@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+# R2 at the overhaul's after pin (GEVA-255 amendment) dry run: the rules this post adds or changes, keyless, at the pins.
+# It builds the real gstack-full install layer as review-units' rig does and runs the install check on it and on broken
+# copies, runs one stub exposure smoke through 176fdc7's run loop with this post's reader map and told prefix, runs the
+# frozen sevmap.ts with this post's severity map on real findings and on fixture arms, and drives the pause and the
+# re-cost on temporary ledgers. Cases no real output holds are synthetic copies, and the script says so where it makes
+# one. #154's own rules stand, and its dry run (dry-run-rr.txt there) drove them. Keys are unset first.
+# Usage: R=<gstack-evals at 715f837> B=<gstack-evals at 176fdc7> GSRC=<garrytan/gstack clone holding 699a41cb>
+#   SEVMAP=<GEVA-89's sevmap.ts> S108=<#108's derived source arms> R2F=<R2's judged arms root>
+#   bash dry-run-rr2.sh.txt <empty work dir>
+# The state root (stateRoot at 176fdc7: ~/.capy/work/gstack-evals on Capy) must hold GSRC under sources/. This post's
+# attachments come from the script's folder (D), #154's from A154 (default: D's sibling folder, since 176fdc7 predates #154)
+# and #129's from PC (default: B's wiki).
+set -u
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+W=$(mkdir -p "$1" && cd "$1" && pwd)
+D=$(cd "$(dirname "$0")" && pwd)
+A154=${A154:-$(cd "$D/../2026-11-02-geva-195-r2-rerun-amendment" && pwd)}
+PC=${PC:-$B/wiki/plans/2026-11-02-geva-122-r2-amendment}
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+S=$P/stacks-r1.json
+MAP=$D/reader-map-gstack-699a41cb6808.json
+PIN=699a41cb6808e01240d02e82247693f9170d401a
+L="$B/bin/gstack-evals ledger"
+export R B
+mkdir -p "$W/log" "$W/bin"
+for f in rr2-install.ts rr2-install-check.py rr2-pause.py; do cp "$D/$f.txt" "$W/bin/$f"; done
+for f in rr-gate.py rr-stub-arms.ts; do cp "$A154/$f.txt" "$W/bin/$f"; done
+HIDE="s#$W#\$W#g; s#$D#\$D#g; s#$A154#\$A154#g; s#$PC#\$PC#g; s#$GSRC#\$GSRC#g; s#$SEVMAP#\$SEVMAP#g; s#$S108#\$S108#g; s#$R2F#\$R2F#g; s#$R#\$R#g; s#$B#\$B#g; s#$HOME#~#g"
+n=0
+step() {
+  local pat=$1; shift
+  n=$((n + 1))
+  echo
+  echo "\$ $*" | sed "$HIDE" | cut -c1-400
+  "$@" > "$W/log/$n.txt" 2>&1
+  local c=$?
+  grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-24}" | sed "$HIDE" | cut -c1-400
+  echo "exit $c (log/$n.txt)"
+}
+front() { local dir=$1; shift; for f in "$@"; do h=$(sha256sum "$dir/$f" | cut -c1-64); grep -q "$h" "$dir/README.md" && echo "front matter ok $f $h" || echo "E_PIN $f $h is not in its post's front matter"; done; }
+init_items() { local rec=$1; shift; for p in "$@"; do ITEM="${p%%:*}" CAP="${p#*:}" REC="$rec" bun -e 'const { recordApproval } = await import(process.env.R + "/src/runner/ledger/ledger.ts"); recordApproval(process.env.REC, { action: "init", item: process.env.ITEM, cap_micros: Math.round(Number(process.env.CAP) * 1e6), quotes: [{ words: "Dry run: keyless item, no spend", by: "GEVA-255", source: "dry-run" }], admission: "warn" });' > /dev/null || echo "E_INIT ${p%%:*}"; echo "item ${p%%:*} at \$${p#*:}"; done; }
+mapcheck() {
+  M="$MAP" bun -e 'const { loadReaderMap } = await import(process.env.B + "/src/trial/review/readers.ts"); const r = loadReaderMap(process.env.M); console.log("problem" in r ? "E_MAP " + r.problem : "map loads at 176fdc7: sha256 " + r.sha256 + ", gstack " + r.map.gstack.sha + ", " + Object.keys(r.map.checklists).length + " checklists, marker " + JSON.stringify(r.map.adversarial));'
+  for p in $(jq -r '.checklists | keys[]' "$MAP"); do git -C "$GSRC" ls-tree --name-only "$PIN" -- "$p" | grep -qx "$p" && echo "present at the pin: $p" || echo "E_MAP_PATH $p"; done
+  echo "marker in review/sections/adversarial.md: $(git -C "$GSRC" show "$PIN:review/sections/adversarial.md" | grep -c 'Think like an attacker and a chaos engineer')"
+  echo "files changed under review/specialists and review/sections/adversarial.md since 5209e92: $(git -C "$GSRC" diff --name-only 5209e9262d8068a75b29be562fbc1de82ba8b487 "$PIN" -- review/specialists review/sections/adversarial.md | wc -l)"
+  echo "map keys that differ from #154's: $(python3 -c 'import json,sys; a=json.load(open(sys.argv[1])); b=json.load(open(sys.argv[2])); print(sorted(k for k in set(a)|set(b) if a.get(k)!=b.get(k)), "in gstack:", sorted(k for k in set(a["gstack"])|set(b["gstack"]) if a["gstack"].get(k)!=b["gstack"].get(k)))' "$A154/reader-map-gstack-5209e9262d80.json" "$MAP")"
+  echo "gstack VERSION at the pin: $(git -C "$GSRC" show "$PIN:VERSION")"
+}
+leafdiff() { python3 -c '
+import json, sys
+def leaves(x, p=""):
+    if isinstance(x, dict):
+        for k, v in x.items(): yield from leaves(v, p + "/" + k)
+    elif isinstance(x, list):
+        for i, v in enumerate(x): yield from leaves(v, p + "/" + str(i))
+    else: yield p, x
+a, b = dict(leaves(json.load(open(sys.argv[1])))), dict(leaves(json.load(open(sys.argv[2]))))
+d = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+print("leaves that differ: %d of %d: %s" % (len(d), len(set(a) | set(b)), d))' "$1" "$2"; }
+
+echo "## Pins"
+step . git -C "$R" log -1 --format='rig %H %s'
+step . git -C "$B" log -1 --format='sessions %H %s'
+step . sh -c "git -C $R status --porcelain | wc -l; git -C $B status --porcelain | wc -l"
+step . git -C "$GSRC" log -1 --format='gstack %H %s' "$PIN"
+step . front "$D" comparisons.rr2.json dry-run-rr2.sh.txt install-pins.json reader-map-gstack-699a41cb6808.json rr2-install-check.py.txt rr2-install.ts.txt rr2-pause.py.txt severity-map.rr2.json told-gstack-full-rr2.txt
+step . front "$A154" comparisons.rr.json reader-map-gstack-5209e9262d80.json rr-gate.py.txt rr-pause.py.txt rr-stub-arms.ts.txt
+step . front "$PC" told-gstack-full.txt
+step . sha256sum "$SEVMAP" "$S"
+step . mapcheck
+step . leafdiff "$A154/comparisons.rr.json" "$D/comparisons.rr2.json"
+step . python3 -c '
+import hashlib, sys
+a, b = open(sys.argv[1]).read().rstrip("\n"), open(sys.argv[2]).read().rstrip("\n")
+print("told prefix: #129s prefix plus: " + b[len(a) + 1:] if b.startswith(a + " ") else "E_TOLD the new prefix does not start with #129s")
+print("prefix sha256 " + hashlib.sha256(b.encode()).hexdigest())' "$PC/told-gstack-full.txt" "$D/told-gstack-full-rr2.txt"
+step . python3 -c '
+import json, sys
+a, b = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+print("stacks round 1 entries other than none unchanged:", all(b[k] == a[k] for k in a if k != "none"))
+print("none: every frozen row kept:", all(b["none"]["default"].get(x) == y for x, y in a["none"]["default"].items()))
+print("none adds:", json.dumps({k: v for k, v in b["none"]["default"].items() if k not in a["none"]["default"]}))
+print("new keys:", json.dumps({k: b[k] for k in b if k not in a}))' "$P/severity-map.json" "$D/severity-map.rr2.json"
+step . sh -c "diff $A154/rr-pause.py.txt $D/rr2-pause.py.txt | grep -c '^[<>]'"
+
+echo; echo "## The install layer (sections 2 and 4)"
+step '^(ok|FAIL) (bun|docker|trial image)' "$B/bin/gstack-evals" doctor --host claude --ledger "$W/doctor.sqlite" --ledger-record "$W/doctor-record"
+SR=$(bun -e 'const { stateRoot } = await import(process.env.B + "/src/trial/image.ts"); console.log(stateRoot(process.env))')
+step . sh -c "ls $SR/sources; git -C $SR/sources/* cat-file -t $PIN"
+step . sh -c "B=$B bun $W/bin/rr2-install.ts $PIN | tee $W/install.json | jq -c '{tree_sha256, install: .provenance.install, stack: .provenance.stack, image, home}'"
+LAYER=$(jq -r .layer "$W/install.json")
+SBH=$(jq -r .home "$W/install.json")
+HIDE="$HIDE; s#$SBH/#\$SBH/#g"
+step . sh -c "jq -c '.hooks | map_values([.[].hooks[] | [.command, .timeout]])' $LAYER/.claude/settings.json; readlink $LAYER/.claude/skills/review/SKILL.md $LAYER/.claude/skills/gstack"
+echo "# The served tree against the pin's own review/ folder from git, hashed the same way."
+mkdir -p "$W/gtree" && git -C "$GSRC" archive "$PIN" review | tar x -C "$W/gtree"
+step . sh -c "cd $W/gtree/review && find . -type f | sed 's#^./##' | while read f; do printf '%s\t%s\n' \"\$f\" \"\$(sha256sum \"\$f\" | cut -c1-64)\"; done | LC_ALL=C sort | sha256sum | cut -c1-64"
+step . sh -c "cmp $LAYER/.local/share/gstack/review/SKILL.md $W/gtree/review/SKILL.md && echo 'the served review/SKILL.md is the committed full render at the pin'"
+
+echo; echo "## The install check: the real layer, then broken copies (section 4)"
+CHECK() { python3 "$W/bin/rr2-install-check.py" "$@"; }
+step '^(PASS|REFUSE|review_tree|settings_sha|install check|E_)' CHECK "$LAYER" "$D/install-pins.json"
+# fx copies the layer with hard-linked files, so a copy costs no space; a case that edits a file gives it its own inode
+# first (own), so the real layer never changes.
+fx() { rm -rf "$W/fx/$1"; mkdir -p "$W/fx"; cp -al "$LAYER" "$W/fx/$1"; echo "$W/fx/$1"; }
+own() { cp -p "$1" "$1.own" && mv "$1.own" "$1"; }
+X=$(fx dangling); ln -s ../../../nowhere.md "$X/.claude/skills/review/extra.md"
+echo "# Synthetic: a dangling link beside the served /review files."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+X=$(fx absolute); ln -sfn "$SBH/.local/share/gstack" "$X/.claude/skills/gstack"
+echo "# Synthetic: ~/.claude/skills/gstack as an absolute link, which the hook commands pass through."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+X=$(fx escape); ln -s ../../../../outside "$X/.claude/skills/escape"
+echo "# Synthetic: a link that leaves the layer."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+X=$(fx lite); ln -sfn ../../../.gstack/render/claude/review/SKILL.md "$X/.claude/skills/review/SKILL.md"
+echo "# Synthetic: /review served from a render under ~/.gstack, which the capture drops (what a --loadout lite install does)."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+X=$(fx elsewhere); ln -sfn ../../../.local/share/gstack/ship/SKILL.md "$X/.claude/skills/review/SKILL.md"
+echo "# Synthetic: /review's SKILL.md resolving to a file that exists but is not /review's."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+X=$(fx tree); own "$X/.local/share/gstack/review/checklist.md"; echo >> "$X/.local/share/gstack/review/checklist.md"
+echo "# Synthetic: one byte added to the served checklist."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+X=$(fx nohook); jq '.hooks.Stop |= map(select(._gstack_source != "gstack-skill-contract"))' "$LAYER/.claude/settings.json" > "$W/s.json" && rm "$X/.claude/settings.json" && mv "$W/s.json" "$X/.claude/settings.json"
+echo "# Synthetic: settings.json without the contract hook."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+X=$(fx timeout); jq '(.hooks.Stop[] | select(._gstack_source == "gstack-skill-contract") | .hooks[0].timeout) = 30' "$LAYER/.claude/settings.json" > "$W/s.json" && rm "$X/.claude/settings.json" && mv "$W/s.json" "$X/.claude/settings.json"
+echo "# Synthetic: the contract hook's timeout at 30 s, not 10."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+X=$(fx noexec); H=$X/.local/share/gstack/hosts/claude/hooks/skill-contract-stop-hook; own "$H"; chmod -x "$H"
+echo "# Synthetic: the contract hook's script not executable."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$X" "$D/install-pins.json"
+echo "# Bad input, exit 5: a folder that is not an install layer."
+step '^(PASS|REFUSE|install check|E_)' CHECK "$W/gtree" "$D/install-pins.json"
+step . sh -c "test \"\$(python3 $W/bin/rr2-install-check.py $LAYER $D/install-pins.json | tail -1)\" = 'install check: PASS' && echo 'the real layer still passes after the broken copies'"
+echo "# After a launch (synthetic: an arms.json in run-host.ts's layout at 176fdc7, built from the checked layer): a match, then a changed install digest."
+jq '{schema_version: 1, arms: [{name: "gstack-full", provenance: .provenance, tree_sha256: .tree_sha256, layers: [{dest: .dest}]}, {name: "none", provenance: {kind: "none"}, tree_sha256: "none:none", layers: []}]}' "$W/install.json" > "$W/arms-ok.json"
+jq '.arms[0].provenance.install.tree_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"' "$W/arms-ok.json" > "$W/arms-moved.json"
+step '^(PASS|REFUSE|E_)' CHECK --match "$W/arms-ok.json" "$W/install.json"
+step '^(PASS|REFUSE|E_)' CHECK --match "$W/arms-moved.json" "$W/install.json"
+
+echo; echo "## The exposure smoke as a stub run with this post's reader map and told prefix (sections 3 and 7)"
+SMOKE="garrytan/gbrain#7789@49eb4da5f7c8,garrytan/gstack#3475@fc69d3ff0bfe,garrytan/gstack#3507@8c021d124220"
+jq --arg ids "$SMOKE" '.units |= map(select(.id as $i | ($ids | split(",") | index($i))))' "$S" > "$W/smoke-suite.json"
+ST() { env B="$B" MAP="$MAP" TOLD="$D/told-gstack-full-rr2.txt" bun "$W/bin/rr-stub-arms.ts" "$@"; }
+step '^(stub run|E_)' ST "$S" "$W/run/rr2-smoke-full" gstack-full smoke --units "$SMOKE"
+step . jq -c '{id, system_prompt: .arm_provenance.system_prompt, told_prefix_sha256: .told.prefix_sha256, reader_map_sha256, parse_outcomes}' "$W/run/rr2-smoke-full/arms/gstack-full-opus/arm.json"
+step '^(exposure|gate|E_)' python3 "$W/bin/rr-gate.py" "$W/smoke-suite.json" "$W/run/rr2-smoke-full/arms/gstack-full-opus" "$W/run/rr2-smoke-full/parses.tsv" gstack-full-opus
+
+echo; echo "## The severity map through the frozen sevmap.ts (section 6)"
+# review-units writes each arm's severity_map from the --severity-map entry named for the arm (src/trial/review/run.ts:497
+# at 176fdc7), so each case sets arm.json's severity_map from that entry, as the run would, then runs sevmap.ts.
+sev() { # <case> <arm dir, or - for a fixture> <map file> <arm name> [fixture labels]
+  local c=$1 src=$2 map=$3 name=$4; shift 4; local X=$W/sev/$c; rm -rf "$X"; mkdir -p "$X/findings"
+  if [ "$src" = - ]; then
+    echo '{"id": "fixture"}' > "$X/arm.json"; local i=0
+    for l in "$@"; do i=$((i + 1)); jq -cn --arg s "$l" --arg i "p1-$i" '{severity: $s, path: "src/a.ts", line: 1, summary: "dry-run fixture finding", pass: 1, id: $i, evidence: "fixture"}'; done > "$X/findings/fixture.jsonl"
+  else cp "$src/arm.json" "$X/arm.json"; cp "$src"/findings/*.jsonl "$X/findings/"; fi
+  jq --slurpfile m "$map" --arg a "$name" 'if $m[0][$a] then .severity_map = $m[0][$a] else del(.severity_map) end' "$X/arm.json" > "$X/a.json" && mv "$X/a.json" "$X/arm.json"
+  echo "$c: $(cat "$X"/findings/*.jsonl | grep -c .) findings, severity_map from the $name entry of $(basename "$map")"
+  bun "$SEVMAP" "$X"; local rc=$?
+  python3 -c '
+import json, sys, glob
+d = sys.argv[1]; m = (json.load(open(d + "/arm.json")).get("severity_map") or {}).get("default", {})
+raw = lambda f: str(f.get("label") or f.get("severity")).split(",")[0].strip()
+counts = {}
+for p in glob.glob(d + "/findings/*.jsonl"):
+    for line in open(p):
+        if line.strip():
+            l = raw(json.loads(line)); counts[l] = counts.get(l, 0) + 1
+to = lambda l: l if l in ("CRITICAL", "INFORMATIONAL") else m.get(l, "UNMAPPED")
+out = {}
+for l, k in counts.items(): out.setdefault(to(l), []).append("%s x%d" % (l, k))
+for v in sorted(out): print("maps to %s: %s" % (v, ", ".join(sorted(out[v]))))' "$X"
+  return $rc
+}
+NEW=$D/severity-map.rr2.json; OLD=$P/severity-map.json
+echo "# Real no-gstack findings: #108's none-opus and none-particle-1, and R2's none-r2, each under the none entry."
+step '^(real|maps|E_)|unmapped' sev real-none-opus "$S108/none-opus" "$NEW" none
+step '^(real|maps|E_)|unmapped' sev real-none-particle-1 "$S108/none-particle-1" "$NEW" none
+step '^(real|maps|E_)|unmapped' sev real-none-r2 "$R2F/none-r2" "$NEW" none
+echo "# Real gstack findings: R2's gstack-full, under the gstack-full entry."
+step '^(real|maps|E_)|unmapped' sev real-gstack-full "$R2F/gstack-full" "$NEW" gstack-full
+CASES="BLOCKER Blocker blocker BLOCKING Blocking blocking HIGH High high CRITICAL Critical critical MAJOR Major major P0 p0 P1 p1 MEDIUM Medium medium LOW Low low NIT Nit nit INFO Info info INFORMATIONAL Informational informational MINOR Minor minor P2 p2 P3 p3 P4 p4"
+echo "# Fixture none arm (synthetic): one finding for every case and P-label, and one compound label."
+step '^(fx|maps|E_)|unmapped' sev fx-none - "$NEW" none $CASES "P1 (security)"
+echo "# The same fixture under stacks round 1's frozen map: it stops (exit 3)."
+step '^(fx|maps|E_)|unmapped' sev fx-none-old - "$OLD" none $CASES "P1 (security)"
+echo "# A label no row covers, under this post's map: it stops (exit 3)."
+step '^(fx|maps|E_)|unmapped' sev fx-none-unknown - "$NEW" none medium Suggestion
+echo "# Fixture gstack-full arm (synthetic): gstack's two labels in each case, under this post's map, then under the frozen map, which has no gstack-full entry."
+step '^(fx|maps|E_)|unmapped' sev fx-gstack - "$NEW" gstack-full CRITICAL Critical critical INFORMATIONAL Informational informational
+step '^(fx|maps|E_)|unmapped' sev fx-gstack-old - "$OLD" gstack-full CRITICAL Critical critical INFORMATIONAL Informational informational
+echo "# A none-style label in the gstack-full arm still stops (exit 3)."
+step '^(fx|maps|E_)|unmapped' sev fx-gstack-high - "$NEW" gstack-full CRITICAL High
+
+echo; echo "## The five items at their caps: one lease each, opened and settled; a bound item refuses a second run (section 5)"
+CAPS="rr2-smoke-full:120 rr2-grid-full:770 rr2-grid-none:240 rr2-judge-match:200 rr2-judge-adjudicate:200"
+LR=$W/ledger; mkdir -p "$LR"; LG="--ledger $LR/ledger.sqlite --ledger-record $LR/record"
+step item init_items "$LR/record" $CAPS
+for p in $CAPS; do it=${p%%:*}; step 'lease_id|state|E_' sh -c "$L lease --item $it --run rr2-dry-$it --amount ${p#*:} $LG --json | tee $LR/$it.json"; step 'settle|E_' $L settle --lease "$(jq -r .lease_id "$LR/$it.json")" $LG; done
+step 'E_' $L lease --item rr2-grid-full --run rr2-dry-again --amount 1 $LG
+step '^(item|pause|E_)' python3 "$W/bin/rr2-pause.py" "$LR/record" rr2-grid-full 4 --crew 0
+
+echo; echo "## The pause and the re-cost on a temporary ledger (section 5)"
+LP=$W/pause; mkdir -p "$LP"; LQ="--ledger $LP/ledger.sqlite --ledger-record $LP/record"
+step item init_items "$LP/record" $CAPS
+PAUSE() { python3 "$W/bin/rr2-pause.py" "$@"; }
+echo "# Crew use \$20 so far: the smoke, one round of its 3 sessions, launches at its own cap."
+step '^(pause|E_)' PAUSE "$LP/record" rr2-smoke-full 3 --crew 20
+echo "# Without --crew the pause refuses to run (exit 5)."
+step '^(pause|E_)' PAUSE "$LP/record" rr2-smoke-full 3
+step 'lease_id|E_' $L lease --item rr2-smoke-full --run rr2-dry-smoke --amount 120 $LQ --json
+echo "# The smoke's lease reserves \$120 and crew use is \$1,600: headroom \$180, so the grid's spend cap is \$180, not its \$770."
+step '^(pause|E_)' PAUSE "$LP/record" rr2-grid-full 4 --crew 1600
+echo "# Crew use \$1,650: headroom \$130, below one round of 4 at \$40, so the pause stops (exit 3)."
+step '^(pause|E_)' PAUSE "$LP/record" rr2-grid-full 4 --crew 1650
+echo "# A judge batch with a \$60 worst case at \$180 of headroom: refused, since its lease would reserve the item's \$200. Then at \$20 of crew use."
+step '^(pause|E_)' PAUSE "$LP/record" rr2-judge-match 1 --crew 1600 60
+step '^(pause|E_)' PAUSE "$LP/record" rr2-judge-match 1 --crew 20 60
+echo "# The re-cost on the stub smoke's cost.tsv, then on copies with the session costs set (synthetic)."
+CT=$W/run/rr2-smoke-full/arms/gstack-full-opus/cost.tsv
+cost() { awk -F'\t' -v OFS='\t' -v a="$2" -v b="$3" -v c="$4" -v u="${5:-0}" 'NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i } NR > 1 && $col["scope"] == "all" { k++; $col["usd"] = (k == 1 ? a : k == 2 ? b : c); $col["unknown_calls"] = (k == 1 ? u : 0) } { print }' "$CT" > "$W/cost-$1.tsv"; echo "$W/cost-$1.tsv"; }
+step '^(recost|E_)' PAUSE --recost "$LP/record" "$CT" 4
+echo "# #187's smoke costs (\$7.84 dearest): the grid fits."
+step '^(recost|E_)' PAUSE --recost "$LP/record" "$(cost fits 7.84 5.10 5.33)" 4
+echo "# Dearest at \$9.24: 66 x 9.24 + 160 = 769.84, inside \$770."
+step '^(recost|E_)' PAUSE --recost "$LP/record" "$(cost edge 9.24 5.10 5.33)" 4
+echo "# Dearest at \$9.25: past \$770, so no grid (exit 3)."
+step '^(recost|E_)' PAUSE --recost "$LP/record" "$(cost over 9.25 5.10 5.33)" 4
+echo "# A smoke session with an unknown call: its cost is not known (exit 5)."
+step '^(recost|E_)' PAUSE --recost "$LP/record" "$(cost unknown 6.00 5.10 5.33 1)" 4
+echo "# A grid lease of \$500 already open: \$270 left, so even #187's costs do not fit (exit 3)."
+step 'lease_id|E_' $L lease --item rr2-grid-full --run rr2-dry-grid --amount 500 $LQ --json
+step '^(recost|E_)' PAUSE --recost "$LP/record" "$W/cost-fits.tsv" 4
+echo "# The pause's stop through review-units' spend cap: a stub launch with --spend-cap 150, below the item's 240, and --append"
+echo "# marks that stop as the pause's, which #154's rr-decide.py skips."
+ST "$S" "$W/run/pause" none pause --cap 150 2> "$W/run/pause.launch"; rc=$?; [ $rc -eq 0 ] && grep -qE '^[A-Z][A-Z0-9_]*[A-Z0-9]( |:|$)' "$W/run/pause.launch" && rc=2
+step '^(pause|E_)' PAUSE --append "$W/run/pause.launch" $rc "$W/run/pause.stderr" 150 240
+step '^(CAP_STOP|RR_PAUSE_STOP|review-units)' cat "$W/run/pause.stderr"
+echo; echo "## Done"

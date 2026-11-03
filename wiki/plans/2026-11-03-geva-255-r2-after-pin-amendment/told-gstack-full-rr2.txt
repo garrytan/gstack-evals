@@ -1,0 +1,1 @@
+/review Run the full review procedure: dispatch the Review Army specialists your plan selects and run the adversarial pass. Do not make Fix-First edits; report findings only. Writes to gstack's own state (its learnings, timeline and review log) are allowed. If a stop hook asks for more, do it, then end your reply again with the fenced json block.

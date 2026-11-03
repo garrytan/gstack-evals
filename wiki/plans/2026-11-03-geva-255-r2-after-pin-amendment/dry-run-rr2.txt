@@ -1,0 +1,525 @@
+## Pins
+
+$ git -C $R log -1 --format=rig %H %s
+rig 715f837c353700344785e2ae2c721e8195d616cd Stacks round 1 step 5a fixes: judge-run retries, flag-scan rules, impact binding, secondary guards (GST-517) (#97)
+exit 0 (log/1.txt)
+
+$ git -C $B log -1 --format=sessions %H %s
+sessions 176fdc75e04626e736b0c3c93d45a45937e45508 review driver: keep a headless session open while its background work runs, bounded by a deadline (GST-734) (#141)
+exit 0 (log/2.txt)
+
+$ sh -c git -C $R status --porcelain | wc -l; git -C $B status --porcelain | wc -l
+0
+0
+exit 0 (log/3.txt)
+
+$ git -C $GSRC log -1 --format=gstack %H %s 699a41cb6808e01240d02e82247693f9170d401a
+gstack 699a41cb6808e01240d02e82247693f9170d401a after-pin: re-pin /review and /investigate to measured combined sizes (#3922 + #3957)
+exit 0 (log/4.txt)
+
+$ front $D comparisons.rr2.json dry-run-rr2.sh.txt install-pins.json reader-map-gstack-699a41cb6808.json rr2-install-check.py.txt rr2-install.ts.txt rr2-pause.py.txt severity-map.rr2.json told-gstack-full-rr2.txt
+front matter ok comparisons.rr2.json 6015b335b85d5ec9f04cda5f8b57e04a36740ee9ffa0762f406eff5ad5fc1eed
+front matter ok dry-run-rr2.sh.txt cf430562e889243ace136a93299ed030695b0a06b0aab3826301ce77d5a40c85
+front matter ok install-pins.json c4768233a19c57d7ea28acfa6f32e19278844ccf1d1a66af2cdaf8550a36d678
+front matter ok reader-map-gstack-699a41cb6808.json d74a9e1c21d635a2a7def12f1c0e77ae5566f74f787be2fe215518f164470651
+front matter ok rr2-install-check.py.txt 4b420d8dbad8e506c708d3610c29c3f954de3d646ecbcb5a36c6e55810702ffd
+front matter ok rr2-install.ts.txt 0e43cd550df2a7c3dd97afea993ba7819d29191a2383611f254feccfad794908
+front matter ok rr2-pause.py.txt edc0dfb467bf1bb1f5007387c1505caa9e21c4617b99803757f860d12771fc2f
+front matter ok severity-map.rr2.json 80dbac1d3e66d64e38255137f84d630c66b75b44e89fbdc2792619a26cd4178b
+front matter ok told-gstack-full-rr2.txt 27ba51eabf3dc4d0767b29711075b7c8d70067fe602d65c7b00af911df54474e
+exit 0 (log/5.txt)
+
+$ front $A154 comparisons.rr.json reader-map-gstack-5209e9262d80.json rr-gate.py.txt rr-pause.py.txt rr-stub-arms.ts.txt
+front matter ok comparisons.rr.json e25562c3912735ca7045ef0c6908cd357c906f97e895bbacb51b731651edf653
+front matter ok reader-map-gstack-5209e9262d80.json a17fc2c08073053c225258af9448f3e520cfd03cfa7f23593e0750646587051d
+front matter ok rr-gate.py.txt 3aa3ac323f5789f1496d3862fed73e334e1d1fd7fcf052417b2d57a87c5f2548
+front matter ok rr-pause.py.txt d421b6c1500fc87b8886b92cf7f0da8ca7694c1c947647a233be2c973ee87c28
+front matter ok rr-stub-arms.ts.txt 473e157f375e12cdebe540c93a7b14f5998e1e084d392c20d9caf2c22b764c76
+exit 0 (log/6.txt)
+
+$ front $PC told-gstack-full.txt
+front matter ok told-gstack-full.txt bceb6a442b185e98d05cfe78769270ee553a28eb0e2cefcc47c9aadf7f41ba90
+exit 0 (log/7.txt)
+
+$ sha256sum $SEVMAP $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json
+b3724a71fe4ee0a8a70eb454115d8e815679ab62066771541f975f9e197a66ea  $SEVMAP
+4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d  $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json
+exit 0 (log/8.txt)
+
+$ mapcheck
+map loads at 176fdc7: sha256 d74a9e1c21d635a2a7def12f1c0e77ae5566f74f787be2fe215518f164470651, gstack 699a41cb6808e01240d02e82247693f9170d401a, 11 checklists, marker ["Think like an attacker and a chaos engineer"]
+present at the pin: review/design-checklist.md
+present at the pin: review/specialists/api-contract.md
+present at the pin: review/specialists/data-migration.md
+present at the pin: review/specialists/maintainability.md
+present at the pin: review/specialists/performance.md
+present at the pin: review/specialists/red-team.md
+present at the pin: review/specialists/security.md
+present at the pin: review/specialists/simplification.md
+present at the pin: review/specialists/state-machines.md
+present at the pin: review/specialists/targeted.md
+present at the pin: review/specialists/testing.md
+marker in review/sections/adversarial.md: 2
+files changed under review/specialists and review/sections/adversarial.md since 5209e92: 0
+map keys that differ from #154's: ['gstack', 'note'] in gstack: ['sha']
+gstack VERSION at the pin: 1.94.39.0
+exit 0 (log/9.txt)
+
+$ leafdiff $A154/comparisons.rr.json $D/comparisons.rr2.json
+leaves that differ: 2 of 16: ['/comparisons/0/note', '/decision_rule']
+exit 0 (log/10.txt)
+
+$ python3 -c 
+import hashlib, sys
+a, b = open(sys.argv[1]).read().rstrip("\n"), open(sys.argv[2]).read().rstrip("\n")
+print("told prefix: #129s prefix plus: " + b[len(a) + 1:] if b.startswith(a + " ") else "E_TOLD the new prefix does not start with #129s")
+print("prefix sha256 " + hashlib.sha256(b.encode()).hexdigest()) $PC/told-gstack-full.txt $D/told-gstack-full-rr2.txt
+told prefix: #129s prefix plus: If a stop hook asks for more, do it, then end your reply again with the fenced json block.
+prefix sha256 ba9b412ce4c0e3dc87256383bce3eb12fb833a41c1df4bcec7e21562038ee055
+exit 0 (log/11.txt)
+
+$ python3 -c 
+import json, sys
+a, b = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+print("stacks round 1 entries other than none unchanged:", all(b[k] == a[k] for k in a if k != "none"))
+print("none: every frozen row kept:", all(b["none"]["default"].get(x) == y for x, y in a["none"]["default"].items()))
+print("none adds:", json.dumps({k: v for k, v in b["none"]["default"].items() if k not in a["none"]["default"]}))
+print("new keys:", json.dumps({k: b[k] for k in b if k not in a})) $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json $D/severity-map.rr2.json
+stacks round 1 entries other than none unchanged: True
+none: every frozen row kept: True
+none adds: {"Blocker": "CRITICAL", "Blocking": "CRITICAL", "High": "CRITICAL", "Medium": "INFORMATIONAL", "Low": "INFORMATIONAL", "Nit": "INFORMATIONAL", "Info": "INFORMATIONAL", "Critical": "CRITICAL", "critical": "CRITICAL", "Informational": "INFORMATIONAL", "informational": "INFORMATIONAL", "Major": "CRITICAL", "Minor": "INFORMATIONAL", "P1": "CRITICAL", "P2": "INFORMATIONAL", "P3": "INFORMATIO
+new keys: {"gstack-full": {"default": {"Critical": "CRITICAL", "critical": "CRITICAL", "Informational": "INFORMATIONAL", "informational": "INFORMATIONAL"}}}
+exit 0 (log/12.txt)
+
+$ sh -c diff $A154/rr-pause.py.txt $D/rr2-pause.py.txt | grep -c '^[<>]'
+92
+exit 0 (log/13.txt)
+
+## The install layer (sections 2 and 4)
+
+$ $B/bin/gstack-evals doctor --host claude --ledger $W/doctor.sqlite --ledger-record $W/doctor-record
+ok bun: 1.4.4
+ok docker: daemon 29.9.2
+ok trial image: gstack-evals-trial:f62711a0a17fc1e9 sha256:5da4eb7fbdcac20b69971087593c4f1fc10e04b7bae6ddd8c1be7cdbdb18961b (recipe f62711a0a17f, pinned)
+exit 2 (log/14.txt)
+
+$ sh -c ls ~/.capy/work/gstack-evals/sources; git -C ~/.capy/work/gstack-evals/sources/* cat-file -t 699a41cb6808e01240d02e82247693f9170d401a
+garrytan-gstack
+commit
+exit 0 (log/15.txt)
+
+$ sh -c B=$B bun $W/bin/rr2-install.ts 699a41cb6808e01240d02e82247693f9170d401a | tee $W/install.json | jq -c '{tree_sha256, install: .provenance.install, stack: .provenance.stack, image, home}'
+{"tree_sha256":"cc5c6a37e6e85d00a7f84c999b797d7fdc22cf5b86cfb5c23640a25a4c051dd9","install":{"command":"./setup --host claude --no-browser -q","runner":"docker sha256:5da4eb7fbdcac20b69971087593c4f1fc10e04b7bae6ddd8c1be7cdbdb18961b","tree_sha256":"6967df0ed2a4ffdf2f436c74224806980ed534d0649b9fde04e8f8d0b9112c31"},"stack":{"repo":"garrytan/gstack","sha":"699a41cb6808e01240d02e82247693f9170d401a","s
+exit 0 (log/16.txt)
+
+$ sh -c jq -c '.hooks | map_values([.[].hooks[] | [.command, .timeout]])' ~/.capy/work/gstack-evals/installs/c46fe0c5bc93f5d4cb279b0206f51c15/home/.claude/settings.json; readlink ~/.capy/work/gstack-evals/installs/c46fe0c5bc93f5d4cb279b0206f51c15/home/.claude/skills/review/SKILL.md ~/.capy/work/gstack-evals/installs/c46fe0c5bc93f5d4cb279b0206f51c15/home/.claude/skills/gstack
+{"Stop":[["$SBH/.claude/skills/gstack/hosts/claude/hooks/timeline-stop-hook",5],["$SBH/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook",10]],"UserPromptSubmit":[["$SBH/.claude/skills/gstack/hosts/claude/hooks/skill-route-hook",5]]}
+../../../.local/share/gstack/review/SKILL.md
+../../.local/share/gstack
+exit 0 (log/17.txt)
+# The served tree against the pin's own review/ folder from git, hashed the same way.
+
+$ sh -c cd $W/gtree/review && find . -type f | sed 's#^./##' | while read f; do printf '%s\t%s\n' "$f" "$(sha256sum "$f" | cut -c1-64)"; done | LC_ALL=C sort | sha256sum | cut -c1-64
+3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+exit 0 (log/18.txt)
+
+$ sh -c cmp ~/.capy/work/gstack-evals/installs/c46fe0c5bc93f5d4cb279b0206f51c15/home/.local/share/gstack/review/SKILL.md $W/gtree/review/SKILL.md && echo 'the served review/SKILL.md is the committed full render at the pin'
+the served review/SKILL.md is the committed full render at the pin
+exit 0 (log/19.txt)
+
+## The install check: the real layer, then broken copies (section 4)
+
+$ CHECK ~/.capy/work/gstack-evals/installs/c46fe0c5bc93f5d4cb279b0206f51c15/home $D/install-pins.json
+PASS links: 143 under .claude, 0 that do not resolve inside the layer
+PASS served /review: SKILL.md resolves to .local/share/gstack/review/SKILL.md
+review_tree_sha256 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0 (27 files)
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+settings_sha256 e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS hooks: {"Stop": [["skill-contract-stop-hook", 10], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+PASS hook commands resolve to executable files
+install check: PASS
+exit 0 (log/20.txt)
+# Synthetic: a dangling link beside the served /review files.
+
+$ CHECK $W/fx/dangling $D/install-pins.json
+REFUSE links: 144 under .claude, 1 that do not resolve inside the layer: nowhere.md does not exist
+REFUSE served /review: SKILL.md resolves to .claude/skills/review/extra.md -> nowhere.md does not exist
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+PASS settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS hooks: {"Stop": [["skill-contract-stop-hook", 10], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+PASS hook commands resolve to executable files
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/21.txt)
+# Synthetic: ~/.claude/skills/gstack as an absolute link, which the hook commands pass through.
+
+$ CHECK $W/fx/absolute $D/install-pins.json
+REFUSE links: 143 under .claude, 1 that do not resolve inside the layer: .claude/skills/gstack is an absolute link to $SBH/.local/share/gstack
+REFUSE served /review: SKILL.md resolves to .claude/skills/gstack/review/SKILL.md -> .claude/skills/gstack is an absolute link to $SBH/.local/share/gstack
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+PASS settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS hooks: {"Stop": [["skill-contract-stop-hook", 10], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+REFUSE hook commands resolve to executable files: Stop $SBH/.claude/skills/gstack/hosts/claude/hooks/timeline-stop-hook (.claude/skills/gstack is an absolute link to $SBH/.local/share/gstack); Stop $SBH/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook (.claude/skills/gstack is an absolute link to $SBH/.local/share/gstack); UserPromptSubmit $SBH/.claude/skills/gstack/hosts/claude/h
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/22.txt)
+# Synthetic: a link that leaves the layer.
+
+$ CHECK $W/fx/escape $D/install-pins.json
+REFUSE links: 144 under .claude, 1 that do not resolve inside the layer: .claude/skills/escape leaves the layer (../../../../outside)
+PASS served /review: SKILL.md resolves to .local/share/gstack/review/SKILL.md
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+PASS settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS hooks: {"Stop": [["skill-contract-stop-hook", 10], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+PASS hook commands resolve to executable files
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/23.txt)
+# Synthetic: /review served from a render under ~/.gstack, which the capture drops (what a --loadout lite install does).
+
+$ CHECK $W/fx/lite $D/install-pins.json
+REFUSE links: 143 under .claude, 1 that do not resolve inside the layer: .gstack does not exist
+REFUSE served /review: SKILL.md resolves to .claude/skills/review/SKILL.md -> .gstack does not exist; .claude/skills/review/SKILL.md -> .gstack does not exist
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+PASS settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS hooks: {"Stop": [["skill-contract-stop-hook", 10], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+PASS hook commands resolve to executable files
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/24.txt)
+# Synthetic: /review's SKILL.md resolving to a file that exists but is not /review's.
+
+$ CHECK $W/fx/elsewhere $D/install-pins.json
+PASS links: 143 under .claude, 0 that do not resolve inside the layer
+REFUSE served /review: SKILL.md resolves to .claude/skills/review/SKILL.md -> .local/share/gstack/ship/SKILL.md; .claude/skills/review/SKILL.md -> outside .local/share/gstack/review
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+PASS settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS hooks: {"Stop": [["skill-contract-stop-hook", 10], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+PASS hook commands resolve to executable files
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/25.txt)
+# Synthetic: one byte added to the served checklist.
+
+$ CHECK $W/fx/tree $D/install-pins.json
+PASS links: 143 under .claude, 0 that do not resolve inside the layer
+PASS served /review: SKILL.md resolves to .local/share/gstack/review/SKILL.md
+REFUSE review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+PASS settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS hooks: {"Stop": [["skill-contract-stop-hook", 10], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+PASS hook commands resolve to executable files
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/26.txt)
+# Synthetic: settings.json without the contract hook.
+
+$ CHECK $W/fx/nohook $D/install-pins.json
+PASS links: 143 under .claude, 0 that do not resolve inside the layer
+PASS served /review: SKILL.md resolves to .local/share/gstack/review/SKILL.md
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+REFUSE settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+REFUSE hooks: {"Stop": [["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+PASS hook commands resolve to executable files
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/27.txt)
+# Synthetic: the contract hook's timeout at 30 s, not 10.
+
+$ CHECK $W/fx/timeout $D/install-pins.json
+PASS links: 143 under .claude, 0 that do not resolve inside the layer
+PASS served /review: SKILL.md resolves to .local/share/gstack/review/SKILL.md
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+REFUSE settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+REFUSE hooks: {"Stop": [["skill-contract-stop-hook", 30], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+PASS hook commands resolve to executable files
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/28.txt)
+# Synthetic: the contract hook's script not executable.
+
+$ CHECK $W/fx/noexec $D/install-pins.json
+PASS links: 143 under .claude, 0 that do not resolve inside the layer
+PASS served /review: SKILL.md resolves to .local/share/gstack/review/SKILL.md
+PASS review tree: pinned 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
+PASS settings.json: pinned e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc
+PASS hooks: {"Stop": [["skill-contract-stop-hook", 10], ["timeline-stop-hook", 5]], "UserPromptSubmit": [["skill-route-hook", 5]]}
+REFUSE hook commands resolve to executable files: Stop $SBH/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook (not an executable file)
+install check: REFUSE: launch nothing and report to the Captain
+exit 3 (log/29.txt)
+# Bad input, exit 5: a folder that is not an install layer.
+
+$ CHECK $W/gtree $D/install-pins.json
+E_RR2_INSTALL_CHECK ValueError: $W/gtree has no .claude or .local/share/gstack/review, so it is not a gstack install layer
+exit 5 (log/30.txt)
+
+$ sh -c test "$(python3 $W/bin/rr2-install-check.py ~/.capy/work/gstack-evals/installs/c46fe0c5bc93f5d4cb279b0206f51c15/home $D/install-pins.json | tail -1)" = 'install check: PASS' && echo 'the real layer still passes after the broken copies'
+the real layer still passes after the broken copies
+exit 0 (log/31.txt)
+# After a launch (synthetic: an arms.json in run-host.ts's layout at 176fdc7, built from the checked layer): a match, then a changed install digest.
+
+$ CHECK --match $W/arms-ok.json $W/install.json
+PASS launch install: arm tree cc5c6a37e6e85d00a7f84c999b797d7fdc22cf5b86cfb5c23640a25a4c051dd9, install tree 6967df0ed2a4ffdf2f436c74224806980ed534d0649b9fde04e8f8d0b9112c31, gstack 699a41cb6808e01240d02e82247693f9170d401a
+exit 0 (log/32.txt)
+
+$ CHECK --match $W/arms-moved.json $W/install.json
+REFUSE launch install: arm tree cc5c6a37e6e85d00a7f84c999b797d7fdc22cf5b86cfb5c23640a25a4c051dd9, install tree 0000000000000000000000000000000000000000000000000000000000000000, gstack 699a41cb6808e01240d02e82247693f9170d401a; checked layer cc5c6a37e6e85d00a7f84c999b797d7fdc22cf5b86cfb5c23640a25a4c051dd9, 6967df0ed2a4ffdf2f436c74224806980ed534d0649b9fde04e8f8d0b9112c31, 699a41cb6808e01240d02e822476
+exit 3 (log/33.txt)
+
+## The exposure smoke as a stub run with this post's reader map and told prefix (sections 3 and 7)
+
+$ ST $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json $W/run/rr2-smoke-full gstack-full smoke --units garrytan/gbrain#7789@49eb4da5f7c8,garrytan/gstack#3475@fc69d3ff0bfe,garrytan/gstack#3507@8c021d124220
+stub run gstack-full smoke: 1 arm, 3 units x 1 passes, stops none; reader map sha256 d74a9e1c21d635a2a7def12f1c0e77ae5566f74f787be2fe215518f164470651; background wait 3 s (dry-run setting)
+stub run gstack-full smoke: never-waited sessions 3, scored by rule final 3, parse equal to findings.ts's parseFindings 3
+exit 0 (log/34.txt)
+
+$ jq -c {id, system_prompt: .arm_provenance.system_prompt, told_prefix_sha256: .told.prefix_sha256, reader_map_sha256, parse_outcomes} $W/run/rr2-smoke-full/arms/gstack-full-opus/arm.json
+{"id":"gstack-full-opus","system_prompt":"claude-code-preset","told_prefix_sha256":"ba9b412ce4c0e3dc87256383bce3eb12fb833a41c1df4bcec7e21562038ee055","reader_map_sha256":"d74a9e1c21d635a2a7def12f1c0e77ae5566f74f787be2fe215518f164470651","parse_outcomes":{"findings":1,"empty":2,"missing":0,"malformed":0,"incomplete":0,"not_run":0}}
+exit 0 (log/35.txt)
+
+$ python3 $W/bin/rr-gate.py $W/smoke-suite.json $W/run/rr2-smoke-full/arms/gstack-full-opus $W/run/rr2-smoke-full/parses.tsv gstack-full-opus
+exposure: 3 of 3 PR-passes returned (not returned: none); of those, a specialist with tokens in 3, adversarial-native with tokens in 3, both in 3; red-team 0, targeted 0 (not gated); 0 returned PR-passes have a reader row with total_tokens unavailable
+gate: pass (returned with both in at least 3 of 3 PR-passes)
+exit 0 (log/36.txt)
+
+## The severity map through the frozen sevmap.ts (section 6)
+# Real no-gstack findings: #108's none-opus and none-particle-1, and R2's none-r2, each under the none entry.
+
+$ sev real-none-opus $S108/none-opus $D/severity-map.rr2.json none
+real-none-opus: 122 findings, severity_map from the none entry of severity-map.rr2.json
+real-none-opus labels 7 map keys 41 compound entries 0 unmapped 0 
+maps to CRITICAL: HIGH x1, high x14, major x2
+maps to INFORMATIONAL: low x44, medium x55, minor x3, nit x3
+exit 0 (log/37.txt)
+
+$ sev real-none-particle-1 $S108/none-particle-1 $D/severity-map.rr2.json none
+real-none-particle-1: 28 findings, severity_map from the none entry of severity-map.rr2.json
+real-none-particle-1 labels 3 map keys 41 compound entries 0 unmapped 0 
+maps to CRITICAL: high x2
+maps to INFORMATIONAL: low x18, medium x8
+exit 0 (log/38.txt)
+
+$ sev real-none-r2 $R2F/none-r2 $D/severity-map.rr2.json none
+real-none-r2: 37 findings, severity_map from the none entry of severity-map.rr2.json
+real-none-r2 labels 3 map keys 41 compound entries 0 unmapped 0 
+maps to CRITICAL: high x5
+maps to INFORMATIONAL: low x16, medium x16
+exit 0 (log/39.txt)
+# Real gstack findings: R2's gstack-full, under the gstack-full entry.
+
+$ sev real-gstack-full $R2F/gstack-full $D/severity-map.rr2.json gstack-full
+real-gstack-full: 51 findings, severity_map from the gstack-full entry of severity-map.rr2.json
+real-gstack-full labels 2 map keys 8 compound entries 0 unmapped 0 
+maps to CRITICAL: CRITICAL x10
+maps to INFORMATIONAL: INFORMATIONAL x41
+exit 0 (log/40.txt)
+# Fixture none arm (synthetic): one finding for every case and P-label, and one compound label.
+
+$ sev fx-none - $D/severity-map.rr2.json none BLOCKER Blocker blocker BLOCKING Blocking blocking HIGH High high CRITICAL Critical critical MAJOR Major major P0 p0 P1 p1 MEDIUM Medium medium LOW Low low NIT Nit nit INFO Info info INFORMATIONAL Informational informational MINOR Minor minor P2 p2 P3 p3 P4 p4 P1 (security)
+fx-none: 44 findings, severity_map from the none entry of severity-map.rr2.json
+fx-none labels 44 map keys 42 compound entries 1 unmapped 0 
+maps to CRITICAL: BLOCKER x1, BLOCKING x1, Blocker x1, Blocking x1, CRITICAL x1, Critical x1, HIGH x1, High x1, MAJOR x1, Major x1, P0 x1, P1 (security) x1, P1 x1, blocker x1, blocking x1, critical x1, high x1, major x1, p0 x1, p1 x1
+maps to INFORMATIONAL: INFO x1, INFORMATIONAL x1, Info x1, Informational x1, LOW x1, Low x1, MEDIUM x1, MINOR x1, Medium x1, Minor x1, NIT x1, Nit x1, P2 x1, P3 x1, P4 x1, info x1, informational x1, low x1, medium x1, minor x1, nit x1, p2 x1, p3 x1, p4 x1
+exit 0 (log/41.txt)
+# The same fixture under stacks round 1's frozen map: it stops (exit 3).
+
+$ sev fx-none-old - $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json none BLOCKER Blocker blocker BLOCKING Blocking blocking HIGH High high CRITICAL Critical critical MAJOR Major major P0 p0 P1 p1 MEDIUM Medium medium LOW Low low NIT Nit nit INFO Info info INFORMATIONAL Informational informational MINOR Minor minor P2 p2 P3 p3 P4 p4 P1 (security)
+fx-none-old: 44 findings, severity_map from the none entry of severity-map.json
+fx-none-old labels 44 map keys 20 compound entries 0 unmapped 22 ["Blocker","Blocking","High","Critical","critical","Major","P1","p1","Medium","Low","Nit","Info","Informational","informational","Minor","P2","p2","P3","p3","P4","p4","P1 (security)"]
+maps to CRITICAL: BLOCKER x1, BLOCKING x1, CRITICAL x1, HIGH x1, MAJOR x1, P0 x1, blocker x1, blocking x1, high x1, major x1, p0 x1
+maps to INFORMATIONAL: INFO x1, INFORMATIONAL x1, LOW x1, MEDIUM x1, MINOR x1, NIT x1, info x1, low x1, medium x1, minor x1, nit x1
+maps to UNMAPPED: Blocker x1, Blocking x1, Critical x1, High x1, Info x1, Informational x1, Low x1, Major x1, Medium x1, Minor x1, Nit x1, P1 (security) x1, P1 x1, P2 x1, P3 x1, P4 x1, critical x1, informational x1, p1 x1, p2 x1, p3 x1, p4 x1
+exit 3 (log/42.txt)
+# A label no row covers, under this post's map: it stops (exit 3).
+
+$ sev fx-none-unknown - $D/severity-map.rr2.json none medium Suggestion
+fx-none-unknown: 2 findings, severity_map from the none entry of severity-map.rr2.json
+fx-none-unknown labels 2 map keys 41 compound entries 0 unmapped 1 ["Suggestion"]
+maps to INFORMATIONAL: medium x1
+maps to UNMAPPED: Suggestion x1
+exit 3 (log/43.txt)
+# Fixture gstack-full arm (synthetic): gstack's two labels in each case, under this post's map, then under the frozen map, which has no gstack-full entry.
+
+$ sev fx-gstack - $D/severity-map.rr2.json gstack-full CRITICAL Critical critical INFORMATIONAL Informational informational
+fx-gstack: 6 findings, severity_map from the gstack-full entry of severity-map.rr2.json
+fx-gstack labels 6 map keys 8 compound entries 0 unmapped 0 
+maps to CRITICAL: CRITICAL x1, Critical x1, critical x1
+maps to INFORMATIONAL: INFORMATIONAL x1, Informational x1, informational x1
+exit 0 (log/44.txt)
+
+$ sev fx-gstack-old - $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/severity-map.json gstack-full CRITICAL Critical critical INFORMATIONAL Informational informational
+fx-gstack-old: 6 findings, severity_map from the gstack-full entry of severity-map.json
+fx-gstack-old labels 6 map keys 4 compound entries 0 unmapped 4 ["Critical","critical","Informational","informational"]
+maps to CRITICAL: CRITICAL x1
+maps to INFORMATIONAL: INFORMATIONAL x1
+maps to UNMAPPED: Critical x1, Informational x1, critical x1, informational x1
+exit 3 (log/45.txt)
+# A none-style label in the gstack-full arm still stops (exit 3).
+
+$ sev fx-gstack-high - $D/severity-map.rr2.json gstack-full CRITICAL High
+fx-gstack-high: 2 findings, severity_map from the gstack-full entry of severity-map.rr2.json
+fx-gstack-high labels 2 map keys 8 compound entries 0 unmapped 1 ["High"]
+maps to CRITICAL: CRITICAL x1
+maps to UNMAPPED: High x1
+exit 3 (log/46.txt)
+
+## The five items at their caps: one lease each, opened and settled; a bound item refuses a second run (section 5)
+
+$ init_items $W/ledger/record rr2-smoke-full:120 rr2-grid-full:770 rr2-grid-none:240 rr2-judge-match:200 rr2-judge-adjudicate:200
+item rr2-smoke-full at $120
+item rr2-grid-full at $770
+item rr2-grid-none at $240
+item rr2-judge-match at $200
+item rr2-judge-adjudicate at $200
+exit 0 (log/47.txt)
+
+$ sh -c $B/bin/gstack-evals ledger lease --item rr2-smoke-full --run rr2-dry-rr2-smoke-full --amount 120 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-smoke-full.json
+  "lease_id": "rr2-smoke-full.0001.83e056",
+  "state": "open",
+exit 0 (log/48.txt)
+
+$ $B/bin/gstack-evals ledger settle --lease rr2-smoke-full.0001.83e056 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+exit 0 (log/49.txt)
+
+$ sh -c $B/bin/gstack-evals ledger lease --item rr2-grid-full --run rr2-dry-rr2-grid-full --amount 770 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-grid-full.json
+  "lease_id": "rr2-grid-full.0001.d6c113",
+  "state": "open",
+exit 0 (log/50.txt)
+
+$ $B/bin/gstack-evals ledger settle --lease rr2-grid-full.0001.d6c113 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+exit 0 (log/51.txt)
+
+$ sh -c $B/bin/gstack-evals ledger lease --item rr2-grid-none --run rr2-dry-rr2-grid-none --amount 240 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-grid-none.json
+  "lease_id": "rr2-grid-none.0001.f3bbef",
+  "state": "open",
+exit 0 (log/52.txt)
+
+$ $B/bin/gstack-evals ledger settle --lease rr2-grid-none.0001.f3bbef --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+exit 0 (log/53.txt)
+
+$ sh -c $B/bin/gstack-evals ledger lease --item rr2-judge-match --run rr2-dry-rr2-judge-match --amount 200 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-judge-match.json
+  "lease_id": "rr2-judge-match.0001.6378b0",
+  "state": "open",
+exit 0 (log/54.txt)
+
+$ $B/bin/gstack-evals ledger settle --lease rr2-judge-match.0001.6378b0 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+exit 0 (log/55.txt)
+
+$ sh -c $B/bin/gstack-evals ledger lease --item rr2-judge-adjudicate --run rr2-dry-rr2-judge-adjudicate --amount 200 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-judge-adjudicate.json
+  "lease_id": "rr2-judge-adjudicate.0001.7cf793",
+  "state": "open",
+exit 0 (log/56.txt)
+
+$ $B/bin/gstack-evals ledger settle --lease rr2-judge-adjudicate.0001.7cf793 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+exit 0 (log/57.txt)
+
+$ $B/bin/gstack-evals ledger lease --item rr2-grid-full --run rr2-dry-again --amount 1 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+E_ITEM_BOUND line item rr2-grid-full is bound to run rr2-dry-rr2-grid-full, so run rr2-dry-again cannot spend from it
+E_ITEM_BOUND fix: This run cannot spend from that item. Continue the run the message names with its own --resume <out>, or ask the owner for a new line item for this run and record it with gstack-evals ledger init and their words.
+E_ITEM_BOUND docs: docs/errors.md#e_item_bound
+exit 2 (log/58.txt)
+
+$ python3 $W/bin/rr2-pause.py $W/ledger/record rr2-grid-full 4 --crew 0
+item rr2-smoke-full: cap $120.00, settled $0.00, reserved $0.00
+item rr2-grid-full: cap $770.00, settled $0.00, reserved $0.00
+item rr2-grid-none: cap $240.00, settled $0.00, reserved $0.00
+item rr2-judge-match: cap $200.00, settled $0.00, reserved $0.00
+item rr2-judge-adjudicate: cap $200.00, settled $0.00, reserved $0.00
+pause: crew use $0.00 and a crew reserve of $100.00; settled $0.00 and reserved $0.00 over the five items; headroom $1900.00 of $2000.00; one round of rr2-grid-full costs at most $160.00
+pause: launch rr2-grid-full with --spend-cap 770.00 (the smaller of the item's $770.00 left and the headroom)
+exit 0 (log/59.txt)
+
+## The pause and the re-cost on a temporary ledger (section 5)
+
+$ init_items $W/pause/record rr2-smoke-full:120 rr2-grid-full:770 rr2-grid-none:240 rr2-judge-match:200 rr2-judge-adjudicate:200
+item rr2-smoke-full at $120
+item rr2-grid-full at $770
+item rr2-grid-none at $240
+item rr2-judge-match at $200
+item rr2-judge-adjudicate at $200
+exit 0 (log/60.txt)
+# Crew use $20 so far: the smoke, one round of its 3 sessions, launches at its own cap.
+
+$ PAUSE $W/pause/record rr2-smoke-full 3 --crew 20
+pause: crew use $20.00 and a crew reserve of $100.00; settled $0.00 and reserved $0.00 over the five items; headroom $1880.00 of $2000.00; one round of rr2-smoke-full costs at most $120.00
+pause: launch rr2-smoke-full with --spend-cap 120.00 (the smaller of the item's $120.00 left and the headroom)
+exit 0 (log/61.txt)
+# Without --crew the pause refuses to run (exit 5).
+
+$ PAUSE $W/pause/record rr2-smoke-full 3
+E_RR_PAUSE ValueError: usage: rr2-pause.py <record dir> <next item> <parallel> --crew <usd> [<round worst case>]
+exit 5 (log/62.txt)
+
+$ $B/bin/gstack-evals ledger lease --item rr2-smoke-full --run rr2-dry-smoke --amount 120 --ledger $W/pause/ledger.sqlite --ledger-record $W/pause/record --json
+  "lease_id": "rr2-smoke-full.0001.7ef56a",
+exit 0 (log/63.txt)
+# The smoke's lease reserves $120 and crew use is $1,600: headroom $180, so the grid's spend cap is $180, not its $770.
+
+$ PAUSE $W/pause/record rr2-grid-full 4 --crew 1600
+pause: crew use $1600.00 and a crew reserve of $100.00; settled $0.00 and reserved $120.00 over the five items; headroom $180.00 of $2000.00; one round of rr2-grid-full costs at most $160.00
+pause: launch rr2-grid-full with --spend-cap 180.00 (the smaller of the item's $770.00 left and the headroom)
+exit 0 (log/64.txt)
+# Crew use $1,650: headroom $130, below one round of 4 at $40, so the pause stops (exit 3).
+
+$ PAUSE $W/pause/record rr2-grid-full 4 --crew 1650
+pause: crew use $1650.00 and a crew reserve of $100.00; settled $0.00 and reserved $120.00 over the five items; headroom $130.00 of $2000.00; one round of rr2-grid-full costs at most $160.00
+pause: STOP. The headroom is below one round's worst case: launch nothing, report to the Captain, and resume only on the Captain's word, inside the ceiling.
+exit 3 (log/65.txt)
+# A judge batch with a $60 worst case at $180 of headroom: refused, since its lease would reserve the item's $200. Then at $20 of crew use.
+
+$ PAUSE $W/pause/record rr2-judge-match 1 --crew 1600 60
+pause: crew use $1600.00 and a crew reserve of $100.00; settled $0.00 and reserved $120.00 over the five items; headroom $180.00 of $2000.00; one round of rr2-judge-match costs at most $200.00
+pause: STOP. The headroom is below one round's worst case: launch nothing, report to the Captain, and resume only on the Captain's word, inside the ceiling.
+exit 3 (log/66.txt)
+
+$ PAUSE $W/pause/record rr2-judge-match 1 --crew 20 60
+pause: crew use $20.00 and a crew reserve of $100.00; settled $0.00 and reserved $120.00 over the five items; headroom $1760.00 of $2000.00; one round of rr2-judge-match costs at most $200.00
+pause: launch the judge batch on rr2-judge-match; its lease reserves the item's $200.00 left, which fits the headroom
+exit 0 (log/67.txt)
+# The re-cost on the stub smoke's cost.tsv, then on copies with the session costs set (synthetic).
+
+$ PAUSE --recost $W/pause/record $W/run/rr2-smoke-full/arms/gstack-full-opus/cost.tsv 4
+recost: smoke sessions $0.00, $0.00, $0.00; dearest $0.00; 66 sessions at that plus one round of 4 at $40 is $160.00; rr2-grid-full has $770.00 left of $770.00
+recost: the grid fits its cap
+exit 0 (log/68.txt)
+# #187's smoke costs ($7.84 dearest): the grid fits.
+
+$ PAUSE --recost $W/pause/record $W/cost-fits.tsv 4
+recost: smoke sessions $7.84, $5.10, $5.33; dearest $7.84; 66 sessions at that plus one round of 4 at $40 is $677.44; rr2-grid-full has $770.00 left of $770.00
+recost: the grid fits its cap
+exit 0 (log/69.txt)
+# Dearest at $9.24: 66 x 9.24 + 160 = 769.84, inside $770.
+
+$ PAUSE --recost $W/pause/record $W/cost-edge.tsv 4
+recost: smoke sessions $9.24, $5.10, $5.33; dearest $9.24; 66 sessions at that plus one round of 4 at $40 is $769.84; rr2-grid-full has $770.00 left of $770.00
+recost: the grid fits its cap
+exit 0 (log/70.txt)
+# Dearest at $9.25: past $770, so no grid (exit 3).
+
+$ PAUSE --recost $W/pause/record $W/cost-over.tsv 4
+recost: smoke sessions $9.25, $5.10, $5.33; dearest $9.25; 66 sessions at that plus one round of 4 at $40 is $770.50; rr2-grid-full has $770.00 left of $770.00
+recost: STOP. The grid does not fit its cap at the smoke's dearest session: start no grid and report to the Captain.
+exit 3 (log/71.txt)
+# A smoke session with an unknown call: its cost is not known (exit 5).
+
+$ PAUSE --recost $W/pause/record $W/cost-unknown.tsv 4
+E_RR_PAUSE ValueError: a smoke session row has no usd value or unknown calls, so its cost is not known
+exit 5 (log/72.txt)
+# A grid lease of $500 already open: $270 left, so even #187's costs do not fit (exit 3).
+
+$ $B/bin/gstack-evals ledger lease --item rr2-grid-full --run rr2-dry-grid --amount 500 --ledger $W/pause/ledger.sqlite --ledger-record $W/pause/record --json
+  "lease_id": "rr2-grid-full.0001.fe3a00",
+exit 0 (log/73.txt)
+
+$ PAUSE --recost $W/pause/record $W/cost-fits.tsv 4
+recost: smoke sessions $7.84, $5.10, $5.33; dearest $7.84; 66 sessions at that plus one round of 4 at $40 is $677.44; rr2-grid-full has $270.00 left of $770.00
+recost: STOP. The grid does not fit its cap at the smoke's dearest session: start no grid and report to the Captain.
+exit 3 (log/74.txt)
+# The pause's stop through review-units' spend cap: a stub launch with --spend-cap 150, below the item's 240, and --append
+# marks that stop as the pause's, which #154's rr-decide.py skips.
+stub run none pause: 1 arm, 33 units x 1 passes, stops CAP_STOP; reader map sha256 d74a9e1c21d635a2a7def12f1c0e77ae5566f74f787be2fe215518f164470651; background wait 3 s (dry-run setting)
+stub run none pause: never-waited sessions 0, scored by rule final 0, parse equal to findings.ts's parseFindings 0
+CAP_STOP the next round's worst case (4 sessions at their allowance) does not fit under the cap
+
+$ PAUSE --append $W/run/pause.launch 2 $W/run/pause.stderr 150 240
+pause: appended 1 lines and review-units exit 2 to the run log; 1 marked RR_PAUSE_STOP as the pause's stop
+exit 0 (log/75.txt)
+
+$ cat $W/run/pause.stderr
+RR_PAUSE_STOP CAP_STOP the next round's worst case (4 sessions at their allowance) does not fit under the cap
+review-units exit 2
+exit 0 (log/76.txt)
+
+## Done

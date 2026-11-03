@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "suite": "stacks-r1",
+  "decision_rule": "Preregistered in wiki/plans/2026-11-02-geva-195-r2-rerun-amendment (sections 4 to 7), as wiki/plans/2026-11-03-geva-255-r2-after-pin-amendment amends it. Two passes each of gstack-full (gstack 699a41cb /review, the overhaul's after pin installed by review-units' default ./setup, on Opus 5.5, told to run the Review Army and the adversarial pass) and none-rr (Opus 5.5, no gstack, the same told template) on all 33 stacks-r1 units, on #141's driver at 176fdc7, judged blind in one matching and one adjudication batch at rig 715f837. Each blocking blocker's value is the share of an arm's passes that FOUND it; PR clusters are the units. The comparison is scored after noloss derive --drop-gaps on its two arms. No outcome, FIX-METHOD to the Captain with the counts, when gstack-full's exposure gate failed, more than 6 of an arm's 66 sessions ended in turn_cap or allowance_stop, --drop-gaps dropped more than 3 of the 33 units, an arm stopped, either grid run's saved stderr log shows a stop other than coverage gaps (a proxy CAP_STOP above all, whether or not --drop-gaps dropped its gap) or can't show its stops, or the scorer gave no verdict, delta or interval. Otherwise CUT-CANDIDATE when gstack-full found no more blocking blocker-passes than none-rr; KEEP when the scorer's 95% interval of the recall difference is above zero (a Holm family of one); FIX-METHOD otherwise. The scorer's NO_LOSS, LOSS and size-rule lines are printed but decide nothing. The rescue and complete-case sensitivities, the cohort14 and out19 strata, false blockers per PR on the 6 over-blocking units and every unmatched blocking finding are reported beside.",
+  "seed": 20261031,
+  "draws": 10000,
+  "comparisons": [
+    {
+      "id": "gstack-full-vs-none",
+      "variant": "gstack-full",
+      "reference": "none-rr",
+      "margin_points": 10,
+      "margin_reason": "Stacks round 1 plan (wiki/plans/2026-10-30-geva-59-stacks-round-1-plan, section 7): 10 points of blocking recall, the review no-loss lane's margin; the rerun decides on the count rule and the interval, so the margin decides nothing",
+      "post_hoc": false,
+      "frozen_bar": null,
+      "size_rule": {
+        "power_sims": 2000,
+        "spread": "wide"
+      },
+      "false_blocker_drop": 0.5,
+      "note": "R2 at the overhaul's after pin: the full /review procedure against plain Opus 5.5 on the same units, harness and settings, on the driver that waits for background work."
+    }
+  ]
+}

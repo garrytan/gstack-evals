@@ -1,0 +1,36 @@
+// R2 at the overhaul's after pin (GEVA-255 amendment, section 4): builds, or takes from the install cache, the gstack-full
+// arm's install exactly as review-units' Docker rig does (dockerRig in src/skill-eval/cli/run-host.ts at 176fdc7, which
+// src/trial/review/cli.ts:386 calls): installArms with dockerInstaller on the pinned trial image, the sandbox's home and the
+// state root's cache, for the arm spec that `--arms gstack-full=garrytan/gstack@<sha>` parses to (src/skill-eval/cli/arms.ts:211).
+// The install cache is keyed by the recipe, the source tree, the host, the checkout name, the command, the kept paths and the
+// runner's image digest (install.ts:493), so a review-units launch on the same machine and state root reuses this layer.
+// It calls no model and opens no lease. It prints one JSON line: the layer's path, its tree digest, the arm's tree digest,
+// the install provenance, the image pin and the sandbox home. rr2-install-check.py reads that layer.
+// Usage: B=<gstack-evals at 176fdc7> bun rr2-install.ts <gstack sha>
+import { homedir } from "node:os";
+
+const B = process.env.B;
+const sha = process.argv[2] ?? "";
+if (!B || !/^[0-9a-f]{40}$/.test(sha)) {
+  console.error("E_RR2_INSTALL usage: B=<gstack-evals at 176fdc7> bun rr2-install.ts <40-hex gstack sha>");
+  process.exit(5);
+}
+const { installArms, stackSources, dockerInstaller } = await import(B + "/src/arms/install.ts");
+const { checkImagePin, stateRoot } = await import(B + "/src/trial/image.ts");
+const { dockerSandbox } = await import(B + "/src/trial/sandbox.ts");
+const bin = process.env.GSTACK_EVALS_DOCKER_BIN || "docker";
+const state = stateRoot(process.env);
+const pin = checkImagePin({ state, docker: bin });
+if (!pin.ok) {
+  console.error("E_RR2_INSTALL " + pin.code + ": " + pin.message);
+  process.exit(5);
+}
+const home = dockerSandbox({ trialImage: pin.pin.tag, docker: bin }).homePath("");
+const arm = { name: "gstack-full", kind: "stack", stack: { repo: "garrytan/gstack", sha }, install: {} };
+const installs = installArms({ host: "claude", arms: [arm], skill: null, skills: { "gstack-full": "review" }, base: null, sources: stackSources({ root: null, home: homedir(), state }), runner: dockerInstaller({ image: pin.pin.tag, digest: pin.pin.digest, docker: bin, home }), state });
+const got = installs[0];
+if (!got || got.layers.length !== 1) {
+  console.error("E_RR2_INSTALL expected one install with one layer, got " + JSON.stringify(installs.map((i: { layers: unknown[] }) => i.layers.length)));
+  process.exit(5);
+}
+console.log(JSON.stringify({ layer: got.layers[0].src, dest: got.layers[0].dest, tree_sha256: got.tree_sha256, provenance: got.provenance, image: { tag: pin.pin.tag, digest: pin.pin.digest }, home }));
