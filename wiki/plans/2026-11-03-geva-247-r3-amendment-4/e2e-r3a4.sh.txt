@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# Part F of dry-run-r3a4.sh.txt, adapted from 3c's e2e-3c.sh.txt: the export's own vm-run.sh, end to end on this machine,
+# against the export's real proxy.ts and ledger service with the stub model (fake_upstream.ts on 127.0.0.1:8799, the
+# claude-opus-5-5 route's base_url), Harbor at f3a5a92 (uv tool install, as vm-bootstrap.sh does it) and the Lane B agent.
+# The task is one made-up SWE-rebench shaped fixture (demo__demo-7, the shape of tests/r3a4.test.ts's rebenchFixture: its
+# own resources and timeouts, three tests/ files, FROM by tag, WORKDIR /testbed as the SWE-rebench images set it), never a pool task body, materialized through the pin's
+# materializeRebench, so its verifier carries every tests/ file and both Dockerfiles are FROM python:3.11-slim-bookworm
+# pinned by its real Docker Hub digest. Its repo is the smoke task's calc.py, so the stub model's fix can pass it, and the
+# reward assertion is reward 1. E1 runs both arms in one job on a $40 ledger: none, and told /investigate with
+# procedure_line=investigate-phases (#109's gstack arm), each on cells.r3a4.json's Opus cell ($12 session cap). E2 is 3c's
+# D2 at the new session cap: two none trials at once on a $20 ledger with STOP_ON_CAP, where the ledger refuses the second
+# $12 reserve and the watcher must stop Harbor (it assumes the two trials overlap, as 3c's D2 does).
+# The prompt checks read the agent's own "prompt" event (wrapper, instruction and procedure line sha256s) and rebuild the
+# prompt it sent with the pin's prompt_builder.py from those verified inputs: Claude Code expands the slash command before
+# its first model request, so the stub model never sees the told prompt verbatim.
+# The task's network modes are public, as 3c's are, because a Capy machine's kernel can't run Harbor's egress sidecar.
+# No provider key exists in any process: ~/.laneb-keys holds a placeholder for the run and is removed after.
+# It ends with named assertions, each a PASS or FAIL line; the script's own exit code is not one of them.
+# Usage: bash e2e-r3a4.sh.txt <export>/quick/laneb <arms dir holding none.tar.gz and gstack.tar.gz> <empty work dir>
+set -u
+L=$(cd "$1" && pwd); A=$(cd "$2" && pwd); W=$(mkdir -p "$3" && cd "$3" && pwd)
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN
+mkdir -p "$W/bin" && ln -sf /usr/bin/sg "$W/bin/sg"
+export PATH="$W/bin:$HOME/.local/bin:$PATH"
+for p in 8787 8788 8799 9911; do if (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then echo "127.0.0.1:$p already answers; stop it first"; exit 2; fi; done
+[ ! -e "$HOME/.laneb-keys" ] || { echo "$HOME/.laneb-keys exists; refusing to overwrite it"; exit 2; }
+fpid=""; lpid=""
+cleanup() { rm -f "$HOME/.laneb-keys"; [ -z "$fpid" ] || kill "$fpid" 2>/dev/null; [ -z "$lpid" ] || kill "$lpid" 2>/dev/null; true; }
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
+(umask 077; echo "ANTHROPIC_API_KEY=dry-run-placeholder-not-a-key" > "$HOME/.laneb-keys")
+echo "harbor $(harbor --version 2>/dev/null | head -1), bun $(bun --version), docker $(docker version --format '{{.Server.Version}}')"
+uv tool list 2>/dev/null | head -1
+IMG=python:3.11-slim-bookworm
+docker pull -q "$IMG" > /dev/null && DIG=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMG" | sed 's/.*@//')
+echo "fixture base image $IMG, digest $DIG"
+LINE=$(cd "$L/.." && bun -e 'const { PROCEDURE_LINES } = await import("./laneb/runner/grid.ts"); process.stdout.write(PROCEDURE_LINES["investigate-phases"])')
+LSHA=$(printf %s "$LINE" | sha256sum | cut -c1-64)
+echo "procedure line sha256 $LSHA"
+# The made-up fixture task, in rebenchFixture's layout.
+F=$W/src/demo__demo-7
+mkdir -p "$F/environment" "$F/tests" "$F/solution"
+printf '[task]\nname = "swe-rebench/demo__demo-7"\n\n[metadata]\ndifficulty = "medium"\n\n[verifier]\ntimeout_sec = 600\n\n[agent]\ntimeout_sec = 900\n\n[environment]\nbuild_timeout_sec = 1800.0\ncpus = 2\nmemory = '"'"'8G'"'"'\nstorage = '"'"'16G'"'"'\n' > "$F/task.toml"
+cat > "$F/environment/Dockerfile" <<EOF
+FROM $IMG
+
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /testbed
+RUN printf 'def add(a, b):\n    return a - b\n' > calc.py && git init -q && git -c user.email=fixture@example.com -c user.name=fixture add -A && git -c user.email=fixture@example.com -c user.name=fixture commit -qm base
+RUN mkdir -p /logs
+EOF
+echo "calc.add(2, 3) returns -1 instead of 5. Fix it." > "$F/instruction.md"
+printf '#!/bin/bash\ncd /testbed && sed -i "s/return a - b/return a + b/" calc.py\n' > "$F/solution/solve.sh"
+printf '#!/bin/bash\nset -u\npython3 /tests/parser.py\n' > "$F/tests/test.sh"
+echo '{"instance_id": "demo__demo-7"}' > "$F/tests/config.json"
+cat > "$F/tests/parser.py" <<'EOF'
+import json, subprocess
+ok = subprocess.run(["python3", "-c", "import calc; assert calc.add(2, 3) == 5"], cwd="/testbed").returncode == 0
+open("/logs/verifier/reward.txt", "w").write("1\n" if ok else "0\n")
+print(json.dumps({"instance_id": json.load(open("/tests/config.json"))["instance_id"], "passed": ok}))
+EOF
+cat > "$W/materialize.ts" <<'EOF'
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+const [L, src, dest, image, digest] = process.argv.slice(2);
+const { materializeRebench, treeDigest } = await import(L + "/runner/materialize.ts");
+const files = (d: string): number => readdirSync(d, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? files(join(d, e.name)) : 1), 0);
+const task = { task_id: "demo__demo-7", created: "2026-01", repo: "demo/demo", hub_ref: "", digest: "sha256:" + treeDigest(src), digest_files: files(src), image, image_digest: digest };
+const m = materializeRebench(join(src, ".."), task, dest, { runtimeStages: readFileSync(L + "/runner/runtime-stages.Dockerfile", "utf8"), runtimeCopy: readFileSync(L + "/runner/runtime-copy.Dockerfile", "utf8"), network: "public" });
+console.log("materialized " + task.task_id + ": image " + m.image + ", source digest " + m.sourceDigest);
+EOF
+FAKE_UPSTREAM_LOG="$W/fake-upstream.jsonl" setsid bun "$L/runner/fake_upstream.ts" > "$W/fake-upstream.log" 2>&1 < /dev/null &
+fpid=$!
+show() { echo "--- $1"; if [ -s "$2" ]; then cat "$2"; echo; else echo "(missing or empty)"; fi; }
+run() {
+  local name=$1 cap=$2 stopcap=$3 arms=$4 attempts=$5 R="$W/$1"
+  mkdir -p "$R/arms" "$R/tasks"
+  bun "$W/materialize.ts" "$L" "$F" "$R/tasks/demo__demo-7" "$IMG" "$DIG"
+  sed -i 's/^network_mode = .*/network_mode = "public"/' "$R/tasks/demo__demo-7/task.toml"
+  if [ "$name" = E1 ]; then echo "--- materialized tests/: $(ls "$R/tasks/demo__demo-7/tests" | tr '\n' ' ')"; grep -h '^FROM\|^COPY' "$R/tasks/demo__demo-7/tests/Dockerfile" "$R/tasks/demo__demo-7/environment/Dockerfile"; fi
+  cp "$A/none.tar.gz" "$R/arms/none-8bab483364e4.tar.gz"
+  local ns gs=""; ns=$(gzip -dc "$R/arms/none-8bab483364e4.tar.gz" | sha256sum | cut -d' ' -f1)
+  if [ "$arms" != none ]; then cp "$A/gstack.tar.gz" "$R/arms/gstack-b93994689107.tar.gz"; gs=$(gzip -dc "$R/arms/gstack-b93994689107.tar.gz" | sha256sum | cut -d' ' -f1); fi
+  jq '.routes[.models["claude-opus-5-5"].route].base_url = "http://127.0.0.1:8799"' "$L/config/proxy.json" > "$R/proxy.json"
+  local armjson
+  armjson=$(jq -n --arg r "$R" --arg ns "$ns" --arg gs "$gs" '[{name: "none-8bab483364e4", tar: ($r + "/arms/none-8bab483364e4.tar"), sha256: $ns, system_prompt: "claude-code-preset"}, {name: "gstack-b93994689107", tar: ($r + "/arms/gstack-b93994689107.tar"), sha256: $gs, system_prompt: "claude-code-preset", told: "investigate", procedure_line: "investigate-phases"}]' | jq -c --arg a "$arms" '[.[] | select(.name | test($a))]')
+  jq -n --arg r "$R" --arg l "$L" --argjson arms "$armjson" --argjson at "$attempts" --slurpfile c "$L/config/cells.r3a4.json" '{job_name: "dry-r3a4", tasks_dir: ($r + "/tasks"), tasks: ["demo__demo-7"],
+    models: [$c[0].models[] | select(.id == "claude-opus-5-5")], arms: $arms, attempts: $at, n_concurrent: 2, agent_dir: ($l + "/runner/agent"), runner_dir: ($l + "/runner"), base_url: "http://__GATEWAY__:8787",
+    max_output_tokens: $c[0].max_output_tokens, verifier_timeout_multiplier: $c[0].verifier_timeout_multiplier, repo_dir: "/testbed"}' > "$R/spec.json"
+  bun "$L/runner/grid.ts" "$R/spec.json" "$R/job.json"
+  jq -n --argjson arms "$armjson" '{arms: [$arms[] | {name, sha256}]}' > "$R/manifest.json"
+  [ "$stopcap" = no ] || touch "$R/STOP_ON_CAP"
+  LEDGER="$R/ledger.jsonl" bun -e 'const { Ledger } = await import(process.argv[1] + "/runner/ledger.ts"); new Ledger(process.env.LEDGER, "dry-r3a4").approve(Number(process.argv[2]), { words: "dry run, no spend", by: "dry run" });' "$L" "$cap"
+  setsid bun "$L/runner/ledger.ts" serve --path "$R/ledger.jsonl" --item dry-r3a4 --port 9911 > "$R/ledger-service.log" 2>&1 < /dev/null &
+  lpid=$!
+  for _ in $(seq 1 40); do curl -fsS 127.0.0.1:9911/status > /dev/null 2>&1 && break; sleep 0.5; done
+  echo
+  echo "## $name: ledger cap \$$cap, batch cap \$150, STOP_ON_CAP $stopcap, arms $arms, attempts $attempts"
+  local t0=$SECONDS
+  setsid bash "$L/runner/vm-run.sh" "$R" "dry-$name/" 150 > "$R/vm-run.stdout" 2>&1 < /dev/null
+  local rc=$?
+  echo "$rc" > "$R/vm-run.sh.rc"
+  echo "vm-run.sh exit $rc after $((SECONDS - t0)) s"
+  kill "$lpid" 2>/dev/null; wait "$lpid" 2>/dev/null; lpid=""
+  local O="$R/out"
+  echo "out/: $(cd "$O" && ls | tr '\n' ' ')"
+  show "out/proxy-status-end.json" "$O/proxy-status-end.json"
+  show "out/cap-stop.json" "$O/cap-stop.json"
+  echo "--- out/close-all.json"; jq -c '[.[] | {trial, open, spent_micros, settled}]' "$O/close-all.json" 2>&1
+  echo "--- out/proxy-sessions.jsonl"; jq -c '{trial, model, cap_micros, spent_micros, requests, ok_responses, refused, open, close_reason, cmd_expanded, cmd_names}' "$O/proxy-sessions.jsonl" 2>&1
+  echo "--- ledger rows"; jq -c '{kind, id, usd_micros}' "$R/ledger.jsonl"
+  echo "--- spend agrees: sessions $(jq -s 'map(.spent_micros) | add // 0' "$O/proxy-sessions.jsonl"), proxy $(jq .global_spent_micros "$O/proxy-totals.json"), ledger settled $(jq .settledMicros "$O/ledger-status-end.json") (micros)"
+  show "out/pulls.tsv" "$O/pulls.tsv"
+  echo "--- trials"; for d in "$R"/jobs/dry-r3a4/*/; do [ -f "$d/config.json" ] || continue; echo "$(basename "$d"): arm $(jq -r .agent.kwargs.arm "$d/config.json"), result.json $([ -f "$d/result.json" ] && echo yes || echo no), reward $(cat "$d/verifier/reward.txt" 2>/dev/null || echo none), exception $(jq -r '.exception_info.exception_type // "none"' "$d/result.json" 2>/dev/null)"; done
+  echo "--- harbor.log, last 3 lines"; tail -3 "$O/harbor.log"
+}
+run E1 40 no . 1
+run E2 20 yes none 2
+cat > "$W/prompts.py" <<'EOF'
+# prompts.py <laneb> <E1 dir> <instruction.md> <procedure line sha256>: each E1 trial's logged "prompt" event, its inputs
+# checked against the files, and the prompt the agent sent rebuilt from them with the pin's prompt_builder.
+import glob, hashlib, json, os, sys
+L, R, ins, lsha = sys.argv[1:5]
+sys.path.insert(0, L + "/runner/agent")
+from prompt_builder import PROCEDURE_LINES, build_prompt
+sha = lambda s: hashlib.sha256(s.encode()).hexdigest()
+wrapper, instruction = open(L + "/runner/prompt-wrapper.md").read(), open(ins).read()
+ev = {}
+for f in glob.glob(R + "/jobs/dry-r3a4/*/**/*.jsonl", recursive=True):
+    for line in open(f, errors="replace"):
+        try: e = json.loads(line)
+        except Exception: continue
+        if isinstance(e, dict) and e.get("event") == "prompt":
+            ev["told" if e.get("told_skill") else "none"] = e
+for k in ("none", "told"): print(k, "prompt event:", json.dumps(ev.get(k)))
+out = {"events": sorted(ev)}
+if len(ev) == 2:
+    t, n = ev["told"], ev["none"]
+    out["inputs"] = all(e["wrapper_sha256"] == sha(wrapper) and e["instruction_sha256"] in (sha(instruction), sha(instruction.strip())) for e in (t, n))
+    out["logged_sha"] = t.get("procedure_line") == "investigate-phases" and t.get("procedure_line_sha256") == lsha == sha(PROCEDURE_LINES["investigate-phases"]) and "procedure_line" not in n
+    i = instruction if t["instruction_sha256"] == sha(instruction) else instruction.strip()
+    told = build_prompt(wrapper, i, True, t["told_skill"], procedure_line=t["procedure_line"]); none = build_prompt(wrapper, i, False, "")
+    tail = "\n" + PROCEDURE_LINES["investigate-phases"] + "\n"
+    out["told_ends"] = told.endswith("\n" + tail) and told.startswith("/investigate ")
+    out["none_is_told_minus"] = told[len("/investigate "):len(told) - len(tail)] == none
+    print("told prompt sha256", sha(told), "ends with:", json.dumps(told[-120:]))
+    print("none prompt sha256", sha(none))
+json.dump(out, open(R + "/prompts.json", "w")); print(json.dumps(out))
+EOF
+echo; echo "## E1 prompts"
+python3 "$W/prompts.py" "$L" "$W/E1" "$F/instruction.md" "$LSHA"
+echo; echo "## leftovers"
+echo "containers: $(docker ps -q | wc -l), ports: $(for p in 8787 8788 9911; do (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && echo -n "$p "; done)none else"
+echo; echo "## assertions"
+ok() { if "${@:2}"; then echo "PASS $1"; else echo "FAIL $1"; fi; }
+rc() { [ "$(cat "$W/$1/vm-run.sh.rc" 2>/dev/null)" = "$2" ]; }
+capnull() { jq -e 'has("cap_stop") and .cap_stop == null' "$W/$1/out/$2" > /dev/null 2>&1; }
+capset() { jq -e '.cap_stop != null and .cap_stop != false and .cap_stop != ""' "$W/$1/out/$2" > /dev/null 2>&1; }
+agree() { local O="$W/$1/out" s p l; s=$(jq -s 'map(.spent_micros) | add // 0' "$O/proxy-sessions.jsonl" 2>/dev/null); p=$(jq .global_spent_micros "$O/proxy-totals.json" 2>/dev/null); l=$(jq .settledMicros "$O/ledger-status-end.json" 2>/dev/null); [ -n "$s" ] && [ "$s" = "$p" ] && [ "$p" = "$l" ]; }
+trials() { local n=0 d; for d in "$W/E1"/jobs/dry-r3a4/*/; do [ -f "$d/config.json" ] || continue; n=$((n + 1)); [ "$(cat "$d/verifier/reward.txt" 2>/dev/null)" = "$1" ] || [ "$1" = any -a -s "$d/verifier/reward.txt" ] || return 1; [ "$(jq -r '.exception_info.exception_type // "none"' "$d/result.json" 2>/dev/null)" = none ] || return 1; done; [ "$n" = 2 ]; }
+okresp() { jq -s -e 'length == 2 and all(.[]; (.ok_responses // 0) > 0)' "$W/E1/out/proxy-sessions.jsonl" > /dev/null 2>&1; }
+noopen() { jq -e '.openIds == []' "$W/$1/out/ledger-status-end.json" > /dev/null 2>&1 && jq -e 'type == "array" and length == 0' "$W/$1/out/close-all.json" > /dev/null 2>&1; }
+nocap() { [ ! -e "$W/E1/out/cap-stop.json" ] || capnull E1 cap-stop.json; }
+pj() { jq -e ".$1 == true" "$W/E1/prompts.json" > /dev/null 2>&1; }
+ok "E1: vm-run.sh exits 0" rc E1 0
+ok "E1: both trials (none and told) reach the verifier and write a reward, with no exception" trials any
+ok "E1: both trials have reward 1" trials 1
+ok "E1: proxy-status-end.json has cap_stop null" capnull E1 proxy-status-end.json
+ok "E1: no cap stop (cap-stop.json absent or cap_stop null)" nocap
+ok "E1: spend agrees across sessions, proxy and ledger" agree E1
+ok "E1: both proxy sessions have ok_responses above 0" okresp
+ok "E1: no open reservation at the end (ledger openIds and close-all.json empty)" noopen E1
+ok "E1: each arm logged its prompt inputs, and they match the wrapper and the task's instruction" pj inputs
+ok "E1: the told arm logged procedure_line investigate-phases with the line's sha256; none logged no line" pj logged_sha
+ok "E1: the told prompt starts with /investigate and ends with a blank line and the procedure line" pj told_ends
+ok "E1: the none prompt is the told prompt minus the slash command and the line, byte for byte" pj none_is_told_minus
+ok "E2: vm-run.sh exits 130" rc E2 130
+ok "E2: proxy-status-end.json has cap_stop set" capset E2 proxy-status-end.json
+ok "E2: cap-stop.json has cap_stop set" capset E2 cap-stop.json
+ok "E2: spend agrees across sessions, proxy and ledger" agree E2

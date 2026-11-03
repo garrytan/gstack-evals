@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Real-oracle dry run for R3 amendment 4 (plan section 4 item 4), local Docker, no model call, no VM.
+set -u
+W=$A4/oracle-dryrun
+G=$A4/wt
+L=$G/quick/laneb
+EXP=$A4/dl-rebench/swe-rebench-leaderboard
+TASKS=AbsaOSS__generate-release-notes-207,BrianPugh__cyclopts-609,Cambridge-ICCS__TCTrack-118,ImperialCollegeLondon__proCAT-503
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+rec=$W/record.txt
+say() { echo "$*" | tee -a "$rec"; }
+step() { say "\$ $*"; "$@" >> "$W/log.txt" 2>&1; local c=$?; say "exit $c"; return $c; }
+mkdir -p "$W/arms" "$W/vm"
+: > "$rec"
+say "R3 amendment 4 real-oracle dry run, $(date -u +%FT%TZ), branch head $(git -C "$G" rev-parse HEAD) (worktree dirty: $(git -C "$G" status --porcelain -- quick | wc -l) paths)"
+say "docker $(docker version --format '{{.Server.Version}}'), harbor at f3a5a92 ($(command -v harbor)); free disk $(df -h / | awk 'NR==2 {print $4}'), memory $(free -g | awk '/Mem/ {print $2}') GB"
+cp $CAPTAIN_DRIVE/handoffs/GSTA-30/arms/none-8bab483364e4.tar.gz "$W/arms/none.tar.gz"
+cp -r "$L/runner" "$W/vm/runner"
+for kind in good broken; do
+  run=$W/vm-$kind/run
+  rm -rf "$W/vm-$kind"; mkdir -p "$W/vm-$kind"; cp -r "$L/runner" "$W/vm-$kind/runner"
+  T=$TASKS; [ $kind = broken ] && T=${TASKS%%,*}
+  step env TASK_SET=swerebench-r3a4 SWEREBENCH=$EXP TASKS=$T ORACLE=1 NETWORK=public VM_ROOT=$W/vm-$kind CELLS=cells.r3a4.json ARM_MANIFESTS=arms/manifests/r3 \
+    bun $L/runner/prepare-run.ts $run r3a4-dryrun-$kind claude-opus-5-5 none $W/arms 1 4 || exit 1
+  if [ $kind = broken ]; then
+    t=${TASKS%%,*}
+    say "breaking $t's reference patch: solve.sh keeps only its patch publish block, so the verifier gets an empty model.patch"
+    printf '#!/bin/bash\nset -euo pipefail\n# laneb dry run: the reference fix is removed on purpose.\nmkdir -p /logs/artifacts && cd /testbed && git add -A && git diff --cached --binary HEAD > /logs/artifacts/model.patch\n' > "$run/tasks/$t/solution/solve.sh"
+  fi
+  say "\$ (cd $run && harbor run -y -c $run/oracle.json)   # vm-run.sh line 137's job path, without sg"
+  (cd "$run" && harbor run -y -c "$run/oracle.json") > "$W/oracle-$kind.log" 2>&1
+  say "exit $?"
+  for d in "$run"/jobs/*-oracle/*/; do
+    [ -f "$d/config.json" ] || continue
+    t=$(jq -r '.task.path | split("/") | last' "$d/config.json")
+    say "$kind $t reward $(cat "$d/verifier/reward.txt" 2>/dev/null || echo none) exception $(jq -r '.exception_info.exception_type // "none"' "$d/result.json" 2>/dev/null)"
+  done
+done
+for t in ${TASKS//,/ }; do
+  say "image $t: $(jq -r --arg t "$t" '.tasks[] | select(.task_id == $t) | .image + "@" + .image_digest' "$L/tasks/swerebench-r3a4.json"); FROM in env Dockerfile: $(grep -m1 '^FROM swerebench' "$W/vm-good/run/tasks/$t/environment/Dockerfile" | cut -d' ' -f2); pulled: $(docker image inspect --format '{{join .RepoDigests ","}}' "$(grep -m1 '^FROM swerebench' "$W/vm-good/run/tasks/$t/environment/Dockerfile" | cut -d' ' -f2)" 2>/dev/null)"
+  say "resources $t: $(grep -E '^(cpus|memory|storage)' "$W/vm-good/run/tasks/$t/task.toml" | tr '\n' ' '); verifier COPY: $(grep '^COPY' "$W/vm-good/run/tasks/$t/tests/Dockerfile")"
+done
+say "pruning: docker system prune -af"
+docker system prune -af --volumes > "$W/prune.log" 2>&1; say "prune exit $?; free disk $(df -h / | awk 'NR==2 {print $4}')"

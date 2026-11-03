@@ -1,0 +1,280 @@
+#!/usr/bin/env bash
+# R3 amendment 4 dry run (GEVA-247), keyless, at the amendment 4 pin (#186's squash merge, 616de34). It follows the post's
+# "dry run to repeat at the merge pin" steps 1 to 9 and plan section 11, in the style of 3c's dry-run-3c.sh.txt: step()
+# logs each command's exit code and output and goes on after a failure, so the script's own exit proves nothing.
+# Part 0 exports the pin with git archive outside any git work tree and installs the locked dependencies.
+# Part A runs the keyless test files from the export, one file at a time, with pass and fail counts.
+# Part B prepares r3a4-opus and r3a4-sol on temporary ledgers approved at their caps, from a fixture drop list made from
+# the committed pool (its first 6 ids, in the shape tests/r3a4.test.ts's dropFile writes), not from a real preflight.
+# Sol's prepare is first refused with no route record; then a fixture pass record for r3a4-sol, in the shape
+# tests/r3-sol.test.ts's passRecord writes, goes beside its ledger. No route check ran.
+# Part C drives screen.ts run's refusals before the bind for both items with a stub runner that is never called.
+# Part D opens and settles one lease per new item on temporary ledgers, through the CLI as launch.sh and oracle-preflight.sh
+# call it and through ledger.ts serve as the proxy calls it.
+# Part E drives screen-a's projection stop and screen.ts resume: launch.sh runs with tests/fixtures/launch/ubi as the
+# runner, and a fake ssh (bin/vm/ssh, adapted from tests/fixtures/launch/ssh) plays vm-run.sh: it reserves and settles one
+# session per planned task through the item's ledger service, as the proxy does, and writes the trial files in the shape
+# tests/r3a4.test.ts's writeTrial writes. The fixture ssh writes one trial only, so it can't reach the projection check.
+# Part F runs e2e-r3a4.sh.txt on the export. Part G drives r3/oracle-preflight.sh and r3/drop-list.py with
+# tests/fixtures/r3a4-oracle-stubs, as tests/r3a4-oracle.test.ts does. Part H checks and copies the real-oracle record.
+# Part I reruns amendment 3's dry-run-a3.sh.txt at this pin with SHOW=1000, as 3c section 10 step 2 does, and diffs it with
+# part A of 3c's dry-run-3c.txt after 3c's mask.
+# No step calls a model or starts a VM. Model and Ubicloud keys are unset first; the run steps get a placeholder Ubicloud
+# key, which no stub reads. Part F pulls public Docker Hub images; part I reads Harbor Hub's public registry.
+# Usage: PIN=<pin> G=<gstack-evals git checkout holding PIN> SWEREBENCH=<the pinned Harbor's export of
+#   swe-rebench/swe-rebench-leaderboard> SWEBV=<harbor-datasets checkout> ARMS=<the three arm tars> R=<pinned ubi-runner.sh>
+#   HARBOR_DIR=<harbor at f3a5a92> DROPS=<GEVA-177's r3-drop-list.json> A2=<attempt 2's plan.json> A3=<amendment 3's post
+#   folder> C3=<3c's post folder> P=<this post's folder> ROUTE=<r3a-sol's route record> OREC=<real-oracle record>
+#   OSH=<real-oracle script> UBI_OWNER=<thread code> bash dry-run-r3a4.sh.txt <empty work dir>
+# Paths print as $W, $G, $SWEREBENCH, $SWEBV, $ARMS, $R, $HARBOR_DIR, $DROPS, $A2, $A3, $C3, $P, $ROUTE, $OREC, $OSH and ~.
+set -u
+W=$(mkdir -p "$1" && cd "$1" && pwd)
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN
+export PATH="$HOME/.local/bin:$PATH"
+E=$W/export
+L=$E/quick/laneb
+mkdir -p "$W/log" "$W/bin/vm" "$W/b" "$W/c" "$W/d" "$W/e" "$W/g"
+HIDE="s#$P#\$P#g; s#$C3#\$C3#g; s#$A3#\$A3#g; s#$ROUTE#\$ROUTE#g; s#$OREC#\$OREC#g; s#$OSH#\$OSH#g; s#$W#\$W#g; s#$G#\$G#g; s#$SWEREBENCH#\$SWEREBENCH#g; s#$SWEBV#\$SWEBV#g; s#$ARMS#\$ARMS#g; s#$R#\$R#g; s#$HARBOR_DIR#\$HARBOR_DIR#g; s#$DROPS#\$DROPS#g; s#$A2#\$A2#g; s#$HOME#~#g"
+n=0
+step() {
+  local pat=$1; shift
+  n=$((n + 1))
+  echo
+  echo "\$ $*" | sed "$HIDE"
+  "$@" > "$W/log/$n.txt" 2>&1
+  local c=$?
+  grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-30}" | sed "$HIDE"
+  echo "exit $c (log/$n.txt)"
+}
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN; do echo "$k: $([ -n "${!k+x}" ] && echo set || echo unset)"; done
+DRY="Dry run: a temporary ledger, no spend"
+cat > "$W/bin/approve.ts" <<'EOF'
+const { Ledger } = await import(process.argv[2] + "/quick/laneb/runner/ledger.ts");
+new Ledger(process.env.LEDGER!, process.argv[3]).approve(Number(process.argv[4]), { words: process.argv[5], by: process.argv[6], source: "dry run" });
+EOF
+# drops.ts <export> <out>: a drop list of the pool's first 6 ids, as tests/r3a4.test.ts's dropFile writes one.
+cat > "$W/bin/drops.ts" <<'EOF'
+import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
+const { poolIds } = await import(process.argv[2] + "/quick/laneb/r3/screen.ts");
+const { R3A4_POOL_SHA256 } = await import(process.argv[2] + "/quick/laneb/runner/materialize.ts");
+const sha = (b: string) => createHash("sha256").update(b).digest("hex");
+const listing = (ids: string[]) => sha([...ids].sort().map((i) => i + "\n").join(""));
+const pool: string[] = poolIds(), dropped = pool.slice(0, 6), kept = pool.filter((id) => !dropped.includes(id));
+const fail = { result: "fail", kind: "reference fails" }, pass = { result: "pass", kind: "pass" };
+writeFileSync(process.argv[3], JSON.stringify({ pool_file_sha256: R3A4_POOL_SHA256, pool_size: pool.length, dropped: dropped.map((task, i) => ({ task, reason: "reference fails", pass1: i % 2 ? pass : fail, pass2: fail })), dropped_ids_sha256: listing(dropped), kept_size: kept.length, kept_ids_sha256: listing(kept) }, null, 2) + "\n");
+console.log("fixture drop list: " + dropped.length + " of " + pool.length + " pool ids dropped: " + dropped.join(", "));
+EOF
+# route.ts <export> <ledger>: a passed route record for r3a4-sol on the pin's proxy config, as r3-sol.test.ts's passRecord.
+cat > "$W/bin/route.ts" <<'EOF'
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+const cfg = createHash("sha256").update(readFileSync(process.argv[2] + "/quick/laneb/config/proxy.json")).digest("hex");
+writeFileSync(process.argv[3] + ".route.json", JSON.stringify({ item: "r3a4-sol", model: "gpt-6.1-sol", verdict: "pass", reason: "dry-run fixture record, no route check ran", proxy_config_sha256: cfg, sessions: [] }));
+console.log("fixture route record for r3a4-sol, proxy_config_sha256 " + cfg);
+EOF
+# plan.py <work dir>: what prepare wrote: the draw, sorted-id sha256s, part sizes, concurrency and the pilot's arm options.
+cat > "$W/bin/plan.py" <<'EOF'
+import hashlib, json, sys
+w = sys.argv[1]; p = json.load(open(w + "/plan.json"))
+sha = lambda ids: hashlib.sha256("".join(i + "\n" for i in ids).encode()).hexdigest()
+print("item", p["item"], "cap", p["cap_usd"], "dropped", p["dropped"], "concurrent", p["concurrent"], "pool_sha256", p["pool_sha256"])
+print("screen", len(p["screen_tasks"]), "tasks, ids sha256 (draw order)", p["screen_ids_sha256"], "(sorted)", sha(sorted(p["screen_tasks"])))
+print("pilot", len(p["pilot_tasks"]), "tasks, ids sha256 (draw order)", p["pilot_ids_sha256"], "(sorted)", sha(sorted(p["pilot_tasks"])))
+print("pilot tasks:", " ".join(p["pilot_tasks"]))
+print("pilot within screen:", set(p["pilot_tasks"]) <= set(p["screen_tasks"]), "| screen-a + screen-b = screen:", p["part_tasks"]["screen-a"] + p["part_tasks"]["screen-b"] == p["screen_tasks"])
+print("procedure_line_sha256", p["procedure_line_sha256"])
+for part in ("screen-a", "screen-b", "pilot"):
+    j = json.load(open(w + "/" + part + "/job.json")); k = j["agents"][0]["kwargs"]
+    ids = sorted(t["path"].split("/")[-1] for t in j["tasks"])
+    print(part, "job", j["job_name"], len(ids), "tasks, sorted ids sha256", sha(ids), "n_concurrent_trials", j["n_concurrent_trials"], "arm", k["arm"], "model", k["upstream_model"], "session_cap_usd", k["session_cap_usd"], "told", k.get("told_skill"), "procedure_line", k.get("procedure_line"), "ids match plan", ids == sorted(p["part_tasks"][part]))
+EOF
+S=$W/bin/stub-runner.sh
+cat > "$S" <<'EOF'
+#!/usr/bin/env bash
+# Stub runner for the refusals: logs each call and starts nothing.
+echo "$*" >> "${STUB_STATE:?}/calls"; exit 1
+EOF
+chmod +x "$S"
+export S E UBI_OWNER
+# runenv.sh <ledger> <stub state> <port> <command...>: the run command's settings (3c's runenv.sh) for an amendment 4 item.
+cat > "$W/bin/runenv.sh" <<'EOF'
+#!/usr/bin/env bash
+mkdir -p "$2"
+exec env -u UBICLOUD_API_TOKEN UBICLOUD_API_KEY=dry-run-placeholder-not-a-key LEDGER="$1" UBI_OWNER="$UBI_OWNER" UBI_RUNNER="$S" STUB_STATE="$2" UBI_TTL_HOURS=24 VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 UBI_SIZE=standard-16 UBI_STORAGE=640 LEDGER_PORT="$3" VM_EXTEND_LEAD_SEC=1800 UBI_LOCATION=eu-central-h1 DROPS="$DF" DROPS_SHA256="$DS" "${@:4}"
+EOF
+# refuse.sh <stub state> <ledger> <work dir> <item> <port> [env args]: 3c's refuse.sh with --item.
+cat > "$W/bin/refuse.sh" <<'EOF'
+#!/usr/bin/env bash
+st=$1 ledger=$2 work=$3 item=$4 port=$5; shift 5
+before=$(sha256sum "$ledger" | cut -c1-64); had=no; [ ! -e "$ledger.bound" ] || had=yes
+(cd "$E" && "$(dirname "$0")/runenv.sh" "$ledger" "$st" "$port" env "$@" bun quick/laneb/r3/screen.ts run "$work" --item "$item")
+echo "run exit $?"
+echo "bound before: $had, bound after: $([ -e "$ledger.bound" ] && echo yes || echo no)"
+[ "$(sha256sum "$ledger" | cut -c1-64)" = "$before" ] && echo "ledger unchanged" || echo "ledger changed"
+[ -e "$st/calls" ] && cat "$st/calls" || echo "the runner was never called"
+echo "launch-exit files: $(ls "$work" | grep -c launch-exit)"
+EOF
+chmod +x "$W/bin/runenv.sh" "$W/bin/refuse.sh"
+
+echo "## Part 0: the export is the pin"
+step . sh -c "git -C $G archive --format=tar $PIN > $W/pin.tar && git get-tar-commit-id < $W/pin.tar"
+step . sh -c "mkdir $E && tar -xf $W/pin.tar -C $E && find $E -type f -o -type l | wc -l"
+step . sh -c "cd $E && git rev-parse --is-inside-work-tree; echo git exit \$?"
+step '^bun|installed|error' sh -c "cd $E && bun install --frozen-lockfile"
+step . sh -c "cd $L && sha256sum r3/screen.ts r3/oracle-preflight.sh r3/oracle-pass.sh r3/drop-list.py runner/ledger.ts runner/launch.sh runner/vm-run.sh runner/proxy.ts runner/materialize.ts runner/prepare-run.ts runner/grid.ts runner/agent/prompt_builder.py config/cells.r3a4.json config/proxy.json tasks/swerebench-r3a4.json && jq '.tasks | length' tasks/swerebench-r3a4.json"
+step . sh -c "cd $E && bun -e 'const { PROCEDURE_LINES } = await import(\"./quick/laneb/runner/grid.ts\"); const l = PROCEDURE_LINES[\"investigate-phases\"]; console.log(JSON.stringify(l)); console.log(new Bun.CryptoHasher(\"sha256\").update(l).digest(\"hex\") + \"  sha256 of the investigate-phases line\")'"
+
+echo; echo "## Part A: the keyless test files from the export"
+for f in r3 r3-drop r3-sol r3a4 r3a4-oracle grid vm-run launch; do
+  SHOW=12 step '^ *[0-9]+ (pass|fail|skip)|^Ran |\(fail\)' sh -c "cd $E && bun test quick/laneb/tests/$f.test.ts"
+done
+
+echo; echo "## Part B: prepare both items from a fixture drop list"
+DF=$W/b/drop-list-fixture.json
+step . sh -c "cd $E && bun $W/bin/drops.ts $E $DF && sha256sum $DF && jq -c '{pool_size, kept_size, dropped_ids_sha256, kept_ids_sha256}' $DF"
+DS=$(sha256sum "$DF" | cut -c1-64)
+export DF DS
+step . sh -c "test -d $SWEREBENCH && echo \"\$(ls $SWEREBENCH | wc -l) tasks in the export of swe-rebench/swe-rebench-leaderboard at sha256:ebe7444e313a0d8db94fa541139826eaebe2b0abcd4900c6f73e750494910dca (harbor datasets download, Harbor f3a5a92); prepare checks each drawn task against its pool digest\""
+for m in "r3a4-opus 550" "r3a4-sol 700"; do
+  set -- $m
+  step . sh -c "LEDGER=$W/b/$1.jsonl bun $W/bin/approve.ts $E $1 $2 '$DRY' $UBI_OWNER && jq -c '{item, kind, usd_micros}' $W/b/$1.jsonl"
+done
+step . sh -c "cd $E && LEDGER=$W/b/r3a4-sol.jsonl SWEREBENCH=$SWEREBENCH ARMS=$ARMS DROPS=$DF DROPS_SHA256=$DS bun quick/laneb/r3/screen.ts prepare $W/b/work-r3a4-sol-noroute --item r3a4-sol; echo 'prepare with no route record: exit' \$?; test ! -e $W/b/work-r3a4-sol-noroute && echo 'no work dir written'"
+step . sh -c "bun $W/bin/route.ts $E $W/b/r3a4-sol.jsonl && sha256sum $W/b/r3a4-sol.jsonl.route.json"
+for it in r3a4-opus r3a4-sol; do
+  step 'prepared|Error|error|E_' sh -c "cd $E && LEDGER=$W/b/$it.jsonl SWEREBENCH=$SWEREBENCH ARMS=$ARMS DROPS=$DF DROPS_SHA256=$DS bun quick/laneb/r3/screen.ts prepare $W/b/work-$it --item $it"
+  step . python3 "$W/bin/plan.py" "$W/b/work-$it"
+done
+step . bash -c "for k in screen_tasks pilot_tasks part_tasks procedure_line_sha256; do cmp <(jq -c .\$k $W/b/work-r3a4-opus/plan.json) <(jq -c .\$k $W/b/work-r3a4-sol/plan.json) && echo \"\$k: same for both items\"; done; for p in screen-a screen-b pilot; do jq -c '[.arms[]? | {name, procedure_line, procedure_line_sha256}]' $W/b/work-r3a4-opus/\$p/manifest.json | sed \"s/^/\$p manifest: /\"; done"
+
+echo; echo "## Part C: refusals before the bind, for both items"
+for m in "r3a4-opus 550 9913" "r3a4-sol 700 9914"; do
+  set -- $m
+  it=$1 cap=$2 port=$3 C=$W/c
+  for wrong in $((cap - 1)) $((cap + 1)); do
+    LEDGER=$C/$it-$wrong.jsonl bun "$W/bin/approve.ts" "$E" "$it" "$wrong" "$DRY" "$UBI_OWNER"
+    [ "$it" = r3a4-opus ] || bun "$W/bin/route.ts" "$E" "$C/$it-$wrong.jsonl" > /dev/null
+    step . bash "$W/bin/refuse.sh" "$C/s-$it-$wrong" "$C/$it-$wrong.jsonl" "$W/b/work-$it" "$it" "$port"
+  done
+  LEDGER=$C/$it-raise.jsonl bun "$W/bin/approve.ts" "$E" "$it" "$cap" "$DRY" "$UBI_OWNER"
+  [ "$it" = r3a4-opus ] || bun "$W/bin/route.ts" "$E" "$C/$it-raise.jsonl" > /dev/null
+  step . sh -c "cd $E && bun quick/laneb/runner/ledger.ts raise --path $C/$it-raise.jsonl --item $it --usd $((cap + 100)) --approved-by 'dry run $UBI_OWNER, no approvals file' && jq -c '{kind, id, usd_micros, raised_from_micros, approved_by}' $C/$it-raise.jsonl"
+  step . bash "$W/bin/refuse.sh" "$C/s-$it-raise" "$C/$it-raise.jsonl" "$W/b/work-$it" "$it" "$port"
+  if [ "$it" = r3a4-sol ]; then
+    LEDGER=$C/r3a4-sol-a1route.jsonl bun "$W/bin/approve.ts" "$E" r3a4-sol 700 "$DRY" "$UBI_OWNER"
+    step . sh -c "test ! -e $C/r3a4-sol-a1route.jsonl.route.json && cp $ROUTE $C/r3a4-sol-a1route.jsonl.route.json && sha256sum $ROUTE $C/r3a4-sol-a1route.jsonl.route.json && jq -c '{item, model, verdict, proxy_config_sha256}' $ROUTE"
+    step . bash "$W/bin/refuse.sh" "$C/s-sol-a1route" "$C/r3a4-sol-a1route.jsonl" "$W/b/work-r3a4-sol" r3a4-sol 9914
+  fi
+  step . bash -c "python3 -m http.server --bind 127.0.0.1 $port > /dev/null 2>&1 & p=\$!; sleep 1; bash $W/bin/refuse.sh $C/s-$it-port $W/b/$it.jsonl $W/b/work-$it $it $port; kill \$p"
+  for u in UBI_OWNER UBICLOUD_API_KEY UBI_RUNNER; do
+    step . bash "$W/bin/refuse.sh" "$C/s-$it-$u" "$W/b/$it.jsonl" "$W/b/work-$it" "$it" "$port" -u "$u"
+  done
+done
+
+echo; echo "## Part D: one lease per new item on temporary ledgers"
+for m in "r3a4-oracle 20 19912" "r3a4-opus 550 19913" "r3a4-sol 700 19914"; do
+  set -- $m
+  it=$1 cap=$2 port=$3 D=$W/d/$1.jsonl
+  LEDGER=$D bun "$W/bin/approve.ts" "$E" "$it" "$cap" "$DRY" "$UBI_OWNER"
+  step . sh -c "cd $L && flock $D.lock bun runner/ledger.ts reserve --path $D --item $it --id $it-dry/vm --usd 2.40 --detail 'VM hours, block 1 of 4 h' && flock $D.lock bun runner/ledger.ts settle --path $D --item $it --id $it-dry/vm --usd 0.000500 --detail 'VM hours: dry run'"
+  if [ "$it" != r3a4-oracle ]; then
+    step . bash -c "cd $L && if (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null; then echo '127.0.0.1:$port already answers; stop it first'; exit 2; fi; bun runner/ledger.ts serve --path $D --item $it --port $port > $W/d/$it-serve.log 2>&1 < /dev/null & p=\$!; for _ in \$(seq 1 40); do curl -fsS 127.0.0.1:$port/status > /dev/null 2>&1 && break; sleep 0.25; done; cat $W/d/$it-serve.log; curl -sS -X POST 127.0.0.1:$port/reserve -H 'content-type: application/json' -d '{\"id\":\"$it-dry/s-1\",\"usd_micros\":12000000,\"meta\":{\"trial\":\"dry\"}}'; echo; curl -sS -X POST 127.0.0.1:$port/settle -H 'content-type: application/json' -d '{\"id\":\"$it-dry/s-1\",\"usd_micros\":103000}'; echo; curl -sS 127.0.0.1:$port/status; echo; kill \$p"
+  fi
+  step . sh -c "cd $L && jq -c '{kind, id, usd_micros}' $D && bun runner/ledger.ts status --path $D --item $it && echo \"open: [\$(bun runner/ledger.ts open --path $D --item $it)]\""
+done
+
+echo; echo "## Part E: screen-a's projection stop, then resume"
+cp "$L/tests/fixtures/launch/ubi" "$W/bin/launch-ubi" && chmod +x "$W/bin/launch-ubi"
+cat > "$W/bin/play-vm-run.ts" <<'EOF'
+// Plays vm-run.sh for launch.sh's batch ssh, adapted from tests/fixtures/launch/ssh: the "VM" is $VM. One session per
+// planned task: reserved at the cells' $12 session cap and settled at SPEND_NONE or SPEND_TOLD through the ledger service
+// (LEDGER_PORT), as the proxy does, with each trial's files as tests/r3a4.test.ts's writeTrial writes them. Screen trials
+// fail for the first FAILS tasks of each part; pilot trials show the procedure in the first 8.
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const m = /vm-run\.sh work\/run (\S+) (\S+)/.exec(process.argv.at(-1) ?? "");
+const run = join(process.env.VM!, "work/run"), port = process.env.LEDGER_PORT!;
+appendFileSync(process.env.EVENTS!, "batch started: vm-run.sh work/run " + (m?.[1] ?? "?") + " " + (m?.[2] ?? "?") + "\n");
+for (const d of ["out", "jobs"]) rmSync(join(run, d), { recursive: true, force: true });
+mkdirSync(join(run, "out"), { recursive: true });
+const job = JSON.parse(readFileSync(join(run, "job.json"), "utf8")), kw = job.agents[0].kwargs, told = !!kw.told_skill;
+const spend = Number(told ? process.env.SPEND_TOLD : process.env.SPEND_NONE), fails = Number(process.env.FAILS ?? 20);
+const call = async (path: string, body: object) => (await fetch("http://127.0.0.1:" + port + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json() as any;
+let rc = 0;
+for (const [i, t] of job.tasks.entries()) {
+  const task = t.path.split("/").at(-1), name = task.slice(0, 20) + "__" + i, sid = "s-" + i, d = join(run, "jobs", job.job_name, name);
+  const r = await call("/reserve", { id: m![1] + sid, usd_micros: 12_000_000, meta: { trial: name + "__env" } });
+  if (!r.ok) { writeFileSync(join(run, "out/proxy-status-end.json"), JSON.stringify({ cap_stop: "ledger refused a reserve for " + name })); rc = 130; break; }
+  mkdirSync(join(d, "evaluator"), { recursive: true });
+  writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: "/vm/run/tasks/" + task }, agent: { name: "laneb-claude-code", kwargs: { arm: kw.arm, upstream_model: kw.upstream_model, ...(told ? { told_skill: kw.told_skill, procedure_line: kw.procedure_line } : {}) } } }));
+  writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: name, verifier_result: { rewards: { reward: told ? 1 : i < fails ? 0 : 1 } }, exception_info: null }));
+  writeFileSync(join(d, "evaluator/sdk-messages.jsonl"), JSON.stringify({ type: "AssistantMessage", content: [{ text: told && i < 8 ? "Phase 1\nDEBUG REPORT" : "Fixed it." }] }) + "\n");
+  const micros = Math.round(spend * 1e6);
+  appendFileSync(join(run, "out/proxy-sessions.jsonl"), JSON.stringify({ id: sid, trial: name + "__env", model: kw.upstream_model, spent_micros: micros, ok_responses: 3, requests: 4, refused: 0, refused_budget: 0, opened_at: "2026-11-04T00:00:00Z", closed_at: "2026-11-04T01:00:00Z", cmd_expanded: told, cmd_names: told ? ["investigate"] : [] }) + "\n");
+  await call("/settle", { id: m![1] + sid, usd_micros: micros });
+}
+if (rc === 0) writeFileSync(join(run, "out/proxy-status-end.json"), JSON.stringify({ cap_stop: null }));
+writeFileSync(join(run, "out/vm-run.exit"), rc + "\n");
+appendFileSync(process.env.EVENTS!, "batch ended " + rc + "\n");
+process.exit(rc);
+EOF
+printf '#!/usr/bin/env bash\nexec bun %s "$@"\n' "$W/bin/play-vm-run.ts" > "$W/bin/vm/ssh" && chmod +x "$W/bin/vm/ssh"
+# e_env <item dir> <ledger> <port> <none spend> <command...>: screen.ts with the fixture runner and the fake ssh.
+e_env() { local x=$1 ledger=$2 port=$3 sn=$4; shift 4; mkdir -p "$x/vm" "$x/state"; (cd "$E" && env -u UBICLOUD_API_TOKEN PATH="$W/bin/vm:$PATH" UBICLOUD_API_KEY=dry-run-placeholder-not-a-key LEDGER="$ledger" UBI_OWNER="$UBI_OWNER" UBI_RUNNER="$W/bin/launch-ubi" UBI_RUNNER_STATE="$x/state" STATE="$x/state" VM="$x/vm" EVENTS="$x/events.log" PULL_RETRY_SEC=0 UBI_TTL_HOURS=24 VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 LEDGER_PORT="$port" DROPS="$DF" DROPS_SHA256="$DS" SPEND_NONE="$sn" SPEND_TOLD=5 FAILS=20 "$@"); }
+after() { echo "--- after: ledger $(cd $L && bun runner/ledger.ts status --path $2 --item $3), up calls $(grep -c '^up ' $1/events.log 2>/dev/null || echo 0)"; grep '^batch' "$1/events.log" 2>/dev/null; ls "$1/work" | grep -E 'launch-exit|projection|raise' | tr '\n' ' '; echo; }
+export -f e_env after; export W L
+for m in "r3a4-opus 550 9913 2.5" "r3a4-sol 700 9914 3"; do
+  set -- $m
+  it=$1 cap=$2 port=$3 sn=$4 x=$W/e/$1 led=$W/e/$1/$1.jsonl
+  mkdir -p "$x" && cp -r "$W/b/work-$it" "$x/work"
+  LEDGER=$led bun "$W/bin/approve.ts" "$E" "$it" "$cap" "$DRY" "$UBI_OWNER"
+  [ "$it" = r3a4-opus ] || bun "$W/bin/route.ts" "$E" "$led" > /dev/null
+  step 'projection|screen-|pilot|E_|Error|exit|after|batch|ledger|up calls' bash -c "e_env $x $led $port $sn bun quick/laneb/r3/screen.ts run $x/work --item $it; echo run exit \$?; after $x $led $it; cat $x/work/screen-b.projection-stop; jq -c . $x/work/projection.json"
+  step . bash -c "e_env $x $led $port $sn bun quick/laneb/r3/screen.ts analyze $x/work --item $it; echo analyze exit \$?"
+  step . bash -c "e_env $x $led $port $sn bun quick/laneb/r3/screen.ts resume $x/work --item $it; echo resume with no raise: exit \$?; after $x $led $it"
+  if [ "$it" = r3a4-opus ]; then
+    step . bash -c "cp -r $x/work $x/work-other && e_env $x $led $port $sn bun quick/laneb/r3/screen.ts resume $x/work-other --item $it; echo resume from another work dir: exit \$?; after $x $led $it"
+    step . bash -c "LEDGER=$W/e/unbound.jsonl bun $W/bin/approve.ts $E $it $cap '$DRY' $UBI_OWNER && cp -r $W/b/work-$it $W/e/work-unbound && e_env $x $W/e/unbound.jsonl $port $sn bun quick/laneb/r3/screen.ts resume $W/e/work-unbound --item $it; echo resume on an unbound item: exit \$?"
+    step . bash -c "cd $L && bun runner/ledger.ts raise --path $led --item $it --usd 600 --approved-by 'dry run $UBI_OWNER, no approvals file'; echo raise exit \$?; e_env $x $led $port $sn bun quick/laneb/r3/screen.ts resume $x/work --item $it; echo resume after a raise the projection still passes: exit \$?; after $x $led $it"
+    up=700
+  else
+    up=800
+  fi
+  step . bash -c "cd $L && bun runner/ledger.ts raise --path $led --item $it --usd $up --approved-by 'dry run $UBI_OWNER, no approvals file'; echo raise exit \$?; jq -c 'select(.kind == \"approval\") | {id, usd_micros, raised_from_micros, approved_by}' $led; e_env $x $led $port $sn bun quick/laneb/r3/screen.ts resume $x/work --item $it; echo resume after the raise: exit \$?; after $x $led $it; jq -c '{raise: .raise.id, cap_usd: .projection.cap_usd, over: .projection.over}' $x/work/cap-raise.json"
+  step . bash -c "e_env $x $led $port $sn bun quick/laneb/r3/screen.ts resume $x/work --item $it; echo resume again: exit \$?; e_env $x $led $port $sn bun quick/laneb/r3/screen.ts run $x/work --item $it; echo run again: exit \$?; after $x $led $it"
+  step . bash -c "e_env $x $led $port $sn bun quick/laneb/r3/screen.ts analyze $x/work --item $it; echo analyze exit \$?; jq -c '{outcome, cap_raise: .cap_raise.raise.id, ledger: {cap_usd: .ledger.cap_usd, settled_usd: .ledger.settled_usd, open: (.ledger.open_reserves | length)}}' $x/work/record.json"
+done
+
+echo; echo "## Part F: e2e-r3a4.sh.txt on the export"
+SHOW=1000 step . bash "$P/e2e-r3a4.sh.txt" "$L" "$ARMS" "$W/e2e"
+
+echo; echo "## Part G: the oracle preflight with tests/r3a4-oracle.test.ts's stubs"
+shard() {
+  local w=$1 t f
+  mkdir -p "$w/run" "$w/bin"
+  for t in alpha__one-1 beta__two-2 gamma__three-3 delta__four-4; do
+    for f in environment tests; do mkdir -p "$w/run/tasks/$t/$f"; echo "FROM swerebench/sweb.eval.x86_64.${t/__/_1776_}@sha256:$(printf %s "$t" | sha256sum | cut -c1-64)" > "$w/run/tasks/$t/$f/Dockerfile"; done
+  done
+  echo '{"job_name":"r3a4-oracle-s1-oracle","tasks":[{"path":"tasks/alpha__one-1"},{"path":"tasks/beta__two-2"},{"path":"tasks/gamma__three-3"},{"path":"tasks/delta__four-4"}]}' > "$w/run/oracle.json"
+  echo '{"tasks":[{"task_id":"alpha__one-1"},{"task_id":"beta__two-2"},{"task_id":"gamma__three-3"},{"task_id":"delta__four-4"}]}' > "$w/pool.json"
+  for f in sg docker curl harbor ubi-runner.sh; do cp "$L/tests/fixtures/r3a4-oracle-stubs/$f" "$w/bin/$f"; chmod +x "$w/bin/$f"; done
+  mv "$w/bin/ubi-runner.sh" "$w/ubi-runner.sh"
+  LEDGER=$w/r3a4-oracle.jsonl bun "$W/bin/approve.ts" "$E" r3a4-oracle 20 "$DRY" "$UBI_OWNER"
+}
+for c in "finished STUB_FAIL=gamma__three-3" "unfinished STUB_UNFINISHED=2" "quarter STUB_FAIL=alpha__one-1,beta__two-2"; do
+  set -- $c
+  w=$W/g/$1; shard "$w"
+  step . bash -c "env UBI_OWNER=$UBI_OWNER LEDGER=$w/r3a4-oracle.jsonl RUNNER_SHA256=\$(sha256sum $w/ubi-runner.sh | cut -c1-64) POLL_SEC=1 STUB_VM=$w/vm STUB_BIN=$w/bin STUB_LOG=$w/runner.log $2 bash $L/r3/oracle-preflight.sh $w/ubi-runner.sh $E $w/run 1 $w/out; echo preflight exit \$?; grep -E '^(up|down)' $w/runner.log; cd $L && bun runner/ledger.ts status --path $w/r3a4-oracle.jsonl --item r3a4-oracle; python3 r3/drop-list.py drops $w/pool.json $w/drops.json $w/drops.tsv $w/run $w/out; echo drop-list exit \$?; test -e $w/drops.json && jq -c '{dropped: [.dropped[].task], kept_size}' $w/drops.json || echo 'no drop list written'"
+done
+
+echo; echo "## Part H: the real-oracle record and script"
+step . sh -c "sha256sum $OREC $OSH; grep -c -i -E 'api_key=|token=|secret|password|sk-[a-z0-9]|ghp_|bearer ' $OREC $OSH; cp $OREC $P/oracle-dryrun-r3a4.txt && cp $OSH $P/oracle-dryrun-r3a4.sh.txt && cmp $OREC $P/oracle-dryrun-r3a4.txt && cmp $OSH $P/oracle-dryrun-r3a4.sh.txt && echo 'copied byte for byte' && sha256sum $P/oracle-dryrun-r3a4.txt $P/oracle-dryrun-r3a4.sh.txt"
+
+echo; echo "## Part I: amendment 3's dry run at this pin, against part A of 3c's dry-run-3c.txt"
+step . sh -c "sha256sum $A3/dry-run-a3.sh.txt $C3/dry-run-3c.txt $R $A2 $DROPS"
+SHOW=1000 step . env SHOW=1000 PIN="$PIN" G="$G" SWEBV="$SWEBV" ARMS="$ARMS" R="$R" HARBOR_DIR="$HARBOR_DIR" DROPS="$DROPS" A2="$A2" bash "$A3/dry-run-a3.sh.txt" "$W/a3"
+A3OUT=$W/log/$n.txt
+M='s/\[[0-9.]+m?s\]/[t]/g'
+SHOW=1000 step . bash -c "diff <(sed -n '/^\\\$ env PIN=/,/^## Part B/p' $C3/dry-run-3c.txt | sed '1d;\$d' | grep -v '^\$' | sed '\$d' | sed -E '$M') <(grep -v '^\$' $A3OUT | sed -E '$M'); echo diff exit \$?"
+echo; echo "## Done"
