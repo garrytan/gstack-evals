@@ -128,7 +128,7 @@ The screen figures are a4's $19.153647 and a1's $25.590538 without its route che
 No paid call runs before this post merges and the Captain records both caps. Before its run step, each run thread:
 
 1. Runs 3b section 10 step 2 (amendment 3's dry-run-a3.sh.txt, keyless) with PIN set to this post's pin and SHOW=1000, and compares its output with part A of dry-run-3c.txt line for line after the mask in section 10. The mask covers only timings, ISO timestamps and fixture epoch names, and comes from the diff of two runs at the pin (section 7).
-2. Runs e2e-3c.sh.txt (dry-run-3c.txt's part D) on that export on its own machine, keyless, and reads the named assertions it prints at its end, each a PASS or FAIL line. D1: vm-run.sh exits 0, and proxy-status-end.json has cap_stop null. D2: vm-run.sh exits 130, and cap_stop is set in both proxy-status-end.json and cap-stop.json. Both: spend agrees across sessions, proxy and ledger. Every line must read PASS. The script's own exit 0 is not an assertion.
+2. Runs e2e-3c.sh.txt (dry-run-3c.txt's part D) on that export on its own machine, keyless, and reads the named assertions it prints at its end, each a PASS or FAIL line. D1: vm-run.sh exits 0, and proxy-status-end.json has cap_stop null. D2: vm-run.sh exits 130, and cap_stop is set in both proxy-status-end.json and cap-stop.json. Both: spend agrees across sessions, proxy and ledger. Every line must read PASS. The script's own exit 0 is not an assertion. D2 assumes Harbor's two trials overlap; if they don't, D2 reads FAIL on a healthy pin, and the run thread stops before any spend and comes to the Captain.
 
 ## 7. Dry run
 
