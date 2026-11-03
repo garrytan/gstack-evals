@@ -57,7 +57,7 @@ def main():
     lo, hi = ci[0] * 100, ci[1] * 100
     print("R2 rerun count: gstack-full found %d of %d blocking blocker-passes, none-rr %d of %d; difference %+.1f points [95%% CI %+.1f, %+.1f]" % (f, b * pv, n, b * pr, res["delta"] * 100, lo, hi))
     if f <= n:
-        print("R2 rerun outcome: CUT-CANDIDATE. The full /review procedure found no more blocking blockers than plain Opus 5.5; it goes to Garry with this record.")
+        print("R2 rerun outcome: CUT-CANDIDATE. The full /review procedure found no more blocking blockers than plain Opus 5.5; it goes to the project owner with this record.")
         sys.exit(1)
     if lo > 0:
         print("R2 rerun outcome: KEEP. The full procedure found more blocking blockers than plain Opus 5.5, and the interval is above zero.")

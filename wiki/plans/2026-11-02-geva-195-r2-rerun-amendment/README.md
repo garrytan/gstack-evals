@@ -16,11 +16,11 @@ links:
 attachments:
   - d74c0bee01a73674fe92de8603cf07c000f3fc469917752fef841c037feaf9db  comparisons.rr.json
   - aaa46b6c104e14bdd9de9ed12ed2329f34d63ba39f7c4c63e9a7b85f99e5e8c2  dry-run-rr.sh.txt
-  - a975f631814cce7a349f670c9c165955850e9882dd2465a2d515abf5997a11fc  dry-run-rr.txt
+  - fe10682278ca7e790c2f42d7bcb99b48f3a2396d84a40fd0a2e500cb4286a85e  dry-run-rr.txt
   - c1bb431cde482da750f6a6ba3152d3e29357247e5b731cb28a7591d4a6cf3e38  power-rr.py.txt
   - a17fc2c08073053c225258af9448f3e520cfd03cfa7f23593e0750646587051d  reader-map-gstack-5209e9262d80.json
   - 95ed70447dc13d5cb280c0fc364bfc69ce1d8c52487fe754ac0f86e09c20c3df  rr-admit.py.txt
-  - 45c5f92089a95de130dcfef3e5273a886cc0a6470041d415960cce4e83602324  rr-decide.py.txt
+  - c8a3eb63ad0c80723c21b0b1d6e8286ce500881658c05581135e2fa84f477090  rr-decide.py.txt
   - 3aa3ac323f5789f1496d3862fed73e334e1d1fd7fcf052417b2d57a87c5f2548  rr-gate.py.txt
   - cc708fa60c0c354bc48a6ca54117dcc3357b272a5f5bc9e880c0d4ed7ebb92c3  rr-held.py.txt
   - e6aefa5da928b40b6aeecd676e6ff09b12d4380ba839eefa6d48a83d4ec92afb  rr-pause.py.txt
@@ -156,7 +156,7 @@ A PR-pass **returned** when its session's parse outcome is findings or empty (a 
 **The decision** (rr-decide.py, attached), in this order. The Holm family is this one comparison, so KEEP is R2's own interval rule:
 
 1. **No outcome** when gstack-full's gate failed, the cap-stop rule or the coverage rule fired (section 4), or the scorer gave no verdict, delta or interval. It goes to the Captain as FIX-METHOD with the counts. Bad input makes rr-decide.py exit 5, an error and never an outcome.
-2. **CUT-CANDIDATE** when gstack-full found no more blocking blocker-passes than none-rr. The Review Army and the adversarial pass go to Garry with the record.
+2. **CUT-CANDIDATE** when gstack-full found no more blocking blocker-passes than none-rr. The Review Army and the adversarial pass go to the project owner with the record.
 3. **KEEP** when the scorer's 95% PR-clustered interval of the recall difference is above zero.
 4. **FIX-METHOD** otherwise: gstack-full found more, but this grid can't show it.
 
@@ -184,7 +184,7 @@ Caps are sized for the science (R57): every review-units item's cap is its worst
 | rr-judge-adjudicate | 1 batch | $1,130 | a few dollars |
 | **Grid total** | | **$6,619** | **about $310 to $680** |
 
-**R42.** The pilot's caps total $6,940, above the $5,000 one thread may spend on the Captain's approval alone. The pause rule below keeps this rerun's settled plus reserved spend under $4,500 until the Captain gives word to resume, and the pilot's expected spend is about $150, so no thread passes $5,000 without a later decision. The Captain gives Garry a heads-up before the pilot and asks him before any resume past the pause.
+**R42.** The pilot's caps total $6,940, above the $5,000 one thread may spend on the Captain's approval alone. The pause rule below keeps this rerun's settled plus reserved spend under $4,500 until the Captain gives word to resume, and the pilot's expected spend is about $150 to $175 (section 8's table), so no thread passes $5,000 without a later decision. The Captain gives the project owner a heads-up before the pilot and asks the owner before any resume past the pause.
 
 Every item serves one run: its first lease binds it, and a second run on it is refused (E_ITEM_BOUND). A resume of the same run, with the same run id, may take a further lease, as R2's none-r2 did.
 

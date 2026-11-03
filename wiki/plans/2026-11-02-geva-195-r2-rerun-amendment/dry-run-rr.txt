@@ -53,7 +53,7 @@ d74c0bee01a73674fe92de8603cf07c000f3fc469917752fef841c037feaf9db  comparisons.rr
 aaa46b6c104e14bdd9de9ed12ed2329f34d63ba39f7c4c63e9a7b85f99e5e8c2  dry-run-rr.sh.txt
 c1bb431cde482da750f6a6ba3152d3e29357247e5b731cb28a7591d4a6cf3e38  power-rr.py.txt
 95ed70447dc13d5cb280c0fc364bfc69ce1d8c52487fe754ac0f86e09c20c3df  rr-admit.py.txt
-45c5f92089a95de130dcfef3e5273a886cc0a6470041d415960cce4e83602324  rr-decide.py.txt
+c8a3eb63ad0c80723c21b0b1d6e8286ce500881658c05581135e2fa84f477090  rr-decide.py.txt
 3aa3ac323f5789f1496d3862fed73e334e1d1fd7fcf052417b2d57a87c5f2548  rr-gate.py.txt
 cc708fa60c0c354bc48a6ca54117dcc3357b272a5f5bc9e880c0d4ed7ebb92c3  rr-held.py.txt
 e6aefa5da928b40b6aeecd676e6ff09b12d4380ba839eefa6d48a83d4ec92afb  rr-pause.py.txt
@@ -115,16 +115,16 @@ exit 0 (log/15.txt)
 
 $ sh -c cat $W/run/rr-full/cells.ndjson $W/run/rr-none/cells.ndjson | jq -c 'select((.record.session_end.waited_ms // 0) > 0 or .record.termination.kind != "completed" or .parse.kind != "findings") | {arm: .cell.arm, unit: .cell.unit, pass: .cell.pass, end: .record.termination, cause: .record.session_end.cause, waited_ms: .record.session_end.waited_ms, findings_block: .record.session_end.findings_
 {"arm":"gstack-full","unit":"garrytan/gstack#3524@205ea0e2e82f","pass":1,"end":{"kind":"turn_cap"},"cause":"clean","waited_ms":0,"findings_block":null,"parse":"missing","scored_turn":{"rule":"capped","index":null,"of":0}}
-{"arm":"gstack-full","unit":"garrytan/gstack#3596@0be7c3d44339","pass":1,"end":{"kind":"completed"},"cause":"clean","waited_ms":296,"findings_block":null,"parse":"findings","scored_turn":{"rule":"final","index":1,"of":2}}
-{"arm":"gstack-full","unit":"garrytan/gstack#3593@89156431975e","pass":1,"end":{"kind":"completed"},"cause":"clean","waited_ms":278,"findings_block":null,"parse":"findings","scored_turn":{"rule":"held","index":0,"of":2}}
+{"arm":"gstack-full","unit":"garrytan/gstack#3593@89156431975e","pass":1,"end":{"kind":"completed"},"cause":"clean","waited_ms":294,"findings_block":null,"parse":"findings","scored_turn":{"rule":"held","index":0,"of":2}}
+{"arm":"gstack-full","unit":"garrytan/gstack#3596@0be7c3d44339","pass":1,"end":{"kind":"completed"},"cause":"clean","waited_ms":281,"findings_block":null,"parse":"findings","scored_turn":{"rule":"final","index":1,"of":2}}
 {"arm":"gstack-full","unit":"garrytan/gstack#3527@2684974602c1","pass":1,"end":{"kind":"completed"},"cause":"clean","waited_ms":0,"findings_block":null,"parse":"missing","scored_turn":{"rule":"final","index":0,"of":1}}
-{"arm":"gstack-full","unit":"garrytan/gstack#3545@d4f0ea3c314f","pass":1,"end":{"kind":"missing","code":"E_BACKGROUND_DEADLINE"},"cause":"deadline","waited_ms":3238,"findings_block":true,"parse":"incomplete","scored_turn":{"rule":"final","index":null,"of":1}}
+{"arm":"gstack-full","unit":"garrytan/gstack#3545@d4f0ea3c314f","pass":1,"end":{"kind":"missing","code":"E_BACKGROUND_DEADLINE"},"cause":"deadline","waited_ms":3234,"findings_block":true,"parse":"incomplete","scored_turn":{"rule":"final","index":null,"of":1}}
 {"arm":"none","unit":"garrytan/gstack#3567@2b42ec597e03","pass":1,"end":{"kind":"turn_cap"},"cause":"clean","waited_ms":0,"findings_block":null,"parse":"findings","scored_turn":{"rule":"capped","index":0,"of":1}}
 {"arm":"none","unit":"garrytan/gstack#3573@f3a130c760f8","pass":1,"end":{"kind":"allowance_stop"},"cause":"clean","waited_ms":0,"findings_block":null,"parse":"missing","scored_turn":{"rule":"capped","index":null,"of":0}}
-{"arm":"none","unit":"garrytan/gstack#3564@e97b8573502b","pass":1,"end":{"kind":"missing","code":"E_BACKGROUND_DEADLINE"},"cause":"deadline","waited_ms":3243,"findings_block":false,"parse":"incomplete","scored_turn":{"rule":"final","index":null,"of":1}}
-{"arm":"none","unit":"garrytan/gstack#3578@0ff98dba1fdd","pass":1,"end":{"kind":"completed"},"cause":"clean","waited_ms":301,"findings_block":null,"parse":"malformed","scored_turn":{"rule":"held","index":0,"of":2}}
-{"arm":"none","unit":"garrytan/gstack#3545@d4f0ea3c314f","pass":2,"end":{"kind":"completed"},"cause":"clean","waited_ms":301,"findings_block":null,"parse":"malformed","scored_turn":{"rule":"final","index":1,"of":2}}
-{"arm":"none","unit":"garrytan/gstack#3583@f5bcdf71a765","pass":2,"end":{"kind":"completed"},"cause":"clean","waited_ms":255,"findings_block":null,"parse":"findings","scored_turn":{"rule":"held","index":0,"of":2}}
+{"arm":"none","unit":"garrytan/gstack#3564@e97b8573502b","pass":1,"end":{"kind":"missing","code":"E_BACKGROUND_DEADLINE"},"cause":"deadline","waited_ms":3173,"findings_block":false,"parse":"incomplete","scored_turn":{"rule":"final","index":null,"of":1}}
+{"arm":"none","unit":"garrytan/gstack#3578@0ff98dba1fdd","pass":1,"end":{"kind":"completed"},"cause":"clean","waited_ms":302,"findings_block":null,"parse":"malformed","scored_turn":{"rule":"held","index":0,"of":2}}
+{"arm":"none","unit":"garrytan/gstack#3545@d4f0ea3c314f","pass":2,"end":{"kind":"completed"},"cause":"clean","waited_ms":287,"findings_block":null,"parse":"malformed","scored_turn":{"rule":"final","index":1,"of":2}}
+{"arm":"none","unit":"garrytan/gstack#3583@f5bcdf71a765","pass":2,"end":{"kind":"completed"},"cause":"clean","waited_ms":286,"findings_block":null,"parse":"findings","scored_turn":{"rule":"held","index":0,"of":2}}
 exit 0 (log/16.txt)
 
 $ sh -c jq -r '.coverage_gaps[]?' $W/run/rr-*/arms/*/arm.json
@@ -144,7 +144,7 @@ waited gstack-full-opus: 3 sessions waited, 3.8 s idle in all
 held none-opus: 66 sessions; held rescues 1 (arm.json 1); scored_turn.rule capped 2, final 62, held 2
 cause none-opus: clean 65, deadline 1, tasks_pending 0, no session_end 0
 deadline none-opus: 1 deadline gaps, block_present_at_deadline 0
-waited none-opus: 4 sessions waited, 4.1 s idle in all
+waited none-opus: 4 sessions waited, 4.0 s idle in all
 drop file: 2 units with a held-rescued session: garrytan/gstack#3583@f5bcdf71a765, garrytan/gstack#3593@89156431975e
 exit 0 (log/18.txt)
 
@@ -274,7 +274,7 @@ exit 0 (log/39.txt)
 # FAIL at the floor (the fake judge matches nothing)
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/praw/stacks-r1/none-pilot --seed 20261031 --out $W/pilot/floor/match --key $W/pilot/floor/match-key.json
-judge-packet: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, 33 packets, 210 findings from 1 arms; the key is outside the packets
+judge-packet: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, 33 packets, 210 findings from 1 arms; the key is outside the packets
 exit 0 (log/40.txt)
 
 $ sh -c $R/bin/gstack-evals noloss judge-run --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/pilot/floor/match --key $W/pilot/floor/match-key.json --arm $W/praw/stacks-r1/none-pilot --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5
@@ -283,11 +283,11 @@ item rr-pilot-judge: cap $1000.00, $0.00 committed, $1000.00 left; the worst cas
 exit 0 (log/41.txt)
 
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/pilot/floor/match --key $W/pilot/floor/match-key.json --arm $W/praw/stacks-r1/none-pilot --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/pil
-judge-run: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, 42 requests; primary answered 33 packets, second 9, third 0; 0 unjudged; files in $W/pilot/floor/judge-match
+judge-run: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, 42 requests; primary answered 33 packets, second 9, third 0; 0 unjudged; files in $W/pilot/floor/judge-match
 exit 0 (log/42.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/pilot/floor/match-key.json --reply $W/pilot/floor/judge-match/primary.json --second $W/pilot/floor/judge-match/second.json --arm $W/praw/stacks-r1/none-pilot --out $W/pilot/floor/joined
-judge-join: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, wrote judgments for none-pilot under $W/pilot/floor/joined; second judge on 10 blockers (kappa n/a), third read on 0. Ingest each arm with noloss ingest.
+judge-join: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, wrote judgments for none-pilot under $W/pilot/floor/joined; second judge on 10 blockers (kappa n/a), third read on 0. Ingest each arm with noloss ingest.
 exit 0 (log/43.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/pilot/floor/joined/none-pilot --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/pilot/floor/judged
@@ -306,15 +306,15 @@ exit 3 (log/46.txt)
 # PASS in the middle
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/praw/stacks-r1/none-pilot --seed 20261031 --out $W/pilot/mid/match --key $W/pilot/mid/match-key.json
-judge-packet: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, 33 packets, 210 findings from 1 arms; the key is outside the packets
+judge-packet: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, 33 packets, 210 findings from 1 arms; the key is outside the packets
 exit 0 (log/47.txt)
 
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/pilot/mid/match --key $W/pilot/mid/match-key.json --arm $W/praw/stacks-r1/none-pilot --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/pilot/m
-judge-run: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, 50 requests; primary answered 33 packets, second 14, third 3; 0 unjudged; files in $W/pilot/mid/judge-match
+judge-run: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, 50 requests; primary answered 33 packets, second 14, third 3; 0 unjudged; files in $W/pilot/mid/judge-match
 exit 0 (log/48.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/pilot/mid/match-key.json --reply $W/pilot/mid/judge-match/primary.json --second $W/pilot/mid/judge-match/second.json --third $W/pilot/mid/judge-match/third.json --arm $W/praw/stacks-r1/none-pilot --out $W/pilot/mid/joined
-judge-join: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, wrote judgments for none-pilot under $W/pilot/mid/joined; second judge on 24 blockers (kappa 0.8313), third read on 3. Ingest each arm with noloss ingest.
+judge-join: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, wrote judgments for none-pilot under $W/pilot/mid/joined; second judge on 24 blockers (kappa 0.8313), third read on 3. Ingest each arm with noloss ingest.
 exit 0 (log/49.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/pilot/mid/joined/none-pilot --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/pilot/mid/judged
@@ -333,15 +333,15 @@ exit 0 (log/52.txt)
 # FAIL at the top (the fake judge matches every finding)
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/praw/stacks-r1/none-pilot --seed 20261031 --out $W/pilot/top/match --key $W/pilot/top/match-key.json
-judge-packet: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, 33 packets, 210 findings from 1 arms; the key is outside the packets
+judge-packet: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, 33 packets, 210 findings from 1 arms; the key is outside the packets
 exit 0 (log/53.txt)
 
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/pilot/top/match --key $W/pilot/top/match-key.json --arm $W/praw/stacks-r1/none-pilot --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5 --ledger $W/pilot/t
-judge-run: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, 44 requests; primary answered 33 packets, second 9, third 2; 0 unjudged; files in $W/pilot/top/judge-match
+judge-run: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, 44 requests; primary answered 33 packets, second 9, third 2; 0 unjudged; files in $W/pilot/top/judge-match
 exit 0 (log/54.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/pilot/top/match-key.json --reply $W/pilot/top/judge-match/primary.json --second $W/pilot/top/judge-match/second.json --third $W/pilot/top/judge-match/third.json --arm $W/praw/stacks-r1/none-pilot --out $W/pilot/top/joined
-judge-join: batch b90f5d989aed186859fab76ff20ed528c9a911f25b4fa9f2b16604d1e51e48aa, wrote judgments for none-pilot under $W/pilot/top/joined; second judge on 10 blockers (kappa 0.6), third read on 2. Ingest each arm with noloss ingest.
+judge-join: batch db88a55aec1f1d3ad6e9d2c4e75273af4d706a555e9966a9c204c4046484d99d, wrote judgments for none-pilot under $W/pilot/top/joined; second judge on 10 blockers (kappa 0.6), third read on 2. Ingest each arm with noloss ingest.
 exit 0 (log/55.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/pilot/top/joined/none-pilot --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/pilot/top/judged
@@ -366,7 +366,7 @@ exit 0 (log/59.txt)
 $ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $W/bin/comparisons.rr.json --id stacks-r1-pilot --out $W/pilot/gap4/d --root $W/pilot/gap4/judged --drop-gaps
 derive stacks-r1-pilot: drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
 suite $W/pilot/gap4/d/stacks-r1-pilot.json sha256 0b82426ca50d6584d6cabf69b70099540ee8ae6b7f059760956a642a76bf8855: 29 units, 35 blocking blockers on 23 PRs; 4 units dropped (garrytan/gstack#3593@89156431975e, garrytan/gstack#3596@0be7c3d44339, garrytan/gstack#3516@ee73419c3295, garrytan/gstack#3524@205ea0e2e82f)
-arm none-pilot: stopped -> complete, 20 cost rows dropped, tree 9ef71cee7062de51ddbaf90a5cd6a2272d781e88eea12b169b53f76b215d07ae
+arm none-pilot: stopped -> complete, 20 cost rows dropped, tree cdc8174f6e21a488386393d5304995b8cba421d6a4e2b378c60e52f057af3422
 exit 0 (log/60.txt)
 
 $ python3 $W/bin/rr-admit.py $W/pilot/gap4/d/derive.json $W/pilot/gap4/d/stacks-r1-pilot.json $W/pilot/gap4/d/arms/stacks-r1-pilot/none-pilot $W/pilot/gap4/run-arm.json $W/pilot/gap4/run.stderr $W/bin/power-rr.py
@@ -398,7 +398,7 @@ exit 4 (log/65.txt)
 # KEEP
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --seed 20261031 --out $W/grid/keep/match --key $W/grid/keep/match-key.json
-judge-packet: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, 33 packets, 158 findings from 2 arms; the key is outside the packets
+judge-packet: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, 33 packets, 158 findings from 2 arms; the key is outside the packets
 exit 0 (log/66.txt)
 
 $ sh -c $R/bin/gstack-evals noloss judge-run --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/grid/keep/match --key $W/grid/keep/match-key.json  --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --thi
@@ -407,11 +407,11 @@ item rr-judge-match: cap $1000.00, $0.00 committed, $1000.00 left; the worst cas
 exit 0 (log/67.txt)
 
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/grid/keep/match --key $W/grid/keep/match-key.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude
-judge-run: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, 68 requests; primary answered 33 packets, second 25, third 10; 0 unjudged; files in $W/grid/keep/judge-match
+judge-run: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, 68 requests; primary answered 33 packets, second 25, third 10; 0 unjudged; files in $W/grid/keep/judge-match
 exit 0 (log/68.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/grid/keep/match-key.json --reply $W/grid/keep/judge-match/primary.json --second $W/grid/keep/judge-match/second.json --third $W/grid/keep/judge-match/third.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --out $W/grid/keep/judge-match/joined
-judge-join: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, wrote judgments for gstack-full, none-rr under $W/grid/keep/judge-match/joined; second judge on 37 blockers (kappa 0.7539), third read on 10. Ingest each arm with noloss ingest.
+judge-join: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, wrote judgments for gstack-full, none-rr under $W/grid/keep/judge-match/joined; second judge on 37 blockers (kappa 0.7539), third read on 10. Ingest each arm with noloss ingest.
 exit 0 (log/69.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/grid/keep/judge-match/joined/gstack-full --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/grid/keep/judged
@@ -423,7 +423,7 @@ ingest published: arm none-rr (live, judged, 2 passes) at $W/grid/keep/judged/st
 exit 0 (log/71.txt)
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/grid/keep/judged/stacks-r1/gstack-full --arm $W/grid/keep/judged/stacks-r1/none-rr --seed 20261031 --out $W/grid/keep/adj --key $W/grid/keep/adj-key.json --adjudicate
-judge-packet: batch 905fdf3eeec2edbd783f4216088b9551aaa64fc1e2d2119c943acccecf3499cb, 24 packets, 65 findings from 2 arms; the key is outside the packets
+judge-packet: batch 491ae116406a8b04d50233a8866de88aefb3e855421de0195afc1b18e3f4c9e7, 24 packets, 65 findings from 2 arms; the key is outside the packets
 exit 0 (log/72.txt)
 
 $ sh -c $R/bin/gstack-evals noloss judge-run --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/grid/keep/adj --key $W/grid/keep/adj-key.json  --arm $W/grid/keep/judged/stacks-r1/gstack-full --arm $W/grid/keep/judged/stacks-r1/none-rr --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second op
@@ -434,11 +434,11 @@ exit 0 (log/73.txt)
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/grid/keep/adj --key $W/grid/keep/adj-key.json --arm $W/grid/keep/judged/stacks-r1/gstack-full --arm $W/grid/keep/judged/stacks-r1/none-rr --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --
 unverifiable not-defect rulings, arm gstack-full: 0, 0.0000 per PR cluster per pass (2 passes, 32 PR clusters)
 unverifiable not-defect rulings, arm none-rr: 5, 0.0781 per PR cluster per pass (2 passes, 32 PR clusters)
-judge-run: batch 905fdf3eeec2edbd783f4216088b9551aaa64fc1e2d2119c943acccecf3499cb, 55 requests; primary answered 24 packets, second 24, third 7; 0 unjudged; files in $W/grid/keep/judge-adj
+judge-run: batch 491ae116406a8b04d50233a8866de88aefb3e855421de0195afc1b18e3f4c9e7, 55 requests; primary answered 24 packets, second 24, third 7; 0 unjudged; files in $W/grid/keep/judge-adj
 exit 0 (log/74.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/grid/keep/adj-key.json --reply $W/grid/keep/judge-adj/primary.json --second $W/grid/keep/judge-adj/second.json --third $W/grid/keep/judge-adj/third.json --arm $W/grid/keep/judged/stacks-r1/gstack-full --arm $W/grid/keep/judged/stacks-r1/none-rr --out $W/grid/keep/judge-adj
-judge-join: batch 905fdf3eeec2edbd783f4216088b9551aaa64fc1e2d2119c943acccecf3499cb, wrote adjudication.tsv for gstack-full, none-rr under $W/grid/keep/judge-adj/joined; second judge on 49 blockers (kappa 0.3929), third read on 7. Ingest each arm with noloss ingest.
+judge-join: batch 491ae116406a8b04d50233a8866de88aefb3e855421de0195afc1b18e3f4c9e7, wrote adjudication.tsv for gstack-full, none-rr under $W/grid/keep/judge-adj/joined; second judge on 49 blockers (kappa 0.3929), third read on 7. Ingest each arm with noloss ingest.
 exit 0 (log/75.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/grid/keep/judge-adj/joined/gstack-full --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/grid/keep/final
@@ -452,8 +452,8 @@ exit 0 (log/77.txt)
 $ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $W/bin/comparisons.rr.json --id stacks-r1-rr --out $W/grid/keep/stacks-r1-rr --root $W/grid/keep/final --drop-gaps
 derive stacks-r1-rr: drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
 suite $W/grid/keep/stacks-r1-rr/stacks-r1-rr.json sha256 a111f8409ad1b3cbef70d449f30eacf29a31d160c20a1937191c502dc03eb87d: 30 units, 39 blocking blockers on 23 PRs; 3 units dropped (garrytan/gstack#3545@d4f0ea3c314f, garrytan/gstack#3564@e97b8573502b, garrytan/gstack#3578@0ff98dba1fdd)
-arm gstack-full: stopped -> complete, 27 cost rows dropped, tree 209d54e36263ee933d3ce8e57d799a21d9d62e6f3ac2a1f825ef482491fa1901
-arm none-rr: stopped -> complete, 6 cost rows dropped, tree 789edb85adb2487160cfda32dde228693890c41a2a729d4d080e43dbd512e2c0
+arm gstack-full: stopped -> complete, 27 cost rows dropped, tree d57819c93ac4b47449de8ac5c31f507edb654ff9f3af66963be25e276a28dd35
+arm none-rr: stopped -> complete, 6 cost rows dropped, tree 449ad4e1114e6e1c610186384d68b86143edaa7be6ce75309f488b36c46a2abc
 exit 0 (log/78.txt)
 
 $ $R/bin/gstack-evals noloss score --suite $W/grid/keep/stacks-r1-rr/stacks-r1-rr.json --root $W/grid/keep/stacks-r1-rr/arms --prereg $W/grid/keep/stacks-r1-rr/comparisons.stacks-r1-rr.json --variant gstack-full --reference none-rr --out $W/grid/keep/stacks-r1-rr/score.json
@@ -471,15 +471,15 @@ exit 0 (log/80.txt)
 # CUT-CANDIDATE
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --seed 20261031 --out $W/grid/cut/match --key $W/grid/cut/match-key.json
-judge-packet: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, 33 packets, 158 findings from 2 arms; the key is outside the packets
+judge-packet: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, 33 packets, 158 findings from 2 arms; the key is outside the packets
 exit 0 (log/81.txt)
 
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/grid/cut/match --key $W/grid/cut/match-key.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-s
-judge-run: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, 58 requests; primary answered 33 packets, second 19, third 6; 0 unjudged; files in $W/grid/cut/judge-match
+judge-run: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, 58 requests; primary answered 33 packets, second 19, third 6; 0 unjudged; files in $W/grid/cut/judge-match
 exit 0 (log/82.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/grid/cut/match-key.json --reply $W/grid/cut/judge-match/primary.json --second $W/grid/cut/judge-match/second.json --third $W/grid/cut/judge-match/third.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --out $W/grid/cut/judge-match/joined
-judge-join: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, wrote judgments for gstack-full, none-rr under $W/grid/cut/judge-match/joined; second judge on 26 blockers (kappa 0.7005), third read on 6. Ingest each arm with noloss ingest.
+judge-join: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, wrote judgments for gstack-full, none-rr under $W/grid/cut/judge-match/joined; second judge on 26 blockers (kappa 0.7005), third read on 6. Ingest each arm with noloss ingest.
 exit 0 (log/83.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/grid/cut/judge-match/joined/gstack-full --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/grid/cut/judged
@@ -491,17 +491,17 @@ ingest published: arm none-rr (live, judged, 2 passes) at $W/grid/cut/judged/sta
 exit 0 (log/85.txt)
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/grid/cut/judged/stacks-r1/gstack-full --arm $W/grid/cut/judged/stacks-r1/none-rr --seed 20261031 --out $W/grid/cut/adj --key $W/grid/cut/adj-key.json --adjudicate
-judge-packet: batch 6bc4d59ca6c0bb5f5cbcb06d8b1d83ded76128fbf809cf938724914cf21b9553, 24 packets, 91 findings from 2 arms; the key is outside the packets
+judge-packet: batch 9d7ba7a99cf4d561f76aaab00dac0caf9439d48b26f3b4388173bce4ee664070, 24 packets, 91 findings from 2 arms; the key is outside the packets
 exit 0 (log/86.txt)
 
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/grid/cut/adj --key $W/grid/cut/adj-key.json --arm $W/grid/cut/judged/stacks-r1/gstack-full --arm $W/grid/cut/judged/stacks-r1/none-rr --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --thir
 unverifiable not-defect rulings, arm gstack-full: 7, 0.1094 per PR cluster per pass (2 passes, 32 PR clusters)
 unverifiable not-defect rulings, arm none-rr: 4, 0.0625 per PR cluster per pass (2 passes, 32 PR clusters)
-judge-run: batch 6bc4d59ca6c0bb5f5cbcb06d8b1d83ded76128fbf809cf938724914cf21b9553, 62 requests; primary answered 24 packets, second 24, third 14; 0 unjudged; files in $W/grid/cut/judge-adj
+judge-run: batch 9d7ba7a99cf4d561f76aaab00dac0caf9439d48b26f3b4388173bce4ee664070, 62 requests; primary answered 24 packets, second 24, third 14; 0 unjudged; files in $W/grid/cut/judge-adj
 exit 0 (log/87.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/grid/cut/adj-key.json --reply $W/grid/cut/judge-adj/primary.json --second $W/grid/cut/judge-adj/second.json --third $W/grid/cut/judge-adj/third.json --arm $W/grid/cut/judged/stacks-r1/gstack-full --arm $W/grid/cut/judged/stacks-r1/none-rr --out $W/grid/cut/judge-adj/joined
-judge-join: batch 6bc4d59ca6c0bb5f5cbcb06d8b1d83ded76128fbf809cf938724914cf21b9553, wrote adjudication.tsv for gstack-full, none-rr under $W/grid/cut/judge-adj/joined; second judge on 71 blockers (kappa 0.3811), third read on 14. Ingest each arm with noloss ingest.
+judge-join: batch 9d7ba7a99cf4d561f76aaab00dac0caf9439d48b26f3b4388173bce4ee664070, wrote adjudication.tsv for gstack-full, none-rr under $W/grid/cut/judge-adj/joined; second judge on 71 blockers (kappa 0.3811), third read on 14. Ingest each arm with noloss ingest.
 exit 0 (log/88.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/grid/cut/judge-adj/joined/gstack-full --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/grid/cut/final
@@ -515,8 +515,8 @@ exit 0 (log/90.txt)
 $ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $W/bin/comparisons.rr.json --id stacks-r1-rr --out $W/grid/cut/stacks-r1-rr --root $W/grid/cut/final --drop-gaps
 derive stacks-r1-rr: drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
 suite $W/grid/cut/stacks-r1-rr/stacks-r1-rr.json sha256 a111f8409ad1b3cbef70d449f30eacf29a31d160c20a1937191c502dc03eb87d: 30 units, 39 blocking blockers on 23 PRs; 3 units dropped (garrytan/gstack#3545@d4f0ea3c314f, garrytan/gstack#3564@e97b8573502b, garrytan/gstack#3578@0ff98dba1fdd)
-arm gstack-full: stopped -> complete, 27 cost rows dropped, tree 3575cc2a8a2b5b40c5722aab24ded5aaec83b9d182784a837681fd64fdaa248c
-arm none-rr: stopped -> complete, 6 cost rows dropped, tree e914df8861802a0d6264b0dbcbd72d60d42458ac766f25ee588e97618973120b
+arm gstack-full: stopped -> complete, 27 cost rows dropped, tree 1c9f35973759aa5cef9a65c8269b2ff52146bcc1d5e29075f9a3c26cbed35fe6
+arm none-rr: stopped -> complete, 6 cost rows dropped, tree d0706471ee13820f86c9cc4a51dd16890c6283c91fe101c82039ac3293ac8737
 exit 0 (log/91.txt)
 
 $ $R/bin/gstack-evals noloss score --suite $W/grid/cut/stacks-r1-rr/stacks-r1-rr.json --root $W/grid/cut/stacks-r1-rr/arms --prereg $W/grid/cut/stacks-r1-rr/comparisons.stacks-r1-rr.json --variant gstack-full --reference none-rr --out $W/grid/cut/stacks-r1-rr/score.json
@@ -529,20 +529,20 @@ exposure: 63 of 66 PR-passes returned (not returned: incomplete 1, missing 2); o
 gate: pass (returned with both in at least 60 of 66 PR-passes)
 R2 rerun counts: cap stops gstack-full 1 (turn_cap 1, allowance_stop 0), none-rr 2 (turn_cap 1, allowance_stop 1); units dropped by --drop-gaps 3 of 33
 R2 rerun count: gstack-full found 14 of 78 blocking blocker-passes, none-rr 44 of 78; difference -38.5 points [95% CI -50.0, -25.6]
-R2 rerun outcome: CUT-CANDIDATE. The full /review procedure found no more blocking blockers than plain Opus 5.5; it goes to Garry with this record.
+R2 rerun outcome: CUT-CANDIDATE. The full /review procedure found no more blocking blockers than plain Opus 5.5; it goes to the project owner with this record.
 exit 1 (log/93.txt)
 # FIX-METHOD
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --seed 20261031 --out $W/grid/fix/match --key $W/grid/fix/match-key.json
-judge-packet: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, 33 packets, 158 findings from 2 arms; the key is outside the packets
+judge-packet: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, 33 packets, 158 findings from 2 arms; the key is outside the packets
 exit 0 (log/94.txt)
 
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/grid/fix/match --key $W/grid/fix/match-key.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-s
-judge-run: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, 50 requests; primary answered 33 packets, second 14, third 3; 0 unjudged; files in $W/grid/fix/judge-match
+judge-run: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, 50 requests; primary answered 33 packets, second 14, third 3; 0 unjudged; files in $W/grid/fix/judge-match
 exit 0 (log/95.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/grid/fix/match-key.json --reply $W/grid/fix/judge-match/primary.json --second $W/grid/fix/judge-match/second.json --third $W/grid/fix/judge-match/third.json --arm $W/raw/stacks-r1/gstack-full --arm $W/raw/stacks-r1/none-rr --out $W/grid/fix/judge-match/joined
-judge-join: batch da16486311a07f23b9f95a374048bbfd77904da44b8bb027492af9fb8d0b6beb, wrote judgments for gstack-full, none-rr under $W/grid/fix/judge-match/joined; second judge on 20 blockers (kappa 0.7826), third read on 3. Ingest each arm with noloss ingest.
+judge-join: batch 9bddd2d35d0d7dda3d38780dd85f96b759c9f368c8daa2c4095632d6ddf45aa5, wrote judgments for gstack-full, none-rr under $W/grid/fix/judge-match/joined; second judge on 20 blockers (kappa 0.7826), third read on 3. Ingest each arm with noloss ingest.
 exit 0 (log/96.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/grid/fix/judge-match/joined/gstack-full --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/grid/fix/judged
@@ -554,17 +554,17 @@ ingest published: arm none-rr (live, judged, 2 passes) at $W/grid/fix/judged/sta
 exit 0 (log/98.txt)
 
 $ $R/bin/gstack-evals noloss judge-packet --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --arm $W/grid/fix/judged/stacks-r1/gstack-full --arm $W/grid/fix/judged/stacks-r1/none-rr --seed 20261031 --out $W/grid/fix/adj --key $W/grid/fix/adj-key.json --adjudicate
-judge-packet: batch d0b1cc86188a62a39e40809deb60aca31bf17136e4cf88995aaa0c5f6373e2d8, 19 packets, 81 findings from 2 arms; the key is outside the packets
+judge-packet: batch d630a291828cf21471c993f7cf6f6a7130094ae1896e7be96c250158dfac0018, 19 packets, 81 findings from 2 arms; the key is outside the packets
 exit 0 (log/99.txt)
 
 $ bun $W/bin/judge-fake.ts --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --packets $W/grid/fix/adj --key $W/grid/fix/adj-key.json --arm $W/grid/fix/judged/stacks-r1/gstack-full --arm $W/grid/fix/judged/stacks-r1/none-rr --brief $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/judge-brief.md --primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --thir
 unverifiable not-defect rulings, arm gstack-full: 4, 0.0625 per PR cluster per pass (2 passes, 32 PR clusters)
 unverifiable not-defect rulings, arm none-rr: 5, 0.0781 per PR cluster per pass (2 passes, 32 PR clusters)
-judge-run: batch d0b1cc86188a62a39e40809deb60aca31bf17136e4cf88995aaa0c5f6373e2d8, 51 requests; primary answered 19 packets, second 19, third 13; 0 unjudged; files in $W/grid/fix/judge-adj
+judge-run: batch d630a291828cf21471c993f7cf6f6a7130094ae1896e7be96c250158dfac0018, 51 requests; primary answered 19 packets, second 19, third 13; 0 unjudged; files in $W/grid/fix/judge-adj
 exit 0 (log/100.txt)
 
 $ $R/bin/gstack-evals noloss judge-join --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --key $W/grid/fix/adj-key.json --reply $W/grid/fix/judge-adj/primary.json --second $W/grid/fix/judge-adj/second.json --third $W/grid/fix/judge-adj/third.json --arm $W/grid/fix/judged/stacks-r1/gstack-full --arm $W/grid/fix/judged/stacks-r1/none-rr --out $W/grid/fix/judge-adj/joined
-judge-join: batch d0b1cc86188a62a39e40809deb60aca31bf17136e4cf88995aaa0c5f6373e2d8, wrote adjudication.tsv for gstack-full, none-rr under $W/grid/fix/judge-adj/joined; second judge on 63 blockers (kappa 0.3546), third read on 13. Ingest each arm with noloss ingest.
+judge-join: batch d630a291828cf21471c993f7cf6f6a7130094ae1896e7be96c250158dfac0018, wrote adjudication.tsv for gstack-full, none-rr under $W/grid/fix/judge-adj/joined; second judge on 63 blockers (kappa 0.3546), third read on 13. Ingest each arm with noloss ingest.
 exit 0 (log/101.txt)
 
 $ $R/bin/gstack-evals noloss ingest $W/grid/fix/judge-adj/joined/gstack-full --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --root $W/grid/fix/final
@@ -578,8 +578,8 @@ exit 0 (log/103.txt)
 $ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $W/bin/comparisons.rr.json --id stacks-r1-rr --out $W/grid/fix/stacks-r1-rr --root $W/grid/fix/final --drop-gaps
 derive stacks-r1-rr: drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
 suite $W/grid/fix/stacks-r1-rr/stacks-r1-rr.json sha256 a111f8409ad1b3cbef70d449f30eacf29a31d160c20a1937191c502dc03eb87d: 30 units, 39 blocking blockers on 23 PRs; 3 units dropped (garrytan/gstack#3545@d4f0ea3c314f, garrytan/gstack#3564@e97b8573502b, garrytan/gstack#3578@0ff98dba1fdd)
-arm gstack-full: stopped -> complete, 27 cost rows dropped, tree 16b03f07284c60878ae8ebb2da65159d9298ef9de11e5c9cd173f598e413bc4b
-arm none-rr: stopped -> complete, 6 cost rows dropped, tree 8cac4f9af269c979225a337619b7dda8e466add4eda3e6f197f1a0969c466332
+arm gstack-full: stopped -> complete, 27 cost rows dropped, tree 031c5b26b13798b244ba1a79c8e4638bb3e595a907081c662210b4283371fcdf
+arm none-rr: stopped -> complete, 6 cost rows dropped, tree 7fc1caaa1c12dbb2cb5bfa301244e9a524b4437f707c0e0bf1d5e9fd0edf6828
 exit 0 (log/104.txt)
 
 $ $R/bin/gstack-evals noloss score --suite $W/grid/fix/stacks-r1-rr/stacks-r1-rr.json --root $W/grid/fix/stacks-r1-rr/arms --prereg $W/grid/fix/stacks-r1-rr/comparisons.stacks-r1-rr.json --variant gstack-full --reference none-rr --out $W/grid/fix/stacks-r1-rr/score.json
@@ -617,8 +617,8 @@ exit 0 (log/109.txt)
 $ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $W/bin/comparisons.rr.json --id stacks-r1-rr-rescue --out $W/grid/keep/stacks-r1-rr-rescue --root $W/grid/keep/final --drop-gaps --drop-file $W/held/rescue-drop.tsv
 derive stacks-r1-rr-rescue: drop every unit listed in rescue-drop.tsv (sha256 89177ada488b248c028df048e60047956da88081ba32355fe7a05af7389b0080); drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
 suite $W/grid/keep/stacks-r1-rr-rescue/stacks-r1-rr-rescue.json sha256 3368b539cbb5582345812b99846831a7b157b40352236c8f1dc0d6e7d6038767: 28 units, 35 blocking blockers on 21 PRs; 5 units dropped (garrytan/gstack#3583@f5bcdf71a765, garrytan/gstack#3593@89156431975e, garrytan/gstack#3545@d4f0ea3c314f, garrytan/gstack#3564@e97b8573502b, garrytan/gstack#3578@0ff98dba1fdd)
-arm gstack-full: stopped -> complete, 44 cost rows dropped, tree ce821fa315078f16954aaead25a1d1e889fea38f1aca01b900d22bb5eaebb27d
-arm none-rr: stopped -> complete, 10 cost rows dropped, tree 401fdf75ad346e51ab6cae430229cda000a23cc2768f581a55147b45a9ebf2f0
+arm gstack-full: stopped -> complete, 44 cost rows dropped, tree c81782b80ac5095a3347d468c6a930f87f9f4fc8681a0b87c76e7e7ad0d74122
+arm none-rr: stopped -> complete, 10 cost rows dropped, tree fa089625b0e866637a6a48169d7a5235212b608d92d3beca6a4a18867d8ed918
 exit 0 (log/110.txt)
 
 $ $R/bin/gstack-evals noloss score --suite $W/grid/keep/stacks-r1-rr-rescue/stacks-r1-rr-rescue.json --root $W/grid/keep/stacks-r1-rr-rescue/arms --prereg $W/grid/keep/stacks-r1-rr-rescue/comparisons.stacks-r1-rr-rescue.json --variant gstack-full --reference none-rr --out $W/grid/keep/stacks-r1-rr-rescue/score.json
@@ -630,8 +630,8 @@ exit 2 (log/111.txt)
 $ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $W/bin/comparisons.rr.json --id stacks-r1-rr-cc --out $W/grid/keep/stacks-r1-rr-cc --root $W/grid/keep/final --drop-gaps --drop-file $W/held/caps-drop.tsv
 derive stacks-r1-rr-cc: drop every unit listed in caps-drop.tsv (sha256 982ee7a58df400924fc995f52427fa2f919e9a0d49670faecb250dbd1638e6b2); drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
 suite $W/grid/keep/stacks-r1-rr-cc/stacks-r1-rr-cc.json sha256 e899b4d73ae6e6040c6a9f4f2a2fdccaf6ca773645d6ae829e9394539bb87139: 27 units, 34 blocking blockers on 20 PRs; 6 units dropped (garrytan/gstack#3524@205ea0e2e82f, garrytan/gstack#3567@2b42ec597e03, garrytan/gstack#3573@f3a130c760f8, garrytan/gstack#3545@d4f0ea3c314f, garrytan/gstack#3564@e97b8573502b, garrytan/gstack#3578@0ff98dba1fdd)
-arm gstack-full: stopped -> complete, 53 cost rows dropped, tree d51209081f05cff7132601984625aa6793604d845af74e96010a6af8aa384b7f
-arm none-rr: stopped -> complete, 12 cost rows dropped, tree 2267d94a475027c03ed53145e3a5e31caa7c19e8fb11fa2ea87f70de9cddcd29
+arm gstack-full: stopped -> complete, 53 cost rows dropped, tree 06f49a4a376674218b6932c38dba14d931f19f21ce0507e1473f0c2c4e40b2ac
+arm none-rr: stopped -> complete, 12 cost rows dropped, tree 78bc3c6f97ce89b837090a35d7c4f0a00fe5bdf84d8a228b1a93653f897e4b76
 exit 0 (log/112.txt)
 
 $ $R/bin/gstack-evals noloss score --suite $W/grid/keep/stacks-r1-rr-cc/stacks-r1-rr-cc.json --root $W/grid/keep/stacks-r1-rr-cc/arms --prereg $W/grid/keep/stacks-r1-rr-cc/comparisons.stacks-r1-rr-cc.json --variant gstack-full --reference none-rr --out $W/grid/keep/stacks-r1-rr-cc/score.json
@@ -648,8 +648,8 @@ exit 0 (log/114.txt)
 $ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $W/bin/comparisons.rr.json --id stacks-r1-rr-cohort14 --out $W/grid/keep/stacks-r1-rr-cohort14 --root $W/grid/keep/final --drop-gaps --drop-file $W/out19.tsv
 derive stacks-r1-rr-cohort14: drop every unit listed in out19.tsv (sha256 169680cde2d841a1b4e9c715843dffa50d84b44c34776627380eead2c583d72a); drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
 suite $W/grid/keep/stacks-r1-rr-cohort14/stacks-r1-rr-cohort14.json sha256 8f0d692d50266cc7d5a4b9e1296481e37b83643a7f0b99f05cc81ef1c71be33e: 11 units, 26 blocking blockers on 11 PRs; 22 units dropped (garrytan/gbrain#7511@6b01f793f2bc, garrytan/gbrain#7674@af88cba164b0, garrytan/gbrain#7684@ac3c2af65960, garrytan/gbrain#7789@49eb4da5f7c8, garrytan/gbrain#7794@2d801d54cee4, garrytan/gbrain#7872@f61
-arm gstack-full: stopped -> complete, 217 cost rows dropped, tree b4c612454f26484b0bacf66c8ef348c9c21bfdb33f220aa4d248303b506485bf
-arm none-rr: stopped -> complete, 44 cost rows dropped, tree d5a4839b6b211b1c7d8a637e6c34412b2687475240c487b2f68ecd4190224a4a
+arm gstack-full: stopped -> complete, 217 cost rows dropped, tree b512141a8885f92bc4a23a1e531bf320dbe7bda938b53018c009a5e6c321eba3
+arm none-rr: stopped -> complete, 44 cost rows dropped, tree c2e2a3b68db35bb42bea4166a8eb47106d8a39fec899aea23cd668fbed1b7912
 exit 0 (log/115.txt)
 
 $ $R/bin/gstack-evals noloss score --suite $W/grid/keep/stacks-r1-rr-cohort14/stacks-r1-rr-cohort14.json --root $W/grid/keep/stacks-r1-rr-cohort14/arms --prereg $W/grid/keep/stacks-r1-rr-cohort14/comparisons.stacks-r1-rr-cohort14.json --variant gstack-full --reference none-rr --out $W/grid/keep/stacks-r1-rr-cohort14/score.json
@@ -661,8 +661,8 @@ exit 2 (log/116.txt)
 $ $R/bin/gstack-evals noloss derive --suite $R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg/stacks-r1.json --comparisons $W/bin/comparisons.rr.json --id stacks-r1-rr-out19 --out $W/grid/keep/stacks-r1-rr-out19 --root $W/grid/keep/final --drop-gaps --drop-file $W/cohort14.tsv
 derive stacks-r1-rr-out19: drop every unit listed in cohort14.tsv (sha256 0dd8894f3fcb42200cd8644960329eabdd1cf344956303112ff3219c092db180); drop every unit with a coverage gap or a judgment with coverage incomplete in any arm
 suite $W/grid/keep/stacks-r1-rr-out19/stacks-r1-rr-out19.json sha256 e595d49a455a29f2bfbcbcab48f3b048750359a78cab7e0c00ff28ea5b24fd8a: 19 units, 13 blocking blockers on 13 PRs; 14 units dropped (garrytan/gstack#3593@89156431975e, garrytan/gstack#3596@0be7c3d44339, garrytan/gstack#3516@ee73419c3295, garrytan/gstack#3524@205ea0e2e82f, garrytan/gstack#3526@808dead70e32, garrytan/gstack#3527@268497460
-arm gstack-full: stopped -> complete, 127 cost rows dropped, tree 4ddef22f2cbf159459a6c0ef0563cd77bd422cb25b27b2eaa3002318eb9740a2
-arm none-rr: stopped -> complete, 28 cost rows dropped, tree 6dbfa59479a51e19ce596d9838ac2065fa64aab2d6c996bc6976e238fb5887e3
+arm gstack-full: stopped -> complete, 127 cost rows dropped, tree 686c0f692f586f888bce36277e0fcf3b38fa30740371636619e6dd278fda2200
+arm none-rr: stopped -> complete, 28 cost rows dropped, tree 7e09ae86a40cb5467a3fe16314f4a341d78d30b5da2f527fe2661c555287b96b
 exit 0 (log/117.txt)
 
 $ $R/bin/gstack-evals noloss score --suite $W/grid/keep/stacks-r1-rr-out19/stacks-r1-rr-out19.json --root $W/grid/keep/stacks-r1-rr-out19/arms --prereg $W/grid/keep/stacks-r1-rr-out19/comparisons.stacks-r1-rr-out19.json --variant gstack-full --reference none-rr --out $W/grid/keep/stacks-r1-rr-out19/score.json
@@ -757,59 +757,59 @@ item rr-judge-adjudicate at $1130
 exit 0 (log/129.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr-pilot-none --run rr-dry-rr-pilot-none --amount 6600 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr-pilot-none.json
-  "lease_id": "rr-pilot-none.0001.33d377",
+  "lease_id": "rr-pilot-none.0001.d629bf",
   "state": "open",
 exit 0 (log/130.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr-pilot-none.0001.33d377 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr-pilot-none.0001.d629bf --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/131.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr-smoke-full --run rr-dry-rr-smoke-full --amount 120 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr-smoke-full.json
-  "lease_id": "rr-smoke-full.0001.f5b6ab",
+  "lease_id": "rr-smoke-full.0001.52432b",
   "state": "open",
 exit 0 (log/132.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr-smoke-full.0001.f5b6ab --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr-smoke-full.0001.52432b --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/133.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr-grid-none --run rr-dry-rr-grid-none --amount 2640 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr-grid-none.json
-  "lease_id": "rr-grid-none.0001.328a73",
+  "lease_id": "rr-grid-none.0001.24db2c",
   "state": "open",
 exit 0 (log/134.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr-grid-none.0001.328a73 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr-grid-none.0001.24db2c --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/135.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr-grid-full --run rr-dry-rr-grid-full --amount 2640 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr-grid-full.json
-  "lease_id": "rr-grid-full.0001.c7700a",
+  "lease_id": "rr-grid-full.0001.e4491d",
   "state": "open",
 exit 0 (log/136.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr-grid-full.0001.c7700a --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr-grid-full.0001.e4491d --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/137.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr-pilot-judge --run rr-dry-rr-pilot-judge --amount 220 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr-pilot-judge.json
-  "lease_id": "rr-pilot-judge.0001.80a75b",
+  "lease_id": "rr-pilot-judge.0001.83f0d4",
   "state": "open",
 exit 0 (log/138.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr-pilot-judge.0001.80a75b --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr-pilot-judge.0001.83f0d4 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/139.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr-judge-match --run rr-dry-rr-judge-match --amount 209 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr-judge-match.json
-  "lease_id": "rr-judge-match.0001.fc3f78",
+  "lease_id": "rr-judge-match.0001.cae329",
   "state": "open",
 exit 0 (log/140.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr-judge-match.0001.fc3f78 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr-judge-match.0001.cae329 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/141.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr-judge-adjudicate --run rr-dry-rr-judge-adjudicate --amount 1130 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr-judge-adjudicate.json
-  "lease_id": "rr-judge-adjudicate.0001.8e4c68",
+  "lease_id": "rr-judge-adjudicate.0001.c0d0e4",
   "state": "open",
 exit 0 (log/142.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr-judge-adjudicate.0001.8e4c68 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr-judge-adjudicate.0001.c0d0e4 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/143.txt)
 
 $ $B/bin/gstack-evals ledger lease --item rr-grid-full --run rr-dry-again --amount 1 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
@@ -849,7 +849,7 @@ item rr-judge-adjudicate at $1130
 exit 0 (log/147.txt)
 
 $ $B/bin/gstack-evals ledger lease --item rr-grid-none --run rr-dry-grid-none --amount 2640 --ledger $W/pause/ledger.sqlite --ledger-record $W/pause/record --json
-  "lease_id": "rr-grid-none.0001.5be5ae",
+  "lease_id": "rr-grid-none.0001.5ef4a4",
 exit 0 (log/148.txt)
 
 $ python3 $W/bin/rr-pause.py $W/pause/record rr-grid-full 4
@@ -858,7 +858,7 @@ pause: launch rr-grid-full with --spend-cap 1860.00 (the smaller of the item's $
 exit 0 (log/149.txt)
 
 $ $B/bin/gstack-evals ledger lease --item rr-grid-full --run rr-dry-grid-full --amount 1710 --ledger $W/pause/ledger.sqlite --ledger-record $W/pause/record --json
-  "lease_id": "rr-grid-full.0001.0b068b",
+  "lease_id": "rr-grid-full.0001.083559",
 exit 0 (log/150.txt)
 
 $ python3 $W/bin/rr-pause.py $W/pause/record rr-grid-full 4
