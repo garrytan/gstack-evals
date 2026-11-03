@@ -1,0 +1,184 @@
+// R2 at the overhaul's after pin (GEVA-257, section 7): the hook readout for the smoke and both grids. review-units keeps a
+// session's gstack state root in its work dir, <out>/runs/<model>/<arm>/<task>/p<pass>/work/<task>/.gstack-home
+// (src/trial/state-root.ts and src/trial/trial.ts at 176fdc7), and removes the work dir when the session ends, since
+// runTrial runs without keep. What stays is the session's delta.json, which lists the paths the session added or changed,
+// .gstack-home included (src/trial/delta.ts; written only for a session that completed), and host/transcript.ndjson.
+// So the hook logs are taken out while the launch runs:
+// watch: until the launch's pid exits, then once more, every 0.5 s it hard-links each session's hooks/skill-contract.log
+//   and hooks/skill-route.log into <links dir>/<model>/<arm>/<task>/p<pass>/, and copies each skill-contracts/*.json
+//   record into records/ there when its size or mtime changes. Both hooks append to their log in place (appendHookTrace in
+//   lib/skill-route.ts at 699a41cb), so one link sees every later line and outlives the work dir. A record is rewritten by
+//   rename, so it is copied. The links dir must be on the launch's file system.
+// readout: one row per session: whether delta.json lists the contract log, the contract log's lines by event (blocked,
+//   met and met_waived, met_after_block, miss, fail-open: a state-error line, unknown shape: a state-error naming an
+//   unknown transcript shape, deferred: agents-running or agents-stalled, no contract: no-contract-skill, the hook ran but
+//   found no loaded skill with a contract, other), the routing log's lines (routed and
+//   other), the transcript's count of SKILL_CONTRACT_UNMET, and the exposure timing. The timing walks the transcript's SDK
+//   messages in order with 176fdc7's readTranscript, readerOf and parseFinalTurn and this post's reader map. The first
+//   block is the first main-agent text whose last json block parses as findings. A launch counts when the CLI started it
+//   (task_started, or a message from the subagent), as readers.ts counts it. The specialists are rr-gate.py's (#154): the
+//   Review Army readers other than red-team, and batched. unprompted: a specialist and adversarial-native both started
+//   before the first block (or with no block). after-hook: both started, at least one only after the first block, and the
+//   contract log has a blocked line. late, no block seen: the same with no blocked line. absent: not both. final differs:
+//   the last block's findings differ from the first block's (- when the session has fewer than two blocks).
+//   The rows decide nothing. With --smoke it exits 3 (HOOK_SILENT) when no session has a contract-log line, by delta.json
+//   or by link, so the run stops and goes to the Captain before any grid.
+// Exit 0, 3 (HOOK_SILENT, --smoke only), 5 bad input.
+// Usage: bun rr2-hooks.ts watch <launch out dir> <links dir> <launch pid>
+//        B=<gstack-evals at 176fdc7> MAP=<reader map> bun rr2-hooks.ts readout <launch out dir> <links dir> [--smoke]
+import { copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+const bad = (why: string): never => {
+  console.error("E_RR2_HOOKS " + why + "; fix: see the usage lines at the top of rr2-hooks.ts");
+  process.exit(5);
+};
+const [mode, out, links, third] = process.argv.slice(2);
+if (!out || !links || !["watch", "readout"].includes(mode ?? "")) bad("usage: bun rr2-hooks.ts watch <out> <links> <pid> | readout <out> <links> [--smoke]");
+const runs = join(out!, "runs");
+const ls = (dir: string) => (existsSync(dir) ? readdirSync(dir).sort() : []);
+const sessions = () => ls(runs).flatMap((m) => ls(join(runs, m)).flatMap((a) => ls(join(runs, m, a)).flatMap((t) => ls(join(runs, m, a, t)).filter((p) => /^p\d+$/.test(p)).map((p) => [m, a, t, p] as const))));
+const LOGS = ["skill-contract.log", "skill-route.log"];
+
+if (mode === "watch") {
+  const pid = Number(third);
+  if (!Number.isSafeInteger(pid) || pid < 1) bad("watch needs the launch's pid");
+  const alive = () => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return (e as NodeJS.ErrnoException).code === "EPERM";
+    }
+  };
+  let linked = 0, copied = 0;
+  const seen = new Map<string, string>();
+  const scan = () => {
+    for (const [m, a, t, p] of sessions()) {
+      const dest = join(links!, m, a, t, p);
+      for (const w of ls(join(runs, m, a, t, p, "work"))) {
+        const root = join(runs, m, a, t, p, "work", w, ".gstack-home");
+        for (const name of LOGS) {
+          const f = join(root, "hooks", name);
+          if (existsSync(join(dest, name)) || !existsSync(f)) continue;
+          mkdirSync(dest, { recursive: true });
+          try {
+            linkSync(f, join(dest, name));
+            linked++;
+          } catch (e) {
+            const code = (e as NodeJS.ErrnoException).code;
+            if (code === "EXDEV") bad("the links dir is not on the launch's file system");
+            if (code !== "ENOENT" && code !== "EEXIST") throw e;
+          }
+        }
+        for (const r of ls(join(root, "skill-contracts")).filter((x) => x.endsWith(".json"))) {
+          const f = join(root, "skill-contracts", r);
+          try {
+            const s = statSync(f);
+            const key = s.size + ":" + s.mtimeMs;
+            if (seen.get(f) === key) continue;
+            mkdirSync(join(dest, "records"), { recursive: true });
+            copyFileSync(f, join(dest, "records", r));
+            seen.set(f, key);
+            copied++;
+          } catch (e) {
+            if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+          }
+        }
+      }
+    }
+  };
+  while (alive()) {
+    scan();
+    await Bun.sleep(500);
+  }
+  scan();
+  console.log("watch: launch " + pid + " ended; linked " + linked + " hook logs, copied " + copied + " record versions into " + links);
+  process.exit(0);
+}
+
+const B = process.env.B, MAP = process.env.MAP;
+if (!B || !MAP) bad("readout needs B and MAP");
+if (third !== undefined && third !== "--smoke") bad("unknown option " + third);
+const { readTranscript, readerOf, loadReaderMap, ADVERSARIAL } = await import(B + "/src/trial/review/readers.ts");
+const { parseFinalTurn } = await import(B + "/src/trial/review/findings.ts");
+const loaded = loadReaderMap(MAP);
+if ("problem" in loaded) bad("reader map: " + loaded.problem);
+const SPEC = new Set(["testing", "maintainability", "security", "performance", "data-migration", "api-contract", "design", "simplification", "state-machines", "batched"]);
+const read = (f: string) => (existsSync(f) ? readFileSync(f, "utf8") : "");
+const events = (text: string) => text.split("\n").filter((l) => l.trim()).map((l) => ({ event: / event=(\S+)/.exec(l)?.[1] ?? "?", line: l }));
+
+function timing(text: string, blocked: boolean) {
+  const msgs = readTranscript(text);
+  const launches: { at: number; id: string; reader: string }[] = [];
+  const started = new Set<string>();
+  const blocks: { at: number; findings: unknown }[] = [];
+  msgs.forEach((m: Record<string, any>, at: number) => {
+    if (m.type === "assistant" && !m.parent_tool_use_id && !m.error && !m.is_api_error_message) {
+      for (const b of Array.isArray(m.message?.content) ? m.message.content : []) {
+        if (b?.type === "text" && typeof b.text === "string") {
+          const p = parseFinalTurn(b.text);
+          if (p.kind === "findings") blocks.push({ at, findings: p.findings });
+        }
+        if (b?.type === "tool_use" && (b.name === "Agent" || b.name === "Task") && typeof b.id === "string" && !launches.some((l) => l.id === b.id)) launches.push({ at, id: b.id, reader: readerOf(typeof b.input?.prompt === "string" ? b.input.prompt : "", loaded.map) });
+      }
+    }
+    if (m.type === "system" && m.subtype === "task_started" && typeof m.tool_use_id === "string") started.add(m.tool_use_id);
+    if (typeof m.parent_tool_use_id === "string") started.add(m.parent_tool_use_id);
+  });
+  const ran = launches.filter((l) => started.has(l.id));
+  const first = blocks[0]?.at ?? Infinity;
+  const has = (ls: typeof ran) => ls.some((l) => SPEC.has(l.reader)) && ls.some((l) => l.reader === ADVERSARIAL);
+  const exposure = !has(ran) ? "absent" : has(ran.filter((l) => l.at < first)) ? "unprompted" : blocked ? "after-hook" : "late, no block seen";
+  const differs = blocks.length < 2 ? "-" : JSON.stringify(blocks[0]!.findings) === JSON.stringify(blocks.at(-1)!.findings) ? "no" : "yes";
+  return { exposure, differs, blocks: blocks.length };
+}
+
+const rows: string[][] = [];
+const tally = new Map<string, number>();
+const add = (k: string, n = 1) => tally.set(k, (tally.get(k) ?? 0) + n);
+let logged = 0;
+for (const [m, a, t, p] of sessions()) {
+  const dir = join(runs, m, a, t, p);
+  if (!existsSync(join(dir, "trial.json"))) continue;
+  const delta = read(join(dir, "delta.json"));
+  const listed = delta ? [...(JSON.parse(delta).added ?? []), ...(JSON.parse(delta).changed ?? [])].some((x: string) => x.endsWith(".gstack-home/hooks/skill-contract.log")) : false;
+  const contract = events(read(join(links!, m, a, t, p, "skill-contract.log")));
+  const route = events(read(join(links!, m, a, t, p, "skill-route.log")));
+  const count = (pred: (e: { event: string; line: string }) => boolean) => contract.filter(pred).length;
+  const c = {
+    blocked: count((e) => e.event === "blocked"),
+    met: count((e) => e.event === "met" || e.event === "met_waived"),
+    met_after_block: count((e) => e.event === "met_after_block"),
+    miss: count((e) => e.event === "miss"),
+    fail_open: count((e) => e.event === "state-error"),
+    unknown_shape: count((e) => e.event === "state-error" && e.line.includes("unknown transcript shape")),
+    deferred: count((e) => e.event === "agents-running" || e.event === "agents-stalled"),
+    no_contract: count((e) => e.event === "no-contract-skill"),
+  };
+  const other = contract.length - c.blocked - c.met - c.met_after_block - c.miss - c.fail_open - c.deferred - c.no_contract;
+  const transcript = read(join(dir, "host", "transcript.ndjson"));
+  const unmet = (transcript.match(/SKILL_CONTRACT_UNMET/g) ?? []).length;
+  const tm = timing(transcript, c.blocked > 0);
+  if (listed || contract.length) logged++;
+  add("sessions");
+  if (listed) add("listed");
+  if (contract.length) add("linked");
+  for (const [k, v] of Object.entries(c)) add(k, v);
+  if (route.length) add("route sessions");
+  add("routed", route.filter((e) => e.event === "routed").length);
+  add(tm.exposure);
+  if (tm.differs !== "-") add("two blocks");
+  if (tm.differs === "yes") add("differs");
+  rows.push([m + "/" + a + "/" + t + "/" + p, listed ? "yes" : "no", String(contract.length), String(c.blocked), String(c.met), String(c.met_after_block), String(c.miss), String(c.fail_open), String(c.unknown_shape), String(c.deferred), String(c.no_contract), String(other), String(route.length), String(unmet), tm.exposure, tm.differs]);
+}
+if (!rows.length) bad("no session under " + runs);
+const g = (k: string) => tally.get(k) ?? 0;
+console.log(["session", "delta_lists_log", "log_lines", "blocked", "met", "met_after_block", "miss", "fail_open", "unknown_shape", "deferred", "no_contract", "other", "route_lines", "unmet_in_transcript", "exposure", "final_differs"].join("\t"));
+for (const r of rows) console.log(r.join("\t"));
+console.log("hook readout: " + g("sessions") + " sessions; a contract-log line in " + logged + " (delta.json lists the log in " + g("listed") + ", linked in " + g("linked") + "); lines: blocked " + g("blocked") + ", met " + g("met") + ", met_after_block " + g("met_after_block") + ", miss " + g("miss") + ", fail-open " + g("fail_open") + " (unknown shape " + g("unknown_shape") + "), deferred " + g("deferred") + ", no contract " + g("no_contract") + "; routing log in " + g("route sessions") + " sessions, routed " + g("routed"));
+console.log("exposure timing: unprompted " + g("unprompted") + ", after-hook " + g("after-hook") + ", late, no block seen " + g("late, no block seen") + ", absent " + g("absent") + "; the final block differs from the first in " + g("differs") + " of " + g("two blocks") + " sessions with two or more blocks");
+if (third === "--smoke" && logged === 0) {
+  console.log("HOOK_SILENT no smoke session has a contract-hook log line: stop, and take the run to the Captain before any grid");
+  process.exit(3);
+}
