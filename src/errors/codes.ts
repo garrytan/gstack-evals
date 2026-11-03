@@ -1004,7 +1004,7 @@ export const CODES = {
   },
   E_ROUTE_TOOL_ROUNDTRIP: {
     exit: 1,
-    meaning: "route-check's tool part failed on the model's OpenRouter route: in a one-turn session that reads a random token from token.txt, no main-agent tool call got a non-error result holding the token, the main agent's last text did not quote it, the session did not complete, or the provider answered one of the session's own calls with a 4xx other than 401, 403 or 429 (the reason holds the status and the response body). The try counts against the part's two; a second failure takes the model out of E1 with this code.",
+    meaning: "route-check's tool part failed on the model's OpenRouter route: in a one-turn session that reads a random token from token.txt, no main-agent tool call got a non-error result holding the token, the main agent's last text did not quote it, the session did not complete, or the provider answered one of the session's own calls with a 4xx other than 401, 402, 403, 408 or 429 (the reason holds the status and the response body). The try counts against the part's two; a second failure takes the model out of E1 with this code.",
     fix: "Apply a named repair from the frozen list (--repair provider-pin=<openrouter provider>), then rerun route-check with the same --out. After the second failure there is no fix inside the check: the results name this code.",
     side_effects: "Spend on the model's e1-route line item, settled in the ledger; the try is recorded in <out>/route-check.json.",
     retry_safe: true,
@@ -1013,7 +1013,7 @@ export const CODES = {
   },
   E_ROUTE_NO_BLOCK: {
     exit: 1,
-    meaning: "route-check's block part failed on the model's OpenRouter route: the two-turn none-arm plan session on the fixture unit (the plan ask, then the turn-2 ask with the frozen output block) did not complete with a plan-findings block that parses, or the provider answered one of the session's own calls with a 4xx other than 401, 403 or 429 (the reason holds the status and the response body). An empty list ([]) passes. The try counts against the part's two; a second failure takes the model out of E1 with this code.",
+    meaning: "route-check's block part failed on the model's OpenRouter route: the two-turn none-arm plan session on the fixture unit (the plan ask, then the turn-2 ask with the frozen output block) did not complete with a plan-findings block that parses, or the provider answered one of the session's own calls with a 4xx other than 401, 402, 403, 408 or 429 (the reason holds the status and the response body). An empty list ([]) passes. The try counts against the part's two; a second failure takes the model out of E1 with this code.",
     fix: "Raise the output allowance (--repair output-allowance=<tokens>, above 32000), then rerun route-check with the same --out. After the second failure there is no fix inside the check: the results name this code.",
     side_effects: "Spend on the model's e1-route line item, settled in the ledger; the try is recorded in <out>/route-check.json.",
     retry_safe: true,

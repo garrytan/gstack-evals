@@ -79,6 +79,17 @@ describe("the read audit (GEVA-203, keyless)", () => {
     for (const command of ["ls " + skills + " 2>&1 | head -5", "cat " + skills + " 2>&1; false", "cat " + skills + " && false", "cat " + skills + " || false", "cat " + skills + " |& head", "cat " + skills + " &", "cat " + skills + " & false", "cat " + skills + "\nfalse", "(cat " + skills + ")", "echo $(cat " + skills + ")", "echo `cat " + skills + "`"]) expect([command, touch(command)]).toEqual([command, [[shown, false, true]]]);
   });
 
+  // Value: protects=S3 (#176 /ship pass 1, the Captain's ruling): a separator inside single or double quotes separates nothing, so an errored grep with a quoted alternation reads clean, while $( ) or backticks inside double quotes and real separators outside quotes stay compound; fails_when=a quoted | or ; marks a failed simple command contaminated, or a command substitution inside double quotes loses its touches on error; why_new=GST-1121 (S3); seam=auditTranscript's error rule for Bash; no_claim=escaped quotes outside a quoted span
+  test("S3: quoted separators make no compound; $( ) and backticks inside double quotes still do", () => {
+    const failed = (id: string): Msg => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "grep: No such file or directory", is_error: true }] }, parent_tool_use_id: null, session_id: "s" });
+    const touch = (command: string) => audit(ndjson(call("t1", "Bash", { command }), failed("t1")), "none").map((t) => [t.target, t.error, t.contaminated]);
+    const skills = join(HOME, ".claude", "skills", "gstack", "SKILL.md");
+    const shown = "~/.claude/skills/gstack/SKILL.md";
+    expect(touch('grep -rE "gstack|skill" ~/.capy/drive')).toEqual([["~/.capy/drive", true, false]]);
+    for (const command of ["cat " + skills + ' "a; b"', "cat " + skills + " 'a | b'", "grep -e 'x&y' " + skills, 'grep "(a)" ' + skills, "cat " + skills + " '$(nope)'"]) expect([command, touch(command)]).toEqual([command, [[shown, true, false]]]);
+    for (const command of ['echo "$(cat ' + skills + ')"', 'echo "`cat ' + skills + '`"', 'grep -E "a|b" ' + skills + " | head", "cat " + skills + ' "a"; false']) expect([command, touch(command)]).toEqual([command, [[shown, false, true]]]);
+  });
+
   // Value: protects=a subagent's tool call (parent_tool_use_id set) is audited the same as the main agent's; fails_when=a none arm launches a subagent that reads a skill or drive file and stays clean; why_new=audit.ts reads every tool call, the main agent's and each subagent's; seam=auditTranscript over sidechain messages; no_claim=a subagent whose transcript is written elsewhere
   test("a subagent's call counts the same as the main agent's", () => {
     const text = ndjson(call("a1", "Agent", { description: "Read the plan", prompt: "Read plan.md and summarize it." }), call("t1", "Read", { file_path: SKILL }, "a1"), result("t1", false, "a1"), call("t2", "Read", { file_path: DRIVE }, "a1"), result("t2", false, "a1"), result("a1"));

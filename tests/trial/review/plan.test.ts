@@ -98,6 +98,24 @@ describe("the rec user (B4, open item 3)", () => {
     for (const q of offers) expect(recAnswer(q, "ceo")).toBe(REC_REPLY);
   });
 
+  // Value: protects=S1 (#176 /ship pass 1, the Captain's ruling): a mode or Step 0 question that offers any other skill or review is declined, while GST-925's /ship and commit wording in a mode question still gets the recommendation as a choice; fails_when=MODE wins over another skill, so the rec user hands the session to /office-hours, or GST-925's /ship wording is declined; why_new=GST-1121 (S1); seam=recAnswer and recFreeformFor; no_claim=a question that names no skill or review
+  test("S1: a mode or Step 0 question that offers another skill is declined; GST-925's /ship and commit wording still gets the recommendation", async () => {
+    const offers = ["Step 0: Run /office-hours first, or proceed?", "Step 0: Run /office-hours first, or proceed? (Recommended: run /office-hours)", "Which review mode? Or should I hand off to /plan-eng-review?", "Step 0A: should I run an eng review before the scope challenge?"];
+    for (const q of offers) expect([q, recAnswer(q, "ceo"), await recFreeformFor("ceo")("", q)]).toEqual([q, REC_DECLINE, { text: REC_DECLINE }]);
+    const gst925 = "Step 0E, mode selection. A) SCOPE EXPANSION B) SELECTIVE EXPANSION C) HOLD SCOPE (recommended) D) SCOPE REDUCTION. Each mode ends with /ship and a commit.";
+    expect([recAnswer(gst925, "ceo"), await recFreeformFor("ceo")("", gst925)]).toEqual([REC_REPLY, { text: REC_REPLY, choice: true }]);
+    expect(recAnswer("Step 0: run /plan-ceo-review's own scope challenge first?", "ceo")).toBe(REC_REPLY);
+  });
+
+  // Value: protects=S2 (#176 /ship pass 1, the Captain's ruling): a plain-language offer in the long forms the skills use (an engineering review, a developer experience review, a designer's eye review, a security audit) is declined, and each lens still takes its own; fails_when=a long-form offer of another review is accepted, or a lens declines its own long form; why_new=GST-1121 (S2); seam=recAnswer over OTHER_REVIEWS and each lens's phrases; no_claim=paraphrases beyond these forms
+  test("S2: long-form offers of another review are declined, and each lens takes its own", () => {
+    const own = { eng: "Want me to run an engineering review next?", devex: "Should I follow up with a developer experience review?", design: "Shall I do a designer's eye review after this?" } as const;
+    for (const lens of ["ceo", "eng", "devex", "design"] as const) {
+      expect([lens, recAnswer("Want a security audit too?", lens)]).toEqual([lens, REC_DECLINE]);
+      for (const [owner, q] of Object.entries(own)) expect([lens, q, recAnswer(q, lens)]).toEqual([lens, q, owner === lens ? REC_REPLY : REC_DECLINE]);
+    }
+  });
+
   test("through the simulator, a gated effect still gets the non-approving answer", async () => {
     const sim = new UserSim({ task: "t", script: REC_USER, log: join(scratch("rec-"), "usersim.ndjson"), freeform: async (p, q) => ((await recFreeformFor("ceo")(p, q)) as { text: string }).text });
     const ask = async (question: string, options: string[] = ["A", "B"]) => ((await sim.answerAsk([{ question, options: options.map((label) => ({ label })) }])) as { answers: Record<string, string> }).answers[question];

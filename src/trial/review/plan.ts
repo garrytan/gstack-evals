@@ -38,9 +38,9 @@ export const PLAN_ARMS: readonly PlanArm[] = ["none", "gstack", "gstack-auto", "
 /** Each lens's skill, its told command, its lens line (the skill's own description, frozen in the prereg) and the review phrases it owns. */
 export const PLAN_LENSES = {
   ceo: { skill: "plan-ceo-review", command: "/plan-ceo-review", line: "Do a CEO/founder-mode review of this plan.", phrases: ["ceo review"] },
-  eng: { skill: "plan-eng-review", command: "/plan-eng-review", line: "Do an eng manager-mode review of this plan.", phrases: ["eng review"] },
-  devex: { skill: "plan-devex-review", command: "/plan-devex-review", line: "Do a developer experience review of this plan.", phrases: ["devex review", "dx review"] },
-  design: { skill: "plan-design-review", command: "/plan-design-review", line: "Do a designer's eye review of this plan.", phrases: ["design review"] },
+  eng: { skill: "plan-eng-review", command: "/plan-eng-review", line: "Do an eng manager-mode review of this plan.", phrases: ["eng review", "engineering review"] },
+  devex: { skill: "plan-devex-review", command: "/plan-devex-review", line: "Do a developer experience review of this plan.", phrases: ["devex review", "dx review", "developer experience review"] },
+  design: { skill: "plan-design-review", command: "/plan-design-review", line: "Do a designer's eye review of this plan.", phrases: ["design review", "designer's eye review"] },
 } as const satisfies Record<string, { skill: string; command: string; line: string; phrases: readonly string[] }>;
 export type PlanLens = keyof typeof PLAN_LENSES;
 export const isPlanLens = (v: string): v is PlanLens => Object.hasOwn(PLAN_LENSES, v);
@@ -143,18 +143,24 @@ export function neverAskPreferences(dir: string | null): string | null {
 export const REC_REPLY = "Go with your recommendation.";
 export const REC_DECLINE = "No, not now.";
 export const REC_PERSONA = "You take every recommendation. To each question you answer exactly " + JSON.stringify(REC_REPLY) + " That includes a question about a review mode or a Step 0 choice. To any other question that offers to run another skill or review, or to promote or commit docs, you answer exactly " + JSON.stringify(REC_DECLINE);
-const OTHER_REVIEWS = ["ceo review", "eng review", "design review", "devex review", "dx review", "security review", "code review", "autoplan", "office hours"];
+const OTHER_REVIEWS = ["ceo review", "eng review", "engineering review", "design review", "designer's eye review", "devex review", "dx review", "developer experience review", "security review", "security audit", "code review", "autoplan", "office hours"];
 const OTHER_SKILL = Object.fromEntries(Object.entries(PLAN_LENSES).map(([lens, l]) => [lens, new RegExp(["(^|[\\s(\"'`])\\/(?!" + l.command.slice(1) + "(?![\\w-]))[a-z][a-z0-9-]*(:[a-z0-9-]+)?(?=$|[\\s.,;:!?)\"'`])", ...OTHER_REVIEWS.filter((p) => !(l.phrases as readonly string[]).includes(p)).map((p) => "\\b" + p.replace(" ", "[ -]") + "\\b")].join("|"), "i")])) as Record<PlanLens, RegExp>;
 const DOCS = /\bpromot(e|es|ed|ing)\b|\bcommit(s|ted|ting)?\b|\bdocs\//i;
 const MODE = /\b(SCOPE EXPANSION|SELECTIVE EXPANSION|HOLD SCOPE|SCOPE REDUCTION|DX EXPANSION|DX POLISH|DX TRIAGE)\b|\breview mode\b|\bmode selection\b|\bStep 0[A-I]?\b|\bscope (gate|challenge)\b|\bWhat should I review\?|\b(original|smaller) arrangement\b|\bdesign completeness\b|\bfocus on specific areas\b|\bHow deep should this DX review go\b/i;
 
+const SHIP = /(^|[\s("'`])\/ship(?![\w-])/gi;
+const MODE_WORDS = new RegExp(MODE.source, "gi");
+
 /** The rec user's answer to one question under one lens, as the user simulator's free-form source. */
-export const recAnswer = (question: string, lens: PlanLens): string => (MODE.test(question) ? REC_REPLY : OTHER_SKILL[lens].test(question) || DOCS.test(question) ? REC_DECLINE : REC_REPLY);
+export const recAnswer = (question: string, lens: PlanLens): string => (MODE.test(question) ? (OTHER_SKILL[lens].test(question.replace(MODE_WORDS, " ").replace(SHIP, "$1")) ? REC_DECLINE : REC_REPLY) : OTHER_SKILL[lens].test(question) || DOCS.test(question) ? REC_DECLINE : REC_REPLY);
 /** The driver's free-form source for one lens. */
-export const recFreeformFor = (lens: PlanLens) => async (_persona: string, question: string): Promise<PersonaAnswer> => ({ text: recAnswer(question, lens), ...(MODE.test(question) ? { choice: true as const } : {}) });
+export const recFreeformFor = (lens: PlanLens) => async (_persona: string, question: string): Promise<PersonaAnswer> => {
+  const text = recAnswer(question, lens);
+  return { text, ...(MODE.test(question) && text === REC_REPLY ? { choice: true as const } : {}) };
+};
 /** The sidecar entry every plan arm runs with: a persona and no scripted replies, so every question reaches recAnswer. */
 export const REC_USER: UserScript = { persona: REC_PERSONA };
-export const REC_USER_SHA256 = sha256(JSON.stringify({ persona: REC_PERSONA, reply: REC_REPLY, decline: REC_DECLINE, other_skill: Object.fromEntries(Object.entries(OTHER_SKILL).map(([lens, r]) => [lens, r.source])), docs: DOCS.source, mode: MODE.source }));
+export const REC_USER_SHA256 = sha256(JSON.stringify({ persona: REC_PERSONA, reply: REC_REPLY, decline: REC_DECLINE, other_skill: Object.fromEntries(Object.entries(OTHER_SKILL).map(([lens, r]) => [lens, r.source])), docs: DOCS.source, mode: MODE.source, ship: SHIP.source }));
 
 export interface PlanFinding {
   severity: PlanSeverity;

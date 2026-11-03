@@ -32,7 +32,7 @@ export interface Touch {
 
 const INPUTS = ["file_path", "path", "pattern", "notebook_path"] as const;
 
-const compound = (command: string): boolean => /[;&|\n()`]/.test(command.replace(/\d*[<>]&\d*-?|&>>?|>\|/g, ""));
+const compound = (command: string): boolean => /[;&|\n()`]/.test(command.replace(/'[^']*'|"((?:[^"\\]|\\.)*)"/g, (_, dq: string | undefined) => (dq !== undefined && /\$\(|`/.test(dq) ? "(" : "")).replace(/\d*[<>]&\d*-?|&>>?|>\|/g, ""));
 
 function pathClasses(raw: string, home: string): TouchClass[] {
   const p = raw.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, home);
