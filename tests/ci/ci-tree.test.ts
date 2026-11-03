@@ -120,6 +120,15 @@ describe("ci-tree.ts record", () => {
     expect([missing.status, missing.stderr.trim()]).toEqual([1, "ci-tree: --junit <value> is required"]);
     expect([existsSync(join(dir, "other.json")), existsSync(join(dir, "missing.json"))]).toEqual([false, false]);
   });
+
+  test("refuses a checkout that changed after checkout, so tree.json never names a tree the checks did not read", () => {
+    const dir = tempRepo({ "junit.xml": JUNIT, "checks.txt": "bun run typecheck\n" });
+    const head = sh(dir, "git rev-parse HEAD").trim();
+    writeFileSync(join(dir, "stray.md"), "written by a step\n");
+    const out = join(tmpdir(), "ci-tree-dirty-" + process.pid + ".json");
+    const dirty = record(dir, ["--junit", "junit.xml", "--checks", "checks.txt", "--out", out], { GITHUB_SHA: head });
+    expect([dirty.status, dirty.stderr.trim(), existsSync(out)]).toEqual([1, "ci-tree: the checkout changed after checkout, so the checks did not read HEAD's tree", false]);
+  });
 });
 
 describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
@@ -163,5 +172,11 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
       expect(runs[at]!.split("\n").at(-1)).toBe("echo '" + command + "' >> \"$RUNNER_TEMP/checks-passed.txt\"");
     }
     expect(runs[record]).toContain('--checks "$RUNNER_TEMP/checks-passed.txt"');
+  });
+
+  test("the wiki:check entry is written only when the run checked against the default branch", () => {
+    const wiki = steps.find((s) => (s.run ?? "").trim().startsWith("bun run wiki:check "))! as Step & { env?: Record<string, string> };
+    expect(wiki.env?.BASE_IS_DEFAULT).toBe("${{ github.event_name != 'pull_request' || github.base_ref == github.event.repository.default_branch }}");
+    expect(wiki.run!.trim().split("\n").at(-2)).toStartWith('[ "$BASE_IS_DEFAULT" = true ] || {');
   });
 });

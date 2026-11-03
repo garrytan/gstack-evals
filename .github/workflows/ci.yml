@@ -63,9 +63,12 @@ jobs:
       - name: Wiki check (front matter, links, attachments, secrets, sealed markers, index, merged posts unchanged)
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        # Its check entry stands for the ship lane bun run wiki:check, whose default base on a branch that contains main is this one.
+          BASE_IS_DEFAULT: ${{ github.event_name != 'pull_request' || github.base_ref == github.event.repository.default_branch }}
+        # Its check entry stands for the ship lane bun run wiki:check, whose default base is the default branch, so a pull request
+        # into another branch (a stacked PR) writes no entry and its wiki:check lane cannot carry.
         run: |
           bun run wiki:check --base "$BASE"
+          [ "$BASE_IS_DEFAULT" = true ] || { echo "wiki:check ran against $GITHUB_BASE_REF, not the default branch: no carry entry"; exit 0; }
           echo 'bun run wiki:check' >> "$RUNNER_TEMP/checks-passed.txt"
       - name: Record the tested tree for CI carry (tree.json)
         env:
