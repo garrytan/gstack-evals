@@ -62,6 +62,19 @@ describe("the clean-room script (GEVA-203, keyless)", () => {
     expect(check(dangling)).toEqual({ code: 0, out: "" });
   });
 
+  // Value: protects=R2R4 (#166 /ship round 2, and Capy's review at clean-room.ts:47): an instruction file under a directory whose name holds a newline is checked like any other, so one that names gstack prints found and exits 3, and a clean one stays clean; fails_when=the scan splits find's output on newlines, so the hit is read as two missing paths and the script exits 0; why_new=GST-1121 item 3 (a fail-open regression from round 1's find loop); seam=CLEAN_ROOM_SCRIPT's find over <unit>; no_claim=a newline in the home or unit path itself
+  test("an AGENTS.md under a directory whose name holds a newline is scanned: naming gstack exits 3, clean exits 0", () => {
+    const r = fresh();
+    const odd = join(r.unit, "notes\nold", "AGENTS.md");
+    put(odd, "Load gstack first.\n");
+    const got = check(r);
+    expect([got.code, got.out]).toEqual([3, "found " + odd + "\n"]);
+    const clean = fresh();
+    put(join(clean.unit, "notes\nold", "AGENTS.md"), "Review plans plainly.\n");
+    put(join(clean.unit, "CLAUDE.md"), "Keep it short.\n");
+    expect(check(clean)).toEqual({ code: 0, out: "" });
+  });
+
   // Value: protects=a scan that cannot run fails closed: with find or grep off PATH the script prints its reason on stderr and exits 4, never 0 or a bare 3, even on a unit whose AGENTS.md names gstack, and so does a CLAUDE.md link grep cannot read; fails_when=a missing tool or a read error leaves the scan silent and exits 0, or prints found from a scan that never ran; seam=CLEAN_ROOM_SCRIPT under sh with a PATH built at runtime
   test("with find or grep missing from PATH, or a link grep cannot read, the script prints its reason on stderr and exits 4", () => {
     for (const tool of ["find", "grep"] as const) {
@@ -74,6 +87,6 @@ describe("the clean-room script (GEVA-203, keyless)", () => {
     put(join(unread.root, "notes"));
     symlinkSync(join(unread.root, "notes"), join(unread.unit, "CLAUDE.md"));
     const c = spawnSync(SH, ["-c", CLEAN_ROOM_SCRIPT, "clean-room", unread.home, unread.unit], { encoding: "utf8", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", CLEAN_ROOM_ROOT: unread.root } });
-    expect([c.status, c.stdout, c.stderr]).toEqual([4, "", "clean-room: grep could not read " + join(unread.unit, "CLAUDE.md") + " (exit 2)\n"]);
+    expect([c.status, c.stdout, c.stderr]).toEqual([4, "", "clean-room: grep could not read " + join(unread.unit, "CLAUDE.md") + " (exit 2)\nclean-room: find could not finish under " + unread.unit + "\n"]);
   });
 });

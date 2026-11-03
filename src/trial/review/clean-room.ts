@@ -26,7 +26,10 @@ export const CLEAN_ROOM_CHECKS = [
   "any AGENTS.md or CLAUDE.md under <unit>, outside .git, naming gstack",
 ] as const;
 
+const UNIT_FILES = 'b=0; for f; do grep -qi gstack "$f" 2>/dev/null; s=$?; if [ "$s" = 0 ]; then printf "found %s\\n" "$f"; elif [ "$s" != 1 ] && [ -e "$f" ]; then printf "clean-room: grep could not read %s (exit %s)\\n" "$f" "$s" >&3; b=1; fi; done; exit $b';
+
 export const CLEAN_ROOM_SCRIPT = [
+  "exec 3>&2",
   "hit=0",
   'found() { printf "found %s\\n" "$1"; hit=1; }',
   'there() { [ -e "$1" ] || [ -L "$1" ]; }',
@@ -41,10 +44,8 @@ export const CLEAN_ROOM_SCRIPT = [
   'for p in "$home/.claude/CLAUDE.md" "$home/AGENTS.md"; do [ -f "$p" ] && named "$p"; done',
   'for u in "$@"; do',
   '  there "$u/.claude/skills" && found "$u/.claude/skills"',
-  '  list=$(find "$u" -name .git -prune -o \\( -name AGENTS.md -o -name CLAUDE.md \\) \\( -type f -o -type l \\) -print 2>/dev/null) || fail "find could not finish under $u"',
-  '  while IFS= read -r f; do [ -n "$f" ] && named "$f"; done <<EOF',
-  "$list",
-  "EOF",
+  '  out=$(find "$u" -name .git -prune -o \\( -name AGENTS.md -o -name CLAUDE.md \\) \\( -type f -o -type l \\) -exec sh -c \'' + UNIT_FILES + '\' clean-room {} + 2>/dev/null) || fail "find could not finish under $u"',
+  '  [ -z "$out" ] || { printf "%s\\n" "$out"; hit=1; }',
   "done",
   '[ "$bad" = 0 ] || exit 4',
   '[ "$hit" = 0 ] || exit 3',
