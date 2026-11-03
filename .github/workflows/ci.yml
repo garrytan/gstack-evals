@@ -4,6 +4,10 @@
 # the token read-only, but a dispatch runs the dispatched ref's copy, so trains stay off until gstack dispatches them on the base
 # ref (GST-254, gstack GST-255). The checkout keeps no credentials, since no step needs them.
 # Later units add tests under tests/; `bun test` picks them up without a change here.
+# CI carry (GST-1182; gstack docs/pregate.md#ci-carry): the last steps write tree.json, the tested-tree artifact that lets
+# gstack's /ship and pregate reuse this run at the same clean tree instead of running the lanes again. It names the run, its
+# head and tree, every test file in bun test's JUnit report, and a check:<command> entry that each check step appends only
+# after its command passed. .gstack/pregate.json's run_profiles and ship_lanes_from say which runs and lanes it covers.
 # gstack is fetched at the commit sealed.yml pins, because tests/ci/sealed-workflow.test.ts runs sealed.yml's steps with
 # gstack's real sealed checker on scratch repositories.
 name: ci
@@ -47,12 +51,35 @@ jobs:
           git -C "$RUNNER_TEMP/gstack" checkout -q --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/gstack" rev-parse HEAD)" = "$GSTACK_SHA"
       - name: Typecheck
-        run: bun run typecheck
+        run: |
+          bun run typecheck
+          echo 'bun run typecheck' >> "$RUNNER_TEMP/checks-passed.txt"
       - name: Tests
-        run: bun test
+        run: bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
       - name: Reason-code doc is fresh (docs/errors.md from src/errors/codes.ts)
-        run: bun run errors:check
+        run: |
+          bun run errors:check
+          echo 'bun run errors:check' >> "$RUNNER_TEMP/checks-passed.txt"
       - name: Wiki check (front matter, links, attachments, secrets, sealed markers, index, merged posts unchanged)
+        shell: bash
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: bun run wiki:check --base "$BASE"
+          BASE_IS_DEFAULT: ${{ github.event_name != 'pull_request' || github.base_ref == github.event.repository.default_branch }}
+        # Its check entry stands for the ship lane bun run wiki:check, whose default base is the default branch, so a pull request
+        # into another branch (a stacked PR) writes no entry and its wiki:check lane cannot carry. Nor does a run that resolved no
+        # base and so did not check merged posts against one. shell: bash runs the step with pipefail, so the tee keeps a failure.
+        run: |
+          bun run wiki:check --base "$BASE" | tee "$RUNNER_TEMP/wiki-check.txt"
+          grep -Eq '^wiki: ok, [0-9]+ posts; immutability checked against ' "$RUNNER_TEMP/wiki-check.txt" || { echo "wiki:check did not check immutability against a base: no carry entry"; exit 0; }
+          [ "$BASE_IS_DEFAULT" = true ] || { echo "wiki:check ran against $GITHUB_BASE_REF, not the default branch: no carry entry"; exit 0; }
+          echo 'bun run wiki:check' >> "$RUNNER_TEMP/checks-passed.txt"
+      - name: Record the tested tree for CI carry (tree.json)
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bun scripts/ci-tree.ts record --junit "$RUNNER_TEMP/junit.xml" --checks "$RUNNER_TEMP/checks-passed.txt" --out "$RUNNER_TEMP/tested-tree/tree.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tested-tree
+          path: ${{ runner.temp }}/tested-tree/tree.json
+          if-no-files-found: error
+          retention-days: 7

@@ -7,14 +7,15 @@
 // Env: TB2 (terminal-bench-2 checkout at the pinned commit), VM_ROOT (the VM work dir, default in the code), NETWORK (default allowlist),
 // TASK_SET (tb2, the default, or swebv-r3: R3's SWE-bench Verified list, materialized from SWEBV, a harbor-datasets checkout
 // at the registry pin, with the patch exported from /testbed, less R3's drop list), TASKS (a comma list from the task set,
-// default all; a task on R3's drop list is refused),
+// default all; a task on R3's drop list is refused; or swerebench-r3a4: R3 amendment 4's SWE-rebench pool, materialized from
+// SWEREBENCH, the pinned Harbor's export of the Hub package, each task checked against tasks/swerebench-r3a4.json),
 // CELLS (a cells*.json file in config/, default cells.json), ARM_MANIFESTS (the arm manifest directory under quick/laneb,
 // default arms/manifests).
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
-import { loadR3Drops, loadSwebvTasks, materializeSwebv, materializeTb2, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256 } from "./materialize.ts";
-import { armSpec, jobConfig } from "./grid.ts";
+import { loadR3Drops, loadRebenchPool, loadSwebvTasks, materializeRebench, materializeSwebv, materializeTb2, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256, R3A4_POOL_FILE, R3A4_POOL_SHA256 } from "./materialize.ts";
+import { armSpec, jobConfig, PROCEDURE_LINES } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -28,7 +29,7 @@ if (import.meta.main) {
   const vm = process.env.VM_ROOT ?? "/home/ubi/work";
   const network = (process.env.NETWORK ?? "allowlist") as "allowlist" | "public";
   const taskSet = process.env.TASK_SET ?? "tb2";
-  if (taskSet !== "tb2" && taskSet !== "swebv-r3") throw new Error(`E_USAGE TASK_SET ${taskSet} is not tb2 or swebv-r3`);
+  if (taskSet !== "tb2" && taskSet !== "swebv-r3" && taskSet !== "swerebench-r3a4") throw new Error(`E_USAGE TASK_SET ${taskSet} is not tb2, swebv-r3 or swerebench-r3a4`);
   const cellsFile = process.env.CELLS ?? "cells.json";
   if (!/^cells[\w.-]*\.json$/.test(cellsFile) || !existsSync(join(root, "config", cellsFile))) throw new Error(`E_USAGE CELLS ${cellsFile} is not a cells*.json file in config/`);
   const armManifests = process.env.ARM_MANIFESTS ?? "arms/manifests";
@@ -39,7 +40,8 @@ if (import.meta.main) {
   const band = taskSet === "swebv-r3" ? loadSwebvTasks(join(root, "tasks/swebv-r3.txt"), join(root, "tasks/swebv-r3.json"), R3_BAND_SHA256) : [];
   const drops = taskSet === "swebv-r3" ? loadR3Drops(join(root, R3_DROP_FILE), R3_DROP_SHA256, band.map((t) => t.task_id)) : [];
   const swebv = band.filter((t) => !drops.some((d) => d.task_id === t.task_id));
-  const all: string[] = taskSet === "swebv-r3" ? swebv.map((t) => t.task_id) : JSON.parse(readFileSync(join(root, "tasks/final.json"), "utf8")).tasks;
+  const rebench = taskSet === "swerebench-r3a4" ? loadRebenchPool(join(root, R3A4_POOL_FILE), R3A4_POOL_SHA256) : [];
+  const all: string[] = taskSet === "swebv-r3" ? swebv.map((t) => t.task_id) : taskSet === "swerebench-r3a4" ? rebench.map((t) => t.task_id) : JSON.parse(readFileSync(join(root, "tasks/final.json"), "utf8")).tasks;
   const final = process.env.TASKS ? process.env.TASKS.split(",") : all;
   for (const id of final) {
     const drop = drops.find((d) => d.task_id === id);
@@ -51,7 +53,10 @@ if (import.meta.main) {
   mkdirSync(join(run, "arms"), { recursive: true });
 
   const tasks: Record<string, unknown> = {};
-  if (taskSet === "swebv-r3") {
+  if (taskSet === "swerebench-r3a4") {
+    const exportDir = process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
+    for (const id of final) tasks[id] = materializeRebench(exportDir, rebench.find((t) => t.task_id === id)!, join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
+  } else if (taskSet === "swebv-r3") {
     const root = process.env.SWEBV ?? join(process.env.HOME ?? "", ".capy/work/ref/harbor-datasets");
     for (const id of final) tasks[id] = materializeSwebv(root, swebv.find((t) => t.task_id === id)!, join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
   } else {
@@ -94,7 +99,7 @@ if (import.meta.main) {
     job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options })),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
-    ...(taskSet === "swebv-r3" ? { repo_dir: "/testbed" } : {}),
+    ...(taskSet === "swebv-r3" || taskSet === "swerebench-r3a4" ? { repo_dir: "/testbed" } : {}),
   });
   writeFileSync(join(run, "job.json"), JSON.stringify(job, null, 2) + "\n");
   if (process.env.ORACLE === "1") {
@@ -107,7 +112,8 @@ if (import.meta.main) {
     git_head: git(["rev-parse", "HEAD"]), git_dirty: git(["status", "--porcelain", "--", "."]) !== "",
     wrapper_sha256: sha256(join(here, "prompt-wrapper.md")), persona_sha256: sha256(join(here, "agent/persona.json")),
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
-    arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "", told_skill: options.told ?? "" })), tasks,
+    arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "", told_skill: options.told ?? "",
+      ...(options.procedure_line ? { procedure_line: options.procedure_line, procedure_line_sha256: createHash("sha256").update(PROCEDURE_LINES[options.procedure_line as keyof typeof PROCEDURE_LINES]).digest("hex") } : {}) })), tasks,
   };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
   console.log(`${run}: ${final.length} tasks x ${models.length} models x ${arms.length} arms x ${attempts} attempts, git ${manifest.git_head.slice(0, 7)}${manifest.git_dirty ? " (dirty)" : ""}`);

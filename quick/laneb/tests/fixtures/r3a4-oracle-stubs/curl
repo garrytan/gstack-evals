@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Stub curl: a registry token, then rate limit headers with pulls left.
+case "$*" in
+  *auth.docker.io*) echo '{"token":"t"}' ;;
+  *) printf 'ratelimit-limit: 100;w=21600\nratelimit-remaining: 90;w=21600\n' ;;
+esac

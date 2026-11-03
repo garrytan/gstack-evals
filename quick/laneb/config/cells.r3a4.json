@@ -1,0 +1,22 @@
+{
+  "note": "Cells for R3 amendment 4 (plan sections 7 and 10): the per-session allowance in R3a is each session's cap, reserved in the item's ledger before the session and enforced by the metering proxy. Opus 5.5 $12, GPT-6.1 Sol $12 through OpenRouter, particle-1 $3 through OpenRouter. cells.r3.json stays as it was for the old items.",
+  "models": [
+    {
+      "id": "claude-opus-5-5",
+      "harbor_model": "anthropic/claude-opus-5-5",
+      "session_cap_usd": 12
+    },
+    {
+      "id": "particle-1",
+      "harbor_model": "anthropic/particle-1",
+      "session_cap_usd": 3
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "harbor_model": "anthropic/gpt-6.1-sol",
+      "session_cap_usd": 12
+    }
+  ],
+  "max_output_tokens": 32000,
+  "verifier_timeout_multiplier": 2
+}

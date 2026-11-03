@@ -53,7 +53,7 @@ The paid evals need provider keys, a merged preregistration and an approved spen
 | [schema/](schema/README.md) | JSON schemas for tasks, arms and verdicts |
 | [docs/](docs/) | Guides: the [rig](docs/rig.md), the [budget ledger](docs/budget-ledger.md), [adapters](docs/adapters.md), [skill-eval](docs/skill-eval.md), [stacks](docs/stacks.md) and the generated [reason codes](docs/errors.md) |
 | [tests/](tests/) | Keyless tests |
-| [.gstack/pregate.json](.gstack/pregate.json) | The sealed-output policy that `gstack-pregate sealed` checks before every push and that CI checks on every pull request and every push to main |
+| [.gstack/pregate.json](.gstack/pregate.json) | The pregate policy: the sealed-output rules that `gstack-pregate sealed` checks before every push and that CI checks on every pull request and every push to main, the test lanes, and the CI carry map (`run_profiles`, `ship_lanes_from`) that lets gstack's /ship and pregate reuse a green `ci.yml` run at the same tree for the lanes `bun test`, `bun run typecheck`, `bun run errors:check` and `bun run wiki:check`, each matched byte for byte |
 | [NOTICE.md](NOTICE.md) | Every vendored or adapted source and its licence |
 
 ## Contributing and security

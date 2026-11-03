@@ -30,7 +30,8 @@
 // Sessions reserve their allowance on the item under its route prefix (r3a-sol-route/) and settle at metered cost. At the
 // end, open route reserves are reconciled from the proxy's sessions file, as launch.sh does, so the screen's bind sees
 // settled rows only.
-//   bun quick/laneb/r3/route-check.ts [--model gpt-6.1-sol] [--rerun]
+//   bun quick/laneb/r3/route-check.ts [--model gpt-6.1-sol | --item r3a4-sol] [--rerun]
+// --item r3a4-sol runs R3 amendment 4's fresh route check on its own item, at cells.r3a4.json's allowance.
 // Env: LEDGER (the item's jsonl ledger, approved at the item's cap), ARMS (a directory with none.tar and gstack.tar, or
 // .tar.gz, matching ARM_MANIFESTS, default arms/manifests/r3), the route's provider key (OPENROUTER_API_KEY for Sol; only
 // the proxy sees it), OUT (the work dir, default ~/.capy/work/r3-route-check/<item>), PROXY_CONFIG (default
@@ -49,7 +50,7 @@ import { readSessionRows, sessionsByTrial } from "../analysis/analyze.ts";
 import { armSpec, jobConfig } from "../runner/grid.ts";
 import { fromMicros, Ledger, readRows, reconcile, totals } from "../runner/ledger.ts";
 import { loadR3Trial } from "./exposure.ts";
-import { itemCheck, portTaken, R3_ARMS, R3A, readRoute, routeRecordPath, SOL, type R3aModel, type RouteVerdict } from "./screen.ts";
+import { A4, itemCheck, portTaken, R3_ARMS, R3A, R3A4, readRoute, routeRecordPath, SOL, type R3aModel, type RouteVerdict } from "./screen.ts";
 
 const LANEB = resolve(import.meta.dir, "..");
 const RUNNER = join(LANEB, "runner");
@@ -172,9 +173,9 @@ async function main(argv: string[]): Promise<number> {
   const rerun = argv.includes("--rerun");
   const args = argv.filter((a) => a !== "--rerun");
   const modelId = args.length === 0 ? SOL : args.length === 2 && args[0] === "--model" ? args[1]! : "";
-  const m: R3aModel | undefined = R3A[modelId];
+  const m: R3aModel | undefined = args.length === 2 && args[0] === "--item" ? R3A4[args[1]!] : R3A[modelId];
   const routeModels = Object.values(R3A).filter((x) => x.routePrefix !== null).map((x) => x.id);
-  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")}] [--rerun]`);
+  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")} | --item r3a4-sol] [--rerun]`);
   if (m.routePrefix === null) throw new Error(`E_USAGE ${m.id} has no route check in R3a (route-checked models: ${routeModels.join(", ")})`);
   const prefix = m.routePrefix;
   const ledger = process.env.LEDGER;
@@ -187,9 +188,10 @@ async function main(argv: string[]): Promise<number> {
   if (!keyEnv) throw new Error(`${proxyPath} has no route for ${m.id}`);
   if (!process.env[keyEnv]) throw new Error(`E_USAGE set ${keyEnv}, the key for ${m.id}'s route (only the proxy sees it)`);
   if (!Bun.which("harbor")) throw new Error("E_USAGE harbor is not on PATH; no session ran");
-  const cells = JSON.parse(readFileSync(join(LANEB, "config/cells.r3.json"), "utf8"));
+  const cellsFile = m.a4 ? A4.cells : "cells.r3.json";
+  const cells = JSON.parse(readFileSync(join(LANEB, "config", cellsFile), "utf8"));
   const cell = cells.models.find((c: any) => c.id === m.id);
-  if (!cell) throw new Error(`config/cells.r3.json has no cell for ${m.id}`);
+  if (!cell) throw new Error(`config/${cellsFile} has no cell for ${m.id}`);
 
   lock(ledger);
   itemCheck(ledger, m);
@@ -241,6 +243,7 @@ async function main(argv: string[]): Promise<number> {
   const gw = Bun.spawnSync(["docker", "network", "inspect", "bridge", "--format", "{{(index .IPAM.Config 0).Gateway}}"]).stdout.toString().trim();
   if (!gw) throw new Error("docker gave no bridge gateway");
   const lport = process.env.LEDGER_PORT ?? m.ledgerPort, dport = process.env.PROXY_DATA_PORT ?? "8787", cport = process.env.PROXY_CONTROL_PORT ?? "8788";
+  if (new Set([lport, dport, cport]).size !== 3) throw new Error(`E_USAGE LEDGER_PORT ${lport}, PROXY_DATA_PORT ${dport} and PROXY_CONTROL_PORT ${cport} must be three different ports; no session ran`);
   const taken = [["127.0.0.1", lport], ["127.0.0.1", cport], [gw, dport]].filter(([h, p]) => portTaken(h!, p!)).map(([h, p]) => `${h}:${p}`);
   if (taken.length) throw new Error(`E_USAGE something already answers on ${taken.join(", ")} (another run's ledger service or proxy?); set LEDGER_PORT, PROXY_DATA_PORT or PROXY_CONTROL_PORT to a free port; no session ran`);
   const control = `http://127.0.0.1:${cport}`, ledgerUrl = `http://127.0.0.1:${lport}`;

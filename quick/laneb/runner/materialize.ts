@@ -46,14 +46,20 @@ export function baseImage(dockerfile: string): string {
   return m[1];
 }
 
-export function taskToml(agentTimeoutSec: number, verifierTimeoutSec: number, network: "allowlist" | "public", original: string): string {
+// A task's environment resources. SWE-bench Verified tasks run on the defaults below; a SWE-rebench task keeps its own.
+export type Resources = { cpus: number; memory: string; storage: string };
+const VERIFIED_RESOURCES: Resources = { cpus: 1, memory: "4G", storage: "10G" };
+const VERIFIED_SOURCE = "harbor-datasets swebench-verified, converted to a separate verifier";
+
+export function taskToml(agentTimeoutSec: number, verifierTimeoutSec: number, network: "allowlist" | "public", original: string, source: { label: string; resources: Resources } = { label: VERIFIED_SOURCE, resources: VERIFIED_RESOURCES }): string {
   const meta = /\[metadata\]([\s\S]*?)(?=\n\[|$)/.exec(original)?.[1]?.trim() ?? "";
+  const { cpus, memory, storage } = source.resources;
   return [
     'schema_version = "1.4"',
     "",
     "[metadata]",
     meta,
-    'laneb_source = "harbor-datasets swebench-verified, converted to a separate verifier"',
+    `laneb_source = "${source.label}"`,
     "",
     "[verifier]",
     `timeout_sec = ${verifierTimeoutSec.toFixed(1)}`,
@@ -67,14 +73,17 @@ export function taskToml(agentTimeoutSec: number, verifierTimeoutSec: number, ne
     "[environment]",
     `network_mode = "${network === "allowlist" ? "no-network" : "public"}"`,
     "build_timeout_sec = 1800.0",
-    "cpus = 1",
-    "memory = '4G'",
-    "storage = '10G'",
+    `cpus = ${cpus}`,
+    `memory = '${memory}'`,
+    `storage = '${storage}'`,
     "",
   ].join("\n");
 }
 
-export function materialize(src: string, dest: string, opts: { runtimeStages: string; runtimeCopy: string; agentTimeoutSec: number; verifierTimeoutSec: number; network: "allowlist" | "public" }) {
+// Every file of the source tests/ goes to the verifier and is copied into it, test.sh first. A source may pin its base
+// image (image, written into both FROM lines), keep its own resources, and replace the verifier's uv install with its own
+// setup lines (verifierSetup).
+export function materialize(src: string, dest: string, opts: { runtimeStages: string; runtimeCopy: string; agentTimeoutSec: number; verifierTimeoutSec: number; network: "allowlist" | "public"; image?: string; source?: { label: string; resources: Resources }; verifierSetup?: string[] }) {
   if (existsSync(dest)) rmSync(dest, { recursive: true });
   mkdirSync(join(dest, "environment"), { recursive: true });
   mkdirSync(join(dest, "tests"), { recursive: true });
@@ -84,18 +93,23 @@ export function materialize(src: string, dest: string, opts: { runtimeStages: st
     const solve = join(dest, "solution", "solve.sh");
     writeFileSync(solve, readFileSync(solve, "utf8").trimEnd() + "\n\n# laneb: publish the oracle's change the way the agent does, for the separate verifier.\nmkdir -p /logs/artifacts && cd /testbed && git add -A && git diff --cached --binary HEAD > /logs/artifacts/model.patch\n", { mode: 0o755 });
   }
-  const envDocker = readFileSync(join(src, "environment", "Dockerfile"), "utf8");
-  const image = baseImage(envDocker);
+  const sourceDocker = readFileSync(join(src, "environment", "Dockerfile"), "utf8");
+  const image = opts.image ?? baseImage(sourceDocker);
+  const envDocker = opts.image ? sourceDocker.replace(/^FROM\s+\S+/m, `FROM ${opts.image}`) : sourceDocker;
+  const testFiles = readdirSync(join(src, "tests")).filter((f) => f !== "test.sh").sort();
+  for (const f of testFiles) {
+    if (statSync(join(src, "tests", f)).isDirectory()) throw new Error(`${src}: tests/${f} is a directory; the verifier copies files only`);
+    cpSync(join(src, "tests", f), join(dest, "tests", f));
+  }
   writeFileSync(join(dest, "environment", "Dockerfile"), opts.runtimeStages + "\n" + envDocker.trimEnd() + "\n\n" + opts.runtimeCopy);
   const testSh = readFileSync(join(src, "tests", "test.sh"), "utf8");
   const body = testSh.replace(/^#!.*\n/, "");
   writeFileSync(join(dest, "tests", "test.sh"), "#!/bin/bash\n" + APPLY_BLOCK + body, { mode: 0o755 });
-  cpSync(join(src, "tests", "config.json"), join(dest, "tests", "config.json"));
   writeFileSync(
     join(dest, "tests", "Dockerfile"),
-    [`FROM ${image}`, "WORKDIR /testbed", "RUN curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh", "RUN mkdir -p /logs /tests", "COPY test.sh config.json /tests/", "RUN chmod +x /tests/test.sh", ""].join("\n"),
+    [`FROM ${image}`, "WORKDIR /testbed", ...(opts.verifierSetup ?? ["RUN curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh"]), "RUN mkdir -p /logs /tests", `COPY ${["test.sh", ...testFiles].join(" ")} /tests/`, "RUN chmod +x /tests/test.sh", ""].join("\n"),
   );
-  writeFileSync(join(dest, "task.toml"), taskToml(opts.agentTimeoutSec, opts.verifierTimeoutSec, opts.network, readFileSync(join(src, "task.toml"), "utf8")));
+  writeFileSync(join(dest, "task.toml"), taskToml(opts.agentTimeoutSec, opts.verifierTimeoutSec, opts.network, readFileSync(join(src, "task.toml"), "utf8"), opts.source));
   return { image, sourceDigest: treeDigest(src), digest: treeDigest(dest) };
 }
 
@@ -234,6 +248,74 @@ export function materializeSwebv(root: string, task: SwebvTask, dest: string, op
   const verifierTimeoutSec = tomlNumber(original, "verifier", "timeout_sec");
   if (!agentTimeoutSec || !verifierTimeoutSec) throw new Error(`${task.task_id}: task.toml has no [agent] or [verifier] timeout_sec`);
   return materialize(src, dest, { ...opts, agentTimeoutSec, verifierTimeoutSec });
+}
+
+// R3 amendment 4's SWE-rebench pool (plan section 4): tasks/swerebench-r3a4.json must hash to R3A4_POOL_SHA256, and each
+// task directory of the Harbor package export must match its digest before it is materialized. The verifier gets all of
+// tests/, both FROM lines pin the base image by its linux/amd64 manifest digest, the task keeps its own cpus, memory and
+// storage and its own timeouts, and the verifier runs the source environment's own setup lines in place of the uv install.
+export const R3A4_POOL_FILE = "tasks/swerebench-r3a4.json";
+export const R3A4_POOL_SHA256 = "7d2b2735cd50836364cc2c1fba9a2dd07a5ce42e9ea0f9c4b8d699b9e81ea1af";
+
+export type RebenchTask = { task_id: string; created: string; repo: string; hub_ref: string; digest: string; digest_files: number; image: string; image_digest: string };
+
+export function loadRebenchPool(path: string, wantSha256: string): RebenchTask[] {
+  const raw = readFileSync(path);
+  const got = createHash("sha256").update(raw).digest("hex");
+  if (got !== wantSha256) throw new Error(`${path}: sha256 ${got} is not the pinned ${wantSha256}`);
+  return (JSON.parse(raw.toString("utf8")) as { tasks: RebenchTask[] }).tasks;
+}
+
+function tomlString(text: string, section: string, key: string): string | null {
+  const body = new RegExp(`^\\[${section}\\]\\s*$([\\s\\S]*?)(?=^\\[|(?![\\s\\S]))`, "m").exec(text)?.[1] ?? "";
+  return new RegExp(`^\\s*${key}\\s*=\\s*['"]?([^'"\\s]+)['"]?\\s*$`, "m").exec(body)?.[1] ?? null;
+}
+
+export function materializeRebench(root: string, task: RebenchTask, dest: string, opts: { runtimeStages: string; runtimeCopy: string; network: "allowlist" | "public" }) {
+  const src = join(root, task.task_id);
+  const sourceDigest = treeDigest(src);
+  if ("sha256:" + sourceDigest !== task.digest) throw new Error(`${task.task_id}: source digest sha256:${sourceDigest} differs from swerebench-r3a4.json ${task.digest}`);
+  const original = readFileSync(join(src, "task.toml"), "utf8");
+  const agentTimeoutSec = tomlNumber(original, "agent", "timeout_sec");
+  const verifierTimeoutSec = tomlNumber(original, "verifier", "timeout_sec");
+  if (!agentTimeoutSec || !verifierTimeoutSec) throw new Error(`${task.task_id}: task.toml has no [agent] or [verifier] timeout_sec`);
+  const cpus = tomlNumber(original, "environment", "cpus"), memory = tomlString(original, "environment", "memory"), storage = tomlString(original, "environment", "storage");
+  if (!cpus || !memory || !storage) throw new Error(`${task.task_id}: task.toml has no [environment] cpus, memory or storage`);
+  const docker = readFileSync(join(src, "environment", "Dockerfile"), "utf8");
+  if (baseImage(docker) !== task.image) throw new Error(`${task.task_id}: environment/Dockerfile is FROM ${baseImage(docker)}, not swerebench-r3a4.json's ${task.image}`);
+  if (!/^sha256:[0-9a-f]{64}$/.test(task.image_digest)) throw new Error(`${task.task_id}: image_digest ${task.image_digest} is not a sha256 digest`);
+  const verifierSetup = docker.split("\n").filter((l) => l.trim() && !/^FROM\s/i.test(l.trim()));
+  return materialize(src, dest, {
+    ...opts, agentTimeoutSec, verifierTimeoutSec, image: `${task.image.replace(/:[^:/]+$/, "")}@${task.image_digest}`,
+    source: { label: "swe-rebench leaderboard Hub package, converted to a separate verifier", resources: { cpus, memory, storage } }, verifierSetup,
+  });
+}
+
+// R3 amendment 4's drop list (plan section 4 items 5 and 6), as r3/drop-list.py writes it: it must hash to the sha256 the
+// run record names, name the pinned pool, list pool tasks that failed either oracle pass, once each, and match its own id
+// digests. A drop list of more than a quarter of the pool stops the attempt before any model call.
+export type R3a4Drop = { task_id: string; reason: string };
+
+export function loadR3a4Drops(path: string, wantSha256: string, pool: string[]): R3a4Drop[] {
+  const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
+  if (!/^[0-9a-f]{64}$/.test(wantSha256)) throw new Error(`E_USAGE the drop list's expected sha256 ${JSON.stringify(wantSha256)} is not a sha256; pass the run record's`);
+  const raw = readFileSync(path);
+  if (sha(raw) !== wantSha256) throw new Error(`${path}: sha256 ${sha(raw)} is not the run record's ${wantSha256}`);
+  const doc = JSON.parse(raw.toString("utf8")) as { pool_file_sha256: string; pool_size: number; dropped: { task: string; reason: string; pass1?: { result?: string }; pass2?: { result?: string } }[]; dropped_ids_sha256: string; kept_size: number; kept_ids_sha256: string };
+  if (doc.pool_file_sha256 !== R3A4_POOL_SHA256 || doc.pool_size !== pool.length) throw new Error(`${path}: pool_file_sha256 ${doc.pool_file_sha256} with pool_size ${doc.pool_size} is not the pinned pool (${R3A4_POOL_SHA256}, ${pool.length} tasks)`);
+  const seen = new Set<string>();
+  for (const d of doc.dropped) {
+    if (!pool.includes(d.task)) throw new Error(`${path}: ${d.task} is not a pool task`);
+    if (seen.has(d.task)) throw new Error(`${path}: ${d.task} is listed twice`);
+    if (typeof d.reason !== "string" || !d.reason.trim()) throw new Error(`${path}: ${d.task} has no reason`);
+    if (d.pass1?.result !== "fail" && d.pass2?.result !== "fail") throw new Error(`${path}: ${d.task} failed neither oracle pass`);
+    seen.add(d.task);
+  }
+  const listing = (ids: string[]) => sha([...ids].sort().map((i) => i + "\n").join(""));
+  const kept = pool.filter((id) => !seen.has(id));
+  if (doc.dropped_ids_sha256 !== listing([...seen]) || doc.kept_size !== kept.length || doc.kept_ids_sha256 !== listing(kept)) throw new Error(`${path}: dropped_ids_sha256, kept_size or kept_ids_sha256 does not match its dropped tasks`);
+  if (seen.size * 4 > pool.length) throw new Error(`${path}: ${seen.size} of ${pool.length} pool tasks failed the oracle preflight, more than a quarter; the attempt stops before any model call and the Captain gets the record`);
+  return doc.dropped.map((d) => ({ task_id: d.task, reason: d.reason }));
 }
 
 if (import.meta.main) {

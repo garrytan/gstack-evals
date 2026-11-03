@@ -23,8 +23,11 @@ export type BatchSpec = {
 // left out keeps the agent's default (sdk-default, no session kind) and stays out of the kwargs, so a batch that sets
 // none writes the same JobConfig as before.
 // told takes a skill name rather than a value from a list: the agent opens the prompt with /<skill>.
-export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"] };
-export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string };
+// procedure_line names a fixed line a told prompt ends with, after a blank line (R3 amendment 4, plan section 6); it needs
+// told. PROCEDURE_LINES must equal prompt_builder.py's, byte for byte (a keyless test checks).
+export const PROCEDURE_LINES = { "investigate-phases": "Work through /investigate's phases in order, and finish with its DEBUG REPORT." };
+export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"], procedure_line: Object.keys(PROCEDURE_LINES) };
+export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string };
 const SKILL_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 // One entry of prepare-run's arms list: <arm>[:<option>=<value>]..., for example
@@ -40,6 +43,7 @@ export function armSpec(entry: string): { name: string } & AgentOptions {
     }
     options[key] = value;
   }
+  if (options.procedure_line && !options.told) throw new Error(`E_USAGE arm ${entry}: procedure_line needs told`);
   return { name, ...options };
 }
 
@@ -76,6 +80,7 @@ export function jobConfig(b: BatchSpec) {
         ...(a.system_prompt ? { system_prompt: a.system_prompt } : {}),
         ...(a.session_kind ? { session_kind: a.session_kind } : {}),
         ...(a.told ? { told_skill: a.told } : {}),
+        ...(a.procedure_line ? { procedure_line: a.procedure_line } : {}),
         ...(b.repo_dir ? { repo_dir: b.repo_dir } : {}),
       },
     })),

@@ -1,0 +1,52 @@
+PASS e0-readings.ts beside this script is E0's byte-identical copy (sha256 0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9)
+    judge brief sha256 82d453a8f6e2c848899040b0700e8d887d2ddb23ee24037819e054b56c607bed
+    fixture: 8 units, 31 blockers; Opus must-fix matches per stratum ceo 10/24, eng 10/18, dx 0/24, design 14/24; one Opus eng session (pass 1) loops on tool calls to the turn cap; one design anchor missed in one pass; two cells where sol and opus differ
+PASS claude-opus-5-5: runReviewUnits on the full suite with the frozen values (none arm, 4 passes, parallel 3, timeout 3600, max turns 100, cap $225.28) through the real SDK and CLI and the metering proxy: 32 sessions, 31 scored with 31 parsed blocks, 1 turn cap (the scripted eng session, pass 1, 101 turns), stops [], stderr log 0 lines
+PASS hr-opus-none: recorded at $225.28 on the temporary ledger, one lease bound to the run and settled at $0.5633
+PASS particle-ai/particle-1: runReviewUnits on the full suite with the frozen values (none arm, 4 passes, parallel 3, timeout 3600, max turns 100, cap $19.20, allowance $0.60) through the real SDK and CLI and the metering proxy: 32 sessions, 32 scored with 32 parsed blocks, 0 turn cap, stops [], stderr log 0 lines
+PASS hr-particle-none: recorded at $19.20 on the temporary ledger, one lease bound to the run and settled at $0.0037
+PASS every review-units model request went to the fake upstream and named its session (163 requests, 0 unmatched)
+PASS judge-packet builds one batch over both arms, seed 20261103 (exit 0): judge-packet: batch e4ad4f88cb10239b177b8b7aa8c588d4a30e6fa62e73e8dfd8894453644176b0, 8 packets, 183 findings from 2 arms; the key is outside the packets
+PASS hr-judge-sol: recorded at $294.39 ($294.96 less $0.567012 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.957012); judge-run with --brief judge-brief-v3.1.md (primary openai/gpt-6.1-sol, second anthropic/claude-opus-5-5, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (gpt-6.1-sol 8, claude-opus-5-5 8, claude-sonnet-5-5 2); lease settled at $0.0182
+PASS hr-judge-opus: recorded at $294.37 ($294.96 less $0.585212 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.955212); judge-run with --brief judge-brief-v3.1.md (primary anthropic/claude-opus-5-5, second openai/gpt-6.1-sol, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (claude-opus-5-5 8, gpt-6.1-sol 8, claude-sonnet-5-5 2); lease settled at $0.0182
+PASS hr-judge-sonnet: recorded at $294.35 ($294.96 less $0.603412 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.953412); judge-run with --brief judge-brief-v3.1.md (primary anthropic/claude-sonnet-5-5, second openai/gpt-6.1-sol, third anthropic/claude-opus-5-5) exits 0 with every send answered by the fake (claude-sonnet-5-5 8, gpt-6.1-sol 8, claude-opus-5-5 2); lease settled at $0.0140
+PASS envelope with $12.340001 settled: the item records $282.61 ($282.619999 rounded down; toFixed(2) would record $282.62), so committed plus cap is $294.950001, within $294.96
+PASS no request left loopback (0 refused)
+    e0-readings --kinds hr-kinds.json (E0 labels ignored): E0: READ
+    e0-readings --kinds hr-kinds.json (E0 labels ignored): Opus sessions: scheduled 32, scored 31, stops 1 (turn cap 1, allowance 0, timeout after output 0; 0 dropped held a parsed block), gaps 0, cap 0, misses (scored, no block) 0
+    e0-readings --kinds hr-kinds.json (E0 labels ignored): Kind C-RC (ceo, 6 items): must-fix 10/24 = 0.417 -> KEEP; any-severity 10/24; stops 0
+    e0-readings --kinds hr-kinds.json (E0 labels ignored): Kind E-RC (eng, 5 items): must-fix 10/18 = 0.556 -> KEEP; any-severity 10/18; stops 2
+    e0-readings --kinds hr-kinds.json (E0 labels ignored): Kind G-RC (design, 6 items): must-fix 14/24 = 0.583 -> KEEP; any-severity 14/24; stops 0
+    e0-readings --kinds hr-kinds.json (E0 labels ignored): Kind X-RC (dx, 6 items): must-fix 0/24 = 0.000 -> DEAD -> AWAITING RE-AUDIT; any-severity 0/24; stops 0
+    e0-readings --kinds hr-kinds.json (E0 labels ignored): Judging: complete; unanswered blockers in primary replies sol 0, opus 0, sonnet 0; matching kappa sol/opus over both arms' cells with a parsed block, pooled 0.984 (n 245), ceo 0.969 (n 64), eng 1.000 (n 53), dx 1.000 (n 64), design 0.968 (n 64)
+    e0-readings --kinds hr-kinds.json (E0 labels ignored): particle-1 (descriptive): C-RC 6/24, E-RC 5/20, G-RC 6/24, X-RC 6/24; anchors 1.000; missing block 0/32; stops 0; gaps 0; cap 0
+PASS e0-readings --kinds hr-kinds.json --passes 4 exits 0 and writes readings.json with 124 Opus cells (by hand 124), turn cap [1,0] (by hand Opus 1, particle-1 0)
+PASS readings.json kind C-RC (ceo, 6 items): must-fix 10/24, stops 0; by hand 10/24, stops 0
+PASS readings.json kind E-RC (eng, 5 items): must-fix 10/18, stops 2; by hand 10/18, stops 2
+PASS readings.json kind X-RC (dx, 6 items): must-fix 0/24, stops 0; by hand 0/24, stops 0
+PASS readings.json kind G-RC (design, 6 items): must-fix 14/24, stops 0; by hand 14/24, stops 0
+PASS the 2 cells where sol and opus differ (by hand 2: one sol-only miss on a match, one sol-only match on a miss) each take sonnet's answer
+PASS e0-readings --kinds hr-shapes.json --passes 4 exits 0 and writes readings.json; its per-shape must-fix counts are C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8; by hand C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8
+PASS hr-rule with step 7's literal --scorer ., run from the pinned checkout, exits as with an absolute scorer (exit 0) and prints the same agreement lines
+    hr-rule: Whole run: no whole-run stop
+    hr-rule: Stratum ceo (C-RC, 6 items): HEADROOM; m 10 of n 24 = 0.417; stopped readings 0 (all miss 10/24 HEADROOM, all match 10/24 HEADROOM); anchors 8 of 8 (A-F 4/4, A-X 4/4; threshold 4); sessions gap 0, stopped 0
+    hr-rule: Stratum eng (E-RC, 5 items): NO READ (stop bounds disagree (all miss HEADROOM, all match NEAR-CEILING)); m 10 of n 18 = 0.556; stopped readings 2 (all miss 10/20 HEADROOM, all match 12/20 NEAR-CEILING); anchors 7 to 8 of 8 (A-T 3/4, A-X 4/4; threshold 4); sessions gap 0, stopped 1
+    hr-rule: Stratum dx (X-RC, 6 items): AWAITING RE-AUDIT (DEAD; rerun e0-readings with --reaudit); m 0 of n 24 = 0.000; stopped readings 0 (all miss 0/24 DEAD, all match 0/24 DEAD); anchors 8 of 8 (A-F 4/4, A-X 4/4; threshold 4); sessions gap 0, stopped 0
+    hr-rule: Stratum design (G-RC, 6 items): NEAR-CEILING; m 14 of n 24 = 0.583; stopped readings 0 (all miss 14/24 NEAR-CEILING, all match 14/24 NEAR-CEILING); anchors 7 of 8 (A-F 3/4, A-T 4/4; threshold 4); sessions gap 0, stopped 0
+    hr-rule: Pooled (all 23 candidates; describes the levers, decides nothing): m 34 of n 90 = 0.378; stopped readings 2 (all miss 34/92, all match 36/92)
+    hr-rule: Pooled anchors (decides nothing): 30 of 32, at or over the pooled threshold 24
+    hr-rule: Per shape (decides nothing): C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8
+    hr-rule: Agreement pooled (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 245; both match 118, Sol only 1, Opus only 1, both miss 125; raw agreement 0.992, PABAK 0.984, kappa 0.984
+    hr-rule: Agreement ceo (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 64; both match 31, Sol only 0, Opus only 1, both miss 32; raw agreement 0.984, PABAK 0.969, kappa 0.969
+    hr-rule: Agreement eng (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 53; both match 30, Sol only 0, Opus only 0, both miss 23; raw agreement 1.000, PABAK 1.000, kappa 1.000
+    hr-rule: Agreement dx (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 64; both match 22, Sol only 0, Opus only 0, both miss 42; raw agreement 1.000, PABAK 1.000, kappa 1.000
+    hr-rule: Agreement design (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 64; both match 35, Sol only 1, Opus only 0, both miss 28; raw agreement 0.984, PABAK 0.969, kappa 0.968
+PASS hr-rule --readings (hr-kinds run) --shapes (hr-shapes run) exits 0 (by hand 0) and prints Whole run: no whole-run stop
+PASS hr-rule stratum ceo: by hand HEADROOM, m 10 of n 24, stopped readings 0 scored both ways (all miss 10/24 HEADROOM, all match 10/24 HEADROOM), anchors 8 of 8, stopped sessions 0
+PASS hr-rule stratum eng: by hand NO READ (stop bounds disagree (all miss HEADROOM, all match NEAR-CEILING)), m 10 of n 18, stopped readings 2 scored both ways (all miss 10/20 HEADROOM, all match 12/20 NEAR-CEILING), anchors 7 to 8 of 8, stopped sessions 1
+PASS hr-rule stratum dx: by hand AWAITING RE-AUDIT (DEAD; rerun e0-readings with --reaudit), m 0 of n 24, stopped readings 0 scored both ways (all miss 0/24 DEAD, all match 0/24 DEAD), anchors 8 of 8, stopped sessions 0
+PASS hr-rule stratum design: by hand NEAR-CEILING, m 14 of n 24, stopped readings 0 scored both ways (all miss 14/24 NEAR-CEILING, all match 14/24 NEAR-CEILING), anchors 7 of 8, stopped sessions 0
+PASS hr-rule pooled line (decides nothing): by hand 23 candidates, m 34 of n 90, stopped 2; pooled anchors 30 of 32; per shape C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8
+PASS hr-rule with step 5's flags after -- prints the agreement line (2x2, raw agreement, PABAK, kappa) for pooled and each stratum, each n and kappa equal to e0-readings' printed kappa
+PASS hr-rule refuses the hr-shapes readings as --readings (exit 2, E_USAGE naming hr-kinds.json)
+PASS 28, FAIL 0

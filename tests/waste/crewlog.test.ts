@@ -205,6 +205,28 @@ describe("thread exports", () => {
     expect(s.pushed_head_checks.calls).toBe(1);
   });
 
+  test("a pr_create whose input was cut or is not JSON opens no pushed head; a whole one on the same machine keeps the push's", () => {
+    const cut: C = { tool: "pr_create", input: '{"title":"t","index":1,"body":"a long body the export cut', inChars: 4000 };
+    const at = (pr: C, check: C, push = bash("cd repo-a && git push")) => scan(run([push]), run([pr]), run([check])).pushed_head_checks.calls;
+    expect(at(cut, bash("cd repo-a && bun test", "ok"))).toBe(0);
+    expect(at(cut, bash("bun test", "ok"))).toBe(0);
+    expect(at(cut, bash("bun test", "ok", { machine: { subagent: "1" } }))).toBe(0);
+    expect(at(tool("pr_create", "not json"), bash("cd repo-a && bun test", "ok"))).toBe(0);
+    expect(at(tool("pr_create", "not json"), bash("bun test", "ok"))).toBe(0);
+    expect(scan(run([bash("cd repo-a && git push")]), run([cut]), run([bash("cd repo-a && git push")]), run([bash("cd repo-a && bun test", "ok")])).pushed_head_checks.calls).toBe(1);
+    expect(at(tool("pr_create", { title: "t" }), bash("cd repo-a && bun test", "ok"))).toBe(1);
+    const sub = { machine: { subagent: "1" } };
+    expect(at(tool("pr_create", { title: "t", index: 1 }), bash("cd repo-a && bun test", "ok", sub), bash("cd repo-a && git push", "ok", sub))).toBe(1);
+  });
+
+  test("a pr_create with a null index scopes to the primary; a numeric index scopes to its subagent", () => {
+    const at = (pr: C, check: C) => scan(run([pr]), run([check])).pushed_head_checks.calls;
+    expect(at(tool("pr_create", { title: "t", index: null }), bash("bun test", "ok"))).toBe(1);
+    expect(scan(run([bash("cd repo-a && git push")]), run([tool("pr_create", { title: "t", index: null })]), run([bash("cd repo-a && bun test", "ok")])).pushed_head_checks.calls).toBe(1);
+    expect(at(tool("pr_create", { title: "t", index: 1 }), bash("bun test", "ok"))).toBe(0);
+    expect(at(tool("pr_create", { title: "t", index: 1 }), bash("bun test", "ok", { machine: { subagent: "1" } }))).toBe(1);
+  });
+
   test("a check in another directory after pr_create is not at the pushed head", () => {
     const s = scan(run([bash("cd repo-a && git push")]), run([tool("pr_create", { title: "t" })]), run([bash("cd repo-b && bun test", "ok")]));
     expect(s.pushed_head_checks.calls).toBe(0);

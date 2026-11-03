@@ -1,0 +1,59 @@
+## hr-rule: readings at their integer edges, n = 24 (6 items x 4 passes)
+PASS n 24: m 4 FLOOR (5m < n), m 5 HEADROOM (5m >= n), m 12 HEADROOM (2m <= n), m 13 NEAR-CEILING (2m > n) (exit 0; ceo FLOOR, eng HEADROOM, dx HEADROOM, design NEAR-CEILING)
+PASS n 24: m 14 NEAR-CEILING (5m <= 3n), m 15 CEILING (5m > 3n), m 1 FLOOR (0 < m), m 24 CEILING (exit 0; ceo NEAR-CEILING, eng CEILING, dx FLOOR, design CEILING)
+## hr-rule: smaller n after exclusions
+PASS n 20 (5 items): m 3 FLOOR, m 4 HEADROOM, m 10 HEADROOM, m 11 NEAR-CEILING (exit 0; ceo FLOOR, eng HEADROOM, dx HEADROOM, design NEAR-CEILING)
+PASS n 20: m 12 NEAR-CEILING, m 13 CEILING; n 16 (4 items): m 3 FLOOR, m 4 HEADROOM (exit 0; ceo NEAR-CEILING, eng CEILING, dx FLOOR, design HEADROOM)
+PASS n 16 (4 items): m 8 HEADROOM, m 9 NEAR-CEILING, m 10 CEILING; 4 items is enough to read (exit 0; ceo HEADROOM, eng NEAR-CEILING, dx CEILING, design HEADROOM)
+## hr-rule: the 4-item floor
+PASS a stratum left with 3 items reads NO READ (fewer than 4 items); the other strata read (exit 0; ceo NO READ, eng HEADROOM, dx HEADROOM, design HEADROOM)
+## hr-rule: stopped sessions scored both ways
+PASS one turn-cap session (3 candidate readings): m 8 of 21 reads HEADROOM both ways (8/24, 11/24); m 11 reads HEADROOM then NEAR-CEILING (11/24, 14/24): NO READ; m 0 reads DEAD then FLOOR: NO READ; m 3 reads FLOOR then HEADROOM: NO READ (exit 0; ceo HEADROOM, eng NO READ, dx NO READ, design NO READ)
+PASS stops at a CEILING both ways: m 20 of 21 with 3 stopped (20/24, 23/24) reads CEILING (exit 0; ceo HEADROOM, eng CEILING, dx HEADROOM, design HEADROOM)
+## hr-rule: a surviving GAP
+PASS a GAP session in eng makes eng alone NO READ; ceo, dx and design read (e0-readings itself reads E0 NO READ, which hr-rule ignores) (exit 0; ceo HEADROOM, eng NO READ, dx HEADROOM, design HEADROOM)
+PASS the GAP fixture's readings.json reads E0 NO READ from e0-readings (the whole-run rule hr-rule replaces)
+## hr-rule: DEAD and the re-audit split
+PASS DEAD with 0 failing items reads FLOOR, 1 failing reads FLOOR, 2 failing reads UNFAIR (e0-readings' re-audit results); design reads HEADROOM (exit 0; ceo FLOOR, eng FLOOR, dx UNFAIR, design HEADROOM)
+PASS DEAD in every stratum with no re-audit file reads AWAITING RE-AUDIT and exits 3 (exit 3; ceo AWAITING RE-AUDIT, eng AWAITING RE-AUDIT, dx AWAITING RE-AUDIT, design AWAITING RE-AUDIT)
+## hr-rule: anchor thresholds (stratum 4 of 8, pooled 24 of 32, hr-oc.txt)
+PASS anchors 4 of 8 read; 3 of 8 read NO READ; 3 scored matches plus a stopped anchor reading (3 to 4) read NO READ; pooled 18 of 32 prints the pooled flag (exit 0; ceo HEADROOM, eng NO READ, dx NO READ, design HEADROOM)
+PASS pooled anchors 24 of 32 (4, 4, 8, 8) print no flag; 23 of 32 print it (exit 0; ceo HEADROOM, eng HEADROOM, dx HEADROOM, design HEADROOM)
+## hr-rule: whole-run stops and unjudged cells
+PASS a cap stop in the Opus run makes every stratum NO READ and exits 3 (exit 3; ceo NO READ, eng NO READ, dx NO READ, design NO READ)
+PASS a stopped judge item makes every stratum NO READ and exits 3 (exit 3)
+PASS an Opus pin e0-readings reports as wrong makes every stratum NO READ (exit 3)
+PASS a candidate blocker no judge pair settled makes its stratum NO READ (4 needed cells unjudged); the others read (exit 0; ceo HEADROOM, eng HEADROOM, dx NO READ, design HEADROOM)
+## hr-rule: Sol-vs-Opus agreement (decides no reading; plan section 5, I1)
+PASS ceo, Sol marks every cell a match and Opus 19 of 20: 2x2 19/1/0/0, raw agreement 0.950, PABAK 0.900, kappa 0; HEADROOM at raw 0.95 is not flagged
+PASS eng, Sol marks every cell a match and Opus 18 of 20: 2x2 18/2/0/0, raw agreement 0.900, PABAK 0.800, kappa 0; HEADROOM under 0.95 is flagged
+PASS dx, 2x2 1/1/1/17: raw agreement 0.900, PABAK 0.800, kappa 4/9 = 0.444; NEAR-CEILING is never flagged
+PASS design, 2x2 2/1/1/16 plus 3 cells Sol left unjudged (excluded): raw agreement 0.900, PABAK 0.800, kappa 31/51 = 0.608; HEADROOM with kappa at or over 0.6 is not flagged
+PASS pooled, 2x2 40/5/2/33 of 80: raw agreement 0.9125, PABAK 0.825, kappa 131/159 = 0.824; pooled is never flagged
+PASS every agreement n and kappa equals e0-readings' kappaRead on the same cells (pooled and each stratum)
+PASS the printed agreement lines carry the 2x2, raw agreement, PABAK and kappa, and only eng's carries the flag (1 flagged)
+## hr-rule: pooled line, per-shape counts and refusals
+PASS the pooled line reads 34 of 96 over 24 candidates and the per-shape line lists 12 shapes from the shapes run (exit 0)
+PASS hr-rule refuses a --shapes file from another run (exit 2, E_USAGE)
+PASS hr-rule refuses readings made with the E0 shapes kinds file, not hr-kinds.json (exit 2, E_USAGE)
+PASS hr-rule refuses readings made at --passes 2 (exit 2, E_USAGE)
+PASS hr-rule refuses a missing --readings, an unreadable file and a repeated flag (exits 2, 2, 2, E_USAGE)
+## hr-kappa (as run) against hand values
+PASS hr-kappa passes its self-check on the fixture (E0's printed kappa and n per stratum) and exits 0
+PASS hr-kappa pooled: 2x2 counts, raw agreement, PABAK, AC1, Cohen's kappa and the reading equal the hand values
+PASS hr-kappa ceo: 2x2 counts, raw agreement, PABAK, AC1, Cohen's kappa and the reading equal the hand values
+PASS hr-kappa eng: 2x2 counts, raw agreement, PABAK, AC1, Cohen's kappa and the reading equal the hand values
+PASS hr-kappa dx: 2x2 counts, raw agreement, PABAK, AC1, Cohen's kappa and the reading equal the hand values
+PASS hr-kappa design: 2x2 counts, raw agreement, PABAK, AC1, Cohen's kappa and the reading equal the hand values
+PASS hr-kappa reads PARADOX at raw agreement 0.953 (design) and DISAGREEMENT at 0.940 (eng), either side of 0.95
+PASS hr-kappa counts 12 disagreeing cells (b + c pooled) and writes kappa.json and reaudit.json
+PASS hr-kappa refuses to run outside hr-custody.sh --reaudit (E0_REAUDIT unset; exit 2, E_USAGE)
+## hr-exposure against hand counts
+PASS hr-exposure exits 0 and prints a 2x2 per stratum and pooled
+PASS hr-exposure counts a Read with an absolute path, a shell grep without the src/ prefix and a subagent Read as opened (ceo 1 opened and matched, 2 opened and missed)
+PASS hr-exposure does not count a search naming only the folder or a read of a longer file name (ceo 3 matched without opening)
+PASS hr-exposure: strata with no opening count every matched reading as matched without opening (eng 5, design 13), and the pooled 2x2 sums them (1, 2, 33, 60)
+PASS hr-exposure refuses a candidate with no hr-traces.json row (exit 2, E_USAGE)
+## Leak check
+PASS the transcript prints no fixture unit id, case id, home path or scratch path (0 found)
+PASS 45, FAIL 0

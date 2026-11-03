@@ -1,0 +1,255 @@
+#!/usr/bin/env bun
+// hr-e2e.ts: the headroom dry run's step k (GEVA-238), adapted from E0's e0-e2e.ts and run as its own process. Runs the
+// full synthetic headroom suite through runReviewUnits with the frozen review-units values (none arm, 4 passes, parallel 3,
+// timeout 3600, max turns 100; hr-opus-none at $225.28 and hr-particle-none at $19.20 with allowance $0.60, each as one
+// lease on a temporary ledger), the real pinned SDK and Claude Code binary against a real MeteringProxy on that ledger whose
+// upstream is a scripted fake writing a chosen plan-findings block per session (one Opus session loops on tool calls until
+// the turn cap); then judge-packet over both arms, judge-run three times over a fake upstream that judges from the packet
+// content, each item recorded at the envelope ($294.96 less every earlier item's settled spend, rounded down to the cent,
+// floor $36.40); then E0's byte-identical e0-readings.ts twice (--kinds hr-kinds.json, then hr-shapes.json, both --passes 4)
+// and hr-rule.ts on the first readings.json with the second as --shapes. Every expected value is derived from the fixture
+// this script writes. Keyless: no request leaves loopback. Prints PASS/FAIL lines, counts only, then "PASS n, FAIL m".
+// Run from a dir holding hr-rule.ts and E0's e0-readings.ts, each with the .txt suffix removed:
+//   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun hr-e2e.ts <scorer> <sealed root> <suite.json> <plans.git> <scratch> <judge brief>
+import { createHash, randomBytes } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+const [scorer, SR, SUITE, SRC, root, BRIEF] = process.argv.slice(2).map((p) => resolve(p)) as [string, string, string, string, string, string];
+rmSync(root, { recursive: true, force: true });
+mkdirSync(root, { recursive: true });
+const HERE = import.meta.dir, HOME = process.env.HOME ?? "";
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const raw = JSON.parse(readFileSync(SUITE, "utf8"));
+const units: string[] = raw.units.map((u: any) => u.id);
+const scrub = (t: string) => {
+  let s = t.replaceAll(root, "$SCRATCH").replaceAll(SR, "$SEALED").replaceAll(scorer, "$SCORER").replaceAll(HERE, "$BUNDLE").replaceAll(HOME, "~");
+  for (const id of units) s = s.replaceAll(id, "<unit>");
+  return s.replace(/panel\/plans#\d+(@[0-9a-f]+)?/g, "<unit>").replace(/\b(e0|hr)-\d+-\d+\b/g, "<case>").replace(/plans-\d+-[0-9a-f]+/g, "<unit>").replace(/unit-\d+\b/g, "<unit>");
+};
+let pass = 0, fail = 0;
+const check = (label: string, ok: boolean) => { ok ? pass++ : fail++; console.log(scrub((ok ? "PASS " : "FAIL ") + label)); };
+const say = (text: string) => console.log(scrub("    " + text));
+const realFetch = globalThis.fetch;
+let offLoop = 0;
+globalThis.fetch = (async (input: any, init?: any) => {
+  const host = new URL(input instanceof Request ? input.url : String(input)).hostname;
+  if (host !== "127.0.0.1" && host !== "localhost") { offLoop++; throw new Error("hr-e2e: a request left loopback for " + host); }
+  return realFetch(input, init);
+}) as typeof fetch;
+const imp = (p: string) => import(join(scorer, p));
+const { DEFAULT_POLICY, loadPolicy } = await imp("src/skill-eval/cli/policy.ts");
+const { PLAN_SEVERITY_MAP } = await imp("src/trial/review/plan.ts");
+const { runReviewUnits } = await imp("src/trial/review/run.ts");
+const { buildUnitRepo, buildUnitTree, unitTaskId } = await imp("src/trial/review/unit.ts");
+const { localSandbox, messagesResponse, KEYS } = await imp("tests/adapters/harness.ts");
+const { MeteringProxy } = await imp("src/runner/proxy/metering-proxy.ts");
+const { ledgerCli } = await imp("src/runner/ledger/cli.ts");
+const { openLease, settleLease, ledgerStatus } = await imp("src/runner/ledger/ledger.ts");
+const { openLocalLedger } = await imp("src/runner/ledger/local.ts");
+const { ledgerPath } = await imp("src/runner/ledger/paths.ts");
+const { rigAdmission } = await imp("src/rig/admission.ts");
+const { newRunId } = await imp("src/skill-eval/cli/call.ts");
+const { nolossCli } = await imp("lanes/review-noloss/cli.ts");
+const { judgeRunCmd } = await imp("lanes/review-noloss/judge-run.ts");
+const E0R = "0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9";
+check("e0-readings.ts beside this script is E0's byte-identical copy (sha256 " + E0R + ")", sha(readFileSync(join(HERE, "e0-readings.ts"))) === E0R);
+say("judge brief sha256 " + sha(readFileSync(BRIEF)));
+const R = await import(join(HERE, "e0-readings.ts"));
+const mods = await R.loadMods(scorer);
+const bl: any[] = JSON.parse(readFileSync(join(SR, "hr-kinds.json"), "utf8")).blockers;
+const shapesBl: any[] = JSON.parse(readFileSync(join(SR, "hr-shapes.json"), "utf8")).blockers;
+const policy = loadPolicy(DEFAULT_POLICY);
+const OPUS = "claude-opus-5-5", PARTICLE = "particle-ai/particle-1", PASSES = 4, ENVELOPE = 294_960_000, FLOOR = 36_400_000;
+const SOLJ = "openai/gpt-6.1-sol", OPUSJ = "anthropic/claude-opus-5-5", SONNETJ = "anthropic/claude-sonnet-5-5";
+const STRATA = ["ceo", "eng", "dx", "design"], KIND: Record<string, string> = { ceo: "C-RC", eng: "E-RC", dx: "X-RC", design: "G-RC" };
+const byOrder = (a: any, b: any) => units.indexOf(a.unit) - units.indexOf(b.unit) || a.blocker.localeCompare(b.blocker);
+const inStratum = (st: string) => units.filter((u) => bl.some((b) => b.unit === u && b.stratum === st));
+const capped = inStratum("eng")[0]!;
+const stopped = (unit: string, p: number) => unit === capped && p === 1;
+const passesOf = [1, 2, 3, 4];
+const cellsOf = (bs: any[]) => [...bs].sort(byOrder).flatMap((b) => passesOf.filter((p) => !stopped(b.unit, p)).map((p) => b.unit + " " + b.blocker + " " + p));
+// The fixture: per stratum, the Opus must-fix matches among the headroom kind's scored readings, as a share of its readings.
+const T = new Set<string>(), D = new Map<string, string>(), X: Record<string, any> = {};
+const reading = (m: number, n: number) => (m === 0 ? "DEAD" : 5 * m < n ? "FLOOR" : 2 * m <= n ? "HEADROOM" : 5 * m <= 3 * n ? "NEAR-CEILING" : "CEILING");
+for (const st of STRATA) {
+  const cand = bl.filter((b) => b.stratum === st && b.role === "candidate"), anc = bl.filter((b) => b.stratum === st && b.role === "anchor");
+  const scored = cellsOf(cand), nb = cand.length * PASSES, stops = nb - scored.length;
+  const m = ({ ceo: Math.ceil(0.4 * nb), eng: Math.floor(nb / 2), dx: 0, design: Math.floor(0.6 * nb) } as Record<string, number>)[st]!;
+  for (const c of scored.slice(0, m)) T.add(c);
+  const ac = cellsOf(anc), miss = st === "design" ? ac[1]! : null;
+  for (const c of ac) if (c !== miss) T.add(c);
+  const aLow = ac.length - (miss ? 1 : 0), aHigh = aLow + (anc.length * PASSES - ac.length);
+  const low = reading(m, nb), high = reading(m + stops, nb);
+  const why = low !== high ? "stop bounds disagree (all miss " + low + ", all match " + high + ")" : "";
+  const read = why ? "NO READ" : low === "DEAD" ? "AWAITING RE-AUDIT (DEAD; rerun e0-readings with --reaudit)" : low;
+  X[st] = { items: cand.length, m, n: scored.length, nb, stops, low, high, aLow, aHigh, of: anc.length * PASSES, why, read, sessions: stops ? 1 : 0 };
+}
+D.set(cellsOf(bl.filter((b) => b.stratum === "ceo" && b.role === "candidate"))[0]!, "solno");
+D.set(cellsOf(bl.filter((b) => b.stratum === "design" && b.role === "candidate")).find((c) => !T.has(c))!, "solyes");
+say("fixture: " + units.length + " units, " + bl.length + " blockers; Opus must-fix matches per stratum " + STRATA.map((st) => st + " " + X[st].m + "/" + X[st].n).join(", ") + "; one Opus eng session (pass 1) loops on tool calls to the turn cap; one design anchor missed in one pass; two cells where sol and opus differ");
+const finding = (claim: string, severity = "High") => ({ severity, section: "Summary", line: 1, claim, evidence: "plan.md", fix: "A synthetic fix." });
+const fence = (model: string, unit: string, p: number) => {
+  const fs = bl.filter((b) => b.unit === unit).flatMap((b) => {
+    const c = unit + " " + b.blocker + " " + p;
+    const mode = model === OPUS ? (T.has(c) ? D.get(c) ?? "match" : D.get(c)) : b.role === "anchor" || p === 1 ? "match" : undefined;
+    return mode ? [finding("Synthetic finding HRTAG " + b.blocker + " " + mode + ".")] : [];
+  });
+  return "\x60\x60\x60plan-findings\n" + JSON.stringify([...fs, finding("Synthetic finding HRTAG none none.", "Medium")]) + "\n\x60\x60\x60";
+};
+const LD = join(root, "ledger");
+mkdirSync(LD);
+const REC = join(LD, "record");
+writeFileSync(join(LD, "approvals-stub"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+const LENV: Record<string, string> = { ...(process.env as Record<string, string>), ...KEYS, GSTACK_EVALS_LEDGER_RECORD: REC, GSTACK_EVALS_LEDGER: join(LD, "local.sqlite"), GSTACK_EVALS_APPROVALS_BIN: join(LD, "approvals-stub") };
+const local = openLocalLedger(ledgerPath(undefined, LENV));
+let settled = 0, unmatched = 0, upstream = 0;
+const recordItem = async (item: string, micros: number) => { const c = Math.floor(micros / 10_000) * 10_000; return (await ledgerCli(["init", "--item", item, "--cap", (c / 1e6).toFixed(2), "--admission", "warn", "--words", "dry run only", "--by", "hr-e2e.ts", "--source", "HR keyless dry run"], { out: () => {}, err: () => {} }, LENV)) === 0 ? c : null; };
+const scratch = (n: string) => mkdtempSync(join(root, n));
+const prep = (u: any) => {
+  const unit = { id: u.id, repo: u.repo, pr: u.pr, head: u.head, base: u.base };
+  const repo = buildUnitRepo({ unit, source: SRC, dest: join(scratch("unit-"), "repo"), baseBranch: "main" });
+  const tree = buildUnitTree({ repo, task: unitTaskId(unit), dest: join(scratch("tree-"), "tree"), image: "unused", test: null, install: null, scratch: scratch("build-"), run: () => { throw new Error("a plan unit runs no step"); } });
+  return { unit, task: unitTaskId(unit), base_branch: "main", merge_base: repo.merge_base, tree: tree.dir, tree_sha256: tree.tree_sha256, instructions: repo.instructions, check: null };
+};
+const prepared = raw.units.map(prep);
+const taskUnit = new Map<string, string>(prepared.map((p: any) => [p.task, p.unit.id]));
+async function reviewUnits(model: string, item: string, cap: string, allowance: number | null) {
+  const capMicros = Math.round(Number(cap) * 1e6), recorded = await recordItem(item, capMicros);
+  const out = join(root, item), log = join(root, item + ".log"), runId = newRunId("review-units");
+  const lease = openLease(REC, local, { item, run_id: runId, amount_micros: capMicros, requireAdmission: rigAdmission({ proof: "trial" }), warn: () => {} });
+  let tu = 0;
+  const proxy = new MeteringProxy({
+    ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "hr-e2e-" + randomBytes(4).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal: join(root, item + ".proxy.ndjson"), retry: { attempts: 1, elapsed_ms: 10_000 }, env: KEYS,
+    fetch: async (url: string, init: RequestInit) => {
+      upstream++;
+      const body = JSON.parse(String(init.body ?? "{}"));
+      if (!new URL(url).pathname.endsWith("/v1/messages")) return Response.json({ data: [] });
+      if (!(body.tools ?? []).some((t: any) => t.name === "Bash")) return messagesResponse(body, [{ type: "text", text: "ok" }]);
+      const m = /\/none\/([^\/"\\\s]+)\/p(\d+)\b/.exec(JSON.stringify(body)), unit = m ? taskUnit.get(m[1]!) : undefined;
+      if (!unit) { unmatched++; return messagesResponse(body, [{ type: "text", text: "I read the plan." }]); }
+      if (model === OPUS && stopped(unit, Number(m![2]))) return messagesResponse(body, [{ type: "tool_use", id: "toolu_hr" + ++tu, name: "Bash", input: { command: "true", description: "noop" } }]);
+      return messagesResponse(body, [{ type: "text", text: fence(model, unit, Number(m![2])) }]);
+    },
+  });
+  proxy.start();
+  const rig = {
+    baseUrl: "http://127.0.0.1:" + proxy.port, network: null, imageDigest: null, bind: async (req: any) => proxy.bind(req), finalize: async (m: string) => proxy.finalize(m),
+    arms: { none: { tree_sha256: "none-tree", skill: null, gstack: null, plugins: [] } }, sandbox: () => localSandbox(() => {}), judgeSandbox: () => localSandbox(() => {}),
+    egress: () => ({ open: false, detail: "dry run rig" }), close: async () => ({ committed: 0, unknown: 0, lease_id: null }), recovery: null,
+  };
+  const errs: string[] = [], keep = console.error;
+  console.error = (...a: any[]) => { errs.push(a.join(" ")); };
+  let run: any;
+  try {
+    run = await runReviewUnits({ host: "claude", suite: { id: raw.id, sha256: null }, units: prepared, arms: [{ name: "none", told: "none", systemPrompt: "claude-code-preset" }], models: [model], passes: PASSES, parallel: 3, timeoutS: 3600, maxTurns: 100, ...(allowance ? { allowanceMicros: allowance } : {}), cap: capMicros, runId, out, date: "2026-11-03", policy, keyBase: { image_digest: null, recipe: "hr-dryrun", host_version: null, adapter_sha256: "hr-dryrun", isolation: "process" }, journal: null, plan: { lens: "ceo" }, severityMap: { none: PLAN_SEVERITY_MAP }, env: {} }, rig);
+  } finally {
+    console.error = keep;
+    proxy.stop();
+  }
+  settleLease(REC, local, lease.lease_id);
+  for (const s of run.stale) errs.push(s.code + " " + s.message + "\n  fix: " + s.fix);
+  writeFileSync(log, errs.map((e) => e + "\n").join(""));
+  const st = ledgerStatus(REC, item)[0];
+  settled += st.committed_micros;
+  return { recorded, runId, out, log, run, st, cap, arm: join(out, "arms", readdirSync(join(out, "arms"))[0]!) };
+}
+const noloss = async (args: string[]) => { const o: string[] = [], e: string[] = []; const code = await nolossCli(args, { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }); return { code, out: o.join("\n"), err: e.join("\n") }; };
+const judgeRun = async (argv: string[], fetch: any) => {
+  const o: string[] = [], e: string[] = [];
+  try { return { code: await judgeRunCmd(argv, { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }, { env: LENV, fetch }), err: e.join("\n") }; } catch (x: any) { return { code: 2, err: (x?.code ?? "") + " " + String(x?.message ?? x) }; }
+};
+const judgeFetch = (sent: string[], batch: string) => async (_url: string, init: RequestInit) => {
+  const body = JSON.parse(String(init.body));
+  const prompt: string = (body.input ?? body.messages)[0].content;
+  const file = /=== Packet: (\S+) ===/.exec(prompt)![1]!;
+  const packet = JSON.parse(prompt.split("=== Packet: " + file + " ===\n")[1]!.split("\n=== ")[0]!);
+  sent.push(body.model);
+  const says = (mode: string) => mode === "match" || (mode === "solno" && !/sol/.test(body.model)) || (mode === "solyes" && /sol/.test(body.model));
+  const text = JSON.stringify({ batch, judge: "a synthetic judge", packets: [{ file, blockers: packet.blockers.map((b: any) => ({ id: b.id, matches: packet.findings.filter((f: any) => { const t = /HRTAG (\S+) (\w+)/.exec(JSON.stringify(f)); return !!t && t[1] === b.id && says(t[2]!); }).map((f: any) => f.id) })), impact: Object.fromEntries(packet.findings.map((f: any) => [f.id, "non-blocking"])) }] });
+  return body.input
+    ? Response.json({ id: "r", object: "response", status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }], usage: { input_tokens: 100, input_tokens_details: { cached_tokens: 0 }, output_tokens: 50, output_tokens_details: { reasoning_tokens: 0 } } })
+    : Response.json({ id: "m", type: "message", role: "assistant", content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 100, output_tokens: 50 } });
+};
+try {
+  const opus = await reviewUnits(OPUS, "hr-opus-none", "225.28", null);
+  const particle = await reviewUnits(PARTICLE, "hr-particle-none", "19.20", 600_000);
+  const sessions = units.length * PASSES;
+  for (const x of [opus, particle]) {
+    const a = R.readArm(x.out, raw, PASSES, mods), model = x === opus ? OPUS : PARTICLE;
+    const cls = (c: string) => a.sessions.filter((s: any) => s.cls === c).length, tc = a.sessions.find((s: any) => s.cls === "TURN_CAP");
+    check(model + ": runReviewUnits on the full suite with the frozen values (none arm, 4 passes, parallel 3, timeout 3600, max turns 100, cap $" + x.cap + (x === particle ? ", allowance $0.60" : "") + ") through the real SDK and CLI and the metering proxy: " + a.sessions.length + " sessions, " + cls("SCORED") + " scored with " + a.sessions.filter((s: any) => s.block).length + " parsed blocks, " + cls("TURN_CAP") + " turn cap" + (tc ? " (the scripted eng session, pass " + tc.pass + ", " + tc.turns + " turns)" : "") + ", stops [" + x.run.stops.map((s: any) => s.code).join(", ") + "], stderr log " + readFileSync(x.log, "utf8").split("\n").filter(Boolean).length + " lines", a.sessions.length === sessions && x.run.stops.length === 0 && (x === opus ? cls("SCORED") === sessions - 1 && cls("TURN_CAP") === 1 && tc?.unit === capped && tc?.pass === 1 : cls("SCORED") === sessions) && a.sessions.filter((s: any) => s.block).length === cls("SCORED"));
+    check(x.st.item + ": recorded at $" + x.cap + " on the temporary ledger, one lease bound to the run and settled at $" + (x.st.committed_micros / 1e6).toFixed(4), !!x.recorded && x.st.run_id === x.runId && !x.st.open_lease);
+  }
+  check("every review-units model request went to the fake upstream and named its session (" + upstream + " requests, " + unmatched + " unmatched)", upstream > 0 && unmatched === 0);
+  const packets = join(root, "packets"), keyPath = join(root, "key.json");
+  const jp = await noloss(["judge-packet", "--suite", SUITE, "--arm", opus.arm, "--arm", particle.arm, "--seed", "20261103", "--out", packets, "--key", keyPath, "--source", "panel/plans=" + SRC, "--sealed-root", SR]);
+  check("judge-packet builds one batch over both arms, seed 20261103 (exit " + jp.code + "): " + (jp.code === 0 ? jp.out.split("\n")[0] : jp.err.split("\n")[0]), jp.code === 0);
+  const key = JSON.parse(readFileSync(keyPath, "utf8"));
+  const jr: Record<string, string> = {};
+  for (const [j, pr, se, th] of [["sol", SOLJ, OPUSJ, SONNETJ], ["opus", OPUSJ, SOLJ, SONNETJ], ["sonnet", SONNETJ, SOLJ, OPUSJ]] as const) {
+    const item = "hr-judge-" + j, before = settled, cap = (await recordItem(item, Math.max(FLOOR, ENVELOPE - settled))) ?? 0, sent: string[] = [];
+    jr[j] = join(root, "jr-" + j);
+    const args = ["--suite", SUITE, "--packets", packets, "--key", keyPath, "--arm", opus.arm, "--arm", particle.arm, "--brief", BRIEF, "--primary", pr, "--second", se, "--third", th, "--item", item, "--out", jr[j]!, "--ledger", LENV.GSTACK_EVALS_LEDGER!, "--record", REC, "--source", "panel/plans=" + SRC];
+    let r = await judgeRun([...args, "--sealed-root", SR], judgeFetch(sent, key.batch));
+    if (r.code && /sealed-root/.test(r.err)) r = await judgeRun(args, judgeFetch(sent, key.batch));
+    if (r.code) say(j + ": " + r.err.split("\n")[0]!.slice(0, 300));
+    const st = ledgerStatus(REC, item)[0];
+    settled += st.committed_micros;
+    const by = [...new Set(sent)].map((m) => m + " " + sent.filter((s) => s === m).length).join(", ");
+    check(item + ": recorded at $" + (cap / 1e6).toFixed(2) + " ($294.96 less $" + (before / 1e6).toFixed(6) + " settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $" + ((before + cap) / 1e6).toFixed(6) + "); judge-run with --brief judge-brief-v3.1.md (primary " + pr + ", second " + se + ", third " + th + ") exits " + r.code + " with every send answered by the fake (" + by + "); lease settled at $" + (st.committed_micros / 1e6).toFixed(4), cap === Math.floor((ENVELOPE - before) / 10_000) * 10_000 && before + cap <= ENVELOPE && r.code === 0 && sent.length >= key.packets.length && !st.open_lease);
+  }
+  {
+    const cap = await recordItem("hr-envelope-check", ENVELOPE - 12_340_001), st = ledgerStatus(REC, "hr-envelope-check")[0];
+    check("envelope with $12.340001 settled: the item records $" + (st.cap_micros / 1e6).toFixed(2) + " ($282.619999 rounded down; toFixed(2) would record $282.62), so committed plus cap is $" + ((12_340_001 + st.cap_micros) / 1e6).toFixed(6) + ", within $294.96", cap === 282_610_000 && st.cap_micros === 282_610_000 && 12_340_001 + st.cap_micros <= ENVELOPE);
+  }
+  check("no request left loopback (" + offLoop + " refused)", offLoop === 0);
+  const readings = (name: string, kinds: string) => {
+    const out = join(root, "readings-" + name);
+    const r = spawnSync("bun", [join(HERE, "e0-readings.ts"), "--scorer", scorer, "--suite", SUITE, "--kinds", join(SR, kinds), "--opus", opus.out, "--particle", particle.out, "--key", keyPath, "--read", "sol=" + jr.sol, "--read", "opus=" + jr.opus, "--read", "sonnet=" + jr.sonnet, "--passes", String(PASSES), "--out", out], { encoding: "utf8" });
+    if (r.status !== 0 && r.status !== 3) say(name + ": " + (r.stderr ?? "").trim().split("\n")[0]!.slice(0, 300));
+    return { code: r.status, out: r.stdout ?? "", file: join(out, "readings.json"), j: r.status === 0 || r.status === 3 ? JSON.parse(readFileSync(join(out, "readings.json"), "utf8")) : null };
+  };
+  const p1 = readings("kinds", "hr-kinds.json");
+  for (const l of p1.out.split("\n").filter((l) => /^(E0|Opus sessions|Kind|Judging|particle-1)/.test(l))) say("e0-readings --kinds hr-kinds.json (E0 labels ignored): " + l);
+  check("e0-readings --kinds hr-kinds.json --passes 4 exits " + p1.code + " and writes readings.json with " + (p1.j?.cells?.length ?? 0) + " Opus cells (by hand " + bl.length * PASSES + "), turn cap [" + p1.j?.classes?.TURN_CAP + "] (by hand Opus 1, particle-1 0)", !!p1.j && p1.j.cells.length === bl.length * PASSES && p1.j.classes.TURN_CAP.join(",") === "1,0" && p1.j.classes.GAP.join(",") === "0,0" && p1.j.classes.CAP.join(",") === "0,0");
+  if (!p1.j) throw new Error("e0-readings with hr-kinds.json wrote no readings.json");
+  for (const st of STRATA) {
+    const v = p1.j.kinds[KIND[st]!], x = X[st];
+    check("readings.json kind " + KIND[st] + " (" + st + ", " + v?.items + " items): must-fix " + v?.m + "/" + v?.n + ", stops " + v?.stops + "; by hand " + x.m + "/" + x.n + ", stops " + x.stops, v?.m === x.m && v?.n === x.n && v?.stops === x.stops && v?.items === x.items);
+  }
+  const split = p1.j.cells.filter((c: any) => c.sol && c.opus && c.sol.must !== c.opus.must);
+  check("the " + split.length + " cells where sol and opus differ (by hand 2: one sol-only miss on a match, one sol-only match on a miss) each take sonnet's answer", split.length === 2 && split.every((c: any) => c.sonnet.judged && c.final === c.sonnet.must) && split.some((c: any) => c.final === true) && split.some((c: any) => c.final === false));
+  const p2 = readings("shapes", "hr-shapes.json");
+  const wantShape = [...new Set<string>(shapesBl.filter((b) => b.role === "candidate").map((b) => b.kind))].sort().map((k) => { const cs = cellsOf(shapesBl.filter((b) => b.kind === k)); return k + " " + cs.filter((c) => T.has(c)).length + "/" + cs.length; }).join(", ");
+  check("e0-readings --kinds hr-shapes.json --passes 4 exits " + p2.code + " and writes readings.json; its per-shape must-fix counts are " + (p2.j ? Object.entries(p2.j.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n).join(", ") : "absent") + "; by hand " + wantShape, !!p2.j && Object.entries(p2.j.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n).join(", ") === wantShape);
+  const rule = (args: string[]) => { const r = spawnSync("bun", [join(HERE, "hr-rule.ts"), ...args], { encoding: "utf8" }); return { code: r.status, out: r.stdout ?? "", err: (r.stderr ?? "").trim().split("\n")[0] ?? "" }; };
+  const after = ["--suite", SUITE, "--kinds", join(SR, "hr-kinds.json"), "--passes", String(PASSES), "--opus", opus.out, "--particle", particle.out, "--key", keyPath, "--read", "sol=" + jr.sol, "--read", "opus=" + jr.opus, "--read", "sonnet=" + jr.sonnet];
+  const hr = rule(["--readings", p1.file, "--shapes", p2.file, "--", "--scorer", scorer, ...after]);
+  const lit = spawnSync("bun", [join(HERE, "hr-rule.ts"), "--readings", p1.file, "--shapes", p2.file, "--", "--scorer", ".", ...after], { encoding: "utf8", cwd: scorer });
+  const agr = (s: string) => s.split("\n").filter((l) => l.startsWith("Agreement ")).join("\n");
+  check("hr-rule with step 7's literal --scorer ., run from the pinned checkout, exits as with an absolute scorer (exit " + lit.status + ") and prints the same agreement lines", lit.status === hr.code && agr(lit.stdout ?? "") !== "" && agr(lit.stdout ?? "") === agr(hr.out));
+  for (const l of hr.out.split("\n").filter(Boolean)) say("hr-rule: " + l);
+  const want0 = STRATA.some((st) => !X[st].why && !X[st].read.startsWith("AWAITING")) ? 0 : 3;
+  check("hr-rule --readings (hr-kinds run) --shapes (hr-shapes run) exits " + hr.code + " (by hand " + want0 + ") and prints Whole run: no whole-run stop", hr.code === want0 && /^Whole run: no whole-run stop$/m.test(hr.out));
+  for (const st of STRATA) {
+    const x = X[st], line = hr.out.split("\n").find((l) => l.startsWith("Stratum " + st + " ")) ?? "";
+    const head = "Stratum " + st + " (" + KIND[st] + ", " + x.items + " items): " + x.read + (x.why ? " (" + x.why + ")" : "") + "; m " + x.m + " of n " + x.n + " = ";
+    const mid = "; stopped readings " + x.stops + " (all miss " + x.m + "/" + x.nb + " " + x.low + ", all match " + (x.m + x.stops) + "/" + x.nb + " " + x.high + "); anchors " + x.aLow + (x.aHigh !== x.aLow ? " to " + x.aHigh : "") + " of " + x.of + " (";
+    const tail = "; sessions gap 0, stopped " + x.sessions;
+    check("hr-rule stratum " + st + ": " + (line.startsWith(head) && line.includes(mid) && line.endsWith(tail) ? "" : "printed [" + line + "]; ") + "by hand " + x.read + (x.why ? " (" + x.why + ")" : "") + ", m " + x.m + " of n " + x.n + ", stopped readings " + x.stops + " scored both ways (all miss " + x.m + "/" + x.nb + " " + x.low + ", all match " + (x.m + x.stops) + "/" + x.nb + " " + x.high + "), anchors " + x.aLow + (x.aHigh !== x.aLow ? " to " + x.aHigh : "") + " of " + x.of + ", stopped sessions " + x.sessions, line.startsWith(head) && line.includes(mid) && line.endsWith(tail));
+  }
+  const pm = STRATA.reduce((a, st) => a + X[st].m, 0), pn = STRATA.reduce((a, st) => a + X[st].n, 0), ps = STRATA.reduce((a, st) => a + X[st].stops, 0), pa = STRATA.reduce((a, st) => a + X[st].aLow, 0), pof = STRATA.reduce((a, st) => a + X[st].of, 0);
+  const items = STRATA.reduce((a, st) => a + X[st].items, 0);
+  check("hr-rule pooled line (decides nothing): by hand " + items + " candidates, m " + pm + " of n " + pn + ", stopped " + ps + "; pooled anchors " + pa + " of " + pof + "; per shape " + wantShape, hr.out.includes("Pooled (all " + items + " candidates; describes the levers, decides nothing): m " + pm + " of n " + pn + " = ") && hr.out.includes("; stopped readings " + ps + " (all miss " + pm + "/" + (pn + ps) + ", all match " + (pm + ps) + "/" + (pn + ps) + ")") && hr.out.includes("Pooled anchors (decides nothing): " + pa + " of " + pof + (pa < 24 ? ", under" : ", at or over")) && hr.out.includes("Per shape (decides nothing): " + wantShape));
+  const judging = p1.out.split("\n").find((l) => l.startsWith("Judging:")) ?? "";
+  const agreeOk = ["pooled", ...STRATA].every((s) => { const m = judging.match(new RegExp("\\b" + s + " (\\S+) \\(n (\\d+)\\)")), a = hr.out.split("\n").find((l) => l.startsWith("Agreement " + s + " (")) ?? ""; return !!m && a.includes("decides no reading): n " + m[2] + "; both match ") && a.includes("; raw agreement ") && a.includes(", PABAK ") && a.includes(", kappa " + m[1]); });
+  check("hr-rule with step 5's flags after -- prints the agreement line (2x2, raw agreement, PABAK, kappa) for pooled and each stratum, each n and kappa equal to e0-readings' printed kappa", agreeOk);
+  const bad = rule(["--readings", p2.file]);
+  check("hr-rule refuses the hr-shapes readings as --readings (exit " + bad.code + ", E_USAGE naming hr-kinds.json)", bad.code === 2 && /^E_USAGE hr-rule: .*run e0-readings with hr-kinds\.json/.test(bad.err));
+} catch (e) {
+  check("hr-e2e ran to the end (threw " + (e instanceof Error ? e.message.split("\n")[0] : String(e)).slice(0, 300) + ")", false);
+}
+console.log("PASS " + pass + ", FAIL " + fail);
+process.exit(fail ? 1 : 0);

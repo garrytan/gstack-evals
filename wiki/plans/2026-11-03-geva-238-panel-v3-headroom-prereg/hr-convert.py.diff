@@ -1,0 +1,351 @@
+--- wiki/plans/2026-11-03-geva-219-panel-v3-e0-screen-prereg/convert-e0.py.txt	2026-11-03 08:05:23.211659988 +0000
++++ wiki/plans/2026-11-03-geva-238-panel-v3-headroom-prereg/hr-convert.py.txt	2026-11-03 08:40:08.650933186 +0000
+@@ -1,115 +1,280 @@
+ #!/usr/bin/env python3
+-# convert-e0.py <slice dir> <run dir> [<dry-run seed>]: converts the extracted panel v3 calibration slice (GEVA-217's layout) into E0's run
+-# material: plan cases in the one catalog schema under <run>/sealed-root/catalog/e0/ (lens ceo), one combined source clone
+-# (panel/plans, a branch per unit number: base commit context/ and src/, head commit adds plan.md), map.json and
+-# <run>/sealed-root/e0-kinds.json (filled with suite ids by build-e0.sh). Kept units only; excluded items are no blockers.
++# hr-convert.py <slice dir> <run dir> [<dry-run seed>]: converts the extracted panel v3 headroom slice (plan section 3)
++# into the headroom check's run material: plan cases in the one catalog schema under <run>/sealed-root/catalog/hr/ (lens
++# ceo), one combined source clone (panel/plans, a branch per unit number: base commit context/ and src/, head commit adds
++# plan.md), map.json and, in <run>/sealed-root/, hr-kinds.json (each candidate mapped to its stratum's headroom kind: ceo
++# C-RC, eng E-RC, dx X-RC, design G-RC; anchors keep their shape), hr-shapes.json (each candidate with its E0 shape), both
++# in e0-kinds.json's schema, and hr-traces.json, all three filled with suite ids by hr-build.sh. Kept units only; excluded
++# items are no blockers. Each candidate's blocker cause is E0's (lever content, then the item's cause) followed by its
++# trace: each hop's file and symbol, ending in the planted behavior.
+ # Unit numbers are an OS-random permutation; the optional seed draws them from random.Random(seed) instead, for the keyless
+-# dry run only (build-e0.sh passes it only under a dry-run digest), and says so. Prints counts and digests only. Refuses (exit 2, E_USAGE) a pending seal, a
+-# row not final or not kept, a kit digest other than the kit's, a kept unit whose key.json items differ from the manifest, or
+-# counts other than the frozen ones. e0-kinds.json marks each blocker flagged when its unit's failing_unit_codes is
+-# non-empty, never the codes. Fields it does not use (drop_rule, counts) are ignored. It creates the run dir mode 0700 and
+-# refuses to go on when the dir is not 0700. GEVA-219.
++# dry run only: it is honored only for a slice whose manifest seal_kind is dry-run, and says so. Prints counts and digests
++# only. Refuses (exit 2, E_USAGE) a pending seal (or any seal_kind but final or dry-run), a seed with a final slice, a row
++# not final or not kept, a kit digest other than kit v3.1's, a missing audit_date, a kept unit whose key.json items or
++# traces differ from the manifest, and a slice that breaks the recipe: other than 8 units, 2 a stratum; a unit that does
++# not key one item of each of its stratum's three E0 shapes plus one anchor in A-X, A-F or A-T (exclusions allowed);
++# a stratum whose anchors are not one context anchor (its evidence names a context/ file) and one src anchor (its
++# evidence names a src/ file plan.md names); bases other than 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a
++# 40-hex commit, two hosting eng and dx and two hosting ceo and design, one unit of each; a kept candidate's trace with
++# fewer than 2 hops past its origin, hop files that are not 2 or more distinct src/ files, a hop file missing from the
++# unit tree or named in plan.md with or without its src/ prefix, a terminal that is not the last hop's file, an added
++# terminal file (upstream_path null), or a terminal whose git hash-object equals the recorded upstream blob; and a unit
++# tree (head commit, git ls-tree -r -t -l HEAD) outside 307200 to 491520 bytes, 150 to 600 blobs or under 12 trees; a kept unit that excludes its anchor; an anchor whose key.json anchor_place is not its
++# manifest anchor_type; or a symlink, hidden path or special file under a kept unit's context/ or src/.
++# e0-kinds.json's flagged rule holds: a blocker is flagged when its unit's failing_unit_codes is non-empty, never the
++# codes. It creates the run dir mode 0700, refuses to go on when the dir is not 0700, and removes the run dir it made when
++# it refuses after making it.
++#   hr-convert.py --smoke <smoke unit dir> <run dir> <scorer>: the public smoke unit (plan section 4): plan.md, context/,
++# src/ and a key.json holding the base record and one dummy blocker. Applies only the layout refusals (top level holds
++# plan.md, key.json, context/ and src/ only; no symlink, hidden path or special file; an MIT or BSD base at a 40-hex
++# commit; a dummy blocker on a plan.md heading) and the size refusals above, then writes the case (visibility public),
++# the source clone, map.json and the suite planrev-v3-hr-smoke with the pinned scorer, keyless. No kinds, traces or seal
++# check. GEVA-238, from convert-e0.py (GEVA-219).
+ import hashlib, json, os, random, re, shutil, subprocess, sys, tempfile
+ from collections import Counter
+-KIT = "6f21a709317f889b2472cc1e3f0637b36e4057499c12da7a5e31e055b83e0722"
++KIT = "4ed951fb525d16bcc8456f1fb6132ec0b3c0cb43a938f7d9214aba37113ef6e6"
+ REPO = "panel/plans"
++STRATA = ("ceo", "eng", "dx", "design")
++SHAPES = {"ceo": ["C-OM", "C-Q", "C-U2"], "eng": ["E-CD", "E-OM", "E-Q"], "dx": ["X-CD", "X-OM", "X-Q"], "design": ["G-A11Y", "G-OM", "G-X"]}
++HR = {"ceo": "C-RC", "eng": "E-RC", "dx": "X-RC", "design": "G-RC"}
++LICENCES = ("MIT", "BSD-2-Clause", "BSD-3-Clause")
++HEX40 = re.compile(r"^[0-9a-f]{40}$")
++MADE = []
+ def refuse(msg):
+-    print("E_USAGE convert-e0: " + msg, file=sys.stderr); sys.exit(2)
+-if len(sys.argv) not in (3, 4): refuse("usage: convert-e0.py <slice dir> <run dir> [<dry-run seed>]")
+-sl, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
++    for d in MADE: shutil.rmtree(d, ignore_errors=True)
++    print("E_USAGE hr-convert: " + msg, file=sys.stderr); sys.exit(2)
++SMOKE = sys.argv[1:2] == ["--smoke"]
++if SMOKE and len(sys.argv) != 5: refuse("usage: hr-convert.py --smoke <smoke unit dir> <run dir> <scorer>")
++if not SMOKE and len(sys.argv) not in (3, 4): refuse("usage: hr-convert.py <slice dir> <run dir> [<dry-run seed>]")
++sl, out = os.path.abspath(sys.argv[2 if SMOKE else 1]), os.path.abspath(sys.argv[3 if SMOKE else 2])
+ sha = lambda b: hashlib.sha256(b).hexdigest()
++strip = lambda s: s.strip().lstrip("#").strip()
++def git(d, *a):
++    r = subprocess.run(["git", "-C", d, "-c", "gc.auto=0", "-c", "maintenance.auto=false", *a], capture_output=True)
++    if r.returncode: refuse("git " + a[0] + " failed while building a unit branch")
++    return r.stdout
++def make_run():
++    if os.path.exists(out): refuse("the run dir exists")
++    os.makedirs(out, mode=0o700); MADE.append(out)
++    if os.stat(out).st_mode & 0o777 != 0o700: refuse("the run dir is mode %o, not 0700" % (os.stat(out).st_mode & 0o777))
++    src = os.path.join(out, "work-source"); subprocess.run(["git", "init", "-q", "-b", "main", src], check=True, capture_output=True)
++    return src, tempfile.mkdtemp(dir=out)
++def build_unit(ud, tmp, src, pr):
++    c = os.path.join(tmp, "u"); shutil.rmtree(c, ignore_errors=True); os.makedirs(c)
++    git(c, "init", "-q", "-b", "main")
++    for sub in ("context", "src"):
++        if os.path.isdir(os.path.join(ud, sub)): shutil.copytree(os.path.join(ud, sub), os.path.join(c, sub))
++    git(c, "add", "-A"); git(c, "commit", "-q", "-m", "Working documents and code")
++    base = git(c, "rev-parse", "HEAD").decode().strip()
++    shutil.copy(os.path.join(ud, "plan.md"), os.path.join(c, "plan.md"))
++    git(c, "add", "plan.md"); git(c, "commit", "-q", "-m", "Plan")
++    head = git(c, "rev-parse", "HEAD").decode().strip()
++    size = blobs = trees = other = 0
++    for e in git(c, "ls-tree", "-r", "-t", "-l", "-z", "HEAD").decode().split("\0"):
++        if not e: continue
++        meta = e.split("\t", 1)[0].split()
++        if meta[1] == "tree": trees += 1
++        elif meta[1] == "blob": blobs += 1; size += int(meta[3])
++        else: other += 1
++    git(src, "fetch", "-q", "--no-tags", c, "main:refs/heads/unit-" + str(pr))
++    return base, head, (size, blobs, trees, other)
++def outside(n):
++    size, blobs, trees, other = n
++    return [not 307200 <= size <= 491520, not 150 <= blobs <= 600, trees < 12, other > 0]
++def size_refusal(stats):
++    bad = [outside(n) for n in stats]
++    if any(any(b) for b in bad):
++        refuse("%d unit trees fall outside the size range (git ls-tree -r -t -l HEAD): bytes outside 307200 to 491520 %d, blobs outside 150 to 600 %d, under 12 trees %d, other entries %d"
++               % (sum(any(b) for b in bad), sum(b[0] for b in bad), sum(b[1] for b in bad), sum(b[2] for b in bad), sum(b[3] for b in bad)))
++def heading_line(planb, section):
++    hits = [n + 1 for n, l in enumerate(planb.decode().split("\n")) if re.match(r"^#{1,6}\s", l) and strip(l) == strip(section)]
++    if not hits: refuse("no plan.md heading for a keyed section in one unit")
++    return hits[0]
++def finish(src, tmp, mapping):
++    shutil.rmtree(tmp, ignore_errors=True)
++    os.makedirs(os.path.join(out, "source"))
++    subprocess.run(["git", "-C", src, "-c", "gc.auto=0", "bundle", "create", "-q", os.path.join(out, "source", "plans.bundle"), "--all"], check=True, capture_output=True)
++    shutil.rmtree(src, ignore_errors=True)
++    mapping.sort(key=lambda m: m["pr"])
++    with open(os.path.join(out, "map.json"), "w") as fh: fh.write(json.dumps({"repo": REPO, "units": mapping}, indent=2) + "\n")
++    os.chmod(os.path.join(out, "map.json"), 0o600)
++def good_base(b):
++    return isinstance(b, dict) and isinstance(b.get("repo"), str) and b.get("licence") in LICENCES and isinstance(b.get("commit"), str) and bool(HEX40.match(b["commit"]))
++
++if SMOKE:
++    scorer = os.path.abspath(sys.argv[4])
++    top = sorted(os.listdir(sl))
++    bad = [n for n in top if n not in ("plan.md", "key.json", "context", "src")]
++    for root, ds, fs in os.walk(sl):
++        for n in ds + fs:
++            p = os.path.join(root, n); rel = os.path.relpath(p, sl)
++            if os.path.islink(p) or not (os.path.isfile(p) or os.path.isdir(p)) or any(x.startswith(".") for x in rel.split(os.sep)): bad.append(rel)
++    if bad or not os.path.isfile(os.path.join(sl, "plan.md")) or not os.path.isfile(os.path.join(sl, "key.json")):
++        refuse("the smoke unit breaks the layout: %d entries are not plan.md, key.json, context/ or src/, or are symlinks, hidden or special files" % len(bad))
++    keyb = open(os.path.join(sl, "key.json"), "rb").read()
++    try: key = json.loads(keyb); blk = key["blocker"]; ok = good_base(key.get("base")) and isinstance(blk.get("plan_section"), str) and isinstance(blk.get("cause"), str) and key.get("mode") in ("greenfield", "added", "fix")
++    except (ValueError, KeyError, TypeError, AttributeError): ok = False
++    if not ok: refuse("the smoke key.json needs mode, a base record (repo, an MIT or BSD licence, a 40-hex commit) and one blocker with plan_section and cause")
++    planb = open(os.path.join(sl, "plan.md"), "rb").read()
++    line = heading_line(planb, blk["plan_section"])
++    src, tmp = make_run()
++    SR = os.path.join(out, "sealed-root"); CAT = os.path.join(SR, "catalog", "hr-smoke"); os.makedirs(CAT)
++    base, head, n = build_unit(sl, tmp, src, 1)
++    size_refusal([n])
++    MODE = {"greenfield": "greenfield", "added": "added-capability", "fix": "fix"}
++    case = {"schema_version": 1, "kind": "plan", "id": "hr-smoke-1", "visibility": "public", "repo": REPO, "pr": 1, "reviewed_head": head, "merge_base": base,
++            "plan": {"digest": sha(planb), "lens": "ceo", "stratum": "seeded", "source": "panel v3 headroom smoke unit on " + key["base"]["repo"] + " at " + key["base"]["commit"], "plan_type": MODE[key["mode"]], "flaw_class": "right-thing-badly"},
++            "defect": {"file": "plan.md", "line": line, "section": strip(blk["plan_section"]), "cause": blk["cause"].strip(), "summary": "smoke"},
++            "severity": {"deserved": "CRITICAL", "basis": "A dummy blocker for the suite schema; the smoke decides no reading."},
++            "receipt": {"source": "panel v3 headroom smoke key.json (sha256 " + sha(keyb) + ")", "evidence": ["plan.md: " + strip(blk["plan_section"])]},
++            "answer_key_audit": {"by": "none: the smoke unit is public and unaudited", "at": "2026-11-03", "verdict": "confirmed", "notes": "Dummy blocker; the smoke reads turns, cost, stops and wall time only."},
++            "credit": "Panel v3 headroom smoke unit, written by the custodian"}
++    with open(os.path.join(CAT, "hr-smoke-1.json"), "w") as fh: fh.write(json.dumps(case, indent=2) + "\n")
++    finish(src, tmp, [{"unit": "smoke", "pr": 1, "stratum": "smoke", "head": head, "base": base, "cases": ["hr-smoke-1"]}])
++    os.makedirs(os.path.join(SR, "suites"))
++    env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY")}
++    sp = os.path.join(SR, "suites", "planrev-v3-hr-smoke.json")
++    r = subprocess.run([os.path.join(scorer, "bin", "gstack-evals"), "noloss", "suite", "--from-catalog", "catalog/hr-smoke", "--id", "planrev-v3-hr-smoke", "--sealed-root", SR, "--out", sp], cwd=scorer, env=env, capture_output=True)
++    if r.returncode:
++        with open(os.path.join(out, "suite.log"), "wb") as fh: fh.write(r.stdout + r.stderr)
++        print("E_USAGE hr-convert: noloss suite refused; its output is in $RUN/suite.log", file=sys.stderr); sys.exit(2)
++    subprocess.run(["git", "clone", "-q", "--mirror", os.path.join(out, "source", "plans.bundle"), os.path.join(out, "source", "plans.git")], check=True, capture_output=True)
++    print("smoke unit: bytes %d, blobs %d, trees %d; blockers 1" % n[:3])
++    print("smoke suite planrev-v3-hr-smoke sha256", sha(open(sp, "rb").read()))
++    print("plans bundle sha256", sha(open(os.path.join(out, "source", "plans.bundle"), "rb").read()))
++    sys.exit(0)
++
+ man = json.load(open(os.path.join(sl, "manifest.json")))
+ if man.get("seal_kind") in (None, "pending"): refuse("the manifest's seal_kind is %s, not a final seal" % man.get("seal_kind"))
++if man.get("seal_kind") not in ("final", "dry-run"): refuse("the manifest's seal_kind is neither final nor dry-run")
++if len(sys.argv) == 4 and man["seal_kind"] != "dry-run": refuse("a dry-run seed is honored only for a slice whose seal_kind is dry-run")
+ if any(r.get("state") != "final" for r in man["units"]): refuse("%d manifest rows are not in state final" % sum(r.get("state") != "final" for r in man["units"]))
+ if man.get("kit_digest") != KIT: refuse("the manifest's kit_digest is not the kit's digest " + KIT)
++if not re.match(r"^\d{4}-\d\d-\d\d$", str(man.get("audit_date", ""))): refuse("the manifest's audit_date is not a YYYY-MM-DD date")
+ kept = [r for r in man["units"] if r.get("kept") is True]
+ if len(kept) != len(man["units"]): refuse("%d manifest rows are not kept" % (len(man["units"]) - len(kept)))
++def bare(t):
++    t = json.loads(json.dumps(t))
++    if isinstance(t, dict) and isinstance(t.get("terminal"), dict): t["terminal"].pop("upstream_blob", None)
++    return t
+ bad = 0
+ for r in kept:
+     kdoc = json.load(open(os.path.join(sl, "units", r["unit"], "key.json")))
+     if {i["id"]: [i["item_kind"], i["role"]] for i in kdoc["items"]} != r["items"] or kdoc.get("unit") != r["unit"] or kdoc.get("stratum") != r["stratum"]: bad += 1
++    elif {i["id"]: i["trace"] for i in kdoc["items"] if "trace" in i} != {k: bare(t) for k, t in (r.get("traces") or {}).items()}: bad += 1
+     if not set(r.get("excluded_items", [])) <= set(r["items"]): bad += 1
+-if bad: refuse("%d kept units have key.json items that do not match the manifest" % bad)
+-FROZEN = {k: 6 for k in ("C-Q", "C-U2", "C-OM", "E-CD", "E-OM", "E-Q", "X-OM", "X-CD", "X-Q", "G-OM", "G-A11Y", "G-X")}
+-FROZEN.update({"C-U2": 5, "G-A11Y": 5, "E-OM": 5})
+-got, anchors = Counter(), 0
++if bad: refuse("%d kept units have key.json items or traces that do not match the manifest" % bad)
++bad = sum(any(r["items"][x][1] == "anchor" for x in r.get("excluded_items", [])) for r in kept)
++if bad: refuse("%d kept units exclude their anchor; an anchor that still fails its fix round stops the build and goes to the Captain" % bad)
++bad = []
++for r in kept:
++    ud = os.path.join(sl, "units", r["unit"])
++    for sub in ("context", "src"):
++        for root, ds, fs in os.walk(os.path.join(ud, sub)):
++            for n in ds + fs:
++                p = os.path.join(root, n); rel = os.path.relpath(p, ud)
++                if os.path.islink(p) or not (os.path.isfile(p) or os.path.isdir(p)) or any(x.startswith(".") for x in rel.split(os.sep)): bad.append(rel)
++if bad: refuse("%d entries under the kept units' context/ or src/ are symlinks, hidden paths or special files" % len(bad))
++if len(kept) != 8 or Counter(r["stratum"] for r in kept) != Counter({s: 2 for s in STRATA}): refuse("the slice is not 8 kept units, 2 a stratum")
++bad = sum(len(r["items"]) != 4 or sorted(k for k, ro in r["items"].values() if ro == "candidate") != SHAPES[r["stratum"]]
++          or [k in ("A-X", "A-F", "A-T") for k, ro in r["items"].values() if ro == "anchor"] != [True] for r in kept)
++if bad: refuse("%d units do not key one item of each of their stratum's three E0 shapes plus one anchor in A-X, A-F or A-T" % bad)
++keys = {r["unit"]: json.load(open(os.path.join(sl, "units", r["unit"], "key.json"))) for r in kept}
++plans = {r["unit"]: open(os.path.join(sl, "units", r["unit"], "plan.md"), "rb").read().decode() for r in kept}
++def anchor_ok(r):
++    a = [i for i in keys[r["unit"]]["items"] if i["role"] == "anchor"][0]
++    if a.get("anchor_place") != r.get("anchor_type"): return False
++    paths = [e.get("path", "") for e in a.get("evidence", []) if isinstance(e, dict)]
++    if r.get("anchor_type") == "context": return any(p.startswith("context/") for p in paths)
++    return r.get("anchor_type") == "src" and any(p.startswith("src/") and p in plans[r["unit"]] for p in paths)
++bad = sum(sorted(r.get("anchor_type") for r in kept if r["stratum"] == s) != ["context", "src"] for s in STRATA) + sum(not anchor_ok(r) for r in kept)
++if bad: refuse("%d strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file plan.md names) a stratum, each with key.json's anchor_place equal to its anchor_type" % bad)
++bases = man.get("bases")
++ok = isinstance(bases, list) and len(bases) == 4 and all(good_base(b) and isinstance(b.get("strata"), list) for b in bases) and len({b["repo"] for b in bases}) == 4
++if ok:
++    hosted = {b["repo"]: sorted(r["stratum"] for r in kept if r.get("base") == b["repo"]) for b in bases}
++    ok = all(r.get("base") in hosted for r in kept) and all(hosted[b["repo"]] == sorted(b["strata"]) for b in bases) and Counter(tuple(v) for v in hosted.values()) == Counter({("dx", "eng"): 2, ("ceo", "design"): 2})
++if not ok: refuse("the slice's bases are not 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a 40-hex commit, two hosting one eng and one dx unit and two hosting one ceo and one design unit")
++REASONS = ("fewer than 2 hops past the origin", "hop files that are not 2 or more distinct src/ files", "a hop file missing from the unit tree",
++           "a hop file plan.md names, with or without its src/ prefix", "a terminal that is not the last hop's file, or a malformed origin, symbol, line or blob",
++           "an added terminal file (upstream_path null), with no upstream blob to differ from", "a terminal whose git hash-object equals the recorded upstream blob")
++def trace_fault(r, iid):
++    ud = os.path.join(sl, "units", r["unit"]); t = (r.get("traces") or {}).get(iid)
++    if not isinstance(t, dict) or not isinstance(t.get("hops"), list): return 4
++    hops = t["hops"]
++    if len(hops) < 2: return 0
++    files = [h.get("file") if isinstance(h, dict) else None for h in hops]
++    if not all(isinstance(f, str) and f.startswith("src/") and ".." not in f.split("/") for f in files) or len(set(files)) < 2: return 1
++    if not all(os.path.isfile(os.path.join(ud, f)) and not os.path.islink(os.path.join(ud, f)) for f in files): return 2
++    if any(f in plans[r["unit"]] or f[4:] in plans[r["unit"]] for f in files): return 3
++    term = t.get("terminal")
++    if not (isinstance(t.get("origin"), str) and t["origin"].strip() and all(isinstance(h.get("symbol"), str) and h["symbol"].strip() for h in hops) and isinstance(term, dict)
++            and term.get("file") == files[-1] and isinstance(term.get("line"), int) and isinstance(term.get("behavior"), str) and term["behavior"].strip()): return 4
++    if not 1 <= term["line"] <= len(open(os.path.join(ud, files[-1]), "rb").read().split(b"\n")): return 4
++    if term.get("upstream_path") is None: return 5
++    if not (isinstance(term["upstream_path"], str) and isinstance(term.get("upstream_blob"), str) and HEX40.match(term["upstream_blob"])): return 4
++    got = subprocess.run(["git", "hash-object", "--no-filters", "--", os.path.join(ud, files[-1])], capture_output=True, text=True).stdout.strip()
++    return 6 if got == term["upstream_blob"] else None
++faults = Counter()
+ for r in kept:
+     for iid, (k, ro) in r["items"].items():
+-        if iid in set(r.get("excluded_items", [])): continue
+-        if ro == "anchor": anchors += 1
+-        else: got[k] += 1
+-if len(kept) != 24 or Counter(r["stratum"] for r in kept) != Counter({"ceo": 6, "eng": 6, "dx": 6, "design": 6}) or anchors != 24 or dict(got) != FROZEN or Counter(r["stratum"] for r in kept if r.get("failing_unit_codes")) != Counter({"ceo": 2, "eng": 1}):
+-    refuse("the slice's counts differ from the frozen ones (24 kept units, 6 per stratum, 24 anchors, 69 candidates with C-U2, G-A11Y and E-OM at 5, 3 flagged units: 2 ceo, 1 eng)")
+-if os.path.exists(out): refuse("the run dir exists")
+-os.makedirs(out, mode=0o700)
+-if os.stat(out).st_mode & 0o777 != 0o700: refuse("the run dir is mode %o, not 0700" % (os.stat(out).st_mode & 0o777))
+-SR = os.path.join(out, "sealed-root"); CAT = os.path.join(SR, "catalog", "e0"); os.makedirs(CAT)
+-src = os.path.join(out, "work-source"); subprocess.run(["git", "init", "-q", "-b", "main", src], check=True, capture_output=True)
+-def git(d, *a):
+-    r = subprocess.run(["git", "-C", d, "-c", "gc.auto=0", "-c", "maintenance.auto=false", *a], capture_output=True)
+-    if r.returncode: refuse("git " + a[0] + " failed while building a unit branch")
+-    return r.stdout
++        if ro == "candidate" and iid not in set(r.get("excluded_items", [])):
++            f = trace_fault(r, iid)
++            if f is not None: faults[f] += 1
++for f in range(len(REASONS)):
++    if faults[f]: refuse("%d kept candidates have a trace with %s" % (faults[f], REASONS[f]))
++src, tmp = make_run()
++SR = os.path.join(out, "sealed-root"); CAT = os.path.join(SR, "catalog", "hr"); os.makedirs(CAT)
+ FLAW = {"C-Q": "wrong-thing", "C-U2": "wrong-thing", "A-F": "wrong-thing"}
+ MODE = {"greenfield": "greenfield", "added": "added-capability", "fix": "fix"}
+ LEAD = {"H2": ("Deciding fact (written nowhere): ", "intermediate"), "QT": ("Computation: ", "computation"), "OM": ("Missing step: ", "absent_step"), "CD": ("Code behavior: ", "code_fact")}
+-strip = lambda s: s.strip().lstrip("#").strip()
+-def cause(i):
++def cause(i, t):
+     k, c = i["item_kind"], i["cause"].strip()
+     if k == "A-X": return "A conflict between two places (" + strip(i["plan_section"]) + " and " + " and ".join(strip(p) for p in i.get("other_places", [])) + "). " + c
+     if k == "A-F": return "A false fact. " + c
+     if k == "A-T": return "A hidden commitment. " + c
+     parts = [LEAD[lv][0] + i[LEAD[lv][1]].strip() for lv in i["levers"]]
+     if k in ("C-Q", "C-U2"): parts.append("The plan decides: " + i["decision"].strip() + " It should become: " + i["should_become"].strip())
+-    return " ".join(parts + [c])
++    trace = "Trace: from " + t["origin"].strip() + " through " + ", then ".join(h["file"] + " (" + h["symbol"].strip() + ")" for h in t["hops"]) + "; the planted behavior at " + t["terminal"]["file"] + " line " + str(t["terminal"]["line"]) + ": " + t["terminal"]["behavior"].strip()
++    return " ".join(parts + [c, trace])
+ nums = list(range(1, len(kept) + 1))
+ if len(sys.argv) == 4: random.Random(int(sys.argv[3])).shuffle(nums); print("unit numbers drawn from seed " + sys.argv[3] + " (dry run only)")
+ else: random.SystemRandom().shuffle(nums)
+-tmp = tempfile.mkdtemp(dir=out)
+-cases, mapping = {}, []
++cases, shapes, traces, mapping, stats = {}, {}, {}, [], []
+ counts = Counter()
+ for r, pr in zip(sorted(kept, key=lambda r: r["unit"]), nums):
+     uid = r["unit"]; ud = os.path.join(sl, "units", uid)
+     keyb = open(os.path.join(ud, "key.json"), "rb").read(); key = json.loads(keyb)
+     planb = open(os.path.join(ud, "plan.md"), "rb").read()
+-    c = os.path.join(tmp, "u"); shutil.rmtree(c, ignore_errors=True); os.makedirs(c)
+-    git(c, "init", "-q", "-b", "main")
+-    for sub in ("context", "src"):
+-        if os.path.isdir(os.path.join(ud, sub)): shutil.copytree(os.path.join(ud, sub), os.path.join(c, sub))
+-    git(c, "add", "-A"); git(c, "commit", "-q", "-m", "Working documents and code")
+-    base = git(c, "rev-parse", "HEAD").decode().strip()
+-    shutil.copy(os.path.join(ud, "plan.md"), os.path.join(c, "plan.md"))
+-    git(c, "add", "plan.md"); git(c, "commit", "-q", "-m", "Plan")
+-    head = git(c, "rev-parse", "HEAD").decode().strip()
+-    git(src, "fetch", "-q", "--no-tags", c, "main:refs/heads/unit-" + str(pr))
+-    lines = planb.decode().split("\n")
+-    def heading_line(section):
+-        hits = [n + 1 for n, l in enumerate(lines) if re.match(r"^#{1,6}\s", l) and strip(l) == strip(section)]
+-        if not hits: refuse("no plan.md heading for a keyed section in one unit")
+-        return hits[0]
++    base, head, n = build_unit(ud, tmp, src, pr)
++    stats.append(n)
+     excl = set(r.get("excluded_items", []))
+     ids = []
+     for k2, i in enumerate([i for i in key["items"] if i["id"] not in excl], 1):
+-        cid = "e0-" + str(pr) + "-" + str(k2); ids.append(cid)
++        cid = "hr-" + str(pr) + "-" + str(k2); ids.append(cid)
++        t = r["traces"].get(i["id"]) if i["role"] == "candidate" else None
+         case = {"schema_version": 1, "kind": "plan", "id": cid, "visibility": "sealed", "repo": REPO, "pr": pr, "reviewed_head": head, "merge_base": base,
+-                "plan": {"digest": sha(planb), "lens": "ceo", "stratum": "seeded", "source": "panel v3 calibration kind " + i["item_kind"], "plan_type": MODE[key["mode"]], "flaw_class": FLAW.get(i["item_kind"], "right-thing-badly")},
+-                "defect": {"file": "plan.md", "line": heading_line(i["plan_section"]), "section": strip(i["plan_section"]), "cause": cause(i), "summary": i["item_kind"]},
++                "plan": {"digest": sha(planb), "lens": "ceo", "stratum": "seeded", "source": "panel v3 headroom kind " + (HR[r["stratum"]] + " (E0 shape " + i["item_kind"] + ")" if t else i["item_kind"]), "plan_type": MODE[key["mode"]], "flaw_class": FLAW.get(i["item_kind"], "right-thing-badly")},
++                "defect": {"file": "plan.md", "line": heading_line(planb, i["plan_section"]), "section": strip(i["plan_section"]), "cause": cause(i, t), "summary": i["item_kind"]},
+                 "severity": {"deserved": "CRITICAL", "basis": "Kit key deserved severity " + i["deserved_severity"] + "; Critical and High are must-fix under the plan told prompt."},
+-                "receipt": {"source": "panel v3 calibration units/" + uid + "/key.json (sha256 " + sha(keyb) + "), " + i["id"], "evidence": [e["path"] + ": " + e["what"] for e in i["evidence"]]},
+-                "answer_key_audit": {"by": "GEVA-217 custody audit (" + ", ".join(r.get("audit_files", [])) + ")", "at": "2026-11-02", "verdict": "confirmed", "notes": "Manifest verdict " + str(r.get("verdict")) + ", state final."},
+-                "credit": "Panel v3 calibration slice (GEVA-202 kit, GEVA-217 custody), written blind to gstack"}
++                "receipt": {"source": "panel v3 headroom units/" + uid + "/key.json (sha256 " + sha(keyb) + "), " + i["id"], "evidence": [e["path"] + ": " + e["what"] for e in i["evidence"]]},
++                "answer_key_audit": {"by": "panel v3 headroom custody audit (" + ", ".join(r.get("audit_files", [])) + ")", "at": man["audit_date"], "verdict": "confirmed", "notes": "Manifest verdict " + str(r.get("verdict")) + ", state final."},
++                "credit": "Panel v3 headroom slice (kit v3.1 and hr-addendum.md), written blind to gstack"}
+         with open(os.path.join(CAT, cid + ".json"), "w") as fh: fh.write(json.dumps(case, indent=2) + "\n")
+-        cases[cid] = {"stratum": r["stratum"], "kind": i["item_kind"], "role": i["role"], "flagged": bool(r.get("failing_unit_codes"))}
++        row = {"stratum": r["stratum"], "kind": i["item_kind"], "role": i["role"], "flagged": bool(r.get("failing_unit_codes"))}
++        shapes[cid] = row
++        cases[cid] = dict(row, kind=HR[r["stratum"]]) if t else row
++        if t: traces[cid] = {"terminal": t["terminal"]["file"], "hops": [h["file"] for h in t["hops"]]}
+         counts[(r["stratum"], i["item_kind"], i["role"])] += 1
+     mapping.append({"unit": uid, "pr": pr, "stratum": r["stratum"], "head": head, "base": base, "cases": ids})
+-shutil.rmtree(tmp, ignore_errors=True)
+-os.makedirs(os.path.join(out, "source"))
+-subprocess.run(["git", "-C", src, "-c", "gc.auto=0", "bundle", "create", "-q", os.path.join(out, "source", "plans.bundle"), "--all"], check=True, capture_output=True)
+-shutil.rmtree(src, ignore_errors=True)
+-mapping.sort(key=lambda m: m["pr"])
+-with open(os.path.join(out, "map.json"), "w") as fh: fh.write(json.dumps({"repo": REPO, "units": mapping}, indent=2) + "\n")
+-os.chmod(os.path.join(out, "map.json"), 0o600)
+-with open(os.path.join(SR, "e0-kinds.json"), "w") as fh: fh.write(json.dumps({"suite": "planrev-v3-e0", "suite_sha256": None, "cases": cases}, indent=2) + "\n")
+-print("kept units", len(kept), "of", len(man["units"]), "; blockers", len(cases), "; excluded items", sum(len(r.get("excluded_items", [])) for r in kept))
+-for s in ("ceo", "eng", "dx", "design"):
++size_refusal(stats)
++finish(src, tmp, mapping)
++for name, rows in (("hr-kinds.json", cases), ("hr-shapes.json", shapes)):
++    with open(os.path.join(SR, name), "w") as fh: fh.write(json.dumps({"suite": "planrev-v3-hr", "suite_sha256": None, "cases": rows}, indent=2) + "\n")
++with open(os.path.join(SR, "hr-traces.json"), "w") as fh: fh.write(json.dumps({"schema": 1, "suite_sha256": None, "cases": traces}, indent=2) + "\n")
++print("kept units", len(kept), "of", len(man["units"]), "; blockers", len(cases), "; candidates", len(traces), "; excluded items", sum(len(r.get("excluded_items", [])) for r in kept))
++print("bases", len(bases), "; licences", ", ".join("%s %d" % kv for kv in sorted(Counter(b["licence"] for b in bases).items())))
++print("unit trees: bytes %d to %d, blobs %d to %d, trees %d to %d" % (min(s[0] for s in stats), max(s[0] for s in stats), min(s[1] for s in stats), max(s[1] for s in stats), min(s[2] for s in stats), max(s[2] for s in stats)))
++for s in STRATA:
+     print("stratum", s, "units", sum(m["stratum"] == s for m in mapping), "; " + ", ".join("%s %s %d" % (k, ro, n) for (st, k, ro), n in sorted(counts.items()) if st == s))
+ print("plans bundle sha256", sha(open(os.path.join(out, "source", "plans.bundle"), "rb").read()))

@@ -1,0 +1,76 @@
+--- wiki/plans/2026-11-03-geva-219-panel-v3-e0-screen-prereg/build-e0.sh.txt	2026-11-03 07:16:07.718081935 +0000
++++ wiki/plans/2026-11-03-geva-238-panel-v3-headroom-prereg/hr-build.sh.txt	2026-11-03 07:33:59.643423724 +0000
+@@ -1,39 +1,49 @@
+ #!/usr/bin/env bash
+-# build-e0.sh <bundle tar> <slice dir> <run dir> <scorer> [<bundle sha256>]: builds E0's run material from the extracted
+-# calibration slice with the pinned scorer: refuses unless the bundle's sha256 is the frozen one (the fifth argument binds
+-# another digest, for the keyless dry run only, and says so, and then also seeds convert-e0.py's unit-number draw with
+-# 20261103 so the dry run's layout repeats), then plan cases and the source clone (convert-e0.py), the
+-# suite planrev-v3-e0 (noloss suite --from-catalog), the mirror clone and e0-kinds.json with the suite's blockers and
+-# sha256. Keyless. Runs under umask 077, so the run root and every file in it are private. Prints counts and digests only.
+-# GEVA-219.
++# hr-build.sh <bundle tar> <slice dir> <run dir> <scorer> <bundle sha256> [<dry-run seed>]: builds the headroom check's
++# run material from the extracted slice with the pinned scorer: refuses unless the bundle's sha256 is the fifth argument
++# (the sha256 the custodian sealed and the Captain recorded), then plan cases and the source clone (hr-convert.py), the
++# suite planrev-v3-hr (noloss suite --from-catalog), the mirror clone, and hr-kinds.json, hr-shapes.json and hr-traces.json
++# with the suite's blockers and sha256. The optional sixth argument seeds hr-convert.py's unit-number draw so a dry run's
++# layout repeats; hr-convert.py honors it only for a slice whose seal_kind is dry-run, and hr-custody.sh never passes one.
++# Keyless. Runs under umask 077, so the run root and every file in it are private. Prints counts and digests only.
++# GEVA-238, from build-e0.sh (GEVA-219).
+ set -euo pipefail
+ umask 077
+-FROZEN=ea69c111bc5d781d507ee296d84202702eb628375c7310bfb26eb93523644934
+-BUNDLE=$(realpath "$1"); SLICE=$(realpath "$2"); RUN=$(realpath -m "$3"); SCORER=$(realpath "$4"); WANT=${5:-$FROZEN}
++usage() { echo "E_USAGE hr-build: $1" >&2; exit 2; }
++[ $# -ge 5 ] && [ $# -le 6 ] || usage "takes <bundle tar> <slice dir> <run dir> <scorer> <bundle sha256> [<dry-run seed>]"
++BUNDLE=$(realpath "$1"); SLICE=$(realpath "$2"); RUN=$(realpath -m "$3"); SCORER=$(realpath "$4"); WANT=$5; SEED=${6:-}
++[[ $WANT =~ ^[0-9a-f]{64}$ ]] || usage "the bundle sha256 must be 64 lowercase hex characters"
++[ -z "$SEED" ] || [[ $SEED =~ ^[0-9]+$ ]] || usage "the dry-run seed must be a whole number"
+ GOT=$(sha256sum "$BUNDLE" | cut -c1-64)
+-if [ "$GOT" != "$WANT" ]; then echo "E_USAGE build-e0: the bundle's sha256 is $GOT, not $WANT" >&2; exit 2; fi
+-[ "$WANT" = "$FROZEN" ] || echo "build-e0: bundle bound to $WANT, not the frozen digest (dry run only)"
++[ "$GOT" = "$WANT" ] || usage "the bundle's sha256 is $GOT, not $WANT"
+ G="env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY $SCORER/bin/gstack-evals"
+ HERE=$(cd "$(dirname "$0")" && pwd)
+-if [ "$WANT" = "$FROZEN" ]; then python3 "$HERE/convert-e0.py" "$SLICE" "$RUN"; else python3 "$HERE/convert-e0.py" "$SLICE" "$RUN" 20261103; fi
++if [ -z "$SEED" ]; then python3 "$HERE/hr-convert.py" "$SLICE" "$RUN"; else python3 "$HERE/hr-convert.py" "$SLICE" "$RUN" "$SEED"; fi
+ SR=$RUN/sealed-root; mkdir -p "$SR/suites"
+-if ! (cd "$SCORER" && $G noloss suite --from-catalog catalog/e0 --id planrev-v3-e0 --sealed-root "$SR" --out "$SR/suites/planrev-v3-e0.json") > "$RUN/suite.log" 2>&1; then
+-  echo "E_USAGE build-e0: noloss suite refused; its output is in \$RUN/suite.log" >&2; exit 2
++if ! (cd "$SCORER" && $G noloss suite --from-catalog catalog/hr --id planrev-v3-hr --sealed-root "$SR" --out "$SR/suites/planrev-v3-hr.json") > "$RUN/suite.log" 2>&1; then
++  echo "E_USAGE hr-build: noloss suite refused; its output is in \$RUN/suite.log" >&2; exit 2
+ fi
+ git clone -q --mirror "$RUN/source/plans.bundle" "$RUN/source/plans.git" 2>/dev/null
+ python3 - "$SR" <<'PY'
+ import hashlib, json, os, sys
+ from collections import Counter
+ sr = sys.argv[1]
+-sp = os.path.join(sr, "suites", "planrev-v3-e0.json"); kp = os.path.join(sr, "e0-kinds.json")
+-suite = json.load(open(sp)); kinds = json.load(open(kp))
+-rows = [dict(unit=u["id"], blocker=b["id"], **kinds["cases"][b["case"]]) for u in suite["units"] for b in u["blockers"]]
+-assert len(rows) == len(kinds["cases"]), "every case is one suite blocker"
+-s = hashlib.sha256(open(sp, "rb").read()).hexdigest()
+-with open(kp, "w") as fh: fh.write(json.dumps({"suite": suite["id"], "suite_sha256": s, "blockers": rows}, indent=2) + "\n")
+-c = Counter((r["stratum"], r["kind"], r["role"]) for r in rows)
+-print("suite", suite["id"], "units", len(suite["units"]), "blockers", len(rows), "flagged blockers", sum(r["flagged"] for r in rows))
+-for st in ("ceo", "eng", "dx", "design"): print("  " + st + ": " + ", ".join("%s %d" % (k, n) for (x, k, ro), n in sorted(c.items()) if x == st))
++sp = os.path.join(sr, "suites", "planrev-v3-hr.json")
++suite = json.load(open(sp)); s = hashlib.sha256(open(sp, "rb").read()).hexdigest()
++pairs = [(u["id"], b) for u in suite["units"] for b in u["blockers"]]
++for name in ("hr-kinds.json", "hr-shapes.json"):
++    kp = os.path.join(sr, name); kinds = json.load(open(kp))
++    rows = [dict(unit=u, blocker=b["id"], **kinds["cases"][b["case"]]) for u, b in pairs]
++    assert len(rows) == len(kinds["cases"]), "every case is one suite blocker"
++    with open(kp, "w") as fh: fh.write(json.dumps({"suite": suite["id"], "suite_sha256": s, "blockers": rows}, indent=2) + "\n")
++    c = Counter((r["stratum"], r["kind"], r["role"]) for r in rows)
++    print(name, "blockers", len(rows), "flagged blockers", sum(r["flagged"] for r in rows))
++    for st in ("ceo", "eng", "dx", "design"): print("  " + st + ": " + ", ".join("%s %d" % (k, n) for (x, k, ro), n in sorted(c.items()) if x == st))
++tp = os.path.join(sr, "hr-traces.json"); tr = json.load(open(tp))["cases"]
++blockers = {b["case"]: dict(unit=u, **tr[b["case"]]) for u, b in pairs if b["case"] in tr}
++assert len(blockers) == len(tr), "every trace is one suite blocker"
++with open(tp, "w") as fh: fh.write(json.dumps({"schema": 1, "blockers": blockers}, indent=2) + "\n")
++print("suite", suite["id"], "units", len(suite["units"]), "blockers", len(pairs), "traced blockers", len(blockers))
+ print("suite sha256", s)
+-print("e0-kinds.json sha256", hashlib.sha256(open(kp, "rb").read()).hexdigest())
++for name in ("hr-kinds.json", "hr-shapes.json", "hr-traces.json"): print(name, "sha256", hashlib.sha256(open(os.path.join(sr, name), "rb").read()).hexdigest())
+ PY

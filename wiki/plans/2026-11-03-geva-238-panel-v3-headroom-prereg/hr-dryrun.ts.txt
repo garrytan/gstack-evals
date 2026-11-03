@@ -1,0 +1,137 @@
+#!/usr/bin/env bun
+// hr-dryrun.ts: keyless dry run of the panel v3 headroom preregistration (GEVA-238). Drives the frozen rules through the
+// pinned scorer: (a) the pin; (c) review-units --dry-run with the frozen flags for hr-smoke-opus, its frozen fallback,
+// hr-opus-none and hr-particle-none, and the resume refusals; (g) the ledger: every item at its cap with admission warn,
+// one lease opened and settled per item, a second run refused; (d) hr-stops.ts (GAP repair, smoke fallback read, start
+// rule). The build, convert, rule, kappa and exposure parts run in their own dry-run scripts. Every unit, finding and
+// judgment is synthetic. Writes hr-dryrun.txt beside itself. Run from a dir holding the prereg's *.txt scripts and E0's e0-readings.ts,
+// each with the .txt suffix removed:
+//   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun hr-dryrun.ts <scorer> <scratch> <suite.json> <plans.git> [<smoke suite.json> <smoke plans.git>]
+import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+const [scorer, OUT, SUITE, SRC, SMOKE, SMOKESRC] = process.argv.slice(2).map((p) => resolve(p)) as string[];
+const HERE = import.meta.dir;
+const PIN = "b7b6aeccec868e5127e951b187ca4b637da13114";
+const HOME = process.env.HOME ?? "";
+const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) as Record<string, string>;
+rmSync(OUT!, { recursive: true, force: true });
+mkdirSync(OUT!, { recursive: true });
+const suite = JSON.parse(readFileSync(SUITE!, "utf8"));
+const smoke = SMOKE ? JSON.parse(readFileSync(SMOKE, "utf8")) : null;
+const IDS: string[] = [...suite.units, ...(smoke?.units ?? [])].map((u: any) => u.id);
+const lines: string[] = [];
+let pass = 0, fail = 0;
+const scrub = (t: string) => {
+  let s = t.replaceAll(OUT!, "$OUT").replaceAll(scorer!, "$SCORER").replaceAll(HERE, "$BUNDLE").replaceAll(HOME, "~");
+  for (const id of IDS) s = s.replaceAll(id, "<unit>");
+  return s.replace(/panel\/plans#\d+(@[0-9a-f]+)?/g, "<unit>").replace(/\b(e0|hr)-\d+-\d+\b/g, "<case>").replace(/plans-\d+-[0-9a-f]+/g, "<unit>").replace(/unit-\d+\b/g, "<unit>");
+};
+const say = (t: string) => lines.push(scrub(t));
+const check = (label: string, ok: boolean) => { ok ? pass++ : fail++; say((ok ? "PASS " : "FAIL ") + label); };
+const run = (cmd: string[], cwd = scorer!, env = KEYLESS) => spawnSync(cmd[0]!, cmd.slice(1), { encoding: "utf8", cwd, env, maxBuffer: 1 << 28 });
+const section = async (title: string, fn: () => Promise<void> | void) => {
+  say("\n## " + title);
+  try { await fn(); } catch (e) { check(title + ": ran to the end (threw " + (e instanceof Error ? e.message.split("\n")[0] : String(e)) + ")", false); }
+};
+const relay = (title: string, r: ReturnType<typeof run>) => {
+  for (const l of r.stdout.split("\n").filter((l) => l.trim())) {
+    if (l.startsWith("{")) { try { const x = JSON.parse(l); if (x.kind === "check") check(x.label, x.ok); else if (x.kind === "say") say("    " + x.text); else say("    " + l); } catch { say("    " + l); } }
+    else if (/^PASS /.test(l)) check(l.slice(5), true);
+    else if (/^FAIL /.test(l)) check(l.slice(5), false);
+    else if (!/^PASS \d+, FAIL \d+$/.test(l.trim())) say("    " + l);
+  }
+  if (r.status !== 0) for (const l of r.stderr.split("\n").filter((l) => l.trim()).slice(-3)) say("    stderr: " + l.slice(0, 300));
+  check(title + " ran as its own process (exit " + r.status + ")", r.status === 0);
+};
+const repo = suite.units[0].repo, SR = resolve(SUITE!, "..", "..");
+
+await section("a. Pin", () => {
+  const head = run(["git", "-C", scorer!, "rev-parse", "HEAD"]).stdout.trim();
+  const dirty = run(["git", "-C", scorer!, "status", "--porcelain"]).stdout.trim();
+  check("the scorer is at " + PIN + " with no change and no untracked file", head === PIN && dirty === "");
+});
+
+await section("c. The frozen commands (review-units --dry-run, paths swapped)", async () => {
+  const { MAX_TURNS } = await import(join(scorer!, "src/adapters/claude-code/driver.ts"));
+  say("    suite: " + suite.units.length + " units" + (smoke ? "; smoke suite: " + smoke.units.length + " unit" : "; no smoke suite given, so the smoke lines run on the main suite") + "; the driver's default MAX_TURNS is " + MAX_TURNS);
+  const S = smoke ? SMOKE! : SUITE!, SS = smoke ? SMOKESRC! : SRC!, ssr = resolve(S, "..", ".."), srepo = (smoke ?? suite).units[0].repo, sn = (smoke ?? suite).units.length;
+  const RUNS: Array<[string, string, string, string, number, string, string, string | null, number, string, string]> = [
+    ["hr-smoke-opus", S, ssr, SS, 2, "100", "3600", null, sn * 2, "14.08", srepo],
+    ["hr-smoke-opus (frozen fallback)", S, ssr, SS, 2, "200", "5400", null, sn * 2, "14.08", srepo],
+    ["hr-opus-none", SUITE!, SR, SRC!, 4, "100", "3600", null, suite.units.length * 4, "225.28", repo],
+    ["hr-particle-none", SUITE!, SR, SRC!, 4, "100", "3600", "0.60", suite.units.length * 4, "19.20", repo],
+  ];
+  const argsOf = (item: string, s: string, sr: string, src: string, passes: number, mt: string, to: string, allow: string | null, cap: string, rp: string, out: string, model: string) => ["review-units", "--suite", s, "--arms", "none", "--models", model, "--passes", String(passes), "--sealed-root", sr, "--plan", "ceo", "--units", "all", "--source", rp + "=" + src, "--base-branch", rp + "=main", "--system-prompt", "none=claude-code-preset", "--parallel", "3", "--timeout", to, "--max-turns", mt, ...(allow ? ["--allowance", allow] : []), "--item", item.split(" ")[0]!, "--spend-cap", cap, "--out", out, "--dry-run"];
+  for (const [item, s, sr, src, passes, mt, to, allow, n, cap, rp] of RUNS) {
+    const model = item.startsWith("hr-particle") ? "particle-ai/particle-1" : "claude-opus-5-5";
+    const out = join(OUT!, "rundir", item.split(" ")[0]!);
+    const r = run([join(scorer!, "bin/gstack-evals"), ...argsOf(item, s, sr, src, passes, mt, to, allow, cap, rp, out, model)]);
+    const o = r.stdout + r.stderr;
+    for (const l of o.split("\n").filter((l) => /^(arms|models|max turns|worst case)/.test(l))) say("    " + l.slice(0, 300));
+    check(item + ": review-units --dry-run runs keyless (exit " + r.status + "), " + n + " sessions, the none arm on " + model + " with claude-code-preset, max turns " + mt + ", spend cap $" + cap, r.status === 0 && new RegExp("sessions " + n + "\\b").test(o) && /arms: none \(/.test(o) && o.includes(model) && /system prompt claude-code-preset/.test(o) && new RegExp("^max turns " + mt + ";", "m").test(o) && o.includes("spend cap $" + cap));
+    say("    timeout " + to + " and --parallel 3 are accepted; the pin's dry run prints neither");
+  }
+  const out = join(OUT!, "resume");
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, "run.json"), JSON.stringify({ run_id: "review-units-dryrun", max_turns: 100, session_kind: null, background_wait_s: 3600 }) + "\n");
+  const rr = (mt: string) => run([join(scorer!, "bin/gstack-evals"), ...argsOf("hr-opus-none", SUITE!, SR, SRC!, 4, mt, "3600", null, "211.20", repo, out, "claude-opus-5-5").slice(0, -1), "--resume", "--repair", "dry run repair note", "--dry-run"]);
+  const ok = rr("100"), stale = rr("200");
+  check("a resume with the run's own flags plus --resume --repair \"<note>\" and a lower --spend-cap passes the resume checks (exit " + ok.status + ", out marked resume)", ok.status === 0 && /\(resume\)/.test(ok.stdout) && ok.stdout.includes("spend cap $211.20"));
+  check("a resume that changes --max-turns refuses with E_CACHE_STALE (exit " + stale.status + "), so a repair runs with the run's own flags", stale.status === 2 && /^E_CACHE_STALE/m.test(stale.stderr));
+});
+
+await section("g. Ledger: every frozen item at its cap, one lease opened and settled per item", async () => {
+  const { ledgerCli } = await import(join(scorer!, "src/runner/ledger/cli.ts"));
+  const { openLease, settleLease, ledgerStatus } = await import(join(scorer!, "src/runner/ledger/ledger.ts"));
+  const { openLocalLedger } = await import(join(scorer!, "src/runner/ledger/local.ts"));
+  const { ledgerPath } = await import(join(scorer!, "src/runner/ledger/paths.ts"));
+  const { rigAdmission } = await import(join(scorer!, "src/rig/admission.ts"));
+  const { newRunId } = await import(join(scorer!, "src/skill-eval/cli/call.ts"));
+  const LD = join(OUT!, "ledger");
+  mkdirSync(LD);
+  const REC = join(LD, "record");
+  writeFileSync(join(LD, "approvals-stub"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const LENV = { ...KEYLESS, GSTACK_EVALS_LEDGER_RECORD: REC, GSTACK_EVALS_LEDGER: join(LD, "local.sqlite"), GSTACK_EVALS_APPROVALS_BIN: join(LD, "approvals-stub") };
+  say("A temporary approval record and local ledger under $OUT/ledger; the gstack-approvals mirror is a stub. Leases use the pinned entry points' own openLease calls (review-units: amount = --spend-cap, rig admission proof trial; judge-run: proof direct), with --admission warn. Each run item settles at its projected spend, each judge item at a third of the projected $26.00.");
+  check("the run caps at their allowances leave the judges exactly the $36.40 floor ($294.96 - $14.08 - $225.28 - $19.20)", 294_960_000 - 14_080_000 - 225_280_000 - 19_200_000 === 36_400_000);
+  const local = openLocalLedger(ledgerPath(undefined, LENV));
+  let calls = 0, settled = 0;
+  const warned: string[] = [];
+  const leaseFor = (item: string, run_id: string, proof: string, amount?: number) => openLease(REC, local, { item, run_id, ...(amount === undefined ? {} : { amount_micros: amount }), requireAdmission: rigAdmission({ proof }), warn: (code: string) => warned.push(code) });
+  const codeOf = (f: () => unknown) => { try { f(); return "opened"; } catch (e: any) { return e?.code ?? String(e).split(" ")[0]; } };
+  const ITEMS: Array<[string, number | null, string, number, string]> = [["hr-smoke-opus", 14_080_000, "claude-opus-5-5", 3_400_000, "trial"], ["hr-opus-none", 225_280_000, "claude-opus-5-5", 54_400_000, "trial"], ["hr-particle-none", 19_200_000, "particle-ai/particle-1", 4_480_000, "trial"], ["hr-judge-sol", null, "gpt-6.1-sol", 8_670_000, "direct"], ["hr-judge-opus", null, "claude-opus-5-5", 8_670_000, "direct"], ["hr-judge-sonnet", null, "claude-sonnet-5-5", 8_670_000, "direct"]];
+  for (const [item, cap, model, micros, proof] of ITEMS) {
+    const capMicros = cap ?? Math.max(36_400_000, Math.floor((294_960_000 - settled) / 10_000) * 10_000);
+    const o: string[] = [], e: string[] = [];
+    const code = await ledgerCli(["init", "--item", item, "--cap", (capMicros / 1e6).toFixed(2), "--admission", "warn", "--words", "dry run only", "--by", "hr-dryrun.ts", "--source", "HR keyless dry run"], { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }, LENV);
+    check(item + " recorded at $" + (capMicros / 1e6).toFixed(2) + (cap === null ? " ($294.96 less $" + (settled / 1e6).toFixed(2) + " settled by every earlier item, rounded down to the cent, floor $36.40)" : ""), code === 0);
+    const runId = proof === "trial" ? newRunId("review-units") : "judge-" + randomBytes(6).toString("hex");
+    const lease = leaseFor(item, runId, proof, proof === "trial" ? capMicros : undefined);
+    calls++;
+    const rv = await local.reserve({ idempotency_key: "dry-" + calls, lease_id: lease.lease_id, cell: { run_id: runId, arm: "none", task: "synthetic", model, trial: 1, attempt: 1, meter_id: "dry-" + calls }, max_micros: micros });
+    await local.settle(rv.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 1000, output: 100, reasoning: 0, cache_read: 0, cache_write: 0 } });
+    settleLease(REC, local, lease.lease_id);
+    const st = ledgerStatus(REC, item)[0];
+    settled += st.committed_micros;
+    check(item + ": one lease opened (" + warned.at(-1) + ") at $" + ((proof === "trial" ? capMicros : capMicros) / 1e6).toFixed(2) + " and settled at $" + (st.committed_micros / 1e6).toFixed(2) + ", the item bound to its run", st.run_id === runId && st.committed_micros === micros && !st.open_lease && st.leases === 1);
+    const again = codeOf(() => leaseFor(item, proof === "trial" ? newRunId("review-units") : "judge-" + randomBytes(6).toString("hex"), proof));
+    check(item + ": a second run on the settled item refuses with " + again, again === "E_ITEM_BOUND");
+  }
+  say("    settled in all: $" + (settled / 1e6).toFixed(2) + " of the $294.96 envelope");
+});
+
+await section("d. Rig steps: GAP repair, the smoke fallback read and the start rule (hr-stops.ts)", () => {
+  relay("hr-stops.ts", run(["bun", join(HERE, "hr-stops.ts"), scorer!, SUITE!, SRC!, join(OUT!, "stops"), "all"], HERE));
+});
+
+
+say("\n## Leak check");
+const all = lines.join("\n");
+const leaks = [...IDS.filter((id) => all.includes(id)), ...(all.match(/panel\/plans#\d+|\b(e0|hr)-\d+-\d+\b|plans-\d+-[0-9a-f]{6,}/g) ?? []), ...(HOME && all.includes(HOME) ? [HOME] : [])];
+check("the transcript prints no unit id, unit label, case id or home path (" + leaks.length + " found)", leaks.length === 0);
+say("\nPASS " + pass + ", FAIL " + fail);
+writeFileSync(join(HERE, "hr-dryrun.txt"), lines.join("\n").replace(/^\n/, "") + "\n");
+console.log(lines.join("\n"));
+process.exit(fail ? 1 : 0);

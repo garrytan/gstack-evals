@@ -1,0 +1,78 @@
+PASS gen-synth-hr.py writes the slice
+PASS gen-synth-hr.py repeats byte for byte under one seed
+    check_units.py codes: context-files: 8; context-size: 8; src-files: 8; 
+PASS kit v3.1 check_units.py reports only the exempt codes (context-size, src-files, src-size, and context-files for the 10 to 20 total only): 0 other problems
+PASS hr-build.sh refuses a bundle whose sha256 is not the fifth argument (exit 2)
+PASS hr-build.sh refuses without the bundle sha256 (exit 2)
+    unit numbers drawn from seed 20261103 (dry run only)
+    kept units 8 of 8 ; blockers 31 ; candidates 23 ; excluded items 1
+    bases 4 ; licences BSD-2-Clause 1, BSD-3-Clause 1, MIT 2
+    unit trees: bytes 355957 to 363468, blobs 202 to 208, trees 14 to 15
+    stratum ceo units 2 ; A-F anchor 1, A-X anchor 1, C-OM candidate 2, C-Q candidate 2, C-U2 candidate 2
+    stratum eng units 2 ; A-T anchor 1, A-X anchor 1, E-CD candidate 2, E-OM candidate 1, E-Q candidate 2
+    stratum dx units 2 ; A-F anchor 1, A-X anchor 1, X-CD candidate 2, X-OM candidate 2, X-Q candidate 2
+    stratum design units 2 ; A-F anchor 1, A-T anchor 1, G-A11Y candidate 2, G-OM candidate 2, G-X candidate 2
+    hr-kinds.json blockers 31 flagged blockers 4
+      ceo: A-F 1, A-X 1, C-RC 6
+      eng: A-T 1, A-X 1, E-RC 5
+      dx: A-F 1, A-X 1, X-RC 6
+      design: A-F 1, A-T 1, G-RC 6
+    hr-shapes.json blockers 31 flagged blockers 4
+      ceo: A-F 1, A-X 1, C-OM 2, C-Q 2, C-U2 2
+      eng: A-T 1, A-X 1, E-CD 2, E-OM 1, E-Q 2
+      dx: A-F 1, A-X 1, X-CD 2, X-OM 2, X-Q 2
+      design: A-F 1, A-T 1, G-A11Y 2, G-OM 2, G-X 2
+    suite planrev-v3-hr units 8 blockers 31 traced blockers 23
+PASS hr-build.sh builds the synthetic slice, bound to its sha256, seeded (exit 0)
+    units 8, blockers 31, candidates 23, traced 23, checks 1111111
+PASS the suite loads with the sealed root (8 units, 31 blockers, 23 candidates); hr-kinds.json and hr-shapes.json keep e0-kinds.json's schema and name the suite sha256; candidates read C-RC, E-RC, X-RC, G-RC and their E0 shapes; hr-traces.json holds 23 traces keyed by case id; 4 flagged blockers
+PASS each of the 23 candidate causes ends in its trace (23)
+PASS the run root is mode 700 (700 wanted), 0 entries group- or world-readable
+PASS hr-convert.py refuses a run dir it could not make mode 0700 and leaves none (exit 2)
+PASS hr-convert.py refuses a pending seal (exit 2: E_USAGE hr-convert: the manifest's seal_kind is pending, not a final seal )
+PASS hr-convert.py refuses a wrong kit digest (exit 2: E_USAGE hr-convert: the manifest's kit_digest is not the kit's digest 4ed951fb525d16bcc8456f1fb6132ec0b3c0cb43a938f7d9214aba37113ef6e6 )
+PASS hr-convert.py refuses a key and manifest mismatch (item kind) (exit 2: E_USAGE hr-convert: 1 kept units have key.json items or traces that do not match the manifest )
+PASS hr-convert.py refuses a key and manifest mismatch (trace) (exit 2: E_USAGE hr-convert: 1 kept units have key.json items or traces that do not match the manifest )
+PASS hr-convert.py refuses a row not in state final (exit 2: E_USAGE hr-convert: 1 manifest rows are not in state final )
+PASS hr-convert.py refuses a unit with kept false (exit 2: E_USAGE hr-convert: 1 manifest rows are not kept )
+PASS hr-convert.py refuses a dry-run seed with a final slice (exit 2: E_USAGE hr-convert: a dry-run seed is honored only for a slice whose seal_kind is dry-run )
+PASS hr-convert.py refuses 7 units (exit 2: E_USAGE hr-convert: the slice is not 8 kept units, 2 a stratum )
+PASS hr-convert.py refuses 3 units in one stratum (exit 2: E_USAGE hr-convert: the slice is not 8 kept units, 2 a stratum )
+PASS hr-convert.py refuses a unit missing one of its three E0 shapes (exit 2: E_USAGE hr-convert: 1 units do not key one item of each of their stratum's three E0 shapes plus one anchor in A-X, A-F or A-T )
+PASS hr-convert.py refuses an anchor outside A-X, A-F and A-T (exit 2: E_USAGE hr-convert: 1 units do not key one item of each of their stratum's three E0 shapes plus one anchor in A-X, A-F or A-T )
+PASS hr-convert.py refuses two context anchors in a stratum (exit 2: E_USAGE hr-convert: 2 strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file p)
+PASS hr-convert.py refuses a src anchor whose file plan.md does not name (exit 2: E_USAGE hr-convert: 1 strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file p)
+PASS hr-convert.py refuses an anchor whose key.json anchor_place is not its anchor_type (exit 2: E_USAGE hr-convert: 1 strata or anchors break the anchor rule: one context anchor (evidence in context/) and one src anchor (evidence in a src/ file p)
+PASS hr-convert.py refuses a kept unit that excludes its anchor (exit 2: E_USAGE hr-convert: 1 kept units exclude their anchor; an anchor that still fails its fix round stops the build and goes to the Captain )
+PASS hr-convert.py refuses a symlink under a unit's src/ (exit 2: E_USAGE hr-convert: 1 entries under the kept units' context/ or src/ are symlinks, hidden paths or special files )
+PASS hr-convert.py refuses a hidden path under a unit's context/ (exit 2: E_USAGE hr-convert: 1 entries under the kept units' context/ or src/ are symlinks, hidden paths or special files )
+PASS hr-convert.py refuses a GPL base (exit 2: E_USAGE hr-convert: the slice's bases are not 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a 40-hex commit, two hosting one eng and one dx un)
+PASS hr-convert.py refuses a base at a short commit (exit 2: E_USAGE hr-convert: the slice's bases are not 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a 40-hex commit, two hosting one eng and one dx un)
+PASS hr-convert.py refuses 3 bases (exit 2: E_USAGE hr-convert: the slice's bases are not 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a 40-hex commit, two hosting one eng and one dx un)
+PASS hr-convert.py refuses a base hosting eng and ceo (exit 2: E_USAGE hr-convert: the slice's bases are not 4 distinct MIT, BSD-2-Clause or BSD-3-Clause repos at a 40-hex commit, two hosting one eng and one dx un)
+PASS hr-convert.py refuses a trace with 1 hop past the origin (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with fewer than 2 hops past the origin )
+PASS hr-convert.py refuses a trace whose hop files are one file (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with hop files that are not 2 or more distinct src/ files )
+PASS hr-convert.py refuses a trace with a hop outside src/ (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with hop files that are not 2 or more distinct src/ files )
+PASS hr-convert.py refuses a trace with a missing hop file (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with a hop file missing from the unit tree )
+PASS hr-convert.py refuses a hop file plan.md names with src/ (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with a hop file plan.md names, with or without its src/ prefix )
+PASS hr-convert.py refuses a hop file plan.md names without src/ (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with a hop file plan.md names, with or without its src/ prefix )
+PASS hr-convert.py refuses a terminal that is not the last hop's file (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with a terminal that is not the last hop's file, or a malformed origin, symbol, line or blob )
+PASS hr-convert.py refuses an added terminal file (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with an added terminal file (upstream_path null), with no upstream blob to differ from )
+PASS hr-convert.py refuses a terminal identical to the upstream blob (exit 2: E_USAGE hr-convert: 1 kept candidates have a trace with a terminal whose git hash-object equals the recorded upstream blob )
+PASS hr-convert.py refuses a unit over 491520 bytes (exit 2: E_USAGE hr-convert: 1 unit trees fall outside the size range (git ls-tree -r -t -l HEAD): bytes outside 307200 to 491520 1, blobs outside 150 to 600 0)
+PASS hr-convert.py refuses a unit under 307200 bytes (exit 2: E_USAGE hr-convert: 1 unit trees fall outside the size range (git ls-tree -r -t -l HEAD): bytes outside 307200 to 491520 1, blobs outside 150 to 600 0)
+PASS hr-convert.py refuses a unit over 600 blobs (exit 2: E_USAGE hr-convert: 1 unit trees fall outside the size range (git ls-tree -r -t -l HEAD): bytes outside 307200 to 491520 0, blobs outside 150 to 600 1)
+PASS hr-convert.py refuses a unit under 150 blobs (exit 2: E_USAGE hr-convert: 1 unit trees fall outside the size range (git ls-tree -r -t -l HEAD): bytes outside 307200 to 491520 0, blobs outside 150 to 600 1)
+PASS hr-convert.py refuses a unit under 12 trees (exit 2: E_USAGE hr-convert: 1 unit trees fall outside the size range (git ls-tree -r -t -l HEAD): bytes outside 307200 to 491520 0, blobs outside 150 to 600 0)
+    smoke unit: bytes 466494, blobs 266, trees 18; blockers 1
+PASS hr-convert.py --smoke builds the smoke suite planrev-v3-hr-smoke (1 1 units and blockers) and the mirror clone (exit 0)
+PASS hr-convert.py --smoke refuses an extra top-level file (exit 2)
+PASS hr-convert.py --smoke refuses a unit over 491520 bytes (exit 2)
+PASS hr-custody.sh build refuses with zero seal lines, before it decrypts (exit 2; log lines 0, 0 extractions)
+PASS hr-custody.sh build refuses with two seal lines for the bundle, before it decrypts (exit 2)
+PASS hr-custody.sh build refuses with one seal line for another sha256, before it decrypts (exit 2)
+PASS hr-custody.sh build refuses a bundle whose sha256 is not the argument, before it decrypts (exit 2)
+PASS hr-custody.sh build decrypts into /dev/shm, runs hr-build.sh (OS-random draw, no seed), logs one line with the suite sha256 and leaves nothing under /dev/shm (exit 0; 0 left)
+PASS hr-custody.sh's run root is mode 700 (700 wanted) with 0 open entries
+PASS hr-custody.sh --reaudit still runs as before (exit 0; 0 left)
+PASS 55, FAIL 0
