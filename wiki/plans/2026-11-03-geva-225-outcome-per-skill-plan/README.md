@@ -15,29 +15,30 @@ links:
   - src/runner/stats/gates.ts
 source: "Plan written by GEVA-225 through gstack /autoplan run autoplan-20261103023817 (rounds 1 and 2, gate_revs 1 to 4), approved at gate_rev 4. Issue GST-1144. The Implementation plan section is the approved text."
 attachments:
-  - 8bf164f962e212e1f12035a167fdb8bf4718905ad5ac0ebd8fa5a481fe504f50  cost.py
+  - 069c6c5e3202b7b863d48d210274e2d246d1d2c785d48555db40904f83756cb0  boundcheck.py
+  - 1ce669d3bc1408b4ac232552030d01756c74e26713c16375317dedd3782785a8  cost.py
   - 5e139f60e97f35c7569b348a882eca3a3ae74238052bda16801fcf39bea812cd  emit.py
   - a8783199c2ba931048b8ab045edccc9bbb37c9056ca1a0d4201e923bef82cc7d  export/ceo-consensus.json
-  - 3cc6ef2b786307fdfa62248c67c91facee27dd624f101970424b1a6e3d6979d1  export/ceo-consensus.md
+  - 7960f1951931b96315633081fd140acc490ae9b53abf40144e9e0f10557ac501  export/ceo-consensus.md
   - 7b8ff40b303716900e2d99746c676652ebdbfbde3c158f0bdb8cc09b7d741fa1  export/ceo-native.a1.bound.md
   - 2002fe2f57695f5792b1ea6a081f79c64cbac9936c079a41d335271351124a8d  export/ceo-native.a5.bound.md
   - 76302fc235017b8500e8a7ff3c0306bf232897d51f5b4dd0718f36047bf7bff2  export/decisions.jsonl
   - a13c5331c9723103c6e6c266beda6552a7fe176d8f4f105ed76ddfcb2e14dae8  export/design-consensus.json
-  - 19f84c449cbc3ecf7e6ef3b960b9c1e3ef15a0cf4132d2f1b3977e30db88ef05  export/design-consensus.md
+  - f361559434ab492f3f0b4d6b7a0c9e5e29f1439853c8f6705350f76504cfeb84  export/design-consensus.md
   - 8620222e1705c522c967933e8c6edd98412723077fb4f2e15eadecc40ae41408  export/design-deferred.findings.jsonl
   - 59452992c178c07108f5f4e25119c1cf13eb775ba779ceee59e7e9c433587a78  export/design-native.a2.bound.md
   - edb62d11430e42a99e149677217f416c7d4ebc6ac81d81cf1250f1bebfa6bb61  export/dx-consensus.json
-  - 09d6823371803bfef28a8c89c75a04aeda5ef9f59e6f1f770cebe95e622405ce  export/dx-consensus.md
+  - 87330d20b3a07ba1b4ef24eeb6d94fc559e07eacd56d5ef12fae05efd0f55e1e  export/dx-consensus.md
   - 5896ce894bc642d93a92c77f234e1d15492849ab86680185d8b183cccd0977d2  export/dx-deferred.findings.jsonl
   - 64a6e1a84ced700d4e4379c8cdb301ef23b5829b483a8588ed30b64afe5eb09b  export/dx-native.a3.bound.md
   - ef1f751fdce3b946e498f20466e27bd25928e98cfc9690e84744ab6de857cfd0  export/eng-consensus.json
-  - 3ed20c51a82d2f6721d8419138d8359003d15d085fbb3c493682f4e79d884098  export/eng-consensus.md
+  - a38107b1d6c0f609efdbfa5b7b59fcb5112558d4f742690176134c9ffffc36e9  export/eng-consensus.md
   - 5a355f851fe0a2d7146a449f800614e8d40e1641e87978f02f3e15048e9a6a34  export/eng-native.a4.bound.md
   - a88f4a2a9ea2f1073fa729ab3c6a00685266058f3583548480f4802051ce6328  export/eng-native.a6.bound.md
   - 58e47081d1a8438b03db647159ae3e234d1860cd645fe1f2dba5f43ae7cc9152  export/findings.jsonl
   - b0ca7fbcb9e549f764c0040b1162dd8a2cdf1ea692efa5b8904f4e7d8338c86d  export/gate.json
   - 23e4f822ce28ce74cef83152799bd33600bedaaf2d119ecdb1057826b980f1c8  export/plan.md
-  - a1df750fe68e9cce741b0e72195dcfab2b1799fafb634e4ef2fecaf6dee92da5  export/review-record.md
+  - f838799ed260f4093e47b3686a6e8991ae3dfd9731eae7ca4aa7280afeb3c3ca  export/review-record.md
   - 89dd13bd0aef8210811ca16e3cc74197cca29c475c8ab7e7e0a4196e5aff4ded  export/run.json
   - b0282337363738724403137afc5af835972e27fb5c85a2ebdf01684f2d7ce254  export/tasks.jsonl
   - cba4413319936196fb17b148b9e239c2c5b90004f42dc6cdc03a2cec956a2050  export/timing.json
@@ -46,7 +47,7 @@ attachments:
   - 2781d57961c83fe137d7beea2773bfbd3c95deeabb5cdd54c78dbb82a2ebe690  power.py
   - 260f1dd6c50c01fce64d40831b11e1d033516e2db47937e77d0bdabbb78d88ea  probes.md
   - 5883ddd609cafa62a69ac75c84fb165c909545ad1c0bbc2c5b16adc4c49df874  sizing.sh
-  - 4044212b8f82e8bd5416e3c25ce09b8dce1d4b0ed1d2ef85345a178a6729dfd5  sizing.txt
+  - 969c6465edf47b8b2aec8cb3a4c642201defd6b19a6b26c14bbdac5529a0a668  sizing.txt
   - 64b05e7c5652a9f9549004eba218b6c11986e7b485094a4ad2906b40cbfc0624  survivor.py
 ---
 
@@ -72,7 +73,7 @@ Design's 12 and DX's 16 open findings, and the round-2 Mediums and Lows that no 
 - cost.py, survivor.py and emit.py: the keyless price model behind section 8. sizing.sh runs every case the plan cites, and sizing.txt holds the lines it printed. Run bash sizing.sh in this folder; it needs only Python 3.
 - power.py and mddgrid.py: the keyless power simulation (numpy and scipy) and the script that wrote mdd-grid.json, the MDD grid sections 7 and 8 read.
 - probes.md: the four $0 probes from section 10, with their scripts and results.
-- export/: the /autoplan run's public export (gstack-autoplan export --public on gstack 1.93.34.0): the run record, the review record, every bound review, the findings, tasks, decisions and the gate. Two files are redacted because they held the project owner's own words, which stay in the Captain drive: the owner_reply fields in decisions.jsonl and one quoted line in ceo-native.a5.bound.md. Everything else is as exported.
+- export/: the /autoplan run's public export (gstack-autoplan export --public on gstack 1.93.34.0): the run record, the review record, every bound review, the findings, tasks, decisions and the gate. Two files are redacted because they held the project owner's own words, which stay in the Captain drive: the owner_reply fields in decisions.jsonl and one quoted line in ceo-native.a5.bound.md. Five more differ only in punctuation: em dashes became hyphens in ceo-consensus.md, design-consensus.md, dx-consensus.md, eng-consensus.md and review-record.md, for the repo's style. For these seven files run.json's digests are the exporter's, and the attachments list holds the committed ones. Everything else is as exported.
 
 ## Implementation plan
 
@@ -114,7 +115,7 @@ Proxy evals kept ending at a ceiling or with zero exposure. The real-world outco
 - d8 (Eng F2): forced and exposed-told price rows, told sessions metered by exposure at admission, and a pin frozen at admission (sections 6 and 8).
 - d9 (Eng F3): a crew line of $1.20 per valid task inside authoring, and two preregs per family inside the $70 line (section 8).
 
-Under d7's fixed order (particle-1, then trials, then tasks), every lone survivor passes the 20-point bound at house prices, so a family whose other skill stops ends both skills as FIX-METHOD (price).
+Under d7's fixed order (particle-1, then trials, then tasks), every lone survivor passes the 20-point bound at house prices against the $1,700 re-size line (section 8), so a family whose other skill stops ends both skills as FIX-METHOD (price).
 
 A carry check on this delta (gate_rev 3) found three problems, and the Captain had them fixed in one round. The survivor search had replaced d7's fixed order, the envelope ignored open reservations, and U's and X's cost cut compared a fractional gain with a pass-or-fail break-even. v3 restores d7's order, makes the envelope admit and reserve each paid stage atomically (O6), and reads U's and X's cost from the ratio's interval alone.
 
@@ -401,7 +402,7 @@ One line per skill, planned dollars (authoring includes the crew line; parts are
 
 plan-eng-review plans well under its cap because autoplan shares its panel: a larger G panel would push autoplan past its plan.
 
-**Stand-in and particle-1 rows.** Under the 2-point rule they fit only on plan-eng-review at house prices. Adding both there would take wave 1 to $9,811, raise plan-eng-review's told minus none MDD to 20.4 (Holm, alpha 0.025) and autoplan's to 19.8, and leave $189 of the envelope unplanned (cost.py's chosen design). The pair passes the 20-point bound, so wave 1's plan has neither. Before any spend on either row, the G prereg rechecks the 2-point fit at admission's metered prices and particle-1's metered ratio, stand-in first, and adds a row only if it also stays under the bound and inside the envelope.
+**Stand-in and particle-1 rows.** Under the 2-point rule they fit only on plan-eng-review at house prices. Adding both there would raise plan-eng-review's told minus none MDD to 20.4, past the 20-point bound. The stand-in alone fits: plan-eng-review at 54 x 4 with an MDD of 19.2 (Holm, alpha 0.025), autoplan at 42 x 4 with 19.8, wave 1 at $9,713 and $287 of the envelope unplanned (cost.py's chosen design, stand-in first; boundcheck.py checks the bound both ways). Wave 1's plan still has neither row. Before any spend on either row, the G prereg rechecks the 2-point fit at admission's metered prices and particle-1's metered ratio, stand-in first, and adds a row only if it also stays under the bound and inside the envelope.
 
 **The cost-per-solved guard.** The guard binds every told skill, in #169's form: the upper bound of the 95% interval of told's cost per solved task over none's must be at most 1.5 (#169's G3 definition, which O4 reuses). The break-even gain is the gain at which told's cost per solved task equals 1.5 times none's: p times (m / 1.5 minus 1), with p the control rate and m told's session multiple. At p = 0.5 that is the column above. For U and X the gain is on the pass-or-fail solve the cost figure counts (section 3), not on the fractional primary, so it is a planning figure and is never compared with the primary's interval. design-review breaks even only if told solves every task, and autoplan would need 117 points, so autoplan can't pass the guard at its central price whatever its gain. At the forced price (1.15 times told) the gains rise to +34 for plan-eng-review, +42 for plan-devex-review and plan-design-review and +46 for devex-review, and design-review and autoplan can't reach theirs. Section 9 turns the ratio into a verdict. Whether 1.5 times on hidden-test solves is the right bar for a told skill goes to the project owner before G admission (section 16).
 
@@ -432,7 +433,7 @@ At 1.15 times every row stays under the bound. At 1.5 times G's two rows and des
 
 At 10 times no row stays under the bound, so every skill would stop at its projection check after admission and spend nothing on bulk work. With the crew line at TS's full rate, only X stays under it.
 
-**One survivor per family.** When one skill of a family stops at admission or at its futility look, the survivor pays every shared cost not yet spent: bulk authoring, screening, the whole none arm and the prereg thread. The re-size rule is d7's fixed order, with no search: drop the particle-1 row first, then trials, then tasks, one step at a time, until the survivor fits its plan (survivor.py). Wave 1's plan has no particle-1 row, so trials go first. A survivor whose MDD passes the 20-point bound stops as FIX-METHOD (price).
+**One survivor per family.** When one skill of a family stops at admission or at its futility look, the survivor pays every shared cost not yet spent: bulk authoring, screening, the whole none arm and the prereg thread. The re-size rule is d7's fixed order, with no search: drop the particle-1 row first, then trials, then tasks, one step at a time, until the survivor fits its plan (survivor.py). Its plan is the $1,700 line every design in this section is sized to, which keeps at least $300 of each skill's $2,000 as reserve. Wave 1's plan has no particle-1 row, so trials go first. A survivor whose MDD passes the 20-point bound stops as FIX-METHOD (price). That includes plan-eng-review at house prices: alone at 60 x 3 it costs $1,804, over the $1,700 line, so it re-sizes to 60 x 2 with an MDD of 21.6. So if autoplan fails admission, plan-eng-review stops as a lone survivor, and the project owner's keep-until-read decision on it (GST-1218) stays open until a later wave.
 
 | Skill | Planned with both | Alone at that size | Re-size alone | MDD | Re-size's price |
 |---|---|---|---|---|---|

@@ -18,13 +18,13 @@ grid x1.2:
 90 3 15.0 16.2
 84 4 13.8 15.0
 == the 2-point rule's extra rows at house central (chosen)
-plan-eng-review | G | n 48 x 4 | MDD 20.4 | planned 1695 | crew 160, authoring 223, screening 177, admission 64, Opus confirmatory 771 (none share 111, told 417, stand-in 243), particle-1 300, reserve 305
+plan-eng-review | G | n 54 x 4 | MDD 19.2 | planned 1549 | crew 160, authoring 249, screening 199, admission 64, Opus confirmatory 877 (none share 135, told 469, stand-in 273), reserve 451
 plan-devex-review | X | n 78 x 3 | MDD 15.6 | planned 1593 | crew 160, authoring 412, screening 134, calibration 10, admission 81, Opus confirmatory 796 (none share 161, told 635), reserve 407
-autoplan | G | n 42 x 4 | MDD 19.8 | planned 1588 | crew 160, authoring 223, screening 177, admission 128, Opus confirmatory 900 (none share 86, told 814), reserve 412
+autoplan | G | n 42 x 4 | MDD 19.8 | planned 1636 | crew 160, authoring 249, screening 199, admission 128, Opus confirmatory 900 (none share 86, told 814), reserve 364
 devex-review | X | n 78 x 3 | MDD 15.6 | planned 1617 | crew 160, authoring 412, screening 134, calibration 10, admission 83, Opus confirmatory 818 (none share 161, told 657), reserve 383
 plan-design-review | U | n 60 x 3 | MDD 18.6 | planned 1657 | crew 185, authoring 322, screening 163, calibration 29, admission 110, Opus confirmatory 847 (none share 215, told 632), reserve 343
 design-review | U | n 54 x 3 | MDD 19.2 | planned 1661 | crew 185, authoring 322, screening 163, calibration 29, admission 124, Opus confirmatory 838 (none share 176, told 662), reserve 339
-wave1 planned 9811
+wave1 planned 9713
 grid x1.2:
 42 2 26.4 28.8
 48 2 24.6 27.0

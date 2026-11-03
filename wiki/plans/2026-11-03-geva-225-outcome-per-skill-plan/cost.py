@@ -29,7 +29,7 @@ CREW = {"G": 100 + 150 + 70, "U": 100 + 200 + 70, "X": 100 + 150 + 70}
 CALIB = {"G": 0.0, "U": 12 * 2 * 2 * MEAS["U"], "X": 12 * 2 * 2 * 0.40}
 FAM = {"G": ["plan-eng-review", "autoplan"], "U": ["plan-design-review", "design-review"],
        "X": ["plan-devex-review", "devex-review"]}
-CEIL, PLAN, SLICE = 2000.0, 1700.0, 12
+CEIL, PLAN, SLICE, BOUND = 2000.0, 1700.0, 12, 20.0
 NS = list(range(24, 121, 6))
 
 def costs(f, n, k, st, p1):
@@ -80,6 +80,9 @@ def best(f, st, p1):
                     top = (key, n, k, m, cs)
     return top
 
+def fits(b, base):
+    return max(b[3]) <= BOUND and all(b[3][i] <= base[3][i] + 2.0 for i in range(2))
+
 res = {}
 for f in FAM:
     base = best(f, (0, 0), (0, 0))
@@ -94,10 +97,10 @@ for f in FAM:
             b = best(f, st, p1)
             if b is None:
                 continue
-            if all(b[3][i] <= base[3][i] + 2.0 for i in range(2)):
-                adds = sum(st) + sum(p1)
-                cur = sum(choice[0]) + sum(choice[1])
-                if adds > cur or (adds == cur and b[0] < choice[2][0]):
+            if fits(b, base):
+                rank = (sum(st), sum(p1))
+                cur = (sum(choice[0]), sum(choice[1]))
+                if rank > cur or (rank == cur and b[0] < choice[2][0]):
                     choice = (st, p1, b)
     st, p1, b = choice
     res[f] = dict(base=dict(n=base[1], k=base[2], mdd=base[3], tot=[round(sum(c.values())) for c in base[4]],
