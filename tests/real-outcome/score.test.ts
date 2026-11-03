@@ -664,6 +664,7 @@ describe("detectors", () => {
       [oneLine, ['    if sys.platform == "win32": pytest.skip("not on windows")']],
       [block, ['    if sys.platform=="win32":  # posix only', '        pytest.skip(reason="posix")']],
       [['    if (sys.platform == "win32"', "            and not HAS_X):", '        pytest.skip("posix")'], ['    if (sys.platform == "win32" and not HAS_X): pytest.skip("posix")']],
+      [['    if sys.platform == "win32" and \\', "            not HAS_X:", '        pytest.skip("posix")'], ['    if sys.platform == "win32" and not HAS_X: pytest.skip("posix")']],
       [elif, ["    if HAS_X:", "        g()", '    elif not HAS_GPU: pytest.skip("no gpu")']],
       [["    if not HAS_X:", "        h()", '    pytest.skip("later")'], ['    pytest.skip("later")']],
     ];
@@ -691,9 +692,11 @@ describe("detectors", () => {
     const short = (header: string): string[] => ["\t" + header, '\t\tt.Skip("short")', "\t}"];
     const wide = short('if testing.Short() && runtime.GOOS == "windows" {');
     const goos = ['\tif runtime.GOOS == "windows" {', '\t\tt.Skip("posix")', "\t}"];
+    const split = ["\tif testing.Short() &&", '\t\truntime.GOOS == "windows" {', '\t\tt.Skip("short")', "\t}"];
     const goSame: [string[], string[]][] = [
       [short("if testing.Short() {"), short("if testing.Short() {")],
       [wide, wide],
+      [split, wide],
       [short("if testing.Short() {"), short("if testing.Short(){")],
       [short("if testing.Short() {"), ["\tif testing.Short() {", '\t\tt.Skip("slow")', "\t}"]],
       [short("if testing.Short() {"), ['\tif testing.Short() { t.Skip("short") }']],
@@ -704,6 +707,7 @@ describe("detectors", () => {
     const goChanged: [string[], string[]][] = [
       [short("if testing.Short() {"), short("if !testing.Short() {")],
       [wide, short("if testing.Short() {")],
+      [split, short("if testing.Short() {")],
       [short("if testing.Short() {"), ['\tt.Skip("short")']],
       [goos, ['\tt.Skip("posix")']],
       [["\tif HasGPU() {", '\t\tt.Skip("gpu")', "\t}"], ["\tif HasGPU() {", "\t\th()", "\t} else {", '\t\tt.Skip("gpu")', "\t}"]],
