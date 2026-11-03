@@ -19,7 +19,7 @@ Grade: exploratory. One rough scan of two archives, with no frozen detector and 
 
 ## What we found
 
-We scanned 899 archived agent sessions for tool calls that added nothing: a re-run with nothing new, a re-read of unchanged text, a duplicate reviewer, a repeated poll. We found 4 such calls in 14,036, and none in any no-gstack cell. The Opus 5.5 no-gstack control rate is 0 of 381 calls in Run D and 0 of 1,009 in stacks round 1. Every paired task difference is 0, so no minimum detectable difference (MDD) can be computed.
+We scanned 899 archived agent sessions for tool calls that added nothing: a re-run with nothing new, a re-read of unchanged text, a duplicate reviewer, a repeated poll. We found 4 such calls in 14,036, and none in any no-gstack cell. The Opus 5.5 no-gstack control rate is 0 of 381 calls in Run D and 0 of 1,009 in stacks round 1. Every no-gstack model pair and every gstack-against-none pair has a paired task difference of 0, so no minimum detectable difference (MDD) can be computed.
 
 The plan for this work said a waste comparison needs room: an Opus no-gstack share of at least 2%, or 5% in some cell. The archives are far below that. So the waste comparison planned on the transcripts of GST-1089, a planned paid comparison of these three models inside Claude Code, is dropped, and the question moves to where the waste showed up: multi-hour crew ship pipelines.
 
@@ -84,7 +84,7 @@ The normalized R1 reading gives the same counts. No R3, R4a or R6 call fired any
 | particle-1 | none | 27 | 52% | 4% |
 | particle-1 | gstack | 25 | 56% | 0% |
 
-The two columns rank the models in opposite orders. U1 depends on which commands the list knows, and Sol likely checks its work with commands the list misses. This post makes no claim about models from U1. stacks round 1's review sessions almost never edit (8 Write calls in all), so U1 there rests on 3 sessions and is not shown.
+The two columns rank the models differently: Opus 5.5 has the lowest U1 rate and the highest no-Bash rate. U1 depends on which commands the list knows, and Sol likely checks its work with commands the list misses. This post makes no claim about models from U1. stacks round 1's review sessions almost never edit (8 Write calls in all), so U1 there rests on 3 sessions and is not shown.
 
 ## Cost
 
@@ -94,7 +94,7 @@ Paid model calls: $0. The scan used 1.9M host tokens (1,347 Capy credits, about 
 
 - **Exposure.** The question is about the models' own habits, and the gstack arms ran with gstack loaded as the Run D and stacks round 1 posts report. gstack and none both sat at 0, so gstack had nothing to cut. Exposure doesn't decide this.
 - **Task fit.** Poor. Single-task benchmark sessions of 5 to 67 calls on average leave little to repeat. The waste we wanted to measure lives in multi-session ship pipelines.
-- **Power and floor.** Floor. The control rate is 0 of 381 calls (Opus none, Run D) and 0 of 1,009 (Opus none, stacks round 1). Every paired difference is 0, so the MDD is undefined, and the room rule fails on its own.
+- **Power and floor.** Floor. The control rate is 0 of 381 calls (Opus none, Run D) and 0 of 1,009 (Opus none, stacks round 1). Every no-gstack model pair and every gstack-against-none pair has a paired difference of 0, so the MDD is undefined, and the room rule fails on its own.
 - **Frontier competence.** Opus 5.5 without gstack made no wasted call by these rules in 1,390 calls across both archives.
 - **Verdict: FIX-METHOD** (floor and task fit). This is not a CUT-CANDIDATE for any gstack skill, because the scan never had room to see an effect.
 
