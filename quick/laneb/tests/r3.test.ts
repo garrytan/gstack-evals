@@ -477,7 +477,7 @@ describe("R3 screen and admission", () => {
       writeFileSync(join(w, name, "plan.json"), "{}");
       return join(w, name);
     };
-    const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "1", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", LEDGER_PORT: String(20000 + Math.floor(Math.random() * 20000)), ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+    const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "1", UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", LEDGER_PORT: String(20000 + Math.floor(Math.random() * 20000)), ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
     const run = (d: string) => Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", d], { env });
     run(prep("a"));
     expect(readFileSync(join(w, "a", "screen.launch-exit"), "utf8").trim()).toBe("1");
