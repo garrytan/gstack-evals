@@ -190,6 +190,21 @@ describe("thread exports", () => {
     expect(s.pushed_head_checks.calls).toBe(1);
   });
 
+  test("pr_create after a tree change resets to its machine and no directory", () => {
+    const s = scan(run([bash("cd repo-a && git push")]), run([tool("edit", { path: "f" })]), run([tool("pr_create", { title: "t" })]), run([bash("bun test", "ok")]));
+    expect(s.pushed_head_checks.calls).toBe(1);
+  });
+
+  test("a check in the pushed directory after a tree change and pr_create is not at the pushed head", () => {
+    const s = scan(run([bash("cd repo-a && git push")]), run([tool("edit", { path: "f" })]), run([tool("pr_create", { title: "t" })]), run([bash("cd repo-a && bun test", "ok")]));
+    expect(s.pushed_head_checks.calls).toBe(0);
+  });
+
+  test("pr_create from the primary after a push on a subagent resets to the primary", () => {
+    const s = scan(run([bash("git push", "ok", { machine: { subagent: "1" } })]), run([tool("pr_create", { title: "t" })]), run([bash("bun test", "ok")]));
+    expect(s.pushed_head_checks.calls).toBe(1);
+  });
+
   test("a check in another directory after pr_create is not at the pushed head", () => {
     const s = scan(run([bash("cd repo-a && git push")]), run([tool("pr_create", { title: "t" })]), run([bash("cd repo-b && bun test", "ok")]));
     expect(s.pushed_head_checks.calls).toBe(0);

@@ -572,11 +572,14 @@ export function scanSession(items: ExportItem[]) {
     polls.clear();
     const toSubagent = c.tool === "message_agent" && (c.inputCut || /^\d+(\.\d+)*$/.test(String(json(c.input)?.to ?? "")));
     if (TREE_TOOLS.has(c.tool) || AGENT_TOOLS.has(c.tool) || toSubagent) {
+      const index = c.tool === "pr_create" ? json(c.input)?.index : undefined;
+      const from = JSON.stringify(index === undefined ? "primary" : { subagent: String(index) }) + "\u0000";
+      const keep = pushedEpoch === epoch && pushedAt.startsWith(from);
       epoch++;
       strictEpoch++;
       if (c.tool === "pr_create" && !c.isError) {
         pushedEpoch = epoch;
-        pushedAt ||= JSON.stringify("primary") + "\u0000";
+        if (!keep) pushedAt = from;
       }
     }
   }
