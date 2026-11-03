@@ -239,9 +239,9 @@ allowance, above 32,000 tokens). A provider pin applies only when it names the p
 routes OpenRouter calls to the row's providers and has no per-run pin. An endpoint, credential or proxy failure is
 E_ROUTE_INFRA (exit 2). It never passes a part and uses no try. That covers a provider's 401, 402, 403, 408 or 429, a
 call with no outcome line, an unknown outcome such as a broken stream, a 5xx with no usage, a session with no billed
-call, and a bill lookup that still fails at the deadline. A session that ends after model output is infra too when its
-last call got one of those statuses, a 5xx, no answer or a proxy refusal. A provider's other 4xx on a session's own call
-fails the part that session serves. The second infra outcome ends the check INCONCLUSIVE (E_ROUTE_INCONCLUSIVE, exit 2),
+call, and a bill lookup that still fails at the deadline. A session that fails its part after model output is infra too
+when its last call got one of those statuses, a 5xx, no answer or a proxy refusal; one that passes still passes. A
+provider's other 4xx on a session's own call fails the part that session serves. The second infra outcome ends the check INCONCLUSIVE (E_ROUTE_INCONCLUSIVE, exit 2),
 which blocks the route from E1, unless a part failed both tries.
 
 The check's cap is four sessions at the model's full allowance, and each try leases its own worst case on the item. A cap
