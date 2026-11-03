@@ -69,6 +69,16 @@ describe("the read audit (GEVA-203, keyless)", () => {
     for (const arm of ["none", "gstack"] as const) expect([arm, audit(simple, arm)]).toEqual([arm, [{ tool: "Bash", class: "capy", target: DRIVE_SHOWN, error: true, contaminated: false }]]);
   });
 
+  // Value: protects=R2S1 (#166 /ship round 2, the Captain's ruling on GST-1121): only ;, &&, ||, | and a background & separate commands (a newline, a subshell and a command substitution run commands of their own too), and the & or | of a redirection such as 2>&1 separates nothing, so a failed `ls <path> 2>&1` in a none or lens arm reads clean while every real compound that errors stays contaminated; fails_when=a redirection makes a simple command compound, so one failed ls marks the arm untested, or a real compound loses its touches on error; why_new=GST-1121 (R2S1, a regression from round 1's O1 fix); seam=auditTranscript's error rule for Bash; no_claim=quoting, which the rule does not read
+  test("R2S1: an errored simple command with a redirection reads clean; an errored compound stays contaminated", () => {
+    const failed = (id: string, content: string): Msg => ({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content, is_error: true }] }, parent_tool_use_id: null, session_id: "s" });
+    const skills = join(HOME, ".claude", "skills", "gstack", "SKILL.md");
+    const shown = "~/.claude/skills/gstack/SKILL.md";
+    const touch = (command: string) => audit(ndjson(call("t1", "Bash", { command }), failed("t1", "ls: cannot access: No such file or directory")), "none").map((t) => [t.target, t.error, t.contaminated]);
+    for (const command of ["ls " + skills + " 2>&1", "ls " + skills + " 2>/dev/null", "cat " + skills + " >&2", "cat " + skills + " 1>&-", "cat " + skills + " &>/dev/null", "cat " + skills + " &>>log", "cat " + skills + " >|out", "cat " + skills + " 0<&3"]) expect([command, touch(command)]).toEqual([command, [[shown, true, false]]]);
+    for (const command of ["ls " + skills + " 2>&1 | head -5", "cat " + skills + " 2>&1; false", "cat " + skills + " && false", "cat " + skills + " || false", "cat " + skills + " |& head", "cat " + skills + " &", "cat " + skills + " & false", "cat " + skills + "\nfalse", "(cat " + skills + ")", "echo $(cat " + skills + ")", "echo `cat " + skills + "`"]) expect([command, touch(command)]).toEqual([command, [[shown, false, true]]]);
+  });
+
   // Value: protects=a subagent's tool call (parent_tool_use_id set) is audited the same as the main agent's; fails_when=a none arm launches a subagent that reads a skill or drive file and stays clean; why_new=audit.ts reads every tool call, the main agent's and each subagent's; seam=auditTranscript over sidechain messages; no_claim=a subagent whose transcript is written elsewhere
   test("a subagent's call counts the same as the main agent's", () => {
     const text = ndjson(call("a1", "Agent", { description: "Read the plan", prompt: "Read plan.md and summarize it." }), call("t1", "Read", { file_path: SKILL }, "a1"), result("t1", false, "a1"), call("t2", "Read", { file_path: DRIVE }, "a1"), result("t2", false, "a1"), result("a1"));
