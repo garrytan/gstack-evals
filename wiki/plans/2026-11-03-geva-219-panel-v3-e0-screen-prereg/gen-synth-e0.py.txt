@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+# gen-synth-e0.py <out dir> <seed>: a synthetic public calibration slice in the sealed slice's layout (GEVA-217):
+# assignment.json, manifest.json, units/<ID>/ (24 units, 6 per stratum), audit/O/, audit/S/ and fix/. Every word is
+# invented neutral filler; the units pass the kit's check_units.py --wave calibration. Two items are excluded in the
+# manifest (C-U2, E-OM, G-A11Y) and three units are flagged (failing_unit_codes: 2 ceo, 1 eng), the frozen shape.
+import json, os, random, sys
+out, seed = os.path.abspath(sys.argv[1]), int(sys.argv[2])
+rng = random.Random(seed)
+KIT = "6f21a709317f889b2472cc1e3f0637b36e4057499c12da7a5e31e055b83e0722"
+KINDS = {"ceo": [("C-Q", ("H2", "QT")), ("C-U2", ("H2", "QT")), ("C-OM", ("OM", "H2"))],
+         "eng": [("E-CD", ("CD", "H2")), ("E-OM", ("OM", "QT")), ("E-Q", ("QT", "H2"))],
+         "dx": [("X-OM", ("OM", "H2")), ("X-CD", ("CD", "QT")), ("X-Q", ("QT", "H2"))],
+         "design": [("G-OM", ("OM", "QT")), ("G-A11Y", ("H2", "QT")), ("G-X", ("H2", "QT"))]}
+FIELD = {"H2": "intermediate", "QT": "computation", "OM": "absent_step", "CD": "code_fact"}
+SHAPES = ["A-X", "A-F", "A-T"]
+WORDS = ["The north office restocked the paper trays on Tuesday and logged the delivery in the shared sheet.",
+         "Lunch orders for the Thursday session go to the front desk by ten in the morning.",
+         "The parking garage on the east side closes for repainting during the second week of the month.",
+         "Badge photos are retaken every two years, and the old badges are shredded at the front desk.",
+         "The quarterly offsite moved to the lakeside venue because the usual hall was booked.",
+         "New laptops arrive with the standard image, and the help desk enrolls them the same afternoon.",
+         "The shared calendar lists every recurring meeting with its room and its usual attendees.",
+         "Coffee beans are ordered from the same roaster each month, and the invoice goes to facilities.",
+         "The weekly digest summarises shipped work and is posted in the team channel on Fridays.",
+         "Desk moves are scheduled after hours so that nobody loses a working day to the move.",
+         "The printer on the third floor takes larger paper, and its toner is kept in the supply room.",
+         "Visitors sign in at reception and receive a paper pass that they return when they leave."]
+HEADS = ["Summary", "Context", "Goals", "Approach", "Sequence", "Staffing", "Timeline", "Budget", "Milestones",
+         "Dependencies", "Measurement", "Rollout", "Support", "Communication", "Scope", "Operations"]
+def para(n):
+    s = ""
+    while len(s) < n: s += rng.choice(WORDS) + " "
+    return s.strip() + "\n"
+def write(p, t):
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w") as fh: fh.write(t)
+ids = []
+while len(ids) < 24:
+    i = "%08x" % rng.getrandbits(32)
+    if i not in ids: ids.append(i)
+strata = [s for s in ("ceo", "eng", "dx", "design") for _ in range(6)]
+rows, assign = [], []
+for n, (uid, st) in enumerate(zip(ids, strata)):
+    d = os.path.join(out, "units", uid)
+    mode = "added" if n % 2 == 0 else "fix"
+    shape = SHAPES[n % 3]
+    heads = rng.sample(HEADS, 8)
+    has_src = st != "design"
+    nctx = 8 if has_src else 12
+    for c in range(nctx):
+        ext = [".md", ".txt", ".csv"][c % 3]
+        body = ("# Working note %d\n\n" % c + para(2700)) if ext != ".csv" else "week,office,count\n" + "".join("%d,north,%d\n" % (w, rng.randint(10, 99)) for w in range(1, 300))
+        write(os.path.join(d, "context", "doc%d%s" % (c, ext)), body)
+    if has_src:
+        for c in range(4):
+            write(os.path.join(d, "src", "mod%d.py" % c), "def handler_%d(event):\n    # Sum the quantities on the event rows.\n    total = 0\n" % c + "    total += len(event)\n" * 50 + "    return total\n")
+    plan = "# Plan for the next quarter\n\n"
+    for k, h in enumerate(heads):
+        extra = "The work changes src/screens/OrderSummary.tsx and src/screens/OrderStatus.tsx.\n\n" if st == "design" and k == 0 else ""
+        plan += "## %s\n\n%s%s\n" % (h, extra, para(1000))
+    write(os.path.join(d, "plan.md"), plan)
+    def ev(levers):
+        third = "src/mod1.py" if "CD" in levers else "context/doc3%s" % [".md", ".txt", ".csv"][0]
+        return [{"path": "context/doc1.txt", "what": "A synthetic row."}, {"path": "context/doc4.txt", "what": "A synthetic row."}, {"path": third, "what": "A synthetic fact."}]
+    items = []
+    for k, (kind, levers) in enumerate(KINDS[st] + [(shape, ())], 1):
+        it = {"id": "%s-%d" % (uid, k), "item_kind": kind, "role": "anchor" if not levers else "candidate", "levers": list(levers),
+              "plan_section": heads[k - 1], "cause": "Synthetic cause for a %s item." % kind, "evidence": ev(levers),
+              "deserved_severity": "High", "fix": "Synthetic fix."}
+        for lv in levers: it[FIELD[lv]] = "Synthetic %s for a %s item." % (FIELD[lv].replace("_", " "), kind)
+        if kind in ("C-Q", "C-U2"): it.update(decision="Synthetic decision.", should_become="Synthetic replacement decision.")
+        if kind == "A-X": it["other_places"] = [heads[4]]
+        items.append(it)
+    key = {"unit": uid, "wave": "calibration", "stratum": st, "kind": "calibration", "mode": mode, "anchor_shape": shape, "items": items,
+           "minors": [{"plan_section": heads[5], "issue": "A vague owner.", "deserved_severity": "Medium"}, {"plan_section": heads[6], "issue": "A metric without a baseline.", "deserved_severity": "Low"}]}
+    write(os.path.join(d, "key.json"), json.dumps(key, indent=1) + "\n")
+    excl = [items[1]["id"]] if n in (1, 7, 19) else []
+    kept = True
+    for a in ("O", "S"): write(os.path.join(out, "audit", a, uid + ".json"), json.dumps({"unit": uid, "auditor": a, "verdict": "PASS" if kept else "FAIL"}) + "\n")
+    rows.append({"unit": uid, "stratum": st, "author": "A%d" % (n % 4), "auditor": "O", "mode": mode, "anchor_shape": shape,
+                 "items": {it["id"]: [it["item_kind"], it["role"]] for it in items}, "audit_files": ["audit/O/%s.json" % uid, "audit/S/%s.json" % uid],
+                 "audit_rounds": 1, "fix_rounds_used": 0, "latest_fix_reaudited": True, "verdict": "PASS" if kept else "FAIL",
+                 "failing_items": [], "failing_unit_codes": ["synthetic-flag"] if n in (0, 2, 6) else [], "excluded_items": excl,
+                 "kept": kept, "state": "final", "notes": ""})
+    assign.append({"unit": uid, "stratum": st, "mode": mode, "anchor_shape": shape, "author": "A%d" % (n % 4)})
+write(os.path.join(out, "fix", "round-1.json"), json.dumps({"units": []}) + "\n")
+write(os.path.join(out, "assignment.json"), json.dumps({"wave": "calibration", "units": assign}, indent=1) + "\n")
+man = {"auditor_S_note": "synthetic", "counts": {"units": 24, "kept": 24, "excluded_items": 3, "dropped_items": 3, "kept_items_by_stratum": {s: sum(len(r["items"]) - len(r["excluded_items"]) for r in rows if r["stratum"] == s) for s in ("ceo", "eng", "dx", "design")}},
+       "drop_rule": "Synthetic: an item that fails its re-audit is excluded; its unit keeps its other items.", "first_pass": {"pass": 24, "fail": 0},
+       "fix_files": ["fix/round-1.json"], "kit_digest": KIT, "lever_held_latest": {}, "recipient": "synthetic-recipient", "seal_kind": "final",
+       "units": rows, "wave": "calibration"}
+write(os.path.join(out, "manifest.json"), json.dumps(man, indent=1) + "\n")
+print("synthetic slice: 24 units, 96 items, 3 excluded candidates, 3 flagged units")

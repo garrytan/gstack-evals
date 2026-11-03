@@ -1,0 +1,287 @@
+#!/usr/bin/env bun
+// e0-dryrun.ts: keyless dry run of the panel v3 E0 preregistration (GEVA-219). Drives the frozen rules through the pinned
+// scorer on a synthetic slice: (a) the pin; (b) gen-synth-e0.py, the kit's check_units.py, build-e0.sh and its refusals;
+// (c) review-units --dry-run with the frozen commands; (d) real stops through the real SDK, CLI and metering proxy
+// (e0-stops.ts) and judge-packet on those arms; (g) the ledger, one lease per item; (e) judge-packet over synthetic arms,
+// judge-run --dry-run per judge item, the combine rule and kappa; (f) rule edges; (h) the start rule; (i) the read audit;
+// (j) a leak check; (k) the readings end to end in e0-e2e.ts, its own process. Every unit, finding and judgment is synthetic. Writes e0-dryrun.txt beside itself.
+//   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun e0-dryrun.ts <scorer> <scratch>
+import { createHash, randomBytes } from "node:crypto";
+import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+const [scorer, OUT] = process.argv.slice(2).map((p) => resolve(p)) as [string, string];
+const HERE = import.meta.dir;
+const BRIEF = join(HERE, "judge-brief-v3.md");
+const PIN = "b7b6aeccec868e5127e951b187ca4b637da13114";
+const HOME = process.env.HOME ?? "";
+const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) as Record<string, string>;
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
+const lines: string[] = [];
+let pass = 0, fail = 0, IDS: string[] = [];
+const scrub = (t: string) => {
+  let s = t.replaceAll(OUT, "$OUT").replaceAll(scorer, "$SCORER").replaceAll(HERE, "$BUNDLE").replaceAll(HOME, "~");
+  for (const id of IDS) s = s.replaceAll(id, "<unit>");
+  return s.replace(/packets\/[^\s"']+\.json/g, "packets/<n>.json").replace(/panel\/plans#\d+(@[0-9a-f]+)?/g, "<unit>").replace(/\be0-\d+-\d+\b/g, "<case>").replace(/plans-\d+-[0-9a-f]+/g, "<unit>").replace(/unit-\d+\b/g, "<unit>");
+};
+const say = (t: string) => lines.push(scrub(t));
+const check = (label: string, ok: boolean) => { ok ? pass++ : fail++; say((ok ? "PASS " : "FAIL ") + label); };
+const run = (cmd: string[], cwd = scorer, env = KEYLESS) => spawnSync(cmd[0]!, cmd.slice(1), { encoding: "utf8", cwd, env, maxBuffer: 1 << 28 });
+const section = async (title: string, fn: () => Promise<void> | void) => {
+  say("\n## " + title);
+  try { await fn(); } catch (e) { check(title + ": ran to the end (threw " + (e instanceof Error ? e.message.split("\n")[0] : String(e)) + ")", false); }
+};
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const R = await import(join(HERE, "e0-readings.ts"));
+const { loadSuite } = await import(join(scorer, "lanes/review-noloss/suite.ts"));
+const { nolossCli } = await import(join(scorer, "lanes/review-noloss/cli.ts"));
+const noloss = async (args: string[]) => { const o: string[] = [], e: string[] = []; const code = await nolossCli(args, { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }); return { code, out: o.join("\n"), err: e.join("\n") }; };
+const SL = join(OUT, "slice"), RUN = join(OUT, "run"), SR = join(RUN, "sealed-root"), SUITE = join(SR, "suites/planrev-v3-e0.json"), SRC = join(RUN, "source/plans.git");
+let STOPS: any[] = [], REC = "", LENV: Record<string, string> = {};
+
+await section("a. Pin", () => {
+  const head = run(["git", "-C", scorer, "rev-parse", "HEAD"]).stdout.trim();
+  const dirty = run(["git", "-C", scorer, "status", "--porcelain", "--untracked-files=no"]).stdout.trim();
+  check("the scorer is at " + PIN + " with no tracked change", head === PIN && dirty === "");
+});
+
+await section("b. Synthetic slice, the kit's check, build-e0.sh and its refusals", async () => {
+  check("gen-synth-e0.py writes a slice in the sealed layout", run(["python3", join(HERE, "gen-synth-e0.py"), SL, "20261103"]).status === 0);
+  IDS = JSON.parse(readFileSync(join(SL, "manifest.json"), "utf8")).units.map((u: any) => u.unit);
+  const KIT = join(OUT, "kit");
+  mkdirSync(KIT);
+  for (const [f, t] of [["check_units.py.txt", "check_units.py"], ["echo-terms.txt", "echo-terms.txt"]]) cpSync(join(scorer, "wiki/plans/2026-11-02-geva-202-panel-v3-author-kit", f!), join(KIT, t!));
+  const c = run(["python3", join(KIT, "check_units.py"), join(SL, "units"), "--wave", "calibration"]);
+  const zero = (c.stdout.match(/^unit \S+ problems 0$/gm) ?? []).length;
+  check("the kit's check_units.py --wave calibration: " + zero + " of 24 units at problems 0 (exit " + c.status + ")", c.status === 0 && zero === 24);
+  const tar = join(OUT, "slice.tar");
+  run(["tar", "-cf", tar, "-C", SL, "."], OUT);
+  const wrong = run(["bash", join(HERE, "build-e0.sh"), tar, SL, join(OUT, "run-wrongsha"), scorer]);
+  check("build-e0.sh refuses a bundle whose sha256 is not the frozen ea69c111... (exit " + wrong.status + ")", wrong.status === 2 && /^E_USAGE build-e0: the bundle's sha256/m.test(wrong.stderr));
+  const b = run(["bash", join(HERE, "build-e0.sh"), tar, SL, RUN, scorer, sha(readFileSync(tar))]);
+  for (const l of b.stdout.split("\n").filter((l) => l.trim() && !/sha256/.test(l))) say("    " + l);
+  if (b.status !== 0) for (const l of b.stderr.split("\n").filter((l) => l.trim()).slice(-4)) say("    stderr: " + l.slice(0, 300));
+  check("build-e0.sh builds the synthetic slice, bound to its own sha256 by the dry-run-only fifth argument (exit " + b.status + ")", b.status === 0);
+  const open = readdirSync(RUN, { recursive: true }).filter((f) => statSync(join(RUN, String(f))).mode & 0o044).length;
+  check("build-e0.sh's run root is mode " + (statSync(RUN).mode & 0o777).toString(8) + " (0700 wanted), and " + open + " files or dirs under it are group- or world-readable", (statSync(RUN).mode & 0o777) === 0o700 && open === 0);
+  const um = run(["bash", "-c", "umask 0277 && python3 \"$0\" \"$1\" \"$2\"", join(HERE, "convert-e0.py"), SL, join(OUT, "run-umask")]);
+  check("convert-e0.py refuses a run dir it could not make mode 0700 (umask 0277; exit " + um.status + ": " + (um.stderr.split("\n")[0] ?? "").slice(0, 150) + ")", um.status === 2 && /not 0700/.test(um.stderr));
+  const s = loadSuite(SUITE, { sealedRoot: SR }).suite;
+  const kinds = JSON.parse(readFileSync(join(SR, "e0-kinds.json"), "utf8"));
+  const cand = kinds.blockers.filter((x: any) => x.role === "candidate");
+  check("the suite loads with the sealed root: 24 units, 93 blockers (24 anchors, 69 candidates), 12 blockers in 3 flagged units, and e0-kinds.json names the suite's sha256", s.units.length === 24 && s.units.flatMap((u: any) => u.blockers).length === 93 && kinds.blockers.length === 93 && cand.length === 69 && kinds.blockers.filter((x: any) => x.flagged).length === 12 && kinds.suite_sha256 === sha(readFileSync(SUITE)) && kinds.blockers.every((x: any) => !("codes" in x)));
+  const refuse = (label: string, mutate: (m: any, d: string) => void) => {
+    const d = join(OUT, "ref-" + label.replace(/\W+/g, "-"));
+    cpSync(SL, d, { recursive: true });
+    const m = JSON.parse(readFileSync(join(d, "manifest.json"), "utf8"));
+    mutate(m, d);
+    writeFileSync(join(d, "manifest.json"), JSON.stringify(m));
+    const r = run(["python3", join(HERE, "convert-e0.py"), d, d + "-run"]);
+    check("convert-e0.py refuses " + label + " (exit " + r.status + ": " + (r.stderr.split("\n")[0] ?? "").slice(0, 150) + ")", r.status === 2 && /^E_USAGE/.test(r.stderr));
+  };
+  refuse("a pending manifest", (m) => { m.seal_kind = "pending"; });
+  refuse("a bad kit digest", (m) => { m.kit_digest = "0".repeat(64); });
+  refuse("a key/manifest mismatch", (m, d) => { const k = join(d, "units", m.units[3].unit, "key.json"); const key = JSON.parse(readFileSync(k, "utf8")); key.items[0].item_kind = "C-OM"; writeFileSync(k, JSON.stringify(key)); });
+  refuse("a row not in state final", (m) => { m.units[5].state = "draft"; });
+  refuse("a unit with kept false", (m) => { m.units[5].kept = false; });
+  refuse("wrong counts (a fourth excluded candidate)", (m) => { m.units[4].excluded_items = [Object.keys(m.units[4].items)[0]]; });
+  refuse("wrong counts (a fourth flagged unit)", (m) => { m.units[12].failing_unit_codes = ["x"]; });
+});
+
+await section("c. The frozen commands (review-units --dry-run, paths swapped)", async () => {
+  const { MAX_TURNS } = await import(join(scorer, "src/adapters/claude-code/driver.ts"));
+  for (const [model, item, cap] of [["claude-opus-5-5", "e0-opus-none", "43.30"], ["particle-ai/particle-1", "e0-particle-none", "6.12"]] as const) {
+    const r = run([join(scorer, "bin/gstack-evals"), "review-units", "--suite", SUITE, "--arms", "none", "--models", model, "--passes", "2", "--sealed-root", SR, "--plan", "ceo", "--units", "all", "--source", "panel/plans=" + SRC, "--base-branch", "panel/plans=main", "--system-prompt", "none=claude-code-preset", "--parallel", "3", "--timeout", "3600", "--item", item, "--spend-cap", cap, "--out", join(OUT, "rundir", item), "--dry-run"]);
+    const o = r.stdout + r.stderr;
+    for (const l of o.split("\n").filter((l) => l.trim() && !/^\s+\S*(plans|<unit>|#)/.test(scrub(l))).slice(0, 9)) say("    " + l.slice(0, 260));
+    check(item + ": review-units --dry-run runs keyless (exit " + r.status + ")", r.status === 0);
+    check(item + ": 48 sessions", /sessions 48\b/.test(o));
+    check(item + ": the none arm's line on " + model, /arms: none \(/.test(o) && o.includes(model));
+    check(item + ": claude-code-preset appears in the plan", /claude-code-preset/.test(o));
+    check(item + ": 60 turns (no --max-turns; the driver's MAX_TURNS is " + MAX_TURNS + " and the dry run prints a max-turns line only when it differs)", MAX_TURNS === 60 && !/max turns/.test(o));
+    check(item + ": the spend cap prints as $" + cap, o.includes("$" + cap));
+    say("    timeout 3600 " + (/3600/.test(o) ? "printed" : "accepted, not printed by the pin's dry run") + "; parallel 3 " + (/parallel 3/.test(o) ? "printed" : "accepted, not printed") + "; item " + (o.includes(item) ? "printed" : "accepted, not printed (the dry run returns before it reads --item)"));
+  }
+});
+
+await section("d. Real stops: the real SDK and CLI against the real metering proxy with a scripted upstream", async () => {
+  const r = run(["bun", join(HERE, "e0-stops.ts"), scorer, SUITE, SRC, join(OUT, "stops"), "all"], HERE);
+  STOPS = r.stdout.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
+  check("e0-stops.ts ran as its own process (exit " + r.status + ")", r.status === 0);
+  const want: Record<string, string> = { block: "SCORED", noblock: "SCORED", turncap: "TURN_CAP", allowance: "ALLOWANCE", timeout_out: "TIMEOUT_OUT", timeout_pre: "GAP", upstream: "GAP" };
+  for (const [name, cls] of Object.entries(want)) {
+    const s = STOPS.find((x) => x.kind === "stop" && x.name === name);
+    if (!s || s.error) { check(name + ": the scenario ran" + (s?.error ? " (" + s.error + ")" : ""), false); continue; }
+    say("    " + name + ": main records " + s.termination + "; planScore " + s.planScore + "; arm.json " + s.status + (s.gaps ? ", " + s.gaps + " coverage gap" : "") + "; review-units stops [" + s.stops.join(", ") + "]; init " + s.init + "; e0-readings reads " + s.cls + (s.block ? " with a parsed block" : ""));
+    check(name + ": e0-readings's termination read gives " + cls + (name === "noblock" ? " with no parsed block (a miss)" : ""), s.cls === cls && (name !== "block" || s.block) && (name !== "noblock" || !s.block));
+  }
+  for (const name of ["block", "allowance", "timeout_pre"]) {
+    const s = STOPS.find((x) => x.kind === "stop" && x.name === name);
+    if (!s?.out) continue;
+    const p = await noloss(["judge-packet", "--suite", SUITE, "--arm", join(s.out, "arms", "none-opus"), "--seed", "20261103", "--out", join(OUT, "jp-" + name), "--key", join(OUT, "jp-" + name + ".key.json"), "--source", "panel/plans=" + SRC, "--sealed-root", SR]);
+    say("    judge-packet on the " + name + " arm (one unit of the suite" + (s.status === "stopped" ? ", arm.json stopped with a coverage gap" : "") + "): " + (p.code === 0 ? "accepted: " + p.out.split("\n")[0] : "refused (exit " + p.code + "): " + p.err.split("\n")[0]!.slice(0, 220)));
+  }
+});
+
+await section("g. Ledger: every frozen item at its cap, one lease opened and settled per item", async () => {
+  const { ledgerCli } = await import(join(scorer, "src/runner/ledger/cli.ts"));
+  const { openLease, settleLease, ledgerStatus } = await import(join(scorer, "src/runner/ledger/ledger.ts"));
+  const { openLocalLedger } = await import(join(scorer, "src/runner/ledger/local.ts"));
+  const { ledgerPath } = await import(join(scorer, "src/runner/ledger/paths.ts"));
+  const { rigAdmission } = await import(join(scorer, "src/rig/admission.ts"));
+  const { newRunId } = await import(join(scorer, "src/skill-eval/cli/call.ts"));
+  const LD = join(OUT, "ledger");
+  mkdirSync(LD);
+  REC = join(LD, "record");
+  writeFileSync(join(LD, "approvals-stub"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  LENV = { ...KEYLESS, GSTACK_EVALS_LEDGER_RECORD: REC, GSTACK_EVALS_LEDGER: join(LD, "local.sqlite"), GSTACK_EVALS_APPROVALS_BIN: join(LD, "approvals-stub") };
+  say("A temporary approval record and local ledger under $OUT/ledger; the gstack-approvals mirror is a stub. Leases use the pinned entry points' own openLease calls (review-units: amount = --spend-cap, rig admission proof trial; judge-run: proof direct), with --admission warn.");
+  const local = openLocalLedger(ledgerPath(undefined, LENV));
+  let calls = 0, settled = 0;
+  const warned: string[] = [];
+  const leaseFor = (item: string, run_id: string, proof: string, amount?: number) => openLease(REC, local, { item, run_id, ...(amount === undefined ? {} : { amount_micros: amount }), requireAdmission: rigAdmission({ proof }), warn: (code: string) => warned.push(code) });
+  const codeOf = (f: () => unknown) => { try { f(); return "opened"; } catch (e: any) { return e?.code ?? String(e).split(" ")[0]; } };
+  const ITEMS: Array<[string, number | null, string, number, string]> = [["e0-opus-none", 43.3, "claude-opus-5-5", 21_600_000, "trial"], ["e0-particle-none", 6.12, "particle-ai/particle-1", 2_400_000, "trial"], ["e0-judge-sol", null, "gpt-6.1-sol", 1_100_000, "direct"], ["e0-judge-opus", null, "claude-opus-5-5", 1_100_000, "direct"], ["e0-judge-sonnet", null, "claude-sonnet-5-5", 1_100_000, "direct"]];
+  for (const [item, cap, model, micros, proof] of ITEMS) {
+    const capMicros = cap === null ? Math.floor((62_860_000 - settled) / 10_000) * 10_000 : Math.round(cap * 1e6);
+    const o: string[] = [], e: string[] = [];
+    const code = await ledgerCli(["init", "--item", item, "--cap", (capMicros / 1e6).toFixed(2), "--admission", "warn", "--words", "dry run only", "--by", "e0-dryrun.ts", "--source", "E0 keyless dry run"], { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }, LENV);
+    check(item + " recorded at $" + (capMicros / 1e6).toFixed(2) + (cap === null ? " ($62.86 less $" + (settled / 1e6).toFixed(2) + " settled by every earlier E0 item, rounded down to the cent)" : ""), code === 0);
+    const runId = proof === "trial" ? newRunId("review-units") : "judge-" + randomBytes(6).toString("hex");
+    const lease = leaseFor(item, runId, proof, proof === "trial" ? capMicros : undefined);
+    calls++;
+    const rv = await local.reserve({ idempotency_key: "dry-" + calls, lease_id: lease.lease_id, cell: { run_id: runId, arm: "none", task: "synthetic", model, trial: 1, attempt: 1, meter_id: "dry-" + calls }, max_micros: micros });
+    await local.settle(rv.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 1000, output: 100, reasoning: 0, cache_read: 0, cache_write: 0 } });
+    settleLease(REC, local, lease.lease_id);
+    const st = ledgerStatus(REC, item)[0];
+    settled += st.committed_micros;
+    check(item + ": one lease opened (" + warned.at(-1) + ") and settled at $" + (st.committed_micros / 1e6).toFixed(2) + ", the item bound to its run", st.run_id === runId && st.committed_micros === micros && !st.open_lease);
+    const again = codeOf(() => leaseFor(item, proof === "trial" ? newRunId("review-units") : "judge-" + randomBytes(6).toString("hex"), proof));
+    check(item + ": a second run on the settled item refuses with " + again, again === "E_ITEM_BOUND");
+  }
+});
+
+await section("e. Judging: one blind batch, judge-run --dry-run per judge item, the combine rule and kappa", async () => {
+  const { writePlanArm } = await import(join(scorer, "tests/noloss/plan-panel.ts"));
+  const suite = loadSuite(SUITE, { sealedRoot: SR }).suite;
+  const raw = join(OUT, "arms-raw");
+  for (const [id, rate] of [["none-opus", 0.5], ["none-particle-1", 0.3]] as const) writePlanArm(join(raw, id), suite, { id, passes: 2, raw: true, noise: 0, outcome: (u: any, b: any, p: number) => (((u.pr * 7 + p * 3 + b.id.length) % 10) / 10 < rate ? "F" : "M") });
+  const packets = join(OUT, "packets"), keyPath = join(OUT, "key.json");
+  const p = await noloss(["judge-packet", "--suite", SUITE, "--arm", join(raw, "none-opus"), "--arm", join(raw, "none-particle-1"), "--seed", "20261103", "--out", packets, "--key", keyPath, "--source", "panel/plans=" + SRC, "--sealed-root", SR]);
+  say("    " + (p.code === 0 ? p.out.split("\n")[0] : p.err.split("\n")[0]));
+  check("judge-packet builds one batch over both arms, seed 20261103", p.code === 0);
+  {
+    const st = join(OUT, "arms-stopped");
+    rmSync(st, { recursive: true, force: true });
+    cpSync(raw, st, { recursive: true });
+    const aj = join(st, "none-opus", "arm.json"), arm = JSON.parse(readFileSync(aj, "utf8"));
+    arm.status = "stopped";
+    arm.coverage_gaps = ["panel/plans#1 pass 2: incomplete, the session ended missing (E_ALLOWANCE)"];
+    writeFileSync(aj, JSON.stringify(arm, null, 2));
+    const q = await noloss(["judge-packet", "--suite", SUITE, "--arm", join(st, "none-opus"), "--arm", join(st, "none-particle-1"), "--seed", "20261103", "--out", join(OUT, "jp-stopped"), "--key", join(OUT, "jp-stopped.key.json"), "--source", "panel/plans=" + SRC, "--sealed-root", SR]);
+    check("judge-packet accepts a full Opus arm that review-units marked stopped with a coverage gap, as an allowance stop leaves it (a findings file for every unit): " + (q.code === 0 ? q.out.split("\n")[0] : q.err.split("\n")[0]), q.code === 0);
+  }
+  say("    judge brief v3: judge-brief-v3.md, sha256 " + sha(readFileSync(BRIEF)));
+  const J: Record<string, string[]> = { sol: ["openai/gpt-6.1-sol", "anthropic/claude-opus-5-5", "anthropic/claude-sonnet-5-5"], opus: ["anthropic/claude-opus-5-5", "openai/gpt-6.1-sol", "anthropic/claude-sonnet-5-5"], sonnet: ["anthropic/claude-sonnet-5-5", "openai/gpt-6.1-sol", "anthropic/claude-opus-5-5"] };
+  for (const [j, [pr, se, th]] of Object.entries(J)) {
+    const args = ["judge-run", "--suite", SUITE, "--packets", packets, "--key", keyPath, "--arm", join(raw, "none-opus"), "--arm", join(raw, "none-particle-1"), "--brief", BRIEF, "--primary", pr!, "--second", se!, "--third", th!, "--item", "e0-judge-" + j, "--out", join(OUT, "jr-" + j), "--ledger", LENV.GSTACK_EVALS_LEDGER!, "--record", REC, "--source", "panel/plans=" + SRC, "--dry-run"];
+    let r = await noloss([...args, "--sealed-root", SR]);
+    if (r.code && /sealed-root/.test(r.err)) r = await noloss(args);
+    const worst = r.out.split("\n").filter((l) => /^worst case:|^item /.test(l));
+    for (const l of worst) say("    " + j + ": " + l);
+    if (r.code) say("    " + j + ": " + r.err.split("\n")[0]!.slice(0, 220));
+    check("e0-judge-" + j + ": judge-run --dry-run (primary " + pr + ", second " + se + ", third " + th + ") checks and prints its worst case keyless", r.code === 0 && worst.length >= 1);
+  }
+  const entries = new Map<string, any>([["P o1", { arm: "none-opus", pass: 1, finding: "p1-1" }], ["P o2", { arm: "none-opus", pass: 1, finding: "p1-2" }], ["P o3", { arm: "none-particle-1", pass: 1, finding: "p1-1" }]]);
+  const sev = (_a: string, _u: string, id: string) => (id === "p1-1" ? "High" : "Medium");
+  const A = (m: string[]) => new Map([["U B1", new Set(m)]]);
+  const rd = (ans: Map<string, Set<string>>) => R.cellRead(ans, "P", "U", "B1", "none-opus", 1, entries, sev);
+  const must = rd(A(["o1"])), med = rd(A(["o2"])), none = rd(A(["o3"])), unj = rd(new Map());
+  check("combine: sol and opus agree on a must-fix match -> matched", R.combine(must, must, unj) === true);
+  check("combine: they agree on no must-fix match (a Medium match, another arm's finding) -> unmatched, any-severity still read", R.combine(med, none, unj) === false && med.any && !none.any);
+  check("combine: they disagree and sonnet's must-fix match decides -> matched", R.combine(must, med, must) === true);
+  check("combine: they disagree and sonnet's Medium match decides -> unmatched", R.combine(none, must, med) === false);
+  check("combine: they disagree and sonnet left the packet unjudged -> no final", R.combine(must, none, unj) === null);
+  check("combine: a packet unjudged in the opus primary reply -> no final, and E0 reads NO READ (judging incomplete)", R.combine(must, unj, must) === null && R.e0NoRead({ gaps: 0, caps: 0, judgingIncomplete: 1, anchor: 0.9, initBad: 0, armBad: [] }).some((x: string) => /judging incomplete/.test(x)));
+  const pairs = [...Array(3).fill([true, true]), [true, false], [false, true], ...Array(5).fill([false, false])] as Array<[boolean, boolean]>;
+  const k = R.kappa(pairs)!;
+  check("kappa on 10 cells (3 both, 1 sol only, 1 opus only, 5 neither) is " + k.toFixed(5) + ", by hand (0.8 - 0.52) / 0.48 = 0.58333", Math.abs(k - 7 / 12) < 1e-9);
+  check("kappa is undefined (null) when every cell reads the same for both judges", R.kappa([[true, true], [true, true]]) === null);
+  const kc = (stratum: string, a: boolean, b: boolean) => ({ stratum, sol: { judged: true, any: a }, opus: { judged: true, any: b } });
+  const kr = R.kappaRead([kc("ceo", true, true), kc("ceo", true, true), kc("ceo", false, false), kc("ceo", false, false), kc("dx", true, true), kc("dx", true, true), kc("dx", false, false), kc("dx", false, false), kc("dx", true, false), kc("dx", false, true), { stratum: "dx", cls: "SCORED", block: false, final: false }]);
+  check("kappaRead pools judged cells per stratum with their denominators and leaves out a session with no block: ceo " + kr.ceo.kappa + " (n " + kr.ceo.n + "), dx " + kr.dx.kappa?.toFixed(5) + " (n " + kr.dx.n + ", by hand (4/6 - 1/2) / (1/2) = 0.33333) flagged under 0.6, eng unread (n 0), pooled n " + kr.pooled.n, kr.ceo.kappa === 1 && kr.ceo.n === 4 && !kr.ceo.under && Math.abs(kr.dx.kappa - 1 / 3) < 1e-9 && kr.dx.n === 6 && kr.dx.under && kr.eng.n === 0 && kr.eng.kappa === null && !kr.eng.under && kr.pooled.n === 10);
+});
+
+await section("f. Rule edges on synthetic judgments", () => {
+  const kv: Array<[number, number, number, string]> = [[6, 12, 0, "DEAD"], [6, 12, 1, "KEEP"], [6, 12, 7, "KEEP"], [6, 12, 8, "DROP-CEILING"], [6, 11, 7, "DROP-CEILING"], [6, 10, 6, "KEEP"], [5, 10, 1, "KEEP"], [5, 10, 6, "KEEP"], [5, 10, 7, "DROP-CEILING"], [5, 10, 0, "DEAD"], [3, 6, 2, "KIND NO READ"]];
+  for (const [items, n, m, want] of kv) check("a kind of " + items + " items at " + m + " of " + n + " -> " + want + (items === 5 && n === 10 ? " (the n=10 band)" : ""), R.kindVerdict(items, n, m) === want);
+  const anchors = (full: number, half: number) => [...Array(full).fill({ matched: 2, read: 2 }), ...Array(half).fill({ matched: 1, read: 2 })];
+  const base = { gaps: 0, caps: 0, judgingIncomplete: 0, anchor: 0.9, initBad: 0, armBad: [] as string[] };
+  const a41 = R.anchorRecall(anchors(17, 7))!, a40 = R.anchorRecall(anchors(16, 8))!;
+  check("pooled anchors 41 of 48 (" + a41.toFixed(4) + ") read", R.e0NoRead({ ...base, anchor: a41 }).length === 0);
+  check("pooled anchors 40 of 48 (" + a40.toFixed(4) + ") read NO READ", R.e0NoRead({ ...base, anchor: a40 }).length === 1);
+  check("a stratum's anchors 9 of 12 (0.75) keep its verdict", R.stratumVerdict(["KEEP", "KEEP"], R.anchorRecall(anchors(3, 3))) === "BUILD");
+  check("a stratum's anchors 8 of 12 read STRATUM NO READ", R.stratumVerdict(["KEEP", "KEEP"], R.anchorRecall(anchors(2, 4))) === "STRATUM NO READ");
+  check("a stratum with no stop in its 12 Opus sessions keeps its verdict", R.stratumVerdict(["KEEP", "KEEP"], 0.9, 0, 12) === "BUILD");
+  check("one stop in a stratum's 12 Opus sessions (over 5%) reads STRATUM NO READ", R.stratumVerdict(["KEEP", "KEEP"], 0.9, 1, 12) === "STRATUM NO READ");
+  {
+    const kk = { blockers: ["1", "2", "3", "4", "5", "6"].flatMap((u) => [{ unit: u, blocker: "A", kind: "C-AN", role: "anchor", stratum: "ceo" }, { unit: u, blocker: "K", kind: "C-K1", role: "candidate", stratum: "ceo" }, { unit: u, blocker: "L", kind: "C-K2", role: "candidate", stratum: "ceo" }]) };
+    const cellsOf = (stopUnit: string | null) => kk.blockers.flatMap((b) => [1, 2].map((pass) => { const stop = b.unit === stopUnit && pass === 2; return { ...b, flagged: false, pass, cls: stop ? "TURN_CAP" : "SCORED", block: !stop, final: stop ? undefined : b.role === "anchor" || (pass === 1 && b.unit === "1"), final_any: stop ? undefined : true }; }));
+    const clean = R.decide(cellsOf(null), kk, null), one = R.decide(cellsOf("3"), kk, null);
+    check("decide counts stops per stratum: no stop -> ceo " + clean.strata.ceo.verdict + " (0 of " + clean.strata.ceo.scheduled + "); one turn-cap session -> ceo " + one.strata.ceo.verdict + " (" + one.strata.ceo.stops + " of " + one.strata.ceo.scheduled + "), and the stopped session's readings drop (C-K1 n " + one.kinds["C-K1"].n + ")", clean.strata.ceo.verdict === "BUILD" && clean.strata.ceo.scheduled === 12 && one.strata.ceo.stops === 1 && one.strata.ceo.verdict === "STRATUM NO READ" && one.kinds["C-K1"].n === 11);
+  }
+  check("a GAP reads NO READ", R.e0NoRead({ ...base, gaps: 1 }).length === 1);
+  check("a CAP reads NO READ", R.e0NoRead({ ...base, caps: 1 }).length === 1);
+  check("a session without claude-code-preset or Claude Code 2.1.314 in init.json reads NO READ", R.e0NoRead({ ...base, initBad: 1 }).length === 1);
+  check("an arm.json told template, parser or rec user sha256 off the pin reads NO READ", R.e0NoRead({ ...base, armBad: ["parser"] }).length === 1);
+  const sv: Array<[string[], string]> = [[["KEEP", "KEEP", "KEEP"], "BUILD"], [["KEEP", "KEEP", "DROP-CEILING"], "BUILD"], [["KEEP", "KEEP-FLOOR", "DROP-CEILING"], "BUILD"], [["KEEP", "DROP-CEILING", "DROPPED-UNFAIR"], "BUILD-ONE"], [["KEEP-FLOOR", "DROP-CEILING", "DROP-CEILING"], "NOT BUILT"], [["DROP-CEILING", "DROP-CEILING", "KIND NO READ"], "NOT BUILT"]];
+  for (const [finals, want] of sv) check("a stratum with " + finals.join(", ") + " -> " + want, R.stratumVerdict(finals, 0.9).startsWith(want));
+  check("re-audit with 1 failing item -> KEEP-FLOOR", R.reauditVerdict({ items: 6, failing: 1 }) === "KEEP-FLOOR");
+  check("re-audit with 2 failing items -> DROPPED-UNFAIR", R.reauditVerdict({ items: 6, failing: 2 }) === "DROPPED-UNFAIR");
+  check("before --reaudit a DEAD kind prints AWAITING RE-AUDIT and its stratum gets no verdict", R.stratumVerdict(["KEEP", "AWAITING RE-AUDIT"], 0.9) === "AWAITING RE-AUDIT");
+  const units = ["u1", "u2", "u3", "u4", "u5", "u6"];
+  const kb = [...units.map((u) => ({ unit: u, blocker: "B1", stratum: "dx", kind: "X-Q", role: "candidate", flagged: u === "u1" })), ...units.map((u) => ({ unit: u, blocker: "B2", stratum: "dx", kind: "A-F", role: "anchor", flagged: u === "u1" }))];
+  const cells = kb.flatMap((b) => [1, 2].map((p) => ({ ...b, pass: p, cls: "SCORED", block: true, final: b.role === "anchor" || b.unit === "u1", final_any: true })));
+  const dP = R.decide(cells, { blockers: kb }, null), dS = R.decide(cells.filter((c) => !c.flagged), { blockers: kb.filter((b) => !b.flagged) }, null);
+  const diffs = R.sensitivityDiffs(dP, dS);
+  for (const d of diffs) say("    " + d);
+  check("sensitivity read: a kind whose matches all sit in a flagged unit reads KEEP (2/12) in the primary read and DEAD (0/10) in the sensitivity read, and both the kind and its stratum print as differing", dP.kinds["X-Q"].final === "KEEP" && dS.kinds["X-Q"].verdict === "DEAD" && diffs.length === 2);
+  const ra = { "X-Q": units.map((u) => ({ unit: u, blocker: "B1", result: u === "u1" || u === "u2" ? "fail" : "pass" })) };
+  const dS2 = R.decide(cells.filter((c) => !c.flagged), { blockers: kb.filter((b) => !b.flagged) }, R.checkReaudit(ra, { blockers: kb }, ["X-Q"]));
+  const threw = (f: () => unknown) => { try { f(); return false; } catch { return true; } };
+  check("the sensitivity read counts re-audit failures over its own items: X-Q, DEAD only there, with 2 of 6 items failing, one in the flagged unit, reads " + dS2.kinds["X-Q"].final + " (1 failing of its 5 items), and a re-audit with no record for that kind is refused", dS2.kinds["X-Q"].final === "KEEP-FLOOR" && threw(() => R.checkReaudit({}, { blockers: kb }, ["X-Q"])));
+});
+
+await section("h. Start rule through the real run loop (real driver over a fake SDK query; finalize returns the chosen spend)", () => {
+  const want: Array<[string, number, boolean, string]> = [["opus-0.49", 48, false, "allowance $7.04, cap $43.30: 45 sessions at $0.49 leave the last round in"], ["opus-0.50", 45, true, "at $0.50 the last round does not start"], ["particle-0.123", 48, false, "allowance $0.192, cap $6.12: 45 sessions at $0.123 leave the last round in"], ["particle-0.124", 45, true, "at $0.124 the last round does not start"]];
+  for (const [name, n, cap, label] of want) {
+    const s = STOPS.find((x) => x.kind === "start" && x.name === name);
+    if (!s || s.error) { check(name + ": ran" + (s?.error ? " (" + s.error + ")" : ""), false); continue; }
+    check(name + ": " + label + " (" + s.sessions + " sessions, spent $" + s.spent + ", stops [" + s.stops.join(", ") + "]; e0-readings reads " + s.cap + " sessions CAP from arm.json's not_run)", s.sessions === n && s.stops.includes("CAP_STOP") === cap && s.cap === 48 - n);
+  }
+});
+
+await section("i. Read audit", () => {
+  const real = STOPS.filter((x) => x.kind === "stop" && !x.error);
+  check("the " + real.length + " real transcripts from d show no gstack, skills or ~/.capy read (" + real.reduce((n, x) => n + x.reads, 0) + " calls flagged)", real.length === 7 && real.every((x) => x.reads === 0));
+  const fx = [{ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: HOME + "/.claude/skills/gstack/plan-ceo-review/SKILL.md" } }, { type: "tool_use", id: "t2", name: "Bash", input: { command: "cat " + HOME + "/.capy/drive/notes.md" } }, { type: "tool_use", id: "t3", name: "Bash", input: { command: "gstack-config get proactive" } }, { type: "tool_use", id: "t4", name: "Read", input: { file_path: "/work/plans-3-abcdef12/plan.md" } }] } }];
+  const hits = R.readAudit(fx), a = R.auditCounts([{ reads: hits }]), shown = JSON.stringify(a);
+  say("    " + shown);
+  check("a fixture transcript that reads a SKILL.md under .claude/skills, reads a ~/.capy path and runs a gstack-* command is flagged three times and printed only as counts by rule and tool (skill file read (Read) 1, drive read (Bash) 1, gstack command (Bash) 1) with no call input; its plan.md read is not flagged", hits.length === 3 && a.calls === 3 && a.sessions_flagged === 1 && a.counts["skill file read (Read)"] === 1 && a.counts["drive read (Bash)"] === 1 && a.counts["gstack command (Bash)"] === 1 && !/SKILL\.md|notes\.md|proactive|plan\.md/.test(shown));
+});
+
+await section("k. Readings end to end: the full suite through the real SDK, CLI and metering proxy, judge-packet, judge-run three times, e0-readings's CLI (e0-e2e.ts)", () => {
+  const r = run(["bun", join(HERE, "e0-e2e.ts"), scorer, SR, SUITE, SRC, join(OUT, "e2e"), BRIEF], HERE);
+  for (const x of r.stdout.split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l))) x.kind === "check" ? check(x.label, x.ok) : say("    " + x.text);
+  check("e0-e2e.ts ran as its own process (exit " + r.status + ")", r.status === 0);
+});
+
+say("\n## j. Leak check");
+const all = lines.join("\n");
+const leaks = [...IDS.filter((id) => all.includes(id)), ...(all.match(/panel\/plans#\d+|\be0-\d+-\d+\b|packets\/\d+\.json|plans-\d+-[0-9a-f]{6,}/g) ?? [])];
+check("the transcript prints no synthetic unit id, unit label, case id or packet file name (" + leaks.length + " found)", leaks.length === 0);
+say("\nPASS " + pass + ", FAIL " + fail);
+writeFileSync(join(HERE, "e0-dryrun.txt"), lines.join("\n") + "\n");
+console.log(lines.join("\n"));
+process.exit(fail ? 1 : 0);

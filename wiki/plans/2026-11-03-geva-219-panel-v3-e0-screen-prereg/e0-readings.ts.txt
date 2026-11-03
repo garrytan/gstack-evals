@@ -1,0 +1,349 @@
+#!/usr/bin/env bun
+// e0-readings.ts: the frozen E0 readings for the panel v3 kind screen (GEVA-219). Reads each scheduled none session's
+// termination from the review-units records, joins three primary judge replies on one judge-packet batch, each checked
+// against its run.json and the key first, and prints the
+// per-kind, per-stratum and E0 verdicts with descriptives, for the primary read (every kept unit) and a sensitivity read
+// that leaves out the flagged units' readings (same rules and judging; it is reported and decides nothing). Aggregates only: no unit id, label, number or text is printed.
+//   bun e0-readings.ts --scorer <dir> --suite <suite.json> --kinds <e0-kinds.json> --opus <out> --particle <out> --key <key>
+//     --read sol=<judge-run out> --read opus=<dir> --read sonnet=<dir> [--reaudit <json>]
+//     [--passes 2] --out <dir>
+// Writes verdict.txt and readings.json, and the raw flagged tool calls of the read audit to read-audit-raw.json, which stays in
+// the sealed run root. Exit 0 when a verdict prints, 3 for NO READ, 2 for E_USAGE.
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+export type Cls = "SCORED" | "TURN_CAP" | "ALLOWANCE" | "TIMEOUT_OUT" | "GAP" | "CAP";
+export const STOP_CLASSES = new Set<Cls>(["TURN_CAP", "ALLOWANCE", "TIMEOUT_OUT"]);
+export const PIN = { claude_code_version: "2.1.314", system_prompt: "claude-code-preset" };
+export const MUST = /^(critical|high)$/i;
+export class Usage extends Error {}
+const usage = (m: string): never => { throw new Usage(m); };
+
+export async function loadMods(scorer: string) {
+  const [run, unit, drv, judge, plan] = await Promise.all(["src/trial/review/run.ts", "src/trial/review/unit.ts", "src/adapters/claude-code/driver.ts", "lanes/review-noloss/judge.ts", "src/trial/review/plan.ts"].map((p) => import(join(scorer, p))));
+  return { readReviewJournal: run.readReviewJournal, reviewCellId: run.reviewCellId, armId: run.armId, unitFile: run.unitFile, unitTaskId: unit.unitTaskId, ALLOWANCE_SPENT: drv.ALLOWANCE_SPENT as RegExp, packetAnswers: judge.packetAnswers, TOLD_PLAN_SHA256: plan.TOLD_PLAN_SHA256 as string, PLAN_PARSER_SHA256: plan.PLAN_PARSER_SHA256 as string, REC_USER_SHA256: plan.REC_USER_SHA256 as string };
+}
+export type Mods = Awaited<ReturnType<typeof loadMods>>;
+
+const text = (f: string) => (existsSync(f) ? readFileSync(f, "utf8") : "");
+const json = (f: string) => { try { return existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : null; } catch { return null; } };
+export const ndjson = (raw: string): any[] => raw.split("\n").flatMap((l) => { if (!l.trim()) return []; try { return [JSON.parse(l)]; } catch { return []; } });
+export const lastResult = (msgs: any[]) => [...msgs].reverse().find((m) => m?.type === "result" && !m.parent_tool_use_id) ?? null;
+
+/** The termination class of one scheduled session (prereg rule a). */
+export function classify(e: any, msgs: any[], raw: string, trial: any, capRun: boolean, allowanceSpent: RegExp): Cls {
+  if (!e) return trial?.record?.termination?.kind === "cap_stop" || capRun ? "CAP" : "GAP";
+  const t = e.record?.termination ?? {}, out = e.record?.model_output === true;
+  if (t.kind === "cap_stop") return "CAP";
+  if (t.kind === "completed") return lastResult(msgs)?.subtype === "error_max_turns" ? "TURN_CAP" : out ? "SCORED" : "GAP";
+  if (t.kind === "arm_failure") return out ? "SCORED" : "GAP";
+  if (t.kind === "missing" && t.code === "E_ALLOWANCE" && allowanceSpent.test(raw)) return "ALLOWANCE";
+  if (t.kind === "timeout" && out) return "TIMEOUT_OUT";
+  return "GAP";
+}
+
+const AUDIT: Array<[string, RegExp]> = [["skill file read", /(?:gstack|\.claude\/skills)[^\s"']*\/(?:SKILL\.md|sections\/[^\s"']+)/], ["skill file read", /\.local\/share\/gstack/], ["drive read", /\.capy(?:\/|\b)/]];
+const GCMD = /(?:^|[\s;&|("'\/])gstack-[a-z][a-z0-9-]*/;
+export interface AuditHit { tool: string; rule: string; input: string }
+/** Tool calls that touch a gstack or .claude/skills SKILL.md or sections file or ~/.local/share/gstack (skill file read), ~/.capy (drive read), or run a gstack-* command (gstack command). */
+export function readAudit(msgs: any[]): AuditHit[] {
+  const hits: AuditHit[] = [];
+  for (const m of msgs) if (m?.type === "assistant" && Array.isArray(m.message?.content)) for (const b of m.message.content) {
+    if (b?.type !== "tool_use") continue;
+    const s = JSON.stringify(b.input ?? {}), cmd = typeof b.input?.command === "string" ? b.input.command : "";
+    const rule = AUDIT.find(([, re]) => re.test(s))?.[0] ?? (GCMD.test(cmd) ? "gstack command" : null);
+    if (rule) hits.push({ tool: String(b.name), rule, input: s });
+  }
+  return hits;
+}
+/** The read audit's printed form: flagged sessions and calls, counted by rule category and tool name, with no call input. */
+export function auditCounts(sessions: Array<{ reads: AuditHit[] }>) {
+  const counts: Record<string, number> = {};
+  for (const h of sessions.flatMap((s) => s.reads)) counts[h.rule + " (" + h.tool + ")"] = (counts[h.rule + " (" + h.tool + ")"] ?? 0) + 1;
+  return { sessions_flagged: sessions.filter((s) => s.reads.length).length, calls: sessions.reduce((n, s) => n + s.reads.length, 0), counts };
+}
+
+export interface Session { unit: string; pass: number; cls: Cls; block: boolean; findings: number; cost_usd: number | null; turns: number | null; init: any; reads: AuditHit[] }
+export function readArm(out: string, suite: any, passes: number, mods: Mods) {
+  const armsDir = join(out, "arms");
+  const ids = existsSync(armsDir) ? readdirSync(armsDir) : [];
+  if (ids.length !== 1) usage(out + " holds " + ids.length + " arm directories; an E0 run holds the none arm alone");
+  const armJson = json(join(armsDir, ids[0]!, "arm.json"));
+  const capRun = Number(armJson?.parse_outcomes?.not_run ?? 0) > 0;
+  const model: string = armJson?.models?.find((m: any) => m.role === "driver")?.model ?? usage("arm.json in " + out + " names no driver model");
+  const journal = mods.readReviewJournal(out);
+  const sessions: Session[] = [];
+  for (const u of suite.units) for (let p = 1; p <= passes; p++) {
+    const e = journal.get(mods.reviewCellId({ model, arm: "none", unit: u.id, pass: p }));
+    const dir = join(out, "runs", model.replaceAll("/", "_"), "none", mods.unitTaskId(u), "p" + p);
+    const raw = text(join(dir, "host", "transcript.ndjson")), msgs = ndjson(raw);
+    const cls = classify(e, msgs, raw, json(join(dir, "trial.json")), capRun, mods.ALLOWANCE_SPENT);
+    const block = e?.parse?.kind === "findings" && e.parse.findings.length > 0;
+    const res = lastResult(msgs);
+    const turns = typeof res?.num_turns === "number" ? res.num_turns : msgs.filter((m) => m?.type === "assistant" && !m.parent_tool_use_id).length;
+    sessions.push({ unit: u.id, pass: p, cls, block, findings: block ? e.parse.findings.length : 0, cost_usd: typeof e?.record?.cost_micros === "number" ? e.record.cost_micros / 1e6 : null, turns: e ? turns : null, init: json(join(dir, "host", "init.json")), reads: readAudit(msgs) });
+  }
+  return { id: ids[0]!, model, armJson, unitsJson: json(join(out, "units.json")), sessions };
+}
+export type ArmRead = ReturnType<typeof readArm>;
+
+export interface JudgeRead { judged: boolean; any: boolean; must: boolean }
+/** One judge's read of one (blocker, session) cell from its primary reply's answers. */
+export function cellRead(answers: Map<string, Set<string>>, packet: string, unit: string, blocker: string, armId: string, pass: number, entries: Map<string, any>, sev: (arm: string, unit: string, id: string) => string): JudgeRead {
+  const set = answers.get(unit + " " + blocker);
+  if (!set) return { judged: false, any: false, must: false };
+  let any = false, must = false;
+  for (const o of set) {
+    const en = entries.get(packet + " " + o);
+    if (!en || en.arm !== armId || en.pass !== pass) continue;
+    any = true;
+    if (MUST.test(sev(armId, unit, en.finding))) must = true;
+  }
+  return { judged: true, any, must };
+}
+/** Final per cell: sol and opus agree on must-fix matched, else sonnet decides; null when a needed read is unjudged. */
+export function combine(sol: JudgeRead, opus: JudgeRead, sonnet: JudgeRead, bit: "must" | "any" = "must"): boolean | null {
+  if (!sol.judged || !opus.judged) return null;
+  if (sol[bit] === opus[bit]) return sol[bit];
+  return sonnet.judged ? sonnet[bit] : null;
+}
+export function kappa(pairs: Array<[boolean, boolean]>): number | null {
+  const n = pairs.length;
+  if (!n) return null;
+  const po = pairs.filter(([a, b]) => a === b).length / n, pa = pairs.filter(([a]) => a).length / n, pb = pairs.filter(([, b]) => b).length / n;
+  const pe = pa * pb + (1 - pa) * (1 - pb);
+  return pe === 1 ? null : (po - pe) / (1 - pe);
+}
+/** Matching kappa sol/opus on any-severity matches over both arms' judged cells (scored sessions with a parsed block), per stratum and pooled, with each denominator; a stratum under 0.6 is flagged. */
+export function kappaRead(cells: any[]) {
+  const read = (st: string | null) => {
+    const ps = cells.filter((c) => c.sol?.judged && c.opus?.judged && (st === null || c.stratum === st)).map((c) => [c.sol.any, c.opus.any] as [boolean, boolean]), k = kappa(ps);
+    return { kappa: k, n: ps.length, under: k !== null && k < 0.6 };
+  };
+  return Object.fromEntries([["pooled", read(null)], ...["ceo", "eng", "dx", "design"].map((s) => [s, read(s)])]) as Record<string, { kappa: number | null; n: number; under: boolean }>;
+}
+export type KindV = "KEEP" | "DEAD" | "DROP-CEILING" | "KIND NO READ";
+export function kindVerdict(items: number, n: number, m: number): KindV {
+  if (items < 4 || n === 0) return "KIND NO READ";
+  if (m === 0) return "DEAD";
+  return m / n > 0.6 ? "DROP-CEILING" : "KEEP";
+}
+export const reauditVerdict = (r: { items: number; failing: number }) => (r.failing <= 1 ? "KEEP-FLOOR" : "DROPPED-UNFAIR");
+export type Reaudit = Record<string, Array<{ unit: string; blocker: string; result: "pass" | "fail" }>>;
+/** The re-audit file: one record per DEAD kind of either read, each listing exactly the kind's kept items, each pass or fail. */
+export function checkReaudit(r: any, kinds: any, dead: string[]): Reaudit {
+  if (!r || typeof r !== "object" || Array.isArray(r)) usage("the re-audit file is not an object of kind records");
+  const keys = Object.keys(r).sort(), want = [...dead].sort();
+  if (keys.join(" ") !== want.join(" ")) usage("the re-audit file holds records for " + (keys.join(", ") || "no kind") + ", not for the DEAD kinds " + (want.join(", ") || "(none)"));
+  for (const k of keys) {
+    const items = kinds.blockers.filter((b: any) => b.kind === k).map((b: any) => b.unit + " " + b.blocker).sort();
+    if (!Array.isArray(r[k]) || r[k].some((i: any) => i?.result !== "pass" && i?.result !== "fail")) usage("the re-audit record for " + k + " is not a list of items each with result pass or fail");
+    if (r[k].map((i: any) => i.unit + " " + i.blocker).sort().join("\n") !== items.join("\n")) usage("the re-audit record for " + k + " does not list exactly the kind's " + items.length + " kept items");
+  }
+  return r;
+}
+export function stratumVerdict(finals: string[], anchor: number | null, stops = 0, scheduled = 12): string {
+  if (stops > 0.05 * scheduled) return "STRATUM NO READ";
+  if (anchor === null || anchor < 0.75) return "STRATUM NO READ";
+  if (finals.includes("AWAITING RE-AUDIT")) return "AWAITING RE-AUDIT";
+  const keep = finals.filter((k) => k === "KEEP").length, floor = finals.filter((k) => k === "KEEP-FLOOR").length;
+  if (keep === 0) return "NOT BUILT (R56 row back to the Captain, R48 FIX-METHOD)";
+  return keep + floor >= 2 ? "BUILD" : "BUILD-ONE (flagged)";
+}
+export const anchorRecall = (items: Array<{ matched: number; read: number }>): number | null => {
+  const rs = items.filter((i) => i.read > 0).map((i) => i.matched / i.read);
+  return rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null;
+};
+export function e0NoRead(x: { gaps: number; caps: number; judgingIncomplete: number; judgeStopped?: string[]; anchor: number | null; initBad: number; armBad: string[] }): string[] {
+  const r: string[] = [];
+  if (x.gaps) r.push(x.gaps + " coverage gap(s) in the Opus run");
+  if (x.caps) r.push(x.caps + " cap stop(s) in the Opus run");
+  if (x.judgeStopped?.length) r.push("judging incomplete: " + x.judgeStopped.join(", ") + " stopped");
+  else if (x.judgingIncomplete) r.push("judging incomplete: " + x.judgingIncomplete + " needed cell(s) unjudged");
+  if (x.anchor === null || x.anchor < 0.85) r.push("pooled anchor recall " + (x.anchor === null ? "unread" : x.anchor.toFixed(3)) + " < 0.85");
+  if (x.initBad) r.push(x.initBad + " Opus session(s) whose init.json lacks " + PIN.system_prompt + " or Claude Code " + PIN.claude_code_version);
+  if (x.armBad.length) r.push("arm.json pins differ: " + x.armBad.join(", "));
+  return r;
+}
+export function rng(seed: number) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+export function summary(xs: number[], draws = 10000, seed = 1) {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b), n = s.length, mean = s.reduce((a, b) => a + b, 0) / n;
+  const median = n % 2 ? s[(n - 1) / 2]! : (s[n / 2 - 1]! + s[n / 2]!) / 2;
+  const r = rng(seed), means: number[] = [];
+  for (let d = 0; d < draws; d++) { let t = 0; for (let i = 0; i < n; i++) t += s[Math.floor(r() * n)]!; means.push(t / n); }
+  means.sort((a, b) => a - b);
+  return { n, median, mean, upper90: means[Math.min(draws - 1, Math.ceil(0.9 * draws) - 1)]! };
+}
+
+/** Readings for one arm: per blocker and session, the class, and when scored, the three reads and the final. */
+export function armReadings(arm: ArmRead, kinds: any, key: any, replies: Record<string, Map<string, Set<string>>>, entries: Map<string, any>, sev: (a: string, u: string, id: string) => string, armId: string) {
+  const packetOf = new Map<string, string>(key ? key.packets.map((p: any) => [p.unit, p.file]) : []);
+  const cells: any[] = [];
+  for (const b of kinds.blockers) for (const s of arm.sessions.filter((x) => x.unit === b.unit)) {
+    const c: any = { stratum: b.stratum, kind: b.kind, role: b.role, unit: b.unit, blocker: b.blocker, flagged: b.flagged === true, pass: s.pass, cls: s.cls, block: s.block };
+    if (s.cls === "SCORED" && s.block) {
+      const p = packetOf.get(b.unit) ?? "";
+      const [sol, opus, sonnet] = (["sol", "opus", "sonnet"] as const).map((j) => (p ? cellRead(replies[j]!, p, b.unit, b.blocker, armId, s.pass, entries, sev) : { judged: false, any: false, must: false }));
+      Object.assign(c, { sol, opus, sonnet, final: combine(sol!, opus!, sonnet!), final_any: combine(sol!, opus!, sonnet!, "any") });
+    } else if (s.cls === "SCORED") Object.assign(c, { final: s.block ? null : false, final_any: s.block ? null : false, miss: !s.block });
+    cells.push(c);
+  }
+  return cells;
+}
+
+export function decide(cells: any[], kinds: any, reaudit: Reaudit | null) {
+  const itemsOf = (k: string) => kinds.blockers.filter((b: any) => b.kind === k).length;
+  const kindsList = [...new Set<string>(kinds.blockers.filter((b: any) => b.role === "candidate").map((b: any) => b.kind))].sort();
+  const per: Record<string, any> = {};
+  for (const k of kindsList) {
+    const cs = cells.filter((c) => c.kind === k), read = cs.filter((c) => c.cls === "SCORED");
+    const n = read.length, m = read.filter((c) => c.final === true).length, any = read.filter((c) => c.final_any === true).length;
+    const v = kindVerdict(itemsOf(k), n, m);
+    const failing = reaudit?.[k]?.filter((i) => i.result === "fail" && kinds.blockers.some((b: any) => b.kind === k && b.unit === i.unit && b.blocker === i.blocker)).length ?? 0;
+    const final = v === "DEAD" ? (reaudit?.[k] ? reauditVerdict({ items: itemsOf(k), failing }) : "AWAITING RE-AUDIT") : v;
+    per[k] = { stratum: cs[0]?.stratum ?? kinds.blockers.find((b: any) => b.kind === k).stratum, items: itemsOf(k), n, m, rate: n ? m / n : null, any, any_rate: n ? any / n : null, stops: cs.filter((c) => STOP_CLASSES.has(c.cls)).length, verdict: v, final };
+  }
+  const anchorItems = (st: string | null) => {
+    const by = new Map<string, { matched: number; read: number }>();
+    for (const c of cells) if (c.role === "anchor" && (st === null || c.stratum === st) && c.cls === "SCORED") {
+      const k = c.unit + " " + c.blocker, v = by.get(k) ?? { matched: 0, read: 0 };
+      v.read++; if (c.final === true) v.matched++; by.set(k, v);
+    }
+    return [...by.values()];
+  };
+  const strata: Record<string, any> = {};
+  for (const st of ["ceo", "eng", "dx", "design"]) {
+    const a = anchorRecall(anchorItems(st));
+    const sessions = new Map<string, Cls>();
+    for (const c of cells) if (c.stratum === st) sessions.set(c.unit + " " + c.pass, c.cls);
+    const stops = [...sessions.values()].filter((c) => STOP_CLASSES.has(c)).length;
+    strata[st] = { anchor_recall: a, stops, scheduled: sessions.size, verdict: stratumVerdict(Object.values(per).filter((k: any) => k.stratum === st).map((k: any) => k.final), a, stops, sessions.size) };
+  }
+  return { kinds: per, strata, anchor_pooled: anchorRecall(anchorItems(null)) };
+}
+
+/** Each kind and stratum whose disposition differs between the primary read and the sensitivity read. */
+export function sensitivityDiffs(p: ReturnType<typeof decide>, s: ReturnType<typeof decide>): string[] {
+  const out: string[] = [];
+  for (const k of Object.keys(p.kinds)) if (p.kinds[k].final !== s.kinds[k]?.final) out.push("kind " + k + ": primary " + p.kinds[k].final + ", sensitivity " + (s.kinds[k]?.final ?? "unread"));
+  for (const st of Object.keys(p.strata)) if (p.strata[st].verdict !== s.strata[st].verdict) out.push("stratum " + st + ": primary " + p.strata[st].verdict + ", sensitivity " + s.strata[st].verdict);
+  return out;
+}
+
+function main(argv: string[]): Promise<number> | number {
+  const flags = new Map<string, string[]>();
+  for (let i = 0; i < argv.length; i += 2) {
+    const f = argv[i]!, v = argv[i + 1];
+    if (!f.startsWith("--") || v === undefined) usage("expected --flag value pairs, got " + JSON.stringify(f));
+    flags.set(f, [...(flags.get(f) ?? []), v!]);
+  }
+  const one = (f: string, req = true) => { const v = flags.get(f); if (!v && req) usage("needs " + f); if (v && v.length > 1) usage(f + " given twice"); return v ? resolve(v[0]!) : null; };
+  for (const f of flags.keys()) if (!["--scorer", "--suite", "--kinds", "--opus", "--particle", "--key", "--read", "--reaudit", "--out", "--passes"].includes(f)) usage("unknown flag " + f);
+  return run(one, flags);
+}
+
+async function run(one: (f: string, req?: boolean) => string | null, flags: Map<string, string[]>): Promise<number> {
+  const mods = await loadMods(one("--scorer")!);
+  const suiteFile = one("--suite")!, suiteBytes = readFileSync(suiteFile), suite = JSON.parse(suiteBytes.toString());
+  const kinds = JSON.parse(readFileSync(one("--kinds")!, "utf8"));
+  if (kinds.suite_sha256 !== createHash("sha256").update(suiteBytes).digest("hex")) usage("e0-kinds.json names another suite sha256");
+  const reads = Object.fromEntries((flags.get("--read") ?? []).map((r) => { const [n, d] = r.split("="); return [n, resolve(d ?? "")]; }));
+  for (const j of ["sol", "opus", "sonnet"]) if (!reads[j]) usage("needs --read " + j + "=<judge-run out dir>");
+  const passes = Number(flags.get("--passes")?.[0] ?? 2);
+  const opus = readArm(one("--opus")!, suite, passes, mods);
+  const particle = readArm(one("--particle")!, suite, passes, mods);
+  const key = JSON.parse(readFileSync(one("--key")!, "utf8"));
+  const entries = new Map<string, any>(key.entries.map((e: any) => [e.packet + " " + e.opaque, e]));
+  const ROLE: Record<string, string> = { sol: "openai/gpt-6.1-sol", opus: "anthropic/claude-opus-5-5", sonnet: "anthropic/claude-sonnet-5-5" };
+  const real = (d: string) => (existsSync(d) ? realpathSync(d) : d);
+  for (const [a, b] of [["sol", "opus"], ["sol", "sonnet"], ["opus", "sonnet"]]) if (real(reads[a]!) === real(reads[b]!)) usage("--read " + a + " and --read " + b + " name the same dir; the three reads must be distinct");
+  const replies: Record<string, Map<string, Set<string>>> = {};
+  const unanswered: Record<string, number> = {};
+  const judgeStopped: string[] = [];
+  for (const j of ["sol", "opus", "sonnet"]) {
+    const rj = json(join(reads[j]!, "run.json")) ?? usage("--read " + j + " holds no judge-run run.json");
+    if (rj.models?.primary !== ROLE[j]) usage("--read " + j + ": its run.json names primary model " + rj.models?.primary + ", not " + ROLE[j]);
+    if (rj.batch !== key.batch) usage("--read " + j + ": its run.json names batch " + rj.batch + ", not the key's batch " + key.batch);
+    const answers = new Map<string, Set<string>>();
+    if (rj.state === "stopped") judgeStopped.push(String(rj.item));
+    else {
+      if (rj.state !== "finished") usage("--read " + j + ": its run.json state is " + rj.state + ", not finished");
+      const body = text(join(reads[j]!, "primary.json"));
+      if (createHash("sha256").update(body).digest("hex") !== rj.files?.["primary.json"]) usage("--read " + j + ": primary.json is not the reply its run.json records");
+      for (const p of JSON.parse(body).packets ?? []) {
+        const known = key.packets.find((k: any) => k.file === p.file) ?? usage("the " + j + " primary reply names a packet the key does not");
+        if (p.sha256 !== known.sha256) usage("--read " + j + ": a packet digest in its primary reply is not the key's");
+        mods.packetAnswers(known, p, key, suite, j + " primary", answers);
+      }
+    }
+    replies[j] = answers;
+    unanswered[j] = suite.units.reduce((n: number, u: any) => n + u.blockers.filter((b: any) => !answers.has(u.id + " " + b.id)).length, 0);
+  }
+  const sevMap = new Map<string, string>();
+  for (const a of [opus, particle]) for (const u of suite.units) for (const l of ndjson(text(join(a === opus ? one("--opus")! : one("--particle")!, "arms", a.id, "findings", mods.unitFile(u.id) + ".jsonl")))) sevMap.set(a.id + " " + u.id + " " + l.id, String(l.severity ?? ""));
+  const sev = (a: string, u: string, id: string) => sevMap.get(a + " " + u + " " + id) ?? "";
+  const keyArms = new Set<string>(key.arms.map((a: any) => a.id));
+  for (const a of [opus, particle]) if (!keyArms.has(a.id)) usage("the judge key does not hold the arm " + a.id);
+  const opusCells = armReadings(opus, kinds, key, replies, entries, sev, opus.id);
+  const particleCells = armReadings(particle, kinds, key, replies, entries, sev, particle.id);
+  const sk = { ...kinds, blockers: kinds.blockers.filter((b: any) => !b.flagged) };
+  const deadOf = (x: ReturnType<typeof decide>) => Object.keys(x.kinds).filter((k) => x.kinds[k].verdict === "DEAD");
+  const deadP = deadOf(decide(opusCells, kinds, null)), deadS = deadOf(decide(opusCells.filter((c) => !c.flagged), sk, null)), dead = [...new Set([...deadP, ...deadS])].sort();
+  const reauditFile = one("--reaudit", false), reaudit = reauditFile ? checkReaudit(json(reauditFile), kinds, dead) : null;
+  const d = decide(opusCells, kinds, reaudit);
+  const ds = decide(opusCells.filter((c) => !c.flagged), sk, reaudit);
+  const diffs = sensitivityDiffs(d, ds);
+  const cnt = (a: ArmRead, c: Cls) => a.sessions.filter((s) => s.cls === c).length;
+  const stops = opus.sessions.filter((s) => STOP_CLASSES.has(s.cls));
+  const incomplete = opusCells.filter((c) => c.cls === "SCORED" && c.block && c.final === null).length;
+  const initBad = opus.sessions.filter((s) => s.cls !== "GAP" && s.cls !== "CAP" && (s.init?.system_prompt !== PIN.system_prompt || s.init?.claude_code_version !== PIN.claude_code_version)).length;
+  const armBad: string[] = [];
+  for (const a of [opus]) {
+    if (a.armJson?.told?.template_sha256 !== mods.TOLD_PLAN_SHA256) armBad.push("told template");
+    if ((a.armJson?.parser_sha256 ?? a.unitsJson?.parser_sha256) !== mods.PLAN_PARSER_SHA256) armBad.push("parser");
+    if (a.armJson?.told?.rec_user_sha256 !== mods.REC_USER_SHA256) armBad.push("rec user");
+  }
+  const reasons = e0NoRead({ gaps: cnt(opus, "GAP"), caps: cnt(opus, "CAP"), judgingIncomplete: incomplete, judgeStopped, anchor: d.anchor_pooled, initBad, armBad });
+  const sReasons = e0NoRead({ gaps: cnt(opus, "GAP"), caps: cnt(opus, "CAP"), judgingIncomplete: incomplete, judgeStopped, anchor: ds.anchor_pooled, initBad, armBad });
+  const kap = kappaRead([...opusCells, ...particleCells]);
+  const pd = decide(particleCells, kinds, null);
+  const pScored = particle.sessions.filter((s) => s.cls === "SCORED");
+  const audit = Object.fromEntries([opus, particle].map((a) => [a.model, auditCounts(a.sessions)]));
+  const costs = Object.fromEntries([opus, particle].map((a) => [a.model, { cost_usd: summary(a.sessions.flatMap((s) => (s.cost_usd === null ? [] : [s.cost_usd]))), turns: summary(a.sessions.flatMap((s) => (s.turns === null ? [] : [s.turns]))) }]));
+  const out = one("--out")!;
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, "read-audit-raw.json"), JSON.stringify(Object.fromEntries([opus, particle].map((a) => [a.model, a.sessions.flatMap((s) => s.reads.map((h) => ({ unit: s.unit, pass: s.pass, ...h })))])), null, 1) + "\n");
+  const f3 = (x: number | null | undefined) => (x === null || x === undefined ? "n/a" : x.toFixed(3));
+  const lines: string[] = [];
+  lines.push("E0: " + (reasons.length ? "NO READ (" + reasons.join("; ") + ")" : "READ"));
+  lines.push("Opus sessions: scheduled " + opus.sessions.length + ", scored " + cnt(opus, "SCORED") + ", stops " + stops.length + " (turn cap " + cnt(opus, "TURN_CAP") + ", allowance " + cnt(opus, "ALLOWANCE") + ", timeout after output " + cnt(opus, "TIMEOUT_OUT") + "; " + stops.filter((s) => s.block).length + " dropped held a parsed block), gaps " + cnt(opus, "GAP") + ", cap " + cnt(opus, "CAP") + ", misses (scored, no block) " + opus.sessions.filter((s) => s.cls === "SCORED" && !s.block).length);
+  lines.push("Anchors: pooled recall " + f3(d.anchor_pooled) + "; " + Object.entries(d.strata).map(([s, v]: any) => s + " " + f3(v.anchor_recall)).join(", "));
+  for (const [k, v] of Object.entries(d.kinds) as any) lines.push("Kind " + k + " (" + v.stratum + ", " + v.items + " items): must-fix " + v.m + "/" + v.n + " = " + f3(v.rate) + " -> " + v.verdict + (v.final !== v.verdict ? " -> " + v.final : "") + "; any-severity " + v.any + "/" + v.n + "; stops " + v.stops);
+  for (const [s, v] of Object.entries(d.strata) as any) lines.push("Stratum " + s + ": " + (reasons.length ? "(E0 NO READ) " : "") + v.verdict);
+  lines.push("Sensitivity read (flagged units left out, " + kinds.blockers.filter((b: any) => b.flagged).length + " blockers; reported, decides nothing): E0 " + (sReasons.length ? "NO READ" : "READ") + "; anchors " + f3(ds.anchor_pooled) + "; " + Object.entries(ds.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n + " " + v.final).join(", ") + "; " + Object.entries(ds.strata).map(([s, v]: any) => s + " " + v.verdict).join(", "));
+  for (const x of diffs) lines.push("Differs between the primary and sensitivity reads: " + x);
+  lines.push("Re-audit: DEAD in the primary read " + (deadP.join(", ") || "none") + "; in the sensitivity read " + (deadS.join(", ") || "none") + "; the re-audit covers " + (dead.join(", ") || "no kind"));
+  lines.push("Judging: " + (judgeStopped.length ? judgeStopped.join(", ") + " stopped" : incomplete ? incomplete + " needed cells unjudged" : "complete") + "; unanswered blockers in primary replies sol " + unanswered.sol + ", opus " + unanswered.opus + ", sonnet " + unanswered.sonnet + "; matching kappa sol/opus over both arms' cells with a parsed block, pooled " + f3(kap.pooled!.kappa) + " (n " + kap.pooled!.n + "), " + ["ceo", "eng", "dx", "design"].map((s) => s + " " + f3(kap[s]!.kappa) + " (n " + kap[s]!.n + ")").join(", "));
+  for (const s of ["ceo", "eng", "dx", "design"]) if (kap[s]!.under) lines.push("Kappa " + s + " " + f3(kap[s]!.kappa) + " (n " + kap[s]!.n + "): kappa under 0.6: E1 must revise brief v3 before this stratum's judging");
+  lines.push("particle-1 (descriptive): " + Object.entries(pd.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n).join(", ") + "; anchors " + f3(pd.anchor_pooled) + "; missing block " + pScored.filter((s) => !s.block).length + "/" + pScored.length + "; stops " + particle.sessions.filter((s) => STOP_CLASSES.has(s.cls)).length + "; gaps " + cnt(particle, "GAP") + "; cap " + cnt(particle, "CAP"));
+  for (const [m, c] of Object.entries(costs) as any) lines.push("Cost " + m + ": " + (c.cost_usd ? "median $" + c.cost_usd.median.toFixed(3) + ", mean $" + c.cost_usd.mean.toFixed(3) + ", 90% upper $" + c.cost_usd.upper90.toFixed(3) : "n/a") + "; turns " + (c.turns ? "median " + c.turns.median + ", mean " + c.turns.mean.toFixed(1) + ", 90% upper " + c.turns.upper90.toFixed(1) : "n/a"));
+  for (const [m, a] of Object.entries(audit) as any) lines.push("Read audit " + m + ": " + a.sessions_flagged + " sessions flagged, " + a.calls + " calls" + (a.calls ? " (" + Object.entries(a.counts).map(([k, n]) => k + " " + n).join(", ") + ")" : ""));
+  writeFileSync(join(out, "verdict.txt"), lines.join("\n") + "\n");
+  writeFileSync(join(out, "readings.json"), JSON.stringify({ e0: reasons.length ? "NO READ" : "READ", reasons, kinds: d.kinds, strata: d.strata, anchor_pooled: d.anchor_pooled, sensitivity: { e0: sReasons.length ? "NO READ" : "READ", reasons: sReasons, kinds: ds.kinds, strata: ds.strata, anchor_pooled: ds.anchor_pooled, diffs }, kappa: kap, judge_stopped: judgeStopped, stops: stops.length, scheduled: opus.sessions.length, classes: Object.fromEntries((["SCORED", "TURN_CAP", "ALLOWANCE", "TIMEOUT_OUT", "GAP", "CAP"] as Cls[]).map((c) => [c, [cnt(opus, c), cnt(particle, c)]])), particle: { kinds: pd.kinds, anchor_pooled: pd.anchor_pooled }, costs, audit, cells: opusCells }, null, 1) + "\n");
+  for (const l of lines) console.log(l);
+  return reasons.length ? 3 : 0;
+}
+
+if (import.meta.main) {
+  try {
+    process.exit(await main(process.argv.slice(2)));
+  } catch (e) {
+    console.error("E_USAGE e0-readings: " + (e instanceof Error ? e.message : String(e)));
+    process.exit(2);
+  }
+}
