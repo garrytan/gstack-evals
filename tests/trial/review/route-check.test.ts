@@ -12,10 +12,11 @@ import { LedgerError } from "../../../src/runner/ledger/record.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
 import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { PLAN_ASK, PLAN_TURN2, REC_USER } from "../../../src/trial/review/plan.ts";
-import { billedCosts, billIds, journalCalls, judgeBlock, judgeMetering, judgeTool, main, runSessions, sessionInfra, TOOL_PROMPT, type Deps, type RoundInput, type RoundResult } from "../../../src/trial/review/route-check.ts";
+import { billedCosts, billIds, journalCalls, journalMetering, judgeBlock, judgeMetering, judgeTool, main, providerRefusal, runSessions, sessionInfra, TOOL_PROMPT, type Bills, type Deps, type RoundInput, type RoundResult } from "../../../src/trial/review/route-check.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
 import type { TrialRecord } from "../../../src/types.ts";
-import { harness, localSandbox } from "../../adapters/harness.ts";
+import { harness, localSandbox, MemoryLedger } from "../../adapters/harness.ts";
+import { MeteringProxy } from "../../../src/runner/proxy/metering-proxy.ts";
 import { collect } from "../../cli/helpers.ts";
 
 const SOL = "openai/gpt-6.1-sol";
@@ -40,10 +41,11 @@ const roundTrip = (o: { error?: boolean; quote?: boolean; parent?: string } = {}
   user([{ type: "tool_result", tool_use_id: "tu1", content: o.error ? "File does not exist." : TOKEN + "\n", is_error: o.error === true }], o.parent ?? null) +
   assistant([{ type: "text", text: o.quote === false ? "I read the file." : "The token is " + TOKEN + "." }]);
 const rec = (termination: TrialRecord["termination"], turns: string[] = [], model_output = true) => ({ termination, turns, model_output }) as unknown as TrialRecord;
-const call = (meter: string, rid: string, o: { spent?: number; upstream?: string | null; status?: number; unknown?: boolean } = {}) => [
+const call = (meter: string, rid: string, o: { spent?: number; upstream?: string | null; status?: number; unknown?: boolean; reason?: string } = {}) => [
   { kind: "request", reservation_id: rid, cell: { meter_id: meter } },
-  { kind: "outcome", reservation_id: rid, meter_id: meter, status: o.status ?? 200, outcome: o.unknown ? { kind: "unknown" } : { kind: "spent", spent_micros: o.spent ?? 100_000, usage: { input: 10, output: 5, cache_read: 0, cache_write: 0, reasoning: 0 } }, upstream_id: o.upstream === undefined ? "gen-" + rid : o.upstream },
+  { kind: "outcome", reservation_id: rid, meter_id: meter, status: o.status ?? 200, outcome: o.unknown ? { kind: "unknown" } : { kind: "spent", spent_micros: o.spent ?? 100_000, usage: { input: 10, output: 5, cache_read: 0, cache_write: 0, reasoning: 0 } }, ...(o.reason ? { reason: o.reason } : {}), upstream_id: o.upstream === undefined ? "gen-" + rid : o.upstream },
 ];
+const found = (billed: Map<string, { micros: number; reasoning: number | null }>, more: Partial<Bills> = {}): Bills => ({ billed, unpublished: new Set(), infra: null, ...more });
 
 interface Script { tool?: Partial<{ record: TrialRecord; transcript: string }>; block?: TrialRecord; journal?: Record<string, unknown>[]; throws?: Error; lease?: string; spent?: number }
 function fakeRound(script: Script, seen: RoundInput[]): Deps["round"] {
@@ -143,8 +145,8 @@ describe("route-check exits", () => {
     expect(seen[1]!.sessions).toEqual(["tool", "block"]);
   });
 
-  // Value: protects=an endpoint or proxy failure exits 2 with E_ROUTE_INFRA, uses no try, prints what the proxy said with the key scrubbed, and two of them stop the check; fails_when=an infra stop counts as a try, the key reaches stderr, or a third run spends; why_new=GEVA-203; seam=main, sessionInfra and proxyErrors; no_claim=which infra failures a live route shows
-  test("E_ROUTE_INFRA exits 2 with no try used, and a second one stops the check", async () => {
+  // Value: protects=an endpoint or proxy failure exits 2 with E_ROUTE_INFRA, uses no try, prints what the proxy said with the key scrubbed, and the second one ends the check INCONCLUSIVE (E_ROUTE_INCONCLUSIVE, exit 2), which blocks the route from E1 and refuses any later try; fails_when=an infra stop counts as a try, the key reaches stderr, the bound leaves the model in E1, or a third run spends; why_new=GEVA-203, and GST-1121 (the Captain's ruling: infra never passes, and a bounded number of infra outcomes ends INCONCLUSIVE); seam=main, sessionInfra and proxyErrors; no_claim=which infra failures a live route shows
+  test("E_ROUTE_INFRA exits 2 with no try used, and a second one ends the check INCONCLUSIVE", async () => {
     const out = outDir();
     const seen: RoundInput[] = [];
     const journal = [...call("m-tool", "r1"), { kind: "refusal", meter_id: "m-block", code: "UPSTREAM", reason: "openrouter answered 503; sent with Bearer " + KEY }];
@@ -157,39 +159,47 @@ describe("route-check exits", () => {
     expect(first.lines.at(-1)).toBe("  fix: check the endpoint, credential or proxy named above, then rerun route-check with the same --out");
     expect(state(out).tries[0].parts.block).toEqual({ result: "infra", reason: "the session ended missing (UPSTREAM)" });
     const second = await run(argv(out), { round });
-    expect(second.lines.at(-1)).toStartWith("  fix: this is the second infra failure, so the check stops for the Captain");
+    expect(second.code).toBe(2);
+    expect(second.lines).toContain("  fix: this is the check's last allowed infra outcome, so the check ends INCONCLUSIVE (E_ROUTE_INCONCLUSIVE); report the lines above");
+    expect(second.lines.slice(-2)).toEqual(["E_ROUTE_INCONCLUSIVE route-check: openai/gpt-6.1-sol has had 2 infra outcomes (" + join(out, "route-check.json") + "), so the check is INCONCLUSIVE and openai/gpt-6.1-sol does not enter E1", "  fix: report the check to the Captain with the infra lines its tries printed; route-check runs no more tries on this --out"]);
     const third = await run(argv(out), { round });
     expect(third.code).toBe(2);
-    expect(third.lines[0]).toStartWith("E_ROUTE_INFRA route-check: openai/gpt-6.1-sol has had 2 infra failures");
+    expect(third.lines[0]).toBe(second.lines.at(-2)!);
     expect(seen).toHaveLength(2);
   });
 
-  // Value: protects=a provider 4xx other than 401, 403 or 429 on the tool session's own call fails the tool part (E_ROUTE_TOOL_ROUNDTRIP, exit 1, a try used) with the status and response body, while a 429 there stays E_ROUTE_INFRA with no try used; fails_when=a provider 404 reads as infra, the reason drops the status or body, or a 429 fails the part; why_new=PR #166 review (R2); seam=main, providerRefusal and sessionInfra; no_claim=which 4xx answers a live route gives
-  test("a provider 404 on the tool session fails the tool part with exit 1; a 429 there stays infra", async () => {
+  // Value: protects=a provider 4xx other than 401, 402, 403, 408 or 429 on the tool session's own call fails the tool part (E_ROUTE_TOOL_ROUNDTRIP, exit 1, a try used) with the status and response body, while 402 (our credits), 408 (a timeout) and 429 stay E_ROUTE_INFRA with no try used; a session whose only call was refused at $0 has no verified bill, so metering is infra and never passes; fails_when=a provider 400 or 404 reads as infra, the reason drops the status or body, a 402 or 408 fails the part (R2R2), or metering passes with no bill (R2R1); why_new=PR #166 review (R2), and GST-1121 (R2R1, R2R2); seam=main, providerRefusal, sessionInfra and journalMetering; no_claim=which 4xx answers a live route gives
+  test("a provider 400 or 404 on the tool session fails the tool part with exit 1; a 402, 408 or 429 there stays infra; metering with no bill is infra", async () => {
     const body = 'API Error: 404 {"error":{"message":"No endpoints found that support tool use","code":404}}';
     const apiError = line({ type: "assistant", parent_tool_use_id: null, is_api_error_message: true, error: "unknown", message: { content: [{ type: "text", text: body }] } });
     const refused = (status: number) => fakeRound({ tool: { record: rec({ kind: "missing", code: "UPSTREAM" }, [], false), transcript: apiError }, journal: [...call("m-tool", "r1", { spent: 0, status, upstream: null }), ...call("m-block", "r2")] }, []);
-    const out = outDir();
-    const notFound = await run(argv(out), { round: refused(404) });
-    expect(notFound.code).toBe(1);
-    expect(notFound.lines[0]).toBe("E_ROUTE_TOOL_ROUNDTRIP route-check: openai/gpt-6.1-sol on https://openrouter.ai/api/v1/messages (Claude Code 2.9.0), part tool, try 1 of 2: the provider answered 404 to Claude Code's request: " + body);
-    expect(state(out).tries[0].parts).toEqual({ tool: { result: "fail", code: "E_ROUTE_TOOL_ROUNDTRIP", reason: "the provider answered 404 to Claude Code's request: " + body }, block: { result: "pass" }, metering: { result: "pass" } });
-    const limited = outDir();
-    const busy = await run(argv(limited), { round: refused(429) });
-    expect(busy.code).toBe(2);
-    expect(busy.lines[0]).toEndWith("part tool, try 1 (no try used): the session ended missing (UPSTREAM)");
-    expect(state(limited).tries[0].parts.tool).toEqual({ result: "infra", reason: "the session ended missing (UPSTREAM)" });
+    for (const status of [400, 404]) {
+      const out = outDir();
+      const r = await run(argv(out), { round: refused(status) });
+      expect([status, r.code]).toEqual([status, 1]);
+      expect(r.lines[0]).toBe("E_ROUTE_TOOL_ROUNDTRIP route-check: openai/gpt-6.1-sol on https://openrouter.ai/api/v1/messages (Claude Code 2.9.0), part tool, try 1 of 2: the provider answered " + status + " to Claude Code's request: " + body);
+      const none = "no call of the tool session was billed, so no bill can verify its metering";
+      expect(state(out).tries[0].parts).toEqual({ tool: { result: "fail", code: "E_ROUTE_TOOL_ROUNDTRIP", reason: "the provider answered " + status + " to Claude Code's request: " + body }, block: { result: "pass" }, metering: { result: "infra", reason: none } });
+      expect(r.err).toContain("part metering, try 1 (no try used): " + none);
+    }
+    for (const status of [402, 408, 429]) {
+      const out = outDir();
+      const r = await run(argv(out), { round: refused(status) });
+      expect([status, r.code, r.lines[0]]).toEqual([status, 2, "E_ROUTE_INFRA route-check: openai/gpt-6.1-sol on https://openrouter.ai/api/v1/messages (Claude Code 2.9.0), part tool, try 1 (no try used): the session ended missing (UPSTREAM)"]);
+      expect([status, state(out).tries[0].parts]).toEqual([status, { tool: { result: "infra", reason: "the session ended missing (UPSTREAM)" }, block: { result: "pass" }, metering: { result: "infra", reason: "the session ended missing (UPSTREAM)" } }]);
+    }
   });
 
-  // Value: protects=a call whose spend the proxy could not read (a retried 5xx with no usage, charged at its full reservation, or an unknown outcome) makes the metering part E_ROUTE_INFRA (exit 2, no try used, no bill lookup) and keeps the try's charge, while a normal call with no upstream id still fails metering; fails_when=either case fails metering and uses a try, the charge is dropped from the record, or the control passes; why_new=PR #166 review (A2, the Captain's ruling); seam=main, meteringInfra and judgeMetering; no_claim=how often a live route sees a 5xx
-  test("a retried 502 with no usage or an unknown outcome makes metering infra; a call with no upstream id still fails it", async () => {
+  // Value: protects=a call whose spend the proxy could not read (a retried 5xx with no usage, charged at its full reservation, or an unknown outcome such as a broken stream) or a call with no outcome line (a proxy fault) makes the metering part E_ROUTE_INFRA (exit 2, no try used, no bill lookup) and keeps the try's charge, while a 2xx answer with no usage, from a JSON reply or a stream, and a billed call with no upstream id fail metering (E_ROUTE_METERING, exit 1, a try used), because the route must report usage; fails_when=an infra case uses a try, the charge is dropped from the record, a 2xx with no usage reads as infra (R2R3), or a call with no outcome line fails the part; why_new=PR #166 review (A2, the Captain's ruling), and GST-1121 (R2R3); seam=main, journalMetering and judgeMetering; no_claim=how often a live route sees a 5xx or a 2xx with no usage
+  test("a retried 502 with no usage, a broken stream or a call with no outcome line makes metering infra; a 2xx with no usage or no upstream id fails it", async () => {
     const looked: string[] = [];
     const fetch = (async (url: string) => (looked.push(url), bills({ "gen-r1": 0.1, "gen-r2": 0.1 })(url))) as Deps["fetch"];
     const [request, outcome] = call("m-tool", "r0", { spent: 6_880_000, status: 502, upstream: null });
     const retried = [request, { ...outcome, outcome: { kind: "spent", spent_micros: 6_880_000, usage: { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 } }, reason: "a 5xx without usage is charged at its reservation" }];
     const cases: [string, Record<string, unknown>[], string][] = [
       ["retried 502", [...retried, ...call("m-tool", "r1"), ...call("m-block", "r2")], "call r0 (tool session): the provider answered 502 with no usage, so the proxy charged its full reservation"],
-      ["unknown outcome", [...call("m-tool", "r1"), ...call("m-block", "r2", { unknown: true })], "call r2 (block session) has an unknown outcome, so its spend is not known"],
+      ["broken stream", [...call("m-tool", "r1"), ...call("m-block", "r2"), ...call("m-block", "r3", { unknown: true, reason: "the stream broke: socket hang up" })], "call r3 (block session) has an unknown outcome (the stream broke: socket hang up), so its spend is not known"],
+      ["no outcome line", [...call("m-tool", "r1"), ...call("m-block", "r2"), call("m-block", "r3")[0]!], "call r3 (block session) has no outcome line in the proxy journal, a proxy fault"],
     ];
     for (const [name, journal, reason] of cases) {
       const out = outDir();
@@ -199,9 +209,30 @@ describe("route-check exits", () => {
       expect([name, t.parts, t.spent_micros]).toEqual([name, { tool: { result: "pass" }, block: { result: "pass" }, metering: { result: "infra", reason } }, 7_080_000]);
     }
     expect(looked).toEqual([]);
-    const control = await run(argv(outDir()), { round: fakeRound({ journal: [...call("m-tool", "r1"), ...call("m-block", "r2", { upstream: null })] }, []) });
-    expect(control.code).toBe(1);
-    expect(control.lines[0]).toEndWith("part metering, try 1 of 2: call r2 (block session) has no upstream id, so its billed cost cannot be read");
+    const noUsage = "call r3 (block session): the provider answered 200 with no usage, and the route must report usage";
+    const fails: [string, Record<string, unknown>[], string][] = [
+      ["no upstream id", [...call("m-tool", "r1"), ...call("m-block", "r2", { upstream: null })], "call r2 (block session) has no upstream id, so its billed cost cannot be read"],
+      ["2xx JSON with no usage", [...call("m-tool", "r1"), ...call("m-block", "r2"), ...call("m-block", "r3", { unknown: true })], noUsage],
+      ["2xx stream with no usage", [...call("m-tool", "r1"), ...call("m-block", "r2"), ...call("m-block", "r3", { unknown: true, reason: "the stream ended without usage" })], noUsage],
+    ];
+    for (const [name, journal, reason] of fails) {
+      const out = outDir();
+      const r = await run(argv(out), { round: fakeRound({ journal }, []) });
+      expect([name, r.code, r.lines[0]]).toEqual([name, 1, "E_ROUTE_METERING route-check: openai/gpt-6.1-sol on https://openrouter.ai/api/v1/messages (Claude Code 2.9.0), part metering, try 1 of 2: " + reason]);
+      expect([name, state(out).tries[0].parts.metering]).toEqual([name, { result: "fail", code: "E_ROUTE_METERING", reason }]);
+    }
+  });
+
+  // Value: protects=R2S2: a route whose generations OpenRouter never publishes fails metering (E_ROUTE_METERING, exit 1, a try used) for every call, the second id included, while a lookup that still fails at the deadline (a 500) stays infra with no try used; fails_when=an unpublished bill reads as infra, so a route that never publishes is never failed, or a failing lookup fails the route; why_new=GST-1121 (R2S2, the Captain's ruling: the route must publish generations to be metered); seam=main and billedCosts over the shared deadline; no_claim=OpenRouter's real publishing lag
+  test("R2S2: bills unpublished at the deadline fail metering; a lookup still failing at the deadline is infra", async () => {
+    const out = outDir();
+    const unpublished = await run(argv(out), { round: fakeRound({}, []), fetch: (async () => new Response("{}", { status: 404 })) as Deps["fetch"] });
+    const reason = "call r1 (tool session): OpenRouter has no billed generation gen-r1 within the wait; call r2 (block session): OpenRouter has no billed generation gen-r2 within the wait";
+    expect([unpublished.code, unpublished.lines[0]]).toEqual([1, "E_ROUTE_METERING route-check: openai/gpt-6.1-sol on https://openrouter.ai/api/v1/messages (Claude Code 2.9.0), part metering, try 1 of 2: " + reason]);
+    expect(state(out).tries[0].parts.metering).toEqual({ result: "fail", code: "E_ROUTE_METERING", reason });
+    const down = outDir();
+    const failing = await run(argv(down), { round: fakeRound({}, []), fetch: (async () => new Response("{}", { status: 500 })) as Deps["fetch"] });
+    expect([failing.code, failing.lines[0]]).toEqual([2, "E_ROUTE_INFRA route-check: openai/gpt-6.1-sol on https://openrouter.ai/api/v1/messages (Claude Code 2.9.0), part metering, try 1 (no try used): OpenRouter answered 500 to the generation lookup"]);
   });
 
   // Value: protects=a ledger, proxy or budget cap stop leaves the check incomplete (CAP_STOP, exit 2) and uses no try; fails_when=a cap stop reads as a pass or a failure, or a try past the check's cap starts; why_new=GEVA-203; seam=main's cap handling; no_claim=the ledger's own cap arithmetic
@@ -274,15 +305,23 @@ describe("route-check judges", () => {
     expect(sessionInfra(rec({ kind: "timeout" }))).toBeNull();
   });
 
-  // Value: protects=metering passes within 10% and fails outside it, with no upstream id, with an unknown outcome or with no call, while a refused call settled at nothing needs no id; fails_when=any of these flips; why_new=GEVA-203; seam=journalCalls and judgeMetering; no_claim=OpenRouter's rounding
+  // Value: protects=metering passes within 10% and fails outside it, with no upstream id, with a 2xx that reports no usage or with a bill unpublished at the deadline; a refused call settled at nothing needs no id beside a billed one; and only a verified bill passes: a session with no paid call, or whose calls were all refused at $0, and a bill lookup that failed are infra, never a pass; fails_when=any of these flips, or metering passes with no bill (R2R1); why_new=GEVA-203, and GST-1121 (R2R1, R2R3, R2S2); seam=journalCalls, journalMetering and judgeMetering; no_claim=OpenRouter's rounding
   test("judgeMetering", () => {
     const meters = { tool: "m-tool", block: "m-block" };
     const bill = (b: number) => new Map([["gen-r1", { micros: 95_000, reasoning: 0 }], ["gen-r2", { micros: b, reasoning: 3 }]]);
+    const judge = (lines: Record<string, unknown>[], bills: Bills) => {
+      const m = judgeMetering(journalCalls(lines, meters), bills, ["tool", "block"]);
+      return { problems: m.problems, infra: m.infra };
+    };
     const lines = [...call("m-tool", "r1"), ...call("m-block", "r2"), ...call("m-block", "r3", { spent: 0, status: 429, upstream: null })];
-    expect(judgeMetering(journalCalls(lines, meters), bill(105_000), ["tool", "block"]).problems).toEqual([]);
-    expect(judgeMetering(journalCalls(lines, meters), bill(80_000), ["tool", "block"]).problems).toEqual(["the block session metered $0.100000 and OpenRouter billed $0.080000, more than 10% apart"]);
-    expect(judgeMetering(journalCalls([...call("m-tool", "r1"), ...call("m-block", "r2", { upstream: null })], meters), bill(100_000), ["tool", "block"]).problems).toEqual(["call r2 (block session) has no upstream id, so its billed cost cannot be read"]);
-    expect(judgeMetering(journalCalls([...call("m-block", "r2", { unknown: true })], meters), bill(100_000), ["tool", "block"]).problems).toEqual(["call r2 (block session) has no spent outcome with its spend and reasoning tokens in the proxy journal", "the tool session has no paid call in the proxy journal"]);
+    expect(judge(lines, found(bill(105_000)))).toEqual({ problems: [], infra: [] });
+    expect(judge(lines, found(bill(80_000)))).toEqual({ problems: ["the block session metered $0.100000 and OpenRouter billed $0.080000, more than 10% apart"], infra: [] });
+    expect(judge([...call("m-tool", "r1"), ...call("m-block", "r2", { upstream: null })], found(bill(100_000)))).toEqual({ problems: ["call r2 (block session) has no upstream id, so its billed cost cannot be read"], infra: [] });
+    expect(judge(call("m-block", "r2", { unknown: true }), found(bill(100_000)))).toEqual({ problems: ["call r2 (block session): the provider answered 200 with no usage, and the route must report usage"], infra: ["the tool session has no paid call in the proxy journal, a proxy fault", "no call of the block session was billed, so no bill can verify its metering"] });
+    const refused = [...call("m-tool", "r1", { spent: 0, status: 404, upstream: null }), ...call("m-block", "r2", { spent: 0, status: 400, upstream: null })];
+    expect(judge(refused, found(new Map()))).toEqual({ problems: [], infra: ["no call of the tool session was billed, so no bill can verify its metering", "no call of the block session was billed, so no bill can verify its metering"] });
+    expect(judge(lines, found(new Map([["gen-r1", { micros: 95_000, reasoning: 0 }]]), { unpublished: new Set(["gen-r2"]) }))).toEqual({ problems: ["call r2 (block session): OpenRouter has no billed generation gen-r2 within the wait"], infra: [] });
+    expect(judge(lines, found(new Map(), { infra: "OpenRouter answered 500 to the generation lookup" }))).toEqual({ problems: [], infra: ["OpenRouter answered 500 to the generation lookup"] });
   });
 
   // Value: protects=a call the proxy never sent (settled at $0 with a null status, its "not sent: ..." outcome) needs no upstream id and no bill lookup, while a $0 call with a status and no upstream id still does; fails_when=a never-sent call reads as a metering problem or is looked up, or the exemption covers a call that reached the provider; why_new=PR #166 review (S2); seam=journalCalls, billIds and judgeMetering; no_claim=how often the proxy skips a send
@@ -292,12 +331,50 @@ describe("route-check judges", () => {
     const [request, outcome] = call("m-block", "r3", { spent: 0, upstream: null });
     const notSent = [request, { ...outcome, status: null, reason: "not sent: attempt 2 would start past this call's retry budget of 60000 ms" }];
     const calls = journalCalls([...call("m-tool", "r1"), ...call("m-block", "r2"), ...notSent], meters);
-    expect(judgeMetering(calls, bill, ["tool", "block"]).problems).toEqual([]);
+    expect(judgeMetering(calls, found(bill), ["tool", "block"])).toMatchObject({ problems: [], infra: [] });
     expect(billIds(calls)).toEqual(["gen-r1", "gen-r2"]);
-    expect(judgeMetering(journalCalls([...call("m-tool", "r1"), ...call("m-block", "r2"), request, outcome], meters), bill, ["tool", "block"]).problems).toEqual(["call r3 (block session) has no upstream id, so its billed cost cannot be read"]);
+    expect(judgeMetering(journalCalls([...call("m-tool", "r1"), ...call("m-block", "r2"), request, outcome], meters), found(bill), ["tool", "block"])).toMatchObject({ problems: ["call r3 (block session) has no upstream id, so its billed cost cannot be read"], infra: [] });
   });
 
-  // Value: protects=the bill reader waits a bounded time: it finds a generation that appears after two polls, gives up on one that never does at the deadline, and calls a refused key infra; fails_when=it stops early, polls past the deadline or reads a 401 as a missing bill; why_new=GEVA-203; seam=billedCosts with an injected fetch and clock; no_claim=OpenRouter's real lag
+  // Value: protects=route-check reads the real metering proxy's journal the way the proxy writes it: a 2xx JSON reply and a 2xx stream with no usage are route failures, a stream that breaks is infra, a billed reply needs its bill, and a 402 or 404 refused at $0 needs none; providerRefusal calls a 402 ours and a 404 the route's answer; fails_when=the proxy's no-usage or broken-stream outcome lines read the other way, or a 402 counts as the route's answer; why_new=GST-1121 (R2R2, R2R3; the #101 lesson: test against the real component); seam=MeteringProxy's journal into journalCalls, journalMetering, billIds and providerRefusal; no_claim=OpenRouter's own answers
+  test("the real proxy's journal: a 2xx with no usage fails, a broken stream is infra, a 402 is ours and a 404 the route's", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "route-proxy-"));
+    roots.push(dir);
+    const bytes = new TextEncoder();
+    const start = (id: string, usage = "") => "data: " + JSON.stringify({ type: "message_start", message: { id, ...(usage ? { usage: { input_tokens: 10, output_tokens: 1 } } : {}) } }) + "\n\n";
+    const replies: (() => Response)[] = [
+      () => Response.json({ id: "gen-a" }),
+      () => new Response(start("gen-b"), { headers: { "content-type": "text/event-stream" } }),
+      () => new Response(new ReadableStream({ start: (c) => (c.enqueue(bytes.encode(start("gen-c", "usage"))), c.error(new Error("socket hang up"))) }), { headers: { "content-type": "text/event-stream" } }),
+      () => Response.json({ id: "gen-d", usage: { input_tokens: 10, output_tokens: 5 } }),
+      () => Response.json({ error: { message: "Insufficient credits" } }, { status: 402 }),
+      () => Response.json({ error: { message: "No endpoints found" } }, { status: 404 }),
+    ];
+    const proxy = new MeteringProxy({ ledger: new MemoryLedger(), leaseId: "lease-test", host: "127.0.0.1", managementSocket: join(dir, "management.sock"), managementToken: "management-token-0123456789abcdef", journal: join(dir, "journal.ndjson"), retry: { attempts: 1, elapsed_ms: 10_000 }, env: { OPENROUTER_API_KEY: KEY }, fetch: async () => replies.shift()!() });
+    proxy.start();
+    try {
+      const b = proxy.bind({ cell: { run_id: "run-test", arm: "none", task: "route-tool", model: SOL, trial: 1, attempt: 1 }, models: ["openrouter:" + SOL], allowance_micros: 6_880_000 });
+      for (let i = 0; i < 6; i++) {
+        await fetch("http://127.0.0.1:" + proxy.port + "/" + b.slot + "/openrouter/v1/messages", { method: "POST", headers: { "content-type": "application/json", "anthropic-version": "2023-06-01", authorization: "Bearer " + b.token }, body: JSON.stringify({ model: SOL, max_tokens: 1024, messages: [{ role: "user", content: "hi" }] }) }).then((res) => res.text()).catch(() => "");
+      }
+      await proxy.finalize(b.meter_id);
+      const lines = readFileSync(join(dir, "journal.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      const calls = journalCalls(lines, { tool: b.meter_id });
+      expect(calls.map((c) => [c.status, c.outcome?.kind, c.upstream_id])).toEqual([[200, "unknown", "gen-a"], [200, "unknown", "gen-b"], [200, "unknown", null], [200, "spent", "gen-d"], [402, "spent", null], [404, "spent", null]]);
+      const id = calls.map((c) => c.reservation_id);
+      const m = journalMetering(calls, ["tool"]);
+      expect(m.problems).toEqual([0, 1].map((i) => "call " + id[i] + " (tool session): the provider answered 200 with no usage, and the route must report usage"));
+      expect(m.infra).toHaveLength(1);
+      expect(m.infra[0]).toMatch(new RegExp("^call " + id[2] + " \\(tool session\\) has an unknown outcome \\(the stream broke: .+\\), so its spend is not known$"));
+      expect(billIds(calls)).toEqual(["gen-d"]);
+      expect(providerRefusal(lines, b.meter_id, "")).toBe("the provider answered 404 to Claude Code's request, and the transcript holds no response body");
+      expect(providerRefusal(lines.filter((l) => l.status !== 404), b.meter_id, "")).toBeNull();
+    } finally {
+      proxy.stop();
+    }
+  });
+
+  // Value: protects=the bill reader waits a bounded time: it finds a generation that appears after two polls, reports one that never does as unpublished at the deadline, and calls a refused key infra; fails_when=it stops early, polls past the deadline, reads an unpublished bill as infra or a 401 as a missing bill; why_new=GEVA-203, and GST-1121 (R2S2); seam=billedCosts with an injected fetch and clock; no_claim=OpenRouter's real lag
   test("billedCosts' bounded wait", async () => {
     let clock = 0;
     const sleeps: number[] = [];
@@ -306,34 +383,37 @@ describe("route-check judges", () => {
       const status = statuses.shift() ?? 404;
       return status === 200 ? Response.json({ data: { total_cost: 0.0123, native_tokens_reasoning: 7 } }) : new Response("{}", { status });
     }) as Deps["fetch"] });
-    expect(await billedCosts(["gen-1"], deps([404, 404, 200]))).toEqual({ billed: new Map([["gen-1", { micros: 12_300, reasoning: 7 }]]) });
+    expect(await billedCosts(["gen-1"], deps([404, 404, 200]))).toEqual({ billed: new Map([["gen-1", { micros: 12_300, reasoning: 7 }]]), unpublished: new Set(), infra: null });
     expect(sleeps).toHaveLength(2);
     clock = 0;
     sleeps.length = 0;
-    expect(await billedCosts(["gen-2"], deps([]))).toEqual({ billed: new Map() });
+    expect(await billedCosts(["gen-2"], deps([]))).toEqual({ billed: new Map(), unpublished: new Set(["gen-2"]), infra: null });
     expect(sleeps).toEqual([5_000, 10_000, 15_000, 20_000]);
-    expect(await billedCosts(["gen-3"], deps([401]))).toEqual({ infra: "OpenRouter answered 401 to the generation lookup's key" });
+    expect(await billedCosts(["gen-3"], deps([401]))).toEqual({ billed: new Map(), unpublished: new Set(), infra: "OpenRouter answered 401 to the generation lookup's key" });
   });
 
-  // Value: protects=a bill lookup that stalls on its headers or its body ends as infra near the shared deadline, and an id the wait never reached is infra too; fails_when=a stalled lookup hangs past the deadline, an abort reads as a missing bill, or an id is looked up after the wait ran out; why_new=PR #166 review; seam=billedCosts with a fetch that waits on its signal and a local server that never ends its body; no_claim=OpenRouter's real stalls
+  // Value: protects=a bill lookup that stalls on its headers or its body ends as infra near the shared deadline, an id the wait never reached is infra too, and every id still unpublished at the deadline is unpublished, the second included (R2S2: round 1's reader called the second one infra); fails_when=a stalled lookup hangs past the deadline, an abort reads as a missing bill, an id is looked up after the wait ran out, or a later unpublished id reads as infra; why_new=PR #166 review, and GST-1121 (R2S2); seam=billedCosts with a fetch that waits on its signal and a local server that never ends its body; no_claim=OpenRouter's real stalls
   test("billedCosts aborts a stalled lookup at the shared deadline", async () => {
     const real = { key: KEY, waitMs: 300, pollMs: 100, now: () => performance.now(), sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) };
     const headers = (async (_url: string, init?: RequestInit) => new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)))) as Deps["fetch"];
     let started = performance.now();
-    expect(await billedCosts(["gen-1"], { ...real, fetch: headers })).toEqual({ infra: "the generation lookup failed: The operation timed out." });
+    expect(await billedCosts(["gen-1"], { ...real, fetch: headers })).toEqual({ billed: new Map(), unpublished: new Set(), infra: "the generation lookup failed: The operation timed out." });
     expect(performance.now() - started).toBeLessThan(2_000);
     const server = Bun.serve({ port: 0, fetch: () => new Response(new ReadableStream({ start: (c) => c.enqueue(new TextEncoder().encode('{"data":')) }), { headers: { "content-type": "application/json" } }) });
     try {
       const body = ((url: string, init?: RequestInit) => fetch(server.url.origin + new URL(url).pathname + new URL(url).search, init)) as Deps["fetch"];
       started = performance.now();
-      expect(await billedCosts(["gen-2"], { ...real, fetch: body })).toEqual({ infra: "the generation lookup failed: The operation timed out." });
+      expect(await billedCosts(["gen-2"], { ...real, fetch: body })).toEqual({ billed: new Map(), unpublished: new Set(), infra: "the generation lookup failed: The operation timed out." });
       expect(performance.now() - started).toBeLessThan(2_000);
     } finally {
       server.stop(true);
     }
     let clock = 0;
     const missing = { key: KEY, waitMs: 20_000, pollMs: 5_000, now: () => clock, sleep: async (ms: number) => void (clock += ms), fetch: (async () => new Response("{}", { status: 404 })) as Deps["fetch"] };
-    expect(await billedCosts(["gen-3", "gen-4"], missing)).toEqual({ infra: "the shared wait ran out before generation gen-4 was looked up" });
+    expect(await billedCosts(["gen-3", "gen-4"], missing)).toEqual({ billed: new Map(), unpublished: new Set(["gen-3", "gen-4"]), infra: null });
+    clock = 0;
+    const slow = { ...missing, fetch: (async () => ((clock += 20_000), new Response("{}", { status: 404 }))) as Deps["fetch"] };
+    expect(await billedCosts(["gen-5", "gen-6"], slow)).toEqual({ billed: new Map(), unpublished: new Set(["gen-5"]), infra: "the shared wait ran out before generation gen-6 was looked up" });
   });
 });
 
