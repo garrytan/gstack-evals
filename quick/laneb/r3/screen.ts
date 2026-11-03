@@ -27,6 +27,10 @@
 // the pilot and stops there when the screen is already incomplete, and analyze removes an earlier analysis's
 // admitted.txt and r3b-tasks.txt before it reads anything else (#121's notes, R3 amendment section 6.6). A plan.json that
 // parses and names another item is refused first, with nothing removed (Captain ruling B1).
+// R3 amendment 4's items run with --item r3a4-opus or --item r3a4-sol instead of --model (R3A4 below): prepare also needs
+// SWEREBENCH (the Hub package export), DROPS (the oracle preflight's drop list) and DROPS_SHA256 (its sha256 from the run
+// record), and run and analyze check the plan's draw against DROPS again. run stops after screen-a when the projection
+// check passes the item's cap, and analyze then reports screen-b as not launched (incomplete).
 // Exit codes, as r3-dry.ts: 0 admission passed (R3b waits for Garry's caps), 4 incomplete, 5 saturation, 6 pilot
 // FIX-METHOD; 2 usage, 1 any other error.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -34,7 +38,8 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { readSessionRows, rng } from "../analysis/analyze.ts";
 import { fromMicros, readRows, totals } from "../runner/ledger.ts";
-import { loadR3Drops, loadSwebvTasks, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256, type R3Drop } from "../runner/materialize.ts";
+import { loadR3a4Drops, loadR3Drops, loadRebenchPool, loadSwebvTasks, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256, R3A4_POOL_FILE, R3A4_POOL_SHA256, type R3Drop } from "../runner/materialize.ts";
+import { PROCEDURE_LINES } from "../runner/grid.ts";
 import { loadR3Jobs, type R3Trial } from "./exposure.ts";
 
 export const OPUS = "claude-opus-5-5";
@@ -48,10 +53,13 @@ export const R3_ARMS = {
   none: "none:system_prompt=claude-code-preset",
   gstack: "gstack:told=investigate:system_prompt=claude-code-preset",
   placebo: "placebo:told=investigate:system_prompt=claude-code-preset",
+  // R3 amendment 4's treatment (plan section 6): told /investigate with the procedure line, and the placebo matched to it.
+  toldLine: "gstack:told=investigate:procedure_line=investigate-phases:system_prompt=claude-code-preset",
+  placeboLine: "placebo:told=investigate:procedure_line=investigate-phases:system_prompt=claude-code-preset",
 } as const;
 export const R3_CELLS: Record<string, (keyof typeof R3_ARMS)[]> = { "claude-opus-5-5": ["none", "gstack"], "particle-1": ["none", "gstack", "placebo"] };
 
-type Part = { name: "screen" | "pilot"; job: string; arm: string; prefix: string };
+type Part = { name: string; job: string; arm: string; prefix: string };
 export type R3aModel = {
   id: string; label: string; item: string; capUsd: number; capFrom: string;
   // Ledger prefix of the model's route check sessions on its item, or null when the model has no route check.
@@ -62,6 +70,8 @@ export type R3aModel = {
   // Outcome lines: tag follows "R3 outcome" and "R3b start", stop ends a STOP line, incomplete follows an incomplete one.
   tag: string; stop: string; incomplete: string;
   projection: (n: number, cNone: number, cTold: number) => { text: string; usd: Record<string, number> };
+  // R3 amendment 4's items only: the session allowance (cells.r3a4.json) that a trial with no metered cost counts at.
+  a4?: { allowanceUsd: number };
 };
 export const R3A: Record<string, R3aModel> = {
   [OPUS]: {
@@ -90,8 +100,80 @@ export const R3A: Record<string, R3aModel> = {
     },
   },
 };
+// R3 amendment 4 (plan sections 4 to 6, 8 and 10): each model's screen of 200 none trials drawn from the SWE-rebench pool
+// less its oracle drop list, in two parts of 100 (screen-a, then screen-b), then a pilot of 10 told trials with the
+// procedure line, on its own item, cap and ledger port. The old items above keep their code paths.
+export const A4 = { screenTasks: 200, partTasks: 100, screenSeed: 20261104, pilotTasks: 10, pilotSeed: 20261105, concurrent: "6", cells: "cells.r3a4.json", reserveUsd: 72, pilotSessionUsd: 12, particleTrialUsd: 0.75 };
+const a4Parts = (item: string) => [
+  { name: "screen-a", job: `${item}-screen-a`, arm: R3_ARMS.none, prefix: `${item}-screen-a/` },
+  { name: "screen-b", job: `${item}-screen-b`, arm: R3_ARMS.none, prefix: `${item}-screen-b/` },
+  { name: "pilot", job: `${item}-pilot`, arm: R3_ARMS.toldLine, prefix: `${item}-pilot/` },
+];
+export const R3A4: Record<string, R3aModel> = {
+  "r3a4-opus": {
+    id: OPUS, label: "Opus 5.5", item: "r3a4-opus", capUsd: 550, capFrom: "amendment 4's", routePrefix: null, ledgerPort: "9913", parts: a4Parts("r3a4-opus"),
+    tag: "", stop: "R3b does not start", incomplete: "R3a stopped, so R3b does not start; the Captain gets the record.", a4: { allowanceUsd: 12 },
+    projection: (n, cNone, cTold) => {
+      const opus = n * 3 * (cNone + cTold), particle = n * 3 * 3 * A4.particleTrialUsd;
+      return { text: `projection r3b4-opus $${opus.toFixed(0)}, r3b4-particle $${particle.toFixed(0)} (planning estimate $0.75 a trial); the Captain records both caps before R3b starts`, usd: { "r3b4-opus": opus, "r3b4-particle": particle } };
+    },
+  },
+  "r3a4-sol": {
+    id: SOL, label: "GPT-6.1 Sol", item: "r3a4-sol", capUsd: 700, capFrom: "amendment 4's", routePrefix: "r3a4-sol-route/", ledgerPort: "9914", parts: a4Parts("r3a4-sol"),
+    tag: " for GPT-6.1 Sol", stop: "Sol's R3b does not start, and Opus's R3 is unaffected", a4: { allowanceUsd: 12 },
+    incomplete: "Sol's R3a stopped, so Sol's R3b does not start; Opus's R3a and its outcome are untouched, and the Captain gets the record.",
+    projection: (n, cNone, cTold) => {
+      const sol = n * 3 * (cNone + cTold);
+      return { text: `projection r3b4-sol $${sol.toFixed(0)}; the Captain records r3b4-sol's cap before Sol's R3b starts`, usd: { "r3b4-sol": sol } };
+    },
+  },
+};
+
 const HERE = import.meta.dir;
 const LANEB = resolve(HERE, "..");
+
+export const poolIds = () => loadRebenchPool(join(LANEB, R3A4_POOL_FILE), R3A4_POOL_SHA256).map((t) => t.task_id);
+
+// The draw (plan section 4 item 6): 200 screen tasks from the sorted pool less the drop list with seed 20261104, then 10
+// pilot tasks from the sorted 200 with seed 20261105. screen-a is the first 100 drawn and screen-b the next 100.
+export function r3a4Draw(dropsPath: string, dropsSha256: string, pool: string[] = poolIds()) {
+  const dropped = new Set(loadR3a4Drops(dropsPath, dropsSha256, pool).map((d) => d.task_id));
+  const draw = (from: string[], n: number, seed: number) => {
+    const r = rng(seed), left = [...from].sort(), out: string[] = [];
+    while (out.length < n) out.push(left.splice(Math.floor(r() * left.length), 1)[0]!);
+    return out;
+  };
+  const kept = pool.filter((id) => !dropped.has(id));
+  if (kept.length < A4.screenTasks) throw new Error(`${dropsPath}: only ${kept.length} pool tasks are left, fewer than the screen's ${A4.screenTasks}`);
+  const screen = draw(kept, A4.screenTasks, A4.screenSeed);
+  const pilot = draw(screen, A4.pilotTasks, A4.pilotSeed);
+  return { screen, pilot, parts: { "screen-a": screen.slice(0, A4.partTasks), "screen-b": screen.slice(A4.partTasks), pilot } as Record<string, string[]>, dropped: dropped.size };
+}
+
+const drawEnv = () => {
+  const path = process.env.DROPS ?? "", want = process.env.DROPS_SHA256 ?? "";
+  if (!path || !want) throw new Error("E_USAGE set DROPS to the oracle preflight's drop list and DROPS_SHA256 to the sha256 the run record names for it");
+  return { path, want, ...r3a4Draw(path, want) };
+};
+
+// The between-part check after screen-a (plan section 5, F1), from cost data only: screen-a's settled model and VM spend
+// times two, 10 pilot sessions at min($12, 2.5 times screen-a's mean none cost), one VM block per remaining part, and the
+// $72 reserve headroom. It never reads an outcome.
+export function projectionCheck(rows: ReturnType<typeof readRows>, screenA: R3Trial[], m: R3aModel, block: number) {
+  const prefix = m.parts[0]!.prefix;
+  const spentA = fromMicros(rows.filter((r) => r.kind === "settle" && r.id.startsWith(prefix)).reduce((s, r) => s + r.usd_micros, 0));
+  const costs = screenA.map((t) => t.cost_usd).filter((c): c is number => c !== null);
+  const mean = costs.length ? costs.reduce((a, c) => a + c, 0) / costs.length : m.a4!.allowanceUsd;
+  const pilotSession = Math.min(A4.pilotSessionUsd, 2.5 * mean);
+  const usd = spentA * 2 + A4.pilotTasks * pilotSession + block * (m.parts.length - 1) + A4.reserveUsd;
+  const over = usd > m.capUsd;
+  const line = `screen-a: projection $${usd.toFixed(2)} (screen-a settled $${spentA.toFixed(2)} x 2, ${A4.pilotTasks} pilot sessions at $${pilotSession.toFixed(2)}, ${m.parts.length - 1} VM blocks at $${block.toFixed(2)}, reserve headroom $${A4.reserveUsd}) ${over ? "passes" : "fits"} ${m.item}'s $${m.capUsd} cap${over ? "; the run stops before screen-b and the Captain decides a cap raise" : "; screen-b starts"}`;
+  return { over, line, record: { projection_usd: usd, cap_usd: m.capUsd, screen_a_settled_usd: spentA, pilot_session_usd: pilotSession, vm_block_usd: block, vm_blocks: m.parts.length - 1, reserve_usd: A4.reserveUsd, over } };
+}
+
+// Sessions that ended at the session allowance (the proxy refused for budget), per part and arm (plan section 5, E1).
+export const allowanceStops = (parts: { part: Part; trials: R3Trial[] }[]) =>
+  Object.fromEntries(parts.map((p) => [p.part.name, Object.fromEntries([...new Set(p.trials.map((t) => t.arm))].sort().map((arm) => [arm, p.trials.filter((t) => t.arm === arm && t.budget_stop).length]))]));
 
 export function bandIds(): string[] {
   return loadSwebvTasks(join(LANEB, "tasks/swebv-r3.txt"), join(LANEB, "tasks/swebv-r3.json"), R3_BAND_SHA256).map((t) => t.task_id);
@@ -190,21 +272,23 @@ export function admission(screen: R3Trial[], pilot: R3Trial[], m: R3aModel = R3A
   const admitted = graded.filter((t) => t.outcome === "fail").map((t) => t.task).sort();
   const pg = pilot.filter((t) => t.outcome !== "infra");
   const pilotExposed = pg.filter((t) => t.exposed).length;
-  const cost = (ts: R3Trial[]) => ts.reduce((a, t) => a + (t.cost_usd ?? ALLOWANCE_USD[t.model] ?? NaN), 0) / ts.length;
+  const cost = (ts: R3Trial[]) => ts.reduce((a, t) => a + (t.cost_usd ?? m.a4?.allowanceUsd ?? ALLOWANCE_USD[t.model] ?? NaN), 0) / ts.length;
   const cNone = cost(graded), cTold = cost(pg);
   const missingCost = [...graded, ...pg].filter((t) => t.cost_usd === null).map((t) => t.trial);
-  const lines = [`admission: ${admitted.length} of ${graded.length} graded in-band tasks unsolved by ${m.label} none (${screen.length - graded.length} infra); pilot exposure ${pilotExposed} of ${pg.length} graded told trials`];
+  const lines = [`admission: ${admitted.length} of ${graded.length} graded ${m.a4 ? "screen" : "in-band"} tasks unsolved by ${m.label} none (${screen.length - graded.length} infra); pilot exposure ${pilotExposed} of ${pg.length} graded told trials`];
   const record: Record<string, unknown> = {
     screen: { trials: screen.length, graded: graded.length, infra: screen.length - graded.length, admitted: admitted.length },
     pilot: { tasks: pilot.map((t) => t.task), trials: pilot.length, graded: pg.length, exposed: pilotExposed, body_loaded: pg.filter((t) => t.body_loaded).length, investigate_opened: pg.filter((t) => t.investigate_opened).length, procedure_shown: pg.filter((t) => t.procedure_shown).length },
     measured_cost_per_trial_usd: { none: cNone, told: cTold, missing_cost_trials: missingCost },
   };
   if (admitted.length < ADMISSION.minAdmitted) {
-    lines.push(`R3 outcome${m.tag}: STOP (saturation). Only ${admitted.length} in-band tasks are unsolved by ${m.label} with no skill, fewer than 30, so told /investigate can't be tested on ${m.label} on SWE-bench Verified. This report is the finding; ${m.stop}.`);
+    lines.push(m.a4
+      ? `R3 outcome${m.tag}: STOP (saturation). Only ${admitted.length} screen tasks are unsolved by ${m.label} with no skill, fewer than 30, so told /investigate with the procedure line can't be tested on ${m.label} on SWE-rebench. This report is the finding; ${m.stop}.`
+      : `R3 outcome${m.tag}: STOP (saturation). Only ${admitted.length} in-band tasks are unsolved by ${m.label} with no skill, fewer than 30, so told /investigate can't be tested on ${m.label} on SWE-bench Verified. This report is the finding; ${m.stop}.`);
     return { lines, exit: 5, admitted, r3bTasks: [], record: { ...record, outcome: "saturation" } };
   }
   if (pilotExposed < ADMISSION.pilotMinExposed) {
-    lines.push(`R3 outcome${m.tag}: STOP (FIX-METHOD). Told /investigate ran its procedure in ${pilotExposed} of ${pg.length} pilot trials, under 7; ${m.stop}.`);
+    lines.push(`R3 outcome${m.tag}: STOP (FIX-METHOD). Told /investigate${m.a4 ? " with the procedure line" : ""} ran its procedure in ${pilotExposed} of ${pg.length} pilot trials, under 7; ${m.stop}.`);
     return { lines, exit: 6, admitted, r3bTasks: [], record: { ...record, outcome: "pilot-fix-method" } };
   }
   const n = Math.min(ADMISSION.nMax, admitted.length);
@@ -234,7 +318,39 @@ function sh(cmd: string[], env: Record<string, string | undefined>) {
   return p.exitCode ?? 1;
 }
 
+// An amendment 4 item's prepare: the draw from DROPS (checked against DROPS_SHA256), then screen-a, screen-b and the pilot
+// from the SWE-rebench export (SWEREBENCH) at CONCURRENT=6 with cells.r3a4.json.
+function prepareA4(work: string, m: R3aModel) {
+  const ledger = process.env.LEDGER ?? "";
+  bindCheck(ledger, m, [join(LANEB, "config/proxy.json")]);
+  const arms = process.env.ARMS;
+  if (!arms) throw new Error("E_USAGE set ARMS to the directory holding none, gstack and placebo arm tars (#109's, handoffs/GSTA-30/arms)");
+  const d = drawEnv();
+  mkdirSync(work, { recursive: true });
+  for (const part of m.parts) {
+    const env = { ...process.env, TASK_SET: "swerebench-r3a4", CELLS: A4.cells, ARM_MANIFESTS: "arms/manifests/r3", TASKS: d.parts[part.name]!.join(",") };
+    const rc = sh([process.execPath, join(LANEB, "runner/prepare-run.ts"), join(work, part.name), part.job, m.id, part.arm, arms, "1", A4.concurrent], env);
+    if (rc !== 0) throw new Error(`prepare-run for ${part.name} exited ${rc}`);
+    writeFileSync(join(work, part.name, "STOP_ON_CAP"), "");
+  }
+  const idsSha = (ids: string[]) => createHash("sha256").update(ids.map((i) => i + "\n").join("")).digest("hex");
+  writeFileSync(join(work, "plan.json"), JSON.stringify({
+    item: m.item, cap_usd: m.capUsd, pool_sha256: R3A4_POOL_SHA256, drops_sha256: d.want, dropped: d.dropped, screen_seed: A4.screenSeed, pilot_seed: A4.pilotSeed,
+    screen_tasks: d.screen, screen_ids_sha256: idsSha(d.screen), pilot_tasks: d.pilot, pilot_ids_sha256: idsSha(d.pilot), part_tasks: d.parts,
+    procedure_line_sha256: createHash("sha256").update(PROCEDURE_LINES["investigate-phases"]).digest("hex"), concurrent: Number(A4.concurrent), parts: m.parts,
+  }, null, 2) + "\n");
+  console.log(`prepared ${work}: screen-a and screen-b (${A4.partTasks} tasks each, none) and pilot (${d.pilot.length} tasks, told /investigate with the procedure line), item ${m.item} unbound; screen ids sha256 ${idsSha(d.screen)}, pilot ids sha256 ${idsSha(d.pilot)}`);
+}
+
+// The plan's draw must be the one DROPS and DROPS_SHA256 give now, on the pinned pool.
+function a4Planned(work: string, plan: any): Record<string, string[]> {
+  const d = drawEnv();
+  if (plan.pool_sha256 !== R3A4_POOL_SHA256 || plan.drops_sha256 !== d.want || JSON.stringify(plan.part_tasks) !== JSON.stringify(d.parts)) throw new Error(`${work}/plan.json's draw is not the seed ${A4.screenSeed} and ${A4.pilotSeed} draw from the pinned pool less DROPS`);
+  return d.parts;
+}
+
 function prepare(work: string, m: R3aModel) {
+  if (m.a4) return prepareA4(work, m);
   const ledger = process.env.LEDGER ?? "";
   bindCheck(ledger, m, [join(LANEB, "config/proxy.json")]);
   const arms = process.env.ARMS;
@@ -275,7 +391,7 @@ function run(work: string, m: R3aModel) {
   if (portTaken("127.0.0.1", lport)) throw new Error(`E_USAGE ${busy}; set LEDGER_PORT to a free port; ${m.item} is still unbound`);
   const configs = m.parts.map((part) => join(work, part.name, "proxy.json"));
   bindCheck(ledger, m, configs);
-  const planned: Record<string, string[]> = { screen: screenIds(), pilot: plan.pilot_tasks };
+  const planned: Record<string, string[]> = m.a4 ? a4Planned(work, plan) : { screen: screenIds(), pilot: plan.pilot_tasks };
   try {
     writeFileSync(bound, JSON.stringify({ item: m.item, work, at: new Date().toISOString() }) + "\n", { flag: "wx" });
   } catch (e) {
@@ -290,8 +406,14 @@ function run(work: string, m: R3aModel) {
     writeFileSync(join(work, `${part.name}.launch-exit`), `${rc}\n`);
     if (rc !== 0 || existsSync(join(dir, "pulled/out/cap-stop.json")) || existsSync(join(dir, "vm-cap-stop"))) { console.log(`${part.name}: launch exited ${rc}; the run stops here`); return; }
     if (i === m.parts.length - 1) return;
-    const stop = loadPart(work, part, planned[part.name]!, m).stop;
-    if (stop) { console.log(`${part.name} is incomplete (${stop}); the run stops here`); return; }
+    const loaded = loadPart(work, part, planned[part.name]!, m);
+    if (loaded.stop) { console.log(`${part.name} is incomplete (${loaded.stop}); the run stops here`); return; }
+    if (m.a4 && part.name === "screen-a") {
+      const p = projectionCheck(readRows(ledger), loaded.trials, m, vmBlock(rate, hours, m.capUsd));
+      console.log(p.line);
+      writeFileSync(join(work, "projection.json"), JSON.stringify({ ...p.record, line: p.line }, null, 2) + "\n");
+      if (p.over) { writeFileSync(join(work, "screen-b.projection-stop"), p.line + "\n"); return; }
+    }
   }
 }
 
@@ -318,6 +440,8 @@ function stopReason(work: string, part: Part, trials: R3Trial[], tasks: string[]
   const exitText = existsSync(exitFile) ? readFileSync(exitFile, "utf8").trim() : null;
   if (exitText !== null && !/^\d+$/.test(exitText)) return `${part.name}: launch exit unreadable`;
   const rc = exitText === null ? null : Number(exitText);
+  const projected = join(work, `${part.name}.projection-stop`);
+  if (existsSync(projected)) return `${part.name} was not launched: ${readFileSync(projected, "utf8").trim()}`;
   if (rc === 9) return `${m.item} refused ${part.name}'s VM reserve`;
   if (existsSync(join(dir, "vm-cap-stop"))) return `${part.name}: ${readFileSync(join(dir, "vm-cap-stop"), "utf8").trim()}`;
   const bad = PROXY_FILES.find((f) => existsSync(join(dir, "pulled/out", f)) && unreadable(join(dir, "pulled/out", f)));
@@ -352,11 +476,10 @@ function analyze(work: string, m: R3aModel): number {
   for (const stale of ["admitted.txt", "r3b-tasks.txt"]) rmSync(join(work, stale), { force: true });
   if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
-  const band = bandIds();
-  if (JSON.stringify(plan.pilot_tasks) !== JSON.stringify(pilotTasks(band))) throw new Error(`${work}/plan.json's pilot tasks are not the seed ${PILOT.seed} draw`);
-  const planned: Record<string, string[]> = { screen: screenIds(), pilot: plan.pilot_tasks };
+  if (!m.a4 && JSON.stringify(plan.pilot_tasks) !== JSON.stringify(pilotTasks(bandIds()))) throw new Error(`${work}/plan.json's pilot tasks are not the seed ${PILOT.seed} draw`);
+  const planned: Record<string, string[]> = m.a4 ? a4Planned(work, plan) : { screen: screenIds(), pilot: plan.pilot_tasks };
   const parts = m.parts.map((part) => loadPart(work, part, planned[part.name]!, m));
-  const [screen, pilot] = parts.map((p) => p.trials) as [R3Trial[], R3Trial[]];
+  const screen = parts.filter((p) => p.part.name !== "pilot").flatMap((p) => p.trials), pilot = parts.find((p) => p.part.name === "pilot")!.trials;
   writeFileSync(join(work, "trials.jsonl"), parts.flatMap((p) => p.trials.map((t) => JSON.stringify({ part: p.part.name, ...t }))).join("\n") + "\n");
   const rows = readRows(ledger);
   const t = totals(rows);
@@ -369,7 +492,7 @@ function analyze(work: string, m: R3aModel): number {
     const rows = existsSync(f) ? readFileSync(f, "utf8").split("\n").slice(1).filter(Boolean).map((l) => l.split("\t")) : null;
     return [part.name, rows && { images: rows.length, failed: rows.filter((r) => r[0] !== "ok").map((r) => r[3]), rate_limit_wait_s: rows.reduce((s, r) => s + Number(r[2]), 0) }];
   }));
-  const base = { item: m.item, ...route, pulls, ledger: { cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserves: t.openIds, vm_settles: vm } };
+  const base = { item: m.item, ...route, pulls, ...(m.a4 ? { allowance_stops: allowanceStops(parts) } : {}), ledger: { cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserves: t.openIds, vm_settles: vm } };
   console.log(ledgerLine);
   const stop = parts.map((p) => p.stop).find(Boolean);
   if (stop) {
@@ -389,9 +512,9 @@ function analyze(work: string, m: R3aModel): number {
 if (import.meta.main) {
   const [cmd, workArg, ...rest] = Bun.argv.slice(2);
   const modelId = rest.length === 0 ? OPUS : rest.length === 2 && rest[0] === "--model" ? rest[1]! : "";
-  const m = R3A[modelId];
+  const m = rest.length === 2 && rest[0] === "--item" ? R3A4[rest[1]!] : R3A[modelId];
   if (!workArg || !["all", "prepare", "run", "analyze"].includes(cmd ?? "") || !m) {
-    console.error(`E_USAGE usage: bun quick/laneb/r3/screen.ts all|prepare|run|analyze <work dir> [--model ${Object.keys(R3A).join("|")}]`);
+    console.error(`E_USAGE usage: bun quick/laneb/r3/screen.ts all|prepare|run|analyze <work dir> [--model ${Object.keys(R3A).join("|")} | --item ${Object.keys(R3A4).join("|")}]`);
     process.exit(2);
   }
   if (!process.env.LEDGER) { console.error(`E_USAGE set LEDGER to ${m.item}'s jsonl ledger`); process.exit(2); }

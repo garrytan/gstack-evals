@@ -14,19 +14,21 @@ import traceback
 from pathlib import Path
 
 import agent_sdk_test as base
+from prompt_builder import PROCEDURE_LINES
 
 RECORD = '    elif m.get("type") == "user":\n'
 assert RECORD in base.FAKE_DOCKER
 base.FAKE_DOCKER = base.FAKE_DOCKER.replace(RECORD, RECORD + '        open(os.environ["FAKE_DOCKER_LOG"] + ".prompt", "a").write(json.dumps(m["message"]["content"]) + "\\n")\n')
 
-OPTIONS = ("arm", "upstream_model", "session_cap_usd", "repo_dir", "system_prompt", "session_kind", "told_skill")
+OPTIONS = ("arm", "upstream_model", "session_cap_usd", "repo_dir", "system_prompt", "session_kind", "told_skill", "procedure_line")
 
 
 def check(tmp: Path, kwargs: dict):
     a, call, init, summary = base.run(tmp, **{k: kwargs[k] for k in OPTIONS if k in kwargs})
     prompts = [json.loads(line) for line in (tmp / "docker.jsonl.prompt").read_text().splitlines()]
     told = kwargs.get("told_skill", "")
-    assert prompts == [("/" + told + " " if told else "") + "Task: do it"], (kwargs["arm"], prompts)
+    line = kwargs.get("procedure_line", "")
+    assert prompts == [("/" + told + " " if told else "") + "Task: do it" + ("\n\n" + PROCEDURE_LINES[line] + "\n" if line else "")], (kwargs["arm"], prompts)
     assert (told == "investigate") == (kwargs["arm"] in ("gstack", "placebo")), kwargs
     assert call["env"]["CLAUDE_CODE_DISABLE_BUNDLED_SKILLS"] == "1", call["env"]
     assert "--system-prompt" not in call["argv"] and "--append-system-prompt" not in call["argv"], call["argv"]
