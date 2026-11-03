@@ -83,4 +83,4 @@ The auditor runs kit v3.1's audit brief with two changes.
 - `CH-upstream`: the terminal line matches the base at the pinned commit, so upstream behavior decides the item;
 - `CH-stated`: a comment, docstring, README, doc, test name or commit message states the behavior.
 
-Report the CH sub-test's counts per code beside the kit's codes. Each item gets at most one fix round; an item that still fails is excluded in the manifest. A unit is never dropped for a unit-level failure, only flagged.
+Report the CH sub-test's counts per code beside the kit's codes. Each item gets at most one fix round; an item that still fails is excluded in the manifest, except an anchor: an anchor that still fails its fix round is never excluded, and the build stops until the Captain decides. A unit is never dropped for a unit-level failure, only flagged.
