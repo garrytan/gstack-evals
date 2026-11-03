@@ -573,8 +573,12 @@ const guardAt = (lines: [number, string][][], first: number, text: string) => {
   const starts = [0];
   for (let k = text.indexOf("\n"); k >= 0; k = text.indexOf("\n", k + 1)) starts.push(k + 1);
   return (o: number): string => {
-    let l = starts.length - 1;
-    while (starts[l] > o) l--;
+    let l = 0;
+    for (let hi = starts.length - 1; l < hi; ) {
+      const mid = (l + hi + 1) >> 1;
+      if (starts[mid] <= o) l = mid;
+      else hi = mid - 1;
+    }
     return lines[first + l].reduce((g, [col, v]) => (col <= o - starts[l] ? v : g), "");
   };
 };

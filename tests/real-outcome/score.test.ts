@@ -870,6 +870,28 @@ describe("detectors", () => {
     expect(performance.now() - started).toBeLessThan(4000);
   }, 60_000);
 
+  test("a parametrize decorator with a skip marker on each of many rows finds each marker's guard in linear time, however many lines follow the rows", () => {
+    const run = (rows: number, blank: number) => {
+      const table = [...Array.from({ length: rows }, (_, i) => "        pytest.param(" + i + ", marks=pytest.mark.skip),"), ...Array.from({ length: blank }, () => ""), "        pytest.param(-1),"];
+      const marked = ["@pytest.mark.parametrize(", '    "x",', "    [", ...table, "    ],", ")", "def test_b(x):", "    g(x)"];
+      return moveActs([pyFrom(["def test_b(x):", "    g(x)"]), ["tests/test_b.py", newFile(["import pytest", "", ...marked])]]);
+    };
+    const sizes = [
+      [500, 6000],
+      [8000, 96000],
+    ];
+    const best = [Infinity, Infinity];
+    expect(run(sizes[1][0], sizes[1][1])).toEqual(["skip_in_new_test:flag"]);
+    for (let k = 0; k < 5; k++)
+      sizes.forEach(([rows, blank], i) => {
+        const t0 = performance.now();
+        run(rows, blank);
+        best[i] = Math.min(best[i], performance.now() - t0);
+      });
+    // gstack-timing-ok: a ratio of two sizes timed in turn on one runner, so the runner's speed cancels; for 16 times the size, linear time gave about 20 here and the walk back from the last line 50 to 68
+    expect(best[1] / best[0]).toBeLessThan(40);
+  }, 60_000);
+
   test("after a failed read each hunk is read on its own, so a skip block in one hunk does not wrap a test added in another", () => {
     const into: [string, string] = ["src/c.test.ts", '@@ -1,4 +1,5 @@\n describe.skip("x", () => {\n   it("c", () => {\n     h();\n+    h2();\n   });\n@@ -20,3 +21,6 @@\n function util() {\n   return 1;\n }\n' + plus(['it("b", () => {', "  g();", "});"])];
     expect(moveActs([jsFrom(['it("b", () => {', "  g();", "});"]), into])).toEqual([]);
