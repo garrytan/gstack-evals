@@ -1,0 +1,44 @@
+{
+  "unit": "S16",
+  "kind": "seeded",
+  "mode": "added-capability",
+  "product": "VisitThyme, a family journal added to volunteer care-visit coordination",
+  "flaws": [
+    {
+      "id": "S16-F1",
+      "group": "W",
+      "source": "T2",
+      "category": "T2-W2",
+      "plan_section": "The journal",
+      "cause": "The plan uses a journal to improve early renewal while leaving expense handling unchanged. Exit evidence connects nearly every departure to delayed volunteer repayments, not inadequate updates, and a weekly expense-summary test already improved the relevant process. The chosen benefit does not address the reason this cohort leaves.",
+      "evidence": [
+        {
+          "path": "context/renewal.md",
+          "what": "Seventeen of nineteen departures cite late repayments; none cites updates; weekly summaries shorten repayment delays."
+        }
+      ],
+      "changes_what_gets_built": "Change the expense-summary cadence and repayment coordination instead of prioritizing the family journal for renewal.",
+      "deserved_severity": "Critical",
+      "fix": "Make timely expense handling the renewal release and assess the journal separately for established circles."
+    },
+    {
+      "id": "S16-F2",
+      "group": "B",
+      "source": "T1",
+      "category": "T1-B4",
+      "plan_section": "Enrollment administration",
+      "cause": "The plan permanently gives up a referral seat and cannot regain it for five years. The context shows that the seat supplies a third of paid acquisition at a small maintenance cost, yet the plan provides no comparison with keeping it and no recoverable transition. Changing the renewal feature would not restore the surrendered seat.",
+      "evidence": [
+        {
+          "path": "context/referrals.md",
+          "what": "The seat supplies 34 percent of new paid circles, costs $350 annually with one hour per quarter, and cannot be regained for five years."
+        }
+      ],
+      "changes_what_gets_built": "Keep the cooperative connector and membership unless a separate business case supports surrendering them.",
+      "deserved_severity": "High",
+      "fix": "Retain the seat during the release. Evaluate any permanent surrender against its acquisition value and the low cost of leaving it in place."
+    }
+  ],
+  "bait": null,
+  "notes": "Existing subscriptions remain usable after directory withdrawal; the separate issue is an unsupported irreversible acquisition decision."
+}

@@ -1,0 +1,48 @@
+{
+  "unit": "S12",
+  "kind": "seeded",
+  "mode": "added-capability",
+  "product": "TrayBrook, weekly prepared-meal ordering for residential care homes",
+  "flaws": [
+    {
+      "id": "S12-F1",
+      "group": "W",
+      "source": "T1",
+      "category": "T1-W4",
+      "plan_section": "Change requested",
+      "cause": "The plan fixes a full week's quantities on Monday, relying on meal demand remaining suitable for the rest of the week. Occupancy changes after Monday every week, cannot be scheduled in advance, and directly determines meals needed. Locking quantities therefore removes the available adjustment that prevents unused portions and shortages.",
+      "evidence": [
+        {
+          "path": "context/residents.md",
+          "what": "All homes change occupancy after Monday every week, changes cannot be predicted, and kitchens can adjust quantities daily without added cost."
+        }
+      ],
+      "changes_what_gets_built": "Keep day-level quantity changes instead of a full-week quantity lock.",
+      "deserved_severity": "Critical",
+      "fix": "Use a weekly planning view with daily quantity corrections tied to current occupancy."
+    },
+    {
+      "id": "S12-F2",
+      "group": "B",
+      "source": "T2",
+      "category": "T2-B2",
+      "plan_section": "Release contents",
+      "cause": "The plan makes new badge authoring and a staff recipe library mandatory parts of the first release. Customers can adopt an ordering-only change, and neither addition addresses their waste objective. Those additions delay the useful trial by seven weeks even if the quantity-lock decision is corrected.",
+      "evidence": [
+        {
+          "path": "context/customer-notes.md",
+          "what": "All six homes can adopt ordering alone and none requires badges or recipes."
+        },
+        {
+          "path": "context/resources.md",
+          "what": "Ordering takes five engineer-weeks; additions take another seven."
+        }
+      ],
+      "changes_what_gets_built": "Ship only ordering and the kitchen quantity report in the first release.",
+      "deserved_severity": "High",
+      "fix": "Remove badges and the recipe library from the ordering release and assess them separately if demand appears."
+    }
+  ],
+  "bait": null,
+  "notes": "The weekly-demand belief is implicit in the chosen quantity lock rather than announced in the plan."
+}

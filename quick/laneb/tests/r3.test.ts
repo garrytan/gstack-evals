@@ -8,6 +8,7 @@ import { armSpec, jobConfig } from "../runner/grid.ts";
 import { Ledger, readRows, toMicros, totals } from "../runner/ledger.ts";
 import { APPLY_BLOCK, loadSwebvTasks, materializeSwebv, R3_BAND_SHA256 } from "../runner/materialize.ts";
 import { startProxy, type ProxyConfig } from "../runner/proxy.ts";
+import { startRealProxyRun } from "./real-proxy-rig.ts";
 import { loadR3Jobs, toTrial, type R3Trial } from "../r3/exposure.ts";
 import { admission, bandIds, bindCheck, pilotTasks, R3_ARMS, R3_CELLS, screenIds } from "../r3/screen.ts";
 
@@ -408,6 +409,54 @@ describe("R3 screen and admission", () => {
     });
   }
 
+  // Rule 5 (GSTA-2 ruling B1) on the proxy-status-end.json that vm-run.sh writes from the real proxy.ts control server at
+  // the end of a run (tests/real-proxy-rig.ts), copied into the screen's pulled out/ and read by analyze as a run's would be.
+  const endState = async (batchCapUsd: number, agent: (r: Awaited<ReturnType<typeof startRealProxyRun>>) => Promise<void>) => {
+    const p = await startRealProxyRun({ batchCapUsd, ledgerCapUsd: 50 });
+    expect(p.harborRunning()).toBe(true);
+    await agent(p);
+    p.finish();
+    expect(await p.exited).toBe(0);
+    return p;
+  };
+  const withEnd = (p: { run: string }) => work({ after: (w) => cpSync(join(p.run, "out/proxy-status-end.json"), join(w, "screen/pulled/out/proxy-status-end.json")) });
+
+  test("a clean end state from the real proxy reads as no cap stop, and admission runs", async () => {
+    const p = await endState(50, async (r) => {
+      const s = await r.open("t1", 4);
+      expect((await r.close(s.body.id)).status).toBe(200);
+    });
+    expect(JSON.parse(p.out("proxy-status-end.json"))).toEqual({ sessions: 1, open_sessions: 0, unsettled_sessions: [], cap_stop: null, global_spent_micros: 0 });
+    const r = withEnd(p);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("incomplete");
+  }, 60_000);
+
+  test("a session still open when Harbor ends is closed by close-all before the end-state read, which reads as no cap stop", async () => {
+    let id = "";
+    const p = await endState(50, async (r) => { id = (await r.open("t1", 4)).body.id; });
+    expect(JSON.parse(p.out("proxy-status-end.json"))).toEqual({ sessions: 1, open_sessions: 0, unsettled_sessions: [], cap_stop: null, global_spent_micros: 0 });
+    expect(JSON.parse(p.out("proxy-sessions.jsonl").trim())).toMatchObject({ id, open: false, close_reason: "close-all" });
+    const r = withEnd(p);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("incomplete");
+  }, 60_000);
+
+  test("a batch-cap stop the real proxy latched, recorded only in the end state, makes R3a incomplete and admits nothing", async () => {
+    const p = await endState(5, async (r) => {
+      expect((await r.open("t1", 4)).status).toBe(200);
+      expect((await r.open("t2", 4)).status).toBe(409);
+    });
+    const end = JSON.parse(p.out("proxy-status-end.json"));
+    expect(end).toMatchObject({ sessions: 1, open_sessions: 0, unsettled_sessions: [] });
+    expect(end.cap_stop).toMatch(/^batch cap reached for t2 at /);
+    expect(p.has("cap-stop.json")).toBe(false);
+    const r = withEnd(p);
+    expect(r.code).toBe(4);
+    expect(r.out).toContain(`R3 outcome: none (incomplete: screen: ${end.cap_stop})`);
+    expect(existsSync(join(r.w, "admitted.txt"))).toBe(false);
+  }, 60_000);
+
   test("a reanalysis that ends incomplete leaves no admitted.txt or r3b-tasks.txt from an earlier analysis", () => {
     const r = work();
     expect(r.code).toBe(0);
@@ -428,7 +477,7 @@ describe("R3 screen and admission", () => {
       writeFileSync(join(w, name, "plan.json"), "{}");
       return join(w, name);
     };
-    const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "1", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", LEDGER_PORT: String(20000 + Math.floor(Math.random() * 20000)), ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+    const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "1", UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", LEDGER_PORT: String(20000 + Math.floor(Math.random() * 20000)), ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
     const run = (d: string) => Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", d], { env });
     run(prep("a"));
     expect(readFileSync(join(w, "a", "screen.launch-exit"), "utf8").trim()).toBe("1");

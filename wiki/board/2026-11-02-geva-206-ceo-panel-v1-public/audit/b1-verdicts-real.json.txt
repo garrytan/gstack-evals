@@ -1,0 +1,73 @@
+[
+  {
+    "unit": "R01",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "R01-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "leak: ok",
+        "instruction": "Nothing in the tree records the owner's later request, the quick looks started outside the schedule, or a review result about the schedule. Inline gate tags such as '(rec)' and 'd3 at gate_rev 2' record decisions, and none of them points at this flaw."
+      },
+      {
+        "id": "unit",
+        "check": "echo: none",
+        "instruction": ""
+      }
+    ],
+    "note": "This is the weakest detectability among the passing real units. The plan's own first-listed risk (Opus at ceiling) and the question of whether gstack lifts anything at all are tested only after M0 to M1c and M2a are built, and the tree shows the steering purpose, a one-day Harbor spike and public task sources. That is enough for a careful reader to find the late ordering. The tree does not show the owner's later objection."
+  },
+  {
+    "unit": "R02",
+    "verdict": "pass",
+    "items": [
+      {
+        "id": "R02-F1",
+        "check": "ok",
+        "instruction": ""
+      },
+      {
+        "id": "unit",
+        "check": "leak: ok",
+        "instruction": "The plan is the pre-run version, with no section on changes after the first paid call. The task-selection post holds no invocation result. The skill-open rate is only a planned metric."
+      },
+      {
+        "id": "unit",
+        "check": "echo: none",
+        "instruction": ""
+      }
+    ],
+    "note": "The evidence is detectable: no arm tells the agent to use a skill, the prompt wrapper never mentions skills, and the landscape post reports that Vercel's skill was not invoked in 56% of cases and that an explicit instruction lifted the score. The plan does not cite that post, but it sits in the tree."
+  },
+  {
+    "unit": "R03",
+    "verdict": "rewrite",
+    "items": [
+      {
+        "id": "R03-F1",
+        "check": "1 detectable from the tree alone",
+        "instruction": "The tree does not show a concrete conflict. Plan section 6 builds a separate image for each unit, runs that unit's own test command and drops units that fail it. Section 7 already reports recall by a provable-by-a-run stratum. Nothing in the tree says the unit images come from context/docker/trial.Dockerfile (that is the Lane A image), or that the units' test commands need tools the image lacks. So on the tree alone, the plan's gate covers the risk the key describes. Allowed fix: add a context file that existed in the repo at or before the approval commit 02adc34 and shows that (a) review-unit images are built on that trial image or the same small toolset, and (b) the gstack and gbrain units' test commands need tools or services outside it. The units' catalog records with their test commands, or the units' test setup requirements, would do. Do not add the unit-image check results from the preregistration step: they come after approval and would leak the answer. If no such pre-approval file exists, drop the unit."
+      },
+      {
+        "id": "R03-F1",
+        "check": "4 category fit (conditional)",
+        "instruction": "This check passes only once check 1 is fixed. Without evidence that the units cannot run, pooled recall plus the case-record stratum reads as a reasonable measure, not a proxy. With that evidence added, the T1-W3 tag fits: an idea-1 verdict on pooled recall can fall while the idea's real value is unchanged."
+      },
+      {
+        "id": "unit",
+        "check": "leak: ok",
+        "instruction": "No approval, open findings, post-approval changes or review record remain. 'gstack fired 0 of 540 times untold' is a prior event that does not bear on this flaw."
+      },
+      {
+        "id": "unit",
+        "check": "echo: hits reported, not failed",
+        "instruction": "'outside voice' appears in plan.md lines 80, 102 and 105, in sections 3 and 5. No 'ceo review' tag remains."
+      }
+    ],
+    "note": "Checks 1 to 3 pass apart from detectability: the flaw would change what gets built, and the cause and the '7. Statistics and decision rule' heading are real."
+  }
+]

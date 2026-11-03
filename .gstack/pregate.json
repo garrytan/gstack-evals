@@ -179,7 +179,10 @@
       "**/runs/**"
     ],
     "answer_markers": [
-      "\\bSEALED(?: [A-Z]+)*:"
+      "\\bSEALED(?: [A-Z]+)+:",
+      "\\bSEALED[:](?! (?:(?:clear|refused|warned|error|no-policy) findings=\\d+ commits=\\d+(?: |$)|(?:clear|refused|error)$|not checked \\(exit (?:\\d+|null)\\)$))",
+      "\\bSEALED[:] (?:clear|refused|warned|error|no-policy) findings=\\d+ commits=\\d+ (?!(?:skipped=\\d+ )?visibility=(?:public|private|unknown \\(counted public\\)) waived=\\d+(?: exempt=\\d+)?(?: unchecked=\\d+)? policy=)",
+      "\\bSEALED[:] \\S+ findings=\\d+ commits=\\d+ (?:[a-z]+=\\w+ (?:\\(counted public\\) )?)*policy=(?!(?:[\\w.-]+/[\\w./-]+(?: \\+ (?:commit|pushed) [\\da-f]{12})?|(?:commit|pushed) [\\da-f]{12}|no sealed key on [\\w./-]+ or [\\w./-]+)$)"
     ],
     "seed_patterns": [
       "\\b(?:sealed|holdout|rotation)_seed\\s*[=:]\\s*[\"']?[0-9A-Za-z]{4,}"

@@ -20,6 +20,10 @@ const TASKS = join(SUITE, "tasks");
 const REFS = join(REPO_ROOT, "tests/seeded-mistakes/references");
 const GUARDS = join(REPO_ROOT, "tests/seeded-mistakes/guards");
 const ENV = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? tmpdir(), LANG: "C.UTF-8" };
+// The tests' own git runs with auto maintenance off, as grade.ts's does: a commit's detached `git maintenance run --auto`
+// unlinks .git/objects/maintenance.lock a few ms later, and when that lands while grade.ts copies a tree a test just seeded,
+// the copy fails and the grade comes back with no scenarios (GST-1016).
+const NO_GIT_MAINTENANCE = { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "maintenance.auto", GIT_CONFIG_VALUE_0: "false" };
 const CHECK = 'bun --no-env-file --config="$SKILL_EVAL_FIXTURES/bunfig.toml" --tsconfig-override="$SKILL_EVAL_FIXTURES/tsconfig.json" "$SKILL_EVAL_FIXTURES/grade.ts" ';
 const KINDS: Record<string, string> = {
   "admin-route-flag": "test gap",
@@ -40,7 +44,7 @@ const ids = file.tasks.map((t) => t.id);
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
 
 function run(cmd: string[], cwd: string, env: Record<string, string> = {}): string {
-  const r = Bun.spawnSync(cmd, { cwd, env: { ...ENV, ...env } });
+  const r = Bun.spawnSync(cmd, { cwd, env: { ...ENV, ...NO_GIT_MAINTENANCE, ...env } });
   if (r.exitCode !== 0) throw new Error(cmd.join(" ") + " exited " + r.exitCode + ": " + r.stderr.toString());
   return r.stdout.toString();
 }
@@ -541,6 +545,18 @@ describe("grade.ts grades the tree, not the tree's config", () => {
       expect(events.filter((e) => /"argv":\[[^\]]*"maintenance"|"label":"detach"/.test(e))).toEqual([]);
     });
   }, 240_000);
+
+  // Value: protects=the tests' own seeds start no background git maintenance either, so a tree a test seeds holds still while grade.ts copies it; fails_when=run() drops NO_GIT_MAINTENANCE, so a commit's detached maintenance can unlink .git/objects/maintenance.lock during grade.ts's first copy, which fails the copy and leaves the grade with no scenarios; why_new=GST-1016: "a preload that exits 0" threw on m.scenarios.fresh about once per loaded full-suite train, and under a CPU hog 12 of 900 seed-then-copy runs failed on that lock with maintenance on, 0 of 900 with it off; seam=this file's run(), which seed() and every other git step here go through; no_claim=git in other test files
+  test("the tests' own seeds start no background git maintenance", async () => {
+    await inRoot(async (root) => {
+      const trace = join(root, "trace2.json");
+      mkdirSync(join(root, "tree"));
+      run(["sh", join(TASKS, "seed.sh"), ID], join(root, "tree"), { GIT_TRACE2_EVENT: trace });
+      const events = readFileSync(trace, "utf8").split("\n");
+      expect(events.some((e) => /"argv":\[[^\]]*"commit"/.test(e))).toBe(true);
+      expect(events.filter((e) => /"argv":\[[^\]]*"maintenance"|"label":"detach"/.test(e))).toEqual([]);
+    });
+  });
 
   // Value: protects=a check that hangs, or passes but leaves a process holding its stderr, fails every scenario with a reason by the grade's own deadline, so the trial's check timeout never fires first and a hung tree records a fail, not an unjudged trial; fails_when=grade.ts loses its total deadline, stops capping each step at the time left, or counts a step that timed out with status 0 as finished; why_new=#87's /ship pass 4 red-team finding 1 (GST-413); seam=grade.ts's deadline, lowered through GRADE_DEADLINE_MS in grade.ts's own environment, which no step passes on to the tree; no_claim=that grade.ts can stop tree code that ignores SIGTERM
   test("a check that hangs in every scenario fails the grade, with a reason, by the grade's deadline", async () => {

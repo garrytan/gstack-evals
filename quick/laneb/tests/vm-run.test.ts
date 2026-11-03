@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { startRealProxyRun } from "./real-proxy-rig.ts";
 
 // vm-run.sh with fake sg, curl, bun, sleep, harbor and pkill: the oracle job's trials are written by the test, the ledger
 // tunnel answers, and the metering proxy is healthy only when the test asks for it. The fake pkill logs its arguments
@@ -125,41 +126,60 @@ describe("vm-run.sh during the paid batch", () => {
     expect(code).toBe(143);
   }, 60_000);
 
-  test("with STOP_ON_CAP, a latched cap stop reaches the running Harbor as one SIGINT and out/cap-stop.json records it", async () => {
-    const s = setup(null, true);
-    const log = join(s.run, "..", "sg.log");
-    writeFileSync(join(s.run, "..", "bin", "curl"), `#!/usr/bin/env bash\necho "curl $*" >> "${log}"\ncase "$*" in *8788/status*) if [ -e "${s.run}/CAPPED" ]; then echo '{"cap_stop":"ledger refused a reserve for t1"}'; else echo '{"cap_stop":null}'; fi ;; *) echo '{}' ;; esac\n`);
-    writeFileSync(join(s.run, "STOP_ON_CAP"), "");
-    const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
-    for (let i = 0; i < 200 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
-    for (let i = 0; i < 200 && !s.sg().includes("8788/status"); i++) await Bun.sleep(50);
-    expect(s.sg()).not.toContain("pkill");
-    writeFileSync(join(s.run, "CAPPED"), "");
-    const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
-    const code = await proc.exited;
-    clearTimeout(timer);
-    expect(s.sg().match(/pkill -INT -f \/bin\/harbor run/g)).toHaveLength(1);
-    expect(s.sg().match(/harbor got INT/g)).toHaveLength(1);
-    expect(s.sg()).not.toContain("harbor finished");
-    expect(JSON.parse(readFileSync(join(s.run, "out", "cap-stop.json"), "utf8")).cap_stop).toBe("ledger refused a reserve for t1");
-    expect(s.sg()).toContain("8788/close-all");
+  // The cap watcher and the end-state read against the real proxy.ts control server (tests/real-proxy-rig.ts). At b82ecf9
+  // both read GET /status, which proxy.ts never served: the stub curl these tests used to run answered it, so the watcher
+  // never fired and proxy-status-end.json came back empty on the VM (GEVA-199, GEVA-200).
+  test("with STOP_ON_CAP, a cap stop the real proxy latches reaches the running Harbor as one SIGINT, and out/cap-stop.json and out/proxy-status-end.json record it", async () => {
+    const r = await startRealProxyRun({ batchCapUsd: 50, ledgerCapUsd: 5, stopOnCap: true });
+    expect(r.harborRunning()).toBe(true);
+    const t1 = await r.open("t1", 4);
+    expect(t1.status).toBe(200);
+    await Bun.sleep(1000);
+    expect(r.log()).not.toContain("pkill");
+    const t2 = await r.open("t2", 4);
+    expect(t2.status).toBe(409);
+    const code = await r.exited;
+    expect(r.log().match(/pkill -INT -f \/bin\/harbor run/g)).toHaveLength(1);
+    expect(r.log().match(/harbor got INT/g)).toHaveLength(1);
+    expect(r.log()).not.toContain("harbor finished");
+    const capStop = JSON.parse(r.out("cap-stop.json"));
+    expect(capStop.cap_stop).toMatch(/^ledger refused a reserve for t2 at /);
+    expect(capStop).toMatchObject({ sessions: 1, open_sessions: 1, unsettled_sessions: [t1.body.id] });
+    expect(JSON.parse(r.out("proxy-status-end.json"))).toEqual({ sessions: 1, open_sessions: 0, unsettled_sessions: [], cap_stop: capStop.cap_stop, global_spent_micros: 0 });
+    expect(JSON.parse(r.out("close-all.json")).map((s: any) => s.id)).toEqual([t1.body.id]);
     expect(code).toBe(130);
-    expect(s.exitFile()).toBe("130");
+    expect(r.out("vm-run.exit").trim()).toBe("130");
   }, 60_000);
 
-  test("without STOP_ON_CAP, a latched cap stop leaves Harbor running", async () => {
-    const s = setup(null, true);
-    const log = join(s.run, "..", "sg.log");
-    writeFileSync(join(s.run, "..", "bin", "curl"), `#!/usr/bin/env bash\necho "curl $*" >> "${log}"\ncase "$*" in *8788/status*) echo '{"cap_stop":"ledger refused a reserve for t1"}' ;; *) echo '{}' ;; esac\n`);
-    const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
-    for (let i = 0; i < 200 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+  test("without STOP_ON_CAP, a latched cap stop leaves Harbor running, and out/proxy-status-end.json still records it", async () => {
+    const r = await startRealProxyRun({ batchCapUsd: 50, ledgerCapUsd: 5 });
+    expect((await r.open("t1", 4)).status).toBe(200);
+    expect((await r.open("t2", 4)).status).toBe(409);
     await Bun.sleep(1000);
-    expect(s.sg()).not.toContain("pkill");
-    expect(existsSync(join(s.run, "out", "cap-stop.json"))).toBe(false);
-    writeFileSync(join(s.run, "STOP"), "");
-    const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
-    expect(await proc.exited).toBe(130);
-    clearTimeout(timer);
+    expect(r.log()).not.toContain("pkill");
+    expect(r.has("cap-stop.json")).toBe(false);
+    r.stop();
+    expect(await r.exited).toBe(130);
+    expect(JSON.parse(r.out("proxy-status-end.json")).cap_stop).toMatch(/^ledger refused a reserve for t2 at /);
+  }, 60_000);
+
+  test("with STOP_ON_CAP, a real proxy that stops answering leaves Harbor running, and 3 failed reads in a row put one timestamped line in out/cap-watch.log", async () => {
+    const r = await startRealProxyRun({ batchCapUsd: 50, ledgerCapUsd: 5, stopOnCap: true });
+    expect(r.harborRunning()).toBe(true);
+    await Bun.sleep(1000);
+    expect(r.has("cap-watch.log")).toBe(false);
+    expect(r.killProxy()).toBe(true);
+    for (let i = 0; i < 100 && !r.has("cap-watch.log"); i++) await Bun.sleep(100);
+    await Bun.sleep(1000);
+    const lines = r.out("cap-watch.log").trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ proxy_status failed 3 times in a row: /);
+    expect(r.log()).not.toContain("pkill");
+    expect(r.has("cap-stop.json")).toBe(false);
+    r.finish();
+    expect(await r.exited).toBe(0);
+    expect(r.log()).toContain("harbor finished");
+    expect(r.out("proxy-status-end.json")).toBe("");
   }, 60_000);
 });
 
