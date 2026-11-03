@@ -39,9 +39,9 @@ step() {
 JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
 arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
 ST() { env B="$B" MAP="$MAP" TOLD="$PC/told-gstack-full.txt" bun "$W/bin/rr-stub-arms.ts" "$@"; }
-# STE saves a stub run's stderr as the README's run step does, closed by its exit line. review-units' CLI exits 2 on any
+# STE appends a stub run's stderr (2>>) as the README's run step does, closed by its exit line. review-units' CLI exits 2 on any
 # stop (src/trial/review/cli.ts at 176fdc7), so a stub run that logged a stop line and exited 0 closes with exit 2.
-STE() { local f=$1 rc n; shift; mkdir -p "$(dirname "$f")"; ST "$@" 2> "$f"; rc=$?; n=$rc; [ $rc -eq 0 ] && grep -qE '^[A-Z][A-Z0-9_]*[A-Z0-9]( |:|$)' "$f" && n=2; echo "review-units exit $n" >> "$f"; cat "$f" >&2; return $rc; }
+STE() { local f=$1 rc n; shift; mkdir -p "$(dirname "$f")"; ST "$@" 2>> "$f"; rc=$?; n=$rc; [ $rc -eq 0 ] && grep -qE '^[A-Z][A-Z0-9_]*[A-Z0-9]( |:|$)' "$f" && n=2; echo "review-units exit $n" >> "$f"; cat "$f" >&2; return $rc; }
 GS() { printf 'E_COVERAGE_GAP arm none-opus stopped with %s, so it gets no verdict (synthetic)\nreview-units exit 2\n' "$1"; }
 third() { [ -s "$1/third.json" ] && echo "--third $1/third.json"; }
 init_items() { local rec=$1; shift; for p in "$@"; do ITEM="${p%%:*}" CAP="${p#*:}" REC="$rec" bun -e 'const { recordApproval } = await import(process.env.R + "/src/runner/ledger/ledger.ts"); recordApproval(process.env.REC, { action: "init", item: process.env.ITEM, cap_micros: Math.round(Number(process.env.CAP) * 1e6), quotes: [{ words: "Dry run: keyless item, no spend", by: "GEVA-195", source: "dry-run" }], admission: "warn" });' > /dev/null || echo "E_INIT ${p%%:*}"; echo "item ${p%%:*} at \$${p#*:}"; done; }
@@ -129,6 +129,7 @@ step '^(reader|none|E_)' python3 "$W/bin/blind.py" "$S" "$W/psrc/none-pilot"
 step 'ingested|published|E_' $G ingest "$W/psrc/none-pilot" --suite "$S" --root "$W/praw"
 pilot_round() {
   local X=$W/pilot/$1; mkdir -p "$X"; cp -r "$W/record" "$X/record"
+  # The real run puts the judge pre-flight (preflight.py on judge-run --dry-run) before any judge call; it is driven below at the frozen caps.
   local AR="--arm $W/praw/stacks-r1/none-pilot"
   step 'packet|E_' $G judge-packet --suite "$S" $AR --seed 20261031 --out "$X/match" --key "$X/match-key.json"
   local J="--suite $S --packets $X/match --key $X/match-key.json $AR --brief $P/judge-brief.md $JUDGES --ledger $X/ledger.sqlite --record $X/record"
@@ -168,6 +169,7 @@ score_on() { step '^([A-Za-z0-9-]+ vs [a-z0-9-]+ at a |verdict|E_)' $G score --s
 derive_on() { local X=$1 id=$2; shift 2; step '^(derive|E_)|dropped' $G derive --suite "$S" --comparisons "$W/bin/comparisons.rr.json" --id "$id" --out "$X/$id" --root "$X/final" --drop-gaps "$@"; score_on "$X/$id" "$id"; }
 judge_round() {
   local X=$W/grid/$1; mkdir -p "$X"; cp -r "$W/record" "$X/record"
+  # The real run puts the judge pre-flight (preflight.py on judge-run --dry-run) before any judge call; it is driven below at the frozen caps.
   step 'packet|E_' $G judge-packet --suite "$S" $(arms "$W/raw/stacks-r1" $ARMS) --seed 20261031 --out "$X/match" --key "$X/match-key.json"
   local J="--suite $S --packets $X/match --key $X/match-key.json $(arms $W/raw/stacks-r1 $ARMS) --brief $P/judge-brief.md $JUDGES --ledger $X/ledger.sqlite --record $X/record"
   [ "$1" = keep ] && step '^(worst case|item )|E_' sh -c "$G judge-run $J --item rr-judge-match --out $X/judge-match --dry-run | tee $W/judge/grid-match.txt"
@@ -258,9 +260,10 @@ print("judge cap %s: the stub-shaped batch holds %d findings in %d packets and c
 open(out, "a").write("%s\t%d\n" % (item, cap))
 EOF
 }
-# A matching batch's cap is judge-run's worst case on 33 packets of 100,000 characters each, each packet the batch's
-# largest repeated to that length, priced as judge-run --dry-run prices a request at 715f837 (judge-run.ts's request and
-# the proxy's fields, prices.ts); the script first checks that this pricing gives judge-run's own figure on that packet.
+# A matching batch's cap is sized at 33 packets of 100,000 characters each, not a worst case or a bound (the judge
+# pre-flight below prices each real batch before any judge call), each packet the batch's largest repeated to that length,
+# priced as judge-run --dry-run prices a request at 715f837 (judge-run.ts's request and the proxy's fields, prices.ts);
+# the script first checks that this pricing gives judge-run's own figure on that packet.
 cat > "$W/bin/size-match.ts" <<'EOF'
 import { appendFileSync, readdirSync, readFileSync } from "fs";
 const { judgeRequest, JUDGE_REASONING_EFFORT } = await import(process.env.R + "/src/adapters/judge.ts");
@@ -293,6 +296,37 @@ step '^(judge cap|E_)' bun "$W/bin/size-match.ts" rr-judge-match "$W/judge/grid-
 echo "# Adjudication requests also carry an evidence sheet with up to 61 lines of code at each finding, which no character count bounds, so rr-judge-adjudicate's cap is an estimate from the fit."
 step '^judge cap' size_judge rr-judge-adjudicate "$W/judge/grid-adj.txt" "$W/grid/keep/adj-key.json" 4 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
 step . cat "$W/judge/caps.tsv"
+
+echo; echo "## The judge pre-flight at the frozen caps: judge-run --dry-run prices the real batch before any judge call (section 7)"
+cat > "$W/bin/preflight.py" <<'EOF'
+import re, sys
+item, log = sys.argv[1:3]
+text = open(log).read()
+d = re.search(r"\$([0-9.,]+) if every answer is asked again", text)
+c = re.search(r"^item " + re.escape(item) + r": cap \$([0-9.,]+)", text, re.M)
+if not d or not c:
+    print("E_PREFLIGHT %s: judge-run --dry-run printed no doubled estimate or no cap for the item" % item)
+    sys.exit(5)
+doubled, cap = float(d.group(1).replace(",", "")), float(c.group(1).replace(",", ""))
+if doubled > cap:
+    print("preflight %s: STOP before any judge call: the doubled estimate $%.2f passes the item's cap $%.2f; no judging and no verdict, the Captain decides the cap" % (item, doubled, cap))
+    sys.exit(3)
+print("preflight %s: proceed: the doubled estimate $%.2f fits the item's cap $%.2f" % (item, doubled, cap))
+EOF
+LF=$W/preflight; mkdir -p "$LF/under" "$LF/over"
+JP="--suite $S --packets $W/pilot/mid/match --key $W/pilot/mid/match-key.json --arm $W/praw/stacks-r1/none-pilot --brief $P/judge-brief.md $JUDGES --item rr-pilot-judge"
+preflight_case() {
+  local X=$LF/$1
+  step '^(worst case|item )|E_' sh -c "$G judge-run $JP --ledger $X/ledger.sqlite --record $X/record --out $X/judge --dry-run > $X/dry.txt; c=\$?; cat $X/dry.txt; exit \$c"
+  FAKE_RATES="none-pilot=30" step '^(preflight|judge-run|E_)|unjudged' sh -c "python3 $W/bin/preflight.py rr-pilot-judge $X/dry.txt && bun $W/bin/judge-fake.ts $JP --ledger $X/ledger.sqlite --record $X/record --out $X/judge --concurrency 4"
+  step . sh -c "test -s $X/judge/primary.json && echo 'judge replies written' || echo 'no judge reply written'; test -e $X/ledger.sqlite && echo 'ledger opened' || echo 'ledger never opened: no lease, no spend'"
+}
+echo "# Under the cap: the pilot's stub batch on rr-pilot-judge at its frozen cap. The pre-flight proceeds, then the fake judge runs."
+step item init_items "$LF/under/record" $(awk '{ printf "%s:%s ", $1, $2 }' "$W/judge/caps.tsv")
+preflight_case under
+echo "# Over the cap (synthetic): the same batch on a record that caps rr-pilot-judge at \$100, below its doubled estimate. The pre-flight stops it before any judge call."
+step item init_items "$LF/over/record" rr-pilot-judge:100
+preflight_case over
 
 echo; echo "## The seven items at their frozen caps: one lease each, opened and settled; a bound item refuses a second run (section 8)"
 LR=$W/ledger; mkdir -p "$LR"; LG="--ledger $LR/ledger.sqlite --ledger-record $LR/record"
