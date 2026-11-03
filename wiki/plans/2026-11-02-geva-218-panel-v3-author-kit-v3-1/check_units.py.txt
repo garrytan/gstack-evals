@@ -1,0 +1,832 @@
+#!/usr/bin/env python3
+"""Panel v3 author kit checker (kit v3.1).
+
+Checks every unit under a panel folder for layout, sizes, scope, the clean-room
+path list, auto-loaded content, the echo and signpost terms and the key schema.
+It prints unit ids, check codes, paths, line numbers, item ids, terms from the
+kit's own list and counts, never file text.
+
+  python3 check_units.py <panel_dir> --wave calibration
+  python3 check_units.py <panel_dir> --wave admission --kept E-CD,E-Q --floor E-OM
+  python3 check_units.py <panel_dir> --wave confirmatory --kept E-CD,E-Q --floor none
+  python3 check_units.py --self-test
+  python3 check_units.py --write-fixtures <empty_dir>
+
+The admission and confirmatory waves require --kept and --floor (none when no
+kept kind is KEEP-FLOOR), so the E0 recipe can't be skipped by leaving them out.
+
+--write-fixtures writes the clean self-test unit and each defect case kit v3.1
+added, one panel folder per case, and prints "<case> <code>" for each, so
+another checker can be run on the same trees.
+
+Exit 0 when the last line reads "problems 0", 1 when it counts problems, 2 on a
+usage error.
+"""
+import json
+import os
+import re
+import shutil
+import stat
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+STRATA = ("ceo", "eng", "dx", "design")
+MODES = ("greenfield", "added", "fix")
+WAVES = ("calibration", "admission", "confirmatory")
+KINDS = {
+    "C-Q": ("ceo", ("H2", "QT")),
+    "C-U2": ("ceo", ("H2", "QT")),
+    "C-OM": ("ceo", ("OM", "H2")),
+    "E-CD": ("eng", ("CD", "H2")),
+    "E-OM": ("eng", ("OM", "QT")),
+    "E-Q": ("eng", ("QT", "H2")),
+    "X-OM": ("dx", ("OM", "H2")),
+    "X-CD": ("dx", ("CD", "QT")),
+    "X-Q": ("dx", ("QT", "H2")),
+    "G-OM": ("design", ("OM", "QT")),
+    "G-A11Y": ("design", ("H2", "QT")),
+    "G-X": ("design", ("H2", "QT")),
+}
+NEEDS_EXISTING = {"C-U2", "E-CD", "E-OM", "X-OM", "X-CD", "G-X"}
+NEEDS_DECISION = {"C-Q", "C-U2"}
+ANCHORS = ("A-X", "A-F", "A-T")
+LEVER_FIELD = {"H2": "intermediate", "QT": "computation", "OM": "absent_step", "CD": "code_fact"}
+SEVERITIES = ("Critical", "High")
+MINOR_SEVERITIES = ("Medium", "Low")
+
+PLAN_BYTES = (7000, 11000)
+CONTEXT_BYTES = (20000, 45000)
+CONTEXT_FILES = (10, 20)
+CONTEXT_DIR_MIN_FILES = 6
+SRC_MAX_FILES = 12
+SRC_FILE_MAX_BYTES = 5000
+SECTIONS = (6, 12)
+MINORS = (2, 4)
+ABSENT_TERMS_MIN = 2
+COMPUTATION_NUMBERS_MIN = 3
+
+CONTEXT_EXT = {".md", ".csv", ".json", ".yaml", ".yml", ".txt"}
+SRC_EXT = {".py", ".ts", ".js", ".go", ".rb", ".java", ".kt", ".rs", ".sql", ".sh",
+           ".json", ".yaml", ".yml", ".toml", ".md", ".tsx", ".jsx", ".css", ".scss",
+           ".html", ".vue", ".svelte", ".swift", ".dart", ".cs", ".php", ".txt"}
+UI_EXT = ("tsx", "jsx", "vue", "svelte", "css", "scss", "html", "swift", "storyboard", "xib", "dart")
+UI_NAME = re.compile(r"[A-Za-z0-9_./-]+\.(?:" + "|".join(UI_EXT) + r")\b", re.I)
+
+# The clean-room path list (plan section 4, I1) plus the files a coding CLI loads
+# on its own from a working tree (R3): a unit tree that holds any of these fails
+# at authoring, before any trial image sees it.
+CLEAN_ROOM_NAMES = {".claude", ".capy", ".gstack", ".local", ".mcp.json", "agents.md", "agents.override.md",
+                    "claude.md", "claude.local.md", "gemini.md", "skill.md"}
+CLEAN_ROOM_PATH_WORDS = ("gstack", ".claude/skills", ".capy/drive", ".local/share/gstack")
+AT_IMPORT = re.compile(r"(?:^|(?<=\s))@(?:~|\.{0,2}/)\S*"
+                       r"|(?:^|(?<=\s))@[^\s@]+\.(?:md|markdown|mdc|txt|json|ya?ml|toml)(?![A-Za-z0-9])", re.I)
+
+UNIT_ID = re.compile(r"^[0-9a-f]{8}$")
+ITEM_ID = re.compile(r"^[0-9a-f]{8}-[0-9]+$")
+HEADING = re.compile(r"^(#{1,6})[ \t]+(.*?)[ \t#]*$")
+SETEXT = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
+FENCE = re.compile(r"^ {0,3}(?:```|~~~)")
+CODE_SPAN = re.compile(r"(`+).*?\1")
+CONTINUATION = re.compile(r"^[ \t]*(?:/\*+|\*+|//+|#+|--+|;+|>+)?[ \t]*")
+NUMBER = re.compile(r"[0-9]+(?:[.,][0-9]+)*")
+WS = r"(?:[^\S\n]+(?:\n[^\S\n]*)?|\n[^\S\n]*)"
+
+
+class Report:
+    def __init__(self):
+        self.lines = []
+        self.count = 0
+
+    def problem(self, unit, code, detail):
+        self.count += 1
+        self.lines.append("PROBLEM %s %s: %s" % (unit, code, detail))
+
+
+def is_text(v):
+    return isinstance(v, str) and bool(v.strip())
+
+
+def load_echo_terms(path):
+    terms = {"any": [], "heading": [], "signpost": []}
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            scope, _, phrase = line.partition(":")
+            phrase = " ".join(phrase.strip().lower().split())
+            if not phrase or scope not in terms:
+                raise SystemExit("E_USAGE echo-terms.txt: bad line: %s" % scope)
+            terms[scope].append(phrase)
+    return terms
+
+
+def term_regex(phrase):
+    body = WS.join(re.escape(w) for w in phrase.split(" "))
+    left = r"(?<![A-Za-z0-9])" if phrase[0].isalnum() else ""
+    right = r"(?![A-Za-z0-9])" if phrase[-1].isalnum() else ""
+    return re.compile(left + body + right, re.I)
+
+
+def views(text):
+    return text, "\n".join(CONTINUATION.sub("", line, count=1) for line in text.split("\n"))
+
+
+def line_hits(rx, texts):
+    return sorted({v.count("\n", 0, m.start()) + 1 for v in texts for m in rx.finditer(v)})
+
+
+def md_headings(text):
+    lines = text.split("\n")
+    out = []
+    for i, line in enumerate(lines):
+        if HEADING.match(line):
+            out.append((i + 1, line))
+        elif line.strip() and not SETEXT.match(line) and i + 1 < len(lines) and SETEXT.match(lines[i + 1]):
+            out.append((i + 1, line))
+    return out
+
+
+def at_imports(rel, text):
+    hits, fenced = [], False
+    for n, line in enumerate(text.split("\n"), 1):
+        if rel.endswith(".md"):
+            if FENCE.match(line):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            line = CODE_SPAN.sub(" ", line)
+        if AT_IMPORT.search(line):
+            hits.append(n)
+    return hits
+
+
+def walk(unit_dir):
+    out = []
+    for root, dirs, files in os.walk(unit_dir, followlinks=False):
+        for name in sorted(dirs) + sorted(files):
+            full = os.path.join(root, name)
+            out.append((os.path.relpath(full, unit_dir).replace(os.sep, "/"), full))
+    return sorted(out)
+
+
+def plan_headings(text):
+    return [m.group(2).strip() for m in (HEADING.match(l) for l in text.splitlines())
+            if m and m.group(1) == "##"]
+
+
+def check_tree(unit, unit_dir, rep):
+    files = {}
+    for rel, full in walk(unit_dir):
+        parts = rel.split("/")
+        low = rel.lower()
+        mode = os.lstat(full).st_mode
+        if stat.S_ISLNK(mode):
+            rep.problem(unit, "clean-room", "symlink %s" % rel)
+            continue
+        if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+            rep.problem(unit, "clean-room", "%s is not a regular file or folder" % rel)
+            continue
+        hit = [p for p in parts if p.lower() in CLEAN_ROOM_NAMES]
+        hit += [w for w in CLEAN_ROOM_PATH_WORDS if w in low]
+        if hit:
+            rep.problem(unit, "clean-room", "path %s matches %s" % (rel, hit[0]))
+        if any(p.startswith(".") for p in parts):
+            rep.problem(unit, "layout", "hidden path %s" % rel)
+        if stat.S_ISDIR(mode):
+            if len(parts) == 1 and parts[0] not in ("context", "src"):
+                rep.problem(unit, "layout", "unexpected folder %s" % rel)
+            if parts[0] == "context" and len(parts) > 1:
+                rep.problem(unit, "layout", "context/ holds a subfolder %s" % rel)
+            continue
+        if len(parts) == 1 and parts[0] not in ("plan.md", "key.json"):
+            rep.problem(unit, "layout", "unexpected top-level file %s" % rel)
+        ext = os.path.splitext(rel)[1].lower()
+        if parts[0] == "context" and ext not in CONTEXT_EXT:
+            rep.problem(unit, "layout", "context file type %s" % rel)
+        if parts[0] == "src" and ext not in SRC_EXT:
+            rep.problem(unit, "layout", "src file type %s" % rel)
+        try:
+            with open(full, encoding="utf-8") as f:
+                files[rel] = f.read()
+        except UnicodeDecodeError:
+            rep.problem(unit, "layout", "not UTF-8 text %s" % rel)
+    for need in ("plan.md", "key.json"):
+        if need not in files:
+            rep.problem(unit, "layout", "missing %s" % need)
+    if not os.path.isdir(os.path.join(unit_dir, "context")):
+        rep.problem(unit, "layout", "missing context/")
+    return files
+
+
+def check_sizes(unit, files, rep):
+    plan = files.get("plan.md", "")
+    n = len(plan.encode("utf-8"))
+    if not PLAN_BYTES[0] <= n <= PLAN_BYTES[1]:
+        rep.problem(unit, "plan-size", "plan.md is %d bytes, want %d to %d" % ((n,) + PLAN_BYTES))
+    heads = plan_headings(plan)
+    if not SECTIONS[0] <= len(heads) <= SECTIONS[1]:
+        rep.problem(unit, "plan-sections", "%d ## sections, want %d to %d" % ((len(heads),) + SECTIONS))
+    if len(set(heads)) != len(heads):
+        rep.problem(unit, "plan-sections", "two ## headings share one text")
+    ctx = [r for r in files if r.startswith("context/")]
+    src = [r for r in files if r.startswith("src/")]
+    total = sum(len(files[r].encode("utf-8")) for r in ctx + src)
+    if not CONTEXT_BYTES[0] <= total <= CONTEXT_BYTES[1]:
+        rep.problem(unit, "context-size", "context/ and src/ hold %d bytes, want %d to %d" % ((total,) + CONTEXT_BYTES))
+    if not CONTEXT_FILES[0] <= len(ctx) + len(src) <= CONTEXT_FILES[1]:
+        rep.problem(unit, "context-files", "context/ and src/ hold %d files, want %d to %d" % ((len(ctx) + len(src),) + CONTEXT_FILES))
+    if len(ctx) < CONTEXT_DIR_MIN_FILES:
+        rep.problem(unit, "context-files", "context/ holds %d files, want at least %d" % (len(ctx), CONTEXT_DIR_MIN_FILES))
+    if len(src) > SRC_MAX_FILES:
+        rep.problem(unit, "src-files", "src/ holds %d files, want at most %d" % (len(src), SRC_MAX_FILES))
+    for r in src:
+        b = len(files[r].encode("utf-8"))
+        if b > SRC_FILE_MAX_BYTES:
+            rep.problem(unit, "src-size", "%s is %d bytes, want at most %d" % (r, b, SRC_FILE_MAX_BYTES))
+    return heads, src
+
+
+def check_echo(unit, files, terms, rep):
+    compiled = {scope: [(t, term_regex(t)) for t in terms[scope]] for scope in terms}
+    for rel in sorted(files):
+        for t, rx in compiled["any"]:
+            if rx.search(rel):
+                rep.problem(unit, "echo-path", "%s matches any: %s" % (rel, t))
+        if rel == "key.json":
+            continue
+        text = files[rel]
+        texts = views(text)
+        for scope, code in (("any", "echo"), ("signpost", "signpost")):
+            for t, rx in compiled[scope]:
+                for n in line_hits(rx, texts):
+                    rep.problem(unit, code, "%s line %d matches %s: %s" % (rel, n, scope, t))
+        if rel.endswith(".md"):
+            for n, line in md_headings(text):
+                for t, rx in compiled["heading"]:
+                    if rx.search(line):
+                        rep.problem(unit, "echo-heading", "%s line %d matches heading: %s" % (rel, n, t))
+        for n in at_imports(rel, text):
+            rep.problem(unit, "auto-load", "%s line %d holds an @-import" % (rel, n))
+
+
+def check_scope(unit, stratum, files, src, rep):
+    plan = files.get("plan.md", "")
+    ui_named = bool(UI_NAME.search(plan))
+    if stratum in ("ceo", "eng", "dx"):
+        if ui_named:
+            rep.problem(unit, "ui-scope", "a %s plan names a UI file" % stratum)
+        for r in src:
+            if r.lower().endswith(tuple("." + e for e in UI_EXT)):
+                rep.problem(unit, "ui-scope", "a %s unit holds UI file %s" % (stratum, r))
+    if stratum == "design" and not ui_named:
+        rep.problem(unit, "ui-scope", "a design plan names no UI file")
+    if stratum in ("eng", "dx") and not src:
+        rep.problem(unit, "layout", "an %s unit has no src/" % stratum)
+
+
+def need_str(obj, field, unit, where, rep):
+    v = obj.get(field)
+    if not isinstance(v, str) or not v.strip():
+        rep.problem(unit, "key-field", "%s needs %s" % (where, field))
+        return False
+    return True
+
+
+def check_places(unit, where, places, files, heads, rep, allow_heading):
+    for p in places:
+        if not isinstance(p, str):
+            rep.problem(unit, "key-field", "%s has a non-text place" % where)
+        elif p in files and p != "key.json":
+            continue
+        elif allow_heading and p in heads:
+            continue
+        else:
+            rep.problem(unit, "key-place", "%s names a heading or path not in the unit" % where)
+
+
+def check_evidence(unit, where, ev, files, rep):
+    paths = []
+    if not isinstance(ev, list) or not ev:
+        rep.problem(unit, "key-field", "%s needs evidence" % where)
+        return paths
+    for e in ev:
+        if not isinstance(e, dict) or not isinstance(e.get("path"), str) or not isinstance(e.get("what"), str) or not e["what"].strip():
+            rep.problem(unit, "key-field", "%s has an evidence entry without path and what" % where)
+            continue
+        if e["path"] not in files or e["path"] == "key.json":
+            rep.problem(unit, "key-place", "%s evidence path not in the unit" % where)
+        paths.append(e["path"])
+    return paths
+
+
+def check_absent(unit, where, terms, plan, rep):
+    if not (isinstance(terms, list) and len(terms) >= ABSENT_TERMS_MIN and all(is_text(t) for t in terms)):
+        rep.problem(unit, "key-field", "%s needs absent_terms: %d or more words or phrases that name the missing step" % (where, ABSENT_TERMS_MIN))
+        return
+    texts = views(plan)
+    for i, t in enumerate(terms, 1):
+        lines = line_hits(term_regex(" ".join(t.lower().split())), texts)
+        if lines:
+            rep.problem(unit, "lever-om", "%s: plan.md line %d holds absent_terms entry %d" % (where, lines[0], i))
+
+
+def check_item(unit, stratum, mode, n, item, files, heads, rep):
+    iid = item.get("id")
+    where = "item %s" % (iid if isinstance(iid, str) and ITEM_ID.match(iid) else "#%d" % n)
+    kind = item.get("item_kind")
+    role = item.get("role")
+    if not isinstance(kind, str):
+        rep.problem(unit, "key-kind", "%s item_kind must be text" % where)
+        kind = None
+    if role == "anchor":
+        if kind is not None and kind not in ANCHORS:
+            rep.problem(unit, "key-kind", "%s anchor kind must be one of %s" % (where, ",".join(ANCHORS)))
+        want_levers = ()
+    elif role == "candidate":
+        if kind not in KINDS:
+            if kind is not None:
+                rep.problem(unit, "key-kind", "%s has an unknown item_kind" % where)
+            return None
+        if KINDS[kind][0] != stratum:
+            rep.problem(unit, "key-kind", "%s kind %s belongs to stratum %s" % (where, kind, KINDS[kind][0]))
+        want_levers = KINDS[kind][1]
+        if kind in NEEDS_EXISTING and mode == "greenfield":
+            rep.problem(unit, "key-mode", "%s kind %s needs an existing product, not greenfield" % (where, kind))
+    else:
+        rep.problem(unit, "key-field", "%s role must be candidate or anchor" % where)
+        return kind
+    levers = item.get("levers")
+    if not (isinstance(levers, list) and all(isinstance(lv, str) for lv in levers) and sorted(levers) == sorted(want_levers)):
+        rep.problem(unit, "key-levers", "%s levers must be [%s]" % (where, ", ".join(want_levers)))
+    for f in ("cause", "fix"):
+        need_str(item, f, unit, where, rep)
+    if item.get("deserved_severity") not in SEVERITIES:
+        rep.problem(unit, "key-field", "%s deserved_severity must be Critical or High" % where)
+    section = item.get("plan_section")
+    if not isinstance(section, str) or section not in heads:
+        rep.problem(unit, "key-place", "%s plan_section is not a ## heading in plan.md" % where)
+    if "other_places" in item:
+        check_places(unit, where, item["other_places"] if isinstance(item["other_places"], list) else [None], files, heads, rep, True)
+    paths = check_evidence(unit, where, item.get("evidence"), files, rep)
+    distinct = set(paths)
+    for lv in want_levers:
+        need_str(item, LEVER_FIELD[lv], unit, where, rep)
+    if ("H2" in want_levers or "QT" in want_levers) and len(distinct) < 3:
+        rep.problem(unit, "key-evidence", "%s needs evidence from 3 or more distinct files, has %d" % (where, len(distinct)))
+    if "CD" in want_levers and not any(p.startswith("src/") for p in distinct):
+        rep.problem(unit, "key-evidence", "%s needs evidence under src/" % where)
+    if "OM" in want_levers and not any(p.startswith(("context/", "src/")) for p in distinct):
+        rep.problem(unit, "key-evidence", "%s needs evidence under context/ or src/" % where)
+    if "OM" in want_levers:
+        check_absent(unit, where, item.get("absent_terms"), files.get("plan.md", ""), rep)
+    if "QT" in want_levers and is_text(item.get("computation")) and len(NUMBER.findall(item["computation"])) < COMPUTATION_NUMBERS_MIN:
+        rep.problem(unit, "key-field", "%s computation names fewer than %d numbers" % (where, COMPUTATION_NUMBERS_MIN))
+    if "CD" in want_levers and is_text(item.get("code_fact")) and not any(r.startswith("src/") and r in item["code_fact"] for r in files):
+        rep.problem(unit, "key-field", "%s code_fact names no src/ file of the unit" % where)
+    if kind in NEEDS_DECISION:
+        need_str(item, "decision", unit, where, rep)
+        need_str(item, "should_become", unit, where, rep)
+    if role == "anchor" and not any(p.startswith(("context/", "src/")) for p in distinct) and kind != "A-X":
+        rep.problem(unit, "key-evidence", "%s needs evidence under context/ or src/" % where)
+    return kind
+
+
+def check_independent(unit, items, files, rep):
+    owner = {}
+    for n, it in enumerate(items, 1):
+        if not isinstance(it, dict):
+            continue
+        ev = it.get("evidence") if isinstance(it.get("evidence"), list) else []
+        places = it.get("other_places") if isinstance(it.get("other_places"), list) else []
+        paths = {p for p in [e.get("path") for e in ev if isinstance(e, dict)] + places
+                 if isinstance(p, str) and p in files and p not in ("plan.md", "key.json")}
+        for p in sorted(paths):
+            if p in owner:
+                rep.problem(unit, "key-independent", "items %d and %d share evidence file %s" % (owner[p], n, p))
+            else:
+                owner[p] = n
+
+
+def check_minors(unit, key, heads, rep):
+    minors = key.get("minors")
+    if not isinstance(minors, list) or not MINORS[0] <= len(minors) <= MINORS[1]:
+        rep.problem(unit, "key-minors", "want %d to %d minors" % MINORS)
+        return
+    for i, m in enumerate(minors, 1):
+        if not isinstance(m, dict):
+            rep.problem(unit, "key-minors", "minor %d is not an object" % i)
+            continue
+        if m.get("plan_section") not in heads:
+            rep.problem(unit, "key-minors", "minor %d plan_section is not a ## heading" % i)
+        if not isinstance(m.get("issue"), str) or not m["issue"].strip():
+            rep.problem(unit, "key-minors", "minor %d needs issue" % i)
+        if m.get("deserved_severity") not in MINOR_SEVERITIES:
+            rep.problem(unit, "key-minors", "minor %d deserved_severity must be Medium or Low" % i)
+
+
+def check_key(unit, files, heads, wave, kept, floor, rep):
+    try:
+        answer = json.loads(files.get("key.json", ""))
+    except (ValueError, RecursionError):
+        rep.problem(unit, "key-json", "key.json does not parse")
+        return None
+    if not isinstance(answer, dict):
+        rep.problem(unit, "key-json", "key.json is not an object")
+        return None
+    if answer.get("unit") != unit:
+        rep.problem(unit, "key-field", "unit field differs from the folder name")
+    if answer.get("wave") != wave:
+        rep.problem(unit, "key-field", "wave field is not %s" % wave)
+    stratum, mode, kind = answer.get("stratum"), answer.get("mode"), answer.get("kind")
+    if stratum not in STRATA:
+        rep.problem(unit, "key-field", "stratum must be one of %s" % ",".join(STRATA))
+    if mode not in MODES:
+        rep.problem(unit, "key-field", "mode must be one of %s" % ",".join(MODES))
+    allowed = {"calibration": ("calibration",), "admission": ("panel",), "confirmatory": ("panel", "decoy")}[wave]
+    if kind not in allowed:
+        rep.problem(unit, "key-field", "kind must be %s in the %s wave" % (" or ".join(allowed), wave))
+        return answer
+    check_minors(unit, answer, heads, rep)
+    if kind == "decoy":
+        bait = answer.get("bait")
+        if "items" in answer and answer["items"]:
+            rep.problem(unit, "key-decoy", "a decoy keys no items")
+        if not isinstance(bait, dict):
+            rep.problem(unit, "key-decoy", "a decoy needs bait")
+            return answer
+        resembles = bait.get("resembles")
+        if not isinstance(resembles, str) or resembles not in KINDS or KINDS[resembles][0] != stratum:
+            rep.problem(unit, "key-decoy", "bait resembles must be a kind of this stratum")
+        elif kept is not None and resembles not in kept:
+            rep.problem(unit, "key-decoy", "bait resembles a kind E0 did not keep")
+        if not isinstance(bait.get("omission"), bool):
+            rep.problem(unit, "key-decoy", "bait needs omission true or false")
+        for f in ("choice", "why_not_a_flaw"):
+            need_str(bait, f, unit, "bait", rep)
+        section = bait.get("plan_section")
+        if not isinstance(section, str) or section not in heads:
+            rep.problem(unit, "key-place", "bait plan_section is not a ## heading in plan.md")
+        jpaths = check_evidence(unit, "bait justification", bait.get("justification"), files, rep)
+        if not any(p.startswith(("context/", "src/")) for p in jpaths):
+            rep.problem(unit, "key-evidence", "bait justification needs a context/ or src/ path")
+        return answer
+    items = answer.get("items")
+    if not isinstance(items, list):
+        rep.problem(unit, "key-field", "items must be a list")
+        return answer
+    ids = [it.get("id") if isinstance(it, dict) else None for it in items]
+    if ids != ["%s-%d" % (unit, i) for i in range(1, len(items) + 1)]:
+        rep.problem(unit, "key-field", "item ids must run %s-1, %s-2 and on, in order" % (unit, unit))
+    kinds = [check_item(unit, stratum, mode, n, it, files, heads, rep) if isinstance(it, dict) else None
+             for n, it in enumerate(items, 1)]
+    sections = [it.get("plan_section") for it in items if isinstance(it, dict) and isinstance(it.get("plan_section"), str)]
+    if len(set(sections)) != len(sections):
+        rep.problem(unit, "key-sections", "two keyed items share a plan_section")
+    check_independent(unit, items, files, rep)
+    roles = [it.get("role") for it in items if isinstance(it, dict)]
+    if kind == "calibration":
+        want = sorted(k for k, v in KINDS.items() if v[0] == stratum)
+        cands = sorted(k for k, r in zip(kinds, roles) if r == "candidate" and k is not None)
+        if len(items) != 4 or roles.count("anchor") != 1 or cands != want:
+            rep.problem(unit, "key-recipe", "a calibration unit keys one item of each of its stratum's three kinds and one anchor")
+        anchor_kind = [k for k, r in zip(kinds, roles) if r == "anchor"]
+        if anchor_kind and answer.get("anchor_shape") not in (None, anchor_kind[0]):
+            rep.problem(unit, "key-recipe", "anchor_shape differs from the anchor's item_kind")
+    else:
+        if len(items) != 3 or roles.count("candidate") != 3:
+            rep.problem(unit, "key-recipe", "a panel unit keys three candidate items")
+        if kept is not None:
+            if any(k not in kept for k in kinds):
+                rep.problem(unit, "key-recipe", "an item's kind is not on the kept list")
+            if len(kept) >= 2 and len(set(kinds)) < 2:
+                rep.problem(unit, "key-recipe", "items must span at least two kept kinds")
+            if sum(1 for k in kinds if k in floor) > 1:
+                rep.problem(unit, "key-recipe", "at most one item of a floor kind")
+    return answer
+
+
+def check_unit(unit_dir, wave, kept, floor, terms, rep):
+    unit = os.path.basename(os.path.normpath(unit_dir))
+    if not UNIT_ID.match(unit):
+        rep.problem(unit, "layout", "unit id must be 8 lowercase hex characters")
+    files = check_tree(unit, unit_dir, rep)
+    heads, src = check_sizes(unit, files, rep)
+    check_echo(unit, files, terms, rep)
+    key = check_key(unit, files, heads, wave, kept, floor, rep)
+    if isinstance(key, dict) and key.get("stratum") in STRATA:
+        check_scope(unit, key["stratum"], files, src, rep)
+
+
+def recipe_problem(kept, floor):
+    if kept is None:
+        return None
+    unknown = [k for k in kept + floor if k not in KINDS]
+    if unknown:
+        return "unknown kind %s" % unknown[0]
+    if any(k not in kept for k in floor):
+        return "a floor kind must also be on the kept list"
+    strata = {KINDS[k][0] for k in kept}
+    if len(strata) != 1:
+        return "--kept must name kinds of one stratum"
+    if not kept:
+        return "no kept kind: the stratum is not built"
+    if all(k in floor for k in kept):
+        return "every kept kind is KEEP-FLOOR, so no unit can carry three items with at most one floor item"
+    return None
+
+
+def run(panel, wave, kept, floor, echo_path, out=print):
+    terms = load_echo_terms(echo_path)
+    rep = Report()
+    why = recipe_problem(kept, floor)
+    if why:
+        rep.problem("-", "recipe-unmeetable", why)
+    units = 0
+    for name in sorted(os.listdir(panel)):
+        full = os.path.join(panel, name)
+        if not os.path.islink(full) and not os.path.isdir(full):
+            rep.problem("-", "clean-room" if name.lower() in CLEAN_ROOM_NAMES else "layout",
+                        "panel folder entry %s is not a unit folder" % name)
+            continue
+        units += 1
+        before = rep.count
+        if os.path.islink(full):
+            rep.problem(name, "clean-room", "the unit folder is a symlink")
+        else:
+            check_unit(full, wave, kept, floor, terms, rep)
+        rep.lines.append("unit %s problems %d" % (name, rep.count - before))
+    if not units:
+        rep.problem("-", "layout", "no unit folders under the panel folder")
+    for line in rep.lines:
+        out(line)
+    out("units %d" % units)
+    out("problems %d" % rep.count)
+    return rep
+
+
+FILLER = ("The team met on Tuesday and agreed the numbers below are the current baseline. "
+          "Owners are listed beside each row, and the table is refreshed every Monday morning. ")
+
+
+def _synthetic_unit(panel, unit, stratum="eng"):
+    d = os.path.join(panel, unit)
+    os.makedirs(os.path.join(d, "context"))
+    os.makedirs(os.path.join(d, "src"))
+    for i in range(8):
+        with open(os.path.join(d, "context", "doc%d.md" % i), "w") as f:
+            f.write("# Working note %d\n\n" % i + FILLER * 15)
+    for i in range(4):
+        with open(os.path.join(d, "src", "mod%d.py" % i), "w") as f:
+            f.write("def handler_%d(event):\n    return event\n" % i + "# filler line\n" * 60)
+    names = ["Goals", "Background", "Approach", "Data changes", "Rollout", "Staffing", "Timeline"]
+    with open(os.path.join(d, "plan.md"), "w") as f:
+        f.write("# Plan\n\n" + "".join("## %s\n\n%s\n\n" % (n, FILLER * 8) for n in names))
+
+    def ev(*paths):
+        return [{"path": p, "what": "a fact"} for p in paths]
+
+    def item(n, kind, section, levers, evidence, extra):
+        it = {"id": "%s-%d" % (unit, n), "item_kind": kind, "role": "candidate" if kind in KINDS else "anchor",
+              "levers": list(levers), "plan_section": section, "cause": "c", "evidence": evidence,
+              "deserved_severity": "High", "fix": "f"}
+        it.update(extra)
+        return it
+    key = {"unit": unit, "wave": "calibration", "stratum": stratum, "kind": "calibration", "mode": "added",
+           "anchor_shape": "A-F",
+           "items": [item(1, "E-CD", "Approach", ("CD", "H2"), ev("context/doc1.md", "context/doc2.md", "src/mod1.py"),
+                          {"code_fact": "src/mod1.py handler_1 returns before it writes", "intermediate": "y"}),
+                     item(2, "E-OM", "Data changes", ("OM", "QT"), ev("plan.md", "context/doc3.md", "context/doc4.md"),
+                          {"absent_step": "x", "computation": "120 rows * 4 writes / 60 s",
+                           "absent_terms": ["backfill", "dual write"]}),
+                     item(3, "E-Q", "Rollout", ("QT", "H2"), ev("plan.md", "context/doc5.md", "context/doc6.md"),
+                          {"computation": "300 rps * 3 calls = 900, over 500", "intermediate": "y"}),
+                     item(4, "A-F", "Goals", (), ev("context/doc7.md"), {})],
+           "minors": [{"plan_section": "Staffing", "issue": "i", "deserved_severity": "Medium"},
+                      {"plan_section": "Timeline", "issue": "i", "deserved_severity": "Low"}]}
+    with open(os.path.join(d, "key.json"), "w") as f:
+        json.dump(key, f)
+    return d
+
+
+def _edit(path, fn):
+    with open(path, encoding="utf-8") as f:
+        t = f.read()
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(fn(t))
+
+
+def _edit_key(d, fn):
+    p = os.path.join(d, "key.json")
+    with open(p, encoding="utf-8") as f:
+        k = json.load(f)
+    fn(k)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(k, f)
+
+
+def _write(d, rel, text):
+    p = os.path.join(d, rel)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _move_out(d):
+    target = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(d))), "symlink-target")
+    os.rename(d, target)
+    os.symlink(target, d)
+
+
+def _cases():
+    cases = []
+
+    def case(name, mutate, code, new=False):
+        cases.append((name, mutate, code, new))
+
+    def doc(d, rel):
+        return os.path.join(d, rel)
+
+    case("clean unit passes", None, None)
+    case("echo term in a context file", lambda d: _edit(doc(d, "context/doc3.md"), lambda t: t + "\nSee the failure modes registry.\n"), "echo")
+    case("heading echo in plan", lambda d: _edit(doc(d, "plan.md"), lambda t: t.replace("## Staffing", "## Test plan")), "echo-heading")
+    case("clean-room folder", lambda d: os.makedirs(doc(d, "src/.claude/skills")), "clean-room")
+    case("AGENTS.md in the tree", lambda d: _write(d, "context/AGENTS.md", "x"), "clean-room")
+    case("plan too small", lambda d: _edit(doc(d, "plan.md"), lambda t: t[:3000]), "plan-size")
+    case("missing lever field", lambda d: _edit_key(d, lambda k: k["items"][0].pop("code_fact")), "key-field")
+    case("wrong levers", lambda d: _edit_key(d, lambda k: k["items"][1].update(levers=["OM"])), "key-levers")
+    case("UI file named in an eng plan", lambda d: _edit(doc(d, "plan.md"), lambda t: t + "\nWe touch web/Checkout.tsx.\n"), "ui-scope")
+    case("two items share a section", lambda d: _edit_key(d, lambda k: k["items"][3].update(plan_section="Rollout")), "key-sections")
+    case("greenfield with an existing-product kind", lambda d: _edit_key(d, lambda k: k.update(mode="greenfield")), "key-mode")
+    case("QT item with two files", lambda d: _edit_key(d, lambda k: k["items"][2].update(evidence=k["items"][2]["evidence"][:2])), "key-evidence")
+    case("calibration unit missing a kind", lambda d: _edit_key(d, lambda k: k["items"].pop(2)), "key-recipe")
+    case("symlink", lambda d: os.symlink("/etc/hostname", doc(d, "context/link.md")), "clean-room")
+    case("gstack in a path", lambda d: _write(d, "src/gstack_helper.py", "x = 1\n"), "clean-room")
+    case("symlinked unit root", _move_out, "clean-room", True)
+    case("named pipe", lambda d: os.mkfifo(doc(d, "context/feed.md")), "clean-room", True)
+    case("levers with a number", lambda d: _edit_key(d, lambda k: k["items"][0].update(levers=["CD", 7])), "key-levers", True)
+    case("levers with an object", lambda d: _edit_key(d, lambda k: k["items"][0].update(levers=[{"lever": "CD"}, "H2"])), "key-levers", True)
+    case("item_kind as a list", lambda d: _edit_key(d, lambda k: k["items"][0].update(item_kind=["E-CD"])), "key-kind", True)
+    case("candidate without item_kind", lambda d: _edit_key(d, lambda k: k["items"][0].pop("item_kind")), "key-kind", True)
+    case("plan_section as a list", lambda d: _edit_key(d, lambda k: k["items"][0].update(plan_section=["Approach"])), "key-place", True)
+    case("key nested too deep", lambda d: _write(d, "key.json", "[" * 100000 + "]" * 100000), "key-json", True)
+    case("echo term wrapped across lines", lambda d: _edit(doc(d, "context/doc3.md"), lambda t: t + "\nSee the failure\nmodes registry.\n"), "echo", True)
+    case("echo term wrapped across comment lines", lambda d: _edit(doc(d, "src/mod2.py"), lambda t: t + "# Check the failure\n# modes registry first.\n"), "echo", True)
+    case("heading echo as a setext heading", lambda d: _edit(doc(d, "context/doc4.md"), lambda t: t + "\nTest plan\n=========\n"), "echo-heading", True)
+    case("CLAUDE.local.md in context", lambda d: _write(d, "context/CLAUDE.local.md", "x\n"), "clean-room", True)
+    case(".claude/commands in the unit", lambda d: _write(d, ".claude/commands/review.md", "x\n"), "clean-room", True)
+    case(".claude/settings.json in the unit", lambda d: _write(d, ".claude/settings.json", "{}\n"), "clean-room", True)
+    case("@-import line", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\nHouse rules: @../shared/house-rules.md\n"), "auto-load", True)
+    case("CLAUDE.md beside the units", lambda d: _write(os.path.dirname(d), "CLAUDE.md", "x\n"), "clean-room", True)
+    case("signpost phrase", lambda d: _edit(doc(d, "context/doc6.md"), lambda t: t + "\nNote that the export lags a day.\n"), "signpost", True)
+    case("plan names an absent term", lambda d: _edit(doc(d, "plan.md"), lambda t: t.replace("## Timeline\n\n", "## Timeline\n\nThe backfill runs on day two.\n\n")), "lever-om", True)
+    case("OM item without absent_terms", lambda d: _edit_key(d, lambda k: k["items"][1].pop("absent_terms")), "key-field", True)
+    case("two items share an evidence file", lambda d: _edit_key(d, lambda k: k["items"][2]["evidence"].append({"path": "context/doc1.md", "what": "a fact"})), "key-independent", True)
+    case("computation with two numbers", lambda d: _edit_key(d, lambda k: k["items"][1].update(computation="about 40 a second, under 50")), "key-field", True)
+    case("code_fact names no src file", lambda d: _edit_key(d, lambda k: k["items"][0].update(code_fact="the handler writes late")), "key-field", True)
+    case("@ in a code fence, a mail address and a decorator pass",
+         lambda d: (_edit(doc(d, "context/doc5.md"), lambda t: t + "\n```\ncurl -d @body.json https://api.example.com/v1/jobs\n```\n\nMail ops@example.com about `@notes.md`.\n"),
+                    _edit(doc(d, "src/mod3.py"), lambda t: "import functools\n\n\n@functools.lru_cache\n" + t)), None, True)
+    return cases
+
+
+BAD_VALUES = (None, 7, "x", [], {}, ["CD", 7], [{"lever": "CD"}], [["x"]], [{"path": ["x"], "what": 7}], {"a": [1]})
+ITEM_FIELDS = ("id", "item_kind", "role", "levers", "plan_section", "other_places", "cause", "fix", "evidence",
+               "deserved_severity", "intermediate", "computation", "absent_step", "absent_terms", "code_fact")
+KEY_FIELDS = ("unit", "wave", "stratum", "kind", "mode", "anchor_shape", "items", "minors")
+BAIT_FIELDS = ("resembles", "omission", "plan_section", "choice", "why_not_a_flaw", "justification")
+
+
+def _fuzz():
+    root = tempfile.mkdtemp(prefix="check-units-")
+    count = failed = 0
+    try:
+        d = _synthetic_unit(os.path.join(root, "panel"), "0a1b2c3d")
+        files = check_tree("0a1b2c3d", d, Report())
+        heads, _ = check_sizes("0a1b2c3d", files, Report())
+        base = json.loads(files["key.json"])
+        decoy = {"unit": "0a1b2c3d", "wave": "confirmatory", "stratum": "eng", "kind": "decoy", "mode": "added",
+                 "bait": {"resembles": "E-OM", "omission": True, "plan_section": "Data changes", "choice": "c",
+                          "why_not_a_flaw": "w", "justification": [{"path": "context/doc3.md", "what": "a fact"}]},
+                 "minors": base["minors"]}
+        trials = [("calibration", base, ("items", n, f)) for n in range(len(base["items"])) for f in ITEM_FIELDS]
+        trials += [("calibration", base, (f,)) for f in KEY_FIELDS]
+        trials += [("calibration", base, ("minors", 0, f)) for f in ("plan_section", "issue", "deserved_severity")]
+        trials += [("confirmatory", decoy, ("bait", f)) for f in BAIT_FIELDS] + [("confirmatory", decoy, ("bait",))]
+        for wave, key, path in trials:
+            for v in BAD_VALUES:
+                k = json.loads(json.dumps(key))
+                target = k
+                for p in path[:-1]:
+                    target = target[p]
+                target[path[-1]] = v
+                count += 1
+                try:
+                    check_key("0a1b2c3d", dict(files, **{"key.json": json.dumps(k)}), heads, wave,
+                              ["E-CD", "E-OM"] if wave == "confirmatory" else None, [], Report())
+                except Exception as e:
+                    failed += 1
+                    print("self-test FAIL fuzz %s=%s: %s" % (".".join(map(str, path)), json.dumps(v), type(e).__name__))
+    finally:
+        shutil.rmtree(root)
+    return count, failed
+
+
+def self_test():
+    echo = os.path.join(HERE, "echo-terms.txt")
+    failed = total = 0
+    for name, mutate, code, _ in _cases():
+        total += 1
+        root = tempfile.mkdtemp(prefix="check-units-")
+        try:
+            panel = os.path.join(root, "panel")
+            d = _synthetic_unit(panel, "0a1b2c3d")
+            if mutate:
+                mutate(d)
+            lines = []
+            rep = run(panel, "calibration", None, [], echo, out=lines.append)
+            codes = {l.split()[2].rstrip(":") for l in lines if l.startswith("PROBLEM")}
+            ok = (rep.count == 0) if code is None else (code in codes)
+            if not ok:
+                failed += 1
+                print("self-test FAIL %s: got %s" % (name, sorted(codes) or "no problems"))
+        finally:
+            shutil.rmtree(root)
+    n, bad = _fuzz()
+    total += n
+    failed += bad
+    usage = [(["x", "--wave", "admission"], 2), (["x", "--wave", "confirmatory", "--kept", "E-CD"], 2),
+             (["x", "--wave", "calibration", "--floor", "none"], 2)]
+    root = tempfile.mkdtemp(prefix="check-units-")
+    try:
+        for argv, want in usage:
+            argv = [root] + argv[1:]
+            if main(argv) != want:
+                failed += 1
+                print("self-test FAIL usage %s" % " ".join(argv[1:]))
+    finally:
+        shutil.rmtree(root)
+    for kept, floor, bad in ((["E-CD", "E-OM"], ["E-CD", "E-OM"], True), (["E-CD"], ["E-CD"], True),
+                             (["E-CD", "E-OM"], ["E-OM"], False), (["E-CD"], [], False)):
+        if (recipe_problem(kept, floor) is not None) != bad:
+            failed += 1
+            print("self-test FAIL recipe %s floor %s" % (kept, floor))
+    print("self-test %s, %d cases" % ("ok" if failed == 0 else "failed", total + len(usage) + 4))
+    return 0 if failed == 0 else 1
+
+
+def write_fixtures(out):
+    os.makedirs(out, exist_ok=True)
+    for name, mutate, code, new in _cases():
+        if mutate is not None and not (new and code):
+            continue
+        slug = "clean" if mutate is None else re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+        d = _synthetic_unit(os.path.join(out, slug), "0a1b2c3d")
+        if mutate:
+            mutate(d)
+        print("%s %s" % (slug, code or "none"))
+    return 0
+
+
+def main(argv):
+    if argv[:1] == ["--self-test"]:
+        return self_test()
+    if argv[:1] == ["--write-fixtures"]:
+        if len(argv) != 2 or (os.path.exists(argv[1]) and os.listdir(argv[1])):
+            print("E_USAGE: python3 check_units.py --write-fixtures <empty_dir>")
+            return 2
+        return write_fixtures(argv[1])
+    args, wave, kept, floor = [], None, None, None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--wave", "--kept", "--floor") and i + 1 < len(argv):
+            v = argv[i + 1]
+            if a == "--wave":
+                wave = v
+            elif a == "--kept":
+                kept = [k for k in v.split(",") if k]
+            else:
+                floor = [] if v == "none" else [k for k in v.split(",") if k]
+            i += 2
+            continue
+        args.append(a)
+        i += 1
+    if len(args) != 1 or wave not in WAVES or not os.path.isdir(args[0]):
+        print("E_USAGE: python3 check_units.py <panel_dir> --wave calibration|admission|confirmatory [--kept K,K --floor K|none]")
+        return 2
+    if wave == "calibration" and (kept is not None or floor is not None):
+        print("E_USAGE: --kept and --floor apply to admission and confirmatory waves")
+        return 2
+    if wave != "calibration" and (not kept or floor is None):
+        print("E_USAGE: the %s wave needs --kept with E0's kept kinds and --floor with its KEEP-FLOOR kinds or none" % wave)
+        return 2
+    rep = run(args[0], wave, kept, floor or [], os.path.join(HERE, "echo-terms.txt"))
+    return 0 if rep.count == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
