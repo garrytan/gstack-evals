@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+# Held-session counts for the R2 rerun (GEVA-195 amendment, section 4), keyless, printed beside every verdict and never
+# deciding. 176fdc7's run loop (src/trial/review/run.ts) writes <out>/cells.ndjson, one line per finished session with its
+# trial record (termination, session_end), parse and scored_turn, the last line for a cell winning as readReviewJournal
+# reads it, and <out>/arms/<arm id>/arm.json with held_rescues. Per arm of each out dir given, it prints:
+#  - held rescues: arm.json's held_rescues, checked against the journal's sessions scored by rule held whose parse is
+#    findings, and the count of each scored_turn.rule;
+#  - session_end.cause counts (clean, deadline, tasks_pending) and the sessions with no session_end;
+#  - block_present_at_deadline: deadline gaps (termination missing, E_BACKGROUND_DEADLINE) whose session_end.findings_block
+#    is true;
+#  - the sessions that waited (session_end.waited_ms > 0) and their idle time in all.
+# It writes the rescue sensitivity's drop file: a unit column holding every unit with a held-rescued session in any arm
+# given, in any pass, as noloss derive --drop-file reads it.
+# Exit 0, or 5 on bad input (a missing journal or arm.json, or held_rescues that disagree with the journal).
+# Usage: python3 rr-held.py <drop file out> <review-units out dir>...
+import json, os, sys
+from collections import Counter
+
+try:
+    drop, outs = sys.argv[1], sys.argv[2:]
+    if not outs:
+        raise ValueError("no review-units out dir given")
+    rescued = set()
+    for out in outs:
+        cells = {}
+        for line in open(os.path.join(out, "cells.ndjson")):
+            if line.strip():
+                e = json.loads(line)
+                c = e["cell"]
+                cells[(c["model"], c["arm"], c["unit"], c["pass"])] = e
+        for aid in sorted(os.listdir(os.path.join(out, "arms"))):
+            arm = json.load(open(os.path.join(out, "arms", aid, "arm.json")))
+            name, model = arm["label"].split(" on ", 1)
+            es = [e for k, e in cells.items() if k[0] == model and k[1] == name]
+            end = lambda e: e["record"].get("session_end") or {}
+            held = [e for e in es if (e.get("scored_turn") or {}).get("rule") == "held" and e["parse"]["kind"] == "findings"]
+            if arm.get("held_rescues") != len(held):
+                raise ValueError("%s: arm.json held_rescues is %r, the journal has %d" % (aid, arm.get("held_rescues"), len(held)))
+            rules = Counter((e.get("scored_turn") or {}).get("rule", "none") for e in es)
+            causes = Counter(end(e).get("cause", "no session_end") for e in es)
+            dl = [e for e in es if e["record"]["termination"].get("kind") == "missing" and e["record"]["termination"].get("code") == "E_BACKGROUND_DEADLINE"]
+            waited = [e for e in es if (end(e).get("waited_ms") or 0) > 0]
+            print("held %s: %d sessions; held rescues %d (arm.json %d); scored_turn.rule %s" % (aid, len(es), len(held), arm["held_rescues"], ", ".join("%s %d" % kv for kv in sorted(rules.items()))))
+            print("cause %s: clean %d, deadline %d, tasks_pending %d, no session_end %d" % (aid, causes["clean"], causes["deadline"], causes["tasks_pending"], causes["no session_end"]))
+            print("deadline %s: %d deadline gaps, block_present_at_deadline %d" % (aid, len(dl), sum(1 for e in dl if end(e).get("findings_block") is True)))
+            print("waited %s: %d sessions waited, %.1f s idle in all" % (aid, len(waited), sum(end(e)["waited_ms"] for e in waited) / 1000))
+            rescued |= {e["cell"]["unit"] for e in held}
+    with open(drop, "w") as w:
+        w.write("unit\n" + "".join(u + "\n" for u in sorted(rescued)))
+    print("drop file: %d units with a held-rescued session: %s" % (len(rescued), ", ".join(sorted(rescued)) or "none"))
+except Exception as e:
+    print("E_RR_HELD %s: %s. This is an error, not a count." % (type(e).__name__, e))
+    sys.exit(5)
