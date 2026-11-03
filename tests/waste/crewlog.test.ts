@@ -185,6 +185,16 @@ describe("thread exports", () => {
     expect(after(bash("cd repo-a && git push"), bash("cd repo-a && bun test", "ok"))).toBe(1);
   });
 
+  test("pr_create after a push keeps the pushed head's machine and directory", () => {
+    const s = scan(run([bash("cd repo-a && git push")]), run([tool("pr_create", { title: "t" })]), run([bash("cd repo-a && bun test", "ok")]));
+    expect(s.pushed_head_checks.calls).toBe(1);
+  });
+
+  test("a check in another directory after pr_create is not at the pushed head", () => {
+    const s = scan(run([bash("cd repo-a && git push")]), run([tool("pr_create", { title: "t" })]), run([bash("cd repo-b && bun test", "ok")]));
+    expect(s.pushed_head_checks.calls).toBe(0);
+  });
+
   test("patches, sourced scripts and attached in-place flags cross the boundary", () => {
     const again = (mid: C) => scan(run([bash("bun test", "ok")]), run([mid]), run([bash("bun test", "ok")]));
     for (const mid of [tool("apply_patch", { patch: "x" }), bash("source ./repair.sh", ""), bash(". ./repair.sh", "")]) {

@@ -576,7 +576,7 @@ export function scanSession(items: ExportItem[]) {
       strictEpoch++;
       if (c.tool === "pr_create" && !c.isError) {
         pushedEpoch = epoch;
-        pushedAt = JSON.stringify("primary") + "\u0000";
+        pushedAt ||= JSON.stringify("primary") + "\u0000";
       }
     }
   }
