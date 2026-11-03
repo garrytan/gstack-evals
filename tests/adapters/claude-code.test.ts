@@ -731,10 +731,12 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     const wait = o.waitMs === null ? {} : { backgroundWaitMs: o.waitMs ?? BACKGROUND_WAIT_MS };
     const proxy = { baseUrl: "http://127.0.0.1:9", slot: "s", token: "t" };
     const driver = o.host ? hostDriver({ host: "claude", model: MODEL, provider: "anthropic", proxy, interactive: false, skill: null, out, ...wait, ...(o.capStops ? { capStops: true } : {}) }) : claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy, skill: null, out, ...wait, ...(o.capStops ? { capStops: true } : {}) });
-    const t0 = performance.now();
     const outcome = await driver.run(session as never, { id: "t", prompt: "Review the branch." }, o.timeoutMs ?? 20_000);
     const log = existsSync(join(out, "cli-stderr.log")) ? readFileSync(join(out, "cli-stderr.log"), "utf8") : "";
-    return { outcome, ms: performance.now() - t0, log, out };
+    const read = readFileSync(join(out, "transcript.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+    // What the session read, in order, up to where it stopped reading: each result, each reader landing and each wakeup firing.
+    const events = read.flatMap((m) => (m.type === "result" ? ["result"] : m.subtype === "task_notification" ? ["landed " + m.tool_use_id] : m.type === "command_lifecycle" && m.state === "started" ? ["wakeup"] : []));
+    return { outcome, log, out, events, last: read.at(-1) };
   };
   const agent = (id: string, delay: number | null, extra: Record<string, unknown> = {}) => ({ id, delay, ...extra });
 
@@ -754,7 +756,7 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
       const r = await bg({ readers: [agent("tu_a", 300)] }, { waitMs: null, host });
       expect([r.outcome.termination, r.outcome.turns, "session_end" in r.outcome]).toEqual([{ kind: "completed" }, ["Waiting."], false]);
       expect(r.log).toContain('background work still out (local_agent "reader tu_a"); this run sets no background wait, so nothing held it');
-      expect(r.ms).toBeLessThan(3_000);
+      expect(r.events).toEqual(["result"]);
     }
   }, 30_000);
 
@@ -764,7 +766,7 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     expect([bash.outcome.termination, bash.outcome.turns.at(-1), bash.outcome.session_end?.cause]).toEqual([{ kind: "completed" }, REPORT, "clean"]);
     const late = await bg({ readers: [agent("tu_a", 300), agent("tu_b", 600)], late_level: true }, { waitMs: 10_000 });
     expect([late.outcome.termination, late.outcome.turns.at(-1), late.outcome.session_end?.cause]).toEqual([{ kind: "completed" }, REPORT, "clean"]);
-    expect(late.ms).toBeLessThan(5_000);
+    expect(late.last).toMatchObject({ type: "result", result: REPORT });
   }, 30_000);
 
   // Value: protects=a reader that never returns hits the configured deadline, which is a missing cell (E_BACKGROUND_DEADLINE), so review-units scores it as a coverage gap and never as the arm finding nothing; fails_when=the session hangs to its timeout, completes on its last waiting turn, or the record misses the cause; why_new=GST-734; seam=the driver's background deadline; no_claim=a real model
@@ -773,7 +775,7 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
     expect(r.outcome.termination).toEqual({ kind: "missing", code: "E_BACKGROUND_DEADLINE" });
     expect(r.outcome.session_end).toMatchObject({ cause: "deadline", pending: ['local_agent "reader tu_b"'], released_wakeups: [] });
     expect(r.outcome.session_end!.waited_ms).toBeGreaterThanOrEqual(1_500);
-    expect(r.ms).toBeLessThan(5_000);
+    expect(r.log).toContain("the session sat idle 1500 ms in all waiting on its background work");
     expect(r.log).toContain("E_BACKGROUND_DEADLINE, not the arm's");
     expect(parseFindings(r.outcome)).toEqual({ kind: "incomplete", reason: "the session ended missing (E_BACKGROUND_DEADLINE)" });
   }, 30_000);
@@ -805,24 +807,24 @@ describe("GST-734: background work on the pinned Agent SDK against a stub CLI (k
   test("a wakeup set while nothing ran holds the session; a fallback set while readers ran is released and recorded", async () => {
     const alone = await bg({ readers: [], wakeup: { delay: 1_000, text: REPORT } });
     expect([alone.outcome.termination, alone.outcome.turns, alone.outcome.session_end?.cause, alone.outcome.session_end?.released_wakeups]).toEqual([{ kind: "completed" }, ["Waiting.", REPORT], "clean", []]);
-    expect(alone.ms).toBeGreaterThanOrEqual(1_000);
+    expect(alone.events).toEqual(["result", "wakeup", "result"]);
     const fallback = await bg({ readers: [agent("tu_a", 300)], wakeup: { delay: 8_000, text: "WAKE: nothing left." } });
     expect([fallback.outcome.termination, fallback.outcome.turns.at(-1), fallback.outcome.session_end?.cause, fallback.outcome.session_end?.pending]).toEqual([{ kind: "completed" }, REPORT, "clean", []]);
-    expect(fallback.ms).toBeLessThan(5_000);
+    expect(fallback.events).toEqual(["result", "landed tu_a", "result"]);
     const [released] = fallback.outcome.session_end!.released_wakeups;
     expect(fallback.outcome.session_end!.released_wakeups).toHaveLength(1);
     expect(released).toMatchObject({ delay_s: 60, running: ['local_agent "reader tu_a"'] });
     expect(Date.parse(released!.fires_at) - Date.parse(released!.set_at)).toBeGreaterThan(7_000);
     const stopped = await bg({ readers: [], wakeup: { delay: 8_000, text: REPORT, stop: true } });
     expect([stopped.outcome.turns, stopped.outcome.session_end?.cause]).toEqual([["Waiting."], "clean"]);
-    expect(stopped.ms).toBeLessThan(5_000);
+    expect(stopped.outcome.session_end?.waited_ms).toBe(0);
   }, 30_000);
 
   // Value: protects=ambient tasks (not activity) and tasks a subagent launched (its own business) never hold the session, so they cannot push a finished session into the deadline; fails_when=either is waited on; why_new=GST-734 (the SDK's ambient flag and parent_task_id); seam=the level filter; no_claim=a real model
   test("ambient tasks and tasks a subagent launched never hold the session", async () => {
     const r = await bg({ readers: [agent("tu_amb", null, { ambient: true }), agent("tu_nest", null, { nested: true })] }, { waitMs: 10_000 });
     expect([r.outcome.termination, r.outcome.turns, r.outcome.session_end?.cause]).toEqual([{ kind: "completed" }, ["Waiting."], "clean"]);
-    expect(r.ms).toBeLessThan(5_000);
+    expect(r.outcome.session_end?.waited_ms).toBe(0);
   }, 30_000);
 
   // Value: protects=spend and cap rules during the wait: a refusal on a turn the CLI takes while readers are out still ends the session as a cap stop, as allowance_stop under capStops, or as a missing E_ALLOWANCE cell without it, and the record says tasks were pending; a session timeout while the session sits idle on held work ends it at the deadline (E_BACKGROUND_DEADLINE, GSTA-2's B1 ruling on #141), and one during an active turn stays the arm's timeout; fails_when=a longer session escapes its allowance, a cap stop becomes a deadline or a completion, or the timeout is swallowed; why_new=GST-734 brief (spend and cap rules still hold); seam=the refusal and timeout paths with a wait open; no_claim=the proxy, which the real CLI test drives
@@ -886,10 +888,9 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
     open.push(h);
     const b = h.bind(MODEL);
     const driver = claudeCodeDriver({ model: MODEL, provider: "anthropic", proxy: { baseUrl: h.baseUrl, slot: b.slot, token: b.token }, skill: null, out: join(h.dir, "host"), query: query as never, backgroundWaitMs: 4_000 });
-    const t0 = performance.now();
     const outcome = await driver.run(h.session(join(h.dir, "work", "t"), join(h.dir, "home"), driver.env!), { id: "t", prompt: "Review the branch." }, 120_000).finally(release);
-    expect(performance.now() - t0).toBeLessThan(30_000);
     expect(outcome.termination).toEqual({ kind: "missing", code: "E_BACKGROUND_DEADLINE" });
+    expect(readFileSync(join(h.dir, "host", "cli-stderr.log"), "utf8")).toContain("the session sat idle 4000 ms in all waiting on its background work");
     expect(outcome.session_end).toMatchObject({ cause: "deadline", pending: ['local_agent "reader B"'] });
     expect(outcome.session_end!.waited_ms).toBeGreaterThanOrEqual(4_000);
     expect(parseFindings(outcome).kind).toBe("incomplete");
@@ -902,9 +903,9 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
       if (!t.results.has("toolu_wake")) return [{ type: "tool_use", id: "toolu_wake", name: "ScheduleWakeup", input: { delaySeconds: 1200, reason: "fallback in case the reader hangs", prompt: "continue the review", noop: true } }];
       return [{ type: "text", text: JSON.stringify(t.body.messages).includes("FINDING-A") ? REPORT : "The reader is running in the background." }];
     };
-    const t0 = performance.now();
     const r = await run(script, { prompt: "Review the branch.", options: { backgroundWaitMs: BACKGROUND_WAIT_MS } });
-    expect(performance.now() - t0).toBeLessThan(60_000);
+    const read = r.lines("transcript.ndjson");
+    expect([read.at(-1)?.type, read.some((m) => m.wakeup_source === "loop_wakeup")]).toEqual(["result", false]);
     expect([r.outcome.termination, r.outcome.turns.at(-1), r.outcome.session_end?.cause, r.outcome.session_end?.pending]).toEqual([{ kind: "completed" }, REPORT, "clean", []]);
     expect(r.outcome.session_end!.released_wakeups).toHaveLength(1);
     expect(r.outcome.session_end!.released_wakeups[0]).toMatchObject({ delay_s: 1200, running: ['local_agent "reader A"'] });
