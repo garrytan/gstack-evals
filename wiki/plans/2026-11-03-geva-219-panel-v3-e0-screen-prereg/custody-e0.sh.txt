@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# custody-e0.sh <bundle.tar.age> <age identity> <run dir> <scorer> <CUSTODY.md> [<bundle sha256>]: the only allowed way to
+# produce E0's slice. In one process it refuses unless the bundle's sha256 is the frozen one (the sixth argument binds
+# another digest, for the keyless dry run only, and says so), decrypts and extracts the bundle into a fresh dir under
+# /dev/shm, runs build-e0.sh on that extraction with the same bundle, appends one line to CUSTODY.md, then removes the
+# extraction and checks it is gone (an EXIT trap does the same on any failure). Prints counts and digests only. GEVA-219.
+set -euo pipefail
+umask 077
+FROZEN=ea69c111bc5d781d507ee296d84202702eb628375c7310bfb26eb93523644934
+BUNDLE=$(realpath "$1"); IDENTITY=$(realpath "$2"); RUN=$(realpath -m "$3"); SCORER=$(realpath "$4"); LOG=$(realpath -m "$5"); WANT=${6:-$FROZEN}
+command -v age >/dev/null || { echo "E_USAGE custody-e0: age is not installed" >&2; exit 2; }
+GOT=$(sha256sum "$BUNDLE" | cut -c1-64)
+if [ "$GOT" != "$WANT" ]; then echo "E_USAGE custody-e0: the bundle's sha256 is $GOT, not $WANT" >&2; exit 2; fi
+[ "$WANT" = "$FROZEN" ] || echo "custody-e0: bundle bound to $WANT, not the frozen digest (dry run only)"
+HERE=$(cd "$(dirname "$0")" && pwd)
+SHM=$(mktemp -d /dev/shm/e0-slice.XXXXXX)
+gone() { rm -rf "$SHM"; test ! -e "$SHM" || { echo "E_USAGE custody-e0: the extraction under /dev/shm is still on disk" >&2; return 1; }; }
+trap gone EXIT
+age -d -i "$IDENTITY" "$BUNDLE" | tar -xf - -C "$SHM"
+echo "custody-e0: slice extracted to RAM, $(find "$SHM" -type f | wc -l) files"
+if [ "$WANT" = "$FROZEN" ]; then
+  bash "$HERE/build-e0.sh" "$BUNDLE" "$SHM" "$RUN" "$SCORER"
+else
+  bash "$HERE/build-e0.sh" "$BUNDLE" "$SHM" "$RUN" "$SCORER" "$WANT"
+fi
+SUITE=$(sha256sum "$RUN/sealed-root/suites/planrev-v3-e0.json" | cut -c1-64)
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) custody-e0 bundle $GOT suite $SUITE" >> "$LOG"
+gone
+trap - EXIT
+echo "custody-e0: slice removed from RAM; bundle sha256 $GOT, suite sha256 $SUITE"

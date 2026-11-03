@@ -25,8 +25,8 @@ kept = [r for r in man["units"] if r.get("kept") is True]
 if len(kept) != len(man["units"]): refuse("%d manifest rows are not kept" % (len(man["units"]) - len(kept)))
 bad = 0
 for r in kept:
-    key = json.load(open(os.path.join(sl, "units", r["unit"], "key.json")))
-    if {i["id"]: [i["item_kind"], i["role"]] for i in key["items"]} != r["items"] or key.get("unit") != r["unit"] or key.get("stratum") != r["stratum"]: bad += 1
+    kdoc = json.load(open(os.path.join(sl, "units", r["unit"], "key.json")))
+    if {i["id"]: [i["item_kind"], i["role"]] for i in kdoc["items"]} != r["items"] or kdoc.get("unit") != r["unit"] or kdoc.get("stratum") != r["stratum"]: bad += 1
     if not set(r.get("excluded_items", [])) <= set(r["items"]): bad += 1
 if bad: refuse("%d kept units have key.json items that do not match the manifest" % bad)
 FROZEN = {k: 6 for k in ("C-Q", "C-U2", "C-OM", "E-CD", "E-OM", "E-Q", "X-OM", "X-CD", "X-Q", "G-OM", "G-A11Y", "G-X")}

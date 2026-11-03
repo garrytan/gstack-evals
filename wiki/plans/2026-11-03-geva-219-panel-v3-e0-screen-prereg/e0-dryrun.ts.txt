@@ -7,7 +7,7 @@
 // (j) a leak check; (k) the readings end to end in e0-e2e.ts, its own process. Every unit, finding and judgment is synthetic. Writes e0-dryrun.txt beside itself.
 //   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun e0-dryrun.ts <scorer> <scratch>
 import { createHash, randomBytes } from "node:crypto";
-import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 const [scorer, OUT] = process.argv.slice(2).map((p) => resolve(p)) as [string, string];
@@ -63,6 +63,21 @@ await section("b. Synthetic slice, the kit's check, build-e0.sh and its refusals
   for (const l of b.stdout.split("\n").filter((l) => l.trim() && !/sha256/.test(l))) say("    " + l);
   if (b.status !== 0) for (const l of b.stderr.split("\n").filter((l) => l.trim()).slice(-4)) say("    stderr: " + l.slice(0, 300));
   check("build-e0.sh builds the synthetic slice, bound to its own sha256 by the dry-run-only fifth argument (exit " + b.status + ")", b.status === 0);
+  if (run(["bash", "-c", "command -v age age-keygen"]).status !== 0) say("    custody-e0.sh: age is not installed here, so its end-to-end check is skipped");
+  else {
+    const ident = join(OUT, "age-identity.txt"), enc = join(OUT, "slice.tar.age"), clog = join(OUT, "CUSTODY.md"), RC = join(OUT, "run-custody");
+    run(["age-keygen", "-o", ident]);
+    run(["age", "-r", run(["age-keygen", "-y", ident]).stdout.trim(), "-o", enc, tar]);
+    const shm = () => readdirSync("/dev/shm").filter((f) => f.startsWith("e0-slice.")).length, before = shm(), es = sha(readFileSync(enc));
+    const bad = run(["bash", join(HERE, "custody-e0.sh"), enc, ident, join(OUT, "run-custody-wrongsha"), scorer, clog]);
+    check("custody-e0.sh refuses an age bundle whose sha256 is not the frozen ea69c111... before it decrypts (exit " + bad.status + ")", bad.status === 2 && /^E_USAGE custody-e0: the bundle's sha256/m.test(bad.stderr) && !existsSync(clog) && shm() === before);
+    const c = run(["bash", join(HERE, "custody-e0.sh"), enc, ident, RC, scorer, clog, es]);
+    if (c.status !== 0) for (const l of c.stderr.split("\n").filter((l) => l.trim()).slice(-4)) say("    stderr: " + l.slice(0, 300));
+    const sp = join(RC, "sealed-root", "suites", "planrev-v3-e0.json"), ss = existsSync(sp) ? sha(readFileSync(sp)) : "", cl = existsSync(clog) ? readFileSync(clog, "utf8").trim().split("\n") : [];
+    check("custody-e0.sh decrypts the age bundle into /dev/shm and runs build-e0.sh on it, bound by the dry-run-only sixth argument (exit " + c.status + ")", c.status === 0 && /\(dry run only\)/.test(c.stdout));
+    check("custody-e0.sh builds the suite (" + (ss ? JSON.parse(readFileSync(sp, "utf8")).units.length : 0) + " units) and appends one CUSTODY.md line with a UTC time, the bundle's sha256 and the suite's sha256 (" + cl.length + " line)", ss !== "" && JSON.parse(readFileSync(sp, "utf8")).units.length === 24 && cl.length === 1 && new RegExp("^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ custody-e0 bundle " + es + " suite " + ss + "$").test(cl[0] ?? ""));
+    check("custody-e0.sh leaves no extraction under /dev/shm (" + (shm() - before) + " left)", shm() === before);
+  }
   const open = readdirSync(RUN, { recursive: true }).filter((f) => statSync(join(RUN, String(f))).mode & 0o044).length;
   check("build-e0.sh's run root is mode " + (statSync(RUN).mode & 0o777).toString(8) + " (0700 wanted), and " + open + " files or dirs under it are group- or world-readable", (statSync(RUN).mode & 0o777) === 0o700 && open === 0);
   const um = run(["bash", "-c", "umask 0277 && python3 \"$0\" \"$1\" \"$2\"", join(HERE, "convert-e0.py"), SL, join(OUT, "run-umask")]);

@@ -17,13 +17,14 @@ links:
   - GST-916
 attachments:
   - fc42d0ee96ad7fb36bc02953b213b13b0dfa43923751ed4da7b52f22fb0cca77  build-e0.sh.txt
-  - 533271a4325a90ae52fa597717601e72c15fd4097c202dd39b1c6859eaa3c289  convert-e0.py.txt
-  - 5887c5cd7499d1214793e3e86fd6c6a4696c946e1736f9134eb1217d03c28dc8  e0-dryrun.ts.txt
-  - 44675050b7083dbb24bfb97573e646844eba474b83f5e230f40ed7d4332e0e67  e0-dryrun.txt
-  - 32f36aae18fab81e289d92be524d0baf1f2dcf8bcbb980428223a772654aec3b  e0-e2e.ts.txt
+  - 0e2312705359649ee257831cdb11c784701b38de6b03a1b17fc369eba75b5d80  convert-e0.py.txt
+  - be3257fa224f821f31393494c238b7cc784f8e17e2ab1b3a7623c91673a226e5  custody-e0.sh.txt
+  - 69fe76c0a4ad6955b741381ef926f00c90ad8c4cf3ef39e3bf460a31fbb5c17c  e0-dryrun.ts.txt
+  - b887f34515ee524f1c5669a0543338706112299f6b69495ce6cde0d6d2d6a962  e0-dryrun.txt
+  - 6402f1bf9127bc1a245614a6555749e7d8f6f2478e3b51ad163e0a4da6f356f1  e0-e2e.ts.txt
   - 2c0b323bd4097f3933339e13eceb311485e5ea99dac2a85ccc9ec76eeedad66d  e0-oc.py.txt
   - ee638f22186ee1766d7fd16a63c184d6a9764df9303d93ad29cef6f78a2c16d2  e0-oc.txt
-  - 9c0930f52a74efe554f8284fb555c1d615a007ed1b4a4063d388b5178e7af2bb  e0-readings.ts.txt
+  - 0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9  e0-readings.ts.txt
   - a3026ed074000650f932e71de30756858385b5091014389eaafef6f25c1c782e  e0-stops.ts.txt
   - 746d3b35714ad1aa92d4bbbdeaa4497940afa2b23ad7db13d9fb2cf2301f0b31  gen-synth-e0.py.txt
   - 79d73194f09c65d457c9ada56143f4b3776a8839c777846a91fb9869a660a936  judge-brief-v3.md
@@ -104,11 +105,12 @@ The suite, e0-kinds.json and the permutation pair unit heads with kinds, so they
 
 ## 4. Frozen commands
 
-Paths as on the run machine: $BUNDLE is the sealed bundle file (panel-v3-calibration.tar.age, section 3), $SLICE the extracted slice in /dev/shm, $RUN the run root on disk, which build-e0.sh creates mode 0700 (review-units refuses an --out under /dev/shm, E_RECEIPTS_VOLATILE), $SR=$RUN/sealed-root, $SRC=$RUN/source/plans.git, $B this bundle's scripts with their .txt suffixes removed. Every command runs from the pinned checkout under `env -u` for any key the step does not need.
+Paths as on the run machine: $BUNDLE is the sealed bundle file (panel-v3-calibration.tar.age, section 3), $IDENTITY the age identity that opens it, $CUSTODY the CUSTODY.md beside it, $SLICE the extracted slice, which custody-e0.sh makes in a fresh /dev/shm dir, hands to build-e0.sh and removes in the same process (custody-e0.sh is the only allowed way to produce the slice), $RUN the run root on disk, which build-e0.sh creates mode 0700 (review-units refuses an --out under /dev/shm, E_RECEIPTS_VOLATILE), $SR=$RUN/sealed-root, $SRC=$RUN/source/plans.git, $B this bundle's scripts with their .txt suffixes removed. Every command runs from the pinned checkout under `env -u` for any key the step does not need.
 
 ```
-# 0. Pin check, then build the run material (keyless; counts and digests only)
-bash $B/build-e0.sh $BUNDLE $SLICE $RUN .
+# 0. Pin check, then build the run material under custody (keyless; counts and digests only). custody-e0.sh checks
+#    $BUNDLE's sha256, decrypts it into $SLICE, runs bash $B/build-e0.sh $BUNDLE $SLICE $RUN . there, logs CUSTODY.md and removes $SLICE
+bash $B/custody-e0.sh $BUNDLE $IDENTITY $RUN . $CUSTODY
 
 # 1. The Opus run (item e0-opus-none)
 bin/gstack-evals review-units --suite $SR/suites/planrev-v3-e0.json --arms none --models claude-opus-5-5 --passes 2 \
@@ -212,7 +214,7 @@ At 12 readings this is the plan's D1 rule exactly. The rate form keeps it the sa
 | **BUILD** | at least one KEEP kind, and two or three kept kinds | author its admission units from the kept kinds, three items a unit of at least two kinds, at most one floor item |
 | **BUILD-ONE** | its only kept kind is one KEEP kind | author from that kind alone, flagged |
 | **NOT BUILT** | no KEEP kind: no kept kind, or only KEEP-FLOOR kinds | the stratum is not built; its R56 row returns to the Captain with R48 FIX-METHOD and the reading |
-| **STRATUM NO READ** | stratum anchor recall under 0.75 | back to the Captain; nothing is authored from its kinds |
+| **STRATUM NO READ** | stratum anchor recall under 0.75, or its stops pass 5% of its scheduled Opus sessions, section 5 | back to the Captain; nothing is authored from its kinds |
 
 **A stratum with only floor kinds** (the plan's ceo-outside-3) is NOT BUILT. The unit recipe allows at most one floor item in three, so such a stratum can't fill a unit. Relaxing the recipe would not help: three items that plain Opus found 0 times in 12 would put the stratum's plain recall near 0, below E1's admission floor of 0.2, so E1 could not admit it. Kit v3's checker already refuses that --kept and --floor pair.
 
@@ -272,7 +274,7 @@ Projections are the plan's (section 7): none at $0.33 a session on Opus (#131's 
 | e0-judge-sol, e0-judge-opus, e0-judge-sonnet | three judge-run calls | $22.68 | each recorded at $62.86 less the settled spend of every earlier E0 item, rounded down to the cent |
 | **E0** | | **$42.48** | **$62.86** |
 
-**Why three judge items, not one.** The plan priced one item, e0-judge, at $13.44. A ledger item funds one run, and each judge-run call leases its own item, so one item can't serve three calls; the dry run shows the refusal. So the judge budget is an envelope: each judge item is recorded, in the order of section 4, at $62.86 less the settled spend of every earlier E0 item, rounded down to the cent. E0's total can never pass the approved $62.86, and judging has at least the plan's $13.44 even if both runs reach their caps. The envelope does not cover the worst case: one call with every request sent three times at 16,000 output tokens is $82.15 on the dry run's synthetic packets under brief v3, and $164.29 if judge-run asks every refused answer again. A judge item that stops at its cap leaves judging incomplete, so E0 reads NO READ, and judging is never retried to change a verdict.
+**Why three judge items, not one.** The plan priced one item, e0-judge, at $13.44. A ledger item funds one run, and each judge-run call leases its own item, so one item can't serve three calls; the dry run shows the refusal. So the judge budget is an envelope: each judge item is recorded, in the order of section 4, at $62.86 less the settled spend of every earlier E0 item, rounded down to the cent. E0's total can never pass the approved $62.86, and judging has at least the plan's $13.44 even if both runs reach their caps. The envelope does not cover the worst case: one call with every request sent three times at 16,000 output tokens is $82.15 on the dry run's synthetic packets under brief v3, and $164.30 if judge-run asks every refused answer again. These figures change with each dry-run draw and bind nothing. A judge item that stops at its cap leaves judging incomplete, so E0 reads NO READ, and judging is never retried to change a verdict.
 
 **Approval rows.** The Captain records each item in the ledger after this post merges, with `admission warn` as #127's items were (no rig admit record exists for this pin; each lease warns RIG_UNPROVEN and opens). Each row quotes the program approval:
 
@@ -291,7 +293,7 @@ Each row cites the program approval of 2026-11-02, which set the E0 screen at $6
 - e0-particle-none: the same shape at 3 x $0.192 = $0.58; the 16th round starts while 45 sessions have spent at most $5.54, so the run finishes while particle-1 averages up to $0.12 a session. The dry run checks both edges.
 - A cap stop on the Opus run or a judge item is an incomplete run: E0 reads NO READ, and the run is never retried to change a verdict. A particle-1 cap stop is recorded and printed and decides nothing.
 
-**Launch checks, all logged before the first lease opens:** this post is merged; the Captain's approval rows for e0-opus-none and e0-particle-none are in the ledger at these caps; the pin check passes; the slice bundle's sha256 matches section 3; build-e0.sh's counts match section 3; the trial image pin passes (review-units checks it); /dev/shm and ~/.capy/work hold no leftover plaintext from an earlier opening; and `review-units --dry-run` with the frozen flags plans the expected sessions.
+**Launch checks, all logged before the first lease opens:** this post is merged; the Captain's approval rows for e0-opus-none and e0-particle-none are in the ledger at these caps; the pin check passes; the slice bundle's sha256 matches section 3; CUSTODY.md holds custody-e0.sh's line for this bundle (its sha256 and the built suite's); build-e0.sh's counts match section 3; the trial image pin passes (review-units checks it); /dev/shm and ~/.capy/work hold no leftover plaintext from an earlier opening; and `review-units --dry-run` with the frozen flags plans the expected sessions.
 
 ## 9. Run rules
 
@@ -315,6 +317,7 @@ Each row cites the program approval of 2026-11-02, which set the E0 screen at $6
 - Seeded items are not natural flaws. The kinds were chosen because they look hard, and E0 keeps those plain Opus misses, so later posts state that v3's headroom was engineered.
 - One family (Gemini) wrote the units; the auditors, the second and third judges and this author share the subject's family (Anthropic) or the first judge's (OpenAI).
 - E0 runs every stratum under the ceo lens at main; for the none arm the lens changes nothing the model sees (section 2).
+- The tie between the slice and the bundle is procedural: build-e0.sh hashes the bundle but builds from the slice it is given, and custody-e0.sh enforces the tie by extracting that slice from the hashed bundle in the same process.
 - Outside terms: the calibration plans are synthetic work written for this program, every model runs through its normal paid API, and E0 trains no model and republishes no third-party content.
 
 ## 12. Review record
@@ -339,10 +342,10 @@ Building the draft also brought three rules into line with the plan or the pin b
 
 ## 13. Dry run
 
-[e0-dryrun.ts](e0-dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on a synthetic slice that [gen-synth-e0.py](gen-synth-e0.py.txt) writes; it never opens the sealed slice. [e0-dryrun.txt](e0-dryrun.txt) is its transcript: PASS 154, FAIL 0.
+[e0-dryrun.ts](e0-dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on a synthetic slice that [gen-synth-e0.py](gen-synth-e0.py.txt) writes; it never opens the sealed slice. [e0-dryrun.txt](e0-dryrun.txt) is its transcript: PASS 162, FAIL 0.
 
 - **a. Pin:** the scorer at b7b6aec with no tracked change.
-- **b. Build and refusals:** the 24 synthetic units pass kit v3's checker; build-e0.sh builds the slice and the suite loads with 93 blockers; convert refuses a pending seal, a wrong kit digest, a key and manifest mismatch, a row not final, a row with kept false and wrong counts; build refuses a bundle sha256 other than the frozen one; the built run root is mode 0700 with nothing under it group- or world-readable, and convert refuses a run root it could not make 0700.
+- **b. Build and refusals:** the 24 synthetic units pass kit v3's checker; build-e0.sh builds the slice and the suite loads with 93 blockers; convert refuses a pending seal, a wrong kit digest, a key and manifest mismatch, a row not final, a row with kept false and wrong counts; build refuses a bundle sha256 other than the frozen one; custody-e0.sh refuses one before it decrypts; on an age-encrypted synthetic bundle custody-e0.sh decrypts into /dev/shm, builds the suite, writes its CUSTODY.md line and leaves nothing under /dev/shm; the built run root is mode 0700 with nothing under it group- or world-readable, and convert refuses a run root it could not make 0700.
 - **c. Frozen commands:** both review-units calls at --dry-run plan 48 sessions each with the none line, claude-code-preset, 60 turns and the cap.
 - **d. Real stops:** seven scenarios through runReviewUnits, the pinned SDK and the pinned Claude Code binary against a scripted upstream behind the real metering proxy, each read by the termination read as section 5 says, and judge-packet on a full Opus arm that review-units marked stopped.
 - **e. Judging:** judge-packet over both arms, judge-run --dry-run for each judge item with brief v3 (its sha256 printed) and its worst case, the combine rule, kappa against a hand value, and kappa's per-stratum denominators and flag under 0.6.
@@ -350,7 +353,7 @@ Building the draft also brought three rules into line with the plan or the pin b
 - **g. Ledger:** every item recorded at its cap on a temporary ledger (judge items at the envelope amount, rounded down to the cent), one lease opened and settled, and a second run refused with E_ITEM_BOUND.
 - **h. Start rule:** through the real run loop, Opus finishes at $0.49 a session and stops before the last round at $0.50, and particle-1 at $0.123 and $0.124; the readings read the 3 sessions never run as CAP from arm.json.
 - **i. Read audit:** it flags a fixture's three bad reads, printed only as counts by rule category and tool name, and nothing in the real transcripts.
-- **k. Readings end to end** ([e0-e2e.ts](e0-e2e.ts.txt)): both runs over the full synthetic suite with one turn-cap session, judge-packet, the three judge-run calls against a fake upstream on the temporary ledger at the envelope amounts, then both readings parts, with every kind count, stratum verdict, Sonnet tie-break, kappa over both models and re-audit outcome checked against hand values; then the envelope with a fractional-cent spend, the re-audit file's refusals, the judge-read refusals (one dir for two roles, a wrong primary model, a wrong batch, a wrong packet digest), a judge item stopped at its cap (E0 NO READ, readings.json written), and a particle-1 run with sessions never run (read CAP, E0 still READ).
+- **k. Readings end to end** ([e0-e2e.ts](e0-e2e.ts.txt)): both runs over the full synthetic suite with one turn-cap session, judge-packet, the three judge-run calls against a fake upstream on the temporary ledger at the envelope amounts, then both readings parts, with every kind count, stratum verdict, Sonnet tie-break, kappa over both models and re-audit outcome checked against hand values; then the envelope with a fractional-cent spend, the re-audit file's refusals, the judge-read refusals (one dir for two roles, a wrong primary model, a wrong batch), the arm refusals (--opus and --particle swapped, one dir for both), the key refusals through the scorer's loadKey (an edited packet digest, an edited mapping, an arm tree the key did not bind), a judge item stopped at its cap (E0 NO READ, readings.json written), and a particle-1 run with sessions never run (judged on its own batch; read CAP, E0 still READ).
 - **j. Leak check:** the transcript prints no synthetic unit id, unit label, case id or packet file name, and no home path.
 
 It does not drive review-units' own main(), which checks the Docker image pin and builds the Docker rig; the dry run calls runReviewUnits with the values the frozen flags produce, and section c covers the flags. It sends no real judge request.
@@ -360,13 +363,14 @@ It does not drive review-units' own main(), which checks the Docker image pin an
 Each script is attached with a .txt suffix so the repo checks never load it; the run thread removes the suffix ($B in section 4).
 
 - [build-e0.sh](build-e0.sh.txt) `fc42d0ee96ad7fb36bc02953b213b13b0dfa43923751ed4da7b52f22fb0cca77`: builds the run material from the extracted slice under umask 077 and refuses any bundle but the frozen one.
-- [convert-e0.py](convert-e0.py.txt) `533271a4325a90ae52fa597717601e72c15fd4097c202dd39b1c6859eaa3c289`: turns the slice into the suite, e0-kinds.json and the source clone, and refuses any shape but the frozen counts and any run root it could not make mode 0700.
+- [convert-e0.py](convert-e0.py.txt) `0e2312705359649ee257831cdb11c784701b38de6b03a1b17fc369eba75b5d80`: turns the slice into the suite, e0-kinds.json and the source clone, and refuses any shape but the frozen counts and any run root it could not make mode 0700.
+- [custody-e0.sh](custody-e0.sh.txt) `be3257fa224f821f31393494c238b7cc784f8e17e2ab1b3a7623c91673a226e5`: the only allowed way to produce the slice; checks the bundle's sha256, decrypts it into /dev/shm, runs build-e0.sh there, logs CUSTODY.md and removes the extraction.
 - [gen-synth-e0.py](gen-synth-e0.py.txt) `746d3b35714ad1aa92d4bbbdeaa4497940afa2b23ad7db13d9fb2cf2301f0b31`: writes the synthetic slice the dry run builds from.
-- [e0-readings.ts](e0-readings.ts.txt) `9c0930f52a74efe554f8284fb555c1d615a007ed1b4a4063d388b5178e7af2bb`: the termination read, the judge-read checks and the judging join, the kind-keep rule with the re-audit file's checks, the sensitivity read, kappa, the read audit's counts and the verdict block.
+- [e0-readings.ts](e0-readings.ts.txt) `0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9`: the termination read, the judge-read checks and the judging join, the kind-keep rule with the re-audit file's checks, the sensitivity read, kappa, the read audit's counts and the verdict block.
 - [e0-stops.ts](e0-stops.ts.txt) `a3026ed074000650f932e71de30756858385b5091014389eaafef6f25c1c782e`: dry-run steps d and h: real stops and the start rule through the pinned run loop.
-- [e0-e2e.ts](e0-e2e.ts.txt) `32f36aae18fab81e289d92be524d0baf1f2dcf8bcbb980428223a772654aec3b`: dry-run step k: both runs, packets, the three judge calls and both readings parts end to end.
-- [e0-dryrun.ts](e0-dryrun.ts.txt) `5887c5cd7499d1214793e3e86fd6c6a4696c946e1736f9134eb1217d03c28dc8`: the keyless dry run.
-- [e0-dryrun.txt](e0-dryrun.txt) `44675050b7083dbb24bfb97573e646844eba474b83f5e230f40ed7d4332e0e67`: its transcript.
+- [e0-e2e.ts](e0-e2e.ts.txt) `6402f1bf9127bc1a245614a6555749e7d8f6f2478e3b51ad163e0a4da6f356f1`: dry-run step k: both runs, packets, the three judge calls and both readings parts end to end.
+- [e0-dryrun.ts](e0-dryrun.ts.txt) `69fe76c0a4ad6955b741381ef926f00c90ad8c4cf3ef39e3bf460a31fbb5c17c`: the keyless dry run.
+- [e0-dryrun.txt](e0-dryrun.txt) `b887f34515ee524f1c5669a0543338706112299f6b69495ce6cde0d6d2d6a962`: its transcript.
 - [e0-oc.py](e0-oc.py.txt) `2c0b323bd4097f3933339e13eceb311485e5ea99dac2a85ccc9ec76eeedad66d`: the operating-characteristic model.
 - [e0-oc.txt](e0-oc.txt) `ee638f22186ee1766d7fd16a63c184d6a9764df9303d93ad29cef6f78a2c16d2`: its table.
 - [judge-brief-v3.md](judge-brief-v3.md) `79d73194f09c65d457c9ada56143f4b3776a8839c777846a91fb9869a660a936`: judge brief v3.

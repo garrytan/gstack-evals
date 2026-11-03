@@ -179,9 +179,9 @@ try {
     check("envelope with $12.340001 settled: the item records $" + (st.cap_micros / 1e6).toFixed(2) + " ($50.519999 rounded down; toFixed(2) would record $50.52), so committed plus cap is $" + ((12_340_001 + st.cap_micros) / 1e6).toFixed(6) + ", within $62.86", cap === 50_510_000 && st.cap_micros === 50_510_000 && 12_340_001 + st.cap_micros <= 62_860_000);
   }
   check("no request left loopback (" + offLoop + " refused)", offLoop === 0);
-  const readings = (name: string, extra: string[], o: { reads?: Record<string, string>; key?: string; particle?: string } = {}) => {
+  const readings = (name: string, extra: string[], o: { reads?: Record<string, string>; key?: string; opus?: string; particle?: string } = {}) => {
     const out = join(root, "readings-" + name), rd = { ...jr, ...o.reads };
-    const r = spawnSync("bun", [join(import.meta.dir, "e0-readings.ts"), "--scorer", scorer, "--suite", SUITE, "--kinds", join(SR, "e0-kinds.json"), "--opus", opus.out, "--particle", o.particle ?? particle.out, "--key", o.key ?? keyPath, "--read", "sol=" + rd.sol, "--read", "opus=" + rd.opus, "--read", "sonnet=" + rd.sonnet, "--out", out, ...extra], { encoding: "utf8" });
+    const r = spawnSync("bun", [join(import.meta.dir, "e0-readings.ts"), "--scorer", scorer, "--suite", SUITE, "--kinds", join(SR, "e0-kinds.json"), "--opus", o.opus ?? opus.out, "--particle", o.particle ?? particle.out, "--key", o.key ?? keyPath, "--read", "sol=" + rd.sol, "--read", "opus=" + rd.opus, "--read", "sonnet=" + rd.sonnet, "--out", out, ...extra], { encoding: "utf8" });
     if (r.status !== 0) say(name + ": " + (r.stderr ?? "").trim().split("\n")[0]!.slice(0, 300));
     return { code: r.status, out: r.stdout ?? "", err: (r.stderr ?? "").trim().split("\n")[0]!, j: r.status === 0 || r.status === 3 ? JSON.parse(readFileSync(join(out, "readings.json"), "utf8")) : null };
   };
@@ -229,7 +229,17 @@ try {
   refused("batch", "a read whose run.json names another batch", /names batch another-batch/, { reads: { sonnet: wb } });
   const kd = join(root, "key-digest.json");
   writeFileSync(kd, JSON.stringify({ ...key, packets: key.packets.map((p: any, i: number) => (i ? p : { ...p, sha256: "0".repeat(64) })) }));
-  refused("digest", "a key whose packet digest differs from the one the reads judged", /packet digest/, { key: kd });
+  refused("digest", "a key whose packet digest differs from the one the reads judged (the scorer's loadKey now refuses it, since the key no longer hashes to its batch digest)", /does not hash to its own batch digest/, { key: kd });
+  refused("swap", "--opus and --particle swapped (each run's arm.json names the other driver model)", /--opus: its arm\.json names driver model particle-ai\/particle-1/, { opus: particle.out, particle: opus.out });
+  refused("samedir", "the same run dir given for --opus and --particle", /--opus and --particle name the same dir/, { particle: opus.out });
+  const km = join(root, "key-mapping.json");
+  writeFileSync(km, JSON.stringify({ ...key, entries: key.entries.map((e: any, i: number) => (i ? e : { ...e, opaque: e.opaque + "x" })) }));
+  refused("mapping", "a key whose mapping was edited (it no longer hashes to its mapping_sha256 and batch digest), through the scorer's loadKey", /does not hash to its own batch digest/, { key: km });
+  const tw = join(root, "opus-tree");
+  cpSync(opus.out, tw, { recursive: true });
+  const ta = join(tw, "arms", readdirSync(join(tw, "arms"))[0]!, "arm.json");
+  writeFileSync(ta, JSON.stringify(JSON.parse(readFileSync(ta, "utf8"))));
+  refused("tree", "an Opus arm whose tree differs from the tree_sha256 the key bound (arm.json rewritten)", /changed since the packets were built/, { opus: tw });
   const stopped = join(root, "jr-stopped"), sent: string[] = [];
   const capS = await recordItem("e0-judge-stopped", 10_000);
   const rs = await judgeRun(["--suite", SUITE, "--packets", packets, "--key", keyPath, "--arm", opus.arm, "--arm", particle.arm, "--brief", BRIEF, "--primary", SOLJ, "--second", OPUSJ, "--third", SONNETJ, "--item", "e0-judge-stopped", "--out", stopped, "--ledger", LENV.GSTACK_EVALS_LEDGER!, "--record", REC, "--source", "panel/plans=" + SRC], judgeFetch(sent, key.batch));
@@ -243,7 +253,21 @@ try {
   writeFileSync(join(pc, "cells.ndjson"), readFileSync(join(pc, "cells.ndjson"), "utf8").trim().split("\n").slice(0, -2).join("\n") + "\n");
   const aj = join(pc, "arms", readdirSync(join(pc, "arms"))[0]!, "arm.json"), am = JSON.parse(readFileSync(aj, "utf8"));
   writeFileSync(aj, JSON.stringify({ ...am, parse_outcomes: { ...am.parse_outcomes, not_run: 2 } }, null, 2));
-  const pcr = readings("particle-capped", [], { particle: pc });
+  const pcArm = join(pc, "arms", readdirSync(join(pc, "arms"))[0]!), pcPackets = join(root, "packets-pc"), pcKey = join(root, "key-pc.json"), pcReads: Record<string, string> = {};
+  const pjp = await noloss(["judge-packet", "--suite", SUITE, "--arm", opus.arm, "--arm", pcArm, "--seed", "20261103", "--out", pcPackets, "--key", pcKey, "--source", "panel/plans=" + SRC, "--sealed-root", SR]);
+  if (pjp.code) say("particle-capped judge-packet: " + pjp.err.split("\n")[0]!.slice(0, 300));
+  const pcBatch = existsSync(pcKey) ? JSON.parse(readFileSync(pcKey, "utf8")).batch : "";
+  for (const [j, pr, se, th] of [["sol", SOLJ, OPUSJ, SONNETJ], ["opus", OPUSJ, SOLJ, SONNETJ], ["sonnet", SONNETJ, SOLJ, OPUSJ]] as const) {
+    const item = "e0-judge-pc-" + j;
+    await recordItem(item, 62_860_000 - settled);
+    pcReads[j] = join(root, "jr-pc-" + j);
+    const args = ["--suite", SUITE, "--packets", pcPackets, "--key", pcKey, "--arm", opus.arm, "--arm", pcArm, "--brief", BRIEF, "--primary", pr, "--second", se, "--third", th, "--item", item, "--out", pcReads[j]!, "--ledger", LENV.GSTACK_EVALS_LEDGER!, "--record", REC, "--source", "panel/plans=" + SRC];
+    let r = await judgeRun([...args, "--sealed-root", SR], judgeFetch([], pcBatch));
+    if (r.code && /sealed-root/.test(r.err)) r = await judgeRun(args, judgeFetch([], pcBatch));
+    if (r.code) say("particle-capped " + j + ": " + r.err.split("\n")[0]!.slice(0, 300));
+    settled += ledgerStatus(REC, item)[0].committed_micros;
+  }
+  const pcr = readings("particle-capped", [], { particle: pc, key: pcKey, reads: pcReads });
   check("a particle-1 run with 2 sessions never run (arm.json parse_outcomes.not_run 2, no journal entry) reads them CAP (" + pcr.j?.classes?.CAP?.[1] + "), printed descriptively, and E0 still reads READ (exit " + pcr.code + ")", pcr.code === 0 && /^E0: READ$/m.test(pcr.out) && pcr.j?.classes?.CAP?.[1] === 2 && /^particle-1 \(descriptive\):.*; cap 2$/m.test(pcr.out));
 } catch (e) {
   check("e0-e2e ran to the end (threw " + (e instanceof Error ? e.message.split("\n")[0] : String(e)).slice(0, 300) + ")", false);

@@ -21,8 +21,8 @@ export class Usage extends Error {}
 const usage = (m: string): never => { throw new Usage(m); };
 
 export async function loadMods(scorer: string) {
-  const [run, unit, drv, judge, plan] = await Promise.all(["src/trial/review/run.ts", "src/trial/review/unit.ts", "src/adapters/claude-code/driver.ts", "lanes/review-noloss/judge.ts", "src/trial/review/plan.ts"].map((p) => import(join(scorer, p))));
-  return { readReviewJournal: run.readReviewJournal, reviewCellId: run.reviewCellId, armId: run.armId, unitFile: run.unitFile, unitTaskId: unit.unitTaskId, ALLOWANCE_SPENT: drv.ALLOWANCE_SPENT as RegExp, packetAnswers: judge.packetAnswers, TOLD_PLAN_SHA256: plan.TOLD_PLAN_SHA256 as string, PLAN_PARSER_SHA256: plan.PLAN_PARSER_SHA256 as string, REC_USER_SHA256: plan.REC_USER_SHA256 as string };
+  const [run, unit, drv, judge, plan, ingest] = await Promise.all(["src/trial/review/run.ts", "src/trial/review/unit.ts", "src/adapters/claude-code/driver.ts", "lanes/review-noloss/judge.ts", "src/trial/review/plan.ts", "lanes/review-noloss/ingest.ts"].map((p) => import(join(scorer, p))));
+  return { readReviewJournal: run.readReviewJournal, reviewCellId: run.reviewCellId, armId: run.armId, unitFile: run.unitFile, unitTaskId: unit.unitTaskId, ALLOWANCE_SPENT: drv.ALLOWANCE_SPENT as RegExp, packetAnswers: judge.packetAnswers, loadKey: judge.loadKey, readArmDir: ingest.readArmDir, TOLD_PLAN_SHA256: plan.TOLD_PLAN_SHA256 as string, PLAN_PARSER_SHA256: plan.PLAN_PARSER_SHA256 as string, REC_USER_SHA256: plan.REC_USER_SHA256 as string };
 }
 export type Mods = Awaited<ReturnType<typeof loadMods>>;
 
@@ -255,12 +255,23 @@ async function run(one: (f: string, req?: boolean) => string | null, flags: Map<
   const reads = Object.fromEntries((flags.get("--read") ?? []).map((r) => { const [n, d] = r.split("="); return [n, resolve(d ?? "")]; }));
   for (const j of ["sol", "opus", "sonnet"]) if (!reads[j]) usage("needs --read " + j + "=<judge-run out dir>");
   const passes = Number(flags.get("--passes")?.[0] ?? 2);
+  const real = (d: string) => (existsSync(d) ? realpathSync(d) : d);
+  if (real(one("--opus")!) === real(one("--particle")!)) usage("--opus and --particle name the same dir; the two arms must be distinct runs");
   const opus = readArm(one("--opus")!, suite, passes, mods);
   const particle = readArm(one("--particle")!, suite, passes, mods);
-  const key = JSON.parse(readFileSync(one("--key")!, "utf8"));
+  if (opus.id === particle.id) usage("--opus and --particle hold the same arm id " + opus.id + "; the two arms must be distinct runs");
+  for (const [f, a, want] of [["--opus", opus, "claude-opus-5-5"], ["--particle", particle, "particle-ai/particle-1"]] as const) if (a.model !== want) usage(f + ": its arm.json names driver model " + a.model + ", not " + want);
+  let key: any;
+  try {
+    const kpath = one("--key")!;
+    const armDirs = [[one("--opus")!, opus.id], [one("--particle")!, particle.id]].map(([o, id]) => mods.readArmDir(join(o!, "arms", id!), suite, kinds.suite_sha256));
+    const req = { suite, suiteSha256: kinds.suite_sha256, key: kpath, arms: armDirs };
+    key = mods.loadKey(req);
+  } catch (e) {
+    usage("--key: " + (e instanceof Error ? e.message : String(e)));
+  }
   const entries = new Map<string, any>(key.entries.map((e: any) => [e.packet + " " + e.opaque, e]));
   const ROLE: Record<string, string> = { sol: "openai/gpt-6.1-sol", opus: "anthropic/claude-opus-5-5", sonnet: "anthropic/claude-sonnet-5-5" };
-  const real = (d: string) => (existsSync(d) ? realpathSync(d) : d);
   for (const [a, b] of [["sol", "opus"], ["sol", "sonnet"], ["opus", "sonnet"]]) if (real(reads[a]!) === real(reads[b]!)) usage("--read " + a + " and --read " + b + " name the same dir; the three reads must be distinct");
   const replies: Record<string, Map<string, Set<string>>> = {};
   const unanswered: Record<string, number> = {};
