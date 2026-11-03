@@ -4,7 +4,7 @@ $ sh -c sha256sum $A3/dry-run-a3.sh.txt $B3/capacity-probe.sh.txt $B3/no-start.s
 f4f96462e696cf430daf9420eb73668171856f7a8f5d28142ef08e7802618f8c  $A3/dry-run-a3.sh.txt
 7740ca150290c91161b3d27d62b1d3b893e99c1d861d875e6e0e89fd87febedb  $B3/capacity-probe.sh.txt
 964ef25ccb04eb40f3942b6bdb9a4bb594e8da5bf9966624e483de1d5b17d38e  $B3/no-start.sh.txt
-fc9523c1e2c9a0a611c5601dadd5236ad013729b571f5e5bd33844c15f865806  $C/e2e-3c.sh.txt
+f365a01b76f1ed258b441d6534953e01f531909efc193769ca4b846e4f9a19ff  $C/e2e-3c.sh.txt
 exit 0 (log/1.txt)
 
 $ env PIN=8ec81b8a8ea6bfbc0f692826f9dbabe1146e3add G=$G SWEBV=$SWEBV ARMS=$ARMS R=$R HARBOR_DIR=$HARBOR_DIR DROPS=$DROPS A2=$A2 bash $A3/dry-run-a3.sh.txt $W/a3
@@ -434,7 +434,7 @@ exit 0 (log/7.txt)
 ## Dependencies, task set, arm tars and the drop list
 $ sh -c cd $W/export && bun install --frozen-lockfile
 bun install v1.4.4 (38afee6c8)
-112 packages installed [71.00ms]
+112 packages installed [46.00ms]
 exit 0 (log/8.txt)
 $ git -C $HARBOR_DIR rev-parse HEAD
 f3a5a923f6d722472c9e797af836ae4425fb215f
@@ -699,7 +699,7 @@ exit 0 (log/37.txt)
 $ sh -c cd $W/export && bun test quick/laneb/tests/r3.test.ts quick/laneb/tests/r3-sol.test.ts quick/laneb/tests/launch.test.ts quick/laneb/tests/vm-run.test.ts
  200 pass
  0 fail
-Ran 200 tests across 4 files. [142.60s]
+Ran 200 tests across 4 files. [143.75s]
 exit 0 (log/38.txt)
 ## Done
 exit 0 (log/2.txt)
@@ -775,10 +775,10 @@ exit 0 (log/5.txt)
 
 $ sh -c LEDGER=$W/probe-fixtures/fail.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-221 && STUB_STATE=$W/probe-fixtures/s-fail PROBE_WINDOW_SEC=5 PROBE_GAP_SEC=2 UBI_OWNER=GEVA-223 bash $B3/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/fail.jsonl eu-central-h1 $W/probe-fixtures/fail; echo probe exit $?; test ! -e $W/probe-fixtures/fail/probe-pass && echo 'no probe-pass'; bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $W/probe-fixtures/fail.jsonl --item r3-capacity-probe
 probe: eu-central-h1 standard-16 640 GB, window 5s, at least 2s between probe starts, owner GEVA-223, ledger item r3-capacity-probe
-probe 1 at 2026-11-03T01:58:08Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671088-1-t1 confirmed gone, 0 s, settled $0.000000
-probe 2 at 2026-11-03T01:58:10Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671090-2-t1 confirmed gone, 0 s, settled $0.000000
-probe 3 at 2026-11-03T01:58:12Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671092-3-t1 confirmed gone, 0 s, settled $0.000000
-probe 4 at 2026-11-03T01:58:13Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671093-4-t1 confirmed gone, 0 s, settled $0.000000
+probe 1 at 2026-11-03T03:12:47Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793675567-1-t1 confirmed gone, 0 s, settled $0.000000
+probe 2 at 2026-11-03T03:12:49Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793675569-2-t1 confirmed gone, 0 s, settled $0.000000
+probe 3 at 2026-11-03T03:12:51Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793675571-3-t1 confirmed gone, 0 s, settled $0.000000
+probe 4 at 2026-11-03T03:12:52Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793675572-4-t1 confirmed gone, 0 s, settled $0.000000
 probe: every probe in eu-central-h1 failed in the 5s window (4 probes); nothing binds
 probe exit 1
 no probe-pass
@@ -815,27 +815,27 @@ exit 0 (log/7.txt)
 
 $ sh -c LEDGER=$W/probe-fixtures/late.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-221 && STUB_STATE=$W/probe-fixtures/s-late STUB_FAIL_UPS=2 PROBE_WINDOW_SEC=60 PROBE_GAP_SEC=2 UBI_OWNER=GEVA-223 bash $B3/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/late.jsonl eu-north-h1 $W/probe-fixtures/late; echo probe exit $?; cat $W/probe-fixtures/late/probe-pass; cat $W/probe-fixtures/s-late/calls
 probe: eu-north-h1 standard-16 640 GB, window 60s, at least 2s between probe starts, owner GEVA-223, ledger item r3-capacity-probe
-probe 1 at 2026-11-03T01:58:15Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671095-1-t1 confirmed gone, 0 s, settled $0.000000
-probe 2 at 2026-11-03T01:58:17Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793671097-2-t1 confirmed gone, 0 s, settled $0.000000
-probe 3 at 2026-11-03T01:58:19Z: pass, ubirun-fixture-1793671099-3-t1 reached running and is destroyed, 0 s, settled $0.000000; list --mine empty
+probe 1 at 2026-11-03T03:12:54Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793675574-1-t1 confirmed gone, 0 s, settled $0.000000
+probe 2 at 2026-11-03T03:12:56Z: fail (up exit 1: ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)), VM ubirun-fixture-1793675576-2-t1 confirmed gone, 0 s, settled $0.000000
+probe 3 at 2026-11-03T03:12:58Z: pass, ubirun-fixture-1793675578-3-t1 reached running and is destroyed, 0 s, settled $0.000000; list --mine empty
 probe exit 0
 location=eu-north-h1
-vm=ubirun-fixture-1793671099-3-t1
-passed=2026-11-03T01:58:19Z
+vm=ubirun-fixture-1793675578-3-t1
+passed=2026-11-03T03:12:58Z
 up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
-down ubirun-fixture-1793671095-1-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793675574-1-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
 list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
 up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
-down ubirun-fixture-1793671097-2-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793675576-2-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
 list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
 up -s standard-16 -S 640 UBI_LOCATION=eu-north-h1 UBI_SIZE=unset UBI_STORAGE=unset
-down ubirun-fixture-1793671099-3-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
+down ubirun-fixture-1793675578-3-t1 UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
 list --mine UBI_LOCATION=unset UBI_SIZE=unset UBI_STORAGE=unset
 exit 0 (log/8.txt)
 
 $ sh -c LEDGER=$W/probe-fixtures/left.jsonl bun $W/bin/approve.ts $W/a3/export r3-capacity-probe 5 'Dry run: a temporary ledger, no spend' GEVA-221 && STUB_STATE=$W/probe-fixtures/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=GEVA-223 bash $B3/capacity-probe.sh.txt $W/bin/stub-runner.sh $W/a3/export/quick/laneb $W/probe-fixtures/left.jsonl eu-central-h1 $W/probe-fixtures/left; echo probe exit $?; test ! -e $W/probe-fixtures/left/probe-pass && echo 'no probe-pass'; bun $W/a3/export/quick/laneb/runner/ledger.ts status --path $W/probe-fixtures/left.jsonl --item r3-capacity-probe
 probe: eu-central-h1 standard-16 640 GB, window 10800s, at least 600s between probe starts, owner GEVA-223, ledger item r3-capacity-probe
-probe 1 at 2026-11-03T01:58:19Z: VM ubirun-fixture-1793671099-1-t1 may still exist (down exit 1, list --mine exit 0, listed: eu-central-h1  ubirun-fixture-1793671099-1-t1); reserve probe-1-1793671099 stays open and must be settled for the VM's full life after cleanup; destroy the VM before anything else
+probe 1 at 2026-11-03T03:12:58Z: VM ubirun-fixture-1793675578-1-t1 may still exist (down exit 1, list --mine exit 0, listed: eu-central-h1  ubirun-fixture-1793675578-1-t1); reserve probe-1-1793675578 stays open and must be settled for the VM's full life after cleanup; destroy the VM before anything else
 probe exit 3
 no probe-pass
 {"cap_usd":5,"settled_usd":0,"open_reserved_usd":0.3,"open_ids":1}
@@ -1018,9 +1018,9 @@ run exit 0
 {"cap_usd":150,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
 {"ok":true,"existing":false}
 ubi-runner: reap: no expired VMs
-ubi-runner: creating eu-central-h1/ubirun-fixture-1793671101-1-t1 (standard-16)
+ubi-runner: creating eu-central-h1/ubirun-fixture-1793675579-1-t1 (standard-16)
 ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)
-ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793671101-1-t1
+ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793675579-1-t1
 {"ok":true}
 screen: launch exited 1; the run stops here
 up -s standard-16 -S 640 UBI_LOCATION=eu-central-h1 UBI_SIZE=standard-16 UBI_STORAGE=640
@@ -1041,9 +1041,9 @@ run exit 0
 {"cap_usd":140,"settled_usd":0,"open_reserved_usd":0,"open_ids":0}
 {"ok":true,"existing":false}
 ubi-runner: reap: no expired VMs
-ubi-runner: creating eu-central-h1/ubirun-fixture-1793671101-1-t1 (standard-16)
+ubi-runner: creating eu-central-h1/ubirun-fixture-1793675580-1-t1 (standard-16)
 ubi-runner: VM did not reach running in 10 minutes (last state: waiting for capacity)
-ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793671101-1-t1
+ubi-runner: destroyed eu-central-h1/ubirun-fixture-1793675580-1-t1
 {"ok":true}
 screen: launch exited 1; the run stops here
 no-start: VM did not reach running in 10 minutes (last state: waiting for capacity)
@@ -1070,21 +1070,21 @@ exit 1 (log/36.txt)
 # A rerun on a bound item is refused as bound, before any other check
 
 $ bash $W/bin/refuse.sh $W/c/s-rerun $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911
-E_INTERNAL r3a-screen is already bound to a run ({"item":"r3a-screen","work":"$W/a3/work-r3a-screen","at":"2026-11-03T01:58:21.007Z"}); an item serves one run (prereg section 5)
+E_INTERNAL r3a-screen is already bound to a run ({"item":"r3a-screen","work":"$W/a3/work-r3a-screen","at":"2026-11-03T03:12:59.839Z"}); an item serves one run (prereg section 5)
 run exit 1
 bound before: yes, bound after: yes
 ledger unchanged
 the runner was never called
-retry check: no, the record goes to the Captain (rows besides the approval: {"kind_detail":"VM hours, block 1 of 4 h","ts":"2026-11-03T01:58:21.060Z","item":"r3a-screen","kind":"reserve","id":"r3a-screen/vm","usd_micros":2400000} {"kind_detail":"VM hours: 0.000000 h at $0.60/h, block 1 of 1","ts":"2026-11-03T01:58:21.135Z","item":"r3a-screen","kind":"settle","id":"r3a-screen/vm","usd_micros":0,"reserved_micros":2400000,"over_reserve":false} )
+retry check: no, the record goes to the Captain (rows besides the approval: {"kind_detail":"VM hours, block 1 of 4 h","ts":"2026-11-03T03:12:59.891Z","item":"r3a-screen","kind":"reserve","id":"r3a-screen/vm","usd_micros":2400000} {"kind_detail":"VM hours: 0.000000 h at $0.60/h, block 1 of 1","ts":"2026-11-03T03:12:59.948Z","item":"r3a-screen","kind":"settle","id":"r3a-screen/vm","usd_micros":0,"reserved_micros":2400000,"over_reserve":false} )
 exit 0 (log/37.txt)
 
 $ bash $W/bin/refuse.sh $W/c/s-rerun-sol $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_RUNNER=
-E_INTERNAL r3a-sol is already bound to a run ({"item":"r3a-sol","work":"$W/a3/work-r3a-sol","at":"2026-11-03T01:58:21.290Z"}); an item serves one run (prereg section 5)
+E_INTERNAL r3a-sol is already bound to a run ({"item":"r3a-sol","work":"$W/a3/work-r3a-sol","at":"2026-11-03T03:13:00.054Z"}); an item serves one run (prereg section 5)
 run exit 1
 bound before: yes, bound after: yes
 ledger unchanged
 the runner was never called
-retry check: no, the record goes to the Captain (rows besides the approval: {"kind_detail":"VM hours, block 1 of 4 h","ts":"2026-11-03T01:58:21.351Z","item":"r3a-sol","kind":"reserve","id":"r3a-sol-screen/vm","usd_micros":2400000} {"kind_detail":"VM hours: 0.000000 h at $0.60/h, block 1 of 1","ts":"2026-11-03T01:58:21.413Z","item":"r3a-sol","kind":"settle","id":"r3a-sol-screen/vm","usd_micros":0,"reserved_micros":2400000,"over_reserve":false} )
+retry check: no, the record goes to the Captain (rows besides the approval: {"kind_detail":"VM hours, block 1 of 4 h","ts":"2026-11-03T03:13:00.102Z","item":"r3a-sol","kind":"reserve","id":"r3a-sol-screen/vm","usd_micros":2400000} {"kind_detail":"VM hours: 0.000000 h at $0.60/h, block 1 of 1","ts":"2026-11-03T03:13:00.161Z","item":"r3a-sol","kind":"settle","id":"r3a-sol-screen/vm","usd_micros":0,"reserved_micros":2400000,"over_reserve":false} )
 exit 0 (log/38.txt)
 
 # Sol a2: a fresh ledger with a1's passed route record carried forward (3b section 4.5 item 2)
@@ -1119,7 +1119,7 @@ $ bash $C/e2e-3c.sh.txt $W/a3/export/quick/laneb $ARMS $W/e2e
 harbor 0.25.0, bun 1.4.4, docker 29.9.2
 wrote $W/e2e/D1/job.json: 1 tasks x 1 agents x 2 attempts
 ## D1: ledger cap $20, batch cap $150, STOP_ON_CAP no
-vm-run.sh exit 0 after 38 s
+vm-run.sh exit 0 after 36 s
 out/: close-all.json harbor.log images.txt job.resolved.json ledger-status-end.json ledger-status-start.json proxy-requests.jsonl proxy-sessions.jsonl proxy-status-end.json proxy-totals.json proxy.log pull.d pulls.tsv vm-run.exit 
 --- out/vm-run.exit
 0
@@ -1134,8 +1134,8 @@ rule 5: absent, not read
 --- out/close-all.json
 []
 --- out/proxy-sessions.jsonl
-{"trial":"smoke-task__6D4ia7a__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":51500,"requests":5,"ok_responses":5,"refused":0,"open":false,"close_reason":"agent_finished"}
-{"trial":"smoke-task__GvmXYMv__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":51500,"requests":5,"ok_responses":5,"refused":0,"open":false,"close_reason":"agent_finished"}
+{"trial":"smoke-task__JrdFQEX__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":51500,"requests":5,"ok_responses":5,"refused":0,"open":false,"close_reason":"agent_finished"}
+{"trial":"smoke-task__ooRPxjh__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":51500,"requests":5,"ok_responses":5,"refused":0,"open":false,"close_reason":"agent_finished"}
 --- out/proxy-requests.jsonl events
       2 body_load_probe
      10 request
@@ -1146,10 +1146,10 @@ rule 5: absent, not read
 {"capMicros":20000000,"settledMicros":103000,"openReservedMicros":0,"openIds":[]}
 --- ledger rows
 {"kind":"approval","id":"approval","usd_micros":20000000}
-{"kind":"reserve","id":"dry-D1/s-94bf61dec450","usd_micros":4000000}
-{"kind":"reserve","id":"dry-D1/s-73401b7b69b2","usd_micros":4000000}
-{"kind":"settle","id":"dry-D1/s-94bf61dec450","usd_micros":51500}
-{"kind":"settle","id":"dry-D1/s-73401b7b69b2","usd_micros":51500}
+{"kind":"reserve","id":"dry-D1/s-47416ede7d89","usd_micros":4000000}
+{"kind":"reserve","id":"dry-D1/s-3c9410b2300e","usd_micros":4000000}
+{"kind":"settle","id":"dry-D1/s-47416ede7d89","usd_micros":51500}
+{"kind":"settle","id":"dry-D1/s-3c9410b2300e","usd_micros":51500}
 --- spend agrees: sessions 103000, proxy 103000, ledger settled 103000 (micros)
 --- out/pulls.tsv
 status	tries	rate_limit_wait_s	image
@@ -1157,66 +1157,68 @@ ok	1	0	gogost/gost:3.2.7-nightly.20260602@sha256:afc0137758ab4ce399d47a299f9abba
 ok	1	0	node:24-bookworm-slim
 ok	1	0	python:3.11-slim-bookworm
 --- trials
-smoke-task__6D4ia7a: result.json yes, reward 1, exception none
-smoke-task__GvmXYMv: result.json yes, reward 1, exception none
+smoke-task__JrdFQEX: result.json yes, reward 1, exception none
+smoke-task__ooRPxjh: result.json yes, reward 1, exception none
 --- harbor.log, last 5 lines
-Total runtime: 31s
+Total runtime: 30s
 Results written to jobs/dry-3c/result.json
 Inspect results by running `harbor view jobs`
 Share results by running `harbor upload jobs/dry-3c`
 --- fake upstream requests so far: 20
 wrote $W/e2e/D2/job.json: 1 tasks x 1 agents x 2 attempts
 ## D2: ledger cap $5, batch cap $150, STOP_ON_CAP yes
-vm-run.sh exit 130 after 27 s
+vm-run.sh exit 130 after 21 s
 out/: cap-stop.json close-all.json harbor.log images.txt job.resolved.json ledger-status-end.json ledger-status-start.json proxy-requests.jsonl proxy-sessions.jsonl proxy-status-end.json proxy-totals.json proxy.log pull.d pulls.tsv vm-run.exit 
 --- out/vm-run.exit
 130
 --- out/proxy-status-end.json
-{"sessions":1,"open_sessions":0,"unsettled_sessions":[],"cap_stop":"ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z","global_spent_micros":51500}
-rule 5: cap stop: incomplete (ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z)
+{"sessions":1,"open_sessions":0,"unsettled_sessions":[],"cap_stop":"ledger refused a reserve for smoke-task__ByJpwWo__env at 2026-11-03T03:13:59.580Z","global_spent_micros":0}
+rule 5: cap stop: incomplete (ledger refused a reserve for smoke-task__ByJpwWo__env at 2026-11-03T03:13:59.580Z)
 --- out/cap-stop.json
-{"sessions":1,"open_sessions":0,"unsettled_sessions":[],"cap_stop":"ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z","global_spent_micros":51500}
-rule 5: cap stop: incomplete (ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z)
+{"sessions":1,"open_sessions":1,"unsettled_sessions":["s-51e5f42b92ee"],"cap_stop":"ledger refused a reserve for smoke-task__ByJpwWo__env at 2026-11-03T03:13:59.580Z","global_spent_micros":0}
+rule 5: cap stop: incomplete (ledger refused a reserve for smoke-task__ByJpwWo__env at 2026-11-03T03:13:59.580Z)
 --- out/proxy-totals.json
-{"global_spent_micros":51500,"cap_stop":"ledger refused a reserve for smoke-task__q5y7tYA__env at 2026-11-03T01:59:24.276Z","open_sessions":0,"unsettled_sessions":[],"sessions":1}
+{"global_spent_micros":0,"cap_stop":"ledger refused a reserve for smoke-task__ByJpwWo__env at 2026-11-03T03:13:59.580Z","open_sessions":0,"unsettled_sessions":[],"sessions":1}
 --- out/close-all.json
 []
 --- out/proxy-sessions.jsonl
-{"trial":"smoke-task__ZEnpUVE__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":51500,"requests":5,"ok_responses":5,"refused":0,"open":false,"close_reason":"agent_finished"}
+{"trial":"smoke-task__GCumZNp__env","model":"claude-opus-5-5","cap_micros":4000000,"spent_micros":0,"requests":0,"ok_responses":0,"refused":0,"open":false,"close_reason":"agent_finished"}
 --- out/proxy-requests.jsonl events
-      1 body_load_probe
       1 cap_stop
-      5 request
       1 session_open
 --- out/ledger-status-start.json
 {"capMicros":5000000,"settledMicros":0,"openReservedMicros":0,"openIds":[]}
 --- out/ledger-status-end.json
-{"capMicros":5000000,"settledMicros":51500,"openReservedMicros":0,"openIds":[]}
+{"capMicros":5000000,"settledMicros":0,"openReservedMicros":0,"openIds":[]}
 --- ledger rows
 {"kind":"approval","id":"approval","usd_micros":5000000}
-{"kind":"reserve","id":"dry-D2/s-1ca66d6ec802","usd_micros":4000000}
-{"kind":"settle","id":"dry-D2/s-1ca66d6ec802","usd_micros":51500}
---- spend agrees: sessions 51500, proxy 51500, ledger settled 51500 (micros)
+{"kind":"reserve","id":"dry-D2/s-51e5f42b92ee","usd_micros":4000000}
+{"kind":"settle","id":"dry-D2/s-51e5f42b92ee","usd_micros":0}
+--- spend agrees: sessions 0, proxy 0, ledger settled 0 (micros)
 --- out/pulls.tsv
 status	tries	rate_limit_wait_s	image
 ok	1	0	gogost/gost:3.2.7-nightly.20260602@sha256:afc0137758ab4ce399d47a299f9abbacbf522b52a17e59cbb4b4e7a1a66e9196
 ok	1	0	node:24-bookworm-slim
 ok	1	0	python:3.11-slim-bookworm
 --- trials
-smoke-task__ZEnpUVE: result.json yes, reward 1, exception none
-smoke-task__q5y7tYA: result.json yes, reward none, exception LedgerCapStop
+smoke-task__ByJpwWo: result.json yes, reward none, exception LedgerCapStop
+smoke-task__GCumZNp: result.json yes, reward none, exception CancelledError
 --- harbor.log, last 5 lines
 Task smoke-task: Configured runtime overrides apply only to the agent environment and are not propagated to separate verifier environments (extra_docker_compose: $W/a3/export/quick/laneb/runner/agent-caps.compose.yaml). Bake grading dependencies into the verifier image under tests/ or declare required agent outputs as artifacts.
 Task smoke-task: Configured runtime overrides apply only to the agent environment and are not propagated to separate verifier environments (extra_docker_compose: $W/a3/export/quick/laneb/runner/agent-caps.compose.yaml). Bake grading dependencies into the verifier image under tests/ or declare required agent outputs as artifacts.
 WARNING: Error loading config file: open /root/.docker/config.json: permission denied
-  2/2 Mean: 0.500 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:19 0:00:00
---- fake upstream requests so far: 30
+  2/2 Mean: 0.000 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:16 0:00:00
+--- fake upstream requests so far: 20
 ## leftovers
 containers: 0, ports: none else
 ## assertions
 PASS D1: vm-run.sh exits 0
 PASS D1: proxy-status-end.json has cap_stop null
 PASS D1: spend agrees across sessions, proxy and ledger
+PASS D1: both trials have reward 1 and no exception
+PASS D1: both proxy sessions have ok_responses above 0
+PASS D1: no open reservation at the end (ledger openIds and close-all.json empty)
+PASS D1: no cap stop (cap-stop.json absent or cap_stop null)
 PASS D2: vm-run.sh exits 130
 PASS D2: proxy-status-end.json has cap_stop set
 PASS D2: cap-stop.json has cap_stop set
@@ -1224,4 +1226,4 @@ PASS D2: spend agrees across sessions, proxy and ledger
 exit 0 (log/42.txt)
 
 ## Done
-dry exit 0 after 355 s
+dry exit 0 after 350 s

@@ -97,9 +97,26 @@ agree() {
   l=$(jq .settledMicros "$O/ledger-status-end.json" 2>/dev/null)
   [ -n "$s" ] && [ "$s" = "$p" ] && [ "$p" = "$l" ]
 }
+trials() {
+  local n=0 d
+  for d in "$W/$1"/jobs/dry-3c/*/; do
+    [ -f "$d/config.json" ] || continue
+    n=$((n + 1))
+    [ "$(cat "$d/verifier/reward.txt" 2>/dev/null)" = 1 ] || return 1
+    [ "$(jq -r '.exception_info.exception_type // "none"' "$d/result.json" 2>/dev/null)" = none ] || return 1
+  done
+  [ "$n" = 2 ]
+}
+okresp() { jq -s -e 'length == 2 and all(.[]; (.ok_responses // 0) > 0)' "$W/$1/out/proxy-sessions.jsonl" > /dev/null 2>&1; }
+noopen() { jq -e '.openIds == []' "$W/$1/out/ledger-status-end.json" > /dev/null 2>&1 && jq -e 'type == "array" and length == 0' "$W/$1/out/close-all.json" > /dev/null 2>&1; }
+nocap() { [ ! -e "$W/$1/out/cap-stop.json" ] || capnull "$1" cap-stop.json; }
 ok "D1: vm-run.sh exits 0" rc D1 0
 ok "D1: proxy-status-end.json has cap_stop null" capnull D1 proxy-status-end.json
 ok "D1: spend agrees across sessions, proxy and ledger" agree D1
+ok "D1: both trials have reward 1 and no exception" trials D1
+ok "D1: both proxy sessions have ok_responses above 0" okresp D1
+ok "D1: no open reservation at the end (ledger openIds and close-all.json empty)" noopen D1
+ok "D1: no cap stop (cap-stop.json absent or cap_stop null)" nocap D1
 ok "D2: vm-run.sh exits 130" rc D2 130
 ok "D2: proxy-status-end.json has cap_stop set" capset D2 proxy-status-end.json
 ok "D2: cap-stop.json has cap_stop set" capset D2 cap-stop.json
