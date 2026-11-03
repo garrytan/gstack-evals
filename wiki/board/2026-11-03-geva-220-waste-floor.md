@@ -137,7 +137,7 @@ Exploratory, $0: we scanned 899 coding-agent sessions on Opus 5.5, GPT-6.1 Sol a
 | Check | Evidence |
 |---|---|
 | The headline holds at the high end | A count has no interval. With every reset rule off, the upper check gives at most 0.34% of Run D's calls, still under the 2% room rule. |
-| A null says what the test could see | Control rate 0 of 381 calls (Opus none, Run D) and 0 of 1,009 (Opus none, stacks round 1). The MDD is undefined because every paired difference is 0, and the post says so. |
+| A null says what the test could see | Control rate 0 of 381 calls (Opus none, Run D) and 0 of 1,009 (Opus none, stacks round 1). The MDD is undefined because every no-gstack and gstack-against-none paired difference is 0, and the post says so. |
 | The grade is named | Exploratory, in the record table and the X hook. |
 | No forbidden claim | No model claim from U1, no gstack cut claim, no parity claim. |
 | The numbers recompute | Sessions sum to 899 and calls to 14,036, and the shares and paired SEs follow from the table rows, as this PR's review checked. |
