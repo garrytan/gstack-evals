@@ -778,6 +778,7 @@ describe("detectors", () => {
       [fn, ["\tif fn := func() bool {", "\t\treturn HasGPU()", "\t}; !fn() {", '\t\tt.Skip("x")', "\t}"]],
       [anon, ['\tif v := struct{ ok bool }{HasGPU()}; !v.ok { t.Skip("x") }']],
       [goIf("if fn := func() bool { ok := HasGPU(); return ok }; !fn() {"), ["\tif fn := func() bool {", "\t\tok := HasGPU()", "\t\treturn ok", "\t}; !fn() {", '\t\tt.Skip("x")', "\t}"]],
+      [goIf("if f := func() <-chan bool { return nil }; f() != nil {"), ['\tif f := func() <-chan bool { return nil }; f() != nil { t.Skip("y") }']],
     ];
     for (const [from, to] of goSame) expect([from, to, goMove(from, to)]).toEqual([from, to, readd]);
     const goChanged: [string[], string[]][] = [
@@ -790,6 +791,9 @@ describe("detectors", () => {
       [fn, goIf("if fn := func() bool { return HasGPU() }; fn() {")],
       [anon, goIf("if v := struct{ ok bool }{HasGPU()}; v.ok {")],
       [goIf("if fn := func() bool { ok := HasGPU(); return ok }; !fn() {"), goIf("if fn := func() bool { ok := HasGPU(); return !ok }; !fn() {")],
+      [goIf("if xs := []chan int{nil}; xs[0] != nil {"), goIf("if xs := []chan int{nil}; xs[0] == nil {")],
+      [goIf("if m := map[string]chan int{}; len(m) > 0 {"), goIf("if m := map[string]chan int{}; len(m) == 0 {")],
+      [goIf("if f := func() <-chan bool { return nil }; f() != nil {"), goIf("if f := func() <-chan bool { return nil }; f() == nil {")],
     ];
     for (const [from, to] of goChanged) expect([from, to, goMove(from, to)]).toEqual([from, to, removed]);
   });

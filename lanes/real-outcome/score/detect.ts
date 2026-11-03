@@ -470,17 +470,17 @@ function unwrap(cond: string): string {
 
 /** Whether a { at bracket depth 0 in a Go if or else if header, after the header's text h (trimmed), opens a literal
  * and not the body. Go reads it so after a struct or interface keyword (the type's fields), after an array, slice, map
- * or struct type (a composite literal: []T, [n]T, map[K]V or struct{...}, with a named, pointer, struct or interface
- * element), and after a func signature (a func literal's body). */
+ * or struct type (a composite literal: []T, [n]T, map[K]V or struct{...}, with a named, pointer, channel, struct or
+ * interface element), and after a func signature (a func literal's body). */
 function opensLiteral(h: string): boolean {
   const opener = (k: number): number => {
     for (let depth = 0; k >= 0; k--) if ((depth += ")]}".includes(h[k]) ? 1 : "([{".includes(h[k]) ? -1 : 0) === 0) return k;
     return -1;
   };
-  if (/\b(?:struct|interface)$/.test(h) || /\]\s*(?:\*\s*)*\w[\w.]*(?:\[[^\]]*\])?$/.test(h)) return true;
+  if (/\b(?:struct|interface)$/.test(h) || /\]\s*(?:\*\s*)*(?:(?:<-\s*)?chan\b(?:\s*<-)?\s*(?:\*\s*)*)?\w[\w.]*(?:\[[^\]]*\])?$/.test(h)) return true;
   if (h.endsWith("}")) return /\b(?:struct|interface)$/.test(h.slice(0, opener(h.length - 1)).trimEnd());
   let n = h.length;
-  while (n > 0 && /[\w.*[\]\s]/.test(h[n - 1])) n--;
+  while (n > 0 && /[\w.*[\]\s<-]/.test(h[n - 1])) n--;
   if (h[n - 1] !== ")") return false;
   const params = h.slice(0, opener(n - 1)).trimEnd();
   return /\bfunc$/.test(params) || (params.endsWith(")") && /\bfunc$/.test(h.slice(0, opener(params.length - 1)).trimEnd()));
