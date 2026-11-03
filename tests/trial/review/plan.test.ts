@@ -129,6 +129,40 @@ describe("the rec user (B4, open item 3)", () => {
     expect(recAnswer("Review mode: hold scope or cut to minimum? Each option ends with /ship and a commit.", "ceo")).toBe(REC_REPLY);
   });
 
+  // Value: protects=A1 (#176 /ship Step 11, the Captain's ruling): the rec user matches a question only after it strips markdown emphasis (*, _ and backticks) and folds curly quotes to ASCII, so a slash command or review phrase in bold, italics, code or curly quotes is declined like a plain one, in a mode or Step 0 question too, while prose with emphasis that names no skill keeps the recommendation, and a mode question its choice; fails_when=an emphasized or curly-quoted offer of another skill or review is accepted, or emphasis alone draws a decline or drops the choice; why_new=GST-1175 (A1, and #176's OV3); seam=recAnswer and recFreeformFor; no_claim=other markup, such as HTML tags
+  test("A1: a skill or review in markdown emphasis or curly quotes is declined; emphasis that names no skill is not", async () => {
+    const offers: [PlanLens, string][] = [
+      ["ceo", "Want me to run **/review** next?"],
+      ["eng", "Should I run **/cso** after this?"],
+      ["ceo", "I can run “/qa” on this. Want that?"],
+      ["ceo", "Run ‘/qa’ next?"],
+      ["design", "Run _/qa_ next?"],
+      ["eng", "Want a designer’s *eye* review next?"],
+      ["ceo", "Step 0: proceed, or run **/review** first?"],
+      ["devex", "How deep should this DX review go? Or hand off to “/plan-eng-review”?"],
+    ];
+    for (const [lens, q] of offers) expect([lens, q, recAnswer(q, lens), await recFreeformFor(lens)("", q)]).toEqual([lens, q, REC_DECLINE, { text: REC_DECLINE }]);
+    const plain: [PlanLens, string][] = [["ceo", "The plan has **3 open risks**. Take the *recommended* fix?"], ["eng", "Is `retry_count` the right __name__ for this?"], ["design", "Use “empty state” copy from the style guide?"]];
+    for (const [lens, q] of plain) expect([lens, q, recAnswer(q, lens), await recFreeformFor(lens)("", q)]).toEqual([lens, q, REC_REPLY, { text: REC_REPLY }]);
+    for (const q of ["Step 0: **HOLD SCOPE** or *SCOPE REDUCTION*?", "Which _review mode_ fits: hold or cut?"]) expect([q, await recFreeformFor("ceo")("", q)]).toEqual([q, { text: REC_REPLY, choice: true }]);
+  });
+
+  // Value: protects=OV1 (#176 /ship Step 11, the Captain's ruling): the other-skill test matches only a slash token that names a skill directory of the scorer's pinned gstack (v1.93.17.0), so a mode, Step 0 or plain question that names a route or path gets the recommendation again under every lens, and a mode question its choice, while an offer of a real skill, beside a route or not, is still declined; fails_when=a route or path such as /checkout draws the decline again, or a real skill offer is accepted; why_new=GST-1175 (OV1, a regression from #176's S1); seam=recAnswer and recFreeformFor over OTHER_SKILL; no_claim=a route spelled like a gstack skill, such as /health, which stays declined
+  test("OV1: a route or path gets the recommendation again; a real skill offer is still declined", async () => {
+    const modes: [PlanLens, string][] = [
+      ["design", "Rate design completeness: the /checkout flow has no empty state. Fix now?"],
+      ["design", "Step 0: HOLD SCOPE on the /settings page, or SCOPE EXPANSION to add /billing?"],
+      ["eng", "Step 0: scope challenge. The plan adds a /status endpoint. Reduce scope?"],
+      ["ceo", "Step 0E, mode selection. A) SCOPE EXPANSION B) HOLD SCOPE. (Path: /tmp is used.)"],
+      ["devex", "How deep should this DX review go? The CLI reads /etc/app.conf and serves /docs."],
+    ];
+    for (const [lens, q] of modes) expect([lens, q, await recFreeformFor(lens)("", q)]).toEqual([lens, q, { text: REC_REPLY, choice: true }]);
+    for (const lens of ["ceo", "eng", "devex", "design"] as const) {
+      for (const q of ["Should the /login page show an error state?", "Rename the /api/v1/users route to /users?"]) expect([lens, q, recAnswer(q, lens)]).toEqual([lens, q, REC_REPLY]);
+      for (const q of ["Run /qa on the /checkout flow next?", "Step 0: proceed, or run /office-hours on the /settings page first?", "Want me to run /design-review on /billing?"]) expect([lens, q, recAnswer(q, lens)]).toEqual([lens, q, REC_DECLINE]);
+    }
+  });
+
   test("through the simulator, a gated effect still gets the non-approving answer", async () => {
     const sim = new UserSim({ task: "t", script: REC_USER, log: join(scratch("rec-"), "usersim.ndjson"), freeform: async (p, q) => ((await recFreeformFor("ceo")(p, q)) as { text: string }).text });
     const ask = async (question: string, options: string[] = ["A", "B"]) => ((await sim.answerAsk([{ question, options: options.map((label) => ({ label })) }])) as { answers: Record<string, string> }).answers[question];

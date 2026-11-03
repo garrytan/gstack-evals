@@ -13,9 +13,11 @@
 // - The rec user (B4) answers every question "Go with your recommendation.". A question about a review mode or a Step 0
 //   choice (MODE, built from each lens's Step 0 and mode names in the pinned skills) gets that answer before any other
 //   rule (GSTA-2's ruling on GST-925). Otherwise it answers "No, not now." to a question that names another skill or
-//   review (a slash command other than the lens's own, or a review phrase the lens does not own), or asks to promote or
-//   commit docs. It needs no model. src/usersim's binding rules still hold, so a question that names a gated effect
-//   (write, commit, run, ship, ...) gets the simulator's non-approving answer.
+//   review (a slash command naming a skill of the pinned gstack other than the lens's own, so a route such as /checkout
+//   is not one, or a review phrase the lens does not own), or asks to promote or commit docs. Every rule reads the
+//   question with markdown emphasis (*, _ and backticks) stripped and curly quotes folded to ASCII. It needs no model.
+//   src/usersim's binding rules still hold, so a question that names a gated effect (write, commit, run, ship, ...) gets
+//   the simulator's non-approving answer.
 //   An arm that installs gstack also gets every question its registry lists set to never-ask (auto-decide) in the
 //   trial's throwaway state root, through gstack's global preference file.
 // - parsePlanSession reads the last plan-findings block in any assistant turn of a completed session. A plan run scores
@@ -144,22 +146,27 @@ export const REC_REPLY = "Go with your recommendation.";
 export const REC_DECLINE = "No, not now.";
 export const REC_PERSONA = "You take every recommendation. To each question you answer exactly " + JSON.stringify(REC_REPLY) + " That includes a question about a review mode or a Step 0 choice. To any other question that offers to run another skill or review, or to promote or commit docs, you answer exactly " + JSON.stringify(REC_DECLINE);
 const OTHER_REVIEWS = ["ceo review", "ceo/founder-mode review", "founder-mode review", "eng review", "engineering review", "eng manager-mode review", "design review", "designer's eye review", "devex review", "dx review", "developer experience review", "security review", "security audit", "code review", "autoplan", "office hours"];
-const OTHER_SKILL = Object.fromEntries(Object.entries(PLAN_LENSES).map(([lens, l]) => [lens, new RegExp(["(^|[\\s(\"'`])\\/(?!" + l.command.slice(1) + "(?![\\w-]))[a-z][a-z0-9-]*(:[a-z0-9-]+)?(?=$|[\\s.,;:!?)\"'`])", ...OTHER_REVIEWS.filter((p) => !(l.phrases as readonly string[]).includes(p)).map((p) => "\\b" + p.replaceAll(" ", "[ -]") + "\\b")].join("|"), "i")])) as Record<PlanLens, RegExp>;
+/** The skill directories (each holding a SKILL.md) of gstack v1.93.17.0 at 68410828fd85, the scorer's gstack pin: the only slash tokens that name another skill. */
+const GSTACK_SKILLS = ["autoplan", "benchmark", "benchmark-models", "browse", "canary", "captain", "careful", "codex", "connect-chrome", "context-restore", "context-save", "cso", "design-consultation", "design-html", "design-motion", "design-review", "design-shotgun", "deslop-shared-libs", "devex-review", "diagram", "document-generate", "document-release", "eval-plan", "freeze", "gstack-upgrade", "guard", "health", "investigate", "ios-clean", "ios-design-review", "ios-fix", "ios-qa", "ios-sync", "land-and-deploy", "landing-report", "learn", "make-pdf", "modernize", "office-hours", "open-gstack-browser", "pair-agent", "plan-ceo-review", "plan-design-review", "plan-devex-review", "plan-eng-review", "plan-tune", "qa", "qa-only", "retro", "review", "scrape", "setup-browser-cookies", "setup-deploy", "setup-gbrain", "ship", "skillify", "spec", "sync-gbrain", "test-audit", "ubicloud", "unfreeze", "verify", "write-skill"];
+const OTHER_SKILL = Object.fromEntries(Object.entries(PLAN_LENSES).map(([lens, l]) => [lens, new RegExp(["(^|[\\s(\"'`])\\/(" + GSTACK_SKILLS.filter((s) => s !== l.skill).join("|") + ")(:[a-z0-9-]+)?(?=$|[\\s.,;:!?)\"'`])", ...OTHER_REVIEWS.filter((p) => !(l.phrases as readonly string[]).includes(p)).map((p) => "\\b" + p.replaceAll(" ", "[ -]") + "\\b")].join("|"), "i")])) as Record<PlanLens, RegExp>;
 const DOCS = /\bpromot(e|es|ed|ing)\b|\bcommit(s|ted|ting)?\b|\bdocs\//i;
 const MODE = /\b(SCOPE EXPANSION|SELECTIVE EXPANSION|HOLD SCOPE|SCOPE REDUCTION|DX EXPANSION|DX POLISH|DX TRIAGE)\b|\breview mode\b|\bmode selection\b|\bStep 0[A-I]?\b|\bscope (gate|challenge)\b|\bWhat should I review\?|\b(original|smaller) arrangement\b|\bdesign completeness\b|\bfocus on specific areas\b|\bHow deep should this DX review go\b/i;
 
 const SHIP = /\bends with \/ship(?![\w-])/gi;
 const MODE_WORDS = new RegExp(MODE.source, "gi");
 
+/** The question as every rec user rule reads it: markdown emphasis (*, _ and backticks) stripped and curly quotes folded to ASCII. */
+const plain = (question: string): string => question.replace(/[*_`]/g, "").replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+
 /** The rec user's answer to one question under one lens, as the user simulator's free-form source. */
 export const recAnswer = (question: string, lens: PlanLens): string => {
-  const q = question.replaceAll("’", "'");
+  const q = plain(question);
   return MODE.test(q) ? (OTHER_SKILL[lens].test(q.replace(MODE_WORDS, " ").replace(SHIP, " ")) ? REC_DECLINE : REC_REPLY) : OTHER_SKILL[lens].test(q) || DOCS.test(q) ? REC_DECLINE : REC_REPLY;
 };
 /** The driver's free-form source for one lens. */
 export const recFreeformFor = (lens: PlanLens) => async (_persona: string, question: string): Promise<PersonaAnswer> => {
   const text = recAnswer(question, lens);
-  return { text, ...(MODE.test(question) && text === REC_REPLY ? { choice: true as const } : {}) };
+  return { text, ...(MODE.test(plain(question)) && text === REC_REPLY ? { choice: true as const } : {}) };
 };
 /** The sidecar entry every plan arm runs with: a persona and no scripted replies, so every question reaches recAnswer. */
 export const REC_USER: UserScript = { persona: REC_PERSONA };

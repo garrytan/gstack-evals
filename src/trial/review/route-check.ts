@@ -18,7 +18,8 @@
 //   twice leaves E1 with that part's code, and a third try is refused. Between tries the only change allowed is a repair
 //   from the frozen list (REPAIRS), named with --repair and recorded with the try.
 // - An endpoint, credential or proxy failure is E_ROUTE_INFRA (exit 2). It never passes a part and uses no try: a session
-//   that ended missing, with rejected credentials, as an infra incident or before any model output; a rig that failed
+//   that ended missing, with rejected credentials, as an infra incident or before any model output, or after model output
+//   when its last call on its meter got an INFRA_STATUSES status, a 5xx, no answer or a proxy refusal; a rig that failed
 //   without a reason code; a bill lookup the key refused, one still failing at the deadline, or an id the wait never
 //   reached; a call with no outcome line or a session with no paid call (a proxy fault); an unknown outcome (a lost send,
 //   a broken stream or a lost body) or a 5xx with no usage, which the proxy charges at its full reservation (a retried
@@ -125,14 +126,21 @@ export const partPassed = (s: RouteState, p: Part): boolean => s.tries.some((t) 
 export const partFails = (s: RouteState, p: Part): number => s.tries.filter((t) => t.parts[p]?.result === "fail").length;
 export const infraFailures = (s: RouteState): number => s.tries.filter((t) => Object.values(t.parts).some((r) => r?.result === "infra")).length;
 
-/** Why a session is an endpoint, credential or proxy failure rather than a result of the route, or null. */
-export function sessionInfra(record: Pick<TrialRecord, "termination" | "model_output">): string | null {
+/**
+ * Why a session is an endpoint, credential or proxy failure rather than a result of the route, or null. A timeout, CLI
+ * failure or completion is infra before any model output, and after it when the session's last call on its meter (the
+ * journal's last outcome or refusal) got an INFRA_STATUSES status, a 5xx, no answer or a proxy refusal (T1).
+ */
+export function sessionInfra(record: Pick<TrialRecord, "termination" | "model_output">, journal: readonly Line[] = [], meter = ""): string | null {
   const t = record.termination;
   if (t.kind === "missing") return "the session ended missing (" + t.code + ")";
   if (t.kind === "credentials_rejected") return "the provider rejected the proxy's key (E_KEY_REJECTED)";
   if (t.kind === "infra") return "the session ended on an infra incident: " + t.incident;
-  if ((t.kind === "timeout" || t.kind === "arm_failure" || t.kind === "completed") && record.model_output !== true) return "the session ended " + t.kind + " before any model output";
-  return null;
+  if (t.kind !== "timeout" && t.kind !== "arm_failure" && t.kind !== "completed") return null;
+  if (record.model_output !== true) return "the session ended " + t.kind + " before any model output";
+  const last = journal.findLast((l) => l.meter_id === meter && (l.kind === "outcome" || l.kind === "refusal"));
+  const cause = !last ? null : last.kind === "refusal" ? "the proxy refused it (" + last.code + ")" : typeof last.status !== "number" ? "the proxy never sent it or lost its answer" : INFRA_STATUSES.has(last.status) || last.status >= 500 ? "the provider answered " + last.status : null;
+  return cause ? "the session ended " + t.kind + " after model output, and its last call failed: " + cause : null;
 }
 
 const blockText = (content: unknown): string => (typeof content === "string" ? content : Array.isArray(content) ? content.map((b) => (typeof b?.text === "string" ? b.text : "")).join("\n") : "");
@@ -635,11 +643,11 @@ async function routeCheck(argv: string[], io: Io, env: Env, deps: Deps): Promise
   if (Object.values(round.sessions).some((s) => s.record.termination.kind === "cap_stop")) return capStop("the proxy stopped a session at the lease's cap");
   const refusalOf = (s: Session): string | null => {
     const r = round.sessions[s];
-    return r && sessionInfra(r.record) ? providerRefusal(round.journal, r.meter_id, r.transcript) : null;
+    return r && sessionInfra(r.record, round.journal, r.meter_id) ? providerRefusal(round.journal, r.meter_id, r.transcript) : null;
   };
   const infraOf = (s: Session): string | null => {
     const r = round.sessions[s];
-    return r ? (refusalOf(s) ? null : sessionInfra(r.record)) : "the " + s + " session did not run";
+    return r ? (refusalOf(s) ? null : sessionInfra(r.record, round.journal, r.meter_id)) : "the " + s + " session did not run";
   };
   const judged = (p: Part, why: string | null): PartResult => (why === null ? { result: "pass" } : { result: "fail", code: PART_CODES[p], reason: why });
   const rows: CallRow[] = [];

@@ -190,6 +190,43 @@ describe("route-check exits", () => {
     }
   });
 
+  // Value: protects=T1 (#176 /ship Step 11, the Captain's standing ruling that infra uses no try): a session whose last call on its meter failed for an infra cause (402, 408, 429, a 5xx past the proxy's retries, a call the proxy never sent or got no answer to, or a proxy refusal) is E_ROUTE_INFRA with no try used after model output too, for the tool and the block session, and two such outcomes end the check INCONCLUSIVE rather than with a route code, while a session that failed on the model's own answer after output, a 429 it recovered from included, still fails its part and uses a try; fails_when=infra after model output fails a part, so two blips eject the model from E1 with a route code, or a model failure after output reads as infra; why_new=GST-1175 (T1); seam=main, and sessionInfra over the session's journal; no_claim=which errors a live route returns
+  test("T1: infra on a session's last call uses no try after model output too; a model failure after output uses one", async () => {
+    const [request, outcome] = call("m-tool", "r1", { spent: 0, upstream: null });
+    const cases: [string, Record<string, unknown>[], string][] = [
+      ["402", call("m-tool", "r1", { spent: 0, status: 402, upstream: null }), "the provider answered 402"],
+      ["408", call("m-tool", "r1", { spent: 0, status: 408, upstream: null }), "the provider answered 408"],
+      ["429", call("m-tool", "r1", { spent: 0, status: 429, upstream: null }), "the provider answered 429"],
+      ["exhausted 503", call("m-tool", "r1", { spent: 6_880_000, status: 503, upstream: null }), "the provider answered 503"],
+      ["never sent", [request!, { ...outcome, status: null, reason: "not sent: attempt 2 would start past this call's retry budget of 60000 ms" }], "the proxy never sent it or lost its answer"],
+      ["proxy refusal", [{ kind: "refusal", meter_id: "m-tool", code: "UPSTREAM", reason: "openrouter is rate limited for 5000 ms more, past this call's retry budget of 60000 ms" }], "the proxy refused it (UPSTREAM)"],
+    ];
+    const after = "the session ended completed after model output, and its last call failed: ";
+    for (const [name, last, cause] of cases) {
+      const out = outDir();
+      const round = fakeRound({ tool: { record: rec({ kind: "completed" }, ["I read the file."]), transcript: roundTrip({ quote: false }) }, journal: [...call("m-tool", "r0"), ...last, ...call("m-block", "r2")] }, []);
+      const r = await run(argv(out), { round });
+      expect([name, r.code, r.lines[0]]).toEqual([name, 2, "E_ROUTE_INFRA route-check: openai/gpt-6.1-sol on https://openrouter.ai/api/v1/messages (Claude Code 2.9.0), part tool, try 1 (no try used): " + after + cause]);
+      expect([name, state(out).tries[0].parts]).toEqual([name, { tool: { result: "infra", reason: after + cause }, block: { result: "pass" }, metering: { result: "infra", reason: after + cause } }]);
+    }
+    const out = outDir();
+    const block = fakeRound({ block: rec({ kind: "completed" }, ["Partial review, no block yet."]), journal: [...call("m-tool", "r1"), ...call("m-block", "r2"), ...call("m-block", "r3", { spent: 0, status: 429, upstream: null })] }, []);
+    const first = await run(argv(out), { round: block });
+    expect([first.code, state(out).tries[0].parts.block]).toEqual([2, { result: "infra", reason: after + "the provider answered 429" }]);
+    const second = await run(argv(out), { round: block });
+    expect([second.code, second.lines.at(-2)]).toEqual([2, "E_ROUTE_INCONCLUSIVE route-check: openai/gpt-6.1-sol has had 2 infra outcomes (" + join(out, "route-check.json") + "), so the check is INCONCLUSIVE and openai/gpt-6.1-sol does not enter E1"]);
+    const model: [string, Record<string, unknown>[]][] = [
+      ["a model error after output", [...call("m-tool", "r0"), ...call("m-tool", "r1"), ...call("m-block", "r2")]],
+      ["a model error after a recovered 429", [...call("m-tool", "r0", { spent: 0, status: 429, upstream: null }), ...call("m-tool", "r1"), ...call("m-block", "r2")]],
+    ];
+    for (const [name, journal] of model) {
+      const out = outDir();
+      const r = await run(argv(out), { round: fakeRound({ tool: { record: rec({ kind: "completed" }, ["I read the file."]), transcript: roundTrip({ quote: false }) }, journal }, []) });
+      expect([name, r.code, r.lines[0]]).toEqual([name, 1, "E_ROUTE_TOOL_ROUNDTRIP route-check: openai/gpt-6.1-sol on https://openrouter.ai/api/v1/messages (Claude Code 2.9.0), part tool, try 1 of 2: the main agent's last text does not quote the token"]);
+      expect([name, state(out).tries[0].parts.tool]).toEqual([name, { result: "fail", code: "E_ROUTE_TOOL_ROUNDTRIP", reason: "the main agent's last text does not quote the token" }]);
+    }
+  });
+
   // Value: protects=a call whose spend the proxy could not read (a retried 5xx with no usage, charged at its full reservation, or an unknown outcome such as a broken stream) or a call with no outcome line (a proxy fault) makes the metering part E_ROUTE_INFRA (exit 2, no try used, no bill lookup) and keeps the try's charge, while a 2xx answer with no usage, from a JSON reply or a stream, and a billed call with no upstream id fail metering (E_ROUTE_METERING, exit 1, a try used), because the route must report usage; fails_when=an infra case uses a try, the charge is dropped from the record, a 2xx with no usage reads as infra (R2R3), or a call with no outcome line fails the part; why_new=PR #166 review (A2, the Captain's ruling), and GST-1121 (R2R3); seam=main, journalMetering and judgeMetering; no_claim=how often a live route sees a 5xx or a 2xx with no usage
   test("a retried 502 with no usage, a broken stream or a call with no outcome line makes metering infra; a 2xx with no usage or no upstream id fails it", async () => {
     const looked: string[] = [];
@@ -303,6 +340,10 @@ describe("route-check judges", () => {
     expect(sessionInfra(rec({ kind: "credentials_rejected" }))).toContain("E_KEY_REJECTED");
     expect(sessionInfra(rec({ kind: "timeout" }, [], false))).toBe("the session ended timeout before any model output");
     expect(sessionInfra(rec({ kind: "timeout" }))).toBeNull();
+    expect(sessionInfra(rec({ kind: "timeout" }), [...call("m", "r0"), ...call("m", "r1", { spent: 0, status: 429, upstream: null })], "m")).toBe("the session ended timeout after model output, and its last call failed: the provider answered 429");
+    expect(sessionInfra(rec({ kind: "completed" }), [...call("m", "r0", { spent: 0, status: 429, upstream: null }), ...call("m", "r1"), ...call("other", "r2", { spent: 0, status: 429, upstream: null })], "m")).toBeNull();
+    expect(sessionInfra(rec({ kind: "completed" }), [...call("m", "r0"), ...call("m", "r1", { spent: 0, status: 404, upstream: null })], "m")).toBeNull();
+    expect(sessionInfra(rec({ kind: "turn_cap" } as never), [...call("m", "r0", { spent: 0, status: 429, upstream: null })], "m")).toBeNull();
   });
 
   // Value: protects=metering passes within 10% and fails outside it, with no upstream id, with a 2xx that reports no usage or with a bill unpublished at the deadline; a refused call settled at nothing needs no id beside a billed one; and only a verified bill passes: a session with no paid call, or whose calls were all refused at $0, and a bill lookup that failed are infra, never a pass; fails_when=any of these flips, or metering passes with no bill (R2R1); why_new=GEVA-203, and GST-1121 (R2R1, R2R3, R2S2); seam=journalCalls, journalMetering and judgeMetering; no_claim=OpenRouter's rounding
