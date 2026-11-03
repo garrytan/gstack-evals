@@ -1,0 +1,110 @@
+#!/usr/bin/env bun
+// e0-stops.ts: E0 dry run steps d and h, run as its own process as tests/trial/review/plan-told-sdk.ts does (GEVA-219).
+// Step d runs one synthetic unit per scenario through runReviewUnits, the real Claude Code driver, the real pinned SDK and
+// the REAL pinned CLI binary (localSandbox spawns CLAUDE_CLI) against harness()'s real MeteringProxy with a scripted fake
+// upstream, then reads each session with e0-readings.ts's termination read. Step h runs the start rule through the real
+// run loop with the real driver over a fake SDK query and a rig whose finalize returns chosen spend. Keyless. Prints one
+// JSON line per scenario with classes and codes only.
+//   bun e0-stops.ts <scorer> <suite.json> <plans.git> <scratch>
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+const [scorer, suitePath, source, root] = process.argv.slice(2) as [string, string, string, string];
+rmSync(root, { recursive: true, force: true });
+mkdirSync(root, { recursive: true });
+const imp = (p: string) => import(join(scorer, p));
+const { DEFAULT_POLICY, loadPolicy } = await imp("src/skill-eval/cli/policy.ts");
+const { PLAN_SEVERITY_MAP } = await imp("src/trial/review/plan.ts");
+const { runReviewUnits, readReviewJournal, planScore } = await imp("src/trial/review/run.ts");
+const { buildUnitRepo, buildUnitTree, unitTaskId } = await imp("src/trial/review/unit.ts");
+const { harness, localSandbox } = await imp("tests/adapters/harness.ts");
+const { claudeCodeDriver } = await imp("src/adapters/claude-code/driver.ts");
+const R = await import(join(import.meta.dir, "e0-readings.ts"));
+const mods = await R.loadMods(scorer);
+const suite = JSON.parse(readFileSync(suitePath, "utf8"));
+const policy = loadPolicy(DEFAULT_POLICY);
+const scratch = (n: string) => mkdtempSync(join(root, n));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const prep = (u: any) => {
+  const unit = { id: u.id, repo: u.repo, pr: u.pr, head: u.head, base: u.base };
+  const repo = buildUnitRepo({ unit, source, dest: join(scratch("unit-"), "repo"), baseBranch: "main" });
+  const tree = buildUnitTree({ repo, task: unitTaskId(unit), dest: join(scratch("tree-"), "tree"), image: "unused", test: null, install: null, scratch: scratch("build-"), run: () => { throw new Error("a plan unit runs no step"); } });
+  return { unit, task: unitTaskId(unit), base_branch: "main", merge_base: repo.merge_base, tree: tree.dir, tree_sha256: tree.tree_sha256, instructions: repo.instructions, check: null };
+};
+const FENCE = "\x60\x60\x60plan-findings\n" + JSON.stringify([{ severity: "High", section: "Summary", line: 1, claim: "A synthetic claim about the plan.", evidence: "plan.md", fix: "A synthetic fix." }]) + "\n\x60\x60\x60";
+const text = (t: string) => [{ type: "text", text: t }];
+let tu = 0;
+const tool = () => [{ type: "tool_use", id: "toolu_e0" + ++tu, name: "Bash", input: { command: "true", description: "noop" } }];
+const rigFor = (h: any, o: any) => ({
+  baseUrl: h.baseUrl, network: null, imageDigest: null,
+  bind: async (req: any) => h.proxy.bind(req),
+  finalize: async (m: string) => { const f = await h.proxy.finalize(m); return o.micros === undefined ? f : { ...f, micros: o.micros }; },
+  arms: { none: { tree_sha256: "none-tree", skill: null, gstack: null, plugins: [] } },
+  sandbox: () => localSandbox(() => {}), judgeSandbox: () => localSandbox(() => {}),
+  egress: () => ({ open: false, detail: "dry run rig" }), close: async () => ({ committed: 0, unknown: 0, lease_id: null }), recovery: null,
+  ...(o.driver ? { driver: o.driver } : {}),
+});
+async function runOne(name: string, script: any, o: any) {
+  const h = harness(script);
+  const out = join(root, "run-" + name);
+  const units = o.units ?? [one];
+  const input = { host: "claude", suite: { id: suite.id, sha256: null }, units, arms: [{ name: "none", told: "none", systemPrompt: "claude-code-preset" }], models: [o.model ?? "claude-opus-5-5"], passes: o.passes ?? 1, parallel: o.parallel ?? 1, timeoutS: o.timeoutS ?? 120, cap: o.cap ?? 50_000_000, ...(o.allowance ? { allowanceMicros: o.allowance } : {}), runId: "e0-" + name, out, date: "2026-11-03", policy, keyBase: { image_digest: null, recipe: "e0-dryrun", host_version: null, adapter_sha256: "e0-dryrun", isolation: "process" }, journal: null, plan: { lens: "ceo" }, severityMap: { none: PLAN_SEVERITY_MAP }, ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), env: {} };
+  try {
+    return { out, run: await runReviewUnits(input, rigFor(h, o)), units };
+  } finally {
+    h.proxy.stop();
+  }
+}
+const one = prep(suite.units[0]);
+const mode = process.argv[6] ?? "all";
+if (mode !== "starts") {
+  const STOP: Array<[string, any, any]> = [
+    ["block", () => text(FENCE), {}],
+    ["noblock", () => text("I read the plan and its context."), {}],
+    ["turncap", () => tool(), { maxTurns: 2 }],
+    ["allowance", () => text(FENCE), { allowance: 1000 }],
+    ["timeout_out", (t: any) => (t.results.size === 0 ? tool() : sleep(60_000).then(() => text(FENCE))), { timeoutS: 20 }],
+    ["timeout_pre", () => sleep(60_000).then(() => text(FENCE)), { timeoutS: 20 }],
+    ["upstream", () => { throw new Error("synthetic upstream failure"); }, { timeoutS: 45 }],
+  ];
+  const results = await Promise.all(STOP.map(async ([name, script, o]) => {
+    try {
+      const { out, run, units } = await runOne(name, script, o);
+      const sub = { units: units.map((p: any) => suite.units.find((u: any) => u.id === p.unit.id)) };
+      const arm = R.readArm(out, sub, 1, mods);
+      const e: any = [...readReviewJournal(out).values()][0];
+      const t = e?.record?.termination;
+      const s = arm.sessions[0]!;
+      return { kind: "stop", name, out, termination: e ? t.kind + (t.code ? " " + t.code : "") + (e.record.model_output ? " after output" : " before output") : "absent", planScore: e ? planScore(e) : "absent", status: arm.armJson?.status, gaps: arm.armJson?.coverage_gaps?.length ?? 0, stops: run.stops.map((x: any) => x.code), cls: s.cls, block: s.block, reads: s.reads.length, turns: s.turns, init: s.init ? s.init.system_prompt + " " + s.init.claude_code_version : null };
+    } catch (err) {
+      return { kind: "stop", name, error: String(err).split("\n")[0]!.slice(0, 300) };
+    }
+  }));
+  for (const r of results) console.log(JSON.stringify(r));
+}
+if (mode !== "stops") {
+  const fakeQuery = (_: any) => {
+    async function* gen() {
+      yield { type: "system", subtype: "init", model: "fake", claude_code_version: "2.1.314", tools: [], skills: [], cwd: "", permissionMode: "default", apiKeySource: "none", session_id: "s" };
+      yield { type: "assistant", parent_tool_use_id: null, session_id: "s", message: { id: "m", type: "message", role: "assistant", model: "fake", content: [{ type: "text", text: FENCE }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } } };
+      yield { type: "result", subtype: "success", is_error: false, num_turns: 1, result: FENCE, session_id: "s", total_cost_usd: 0, usage: { input_tokens: 1, output_tokens: 1 }, duration_ms: 1, duration_api_ms: 1 };
+    }
+    const g: any = gen();
+    g.interrupt = async () => {};
+    g.close = () => {};
+    return g;
+  };
+  const all = suite.units.map(prep);
+  const START: Array<[string, string, number, number, number]> = [
+    ["opus-0.49", "claude-opus-5-5", 7_040_000, 43_300_000, 490_000], ["opus-0.50", "claude-opus-5-5", 7_040_000, 43_300_000, 500_000],
+    ["particle-0.123", "particle-ai/particle-1", 192_000, 6_120_000, 123_000], ["particle-0.124", "particle-ai/particle-1", 192_000, 6_120_000, 124_000],
+  ];
+  for (const [name, model, allowance, cap, micros] of START) {
+    try {
+      const { out, run } = await runOne(name, () => text(FENCE), { units: all, passes: 2, parallel: 3, model, allowance, cap, micros, driver: (o: any) => claudeCodeDriver({ ...o, query: fakeQuery }) });
+      console.log(JSON.stringify({ kind: "start", name, sessions: readReviewJournal(out).size, spent: (run.spent / 1e6).toFixed(3), stops: run.stops.map((s: any) => s.code), cap: R.readArm(out, suite, 2, mods).sessions.filter((s: any) => s.cls === "CAP").length }));
+    } catch (err) {
+      console.log(JSON.stringify({ kind: "start", name, error: String(err).split("\n")[0]!.slice(0, 300) }));
+    }
+  }
+}
+process.exit(0);

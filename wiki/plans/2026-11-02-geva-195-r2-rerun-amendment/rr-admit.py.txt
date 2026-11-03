@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+# Admission pass line for the R2 rerun (GEVA-195 amendment, section 5), keyless. Reads the pilot's derive.json (noloss
+# derive --drop-gaps on the judged pilot arm), the derived suite and the derived arm. When the drop removed more than 3
+# units, the pilot is incomplete: no admission, to the Captain (exit 4). Otherwise it takes blocking recall pooled per
+# blocker (each blocking blocker's share of the arm's passes judged F, as noloss score counts it) with the scorer's
+# PR-clustered 95% percentile bootstrap: clusteredPairedDelta (src/runner/stats/paired.ts at rig 715f837) ported with its
+# seeded generator, 10,000 draws, seed 20261031, so the interval is the one noloss score gives the arm. The pilot passes
+# when the lower bound is above 0 and the upper bound plus the MDD is at most 100 points. The MDD is the larger of
+# power-rr.py's MDD at the point estimate and at the planning control rate (7.1%, section 1), both at the grid's 2 passes
+# on the derived suite's clusters, so a pilot at the ceiling, where the MDD at the point estimate falls to 0, still fails.
+# pass_line() holds that rule, and power-rr.py's pilot_chance() runs it on simulated pilots. interval() draws and sums as
+# clusteredPairedDelta does, in the same order; it only keeps each seed's draw list for later calls.
+# Before all of that it reads the pilot run's own arm.json (review-units' output, before source, judging and derive).
+# When parse_outcomes.not_run is above 0, or the arm stopped with no coverage gap (a stop for any reason other than
+# coverage gaps), the pilot was interrupted: incomplete, it goes to the Captain with no admission (exit 4). An arm
+# stopped only for coverage gaps goes on to the drop rule. It then reads the pilot run's saved stderr (the README's run
+# step saves it as <dir>/rr-pilot-none.stderr and closes it with a "review-units exit N" line). review-units logs every
+# stop there as a line led by its code (src/trial/review/run.ts at 176fdc7) and exits 2 on any stop. The pilot is
+# incomplete too (exit 4) when that log is missing, empty or unreadable, has no closing exit line, carries a stop line
+# led by any code but E_COVERAGE_GAP (a proxy CAP_STOP above all), carries a line about a stop that no code leads, or
+# closes with an exit that does not match its stop lines (0 with none, 2 with some). It skips only the pause's own stop
+# line, which rr-pause.py --append writes led by RR_PAUSE_STOP (README section 8); every other line counts as above.
+# Exit 0 PASS, 3 FAIL, 4 incomplete, 5 bad input (never an outcome).
+# Usage: python3 rr-admit.py <derive.json> <derived suite json> <derived arm dir> <pilot run arm.json> <pilot run stderr log> [power-rr.py or power-rr.py.txt]
+import csv, importlib.machinery, importlib.util, json, math, os, re, sys
+PAUSED = re.compile(r"RR_PAUSE_STOP CAP_STOP the next round's worst case \(\d+ sessions at their allowance\) does not fit under the cap")
+from functools import reduce
+from operator import add
+
+PLAN = 0.071
+
+M32 = 0xFFFFFFFF
+
+
+def seeded(seed):
+    """seededRandom in src/runner/stats/paired.ts, bit for bit."""
+    s = [seed & M32]
+
+    def rnd():
+        s[0] = (s[0] + 0x6D2B79F5) & M32
+        t = s[0]
+        t = ((t ^ (t >> 15)) * (t | 1)) & M32
+        t = (t ^ ((t + (((t ^ (t >> 7)) * (t | 61)) & M32)) & M32)) & M32
+        return ((t ^ (t >> 14)) & M32) / 4294967296
+    return rnd
+
+
+ROWS = {}
+
+
+def interval(values, seed=20261031, draws=10000):
+    """clusteredPairedDelta's delta and percentile interval for (cluster, a, b) items."""
+    n = len(values)
+    by = {}
+    for c, a, b in values:
+        s = by.setdefault(c, [0.0, 0])
+        s[0] += b - a
+        s[1] += 1
+    cl = [by[k] for k in sorted(by)]
+    g = len(cl)
+    delta = sum(c[0] for c in cl) / n
+    if all(b - a == 0 for _, a, b in values):
+        return delta, ((0.0, 0.0) if g > 1 else None)
+    if g < 2:
+        return delta, None
+    rows = ROWS.get((seed, draws, g))
+    if rows is None:
+        rnd = seeded(seed)
+        rows = ROWS[(seed, draws, g)] = [[int(rnd() * g) for _ in range(g)] for _ in range(draws)]
+    sums, counts = [c[0] for c in cl], [c[1] for c in cl]
+    boot = [reduce(add, map(sums.__getitem__, row), 0) / sum(map(counts.__getitem__, row)) for row in rows]
+    boot.sort()
+    return delta, (boot[int(draws * 0.025)], boot[math.ceil(draws * 0.975) - 1])
+
+
+REF = re.compile(r"^(?:([A-Za-z0-9_.-]+)(?:/|__)([A-Za-z0-9_.-]+)#)?(\d+)(?:@([0-9a-f]{7,40}))?$")
+
+
+def unit_of(suite, ref):
+    if any(u["id"] == ref for u in suite["units"]):
+        return ref
+    m = REF.match(ref)
+    if not m:
+        return None
+    repo = m.group(1) + "/" + m.group(2) if m.group(1) else None
+    hits = [u["id"] for u in suite["units"] if u["pr"] == int(m.group(3)) and (repo is None or u["repo"] == repo) and (not m.group(4) or u["head"].startswith(m.group(4)))]
+    return hits[0] if len(hits) == 1 else None
+
+
+def pass_line(values, cl, pw):
+    """The pass line on (cluster, a, b) blocking values: lower bound above 0, upper bound plus the MDD at most 100 points."""
+    est, ci = interval(values)
+    if ci is None:
+        raise ValueError("the bootstrap has fewer than 2 clusters")
+    m_est, m_plan = pw.mdd(cl, est, 2), pw.mdd(cl, PLAN, 2)
+    m = max(m_est, m_plan)
+    lo, hi = 100 * ci[0], 100 * ci[1]
+    return est, lo, hi, m_est, m_plan, m, lo > 0 and hi + m <= 100
+
+
+def blocking_values(suite, arm_dir):
+    arm = json.load(open(os.path.join(arm_dir, "arm.json")))
+    passes = arm["passes"]
+    found = set()
+    for r in csv.DictReader(open(os.path.join(arm_dir, "judgments.tsv")), delimiter="\t"):
+        u = unit_of(suite, r["pr"])
+        if u is None:
+            raise ValueError("judgments.tsv names %r, which is no unit of suite %s" % (r["pr"], suite["id"]))
+        if r["outcome"] == "F":
+            found.add((u, r["blocker_id"], int(r.get("pass") or 1)))
+    return arm, [(u["cluster"], 0.0, sum(1 for p in range(1, passes + 1) if (u["id"], b["id"], p) in found) / passes) for u in suite["units"] for b in u.get("blockers", []) if b.get("counts") == "blocking"]
+
+
+if __name__ == "__main__":
+    try:
+        dj, sp, ad, ra, el = sys.argv[1:6]
+        power = sys.argv[6] if len(sys.argv) > 6 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "power-rr.py")
+        run = json.load(open(ra))
+        not_run, gaps = run["parse_outcomes"]["not_run"], len(run.get("coverage_gaps") or [])
+        if not_run > 0 or (run["status"] != "complete" and gaps == 0):
+            print("admission: incomplete: goes to the Captain, no admission. The pilot run %s has %d sessions not run and status %s with %d coverage gaps, so it was interrupted." % (run["id"], not_run, run["status"], gaps))
+            sys.exit(4)
+        try:
+            lines = [x for x in open(el, encoding="utf-8").read().splitlines() if x.strip() and not PAUSED.fullmatch(x)]
+        except (OSError, UnicodeDecodeError):
+            lines = []
+        end = re.fullmatch(r"review-units exit (\d+)", lines[-1]) if lines else None
+        stops = [x for x in lines[:-1] if re.match(r"[A-Z][A-Z0-9_]*[A-Z0-9](?= |:|$)", x)]
+        loose = [x for x in lines[:-1] if x not in stops and re.search(r"stop", x, re.I)]
+        other = [x for x in stops if not x.startswith("E_COVERAGE_GAP ")]
+        bad = ("is missing, empty or unreadable" if not lines else "has no closing review-units exit line" if not end
+               else "carries the stop line %r" % other[0][:160] if other
+               else "carries a line about a stop that no code leads: %r" % loose[0][:160] if loose
+               else "closes with exit %s and %d stop lines" % (end.group(1), len(stops)) if end.group(1) != ("2" if stops else "0") else None)
+        if bad:
+            print("admission: incomplete: goes to the Captain, no admission. The pilot run's stderr log %s %s." % (el, bad))
+            sys.exit(4)
+        d = json.load(open(dj))
+        dropped = [x["unit"] for x in d["dropped"]]
+        if len(dropped) > 3:
+            print("admission: incomplete. noloss derive --drop-gaps dropped %d units, more than 3: %s. No admission; the pilot goes to the Captain." % (len(dropped), ", ".join(dropped)))
+            sys.exit(4)
+        suite = json.load(open(sp))
+        arm, values = blocking_values(suite, ad)
+        if not values:
+            raise ValueError("the derived suite holds no blocking blocker")
+        loader = importlib.machinery.SourceFileLoader("power_rr", power)
+        pw = importlib.util.module_from_spec(importlib.util.spec_from_loader("power_rr", loader))
+        loader.exec_module(pw)
+        cl = pw.clusters_of(suite)
+        est, lo, hi, m_est, m_plan, m, ok = pass_line(values, cl, pw)
+        print("admission: %s blocking recall %.1f%% on %d blocking blockers in %d PR clusters, %d units dropped as gaps; 95%% CI [%.1f, %.1f]; MDD with 2 passes %.1f points at %.1f%% and %.1f at the planning rate %.1f%%, so %.1f; upper bound plus MDD %.1f points" % (arm["id"], 100 * est, len(values), len(cl), len(dropped), lo, hi, m_est, 100 * est, m_plan, 100 * PLAN, m, hi + m))
+        print("admission: " + ("PASS: the lower bound is above 0 and the upper bound plus the MDD is at most 100 points." if ok else "FAIL: " + ("the lower bound is not above 0 (the floor)." if lo <= 0 else "the upper bound plus the MDD is above 100 points (the top).") + " No grid runs on this set."))
+        sys.exit(0 if ok else 3)
+    except Exception as e:
+        print("E_RR_ADMIT %s: %s. This is an error, not an outcome." % (type(e).__name__, e))
+        sys.exit(5)

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "gstack": {
+    "repo": "garrytan/gstack",
+    "sha": "5209e9262d8068a75b29be562fbc1de82ba8b487"
+  },
+  "note": "gstack /review and /ship at v1.93.6.0: the Review Army checklists (review/sections/review-army.md), /ship's targeted reader (review/specialists/targeted.md, lib/review-targeted.ts) and the Claude adversarial subagent prompt (review/sections/adversarial.md, ship/sections/adversarial.md).",
+  "checklists": {
+    "review/specialists/testing.md": "testing",
+    "review/specialists/maintainability.md": "maintainability",
+    "review/specialists/security.md": "security",
+    "review/specialists/performance.md": "performance",
+    "review/specialists/data-migration.md": "data-migration",
+    "review/specialists/api-contract.md": "api-contract",
+    "review/design-checklist.md": "design",
+    "review/specialists/simplification.md": "simplification",
+    "review/specialists/state-machines.md": "state-machines",
+    "review/specialists/red-team.md": "red-team",
+    "review/specialists/targeted.md": "targeted"
+  },
+  "adversarial": [
+    "Think like an attacker and a chaos engineer"
+  ]
+}

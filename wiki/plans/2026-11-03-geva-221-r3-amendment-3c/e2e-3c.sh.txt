@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Part D of dry-run-3c.sh.txt: the export's own vm-run.sh, end to end on this machine, against the export's real proxy.ts
+# with a stub model, then every out/ file it leaves, read for its content. Harbor at f3a5a92 (uv tool install, as
+# vm-bootstrap.sh does it), the Lane B agent, Claude Code 2.1.312 in the export's smoke-task container and #109's none arm
+# tar, with R3's none arm settings (claude-code-preset, a $4 session cap, 32000 output tokens). The proxy runs the
+# pin's config/proxy.json with only the claude-opus-5-5 route's base_url pointed at the export's fake_upstream.ts on
+# 127.0.0.1:8799, which is the stub model, and the export's ledger.ts serves a temporary ledger on 127.0.0.1:9911, where
+# launch.sh's tunnel would be. Two runs: D1, two trials on a $20 ledger, ends clean; D2, two trials at once on a $5 ledger
+# with STOP_ON_CAP, where the ledger refuses the second $4 reserve and the watcher must stop Harbor. The task's agent
+# and environment network modes are public, as smoke.sh's NETWORK=public sets them, because a Capy machine's kernel can't
+# run Harbor's egress sidecar; nothing else differs from a VM run.
+# No provider key exists in any process: ~/.laneb-keys holds a placeholder for the run and is removed after.
+# It ends with named assertions, each printed as a PASS or FAIL line (README section 6 item 2). The script's own exit
+# code is not one of them.
+# Usage: bash e2e-3c.sh <export>/quick/laneb <arms dir holding none-8bab483364e4.tar.gz> <empty work dir>
+set -u
+L=$(cd "$1" && pwd); A=$(cd "$2" && pwd); W=$(mkdir -p "$3" && cd "$3" && pwd)
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+# vm-run.sh runs docker through sg (shadow's newgrp, /usr/bin/sg on the VM). On a Capy machine nvm's ast-grep is also
+# named sg and comes first on PATH, so a link to /usr/bin/sg goes first here.
+mkdir -p "$W/bin" && ln -sf /usr/bin/sg "$W/bin/sg"
+export PATH="$W/bin:$HOME/.local/bin:$PATH"
+for p in 8787 8788 8799 9911; do if (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then echo "127.0.0.1:$p already answers; stop it first"; exit 2; fi; done
+[ ! -e "$HOME/.laneb-keys" ] || { echo "$HOME/.laneb-keys exists; refusing to overwrite it"; exit 2; }
+fpid=""; lpid=""
+cleanup() { rm -f "$HOME/.laneb-keys"; [ -z "$fpid" ] || kill "$fpid" 2>/dev/null; [ -z "$lpid" ] || kill "$lpid" 2>/dev/null; true; }
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
+(umask 077; echo "ANTHROPIC_API_KEY=dry-run-placeholder-not-a-key" > "$HOME/.laneb-keys")
+echo "harbor $(harbor --version 2>/dev/null | head -1), bun $(bun --version), docker $(docker version --format '{{.Server.Version}}')"
+FAKE_UPSTREAM_LOG="$W/fake-upstream.jsonl" setsid bun "$L/runner/fake_upstream.ts" > "$W/fake-upstream.log" 2>&1 < /dev/null &
+fpid=$!
+show() { echo "--- $1"; if [ -s "$2" ]; then cat "$2"; echo; else echo "(missing or empty)"; fi; }
+# rule5 <file>: #133 section 3 rule 5 as screen.ts reads proxy-status-end.json and cap-stop.json (screen.ts stopReason):
+# empty or unparseable makes the part incomplete; otherwise a cap_stop that is set does.
+rule5() { bun -e 'const fs = require("fs"); const p = process.argv[1]; const t = fs.existsSync(p) ? fs.readFileSync(p, "utf8") : null; if (t === null) { console.log("rule 5: absent, not read"); process.exit(0); } let s; try { if (!t.trim()) throw 0; s = JSON.parse(t); } catch { console.log("rule 5: empty or unparseable: incomplete"); process.exit(0); } console.log(s?.cap_stop ? "rule 5: cap stop: incomplete (" + s.cap_stop + ")" : "rule 5: readable, no cap stop");' "$1"; }
+run() {
+  local name=$1 cap=$2 stopcap=$3 R="$W/$1"
+  mkdir -p "$R/arms" "$R/tasks"
+  cp -r "$L/runner/smoke-task" "$R/tasks/smoke-task"
+  sed -i 's/^network_mode = .*/network_mode = "public"/' "$R/tasks/smoke-task/task.toml"
+  cp "$A/none-8bab483364e4.tar.gz" "$R/arms/"
+  local sha; sha=$(gzip -dc "$R/arms/none-8bab483364e4.tar.gz" | sha256sum | cut -d' ' -f1)
+  jq '.routes[.models["claude-opus-5-5"].route].base_url = "http://127.0.0.1:8799"' "$L/config/proxy.json" > "$R/proxy.json"
+  jq -n --arg r "$R" --arg l "$L" --arg sha "$sha" --slurpfile c "$L/config/cells.r3.json" '{job_name: "dry-3c", tasks_dir: ($r + "/tasks"), tasks: ["smoke-task"],
+    models: [$c[0].models[] | select(.id == "claude-opus-5-5")], arms: [{name: "none-8bab483364e4", tar: ($r + "/arms/none-8bab483364e4.tar"), sha256: $sha, system_prompt: "claude-code-preset"}],
+    attempts: 2, n_concurrent: 2, agent_dir: ($l + "/runner/agent"), runner_dir: ($l + "/runner"), base_url: "http://__GATEWAY__:8787",
+    max_output_tokens: $c[0].max_output_tokens, verifier_timeout_multiplier: $c[0].verifier_timeout_multiplier, repo_dir: "/testbed"}' > "$R/spec.json"
+  bun "$L/runner/grid.ts" "$R/spec.json" "$R/job.json"
+  jq -n --arg sha "$sha" '{arms: [{name: "none-8bab483364e4", sha256: $sha}]}' > "$R/manifest.json"
+  [ "$stopcap" = no ] || touch "$R/STOP_ON_CAP"
+  LEDGER="$R/ledger.jsonl" bun -e 'const { Ledger } = await import(process.argv[1] + "/runner/ledger.ts"); new Ledger(process.env.LEDGER, "dry-3c").approve(Number(process.argv[2]), { words: "dry run, no spend", by: "dry run" });' "$L" "$cap"
+  setsid bun "$L/runner/ledger.ts" serve --path "$R/ledger.jsonl" --item dry-3c --port 9911 > "$R/ledger-service.log" 2>&1 < /dev/null &
+  lpid=$!
+  for _ in $(seq 1 40); do curl -fsS 127.0.0.1:9911/status > /dev/null 2>&1 && break; sleep 0.5; done
+  echo
+  echo "## $name: ledger cap \$$cap, batch cap \$150, STOP_ON_CAP $stopcap"
+  local t0=$SECONDS
+  setsid bash "$L/runner/vm-run.sh" "$R" "dry-$name/" 150 > "$R/vm-run.stdout" 2>&1 < /dev/null
+  local rc=$?
+  echo "$rc" > "$R/vm-run.sh.rc"
+  echo "vm-run.sh exit $rc after $((SECONDS - t0)) s"
+  kill "$lpid" 2>/dev/null; wait "$lpid" 2>/dev/null; lpid=""
+  local O="$R/out"
+  echo "out/: $(cd "$O" && ls | tr '\n' ' ')"
+  show "out/vm-run.exit" "$O/vm-run.exit"
+  show "out/proxy-status-end.json" "$O/proxy-status-end.json"; rule5 "$O/proxy-status-end.json"
+  show "out/cap-stop.json" "$O/cap-stop.json"; rule5 "$O/cap-stop.json"
+  show "out/proxy-totals.json" "$O/proxy-totals.json"
+  echo "--- out/close-all.json"; jq -c '[.[] | {trial, open, spent_micros, settled, ledger_settle}]' "$O/close-all.json" 2>&1
+  echo "--- out/proxy-sessions.jsonl"; jq -c '{trial, model, cap_micros, spent_micros, requests, ok_responses, refused, open, close_reason}' "$O/proxy-sessions.jsonl" 2>&1
+  echo "--- out/proxy-requests.jsonl events"; jq -r '.event // "request"' "$O/proxy-requests.jsonl" 2>&1 | sort | uniq -c
+  show "out/ledger-status-start.json" "$O/ledger-status-start.json"
+  show "out/ledger-status-end.json" "$O/ledger-status-end.json"
+  echo "--- ledger rows"; jq -c '{kind, id, usd_micros}' "$R/ledger.jsonl"
+  echo "--- spend agrees: sessions $(jq -s 'map(.spent_micros) | add // 0' "$O/proxy-sessions.jsonl"), proxy $(jq .global_spent_micros "$O/proxy-totals.json"), ledger settled $(jq .settledMicros "$O/ledger-status-end.json") (micros)"
+  show "out/pulls.tsv" "$O/pulls.tsv"
+  echo "--- trials"; for d in "$R"/jobs/dry-3c/*/; do [ -f "$d/config.json" ] || continue; echo "$(basename "$d"): result.json $([ -f "$d/result.json" ] && echo yes || echo no), reward $(cat "$d/verifier/reward.txt" 2>/dev/null || echo none), exception $(jq -r '.exception_info.exception_type // "none"' "$d/result.json" 2>/dev/null)"; done
+  echo "--- harbor.log, last 5 lines"; tail -5 "$O/harbor.log"
+  echo "--- fake upstream requests so far: $(wc -l < "$W/fake-upstream.jsonl" 2>/dev/null || echo 0)"
+}
+run D1 20 no
+run D2 5 yes
+echo
+echo "## leftovers"
+echo "containers: $(docker ps -q | wc -l), ports: $(for p in 8787 8788 9911; do (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && echo -n "$p "; done)none else"
+echo
+echo "## assertions"
+ok() { if "${@:2}"; then echo "PASS $1"; else echo "FAIL $1"; fi; }
+rc() { [ "$(cat "$W/$1/vm-run.sh.rc" 2>/dev/null)" = "$2" ]; }
+capnull() { jq -e 'has("cap_stop") and .cap_stop == null' "$W/$1/out/$2" > /dev/null 2>&1; }
+capset() { jq -e '.cap_stop != null and .cap_stop != false and .cap_stop != ""' "$W/$1/out/$2" > /dev/null 2>&1; }
+agree() {
+  local O="$W/$1/out" s p l
+  s=$(jq -s 'map(.spent_micros) | add // 0' "$O/proxy-sessions.jsonl" 2>/dev/null)
+  p=$(jq .global_spent_micros "$O/proxy-totals.json" 2>/dev/null)
+  l=$(jq .settledMicros "$O/ledger-status-end.json" 2>/dev/null)
+  [ -n "$s" ] && [ "$s" = "$p" ] && [ "$p" = "$l" ]
+}
+trials() {
+  local n=0 d
+  for d in "$W/$1"/jobs/dry-3c/*/; do
+    [ -f "$d/config.json" ] || continue
+    n=$((n + 1))
+    [ "$(cat "$d/verifier/reward.txt" 2>/dev/null)" = 1 ] || return 1
+    [ "$(jq -r '.exception_info.exception_type // "none"' "$d/result.json" 2>/dev/null)" = none ] || return 1
+  done
+  [ "$n" = 2 ]
+}
+okresp() { jq -s -e 'length == 2 and all(.[]; (.ok_responses // 0) > 0)' "$W/$1/out/proxy-sessions.jsonl" > /dev/null 2>&1; }
+noopen() { jq -e '.openIds == []' "$W/$1/out/ledger-status-end.json" > /dev/null 2>&1 && jq -e 'type == "array" and length == 0' "$W/$1/out/close-all.json" > /dev/null 2>&1; }
+nocap() { [ ! -e "$W/$1/out/cap-stop.json" ] || capnull "$1" cap-stop.json; }
+ok "D1: vm-run.sh exits 0" rc D1 0
+ok "D1: proxy-status-end.json has cap_stop null" capnull D1 proxy-status-end.json
+ok "D1: spend agrees across sessions, proxy and ledger" agree D1
+ok "D1: both trials have reward 1 and no exception" trials D1
+ok "D1: both proxy sessions have ok_responses above 0" okresp D1
+ok "D1: no open reservation at the end (ledger openIds and close-all.json empty)" noopen D1
+ok "D1: no cap stop (cap-stop.json absent or cap_stop null)" nocap D1
+ok "D2: vm-run.sh exits 130" rc D2 130
+ok "D2: proxy-status-end.json has cap_stop set" capset D2 proxy-status-end.json
+ok "D2: cap-stop.json has cap_stop set" capset D2 cap-stop.json
+ok "D2: spend agrees across sessions, proxy and ledger" agree D2
