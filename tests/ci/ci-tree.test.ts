@@ -129,6 +129,57 @@ describe("ci-tree.ts record", () => {
     const dirty = record(dir, ["--junit", "junit.xml", "--checks", "checks.txt", "--out", out], { GITHUB_SHA: head });
     expect([dirty.status, dirty.stderr.trim(), existsSync(out)]).toEqual([1, "ci-tree: the checkout changed after checkout, so the checks did not read HEAD's tree", false]);
   });
+
+  test("refuses when git status fails, as on a corrupt index over a modified file, and writes nothing, while the clean tree before it records", () => {
+    const dir = tempRepo({ "junit.xml": JUNIT, "checks.txt": "bun run typecheck\n", "tracked.md": "one\n" });
+    const head = sh(dir, "git rev-parse HEAD").trim();
+    const outDir = mkdtempSync(join(tmpdir(), "ci-tree-out-"));
+    scratch.push(outDir);
+    const args = (name: string) => ["--junit", "junit.xml", "--checks", "checks.txt", "--out", join(outDir, name)];
+    const clean = record(dir, args("clean.json"), { GITHUB_SHA: head });
+    expect([clean.status, clean.stderr, existsSync(join(outDir, "clean.json"))]).toEqual([0, "", true]);
+    writeFileSync(join(dir, "tracked.md"), "two\n");
+    writeFileSync(join(dir, ".git", "index"), "not an index\n");
+    const corrupt = record(dir, args("corrupt.json"), { GITHUB_SHA: head });
+    expect([corrupt.status, existsSync(join(outDir, "corrupt.json"))]).toEqual([1, false]);
+    expect(corrupt.stderr).toStartWith("ci-tree: git status --porcelain --untracked-files=all exited 128: ");
+  });
+});
+
+describe("ci.yml's wiki:check step", () => {
+  const wiki = workflow.jobs.checks!.steps.find((s) => (s.run ?? "").trim().startsWith("bun run wiki:check ")) as Step & { shell?: string };
+  const run = (stdout: string, o: { status?: number; baseIsDefault?: string } = {}) => {
+    const dir = mkdtempSync(join(tmpdir(), "ci-wiki-step-"));
+    scratch.push(dir);
+    mkdirSync(join(dir, "bin"));
+    writeFileSync(join(dir, "bin", "bun"), '#!/bin/bash\n[ "$*" = "run wiki:check --base base-sha" ] || { echo "unexpected bun $*" >&2; exit 9; }\nprintf "%s\\n" "$STUB_OUT"\nexit "$STUB_STATUS"\n', { mode: 0o755 });
+    const env = { PATH: join(dir, "bin") + ":" + process.env.PATH, RUNNER_TEMP: dir, BASE: "base-sha", BASE_IS_DEFAULT: o.baseIsDefault ?? "true", GITHUB_BASE_REF: "stack-parent", STUB_OUT: stdout, STUB_STATUS: String(o.status ?? 0) };
+    const r = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", wiki.run!], { cwd: dir, encoding: "utf8", env });
+    const passed = join(dir, "checks-passed.txt");
+    return { status: r.status, entries: existsSync(passed) ? lines(readFileSync(passed, "utf8")) : [], stdout: r.stdout };
+  };
+  const CHECKED = "wiki: ok, 3 posts; immutability checked against base-sha (merge base 0123456789ab)";
+
+  test("runs under bash with pipefail, as GitHub runs a step that sets shell: bash", () => {
+    expect(wiki.shell).toBe("bash");
+  });
+
+  test("writes the carry entry when wiki:check checked immutability against the default branch, and prints wiki:check's output", () => {
+    const r = run(CHECKED);
+    expect([r.status, r.entries]).toEqual([0, ["bun run wiki:check"]]);
+    expect(r.stdout).toContain(CHECKED);
+  });
+
+  test("writes no entry when wiki:check passed without checking immutability", () => {
+    for (const note of ["immutability not checked (--base none)", "immutability not checked: the push created the branch, so there is no previous commit", "immutability not checked: no origin/HEAD, origin/main or origin/master in this clone"]) {
+      expect([note, run("wiki: ok, 3 posts; " + note).status, run("wiki: ok, 3 posts; " + note).entries]).toEqual([note, 0, []]);
+    }
+  });
+
+  test("keeps the stacked-PR rule and fails the step, writing nothing, when wiki:check fails", () => {
+    expect(run(CHECKED, { baseIsDefault: "false" })).toMatchObject({ status: 0, entries: [] });
+    expect(run("wiki: 1 problem(s), 3 posts; immutability checked against base-sha (merge base 0123456789ab)", { status: 1 })).toMatchObject({ status: 1, entries: [] });
+  });
 });
 
 describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
