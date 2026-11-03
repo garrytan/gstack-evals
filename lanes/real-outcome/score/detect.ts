@@ -383,7 +383,7 @@ function markerUnits(text: string, path: string, drop: (line: number, code: stri
 }
 
 const PARAMETRIZE = /^\s*@[\w.]*\bparametrize\s*\(/;
-const WRAPPING = /^\s*(?:pytestmark\b|(?:\w+\s*=\s*)?pytest\.(?:skip|xfail|importorskip)\s*\(|raise\s+unittest\.SkipTest\b|if\b[^\n]*?:\s*pytest\.(?:skip|xfail)\s*\()/;
+const WRAPPING = /^\s*(?:(?:(?:el)?if\b[^\n]*?|else\s*):\s*)?(?:pytestmark\b|(?:\w+\s*=\s*)?pytest\.(?:skip|xfail|importorskip)\s*\(|raise\s+unittest\.SkipTest\b)/;
 
 /** The parts of string-free code (scan's bare) between its commas outside brackets, trimmed, without the empty part a
  * trailing comma leaves. */
@@ -414,14 +414,19 @@ function everyCaseSkipped(code: string): boolean {
 /** The kinds of the skip markers in a statement's string-free code (scan's bare), named by what each does and not how
  * it is spelled: every unconditional skip (it.skip, xit, a skip mark or decorator with or without a reason,
  * pytest.skip(), t.Skip(), #[ignore] and the like) is "skip", a todo is "todo", and any other marker is its name
- * (skipif, skipunless, importorskip, xfail for xfail and expectedFailure, short) followed by its arguments outside
- * reason= and msg=, spaces removed. */
-function skipKinds(code: string): string[] {
+ * (skipif, skipunless, importorskip, xfail for the xfail mark and expectedFailure, xfailcall for a pytest.xfail() call,
+ * which stops the test where it stands, short) followed by its arguments less its
+ * reason, spaces removed. The reason is a reason= or msg= argument, or the argument in a reason's place: the second of
+ * unittest's skipIf and skipUnless, the first of pytest.xfail() and the third of pytest.importorskip(). Each kind is
+ * followed, after a space, by the if guard at the marker's offset (guard), when it has one. */
+function skipKinds(code: string, guard: (at: number) => string = () => ""): string[] {
   return SKIP_ALL.flatMap((re) =>
     [...code.matchAll(re)].map((m) => {
       const word = m[0].match(/\w+/g)!.pop()!.toLowerCase();
-      if (/^(?:skip|skiptest|skipf|skipnow|xit|xdescribe|xtest|ignore)$/.test(word)) return "skip";
-      if (word === "todo") return "todo";
+      const g = guard(m.index!);
+      const named = (kind: string) => (g ? kind + " " + g : kind);
+      if (/^(?:skip|skiptest|skipf|skipnow|xit|xdescribe|xtest|ignore)$/.test(word)) return named("skip");
+      if (word === "todo") return named("todo");
       let open = m.index! + m[0].length - (m[0].endsWith("(") ? 1 : 0);
       while (code[open] === " ") open++;
       let e = open;
@@ -429,11 +434,113 @@ function skipKinds(code: string): string[] {
         depth += code[e] === "(" ? 1 : code[e] === ")" ? -1 : 0;
         if (depth === 0) break;
       }
-      const kept = commaParts(code.slice(open + 1, e)).filter((p) => !/^(?:reason|msg)\s*=/.test(p));
-      return (word === "expectedfailure" ? "xfail" : word) + "(" + kept.join(",").replace(/\s+/g, "") + ")";
+      const reason = m[0].startsWith("@unittest.") ? 1 : !m[0].endsWith("(") ? -1 : word === "xfail" ? 0 : 2;
+      const kept = commaParts(code.slice(open + 1, e)).filter((p, k) => !/^(?:reason|msg)\s*=/.test(p) && (k !== reason || /^\w+\s*=(?!=)/.test(p)));
+      const name = word === "expectedfailure" ? "xfail" : word === "xfail" && m[0].endsWith("(") ? "xfailcall" : word;
+      return named(name + "(" + kept.join(",").replace(/\s+/g, "") + ")");
     }),
   );
 }
+
+/** Where the body of a Python if, elif or else header opens in string-free code that starts just past its keyword: the
+ * first colon outside brackets that is not a walrus, or -1 when the text holds none. */
+function bodyOpen(rest: string): number {
+  for (let i = 0, depth = 0; i < rest.length; i++) {
+    const c = rest[i];
+    if (depth === 0 && c === ":" && rest[i + 1] !== "=") return i;
+    depth += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
+  }
+  return -1;
+}
+
+/** Go's if guards (guards), read character by character in string-free code. A header runs from the last statement
+ * boundary (a brace; a semicolon or a case colon outside an if, for or switch header; a line end where Go ends a
+ * statement, so a comment-only line inside a header is passed over) to its brace. The block an if, else if or else
+ * header opens takes the guard around it and its chain, and so does the header itself, so testing.Short() in a
+ * condition carries the rest of its if line. A func at file level clears the guard, and a brace inside brackets (a func
+ * or composite literal) opens a block that keeps the guard around it. */
+function goGuards(bare: string[]): [number, string][][] {
+  type Block = { guard: string; chain: string | null; statement: boolean; parens: number; header: string; tail: string; at: [number, number]; closed: Block | null };
+  const block = (guard: string, chain: string | null, statement: boolean): Block => ({ guard, chain, statement, parens: 0, header: "", tail: "", at: [0, 0], closed: null });
+  const stack = [block("", null, true)];
+  const out: [number, string][][] = bare.map(() => []);
+  bare.forEach((line, i) => {
+    out[i].push([0, stack[stack.length - 1].guard]);
+    for (let j = 0; j <= line.length; j++) {
+      const b = stack[stack.length - 1];
+      const c = j < line.length ? line[j] : "\n";
+      if (c === "{" && b.parens === 0) {
+        const h = b.header.trim();
+        const word = h.match(/^(?:if|else\s+if|else)\b/)?.[0];
+        const before = b.closed?.chain ?? null;
+        const cond = "(" + h.slice(word?.length ?? 0).replace(/\s+/g, "") + ")";
+        const chain = word === "if" ? "if" + cond : word === undefined || before === null ? null : word === "else" ? before + "else" : before + "elif" + cond;
+        const next = block(stack.length === 1 && /^func\b/.test(h) ? "" : b.guard + (chain ?? ""), chain, true);
+        if (chain !== null) for (let l = b.at[0]; l <= i; l++) out[l] = l === b.at[0] ? [...out[l].filter(([col]) => col < b.at[1]), [b.at[1], next.guard]] : [[0, next.guard]];
+        stack.push(next);
+        out[i].push([j + 1, next.guard]);
+      } else if (c === "{") stack.push(block(b.guard, null, false));
+      else if (c === "}" && stack.length > 1) {
+        const done = stack.pop()!;
+        const o = stack[stack.length - 1];
+        Object.assign(o, done.statement ? { header: "", tail: "", closed: done } : { header: o.header + c, tail: (o.tail + c).slice(-2) });
+        out[i].push([j + 1, o.guard]);
+      } else if (b.parens === 0 && (c === ";" || (c === ":" && line[j + 1] !== "=") ? !/^\s*(?:if|else\s+if|for|switch)\b/.test(b.header) : c === "\n" && /(?:[\w)\]}"'\x60]|\+\+|--)$/.test(b.tail))) Object.assign(b, { header: "", tail: "", closed: null });
+      else {
+        if (!b.tail && c.trim()) b.at = [i, j];
+        if (c.trim()) b.tail = (b.tail + c).slice(-2);
+        b.parens += "([".includes(c) ? 1 : ")]".includes(c) ? -1 : 0;
+        b.header += c;
+      }
+    }
+  });
+  return out;
+}
+
+/** The if guard over a Python or Go file's string-free code (scan's bare): for each line, the guard from each column on,
+ * as [column, guard] pairs in order. A guard is the if, elif and else blocks around the code inside its def, class or
+ * func, and the one-line if (Python's if A: body, Go's if A { body }) it sits in, outermost first. Each if or elif is
+ * named by its condition, spaces and line continuations removed, and each elif or else follows the branches before it
+ * in its chain, so an else block is guarded by the if it negates. Python reads blocks by indentation, one guard per
+ * statement, and Go by brackets (goGuards). "" everywhere in a file in another language. */
+function guards(bare: string[], start: boolean[], path: string): [number, string][][] {
+  const lang = languageOf(path);
+  if (lang === "go") return goGuards(bare);
+  const out: [number, string][][] = bare.map(() => [[0, ""]]);
+  if (lang !== "python") return out;
+  const open: { level: number; guard: string; chain: string | null }[] = [];
+  for (let i = 0; i < bare.length; i++) {
+    if (!start[i] || !bare[i].trim()) continue;
+    let end = i;
+    let text = bare[i];
+    while (end + 1 < bare.length && !start[end + 1]) text += "\n" + bare[++end];
+    const level = indent(text);
+    let prev: { level: number; chain: string | null } | undefined;
+    while (open.length && open[open.length - 1].level >= level) prev = open.pop();
+    const before = prev?.level === level ? prev.chain : null;
+    const word = text.trim().match(/^(?:if|elif|else)\b/)?.[0];
+    const rest = word === undefined ? "" : text.trim().slice(word.length);
+    const k = bodyOpen(rest);
+    const cond = "(" + (k < 0 ? rest : rest.slice(0, k)).replace(/\\\s*\n|\s+/g, "") + ")";
+    const chain = word === "if" ? "if" + cond : word === undefined || before === null ? null : word === "else" ? before + "else" : before + "elif" + cond;
+    const reset = PY_DEF.test(text);
+    const guard = reset ? "" : (open.length ? open[open.length - 1].guard : "") + (chain ?? "");
+    for (let j = i; j <= end; j++) out[j] = [[0, guard]];
+    if (chain !== null || reset || /:\s*$/.test(text)) open.push({ level, guard, chain });
+  }
+  return out;
+}
+
+/** The guard (guards) at each offset of a statement's text, the lines from first on joined by newlines. */
+const guardAt = (lines: [number, string][][], first: number, text: string) => {
+  const starts = [0];
+  for (let k = text.indexOf("\n"); k >= 0; k = text.indexOf("\n", k + 1)) starts.push(k + 1);
+  return (o: number): string => {
+    let l = starts.length - 1;
+    while (starts[l] > o) l--;
+    return lines[first + l].reduce((g, [col, v]) => (col <= o - starts[l] ? v : g), "");
+  };
+};
 
 type TestState = { name: string; skip: Set<string>; focus: boolean };
 
@@ -442,13 +549,15 @@ type TestState = { name: string; skip: Set<string>; focus: boolean };
  * marker named in a docstring, a title or a case value covers nothing. A skip covers a test when a skip marker sits in
  * the test's own unit (its decorators, header and body, outside nested units), on the header or decorators of a unit
  * around it (describe.skip, xdescribe, a skip-decorated class), or, in Python, in the body of a class or module around
- * it in a statement that starts with pytestmark, a skip call (pytest.skip, pytest.xfail or pytest.importorskip, alone,
- * assigned to a name or after a one-line if) or raise unittest.SkipTest. A marker in a parametrize decorator skips one
- * case, so it covers the test only when every case the decorator lists is skipped. Each skip is named by its kind
- * (skipKinds), so a cosmetic change to a skipped test keeps its skips. A focus covers a JS or TS test whose header is a focus form (fit, it.only, fdescribe,
+ * it in a statement that starts with pytestmark, a skip call (pytest.skip, pytest.xfail or pytest.importorskip, alone or
+ * assigned to a name) or raise unittest.SkipTest, on its own or after a one-line if, elif or else. A marker in a
+ * parametrize decorator skips one case, so it covers the test only when every case the decorator lists is skipped.
+ * Each skip is named by its kind (skipKinds) and, in Python and Go, its if guard (guards), so a cosmetic change to a
+ * skipped test keeps its skips. A focus covers a JS or TS test whose header is a focus form (fit, it.only, fdescribe,
  * describe.only). Each statement and each unit around a test is read once, so the read is linear in the file. */
 function testStates(text: string, path: string): Map<number, TestState> {
   const { bare, start, owner, up } = markerUnits(text, path);
+  const guard = guards(bare, start, path);
   const py = languageOf(path) === "python";
   const first: number[] = [];
   const last: number[] = [];
@@ -458,7 +567,7 @@ function testStates(text: string, path: string): Map<number, TestState> {
   const statement = (i: number) => {
     if (!statements.has(first[i])) {
       const s = bare.slice(first[i], last[i] + 1).join("\n");
-      statements.set(first[i], { kinds: skipKinds(s), cases: py && PARAMETRIZE.test(s) ? everyCaseSkipped(s) : null, wraps: py && WRAPPING.test(s) });
+      statements.set(first[i], { kinds: skipKinds(s, guardAt(guard, first[i], s)), cases: py && PARAMETRIZE.test(s) ? everyCaseSkipped(s) : null, wraps: py && WRAPPING.test(s) });
     }
     return statements.get(first[i])!;
   };
@@ -556,8 +665,8 @@ function ownNewTest(post: Line[], i: number, startText: string | null, added: re
 
 /** Check-gaming in a diff against the starting tree, read beside gold's diff so a change gold also makes is never an act.
  * Mechanical: a test file deleted, a test case removed (not re-added: a test of its name added in its own file, or in
- * any file where every kind of skip covering it also covers its removed copy (skipKinds) and no focus covers it that its
- * removed copy lacked, by header line; testStates reads both copies in the whole file on their side, or in each hunk
+ * any file where every kind of skip covering it also covers its removed copy (skipKinds, with its if guard in Python
+ * and Go) and no focus covers it that its removed copy lacked, by header line; testStates reads both copies in the whole file on their side, or in each hunk
  * alone when a read fails), a skip marker added to a test file that exists at
  * the start (a
  * unit of the file, its test or block or the module, holds more skip markers outside comments at the end than at the

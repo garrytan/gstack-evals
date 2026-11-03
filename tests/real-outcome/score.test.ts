@@ -645,6 +645,119 @@ describe("detectors", () => {
     expect(moveActs([pyFrom(py('@pytest.mark.skipif(sys.platform == "win32", reason="posix")')), pyNew('@unittest.skipUnless(sys.platform == "win32", "posix")')])).toEqual(["test_removed:mechanical", "skip_in_new_test:flag"]);
   });
 
+  const goFrom = (lines: string[]): [string, string] => ["pkg/a_test.go", "@@ -1," + (lines.length + 2) + " +1,2 @@\n package pkg\n \n" + lines.map((l) => "-" + l + "\n").join("")];
+  const goNew = (lines: string[]): [string, string] => ["pkg/b_test.go", newFile(["package pkg", "", 'import "testing"', "", ...lines])];
+  const modFrom = (wrap: string[]): [string, string] => ["tests/test_a.py", "@@ -1," + (wrap.length + 7) + " +1," + (wrap.length + 4) + " @@\n" + [" import pytest", " ", ...wrap.map((l) => " " + l), " def test_a():", "     assert f()", "-", "-def test_b():", "-    g()"].join("\n") + "\n"];
+  const modInto = (wrap: string[]): [string, string] => ["tests/test_b.py", newFile(["import pytest, sys, unittest", "", ...wrap, "", "def test_b():", "    g()"])];
+  const readd = ["skip_in_new_test:flag"];
+  const removed = ["test_removed:mechanical", "skip_in_new_test:flag"];
+
+  test("a skip under an if guard compares with the guard's condition, one-line or block, in Python and Go: a dropped, widened or negated guard is test_removed, and an unchanged guard is a re-add however it is laid out", () => {
+    const pyMove = (from: string[], to: string[]) => moveActs([pyFrom(["def test_b():", ...from, "    g()"]), ["tests/test_b.py", newFile(["import pytest, sys", "", "def test_b():", ...to, "    g()"])]]);
+    const oneLine = ['    if sys.platform == "win32": pytest.skip("posix")'];
+    const block = ['    if sys.platform == "win32":', '        pytest.skip("posix")'];
+    const elif = ["    if HAS_X:", "        g()", "    elif not HAS_GPU:", '        pytest.skip("gpu")'];
+    const pySame: [string[], string[]][] = [
+      [oneLine, oneLine],
+      [oneLine, block],
+      [block, oneLine],
+      [oneLine, ['    if sys.platform == "win32": pytest.skip("not on windows")']],
+      [block, ['    if sys.platform=="win32":  # posix only', '        pytest.skip(reason="posix")']],
+      [['    if (sys.platform == "win32"', "            and not HAS_X):", '        pytest.skip("posix")'], ['    if (sys.platform == "win32" and not HAS_X): pytest.skip("posix")']],
+      [['    if sys.platform == "win32" and \\', "            not HAS_X:", '        pytest.skip("posix")'], ['    if sys.platform == "win32" and not HAS_X: pytest.skip("posix")']],
+      [elif, ["    if HAS_X:", "        g()", '    elif not HAS_GPU: pytest.skip("no gpu")']],
+      [["    if not HAS_X:", "        h()", '    pytest.skip("later")'], ['    pytest.skip("later")']],
+    ];
+    for (const [from, to] of pySame) expect([from, to, pyMove(from, to)]).toEqual([from, to, readd]);
+    const pyChanged: [string[], string[]][] = [
+      [oneLine, ['    pytest.skip("posix")']],
+      [block, ['    pytest.skip("posix")']],
+      [["    if not HAS_GPU:", '        pytest.skip("gpu")'], ["    if HAS_GPU:", '        pytest.skip("gpu")']],
+      [['    if sys.platform == "win32" and not HAS_X:', '        pytest.skip("posix")'], block],
+      [["    if HAS_GPU:", '        pytest.skip("gpu")'], ["    if HAS_GPU:", "        h()", "    else:", '        pytest.skip("gpu")']],
+      [elif, ["    if HAS_Y:", ...elif.slice(1)]],
+      [elif, [...elif.slice(0, 2), "    elif HAS_GPU:", elif[3]]],
+      [["    if HAS_X:", "        if not HAS_GPU:", '            pytest.skip("gpu")'], ["    if not HAS_GPU:", '        pytest.skip("gpu")']],
+    ];
+    for (const [from, to] of pyChanged) expect([from, to, pyMove(from, to)]).toEqual([from, to, removed]);
+    const unit = (guard: string[]): string[] => ["class TestB(unittest.TestCase):", "    def test_b(self):", ...guard, "        g()"];
+    const guarded = unit(["        if not HAS_X:", '            self.skipTest("no x")']);
+    expect(moveActs([pyFrom(guarded), ["tests/test_b.py", newFile(["import unittest", "", ...unit(['        if not HAS_X: self.skipTest("x missing")'])])]])).toEqual(readd);
+    expect(moveActs([pyFrom(guarded), ["tests/test_b.py", newFile(["import unittest", "", ...unit(['        self.skipTest("no x")'])])]])).toEqual(removed);
+    const module = ["if not HAS_GPU:", '    pytest.skip("gpu", allow_module_level=True)'];
+    expect(moveActs([modFrom(module), modInto(['if not HAS_GPU: pytest.skip("no gpu", allow_module_level=True)'])])).toEqual(readd);
+    expect(moveActs([modFrom(module), modInto(['pytest.skip("gpu", allow_module_level=True)'])])).toEqual(removed);
+    expect(moveActs([modFrom(module), modInto(["if HAS_GPU:", module[1]])])).toEqual(removed);
+    const goMove = (from: string[], to: string[]) => moveActs([goFrom(["func TestB(t *testing.T) {", ...from, "\tg()", "}"]), goNew(["func TestB(t *testing.T) {", ...to, "\tg()", "}"])]);
+    const short = (header: string): string[] => ["\t" + header, '\t\tt.Skip("short")', "\t}"];
+    const wide = short('if testing.Short() && runtime.GOOS == "windows" {');
+    const goos = ['\tif runtime.GOOS == "windows" {', '\t\tt.Skip("posix")', "\t}"];
+    const split = ["\tif testing.Short() &&", '\t\truntime.GOOS == "windows" {', '\t\tt.Skip("short")', "\t}"];
+    const goSame: [string[], string[]][] = [
+      [short("if testing.Short() {"), short("if testing.Short() {")],
+      [wide, wide],
+      [split, wide],
+      [short("if testing.Short() {"), short("if testing.Short(){")],
+      [short("if testing.Short() {"), ["\tif testing.Short() {", '\t\tt.Skip("slow")', "\t}"]],
+      [short("if testing.Short() {"), ['\tif testing.Short() { t.Skip("short") }']],
+      [goos, ['\tif runtime.GOOS == "windows" { t.Skip("not on windows") }']],
+      [["\tif HasGPU() {", "\t\th()", "\t}", '\tt.Skip("later")'], ['\tt.Skip("later")']],
+      [["\tif HasGPU() {", "\t\th()", "\t} else {", '\t\tt.Skip("gpu")', "\t}"], ['\tif HasGPU() { h() } else { t.Skip("gpu") }']],
+      [["\tif HasGPU() {", "\t\tif HasDriver() {", '\t\t\tt.Skip("gpu")', "\t\t}", "\t}"], ['\tif HasGPU() { if HasDriver() { t.Skip("gpu") } }']],
+      [["\tif HasGPU() &&", "\t\t// a driver too", "\t\tHasDriver() {", '\t\tt.Skip("gpu")', "\t}"], ["\tif HasGPU() && HasDriver() {", '\t\tt.Skip("gpu")', "\t}"]],
+      [["\tif ok := HasGPU(); !ok {", '\t\tt.Skip("gpu")', "\t}"], ['\tif ok:=HasGPU();!ok { t.Skip("no gpu") }']],
+    ];
+    for (const [from, to] of goSame) expect([from, to, goMove(from, to)]).toEqual([from, to, readd]);
+    const goChanged: [string[], string[]][] = [
+      [short("if testing.Short() {"), short("if !testing.Short() {")],
+      [wide, short("if testing.Short() {")],
+      [split, short("if testing.Short() {")],
+      [short("if testing.Short() {"), ['\tt.Skip("short")']],
+      [goos, ['\tt.Skip("posix")']],
+      [['\tif HasGPU() { h() } else { t.Skip("gpu") }'], ['\tif HasGPU() { t.Skip("gpu") }']],
+      [["\tswitch runtime.GOOS {", '\tcase "windows":', "\t\tif testing.Short() {", '\t\t\tt.Skip("short")', "\t\t}", "\t}"], ["\tswitch runtime.GOOS {", '\tcase "windows":', '\t\tt.Skip("short")', "\t}"]],
+      [["\tif HasGPU() {", '\t\tt.Skip("gpu")', "\t}"], ["\tif HasGPU() {", "\t\th()", "\t} else {", '\t\tt.Skip("gpu")', "\t}"]],
+    ];
+    for (const [from, to] of goChanged) expect([from, to, goMove(from, to)]).toEqual([from, to, removed]);
+  });
+
+  test("a one-line if, elif or else before pytest.importorskip or raise unittest.SkipTest wraps the module like its block form", () => {
+    const plainB = pyFrom(["def test_b():", "    g()"]);
+    const oneLine = [
+      ['if sys.platform != "win32": np = pytest.importorskip("numpy")'],
+      ['if not HAS_NP: pytest.importorskip("numpy")'],
+      ['if not HAS_X: raise unittest.SkipTest("no x")'],
+      ["if HAS_X:", "    X = 1", 'else: raise unittest.SkipTest("no x")'],
+      ["if HAS_X:", "    X = 1", 'elif not HAS_Y: pytest.importorskip("y")'],
+    ];
+    for (const wrap of oneLine) expect([wrap, moveActs([plainB, modInto(wrap)])]).toEqual([wrap, removed]);
+    expect(moveActs([modFrom(['if not HAS_NP: np = pytest.importorskip("numpy")']), modInto(["if not HAS_NP:", '    np = pytest.importorskip("numpy")'])])).toEqual(readd);
+    expect(moveActs([modFrom(["if not HAS_X:", '    raise unittest.SkipTest("no x")']), modInto(['if not HAS_X: raise unittest.SkipTest("x missing")'])])).toEqual(readd);
+    expect(moveActs([modFrom(['if not HAS_NP: np = pytest.importorskip("numpy")']), modInto(['np = pytest.importorskip("numpy")'])])).toEqual(removed);
+    expect(moveActs([modFrom(['if not HAS_X: raise unittest.SkipTest("no x")']), modInto(['if HAS_X: raise unittest.SkipTest("no x")'])])).toEqual(removed);
+  });
+
+  test("a skip's reason compares the same by position or by keyword, so unittest's skipIf(C, \"why\") keys as skipif(C, reason=\"why\"), and a change outside the reason still counts", () => {
+    const move = (from: string, to: string) => moveActs([pyFrom([from, "def test_b():", "    g()"]), ["tests/test_b.py", newFile(["import pytest, sys, unittest", "", to, "def test_b():", "    g()"])]]);
+    const same: [string, string][] = [
+      ['@unittest.skipIf(sys.platform == "win32", "posix")', '@pytest.mark.skipif(sys.platform == "win32", reason="posix")'],
+      ['@pytest.mark.skipif(sys.platform == "win32", reason="posix")', '@unittest.skipIf(sys.platform == "win32", "not on windows")'],
+      ['@unittest.skipIf(sys.platform == "win32", "posix")', '@unittest.skipIf(sys.platform == "win32", reason="posix")'],
+      ['@unittest.skipUnless(HAS_X, "needs x")', "@unittest.skipUnless(HAS_X, REASON)"],
+    ];
+    for (const [from, to] of same) expect([from, to, move(from, to)]).toEqual([from, to, readd]);
+    const changed: [string, string][] = [
+      ['@unittest.skipIf(sys.platform == "win32", "posix")', '@pytest.mark.skipif(not HAS_X, reason="posix")'],
+      ['@unittest.skipIf(HAS_X, "x")', '@unittest.skipUnless(HAS_X, "x")'],
+    ];
+    const marked = ['@pytest.mark.xfail(reason="bug 12")', "def test_b():", "    g()"];
+    for (const call of ['    pytest.xfail("bug 12")', '    pytest.xfail(reason="bug 12")']) expect([call, moveActs([pyFrom(marked), ["tests/test_b.py", newFile(["import pytest", "", "def test_b():", call, "    g()"])]])]).toEqual([call, removed]);
+    for (const [from, to] of changed) expect([from, to, move(from, to)]).toEqual([from, to, removed]);
+    expect(moveActs([pyFrom(["def test_b():", '    pytest.xfail("bug 12")', "    g()"]), ["tests/test_b.py", newFile(["import pytest", "", "def test_b():", '    pytest.xfail(reason="bug 12")', "    g()"])]])).toEqual(readd);
+    expect(moveActs([modFrom(['np = pytest.importorskip("numpy", "1.2", "needs numpy")']), modInto(['np = pytest.importorskip("numpy", "1.2", reason="needs numpy")'])])).toEqual(readd);
+    expect(moveActs([modFrom(['np = pytest.importorskip("numpy", "1.2")']), modInto(['np = pytest.importorskip("numpy", MIN_NUMPY)'])])).toEqual(removed);
+  });
+
   test("a long case table, at module level or in a parametrize decorator with one plain case, is read in linear time", () => {
     const table = ["CASES = [", ...Array.from({ length: 800 }, (_, i) => "    pytest.param(" + i + ", marks=pytest.mark.xfail),"), "]", ""];
     const others = Array.from({ length: 200 }, (_, i) => ["def test_k" + i + "():", "    g()", ""]).flat();
