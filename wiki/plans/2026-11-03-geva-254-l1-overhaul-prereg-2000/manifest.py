@@ -43,7 +43,7 @@ for p in ("before", "after"):
     rp = f"{G}/lib/skill-route.ts"
     if os.path.exists(rp):
         m = re.search(r"ROUTE_THRESHOLD = ([0-9.]+)", open(rp).read()); rt = m.group(1) if m else None
-    out[p] = {"sha": head, "version": ver, "setup": "./setup --host claude --loadout lite (clean HOME, non-interactive, GSTACK_SKIP_PLAYWRIGHT=1 GSTACK_SKIP_FONTS=1), exit 0",
+    out[p] = {"sha": head, "version": ver, "setup": "./setup --host claude --loadout lite (clean HOME, non-interactive, GSTACK_SKIP_PLAYWRIGHT=1 GSTACK_SKIP_FONTS=1), exit " + open(f"{W}/setup-{p}.exit").read().strip(),
               "hooks": hooks, "config": cfg, "skills_dir_entries": len(skills), "skills": skills,
               "lite": {"spec": lock["spec"], "spec_sha256": lock["spec_sha256"], "files": len(lock["files"]), "excluded": lock.get("excluded"),
                        "setup_render_matches_lock_bytes": f"{raw_match} of {len(lock['files'])}",
