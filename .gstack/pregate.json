@@ -51,7 +51,8 @@
     ],
     ".gstack/pregate.json": [
       "tests/wiki.test.ts",
-      "tests/sealed.test.ts"
+      "tests/sealed.test.ts",
+      "tests/ci/ci-tree.test.ts"
     ],
     ".gstack/sealed-allow.tsv": [
       "tests/sealed.test.ts"
@@ -59,7 +60,9 @@
     "wiki/**": [
       "tests/wiki.test.ts"
     ],
-    ".github/workflows/**": [],
+    ".github/workflows/**": [
+      "tests/ci/ci-tree.test.ts"
+    ],
     "package.json": [],
     "bun.lock": [],
     "tsconfig.json": [],
@@ -145,6 +148,46 @@
       "spikes",
       "docker"
     ]
+  },
+  "run_profiles": {
+    "ci-carry/checks": {
+      "workflow": "ci.yml",
+      "events": [
+        "pull_request",
+        "workflow_dispatch"
+      ],
+      "jobs": [
+        "checks"
+      ],
+      "artifact": "tested-tree",
+      "os": "Linux"
+    }
+  },
+  "ship_lanes_from": {
+    "bun test": {
+      "profiles": [
+        "ci-carry/checks"
+      ],
+      "inventory": "bun --no-env-file --config=/dev/null scripts/ci-tree.ts list"
+    },
+    "bun run typecheck": {
+      "profiles": [
+        "ci-carry/checks"
+      ],
+      "inventory": "echo 'check:bun run typecheck'"
+    },
+    "bun run errors:check": {
+      "profiles": [
+        "ci-carry/checks"
+      ],
+      "inventory": "echo 'check:bun run errors:check'"
+    },
+    "bun run wiki:check": {
+      "profiles": [
+        "ci-carry/checks"
+      ],
+      "inventory": "echo 'check:bun run wiki:check'"
+    }
   },
   "sealed": {
     "paths": [
