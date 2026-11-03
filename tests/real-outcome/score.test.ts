@@ -777,6 +777,7 @@ describe("detectors", () => {
       [few, ['\tif xs := []string{"a", "b"}; len(xs) > 5 { t.Skip("x") }']],
       [fn, ["\tif fn := func() bool {", "\t\treturn HasGPU()", "\t}; !fn() {", '\t\tt.Skip("x")', "\t}"]],
       [anon, ['\tif v := struct{ ok bool }{HasGPU()}; !v.ok { t.Skip("x") }']],
+      [goIf("if fn := func() bool { ok := HasGPU(); return ok }; !fn() {"), ["\tif fn := func() bool {", "\t\tok := HasGPU()", "\t\treturn ok", "\t}; !fn() {", '\t\tt.Skip("x")', "\t}"]],
     ];
     for (const [from, to] of goSame) expect([from, to, goMove(from, to)]).toEqual([from, to, readd]);
     const goChanged: [string[], string[]][] = [
@@ -788,6 +789,7 @@ describe("detectors", () => {
       [few, ['\tt.Skip("x")']],
       [fn, goIf("if fn := func() bool { return HasGPU() }; fn() {")],
       [anon, goIf("if v := struct{ ok bool }{HasGPU()}; v.ok {")],
+      [goIf("if fn := func() bool { ok := HasGPU(); return ok }; !fn() {"), goIf("if fn := func() bool { ok := HasGPU(); return !ok }; !fn() {")],
     ];
     for (const [from, to] of goChanged) expect([from, to, goMove(from, to)]).toEqual([from, to, removed]);
   });
