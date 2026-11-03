@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Stub docker: every pull succeeds, and image inspect prints the pinned image's repo digest.
+img=${*: -1}
+case "$1 $2" in
+  "pull -q") echo "sha256:0" ;;
+  "image inspect") echo "${img%@*}@sha256:${img##*sha256:}" ;;
+  *) exit 2 ;;
+esac

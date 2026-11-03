@@ -30,10 +30,12 @@
 // R3 amendment 4's items run with --item r3a4-opus or --item r3a4-sol instead of --model (R3A4 below): prepare also needs
 // SWEREBENCH (the Hub package export), DROPS (the oracle preflight's drop list) and DROPS_SHA256 (its sha256 from the run
 // record), and run and analyze check the plan's draw against DROPS again. run stops after screen-a when the projection
-// check passes the item's cap, and analyze then reports screen-b as not launched (incomplete).
+// check passes the item's cap, and analyze then reports screen-b as not launched (incomplete). Once the Captain records a cap
+// raise in approvals/ and the run thread appends it to the item's ledger with Ledger.raise, resume <work dir> --item <item>
+// relaunches screen-b and the pilot on the same item, bound run and work dir; with no raise it refuses.
 // Exit codes, as r3-dry.ts: 0 admission passed (R3b waits for Garry's caps), 4 incomplete, 5 saturation, 6 pilot
 // FIX-METHOD; 2 usage, 1 any other error.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { readSessionRows, rng } from "../analysis/analyze.ts";
@@ -231,6 +233,7 @@ export function itemCheck(ledgerPath: string, m: R3aModel) {
   const approval = rows.find((r) => r.kind === "approval");
   if (!approval || approval.item !== m.item) throw new Error(`${ledgerPath}: no approval row for item ${m.item}`);
   if (approval.usd_micros !== m.capUsd * 1_000_000) throw new Error(`${ledgerPath}: ${m.item}'s cap is $${fromMicros(approval.usd_micros)}, not ${m.capFrom} $${m.capUsd}`);
+  if (rows.filter((r) => r.kind === "approval").length > 1) throw new Error(`${ledgerPath}: ${m.item} holds a cap raise before its run; a raise only resumes screen-b after a projection stop (plan section 5)`);
   const route = m.routePrefix;
   const used = rows.filter((r) => (r.kind === "reserve" || r.kind === "settle") && !(route !== null && r.id.startsWith(route)));
   if (used.length) throw new Error(`${ledgerPath}: ${m.item} already holds ${used.length} reserve or settle rows; an item serves one run (prereg section 5)`);
@@ -368,20 +371,26 @@ function prepare(work: string, m: R3aModel) {
   console.log(`prepared ${work}: screen (${screenIds().length} tasks, none) and pilot (${pilot.join(", ")}, told /investigate), item ${m.item} unbound`);
 }
 
+// run's and resume's checks of the VM, runner and ledger port settings, before anything launches.
+function launchEnv(m: R3aModel, state = `${state}`) {
+  const rate = process.env.VM_USD_PER_HOUR ?? "", hours = process.env.VM_RESERVE_HOURS ?? "4";
+  if (!rate) throw new Error(`E_USAGE set VM_USD_PER_HOUR so the VM hours settle to ${m.item}`);
+  vmBlock(rate, hours, m.capUsd);
+  const runner = process.env.UBI_RUNNER ?? "";
+  if (!Bun.which(runner)) throw new Error(`E_USAGE ${runner ? `UBI_RUNNER ${JSON.stringify(runner)} is not an executable file or a command on PATH` : "UBI_RUNNER is unset or blank"}; set it to the ubi-runner.sh copy launch.sh starts the VMs with; ${state}`);
+  if (!/[A-Za-z0-9]/.test(process.env.UBI_OWNER ?? "")) throw new Error(`E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; ${state}`);
+  if (!process.env.UBICLOUD_API_KEY && !process.env.UBICLOUD_API_TOKEN) throw new Error(`E_USAGE set UBICLOUD_API_KEY; ubi-runner.sh starts no VM without it (UBICLOUD_API_TOKEN also works); ${state}`);
+  const ttl = process.env.UBI_TTL_HOURS || "3";
+  if (!/^[1-9][0-9]{0,2}$/.test(ttl)) throw new Error(`E_USAGE UBI_TTL_HOURS ${JSON.stringify(ttl)} is not a whole number of hours from 1 to 999 with no leading zero, which ubi-runner.sh requires; ${state}`);
+  return { rate, hours };
+}
+
 function run(work: string, m: R3aModel) {
   const ledger = process.env.LEDGER ?? "";
   const bound = ledger + ".bound";
   const boundTo = () => `${m.item} is already bound to a run (${readFileSync(bound, "utf8").trim()}); an item serves one run (prereg section 5)`;
   if (existsSync(bound)) throw new Error(boundTo());
-  const rate = process.env.VM_USD_PER_HOUR ?? "", hours = process.env.VM_RESERVE_HOURS ?? "4";
-  if (!rate) throw new Error(`E_USAGE set VM_USD_PER_HOUR so the VM hours settle to ${m.item}`);
-  vmBlock(rate, hours, m.capUsd);
-  const runner = process.env.UBI_RUNNER ?? "";
-  if (!Bun.which(runner)) throw new Error(`E_USAGE ${runner ? `UBI_RUNNER ${JSON.stringify(runner)} is not an executable file or a command on PATH` : "UBI_RUNNER is unset or blank"}; set it to the ubi-runner.sh copy launch.sh starts the VMs with; ${m.item} is still unbound`);
-  if (!/[A-Za-z0-9]/.test(process.env.UBI_OWNER ?? "")) throw new Error(`E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; ${m.item} is still unbound`);
-  if (!process.env.UBICLOUD_API_KEY && !process.env.UBICLOUD_API_TOKEN) throw new Error(`E_USAGE set UBICLOUD_API_KEY; ubi-runner.sh starts no VM without it (UBICLOUD_API_TOKEN also works); ${m.item} is still unbound`);
-  const ttl = process.env.UBI_TTL_HOURS || "3";
-  if (!/^[1-9][0-9]{0,2}$/.test(ttl)) throw new Error(`E_USAGE UBI_TTL_HOURS ${JSON.stringify(ttl)} is not a whole number of hours from 1 to 999 with no leading zero, which ubi-runner.sh requires; ${m.item} is still unbound`);
+  const { rate, hours } = launchEnv(m);
   if (!existsSync(join(work, "plan.json"))) throw new Error(`E_USAGE ${work} has no plan.json; run prepare first`);
   routePassed(ledger, m);
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
@@ -399,10 +408,17 @@ function run(work: string, m: R3aModel) {
     throw new Error(boundTo());
   }
   bindCheck(ledger, m, configs);
+  launchParts(work, m, planned, 0, m.capUsd, { ledger, lport, rate, hours, busy });
+}
+
+// Launches the parts from index from on, in order, with capUsd as each batch's cap.
+function launchParts(work: string, m: R3aModel, planned: Record<string, string[]>, from: number, capUsd: number, o: { ledger: string; lport: string; rate: string; hours: string; busy: string }) {
+  const { ledger, lport, rate, hours, busy } = o;
   for (const [i, part] of m.parts.entries()) {
+    if (i < from) continue;
     const dir = join(work, part.name);
     if (portTaken("127.0.0.1", lport)) { console.log(`${part.name}: ${busy}; the run stops here`); return; }
-    const rc = sh(["bash", join(LANEB, "runner/launch.sh"), dir, part.prefix, String(m.capUsd)], { ...process.env, LEDGER: ledger, LEDGER_PORT: lport, ITEM: m.item, VM_RESERVE_HOURS: hours });
+    const rc = sh(["bash", join(LANEB, "runner/launch.sh"), dir, part.prefix, String(capUsd)], { ...process.env, LEDGER: ledger, LEDGER_PORT: lport, ITEM: m.item, VM_RESERVE_HOURS: hours });
     writeFileSync(join(work, `${part.name}.launch-exit`), `${rc}\n`);
     if (rc !== 0 || existsSync(join(dir, "pulled/out/cap-stop.json")) || existsSync(join(dir, "vm-cap-stop"))) { console.log(`${part.name}: launch exited ${rc}; the run stops here`); return; }
     if (i === m.parts.length - 1) return;
@@ -415,6 +431,39 @@ function run(work: string, m: R3aModel) {
       if (p.over) { writeFileSync(join(work, "screen-b.projection-stop"), p.line + "\n"); return; }
     }
   }
+}
+
+// R3 amendment 4 (plan section 5, F1): after run stopped at the projection check, a cap raise recorded on the item's
+// ledger (Ledger.raise, from the Captain's approval in approvals/) resumes screen-b and then the pilot on the same item
+// and work dir, with the raised cap as each batch's cap. It launches nothing when the item is not bound to this work dir,
+// screen-b has no projection stop (so it resumes once), no raise is recorded, or the projection still passes the raise.
+function resume(work: string, m: R3aModel) {
+  if (!m.a4) throw new Error(`E_USAGE resume is for R3 amendment 4's items (--item ${Object.keys(R3A4).join("|")})`);
+  const ledger = process.env.LEDGER ?? "";
+  const bound = ledger + ".bound", stop = join(work, "screen-b.projection-stop");
+  if (!existsSync(bound)) throw new Error(`${m.item} is not bound to a run; resume follows run's projection stop`);
+  const boundWork = String(JSON.parse(readFileSync(bound, "utf8")).work);
+  if (resolve(boundWork) !== work) throw new Error(`${m.item} is bound to the run in ${boundWork}, not ${work}; nothing was launched`);
+  if (!existsSync(stop)) throw new Error(`${work} has no screen-b.projection-stop; resume follows only a projection stop, and only once`);
+  const { rate, hours } = launchEnv(m, `${m.item} stays stopped before screen-b`);
+  const rows = readRows(ledger), approvals = rows.filter((r) => r.kind === "approval"), raise = approvals.at(-1);
+  if (approvals[0]?.item !== m.item || approvals[0]?.usd_micros !== m.capUsd * 1_000_000) throw new Error(`${ledger}: the first approval row is not ${m.item}'s at ${m.capFrom} $${m.capUsd}`);
+  if (approvals.length < 2 || raise?.item !== m.item) throw new Error(`no cap raise is recorded on ${ledger} for ${m.item}; screen-b stays stopped (plan section 5)`);
+  const capUsd = fromMicros(raise.usd_micros);
+  const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+  if (plan.item !== m.item) throw new Error(`E_USAGE ${work}/plan.json is item ${plan.item}'s, not ${m.item}; nothing was launched`);
+  const planned = a4Planned(work, plan);
+  const a = loadPart(work, m.parts[0]!, planned["screen-a"]!, m);
+  if (a.stop) throw new Error(`screen-a is incomplete (${a.stop}); nothing resumes`);
+  const p = projectionCheck(rows, a.trials, { ...m, capUsd }, vmBlock(rate, hours, capUsd));
+  console.log(p.line);
+  if (p.over) throw new Error(`the projection of $${p.record.projection_usd.toFixed(2)} still passes ${m.item}'s raised $${capUsd} cap; screen-b stays stopped`);
+  const lport = process.env.LEDGER_PORT ?? m.ledgerPort;
+  const busy = `something already answers on 127.0.0.1:${lport} (another run's ledger service?)`;
+  if (portTaken("127.0.0.1", lport)) throw new Error(`E_USAGE ${busy}; set LEDGER_PORT to a free port; screen-b stays stopped`);
+  writeFileSync(join(work, "cap-raise.json"), JSON.stringify({ raise, projection: { ...p.record, line: p.line } }, null, 2) + "\n");
+  renameSync(stop, stop + ".raised");
+  launchParts(work, m, planned, 1, capUsd, { ledger, lport, rate, hours, busy });
 }
 
 const PROXY_FILES = ["cap-stop.json", "proxy-status-end.json", "proxy-sessions.jsonl"];
@@ -492,7 +541,8 @@ function analyze(work: string, m: R3aModel): number {
     const rows = existsSync(f) ? readFileSync(f, "utf8").split("\n").slice(1).filter(Boolean).map((l) => l.split("\t")) : null;
     return [part.name, rows && { images: rows.length, failed: rows.filter((r) => r[0] !== "ok").map((r) => r[3]), rate_limit_wait_s: rows.reduce((s, r) => s + Number(r[2]), 0) }];
   }));
-  const base = { item: m.item, ...route, pulls, ...(m.a4 ? { allowance_stops: allowanceStops(parts) } : {}), ledger: { cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserves: t.openIds, vm_settles: vm } };
+  const raised = join(work, "cap-raise.json");
+  const base = { item: m.item, ...route, pulls, ...(m.a4 ? { allowance_stops: allowanceStops(parts) } : {}), ...(existsSync(raised) ? { cap_raise: JSON.parse(readFileSync(raised, "utf8")) } : {}), ledger: { cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserves: t.openIds, vm_settles: vm } };
   console.log(ledgerLine);
   const stop = parts.map((p) => p.stop).find(Boolean);
   if (stop) {
@@ -513,8 +563,8 @@ if (import.meta.main) {
   const [cmd, workArg, ...rest] = Bun.argv.slice(2);
   const modelId = rest.length === 0 ? OPUS : rest.length === 2 && rest[0] === "--model" ? rest[1]! : "";
   const m = rest.length === 2 && rest[0] === "--item" ? R3A4[rest[1]!] : R3A[modelId];
-  if (!workArg || !["all", "prepare", "run", "analyze"].includes(cmd ?? "") || !m) {
-    console.error(`E_USAGE usage: bun quick/laneb/r3/screen.ts all|prepare|run|analyze <work dir> [--model ${Object.keys(R3A).join("|")} | --item ${Object.keys(R3A4).join("|")}]`);
+  if (!workArg || !["all", "prepare", "run", "resume", "analyze"].includes(cmd ?? "") || !m) {
+    console.error(`E_USAGE usage: bun quick/laneb/r3/screen.ts all|prepare|run|resume|analyze <work dir> [--model ${Object.keys(R3A).join("|")} | --item ${Object.keys(R3A4).join("|")}]`);
     process.exit(2);
   }
   if (!process.env.LEDGER) { console.error(`E_USAGE set LEDGER to ${m.item}'s jsonl ledger`); process.exit(2); }
@@ -522,6 +572,7 @@ if (import.meta.main) {
   try {
     if (cmd === "prepare" || cmd === "all") prepare(work, m);
     if (cmd === "run" || cmd === "all") run(work, m);
+    if (cmd === "resume") resume(work, m);
     if (cmd === "analyze" || cmd === "all") process.exit(analyze(work, m));
   } catch (e) {
     const msg = String((e as Error).message ?? e);

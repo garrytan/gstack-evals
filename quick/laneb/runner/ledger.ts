@@ -25,8 +25,9 @@ export function readRows(path: string): Row[] {
     .map((l) => JSON.parse(l) as Row);
 }
 
+// The cap is the newest approval row's: the first approval, or the latest raise (Ledger.raise) after it.
 export function totals(rows: Row[]): Totals {
-  const approval = rows.find((r) => r.kind === "approval");
+  const approval = rows.findLast((r) => r.kind === "approval");
   if (!approval) throw new Error("ledger has no approval row");
   const reserved = new Map<string, number>();
   const settled = new Map<string, number>();
@@ -63,6 +64,15 @@ export class Ledger {
   approve(capUsd: number, extra: Record<string, unknown>) {
     if (readRows(this.path).some((r) => r.kind === "approval")) throw new Error("approval row already present");
     appendDurable(this.path, { ...extra, ts: new Date().toISOString(), item: this.item, kind: "approval", id: "approval", usd_micros: toMicros(capUsd) });
+  }
+
+  // A cap raise the owner approved after the first approval: one more approval row, above the current cap.
+  raise(capUsd: number, extra: Record<string, unknown>) {
+    const rows = readRows(this.path), approvals = rows.filter((r) => r.kind === "approval");
+    if (!approvals.length) throw new Error("ledger has no approval row to raise");
+    const from = totals(rows).capMicros;
+    if (toMicros(capUsd) <= from) throw new Error(`a raise to $${capUsd} is not above the current cap of $${fromMicros(from)}`);
+    appendDurable(this.path, { ...extra, ts: new Date().toISOString(), item: this.item, kind: "approval", id: `raise-${approvals.length}`, usd_micros: toMicros(capUsd), raised_from_micros: from });
   }
 
   reserve(id: string, usdMicros: number, meta: Record<string, unknown> = {}): { ok: true; existing: boolean } | { ok: false; reason: string; totals: Totals } {

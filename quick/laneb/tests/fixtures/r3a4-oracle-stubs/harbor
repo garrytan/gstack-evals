@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Stub harbor: "harbor run -y -c <oracle.json>" writes one oracle trial per task, reward 0 for the tasks in STUB_FAIL and
+# 1 for the rest. The job's result.json is left out on the call STUB_UNFINISHED names (1 is pass 1, 2 is pass 2), as
+# when Harbor dies mid-job.
+cfg=$4
+job=$(jq -r .job_name "$cfg")
+n=$(( $(cat "$HOME/harbor-calls" 2>/dev/null || echo 0) + 1 )); echo $n > "$HOME/harbor-calls"
+for t in $(jq -r '.tasks[].path | split("/") | last' "$cfg"); do
+  d=jobs/$job/${t}__a1; mkdir -p "$d/verifier"
+  jq -n --arg p "work/run/tasks/$t" '{task: {path: $p}}' > "$d/config.json"
+  case ",${STUB_FAIL:-}," in *",$t,"*) echo 0 ;; *) echo 1 ;; esac > "$d/verifier/reward.txt"
+  echo '{"exception_info": null}' > "$d/result.json"
+done
+[ "${STUB_UNFINISHED:-}" = "$n" ] || echo '{}' > "jobs/$job/result.json"
