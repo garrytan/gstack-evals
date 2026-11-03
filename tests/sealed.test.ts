@@ -134,6 +134,13 @@ describe("sealed publication rules", () => {
     }
   });
 
+  test("every text rule fits gstack's 256-character pattern limit, so the policy stays readable", () => {
+    for (const rule of [...sealed.answer_markers, ...sealed.seed_patterns]) {
+      expect(rule.length).toBeGreaterThanOrEqual(1);
+      expect(rule.length).toBeLessThanOrEqual(256);
+    }
+  });
+
   test("no text rule matches a line of the config itself, so the config never refuses its own commit", () => {
     const rules = [...sealed.answer_markers, ...sealed.seed_patterns].map((r) => new RegExp(r));
     for (const line of configText.split("\n")) for (const re of rules) expect(re.test(line)).toBe(false);
