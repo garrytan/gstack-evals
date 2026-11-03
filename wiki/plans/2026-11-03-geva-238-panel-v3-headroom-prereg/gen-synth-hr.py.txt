@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+# gen-synth-hr.py <out dir> <seed>: a synthetic headroom slice in the sealed layout (manifest.json, units/<ID>/): 8 units,
+# 2 per stratum, on 4 synthetic bases (two service bases host eng and dx, two application bases host ceo and design). Each
+# unit tree holds 300 to 480 KiB in 150 to 600 files across at least 12 folders. Every candidate carries a two-hop trace in
+# its manifest row whose last file holds a planted line, so its blob differs from the upstream blob the row records. Each
+# stratum has one context anchor and one src anchor. One eng candidate is excluded in the manifest, and one ceo unit is
+# flagged. Every word is invented neutral filler. GEVA-238.
+import hashlib, json, os, random, sys
+out, seed = os.path.abspath(sys.argv[1]), int(sys.argv[2])
+rng = random.Random(seed)
+KIT = "4ed951fb525d16bcc8456f1fb6132ec0b3c0cb43a938f7d9214aba37113ef6e6"
+KINDS = {"ceo": [("C-Q", ("H2", "QT")), ("C-U2", ("H2", "QT")), ("C-OM", ("OM", "H2"))],
+         "eng": [("E-CD", ("CD", "H2")), ("E-OM", ("OM", "QT")), ("E-Q", ("QT", "H2"))],
+         "dx": [("X-OM", ("OM", "H2")), ("X-CD", ("CD", "QT")), ("X-Q", ("QT", "H2"))],
+         "design": [("G-OM", ("OM", "QT")), ("G-A11Y", ("H2", "QT")), ("G-X", ("H2", "QT"))]}
+FIELD = {"H2": "intermediate", "QT": "computation", "OM": "absent_step", "CD": "code_fact"}
+SHAPES = ["A-X", "A-F", "A-T"]
+WORDS = ["The north office restocked the paper trays on Tuesday and logged the delivery in the shared sheet.",
+         "Lunch orders for the Thursday session go to the front desk by ten in the morning.",
+         "The parking garage on the east side closes for repainting during the second week of the month.",
+         "Badge photos are retaken every two years, and the old badges are shredded at the front desk.",
+         "The shared calendar lists every recurring meeting with its room and its usual attendees.",
+         "Desk moves are scheduled after hours so that nobody loses a working day to the move."]
+HEADS = ["Summary", "Context", "Goals", "Approach", "Sequence", "Staffing", "Timeline", "Budget", "Milestones",
+         "Dependencies", "Measurement", "Rollout", "Support", "Communication", "Scope", "Operations"]
+BASES = [("synthetic/service-a", "eng", "dx"), ("synthetic/service-b", "eng", "dx"), ("synthetic/app-c", "ceo", "design"), ("synthetic/app-d", "ceo", "design")]
+def para(n):
+    s = ""
+    while len(s) < n: s += rng.choice(WORDS) + " "
+    return s.strip() + "\n"
+def write(p, t):
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w") as fh: fh.write(t)
+def blob(t):
+    b = t.encode()
+    return hashlib.sha1(b"blob %d\0" % len(b) + b).hexdigest()
+def module(p, m):
+    body = "# Copyright (c) 2024 Synthetic Upstream Authors\n# SPDX-License-Identifier: MIT\n\n"
+    for f in range(6):
+        body += "def handler_%d_%d(event):\n    total = 0\n" % (m, f) + "    total += len(event)\n" * 9 + "    return total\n\n"
+    return body
+ids = []
+while len(ids) < 8:
+    i = "%08x" % rng.getrandbits(32)
+    if i not in ids: ids.append(i)
+layout = [(repo, st, b) for b, (repo, s1, s2) in enumerate(BASES) for st in (s1, s2)]
+seen, rows = {}, []
+for n, (uid, (repo, st, b)) in enumerate(zip(ids, layout)):
+    d = os.path.join(out, "units", uid)
+    atype = "context" if st not in seen else "src"
+    seen[st] = True
+    heads = rng.sample(HEADS, 8)
+    for c in range(8):
+        ext = [".md", ".txt", ".csv"][c % 3]
+        body = ("# Working note %d\n\n" % c + para(2700)) if ext != ".csv" else "week,office,count\n" + "".join("%d,north,%d\n" % (w, rng.randint(10, 99)) for w in range(1, 300))
+        write(os.path.join(d, "context", "doc%d%s" % (c, ext)), body)
+    upstream = {}
+    for p in range(12):
+        for m in range(16):
+            rel = "src/pkg%02d/mod%02d.py" % (p, m)
+            upstream[rel] = module(p, m)
+            write(os.path.join(d, rel), upstream[rel])
+    plan = "# Plan for the next quarter\n\n"
+    for k, h in enumerate(heads):
+        extra = "The work changes the modules src/pkg00/ and src/pkg01/, starting from src/pkg00/mod00.py and src/pkg02/mod00.py.\n\n" if k == 0 else ""
+        plan += "## %s\n\n%s%s\n" % (h, extra, para(1000))
+    write(os.path.join(d, "plan.md"), plan)
+    items, traces, anchor_type = [], {}, {}
+    for k, (kind, levers) in enumerate(KINDS[st] + [(SHAPES[n % 3], ())], 1):
+        iid = "%s-%d" % (uid, k)
+        ev = [{"path": "context/doc1.txt", "what": "A synthetic row."}, {"path": "src/pkg00/mod00.py", "what": "A synthetic entry."}]
+        it = {"id": iid, "item_kind": kind, "role": "anchor" if not levers else "candidate", "levers": list(levers), "plan_section": heads[k - 1],
+              "cause": "Synthetic cause for a %s item." % kind, "evidence": ev, "deserved_severity": "High", "fix": "Synthetic fix."}
+        for lv in levers: it[FIELD[lv]] = "Synthetic %s for a %s item." % (FIELD[lv].replace("_", " "), kind)
+        if kind in ("C-Q", "C-U2"): it.update(decision="Synthetic decision.", should_become="Synthetic replacement decision.")
+        if kind == "A-X": it["other_places"] = [heads[4]]
+        items.append(it)
+        if levers:
+            hop1, hop2 = "src/pkg%02d/mod%02d.py" % (k + 2, 3), "src/pkg%02d/mod%02d.py" % (k + 5, 7)
+            text = upstream[hop2].replace("    return total\n", "    total -= 1\n    return total\n", 1)
+            write(os.path.join(d, hop2), text)
+            line = text.split("\n").index("    total -= 1") + 1
+            traces[iid] = {"hops": [{"file": "src/pkg00/mod00.py", "symbol": "handler_0_0", "origin": True}, {"file": hop1, "symbol": "handler_%d_0" % 3}, {"file": hop2, "symbol": "handler_%d_0" % 7}],
+                           "terminal": {"file": hop2, "line": line, "upstream_blob": blob(upstream[hop2])}}
+        else:
+            anchor_type[iid] = atype
+    key = {"unit": uid, "wave": "calibration", "stratum": st, "kind": "calibration", "mode": "added" if n % 2 == 0 else "fix", "anchor_shape": SHAPES[n % 3], "items": items,
+           "minors": [{"plan_section": heads[5], "issue": "A vague owner.", "deserved_severity": "Medium"}, {"plan_section": heads[6], "issue": "A metric without a baseline.", "deserved_severity": "Low"}]}
+    write(os.path.join(d, "key.json"), json.dumps(key, indent=1) + "\n")
+    rows.append({"unit": uid, "stratum": st, "author": "A%d" % b, "auditor": "S%d" % b, "mode": key["mode"], "anchor_shape": key["anchor_shape"],
+                 "items": {it["id"]: [it["item_kind"], it["role"]] for it in items}, "audit_files": ["audit/S%d/%s.json" % (b, uid)], "audit_rounds": 1,
+                 "fix_rounds_used": 0, "verdict": "PASS", "failing_items": [], "failing_unit_codes": ["synthetic-flag"] if n == 4 else [],
+                 "excluded_items": [items[1]["id"]] if n == 2 else [], "kept": True, "state": "final",
+                 "base": {"repo": repo, "commit": hashlib.sha1(repo.encode()).hexdigest(), "license": "MIT"}, "anchor_type": anchor_type, "traces": traces})
+man = {"kit_digest": KIT, "seal_kind": "final", "wave": "calibration", "recipient": "synthetic-recipient", "units": rows}
+write(os.path.join(out, "manifest.json"), json.dumps(man, indent=1) + "\n")
+print("synthetic headroom slice: 8 units, 32 items, 1 excluded candidate, 1 flagged unit")
