@@ -244,8 +244,9 @@ E_ROUTE_INFRA (exit 2). It never passes a part and uses no try. That covers a pr
 call with no outcome line, an unknown outcome such as a broken stream, a 5xx with no usage, a session with no billed
 call, and a bill lookup that still fails at the deadline. A session that fails its part after model output is infra too
 when its last call got one of those statuses, a 5xx, no answer or a proxy refusal; one that passes still passes. A
-provider's other 4xx on a session's own call fails the part that session serves. The second infra outcome ends the check INCONCLUSIVE (E_ROUTE_INCONCLUSIVE, exit 2),
-which blocks the route from E1, unless a part failed both tries.
+provider's other 4xx on a session's own call fails the part that session serves, except that a part failing after model
+output is judged on its session's last call alone. The second infra outcome ends the check INCONCLUSIVE
+(E_ROUTE_INCONCLUSIVE, exit 2), which blocks the route from E1, unless a part failed both tries.
 
 The check's cap is four sessions at the model's full allowance, and each try leases its own worst case on the item. A cap
 stop, from that budget, the ledger or the proxy, leaves the check incomplete (CAP_STOP, exit 2). On E_ROUTE_METERING the

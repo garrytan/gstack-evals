@@ -27,10 +27,12 @@
 //   attempt included); and a session with no billed call, with no bill lookup when the journal alone shows infra. The
 //   proxy's charge stays in the ledger and the try's record as it was settled. After MAX_INFRA infra outcomes the check
 //   ends INCONCLUSIVE (E_ROUTE_INCONCLUSIVE, exit 2), which blocks the route from E1, unless a part failed both tries. A
-//   session that would be infra after the provider answered one of its own calls with a 4xx outside INFRA_STATUSES (401
-//   and 403, the key; 402, our credits; 408, a timeout; 429, a rate limit) is the route's answer instead: the part that
-//   session serves (tool or block) fails with the status and the response body, and the try counts. 5xx answers,
-//   network errors, INFRA_STATUSES and the proxy's own refusals stay infra.
+//   session that ended missing, with rejected credentials, as an infra incident or before any model output after the
+//   provider answered one of its own calls with a 4xx outside INFRA_STATUSES (401 and 403, the key; 402, our credits;
+//   408, a timeout; 429, a rate limit) is the route's answer instead: the part that session serves (tool or block)
+//   fails with the status and the response body, and the try counts. 5xx answers, network errors, INFRA_STATUSES and
+//   the proxy's own refusals stay infra. A part that failed after model output is judged on its session's last call
+//   alone (T1).
 // - Sessions run on review-units' Docker rig (dockerRig, one bare none arm) under --item. The check's cap is four sessions
 //   at the model's full allowance; a try starts only when its worst case fits under what is left, and its lease holds that
 //   worst case. A ledger cap stop leaves the check incomplete (CAP_STOP, exit 2): neither passed nor failed.
