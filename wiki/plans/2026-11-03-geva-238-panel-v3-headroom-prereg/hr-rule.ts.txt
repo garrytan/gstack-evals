@@ -11,9 +11,16 @@
 // repair, or a needed cell no judge pair settled. NO READ for every stratum: a cap stop in the Opus run, a stopped judge item,
 // or an Opus pin e0-readings reports as wrong (init.json or arm.json). The pooled line over every candidate, the pooled
 // anchor count (threshold 24 of 32, hr-oc.txt) and the per-shape counts describe the levers and decide nothing.
-//   bun hr-rule.ts --readings <readings.json> [--shapes <readings.json of the hr-shapes.json run>]
+// Agreement (plan section 5, I1; decides no reading): readings.json keeps only the Opus arm's cells, so with step 5's
+// e0-readings flags after -- it rebuilds both arms' cells with e0-readings' own functions, checks that they give readings.json's
+// Opus cells and kappa, and prints per stratum and pooled the Sol-vs-Opus any-severity 2x2 over every judged cell of both arms
+// (the population of e0-readings' kappa), n, raw agreement, PABAK and kappa. A HEADROOM stratum with kappa under 0.6 and raw
+// agreement under 0.95 is flagged: brief revision needed before E1.
+//   bun hr-rule.ts --readings <readings.json> [--shapes <readings.json of the hr-shapes.json run>] [-- <step 5's flags without --out>]
 // Prints counts only. Exit 0 when at least one stratum reads, 3 when none does, 2 for E_USAGE.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { armReadings, kappa as kappaOf, kappaRead, loadMods, ndjson, readArm } from "./e0-readings.ts";
 
 export const KIND: Record<string, string> = { ceo: "C-RC", eng: "E-RC", dx: "X-RC", design: "G-RC" };
 export const STRATA = ["ceo", "eng", "dx", "design"];
@@ -116,7 +123,57 @@ export function render(d: ReturnType<typeof decide>, shapeLine: string | null): 
   return out;
 }
 
-function main(argv: string[]): number {
+export interface Agree { n: number; both: number; sol: number; opus: number; neither: number; raw: number | null; pabak: number | null; kappa: number | null; flag: boolean }
+/** Sol-vs-Opus any-severity agreement over every cell both judged, per stratum and pooled; flags a HEADROOM stratum with kappa under 0.6 and raw agreement under 0.95. */
+export function agreement(cells: any[], readings: Record<string, string>): Record<string, Agree> {
+  return Object.fromEntries(["pooled", ...STRATA].map((s) => {
+    const cs = cells.filter((c) => c.sol?.judged && c.opus?.judged && (s === "pooled" || c.stratum === s)), n = cs.length;
+    const both = cs.filter((c) => c.sol.any && c.opus.any).length, sol = cs.filter((c) => c.sol.any && !c.opus.any).length, opus = cs.filter((c) => !c.sol.any && c.opus.any).length;
+    const raw = n ? (n - sol - opus) / n : null, k = kappaOf(cs.map((c) => [c.sol.any, c.opus.any] as [boolean, boolean]));
+    return [s, { n, both, sol, opus, neither: n - both - sol - opus, raw, pabak: raw === null ? null : 2 * raw - 1, kappa: k, flag: readings[s] === "HEADROOM" && k !== null && k < 0.6 && raw !== null && raw < 0.95 }];
+  }));
+}
+
+export function renderAgreement(a: Record<string, Agree>): string[] {
+  const f3 = (x: number | null) => (x === null ? "n/a" : x.toFixed(3));
+  return Object.entries(a).map(([s, v]) => "Agreement " + s + " (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n " + v.n + "; both match " + v.both + ", Sol only " + v.sol + ", Opus only " + v.opus + ", both miss " + v.neither + "; raw agreement " + f3(v.raw) + ", PABAK " + f3(v.pabak) + ", kappa " + f3(v.kappa) + (v.flag ? "; HEADROOM with kappa under 0.6 and raw agreement under 0.95: brief revision needed before E1" : ""));
+}
+
+/** Rebuilds both arms' cells from step 5's e0-readings flags as e0-readings' run() does, and refuses unless they give readings.json's Opus cells and kappa. */
+export async function rebuild(argv: string[], r: any): Promise<any[]> {
+  const f = new Map<string, string[]>();
+  for (let i = 0; i < argv.length; i += 2) {
+    const k = argv[i]!, v = argv[i + 1];
+    if (!["--scorer", "--suite", "--kinds", "--passes", "--opus", "--particle", "--key", "--read"].includes(k) || v === undefined) usage("after --, expected step 5's e0-readings flags without --out, got " + JSON.stringify(k));
+    f.set(k, [...(f.get(k) ?? []), v!]);
+  }
+  const one = (k: string) => (f.get(k)?.length === 1 ? f.get(k)![0]! : usage("after --, needs one " + k));
+  const mods = await loadMods(one("--scorer"));
+  const suite = JSON.parse(readFileSync(one("--suite"), "utf8")), kinds = JSON.parse(readFileSync(one("--kinds"), "utf8"));
+  const outs = [one("--opus"), one("--particle")], arms = outs.map((o) => readArm(o, suite, Number(one("--passes")), mods));
+  const key = mods.loadKey({ suite, suiteSha256: kinds.suite_sha256, key: one("--key"), arms: arms.map((a, i) => mods.readArmDir(join(outs[i]!, "arms", a.id), suite, kinds.suite_sha256)) });
+  const entries = new Map<string, any>(key.entries.map((e: any) => [e.packet + " " + e.opaque, e]));
+  const reads = Object.fromEntries((f.get("--read") ?? []).map((x) => [x.split("=")[0], x.slice(x.indexOf("=") + 1)]));
+  const replies: Record<string, Map<string, Set<string>>> = {};
+  for (const j of ["sol", "opus", "sonnet"]) {
+    const dir = reads[j] ?? usage("after --, needs --read " + j + "=<dir>"), rj = JSON.parse(readFileSync(join(dir, "run.json"), "utf8")), answers = new Map<string, Set<string>>();
+    if (rj.state !== "stopped") for (const p of JSON.parse(readFileSync(join(dir, "primary.json"), "utf8")).packets ?? []) mods.packetAnswers(key.packets.find((k: any) => k.file === p.file) ?? usage("a " + j + " packet is not in the key"), p, key, suite, j + " primary", answers);
+    replies[j] = answers;
+  }
+  const sevMap = new Map<string, string>();
+  arms.forEach((a, i) => { for (const u of suite.units) { const p = join(outs[i]!, "arms", a.id, "findings", mods.unitFile(u.id) + ".jsonl"); for (const l of ndjson(existsSync(p) ? readFileSync(p, "utf8") : "")) sevMap.set(a.id + " " + u.id + " " + l.id, String(l.severity ?? "")); } });
+  const sev = (a: string, u: string, id: string) => sevMap.get(a + " " + u + " " + id) ?? "";
+  const cells = arms.map((a) => armReadings(a, kinds, key, replies, entries, sev, a.id));
+  const sig = (cs: any[]) => cs.map((c) => [c.unit, c.blocker, c.pass, c.cls, c.sol?.judged, c.sol?.any, c.opus?.judged, c.opus?.any].join(" ")).sort().join("\n");
+  if (sig(cells[0]!) !== sig(r.cells)) usage("the Opus cells rebuilt from the flags after -- are not readings.json's; pass the flags of the e0-readings run that wrote --readings");
+  const all = [...cells[0]!, ...cells[1]!], k = kappaRead(all);
+  for (const s of ["pooled", ...STRATA]) if (k[s]!.n !== r.kappa?.[s]?.n || k[s]!.kappa !== r.kappa?.[s]?.kappa) usage("the kappa rebuilt from the flags after -- is not readings.json's in " + s);
+  return all;
+}
+
+async function main(argv: string[]): Promise<number> {
+  const cut = argv.indexOf("--"), tail = cut >= 0 ? argv.slice(cut + 1) : null;
+  if (cut >= 0) argv = argv.slice(0, cut);
   const flags = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     const f = argv[i]!, v = argv[i + 1];
@@ -129,12 +186,14 @@ function main(argv: string[]): number {
   const d = decide(r);
   const lines = render(d, flags.has("--shapes") ? shapes(r, load(flags.get("--shapes")!)) : null);
   for (const l of lines) console.log(l);
+  if (!tail) console.log("Agreement: not read (pass step 5's e0-readings flags, without --out, after --)");
+  else for (const l of renderAgreement(agreement(await rebuild(tail, r), Object.fromEntries(d.lines.map((l) => [l.stratum, l.reading]))))) console.log(l);
   return d.lines.some((l) => !l.reasons.length && !l.reading.startsWith("AWAITING")) ? 0 : 3;
 }
 
 if (import.meta.main) {
   try {
-    process.exit(main(process.argv.slice(2)));
+    process.exit(await main(process.argv.slice(2)));
   } catch (e) {
     console.error("E_USAGE hr-rule: " + (e instanceof Error ? e.message : String(e)));
     process.exit(2);

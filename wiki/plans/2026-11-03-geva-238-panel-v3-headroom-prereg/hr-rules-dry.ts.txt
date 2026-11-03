@@ -138,6 +138,25 @@ expect("a cap stop in the Opus run makes every stratum NO READ and exits 3", { s
   check("an Opus pin e0-readings reports as wrong makes every stratum NO READ (exit " + r2.code + ")", r2.code === 3 && STRATA.every((s) => r2.got[s]?.reading === "NO READ"));
 }
 expect("a candidate blocker no judge pair settled makes its stratum NO READ (4 needed cells unjudged); the others read", { strata: { ...all(6), dx: { m: 6, unjudged: true } } }, { ceo: "HEADROOM", eng: "HEADROOM", dx: "NO READ", design: "HEADROOM" }, (r) => has(r, "dx", "4 needed cell(s) unjudged"));
+out("## hr-rule: Sol-vs-Opus agreement (decides no reading; plan section 5, I1)");
+{
+  const H = await import(join(HERE, "hr-rule.ts"));
+  const cell = (stratum: string, sol: boolean, opus: boolean, judged = true) => ({ stratum, sol: { judged, any: sol, must: false }, opus: { judged: true, any: opus, must: false } });
+  const many = (st: string, k: number, s: boolean, o: boolean) => Array.from({ length: k }, () => cell(st, s, o));
+  const cells = [...many("ceo", 19, true, true), ...many("ceo", 1, true, false), ...many("eng", 18, true, true), ...many("eng", 2, true, false), ...many("dx", 1, true, true), ...many("dx", 1, true, false), ...many("dx", 1, false, true), ...many("dx", 17, false, false), ...many("design", 2, true, true), ...many("design", 1, true, false), ...many("design", 1, false, true), ...many("design", 16, false, false), cell("design", true, true, false), cell("design", false, true, false), cell("design", true, false, false)];
+  const a = H.agreement(cells, { ceo: "HEADROOM", eng: "HEADROOM", dx: "NEAR-CEILING", design: "HEADROOM" });
+  const near = (x: number | null, y: number) => x !== null && Math.abs(x - y) < 1e-9;
+  const is = (s: string, n: number, t: number[], raw: number, pabak: number, k: number, flag: boolean) => a[s].n === n && [a[s].both, a[s].sol, a[s].opus, a[s].neither].join() === t.join() && near(a[s].raw, raw) && near(a[s].pabak, pabak) && near(a[s].kappa, k) && a[s].flag === flag;
+  check("ceo, Sol marks every cell a match and Opus 19 of 20: 2x2 19/1/0/0, raw agreement 0.950, PABAK 0.900, kappa 0; HEADROOM at raw 0.95 is not flagged", is("ceo", 20, [19, 1, 0, 0], 0.95, 0.9, 0, false));
+  check("eng, Sol marks every cell a match and Opus 18 of 20: 2x2 18/2/0/0, raw agreement 0.900, PABAK 0.800, kappa 0; HEADROOM under 0.95 is flagged", is("eng", 20, [18, 2, 0, 0], 0.9, 0.8, 0, true));
+  check("dx, 2x2 1/1/1/17: raw agreement 0.900, PABAK 0.800, kappa 4/9 = 0.444; NEAR-CEILING is never flagged", is("dx", 20, [1, 1, 1, 17], 0.9, 0.8, 4 / 9, false));
+  check("design, 2x2 2/1/1/16 plus 3 cells Sol left unjudged (excluded): raw agreement 0.900, PABAK 0.800, kappa 31/51 = 0.608; HEADROOM with kappa at or over 0.6 is not flagged", is("design", 20, [2, 1, 1, 16], 0.9, 0.8, 31 / 51, false));
+  check("pooled, 2x2 40/5/2/33 of 80: raw agreement 0.9125, PABAK 0.825, kappa 131/159 = 0.824; pooled is never flagged", is("pooled", 80, [40, 5, 2, 33], 0.9125, 0.825, 131 / 159, false));
+  const k = R.kappaRead(cells);
+  check("every agreement n and kappa equals e0-readings' kappaRead on the same cells (pooled and each stratum)", ["pooled", "ceo", "eng", "dx", "design"].every((s) => k[s].n === a[s].n && k[s].kappa === a[s].kappa));
+  const lines = H.renderAgreement(a), flagged = lines.filter((l: string) => l.endsWith("brief revision needed before E1"));
+  check("the printed agreement lines carry the 2x2, raw agreement, PABAK and kappa, and only eng's carries the flag (" + flagged.length + " flagged)", lines.length === 5 && flagged.length === 1 && flagged[0].startsWith("Agreement eng ") && lines[1] === "Agreement ceo (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 20; both match 19, Sol only 1, Opus only 0, both miss 0; raw agreement 0.950, PABAK 0.900, kappa 0.000");
+}
 out("## hr-rule: pooled line, per-shape counts and refusals");
 {
   const spec: Spec = { strata: { ceo: { m: 4 }, eng: { m: 5 }, dx: { m: 12 }, design: { m: 13 } } };

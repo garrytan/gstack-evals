@@ -24,6 +24,14 @@ PASS a cap stop in the Opus run makes every stratum NO READ and exits 3 (exit 3;
 PASS a stopped judge item makes every stratum NO READ and exits 3 (exit 3)
 PASS an Opus pin e0-readings reports as wrong makes every stratum NO READ (exit 3)
 PASS a candidate blocker no judge pair settled makes its stratum NO READ (4 needed cells unjudged); the others read (exit 0; ceo HEADROOM, eng HEADROOM, dx NO READ, design HEADROOM)
+## hr-rule: Sol-vs-Opus agreement (decides no reading; plan section 5, I1)
+PASS ceo, Sol marks every cell a match and Opus 19 of 20: 2x2 19/1/0/0, raw agreement 0.950, PABAK 0.900, kappa 0; HEADROOM at raw 0.95 is not flagged
+PASS eng, Sol marks every cell a match and Opus 18 of 20: 2x2 18/2/0/0, raw agreement 0.900, PABAK 0.800, kappa 0; HEADROOM under 0.95 is flagged
+PASS dx, 2x2 1/1/1/17: raw agreement 0.900, PABAK 0.800, kappa 4/9 = 0.444; NEAR-CEILING is never flagged
+PASS design, 2x2 2/1/1/16 plus 3 cells Sol left unjudged (excluded): raw agreement 0.900, PABAK 0.800, kappa 31/51 = 0.608; HEADROOM with kappa at or over 0.6 is not flagged
+PASS pooled, 2x2 40/5/2/33 of 80: raw agreement 0.9125, PABAK 0.825, kappa 131/159 = 0.824; pooled is never flagged
+PASS every agreement n and kappa equals e0-readings' kappaRead on the same cells (pooled and each stratum)
+PASS the printed agreement lines carry the 2x2, raw agreement, PABAK and kappa, and only eng's carries the flag (1 flagged)
 ## hr-rule: pooled line, per-shape counts and refusals
 PASS the pooled line reads 34 of 96 over 24 candidates and the per-shape line lists 12 shapes from the shapes run (exit 0)
 PASS hr-rule refuses a --shapes file from another run (exit 2, E_USAGE)
@@ -48,4 +56,4 @@ PASS hr-exposure: strata with no opening count every matched reading as matched 
 PASS hr-exposure refuses a candidate with no hr-traces.json row (exit 2, E_USAGE)
 ## Leak check
 PASS the transcript prints no fixture unit id, case id, home path or scratch path (0 found)
-PASS 38, FAIL 0
+PASS 45, FAIL 0

@@ -6,7 +6,7 @@ PASS hr-opus-none: recorded at $225.28 on the temporary ledger, one lease bound 
 PASS particle-ai/particle-1: runReviewUnits on the full suite with the frozen values (none arm, 4 passes, parallel 3, timeout 3600, max turns 100, cap $19.20, allowance $0.60) through the real SDK and CLI and the metering proxy: 32 sessions, 32 scored with 32 parsed blocks, 0 turn cap, stops [], stderr log 0 lines
 PASS hr-particle-none: recorded at $19.20 on the temporary ledger, one lease bound to the run and settled at $0.0037
 PASS every review-units model request went to the fake upstream and named its session (163 requests, 0 unmatched)
-PASS judge-packet builds one batch over both arms, seed 20261103 (exit 0): judge-packet: batch d05ccf8b9aa7fd54a37d924b4893e31a55e0473b72ba88b853cab802282bf56b, 8 packets, 183 findings from 2 arms; the key is outside the packets
+PASS judge-packet builds one batch over both arms, seed 20261103 (exit 0): judge-packet: batch b221e3b121b35161019e07aca3375cd7ebb3445f4bc26bae8d2b9cf958f6bc19, 8 packets, 183 findings from 2 arms; the key is outside the packets
 PASS hr-judge-sol: recorded at $294.39 ($294.96 less $0.567012 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.957012); judge-run with --brief judge-brief-v3.1.md (primary openai/gpt-6.1-sol, second anthropic/claude-opus-5-5, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (gpt-6.1-sol 8, claude-opus-5-5 8, claude-sonnet-5-5 2); lease settled at $0.0182
 PASS hr-judge-opus: recorded at $294.37 ($294.96 less $0.585212 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.955212); judge-run with --brief judge-brief-v3.1.md (primary anthropic/claude-opus-5-5, second openai/gpt-6.1-sol, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (claude-opus-5-5 8, gpt-6.1-sol 8, claude-sonnet-5-5 2); lease settled at $0.0182
 PASS hr-judge-sonnet: recorded at $294.35 ($294.96 less $0.603412 settled by every earlier item, rounded down to the cent, floor $36.40, so committed plus cap is $294.953412); judge-run with --brief judge-brief-v3.1.md (primary anthropic/claude-sonnet-5-5, second openai/gpt-6.1-sol, third anthropic/claude-opus-5-5) exits 0 with every send answered by the fake (claude-sonnet-5-5 8, gpt-6.1-sol 8, claude-opus-5-5 2); lease settled at $0.0140
@@ -35,11 +35,17 @@ PASS e0-readings --kinds hr-shapes.json --passes 4 exits 0 and writes readings.j
     hr-rule: Pooled (all 23 candidates; describes the levers, decides nothing): m 34 of n 90 = 0.378; stopped readings 2 (all miss 34/92, all match 36/92)
     hr-rule: Pooled anchors (decides nothing): 30 of 32, at or over the pooled threshold 24
     hr-rule: Per shape (decides nothing): C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8
+    hr-rule: Agreement pooled (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 245; both match 118, Sol only 1, Opus only 1, both miss 125; raw agreement 0.992, PABAK 0.984, kappa 0.984
+    hr-rule: Agreement ceo (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 64; both match 31, Sol only 0, Opus only 1, both miss 32; raw agreement 0.984, PABAK 0.969, kappa 0.969
+    hr-rule: Agreement eng (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 53; both match 30, Sol only 0, Opus only 0, both miss 23; raw agreement 1.000, PABAK 1.000, kappa 1.000
+    hr-rule: Agreement dx (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 64; both match 22, Sol only 0, Opus only 0, both miss 42; raw agreement 1.000, PABAK 1.000, kappa 1.000
+    hr-rule: Agreement design (Sol vs Opus, any severity, both arms' judged cells; decides no reading): n 64; both match 35, Sol only 1, Opus only 0, both miss 28; raw agreement 0.984, PABAK 0.969, kappa 0.968
 PASS hr-rule --readings (hr-kinds run) --shapes (hr-shapes run) exits 0 (by hand 0) and prints Whole run: no whole-run stop
 PASS hr-rule stratum ceo: by hand HEADROOM, m 10 of n 24, stopped readings 0 scored both ways (all miss 10/24 HEADROOM, all match 10/24 HEADROOM), anchors 8 of 8, stopped sessions 0
 PASS hr-rule stratum eng: by hand NO READ (stop bounds disagree (all miss HEADROOM, all match NEAR-CEILING)), m 10 of n 18, stopped readings 2 scored both ways (all miss 10/20 HEADROOM, all match 12/20 NEAR-CEILING), anchors 7 to 8 of 8, stopped sessions 1
 PASS hr-rule stratum dx: by hand AWAITING RE-AUDIT (DEAD; rerun e0-readings with --reaudit), m 0 of n 24, stopped readings 0 scored both ways (all miss 0/24 DEAD, all match 0/24 DEAD), anchors 8 of 8, stopped sessions 0
 PASS hr-rule stratum design: by hand NEAR-CEILING, m 14 of n 24, stopped readings 0 scored both ways (all miss 14/24 NEAR-CEILING, all match 14/24 NEAR-CEILING), anchors 7 of 8, stopped sessions 0
 PASS hr-rule pooled line (decides nothing): by hand 23 candidates, m 34 of n 90, stopped 2; pooled anchors 30 of 32; per shape C-OM 2/8, C-Q 4/8, C-U2 4/8, E-CD 7/7, E-OM 0/4, E-Q 3/7, G-A11Y 4/8, G-OM 6/8, G-X 4/8, X-CD 0/8, X-OM 0/8, X-Q 0/8
+PASS hr-rule with step 5's flags after -- prints the agreement line (2x2, raw agreement, PABAK, kappa) for pooled and each stratum, each n and kappa equal to e0-readings' printed kappa
 PASS hr-rule refuses the hr-shapes readings as --readings (exit 2, E_USAGE naming hr-kinds.json)
-PASS 26, FAIL 0
+PASS 27, FAIL 0

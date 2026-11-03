@@ -225,7 +225,7 @@ try {
   const wantShape = [...new Set<string>(shapesBl.filter((b) => b.role === "candidate").map((b) => b.kind))].sort().map((k) => { const cs = cellsOf(shapesBl.filter((b) => b.kind === k)); return k + " " + cs.filter((c) => T.has(c)).length + "/" + cs.length; }).join(", ");
   check("e0-readings --kinds hr-shapes.json --passes 4 exits " + p2.code + " and writes readings.json; its per-shape must-fix counts are " + (p2.j ? Object.entries(p2.j.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n).join(", ") : "absent") + "; by hand " + wantShape, !!p2.j && Object.entries(p2.j.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n).join(", ") === wantShape);
   const rule = (args: string[]) => { const r = spawnSync("bun", [join(HERE, "hr-rule.ts"), ...args], { encoding: "utf8" }); return { code: r.status, out: r.stdout ?? "", err: (r.stderr ?? "").trim().split("\n")[0] ?? "" }; };
-  const hr = rule(["--readings", p1.file, "--shapes", p2.file]);
+  const hr = rule(["--readings", p1.file, "--shapes", p2.file, "--", "--scorer", scorer, "--suite", SUITE, "--kinds", join(SR, "hr-kinds.json"), "--passes", String(PASSES), "--opus", opus.out, "--particle", particle.out, "--key", keyPath, "--read", "sol=" + jr.sol, "--read", "opus=" + jr.opus, "--read", "sonnet=" + jr.sonnet]);
   for (const l of hr.out.split("\n").filter(Boolean)) say("hr-rule: " + l);
   const want0 = STRATA.some((st) => !X[st].why && !X[st].read.startsWith("AWAITING")) ? 0 : 3;
   check("hr-rule --readings (hr-kinds run) --shapes (hr-shapes run) exits " + hr.code + " (by hand " + want0 + ") and prints Whole run: no whole-run stop", hr.code === want0 && /^Whole run: no whole-run stop$/m.test(hr.out));
@@ -239,6 +239,9 @@ try {
   const pm = STRATA.reduce((a, st) => a + X[st].m, 0), pn = STRATA.reduce((a, st) => a + X[st].n, 0), ps = STRATA.reduce((a, st) => a + X[st].stops, 0), pa = STRATA.reduce((a, st) => a + X[st].aLow, 0), pof = STRATA.reduce((a, st) => a + X[st].of, 0);
   const items = STRATA.reduce((a, st) => a + X[st].items, 0);
   check("hr-rule pooled line (decides nothing): by hand " + items + " candidates, m " + pm + " of n " + pn + ", stopped " + ps + "; pooled anchors " + pa + " of " + pof + "; per shape " + wantShape, hr.out.includes("Pooled (all " + items + " candidates; describes the levers, decides nothing): m " + pm + " of n " + pn + " = ") && hr.out.includes("; stopped readings " + ps + " (all miss " + pm + "/" + (pn + ps) + ", all match " + (pm + ps) + "/" + (pn + ps) + ")") && hr.out.includes("Pooled anchors (decides nothing): " + pa + " of " + pof + (pa < 24 ? ", under" : ", at or over")) && hr.out.includes("Per shape (decides nothing): " + wantShape));
+  const judging = p1.out.split("\n").find((l) => l.startsWith("Judging:")) ?? "";
+  const agreeOk = ["pooled", ...STRATA].every((s) => { const m = judging.match(new RegExp("\\b" + s + " (\\S+) \\(n (\\d+)\\)")), a = hr.out.split("\n").find((l) => l.startsWith("Agreement " + s + " (")) ?? ""; return !!m && a.includes("decides no reading): n " + m[2] + "; both match ") && a.includes("; raw agreement ") && a.includes(", PABAK ") && a.includes(", kappa " + m[1]); });
+  check("hr-rule with step 5's flags after -- prints the agreement line (2x2, raw agreement, PABAK, kappa) for pooled and each stratum, each n and kappa equal to e0-readings' printed kappa", agreeOk);
   const bad = rule(["--readings", p2.file]);
   check("hr-rule refuses the hr-shapes readings as --readings (exit " + bad.code + ", E_USAGE naming hr-kinds.json)", bad.code === 2 && /^E_USAGE hr-rule: .*run e0-readings with hr-kinds\.json/.test(bad.err));
 } catch (e) {
