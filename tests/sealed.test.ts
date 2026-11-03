@@ -98,8 +98,46 @@ describe("sealed publication rules", () => {
       label("ANSWER", "clear findings=0 commits=1"),
       label("HIDDEN TEST", "t1"),
       label("HIDDEN TEST", "not checked yet"),
+      bare + "clear findings=0 commits=3 visibility=private answer=42",
+      bare + "clear findings=0 commits=1 skipped=0 visibility=public waived=0 exempt=0 answer=42 policy=origin/main",
+      bare + "clear findings=0 commits=1 skipped=0 visibility=public waived=0 exempt=0 policy=origin/main answer=42",
+      bare + "clear findings=0 commits=1 visibility=the-hidden-answer-is-42 waived=0 policy=origin/main",
+      bare + "clear findings=0 commits=1 visibility=public waived=forty-two policy=origin/main",
+      bare + "clear findings=0 commits=1 visibility=public waived=0 policy=the-hidden-answer-is-42",
+      bare + "clear findings=0 commits=1 visibility=public waived=0 policy=hidden-answer-42 + commit 0123456789ab",
     ]) {
       expect(trips(line)).toBe(true);
+    }
+  });
+
+  test("every verdict the sealed workflow test feeds its gate stays exempt", () => {
+    const markers = sealed.answer_markers.map((m) => new RegExp(m));
+    const source = readFileSync(join(import.meta.dir, "ci", "sealed-workflow.test.ts"), "utf8");
+    const verdicts = [...source.matchAll(/gate\("([^"]+)"\)/g)].map((m) => m[1]!);
+    expect(verdicts.length).toBeGreaterThan(5);
+    for (const verdict of verdicts) expect(markers.some((re) => re.test("SEALED" + ": " + verdict))).toBe(false);
+  });
+
+  test("the markers finish fast on long adversarial lines", () => {
+    const markers = sealed.answer_markers.map((m) => new RegExp(m));
+    const head = "SEALED" + ": clear findings=0 commits=1 ";
+    for (const line of [
+      head.repeat(5000),
+      head + "a=b ".repeat(50000),
+      head + "skipped=0 visibility=public waived=0 " + "policy=x ".repeat(20000),
+      head + "visibility=public waived=0 policy=" + "a".repeat(100000) + "/" + "b".repeat(100000) + " +",
+      head + "visibility=public waived=0 policy=no sealed key on " + "a ".repeat(50000),
+    ]) {
+      const start = performance.now();
+      for (const re of markers) re.test(line);
+      expect(performance.now() - start).toBeLessThan(100);
+    }
+  });
+
+  test("every text rule fits gstack's 256-character pattern limit, so the policy stays readable", () => {
+    for (const rule of [...sealed.answer_markers, ...sealed.seed_patterns]) {
+      expect(rule.length).toBeGreaterThanOrEqual(1);
+      expect(rule.length).toBeLessThanOrEqual(256);
     }
   });
 
