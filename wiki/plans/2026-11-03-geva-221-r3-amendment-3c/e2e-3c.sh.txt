@@ -10,6 +10,8 @@
 # and environment network modes are public, as smoke.sh's NETWORK=public sets them, because a Capy machine's kernel can't
 # run Harbor's egress sidecar; nothing else differs from a VM run.
 # No provider key exists in any process: ~/.laneb-keys holds a placeholder for the run and is removed after.
+# It ends with named assertions, each printed as a PASS or FAIL line (README section 6 item 2). The script's own exit
+# code is not one of them.
 # Usage: bash e2e-3c.sh <export>/quick/laneb <arms dir holding none-8bab483364e4.tar.gz> <empty work dir>
 set -u
 L=$(cd "$1" && pwd); A=$(cd "$2" && pwd); W=$(mkdir -p "$3" && cd "$3" && pwd)
@@ -55,7 +57,9 @@ run() {
   echo "## $name: ledger cap \$$cap, batch cap \$150, STOP_ON_CAP $stopcap"
   local t0=$SECONDS
   setsid bash "$L/runner/vm-run.sh" "$R" "dry-$name/" 150 > "$R/vm-run.stdout" 2>&1 < /dev/null
-  echo "vm-run.sh exit $? after $((SECONDS - t0)) s"
+  local rc=$?
+  echo "$rc" > "$R/vm-run.sh.rc"
+  echo "vm-run.sh exit $rc after $((SECONDS - t0)) s"
   kill "$lpid" 2>/dev/null; wait "$lpid" 2>/dev/null; lpid=""
   local O="$R/out"
   echo "out/: $(cd "$O" && ls | tr '\n' ' ')"
@@ -80,3 +84,23 @@ run D2 5 yes
 echo
 echo "## leftovers"
 echo "containers: $(docker ps -q | wc -l), ports: $(for p in 8787 8788 9911; do (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && echo -n "$p "; done)none else"
+echo
+echo "## assertions"
+ok() { if "${@:2}"; then echo "PASS $1"; else echo "FAIL $1"; fi; }
+rc() { [ "$(cat "$W/$1/vm-run.sh.rc" 2>/dev/null)" = "$2" ]; }
+capnull() { jq -e 'has("cap_stop") and .cap_stop == null' "$W/$1/out/$2" > /dev/null 2>&1; }
+capset() { jq -e '.cap_stop != null and .cap_stop != false and .cap_stop != ""' "$W/$1/out/$2" > /dev/null 2>&1; }
+agree() {
+  local O="$W/$1/out" s p l
+  s=$(jq -s 'map(.spent_micros) | add // 0' "$O/proxy-sessions.jsonl" 2>/dev/null)
+  p=$(jq .global_spent_micros "$O/proxy-totals.json" 2>/dev/null)
+  l=$(jq .settledMicros "$O/ledger-status-end.json" 2>/dev/null)
+  [ -n "$s" ] && [ "$s" = "$p" ] && [ "$p" = "$l" ]
+}
+ok "D1: vm-run.sh exits 0" rc D1 0
+ok "D1: proxy-status-end.json has cap_stop null" capnull D1 proxy-status-end.json
+ok "D1: spend agrees across sessions, proxy and ledger" agree D1
+ok "D2: vm-run.sh exits 130" rc D2 130
+ok "D2: proxy-status-end.json has cap_stop set" capset D2 proxy-status-end.json
+ok "D2: cap-stop.json has cap_stop set" capset D2 cap-stop.json
+ok "D2: spend agrees across sessions, proxy and ledger" agree D2

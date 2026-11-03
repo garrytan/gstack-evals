@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
 # R3 amendment 3c dry run (GEVA-221), keyless, at the 3c pin: the merge commit that holds both GST-1055 fixes, #159 (the
-# proxy end state and the cap watcher read GET /totals) and #170 (screen.ts run checks UBI_RUNNER, UBI_OWNER and the
-# item's ledger before it binds the item, and refuses a bound item first).
+# proxy end state and the cap watcher read GET /totals) and #170 (screen.ts run checks UBI_RUNNER, UBI_OWNER, the
+# Ubicloud key, UBI_TTL_HOURS and the item's ledger before it binds the item, and refuses a bound item first).
 # Part A reruns amendment 3's dry-run-a3.sh.txt with the pin's export, both models on temporary ledgers, and prints its
 # whole output. Part B shows what changed from 3b's pin, b82ecf9, to the pin, with the pinned files' digests.
-# Part C drives the export's screen.ts run with a stub runner and no VM: the refusals before the bind leave the item
-# unbound and the ledger untouched; 3b's no-start rule still classifies a no-start for each model; a rerun on a bound item
-# is refused as bound; and Sol a1's passed route record, copied beside a fresh ledger, lets prepare pass at the pin.
+# Part C first drives 3b's capacity-probe.sh.txt at the pin with 3b's stub runner (no network, no VM, no key): a window in
+# which every probe fails, a full 3-hour window of fast refusals on a fake clock, a pass after failures in eu-north-h1, a
+# VM the stub can't destroy (its reserve stays open) and a probe ledger that refuses; then the run step's guard on a
+# fresh pass, a pass in another location, a pass 31 minutes old and no pass. Then it drives the export's screen.ts run
+# with the stub runner and no VM: the refusals before the bind (UBI_RUNNER, UBI_OWNER, no Ubicloud key, UBI_TTL_HOURS 0
+# and 03, and a ledger that already holds a reserve) leave the item unbound and the ledger untouched, and section 4's
+# retry check reads each one; no-start.sh.txt says a refusal before the bind is not a no-start; 3b's no-start rule still
+# classifies a no-start for each model, and 3b's four records that are not no-starts; a rerun on a bound item is refused
+# as bound; and Sol a1's passed route record, copied beside a fresh ledger, lets prepare pass at the pin.
 # Part D runs e2e-3c.sh.txt on the export: vm-run.sh end to end against the real proxy and ledger service with a stub
-# model, a clean run and a ledger cap stop, with every out/ file read for its content.
-# No step calls a model or starts a VM. Model and Ubicloud keys are unset first; part A's fetch_registry.py reads Harbor
-# Hub's public registry and part D pulls public images.
+# model, a clean run and a ledger cap stop, with every out/ file read for its content, and ends with its named PASS or
+# FAIL assertions.
+# No step calls a model or starts a VM. Model and Ubicloud keys are unset first. The run steps get a placeholder Ubicloud
+# key, which is not a key and which the stub runner never reads, because screen.ts run refuses before the bind without
+# one. Part A's fetch_registry.py reads Harbor Hub's public registry and part D pulls public images.
 # Usage: PIN=<the 3c pin> G=<gstack-evals git checkout holding PIN and b82ecf9> SWEBV=<harbor-datasets checkout>
 #   ARMS=<the three arm tars> R=<read-only copy of the pinned ubi-runner.sh> HARBOR_DIR=<harbor at f3a5a92>
 #   DROPS=<r3-drop-list.json> A2=<attempt 2's plan.json> A3=<amendment 3's post folder> B3=<3b's post folder>
@@ -37,9 +45,11 @@ step() {
   grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-30}" | sed "$HIDE"
   echo "exit $c (log/$n.txt)"
 }
-# 3b's stub runner (dry-run-3b.sh.txt), unchanged: no network and no VM; up fails the way attempt 3's VM did.
+# 3b's stub runner, fake clock and guard (dry-run-3b.sh.txt), unchanged.
 cat > "$W/bin/stub-runner.sh" <<'EOF'
 #!/usr/bin/env bash
+# Stub of the pinned runner for the keyless fixtures: no network and no VM. Each call is logged with the location and
+# size settings it saw. up fails the way attempt 3's did for its first STUB_FAIL_UPS calls (all of them by default).
 st=${STUB_STATE:?}; mkdir -p "$st"
 cmd=$1; shift
 echo "$cmd $* UBI_LOCATION=${UBI_LOCATION:-unset} UBI_SIZE=${UBI_SIZE:-unset} UBI_STORAGE=${UBI_STORAGE:-unset}" >> "$st/calls"
@@ -55,12 +65,24 @@ case $cmd in
       exit 1
     fi
     echo "$loc  $name" > "$st/alive"; echo "ubi-runner: ready: $name (fixture)" >&2; echo "$name" ;;
-  down) rm -f "$st/alive"; echo "ubi-runner: gone: ?/$1 (fixture)" >&2 ;;
+  down)
+    if [ "${STUB_DOWN_FAILS:-0}" = 1 ]; then echo "ubi-runner: FAILED to destroy $1 (HTTP 500, fixture)" >&2; exit 1; fi
+    rm -f "$st/alive"; echo "ubi-runner: gone: ?/$1 (fixture)" >&2 ;;
   list) [ ! -s "$st/alive" ] || cat "$st/alive" ;;
   *) echo "stub: $cmd is not stubbed" >&2; exit 1 ;;
 esac
 EOF
 chmod +x "$W/bin/stub-runner.sh"
+mkdir -p "$W/bin/clock"
+printf '#!/usr/bin/env bash\n# Fake date for the window fixture: the time is the epoch in $FAKE_CLOCK unless -d names one.\ncase " $* " in *" -d "*) exec %s "$@" ;; esac\nexec %s -d "@$(cat "$FAKE_CLOCK")" "$@"\n' "$(command -v date)" "$(command -v date)" > "$W/bin/clock/date"
+cat > "$W/bin/clock/sleep" <<'EOF'
+#!/usr/bin/env bash
+# Fake sleep for the window fixture: moves the clock in $FAKE_CLOCK forward by $1 seconds and returns at once.
+echo $(( $(cat "$FAKE_CLOCK") + $1 )) > "$FAKE_CLOCK"
+EOF
+chmod +x "$W/bin/clock/date" "$W/bin/clock/sleep"
+# the run step's guard, as section 10 step 9 writes it: a probe pass in this location, written in the last 30 minutes.
+guard() { test -f "$1/probe-pass" && grep -qx "location=$2" "$1/probe-pass" && test $(( $(date +%s) - $(stat -c %Y "$1/probe-pass") )) -le 1800; }
 cp "$W/bin/stub-runner.sh" "$W/bin/stub-noexec.sh" && chmod 0644 "$W/bin/stub-noexec.sh"
 cat > "$W/bin/approve.ts" <<'EOF'
 const { Ledger } = await import(process.argv[2] + "/quick/laneb/runner/ledger.ts");
@@ -70,15 +92,16 @@ S=$W/bin/stub-runner.sh
 export S UBI_OWNER E
 DRY="Dry run: a temporary ledger, no spend"
 # runenv.sh <ledger> <stub state> <port> <location> <command...>: the run command's settings from 3b section 10 step 9,
-# with the stub as the runner (dry-run-3b.sh.txt's runenv).
+# with the stub as the runner (dry-run-3b.sh.txt's runenv) and a placeholder Ubicloud key, which the stub never reads.
 cat > "$W/bin/runenv.sh" <<'EOF'
 #!/usr/bin/env bash
 [ -x "$S" ] || { echo "runenv: no stub runner" >&2; exit 2; }
-exec env -u UBICLOUD_API_KEY -u UBICLOUD_API_TOKEN LEDGER="$1" UBI_OWNER="$UBI_OWNER" UBI_RUNNER="$S" STUB_STATE="$2" UBI_TTL_HOURS=24 VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 UBI_SIZE=standard-16 UBI_STORAGE=640 LEDGER_PORT="$3" VM_EXTEND_LEAD_SEC=1800 UBI_LOCATION="$4" "${@:5}"
+exec env -u UBICLOUD_API_TOKEN UBICLOUD_API_KEY=dry-run-placeholder-not-a-key LEDGER="$1" UBI_OWNER="$UBI_OWNER" UBI_RUNNER="$S" STUB_STATE="$2" UBI_TTL_HOURS=24 VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 UBI_SIZE=standard-16 UBI_STORAGE=640 LEDGER_PORT="$3" VM_EXTEND_LEAD_SEC=1800 UBI_LOCATION="$4" "${@:5}"
 EOF
-# refuse.sh <stub state> <ledger> <work dir> <model> <port> [VAR=value...]: screen.ts run from the export with runenv's
-# settings, changed by the VAR=value pairs; then the exit, whether the item is bound, whether the ledger's bytes changed,
-# and whether the runner was called.
+# refuse.sh <stub state> <ledger> <work dir> <model> <port> [VAR=value or -u VAR...]: screen.ts run from the export with
+# runenv's settings, changed by env's arguments; then the exit, whether the item is bound, whether the ledger's bytes
+# changed, whether the runner was called, and section 4's retry check: no .bound before or after, the ledger's sha256
+# unchanged, and no ledger row but its approval.
 cat > "$W/bin/refuse.sh" <<'EOF'
 #!/usr/bin/env bash
 st=$1 ledger=$2 work=$3 model=$4 port=$5; shift 5
@@ -88,11 +111,18 @@ echo "run exit $?"
 echo "bound before: $had, bound after: $([ -e "$ledger.bound" ] && echo yes || echo no)"
 [ "$(sha256sum "$ledger" | cut -c1-64)" = "$before" ] && echo "ledger unchanged" || echo "ledger changed"
 [ -e "$st/calls" ] && cat "$st/calls" || echo "the runner was never called"
+after=no; [ ! -e "$ledger.bound" ] || after=yes
+rows=$(jq -c 'select(.kind != "approval")' "$ledger") || rows="the ledger could not be read"
+if [ $had = no ] && [ $after = no ] && [ "$(sha256sum "$ledger" | cut -c1-64)" = "$before" ] && [ -z "$rows" ]; then
+  echo "retry check: yes, fix the input and run the step again"
+else
+  echo "retry check: no, the record goes to the Captain${rows:+ (rows besides the approval: $(echo "$rows" | head -3 | tr '\n' ' '))}"
+fi
 EOF
 chmod +x "$W/bin/runenv.sh" "$W/bin/refuse.sh"
 
 echo "## Part A: amendment 3's dry run at the 3c pin"
-step . sh -c "sha256sum $A3/dry-run-a3.sh.txt $B3/no-start.sh.txt $C/e2e-3c.sh.txt"
+step . sh -c "sha256sum $A3/dry-run-a3.sh.txt $B3/capacity-probe.sh.txt $B3/no-start.sh.txt $C/e2e-3c.sh.txt"
 SHOW=1000 step . env PIN="$PIN" G="$G" SWEBV="$SWEBV" ARMS="$ARMS" R="$R" HARBOR_DIR="$HARBOR_DIR" DROPS="$DROPS" A2="$A2" bash "$A3/dry-run-a3.sh.txt" "$W/a3"
 
 echo; echo "## Part B: what changed from 3b's pin (b82ecf9) to the 3c pin"
@@ -100,20 +130,41 @@ step . git -C "$G" diff --stat "$OLD" "$PIN" -- quick
 step . git -C "$G" diff --name-only "$OLD" "$PIN"
 step . sh -c "cd $L && for f in r3/screen.ts r3/exposure.ts r3/route-check.ts runner/launch.sh runner/vm-run.sh runner/proxy.ts runner/ledger.ts runner/materialize.ts runner/prepare-run.ts analysis/analyze.ts config/cells.r3.json config/proxy.json tasks/swebv-r3.txt tasks/swebv-r3.json tasks/swebv-r3-drop.json; do o=\$(git -C $G show $OLD:quick/laneb/\$f | sha256sum | cut -c1-64); p=\$(sha256sum \$f | cut -c1-64); if [ \$o = \$p ]; then s='same as b82ecf9'; else s='changed'; fi; echo \"\$p  \$f  \$s\"; done"
 
-echo; echo "## Part C: screen.ts run at the pin, stub runner, no VM"
-echo "# Refusals before the bind, on part A's unbound temporary ledgers and work dirs"
+echo; echo "## Part C: 3b's capacity probe and screen.ts run at the pin, stub runner, no VM"
+echo "# 3b's probe fixtures and the run step's guard, with 3b's capacity-probe.sh.txt"
+F=$W/probe-fixtures; mkdir -p "$F"
+step . sh -c "LEDGER=$F/fail.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-221 && STUB_STATE=$F/s-fail PROBE_WINDOW_SEC=5 PROBE_GAP_SEC=2 UBI_OWNER=$UBI_OWNER bash $B3/capacity-probe.sh.txt $S $L $F/fail.jsonl eu-central-h1 $F/fail; echo probe exit \$?; test ! -e $F/fail/probe-pass && echo 'no probe-pass'; bun $L/runner/ledger.ts status --path $F/fail.jsonl --item r3-capacity-probe"
+SHOW=40 step . sh -c "LEDGER=$F/window.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-221 && echo 1800000000 > $F/clock && PATH=$W/bin/clock:\$PATH FAKE_CLOCK=$F/clock STUB_STATE=$F/s-window UBI_OWNER=$UBI_OWNER bash $B3/capacity-probe.sh.txt $S $L $F/window.jsonl eu-central-h1 $F/window; echo probe exit \$?; echo fake clock at the end: first probe start + \$(( \$(cat $F/clock) - 1800000000 )) s; echo up calls: \$(grep -c '^up ' $F/s-window/calls); bun $L/runner/ledger.ts status --path $F/window.jsonl --item r3-capacity-probe"
+step . sh -c "LEDGER=$F/late.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-221 && STUB_STATE=$F/s-late STUB_FAIL_UPS=2 PROBE_WINDOW_SEC=60 PROBE_GAP_SEC=2 UBI_OWNER=$UBI_OWNER bash $B3/capacity-probe.sh.txt $S $L $F/late.jsonl eu-north-h1 $F/late; echo probe exit \$?; cat $F/late/probe-pass; cat $F/s-late/calls"
+step . sh -c "LEDGER=$F/left.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 5 '$DRY' GEVA-221 && STUB_STATE=$F/s-left STUB_FAIL_UPS=0 STUB_DOWN_FAILS=1 UBI_OWNER=$UBI_OWNER bash $B3/capacity-probe.sh.txt $S $L $F/left.jsonl eu-central-h1 $F/left; echo probe exit \$?; test ! -e $F/left/probe-pass && echo 'no probe-pass'; bun $L/runner/ledger.ts status --path $F/left.jsonl --item r3-capacity-probe"
+step . sh -c "LEDGER=$F/cap.jsonl bun $W/bin/approve.ts $E r3-capacity-probe 0.2 '$DRY' GEVA-221 && STUB_STATE=$F/s-cap UBI_OWNER=$UBI_OWNER bash $B3/capacity-probe.sh.txt $S $L $F/cap.jsonl eu-central-h1 $F/cap; echo probe exit \$?; test ! -e $F/s-cap/calls && echo 'the runner was never called'"
+step . bash -c "$(declare -f guard); guard $F/late eu-north-h1 && echo 'fresh pass in eu-north-h1: the run step may start'; guard $F/late eu-central-h1 || echo 'pass in another location: the run step refuses'; touch -d '31 minutes ago' $F/late/probe-pass; guard $F/late eu-north-h1 || echo 'pass 31 minutes old: the run step refuses'; guard $F/fail eu-central-h1 || echo 'no pass: the run step refuses'"
+echo; echo "# Refusals before the bind, on part A's unbound temporary ledgers and work dirs"
 for m in "r3a-screen claude-opus-5-5 9911" "r3a-sol gpt-6.1-sol 9912"; do
   set -- $m
   step . bash "$W/bin/refuse.sh" $N/s-$1-blank $W/a3/$1.jsonl $W/a3/work-$1 $2 $3 UBI_RUNNER=
   step . bash "$W/bin/refuse.sh" $N/s-$1-noexec $W/a3/$1.jsonl $W/a3/work-$1 $2 $3 UBI_RUNNER=$W/bin/stub-noexec.sh
   step . bash "$W/bin/refuse.sh" $N/s-$1-owner $W/a3/$1.jsonl $W/a3/work-$1 $2 $3 UBI_OWNER=
   step . bash "$W/bin/refuse.sh" $N/s-$1-owner2 $W/a3/$1.jsonl $W/a3/work-$1 $2 $3 UBI_OWNER=--
+  step . bash "$W/bin/refuse.sh" $N/s-$1-nokey $W/a3/$1.jsonl $W/a3/work-$1 $2 $3 -u UBICLOUD_API_KEY
+  step . bash "$W/bin/refuse.sh" $N/s-$1-ttl0 $W/a3/$1.jsonl $W/a3/work-$1 $2 $3 UBI_TTL_HOURS=0
+  step . bash "$W/bin/refuse.sh" $N/s-$1-ttl03 $W/a3/$1.jsonl $W/a3/work-$1 $2 $3 UBI_TTL_HOURS=03
 done
+echo; echo "# A fresh approved ledger that already holds a reserve: refused before the bind, and the retry check says no"
+step . sh -c "LEDGER=$N/hist.jsonl bun $W/bin/approve.ts $E r3a-screen 150 '$DRY' GEVA-221 && echo '{\"ts\":\"1970-01-01T00:00:00.000Z\",\"item\":\"r3a-screen\",\"kind\":\"reserve\",\"id\":\"r3a-screen/django__django-10973__a1\",\"usd_micros\":4000000}' >> $N/hist.jsonl && jq -c '{kind, item, id, usd_micros}' $N/hist.jsonl"
+step . bash "$W/bin/refuse.sh" $N/s-hist $N/hist.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911
+echo; echo "# no-start.sh.txt on a refusal before the bind (exit 2): not a no-start"
+step . bash -c "cd $E && $W/bin/runenv.sh $W/a3/r3a-screen.jsonl $N/s-pre 9911 eu-central-h1 env UBI_RUNNER= bun quick/laneb/r3/screen.ts run $W/a3/work-r3a-screen --model claude-opus-5-5 > $N/run-pre.log 2>&1; echo run exit \$?; cat $N/run-pre.log; bash $B3/no-start.sh.txt $W/a3/work-r3a-screen $N/run-pre.log $W/a3/r3a-screen.jsonl claude-opus-5-5"
 echo; echo "# 3b's no-start rule at the pin: each model's run binds, the stub's up fails, no-start.sh.txt classifies it"
 step . bash -c "cd $E && $W/bin/runenv.sh $W/a3/r3a-screen.jsonl $N/s-a5 9911 eu-central-h1 bun quick/laneb/r3/screen.ts run $W/a3/work-r3a-screen --model claude-opus-5-5 > $N/run-a5.log 2>&1; echo run exit \$?; cat $W/a3/work-r3a-screen/screen.launch-exit; cat $N/run-a5.log; cat $N/s-a5/calls"
 step . bash "$B3/no-start.sh.txt" "$W/a3/work-r3a-screen" "$N/run-a5.log" "$W/a3/r3a-screen.jsonl" claude-opus-5-5
 step . sh -c "cd $E && LEDGER=$W/a3/r3a-screen.jsonl bun quick/laneb/r3/screen.ts analyze $W/a3/work-r3a-screen --model claude-opus-5-5; echo analyze exit \$?"
 step . bash -c "cd $E && $W/bin/runenv.sh $W/a3/r3a-sol.jsonl $N/s-sol 9912 eu-central-h1 bun quick/laneb/r3/screen.ts run $W/a3/work-r3a-sol --model gpt-6.1-sol > $N/run-sol.log 2>&1; echo run exit \$?; cat $N/run-sol.log; bash $B3/no-start.sh.txt $W/a3/work-r3a-sol $N/run-sol.log $W/a3/r3a-sol.jsonl gpt-6.1-sol"
+echo; echo "# 3b's four records that are not no-starts"
+step . bash -c "cp -r $W/a3/work-r3a-screen $N/x1 && echo 6 > $N/x1/screen.launch-exit && { cat $N/run-a5.log; echo 'vm: ubirun-fixture-x1-t24'; } > $N/x1.log && bash $B3/no-start.sh.txt $N/x1 $N/x1.log $W/a3/r3a-screen.jsonl claude-opus-5-5"
+step . bash -c "cp -r $W/a3/work-r3a-screen $N/x2 && echo 9 > $N/x2/screen.launch-exit && bash $B3/no-start.sh.txt $N/x2 $N/run-a5.log $W/a3/r3a-screen.jsonl claude-opus-5-5"
+step . bash -c "cp -r $W/a3/work-r3a-screen $N/x3 && echo 0 > $N/x3/pilot.launch-exit && bash $B3/no-start.sh.txt $N/x3 $N/run-a5.log $W/a3/r3a-screen.jsonl claude-opus-5-5"
+step . bash -c "cp $W/a3/r3a-screen.jsonl $N/x4.jsonl && echo '{\"ts\":\"1970-01-01T00:00:00.000Z\",\"item\":\"r3a-screen\",\"kind\":\"reserve\",\"id\":\"r3a-screen/django__django-10973__a1\",\"usd_micros\":4000000}' >> $N/x4.jsonl && bash $B3/no-start.sh.txt $W/a3/work-r3a-screen $N/run-a5.log $N/x4.jsonl claude-opus-5-5"
 echo; echo "# A rerun on a bound item is refused as bound, before any other check"
 step . bash "$W/bin/refuse.sh" $N/s-rerun $W/a3/r3a-screen.jsonl $W/a3/work-r3a-screen claude-opus-5-5 9911
 step . bash "$W/bin/refuse.sh" $N/s-rerun-sol $W/a3/r3a-sol.jsonl $W/a3/work-r3a-sol gpt-6.1-sol 9912 UBI_RUNNER=
