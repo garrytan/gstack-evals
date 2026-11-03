@@ -168,7 +168,7 @@
       "profiles": [
         "ci-carry/checks"
       ],
-      "inventory": "bun --no-env-file --config=/dev/null scripts/ci-tree.ts list"
+      "inventory": "git ls-tree -r --name-only HEAD | grep -Ei '(^|/)[^/]+[._](test|spec)\\.([cm]?[jt]s|[jt]sx)$' | grep -Ev '(^|/)(\\.[^/]*|node_modules)/'"
     },
     "bun run typecheck": {
       "profiles": [

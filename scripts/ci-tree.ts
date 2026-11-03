@@ -2,13 +2,11 @@
 // CI carry (GST-1182): gstack's /ship and pregate reuse a green ci.yml run at the exact, clean tree instead of running the
 // same lanes again (gstack docs/pregate.md#ci-carry). They accept a run only when its tested-tree artifact, tree.json,
 // names the run, its head and its tree, and lists what it ran, and when that list covers each lane's inventory in
-// .gstack/pregate.json's ship_lanes_from. ci.yml's checks job writes tree.json with record; list is the bun test lane's
-// inventory.
-//   bun scripts/ci-tree.ts list                                            the test files bun test runs in HEAD's tree
+// .gstack/pregate.json's ship_lanes_from. ci.yml's checks job writes tree.json with this script:
 //   bun scripts/ci-tree.ts record --junit <report> --checks <file> --out <tree.json>
-// record lists every test file in bun test's JUnit report, then one "check:<command>" entry per line of --checks. Each
-// check step in ci.yml appends its command to that file only after the command passed, and a check lane's inventory prints
-// the same entry, so typecheck, errors:check and wiki:check carry only from a run that recorded passing them.
+// It lists every test file in bun test's JUnit report, then one "check:<command>" entry per line of --checks. Each check
+// step in ci.yml appends its command to that file only after the command passed, and a check lane's inventory prints the
+// same entry, so typecheck, errors:check and wiki:check carry only from a run that recorded passing them.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -28,20 +26,6 @@ export interface TreeRecord {
   os: string;
   files: string[];
   tests: number;
-}
-
-/** Whether bun test runs this path: a .test, _test, .spec or _spec JS or TS file outside node_modules and dot directories. */
-export function isTestFile(path: string): boolean {
-  const parts = path.split("/");
-  if (parts.slice(0, -1).some((p) => p.startsWith(".") || p === "node_modules")) return false;
-  return /[._](?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/i.test(parts.at(-1)!);
-}
-
-/** The test files bun test runs in HEAD's committed tree, sorted. */
-export function listTestFiles(cwd: string = process.cwd()): string[] {
-  const r = spawnSync("git", ["ls-tree", "-r", "-z", "--name-only", "HEAD"], { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  if (r.status !== 0) throw new Error("git ls-tree HEAD failed: " + (r.stderr ?? "").trim());
-  return r.stdout.split("\0").filter((f) => f && isTestFile(f)).sort();
 }
 
 /**
@@ -102,10 +86,9 @@ function record(args: string[]) {
 if (import.meta.main) {
   const [verb = "", ...args] = process.argv.slice(2);
   try {
-    if (verb === "list") for (const f of listTestFiles()) console.log(f);
-    else if (verb === "record") record(args);
+    if (verb === "record") record(args);
     else {
-      console.error("usage: bun scripts/ci-tree.ts list | record --junit <report> --checks <file> --out <tree.json>");
+      console.error("usage: bun scripts/ci-tree.ts record --junit <report> --checks <file> --out <tree.json>");
       process.exitCode = 2;
     }
   } catch (e) {
