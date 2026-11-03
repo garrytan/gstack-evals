@@ -1,0 +1,45 @@
+price.py: L1 superseding preregistration at 2,000 dollars all-in. One ledger item per launch. Expected = 1.05 x model spend
+(Harbor's in-launch retries of sessions that got no model response) + VM hours. Cap = ceil10(1.5 x expected + 6 parallel
+sessions x allowance + one 4-hour VM block at 0.60 per hour for each part). VM spend is reserved and settled on each launch's
+own item (VM_USD_PER_HOUR=0.60). Rates per Opus session: SWE-rebench none 0.37 and told 0.74 (R3 amendment 4, measured);
+every gstack arm at the told rate; TB2 0.232 (merged L1 price.txt). Allowance 5.00 (SWE-rebench), 2.50 (TB2). VM hours
+0.0317 per none session and 0.0633 per gstack session (R3 amendment 4: 0.0317 over 210 sessions, told 0.0537).
+
+Planned path (Opus 5.5):
+item         sessions parts    vm h     model      vm   expected     cap
+pilot-opus         32     1     2.0     24.86    1.22      26.08      80
+f1-opus           560     4    32.9    404.04   19.76     423.80     680
+tb2-opus          370     2    21.1     90.13   12.65     102.79     180
+
+Crew model use (planned token stops, millions of tokens):
+   120M  GEVA-254: this preregistration through READY
+    50M  a successor for this PR's /ship, if needed
+    90M  U1: Lane B arms at both pins (lite, off config, seeded user), build and /ship
+   160M  U2: probes I and L, the analysis entry and the ceiling check, build and gate-class /ship
+    60M  amendment C: build pins, keyless dry run, routing table
+    60M  run thread: pilot, re-cost, F1, gate reading, TB2 twin, analysis
+    10M  blind probe audit reader
+    90M  results post, claim check and light /ship
+   640M  crew line, expected $288.00 at 0.45 per million; cap $400.00
+    80M  Captain GEVA-2: L1 turns, booked per turn: expected $36.00, cap $40.00
+    30M  Sol run work, if Sol runs: expected $13.50, cap $15.00
+    30M  particle-1 run work, if particle-1 runs: expected $13.50, cap $15.00
+  The tally reads each thread's credits / 1000, not tokens.
+
+All-in expected: paid $552.67 + crew $351.00 = $903.67
+All-in at caps:  paid $940.00 + crew $470.00 = $1410.00 (ceiling $2000.00, headroom $590.00)
+
+Leftover rule (section 9). Each leftover model launches only when the ceiling check passes at its launch; planning caps:
+  pilot-sol          32 sessions, expected    $41.74, cap   100
+  f1-sol            400 sessions, expected   $460.22, cap   730
+  pilot-p1           32 sessions, expected    $51.91, cap   120
+  f1-p1             400 sessions, expected   $583.97, cap   920
+  If every planned item settles at its cap: Sol needs $830.00 against $590.00 left: does not fit.
+    particle-1 after Sol at its expected spend needs $1040.00 against $88.04 left: does not fit; with no Sol run, $590.00 left: does not fit.
+  If every planned item settles at its expected spend: Sol needs $830.00 against $977.33 left: fits.
+    particle-1 after Sol at its expected spend needs $1040.00 against $475.37 left: does not fit; with no Sol run, $977.33 left: does not fit.
+
+Not planned:
+  F2 (two more F replicates on none, before-t and after-t, 480 sessions): not bought. O5 is descriptive (power.txt).
+  Sealed held-out bug fixes (the merged plan's T-hinv): 92 tasks to author, audit and hold in custody; dropped.
+  Held-out and public review (T-hrev, P4, P5): moved to the R2 line (GST-1163).

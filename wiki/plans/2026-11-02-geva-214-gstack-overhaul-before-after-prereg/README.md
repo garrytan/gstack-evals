@@ -7,7 +7,7 @@ author: GEVA-214
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-02
-status: open
+status: superseded
 links:
   - 2026-11-01-geva-125-untold-discovery-prereg
   - 2026-11-01-geva-101-r48-follow-ups-prereg
