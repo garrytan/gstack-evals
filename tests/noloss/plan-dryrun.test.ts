@@ -115,6 +115,8 @@ describe("B7: the R1a frozen rules, keyless, on the B5 panel's shape", () => {
       recovery: null,
       driver: (o) => ({
         async run(_session, task): Promise<AgentOutcome> {
+          mkdirSync(o.out, { recursive: true });
+          writeFileSync(join(o.out, "transcript.ndjson"), JSON.stringify({ type: "system", subtype: "init" }) + "\n");
           const s = slots.get(o.proxy.slot)!;
           const r = reply(s.arm, s.model, unitOf.get(task.id)!, s.pass);
           return { turns: r.turns, termination: { kind: r.timeout ? "timeout" : "completed" }, model_output: true, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: r.turns.length, loaded_bytes: null };
