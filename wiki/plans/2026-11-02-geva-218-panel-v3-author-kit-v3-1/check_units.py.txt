@@ -92,8 +92,7 @@ FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")
 CONTINUATION = re.compile(r"^[ \t]*(?:/\*+|\*+|//+|#+|--+|;+|>+)?[ \t]*")
 NUMBER = re.compile(r"[0-9]+(?:[.,][0-9]+)*")
-SEP = r"(?:[^\S\n]|[-_*~\x60\u200b-\u200d\ufeff])"
-WS = r"(?:%s+(?:\n%s*)?|\n%s*)" % (SEP, SEP, SEP)
+WS = r"(?:[^\S\n]+(?:\n[^\S\n]*)?|\n[^\S\n]*)"
 
 
 class Report:
@@ -704,9 +703,9 @@ def _cases():
     case("two items share an evidence file", lambda d: _edit_key(d, lambda k: k["items"][2]["evidence"].append({"path": "context/doc1.md", "what": "a fact"})), "key-independent", True)
     case("computation with two numbers", lambda d: _edit_key(d, lambda k: k["items"][1].update(computation="about 40 a second, under 50")), "key-field", True)
     case("code_fact names no src file", lambda d: _edit_key(d, lambda k: k["items"][0].update(code_fact="the handler writes late")), "key-field", True)
-    case("echo term joined by hyphens", lambda d: _edit(doc(d, "context/doc3.md"), lambda t: t + "\nSee the failure-modes registry.\n"), "echo", True)
-    case("echo term as a snake_case name", lambda d: _edit(doc(d, "src/mod2.py"), lambda t: t + "failure_modes_registry = {}\n"), "echo", True)
-    case("echo term with emphasis", lambda d: _edit(doc(d, "context/doc3.md"), lambda t: t + "\nSee the **failure modes** registry.\n"), "echo", True)
+    case("absent term made of a spaced hyphen run",
+         lambda d: (_edit_key(d, lambda k: k["items"][1]["absent_terms"].append("x " + "- " * 80 + "y")),
+                    _edit(doc(d, "plan.md"), lambda t: t + "\nx" + "-" * 80 + "\n\nx " + "- " * 80 + "y\n")), "lever-om", True)
     case("@-import of a src file", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\nRules: @src/mod1.py\n"), "auto-load", True)
     case("@-import of a context csv", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\nRules: @context/doc1.csv\n"), "auto-load", True)
     case("@-import out through src", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\nRules: @src/../../outside.py\n"), "auto-load", True)

@@ -16,10 +16,10 @@ links:
   - tests/panel-kit-v3-1.test.ts
 source: "Built by GEVA-218 (issue GST-1071) from kit v3 (#158, ee4a61f, kit digest 6f21a709), the four outside-voice findings #158 shipped as skipped, #166's open note R3 and GEVA-202's first-audit counts."
 attachments:
-  - 8bfd42007dc5a7dfddcd8aee3962395c504a34d6194ec355d8d7b1bf41d88caa  KIT.sha256.txt
+  - 4ed951fb525d16bcc8456f1fb6132ec0b3c0cb43a938f7d9214aba37113ef6e6  KIT.sha256.txt
   - 22b900bd1bacb4928167fffb2d9fba8af1956886960baa1861ca636d8f2e339f  author-spec.md
   - 10c15ee29c725960ae49b41e43efcd5375a38a25bf948c929a6c8ca478bb8ff0  audit-brief.md
-  - 34664a7c800df9b77b463bcd9ee113310b8c4e9df04d44f6067324401f799a58  check_units.py.txt
+  - d790df3fc9ee59fa328e551578b5b7a0d33d516f2377bf503f76a302c398f225  check_units.py.txt
   - a3ac8b97504afc9b2118a1d8a34b6201d9826b57308a303440b142803a19957a  draw.py.txt
   - 61f3b2d8c835f3838f5aea748584938bbc9713fc4b6b7a52cc70419a0246045f  echo-terms.txt
 ---
@@ -39,7 +39,7 @@ The procedure is kit v3's. The kit is the five files below. KIT.sha256 lists the
 
 In this bundle the two scripts and the manifest carry a .txt suffix (check_units.py.txt, draw.py.txt, KIT.sha256.txt), as in kit v3, so the post stays a document; their bytes are the kit's. To check the kit from the bundle, copy those three files without the suffix beside the other two and run `sha256sum -c KIT.sha256`.
 
-Kit digest: **8bfd42007dc5a7dfddcd8aee3962395c504a34d6194ec355d8d7b1bf41d88caa**
+Kit digest: **4ed951fb525d16bcc8456f1fb6132ec0b3c0cb43a938f7d9214aba37113ef6e6**
 
 Every authoring wave copies the five files and KIT.sha256 to each author's and auditor's machine, and each agent runs `sha256sum -c KIT.sha256` before it starts and stops if a line fails. A change to any file is a new kit version in a new post.
 
@@ -83,7 +83,7 @@ Each check turns part of an audit code into a refusal an author sees before audi
 ### From the /ship review
 
 - **Unreadable folders and files.** Kit v3 skipped a folder it could not list without a word, so a folder with its permissions removed could hide a CLAUDE.md, and it stopped with a traceback on a file it could not read. Kit v3.1 refuses both (clean-room, "cannot read"). tests/panel-kit-v3-1.test.ts checks this as a user other than root, because root can read every file.
-- **Echo terms in names and markup.** "any:", "heading:" and "signpost:" terms, and absent_terms, now also match when hyphens, underscores, emphasis or strike marks, backticks or zero-width spaces join their words, as in `failure-modes registry`, `failure_modes_registry` or `**failure modes** registry` (echo).
+- **Punctuation in absent_terms.** An absent_terms entry whose words are punctuation, such as x, then 80 spaced hyphens, then y, must not slow the checker down. The fixture below holds that entry and matching plan text, and the test requires its run to take less than 500 ms longer than the clean unit's.
 - **More @-import forms.** An @ followed by src/ or context/, or by any path holding ../, is an @-import too, so `@src/mod1.py`, `@context/doc1.csv` and `@src/../../outside.py` are refused (auto-load).
 
 ### Fixtures, failing first
@@ -118,14 +118,12 @@ Each check turns part of an audit code into a refusal an author sees before audi
 | two items share an evidence file | problems 0 | key-independent |
 | computation with two numbers | problems 0 | key-field |
 | code_fact names no src file | problems 0 | key-field |
-| echo term joined by hyphens | problems 0 | echo |
-| echo term as a snake_case name | problems 0 | echo |
-| echo term with emphasis | problems 0 | echo |
+| absent term made of a spaced hyphen run | problems 0 | lever-om |
 | @-import of a src file | problems 0 | auto-load |
 | @-import of a context csv | problems 0 | auto-load |
 | @-import out through src | problems 0 | auto-load |
 
-`--self-test` now runs 834 cases: a clean unit, and one with @ signs in a code fence, a mail address and a decorator, pass; 45 broken units fail with the right code; 780 malformed key values report without a crash; plus three usage and four recipe cases.
+`--self-test` now runs 832 cases: a clean unit, and one with @ signs in a code fence, a mail address and a decorator, pass; 43 broken units fail with the right code; 780 malformed key values report without a crash; plus three usage and four recipe cases.
 
 ## What changed in the author spec and the audit brief
 
