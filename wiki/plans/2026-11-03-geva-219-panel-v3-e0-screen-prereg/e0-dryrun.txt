@@ -6,7 +6,8 @@ PASS the scorer is at b7b6aeccec868e5127e951b187ca4b637da13114 with no tracked c
 PASS gen-synth-e0.py writes a slice in the sealed layout
 PASS the kit's check_units.py --wave calibration: 24 of 24 units at problems 0 (exit 0)
 PASS build-e0.sh refuses a bundle whose sha256 is not the frozen ea69c111... (exit 2)
-    build-e0: bundle bound to c74bbe923fe6c7e257f89d4214a929b930197a12e4073c1c56d58d5541dbe0e1, not the frozen digest (dry run only)
+    build-e0: bundle bound to 2194518ebe90f8ca8c138d7ccd51a2247ceadf9e8fe5bf66969b07befb45ffc7, not the frozen digest (dry run only)
+    unit numbers drawn from seed 20261103 (dry run only)
     kept units 24 of 24 ; blockers 93 ; excluded items 3
     stratum ceo units 6 ; A-F anchor 2, A-T anchor 2, A-X anchor 2, C-OM candidate 6, C-Q candidate 6, C-U2 candidate 5
     stratum eng units 6 ; A-F anchor 2, A-T anchor 2, A-X anchor 2, E-CD candidate 6, E-OM candidate 5, E-Q candidate 6
@@ -19,9 +20,14 @@ PASS build-e0.sh refuses a bundle whose sha256 is not the frozen ea69c111... (ex
       design: A-F 2, A-T 2, A-X 2, G-A11Y 5, G-OM 6, G-X 6
 PASS build-e0.sh builds the synthetic slice, bound to its own sha256 by the dry-run-only fifth argument (exit 0)
 PASS custody-e0.sh refuses an age bundle whose sha256 is not the frozen ea69c111... before it decrypts (exit 2)
+PASS custody-e0.sh refuses before it decrypts when E0_MACHINE is unset, so every CUSTODY.md line names its machine (exit 2)
 PASS custody-e0.sh decrypts the age bundle into /dev/shm and runs build-e0.sh on it, bound by the dry-run-only sixth argument (exit 0)
-PASS custody-e0.sh builds the suite (24 units) and appends one CUSTODY.md line with a UTC time, the bundle's sha256 and the suite's sha256 (1 line)
+PASS custody-e0.sh builds the suite (24 units) and appends one CUSTODY.md line with a UTC time, the mode, the bundle's sha256, the suite's sha256, the machine and the run dir (1 line)
 PASS custody-e0.sh leaves no extraction under /dev/shm (0 left)
+PASS custody-e0.sh refuses a run dir that already exists before it decrypts, so its failure trap can only ever remove a dir it made (exit 2; the built run root is untouched)
+PASS forced failure: with build-e0.sh failing after the decryption (a scorer whose suite step exits 1, after convert-e0.py wrote the run root), custody-e0.sh exits 2, appends one CUSTODY.md line naming the failed stage, its exit code, the machine and the run dir, and removes the half-built run root and the extraction (0 left)
+PASS custody-e0.sh --reaudit decrypts the bundle into /dev/shm, makes the re-audit dir mode 0700 and runs the re-audit command there with E0_SLICE and E0_REAUDIT set (a stand-in that finds the slice's 24 units and their key.json under /dev/shm and writes reaudit.json); it appends one CUSTODY.md line with the reaudit.json sha256, the machine and the dir, and leaves no extraction (exit 0)
+PASS forced failure: with the re-audit command failing after the decryption (exit 3 after writing a partial reaudit.json), custody-e0.sh --reaudit exits 3, appends one CUSTODY.md line naming the failed stage, its exit code, the machine and the re-audit dir, and removes that dir and the extraction (0 left); the run root and the earlier re-audit stay
 PASS build-e0.sh's run root is mode 700 (0700 wanted), and 0 files or dirs under it are group- or world-readable
 PASS convert-e0.py refuses a run dir it could not make mode 0700 (umask 0277; exit 2: E_USAGE convert-e0: the run dir is mode 500, not 0700)
 PASS the suite loads with the sealed root: 24 units, 93 blockers (24 anchors, 69 candidates), 12 blockers in 3 flagged units, and e0-kinds.json names the suite's sha256
@@ -35,7 +41,7 @@ PASS convert-e0.py refuses wrong counts (a fourth flagged unit) (exit 2: E_USAGE
 
 ## c. The frozen commands (review-units --dry-run, paths swapped)
     review-units dry run: nothing is built, written or spent
-    suite planrev-v3-e0 (sha256 9ed364e80dddc4141afb7aa33d58b6a0bf4d847444f21f2b5caa7a9a8df82e1f)
+    suite planrev-v3-e0 (sha256 abe6e3f2049d76b4c15a585480ab3814c373972f57e690c197bfab31e076bcdf)
     plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d
     units (24):
     arms: none ("Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset
@@ -51,7 +57,7 @@ PASS e0-opus-none: 60 turns (no --max-turns; the driver's MAX_TURNS is 60 and th
 PASS e0-opus-none: the spend cap prints as $43.30
     timeout 3600 printed; parallel 3 accepted, not printed; item printed
     review-units dry run: nothing is built, written or spent
-    suite planrev-v3-e0 (sha256 9ed364e80dddc4141afb7aa33d58b6a0bf4d847444f21f2b5caa7a9a8df82e1f)
+    suite planrev-v3-e0 (sha256 abe6e3f2049d76b4c15a585480ab3814c373972f57e690c197bfab31e076bcdf)
     plan lens ceo; told plan template sha256 48a6f6a32049f111023e6d15958d1263f94611116d14ccb703809a97eff44291; plan parser sha256 048b1f22600b504b7bccccb48c5e2b9b54cdd7a433ad9b35e3261d2df49d0e46; rec user sha256 ab8977416ccde79c7f9789e56bfce43f338b43374f823c87b22d
     units (24):
     arms: none ("Review this plan for problems." on particle-ai/particle-1) system prompt claude-code-preset
@@ -106,18 +112,18 @@ PASS e0-judge-sonnet: one lease opened (RIG_UNPROVEN) and settled at $1.10, the 
 PASS e0-judge-sonnet: a second run on the settled item refuses with E_ITEM_BOUND
 
 ## e. Judging: one blind batch, judge-run --dry-run per judge item, the combine rule and kappa
-    judge-packet: batch 167fd630483aa261cbd5abd131db8d2bf977157ffcee96b4a6b87daf6032fa32, 24 packets, 142 findings from 2 arms; the key is outside the packets
+    judge-packet: batch 2c00e53f78d7c63a90e6b951893bf79f4168f2ee1cbb044c33d174d4298c1504, 24 packets, 144 findings from 2 arms; the key is outside the packets
 PASS judge-packet builds one batch over both arms, seed 20261103
-PASS judge-packet accepts a full Opus arm that review-units marked stopped with a coverage gap, as an allowance stop leaves it (a findings file for every unit): judge-packet: batch 0fa320df6e1cf6b51626ff5aca142fb450c13ff22c946b272b16eb3d7791a57c, 24 packets, 142 findings from 2 arms; the key is outside the packets
+PASS judge-packet accepts a full Opus arm that review-units marked stopped with a coverage gap, as an allowance stop leaves it (a findings file for every unit): judge-packet: batch 21be8a304f596ed15c7dabcef4e01002ed21276713e434eb52e6f3ff901adca6, 24 packets, 144 findings from 2 arms; the key is outside the packets
     judge brief v3: judge-brief-v3.md, sha256 79d73194f09c65d457c9ada56143f4b3776a8839c777846a91fb9869a660a936
-    sol: worst case: primary $22.134816 on 24 packets; second up to $40.010424 and third up to $20.0055 if they read every packet; $82.15074 in all, $164.30148 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
-    sol: item e0-judge-sol: cap $38.86, $1.10 committed, $37.76 left; the worst case $82.15074 does not fit, and asked again $164.30148 does not fit. The cap stops the run wherever it falls.
+    sol: worst case: primary $22.138374 on 24 packets; second up to $40.016112 and third up to $20.008344 if they read every packet; $82.16283 in all, $164.32566 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+    sol: item e0-judge-sol: cap $38.86, $1.10 committed, $37.76 left; the worst case $82.16283 does not fit, and asked again $164.32566 does not fit. The cap stops the run wherever it falls.
 PASS e0-judge-sol: judge-run --dry-run (primary openai/gpt-6.1-sol, second anthropic/claude-opus-5-5, third anthropic/claude-sonnet-5-5) checks and prints its worst case keyless
-    opus: worst case: primary $40.010424 on 24 packets; second up to $22.134816 and third up to $20.0055 if they read every packet; $82.15074 in all, $164.30148 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
-    opus: item e0-judge-opus: cap $37.76, $1.10 committed, $36.66 left; the worst case $82.15074 does not fit, and asked again $164.30148 does not fit. The cap stops the run wherever it falls.
+    opus: worst case: primary $40.016112 on 24 packets; second up to $22.138374 and third up to $20.008344 if they read every packet; $82.16283 in all, $164.32566 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+    opus: item e0-judge-opus: cap $37.76, $1.10 committed, $36.66 left; the worst case $82.16283 does not fit, and asked again $164.32566 does not fit. The cap stops the run wherever it falls.
 PASS e0-judge-opus: judge-run --dry-run (primary anthropic/claude-opus-5-5, second openai/gpt-6.1-sol, third anthropic/claude-sonnet-5-5) checks and prints its worst case keyless
-    sonnet: worst case: primary $20.0055 on 24 packets; second up to $22.134816 and third up to $40.010424 if they read every packet; $82.15074 in all, $164.30148 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
-    sonnet: item e0-judge-sonnet: cap $36.66, $1.10 committed, $35.56 left; the worst case $82.15074 does not fit, and asked again $164.30148 does not fit. The cap stops the run wherever it falls.
+    sonnet: worst case: primary $20.008344 on 24 packets; second up to $22.138374 and third up to $40.016112 if they read every packet; $82.16283 in all, $164.32566 if every answer is asked again. Each request counts 3 sends, since the retry budget allows 3 sends within 900 s and a 5xx without usage is charged its full reservation. Nothing was sent or written.
+    sonnet: item e0-judge-sonnet: cap $36.66, $1.10 committed, $35.56 left; the worst case $82.16283 does not fit, and asked again $164.32566 does not fit. The cap stops the run wherever it falls.
 PASS e0-judge-sonnet: judge-run --dry-run (primary anthropic/claude-sonnet-5-5, second openai/gpt-6.1-sol, third anthropic/claude-opus-5-5) checks and prints its worst case keyless
 PASS combine: sol and opus agree on a must-fix match -> matched
 PASS combine: they agree on no must-fix match (a Medium match, another arm's finding) -> unmatched, any-severity still read
@@ -183,10 +189,10 @@ PASS e0-opus-none: recorded at $43.30 on the temporary ledger, one lease bound t
 PASS particle-ai/particle-1: runReviewUnits on the full suite with the frozen values (none arm, 2 passes, parallel 3, timeout 3600, cap $6.12) through the real SDK and CLI and the metering proxy: 48 sessions, 48 scored with 48 parsed blocks, 0 turn cap, stops [], stderr log 0 lines
 PASS e0-particle-none: recorded at $6.12 on the temporary ledger, one lease bound to the run and settled at $0.0056
 PASS every review-units model request went to the fake upstream and named its session (155 requests, 0 unmatched)
-PASS judge-packet builds one batch over both arms, seed 20261103 (exit 0): judge-packet: batch 05dff60808d7098957a37d9efb6081390da1cffe8456ed236f3ff731412b64a5, 24 packets, 267 findings from 2 arms; the key is outside the packets
-PASS e0-judge-sol: recorded at $62.39 ($62.86 less $0.465668 settled by every earlier item, rounded down to the cent, so committed plus cap is $62.855668); judge-run (primary openai/gpt-6.1-sol, second anthropic/claude-opus-5-5, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (gpt-6.1-sol 24, claude-opus-5-5 23, claude-sonnet-5-5 3); lease settled at $0.0511
-PASS e0-judge-opus: recorded at $62.34 ($62.86 less $0.516768 settled by every earlier item, rounded down to the cent, so committed plus cap is $62.856768); judge-run (primary anthropic/claude-opus-5-5, second openai/gpt-6.1-sol, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (claude-opus-5-5 24, gpt-6.1-sol 23, claude-sonnet-5-5 3); lease settled at $0.0518
-PASS e0-judge-sonnet: recorded at $62.29 ($62.86 less $0.568568 settled by every earlier item, rounded down to the cent, so committed plus cap is $62.858568); judge-run (primary anthropic/claude-sonnet-5-5, second openai/gpt-6.1-sol, third anthropic/claude-opus-5-5) exits 0 with every send answered by the fake (claude-sonnet-5-5 24, gpt-6.1-sol 24, claude-opus-5-5 2); lease settled at $0.0364
+PASS judge-packet builds one batch over both arms, seed 20261103 (exit 0): judge-packet: batch a76335fb758a513ea5cb5b5af3be8225df3a489737b5f5dfe66e01c4120468a6, 24 packets, 267 findings from 2 arms; the key is outside the packets
+PASS e0-judge-sol: recorded at $62.39 ($62.86 less $0.465668 settled by every earlier item, rounded down to the cent, so committed plus cap is $62.855668); judge-run (primary openai/gpt-6.1-sol, second anthropic/claude-opus-5-5, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (gpt-6.1-sol 24, claude-opus-5-5 24, claude-sonnet-5-5 4); lease settled at $0.0532
+PASS e0-judge-opus: recorded at $62.34 ($62.86 less $0.518868 settled by every earlier item, rounded down to the cent, so committed plus cap is $62.858868); judge-run (primary anthropic/claude-opus-5-5, second openai/gpt-6.1-sol, third anthropic/claude-sonnet-5-5) exits 0 with every send answered by the fake (claude-opus-5-5 24, gpt-6.1-sol 24, claude-sonnet-5-5 3); lease settled at $0.0525
+PASS e0-judge-sonnet: recorded at $62.28 ($62.86 less $0.571368 settled by every earlier item, rounded down to the cent, so committed plus cap is $62.851368); judge-run (primary anthropic/claude-sonnet-5-5, second openai/gpt-6.1-sol, third anthropic/claude-opus-5-5) exits 0 with every send answered by the fake (claude-sonnet-5-5 24, gpt-6.1-sol 24, claude-opus-5-5 1); lease settled at $0.0350
 PASS envelope with $12.340001 settled: the item records $50.51 ($50.519999 rounded down; toFixed(2) would record $50.52), so committed plus cap is $62.850001, within $62.86
 PASS no request left loopback (0 refused)
     part one: E0: READ
@@ -208,7 +214,7 @@ PASS no request left loopback (0 refused)
     part one: Stratum eng: BUILD
     part one: Stratum dx: AWAITING RE-AUDIT
     part one: Stratum design: BUILD
-    part one: Sensitivity read (flagged units left out, 12 blockers; reported, decides nothing): E0 READ; anchors 0.952; C-OM 1/7 KEEP, C-Q 1/7 KEEP, C-U2 1/5 KIND NO READ, E-CD 4/10 KEEP, E-OM 4/8 KEEP, E-Q 3/10 KEEP, G-A11Y 2/10 KEEP, G-OM 6/12 KEEP, G-X 7/12 KEEP, X-CD 0/12 AWAITING RE-AUDIT, X-OM 9/12 DROP-CEILING, X-Q 5/12 KEEP; ceo STRATUM NO READ, eng BUILD, dx AWAITING RE-AUDIT, design BUILD
+    part one: Sensitivity read (flagged units left out, 12 blockers; reported, decides nothing): E0 READ; anchors 0.952; C-OM 3/7 KEEP, C-Q 2/7 KEEP, C-U2 1/5 KIND NO READ, E-CD 6/10 KEEP, E-OM 4/8 KEEP, E-Q 3/10 KEEP, G-A11Y 2/10 KEEP, G-OM 6/12 KEEP, G-X 7/12 KEEP, X-CD 0/12 AWAITING RE-AUDIT, X-OM 9/12 DROP-CEILING, X-Q 5/12 KEEP; ceo STRATUM NO READ, eng BUILD, dx AWAITING RE-AUDIT, design BUILD
     part one: Differs between the primary and sensitivity reads: kind C-U2: primary KEEP, sensitivity KIND NO READ
     part one: Re-audit: DEAD in the primary read X-CD; in the sensitivity read X-CD; the re-audit covers X-CD
     part one: Judging: complete; unanswered blockers in primary replies sol 0, opus 0, sonnet 0; matching kappa sol/opus over both arms' cells with a parsed block, pooled 0.978 (n 368), ceo 1.000 (n 88), eng 0.956 (n 92), dx 1.000 (n 96), design 0.956 (n 92)
@@ -260,19 +266,21 @@ PASS part two refuses --reaudit with an extra record for a kind that is not DEAD
 PASS e0-readings refuses the same judge-run dir given for sol and opus before joining (exit 2, E_USAGE naming it)
     model: E_USAGE e0-readings: --read sol: its run.json names primary model anthropic/claude-opus-5-5, not openai/gpt-6.1-sol
 PASS e0-readings refuses a read whose run.json names another primary model (the opus read given as sol, the sol read as opus) before joining (exit 2, E_USAGE naming it)
-    batch: E_USAGE e0-readings: --read sonnet: its run.json names batch another-batch, not the key's batch 05dff60808d7098957a37d9efb6081390da1cffe8456ed236f3ff731412b64a5
+    batch: E_USAGE e0-readings: --read sonnet: its run.json names batch another-batch, not the key's batch a76335fb758a513ea5cb5b5af3be8225df3a489737b5f5dfe66e01c4120468a6
 PASS e0-readings refuses a read whose run.json names another batch before joining (exit 2, E_USAGE naming it)
     digest: E_USAGE e0-readings: --key: --key $OUT/e2e/key-digest.json does not hash to its own batch digest; it was edited or swapped
 PASS e0-readings refuses a key whose packet digest differs from the one the reads judged (the scorer's loadKey now refuses it, since the key no longer hashes to its batch digest) before joining (exit 2, E_USAGE naming it)
+    replydigest: E_USAGE e0-readings: --read sonnet: a packet digest in its primary reply is not the key's
+PASS e0-readings refuses a read whose primary reply names a packet digest other than the key's, with an unchanged key that loads and a run.json that records the edited reply (the reply-side packet-digest guard) before joining (exit 2, E_USAGE naming it)
     swap: E_USAGE e0-readings: --opus: its arm.json names driver model particle-ai/particle-1, not claude-opus-5-5
 PASS e0-readings refuses --opus and --particle swapped (each run's arm.json names the other driver model) before joining (exit 2, E_USAGE naming it)
     samedir: E_USAGE e0-readings: --opus and --particle name the same dir; the two arms must be distinct runs
 PASS e0-readings refuses the same run dir given for --opus and --particle before joining (exit 2, E_USAGE naming it)
     mapping: E_USAGE e0-readings: --key: --key $OUT/e2e/key-mapping.json does not hash to its own batch digest; it was edited or swapped
 PASS e0-readings refuses a key whose mapping was edited (it no longer hashes to its mapping_sha256 and batch digest), through the scorer's loadKey before joining (exit 2, E_USAGE naming it)
-    tree: E_USAGE e0-readings: --key: arm none-opus changed since the packets were built (tree 90e0ff50904a3bbed3eca6d197a9efc693e5501dfbdcba2577f667959f0c96b2, now 5a21dc45d537b195153f9869011dc4d1f093a1b087b8c0825f855f1b149f5f13); build a new batch
+    tree: E_USAGE e0-readings: --key: arm none-opus changed since the packets were built (tree bbe10c80c4fd22e8c10b546657dacd6abc4ae32a97cc44cf638391fbad05aa54, now 103c04569371067fb3e51fbbb86f8b6a7d652329157e90575f6dbdc696c41b0a); build a new batch
 PASS e0-readings refuses an Opus arm whose tree differs from the tree_sha256 the key bound (arm.json rewritten) before joining (exit 2, E_USAGE naming it)
-    stopped judge item: E_ALLOWANCE the primary judge (openai/gpt-6.1-sol) on packets/<n>.json: E_ALLOWANCE: metering proxy: the slot's allowance of $0.010000 cannot hold this call's worst case of $0.306940 ($0.000000 already 
+    stopped judge item: E_ALLOWANCE the primary judge (openai/gpt-6.1-sol) on packets/<n>.json: E_ALLOWANCE: metering proxy: the slot's allowance of $0.010000 cannot hold this call's worst case of $0.306845 ($0.000000 already 
     stopped: 
     stopped judge item: E0: NO READ (judging incomplete: e0-judge-stopped stopped; pooled anchor recall 0.000 < 0.85)
     stopped judge item: Judging: e0-judge-stopped stopped; unanswered blockers in primary replies sol 93, opus 0, sonnet 0; matching kappa sol/opus over both arms' cells with a parsed block, pooled n/a (n 0), ceo n/a (n 0), eng n/a (n 0), dx n/a (n 0), design n/a (n 0)
@@ -283,4 +291,4 @@ PASS e0-e2e.ts ran as its own process (exit 0)
 ## j. Leak check
 PASS the transcript prints no synthetic unit id, unit label, case id or packet file name (0 found)
 
-PASS 162, FAIL 0
+PASS 168, FAIL 0

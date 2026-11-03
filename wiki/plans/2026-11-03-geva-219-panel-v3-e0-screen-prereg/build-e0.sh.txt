@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # build-e0.sh <bundle tar> <slice dir> <run dir> <scorer> [<bundle sha256>]: builds E0's run material from the extracted
 # calibration slice with the pinned scorer: refuses unless the bundle's sha256 is the frozen one (the fifth argument binds
-# another digest, for the keyless dry run only, and says so), then plan cases and the source clone (convert-e0.py), the
+# another digest, for the keyless dry run only, and says so, and then also seeds convert-e0.py's unit-number draw with
+# 20261103 so the dry run's layout repeats), then plan cases and the source clone (convert-e0.py), the
 # suite planrev-v3-e0 (noloss suite --from-catalog), the mirror clone and e0-kinds.json with the suite's blockers and
 # sha256. Keyless. Runs under umask 077, so the run root and every file in it are private. Prints counts and digests only.
 # GEVA-219.
@@ -14,7 +15,7 @@ if [ "$GOT" != "$WANT" ]; then echo "E_USAGE build-e0: the bundle's sha256 is $G
 [ "$WANT" = "$FROZEN" ] || echo "build-e0: bundle bound to $WANT, not the frozen digest (dry run only)"
 G="env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY $SCORER/bin/gstack-evals"
 HERE=$(cd "$(dirname "$0")" && pwd)
-python3 "$HERE/convert-e0.py" "$SLICE" "$RUN"
+if [ "$WANT" = "$FROZEN" ]; then python3 "$HERE/convert-e0.py" "$SLICE" "$RUN"; else python3 "$HERE/convert-e0.py" "$SLICE" "$RUN" 20261103; fi
 SR=$RUN/sealed-root; mkdir -p "$SR/suites"
 if ! (cd "$SCORER" && $G noloss suite --from-catalog catalog/e0 --id planrev-v3-e0 --sealed-root "$SR" --out "$SR/suites/planrev-v3-e0.json") > "$RUN/suite.log" 2>&1; then
   echo "E_USAGE build-e0: noloss suite refused; its output is in \$RUN/suite.log" >&2; exit 2

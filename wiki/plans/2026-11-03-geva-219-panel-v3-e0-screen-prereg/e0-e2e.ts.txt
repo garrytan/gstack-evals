@@ -6,7 +6,7 @@
 // judge-packet over both arms, judge-run three times (the prereg's loop) over a fake upstream that judges from the packet
 // content, and e0-readings.ts's CLI, part one and part two. Keyless: no request leaves loopback. One JSON line per check.
 //   bun e0-e2e.ts <scorer> <sealed root> <suite.json> <plans.git> <scratch> <judge brief>
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -230,6 +230,14 @@ try {
   const kd = join(root, "key-digest.json");
   writeFileSync(kd, JSON.stringify({ ...key, packets: key.packets.map((p: any, i: number) => (i ? p : { ...p, sha256: "0".repeat(64) })) }));
   refused("digest", "a key whose packet digest differs from the one the reads judged (the scorer's loadKey now refuses it, since the key no longer hashes to its batch digest)", /does not hash to its own batch digest/, { key: kd });
+  const wr = join(root, "jr-replydigest");
+  cpSync(jr.sonnet!, wr, { recursive: true });
+  const prim = JSON.parse(readFileSync(join(wr, "primary.json"), "utf8"));
+  prim.packets[0].sha256 = "0".repeat(64);
+  const pb = JSON.stringify(prim);
+  writeFileSync(join(wr, "primary.json"), pb);
+  writeFileSync(join(wr, "run.json"), JSON.stringify((({ files, ...rest }) => ({ ...rest, files: { ...files, "primary.json": createHash("sha256").update(pb).digest("hex") } }))(JSON.parse(readFileSync(join(wr, "run.json"), "utf8")))));
+  refused("replydigest", "a read whose primary reply names a packet digest other than the key's, with an unchanged key that loads and a run.json that records the edited reply (the reply-side packet-digest guard)", /a packet digest in its primary reply is not the key's/, { reads: { sonnet: wr } });
   refused("swap", "--opus and --particle swapped (each run's arm.json names the other driver model)", /--opus: its arm\.json names driver model particle-ai\/particle-1/, { opus: particle.out, particle: opus.out });
   refused("samedir", "the same run dir given for --opus and --particle", /--opus and --particle name the same dir/, { particle: opus.out });
   const km = join(root, "key-mapping.json");

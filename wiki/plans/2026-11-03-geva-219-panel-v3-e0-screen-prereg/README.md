@@ -16,12 +16,12 @@ links:
   - GST-1107
   - GST-916
 attachments:
-  - fc42d0ee96ad7fb36bc02953b213b13b0dfa43923751ed4da7b52f22fb0cca77  build-e0.sh.txt
-  - 0e2312705359649ee257831cdb11c784701b38de6b03a1b17fc369eba75b5d80  convert-e0.py.txt
-  - be3257fa224f821f31393494c238b7cc784f8e17e2ab1b3a7623c91673a226e5  custody-e0.sh.txt
-  - 69fe76c0a4ad6955b741381ef926f00c90ad8c4cf3ef39e3bf460a31fbb5c17c  e0-dryrun.ts.txt
-  - b887f34515ee524f1c5669a0543338706112299f6b69495ce6cde0d6d2d6a962  e0-dryrun.txt
-  - 6402f1bf9127bc1a245614a6555749e7d8f6f2478e3b51ad163e0a4da6f356f1  e0-e2e.ts.txt
+  - bc81945309b1611c80d9e1ce4452903b0785dde42607727f11f9fc4d3461604d  build-e0.sh.txt
+  - 0874e6014b5f3b1e1f19ab0f98526e23d1d991de0c10c7a02d6eace2b477c99c  convert-e0.py.txt
+  - b0877e6f147644e27d2b96d6b906a43244ce5ad37ccdf7d83f10f1eeb04dd078  custody-e0.sh.txt
+  - 11d297e4780fab18d300f36c4b3490205874d07cf3ad3c9259895832c5947d8a  e0-dryrun.ts.txt
+  - 38589cd3b88c7f388fd0fb9abe0e9c14358c129e547a633633af851b6155f152  e0-dryrun.txt
+  - fb0540a7134d12411e436841c35bf04c7fc5fcdc40af2dba00d0498cb7a8d814  e0-e2e.ts.txt
   - 2c0b323bd4097f3933339e13eceb311485e5ea99dac2a85ccc9ec76eeedad66d  e0-oc.py.txt
   - ee638f22186ee1766d7fd16a63c184d6a9764df9303d93ad29cef6f78a2c16d2  e0-oc.txt
   - 0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9  e0-readings.ts.txt
@@ -105,12 +105,27 @@ The suite, e0-kinds.json and the permutation pair unit heads with kinds, so they
 
 ## 4. Frozen commands
 
-Paths as on the run machine: $BUNDLE is the sealed bundle file (panel-v3-calibration.tar.age, section 3), $IDENTITY the age identity that opens it, $CUSTODY the CUSTODY.md beside it, $SLICE the extracted slice, which custody-e0.sh makes in a fresh /dev/shm dir, hands to build-e0.sh and removes in the same process (custody-e0.sh is the only allowed way to produce the slice), $RUN the run root on disk, which build-e0.sh creates mode 0700 (review-units refuses an --out under /dev/shm, E_RECEIPTS_VOLATILE), $SR=$RUN/sealed-root, $SRC=$RUN/source/plans.git, $B this bundle's scripts with their .txt suffixes removed. Every command runs from the pinned checkout under `env -u` for any key the step does not need.
+Paths as on the run machine: $BUNDLE is the sealed bundle file (panel-v3-calibration.tar.age, section 3), $IDENTITY the age identity that opens it, $CUSTODY the CUSTODY.md beside it, E0's one custody log (section 9), $MACHINE the run machine's Capy machine id, which custody-e0.sh writes into every $CUSTODY line, $SLICE the extracted slice, which custody-e0.sh makes in a fresh /dev/shm dir, hands to its step and removes in the same process, $RUN the run root on disk, which build-e0.sh creates mode 0700 (review-units refuses an --out under /dev/shm, E_RECEIPTS_VOLATILE), $SR=$RUN/sealed-root, $SRC=$RUN/source/plans.git, $B this bundle's scripts with their .txt suffixes removed. custody-e0.sh is the only allowed way to open $BUNDLE: step 0 produces the slice for build-e0.sh, and its --reaudit mode (step 5b) is the only allowed way to open key.json and the unit trees for the section 7 re-audit. Every command runs from the pinned checkout under `env -u` for any key the step does not need.
 
 ```
+# L. Launch check: the files in $B are the ones section 14 lists (sha256sum exits 1 on any mismatch or missing file)
+(cd $B && sha256sum --strict -c) <<'EOF'
+bc81945309b1611c80d9e1ce4452903b0785dde42607727f11f9fc4d3461604d  build-e0.sh
+0874e6014b5f3b1e1f19ab0f98526e23d1d991de0c10c7a02d6eace2b477c99c  convert-e0.py
+b0877e6f147644e27d2b96d6b906a43244ce5ad37ccdf7d83f10f1eeb04dd078  custody-e0.sh
+11d297e4780fab18d300f36c4b3490205874d07cf3ad3c9259895832c5947d8a  e0-dryrun.ts
+fb0540a7134d12411e436841c35bf04c7fc5fcdc40af2dba00d0498cb7a8d814  e0-e2e.ts
+2c0b323bd4097f3933339e13eceb311485e5ea99dac2a85ccc9ec76eeedad66d  e0-oc.py
+0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9  e0-readings.ts
+a3026ed074000650f932e71de30756858385b5091014389eaafef6f25c1c782e  e0-stops.ts
+746d3b35714ad1aa92d4bbbdeaa4497940afa2b23ad7db13d9fb2cf2301f0b31  gen-synth-e0.py
+79d73194f09c65d457c9ada56143f4b3776a8839c777846a91fb9869a660a936  judge-brief-v3.md
+EOF
+
 # 0. Pin check, then build the run material under custody (keyless; counts and digests only). custody-e0.sh checks
-#    $BUNDLE's sha256, decrypts it into $SLICE, runs bash $B/build-e0.sh $BUNDLE $SLICE $RUN . there, logs CUSTODY.md and removes $SLICE
-bash $B/custody-e0.sh $BUNDLE $IDENTITY $RUN . $CUSTODY
+#    $BUNDLE's sha256, decrypts it into $SLICE, runs bash $B/build-e0.sh $BUNDLE $SLICE $RUN . there, removes $SLICE and
+#    logs $CUSTODY; if anything fails once the decryption starts, it logs the failure and removes $SLICE and $RUN
+E0_MACHINE=$MACHINE bash $B/custody-e0.sh $BUNDLE $IDENTITY $RUN . $CUSTODY
 
 # 1. The Opus run (item e0-opus-none)
 bin/gstack-evals review-units --suite $SR/suites/planrev-v3-e0.json --arms none --models claude-opus-5-5 --passes 2 \
@@ -145,15 +160,21 @@ bun $B/e0-readings.ts --scorer . --suite $SR/suites/planrev-v3-e0.json --kinds $
   --opus $RUN/e0-opus-none --particle $RUN/e0-particle-none --key $RUN/judge/key.json \
   --read sol=$RUN/judge/read-sol --read opus=$RUN/judge/read-opus --read sonnet=$RUN/judge/read-sonnet --out $RUN/readings
 
+# 5b. The re-audit of DEAD kinds (section 7) under custody. custody-e0.sh checks $BUNDLE's sha256, decrypts it into a fresh
+#     /dev/shm dir, makes $RUN/reaudit mode 0700, runs the re-audit command in the foreground with E0_SLICE set to the
+#     extraction and E0_REAUDIT to $RUN/reaudit, removes the extraction and logs $CUSTODY; if the command fails or leaves
+#     no reaudit.json, it logs the failure and removes the extraction and $RUN/reaudit
+E0_MACHINE=$MACHINE bash $B/custody-e0.sh --reaudit $BUNDLE $IDENTITY $RUN/reaudit $CUSTODY -- <the re-audit command>
+
 # 6. Readings, part two, with the re-audit's results (section 7)
-bun $B/e0-readings.ts <the same flags> --reaudit $RUN/reaudit.json --out $RUN/readings-final
+bun $B/e0-readings.ts <the same flags> --reaudit $RUN/reaudit/reaudit.json --out $RUN/readings-final
 ```
 
 Notes on the commands:
 - At the pin a cap stop prints nothing: review-units adds it to its run stops and exits 2, writes no journal entry for a session the start rule never ran, and counts those sessions in arm.json's parse_outcomes.not_run. So the readings read a scheduled session with no journal entry as CAP when not_run is above 0, and as GAP otherwise.
 - At the pin review-units exits 2 with E_COVERAGE_GAP when any session is a coverage gap, and it records an allowance stop as one (section 5). That exit does not end E0. The run's records are complete, judge-packet accepts an arm that review-units marked stopped (the dry run checks it on a full arm), and the readings classify each session themselves.
 - Each judge-run call prints a judge-join command. E0 does not run it: the readings join the three primary replies themselves (section 6).
-- The re-audit of DEAD kinds (section 7) runs between steps 5 and 6 and writes $RUN/reaudit.json.
+- The re-audit of DEAD kinds (section 7) runs between steps 5 and 6, as step 5b. Its command is the run thread's own: it runs the section 7 re-audit agent on this machine and returns once the agent has written $E0_REAUDIT/reaudit.json. The agent reads key.json and the unit trees only under $E0_SLICE, and that plaintext exists only while the command runs.
 
 ## 5. Terminations and stops
 
@@ -184,7 +205,7 @@ Main scores a turn cap or a timeout after output as a miss and marks the arm com
 - **read-opus**, primary anthropic/claude-opus-5-5: the second judge on every blocker.
 - **read-sonnet**, primary anthropic/claude-sonnet-5-5: the third judge.
 
-For each blocker and session, the final must-fix match is the one read-sol and read-opus agree on; where they differ, read-sonnet's decides. That is exactly "two judges on every match, the third where they differ", because each read is blind and independent of the others. Each judge-run call also runs its own partial second and third reads, which the pin requires; they are recorded and decide nothing. **Judging is incomplete, and E0 reads NO READ, when a packet that a needed cell depends on is unjudged in a primary reply** (a reply refused twice), or when a judge item stops at its cap. Before joining, the readings check each read: its run.json shows a finished run whose primary model is the one its role names, whose batch is the key's, and whose primary reply is the file run.json records, with packet digests equal to the key's; the three read dirs are distinct. Any mismatch exits 2 (E_USAGE) and names it. A read whose run.json shows the run stopped prints E0: NO READ (judging incomplete) and still writes readings.json.
+For each blocker and session, the final must-fix match is the one read-sol and read-opus agree on; where they differ, read-sonnet's decides. That is exactly "two judges on every match, the third where they differ", because each read is blind and independent of the others. Each judge-run call also runs its own partial second and third reads, which the pin requires; they are recorded and decide nothing. **Judging is incomplete, and E0 reads NO READ, when a packet that a needed cell depends on is unjudged in a primary reply** (a reply refused twice), or when a judge item stops at its cap. Before joining, the readings check the two runs, the key and each read. --opus and --particle must name distinct dirs holding distinct arms, and each arm.json must name its role's driver model (claude-opus-5-5 for --opus, particle-ai/particle-1 for --particle), so a swapped pair is refused. The key loads through the scorer's own loadKey, which refuses a key that does not hash to its batch digest (an edited packet digest or mapping) and an arm whose tree differs from the tree_sha256 the key bound, and the key must hold both arms. Each read's run.json shows a finished run whose primary model is the one its role names, whose batch is the key's, and whose primary reply is the file run.json records, with packet digests equal to the key's; the three read dirs are distinct. Any mismatch exits 2 (E_USAGE) and names it. A read whose run.json shows the run stopped prints E0: NO READ (judging incomplete) and still writes readings.json.
 
 **Kappa, pooled per stratum.** Matching kappa (Cohen's) between read-sol and read-opus, on whether some finding of a session matches a blocker at any severity, pooled over both models' judged cells: every blocker and scored session cell whose session wrote a non-empty parsed block (a session with no block has no judge reading, so it stays out), per stratum and overall, with each denominator printed. E0 is burned calibration material, so kappa decides no E0 disposition. A stratum under 0.6 is flagged ("kappa under 0.6: E1 must revise brief v3 before this stratum's judging"), and the E1 prereg must revise brief v3 on E0's burned units and re-read kappa before that stratum's E1 judging (plan section 5, I1).
 
@@ -203,7 +224,7 @@ Read on the Opus run only, after judging. For each candidate kind, n is its read
 
 At 12 readings this is the plan's D1 rule exactly. The rate form keeps it the same rule when an exclusion or a stop removes readings: 7 of 11 and 7 of 10 drop, 6 of 10 keeps.
 
-**DEAD kinds** (plan C1). A none score of 0 says nothing about lift, so each DEAD kind gets a blind re-audit: a fresh openai/gpt-6.1-sol agent (a family outside the subject's), holding each item's key and unit tree under custody but none of E0's readings or transcripts, checks each of the kind's items for findability (F), must-fix (M) and signposting (S) under kit v3's audit-brief.md. The kind passes when at most one of its items fails any of the three: it stays as **KEEP-FLOOR**, flagged, at most one floor item per panel unit. Otherwise it is **DROPPED-UNFAIR**. The re-audit is Capy agent work, not a ledger call, and its results enter part two of the readings as reaudit.json: one record per DEAD kind, listing each of the kind's kept items (unit and blocker) with pass or fail. The readings refuse (exit 2) a file whose kinds or items differ from that. Part one prints the DEAD kinds of both the primary and the sensitivity read, and the re-audit covers their union.
+**DEAD kinds** (plan C1). A none score of 0 says nothing about lift, so each DEAD kind gets a blind re-audit: a fresh openai/gpt-6.1-sol agent (a family outside the subject's), holding each item's key and unit tree, opened only through custody-e0.sh --reaudit (section 4, step 5b), the only allowed way to open key.json and the unit trees for the re-audit, but none of E0's readings or transcripts, checks each of the kind's items for findability (F), must-fix (M) and signposting (S) under kit v3's audit-brief.md. The kind passes when at most one of its items fails any of the three: it stays as **KEEP-FLOOR**, flagged, at most one floor item per panel unit. Otherwise it is **DROPPED-UNFAIR**. The re-audit is Capy agent work, not a ledger call, and its results enter part two of the readings as $RUN/reaudit/reaudit.json: one record per DEAD kind, listing each of the kind's kept items (unit and blocker) with pass or fail. The readings refuse (exit 2) a file whose kinds or items differ from that. Part one prints the DEAD kinds of both the primary and the sensitivity read, and the re-audit covers their union.
 
 **Validity.** Anchor recall, the mean over anchor items of each one's share of matched passes, pooled over all strata, must be at least 0.85, or E0 reads NO READ: the rig or the judging is off. Per stratum, anchor recall under 0.75 makes that stratum read STRATUM NO READ, so a lens whose judging fails can't keep kinds by missing them.
 
@@ -293,13 +314,13 @@ Each row cites the program approval of 2026-11-02, which set the E0 screen at $6
 - e0-particle-none: the same shape at 3 x $0.192 = $0.58; the 16th round starts while 45 sessions have spent at most $5.54, so the run finishes while particle-1 averages up to $0.12 a session. The dry run checks both edges.
 - A cap stop on the Opus run or a judge item is an incomplete run: E0 reads NO READ, and the run is never retried to change a verdict. A particle-1 cap stop is recorded and printed and decides nothing.
 
-**Launch checks, all logged before the first lease opens:** this post is merged; the Captain's approval rows for e0-opus-none and e0-particle-none are in the ledger at these caps; the pin check passes; the slice bundle's sha256 matches section 3; CUSTODY.md holds custody-e0.sh's line for this bundle (its sha256 and the built suite's); build-e0.sh's counts match section 3; the trial image pin passes (review-units checks it); /dev/shm and ~/.capy/work hold no leftover plaintext from an earlier opening; and `review-units --dry-run` with the frozen flags plans the expected sessions.
+**Launch checks, all logged before the first lease opens:** this post is merged; the Captain's approval rows for e0-opus-none and e0-particle-none are in the ledger at these caps; the pin check passes; the files in $B match section 14's sha256s (section 4, step L); the slice bundle's sha256 matches section 3; $CUSTODY holds custody-e0.sh's build line for this bundle and this $RUN (the bundle's sha256, the built suite's, the machine id and the run dir); build-e0.sh's counts match section 3; the trial image pin passes (review-units checks it); /dev/shm and ~/.capy/work hold no leftover plaintext from an earlier opening; and `review-units --dry-run` with the frozen flags plans the expected sessions.
 
 ## 9. Run rules
 
 - Order: this post merges; the Captain records the approval rows; build; the Opus run; the particle-1 run; packets; the three reads; readings part one; the re-audit of DEAD kinds; readings part two; a results post through the Captain's queue, in its own PR. Preregistration and results never share a PR.
 - Machine: the waiting agent's own machine, with Docker and at least 16 GB of memory at --parallel 3; vCPU, memory and --parallel recorded beside the run root. Each review-units run goes as a watched background operation under 6 hours, attached on a timer.
-- Custody: the slice and run bundles decrypt only into /dev/shm under a live program, and every opening and closing is logged in CUSTODY.md under the build thread's handoffs/<code>/sealed/. The run root and retained unit trees sit in mode-0700 directories on disk. After the last read they are sealed to the v3 recipient and the plaintext deleted and checked with `test ! -e`. On every wake, check /dev/shm and ~/.capy/work for leftover plaintext before anything else.
+- Custody: the slice and run bundles decrypt only into /dev/shm under a live program, and every opening and closing is logged in $CUSTODY (section 4), the CUSTODY.md beside the slice bundle, with the machine id and the path; custody-e0.sh writes its own lines there. The run root and retained unit trees sit in mode-0700 directories on disk. After the last read they are sealed to the v3 recipient and the plaintext deleted and checked with `test ! -e`. On every wake, check /dev/shm and ~/.capy/work for leftover plaintext before anything else.
 - Spend goes only through the ledger, item by item, as the pinned entry points lease it.
 - Calibration units never become panel material. They stay sealed until the confirmatory rounds end.
 
@@ -342,10 +363,10 @@ Building the draft also brought three rules into line with the plan or the pin b
 
 ## 13. Dry run
 
-[e0-dryrun.ts](e0-dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on a synthetic slice that [gen-synth-e0.py](gen-synth-e0.py.txt) writes; it never opens the sealed slice. [e0-dryrun.txt](e0-dryrun.txt) is its transcript: PASS 162, FAIL 0.
+[e0-dryrun.ts](e0-dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on a synthetic slice that [gen-synth-e0.py](gen-synth-e0.py.txt) writes; it never opens the sealed slice. [e0-dryrun.txt](e0-dryrun.txt) is its transcript: PASS 168, FAIL 0.
 
 - **a. Pin:** the scorer at b7b6aec with no tracked change.
-- **b. Build and refusals:** the 24 synthetic units pass kit v3's checker; build-e0.sh builds the slice and the suite loads with 93 blockers; convert refuses a pending seal, a wrong kit digest, a key and manifest mismatch, a row not final, a row with kept false and wrong counts; build refuses a bundle sha256 other than the frozen one; custody-e0.sh refuses one before it decrypts; on an age-encrypted synthetic bundle custody-e0.sh decrypts into /dev/shm, builds the suite, writes its CUSTODY.md line and leaves nothing under /dev/shm; the built run root is mode 0700 with nothing under it group- or world-readable, and convert refuses a run root it could not make 0700.
+- **b. Build and refusals:** the 24 synthetic units pass kit v3's checker; build-e0.sh builds the slice and the suite loads with 93 blockers; convert refuses a pending seal, a wrong kit digest, a key and manifest mismatch, a row not final, a row with kept false and wrong counts; build refuses a bundle sha256 other than the frozen one; custody-e0.sh refuses one before it decrypts; on an age-encrypted synthetic bundle under a throwaway age identity, custody-e0.sh refuses an unset E0_MACHINE and an existing run dir before it decrypts, decrypts into /dev/shm, builds the suite, writes its CUSTODY.md line with the machine and the run dir and leaves nothing under /dev/shm; with build-e0.sh forced to fail after the decryption, it logs the failure and removes the half-built run root and the extraction; in --reaudit mode it runs a stand-in re-audit command against the extraction, logs it and leaves nothing under /dev/shm, and with that command forced to fail it logs the failure and removes the re-audit dir and the extraction, leaving the run root; the dry run's unit-number draw is seeded (build-e0.sh passes 20261103 to convert-e0.py under a dry-run digest), so the synthetic layout, and with it the sensitivity read's checks in k, repeats from run to run; the built run root is mode 0700 with nothing under it group- or world-readable, and convert refuses a run root it could not make 0700.
 - **c. Frozen commands:** both review-units calls at --dry-run plan 48 sessions each with the none line, claude-code-preset, 60 turns and the cap.
 - **d. Real stops:** seven scenarios through runReviewUnits, the pinned SDK and the pinned Claude Code binary against a scripted upstream behind the real metering proxy, each read by the termination read as section 5 says, and judge-packet on a full Opus arm that review-units marked stopped.
 - **e. Judging:** judge-packet over both arms, judge-run --dry-run for each judge item with brief v3 (its sha256 printed) and its worst case, the combine rule, kappa against a hand value, and kappa's per-stratum denominators and flag under 0.6.
@@ -353,7 +374,7 @@ Building the draft also brought three rules into line with the plan or the pin b
 - **g. Ledger:** every item recorded at its cap on a temporary ledger (judge items at the envelope amount, rounded down to the cent), one lease opened and settled, and a second run refused with E_ITEM_BOUND.
 - **h. Start rule:** through the real run loop, Opus finishes at $0.49 a session and stops before the last round at $0.50, and particle-1 at $0.123 and $0.124; the readings read the 3 sessions never run as CAP from arm.json.
 - **i. Read audit:** it flags a fixture's three bad reads, printed only as counts by rule category and tool name, and nothing in the real transcripts.
-- **k. Readings end to end** ([e0-e2e.ts](e0-e2e.ts.txt)): both runs over the full synthetic suite with one turn-cap session, judge-packet, the three judge-run calls against a fake upstream on the temporary ledger at the envelope amounts, then both readings parts, with every kind count, stratum verdict, Sonnet tie-break, kappa over both models and re-audit outcome checked against hand values; then the envelope with a fractional-cent spend, the re-audit file's refusals, the judge-read refusals (one dir for two roles, a wrong primary model, a wrong batch), the arm refusals (--opus and --particle swapped, one dir for both), the key refusals through the scorer's loadKey (an edited packet digest, an edited mapping, an arm tree the key did not bind), a judge item stopped at its cap (E0 NO READ, readings.json written), and a particle-1 run with sessions never run (judged on its own batch; read CAP, E0 still READ).
+- **k. Readings end to end** ([e0-e2e.ts](e0-e2e.ts.txt)): both runs over the full synthetic suite with one turn-cap session, judge-packet, the three judge-run calls against a fake upstream on the temporary ledger at the envelope amounts, then both readings parts, with every kind count, stratum verdict, Sonnet tie-break, kappa over both models and re-audit outcome checked against hand values; then the envelope with a fractional-cent spend, the re-audit file's refusals, the judge-read refusals (one dir for two roles, a wrong primary model, a wrong batch), the arm refusals (--opus and --particle swapped, one dir for both), the key refusals through the scorer's loadKey (an edited packet digest, an edited mapping, an arm tree the key did not bind), the reply-side packet-digest guard (a judge read whose primary reply names another packet digest, with its run.json recording that reply), a judge item stopped at its cap (E0 NO READ, readings.json written), and a particle-1 run with sessions never run (judged on its own batch; read CAP, E0 still READ).
 - **j. Leak check:** the transcript prints no synthetic unit id, unit label, case id or packet file name, and no home path.
 
 It does not drive review-units' own main(), which checks the Docker image pin and builds the Docker rig; the dry run calls runReviewUnits with the values the frozen flags produce, and section c covers the flags. It sends no real judge request.
@@ -362,15 +383,15 @@ It does not drive review-units' own main(), which checks the Docker image pin an
 
 Each script is attached with a .txt suffix so the repo checks never load it; the run thread removes the suffix ($B in section 4).
 
-- [build-e0.sh](build-e0.sh.txt) `fc42d0ee96ad7fb36bc02953b213b13b0dfa43923751ed4da7b52f22fb0cca77`: builds the run material from the extracted slice under umask 077 and refuses any bundle but the frozen one.
-- [convert-e0.py](convert-e0.py.txt) `0e2312705359649ee257831cdb11c784701b38de6b03a1b17fc369eba75b5d80`: turns the slice into the suite, e0-kinds.json and the source clone, and refuses any shape but the frozen counts and any run root it could not make mode 0700.
-- [custody-e0.sh](custody-e0.sh.txt) `be3257fa224f821f31393494c238b7cc784f8e17e2ab1b3a7623c91673a226e5`: the only allowed way to produce the slice; checks the bundle's sha256, decrypts it into /dev/shm, runs build-e0.sh there, logs CUSTODY.md and removes the extraction.
+- [build-e0.sh](build-e0.sh.txt) `bc81945309b1611c80d9e1ce4452903b0785dde42607727f11f9fc4d3461604d`: builds the run material from the extracted slice under umask 077 and refuses any bundle but the frozen one; under the dry run's digest it seeds the unit-number draw.
+- [convert-e0.py](convert-e0.py.txt) `0874e6014b5f3b1e1f19ab0f98526e23d1d991de0c10c7a02d6eace2b477c99c`: turns the slice into the suite, e0-kinds.json and the source clone, and refuses any shape but the frozen counts and any run root it could not make mode 0700; an optional seed, passed only under a dry-run digest, seeds the unit-number draw.
+- [custody-e0.sh](custody-e0.sh.txt) `b0877e6f147644e27d2b96d6b906a43244ce5ad37ccdf7d83f10f1eeb04dd078`: the only allowed way to open the bundle; checks its sha256, decrypts it into /dev/shm, runs build-e0.sh there or, with --reaudit, the section 7 re-audit command, removes the extraction and logs CUSTODY.md with the machine id and the run or re-audit dir; a failure after the decryption is logged and removes the extraction and that dir.
 - [gen-synth-e0.py](gen-synth-e0.py.txt) `746d3b35714ad1aa92d4bbbdeaa4497940afa2b23ad7db13d9fb2cf2301f0b31`: writes the synthetic slice the dry run builds from.
 - [e0-readings.ts](e0-readings.ts.txt) `0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9`: the termination read, the judge-read checks and the judging join, the kind-keep rule with the re-audit file's checks, the sensitivity read, kappa, the read audit's counts and the verdict block.
 - [e0-stops.ts](e0-stops.ts.txt) `a3026ed074000650f932e71de30756858385b5091014389eaafef6f25c1c782e`: dry-run steps d and h: real stops and the start rule through the pinned run loop.
-- [e0-e2e.ts](e0-e2e.ts.txt) `6402f1bf9127bc1a245614a6555749e7d8f6f2478e3b51ad163e0a4da6f356f1`: dry-run step k: both runs, packets, the three judge calls and both readings parts end to end.
-- [e0-dryrun.ts](e0-dryrun.ts.txt) `69fe76c0a4ad6955b741381ef926f00c90ad8c4cf3ef39e3bf460a31fbb5c17c`: the keyless dry run.
-- [e0-dryrun.txt](e0-dryrun.txt) `b887f34515ee524f1c5669a0543338706112299f6b69495ce6cde0d6d2d6a962`: its transcript.
+- [e0-e2e.ts](e0-e2e.ts.txt) `fb0540a7134d12411e436841c35bf04c7fc5fcdc40af2dba00d0498cb7a8d814`: dry-run step k: both runs, packets, the three judge calls and both readings parts end to end.
+- [e0-dryrun.ts](e0-dryrun.ts.txt) `11d297e4780fab18d300f36c4b3490205874d07cf3ad3c9259895832c5947d8a`: the keyless dry run.
+- [e0-dryrun.txt](e0-dryrun.txt) `38589cd3b88c7f388fd0fb9abe0e9c14358c129e547a633633af851b6155f152`: its transcript.
 - [e0-oc.py](e0-oc.py.txt) `2c0b323bd4097f3933339e13eceb311485e5ea99dac2a85ccc9ec76eeedad66d`: the operating-characteristic model.
 - [e0-oc.txt](e0-oc.txt) `ee638f22186ee1766d7fd16a63c184d6a9764df9303d93ad29cef6f78a2c16d2`: its table.
 - [judge-brief-v3.md](judge-brief-v3.md) `79d73194f09c65d457c9ada56143f4b3776a8839c777846a91fb9869a660a936`: judge brief v3.
