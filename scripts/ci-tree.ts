@@ -74,7 +74,11 @@ function need(args: string[], name: string): string {
 }
 
 function record(args: string[]) {
-  const git = (a: string[]) => spawnSync("git", a, { encoding: "utf8" }).stdout?.trim() ?? "";
+  const git = (a: string[]) => {
+    const r = spawnSync("git", a, { encoding: "utf8" });
+    if (r.status !== 0) throw new Error("git " + a.join(" ") + " exited " + r.status + ": " + (r.error?.message ?? r.stderr?.trim()));
+    return r.stdout.trim();
+  };
   if (git(["rev-parse", "HEAD"]) !== process.env.GITHUB_SHA) throw new Error("HEAD is not GITHUB_SHA, the commit this run tested");
   const rec = treeRecord(process.env, { junit: readFileSync(need(args, "--junit"), "utf8"), checks: readFileSync(need(args, "--checks"), "utf8"), tree: git(["rev-parse", "HEAD^{tree}"]) });
   if (git(["status", "--porcelain", "--untracked-files=all"])) throw new Error("the checkout changed after checkout, so the checks did not read HEAD's tree");
