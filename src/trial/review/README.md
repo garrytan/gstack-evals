@@ -161,8 +161,11 @@ sealed. plan.ts holds what differs:
   and goes out verbatim. `--arm-models <arm>=<model>[,<model>]` limits an arm to some of `--models`.
 - Two turns: once turn 1 completes, the driver sends PLAN_TURN2_TEXT, pinned by PLAN_TURN2_SHA256, in the same
   session. It asks for every problem found and a `plan-findings` fence with severity (Critical, High, Medium, Low),
-  section, line, claim, evidence and fix. Turn 2 has its own clock (300 s) and turn cap (5). Every plan session key
-  carries PLAN_TURN2_SHA256 and the allowance. PLAN_SEVERITY_MAP maps Critical and High to CRITICAL.
+  section, line, claim, evidence and fix. Turn 2 has its own clock (300 s) and turn cap (5). At the cap the driver
+  interrupts the CLI before it closes it, whether the CLI is about to call the model again after a tool result or a
+  simulator reply or held background work would start another call after a result. With background work held it asks
+  the simulator nothing, so no model call follows the cap. Every plan session key carries PLAN_TURN2_SHA256 and the
+  allowance. PLAN_SEVERITY_MAP maps Critical and High to CRITICAL.
 - A plan unit installs and tests nothing: its tree is the repository, with the same history check.
 - Every arm runs with the rec user: each question gets "Go with your recommendation." A question that offers another
   skill or review (by slash command or phrase, not counting the lens's own) or to promote or commit docs gets "No, not
@@ -184,10 +187,13 @@ sealed. plan.ts holds what differs:
   tree mounted read-only. A hit (a .capy drive, ~/.local/share/gstack, ~/.claude/skills, a unit's .claude/skills, or
   an AGENTS.md or CLAUDE.md naming gstack) stops the run with E_CLEAN_ROOM (exit 2), naming the arm, the image digest
   and the paths, before any spend. Each none and lens session runs the same script before the CLI starts; a refusal is
-  a coverage gap that is not journaled, so `--resume` reruns it.
+  a coverage gap that is not journaled, so `--resume` reruns it. find hands each AGENTS.md and CLAUDE.md to grep
+  itself, so a path whose name holds a newline is read whole.
 - Read audit: audit.ts scans every tool call in each session's transcript and logs each touch of a gstack skill file,
-  ~/.local/share/gstack, a .capy path or a gstack-* command. A non-error touch under .capy in any arm, or of gstack in
-  a none or lens arm, makes the arm untested: arm.json is stopped with an `untested` block (sessions, paths, paid
+  ~/.local/share/gstack, a .capy path or a gstack-* command. A touch whose result is an error is logged and never
+  counts, except in a compound Bash command (;, &&, ||, |, a background &, a newline, a subshell or a command
+  substitution). The & or | of a redirection, such as `ls <path> 2>&1`, separates nothing. A non-error touch under
+  .capy in any arm, or of gstack in a none or lens arm, makes the arm untested: arm.json is stopped with an `untested` block (sessions, paths, paid
   spend), the run stops with E_ARM_CONTAMINATED, and review-units exits 4. judge-packet and judge-join refuse an
   untested arm, derive never completes one, and score treats it as stopped.
 - No second model: --plan builds every cell without its Codex voice (gstack's config gets codex_reviews disabled and the
@@ -218,10 +224,12 @@ parts on review-units' Docker rig, with one bare none arm and the metering proxy
 - block: a two-turn none-arm plan session on the fixture unit (tests/trial/review/fixtures/route-check-unit): the plan
   ask, then PLAN_TURN2 as the driver's follow-up, with the rec user and cap stops on. It passes when parsePlanSession gives
   findings, an empty list included.
-- metering: every call of both sessions has a spent outcome in the proxy journal with its spend and reasoning tokens,
-  and each session's metered spend is within 10% of OpenRouter's billed cost. The proxy journals each call's
-  upstream_id, and route-check reads the bill from GET /api/v1/generation?id=<id>, polling until every id is found or
-  three minutes pass.
+- metering: only a verified bill passes. Each session has a billed call, every billed call has a spent outcome in the
+  proxy journal with its spend and reasoning tokens, and each session's metered spend is within 10% of OpenRouter's
+  billed cost. The proxy journals each call's upstream_id, and route-check reads the bill from
+  GET /api/v1/generation?id=<id>, polling every id until it is found or three minutes pass. A 2xx answer with no usage,
+  or a generation still unpublished at the deadline, fails metering, because the route must report usage and publish
+  its generations.
 
 Each run is one try of every part not yet passed, kept in <out>/route-check.json with one run id for the item. A part gets
 two tries; a model that fails a part twice leaves E1 with that part's code (E_ROUTE_TOOL_ROUNDTRIP, E_ROUTE_NO_BLOCK or
@@ -229,7 +237,11 @@ E_ROUTE_METERING, exit 1), and a third try is refused. Between tries the only ch
 list: `--repair provider-pin=<openrouter provider>` or `--repair output-allowance=<tokens>` (each session's output
 allowance, above 32,000 tokens). A provider pin applies only when it names the price row's own provider, since the proxy
 routes OpenRouter calls to the row's providers and has no per-run pin. An endpoint, credential or proxy failure is
-E_ROUTE_INFRA (exit 2) and uses no try; two of them stop the check for the Captain, and the model stays in E1.
+E_ROUTE_INFRA (exit 2). It never passes a part and uses no try. That covers a provider's 401, 402, 403, 408 or 429, a
+call with no outcome line, an unknown outcome such as a broken stream, a 5xx with no usage, a session with no billed
+call, and a bill lookup that still fails at the deadline. A provider's other 4xx on a session's own call fails the part
+that session serves. The second infra outcome ends the check INCONCLUSIVE (E_ROUTE_INCONCLUSIVE, exit 2), which blocks
+the route from E1, unless a part failed both tries.
 
 The check's cap is four sessions at the model's full allowance, and each try leases its own worst case on the item. A cap
 stop, from that budget, the ledger or the proxy, leaves the check incomplete (CAP_STOP, exit 2). On E_ROUTE_METERING the
