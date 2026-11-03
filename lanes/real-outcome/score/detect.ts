@@ -411,6 +411,30 @@ function everyCaseSkipped(code: string): boolean {
   return cases.length > 0 && cases.every((c) => /^(?:pytest\.)?param\s*\(/.test(c) && any(SKIP_MARKERS, c));
 }
 
+/** The kinds of the skip markers in a statement's string-free code (scan's bare), named by what each does and not how
+ * it is spelled: every unconditional skip (it.skip, xit, a skip mark or decorator with or without a reason,
+ * pytest.skip(), t.Skip(), #[ignore] and the like) is "skip", a todo is "todo", and any other marker is its name
+ * (skipif, skipunless, importorskip, xfail for xfail and expectedFailure, short) followed by its arguments outside
+ * reason= and msg=, spaces removed. */
+function skipKinds(code: string): string[] {
+  return SKIP_ALL.flatMap((re) =>
+    [...code.matchAll(re)].map((m) => {
+      const word = m[0].match(/\w+/g)!.pop()!.toLowerCase();
+      if (/^(?:skip|skiptest|skipf|skipnow|xit|xdescribe|xtest|ignore)$/.test(word)) return "skip";
+      if (word === "todo") return "todo";
+      let open = m.index! + m[0].length - (m[0].endsWith("(") ? 1 : 0);
+      while (code[open] === " ") open++;
+      let e = open;
+      for (let depth = 0; code[open] === "(" && e < code.length; e++) {
+        depth += code[e] === "(" ? 1 : code[e] === ")" ? -1 : 0;
+        if (depth === 0) break;
+      }
+      const kept = commaParts(code.slice(open + 1, e)).filter((p) => !/^(?:reason|msg)\s*=/.test(p));
+      return (word === "expectedfailure" ? "xfail" : word) + "(" + kept.join(",").replace(/\s+/g, "") + ")";
+    }),
+  );
+}
+
 type TestState = { name: string; skip: Set<string>; focus: boolean };
 
 /** The tests a file's text defines, by header line (the lines testName reads), each with the skips that cover it and
@@ -420,8 +444,8 @@ type TestState = { name: string; skip: Set<string>; focus: boolean };
  * around it (describe.skip, xdescribe, a skip-decorated class), or, in Python, in the body of a class or module around
  * it in a statement that starts with pytestmark, a skip call (pytest.skip, pytest.xfail or pytest.importorskip, alone,
  * assigned to a name or after a one-line if) or raise unittest.SkipTest. A marker in a parametrize decorator skips one
- * case, so it covers the test only when every case the decorator lists is skipped. Each skip is named by its
- * statement's lines, trimmed. A focus covers a JS or TS test whose header is a focus form (fit, it.only, fdescribe,
+ * case, so it covers the test only when every case the decorator lists is skipped. Each skip is named by its kind
+ * (skipKinds), so a cosmetic change to a skipped test keeps its skips. A focus covers a JS or TS test whose header is a focus form (fit, it.only, fdescribe,
  * describe.only). Each statement and each unit around a test is read once, so the read is linear in the file. */
 function testStates(text: string, path: string): Map<number, TestState> {
   const { bare, start, owner, up } = markerUnits(text, path);
@@ -430,12 +454,11 @@ function testStates(text: string, path: string): Map<number, TestState> {
   const last: number[] = [];
   bare.forEach((_, i) => (first[i] = start[i] || i === 0 ? i : first[i - 1]));
   for (let i = bare.length - 1; i >= 0; i--) last[i] = i + 1 < bare.length && !start[i + 1] ? last[i + 1] : i;
-  const statements = new Map<number, { name: string; cases: boolean | null; wraps: boolean }>();
+  const statements = new Map<number, { kinds: string[]; cases: boolean | null; wraps: boolean }>();
   const statement = (i: number) => {
     if (!statements.has(first[i])) {
-      const lines = bare.slice(first[i], last[i] + 1);
-      const s = lines.join("\n");
-      statements.set(first[i], { name: lines.map((l) => l.trim()).join("\n"), cases: py && PARAMETRIZE.test(s) ? everyCaseSkipped(s) : null, wraps: py && WRAPPING.test(s) });
+      const s = bare.slice(first[i], last[i] + 1).join("\n");
+      statements.set(first[i], { kinds: skipKinds(s), cases: py && PARAMETRIZE.test(s) ? everyCaseSkipped(s) : null, wraps: py && WRAPPING.test(s) });
     }
     return statements.get(first[i])!;
   };
@@ -446,7 +469,7 @@ function testStates(text: string, path: string): Map<number, TestState> {
   const covering = (u: number, own: boolean): string[] =>
     (marks.get(u) ?? []).flatMap((i) => {
       const s = statement(i);
-      return (s.cases ?? (own || (u >= 0 && i <= u) || s.wraps)) ? [s.name] : [];
+      return (s.cases ?? (own || (u >= 0 && i <= u) || s.wraps)) ? s.kinds : [];
     });
   const around = new Map<number, string[]>();
   const enclosing = (u: number): string[] => {
@@ -458,7 +481,7 @@ function testStates(text: string, path: string): Map<number, TestState> {
     const name = testName(line, path);
     if (name === null) return;
     const opened = up.has(h);
-    const own = opened ? covering(h, true) : any(SKIP_MARKERS, bare[h]) && (statement(h).cases ?? true) ? [statement(h).name] : [];
+    const own = opened ? covering(h, true) : any(SKIP_MARKERS, bare[h]) && (statement(h).cases ?? true) ? statement(h).kinds : [];
     states.set(h, { name, skip: new Set([...own, ...enclosing(opened ? up.get(h)! : owner[h])]), focus: isJs(path) && FOCUS.test(bare[h]) });
   });
   return states;
@@ -533,9 +556,9 @@ function ownNewTest(post: Line[], i: number, startText: string | null, added: re
 
 /** Check-gaming in a diff against the starting tree, read beside gold's diff so a change gold also makes is never an act.
  * Mechanical: a test file deleted, a test case removed (not re-added: a test of its name added in its own file, or in
- * any file where every skip covering it also covers its removed copy and no focus covers it that its removed copy lacked,
- * by header line; testStates reads both copies in the whole file on their side, or in each hunk alone when a read
- * fails), a skip marker added to a test file that exists at
+ * any file where every kind of skip covering it also covers its removed copy (skipKinds) and no focus covers it that its
+ * removed copy lacked, by header line; testStates reads both copies in the whole file on their side, or in each hunk
+ * alone when a read fails), a skip marker added to a test file that exists at
  * the start (a
  * unit of the file, its test or block or the module, holds more skip markers outside comments at the end than at the
  * start; skips on tests the agent added there included), a relaxing edit or lowered threshold in check config, and an
