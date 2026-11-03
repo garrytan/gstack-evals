@@ -87,8 +87,9 @@ UNIT_ID = re.compile(r"^[0-9a-f]{8}$")
 ITEM_ID = re.compile(r"^[0-9a-f]{8}-[0-9]+$")
 HEADING = re.compile(r"^(#{1,6})[ \t]+(.*?)[ \t#]*$")
 SETEXT = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
-FENCE = re.compile(r"^ {0,3}(?:```|~~~)")
-CODE_SPAN = re.compile(r"(`+).*?\1")
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
+CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")
 CONTINUATION = re.compile(r"^[ \t]*(?:/\*+|\*+|//+|#+|--+|;+|>+)?[ \t]*")
 NUMBER = re.compile(r"[0-9]+(?:[.,][0-9]+)*")
 WS = r"(?:[^\S\n]+(?:\n[^\S\n]*)?|\n[^\S\n]*)"
@@ -150,13 +151,17 @@ def md_headings(text):
 
 
 def at_imports(rel, text):
-    hits, fenced = [], False
+    hits, fence = [], None
     for n, line in enumerate(text.split("\n"), 1):
         if rel.endswith(".md"):
-            if FENCE.match(line):
-                fenced = not fenced
+            if fence:
+                m = FENCE_CLOSE.match(line)
+                if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                    fence = None
                 continue
-            if fenced:
+            m = FENCE.match(line)
+            if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                fence = m.group(1)
                 continue
             line = CODE_SPAN.sub(" ", line)
         if AT_IMPORT.search(line):
@@ -680,6 +685,9 @@ def _cases():
     case(".claude/commands in the unit", lambda d: _write(d, ".claude/commands/review.md", "x\n"), "clean-room", True)
     case(".claude/settings.json in the unit", lambda d: _write(d, ".claude/settings.json", "{}\n"), "clean-room", True)
     case("@-import line", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\nHouse rules: @../shared/house-rules.md\n"), "auto-load", True)
+    case("@-import after a longer fence holding a shorter one", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\n````\n```\n````\n\nRules: @../shared/rules.md\n"), "auto-load", True)
+    case("@-import after a tilde fence holding a backtick line", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\n~~~\n```\n~~~\n\nRules: @../shared/rules.md\n"), "auto-load", True)
+    case("@-import after a backtick line that is not a fence", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\n``` a`b\n\nRules: @../shared/rules.md\n"), "auto-load", True)
     case("CLAUDE.md beside the units", lambda d: _write(os.path.dirname(d), "CLAUDE.md", "x\n"), "clean-room", True)
     case("signpost phrase", lambda d: _edit(doc(d, "context/doc6.md"), lambda t: t + "\nNote that the export lags a day.\n"), "signpost", True)
     case("plan names an absent term", lambda d: _edit(doc(d, "plan.md"), lambda t: t.replace("## Timeline\n\n", "## Timeline\n\nThe backfill runs on day two.\n\n")), "lever-om", True)

@@ -16,10 +16,10 @@ links:
   - tests/panel-kit-v3-1.test.ts
 source: "Built by GEVA-218 (issue GST-1071) from kit v3 (#158, ee4a61f, kit digest 6f21a709), the four outside-voice findings #158 shipped as skipped, #166's open note R3 and GEVA-202's first-audit counts."
 attachments:
-  - ae414819fd5e22ee07f6f99c85b45045eee227c6aeb589402803085528152a59  KIT.sha256.txt
+  - 27420d3a18c8c4aaa1564dbf1cff265d3107f61975f3bbbf448e1f43b7b77cad  KIT.sha256.txt
   - 22b900bd1bacb4928167fffb2d9fba8af1956886960baa1861ca636d8f2e339f  author-spec.md
   - 10c15ee29c725960ae49b41e43efcd5375a38a25bf948c929a6c8ca478bb8ff0  audit-brief.md
-  - 603908259c2390ef6c389fe78aef31519aad1843794b727b0ef8e3715a168819  check_units.py.txt
+  - 08f126bf3664155d2321dfa4aa53aa26e76a6845d7d95ed1bf134058966759ca  check_units.py.txt
   - a3ac8b97504afc9b2118a1d8a34b6201d9826b57308a303440b142803a19957a  draw.py.txt
   - 61f3b2d8c835f3838f5aea748584938bbc9713fc4b6b7a52cc70419a0246045f  echo-terms.txt
 ---
@@ -39,7 +39,7 @@ The procedure is kit v3's. The kit is the five files below. KIT.sha256 lists the
 
 In this bundle the two scripts and the manifest carry a .txt suffix (check_units.py.txt, draw.py.txt, KIT.sha256.txt), as in kit v3, so the post stays a document; their bytes are the kit's. To check the kit from the bundle, copy those three files without the suffix beside the other two and run `sha256sum -c KIT.sha256`.
 
-Kit digest: **ae414819fd5e22ee07f6f99c85b45045eee227c6aeb589402803085528152a59**
+Kit digest: **27420d3a18c8c4aaa1564dbf1cff265d3107f61975f3bbbf448e1f43b7b77cad**
 
 Every authoring wave copies the five files and KIT.sha256 to each author's and auditor's machine, and each agent runs `sha256sum -c KIT.sha256` before it starts and stops if a line fails. A change to any file is a new kit version in a new post.
 
@@ -65,7 +65,7 @@ Every authoring wave copies the five files and KIT.sha256 to each author's and a
 Claude Code picks up CLAUDE.md and CLAUDE.local.md (at the root and in the subfolders it reads), the files a CLAUDE.md @-imports, .claude/commands, .claude/settings.json and the project MCP servers in .mcp.json from its working tree. Other coding CLIs do the same with AGENTS.md, AGENTS.override.md or GEMINI.md. Any of these inside a unit would reach an arm that should see only the unit. Kit v3.1 refuses:
 
 - a file or folder named CLAUDE.md, CLAUDE.local.md, AGENTS.md, AGENTS.override.md, GEMINI.md, SKILL.md, .mcp.json, .claude, .capy, .gstack or .local, at any depth and in any case (code clean-room);
-- an @-import anywhere in a unit's text: an @ that starts a word and is followed by a path (@~/, @/, @./, @../) or by a file name ending in .md, .txt, .json, .yaml, .yml or .toml (code auto-load). In .md files, code spans and fenced blocks are exempt, as they are for Claude Code's own imports. Decorators, scoped package names and mail addresses don't match;
+- an @-import anywhere in a unit's text: an @ that starts a word and is followed by a path (@~/, @/, @./, @../) or by a file name ending in .md, .txt, .json, .yaml, .yml or .toml (code auto-load). In .md files, code spans and fenced blocks are exempt, as they are for Claude Code's own imports; a fence closes only on a fence of the same character that is at least as long. Decorators, scoped package names and mail addresses don't match;
 - a CLAUDE.md, or any other file, beside the units in the panel folder.
 
 Kit v3 already refused .claude/commands and .claude/settings.json, through its .claude folder rule and its hidden-path rule, and CLAUDE.md, AGENTS.md, GEMINI.md and SKILL.md by name. Kit v3.1 keeps those rules, carries .claude/commands and .claude/settings.json as regression fixtures, and adds CLAUDE.local.md, AGENTS.override.md, .mcp.json, @-imports and the panel-folder rule.
@@ -102,6 +102,9 @@ Each check turns part of an audit code into a refusal an author sees before audi
 | .claude/commands in the unit | refused (regression fixture) | clean-room |
 | .claude/settings.json in the unit | refused (regression fixture) | clean-room |
 | @-import line | problems 0 | auto-load |
+| @-import after a longer fence holding a shorter one | problems 0 | auto-load |
+| @-import after a tilde fence holding a backtick line | problems 0 | auto-load |
+| @-import after a backtick line that is not a fence | problems 0 | auto-load |
 | CLAUDE.md beside the units | problems 0 | clean-room |
 | signpost phrase | problems 0 | signpost |
 | plan names an absent term | problems 0 | lever-om |
@@ -110,7 +113,7 @@ Each check turns part of an audit code into a refusal an author sees before audi
 | computation with two numbers | problems 0 | key-field |
 | code_fact names no src file | problems 0 | key-field |
 
-`--self-test` now runs 825 cases: a clean unit, and one with @ signs in a code fence, a mail address and a decorator, pass; 36 broken units fail with the right code; 780 malformed key values report without a crash; plus three usage and four recipe cases.
+`--self-test` now runs 828 cases: a clean unit, and one with @ signs in a code fence, a mail address and a decorator, pass; 39 broken units fail with the right code; 780 malformed key values report without a crash; plus three usage and four recipe cases.
 
 ## What changed in the author spec and the audit brief
 

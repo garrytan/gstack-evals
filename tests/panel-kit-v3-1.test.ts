@@ -26,6 +26,9 @@ const FIXTURES = [
   "claude-commands-in-the-unit clean-room",
   "claude-settings-json-in-the-unit clean-room",
   "import-line auto-load",
+  "import-after-a-longer-fence-holding-a-shorter-one auto-load",
+  "import-after-a-tilde-fence-holding-a-backtick-line auto-load",
+  "import-after-a-backtick-line-that-is-not-a-fence auto-load",
   "claude-md-beside-the-units clean-room",
   "signpost-phrase signpost",
   "plan-names-an-absent-term lever-om",
@@ -62,7 +65,7 @@ describe("panel v3 author kit v3.1", () => {
     const dir = mkdtempSync(join(tmpdir(), "kit-v31-"));
     try {
       const r = spawnSync("python3", [kit(V31, dir), "--self-test"], { encoding: "utf8", timeout: 60000 });
-      expect(r.stdout).toContain("self-test ok, 825 cases");
+      expect(r.stdout).toContain("self-test ok, 828 cases");
       expect(r.status).toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
