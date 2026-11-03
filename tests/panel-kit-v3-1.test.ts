@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,6 +36,12 @@ const FIXTURES = [
   "two-items-share-an-evidence-file key-independent",
   "computation-with-two-numbers key-field",
   "code-fact-names-no-src-file key-field",
+  "echo-term-joined-by-hyphens echo",
+  "echo-term-as-a-snake-case-name echo",
+  "echo-term-with-emphasis echo",
+  "import-of-a-src-file auto-load",
+  "import-of-a-context-csv auto-load",
+  "import-out-through-src auto-load",
 ];
 const CAUGHT_BY_V3 = new Set(["claude-commands-in-the-unit", "claude-settings-json-in-the-unit"]);
 
@@ -65,7 +71,7 @@ describe("panel v3 author kit v3.1", () => {
     const dir = mkdtempSync(join(tmpdir(), "kit-v31-"));
     try {
       const r = spawnSync("python3", [kit(V31, dir), "--self-test"], { encoding: "utf8", timeout: 60000 });
-      expect(r.stdout).toContain("self-test ok, 828 cases");
+      expect(r.stdout).toContain("self-test ok, 834 cases");
       expect(r.status).toBe(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -99,4 +105,24 @@ describe("panel v3 author kit v3.1", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 90000);
+
+  test.skipIf(process.getuid?.() === 0)("kit v3.1 refuses a folder it cannot list and a file it cannot read", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kit-unreadable-"));
+    const unit = join(dir, "fx", "clean", "0a1b2c3d");
+    const locked = [join(unit, "src", "lib"), join(unit, "src", "mod1.py")];
+    try {
+      const v31 = kit(V31, join(dir, "v31"));
+      expect(spawnSync("python3", [v31, "--write-fixtures", join(dir, "fx")], { encoding: "utf8" }).status).toBe(0);
+      mkdirSync(locked[0]!);
+      writeFileSync(join(locked[0]!, "CLAUDE.md"), "x\n");
+      for (const p of locked) chmodSync(p, 0);
+      const r = check(v31, join(dir, "fx", "clean"));
+      expect({ status: r.status, err: r.err }).toEqual({ status: 1, err: "" });
+      expect(r.out).toMatch(/^PROBLEM 0a1b2c3d clean-room: cannot read src\/lib$/m);
+      expect(r.out).toMatch(/^PROBLEM 0a1b2c3d clean-room: cannot read src\/mod1\.py$/m);
+    } finally {
+      for (const p of locked) chmodSync(p, 0o755);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

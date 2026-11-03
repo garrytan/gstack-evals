@@ -80,7 +80,7 @@ UI_NAME = re.compile(r"[A-Za-z0-9_./-]+\.(?:" + "|".join(UI_EXT) + r")\b", re.I)
 CLEAN_ROOM_NAMES = {".claude", ".capy", ".gstack", ".local", ".mcp.json", "agents.md", "agents.override.md",
                     "claude.md", "claude.local.md", "gemini.md", "skill.md"}
 CLEAN_ROOM_PATH_WORDS = ("gstack", ".claude/skills", ".capy/drive", ".local/share/gstack")
-AT_IMPORT = re.compile(r"(?:^|(?<=\s))@(?:~|\.{0,2}/)\S*"
+AT_IMPORT = re.compile(r"(?:^|(?<=\s))@(?:~|\.{0,2}/|(?:src|context)/|[^\s@]*\.\./)\S*"
                        r"|(?:^|(?<=\s))@[^\s@]+\.(?:md|markdown|mdc|txt|json|ya?ml|toml)(?![A-Za-z0-9])", re.I)
 
 UNIT_ID = re.compile(r"^[0-9a-f]{8}$")
@@ -92,7 +92,8 @@ FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")
 CONTINUATION = re.compile(r"^[ \t]*(?:/\*+|\*+|//+|#+|--+|;+|>+)?[ \t]*")
 NUMBER = re.compile(r"[0-9]+(?:[.,][0-9]+)*")
-WS = r"(?:[^\S\n]+(?:\n[^\S\n]*)?|\n[^\S\n]*)"
+SEP = r"(?:[^\S\n]|[-_*~\x60\u200b-\u200d\ufeff])"
+WS = r"(?:%s+(?:\n%s*)?|\n%s*)" % (SEP, SEP, SEP)
 
 
 class Report:
@@ -169,9 +170,9 @@ def at_imports(rel, text):
     return hits
 
 
-def walk(unit_dir):
+def walk(unit_dir, errors):
     out = []
-    for root, dirs, files in os.walk(unit_dir, followlinks=False):
+    for root, dirs, files in os.walk(unit_dir, onerror=errors.append, followlinks=False):
         for name in sorted(dirs) + sorted(files):
             full = os.path.join(root, name)
             out.append((os.path.relpath(full, unit_dir).replace(os.sep, "/"), full))
@@ -184,11 +185,15 @@ def plan_headings(text):
 
 
 def check_tree(unit, unit_dir, rep):
-    files = {}
-    for rel, full in walk(unit_dir):
+    files, errors = {}, []
+    for rel, full in walk(unit_dir, errors):
         parts = rel.split("/")
         low = rel.lower()
-        mode = os.lstat(full).st_mode
+        try:
+            mode = os.lstat(full).st_mode
+        except OSError:
+            rep.problem(unit, "clean-room", "cannot read %s" % rel)
+            continue
         if stat.S_ISLNK(mode):
             rep.problem(unit, "clean-room", "symlink %s" % rel)
             continue
@@ -219,6 +224,10 @@ def check_tree(unit, unit_dir, rep):
                 files[rel] = f.read()
         except UnicodeDecodeError:
             rep.problem(unit, "layout", "not UTF-8 text %s" % rel)
+        except OSError:
+            rep.problem(unit, "clean-room", "cannot read %s" % rel)
+    for e in errors:
+        rep.problem(unit, "clean-room", "cannot read %s" % os.path.relpath(e.filename, unit_dir).replace(os.sep, "/"))
     for need in ("plan.md", "key.json"):
         if need not in files:
             rep.problem(unit, "layout", "missing %s" % need)
@@ -695,6 +704,12 @@ def _cases():
     case("two items share an evidence file", lambda d: _edit_key(d, lambda k: k["items"][2]["evidence"].append({"path": "context/doc1.md", "what": "a fact"})), "key-independent", True)
     case("computation with two numbers", lambda d: _edit_key(d, lambda k: k["items"][1].update(computation="about 40 a second, under 50")), "key-field", True)
     case("code_fact names no src file", lambda d: _edit_key(d, lambda k: k["items"][0].update(code_fact="the handler writes late")), "key-field", True)
+    case("echo term joined by hyphens", lambda d: _edit(doc(d, "context/doc3.md"), lambda t: t + "\nSee the failure-modes registry.\n"), "echo", True)
+    case("echo term as a snake_case name", lambda d: _edit(doc(d, "src/mod2.py"), lambda t: t + "failure_modes_registry = {}\n"), "echo", True)
+    case("echo term with emphasis", lambda d: _edit(doc(d, "context/doc3.md"), lambda t: t + "\nSee the **failure modes** registry.\n"), "echo", True)
+    case("@-import of a src file", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\nRules: @src/mod1.py\n"), "auto-load", True)
+    case("@-import of a context csv", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\nRules: @context/doc1.csv\n"), "auto-load", True)
+    case("@-import out through src", lambda d: _edit(doc(d, "context/doc5.md"), lambda t: t + "\nRules: @src/../../outside.py\n"), "auto-load", True)
     case("@ in a code fence, a mail address and a decorator pass",
          lambda d: (_edit(doc(d, "context/doc5.md"), lambda t: t + "\n```\ncurl -d @body.json https://api.example.com/v1/jobs\n```\n\nMail ops@example.com about `@notes.md`.\n"),
                     _edit(doc(d, "src/mod3.py"), lambda t: "import functools\n\n\n@functools.lru_cache\n" + t)), None, True)
