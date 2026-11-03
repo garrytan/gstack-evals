@@ -143,7 +143,7 @@ export function neverAskPreferences(dir: string | null): string | null {
 export const REC_REPLY = "Go with your recommendation.";
 export const REC_DECLINE = "No, not now.";
 export const REC_PERSONA = "You take every recommendation. To each question you answer exactly " + JSON.stringify(REC_REPLY) + " That includes a question about a review mode or a Step 0 choice. To any other question that offers to run another skill or review, or to promote or commit docs, you answer exactly " + JSON.stringify(REC_DECLINE);
-const OTHER_REVIEWS = ["eng review", "design review", "devex review", "dx review", "security review", "code review", "autoplan", "office hours"];
+const OTHER_REVIEWS = ["ceo review", "eng review", "design review", "devex review", "dx review", "security review", "code review", "autoplan", "office hours"];
 const OTHER_SKILL = Object.fromEntries(Object.entries(PLAN_LENSES).map(([lens, l]) => [lens, new RegExp(["(^|[\\s(\"'`])\\/(?!" + l.command.slice(1) + "(?![\\w-]))[a-z][a-z0-9-]*(:[a-z0-9-]+)?(?=$|[\\s.,;:!?)\"'`])", ...OTHER_REVIEWS.filter((p) => !(l.phrases as readonly string[]).includes(p)).map((p) => "\\b" + p.replace(" ", "[ -]") + "\\b")].join("|"), "i")])) as Record<PlanLens, RegExp>;
 const DOCS = /\bpromot(e|es|ed|ing)\b|\bcommit(s|ted|ting)?\b|\bdocs\//i;
 const MODE = /\b(SCOPE EXPANSION|SELECTIVE EXPANSION|HOLD SCOPE|SCOPE REDUCTION|DX EXPANSION|DX POLISH|DX TRIAGE)\b|\breview mode\b|\bmode selection\b|\bStep 0[A-I]?\b|\bscope (gate|challenge)\b|\bWhat should I review\?|\b(original|smaller) arrangement\b|\bdesign completeness\b|\bfocus on specific areas\b|\bHow deep should this DX review go\b/i;

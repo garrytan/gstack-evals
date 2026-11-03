@@ -89,6 +89,15 @@ describe("the rec user (B4, open item 3)", () => {
     expect(REC_USER_SHA256).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  test("a non-CEO lens declines a plain-language offer of the CEO review, and the CEO lens still takes its own", () => {
+    const offers = ["Want me to start the CEO review now?", "Should I run a CEO review next?", "Shall we do the ceo-review after this?"];
+    for (const lens of ["eng", "devex", "design"] as const) {
+      for (const q of offers) expect(recAnswer(q, lens)).toBe(REC_DECLINE);
+      expect(recAnswer("Is the CEO the main reader of this plan?", lens)).toBe(REC_REPLY);
+    }
+    for (const q of offers) expect(recAnswer(q, "ceo")).toBe(REC_REPLY);
+  });
+
   test("through the simulator, a gated effect still gets the non-approving answer", async () => {
     const sim = new UserSim({ task: "t", script: REC_USER, log: join(scratch("rec-"), "usersim.ndjson"), freeform: async (p, q) => ((await recFreeformFor("ceo")(p, q)) as { text: string }).text });
     const ask = async (question: string, options: string[] = ["A", "B"]) => ((await sim.answerAsk([{ question, options: options.map((label) => ({ label })) }])) as { answers: Record<string, string> }).answers[question];
