@@ -18,9 +18,9 @@ links:
 attachments:
   - bc81945309b1611c80d9e1ce4452903b0785dde42607727f11f9fc4d3461604d  build-e0.sh.txt
   - 0874e6014b5f3b1e1f19ab0f98526e23d1d991de0c10c7a02d6eace2b477c99c  convert-e0.py.txt
-  - b0877e6f147644e27d2b96d6b906a43244ce5ad37ccdf7d83f10f1eeb04dd078  custody-e0.sh.txt
-  - 11d297e4780fab18d300f36c4b3490205874d07cf3ad3c9259895832c5947d8a  e0-dryrun.ts.txt
-  - 38589cd3b88c7f388fd0fb9abe0e9c14358c129e547a633633af851b6155f152  e0-dryrun.txt
+  - 415a47099376a4df46fb08daa45a3fddd230d7c450d103d3cc8393d72c72bb17  custody-e0.sh.txt
+  - 56640c885ef6aab227f085462892b4cf70ac8783af7623c8f13c746ce18d0d6d  e0-dryrun.ts.txt
+  - da7bf5bf157c9170c08d8e14429390b3361cfc08625ab812e4ca08497fa063ba  e0-dryrun.txt
   - fb0540a7134d12411e436841c35bf04c7fc5fcdc40af2dba00d0498cb7a8d814  e0-e2e.ts.txt
   - 2c0b323bd4097f3933339e13eceb311485e5ea99dac2a85ccc9ec76eeedad66d  e0-oc.py.txt
   - ee638f22186ee1766d7fd16a63c184d6a9764df9303d93ad29cef6f78a2c16d2  e0-oc.txt
@@ -112,8 +112,8 @@ Paths as on the run machine: $BUNDLE is the sealed bundle file (panel-v3-calibra
 (cd $B && sha256sum --strict -c) <<'EOF'
 bc81945309b1611c80d9e1ce4452903b0785dde42607727f11f9fc4d3461604d  build-e0.sh
 0874e6014b5f3b1e1f19ab0f98526e23d1d991de0c10c7a02d6eace2b477c99c  convert-e0.py
-b0877e6f147644e27d2b96d6b906a43244ce5ad37ccdf7d83f10f1eeb04dd078  custody-e0.sh
-11d297e4780fab18d300f36c4b3490205874d07cf3ad3c9259895832c5947d8a  e0-dryrun.ts
+415a47099376a4df46fb08daa45a3fddd230d7c450d103d3cc8393d72c72bb17  custody-e0.sh
+56640c885ef6aab227f085462892b4cf70ac8783af7623c8f13c746ce18d0d6d  e0-dryrun.ts
 fb0540a7134d12411e436841c35bf04c7fc5fcdc40af2dba00d0498cb7a8d814  e0-e2e.ts
 2c0b323bd4097f3933339e13eceb311485e5ea99dac2a85ccc9ec76eeedad66d  e0-oc.py
 0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9  e0-readings.ts
@@ -123,8 +123,9 @@ a3026ed074000650f932e71de30756858385b5091014389eaafef6f25c1c782e  e0-stops.ts
 EOF
 
 # 0. Pin check, then build the run material under custody (keyless; counts and digests only). custody-e0.sh checks
-#    $BUNDLE's sha256, decrypts it into $SLICE, runs bash $B/build-e0.sh $BUNDLE $SLICE $RUN . there, removes $SLICE and
-#    logs $CUSTODY; if anything fails once the decryption starts, it logs the failure and removes $SLICE and $RUN
+#    $BUNDLE's sha256, reserves $RUN by creating $RUN.lock with mkdir (a second launch on $RUN refuses), decrypts the bundle
+#    into $SLICE, runs bash $B/build-e0.sh $BUNDLE $SLICE $RUN . there, removes $SLICE, logs $CUSTODY and releases the lock;
+#    if anything fails once the lock is held, it logs the failure and removes $SLICE and the $RUN it made
 E0_MACHINE=$MACHINE bash $B/custody-e0.sh $BUNDLE $IDENTITY $RUN . $CUSTODY
 
 # 1. The Opus run (item e0-opus-none)
@@ -160,10 +161,11 @@ bun $B/e0-readings.ts --scorer . --suite $SR/suites/planrev-v3-e0.json --kinds $
   --opus $RUN/e0-opus-none --particle $RUN/e0-particle-none --key $RUN/judge/key.json \
   --read sol=$RUN/judge/read-sol --read opus=$RUN/judge/read-opus --read sonnet=$RUN/judge/read-sonnet --out $RUN/readings
 
-# 5b. The re-audit of DEAD kinds (section 7) under custody. custody-e0.sh checks $BUNDLE's sha256, decrypts it into a fresh
-#     /dev/shm dir, makes $RUN/reaudit mode 0700, runs the re-audit command in the foreground with E0_SLICE set to the
-#     extraction and E0_REAUDIT to $RUN/reaudit, removes the extraction and logs $CUSTODY; if the command fails or leaves
-#     no reaudit.json, it logs the failure and removes the extraction and $RUN/reaudit
+# 5b. The re-audit of DEAD kinds (section 7) under custody. custody-e0.sh checks $BUNDLE's sha256, reserves $RUN/reaudit
+#     by creating $RUN/reaudit.lock with mkdir, decrypts the bundle into a fresh /dev/shm dir, makes $RUN/reaudit mode 0700,
+#     runs the re-audit command in the foreground with E0_SLICE set to the extraction and E0_REAUDIT to $RUN/reaudit,
+#     removes the extraction, logs $CUSTODY and releases the lock; if the command fails or leaves no reaudit.json, it logs
+#     the failure and removes the extraction and the $RUN/reaudit it made
 E0_MACHINE=$MACHINE bash $B/custody-e0.sh --reaudit $BUNDLE $IDENTITY $RUN/reaudit $CUSTODY -- <the re-audit command>
 
 # 6. Readings, part two, with the re-audit's results (section 7)
@@ -363,10 +365,10 @@ Building the draft also brought three rules into line with the plan or the pin b
 
 ## 13. Dry run
 
-[e0-dryrun.ts](e0-dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on a synthetic slice that [gen-synth-e0.py](gen-synth-e0.py.txt) writes; it never opens the sealed slice. [e0-dryrun.txt](e0-dryrun.txt) is its transcript: PASS 168, FAIL 0.
+[e0-dryrun.ts](e0-dryrun.ts.txt) drives every frozen rule through the pinned scorer, keyless, on a synthetic slice that [gen-synth-e0.py](gen-synth-e0.py.txt) writes; it never opens the sealed slice. [e0-dryrun.txt](e0-dryrun.txt) is its transcript: PASS 170, FAIL 0.
 
 - **a. Pin:** the scorer at b7b6aec with no tracked change.
-- **b. Build and refusals:** the 24 synthetic units pass kit v3's checker; build-e0.sh builds the slice and the suite loads with 93 blockers; convert refuses a pending seal, a wrong kit digest, a key and manifest mismatch, a row not final, a row with kept false and wrong counts; build refuses a bundle sha256 other than the frozen one; custody-e0.sh refuses one before it decrypts; on an age-encrypted synthetic bundle under a throwaway age identity, custody-e0.sh refuses an unset E0_MACHINE and an existing run dir before it decrypts, decrypts into /dev/shm, builds the suite, writes its CUSTODY.md line with the machine and the run dir and leaves nothing under /dev/shm; with build-e0.sh forced to fail after the decryption, it logs the failure and removes the half-built run root and the extraction; in --reaudit mode it runs a stand-in re-audit command against the extraction, logs it and leaves nothing under /dev/shm, and with that command forced to fail it logs the failure and removes the re-audit dir and the extraction, leaving the run root; the dry run's unit-number draw is seeded (build-e0.sh passes 20261103 to convert-e0.py under a dry-run digest), so the synthetic layout, and with it the sensitivity read's checks in k, repeats from run to run; the built run root is mode 0700 with nothing under it group- or world-readable, and convert refuses a run root it could not make 0700.
+- **b. Build and refusals:** the 24 synthetic units pass kit v3's checker; build-e0.sh builds the slice and the suite loads with 93 blockers; convert refuses a pending seal, a wrong kit digest, a key and manifest mismatch, a row not final, a row with kept false and wrong counts; build refuses a bundle sha256 other than the frozen one; custody-e0.sh refuses one before it decrypts; on an age-encrypted synthetic bundle under a throwaway age identity, custody-e0.sh refuses an unset E0_MACHINE and an existing run dir before it decrypts, decrypts into /dev/shm, builds the suite, writes its CUSTODY.md line with the machine and the run dir and leaves nothing under /dev/shm; with build-e0.sh forced to fail after the decryption, it logs the failure and removes the half-built run root and the extraction; in --reaudit mode it runs a stand-in re-audit command against the extraction, logs it and leaves nothing under /dev/shm, and with that command forced to fail it logs the failure and removes the re-audit dir and the extraction, leaving the run root; every launch releases its lock, and while one --reaudit launch holds a dir, a second launch on the same dir refuses before it decrypts, logs nothing and leaves the first launch's dir, which then finishes; the dry run's unit-number draw is seeded (build-e0.sh passes 20261103 to convert-e0.py under a dry-run digest), so the synthetic layout, and with it the sensitivity read's checks in k, repeats from run to run; the built run root is mode 0700 with nothing under it group- or world-readable, and convert refuses a run root it could not make 0700.
 - **c. Frozen commands:** both review-units calls at --dry-run plan 48 sessions each with the none line, claude-code-preset, 60 turns and the cap.
 - **d. Real stops:** seven scenarios through runReviewUnits, the pinned SDK and the pinned Claude Code binary against a scripted upstream behind the real metering proxy, each read by the termination read as section 5 says, and judge-packet on a full Opus arm that review-units marked stopped.
 - **e. Judging:** judge-packet over both arms, judge-run --dry-run for each judge item with brief v3 (its sha256 printed) and its worst case, the combine rule, kappa against a hand value, and kappa's per-stratum denominators and flag under 0.6.
@@ -385,13 +387,17 @@ Each script is attached with a .txt suffix so the repo checks never load it; the
 
 - [build-e0.sh](build-e0.sh.txt) `bc81945309b1611c80d9e1ce4452903b0785dde42607727f11f9fc4d3461604d`: builds the run material from the extracted slice under umask 077 and refuses any bundle but the frozen one; under the dry run's digest it seeds the unit-number draw.
 - [convert-e0.py](convert-e0.py.txt) `0874e6014b5f3b1e1f19ab0f98526e23d1d991de0c10c7a02d6eace2b477c99c`: turns the slice into the suite, e0-kinds.json and the source clone, and refuses any shape but the frozen counts and any run root it could not make mode 0700; an optional seed, passed only under a dry-run digest, seeds the unit-number draw.
-- [custody-e0.sh](custody-e0.sh.txt) `b0877e6f147644e27d2b96d6b906a43244ce5ad37ccdf7d83f10f1eeb04dd078`: the only allowed way to open the bundle; checks its sha256, decrypts it into /dev/shm, runs build-e0.sh there or, with --reaudit, the section 7 re-audit command, removes the extraction and logs CUSTODY.md with the machine id and the run or re-audit dir; a failure after the decryption is logged and removes the extraction and that dir.
+- [custody-e0.sh](custody-e0.sh.txt) `415a47099376a4df46fb08daa45a3fddd230d7c450d103d3cc8393d72c72bb17`: the only allowed way to open the bundle; checks its sha256, reserves the run or re-audit dir with a mkdir lock, decrypts it into /dev/shm, runs build-e0.sh there or, with --reaudit, the section 7 re-audit command, removes the extraction and logs CUSTODY.md with the machine id and the run or re-audit dir; a failure once the lock is held is logged and removes the extraction and that dir if this launch made it.
 - [gen-synth-e0.py](gen-synth-e0.py.txt) `746d3b35714ad1aa92d4bbbdeaa4497940afa2b23ad7db13d9fb2cf2301f0b31`: writes the synthetic slice the dry run builds from.
 - [e0-readings.ts](e0-readings.ts.txt) `0813d707141747c2ac97656ed851faa8673f9c35949a5e2de91d797595ea4fb9`: the termination read, the judge-read checks and the judging join, the kind-keep rule with the re-audit file's checks, the sensitivity read, kappa, the read audit's counts and the verdict block.
 - [e0-stops.ts](e0-stops.ts.txt) `a3026ed074000650f932e71de30756858385b5091014389eaafef6f25c1c782e`: dry-run steps d and h: real stops and the start rule through the pinned run loop.
 - [e0-e2e.ts](e0-e2e.ts.txt) `fb0540a7134d12411e436841c35bf04c7fc5fcdc40af2dba00d0498cb7a8d814`: dry-run step k: both runs, packets, the three judge calls and both readings parts end to end.
-- [e0-dryrun.ts](e0-dryrun.ts.txt) `11d297e4780fab18d300f36c4b3490205874d07cf3ad3c9259895832c5947d8a`: the keyless dry run.
-- [e0-dryrun.txt](e0-dryrun.txt) `38589cd3b88c7f388fd0fb9abe0e9c14358c129e547a633633af851b6155f152`: its transcript.
+- [e0-dryrun.ts](e0-dryrun.ts.txt) `56640c885ef6aab227f085462892b4cf70ac8783af7623c8f13c746ce18d0d6d`: the keyless dry run.
+- [e0-dryrun.txt](e0-dryrun.txt) `da7bf5bf157c9170c08d8e14429390b3361cfc08625ab812e4ca08497fa063ba`: its transcript.
 - [e0-oc.py](e0-oc.py.txt) `2c0b323bd4097f3933339e13eceb311485e5ea99dac2a85ccc9ec76eeedad66d`: the operating-characteristic model.
 - [e0-oc.txt](e0-oc.txt) `ee638f22186ee1766d7fd16a63c184d6a9764df9303d93ad29cef6f78a2c16d2`: its table.
 - [judge-brief-v3.md](judge-brief-v3.md) `79d73194f09c65d457c9ada56143f4b3776a8839c777846a91fb9869a660a936`: judge brief v3.
+
+## 15. Open notes
+
+- **Particle-1's unjudged cells count as misses.** When a primary judge leaves a packet unjudged (a reply refused twice), e0-readings.ts counts particle-1's scored cells in that packet as misses, because its judging-incomplete check reads Opus cells only. This changes no Opus disposition and no E0 verdict, since particle-1 decides nothing. The Captain (GSTA-2) accepted it as an open note at /ship on 2026-11-03, and e0-readings.ts stays as frozen. The results post prints particle-1's unjudged cell count and, when it is above 0, labels particle-1's recall a lower bound.

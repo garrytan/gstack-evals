@@ -98,6 +98,25 @@ await section("b. Synthetic slice, the kit's check, build-e0.sh and its refusals
     check("custody-e0.sh --reaudit decrypts the bundle into /dev/shm, makes the re-audit dir mode 0700 and runs the re-audit command there with E0_SLICE and E0_REAUDIT set (a stand-in that finds the slice's 24 units and their key.json under /dev/shm and writes reaudit.json); it appends one CUSTODY.md line with the reaudit.json sha256, the machine and the dir, and leaves no extraction (exit " + ra.status + ")", ra.status === 0 && !!rj && JSON.parse(String(rj)).units === 24 && (statSync(RA).mode & 0o777) === 0o700 && cl().length === 3 && line("reaudit bundle " + es + " reaudit\\.json " + sha(rj!) + " machine dry-run-machine dir " + esc(RA) + " ok").test(cl()[2] ?? "") && shm() === before);
     const rf = custody(["--reaudit", enc, ident, RB, clog, es, "--", "bash", "-c", 'echo "{}" > "$E0_REAUDIT/reaudit.json"; exit 3']);
     check("forced failure: with the re-audit command failing after the decryption (exit 3 after writing a partial reaudit.json), custody-e0.sh --reaudit exits " + rf.status + ", appends one CUSTODY.md line naming the failed stage, its exit code, the machine and the re-audit dir, and removes that dir and the extraction (" + (shm() - before) + " left); the run root and the earlier re-audit stay", rf.status === 3 && cl().length === 4 && line("reaudit bundle " + es + " FAILED at reaudit exit 3 machine dry-run-machine dir " + esc(RB) + " removed").test(cl()[3] ?? "") && !existsSync(RB) && shm() === before && existsSync(sp) && existsSync(join(RA, "reaudit.json")));
+    check("every earlier launch released its lock, the refusals and the forced failures included (" + [RC, RF, RA, RB].filter((d) => existsSync(d + ".lock")).length + " left)", [RC, RF, RA, RB].every((d) => !existsSync(d + ".lock")));
+    const RD = join(RC, "reaudit-double"), DD = join(OUT, "double"), harness = join(DD, "double.sh");
+    mkdirSync(DD);
+    writeFileSync(harness, [
+      'bash "$CUSTODY" --reaudit "$ENC" "$IDENT" "$DIR" "$CLOG" "$ES" -- bash -c \'touch "$READY"; while [ ! -e "$GO" ]; do sleep 0.2; done; echo "{}" > "$E0_REAUDIT/reaudit.json"\' > "$DD/a.out" 2> "$DD/a.err" &',
+      "A=$!",
+      'for i in $(seq 1 600); do [ -e "$READY" ] && break; sleep 0.2; done',
+      'ls /dev/shm | grep -c "^e0-slice\\." > "$DD/shm-during"',
+      'bash "$CUSTODY" --reaudit "$ENC" "$IDENT" "$DIR" "$CLOG" "$ES" -- bash -c \'echo "{}" > "$E0_REAUDIT/reaudit.json"; exit 3\' > "$DD/b.out" 2> "$DD/b.err"',
+      'echo $? > "$DD/b.code"',
+      'test -d "$DIR" && test -d "$DIR.lock" && echo held > "$DD/dir-during"',
+      'wc -l < "$CLOG" > "$DD/clog-during"',
+      'touch "$GO"',
+      'wait $A; echo $? > "$DD/a.code"',
+    ].join("\n") + "\n");
+    const before2 = cl().length;
+    run(["bash", harness], scorer, { ...CENV, CUSTODY: join(HERE, "custody-e0.sh"), ENC: enc, IDENT: ident, DIR: RD, CLOG: clog, ES: es, DD, READY: join(DD, "ready"), GO: join(DD, "go") });
+    const rd = (f: string) => (existsSync(join(DD, f)) ? readFileSync(join(DD, f), "utf8").trim() : "");
+    check("double launch: while one --reaudit launch holds a dir (its extraction in /dev/shm, its command running), a second launch on the same dir refuses before it decrypts (exit " + rd("b.code") + ", naming the lock): it logs nothing, adds no extraction (" + (Number(rd("shm-during")) - before) + " under /dev/shm, the first launch's) and leaves the first launch's dir; the first then finishes ok (exit " + rd("a.code") + "), logs its line, keeps its reaudit.json and releases its lock", rd("b.code") === "2" && /another launch holds the reaudit dir/.test(rd("b.err")) && Number(rd("shm-during")) === before + 1 && rd("dir-during") === "held" && Number(rd("clog-during")) === before2 && rd("a.code") === "0" && cl().length === before2 + 1 && line("reaudit bundle " + es + " reaudit\\.json \\S+ machine dry-run-machine dir " + esc(RD) + " ok").test(cl().at(-1) ?? "") && existsSync(join(RD, "reaudit.json")) && !existsSync(RD + ".lock") && shm() === before);
   }
   const open = readdirSync(RUN, { recursive: true }).filter((f) => statSync(join(RUN, String(f))).mode & 0o044).length;
   check("build-e0.sh's run root is mode " + (statSync(RUN).mode & 0o777).toString(8) + " (0700 wanted), and " + open + " files or dirs under it are group- or world-readable", (statSync(RUN).mode & 0o777) === 0o700 && open === 0);
