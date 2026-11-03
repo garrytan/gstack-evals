@@ -154,7 +154,7 @@ The findings standard (GST-800, decision D1) asks every null to state its contro
 
 - **Control rates.** With no skill, Opus 5.5 solved 94.5% of the band (87.6% to 98.2%) and Sol 84.6% (75.5% to 91.3%). The most any arm could gain on the band is what is left: 5.5 points on Opus and 15.4 on Sol.
 - **MDD.** The prereg's frozen formula (section 6, power.py: 2.8 x sqrt(2 x 0.16 / 3 / n), three replicates, paired by task) gives 10.9 points at R3b's planned 70 tasks and 16.7 at its minimum of 30. At the admitted counts it would be 40.9 points at 5 tasks (Opus) and 24.4 at 14 (Sol). The formula assumes per-task pass chances near 0.5. On tasks a model failed once, the true rates are unknown, so these are the prereg's planning numbers at a smaller n, not fitted values.
-- **Admission.** The findings standard's admission check needs room of at least twice the MDD, 33.4 points at 30 tasks. Opus has 5.5 points and Sol 15.4.
+- **Admission.** R3b would run only on the admitted tasks, the ones each model failed in its screen trial, and their control rates are unknown. So the band's rates above can't settle the findings standard's admission check (room of at least twice the MDD) for R3b. The preregistered rule, at least 30 admitted tasks, is what stopped it.
 
 A saturation stop isn't a null on the skill. R3b never ran, so no lift was estimated and no interval on /investigate exists. The finding is that told /investigate can't be tested here.
 
