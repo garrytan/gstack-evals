@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { armSpec, jobConfig, PROCEDURE_LINES } from "../runner/grid.ts";
-import { Ledger, toMicros } from "../runner/ledger.ts";
+import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
 import { loadRebenchPool, loadSwebvTasks, materializeRebench, materializeSwebv, R3A4_POOL_FILE, R3A4_POOL_SHA256, treeDigest, type RebenchTask } from "../runner/materialize.ts";
 import { A4, allowanceStops, bindCheck, itemCheck, OPUS, poolIds, projectionCheck, R3_ARMS, R3A, R3A4, r3a4Draw, SOL } from "../r3/screen.ts";
 import type { R3Trial } from "../r3/exposure.ts";
@@ -310,6 +310,104 @@ describe("amendment 4's screen", () => {
   test("allowance stops count per part and arm", () => {
     const t = (arm: string, budget_stop: boolean) => ({ arm, budget_stop }) as R3Trial;
     expect(allowanceStops([{ part: opus4.parts[2]!, trials: [t("gstack", true), t("gstack", false), t("none", true)] }])).toEqual({ pilot: { gstack: 1, none: 1 } });
+  });
+});
+
+
+// Plan section 5 (F1): a cap raise recorded on the item's ledger resumes screen-b and the pilot on the same item.
+describe("resuming screen-b after a recorded cap raise", () => {
+  const words = { words: "test raise", by: "test" };
+  test("Ledger.raise appends a higher cap that the ledger then enforces; no approval, or a cap at or under the current one, is refused", () => {
+    const p = join(tmp("r3a4-raise-"), "r3a4-opus.jsonl");
+    const l = new Ledger(p, "r3a4-opus");
+    expect(() => l.raise(600, words)).toThrow("no approval row");
+    l.approve(550, words);
+    expect(() => l.approve(600, words)).toThrow("approval row already present");
+    expect(l.reserve("a", toMicros(549))).toEqual({ ok: true, existing: false });
+    expect(l.reserve("b", toMicros(2))).toMatchObject({ ok: false, reason: "cap" });
+    for (const low of [550, 549]) expect(() => l.raise(low, words)).toThrow("is not above the current cap");
+    l.raise(800, words);
+    expect(l.status().capMicros).toBe(toMicros(800));
+    expect(l.reserve("b", toMicros(2))).toEqual({ ok: true, existing: false });
+    expect(() => l.raise(800, words)).toThrow("is not above the current cap");
+    expect(readRows(p).filter((r) => r.kind === "approval").map((r) => [r.id, r.usd_micros, r.raised_from_micros ?? null, r.words])).toEqual([["approval", 550e6, null, "test raise"], ["raise-1", 800e6, 550e6, "test raise"]]);
+  });
+
+  test("an item whose ledger holds a raise before its run is refused at prepare and run", () => {
+    const p = join(tmp("r3a4-raise-"), "r3a4-opus.jsonl");
+    new Ledger(p, "r3a4-opus").approve(550, words);
+    new Ledger(p, "r3a4-opus").raise(800, words);
+    expect(() => itemCheck(p, opus4)).toThrow("holds a cap raise before its run");
+  });
+
+  // A bound item whose run stopped after screen-a: settledEach x 100 settled on screen-a, so the projection is
+  // 2 x 100 x settledEach + 10 x $2.50 + 2 x $4 + $72, over the $550 cap.
+  function stopped(o: { raise?: number; settledEach?: number } = {}) {
+    const x = work4(opus4, { skipB: true });
+    rmSync(join(x.w, "pilot"), { recursive: true, force: true });
+    rmSync(join(x.w, "pilot.launch-exit"), { force: true });
+    for (const part of ["screen-b", "pilot"]) mkdirSync(join(x.w, part), { recursive: true });
+    const l = new Ledger(x.ledger, opus4.item);
+    for (let i = 0; i < 100; i++) {
+      l.reserve("r3a4-opus-screen-a/s-" + i, toMicros(o.settledEach ?? 5.48));
+      l.settle("r3a4-opus-screen-a/s-" + i, toMicros(o.settledEach ?? 5.48));
+    }
+    writeFileSync(x.ledger + ".bound", JSON.stringify({ item: opus4.item, work: x.w, at: "2026-11-04T00:00:00Z" }) + "\n");
+    if (o.raise) l.raise(o.raise, words);
+    return x;
+  }
+  const env = (x: ReturnType<typeof work4>) => ({ ...process.env, LEDGER: x.ledger, DROPS: x.drops.path, DROPS_SHA256: x.drops.sha256, VM_USD_PER_HOUR: "1", UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", LEDGER_PORT: String(20000 + Math.floor(Math.random() * 20000)), ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" });
+  const screen = (cmd: string, x: ReturnType<typeof work4>) => {
+    const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), cmd, x.w, "--item", opus4.item], { env: env(x) });
+    return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
+  };
+  const launched = (x: ReturnType<typeof work4>) => readRows(x.ledger).filter((r) => r.id.startsWith("r3a4-opus-screen-b/") || r.id.startsWith("r3a4-opus-pilot/"));
+
+  test("with no raise recorded, resume refuses and launches nothing", () => {
+    const x = stopped();
+    const r = screen("resume", x);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("no cap raise is recorded on");
+    expect(existsSync(join(x.w, "screen-b.launch-exit"))).toBe(false);
+    expect(existsSync(join(x.w, "screen-b.projection-stop"))).toBe(true);
+    expect(launched(x)).toEqual([]);
+  });
+
+  test("with a raise recorded, resume relaunches screen-b on the same item at the raised cap, once", () => {
+    const x = stopped({ raise: 1300 });
+    const r = screen("resume", x);
+    expect(r.out).toContain("screen-a: projection $1201.00");
+    expect(r.out).toContain("fits r3a4-opus's $1300 cap; screen-b starts");
+    expect(readFileSync(join(x.w, "screen-b.launch-exit"), "utf8").trim()).toBe("1");
+    // $548 is settled, so screen-b's $4 VM block fits only the raised cap.
+    expect(launched(x).map((row) => [row.id, row.kind])).toEqual([["r3a4-opus-screen-b/vm", "reserve"], ["r3a4-opus-screen-b/vm", "settle"]]);
+    expect(existsSync(join(x.w, "pilot.launch-exit"))).toBe(false);
+    expect(existsSync(join(x.w, "screen-b.projection-stop"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(x.w, "cap-raise.json"), "utf8"))).toMatchObject({ raise: { id: "raise-1", usd_micros: 1300e6, raised_from_micros: 550e6 }, projection: { cap_usd: 1300, over: false } });
+    const again = screen("resume", x);
+    expect(again.code).toBe(1);
+    expect(again.err).toContain("has no screen-b.projection-stop");
+    expect(screen("run", x).err).toContain("r3a4-opus is already bound to a run");
+    expect(launched(x)).toHaveLength(2);
+    const a = screen("analyze", x);
+    expect(a.code).toBe(4);
+    expect(a.out).toContain("incomplete: screen-b's launch exited 1");
+    expect(JSON.parse(readFileSync(join(x.w, "record.json"), "utf8")).cap_raise.raise.id).toBe("raise-1");
+  });
+
+  test("a raise the projection still passes is refused, and so is a resume from another work dir", () => {
+    const x = stopped({ raise: 1200 });
+    const r = screen("resume", x);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("still passes r3a4-opus's raised $1200 cap");
+    expect(existsSync(join(x.w, "screen-b.projection-stop"))).toBe(true);
+    expect(launched(x)).toEqual([]);
+    const y = stopped({ raise: 1300 });
+    writeFileSync(y.ledger + ".bound", JSON.stringify({ item: opus4.item, work: "/elsewhere", at: "2026-11-04T00:00:00Z" }) + "\n");
+    const other = screen("resume", y);
+    expect(other.code).toBe(1);
+    expect(other.err).toContain("is bound to the run in /elsewhere");
+    expect(launched(y)).toEqual([]);
   });
 });
 
