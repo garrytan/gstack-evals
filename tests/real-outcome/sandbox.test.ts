@@ -1,7 +1,7 @@
 // Keyless tests of the ship sandbox (lanes/real-outcome/sandbox): the evaluator-owned origin, gh API and journal, and the
 // shipment record. A fake agent works in a scratch "container" directory with real git over smart HTTP and the real gh
 // stub, as a trial's agent would, against a sidecar on 127.0.0.1.
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,6 +9,9 @@ import { join } from "node:path";
 import { git } from "../../lanes/real-outcome/sandbox/gh.ts";
 import type { ShipmentRecord } from "../../lanes/real-outcome/sandbox/shipment.ts";
 import type { TrialSpec } from "../../lanes/real-outcome/sandbox/sidecar.ts";
+
+// Each test drives real git and gh calls through the sidecar, 2 to 5 s each on a 4-core machine, so bun's 5 s default fails them under load (GST-1016).
+setDefaultTimeout(30_000);
 
 const tmp = mkdtempSync(join(tmpdir(), "real-sandbox-"));
 const sc = { controlUrl: "", proc: null as ReturnType<typeof Bun.spawn> | null };
@@ -31,9 +34,10 @@ async function serve(root: string, cwd?: string) {
   expect(controlUrl).toStartWith("http://127.0.0.1:");
   return { proc, controlUrl };
 }
-beforeAll(async () => {
-  Object.assign(sc, await serve(join(tmp, "sidecar")));
-});
+// The sidecar starts while the file loads, outside every test and hook: when a test times out, bun kills the child processes
+// that tests and hooks started, so a sidecar started in beforeAll died with the first timeout and every later test failed
+// with ECONNREFUSED (GST-1016).
+Object.assign(sc, await serve(join(tmp, "sidecar")));
 afterAll(() => {
   sc.proc?.kill();
   rmSync(tmp, { recursive: true, force: true });

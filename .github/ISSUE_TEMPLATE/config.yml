@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem, leaked secret or exposed held-out task
+    url: https://github.com/garrytan/gstack-evals/blob/main/SECURITY.md
+    about: Report these privately, as SECURITY.md describes.
+  - name: A problem in gstack itself
+    url: https://github.com/garrytan/gstack/issues
+    about: gstack's skills and tools have their own issue tracker.

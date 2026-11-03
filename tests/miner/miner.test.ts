@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,6 +8,9 @@ import {
   type Api, auditOrder, blameRanges, build, canHoldDefect, caseId, ghApi, type Hand, isFixTitle, mapLine, mentions, mine, type Mined, namedIssues, parseBlame, parseDiff,
   reviewSection, rewrittenRanges,
 } from "../../scripts/mine-review-cases.ts";
+
+// The mine tests drive dozens of git commands, 1.5 to 4.5 s each on a 4-core machine, so bun's 5 s default fails them under load (GST-1016, GST-978).
+setDefaultTimeout(30_000);
 
 const ROOT = join(import.meta.dir, "../..");
 const tmp = mkdtempSync(join(tmpdir(), "miner-"));
@@ -123,6 +126,17 @@ function squashRepo(name = "r") {
   return { clones, api, c0, k1, k2, s1, p2, p3, p4, p5 };
 }
 
+// The squash-merged repo and its mine are built once for the tests that only read them; each gets its own copy of the result.
+let squashMined: Promise<{ r: ReturnType<typeof squashRepo>; mined: Mined }> | undefined;
+async function minedSquashRepo() {
+  squashMined ??= (async () => {
+    const r = squashRepo();
+    return { r, mined: await mine({ clones: r.clones, repos: ["o/r"], api: r.api, until: "2026-10-29T00:00:00Z", catalog: catalogDir(), scope }) };
+  })();
+  const { r, mined } = await squashMined;
+  return { r, mined: structuredClone(mined) };
+}
+
 describe("scripts/mine-review-cases.ts", () => {
   test("the committed catalog regenerates byte for byte from mined.json and hand.json, and every case validates with an audit", () => {
     const run = spawnSync("bun", ["scripts/mine-review-cases.ts", "build", "--check"], { cwd: ROOT, encoding: "utf8" });
@@ -175,9 +189,7 @@ describe("scripts/mine-review-cases.ts", () => {
   });
 
   test("mine finds an escaped and a review-caught case in a squash-merged repo, with decoy hits from every later commit", async () => {
-    const r = squashRepo();
-    const catalog = catalogDir();
-    const mined = await mine({ clones: r.clones, repos: ["o/r"], api: r.api, until: "2026-10-29T00:00:00Z", catalog, scope });
+    const { r, mined } = await minedSquashRepo();
     expect(mined.candidates.map((c) => c.candidate)).toEqual(["o/r#1@" + r.k2.slice(0, 12), "o/r#2"]);
     const [caught, escaped] = mined.candidates as [Mined["candidates"][0], Mined["candidates"][0]];
     expect([escaped.kind, escaped.pr, escaped.reviewed_head, escaped.merge_base, escaped.file, escaped.lines, escaped.fix.commit]).toEqual(["escaped", 1, r.k2, r.c0, "src/app.ts", [12], r.p2.s]);
@@ -264,8 +276,7 @@ describe("scripts/mine-review-cases.ts", () => {
   });
 
   test("build never removes a seed, even when a partial mine did not audit it", async () => {
-    const r = squashRepo("t");
-    const mined = await mine({ clones: r.clones, repos: ["o/t"], api: r.api, until: "2026-10-29T00:00:00Z", catalog: catalogDir(), scope });
+    const { mined } = await minedSquashRepo();
     const catalog = catalogDir();
     const seed = "gstack-3516-ship-hook-actor-negation-guard.json";
     writeFileSync(join(catalog, seed), readFileSync(join(ROOT, "lanes/review-replay/catalog/public", seed)));
@@ -285,15 +296,14 @@ describe("scripts/mine-review-cases.ts", () => {
   });
 
   test("build writes valid cases in audit order, one per PR, drops a case whose decoy holds a defect, and stops at the target", async () => {
-    const r = squashRepo("s");
-    const mined = await mine({ clones: r.clones, repos: ["o/s"], api: r.api, until: "2026-10-29T00:00:00Z", catalog: catalogDir(), scope });
+    const { mined } = await minedSquashRepo();
     const [caught, escaped] = mined.candidates as [Mined["candidates"][0], Mined["candidates"][0]];
     const confirmed = (extra: object) => ({ at: "2026-10-30", verdict: "confirmed" as const, notes: "read the fix", summary: "b is wrong", severity: { deserved: null, basis: "the evidence does not settle it" }, ...extra });
     const hand: Hand = {
       auditor: "test auditor",
       audits: {
         [escaped.candidate]: confirmed({ decoys: { "0": { verdict: "clean", later_fix: null, reason: "a rename" } }, needs_human_check: [{ item: "severity", reason: "no failing test named" }] }),
-        [caught.candidate]: confirmed({ in_history: [{ by: "pass 1", rated: "blocking" }], decoys: { "0": { verdict: "holds-defect", later_fix: { ref: "o/s#4", fixed: "c" }, reason: "a later fix" } } }),
+        [caught.candidate]: confirmed({ in_history: [{ by: "pass 1", rated: "blocking" }], decoys: { "0": { verdict: "holds-defect", later_fix: { ref: "o/r#4", fixed: "c" }, reason: "a later fix" } } }),
       },
     };
     const catalog = catalogDir();
