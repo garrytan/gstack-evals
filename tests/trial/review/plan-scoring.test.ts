@@ -9,15 +9,15 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { join, relative, sep } from "node:path";
 import { claudeCodeDriver } from "../../../src/adapters/claude-code/driver.ts";
 import { REPO_ROOT } from "../../../src/cli.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
 import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { dirTreeSha256 } from "../../../src/trial/cache.ts";
 import { removeTree } from "../../../src/trial/cleanup.ts";
-import { copyToSink, sinkLinkProblem } from "../../../src/trial/durable.ts";
+import { copyToSink, sinkLinkProblem, volatilePathProblem } from "../../../src/trial/durable.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { seedStateRoot } from "../../../src/trial/state-root.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
@@ -37,8 +37,10 @@ const scratch = (name: string) => {
   roots.push(d);
   return d;
 };
+const DURABLE = join(homedir(), ".cache", "gstack-evals-tests");
 const durable = () => {
-  const d = mkdtempSync(join(REPO_ROOT, ".plan-scoring-test-"));
+  mkdirSync(DURABLE, { recursive: true });
+  const d = mkdtempSync(join(DURABLE, "plan-scoring-"));
   roots.push(d);
   return d;
 };
@@ -393,6 +395,14 @@ describe("the planning lane's failure rule, end to end through the Claude Code d
   // Value: protects=a sealed run with a receipts sink outside the repo still copies its receipts there; fails_when=the sealed-sink guard refuses an outside sink; why_new=GST-737 receipts sink; seam=runReviewUnits; no_claim=none beyond protects
   test("a sealed run copies its receipts to a sink outside the repo", () => {
     expect(readFileSync(join(sink, "cells.ndjson"), "utf8")).toBe(readFileSync(join(out, "cells.ndjson"), "utf8"));
+  });
+});
+
+// Value: protects=GST-1121 item 4: this file's durable out dirs sit outside the repo and outside any temp dir runReviewUnits refuses, and afterAll removes them, so a run, even one killed before afterAll, never leaves a folder in the repo root; fails_when=durable() makes its dir under REPO_ROOT, which dirtied /ship's tree on #166, or under /tmp, which runReviewUnits refuses with E_RECEIPTS_VOLATILE; why_new=GEVA-211's report (a leaked .plan-scoring-test- folder); seam=durable(); no_claim=the other test files that make dirs under REPO_ROOT
+describe("this file's durable out dirs (keyless)", () => {
+  test("durable() makes its dir outside the repo and off a volatile path", () => {
+    const d = durable();
+    expect([existsSync(d), relative(REPO_ROOT, d).startsWith(".." + sep), volatilePathProblem(d)]).toEqual([true, true, null]);
   });
 });
 
