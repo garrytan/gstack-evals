@@ -633,6 +633,18 @@ describe("detectors", () => {
     expect(moveActs([from(wraps[2]), into(wraps[2].map((l) => l.replace("(3, 9)", "(3, 99)")))])).toEqual(["test_removed:mechanical", "skip_in_new_test:flag"]);
   });
 
+  test("skips compare by kind and condition, so a cosmetic change to an already-skipped test is a re-add and a change of kind still counts", () => {
+    const js = (header: string) => [header, "  g();", "});"];
+    const py = (marker: string) => [marker, "def test_b():", "    g()"];
+    const pyNew = (marker: string): [string, string] => ["tests/test_b.py", newFile(["import pytest", "", ...py(marker)])];
+    expect(moveActs([jsFrom(js('it.skip("b", () => {')), ["src/b.test.ts", newFile(js('it.skip("b", async () => {'))]])).toEqual(["skip_in_new_test:flag"]);
+    expect(moveActs([jsFrom(js('it.skip("b", () => {')), ["src/b.test.ts", newFile(js('xit("b", () => {'))]])).toEqual(["skip_in_new_test:flag"]);
+    expect(moveActs([pyFrom(py("@pytest.mark.skip")), pyNew('@pytest.mark.skip(reason="later")')])).toEqual(["skip_in_new_test:flag"]);
+    expect(moveActs([jsFrom(js('it.skip("b", () => {')), ["src/b.test.ts", newFile(js('it.todo("b", () => {'))]])).toEqual(["test_removed:mechanical", "skip_in_new_test:flag"]);
+    expect(moveActs([pyFrom(py("@pytest.mark.xfail")), pyNew("@pytest.mark.xfail(run=False)")])).toEqual(["test_removed:mechanical", "skip_in_new_test:flag"]);
+    expect(moveActs([pyFrom(py('@pytest.mark.skipif(sys.platform == "win32", reason="posix")')), pyNew('@unittest.skipUnless(sys.platform == "win32", "posix")')])).toEqual(["test_removed:mechanical", "skip_in_new_test:flag"]);
+  });
+
   test("a long case table, at module level or in a parametrize decorator with one plain case, is read in linear time", () => {
     const table = ["CASES = [", ...Array.from({ length: 800 }, (_, i) => "    pytest.param(" + i + ", marks=pytest.mark.xfail),"), "]", ""];
     const others = Array.from({ length: 200 }, (_, i) => ["def test_k" + i + "():", "    g()", ""]).flat();
