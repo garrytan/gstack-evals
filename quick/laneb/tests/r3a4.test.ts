@@ -346,6 +346,26 @@ describe("resuming screen-b after a recorded cap raise", () => {
     expect(new Ledger(p, "r3a4-opus").status().capMicros).toBe(toMicros(800));
   });
 
+  test("a raise whose item is not the first approval row's item is refused and leaves the file unchanged, through the class and the CLI", () => {
+    const p = join(tmp("r3a4-raise-"), "r3a4-opus.jsonl");
+    const cli = (item: string) => Bun.spawnSync([process.execPath, join(laneb, "runner/ledger.ts"), "raise", "--path", p, "--item", item, "--usd", "800", "--approved-by", "GSTA-2"]);
+    const none = cli("r3a4-opus");
+    expect([none.exitCode, none.stdout.toString().includes("no approval row")]).toEqual([3, true]);
+    expect(existsSync(p)).toBe(false);
+    new Ledger(p, "r3a4-opus").approve(550, words);
+    const before = readFileSync(p);
+    expect(() => new Ledger(p, "r3a4-oracle").raise(800, words)).toThrow("ledger's approval row is for item r3a4-opus, not r3a4-oracle");
+    const wrong = cli("r3a4-oracle");
+    expect([wrong.exitCode, wrong.stdout.toString().includes("ledger's approval row is for item r3a4-opus, not r3a4-oracle")]).toEqual([3, true]);
+    expect(readFileSync(p).equals(before)).toBe(true);
+    expect(new Ledger(p, "r3a4-opus").status().capMicros).toBe(toMicros(550));
+    const ok = cli("r3a4-opus");
+    expect([ok.exitCode, JSON.parse(ok.stdout.toString())]).toEqual([0, { ok: true, cap_usd: 800 }]);
+    const rows = readRows(p);
+    expect(rows.length).toBe(2);
+    expect(rows[1]).toMatchObject({ item: "r3a4-opus", kind: "approval", id: "raise-1", usd_micros: 800e6, raised_from_micros: 550e6, approved_by: "GSTA-2" });
+  });
+
   test("an item whose ledger holds a raise before its run is refused at prepare and run", () => {
     const p = join(tmp("r3a4-raise-"), "r3a4-opus.jsonl");
     new Ledger(p, "r3a4-opus").approve(550, words);

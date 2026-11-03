@@ -70,6 +70,7 @@ export class Ledger {
   raise(capUsd: number, extra: Record<string, unknown>) {
     const rows = readRows(this.path), approvals = rows.filter((r) => r.kind === "approval");
     if (!approvals.length) throw new Error("ledger has no approval row to raise");
+    if (approvals[0].item !== this.item) throw new Error(`ledger's approval row is for item ${approvals[0].item}, not ${this.item}`);
     const from = totals(rows).capMicros;
     if (toMicros(capUsd) <= from) throw new Error(`a raise to $${capUsd} is not above the current cap of $${fromMicros(from)}`);
     appendDurable(this.path, { ...extra, ts: new Date().toISOString(), item: this.item, kind: "approval", id: `raise-${approvals.length}`, usd_micros: toMicros(capUsd), raised_from_micros: from });
