@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # price.py: planning spend, item caps and the all-in ceiling for the L1 superseding preregistration (GEVA-254, GST-1155).
 # Keyless. Every figure is in dollars. All-in = paid model calls + VMs + crew model use (Capy credits / 1000).
-import math
+import json, math, sys
 
 CEILING = 2000.00
 def ceil10(x): return int(math.ceil(x / 10.0) * 10)
@@ -28,12 +28,29 @@ MULT = {"opus": {"none": 1.0, "gstack": 1.0}, "sol": {"none": 0.254 / 0.191, "gs
 GSTACK_ARMS_ALL = ["before-u", "after-u", "before-t", "after-t", "off-u", "off-t"]
 FIVE = ["none", "before-u", "after-u", "before-t", "after-t"]
 
+# Re-cost (section 9): python3 price.py --measured <file>, where the file holds {"model": "opus", "sol" or "particle-1",
+# "rates": {arm: mean dollars per session in that model's pilot}}. Each arm's SWE-rebench rate becomes the higher of its
+# planning rate and its measured rate, and its TB2 rate scales by the same ratio; an arm with no measured rate keeps its
+# planning rate.
+ARMS = ["none"] + GSTACK_ARMS_ALL
+RAISE = {}
+def usage(msg):
+    sys.stderr.write("E_USAGE price.py: " + msg + "\n")
+    sys.exit(2)
+
+def raise_rates(measured, model_id):
+    for arm, v in measured.items():
+        if arm not in ARMS or not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0:
+            usage("--measured rates must map arm names in %s to positive numbers" % ARMS)
+        kind = "none" if arm == "none" else "gstack"
+        RAISE.setdefault(model_id, {})[arm] = max(1.0, v / (RATE["swe-" + kind] * MULT[model_id][kind]))
+
 def item(name, per_arm, arms, inst, parts=1, model_id="opus"):
     n = 0; model = 0.0; vm_h = 0.0
     for arm in arms:
         k = per_arm[arm] if isinstance(per_arm, dict) else per_arm
         kind = "none" if arm == "none" else "gstack"
-        rate = RATE["tb2"] if inst == "tb2" else RATE["swe-" + kind]
+        rate = (RATE["tb2"] if inst == "tb2" else RATE["swe-" + kind]) * RAISE.get(model_id, {}).get(arm, 1.0)
         n += k; model += k * rate * MULT[model_id][kind]; vm_h += k * VM_H[kind]
     allow = ALLOW["tb2" if inst == "tb2" else "swe"]
     vm = vm_h * VM_USD_PER_HOUR
@@ -43,6 +60,14 @@ def item(name, per_arm, arms, inst, parts=1, model_id="opus"):
 
 PILOT = {"before-u": 10, "before-t": 10, "after-u": 3, "after-t": 3, "off-u": 3, "off-t": 3}
 pilot = item("pilot-opus", PILOT, list(PILOT), "swe")
+measured = None
+if len(sys.argv) > 1:
+    if len(sys.argv) != 3 or sys.argv[1] != "--measured":
+        usage("run with no arguments, or with --measured <file>")
+    measured = json.load(open(sys.argv[2]))
+    if not isinstance(measured, dict) or measured.get("model") not in MULT or not isinstance(measured.get("rates"), dict):
+        usage("the --measured file needs model (opus, sol or particle-1) and rates")
+    raise_rates(measured["rates"], measured["model"])
 f1 = item("f1-opus", 80, ["none"] + GSTACK_ARMS_ALL, "swe", parts=4)
 tb2 = item("tb2-opus", 74, FIVE, "tb2", parts=2)
 opus = [pilot, f1, tb2]
@@ -88,7 +113,8 @@ crew_cap = CREW_CAP + sum(cap for _, _, cap in lines)
 at_caps = paid_cap + crew_cap
 p("All-in expected: paid %s + crew %s = %s" % (usd(paid_exp), usd(crew_exp), usd(paid_exp + crew_exp)))
 p("All-in at caps:  paid %s + crew %s = %s (ceiling %s, headroom %s)" % (usd(paid_cap), usd(crew_cap), usd(at_caps), usd(CEILING), usd(CEILING - at_caps)))
-assert at_caps <= CEILING
+if measured is None:
+    assert at_caps <= CEILING
 p("")
 p("Leftover rule (section 9). Each leftover model launches only when the ceiling check passes at its launch; planning caps:")
 sol = [item("pilot-sol", PILOT, list(PILOT), "swe", model_id="sol"), item("f1-sol", 80, FIVE, "swe", parts=3, model_id="sol")]
@@ -104,6 +130,25 @@ for label, settled in [("every planned item settles at its cap", paid_cap), ("ev
         usd(par_cap), usd(CEILING - base - sol_exp), "fits" if base + sol_exp + par_cap <= CEILING else "does not fit",
         usd(CEILING - base), "fits" if base + par_cap <= CEILING else "does not fit"))
 p("")
+if measured is not None:
+    m = measured["model"]
+    p("Re-cost from %s's pilot (planning rate floors; TB2 scaled by the same ratio): %s" % (m, json.dumps(RAISE.get(m, {}), sort_keys=True)))
+    if m == "opus":
+        f1_five = item("f1-opus", 80, FIVE, "swe", parts=4)
+        steps = [("as planned", [pilot, f1, tb2]), ("without the TB2 twin", [pilot, f1]),
+                 ("without the TB2 twin and F1's off arms", [pilot, f1_five])]
+        verdict = "RECOST: STOP before F1; L1 reports the pilot as a stop"
+        for label, items in steps:
+            total = sum(x["cap"] for x in items) + crew_cap
+            p("  %-42s all-in at caps %s" % (label, usd(total)))
+            if total <= CEILING:
+                verdict = "RECOST: run " + label + "; caps " + ", ".join("%s %d" % (x["name"], x["cap"]) for x in items[1:])
+                break
+        p(verdict)
+    else:
+        x = item("f1-" + m, 80, FIVE, "swe", parts=3, model_id=m)
+        p("RECOST: f1-%s cap %d (expected %s); it launches only if the ceiling check passes with this cap" % (m, x["cap"], usd(x["expected"])))
+    p("")
 p("Not planned:")
 p("  F2 (two more F replicates on none, before-t and after-t, 480 sessions): not bought. O5 is descriptive (power.txt).")
 p("  Sealed held-out bug fixes (the merged plan's T-hinv): 92 tasks to author, audit and hold in custody; dropped.")
