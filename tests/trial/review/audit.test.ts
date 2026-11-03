@@ -1,6 +1,6 @@
 // The read audit (src/trial/review/audit.ts; panel v3 plan, sections 4 and 5): every tool call in a session's
-// transcript.ndjson, the main agent's and each subagent's, is classed by what it touched. A non-error touch under a
-// home's .capy is contamination in every arm; in the none and lens arms a gstack skill file, anything under
+// transcript.ndjson, the main agent's and each subagent's, is classed by what it touched. A non-error touch of a path
+// with a .capy segment is contamination in every arm; in the none and lens arms a gstack skill file, anything under
 // .local/share/gstack and a gstack-* command are contamination too. A touch whose result is an error is printed and
 // never counts unless its Bash command is compound, a call with no result counts as done, and printed targets show HOME as ~ and /work/<task> as <unit>.
 // Every transcript here is built in code, with a fake home made at runtime; nothing on this machine is read.
@@ -86,6 +86,28 @@ describe("the read audit (GEVA-203, keyless)", () => {
       const touches = audit(ndjson(call("t1", "Bash", { command }), failed("t1")), "none");
       expect([command, touches.length > 0, touches.every((t) => !t.error && t.contaminated)]).toEqual([command, true, true]);
     }
+  });
+
+  // Value: protects=FT3 (#176's final readers, the Captain's ruling): the audit expands ~, $HOME and ${HOME}, normalizes each path, and counts any path with a .capy segment in either form, failing closed, so a relative (../.capy), dotted (~/./.capy), doubled-slash, cd-relative or $HOME-built ("$HOME"/.capy) path is contamination in every arm, and a dotted .local/share/./gstack path is a gstack touch; a path that only holds capy in a name (capybara.md, .capybara/, my.capy.md, src/capy/) is no touch; fails_when=a relative or non-normalized .capy path reads clean, or a name that holds capy marks an arm untested; why_new=GST-1175 (FT3); seam=auditTranscript's pathClasses; no_claim=a path the shell builds at run time from other variables or a script file
+  test("FT3: relative, dotted and $HOME-built .capy paths count in every arm; a name that only holds capy does not", () => {
+    const counts: [string, Record<string, unknown>][] = [
+      ["Read", { file_path: "../.capy/drive/x/notes.md" }],
+      ["Read", { file_path: "~/./.capy/drive/x" }],
+      ["Read", { file_path: HOME + "//.capy/drive/x" }],
+      ["Glob", { pattern: "*.md", path: HOME + "/work/../.capy/drive" }],
+      ["Bash", { command: 'cat "$HOME"/.capy/drive/x' }],
+      ["Bash", { command: "cat ${HOME}/./.capy/drive/x" }],
+      ["Bash", { command: "cd ~ && cat .capy/drive/x" }],
+    ];
+    for (const [tool, input] of counts) for (const arm of ARMS) expect([tool, input, arm, audit(ndjson(call("t1", tool, input), result("t1")), arm).some((t) => t.class === "capy" && t.contaminated)]).toEqual([tool, input, arm, true]);
+    expect(audit(ndjson(call("t1", "Read", { file_path: "~/.local/share/./gstack/review/checklist.md" }), result("t1")), "none").map((t) => [t.class, t.contaminated])).toEqual([["gstack", true]]);
+    const clean: [string, Record<string, unknown>][] = [
+      ["Read", { file_path: WORK + "/capybara.md" }],
+      ["Read", { file_path: "~/.capybara/notes" }],
+      ["Bash", { command: "cat docs/my.capy.md src/capy/index.ts" }],
+      ["Grep", { pattern: "capy", path: WORK }],
+    ];
+    for (const [tool, input] of clean) for (const arm of ARMS) expect([tool, input, arm, audit(ndjson(call("t1", tool, input), result("t1")), arm)]).toEqual([tool, input, arm, []]);
   });
 
   // Value: protects=a subagent's tool call (parent_tool_use_id set) is audited the same as the main agent's; fails_when=a none arm launches a subagent that reads a skill or drive file and stays clean; why_new=audit.ts reads every tool call, the main agent's and each subagent's; seam=auditTranscript over sidechain messages; no_claim=a subagent whose transcript is written elsewhere

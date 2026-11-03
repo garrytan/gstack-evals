@@ -168,12 +168,15 @@ sealed. plan.ts holds what differs:
   allowance. PLAN_SEVERITY_MAP maps Critical and High to CRITICAL.
 - A plan unit installs and tests nothing: its tree is the repository, with the same history check.
 - Every arm runs with the rec user: each question gets "Go with your recommendation." A question that offers another
-  skill or review (by slash command or phrase, not counting the lens's own) or to promote or commit docs gets "No, not
-  now." A mode, scope-gate or Step 0 question (the mode rule, built from each lens's Step 0 and mode names in the
-  pinned skills) gets the recommendation before those rules run, and its answer is marked a choice: it only picks
-  among the question's options, so the simulator passes it even when the question names /ship or a commit (GST-925).
-  Every other answer still goes through the binding rules that refuse gated effects. REC_USER_SHA256 covers the
-  persona, the replies, each lens's decline rule, the docs rule and the mode rule. No model answers for the user. An
+  skill or review (by a slash command naming a skill of gstack v1.93.17.0, so a route such as /checkout is not one, or
+  by phrase, not counting the lens's own) or to promote or commit docs gets "No, not now." A mode, scope-gate or Step 0
+  question (the mode rule, built from each lens's Step 0 and mode names in the pinned skills) gets the recommendation,
+  and its answer is marked a choice: it only picks among the question's options, so the simulator passes it even when
+  the question names /ship or a commit in GST-925's "ends with /ship" wording. It is declined instead when what is left
+  once the mode words and that wording are removed offers another skill or review. Every rule reads the question with
+  markdown emphasis (*, _ and backticks) stripped and curly quotes folded to ASCII. Every other answer still goes
+  through the binding rules that refuse gated effects. REC_USER_SHA256 covers the persona, the replies, each lens's
+  decline rule, the docs rule, the mode rule, the /ship wording and the emphasis and quote rule. No model answers for the user. An
   arm that installs gstack gets every question in its registry set to
   never-ask (auto-decide) in the trial's throwaway state root, written over any preferences file the unit's tree ships;
   arm.json records that file's sha256 as `question_preferences_sha256`.

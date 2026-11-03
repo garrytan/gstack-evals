@@ -11,11 +11,13 @@
 // - Lenses: ceo, eng, devex and design. Each has its skill, its command, its lens line (the CEO pattern on the skill's
 //   frontmatter description at gstack v1.93.17.0, 68410828fd85) and the review phrases it owns.
 // - The rec user (B4) answers every question "Go with your recommendation.". A question about a review mode or a Step 0
-//   choice (MODE, built from each lens's Step 0 and mode names in the pinned skills) gets that answer before any other
-//   rule (GSTA-2's ruling on GST-925). Otherwise it answers "No, not now." to a question that names another skill or
-//   review (a slash command naming a skill of the pinned gstack other than the lens's own, so a route such as /checkout
-//   is not one, or a review phrase the lens does not own), or asks to promote or commit docs. Every rule reads the
-//   question with markdown emphasis (*, _ and backticks) stripped and curly quotes folded to ASCII. It needs no model.
+//   choice (MODE, built from each lens's Step 0 and mode names in the pinned skills) gets that answer, marked a choice,
+//   even when it names /ship or a commit in GST-925's "ends with /ship" wording (GSTA-2's ruling on GST-925), unless what
+//   is left once the mode words and that wording are removed names another skill or review (S1, P2-2). Any other
+//   question gets "No, not now." when it names another skill or review (a slash command naming a skill of the pinned
+//   gstack other than the lens's own, so a route such as /checkout is not one, or a review phrase the lens does not own)
+//   or asks to promote or commit docs. Every rule reads the question as PLAIN leaves it: markdown emphasis (*, _ and
+//   backticks) stripped and curly quotes folded to ASCII. REC_USER_SHA256 covers PLAIN too. It needs no model.
 //   src/usersim's binding rules still hold, so a question that names a gated effect (write, commit, run, ship, ...) gets
 //   the simulator's non-approving answer.
 //   An arm that installs gstack also gets every question its registry lists set to never-ask (auto-decide) in the
@@ -155,8 +157,9 @@ const MODE = /\b(SCOPE EXPANSION|SELECTIVE EXPANSION|HOLD SCOPE|SCOPE REDUCTION|
 const SHIP = /\bends with \/ship(?![\w-])/gi;
 const MODE_WORDS = new RegExp(MODE.source, "gi");
 
-/** The question as every rec user rule reads it: markdown emphasis (*, _ and backticks) stripped and curly quotes folded to ASCII. */
-const plain = (question: string): string => question.replace(/[*_`]/g, "").replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+/** How every rec user rule reads a question: markdown emphasis (*, _ and backticks) stripped and curly quotes folded to ASCII. */
+const PLAIN: readonly (readonly [RegExp, string])[] = [[/[*_`]/g, ""], [/[‘’]/g, "'"], [/[“”]/g, '"']];
+const plain = (question: string): string => PLAIN.reduce((q, [from, to]) => q.replace(from, to), question);
 
 /** The rec user's answer to one question under one lens, as the user simulator's free-form source. */
 export const recAnswer = (question: string, lens: PlanLens): string => {
@@ -170,7 +173,7 @@ export const recFreeformFor = (lens: PlanLens) => async (_persona: string, quest
 };
 /** The sidecar entry every plan arm runs with: a persona and no scripted replies, so every question reaches recAnswer. */
 export const REC_USER: UserScript = { persona: REC_PERSONA };
-export const REC_USER_SHA256 = sha256(JSON.stringify({ persona: REC_PERSONA, reply: REC_REPLY, decline: REC_DECLINE, other_skill: Object.fromEntries(Object.entries(OTHER_SKILL).map(([lens, r]) => [lens, r.source])), docs: DOCS.source, mode: MODE.source, ship: SHIP.source }));
+export const REC_USER_SHA256 = sha256(JSON.stringify({ persona: REC_PERSONA, reply: REC_REPLY, decline: REC_DECLINE, other_skill: Object.fromEntries(Object.entries(OTHER_SKILL).map(([lens, r]) => [lens, r.source])), docs: DOCS.source, mode: MODE.source, ship: SHIP.source, plain: PLAIN.map(([from, to]) => [from.source, to]) }));
 
 export interface PlanFinding {
   severity: PlanSeverity;

@@ -1,19 +1,21 @@
 // The read audit for plan runs (panel v3 plan, sections 4 and 5; FOUN-32's rule from GGST-6, 2026-11-02). It reads every
 // tool call in a session's transcript.ndjson, the main agent's and each subagent's, with its tool_result, and classes what
 // each call touched: a gstack skill file (a SKILL.md, or a .md under sections/, on a path with a gstack or .claude/skills
-// segment), anything under .local/share/gstack, anything under a home's .capy (~/.capy, $HOME/.capy, /home/*/.capy,
-// /root/.capy) and a gstack-* command in Bash. It reads a call's file_path, path, pattern and notebook_path, and a Bash
-// call's command text. A touch whose result is an error (a missing file, a failed command) is printed and is never
-// contamination, except in a compound Bash command (one with ;, &&, ||, |, a background &, a newline, a subshell or a
-// command substitution), where an earlier part may have read the file before a later one failed, so every touch keeps
-// counting. The & or | of a redirection (2>&1, >&2, &>file, >|file) separates nothing. A call with no
-// result counts as done. Contamination, in any arm, is a non-error touch under .capy; in
+// segment), anything under .local/share/gstack, any path with a .capy segment (relative ones such as ../.capy and
+// .capy/x included, failing closed) and a gstack-* command in Bash. Each path is read with ~, $HOME and ${HOME} expanded,
+// both as written and normalized (. and .. resolved, doubled slashes merged), and a class counts when either form holds
+// it. It reads a call's file_path, path, pattern and notebook_path, and a Bash call's command text. A touch whose result
+// is an error (a missing file, a failed command) is printed and is never contamination, except in a compound Bash
+// command (one with ;, &&, ||, |, a background &, a newline, a subshell or a command substitution), where an earlier part
+// may have read the file before a later one failed, so every touch keeps counting. The & or | of a redirection (2>&1,
+// >&2, &>file, >|file) separates nothing. A call with no result counts as done. Contamination, in any arm, is a
+// non-error .capy touch; in
 // the none and lens arms it is also a non-error touch of a skill file or of .local/share/gstack, or a gstack-* command.
 // A contaminated arm is untested (E_ARM_CONTAMINATED). Printed targets replace the session's HOME with ~ and its
 // /work/<task> with <unit>. AUDIT_SHA256, this file's sha256, joins every plan session key's verifier.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PlanArm } from "./plan.ts";
 import { readTranscript } from "./readers.ts";
@@ -35,11 +37,12 @@ const INPUTS = ["file_path", "path", "pattern", "notebook_path"] as const;
 const compound = (command: string): boolean => /[;&|\n()`]/.test(command.replace(/\d*[<>]&\d*-?|&>>?|>\|/g, ""));
 
 function pathClasses(raw: string, home: string): TouchClass[] {
-  const p = raw.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, home);
+  const expanded = raw.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, home);
+  const forms = [expanded, posix.normalize(expanded)];
   const out: TouchClass[] = [];
-  if (/(^|\/)(SKILL\.md|sections\/[^/]+\.md)$/.test(p) && (p.split("/").includes("gstack") || /(^|\/)\.claude\/skills(\/|$)/.test(p))) out.push("skill");
-  if (/(^|\/)\.local\/share\/gstack(\/|$)/.test(p)) out.push("gstack");
-  if (p === home + "/.capy" || p.startsWith(home + "/.capy/") || /^\/(home\/[^/]+|root)\/\.capy(\/|$)/.test(p)) out.push("capy");
+  if (forms.some((p) => /(^|\/)(SKILL\.md|sections\/[^/]+\.md)$/.test(p) && (p.split("/").includes("gstack") || /(^|\/)\.claude\/skills(\/|$)/.test(p)))) out.push("skill");
+  if (forms.some((p) => /(^|\/)\.local\/share\/gstack(\/|$)/.test(p))) out.push("gstack");
+  if (forms.some((p) => p.split("/").includes(".capy"))) out.push("capy");
   return out;
 }
 
