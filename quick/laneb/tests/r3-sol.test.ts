@@ -288,7 +288,7 @@ describe("the screen per model", () => {
     const ledger = join(w, "r3a-sol.jsonl");
     approve(ledger, "r3a-sol", 140);
     writeFileSync(join(w, "plan.json"), "{}");
-    const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, "--model", SOL], { env: { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" } });
+    const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, "--model", SOL], { env: { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" } });
     expect(r.exitCode).toBe(1);
     expect(r.stderr.toString()).toContain("GPT-6.1 Sol has not passed its route check on r3a-sol");
     expect(existsSync(ledger + ".bound")).toBe(false);
@@ -330,7 +330,7 @@ describe("the screen per model", () => {
     const { w, ledger } = work(sol);
     passRecord(ledger, sol, "pass", undefined, sha(readFileSync(join(laneb, "config/proxy.json"))));
     const before = readFileSync(ledger, "utf8");
-    const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, "--model", SOL], { env: { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(freePort()), UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" } });
+    const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, "--model", SOL], { env: { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(freePort()), UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" } });
     expect(r.exitCode).toBe(1);
     expect(r.stderr.toString()).toContain(`but the screen's ${join(w, "screen", "proxy.json")} is ${sha(proxyBytes)}`);
     expect(existsSync(ledger + ".bound")).toBe(false);
@@ -386,7 +386,7 @@ describe("#121's notes", () => {
       approve(ledger, m.item, m.capUsd);
       if (m.routePrefix) passRecord(ledger, m);
       const events = join(root, "events.log");
-      const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, UBI_RUNNER: join(bin!, "ubi"), UBI_RUNNER_STATE: state!, UBI_OWNER: "test", LEDGER: ledger, LEDGER_PORT: String(freePort()), EVENTS: events, VM: vm!, STATE: state!, PULL_RETRY_SEC: "0", FINISH: "0", VM_USD_PER_HOUR: "0.60", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+      const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: join(bin!, "ubi"), UBI_RUNNER_STATE: state!, UBI_OWNER: "test", LEDGER: ledger, LEDGER_PORT: String(freePort()), EVENTS: events, VM: vm!, STATE: state!, PULL_RETRY_SEC: "0", FINISH: "0", VM_USD_PER_HOUR: "0.60", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
       const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w!, ...(m.id === OPUS ? [] : ["--model", m.id])], { env });
       const out = r.stdout.toString();
       expect(r.exitCode).toBe(0);
@@ -1031,7 +1031,7 @@ describe("Sol's stops and Opus", () => {
     const was = snap();
     const r = rig();
     expect((await routeCheck(r, { STUB_PLAN: "smoke1=harbor,smoke2=harbor" })).code).toBe(1);
-    const run = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", o.w, "--model", SOL], { env: { ...process.env, LEDGER: r.ledger, VM_USD_PER_HOUR: "0.60", UBI_RUNNER: "/bin/false", UBI_OWNER: "test" } });
+    const run = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", o.w, "--model", SOL], { env: { ...process.env, LEDGER: r.ledger, VM_USD_PER_HOUR: "0.60", UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: "/bin/false", UBI_OWNER: "test" } });
     expect(run.stderr.toString()).toContain("GPT-6.1 Sol dropped out of R3a at its route check");
     const s = work(sol, { after: (w) => writeFileSync(join(w, "screen/pulled/out/cap-stop.json"), JSON.stringify({ cap_stop: "ledger refused a reserve for t__1 at x" })) });
     const stopped = analyzeCli(s.w, s.ledger, SOL);
@@ -1183,7 +1183,7 @@ describe("isolation from other runs", () => {
       approve(ledger, m.item, m.capUsd);
       if (m.routePrefix) passRecord(ledger, m);
       const before = readFileSync(ledger, "utf8");
-      const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(freePort()), UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+      const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(freePort()), UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
       const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, ...(m.id === OPUS ? [] : ["--model", m.id])], { env });
       expect(r.exitCode).toBe(2);
       expect(r.stderr.toString()).toContain(`E_USAGE ${w}/plan.json is item ${other.item}'s, not ${m.label}'s ${m.item}; nothing was bound or launched`);
@@ -1204,7 +1204,7 @@ describe("isolation from other runs", () => {
     const before = readFileSync(ledger, "utf8");
     const other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => Response.json({}) });
     try {
-      const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(other.port), UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
+      const env = { ...process.env, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(other.port), UBICLOUD_API_KEY: "test-not-a-key", UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "" };
       const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, "--model", SOL], { env });
       expect(r.exitCode).toBe(2);
       expect(r.stderr.toString()).toContain(`E_USAGE something already answers on 127.0.0.1:${other.port} (another run's ledger service?); set LEDGER_PORT to a free port; r3a-sol is still unbound`);
@@ -1213,5 +1213,124 @@ describe("isolation from other runs", () => {
     } finally {
       other.stop(true);
     }
+  });
+});
+
+// run checks what launch.sh needs before its first spend, and the item's ledger, before it binds the item (GST-1055).
+// A bad UBI_RUNNER or UBI_OWNER used to fail inside launch.sh after the bind and the VM reserve, so the item was spent on a
+// run that started no VM. These runs carry no real Ubicloud key (a dummy one only beside /bin/false), so one that got past
+// the checks could start no VM either.
+describe("run's checks before it binds the item", () => {
+  const { UBICLOUD_API_KEY: _key, UBICLOUD_API_TOKEN: _token, UBI_RUNNER: _runner, UBI_OWNER: _owner, UBI_TTL_HOURS: _ttl, ...base } = process.env;
+  // A work dir run would bind and launch: plan.json for the model's item, and each part's proxy.json with the bytes Sol's pass names.
+  const ready = (m: typeof opus) => {
+    const root = tmp("r3-bind-");
+    const w = join(root, "work");
+    for (const part of m.parts) {
+      mkdirSync(join(w, part.name), { recursive: true });
+      writeFileSync(join(w, part.name, "proxy.json"), proxyBytes);
+    }
+    writeFileSync(join(w, "plan.json"), JSON.stringify({ item: m.item, pilot_tasks: pilotTasks(bandIds()) }));
+    const ledger = join(root, m.item + ".jsonl");
+    approve(ledger, m.item, m.capUsd);
+    if (m.routePrefix) passRecord(ledger, m);
+    return { root, w, ledger };
+  };
+  const runCli = (m: typeof opus, w: string, ledger: string, env: Record<string, string>, port = freePort()) =>
+    Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "run", w, ...(m.id === OPUS ? [] : ["--model", m.id])], {
+      env: { ...base, LEDGER: ledger, VM_USD_PER_HOUR: "0.60", LEDGER_PORT: String(port), ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "", ...env } as Record<string, string>,
+    });
+  const refusedUnbound = (r: ReturnType<typeof runCli>, w: string, ledger: string, before: string, code: number, message: string) => {
+    expect(existsSync(ledger + ".bound")).toBe(false);
+    expect(readFileSync(ledger, "utf8")).toBe(before);
+    expect(existsSync(join(w, "screen.launch-exit"))).toBe(false);
+    expect(r.stderr.toString()).toContain(message);
+    expect(r.exitCode).toBe(code);
+  };
+
+  for (const m of [opus, sol]) {
+    const badRunners: [string, (root: string) => string | undefined, (runner: string | undefined) => string][] = [
+      ["unset", () => undefined, () => "UBI_RUNNER is unset or blank"],
+      ["blank", () => "", () => "UBI_RUNNER is unset or blank"],
+      ["a missing file", () => "/nonexistent/ubi-runner.sh", (x) => `UBI_RUNNER ${JSON.stringify(x)} is not an executable file or a command on PATH`],
+      ["a file that isn't executable", (root) => { const p = join(root, "ubi-runner.sh"); writeFileSync(p, "#!/bin/sh\nexit 0\n"); chmodSync(p, 0o644); return p; }, (x) => `UBI_RUNNER ${JSON.stringify(x)} is not an executable file or a command on PATH`],
+      ["a directory", (root) => root, (x) => `UBI_RUNNER ${JSON.stringify(x)} is not an executable file or a command on PATH`],
+      ["a bare name not on PATH", () => "ubi-runner-not-on-path.sh", (x) => `UBI_RUNNER ${JSON.stringify(x)} is not an executable file or a command on PATH`],
+    ];
+    for (const [what, make, says] of badRunners) {
+      test(`run with ${m.label} refuses a UBI_RUNNER that is ${what} and leaves ${m.item} unbound`, () => {
+        const { root, w, ledger } = ready(m);
+        const runner = make(root);
+        const before = readFileSync(ledger, "utf8");
+        const r = runCli(m, w, ledger, { UBI_OWNER: "test", ...(runner === undefined ? {} : { UBI_RUNNER: runner }) });
+        refusedUnbound(r, w, ledger, before, 2, `E_USAGE ${says(runner)}; set it to the ubi-runner.sh copy launch.sh starts the VMs with; ${m.item} is still unbound`);
+      });
+    }
+
+    for (const [what, owner] of [["unset", undefined], ["blank", ""], ["only punctuation", "--"]] as const) {
+      test(`run with ${m.label} refuses a UBI_OWNER that is ${what} and leaves ${m.item} unbound`, () => {
+        const { w, ledger } = ready(m);
+        const before = readFileSync(ledger, "utf8");
+        const r = runCli(m, w, ledger, { UBI_RUNNER: "/bin/false", ...(owner === undefined ? {} : { UBI_OWNER: owner }) });
+        refusedUnbound(r, w, ledger, before, 2, `E_USAGE set UBI_OWNER to your thread code; ubi-runner.sh starts no VM without an owner made of letters or digits; ${m.item} is still unbound`);
+      });
+    }
+
+    for (const [what, key] of [["unset", undefined], ["blank", ""]] as const) {
+      test(`run with ${m.label} refuses a UBICLOUD_API_KEY that is ${what} and leaves ${m.item} unbound`, () => {
+        const { w, ledger } = ready(m);
+        const before = readFileSync(ledger, "utf8");
+        const r = runCli(m, w, ledger, { UBI_RUNNER: "/bin/false", UBI_OWNER: "test", ...(key === undefined ? {} : { UBICLOUD_API_KEY: key }) });
+        refusedUnbound(r, w, ledger, before, 2, `E_USAGE set UBICLOUD_API_KEY; ubi-runner.sh starts no VM without it (UBICLOUD_API_TOKEN also works); ${m.item} is still unbound`);
+      });
+    }
+
+    test(`run with ${m.label} takes UBICLOUD_API_TOKEN in place of UBICLOUD_API_KEY`, () => {
+      const { w, ledger } = ready(m);
+      const before = readFileSync(ledger, "utf8");
+      const r = runCli(m, w, ledger, { UBI_RUNNER: "/bin/false", UBI_OWNER: "test", UBICLOUD_API_TOKEN: "test-not-a-key", UBI_TTL_HOURS: "0" });
+      expect(r.stderr.toString()).not.toContain("set UBICLOUD_API_KEY");
+      refusedUnbound(r, w, ledger, before, 2, `E_USAGE UBI_TTL_HOURS "0" is not a whole number of hours`);
+    });
+
+    for (const ttl of ["24h", "0", "1000", "07"]) {
+      test(`run with ${m.label} refuses UBI_TTL_HOURS=${ttl} and leaves ${m.item} unbound`, () => {
+        const { w, ledger } = ready(m);
+        const before = readFileSync(ledger, "utf8");
+        const r = runCli(m, w, ledger, { UBI_RUNNER: "/bin/false", UBI_OWNER: "test", UBICLOUD_API_KEY: "test-not-a-key", UBI_TTL_HOURS: ttl });
+        refusedUnbound(r, w, ledger, before, 2, `E_USAGE UBI_TTL_HOURS ${JSON.stringify(ttl)} is not a whole number of hours from 1 to 999 with no leading zero, which ubi-runner.sh requires; ${m.item} is still unbound`);
+      });
+    }
+
+    test(`a rerun with ${m.label} is refused as already bound, not told ${m.item} is still unbound`, () => {
+      const { w, ledger } = ready(m);
+      writeFileSync(ledger + ".bound", JSON.stringify({ item: m.item, work: "an earlier run" }) + "\n");
+      const before = readFileSync(ledger, "utf8");
+      const other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => Response.json({}) });
+      try {
+        const r = runCli(m, w, ledger, { UBI_RUNNER: "/bin/false", UBI_OWNER: "test" }, other.port);
+        expect(r.stderr.toString()).not.toContain("still unbound");
+        expect(r.stderr.toString()).toContain(`${m.item} is already bound to a run ({"item":"${m.item}","work":"an earlier run"}); an item serves one run`);
+        expect(r.exitCode).toBe(1);
+        expect(existsSync(join(w, "screen.launch-exit"))).toBe(false);
+        expect(readFileSync(ledger, "utf8")).toBe(before);
+      } finally {
+        other.stop(true);
+      }
+    });
+  }
+
+  test("run refuses a ledger that already holds a reserve before it binds r3a-screen", () => {
+    const { w, ledger } = ready(opus);
+    new Ledger(ledger, opus.item).reserve("r3a-screen/earlier", 1_000_000);
+    const before = readFileSync(ledger, "utf8");
+    refusedUnbound(runCli(opus, w, ledger, { UBI_RUNNER: "/bin/false", UBI_OWNER: "test", UBICLOUD_API_KEY: "test-not-a-key" }), w, ledger, before, 1, `${ledger}: r3a-screen already holds 1 reserve or settle rows; an item serves one run`);
+  });
+
+  test("run refuses an open route-check reserve before it binds r3a-sol", () => {
+    const { w, ledger } = ready(sol);
+    new Ledger(ledger, sol.item).reserve(`${sol.routePrefix}smoke-1`, 1_000_000);
+    const before = readFileSync(ledger, "utf8");
+    refusedUnbound(runCli(sol, w, ledger, { UBI_RUNNER: "/bin/false", UBI_OWNER: "test", UBICLOUD_API_KEY: "test-not-a-key" }), w, ledger, before, 1, `${ledger}: 1 route check reserves are still open on r3a-sol`);
   });
 });

@@ -1,0 +1,226 @@
+# Frozen echo-term list for planning panel v3 authoring and audit (kit v3.1).
+# Sources: panel v2's list (wiki/plans/2026-11-01-geva-115-planning-ceo-v2-admission-prereg/echo-terms.txt),
+# kept whole, plus the heading words of plan-eng-review, plan-devex-review and plan-design-review
+# (SKILL.md, sections/review-sections.md, sections/checklist.md), autoplan's phases (SKILL.md and
+# sections/ceo-phase.md, design-phase.md, dx-phase.md, eng-phase.md, phase-close.md, ceo-only.md),
+# and plan-ceo-review re-read, all at gstack 1.93.17.0 (68410828fd85611caea2c8429846f683849f425a).
+# Then the skill names, the clean-room paths and the panel's own words.
+# Case-insensitive whole phrase. "any:" terms are flagged anywhere in a unit tree (file text and
+# paths, key.json excepted); "heading:" terms only inside a markdown heading.
+# --- panel v2 (plan-ceo-review and autoplan Phase 1 headings, panel words)
+any: premise
+any: existing code leverage
+any: dream state
+any: platonic
+any: 10x
+any: mode selection
+any: scope expansion
+any: selective expansion
+any: hold scope
+any: scope reduction
+any: expansion framing
+any: temporal interrogation
+any: nuclear scope
+any: prime directive
+any: landscape check
+any: taste calibration
+any: retrospective check
+any: search before building
+any: what already exists
+any: not in scope
+any: boil the ocean
+any: error & rescue
+any: error and rescue
+any: rescue map
+any: failure modes registry
+any: long-term trajectory
+any: outside voice
+any: review readiness
+any: accepted scope
+any: reviewer concerns
+any: mega plan
+any: ceo plan
+any: ceo review
+any: strategy & scope
+any: strategy and scope
+any: system audit
+any: spec review loop
+any: decision ledger
+any: approval readiness
+any: review sections
+any: founder mode
+any: scope trap
+any: under-ambition
+any: underambitious
+any: decoy
+any: bait
+any: flaw
+any: gotcha
+heading: alternatives
+heading: vision
+heading: scope decisions
+heading: deferred
+heading: trajectory
+heading: completeness
+# --- plan-ceo-review at 1.93.17.0, new since v2
+any: security & threat model
+any: security and threat model
+any: observability & debuggability
+any: observability and debuggability
+any: deployment & rollout review
+any: data flow & interaction edge cases
+any: stale diagram audit
+any: reality rows
+heading: threat model
+heading: observability
+# --- plan-eng-review
+any: scope challenge
+any: architecture review
+any: code quality review
+any: test review
+any: performance review
+any: design doc check
+any: e2e test decision matrix
+any: test plan artifact
+any: tests to retire
+any: worktree parallelization
+any: two shapes before one
+any: design-twice
+any: shared-code evaluation
+any: regression rule
+any: confidence calibration
+any: pending decisions
+any: review log
+any: plan review
+heading: architecture
+heading: code quality
+heading: performance
+heading: test plan
+heading: failure modes
+heading: edge cases
+heading: critical paths
+heading: implementation tasks
+heading: unresolved decisions
+heading: diagrams
+# --- plan-devex-review
+any: developer persona
+any: empathy narrative
+any: competitive dx
+any: magical moment
+any: developer journey
+any: friction point
+any: friction-point
+any: first-time developer
+any: time to hello world
+any: tthw
+any: zero friction
+any: getting started experience
+any: upgrade & migration path
+any: upgrade and migration path
+any: dx scorecard
+any: dx first principles
+any: dx measurement
+any: dx trend
+any: dx characteristics
+any: hall of fame
+any: learn by doing
+any: applicability gate
+any: agent-ready
+heading: dx
+heading: developer experience
+heading: getting started
+heading: error messages
+heading: documentation & learning
+heading: documentation and learning
+heading: upgrade
+heading: migration
+heading: developer environment
+heading: community & ecosystem
+heading: community and ecosystem
+# --- plan-design-review
+any: designer's eye
+any: interaction state
+any: emotional arc
+any: ai slop
+any: design system alignment
+any: responsive & accessibility
+any: responsive and accessibility
+any: unresolved design decisions
+any: initial design rating
+any: design scope assessment
+any: existing design leverage
+any: design hard rules
+any: design outside voices
+any: comparison board
+any: approved mockups
+any: 10/10
+any: design.md
+any: ui scope
+heading: information architecture
+heading: user journey
+heading: accessibility
+heading: responsive
+heading: design principles
+heading: design philosophy
+# --- autoplan phases
+any: autoplan
+any: auto-review
+any: auto-decide
+any: auto-decided
+any: decision audit trail
+any: decision classification
+any: decision principles
+any: cross-phase themes
+any: final approval gate
+any: pre-gate verification
+any: dual voices
+any: taste choice
+any: user challenge
+any: todos.md
+heading: restore point
+heading: review scores
+heading: plan summary
+# --- skill names
+any: eng review
+any: engineering review
+any: design review
+any: devex review
+any: dx review
+any: plan-ceo-review
+any: plan-eng-review
+any: plan-devex-review
+any: plan-design-review
+# --- clean-room paths and tool names (plan section 4)
+any: gstack
+any: .claude/skills
+any: .capy
+any: .local/share/gstack
+any: skill.md
+any: claude.md
+any: agents.md
+# --- panel words
+any: must-fix
+any: omission
+any: two-hop
+any: two hops
+any: anchor item
+any: answer key
+any: planted
+any: signpost
+any: calibration slice
+
+# --- kit v3.1: signposts (author-spec.md, "No signposting"). "signpost:" terms are flagged
+# anywhere in a unit's file text, key.json excepted. From kit v3.1, "any:" and "signpost:" terms also
+# match across one line break, comment and quote markers included, and "heading:" terms also match
+# setext headings.
+signpost: we assume
+signpost: we are assuming
+signpost: we're assuming
+signpost: note that
+signpost: please note
+signpost: risk:
+signpost: to be confirmed
+signpost: to be verified
+signpost: worth checking
+signpost: fixme
+
