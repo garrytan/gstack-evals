@@ -11,8 +11,9 @@ Usage:
   drop-list.py shard <pool json> <N>     the comma list of shard N's tasks (1 to 4: sorted pool ids, every fourth)
   drop-list.py drops <pool json> <out json> <out tsv> <shard run dir> <shard out dir> [<shard run dir> <shard out dir>]...
     A shard out dir is oracle-preflight.sh's: it holds pass1/ and pass2/. Every pool task must be in exactly one shard.
-Exit codes: 0 the drop list was written, 2 a pass is void or the shards don't cover the pool once, 3 the drop list was
-written and more than a quarter of the pool is dropped (the attempt stops before any model call).
+Exit codes: 0 the drop list was written, 1 this scorer's fails differ from a pass's oracle-fails.txt (a Python error also
+exits 1), 2 a pass is void or the shards don't cover the pool once, 3 the drop list was written and more than a quarter of
+the pool is dropped (the attempt stops before any model call).
 """
 import hashlib, json, os, sys
 

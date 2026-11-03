@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Stub docker: every pull succeeds, and image inspect prints the pinned image's repo digest.
+# Stub docker: every pull succeeds, after STUB_DOCKER_SLEEP seconds when set, and image inspect prints the pinned image's
+# repo digest.
 img=${*: -1}
 case "$1 $2" in
-  "pull -q") echo "sha256:0" ;;
+  "pull -q") [ -z "${STUB_DOCKER_SLEEP:-}" ] || command -p sleep "$STUB_DOCKER_SLEEP"; echo "sha256:0" ;;
   "image inspect") echo "${img%@*}@sha256:${img##*sha256:}" ;;
   *) exit 2 ;;
 esac

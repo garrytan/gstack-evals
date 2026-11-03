@@ -181,13 +181,26 @@ if (import.meta.main) {
     const reused = "existing" in out && out.existing;
     console.log(JSON.stringify(reused ? { ok: false, reason: "id already reserved" } : out));
     process.exit(out.ok && !reused ? 0 : 3);
+  } else if (cmd === "raise") {
+    // A cap raise the owner approved, with its approver on the row.
+    if (!args.path || !args.item || !args["approved-by"] || !/^\d+(\.\d+)?$/.test(args.usd ?? "")) {
+      console.error("E_USAGE usage: bun ledger.ts raise --path <jsonl> --item <name> --usd <new cap> --approved-by <approver> [--detail <text>]");
+      process.exit(2);
+    }
+    try {
+      new Ledger(args.path, args.item).raise(Number(args.usd), { approved_by: args["approved-by"], ...(args.detail ? { detail: args.detail } : {}) });
+    } catch (e) {
+      console.log(JSON.stringify({ ok: false, reason: (e as Error).message }));
+      process.exit(3);
+    }
+    console.log(JSON.stringify({ ok: true, cap_usd: fromMicros(new Ledger(args.path, args.item).status().capMicros) }));
   } else if (cmd === "open") {
     for (const id of new Ledger(args.path, args.item).status().openIds) console.log(id);
   } else if (cmd === "status") {
     const t = new Ledger(args.path, args.item).status();
     console.log(JSON.stringify({ cap_usd: fromMicros(t.capMicros), settled_usd: fromMicros(t.settledMicros), open_reserved_usd: fromMicros(t.openReservedMicros), open_ids: t.openIds.length }));
   } else {
-    console.error("E_USAGE usage: bun ledger.ts serve|status|open|reconcile|reserve|settle --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>] [--id <id> --usd <amount>]");
+    console.error("E_USAGE usage: bun ledger.ts serve|status|open|reconcile|reserve|settle|raise --path <jsonl> --item <name> [--port N] [--sessions <jsonl> --prefix <p>] [--id <id> --usd <amount>] [--approved-by <approver>]");
     process.exit(2);
   }
 }

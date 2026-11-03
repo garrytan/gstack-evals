@@ -333,6 +333,19 @@ describe("resuming screen-b after a recorded cap raise", () => {
     expect(readRows(p).filter((r) => r.kind === "approval").map((r) => [r.id, r.usd_micros, r.raised_from_micros ?? null, r.words])).toEqual([["approval", 550e6, null, "test raise"], ["raise-1", 800e6, 550e6, "test raise"]]);
   });
 
+  test("ledger.ts raise appends the raise with its approver; no --approved-by is a usage error and a cap at or under the current one is refused", () => {
+    const p = join(tmp("r3a4-raise-"), "r3a4-opus.jsonl");
+    new Ledger(p, "r3a4-opus").approve(550, words);
+    const cli = (...a: string[]) => Bun.spawnSync([process.execPath, join(laneb, "runner/ledger.ts"), "raise", "--path", p, "--item", "r3a4-opus", ...a]);
+    expect(cli("--usd", "800").exitCode).toBe(2);
+    const low = cli("--usd", "550", "--approved-by", "GSTA-2");
+    expect([low.exitCode, low.stdout.toString().includes("is not above the current cap")]).toEqual([3, true]);
+    const ok = cli("--usd", "800", "--approved-by", "GSTA-2", "--detail", "approvals/r3a4-opus-raise.md");
+    expect([ok.exitCode, JSON.parse(ok.stdout.toString())]).toEqual([0, { ok: true, cap_usd: 800 }]);
+    expect(readRows(p).filter((r) => r.kind === "approval").at(-1)).toMatchObject({ id: "raise-1", usd_micros: 800e6, raised_from_micros: 550e6, approved_by: "GSTA-2", detail: "approvals/r3a4-opus-raise.md" });
+    expect(new Ledger(p, "r3a4-opus").status().capMicros).toBe(toMicros(800));
+  });
+
   test("an item whose ledger holds a raise before its run is refused at prepare and run", () => {
     const p = join(tmp("r3a4-raise-"), "r3a4-opus.jsonl");
     new Ledger(p, "r3a4-opus").approve(550, words);
@@ -393,6 +406,24 @@ describe("resuming screen-b after a recorded cap raise", () => {
     expect(a.code).toBe(4);
     expect(a.out).toContain("incomplete: screen-b's launch exited 1");
     expect(JSON.parse(readFileSync(join(x.w, "record.json"), "utf8")).cap_raise.raise.id).toBe("raise-1");
+  });
+
+  test("a launch that stops before screen-b starts puts the projection stop back, so resume can run again", () => {
+    const x = stopped({ raise: 1300 });
+    // A bash first on PATH whose first port check finds the port free and every later one finds it taken.
+    const bin = tmp("r3a4-bash-");
+    writeFileSync(join(bin, "bash"), '#!/bin/bash\nif [ "$1" = -c ] && [[ "$2" == *"/dev/tcp/"* ]]; then\n  n=$(( $(cat "$0.calls" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$0.calls"\n  [ "$n" -ge 2 ]; exit\nfi\nexec /bin/bash "$@"\n');
+    chmodSync(join(bin, "bash"), 0o755);
+    const r = Bun.spawnSync([process.execPath, join(laneb, "r3/screen.ts"), "resume", x.w, "--item", opus4.item], { env: { ...env(x), PATH: bin + ":" + process.env.PATH } });
+    expect(r.stdout.toString()).toContain("screen-b: something already answers on 127.0.0.1:");
+    expect(readFileSync(join(bin, "bash.calls"), "utf8").trim()).toBe("2");
+    expect(existsSync(join(x.w, "screen-b.launch-exit"))).toBe(false);
+    expect(existsSync(join(x.w, "screen-b.projection-stop"))).toBe(true);
+    expect(existsSync(join(x.w, "screen-b.projection-stop.raised"))).toBe(false);
+    expect(launched(x)).toEqual([]);
+    screen("resume", x);
+    expect(readFileSync(join(x.w, "screen-b.launch-exit"), "utf8").trim()).toBe("1");
+    expect(existsSync(join(x.w, "screen-b.projection-stop"))).toBe(false);
   });
 
   test("a raise the projection still passes is refused, and so is a resume from another work dir", () => {

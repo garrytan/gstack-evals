@@ -126,6 +126,64 @@ describe("the oracle preflight with a stub runner", () => {
     expect(e.log).not.toContain("ssh");
     expect(readRows(down.ledger).filter((r) => r.kind !== "approval").map((r) => r.kind)).toEqual(["reserve", "settle"]);
   }, 120_000);
+
+  test("every ledger call waits for the flock on $LEDGER.lock, so shards sharing a ledger reserve one at a time", async () => {
+    const s = shard(TASKS);
+    new Ledger(s.ledger, "r3a4-oracle").approve(20, { words: "test", by: "test" });
+    const held = join(s.w, "held");
+    const holder = Bun.spawn(["flock", s.ledger + ".lock", "bash", "-c", "touch \"$0\"; sleep 3", held]);
+    while (!existsSync(held)) await Bun.sleep(50);
+    const t = Date.now();
+    const p = preflight(s, { STUB_UP_FAIL: "1" });
+    expect(Date.now() - t).toBeGreaterThanOrEqual(2500);
+    expect(p.code).toBe(3);
+    expect(readRows(s.ledger).filter((r) => r.kind !== "approval").map((r) => r.kind)).toEqual(["reserve", "settle"]);
+    await holder.exited;
+  }, 120_000);
+
+  test("results that fail every pull keep the VM up with its block open: exit 7 and the commands to finish by hand", () => {
+    const s = shard(TASKS);
+    const p = preflight(s, { STUB_PULL_FAIL: "1", PULL_SEC: "0" });
+    expect(p.code).toBe(7);
+    expect(p.log.match(/^pull work\/pass1$/gm)).toHaveLength(3);
+    expect(p.log).not.toContain("down ");
+    expect(readRows(s.ledger).filter((r) => r.kind !== "approval").map((r) => r.kind)).toEqual(["reserve"]);
+    expect(p.out).toContain("pass 1 results not pulled (void shard); VM stub-vm-1 stays up and its blocks stay open");
+    expect(p.out).toContain("UBI_OWNER=test " + s.runner + " pull stub-vm-1 work/pass1 " + s.out + "\n");
+    expect(p.out).toContain("UBI_OWNER=test " + s.runner + " down stub-vm-1\n");
+    expect(p.out).toMatch(new RegExp("flock " + s.ledger + "\\.lock bun \\S+/ledger\\.ts settle --path " + s.ledger + " --item r3a4-oracle --id shard1-\\d+-vm --usd <share>"));
+  }, 120_000);
+
+  test("a pass that won't start, 5 failed polls in a row, or a pass still running near the 12-hour TTL is a VM failure: exit 3, VM down, hours settled", () => {
+    for (const [env, line] of [
+      [{ STUB_SSH_FAIL: "setsid" }, "pass 1 did not start on stub-vm-1 (void shard)"],
+      [{ STUB_SSH_FAIL: "pass.exit" }, "5 polls of stub-vm-1 failed in a row (void shard)"],
+      [{ TTL_SEC: "605", STUB_DOCKER_SLEEP: "10" }, "pass 1 is not done 10 minutes before stub-vm-1's 12-hour TTL (void shard)"],
+    ] as const) {
+      const s = shard(TASKS);
+      const p = preflight(s, env);
+      expect([p.code, p.out.includes(line), p.log.includes("down stub-vm-1")]).toEqual([3, true, true]);
+      if (line.startsWith("5 polls")) expect(p.log.match(/^ssh test -f work\/pass1\/pass.exit/gm)).toHaveLength(5);
+      expect(readRows(s.ledger).filter((r) => r.kind !== "approval").map((r) => r.kind)).toEqual(["reserve", "settle"]);
+    }
+  }, 120_000);
+
+  test("pass.exit is Harbor's exit code when it isn't 0, else 10 when a pull failed (a timed-out try counts), and drop-list.py voids either", () => {
+    const h = shard(TASKS);
+    const a = preflight(h, { STUB_HARBOR_EXIT: "3" });
+    expect(a.code).toBe(0);
+    expect(a.out).toContain("shard 1 pass 1: harbor exit 3, pass exit 3, finished, 0 oracle fails");
+    expect(drops(h).out).toContain("exited 3, not 0; it is void");
+    const t = shard(TASKS);
+    exe(join(t.bin, "sleep"), "#!/usr/bin/env bash\n# Stub sleep: no wait between pull tries.\n");
+    const b = preflight(t, { PULL_TRY_SEC: "1", STUB_DOCKER_SLEEP: "5" });
+    expect(b.code).toBe(0);
+    expect(b.out).toContain("shard 1 pass 1: harbor exit 0, pass exit 10, finished, 0 oracle fails");
+    const rows = readFileSync(join(t.out, "pass1/pulls.tsv"), "utf8").split("\n").filter(Boolean).map((l) => l.split("\t"));
+    expect(rows.map((r) => [r[0], r[1], r[4]])).toEqual(Array(4).fill(["FAIL", "6", "try 6 of 6 timed out after 1 s"]));
+    const d = drops(t);
+    expect([d.code, d.out.includes("exited 10, not 0; it is void")]).toEqual([2, true]);
+  }, 120_000);
 });
 
 describe("drop-list.py shard", () => {

@@ -463,7 +463,11 @@ function resume(work: string, m: R3aModel) {
   if (portTaken("127.0.0.1", lport)) throw new Error(`E_USAGE ${busy}; set LEDGER_PORT to a free port; screen-b stays stopped`);
   writeFileSync(join(work, "cap-raise.json"), JSON.stringify({ raise, projection: { ...p.record, line: p.line } }, null, 2) + "\n");
   renameSync(stop, stop + ".raised");
-  launchParts(work, m, planned, 1, capUsd, { ledger, lport, rate, hours, busy });
+  try {
+    launchParts(work, m, planned, 1, capUsd, { ledger, lport, rate, hours, busy });
+  } finally {
+    if (!existsSync(join(work, "screen-b.launch-exit"))) renameSync(stop + ".raised", stop);
+  }
 }
 
 const PROXY_FILES = ["cap-stop.json", "proxy-status-end.json", "proxy-sessions.jsonl"];
