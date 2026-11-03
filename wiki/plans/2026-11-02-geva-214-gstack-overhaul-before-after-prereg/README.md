@@ -16,11 +16,11 @@ links:
   - quick/laneb
 source: "Plan written by GEVA-214 through gstack /autoplan run autoplan-20261102231443 (CEO and eng, one reader each, one round); approved at gate_rev 2. Issue GST-1089 under GST-1088. The Implementation plan section is the approved text."
 attachments:
-  - 3da13c8253b2eae19567f813955901d0ce13a0c495a8a0b6ac289074ac0a5fe4  power.py
+  - 2b3d7cb7dfaa5554e77641394f4e79caead776030b4109f1c19a262459291ded  power.py
   - 3bcacf777107b04801319dc8cc2b67a792e1a6737c6de1393fd377c5e53a7775  power.txt
-  - c40b590516ee03bb40dd0fe1e743aed48e2829c0bdac489011d3fedabc826566  price.py
-  - ab0aa279bda000295327f269e7a289a9eb5b9b669b8ff75e9aeaa4fc6862e71e  price.txt
-  - 792d68ca06510c34bcc70fc305d2885700501bd5ab988017a8e26ce5812bac4e  review-record.md
+  - 74c91afa3cc2dcce8162a246ab6e6c694177464ebb27e1fe1af3f7f4ef354185  price.py
+  - 3f16b70ecc6fb8b5c7f9269a4497a2a7c4d047f0a45030b27146875881704940  price.txt
+  - d77f2e5143e0d435ef44886ad6f0b6713362ac8736b499756bebbabb4f87858d  review-record.md
 ---
 
 # Preregistration: gstack's overhaul measured before and after, on frozen public instruments and a sealed held-out set, with no gstack beside both
@@ -31,7 +31,8 @@ GEVA-214, issue GST-1089 under GST-1088, Captain GEVA-2. Plan only: no paid call
 
 - **Gate 1** (gate_rev 1, rec_hash 5be7fc7d86b8): Garry approved the plan on 2026-11-02, relayed by the Captain (GEVA-2). He took every recommendation: the fix for each of the 11 High findings (d1a to d11a) and approval with those changes (p1b). His words are kept in the Captain drive's approvals/.
 - **Gate 2** (gate_rev 2, rec_hash da0ef8c81830): the revision changed the plan after both phases had used their one round (+108 -83 lines), and the crew rules give that delta to the Captain. The Captain (GEVA-2) answered rec: it accepted the delta (uc1a, uc2a) and approved the plan with d1a to d11a (p1b), recorded as accepted_by GSTA-2. The reason: the delta is exactly the gate-1 fixes Garry took at 2026-11-02T23:47:16Z (Captain drive approvals/2026-11-02-l1-overhaul-measurement.md), so this gate was bookkeeping. gstack recorded the run complete at gate_rev 2.
-- **Spend.** Approving this plan spends nothing. Section 13 expects about $7,900 across three run threads, each paused before $4,900. Each paid item still needs its amendment (section 12), a ledger approval row and, where section 8.3 asks for one, a passed admission.
+- **/ship fix round** (2026-11-03): gstack /ship ran at full depth on the first pushed head (a batched specialist, red team, native adversarial, an outside voice and a targeted money reader), and Capy's PR review ran beside it. The Captain (GEVA-2) approved one fix round covering both sets of findings: the off arms' config path on review-units and one seeded user on both instruments (sections 3 and 4); one ledger item per launch, with a repair item per launch and the new totals, the $4,200 re-cost trigger, the $150 hold-back and the launch order (section 13); and rule fixes to the coverage gate, cap stops, the probe audit, table reading, the behavior LOSS branch, probes L and I, B5 and the amendment branches. The primaries O1 to O4, their arms and the MDD tables are unchanged.
+- **Spend.** Approving this plan spends nothing. Section 13 expects about $7,970 across three run threads, each paused before $4,900. Each paid item still needs its amendment (section 12), a ledger approval row and, where section 8.3 asks for one, a passed admission.
 
 ## ELI5
 
@@ -65,7 +66,7 @@ The overhaul is meant to fix a measured problem, so its success has to be measur
 4. **Held-out size: 80 bug-fix tasks x 3 and 36 review units x 2 passes, after a separate 12 + 8 admission slice.** At 80 tasks the outcome MDD stays under its 15-point margin even under the cautious spread assumption (section 8.2); 60 tasks did not.
 5. **/qa and /verify get descriptive untold counts only.** No instrument on main has tasks that fit them; a fit set is a follow-up.
 6. **Sol and particle-1 run inside Claude Code, Run D's route.** All three models then see the same hooks and the same system prompt. A native-harness Sol arm (Codex) is a separate question.
-7. **Three run threads, each held under $5,000 by a pause rule that counts ledger spend, host model use and VMs.** About $7,900 expected in all: public $2,460, held-out bug fixes with the admission pilots $1,610, held-out review $3,840.
+7. **Three run threads, each held under $5,000 by a pause rule that counts ledger spend, host model use and VMs.** About $7,970 expected in all: public $2,530, held-out bug fixes with the admission pilots $1,600, held-out review $3,830.
 
 ## Implementation plan
 
@@ -107,9 +108,9 @@ Not reused, with reasons: R1's arm C (GSTA-167's full /review) ran in another ha
 **The arms differ only in gstack.** These hold for every arm, model and instrument:
 - Claude Code's own system prompt (claude-code-preset) on every arm, the R56 fair test.
 - CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 on every arm.
-- No GSTACK_* variable is set by the harness on any arm. At the after pin the diet is unconditional for /investigate and /review (gstack's maintainers, 2026-11-02), so a headless session gets the body a user gets.
+- **One seeded user.** Lane B sets no GSTACK_* variable. review-units sets GSTACK_HOME and GSTACK_STATE_ROOT on every arm to the session's own seeded state root (src/trial/state-root.ts): the onboarding markers, with telemetry, update checks, artifact sync and codex reviews off, routing_declined true and proactive core. Build unit B1 writes the same markers and keys into each Lane B gstack arm's state root, so both instruments start every gstack arm as the same onboarded user. If the after pin's install manifest names a seeded key that changes how /investigate or /review fires, the Captain hears before Amendment B. At the after pin the diet is unconditional for /investigate and /review (gstack's maintainers, 2026-11-02), so a headless session gets the body a user gets.
 - Each gstack arm installs gstack through that pin's own ./setup (host claude) into the arm's HOME, the way a user installs it, so each pin's hooks land in that HOME's ~/.claude/settings.json. before's existing hooks (timeline Stop, memorable UserPromptSubmit) install too. #109's tar arms predate this and are not reused.
-- **Fresh state per session.** Every session starts from its arm's install-time HOME and gstack state root, unpacked fresh, so no learnings, review logs or contract records carry across tasks, units or passes. The dry run asserts that the state root holds only install-time files at session start.
+- **Fresh state per session.** Every session starts from its arm's install-time HOME and gstack state root, unpacked fresh (review-units seeds its state root fresh for each session), so no learnings, review logs or contract records carry across tasks, units or passes. The dry run asserts that the state root holds only install-time files at session start.
 - **Headless questions.** If a session calls AskUserQuestion, every arm and pin gets the same reply, the harness's existing headless answer recorded in Amendment B (or, if the harness has none, the fixed text "No answer is available; proceed with your best judgment."). Calls are counted per arm.
 - The same prompt wrapper, turn cap, session allowance and timeout within an instrument and model.
 - **Concurrency.** For each instrument and model, all arms run in the same batches, after the after pin exists. Lane B shuffles arm, task and replicate in one seeded order per batch (seed 20261102). review-units runs one command per model and pass, with every arm in it, in a seeded interleaved order of arm and unit (seed 20261102); every arm's pass 1 runs before any arm's pass 2. Long runs go out as detached shards with the controller on the waiting agent's machine, resumable without regrading. The only before-pin sessions that run before the after sha are the admission readings in section 8.3, which are never scored.
@@ -127,9 +128,9 @@ Not reused, with reasons: R1's arm C (GSTA-167's full /review) ran in another ha
 | after-u | after sha | plain prompt (untold) | Run D, H-inv, H-rev |
 | before-t | 82db89a | "/investigate" or "/review" then the plain prompt (told) | TB2 told, stacks-r1, H-inv, H-rev |
 | after-t | after sha | same told line | TB2 told, stacks-r1, H-inv, H-rev |
-| off-u, off-t | after sha, then gstack-config set skill_routing off and skill_contracts off in the arm's HOME after ./setup | untold, told | Opus only, H-inv and H-rev |
+| off-u, off-t | after sha, with skill_routing off and skill_contracts off in the config the session reads: on Lane B, gstack-config writes both into the arm's state root after ./setup; on review-units, both go in as seeded config keys (stateConfig in src/trial/review/run.ts, the path stack cells use) | untold, told | Opus only, H-inv and H-rev |
 
-The told line is the skill's slash command, one space, and the instrument's plain prompt, the way a user types it. It is identical across pins. On review units the plain prompt is the rig's frozen brief (src/trial/review/told.ts), which forbids edits to the code under review. /review's fix-first step therefore can't run in any arm, and probe R (section 7.3) doesn't count it. At the after pin the off switches leave the hook entries registered but silent (gstack's maintainers, 2026-11-02), so off differs from after only in that config value.
+The told line is the skill's slash command, one space, and the instrument's plain prompt, the way a user types it. It is identical across pins. On review units the plain prompt is the rig's frozen brief (src/trial/review/told.ts), which forbids edits to the code under review. /review's fix-first step therefore can't run in any arm, and probe R (section 7.3) doesn't count it. At the after pin the off switches leave the hook entries registered but silent (gstack's maintainers, 2026-11-02), so off differs from after only in that config value. The dry run asserts, on each instrument, that gstack-config get prints off for both keys inside an off session and that an after session reads neither key as off.
 
 Models (org R54): anthropic/claude-opus-5-5 direct; openai/gpt-6.1-sol inside Claude Code through OpenRouter's Anthropic-compatible endpoint (Run D's route, #153's review route); particle-ai/particle-1 through OpenRouter (particle-ai only). Every model runs inside Claude Code, so the hooks act the same way on all three. A Sol arm in its own Codex harness is out of scope. No Haiku 5.5 or Sonnet 5.5 cell runs. No open-weight ladder slot runs, so the OpenRouter ranking needs no re-read here. Placebo arms are left out: the treatment is a whole install, not a text, and #132 and #140 already measured placebo text.
 
@@ -191,7 +192,7 @@ P1: B1's reading on the 37 TB2 tasks, and on the 5-task fit stratum, with Run D'
 
 #### 7.1 Probe L, a load (discovery)
 
-Run D's rule from #125 section 5, unchanged: a Skill call naming the skill with a non-error result, or a Read or Bash of the installed SKILL.md whose result holds the first 200 characters of that arm's own installed body, after stripping Read's line-number prefixes. The body prefix comes from each pin's own install, never from one pin for both. review-units gets the same rule (build unit B3). A load by the route hook's own injected text does not count; only a body arriving in a tool result counts.
+Run D's rule from #125 section 5, unchanged: a Skill call naming the skill with a non-error result, or a Read or Bash of the installed SKILL.md whose result holds the first 200 characters of that arm's own installed body, after stripping Read's line-number prefixes. The body prefix comes from each pin's own install, never from one pin for both. review-units gets the same rule (build unit B3). A load by the route hook's own injected text does not count; only a body arriving in a tool result counts. The one exception: if the after pin delivers a targeted skill's body through a hook by design (Amendment B reads the install manifest), a hook output holding the first 200 characters of that pin's installed body counts as a load for that pin, and the post reports how many of the pin's loads came that way.
 
 #### 7.2 Probe I, a complete /investigate record (adherence)
 
@@ -199,7 +200,7 @@ A told trial is complete when all of these hold:
 1. An assistant text after the last file edit holds a line matching DEBUG REPORT (case-insensitive, any markdown decoration), followed within 40 lines by the labels Symptom, Root cause, Fix, Evidence, Regression test and Status, each with non-empty content.
 2. Fix names a path:line, and that path is a file the session edited.
 3. Status is one of DONE, DONE_WITH_CONCERNS or BLOCKED.
-4. After the last edit, the session ran a check: a simple command (each command of a parsed shell line, after cd, env prefixes and subshells are unwrapped) that matches the frozen test-runner list (pytest, python -m unittest, go test, cargo test, npm/pnpm/yarn/bun test, make test or check, ctest, bash or sh running a file under a test or tests path) or repeats a command the session ran before its first edit.
+4. After the last edit, the session ran a check: a simple command (each command of a parsed shell line, after cd, env prefixes and subshells are unwrapped) that matches the frozen test-runner list (pytest or py.test, python -m pytest, python -m unittest, tox, nox, go test, cargo test, npm/pnpm/yarn/bun test or run test, npx jest or vitest, jest, vitest, mocha, mvn test or verify, gradle or ./gradlew test, dotnet test, rspec or bundle exec rspec, rake test, phpunit, mix test, swift test, make test or check, ctest, bash or sh running a file under a test or tests path) or repeats a command that exited non-zero before the session's first edit (a failing reproduction, run again).
 
 An edit is an Edit, Write, MultiEdit or NotebookEdit call, or a simple command matching the frozen write list (sed -i, perl -pi, tee, a > or >> redirect to a path in the work tree, cat with a heredoc to a file, patch, git apply, git checkout of a path). Tool calls made by the session's subagents count in the edit and check order. A trial with no edit fails items 2 and 4. If the after pin's own skill no longer produces an output this probe needs, by design (Amendment B reads the install manifest), B3 gets no verdict: FIX-METHOD (method), never CUT-CANDIDATE.
 
@@ -223,7 +224,7 @@ Each pin gets its own reader map, built from that pin's own skill source and pin
 
 | Case | Scored as | Rule |
 |---|---|---|
-| Turn cap or allowance stop | its own arm: a fail for pass and adherence, recall from its last parsed findings block (A1) or nothing | No outcome for an endpoint if more than 10% of any of its arms' sessions cap-stop. |
+| Turn cap or allowance stop | a graded fail for pass and adherence; for recall, a graded pass scored from its last parsed findings block (A1), or zero matched blockers if none parsed | Counted in every outcome. The rate is reported per arm; over 10% in any arm sends a null to step 1 of section 9's cycle, while a KEEP or LOSS stands. |
 | Background deadline | coverage gap | as #154 B1; Lane B records it through B2 |
 | Upstream or provider error (the session ends with no model output from a 5xx, a 429 after retries, or a route refusal) | relaunched once with the same task, arm and seed, under the thread's repair item; a second failure is a coverage gap | never relaunched for any other reason |
 | Infrastructure loss (VM or machine died, image pull refused) | relaunched once under the repair item | logged per arm |
@@ -231,7 +232,7 @@ Each pin gets its own reader map, built from that pin's own skill source and pin
 
 Every Lane B and review-units session records session_end.cause, background_at_first_result and its upstream status (build unit B2 for Lane B), so each row above is classified from the record, never guessed.
 
-**Coverage rule.** An endpoint has no outcome for a model when any of its arms has graded sessions for under 90% of its planned sessions, or when more than 10% of its task or unit clusters lack a graded session in either arm of its contrast. A cluster missing in one arm of a contrast leaves that contrast; it is never imputed.
+**Coverage rule.** An endpoint has no outcome for a model when any of its arms has graded sessions for under 90% of its planned sessions, or when more than 10% of its task or unit clusters fail to enter its contrast. A task cluster enters when each arm of the contrast has at least one graded session on it; a review unit enters by section 7.4's rule (both passes graded in both arms). Planned sessions exclude tasks dropped by the oracle rule (section 7.4), which are reported. A cluster that fails to enter is never imputed.
 
 No graded session is ever rerun. A cap stop of a ledger item makes the run incomplete; it is never retried to change a verdict.
 
@@ -240,7 +241,7 @@ No graded session is ever rerun. A cap stop of a ledger item makes the run incom
 1. **An empty report template passes probe I.** Every label needs content, Fix must name an edited file, and Status must be a listed value.
 2. **Edits after the last test slip past the check by going through Bash.** The write list counts Bash edits, on each simple command. A gap remains for writes made by an interpreter one-liner; the probe audit (item 4) measures it.
 3. **Subagents named "adversarial" that do nothing.** A report must return with numeric total_tokens. The reader map is built from the pin's source, not from the session.
-4. **The probes misread paraphrases.** A blind audit reader (Opus 5.5, arm and pin hidden) labels sessions sampled stratified on the probe's own outcome: per probe and model, 20 that the probe passed and 20 it failed, pooled over arms (all of a class when fewer exist). Cohen's kappa is computed per probe and model. Below 0.7, the endpoints that use that probe become FIX-METHOD (method) for that model, whatever their intervals. When only one class exists, kappa is undefined; the probe then passes when the reader agrees on at least 95% of the sampled sessions.
+4. **The probes misread paraphrases.** A blind audit reader (Opus 5.5, arm and pin hidden) labels sessions sampled stratified on the probe's own outcome: per probe and model, 20 that the probe passed and 20 it failed, pooled over arms (all of a class when fewer exist). Cohen's kappa is computed per probe and model, and the probe passes at 0.7 or more. When either sampled class holds fewer than 10 sessions (one class alone included), kappa is unstable at that prevalence, so the probe instead passes when the reader agrees on at least 95% of the sampled sessions. A failed probe makes the behavior endpoints that use it FIX-METHOD (method) for that model. For O1 to O4 it changes no KEEP or LOSS: a KEEP is worded as a KEEP for the after install (section 9), and a null still reads it at step 2 of section 9's cycle.
 5. **The route hook injects the skill name and "discovery" becomes trivial.** That is the overhaul working as designed. S11 reports the hook's firing rate, a load still needs the body to arrive, and the outcome endpoints don't depend on it.
 6. **The builders tune to the tests.** Every verdict rests on the held-out set (section 10), and S12 measures the gap.
 7. **Time drift between pins.** Arms run in the same batches, in seeded interleaved order (section 3).
@@ -266,24 +267,26 @@ power.py (attached; its sha256 is in the front matter) gives MDD = (z + 0.842) x
 
 | Endpoint | Planned n | Assumed control | MDD@0.05 | MDD@Holm4 | Margin |
 |---|---|---|---|---|---|
-| O1, O2 (H-inv pass) | 80 tasks x 3 | 30% to 70%, conc 2 to 6 | 9.9 to 12.1 | 11.9 to 14.4 | 15 |
+| O1, O2 (H-inv pass) | 80 tasks x 3 | 30% to 70%, conc 2 to 6 | 9.9 to 12.1 | 11.9 to 14.4 (admission table: up to 14.8) | 15 |
 | O3, O4 (H-rev recall) | 36 units (29 keyed) x 2 | 7.1% to 15% | 10.7 to 13.2 | 12.7 to 15.8 | 20 |
 | B1, B3 (behavior, H-inv) | 80 x 3 | before at 2% to 5% (30% to 50%) | 4.7 to 5.8 (9.9 to 10.6) | 5.6 to 7.0 (11.8 to 12.7) | 20 |
 | B2, B4 (behavior, H-rev) | 36 x 2 | before at 2% to 5% (30% to 50%) | 8.4 to 10.5 (18.3 to 19.4) | 10.1 to 12.5 (21.9 to 23.1) | 20 |
 | P5 (stacks-r1 recall, public) | 33 x 2 | 7.1% | 11.2 | 13.3 | |
 
+power.txt's rows come from separate draws of one seeded stream, so one design can read slightly differently in two tables: the frozen admission table reads 14.8 at 50% control (conc 6) against 14.4 in the outcome rows. Monte Carlo error at 4,000 simulations is about 0.4 points. Admission reads the frozen table as written, so the rule is exact, but a true MDD near 50% control may sit up to about 0.4 points above the table, close to the 15-point margin. Recall rows draw about 1.67 blockers per keyed unit where stacks-r1 averages 1.56, so recall MDDs run slightly optimistic.
+
 At 60 tasks x 3, O1's MDD@Holm4 was 13.9 to 16.3 and at 72 tasks 12.5 to 15.2, past the margin under conc 6, so section 5.2 asks for 80. B2 and B4 pass their margin only while the before arm sits low; section 9's saturation step handles the rest. The guard's precision comes from R1: on 14 PRs the false-blocker difference's interval was 2.7 points wide ([+1.46, +4.18]), so 36 units narrows it to roughly 1.7 (inferred, scaling with the square root of units).
 
 #### 8.3 Admission (the E1 check, insight plan C1)
 
-**Frozen parameters.** Admission reads power.txt's frozen admission tables, interpolating linearly between rows, never a fresh simulation: H-inv at 80 tasks x 3, conc 6, effect_sd 0.10, planning rate 40%; H-rev at 36 units x 2, conc 2, effect_sd 0.15, planning rate 7.1%; both at SIMS 4000 and seed 20261102. Amendment A's dry run prints admit or refuse at the floor, middle and top from those tables.
+**Frozen parameters.** Admission reads power.txt's frozen admission tables, interpolating linearly between rows, never a fresh simulation. A rate outside a table's rows reads the nearest end row. That is conservative: binomial spread peaks at 50%, so MDD falls as a rate moves from 50% toward 0 or 100. The same reading rule applies to power.txt's behavior rows (2% to 50%), which section 9's saturation step uses. The tables: H-inv at 80 tasks x 3, conc 6, effect_sd 0.10, planning rate 40%; H-rev at 36 units x 2, conc 2, effect_sd 0.15, planning rate 7.1%; both at SIMS 4000 and seed 20261102. Amendment A's dry run prints admit or refuse at the floor, middle and top from those tables.
 
 **Outcome admission (paid item h-pilot).** The admission slice runs the none arm on all three models. For each held-out family, on Opus 5.5:
 - c = the none arm's rate on the slice, with its cluster interval. MDD = the larger of the table's MDD@Holm4 at c and at the planning rate.
 - **Admit** when 100 minus the interval's upper bound is at least 2 x MDD and MDD is at most the family's claim margin. No lower-bound test applies: plain Opus may sit near 0 on review units, and each key is proven by its failing tests instead (section 10.2).
 - **Not admitted** at the ceiling: the authors make one ceiling-raise attempt (R61: harder kinds, a new slice) and the slice runs again under a new item. A second failure stops the family.
 - **Broken slice:** if more than 1 of the 8 H-rev units, or more than 2 of the 12 H-inv tasks, fails its oracle or failing-test check on the run VM, the authors make one re-author attempt under a new item; a second failure stops the family.
-- A stopped family is the one preregistered branch an amendment may take: Amendment B drops that family's endpoints, and the post reports it as FIX-METHOD (task fit).
+- A stopped family is one of the preregistered branches section 12 lists: Amendment B drops that family's endpoints, and the post reports it as FIX-METHOD (task fit).
 - An incomplete slice (coverage under 90%, or any stop other than a coverage gap) gets no admission and goes to the Captain.
 - Sol and particle-1 report their control rates. A model whose own rate leaves less room than 2 x MDD is flagged "ceiling expected"; its cells still run, and its verdicts follow the saturation path in section 9.
 
@@ -296,24 +299,25 @@ The slice's units never enter the confirmatory set, and no gstack arm ever runs 
 Each primary endpoint gets one line per model: estimate, interval, Holm p, exposure, coverage, and the verdict. The exposure line for an outcome endpoint is the after arm's probe-complete rate (told) or load rate (untold).
 
 **Outcome endpoints O1 to O4.**
-- **KEEP:** the Holm-adjusted test rejects with the interval above 0, and for O3 and O4 the guard holds. With exposure at 80% or more, the post credits the skill's procedure. Below 80%, it is a KEEP for the after install, and the post says the procedure ran in that share of sessions.
-- **Recall gain, guard fails:** no KEEP. The post says the skill catches more and blocks falsely more, with both intervals. R48's cycle names the fix (the proof rule on blocking findings).
+- **KEEP:** the Holm-adjusted test rejects with the interval above 0, and for O3 and O4 the guard holds. With exposure at 80% or more, and the probe behind the exposure line passing its audit (section 7.6), the post credits the skill's procedure. Otherwise it is a KEEP for the after install, and the post says the procedure ran in that share of sessions.
+- **Recall gain, guard fails:** no KEEP. The post says the skill catches more and blocks falsely more, with both intervals. R48's cycle names the fix (the proof rule on blocking findings). The verdict is FIX-METHOD (guard), never CUT-CANDIDATE.
 - **LOSS:** the interval is below 0 with Holm p under 0.05. The post calls it a loss. CUT-CANDIDATE if exposure is at least 80%; FIX-METHOD (exposure) if not.
 - **Null:** the Why-null cycle runs in this order, and the first failing check names the kind:
   1. Power: coverage under the rule, or cap stops over 10%: FIX-METHOD (harness limit).
   2. Method: the probe audit failed for the probe behind the exposure line: FIX-METHOD (method).
   3. Exposure: the after arm's exposure line under 80%: FIX-METHOD (exposure).
-  4. Saturation: the none arm's counted rate leaves less room than 2 x MDD (100 minus its upper bound): FIX-METHOD once (R61), with one ceiling-raise attempt on a new held-out wave before any cut.
+  4. Saturation: with MDD read from section 8.3's frozen table at the none arm's counted rate, 100 minus the upper bound of the none arm's 95% cluster interval is under 2 x MDD: FIX-METHOD once (R61), with one ceiling-raise attempt on a new held-out wave before any cut.
   5. Task fit: the judges' extra-real findings or the probe audit show the key wrong for over 20% of units: FIX-METHOD (task fit).
   6. Otherwise: CUT-CANDIDATE for that skill on that model. It goes to the Captain plainly, in R48's words. The none arm's rate answers R48's frontier question ("does the model do it without the skill?") and is printed beside it.
 
 **Behavior endpoints B1 to B4.**
 - **KEEP:** the test rejects with the interval above 0. KEEP goes to the overhaul part that targets the endpoint: the route hook and the description rewrite for B1 and B2, the contract hook and the body diet for B3 and B4. S6 says which part carried it on Opus.
+- **LOSS:** the interval is below 0 with Holm p under 0.05. The post calls it a loss for that overhaul part on that model: CUT-CANDIDATE if the install exposure check (step 3 below) holds, FIX-METHOD (exposure) if not. No Why-null cycle runs on a loss.
 - **Null:** the cycle runs in this order:
   1. Power: as above: FIX-METHOD (harness limit).
   2. Method: the probe audit failed, or the after pin dropped a probed output by design: FIX-METHOD (method).
   3. Install exposure: the construction checks failed, or the after arm's hook fired in under 80% of the sessions where it should (the route hook's line in after-u sessions for B1 and B2; a contract record in after-t sessions for B3 and B4): FIX-METHOD (exposure).
-  4. Saturation: at the before arm's counted rate, the frozen table's MDD@Holm4 passes the 20-point margin, or 100 minus the before arm's upper bound is under 2 x MDD: FIX-METHOD (saturation).
+  4. Saturation: take MDD from power.txt's behavior rows at the before arm's counted rate (the 80 x 3 rows for B1 and B3, the 36 x 2 rows for B2 and B4, read by section 8.3's rule). Saturation holds when that MDD passes the 20-point margin, or when 100 minus the upper bound of the before arm's 95% cluster interval is under 2 x MDD: FIX-METHOD (saturation).
   5. Otherwise: CUT-CANDIDATE for that overhaul part on that model.
 
 A failed ceiling-raise attempt that fails because of harness limits or broken tasks gives FIX-METHOD, never CUT-CANDIDATE (CREW rule, R61). No verdict rests on Haiku or Sonnet data. The post names each null's kind: saturation, exposure, method or task fit.
@@ -337,13 +341,13 @@ This plan specifies the set; a later custody thread authors it (out of scope her
 
 #### 10.3 Custody
 
-- Each family and wave is its own age-encrypted bundle, to a new recipient key for this set. The identity sits in the gstack-evals x Garry project-user drive's sealed-keys, beside the earlier panels' keys. Bundles live under a Captain-drive handoffs/<custody thread>/sealed/ folder, beside a CUSTODY.md that logs every opening, closing and incident.
+- Each family and wave is its own age-encrypted bundle, to a new recipient key for this set. The identity sits in a project-user drive's sealed-keys, apart from the Captain drive, beside the earlier panels' keys. Bundles live under a Captain-drive handoffs/<custody thread>/sealed/ folder, beside a CUSTODY.md that logs every opening, closing and incident.
 - Labels are minted from crypto.getRandomValues, never from shas, names or ids; CUSTODY.md says so.
 - Decrypt only into /dev/shm, under a live foreground program, with leftovers checked and deleted (test ! -e) on every wake. Run outputs are written encrypted per batch to mode-0700 directories, and leftovers of plaintext outputs are checked on every wake too.
 - Lane B ships task bodies to Ubicloud VMs. Every VM is created with UBI_OWNER set to the run thread, from a runner copy pinned by sha256, with a TTL that covers its batch, and is deleted when its batch ends. CUSTODY.md logs each VM's create and delete times.
-- Every held-out call through OpenRouter sends provider.data_collection deny (build unit B4; the rig's proxy already does, per prices.ts L74 to L75), and the dry run asserts it.
+- Every held-out call through OpenRouter sends provider.data_collection deny (build unit B4; the rig's proxy already does, per prices.ts L74 to L75), and the dry run asserts it. h-pilot is each model's first held-out call, so it shows whether the route accepts the deny; a route that refuses it takes section 12's branch.
 - The repo gets counts by family and language, size ranges, the bundle, suite and kit sha256s, the cut counts and the admission numbers. Never a per-unit row.
-- **Who may open:** the custody thread, the run threads the Captain names, and their same-machine subagents (handoffs that carry sealed material stay on one machine). **Who must not:** gstack's maintainers and every thread working on GST-1088's build, any thread that builds a gstack candidate, and the authors and auditors after sealing. Amendment A names the GST-1088 build threads and confirms that none of them mounts the gstack-evals Captain drive or the gstack-evals x Garry project-user drive; CUSTODY.md records the check.
+- **Who may open:** the custody thread, the run threads the Captain names, and their same-machine subagents (handoffs that carry sealed material stay on one machine). **Who must not:** gstack's maintainers and every thread working on GST-1088's build, any thread that builds a gstack candidate, and the authors and auditors after sealing. Amendment A names the GST-1088 build threads and confirms that none of them mounts the Captain drive or that project-user drive; CUSTODY.md records the check, and the custody thread repeats it before each counted release.
 - **Opening budget:** one counted release per confirmatory bundle (all arms and both pins in it), plus logged keyless dry-run openings. Alpha 0.05 per family per release. A second release, such as a later after2 pin, needs a fresh wave and its own preregistration.
 
 #### 10.4 What leaves custody
@@ -358,32 +362,33 @@ Each unit is its own PR, with the plan step the crew rules set for it, and keyle
 - **B2, Lane B session-end record and hold rule (GST-734 shape).** Every Lane B trial records session_end.cause, background_at_first_result and its upstream status, whatever else happens. laneb_agent.py gets #141's rule B: hold while visible background work runs, a deadline as E_BACKGROUND_DEADLINE (a coverage gap). Keyless tests against the pinned Python Agent SDK with a stub CLI that backgrounds an Agent task, schedules a wakeup and has a Stop hook block once, plus a fixture per row of table 7.5.
 - **B3, probes.** Probe I for Lane B. Probe R and probe L for review-units. Reader maps for 82db89a and the after sha, each built from that pin's own source, carrying that pin's dispatch rule, and pinned by sha256. Adversarial fixtures for every attack in section 7.6, including anchored shell parsing and subagent tool calls.
 - **B4, sealed task roots.** Lane B reads a Harbor task list from a sealed root in /dev/shm, with digests checked, and sends provider.data_collection deny on every OpenRouter call. review-units' --sealed-root path with sealed judge keys, tested at the pinned judging build on a sealed fixture root. Run outputs never land under /dev/shm (E_RECEIPTS_VOLATILE).
-- **B5, analysis and verdicts.** The per-session outcome table's schema in src/types.ts, one converter per harness (tested on recorded fixtures from Run D and #154), and one keyless entry from that table to every endpoint, interval, Holm step, guard, gate and verdict in sections 6 to 9. Synthetic-data tests cover KEEP, the guard failure, LOSS, every FIX-METHOD branch and CUT-CANDIDATE.
+- **B5, analysis and verdicts.** The per-session outcome table's schema in src/types.ts, one converter per harness (tested on recorded fixtures from Run D and #154), and one keyless entry from that table to every endpoint, interval, Holm step, guard, gate and verdict in sections 6 to 9. It implements the guard-fail verdict (FIX-METHOD, guard), cap-stopped sessions as graded fails, the contrast-entry coverage rule and the oracle-drop denominator (section 7.5). Synthetic-data tests cover KEEP, the guard failure, LOSS for outcome and behavior endpoints, every FIX-METHOD branch and CUT-CANDIDATE.
 - **B6, the pause check.** A keyless command that reads every ledger a thread uses (the rig ledger, Lane B's per-item ledgers, judge items, VM reservations), adds the thread's host model use from a counter reading the operator passes in (credits at about $1 per 1,000, R42) and refuses a launch whose worst case would cross $4,900. Lane B's launch takes a --spend-cap, added here if it lacks one. Both dry runs drive it.
 
 ### 12. Amendments and the dry run
 
-Two pins-only amendments follow this post. Neither may change an endpoint, arm, size, margin, scoring rule or verdict rule, except the one preregistered branch in section 8.3. Any other change is a new preregistration that supersedes this one, reviewed the same way.
+Two pins-only amendments follow this post. Neither may change an endpoint, arm, size, margin, scoring rule or verdict rule, except these preregistered branches: a family stopped under section 8.3; a model whose terms bar this use or publishing its results (section 16), whose cells drop; and a model whose route refuses provider.data_collection deny in h-pilot (section 10.3), whose held-out cells drop. The post says why for each. Any other change is a new preregistration that supersedes this one, reviewed the same way.
 
 - **Amendment A (admission).** Pins the Lane B and review-units builds, the CLI and SDK versions, the judging build and the admission bundles' digests. Records the terms links for section 16 and the GST-1088 custody check. Its keyless dry run drives the admission rule at the floor, middle and top, the broken-slice and incomplete cases, and B6's pause. Then b-pilot and h-pilot run.
-- **Amendment B (counted runs).** Written after the after sha exists. Pins the after sha and its install manifest (diffed against before's), every build, the reader maps and their dispatch rules, the probe lists, the AskUserQuestion reply, the analysis config sha256, the confirmatory bundle digests and the price table's as_of. Exposure smokes run on public units only, never on held-out, under their own items: 3 sessions per gstack arm, instrument and model. They confirm the install, the hooks firing, the driver hold and the per-session cost, and they re-cost every item; they are never scored. Its keyless dry run drives every frozen rule through the pinned SDK and the real pinned CLI against fake upstreams and fake judges: each probe on adversarial fixtures, every session-outcome row, the coverage and cap-stop rules, each verdict branch, the pause, and one ledger lease opened and settled per item on a temporary ledger, with E_ITEM_BOUND on a second run of an item and a --resume after a pause reusing the open lease.
+- **Amendment B (counted runs).** Written after the after sha exists. Pins the after sha and its install manifest (diffed against before's), every build, the reader maps and their dispatch rules, the probe lists, the AskUserQuestion reply, the analysis config sha256, the confirmatory bundle digests and the price table's as_of. Exposure smokes run on public units only, never on held-out, under their own items: 3 sessions per gstack arm, instrument and model. They confirm the install, the hooks firing, the driver hold and the per-session cost, and they re-cost every item under section 13's rule; they are never scored. Its keyless dry run drives every frozen rule through the pinned SDK and the real pinned CLI against fake upstreams and fake judges: each probe on adversarial fixtures, every session-outcome row, the coverage and cap-stop rules, each verdict branch, the pause, and one ledger lease opened and settled per item on a temporary ledger, with E_ITEM_BOUND on a second run of an item and a --resume after a pause reusing the open lease.
 
 ### 13. Spend
 
-Prices come from src/runner/pricing/prices.ts (Opus 5.5 $4 in, $20 out, $0.20 cache read, $5 cache write per million; Sol through OpenRouter $2, $10, $0.10, $2.50, read 2026-11-02; particle-1 $0.10, $1, $0.003, read 2026-10-30). Lane B's proxy prices particle-1 input at $0.25, so its Lane B spend is an upper bound. Planning costs per session come from metered runs on main; price.py's header names each source and labels every guess. Sol has no metered review run, so it is costed at Opus's per-session rate. Cap per item = 1.5 x expected + parallel sessions x allowance, rounded up to $10. price.py and price.txt are attached.
+Prices come from src/runner/pricing/prices.ts (Opus 5.5 $4 in, $20 out, $0.20 cache read, $5 cache write per million; Sol through OpenRouter $2, $10, $0.10, $2.50, read 2026-11-02; particle-1 $0.10, $1, $0.003, read 2026-10-30). Lane B's proxy prices particle-1 input at $0.25, so its Lane B spend is an upper bound. Planning costs per session come from metered runs on main; price.py's header names each source and labels every guess. Sol has no metered review run, so it is costed at Opus's per-session rate. Cap per launch item = 1.5 x expected + parallel sessions x allowance; per judge batch, 1.5 x expected + $5; per repair item, 1.5 x expected + 2 x allowance; each rounded up to $10. price.py and price.txt are attached.
 
-**One item per launch.** Each Lane B batch, each review-units command (one per model and pass), each smoke set, each judge batch and each pilot is its own ledger item. Named relaunches (section 7.5) charge the thread's repair item, priced at 5% of the thread. A run resumed after a pause reuses its open lease with --resume (Amendment B's dry run shows it).
+**One item per launch.** The ledger binds an item to its first run (E_ITEM_BOUND), so every launch is its own item: each Lane B batch, each review-units command (one per model and pass), each smoke set (one per instrument and model, covering every gstack arm that model runs), each pilot launch and each judge batch (one per model, pass and step). Each launch also has its own repair item for its named relaunches (section 7.5), expected at 5% of the launch, so no two runs share an item. A run resumed after a pause reuses its open lease with --resume (Amendment B's dry run shows it).
 
 | Thread | Items | Expected | Item caps |
 |---|---|---|---|
-| T-pub | tb2 per model; rev per model and pass; two smoke items; judge; VM; repair | $2,459 | $4,840 |
-| T-hinv | h-pilot, b-pilot, pilot judge; hinv per model; VM; repair | $1,606 | $3,040 |
-| T-hrev | hrev per model and pass; judge; repair | $3,840 | $6,640 |
-| All | | $7,906 | $14,520 |
+| T-pub | smokes per instrument and model; tb2 per model; rev per model and pass; judge batches; VM; a repair item per launch | $2,531 | $6,080 |
+| T-hinv | b-pilot and h-pilot launches; their judge batches; hinv per model; VM; a repair item per launch | $1,604 | $4,510 |
+| T-hrev | hrev per model and pass; judge batches; a repair item per launch | $3,834 | $6,940 |
+| All | | $7,969 | $17,530 |
 
-The Opus attribution arms (off-u, off-t) account for $722 of the expected total. Each thread's own host model use is read from its counter and counted at the pause, not budgeted here. The custody thread's authoring and audit model use is its own line, sized in Amendment A.
+The Opus attribution arms (off-u, off-t) account for $722 of the expected total. Each thread's own host model use is read from its counter and counted at the pause, not budgeted here. The custody thread's authoring and audit model use is its own line, sized in Amendment A before authoring starts (section 15, step 2) and held under the same $4,900 pause as a run thread.
 
-- **Pause rule (R42).** Each run thread stops launching new sessions, and reports to the Captain, before its settled plus reserved ledger spend, plus its host model use and VM hours, would pass $4,900. The operator runs B6's pause check before every launch, and launches run one at a time (#154's rule). A launch's --spend-cap is the smaller of its item's remaining cap and the pause headroom. The pause changes no score. The run resumes only on the Captain's word, and nobody reads an outcome of that thread in between. T-hrev's item caps sum past $5,000, so the pause, not the caps, keeps it under the line. Passing $4,900 in any thread needs the Captain, and a heads-up to Garry before $5,000.
+- **Pause rule (R42).** Each run thread stops launching new sessions, and reports to the Captain, before its settled plus reserved ledger spend, plus its host model use and VM hours, would pass $4,900. The operator runs B6's pause check before every launch, and launches run one at a time (#154's rule). A launch's --spend-cap is the smaller of its item's remaining cap and the pause headroom less $150 held back for the thread's host model use during the launch; the operator rereads the counter after each launch. The pause changes no score. The run resumes only on the Captain's word, and nobody reads an outcome of that thread in between. T-pub's and T-hrev's item caps sum past $5,000, so the pause, not the caps, keeps them under the line. Passing $4,900 in any thread needs the Captain, and a heads-up to Garry before $5,000.
+- **Re-cost and launch order.** After the smokes, price.py reruns with every guessed rate replaced by its smoke-measured per-session cost (held-out rates scaled by the same ratio as their public arm's guess to measurement). If any thread's re-costed expected spend passes $4,200, that thread stops before its first counted launch and goes to the Captain; if it passes $5,000, Garry also hears before any launch. Launches run Opus, then Sol, then particle-1, each model's pass 1 before its pass 2, so a pause keeps whole Opus cells.
 - Every paid call goes through a ledger item with one approval row. Ubicloud VMs carry UBI_OWNER and are deleted when their batch ends.
 
 ### 14. Results plan
@@ -427,7 +432,7 @@ Building the overhaul; authoring the held-out tasks (this plan specifies how); a
 
 - **The after pin's install needs something the containers lack.** B1 and Amendment B's install diff catch it before any counted run.
 - **Held-out kinds come out at the ceiling.** One ceiling-raise attempt, then FIX-METHOD, never a cut.
-- **Sol review costs differ from the assumption.** The smokes re-cost every item, and the pause rule holds the line.
+- **Sol review costs differ from the assumption.** The smokes re-cost every item, the $4,200 re-cost trigger stops a thread before it launches, and the pause rule holds the line.
 - **Judges may share Opus's blind spots.** The matching is against fixed keys proven by failing tests, Sol judges second, and kappa is reported.
 - **The rig's no-edit brief may suppress /review steps in both pins.** Probe R counts only read-only steps, and the exposure line shows it if it happens.
 - **gstack's hook-enforced /investigate test (GST-960) changes the after pin's contract.** The probe stays ours; repro-before-edit is scored descriptively either way.
@@ -435,4 +440,6 @@ Building the overhaul; authoring the held-out tasks (this plan specifies how); a
 
 ## Review record
 
-gstack /autoplan run autoplan-20261102231443 under org R65: phases CEO and eng, one native reader each (Opus 5.5), one round each, no outside voice, design and DX skipped as out of scope. CEO raised 16 findings (6 High) and eng 13 (5 High). The run log, both consensus tables and every finding title are in review-record.md. Gate 1 items d1 to d11 carried the 11 High findings, and the revision (revise v1) wrote each fix into the text above.
+gstack /autoplan run autoplan-20261102231443 under org R65: phases CEO and eng, one native reader each (Opus 5.5), one round each, no outside voice, design and DX skipped as out of scope. CEO raised 16 findings (6 High) and eng 13 (5 High). The run log, both consensus tables and every finding title are in review-record.md. Gate 1 items d1 to d11 carried the 11 High findings, and the revision (revise v1) wrote each fix into the text above. In the attached copy, gstack's em dashes are replaced with hyphens and one thread reference is generalised.
+
+The PR's gstack /ship review read this bundle at full depth (money class, from price.py), with Capy's PR review beside it, and one fix round applied the findings listed under Approval. The /ship receipt in the PR body records the readers and their verdicts.

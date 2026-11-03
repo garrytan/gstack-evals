@@ -1,43 +1,91 @@
-price.py: planning spend and caps in dollars. cap = ceil10(1.5 x expected + parallel x allowance); review items are one per pass.
+price.py: planning spend and caps in dollars. One ledger item per launch (E_ITEM_BOUND: an item funds one run).
+Launch cap = ceil10(1.5 x expected + parallel x allowance); judge batch cap = ceil10(1.5 x expected + 5);
+each launch has its own repair item for named relaunches: expected 5% of the launch, cap ceil10(1.5 x expected + 2 x allowance).
 
 T-pub
-  tb2-opus                           arms none,before-u,after-u,before-t,after-t               sessions  111/arm  allowance   2.5 expected   128.76  cap    240
-  tb2-sol                            arms none,before-u,after-u,before-t,after-t               sessions  111/arm  allowance   2.5 expected   128.76  cap    240
-  tb2-p1                             arms none,before-u,after-u,before-t,after-t               sessions  111/arm  allowance   0.8 expected    57.94  cap    100
-  rev-opus-p1                        arms none,before-t,after-t                                sessions   33/arm  allowance    40 expected   403.59  cap    770
-  rev-opus-p2                        arms none,before-t,after-t                                sessions   33/arm  allowance    40 expected   403.59  cap    770
-  rev-sol-p1                         arms none,before-t,after-t                                sessions   33/arm  allowance    40 expected   403.59  cap    770
-  rev-sol-p2                         arms none,before-t,after-t                                sessions   33/arm  allowance    40 expected   403.59  cap    770
-  rev-p1-p1                          arms none,before-t,after-t                                sessions   33/arm  allowance    10 expected   121.08  cap    230
-  rev-p1-p2                          arms none,before-t,after-t                                sessions   33/arm  allowance    10 expected   121.08  cap    230
-  pub-smoke-laneb (3 sessions x 3 gstack arms x 3 models)                                                                                        expected     6.32  cap     50
-  pub-smoke-rev (3 sessions x 2 gstack arms x 3 models)                                                                                        expected    78.66  cap    280
-  pub-judge                                                                                                                 expected    60.00  cap    150
-  pub-vm                                                                                                                    expected    25.00  cap     60
-  t-pub-repair (named relaunches, 5% of the thread)                                                                             expected   117.10  cap    180
-  T-pub total: expected  2459.05, item caps     4840; the pause line is $4,900 of settled + reserved + host model use + VMs
+  smoke-laneb-opus                             arms before-u,after-u,before-t,after-t,off-u,off-t        sessions    3/arm  allowance     5 expected     7.95  cap    100
+  smoke-laneb-sol                              arms before-u,after-u,before-t,after-t                    sessions    3/arm  allowance     5 expected     5.40  cap     90
+  smoke-laneb-p1                               arms before-u,after-u,before-t,after-t                    sessions    3/arm  allowance   1.5 expected     2.43  cap     30
+  smoke-review-opus                            arms before-u,after-u,before-t,after-t,off-u,off-t        sessions    3/arm  allowance    40 expected    73.80  cap    280
+  smoke-review-sol                             arms before-u,after-u,before-t,after-t                    sessions    3/arm  allowance    40 expected    52.20  cap    240
+  smoke-review-p1                              arms before-u,after-u,before-t,after-t                    sessions    3/arm  allowance    10 expected    15.66  cap     70
+  tb2-opus                                     arms none,before-u,after-u,before-t,after-t               sessions  111/arm  allowance   2.5 expected   128.76  cap    240
+  tb2-sol                                      arms none,before-u,after-u,before-t,after-t               sessions  111/arm  allowance   2.5 expected   128.76  cap    240
+  tb2-p1                                       arms none,before-u,after-u,before-t,after-t               sessions  111/arm  allowance   0.8 expected    57.94  cap    100
+  rev-opus-p1                                  arms none,before-t,after-t                                sessions   33/arm  allowance    40 expected   403.59  cap    770
+  rev-opus-p2                                  arms none,before-t,after-t                                sessions   33/arm  allowance    40 expected   403.59  cap    770
+  rev-sol-p1                                   arms none,before-t,after-t                                sessions   33/arm  allowance    40 expected   403.59  cap    770
+  rev-sol-p2                                   arms none,before-t,after-t                                sessions   33/arm  allowance    40 expected   403.59  cap    770
+  rev-p1-p1                                    arms none,before-t,after-t                                sessions   33/arm  allowance    10 expected   121.08  cap    230
+  rev-p1-p2                                    arms none,before-t,after-t                                sessions   33/arm  allowance    10 expected   121.08  cap    230
+  judge-pub-opus-p1-match                                                                                                             expected     5.00  cap     20
+  judge-pub-opus-p1-adjudicate                                                                                                        expected     5.00  cap     20
+  judge-pub-opus-p2-match                                                                                                             expected     5.00  cap     20
+  judge-pub-opus-p2-adjudicate                                                                                                        expected     5.00  cap     20
+  judge-pub-sol-p1-match                                                                                                              expected     5.00  cap     20
+  judge-pub-sol-p1-adjudicate                                                                                                         expected     5.00  cap     20
+  judge-pub-sol-p2-match                                                                                                              expected     5.00  cap     20
+  judge-pub-sol-p2-adjudicate                                                                                                         expected     5.00  cap     20
+  judge-pub-p1-p1-match                                                                                                               expected     5.00  cap     20
+  judge-pub-p1-p1-adjudicate                                                                                                          expected     5.00  cap     20
+  judge-pub-p1-p2-match                                                                                                               expected     5.00  cap     20
+  judge-pub-p1-p2-adjudicate                                                                                                          expected     5.00  cap     20
+  pub-vm                                                                                                                              expected    25.00  cap     60
+  repair items: 15 (one per launch above), expected   116.47, caps    850
+  T-pub total: expected  2530.89, item caps     6080; the pause line is $4,900 of settled + reserved + host model use + VMs
 
 T-hinv
-  h-pilot (none, 3 models, 12 tasks x 3 and 8 units x 2)                                                                                        expected    52.59  cap    280
-  b-pilot (before-t, Opus, 10 TB2 tasks x 1 and 6 stacks-r1 units x 1)                                                                                        expected    23.00  cap    200
-  h-pilot-judge                                                                                                             expected     5.00  cap     30
-  hinv-opus                          arms none,before-u,after-u,before-t,after-t,off-u,off-t   sessions  240/arm  allowance     5 expected   696.00  cap   1130
-  hinv-sol                           arms none,before-u,after-u,before-t,after-t               sessions  240/arm  allowance     5 expected   492.00  cap    820
-  hinv-p1                            arms none,before-u,after-u,before-t,after-t               sessions  240/arm  allowance   1.5 expected   221.40  cap    360
-  hinv-vm                                                                                                                   expected    40.00  cap    100
-  t-hinv-repair (named relaunches, 5% of the thread)                                                                             expected    76.50  cap    120
-  T-hinv total: expected  1606.49, item caps     3040; the pause line is $4,900 of settled + reserved + host model use + VMs
+  b-pilot-tb2 (before-t, 10 TB2 tasks x 1)     arms before-t                                             sessions   10/arm  allowance   2.5 expected     2.60  cap     50
+  b-pilot-rev (before-t, 6 stacks-r1 units x 1) arms before-t                                             sessions    6/arm  allowance    40 expected    20.40  cap    200
+  h-pilot-inv-opus (none, 12 tasks x 3)        arms none                                                 sessions   36/arm  allowance     5 expected     9.00  cap    100
+  h-pilot-inv-sol (none, 12 tasks x 3)         arms none                                                 sessions   36/arm  allowance     5 expected     9.00  cap    100
+  h-pilot-inv-p1 (none, 12 tasks x 3)          arms none                                                 sessions   36/arm  allowance   1.5 expected     4.05  cap     40
+  h-pilot-rev-opus-p1 (none, 8 units)          arms none                                                 sessions    8/arm  allowance    40 expected     6.64  cap    170
+  h-pilot-rev-opus-p2 (none, 8 units)          arms none                                                 sessions    8/arm  allowance    40 expected     6.64  cap    170
+  h-pilot-rev-sol-p1 (none, 8 units)           arms none                                                 sessions    8/arm  allowance    40 expected     6.64  cap    170
+  h-pilot-rev-sol-p2 (none, 8 units)           arms none                                                 sessions    8/arm  allowance    40 expected     6.64  cap    170
+  h-pilot-rev-p1-p1 (none, 8 units)            arms none                                                 sessions    8/arm  allowance    10 expected     1.99  cap     50
+  h-pilot-rev-p1-p2 (none, 8 units)            arms none                                                 sessions    8/arm  allowance    10 expected     1.99  cap     50
+  judge-hpilot-opus-p1-match                                                                                                          expected     0.42  cap     10
+  judge-hpilot-opus-p1-adjudicate                                                                                                     expected     0.42  cap     10
+  judge-hpilot-opus-p2-match                                                                                                          expected     0.42  cap     10
+  judge-hpilot-opus-p2-adjudicate                                                                                                     expected     0.42  cap     10
+  judge-hpilot-sol-p1-match                                                                                                           expected     0.42  cap     10
+  judge-hpilot-sol-p1-adjudicate                                                                                                      expected     0.42  cap     10
+  judge-hpilot-sol-p2-match                                                                                                           expected     0.42  cap     10
+  judge-hpilot-sol-p2-adjudicate                                                                                                      expected     0.42  cap     10
+  judge-hpilot-p1-p1-match                                                                                                            expected     0.42  cap     10
+  judge-hpilot-p1-p1-adjudicate                                                                                                       expected     0.42  cap     10
+  judge-hpilot-p1-p2-match                                                                                                            expected     0.42  cap     10
+  judge-hpilot-p1-p2-adjudicate                                                                                                       expected     0.42  cap     10
+  hinv-opus                                    arms none,before-u,after-u,before-t,after-t,off-u,off-t   sessions  240/arm  allowance     5 expected   696.00  cap   1130
+  hinv-sol                                     arms none,before-u,after-u,before-t,after-t               sessions  240/arm  allowance     5 expected   492.00  cap    820
+  hinv-p1                                      arms none,before-u,after-u,before-t,after-t               sessions  240/arm  allowance   1.5 expected   221.40  cap    360
+  hinv-vm                                                                                                                             expected    40.00  cap    100
+  repair items: 14 (one per launch above), expected    74.25, caps    710
+  T-hinv total: expected  1604.24, item caps     4510; the pause line is $4,900 of settled + reserved + host model use + VMs
 
 T-hrev
-  hrev-opus-p1                       arms none,before-u,after-u,before-t,after-t,off-u,off-t   sessions   36/arm  allowance    40 expected   915.48  cap   1540
-  hrev-opus-p2                       arms none,before-u,after-u,before-t,after-t,off-u,off-t   sessions   36/arm  allowance    40 expected   915.48  cap   1540
-  hrev-sol-p1                        arms none,before-u,after-u,before-t,after-t               sessions   36/arm  allowance    40 expected   656.28  cap   1150
-  hrev-sol-p2                        arms none,before-u,after-u,before-t,after-t               sessions   36/arm  allowance    40 expected   656.28  cap   1150
-  hrev-p1-p1                         arms none,before-u,after-u,before-t,after-t               sessions   36/arm  allowance    10 expected   196.88  cap    340
-  hrev-p1-p2                         arms none,before-u,after-u,before-t,after-t               sessions   36/arm  allowance    10 expected   196.88  cap    340
-  hrev-judge                                                                                                                expected   120.00  cap    300
-  t-hrev-repair (named relaunches, 5% of the thread)                                                                             expected   182.86  cap    280
-  T-hrev total: expected  3840.15, item caps     6640; the pause line is $4,900 of settled + reserved + host model use + VMs
+  hrev-opus-p1                                 arms none,before-u,after-u,before-t,after-t,off-u,off-t   sessions   36/arm  allowance    40 expected   915.48  cap   1540
+  hrev-opus-p2                                 arms none,before-u,after-u,before-t,after-t,off-u,off-t   sessions   36/arm  allowance    40 expected   915.48  cap   1540
+  hrev-sol-p1                                  arms none,before-u,after-u,before-t,after-t               sessions   36/arm  allowance    40 expected   656.28  cap   1150
+  hrev-sol-p2                                  arms none,before-u,after-u,before-t,after-t               sessions   36/arm  allowance    40 expected   656.28  cap   1150
+  hrev-p1-p1                                   arms none,before-u,after-u,before-t,after-t               sessions   36/arm  allowance    10 expected   196.88  cap    340
+  hrev-p1-p2                                   arms none,before-u,after-u,before-t,after-t               sessions   36/arm  allowance    10 expected   196.88  cap    340
+  judge-hrev-opus-p1-match                                                                                                            expected    10.00  cap     20
+  judge-hrev-opus-p1-adjudicate                                                                                                       expected    10.00  cap     20
+  judge-hrev-opus-p2-match                                                                                                            expected    10.00  cap     20
+  judge-hrev-opus-p2-adjudicate                                                                                                       expected    10.00  cap     20
+  judge-hrev-sol-p1-match                                                                                                             expected    10.00  cap     20
+  judge-hrev-sol-p1-adjudicate                                                                                                        expected    10.00  cap     20
+  judge-hrev-sol-p2-match                                                                                                             expected    10.00  cap     20
+  judge-hrev-sol-p2-adjudicate                                                                                                        expected    10.00  cap     20
+  judge-hrev-p1-p1-match                                                                                                              expected    10.00  cap     20
+  judge-hrev-p1-p1-adjudicate                                                                                                         expected    10.00  cap     20
+  judge-hrev-p1-p2-match                                                                                                              expected    10.00  cap     20
+  judge-hrev-p1-p2-adjudicate                                                                                                         expected    10.00  cap     20
+  repair items: 6 (one per launch above), expected   176.86, caps    640
+  T-hrev total: expected  3834.15, item caps     6940; the pause line is $4,900 of settled + reserved + host model use + VMs
 
-All threads: expected 7905.70, item caps 14520.
-Opus attribution arms (off-u, off-t) account for 722.40 of the expected total.
+All threads: expected 7969.28, item caps 17530.
+Opus attribution arms (off-u, off-t) account for 722.40 of the expected counted-run total.

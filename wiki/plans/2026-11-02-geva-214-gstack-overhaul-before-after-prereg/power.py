@@ -32,7 +32,8 @@ def se_binary(rng, n_tasks, reps, control, conc, effect_sd=0.10):
 
 def se_recall(rng, n_units, passes, control, conc, decoy_share=0.2, effect_sd=0.15):
     # Review units: decoy units carry no blocker; keyed units carry 1 to 3 blockers
-    # (stacks-r1's 42 blockers on 33 units gives about 1.3 on keyed units). Recall is pooled
+    # (stacks-r1 has 42 blockers on 27 keyed units, about 1.56 each; the draw below averages 1.67,
+    # so its SE runs slightly small and recall MDDs slightly optimistic). Recall is pooled
     # over blockers, paired by unit (ratio of sums, as the review rig's PR-clustered rule).
     keyed = [u for u in range(n_units) if u >= int(round(decoy_share * n_units))]
     ests = []

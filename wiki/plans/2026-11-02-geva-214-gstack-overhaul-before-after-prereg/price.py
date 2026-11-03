@@ -39,6 +39,9 @@ ALLOW = {"laneb": {"opus": 2.5, "sol": 2.5, "p1": 0.8}, "hinv": {"opus": 5, "sol
 PARALLEL = {"laneb": 16, "review": 4}
 ATTRIB = {"hinv": ["off-u", "off-t"], "hrev": ["off-u", "off-t"]}
 REPAIR_SHARE = 0.05
+JUDGE_HEAD = 5
+REPAIR_PARALLEL = 2
+MODELS = ("opus", "sol", "p1")
 
 def ceil10(x):
     return math.ceil(x / 10) * 10
@@ -51,50 +54,72 @@ def item(inst, model, with_attrib=True):
     allow = ALLOW["hinv" if inst == "hinv" else KIND[inst]][model]
     return arms, exp, allow
 
+def launch(name, kind, model, arms, n, rate_e, allow):
+    return {"name": name, "arms": arms, "n": n, "allow": allow, "e": rate_e,
+            "c": ceil10(1.5 * rate_e + PARALLEL[kind] * allow), "kind": kind, "model": model, "repair": True}
+
 def rows(inst, model):
     arms, e, a = item(inst, model)
-    head = PARALLEL[KIND[inst]] * a
-    if KIND[inst] == "review":
-        return [(f"{inst}-{model}-p{k}", arms, SESSIONS[inst] // 2, a, e / 2, ceil10(1.5 * e / 2 + head)) for k in (1, 2)]
-    return [(f"{inst}-{model}", arms, SESSIONS[inst], a, e, ceil10(1.5 * e + head))]
+    kind = KIND[inst]
+    if kind == "review":
+        return [launch(f"{inst}-{model}-p{k}", kind, model, arms, SESSIONS[inst] // 2, e / 2, a) for k in (1, 2)]
+    return [launch(f"{inst}-{model}", kind, model, arms, SESSIONS[inst], e, a)]
 
-def fixed(name, e, head):
-    return (name, None, None, None, e, ceil10(1.5 * e + head))
+def smoke(kind, model):
+    inst = "hinv" if kind == "laneb" else "hrev"
+    arms = [a for a in COST[inst] if a != "none" and (model == "opus" or not a.startswith("off"))]
+    e = 3 * sum(COST[inst][a] for a in arms) * m(model, kind)
+    allow = ALLOW["hinv" if kind == "laneb" else "review"][model]
+    return launch(f"smoke-{kind}-{model}", kind, model, arms, 3, e, allow)
 
-PILOT_E = 36 * (0.25 + 0.25 + 0.25 * 0.45) + 16 * (0.83 + 0.83 + 0.83 * 0.30)
-BPILOT_E = 10 * 0.26 + 6 * 3.40
-SMOKE_LB = 3 * (0.26 + 0.35 + 0.25) * (1 + 1 + 0.45)
-SMOKE_RV = 3 * (3.40 + 8.00) * (1 + 1 + 0.30)
+def pilot(name, kind, model, arm, n, rate, allow):
+    return launch(name, kind, model, [arm], n, n * rate * m(model, kind), allow)
+
+def judges(prefix, total, passes=(1, 2)):
+    out = []
+    names = [f"{prefix}-{mo}-p{k}-{step}" for mo in MODELS for k in passes for step in ("match", "adjudicate")]
+    for nm in names:
+        e = total / len(names)
+        out.append({"name": nm, "arms": None, "e": e, "c": ceil10(1.5 * e + JUDGE_HEAD), "repair": False})
+    return out
+
+def fixed(name, e, c):
+    return {"name": name, "arms": None, "e": e, "c": c, "repair": False}
+
 THREADS = {
-    "T-pub": [r for i in ("tb2", "rev") for mo in ("opus", "sol", "p1") for r in rows(i, mo)]
-             + [fixed("pub-smoke-laneb (3 sessions x 3 gstack arms x 3 models)", SMOKE_LB, 16 * 2.5),
-                fixed("pub-smoke-rev (3 sessions x 2 gstack arms x 3 models)", SMOKE_RV, 4 * 40),
-                ("pub-judge", None, None, None, 60, 150), ("pub-vm", None, None, None, 25, 60)],
-    "T-hinv": [fixed("h-pilot (none, 3 models, 12 tasks x 3 and 8 units x 2)", PILOT_E, 16 * 2.5 + 4 * 40),
-               fixed("b-pilot (before-t, Opus, 10 TB2 tasks x 1 and 6 stacks-r1 units x 1)", BPILOT_E, 4 * 40),
-               ("h-pilot-judge", None, None, None, 5, 30)]
-              + [r for mo in ("opus", "sol", "p1") for r in rows("hinv", mo)]
-              + [("hinv-vm", None, None, None, 40, 100)],
-    "T-hrev": [r for mo in ("opus", "sol", "p1") for r in rows("hrev", mo)] + [("hrev-judge", None, None, None, 120, 300)],
+    "T-pub": [smoke(k, mo) for k in ("laneb", "review") for mo in MODELS]
+             + [r for mo in MODELS for r in rows("tb2", mo)]
+             + [r for mo in MODELS for r in rows("rev", mo)]
+             + judges("judge-pub", 60) + [fixed("pub-vm", 25, 60)],
+    "T-hinv": [pilot("b-pilot-tb2 (before-t, 10 TB2 tasks x 1)", "laneb", "opus", "before-t", 10, COST["tb2"]["before-t"], ALLOW["laneb"]["opus"]),
+               pilot("b-pilot-rev (before-t, 6 stacks-r1 units x 1)", "review", "opus", "before-t", 6, COST["rev"]["before-t"], ALLOW["review"]["opus"])]
+              + [pilot(f"h-pilot-inv-{mo} (none, 12 tasks x 3)", "laneb", mo, "none", 36, COST["hinv"]["none"], ALLOW["hinv"][mo]) for mo in MODELS]
+              + [pilot(f"h-pilot-rev-{mo}-p{k} (none, 8 units)", "review", mo, "none", 8, COST["hrev"]["none"], ALLOW["review"][mo]) for mo in MODELS for k in (1, 2)]
+              + judges("judge-hpilot", 5)
+              + [r for mo in MODELS for r in rows("hinv", mo)]
+              + [fixed("hinv-vm", 40, 100)],
+    "T-hrev": [r for mo in MODELS for r in rows("hrev", mo)] + judges("judge-hrev", 120),
 }
-out = ["price.py: planning spend and caps in dollars. cap = ceil10(1.5 x expected + parallel x allowance); review items are one per pass.", ""]
+out = ["price.py: planning spend and caps in dollars. One ledger item per launch (E_ITEM_BOUND: an item funds one run).",
+       "Launch cap = ceil10(1.5 x expected + parallel x allowance); judge batch cap = ceil10(1.5 x expected + 5);",
+       "each launch has its own repair item for named relaunches: expected 5% of the launch, cap ceil10(1.5 x expected + 2 x allowance).", ""]
 ge = gc = 0.0
 for t, items in THREADS.items():
     out.append(t)
     te = tc = 0.0
-    for name, arms, n, a, e, c in items:
-        desc = f"arms {','.join(arms):<52} sessions {n:>4}/arm  allowance {a:>5}" if arms else ""
-        out.append(f"  {name:<34} {desc:<86} expected {e:8.2f}  cap {c:6d}")
-        te += e; tc += c
-    rep = REPAIR_SHARE * te
-    rc = ceil10(1.5 * rep)
-    out.append(f"  {t.lower()}-repair (named relaunches, 5% of the thread){'':<76} expected {rep:8.2f}  cap {rc:6d}")
-    te += rep; tc += rc
+    for it in items:
+        desc = f"arms {','.join(it['arms']):<52} sessions {it['n']:>4}/arm  allowance {it['allow']:>5}" if it["arms"] else ""
+        out.append(f"  {it['name']:<44} {desc:<86} expected {it['e']:8.2f}  cap {it['c']:6d}")
+        te += it["e"]; tc += it["c"]
+    rep_items = [(it["name"].split(" ")[0] + "-repair", REPAIR_SHARE * it["e"], ceil10(1.5 * REPAIR_SHARE * it["e"] + REPAIR_PARALLEL * it["allow"])) for it in items if it["repair"]]
+    re_ = sum(e for _, e, _ in rep_items); rc = sum(c for _, _, c in rep_items)
+    out.append(f"  repair items: {len(rep_items)} (one per launch above), expected {re_:8.2f}, caps {rc:6d}")
+    te += re_; tc += rc
     out.append(f"  {t} total: expected {te:8.2f}, item caps {tc:8.0f}; the pause line is $4,900 of settled + reserved + host model use + VMs")
     out.append("")
     ge += te; gc += tc
 out.append(f"All threads: expected {ge:.2f}, item caps {gc:.0f}.")
 _, a1, _ = item("hinv", "opus"); _, a0, _ = item("hinv", "opus", False)
 _, b1, _ = item("hrev", "opus"); _, b0, _ = item("hrev", "opus", False)
-out.append(f"Opus attribution arms (off-u, off-t) account for {a1 - a0 + b1 - b0:.2f} of the expected total.")
+out.append(f"Opus attribution arms (off-u, off-t) account for {a1 - a0 + b1 - b0:.2f} of the expected counted-run total.")
 print("\n".join(out))
