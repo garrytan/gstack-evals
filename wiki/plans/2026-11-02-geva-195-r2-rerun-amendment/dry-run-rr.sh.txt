@@ -163,7 +163,7 @@ step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$W/pilot/mid/d/derive.json"
 
 echo; echo "## Grid judging, derive --drop-gaps, noloss score and rr-decide.py (section 7)"
 ARMS="gstack-full none-rr"
-decide() { step '^(R2 rerun|exposure|gate|E_)' python3 "$W/bin/rr-decide.py" "$1" "$2" "$S" "${3:-$W/src/gstack-full}" "${4:-$W/src/none-rr}" "$W/run/rr-full/parses.tsv" gstack-full-opus; }
+decide() { step '^(R2 rerun|exposure|gate|E_)' python3 "$W/bin/rr-decide.py" "$1" "$2" "$S" "${3:-$W/src/gstack-full}" "${4:-$W/src/none-rr}" "$W/run/rr-full/parses.tsv" gstack-full-opus "${5:-$W/run/rr-full.stderr}" "${6:-$W/run/rr-none.stderr}"; }
 score_on() { step '^([A-Za-z0-9-]+ vs [a-z0-9-]+ at a |verdict|E_)' $G score --suite "$1/$2.json" --root "$1/arms" --prereg "$1/comparisons.$2.json" --variant gstack-full --reference none-rr --out "$1/score.json"; }
 derive_on() { local X=$1 id=$2; shift 2; step '^(derive|E_)|dropped' $G derive --suite "$S" --comparisons "$W/bin/comparisons.rr.json" --id "$id" --out "$X/$id" --root "$X/final" --drop-gaps "$@"; score_on "$X/$id" "$id"; }
 judge_round() {
@@ -204,11 +204,13 @@ echo; echo "## No outcome, on the KEEP round's scores (synthetic copies, section
 K=$X/stacks-r1-rr
 echo "# The gate failing (the 59-of-66 copy)."; decide "$K/score.json" "$K/derive.json" "$W/gate59/gstack-full"
 echo "# The cap-stop rule: none-rr's arm.json says 7 capped sessions."; mkdir -p "$W/cap7"; cp -r "$W/src/none-rr" "$W/cap7/none-rr"; jq '.cap_stops.turn_cap = 5 | .cap_stops.allowance_stop = 2' "$W/src/none-rr/arm.json" > "$W/cap7/none-rr/arm.json"; decide "$K/score.json" "$K/derive.json" "$W/src/gstack-full" "$W/cap7/none-rr"
+echo "# A proxy CAP_STOP whose gap --drop-gaps dropped: none-rr's run log with run.ts's cap-stop line added, on the KEEP round, which dropped every gap unit."; { grep -v '^review-units exit' "$W/run/rr-none.stderr"; echo "CAP_STOP the proxy stopped a session at the cap"; echo "review-units exit 2"; } > "$W/rr-none-capstop.stderr"; decide "$K/score.json" "$K/derive.json" "" "" "" "$W/rr-none-capstop.stderr"
+echo "# gstack-full's run log is missing."; decide "$K/score.json" "$K/derive.json" "" "" "$W/no-such.stderr"
 echo "# The coverage rule: derive.json with a fourth dropped unit."; jq --arg u "$(jq -r '.units[20].id' "$S")" '.dropped += [{unit: $u, reasons: ["a coverage gap (synthetic)"]}]' "$K/derive.json" > "$W/derive-4.json"; decide "$K/score.json" "$W/derive-4.json"
 echo "# The scorer gives no interval."; jq '.result.ci95 = null' "$K/score.json" > "$W/score-noci.json"; decide "$W/score-noci.json" "$K/derive.json"
 echo "# A score file that doesn't exist: exit 5."; decide "$W/no-such-score.json" "$K/derive.json"
 
-echo; echo "## Judge items' worst-case caps (section 8)"
+echo; echo "## Judge items' caps (section 8)"
 step '^shape' python3 - "$W/raw/stacks-r1" "$R2F" "$W/judge/shape.json" <<'EOF'
 import glob, json, os, sys
 stub, r2, out = sys.argv[1:4]
@@ -256,9 +258,39 @@ print("judge cap %s: the stub-shaped batch holds %d findings in %d packets and c
 open(out, "a").write("%s\t%d\n" % (item, cap))
 EOF
 }
+# A matching batch's cap is judge-run's worst case on 33 packets of 100,000 characters each, each packet the batch's
+# largest repeated to that length, priced as judge-run --dry-run prices a request at 715f837 (judge-run.ts's request and
+# the proxy's fields, prices.ts); the script first checks that this pricing gives judge-run's own figure on that packet.
+cat > "$W/bin/size-match.ts" <<'EOF'
+import { appendFileSync, readdirSync, readFileSync } from "fs";
+const { judgeRequest, JUDGE_REASONING_EFFORT } = await import(process.env.R + "/src/adapters/judge.ts");
+const { priceRequest, reservationMicros } = await import(process.env.R + "/src/runner/pricing/prices.ts");
+const { JUDGE_RETRY } = await import(process.env.R + "/lanes/review-noloss/judge-run.ts");
+const [item, log, dir, briefPath, out] = process.argv.slice(2);
+const CHARS = 100000, PACKETS = 33, MAX_OUTPUT_TOKENS = 16000;
+const brief = readFileSync(briefPath, "utf8"), batch = readFileSync(dir + "/batch.json", "utf8"), lines = readFileSync(log, "utf8");
+const big = readdirSync(dir + "/packets").map((f) => ({ file: "packets/" + f, text: readFileSync(dir + "/packets/" + f, "utf8") })).sort((a, b) => b.text.length - a.text.length || a.file.localeCompare(b.file))[0];
+const proxied = (provider, body) => (provider === "anthropic" ? { ...body, inference_geo: "global" } : { ...body, service_tier: "default" });
+const send = (provider, model, text) => reservationMicros(priceRequest(provider, proxied(provider, judgeRequest(provider, model, ["=== Judge brief ===", brief, "=== Instructions: batch.json ===", batch, "=== Packet: " + big.file + " ===", text].join("\n"), MAX_OUTPUT_TOKENS, provider === "openai" ? JUDGE_REASONING_EFFORT : undefined)), MAX_OUTPUT_TOKENS));
+const usd = (m) => "$" + (m / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+const wide = big.text.repeat(Math.ceil(CHARS / big.text.length)).slice(0, CHARS);
+let total = 0;
+for (const role of ["primary", "second", "third"]) {
+  const m = lines.match(new RegExp("^" + role + "\\s+(\\w+)/(\\S+)\\s+" + big.file.replace(/\./g, "\\.") + "\\s+worst case \\$[0-9.]+ \\((\\d+) sends at \\$([0-9.]+)\\)", "m"));
+  if (!m) { console.log("E_JUDGE_CAP " + item + ": judge-run's dry run prints no " + role + " line for " + big.file); process.exit(1); }
+  const [, provider, model, sends, printed] = m, stub = send(provider, model, big.text), at = send(provider, model, wide);
+  if (Number(sends) !== JUDGE_RETRY.attempts || stub !== Math.round(Number(printed) * 1e6)) { console.log("E_JUDGE_CAP " + item + " " + role + ": this pricing gives " + usd(stub) + " a send on " + big.file + ", and judge-run printed $" + printed + " at " + sends + " sends"); process.exit(1); }
+  total += at * JUDGE_RETRY.attempts * PACKETS;
+  console.log("judge cap " + item + " " + role + " " + provider + "/" + model + ": " + usd(at) + " a send at 100,000 characters; on " + big.file + " (" + big.text.length + " characters) this pricing gives " + usd(stub) + ", as judge-run printed");
+}
+const cap = Math.ceil((2 * total) / 1e6);
+console.log("judge cap " + item + ": " + PACKETS + " packets of 100,000 characters (" + big.file + " repeated), 3 judges at " + JUDGE_RETRY.attempts + " sends each: worst case " + usd(total) + ", and " + usd(2 * total) + " if every answer is asked again (judge-run asks an answer again once): cap $" + cap);
+appendFileSync(out, item + "\t" + cap + "\n");
+EOF
 : > "$W/judge/caps.tsv"
-step '^judge cap' size_judge rr-pilot-judge "$W/judge/pilot-match.txt" "$W/pilot/floor/match-key.json" 5 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
-step '^judge cap' size_judge rr-judge-match "$W/judge/grid-match.txt" "$W/grid/keep/match-key.json" 4 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
+step '^(judge cap|E_)' bun "$W/bin/size-match.ts" rr-pilot-judge "$W/judge/pilot-match.txt" "$W/pilot/floor/match" "$P/judge-brief.md" "$W/judge/caps.tsv"
+step '^(judge cap|E_)' bun "$W/bin/size-match.ts" rr-judge-match "$W/judge/grid-match.txt" "$W/grid/keep/match" "$P/judge-brief.md" "$W/judge/caps.tsv"
+echo "# Adjudication requests also carry an evidence sheet with up to 61 lines of code at each finding, which no character count bounds, so rr-judge-adjudicate's cap is an estimate from the fit."
 step '^judge cap' size_judge rr-judge-adjudicate "$W/judge/grid-adj.txt" "$W/grid/keep/adj-key.json" 4 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
 step . cat "$W/judge/caps.tsv"
 

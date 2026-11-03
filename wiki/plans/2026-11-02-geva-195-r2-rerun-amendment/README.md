@@ -15,12 +15,12 @@ links:
   - 2026-10-31-geva-76-stacks-round-1-prereg
 attachments:
   - d74c0bee01a73674fe92de8603cf07c000f3fc469917752fef841c037feaf9db  comparisons.rr.json
-  - aaa46b6c104e14bdd9de9ed12ed2329f34d63ba39f7c4c63e9a7b85f99e5e8c2  dry-run-rr.sh.txt
-  - fe10682278ca7e790c2f42d7bcb99b48f3a2396d84a40fd0a2e500cb4286a85e  dry-run-rr.txt
+  - 1158bccb365a70f4d54523ef73a6c2e063d798722054636bc44af179e5c411e8  dry-run-rr.sh.txt
+  - f8f724b870c4ad07b7518bfcaa896bb002910a064a0620fdb22cef9dc369f70d  dry-run-rr.txt
   - c1bb431cde482da750f6a6ba3152d3e29357247e5b731cb28a7591d4a6cf3e38  power-rr.py.txt
   - a17fc2c08073053c225258af9448f3e520cfd03cfa7f23593e0750646587051d  reader-map-gstack-5209e9262d80.json
   - 95ed70447dc13d5cb280c0fc364bfc69ce1d8c52487fe754ac0f86e09c20c3df  rr-admit.py.txt
-  - c8a3eb63ad0c80723c21b0b1d6e8286ce500881658c05581135e2fa84f477090  rr-decide.py.txt
+  - e50781fe272ffd739ee19659636c49159e944af23bb7e1346ae4dbc30f78a649  rr-decide.py.txt
   - 3aa3ac323f5789f1496d3862fed73e334e1d1fd7fcf052417b2d57a87c5f2548  rr-gate.py.txt
   - cc708fa60c0c354bc48a6ca54117dcc3357b272a5f5bc9e880c0d4ed7ebb92c3  rr-held.py.txt
   - e6aefa5da928b40b6aeecd676e6ff09b12d4380ba839eefa6d48a83d4ec92afb  rr-pause.py.txt
@@ -155,7 +155,7 @@ A PR-pass **returned** when its session's parse outcome is findings or empty (a 
 
 **The decision** (rr-decide.py, attached), in this order. The Holm family is this one comparison, so KEEP is R2's own interval rule:
 
-1. **No outcome** when gstack-full's gate failed, the cap-stop rule or the coverage rule fired (section 4), or the scorer gave no verdict, delta or interval. It goes to the Captain as FIX-METHOD with the counts. Bad input makes rr-decide.py exit 5, an error and never an outcome.
+1. **No outcome** when gstack-full's gate failed; either grid run's saved stderr log shows a stop other than coverage gaps, a proxy CAP_STOP above all, whether or not `derive --drop-gaps` dropped its gap, or can't show its stops (rr-decide.py reads it as rr-admit.py reads the pilot's, section 5); the cap-stop rule or the coverage rule fired (section 4); or the scorer gave no verdict, delta or interval. It goes to the Captain as FIX-METHOD with the counts. Bad input makes rr-decide.py exit 5, an error and never an outcome.
 2. **CUT-CANDIDATE** when gstack-full found no more blocking blocker-passes than none-rr. The Review Army and the adversarial pass go to the project owner with the record.
 3. **KEEP** when the scorer's 95% PR-clustered interval of the recall difference is above zero.
 4. **FIX-METHOD** otherwise: gstack-full found more, but this grid can't show it.
@@ -170,25 +170,25 @@ The scorer's NO_LOSS, LOSS and size-rule lines print and decide nothing. Reporte
 
 ## 8. Spend: items, caps and the pause rule
 
-Caps are sized for the science (R57): every review-units item's cap is its worst case at the allowance, sessions times $40, so the allowance binds before an item cap can. Judge items cap at judge-run's worst case for a batch of their real size. The dry run fits judge-run's per-packet worst case on its stub batches, sizes each packet at R2's largest session (9 findings at R2's line length, 27 stub-sized findings) times the sessions a packet holds (5 in the pilot, 4 in the grid), takes 33 packets, doubles the sum because judge-run may ask every answer again once, and rounds up to the dollar. Expected spend uses R2's metered rates: none-r2 $0.83 a session; gstack-full $3.36 a session over all 19, and $3.80 to $9.19 for the sessions that ran the full procedure and returned. The smoke re-costs the grid before it starts.
+Caps are sized for the science (R57): every review-units item's cap is its worst case at the allowance, sessions times $40, so the allowance binds before an item cap can. The two matching items, rr-pilot-judge and rr-judge-match, cap at judge-run's worst case on 33 packets of 100,000 characters each at the frozen judge prices (src/runner/pricing/prices.ts at 715f837). The dry run prices each judge's request as judge-run --dry-run does, with the batch's own brief and instructions and its largest stub packet repeated to 100,000 characters, at 3 sends a request on 33 packets, doubles the sum because judge-run may ask every answer again once, and rounds up to the dollar. It first checks that the same pricing gives judge-run's own figure on that stub packet. rr-judge-adjudicate's requests also carry an evidence sheet with up to 61 lines of code at each finding, which no character count bounds, so its cap is an estimate, not a bound: the dry run fits judge-run's per-packet worst case on its stub batch, sizes each packet at R2's largest session (9 findings at R2's line length, 27 stub-sized findings) times the 4 sessions a packet holds, takes 33 packets, doubles the sum and rounds up to the dollar. Expected spend uses R2's metered rates: none-r2 $0.83 a session; gstack-full $3.36 a session over all 19, and $3.80 to $9.19 for the sessions that ran the full procedure and returned. The smoke re-costs the grid before it starts.
 
 | Item | Sessions | Cap (worst case) | Expected |
 |---|---|---|---|
 | rr-pilot-none | 165 | $6,600 | about $140 |
 | rr-smoke-full | 3 | $120 | $10 to $30 |
-| rr-pilot-judge | 1 batch | $220 | a few dollars |
-| **Pilot total** | | **$6,940** | **about $150 to $175** |
+| rr-pilot-judge | 1 batch | $332 | a few dollars |
+| **Pilot total** | | **$7,052** | **about $150 to $175** |
 | rr-grid-none | 66 | $2,640 | about $55 |
 | rr-grid-full | 66 | $2,640 | $250 to $610 |
-| rr-judge-match | 1 batch | $209 | a few dollars |
-| rr-judge-adjudicate | 1 batch | $1,130 | a few dollars |
-| **Grid total** | | **$6,619** | **about $310 to $680** |
+| rr-judge-match | 1 batch | $332 | a few dollars |
+| rr-judge-adjudicate | 1 batch | $1,130 (an estimate) | a few dollars |
+| **Grid total** | | **$6,742** | **about $310 to $680** |
 
-**R42.** The pilot's caps total $6,940, above the $5,000 one thread may spend on the Captain's approval alone. The pause rule below keeps this rerun's settled plus reserved spend under $4,500 until the Captain gives word to resume, and the pilot's expected spend is about $150 to $175 (section 8's table), so no thread passes $5,000 without a later decision. The Captain gives the project owner a heads-up before the pilot and asks the owner before any resume past the pause.
+**R42.** The pilot's caps total $7,052, above the $5,000 one thread may spend on the Captain's approval alone. The pause rule below keeps this rerun's settled plus reserved spend under $4,500 until the Captain gives word to resume, and the pilot's expected spend is about $150 to $175 (section 8's table), so no thread passes $5,000 without a later decision. The Captain gives the project owner a heads-up before the pilot and asks the owner before any resume past the pause.
 
 Every item serves one run: its first lease binds it, and a second run on it is refused (E_ITEM_BOUND). A resume of the same run, with the same run id, may take a further lease, as R2's none-r2 did.
 
-**The pause rule (the Captain's, for R42).** The run thread stops launching new sessions, and reports to the Captain, before this rerun's settled plus reserved spend, summed over every item above (pilot items included), would pass $4,500. It works through each launch's spend cap: before every review-units command and every judge batch, the operator runs rr-pause.py (attached) on the ledger, which prints the headroom (4500 minus settled minus reserved, over this post's items) and exits 3 when the headroom is below one launch round's worst case. For a judge batch, that worst case is the larger of the batch's printed worst case and the item's remaining cap, because judge-run at 715f837 opens its lease with no amount and the ledger then reserves all the item has left. Each review-units launch takes `--spend-cap` equal to the smaller of its item's remaining cap and that headroom. review-units starts a round only when the round's worst case (each session at its allowance) fits under the spend cap, so it stops between rounds, never inside a session. That stop is the pause, not a cap stop of the item, and it changes no score. The run resumes, with `--resume` on the same run, only on the Captain's word, and nobody reads an outcome, judgment or score of this rerun in between. With the caps above, the worst case of every item together ($13,559) passes $4,500, so the rule binds only if sessions cost far more than R2's.
+**The pause rule (the Captain's, for R42).** The run thread stops launching new sessions, and reports to the Captain, before this rerun's settled plus reserved spend, summed over every item above (pilot items included), would pass $4,500. It works through each launch's spend cap: before every review-units command and every judge batch, the operator runs rr-pause.py (attached) on the ledger, which prints the headroom (4500 minus settled minus reserved, over this post's items) and exits 3 when the headroom is below one launch round's worst case. For a judge batch, that worst case is the larger of the batch's printed worst case and the item's remaining cap, because judge-run at 715f837 opens its lease with no amount and the ledger then reserves all the item has left. Each review-units launch takes `--spend-cap` equal to the smaller of its item's remaining cap and that headroom. review-units starts a round only when the round's worst case (each session at its allowance) fits under the spend cap, so it stops between rounds, never inside a session. That stop is the pause, not a cap stop of the item, and it changes no score. The run resumes, with `--resume` on the same run, only on the Captain's word, and nobody reads an outcome, judgment or score of this rerun in between. With the caps above, the worst case of every item together ($13,794) passes $4,500, so the rule binds only if sessions cost far more than R2's.
 
 **Launches run one at a time.** A launch is one review-units command or one judge batch. review-units opens its lease only after the arm's image builds (src/skill-eval/cli/run-host.ts at 176fdc7), so the guard can't see a launch that has started but not yet leased. The operator runs rr-pause.py for the next launch only after the previous launch's lease shows in the ledger record, and two launches never run at once. This closes the overlap the /ship red-team found: two grid arms launched together each saw the full $4,500 of headroom, and their leases reserved $5,280.
 
@@ -223,7 +223,8 @@ Each arm runs alone, one launch at a time (section 8), in its own out dir, on it
       --out <dir>/rr-smoke-full <step 5 flags>
 
     # grid: the same two commands with --units all --passes 2, items rr-grid-none and rr-grid-full,
-    # and new out dirs <dir>/rr-none and <dir>/rr-full
+    # and new out dirs <dir>/rr-none and <dir>/rr-full; each saves its stderr to <dir>/rr-none.stderr or
+    # <dir>/rr-full.stderr and closes it with the exit line, as the pilot's does, for rr-decide.py
 
 Every command runs `--dry-run` first, which prints the cap-stop line, the reader map, the background wait and the worst case at the allowance. Then, at rig 715f837 with this post's scripts and #129's beside them, dry-run-rr.sh's order: r2-source.py, sevmap and the scrub chain, blind.py, rr-gate.py, judging, `derive --drop-gaps`, scoring, rr-held.py, rr-decide.py, the sensitivities and the strata.
 
@@ -238,9 +239,9 @@ dry-run-rr.sh runs this post's steps keyless at rig 715f837 and build 176fdc7, a
 - **Before blinding.** sevmap leaves 0 unmapped labels, the scrub chain takes every source arm's publication-scan hits to 0, and blind.py and ingest pass.
 - **Gate.** The stub output passes at 60 of 66 returned PR-passes. A copy with one more reader's tokens unavailable fails at 59 (exit 3), and three bad inputs exit 5. The smoke passes 3 of 3.
 - **Admission.** The pilot's stub run journals 165 sessions (5 passes). A fake judge matching nothing fails at the floor (recall 0, interval [0, 0], exit 3). One matching at a 30% rate passes (42.4%, [28.1, 55.3], MDD 30.3, upper bound plus MDD 85.6, exit 0). One matching everything fails at the top: the interval is [100, 100], the MDD at the point estimate is 0 and at the planning rate 24.5, so 124.5 (exit 3). Four units marked as gaps make the pilot incomplete (exit 4). A pilot run whose arm.json shows 5 sessions not run is refused as incomplete (exit 4), and a stop for one coverage gap with every session run goes on to the drop rule and passes.
-- **Decision.** On the same stub sessions, three fake judgings give KEEP (69 of 78 blocker-passes against 13, +71.8 points [+59.7, +83.3]), CUT-CANDIDATE (14 against 44, -38.5 [-50.0, -25.6]) and FIX-METHOD (35 against 33, +2.6 [-10.3, +16.2]). A failing gate, 7 capped sessions in none-rr, a fourth dropped unit and a missing interval each give no outcome (exit 4), and a missing score file exits 5. noloss score prints its margin verdict beside each; it decides nothing.
+- **Decision.** On the same stub sessions, three fake judgings give KEEP (69 of 78 blocker-passes against 13, +71.8 points [+59.7, +83.3]), CUT-CANDIDATE (14 against 44, -38.5 [-50.0, -25.6]) and FIX-METHOD (35 against 33, +2.6 [-10.3, +16.2]). A failing gate, a CAP_STOP line in none-rr's run log on the KEEP round (whose drop rule dropped every gap unit, so its scores alone give KEEP), a missing gstack-full run log, 7 capped sessions in none-rr, a fourth dropped unit and a missing interval each give no outcome (exit 4), and a missing score file exits 5. noloss score prints its margin verdict beside each; it decides nothing.
 - **Beside KEEP.** The secondaries, the rescue and complete-case sensitivities and both strata run. rr-admit.py's port of the bootstrap gives each arm the scorer's own recall interval ([74.4, 98.7] and [7.4, 26.7]).
-- **Judge caps.** The fit gives $220, $209 and $1,130, with every answer asked again (section 8).
+- **Judge caps.** At 100,000 characters a packet, rr-pilot-judge and rr-judge-match cap at $332 each, after the pricing gives judge-run's own figure on each batch's largest stub packet. The fit gives rr-judge-adjudicate's estimate, $1,130. All three count every answer asked again (section 8).
 - **Ledger.** All seven items record at their frozen caps, and each opens one lease and settles it. A second run on rr-grid-full is refused (E_ITEM_BOUND).
 - **Pause.** rr-pause.py gives $4,500 of headroom on a fresh ledger, $1,860 after rr-grid-none's lease, and STOP (exit 3) at $150, below one rr-grid-full round ($160). A judge batch with a $100 worst case on rr-judge-adjudicate launches on the fresh ledger and is refused at $150, because its lease would reserve the item's $1,130. Through review-units, a spend cap of $150 stops a 33-session run before any session (CAP_STOP, 0 journaled), and `--resume` with a larger cap finishes the same run.
 

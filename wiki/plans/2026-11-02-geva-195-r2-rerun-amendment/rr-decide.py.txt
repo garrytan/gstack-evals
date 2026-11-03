@@ -1,21 +1,44 @@
 #!/usr/bin/env python3
 # R2 rerun decision (GEVA-195 amendment, section 7) for gstack-full-vs-none, a Holm family of one, in this order:
 #  1. none (no outcome), FIX-METHOD to the Captain with the counts, when gstack-full's exposure gate failed (rr-gate.py
-#     exit 3), more than 6 of an arm's 66 sessions ended in turn_cap or allowance_stop (arm.json cap_stops), noloss derive
-#     --drop-gaps dropped more than 3 of the 33 units (derive.json), an arm stopped, or the scorer gave no verdict, delta
-#     or interval;
+#     exit 3), either grid run's saved stderr log shows a stop other than coverage gaps (a proxy CAP_STOP above all,
+#     whether or not --drop-gaps dropped its gap) or can't show its stops, more than 6 of an arm's 66 sessions ended in
+#     turn_cap or allowance_stop (arm.json cap_stops), noloss derive --drop-gaps dropped more than 3 of the 33 units
+#     (derive.json), an arm stopped, or the scorer gave no verdict, delta or interval;
 #  2. CUT-CANDIDATE when gstack-full found no more blocking blocker-passes than none-rr;
 #  3. KEEP when the scorer's 95% PR-clustered interval of the recall difference is above zero (R2's own rule);
 #  4. FIX-METHOD otherwise: gstack-full found more, but this grid can't show it.
 # The scorer's NO_LOSS, LOSS and size-rule lines decide nothing. Exit 0 KEEP, 1 CUT-CANDIDATE, 2 FIX-METHOD, 4 none, 5 an
 # error (bad input, or a gate error), which is never an outcome.
+# Each grid run's log is its review-units stderr, saved as <dir>/rr-full.stderr and <dir>/rr-none.stderr and closed with a
+# "review-units exit N" line (section 10). review-units logs every stop there as a line led by its code, a proxy cap stop
+# as CAP_STOP (src/trial/review/run.ts at 176fdc7), and derive --drop-gaps can clear an arm's stopped status but never
+# this log. It is read as rr-admit.py reads the pilot's: a log that is missing, empty or unreadable, has no closing exit
+# line, carries a stop line led by any code but E_COVERAGE_GAP, carries a line about a stop that no code leads, or closes
+# with an exit that does not match its stop lines (0 with none, 2 with some) gives no outcome.
 # Usage: python3 rr-decide.py <score json> <derive.json> <stacks-r1.json> <gstack-full source arm> <none-rr source arm>
-#   <gstack-full run out dir>/parses.tsv <gstack-full run arm id>
-import json, os, subprocess, sys
+#   <gstack-full run out dir>/parses.tsv <gstack-full run arm id> <gstack-full run stderr log> <none-rr run stderr log>
+import json, os, re, subprocess, sys
+
+
+def log_stop(path):
+    """Why a grid run's saved stderr log keeps the decision from an outcome, or None."""
+    try:
+        lines = [x for x in open(path, encoding="utf-8").read().splitlines() if x.strip()]
+    except (OSError, UnicodeDecodeError):
+        lines = []
+    end = re.fullmatch(r"review-units exit (\d+)", lines[-1]) if lines else None
+    stops = [x for x in lines[:-1] if re.match(r"[A-Z][A-Z0-9_]*[A-Z0-9](?= |:|$)", x)]
+    loose = [x for x in lines[:-1] if x not in stops and re.search(r"stop", x, re.I)]
+    other = [x for x in stops if not x.startswith("E_COVERAGE_GAP ")]
+    return ("is missing, empty or unreadable" if not lines else "has no closing review-units exit line" if not end
+            else "carries the stop line %r" % other[0][:160] if other
+            else "carries a line about a stop that no code leads: %r" % loose[0][:160] if loose
+            else "closes with exit %s and %d stop lines" % (end.group(1), len(stops)) if end.group(1) != ("2" if stops else "0") else None)
 
 
 def main():
-    score, dj, sp, full, none, parses, run_id = sys.argv[1:8]
+    score, dj, sp, full, none, parses, run_id, full_log, none_log = sys.argv[1:10]
     s, d, suite = json.load(open(score)), json.load(open(dj)), json.load(open(sp))
     here = os.path.dirname(os.path.abspath(__file__))
     gate = subprocess.run([sys.executable, os.path.join(here, "rr-gate.py"), sp, full, parses, run_id], capture_output=True, text=True)
@@ -36,9 +59,12 @@ def main():
     res = s["result"]
     ci = res.get("ci95") or [None, None]
     capped = [k for k, v in caps.items() if sum(v) > 6]
+    logs = [(k, log_stop(p)) for k, p in (("gstack-full", full_log), ("none-rr", none_log)) if log_stop(p)]
     why = None
     if gate.returncode:
         why = "the exposure gate failed"
+    elif logs:
+        why = "a stop --drop-gaps can't clear: %s's run log %s" % logs[0]
     elif capped:
         why = "the cap-stop rule: more than 6 of 66 sessions capped in " + " and ".join(capped)
     elif len(dropped) > 3:
