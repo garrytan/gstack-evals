@@ -1,0 +1,77 @@
+Table 1: independent items (#127's model), 6 items x 4 passes, n = 24
+  concentration 2: P(DEAD) P(FLOOR) P(HEADROOM) P(NEAR-CEILING) P(CEILING)
+    r=0.1  0.224 0.611 0.165 0.000 0.000
+    r=0.2  0.045 0.452 0.491 0.009 0.002
+    r=0.3  0.007 0.212 0.715 0.045 0.020
+    r=0.4  0.002 0.070 0.719 0.122 0.088
+    r=0.5  0.000 0.018 0.533 0.195 0.254
+    r=0.6  0.000 0.002 0.287 0.205 0.505
+    r=0.7  0.000 0.000 0.104 0.127 0.768
+    r=0.8  0.000 0.000 0.021 0.047 0.932
+    r=0.9  0.000 0.000 0.001 0.005 0.994
+  concentration 8: P(DEAD) P(FLOOR) P(HEADROOM) P(NEAR-CEILING) P(CEILING)
+    r=0.1  0.145 0.724 0.131 0.000 0.000
+    r=0.2  0.018 0.463 0.516 0.002 0.000
+    r=0.3  0.002 0.172 0.791 0.027 0.008
+    r=0.4  0.000 0.040 0.792 0.112 0.057
+    r=0.5  0.000 0.006 0.557 0.227 0.210
+    r=0.6  0.000 0.001 0.259 0.243 0.498
+    r=0.7  0.000 0.000 0.069 0.138 0.793
+    r=0.8  0.000 0.000 0.007 0.030 0.963
+    r=0.9  0.000 0.000 0.000 0.002 0.998
+Table 2: session trace effect and base effect, 6 items x 4 passes, n = 24
+  concentration 2: P(DEAD) P(FLOOR) P(HEADROOM) P(NEAR-CEILING) P(CEILING)
+    r=0.1  0.281 0.545 0.173 0.001 0.000
+    r=0.2  0.085 0.429 0.462 0.017 0.008
+    r=0.3  0.024 0.247 0.627 0.059 0.044
+    r=0.4  0.006 0.110 0.631 0.123 0.130
+    r=0.5  0.001 0.041 0.498 0.168 0.291
+    r=0.6  0.000 0.010 0.313 0.169 0.508
+    r=0.7  0.000 0.002 0.146 0.127 0.724
+    r=0.8  0.000 0.000 0.041 0.057 0.902
+    r=0.9  0.000 0.000 0.003 0.008 0.988
+  concentration 8: P(DEAD) P(FLOOR) P(HEADROOM) P(NEAR-CEILING) P(CEILING)
+    r=0.1  0.238 0.590 0.170 0.001 0.000
+    r=0.2  0.070 0.453 0.453 0.016 0.009
+    r=0.3  0.020 0.259 0.618 0.058 0.046
+    r=0.4  0.005 0.115 0.628 0.114 0.139
+    r=0.5  0.001 0.042 0.505 0.159 0.293
+    r=0.6  0.000 0.012 0.316 0.169 0.503
+    r=0.7  0.000 0.002 0.146 0.124 0.727
+    r=0.8  0.000 0.001 0.039 0.059 0.902
+    r=0.9  0.000 0.000 0.003 0.009 0.987
+Table 3: anchor thresholds (NO READ when anchor matches < k)
+  stratum, 2 anchors x 4 passes = 8 readings: threshold 4 (P(matches < 4) at r=0.9: conc 2 0.013, conc 8 0.006; at k=5: conc 2 0.052, conc 8 0.025)
+    concentration 2: P(NO READ) by true anchor recall
+      r=0.60  0.251
+      r=0.70  0.133
+      r=0.80  0.059
+      r=0.85  0.030
+      r=0.90  0.013
+      r=0.95  0.003
+      r=1.00  0.000
+    concentration 8: P(NO READ) by true anchor recall
+      r=0.60  0.231
+      r=0.70  0.106
+      r=0.80  0.036
+      r=0.85  0.017
+      r=0.90  0.006
+      r=0.95  0.001
+      r=1.00  0.000
+  pooled, 8 anchors x 4 passes = 32 readings: threshold 24 (P(matches < 24) at r=0.9: conc 2 0.035, conc 8 0.018; at k=25: conc 2 0.064, conc 8 0.037)
+    concentration 2: P(NO READ) by true anchor recall
+      r=0.60  0.848
+      r=0.70  0.590
+      r=0.80  0.253
+      r=0.85  0.115
+      r=0.90  0.035
+      r=0.95  0.004
+      r=1.00  0.000
+    concentration 8: P(NO READ) by true anchor recall
+      r=0.60  0.890
+      r=0.70  0.616
+      r=0.80  0.218
+      r=0.85  0.081
+      r=0.90  0.018
+      r=0.95  0.002
+      r=1.00  0.000

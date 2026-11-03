@@ -1,0 +1,99 @@
+#!/usr/bin/env bun
+// hr-kappa.ts (GEVA-238): the plan section 7 kappa check on E0's run root, run only inside hr-custody.sh --reaudit.
+//   E0_SLICE=<extraction> E0_REAUDIT=<dir> bun hr-kappa.ts --scorer <pinned checkout b7b6aec> [--root <run root>]
+// Rebuilds E0's judged cells exactly as e0-readings.ts's run() does, then prints per stratum and pooled the 2x2 counts of
+// (sol any-severity match, opus any-severity match), raw agreement, PABAK, Gwet's AC1 and Cohen's kappa, with PARADOX when raw
+// agreement is at least 0.95, else DISAGREEMENT. Self-check: kappa and n must equal E0's printed values, or it exits 2 before
+// writing anything. Writes kappa.json (counts only) to $E0_REAUDIT, the disagreeing cells to $E0_SLICE/hr-disagreements.json
+// (RAM only), waits for $E0_REAUDIT/classes.json (every 10 s, up to 45 minutes), then writes $E0_REAUDIT/reaudit.json.
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { armReadings, kappaRead, loadMods, ndjson, readArm } from "./e0-readings.ts";
+
+const E0: Record<string, [number, number]> = { pooled: [0.385, 350], ceo: [0.739, 89], eng: [0.271, 84], dx: [0.0, 92], design: [0.0, 85] };
+const STRATA = ["pooled", "ceo", "eng", "dx", "design"];
+const ROLE: Record<string, string> = { sol: "openai/gpt-6.1-sol", opus: "anthropic/claude-opus-5-5", sonnet: "anthropic/claude-sonnet-5-5" };
+const fail = (m: string): never => { console.error("E_USAGE hr-kappa: " + m); process.exit(2); };
+const json = (f: string) => JSON.parse(readFileSync(f, "utf8"));
+const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
+
+const argv = process.argv.slice(2), flag = (f: string) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] ?? fail(f + " needs a value") : null; };
+const SLICE = process.env.E0_SLICE ?? fail("E0_SLICE is not set; run under hr-custody.sh --reaudit");
+const REAUDIT = process.env.E0_REAUDIT ?? fail("E0_REAUDIT is not set; run under hr-custody.sh --reaudit");
+const scorer = resolve(flag("--scorer") ?? fail("needs --scorer <pinned checkout>"));
+const findRoot = (d: string, depth: number): string[] => {
+  if (existsSync(join(d, "judge", "key.json")) && existsSync(join(d, "sealed-root", "e0-kinds.json"))) return [d];
+  if (depth === 0) return [];
+  return readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? findRoot(p, depth - 1) : []; });
+};
+const roots = flag("--root") ? [resolve(flag("--root")!)] : findRoot(SLICE, 4);
+if (roots.length !== 1) fail("found " + roots.length + " run roots under E0_SLICE, not one");
+const root = roots[0]!, SR = join(root, "sealed-root");
+
+const mods = await loadMods(scorer);
+const suiteBytes = readFileSync(join(SR, "suites", "planrev-v3-e0.json")), suite = JSON.parse(suiteBytes.toString());
+const kinds = json(join(SR, "e0-kinds.json"));
+if (kinds.suite_sha256 !== sha(suiteBytes)) fail("e0-kinds.json names another suite sha256");
+const outs = { opus: join(root, "e0-opus-none"), particle: join(root, "e0-particle-none") };
+const opus = readArm(outs.opus, suite, 2, mods), particle = readArm(outs.particle, suite, 2, mods);
+const key = mods.loadKey({ suite, suiteSha256: kinds.suite_sha256, key: join(root, "judge", "key.json"), arms: [[outs.opus, opus.id], [outs.particle, particle.id]].map(([o, id]) => mods.readArmDir(join(o!, "arms", id!), suite, kinds.suite_sha256)) });
+const entries = new Map<string, any>(key.entries.map((e: any) => [e.packet + " " + e.opaque, e]));
+const replies: Record<string, Map<string, Set<string>>> = {};
+for (const j of ["sol", "opus", "sonnet"]) {
+  const dir = join(root, "judge", "read-" + j), rj = json(join(dir, "run.json"));
+  if (rj.models?.primary !== ROLE[j]) fail("read-" + j + " names primary model " + rj.models?.primary);
+  if (rj.batch !== key.batch) fail("read-" + j + " names another batch than the key's");
+  const answers = new Map<string, Set<string>>();
+  if (rj.state !== "stopped") {
+    const body = readFileSync(join(dir, "primary.json"), "utf8");
+    if (sha(body) !== rj.files?.["primary.json"]) fail("read-" + j + ": primary.json is not the reply its run.json records");
+    for (const p of JSON.parse(body).packets ?? []) {
+      const known = key.packets.find((k: any) => k.file === p.file) ?? fail("a " + j + " packet is not in the key");
+      if (p.sha256 !== known.sha256) fail("a " + j + " packet digest is not the key's");
+      mods.packetAnswers(known, p, key, suite, j + " primary", answers);
+    }
+  }
+  replies[j] = answers;
+}
+const sevMap = new Map<string, string>();
+for (const [a, out] of [[opus, outs.opus], [particle, outs.particle]] as const) for (const u of suite.units) { const f = join(out, "arms", a.id, "findings", mods.unitFile(u.id) + ".jsonl"); for (const l of ndjson(existsSync(f) ? readFileSync(f, "utf8") : "")) sevMap.set(a.id + " " + u.id + " " + l.id, String(l.severity ?? "")); }
+const sev = (a: string, u: string, id: string) => sevMap.get(a + " " + u + " " + id) ?? "";
+const tagged = ([[opus, outs.opus], [particle, outs.particle]] as const).flatMap(([a, out]) => armReadings(a, kinds, key, replies, entries, sev, a.id).map((c) => ({ ...c, arm: a.id, model: a.model, out })));
+
+const kap = kappaRead(tagged);
+const diffs = STRATA.filter((s) => kap[s]!.n !== E0[s]![1] || kap[s]!.kappa === null || Number(kap[s]!.kappa!.toFixed(3)) !== E0[s]![0]);
+if (diffs.length) fail("SELF-CHECK FAILED: " + diffs.map((s) => s + " kappa " + (kap[s]!.kappa === null ? "null" : kap[s]!.kappa!.toFixed(3)) + " n " + kap[s]!.n + " vs E0 " + E0[s]![0].toFixed(3) + " n " + E0[s]![1]).join("; "));
+
+const both = tagged.filter((c) => c.sol?.judged && c.opus?.judged);
+const stats: Record<string, any> = {};
+for (const s of STRATA) {
+  const cs = both.filter((c) => s === "pooled" || c.stratum === s), n = cs.length;
+  const a = cs.filter((c) => c.sol.any && c.opus.any).length, b = cs.filter((c) => c.sol.any && !c.opus.any).length, c2 = cs.filter((c) => !c.sol.any && c.opus.any).length, d = n - a - b - c2;
+  const po = (a + d) / n, pi = (2 * a + b + c2) / (2 * n), pe = 2 * pi * (1 - pi);
+  stats[s] = { n, sol_match_opus_match: a, sol_match_opus_miss: b, sol_miss_opus_match: c2, sol_miss_opus_miss: d, raw_agreement: po, pabak: 2 * po - 1, ac1: pe === 1 ? null : (po - pe) / (1 - pe), kappa: kap[s]!.kappa, reading: po >= 0.95 ? "PARADOX" : "DISAGREEMENT" };
+}
+const f3 = (x: number | null) => (x === null ? "n/a" : x.toFixed(3));
+for (const s of STRATA) { const v = stats[s]; console.log(s + ": n " + v.n + "; 2x2 (sol,opus) match/match " + v.sol_match_opus_match + ", match/miss " + v.sol_match_opus_miss + ", miss/match " + v.sol_miss_opus_match + ", miss/miss " + v.sol_miss_opus_miss + "; raw " + f3(v.raw_agreement) + ", PABAK " + f3(v.pabak) + ", AC1 " + f3(v.ac1) + ", kappa " + f3(v.kappa) + " -> " + v.reading); }
+writeFileSync(join(REAUDIT, "kappa.json"), JSON.stringify(stats, null, 1) + "\n");
+
+const journals = new Map<string, any>();
+const journal = (out: string) => journals.get(out) ?? journals.set(out, mods.readReviewJournal(out)).get(out);
+const packetOf = new Map<string, string>(key.packets.map((p: any) => [p.unit, p.file]));
+const matched = (j: string, c: any) => [...(replies[j]!.get(c.unit + " " + c.blocker) ?? [])].map((o) => entries.get(packetOf.get(c.unit) + " " + o)).filter((en) => en && en.arm === c.arm && en.pass === c.pass).map((en) => en.finding);
+const dis = both.filter((c) => c.sol.any !== c.opus.any).map((c, i) => {
+  const unit = suite.units.find((u: any) => u.id === c.unit), e = journal(c.out).get(mods.reviewCellId({ model: c.model, arm: "none", unit: c.unit, pass: c.pass }));
+  return { i, stratum: c.stratum, kind: c.kind, role: c.role, lenient: c.sol.any ? "sol" : "opus", blocker: unit?.blockers?.find((b: any) => b.id === c.blocker), findings: e?.parse?.findings ?? [], sol_matched: matched("sol", c), opus_matched: matched("opus", c) };
+});
+writeFileSync(join(SLICE, "hr-disagreements.json"), JSON.stringify(dis, null, 1) + "\n");
+console.log("hr-kappa: " + dis.length + " disagreeing cells written to the extraction; waiting for classes.json");
+
+const classesFile = join(REAUDIT, "classes.json"), until = Date.now() + 45 * 60 * 1000;
+while (!existsSync(classesFile)) {
+  if (Date.now() > until) fail("no classes.json after 45 minutes");
+  await Bun.sleep(10000);
+}
+await Bun.sleep(1000);
+writeFileSync(join(REAUDIT, "reaudit.json"), JSON.stringify({ kappa: stats, classes: json(classesFile) }, null, 1) + "\n");
+console.log("hr-kappa: reaudit.json written");
+process.exit(0);
