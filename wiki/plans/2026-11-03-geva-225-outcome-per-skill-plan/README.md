@@ -13,7 +13,7 @@ links:
   - 2026-11-02-geva-165-planning-panel-v3-plan
   - lanes/real-outcome/score/analysis.ts
   - src/runner/stats/gates.ts
-source: "Plan written by GEVA-225 through gstack /autoplan run autoplan-20261103023817 (rounds 1 and 2, gate_revs 1 to 4), approved at gate_rev 4. Issue GST-1144. The Implementation plan section is the approved text."
+source: "Plan written by GEVA-225 through gstack /autoplan run autoplan-20261103023817 (rounds 1 and 2, gate_revs 1 to 4), approved at gate_rev 4. Issue GST-1144. The Implementation plan section is the approved text with three corrections the Captain accepted in the #192 review on 2026-11-03: the d7 survivor sentence, the Stand-in and particle-1 rows paragraph and the One survivor per family paragraph. export/plan.md keeps the gate_rev 4 text."
 attachments:
   - 069c6c5e3202b7b863d48d210274e2d246d1d2c785d48555db40904f83756cb0  boundcheck.py
   - 1ce669d3bc1408b4ac232552030d01756c74e26713c16375317dedd3782785a8  cost.py
@@ -46,7 +46,7 @@ attachments:
   - 90053f8865ca17fe95d38c12971f3a80508e14e3a177313e16f768cac74387c9  mddgrid.py
   - 2781d57961c83fe137d7beea2773bfbd3c95deeabb5cdd54c78dbb82a2ebe690  power.py
   - 260f1dd6c50c01fce64d40831b11e1d033516e2db47937e77d0bdabbb78d88ea  probes.md
-  - 5883ddd609cafa62a69ac75c84fb165c909545ad1c0bbc2c5b16adc4c49df874  sizing.sh
+  - 21c9248bf799ce1ba7b370e07dde423ce88f1537a7c880ee65b5fe2a3ca8ea06  sizing.sh
   - 969c6465edf47b8b2aec8cb3a4c642201defd6b19a6b26c14bbdac5529a0a668  sizing.txt
   - 64b05e7c5652a9f9549004eba218b6c11986e7b485094a4ad2906b40cbfc0624  survivor.py
 ---
