@@ -1,0 +1,105 @@
+## a. Pin
+PASS the scorer is at b7b6aeccec868e5127e951b187ca4b637da13114 with no change and no untracked file
+
+## c. The frozen commands (review-units --dry-run, paths swapped)
+    suite: 8 units; smoke suite: 1 unit; the driver's default MAX_TURNS is 60
+    arms: none ("Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset
+    models: claude-opus-5-5 (anthropic); passes 2; sessions 2
+    max turns 100; session kind not set
+    worst case at the allowance: $14.08; spend cap $14.08
+PASS hr-smoke-opus: review-units --dry-run runs keyless (exit 0), 2 sessions, the none arm on claude-opus-5-5 with claude-code-preset, max turns 100, spend cap $14.08
+    timeout 3600 and --parallel 3 are accepted; the pin's dry run prints neither
+    arms: none ("Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset
+    models: claude-opus-5-5 (anthropic); passes 2; sessions 2
+    max turns 200; session kind not set
+    worst case at the allowance: $14.08; spend cap $14.08
+PASS hr-smoke-opus (frozen fallback): review-units --dry-run runs keyless (exit 0), 2 sessions, the none arm on claude-opus-5-5 with claude-code-preset, max turns 200, spend cap $14.08
+    timeout 5400 and --parallel 3 are accepted; the pin's dry run prints neither
+    arms: none ("Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset
+    models: claude-opus-5-5 (anthropic); passes 4; sessions 32
+    max turns 100; session kind not set
+    worst case at the allowance: $225.28; spend cap $225.28
+PASS hr-opus-none: review-units --dry-run runs keyless (exit 0), 32 sessions, the none arm on claude-opus-5-5 with claude-code-preset, max turns 100, spend cap $225.28
+    timeout 3600 and --parallel 3 are accepted; the pin's dry run prints neither
+    arms: none ("Review this plan for problems." on particle-ai/particle-1) system prompt claude-code-preset
+    models: particle-ai/particle-1 (openrouter); passes 4; sessions 32
+    max turns 100; session kind not set
+    worst case at the allowance: $19.20; spend cap $19.20
+PASS hr-particle-none: review-units --dry-run runs keyless (exit 0), 32 sessions, the none arm on particle-ai/particle-1 with claude-code-preset, max turns 100, spend cap $19.20
+    timeout 3600 and --parallel 3 are accepted; the pin's dry run prints neither
+PASS a resume with the run's own flags plus --resume --repair "<note>" and a lower --spend-cap passes the resume checks (exit 0, out marked resume)
+PASS a resume that changes --max-turns refuses with E_CACHE_STALE (exit 2), so a repair runs with the run's own flags
+
+## g. Ledger: every frozen item at its cap, one lease opened and settled per item
+A temporary approval record and local ledger under $OUT/ledger; the gstack-approvals mirror is a stub. Leases use the pinned entry points' own openLease calls (review-units: amount = --spend-cap, rig admission proof trial; judge-run: proof direct), with --admission warn. Each run item settles at its projected spend, each judge item at a third of the projected $26.00.
+PASS the run caps at their allowances leave the judges exactly the $36.40 floor ($294.96 - $14.08 - $225.28 - $19.20)
+PASS hr-smoke-opus recorded at $14.08
+PASS hr-smoke-opus: one lease opened (RIG_UNPROVEN) at $14.08 and settled at $3.40, the item bound to its run
+PASS hr-smoke-opus: a second run on the settled item refuses with E_ITEM_BOUND
+PASS hr-opus-none recorded at $225.28
+PASS hr-opus-none: one lease opened (RIG_UNPROVEN) at $225.28 and settled at $54.40, the item bound to its run
+PASS hr-opus-none: a second run on the settled item refuses with E_ITEM_BOUND
+PASS hr-particle-none recorded at $19.20
+PASS hr-particle-none: one lease opened (RIG_UNPROVEN) at $19.20 and settled at $4.48, the item bound to its run
+PASS hr-particle-none: a second run on the settled item refuses with E_ITEM_BOUND
+PASS hr-judge-sol recorded at $232.68 ($294.96 less $62.28 settled by every earlier item, rounded down to the cent, floor $36.40)
+PASS hr-judge-sol: one lease opened (RIG_UNPROVEN) at $232.68 and settled at $8.67, the item bound to its run
+PASS hr-judge-sol: a second run on the settled item refuses with E_ITEM_BOUND
+PASS hr-judge-opus recorded at $224.01 ($294.96 less $70.95 settled by every earlier item, rounded down to the cent, floor $36.40)
+PASS hr-judge-opus: one lease opened (RIG_UNPROVEN) at $224.01 and settled at $8.67, the item bound to its run
+PASS hr-judge-opus: a second run on the settled item refuses with E_ITEM_BOUND
+PASS hr-judge-sonnet recorded at $215.34 ($294.96 less $79.62 settled by every earlier item, rounded down to the cent, floor $36.40)
+PASS hr-judge-sonnet: one lease opened (RIG_UNPROVEN) at $215.34 and settled at $8.67, the item bound to its run
+PASS hr-judge-sonnet: a second run on the settled item refuses with E_ITEM_BOUND
+    settled in all: $88.29 of the $294.96 envelope
+
+## d. Rig steps: GAP repair, the smoke fallback read and the start rule (hr-stops.ts)
+    GAP repair on a temporary ledger: item hr-repair-demo recorded at $28.16 with --admission warn; 2 synthetic units x 2 passes, Opus at its default allowance $7.04, --parallel 1, --timeout 45; the scripted upstream fails every main-agent request of one session in the first run only
+PASS ledger init records the item at $28.16
+    run 1: 4 sessions bound, 4 main-agent requests; cells.ndjson holds 4 lines; the failed session records missing UPSTREAM (planScore gap); e0-readings reads SCORED, GAP, SCORED, SCORED; arm.json status stopped, coverage gaps 1, parse outcomes findings 3, incomplete 1; stops [E_COVERAGE_GAP]; lease settled at $0.99 ($0.01 spent, 1 unknown calls)
+PASS run 1: the upstream failure ends one session as a GAP with an upstream code, journaled (run.ts:409 skips only cap_stop), and the other 3 score; the GAP's unknown call keeps its full reservation in the item's settled spend
+PASS run 1: one lease at the full cap, settled at $0.99; the item is bound to the run
+PASS the frozen left-to-spend command reads $27.16 ($28.16 less $0.99 settled, rounded down to the cent)
+PASS run 2, --resume --repair with the GAP line still journaled: reruns nothing (0 sessions bound, 0 requests), cells.ndjson unchanged, the GAP stands (arm.json status stopped, coverage gaps 1, parse outcomes findings 3, incomplete 1), lease settled at $0.00
+PASS the frozen move takes exactly the GAP cell's line into repairs/ and prints its sha256 and termination (termination missing UPSTREAM)
+PASS the move refuses a cell with no line in cells.ndjson (exit 1)
+PASS the move refuses a second repair of the same cell (exit 1)
+PASS the move refuses a cell with two lines (exit 1)
+PASS run 3, --resume --repair after the move at --spend-cap $27.16: exactly the GAP cell reruns (1 session bound, the GAP cell yes), though its session dir exists (run.ts removes it before the session)
+PASS run 3: cells.ndjson ends with 4 lines: the 3 other lines byte-identical and in order, then one entry for the GAP cell with planScore findings; e0-readings reads SCORED, SCORED, SCORED, SCORED
+    arm.json after the repair: status complete, coverage gaps 0, parse outcomes findings 4; stops []
+PASS run 3: arm.json is rewritten from the journal with no coverage gap
+PASS the meter journal: one file appended across the 3 runs (2 leases name calls in it), and each close's reconcile re-settles the earlier leases' calls with 0 refusals
+PASS ledger after the repair: 3 leases on one run_id, settled at $1.00 in all, none open
+PASS a lease one cent above what is left ($27.17) refuses with CAP_STOP
+PASS a lease for another run_id refuses with E_ITEM_BOUND (a repair resumes the run's own --out, whose run.json keeps the run_id)
+PASS ledger init records hr-repair-short at $14.08
+    a repair that cannot start: a run's first lease settled at $7.10 of $14.08 (booked directly), over a copy of run 1's out dir; what is left reads $6.98, under one Opus session's allowance
+PASS with the GAP line still journaled, a resume at $6.98 reruns nothing and starts no round, so no CAP_STOP (stops [E_COVERAGE_GAP]); the GAP stands
+PASS moving the line anyway: the round does not start (stops [CAP_STOP], 0 sessions), arm.json reads status stopped, coverage gaps 0, parse outcomes findings 3, not_run 1, and e0-readings reads the cell CAP instead of GAP
+PASS putting the line back and resuming once more reruns nothing and rewrites arm.json (status stopped, coverage gaps 1, parse outcomes findings 3, incomplete 1); e0-readings reads the GAP again
+    smoke-scored: pass 1: termination completed -; error_max_turns no; turns 1; cost $0.0043; wall 1s
+    smoke-scored: pass 2: termination completed -; error_max_turns no; turns 1; cost $0.0043; wall 1s
+    smoke-scored: sessions 2; fallback no
+PASS smoke-scored: the frozen smoke read prints both sessions and fallback no
+    smoke-turncap: pass 2: termination completed -; error_max_turns yes; turns 3; cost $0.0086; wall 1s
+    smoke-turncap: pass 1: termination completed -; error_max_turns yes; turns 3; cost $0.0086; wall 1s
+    smoke-turncap: sessions 2; fallback yes
+PASS smoke-turncap: the frozen smoke read prints both sessions and fallback yes
+    smoke-timeout: pass 1: termination timeout -; error_max_turns no; turns None; cost $0.0000; wall 22s
+    smoke-timeout: pass 2: termination timeout -; error_max_turns no; turns None; cost $0.0000; wall 22s
+    smoke-timeout: sessions 2; fallback yes
+PASS smoke-timeout: the frozen smoke read prints both sessions and fallback yes
+PASS Opus's default session allowance at the pin is $7.04 (hr-opus-none and hr-smoke-opus pass no --allowance)
+PASS hr-opus-none: cap $225.28, every session at $7.04, --parallel 3: 32 of 32 sessions, spent $225.28, stops []; e0-readings reads 0 sessions CAP
+PASS hr-opus-none less one cent: cap $225.27, every session at $7.04, --parallel 3: 30 of 32 sessions, spent $211.20, stops [CAP_STOP]; e0-readings reads 2 sessions CAP
+PASS hr-particle-none: cap $19.20, every session at $0.60, --parallel 3: 32 of 32 sessions, spent $19.20, stops []; e0-readings reads 0 sessions CAP
+PASS hr-particle-none less one cent: cap $19.19, every session at $0.60, --parallel 3: 30 of 32 sessions, spent $18.00, stops [CAP_STOP]; e0-readings reads 2 sessions CAP
+PASS hr-smoke-opus: cap $14.08, every session at $7.04, --parallel 3: 2 of 2 sessions, spent $14.08, stops []; e0-readings reads 0 sessions CAP
+PASS hr-smoke-opus less one cent: cap $14.07, every session at $7.04, --parallel 3: 0 of 2 sessions, spent $0.00, stops [CAP_STOP]; e0-readings reads 2 sessions CAP
+PASS hr-stops.ts ran as its own process (exit 0)
+
+## Leak check
+PASS the transcript prints no unit id, unit label, case id or home path (0 found)
+
+PASS 58, FAIL 0

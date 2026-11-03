@@ -1,0 +1,253 @@
+#!/usr/bin/env bun
+// hr-stops.ts: the headroom dry run's rig steps (GEVA-238), run as its own process as E0's e0-stops.ts was. Keyless.
+// repair: the frozen GAP repair through runReviewUnits at the pin, the real pinned SDK and Claude Code binary, and the
+//   real MeteringProxy over a scripted upstream, spending through a temporary ledger with one lease per review-units
+//   invocation, as dockerRig opens it (run-host.ts:533, amount = --spend-cap) and closes it (run-host.ts:564).
+// smoke: the frozen smoke fallback read over three small smoke runs (scored, turn cap, timeout).
+// starts: the start rule at the headroom caps through the real run loop (real driver over a fake SDK query; finalize
+//   returns the chosen spend), as e0-stops.ts did.
+// Prints one JSON line per check ({kind:"check"}) or note ({kind:"say"}), counts and digests only.
+//   bun hr-stops.ts <scorer> <suite.json> <plans.git> <scratch> [all|repair|smoke|starts]
+import { createHash } from "node:crypto";
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+const [scorer, suitePath, source, root] = process.argv.slice(2) as [string, string, string, string];
+const mode = process.argv[6] ?? "all";
+rmSync(root, { recursive: true, force: true });
+mkdirSync(join(root, "tmp"), { recursive: true });
+process.env.TMPDIR = join(root, "tmp");
+const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) as Record<string, string>;
+const imp = (p: string) => import(join(scorer, p));
+const { DEFAULT_POLICY, loadPolicy } = await imp("src/skill-eval/cli/policy.ts");
+const { PLAN_SEVERITY_MAP } = await imp("src/trial/review/plan.ts");
+const { runReviewUnits, readReviewJournal, planScore, reviewCellId } = await imp("src/trial/review/run.ts");
+const { buildUnitRepo, buildUnitTree, unitTaskId } = await imp("src/trial/review/unit.ts");
+const { harness, localSandbox, messagesResponse, KEYS } = await imp("tests/adapters/harness.ts");
+const { claudeCodeDriver } = await imp("src/adapters/claude-code/driver.ts");
+const { MeteringProxy } = await imp("src/runner/proxy/metering-proxy.ts");
+const { recoverRun } = await imp("src/trial/proxy.ts");
+const { openLease, settleLease, ledgerStatus } = await imp("src/runner/ledger/ledger.ts");
+const { openLocalLedger } = await imp("src/runner/ledger/local.ts");
+const { ledgerPath } = await imp("src/runner/ledger/paths.ts");
+const { rigAdmission } = await imp("src/rig/admission.ts");
+const { newRunId } = await imp("src/skill-eval/cli/call.ts");
+const { allowanceMicros, SESSION_ALLOWANCE } = await imp("src/skill-eval/cli/dry-run.ts");
+const R = await import(join(import.meta.dir, "e0-readings.ts"));
+const mods = await R.loadMods(scorer);
+const suite = JSON.parse(readFileSync(suitePath, "utf8"));
+const policy = loadPolicy(DEFAULT_POLICY);
+const emit = (o: any) => console.log(JSON.stringify(o));
+const check = (label: string, ok: boolean) => emit({ kind: "check", label, ok });
+const say = (text: string) => emit({ kind: "say", text });
+const scratch = (n: string) => mkdtempSync(join(root, n));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const usd = (m: number) => "$" + (m / 1e6).toFixed(2);
+const cent = (m: number) => Math.floor(m / 10_000) * 10_000;
+const prep = (u: any) => {
+  const unit = { id: u.id, repo: u.repo, pr: u.pr, head: u.head, base: u.base };
+  const repo = buildUnitRepo({ unit, source, dest: join(scratch("unit-"), "repo"), baseBranch: "main" });
+  const tree = buildUnitTree({ repo, task: unitTaskId(unit), dest: join(scratch("tree-"), "tree"), image: "unused", test: null, install: null, scratch: scratch("build-"), run: () => { throw new Error("a plan unit runs no step"); } });
+  return { unit, task: unitTaskId(unit), base_branch: "main", merge_base: repo.merge_base, tree: tree.dir, tree_sha256: tree.tree_sha256, instructions: repo.instructions, check: null };
+};
+const FENCE = "\x60\x60\x60plan-findings\n" + JSON.stringify([{ severity: "High", section: "Summary", line: 1, claim: "A synthetic claim about the plan.", evidence: "plan.md", fix: "A synthetic fix." }]) + "\n\x60\x60\x60";
+const text = (t: string) => [{ type: "text", text: t }];
+let tu = 0;
+const tool = () => [{ type: "tool_use", id: "toolu_hr" + ++tu, name: "Bash", input: { command: "true", description: "noop" } }];
+const arms = { none: { tree_sha256: "none-tree", skill: null, gstack: null, plugins: [] } };
+const inputOf = (o: any) => ({ host: "claude", suite: { id: suite.id, sha256: null }, units: o.units, arms: [{ name: "none", told: "none", systemPrompt: "claude-code-preset" }], models: [o.model ?? "claude-opus-5-5"], passes: o.passes, parallel: o.parallel, timeoutS: o.timeoutS ?? 120, cap: o.cap, ...(o.allowance ? { allowanceMicros: o.allowance } : {}), runId: o.runId, out: o.out, date: "2026-11-03", policy, keyBase: { image_digest: null, recipe: "hr-dryrun", host_version: null, adapter_sha256: "hr-dryrun", isolation: "process" }, journal: o.journal ?? null, reuse: o.reuse ?? new Map(), repair: o.repair ?? false, plan: { lens: "ceo" }, severityMap: { none: PLAN_SEVERITY_MAP }, ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), env: {} });
+const A = (out: string) => { const d = join(out, "arms"); const id = existsSync(d) ? readdirSync(d)[0] : undefined; return id ? JSON.parse(readFileSync(join(d, id, "arm.json"), "utf8")) : null; };
+const armLine = (a: any) => "status " + a?.status + ", coverage gaps " + (a?.coverage_gaps?.length ?? 0) + ", parse outcomes " + Object.entries(a?.parse_outcomes ?? {}).filter(([, v]) => v).map(([k, v]) => k + " " + v).join(", ");
+
+async function runOne(o: any, script: any) {
+  const h = harness(script);
+  try {
+    const rig = { baseUrl: h.baseUrl, network: null, imageDigest: null, bind: async (req: any) => h.proxy.bind(req), finalize: async (m: string) => { const f = await h.proxy.finalize(m); return o.micros === undefined ? f : { ...f, micros: o.micros }; }, arms, sandbox: () => localSandbox(() => {}), judgeSandbox: () => localSandbox(() => {}), egress: () => ({ open: false, detail: "dry run rig" }), close: async () => ({ committed: 0, unknown: 0, lease_id: null }), recovery: null, ...(o.driver ? { driver: o.driver } : {}) };
+    return await runReviewUnits(inputOf({ runId: "hr-" + o.name, out: join(root, "run-" + o.name), cap: o.cap ?? 50_000_000, ...o }), rig);
+  } finally {
+    h.proxy.stop();
+  }
+}
+
+// The frozen repair move: one cell's line from <out>/cells.ndjson into <out>/repairs/<cell digest>.ndjson, once per cell.
+export const MOVE = `python3 -c 'import sys,os,json,hashlib;o,c=sys.argv[1],json.loads(sys.argv[2]);p=o+"/cells.ndjson";L=open(p).read().splitlines(True);h=[l for l in L if l.strip() and [json.loads(l)["cell"][k] for k in ("model","arm","unit","pass")]==c];f=o+"/repairs/"+hashlib.sha256(json.dumps(c).encode()).hexdigest()[:16]+".ndjson";len(h)==1 or sys.exit("E_USAGE repair: the cell has %d lines in cells.ndjson, not 1"%len(h));os.path.exists(f) and sys.exit("E_USAGE repair: this cell was repaired once already");os.makedirs(o+"/repairs",exist_ok=True);open(f,"x").write(h[0]);open(p+".tmp","w").writelines(l for l in L if l is not h[0]);os.replace(p+".tmp",p);t=json.loads(h[0])["record"]["termination"];print("moved",hashlib.sha256(h[0].encode()).hexdigest(),"termination",t["kind"],t.get("code") or "-")' "$OUT" "$CELL"`;
+// The frozen spend cap for a repair: the item's cap less its settled spend, rounded down to the cent.
+export const LEFT = `$G ledger status --item "$ITEM" --json | python3 -c 'import sys,json;s=[i for i in json.load(sys.stdin)["items"] if i["item"]==sys.argv[1]];len(s)==1 or sys.exit("E_USAGE repair: no single ledger item "+sys.argv[1]);s=s[0];s["open_lease"] and sys.exit("E_USAGE repair: a lease is open on the item");print("%.2f"%((s["cap_micros"]-s["committed_micros"])//10000/100))' "$ITEM"`;
+// The frozen smoke fallback read.
+export const SMOKE = `python3 -c 'import sys,json,glob;o=sys.argv[1];E=[json.loads(l) for l in open(o+"/cells.ndjson") if l.strip()];R=lambda e:([m for f in glob.glob(o+"/runs/*/none/*/p%d/host/transcript.ndjson"%e["cell"]["pass"])[:1] for l in open(f) if l.strip() for m in [json.loads(l)] if m.get("type")=="result" and not m.get("parent_tool_use_id")] or [{}])[-1];S=[(e["cell"]["pass"],e["record"]["termination"]["kind"],e["record"]["termination"].get("code") or "-",R(e).get("subtype")=="error_max_turns",R(e).get("num_turns"),e["record"].get("cost_micros") or 0,e["record"].get("wall_ms") or 0) for e in E];[print("pass %d: termination %s %s; error_max_turns %s; turns %s; cost $%.4f; wall %ds"%(p,k,c,"yes" if x else "no",n,m/1e6,w//1000)) for p,k,c,x,n,m,w in S];print("sessions %d; fallback %s"%(len(S),"yes" if any(x or k in ("timeout","turn_cap") for p,k,c,x,n,m,w in S) else "no"))' "$OUT"`;
+const sh = (cmd: string, env: Record<string, string>) => spawnSync("bash", ["-c", cmd], { encoding: "utf8", env: { ...KEYLESS, ...env } });
+
+if (mode === "all" || mode === "repair") {
+  const LD = join(root, "ledger");
+  mkdirSync(LD);
+  const REC = join(LD, "record");
+  writeFileSync(join(LD, "approvals-stub"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const LENV = { GSTACK_EVALS_LEDGER_RECORD: REC, GSTACK_EVALS_LEDGER: join(LD, "local.sqlite"), GSTACK_EVALS_APPROVALS_BIN: join(LD, "approvals-stub") };
+  const G = join(scorer, "bin/gstack-evals");
+  const local = openLocalLedger(ledgerPath(undefined, { ...KEYLESS, ...LENV }));
+  const init = (item: string, cap: string) => spawnSync(G, ["ledger", "init", "--item", item, "--cap", cap, "--admission", "warn", "--words", "dry run only", "--by", "hr-stops.ts", "--source", "HR keyless dry run"], { encoding: "utf8", cwd: scorer, env: { ...KEYLESS, ...LENV } }).status;
+  const left = (item: string) => { const r = sh(LEFT, { ...LENV, G, ITEM: item }); return { code: r.status, cap: r.stdout.trim(), err: r.stderr.trim().split("\n")[0] ?? "" }; };
+  const codeOf = (f: () => unknown) => { try { f(); return "opened"; } catch (e: any) { return e?.code ?? String(e).split(" ")[0]; } };
+  const units = suite.units.slice(0, 2).map(prep);
+  const gapCell = { model: "claude-opus-5-5", arm: "none", unit: units[0].unit.id, pass: 2 };
+  const gapId = reviewCellId(gapCell);
+  let sock = 0, phase = 1;
+  // One review-units invocation as the CLI makes it on --resume: the run's own flags and run_id (cli.ts:387), the journal
+  // reused (cli.ts:395 reuse: readReviewJournal(out), repair: --repair given), a lease at --spend-cap, a proxy appending to
+  // <out>/proxy/journal.ndjson, and the close that reconciles that journal and settles the lease.
+  const invoke = async (item: string, out: string, runId: string, capMicros: number, resume: boolean) => {
+    const lease = openLease(REC, local, { item, run_id: runId, amount_micros: capMicros, requireAdmission: rigAdmission({ proof: "trial" }), warn: () => {} });
+    mkdirSync(join(out, "proxy"), { recursive: true });
+    const journal = join(out, "proxy", "journal.ndjson");
+    let current: any = null, main = 0;
+    const bound: string[] = [];
+    const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(root, "m" + ++sock + ".sock"), managementToken: "management-token-0123456789abcdef", journal, retry: { attempts: 1, elapsed_ms: 10_000 }, env: KEYS, fetch: async (url: string, init: any) => {
+      const body = JSON.parse(String(init.body ?? "{}"));
+      if (!new URL(url).pathname.endsWith("/v1/messages")) return Response.json({ data: [] });
+      if (!(body.tools ?? []).some((t: any) => t.name === "Bash")) return messagesResponse(body, text("ok"));
+      main++;
+      if (phase === 1 && current?.task === units[0].task && current?.trial === 2) throw new Error("synthetic upstream failure");
+      return messagesResponse(body, text(FENCE));
+    } });
+    proxy.start();
+    const rig = { baseUrl: "http://127.0.0.1:" + proxy.port, network: null, imageDigest: null, bind: async (req: any) => { current = req.cell; bound.push(JSON.stringify([req.cell.task, req.cell.trial])); return proxy.bind(req); }, finalize: (m: string) => proxy.finalize(m), arms, sandbox: () => localSandbox(() => {}), judgeSandbox: () => localSandbox(() => {}), egress: () => ({ open: false, detail: "dry run rig" }), close: async () => ({ committed: 0, unknown: 0, lease_id: null }), recovery: null };
+    let run: any, rec: any;
+    try {
+      run = await runReviewUnits(inputOf({ units, passes: 2, parallel: 1, timeoutS: 45, cap: capMicros, runId, out, journal, reuse: resume ? readReviewJournal(out) : new Map(), repair: resume }), rig);
+    } finally {
+      rec = await recoverRun({ stopProxy: () => proxy.stop(), journal, ledger: local, settle: () => settleLease(REC, local, lease.lease_id) });
+    }
+    return { run, bound, main, settled: rec.settled.spent_micros + rec.settled.unknown_micros, spent: rec.settled.spent_micros, unknown: rec.settled.unknown_calls, refused: rec.reconciled.refused.length, lease: lease.lease_id };
+  };
+  const lines = (out: string) => readFileSync(join(out, "cells.ndjson"), "utf8").split("\n").filter((l) => l.trim());
+  const idOf = (l: string) => reviewCellId(JSON.parse(l).cell);
+  const cls = (out: string) => R.readArm(out, { units: units.map((p: any) => suite.units.find((u: any) => u.id === p.unit.id)) }, 2, mods).sessions;
+  const ITEM = "hr-repair-demo", CAP = 28_160_000, OUT = join(root, "repair", "run"), runId = newRunId("review-units");
+  say("GAP repair on a temporary ledger: item " + ITEM + " recorded at " + usd(CAP) + " with --admission warn; 2 synthetic units x 2 passes, Opus at its default allowance " + usd(allowanceMicros({ policy }, "claude-opus-5-5", SESSION_ALLOWANCE)) + ", --parallel 1, --timeout 45; the scripted upstream fails every main-agent request of one session in the first run only");
+  check("ledger init records the item at " + usd(CAP), init(ITEM, (CAP / 1e6).toFixed(2)) === 0);
+  const r1 = await invoke(ITEM, OUT, runId, CAP, false);
+  const L1 = lines(OUT), gapLine = L1.find((l) => idOf(l) === gapId) ?? "";
+  const t1 = gapLine ? JSON.parse(gapLine).record.termination : null;
+  const s1 = cls(OUT);
+  say("run 1: " + r1.bound.length + " sessions bound, " + r1.main + " main-agent requests; cells.ndjson holds " + L1.length + " lines; the failed session records " + (t1 ? t1.kind + " " + (t1.code ?? "-") : "absent") + " (planScore " + (gapLine ? planScore(JSON.parse(gapLine)) : "absent") + "); e0-readings reads " + s1.map((s: any) => s.cls).join(", ") + "; arm.json " + armLine(A(OUT)) + "; stops [" + r1.run.stops.map((s: any) => s.code).join(", ") + "]; lease settled at " + usd(r1.settled) + " (" + usd(r1.spent) + " spent, " + r1.unknown + " unknown calls)");
+  check("run 1: the upstream failure ends one session as a GAP with an upstream code, journaled (run.ts:409 skips only cap_stop), and the other 3 score; the GAP's unknown call keeps its full reservation in the item's settled spend", !!t1 && t1.kind === "missing" && /UPSTREAM|INFRA/.test(t1.code ?? "") && L1.length === 4 && s1.filter((s: any) => s.cls === "GAP").length === 1 && s1.filter((s: any) => s.cls === "SCORED").length === 3);
+  const st1 = ledgerStatus(REC, ITEM)[0];
+  check("run 1: one lease at the full cap, settled at " + usd(st1.committed_micros) + "; the item is bound to the run", st1.run_id === runId && !st1.open_lease && st1.leases === 1 && st1.committed_micros === r1.settled);
+  const SHORT = join(root, "repair", "short");
+  cpSync(OUT, SHORT, { recursive: true });
+  const l2 = left(ITEM);
+  check("the frozen left-to-spend command reads $" + l2.cap + " (" + usd(CAP) + " less " + usd(st1.committed_micros) + " settled, rounded down to the cent)", l2.code === 0 && Math.round(Number(l2.cap) * 1e6) === cent(CAP - st1.committed_micros));
+  const r2 = await invoke(ITEM, OUT, runId, Math.round(Number(l2.cap) * 1e6), true);
+  const L2 = lines(OUT);
+  check("run 2, --resume --repair with the GAP line still journaled: reruns nothing (" + r2.bound.length + " sessions bound, " + r2.main + " requests), cells.ndjson unchanged, the GAP stands (arm.json " + armLine(A(OUT)) + "), lease settled at " + usd(r2.settled), r2.bound.length === 0 && r2.main === 0 && L2.join("\n") === L1.join("\n") && cls(OUT).filter((s: any) => s.cls === "GAP").length === 1 && r2.settled === 0);
+  const mv = (out: string, cell: any) => sh(MOVE, { OUT: out, CELL: JSON.stringify([cell.model, cell.arm, cell.unit, cell.pass]) });
+  const m1 = mv(OUT, gapCell);
+  const rf = existsSync(join(OUT, "repairs")) ? readdirSync(join(OUT, "repairs")) : [];
+  const moved = rf.length === 1 ? readFileSync(join(OUT, "repairs", rf[0]!), "utf8") : "";
+  check("the frozen move takes exactly the GAP cell's line into repairs/ and prints its sha256 and termination (" + m1.stdout.trim().split(" ").slice(2).join(" ") + ")", m1.status === 0 && moved === gapLine + "\n" && m1.stdout.trim() === "moved " + sha(gapLine + "\n") + " termination " + t1?.kind + " " + (t1?.code ?? "-") && lines(OUT).length === 3 && !lines(OUT).includes(gapLine));
+  const again = mv(OUT, gapCell);
+  check("the move refuses a cell with no line in cells.ndjson (exit " + again.status + ")", again.status !== 0 && /has 0 lines/.test(again.stderr));
+  const D2 = join(root, "repair", "twice");
+  cpSync(OUT, D2, { recursive: true });
+  appendFileSync(join(D2, "cells.ndjson"), gapLine + "\n");
+  const tw = mv(D2, gapCell);
+  check("the move refuses a second repair of the same cell (exit " + tw.status + ")", tw.status !== 0 && /repaired once already/.test(tw.stderr) && lines(D2).length === 4);
+  const D3 = join(root, "repair", "dup");
+  cpSync(SHORT, D3, { recursive: true });
+  const other = L1.find((l) => idOf(l) !== gapId)!;
+  appendFileSync(join(D3, "cells.ndjson"), other + "\n");
+  const dp = mv(D3, JSON.parse(other).cell);
+  check("the move refuses a cell with two lines (exit " + dp.status + ")", dp.status !== 0 && /has 2 lines/.test(dp.stderr) && !existsSync(join(D3, "repairs")));
+  phase = 2;
+  const l3 = left(ITEM);
+  const r3 = await invoke(ITEM, OUT, runId, Math.round(Number(l3.cap) * 1e6), true);
+  const L3 = lines(OUT), s3 = cls(OUT);
+  const last = L3.at(-1) ? JSON.parse(L3.at(-1)!) : null;
+  check("run 3, --resume --repair after the move at --spend-cap $" + l3.cap + ": exactly the GAP cell reruns (" + r3.bound.length + " session bound, the GAP cell " + (r3.bound[0] === JSON.stringify([units[0].task, 2]) ? "yes" : "no") + "), though its session dir exists (run.ts removes it before the session)", r3.bound.length === 1 && r3.bound[0] === JSON.stringify([units[0].task, 2]));
+  check("run 3: cells.ndjson ends with " + L3.length + " lines: the 3 other lines byte-identical and in order, then one entry for the GAP cell with planScore " + (last ? planScore(last) : "absent") + "; e0-readings reads " + s3.map((s: any) => s.cls).join(", "), L3.length === 4 && L3.slice(0, 3).join("\n") === L1.filter((l) => l !== gapLine).join("\n") && idOf(L3[3]!) === gapId && planScore(last) !== "gap" && s3.every((s: any) => s.cls === "SCORED"));
+  const a3 = A(OUT);
+  say("arm.json after the repair: " + armLine(a3) + "; stops [" + r3.run.stops.map((s: any) => s.code).join(", ") + "]");
+  check("run 3: arm.json is rewritten from the journal with no coverage gap", (a3?.coverage_gaps?.length ?? 0) === 0 && a3?.status !== "stopped");
+  const pj = readFileSync(join(OUT, "proxy", "journal.ndjson"), "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+  const nl = new Set(pj.map((e: any) => e.lease_id).filter(Boolean)).size;
+  check("the meter journal: one file appended across the 3 runs (" + nl + " leases name calls in it), and each close's reconcile re-settles the earlier leases' calls with " + (r1.refused + r2.refused + r3.refused) + " refusals", nl >= 2 && r1.refused + r2.refused + r3.refused === 0);
+  const st3 = ledgerStatus(REC, ITEM)[0];
+  check("ledger after the repair: 3 leases on one run_id, settled at " + usd(st3.committed_micros) + " in all, none open", st3.leases === 3 && st3.run_id === runId && !st3.open_lease && st3.committed_micros === r1.settled + r2.settled + r3.settled);
+  const l4 = Math.round(Number(left(ITEM).cap) * 1e6);
+  const over = codeOf(() => openLease(REC, local, { item: ITEM, run_id: runId, amount_micros: l4 + 10_000, requireAdmission: rigAdmission({ proof: "trial" }), warn: () => {} }));
+  check("a lease one cent above what is left (" + usd(l4 + 10_000) + ") refuses with " + over, over === "CAP_STOP");
+  const bnd = codeOf(() => openLease(REC, local, { item: ITEM, run_id: newRunId("review-units"), amount_micros: l4, requireAdmission: rigAdmission({ proof: "trial" }), warn: () => {} }));
+  check("a lease for another run_id refuses with " + bnd + " (a repair resumes the run's own --out, whose run.json keeps the run_id)", bnd === "E_ITEM_BOUND");
+  const SITEM = "hr-repair-short", SCAP = 14_080_000, sid = newRunId("review-units");
+  check("ledger init records " + SITEM + " at " + usd(SCAP), init(SITEM, (SCAP / 1e6).toFixed(2)) === 0);
+  const sl = openLease(REC, local, { item: SITEM, run_id: sid, amount_micros: SCAP, requireAdmission: rigAdmission({ proof: "trial" }), warn: () => {} });
+  const rv = await local.reserve({ idempotency_key: "short-1", lease_id: sl.lease_id, cell: { run_id: sid, arm: "none", task: "synthetic", model: "claude-opus-5-5", trial: 1, attempt: 1, meter_id: "short-1" }, max_micros: 7_100_000 });
+  await local.settle(rv.reservation.reservation_id, { kind: "spent", spent_micros: 7_100_000, usage: { input: 1000, output: 100, reasoning: 0, cache_read: 0, cache_write: 0 } });
+  settleLease(REC, local, sl.lease_id);
+  const ls = left(SITEM);
+  say("a repair that cannot start: a run's first lease settled at $7.10 of " + usd(SCAP) + " (booked directly), over a copy of run 1's out dir; what is left reads $" + ls.cap + ", under one Opus session's allowance");
+  const rs = await invoke(SITEM, SHORT, sid, Math.round(Number(ls.cap) * 1e6), true);
+  check("with the GAP line still journaled, a resume at $" + ls.cap + " reruns nothing and starts no round, so no CAP_STOP (stops [" + rs.run.stops.map((s: any) => s.code).join(", ") + "]); the GAP stands", rs.bound.length === 0 && !rs.run.stops.some((s: any) => s.code === "CAP_STOP") && cls(SHORT).filter((s: any) => s.cls === "GAP").length === 1);
+  mv(SHORT, gapCell);
+  const rs2 = await invoke(SITEM, SHORT, sid, Math.round(Number(left(SITEM).cap) * 1e6), true);
+  const ss = cls(SHORT);
+  check("moving the line anyway: the round does not start (stops [" + rs2.run.stops.map((s: any) => s.code).join(", ") + "], " + rs2.bound.length + " sessions), arm.json reads " + armLine(A(SHORT)) + ", and e0-readings reads the cell " + ss.filter((s: any) => s.cls !== "SCORED").map((s: any) => s.cls).join(", ") + " instead of GAP", rs2.bound.length === 0 && rs2.run.stops.some((s: any) => s.code === "CAP_STOP") && ss.filter((s: any) => s.cls === "CAP").length === 1);
+  const back = readdirSync(join(SHORT, "repairs"));
+  appendFileSync(join(SHORT, "cells.ndjson"), readFileSync(join(SHORT, "repairs", back[0]!), "utf8"));
+  rmSync(join(SHORT, "repairs"), { recursive: true });
+  const rs3 = await invoke(SITEM, SHORT, sid, Math.round(Number(left(SITEM).cap) * 1e6), true);
+  check("putting the line back and resuming once more reruns nothing and rewrites arm.json (" + armLine(A(SHORT)) + "); e0-readings reads the GAP again", rs3.bound.length === 0 && !rs3.run.stops.some((s: any) => s.code === "CAP_STOP") && cls(SHORT).filter((s: any) => s.cls === "GAP").length === 1 && (A(SHORT)?.coverage_gaps?.length ?? 0) === 1);
+}
+
+if (mode === "all" || mode === "smoke") {
+  const one = [prep(suite.units[0])];
+  const cases: Array<[string, any, any, string]> = [["smoke-scored", () => text(FENCE), {}, "no"], ["smoke-turncap", () => tool(), { maxTurns: 2 }, "yes"], ["smoke-timeout", () => sleep(60_000).then(() => text(FENCE)), { timeoutS: 20 }, "yes"]];
+  await Promise.all(cases.map(async ([name, script, o, want]) => {
+    try {
+      await runOne({ name, units: one, passes: 2, parallel: 3, ...o }, script);
+      const r = sh(SMOKE, { OUT: join(root, "run-" + name) });
+      for (const l of r.stdout.trim().split("\n")) say(name + ": " + l);
+      if (r.status !== 0) say(name + ": stderr " + r.stderr.trim().split("\n").at(-1));
+      check(name + ": the frozen smoke read prints both sessions and fallback " + want, r.status === 0 && /^sessions 2; fallback /m.test(r.stdout) && r.stdout.trim().endsWith("fallback " + want));
+    } catch (e) {
+      check(name + ": ran (" + String(e).split("\n")[0]!.slice(0, 200) + ")", false);
+    }
+  }));
+}
+
+if (mode === "all" || mode === "starts") {
+  const fakeQuery = (_: any) => {
+    async function* gen() {
+      yield { type: "system", subtype: "init", model: "fake", claude_code_version: "2.1.314", tools: [], skills: [], cwd: "", permissionMode: "default", apiKeySource: "none", session_id: "s" };
+      yield { type: "assistant", parent_tool_use_id: null, session_id: "s", message: { id: "m", type: "message", role: "assistant", model: "fake", content: [{ type: "text", text: FENCE }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } } };
+      yield { type: "result", subtype: "success", is_error: false, num_turns: 1, result: FENCE, session_id: "s", total_cost_usd: 0, usage: { input_tokens: 1, output_tokens: 1 }, duration_ms: 1, duration_api_ms: 1 };
+    }
+    const g: any = gen();
+    g.interrupt = async () => {};
+    g.close = () => {};
+    return g;
+  };
+  const eight = suite.units.slice(0, 8).map(prep);
+  const opusAllow = allowanceMicros({ policy }, "claude-opus-5-5", SESSION_ALLOWANCE);
+  check("Opus's default session allowance at the pin is " + usd(opusAllow) + " (hr-opus-none and hr-smoke-opus pass no --allowance)", opusAllow === 7_040_000);
+  const START: Array<[string, string, number | null, number, number, number, number, number]> = [
+    ["hr-opus-none", "claude-opus-5-5", null, 225_280_000, 7_040_000, 8, 4, 32], ["hr-opus-none less one cent", "claude-opus-5-5", null, 225_270_000, 7_040_000, 8, 4, 30],
+    ["hr-particle-none", "particle-ai/particle-1", 600_000, 19_200_000, 600_000, 8, 4, 32], ["hr-particle-none less one cent", "particle-ai/particle-1", 600_000, 19_190_000, 600_000, 8, 4, 30],
+    ["hr-smoke-opus", "claude-opus-5-5", null, 14_080_000, 7_040_000, 1, 2, 2], ["hr-smoke-opus less one cent", "claude-opus-5-5", null, 14_070_000, 7_040_000, 1, 2, 0],
+  ];
+  for (const [name, model, allowance, cap, micros, n, passes, want] of START) {
+    try {
+      const units = eight.slice(0, n);
+      const tag = name.replaceAll(" ", "-");
+      const run = await runOne({ name: tag, units, passes, parallel: 3, model, ...(allowance ? { allowance } : {}), cap, micros, driver: (o: any) => claudeCodeDriver({ ...o, query: fakeQuery }) }, () => text(FENCE));
+      const out = join(root, "run-" + tag);
+      const ran = existsSync(join(out, "cells.ndjson")) ? readReviewJournal(out).size : 0;
+      const caps = R.readArm(out, { units: units.map((p: any) => suite.units.find((u: any) => u.id === p.unit.id)) }, passes, mods).sessions.filter((s: any) => s.cls === "CAP").length;
+      check(name + ": cap " + usd(cap) + ", every session at " + usd(micros) + ", --parallel 3: " + ran + " of " + n * passes + " sessions, spent " + usd(run.spent) + ", stops [" + run.stops.map((s: any) => s.code).join(", ") + "]; e0-readings reads " + caps + " sessions CAP", ran === want && run.spent === want * micros && run.stops.some((s: any) => s.code === "CAP_STOP") === (want < n * passes) && caps === n * passes - want);
+    } catch (err) {
+      check(name + ": ran (" + String(err).split("\n")[0]!.slice(0, 300) + ")", false);
+    }
+  }
+}
+process.exit(0);

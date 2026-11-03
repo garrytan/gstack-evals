@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# hr-build-dry.sh <scorer> <scratch>: keyless dry run, step b, of the headroom prereg's build path (GEVA-238). Run it from a
+# folder holding gen-synth-hr.py, hr-convert.py, hr-build.sh and hr-custody.sh (the attachments with .txt removed) and
+# kit v3.1's check_units.py and echo-terms.txt. Drives: the synthetic slice and kit v3.1's checker (only exempt codes),
+# hr-build.sh (refuses a wrong bundle sha256; builds, and the suite loads), hr-convert.py's refusals on mutated copies,
+# the smoke mode, and hr-custody.sh build mode with a throwaway age identity (seal-line refusals before decryption, the
+# happy path through /dev/shm). Prints PASS and FAIL lines, counts and digests only, and a final PASS n, FAIL m line.
+set -uo pipefail
+umask 077
+S=$(realpath "$1"); O=$(realpath -m "$2"); H=$(cd "$(dirname "$0")" && pwd)
+rm -rf "$O" "$O.bases" "$O"/../sm.base 2>/dev/null; mkdir -p "$O"
+P=0; F=0
+ck() { if [ "$2" = 0 ]; then P=$((P+1)); echo "PASS $1"; else F=$((F+1)); echo "FAIL $1"; fi; }
+K() { env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY "$@"; }
+SL=$O/slice; K python3 "$H/gen-synth-hr.py" "$SL" 20261103 >/dev/null; ck "gen-synth-hr.py writes the slice" $?
+A=$(cd "$O" && K python3 "$H/gen-synth-hr.py" "$SL.x" 20261103 >/dev/null && diff -r -q -x .git "$SL" "$SL.x" >/dev/null && echo 0 || echo 1); rm -rf "$SL.x" "$SL.x.bases"; ck "gen-synth-hr.py repeats byte for byte under one seed" $A
+python3 "$H/check_units.py" "$SL/units" --wave calibration > "$O/chk.txt"
+CODES=$(grep '^PROBLEM' "$O/chk.txt" | awk '{print $3}' | sort | uniq -c | awk '{printf "%s %s; ", $2, $1}')
+BAD=$(grep '^PROBLEM' "$O/chk.txt" | grep -vE ' (context-size|src-files|src-size): | context-files: context/ and src/ hold ' | wc -l)
+echo "    check_units.py codes: $CODES"
+ck "kit v3.1 check_units.py reports only the exempt codes (context-size, src-files, src-size, and context-files for the 10 to 20 total only): $BAD other problems" $([ "$BAD" = 0 ] && echo 0 || echo 1)
+TAR=$O/slice.tar; tar -cf "$TAR" -C "$SL" .; TS=$(sha256sum "$TAR" | cut -c1-64)
+bash "$H/hr-build.sh" "$TAR" "$SL" "$O/run-wrong" "$S" "$(printf 0%.0s {1..64})" 2>"$O/e" >/dev/null; R=$?
+ck "hr-build.sh refuses a bundle whose sha256 is not the fifth argument (exit $R)" $([ $R = 2 ] && grep -q "E_USAGE hr-build: the bundle's sha256" "$O/e" && echo 0 || echo 1)
+bash "$H/hr-build.sh" "$TAR" "$SL" "$O/run-nosha" "$S" 2>"$O/e" >/dev/null; R=$?
+ck "hr-build.sh refuses without the bundle sha256 (exit $R)" $([ $R = 2 ] && echo 0 || echo 1)
+RUN=$O/run; bash "$H/hr-build.sh" "$TAR" "$SL" "$RUN" "$S" "$TS" 20261103 > "$O/b.out" 2>"$O/e"; R=$?
+grep -v sha256 "$O/b.out" | sed 's/^/    /'
+ck "hr-build.sh builds the synthetic slice, bound to its sha256, seeded (exit $R)" $R
+SR=$RUN/sealed-root
+cat > "$O/load.ts" <<'TS'
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+const [scorer, sr] = process.argv.slice(2);
+const { loadSuite } = await import(scorer + "/lanes/review-noloss/suite.ts");
+const sp = sr + "/suites/planrev-v3-hr.json", s = loadSuite(sp, { sealedRoot: sr }).suite, sh = createHash("sha256").update(readFileSync(sp)).digest("hex");
+const j = (f: string) => JSON.parse(readFileSync(sr + "/" + f, "utf8"));
+const k = j("hr-kinds.json"), p = j("hr-shapes.json"), t = j("hr-traces.json");
+const bl = s.units.flatMap((u: any) => u.blockers.map((b: any) => ({ u: u.id, b })));
+const HR: any = { ceo: "C-RC", eng: "E-RC", dx: "X-RC", design: "G-RC" };
+const keys = (o: any) => Object.keys(o).sort().join(",");
+const ok = [
+  s.units.length === 8 && bl.length === 31,
+  k.suite_sha256 === sh && p.suite_sha256 === sh && keys(k) === "blockers,suite,suite_sha256" && keys(p) === keys(k),
+  k.blockers.every((r: any) => keys(r) === "blocker,flagged,kind,role,stratum,unit") && p.blockers.every((r: any, i: number) => r.unit === k.blockers[i].unit && r.blocker === k.blockers[i].blocker),
+  k.blockers.filter((r: any) => r.role === "candidate").every((r: any) => r.kind === HR[r.stratum]) && k.blockers.filter((r: any) => r.role === "anchor").every((r: any) => /^A-[XFT]$/.test(r.kind)),
+  p.blockers.filter((r: any) => r.role === "candidate").every((r: any) => /^[CEXG]-/.test(r.kind) && !r.kind.endsWith("-RC")),
+  keys(t) === "blockers,schema" && t.schema === 1 && Object.keys(t.blockers).length === 23 && bl.filter((x: any) => t.blockers[x.b.case]).every((x: any) => t.blockers[x.b.case].unit === x.u && t.blockers[x.b.case].hops.at(-1) === t.blockers[x.b.case].terminal && t.blockers[x.b.case].hops.length >= 2),
+  k.blockers.filter((r: any) => r.flagged).length === 4,
+];
+console.log("units " + s.units.length + ", blockers " + bl.length + ", candidates " + k.blockers.filter((r: any) => r.role === "candidate").length + ", traced " + Object.keys(t.blockers).length + ", checks " + ok.map((x) => (x ? 1 : 0)).join(""));
+process.exit(ok.every(Boolean) ? 0 : 1);
+TS
+L=$(K bun "$O/load.ts" "$S" "$SR" 2>&1); R=$?; echo "    $L" | head -3
+ck "the suite loads with the sealed root (8 units, 31 blockers, 23 candidates); hr-kinds.json and hr-shapes.json keep e0-kinds.json's schema and name the suite sha256; candidates read C-RC, E-RC, X-RC, G-RC and their E0 shapes; hr-traces.json holds 23 traces keyed by case id; 4 flagged blockers" $R
+C=$(grep -l '"cause": "[^"]*Trace: from ' "$SR"/catalog/hr/*.json | wc -l); ck "each of the 23 candidate causes ends in its trace ($C)" $([ "$C" = 23 ] && echo 0 || echo 1)
+OPEN=$(find "$RUN" -perm /044 | wc -l); M=$(stat -c %a "$RUN"); ck "the run root is mode $M (700 wanted), $OPEN entries group- or world-readable" $([ "$M" = 700 ] && [ "$OPEN" = 0 ] && echo 0 || echo 1)
+bash -c 'umask 0277 && python3 "$0" "$1" "$2"' "$H/hr-convert.py" "$SL" "$O/run-umask" 2>"$O/e" >/dev/null; R=$?
+ck "hr-convert.py refuses a run dir it could not make mode 0700 and leaves none (exit $R)" $([ $R = 2 ] && grep -q "not 0700" "$O/e" && [ ! -e "$O/run-umask" ] && echo 0 || echo 1)
+N=0
+ref() {
+  N=$((N+1)); local d=$O/ref$N; cp -r "$SL" "$d"
+  (cd "$d" && python3 -c "$2") || { ck "mutation for: $1" 1; return; }
+  python3 "$H/hr-convert.py" "$d" "$d-run" ${4:-} 2>"$O/e" >/dev/null; local r=$?
+  ck "hr-convert.py refuses $1 (exit $r: $(head -c 150 "$O/e" | tr '\n' ' '))" $([ $r = 2 ] && grep -q "$3" "$O/e" && [ ! -e "$d-run" ] && echo 0 || echo 1)
+  rm -rf "$d"
+}
+PRE='import json,os,glob,subprocess
+m=json.load(open("manifest.json")); U=m["units"]
+def key(i): return json.load(open("units/%s/key.json"%U[i]["unit"]))
+def put(i,k): open("units/%s/key.json"%U[i]["unit"],"w").write(json.dumps(k))
+def tr(i,fn):
+    k=key(i); c=[x for x in k["items"] if "trace" in x][0]; fn(c["trace"]); put(i,k)
+    t=U[i]["traces"][c["id"]]; fn(t)
+    return c
+def save(): open("manifest.json","w").write(json.dumps(m))
+'
+ref "a pending seal" "$PRE"'m["seal_kind"]="pending"; save()' "not a final seal"
+ref "a wrong kit digest" "$PRE"'m["kit_digest"]="0"*64; save()' "kit_digest"
+ref "a key and manifest mismatch (item kind)" "$PRE"'k=key(3); k["items"][0]["item_kind"]="C-OM"; put(3,k)' "do not match the manifest"
+ref "a key and manifest mismatch (trace)" "$PRE"'k=key(3); [x for x in k["items"] if "trace" in x][0]["trace"]["origin"]="src/x.py"; put(3,k)' "do not match the manifest"
+ref "a row not in state final" "$PRE"'U[5]["state"]="draft"; save()' "state final"
+ref "a unit with kept false" "$PRE"'U[5]["kept"]=False; save()' "not kept"
+ref "a dry-run seed with a final slice" "$PRE"'m["seal_kind"]="final"; save()' "dry-run seed" 7
+ref "7 units" "$PRE"'U.pop(); save()' "not 8 kept units"
+ref "3 units in one stratum" "$PRE"'k=key(1); k["stratum"]="eng"; put(1,k); U[1]["stratum"]="eng"; save()' "not 8 kept units"
+ref "a unit missing one of its three E0 shapes" "$PRE"'k=key(0); i=k["items"][0]; i["item_kind"]=k["items"][1]["item_kind"]; put(0,k); U[0]["items"][i["id"]][0]=i["item_kind"]; save()' "three E0 shapes"
+ref "an anchor outside A-X, A-F and A-T" "$PRE"'k=key(0); i=k["items"][3]; i["item_kind"]="A-Q"; put(0,k); U[0]["items"][i["id"]][0]="A-Q"; save()' "three E0 shapes"
+ref "two context anchors in a stratum" "$PRE"'U[2]["anchor_type"]="context"; save()' "anchor rule"
+ref "a src anchor whose file plan.md does not name" "$PRE"'k=key(2); k["items"][3]["evidence"]=[{"path":"src/pkg11/mod15.py","what":"x"}]; put(2,k)' "anchor rule"
+ref "a GPL base" "$PRE"'m["bases"][0]["licence"]="GPL-3.0"; save()' "bases are not 4"
+ref "a base at a short commit" "$PRE"'m["bases"][1]["commit"]="abc123"; save()' "bases are not 4"
+ref "3 bases" "$PRE"'m["bases"].pop(); save()' "bases are not 4"
+ref "a base hosting eng and ceo" "$PRE"'U[0]["base"],U[4]["base"]=U[4]["base"],U[0]["base"]; save()' "bases are not 4"
+ref "a trace with 1 hop past the origin" "$PRE"'tr(0,lambda t: t["hops"].pop(0)); save()' "fewer than 2 hops"
+ref "a trace whose hop files are one file" "$PRE"'tr(0,lambda t: t["hops"][0].update(file=t["hops"][1]["file"])); save()' "distinct src/"
+ref "a trace with a hop outside src/" "$PRE"'tr(0,lambda t: t["hops"][0].update(file="context/doc1.txt")); save()' "distinct src/"
+ref "a trace with a missing hop file" "$PRE"'tr(0,lambda t: t["hops"][0].update(file="src/pkg03/gone.py")); save()' "missing from the unit tree"
+ref "a hop file plan.md names with src/" "$PRE"'c=tr(0,lambda t: None); f=c["trace"]["hops"][0]["file"]; open("units/%s/plan.md"%U[0]["unit"],"a").write("\nSee "+f+".\n")' "plan.md names"
+ref "a hop file plan.md names without src/" "$PRE"'c=tr(0,lambda t: None); f=c["trace"]["hops"][1]["file"][4:]; open("units/%s/plan.md"%U[0]["unit"],"a").write("\nSee "+f+".\n")' "plan.md names"
+ref "a terminal that is not the last hop's file" "$PRE"'tr(0,lambda t: t["terminal"].update(file=t["hops"][0]["file"])); save()' "not the last hop"
+ref "an added terminal file" "$PRE"'tr(0,lambda t: t["terminal"].update(upstream_path=None)); save()' "added terminal file"
+ref "a terminal identical to the upstream blob" "$PRE"'c=tr(0,lambda t: None); f=c["trace"]["terminal"]["file"]; b=U[0]["base"].split("/")[1]; cm=[x["commit"] for x in m["bases"] if x["repo"]==U[0]["base"]][0]
+open("units/%s/%s"%(U[0]["unit"],f),"wb").write(subprocess.run(["git","-C","../slice.bases/"+b,"show",cm+":"+f[4:]],capture_output=True,check=True).stdout)' "hash-object equals"
+ref "a unit over 491520 bytes" "$PRE"'open("units/%s/context/pad.md"%U[1]["unit"],"w").write("pad line\n"*20000)' "bytes outside 307200 to 491520 1, blobs outside 150 to 600 0, under 12 trees 0"
+ref "a unit under 307200 bytes" "$PRE"'[open(p,"w").write("x = 1\n") for p in glob.glob("units/%s/src/pkg1[01]/*.py"%U[1]["unit"])+glob.glob("units/%s/src/pkg09/*.py"%U[1]["unit"])+glob.glob("units/%s/src/pkg0[12]/*.py"%U[1]["unit"])]' "bytes outside 307200 to 491520 1, blobs outside 150 to 600 0, under 12 trees 0"
+ref "a unit over 600 blobs" "$PRE"'os.makedirs("units/%s/src/extra"%U[1]["unit"]); [open("units/%s/src/extra/f%d.txt"%(U[1]["unit"],n),"w").write("%d\n"%n) for n in range(420)]' "bytes outside 307200 to 491520 0, blobs outside 150 to 600 1, under 12 trees 0"
+ref "a unit under 150 blobs" "$PRE"'[os.remove(p) for q in ("01","02","09","10","11") for p in sorted(glob.glob("units/%s/src/pkg%s/*.py"%(U[1]["unit"],q)))[4:]]; open("units/%s/context/pad.md"%U[1]["unit"],"w").write("pad line\n"*11000)' "bytes outside 307200 to 491520 0, blobs outside 150 to 600 1, under 12 trees 0"
+ref "a unit under 12 trees" "$PRE"'import shutil; [shutil.rmtree("units/%s/src/pkg%s"%(U[1]["unit"],q)) for q in ("09","10","11")]; open("units/%s/context/pad.md"%U[1]["unit"],"w").write("pad line\n"*9000)' "bytes outside 307200 to 491520 0, blobs outside 150 to 600 0, under 12 trees 1"
+SM=$O/sm; K python3 "$H/gen-synth-hr.py" "$SM" 20261103 --smoke >/dev/null
+K python3 "$H/hr-convert.py" --smoke "$SM" "$O/run-smoke" "$S" > "$O/s.out" 2>"$O/e"; R=$?; grep -v sha256 "$O/s.out" | sed 's/^/    /'
+N2=$(python3 -c "import json;s=json.load(open('$O/run-smoke/sealed-root/suites/planrev-v3-hr-smoke.json'));print(len(s['units']),sum(len(u['blockers']) for u in s['units']))" 2>/dev/null)
+ck "hr-convert.py --smoke builds the smoke suite planrev-v3-hr-smoke ($N2 units and blockers) and the mirror clone (exit $R)" $([ $R = 0 ] && [ "$N2" = "1 1" ] && [ -d "$O/run-smoke/source/plans.git" ] && [ "$(stat -c %a "$O/run-smoke")" = 700 ] && echo 0 || echo 1)
+cp -r "$SM" "$O/sm2"; touch "$O/sm2/notes.md"; K python3 "$H/hr-convert.py" --smoke "$O/sm2" "$O/run-sm2" "$S" 2>"$O/e" >/dev/null; R=$?
+ck "hr-convert.py --smoke refuses an extra top-level file (exit $R)" $([ $R = 2 ] && grep -q "breaks the layout" "$O/e" && echo 0 || echo 1)
+cp -r "$SM" "$O/sm3"; printf 'pad line\n%.0s' $(seq 1 6000) > "$O/sm3/context/pad.md"; K python3 "$H/hr-convert.py" --smoke "$O/sm3" "$O/run-sm3" "$S" 2>"$O/e" >/dev/null; R=$?
+ck "hr-convert.py --smoke refuses a unit over 491520 bytes (exit $R)" $([ $R = 2 ] && grep -q "size range" "$O/e" && [ ! -e "$O/run-sm3" ] && echo 0 || echo 1)
+ID=$O/age-identity.txt; ENC=$O/slice.tar.age; CL=$O/CUSTODY.md
+age-keygen -o "$ID" 2>/dev/null; age -r "$(age-keygen -y "$ID")" -o "$ENC" "$TAR"; ES=$(sha256sum "$ENC" | cut -c1-64)
+shm() { ls /dev/shm | grep -c '^e0-slice\.'; }; B0=$(shm)
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+cus() { E0_MACHINE=dry-run-machine K bash "$H/hr-custody.sh" "$ENC" "$ID" "$1" "$S" "$CL" "$ES" > "$O/c.out" 2>"$O/e"; }
+: > "$CL"; cus "$O/rc0"; R=$?
+ck "hr-custody.sh build refuses with zero seal lines, before it decrypts (exit $R; log lines $(wc -l < "$CL"), $(( $(shm) - B0 )) extractions)" $([ $R = 2 ] && grep -q "holds 0 seal lines" "$O/e" && [ ! -s "$CL" ] && [ "$(shm)" = "$B0" ] && [ ! -e "$O/rc0" ] && echo 0 || echo 1)
+printf '%s seal bundle %s\n%s seal bundle %s again\n' "$(now)" "$ES" "$(now)" "$ES" > "$CL"; cus "$O/rc2"; R=$?
+ck "hr-custody.sh build refuses with two seal lines for the bundle, before it decrypts (exit $R)" $([ $R = 2 ] && grep -q "holds 2 seal lines" "$O/e" && [ "$(wc -l < "$CL")" = 2 ] && [ "$(shm)" = "$B0" ] && [ ! -e "$O/rc2" ] && echo 0 || echo 1)
+printf '%s seal bundle %s\n' "$(now)" "$TS" > "$CL"; cus "$O/rco"; R=$?
+ck "hr-custody.sh build refuses with one seal line for another sha256, before it decrypts (exit $R)" $([ $R = 2 ] && grep -q "holds 0 seal lines" "$O/e" && [ "$(wc -l < "$CL")" = 1 ] && [ "$(shm)" = "$B0" ] && echo 0 || echo 1)
+printf '%s seal bundle %s\n' "$(now)" "$ES" > "$CL"
+E0_MACHINE=dry-run-machine K bash "$H/hr-custody.sh" "$ENC" "$ID" "$O/rcw" "$S" "$CL" "$TS" >/dev/null 2>"$O/e"; R=$?
+ck "hr-custody.sh build refuses a bundle whose sha256 is not the argument, before it decrypts (exit $R)" $([ $R = 2 ] && grep -q "the bundle's sha256" "$O/e" && [ "$(wc -l < "$CL")" = 1 ] && echo 0 || echo 1)
+RC=$O/rc; cus "$RC"; R=$?
+SS=$(sha256sum "$RC/sealed-root/suites/planrev-v3-hr.json" 2>/dev/null | cut -c1-64)
+ck "hr-custody.sh build decrypts into /dev/shm, runs hr-build.sh (OS-random draw, no seed), logs one line with the suite sha256 and leaves nothing under /dev/shm (exit $R; $(( $(shm) - B0 )) left)" $([ $R = 0 ] && grep -qE "^[0-9TZ:-]+ hr-custody build bundle $ES suite $SS machine dry-run-machine dir $RC ok$" "$CL" && [ "$(wc -l < "$CL")" = 2 ] && [ "$(shm)" = "$B0" ] && ! grep -q "dry run only" "$O/c.out" && [ ! -e "$RC.lock" ] && echo 0 || echo 1)
+ck "hr-custody.sh's run root is mode $(stat -c %a "$RC") (700 wanted) with $(find "$RC" -perm /044 | wc -l) open entries" $([ "$(stat -c %a "$RC")" = 700 ] && [ "$(find "$RC" -perm /044 | wc -l)" = 0 ] && echo 0 || echo 1)
+E0_MACHINE=dry-run-machine K bash "$H/hr-custody.sh" --reaudit "$ENC" "$ID" "$RC/reaudit" "$CL" "$ES" -- bash -c 'test -s "$E0_SLICE/manifest.json" && echo "{}" > "$E0_REAUDIT/reaudit.json"' >/dev/null 2>"$O/e"; R=$?
+ck "hr-custody.sh --reaudit still runs as before (exit $R; $(( $(shm) - B0 )) left)" $([ $R = 0 ] && [ "$(wc -l < "$CL")" = 3 ] && [ "$(shm)" = "$B0" ] && echo 0 || echo 1)
+echo "PASS $P, FAIL $F"

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# hr-custody.sh: custody-e0.sh (GEVA-219) with the bundle sha256 required, for GEVA-238's one opening of E0's run bundle.
-# Two modes, each in one process:
+# hr-custody.sh: custody-e0.sh (GEVA-219) with the bundle sha256 required. Its --reaudit mode served GEVA-238's one opening of
+# E0's run bundle for the kappa check; its build mode opens the headroom slice. Two modes, each in one process:
 #   hr-custody.sh <bundle.tar.age> <age identity> <run dir> <scorer> <CUSTODY.md> <bundle sha256>
-#     builds the run material: runs build-e0.sh on the extraction with the same bundle (section 4, step 0).
+#     builds the run material: runs hr-build.sh on the extraction with the same bundle and no dry-run seed. It also
+#     refuses, before it decrypts, unless CUSTODY.md holds exactly one line matching
+#     ^<UTC time, YYYY-MM-DDTHH:MM:SSZ> seal bundle <bundle sha256>( |$), the custodian's seal line for this bundle.
 #   hr-custody.sh --reaudit <bundle.tar.age> <age identity> <re-audit dir> <CUSTODY.md> <bundle sha256> -- <command> [<arg>...]
 #     the section 7 re-audit, the only allowed way to open key.json and the unit trees for it (section 4, step 5b): makes the
 #     re-audit dir mode 0700 and runs <command> there in the foreground with E0_SLICE set to the extraction and E0_REAUDIT to
@@ -38,6 +40,10 @@ MACHINE=${E0_MACHINE:-}
 command -v age >/dev/null || usage "age is not installed"
 GOT=$(sha256sum "$BUNDLE" | cut -c1-64)
 [ "$GOT" = "$WANT" ] || usage "the bundle's sha256 is $GOT, not $WANT"
+if [ "$MODE" = build ]; then
+  SEALS=$(grep -cE "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z seal bundle $WANT( |\$)" "$LOG" 2>/dev/null || true)
+  [ "${SEALS:-0}" = 1 ] || usage "CUSTODY.md holds ${SEALS:-0} seal lines for bundle $WANT, not exactly one"
+fi
 LOCK=$DIR.lock
 mkdir "$LOCK" 2>/dev/null || usage "another launch holds the $MODE dir (its lock $LOCK exists); remove a lock by hand only after checking that no hr-custody.sh runs"
 if [ -e "$DIR" ]; then rmdir "$LOCK"; usage "the $MODE dir exists; it must be new, so a failure can only ever remove what this run made"; fi
@@ -71,8 +77,8 @@ echo "hr-custody: slice extracted to RAM, $(find "$SHM" -type f | wc -l) files"
 STAGE=$MODE
 if [ "$MODE" = build ]; then
   MADE=1
-  bash "$HERE/build-e0.sh" "$BUNDLE" "$SHM" "$DIR" "$SCORER" "$WANT"
-  OUT="suite $(sha256sum "$DIR/sealed-root/suites/planrev-v3-e0.json" | cut -c1-64)"
+  bash "$HERE/hr-build.sh" "$BUNDLE" "$SHM" "$DIR" "$SCORER" "$WANT"
+  OUT="suite $(sha256sum "$DIR/sealed-root/suites/planrev-v3-hr.json" | cut -c1-64)"
 else
   mkdir -m 700 "$DIR"
   MADE=1

@@ -1,0 +1,84 @@
+#!/usr/bin/env bun
+// hr-exposure.ts: the descriptive exposure read of the panel v3 headroom check (GEVA-238 plan section 6). Decides nothing.
+// For each Opus candidate reading the headroom rule reads (a scored session), it asks whether the session opened the
+// item's trace terminal file: any tool call, subagent calls included, whose input names the terminal path with or without
+// its src/ prefix. It prints per stratum and pooled a 2x2 of opened by matched, and the matched-without-opening count as a
+// memorization or signpost flag. Counts only: no path, unit or case id is printed.
+//   bun hr-exposure.ts --scorer <pinned checkout> --suite <suite.json> --opus <review-units out> --traces <hr-traces.json>
+//     --readings <readings.json of the hr-kinds.json run> [--passes 4]
+// hr-traces.json: {"schema":1,"blockers":{<case id>:{"unit":<suite unit id>,"terminal":"src/...","hops":[...]}}}, one row
+// per candidate; a suite blocker's case field names its row. Exit 0, or 2 for E_USAGE.
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { loadMods, ndjson, readArm } from "./e0-readings.ts";
+
+export const STRATA = ["ceo", "eng", "dx", "design"];
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** A pattern for a src/ path named in a tool call's JSON input, with or without its src/ prefix, at path boundaries. */
+export function namePattern(terminal: string): RegExp {
+  const bare = terminal.replace(/^\.?\/?src\//, "");
+  return new RegExp("(?<![A-Za-z0-9_.-])(?:[^\\s\"']*/)?" + esc(bare) + "(?![A-Za-z0-9_-]|\\.[A-Za-z0-9])");
+}
+/** True when any tool call in the transcript names the path. */
+export function opened(msgs: any[], terminal: string): boolean {
+  const re = namePattern(terminal);
+  for (const m of msgs) if (m?.type === "assistant" && Array.isArray(m.message?.content)) for (const b of m.message.content) if (b?.type === "tool_use" && re.test(JSON.stringify(b.input ?? {}))) return true;
+  return false;
+}
+export interface Cell2 { opened_matched: number; opened_missed: number; unopened_matched: number; unopened_missed: number }
+export function exposure(cells: any[], suite: any, traces: any, transcript: (unit: string, pass: number) => any[]) {
+  if (traces?.schema !== 1 || !traces.blockers || typeof traces.blockers !== "object") throw new Error("the traces file is not hr-traces.json schema 1");
+  const caseOf = new Map<string, string>();
+  for (const u of suite.units) for (const b of u.blockers) caseOf.set(u.id + " " + b.id, b.case);
+  const out: Record<string, Cell2> = Object.fromEntries([...STRATA, "pooled"].map((s) => [s, { opened_matched: 0, opened_missed: 0, unopened_matched: 0, unopened_missed: 0 }]));
+  const cache = new Map<string, any[]>();
+  for (const c of cells) {
+    if (c.role !== "candidate" || c.cls !== "SCORED") continue;
+    const cid = caseOf.get(c.unit + " " + c.blocker);
+    if (cid === undefined) throw new Error("a readings cell names a blocker the suite does not hold");
+    const t = traces.blockers[cid];
+    if (!t || t.unit !== c.unit || typeof t.terminal !== "string" || !t.terminal.startsWith("src/")) throw new Error("a candidate has no hr-traces.json row with its unit and a src/ terminal");
+    const k = c.unit + " " + c.pass, msgs = cache.get(k) ?? cache.set(k, transcript(c.unit, c.pass)).get(k)!;
+    const key = ((opened(msgs, t.terminal) ? "opened_" : "unopened_") + (c.final === true ? "matched" : "missed")) as keyof Cell2;
+    out[c.stratum]![key]++; out.pooled![key]++;
+  }
+  return out;
+}
+
+async function main(argv: string[]): Promise<number> {
+  const flags = new Map<string, string>();
+  for (let i = 0; i < argv.length; i += 2) {
+    const f = argv[i]!, v = argv[i + 1];
+    if (!["--scorer", "--suite", "--opus", "--traces", "--readings", "--passes"].includes(f) || v === undefined) throw new Error("unknown flag or missing value " + JSON.stringify(f));
+    if (flags.has(f)) throw new Error(f + " given twice");
+    flags.set(f, v!);
+  }
+  const need = (f: string) => flags.get(f) ?? (() => { throw new Error("needs " + f); })();
+  const json = (f: string) => { try { return JSON.parse(readFileSync(resolve(need(f)), "utf8")); } catch (e) { throw new Error("cannot read JSON from " + f); } };
+  const mods = await loadMods(resolve(need("--scorer")));
+  const suite = json("--suite"), traces = json("--traces"), readings = json("--readings");
+  if (!Array.isArray(readings?.cells)) throw new Error("the --readings file holds no cells");
+  const out = resolve(need("--opus")), passes = Number(flags.get("--passes") ?? 4);
+  const arm = readArm(out, suite, passes, mods);
+  if (arm.model !== "claude-opus-5-5") throw new Error("--opus: its arm.json names driver model " + arm.model + ", not claude-opus-5-5");
+  const units = new Map<string, any>(suite.units.map((u: any) => [u.id, u]));
+  const transcript = (unit: string, pass: number) => {
+    const f = join(out, "runs", arm.model.replaceAll("/", "_"), "none", mods.unitTaskId(units.get(unit)), "p" + pass, "host", "transcript.ndjson");
+    return existsSync(f) ? ndjson(readFileSync(f, "utf8")) : [];
+  };
+  const x = exposure(readings.cells, suite, traces, transcript);
+  for (const s of [...STRATA, "pooled"]) {
+    const v = x[s]!, n = v.opened_matched + v.opened_missed + v.unopened_matched + v.unopened_missed;
+    console.log((s === "pooled" ? "Pooled" : "Stratum " + s) + ": " + n + " scored candidate readings; opened the terminal file: matched " + v.opened_matched + ", missed " + v.opened_missed + "; did not open it: matched " + v.unopened_matched + ", missed " + v.unopened_missed + "; flag, matched without opening: " + v.unopened_matched);
+  }
+  return 0;
+}
+
+if (import.meta.main) {
+  try {
+    process.exit(await main(process.argv.slice(2)));
+  } catch (e) {
+    console.error("E_USAGE hr-exposure: " + (e instanceof Error ? e.message : String(e)));
+    process.exit(2);
+  }
+}

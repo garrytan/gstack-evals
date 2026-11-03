@@ -1,0 +1,142 @@
+#!/usr/bin/env bun
+// hr-rule.ts: the panel v3 headroom rule (GEVA-238 plan sections 5 and 6). Reads the readings.json that e0-readings.ts writes
+// when run with hr-kinds.json (every candidate of a stratum mapped to its headroom kind: ceo C-RC, eng E-RC, dx X-RC, design
+// G-RC) and prints one line per stratum on its kind's m must-fix matches of n readings. It ignores e0-readings' own labels and
+// reads its cells, which carry each Opus reading's stratum, role, item, pass, termination class and final match:
+//   HEADROOM 5m >= n and 2m <= n; NEAR-CEILING 2m > n and 5m <= 3n; CEILING 5m > 3n; FLOOR 0 < m and 5m < n; DEAD m = 0, then
+//   e0-readings' re-audit result (KEEP-FLOOR, at most one failing item, reads FLOOR; DROPPED-UNFAIR reads UNFAIR).
+// Readings from stopped sessions (turn cap, allowance, timeout after output) are scored both ways, all miss and all match, and
+// the stratum reads only when both bounds give the same reading. NO READ for a stratum: fewer than 4 candidate items, anchor
+// matches under 4 of its 8 anchor readings (hr-oc.txt) on either bound, bounds that disagree, a GAP session that survived its
+// repair, or a needed cell no judge pair settled. NO READ for every stratum: a cap stop in the Opus run, a stopped judge item,
+// or an Opus pin e0-readings reports as wrong (init.json or arm.json). The pooled line over every candidate, the pooled
+// anchor count (threshold 24 of 32, hr-oc.txt) and the per-shape counts describe the levers and decide nothing.
+//   bun hr-rule.ts --readings <readings.json> [--shapes <readings.json of the hr-shapes.json run>]
+// Prints counts only. Exit 0 when at least one stratum reads, 3 when none does, 2 for E_USAGE.
+import { readFileSync } from "node:fs";
+
+export const KIND: Record<string, string> = { ceo: "C-RC", eng: "E-RC", dx: "X-RC", design: "G-RC" };
+export const STRATA = ["ceo", "eng", "dx", "design"];
+export const STOPS = new Set(["TURN_CAP", "ALLOWANCE", "TIMEOUT_OUT"]);
+const CLS = new Set(["SCORED", "TURN_CAP", "ALLOWANCE", "TIMEOUT_OUT", "GAP", "CAP"]);
+export const PASSES = 4, MIN_ITEMS = 4, ANCHOR_MIN = 4, ANCHOR_READINGS = 8, POOLED_ANCHOR_MIN = 24;
+export class Usage extends Error {}
+const usage = (m: string): never => { throw new Usage(m); };
+
+export type Reading = "HEADROOM" | "NEAR-CEILING" | "CEILING" | "FLOOR" | "DEAD";
+export function reading(m: number, n: number): Reading {
+  if (m === 0) return "DEAD";
+  if (5 * m < n) return "FLOOR";
+  if (2 * m <= n) return "HEADROOM";
+  if (5 * m <= 3 * n) return "NEAR-CEILING";
+  return "CEILING";
+}
+
+const itemKey = (c: any) => c.unit + " " + c.blocker;
+/** Checks readings.json against the shape hr-rule needs: e0-readings' cells under hr-kinds.json at 4 passes. */
+export function check(r: any) {
+  if (!r || typeof r !== "object" || !Array.isArray(r.cells) || !r.kinds || typeof r.kinds !== "object" || !Array.isArray(r.reasons) || !r.classes) usage("the readings file is not an e0-readings readings.json (cells, kinds, reasons, classes)");
+  const items = new Map<string, any[]>();
+  for (const c of r.cells) {
+    if (!STRATA.includes(c?.stratum) || (c.role !== "candidate" && c.role !== "anchor") || !CLS.has(c.cls) || typeof c.unit !== "string" || typeof c.blocker !== "string") usage("a cell lacks a stratum, role, termination class or item");
+    if (c.role === "candidate" && c.kind !== KIND[c.stratum]) usage("a " + c.stratum + " candidate has kind " + c.kind + ", not " + KIND[c.stratum] + "; run e0-readings with hr-kinds.json");
+    items.set(itemKey(c), [...(items.get(itemKey(c)) ?? []), c]);
+  }
+  for (const cs of items.values()) {
+    const passes = cs.map((c) => c.pass).sort((a, b) => a - b).join(",");
+    if (passes !== "1,2,3,4") usage("an item has readings for passes " + passes + ", not 1 to 4; run e0-readings with --passes 4");
+    if (new Set(cs.map((c) => c.stratum + " " + c.role + " " + c.kind)).size !== 1) usage("an item's cells disagree on stratum, role or kind");
+  }
+  const kinds = Object.keys(r.kinds).sort(), want = [...new Set<string>(r.cells.filter((c: any) => c.role === "candidate").map((c: any) => c.kind))].sort();
+  if (kinds.join(" ") !== want.join(" ")) usage("readings.json kinds (" + kinds.join(", ") + ") are not its candidates' kinds (" + want.join(", ") + ")");
+  for (const st of STRATA) {
+    const anchors = new Set(r.cells.filter((c: any) => c.stratum === st && c.role === "anchor").map(itemKey)).size;
+    if (anchors !== ANCHOR_READINGS / PASSES) usage("stratum " + st + " holds " + anchors + " anchor items, not 2 (one context, one src)");
+  }
+  return items;
+}
+
+export interface Line { stratum: string; kind: string; items: number; m: number; n: number; stops: number; low: string; high: string; anchors: { low: number; high: number; of: number; byKind: Record<string, string> }; gapSessions: number; stopSessions: number; unjudged: number; reasons: string[]; reading: string }
+export function decide(r: any) {
+  check(r);
+  const whole: string[] = [];
+  if (Number(r.classes?.CAP?.[0] ?? 0) > 0) whole.push(r.classes.CAP[0] + " cap stop(s) in the Opus run");
+  if (Array.isArray(r.judge_stopped) && r.judge_stopped.length) whole.push(r.judge_stopped.length + " judge item(s) stopped");
+  for (const x of r.reasons as string[]) if (x.includes("init.json lacks") || x.startsWith("arm.json pins differ")) whole.push("e0-readings: " + x);
+  const lines: Line[] = [];
+  for (const st of STRATA) {
+    const cs = r.cells.filter((c: any) => c.stratum === st), cand = cs.filter((c: any) => c.role === "candidate"), anc = cs.filter((c: any) => c.role === "anchor");
+    const items = new Set(cand.map(itemKey)).size;
+    const scored = cand.filter((c: any) => c.cls === "SCORED"), m = scored.filter((c: any) => c.final === true).length, n = scored.length;
+    const stops = cand.filter((c: any) => STOPS.has(c.cls)).length;
+    const sessions = new Map<string, string>(cs.map((c: any) => [c.unit + " " + c.pass, c.cls]));
+    const gapSessions = [...sessions.values()].filter((c) => c === "GAP").length, stopSessions = [...sessions.values()].filter((c) => STOPS.has(c)).length;
+    const unjudged = cs.filter((c: any) => c.cls === "SCORED" && c.block === true && c.final !== true && c.final !== false).length;
+    const aLow = anc.filter((c: any) => c.cls === "SCORED" && c.final === true).length, aHigh = aLow + anc.filter((c: any) => STOPS.has(c.cls)).length;
+    const byKind: Record<string, string> = {};
+    for (const k of [...new Set<string>(anc.map((c: any) => c.kind))].sort()) { const ks = anc.filter((c: any) => c.kind === k); byKind[k] = ks.filter((c: any) => c.cls === "SCORED" && c.final === true).length + "/" + ks.length; }
+    const kind = KIND[st]!, nb = n + stops;
+    const low = items ? reading(m, nb) : "-", high = items ? reading(m + stops, nb) : "-";
+    const reasons = [...whole];
+    if (items < MIN_ITEMS) reasons.push("fewer than 4 items (" + items + ")");
+    if (gapSessions) reasons.push("a surviving GAP (" + gapSessions + " session(s))");
+    if (unjudged) reasons.push(unjudged + " needed cell(s) unjudged");
+    if (aLow < ANCHOR_MIN || aHigh < ANCHOR_MIN) reasons.push("anchor matches " + aLow + (aHigh !== aLow ? " to " + aHigh : "") + " of " + anc.length + ", under " + ANCHOR_MIN);
+    if (!reasons.length && low !== high) reasons.push("stop bounds disagree (all miss " + low + ", all match " + high + ")");
+    let read = reasons.length ? "NO READ" : low;
+    if (read === "DEAD") {
+      const k = r.kinds[kind];
+      if (!k || k.m !== m || k.n !== n) usage("readings.json's " + kind + " counts are not its cells' counts");
+      read = k.final === "KEEP-FLOOR" ? "FLOOR (DEAD, re-audit: at most one failing item)" : k.final === "DROPPED-UNFAIR" ? "UNFAIR (DEAD, re-audit: two or more failing items)" : k.final === "AWAITING RE-AUDIT" ? "AWAITING RE-AUDIT (DEAD; rerun e0-readings with --reaudit)" : usage("readings.json's " + kind + " is DEAD with final " + k.final + ", not a re-audit result");
+    }
+    lines.push({ stratum: st, kind, items, m, n, stops, low, high, anchors: { low: aLow, high: aHigh, of: anc.length, byKind }, gapSessions, stopSessions, unjudged, reasons, reading: read });
+  }
+  const cand = r.cells.filter((c: any) => c.role === "candidate"), sc = cand.filter((c: any) => c.cls === "SCORED");
+  const pm = sc.filter((c: any) => c.final === true).length, ps = cand.filter((c: any) => STOPS.has(c.cls)).length;
+  const anc = r.cells.filter((c: any) => c.role === "anchor"), pa = anc.filter((c: any) => c.cls === "SCORED" && c.final === true).length;
+  return { whole, lines, pooled: { items: new Set(cand.map(itemKey)).size, m: pm, n: sc.length, stops: ps, anchors: pa, anchor_readings: anc.length } };
+}
+
+export function shapes(r: any, s: any): string {
+  if (!s || !Array.isArray(s.cells) || !s.kinds) usage("the --shapes file is not an e0-readings readings.json");
+  const a = r.cells.filter((c: any) => c.role === "candidate").map((c: any) => itemKey(c) + " " + c.pass + " " + c.cls + " " + c.final).sort().join("\n");
+  const b = s.cells.filter((c: any) => c.role === "candidate").map((c: any) => itemKey(c) + " " + c.pass + " " + c.cls + " " + c.final).sort().join("\n");
+  if (a !== b) usage("the --shapes readings hold other candidate readings than --readings; both must come from one run");
+  return Object.entries(s.kinds).map(([k, v]: any) => k + " " + v.m + "/" + v.n).join(", ");
+}
+
+export function render(d: ReturnType<typeof decide>, shapeLine: string | null): string[] {
+  const f3 = (m: number, n: number) => (n ? (m / n).toFixed(3) : "n/a");
+  const out = ["Whole run: " + (d.whole.length ? "NO READ (" + d.whole.join("; ") + ")" : "no whole-run stop")];
+  for (const l of d.lines) out.push("Stratum " + l.stratum + " (" + l.kind + ", " + l.items + " items): " + l.reading + (l.reasons.length ? " (" + l.reasons.join("; ") + ")" : "") + "; m " + l.m + " of n " + l.n + " = " + f3(l.m, l.n) + "; stopped readings " + l.stops + " (all miss " + l.m + "/" + (l.n + l.stops) + " " + l.low + ", all match " + (l.m + l.stops) + "/" + (l.n + l.stops) + " " + l.high + "); anchors " + l.anchors.low + (l.anchors.high !== l.anchors.low ? " to " + l.anchors.high : "") + " of " + l.anchors.of + " (" + Object.entries(l.anchors.byKind).map(([k, v]) => k + " " + v).join(", ") + "; threshold " + ANCHOR_MIN + "); sessions gap " + l.gapSessions + ", stopped " + l.stopSessions);
+  const p = d.pooled;
+  out.push("Pooled (all " + p.items + " candidates; describes the levers, decides nothing): m " + p.m + " of n " + p.n + " = " + f3(p.m, p.n) + "; stopped readings " + p.stops + " (all miss " + p.m + "/" + (p.n + p.stops) + ", all match " + (p.m + p.stops) + "/" + (p.n + p.stops) + ")");
+  out.push("Pooled anchors (decides nothing): " + p.anchors + " of " + p.anchor_readings + (p.anchors < POOLED_ANCHOR_MIN ? ", under the pooled threshold " + POOLED_ANCHOR_MIN + ": flag to the Captain" : ", at or over the pooled threshold " + POOLED_ANCHOR_MIN));
+  out.push("Per shape (decides nothing): " + (shapeLine ?? "see the verdict.txt of e0-readings run with hr-shapes.json, or pass --shapes"));
+  return out;
+}
+
+function main(argv: string[]): number {
+  const flags = new Map<string, string>();
+  for (let i = 0; i < argv.length; i += 2) {
+    const f = argv[i]!, v = argv[i + 1];
+    if (!["--readings", "--shapes"].includes(f) || v === undefined) usage("expected --readings <file> [--shapes <file>], got " + JSON.stringify(f));
+    if (flags.has(f)) usage(f + " given twice");
+    flags.set(f, v!);
+  }
+  const load = (f: string) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return usage("cannot read JSON from the " + (f === flags.get("--shapes") ? "--shapes" : "--readings") + " file"); } };
+  const r = load(flags.get("--readings") ?? usage("needs --readings <readings.json>"));
+  const d = decide(r);
+  const lines = render(d, flags.has("--shapes") ? shapes(r, load(flags.get("--shapes")!)) : null);
+  for (const l of lines) console.log(l);
+  return d.lines.some((l) => !l.reasons.length && !l.reading.startsWith("AWAITING")) ? 0 : 3;
+}
+
+if (import.meta.main) {
+  try {
+    process.exit(main(process.argv.slice(2)));
+  } catch (e) {
+    console.error("E_USAGE hr-rule: " + (e instanceof Error ? e.message : String(e)));
+    process.exit(2);
+  }
+}

@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+# hr-oc.py: operating characteristics of the headroom rule and its anchor thresholds (GEVA-238 plan section 6).
+# Table 1, #127's model as in oc-draft.py: item rates spread as a beta with mean r (concentrations 2 and 8), 4 passes with pass
+# dependence 0.3 (each pass reuses the item's shared draw with probability 0.3), 6 items, 20000 sims, seed 1 per row.
+# Table 2, a dependent model: the same item rates, 2 units of 3 items on 2 bases, 4 passes, so 8 sessions a stratum. Each
+# reading hits when U < p, U = Phi(Z), Z = sqrt(0.20) B + sqrt(0.40) S + sqrt(0.15) I + sqrt(0.25) E, all standard normal:
+# B one draw per unit (its base), S one per session (how far that session traces, shared by its 3 items), I one per item
+# (shared by its 4 passes), E one per reading. Each reading keeps its item's rate as its marginal. 20000 sims, seed 1 per row.
+# Table 3, anchor thresholds on table 1's model: 2 anchors x 4 passes = 8 readings a stratum, 8 anchors x 4 = 32 pooled.
+# Each threshold is the largest integer k with P(matches < k) <= 0.05 at a true anchor recall of 0.9 under both concentrations.
+import math, random
+from statistics import NormalDist
+SIMS, DEP, PASSES = 20000, 0.3, 4
+PHI = NormalDist().cdf
+READ = ("DEAD", "FLOOR", "HEADROOM", "NEAR-CEILING", "CEILING")
+def reading(m, n):
+    if m == 0: return 0
+    if 5 * m < n: return 1
+    if 2 * m <= n: return 2
+    if 5 * m <= 3 * n: return 3
+    return 4
+def rate(rng, r, conc):
+    return 1.0 if r >= 1 else rng.betavariate(r * conc, (1 - r) * conc)
+def hits(rng, rt, P=PASSES):
+    shared = rng.random(); h = 0
+    for _ in range(P):
+        d = shared if rng.random() < DEP else rng.random()
+        h += d < rt
+    return h
+def table1(r, conc, items=6, seed=1):
+    rng = random.Random(seed); out = [0] * 5
+    for _ in range(SIMS):
+        m = sum(hits(rng, rate(rng, r, conc)) for _ in range(items))
+        out[reading(m, items * PASSES)] += 1
+    return [v / SIMS for v in out]
+WB, WS, WI = math.sqrt(0.20), math.sqrt(0.40), math.sqrt(0.15)
+WE = math.sqrt(1 - 0.20 - 0.40 - 0.15)
+def table2(r, conc, units=2, items=3, seed=1):
+    rng = random.Random(seed); out = [0] * 5
+    for _ in range(SIMS):
+        m = 0
+        for _ in range(units):
+            b = rng.gauss(0, 1)
+            ps = [rate(rng, r, conc) for _ in range(items)]
+            iv = [rng.gauss(0, 1) for _ in range(items)]
+            for _ in range(PASSES):
+                s = rng.gauss(0, 1)
+                for i in range(items):
+                    m += PHI(WB * b + WS * s + WI * iv[i] + WE * rng.gauss(0, 1)) < ps[i]
+        out[reading(m, units * items * PASSES)] += 1
+    return [v / SIMS for v in out]
+def anchor_dist(r, conc, anchors, seed=1):
+    rng = random.Random(seed); n = anchors * PASSES; d = [0] * (n + 1)
+    for _ in range(SIMS):
+        d[sum(hits(rng, rate(rng, r, conc)) for _ in range(anchors))] += 1
+    return [v / SIMS for v in d]
+def below(d, k): return sum(d[:k])
+RS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+for name, fn in (("Table 1: independent items (#127's model)", table1), ("Table 2: session trace effect and base effect", table2)):
+    print(name + ", 6 items x 4 passes, n = 24")
+    for conc in (2, 8):
+        print("  concentration %d: P(DEAD) P(FLOOR) P(HEADROOM) P(NEAR-CEILING) P(CEILING)" % conc)
+        for r in RS:
+            print("    r=%.1f  " % r + " ".join("%.3f" % p for p in fn(r, conc)))
+print("Table 3: anchor thresholds (NO READ when anchor matches < k)")
+for label, anchors in (("stratum, 2 anchors x 4 passes = 8 readings", 2), ("pooled, 8 anchors x 4 passes = 32 readings", 8)):
+    d9 = {c: anchor_dist(0.9, c, anchors) for c in (2, 8)}
+    k = max(k for k in range(anchors * PASSES + 1) if all(below(d9[c], k) <= 0.05 for c in (2, 8)))
+    print("  %s: threshold %d (P(matches < %d) at r=0.9: conc 2 %.3f, conc 8 %.3f; at k=%d: conc 2 %.3f, conc 8 %.3f)" % (label, k, k, below(d9[2], k), below(d9[8], k), k + 1, below(d9[2], k + 1), below(d9[8], k + 1)))
+    for conc in (2, 8):
+        print("    concentration %d: P(NO READ) by true anchor recall" % conc)
+        for r in (0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0):
+            print("      r=%.2f  %.3f" % (r, below(anchor_dist(r, conc, anchors), k)))

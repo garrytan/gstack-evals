@@ -1,0 +1,251 @@
+#!/usr/bin/env bun
+// hr-rules-dry.ts: the hr-rule, hr-kappa and hr-exposure part of the headroom prereg's dry run (GEVA-238). Keyless; no
+// request leaves the machine. Run from a dir holding hr-rule.ts, hr-exposure.ts, hr-kappa.ts and e0-readings.ts (each its
+// .txt with the suffix removed):
+//   bun hr-rules-dry.ts <pinned scorer b7b6aec> <scratch dir>
+// hr-rule fixtures: readings.json files built by e0-readings.ts's own exported functions (armReadings, decide, checkReaudit,
+// e0NoRead, kappaRead) from synthetic sessions and judge replies, and assembled in the shape its run() writes. hr-kappa runs
+// as run, on a synthetic E0-shaped run root whose 2x2 tables reproduce E0's printed kappa and n (its self-check), through a
+// stub scorer that re-exports the pin's journal, unit and plan code and its packetAnswers, with loadKey reading the key file
+// and readArmDir a no-op. hr-exposure runs on synthetic transcripts in the review-units layout. Prints PASS or FAIL lines
+// with counts only, then "PASS n, FAIL m". Exit 0 when nothing fails, else 1.
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const [scorerArg, scratchArg] = process.argv.slice(2);
+if (!scorerArg || !scratchArg) { console.error("E_USAGE hr-rules-dry: needs <pinned scorer> <scratch dir>"); process.exit(2); }
+const HERE = import.meta.dir, PIN = resolve(scorerArg), S = resolve(scratchArg);
+rmSync(S, { recursive: true, force: true }); mkdirSync(S, { recursive: true });
+const R = await import(join(HERE, "e0-readings.ts"));
+let pass = 0, fail = 0;
+const transcript: string[] = [];
+const out = (l: string) => { transcript.push(l); console.log(l); };
+const check = (label: string, ok: boolean) => { ok ? pass++ : fail++; out((ok ? "PASS " : "FAIL ") + label); };
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const run = (args: string[], env: Record<string, string> = {}) => { const r = spawnSync("bun", args, { cwd: HERE, encoding: "utf8", env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env } }); return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" }; };
+const STRATA = ["ceo", "eng", "dx", "design"], KIND: Record<string, string> = { ceo: "C-RC", eng: "E-RC", dx: "X-RC", design: "G-RC" };
+const SHAPE: Record<string, string[]> = { ceo: ["C-OM", "C-Q", "C-U2"], eng: ["E-CD", "E-OM", "E-Q"], dx: ["X-CD", "X-OM", "X-Q"], design: ["G-A11Y", "G-OM", "G-X"] };
+const ARM = "none-opus", uid = (st: string, i: number) => "zu-" + st + "-" + i, cid = (u: string, b: string) => "zc-" + u + "-" + b;
+
+// ---------- hr-rule fixtures ----------
+interface St { m: number; items?: number; anchors?: number; stopped?: Array<[number, number]>; gap?: Array<[number, number]>; cap?: Array<[number, number]>; unjudged?: boolean; failing?: number }
+interface Spec { strata: Record<string, St>; reaudit?: boolean; shapes?: boolean; passes?: number }
+function suiteOf() {
+  return { id: "hr-fixture", units: STRATA.flatMap((st, si) => [1, 2].map((i) => { const u = uid(st, i); return { id: u, repo: "example/base" + (si * 2 + i), pr: si * 2 + i, head: sha(u).slice(0, 40), blockers: ["B1", "B2", "B3", "B4"].map((b) => ({ id: b, case: cid(u, b) })) }; })) };
+}
+function build(spec: Spec) {
+  const P = spec.passes ?? 4, blockers: any[] = [], sessions: any[] = [];
+  for (const st of STRATA) {
+    const s = spec.strata[st]!, keep = s.items ?? 6;
+    const drop = new Set(["2 B3", "2 B2", "2 B1", "1 B3", "1 B2", "1 B1"].slice(0, 6 - keep));
+    for (const i of [1, 2]) {
+      for (const [k, b] of ["B1", "B2", "B3"].entries()) if (!drop.has(i + " " + b)) blockers.push({ unit: uid(st, i), blocker: b, stratum: st, kind: spec.shapes ? SHAPE[st]![k] : KIND[st], role: "candidate", flagged: false });
+      blockers.push({ unit: uid(st, i), blocker: "B4", stratum: st, kind: i === 1 ? "A-X" : "A-F", role: "anchor", flagged: false });
+      for (let p = 1; p <= P; p++) {
+        const has = (l?: Array<[number, number]>) => (l ?? []).some(([a, b]) => a === i && b === p);
+        const cls = has(s.stopped) ? "TURN_CAP" : has(s.gap) ? "GAP" : has(s.cap) ? "CAP" : "SCORED";
+        sessions.push({ unit: uid(st, i), pass: p, cls, block: cls === "SCORED" });
+      }
+    }
+  }
+  const kinds = { suite_sha256: "fixture", blockers };
+  const matched = new Set<string>(), unjudgedOut = new Set<string>();
+  for (const st of STRATA) {
+    const s = spec.strata[st]!;
+    const scored = (role: string) => sessions.filter((x) => x.unit.startsWith("zu-" + st + "-") && x.cls === "SCORED").flatMap((x) => blockers.filter((b) => b.unit === x.unit && b.role === role).map((b) => b.unit + " " + b.blocker + " " + x.pass));
+    const cand = scored("candidate"), anc = scored("anchor");
+    if (s.m > cand.length) throw new Error("fixture asks for more matches than readings");
+    cand.slice(0, s.m).forEach((k) => matched.add(k));
+    anc.slice(0, s.anchors ?? anc.length).forEach((k) => matched.add(k));
+    if (s.unjudged) { const k = cand.find((c) => !matched.has(c))!; unjudgedOut.add(k.split(" ").slice(0, 2).join(" ")); }
+  }
+  const replies: Record<string, Map<string, Set<string>>> = {}, entries = new Map<string, any>();
+  for (const j of ["sol", "opus", "sonnet"]) {
+    const m = new Map<string, Set<string>>();
+    for (const b of blockers) {
+      const k = b.unit + " " + b.blocker;
+      if (j === "sol" && unjudgedOut.has(k)) continue;
+      m.set(k, new Set([...matched].filter((x) => x.startsWith(k + " ")).map((x) => "o-" + b.blocker + "-" + x.split(" ")[2])));
+    }
+    replies[j] = m;
+  }
+  for (const x of matched) { const [u, b, p] = x.split(" "); entries.set("p-" + u + " o-" + b + "-" + p, { arm: ARM, pass: Number(p), finding: "f1" }); }
+  const key = { packets: [...new Set(blockers.map((b) => b.unit))].map((u) => ({ unit: u, file: "p-" + u })) };
+  const cells = R.armReadings({ sessions }, kinds, key, replies, entries, () => "critical", ARM);
+  const dead = Object.keys(R.decide(cells, kinds, null).kinds).filter((k) => R.decide(cells, kinds, null).kinds[k].verdict === "DEAD");
+  let reaudit = null;
+  if (spec.reaudit) {
+    const r: any = {};
+    for (const k of dead) { const st = STRATA.find((x) => KIND[x] === k)!; r[k] = blockers.filter((b) => b.kind === k).map((b, i) => ({ unit: b.unit, blocker: b.blocker, result: i < (spec.strata[st]!.failing ?? 0) ? "fail" : "pass" })); }
+    reaudit = R.checkReaudit(r, kinds, dead);
+  }
+  const d = R.decide(cells, kinds, reaudit);
+  const cnt = (c: string) => sessions.filter((x) => x.cls === c).length;
+  const stops = sessions.filter((x) => R.STOP_CLASSES.has(x.cls));
+  const incomplete = cells.filter((c: any) => c.cls === "SCORED" && c.block && c.final === null).length;
+  const reasons = R.e0NoRead({ gaps: cnt("GAP"), caps: cnt("CAP"), judgingIncomplete: incomplete, judgeStopped: [], anchor: d.anchor_pooled, initBad: 0, armBad: [] });
+  return { e0: reasons.length ? "NO READ" : "READ", reasons, kinds: d.kinds, strata: d.strata, anchor_pooled: d.anchor_pooled, sensitivity: { e0: reasons.length ? "NO READ" : "READ", reasons, kinds: d.kinds, strata: d.strata, anchor_pooled: d.anchor_pooled, diffs: [] }, kappa: R.kappaRead(cells), judge_stopped: [], stops: stops.length, scheduled: sessions.length, classes: Object.fromEntries(["SCORED", "TURN_CAP", "ALLOWANCE", "TIMEOUT_OUT", "GAP", "CAP"].map((c) => [c, [cnt(c), 0]])), particle: { kinds: {}, anchor_pooled: null }, costs: {}, audit: {}, cells };
+}
+let fx = 0;
+function rule(readings: any, extra: string[] = []) {
+  const f = join(S, "readings-" + ++fx + ".json");
+  writeFileSync(f, JSON.stringify(readings, null, 1) + "\n");
+  const r = run(["hr-rule.ts", "--readings", f, ...extra]);
+  const got: Record<string, { reading: string; line: string }> = {};
+  for (const l of r.out.split("\n")) { const m = /^Stratum (\w+) \([^)]*\): (.*?)(?: \(|;)/.exec(l); if (m) got[m[1]!] = { reading: m[2]!, line: l }; }
+  return { ...r, got };
+}
+const all = (m: number, o: Partial<St> = {}): Record<string, St> => Object.fromEntries(STRATA.map((s) => [s, { m, ...o }]));
+const expect = (label: string, spec: Spec, want: Record<string, string>, extra: (r: ReturnType<typeof rule>) => boolean = () => true, code = 0) => {
+  const r = rule(build(spec));
+  const ok = r.code === code && STRATA.every((s) => r.got[s]?.reading === want[s]) && extra(r);
+  check(label + " (exit " + r.code + "; " + STRATA.map((s) => s + " " + (r.got[s]?.reading ?? "missing")).join(", ") + ")", ok);
+  return r;
+};
+const has = (r: ReturnType<typeof rule>, st: string, text: string) => r.got[st]?.line.includes(text) ?? false;
+
+out("## hr-rule: readings at their integer edges, n = 24 (6 items x 4 passes)");
+expect("n 24: m 4 FLOOR (5m < n), m 5 HEADROOM (5m >= n), m 12 HEADROOM (2m <= n), m 13 NEAR-CEILING (2m > n)", { strata: { ceo: { m: 4 }, eng: { m: 5 }, dx: { m: 12 }, design: { m: 13 } } }, { ceo: "FLOOR", eng: "HEADROOM", dx: "HEADROOM", design: "NEAR-CEILING" });
+expect("n 24: m 14 NEAR-CEILING (5m <= 3n), m 15 CEILING (5m > 3n), m 1 FLOOR (0 < m), m 24 CEILING", { strata: { ceo: { m: 14 }, eng: { m: 15 }, dx: { m: 1 }, design: { m: 24 } } }, { ceo: "NEAR-CEILING", eng: "CEILING", dx: "FLOOR", design: "CEILING" });
+out("## hr-rule: smaller n after exclusions");
+expect("n 20 (5 items): m 3 FLOOR, m 4 HEADROOM, m 10 HEADROOM, m 11 NEAR-CEILING", { strata: { ceo: { m: 3, items: 5 }, eng: { m: 4, items: 5 }, dx: { m: 10, items: 5 }, design: { m: 11, items: 5 } } }, { ceo: "FLOOR", eng: "HEADROOM", dx: "HEADROOM", design: "NEAR-CEILING" });
+expect("n 20: m 12 NEAR-CEILING, m 13 CEILING; n 16 (4 items): m 3 FLOOR, m 4 HEADROOM", { strata: { ceo: { m: 12, items: 5 }, eng: { m: 13, items: 5 }, dx: { m: 3, items: 4 }, design: { m: 4, items: 4 } } }, { ceo: "NEAR-CEILING", eng: "CEILING", dx: "FLOOR", design: "HEADROOM" });
+expect("n 16 (4 items): m 8 HEADROOM, m 9 NEAR-CEILING, m 10 CEILING; 4 items is enough to read", { strata: { ceo: { m: 8, items: 4 }, eng: { m: 9, items: 4 }, dx: { m: 10, items: 4 }, design: { m: 6 } } }, { ceo: "HEADROOM", eng: "NEAR-CEILING", dx: "CEILING", design: "HEADROOM" });
+out("## hr-rule: the 4-item floor");
+expect("a stratum left with 3 items reads NO READ (fewer than 4 items); the other strata read", { strata: { ceo: { m: 4, items: 3 }, eng: { m: 6 }, dx: { m: 6 }, design: { m: 6 } } }, { ceo: "NO READ", eng: "HEADROOM", dx: "HEADROOM", design: "HEADROOM" }, (r) => has(r, "ceo", "fewer than 4 items (3)"));
+out("## hr-rule: stopped sessions scored both ways");
+expect("one turn-cap session (3 candidate readings): m 8 of 21 reads HEADROOM both ways (8/24, 11/24); m 11 reads HEADROOM then NEAR-CEILING (11/24, 14/24): NO READ; m 0 reads DEAD then FLOOR: NO READ; m 3 reads FLOOR then HEADROOM: NO READ", { strata: { ceo: { m: 8, stopped: [[1, 1]] }, eng: { m: 11, stopped: [[1, 1]] }, dx: { m: 0, stopped: [[2, 3]] }, design: { m: 3, stopped: [[1, 4]] } } }, { ceo: "HEADROOM", eng: "NO READ", dx: "NO READ", design: "NO READ" }, (r) => has(r, "ceo", "all miss 8/24 HEADROOM, all match 11/24 HEADROOM") && has(r, "eng", "stop bounds disagree (all miss HEADROOM, all match NEAR-CEILING)") && has(r, "dx", "all miss DEAD, all match FLOOR") && has(r, "design", "all miss FLOOR, all match HEADROOM"));
+expect("stops at a CEILING both ways: m 20 of 21 with 3 stopped (20/24, 23/24) reads CEILING", { strata: { ...all(6), eng: { m: 20, stopped: [[2, 2]] } } }, { ceo: "HEADROOM", eng: "CEILING", dx: "HEADROOM", design: "HEADROOM" });
+out("## hr-rule: a surviving GAP");
+const gapR = expect("a GAP session in eng makes eng alone NO READ; ceo, dx and design read (e0-readings itself reads E0 NO READ, which hr-rule ignores)", { strata: { ...all(6), eng: { m: 6, gap: [[2, 1]] } } }, { ceo: "HEADROOM", eng: "NO READ", dx: "HEADROOM", design: "HEADROOM" }, (r) => has(r, "eng", "a surviving GAP (1 session(s))"));
+check("the GAP fixture's readings.json reads E0 NO READ from e0-readings (the whole-run rule hr-rule replaces)", JSON.parse(readFileSync(join(S, "readings-" + fx + ".json"), "utf8")).e0 === "NO READ");
+out("## hr-rule: DEAD and the re-audit split");
+expect("DEAD with 0 failing items reads FLOOR, 1 failing reads FLOOR, 2 failing reads UNFAIR (e0-readings' re-audit results); design reads HEADROOM", { reaudit: true, strata: { ceo: { m: 0, failing: 0 }, eng: { m: 0, failing: 1 }, dx: { m: 0, failing: 2 }, design: { m: 6 } } }, { ceo: "FLOOR", eng: "FLOOR", dx: "UNFAIR", design: "HEADROOM" });
+expect("DEAD in every stratum with no re-audit file reads AWAITING RE-AUDIT and exits 3", { strata: all(0) }, { ceo: "AWAITING RE-AUDIT", eng: "AWAITING RE-AUDIT", dx: "AWAITING RE-AUDIT", design: "AWAITING RE-AUDIT" }, () => true, 3);
+out("## hr-rule: anchor thresholds (stratum 4 of 8, pooled 24 of 32, hr-oc.txt)");
+expect("anchors 4 of 8 read; 3 of 8 read NO READ; 3 scored matches plus a stopped anchor reading (3 to 4) read NO READ; pooled 18 of 32 prints the pooled flag", { strata: { ceo: { m: 6, anchors: 4 }, eng: { m: 6, anchors: 3 }, dx: { m: 6, anchors: 3, stopped: [[2, 4]] }, design: { m: 6 } } }, { ceo: "HEADROOM", eng: "NO READ", dx: "NO READ", design: "HEADROOM" }, (r) => has(r, "eng", "anchor matches 3 of 8, under 4") && has(r, "dx", "anchor matches 3 to 4 of 8, under 4") && r.out.includes("Pooled anchors (decides nothing): 18 of 32, under the pooled threshold 24"));
+expect("pooled anchors 24 of 32 (4, 4, 8, 8) print no flag; 23 of 32 print it", { strata: { ceo: { m: 6, anchors: 4 }, eng: { m: 6, anchors: 4 }, dx: { m: 6 }, design: { m: 6 } } }, { ceo: "HEADROOM", eng: "HEADROOM", dx: "HEADROOM", design: "HEADROOM" }, (r) => r.out.includes("24 of 32, at or over the pooled threshold 24") && rule(build({ strata: { ceo: { m: 6, anchors: 4 }, eng: { m: 6, anchors: 4 }, dx: { m: 6, anchors: 7 }, design: { m: 6 } } })).out.includes("23 of 32, under the pooled threshold 24"));
+out("## hr-rule: whole-run stops and unjudged cells");
+expect("a cap stop in the Opus run makes every stratum NO READ and exits 3", { strata: { ...all(6), design: { m: 6, cap: [[2, 4]] } } }, { ceo: "NO READ", eng: "NO READ", dx: "NO READ", design: "NO READ" }, (r) => r.out.includes("Whole run: NO READ (1 cap stop(s) in the Opus run)"), 3);
+{
+  const x = build({ strata: all(6) }); x.judge_stopped = ["hr-judge-sonnet"];
+  const r = rule(x);
+  check("a stopped judge item makes every stratum NO READ and exits 3 (exit " + r.code + ")", r.code === 3 && STRATA.every((s) => r.got[s]?.reading === "NO READ") && r.out.includes("1 judge item(s) stopped"));
+  const y = build({ strata: all(6) }); y.reasons = ["2 Opus session(s) whose init.json lacks claude-code-preset or Claude Code 2.1.314"];
+  const r2 = rule(y);
+  check("an Opus pin e0-readings reports as wrong makes every stratum NO READ (exit " + r2.code + ")", r2.code === 3 && STRATA.every((s) => r2.got[s]?.reading === "NO READ"));
+}
+expect("a candidate blocker no judge pair settled makes its stratum NO READ (4 needed cells unjudged); the others read", { strata: { ...all(6), dx: { m: 6, unjudged: true } } }, { ceo: "HEADROOM", eng: "HEADROOM", dx: "NO READ", design: "HEADROOM" }, (r) => has(r, "dx", "4 needed cell(s) unjudged"));
+out("## hr-rule: pooled line, per-shape counts and refusals");
+{
+  const spec: Spec = { strata: { ceo: { m: 4 }, eng: { m: 5 }, dx: { m: 12 }, design: { m: 13 } } };
+  const sf = join(S, "shapes.json"); writeFileSync(sf, JSON.stringify(build({ ...spec, shapes: true })));
+  const r = rule(build(spec), ["--shapes", sf]);
+  check("the pooled line reads 34 of 96 over 24 candidates and the per-shape line lists 12 shapes from the shapes run (exit " + r.code + ")", r.code === 0 && r.out.includes("Pooled (all 24 candidates; describes the levers, decides nothing): m 34 of n 96") && (/Per shape \(decides nothing\): (.*)/.exec(r.out)?.[1]?.split(", ").length ?? 0) === 12);
+  const bad = join(S, "shapes-bad.json"); writeFileSync(bad, JSON.stringify(build({ ...spec, strata: { ...spec.strata, ceo: { m: 5 } }, shapes: true })));
+  const r2 = rule(build(spec), ["--shapes", bad]);
+  check("hr-rule refuses a --shapes file from another run (exit " + r2.code + ", E_USAGE)", r2.code === 2 && r2.err.startsWith("E_USAGE hr-rule:"));
+  const r3 = rule(build({ ...spec, shapes: true }));
+  check("hr-rule refuses readings made with the E0 shapes kinds file, not hr-kinds.json (exit " + r3.code + ", E_USAGE)", r3.code === 2 && r3.err.includes("run e0-readings with hr-kinds.json"));
+  const r4 = rule(build({ strata: all(4), passes: 2 }));
+  check("hr-rule refuses readings made at --passes 2 (exit " + r4.code + ", E_USAGE)", r4.code === 2 && r4.err.includes("--passes 4"));
+  const r5 = run(["hr-rule.ts"]), r6 = run(["hr-rule.ts", "--readings", join(S, "none.json")]), r7 = run(["hr-rule.ts", "--readings", sf, "--readings", sf]);
+  check("hr-rule refuses a missing --readings, an unreadable file and a repeated flag (exits " + [r5.code, r6.code, r7.code].join(", ") + ", E_USAGE)", [r5, r6, r7].every((x) => x.code === 2 && x.err.startsWith("E_USAGE hr-rule:")));
+}
+
+// ---------- hr-kappa ----------
+out("## hr-kappa (as run) against hand values");
+{
+  const stub = join(S, "stub-scorer");
+  const re = (p: string, body: string) => { mkdirSync(join(stub, p, ".."), { recursive: true }); writeFileSync(join(stub, p), body); };
+  for (const p of ["src/trial/review/run.ts", "src/trial/review/unit.ts", "src/adapters/claude-code/driver.ts", "src/trial/review/plan.ts"]) re(p, "export * from " + JSON.stringify(join(PIN, p)) + ";\n");
+  re("lanes/review-noloss/judge.ts", "import { readFileSync } from \"node:fs\";\nexport { packetAnswers } from " + JSON.stringify(join(PIN, "lanes/review-noloss/judge.ts")) + ";\nexport const loadKey = (o: any) => JSON.parse(readFileSync(o.key, \"utf8\"));\n");
+  re("lanes/review-noloss/ingest.ts", "export const readArmDir = () => ({});\n");
+  const T: Record<string, [number, number, number, number]> = { ceo: [84, 2, 0, 3], eng: [78, 0, 5, 1], dx: [91, 0, 1, 0], design: [81, 0, 4, 0] };
+  const root = join(S, "kappa", "root"), SR = join(root, "sealed-root"), slice = join(S, "kappa"), reaudit = join(S, "kappa-reaudit");
+  mkdirSync(join(SR, "suites"), { recursive: true }); mkdirSync(reaudit, { recursive: true });
+  const units = STRATA.map((st, i) => { const [a, b, c, d] = T[st]!; return { id: "zk-" + st, repo: "example/kbase" + i, pr: 100 + i, head: sha(st).slice(0, 40), blockers: Array.from({ length: a + b + c + d }, (_, k) => ({ id: "B" + (k + 1), case: "zkc-" + st + "-" + (k + 1) })) }; });
+  const suiteText = JSON.stringify({ id: "planrev-v3-e0", units }, null, 1);
+  writeFileSync(join(SR, "suites", "planrev-v3-e0.json"), suiteText);
+  writeFileSync(join(SR, "e0-kinds.json"), JSON.stringify({ suite: "planrev-v3-e0", suite_sha256: sha(suiteText), blockers: units.flatMap((u, i) => u.blockers.map((b) => ({ unit: u.id, blocker: b.id, stratum: STRATA[i], kind: "K-" + STRATA[i], role: "candidate", flagged: false }))) }));
+  for (const [dir, model, id, block] of [["e0-opus-none", "claude-opus-5-5", "none-opus", true], ["e0-particle-none", "particle-ai/particle-1", "none-particle", false]] as const) {
+    mkdirSync(join(root, dir, "arms", id), { recursive: true });
+    writeFileSync(join(root, dir, "arms", id, "arm.json"), JSON.stringify({ models: [{ role: "driver", model }], parse_outcomes: { not_run: 0 } }));
+    writeFileSync(join(root, dir, "cells.ndjson"), units.flatMap((u) => [1, 2].map((p) => JSON.stringify({ cell: { model, arm: "none", unit: u.id, pass: p }, record: { termination: { kind: "completed" }, model_output: true }, parse: block && p === 1 ? { kind: "findings", findings: [{ id: "f1", severity: "critical" }] } : { kind: "miss" } }))).join("\n") + "\n");
+  }
+  mkdirSync(join(root, "judge"), { recursive: true });
+  writeFileSync(join(root, "judge", "key.json"), JSON.stringify({ batch: "zb", packets: units.map((u) => ({ unit: u.id, file: "zp-" + u.id, sha256: sha("zp-" + u.id) })), entries: units.map((u) => ({ packet: "zp-" + u.id, opaque: "o1", arm: "none-opus", pass: 1, finding: "f1" })), arms: [{ id: "none-opus" }, { id: "none-particle" }] }));
+  const ROLE: Record<string, string> = { sol: "openai/gpt-6.1-sol", opus: "anthropic/claude-opus-5-5", sonnet: "anthropic/claude-sonnet-5-5" };
+  for (const j of ["sol", "opus", "sonnet"]) {
+    const body = JSON.stringify({ packets: units.map((u, i) => { const [a, b, c] = T[STRATA[i]!]!; return { file: "zp-" + u.id, sha256: sha("zp-" + u.id), blockers: u.blockers.map((bl, k) => { const solM = k < a + b, opusM = k < a || (k >= a + b && k < a + b + c); return { id: bl.id, matches: (j === "opus" ? opusM : solM) ? ["o1"] : [] }; }) }; }) });
+    mkdirSync(join(root, "judge", "read-" + j), { recursive: true });
+    writeFileSync(join(root, "judge", "read-" + j, "primary.json"), body);
+    writeFileSync(join(root, "judge", "read-" + j, "run.json"), JSON.stringify({ models: { primary: ROLE[j] }, batch: "zb", state: "finished", item: "hr-judge-" + j, files: { "primary.json": sha(body) } }));
+  }
+  writeFileSync(join(reaudit, "classes.json"), JSON.stringify({ R1: 0 }));
+  const r = run(["hr-kappa.ts", "--scorer", stub, "--root", root], { E0_SLICE: slice, E0_REAUDIT: reaudit });
+  const want: Record<string, string> = {
+    pooled: "pooled: n 350; 2x2 (sol,opus) match/match 334, match/miss 2, miss/match 10, miss/miss 4; raw 0.966, PABAK 0.931, AC1 0.964, kappa 0.385 -> PARADOX",
+    ceo: "ceo: n 89; 2x2 (sol,opus) match/match 84, match/miss 2, miss/match 0, miss/miss 3; raw 0.978, PABAK 0.955, AC1 0.975, kappa 0.739 -> PARADOX",
+    eng: "eng: n 84; 2x2 (sol,opus) match/match 78, match/miss 0, miss/match 5, miss/miss 1; raw 0.940, PABAK 0.881, AC1 0.935, kappa 0.271 -> DISAGREEMENT",
+    dx: "dx: n 92; 2x2 (sol,opus) match/match 91, match/miss 0, miss/match 1, miss/miss 0; raw 0.989, PABAK 0.978, AC1 0.989, kappa 0.000 -> PARADOX",
+    design: "design: n 85; 2x2 (sol,opus) match/match 81, match/miss 0, miss/match 4, miss/miss 0; raw 0.953, PABAK 0.906, AC1 0.951, kappa 0.000 -> PARADOX",
+  };
+  const lines = r.out.split("\n");
+  check("hr-kappa passes its self-check on the fixture (E0's printed kappa and n per stratum) and exits " + r.code, r.code === 0);
+  for (const s of ["pooled", ...STRATA]) check("hr-kappa " + s + ": 2x2 counts, raw agreement, PABAK, AC1, Cohen's kappa and the reading equal the hand values", lines.includes(want[s]!));
+  check("hr-kappa reads PARADOX at raw agreement 0.953 (design) and DISAGREEMENT at 0.940 (eng), either side of 0.95", lines.includes(want.design!) && lines.includes(want.eng!));
+  check("hr-kappa counts 12 disagreeing cells (b + c pooled) and writes kappa.json and reaudit.json", r.out.includes("hr-kappa: 12 disagreeing cells") && JSON.parse(readFileSync(join(reaudit, "reaudit.json"), "utf8")).kappa.pooled.n === 350);
+  const r2 = run(["hr-kappa.ts", "--scorer", stub, "--root", root], { E0_SLICE: slice });
+  check("hr-kappa refuses to run outside hr-custody.sh --reaudit (E0_REAUDIT unset; exit " + r2.code + ", E_USAGE)", r2.code === 2 && r2.err.startsWith("E_USAGE hr-kappa:"));
+}
+
+// ---------- hr-exposure ----------
+out("## hr-exposure against hand counts");
+{
+  const suite = suiteOf(), suiteF = join(S, "exp-suite.json"); writeFileSync(suiteF, JSON.stringify(suite));
+  const readingsF = join(S, "exp-readings.json"); writeFileSync(readingsF, JSON.stringify(build({ strata: { ceo: { m: 4 }, eng: { m: 5 }, dx: { m: 12 }, design: { m: 13 } } })));
+  const term = (u: string, b: string) => "src/svc" + u.slice(-1) + u.length + "/deep/" + b.toLowerCase() + "_term.py";
+  const traces: any = { schema: 1, blockers: {} };
+  for (const u of suite.units) for (const b of ["B1", "B2", "B3"]) traces.blockers[cid(u.id, b)] = { unit: u.id, terminal: term(u.id, b), hops: [{ file: "src/a.py" }, { file: "src/b.py" }] };
+  const tracesF = join(S, "exp-traces.json"); writeFileSync(tracesF, JSON.stringify(traces));
+  const opusOut = join(S, "exp-opus");
+  mkdirSync(join(opusOut, "arms", "none-opus"), { recursive: true });
+  writeFileSync(join(opusOut, "arms", "none-opus", "arm.json"), JSON.stringify({ models: [{ role: "driver", model: "claude-opus-5-5" }] }));
+  const u1 = suite.units[0]!, tid = u1.repo.split("/").pop() + "-" + u1.pr + "-" + u1.head.slice(0, 8);
+  const call = (name: string, input: any, sub = false) => JSON.stringify({ type: "assistant", parent_tool_use_id: sub ? "toolu_x" : null, message: { content: [{ type: "tool_use", name, input }] } });
+  const tx: Record<number, string[]> = {
+    1: [call("Read", { file_path: "/work/unit/" + term(u1.id, "B1") })],
+    2: [call("Bash", { command: "grep -n retry " + term(u1.id, "B2").replace(/^src\//, "") + " | head" })],
+    3: [call("Read", { file_path: term(u1.id, "B3") }, true)],
+    4: [call("Grep", { pattern: "retry", path: term(u1.id, "B1").replace(/\/[^/]+$/, "") }), call("Read", { file_path: term(u1.id, "B1") + "x" })],
+  };
+  for (const [p, lines] of Object.entries(tx)) { const d = join(opusOut, "runs", "claude-opus-5-5", "none", tid, "p" + p, "host"); mkdirSync(d, { recursive: true }); writeFileSync(join(d, "transcript.ndjson"), lines.join("\n") + "\n"); }
+  const r = run(["hr-exposure.ts", "--scorer", PIN, "--suite", suiteF, "--opus", opusOut, "--traces", tracesF, "--readings", readingsF]);
+  const want = [
+    "Stratum ceo: 24 scored candidate readings; opened the terminal file: matched 1, missed 2; did not open it: matched 3, missed 18; flag, matched without opening: 3",
+    "Stratum eng: 24 scored candidate readings; opened the terminal file: matched 0, missed 0; did not open it: matched 5, missed 19; flag, matched without opening: 5",
+    "Stratum design: 24 scored candidate readings; opened the terminal file: matched 0, missed 0; did not open it: matched 13, missed 11; flag, matched without opening: 13",
+    "Pooled: 96 scored candidate readings; opened the terminal file: matched 1, missed 2; did not open it: matched 33, missed 60; flag, matched without opening: 33",
+  ];
+  const lines = r.out.split("\n");
+  check("hr-exposure exits " + r.code + " and prints a 2x2 per stratum and pooled", r.code === 0 && lines.filter((l) => /^(Stratum|Pooled)/.test(l)).length === 5);
+  check("hr-exposure counts a Read with an absolute path, a shell grep without the src/ prefix and a subagent Read as opened (ceo 1 opened and matched, 2 opened and missed)", lines.includes(want[0]!));
+  check("hr-exposure does not count a search naming only the folder or a read of a longer file name (ceo 3 matched without opening)", lines.includes(want[0]!));
+  check("hr-exposure: strata with no opening count every matched reading as matched without opening (eng 5, design 13), and the pooled 2x2 sums them (1, 2, 33, 60)", lines.includes(want[1]!) && lines.includes(want[2]!) && lines.includes(want[3]!));
+  delete traces.blockers[cid(u1.id, "B2")]; writeFileSync(tracesF, JSON.stringify(traces));
+  const r2 = run(["hr-exposure.ts", "--scorer", PIN, "--suite", suiteF, "--opus", opusOut, "--traces", tracesF, "--readings", readingsF]);
+  check("hr-exposure refuses a candidate with no hr-traces.json row (exit " + r2.code + ", E_USAGE)", r2.code === 2 && r2.err.startsWith("E_USAGE hr-exposure:"));
+}
+
+out("## Leak check");
+{
+  const ids = suiteOf().units.flatMap((u) => [u.id, ...u.blockers.map((b) => b.case)]).concat(STRATA.flatMap((s, i) => ["zk-" + s, "zkc-" + s + "-1"]));
+  const text = transcript.join("\n"), home = process.env.HOME ?? "/home/";
+  const found = ids.filter((x) => text.includes(x)).length + (text.includes(home) ? 1 : 0) + (text.includes(S) ? 1 : 0);
+  check("the transcript prints no fixture unit id, case id, home path or scratch path (" + found + " found)", found === 0);
+}
+out("PASS " + pass + ", FAIL " + fail);
+process.exit(fail ? 1 : 0);
