@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+# Power for the R2 rerun (GEVA-195 amendment, section 1), keyless and seeded. It builds on #112's R1 method (power.py in
+# 2026-11-01-geva-101-r48-follow-ups-prereg): detection chances come from a beta with concentration 2 (the scorer's "wide"
+# spread), the treatment's mean is the control rate plus a 30-point lead, each pass is a Bernoulli draw, and a blocker's
+# value is its share of found passes. Draws go by PR cluster, the scorer's bootstrap unit: each cluster gets one chance for
+# each arm, drawn on its own for each arm, and every blocker in the cluster uses its arm's chance on every pass, so the lead
+# varies by PR. The standard error of the arms' mean difference over 4000 simulated runs, times 2.8, is the MDD (80% power,
+# two-sided 0.05). by="blocker" draws each blocker's two chances on their own instead, and is printed only as the
+# alternative. The calibration lines set both draws against the PR-clustered intervals R1 and #108 reported, read as an MDD
+# of 2.8 times the interval's width over 3.92. pilot_chance() simulates no-gstack pilots at a set control rate, one chance
+# per PR cluster shared by its blockers (or one per blocker for the alternative), and runs rr-admit.py's own pass line on
+# each, so it is the share of pilots the frozen rule admits. rr-admit.py calls mdd() and clusters_of().
+# Usage: python3 power-rr.py <stacks-r1.json> [rr-admit.py or rr-admit.py.txt]
+import functools, importlib.machinery, importlib.util, json, math, os, random, sys
+from collections import Counter
+
+SEED, SIMS, LEAD, PLAN, PILOT_PASSES = 20261031, 4000, 0.30, 0.071, 5
+COHORT14 = [2, 2, 2, 1, 4, 4, 4, 1, 1, 1, 3, 1, 1, 2]
+
+
+def beta(rng, mean):
+    return rng.betavariate(max(mean * 2, 1e-6), max((1 - mean) * 2, 1e-6))
+
+
+@functools.lru_cache(maxsize=None)
+def _mdd(clusters, p0, passes, lead, by, sims, seed):
+    rng = random.Random(seed)
+    n = sum(clusters)
+    est = []
+    for _ in range(sims):
+        tot = 0.0
+        for size in clusters:
+            if by == "cluster":
+                p, q = beta(rng, p0), beta(rng, min(1.0, p0 + lead))
+            for _ in range(size):
+                if by == "blocker":
+                    p, q = beta(rng, p0), beta(rng, min(1.0, p0 + lead))
+                tot += sum(rng.random() < q for _ in range(passes)) / passes - sum(rng.random() < p for _ in range(passes)) / passes
+        est.append(tot / n)
+    m = sum(est) / sims
+    return 280 * math.sqrt(sum((x - m) ** 2 for x in est) / (sims - 1))
+
+
+def mdd(clusters, p0, passes, lead=LEAD, by="cluster", sims=SIMS, seed=SEED):
+    """The MDD in points for blocking blockers grouped in clusters (sizes), control rate p0, passes per arm."""
+    return _mdd(tuple(clusters), round(p0, 12), passes, lead, by, sims, seed)
+
+
+def clusters_of(suite):
+    """Blocking blockers per PR cluster, for every cluster that holds one, largest first."""
+    c = Counter()
+    for u in suite["units"]:
+        c[u["cluster"]] += sum(1 for b in u.get("blockers", []) if b.get("counts") == "blocking")
+    return sorted((v for v in c.values() if v), reverse=True)
+
+
+def pilot_chance(clusters, p0, passes, admit, by="cluster", sims=SIMS, seed=SEED):
+    """The shares of simulated no-gstack pilots at control rate p0 that rr-admit.py's pass line admits, and that fail at its floor."""
+    rng = random.Random(seed)
+    me = sys.modules[__name__]
+    ok = floor = 0
+    for _ in range(sims):
+        values = []
+        for c, size in enumerate(clusters):
+            p = beta(rng, p0) if by == "cluster" else None
+            for _ in range(size):
+                q = p if by == "cluster" else beta(rng, p0)
+                values.append((c, 0.0, sum(rng.random() < q for _ in range(passes)) / passes))
+        line = admit.pass_line(values, clusters, me)
+        ok += line[-1]
+        floor += line[1] <= 0
+    return ok / sims, floor / sims
+
+
+if __name__ == "__main__":
+    all33 = clusters_of(json.load(open(sys.argv[1])))
+    path = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "rr-admit.py")
+    loader = importlib.machinery.SourceFileLoader("rr_admit", path)
+    admit = importlib.util.module_from_spec(importlib.util.spec_from_loader("rr_admit", loader))
+    loader.exec_module(admit)
+    SETS = [("out19, blocking", [1] * 13, 0.05), ("out19, any severity", [1] * 13, 0.25), ("cohort14, blocking", COHORT14, 0.103), ("all 33 units, blocking", all33, 0.071)]
+    print("power: all 33 units' blocking blockers per PR cluster: " + ",".join(map(str, all33)))
+    for name, cl, p0 in SETS:
+        print("power: %s: %d blockers on %d PR clusters, control %.1f%%: MDD %.1f points at 1 pass, %.1f at 2 passes" % (name, sum(cl), len(cl), 100 * p0, mdd(cl, p0, 1), mdd(cl, p0, 2)))
+    CAL = [("R1, C vs none-opus on cohort14", COHORT14, 0.103, 0.569, 40.5, 72.2), ("#108, gstack-opus vs none-opus on all 33 units", all33, 0.071, 0.024, -6.4, 11.1)]
+    for name, cl, p0, lead, lo, hi in CAL:
+        print("power: calibration, %s (control %.1f%%, lead %.1f points, 2 passes): its PR-clustered interval [%.1f, %.1f] implies an MDD of %.1f; the cluster draw gives %.1f and the blocker-level draw %.1f" % (name, 100 * p0, 100 * lead, lo, hi, 2.8 * (hi - lo) / 3.92, mdd(cl, p0, 2, lead), mdd(cl, p0, 2, lead, "blocker")))
+    print("power: admission: the MDD at the planning rate %.1f%% on all 33 units' clusters at the grid's 2 passes is %.1f points" % (100 * PLAN, mdd(all33, PLAN, 2)))
+    for passes, by in [(PILOT_PASSES, "cluster"), (1, "cluster"), (3, "blocker")]:
+        ok, floor = pilot_chance(all33, PLAN, passes, admit, by)
+        print("power: admission: at a true control rate of %.1f%%, rr-admit.py's pass line admits %.1f%% of %d simulated pilots at %d pass%s, one chance per %s; %.1f%% fail at the floor" % (100 * PLAN, 100 * ok, SIMS, passes, "" if passes == 1 else "es", "PR cluster" if by == "cluster" else "blocker (the alternative)", 100 * floor))

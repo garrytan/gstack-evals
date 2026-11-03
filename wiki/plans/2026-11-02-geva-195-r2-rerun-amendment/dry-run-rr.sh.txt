@@ -1,0 +1,362 @@
+#!/usr/bin/env bash
+# R2 rerun amendment dry run (GEVA-195): the post's frozen rules, keyless, at the pins, on a stub run's real driver output.
+# Sessions run 176fdc7's run loop and driver (rr-stub-arms.ts); judging and scoring run at rig 715f837, with the pinned
+# judge-run in process against #112's fake provider (judge-fake.ts). Cases no stub scenario writes are synthetic copies of
+# a run's outputs, and the script says so where it makes one. Ledger leases go on temporary ledgers. Keys are unset first.
+# Usage: R=<gstack-evals at 715f837> B=<gstack-evals at 176fdc7> GSRC=<garrytan/gstack clone> GBSRC=<garrytan/gbrain clone>
+#   SEVMAP=<GEVA-89's sevmap.ts> SCRUB=<dir holding R1's scrub.ts, scrub2.ts, r1-scrub3.ts> R2F=<R2's judged arms root>
+#   bash dry-run-rr.sh.txt <empty work dir>
+# This post's attachments come from the script's folder (D), #112's from PD and #129's from PC (both default to B's wiki).
+set -u
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY
+W=$(mkdir -p "$1" && cd "$1" && pwd)
+D=$(cd "$(dirname "$0")" && pwd)
+PD=${PD:-$B/wiki/plans/2026-11-01-geva-101-r48-follow-ups-prereg}
+PC=${PC:-$B/wiki/plans/2026-11-02-geva-122-r2-amendment}
+P=$R/wiki/plans/2026-10-31-geva-76-stacks-round-1-prereg
+S=$P/stacks-r1.json
+MAP=$D/reader-map-gstack-5209e9262d80.json
+G="$R/bin/gstack-evals noloss"
+L="$B/bin/gstack-evals ledger"
+export R B
+mkdir -p "$W/log" "$W/bin" "$W/judge" "$W/held"
+for f in judge-fake.ts items.ts; do cp "$PD/$f.txt" "$W/bin/$f"; done
+for f in blind.py r2-source.py; do cp "$PC/$f.txt" "$W/bin/$f"; done
+for f in power-rr.py rr-admit.py rr-gate.py rr-held.py rr-decide.py rr-pause.py rr-stub-arms.ts; do cp "$D/$f.txt" "$W/bin/$f"; done
+cp "$D/comparisons.rr.json" "$W/bin/"
+HIDE="s#$W#\$W#g; s#$D#\$D#g; s#$PD#\$PD#g; s#$PC#\$PC#g; s#$GSRC#\$GSRC#g; s#$GBSRC#\$GBSRC#g; s#$SEVMAP#\$SEVMAP#g; s#$SCRUB#\$SCRUB#g; s#$R2F#\$R2F#g; s#$R#\$R#g; s#$B#\$B#g; s#$HOME#~#g"
+n=0
+step() {
+  local pat=$1; shift
+  n=$((n + 1))
+  echo
+  echo "\$ $*" | sed "$HIDE" | cut -c1-400
+  "$@" > "$W/log/$n.txt" 2>&1
+  local c=$?
+  grep -E -- "$pat" "$W/log/$n.txt" | head -"${SHOW:-24}" | sed "$HIDE" | cut -c1-400
+  echo "exit $c (log/$n.txt)"
+}
+JUDGES="--primary anthropic/claude-opus-5-5 --second openai/gpt-6.1-sol --third anthropic/claude-sonnet-5-5"
+arms() { local root=$1; shift; for a in "$@"; do printf -- ' --arm %s' "$root/$a"; done; }
+ST() { env B="$B" MAP="$MAP" TOLD="$PC/told-gstack-full.txt" bun "$W/bin/rr-stub-arms.ts" "$@"; }
+# STE saves a stub run's stderr and appends it to the run's log with rr-pause.py --append, closed by its exit line, as the
+# README's run step does. PL holds the launch's spend cap and the item's remaining cap; by default the item's cap sets it,
+# so nothing is marked. review-units' CLI exits 2 on any stop (src/trial/review/cli.ts at 176fdc7), so a stub run that
+# logged a stop line and exited 0 closes with exit 2.
+STE() { local f=$1 rc n; shift; mkdir -p "$(dirname "$f")"; ST "$@" 2> "$f.launch"; rc=$?; n=$rc; [ $rc -eq 0 ] && grep -qE '^[A-Z][A-Z0-9_]*[A-Z0-9]( |:|$)' "$f.launch" && n=2; python3 "$W/bin/rr-pause.py" --append "$f.launch" $n "$f" ${PL:-1 1} >&2; cat "$f" >&2; return $rc; }
+GS() { printf 'E_COVERAGE_GAP arm none-opus stopped with %s, so it gets no verdict (synthetic)\nreview-units exit 2\n' "$1"; }
+third() { [ -s "$1/third.json" ] && echo "--third $1/third.json"; }
+init_items() { local rec=$1; shift; for p in "$@"; do ITEM="${p%%:*}" CAP="${p#*:}" REC="$rec" bun -e 'const { recordApproval } = await import(process.env.R + "/src/runner/ledger/ledger.ts"); recordApproval(process.env.REC, { action: "init", item: process.env.ITEM, cap_micros: Math.round(Number(process.env.CAP) * 1e6), quotes: [{ words: "Dry run: keyless item, no spend", by: "GEVA-195", source: "dry-run" }], admission: "warn" });' > /dev/null || echo "E_INIT ${p%%:*}"; echo "item ${p%%:*} at \$${p#*:}"; done; }
+front() { local dir=$1; shift; for f in "$@"; do h=$(sha256sum "$dir/$f" | cut -c1-64); grep -q "$h" "$dir/README.md" && echo "front matter ok $f $h" || echo "E_PIN $f $h is not in its post's front matter"; done; }
+mapcheck() {
+  M="$MAP" bun -e 'const { loadReaderMap } = await import(process.env.B + "/src/trial/review/readers.ts"); const r = loadReaderMap(process.env.M); console.log("problem" in r ? "E_MAP " + r.problem : "map loads at 176fdc7: sha256 " + r.sha256 + ", gstack " + r.map.gstack.sha + ", " + Object.keys(r.map.checklists).length + " checklists, marker " + JSON.stringify(r.map.adversarial));'
+  local c; c=$(jq -r .gstack.sha "$MAP")
+  for p in $(jq -r '.checklists | keys[]' "$MAP"); do git -C "$GSRC" ls-tree --name-only "$c" -- "$p" | grep -qx "$p" && echo "present at the pin: $p" || echo "E_MAP_PATH $p"; done
+  for f in review/sections/adversarial.md ship/sections/adversarial.md; do echo "marker in $f: $(git -C "$GSRC" show "$c:$f" | grep -c 'Think like an attacker and a chaos engineer')"; done
+  echo "gstack VERSION at the pin: $(git -C "$GSRC" show "$c:VERSION")"
+}
+
+echo "## Pins"
+step . git -C "$R" log -1 --format='rig %H %s'
+step . git -C "$B" log -1 --format='sessions %H %s'
+step . sh -c "git -C $R status --porcelain | wc -l; git -C $B status --porcelain | wc -l"
+step . sh -c "cd $B/src/trial/review && sha256sum held.ts findings.ts capped.ts readers.ts"
+step . front "$PD" items.ts.txt judge-fake.ts.txt
+step . front "$PC" blind.py.txt r2-source.py.txt told-gstack-full.txt
+step . sh -c "head -c -1 $PC/told-gstack-full.txt | sha256sum"
+step . sh -c "sha256sum $SEVMAP $SCRUB/scrub.ts $SCRUB/scrub2.ts $SCRUB/r1-scrub3.ts"
+step . sh -c "sha256sum $S; jq -r '.id + \": \" + (.units|length|tostring) + \" units, \" + ([.units[].blockers[]? | select(.counts==\"blocking\")]|length|tostring) + \" blocking blockers\"' $S"
+step . sh -c "cd $D && sha256sum reader-map-gstack-5209e9262d80.json comparisons.rr.json dry-run-rr.sh.txt power-rr.py.txt rr-*.txt"
+step . mapcheck
+
+echo; echo "## Power (section 1)"
+step '^power' python3 "$W/bin/power-rr.py" "$S"
+
+echo; echo "## The grid as two stub runs, one arm each (sections 3 and 4)"
+step '^(stub run|E_|CAP_STOP)' STE "$W/run/rr-none.stderr" "$S" "$W/run/rr-none" none grid
+step '^(stub run|E_|CAP_STOP)' STE "$W/run/rr-full.stderr" "$S" "$W/run/rr-full" gstack-full grid
+step . sh -c "jq -c '{id, status, passes, system_prompt: .arm_provenance.system_prompt, told_prefix_sha256: .told.prefix_sha256, parse_outcomes, held_rescues, cap_stops: (.cap_stops|{turn_cap, allowance_stop, units}), gaps: (.coverage_gaps|length), reader_map_sha256}' $W/run/rr-*/arms/*/arm.json"
+step . sh -c "cat $W/run/rr-full/cells.ndjson $W/run/rr-none/cells.ndjson | jq -c 'select((.record.session_end.waited_ms // 0) > 0 or .record.termination.kind != \"completed\" or .parse.kind != \"findings\") | {arm: .cell.arm, unit: .cell.unit, pass: .cell.pass, end: .record.termination, cause: .record.session_end.cause, waited_ms: .record.session_end.waited_ms, findings_block: .record.session_end.findings_block, parse: .parse.kind, scored_turn}'"
+step . sh -c "jq -r '.coverage_gaps[]?' $W/run/rr-*/arms/*/arm.json"
+
+echo; echo "## Held counts and the rescue drop file (section 4)"
+step '^(held|cause|deadline|waited|drop|E_)' python3 "$W/bin/rr-held.py" "$W/held/rescue-drop.tsv" "$W/run/rr-full" "$W/run/rr-none"
+(echo unit; jq -r '.cap_stops.units[]' "$W/run/rr-full/arms/gstack-full-opus/arm.json" "$W/run/rr-none/arms/none-opus/arm.json" | sort -u) > "$W/held/caps-drop.tsv"
+step . sh -c "cat $W/held/rescue-drop.tsv; echo; cat $W/held/caps-drop.tsv"
+
+echo; echo "## Source arms, sevmap, the scrub chain, blinding and ingest (section 7)"
+scrub_arm() {
+  local A=$1 k=0 s
+  bun "$SEVMAP" "$A" || return $?
+  hits() { $G ingest "$A" --suite "$S" --check 2>&1 | sed -n 's/^E_NOLOSS_ARM \(findings\/[^ ]*\.jsonl\) line \([0-9]*\) (finding .*breaks the publication scan.*/\1:\2/p' | sort -t: -k1,1 -k2,2n -u; }
+  hits > "$A.hits0"; echo "$(basename "$A") scan hits before the scrub: $(wc -l < "$A.hits0")"
+  for s in "$SCRUB/scrub.ts" "$SCRUB/scrub2.ts" "$SCRUB/r1-scrub3.ts"; do
+    k=$((k + 1)); if [ -s "$A.hits$((k - 1))" ]; then bun "$s" "$A" "$A.hits$((k - 1))"; else echo "$(basename "$s"): no hits left, not run"; fi
+    hits > "$A.hits$k"; echo "$(basename "$A") scan hits after step $k: $(wc -l < "$A.hits$k")"
+  done
+  rm -f "$A".hits*
+}
+src() { local root=$1 out=$2; shift 2; for p in "$@"; do IFS=: read -r a b d <<< "$p"; step '^(source|E_)' python3 "$W/bin/r2-source.py" "$root/$d/arms/$b" "$b" "$a" "$out/$a"; step 'labels|hits|not run|E_' scrub_arm "$out/$a"; done; }
+src "$W/run" "$W/src" gstack-full:gstack-full-opus:rr-full none-rr:none-opus:rr-none
+step '^(reader|gstack|none|E_)' python3 "$W/bin/blind.py" "$S" "$W/src/gstack-full" "$W/src/none-rr"
+for a in gstack-full none-rr; do step 'ingested|published|E_' $G ingest "$W/src/$a" --suite "$S" --root "$W/raw"; done
+
+echo; echo "## The exposure gate on returned reports (section 6)"
+GATE() { python3 "$W/bin/rr-gate.py" "$S" "$@"; }
+step '^(exposure|gate|E_)' GATE "$W/src/gstack-full" "$W/run/rr-full/parses.tsv" gstack-full-opus
+echo "# Synthetic: one more returned PR-pass loses its adversarial reader's tokens (unavailable): 59 of 66."
+X=$W/gate59/gstack-full; mkdir -p "$W/gate59"; cp -r "$W/src/gstack-full" "$X"; U2=$(jq -r '.units[2].id' "$S")
+awk -F'\t' -v OFS='\t' -v u="$U2" '$1 == u && $2 == "reader:adversarial-native" && $3 == "1" { $4 = "unavailable" } { print }' "$W/src/gstack-full/cost.tsv" > "$X/cost.tsv"
+step '^(exposure|gate|E_)' GATE "$X" "$W/run/rr-full/parses.tsv" gstack-full-opus
+echo "# Bad input, exit 5: reader rows with the owner dropped from pr (synthetic), the wrong suite, a run arm id parses.tsv lacks."
+Y=$W/gatepr/gstack-full; mkdir -p "$W/gatepr"; cp -r "$W/src/gstack-full" "$Y"
+awk -F'\t' -v OFS='\t' 'NR > 1 && $2 ~ /^reader:/ { sub(/^[^\/]*\//, "", $1) } { print }' "$W/src/gstack-full/cost.tsv" > "$Y/cost.tsv"
+step '^(exposure|gate|E_)' GATE "$Y" "$W/run/rr-full/parses.tsv" gstack-full-opus
+step '^(exposure|gate|E_)' python3 "$W/bin/rr-gate.py" "$R/lanes/review-noloss/suites/gsta167-14pr.json" "$W/src/gstack-full" "$W/run/rr-full/parses.tsv" gstack-full-opus
+step '^(exposure|gate|E_)' GATE "$W/src/gstack-full" "$W/run/rr-full/parses.tsv" gstack-full-sonnet
+
+echo; echo "## The exposure smoke: gstack-full, 1 pass, 3 units (section 5)"
+SMOKE="garrytan/gbrain#7789@49eb4da5f7c8,garrytan/gstack#3475@fc69d3ff0bfe,garrytan/gstack#3507@8c021d124220"
+jq --arg ids "$SMOKE" '.units |= map(select(.id as $i | ($ids | split(",") | index($i))))' "$S" > "$W/smoke-suite.json"
+step '^(stub run|E_)' ST "$S" "$W/run/rr-smoke-full" gstack-full smoke --units "$SMOKE"
+step '^(exposure|gate|E_)' python3 "$W/bin/rr-gate.py" "$W/smoke-suite.json" "$W/run/rr-smoke-full/arms/gstack-full-opus" "$W/run/rr-smoke-full/parses.tsv" gstack-full-opus
+
+echo; echo "## Dry-run judge items (caps for the fake judge's spend only; the frozen caps come later)"
+step item init_items "$W/record" rr-pilot-judge:1000 rr-judge-match:1000 rr-judge-adjudicate:1000
+
+echo; echo "## The admission pilot: none, 5 passes, all 33 units, one matching batch (section 5)"
+step '^(stub run|E_)' STE "$W/run/rr-pilot-none.stderr" "$S" "$W/run/rr-pilot-none" none pilot
+src "$W/run" "$W/psrc" none-pilot:none-opus:rr-pilot-none
+step '^(reader|none|E_)' python3 "$W/bin/blind.py" "$S" "$W/psrc/none-pilot"
+step 'ingested|published|E_' $G ingest "$W/psrc/none-pilot" --suite "$S" --root "$W/praw"
+pilot_round() {
+  local X=$W/pilot/$1; mkdir -p "$X"; cp -r "$W/record" "$X/record"
+  # The real run puts the judge pre-flight (preflight.py on judge-run --dry-run) before any judge call; it is driven below at the frozen caps.
+  local AR="--arm $W/praw/stacks-r1/none-pilot"
+  step 'packet|E_' $G judge-packet --suite "$S" $AR --seed 20261031 --out "$X/match" --key "$X/match-key.json"
+  local J="--suite $S --packets $X/match --key $X/match-key.json $AR --brief $P/judge-brief.md $JUDGES --ledger $X/ledger.sqlite --record $X/record"
+  [ "$1" = floor ] && step '^(worst case|item )|E_' sh -c "$G judge-run $J --item rr-pilot-judge --out $X/judge-match --dry-run | tee $W/judge/pilot-match.txt"
+  FAKE_RATES="none-pilot=$2" step '^(judge-run|E_)|unjudged' bun "$W/bin/judge-fake.ts" $J --item rr-pilot-judge --out "$X/judge-match" --concurrency 4
+  step 'judge-join|E_' $G judge-join --suite "$S" --key "$X/match-key.json" --reply "$X/judge-match/primary.json" --second "$X/judge-match/second.json" $(third "$X/judge-match") $AR --out "$X/joined"
+  step 'published|E_' $G ingest "$X/joined/none-pilot" --suite "$S" --root "$X/judged"
+  step '^(derive|E_)|dropped' $G derive --suite "$S" --comparisons "$W/bin/comparisons.rr.json" --id stacks-r1-pilot --out "$X/d" --root "$X/judged" --drop-gaps
+  step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$X/d/derive.json" "$X/d/stacks-r1-pilot.json" "$X/d/arms/stacks-r1-pilot/none-pilot" "$W/run/rr-pilot-none/arms/none-opus/arm.json" "$W/run/rr-pilot-none.stderr" "$W/bin/power-rr.py"
+}
+echo "# FAIL at the floor (the fake judge matches nothing)"; pilot_round floor 0
+echo "# PASS in the middle"; pilot_round mid 30
+echo "# FAIL at the top (the fake judge matches every finding)"; pilot_round top 100
+echo "# Synthetic: the mid round's judged arm with 4 units marked as coverage gaps: incomplete, exit 4."
+X=$W/pilot/gap4; mkdir -p "$X"; jq --slurpfile s "$S" '.status = "stopped" | .coverage_gaps = [$s[0].units[0:4][] | .id + " pass 1: malformed (synthetic)"]' "$W/pilot/mid/joined/none-pilot/arm.json" > "$X/arm.json"
+cp -r "$W/pilot/mid/joined/none-pilot" "$X/none-pilot"; cp "$X/arm.json" "$X/none-pilot/arm.json"
+jq --slurpfile s "$S" '.status = "stopped" | .coverage_gaps = [$s[0].units[0:4][] | .id + " pass 1: malformed (synthetic)"]' "$W/run/rr-pilot-none/arms/none-opus/arm.json" > "$X/run-arm.json"; GS "4 coverage gaps" > "$X/run.stderr"
+step 'published|E_' $G ingest "$X/none-pilot" --suite "$S" --root "$X/judged"
+step '^(derive|E_)|dropped' $G derive --suite "$S" --comparisons "$W/bin/comparisons.rr.json" --id stacks-r1-pilot --out "$X/d" --root "$X/judged" --drop-gaps
+step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$X/d/derive.json" "$X/d/stacks-r1-pilot.json" "$X/d/arms/stacks-r1-pilot/none-pilot" "$X/run-arm.json" "$X/run.stderr" "$W/bin/power-rr.py"
+echo "# Synthetic: the pilot run's arm.json shows an interrupted run (5 sessions not run, stopped, no coverage gap): incomplete, exit 4."
+X=$W/pilot/interrupted; mkdir -p "$X"; jq '.status = "stopped" | .parse_outcomes.findings -= 5 | .parse_outcomes.not_run = 5 | .coverage_gaps = []' "$W/run/rr-pilot-none/arms/none-opus/arm.json" > "$X/run-arm.json"; cp "$W/run/rr-pilot-none.stderr" "$X/run.stderr"
+step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$W/pilot/mid/d/derive.json" "$W/pilot/mid/d/stacks-r1-pilot.json" "$W/pilot/mid/d/arms/stacks-r1-pilot/none-pilot" "$X/run-arm.json" "$X/run.stderr" "$W/bin/power-rr.py"
+echo "# Synthetic: a gap-only stop (stopped with 1 coverage gap, every session run) goes on to the drop rule and the pass line."
+X=$W/pilot/gaponly; mkdir -p "$X"; jq --slurpfile s "$S" '.status = "stopped" | .coverage_gaps = [$s[0].units[0].id + " pass 1: malformed (synthetic)"]' "$W/run/rr-pilot-none/arms/none-opus/arm.json" > "$X/run-arm.json"; GS "1 coverage gap" > "$X/run.stderr"
+step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$W/pilot/mid/d/derive.json" "$W/pilot/mid/d/stacks-r1-pilot.json" "$W/pilot/mid/d/arms/stacks-r1-pilot/none-pilot" "$X/run-arm.json" "$X/run.stderr" "$W/bin/power-rr.py"
+echo "# Synthetic: a proxy cap stop in the last round leaves one coverage gap and no session not run, and the saved stderr names CAP_STOP: incomplete, exit 4."
+X=$W/pilot/capgap; mkdir -p "$X"; cp "$W/pilot/gaponly/run-arm.json" "$X/run-arm.json"; { GS "1 coverage gap" | head -1; echo "CAP_STOP the proxy stopped a session at the cap"; echo "review-units exit 2"; } > "$X/run.stderr"
+step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$W/pilot/mid/d/derive.json" "$W/pilot/mid/d/stacks-r1-pilot.json" "$W/pilot/mid/d/arms/stacks-r1-pilot/none-pilot" "$X/run-arm.json" "$X/run.stderr" "$W/bin/power-rr.py"
+echo "# Synthetic: the gap-only stop with no saved stderr log: incomplete, exit 4."
+step '^(admission|E_)' python3 "$W/bin/rr-admit.py" "$W/pilot/mid/d/derive.json" "$W/pilot/mid/d/stacks-r1-pilot.json" "$W/pilot/mid/d/arms/stacks-r1-pilot/none-pilot" "$W/pilot/gaponly/run-arm.json" "$W/pilot/nolog/run.stderr" "$W/bin/power-rr.py"
+
+echo; echo "## Grid judging, derive --drop-gaps, noloss score and rr-decide.py (section 7)"
+ARMS="gstack-full none-rr"
+decide() { step '^(R2 rerun|exposure|gate|E_)' python3 "$W/bin/rr-decide.py" "$1" "$2" "$S" "${3:-$W/src/gstack-full}" "${4:-$W/src/none-rr}" "$W/run/rr-full/parses.tsv" gstack-full-opus "${5:-$W/run/rr-full.stderr}" "${6:-$W/run/rr-none.stderr}"; }
+score_on() { step '^([A-Za-z0-9-]+ vs [a-z0-9-]+ at a |verdict|E_)' $G score --suite "$1/$2.json" --root "$1/arms" --prereg "$1/comparisons.$2.json" --variant gstack-full --reference none-rr --out "$1/score.json"; }
+derive_on() { local X=$1 id=$2; shift 2; step '^(derive|E_)|dropped' $G derive --suite "$S" --comparisons "$W/bin/comparisons.rr.json" --id "$id" --out "$X/$id" --root "$X/final" --drop-gaps "$@"; score_on "$X/$id" "$id"; }
+judge_round() {
+  local X=$W/grid/$1; mkdir -p "$X"; cp -r "$W/record" "$X/record"
+  # The real run puts the judge pre-flight (preflight.py on judge-run --dry-run) before any judge call; it is driven below at the frozen caps.
+  step 'packet|E_' $G judge-packet --suite "$S" $(arms "$W/raw/stacks-r1" $ARMS) --seed 20261031 --out "$X/match" --key "$X/match-key.json"
+  local J="--suite $S --packets $X/match --key $X/match-key.json $(arms $W/raw/stacks-r1 $ARMS) --brief $P/judge-brief.md $JUDGES --ledger $X/ledger.sqlite --record $X/record"
+  [ "$1" = keep ] && step '^(worst case|item )|E_' sh -c "$G judge-run $J --item rr-judge-match --out $X/judge-match --dry-run | tee $W/judge/grid-match.txt"
+  FAKE_RATES=$2 step '^(judge-run|E_)|unjudged' bun "$W/bin/judge-fake.ts" $J --item rr-judge-match --out "$X/judge-match" --concurrency 4
+  step 'judge-join|E_' $G judge-join --suite "$S" --key "$X/match-key.json" --reply "$X/judge-match/primary.json" --second "$X/judge-match/second.json" $(third "$X/judge-match") $(arms "$W/raw/stacks-r1" $ARMS) --out "$X/judge-match/joined"
+  for a in $ARMS; do step 'published|E_' $G ingest "$X/judge-match/joined/$a" --suite "$S" --root "$X/judged"; done
+  step 'packet|E_' $G judge-packet --suite "$S" $(arms "$X/judged/stacks-r1" $ARMS) --seed 20261031 --out "$X/adj" --key "$X/adj-key.json" --adjudicate
+  local A="--suite $S --packets $X/adj --key $X/adj-key.json $(arms $X/judged/stacks-r1 $ARMS) --brief $P/judge-brief.md $JUDGES --ledger $X/ledger.sqlite --record $X/record --source garrytan/gstack=$GSRC --source garrytan/gbrain=$GBSRC"
+  [ "$1" = keep ] && step '^(worst case|item )|E_' sh -c "$G judge-run $A --item rr-judge-adjudicate --out $X/judge-adj --dry-run | tee $W/judge/grid-adj.txt"
+  FAKE_RATES=$2 step '^(judge-run|unverifiable|E_)' bun "$W/bin/judge-fake.ts" $A --item rr-judge-adjudicate --out "$X/judge-adj" --concurrency 4
+  step 'judge-join|E_' $G judge-join --suite "$S" --key "$X/adj-key.json" --reply "$X/judge-adj/primary.json" --second "$X/judge-adj/second.json" $(third "$X/judge-adj") $(arms "$X/judged/stacks-r1" $ARMS) --out "$X/judge-adj/joined"
+  for a in $ARMS; do step 'published|E_' $G ingest "$X/judge-adj/joined/$a" --suite "$S" --root "$X/final"; done
+  derive_on "$X" stacks-r1-rr
+  decide "$X/stacks-r1-rr/score.json" "$X/stacks-r1-rr/derive.json"
+}
+echo "# KEEP"; judge_round keep "gstack-full=90,none-rr=10"
+echo "# CUT-CANDIDATE"; judge_round cut "gstack-full=10,none-rr=50"
+echo "# FIX-METHOD"; judge_round fix "${RRSMALL:-gstack-full=30,none-rr=25}"
+
+echo; echo "## Beside the KEEP verdict: sensitivities, strata, secondaries (sections 4 and 7)"
+X=$W/grid/keep
+step '^(recall|new|idea|E_)' $G secondary --suite "$X/stacks-r1-rr/stacks-r1-rr.json" --root "$X/stacks-r1-rr/arms" --variant gstack-full --reference none-rr --seed 20261031
+echo "# rr-admit.py's port of the scorer's bootstrap, on each KEEP arm: its interval should equal the recall interval above."
+for a in gstack-full none-rr; do ra="$W/run/rr-full/arms/gstack-full-opus/arm.json"; [ "$a" = none-rr ] && ra="$W/run/rr-none/arms/none-opus/arm.json"; step '^admission: [a-z]|E_' python3 "$W/bin/rr-admit.py" "$X/stacks-r1-rr/derive.json" "$X/stacks-r1-rr/stacks-r1-rr.json" "$X/stacks-r1-rr/arms/stacks-r1-rr/$a" "$ra" "${ra%%/arms/*}.stderr" "$W/bin/power-rr.py"; done
+echo "# Rescue sensitivity: units with a held-rescued session dropped from both arms."; derive_on "$X" stacks-r1-rr-rescue --drop-file "$W/held/rescue-drop.tsv"
+echo "# Complete-case sensitivity: units with a capped session dropped from both arms."; derive_on "$X" stacks-r1-rr-cc --drop-file "$W/held/caps-drop.tsv"
+(echo unit; jq -r '.units[].id' "$R/lanes/review-noloss/suites/gsta167-14pr.json") > "$W/cohort14.tsv"
+(echo unit; jq -r --slurpfile c "$R/lanes/review-noloss/suites/gsta167-14pr.json" '.units[].id | select(. as $i | [$c[0].units[].id] | index($i) | not)' "$S") > "$W/out19.tsv"
+step . sh -c "echo cohort14.tsv \$((\$(wc -l < $W/cohort14.tsv) - 1)) units, out19.tsv \$((\$(wc -l < $W/out19.tsv) - 1)) units; sha256sum $W/cohort14.tsv"
+echo "# Stratum: the cohort's 14 units."; derive_on "$X" stacks-r1-rr-cohort14 --drop-file "$W/out19.tsv"
+echo "# Stratum: the out19 units."; derive_on "$X" stacks-r1-rr-out19 --drop-file "$W/cohort14.tsv"
+
+echo; echo "## No outcome, on the KEEP round's scores (synthetic copies, section 7)"
+K=$X/stacks-r1-rr
+echo "# The gate failing (the 59-of-66 copy)."; decide "$K/score.json" "$K/derive.json" "$W/gate59/gstack-full"
+echo "# The cap-stop rule: none-rr's arm.json says 7 capped sessions."; mkdir -p "$W/cap7"; cp -r "$W/src/none-rr" "$W/cap7/none-rr"; jq '.cap_stops.turn_cap = 5 | .cap_stops.allowance_stop = 2' "$W/src/none-rr/arm.json" > "$W/cap7/none-rr/arm.json"; decide "$K/score.json" "$K/derive.json" "$W/src/gstack-full" "$W/cap7/none-rr"
+echo "# A proxy CAP_STOP whose gap --drop-gaps dropped: none-rr's run log with run.ts's cap-stop line added, on the KEEP round, which dropped every gap unit."; { grep -v '^review-units exit' "$W/run/rr-none.stderr"; echo "CAP_STOP the proxy stopped a session at the cap"; echo "review-units exit 2"; } > "$W/rr-none-capstop.stderr"; decide "$K/score.json" "$K/derive.json" "" "" "" "$W/rr-none-capstop.stderr"
+echo "# gstack-full's run log is missing."; decide "$K/score.json" "$K/derive.json" "" "" "$W/no-such.stderr"
+echo "# The coverage rule: derive.json with a fourth dropped unit."; jq --arg u "$(jq -r '.units[20].id' "$S")" '.dropped += [{unit: $u, reasons: ["a coverage gap (synthetic)"]}]' "$K/derive.json" > "$W/derive-4.json"; decide "$K/score.json" "$W/derive-4.json"
+echo "# The scorer gives no interval."; jq '.result.ci95 = null' "$K/score.json" > "$W/score-noci.json"; decide "$W/score-noci.json" "$K/derive.json"
+echo "# A score file that doesn't exist: exit 5."; decide "$W/no-such-score.json" "$K/derive.json"
+
+echo; echo "## Judge items' caps (section 8)"
+step '^shape' python3 - "$W/raw/stacks-r1" "$R2F" "$W/judge/shape.json" <<'EOF'
+import glob, json, os, sys
+stub, r2, out = sys.argv[1:4]
+def stats(root):
+    n, size = [], []
+    for f in glob.glob(os.path.join(root, "*", "findings", "*.jsonl")):
+        lines = [l for l in open(f) if l.strip()]
+        passes = json.load(open(os.path.join(os.path.dirname(os.path.dirname(f)), "arm.json")))["passes"]
+        n += [sum(1 for l in lines if json.loads(l).get("pass", 1) == p) for p in range(1, passes + 1)]
+        size += [len(l.encode()) for l in lines]
+    return max(n), sum(n) / len(n), sum(size) / max(len(size), 1)
+s, r = stats(stub), stats(os.path.join(r2, "stacks-r1-out19"))
+print("shape: stub sessions write at most %d findings, %.1f on average, %.0f bytes a finding line" % s)
+print("shape: R2's judged arms (gstack-full and none-r2, 19 units, 1 pass): at most %d findings a session, %.1f on average, %.0f bytes a finding line" % r)
+per = r[0] * r[2] / s[2]
+json.dump({"per_session": per}, open(out, "w"))
+print("shape: a real session is sized as %.1f stub findings (R2's most findings in one session, times its bytes a line over the stub's)" % per)
+EOF
+size_judge() {
+python3 - "$@" <<'EOF'
+import json, math, re, sys
+item, log, key, sessions, shape, out, packets = sys.argv[1:8]
+real = float(sessions) * json.load(open(shape))["per_session"]
+per = {}
+for e in json.load(open(key))["entries"]:
+    per[e["packet"]] = per.get(e["packet"], 0) + 1
+rows, sends = {}, 0
+for line in open(log):
+    m = re.match(r"^(primary|second|third)\s+\S+\s+(\S+)\s+worst case \$([0-9.,]+) \((\d+) sends", line)
+    if m:
+        rows.setdefault(m.group(1), []).append((per.get(m.group(2), 0), float(m.group(3).replace(",", ""))))
+        sends = int(m.group(4))
+stub = total = 0.0
+reqs = 0
+for role, xs in rows.items():
+    k = len(xs); mx = sum(x for x, _ in xs) / k; my = sum(y for _, y in xs) / k
+    vx = sum((x - mx) ** 2 for x, _ in xs)
+    b = sum((x - mx) * (y - my) for x, y in xs) / vx if vx else 0.0
+    a = my - b * mx
+    stub += sum(y for _, y in xs); reqs += k * sends
+    total += int(packets) * (a + b * real)
+    print("judge cap %s %s: %d packets, $%.4f a packet plus $%.5f a finding (least squares on the stub batch's lines)" % (item, role, k, a, b))
+cap = math.ceil(2 * total)
+print("judge cap %s: the stub-shaped batch holds %d findings in %d packets and counts at most %d requests (packets x 3 judges x %d sends); its worst case $%.2f. Sized at %.0f findings a packet (%s sessions a packet) on %s packets, the worst case is $%.2f, and $%.2f if every answer is asked again (judge-run asks an answer again once): cap $%d" % (item, sum(per.values()), max(len(v) for v in rows.values()), reqs, sends, stub, real, sessions, packets, total, 2 * total, cap))
+open(out, "a").write("%s\t%d\n" % (item, cap))
+EOF
+}
+# A matching batch's cap is sized at 33 packets of 100,000 characters each, not a worst case or a bound (the judge
+# pre-flight below prices each real batch before any judge call), each packet the batch's largest repeated to that length,
+# priced as judge-run --dry-run prices a request at 715f837 (judge-run.ts's request and the proxy's fields, prices.ts);
+# the script first checks that this pricing gives judge-run's own figure on that packet.
+cat > "$W/bin/size-match.ts" <<'EOF'
+import { appendFileSync, readdirSync, readFileSync } from "fs";
+const { judgeRequest, JUDGE_REASONING_EFFORT } = await import(process.env.R + "/src/adapters/judge.ts");
+const { priceRequest, reservationMicros } = await import(process.env.R + "/src/runner/pricing/prices.ts");
+const { JUDGE_RETRY } = await import(process.env.R + "/lanes/review-noloss/judge-run.ts");
+const [item, log, dir, briefPath, out] = process.argv.slice(2);
+const CHARS = 100000, PACKETS = 33, MAX_OUTPUT_TOKENS = 16000;
+const brief = readFileSync(briefPath, "utf8"), batch = readFileSync(dir + "/batch.json", "utf8"), lines = readFileSync(log, "utf8");
+const big = readdirSync(dir + "/packets").map((f) => ({ file: "packets/" + f, text: readFileSync(dir + "/packets/" + f, "utf8") })).sort((a, b) => b.text.length - a.text.length || a.file.localeCompare(b.file))[0];
+const proxied = (provider, body) => (provider === "anthropic" ? { ...body, inference_geo: "global" } : { ...body, service_tier: "default" });
+const send = (provider, model, text) => reservationMicros(priceRequest(provider, proxied(provider, judgeRequest(provider, model, ["=== Judge brief ===", brief, "=== Instructions: batch.json ===", batch, "=== Packet: " + big.file + " ===", text].join("\n"), MAX_OUTPUT_TOKENS, provider === "openai" ? JUDGE_REASONING_EFFORT : undefined)), MAX_OUTPUT_TOKENS));
+const usd = (m) => "$" + (m / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+const wide = big.text.repeat(Math.ceil(CHARS / big.text.length)).slice(0, CHARS);
+let total = 0;
+for (const role of ["primary", "second", "third"]) {
+  const m = lines.match(new RegExp("^" + role + "\\s+(\\w+)/(\\S+)\\s+" + big.file.replace(/\./g, "\\.") + "\\s+worst case \\$[0-9.]+ \\((\\d+) sends at \\$([0-9.]+)\\)", "m"));
+  if (!m) { console.log("E_JUDGE_CAP " + item + ": judge-run's dry run prints no " + role + " line for " + big.file); process.exit(1); }
+  const [, provider, model, sends, printed] = m, stub = send(provider, model, big.text), at = send(provider, model, wide);
+  if (Number(sends) !== JUDGE_RETRY.attempts || stub !== Math.round(Number(printed) * 1e6)) { console.log("E_JUDGE_CAP " + item + " " + role + ": this pricing gives " + usd(stub) + " a send on " + big.file + ", and judge-run printed $" + printed + " at " + sends + " sends"); process.exit(1); }
+  total += at * JUDGE_RETRY.attempts * PACKETS;
+  console.log("judge cap " + item + " " + role + " " + provider + "/" + model + ": " + usd(at) + " a send at 100,000 characters; on " + big.file + " (" + big.text.length + " characters) this pricing gives " + usd(stub) + ", as judge-run printed");
+}
+const cap = Math.ceil((2 * total) / 1e6);
+console.log("judge cap " + item + ": " + PACKETS + " packets of 100,000 characters (" + big.file + " repeated), 3 judges at " + JUDGE_RETRY.attempts + " sends each: worst case " + usd(total) + ", and " + usd(2 * total) + " if every answer is asked again (judge-run asks an answer again once): cap $" + cap);
+appendFileSync(out, item + "\t" + cap + "\n");
+EOF
+: > "$W/judge/caps.tsv"
+step '^(judge cap|E_)' bun "$W/bin/size-match.ts" rr-pilot-judge "$W/judge/pilot-match.txt" "$W/pilot/floor/match" "$P/judge-brief.md" "$W/judge/caps.tsv"
+step '^(judge cap|E_)' bun "$W/bin/size-match.ts" rr-judge-match "$W/judge/grid-match.txt" "$W/grid/keep/match" "$P/judge-brief.md" "$W/judge/caps.tsv"
+echo "# Adjudication requests also carry an evidence sheet with up to 61 lines of code at each finding, which no character count bounds, so rr-judge-adjudicate's cap is an estimate from the fit."
+step '^judge cap' size_judge rr-judge-adjudicate "$W/judge/grid-adj.txt" "$W/grid/keep/adj-key.json" 4 "$W/judge/shape.json" "$W/judge/caps.tsv" 33
+step . cat "$W/judge/caps.tsv"
+
+echo; echo "## The judge pre-flight at the frozen caps: judge-run --dry-run prices the real batch before any judge call (section 7)"
+cat > "$W/bin/preflight.py" <<'EOF'
+import re, sys
+item, log = sys.argv[1:3]
+text = open(log).read()
+d = re.search(r"\$([0-9.,]+) if every answer is asked again", text)
+c = re.search(r"^item " + re.escape(item) + r": cap \$([0-9.,]+)", text, re.M)
+if not d or not c:
+    print("E_PREFLIGHT %s: judge-run --dry-run printed no doubled estimate or no cap for the item" % item)
+    sys.exit(5)
+doubled, cap = float(d.group(1).replace(",", "")), float(c.group(1).replace(",", ""))
+if doubled > cap:
+    print("preflight %s: STOP before any judge call: the doubled estimate $%.2f passes the item's cap $%.2f; no judging and no verdict, the Captain decides the cap" % (item, doubled, cap))
+    sys.exit(3)
+print("preflight %s: proceed: the doubled estimate $%.2f fits the item's cap $%.2f" % (item, doubled, cap))
+EOF
+LF=$W/preflight; mkdir -p "$LF/under" "$LF/over"
+JP="--suite $S --packets $W/pilot/mid/match --key $W/pilot/mid/match-key.json --arm $W/praw/stacks-r1/none-pilot --brief $P/judge-brief.md $JUDGES --item rr-pilot-judge"
+preflight_case() {
+  local X=$LF/$1
+  step '^(worst case|item )|E_' sh -c "$G judge-run $JP --ledger $X/ledger.sqlite --record $X/record --out $X/judge --dry-run > $X/dry.txt; c=\$?; cat $X/dry.txt; exit \$c"
+  FAKE_RATES="none-pilot=30" step '^(preflight|judge-run|E_)|unjudged' sh -c "python3 $W/bin/preflight.py rr-pilot-judge $X/dry.txt && bun $W/bin/judge-fake.ts $JP --ledger $X/ledger.sqlite --record $X/record --out $X/judge --concurrency 4"
+  step . sh -c "test -s $X/judge/primary.json && echo 'judge replies written' || echo 'no judge reply written'; test -e $X/ledger.sqlite && echo 'ledger opened' || echo 'ledger never opened: no lease, no spend'"
+}
+echo "# Under the cap: the pilot's stub batch on rr-pilot-judge at its frozen cap. The pre-flight proceeds, then the fake judge runs."
+step item init_items "$LF/under/record" $(awk '{ printf "%s:%s ", $1, $2 }' "$W/judge/caps.tsv")
+preflight_case under
+echo "# Over the cap (synthetic): the same batch on a record that caps rr-pilot-judge at \$100, below its doubled estimate. The pre-flight stops it before any judge call."
+step item init_items "$LF/over/record" rr-pilot-judge:100
+preflight_case over
+
+echo; echo "## The seven items at their frozen caps: one lease each, opened and settled; a bound item refuses a second run (section 8)"
+LR=$W/ledger; mkdir -p "$LR"; LG="--ledger $LR/ledger.sqlite --ledger-record $LR/record"
+CAPS="rr-pilot-none:6600 rr-smoke-full:120 rr-grid-none:2640 rr-grid-full:2640 $(awk '{ printf "%s:%s ", $1, $2 }' "$W/judge/caps.tsv")"
+step item init_items "$LR/record" $CAPS
+for p in $CAPS; do it=${p%%:*}; step 'lease_id|state|E_' sh -c "$L lease --item $it --run rr-dry-$it --amount ${p#*:} $LG --json | tee $LR/$it.json"; step 'settle|E_' $L settle --lease "$(jq -r .lease_id "$LR/$it.json")" $LG; done
+step 'E_' $L lease --item rr-grid-full --run rr-dry-again --amount 1 $LG
+step '^(item|pause|E_)' python3 "$W/bin/rr-pause.py" "$LR/record" rr-grid-full 4
+echo "# A judge batch with a \$100 worst case on rr-judge-adjudicate: its lease would reserve the item's whole remaining cap."
+step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LR/record" rr-judge-adjudicate 1 100
+
+echo; echo "## The pause rule on a temporary ledger, then the pause through review-units' spend cap (section 8)"
+LP=$W/pause; mkdir -p "$LP"; LQ="--ledger $LP/ledger.sqlite --ledger-record $LP/record"
+step item init_items "$LP/record" $CAPS
+step 'lease_id|E_' $L lease --item rr-grid-none --run rr-dry-grid-none --amount 2640 $LQ --json
+step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LP/record" rr-grid-full 4
+step 'lease_id|E_' $L lease --item rr-grid-full --run rr-dry-grid-full --amount 1710 $LQ --json
+step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LP/record" rr-grid-full 4
+echo "# The same \$100 judge batch at \$150 of headroom: refused, since its lease would reserve the item's \$1,130."
+step '^(pause|E_)' python3 "$W/bin/rr-pause.py" "$LP/record" rr-judge-adjudicate 1 100
+echo "# The launch with that spend cap (150, below the item's 1320) stops before any session, and rr-pause.py --append marks"
+echo "# that stop as the pause's; the Captain's word resumes the same run with a larger cap, the item's own."
+PL="150 1320"; step '^(stub run|CAP_STOP|RR_PAUSE_STOP|pause|E_)' STE "$W/run/pause.stderr" "$S" "$W/run/pause" none pause --cap 150
+step . sh -c "jq -c '{id, status, parse_outcomes}' $W/run/pause/arms/*/arm.json; echo sessions journaled: \$(cat $W/run/pause/cells.ndjson 2>/dev/null | wc -l)"
+PL="1320 1320"; step '^(stub run|CAP_STOP|RR_PAUSE_STOP|pause|E_)' STE "$W/run/pause.stderr" "$S" "$W/run/pause" none pause --cap 1320 --resume
+step . sh -c "jq -c '{id, status, parse_outcomes}' $W/run/pause/arms/*/arm.json; echo sessions journaled: \$(wc -l < $W/run/pause/cells.ndjson)"
+echo "# The paused and resumed run's log as none-rr's, on the KEEP round's scores (synthetic): rr-decide.py skips only the marked pause line, so KEEP."
+decide "$K/score.json" "$K/derive.json" "" "" "" "$W/run/pause.stderr"
+echo "# The same log with a proxy CAP_STOP in the resumed launch: no outcome."
+{ sed '$d' "$W/run/pause.stderr"; echo "CAP_STOP the proxy stopped a session at the cap"; echo "review-units exit 2"; } > "$W/pause-proxy.stderr"; decide "$K/score.json" "$K/derive.json" "" "" "" "$W/pause-proxy.stderr"
+echo; echo "## Done"

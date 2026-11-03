@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+# e0-oc.py: operating characteristics of E0's frozen kind and anchor rules (GEVA-219), on admit-oc.py's model: item
+# rates spread as a beta with mean r (concentrations 2 and 8), 2 passes with pass dependence 0.3 (each pass reuses the
+# item's shared draw with probability 0.3), 20000 sims, seed 1. Kind rule: DEAD at 0 matches, DROP-CEILING above 0.6 of
+# readings, KEEP otherwise; 6 items read 12 (KEEP 1-7), 5 items read 10 (the n=10 band, KEEP 1-6), 4 items read 8.
+import random
+SIMS, DEP, PASSES = 20000, 0.3, 2
+def rate(rng, r, conc):
+    return 1.0 if r >= 1 else rng.betavariate(r * conc, (1 - r) * conc)
+def hits(rng, rt):
+    shared = rng.random(); h = 0
+    for _ in range(PASSES):
+        d = shared if rng.random() < DEP else rng.random()
+        h += d < rt
+    return h
+def kind(r, conc, items, seed=1):
+    rng = random.Random(seed); out = [0, 0, 0]
+    for _ in range(SIMS):
+        m = sum(hits(rng, rate(rng, r, conc)) for _ in range(items)); n = items * PASSES
+        out[0 if m == 0 else 2 if m / n > 0.6 else 1] += 1
+    return [x / SIMS for x in out]
+def anchors(r, conc, items, test, seed=1):
+    rng = random.Random(seed); k = 0
+    for _ in range(SIMS):
+        rec = sum(hits(rng, rate(rng, r, conc)) / PASSES for _ in range(items)) / items
+        k += test(rec)
+    return k / SIMS
+for conc in (2, 8):
+    print("concentration %d: P(DEAD) P(KEEP) P(DROP-CEILING) for 6 items (n=12), 5 items (n=10 band), 4 items (n=8)" % conc)
+    for r in (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95):
+        print("  r=%.2f  " % r + "  |  ".join(" ".join("%.3f" % p for p in kind(r, conc, it)) for it in (6, 5, 4)))
+for conc in (2, 8):
+    print("concentration %d: P(pooled anchor recall >= 0.85), 24 anchors; P(stratum anchor recall < 0.75), 6 anchors" % conc)
+    for r in (0.80, 0.85, 0.90, 0.95, 1.0):
+        print("  r=%.2f  %.3f  %.3f" % (r, anchors(r, conc, 24, lambda x: x >= 0.85 - 1e-9), anchors(r, conc, 6, lambda x: x < 0.75 - 1e-9)))

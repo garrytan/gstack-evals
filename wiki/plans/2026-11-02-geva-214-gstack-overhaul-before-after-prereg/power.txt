@@ -1,0 +1,57 @@
+power.py seed 20261102, 4000 simulations per row, effect_sd 0.10 unless a row says otherwise. Points are percentage points.
+Assumptions: task (or blocker) rates ~ Beta(mean = control, a+b = conc); conc 2 = very spread (TB2: Opus none passed 3 of 3 on 28 of 37 tasks), conc 6 = moderate;
+each cluster also drifts between arms by N(0, effect_sd) under no effect; replicates and passes are independent draws; H-rev: 20% decoy units, keyed units carry 1, 1, 1, 2, 2 or 3 blockers.
+
+Binary outcome endpoints (H-inv pass), paired by task:
+tasks 60 x reps 3, control 30%, conc 2                     SE   4.2  MDD@0.05  11.7  MDD@Holm4  14.0
+tasks 60 x reps 3, control 30%, conc 6                     SE   4.5  MDD@0.05  12.7  MDD@Holm4  15.2
+tasks 60 x reps 3, control 50%, conc 2                     SE   4.5  MDD@0.05  12.6  MDD@Holm4  15.0
+tasks 60 x reps 3, control 50%, conc 6                     SE   4.9  MDD@0.05  13.7  MDD@Holm4  16.3
+tasks 60 x reps 3, control 70%, conc 2                     SE   4.2  MDD@0.05  11.6  MDD@Holm4  13.9
+tasks 60 x reps 3, control 70%, conc 6                     SE   4.6  MDD@0.05  12.9  MDD@Holm4  15.4
+tasks 72 x reps 3, control 30%, conc 2                     SE   3.8  MDD@0.05  10.7  MDD@Holm4  12.7
+tasks 72 x reps 3, control 30%, conc 6                     SE   4.2  MDD@0.05  11.6  MDD@Holm4  13.9
+tasks 72 x reps 3, control 50%, conc 2                     SE   4.0  MDD@0.05  11.2  MDD@Holm4  13.4
+tasks 72 x reps 3, control 50%, conc 6                     SE   4.5  MDD@0.05  12.7  MDD@Holm4  15.2
+tasks 72 x reps 3, control 70%, conc 2                     SE   3.7  MDD@0.05  10.5  MDD@Holm4  12.5
+tasks 72 x reps 3, control 70%, conc 6                     SE   4.1  MDD@0.05  11.5  MDD@Holm4  13.8
+tasks 80 x reps 3, control 30%, conc 2                     SE   3.6  MDD@0.05   9.9  MDD@Holm4  11.9
+tasks 80 x reps 3, control 30%, conc 6                     SE   4.0  MDD@0.05  11.2  MDD@Holm4  13.3
+tasks 80 x reps 3, control 50%, conc 2                     SE   3.9  MDD@0.05  10.8  MDD@Holm4  12.9
+tasks 80 x reps 3, control 50%, conc 6                     SE   4.3  MDD@0.05  12.1  MDD@Holm4  14.4
+tasks 80 x reps 3, control 70%, conc 2                     SE   3.6  MDD@0.05  10.1  MDD@Holm4  12.1
+tasks 80 x reps 3, control 70%, conc 6                     SE   4.0  MDD@0.05  11.1  MDD@Holm4  13.3
+
+Behavior endpoints (load or complete rate at the before pin), conc 2:
+clusters 80 x 3, before 2%                                 SE   1.7  MDD@0.05   4.7  MDD@Holm4   5.6
+clusters 80 x 3, before 5%                                 SE   2.1  MDD@0.05   5.8  MDD@Holm4   7.0
+clusters 80 x 3, before 30%                                SE   3.5  MDD@0.05   9.9  MDD@Holm4  11.8
+clusters 80 x 3, before 50%                                SE   3.8  MDD@0.05  10.6  MDD@Holm4  12.7
+clusters 36 x 2, before 2%                                 SE   3.0  MDD@0.05   8.4  MDD@Holm4  10.1
+clusters 36 x 2, before 5%                                 SE   3.7  MDD@0.05  10.5  MDD@Holm4  12.5
+clusters 36 x 2, before 30%                                SE   6.5  MDD@0.05  18.3  MDD@Holm4  21.9
+clusters 36 x 2, before 50%                                SE   6.9  MDD@0.05  19.4  MDD@Holm4  23.1
+
+Review blocking recall, paired by unit, conc 2:
+units 36 (29 keyed) x passes 2, control 7.1%               SE   3.8  MDD@0.05  10.7  MDD@Holm4  12.7
+units 36 (29 keyed) x passes 2, control 15.0%              SE   4.7  MDD@0.05  13.2  MDD@Holm4  15.8
+units 36 (29 keyed) x passes 2, control 30.0%              SE   5.8  MDD@0.05  16.2  MDD@Holm4  19.4
+units 33 (26 keyed) x passes 2, control 7.1%               SE   4.0  MDD@0.05  11.2  MDD@Holm4  13.3
+
+FROZEN ADMISSION TABLES (section 8.3). MDD@Holm4 at the confirmatory n; admission uses the larger of the row at the slice's rate and the row at the planning rate.
+H-inv: 80 tasks x 3, conc 6, effect_sd 0.10; planning rate 40%.
+  H-inv control 10%  MDD@Holm4   9.3
+  H-inv control 20%  MDD@Holm4  11.8
+  H-inv control 30%  MDD@Holm4  13.3
+  H-inv control 40%  MDD@Holm4  14.1
+  H-inv control 50%  MDD@Holm4  14.8
+  H-inv control 60%  MDD@Holm4  14.0
+  H-inv control 70%  MDD@Holm4  13.6
+  H-inv control 80%  MDD@Holm4  11.6
+  H-inv control 90%  MDD@Holm4   9.2
+H-rev: 36 units x 2 passes, conc 2, effect_sd 0.15; planning rate 7.1%.
+  H-rev control  2.0%  MDD@Holm4  10.0
+  H-rev control  7.1%  MDD@Holm4  12.5
+  H-rev control 15.0%  MDD@Holm4  15.6
+  H-rev control 30.0%  MDD@Holm4  19.1
+  H-rev control 50.0%  MDD@Holm4  20.4

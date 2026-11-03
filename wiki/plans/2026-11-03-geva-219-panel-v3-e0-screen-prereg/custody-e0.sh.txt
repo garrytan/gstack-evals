@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# custody-e0.sh: the only allowed way to open E0's calibration bundle (GEVA-219). Two modes, each in one process:
+#   custody-e0.sh <bundle.tar.age> <age identity> <run dir> <scorer> <CUSTODY.md> [<bundle sha256>]
+#     builds the run material: runs build-e0.sh on the extraction with the same bundle (section 4, step 0).
+#   custody-e0.sh --reaudit <bundle.tar.age> <age identity> <re-audit dir> <CUSTODY.md> [<bundle sha256>] -- <command> [<arg>...]
+#     the section 7 re-audit, the only allowed way to open key.json and the unit trees for it (section 4, step 5b): makes the
+#     re-audit dir mode 0700 and runs <command> there in the foreground with E0_SLICE set to the extraction and E0_REAUDIT to
+#     that dir; the command must leave a non-empty reaudit.json in it.
+# Both refuse, before they decrypt, unless E0_MACHINE names this machine and the bundle's sha256 is the frozen one (the
+# optional digest binds another, for the keyless dry run only, and says so). Then they reserve the run or re-audit dir by
+# creating <dir>.lock with mkdir, which is atomic, so a second launch on the same dir refuses while the first runs, and
+# refuse when the dir already exists. Then they decrypt and extract the bundle into a fresh dir under /dev/shm, run their
+# step there, remove the extraction and check it is gone, append one line to CUSTODY.md (UTC time, mode, the bundle's
+# sha256, the step's digest, the machine and the dir) and release the lock. If anything fails once the lock is held, an EXIT
+# trap appends the line with the failed stage and its exit code instead, removes the extraction and the run or re-audit dir
+# only if this process made it, checks both are gone and releases the lock. A lock left by a killed launch makes every later
+# launch on that dir refuse until it is removed by hand. Prints counts and digests only.
+set -euo pipefail
+umask 077
+FROZEN=ea69c111bc5d781d507ee296d84202702eb628375c7310bfb26eb93523644934
+usage() { echo "E_USAGE custody-e0: $1" >&2; exit 2; }
+MODE=build
+if [ "${1:-}" = "--reaudit" ]; then MODE=reaudit; shift; fi
+[ $# -ge 4 ] || usage "too few arguments; see the header"
+BUNDLE=$(realpath "$1"); IDENTITY=$(realpath "$2"); DIR=$(realpath -m "$3")
+if [ "$MODE" = build ]; then
+  [ $# -ge 5 ] && [ $# -le 6 ] || usage "build takes <bundle> <identity> <run dir> <scorer> <CUSTODY.md> [<bundle sha256>]"
+  SCORER=$(realpath "$4"); LOG=$(realpath -m "$5"); WANT=${6:-$FROZEN}
+else
+  LOG=$(realpath -m "$4"); shift 4; WANT=$FROZEN
+  if [ "${1:-}" != "--" ] && [ $# -ge 1 ]; then WANT=$1; shift; fi
+  [ "${1:-}" = "--" ] && [ $# -ge 2 ] || usage "--reaudit needs -- <command> after its arguments"
+  shift
+fi
+MACHINE=${E0_MACHINE:-}
+[ -n "$MACHINE" ] || usage "set E0_MACHINE to this machine's id, so CUSTODY.md names where the plaintext was"
+command -v age >/dev/null || usage "age is not installed"
+GOT=$(sha256sum "$BUNDLE" | cut -c1-64)
+[ "$GOT" = "$WANT" ] || usage "the bundle's sha256 is $GOT, not $WANT"
+[ "$WANT" = "$FROZEN" ] || echo "custody-e0: bundle bound to $WANT, not the frozen digest (dry run only)"
+LOCK=$DIR.lock
+mkdir "$LOCK" 2>/dev/null || usage "another launch holds the $MODE dir (its lock $LOCK exists); remove a lock by hand only after checking that no custody-e0.sh runs"
+if [ -e "$DIR" ]; then rmdir "$LOCK"; usage "the $MODE dir exists; it must be new, so a failure can only ever remove what this run made"; fi
+HERE=$(cd "$(dirname "$0")" && pwd)
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+STAGE=decrypt
+SHM=""
+MADE=0
+failed() {
+  local code=$? left="" dir="not made"
+  set +e
+  trap - EXIT INT TERM HUP
+  [ "$code" -ne 0 ] || code=1
+  if [ -n "$SHM" ]; then rm -rf "$SHM"; test ! -e "$SHM" || left="$left extraction $SHM"; fi
+  if [ "$MADE" = 1 ]; then rm -rf "$DIR"; if test -e "$DIR"; then left="$left dir"; else dir="removed"; fi; fi
+  rmdir "$LOCK" || left="$left lock"
+  local line="$(now) custody-e0 $MODE bundle $GOT FAILED at $STAGE exit $code machine $MACHINE dir $DIR $dir"
+  [ -z "$left" ] || line="$line NOT REMOVED:$left"
+  echo "$line" >> "$LOG" || echo "E_USAGE custody-e0: could not append the failure to CUSTODY.md" >&2
+  echo "E_USAGE custody-e0: $MODE failed at $STAGE (exit $code); the $MODE dir is $dir$([ -z "$left" ] || echo ", NOT REMOVED:$left"); logged to CUSTODY.md" >&2
+  exit "$code"
+}
+trap failed EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+SHM=$(mktemp -d /dev/shm/e0-slice.XXXXXX)
+age -d -i "$IDENTITY" "$BUNDLE" | tar -xf - -C "$SHM"
+echo "custody-e0: slice extracted to RAM, $(find "$SHM" -type f | wc -l) files"
+STAGE=$MODE
+if [ "$MODE" = build ]; then
+  MADE=1
+  if [ "$WANT" = "$FROZEN" ]; then
+    bash "$HERE/build-e0.sh" "$BUNDLE" "$SHM" "$DIR" "$SCORER"
+  else
+    bash "$HERE/build-e0.sh" "$BUNDLE" "$SHM" "$DIR" "$SCORER" "$WANT"
+  fi
+  OUT="suite $(sha256sum "$DIR/sealed-root/suites/planrev-v3-e0.json" | cut -c1-64)"
+else
+  mkdir -m 700 "$DIR"
+  MADE=1
+  E0_SLICE=$SHM E0_REAUDIT=$DIR "$@"
+  test -s "$DIR/reaudit.json" || { echo "E_USAGE custody-e0: the re-audit command left no reaudit.json" >&2; exit 2; }
+  OUT="reaudit.json $(sha256sum "$DIR/reaudit.json" | cut -c1-64)"
+fi
+STAGE=close
+rm -rf "$SHM"
+test ! -e "$SHM"
+echo "$(now) custody-e0 $MODE bundle $GOT $OUT machine $MACHINE dir $DIR ok" >> "$LOG"
+trap - EXIT INT TERM HUP
+rmdir "$LOCK"
+echo "custody-e0: slice removed from RAM; bundle sha256 $GOT, $OUT"
