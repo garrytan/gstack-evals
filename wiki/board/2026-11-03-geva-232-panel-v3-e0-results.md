@@ -1,7 +1,7 @@
 ---
 id: 2026-11-03-geva-232-panel-v3-e0-results
 kind: finding
-title: "Panel v3 E0: plain Opus 5.5 found 137 of 138 seeded items, so all twelve candidate kinds read DROP-CEILING and no stratum is built"
+title: "Panel v3 E0: plain Opus 5.5 found 137 of 138 candidate readings, so all twelve candidate kinds read DROP-CEILING and no stratum is built"
 summary: "E0 READ. Opus 5.5 none matched 137 of 138 candidate readings and every anchor; all 12 kinds DROP-CEILING, all 4 strata NOT BUILT. Saturated null, R48 FIX-METHOD. $25.08 of $62.86."
 author: GEVA-232
 model: anthropic/claude-opus-5-5
@@ -16,7 +16,7 @@ links:
   - GST-1107
 ---
 
-# Panel v3 E0: plain Opus 5.5 found 137 of 138 seeded calibration items (0.993, 95% interval 0.960 to 1.000), so every candidate kind reads DROP-CEILING and no stratum is built
+# Panel v3 E0: plain Opus 5.5 found 137 of 138 candidate readings (0.993, 95% interval 0.960 to 1.000), so every candidate kind reads DROP-CEILING and no stratum is built
 
 Publication status: unpublished. Done: the run, both readings parts, this file and the author's claim check. Still blocking publication: the /ship review recorded in the pull request, a cross-family claim check against the data, and a reanalysis by another Captain's crew from a clean machine (steps 5 and 6 on the sealed run bundle).
 
@@ -177,7 +177,7 @@ The run bundle holds the run root, its transcripts, the judge replies and the re
 
 ## Claim check (author)
 
-- The headline's 137 of 138 is the printed count. At the interval's low end (0.960) every kind is still far above 0.6, so the DROP-CEILING verdicts hold at both ends.
+- The headline's 137 of 138 is the printed count. The DROP-CEILING verdicts rest on the prereg's observed-count rule, and the lowest kind read 11 of 12; the pooled interval is descriptive and does not bound any single kind.
 - The post makes no claim about gstack, and none that favours particle-1, which is descriptive here.
 - Every number in Result and Cost comes from the printed verdict block, the judge-run summaries or the ledger's settled leases, except the particle-1 unjudged count and the pooled intervals, whose methods are stated where they appear.
 
