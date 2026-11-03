@@ -453,15 +453,51 @@ function bodyOpen(rest: string): number {
   return -1;
 }
 
+/** A guard's condition, spaces removed, without the parentheses around all of it, or in Go around all of it after an
+ * init statement's semicolon, which Black and gofmt add and drop as layout. */
+function unwrap(cond: string): string {
+  let at = 0;
+  for (let i = 0, depth = 0; i < cond.length; i++) {
+    if (cond[i] === ";" && depth === 0) at = i + 1;
+    depth += "([{".includes(cond[i]) ? 1 : ")]}".includes(cond[i]) ? -1 : 0;
+  }
+  for (let c = cond.slice(at); ; c = c.slice(1, -1)) {
+    let k = 0;
+    for (let depth = 0; k < c.length; k++) if ((depth += c[k] === "(" ? 1 : c[k] === ")" ? -1 : 0) === 0) break;
+    if (c[0] !== "(" || k !== c.length - 1) return cond.slice(0, at) + c;
+  }
+}
+
+/** Whether a { at bracket depth 0 in a Go if or else if header, after the header's text h (trimmed), opens a literal
+ * and not the body. Go reads it so after a struct or interface keyword (the type's fields), after an array, slice, map
+ * or struct type (a composite literal: []T, [n]T, map[K]V or struct{...}, with a named, pointer, channel, struct or
+ * interface element), and after a func signature (a func literal's body). */
+function opensLiteral(h: string): boolean {
+  const opener = (k: number): number => {
+    for (let depth = 0; k >= 0; k--) if ((depth += ")]}".includes(h[k]) ? 1 : "([{".includes(h[k]) ? -1 : 0) === 0) return k;
+    return -1;
+  };
+  if (/\b(?:struct|interface)$/.test(h) || /\]\s*(?:\*\s*)*(?:(?:<-\s*)?chan\b(?:\s*<-)?\s*(?:\*\s*)*)?\w[\w.]*(?:\[[^\]]*\])?$/.test(h)) return true;
+  if (h.endsWith("}")) return /\b(?:struct|interface)$/.test(h.slice(0, opener(h.length - 1)).trimEnd());
+  let n = h.length;
+  while (n > 0 && /[\w.*[\]\s<-]/.test(h[n - 1])) n--;
+  if (h[n - 1] !== ")") return false;
+  const params = h.slice(0, opener(n - 1)).trimEnd();
+  return /\bfunc$/.test(params) || (params.endsWith(")") && /\bfunc$/.test(h.slice(0, opener(params.length - 1)).trimEnd()));
+}
+
 /** Go's if guards (guards), read character by character in string-free code. A header runs from the last statement
  * boundary (a brace; a semicolon or a case colon outside an if, for or switch header; a line end where Go ends a
- * statement, so a comment-only line inside a header is passed over) to its brace. The block an if, else if or else
- * header opens takes the guard around it and its chain, and so does the header itself, so testing.Short() in a
- * condition carries the rest of its if line. A func at file level clears the guard, and a brace inside brackets (a func
- * or composite literal) opens a block that keeps the guard around it. */
+ * statement, which is never just after if or else, so a comment-only line inside a header is passed over) to its brace.
+ * The block an if, else if or else header opens takes the guard around it and its chain, and so does the header itself,
+ * so testing.Short() in a condition carries the rest of its if line. A func at file level clears the guard. A brace
+ * inside brackets, or one in an if or else if header that opens a literal (opensLiteral), opens a block that keeps the
+ * guard around it, and its text joins the header when it closes, without semicolons (a line end ends a statement in a
+ * func literal's body the same way), so a literal in a condition is keyed with its contents. A condition is keyed
+ * without a comma before a closing bracket, which gofmt writes when it splits a literal or a call across lines. */
 function goGuards(bare: string[]): [number, string][][] {
-  type Block = { guard: string; chain: string | null; statement: boolean; parens: number; header: string; tail: string; at: [number, number]; closed: Block | null };
-  const block = (guard: string, chain: string | null, statement: boolean): Block => ({ guard, chain, statement, parens: 0, header: "", tail: "", at: [0, 0], closed: null });
+  type Block = { guard: string; chain: string | null; statement: boolean; parens: number; header: string; tail: string; at: [number, number]; open: [number, number]; closed: Block | null };
+  const block = (guard: string, chain: string | null, statement: boolean, open: [number, number] = [0, 0]): Block => ({ guard, chain, statement, parens: 0, header: "", tail: "", at: [0, 0], open, closed: null });
   const stack = [block("", null, true)];
   const out: [number, string][][] = bare.map(() => []);
   bare.forEach((line, i) => {
@@ -469,23 +505,24 @@ function goGuards(bare: string[]): [number, string][][] {
     for (let j = 0; j <= line.length; j++) {
       const b = stack[stack.length - 1];
       const c = j < line.length ? line[j] : "\n";
-      if (c === "{" && b.parens === 0) {
+      if (c === "{" && b.parens === 0 && !(/^\s*(?:if|else\s+if)\b/.test(b.header) && opensLiteral(b.header.trim()))) {
         const h = b.header.trim();
         const word = h.match(/^(?:if|else\s+if|else)\b/)?.[0];
         const before = b.closed?.chain ?? null;
-        const cond = "(" + h.slice(word?.length ?? 0).replace(/\s+/g, "") + ")";
+        const cond = "(" + unwrap(h.slice(word?.length ?? 0).replace(/\s+/g, "").replace(/,(?=[)\]}])/g, "")) + ")";
         const chain = word === "if" ? "if" + cond : word === undefined || before === null ? null : word === "else" ? before + "else" : before + "elif" + cond;
         const next = block(stack.length === 1 && /^func\b/.test(h) ? "" : b.guard + (chain ?? ""), chain, true);
         if (chain !== null) for (let l = b.at[0]; l <= i; l++) out[l] = l === b.at[0] ? [...out[l].filter(([col]) => col < b.at[1]), [b.at[1], next.guard]] : [[0, next.guard]];
         stack.push(next);
         out[i].push([j + 1, next.guard]);
-      } else if (c === "{") stack.push(block(b.guard, null, false));
+      } else if (c === "{") stack.push(block(b.guard, null, false, [i, j]));
       else if (c === "}" && stack.length > 1) {
         const done = stack.pop()!;
         const o = stack[stack.length - 1];
-        Object.assign(o, done.statement ? { header: "", tail: "", closed: done } : { header: o.header + c, tail: (o.tail + c).slice(-2) });
+        const text = done.statement ? "" : bare.slice(done.open[0], i + 1).join("\n");
+        Object.assign(o, done.statement ? { header: "", tail: "", closed: done } : { header: o.header + text.slice(done.open[1], text.length - line.length + j + 1).replace(/;/g, ""), tail: (o.tail + c).slice(-2) });
         out[i].push([j + 1, o.guard]);
-      } else if (b.parens === 0 && (c === ";" || (c === ":" && line[j + 1] !== "=") ? !/^\s*(?:if|else\s+if|for|switch)\b/.test(b.header) : c === "\n" && /(?:[\w)\]}"'\x60]|\+\+|--)$/.test(b.tail))) Object.assign(b, { header: "", tail: "", closed: null });
+      } else if (b.parens === 0 && (c === ";" || (c === ":" && line[j + 1] !== "=") ? !/^\s*(?:if|else\s+if|for|switch)\b/.test(b.header) : c === "\n" && /(?:[\w)\]}"'\x60]|\+\+|--)$/.test(b.tail) && !/\b(?:if|else)\s*$/.test(b.header))) Object.assign(b, { header: "", tail: "", closed: null });
       else {
         if (!b.tail && c.trim()) b.at = [i, j];
         if (c.trim()) b.tail = (b.tail + c).slice(-2);
@@ -500,9 +537,9 @@ function goGuards(bare: string[]): [number, string][][] {
 /** The if guard over a Python or Go file's string-free code (scan's bare): for each line, the guard from each column on,
  * as [column, guard] pairs in order. A guard is the if, elif and else blocks around the code inside its def, class or
  * func, and the one-line if (Python's if A: body, Go's if A { body }) it sits in, outermost first. Each if or elif is
- * named by its condition, spaces and line continuations removed, and each elif or else follows the branches before it
- * in its chain, so an else block is guarded by the if it negates. Python reads blocks by indentation, one guard per
- * statement, and Go by brackets (goGuards). "" everywhere in a file in another language. */
+ * named by its condition, spaces and line continuations removed (unwrap), and each elif or else follows the branches
+ * before it in its chain, so an else block is guarded by the if it negates. Python reads blocks by indentation, one
+ * guard per statement, and Go by brackets (goGuards). "" everywhere in a file in another language. */
 function guards(bare: string[], start: boolean[], path: string): [number, string][][] {
   const lang = languageOf(path);
   if (lang === "go") return goGuards(bare);
@@ -521,7 +558,7 @@ function guards(bare: string[], start: boolean[], path: string): [number, string
     const word = text.trim().match(/^(?:if|elif|else)\b/)?.[0];
     const rest = word === undefined ? "" : text.trim().slice(word.length);
     const k = bodyOpen(rest);
-    const cond = "(" + (k < 0 ? rest : rest.slice(0, k)).replace(/\\\s*\n|\s+/g, "") + ")";
+    const cond = "(" + unwrap((k < 0 ? rest : rest.slice(0, k)).replace(/\\\s*\n|\s+/g, "")) + ")";
     const chain = word === "if" ? "if" + cond : word === undefined || before === null ? null : word === "else" ? before + "else" : before + "elif" + cond;
     const reset = PY_DEF.test(text);
     const guard = reset ? "" : (open.length ? open[open.length - 1].guard : "") + (chain ?? "");
@@ -536,8 +573,12 @@ const guardAt = (lines: [number, string][][], first: number, text: string) => {
   const starts = [0];
   for (let k = text.indexOf("\n"); k >= 0; k = text.indexOf("\n", k + 1)) starts.push(k + 1);
   return (o: number): string => {
-    let l = starts.length - 1;
-    while (starts[l] > o) l--;
+    let l = 0;
+    for (let hi = starts.length - 1; l < hi; ) {
+      const mid = (l + hi + 1) >> 1;
+      if (starts[mid] <= o) l = mid;
+      else hi = mid - 1;
+    }
     return lines[first + l].reduce((g, [col, v]) => (col <= o - starts[l] ? v : g), "");
   };
 };

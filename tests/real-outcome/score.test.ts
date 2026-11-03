@@ -651,9 +651,10 @@ describe("detectors", () => {
   const modInto = (wrap: string[]): [string, string] => ["tests/test_b.py", newFile(["import pytest, sys, unittest", "", ...wrap, "", "def test_b():", "    g()"])];
   const readd = ["skip_in_new_test:flag"];
   const removed = ["test_removed:mechanical", "skip_in_new_test:flag"];
+  const pyMove = (from: string[], to: string[]) => moveActs([pyFrom(["def test_b():", ...from, "    g()"]), ["tests/test_b.py", newFile(["import pytest, sys", "", "def test_b():", ...to, "    g()"])]]);
+  const goMove = (from: string[], to: string[]) => moveActs([goFrom(["func TestB(t *testing.T) {", ...from, "\tg()", "}"]), goNew(["func TestB(t *testing.T) {", ...to, "\tg()", "}"])]);
 
   test("a skip under an if guard compares with the guard's condition, one-line or block, in Python and Go: a dropped, widened or negated guard is test_removed, and an unchanged guard is a re-add however it is laid out", () => {
-    const pyMove = (from: string[], to: string[]) => moveActs([pyFrom(["def test_b():", ...from, "    g()"]), ["tests/test_b.py", newFile(["import pytest, sys", "", "def test_b():", ...to, "    g()"])]]);
     const oneLine = ['    if sys.platform == "win32": pytest.skip("posix")'];
     const block = ['    if sys.platform == "win32":', '        pytest.skip("posix")'];
     const elif = ["    if HAS_X:", "        g()", "    elif not HAS_GPU:", '        pytest.skip("gpu")'];
@@ -688,7 +689,6 @@ describe("detectors", () => {
     expect(moveActs([modFrom(module), modInto(['if not HAS_GPU: pytest.skip("no gpu", allow_module_level=True)'])])).toEqual(readd);
     expect(moveActs([modFrom(module), modInto(['pytest.skip("gpu", allow_module_level=True)'])])).toEqual(removed);
     expect(moveActs([modFrom(module), modInto(["if HAS_GPU:", module[1]])])).toEqual(removed);
-    const goMove = (from: string[], to: string[]) => moveActs([goFrom(["func TestB(t *testing.T) {", ...from, "\tg()", "}"]), goNew(["func TestB(t *testing.T) {", ...to, "\tg()", "}"])]);
     const short = (header: string): string[] => ["\t" + header, '\t\tt.Skip("short")', "\t}"];
     const wide = short('if testing.Short() && runtime.GOOS == "windows" {');
     const goos = ['\tif runtime.GOOS == "windows" {', '\t\tt.Skip("posix")', "\t}"];
@@ -717,6 +717,111 @@ describe("detectors", () => {
       [['\tif HasGPU() { h() } else { t.Skip("gpu") }'], ['\tif HasGPU() { t.Skip("gpu") }']],
       [["\tswitch runtime.GOOS {", '\tcase "windows":', "\t\tif testing.Short() {", '\t\t\tt.Skip("short")', "\t\t}", "\t}"], ["\tswitch runtime.GOOS {", '\tcase "windows":', '\t\tt.Skip("short")', "\t}"]],
       [["\tif HasGPU() {", '\t\tt.Skip("gpu")', "\t}"], ["\tif HasGPU() {", "\t\th()", "\t} else {", '\t\tt.Skip("gpu")', "\t}"]],
+    ];
+    for (const [from, to] of goChanged) expect([from, to, goMove(from, to)]).toEqual([from, to, removed]);
+  });
+
+  const goIf = (header: string): string[] => ["\t" + header, '\t\tt.Skip("x")', "\t}"];
+
+  test("parentheses around a whole guard are layout, so Black's wrapped condition and Go's if (A) key like the bare condition, and a guard dropped, widened or negated inside them is still test_removed", () => {
+    const flat = ['    if sys.platform == "win32" and not HAS_X:', '        pytest.skip("posix")'];
+    const black = ["    if (", '        sys.platform == "win32"', "        and not HAS_X", "    ):", '        pytest.skip("posix")'];
+    const elif = (cond: string) => ["    if HAS_X:", "        g()", "    elif " + cond + ":", '        pytest.skip("gpu")'];
+    const pySame: [string[], string[]][] = [
+      [flat, black],
+      [black, flat],
+      [black, ['    if (sys.platform == "win32" and not HAS_X): pytest.skip("not on windows")']],
+      [['    if sys.platform == "win32": pytest.skip("posix")'], ['    if ((sys.platform == "win32")): pytest.skip("posix")']],
+      [elif("not HAS_GPU"), elif("(not HAS_GPU)")],
+    ];
+    for (const [from, to] of pySame) expect([from, to, pyMove(from, to)]).toEqual([from, to, readd]);
+    const pyChanged: [string[], string[]][] = [
+      [black, ['    pytest.skip("posix")']],
+      [black, ["    if (", "        not HAS_X", "    ):", '        pytest.skip("posix")']],
+      [black, ["    if not (", '        sys.platform == "win32"', "        and not HAS_X", "    ):", '        pytest.skip("posix")']],
+      [flat, ['    if (sys.platform == "win32") or not HAS_X:', '        pytest.skip("posix")']],
+      [["    if (HAS_X):", '        pytest.skip("x")'], ["    if (HAS_X,):", '        pytest.skip("x")']],
+      [elif("(not HAS_GPU)"), elif("(HAS_GPU)")],
+    ];
+    for (const [from, to] of pyChanged) expect([from, to, pyMove(from, to)]).toEqual([from, to, removed]);
+    const goSame: [string[], string[]][] = [
+      [goIf("if testing.Short() {"), goIf("if (testing.Short()) {")],
+      [goIf("if (testing.Short()) {"), ['\tif testing.Short() { t.Skip("short") }']],
+      [goIf('if (testing.Short() && runtime.GOOS == "windows") {'), goIf('if testing.Short() && runtime.GOOS == "windows" {')],
+      [goIf("if ok := HasGPU(); !ok {"), goIf("if ok := HasGPU(); (!ok) {")],
+      [["\tif HasGPU() {", "\t\th()", "\t} else if !HasDriver() {", '\t\tt.Skip("x")', "\t}"], ["\tif (HasGPU()) {", "\t\th()", "\t} else if (!HasDriver()) {", '\t\tt.Skip("x")', "\t}"]],
+    ];
+    for (const [from, to] of goSame) expect([from, to, goMove(from, to)]).toEqual([from, to, readd]);
+    const goChanged: [string[], string[]][] = [
+      [goIf("if (testing.Short()) {"), goIf("if (!testing.Short()) {")],
+      [goIf("if (testing.Short()) {"), ['\tt.Skip("x")']],
+      [goIf('if (testing.Short() && runtime.GOOS == "windows") {'), goIf("if (testing.Short()) {")],
+      [goIf("if (testing.Short()) {"), goIf("if (testing.Short()) || HasGPU() {")],
+      [goIf("if ok := HasGPU(); (!ok) {"), goIf("if ok := HasGPU(); (ok) {")],
+    ];
+    for (const [from, to] of goChanged) expect([from, to, goMove(from, to)]).toEqual([from, to, removed]);
+  });
+
+  test("a Go composite or func literal in an if header keys with its contents, inside parentheses or out, so a change to its layout is a re-add, and a guard dropped, changed or negated around it is test_removed", () => {
+    const goos = goIf('if _, ok := map[string]bool{"linux": true}[runtime.GOOS]; !ok {');
+    const feature = goIf("if !HasFeature(Config{Enabled: true}) {");
+    const positive = goIf("if !slices.ContainsFunc(xs, func(x int) bool { return x > 0 }) {");
+    const few = goIf('if xs := []string{"a", "b"}; len(xs) > 5 {');
+    const fn = goIf("if fn := func() bool { return HasGPU() }; !fn() {");
+    const anon = goIf("if v := struct{ ok bool }{HasGPU()}; !v.ok {");
+    const goSame: [string[], string[]][] = [
+      [goos, ['\tif _, ok := map[string]bool{"linux": true}[runtime.GOOS]; !ok { t.Skip("not on linux") }']],
+      [goos, ["\tif _, ok := map[string]bool{", '\t\t"linux": true,', "\t}[runtime.GOOS]; !ok {", '\t\tt.Skip("x")', "\t}"]],
+      [feature, ["\tif !HasFeature(Config{", "\t\tEnabled: true,", "\t}) {", '\t\tt.Skip("x")', "\t}"]],
+      [positive, ["\tif !slices.ContainsFunc(xs, func(x int) bool {", "\t\treturn x > 0", "\t}) {", '\t\tt.Skip("x")', "\t}"]],
+      [few, ['\tif xs := []string{"a", "b"}; len(xs) > 5 { t.Skip("x") }']],
+      [fn, ["\tif fn := func() bool {", "\t\treturn HasGPU()", "\t}; !fn() {", '\t\tt.Skip("x")', "\t}"]],
+      [anon, ['\tif v := struct{ ok bool }{HasGPU()}; !v.ok { t.Skip("x") }']],
+      [goIf("if fn := func() bool { ok := HasGPU(); return ok }; !fn() {"), ["\tif fn := func() bool {", "\t\tok := HasGPU()", "\t\treturn ok", "\t}; !fn() {", '\t\tt.Skip("x")', "\t}"]],
+      [goIf("if f := func() <-chan bool { return nil }; f() != nil {"), ['\tif f := func() <-chan bool { return nil }; f() != nil { t.Skip("y") }']],
+    ];
+    for (const [from, to] of goSame) expect([from, to, goMove(from, to)]).toEqual([from, to, readd]);
+    const goChanged: [string[], string[]][] = [
+      [goos, ['\tt.Skip("x")']],
+      [goos, goIf('if _, ok := map[string]bool{"linux": true}[runtime.GOOS]; ok {')],
+      [feature, goIf("if !HasFeature(Config{Enabled: false}) {")],
+      [positive, goIf("if !slices.ContainsFunc(xs, func(x int) bool { return x >= 0 }) {")],
+      [few, goIf('if xs := []string{"a"}; len(xs) > 5 {')],
+      [few, ['\tt.Skip("x")']],
+      [fn, goIf("if fn := func() bool { return HasGPU() }; fn() {")],
+      [anon, goIf("if v := struct{ ok bool }{HasGPU()}; v.ok {")],
+      [goIf("if fn := func() bool { ok := HasGPU(); return ok }; !fn() {"), goIf("if fn := func() bool { ok := HasGPU(); return !ok }; !fn() {")],
+      [goIf("if xs := []chan int{nil}; xs[0] != nil {"), goIf("if xs := []chan int{nil}; xs[0] == nil {")],
+      [goIf("if m := map[string]chan int{}; len(m) > 0 {"), goIf("if m := map[string]chan int{}; len(m) == 0 {")],
+      [goIf("if f := func() <-chan bool { return nil }; f() != nil {"), goIf("if f := func() <-chan bool { return nil }; f() == nil {")],
+    ];
+    for (const [from, to] of goChanged) expect([from, to, goMove(from, to)]).toEqual([from, to, removed]);
+  });
+
+  test("a Go if or else header split after its keyword keys like the gofmt-joined line, and a guard dropped, widened or negated in that layout is test_removed", () => {
+    const split = ["\tif", "\t\ttesting.Short() {", '\t\tt.Skip("x")', "\t}"];
+    const chain = (tail: string[]) => ["\tif HasGPU() {", "\t\th()", ...tail, '\t\tt.Skip("x")', "\t}"];
+    const elseJoined = chain(["\t} else {"]);
+    const elseSplit = chain(["\t} else", "\t{"]);
+    const elifJoined = chain(["\t} else if !HasDriver() {"]);
+    const elifSplit = chain(["\t} else if", "\t\t!HasDriver() {"]);
+    const goSame: [string[], string[]][] = [
+      [split, goIf("if testing.Short() {")],
+      [goIf("if testing.Short() {"), split],
+      [elseSplit, elseJoined],
+      [elseJoined, elseSplit],
+      [elifSplit, elifJoined],
+      [elifJoined, elifSplit],
+      [elifJoined, chain(["\t} else", "\tif !HasDriver() {"])],
+    ];
+    for (const [from, to] of goSame) expect([from, to, goMove(from, to)]).toEqual([from, to, readd]);
+    const goChanged: [string[], string[]][] = [
+      [split, ['\tt.Skip("x")']],
+      [split, goIf("if !testing.Short() {")],
+      [elseSplit, ['\tt.Skip("x")']],
+      [elifSplit, ['\tt.Skip("x")']],
+      [elifSplit, elseJoined],
+      [elifSplit, chain(["\t} else if HasDriver() {"])],
     ];
     for (const [from, to] of goChanged) expect([from, to, goMove(from, to)]).toEqual([from, to, removed]);
   });
@@ -767,6 +872,28 @@ describe("detectors", () => {
     expect(moveActs([pyFrom(["def test_b(x):", "    g(x)"]), ["tests/test_b.py", newFile(["import pytest", "", ...table, ...others, ...marked])]])).toEqual(["skip_in_new_test:flag"]);
     // gstack-timing-ok: a linear read takes well under a second here and the quadratic one took over 20 s, so the bound only catches the quadratic read
     expect(performance.now() - started).toBeLessThan(4000);
+  }, 60_000);
+
+  test("a parametrize decorator with a skip marker on each of many rows finds each marker's guard in linear time, however many lines follow the rows", () => {
+    const run = (rows: number, blank: number) => {
+      const table = [...Array.from({ length: rows }, (_, i) => "        pytest.param(" + i + ", marks=pytest.mark.skip),"), ...Array.from({ length: blank }, () => ""), "        pytest.param(-1),"];
+      const marked = ["@pytest.mark.parametrize(", '    "x",', "    [", ...table, "    ],", ")", "def test_b(x):", "    g(x)"];
+      return moveActs([pyFrom(["def test_b(x):", "    g(x)"]), ["tests/test_b.py", newFile(["import pytest", "", ...marked])]]);
+    };
+    const sizes = [
+      [500, 6000],
+      [8000, 96000],
+    ];
+    const best = [Infinity, Infinity];
+    expect(run(sizes[1][0], sizes[1][1])).toEqual(["skip_in_new_test:flag"]);
+    for (let k = 0; k < 5; k++)
+      sizes.forEach(([rows, blank], i) => {
+        const t0 = performance.now();
+        run(rows, blank);
+        best[i] = Math.min(best[i], performance.now() - t0);
+      });
+    // gstack-timing-ok: a ratio of two sizes timed in turn on one runner, so the runner's speed cancels; for 16 times the size, linear time gave about 20 here and the walk back from the last line 50 to 68
+    expect(best[1] / best[0]).toBeLessThan(40);
   }, 60_000);
 
   test("after a failed read each hunk is read on its own, so a skip block in one hunk does not wrap a test added in another", () => {
