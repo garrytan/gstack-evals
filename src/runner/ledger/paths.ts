@@ -1,5 +1,6 @@
 // Where the ledger's two tiers live (interface v0.4, "Spend and ledger"). Each has a flag, a variable and a default, and
-// every resolved path carries the rule that chose it. Only the local SQLite tier is refused on a network or FUSE mount.
+// every resolved path carries the rule that chose it. The local SQLite tier is refused on a network or FUSE mount, and so
+// is a program's record when an envelope entry is written (envelope.ts).
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, platform } from "node:os";
@@ -33,7 +34,7 @@ export function ledgerPath(flag?: string, env: Env = process.env, home = homedir
   return { path: join(dir.path, "ledger.sqlite"), rule: dir.rule };
 }
 
-/** The approval record: --ledger-record, GSTACK_EVALS_LEDGER_RECORD, then the state directory. On Capy, point it at your Captain drive. */
+/** The approval record: --ledger-record, GSTACK_EVALS_LEDGER_RECORD, then the state directory. On Capy, a record with no program may sit on your Captain drive; a program's record lives on its envelope host's local disk. */
 export function recordPath(flag?: string, env: Env = process.env, home = homedir()): Resolved {
   if (flag) return { path: resolve(flag), rule: "--ledger-record" };
   if (env.GSTACK_EVALS_LEDGER_RECORD) return { path: resolve(env.GSTACK_EVALS_LEDGER_RECORD), rule: "GSTACK_EVALS_LEDGER_RECORD" };
