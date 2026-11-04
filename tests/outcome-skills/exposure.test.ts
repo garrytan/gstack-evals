@@ -273,6 +273,16 @@ describe("plan-eng-review exposure: review-sections read, Step 0 Scope Challenge
     expect([withSections([sections.join("\n")]), withSections(sections)]).toEqual([true, true]);
   });
 
+  test("p1/red-team#2: heading-only outlines whose inline text is not the section's name are not Sections 1 to 4", () => {
+    const texts = [four((n, name) => "### Section " + n + " (" + name + ")").join("\n"), four((n) => "## Section " + n + " of 4").join("\n")];
+    expect(texts.map((t) => [t, withSections([t])])).toEqual(texts.map((t) => [t, false]));
+  });
+
+  test("p1/red-team#2: the same headings count with content under them", () => {
+    const texts = [four((n, name) => "### Section " + n + " (" + name + ")\n- Issue: process-local store").join("\n"), four((n) => "## Section " + n + " of 4\nNo issues found.").join("\n")];
+    expect(texts.map((t) => [t, withSections([t])])).toEqual(texts.map((t) => [t, true]));
+  });
+
   test("the completion summary written as ### headings is not Sections 1 to 4", () => {
     expect(withSections(["### Architecture Review: 1 issue\n### Code Quality Review: 0 issues\n### Test Review: 1 gap\n### Performance Review: 0 issues"])).toBe(false);
   });

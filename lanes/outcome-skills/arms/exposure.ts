@@ -78,7 +78,7 @@ const REVIEW_SECTIONS_BASH = /^(?!.*\s--(?:help|version)(?![\w-]))\s*(?:cat|head
 const SCOPE_CHALLENGE = [/^#{1,6}\s+(?:Step 0:\s*)?Scope Challenge\b/, /^\*\*(?:Step 0:\s*)?Scope Challenge\*\*/, /^-\s+Step 0:\s*Scope Challenge\b/];
 const SECTIONS = ([["1", "architecture"], ["2", "code quality"], ["3", "tests?"], ["4", "performance"]] as const).map(([n, name]) => ({
   heading: new RegExp("^(?:#{1,6}\\s+|\\*\\*)(?:section\\s+" + n + "(?![\\d.])|" + n + "[.)]\\s+(?:" + name + ")\\s+review\\b)", "i"),
-  inline: new RegExp("^#{1,6}\\s+(?:section\\s+" + n + "(?![\\d.])\\s*[:.\\-–—]?\\s*(?:(?:" + name + ")\\b(?:\\s+review\\b)?)?|" + n + "[.)]\\s+(?:" + name + ")\\s+review\\b)\\s*[:.\\-–—]?\\s*(.*)$", "i"),
+  inline: new RegExp("^#{1,6}\\s+(?:section\\s+" + n + "(?![\\d.])\\s*[:.\\-–—]?\\s*(?:" + name + ")\\b(?:\\s+review\\b)?|" + n + "[.)]\\s+(?:" + name + ")\\s+review\\b)\\s*[:.\\-–—]?\\s*(.*)$", "i"),
 }));
 const TEST_PLAN = /\/projects\/[^/]+\/[^/]+-eng-review-test-plan-[^/]+\.md$/;
 const TEST_PLAN_BASH = /^(?:\$\{?PROJECT_DIR\}?|.*\/projects\/[^/]+)\/[^/]+-eng-review-test-plan-[^/]+\.md$/;
