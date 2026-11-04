@@ -112,6 +112,9 @@ interface Ctx {
   o: Opts;
   tree: Tree;
   run: (script: string, env?: Record<string, string>) => DockerResult;
+  /** The own reading only: the task's unmodified reference tree, copied fresh into its own volume on first use, run by
+   * the same runner in a container from the same image with the same environment, user, limits and repository path. */
+  ref?: () => Ctx;
 }
 
 interface Adapter {
@@ -119,6 +122,11 @@ interface Adapter {
   units(ctx: Ctx): Unit[];
   /** The units that pass on the tree; an error when the runner could not run at all. */
   baseline(ctx: Ctx, units: Unit[]): { passing: Unit[]; error?: string };
+  /** After a baseline error: how the agent's changed test files fail to load or collect, or null when the runner shows
+   * no such signal. */
+  uncollectable(ctx: Ctx, units: Unit[]): string | null;
+  /** On the reference tree: null when the same runner loads its tests cleanly, else what went wrong. */
+  reference(ref: Ctx, units: Unit[]): string | null;
   /** The ids of the mutants within the tool's restriction of the scope patch. */
   mutants(ctx: Ctx, scopePatch: string): { ids: string[]; error?: string };
   /** The outcome of each sampled mutant against the passing units. */
@@ -216,6 +224,9 @@ const reEscape = (s: string) => s.replace(/[.*+?^$()|[\]\\{}\/]/g, "\\$&");
 // ---------- Python: mutmut, function level ----------
 
 const MUTMUT = "\"$PY\" -c \"import sys; sys.path.append('/opt/gstack-mutation/python/site'); sys.argv=['mutmut']+sys.argv[1:]; from mutmut.__main__ import cli; cli()\"";
+/** mutmut lists by running with a filter no mutant matches. It prints this line once it has generated every mutant, then
+ * stops later on the filter, or on its stats run when a test fails. Without the line the listing failed. */
+const MUTMUT_LISTED = /^\s*done in \d+ms \(\d+ files mutated, \d+ ignored, \d+ unmodified\)/m;
 const META = "\"$PY\" -c \"import json,pathlib; json.dump({k:v for m in pathlib.Path('mutants').rglob('*.meta') for k,v in json.loads(m.read_text()).get('exit_code_by_key',{}).items()}, open('/out/py-meta.json','w'))\"";
 
 const PY_WRITE_CONFIG = [
@@ -260,6 +271,11 @@ function junitCases(xml: string): { classname: string; name: string; ok: boolean
   return [...xml.matchAll(/<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g)].map((m) => ({ classname: attr(m[1]!, "classname"), name: attr(m[1]!, "name"), ok: m[2] === "/>" || !/<(failure|error|skipped)\b/.test(m[3] ?? "") }));
 }
 
+/** pytest --collect-only on the files exits 2, or 5, and an "ERROR collecting" line names one of them. */
+export const pytestUncollected = (exit: string, log: string, files: string[]) => (exit === "2" || exit === "5") && files.some((f) => new RegExp("ERROR collecting " + reEscape(f) + "(?: |$)", "m").test(log));
+/** pytest --collect-only exits 0, or 5 with no ERROR line. */
+export const pytestCollected = (exit: string, log: string) => exit === "0" || (exit === "5" && !/ERROR collecting|^ERROR /m.test(log));
+
 const python: Adapter = {
   units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => agentUnits(ctx, c, pythonUnits)),
   baseline(ctx, units) {
@@ -275,6 +291,19 @@ const python: Adapter = {
     if ((exit !== "0" && exit !== "1") || !units.some((u) => mine(u).length > 0)) return { passing: [], error: "pytest did not run the selected tests (exit " + exit + "): " + got(ctx, "py-baseline.log").slice(-600) };
     return { passing: units.filter((u) => mine(u).every((c) => c.ok) && mine(u).length > 0) };
   },
+  uncollectable(ctx, units) {
+    const files = [...new Set(units.map((u) => u.file))];
+    const r = ctx.run('"$PY" -m pytest -p no:cacheprovider --collect-only -q ' + files.map(q).join(" ") + " > /out/py-collect.log 2>&1; echo $? > /out/py-collect.exit");
+    const exit = got(ctx, "py-collect.exit").trim();
+    return r.status === 0 && pytestUncollected(exit, got(ctx, "py-collect.log"), files) ? "pytest --collect-only exited " + exit + " with an ERROR collecting line for the agent's test files" : null;
+  },
+  reference(ref, units) {
+    const dirs = [...new Set(units.map((u) => posix.dirname(u.file)))];
+    const r = ref.run("set --; for d in " + dirs.map(q).join(" ") + '; do if [ -d "$d" ]; then set -- "$@" "$d"; fi; done; "$PY" -m pytest -p no:cacheprovider --collect-only -q "$@" > /out/py-ref.log 2>&1; echo $? > /out/py-ref.exit');
+    const exit = got(ref, "py-ref.exit").trim();
+    if (r.status === 0 && pytestCollected(exit, got(ref, "py-ref.log"))) return null;
+    return "pytest --collect-only on the reference tree " + (r.status !== 0 ? "did not run (" + tail(r) + ")" : "exited " + exit + ": " + got(ref, "py-ref.log").slice(-300));
+  },
   mutants(ctx, scopePatch) {
     const scope = new Set<string>();
     for (const [f, ranges] of sourceRanges("python", parsePatch(scopePatch))) {
@@ -286,8 +315,10 @@ const python: Adapter = {
     if (scope.size === 0) return { ids: [] };
     put(ctx, "py-config.json", pyConfig(ctx, scopePatch, []));
     put(ctx, "py-write-config.py", PY_WRITE_CONFIG);
-    const r = ctx.run('"$PY" /in/py-write-config.py && ' + MUTMUT + " run --max-children 2 'gstack_mutation_list_only*' > /out/py-list.log 2>&1; " + META);
-    if (r.status !== 0 || !has(ctx, "py-meta.json")) return { ids: [], error: "mutmut could not generate mutants (" + tail(r) + "): " + got(ctx, "py-list.log").slice(-600) };
+    const r = ctx.run('"$PY" /in/py-write-config.py && ' + MUTMUT + " run --max-children 2 'gstack_mutation_list_only*' > /out/py-list.log 2>&1; echo $? > /out/py-list.exit; " + META);
+    const exit = got(ctx, "py-list.exit").trim();
+    const listed = MUTMUT_LISTED.test(got(ctx, "py-list.log"));
+    if (r.status !== 0 || !listed || !has(ctx, "py-meta.json")) return { ids: [], error: "mutmut could not generate mutants (" + (r.status !== 0 ? tail(r) : "exit " + (exit || "none") + (listed ? "" : " before it finished generating mutants")) + "): " + got(ctx, "py-list.log").slice(-600) };
     const keys = Object.keys(JSON.parse(got(ctx, "py-meta.json")) as Record<string, unknown>);
     return { ids: keys.filter((k) => scope.has(k.split("__mutmut_")[0]!)) };
   },
@@ -347,6 +378,8 @@ function goByPkg(units: Unit[]): Map<string, Unit[]> {
   for (const u of units) m.set(u.scope, [...(m.get(u.scope) ?? []), u]);
   return m;
 }
+/** go test -json output shows the package's test binary failed to build or set up. */
+export const goBuildFailed = (jsonl: string, err: string) => jsonl.includes('"Action":"build-fail"') || /\[(?:build|setup) failed\]/.test(jsonl + "\n" + err);
 const goRegex = (us: Unit[]) => "^(" + [...new Set(us.map((u) => u.name))].join("|") + ")$";
 const GM = "/opt/gstack-mutation/go/bin/go-mutesting";
 const goFiles = (ctx: Ctx, scopePatch: string) => [...sourceRanges("go", parsePatch(scopePatch)).keys()].filter((f) => ctx.tree.list.has(f));
@@ -373,14 +406,29 @@ const go: Adapter = {
     if (c.status !== 0) return { passing: [], error: "go test did not run (" + tail(c) + ")" };
     return { passing: kept.flatMap(([, us], i) => (got(ctx, "go-control-" + i + ".exit").trim() === "0" ? us : [])) };
   },
+  uncollectable(ctx, units) {
+    const pkgs = [...goByPkg(units).keys()];
+    const r = ctx.run(pkgs.map((pkg, i) => "go test -count=1 -vet=off -json -run '^$' " + q("./" + pkg) + " > /out/go-collect-" + i + ".jsonl 2> /out/go-collect-" + i + ".err").join("; ") + "; echo ok > /out/go-collect.done");
+    if (r.status !== 0 || !has(ctx, "go-collect.done")) return null;
+    const broken = pkgs.filter((_, i) => goBuildFailed(got(ctx, "go-collect-" + i + ".jsonl"), got(ctx, "go-collect-" + i + ".err")));
+    return broken.length ? "go test could not build the tests of " + broken.join(", ") : null;
+  },
+  reference(ref, units) {
+    const pkgs = [...goByPkg(units).keys()];
+    const r = ref.run(pkgs.map((pkg, i) => "if ls " + q(pkg) + "/*.go > /dev/null 2>&1; then go test -count=1 -vet=off -json -run '^$' " + q("./" + pkg) + "; else go build ./...; fi > /out/go-ref-" + i + ".log 2>&1; echo $? > /out/go-ref-" + i + ".exit").join("; "));
+    if (r.status !== 0) return "go did not run on the reference tree (" + tail(r) + ")";
+    const bad = pkgs.flatMap((pkg, i) => (got(ref, "go-ref-" + i + ".exit").trim() === "0" ? [] : [pkg + " (exit " + got(ref, "go-ref-" + i + ".exit").trim() + "): " + got(ref, "go-ref-" + i + ".log").slice(-300)]));
+    return bad.length ? "the reference tree does not build " + bad.join("; ") : null;
+  },
   mutants(ctx, scopePatch) {
     const files = goFiles(ctx, scopePatch);
     if (files.length === 0) return { ids: [] };
     put(ctx, "gm-exec.sh", GM_EXEC);
     rmSync(join(ctx.tree.out, "gm-list.txt"), { force: true });
-    const r = ctx.run(GM + ' --exec "sh /in/gm-exec.sh" ' + files.map((f) => q("./" + f)).join(" ") + " > /out/gm-list.log 2>&1; touch /out/gm-list.txt", { GM_MODE: "list" });
+    const r = ctx.run(GM + ' --exec "sh /in/gm-exec.sh" ' + files.map((f) => q("./" + f)).join(" ") + " > /out/gm-list.log 2>&1; echo $? > /out/gm-list.exit; touch /out/gm-list.txt", { GM_MODE: "list" });
     const log = got(ctx, "gm-list.log");
-    if (r.status !== 0 || /INTERNAL ERROR|panic:/.test(log)) return { ids: [], error: "go-mutesting could not list mutants (" + tail(r) + "): " + log.slice(-600) };
+    const exit = got(ctx, "gm-list.exit").trim();
+    if (r.status !== 0 || exit !== "0" || /INTERNAL ERROR|panic:/.test(log)) return { ids: [], error: "go-mutesting could not list mutants (" + (r.status !== 0 ? tail(r) : "exit " + (exit || "none")) + "): " + log.slice(-600) };
     return { ids: [...new Set(got(ctx, "gm-list.txt").split("\n").filter(Boolean))] };
   },
   run(ctx, scopePatch, sampled, tests) {
@@ -432,6 +480,9 @@ export function rustResults(log: string): Map<string, boolean> {
   return out;
 }
 
+/** cargo test --no-run exits 101 with a compile error in a test target; returns that error line. */
+export const cargoTestUncompiled = (exit: string, log: string): string | null => (exit === "101" ? (/^error: could not compile `[^`]+` \((?:test "[^"]+"|lib test|bin "[^"]+" test)\)/m.exec(log)?.[0] ?? null) : null);
+
 const exactArgs = (units: Unit[]) => "-- --exact " + [...new Set(units.map((u) => u.name))].map(q).join(" ");
 
 /** cargo test's target flags for the units, so a same-named test in a target the agent did not touch never runs: each
@@ -474,6 +525,16 @@ const rust: Adapter = {
     if (ran > units.length) return { passing: [], error: ran + " tests ran for " + units.length + " the agent wrote: an unchanged test shares an exact name with one of them in a target the scorer runs" };
     const res = rustResults(log);
     return { passing: units.filter((u) => res.get(u.scope + "\t" + u.name) === true) };
+  },
+  uncollectable(ctx, units) {
+    const r = ctx.run(CARGO_ENV + "cargo test --no-run --workspace " + rustTargets(ctx, units) + " > /out/rs-collect.log 2>&1; echo $? > /out/rs-collect.exit");
+    return r.status === 0 ? cargoTestUncompiled(got(ctx, "rs-collect.exit").trim(), got(ctx, "rs-collect.log")) : null;
+  },
+  reference(ref) {
+    const r = ref.run(CARGO_ENV + "cargo test --no-run --workspace > /out/rs-ref.log 2>&1; echo $? > /out/rs-ref.exit");
+    const exit = got(ref, "rs-ref.exit").trim();
+    if (r.status === 0 && exit === "0") return null;
+    return "cargo test --no-run on the reference tree " + (r.status !== 0 ? "did not run (" + tail(r) + ")" : "exited " + exit + ": " + got(ref, "rs-ref.log").slice(-300));
   },
   mutants(ctx, scopePatch) {
     put(ctx, "scope.patch", scopePatch);
@@ -533,6 +594,20 @@ export function skipOthers(file: string, text: string, keep: Set<number>): strin
   return lines.join("\n");
 }
 
+type VitestFiles = { name: string; status?: string; message?: string; assertionResults: unknown[] }[];
+const vitestFiles = (report: string): VitestFiles | null => {
+  try {
+    const r = (JSON.parse(report) as { testResults?: VitestFiles }).testResults;
+    return Array.isArray(r) && r.every((t) => typeof t?.name === "string" && Array.isArray(t.assertionResults)) ? r : null;
+  } catch {
+    return null;
+  }
+};
+/** The files vitest's JSON report shows as failed to load: status failed, no assertion results and an error message. */
+export const vitestUnloaded = (report: string, files: string[], repoDir: string) => files.filter((f) => vitestFiles(report)?.some((t) => posix.relative(repoDir, t.name) === f && t.status === "failed" && t.assertionResults.length === 0 && !!t.message?.trim()));
+/** vitest's JSON report names at least one file, and every file it names has assertion results. */
+export const vitestLoaded = (report: string) => { const r = vitestFiles(report); return !!r && r.length > 0 && r.every((t) => t.assertionResults.length > 0); };
+
 const typescript: Adapter = {
   units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => agentUnits(ctx, c, tsUnits)),
   baseline(ctx, units) {
@@ -549,6 +624,17 @@ const typescript: Adapter = {
     }
     if (!units.some((u) => byLine.has(u.file + ":" + u.start))) return { passing: [], error: "vitest's report names none of the selected tests: " + got(ctx, "vt-base.log").slice(-600) };
     return { passing: units.filter((u) => (byLine.get(u.file + ":" + u.start) ?? []).length > 0 && byLine.get(u.file + ":" + u.start)!.every((s) => s === "passed")) };
+  },
+  uncollectable(ctx, units) {
+    if (got(ctx, "vt-base.exit").trim() !== "1" || !has(ctx, "vt-base.json")) return null;
+    const bad = vitestUnloaded(got(ctx, "vt-base.json"), [...new Set(units.map((u) => u.file))], ctx.o.repoDir);
+    return bad.length ? "vitest could not load " + bad.join(", ") : null;
+  },
+  reference(ref) {
+    const r = ref.run("node node_modules/vitest/vitest.mjs run --reporter=json --outputFile=/out/vt-ref.json > /out/vt-ref.log 2>&1; echo $? > /out/vt-ref.exit");
+    const exit = got(ref, "vt-ref.exit").trim();
+    if (r.status === 0 && (exit === "0" || exit === "1") && vitestLoaded(got(ref, "vt-ref.json"))) return null;
+    return "vitest on the reference tree " + (r.status !== 0 ? "did not run (" + tail(r) + ")" : "exited " + exit + " without loading every test file: " + got(ref, "vt-ref.log").slice(-300));
   },
   mutants(ctx, scopePatch) {
     const mutate = [...sourceRanges("typescript", parsePatch(scopePatch))].filter(([f]) => ctx.tree.list.has(f)).flatMap(([f, rs]) => rs.map(([s, e]) => f + ":" + s + "-" + e));
@@ -600,7 +686,13 @@ function readTree(ctx: Ctx, units: Unit[], scopePatch: string, cap: number, seed
   if (units.length === 0) return reading({ changed: 0, passing: 0 });
   const base = a.baseline(ctx, units);
   const changed = units.length;
-  if (base.error) return reading({ changed, passing: 0, toolError: base.error });
+  if (base.error) {
+    const broken = ctx.ref ? a.uncollectable(ctx, units) : null;
+    if (broken === null) return reading({ changed, passing: 0, toolError: base.error });
+    const ref = a.reference(ctx.ref!(), units);
+    if (ref !== null) return reading({ changed, passing: 0, toolError: "the agent's tests fail to collect (" + broken + "), and so do the reference tree's: " + ref });
+    return reading({ changed, passing: 0, detail: "the agent's tests fail to collect (" + broken + "), while the same runner collects the reference tree's cleanly" });
+  }
   const passing = base.passing.length;
   if (passing === 0) return reading({ changed, passing: 0 });
   const listed = a.mutants(ctx, scopePatch);
@@ -627,7 +719,16 @@ export function scoreTree(opts: ScoreOptions): MutationRecord {
     const tree = prepare(o.repoDir, image, join(dir, "own"), opts.patch, new Map());
     if (!tree) return done(reading({ changed: 1, passing: 0, toolError: "the patch does not apply to the image's tree" }));
     volumes.push(tree.volume);
-    const ctx = context(o, image, tree, env);
+    let refCtx: Ctx | undefined;
+    const ref = () => {
+      if (!refCtx) {
+        const t = prepare(o.repoDir, image, join(dir, "ref"), "", new Map())!;
+        volumes.push(t.volume);
+        refCtx = context(o, image, t, env);
+      }
+      return refCtx;
+    };
+    const ctx: Ctx = { ...context(o, image, tree, env), ref };
     const units = ADAPTERS[o.lang].units(ctx);
     const own = readTree(ctx, units, opts.patch, cap, seed);
     if (opts.gold === undefined) return done(own);
