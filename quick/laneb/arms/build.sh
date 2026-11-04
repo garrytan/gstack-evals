@@ -5,9 +5,10 @@
 #   quick/laneb/arms/build.sh [out-dir]      default out-dir: ~/.capy/work/laneb-arms
 #   quick/laneb/arms/build.sh l1 [out-dir]   default out-dir: ~/.capy/work/laneb-arms-l1
 #
-# l1 output, outside git: <out>/{none,before,after,off}.tar and .tar.gz, the
-# pins' checkouts and fetch records, and <out>/trees/. Commit-ready output:
-# manifests/l1/ next to this script. See "The L1 arms" in README.md.
+# l1 output, outside git: <out>/{none,before,after,off}.tar and .tar.gz, their
+# file inventories (<arm>.files.tsv), the pins' checkouts and fetch records, and
+# <out>/trees/. Commit-ready output: manifests/l1/*.json next to this script.
+# See "The L1 arms" in README.md.
 #
 # Output, outside git: <out>/{none,gstack,placebo}.tar and .tar.gz, each with
 # paths relative to /root (extract with tar -x -C /root), plus <out>/trees/.

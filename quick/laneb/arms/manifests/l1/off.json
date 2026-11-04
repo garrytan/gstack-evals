@@ -132,5 +132,6 @@
       "verify",
       "write-skill"
     ]
-  }
+  },
+  "inventory_sha256": "4b504844d28a80c3b708e07b2ae9c14bdefafd29848aff7615144347a2a66089"
 }

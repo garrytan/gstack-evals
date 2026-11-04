@@ -2,6 +2,7 @@
 // prereg's frozen values, each arm's manifest meta and the checks that run inside the arm images.
 //
 //   bun arms/l1.ts manifest --arm <arm> --tree <dir> --tar <file> --out <dir> [--fetch <json> --config <tsv> --lock <json>] [--meta k=v ...]
+//       writes <out>/<arm>.json, and the file inventory <arm>.files.tsv beside the tar (the json records its sha256)
 //   bun arms/l1.ts check --arm <arm> [--doctor <kind>]                  inside a check container, the arm extracted in /root
 //   bun arms/l1.ts session --arm <arm> [--prompt <text>] [--doctor <kind>]   the same; one untold and one told session
 //
@@ -11,7 +12,7 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { manifest } from "./tree.ts";
 import { sse } from "../runner/fake_upstream.ts";
 
@@ -309,8 +310,8 @@ if (import.meta.main) {
       problems = frozenProblems(arm, g);
     }
     const { summary, list } = manifest(arm, tree, tar, meta);
-    writeFileSync(join(out, arm + ".json"), JSON.stringify(summary, null, 2) + "\n");
-    writeFileSync(join(out, arm + ".files.tsv"), list);
+    writeFileSync(join(out, arm + ".json"), JSON.stringify({ ...summary, inventory_sha256: sha256(list) }, null, 2) + "\n");
+    writeFileSync(join(dirname(tar), arm + ".files.tsv"), list);
     console.log(arm + " files=" + summary.tree.files + " tree_digest=" + summary.tree.digest + " tar_sha256=" + summary.tar.sha256);
     if (problems.length) {
       for (const p of problems) console.error("E_INTERNAL " + arm + " differs from the prereg: " + p);

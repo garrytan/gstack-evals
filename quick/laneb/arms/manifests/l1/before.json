@@ -120,5 +120,6 @@
       "verify",
       "write-skill"
     ]
-  }
+  },
+  "inventory_sha256": "9955519b0779d22da8a9dfa637d887e46f1a4067f5a8b9a1a8db8b7ba49b6205"
 }

@@ -19,5 +19,6 @@
     "tree_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "skill_md_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "names": []
-  }
+  },
+  "inventory_sha256": "fb5c2c69b1276762cd975cf4640070fae6130a84558885db0684fb3e9fde8db7"
 }
