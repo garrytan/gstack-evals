@@ -164,13 +164,11 @@ function tokenize(src: string): Tok[] {
     if (c === " " || c === "\t") { flush(); i++; continue; }
     const rest = src.slice(i);
     const redir = /^(\d*>>|\d*>&|\d*>\||\d*>|&>>|&>|<<<|<<-|<<|<&|<>|<)/.exec(rest);
-    if (redir && (!inWord || /^\d+$/.test(raw))) {
-      const op = (inWord ? raw : "") + redir[1]!.replace(/^\d+/, "");
-      raw = "";
-      value = "";
-      inWord = false;
+    if (redir && !(inWord && /^\d/.test(redir[1]!))) {
+      flush();
+      const op = redir[1]!;
       i += redir[1]!.length;
-      if (op.endsWith("<<") || op.endsWith("<<-")) {
+      if ((op.endsWith("<<") && !op.endsWith("<<<")) || op.endsWith("<<-")) {
         while (src[i] === " " || src[i] === "\t") i++;
         let delim = "";
         const m = /^(['"])(.*?)\1|^([^\s;&|<>()]+)/.exec(src.slice(i));
@@ -178,7 +176,7 @@ function tokenize(src: string): Tok[] {
         pendingHeredocs.push({ delim, strip: op.endsWith("<<-"), idx: toks.length });
         continue;
       }
-      if (op.endsWith(">&") || op === "<&") {
+      if (op.endsWith(">&") || op.endsWith("<&")) {
         const m = /^\s*([0-9-]+)/.exec(src.slice(i));
         if (m) { i += m[0].length; continue; }
       }
@@ -350,6 +348,19 @@ export type ProbeOptions = {
 /** The no-gstack read audit's roots: a successful read of a path below one (or of a Capy drive) contaminates a none session. */
 export const auditRoots = (home: string) => [home + "/.claude/skills", home + "/.local/share/gstack", home + "/.gstack"];
 const DRIVE = /\/\.capy\/drive\//;
+/** Commands that never read a file's contents: a path among their words is a mention, unless a word substitutes a command. */
+const NO_READ = new Set(["echo", "printf", "cd", "pushd", "popd", "pwd", "mkdir", "touch", "test", "[", "[[", "export", "unset", "type", "which", "command", "hash", "true", "false", ":", "dirname", "basename", "realpath", "readlink", "sleep", "exit"]);
+const PATH_SPLIT = /[\s'"=;|&<>()`]+/;
+/** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies. */
+function bashReadPaths(command: string): string[] {
+  const out: string[] = [];
+  for (const s of simpleCommands(command)) {
+    const mention = s.words.length > 0 && NO_READ.has(base(s.words[0]!)) && !s.words.some((w) => w.includes("$(") || w.includes("\x60"));
+    const texts = [...(mention ? [] : [...s.words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<")).map((r) => r.target)];
+    for (const t of texts) out.push(...t.split(PATH_SPLIT).filter((w) => w.startsWith("/")));
+  }
+  return out;
+}
 
 export type ProbeI = { complete: boolean; report: boolean; fix_edited: boolean; status: boolean; check_after_edit: boolean; edits: number };
 export type Probes = {
@@ -491,7 +502,7 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
     if (c.name === "Read" || c.name === "Bash") {
       for (const m of target.matchAll(/(\S*\/\.claude\/skills\/([^/\s"']+)\/SKILL\.md)/g)) if (m[2] !== "gstack" && under(m[1]!.replace(/^['"]/, ""), o.gstackRoots)) gstackLoads.add(m[2]!);
     }
-    const paths = c.name === "Bash" ? target.split(/[\s'"=;|&<>()]+/).filter((w) => w.startsWith("/")) : [target];
+    const paths = c.name === "Bash" ? bashReadPaths(target) : [target];
     const hit = paths.find(below);
     if (hit && (c.name !== "Bash" || res.text.trim())) auditHits.push(c.name + " " + hit.slice(0, 200));
   }

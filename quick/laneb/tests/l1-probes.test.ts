@@ -118,7 +118,7 @@ describe("probe I", () => {
     expect(run([edit(), bash("pytest"), tool("Edit", { file_path: "/testbed/src/calc.py", old_string: "x", new_string: "y" }, "String not found", true), text(report())]).probe_i.complete).toBe(true);
   });
   test("attack 2: edits through Bash after the last test end the check; writes outside the work tree do not", () => {
-    for (const late of ["sed -i 's/a/b/' src/calc.py", "perl -pi -e 's/a/b/' src/calc.py", "echo x | tee src/calc.py", "echo x >> src/calc.py", "cat > src/new.py <<'EOF'\npytest\nEOF", "git apply <<'EOF'\n--- a/src/calc.py\n+++ b/src/calc.py\nEOF", "patch -p1 < fix.diff", "git checkout -- src/calc.py"]) {
+    for (const late of ["sed -i 's/a/b/' src/calc.py", "perl -pi -e 's/a/b/' src/calc.py", "echo x | tee src/calc.py", "echo x >> src/calc.py", "cat > src/new.py <<'EOF'\npytest\nEOF", "git apply <<'EOF'\n--- a/src/calc.py\n+++ b/src/calc.py\nEOF", "patch -p1 < fix.diff", "git checkout -- src/calc.py", "echo x>src/calc.py", "echo \"x\">>src/calc.py", "printf x 1>src/calc.py"]) {
       expect([late, run([edit(), bash("pytest"), bash(late), text(report())]).probe_i.check_after_edit]).toEqual([late, false]);
     }
     for (const harmless of ["pytest 2>&1 | tee /tmp/log.txt", "echo done > /dev/null", "cd /tmp && echo x > notes.txt", "cat src/calc.py"]) {
@@ -159,6 +159,8 @@ describe("the runner and write lists", () => {
     const [, py] = simpleCommands("cd app && python x.py > out.txt", "/testbed");
     expect(py!.cwd).toBe("/testbed/app");
     expect(writeTargets(py!, "/testbed")).toEqual(["/testbed/app/out.txt"]);
+    expect(simpleCommands("echo a2>f.txt 2>err.txt", "/testbed")[0]).toMatchObject({ words: ["echo", "a2"], redirects: [{ op: ">", target: "f.txt" }, { op: "2>", target: "err.txt" }] });
+    expect(simpleCommands("echo $((1>2)) x=\"a>b\"")[0]).toMatchObject({ words: ["echo", "$((1>2))", "x=a>b"], redirects: [] });
   });
 });
 
@@ -196,6 +198,11 @@ describe("contract block, turn cap and the read audit", () => {
     expect(run([bash("cat ~/.local/share/gstack/README.md", "gstack")], none).audit_hits.length).toBe(1);
     expect(run([bash("ls ~/.capy/drive/user-x/", "AGENTS.md")], none).audit_hits.length).toBe(1);
     expect(run([bash("ls ~/.claude/skills/", "")], none).audit_hits).toEqual([]);
+    expect(run([bash("echo ~/.claude/skills/investigate/SKILL.md", "/root/.claude/skills/investigate/SKILL.md")], none).audit_hits).toEqual([]);
+    expect(run([bash("test -e ~/.gstack/x && printf '%s' ~/.gstack/x; cd ~/.capy/drive/u; pwd", "/root/.capy/drive/u")], none).audit_hits).toEqual([]);
+    expect(run([bash("echo $(cat ~/.claude/skills/investigate/SKILL.md)", "body")], none).audit_hits.length).toBe(1);
+    expect(run([bash("echo start; head -5 < ~/.local/share/gstack/VERSION", "start\n1.0")], none).audit_hits.length).toBe(1);
+    expect(run([bash("python3 -c \"print(open('/root/.gstack/config.yaml').read())\"", "x: 1")], none).audit_hits.length).toBe(1);
     expect(run([tool("Read", { file_path: "/root/.claude/skills/investigate/SKILL.md" }, "File does not exist.", true)], none).audit_hits).toEqual([]);
   });
 });

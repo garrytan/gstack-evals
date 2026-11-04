@@ -25,6 +25,8 @@
 // record on after-t sessions for B3; an unrecorded hook counts as not fired), saturation (MDD past the margin, or 1 minus the
 // upper bound of the before arm's task interval under 2 x MDD), else CUT-CANDIDATE. Not admitted: a descriptive line,
 // FIX-METHOD (saturation), with no ceiling-raise attempt. No outcome (#169 7.5 coverage): FIX-METHOD (harness limit).
+// The coverage rule holds for every endpoint: a secondary contrast or O5 whose coverage fails prints no outcome. B1 also prints
+// on the routed stratum (section 5), descriptively.
 // A model the ceiling refused: not run, with the MDD it would have had.
 //
 // The probe audit (#169 7.6 item 4) is read from labels a blind reader wrote: per probe and model, Cohen's kappa at 0.7 or more,
@@ -185,9 +187,12 @@ const groupsBy = (keys: string[]) => {
   return [...m.keys()].sort().map((k) => m.get(k)!);
 };
 
-export type Contrast = { a: L1Arm; b: L1Arm; metric: Metric; a_rate: number; b_rate: number; a_n: number; b_n: number; tasks: number; est: number; task_ci: { lo: number; hi: number }; repo_ci: { lo: number; hi: number }; p: number | null };
+export type Planned = { tasks: string[]; reps: number };
+export type Coverage = ReturnType<typeof coverage>;
+export type Contrast = { a: L1Arm; b: L1Arm; metric: Metric; a_rate: number; b_rate: number; a_n: number; b_n: number; tasks: number; est: number; task_ci: { lo: number; hi: number }; repo_ci: { lo: number; hi: number }; p: number | null; coverage: Coverage | null };
 
-export function contrast(rows: L1SessionRow[], s: Scope, a: L1Arm, b: L1Arm, metric: Metric): Contrast {
+/** A paired contrast; with the planned sessions it also carries #169 7.5's coverage, and an endpoint whose coverage fails has no outcome. */
+export function contrast(rows: L1SessionRow[], s: Scope, a: L1Arm, b: L1Arm, metric: Metric, planned: Planned | null = null): Contrast {
   const A = cell(rows, s, a, metric), B = cell(rows, s, b, metric);
   const tasks = [...A.keys()].filter((t) => B.has(t)).sort();
   const diffs = tasks.map((t) => A.get(t)!.v - B.get(t)!.v);
@@ -199,6 +204,7 @@ export function contrast(rows: L1SessionRow[], s: Scope, a: L1Arm, b: L1Arm, met
     task_ci: bootstrap(diffs, tasks.map((_, i) => [i])),
     repo_ci: bootstrap(diffs, groupsBy(tasks.map((t) => A.get(t)!.repo))),
     p: signFlipP(diffs),
+    coverage: planned ? coverage(rows, s, [a, b], planned) : null,
   };
 }
 
@@ -211,7 +217,7 @@ export function armRate(rows: L1SessionRow[], s: Scope, arm: L1Arm, m: Metric) {
 }
 
 /** #169 7.5: each arm graded on 90% of its planned sessions, and at most 10% of planned task clusters failing to enter. */
-export function coverage(rows: L1SessionRow[], s: Scope, arms: L1Arm[], planned: { tasks: string[]; reps: number }) {
+export function coverage(rows: L1SessionRow[], s: Scope, arms: L1Arm[], planned: Planned) {
   const per = arms.map((arm) => ({ arm, graded: graded(rows, s, arm).length, planned: planned.tasks.length * planned.reps }));
   const sets = arms.map((arm) => new Set(graded(rows, s, arm).map((r) => r.task)));
   const missing = planned.tasks.filter((t) => !sets.every((x) => x.has(t))).length;
@@ -351,6 +357,7 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
   const tb2Reps = cfg.tb2_replicates ?? 2;
   const labels: AuditLabel[] = Array.isArray(cfg.audit) ? cfg.audit : typeof cfg.audit === "string" ? readFileSync(cfg.audit, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)) : [];
   const routed = new Set(cfg.routed_stratum);
+  const f1Plan: Planned = { tasks: f1Tasks, reps: 1 };
   const probesSha = sha256(readFileSync(PROBES_TS));
   const models = cfg.models.map((m) => {
     const id = m.id;
@@ -363,8 +370,8 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
       const pilotCov = coverage(rows, pilot, [before], { tasks: pilotTasks, reps: 1 });
       const ad = admit(pr.x, pr.n, power);
       const admission = notRun || !pilotTasks.length || pr.n === 0 ? "no_pilot" : !pilotCov.ok ? "incomplete" : ad.admitted ? "admitted" : "not_admitted";
-      const c = contrast(rows, f1, after, before, metric);
-      const cov = coverage(rows, f1, [after, before], { tasks: f1Tasks, reps: 1 });
+      const c = contrast(rows, f1, after, before, metric, f1Plan);
+      const cov = c.coverage!;
       const br = armRate(rows, f1, before, metric);
       const arms = [graded(rows, f1, after), graded(rows, f1, before)];
       const capStopOver = arms.some((g) => share(g, (r) => r.allowance_stop || r.turn_cap) > OVER);
@@ -389,10 +396,12 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
     }));
     const at = graded(rows, f1, "after-t");
     const gate = { n: at.length, complete: at.filter((r) => r.complete).length, rate: at.length ? share(at, (r) => r.complete) : null, met: at.length > 0 && share(at, (r) => r.complete) >= GATE_BAR, probes_sha256: probesSha };
-    const o5c = contrast(rows, f1, "after-t", "before-t", "pass");
-    const o5 = { contrast: o5c, before_t_rate: o5c.b_n ? o5c.b_rate : null, mdd: o5c.b_n ? interp(power.o5, o5c.b_rate) : null, verdict: "none: descriptive and unpowered (section 8)" };
-    const pass = (a: L1Arm, b: L1Arm) => contrast(rows, f1, a, b, "pass");
+    const o5c = contrast(rows, f1, "after-t", "before-t", "pass", f1Plan);
+    const o5 = { contrast: o5c, outcome: o5c.coverage!.ok, before_t_rate: o5c.b_n ? o5c.b_rate : null, mdd: o5c.b_n ? interp(power.o5, o5c.b_rate) : null, verdict: "none: descriptive and unpowered (section 8)" };
+    const b1Routed = contrast(rows, { ...f1, tasks: routed }, "after-u", "before-u", "load", { tasks: cfg.routed_stratum, reps: 1 });
+    const pass = (a: L1Arm, b: L1Arm) => contrast(rows, f1, a, b, "pass", f1Plan);
     const tb2: Scope = { model: id, instrument: "tb2" };
+    const tb2Plan: Planned = { tasks: tb2Tasks, reps: tb2Reps };
     const fit: Scope = { ...tb2, tasks: new Set(cfg.tb2_fit_stratum ?? []) };
     const costs = Object.fromEntries(F1_ARMS.map((arm) => {
       const g = graded(rows, f1, arm);
@@ -422,23 +431,25 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
       const g = graded(rows, { model: id, instrument: inst }, arm);
       return [arm, { sessions: g.length, background: g.filter((r) => r.background_at_result).length, over: share(g, (r) => r.background_at_result) > OVER }];
     }).filter(([, v]) => (v as any).sessions > 0))]));
-    const s12b1 = contrast(rows, tb2, "after-u", "before-u", "load"), s12b3 = contrast(rows, tb2, "after-t", "before-t", "complete");
+    const s12b1 = contrast(rows, tb2, "after-u", "before-u", "load", tb2Plan), s12b3 = contrast(rows, tb2, "after-t", "before-t", "complete", tb2Plan);
+    const gap = (t: Contrast, f: Contrast) => (t.coverage!.ok && f.coverage!.ok ? t.est - f.est : null);
     return {
       model: id,
       status: m.status,
       primaries,
+      b1_routed: b1Routed,
       gate,
       o5,
       secondary: {
         S1: [pass("after-t", "none"), pass("after-u", "none")],
         S3: [pass("after-u", "before-u")],
         S5: [pass("before-t", "none"), pass("before-u", "none")],
-        S6: [contrast(rows, f1, "after-u", "off-u", "load"), contrast(rows, f1, "after-t", "off-t", "complete"), pass("after-t", "off-t"), pass("after-u", "off-u")],
+        S6: [contrast(rows, f1, "after-u", "off-u", "load", f1Plan), contrast(rows, f1, "after-t", "off-t", "complete", f1Plan), pass("after-t", "off-t"), pass("after-u", "off-u")],
         S7: { f1: skillCounts("f1"), tb2: skillCounts("tb2") },
         S8: { per_arm: costs, ratio_to_none: Object.fromEntries(F1_ARMS.map((arm) => [arm, { per_session: ratio(costs[arm]!.usd_per_session, costs.none!.usd_per_session), per_pass: ratio(costs[arm]!.usd_per_pass, costs.none!.usd_per_pass) }])), g3_after_t: ratio(costs["after-t"]!.usd_per_pass, costs.none!.usd_per_pass) },
         S10: s10,
         S11: { route_hook_after_u: { n: au.length, fired: au.filter((r) => r.route_hook === true).length, unrecorded: au.filter((r) => r.route_hook === null).length, routed_n: au.filter((r) => routed.has(r.task)).length, routed_fired: au.filter((r) => routed.has(r.task) && r.route_hook === true).length }, contract_after_t: { n: at.length, block: at.filter((r) => r.contract_block).length, record: at.filter((r) => r.contract_record === true).length, unrecorded: at.filter((r) => r.contract_record === null).length } },
-        S12: { tb2_b1: s12b1, tb2_b3: s12b3, gap_b1: s12b1.est - primaries[0]!.contrast.est, gap_b3: s12b3.est - primaries[1]!.contrast.est, fit_b1: contrast(rows, fit, "after-u", "before-u", "load"), tb2_coverage: coverage(rows, tb2, [...TB2_ARMS], { tasks: tb2Tasks, reps: tb2Reps }) },
+        S12: { tb2_b1: s12b1, tb2_b3: s12b3, gap_b1: gap(s12b1, primaries[0]!.contrast), gap_b3: gap(s12b3, primaries[1]!.contrast), fit_b1: contrast(rows, fit, "after-u", "before-u", "load", { tasks: cfg.tb2_fit_stratum ?? [], reps: tb2Reps }), tb2_coverage: coverage(rows, tb2, [...TB2_ARMS], tb2Plan) },
         S13: background,
       },
     };
@@ -452,7 +463,10 @@ export type Report = ReturnType<typeof analyze>;
 const pct = (x: number | null | undefined) => (x === null || x === undefined || !Number.isFinite(x) ? "n/a" : (100 * x).toFixed(1) + "%");
 const pts = (x: number | null | undefined) => (x === null || x === undefined || !Number.isFinite(x) ? "n/a" : (x >= 0 ? "+" : "") + (100 * x).toFixed(1));
 const ci = (c: { lo: number; hi: number }) => "[" + pts(c.lo) + ", " + pts(c.hi) + "]";
-const line = (label: string, c: Contrast, tested = false) => "| " + label + " | " + c.a + " " + pct(c.a_rate) + " (" + c.a_n + ") | " + c.b + " " + pct(c.b_rate) + " (" + c.b_n + ") | " + c.tasks + " | " + pts(c.est) + " | " + ci(c.task_ci) + " | " + ci(c.repo_ci) + " | " + (!tested ? "-" : c.p === null ? "n/a" : c.p < 1e-4 ? "<0.0001" : c.p.toFixed(4)) + " |";
+const line = (label: string, c: Contrast, tested = false) => {
+  const none = c.coverage !== null && !c.coverage.ok;
+  return "| " + label + " | " + c.a + " " + pct(c.a_rate) + " (" + c.a_n + ") | " + c.b + " " + pct(c.b_rate) + " (" + c.b_n + ") | " + c.tasks + " | " + (none ? "no outcome (coverage) | - | -" : pts(c.est) + " | " + ci(c.task_ci) + " | " + ci(c.repo_ci)) + " | " + (!tested || none ? "-" : c.p === null ? "n/a" : c.p < 1e-4 ? "<0.0001" : c.p.toFixed(4)) + " |";
+};
 
 export function markdown(rep: Report): string {
   const out: string[] = ["L1 analysis. power.txt " + rep.power_sha256.slice(0, 12) + ", probes.ts " + rep.probes_sha256.slice(0, 12) + ". Sessions " + rep.sessions.total + ": infra " + rep.sessions.infra + ", cap stops " + rep.sessions.cap_stops + ", contaminated none " + rep.sessions.contaminated.length + "."];
@@ -465,11 +479,12 @@ export function markdown(rep: Report): string {
     }
     out.push("", head);
     for (const p of m.primaries) out.push(line(p.member, p.contrast, true));
+    out.push(line("B1 routed stratum", m.b1_routed));
     out.push(line("O5 (descriptive)", m.o5.contrast));
     for (const [k, cs] of Object.entries({ S1: m.secondary.S1, S3: m.secondary.S3, S5: m.secondary.S5, S6: m.secondary.S6 })) for (const c of cs) out.push(line(k + " " + c.metric, c));
     out.push(line("S12 TB2 B1", m.secondary.S12.tb2_b1), line("S12 TB2 B3", m.secondary.S12.tb2_b3), line("S12 TB2 fit B1", m.secondary.S12.fit_b1));
     out.push("", "Gate reading (probe I complete in F1 after-t, bar 50%): " + m.gate.complete + "/" + m.gate.n + " = " + pct(m.gate.rate) + ", " + (m.gate.met ? "met" : "not met") + "; probes.ts sha256 " + m.gate.probes_sha256 + ". It is B3's exposure line.");
-    out.push("O5: " + pts(m.o5.contrast.est) + " points " + ci(m.o5.contrast.task_ci) + ", before-t " + pct(m.o5.before_t_rate) + ", power.txt MDD@0.05 there " + pts(m.o5.mdd) + ". Unpowered: no verdict.");
+    out.push("O5: " + (m.o5.outcome ? pts(m.o5.contrast.est) + " points " + ci(m.o5.contrast.task_ci) : "no outcome under the coverage rule") + ", before-t " + pct(m.o5.before_t_rate) + ", power.txt MDD@0.05 there " + pts(m.o5.mdd) + ". Unpowered: no verdict.");
     out.push("S13 background at result: " + JSON.stringify(m.secondary.S13));
     out.push("S7, S8, S10, S11: " + JSON.stringify({ S7: m.secondary.S7, S8: m.secondary.S8, S10: m.secondary.S10, S11: m.secondary.S11 }));
   }

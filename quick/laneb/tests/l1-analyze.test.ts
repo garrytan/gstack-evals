@@ -168,6 +168,28 @@ describe("the whole entry on synthetic tables", () => {
     const rise = analyze(table({ f1: { "before-u": { load: 24 }, "after-u": { load: 70 }, "before-t": { complete: 1 }, "after-t": { complete: 1 } } }), config());
     expect(verdicts(rise)[0]).toBe("B1 KEEP FIX-METHOD (saturation)");
   }, SLOW);
+  test("descriptive contrasts and O5 follow the coverage rule: under 90% graded in an arm gives no outcome", () => {
+    const rep = analyze(table({ f1: { "before-u": { load: 1, pass: 10 }, "after-u": { load: 2, pass: 20 }, "before-t": { complete: 1 }, "after-t": { complete: 2 } }, extra: (arm, i) => (arm === "none" && i > 0 ? { outcome: "infra" } : arm === "after-t" && i >= 70 ? { outcome: "infra" } : {}) }), config());
+    const m = rep.models[0]!;
+    expect(m.secondary.S1.map((c) => c.coverage!.ok)).toEqual([false, false]);
+    expect(m.secondary.S5.map((c) => c.coverage!.ok)).toEqual([false, false]);
+    expect(m.secondary.S3[0]!.coverage).toMatchObject({ ok: true, clusters_missing: 0 });
+    expect(m.o5.outcome).toBe(false);
+    expect(m.o5.contrast.coverage).toMatchObject({ ok: false, per: [{ arm: "after-t", graded: 70, planned: 80 }, { arm: "before-t", graded: 80, planned: 80 }] });
+    const md = markdown(rep);
+    expect(md).toMatch(/\| S1 pass \| after-t [^\n]*\| no outcome \(coverage\) \| - \| - \| - \|/);
+    expect(md).toMatch(/\| S3 pass \| after-u 25\.0% \(80\) \| before-u 12\.5% \(80\) \| 80 \| \+12\.5 \|/);
+    expect(md).toContain("O5: no outcome under the coverage rule");
+    expect(md).not.toContain("O5: +");
+  }, SLOW);
+  test("B1 also prints on the routed stratum", () => {
+    const rep = analyze(table({ f1: { "after-u": { load: 30 } } }), config({ routed_stratum: TASKS.slice(0, 40) }));
+    const m = rep.models[0]!;
+    expect(m.primaries[0]!.contrast.est).toBeCloseTo(30 / 80, 9);
+    expect(m.b1_routed).toMatchObject({ a: "after-u", b: "before-u", metric: "load", tasks: 40, a_n: 40, coverage: { ok: true, clusters_planned: 40 } });
+    expect(m.b1_routed.est).toBeCloseTo(30 / 40, 9);
+    expect(markdown(rep)).toMatch(/\| B1 routed stratum \| after-u 75\.0% \(40\) \| before-u 0\.0% \(40\) \| 40 \| \+75\.0 \|[^\n]*\| - \|/);
+  }, SLOW);
   test("the repository interval resamples repositories, so clustered gains widen it", () => {
     const tasks = Array.from({ length: 80 }, (_, i) => "o" + Math.floor(i / 8) + "__r" + Math.floor(i / 8) + "-" + i);
     const rep = analyze(table({ tasks, f1: { "before-u": { load: 0 }, "after-u": { load: 24 } } }), config({ f1_tasks: tasks, routed_stratum: tasks }));

@@ -92,10 +92,22 @@ describe("the ceiling check before a launch", () => {
     expect(dollars(tally(atExpected(), crew(288_000, 0, sol), plan(solPlan, { sol: "refused", particle: "refused" })).runWorkHold)).toBe(0);
     expect(dollars(tally(atExpected(), crew(288_000, 0, [{ ...sol[0]!, credits: 20_000 }]), plan()).runWorkHold)).toBe(15);
   });
+  test("a run-work thread's unspent token stop is held too, beside its line's remainder", () => {
+    const sol: Crew["threads"] = [{ code: "GEVA-5", line: "sol", credits: 15_000, tokens: 20 * M, token_stop: 120 * M, status: "open" }];
+    const t = tally(atExpected(), crew(385_000, 0, sol), plan());
+    expect(t.perToken).toBeCloseTo(400 / 820, 9);
+    expect(dollars(t.stops)).toBeCloseTo(100 * (400 / 820), 5);
+    expect(dollars(t.crewHold)).toBeCloseTo(100 * (400 / 820), 5);
+    expect(dollars(t.runWorkHold)).toBe(15);
+    expect(() => tally(atExpected(), crew(0, 0, [{ ...sol[0]!, token_stop: null }]), plan())).toThrow(/GEVA-5 has no token_stop/);
+  });
   test("refuses a launch while another item holds open reservations, and an item not in the plan or already done", () => {
     const r = check([...atExpected(), ...rows("pilot-sol", 100, [], [5])], crew(0, 0), plan(), "f1-sol");
     expect(r.ok).toBe(false);
     expect(r.why).toContain("pilot-sol still holds open reservations");
+    const second = check([...rows("pilot-opus", 80, [26.08]), ...rows("f1-opus", 680, [211.9], [40])], crew(0, 0), { items: [{ item: "pilot-opus", cap_usd: 80, status: "done" }, { item: "f1-opus", cap_usd: 680, status: "open" }], leftover: { sol: "pending", particle: "pending" } }, "f1-opus");
+    expect(second.ok).toBe(false);
+    expect(second.why).toContain("f1-opus still holds open reservations");
     expect(() => check(atExpected(), crew(0, 0), plan(), "f1-particle")).toThrow(UsageError);
     expect(() => check(atExpected(), crew(0, 0), plan(), "f1-opus")).toThrow(/not a planned or open item/);
   });

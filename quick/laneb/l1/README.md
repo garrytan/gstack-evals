@@ -21,7 +21,7 @@ flowchart LR
 |---|---|
 | `probes.ts` | Probes L and I (#169 7.6) over one SDK message log, the S13 background count, the contract hook's block, the read audit for none sessions, and the turn-cap and model-output checks. Probe L passes on a Skill call naming investigate whose base directory lies in the arm's gstack install (a task checkout's own skill never counts), or on a Read or Bash of an `investigate/SKILL.md` whose result holds the first 200 characters of the arm's installed copy. Probe I reads #169 7.2's items 1 to 4: the DEBUG REPORT with its labels, edits and the test rule. A Bash call counts as an edit through #169 7.2's write list (redirects and `tee` inside the work tree, `sed -i`, `perl -i`, `patch`, `git apply` and `git checkout` of paths), after `cd`, `env`, reserved words, subshells and `sh -c` are unwrapped. The S13 count is a background shell, agent or task still running at the final result, so a TaskStop or a kill ends it. |
 | `table.ts` | Builds the per-session table from Lane B's trial directories and the proxy's session rows: arm, instrument, part, task, repository, outcome (graded, infra or cap stop, section 6), pass and adherence, both probes, S13, the read audit, the allowance and turn-cap stops, and the evidence fields. It refuses a pin whose `investigate/SKILL.md` prefix differs from the frozen digest. |
-| `analyze.ts` | One entry from that table to every endpoint: B1, B3, O5 and the secondaries, both 95% intervals (by task and by repository), the sign-flip p, Holm over B1 and B3, the behavior admission, the gate reading, O5's descriptive line, the probe audit and every verdict branch. Every MDD is read from the merged `power.txt`, pinned by sha256. `audit-sample` lists the sessions the blind reader labels. |
+| `analyze.ts` | One entry from that table to every endpoint: B1 (also on the routed stratum), B3, O5 and the secondaries, each under #169 7.5's coverage rule, both 95% intervals (by task and by repository), the sign-flip p, Holm over B1 and B3, the behavior admission, the gate reading, O5's descriptive line, the probe audit and every verdict branch. Every MDD is read from the merged `power.txt`, pinned by sha256. `audit-sample` lists the sessions the blind reader labels. |
 | `ceiling.ts` | Section 9's ceiling check before each launch, with its holdback, and the final read before the results post. |
 
 The per-session row is `L1SessionRow` in [src/types.ts](../../../src/types.ts).
@@ -50,10 +50,10 @@ bun quick/laneb/l1/ceiling.ts final --ledger ledger.jsonl --crew crew.json --pla
 ```text
 items     every plan item: settled + open reserved, or its cap while it is not done
 spent     items + every L1 thread's credits / 1000 + the Captain's booked credits / 1000
-holdback  max($400 - crew spend, unspent token stops of open and planned crew threads x measured $ per token)
+holdback  max($400 - crew spend, unspent token stops of open and planned L1 threads x measured $ per token)
           + max(0, $40 - Captain spend)
           + max(0, $15 - run-work spend) for Sol and for particle-1 while each is pending
-total     spent + holdback; check refuses a launch when total passes $2,000 or another item holds open reservations
+total     spent + holdback; check refuses a launch when total passes $2,000 or any item, its own included, holds open reservations
 ```
 
 The measured rate is all L1 thread credits over all L1 thread tokens, or $0.45 per million before any reading. The final read leaves the post thread out of the holdback and prints the largest token stop it can have, so the all-in figure, the Captain and run-work remainders, the other open threads' stops and the post's stop at the measured rate stay at or under $2,000.

@@ -5,10 +5,10 @@
 // The sum: every L1 ledger item's settled and reserved spend (an item not yet done counts at the larger of that and its cap,
 // so the caps of every planned item still to run are in it); the credits / 1000 of every L1 thread and of the Captain's
 // booked L1 turns; and a holdback. The holdback is the larger of the crew line's unspent remainder ($400 less crew spend, never
-// below zero) and the sum over open and planned crew threads of each one's unspent token stop at the measured L1 dollars per
-// token so far, plus the Captain line's unspent remainder ($40) and each leftover model's run-work remainder ($15) while that
-// model is pending. check refuses a launch whose sum passes $2,000, and a launch while another item holds open reservations
-// (items launch one at a time). final gives the all-in figure before the results post and the largest token stop the post
+// below zero) and the sum over open and planned L1 threads (crew and run-work lines alike) of each one's unspent token stop at
+// the measured L1 dollars per token so far, plus the Captain line's unspent remainder ($40) and each leftover model's run-work
+// remainder ($15) while that model is pending. check refuses a launch whose sum passes $2,000, and a launch while any item,
+// the launch's own included, holds open reservations (items and the parts of one item launch one at a time). final gives the all-in figure before the results post and the largest token stop the post
 // thread can have so that figure, the holds still open and the stop at the measured rate stay at or under $2,000.
 import { readFileSync } from "node:fs";
 import { readRows, totals, type Row } from "../runner/ledger.ts";
@@ -51,7 +51,7 @@ export function tally(ledgerRows: Row[], crew: Crew, plan: Plan, exclude: string
   const tokens = crew.threads.reduce((x, t) => x + t.tokens, 0);
   const allCredits = crewSpent + solSpent + particleSpent;
   const perToken = tokens > 0 ? allCredits / tokens : PLANNING_USD_PER_MTOK;
-  const openThreads = crew.threads.filter((t) => t.line === "crew" && t.status !== "done" && t.code !== exclude);
+  const openThreads = crew.threads.filter((t) => t.status !== "done" && t.code !== exclude);
   for (const t of openThreads) if (typeof t.token_stop !== "number") throw new UsageError("E_USAGE l1 ceiling: open thread " + t.code + " has no token_stop");
   const stops = Math.round(openThreads.reduce((x, t) => x + Math.max(0, t.token_stop! - t.tokens), 0) * perToken);
   const crewHold = Math.max(Math.max(0, micros(CREW_LINE_USD) - crewSpent), stops);
@@ -66,7 +66,7 @@ export function check(ledgerRows: Row[], crew: Crew, plan: Plan, launch: string)
   const t = tally(ledgerRows, crew, plan);
   const item = t.items.find((i) => i.item === launch);
   if (!item || item.status === "done") throw new UsageError("E_USAGE l1 ceiling: " + launch + " is not a planned or open item of the plan");
-  const busy = t.items.filter((i) => i.item !== launch && i.open_ids > 0).map((i) => i.item);
+  const busy = t.items.filter((i) => i.open_ids > 0).map((i) => i.item);
   const over = t.total > micros(CEILING_USD);
   const ok = !over && !busy.length;
   const why = over ? "the sum $" + usd(t.total) + " with " + launch + "'s cap passes $" + usd(micros(CEILING_USD)) : busy.length ? busy.join(", ") + " still holds open reservations: items launch one at a time" : "the sum $" + usd(t.total) + " with " + launch + "'s cap is at or under $" + usd(micros(CEILING_USD));
