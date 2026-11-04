@@ -17,8 +17,9 @@ export const CLEAN_ROOM_SCRIPT = readFileSync(CLEAN_ROOM_SH, "utf8").replace(/\n
 // A gstack trace, for O1's scan: $home/.gstack existing; a .claude/skills folder anywhere below a work dir, outside .git,
 // existing; and "gstack" in any case in the name or content of a CLAUDE.md in a parent of a work dir (up to /, or up to
 // CLEAN_ROOM_ROOT when it is set), of $home/CLAUDE.md, of .claude/settings.json and .claude/settings.local.json in the
-// home or a work dir (where hooks live; any mention counts, since sh cannot parse JSON) and of any entry under
-// .claude/commands, .claude/plugins or .claude/agents in the home or a work dir. Present at all, whatever they hold
+// home or a work dir (where hooks live; any mention counts, since sh cannot parse JSON), of any entry under
+// .claude/commands, .claude/plugins, .claude/agents or .claude/rules in the home or a work dir, and of any entry under
+// $home/.claude/projects/*/memory (Claude Code's auto memory). Present at all, whatever they hold
 // (GSTA-2): CLAUDE.local.md and .mcp.json in the home or a work dir, a CLAUDE.local.md in a parent of a work dir,
 // ~/.claude.json, ~/.claude/.claude.json (the global config file when CLAUDE_CONFIG_DIR is ~/.claude, as the arm sets it),
 // and each entry under /etc/claude-code (Claude Code's managed settings), or /etc/claude-code itself when it
@@ -56,6 +57,8 @@ for p in "$home/CLAUDE.md" "$home/.claude/settings.json" "$home/.claude/settings
 tree "$home/.claude/commands"
 tree "$home/.claude/plugins"
 tree "$home/.claude/agents"
+tree "$home/.claude/rules"
+for m in "$home"/.claude/projects/*/memory; do tree "$m"; done
 for u in "$@"; do
   case "$u" in /*) ;; *) fail "the work dir $u is not an absolute path"; continue ;; esac
   d=$u
@@ -67,6 +70,7 @@ for u in "$@"; do
   tree "$u/.claude/commands"
   tree "$u/.claude/plugins"
   tree "$u/.claude/agents"
+  tree "$u/.claude/rules"
 done
 [ "$bad" = 0 ] || exit 4
 [ "$hit" = 0 ] || exit 3`;

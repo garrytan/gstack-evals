@@ -162,6 +162,29 @@ describe("O1's second clean-room scan (keyless)", () => {
     expect(scan(r)).toMatchObject({ code: 3, out: "found " + join(r.home, ".claude", ".claude.json") + "\n" });
   });
 
+  test("GSTA-2: a rules file in the home or a work dir, or an auto-memory file, that names gstack is a hit", () => {
+    const paths: [string, (r: ReturnType<typeof room>) => string][] = [
+      ["~/.claude/rules", (r) => join(r.home, ".claude", "rules", "style.md")],
+      ["a work dir's .claude/rules, in a subfolder", (r) => join(r.work, ".claude", "rules", "team", "ship.md")],
+      ["auto memory under ~/.claude/projects", (r) => join(r.home, ".claude", "projects", "-work-repo", "memory", "MEMORY.md")],
+    ];
+    for (const [name, where] of paths) {
+      const r = room();
+      put(where(r), "Run /ship from GStack before every push.\n");
+      const got = scan(r);
+      expect([name, got.code, got.out.split("\n").some((l) => l === "found " + where(r))]).toEqual([name, 3, true]);
+    }
+  });
+
+  test("GSTA-2: rules and auto-memory files that do not name gstack stay clean", () => {
+    const r = room();
+    put(join(r.home, ".claude", "rules", "style.md"), "Write plainly.\n");
+    put(join(r.work, ".claude", "rules", "team", "tests.md"), "Run bun test before a push.\n");
+    put(join(r.home, ".claude", "projects", "-work-repo", "memory", "MEMORY.md"), "The repo uses bun.\n");
+    put(join(r.home, ".claude", "projects", "-work-repo", "notes.md"), "Nothing here.\n");
+    expect(scan(r)).toEqual({ code: 0, out: "", err: "" });
+  });
+
   test("GSTA-2: a config dir with no .claude.json, only look-alike names, stays clean", () => {
     const r = room();
     put(join(r.home, ".claude", "claude.json"), "{}\n");
