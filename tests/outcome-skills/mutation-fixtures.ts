@@ -110,6 +110,18 @@ export const RS_IMPL = "pub fn double(x: i64) -> i64 {\n    x * 2\n}\n\npub fn c
 export const RS_STRONG_INLINE = "\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn clamps() {\n        assert_eq!(clamp(5, 0, 10), 5);\n        assert_eq!(clamp(-1, 0, 10), 0);\n        assert_eq!(clamp(11, 0, 10), 10);\n        assert_eq!(clamp(0, 0, 10), 0);\n        assert_eq!(clamp(10, 0, 10), 10);\n    }\n\n    #[test]\n    fn signs() {\n        assert_eq!(sign(3), 1);\n        assert_eq!(sign(-3), -1);\n        assert_eq!(sign(0), 0);\n    }\n}\n";
 export const RS_WEAK_INTEGRATION = "use calc::{clamp, sign};\n\n#[test]\nfn clamp_runs() {\n    let _ = clamp(5, 0, 10);\n}\n\n#[test]\nfn sign_runs() {\n    let _ = sign(0);\n}\n";
 export const rustFixture = () => fixture("rust", RS_BASE);
+// clamp() and sign() alone, for a module file other than lib.rs.
+export const RS_NEW = RS_IMPL.slice(RS_IMPL.indexOf("pub fn clamp"));
+// A crate whose library declares the modules shared (also declared by src/main.rs) and bin (src/bin.rs, a module, not a
+// binary), beside a binary src/bin/old.rs that holds an unchanged test named tests::clamps.
+export const RS_SHARED_BASE: Files = {
+  ...RS_BASE,
+  "src/lib.rs": RS_BASE["src/lib.rs"] + "\npub mod bin;\npub mod shared;\n",
+  "src/main.rs": "mod shared;\n\nfn main() {}\n",
+  "src/shared.rs": "",
+  "src/bin.rs": "",
+  "src/bin/old.rs": "fn main() {}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn clamps() {}\n}\n",
+};
 
 // ---------- TypeScript ----------
 

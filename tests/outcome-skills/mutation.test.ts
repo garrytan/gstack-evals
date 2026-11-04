@@ -7,9 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, newLine, parsePatch, sourceRanges, unsafePaths } from "../../lanes/outcome-skills/mutation/diff.ts";
 import { LANGS, SAMPLE_CAP, SAMPLE_SEED, TOOLS } from "../../lanes/outcome-skills/mutation/pins.ts";
-import { outText, rustResults, skipOthers, strykerMutants } from "../../lanes/outcome-skills/mutation/run.ts";
+import { outText, rustCollision, rustResults, skipOthers, strykerMutants } from "../../lanes/outcome-skills/mutation/run.ts";
 import { reading, record, sample, summary, transplantRan, type Outcome } from "../../lanes/outcome-skills/mutation/score.ts";
-import { changedUnits, goUnits, pythonFunctions, pythonModule, pythonUnits, rustModule, rustUnits, tsCallEnd, tsUnits } from "../../lanes/outcome-skills/mutation/units.ts";
+import { changedUnits, goUnits, pythonFunctions, pythonModule, pythonUnits, rustModule, rustUnits, tsCallEnd, tsUnits, type Unit } from "../../lanes/outcome-skills/mutation/units.ts";
 import { unpinnedInstalls } from "../../src/rig/pins.ts";
 
 const HERE = join(import.meta.dir, "../../lanes/outcome-skills/mutation");
@@ -234,6 +234,12 @@ describe("test units", () => {
     expect(rustUnits("tests/it.rs", "tests/it.rs", "#[test]\nfn a() {}\n").map((u) => [u.name, u.scope])).toEqual([["a", "it"]]);
   });
 
+  test("Rust src/bin.rs is a library module named bin; only the src/bin/ directory holds binaries", () => {
+    expect(rustModule("src/bin.rs")).toEqual({ target: "unit", path: ["bin"] });
+    expect(rustUnits("src/bin.rs", "src/bin.rs", "#[cfg(test)]\nmod tests {\n    #[test]\n    fn t() {}\n}\n").map((u) => u.name)).toEqual(["bin::tests::t"]);
+    expect([rustModule("src/bin/demo.rs"), rustModule("src/bin/demo/main.rs")].map((m) => m.path)).toEqual([[], []]);
+  });
+
   test("TypeScript test and it calls end where their parentheses close, past strings, templates, regexes and .each tables", () => {
     const text = [
       'import { it, test, expect } from "vitest";',
@@ -347,6 +353,24 @@ describe("tool output readers", () => {
       ["it\ta", true],
       ["it\ttests::b", false],
     ]);
+  });
+
+  test("libtest runs per harness: once in the library and once in a binary is one test, twice in one harness is a collision", () => {
+    const list = new Set(["Cargo.toml", "src/lib.rs", "src/main.rs", "src/shared.rs", "src/bin/a.rs", "src/bin/b.rs", "tests/it.rs"]);
+    const unit = (file: string, name: string, scope = "unit"): Unit => ({ file, name, start: 1, end: 1, scope });
+    const run = (header: string, name: string) => "     Running " + header + " (target/debug/deps/x-1)\n\nrunning 1 test\ntest " + name + " ... ok\n\ntest result: ok. 1 passed; 0 failed\n\n";
+    const lib = run("unittests src/lib.rs", "shared::tests::t");
+    const main = run("unittests src/main.rs", "shared::tests::t");
+    expect(rustCollision(lib + main, [unit("src/shared.rs", "shared::tests::t")], list)).toBeNull();
+    expect(rustCollision(main, [unit("src/shared.rs", "shared::tests::t")], list)).toBeNull();
+    expect(rustCollision(lib + main, [unit("src/lib.rs", "shared::tests::t")], list)).toStartWith("test shared::tests::t ");
+    expect(rustCollision(lib + main, [unit("src/shared.rs", "shared::tests::t")], new Set([...list, "crates/b/Cargo.toml"]))).toStartWith("test shared::tests::t ");
+    expect(rustCollision(lib + lib, [unit("src/lib.rs", "shared::tests::t")], new Set([...list, "crates/b/Cargo.toml"]))).toStartWith("test shared::tests::t ");
+    const a = run("unittests src/bin/a.rs", "tests::t");
+    const b = run("unittests src/bin/b.rs", "tests::t");
+    expect(rustCollision(a + b, [unit("src/bin/a.rs", "tests::t")], list)).toStartWith("test tests::t ");
+    expect(rustCollision(a + b, [unit("src/bin/a.rs", "tests::t"), unit("src/bin/b.rs", "tests::t")], list)).toBeNull();
+    expect(rustCollision(run("tests/it.rs", "t") + run("unittests src/lib.rs", "t"), [unit("tests/it.rs", "t", "it")], list)).toStartWith("test t ");
   });
   test("Stryker mutants keyed by exact location, mutator and replacement", () => {
     const m = (line: number, mutatorName: string, status: string) => ({ mutatorName, replacement: "x", status, location: { start: { line, column: 3 }, end: { line, column: 9 } } });
