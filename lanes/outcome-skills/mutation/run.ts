@@ -322,9 +322,9 @@ const python: Adapter = {
   },
   runs(ref, units) {
     const dirs = [...new Set(units.map((u) => posix.dirname(u.file)))];
-    const r = ref.run("set --; for d in " + dirs.map(q).join(" ") + '; do if [ -d "$d" ]; then set -- "$@" "$d"; fi; done; if [ $# = 0 ]; then echo none > /out/py-ref-runs.exit; exit 0; fi; "$PY" -m pytest -p no:cacheprovider --collect-only -q -rs "$@" > /out/py-ref-runs.log 2>&1; echo $? > /out/py-ref-runs.exit');
+    const r = ref.run("set --; : > /out/py-ref-runs.missing; for d in " + dirs.map(q).join(" ") + '; do if [ -d "$d" ]; then set -- "$@" "$d"; else printf "%s\\n" "$d" >> /out/py-ref-runs.missing; fi; done; if [ -s /out/py-ref-runs.missing ]; then echo missing > /out/py-ref-runs.exit; exit 0; fi; "$PY" -m pytest -p no:cacheprovider --collect-only -q -rs "$@" > /out/py-ref-runs.log 2>&1; echo $? > /out/py-ref-runs.exit');
     const exit = got(ref, "py-ref-runs.exit").trim();
-    if (r.status === 0 && exit === "none") return "none of the agent's test folders exists in the reference tree";
+    if (r.status === 0 && exit === "missing") return "the reference tree lacks the agent's test folder: " + got(ref, "py-ref-runs.missing").trim().split("\n").join(", ");
     if (r.status === 0 && pytestRuns(exit, got(ref, "py-ref-runs.log"))) return null;
     return "pytest --collect-only on the reference tree " + (r.status !== 0 ? "did not run (" + tail(r) + ")" : "exited " + exit + " or skipped a file at module level: " + got(ref, "py-ref-runs.log").slice(-300));
   },
