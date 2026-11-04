@@ -1,10 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ledgerCli } from "../../src/runner/ledger/cli.ts";
 import { admitLease, envelopeStatus, recordCrew, recordProgram } from "../../src/runner/ledger/envelope.ts";
-import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { machineId, openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { isRecordFile, LedgerError, readItem, type LeaseFile } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt } from "../../src/types.ts";
@@ -260,6 +260,20 @@ process.kill(process.pid, "SIGKILL");
     expect(envelopeStatus(w.record, "wave1").entries).toBe(2);
     expect(await w.local.reserve({ idempotency_key: "k", lease_id: "pdr-a.0001.000000", cell: cell(1), max_micros: 1 })).toMatchObject({ ok: false, code: "E_LEDGER_MISSING" });
   });
+
+  test("a lease whose expiry passes between its admission and its write is not written, and an on-time lease still lands", () => {
+    const w = world();
+    stage(w.record, "pdr-a", [PDR], 1_200 * D);
+    stage(w.record, "pdr-b", [PDR], 1_200 * D);
+    const stalled = new Date(Date.now() - 120_000);
+    expect(codeOf(() => openLease(w.record, w.local, { item: "pdr-a", run_id: "run-pdr-a", amount_micros: 1_200 * D, ttl_ms: 60_000, requireAdmission: () => null, now: stalled }))).toBe("E_ENVELOPE_LATE");
+    expect(readItem(w.record, "pdr-a").leases).toEqual([]);
+    expect(codeOf(() => lease(w.record, w.local, "pdr-b", 1_200 * D))).toBe("ok");
+    expect(envelopeStatus(w.record, "wave1").skills[PDR]).toMatchObject({ open_micros: 1_200 * D, pending_micros: 0, committed_micros: 1_200 * D, left_micros: 800 * D });
+    expect(codeOf(() => openLease(w.record, w.local, { item: "pdr-a", run_id: "run-pdr-a", amount_micros: 800 * D, ttl_ms: 60_000, requireAdmission: () => null }))).toBe("ok");
+    expect(readItem(w.record, "pdr-a").leases.length).toBe(1);
+    expect(envelopeStatus(w.record, "wave1").skills[PDR]).toMatchObject({ open_micros: 2_000 * D, pending_micros: 0, left_micros: 0 });
+  });
 });
 
 describe("crew model use", () => {
@@ -296,6 +310,37 @@ describe("crew model use", () => {
     expect(codeOf(() => lease(w.record, w.local, "pe-a", 1))).toBe("ENVELOPE_SKILL_STOP");
   });
 
+  test("ENVELOPE_OVER warns once, for the reading that takes a line past its ceiling, and not again while it stays over", async () => {
+    const w = world();
+    await spend(w, "done-pe", [PE], 1_990 * D);
+    const warnings: string[] = [];
+    const crew = (thread: string, credits: number, skills: string[]) => recordCrew(w.record, { program: "wave1", thread, credits_micros: credits * D, skills, source: "thread counter" }, (code, message) => warnings.push(code + " " + message));
+    crew("GEVA-300", 20_000, [PE]);
+    expect(warnings.length).toBe(1);
+    crew("GEVA-301", 1_000, [AP]);
+    crew("GEVA-300", 30_000, [PE]);
+    expect(warnings.length).toBe(1);
+    crew("GEVA-302", 8_000_000, [AP]);
+    expect(warnings.length).toBe(3);
+    expect(warnings.slice(1).every((w) => w.startsWith("ENVELOPE_OVER ") && !w.includes(PE))).toBe(true);
+    expect(warnings.slice(1).some((w) => w.includes("skill " + AP))).toBe(true);
+    expect(warnings.slice(1).some((w) => w.includes("program wave1 holds"))).toBe(true);
+  });
+
+  test("a crew reading whose cost the ledger cannot hold exactly is refused before it is written; a large valid reading still records", () => {
+    const record = join(scratch(), "record");
+    recordProgram(record, { program: "dear", cap_micros: 10_000 * D, skill_cap_micros: 2_000 * D, skills: [PE], credit_rate_micros: 10_000_000 * D, quotes: [quote] });
+    const warnings: string[] = [];
+    const crew = (credits: number) => codeOf(() => recordCrew(record, { program: "dear", thread: "GEVA-300", credits_micros: credits, skills: [PE], source: "thread counter" }, (code) => warnings.push(code)));
+    expect(crew(1_000_000 * D)).toBe("E_USAGE");
+    expect(envelopeStatus(record, "dear")).toMatchObject({ entries: 1, total: { settled_micros: 0 } });
+    expect(crew(900_000 * D)).toBe("ok");
+    expect(envelopeStatus(record, "dear")).toMatchObject({ entries: 2, total: { settled_micros: 9_000_000_000 * D } });
+    expect(warnings).toEqual(["ENVELOPE_OVER", "ENVELOPE_OVER"]);
+    expect(crew(901_000 * D)).toBe("E_USAGE");
+    expect(envelopeStatus(record, "dear")).toMatchObject({ entries: 2, total: { settled_micros: 9_000_000_000 * D } });
+  });
+
   test("a survivor's re-size reserves only stages not yet spent, and settled shared spend keeps its split (M2)", async () => {
     const w = world();
     await spend(w, "g-shared", [PE, AP], 1_000 * D);
@@ -317,9 +362,66 @@ describe("envelope and membership records", () => {
     expect(codeOf(() => recordProgram(fresh, { ...p, skills: [PE, PE] }))).toBe("E_USAGE");
     expect(codeOf(() => recordProgram(fresh, { ...p, skill_cap_micros: 0 }))).toBe("E_USAGE");
     expect(codeOf(() => recordProgram(fresh, { ...p, credit_rate_micros: 0 }))).toBe("E_USAGE");
-    expect(codeOf(() => recordProgram(fresh, p, () => { throw new LedgerError("E_APPROVAL_RECORD", "mirror down"); }))).toBe("E_APPROVAL_RECORD");
     expect(existsSync(join(fresh, "programs"))).toBe(false);
     expect(codeOf(() => envelopeStatus(fresh, "wave1"))).toBe("E_ENVELOPE_MISSING");
+    expect(codeOf(() => recordProgram(fresh, p, () => { throw new LedgerError("E_APPROVAL_RECORD", "mirror down"); }))).toBe("E_APPROVAL_RECORD");
+    expect(envelopeStatus(fresh, "wave1").program).toMatchObject({ cap_micros: 10_000 * D, quotes: [quote] });
+    let mirrored = 0;
+    expect(recordProgram(fresh, p, () => mirrored++)).toMatchObject({ seq: 1, cap_micros: 10_000 * D });
+    expect(mirrored).toBe(1);
+  });
+
+  test("two different envelopes recorded at the same moment mirror an approval row only for the one on record", () => {
+    const record = join(scratch(), "record");
+    const p = { program: "wave1", cap_micros: 10_000 * D, skill_cap_micros: 2_000 * D, skills: SKILLS, credit_rate_micros: D, quotes: [quote] };
+    const rival = { ...p, cap_micros: 12_000 * D };
+    const rows: number[] = [];
+    let inner = "";
+    const outer = codeOf(() =>
+      recordProgram(record, p, () => {
+        rows.push(p.cap_micros);
+        inner = codeOf(() => recordProgram(record, rival, () => rows.push(rival.cap_micros)));
+      }),
+    );
+    expect(rows).toEqual([envelopeStatus(record, "wave1").program.cap_micros]);
+    expect([outer, inner]).toEqual(["ok", "E_USAGE"]);
+  });
+
+  test("of four different envelopes recorded by four processes at the same moment, only the one on record is mirrored", async () => {
+    const dir = scratch();
+    const record = join(dir, "record");
+    const log = join(dir, "rows.log");
+    const source = String.raw`
+import { appendFileSync } from "node:fs";
+import { recordProgram } from "LEDGER/envelope.ts";
+const [start, record, log, cap] = process.argv.slice(2);
+await Bun.sleep(Math.max(0, Number(start) - Date.now()));
+try { recordProgram(record, { program: "wave1", cap_micros: Number(cap), skill_cap_micros: 2000000000, skills: ["autoplan"], credit_rate_micros: 1000000, quotes: [{ words: "w", by: "b", source: "s" }] }, () => appendFileSync(log, cap + "\n")); console.log("ok"); } catch (error) { console.log(error.code ?? error.message); }
+`;
+    const caps = [10_000, 11_000, 12_000, 13_000].map((c) => String(c * D));
+    const results = (await spawnAll(source, caps.map((cap) => [record, log, cap]))).map((r) => r.out);
+    expect(results.filter((r) => r === "ok").length).toBe(1);
+    expect(results.filter((r) => r !== "ok").every((r) => r === "E_USAGE")).toBe(true);
+    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([String(envelopeStatus(record, "wave1").program.cap_micros)]);
+  });
+
+  test("a program record on a network or FUSE mount is refused with E_LEDGER_PATH before any entry is written", () => {
+    const dir = scratch();
+    const record = join(dir, "record");
+    const nfs = [{ point: realpathSync(dir), type: "nfs4" }];
+    const drive = [{ point: realpathSync(dir), type: "fuse.capydrive" }];
+    const p = { program: "wave1", cap_micros: 10_000 * D, skill_cap_micros: 2_000 * D, skills: SKILLS, credit_rate_micros: D, quotes: [quote] };
+    expect(codeOf(() => recordProgram(record, { ...p, mounts: drive }))).toBe("E_LEDGER_PATH");
+    expect(existsSync(join(record, "programs"))).toBe(false);
+    recordProgram(record, { ...p, mounts: [] });
+    stage(record, "pdr-a", [PDR], 1_200 * D);
+    const now = new Date();
+    const file = leaseFile("pdr-a", 1_200 * D, new Date(now.getTime() + 3_600_000), now);
+    expect(codeOf(() => admitLease(record, readItem(record, "pdr-a"), file, { now, mounts: nfs }))).toBe("E_LEDGER_PATH");
+    expect(codeOf(() => recordCrew(record, { program: "wave1", thread: "GEVA-300", credits_micros: D, skills: [PDR], source: "thread counter", mounts: drive }))).toBe("E_LEDGER_PATH");
+    expect(envelopeStatus(record, "wave1").entries).toBe(1);
+    expect(codeOf(() => admitLease(record, readItem(record, "pdr-a"), file, { now, mounts: [] }))).toBe("ok");
+    expect(envelopeStatus(record, "wave1", now).skills[PDR]).toMatchObject({ pending_micros: 1_200 * D });
   });
 
   test("an item joins one program's skills at init, and raise cannot move it", () => {
@@ -377,6 +479,7 @@ describe("gstack-evals ledger envelope, crew and status --program", () => {
     expect(env1.out).toStartWith("ENVELOPE: program=wave1 cap=$10000.00 skill_cap=$2000.00 skills=" + SKILLS.join(",") + " credit_rate=$1.00 per 1000 credits");
     expect(readFileSync(join(dir, "calls.log"), "utf8")).toContain("Approve a gstack-evals program envelope of $10000.00 for program wave1, with $2000.00 for each of its 6 skills");
     expect(readFileSync(join(dir, "calls.log"), "utf8")).toContain("counting crew use at $1.00 per 1,000 credits");
+    expect(readFileSync(join(dir, "calls.log"), "utf8")).toContain("gstack-evals program wave1 in the approval record " + join(dir, "record") + " on envelope host " + machineId());
     expect((await cli("init", "--cap", "5000", "--item", "g-admission", "--admission", "warn", "--program", "wave1", "--skills", PE + "," + AP, ...words)).code).toBe(0);
     expect((await cli("init", "--cap", "10", "--item", "x", "--admission", "warn", "--skills", PE, ...words)).err).toStartWith("E_USAGE ");
     const refused = await cli("lease", "--item", "g-admission", "--run", "run-g", "--amount", "4200");
@@ -393,5 +496,12 @@ describe("gstack-evals ledger envelope, crew and status --program", () => {
     expect(status.out).toContain("SKILL: plan-eng-review cap=$2000.00 committed=$605.00 settled=$5.00 open=$600.00 pending=$0.00 left=$1395.00");
     expect(status.out).toContain("OVERHEAD: settled=$52.00");
     expect(JSON.parse((await cli("status", "--program", "wave1", "--json")).out)).toMatchObject({ total: { committed_micros: 1_282 * D }, items: ["g-admission"] });
+    const one = await cli("status", "--program", "wave1", "--item", "g-admission");
+    expect(one.out).toContain("ENVELOPE: program=wave1 cap=$10000.00 committed=$1282.00");
+    expect(one.out).toContain("SKILL: plan-eng-review cap=$2000.00 committed=$605.00");
+    expect(one.out).toContain("SKILL: autoplan ");
+    expect(one.out).not.toContain("SKILL: design-review ");
+    expect(Object.keys(JSON.parse((await cli("status", "--program", "wave1", "--item", "g-admission", "--json")).out).skills)).toEqual([PE, AP]);
+    expect((await cli("status", "--program", "wave1", "--item", "no-such-item")).err).toStartWith("E_USAGE ");
   });
 });
