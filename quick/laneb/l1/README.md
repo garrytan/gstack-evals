@@ -4,7 +4,7 @@ Build unit U2 of the L1 superseding preregistration ([2026-11-03-geva-254-l1-ove
 
 ```mermaid
 flowchart LR
-  T[trial dirs: config.json, result.json, agent/sdk-messages.jsonl, evaluator/] --> TB[table.ts]
+  T[trial dirs: config.json, result.json, evaluator/sdk-messages.jsonl, evaluator/l1-evidence.json] --> TB[table.ts]
   S[proxy-sessions.jsonl] --> TB
   TB --> R[sessions.jsonl, one L1SessionRow per trial]
   R --> A[analyze.ts report]
@@ -30,13 +30,13 @@ The per-session row is `L1SessionRow` in [src/types.ts](../../../src/types.ts).
 
 ```sh
 bun quick/laneb/l1/table.ts table-config.json sessions.jsonl
-bun quick/laneb/l1/analyze.ts audit-sample sessions.jsonl opus > audit-sample.jsonl
+bun quick/laneb/l1/analyze.ts audit-sample sessions.jsonl claude-opus-5-5 > audit-sample.jsonl
 bun quick/laneb/l1/analyze.ts report sessions.jsonl analysis-config.json report.json
 bun quick/laneb/l1/ceiling.ts check --ledger ledger.jsonl --crew crew.json --plan plan.json --launch pilot-sol
 bun quick/laneb/l1/ceiling.ts final --ledger ledger.jsonl --crew crew.json --plan plan.json --post GEVA-999
 ```
 
-`ceiling.ts check` prints `CEILING PASS` and exits 0, or `CEILING REFUSE` and exits 1. Bad input exits 2 with an `E_USAGE` line, as do the other two commands.
+`audit-sample` and the config's `models` take the model id exactly as the rows carry it, which is the cell's `upstream_model` (for example `claude-opus-5-5`); any other id gives an empty sample. `ceiling.ts check` prints `CEILING PASS` and exits 0, or `CEILING REFUSE` and exits 1. Bad input exits 2 with an `E_USAGE` line, as do the other two commands.
 
 ## Inputs the operator writes
 
