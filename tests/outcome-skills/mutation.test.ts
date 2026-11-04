@@ -2,11 +2,12 @@
 // Keyless tests for the mutation scorer (outcome-per-skill plan v3, sections 3 and 10): the patch reader, the test-unit
 // finders, the frozen sample, the scoring rules in both directions, the tool output readers and the pinned images.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { classify, parsePatch, sourceRanges, touched } from "../../lanes/outcome-skills/mutation/diff.ts";
+import { classify, newLine, parsePatch, sourceRanges } from "../../lanes/outcome-skills/mutation/diff.ts";
 import { LANGS, SAMPLE_CAP, SAMPLE_SEED, TOOLS } from "../../lanes/outcome-skills/mutation/pins.ts";
-import { rustResults, skipOthers, strykerMutants } from "../../lanes/outcome-skills/mutation/run.ts";
+import { outText, rustResults, skipOthers, strykerMutants } from "../../lanes/outcome-skills/mutation/run.ts";
 import { reading, record, sample, summary, transplantRan, type Outcome } from "../../lanes/outcome-skills/mutation/score.ts";
 import { changedUnits, goUnits, pythonFunctions, pythonModule, pythonUnits, rustModule, rustUnits, tsCallEnd, tsUnits } from "../../lanes/outcome-skills/mutation/units.ts";
 import { unpinnedInstalls } from "../../src/rig/pins.ts";
@@ -47,7 +48,7 @@ const PATCH = [
 ].join("\n");
 
 describe("patch reader", () => {
-  test("added lines, removal points, new, deleted and binary files", () => {
+  test("added lines, removed old lines, new, deleted and binary files", () => {
     const f = parsePatch(PATCH);
     expect(f.map((x) => [x.oldPath, x.newPath, x.binary])).toEqual([
       ["calc/ops.py", "calc/ops.py", false],
@@ -56,8 +57,7 @@ describe("patch reader", () => {
       [null, "img.png", true],
     ]);
     expect(f[0]!.added).toEqual([2, 3, 4]);
-    expect(f[0]!.removedAt).toEqual([2]);
-    expect([...touched(f[0]!)].sort()).toEqual([2, 3, 4]);
+    expect(f[0]!.removed).toEqual([2]);
     expect(f[1]!.added).toEqual([1, 2]);
   });
 
@@ -67,10 +67,12 @@ describe("patch reader", () => {
     expect(f.length).toBe(4);
   });
 
-  test("a pure deletion marks the line that now stands where it was", () => {
-    const p = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -3,2 +2,0 @@\n-x\n-y\n";
-    expect(parsePatch(p)[0]!.removedAt).toEqual([3, 3]);
-    expect(parsePatch(p)[0]!.added).toEqual([]);
+  test("a pure deletion records its old lines, and old lines map to their new place", () => {
+    const p = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -3,2 +2,0 @@\n-x\n-y\n@@ -9,1 +7,2 @@\n z\n+w\n";
+    const f = parsePatch(p)[0]!;
+    expect(f.removed).toEqual([3, 4]);
+    expect(f.added).toEqual([8]);
+    expect([1, 2, 3, 4, 5, 8, 9, 10].map((n) => newLine(f, n))).toEqual([1, 2, null, null, 3, 6, 7, 9]);
   });
 
   test("source ranges merge adjacent added lines and skip tests and deleted files", () => {
@@ -115,6 +117,35 @@ describe("source and test files", () => {
 });
 
 describe("test units", () => {
+  test("brackets and quotes inside Python strings neither stretch a test nor make one", () => {
+    const text = 'def test_a():\n    assert render() == "("\n    s = """\ndef test_fake():\nx"""\n    assert s\n\n\ndef test_b():\n    assert 1\n';
+    expect(pythonUnits("t.py", text).map((u) => [u.name, u.start, u.end])).toEqual([
+      ["t.py::test_a", 1, 6],
+      ["t.py::test_b", 9, 10],
+    ]);
+  });
+
+  test("test( and it( inside TypeScript strings, comments, regexes and templates are not units", () => {
+    const text = 'import { expect, test } from "vitest";\n// test("commented", () => {});\ntest("real", () => {\n  expect(render()).toBe("test(");\n  const re = /test(x)/;\n  const t = `it(${f(1)})`;\n});\n';
+    expect(tsUnits("a.test.ts", text).map((u) => [u.start, u.end])).toEqual([[3, 7]]);
+    expect(skipOthers("a.test.ts", text, new Set([3]))).toBe(text);
+  });
+
+  test("Go tests inside raw strings are not units, and a brace line inside one does not end a test", () => {
+    const text = "package a\n\nfunc TestReal(t *testing.T) {\n\tsrc := `\nfunc TestFake(t *testing.T) {\n}\n`\n\t_ = src\n}\n";
+    expect(goUnits("a_test.go", text).map((u) => [u.name, u.start, u.end])).toEqual([["TestReal", 3, 9]]);
+  });
+
+  test("a deleted test credits no neighbour, and a test that lost only lines still counts as changed", () => {
+    const before = "from m import f\n\n\ndef test_a():\n    assert f(1)\n\n\ndef test_b():\n    assert f(2)\n\n\ndef test_c():\n    assert f(3)\n    assert f(4)\n";
+    const drop = "diff --git a/t.py b/t.py\n--- a/t.py\n+++ b/t.py\n@@ -5,10 +5,6 @@\n     assert f(1)\n \n \n-def test_b():\n-    assert f(2)\n-\n-\n def test_c():\n     assert f(3)\n     assert f(4)\n";
+    const afterDrop = "from m import f\n\n\ndef test_a():\n    assert f(1)\n\n\ndef test_c():\n    assert f(3)\n    assert f(4)\n";
+    expect(changedUnits(pythonUnits("t.py", afterDrop), parsePatch(drop)[0]!, pythonUnits("t.py", before))).toEqual([]);
+    const trim = "diff --git a/t.py b/t.py\n--- a/t.py\n+++ b/t.py\n@@ -12,3 +12,2 @@\n def test_c():\n     assert f(3)\n-    assert f(4)\n";
+    const afterTrim = before.replace("    assert f(4)\n", "");
+    expect(changedUnits(pythonUnits("t.py", afterTrim), parsePatch(trim)[0]!, pythonUnits("t.py", before)).map((u) => u.name)).toEqual(["t.py::test_c"]);
+  });
+
   test("pytest functions and methods, with decorators, and only the touched ones", () => {
     const text = "import pytest\n\n@pytest.mark.parametrize('x', [1, 2])\ndef test_a(x):\n    assert x\n\n\ndef helper():\n    pass\n\n\nclass TestB:\n    def test_c(self):\n        assert (1 +\n2)\n\n    def other(self):\n        pass\n\n\nclass Plain:\n    def test_d(self):\n        pass\n";
     const units = pythonUnits("tests/test_x.py", text);
@@ -271,6 +302,23 @@ describe("scoring rules", () => {
 });
 
 describe("tool output readers", () => {
+  test("a container's output is read only through regular files, never through a symlink", () => {
+    const root = mkdtempSync(join(tmpdir(), "mutation-out-"));
+    try {
+      const out = join(root, "out");
+      mkdirSync(join(out, "real"), { recursive: true });
+      mkdirSync(join(root, "host"));
+      writeFileSync(join(root, "host/secret.txt"), "SECRET");
+      writeFileSync(join(out, "a.txt"), "ok");
+      writeFileSync(join(out, "real/b.txt"), "ok too");
+      symlinkSync(join(root, "host/secret.txt"), join(out, "link.txt"));
+      symlinkSync(join(root, "host"), join(out, "dir"));
+      expect([outText(out, "a.txt"), outText(out, "real/b.txt"), outText(out, "link.txt"), outText(out, "dir/secret.txt"), outText(out, "missing.txt"), outText(out, "real")]).toEqual(["ok", "ok too", null, null, null, null]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("libtest lines, keyed by unit or integration target", () => {
     const log = "     Running unittests src/lib.rs (target/debug/deps/calc-1)\ntest tests::a ... ok\ntest tests::b ... FAILED\n     Running tests/it.rs (target/debug/deps/it-2)\ntest a ... ok\ntest tests::b ... ignored\n";
     expect([...rustResults(log)]).toEqual([

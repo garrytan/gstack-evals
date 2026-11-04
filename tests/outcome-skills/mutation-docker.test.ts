@@ -7,6 +7,8 @@
 // apply. TypeScript checks that a pre-existing test in the agent's test file stays out, and Rust that inline tests cannot
 // be transplanted. Building the tool images needs the network once; scoring never does.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { docker } from "../../lanes/real-outcome/task/docker.ts";
 import { TOOLS, type Lang } from "../../lanes/outcome-skills/mutation/pins.ts";
 import { scoreTree, toolImage } from "../../lanes/outcome-skills/mutation/run.ts";
@@ -121,6 +123,17 @@ describe.skipIf(!DOCKER)("python: the scoring rules in both directions (GSTACK_E
     expect(r.transplant).toMatchObject({ status: "no-passing-tests", tests: { changed: 1, passing: 0 } });
   }, LONG);
 
+  test("symlinks the agent's tests plant in the output folder are never followed on the host", () => {
+    const victim = join(fx.dir, "victim.txt");
+    const secret = join(fx.dir, "secret.txt");
+    writeFileSync(victim, "untouched");
+    writeFileSync(secret, "SECRET-7f3a");
+    const plant = "import os\nfrom calc.ops import clamp\n\n\ndef test_clamp_and_plant():\n    for name, target in ((\"py-config.json\", " + JSON.stringify(victim) + "), (\"py-list.log\", " + JSON.stringify(secret) + ")):\n        try:\n            os.symlink(target, \"/out/\" + name)\n        except OSError:\n            pass\n    assert clamp(5, 0, 3) == 3\n";
+    const r = score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": plant });
+    expect(readFileSync(victim, "utf8")).toBe("untouched");
+    expect(JSON.stringify(r)).not.toContain("SECRET-7f3a");
+  }, LONG);
+
   test("a patch that does not apply to the image's tree is a tool error with no score", () => {
     const bad = "diff --git a/calc/ops.py b/calc/ops.py\n--- a/calc/ops.py\n+++ b/calc/ops.py\n@@ -1,2 +1,2 @@\n-def triple(x):\n+def triple(y):\n     return x * 3\n";
     expect(scoreTree({ lang: "python", image: fx.image, patch: bad, work: fx.dir + "/work" })).toMatchObject({ status: "tool-error", score: null, detail: "the patch does not apply to the image's tree" });
@@ -154,5 +167,21 @@ describe.skipIf(!DOCKER)("rust: inline tests cannot move to gold's tree (GSTACK_
     const r = scoreTree({ lang: "rust", image: fx.image, patch: fx.patch(STORIES.rust.strong), gold: fx.patch({ "src/lib.rs": F.RS_IMPL }), work: fx.dir + "/work" });
     expect(r.status).toBe("scored");
     expect(r.transplant).toMatchObject({ status: "not-transplantable", score: null });
+  }, LONG);
+});
+
+describe.skipIf(!DOCKER)("rust: a same-named test in a target the agent did not touch stays out (GSTACK_EVALS_DOCKER=1)", () => {
+  let fx: F.Fixture;
+  beforeAll(() => {
+    fx = F.fixture("rust", { ...F.RS_BASE, "tests/base.rs": "use calc::double;\n\n#[test]\nfn doubles() {\n    assert_eq!(double(2), 4);\n    assert_eq!(double(0), 0);\n    assert_eq!(double(-3), -6);\n}\n" });
+  }, LONG);
+  afterAll(() => fx?.cleanup());
+
+  test("the agent's weak doubles() in its own target scores low beside an unchanged strong doubles()", () => {
+    const lib = F.RS_BASE["src/lib.rs"]!.replace("x * 2", "x + x");
+    const weak = "use calc::double;\n\n#[test]\nfn doubles() {\n    let _ = double(1);\n}\n";
+    const r = scoreTree({ lang: "rust", image: fx.image, patch: fx.patch({ "src/lib.rs": lib, "tests/weak.rs": weak }), work: fx.dir + "/work" });
+    expect(r).toMatchObject({ status: "scored", tests: { changed: 1, passing: 1 } });
+    expect(r.score!).toBeLessThanOrEqual(LOW);
   }, LONG);
 });
