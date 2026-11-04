@@ -279,6 +279,17 @@ describe("plan-eng-review exposure: review-sections read, Step 0 Scope Challenge
     expect(heads.map((h) => [h, withSections([[h, "- Issue: the cache has no owner", ...rest].join("\n")])])).toEqual(heads.map((h) => [h, true]));
   });
 
+  test("GSTA-2: a section's body ends at the next heading of the same or higher level, so an inline-only Section 4 before the completion summary does not count", () => {
+    const three = ["## Section 1: Architecture review", "- Issue: process-local store", "## Section 2: Code quality review", "- Issue: naming", "## Section 3: Test review", "- Gap: refill boundary"];
+    const summary = ["## Completion summary", "- Step 0: Scope Challenge — scope accepted as-is"];
+    for (const four of ["## Section 4: Performance review: no issues found.", "### 4. Performance review", "**4. Performance Review**: no issues"]) expect([four, withSections([[...three, four, ...summary].join("\n")])]).toEqual([four, false]);
+  });
+
+  test("GSTA-2: content under a deeper heading inside a section counts, as in ## Section 4 with ### 4.1 under it", () => {
+    const text = ["## Section 1: Architecture review", "- Issue: process-local store", "## Section 2: Code quality review", "- Issue: naming", "## Section 3: Test review", "- Gap: refill boundary", "## Section 4: Performance review", "### 4.1 Hot path", "- Checked the refill loop", "## Completion summary", "- Step 0: Scope Challenge — scope accepted as-is"].join("\n");
+    expect(withSections([text])).toBe(true);
+  });
+
   test("the pin's own forms count with bullets under them: ### 1. Architecture review and **2. Code Quality Review**", () => {
     const text = ["### 1. Architecture review", "- Issue: process-local store", "**2. Code Quality Review**", "- Issue: naming", "### 3. Test review", "- Gap: refill boundary", "### 4. Performance review", "- None found in the hot path"].join("\n");
     expect(withSections([text])).toBe(true);

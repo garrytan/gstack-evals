@@ -110,8 +110,10 @@ function writeTargets(parts: string[]): string[] {
 
 /** plan-eng-review: review-sections.md read, the Step 0 Scope Challenge marker, Sections 1 to 4 in order, a test plan written.
  * A section counts only under a # or bold heading in the pin's numbered forms (`### 1. Architecture review`, `Section 1`)
- * with content before the next section heading: a non-empty line below the heading that is not a markdown heading. Text
- * on the heading line itself, such as an inline verdict, is never content (GSTA-2). Bare numbered lines are never section
+ * with content in its body: a non-empty line below the heading that is not a markdown heading. A section's body ends at
+ * the next heading of the same or higher level, or at the next recognized section heading, whichever comes first; a
+ * bold-line section heading ends at any # heading (GSTA-2). Text on the heading line itself, such as an inline verdict,
+ * is never content (GSTA-2). Bare numbered lines are never section
  * headings (GSTA-2), so no preview list counts, and neither does an unnumbered label or heading such as the completion
  * summary's. A Bash read
  * counts as a simple command whose result is not empty; a Bash write as a simple command that writes the pin's test-plan
@@ -120,9 +122,12 @@ export function planEngReviewExposure(records: Rec[]): ExposureRead {
   const { uses, lines } = own(records, turnOf("plan-eng-review"));
   const isSection = (line: string) => SECTIONS.some((s) => s.test(line));
   const hasBody = (i: number) => {
+    const level = /^(#{1,6})\s/.exec(lines[i]!.line)?.[1]!.length ?? 0;
     for (const { line } of lines.slice(i + 1)) {
       if (isSection(line)) return false;
-      if (line && !/^#{1,6}\s/.test(line)) return true;
+      const heading = /^(#{1,6})\s/.exec(line);
+      if (heading && (level === 0 || heading[1]!.length <= level)) return false;
+      if (line && !heading) return true;
     }
     return false;
   };
