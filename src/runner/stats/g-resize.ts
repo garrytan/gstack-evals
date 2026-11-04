@@ -94,7 +94,7 @@ export interface PriceModel {
   P1: number;
   TOLD: Record<string, number>;
   MEAS: Record<Family, number>;
-  AUTH: Record<Family, number>;
+  AUTH: { [F in Family]: number };
   SCR_T: Record<Family, number>;
   SCR_MEAS: Record<Family, number>;
   YIELD: Record<Family, number>;
