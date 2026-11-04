@@ -1,13 +1,15 @@
 // L1 per-session outcome table (the L1 superseding preregistration, sections 6 and 10). One L1SessionRow (src/types.ts) per
 // Lane B trial, from the trial's config.json, result.json and evaluator/ files and the metering proxy's session rows.
 //
-// Outcome (section 6, R3 amendment 4's rule): a trial is graded when it has a verifier reward and a model response reached the
+// Outcome (section 6, R3 amendment 4's rule): a trial is graded when it has a verifier reward (a number, or a string that reads as
+// one; null, an empty string or any other value is no reward) and a model response reached the
 // agent (the proxy's last session row has ok_responses > 0; with no row, the SDK log holds model output). An allowance stop
 // (the proxy refused a request for the session's budget) or a turn-cap stop after a model response is a graded fail for pass
 // and adherence, reward or not (#169 7.5). A LedgerCapStop is a cap stop: the run is incomplete. Anything else is infra, a
 // coverage gap. A none session whose read audit hits an installed gstack path or a drive is contaminated: dropped, counted.
-// route_hook, contract_record and contract_check_met come from evaluator/l1-evidence.json when a harness unit wrote it, and
-// are null otherwise: the SDK log carries neither the route hook's line nor the contract record (probes.ts).
+// route_hook, contract_record and contract_check_met come from evaluator/l1-evidence.json, which laneb_hooks.LanebHooksAgent
+// writes for every L1 arm, and are null when the file is missing: the SDK log carries neither the route hook's line nor the
+// contract record (probes.ts).
 //
 // The probe L prefix for each pin is the first 200 characters of that pin's installed investigate/SKILL.md, checked against
 // the digests the preregistration's install-manifest.md froze; a mismatch refuses the table.
@@ -65,7 +67,9 @@ export function sessionRow(dir: string, ctx: TableContext): L1SessionRow | null 
   const last = rows.at(-1);
   const responded = last ? (last.ok_responses ?? 0) > 0 : p.model_text;
   const exc = result?.exception_info?.exception_type ?? null;
-  const raw = Number(result?.verifier_result?.rewards?.reward ?? Object.values(result?.verifier_result?.rewards ?? {})[0]);
+  const rewards = result?.verifier_result?.rewards;
+  const v = rewards?.reward ?? Object.values(rewards ?? {})[0];
+  const raw = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   const reward = result && Number.isFinite(raw) ? raw : null;
   const allowance = (last?.refused_budget ?? 0) > 0;
   const stopped = allowance || p.turn_cap;

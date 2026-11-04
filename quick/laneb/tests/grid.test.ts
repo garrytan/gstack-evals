@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { armSpec, jobConfig, RETRY_ON } from "../runner/grid.ts";
 import { tb2TaskToml, TB2_AGENT_HOSTS } from "../runner/materialize.ts";
+import { ARM_SPECS } from "../l1/l1.ts";
 
 describe("grid", () => {
   test("one agent per model and arm, tasks in rank order, kwargs carry the arm and cap", () => {
@@ -24,6 +25,12 @@ describe("grid", () => {
     models: [{ id: "claude-haiku-5-5", harbor_model: "anthropic/claude-haiku-5-5", session_cap_usd: 1 }],
     arms: [{ name: "none", tar: "/run/arms/none.tar", sha256: "a" }],
   };
+
+  test("every L1 arm runs on the hooks agent, which writes l1-evidence.json, and gstack_hooks never reaches the kwargs", () => {
+    const job = jobConfig({ ...spec, arms: Object.values(ARM_SPECS).map((e) => ({ ...armSpec(e), tar: "/run/arms/x.tar", sha256: "a" })) });
+    expect(job.agents.map((a) => [a.kwargs.arm, a.import_path])).toEqual(Object.keys(ARM_SPECS).map((arm) => [arm, "laneb_hooks:LanebHooksAgent"]));
+    expect(JSON.stringify(job.agents.map((a) => a.kwargs))).not.toContain("gstack_hooks");
+  });
 
   test("an arm's system prompt and session kind reach its kwargs only when set", () => {
     const job = jobConfig({ ...spec, arms: [armSpec("none"), armSpec("gstack:system_prompt=claude-code-preset:session_kind=unattended")].map((a) => ({ ...a, tar: `/run/arms/${a.name}.tar`, sha256: "a" })) });

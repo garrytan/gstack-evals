@@ -365,13 +365,56 @@ const SED_PLAIN = /^\s*s([^\\\n])(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\
 function inert(cmd: string, op: string): boolean {
   return !SUBSTITUTES.test(op) && (cmd !== "sed" || SED_PLAIN.test(op));
 }
+// The options of grep (egrep, fgrep), rg, ag and ack that the positional drop knows: short flags that take no value, short
+// options whose value follows (glued, or as the next word), long flags with no value, and long options that take one, given
+// with = only. Any other option, a long option's value as the next word, and ag's and ack's -A, -B, -C and -D (optional or no
+// values) make the whole command scan as a read.
+const GREP_SHORT: Record<string, { flags: string; valued: string }> = {
+  grep: { flags: "abcEFGHhIiLlnoPqRrsTUuVvwxyZz0123456789", valued: "ABCDdm" },
+  rg: { flags: "abcFHhIiLlNnoPpqSsUuVvwxz0", valued: "ABCEMTdgjmrt" },
+  ag: { flags: "acFHiLlnQSsUuvwz", valued: "Ggmp" },
+  ack: { flags: "cHhiLlnQsvwx", valued: "m" },
+};
+const GREP_LONG_FLAGS = new Set(["--ignore-case", "--no-ignore-case", "--smart-case", "--case-sensitive", "--line-number", "--no-line-number", "--with-filename", "--no-filename", "--count", "--only-matching", "--invert-match", "--word-regexp", "--line-regexp", "--fixed-strings", "--extended-regexp", "--basic-regexp", "--perl-regexp", "--recursive", "--dereference-recursive", "--hidden", "--no-ignore", "--follow", "--quiet", "--silent", "--no-messages", "--null", "--text", "--no-heading", "--heading", "--column", "--byte-offset", "--literal", "--vimgrep", "--json", "--multiline", "--search-zip", "--null-data"]);
+const GREP_LONG_VALUED = new Set(["--context", "--after-context", "--before-context", "--max-count", "--include", "--exclude", "--exclude-dir", "--glob", "--iglob", "--type", "--type-not", "--max-depth", "--color", "--colour", "--binary-files", "--directories", "--devices", "--sort", "--sortr"]);
+/** The index of a grep, rg, ag or ack's pattern among its words (the first operand, or the word after a leading --), or -1
+ * when an option is not in the table above. */
+function grepPattern(cmd: string, words: string[]): number {
+  const o = GREP_SHORT[cmd === "egrep" || cmd === "fgrep" ? "grep" : cmd]!;
+  let pattern = -1;
+  for (let k = 1; k < words.length; k++) {
+    const w = words[k]!;
+    if (w === "--") return pattern >= 0 ? pattern : k + 1 < words.length ? k + 1 : -1;
+    if (!w.startsWith("-") || w === "-") {
+      if (pattern < 0) pattern = k;
+      continue;
+    }
+    if (w.startsWith("--")) {
+      const eq = w.indexOf("=");
+      if (eq > 0 ? !GREP_LONG_VALUED.has(w.slice(0, eq)) : !GREP_LONG_FLAGS.has(w)) return -1;
+      continue;
+    }
+    for (let i = 1; i < w.length; i++) {
+      if (o.valued.includes(w[i]!)) {
+        if (i === w.length - 1) k++;
+        break;
+      }
+      if (!o.flags.includes(w[i]!)) return -1;
+    }
+  }
+  return pattern;
+}
 /** A grep's words without its pattern, and a sed's without its script: the first operand when no -e or -f gives one and it is
- * inert, and each inert sed -e operand, names no file the command reads. A grep with any -e, -f or --regexp word, an -f file
- * and every awk script are scanned whole. */
+ * inert, and each inert sed -e operand, names no file the command reads. A grep with any -e, -f or --regexp word, or any
+ * option grepPattern does not know, an -f file and every awk script are scanned whole. */
 function withoutPattern(words: string[]): string[] {
   const cmd = base(words[0] ?? "");
-  const valued = GREP.has(cmd) ? /^-[ABCmdD]$/ : cmd === "sed" ? /^-l$/ : null;
-  if (!valued || (GREP.has(cmd) && words.some((w) => /^(-[A-Za-z]*[ef]|--regexp|--file)/.test(w)))) return words;
+  if (GREP.has(cmd)) {
+    const k = words.some((w) => /^(-[A-Za-z]*[ef]|--regexp|--file)/.test(w)) ? -1 : grepPattern(cmd, words);
+    return k < 0 ? words : words.filter((w, i) => i !== k || !inert(cmd, w));
+  }
+  const valued = cmd === "sed" ? /^-l$/ : null;
+  if (!valued) return words;
   const kept: string[] = [];
   let given = false;
   for (let k = 0; k < words.length; k++) {
@@ -394,17 +437,20 @@ function withoutPattern(words: string[]): string[] {
   return kept.filter((w, i) => i !== k || !inert(cmd, w));
 }
 /** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies,
- * with a relative word resolved against the directory the line has cd'd to (the work tree at first). */
+ * with a relative word resolved against the directory the line has cd'd to (the work tree at first). In a sed command every
+ * "/" also starts a path, so a filename glued to a command letter (1r/root/x) is found. */
 function bashReadPaths(command: string, cwd: string | null): string[] {
   const out: string[] = [];
   for (const s of simpleCommands(command, cwd)) {
     const words = withoutPattern(s.words);
     const mention = words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
     const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(s.words[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
+    const sed = base(s.words[0] ?? "") === "sed";
     for (const t of texts)
       for (const w of t.split(PATH_SPLIT)) {
         if (w.startsWith("/")) out.push(w);
         else if (s.cwd && w && !w.startsWith("-") && w !== s.words[0]) out.push(posix.resolve(s.cwd, w));
+        if (sed) for (let i = w.indexOf("/", 1); i > 0; i = w.indexOf("/", i + 1)) out.push(w.slice(i));
       }
   }
   return out;

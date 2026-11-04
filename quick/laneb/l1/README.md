@@ -20,8 +20,8 @@ flowchart LR
 | Path | What it does |
 |---|---|
 | `probes.ts` | Probes L and I (#169 7.6) over one SDK message log, the S13 background count, the contract hook's block, the read audit for none sessions, and the turn-cap and model-output checks. Probe L passes on a Skill call naming investigate whose base directory lies in the arm's gstack install (a task checkout's own skill never counts), or on a Read or Bash of an `investigate/SKILL.md` whose result holds the first 200 characters of the arm's installed copy. Probe I reads #169 7.2's items 1 to 4: the DEBUG REPORT with its labels, edits and the test rule. A Bash call counts as an edit through #169 7.2's write list (redirects and `tee` inside the work tree, `sed -i`, `perl -i`, `patch`, `git apply` and `git checkout` of paths), after `cd`, `env`, reserved words, subshells and `sh -c` are unwrapped. The S13 count is a background shell, agent or task still running at the final result, so a TaskStop or a kill ends it. |
-| `table.ts` | Builds the per-session table from Lane B's trial directories and the proxy's session rows: arm, instrument, part, task, repository, outcome (graded, infra or cap stop, section 6), pass and adherence, both probes, S13, the read audit, the allowance and turn-cap stops, and the evidence fields. It refuses a pin whose `investigate/SKILL.md` prefix differs from the frozen digest, and stamps each row with the sha256 of the `probes.ts` that scored it. |
-| `analyze.ts` | One entry from that table to every endpoint: B1 (also on the routed stratum), B3, O5 and the secondaries, each under #169 7.5's coverage rule, both 95% intervals (by task and by repository), the sign-flip p, Holm over B1 and B3, the behavior admission, the gate reading, O5's descriptive line, the probe audit and every verdict branch. Every MDD is read from the merged `power.txt`, pinned by sha256. `audit-sample` lists the sessions the blind reader labels. It refuses a table whose rows were scored by another `probes.ts`. |
+| `table.ts` | Builds the per-session table from Lane B's trial directories and the proxy's session rows: arm, instrument, part, task, repository, outcome (graded, infra, cap stop or contaminated, section 6), pass and adherence, both probes, S13, the read audit, the allowance and turn-cap stops, and the evidence fields. A verifier reward counts only as a number or a string that reads as one; null, an empty string or any other value is no reward, so the session is infra unless a stop makes it a graded fail. It refuses a pin whose `investigate/SKILL.md` prefix differs from the frozen digest, and stamps each row with the sha256 of the `probes.ts` that scored it. |
+| `analyze.ts` | One entry from that table to every endpoint: B1 (also on the routed stratum), B3, O5 and the secondaries, each under #169 7.5's coverage rule, both 95% intervals (by task and by repository), the sign-flip p, Holm over B1 and B3, the behavior admission, the gate reading, O5's descriptive line, the probe audit and every verdict branch. Coverage counts only planned sessions (a planned task, up to the planned replicates of each), so an empty plan, such as an empty routed stratum or fit stratum, gives no outcome. The probe audit passes only when the labels hold one label for each session of this table's audit sample, each with the probe value the table carries. Every MDD is read from the merged `power.txt`, pinned by sha256. `audit-sample` lists the sessions the blind reader labels. It refuses a table whose rows were scored by another `probes.ts`. |
 | `ceiling.ts` | Section 9's ceiling check before each launch, with its holdback, and the final read before the results post. A crew file or plan with a missing, negative or non-numeric amount, or an unknown line or status, exits 2 instead of passing, and so do a missing ledger file and a done item with no ledger rows. |
 
 The per-session row is `L1SessionRow` in [src/types.ts](../../../src/types.ts).
@@ -41,7 +41,7 @@ bun quick/laneb/l1/ceiling.ts final --ledger ledger.jsonl --crew crew.json --pla
 ## Inputs the operator writes
 
 - **table-config.json**: `jobs` (`{dir, instrument, part}`, instrument one of pilot, smoke, f1, tb2), `sessions` (the runs' `proxy-sessions.jsonl` paths), `prefixes` (`{before, after}`, each pin's installed `investigate/SKILL.md`) and an optional `home`.
-- **analysis-config.json**: `models` (`{id, status: run | not_run}`), `routed_stratum` (Amendment C's routed F1 tasks), `construction_checks` (true only when U1's checks and Amendment C's dry run passed), `audit` (the reader's labels, or a path to them) and, optionally, the task lists, `tb2_fit_stratum` and `dropped_by_design`.
+- **analysis-config.json**: `models` (`{id, status: run | not_run}`), `routed_stratum` (Amendment C's routed F1 tasks), `construction_checks` (true only when U1's checks and Amendment C's dry run passed), `audit` (the reader's labels, or a path to them) and, optionally, the task lists, `tb2_fit_stratum` and `dropped_by_design`. Once the table holds TB2 rows for a model that ran, `tb2_tasks` (non-empty) and `tb2_fit_stratum` (may be empty) are required, and `analyze.ts` refuses with `E_USAGE` without them.
 - **crew.json**: `as_of`, `captain_credits` (the Captain's booked L1 turns) and `threads` (`{code, line: crew | sol | particle, credits, tokens, token_stop, status: open | planned | done}`), read from each L1 thread's Capy counter. The repo never calls a Capy API.
 - **plan.json**: `items` (`{item, cap_usd, status: planned | open | done}`, each cap equal to the ledger's) and `leftover` (`{sol, particle}`, each pending, done or refused).
 
@@ -60,14 +60,20 @@ The measured rate is all L1 thread credits over all L1 thread tokens, or $0.45 p
 
 A part whose VM dies leaves open reserves that never settle: the proxy's sessions file died with the VM, so `ledger.ts reconcile` leaves them open, and the check refuses every launch. Once ubi-runner shows the VM gone, the operator settles each of that part's open reserves at its full reserved amount with `bun quick/laneb/runner/ledger.ts settle --path <ledger> --item <item> --id <id> --usd <reserved amount> --detail <the dead VM>`, then runs the check for the part's one relaunch. Settling at full charges the cap what the open reserve did, so no cap moves, and the measured cost of those sessions is reported as an upper bound. The L1 launcher (U1) enforces the one relaunch.
 
-## Known gap: per-session hook evidence
+## Per-session hook evidence
 
-Lane B's SDK log carries neither the route hook's line (a UserPromptSubmit hook's context reaches only the API request) nor the contract hook's record file. The contract hook's block does show, as a "Stop hook feedback" user message, and `probes.ts` reads it. `route_hook`, `contract_record` and `contract_check_met` come from `evaluator/l1-evidence.json` when the harness writes it, in the shape `{"route_hook": bool, "contract_record": bool, "contract_check_met": bool | null}`. Until a harness change writes that file, the fields are null, an unrecorded hook counts as not fired, and B1's and B3's exposure steps read FIX-METHOD (exposure).
+Lane B's SDK log carries neither the route hook's line nor the contract hook's record file; the contract hook's block does show, as a "Stop hook feedback" user message, and `probes.ts` reads it. So every L1 arm sets `gstack_hooks=copy` (`ARM_SPECS` in `l1.ts`) and runs on `runner/agent/laneb_hooks.py`'s `LanebHooksAgent`. After Lane B's own teardown has stopped Claude Code, exported the patch and closed the session, it copies `/root/.gstack/hooks` and `/root/.gstack/skill-contracts` to `evaluator/gstack-hooks/` and Claude Code's transcripts (`*.jsonl` under `/root/.claude/projects`) to `evaluator/claude-projects/`, then writes `evaluator/l1-evidence.json` and adds the same three fields to `laneb-summary.json`:
+
+- `route_hook`: the transcript holds a UserPromptSubmit hook-context attachment with the route hook's line (`ROUTE_MARK` in `arms/l1.ts`). A tool result that quotes the line does not count. The route hook skips a prompt that opens with a slash command, so a told session reads false.
+- `contract_record`: the contract Stop hook left `skill-contracts/<session id>.json`.
+- `contract_check_met`: the record's last investigate run ended met (`met`, `met_waived`, `met_after_block`) or not (`blocked`, `miss`); null with no investigate run or no record.
+
+The session is the one top-level transcript. With none, or more than one, every field is null; a failed copy (named in `teardown_errors`) leaves the fields it decides null; an unreadable record leaves both contract fields null. Null means "could not tell", never "did not fire", and `analyze.ts` counts an unrecorded hook as not fired. Real sessions with Claude Code 2.1.312 in the arm images against `arms/l1.ts`'s fake upstream gave: after untold `true, false, null`, after told `false, true, false` (blocked, then a miss), and off and before, untold or told, `false, false, null`; `tests/fixtures/l1/hooks` holds them, cut to their user, assistant, hook and last-prompt lines.
 
 ## Tests
 
 ```sh
-bun test quick/laneb/tests/l1-probes.test.ts quick/laneb/tests/l1-table.test.ts quick/laneb/tests/l1-analyze.test.ts quick/laneb/tests/l1-ceiling.test.ts
+bun test quick/laneb/tests/l1-probes.test.ts quick/laneb/tests/l1-table.test.ts quick/laneb/tests/l1-analyze.test.ts quick/laneb/tests/l1-ceiling.test.ts quick/laneb/tests/agent.test.ts quick/laneb/tests/grid.test.ts
 ```
 
 The probe fixtures `cli-skill-bg.jsonl` and `cli-kill-agent.jsonl` are sanitized logs of the real Claude Code 2.1.312 under the pinned Agent SDK against a fake upstream. The analysis tests use `tests/fixtures/l1/synthetic.ts`.
@@ -111,7 +117,3 @@ Exit codes: 0 ok, 2 usage, 3 refused, 4 the item stops incomplete, 5 the host is
 ### Amendment C's dry run
 
 The dry run kills the host, not just the controller: it stops the VM mid-part, then runs `attach` until `HOST_LOST`, `recover`, `host-up` and `relaunch`. `tests/l1-host.test.ts` drives the same path keylessly on a fake host and fake part VMs, with the real `host.sh`, `launch.sh` and ledger service.
-
-### Not in this unit
-
-Per-session hook evidence (route hook fired, contract record written, contract check met) needs a change to the agent's teardown and is not captured here.

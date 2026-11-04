@@ -216,12 +216,20 @@ export function armRate(rows: L1SessionRow[], s: Scope, arm: L1Arm, m: Metric) {
   return { arm, n: g.length, x: g.reduce((x, r) => x + value(r, m), 0), rate: mean(g.map((r) => value(r, m))), ci: bootstrap(vals, vals.map((_, i) => [i])) };
 }
 
-/** #169 7.5: each arm graded on 90% of its planned sessions, and at most 10% of planned task clusters failing to enter. */
+/** #169 7.5: each arm graded on 90% of its planned sessions, and at most 10% of planned task clusters failing to enter. Only
+ * planned sessions count: a graded session on a task outside the plan, or past the plan's replicates of its task, does not. An
+ * empty plan is not covered. */
 export function coverage(rows: L1SessionRow[], s: Scope, arms: L1Arm[], planned: Planned) {
-  const per = arms.map((arm) => ({ arm, graded: graded(rows, s, arm).length, planned: planned.tasks.length * planned.reps }));
-  const sets = arms.map((arm) => new Set(graded(rows, s, arm).map((r) => r.task)));
-  const missing = planned.tasks.filter((t) => !sets.every((x) => x.has(t))).length;
-  const ok = per.every((p) => p.graded >= COVERAGE * p.planned) && missing <= OVER * planned.tasks.length;
+  const plan = new Set(planned.tasks);
+  const perTask = (arm: L1Arm) => {
+    const n = new Map<string, number>();
+    for (const r of graded(rows, s, arm)) if (plan.has(r.task)) n.set(r.task, (n.get(r.task) ?? 0) + 1);
+    return n;
+  };
+  const counts = arms.map(perTask);
+  const per = arms.map((arm, i) => ({ arm, graded: [...counts[i]!.values()].reduce((x, v) => x + Math.min(v, planned.reps), 0), planned: planned.tasks.length * planned.reps }));
+  const missing = planned.tasks.filter((t) => !counts.every((x) => x.has(t))).length;
+  const ok = planned.tasks.length > 0 && per.every((p) => p.graded >= COVERAGE * p.planned) && missing <= OVER * planned.tasks.length;
   return { ok, per, clusters_missing: missing, clusters_planned: planned.tasks.length };
 }
 
@@ -245,6 +253,19 @@ export function auditResult(labels: AuditLabel[], probe: "L" | "I", model: strin
   const kappa = pe < 1 ? (po - pe) / (1 - pe) : null;
   const small = Math.min(pos, neg) < SMALL_CLASS;
   return { n, passed_class: pos, failed_class: neg, agreement: po, kappa, rule: small ? ("agreement" as const) : ("kappa" as const), pass: small ? po >= AGREEMENT_BAR : kappa !== null && kappa >= KAPPA_BAR };
+}
+
+/** The audit joined to the table it judges: a probe's labels for a model pass only when they hold exactly one label for each
+ * session of that table's audit sample, each with the probe value the table carries, and auditResult passes on them. A label
+ * for any other session, a second label or a label with another probe value fails it (rule unjoined). */
+export function tableAudit(rows: L1SessionRow[], labels: AuditLabel[], probe: "L" | "I", model: string) {
+  const metric: Metric = probe === "L" ? "load" : "complete";
+  const byTrial = new Map(rows.filter((r) => r.model === model).map((r) => [r.trial, r]));
+  const sample = new Map(auditSample(rows, model).filter((s) => s.probe === probe).map((s) => [s.trial, Boolean(value(byTrial.get(s.trial)!, metric))]));
+  const ls = labels.filter((l) => l.probe === probe && l.model === model);
+  const res = auditResult(ls, probe, model);
+  const joined = ls.length === sample.size && new Set(ls.map((l) => l.trial)).size === ls.length && ls.every((l) => sample.get(l.trial) === l.probe_value);
+  return joined || !ls.length ? { ...res, sample: sample.size } : { ...res, sample: sample.size, rule: "unjoined" as const, pass: false };
 }
 
 /** The blind audit's sample: per probe and model, 20 sessions the probe passed and 20 it failed (all of a class when fewer), pooled over the probe's F1 arms, in seeded order. */
@@ -362,6 +383,10 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
   const f1Tasks = taskList(cfg.f1_tasks, join(BUNDLE, "f-tasks.txt"));
   const pilotTasks = taskList(cfg.pilot_tasks, join(BUNDLE, "pilot-tasks.txt"));
   const tb2Tasks = taskList(cfg.tb2_tasks, null);
+  if (cfg.models.some((m) => m.status === "run" && rows.some((r) => r.model === m.id && r.instrument === "tb2"))) {
+    if (!tb2Tasks.length) throw new UsageError("E_USAGE l1 analyze: the table holds TB2 rows, so the config needs tb2_tasks, the TB2 twin's planned tasks");
+    if (!Array.isArray(cfg.tb2_fit_stratum)) throw new UsageError("E_USAGE l1 analyze: the table holds TB2 rows, so the config needs tb2_fit_stratum, the TB2 fit stratum's tasks (may be empty)");
+  }
   const tb2Reps = cfg.tb2_replicates ?? 2;
   const labels: AuditLabel[] = Array.isArray(cfg.audit) ? cfg.audit : typeof cfg.audit === "string" ? readFileSync(cfg.audit, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)) : [];
   const routed = new Set(cfg.routed_stratum);
@@ -384,7 +409,7 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
       const arms = [graded(rows, f1, after), graded(rows, f1, before)];
       const capStopOver = arms.some((g) => share(g, (r) => r.allowance_stop || r.turn_cap) > OVER);
       const backgroundOver = arms.some((g) => share(g, (r) => r.background_at_result) > OVER);
-      const audit = auditResult(labels, member === "B1" ? "L" : "I", id);
+      const audit = tableAudit(rows, labels, member === "B1" ? "L" : "I", id);
       const exposed = member === "B1" ? graded(rows, f1, "after-u").filter((r) => routed.has(r.task)) : graded(rows, f1, "after-t");
       const exposureRate = exposed.length ? share(exposed, (r) => (member === "B1" ? r.route_hook : r.contract_record) === true) : null;
       return { member, after, before, metric, admission: { status: admission, n: pr.n, x: pr.x, c: pr.n ? pr.rate : null, u: ad.u, mdd: ad.mdd, coverage: pilotCov }, contrast: c, coverage: cov, before_rate: br, capStopOver, backgroundOver, audit, exposure: { rate: exposureRate, n: exposed.length }, mdd: br.n ? interp(power.holm2, br.rate) : null };

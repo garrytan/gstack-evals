@@ -47,15 +47,17 @@ export const L1 = {
 };
 
 // The seven arms (prereg section 4): a label each, on one of four tars, all on Claude Code's own system prompt. Told arms
-// open the prompt with "/investigate ". No arm sets a procedure line or a GSTACK_* variable.
+// open the prompt with "/investigate ". No arm sets a procedure line or a GSTACK_* variable. Every arm runs on
+// laneb_hooks.LanebHooksAgent (gstack_hooks=copy), which copies the hook state and transcripts out after the session closes and
+// writes evaluator/l1-evidence.json; it changes nothing in the session.
 export const ARM_SPECS: Record<string, string> = {
-  none: "none:system_prompt=claude-code-preset",
-  "before-u": "before-u:tar=before:system_prompt=claude-code-preset",
-  "after-u": "after-u:tar=after:system_prompt=claude-code-preset",
-  "off-u": "off-u:tar=off:system_prompt=claude-code-preset",
-  "before-t": "before-t:tar=before:told=investigate:system_prompt=claude-code-preset",
-  "after-t": "after-t:tar=after:told=investigate:system_prompt=claude-code-preset",
-  "off-t": "off-t:tar=off:told=investigate:system_prompt=claude-code-preset",
+  none: "none:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "before-u": "before-u:tar=before:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "after-u": "after-u:tar=after:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "off-u": "off-u:tar=off:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "before-t": "before-t:tar=before:told=investigate:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "after-t": "after-t:tar=after:told=investigate:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "off-t": "off-t:tar=off:told=investigate:system_prompt=claude-code-preset:gstack_hooks=copy",
 };
 const SEVEN = ["none", "before-u", "after-u", "before-t", "after-t", "off-u", "off-t"];
 const FIVE = ["none", "before-u", "after-u", "before-t", "after-t"];
