@@ -136,7 +136,6 @@ export function admitG(input: AdmissionInput): Admission {
         if (tasks.has(x.task)) throw new Error("task " + x.task + " is sampled twice for " + s + "; item 2 takes one trial on each of 8 tasks");
         tasks.add(x.task);
         const t = of(arm).find((y) => y.task === x.task && y.trial === x.trial);
-        if ((!t || t.status !== "scored") && toldRig.gaps > maxGaps) return { item: 2, name: "exposure", pass: null, reading: "not read: sampled trial " + x.trial + " on task " + x.task + " is not a scored trial, and the told arm's " + toldRig.gaps + " gaps pass item 4's limit of " + maxGaps + ", so prereg section 5's replacement can't repair the sample" };
         if (!t || t.status !== "scored" || t.exposed === null) throw new Error("sampled trial " + x.trial + " on task " + x.task + " is not a scored " + s + " trial read by the detector; replace it as prereg section 5 says");
         if (t.exposed) exposed++;
       }

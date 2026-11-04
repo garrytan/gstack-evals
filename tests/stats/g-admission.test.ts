@@ -93,12 +93,21 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
     }
   });
 
-  test("a sample the replacement rule can't repair (told gaps past item 4's limit) leaves item 2 unread, and item 4 stops the skill as FIX-METHOD (rig)", () => {
+  test("an unreplaced gap in the exposure sample throws even when the told arm's gaps pass item 4's limit: admission never infers that section 5's replacement ran out", () => {
     const trials = edit(slice(), (t) => t.arm === PER && t.trial === 1 && ["t00", "t01", "t02"].includes(t.task), { status: "gap" });
-    const p = admitG(input(trials)).skills["plan-eng-review"];
-    expect([p.failed, p.route]).toEqual([4, "FIX-METHOD (rig)"]);
-    expect(p.items[1]!.pass).toBeNull();
-    expect(p.items[1]!.reading).toMatch(/can't repair/);
+    expect(() => admitG(input(trials))).toThrow(/replace it as prereg section 5 says/);
+    const two = edit(slice(), (t) => t.arm === PER && t.trial === 1 && ["t00", "t11"].includes(t.task), { status: "gap" });
+    expect(() => admitG(input(two))).toThrow(/replace it as prereg section 5 says/);
+  });
+
+  test("a sample repaired by section 5's replacement reads item 2 and routes by it, with the told arm's gaps past item 4's limit", () => {
+    const gaps = edit(slice(), (t) => t.arm === PER && t.trial === 1 && ["t00", "t11"].includes(t.task), { status: "gap" });
+    const trials = edit(gaps, (t) => t.arm === PER && t.trial === 1 && ["t01", "t02"].includes(t.task), { exposed: false });
+    const repaired = [{ task: "t00", trial: 2 }, ...SAMPLE.slice(1)];
+    const p = admitG(input(trials, { exposure_sample: { "plan-eng-review": repaired, autoplan: SAMPLE } })).skills["plan-eng-review"];
+    expect([p.failed, p.route]).toEqual([2, "FIX-METHOD (exposure)"]);
+    expect(p.items[1]!.reading).toMatch(/^6 of 8 sampled told trials exposed/);
+    expect(p.items[3]!.pass).toBeNull();
   });
 
   test("item 5's AUTH_PAID and AUTH_EXTRA are refused up front outside the (0, 1000) range resize.py reads", () => {
