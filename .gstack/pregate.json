@@ -40,6 +40,9 @@
     "tests/real-outcome/fixtures/**": [
       "tests/real-outcome/agent.test.ts"
     ],
+    "tests/stats/fixtures/**": [
+      "tests/stats/outcome-decision.test.ts"
+    ],
     "src/errors/codes.ts": [
       "tests/errors.test.ts"
     ],
