@@ -165,10 +165,12 @@ describe("l1.ts on a fake awake host", () => {
     expect(JSON.parse(readFileSync(r.ledger + ".host.json", "utf8"))).toMatchObject({ host: "host-1", item: "pilot-opus" });
     expect(l1(r, ["host-up", r.work]).code).toBe(3);
     expect(l1(r, ["recover", r.work]).err).toContain("answers; run attach");
-    const la = l1(r, ["launch", r.work, "--part", "pilot"]);
+    // The part VM waits after its first trial, since ubi-runner's down on the host drops its bundle once the part is done.
+    const la = l1(r, ["launch", r.work, "--part", "pilot"], { PAUSE_VM: "vm-2", PAUSE_AT: "1" });
     expect([la.code, la.out]).toEqual([0, expect.stringContaining("part VM vm-2 (recovery bundle copied)")]);
     expect(existsSync(join(r.env.UBI_RECOVERY_DIR!, "geva268", "vm-2.bundle"))).toBe(true);
     expect(l1(r, ["launch", r.work, "--part", "pilot"]).code).toBe(3);
+    writeFileSync(join(r.fake, "vm-2/resume"), "");
     const a = await attachUntil(r, /NEXT: host-down \(every part has finished\)/);
     expect(a.out).toContain("pilot: finished, launch exit 0\n");
     expect(JSON.parse(readFileSync(join(r.work, "host/bound.json"), "utf8")).run_id).toBe(plan(r).run_id);
@@ -637,6 +639,8 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     const first = l1(r, ["recover", r.work], { FAIL_DOWN: "1" });
     expect([first.code, first.err]).toEqual([3, expect.stringContaining("could not be confirmed gone")]);
     expect(existsSync(join(r.root, "recovery/geva268/vm-2.bundle"))).toBe(false);
+    // The file's first shape, from a recover that refused before an upgrade: one RECOVER_GONE VM.
+    writeFileSync(join(r.work, "host/part-vm-gone.json"), JSON.stringify({ vm: "vm-2", at: 1 }));
     const rec = l1(r, ["recover", r.work]);
     expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("was already gone (RECOVER_GONE)")]);
     expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_vm_gone: true, complete: false });
@@ -736,7 +740,7 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     const r = rig("pilot-opus");
     expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
     expect(l1(r, ["host-up", r.work]).code).toBe(0);
-    expect(l1(r, ["launch", r.work, "--part", "pilot"], { PAUSE_VM: "vm-2", PAUSE_AT: "5" }).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { PAUSE_VM: "vm-2", PROXY_CRASH_AT: "3" }).code).toBe(0);
     await until(() => existsSync(join(r.fake, "vm-2/paused")));
     writeFileSync(join(r.fake, "vm-2/.dead"), "");
     await attachUntil(r, /pilot: finished, launch exit 7/);
@@ -745,11 +749,11 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     expect(salvageJson(r)).toMatchObject({ vm: "vm-2", pulled: false, vm_down: true });
     const evidence = () => readFileSync(join(r.work, "relaunch-evidence.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(evidence()).toEqual([
-      expect.objectContaining({ event: "vm_death", part: "pilot", vm: "vm-2", open_reserves: [], confirmed_by: expect.stringContaining("ubi-runner down") }),
-      expect.objectContaining({ event: "relaunch", part: "pilot", relaunch: "pilot-relaunch", host: "host-1", vm_deaths: ["vm-2"], replicates: 27 }),
+      expect.objectContaining({ event: "vm_death", part: "pilot", vm: "vm-2", open_reserves: [expect.stringMatching(/^pilot-opus\/pilot\/s3-/)], confirmed_by: expect.stringContaining("ubi-runner down") }),
+      expect.objectContaining({ event: "relaunch", part: "pilot", relaunch: "pilot-relaunch", host: "host-1", vm_deaths: ["vm-2"], replicates: 28 }),
     ]);
     await attachUntil(r, /NEXT: host-down \(every part has finished\)/);
-    expect(ranCells(join(r.work, "pilot-relaunch"))).toHaveLength(27);
+    expect(ranCells(join(r.work, "pilot-relaunch"))).toHaveLength(28);
     const kept = readFileSync(join(r.work, "pilot.relaunch.json"));
     rmSync(join(r.work, "pilot.relaunch.json"));
     const again = l1(r, ["relaunch", r.work, "--part", "pilot"]);
@@ -757,6 +761,23 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     expect(evidence()).toHaveLength(2);
     writeFileSync(join(r.work, "pilot.relaunch.json"), kept);
     expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    expect(openIds(r, "pilot-opus")).toEqual(evidence()[0].open_reserves);
+  }, 300_000);
+
+  test("a recover that dies after it destroyed the part VM still knows that VM on the next run, though ubi-runner's down dropped its local state and bundle: the rerun rebuilds from the records it pulled", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    // recover dies after the part VM's down: here because host/pointer is missing, which it reads only after every part VM.
+    const pointer = join(r.work, "host/pointer"), saved = readFileSync(pointer);
+    rmSync(pointer);
+    expect(l1(r, ["recover", r.work]).code).toBe(1);
+    expect(events(r)).toMatch(/ down vm-2 /);
+    expect(existsSync(join(r.env.UBI_RUNNER_STATE!, "vm-2"))).toBe(false);
+    writeFileSync(pointer, saved);
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
+    expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_vm_gone: false, part_results_pulled: true, complete: true });
     expect(openIds(r, "pilot-opus")).toEqual([]);
   }, 300_000);
 });

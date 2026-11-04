@@ -8,6 +8,7 @@
 # FAIL_RECOVER=1 makes recover fail; FAIL_PULL=<vm> makes each pull from that VM fail; FAIL_PULL_MATCH=<text> makes each pull of a path containing it fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
 # runner's idle watchdog, ending an ssh command and its process group after that long (a setsid -f child survives);
 # FAIL_SSH_MATCH=<text> makes an ssh command containing it exit 255, after running it when FAIL_SSH_RUN=1.
+# Like the real runner, down drops the VM's local state and its recovery bundles once the VM is gone.
 # Like the real runner's list --mine, list prints "<location>  <name>" for each VM of the caller's owner that is not destroyed
 # (a dead VM is still listed, as the API still has it); FAIL_LIST=1 makes it fail, as the real one does when the API can't be read.
 set -u
@@ -57,7 +58,8 @@ case "$cmd" in
     if [ -n "${UBI_FAKE_SSH_LIMIT:-}" ]; then HOME="$d" timeout "$UBI_FAKE_SSH_LIMIT" bash -c "cd '$d' && $c"; else HOME="$d" bash -c "cd '$d' && $c"; fi ;;
   down)
     [ -z "${FAIL_DOWN:-}" ] || exit 1
-    [ ! -d "$(vmdir "$1")" ] || touch "$(vmdir "$1")/.down" ;;
+    [ ! -d "$(vmdir "$1")" ] || touch "$(vmdir "$1")/.down"
+    rm -rf "${state:?}/$1"; [ -z "${UBI_RECOVERY_DIR:-}" ] || rm -f "$UBI_RECOVERY_DIR"/*/"$1.bundle" ;;
   list)
     [ "${1:-}" = --mine ] || exit 2
     [ -z "${FAIL_LIST:-}" ] || { echo "could not list the project's VMs" >&2; exit 1; }
