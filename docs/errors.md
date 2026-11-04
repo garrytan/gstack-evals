@@ -128,6 +128,11 @@ Each entry gives the meaning, the fix, and these facts:
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 | [FALSE_ALARM_GATE_FAIL](#false_alarm_gate_fail) | warning | U13 |
 | [E_REAL_SANDBOX_SETUP](#e_real_sandbox_setup) | 2 | U20 |
+| [E_OUTCOME_ARM](#e_outcome_arm) | 2 | U20 |
+| [E_OUTCOME_TRANSCRIPT](#e_outcome_transcript) | 2 | U20 |
+| [E_OUTCOME_AUTOPLAN_CONFIG](#e_outcome_autoplan_config) | 2 | U20 |
+| [E_OUTCOME_TOLD_INSTALL](#e_outcome_told_install) | 2 | U20 |
+| [E_OUTCOME_CLEAN_ROOM](#e_outcome_clean_room) | 2 | U20 |
 | [E_REAL_SANDBOX_EGRESS](#e_real_sandbox_egress) | 2 | U20 |
 | [E_REAL_SANDBOX_RECORD](#e_real_sandbox_record) | 2 | U20 |
 | [E_REAL_ARM_BUILD](#e_real_arm_build) | 2 | U10 |
@@ -886,6 +891,46 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 The real-outcome ship sandbox could not start or could not open a trial: git (with http-backend) or jq is missing, the sidecar could not listen, the task's bundle does not hold the base commit, the base tree holds project-local Claude Code configuration (a .claude/ directory or .mcp.json, which would give the none arm a skill, plugin or MCP route), or the in-container prep failed. No model was called for the trial.
 
 Fix: Read the message. Install git and jq on the sidecar's host, or fix the task directory (B2) so its image's base branch is at base_commit. A repository with project-local Claude Code configuration is not eligible for this lane; drop it at mining.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OUTCOME_ARM
+
+The outcome-skills arm registry (lanes/outcome-skills/arms/registry.json) refused. Either the file breaks its shape (a told arm without exactly one skill turn that opens with its skill, a turn 1 that does not open with the statement, a missing or non-positive limit, a clean-room told arm, a G skill with no told arm), or a caller asked for something G does not run: a stand-in, forced or untold arm (not run in G, with the prereg's reason), a skill or exposure detector of family X or U (not built), an unknown name, or an empty task statement.
+
+Fix: Read the message. Use an arm that armNames lists for a G skill. A registry edit keeps the G prereg's turn texts, whose sha256s tests/outcome-skills/registry.test.ts pins; X and U arms and detectors come with their own families.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OUTCOME_TRANSCRIPT
+
+A session record file the G exposure detectors read (lanes/outcome-skills/arms/exposure.ts) is not readable: a line before the last is not a JSON object, or an assistant or user record has no phase or parent_tool_use_id, so its turn and author are unknown. A torn last line is dropped and returned, not refused.
+
+Fix: Write the record with a recorder that writes one JSON object per line and keeps each message's phase and parent_tool_use_id. Never hand-edit a session record to change an exposure read.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OUTCOME_AUTOPLAN_CONFIG
+
+autoplan's told configuration check (lanes/outcome-skills/arms/autoplan.ts, G prereg section 4) refused. The pin checkout is not 699a41cb or its gstack-session-kind or autoplan-lean.ts differs, the slash line is not /autoplan PLAN.md, a codex binary or an OpenAI or Codex variable is in the arm's environment, or the pin's own leanMode and gstack-session-kind select the lean feature kind or a session kind other than interactive on the arm's environment. autoplan's admission does not start.
+
+Fix: Don't change the frozen configuration to pass. Fix the image or environment only where it drifted from the configuration; any other cause goes to the Captain, as the G prereg says.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OUTCOME_TOLD_INSTALL
+
+The told install (lanes/outcome-skills/arms/told-install.sh and told.ts) does not match the pin's lite manifest: the home was not clean, the checkout is not 699a41cb at 1.94.39.0, a pin source file the detectors were built from differs, config.yaml does not set claude_loadout: lite, the lite render's file count or tree digest differs from #193's, or the hooks differ.
+
+Fix: Install again into a fresh HOME with told-install.sh, and never edit a rendered file. A different digest from a clean install means the install changed, which goes to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OUTCOME_CLEAN_ROOM
+
+The none arm's clean-room preflight (lanes/outcome-skills/arms/clean-room.ts, running panel v3 C1's script) found a Capy drive or gstack in the arm's session: a .capy, .local/share/gstack or .claude/skills path in its home, a Capy drive mounted under any home directory or under /root, a home or work-tree AGENTS.md or CLAUDE.md that names gstack, or a work tree's .claude/skills. Or the scan could not finish in the image. Each hit is named.
+
+Fix: Remove the named path or mount from the none arm's session, or make the image present and able to run sh with no network, then rerun the same command. The refusal comes before any lease.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
