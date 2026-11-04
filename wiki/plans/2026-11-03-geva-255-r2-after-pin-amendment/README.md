@@ -17,12 +17,12 @@ links:
   - GST-1163
 attachments:
   - 6015b335b85d5ec9f04cda5f8b57e04a36740ee9ffa0762f406eff5ad5fc1eed  comparisons.rr2.json
-  - 1992a484e1b681ed44ff1f8cf3f5e6b0e09aeaa348d0266c13d9fa46e2ec9a53  dry-run-rr2.sh.txt
-  - e12f4a8a9afdc8cf7aa20e462d282eae9fc67dcc44e4932d5927e7703560356d  dry-run-rr2.txt
+  - 45bc3eaa8bf755f9f0d7f934845117474edce39c43acc1b698a0beea0f140b94  dry-run-rr2.sh.txt
+  - 6c7bf9e6c1f44220dadd3a636fcf7a09376ffab5258f78921efd6dd7675260b1  dry-run-rr2.txt
   - c4768233a19c57d7ea28acfa6f32e19278844ccf1d1a66af2cdaf8550a36d678  install-pins.json
   - d74a9e1c21d635a2a7def12f1c0e77ae5566f74f787be2fe215518f164470651  reader-map-gstack-699a41cb6808.json
   - 70e2573bf6781ce65abbe5234a85d6b50ab9d083c756cd921165fe49657cf7c2  rr2-hook-check.ts.txt
-  - b83b160964ce4a4c0b2aaf4d2ccd4eba90d77c0ee9c84199a2f3002a26f46745  rr2-hooks.ts.txt
+  - de62fa26bc80eb2f80a574ac711a165817e2fabe50d297f340dacad2901df3f5  rr2-hooks.ts.txt
   - 4b420d8dbad8e506c708d3610c29c3f954de3d646ecbcb5a36c6e55810702ffd  rr2-install-check.py.txt
   - 0e43cd550df2a7c3dd97afea993ba7819d29191a2383611f254feccfad794908  rr2-install.ts.txt
   - edc0dfb467bf1bb1f5007387c1505caa9e21c4617b99803757f860d12771fc2f  rr2-pause.py.txt
@@ -39,7 +39,7 @@ What changes, in short:
 - gstack-full runs gstack 699a41cb, installed by review-units' default ./setup. That serves /review from the committed full render, not L1's lite loadout (section 2).
 - An install check runs before every launch. It pins the served /review tree, the captured settings.json and the two new hooks (section 4).
 - gstack-full's told prefix gains one format-only sentence for the new contract hook (section 7).
-- A keyless check shows the contract Stop hook blocks in the sandbox before the smoke. A readout takes each session's hook log out, and the run stops before any grid if no smoke session logged a line (sections 4 and 7).
+- A keyless check shows the contract Stop hook blocks in the sandbox before the smoke. A readout takes each session's hook log out, and the run stops before any grid if no smoke session logged an evaluating line (sections 4 and 7).
 - The readout splits gstack-full's exposure into unprompted and after-hook, beside the verdict and in R48's Why-null (section 7).
 - The severity map covers title-case and bare P-labels, and a dry run checks it on real no-gstack findings (section 6).
 - Five new items with caps that total $1,530, under a pause that holds the line to $2,000 all-in, crew model use included. none-rr's grid runs 2 sessions at a time, so its cap holds the control's cost (section 5).
@@ -170,7 +170,7 @@ So gstack-full's told prefix (told-gstack-full-rr2.txt) is #129's prefix with on
 
 **The hook readout.** The contract hook writes one line per decision to $GSTACK_STATE_ROOT/hooks/skill-contract.log, and the routing hook writes skill-route.log beside it. review-units drops both. A session's state root is its work dir's .gstack-home, and runTrial removes the work dir when the session ends (src/trial/state-root.ts and src/trial/trial.ts at 176fdc7). Only the transcript stays, with delta.json, which lists the paths a completed session added. So `rr2-hooks.ts watch` (attached) runs beside every smoke and grid launch. It hard-links each session's two logs out while the session runs, which keeps every later line, and copies its contract records. It opens each file without following a link at its last step, and takes it only when the open file is a regular file inside the session's work dir. It copies a record from that open file, and keeps a log's hard link only when the link is that same file. So a link the agent planted, or a folder it swapped for a link, can't pull a host file out. A log made and removed with its work dir between two scans, a tenth of a second apart, is lost. `rr2-hooks.ts readout` then gives one row per session: whether delta.json lists the contract log, whether that log was lost, the log's lines by outcome (blocked, met, met_after_block, miss, fail-open and unknown shape, deferred while agents run), the routing log's lines, and the transcript's SKILL_CONTRACT_UNMET count. A lost log leaves the session's outcome and exposure unknown, and the readout counts those sessions.
 
-**A silent hook stops the run.** If no smoke session has a contract-log line, by delta.json or by link, the readout exits 3 (HOOK_SILENT). A delta.json listing is enough here, since the log exists only once the hook has written a line to it. The run stops and goes to the Captain before any grid.
+**A silent hook stops the run.** The readout counts a session as logged only when its linked contract log holds an evaluating line: blocked, met, met_after_block or miss. A delta.json listing, a no-contract-skill line or a state-error line alone does not count, since the agent under test can create the log path itself. If no smoke session counts as logged, the readout exits 3 (HOOK_SILENT). The run stops and goes to the Captain before any grid.
 
 **Unprompted against after-hook exposure, reported and deciding nothing.** The hook can force the specialist and adversarial dispatches after a report is written. The gate would then pass without the procedure feeding the findings. So the readout labels each session in which a specialist and adversarial-native both started. After-hook means a blocked line in the session's contract log names specialists-dispatched or adversarial-pass as missing: the hook found a dispatch missing, and the dispatch came after the block. Unprompted means no such line, with both started before the first findings block. Late with no dispatch block means no such line, with at least one started after the first findings block. Unknown means the session's log was lost. A session without both is absent. The readout also says whether the final block's findings differ from the first block's. The results post puts the unprompted and after-hook counts beside the verdict and in R48's Why-null, so a null that rests on after-hook exposure doesn't read as the procedure running and not helping.
 
@@ -239,7 +239,7 @@ What the dry run could not show: the hook inside a real session. The hook check 
 - gstack moves to 699a41cb, installed by review-units' default ./setup, with an install check before every launch (sections 2 and 4).
 - The reader map is re-pinned with its contents unchanged (section 2).
 - gstack-full's told prefix adds one format-only sentence for the contract hook (section 7).
-- A keyless hook check runs before the smoke, a hook readout runs after every launch, and a smoke with no contract-hook log line stops the run before any grid (sections 4 and 7).
+- A keyless hook check runs before the smoke, a hook readout runs after every launch, and a smoke with no evaluating contract-hook log line stops the run before any grid (sections 4 and 7).
 - The readout reports unprompted against after-hook exposure beside the verdict and in R48's Why-null (section 7).
 - none-rr's grid runs at --parallel 2, with its cap unchanged (section 5).
 - The severity map adds title-case and P-label rows (section 6).

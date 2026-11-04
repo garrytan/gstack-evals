@@ -19,11 +19,11 @@ exit 0 (log/4.txt)
 
 $ front $D comparisons.rr2.json dry-run-rr2.sh.txt install-pins.json reader-map-gstack-699a41cb6808.json rr2-hook-check.ts.txt rr2-hooks.ts.txt rr2-install-check.py.txt rr2-install.ts.txt rr2-pause.py.txt severity-map.rr2.json told-gstack-full-rr2.txt
 front matter ok comparisons.rr2.json 6015b335b85d5ec9f04cda5f8b57e04a36740ee9ffa0762f406eff5ad5fc1eed
-front matter ok dry-run-rr2.sh.txt 1992a484e1b681ed44ff1f8cf3f5e6b0e09aeaa348d0266c13d9fa46e2ec9a53
+front matter ok dry-run-rr2.sh.txt 45bc3eaa8bf755f9f0d7f934845117474edce39c43acc1b698a0beea0f140b94
 front matter ok install-pins.json c4768233a19c57d7ea28acfa6f32e19278844ccf1d1a66af2cdaf8550a36d678
 front matter ok reader-map-gstack-699a41cb6808.json d74a9e1c21d635a2a7def12f1c0e77ae5566f74f787be2fe215518f164470651
 front matter ok rr2-hook-check.ts.txt 70e2573bf6781ce65abbe5234a85d6b50ab9d083c756cd921165fe49657cf7c2
-front matter ok rr2-hooks.ts.txt b83b160964ce4a4c0b2aaf4d2ccd4eba90d77c0ee9c84199a2f3002a26f46745
+front matter ok rr2-hooks.ts.txt de62fa26bc80eb2f80a574ac711a165817e2fabe50d297f340dacad2901df3f5
 front matter ok rr2-install-check.py.txt 4b420d8dbad8e506c708d3610c29c3f954de3d646ecbcb5a36c6e55810702ffd
 front matter ok rr2-install.ts.txt 0e43cd550df2a7c3dd97afea993ba7819d29191a2383611f254feccfad794908
 front matter ok rr2-pause.py.txt edc0dfb467bf1bb1f5007387c1505caa9e21c4617b99803757f860d12771fc2f
@@ -102,7 +102,7 @@ exit 0 (log/13.txt)
 $ $B/bin/gstack-evals doctor --host claude --ledger $W/doctor.sqlite --ledger-record $W/doctor-record
 ok bun: 1.4.4
 ok docker: daemon 29.9.2
-ok trial image: gstack-evals-trial:f62711a0a17fc1e9 sha256:d97d9fabcf9e894981967bc5f9f19780c169d768789f438c55ee859574f862d6 (recipe f62711a0a17f, pinned)
+ok trial image: gstack-evals-trial:f62711a0a17fc1e9 sha256:7143efc49a3216087af3f8ece525e4ef9e90604523bd6c4fbf5527ba08ddc2c3 (recipe f62711a0a17f, pinned)
 exit 2 (log/14.txt)
 
 $ sh -c ls ~/.capy/work/gstack-evals/sources; git -C ~/.capy/work/gstack-evals/sources/* cat-file -t 699a41cb6808e01240d02e82247693f9170d401a
@@ -111,10 +111,10 @@ commit
 exit 0 (log/15.txt)
 
 $ sh -c B=$B bun $W/bin/rr2-install.ts 699a41cb6808e01240d02e82247693f9170d401a | tee $W/install.json | jq -c '{tree_sha256, install: .provenance.install, stack: .provenance.stack, image, home}'
-{"tree_sha256":"cc5c6a37e6e85d00a7f84c999b797d7fdc22cf5b86cfb5c23640a25a4c051dd9","install":{"command":"./setup --host claude --no-browser -q","runner":"docker sha256:d97d9fabcf9e894981967bc5f9f19780c169d768789f438c55ee859574f862d6","tree_sha256":"6967df0ed2a4ffdf2f436c74224806980ed534d0649b9fde04e8f8d0b9112c31"},"stack":{"repo":"garrytan/gstack","sha":"699a41cb6808e01240d02e82247693f9170d401a","s
+{"tree_sha256":"cc5c6a37e6e85d00a7f84c999b797d7fdc22cf5b86cfb5c23640a25a4c051dd9","install":{"command":"./setup --host claude --no-browser -q","runner":"docker sha256:7143efc49a3216087af3f8ece525e4ef9e90604523bd6c4fbf5527ba08ddc2c3","tree_sha256":"6967df0ed2a4ffdf2f436c74224806980ed534d0649b9fde04e8f8d0b9112c31"},"stack":{"repo":"garrytan/gstack","sha":"699a41cb6808e01240d02e82247693f9170d401a","s
 exit 0 (log/16.txt)
 
-$ sh -c jq -c '.hooks | map_values([.[].hooks[] | [.command, .timeout]])' ~/.capy/work/gstack-evals/installs/b6279d80dfd260f4b5ae5136f44874ea/home/.claude/settings.json; readlink ~/.capy/work/gstack-evals/installs/b6279d80dfd260f4b5ae5136f44874ea/home/.claude/skills/review/SKILL.md ~/.capy/work/gstack-evals/installs/b6279d80dfd260f4b5ae5136f44874ea/home/.claude/skills/gstack
+$ sh -c jq -c '.hooks | map_values([.[].hooks[] | [.command, .timeout]])' ~/.capy/work/gstack-evals/installs/1c7e7c7ccd71f93c3de79db919e1abfe/home/.claude/settings.json; readlink ~/.capy/work/gstack-evals/installs/1c7e7c7ccd71f93c3de79db919e1abfe/home/.claude/skills/review/SKILL.md ~/.capy/work/gstack-evals/installs/1c7e7c7ccd71f93c3de79db919e1abfe/home/.claude/skills/gstack
 {"Stop":[["$SBH/.claude/skills/gstack/hosts/claude/hooks/timeline-stop-hook",5],["$SBH/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook",10]],"UserPromptSubmit":[["$SBH/.claude/skills/gstack/hosts/claude/hooks/skill-route-hook",5]]}
 ../../../.local/share/gstack/review/SKILL.md
 ../../.local/share/gstack
@@ -125,13 +125,13 @@ $ sh -c cd $W/gtree/review && find . -type f | sed 's#^./##' | while read f; do 
 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0
 exit 0 (log/18.txt)
 
-$ sh -c cmp ~/.capy/work/gstack-evals/installs/b6279d80dfd260f4b5ae5136f44874ea/home/.local/share/gstack/review/SKILL.md $W/gtree/review/SKILL.md && echo 'the served review/SKILL.md is the committed full render at the pin'
+$ sh -c cmp ~/.capy/work/gstack-evals/installs/1c7e7c7ccd71f93c3de79db919e1abfe/home/.local/share/gstack/review/SKILL.md $W/gtree/review/SKILL.md && echo 'the served review/SKILL.md is the committed full render at the pin'
 the served review/SKILL.md is the committed full render at the pin
 exit 0 (log/19.txt)
 
 ## The install check: the real layer, then broken copies (section 4)
 
-$ CHECK ~/.capy/work/gstack-evals/installs/b6279d80dfd260f4b5ae5136f44874ea/home $D/install-pins.json
+$ CHECK ~/.capy/work/gstack-evals/installs/1c7e7c7ccd71f93c3de79db919e1abfe/home $D/install-pins.json
 PASS links: 143 under .claude, 0 that do not resolve inside the layer
 PASS served /review: SKILL.md resolves to .local/share/gstack/review/SKILL.md
 review_tree_sha256 3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0 (27 files)
@@ -247,7 +247,7 @@ $ CHECK $W/gtree $D/install-pins.json
 E_RR2_INSTALL_CHECK ValueError: $W/gtree has no .claude or .local/share/gstack/review, so it is not a gstack install layer
 exit 5 (log/30.txt)
 
-$ sh -c test "$(python3 $W/bin/rr2-install-check.py ~/.capy/work/gstack-evals/installs/b6279d80dfd260f4b5ae5136f44874ea/home $D/install-pins.json | tail -1)" = 'install check: PASS' && echo 'the real layer still passes after the broken copies'
+$ sh -c test "$(python3 $W/bin/rr2-install-check.py ~/.capy/work/gstack-evals/installs/1c7e7c7ccd71f93c3de79db919e1abfe/home $D/install-pins.json | tail -1)" = 'install check: PASS' && echo 'the real layer still passes after the broken copies'
 the real layer still passes after the broken copies
 exit 0 (log/31.txt)
 # After a launch (synthetic: an arms.json in run-host.ts's layout at 176fdc7, built from the checked layer): a match, then a changed install digest.
@@ -264,7 +264,7 @@ exit 3 (log/33.txt)
 # Synthetic transcript that loads /review and meets none of its contract: the hook blocks and logs it, so the check passes.
 
 $ HC unmet $W/hook/unmet
-case unmet: arm image gstack-evals-arm:2bfcb2a484d98210, hook command ~/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook (timeout 10 s), 2 transcript lines
+case unmet: arm image gstack-evals-arm:43a1f98d29b10dbb, hook command ~/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook (timeout 10 s), 2 transcript lines
 hook: exit 0, decision block, reason "SKILL_CONTRACT_UNMET review (contract v1): missing specialists-dispatched, adversarial-pass, review-report. Fix: special"
 log: 1 line(s) in $GSTACK_STATE_ROOT/hooks/skill-contract.log, events blocked; record outcome blocked
 hook check: PASS
@@ -272,7 +272,7 @@ exit 0 (log/34.txt)
 # Synthetic transcript that meets the contract (the selection line, both dispatches with results, the report): no block, refused (exit 3).
 
 $ HC met $W/hook/met
-case met: arm image gstack-evals-arm:2bfcb2a484d98210, hook command ~/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook (timeout 10 s), 8 transcript lines
+case met: arm image gstack-evals-arm:43a1f98d29b10dbb, hook command ~/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook (timeout 10 s), 8 transcript lines
 hook: exit 0, decision none, reason none
 log: 1 line(s) in $GSTACK_STATE_ROOT/hooks/skill-contract.log, events met; record outcome met
 hook check: REFUSE (the hook did not block)
@@ -280,7 +280,7 @@ exit 3 (log/35.txt)
 # An empty transcript: no skill loaded, no block, refused (exit 3).
 
 $ HC empty $W/hook/empty
-case empty: arm image gstack-evals-arm:2bfcb2a484d98210, hook command ~/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook (timeout 10 s), 0 transcript lines
+case empty: arm image gstack-evals-arm:43a1f98d29b10dbb, hook command ~/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook (timeout 10 s), 0 transcript lines
 hook: exit 0, decision none, reason none
 log: 1 line(s) in $GSTACK_STATE_ROOT/hooks/skill-contract.log, events no-contract-skill; record outcome none
 hook check: REFUSE (the hook did not block)
@@ -310,9 +310,9 @@ session	delta_lists_log	log_lines	blocked	met	met_after_block	miss	fail_open	unk
 claude-opus-5-5/gstack-full/gbrain-7789-49eb4da5/p1	no	0	0	0	0	0	0	0	0	0	0	0	0	no	unprompted	-
 claude-opus-5-5/gstack-full/gstack-3475-fc69d3ff/p1	no	0	0	0	0	0	0	0	0	0	0	0	0	no	unprompted	-
 claude-opus-5-5/gstack-full/gstack-3507-8c021d12/p1	no	0	0	0	0	0	0	0	0	0	0	0	0	no	unprompted	-
-hook readout: 3 sessions; a contract-log line in 0 (delta.json lists the log in 0, linked in 0, lost in 0); lines: blocked 0, met 0, met_after_block 0, miss 0, fail-open 0 (unknown shape 0), deferred 0, no contract 0; routing log in 0 sessions, routed 0
+hook readout: 3 sessions; an evaluating contract-log line in 0 (delta.json lists the log in 0, linked in 0, lost in 0); lines: blocked 0, met 0, met_after_block 0, miss 0, fail-open 0 (unknown shape 0), deferred 0, no contract 0; routing log in 0 sessions, routed 0
 exposure timing: unprompted 3, after-hook 0, late, no dispatch block 0, unknown (log lost) 0, absent 0; the final block differs from the first in 0 of 0 sessions with two or more blocks
-HOOK_SILENT no smoke session has a contract-hook log line: stop, and take the run to the Captain before any grid
+HOOK_SILENT no smoke session's linked contract log holds an evaluating line: stop, and take the run to the Captain before any grid
 exit 3 (log/40.txt)
 # Synthetic copy of the stub smoke. Session 1: its delta lists the log, the linked log has blocked (specialists missing)
 # then met_after_block, the routing log has a routed line, and a findings block now comes before its dispatches. Session 2:
@@ -325,15 +325,15 @@ session	delta_lists_log	log_lines	blocked	met	met_after_block	miss	fail_open	unk
 claude-opus-5-5/gstack-full/gbrain-7789-49eb4da5/p1	yes	2	1	0	1	0	0	0	0	0	0	1	0	no	after-hook	yes
 claude-opus-5-5/gstack-full/gstack-3475-fc69d3ff/p1	yes	0	0	0	0	0	0	0	0	0	0	0	0	yes	unknown (log lost)	yes
 claude-opus-5-5/gstack-full/gstack-3507-8c021d12/p1	yes	2	1	0	1	0	0	0	0	0	0	0	0	no	after-hook	-
-hook readout: 3 sessions; a contract-log line in 3 (delta.json lists the log in 3, linked in 2, lost in 1); lines: blocked 2, met 0, met_after_block 2, miss 0, fail-open 0 (unknown shape 0), deferred 0, no contract 0; routing log in 1 sessions, routed 1
+hook readout: 3 sessions; an evaluating contract-log line in 2 (delta.json lists the log in 3, linked in 2, lost in 1); lines: blocked 2, met 0, met_after_block 2, miss 0, fail-open 0 (unknown shape 0), deferred 0, no contract 0; routing log in 1 sessions, routed 1
 exposure timing: unprompted 0, after-hook 2, late, no dispatch block 0, unknown (log lost) 1, absent 0; the final block differs from the first in 2 of 2 sessions with two or more blocks
 exit 0 (log/41.txt)
 # The watch on a synthetic launch: a writer plays one session that creates the contract log and a record, appends a
 # second line, then removes its work dir; the watch ends when the writer does. The session also planted a routing log
 # and a record that are links to a host file (synthetic); the watch takes neither.
 
-$ bun $W/bin/rr2-hooks.ts watch $W/watch/out $W/watch/links 240308
-watch: launch 240308 ended; linked 1 hook logs, copied 1 record versions into $W/watch/links
+$ bun $W/bin/rr2-hooks.ts watch $W/watch/out $W/watch/links 291348
+watch: launch 291348 ended; linked 1 hook logs, copied 1 record versions into $W/watch/links
 exit 0 (log/42.txt)
 
 $ sh -c cat $W/watch/links/m/gstack-full/t/p1/skill-contract.log; ls $W/watch/links/m/gstack-full/t/p1/records; test ! -e $W/watch/out/runs/m/gstack-full/t/p1/work && echo 'the work dir is gone; the linked log keeps both lines'; test ! -e $W/watch/links/m/gstack-full/t/p1/skill-route.log && echo 'the planted routing link was not taken'
@@ -346,8 +346,8 @@ exit 0 (log/43.txt)
 # Synthetic: a second launch whose session has hooks/ and skill-contracts/ as links to a folder outside its work dir
 # (on the same file system), which holds a contract log and a record. The watch takes neither.
 
-$ bun $W/bin/rr2-hooks.ts watch $W/watch-out/out $W/watch-out/links 240365
-watch: launch 240365 ended; linked 0 hook logs, copied 0 record versions into $W/watch-out/links
+$ bun $W/bin/rr2-hooks.ts watch $W/watch-out/out $W/watch-out/links 291399
+watch: launch 291399 ended; linked 0 hook logs, copied 0 record versions into $W/watch-out/links
 exit 0 (log/44.txt)
 
 $ sh -c echo files in the links dir: $(find $W/watch-out/links -type f 2>/dev/null | wc -l)
@@ -359,8 +359,8 @@ exit 0 (log/45.txt)
 # not the open file, so the watch removes it. The record is copied from the open file. The hook acts only under the
 # marker the dry run puts at its work dir's root.
 
-$ env RR2_WATCH_TEST_SWAP=$W/watch-swap/outside bun $W/bin/rr2-hooks.ts watch $W/watch-swap/out $W/watch-swap/links 240419
-watch: launch 240419 ended; linked 0 hook logs, copied 1 record versions into $W/watch-swap/links
+$ env RR2_WATCH_TEST_SWAP=$W/watch-swap/outside bun $W/bin/rr2-hooks.ts watch $W/watch-swap/out $W/watch-swap/links 291447
+watch: launch 291447 ended; linked 0 hook logs, copied 1 record versions into $W/watch-swap/links
 exit 0 (log/46.txt)
 
 $ sh -c find $W/watch-swap/links -type f | sed 's#^$W/watch-swap/links/##'; cat $W/watch-swap/links/m/gstack-full/t/p1/records/s.json; test ! -e $W/watch-swap/links/m/gstack-full/t/p1/skill-contract.log && echo 'no log link: the link named another file'; grep -rlq outside $W/watch-swap/links || echo 'nothing from the outside folder is in the links dir'
@@ -372,7 +372,7 @@ exit 0 (log/47.txt)
 # The same hook on a launch dir beside the work dir, with no marker above it: the watch refuses to start (exit 5)
 # and leaves the session's folders as they were.
 
-$ env RR2_WATCH_TEST_SWAP=$W-nomark/outside bun $W/bin/rr2-hooks.ts watch $W-nomark/out $W-nomark/links 240474
+$ env RR2_WATCH_TEST_SWAP=$W-nomark/outside bun $W/bin/rr2-hooks.ts watch $W-nomark/out $W-nomark/links 291496
 E_RR2_HOOKS RR2_WATCH_TEST_SWAP is set, but no .rr2-dry-run marker sits above $W-nomark/out; it is the dry run's test hook only, so unset it; fix: see the usage lines at the top of rr2-hooks.ts
 exit 5 (log/48.txt)
 
@@ -475,43 +475,43 @@ item rr2-judge-adjudicate at $200
 exit 0 (log/60.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr2-smoke-full --run rr2-dry-rr2-smoke-full --amount 120 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-smoke-full.json
-  "lease_id": "rr2-smoke-full.0001.33e054",
+  "lease_id": "rr2-smoke-full.0001.c0f527",
   "state": "open",
 exit 0 (log/61.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr2-smoke-full.0001.33e054 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr2-smoke-full.0001.c0f527 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/62.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr2-grid-full --run rr2-dry-rr2-grid-full --amount 770 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-grid-full.json
-  "lease_id": "rr2-grid-full.0001.e828f4",
+  "lease_id": "rr2-grid-full.0001.4a71c3",
   "state": "open",
 exit 0 (log/63.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr2-grid-full.0001.e828f4 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr2-grid-full.0001.4a71c3 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/64.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr2-grid-none --run rr2-dry-rr2-grid-none --amount 240 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-grid-none.json
-  "lease_id": "rr2-grid-none.0001.2a2f1d",
+  "lease_id": "rr2-grid-none.0001.ff2b3a",
   "state": "open",
 exit 0 (log/65.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr2-grid-none.0001.2a2f1d --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr2-grid-none.0001.ff2b3a --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/66.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr2-judge-match --run rr2-dry-rr2-judge-match --amount 200 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-judge-match.json
-  "lease_id": "rr2-judge-match.0001.be450e",
+  "lease_id": "rr2-judge-match.0001.2923ae",
   "state": "open",
 exit 0 (log/67.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr2-judge-match.0001.be450e --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr2-judge-match.0001.2923ae --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/68.txt)
 
 $ sh -c $B/bin/gstack-evals ledger lease --item rr2-judge-adjudicate --run rr2-dry-rr2-judge-adjudicate --amount 200 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record --json | tee $W/ledger/rr2-judge-adjudicate.json
-  "lease_id": "rr2-judge-adjudicate.0001.9b3f6a",
+  "lease_id": "rr2-judge-adjudicate.0001.76367c",
   "state": "open",
 exit 0 (log/69.txt)
 
-$ $B/bin/gstack-evals ledger settle --lease rr2-judge-adjudicate.0001.9b3f6a --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
+$ $B/bin/gstack-evals ledger settle --lease rr2-judge-adjudicate.0001.76367c --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
 exit 0 (log/70.txt)
 
 $ $B/bin/gstack-evals ledger lease --item rr2-grid-full --run rr2-dry-again --amount 1 --ledger $W/ledger/ledger.sqlite --ledger-record $W/ledger/record
@@ -552,7 +552,7 @@ E_RR_PAUSE ValueError: usage: rr2-pause.py <record dir> <next item> <parallel> -
 exit 5 (log/75.txt)
 
 $ $B/bin/gstack-evals ledger lease --item rr2-smoke-full --run rr2-dry-smoke --amount 120 --ledger $W/pause/ledger.sqlite --ledger-record $W/pause/record --json
-  "lease_id": "rr2-smoke-full.0001.3c78d6",
+  "lease_id": "rr2-smoke-full.0001.2d2925",
 exit 0 (log/76.txt)
 # The smoke's lease reserves $120 and crew use is $1,600: headroom $180, so the grid's spend cap is $180, not its $770.
 
@@ -615,7 +615,7 @@ exit 5 (log/86.txt)
 # A grid lease of $500 already open: $270 left, so even #187's costs do not fit (exit 3).
 
 $ $B/bin/gstack-evals ledger lease --item rr2-grid-full --run rr2-dry-grid --amount 500 --ledger $W/pause/ledger.sqlite --ledger-record $W/pause/record --json
-  "lease_id": "rr2-grid-full.0001.a7aaec",
+  "lease_id": "rr2-grid-full.0001.c4a13b",
 exit 0 (log/87.txt)
 
 $ PAUSE --recost $W/pause/record $W/cost-fits.tsv 4
@@ -674,8 +674,8 @@ exit 0 (log/95.txt)
 # Synthetic: a session whose skill-contracts folder can't be read while the watch runs, as when runTrial removes a work
 # dir between two reads of one scan. The watch keeps scanning to the launch's end and links the log.
 
-$ bun $W/bin/rr2-hooks.ts watch $W/watch-err/out $W/watch-err/links 245865
-watch: launch 245865 ended; linked 1 hook logs, copied 0 record versions into $W/watch-err/links
+$ bun $W/bin/rr2-hooks.ts watch $W/watch-err/out $W/watch-err/links 296883
+watch: launch 296883 ended; linked 1 hook logs, copied 0 record versions into $W/watch-err/links
 exit 0 (log/96.txt)
 
 $ cat $W/watch-err/links/m/gstack-full/t/p1/skill-contract.log
@@ -689,8 +689,48 @@ session	delta_lists_log	log_lines	blocked	met	met_after_block	miss	fail_open	unk
 claude-opus-5-5/gstack-full/gbrain-7789-49eb4da5/p1	no	0	0	0	0	0	0	0	0	0	0	0	0	yes	unknown (log lost)	-
 claude-opus-5-5/gstack-full/gstack-3475-fc69d3ff/p1	no	0	0	0	0	0	0	0	0	0	0	0	0	no	unprompted	-
 claude-opus-5-5/gstack-full/gstack-3507-8c021d12/p1	no	0	0	0	0	0	0	0	0	0	0	0	0	no	unprompted	-
-hook readout: 3 sessions; a contract-log line in 0 (delta.json lists the log in 0, linked in 0, lost in 1); lines: blocked 0, met 0, met_after_block 0, miss 0, fail-open 0 (unknown shape 0), deferred 0, no contract 0; routing log in 0 sessions, routed 0
+hook readout: 3 sessions; an evaluating contract-log line in 0 (delta.json lists the log in 0, linked in 0, lost in 1); lines: blocked 0, met 0, met_after_block 0, miss 0, fail-open 0 (unknown shape 0), deferred 0, no contract 0; routing log in 0 sessions, routed 0
 exposure timing: unprompted 2, after-hook 0, late, no dispatch block 0, unknown (log lost) 1, absent 0; the final block differs from the first in 0 of 0 sessions with two or more blocks
 exit 0 (log/98.txt)
+
+## HOOK_SILENT counts a session only when its linked contract log holds an evaluating line (section 7)
+# Synthetic copy of the stub smoke. Session 1: its delta lists the contract log, and the linked log holds one met line.
+# It counts as logged, so the smoke passes (exit 0).
+fixture sessions: 1 met, 2 skip, 3 skip of 3
+
+$ RO $W/run/hooks-eval $W/run/hooks-eval.hooks --smoke
+session	delta_lists_log	log_lines	blocked	met	met_after_block	miss	fail_open	unknown_shape	deferred	no_contract	other	route_lines	unmet_in_transcript	log_lost	exposure	final_differs
+claude-opus-5-5/gstack-full/gbrain-7789-49eb4da5/p1	yes	1	0	1	0	0	0	0	0	0	0	0	0	no	unprompted	-
+claude-opus-5-5/gstack-full/gstack-3475-fc69d3ff/p1	no	0	0	0	0	0	0	0	0	0	0	0	0	no	unprompted	-
+claude-opus-5-5/gstack-full/gstack-3507-8c021d12/p1	no	0	0	0	0	0	0	0	0	0	0	0	0	no	unprompted	-
+hook readout: 3 sessions; an evaluating contract-log line in 1 (delta.json lists the log in 1, linked in 1, lost in 0); lines: blocked 0, met 1, met_after_block 0, miss 0, fail-open 0 (unknown shape 0), deferred 0, no contract 0; routing log in 0 sessions, routed 0
+exposure timing: unprompted 3, after-hook 0, late, no dispatch block 0, unknown (log lost) 0, absent 0; the final block differs from the first in 0 of 0 sessions with two or more blocks
+exit 0 (log/99.txt)
+# Synthetic copy: every session's delta lists the contract log, a path the agent can create itself. Session 1's linked
+# log is empty, session 2's holds only a no-contract-skill line and session 3's only a state-error line. No session
+# counts as logged: HOOK_SILENT (exit 3).
+fixture sessions: 1 empty, 2 no-contract-skill, 3 state-error of 3
+
+$ RO $W/run/hooks-noeval $W/run/hooks-noeval.hooks --smoke
+session	delta_lists_log	log_lines	blocked	met	met_after_block	miss	fail_open	unknown_shape	deferred	no_contract	other	route_lines	unmet_in_transcript	log_lost	exposure	final_differs
+claude-opus-5-5/gstack-full/gbrain-7789-49eb4da5/p1	yes	0	0	0	0	0	0	0	0	0	0	0	0	no	unprompted	-
+claude-opus-5-5/gstack-full/gstack-3475-fc69d3ff/p1	yes	1	0	0	0	0	0	0	0	1	0	0	0	no	unprompted	-
+claude-opus-5-5/gstack-full/gstack-3507-8c021d12/p1	yes	1	0	0	0	0	1	1	0	0	0	0	0	no	unprompted	-
+hook readout: 3 sessions; an evaluating contract-log line in 0 (delta.json lists the log in 3, linked in 2, lost in 0); lines: blocked 0, met 0, met_after_block 0, miss 0, fail-open 1 (unknown shape 1), deferred 0, no contract 1; routing log in 0 sessions, routed 0
+exposure timing: unprompted 3, after-hook 0, late, no dispatch block 0, unknown (log lost) 0, absent 0; the final block differs from the first in 0 of 0 sessions with two or more blocks
+HOOK_SILENT no smoke session's linked contract log holds an evaluating line: stop, and take the run to the Captain before any grid
+exit 3 (log/100.txt)
+# Synthetic copy: every session's delta lists the contract log and no link holds it: HOOK_SILENT (exit 3).
+fixture sessions: 1 nolink, 2 nolink, 3 nolink of 3
+
+$ RO $W/run/hooks-listed $W/run/hooks-listed.hooks --smoke
+session	delta_lists_log	log_lines	blocked	met	met_after_block	miss	fail_open	unknown_shape	deferred	no_contract	other	route_lines	unmet_in_transcript	log_lost	exposure	final_differs
+claude-opus-5-5/gstack-full/gbrain-7789-49eb4da5/p1	yes	0	0	0	0	0	0	0	0	0	0	0	0	yes	unknown (log lost)	-
+claude-opus-5-5/gstack-full/gstack-3475-fc69d3ff/p1	yes	0	0	0	0	0	0	0	0	0	0	0	0	yes	unknown (log lost)	-
+claude-opus-5-5/gstack-full/gstack-3507-8c021d12/p1	yes	0	0	0	0	0	0	0	0	0	0	0	0	yes	unknown (log lost)	-
+hook readout: 3 sessions; an evaluating contract-log line in 0 (delta.json lists the log in 3, linked in 0, lost in 3); lines: blocked 0, met 0, met_after_block 0, miss 0, fail-open 0 (unknown shape 0), deferred 0, no contract 0; routing log in 0 sessions, routed 0
+exposure timing: unprompted 0, after-hook 0, late, no dispatch block 0, unknown (log lost) 3, absent 0; the final block differs from the first in 0 of 0 sessions with two or more blocks
+HOOK_SILENT no smoke session's linked contract log holds an evaluating line: stop, and take the run to the Captain before any grid
+exit 3 (log/101.txt)
 
 ## Done

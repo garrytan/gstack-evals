@@ -347,4 +347,33 @@ echo "# Synthetic copy of the stub smoke whose first session has no delta.json, 
 echo "# its exposure reads unknown (log lost), not unprompted."
 FN=$W/run/hooks-nodelta; cp -a "$W/run/rr2-smoke-full" "$FN"; rm "$(ls -d "$FN"/runs/*/*/*/p1 | head -1)/delta.json"
 step . RO "$FN" "$FN.hooks"
+echo; echo "## HOOK_SILENT counts a session only when its linked contract log holds an evaluating line (section 7)"
+PLANT() {
+  python3 -c '
+import glob, json, os, sys
+fx, links, specs = sys.argv[1], sys.argv[2], sys.argv[3:]
+line = {"met": "event=met skill=review missing=- waived=-", "no-contract-skill": "event=no-contract-skill skill=-", "state-error": "event=state-error reason=unknown transcript shape"}
+dirs = sorted(d for d in glob.glob(fx + "/runs/*/*/*/p1") if os.path.exists(d + "/trial.json"))
+for k, (d, spec) in enumerate(zip(dirs, specs)):
+    if spec == "skip":
+        continue
+    dl = json.load(open(d + "/delta.json")); dl["added"].append(".gstack-home/hooks/skill-contract.log"); json.dump(dl, open(d + "/delta.json", "w"))
+    if spec == "nolink":
+        continue
+    rel = os.path.relpath(d, fx + "/runs"); os.makedirs(links + "/" + rel, exist_ok=True)
+    open(links + "/" + rel + "/skill-contract.log", "w").write("" if spec == "empty" else "2026-11-03T00:00:01.000Z session=fy%d %s\n" % (k + 1, line[spec]))
+print("fixture sessions: " + ", ".join("%d %s" % (k + 1, s) for k, s in enumerate(specs[:len(dirs)])) + " of %d" % len(dirs))' "$@"
+}
+echo "# Synthetic copy of the stub smoke. Session 1: its delta lists the contract log, and the linked log holds one met line."
+echo "# It counts as logged, so the smoke passes (exit 0)."
+FY=$W/run/hooks-eval; cp -a "$W/run/rr2-smoke-full" "$FY"; PLANT "$FY" "$FY.hooks" met skip skip
+step . RO "$FY" "$FY.hooks" --smoke
+echo "# Synthetic copy: every session's delta lists the contract log, a path the agent can create itself. Session 1's linked"
+echo "# log is empty, session 2's holds only a no-contract-skill line and session 3's only a state-error line. No session"
+echo "# counts as logged: HOOK_SILENT (exit 3)."
+FZ=$W/run/hooks-noeval; cp -a "$W/run/rr2-smoke-full" "$FZ"; PLANT "$FZ" "$FZ.hooks" empty no-contract-skill state-error
+step . RO "$FZ" "$FZ.hooks" --smoke
+echo "# Synthetic copy: every session's delta lists the contract log and no link holds it: HOOK_SILENT (exit 3)."
+FL=$W/run/hooks-listed; cp -a "$W/run/rr2-smoke-full" "$FL"; PLANT "$FL" "$FL.hooks" nolink nolink nolink
+step . RO "$FL" "$FL.hooks" --smoke
 echo; echo "## Done"

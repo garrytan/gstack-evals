@@ -28,8 +28,8 @@
 //   line names specialists-dispatched or adversarial-pass as missing; unprompted when both started before the first block
 //   (or with no block); late, no dispatch block otherwise. final differs: the last block's findings differ from the first
 //   block's (- when the session has fewer than two blocks).
-//   The rows decide nothing. With --smoke it exits 3 (HOOK_SILENT) when no session has a contract-log line, by delta.json
-//   or by link, so the run stops and goes to the Captain before any grid.
+//   The rows decide nothing. With --smoke it exits 3 (HOOK_SILENT) when no session's linked contract log holds an
+//   evaluating line (blocked, met, met_after_block or miss), so the run stops and goes to the Captain before any grid.
 // Exit 0, 3 (HOOK_SILENT, --smoke only), 5 bad input.
 // Usage: bun rr2-hooks.ts watch <launch out dir> <links dir> <launch pid>
 //        B=<gstack-evals at 176fdc7> MAP=<reader map> bun rr2-hooks.ts readout <launch out dir> <links dir> [--smoke]
@@ -212,7 +212,7 @@ for (const [m, a, t, p] of sessions()) {
   const lost = (listed || !delta) && !regular(join(links!, m, a, t, p, "skill-contract.log"));
   const dispatchBlock = contract.some((e) => e.event === "blocked" && (/ missing=(\S+)/.exec(e.line)?.[1] ?? "").replace(/"/g, "").split(",").some((x) => x === "specialists-dispatched" || x === "adversarial-pass"));
   const exposure = !tm.both ? "absent" : lost ? "unknown (log lost)" : dispatchBlock ? "after-hook" : tm.before ? "unprompted" : "late, no dispatch block";
-  if (listed || contract.length) logged++;
+  if (c.blocked + c.met + c.met_after_block + c.miss > 0) logged++;
   add("sessions");
   if (listed) add("listed");
   if (contract.length) add("linked");
@@ -229,9 +229,9 @@ if (!rows.length) bad("no session under " + runs);
 const g = (k: string) => tally.get(k) ?? 0;
 console.log(["session", "delta_lists_log", "log_lines", "blocked", "met", "met_after_block", "miss", "fail_open", "unknown_shape", "deferred", "no_contract", "other", "route_lines", "unmet_in_transcript", "log_lost", "exposure", "final_differs"].join("\t"));
 for (const r of rows) console.log(r.join("\t"));
-console.log("hook readout: " + g("sessions") + " sessions; a contract-log line in " + logged + " (delta.json lists the log in " + g("listed") + ", linked in " + g("linked") + ", lost in " + g("lost") + "); lines: blocked " + g("blocked") + ", met " + g("met") + ", met_after_block " + g("met_after_block") + ", miss " + g("miss") + ", fail-open " + g("fail_open") + " (unknown shape " + g("unknown_shape") + "), deferred " + g("deferred") + ", no contract " + g("no_contract") + "; routing log in " + g("route sessions") + " sessions, routed " + g("routed"));
+console.log("hook readout: " + g("sessions") + " sessions; an evaluating contract-log line in " + logged + " (delta.json lists the log in " + g("listed") + ", linked in " + g("linked") + ", lost in " + g("lost") + "); lines: blocked " + g("blocked") + ", met " + g("met") + ", met_after_block " + g("met_after_block") + ", miss " + g("miss") + ", fail-open " + g("fail_open") + " (unknown shape " + g("unknown_shape") + "), deferred " + g("deferred") + ", no contract " + g("no_contract") + "; routing log in " + g("route sessions") + " sessions, routed " + g("routed"));
 console.log("exposure timing: unprompted " + g("unprompted") + ", after-hook " + g("after-hook") + ", late, no dispatch block " + g("late, no dispatch block") + ", unknown (log lost) " + g("unknown (log lost)") + ", absent " + g("absent") + "; the final block differs from the first in " + g("differs") + " of " + g("two blocks") + " sessions with two or more blocks");
 if (third === "--smoke" && logged === 0) {
-  console.log("HOOK_SILENT no smoke session has a contract-hook log line: stop, and take the run to the Captain before any grid");
+  console.log("HOOK_SILENT no smoke session's linked contract log holds an evaluating line: stop, and take the run to the Captain before any grid");
   process.exit(3);
 }
