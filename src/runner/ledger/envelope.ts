@@ -4,12 +4,13 @@
 // entry slot, a write-once file, so a check made against entries 1 to N-1 lands only in slot N: of two admissions at
 // the same moment one wins the slot, and the other reads the winner's entry and is checked again. Settling a lease
 // moves its metered amount to settled spend and releases the rest. Like every record slot, an entry slot has one winner
-// within one host (wiki finding 2026-10-28-gsta-16-ledger-cross-host-claim), so a program's leases are admitted from one
-// host until a cross-host claim lands.
+// within one host (wiki finding 2026-10-28-gsta-16-ledger-cross-host-claim), so an entry is refused on a network or FUSE
+// mount (E_LEDGER_PATH) and a program's record lives on the local disk of its one envelope host.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { isMicros, usd } from "./money.ts";
+import { readMounts, remoteMount, type Mount } from "./paths.ts";
 import { checkQuotes, claimSlot, isRecordFile, isSkillList, ITEM_NAME, LedgerError, listItems, readItem, type ItemState, type LeaseFile, type Quote } from "./record.ts";
 
 /** Entry 1 of a program: the owner's ceilings, frozen. */
@@ -116,9 +117,12 @@ function readEntries(record: string, program: string): Entry[] {
 }
 
 /** Claims an entry slot: "written" or "present" when it holds these bytes, "taken" when another entry won it. */
-function claim(record: string, entry: Entry): "written" | "present" | "taken" {
+function claim(record: string, entry: Entry, mounts: Mount[] = readMounts()): "written" | "present" | "taken" {
   if (entry.seq > MAX_ENTRY) throw new LedgerError("E_LEDGER_RECORD", "program " + entry.program + " has used all " + MAX_ENTRY + " envelope entries in " + record);
-  const result = claimSlot(entryPath(record, entry.program, entry.seq), JSON.stringify(entry, null, 2) + "\n");
+  const path = entryPath(record, entry.program, entry.seq);
+  const type = remoteMount(path, mounts);
+  if (type) throw new LedgerError("E_LEDGER_PATH", "the record " + record + " is on a " + type + " mount, where an entry slot of program " + entry.program + " can have more than one winner; keep a program's record on the local disk of its one envelope host (docs/budget-ledger.md, Program envelopes)");
+  const result = claimSlot(path, JSON.stringify(entry, null, 2) + "\n");
   return typeof result === "object" ? "taken" : result;
 }
 
@@ -205,8 +209,12 @@ function refusal(st: EnvelopeStatus, skills: string[], amount: number): LedgerEr
   return null;
 }
 
-/** Records a program's envelope: entry 1, the owner's ceilings with their words. A retry returns it; it never changes. */
-export function recordProgram(record: string, p: { program: string; cap_micros: number; skill_cap_micros: number; skills: string[]; credit_rate_micros: number; quotes: Quote[]; now?: Date }, mirror?: () => void): ProgramFile {
+/**
+ * Records a program's envelope, entry 1, the owner's ceilings with their words, and then mirrors it, so an envelope that
+ * lost the race to entry 1 is refused before it mirrors. It never changes: a retry returns it and mirrors it again, which
+ * completes a mirror that failed.
+ */
+export function recordProgram(record: string, p: { program: string; cap_micros: number; skill_cap_micros: number; skills: string[]; credit_rate_micros: number; quotes: Quote[]; now?: Date; mounts?: Mount[] }, mirror?: () => void): ProgramFile {
   checkProgram(p.program);
   if (!isMicros(p.cap_micros) || p.cap_micros === 0 || !isMicros(p.skill_cap_micros) || p.skill_cap_micros === 0) throw new LedgerError("E_USAGE", "the program's and each skill's ceiling must be positive amounts of dollars");
   if (!isSkillList(p.skills)) throw new LedgerError("E_USAGE", "an envelope needs one or more distinct skills, each matching " + ITEM_NAME);
@@ -220,10 +228,9 @@ export function recordProgram(record: string, p: { program: string; cap_micros: 
     if (same(prior)) return prior;
     throw new LedgerError("E_USAGE", "program " + p.program + " already has an envelope of " + usd(prior.cap_micros) + " with " + usd(prior.skill_cap_micros) + " for each of " + prior.skills.join(", ") + "; an envelope never changes");
   };
-  const prior = current();
-  if (prior) return prior;
+  const recorded = current() ?? (claim(record, file, p.mounts) === "taken" ? current()! : file);
   mirror?.();
-  return claim(record, file) === "taken" ? current()! : file;
+  return recorded;
 }
 
 /**
@@ -231,7 +238,7 @@ export function recordProgram(record: string, p: { program: string; cap_micros: 
  * stay at or under the program's ceiling and each of the item's skills' ceilings, or it is refused with
  * ENVELOPE_PROGRAM_STOP or ENVELOPE_SKILL_STOP. afterCheck runs after a check passes and before its slot is claimed.
  */
-export function admitLease(record: string, state: ItemState, lease: LeaseFile, o: { now?: Date; afterCheck?: () => void } = {}): AdmitFile {
+export function admitLease(record: string, state: ItemState, lease: LeaseFile, o: { now?: Date; afterCheck?: () => void; mounts?: Mount[] } = {}): AdmitFile {
   const program = state.program;
   if (program === null) throw new LedgerError("E_INTERNAL", "line item " + state.item + " is in no program, so it has no envelope to admit a lease against");
   const now = o.now ?? new Date();
@@ -245,7 +252,7 @@ export function admitLease(record: string, state: ItemState, lease: LeaseFile, o
     if (stop) throw stop;
     o.afterCheck?.();
     const file: AdmitFile = { schema: 1, kind: "admit", program, seq: entries.length + 1, lease, recorded_at: now.toISOString() };
-    if (claim(record, file) !== "taken") return file;
+    if (claim(record, file, o.mounts) !== "taken") return file;
   }
   throw new LedgerError("E_LEDGER_RECORD", "admitting lease " + lease.lease_id + " lost program " + program + "'s next entry slot " + MAX_ATTEMPTS + " times in a row; read gstack-evals ledger status --program " + program + " and lease again");
 }
@@ -255,10 +262,11 @@ export const creditsCost = (credits_micros: number, rate_micros: number) => Numb
 
 /**
  * Records a crew thread's model use as settled spend on its skills' lines, or as program overhead with no skills. It is
- * spent already, so it is recorded even past a ceiling, with an ENVELOPE_OVER warning per line it passes. A reading equal
- * to the thread's last returns that entry; a lower reading or another split is refused.
+ * spent already, so it is recorded even past a ceiling, with an ENVELOPE_OVER warning for each line this reading takes past
+ * its ceiling. A reading equal to the thread's last returns that entry; a lower reading, another split or a cost the
+ * ledger cannot hold exactly is refused.
  */
-export function recordCrew(record: string, c: { program: string; thread: string; credits_micros: number; skills: string[]; source: string; now?: Date }, warn?: (code: ReasonCode, message: string) => void): CrewFile {
+export function recordCrew(record: string, c: { program: string; thread: string; credits_micros: number; skills: string[]; source: string; now?: Date; mounts?: Mount[] }, warn?: (code: ReasonCode, message: string) => void): CrewFile {
   if (!THREAD.test(c.thread)) throw new LedgerError("E_USAGE", "thread " + JSON.stringify(c.thread) + " must match " + THREAD);
   if (!isMicros(c.credits_micros)) throw new LedgerError("E_USAGE", "credits must be a non-negative number with up to six decimals");
   if (c.skills.length > 0 && !isSkillList(c.skills)) throw new LedgerError("E_USAGE", "crew skills must be distinct names, each matching " + ITEM_NAME);
@@ -274,11 +282,13 @@ export function recordCrew(record: string, c: { program: string; thread: string;
     }
     if (prior && c.credits_micros < prior.credits_micros) throw new LedgerError("E_USAGE", "thread " + c.thread + " already read " + prior.credits_micros / 1_000_000 + " credits; a reading is cumulative and never goes down");
     if (prior && c.credits_micros === prior.credits_micros) return prior;
-    const file: CrewFile = { schema: 1, kind: "crew", program: c.program, seq: entries.length + 1, thread: c.thread, credits_micros: c.credits_micros, spent_micros: creditsCost(c.credits_micros, status.program.credit_rate_micros), skills: c.skills, source: c.source, recorded_at: now.toISOString() };
-    if (claim(record, file) === "taken") continue;
+    const spent_micros = creditsCost(c.credits_micros, status.program.credit_rate_micros);
+    if (!isMicros(spent_micros)) throw new LedgerError("E_USAGE", "thread " + c.thread + "'s reading of " + c.credits_micros / 1_000_000 + " credits at " + usd(status.program.credit_rate_micros) + " per 1,000 credits costs more than the ledger can hold exactly; check --credits");
+    const file: CrewFile = { schema: 1, kind: "crew", program: c.program, seq: entries.length + 1, thread: c.thread, credits_micros: c.credits_micros, spent_micros, skills: c.skills, source: c.source, recorded_at: now.toISOString() };
+    if (claim(record, file, c.mounts) === "taken") continue;
     const after = readEnvelope(record, c.program, now).status;
-    const over = [["program " + c.program, after.total] as const, ...Object.entries(after.skills).map(([s, l]) => ["skill " + s + " in program " + c.program, l] as const)].filter(([, l]) => l.left_micros < 0);
-    for (const [name, l] of over) warn?.("ENVELOPE_OVER", name + " holds " + usd(l.committed_micros) + ", past its " + usd(l.cap_micros) + " ceiling, after thread " + c.thread + "'s crew use; every new stage on it is refused");
+    const over = [["program " + c.program, status.total, after.total] as const, ...Object.keys(after.skills).map((s) => ["skill " + s + " in program " + c.program, status.skills[s]!, after.skills[s]!] as const)].filter(([, before, l]) => before.left_micros >= 0 && l.left_micros < 0);
+    for (const [name, , l] of over) warn?.("ENVELOPE_OVER", name + " holds " + usd(l.committed_micros) + ", past its " + usd(l.cap_micros) + " ceiling, after thread " + c.thread + "'s crew use; every new stage on it is refused");
     return file;
   }
   throw new LedgerError("E_LEDGER_RECORD", "recording thread " + c.thread + "'s crew use lost program " + c.program + "'s next entry slot " + MAX_ATTEMPTS + " times in a row; record it again");

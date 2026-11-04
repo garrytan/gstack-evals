@@ -138,6 +138,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [ENVELOPE_PROGRAM_STOP](#envelope_program_stop) | 2 | U4 |
 | [ENVELOPE_SKILL_STOP](#envelope_skill_stop) | 2 | U4 |
 | [E_ENVELOPE_MISSING](#e_envelope_missing) | 2 | U4 |
+| [E_ENVELOPE_LATE](#e_envelope_late) | 2 | U4 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -314,9 +315,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_LEDGER_PATH
 
-The local SQLite ledger (--ledger, GSTACK_EVALS_LEDGER) is on a network or FUSE mount, or cannot be used. The approval record is not held to this rule.
+The local SQLite ledger (--ledger, GSTACK_EVALS_LEDGER) is on a network or FUSE mount, or cannot be used. A program's record (--ledger-record) is held to the same rule when an envelope entry is written, because an entry slot there can have more than one winner; any other approval record is not.
 
-Fix: Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/). If a lease was closed at $0 because the local ledger failed while taking it (a busy lock, a full disk), fix that and lease again; the new lease takes the next slot.
+Fix: Point --ledger at a local disk. The message prints the default, $XDG_STATE_HOME/gstack-evals/ledger.sqlite (on Capy, under ~/.capy/work/gstack-evals/). If a lease was closed at $0 because the local ledger failed while taking it (a busy lock, a full disk), fix that and lease again; the new lease takes the next slot. For a program, keep its record on the local disk of its one envelope host (docs/budget-ledger.md, Program envelopes).
 
 Exit 2. Side effects: None: refused before any spend. If the local ledger failed after a lease was recorded, that lease is closed at $0 in the record. Retry safe: yes. Resumable: no. Owner: U4.
 
@@ -967,6 +968,14 @@ No envelope is on record for the program a command names: a line item joining it
 Fix: Check --program and --ledger-record. Otherwise escalate: the owner's program and skill ceilings are recorded with gstack-evals ledger envelope and their exact words (docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_ENVELOPE_LATE
+
+A lease on a program's line item reached its expiry after the envelope admitted it and before it was written. Its admission stopped counting at that expiry and another stage may hold the room, so the lease is not written.
+
+Fix: Lease again. If it happens again, the machine is stalling between admission and the lease write, or --ttl is too short.
+
+Exit 2. Side effects: None: refused before any spend. The admission stays in the program's record and counts nothing. Retry safe: yes. Resumable: no. Owner: U4.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

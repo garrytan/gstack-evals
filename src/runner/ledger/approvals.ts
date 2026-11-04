@@ -34,10 +34,10 @@ export function mirrorApproval(m: MirrorRequest): void {
   addRows(m.bin, ask, "gstack-evals line item " + m.item + " in the approval record " + m.record, m.quotes, m.branch);
 }
 
-/** Mirrors a program envelope's approval the same way, one row per quote. */
-export function mirrorEnvelope(m: { bin: string | null; program: string; cap_micros: number; skill_cap_micros: number; skills: string[]; credit_rate_micros: number; record: string; quotes: Quote[]; branch?: string }): void {
+/** Mirrors a program envelope's approval the same way, one row per quote, naming its record and its envelope host. */
+export function mirrorEnvelope(m: { bin: string | null; program: string; cap_micros: number; skill_cap_micros: number; skills: string[]; credit_rate_micros: number; record: string; host: string; quotes: Quote[]; branch?: string }): void {
   const ask = "Approve a gstack-evals program envelope of " + usd(m.cap_micros) + " for program " + m.program + ", with " + usd(m.skill_cap_micros) + " for each of its " + m.skills.length + " skills (" + m.skills.join(", ") + "), counting crew use at " + usd(m.credit_rate_micros) + " per 1,000 credits";
-  addRows(m.bin, ask, "gstack-evals program " + m.program + " in the approval record " + m.record, m.quotes, m.branch);
+  addRows(m.bin, ask, "gstack-evals program " + m.program + " in the approval record " + m.record + " on envelope host " + m.host, m.quotes, m.branch);
 }
 
 function addRows(bin: string | null, ask: string, scope: string, quotes: Quote[], branch?: string): void {

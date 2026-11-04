@@ -4,11 +4,11 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { CODES, docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import { approvalsBin, mirrorApproval, mirrorEnvelope } from "./approvals.ts";
 import { envelopeStatus, recordCrew, recordProgram, type EnvelopeLine } from "./envelope.ts";
-import { exportLease, importSettlement, ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "./ledger.ts";
+import { exportLease, importSettlement, ledgerStatus, machineId, openLease, reconcileLease, recordApproval, settleLease } from "./ledger.ts";
 import { openLocalLedger } from "./local.ts";
 import { parseUsd, usd } from "./money.ts";
 import { ledgerPath, recordPath } from "./paths.ts";
-import { isRecordFile, LedgerError, type Admission, type Quote } from "./record.ts";
+import { isRecordFile, LedgerError, readItem, type Admission, type Quote } from "./record.ts";
 
 export const HELP = `Usage: gstack-evals ledger <command> [options]
 
@@ -36,7 +36,8 @@ export const HELP = `Usage: gstack-evals ledger <command> [options]
             Every lease on its items is admitted against both, counting settled spend and every open reservation.
   crew      --program <name> --thread <code> --credits <n> --skills <a,b> | --overhead --source <ref>
             Record a crew thread's model use, its cumulative credits reading, as settled spend on its skills' lines.
-  status    --program <name>             The envelope's lines: settled, open and admitted spend, and what is left.
+  status    --program <name> [--item <name>]
+            The envelope's lines: settled, open and admitted spend, and what is left; --item shows that item's skills.
 
 Every command takes --ledger <path> (GSTACK_EVALS_LEDGER), --ledger-record <dir> (GSTACK_EVALS_LEDGER_RECORD)
 and --json. Amounts are dollars with up to six decimals. Guide: docs/budget-ledger.md`;
@@ -124,7 +125,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       print(file, "APPROVED: item=" + file.item + " cap=" + usd(file.cap_micros) + (file.admission ? " admission=" + file.admission : "") + (file.program ? " program=" + file.program + " skills=" + file.skills!.join(",") : "") + " approval=" + file.seq + " record=" + record);
     } else if (cmd === "envelope") {
       const p = { program: need("--program"), cap_micros: dollars("--cap"), skill_cap_micros: dollars("--skill-cap"), skills: list("--skills") ?? fail("gstack-evals ledger envelope needs --skills"), credit_rate_micros: dollars("--credit-rate"), quotes: quotes(flags) };
-      const file = recordProgram(record, p, () => mirrorEnvelope({ bin: approvalsBin(env), ...p, record, branch: one("--branch") }));
+      const file = recordProgram(record, p, () => mirrorEnvelope({ bin: approvalsBin(env), ...p, record, host: machineId(), branch: one("--branch") }));
       print(file, "ENVELOPE: program=" + file.program + " cap=" + usd(file.cap_micros) + " skill_cap=" + usd(file.skill_cap_micros) + " skills=" + file.skills.join(",") + " credit_rate=" + usd(file.credit_rate_micros) + " per 1000 credits record=" + record);
     } else if (cmd === "crew") {
       if (flags.has("--overhead") === flags.has("--skills")) throw new Usage("crew use goes on --skills <a,b> or on --overhead, the program's own line");
@@ -133,7 +134,11 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       const file = recordCrew(record, c, warn);
       print(file, "CREW: program=" + file.program + " thread=" + file.thread + " credits=" + usd(file.credits_micros).slice(1).replace(/\.00$/, "") + " spent=" + usd(file.spent_micros) + " skills=" + (file.skills.join(",") || "overhead") + " entry=" + file.seq + " record=" + record);
     } else if (cmd === "status" && flags.has("--program")) {
-      const s = envelopeStatus(record, need("--program"));
+      const all = envelopeStatus(record, need("--program"));
+      const item = one("--item");
+      if (item !== undefined && !all.items.includes(item)) throw new Usage("line item " + item + " is not in program " + all.program.program + "; its items are " + (all.items.join(",") || "none"));
+      const own = item === undefined ? null : readItem(record, item).skills;
+      const s = own === null ? all : { ...all, skills: Object.fromEntries(Object.entries(all.skills).filter(([skill]) => own.includes(skill))), items: [item!] };
       const text = (l: EnvelopeLine) => "cap=" + usd(l.cap_micros) + " committed=" + usd(l.committed_micros) + " settled=" + usd(l.settled_micros) + " open=" + usd(l.open_micros) + " pending=" + usd(l.pending_micros) + " left=" + usd(l.left_micros);
       const lines = ["ENVELOPE: program=" + s.program.program + " " + text(s.total), ...Object.entries(s.skills).map(([skill, l]) => "SKILL: " + skill + " " + text(l)), "OVERHEAD: settled=" + usd(s.overhead_micros), "ITEMS: " + (s.items.join(",") || "-")];
       for (const [name, l] of [["program " + s.program.program, s.total] as const, ...Object.entries(s.skills).map(([skill, l]) => ["skill " + skill, l] as const)]) {

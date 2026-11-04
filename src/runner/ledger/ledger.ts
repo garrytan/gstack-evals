@@ -117,7 +117,8 @@ export type RequireAdmission = (record: string, lease: LeaseFile) => string | nu
 /**
  * Leases a line item for a run, in the record and, when given, in this machine's local ledger. A lease on a program's
  * item is admitted against the program's envelope first (envelope.ts), so it is refused before anything is written
- * when it would take the program or one of the item's skills past its ceiling.
+ * when it would take the program or one of the item's skills past its ceiling. Its admission counts only until the
+ * lease's expiry, so a lease whose expiry passes before it is written is refused with E_ENVELOPE_LATE.
  */
 export function openLease(record: string, local: LocalLedger | null, req: LeaseRequest): Lease {
   const state = read(record, req.item);
@@ -147,7 +148,10 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
   const unproven = state.admission && (req.requireAdmission ?? rigAdmission())(record, file);
   if (unproven && state.admission === "required") throw new LedgerError("E_RIG_UNPROVEN", "line item " + req.item + " requires admission: " + unproven);
   if (unproven) req.warn?.("RIG_UNPROVEN", "line item " + req.item + " leased without admission: " + unproven);
-  if (state.program !== null) admitLease(record, state, file, { now });
+  if (state.program !== null) {
+    admitLease(record, state, file, { now });
+    if (Date.now() >= Date.parse(file.expires_at)) throw new LedgerError("E_ENVELOPE_LATE", "lease " + file.lease_id + " on line item " + req.item + " was admitted, but its expiry at " + file.expires_at + " passed before it was written, so it is not written and no call can spend against it; lease again");
+  }
   if (typeof write(record, file) === "object") {
     admit(record, read(record, req.item), req.run_id);
     throw new LedgerError("E_LEASE_UNSETTLED", "another lease on line item " + req.item + " was written at the same moment; read gstack-evals ledger status");
