@@ -51,7 +51,7 @@ The Captain (GSTA-2) made two decisions for R3b's run threads. They are recorded
 
 > Run threads set VM_USD_PER_HOUR=0.60 and VM_RESERVE_HOURS=4 explicitly on every launch, and a part with no harbor.log line 'laneb order: applied 140 trials' stops before analysis; #200's code does not yet enforce either, so the run brief does.
 
-Some facts at dbcb5b49 bear on them. settings.json registers three hooks in all, and timeline-stop-hook is the second Stop entry, so "third" in decision 1 counts every hook. No code under quick/laneb/r3 reads timeline-stop-hook output, so the dry run prints no line for it. Only the three grid parts carry an order.json (rule 1 below), and each holds 140 trials, so the order line can appear only in grid-1, grid-2 and grid-3. The dry run sets VM_USD_PER_HOUR=0.60 and VM_RESERVE_HOURS=4 on every r3b.ts call, but it does not drive decision 2's checks: its stub ssh writes no harbor.log.
+Some facts at dbcb5b49 bear on them. The tar's settings.json registers three hooks in all, and timeline-stop-hook is its first Stop entry, before skill-contract-stop-hook (dryrun.txt rule A5), so "third" in decision 1 counts it after the two hooks amendment 5 names. No code under quick/laneb/r3 reads timeline-stop-hook output, so the dry run prints no line for it. Only the three grid parts carry an order.json (rule 1 below), and each holds 140 trials, so the order line can appear only in grid-1, grid-2 and grid-3. The dry run sets VM_USD_PER_HOUR=0.60 and VM_RESERVE_HOURS=4 on every r3b.ts call, but it does not drive decision 2's checks: its stub ssh writes no harbor.log.
 
 ## The dry run
 
