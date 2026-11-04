@@ -8,9 +8,9 @@ const LOG = process.env.FAKE_UPSTREAM_LOG ?? "fake-upstream.jsonl";
 const PORT = Number(process.env.FAKE_UPSTREAM_PORT ?? 8799);
 const USAGE = { input_tokens: 1200, cache_creation_input_tokens: 300, cache_read_input_tokens: 5000, output_tokens: 150 };
 
-type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: unknown };
+export type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: unknown };
 
-function toolResults(messages: any[]): Record<string, string> {
+export function toolResults(messages: any[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const m of messages ?? []) {
     if (m.role !== "user" || !Array.isArray(m.content)) continue;
@@ -53,7 +53,7 @@ export function sse(model: string, blocks: Block[]): string {
   return ev.map(([n, e]) => `event: ${n}\ndata: ${JSON.stringify(e)}\n\n`).join("");
 }
 
-export function startFakeUpstream(port = PORT, logPath = LOG) {
+export function startFakeUpstream(port = PORT, logPath = LOG, script: (body: any) => Block[] = nextTurn) {
   return Bun.serve({
     hostname: "127.0.0.1",
     port,
@@ -67,7 +67,7 @@ export function startFakeUpstream(port = PORT, logPath = LOG) {
         appendFileSync(logPath, JSON.stringify(entry) + "\n");
         return Response.json({ input_tokens: 10 });
       }
-      const blocks: Block[] = tools.includes("Bash") ? nextTurn(body) : [{ type: "text", text: "ok" }];
+      const blocks: Block[] = tools.includes("Bash") ? script(body) : [{ type: "text", text: "ok" }];
       appendFileSync(logPath, JSON.stringify({ ...entry, reply: blocks.map((b) => (b.type === "tool_use" ? b.name : "text")) }) + "\n");
       if (!body.stream) {
         return Response.json({ id: "msg_fake", type: "message", role: "assistant", model: body.model, content: blocks, stop_reason: blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn", usage: USAGE });

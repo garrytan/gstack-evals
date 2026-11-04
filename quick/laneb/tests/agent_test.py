@@ -5,10 +5,12 @@ runner/agent on PYTHONPATH.
 """
 
 import asyncio
+import io
 import json
 import os
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import traceback
@@ -53,6 +55,7 @@ except ImportError:
     module("pydantic", Field=lambda default=None, **k: default)
 
 import laneb_agent as la  # noqa: E402
+import laneb_hooks as lh  # noqa: E402
 from usersim import Simulator  # noqa: E402
 
 la.OPEN_RETRY_S = 0
@@ -465,6 +468,63 @@ def test_post_json_keeps_the_status_and_body_of_an_http_error(tmp):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def _hook_tar(files):
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def hooks_agent(tmp, fake):
+    a = agent(tmp, fake)
+    a.__class__ = lh.LanebHooksAgent
+    return a
+
+
+def test_the_told_arms_gstack_hook_state_is_copied_out_after_the_session(tmp):
+    fake = Fake(tmp)
+    log = b"2026-11-04T00:00:00.000Z session=abc event=blocked skill=investigate missing=debug-report waived=-\n"
+    state = _hook_tar({"hooks/skill-contract.log": log, "skill-contracts/abc.json": b'{"version": 1}'})
+    a = hooks_agent(tmp, fake)
+    plain = a._exec
+    a._exec = lambda container, script, stdin=None, timeout=300: subprocess.CompletedProcess(script, 0, state, b"") if script == lh.GSTACK_HOOK_STATE else plain(container, script, stdin, timeout)
+    run(a)
+    out = tmp / "trial" / "evaluator" / "gstack-hooks"
+    assert (out / "hooks" / "skill-contract.log").read_bytes() == log
+    assert (out / "skill-contracts" / "abc.json").exists()
+    events = [json.loads(l) for l in (tmp / "trial" / "evaluator" / "usersim-events.jsonl").read_text().splitlines()]
+    assert [e["files"] for e in events if e.get("event") == "gstack_hooks"] == [["hooks/skill-contract.log", "skill-contracts/abc.json"]]
+
+
+def test_an_arm_with_no_gstack_state_copies_nothing_and_lane_bs_own_agent_never_copies(tmp):
+    fake = Fake(tmp)
+    a = hooks_agent(tmp, fake)
+    run(a)
+    assert not (tmp / "trial" / "evaluator" / "gstack-hooks").exists()
+    assert any(c[1] == lh.GSTACK_HOOK_STATE[:40] for c in fake.calls)
+    plain = Fake(tmp)
+    run(agent(tmp, plain))
+    assert not any(c[1] == lh.GSTACK_HOOK_STATE[:40] for c in plain.calls)
+    summary = json.loads((tmp / "trial" / "evaluator" / "laneb-summary.json").read_text())
+    assert "gstack_hooks" not in summary["teardown_errors"], summary["teardown_errors"]
+
+
+def test_a_hook_state_copy_that_fails_or_escapes_is_recorded_after_the_close(tmp):
+    for out, rc in ((b"", 2), (_hook_tar({"../escape.log": b"x"}), 0)):
+        fake = Fake(tmp)
+        a = hooks_agent(tmp, fake)
+        plain = a._exec
+        a._exec = lambda container, script, stdin=None, timeout=300, out=out, rc=rc: subprocess.CompletedProcess(script, rc, out, b"tar: failed") if script == lh.GSTACK_HOOK_STATE else plain(container, script, stdin, timeout)
+        run(a)
+        summary = json.loads((tmp / "trial" / "evaluator" / "laneb-summary.json").read_text())
+        assert "gstack_hooks" in summary["teardown_errors"], summary["teardown_errors"]
+        assert summary["session"]["ok_responses"] == 2 and ("post", "close", 120) in fake.calls
+        assert not (tmp / "escape.log").exists() and not (tmp / "trial" / "evaluator" / "escape.log").exists()
 
 
 if __name__ == "__main__":

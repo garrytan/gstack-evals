@@ -128,6 +128,11 @@ Each entry gives the meaning, the fix, and these facts:
 | [NOLOSS_UNDERPOWERED](#noloss_underpowered) | warning | U13 |
 | [FALSE_ALARM_GATE_FAIL](#false_alarm_gate_fail) | warning | U13 |
 | [E_REAL_SANDBOX_SETUP](#e_real_sandbox_setup) | 2 | U20 |
+| [E_OUTCOME_ARM](#e_outcome_arm) | 2 | U20 |
+| [E_OUTCOME_TRANSCRIPT](#e_outcome_transcript) | 2 | U20 |
+| [E_OUTCOME_AUTOPLAN_CONFIG](#e_outcome_autoplan_config) | 2 | U20 |
+| [E_OUTCOME_TOLD_INSTALL](#e_outcome_told_install) | 2 | U20 |
+| [E_OUTCOME_CLEAN_ROOM](#e_outcome_clean_room) | 2 | U20 |
 | [E_REAL_SANDBOX_EGRESS](#e_real_sandbox_egress) | 2 | U20 |
 | [E_REAL_SANDBOX_RECORD](#e_real_sandbox_record) | 2 | U20 |
 | [E_REAL_ARM_BUILD](#e_real_arm_build) | 2 | U10 |
@@ -139,6 +144,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [ENVELOPE_SKILL_STOP](#envelope_skill_stop) | 2 | U4 |
 | [E_ENVELOPE_MISSING](#e_envelope_missing) | 2 | U4 |
 | [E_ENVELOPE_LATE](#e_envelope_late) | 2 | U4 |
+| [E_MUTATION_DOCKER](#e_mutation_docker) | 2 | U20 |
+| [E_MUTATION_INPUT](#e_mutation_input) | 2 | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -889,6 +896,46 @@ Fix: Read the message. Install git and jq on the sidecar's host, or fix the task
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
+### E_OUTCOME_ARM
+
+The outcome-skills arm registry (lanes/outcome-skills/arms/registry.json) refused. Either the file breaks its shape (a told arm without exactly one skill turn that opens with its skill, a turn 1 that does not open with the statement, a missing or non-positive limit, a clean-room told arm, a told arm whose skill its family does not hold, a G skill with no told arm), or a caller asked for something G does not run: a stand-in, forced or untold arm (not run in G, with the prereg's reason), a skill or exposure detector of family X or U (not built), an unknown name (an inherited name such as __proto__ or toString included), or an empty task statement.
+
+Fix: Read the message. Use an arm that armNames lists for a G skill. A registry edit keeps the G prereg's turn texts, whose sha256s tests/outcome-skills/registry.test.ts pins; X and U arms and detectors come with their own families.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OUTCOME_TRANSCRIPT
+
+A session record file the G exposure detectors read (lanes/outcome-skills/arms/exposure.ts) is not readable: a line before the last is not a JSON object, or an assistant or user record has no phase or parent_tool_use_id, so its turn and author are unknown. A torn last line is dropped and returned, not refused.
+
+Fix: Write the record with a recorder that writes one JSON object per line and keeps each message's phase and parent_tool_use_id. Never hand-edit a session record to change an exposure read.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_OUTCOME_AUTOPLAN_CONFIG
+
+autoplan's told configuration check (lanes/outcome-skills/arms/autoplan.ts, G prereg section 4) refused. The pin checkout is not 699a41cb or its gstack-session-kind or autoplan-lean.ts differs, the slash line is not /autoplan PLAN.md, a codex binary or an OpenAI or Codex variable is in the arm's environment, or the pin's own leanMode and gstack-session-kind select the lean feature kind or a session kind other than interactive on the arm's environment. autoplan's admission does not start.
+
+Fix: Don't change the frozen configuration to pass. Fix the image or environment only where it drifted from the configuration; any other cause goes to the Captain, as the G prereg says.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OUTCOME_TOLD_INSTALL
+
+The told install (lanes/outcome-skills/arms/told-install.sh and told.ts) does not match the pin's lite manifest: the home was not clean, the checkout is not 699a41cb at 1.94.39.0, a pin source file the detectors were built from differs, config.yaml does not set claude_loadout: lite, the lite render's file count or tree digest differs from #193's or it holds a broken link, settings.json is missing or not JSON, the hooks differ, a hook command is not its source's pin file under the HOME the session sees (.claude/skills/gstack/hosts/claude/hooks/&lt;name>), a hook file's sha256 differs from the pin's, or git status shows a change in the checkout. Or the told runtime preflight did not find bun on the session's PATH in the arm's image, or could not finish.
+
+Fix: Install again into a fresh HOME with told-install.sh, at the path the session will see as HOME, and never edit a rendered or checked-out file. Put bun on the image's PATH for the session's user. A different digest from a clean install means the install changed, which goes to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OUTCOME_CLEAN_ROOM
+
+The none arm's clean-room preflight (lanes/outcome-skills/arms/clean-room.ts, running panel v3 C1's script) found a Capy drive or gstack in the arm's session. C1's scan: a .capy, .local/share/gstack or .claude/skills path in its home, a Capy drive mounted under any home directory or under /root (seen through other users' 0700 homes), a home or work-tree AGENTS.md or CLAUDE.md that names gstack, or a work tree's .claude/skills. O1's second scan: a .gstack in the home, a .claude/skills folder anywhere in a work tree outside .git, or gstack named in a CLAUDE.md in a parent of a work dir, the home's CLAUDE.md, the home's .claude/settings.json (its hooks), or an entry under .claude/commands or .claude/plugins in the home or a work dir. Or either scan could not finish in the image. Each hit is named.
+
+Fix: Remove the named path or mount from the none arm's session, or make the image present and able to run sh with no network, then rerun the same command. The refusal comes before any lease.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
 ### E_REAL_SANDBOX_EGRESS
 
 The trial container's IP-and-port egress allowlist could not be applied or did not verify: the nftables helper failed, the table read back differs from the one written, an allowed endpoint was unreachable, or a denied probe got through. The agent never started.
@@ -976,6 +1023,22 @@ A lease on a program's line item reached its expiry after the envelope admitted 
 Fix: Lease again. If it happens again, the machine is stalling between admission and the lease write, or --ttl is too short.
 
 Exit 2. Side effects: None: refused before any spend. The admission stays in the program's record and counts nothing. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_MUTATION_DOCKER
+
+Docker failed while building a mutation tool or scorer image, creating a volume or preparing a tree for the mutation scorer, so the tree got no mutation reading.
+
+Fix: Read the build or prepare log in the message. A tool image builds once with the network; the scorer image and every scoring step need none. Fix the host or the image and score the tree again.
+
+Exit 2. Side effects: Partial: images already built stay cached; the scorer's volumes are removed. Nothing was spent. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_MUTATION_INPUT
+
+The mutation scorer was given a project image that is not on this host.
+
+Fix: Build or load the task's project image first, then score the tree again.
+
+Exit 2. Side effects: None: refused before any container ran. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

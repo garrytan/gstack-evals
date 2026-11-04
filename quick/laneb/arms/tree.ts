@@ -1,7 +1,8 @@
 // Tree walk, digest and manifest for the arm trees.
 //
 // skills.tree_digest covers everything under .claude/skills; skills.skill_md_digest
-// covers only <skill>/SKILL.md, the placebo generator's input.
+// covers only <skill>/SKILL.md, the placebo generator's input. A tree with .claude/settings.json also records that
+// file's sha256 and every hook command it registers (settings.hooks), so a manifest shows which hooks an arm runs.
 //
 // The digest is sha256 over one line per entry, sorted by relative path:
 // "<sha256 of the file>  <path>\n" for a regular file and
@@ -52,12 +53,26 @@ export function skillNames(root: string, skillsDir = ".claude/skills"): string[]
   }
 }
 
-export function manifest(arm: string, root: string, tarPath: string, meta: Record<string, string>, skillsDir = ".claude/skills") {
+export type SettingsHook = { event: string; matcher: string; command: string; timeout: number | null; source: string | null };
+
+// The hook commands a Claude Code settings.json registers, in file order.
+export function settingsHooks(settings: any): SettingsHook[] {
+  return Object.entries(settings?.hooks ?? {}).flatMap(([event, groups]) =>
+    (Array.isArray(groups) ? groups : []).flatMap((g: any) => (Array.isArray(g?.hooks) ? g.hooks : []).map((h: any) => ({
+      event, matcher: typeof g.matcher === "string" ? g.matcher : "", command: String(h?.command ?? ""),
+      timeout: typeof h?.timeout === "number" ? h.timeout : null, source: typeof h?._gstack_source === "string" ? h._gstack_source : null,
+    }))));
+}
+
+export function manifest(arm: string, root: string, tarPath: string, meta: Record<string, unknown>, skillsDir = ".claude/skills") {
   const entries = walk(root);
   const skillsPrefix = skillsDir + "/";
   const files = entries.filter((e) => e.type === "file");
   const skillEntries = entries.filter((e) => e.path.startsWith(skillsPrefix)).map((e) => ({ ...e, path: e.path.slice(skillsPrefix.length) }));
   const tar = readFileSync(tarPath);
+  const settingsPath = join(root, ".claude/settings.json");
+  const settings = entries.some((e) => e.path === ".claude/settings.json" && e.type === "file")
+    ? { sha256: sha256(readFileSync(settingsPath)), hooks: settingsHooks(JSON.parse(readFileSync(settingsPath, "utf8"))) } : null;
   const summary = {
     arm,
     ...meta,
@@ -75,6 +90,7 @@ export function manifest(arm: string, root: string, tarPath: string, meta: Recor
       skill_md_digest: treeDigest(skillEntries.filter((e) => /^[^/]+\/SKILL\.md$/.test(e.path))),
       names: skillNames(root, skillsDir),
     },
+    ...(settings ? { settings } : {}),
   };
   const list = ["sha256\tbytes\tmode\ttype\tpath", ...entries.map((e) => [e.sha256, e.size, e.mode.toString(8), e.type, e.path].join("\t"))];
   return { summary, list: list.join("\n") + "\n" };

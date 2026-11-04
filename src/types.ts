@@ -289,3 +289,57 @@ export interface RigBlock {
   recipe_sha256: string;
 }
 
+
+// L1 per-session outcome table (the L1 superseding preregistration, section 10, U2). quick/laneb/l1/table.ts writes one row
+// per Lane B trial from its SDK message log, Harbor result and the proxy's session rows; quick/laneb/l1/analyze.ts reads the
+// rows into every endpoint and verdict. Only U2 edits these types.
+
+export type L1Arm = "none" | "before-u" | "after-u" | "before-t" | "after-t" | "off-u" | "off-t";
+export type L1Instrument = "pilot" | "smoke" | "f1" | "tb2";
+
+export interface L1SessionRow {
+  schema: "l1-session/1";
+  /** The upstream model id the cell ran, as the proxy config names it. */
+  model: string;
+  instrument: L1Instrument;
+  part: string | null;
+  arm: L1Arm;
+  task: string;
+  /** The repository cluster: a SWE-rebench id less its trailing -<number>; a TB2 task is its own cluster. */
+  repo: string;
+  trial: string;
+  /**
+   * graded: a verifier reward after a model response, or an allowance or turn-cap stop after one; infra: no grade, a
+   * coverage gap; cap_stop: the ledger refused the session's reserve, so the run is incomplete; contaminated: a none session
+   * that read an installed gstack file, dropped as untested.
+   */
+  outcome: "graded" | "infra" | "cap_stop" | "contaminated";
+  /** Verifier reward 1 on a graded session that no allowance or turn cap stopped. */
+  pass: boolean;
+  reward: number | null;
+  allowance_stop: boolean;
+  turn_cap: boolean;
+  reason: string;
+  cost_usd: number | null;
+  tokens: number | null;
+  /** Probe L: a load of /investigate resolved to the arm's gstack install. */
+  load_investigate: boolean;
+  gstack_loads: string[];
+  repo_loads: string[];
+  skill_unresolved: number;
+  /** Probe I: a complete /investigate record; false on an allowance or turn-cap stop. */
+  complete: boolean;
+  probe_i: { report: boolean; fix_edited: boolean; status: boolean; check_after_edit: boolean; edits: number };
+  /** S13: background work still running at the first result. */
+  background_at_result: boolean;
+  /** The after pin's contract hook blocked once in the session (its block text reached the log). */
+  contract_block: boolean;
+  /** From evaluator/l1-evidence.json; null when no harness unit recorded it. */
+  route_hook: boolean | null;
+  contract_record: boolean | null;
+  contract_check_met: boolean | null;
+  /** The no-gstack read audit's hits (none arm). */
+  audit_hits: string[];
+  /** The sha256 of the probes.ts that scored this row. */
+  probes_sha256: string;
+}

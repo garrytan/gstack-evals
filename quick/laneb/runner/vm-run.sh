@@ -37,7 +37,7 @@ for gz in "$run"/arms/*.tar.gz; do
   [ -e "$gz" ] || continue
   gzip -dkf "$gz"
   name=$(basename "$gz" .tar.gz)
-  want=$(jq -r --arg n "$name" '.arms[] | select(.name == $n) | .sha256' "$run/manifest.json")
+  want=$(jq -r --arg n "$name" 'first(.arms[] | select((.tar_name // .name) == $n) | .sha256) // ""' "$run/manifest.json")
   got=$(sha256sum "${gz%.gz}" | cut -d' ' -f1)
   [ "$got" = "$want" ] || { echo "arm $name: tar sha256 $got, manifest says $want" >&2; exit 5; }
 done
@@ -165,7 +165,12 @@ proxy_status() {
   curl -fsS --max-time 10 127.0.0.1:$control_port/totals \
     | jq -ce 'select(has("cap_stop") and (.sessions | type) == "number" and (.open_sessions | type) == "number") | {sessions, open_sessions, unsettled_sessions, cap_stop, global_spent_micros}'
 }
-sed "s#__GATEWAY__#$gw#g" "$run/job.json" > "$run/out/job.resolved.json"
+# More jobs (L1's rectangles, l1/l1.ts): job-2.json, job-3.json, ... run after job.json, one after another, each with its
+# own resolved config and Harbor log (out/harbor-2.log, ...). A STOP file or a latched cap stop keeps the next job from
+# starting; the exit code is the first job's that was not 0, or 130 when a stop kept a job from starting.
+jobs=(job)
+while read -r j; do jobs+=("$j"); done < <(cd "$run" && ls 2>/dev/null | sed -n 's/^\(job-[0-9][0-9]*\)\.json$/\1/p' | sort -t- -k2 -n)
+for j in "${jobs[@]}"; do sed "s#__GATEWAY__#$gw#g" "$run/$j.json" > "$run/out/$j.resolved.json"; done
 cd "$run"
 # With a STOP_ON_CAP file in the run dir, a latched cap stop (the ledger or the batch cap refused a session) also stops
 # Harbor, so the run ends incomplete instead of starting trials that can't open a session; out/cap-stop.json records the
@@ -190,9 +195,20 @@ while kill -0 $$ 2>/dev/null; do
   fi
   sleep 2
 done) >/dev/null 2>&1 </dev/null &
+# A run dir with order.json (an R3b grid part) runs its paid job in that trial order: runner/agent/sitecustomize.py reads
+# LANEB_TRIAL_ORDER, and the job fails before any trial when the file doesn't name each trial once. The oracle job above
+# keeps Harbor's own order.
+order=""
+[ ! -f "$run/order.json" ] || order="LANEB_TRIAL_ORDER='$run/order.json' "
 set +e
-sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' harbor run -y -c '$run/out/job.resolved.json'" > "$run/out/harbor.log" 2>&1
-rc=$?
+rc=0
+for j in "${jobs[@]}"; do
+  if [ -e "$run/STOP" ] || [ -e "$run/out/cap-stop.json" ]; then [ "$rc" -ne 0 ] || rc=130; break; fi
+  log=harbor.log; [ "$j" = job ] || log="harbor-${j#job-}.log"
+  sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' ${order}harbor run -y -c '$run/out/$j.resolved.json'" > "$run/out/$log" 2>&1
+  r=$?
+  [ "$rc" -ne 0 ] || rc=$r
+done
 set -e
 curl -fsS -X POST 127.0.0.1:$control_port/close-all > "$run/out/close-all.json" || true
 curl -fsS 127.0.0.1:$control_port/totals > "$run/out/proxy-totals.json" || true
