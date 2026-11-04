@@ -1,0 +1,51 @@
+// R3b power at each model's measured screen none rate, through the frozen KEEP rule itself (GEVA-263).
+// Keyless, seeded, reads no run data. It imports analyze() from a git archive export of 616de34 (amendment 4's pin),
+// whose rng(), quantile(), perTask(), bootstrap() and paired contrast are unchanged from the laneb-stacks-1-runner tag
+// that #112 section 4.6 names. Each simulated R3b calls analyze() on 70 tasks x 3 replicates x {none, told} with
+// seed 20261101 and 10000 draws, and KEEP is its told minus none 95% interval above zero.
+// Task model (#112 section 6): per-task none pass chance p ~ Beta(m*c, (1-m)*c), told = min(1, p + d), c = 1.78
+// (spread 0.3 at mean 0.5). R3b's tasks are the screen's failures, so p is drawn from Beta(m*c, (1-m)*c + 1), the
+// exact law of p given one failed screen trial; m is the model's measured screen none rate.
+// With <draw> "prior" p comes from Beta(m*c, (1-m)*c) instead, the unselected model #112's power.py and the
+// Captain's audit use, so their 80%-power claims can be checked on the same code.
+// Usage: PIN=<export of 616de34> bun r3b-power.ts <model> <m> <c> <n> <reps> <sims> <d,d,...> [failed|prior]
+const [model, mS, cS, nS, repsS, simsS, dsS, draw = "failed"] = Bun.argv.slice(2);
+const { analyze, rng } = await import(process.env.PIN + "/quick/laneb/analysis/analyze.ts");
+const m = Number(mS), c = Number(cS), n = Number(nS), reps = Number(repsS), sims = Number(simsS);
+const ds = dsS.split(",").map(Number);
+const u = rng(20261103);
+const normal = () => { let x = 0, y = 0, s = 0; do { x = 2 * u() - 1; y = 2 * u() - 1; s = x * x + y * y; } while (s >= 1 || s === 0); return x * Math.sqrt(-2 * Math.log(s) / s); };
+const gamma = (k: number): number => {
+  if (k < 1) return gamma(k + 1) * Math.pow(u(), 1 / k);
+  const d = k - 1 / 3, cc = 1 / Math.sqrt(9 * d);
+  for (;;) { const z = normal(), v = Math.pow(1 + cc * z, 3); if (v <= 0) continue; const w = u(); if (Math.log(w) < 0.5 * z * z + d - d * v + d * Math.log(v)) return d * v; }
+};
+const beta = (a: number, b: number) => { const x = gamma(a); return x / (x + gamma(b)); };
+const a = m * c, b = (1 - m) * c + (draw === "prior" ? 0 : 1);
+for (const d of ds) {
+  let keep = 0, cut = 0, pSum = 0;
+  for (let s = 0; s < sims; s++) {
+    const trials: any[] = [];
+    let tn = 0, tt = 0, solvedN = 0, solvedT = 0;
+    const perTask: [number, number, boolean][] = [];
+    for (let i = 0; i < n; i++) {
+      const p = beta(a, b), q = Math.min(1, p + d);
+      pSum += p;
+      let kn = 0, kt = 0;
+      for (let r = 0; r < reps; r++) {
+        const pn = u() < p, pt = u() < q;
+        kn += +pn; kt += +pt;
+        trials.push({ task: "t" + i, arm: "none", model, outcome: pn ? "pass" : "fail", noReward: false, skillOpens: [], costUsd: 0 });
+        trials.push({ task: "t" + i, arm: "gstack", model, outcome: pt ? "pass" : "fail", noReward: false, skillOpens: [], costUsd: 0 });
+      }
+      perTask.push([kn / reps, kt / reps, kn + kt > 0]);
+    }
+    const rep = analyze(trials, { models: [model], arms: ["none", "gstack"], reference: model, seed: 20261101, b: 10000 });
+    const ct = rep.contrasts.find((x: any) => x.contrast === "gstack - none");
+    if (ct.lo > 0) keep++;
+    const sens = perTask.filter((x) => x[2]);
+    const sensDiff = sens.length ? sens.reduce((z, x) => z + x[1] - x[0], 0) / sens.length : 0;
+    if (ct.diff <= 0 && sensDiff <= 0) cut++;
+  }
+  console.log(`${model} draw=${draw} m=${m} c=${c} n=${n} reps=${reps} sims=${sims} d=${(100 * d).toFixed(1)} points: KEEP ${(100 * keep / sims).toFixed(1)}%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) ${(100 * cut / sims).toFixed(1)}%, mean none pass chance on R3b tasks ${(pSum / sims / n).toFixed(3)}`);
+}
