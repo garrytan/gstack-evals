@@ -161,6 +161,13 @@ describe.skipIf(!DOCKER)("python: the scoring rules in both directions (GSTACK_E
     expect(r.detail).toContain("runs the reference tree's");
   }, LONG);
 
+  test("runner rule (GSTA-2): tests skipped at module level in a folder the reference tree does not have stay a tool error, as a new Go package does", () => {
+    const r = score({ "calc/ops.py": F.PY_IMPL, "tests/extra/test_new.py": 'import pytest\npytest.importorskip("not_a_real_module")\n' + F.PY_STRONG });
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("and so do the reference tree's");
+    expect(r.detail).toContain("none of the agent's test folders exists in the reference tree");
+  }, LONG);
+
   test("a mutmut listing that fails is a tool error, not no-mutants", () => {
     expect(score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": F.PY_STRONG, mutants: "not a folder\n" })).toMatchObject({ status: "tool-error", score: null, detail: expect.stringContaining("mutmut could not generate mutants") });
   }, LONG);
