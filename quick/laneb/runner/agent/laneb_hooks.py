@@ -33,7 +33,7 @@ from pathlib import Path
 from laneb_agent import PROBE_TIMEOUT_S, LanebAgent
 
 GSTACK_HOOK_STATE = 'cd /root/.gstack 2>/dev/null || exit 0; set --; for d in hooks skill-contracts; do [ -d "$d" ] && set -- "$@" "$d"; done; [ "$#" -gt 0 ] || exit 0; exec tar -cf - "$@"'
-CLAUDE_TRANSCRIPTS = 'cd /root/.claude/projects 2>/dev/null || exit 0; set --; for f in */*.jsonl */*/subagents/*.jsonl; do [ -f "$f" ] && set -- "$@" "$f"; done; [ "$#" -gt 0 ] || exit 0; exec tar -cf - "$@"'
+CLAUDE_TRANSCRIPTS = 'cd /root/.claude/projects 2>/dev/null || exit 0; set --; for f in */*.jsonl */*/subagents/*.jsonl; do [ -f "$f" ] && set -- "$@" "$f"; done; [ "$#" -gt 0 ] || exit 0; exec tar -cf - -- "$@"'
 ROUTE_MARK = "gstack skill routing (UserPromptSubmit hook;"
 MET = {"met", "met_waived", "met_after_block"}
 UNMET = {"blocked", "miss"}

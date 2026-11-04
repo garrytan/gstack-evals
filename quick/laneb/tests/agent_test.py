@@ -657,6 +657,30 @@ def test_the_hook_record_paths_are_the_after_pins(tmp):
         assert any(("session=" + session + " " + event) in line for line in (HOOK_FIX / case / "gstack" / "hooks" / (hook + ".log")).read_text().splitlines()), (case, hook)
 
 
+def test_both_copy_scripts_run_under_the_real_sh_and_tar_on_a_leading_dash_project_folder(tmp):
+    # Claude Code names a project folder after the cwd, so it starts with a dash (-app). The copy scripts run as written,
+    # under sh and the host's tar, against the after-told session's real tree.
+    roots = {"/root/.claude/projects": HOOK_FIX / "after-told" / "claude-projects", "/root/.gstack": HOOK_FIX / "after-told" / "gstack"}
+    fake = Fake(tmp)
+    a = hooks_agent(tmp, fake)
+    plain = a._exec
+
+    def exec_(container, script, stdin=None, timeout=300):
+        if script not in (lh.GSTACK_HOOK_STATE, lh.CLAUDE_TRANSCRIPTS):
+            return plain(container, script, stdin, timeout)
+        for path, real in roots.items():
+            script = script.replace(path, str(real))
+        return subprocess.run(["sh", "-c", script], capture_output=True, timeout=timeout)
+
+    a._exec = exec_
+    run(a)
+    got, summary = l1(tmp)
+    assert not {"transcripts", "gstack_hooks"} & set(summary["teardown_errors"]), summary["teardown_errors"]
+    assert got == [False, True, False]
+    assert next((tmp / "trial" / "evaluator" / "claude-projects" / "-app").glob("*.jsonl")).stem == _transcript("after-told").stem
+    assert (tmp / "trial" / "evaluator" / "gstack-hooks" / "hooks" / "skill-contract.log").exists()
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted((k, v) for k, v in globals().items() if k.startswith("test_")):
