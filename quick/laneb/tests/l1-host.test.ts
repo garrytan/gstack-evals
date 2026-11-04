@@ -423,12 +423,37 @@ describe("l1.ts on a fake awake host", () => {
     await until(() => existsSync(join(r.fake, "vm-2/paused")));
     await loseHost(r, "host-1", "pilot", "vm-2");
     const failed = l1(r, ["recover", r.work], { FAIL_RECOVER: "1" });
-    expect([failed.code, failed.err]).toEqual([3, expect.stringContaining("ubi-runner recover failed (exit 1)")]);
+    expect([failed.code, failed.err]).toEqual([3, expect.stringContaining("left no local state for part VM vm-2")]);
     expect(events(r)).not.toMatch(/ down host-1 /);
     const rec = l1(r, ["recover", r.work]);
     expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
     expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", complete: true });
   }, 300_000);
+
+  test("a part whose launch.sh exits 7 keeps its VM: host-down salvages it first (stops, pulls, destroys it, settles its blocks) and refuses while it can't", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { FAIL_PULL: "vm-2" }).code).toBe(0);
+    await attachUntil(r, /pilot: finished, launch exit 7/);
+    const stuck = l1(r, ["host-down", r.work], { FAIL_DOWN: "1" });
+    expect([stuck.code, existsSync(join(r.fake, "vm-2/.down")), existsSync(join(r.fake, "host-1/.down"))]).toEqual([3, false, false]);
+    expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    expect(salvageJson(r)).toMatchObject({ vm: "vm-2", pulled: true, vm_down: true });
+    expect(readRows(r.ledger).find((x) => x.kind === "settle" && x.id === "pilot-opus/pilot/vm")!.kind_detail).toContain("settled by salvage of the VM launch.sh kept (exit 7)");
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 240_000);
+
+  test("host-down refuses while any part's VM reserve is open", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"]).code).toBe(0);
+    await attachUntil(r, /NEXT: host-down \(every part has finished\)/);
+    new Ledger(join(r.fake, "host-1/l1/ledger/pilot-opus.jsonl"), "pilot-opus").reserve("pilot-opus/pilot/vm-9", toMicros(1));
+    const x = l1(r, ["host-down", r.work]);
+    expect([x.code, x.err, existsSync(join(r.fake, "host-1/.down"))]).toEqual([3, expect.stringContaining("pilot-opus/pilot/vm-9"), false]);
+  }, 120_000);
 
   test("launch writes launch.json before it starts the controller, and a start whose ssh fails reads host-status: a controller that started counts, one that didn't leaves no launch.json", async () => {
     const r = rig("pilot-opus");

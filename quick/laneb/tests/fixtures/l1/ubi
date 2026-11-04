@@ -3,7 +3,8 @@
 # others part VMs (vm-N). ssh runs the command in the VM's directory with HOME set to it; a VM with a .dead file
 # answers nothing. A part VM's bootstrap and a host's bootstrap are skipped; FAIL_HOST_BOOTSTRAP=1 makes the host's fail. up writes a recovery bundle (a copy of the
 # VM's state) when UBI_RECOVERY_DIR is set, and recover restores the state of every bundle this machine lacks. Switches:
-# FAIL_RECOVER=1 makes recover fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
+# Like the real runner, recover prints RECOVER_EXISTS and exits 1 for a bundle whose VM this machine already has.
+# FAIL_RECOVER=1 makes recover fail; FAIL_PULL=<vm> makes each pull from that VM fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
 # runner's idle watchdog, ending an ssh command and its process group after that long (a setsid -f child survives);
 # FAIL_SSH_MATCH=<text> makes an ssh command containing it exit 255, after running it when FAIL_SSH_RUN=1.
 set -u
@@ -32,6 +33,7 @@ case "$cmd" in
   pull)
     dead "$1" && exit 1
     case $1 in vm-*) sleep "${SLOW_PULL:-0}" ;; esac
+    [ "${FAIL_PULL:-}" != "$1" ] || exit 1
     d=$(vmdir "$1"); mkdir -p "$3"; dest=$(cd "$3" && pwd)
     (cd "$d" && ls -d $2 >/dev/null 2>&1) || exit 0
     (cd "$d" && cp -r $2 "$dest/") ;;
@@ -53,11 +55,13 @@ case "$cmd" in
     [ ! -d "$(vmdir "$1")" ] || touch "$(vmdir "$1")/.down" ;;
   recover)
     [ -z "${FAIL_RECOVER:-}" ] || { echo "recovery bundles are sealed with another key" >&2; exit 1; }
+    rc=0
     for b in "$UBI_RECOVERY_DIR/$owner"/*.bundle; do
       [ -f "$b" ] || continue
       n=$(basename "$b" .bundle)
-      [ -e "$state/$n" ] && continue
+      if [ -e "$state/$n" ]; then echo "RECOVER_FAILED: vm=$n code=RECOVER_EXISTS fix=this machine already has state for $n"; rc=1; continue; fi
       mkdir -p "$state/$n"; cp "$b" "$state/$n/env"; touch "$state/$n/key"
-    done ;;
+    done
+    exit $rc ;;
   *) exit 2 ;;
 esac

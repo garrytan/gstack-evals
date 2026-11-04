@@ -400,7 +400,7 @@ function hostSalvage(root: string, part: string, prefix: string) {
   const hs = hostStatus(root), st = hs.parts[part] as any;
   if (!st) refuse(part + " was never launched on this host");
   if (st.alive) refuse(part + "'s controller is still running");
-  if (st.launch_exit !== null) refuse(part + "'s controller recorded exit " + st.launch_exit + "; nothing to salvage");
+  if (st.launch_exit !== null && st.launch_exit !== 7) refuse(part + "'s controller recorded exit " + st.launch_exit + "; nothing to salvage");
   const others = new Set(Object.entries(hs.parts).filter(([k]) => k !== part).map(([, s]: any) => s.vm).filter(Boolean));
   const candidates = st.vm ? [] : unclaimedBundles(join(root, "recovery", ownerTag(env.UBI_OWNER)), others, Number(st.started_at) * 1000);
   if (candidates.length > 1) refuse(part + "'s VM is unknown: " + candidates.join(", ") + " all have unclaimed recovery bundles from after its controller started");
@@ -433,7 +433,7 @@ function hostSalvage(root: string, part: string, prefix: string) {
   const hours = (nowSec() - Number(st.started_at)) / 3600;
   const block = Number(env.VM_USD_PER_HOUR) * Number(env.VM_RESERVE_HOURS);
   const shares = blockShares(ledger.status().openIds, prefix + "vm", block, Number(env.VM_USD_PER_HOUR) * hours);
-  for (const s of shares) ledger.settle(s.id, toMicros(s.usd), { kind_detail: "VM hours: " + hours.toFixed(6) + " h at $" + env.VM_USD_PER_HOUR + "/h, settled by salvage after the controller was lost" });
+  for (const s of shares) ledger.settle(s.id, toMicros(s.usd), { kind_detail: "VM hours: " + hours.toFixed(6) + " h at $" + env.VM_USD_PER_HOUR + "/h, settled by salvage " + (st.launch_exit === 7 ? "of the VM launch.sh kept (exit 7)" : "after the controller was lost") });
   record.vm_hours = hours;
   record.vm_settles = shares;
   writeJsonAtomic(join(work, part + ".salvage.json"), record);
@@ -774,6 +774,21 @@ function next(work: string, plan: Plan): string {
   return "host-down (every part has finished)";
 }
 
+// Salvages a lost controller's part, or a part VM launch.sh kept at exit 7: host-salvage runs detached on the host and
+// this polls host-status, so no ssh call outlives ubi-runner's idle watchdog.
+function salvageOnHost(host: any, partName: string, prefix: string, h: any, again: string): any {
+  if (!h.salvaging) must(remoteL1(host.name, "rm -f " + H + "/work/" + partName + ".salvage-failed.json && setsid -f bun " + H + "/laneb/l1/l1.ts host-salvage " + H + " " + partName + " " + prefix + " > " + H + "/work/" + partName + ".salvage.log 2>&1 < /dev/null"), "starting " + partName + "'s salvage");
+  const deadline = Date.now() + (Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) + 600) * 1000;
+  for (;;) {
+    const st = status(host) ?? refuse("host " + host.name + " did not answer during " + partName + "'s salvage; run " + again + " again, which waits for it");
+    const s = st.parts[partName];
+    if (s.salvage) return st;
+    if (s.salvage_failed && !s.salvaging) refuse(partName + "'s salvage failed: " + s.salvage_failed.error + "; run " + again + " again");
+    if (Date.now() > deadline) refuse(partName + "'s salvage has not finished; run " + again + " again, which waits for it");
+    Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
+  }
+}
+
 function relaunch(work: string, partName: string) {
   const plan = readPlan(work);
   const part = plan.parts.find((p) => p.name === partName) ?? usage(partName + " is not a part of " + plan.item + "; a relaunch is never relaunched");
@@ -783,18 +798,7 @@ function relaunch(work: string, partName: string) {
   let st = status(host) ?? refuse("host " + host.name + " did not answer; run attach");
   const h = st.parts[partName];
   if (h && h.alive) refuse(partName + "'s controller is still running");
-  if (h && h.launch_exit === null && !h.salvage) {
-    if (!h.salvaging) must(remoteL1(host.name, "rm -f " + H + "/work/" + partName + ".salvage-failed.json && setsid -f bun " + H + "/laneb/l1/l1.ts host-salvage " + H + " " + partName + " " + part.prefix + " > " + H + "/work/" + partName + ".salvage.log 2>&1 < /dev/null"), "starting " + partName + "'s salvage");
-    const deadline = Date.now() + (Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) + 600) * 1000;
-    for (;;) {
-      st = status(host) ?? refuse("host " + host.name + " did not answer during " + partName + "'s salvage; run relaunch again, which waits for it");
-      const s = st.parts[partName];
-      if (s.salvage) break;
-      if (s.salvage_failed && !s.salvaging) refuse(partName + "'s salvage failed: " + s.salvage_failed.error + "; run relaunch again");
-      if (Date.now() > deadline) refuse(partName + "'s salvage has not finished; run relaunch again, which waits for it");
-      Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
-    }
-  }
+  if (h && (h.launch_exit === null || h.launch_exit === 7) && !h.salvage) st = salvageOnHost(host, partName, part.prefix, h, "relaunch");
   if (!existsSync(join(work, partName + ".result.json"))) {
     if (!st.parts[partName]) refuse(partName + " was never launched on " + host.name + " and has no recorded result");
     finishPart(work, host, st, partName, plan);
@@ -828,7 +832,8 @@ function recover(work: string) {
   const partVm: string | null = l?.vm ?? (found.length === 1 ? found[0]! : null);
   if (partVm) {
     const rec = ubi(["recover"]);
-    if (rec.code !== 0) refuse("ubi-runner recover failed (exit " + rec.code + "): " + (rec.err || rec.out).trim().split("\n").slice(-2).join(" | ") + "; nothing was destroyed. Fix it, then run recover again");
+    const state = process.env.UBI_RUNNER_STATE ?? join(process.env.XDG_STATE_HOME ?? join(process.env.HOME ?? "", ".local/state"), "ubi-runner");
+    if (!existsSync(join(state, partVm))) refuse("ubi-runner recover (exit " + rec.code + ") left no local state for part VM " + partVm + ": " + (rec.err || rec.out).trim().split("\n").slice(-2).join(" | ") + "; nothing was destroyed. Fix it, then run recover again");
   }
   const down = ubi(["down", host.name]);
   if (down.code !== 0) refuse("host " + host.name + " could not be confirmed gone (ubi-runner down exit " + down.code + "); run recover again");
@@ -886,7 +891,10 @@ function hostDown(work: string) {
   const running = Object.entries(st.parts).filter(([, s]: any) => s.alive || (s.launch_exit === null && !s.salvage));
   if (running.length) refuse(running.map(([k]) => k).join(", ") + " has not finished");
   for (const s of partState(work, plan)) if (s.launched && !s.result) refuse(s.part.name + "'s results are not pulled yet; run attach");
+  for (const [k, s] of Object.entries(st.parts) as [string, any][]) if (s.launch_exit === 7 && !s.salvage) salvageOnHost(host, k, readJson(join(work, k + ".launch.json")).prefix, s, "host-down");
   mirror(work, host);
+  const vmOpen = new Ledger(mirrorPath(work), plan.item).status().openIds.filter((id: string) => /\/vm(-\d+)?$/.test(id));
+  if (vmOpen.length) refuse("the VM reserves " + vmOpen.join(", ") + " are still open, so a part VM may still be running; salvage or settle them, then run host-down again");
   const ledger = resolve(readJson(join(work, "host/pointer")).ledger);
   copyFileSync(mirrorPath(work), ledger);
   if (existsSync(join(work, "host/bound.json"))) copyFileSync(join(work, "host/bound.json"), ledger + ".bound");
