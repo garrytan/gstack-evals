@@ -1,0 +1,113 @@
+power.py (GEVA-262): the lane's decision rule, simulated; seed 20261104, 4000 sims a point, 20000 a null point, 20 repositories
+columns: design | tasks x trials | ICC | control scenario (its mean none rate) | power at the plan's MDD | simulated MDD (80%%) | ceiling share at that MDD; at most 3 tasks per repository
+plan-eng-review, both alive, house | 60x3 | 0.00 | screened U-pool (0.48) | 0.948 at 18.6 | 15.0 | 0.000
+plan-eng-review, both alive, house | 60x3 | 0.00 | plan v3 band (0.50) | 0.909 at 18.6 | 16.5 | 0.000
+plan-eng-review, both alive, house | 60x3 | 0.00 | screened flat pool (0.48) | 0.933 at 18.6 | 15.5 | 0.000
+plan-eng-review, both alive, house | 60x3 | 0.00 | mean 0.30 (0.30) | 0.941 at 18.6 | 15.0 | 0.000
+plan-eng-review, both alive, house | 60x3 | 0.00 | mean 0.70 (0.70) | 0.989 at 18.6 | 13.5 | 0.000
+plan-eng-review, both alive, house | 60x3 | 0.05 | screened U-pool (0.48) | 0.926 at 18.6 | 15.5 | 0.000
+plan-eng-review, both alive, house | 60x3 | 0.05 | plan v3 band (0.50) | 0.875 at 18.6 | 17.0 | 0.000
+plan-eng-review, both alive, house | 60x3 | 0.10 | screened U-pool (0.48) | 0.905 at 18.6 | 16.5 | 0.000
+plan-eng-review, both alive, house | 60x3 | 0.10 | plan v3 band (0.50) | 0.841 at 18.6 | 18.0 | 0.000
+autoplan, both alive, house | 54x3 | 0.00 | screened U-pool (0.48) | 0.930 at 19.2 | 16.0 | 0.000
+autoplan, both alive, house | 54x3 | 0.00 | plan v3 band (0.50) | 0.900 at 19.2 | 17.0 | 0.000
+autoplan, both alive, house | 54x3 | 0.00 | screened flat pool (0.48) | 0.921 at 19.2 | 16.5 | 0.000
+autoplan, both alive, house | 54x3 | 0.00 | mean 0.30 (0.30) | 0.927 at 19.2 | 16.0 | 0.000
+autoplan, both alive, house | 54x3 | 0.00 | mean 0.70 (0.70) | 0.990 at 19.2 | 14.0 | 0.000
+autoplan, both alive, house | 54x3 | 0.05 | screened U-pool (0.48) | 0.910 at 19.2 | 17.0 | 0.000
+autoplan, both alive, house | 54x3 | 0.05 | plan v3 band (0.50) | 0.859 at 19.2 | 18.0 | 0.000
+autoplan, both alive, house | 54x3 | 0.10 | screened U-pool (0.48) | 0.885 at 19.2 | 17.5 | 0.000
+autoplan, both alive, house | 54x3 | 0.10 | plan v3 band (0.50) | 0.817 at 19.2 | 19.0 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.00 | screened U-pool (0.48) | 0.942 at 18.6 | 15.0 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.00 | plan v3 band (0.50) | 0.909 at 18.6 | 16.5 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.00 | screened flat pool (0.48) | 0.942 at 18.6 | 15.0 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.00 | mean 0.30 (0.30) | 0.939 at 18.6 | 15.0 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.00 | mean 0.70 (0.70) | 0.991 at 18.6 | 13.5 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.05 | screened U-pool (0.48) | 0.913 at 18.6 | 16.0 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.05 | plan v3 band (0.50) | 0.877 at 18.6 | 17.0 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.10 | screened U-pool (0.48) | 0.894 at 18.6 | 16.5 | 0.000
+plan-eng-review alone under M1, house | 48x4 | 0.10 | plan v3 band (0.50) | 0.843 at 18.6 | 18.0 | 0.000
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.00 | screened U-pool (0.48) | 0.941 at 19.8 | 16.0 | 0.000
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.00 | plan v3 band (0.50) | 0.917 at 19.8 | 17.0 | 0.000
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.00 | screened flat pool (0.48) | 0.937 at 19.8 | 16.5 | 0.000
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.00 | mean 0.30 (0.30) | 0.934 at 19.8 | 16.5 | 0.000
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.00 | mean 0.70 (0.70) | 0.992 at 19.8 | 14.0 | 0.001
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.05 | screened U-pool (0.48) | 0.925 at 19.8 | 17.0 | 0.000
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.05 | plan v3 band (0.50) | 0.887 at 19.8 | 18.0 | 0.000
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.10 | screened U-pool (0.48) | 0.897 at 19.8 | 17.5 | 0.000
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | 0.10 | plan v3 band (0.50) | 0.851 at 19.8 | 19.0 | 0.000
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.00 | screened U-pool (0.48) | 0.929 at 21.6 | 18.0 | 0.000
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.00 | plan v3 band (0.50) | 0.898 at 21.6 | 19.0 | 0.000
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.00 | screened flat pool (0.48) | 0.923 at 21.6 | 18.5 | 0.000
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.00 | mean 0.30 (0.30) | 0.928 at 21.6 | 18.0 | 0.000
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.00 | mean 0.70 (0.70) | 0.991 at 21.6 | 15.5 | 0.001
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.05 | screened U-pool (0.48) | 0.906 at 21.6 | 19.0 | 0.000
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.05 | plan v3 band (0.50) | 0.859 at 21.6 | 20.5 | 0.000
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.10 | screened U-pool (0.48) | 0.873 at 21.6 | 19.5 | 0.000
+plan-eng-review alone under plan v3's d7 order, house | 60x2 | 0.10 | plan v3 band (0.50) | 0.806 at 21.6 | 21.5 | 0.000
+M1 rung | 54x4 | 0.00 | screened U-pool (0.48) | 0.953 at 17.4 | 14.0 | 0.000
+M1 rung | 54x4 | 0.00 | plan v3 band (0.50) | 0.920 at 17.4 | 15.0 | 0.000
+M1 rung | 54x4 | 0.00 | screened flat pool (0.48) | 0.940 at 17.4 | 14.5 | 0.000
+M1 rung | 54x4 | 0.00 | mean 0.30 (0.30) | 0.944 at 17.4 | 14.0 | 0.000
+M1 rung | 54x4 | 0.00 | mean 0.70 (0.70) | 0.989 at 17.4 | 12.5 | 0.000
+M1 rung | 54x4 | 0.05 | screened U-pool (0.48) | 0.921 at 17.4 | 15.0 | 0.000
+M1 rung | 54x4 | 0.05 | plan v3 band (0.50) | 0.872 at 17.4 | 16.0 | 0.000
+M1 rung | 54x4 | 0.10 | screened U-pool (0.48) | 0.888 at 17.4 | 15.5 | 0.000
+M1 rung | 54x4 | 0.10 | plan v3 band (0.50) | 0.845 at 17.4 | 16.5 | 0.000
+M1 rung | 36x4 | 0.00 | screened U-pool (0.48) | 0.931 at 21.0 | 17.5 | 0.000
+M1 rung | 36x4 | 0.00 | plan v3 band (0.50) | 0.891 at 21.0 | 19.0 | 0.000
+M1 rung | 36x4 | 0.00 | screened flat pool (0.48) | 0.914 at 21.0 | 18.0 | 0.000
+M1 rung | 36x4 | 0.00 | mean 0.30 (0.30) | 0.913 at 21.0 | 18.0 | 0.000
+M1 rung | 36x4 | 0.00 | mean 0.70 (0.70) | 0.989 at 21.0 | 15.5 | 0.000
+M1 rung | 36x4 | 0.05 | screened U-pool (0.48) | 0.910 at 21.0 | 18.0 | 0.000
+M1 rung | 36x4 | 0.05 | plan v3 band (0.50) | 0.854 at 21.0 | 20.0 | 0.000
+M1 rung | 36x4 | 0.10 | screened U-pool (0.48) | 0.886 at 21.0 | 19.0 | 0.000
+M1 rung | 36x4 | 0.10 | plan v3 band (0.50) | 0.837 at 21.0 | 20.5 | 0.000
+null size (rate of a 'helps' reading, and of any claim, when the true mean difference is 0):
+60x3 | ICC 0.00 | strict null | helps 0.0181 | any claim 0.0370
+60x3 | ICC 0.00 | heterogeneous null | helps 0.0200 | any claim 0.0395
+60x3 | ICC 0.10 | strict null | helps 0.0175 | any claim 0.0345
+60x3 | ICC 0.10 | heterogeneous null | helps 0.0192 | any claim 0.0381
+54x3 | ICC 0.00 | strict null | helps 0.0173 | any claim 0.0354
+54x3 | ICC 0.00 | heterogeneous null | helps 0.0163 | any claim 0.0352
+54x3 | ICC 0.10 | strict null | helps 0.0175 | any claim 0.0339
+54x3 | ICC 0.10 | heterogeneous null | helps 0.0175 | any claim 0.0349
+48x4 | ICC 0.00 | strict null | helps 0.0173 | any claim 0.0343
+48x4 | ICC 0.00 | heterogeneous null | helps 0.0181 | any claim 0.0356
+48x4 | ICC 0.10 | strict null | helps 0.0184 | any claim 0.0376
+48x4 | ICC 0.10 | heterogeneous null | helps 0.0182 | any claim 0.0367
+42x4 | ICC 0.00 | strict null | helps 0.0187 | any claim 0.0360
+42x4 | ICC 0.00 | heterogeneous null | helps 0.0181 | any claim 0.0373
+42x4 | ICC 0.10 | strict null | helps 0.0177 | any claim 0.0352
+42x4 | ICC 0.10 | heterogeneous null | helps 0.0198 | any claim 0.0379
+60x2 | ICC 0.00 | strict null | helps 0.0174 | any claim 0.0346
+60x2 | ICC 0.00 | heterogeneous null | helps 0.0171 | any claim 0.0336
+60x2 | ICC 0.10 | strict null | helps 0.0166 | any claim 0.0336
+60x2 | ICC 0.10 | heterogeneous null | helps 0.0181 | any claim 0.0357
+fallback layout, plan v3's limit of 8 tasks per repository at its most concentrated (the prereg's fallback if the pool can't fill the cap of 3):
+plan-eng-review, both alive, house | 60x3 | sizes 8-8-8-8-8-6-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.00 | screened U-pool | 0.906 at 18.6 | 16.0
+plan-eng-review, both alive, house | 60x3 | sizes 8-8-8-8-8-6-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.05 | screened U-pool | 0.849 at 18.6 | 17.5
+plan-eng-review, both alive, house | 60x3 | sizes 8-8-8-8-8-6-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.10 | plan v3 band | 0.707 at 18.6 | 21.0
+autoplan, both alive, house | 54x3 | sizes 8-8-8-8-7-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.00 | screened U-pool | 0.883 at 19.2 | 17.5
+autoplan, both alive, house | 54x3 | sizes 8-8-8-8-7-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.05 | screened U-pool | 0.831 at 19.2 | 19.0
+autoplan, both alive, house | 54x3 | sizes 8-8-8-8-7-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.10 | plan v3 band | 0.698 at 19.2 | 21.5
+plan-eng-review alone under M1, house | 48x4 | sizes 8-8-8-8-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.00 | screened U-pool | 0.900 at 18.6 | 16.5
+plan-eng-review alone under M1, house | 48x4 | sizes 8-8-8-8-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.05 | screened U-pool | 0.850 at 18.6 | 17.5
+plan-eng-review alone under M1, house | 48x4 | sizes 8-8-8-8-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.10 | plan v3 band | 0.730 at 18.6 | 20.5
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | sizes 8-8-8-2-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.00 | screened U-pool | 0.890 at 19.8 | 17.5
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | sizes 8-8-8-2-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.05 | screened U-pool | 0.854 at 19.8 | 18.5
+both alive at 1.15 times told; plan-eng-review alone under M1 at 1.15 and 1.5 | 42x4 | sizes 8-8-8-2-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1 | ICC 0.10 | plan v3 band | 0.732 at 19.8 | 21.5
+futility look, B-value form at a random half (stop when conditional power for +MDD and for -MDD are both under 10%):
+60x3 | true effect 0.0 | futility stops 0.0000 | helps with the look applied 0.022
+60x3 | true effect 18.6 | futility stops 0.0000 | helps with the look applied 0.943
+54x3 | true effect 0.0 | futility stops 0.0000 | helps with the look applied 0.019
+54x3 | true effect 19.2 | futility stops 0.0000 | helps with the look applied 0.934
+48x4 | true effect 0.0 | futility stops 0.0000 | helps with the look applied 0.018
+48x4 | true effect 18.6 | futility stops 0.0000 | helps with the look applied 0.945
+42x4 | true effect 0.0 | futility stops 0.0000 | helps with the look applied 0.018
+42x4 | true effect 19.8 | futility stops 0.0000 | helps with the look applied 0.943
+admission item 1, headroom: P(pass) for none's solved share over 12 tasks x 2 trials in [0.20, 0.80], by the pool's true mean none rate (20000 sims)
+  U-shaped pool, Beta(m, 1-m) | 0.05: 0.021 | 0.10: 0.126 | 0.15: 0.313 | 0.20: 0.522 | 0.30: 0.835 | 0.50: 0.989 | 0.70: 0.835 | 0.80: 0.525 | 0.85: 0.310 | 0.90: 0.128 | 0.95: 0.020
+  moderate pool, Beta(4m, 4(1-m)) | 0.05: 0.012 | 0.10: 0.105 | 0.15: 0.298 | 0.20: 0.531 | 0.30: 0.866 | 0.50: 0.997 | 0.70: 0.866 | 0.80: 0.531 | 0.85: 0.299 | 0.90: 0.104 | 0.95: 0.013
+admission item 2, exposure: P(at least 7 of 8 sampled told trials exposed), exact binomial, by the told arm's true exposure rate
+  0.50: 0.035 | 0.60: 0.106 | 0.70: 0.255 | 0.75: 0.367 | 0.80: 0.503 | 0.85: 0.657 | 0.90: 0.813 | 0.95: 0.943 | 1.00: 1.000
