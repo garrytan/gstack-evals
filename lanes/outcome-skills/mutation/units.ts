@@ -301,7 +301,7 @@ export function rustModule(rel: string): { target: string; path: string[] } {
     return { target: parts[0]!, path: parts.slice(1).filter((p) => p !== "main" && p !== "mod") };
   }
   const parts = rel.replace(/^src\//, "").replace(/\.rs$/, "").split("/");
-  if (parts[0] === "bin") parts.splice(0, parts.length > 2 ? 2 : parts.length);
+  if (parts[0] === "bin" && parts.length > 1) parts.splice(0, parts.length > 2 ? 2 : parts.length);
   if (parts.length === 1 && (parts[0] === "lib" || parts[0] === "main")) return { target: "unit", path: [] };
   if (parts[parts.length - 1] === "mod") parts.pop();
   return { target: "unit", path: parts };
