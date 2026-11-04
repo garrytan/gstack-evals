@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "run": "autoplan-20261103023817",
+  "phases": [
+    {
+      "phase": "ceo",
+      "started_at": "2026-11-03T02:38:17.969Z",
+      "ended_at": "2026-11-03T02:46:25.385Z",
+      "wall_s": 487,
+      "native_s": 487
+    },
+    {
+      "phase": "design",
+      "started_at": "2026-11-03T02:46:25.385Z",
+      "ended_at": "2026-11-03T02:52:03.772Z",
+      "wall_s": 338,
+      "native_s": 338
+    },
+    {
+      "phase": "dx",
+      "started_at": "2026-11-03T02:52:03.772Z",
+      "ended_at": "2026-11-03T02:58:25.700Z",
+      "wall_s": 382,
+      "native_s": 382
+    },
+    {
+      "phase": "eng",
+      "started_at": "2026-11-03T02:58:25.700Z",
+      "ended_at": "2026-11-03T03:08:04.804Z",
+      "wall_s": 579,
+      "native_s": 579
+    },
+    {
+      "phase": "ceo",
+      "started_at": "2026-11-03T03:08:04.804Z",
+      "ended_at": "2026-11-03T14:46:16.879Z",
+      "wall_s": 41892,
+      "native_s": 1418
+    },
+    {
+      "phase": "eng",
+      "started_at": "2026-11-03T14:46:16.879Z",
+      "ended_at": "2026-11-03T15:11:06.518Z",
+      "wall_s": 1490,
+      "native_s": 1489
+    }
+  ],
+  "started_at": "2026-11-03T02:38:17.969Z",
+  "session_kind": "unattended",
+  "total_wall_s": 45169
+}

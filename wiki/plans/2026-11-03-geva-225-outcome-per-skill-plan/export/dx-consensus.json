@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "phase": "dx",
+  "native": null,
+  "outside": null,
+  "confirmed": 0,
+  "unverified": 0,
+  "disagree": 0,
+  "new": 0,
+  "native_only": 0,
+  "rows": [],
+  "native_only_ids": [],
+  "coverage": "none",
+  "deferred": {
+    "reason": "Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the devex measurement text is unchanged from the reviewed v1, and its open findings carry to the gate.",
+    "by": "agent:GEVA-2",
+    "cause": "owner",
+    "at": "2026-11-03T14:23:33.437Z",
+    "round": 2,
+    "counts": {
+      "Critical": 1,
+      "High": 6,
+      "Medium": 6,
+      "Low": 3,
+      "Informational": 0
+    },
+    "carried_file": "dx-deferred.findings.jsonl",
+    "blockers": [
+      "autoplan-20261103023817-dx-native-3"
+    ],
+    "open": 16
+  }
+}
