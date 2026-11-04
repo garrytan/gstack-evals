@@ -188,6 +188,65 @@ describe("plan-eng-review exposure: review-sections read, Step 0 Scope Challenge
     expect(failed(planEngReviewExposure(read))).toEqual([false, "test_plan_written"]);
   });
 
+  const T = "/root/.gstack/projects/repo/root-feature-eng-review-test-plan-20261105-101500.md";
+  const asWrite = (command: string) => {
+    const rs = base();
+    Object.assign(useOf(rs, "w2"), { name: "Bash", input: { command } });
+    resultOf(rs, "w2").content = "";
+    return planEngReviewExposure(rs).checks.test_plan_written;
+  };
+  const P = "/root/.gstack/render/claude/plan-eng-review/sections/review-sections.md";
+  const asRead = ([command, content]: string[]) => {
+    const rs = base();
+    Object.assign(useOf(rs, "r1"), { name: "Bash", input: { command } });
+    resultOf(rs, "r1").content = content;
+    return planEngReviewExposure(rs).checks.review_sections_read;
+  };
+  const withSections = (texts: string[]) => {
+    const rs = base();
+    blocks(rs)
+      .filter((b) => b.type === "text" && /^## Section \d/.test(b.text))
+      .forEach((b, i) => {
+        b.text = texts[i] ?? "ok";
+      });
+    return planEngReviewExposure(rs).checks.sections_in_order;
+  };
+
+  test("a > inside double or single quotes or after a comment # is no test-plan write, and a numbered redirect such as 2> never is", () => {
+    const commands = ['echo "run: cat > ' + T + '"', "echo 'saved > " + T + " done'", "true # > " + T, "echo '>' " + T, "printf x 2> " + T];
+    expect(commands.map((c) => [c, asWrite(c)])).toEqual(commands.map((c) => [c, false]));
+  });
+
+  test("a real heredoc write, a quoted $PROJECT_DIR target after a real redirect and a tee still write the test plan", () => {
+    const commands = ["cat > " + T + " <<'EOF'\n# Test Plan\nEOF", 'cat > "$PROJECT_DIR/root-feature-eng-review-test-plan-20261105-101500.md" <<\'EOF\'\n# Test Plan\nEOF', "printf '# Test Plan\\n' | tee \"$PROJECT_DIR/root-feature-eng-review-test-plan-20261105-101500.md\"", "echo '# Test Plan' >> " + T + " # appended"];
+    expect(commands.map((c) => [c, asWrite(c)])).toEqual(commands.map((c) => [c, true]));
+  });
+
+  test("cat --help, head --version and an awk BEGIN-only program never read the review-sections file", () => {
+    const calls = [["cat --help " + P, "Usage: cat [OPTION]... [FILE]..."], ["head --version " + P, "head (GNU coreutils) 9.4"], ["awk 'BEGIN{print \"ok\"}' " + P, "ok"]];
+    expect(calls.map((c) => [c[0], asRead(c)])).toEqual(calls.map((c) => [c[0], false]));
+  });
+
+  test("a real cat, sed -n or tail of the review-sections file still reads it", () => {
+    const calls = [["cat " + P, "## Scope Challenge"], ["sed -n '380,520p' " + P, "## Review Sections (after scope is agreed)"], ["tail -n 200 " + P, "### 4. Performance review"]];
+    expect(calls.map((c) => [c[0], asRead(c)])).toEqual(calls.map((c) => [c[0], true]));
+  });
+
+  test("a preview list with or without sub-bullets, a bold summary or the completion summary's list lines are not Sections 1 to 4", () => {
+    const texts = [
+      "I'll review in this order:\n1. Architecture\n   - boundaries\n2. Code quality\n   - naming\n3. Tests\n   - coverage\n4. Performance\n   - hot paths",
+      "Summary:\n**Architecture review:** 1 issue found\n- process-local store\n**Code quality review:** no issues\n- none\n**Test review:** 1 gap\n- refill boundary\n**Performance review:** no issues\n- none",
+      "I'll review in this order:\n1. Architecture\n2. Code quality\n3. Tests\n4. Performance",
+      "- Architecture Review: 1 issue found\n- Code Quality Review: 0 issues found\n- Test Review: 1 issue found\n- Performance Review: 0 issues found",
+    ];
+    expect(texts.map((t) => [t, withSections([t])])).toEqual(texts.map((t) => [t, false]));
+  });
+
+  test("four real headings that carry their verdict on the heading line count as Sections 1 to 4, and so do the fixture's sections", () => {
+    const inline = ["## Section 1: Architecture review: no issues found.", "## Section 2: Code quality review: no issues found.", "## Section 3: Test review: no issues found.", "## Section 4: Performance review: no issues found."];
+    expect([withSections(inline), planEngReviewExposure(base()).checks.sections_in_order]).toEqual([true, true]);
+  });
+
   test("a session that stopped before the skill turn reads unexposed, with every check false", () => {
     expect(planEngReviewExposure(turn1Only(base()))).toMatchObject({ exposed: false, failed: "review_sections_read", checks: { review_sections_read: false, scope_challenge: false, sections_in_order: false, test_plan_written: false } });
   });
