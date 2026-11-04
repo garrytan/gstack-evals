@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+# The install check for R2 at the overhaul's after pin (GEVA-255 amendment, section 4). It reads one gstack-full install
+# layer, the folder rr2-install.ts prints, which review-units' rig lays over the trial image at the sandbox's home, and
+# refuses the run unless all of these hold:
+#  1. every symbolic link under .claude/ resolves inside the layer, through relative links only, to a path that exists:
+#     none dangles, none is absolute and none leaves the layer;
+#  2. .claude/skills/review/SKILL.md and .claude/skills/gstack/review/SKILL.md both resolve to .local/share/gstack/review/SKILL.md,
+#     the checkout's committed full render, and no served review entry resolves outside .local/share/gstack/review;
+#  3. the served /review tree, one "<path>\t<sha256>" line per regular file under .local/share/gstack/review in path order,
+#     hashes to the pinned review_tree_sha256;
+#  4. .claude/settings.json hashes to the pinned settings_sha256, and its hooks hold exactly the pinned entries per event,
+#     each command <home>/.claude/skills/gstack/hosts/claude/hooks/<name> with its pinned timeout, and each command resolves
+#     in the layer to an executable file.
+# It prints the digests it computed, so the dry run can pin them, then one PASS or REFUSE line per check.
+# --match, after each launch: the launch's arms.json must name, for gstack-full, the arm tree digest, the install tree
+# digest and the gstack sha that rr2-install.ts printed for the layer the check passed. A mismatch stops the run.
+# Exit 0 pass, 3 refuse, 5 bad input. Usage: python3 rr2-install-check.py <layer dir> <install-pins.json>
+#                                             python3 rr2-install-check.py --match <launch arms.json> <rr2-install.ts output>
+import hashlib, json, os, sys
+
+REVIEW = ".local/share/gstack/review"
+
+
+def sha(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def resolve(layer, rel, depth=0):
+    """The layer-relative path rel resolves to, following relative links inside the layer; a string reason when it can't."""
+    if depth > 40:
+        return None, "a link loop"
+    parts, done = rel.split("/"), []
+    for i, part in enumerate(parts):
+        here = "/".join(done + [part])
+        full = os.path.join(layer, here)
+        if os.path.islink(full):
+            target = os.readlink(full)
+            if os.path.isabs(target):
+                return None, "%s is an absolute link to %s" % (here, target)
+            joined = os.path.normpath(os.path.join(os.path.dirname(here), target))
+            if joined == ".." or joined.startswith("../") or os.path.isabs(joined):
+                return None, "%s leaves the layer (%s)" % (here, target)
+            rest = "/".join(parts[i + 1:])
+            return resolve(layer, joined + ("/" + rest if rest else ""), depth + 1)
+        if not os.path.lexists(full):
+            return None, "%s does not exist" % here
+        done.append(part)
+    return "/".join(done), None
+
+
+try:
+    if sys.argv[1:2] == ["--match"]:
+        arms, inst = json.load(open(sys.argv[2])), json.load(open(sys.argv[3]))
+        rows = [a for a in arms["arms"] if a.get("name") == "gstack-full"]
+        if len(rows) != 1:
+            raise ValueError("%s has %d gstack-full arms, not 1" % (sys.argv[2], len(rows)))
+        a = rows[0]
+        got = (a.get("tree_sha256"), ((a.get("provenance") or {}).get("install") or {}).get("tree_sha256"), ((a.get("provenance") or {}).get("stack") or {}).get("sha"))
+        want = (inst["tree_sha256"], inst["provenance"]["install"]["tree_sha256"], inst["provenance"]["stack"]["sha"])
+        ok = got == want
+        print(("PASS" if ok else "REFUSE") + " launch install: arm tree %s, install tree %s, gstack %s%s" % (got + ("" if ok else "; checked layer %s, %s, %s: stop before the next launch and report to the Captain" % want,)))
+        sys.exit(0 if ok else 3)
+    layer, pins = sys.argv[1], json.load(open(sys.argv[2]))
+    home = pins["home"].rstrip("/")
+    want_hooks = {event: [(n, int(t)) for n, t in rows] for event, rows in pins["hooks"].items()}
+    if not os.path.isdir(os.path.join(layer, ".claude")) or not os.path.isdir(os.path.join(layer, REVIEW)):
+        raise ValueError("%s has no .claude or %s, so it is not a gstack install layer" % (layer, REVIEW))
+    bad = []
+    links = 0
+    for root, dirs, files in os.walk(os.path.join(layer, ".claude")):
+        for name in dirs + files:
+            full = os.path.join(root, name)
+            if os.path.islink(full):
+                links += 1
+                _, why = resolve(layer, os.path.relpath(full, layer))
+                if why:
+                    bad.append(why)
+    print(("PASS" if not bad else "REFUSE") + " links: %d under .claude, %d that do not resolve inside the layer%s" % (links, len(bad), ": " + "; ".join(bad[:5]) if bad else ""))
+    served = []
+    for entry in ("SKILL.md",):
+        for base in (".claude/skills/review", ".claude/skills/gstack/review"):
+            got, why = resolve(layer, base + "/" + entry)
+            served.append((base + "/" + entry, got, why))
+    for name in sorted(os.listdir(os.path.join(layer, ".claude/skills/review"))):
+        got, why = resolve(layer, ".claude/skills/review/" + name)
+        if name != ".gstack-owned" and (why or not (got == REVIEW or got.startswith(REVIEW + "/"))):
+            served.append((".claude/skills/review/" + name, got, why or "outside " + REVIEW))
+    wrong = [(p, g, w) for p, g, w in served if w or (p.endswith("SKILL.md") and g != REVIEW + "/SKILL.md")]
+    print(("PASS" if not wrong else "REFUSE") + " served /review: SKILL.md resolves to %s" % (REVIEW + "/SKILL.md" if not wrong else "; ".join("%s -> %s" % (p, w or g) for p, g, w in wrong[:5])))
+    lines = []
+    for root, _, files in os.walk(os.path.join(layer, REVIEW)):
+        for name in files:
+            full = os.path.join(root, name)
+            if os.path.islink(full) or not os.path.isfile(full):
+                raise ValueError("%s is not a regular file" % os.path.relpath(full, layer))
+            lines.append("%s\t%s\n" % (os.path.relpath(full, os.path.join(layer, REVIEW)), sha(full)))
+    tree = hashlib.sha256("".join(sorted(lines)).encode()).hexdigest()
+    print("review_tree_sha256 %s (%d files)" % (tree, len(lines)))
+    print(("PASS" if tree == pins["review_tree_sha256"] else "REFUSE") + " review tree: pinned %s" % pins["review_tree_sha256"])
+    settings = os.path.join(layer, ".claude/settings.json")
+    digest = sha(settings)
+    print("settings_sha256 %s" % digest)
+    print(("PASS" if digest == pins["settings_sha256"] else "REFUSE") + " settings.json: pinned %s" % pins["settings_sha256"])
+    hooks = json.load(open(settings)).get("hooks") or {}
+    got_hooks, missing_exec = {}, []
+    for event, groups in hooks.items():
+        for g in groups:
+            for h in g.get("hooks") or []:
+                cmd = h.get("command", "")
+                prefix = home + "/.claude/skills/gstack/hosts/claude/hooks/"
+                name = cmd[len(prefix):] if cmd.startswith(prefix) else cmd
+                got_hooks.setdefault(event, []).append((name, int(h.get("timeout", -1))))
+                rel, why = resolve(layer, cmd[len(home) + 1:]) if cmd.startswith(home + "/") else (None, "not under the home")
+                if why or not os.access(os.path.join(layer, rel), os.X_OK) or not os.path.isfile(os.path.join(layer, rel)):
+                    missing_exec.append("%s %s (%s)" % (event, cmd, why or "not an executable file"))
+    same = {e: sorted(v) for e, v in got_hooks.items()} == {e: sorted(v) for e, v in want_hooks.items()}
+    print(("PASS" if same else "REFUSE") + " hooks: %s" % json.dumps({e: sorted(v) for e, v in sorted(got_hooks.items())}))
+    print(("PASS" if not missing_exec else "REFUSE") + " hook commands resolve to executable files%s" % (": " + "; ".join(missing_exec) if missing_exec else ""))
+    ok = not bad and not wrong and tree == pins["review_tree_sha256"] and digest == pins["settings_sha256"] and same and not missing_exec
+    print("install check: " + ("PASS" if ok else "REFUSE: launch nothing and report to the Captain"))
+    sys.exit(0 if ok else 3)
+except SystemExit:
+    raise
+except Exception as e:
+    print("E_RR2_INSTALL_CHECK %s: %s" % (type(e).__name__, e))
+    sys.exit(5)

@@ -1,0 +1,68 @@
+{
+  "none": {
+    "default": {
+      "BLOCKER": "CRITICAL",
+      "BLOCKING": "CRITICAL",
+      "HIGH": "CRITICAL",
+      "P0": "CRITICAL",
+      "MEDIUM": "INFORMATIONAL",
+      "LOW": "INFORMATIONAL",
+      "NIT": "INFORMATIONAL",
+      "INFO": "INFORMATIONAL",
+      "Blocker": "CRITICAL",
+      "Blocking": "CRITICAL",
+      "High": "CRITICAL",
+      "Medium": "INFORMATIONAL",
+      "Low": "INFORMATIONAL",
+      "Nit": "INFORMATIONAL",
+      "Info": "INFORMATIONAL",
+      "Critical": "CRITICAL",
+      "critical": "CRITICAL",
+      "Informational": "INFORMATIONAL",
+      "informational": "INFORMATIONAL",
+      "Major": "CRITICAL",
+      "Minor": "INFORMATIONAL",
+      "P1": "CRITICAL",
+      "P2": "INFORMATIONAL",
+      "P3": "INFORMATIONAL",
+      "P4": "INFORMATIONAL"
+    }
+  },
+  "gstack": {
+    "default": {}
+  },
+  "pstack": {
+    "default": {
+      "HIGH": "INFORMATIONAL",
+      "MEDIUM": "INFORMATIONAL",
+      "LOW": "INFORMATIONAL"
+    },
+    "by_reader": {
+      "confirmed": {
+        "HIGH": "CRITICAL",
+        "MEDIUM": "CRITICAL",
+        "LOW": "CRITICAL"
+      },
+      "unconfirmed": {
+        "HIGH": "INFORMATIONAL",
+        "MEDIUM": "INFORMATIONAL",
+        "LOW": "INFORMATIONAL"
+      }
+    }
+  },
+  "tstack": {
+    "default": {
+      "BLOCKER": "CRITICAL",
+      "SHOULD": "CRITICAL",
+      "NIT": "INFORMATIONAL"
+    }
+  },
+  "gstack-full": {
+    "default": {
+      "Critical": "CRITICAL",
+      "critical": "CRITICAL",
+      "Informational": "INFORMATIONAL",
+      "informational": "INFORMATIONAL"
+    }
+  }
+}

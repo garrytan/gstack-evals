@@ -1,0 +1,99 @@
+// R2 at the overhaul's after pin (GEVA-257, section 4): the keyless positive control for the contract Stop hook. It runs the
+// hook exactly as a gstack-full session would meet it, with no model call: in the arm image review-units builds from the
+// checked layer (buildArmImage on the pinned trial image, as armImages in src/skill-eval/cli/run-host.ts at 176fdc7 does),
+// as the sandbox user (the host uid, --network none and the hardening flags of src/trial/sandbox.ts), with HOME /home/agent,
+// a work dir at /work/<task> and its state root seeded by 176fdc7's seedStateRoot, the env a session's CLI passes to its
+// hooks (PATH, HOME, LANG, TERM, GSTACK_STATE_ROOT and GSTACK_HOME). The command and timeout are the layer's own
+// settings.json entry for skill-contract-stop-hook. Its stdin is the Stop payload the pin's own test sends
+// (test/skill-contract-stop-hook.test.ts at 699a41cb): session_id, transcript_path, cwd, hook_event_name Stop and
+// stop_hook_active false. The transcript is a synthetic Claude Code JSONL that loads /review by its typed command:
+//   unmet: a report with no specialist selection, no Agent dispatch and no Pre-Landing Review;
+//   met: the selection line, one Agent per selected specialist and the adversarial Agent, each with its result, then a
+//   Pre-Landing Review with Gate edits filled in;
+//   empty: an empty file.
+// It passes only when the hook exits 0, prints {"decision": "block"} with a reason that starts SKILL_CONTRACT_UNMET review,
+// and writes a line with this session and event=blocked to $GSTACK_STATE_ROOT/hooks/skill-contract.log
+// (appendHookTrace in lib/skill-route.ts at 699a41cb). So unmet must pass, and met and empty must be refused.
+// Exit 0 PASS, 3 REFUSE (report to the Captain before any smoke), 5 bad input.
+// Usage: B=<gstack-evals at 176fdc7> bun rr2-hook-check.ts <install.json from rr2-install.ts> <unmet|met|empty> <empty work dir>
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, posix, resolve } from "node:path";
+
+const bad = (why: string): never => {
+  console.error("E_RR2_HOOK_CHECK " + why + "; fix: pass install.json from rr2-install.ts, a case and an empty work dir");
+  process.exit(5);
+};
+const B = process.env.B;
+const [installFile, kase, rootArg] = process.argv.slice(2);
+const root = rootArg ? resolve(rootArg) : undefined;
+if (!B || !installFile || !root || !["unmet", "met", "empty"].includes(kase ?? "")) bad("usage: B=<176fdc7 checkout> bun rr2-hook-check.ts <install.json> <unmet|met|empty> <empty work dir>");
+if (existsSync(root!) && readdirSync(root!).length) bad(root + " is not empty");
+const { buildArmImage, stateRoot } = await import(B + "/src/trial/image.ts");
+const { seedStateRoot } = await import(B + "/src/trial/state-root.ts");
+const docker = process.env.GSTACK_EVALS_DOCKER_BIN || "docker";
+const install = JSON.parse(readFileSync(installFile!, "utf8"));
+if (typeof install.layer !== "string" || typeof install.home !== "string" || typeof install.image?.tag !== "string") bad(installFile + " has no layer, home or image tag");
+const settings = JSON.parse(readFileSync(join(install.layer, ".claude", "settings.json"), "utf8"));
+const entries = (settings.hooks?.Stop ?? []).flatMap((e: { hooks?: { command?: string; timeout?: number }[] }) => e.hooks ?? []).filter((h: { command?: string }) => typeof h.command === "string" && h.command.endsWith("/skill-contract-stop-hook"));
+if (entries.length !== 1 || !Number.isFinite(entries[0].timeout)) bad("the layer's settings.json has " + entries.length + " skill-contract-stop-hook Stop entries with a timeout, not 1");
+const { command, timeout } = entries[0] as { command: string; timeout: number };
+
+mkdirSync(join(root!, "tasks"), { recursive: true });
+const built = buildArmImage({ base: install.image.tag, layers: [{ src: install.layer, dest: install.dest ? posix.join(install.home, install.dest) : install.home }], tasksDir: join(root!, "tasks"), state: stateRoot(process.env), docker });
+if (!built.ok) bad("arm image: " + built.code + ": " + built.message);
+
+const task = "rr2-hook-check";
+const work = join(root!, "work", task);
+const path = "/work/" + task;
+mkdirSync(join(work, ".rr2-hook"), { recursive: true });
+const state = seedStateRoot(work, path);
+const sid = "rr2-hook-check-" + kase;
+const line = (type: "user" | "assistant", content: unknown) => JSON.stringify({ type, sessionId: sid, isSidechain: false, message: { role: type, content } });
+const text = (t: string) => line("assistant", [{ type: "text", text: t }]);
+const agent = (id: string, prompt: string) => line("assistant", [{ type: "tool_use", id, name: "Agent", input: { description: "review pass", prompt } }]);
+const result = (id: string) => line("user", [{ type: "tool_result", tool_use_id: id, content: "No findings." }]);
+const prompt = line("user", "<command-name>/review</command-name>\n<command-message>review</command-message>\n<command-args>Run the full review procedure.</command-args>");
+const BLOCK = "\n\n```json\n[]\n```\n";
+const transcripts: Record<string, string[]> = {
+  unmet: [prompt, text("Review done." + BLOCK)],
+  met: [
+    prompt,
+    text("Dispatching 1 specialists: testing"),
+    agent("tu_spec", "You are a specialist code reviewer. Read the checklist at ~/.claude/skills/gstack/review/specialists/testing.md, then review the diff."),
+    result("tu_spec"),
+    text("Dispatching adversarial pass: native"),
+    agent("tu_adv", "Read the diff for this branch. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production."),
+    result("tu_adv"),
+    text("Pre-Landing Review: no issues found.\n\nGate edits: none: findings only, no Fix-First edits" + BLOCK),
+  ],
+  empty: [],
+};
+const lines = transcripts[kase!]!;
+writeFileSync(join(work, ".rr2-hook", "transcript.jsonl"), lines.length ? lines.join("\n") + "\n" : "");
+const payload = JSON.stringify({ session_id: sid, transcript_path: path + "/.rr2-hook/transcript.jsonl", cwd: path, hook_event_name: "Stop", stop_hook_active: false });
+const uid = (process.getuid?.() ?? 1000) + ":" + (process.getgid?.() ?? 1000);
+const env = { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: install.home, LANG: "C.UTF-8", TERM: "dumb", ...state };
+const r = spawnSync(docker, ["run", "--rm", "-i", "--network", "none", "--user", uid, "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "1024", "-v", work + ":" + path, "-w", path, ...Object.entries(env).flatMap(([k, v]) => ["-e", k + "=" + v]), "--entrypoint", "sh", built.tag, "-c", command], { input: payload, encoding: "utf8", timeout: (timeout + 30) * 1000 });
+const stdout = (r.stdout ?? "").trim();
+let decision: { decision?: unknown; reason?: unknown } | null = null;
+try {
+  decision = stdout ? JSON.parse(stdout) : null;
+} catch {
+  decision = null;
+}
+const logFile = join(work, ".gstack-home", "hooks", "skill-contract.log");
+const log = existsSync(logFile) ? readFileSync(logFile, "utf8").split("\n").filter((l) => l.trim()) : [];
+const events = log.map((l) => / event=([^\s]+)/.exec(l)?.[1] ?? "?");
+const recordFile = join(work, ".gstack-home", "skill-contracts", sid + ".json");
+const outcome = existsSync(recordFile) ? Object.values(JSON.parse(readFileSync(recordFile, "utf8")).runs ?? {}).map((x) => (x as { outcome: string }).outcome).join(",") : "none";
+console.log("case " + kase + ": arm image " + built.tag + ", hook command " + command.replace(install.home, "~") + " (timeout " + timeout + " s), " + lines.length + " transcript lines");
+console.log("hook: exit " + r.status + (r.error ? " (" + r.error.message + ")" : "") + ", decision " + (decision ? String(decision.decision) : "none") + ", reason " + (decision && typeof decision.reason === "string" ? JSON.stringify(decision.reason.slice(0, 120)) : "none") + (r.stderr?.trim() ? ", stderr " + JSON.stringify(r.stderr.trim().slice(0, 200)) : ""));
+console.log("log: " + log.length + " line(s) in $GSTACK_STATE_ROOT/hooks/skill-contract.log, events " + (events.join(",") || "none") + "; record outcome " + outcome);
+const why = r.status !== 0 ? "the hook's container exited " + r.status
+  : decision?.decision !== "block" ? "the hook did not block"
+  : typeof decision.reason !== "string" || !decision.reason.startsWith("SKILL_CONTRACT_UNMET review") ? "the block reason is not SKILL_CONTRACT_UNMET review"
+  : !log.some((l) => l.includes(" session=" + sid + " ") && / event=blocked( |$)/.test(l)) ? "no event=blocked line for this session in the hook log"
+  : null;
+console.log(why ? "hook check: REFUSE (" + why + ")" : "hook check: PASS");
+process.exit(why ? 3 : 0);

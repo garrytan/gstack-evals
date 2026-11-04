@@ -1,0 +1,26 @@
+{
+  "gstack": "699a41cb6808e01240d02e82247693f9170d401a",
+  "install": "./setup --host claude --no-browser -q",
+  "note": "The gstack-full install at review-units' default ./setup, pinned by the dry run (dry-run-rr2.txt) from the real install layer: the served /review tree (one path and sha256 line per file under ~/.local/share/gstack/review) and the captured ~/.claude/settings.json, whose hooks are the entries below, each command <home>/.claude/skills/gstack/hosts/claude/hooks/<name> with its timeout in seconds.",
+  "home": "/home/agent",
+  "hooks": {
+    "Stop": [
+      [
+        "timeline-stop-hook",
+        5
+      ],
+      [
+        "skill-contract-stop-hook",
+        10
+      ]
+    ],
+    "UserPromptSubmit": [
+      [
+        "skill-route-hook",
+        5
+      ]
+    ]
+  },
+  "review_tree_sha256": "3384809985dfe240947660369af2aa4d50ad37e08a57deca6bd7728e68c816e0",
+  "settings_sha256": "e94318fae14de4db9dfdf1619f67c8bc22b56428c6fc92809369f81d0821dedc"
+}
