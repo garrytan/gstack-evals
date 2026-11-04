@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fake ubi-runner for l1-launch.test.ts. Every VM is a directory $UBI_FAKE/<name>: standard-2 VMs are hosts (host-N),
 # others part VMs (vm-N). ssh runs the command in the VM's directory with HOME set to it; a VM with a .dead file
-# answers nothing. A part VM's bootstrap and a host's bootstrap are skipped. up writes a recovery bundle (a copy of the
+# answers nothing. A part VM's bootstrap and a host's bootstrap are skipped; FAIL_HOST_BOOTSTRAP=1 makes the host's fail. up writes a recovery bundle (a copy of the
 # VM's state) when UBI_RECOVERY_DIR is set, and recover restores the state of every bundle this machine lacks.
 set -u
 cmd=$1; shift
@@ -37,7 +37,7 @@ case "$cmd" in
     [ -d "$state/$name" ] || { echo "no local state for VM '$name'" >&2; exit 1; }
     c="$*"
     case "$name:$c" in vm-*:*vm-bootstrap*) exit 0 ;; esac
-    c=${c//bash l1\/laneb\/l1\/host-bootstrap.sh/true}
+    if [ -n "${FAIL_HOST_BOOTSTRAP:-}" ]; then c=${c//bash l1\/laneb\/l1\/host-bootstrap.sh/false}; else c=${c//bash l1\/laneb\/l1\/host-bootstrap.sh/true}; fi
     d=$(vmdir "$name")
     HOME="$d" bash -c "cd '$d' && $c" ;;
   down)

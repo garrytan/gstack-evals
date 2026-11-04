@@ -16,7 +16,8 @@
 // Only tests set L1_PREPARE_RUN, L1_HOST_LEDGER_PORT, L1_UNREACHABLE_MINUTES and the L1_*_SEC waits.
 // Exit codes: 0 ok; 2 usage; 3 refused (state forbids the step); 4 the item stops incomplete; 5 the host is lost;
 // 9 the ledger refused the host's reserve (cap stop, no host); 1 any other error. Stderr lines start with a registered code
-// (src/errors/codes.ts): E_USAGE for a bad call or a refusal ("E_USAGE refused: ..."), E_INTERNAL for anything else.
+// (src/errors/codes.ts): E_USAGE for a bad call or a refusal ("E_USAGE refused: ..."), CAP_STOP for the host's refused
+// reserve, E_INTERNAL for anything else.
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -440,6 +441,13 @@ export function currentHost(work: string): any | null {
   if (!up || rows.some((r) => r.n === up.n && (r.event === "down" || r.event === "lost"))) return null;
   return up;
 }
+// A host-up that failed and whose host could not be destroyed: the host stays current until host-down confirms it gone.
+const cleanupPending = (work: string, host: any) => hosts(work).some((r) => r.n === host.n && r.event === "down_failed");
+function usableHost(work: string, missing: string) {
+  const host = currentHost(work) ?? refuse(missing);
+  if (cleanupPending(work, host)) refuse("host-up failed on " + host.name + " and its cleanup is pending; run host-down");
+  return host;
+}
 const recordHost = (work: string, row: Record<string, unknown>) => { mkdirSync(join(work, "host"), { recursive: true }); appendFileSync(hostsFile(work), JSON.stringify({ ...row, ts: new Date().toISOString() }) + "\n"); };
 const readPlan = (work: string): Plan => { if (!existsSync(join(work, "plan.json"))) usage(work + " has no plan.json; run prepare first"); return readJson(join(work, "plan.json")); };
 const mirrorPath = (work: string) => join(work, "host/ledger.jsonl");
@@ -535,6 +543,7 @@ function status(host: any): any {
 
 function hostUp(work: string) {
   const plan = readPlan(work);
+  refuseEnded(work, plan);
   if (currentHost(work)) refuse("host " + currentHost(work).name + " is already up for " + work);
   const ledger = ledgerEnv();
   if (existsSync(pointerPath(ledger))) refuse(ledger + " is on a host already (" + pointerPath(ledger) + ")");
@@ -551,7 +560,7 @@ function hostUp(work: string) {
   const ttl = plan.host_ttl_hours;
   const id = "host-" + n, usd = Math.round(ttl * L1.host.usdPerHour * 1e6) / 1e6;
   const res = new Ledger(ledger, plan.item).reserve(id, toMicros(usd), { kind_detail: "awake host hours: " + ttl + " h TTL at $" + L1.host.usdPerHour + "/h (" + L1.host.size + ")" });
-  if (!res.ok || res.existing) { console.error("the ledger refused the awake host's reserve of $" + usd + " for " + plan.item + "; no host started (cap stop)"); process.exit(9); }
+  if (!res.ok || res.existing) { console.error("CAP_STOP the ledger refused the awake host's reserve of $" + usd + " for " + plan.item + "; no host started (cap stop)"); process.exit(9); }
   const upAt = nowSec();
   const up = ubi(["up", "-s", L1.host.size], { env: { UBI_TTL_HOURS: String(ttl), UBI_COUNTED: "1" } });
   const name = up.code === 0 ? up.out.trim().split("\n").at(-1)! : "";
@@ -559,7 +568,7 @@ function hostUp(work: string) {
     const down = name ? ubi(["down", name]).code === 0 : true;
     const hours = (nowSec() - upAt) / 3600;
     if (down) new Ledger(ledger, plan.item).settle(id, toMicros(L1.host.usdPerHour * hours), { kind_detail: "awake host hours: " + hours.toFixed(6) + " h; host-up failed" });
-    recordHost(work, { event: "down", n, name, failed: String(e).slice(0, 300), down_confirmed: down, hours });
+    recordHost(work, { event: down ? "down" : "down_failed", n, name, failed: String(e).slice(0, 300), down_confirmed: down, hours });
     throw e;
   };
   if (!name) fail(new Error("ubi-runner up failed: " + up.err.trim().split("\n").slice(-3).join(" | ")));
@@ -598,6 +607,19 @@ function partState(work: string, plan: Plan) {
   return all.map((p) => ({ part: p, launched: existsSync(join(work, p.name + ".launch.json")), result: existsSync(join(work, p.name + ".result.json")) ? readJson(join(work, p.name + ".result.json")) : null, relaunch: existsSync(join(work, p.name + ".relaunch.json")) ? readJson(join(work, p.name + ".relaunch.json")) : null }));
 }
 
+// The item has ended incomplete (prereg section 6): recover could not rebuild the ledger after the host was lost, or a part
+// ended at a cap stop. Nothing more starts for it; host-down is still allowed after a cap stop.
+function itemEnded(work: string, plan: Plan): string | null {
+  const rec = join(work, "host/recover.json");
+  if (existsSync(rec) && readJson(rec).complete === false) return "the host was lost and recover could not rebuild the ledger (host/recover.json)";
+  const cap = partState(work, plan).find((s) => s.result?.cap_stop?.length);
+  return cap ? cap.part.name + " ended at a cap stop (" + cap.result.cap_stop[0] + "), and a cap stop is never relaunched" : null;
+}
+function refuseEnded(work: string, plan: Plan) {
+  const ended = itemEnded(work, plan);
+  if (ended) refuse(plan.item + " has ended incomplete: " + ended + ". Nothing more starts for it; it goes to the Captain");
+}
+
 function launchDir(work: string, plan: Plan, host: any, part: PartPlan) {
   const st = status(host) ?? refuse("host " + host.name + " did not answer; run attach");
   const running = Object.entries(st.parts).filter(([, s]: any) => s.alive || (s.launch_exit === null && !s.salvage));
@@ -627,14 +649,14 @@ function launchDir(work: string, plan: Plan, host: any, part: PartPlan) {
 
 function launch(work: string, partName: string) {
   const plan = readPlan(work);
-  const host = currentHost(work) ?? refuse("no host is up; run host-up");
+  refuseEnded(work, plan);
+  const host = usableHost(work, "no host is up; run host-up");
   const states = partState(work, plan);
   const i = states.findIndex((s) => s.part.name === partName);
   if (i < 0) usage(partName + " is not a part of " + plan.item + " (" + plan.parts.map((p) => p.name).join(", ") + ") or a prepared relaunch");
   if (states[i]!.launched) refuse(partName + " was launched already");
   for (const s of states.slice(0, i)) {
     if (!s.launched || !s.result) refuse(s.part.name + " has not finished; parts run one after another");
-    if (s.result.cap_stop.length) refuse(s.part.name + " ended at a cap stop (" + s.result.cap_stop[0] + "); the item ends incomplete and nothing more launches");
     if (s.result.loss.length && !s.part.relaunch_of && !s.relaunch) refuse(s.part.name + " ended with a loss (" + s.result.loss[0] + "); run relaunch for it first");
   }
   launchDir(work, plan, host, states[i]!.part);
@@ -653,7 +675,8 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
 function attach(work: string) {
   const plan = readPlan(work);
   const host = currentHost(work);
-  if (!host) { console.log("NEXT: " + (existsSync(join(work, "host/recover.json")) ? "host-up (after recover), then relaunch" : "host-up")); return; }
+  if (!host) { const ended = itemEnded(work, plan); console.log("NEXT: " + (ended ? "none: " + plan.item + " ended incomplete (" + ended + ") and goes to the Captain" : existsSync(join(work, "host/recover.json")) ? "host-up (after recover), then relaunch" : "host-up")); return; }
+  if (cleanupPending(work, host)) { console.log("NEXT: host-down (cleanup of a failed host-up is pending)"); return; }
   const st = status(host);
   const unreachable = join(work, "host/unreachable.jsonl");
   if (!st) {
@@ -671,6 +694,11 @@ function attach(work: string) {
   for (const s of partState(work, plan)) {
     const h = st.parts[s.part.name];
     if (!h) continue;
+    if (s.launched) {
+      const lp = join(work, s.part.name + ".launch.json"), l = readJson(lp);
+      const want = { ...l, controller_started_at: h.started_at ?? l.controller_started_at, vm: h.vm ?? l.vm };
+      if (want.vm !== l.vm || want.controller_started_at !== l.controller_started_at) writeJson(lp, want);
+    }
     if (h.alive) { lines.push(s.part.name + ": running (controller pid " + h.pid + ", VM " + (h.vm ?? "not up yet") + ")"); continue; }
     if (s.result) continue;
     if (h.launch_exit === null && !h.salvage) { lines.push(s.part.name + ": CONTROLLER_LOST (no exit recorded). NEXT: relaunch --part " + s.part.name + " (it salvages first)"); continue; }
@@ -690,7 +718,7 @@ function next(work: string, plan: Plan): string {
   for (const s of states) {
     if (!s.launched) return "launch --part " + s.part.name;
     if (!s.result) return "attach again (" + s.part.name + " is running)";
-    if (s.result.cap_stop.length) return "host-down: " + s.part.name + " ended at a cap stop, so the item ends incomplete";
+    if (s.result.cap_stop.length) return "host-down: " + s.part.name + " ended at a cap stop, so " + plan.item + " ends incomplete and goes to the Captain";
     if (s.result.loss.length && !s.part.relaunch_of && !s.relaunch) return "relaunch --part " + s.part.name;
   }
   return "host-down (every part has finished)";
@@ -700,7 +728,8 @@ function relaunch(work: string, partName: string) {
   const plan = readPlan(work);
   const part = plan.parts.find((p) => p.name === partName) ?? usage(partName + " is not a part of " + plan.item + "; a relaunch is never relaunched");
   if (existsSync(join(work, partName + ".relaunch.json"))) refuse(partName + " was relaunched already; the prereg allows one relaunch");
-  const host = currentHost(work) ?? refuse("no host is up; run host-up (after recover, if the host was lost)");
+  refuseEnded(work, plan);
+  const host = usableHost(work, "no host is up; run host-up (after recover, if the host was lost)");
   let st = status(host) ?? refuse("host " + host.name + " did not answer; run attach");
   const h = st.parts[partName];
   if (h && h.alive) refuse(partName + "'s controller is still running");
@@ -730,7 +759,7 @@ function relaunch(work: string, partName: string) {
 
 function recover(work: string) {
   const plan = readPlan(work);
-  const host = currentHost(work) ?? refuse("no host is up, so none is lost");
+  const host = usableHost(work, "no host is up, so none is lost");
   if (status(host)) refuse("host " + host.name + " answers; run attach");
   if (!existsSync(mirrorPath(work))) refuse("no ledger mirror in " + work + "; nothing to rebuild from");
   const down = ubi(["down", host.name]);
@@ -742,21 +771,22 @@ function recover(work: string) {
   if (running) {
     const l = readJson(join(work, running.part.name + ".launch.json"));
     const dir = join(work, running.part.name);
+    const partVm: string | null = l.vm ?? unclaimedBundle(work, plan, l.at);
     complete = false;
-    if (l.vm) {
+    if (partVm) {
       ubi(["recover"]);
-      if (existsSync(bundlePath(l.vm)) && ubi(["ssh", l.vm, "touch work/run/STOP"]).code === 0) {
+      if (existsSync(bundlePath(partVm)) && ubi(["ssh", partVm, "touch work/run/STOP"]).code === 0) {
         const deadline = Date.now() + Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) * 1000;
-        while (Date.now() < deadline && ubi(["ssh", l.vm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
+        while (Date.now() < deadline && ubi(["ssh", partVm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
         mkdirSync(join(dir, "pulled"), { recursive: true });
-        complete = ubi(["ssh", l.vm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", l.vm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", l.vm, "work/run/jobs", join(dir, "pulled")]).code === 0;
+        complete = ubi(["ssh", partVm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", partVm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", partVm, "work/run/jobs", join(dir, "pulled")]).code === 0;
       }
-      const vmDown = ubi(["down", l.vm]).code === 0;
-      if (!vmDown) refuse("part VM " + l.vm + " could not be confirmed gone; run recover again");
+      const vmDown = ubi(["down", partVm]).code === 0;
+      if (!vmDown) refuse("part VM " + partVm + " could not be confirmed gone; run recover again");
       vm = { id: running.part.prefix + "vm", hours: (nowSec() - Number(l.controller_started_at ?? Date.parse(l.at) / 1000)) / 3600 };
-    } else complete = true;
+    }
     if (complete) sessions = readJsonl(join(dir, "pulled/out/proxy-sessions.jsonl"));
-    record.part_vm = l.vm ?? null;
+    record.part_vm = partVm;
     record.part_results_pulled = complete;
   }
   const rows = readRows(mirrorPath(work));
@@ -772,13 +802,34 @@ function recover(work: string) {
   recordHost(work, { event: "lost", n: host.n, name: host.name, down_confirmed_at: goneAt, rows_added: add.length });
   if (running) writeJson(join(work, running.part.name + ".result.json"), { ...classify(join(work, running.part.name), null, { hostLost: true }), at: new Date().toISOString() });
   writeJson(join(work, "host/recover.json"), { ...record, rows_added: add.length, complete });
-  if (!complete) { console.log("STOP: host " + host.name + " and part VM were both lost; ledger rows after the last mirror can't be rebuilt, so " + plan.item + " ends incomplete and goes to the Captain"); process.exit(4); }
+  if (!complete) { console.log("STOP: host " + host.name + " was lost and the running part's VM records were lost or its VM is unknown; ledger rows after the last mirror can't be rebuilt, so " + plan.item + " ends incomplete and goes to the Captain"); process.exit(4); }
   console.log("recovered: host " + host.name + " is gone; " + add.length + " ledger rows rebuilt into " + ledger + ". NEXT: host-up, then " + (running ? "relaunch --part " + running.part.name : "launch the next part"));
+}
+
+// A part VM that came up after launch stopped waiting, before any attach recorded it in launch.json: the one recovery
+// bundle copied since the part launched that no host and no part's launch.json names. None, or more than one, leaves the
+// part VM unknown.
+function unclaimedBundle(work: string, plan: Plan, launchedAt: string): string | null {
+  const dir = join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag());
+  if (!existsSync(dir)) return null;
+  const claimed = new Set([...hosts(work).map((r) => r.name), ...partState(work, plan).filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm)]);
+  const since = Math.floor(Date.parse(launchedAt) / 1000) * 1000;
+  const found = readdirSync(dir).filter((f) => f.endsWith(".bundle")).map((f) => f.slice(0, -".bundle".length)).filter((vm) => !claimed.has(vm) && statSync(join(dir, vm + ".bundle")).mtimeMs >= since);
+  return found.length === 1 ? found[0]! : null;
 }
 
 function hostDown(work: string) {
   const plan = readPlan(work);
   const host = currentHost(work) ?? refuse("no host is up");
+  if (cleanupPending(work, host)) {
+    const ledger = resolve(readJson(join(work, "host/pointer")).ledger);
+    if (ubi(["down", host.name]).code !== 0) refuse("host " + host.name + " could not be confirmed gone; its reserve " + host.reserve_id + " stays open. Run host-down again");
+    const hours = (nowSec() - host.up_at) / 3600;
+    const out = new Ledger(ledger, plan.item).settle(host.reserve_id, toMicros(L1.host.usdPerHour * hours), { kind_detail: "awake host hours: " + hours.toFixed(6) + " h; host-up failed, destroyed by host-down" });
+    recordHost(work, { event: "down", n: host.n, name: host.name, hours, settled: out.ok });
+    console.log("host " + host.name + " (a failed host-up) is gone after " + hours.toFixed(2) + " h; its hours settled on " + ledger);
+    return;
+  }
   const st = status(host) ?? refuse("host " + host.name + " did not answer; run attach, or recover if it is lost");
   const running = Object.entries(st.parts).filter(([, s]: any) => s.alive || (s.launch_exit === null && !s.salvage));
   if (running.length) refuse(running.map(([k]) => k).join(", ") + " has not finished");
