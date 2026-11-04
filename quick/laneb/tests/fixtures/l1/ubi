@@ -2,7 +2,10 @@
 # Fake ubi-runner for l1-launch.test.ts. Every VM is a directory $UBI_FAKE/<name>: standard-2 VMs are hosts (host-N),
 # others part VMs (vm-N). ssh runs the command in the VM's directory with HOME set to it; a VM with a .dead file
 # answers nothing. A part VM's bootstrap and a host's bootstrap are skipped; FAIL_HOST_BOOTSTRAP=1 makes the host's fail. up writes a recovery bundle (a copy of the
-# VM's state) when UBI_RECOVERY_DIR is set, and recover restores the state of every bundle this machine lacks.
+# VM's state) when UBI_RECOVERY_DIR is set, and recover restores the state of every bundle this machine lacks. Switches:
+# FAIL_RECOVER=1 makes recover fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
+# runner's idle watchdog, ending an ssh command and its process group after that long (a setsid -f child survives);
+# FAIL_SSH_MATCH=<text> makes an ssh command containing it exit 255, after running it when FAIL_SSH_RUN=1.
 set -u
 cmd=$1; shift
 state=${UBI_RUNNER_STATE:-$HOME/.local/state/ubi-runner}
@@ -28,6 +31,7 @@ case "$cmd" in
     mkdir -p "$(vmdir "$1")/$3"; cp -r "$2/." "$(vmdir "$1")/$3/" ;;
   pull)
     dead "$1" && exit 1
+    case $1 in vm-*) sleep "${SLOW_PULL:-0}" ;; esac
     d=$(vmdir "$1"); mkdir -p "$3"; dest=$(cd "$3" && pwd)
     (cd "$d" && ls -d $2 >/dev/null 2>&1) || exit 0
     (cd "$d" && cp -r $2 "$dest/") ;;
@@ -39,11 +43,16 @@ case "$cmd" in
     case "$name:$c" in vm-*:*vm-bootstrap*) exit 0 ;; esac
     if [ -n "${FAIL_HOST_BOOTSTRAP:-}" ]; then c=${c//bash l1\/laneb\/l1\/host-bootstrap.sh/false}; else c=${c//bash l1\/laneb\/l1\/host-bootstrap.sh/true}; fi
     d=$(vmdir "$name")
-    HOME="$d" bash -c "cd '$d' && $c" ;;
+    if [ -n "${FAIL_SSH_MATCH:-}" ] && [[ "$c" == *"$FAIL_SSH_MATCH"* ]]; then
+      [ -z "${FAIL_SSH_RUN:-}" ] || HOME="$d" bash -c "cd '$d' && $c"
+      exit 255
+    fi
+    if [ -n "${UBI_FAKE_SSH_LIMIT:-}" ]; then HOME="$d" timeout "$UBI_FAKE_SSH_LIMIT" bash -c "cd '$d' && $c"; else HOME="$d" bash -c "cd '$d' && $c"; fi ;;
   down)
     [ -z "${FAIL_DOWN:-}" ] || exit 1
     [ ! -d "$(vmdir "$1")" ] || touch "$(vmdir "$1")/.down" ;;
   recover)
+    [ -z "${FAIL_RECOVER:-}" ] || { echo "recovery bundles are sealed with another key" >&2; exit 1; }
     for b in "$UBI_RECOVERY_DIR/$owner"/*.bundle; do
       [ -f "$b" ] || continue
       n=$(basename "$b" .bundle)

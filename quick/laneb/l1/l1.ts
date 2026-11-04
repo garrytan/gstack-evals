@@ -79,6 +79,7 @@ const sha256File = (p: string) => sha256(readFileSync(p));
 const nowSec = () => Math.floor(Date.now() / 1000);
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const writeJson = (p: string, v: unknown) => writeFileSync(p, JSON.stringify(v, null, 2) + "\n");
+const writeJsonAtomic = (p: string, v: unknown) => { writeJson(p + ".tmp", v); renameSync(p + ".tmp", p); };
 
 // "<part> <task>" lines, as f-parts.txt writes them.
 export function readParts(text: string): Map<string, string[]> {
@@ -327,6 +328,25 @@ function hostEnv(root: string): Record<string, string> {
   return env;
 }
 const alive = (pid: number, needle: string) => { try { return readFileSync("/proc/" + pid + "/cmdline", "utf8").split("\0").join(" ").includes(needle); } catch { return false; } };
+// A part's controller is alive while any process in host.sh's session is: host.sh leads its own session (setsid -f), so
+// a launch.sh, or a ubi-runner call it made, that outlives host.sh still counts. launch.sh starts the ledger service and
+// the batch's tunnel in sessions of their own, so they don't count; salvage stops them.
+function controllerAlive(pid: number, part: string) {
+  if (alive(pid, "host.sh run " + part + " ")) return true;
+  return readdirSync("/proc").some((p) => {
+    if (!/^\d+$/.test(p) || p === String(pid)) return false;
+    let stat = "";
+    try { stat = readFileSync("/proc/" + p + "/stat", "utf8"); } catch { return false; }
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[3] === String(pid);
+  });
+}
+// The VMs whose recovery bundles in dir were written at or after sinceMs and that no one claims: a part VM that came up
+// before anything recorded its name.
+function unclaimedBundles(dir: string, claimed: Set<string>, sinceMs: number) {
+  if (!existsSync(dir)) return [];
+  const since = Math.floor(sinceMs / 1000) * 1000;
+  return readdirSync(dir).filter((f) => f.endsWith(".bundle")).map((f) => f.slice(0, -".bundle".length)).filter((vm) => !claimed.has(vm) && statSync(join(dir, vm + ".bundle")).mtimeMs >= since);
+}
 export function portTaken(port: string) {
   return Bun.spawnSync(["bash", "-c", 'exec 3<>"/dev/tcp/127.0.0.1/$1"', "bash", port], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
 }
@@ -342,8 +362,11 @@ export function hostStatus(root: string) {
     const part = m[1]!, c = readJson(join(work, f));
     const exitFile = join(work, part + ".launch-exit");
     const log = existsSync(join(work, part + ".controller.log")) ? readFileSync(join(work, part + ".controller.log"), "utf8") : "";
-    parts[part] = { pid: c.pid, started_at: c.started_at, alive: alive(c.pid, "host.sh run " + part + " "), launch_exit: existsSync(exitFile) ? Number(readFileSync(exitFile, "utf8").trim()) : null,
-      vm: /^vm: (\S+)$/m.exec(log)?.[1] ?? null, pulled: existsSync(join(work, part, "pulled/out/vm-run.exit")), salvage: existsSync(join(work, part + ".salvage.json")) ? readJson(join(work, part + ".salvage.json")) : null };
+    const launchExit = existsSync(exitFile) ? Number(readFileSync(exitFile, "utf8").trim()) : null;
+    const lock = join(work, part + ".salvage.lock"), failed = join(work, part + ".salvage-failed.json");
+    parts[part] = { pid: c.pid, started_at: c.started_at, alive: launchExit === null && controllerAlive(c.pid, part), launch_exit: launchExit,
+      vm: /^vm: (\S+)$/m.exec(log)?.[1] ?? null, pulled: existsSync(join(work, part, "pulled/out/vm-run.exit")), salvage: existsSync(join(work, part + ".salvage.json")) ? readJson(join(work, part + ".salvage.json")) : null,
+      salvage_failed: existsSync(failed) ? readJson(failed) : null, salvaging: existsSync(lock) && alive(Number(readFileSync(lock, "utf8").trim()), "host-salvage ") };
   }
   const bytes = existsSync(ledger) ? readFileSync(ledger) : Buffer.alloc(0);
   return { now: nowSec(), item: env.ITEM, ledger: { path: ledger, sha256: sha256(bytes), bytes: bytes.length }, bound: existsSync(ledger + ".bound") ? readJson(ledger + ".bound") : null, parts, port_open: portTaken(env.LEDGER_PORT ?? L1.host.ledgerPort) };
@@ -374,22 +397,26 @@ function secretsEnv(): Record<string, string> {
 // started. A VM that won't answer is destroyed and its blocks settle the same way; its open session reserves stay open.
 function hostSalvage(root: string, part: string, prefix: string) {
   const env = hostEnv(root), work = join(root, "work"), dir = join(work, part);
-  const st = hostStatus(root).parts[part] as any;
+  const hs = hostStatus(root), st = hs.parts[part] as any;
   if (!st) refuse(part + " was never launched on this host");
   if (st.alive) refuse(part + "'s controller is still running");
   if (st.launch_exit !== null) refuse(part + "'s controller recorded exit " + st.launch_exit + "; nothing to salvage");
+  const others = new Set(Object.entries(hs.parts).filter(([k]) => k !== part).map(([, s]: any) => s.vm).filter(Boolean));
+  const candidates = st.vm ? [] : unclaimedBundles(join(root, "recovery", ownerTag(env.UBI_OWNER)), others, Number(st.started_at) * 1000);
+  if (candidates.length > 1) refuse(part + "'s VM is unknown: " + candidates.join(", ") + " all have unclaimed recovery bundles from after its controller started");
+  const vm: string | null = st.vm ?? candidates[0] ?? null;
   const ubiEnv = { ...process.env, ...secretsEnv(), UBI_OWNER: env.UBI_OWNER!, UBI_RUNNER_STATE: join(root, "ubi-state"), UBI_RECOVERY_DIR: join(root, "recovery") };
   const S = join(root, "bin/ubi-runner.sh");
   const ubi = (args: string[]) => { const p = Bun.spawnSync([S, ...args], { env: ubiEnv, stdout: "pipe", stderr: "pipe" }); return { code: p.exitCode ?? 1, out: p.stdout.toString() }; };
-  const record: Record<string, unknown> = { part, at: new Date().toISOString(), vm: st.vm };
+  const record: Record<string, unknown> = { part, at: new Date().toISOString(), vm };
   let pulled = false;
-  if (st.vm && ubi(["ssh", st.vm, "touch work/run/STOP"]).code === 0) {
+  if (vm && ubi(["ssh", vm, "touch work/run/STOP"]).code === 0) {
     const deadline = Date.now() + Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) * 1000;
-    while (Date.now() < deadline && ubi(["ssh", st.vm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
+    while (Date.now() < deadline && ubi(["ssh", vm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
     for (let i = 0; i < 3 && !pulled; i++) {
       mkdirSync(join(dir, "pulled"), { recursive: true });
-      const remote = ubi(["ssh", st.vm, "cd work/run && find out jobs -type f | wc -l"]).out.trim();
-      pulled = ubi(["ssh", st.vm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", st.vm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", st.vm, "work/run/jobs", join(dir, "pulled")]).code === 0
+      const remote = ubi(["ssh", vm, "cd work/run && find out jobs -type f | wc -l"]).out.trim();
+      pulled = ubi(["ssh", vm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", vm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", vm, "work/run/jobs", join(dir, "pulled")]).code === 0
         && remote === Bun.spawnSync(["bash", "-c", "cd \"$1\" && find out jobs -type f | wc -l", "bash", join(dir, "pulled")]).stdout.toString().trim();
     }
   }
@@ -401,16 +428,31 @@ function hostSalvage(root: string, part: string, prefix: string) {
   if (portTaken(port)) refuse("the ledger port " + port + " is still held after the leftover ledger service was stopped; run salvage again");
   const ledger = new Ledger(env.LEDGER!, env.ITEM!);
   if (pulled) record.reconcile = reconcile(ledger, readRows(join(dir, "pulled/out/proxy-sessions.jsonl")) as any[], prefix);
-  if (st.vm) record.vm_down = ubi(["down", st.vm]).code === 0;
-  if (st.vm && !record.vm_down) { writeJson(join(work, part + ".salvage-failed.json"), record); return refuse("VM " + st.vm + " could not be destroyed; its blocks stay open. Run salvage again"); }
+  if (vm) record.vm_down = ubi(["down", vm]).code === 0;
+  if (vm && !record.vm_down) refuse("VM " + vm + " could not be destroyed; its blocks stay open. Run relaunch again to salvage again");
   const hours = (nowSec() - Number(st.started_at)) / 3600;
   const block = Number(env.VM_USD_PER_HOUR) * Number(env.VM_RESERVE_HOURS);
   const shares = blockShares(ledger.status().openIds, prefix + "vm", block, Number(env.VM_USD_PER_HOUR) * hours);
   for (const s of shares) ledger.settle(s.id, toMicros(s.usd), { kind_detail: "VM hours: " + hours.toFixed(6) + " h at $" + env.VM_USD_PER_HOUR + "/h, settled by salvage after the controller was lost" });
   record.vm_hours = hours;
   record.vm_settles = shares;
-  writeJson(join(work, part + ".salvage.json"), record);
+  writeJsonAtomic(join(work, part + ".salvage.json"), record);
   console.log(JSON.stringify(record));
+}
+
+// relaunch starts host-salvage detached on the host and polls host-status, so no ssh call outlives ubi-runner's idle
+// watchdog. One salvage runs at a time; a failure is written to <part>.salvage-failed.json for the poll to read.
+function hostSalvageRecorded(root: string, part: string, prefix: string) {
+  const work = join(root, "work"), lock = join(work, part + ".salvage.lock");
+  try { writeFileSync(lock, String(process.pid), { flag: "wx" }); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    const pid = Number(readFileSync(lock, "utf8").trim());
+    if (alive(pid, "host-salvage ")) refuse(part + "'s salvage is already running (pid " + pid + ")");
+    writeFileSync(lock, String(process.pid));
+  }
+  try { hostSalvage(root, part, prefix); }
+  catch (e) { writeJsonAtomic(join(work, part + ".salvage-failed.json"), { part, at: new Date().toISOString(), error: (e as Error).message }); throw e; }
+  finally { rmSync(lock, { force: true }); }
 }
 
 // --- Agent side -----------------------------------------------------------------------------------------------------
@@ -451,7 +493,7 @@ function usableHost(work: string, missing: string) {
 const recordHost = (work: string, row: Record<string, unknown>) => { mkdirSync(join(work, "host"), { recursive: true }); appendFileSync(hostsFile(work), JSON.stringify({ ...row, ts: new Date().toISOString() }) + "\n"); };
 const readPlan = (work: string): Plan => { if (!existsSync(join(work, "plan.json"))) usage(work + " has no plan.json; run prepare first"); return readJson(join(work, "plan.json")); };
 const mirrorPath = (work: string) => join(work, "host/ledger.jsonl");
-const ownerTag = () => (process.env.UBI_OWNER ?? "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
+const ownerTag = (owner = process.env.UBI_OWNER ?? "") => owner.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
 const bundlePath = (vm: string) => join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag(), vm + ".bundle");
 const pointerPath = (ledger: string) => ledger + ".host.json";
 
@@ -553,6 +595,7 @@ function hostUp(work: string) {
   if (!bound) itemCheck(rows, plan.item);
   if (!process.env.UBICLOUD_API_KEY && !process.env.UBICLOUD_API_TOKEN) usage("set UBICLOUD_API_KEY");
   if (!process.env.ANTHROPIC_API_KEY) usage("set ANTHROPIC_API_KEY; the host passes it to each part VM's metering proxy");
+  if (process.env.UBI_RECOVERY_KEY) refuse("UBI_RECOVERY_KEY is set, but the host seals part-VM recovery bundles with UBICLOUD_API_KEY, so recover could not open them; unset it");
   runner();
   const n = new Set(hosts(work).map((r) => r.n)).size + 1;
   mkdirSync(join(work, "host"), { recursive: true });
@@ -632,8 +675,14 @@ function launchDir(work: string, plan: Plan, host: any, part: PartPlan) {
   if (!st.bound) must(remoteL1(host.name, "bun " + H + "/laneb/l1/l1.ts host-bind " + H + " " + plan.run_id + " " + JSON.stringify(resolve(work))), "binding the run on the host");
   else if (st.bound.run_id !== plan.run_id) refuse(plan.item + " is bound to run " + st.bound.run_id);
   must(ubi(["sync", host.name, join(work, part.name), H + "/work/" + part.name]), "syncing " + part.name);
-  must(ubi(["ssh", host.name, "setsid -f bash " + H + "/laneb/l1/host.sh run " + part.name + " " + part.prefix + " " + plan.cap_usd + " > " + H + "/work/" + part.name + ".controller.log 2>&1 < /dev/null"]), "starting " + part.name + "'s controller");
-  writeJson(join(work, part.name + ".launch.json"), { part: part.name, prefix: part.prefix, host: host.name, at: new Date().toISOString() });
+  const lp = join(work, part.name + ".launch.json"), at = new Date().toISOString();
+  writeJson(lp, { part: part.name, prefix: part.prefix, host: host.name, at });
+  const start = ubi(["ssh", host.name, "setsid -f bash " + H + "/laneb/l1/host.sh run " + part.name + " " + part.prefix + " " + plan.cap_usd + " > " + H + "/work/" + part.name + ".controller.log 2>&1 < /dev/null"]);
+  if (start.code !== 0) {
+    const after = status(host);
+    if (after && !after.parts[part.name]) { rmSync(lp); throw new Error("starting " + part.name + "'s controller failed (exit " + start.code + "): " + start.err.trim().split("\n").slice(-3).join(" | ")); }
+    if (!after) throw new Error("starting " + part.name + "'s controller exited " + start.code + " and the host did not answer after it; launch.json stays, so attach or recover treats the part as started");
+  }
   const deadline = Date.now() + Number(process.env.L1_BUNDLE_WAIT_SEC ?? L1.bundleWaitSec) * 1000;
   let s: any = null;
   while (Date.now() < deadline) {
@@ -642,7 +691,7 @@ function launchDir(work: string, plan: Plan, host: any, part: PartPlan) {
     if (s && s.launch_exit !== null) break;
     Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 10) * 1000);
   }
-  if (s) writeJson(join(work, part.name + ".launch.json"), { part: part.name, prefix: part.prefix, host: host.name, at: new Date().toISOString(), controller_started_at: s.started_at, vm: s.vm });
+  if (s) writeJson(lp, { part: part.name, prefix: part.prefix, host: host.name, at, controller_started_at: s.started_at, vm: s.vm });
   mirror(work, host);
   console.log(part.name + ": controller started on " + host.name + (s?.vm ? ", part VM " + s.vm + " (recovery bundle copied)" : "; no part VM yet, attach will copy its bundle"));
 }
@@ -680,6 +729,7 @@ function attach(work: string) {
   const st = status(host);
   const unreachable = join(work, "host/unreachable.jsonl");
   if (!st) {
+    if (ubi(["ssh", host.name, "true"]).code === 0) refuse("host " + host.name + " answers ssh but host-status failed on it, so it is not lost and no miss is counted; check ~/" + H + " on it");
     appendFileSync(unreachable, JSON.stringify({ host: host.name, at: nowSec() }) + "\n");
     const misses = readJsonl(unreachable).filter((r) => r.host === host.name);
     const span = (misses.at(-1).at - misses[0].at) / 60;
@@ -734,8 +784,16 @@ function relaunch(work: string, partName: string) {
   const h = st.parts[partName];
   if (h && h.alive) refuse(partName + "'s controller is still running");
   if (h && h.launch_exit === null && !h.salvage) {
-    must(remoteL1(host.name, "bun " + H + "/laneb/l1/l1.ts host-salvage " + H + " " + partName + " " + part.prefix), "salvaging " + partName);
-    st = status(host) ?? refuse("host " + host.name + " did not answer after salvage");
+    if (!h.salvaging) must(remoteL1(host.name, "rm -f " + H + "/work/" + partName + ".salvage-failed.json && setsid -f bun " + H + "/laneb/l1/l1.ts host-salvage " + H + " " + partName + " " + part.prefix + " > " + H + "/work/" + partName + ".salvage.log 2>&1 < /dev/null"), "starting " + partName + "'s salvage");
+    const deadline = Date.now() + (Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) + 600) * 1000;
+    for (;;) {
+      st = status(host) ?? refuse("host " + host.name + " did not answer during " + partName + "'s salvage; run relaunch again, which waits for it");
+      const s = st.parts[partName];
+      if (s.salvage) break;
+      if (s.salvage_failed && !s.salvaging) refuse(partName + "'s salvage failed: " + s.salvage_failed.error + "; run relaunch again");
+      if (Date.now() > deadline) refuse(partName + "'s salvage has not finished; run relaunch again, which waits for it");
+      Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
+    }
   }
   if (!existsSync(join(work, partName + ".result.json"))) {
     if (!st.parts[partName]) refuse(partName + " was never launched on " + host.name + " and has no recorded result");
@@ -761,20 +819,26 @@ function recover(work: string) {
   const plan = readPlan(work);
   const host = usableHost(work, "no host is up, so none is lost");
   if (status(host)) refuse("host " + host.name + " answers; run attach");
+  if (ubi(["ssh", host.name, "true"]).code === 0) refuse("host " + host.name + " answers ssh, so it is not lost and nothing is destroyed; host-status fails on it. Check ~/" + H + " on it");
   if (!existsSync(mirrorPath(work))) refuse("no ledger mirror in " + work + "; nothing to rebuild from");
+  const running = partState(work, plan).find((s) => s.launched && !s.result);
+  const l = running ? readJson(join(work, running.part.name + ".launch.json")) : null;
+  const claimed = new Set([...hosts(work).map((r) => r.name), ...partState(work, plan).filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm)]);
+  const found = l && !l.vm ? unclaimedBundles(join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag()), claimed, Date.parse(l.at)) : [];
+  const partVm: string | null = l?.vm ?? (found.length === 1 ? found[0]! : null);
+  if (partVm) {
+    const rec = ubi(["recover"]);
+    if (rec.code !== 0) refuse("ubi-runner recover failed (exit " + rec.code + "): " + (rec.err || rec.out).trim().split("\n").slice(-2).join(" | ") + "; nothing was destroyed. Fix it, then run recover again");
+  }
   const down = ubi(["down", host.name]);
   if (down.code !== 0) refuse("host " + host.name + " could not be confirmed gone (ubi-runner down exit " + down.code + "); run recover again");
   const goneAt = nowSec();
-  const running = partState(work, plan).find((s) => s.launched && !s.result);
   const record: Record<string, unknown> = { host: host.name, down_confirmed_at: goneAt, mirror_sha256: sha256File(mirrorPath(work)), running: running?.part.name ?? null };
   let sessions: any[] | undefined, vm: { id: string; hours: number } | undefined, complete = true;
   if (running) {
-    const l = readJson(join(work, running.part.name + ".launch.json"));
     const dir = join(work, running.part.name);
-    const partVm: string | null = l.vm ?? unclaimedBundle(work, plan, l.at);
     complete = false;
     if (partVm) {
-      ubi(["recover"]);
       if (existsSync(bundlePath(partVm)) && ubi(["ssh", partVm, "touch work/run/STOP"]).code === 0) {
         const deadline = Date.now() + Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) * 1000;
         while (Date.now() < deadline && ubi(["ssh", partVm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
@@ -804,18 +868,6 @@ function recover(work: string) {
   writeJson(join(work, "host/recover.json"), { ...record, rows_added: add.length, complete });
   if (!complete) { console.log("STOP: host " + host.name + " was lost and the running part's VM records were lost or its VM is unknown; ledger rows after the last mirror can't be rebuilt, so " + plan.item + " ends incomplete and goes to the Captain"); process.exit(4); }
   console.log("recovered: host " + host.name + " is gone; " + add.length + " ledger rows rebuilt into " + ledger + ". NEXT: host-up, then " + (running ? "relaunch --part " + running.part.name : "launch the next part"));
-}
-
-// A part VM that came up after launch stopped waiting, before any attach recorded it in launch.json: the one recovery
-// bundle copied since the part launched that no host and no part's launch.json names. None, or more than one, leaves the
-// part VM unknown.
-function unclaimedBundle(work: string, plan: Plan, launchedAt: string): string | null {
-  const dir = join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag());
-  if (!existsSync(dir)) return null;
-  const claimed = new Set([...hosts(work).map((r) => r.name), ...partState(work, plan).filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm)]);
-  const since = Math.floor(Date.parse(launchedAt) / 1000) * 1000;
-  const found = readdirSync(dir).filter((f) => f.endsWith(".bundle")).map((f) => f.slice(0, -".bundle".length)).filter((vm) => !claimed.has(vm) && statSync(join(dir, vm + ".bundle")).mtimeMs >= since);
-  return found.length === 1 ? found[0]! : null;
 }
 
 function hostDown(work: string) {
@@ -853,7 +905,7 @@ if (import.meta.main) {
   try {
     if (cmd === "host-status") console.log(JSON.stringify(hostStatus(resolve(a!))));
     else if (cmd === "host-bind") hostBind(resolve(a!), rest[0]!, rest[1]!);
-    else if (cmd === "host-salvage") hostSalvage(resolve(a!), rest[0]!, rest[1]!);
+    else if (cmd === "host-salvage") hostSalvageRecorded(resolve(a!), rest[0]!, rest[1]!);
     else {
       if (!a) usage("usage: l1.ts prepare|host-up|launch|attach|relaunch|recover|host-down <work> [--item <item>] [--part <part>]");
       const work = resolve(a!);

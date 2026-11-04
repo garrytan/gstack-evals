@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
@@ -105,6 +105,14 @@ async function loseHost(r: Rig, host: string, part: string, vm: string) {
 const launchJson = (r: Rig, part: string) => JSON.parse(readFileSync(join(r.work, part + ".launch.json"), "utf8"));
 const recoverJson = (r: Rig) => JSON.parse(readFileSync(join(r.work, "host/recover.json"), "utf8"));
 const hostUps = (r: Rig) => events(r).match(/ up -s standard-2 /g)?.length ?? 0;
+const salvageJson = (r: Rig) => JSON.parse(readFileSync(join(r.fake, "host-1/l1/work/pilot.salvage.json"), "utf8"));
+// prepare, host-up and launch pilot on host-1, with its part VM vm-2 paused after its fourth trial.
+async function started(r: Rig) {
+  expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+  expect(l1(r, ["host-up", r.work]).code).toBe(0);
+  expect(l1(r, ["launch", r.work, "--part", "pilot"], { PAUSE_VM: "vm-2", PAUSE_AT: "4" }).code).toBe(0);
+  await until(() => existsSync(join(r.fake, "vm-2/paused")));
+}
 
 describe("l1.ts before any spend", () => {
   test("prepare and host-up refuse a used item, a cap that differs from approvals/, an unpinned runner, a missing recovery folder and an unpinned TB2 split, and start no host", () => {
@@ -354,4 +362,82 @@ describe("l1.ts on a fake awake host", () => {
     expect(openIds(r, "pilot-opus")).toEqual([]);
     expect(l1(r, ["attach", r.work]).out).toContain("NEXT: host-up");
   }, 60_000);
+
+  test("a controller is alive while any process in host.sh's session is: with only host.sh killed, attach reports the part running and relaunch is refused", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    process.kill(JSON.parse(readFileSync(join(r.fake, "host-1/l1/work/pilot.controller.json"), "utf8")).pid, "SIGKILL");
+    expect(l1(r, ["attach", r.work]).out).toContain("pilot: running");
+    const re = l1(r, ["relaunch", r.work, "--part", "pilot"]);
+    expect([re.code, re.err, existsSync(join(r.fake, "host-1/l1/work/pilot.salvage.json"))]).toEqual([3, expect.stringContaining("pilot's controller is still running"), false]);
+    Bun.spawnSync(["pkill", "-9", "-f", join(r.fake, "host-1/l1/laneb/runner/launch.sh")]);
+    await attachUntil(r, /pilot: CONTROLLER_LOST/);
+  }, 180_000);
+
+  test("relaunch starts the salvage detached and polls host-status, so the runner's idle watchdog can't cut the salvage off", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    killController(r, "host-1", "pilot");
+    await attachUntil(r, /pilot: CONTROLLER_LOST/);
+    const re = l1(r, ["relaunch", r.work, "--part", "pilot"], { UBI_FAKE_SSH_LIMIT: "6", SLOW_PULL: "4" });
+    expect([re.code, re.out]).toEqual([0, expect.stringContaining("pilot-relaunch: controller started on host-1")]);
+    expect(salvageJson(r)).toMatchObject({ vm: "vm-2", pulled: true, vm_down: true });
+  }, 240_000);
+
+  test("salvage finds a part VM the controller never logged from the one recovery bundle on the host that no part claims, then stops, pulls and destroys it", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    killController(r, "host-1", "pilot");
+    const log = join(r.fake, "host-1/l1/work/pilot.controller.log");
+    writeFileSync(log, readFileSync(log, "utf8").replace(/^vm: .*\n/m, ""));
+    await attachUntil(r, /pilot: CONTROLLER_LOST/);
+    expect(l1(r, ["relaunch", r.work, "--part", "pilot"]).code).toBe(0);
+    expect(salvageJson(r)).toMatchObject({ vm: "vm-2", pulled: true, vm_down: true });
+    expect(events(r)).toMatch(/ down vm-2 /);
+  }, 240_000);
+
+  test("a host that answers ssh while host-status fails on it is not lost: attach counts no miss, and recover refuses and destroys nothing", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    const bad = join(r.fake, "host-1/l1/work/pilot.salvage.json");
+    writeFileSync(bad, "{\"part\":");
+    for (let i = 0; i < 3; i++) {
+      const a = l1(r, ["attach", r.work], { L1_UNREACHABLE_MINUTES: "0" });
+      expect([a.code, a.err]).toEqual([3, expect.stringContaining("answers ssh but host-status failed")]);
+    }
+    expect(existsSync(join(r.work, "host/unreachable.jsonl"))).toBe(false);
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.err]).toEqual([3, expect.stringContaining("answers ssh, so it is not lost")]);
+    expect(events(r)).not.toMatch(/ down host-1 /);
+    rmSync(bad);
+    expect(l1(r, ["attach", r.work]).out).toContain("pilot: running");
+  }, 180_000);
+
+  test("host-up refuses while UBI_RECOVERY_KEY is set, and recover destroys nothing when ubi-runner recover fails", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    const keyed = l1(r, ["host-up", r.work], { UBI_RECOVERY_KEY: "test-not-a-key" });
+    expect([keyed.code, keyed.err, hostUps(r), openIds(r, "pilot-opus")]).toEqual([3, expect.stringContaining("UBI_RECOVERY_KEY is set"), 0, []]);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { PAUSE_VM: "vm-2", PAUSE_AT: "4" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/paused")));
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    const failed = l1(r, ["recover", r.work], { FAIL_RECOVER: "1" });
+    expect([failed.code, failed.err]).toEqual([3, expect.stringContaining("ubi-runner recover failed (exit 1)")]);
+    expect(events(r)).not.toMatch(/ down host-1 /);
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
+    expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", complete: true });
+  }, 300_000);
+
+  test("launch writes launch.json before it starts the controller, and a start whose ssh fails reads host-status: a controller that started counts, one that didn't leaves no launch.json", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    const no = l1(r, ["launch", r.work, "--part", "pilot"], { FAIL_SSH_MATCH: "host.sh run" });
+    expect([no.code, no.err, existsSync(join(r.work, "pilot.launch.json"))]).toEqual([1, expect.stringContaining("starting pilot's controller failed (exit 255)"), false]);
+    const la = l1(r, ["launch", r.work, "--part", "pilot"], { FAIL_SSH_MATCH: "host.sh run", FAIL_SSH_RUN: "1", PAUSE_VM: "vm-2", PAUSE_AT: "4" });
+    expect([la.code, la.out]).toEqual([0, expect.stringContaining("pilot: controller started on host-1, part VM vm-2")]);
+    expect(launchJson(r, "pilot")).toMatchObject({ host: "host-1", vm: "vm-2" });
+  }, 120_000);
 });

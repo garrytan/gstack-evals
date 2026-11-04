@@ -3,7 +3,7 @@
 #   setsid -f bash l1/laneb/l1/host.sh run <part> <ledger prefix> <batch cap usd>
 # It records its pid and start time in l1/work/<part>.controller.json, runs runner/launch.sh on l1/work/<part> with the
 # item's ledger on this host, and writes launch.sh's exit code to l1/work/<part>.launch-exit last, by rename. No exit file
-# with no live pid is a lost controller (l1.ts attach). Provider and Ubicloud keys come from ~/.l1-secrets (mode 0600),
+# and no live process in this script's session (setsid -f makes it the leader) is a lost controller (l1.ts attach). Provider and Ubicloud keys come from ~/.l1-secrets (mode 0600),
 # never from argv.
 set -euo pipefail
 [ "${1:-}" = run ] && [ $# -eq 4 ] || { echo "E_USAGE usage: host.sh run <part> <ledger prefix> <batch cap usd>" >&2; exit 2; }
