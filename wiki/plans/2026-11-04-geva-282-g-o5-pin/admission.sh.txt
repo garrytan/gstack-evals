@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# G admission, item 5 (G prereg 2026-11-04-geva-262-g-family-admission-prereg, section 6): the re-size at the metered
+# inputs, run the way GSTA-2 decided for O5 (GEVA-282). Keyless; needs bash, sha256sum and Python 3.
+#   MULT=<x> M_PER=<x> M_AP=<x> AUTH_PAID=<x> [AUTH_EXTRA=<x>] bash admission.sh.txt <gstack-evals checkout at the pin>
+# Its first five lines are MULT, M_PER, M_AP and AUTH_PAID as given (or "missing") and AGENT_USER's state, set or
+# unset, never its value. They print before anything else runs, and this script opens no lease. It refuses with exit 2
+# when AGENT_USER is set (cost.py reads it, and it moves the wave-1 figure), when YIELD_G or TOLD_SCALE is set, when any
+# of the four values is missing (resize.py would take plan v3's house value for M_PER, M_AP or AUTH_PAID without a
+# word), or when resize.py is not the prereg's attachment. Otherwise it runs resize.py with exactly those values and
+# exits with its status.
+set -u
+ROOT=${1:?usage: MULT=.. M_PER=.. M_AP=.. AUTH_PAID=.. [AUTH_EXTRA=..] bash admission.sh.txt <gstack-evals checkout>}
+RD=$ROOT/wiki/plans/2026-11-04-geva-262-g-family-admission-prereg
+for k in MULT M_PER M_AP AUTH_PAID; do echo "$k: ${!k:-missing}"; done
+echo "AGENT_USER: $([ -n "${AGENT_USER+x}" ] && echo set || echo unset)"
+echo "AUTH_EXTRA: ${AUTH_EXTRA:-unset, resize.py reads 1.2}"
+refuse() { echo "E_USAGE admission: $1" >&2; exit 2; }
+[ -z "${AGENT_USER+x}" ] || refuse "AGENT_USER is set; unset it, because cost.py reads it and it moves the wave-1 figure"
+for k in YIELD_G TOLD_SCALE; do [ -z "${!k+x}" ] || refuse "$k is set; unset it (G prereg section 6, item 5)"; done
+for k in MULT M_PER M_AP AUTH_PAID; do [ -n "${!k:-}" ] || refuse "$k is missing; pass the metered value from G prereg section 6, item 5"; done
+want=1265268921e92667a85529bfe8eec8a5ecb20bc2f12b567a3c3ec3f44913ec34
+got=$(sha256sum "$RD/resize.py" 2>/dev/null | cut -c1-64)
+[ "$got" = "$want" ] || refuse "$RD/resize.py has sha256 ${got:-none}, not the prereg's attachment $want"
+cd "$RD" || refuse "cannot enter $RD"
+exec env -u AGENT_USER -u YIELD_G -u TOLD_SCALE -u AUTH_EXTRA MULT="$MULT" M_PER="$M_PER" M_AP="$M_AP" AUTH_PAID="$AUTH_PAID" ${AUTH_EXTRA:+AUTH_EXTRA="$AUTH_EXTRA"} python3 resize.py

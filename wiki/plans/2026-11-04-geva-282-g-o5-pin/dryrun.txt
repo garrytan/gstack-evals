@@ -1,0 +1,108 @@
+ANTHROPIC_API_KEY: unset
+OPENAI_API_KEY: unset
+OPENROUTER_API_KEY: unset
+UBICLOUD_API_KEY: unset
+AGENT_USER: unset
+commit 17253ec47e4cb13b1c9b0ce09615762d958b4cb1; bun 1.4.4; docker 29.9.2; python 3.12.3
+
+## Part 0: export
+ok   P0 the export is outside any git work tree, and bun install --frozen-lockfile passes | expected: git rev-parse fails; install exit 0 | observed: install exit 0; fatal: not a git repository (or any of the parent directories): .git
+
+## Part A: the told arm at gstack 699a41cb6808e01240d02e82247693f9170d401a
+ok   A1 gstack fetched by sha (git fetch --depth 1 <repo> <sha>); its git archive matches #202's after-pin manifest | expected: adfefb56eebb360f9cd4c3087a980ed510106e4b8096e4afcf0a3854d1a88bb4 | observed: fetch exit 0, adfefb56eebb360f9cd4c3087a980ed510106e4b8096e4afcf0a3854d1a88bb4
+ok   A2 told-install.sh (./setup --host claude --loadout lite) into a clean HOME | expected: exit 0 | observed: exit 0, gstack ready (claude)
+ok   A5a gstack-modules render at the pin | expected: exit 0 | observed: exit 0
+ok   A3 checkToldHome: pin sha and version, the pin's source and hook sha256s, the hooks, a clean checkout | expected: pass at 699a41cb 1.94.39.0 | observed: pass, hooks ["Stop gstack-timeline-stop 5","Stop gstack-skill-contract 10","UserPromptSubmit gstack-skill-route 5"]
+ok   A4 the installed lite render's tree digest equals told.ts TOLD_PIN, #202's after.json and #193's install-manifest.md (setup render row) | expected: 204 files, ed09c8c81574c6446a9579d255bd919470e4792bfc3ced4df42fd3fdc66dc8a7 | observed: 204 files, ed09c8c81574c6446a9579d255bd919470e4792bfc3ced4df42fd3fdc66dc8a7 (in #193's row)
+ok   A5 a fresh gstack-modules render of the pin's lite lock matches the installed render byte for byte, nothing extra | expected: 204 of 204 lock files identical, spec c5df50f999eb | observed: 204 of 204 identical, spec c5df50f999eb, lock sha256 9705ed670d6ee67a5b1ceccddcd4337b06b85d20f7cbc87bb9046fae426cff27 (#202's 7f9a4aca112bfd1ea77acae458018caa566bd2b19967441e896f00253806ca10)
+ok   A6 O1's pin tests with OUTCOME_TOLD_HOME and OUTCOME_GSTACK_PIN set (told.test.ts, autoplan.test.ts) | expected: exit 0, 0 fail, 0 skip | observed: exit 0,23 pass, 0 fail,
+
+## Part C: the clean room (cleanRoomPreflight)
+stand-in image busybox:1.36, id sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+ok   C0 a clean home (/root) and work dir (/work/repo) | expected: passes | observed: passes
+ok   C1 the preflight with another digest than the image's id | expected: E_OUTCOME_CLEAN_ROOM, not the pinned digest | observed: E_OUTCOME_CLEAN_ROOM outcome-skills none arm: image busybox:1.36 (image digest sha256:0000000000000000000000000000000000000000000000000000000000000000): the image's id is sha256:73aaf090f3d85aa34ee199
+ok   C2 a seeded drive mount (C1's scan) | expected: refused, found $CR_HOME/.capy/drive | observed: refused, found $CR_HOME/.capy/drive
+ok   C3 a drive in the home (C1's scan) | expected: refused, found /root/.capy/drive | observed: refused, found /root/.capy, /root/.capy/drive
+ok   C4 second scan: $home/.gstack | expected: refused, found /root/.gstack | observed: refused, found /root/.gstack
+ok   C5 second scan: $home/CLAUDE.local.md, present at all | expected: refused, found /root/CLAUDE.local.md | observed: refused, found /root/CLAUDE.local.md
+ok   C6 second scan: $home/.mcp.json, present at all | expected: refused, found /root/.mcp.json | observed: refused, found /root/.mcp.json
+ok   C7 second scan: ~/.claude.json, present at all | expected: refused, found /root/.claude.json | observed: refused, found /root/.claude.json
+ok   C8 second scan: $home/.claude/.claude.json, present at all | expected: refused, found /root/.claude/.claude.json | observed: refused, found /root/.claude/.claude.json
+ok   C9 second scan: an entry under /etc/claude-code | expected: refused, found /etc/claude-code/managed-settings.json | observed: refused, found /etc/claude-code/managed-settings.json
+ok   C10 second scan: $home/CLAUDE.md naming gstack | expected: refused, found /root/CLAUDE.md | observed: refused, found /root/CLAUDE.md
+ok   C11 second scan: $home/.claude/settings.json naming gstack | expected: refused, found /root/.claude/settings.json | observed: refused, found /root/.claude/settings.json
+ok   C12 second scan: $home/.claude/settings.local.json naming gstack | expected: refused, found /root/.claude/settings.local.json | observed: refused, found /root/.claude/settings.local.json
+ok   C13 second scan: $home/.claude/commands | expected: refused, found /root/.claude/commands/plan.md | observed: refused, found /root/.claude/commands/plan.md
+ok   C14 second scan: $home/.claude/plugins | expected: refused, found /root/.claude/plugins/p/plugin.json | observed: refused, found /root/.claude/plugins/p/plugin.json
+ok   C15 second scan: $home/.claude/agents | expected: refused, found /root/.claude/agents/a.md | observed: refused, found /root/.claude/agents/a.md
+ok   C16 second scan: $home/.claude/rules | expected: refused, found /root/.claude/rules/r.md | observed: refused, found /root/.claude/rules/r.md
+ok   C17 second scan: $home/.claude/projects/*/memory | expected: refused, found /root/.claude/projects/-work-repo/memory/MEMORY.md | observed: refused, found /root/.claude/projects/-work-repo/memory/MEMORY.md
+ok   C18 second scan: CLAUDE.md naming gstack in a parent of the work dir | expected: refused, found /work/CLAUDE.md | observed: refused, found /work/CLAUDE.md
+ok   C19 second scan: CLAUDE.local.md in a parent of the work dir, present at all | expected: refused, found /work/CLAUDE.local.md | observed: refused, found /work/CLAUDE.local.md
+ok   C20 second scan: CLAUDE.local.md in the work dir, present at all | expected: refused, found /work/repo/CLAUDE.local.md | observed: refused, found /work/repo/CLAUDE.local.md
+ok   C21 second scan: .mcp.json in the work dir, present at all | expected: refused, found /work/repo/.mcp.json | observed: refused, found /work/repo/.mcp.json
+ok   C22 second scan: a .claude/skills folder below the work dir | expected: refused, found /work/repo/pkg/.claude/skills | observed: refused, found /work/repo/pkg/.claude/skills
+ok   C23 second scan: the work dir's .claude/settings.json naming gstack | expected: refused, found /work/repo/.claude/settings.json | observed: refused, found /work/repo/.claude/settings.json
+ok   C24 second scan: the work dir's .claude/settings.local.json naming gstack | expected: refused, found /work/repo/.claude/settings.local.json | observed: refused, found /work/repo/.claude/settings.local.json
+ok   C25 second scan: the work dir's .claude/commands | expected: refused, found /work/repo/.claude/commands/c.md | observed: refused, found /work/repo/.claude/commands/c.md
+ok   C26 second scan: the work dir's .claude/plugins | expected: refused, found /work/repo/.claude/plugins/p.json | observed: refused, found /work/repo/.claude/plugins/p.json
+ok   C27 second scan: the work dir's .claude/agents | expected: refused, found /work/repo/.claude/agents/a.md | observed: refused, found /work/repo/.claude/agents/a.md
+ok   C28 second scan: the work dir's .claude/rules | expected: refused, found /work/repo/.claude/rules/r.md | observed: refused, found /work/repo/.claude/rules/r.md
+ok   C29 settings.json and a command that do not name gstack (content scan, not presence) | expected: passes | observed: passes
+
+## Part L: O6's envelope and one U4 lease per frozen stage, on a temporary ledger
+temporary ledger $W/ledger; gstack-approvals is a stub that writes its rows to $W/ledger/approvals-stub.log only
+ok   L1 the program envelope: $10,000, $2,000 a skill, the six wave-1 skills | expected: recorded | observed: exit 0, cap 10000, skill cap 2000
+ok   L2 g-tg: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $60 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-tg.0001.e0fdb2 open $60
+ok   L2 g-adm-none: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $229 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-adm-none.0001.29fe36 open $229
+ok   L2 g-adm-per: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $572 on plan-eng-review | observed: init exit 0, lease exit 0, g-adm-per.0001.20cdd4 open $572
+ok   L2 g-adm-ap: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $1287 on autoplan | observed: init exit 0, lease exit 0, g-adm-ap.0001.6e2cf8 open $1287
+ok   L2 g-adm-vm: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $24 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-adm-vm.0001.8c80ac open $24
+ok   L3 with every stage open, the envelope holds plan-eng-review's and autoplan's reservations (prereg 9: $729 and $1,444) | expected: 728500000 and 1443500000 micros open | observed: 728500000 and 1443500000 micros open
+ok   L4 a further $600 autoplan lease while autoplan holds $1,443.50 is refused by the envelope | expected: refused, nothing leased | observed: exit 2, ENVELOPE_SKILL_STOP skill autoplan in program g-o5-dryrun holds $1443.50 of its $2000.00 ceiling ($0.00 settled, $1443.50 in open leases and $0.00 admitted but not yet leased); its share of this stage
+ok   L5 g-tg: one stub reservation reserved and settled on the lease | expected: $7.93 settled | observed: $7.93 settled
+ok   S none session limit $8.00 (registry.json) at a proxy slot on g-adm-none's lease, stub upstream | expected: the slot refuses before the limit; overshoot at most 10% | observed: 37 calls settled $7.40, then 402 E_ALLOWANCE E_ALLOWANCE: metering proxy: the slot's allowance of $8.000000 cannot hold this call's worst case of $0.656116 ($7.400000 already committed); overshoot 0.0%
+ok   S plan-eng-review:told session limit $20.00 (registry.json) at a proxy slot on g-adm-per's lease, stub upstream | expected: the slot refuses before the limit; overshoot at most 10% | observed: 97 calls settled $19.40, then 402 E_ALLOWANCE E_ALLOWANCE: metering proxy: the slot's allowance of $20.000000 cannot hold this call's worst case of $0.656116 ($19.400000 already committed); overshoot 0.0%
+ok   S autoplan:told session limit $45.00 (registry.json) at a proxy slot on g-adm-ap's lease, stub upstream | expected: the slot refuses before the limit; overshoot at most 10% | observed: 222 calls settled $44.40, then 402 E_ALLOWANCE E_ALLOWANCE: metering proxy: the slot's allowance of $45.000000 cannot hold this call's worst case of $0.656120 ($44.400000 already committed); overshoot 0.0%
+ok   L5 g-adm-vm: one stub reservation reserved and settled on the lease | expected: $1.20 settled | observed: $1.20 settled
+ok   L6 g-tg: the lease settles into the record | expected: closed | observed: exit 0, spent 7.93
+ok   L6 g-adm-none: the lease settles into the record | expected: closed | observed: exit 0, spent 7.4
+ok   L6 g-adm-per: the lease settles into the record | expected: closed | observed: exit 0, spent 19.4
+ok   L6 g-adm-ap: the lease settles into the record | expected: closed | observed: exit 0, spent 44.4
+ok   L6 g-adm-vm: the lease settles into the record | expected: closed | observed: exit 0, spent 1.2
+ok   L7 after settlement: nothing open on any line; settled spend is what the stubs spent | expected: open 0; settled = sum of L5 and S | observed: open 0, settled 80330000 micros
+
+## Part F: the futility look (plan v3 section 6), made-up trials
+ok   F1 an interim estimate trending helps (MDD 18.6 points, t = 1/2) | expected: no stop, direction helps | observed: delta 0.611, cp+ 1.000, cp- 0.000, stop false, helps, loss lead false
+ok   F2 an interim estimate trending hurts | expected: no stop, direction hurts | observed: delta -0.611, cp+ 0.000, cp- 1.000, stop false, hurts, loss lead false
+ok   F3 a flat interim estimate | expected: stop: both conditional powers under 10%, no loss lead | observed: delta 0.000, cp+ 0.023, cp- 0.023, stop true, none, loss lead false
+ok   F4 a flat estimate leaning to none | expected: stop, loss lead | observed: delta -0.033, cp+ 0.017, cp- 0.033, stop true, hurts, loss lead true
+
+## Part R: the metered inputs (GSTA-2's decision A)
+ok   R1 resize.py with the four inputs at plan v3's house values, AGENT_USER unset | expected: exit 0, wave 1 plans $9393 | observed: exit 0, $9393
+ok   R2 the same with AGENT_USER set to a fixture value: not refused, and the wave-1 figure moves | expected: exit 0, wave 1 not $9393 | observed: exit 0, $6075
+ok   R3 M_PER missing: not refused, plan v3's house multiple 2.2 taken | expected: exit 0, output after the inputs line identical to R1 | observed: exit 0, identical
+ok   R4 M_AP missing: not refused, house multiple 5.0 taken | expected: exit 0, identical to R1 | observed: exit 0, identical
+ok   R5 AUTH_PAID missing: not refused, the house author line taken | expected: exit 0, identical to R1 | observed: exit 0, identical
+ok   R6 MULT missing: refused | expected: exit 1, MULT is missing | observed: exit 1, resize.py: bad metered input: MULT is missing; fix: pass none's metered mean session cost 
+ok   R7 admission.sh.txt with the four values and AGENT_USER unset prints them first, then resize.py's output | expected: MULT: 5;M_PER: 2.2;M_AP: 5;AUTH_PAID: 1.39;AGENT_USER: unset; then R1's lines; exit 0 | observed: MULT: 5;M_PER: 2.2;M_AP: 5;AUTH_PAID: 1.39;AGENT_USER: unset; exit 0, R1's lines
+ok   R8 admission.sh.txt with AGENT_USER set | expected: refused, exit 2, AGENT_USER: set, no re-size, no value printed | observed: exit 2, AGENT_USER: set; E_USAGE admission: AGENT_USER is set; unset it, because cost.py reads it and it 
+ok   R9 admission.sh.txt without MULT | expected: refused, exit 2, MULT: missing, no re-size | observed: exit 2, E_USAGE admission: MULT is missing; pass the metered value from G prereg section 6, item 5
+ok   R9 admission.sh.txt without M_PER | expected: refused, exit 2, M_PER: missing, no re-size | observed: exit 2, E_USAGE admission: M_PER is missing; pass the metered value from G prereg section 6, item 
+ok   R9 admission.sh.txt without M_AP | expected: refused, exit 2, M_AP: missing, no re-size | observed: exit 2, E_USAGE admission: M_AP is missing; pass the metered value from G prereg section 6, item 5
+ok   R9 admission.sh.txt without AUTH_PAID | expected: refused, exit 2, AUTH_PAID: missing, no re-size | observed: exit 2, E_USAGE admission: AUTH_PAID is missing; pass the metered value from G prereg section 6, i
+
+## Part D: O2's Docker suite at 17253ec47e4cb13b1c9b0ce09615762d958b4cb1
+ok   D1 GSTACK_EVALS_DOCKER=1 bun test tests/outcome-skills/mutation-docker.test.ts tests/outcome-skills/clean-room.test.ts (#210: 83 pass, 0 fail) | expected: exit 0, 83 pass, 0 fail | observed: exit 0, 83 pass, 0 fail
+ok   D2 strong trees killed, per language (#210: Python 8/10, Go 14/18, Rust 17/19, TypeScript 17/19) | expected: python strong: 8 of 10;go strong: 14 of 18;rust strong: 17 of 19;typescript strong: 17 of 19; | observed: python strong: 8 of 10;go strong: 14 of 18;rust strong: 17 of 19;typescript strong: 17 of 19;
+ok   D3 weak trees killed, per language (#210: 0 of 4 in every language) | expected: python weak: 0 of 4;go weak: 0 of 4;rust weak: 0 of 4;typescript weak: 0 of 4; | observed: python weak: 0 of 4;go weak: 0 of 4;rust weak: 0 of 4;typescript weak: 0 of 4;
+ok   D4 rust tool image gstack-mutation-tool-rust:0859f0c632f9 | expected: built by the suite | observed: cargo-mutants 27.1.0 (MIT), image sha256:448dd5c1162b2abc0119668dcec98d4da527c66ffd9e74d3a54a43edd6b2d0a3, from rust:1-slim-bookworm@sha256:ed2c95ca377d6571b124b05e75e01207973ded639dce7d5542eb7bcd797e32aa
+ok   D4 typescript tool image gstack-mutation-tool-typescript:939cba41bac1 | expected: built by the suite | observed: StrykerJS (@stryker-mutator/core with @stryker-mutator/vitest-runner) 10.1.1 (Apache-2.0), image sha256:b7a4786392934a073be376c7e3bd38b2a6f875dc7bb243fd509b4b353d78cdeb, from node:24-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c
+ok   D4 python tool image gstack-mutation-tool-python:3d746b976b02 | expected: built by the suite | observed: mutmut 3.8.1 (BSD-3-Clause), image sha256:8d84d40f027e8cd7c40d8f74819dab209581ffb81a7ad2d51d119cd4d4d0fe03, from python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337
+ok   D4 go tool image gstack-mutation-tool-go:9dbb406b7ec7 | expected: built by the suite | observed: go-mutesting (avito-tech fork) v0.0.0-20261002081621-9ce5f731e321 (MIT), image sha256:57bbb361eb894ff8799331e1b3b4afddfa21167df8937403bb9cdb6c9f35473d, from golang:1.27-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9
+
+## leftovers
+containers named gstack-evals-*: 0; open leases: 0 micros
+
+rules: 80, failed: 0
+DRYRUN: ok
