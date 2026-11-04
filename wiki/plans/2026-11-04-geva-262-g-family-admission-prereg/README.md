@@ -17,7 +17,7 @@ source: "Written by GEVA-262 for issue GST-1309 (parent GST-1307) from the Capta
 attachments:
   - 3a384d25487282d3c26c09e013bfcaca2ec2fcd45d5e0bb2959439b44a248e42  power.py
   - 102d84516e8a49023d50cbeef55f46ebb018b1a5fe00ccfab1688c95db471978  power.txt
-  - e318b502b636dc3647a52b3eed1923c29a22d514021848f574977304236ffa32  resize.py
+  - 9312d835dd997d7ba6f83826ab0fed5b4d8800dedc571ec23db77b1f3ce282cf  resize.py
   - 7aa4bfdd6cad4ae453b8b7c4b1a7168ab7556a390d582dd6e2a0a8d073768d08  resize.txt
 ---
 
@@ -239,5 +239,6 @@ gstack /autoplan run autoplan-geva262-20261104004035 on gstack 1.95.2.0, lean ki
 
 - d1 (High): G's decision rule is now frozen as one final look at alpha 0.05 (section 8). The reviewer measured that the lane's default two-look boundary of 1.977 cut the worst-case power of 54 x 3 from 0.820 to 0.814 on the earlier even layout.
 - d2 (High): power.py now uses the most concentrated layout the panel rule allows and prints plan v3's 8-per-repository case. At 8 the worst case fell under 0.80, so the Captain capped G's panel at 3 tasks per repository (pick A), with 8 as the written-in fallback.
-- d3 (High): resize.py's input checks exit with a code and a fix.
+- d3 (High): resize.py's input checks exit with a nonzero code, the error and its fix.
 - Medium and Low, fixed in the same revision: crew threads and gap reruns now hold reservations, and caps carry headroom for the call in flight (section 9); T-G's paid calls are in the outside terms; the futility finding went to the Captain, and the confirmatory prereg owns it; the stop order joined M1 as a listed change; the alone price is described as survivor.py computes it; the flat-pool scenario is named as screened; and the session order and exposure sample have frozen draws.
+- PR review on #196, 2 findings, both fixed: resize.py named autoplan as the skill to stop whenever either skill passed the bound, and now stops the one that passed it, autoplan only when both do (section 7); its error lines dropped reason codes that src/errors/codes.ts doesn't hold. Its default output is unchanged.

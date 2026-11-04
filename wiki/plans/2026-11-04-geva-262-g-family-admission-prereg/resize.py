@@ -24,10 +24,10 @@ PINS = {"cost.py": "1ce669d3bc1408b4ac232552030d01756c74e26713c16375317dedd37827
 for f, h in PINS.items():
     path = os.path.join(P, f)
     if not os.path.isfile(path):
-        sys.exit("E_PLAN_INPUT_MISSING: %s not found; fix: run resize.py from its folder in a gstack-evals checkout that holds plan v3 as merged at 5f13212" % path)
+        sys.exit("resize.py: plan v3 input missing: %s not found; fix: run resize.py from its folder in a gstack-evals checkout that holds plan v3 as merged at 5f13212" % path)
     got = hashlib.sha256(open(path, "rb").read()).hexdigest()
     if got != h:
-        sys.exit("E_PLAN_INPUT_CHANGED: %s sha256 %s, pinned %s; fix: restore it from 5f13212, or change the pin only in a superseding prereg" % (f, got, h))
+        sys.exit("resize.py: plan v3 input changed: %s sha256 %s, pinned %s; fix: restore it from 5f13212, or change the pin only in a superseding prereg" % (f, got, h))
 
 NUMERIC = ("MULT", "M_PER", "M_AP", "AUTH_PAID", "AUTH_EXTRA", "YIELD_G", "TOLD_SCALE")
 for k in NUMERIC:
@@ -37,7 +37,7 @@ for k in NUMERIC:
         except ValueError:
             v = float("nan")
         if not (v > 0 and v < 1000) or (k == "YIELD_G" and v > 1):
-            sys.exit("E_RESIZE_INPUT: %s=%r is not a positive number%s; fix: pass the metered value from section 6, item 5" % (k, os.environ[k], " at most 1" if k == "YIELD_G" else ""))
+            sys.exit("resize.py: bad metered input: %s=%r is not a positive number%s; fix: pass the metered value from section 6, item 5" % (k, os.environ[k], " at most 1" if k == "YIELD_G" else ""))
 
 def model(env):
     saved = {k: os.environ.get(k) for k in env}
@@ -108,7 +108,9 @@ def run(name, env):
     over = [s for s, m in zip(("plan-eng-review", "autoplan"), base[3]) if m > ns["BOUND"]]
     print("both alive: plan-eng-review %dx%d MDD %s $%d; autoplan %dx%d MDD %s $%d; wave 1 plans $%d at these prices" % (n1, k, base[3][0], tot[0], n2, k, base[3][1], tot[1], w1))
     if over:
-        print("  past the 20-point bound with both alive: %s; %s stops at admission item 5 and plan-eng-review re-sizes alone" % (", ".join(over), "autoplan"))
+        stop = "autoplan" if len(over) == 2 else over[0]
+        keep = "autoplan" if stop == "plan-eng-review" else "plan-eng-review"
+        print("  past the 20-point bound with both alive: %s; %s stops at admission item 5 and %s re-sizes alone" % (", ".join(over), stop, keep))
     for s, other, n0 in (("plan-eng-review", "autoplan", n1), ("autoplan", "plan-eng-review", n2)):
         m1, old = ladder(ns, s, n0, k), d7(ns, s, n0, k)
         rungs = ", ".join("%dx%d $%d MDD %s" % t for t in m1["tried"])
