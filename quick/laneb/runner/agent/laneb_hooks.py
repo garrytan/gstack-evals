@@ -55,14 +55,14 @@ def _route_context(line: str) -> bool:
 def l1_evidence(transcripts: Path | None, hooks: Path | None) -> dict:
     """The three L1 hook fields from the copied transcripts and hook state; a None directory is a copy that failed."""
     main = sorted(p for p in transcripts.glob("*/*.jsonl") if p.is_file()) if transcripts is not None else []
-    session = main[0].stem if len(main) == 1 else None
+    stem = main[0].stem if len(main) == 1 else None
     out = {"route_hook": None, "contract_record": None, "contract_check_met": None}
-    if session is None:
+    if stem is None:
         return out
     out["route_hook"] = any(_route_context(line) for line in main[0].read_text(errors="replace").splitlines())
     if hooks is None:
         return out
-    record = hooks / "skill-contracts" / (re.sub(r"[^A-Za-z0-9_-]", "_", session)[:128] + ".json")
+    record = hooks / "skill-contracts" / (re.sub(r"[^A-Za-z0-9_-]", "_", stem)[:128] + ".json")
     if not record.exists():
         out["contract_record"] = False
         return out
