@@ -76,10 +76,7 @@ const turnOf = (skill: string) => skillTurn((registry ??= loadRegistry()), skill
 const REVIEW_SECTIONS = /(?:^|\/)plan-eng-review\/sections\/review-sections\.md$/;
 const REVIEW_SECTIONS_BASH = /^(?!.*\s--(?:help|version)(?![\w-]))\s*(?:cat|head|tail|nl|sed\s+-n\s+(["']?)[\d,$]*p\1)\s[^<>]*plan-eng-review\/sections\/review-sections\.md(?![\w.])/;
 const SCOPE_CHALLENGE = [/^#{1,6}\s+(?:Step 0:\s*)?Scope Challenge\b/, /^\*\*(?:Step 0:\s*)?Scope Challenge\*\*/, /^-\s+Step 0:\s*Scope Challenge\b/];
-const SECTIONS = ([["1", "architecture"], ["2", "code quality"], ["3", "tests?"], ["4", "performance"]] as const).map(([n, name]) => ({
-  heading: new RegExp("^(?:#{1,6}\\s+|\\*\\*)(?:section\\s+" + n + "(?![\\d.])|" + n + "[.)]\\s+(?:" + name + ")\\s+review\\b)", "i"),
-  inline: new RegExp("^#{1,6}\\s+(?:section\\s+" + n + "(?![\\d.])\\s*[:.\\-–—]?\\s*(?:" + name + ")\\b(?:\\s+review\\b)?|" + n + "[.)]\\s+(?:" + name + ")\\s+review\\b)\\s*[:.\\-–—]?\\s*(.*)$", "i"),
-}));
+const SECTIONS = ([["1", "architecture"], ["2", "code quality"], ["3", "tests?"], ["4", "performance"]] as const).map(([n, name]) => new RegExp("^(?:#{1,6}\\s+|\\*\\*)(?:section\\s+" + n + "(?![\\d.])|" + n + "[.)]\\s+(?:" + name + ")\\s+review\\b)", "i"));
 const TEST_PLAN = /\/projects\/[^/]+\/[^/]+-eng-review-test-plan-[^/]+\.md$/;
 const TEST_PLAN_BASH = /^(?:\$\{?PROJECT_DIR\}?|.*\/projects\/[^/]+)\/[^/]+-eng-review-test-plan-[^/]+\.md$/;
 
@@ -113,16 +110,16 @@ function writeTargets(parts: string[]): string[] {
 
 /** plan-eng-review: review-sections.md read, the Step 0 Scope Challenge marker, Sections 1 to 4 in order, a test plan written.
  * A section counts only under a # or bold heading in the pin's numbered forms (`### 1. Architecture review`, `Section 1`)
- * with content before the next section heading: a non-empty line that is not a markdown heading, or, on a # heading, text
- * after the section's name. Bare numbered lines are never section headings (GSTA-2), so no preview list counts, and
- * neither does an unnumbered label or heading such as the completion summary's. A Bash read
+ * with content before the next section heading: a non-empty line below the heading that is not a markdown heading. Text
+ * on the heading line itself, such as an inline verdict, is never content (GSTA-2). Bare numbered lines are never section
+ * headings (GSTA-2), so no preview list counts, and neither does an unnumbered label or heading such as the completion
+ * summary's. A Bash read
  * counts as a simple command whose result is not empty; a Bash write as a simple command that writes the pin's test-plan
  * path, by redirect or tee. Edit and MultiEdit never write a test plan. */
 export function planEngReviewExposure(records: Rec[]): ExposureRead {
   const { uses, lines } = own(records, turnOf("plan-eng-review"));
-  const isSection = (line: string) => SECTIONS.some((s) => s.heading.test(line));
-  const hasBody = (i: number, s: (typeof SECTIONS)[number]) => {
-    if (/\w/.test(s.inline.exec(lines[i]!.line)?.[1] ?? "")) return true;
+  const isSection = (line: string) => SECTIONS.some((s) => s.test(line));
+  const hasBody = (i: number) => {
     for (const { line } of lines.slice(i + 1)) {
       if (isSection(line)) return false;
       if (line && !/^#{1,6}\s/.test(line)) return true;
@@ -130,7 +127,7 @@ export function planEngReviewExposure(records: Rec[]): ExposureRead {
     return false;
   };
   let at = -1;
-  const inOrder = SECTIONS.every((s) => (at = lines.findIndex((l, i) => i > at && s.heading.test(l.line) && hasBody(i, s))) >= 0);
+  const inOrder = SECTIONS.every((s) => (at = lines.findIndex((l, i) => i > at && s.test(l.line) && hasBody(i))) >= 0);
   const bashRead = (u: Use) => {
     const parts = simpleCommand(u.input.command);
     return parts?.length === 1 && REVIEW_SECTIONS_BASH.test(parts[0]!) && u.result!.trim() !== "";

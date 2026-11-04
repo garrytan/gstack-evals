@@ -127,6 +127,12 @@ interface Adapter {
   uncollectable(ctx: Ctx, units: Unit[]): string | null;
   /** On the reference tree: null when the same runner loads its tests cleanly, else what went wrong. */
   reference(ref: Ctx, units: Unit[]): string | null;
+  /** After a baseline error with no collect signal: how the agent's changed tests load but run nothing (Python: every
+   * file skipped at module level; Go: a TestMain that exits 0 before m.Run), or null when the runner shows no such signal.
+   * TypeScript and Rust have none: a file whose tests are all skipped or ignored already reads no-passing-tests. */
+  idle?(ctx: Ctx, units: Unit[]): string | null;
+  /** On the reference tree, after idle: null when the same runner reaches its tests and would run them, else what went wrong. */
+  runs?(ref: Ctx, units: Unit[]): string | null;
   /** The ids of the mutants within the tool's restriction of the scope patch. */
   mutants(ctx: Ctx, scopePatch: string): { ids: string[]; error?: string };
   /** The outcome of each sampled mutant against the passing units. */
@@ -275,6 +281,11 @@ function junitCases(xml: string): { classname: string; name: string; ok: boolean
 export const pytestUncollected = (exit: string, log: string, files: string[]) => (exit === "2" || exit === "5") && files.some((f) => new RegExp("ERROR collecting " + reEscape(f) + "(?: |$)", "m").test(log));
 /** pytest --collect-only exits 0, or 5 with no ERROR line. */
 export const pytestCollected = (exit: string, log: string) => exit === "0" || (exit === "5" && !/ERROR collecting|^ERROR /m.test(log));
+/** pytest --collect-only -rs on the files exits 5 with no ERROR line, and a SKIPPED line names each of them: every file was
+ * skipped at module level, so none of their tests would run. A test class pytest will not collect prints no SKIPPED line. */
+export const pytestSkippedAll = (exit: string, log: string, files: string[]) => exit === "5" && !/ERROR collecting|^ERROR /m.test(log) && files.every((f) => new RegExp("^SKIPPED \\[\\d+\\] " + reEscape(f) + ":\\d+: ", "m").test(log));
+/** pytest --collect-only -rs exits 0 with no SKIPPED or ERROR line: it collected tests and skipped no file at module level. */
+export const pytestRuns = (exit: string, log: string) => exit === "0" && !/^(?:SKIPPED|ERROR)\b|ERROR collecting/m.test(log);
 
 const python: Adapter = {
   units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => agentUnits(ctx, c, pythonUnits)),
@@ -303,6 +314,18 @@ const python: Adapter = {
     const exit = got(ref, "py-ref.exit").trim();
     if (r.status === 0 && pytestCollected(exit, got(ref, "py-ref.log"))) return null;
     return "pytest --collect-only on the reference tree " + (r.status !== 0 ? "did not run (" + tail(r) + ")" : "exited " + exit + ": " + got(ref, "py-ref.log").slice(-300));
+  },
+  idle(ctx, units) {
+    const files = [...new Set(units.map((u) => u.file))];
+    const r = ctx.run('"$PY" -m pytest -p no:cacheprovider --collect-only -q -rs ' + files.map(q).join(" ") + " > /out/py-idle.log 2>&1; echo $? > /out/py-idle.exit");
+    return r.status === 0 && pytestSkippedAll(got(ctx, "py-idle.exit").trim(), got(ctx, "py-idle.log"), files) ? "pytest --collect-only exited 5 and skipped each of the agent's test files at module level" : null;
+  },
+  runs(ref, units) {
+    const dirs = [...new Set(units.map((u) => posix.dirname(u.file)))];
+    const r = ref.run("set --; for d in " + dirs.map(q).join(" ") + '; do if [ -d "$d" ]; then set -- "$@" "$d"; fi; done; "$PY" -m pytest -p no:cacheprovider --collect-only -q -rs "$@" > /out/py-ref-runs.log 2>&1; echo $? > /out/py-ref-runs.exit');
+    const exit = got(ref, "py-ref-runs.exit").trim();
+    if (r.status === 0 && pytestRuns(exit, got(ref, "py-ref-runs.log"))) return null;
+    return "pytest --collect-only on the reference tree " + (r.status !== 0 ? "did not run (" + tail(r) + ")" : "exited " + exit + " or skipped a file at module level: " + got(ref, "py-ref-runs.log").slice(-300));
   },
   mutants(ctx, scopePatch) {
     const scope = new Set<string>();
@@ -380,6 +403,15 @@ function goByPkg(units: Unit[]): Map<string, Unit[]> {
 }
 /** go test -json output shows the package's test binary failed to build or set up. */
 export const goBuildFailed = (jsonl: string, err: string) => jsonl.includes('"Action":"build-fail"') || /\[(?:build|setup) failed\]/.test(jsonl + "\n" + err);
+/** go test -list . exited 0 and printed only its ok line: the test binary ran and listed no test. m.Run lists every test of
+ * a package that has one, so its TestMain exits before m.Run. */
+export const goListedNothing = (exit: string, log: string) => {
+  const lines = log.split("\n").filter((l) => l.trim());
+  return exit === "0" && lines.length === 1 && /^ok\s+\S+(?:\s|$)/.test(lines[0]!);
+};
+/** go test -list . exited 0 and listed at least one test. */
+export const goListedTests = (exit: string, log: string) => exit === "0" && /^Test\w*$/m.test(log);
+const goList = (ctx: Ctx, pkgs: string[], name: string) => ctx.run(pkgs.map((pkg, i) => "go test -count=1 -vet=off -list . " + q("./" + pkg) + " > /out/" + name + "-" + i + ".log 2>&1; echo $? > /out/" + name + "-" + i + ".exit").join("; "));
 const goRegex = (us: Unit[]) => "^(" + [...new Set(us.map((u) => u.name))].join("|") + ")$";
 const GM = "/opt/gstack-mutation/go/bin/go-mutesting";
 const goFiles = (ctx: Ctx, scopePatch: string) => [...sourceRanges("go", parsePatch(scopePatch)).keys()].filter((f) => ctx.tree.list.has(f));
@@ -419,6 +451,19 @@ const go: Adapter = {
     if (r.status !== 0) return "go did not run on the reference tree (" + tail(r) + ")";
     const bad = pkgs.flatMap((pkg, i) => (got(ref, "go-ref-" + i + ".exit").trim() === "0" ? [] : [pkg + " (exit " + got(ref, "go-ref-" + i + ".exit").trim() + "): " + got(ref, "go-ref-" + i + ".log").slice(-300)]));
     return bad.length ? "the reference tree does not build " + bad.join("; ") : null;
+  },
+  idle(ctx, units) {
+    const pkgs = [...goByPkg(units).keys()];
+    const r = goList(ctx, pkgs, "go-idle");
+    if (r.status !== 0 || !pkgs.every((_, i) => goListedNothing(got(ctx, "go-idle-" + i + ".exit").trim(), got(ctx, "go-idle-" + i + ".log")))) return null;
+    return "go test -list . ran the test binary of " + pkgs.join(", ") + " and it listed no test, so its TestMain exits before m.Run";
+  },
+  runs(ref, units) {
+    const pkgs = [...goByPkg(units).keys()];
+    const r = goList(ref, pkgs, "go-ref-runs");
+    if (r.status !== 0) return "go did not run on the reference tree (" + tail(r) + ")";
+    const bad = pkgs.flatMap((pkg, i) => (goListedTests(got(ref, "go-ref-runs-" + i + ".exit").trim(), got(ref, "go-ref-runs-" + i + ".log")) ? [] : [pkg + " (exit " + got(ref, "go-ref-runs-" + i + ".exit").trim() + "): " + got(ref, "go-ref-runs-" + i + ".log").slice(-300)]));
+    return bad.length ? "go test -list . on the reference tree lists no test in " + bad.join("; ") : null;
   },
   mutants(ctx, scopePatch) {
     const files = goFiles(ctx, scopePatch);
@@ -688,10 +733,16 @@ function readTree(ctx: Ctx, units: Unit[], scopePatch: string, cap: number, seed
   const changed = units.length;
   if (base.error) {
     const broken = ctx.ref ? a.uncollectable(ctx, units) : null;
-    if (broken === null) return reading({ changed, passing: 0, toolError: base.error });
-    const ref = a.reference(ctx.ref!(), units);
-    if (ref !== null) return reading({ changed, passing: 0, toolError: "the agent's tests fail to collect (" + broken + "), and so do the reference tree's: " + ref });
-    return reading({ changed, passing: 0, detail: "the agent's tests fail to collect (" + broken + "), while the same runner collects the reference tree's cleanly" });
+    if (broken !== null) {
+      const ref = a.reference(ctx.ref!(), units);
+      if (ref !== null) return reading({ changed, passing: 0, toolError: "the agent's tests fail to collect (" + broken + "), and so do the reference tree's: " + ref });
+      return reading({ changed, passing: 0, detail: "the agent's tests fail to collect (" + broken + "), while the same runner collects the reference tree's cleanly" });
+    }
+    const idle = ctx.ref && a.idle ? a.idle(ctx, units) : null;
+    if (idle === null) return reading({ changed, passing: 0, toolError: base.error });
+    const ref = a.runs!(ctx.ref!(), units);
+    if (ref !== null) return reading({ changed, passing: 0, toolError: "the agent's tests load but run nothing (" + idle + "), and so do the reference tree's: " + ref });
+    return reading({ changed, passing: 0, detail: "the agent's tests load but run nothing (" + idle + "), while the same runner runs the reference tree's" });
   }
   const passing = base.passing.length;
   if (passing === 0) return reading({ changed, passing: 0 });

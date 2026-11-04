@@ -31,6 +31,13 @@ describe("the skill-eval flag table", () => {
     expect(rule).not.toMatch(/captain drive/i);
   });
 
+  // Value: protects=the --ledger-record help still says where a record outside any program may live, since E_LEDGER_PATH refuses only a program's entries on a network or FUSE mount; fails_when=the pointer for other records is dropped again; why_new=GST-1361 follow-up to GST-1320; seam=none; no_claim=the record path resolver
+  test("the --ledger-record default rule also says any other record may sit on a Capy drive", () => {
+    const rule = SKILL_EVAL_FLAGS.find((f) => f.name === "--ledger-record")?.default_rule ?? "";
+    expect(rule).toContain("local disk of its envelope host");
+    expect(rule).toMatch(/any other record may sit on a Capy drive/);
+  });
+
   // Value: protects=values, aliases, = forms, lists and variables parse into canonical names with their source; fails_when=--runs stops aliasing --trials, --flag=value breaks, or a variable overrides a flag; why_new=new parser; seam=none; no_claim=none beyond protects
   test("it parses values, aliases, the = form, lists and variables", () => {
     const p = ok(["--runs", "5", "--model=claude-opus-5-5,gpt-6.1-sol", "--dry-run", "--item", "flag-item", "--spend-cap", "12.50"], { GSTACK_EVALS_ITEM: "env-item", GSTACK_EVALS_LEDGER: "/l.sqlite" });
