@@ -72,7 +72,7 @@ export function recordApproval(record: string, a: { action: "init" | "raise"; it
   if (a.action === "init" && last) throw new LedgerError("E_USAGE", "line item " + a.item + " already has an approved cap of " + usd(last.cap_micros) + "; record a higher one with gstack-evals ledger raise");
   if (a.action === "raise" && !last) throw new LedgerError("E_LEDGER_MISSING", "line item " + a.item + " has no approved cap to raise in " + record + "; " + ESCALATE);
   if (last && a.cap_micros <= last.cap_micros) throw new LedgerError("E_USAGE", "raise records a higher cap; line item " + a.item + " is already at " + usd(last.cap_micros));
-  const file: ApprovalFile = { schema: 1, kind: "approval", item: a.item, seq: state.approvals.length + 1, action: a.action, cap_micros: a.cap_micros, quotes: a.quotes, ...(a.admission ? { admission: a.admission } : {}), ...(a.program ? { program: a.program, skills: a.skills } : {}), recorded_at: (a.now ?? new Date()).toISOString() };
+  const file: ApprovalFile = { schema: a.program ? 2 : 1, kind: "approval", item: a.item, seq: state.approvals.length + 1, action: a.action, cap_micros: a.cap_micros, quotes: a.quotes, ...(a.admission ? { admission: a.admission } : {}), ...(a.program ? { program: a.program, skills: a.skills } : {}), recorded_at: (a.now ?? new Date()).toISOString() };
   mirror?.();
   if (typeof write(record, file) === "object") throw new LedgerError("E_LEDGER_RECORD", "another approval for line item " + a.item + " was recorded at the same moment; read gstack-evals ledger status, then record again if it is still needed");
   return file;

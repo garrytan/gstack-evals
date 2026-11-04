@@ -91,7 +91,7 @@ function checkProgram(program: string): void {
 function isEntry(e: unknown, program: string): e is Entry {
   const r = e as Entry | null;
   if (typeof r !== "object" || r === null || r.schema !== 1 || r.program !== program || !Number.isSafeInteger(r.seq)) return false;
-  if (r.kind === "program") return isMicros(r.cap_micros) && r.cap_micros > 0 && isMicros(r.skill_cap_micros) && r.skill_cap_micros > 0 && isSkillList(r.skills) && isMicros(r.credit_rate_micros) && Array.isArray(r.quotes) && r.quotes.length > 0;
+  if (r.kind === "program") return isMicros(r.cap_micros) && r.cap_micros > 0 && isMicros(r.skill_cap_micros) && r.skill_cap_micros > 0 && isSkillList(r.skills) && isMicros(r.credit_rate_micros) && r.credit_rate_micros > 0 && Array.isArray(r.quotes) && r.quotes.length > 0;
   if (r.kind === "admit") return isRecordFile(r.lease) && r.lease.kind === "lease";
   return r.kind === "crew" && THREAD.test(String(r.thread)) && isMicros(r.credits_micros) && isMicros(r.spent_micros) && Array.isArray(r.skills) && (r.skills.length === 0 || isSkillList(r.skills)) && typeof r.source === "string";
 }
@@ -210,7 +210,7 @@ export function recordProgram(record: string, p: { program: string; cap_micros: 
   checkProgram(p.program);
   if (!isMicros(p.cap_micros) || p.cap_micros === 0 || !isMicros(p.skill_cap_micros) || p.skill_cap_micros === 0) throw new LedgerError("E_USAGE", "the program's and each skill's ceiling must be positive amounts of dollars");
   if (!isSkillList(p.skills)) throw new LedgerError("E_USAGE", "an envelope needs one or more distinct skills, each matching " + ITEM_NAME);
-  if (!isMicros(p.credit_rate_micros)) throw new LedgerError("E_USAGE", "the credit rate must be an amount of dollars per 1,000 credits");
+  if (!isMicros(p.credit_rate_micros) || p.credit_rate_micros === 0) throw new LedgerError("E_USAGE", "the credit rate must be a positive amount of dollars per 1,000 credits");
   checkQuotes(p.quotes);
   const file: ProgramFile = { schema: 1, kind: "program", program: p.program, seq: 1, cap_micros: p.cap_micros, skill_cap_micros: p.skill_cap_micros, skills: p.skills, credit_rate_micros: p.credit_rate_micros, quotes: p.quotes, recorded_at: (p.now ?? new Date()).toISOString() };
   const same = (prior: ProgramFile) => JSON.stringify({ ...prior, recorded_at: "" }) === JSON.stringify({ ...file, recorded_at: "" });

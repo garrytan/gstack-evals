@@ -6,7 +6,7 @@ import { ledgerCli } from "../../src/runner/ledger/cli.ts";
 import { admitLease, envelopeStatus, recordCrew, recordProgram } from "../../src/runner/ledger/envelope.ts";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
-import { LedgerError, readItem, type LeaseFile } from "../../src/runner/ledger/record.ts";
+import { isRecordFile, LedgerError, readItem, type LeaseFile } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt } from "../../src/types.ts";
 
 const LEDGER = join(import.meta.dir, "../../src/runner/ledger");
@@ -316,6 +316,7 @@ describe("envelope and membership records", () => {
     expect(codeOf(() => recordProgram(fresh, { ...p, quotes: [] }))).toBe("E_USAGE");
     expect(codeOf(() => recordProgram(fresh, { ...p, skills: [PE, PE] }))).toBe("E_USAGE");
     expect(codeOf(() => recordProgram(fresh, { ...p, skill_cap_micros: 0 }))).toBe("E_USAGE");
+    expect(codeOf(() => recordProgram(fresh, { ...p, credit_rate_micros: 0 }))).toBe("E_USAGE");
     expect(codeOf(() => recordProgram(fresh, p, () => { throw new LedgerError("E_APPROVAL_RECORD", "mirror down"); }))).toBe("E_APPROVAL_RECORD");
     expect(existsSync(join(fresh, "programs"))).toBe(false);
     expect(codeOf(() => envelopeStatus(fresh, "wave1"))).toBe("E_ENVELOPE_MISSING");
@@ -335,6 +336,19 @@ describe("envelope and membership records", () => {
     expect(codeOf(() => recordApproval(w.record, { action: "raise", item: "x5", cap_micros: 2 * D, quotes: [quote] }))).toBe("ok");
     expect(readItem(w.record, "x5")).toMatchObject({ program: "wave1", skills: [PE, AP], cap_micros: 2 * D });
     expect(envelopeStatus(w.record, "wave1").items).toEqual(["x5"]);
+  });
+
+  test("a program item's first approval is schema 2, so a ledger from before envelopes refuses the item instead of leasing it", () => {
+    const w = world();
+    stage(w.record, "member", [PE], D);
+    recordApproval(w.record, { action: "init", item: "plain", cap_micros: D, quotes: [quote], admission: "warn" });
+    const file = (item: string) => JSON.parse(readFileSync(join(w.record, "items", item, "approval-0001.json"), "utf8"));
+    const member = file("member");
+    expect([member.schema, file("plain").schema]).toEqual([2, 1]);
+    expect(isRecordFile(member)).toBe(true);
+    expect(isRecordFile({ ...member, schema: 1 })).toBe(false);
+    expect(isRecordFile({ ...file("plain"), schema: 2 })).toBe(false);
+    expect(readItem(w.record, "member")).toMatchObject({ program: "wave1", skills: [PE] });
   });
 
   test("an item outside any program leases as before, and the envelope does not count it", () => {
@@ -362,6 +376,7 @@ describe("gstack-evals ledger envelope, crew and status --program", () => {
     expect(env1).toMatchObject({ code: 0, err: "" });
     expect(env1.out).toStartWith("ENVELOPE: program=wave1 cap=$10000.00 skill_cap=$2000.00 skills=" + SKILLS.join(",") + " credit_rate=$1.00 per 1000 credits");
     expect(readFileSync(join(dir, "calls.log"), "utf8")).toContain("Approve a gstack-evals program envelope of $10000.00 for program wave1, with $2000.00 for each of its 6 skills");
+    expect(readFileSync(join(dir, "calls.log"), "utf8")).toContain("counting crew use at $1.00 per 1,000 credits");
     expect((await cli("init", "--cap", "5000", "--item", "g-admission", "--admission", "warn", "--program", "wave1", "--skills", PE + "," + AP, ...words)).code).toBe(0);
     expect((await cli("init", "--cap", "10", "--item", "x", "--admission", "warn", "--skills", PE, ...words)).err).toStartWith("E_USAGE ");
     const refused = await cli("lease", "--item", "g-admission", "--run", "run-g", "--amount", "4200");

@@ -35,8 +35,8 @@ export function mirrorApproval(m: MirrorRequest): void {
 }
 
 /** Mirrors a program envelope's approval the same way, one row per quote. */
-export function mirrorEnvelope(m: { bin: string | null; program: string; cap_micros: number; skill_cap_micros: number; skills: string[]; record: string; quotes: Quote[]; branch?: string }): void {
-  const ask = "Approve a gstack-evals program envelope of " + usd(m.cap_micros) + " for program " + m.program + ", with " + usd(m.skill_cap_micros) + " for each of its " + m.skills.length + " skills (" + m.skills.join(", ") + ")";
+export function mirrorEnvelope(m: { bin: string | null; program: string; cap_micros: number; skill_cap_micros: number; skills: string[]; credit_rate_micros: number; record: string; quotes: Quote[]; branch?: string }): void {
+  const ask = "Approve a gstack-evals program envelope of " + usd(m.cap_micros) + " for program " + m.program + ", with " + usd(m.skill_cap_micros) + " for each of its " + m.skills.length + " skills (" + m.skills.join(", ") + "), counting crew use at " + usd(m.credit_rate_micros) + " per 1,000 credits";
   addRows(m.bin, ask, "gstack-evals program " + m.program + " in the approval record " + m.record, m.quotes, m.branch);
 }
 
