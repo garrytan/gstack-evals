@@ -1,0 +1,86 @@
+ANTHROPIC_API_KEY: unset
+OPENAI_API_KEY: unset
+OPENROUTER_API_KEY: unset
+UBICLOUD_API_KEY: unset
+UBICLOUD_API_TOKEN: unset
+commit dbcb5b49e4d41b6a6d176d35e406a4399704c3a7; bun 1.4.4; docker 29.9.2
+
+## Part 0: export
+bun install exit 0; 1681 files exported
+ok   P0 the export is outside any git work tree | expected: git rev-parse fails in the export | observed: fatal: not a git repository (or any of the parent directories): .git
+
+## Part A: the told arm and the none arm
+ok   A1 the six drive parts match SHA256SUMS.txt | expected: 6 OK | observed: 6 OK, exit 0
+ok   A2 whole gz sha256 matches SHA256SUMS.txt and the manifest's tar_gz_sha256 | expected: 8f56fdff7d154f0f5037a2424dc1ddfc3c53c596277803e5b12bab9a09c13125 | observed: 8f56fdff7d154f0f5037a2424dc1ddfc3c53c596277803e5b12bab9a09c13125
+ok   A3 gunzip -k tar sha256 matches the manifest, r3b.ts TOLD_TAR_SHA256 and SHA256SUMS.txt | expected: e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975 | observed: e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975 (code e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975)
+ok   A4 tree digest recomputed from gstack.files.tsv (tree.ts's method) matches the manifest | expected: 4b66ed9376c176d6e0eb87412a9689b04d29e4bff536887fb5878c1721c71248 | observed: 4b66ed9376c176d6e0eb87412a9689b04d29e4bff536887fb5878c1721c71248 (files.tsv sha256 890330ea9230edb0e4a71cbe4fffe3cf22b4f4af65bdd7899f41cca229998862)
+ok   A5 settings.json in the tar matches the manifest and registers the route and contract hooks | expected: fb752c86779d0adffd9285c46006bbb44f7d2508e86ba1bb1313f7964ea420e2 with UserPromptSubmit skill-route-hook and Stop skill-contract-stop-hook | observed: fb752c86779d0adffd9285c46006bbb44f7d2508e86ba1bb1313f7964ea420e2 ["Stop timeline-stop-hook","Stop skill-contract-stop-hook","UserPromptSubmit skill-route-hook"]
+ok   A6 both hook scripts are in the tar at the registered paths | expected: 2 | observed: 2
+ok   A7 arm-check on the committed manifests | expected: exit 0, pass | observed: exit 0, arm-check: pass gstack 699a41cb6808e01240d02e82247693f9170d401a, told arm tar e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975, Claude Code 2.1.
+ok   A8 arm-check on a manifest copy with the UserPromptSubmit entry removed | expected: exit 1, FAIL naming skill-route-hook | observed: exit 1, arm-check: FAIL gstack.json's settings register no UserPromptSubmit hook running skill-route-hook; ./setup leaves it out when its switch resolves off
+ok   A9 the none arm rebuilt with arms/build.sh matches manifests/r3/none.json and r3b/none.json byte for byte | expected: identical, tar 8bab4833 | observed: build exit 0, 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e
+
+## Part B: prepare against the real SWE-rebench export
+ok   B1 the export holds the pool: swerebench_r3a4.py (its default --check mode) | expected: exit 0 | observed: exit 0, 860 tasks in the export; ok: 354 tasks match swerebench-r3a4.json
+ok   B3 prepare r3b4-opus: every part has oracle.json with its job's task ids (ORACLE=1) | expected: recheck:10 grid-1:70 grid-2:70 grid-3:70 | observed: exit 0, recheck:10 grid-1:70 grid-2:70 grid-3:70 
+ok   B4 prepare r3b4-opus: grid parts carry the seed 20261106 order, recheck none; plan.json names the item and cap | expected: 3 order.json files, plan item r3b4-opus cap 376 | observed: 3 order.json, plan r3b4-opus cap 376 order 6bdc9e44225f
+ok   B5 prepare r3b4-opus: the told arm in each part is the pinned tar on LanebHooksAgent | expected: gstack e93a3aa4, laneb_hooks:LanebHooksAgent | observed: e93a3aa4 laneb_hooks:LanebHooksAgent
+ok   B2 Sol's prepare with no route record on r3b4-sol | expected: refused, nothing prepared | observed: exit 1, E_INTERNAL GPT-6.1 Sol has not passed its route check on r3b4-sol ($W/prep/r3b4-sol/r3b4-sol.jsonl.route.json); run r3/route-check.ts first
+ok   B3 prepare r3b4-sol: every part has oracle.json with its job's task ids (ORACLE=1) | expected: recheck:10 grid-1:70 grid-2:70 grid-3:70 | observed: exit 0, recheck:10 grid-1:70 grid-2:70 grid-3:70 
+ok   B4 prepare r3b4-sol: grid parts carry the seed 20261106 order, recheck none; plan.json names the item and cap | expected: 3 order.json files, plan item r3b4-sol cap 393 | observed: 3 order.json, plan r3b4-sol cap 393 order e3e36ed089ff
+ok   B5 prepare r3b4-sol: the told arm in each part is the pinned tar on LanebHooksAgent | expected: gstack e93a3aa4, laneb_hooks:LanebHooksAgent | observed: e93a3aa4 laneb_hooks:LanebHooksAgent
+
+## Part C: run, resume and analyze, scenario by scenario
+### the start rule
+r3b4-opus fits start rule: projection $232.36 = 70 x 3 x ($0.3702 none + $0.7363 told), from r3a4-opus's record, fits r3b4-opus's $376 cap
+r3b4-sol fits start rule: projection $280.30 = 70 x 3 x ($0.4376 none + $0.8972 told), from r3a4-sol's record, fits r3b4-sol's $393 cap
+r3b4-opus-at-200 refused start rule: projection $232.36 = 70 x 3 x ($0.3702 none + $0.7363 told), from r3a4-opus's record, passes r3b4-opus's $200 cap; r3b4-opus does not bind
+real records: r3a4-opus sha256 e9c1dd7ab0d4, r3a4-sol sha256 d983df99e25f
+ok   C1 start rule, r3b4-opus on r3a4-opus's real record | expected: fits $376 at $232.36 | observed: start rule: projection $232.36 = 70 x 3 x ($0.3702 none + $0.7363 told), from r3a4-opus's record, fits r3b4-opus's $376 cap
+ok   C2 start rule, r3b4-sol on r3a4-sol's real record | expected: fits $393 at $280.30 | observed: start rule: projection $280.30 = 70 x 3 x ($0.4376 none + $0.8972 told), from r3a4-sol's record, fits r3b4-sol's $393 cap
+ok   C3 start rule refusal: the exported startRule at a $200 cap on the real Opus record | expected: passes the cap, does not bind | observed: start rule: projection $232.36 = 70 x 3 x ($0.3702 none + $0.7363 told), from r3a4-opus's record, passes r3b4-opus's $200 cap; r3b4-opus does not bind
+ok   C4 run on r3b4-opus with r3a4-sol's real record | expected: refused before the bind | observed: exit 1, $CAPT/GEVA-249/r3a4-sol/record.json is r3a4-sol's record with outcome admitted, not r3a4-opus's admitted record, bound: no
+ok   C5 run with grid-2's oracle.json missing (section 9 item 4) | expected: refused before the bind | observed: exit 1, grid-2 has no oracle.json, so its run-time oracle gate can't run; prepare it again with this build (amendment 5 section 9 item 4), bound: no
+### KEEP on both items, with the leases
+ok   D1 r3b4-opus run binds on the real record and runs all four parts | expected: start rule fits, re-check 10 of 10 passes, every projection fits | observed: run exit 0; re-check: 10 of 10 graded told trials exposed, at least 7; launched: grid-1.launch-exit grid-2.launch-exit grid-3.launch-exit recheck.launch-exit 
+ok   D2 one lease per trial and VM block on r3b4-opus's temporary ledger, opened and settled | expected: 434 reserve and 434 settle rows (430 sessions, 4 VM blocks), open reserves 0 | observed: [434,434] reserve/settle rows; r3b4-opus: settled $215.00 of $376, open reserves 0
+ok   D3 KEEP, Opus; 10 told allowance stops (4.8 points) stay inside the truncation bound | expected: exit 0, KEEP | observed: exit 0, R3b outcome for Opus 5.5: KEEP. The told /investigate at 699a41cb with the procedure line beats none by +57.1 points (95; allowance stops: told 10 of 210 sessions (4.8%), none 0 of 210 (0.0%), infra included; the truncation bound is 5 points
+ok   D4 r3b4-sol run binds (route record on r3b4-sol); the re-check passes at 7 of 9 graded with 1 infra | expected: start rule fits, re-check passes, all four parts run | observed: run exit 0; re-check: 7 of 9 graded told trials exposed, at least 7; launched: grid-1.launch-exit grid-2.launch-exit grid-3.launch-exit recheck.launch-exit 
+ok   D5 one lease per trial and VM block on r3b4-sol's temporary ledger, opened and settled; KEEP, Sol | expected: 434 reserve and 434 settle rows, open reserves 0, exit 0 KEEP | observed: exit 0, [434,434] rows; r3b4-sol: settled $215.00 of $393, open reserves 0; R3b outcome for GPT-6.1 Sol: KEEP. The told /investigate at 
+hooks reader on one told trial (report only): {"files":1,"stop_hook_ran":true,"held_back":false,"outcome":null,"route_hook_ran":false,"routed":false,"contract_events":{"met":1},"route_events":{}}
+### the re-check gate
+ok   E1 re-check 6 of 10 exposed stops R3b with the frozen line before grid-1 | expected: no grid part launched; analyze exit 6, the stop line, FIX-METHOD (exposure) | observed: run exit 0, launched: recheck.gate-stop recheck.launch-exit ; analyze exit 6, R3b did not run for Opus 5.5: told /investigate at 699a41cb showed the procedure in 6 of 10 re-check trials, under 7.
+ok   E2 two infra re-check trials make it incomplete | expected: no grid part launched; analyze exit 4 FIX-METHOD (harness limits) | observed: run: recheck is incomplete (recheck: 2 of 10 trials are infra, two or more); the run stops here; analyze exit 4, R3b outcome for Opus 5.5: none (incomplete: recheck: 2 of 10 trials are infra, two or more). FIX-METHOD (harness limits): the re-check is incomplete, so R3b did not run. Opus's R3b is incomplete; the 
+### the projection stop, raise and resume
+ok   F1 a projection over the cap after the re-check stops before grid-1 | expected: grid-1.projection-stop, grid-1 not launched | observed: run exit 0; after recheck: projection $442.09 (settled $10.00; 3 parts of 70 none at $0.4602 and 70 told at $1.1600, VM $4.21 a part; reserve headroom $79.20) passes r3b4-opus's $376 cap; the run stops before grid-1 and the Captain decides a raise; launched: grid-1.projection-stop recheck.launch-exit 
+ok   F2 analyze while stopped: incomplete for cost limits | expected: exit 4, FIX-METHOD (cost limits) | observed: exit 4, R3b outcome for Opus 5.5: none (incomplete: grid-1 was not launched: after recheck: projection $442.09 (settled $10.00; 3 parts of 70 none at $0.4602 and 70 told at $1.1600, VM $4.21 a part; reserve headroom $79.20) pass
+ok   F3 resume with no recorded raise | expected: refused, grid-1 stays stopped | observed: exit 1, no cap raise is recorded on $W/s/proj/r3b4-opus.jsonl for r3b4-opus since the projection stop before grid-1; it stays stopped (amendment 5 section 5)
+ok   F4 resume after ledger.ts raise --approved-by <file> to $400, which the projection still passes | expected: refused, grid-1 stays stopped, no grid-1 lease | observed: exit 1, the projection of $442.09 still passes r3b4-opus's raised $400 cap; grid-1 stays stopped
+ok   F5 resume after a raise to $460 that the projection fits | expected: accepted once: grid-1 to grid-3 run; cap-raise-grid-1.json names raise-2 | observed: exit 0, after recheck: projection $442.09 (settled $10.00; 3 parts of 70 none at $0.4602 and 70 told at $1.1600, VM $4.21 a part; reserve headroom $79.20) fits r3b4-opus's $460 cap; grid-1 starts; raise {"id":"raise-2","usd_micros":460000000}; launched: grid-1.launch-exit grid-1.projection-stop.raised grid-2.launch-exit grid-3.launch-exit recheck.launch-exit 
+ok   F6 a second resume after the stop was used | expected: refused: no projection stop | observed: exit 1, $W/s/proj/work has no projection stop; resume follows only a projection stop, and only once for each
+ok   F7 analyze after the resumed run | expected: exit 0, KEEP, settled under the raised $460 | observed: exit 0, r3b4-opus: settled $220.00 of $460, open reserves 0; R3b outcome for Opus 5.5: KEEP. The told /investigate at 699
+ok   F8 from grid-1 on the projection uses the grid's own costs; over the cap it stops before grid-2, and with no raise R3b is incomplete | expected: grid-2.projection-stop; analyze exit 4 FIX-METHOD (cost limits) | observed: after grid-1: projection $609.20 (settled $180.00; 2 parts of 70 none at $0.5000 and 70 told at $2.0000, VM $0.00 a part; reserve headroom $79.20) passes r3b4-sol's $393 cap; the run stops before grid-2 and the Captain decides a r; analyze exit 4
+### the grid rules
+ok   G1 exposure 189 of 210 graded told grid trials passes the 90% gate | expected: exit 0, KEEP | observed: run exit 0, analyze exit 0, R3b outcome for Opus 5.5: KEEP. The told /investigate at 699a41cb with the procedure line beats none by +57.1 points (95% CI +45.7 to +68.6) on 70 paired tasks.
+ok   G2 exposure 188 of 210 is under 90% | expected: exit 5, FIX-METHOD (exposure) | observed: run exit 0, analyze exit 5, R3b outcome for Opus 5.5: FIX-METHOD (exposure). The procedure was visible in 188 of 210 graded told grid trials (89.5%), under 90%.
+ok   G3 infra bound in a part: 15 of grid-2's 140 trials | expected: exit 4, incomplete, FIX-METHOD (harness limits) | observed: run exit 0, analyze exit 4, R3b outcome for Opus 5.5: none (incomplete: grid-2: 15 of 140 trials are infra, over 10%). FIX-METHOD (harness limits). Opus's R3b is incomplete; the Captain gets the record.
+ok   G3b the run stops at the incomplete part | expected: grid-3 not launched | observed: launched: grid-1.launch-exit grid-2.launch-exit recheck.launch-exit 
+ok   G4 infra 14 of a part's 140 and 21 of the none cell's 210 stay inside both bounds | expected: exit 0, KEEP | observed: run exit 0, analyze exit 0, R3b outcome for Opus 5.5: KEEP. The told /investigate at 699a41cb with the procedure line beats none by +57.1 points (95% CI +45.7 to +68.6) on 70 paired tasks.
+ok   G5 infra bound in a cell: 22 of the none cell's 210 (7, 7 and 8 by part) | expected: exit 4, incomplete, FIX-METHOD (harness limits) | observed: run exit 0, analyze exit 4, R3b outcome for Opus 5.5: none (incomplete: 22 of 210 none grid trials are infra, over 10%). FIX-METHOD (harness limits). Opus's R3b is incomplete; the Captain gets the record.
+ok   G6 E1 truncation bound: 11 told allowance stops against 0 (5.2 points) | expected: exit 5, FIX-METHOD (truncation) | observed: run exit 0, analyze exit 5, R3b outcome for Opus 5.5: FIX-METHOD (truncation). 5.2% of told sessions ended at the $12 allowance against 0.0% of none sessions, more than 5 points apart.
+ok   G7 D1 fixed: primary at or below zero, 30 solved tasks, sensitivity at or below zero | expected: exit 3, CUT-CANDIDATE | observed: run exit 0, analyze exit 3, R3b outcome for Opus 5.5: CUT-CANDIDATE. The told /investigate at 699a41cb with the procedure line minus none is at or below zero: +0.0 points (95% CI +0.0 to +0.0) on 70 paired tasks, and +0.0 points (95% CI +0.0 to +0.0) on the 
+ok   G8 D1 fixed: primary at or below zero with 29 solved tasks | expected: exit 5, FIX-METHOD (task fit) | observed: run exit 0, analyze exit 5, R3b outcome for Opus 5.5: FIX-METHOD (task fit). The primary is at or below zero (+0.0 points (95% CI +0.0 to +0.0)), and only 29 tasks were solved by any graded grid trial, fewer than 30.
+ok   G9 a positive primary whose interval includes zero | expected: exit 5, FIX-METHOD (power), with the MDD at the realized n | observed: run exit 0, analyze exit 5, R3b outcome for Opus 5.5: FIX-METHOD (power). Told minus none is +0.5 points (95% CI +0.0 to +1.4): above zero, with an interval that includes zero.
+ok   G9b the MDD lines beside FIX-METHOD (power) | expected: MDD at the realized n of 70 paired tasks | observed: MDD at the realized n of 70 paired tasks: #112's formula 10.9 points; r3b-power's model at screen none rate 0.645: 10.5 points
+report-only lines beside the CUT-CANDIDATE (d1-30):
+  D1 sensitivity: 30 paired tasks solved by at least one graded grid trial in either arm; told minus none +0.0 points (95% CI +0.0 to +0.0) on them
+  repository-clustered interval (report only): +0.0 to +0.0 points over 56 repositories
+  Stop hook (report only): ran in 210 of 210 graded told grid trials and held a stop back in 0; outcomes none 210; the route hook logged in 0
+  cross-model overlap (report only): 62 of Opus 5.5's 71 admitted tasks are also unsolved by GPT-6.1 Sol (81 admitted), against about 28.8 if the two failed independently on the 200 screen tasks
+  MDD (amendment 5 section 6): 12.5 points at 70 tasks; re-simulated at the grid's none rate 42.9% and the sensitivity set's 30 tasks (report only): 16.5 points, 20 runs a lift
+
+## leftovers
+ports answering: none else; bound temporary ledgers: 15
+
+rules: 49, failed: 0
+DRYRUN: ok
