@@ -1,0 +1,49 @@
+power.py seed 20261103, 2000 simulations per row, 14 bisection steps, power 0.80. Points are percentage points.
+Model: task rates p ~ Beta(mean = before rate, a+b = conc), conc 2 very spread, conc 6 moderate; after rate q = min(1, p + shift);
+replicates are independent draws. Test: exact two-sided sign-flip on task differences. MDD = realized mean difference in rate
+(after clipping at 1) at the smallest shift with 80% power; n/r = 80% power not reached even at q = 1. Null size = rejection
+rate under q = p, per alpha.
+
+FROZEN BEHAVIOR TABLE (B1 discovery, B3 adherence), F1, 80 tasks x 1, conc 2, rate at the before arm; planning rate 2%.
+The only behavior table: admission, saturation and the MDDs the plan quotes all read it, by linear interpolation
+between rows; a rate outside the rows reads the nearest end row. A row marked NOT POWERED carries no verdict.
+  behavior before  1%                          MDD@0.05  10.9  MDD@Holm2  12.3  null size 0.000/0.000
+  behavior before  2%                          MDD@0.05  11.5  MDD@Holm2  12.9  null size 0.000/0.000
+  behavior before  5%                          MDD@0.05  13.5  MDD@Holm2  15.0  null size 0.009/0.004
+  behavior before 10%                          MDD@0.05  15.7  MDD@Holm2  17.7  null size 0.021/0.011
+  behavior before 20%                          MDD@0.05  18.6  MDD@Holm2  20.3  null size 0.029/0.013  NOT POWERED: over the 20-point margin
+  behavior before 30%                          MDD@0.05  19.5  MDD@Holm2  21.2  null size 0.032/0.017  NOT POWERED: over the 20-point margin
+  behavior before 40%                          MDD@0.05  19.9  MDD@Holm2  21.5  null size 0.033/0.016  NOT POWERED: over the 20-point margin
+  behavior before 50%                          MDD@0.05  19.3  MDD@Holm2  20.6  null size 0.029/0.017  NOT POWERED: over the 20-point margin
+  behavior before 60%                          MDD@0.05  18.2  MDD@Holm2  19.6  null size 0.036/0.019
+  behavior before 70%                          MDD@0.05  16.1  MDD@Holm2  17.5  null size 0.027/0.013
+  behavior before 80%                          MDD@0.05  13.3  MDD@Holm2  14.2  null size 0.026/0.012
+  behavior before 90%                          MDD@0.05   9.8  MDD@Holm2   n/r   null size 0.021/0.012  NOT POWERED: over the 20-point margin
+
+O5, DESCRIPTIVE (after-t minus before-t pass rate), F1, 80 tasks x 1, conc 6, one member (alpha 0.05); no verdict:
+  O5 control 50%                               MDD@0.05  21.4  null size 0.032
+  O5 control 60%                               MDD@0.05  19.8  null size 0.031
+  O5 control 70%                               MDD@0.05  17.6  null size 0.030
+  O5 control 80%                               MDD@0.05  14.4  null size 0.026
+  O5 control 90%                               MDD@0.05   9.8  null size 0.028
+
+WHY O5 IS NOT A PRIMARY: its MDD with two more replicates (80 x 3), and with every eligible task (145 x 3), conc 6:
+  O5 80 tasks x 3, control 60%                 MDD@0.05  11.7  null size 0.027
+  O5 80 tasks x 3, control 65%                 MDD@0.05  11.2  null size 0.036
+  O5 80 tasks x 3, control 70%                 MDD@0.05  10.6  null size 0.034
+  O5 145 tasks x 3, control 60%                MDD@0.05   8.7  null size 0.035
+  O5 145 tasks x 3, control 65%                MDD@0.05   8.4  null size 0.043
+  O5 145 tasks x 3, control 70%                MDD@0.05   7.9  null size 0.044
+
+TB2 TWIN (descriptive, tunable), 37 tasks x 2, conc 2, behavior rate at the before arm:
+  tasks 37 x 2, before 2%                      MDD@0.05  12.7  null size 0.000
+  tasks 37 x 2, before 10%                     MDD@0.05  17.0  null size 0.013
+  tasks 37 x 2, before 50%                     MDD@0.05  20.4  null size 0.027
+
+#169'S DESIGN, RECOMPUTED (O1 and O2, H-inv, 80 tasks x 3, Holm over four members):
+  H-inv 80 x 3, control 30%, conc 2            MDD@Holm4  12.8  null size 0.009
+  H-inv 80 x 3, control 50%, conc 2            MDD@Holm4  13.1  null size 0.007
+  H-inv 80 x 3, control 70%, conc 2            MDD@Holm4  11.3  null size 0.007
+  H-inv 80 x 3, control 30%, conc 6            MDD@Holm4  14.5  null size 0.009
+  H-inv 80 x 3, control 50%, conc 6            MDD@Holm4  14.6  null size 0.011
+  H-inv 80 x 3, control 70%, conc 6            MDD@Holm4  12.3  null size 0.011
