@@ -160,6 +160,10 @@ for (const [label, path, content, want] of cases) {
   const f = found(msg);
   line(!!msg && msg.startsWith("E_OUTCOME_CLEAN_ROOM") && f.includes(want), label, "refused, found " + want, msg ? (msg.startsWith("E_OUTCOME_CLEAN_ROOM") ? "refused, found " + f.join(", ") : msg.split("\n")[0]!.slice(0, 200)) : "passed");
 }
+const anyCase = room([["/work/CLAUDE.md", "a note that names GStack\n"]]);
+line(!!anyCase && anyCase.startsWith("E_OUTCOME_CLEAN_ROOM") && found(anyCase).includes("/work/CLAUDE.md"), "C30 second scan: CLAUDE.md naming GStack (any case) in a parent of the work dir", "refused, found /work/CLAUDE.md", anyCase ? "refused, found " + found(anyCase).join(", ") : "passed");
+const ccFile = room([["/etc/claude-code", "{}\n"]]);
+line(!!ccFile && ccFile.startsWith("E_OUTCOME_CLEAN_ROOM") && found(ccFile).includes("/etc/claude-code"), "C31 second scan: /etc/claude-code as a file, not a plain folder", "refused, found /etc/claude-code", ccFile ? (ccFile.startsWith("E_OUTCOME_CLEAN_ROOM") ? "refused, found " + found(ccFile).join(", ") : ccFile.split("\n")[0]!.slice(0, 200)) : "passed");
 const quiet = room([["/root/.claude/settings.json", "{\"theme\": \"dark\"}\n"], ["/work/repo/.claude/commands/c.md", "plain notes\n"]]);
 line(quiet === null, "C29 settings.json and a command that do not name gstack (content scan, not presence)", "passes", quiet === null ? "passes" : quiet.split("\n")[0]!.slice(0, 200));
 EOF
@@ -183,6 +187,8 @@ for st in $STAGES; do
   LG lease --item "$item" --run "dryrun-$item" --json > "$LD/$item.lease.json" 2> "$LD/$item.lease.err"; d=$?
   rule "L2 $item: init at its prereg cap and one lease, admitted by O6's envelope" "lease open at \$$cap on $sk" "init exit $c, lease exit $d, $(jq -r '.lease_id + " " + .state + " $" + ((.reserved_micros / 1e6) | tostring)' "$LD/$item.lease.json" 2>/dev/null)" sh -c "test $c = 0 && test $d = 0 && test \"\$(jq -r .reserved_micros '$LD/$item.lease.json')\" = $((cap * 1000000))"
 done
+RU=0; for st in $STAGES; do grep -q '^RIG_UNPROVEN' "$LD/${st%%:*}.lease.err" && RU=$((RU + 1)); done
+rule "L2a every stage lease above opened with --admission warn and printed RIG_UNPROVEN (a paid item uses --admission required)" "5 of 5 leases print RIG_UNPROVEN" "$RU of 5; g-tg: $(grep -m1 '^RIG_UNPROVEN' "$LD/g-tg.lease.err" | cut -c1-200)" test "$RU" = 5
 LG status --program $PROG --json > "$LD/status-open.json" 2>&1
 PO=$(jq -r '.skills["plan-eng-review"].open_micros' "$LD/status-open.json"); AO=$(jq -r '.skills.autoplan.open_micros' "$LD/status-open.json")
 rule "L3 with every stage open, the envelope holds plan-eng-review's and autoplan's reservations (prereg 9: \$729 and \$1,444)" "728500000 and 1443500000 micros open" "$PO and $AO micros open" test "$PO" = 728500000 -a "$AO" = 1443500000
@@ -280,6 +286,8 @@ ADM=$HERE/admission.sh.txt
 adm() { local out=$1; shift; env -u AGENT_USER -u MULT -u M_PER -u M_AP -u AUTH_PAID "$@" bash "$ADM" "$E" > "$W/log/$out.txt" 2> "$W/log/$out.err"; echo $? > "$W/log/$out.exit"; }
 adm adm-ok MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39
 HEAD5=$(head -5 "$W/log/adm-ok.txt" | tr '\n' ';')
+A6=$(sed -n 6p "$W/log/adm-ok.txt")
+rule "R7a admission.sh.txt with AUTH_EXTRA unset says so, and resize.py falls back to 1.2 (no refusal)" "AUTH_EXTRA: unset, resize.py reads 1.2" "$A6" test "$A6" = "AUTH_EXTRA: unset, resize.py reads 1.2"
 rule "R7 admission.sh.txt with the four values and AGENT_USER unset prints them first, then resize.py's output" "MULT: 5;M_PER: 2.2;M_AP: 5;AUTH_PAID: 1.39;AGENT_USER: unset; then R1's lines; exit 0" "$HEAD5 exit $(cat "$W/log/adm-ok.exit"), $(cmp -s <(tail -n +7 "$W/log/adm-ok.txt") "$W/log/house.txt" && echo "R1's lines" || echo "other lines")" bash -c "test $(cat "$W/log/adm-ok.exit") = 0 && test '$HEAD5' = 'MULT: 5;M_PER: 2.2;M_AP: 5;AUTH_PAID: 1.39;AGENT_USER: unset;' && cmp -s <(tail -n +7 '$W/log/adm-ok.txt') '$W/log/house.txt'"
 adm adm-agent AGENT_USER=9.99 MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39
 rule "R8 admission.sh.txt with AGENT_USER set" "refused, exit 2, AGENT_USER: set, no re-size, no value printed" "exit $(cat "$W/log/adm-agent.exit"), $(sed -n 5p "$W/log/adm-agent.txt"); $(head -1 "$W/log/adm-agent.err" | cut -c1-80)" bash -c "test $(cat "$W/log/adm-agent.exit") = 2 && sed -n 5p '$W/log/adm-agent.txt' | grep -qx 'AGENT_USER: set' && ! grep -q 'wave 1' '$W/log/adm-agent.txt' && ! grep -q '9.99' '$W/log/adm-agent.txt' '$W/log/adm-agent.err'"
@@ -288,6 +296,14 @@ for k in MULT M_PER M_AP AUTH_PAID; do
   adm "adm-no-$k" "${keep[@]}"
   rule "R9 admission.sh.txt without $k" "refused, exit 2, $k: missing, no re-size" "exit $(cat "$W/log/adm-no-$k.exit"), $(head -1 "$W/log/adm-no-$k.err" | cut -c1-90)" bash -c "test $(cat "$W/log/adm-no-$k.exit") = 2 && grep -qx '$k: missing' '$W/log/adm-no-$k.txt' && ! grep -q 'wave 1' '$W/log/adm-no-$k.txt'"
 done
+for k in YIELD_G TOLD_SCALE; do
+  adm "adm-$k" "$k=1.15" MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39
+  rule "R10 admission.sh.txt with $k set" "refused, exit 2, $k is set, no re-size" "exit $(cat "$W/log/adm-$k.exit"), $(head -1 "$W/log/adm-$k.err" | cut -c1-90)" bash -c "test $(cat "$W/log/adm-$k.exit") = 2 && grep -q '$k is set' '$W/log/adm-$k.err' && ! grep -q 'wave 1' '$W/log/adm-$k.txt'"
+done
+BR=$W/badroot/wiki/plans/2026-11-04-geva-262-g-family-admission-prereg
+mkdir -p "$BR" && { cat "$RD/resize.py"; echo "# one added line"; } > "$BR/resize.py"
+env -u AGENT_USER MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39 bash "$ADM" "$W/badroot" > "$W/log/adm-sha.txt" 2> "$W/log/adm-sha.err"; echo $? > "$W/log/adm-sha.exit"
+rule "R11 admission.sh.txt with a resize.py that is not the prereg's attachment" "refused, exit 2, sha256 not the attachment, no re-size" "exit $(cat "$W/log/adm-sha.exit"), $(grep -o 'has sha256 .*' "$W/log/adm-sha.err" | cut -c1-150)" bash -c "test $(cat "$W/log/adm-sha.exit") = 2 && grep -q 'not the prereg.s attachment 1265268921e9' '$W/log/adm-sha.err' && ! grep -q 'wave 1' '$W/log/adm-sha.txt'"
 
 echo; echo "## Part D: O2's Docker suite at $FULL"
 (cd "$E" && GSTACK_EVALS_DOCKER=1 bun test tests/outcome-skills/mutation-docker.test.ts tests/outcome-skills/clean-room.test.ts --timeout 1800000) > "$W/log/docker-suite.txt" 2>&1; c=$?

@@ -48,16 +48,19 @@ ok   C25 second scan: the work dir's .claude/commands | expected: refused, found
 ok   C26 second scan: the work dir's .claude/plugins | expected: refused, found /work/repo/.claude/plugins/p.json | observed: refused, found /work/repo/.claude/plugins/p.json
 ok   C27 second scan: the work dir's .claude/agents | expected: refused, found /work/repo/.claude/agents/a.md | observed: refused, found /work/repo/.claude/agents/a.md
 ok   C28 second scan: the work dir's .claude/rules | expected: refused, found /work/repo/.claude/rules/r.md | observed: refused, found /work/repo/.claude/rules/r.md
+ok   C30 second scan: CLAUDE.md naming GStack (any case) in a parent of the work dir | expected: refused, found /work/CLAUDE.md | observed: refused, found /work/CLAUDE.md
+ok   C31 second scan: /etc/claude-code as a file, not a plain folder | expected: refused, found /etc/claude-code | observed: refused, found /etc/claude-code
 ok   C29 settings.json and a command that do not name gstack (content scan, not presence) | expected: passes | observed: passes
 
 ## Part L: O6's envelope and one U4 lease per frozen stage, on a temporary ledger
 temporary ledger $W/ledger; gstack-approvals is a stub that writes its rows to $W/ledger/approvals-stub.log only
 ok   L1 the program envelope: $10,000, $2,000 a skill, the six wave-1 skills | expected: recorded | observed: exit 0, cap 10000, skill cap 2000
-ok   L2 g-tg: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $60 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-tg.0001.e0fdb2 open $60
-ok   L2 g-adm-none: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $229 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-adm-none.0001.29fe36 open $229
-ok   L2 g-adm-per: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $572 on plan-eng-review | observed: init exit 0, lease exit 0, g-adm-per.0001.20cdd4 open $572
-ok   L2 g-adm-ap: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $1287 on autoplan | observed: init exit 0, lease exit 0, g-adm-ap.0001.6e2cf8 open $1287
-ok   L2 g-adm-vm: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $24 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-adm-vm.0001.8c80ac open $24
+ok   L2 g-tg: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $60 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-tg.0001.839e88 open $60
+ok   L2 g-adm-none: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $229 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-adm-none.0001.9beea5 open $229
+ok   L2 g-adm-per: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $572 on plan-eng-review | observed: init exit 0, lease exit 0, g-adm-per.0001.a06f9d open $572
+ok   L2 g-adm-ap: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $1287 on autoplan | observed: init exit 0, lease exit 0, g-adm-ap.0001.6cbe12 open $1287
+ok   L2 g-adm-vm: init at its prereg cap and one lease, admitted by O6's envelope | expected: lease open at $24 on plan-eng-review,autoplan | observed: init exit 0, lease exit 0, g-adm-vm.0001.fcff2a open $24
+ok   L2a every stage lease above opened with --admission warn and printed RIG_UNPROVEN (a paid item uses --admission required) | expected: 5 of 5 leases print RIG_UNPROVEN | observed: 5 of 5; g-tg: RIG_UNPROVEN line item g-tg leased without admission: no admission record at $W/ledger/record/items/g-tg/admission-0001.json for slot 1; run gstack-evals rig
 ok   L3 with every stage open, the envelope holds plan-eng-review's and autoplan's reservations (prereg 9: $729 and $1,444) | expected: 728500000 and 1443500000 micros open | observed: 728500000 and 1443500000 micros open
 ok   L4 a further $600 autoplan lease while autoplan holds $1,443.50 is refused by the envelope | expected: refused, nothing leased | observed: exit 2, ENVELOPE_SKILL_STOP skill autoplan in program g-o5-dryrun holds $1443.50 of its $2000.00 ceiling ($0.00 settled, $1443.50 in open leases and $0.00 admitted but not yet leased); its share of this stage
 ok   L5 g-tg: one stub reservation reserved and settled on the lease | expected: $7.93 settled | observed: $7.93 settled
@@ -85,12 +88,16 @@ ok   R3 M_PER missing: not refused, plan v3's house multiple 2.2 taken | expecte
 ok   R4 M_AP missing: not refused, house multiple 5.0 taken | expected: exit 0, identical to R1 | observed: exit 0, identical
 ok   R5 AUTH_PAID missing: not refused, the house author line taken | expected: exit 0, identical to R1 | observed: exit 0, identical
 ok   R6 MULT missing: refused | expected: exit 1, MULT is missing | observed: exit 1, resize.py: bad metered input: MULT is missing; fix: pass none's metered mean session cost 
+ok   R7a admission.sh.txt with AUTH_EXTRA unset says so, and resize.py falls back to 1.2 (no refusal) | expected: AUTH_EXTRA: unset, resize.py reads 1.2 | observed: AUTH_EXTRA: unset, resize.py reads 1.2
 ok   R7 admission.sh.txt with the four values and AGENT_USER unset prints them first, then resize.py's output | expected: MULT: 5;M_PER: 2.2;M_AP: 5;AUTH_PAID: 1.39;AGENT_USER: unset; then R1's lines; exit 0 | observed: MULT: 5;M_PER: 2.2;M_AP: 5;AUTH_PAID: 1.39;AGENT_USER: unset; exit 0, R1's lines
 ok   R8 admission.sh.txt with AGENT_USER set | expected: refused, exit 2, AGENT_USER: set, no re-size, no value printed | observed: exit 2, AGENT_USER: set; E_USAGE admission: AGENT_USER is set; unset it, because cost.py reads it and it 
 ok   R9 admission.sh.txt without MULT | expected: refused, exit 2, MULT: missing, no re-size | observed: exit 2, E_USAGE admission: MULT is missing; pass the metered value from G prereg section 6, item 5
 ok   R9 admission.sh.txt without M_PER | expected: refused, exit 2, M_PER: missing, no re-size | observed: exit 2, E_USAGE admission: M_PER is missing; pass the metered value from G prereg section 6, item 
 ok   R9 admission.sh.txt without M_AP | expected: refused, exit 2, M_AP: missing, no re-size | observed: exit 2, E_USAGE admission: M_AP is missing; pass the metered value from G prereg section 6, item 5
 ok   R9 admission.sh.txt without AUTH_PAID | expected: refused, exit 2, AUTH_PAID: missing, no re-size | observed: exit 2, E_USAGE admission: AUTH_PAID is missing; pass the metered value from G prereg section 6, i
+ok   R10 admission.sh.txt with YIELD_G set | expected: refused, exit 2, YIELD_G is set, no re-size | observed: exit 2, E_USAGE admission: YIELD_G is set; unset it (G prereg section 6, item 5)
+ok   R10 admission.sh.txt with TOLD_SCALE set | expected: refused, exit 2, TOLD_SCALE is set, no re-size | observed: exit 2, E_USAGE admission: TOLD_SCALE is set; unset it (G prereg section 6, item 5)
+ok   R11 admission.sh.txt with a resize.py that is not the prereg's attachment | expected: refused, exit 2, sha256 not the attachment, no re-size | observed: exit 2, has sha256 1dd4d4eb7cb420e7dea0bc15903420903def51b64f18cc39eb5843cfe2807780, not the prereg's attachment 1265268921e92667a85529bfe8eec8a5ecb20bc2f12b5
 
 ## Part D: O2's Docker suite at 17253ec47e4cb13b1c9b0ce09615762d958b4cb1
 ok   D1 GSTACK_EVALS_DOCKER=1 bun test tests/outcome-skills/mutation-docker.test.ts tests/outcome-skills/clean-room.test.ts (#210: 83 pass, 0 fail) | expected: exit 0, 83 pass, 0 fail | observed: exit 0, 83 pass, 0 fail
@@ -104,5 +111,5 @@ ok   D4 go tool image gstack-mutation-tool-go:9dbb406b7ec7 | expected: built by 
 ## leftovers
 containers named gstack-evals-*: 0; open leases: 0 micros
 
-rules: 80, failed: 0
+rules: 87, failed: 0
 DRYRUN: ok
