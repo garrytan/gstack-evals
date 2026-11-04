@@ -548,6 +548,16 @@ const mirrorPath = (work: string) => join(work, "host/ledger.jsonl");
 const ownerTag = (owner = process.env.UBI_OWNER ?? "") => owner.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
 const bundlePath = (vm: string) => join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag(), vm + ".bundle");
 const pointerPath = (ledger: string) => ledger + ".host.json";
+// The relaunch evidence (Amendment C's dead-part procedure), one JSON line per event in <work>/relaunch-evidence.jsonl: each
+// part VM confirmed gone with the part's records not pulled, with the part's session reserves still open (they never settle
+// on their own), and each part's one relaunch.
+const evidencePath = (work: string) => join(work, "relaunch-evidence.jsonl");
+function recordVmDeath(work: string, part: string, prefix: string, vm: string, how: string, openIds: string[]) {
+  if (readJsonl(evidencePath(work)).some((e) => e.event === "vm_death" && e.part === part && e.vm === vm)) return;
+  const open = openIds.filter((id) => id.startsWith(prefix) && !/^vm(-\d+)?$/.test(id.slice(prefix.length)));
+  appendFileSync(evidencePath(work), JSON.stringify({ event: "vm_death", part, vm, confirmed_by: how, open_reserves: open, at: new Date().toISOString() }) + "\n");
+}
+const noRecord = (part: string, host: any) => part + " ended at launch.sh's exit 7 with its VM kept and no salvage, and host " + host.name + " has no record of it, so its VM can't be stopped, pulled or settled from here; it goes to the Captain";
 
 function ledgerEnv() {
   const p = process.env.LEDGER ?? "";
@@ -765,9 +775,11 @@ function launch(work: string, partName: string) {
   const kept = states.slice(0, i).filter((s) => s.result?.launch_exit === 7 && !s.result.salvage);
   if (kept.length) {
     let st = status(host) ?? refuse("host " + host.name + " did not answer; run attach");
-    for (const s of kept) if (st.parts[s.part.name] && !st.parts[s.part.name].salvage) st = salvageOnHost(host, s.part.name, s.part.prefix, st.parts[s.part.name], "launch");
+    const orphan = kept.find((s) => !st.parts[s.part.name]);
+    if (orphan) refuse(noRecord(orphan.part.name, host));
+    for (const s of kept) if (!st.parts[s.part.name].salvage) st = salvageOnHost(host, s.part.name, s.part.prefix, st.parts[s.part.name], "launch");
     mirror(work, host);
-    for (const s of kept) if (st.parts[s.part.name]) finishPart(work, host, st, s.part.name, plan);
+    for (const s of kept) finishPart(work, host, st, s.part.name, plan);
     refuseEnded(work, plan);
     states = partState(work, plan);
   }
@@ -786,6 +798,7 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
   const ledger = s.launch_exit === 7 && !s.salvage ? undefined : { rows: readRows(mirrorPath(work)), since: readJson(join(work, name + ".launch.json")).at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd };
   const result = { ...classify(dir, s.launch_exit, { controllerLost: s.launch_exit === null, ledger }), salvage: s.salvage, at: new Date().toISOString() };
   writeJson(join(work, name + ".result.json"), result);
+  if (s.salvage?.vm && s.salvage.vm_down && !s.salvage.pulled) recordVmDeath(work, name, readJson(join(work, name + ".launch.json")).prefix, s.salvage.vm, "ubi-runner down by the salvage on host " + host.name + ", which could not pull the part's records", totals(readRows(mirrorPath(work))).openIds);
   return result;
 }
 
@@ -869,12 +882,14 @@ function salvageOnHost(host: any, partName: string, prefix: string, h: any, agai
 function relaunch(work: string, partName: string) {
   const plan = readPlan(work);
   const part = plan.parts.find((p) => p.name === partName) ?? usage(partName + " is not a part of " + plan.item + "; a relaunch is never relaunched");
-  if (existsSync(join(work, partName + ".relaunch.json"))) refuse(partName + " was relaunched already; the prereg allows one relaunch");
+  if (existsSync(join(work, partName + ".relaunch.json")) || readJsonl(evidencePath(work)).some((e) => e.event === "relaunch" && e.part === partName)) refuse(partName + " was relaunched already; the prereg allows one relaunch");
   refuseEnded(work, plan);
   const host = usableHost(work, "no host is up; run host-up (after recover, if the host was lost)");
   let st = status(host) ?? refuse("host " + host.name + " did not answer; run attach");
   const h = st.parts[partName];
   if (h && h.alive) refuse(partName + "'s controller is still running");
+  const earlier = existsSync(join(work, partName + ".result.json")) ? readJson(join(work, partName + ".result.json")) : null;
+  if (!h && earlier?.launch_exit === 7 && !earlier.salvage) refuse(noRecord(partName, host));
   const salvaged = h && (h.launch_exit === null || h.launch_exit === 7);
   if (salvaged && !h.salvage) st = salvageOnHost(host, partName, part.prefix, h, "relaunch");
   mirror(work, host);
@@ -893,10 +908,12 @@ function relaunch(work: string, partName: string) {
   const cells = startedCells(part, refs, trialTasksFrom(join(work, partName, "pulled/jobs")));
   const rects = relaunchRects(cells.neverStarted);
   const record = { part: partName, loss: result.loss, never_started: cells.neverStarted, strays: cells.strays, rects, at: new Date().toISOString() };
-  if (!rects.length) { writeJson(join(work, partName + ".relaunch.json"), { ...record, launched: false }); console.log(partName + ": every planned cell started; nothing to relaunch"); return; }
+  const evidence = JSON.stringify({ event: "relaunch", part: partName, relaunch: rects.length ? partName + "-relaunch" : null, host: host.name, loss: result.loss, vm_deaths: readJsonl(evidencePath(work)).filter((e) => e.event === "vm_death" && e.part === partName).map((e) => e.vm), replicates: cells.neverStarted.reduce((n, c) => n + c.replicates, 0), at: record.at }) + "\n";
+  if (!rects.length) { writeJson(join(work, partName + ".relaunch.json"), { ...record, launched: false }); appendFileSync(evidencePath(work), evidence); console.log(partName + ": every planned cell started; nothing to relaunch"); return; }
   const rp: PartPlan = { name: partName + "-relaunch", prefix: prefixOf(plan.item, partName + "-relaunch"), rects, relaunch_of: partName };
   preparePart(work, rp, ITEMS[plan.item]!, process.env.ARMS ?? usage("set ARMS to the arm tar directory"));
   writeJson(join(work, partName + ".relaunch.json"), { ...record, launched: true });
+  appendFileSync(evidencePath(work), evidence);
   launchDir(work, plan, host, rp);
 }
 
@@ -906,61 +923,88 @@ function recover(work: string) {
   if (status(host)) refuse("host " + host.name + " answers; run attach");
   if (ubi(["ssh", host.name, "true"]).code === 0) refuse("host " + host.name + " answers ssh, so it is not lost and nothing is destroyed; host-status fails on it. Check ~/" + H + " on it");
   if (!existsSync(mirrorPath(work))) refuse("no ledger mirror in " + work + "; nothing to rebuild from");
-  const running = partState(work, plan).find((s) => s.launched && !s.result);
-  const l = running ? readJson(join(work, running.part.name + ".launch.json")) : null;
-  const claimed = new Set([...hosts(work).map((r) => r.name), ...partState(work, plan).filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm)]);
-  const found = l && !l.vm ? unclaimedBundles(join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag()), claimed, Date.parse(l.at)) : [];
-  const partVm: string | null = l?.vm ?? (found.length === 1 ? found[0]! : null);
-  let partGone = false;
-  if (partVm) {
+  const states = partState(work, plan);
+  const running = states.find((s) => s.launched && !s.result);
+  // Every part whose VM may still run under the lost host: the running part, and each part launch.sh kept at exit 7 that no
+  // salvage reached. Each one's VM is stopped, pulled and destroyed, and the part is classified again with the ledger check.
+  const held = states.filter((s) => s === running || (s.launched && s.result?.launch_exit === 7 && !s.result.salvage));
+  const claimed = new Set([...hosts(work).map((r) => r.name), ...states.filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm)]);
+  const parts = held.map((s) => {
+    const l = readJson(join(work, s.part.name + ".launch.json"));
+    const found = l.vm ? [] : unclaimedBundles(join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag()), claimed, Date.parse(l.at));
+    return { s, l, name: s.part.name as string, vm: (l.vm ?? (found.length === 1 ? found[0] : null)) as string | null, gone: false, pulled: false, missing: [] as string[] };
+  });
+  const picked = parts.filter((p) => !p.l.vm && p.vm).map((p) => p.vm);
+  for (const p of parts) if (!p.l.vm && picked.filter((v) => v === p.vm).length > 1) p.vm = null;
+  // A part VM nothing names may still be running, so the host stays until ubi-runner lists no VM of this owner that no host
+  // or part names.
+  const unknown = parts.filter((p) => !p.vm).map((p) => p.name).join(", ");
+  if (unknown) {
+    const ls = ubi(["list", "--mine"]);
+    if (ls.code !== 0) refuse("the VM of " + unknown + " is unknown and ubi-runner list --mine failed (exit " + ls.code + "), so it may still be running; nothing was destroyed. Run recover again");
+    const named = new Set([...claimed, ...parts.map((p) => p.vm)]);
+    const strays = ls.out.split("\n").map((x) => x.trim().split(/\s+/).at(-1) ?? "").filter((n) => n && !named.has(n));
+    if (strays.length) refuse("the VM of " + unknown + " is unknown, and ubi-runner lists VMs of this owner that no host or part names (" + strays.join(", ") + "), so it may still be running; nothing was destroyed. Destroy each one that is this run's with ubi-runner down <vm>, then run recover again");
+  }
+  if (parts.some((p) => p.vm)) {
     const rec = ubi(["recover"]);
     const state = process.env.UBI_RUNNER_STATE ?? join(process.env.XDG_STATE_HOME ?? join(process.env.HOME ?? "", ".local/state"), "ubi-runner");
-    const gone = join(work, "host/part-vm-gone.json");
-    partGone = !existsSync(join(state, partVm)) && (rec.out.split("\n").some((x) => x.trim() === "RECOVER_GONE: vm=" + partVm) || (existsSync(gone) && readJson(gone).vm === partVm));
-    if (partGone) writeJson(gone, { vm: partVm, at: nowSec() });
-    if (!existsSync(join(state, partVm)) && !partGone) refuse("ubi-runner recover (exit " + rec.code + ") left no local state for part VM " + partVm + ": " + (rec.err || rec.out).trim().split("\n").slice(-2).join(" | ") + "; nothing was destroyed. Fix it, then run recover again");
+    const goneFile = join(work, "host/part-vm-gone.json");
+    const before: string[] = existsSync(goneFile) ? readJson(goneFile).vms : [];
+    for (const p of parts) p.gone = !!p.vm && !existsSync(join(state, p.vm)) && (rec.out.split("\n").some((x) => x.trim() === "RECOVER_GONE: vm=" + p.vm) || before.includes(p.vm));
+    if (parts.some((p) => p.gone)) writeJson(goneFile, { vms: [...new Set([...before, ...parts.filter((p) => p.gone).map((p) => p.vm)])], at: nowSec() });
+    const stateless = parts.find((p) => p.vm && !p.gone && !existsSync(join(state, p.vm)));
+    if (stateless) refuse("ubi-runner recover (exit " + rec.code + ") left no local state for part VM " + stateless.vm + ": " + (rec.err || rec.out).trim().split("\n").slice(-2).join(" | ") + "; nothing was destroyed. Fix it, then run recover again");
   }
   const down = ubi(["down", host.name]);
   if (down.code !== 0) refuse("host " + host.name + " could not be confirmed gone (ubi-runner down exit " + down.code + "); run recover again");
   const goneAt = nowSec();
-  const record: Record<string, unknown> = { host: host.name, down_confirmed_at: goneAt, mirror_sha256: sha256File(mirrorPath(work)), running: running?.part.name ?? null };
   const rows = readRows(mirrorPath(work));
-  let sessions: any[] | undefined, open: any[] | undefined, missing: string[] = [], vm: { id: string; hours: number } | undefined, complete = true;
-  if (running) {
-    const dir = join(work, running.part.name);
-    let pulled = false;
-    if (partVm) {
-      if (!partGone && existsSync(bundlePath(partVm)) && ubi(["ssh", partVm, "touch work/run/STOP"]).code === 0) {
+  const add: Row[] = [];
+  const at = new Date().toISOString(), hostHours = (goneAt - host.up_at) / 3600;
+  for (const p of parts) {
+    const dir = join(work, p.name), prefix = p.s.part.prefix;
+    let vm: { id: string; hours: number } | undefined, sessions: any[] | undefined, open: any[] | undefined;
+    if (p.vm) {
+      if (!p.gone && existsSync(bundlePath(p.vm)) && ubi(["ssh", p.vm, "touch work/run/STOP"]).code === 0) {
         const deadline = Date.now() + Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) * 1000;
-        while (Date.now() < deadline && ubi(["ssh", partVm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
+        while (Date.now() < deadline && ubi(["ssh", p.vm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
         mkdirSync(join(dir, "pulled"), { recursive: true });
-        pulled = ubi(["ssh", partVm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", partVm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", partVm, "work/run/jobs", join(dir, "pulled")]).code === 0;
+        p.pulled = ubi(["ssh", p.vm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", p.vm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", p.vm, "work/run/jobs", join(dir, "pulled")]).code === 0;
       }
-      if (!partGone && ubi(["down", partVm]).code !== 0) refuse("part VM " + partVm + " could not be confirmed gone; run recover again");
-      vm = { id: running.part.prefix + "vm", hours: (nowSec() - Number(l.controller_started_at ?? Date.parse(l.at) / 1000)) / 3600 };
+      if (!p.gone && ubi(["down", p.vm]).code !== 0) refuse("part VM " + p.vm + " could not be confirmed gone; run recover again");
+      vm = { id: prefix + "vm", hours: (nowSec() - Number(p.l.controller_started_at ?? Date.parse(p.l.at) / 1000)) / 3600 };
     }
-    if (pulled) ({ closed: sessions, open, missing } = sessionRecords(join(dir, "pulled/out"), running.part.prefix, rows));
-    complete = pulled && !missing.length;
-    record.part_vm = partVm;
-    record.part_vm_gone = partGone;
-    record.part_results_pulled = pulled;
-    record.missing_sessions = missing;
+    if (p.pulled) ({ closed: sessions, open, missing: p.missing } = sessionRecords(join(dir, "pulled/out"), prefix, rows));
+    add.push(...restoreRows([...rows, ...add], { item: plan.item, prefix, sessions, open, vm, hostId: host.reserve_id, hostHours, at }));
+    if (p.vm && !p.pulled) recordVmDeath(work, p.name, prefix, p.vm, p.gone ? "ubi-runner recover reported it gone (RECOVER_GONE)" : "recover could not pull its records, and ubi-runner down confirmed it gone", totals([...rows, ...add]).openIds);
   }
-  const add = restoreRows(rows, { item: plan.item, prefix: running?.part.prefix, sessions, open, vm, hostId: host.reserve_id, hostHours: (goneAt - host.up_at) / 3600, at: new Date().toISOString() });
+  add.push(...restoreRows([...rows, ...add], { item: plan.item, hostId: host.reserve_id, hostHours, at }));
+  const mirrorSha = sha256File(mirrorPath(work));
   const restored = mirrorPath(work) + ".restored";
   copyFileSync(mirrorPath(work), restored);
   for (const r of add) appendRow(restored, r);
-  appendRow(restored, { ts: new Date().toISOString(), item: plan.item, kind: "note", id: "host-lost-" + host.n, usd_micros: 0, detail: "host " + host.name + " was lost; rows after the agent's last mirror were rebuilt from " + (running ? (sessions ? "the part VM's pulled records" + (missing.length ? ", which miss " + missing.length + " session records" : "") : "nothing: the part VM's records were lost too") : "no running part") });
+  const from = parts.length ? parts.map((p) => p.name + " from " + (p.pulled ? "the part VM's pulled records" + (p.missing.length ? ", which miss " + p.missing.length + " session records" : "") : "nothing: the part VM's records were lost too")).join("; ") : "no running part";
+  appendRow(restored, { ts: at, item: plan.item, kind: "note", id: "host-lost-" + host.n, usd_micros: 0, detail: "host " + host.name + " was lost; rows after the agent's last mirror were rebuilt: " + from });
   const ledger = resolve(readJson(join(work, "host/pointer")).ledger);
   moveFile(restored, ledger);
   if (existsSync(join(work, "host/bound.json"))) copyFileSync(join(work, "host/bound.json"), ledger + ".bound");
   rmSync(pointerPath(ledger), { force: true });
   recordHost(work, { event: "lost", n: host.n, name: host.name, down_confirmed_at: goneAt, rows_added: add.length });
-  if (running) writeJson(join(work, running.part.name + ".result.json"), { ...classify(join(work, running.part.name), null, { hostLost: true, ledger: { rows: [...rows, ...add.filter((x) => x.kind === "reserve"), ...add.filter((x) => x.kind !== "reserve")], since: l.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd } }), at: new Date().toISOString() });
-  writeJson(join(work, "host/recover.json"), { ...record, rows_added: add.length, complete });
+  const checked = [...rows, ...add.filter((x) => x.kind === "reserve"), ...add.filter((x) => x.kind !== "reserve")];
+  for (const p of parts) {
+    const ledgerCheck = { rows: checked, since: p.l.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd };
+    const salvage = p.s === running ? {} : { salvage: { by: "recover", vm: p.vm, vm_gone: p.gone, pulled: p.pulled, vm_down: !!p.vm, at } };
+    writeJson(join(work, p.name + ".result.json"), { ...classify(join(work, p.name), p.s === running ? null : 7, { hostLost: true, ledger: ledgerCheck }), ...salvage, at });
+  }
+  const run = parts.find((p) => p.s === running);
+  const complete = parts.every((p) => p.pulled && !p.missing.length);
+  writeJson(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
+    ...(run ? { part_vm: run.vm, part_vm_gone: run.gone, part_results_pulled: run.pulled, missing_sessions: run.missing } : {}),
+    kept: parts.filter((p) => p !== run).map((p) => ({ part: p.name, vm: p.vm, vm_gone: p.gone, results_pulled: p.pulled, missing_sessions: p.missing })), rows_added: add.length, complete });
   if (!complete) {
-    const why = missing.length ? "the running part's records miss sessions (" + missing.slice(0, 5).join("; ") + (missing.length > 5 ? "; and " + (missing.length - 5) + " more in host/recover.json" : "") + ")"
-      : partGone ? "the running part's VM " + partVm + " was already gone (RECOVER_GONE), so its records were lost" : "the running part's VM records were lost or its VM is unknown";
+    const why = parts.filter((p) => !p.pulled || p.missing.length).map((p) => p.missing.length ? p.name + "'s records miss sessions (" + p.missing.slice(0, 5).join("; ") + (p.missing.length > 5 ? "; and " + (p.missing.length - 5) + " more in host/recover.json" : "") + ")"
+      : p.gone ? p.name + "'s VM " + p.vm + " was already gone (RECOVER_GONE), so its records were lost" : p.name + "'s VM records were lost or its VM is unknown").join("; ");
     console.log("STOP: host " + host.name + " was lost and " + why + "; ledger rows after the last mirror can't be fully rebuilt, so " + plan.item + " ends incomplete and goes to the Captain");
     process.exit(4);
   }

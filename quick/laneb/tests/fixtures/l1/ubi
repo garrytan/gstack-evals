@@ -8,6 +8,8 @@
 # FAIL_RECOVER=1 makes recover fail; FAIL_PULL=<vm> makes each pull from that VM fail; FAIL_PULL_MATCH=<text> makes each pull of a path containing it fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
 # runner's idle watchdog, ending an ssh command and its process group after that long (a setsid -f child survives);
 # FAIL_SSH_MATCH=<text> makes an ssh command containing it exit 255, after running it when FAIL_SSH_RUN=1.
+# Like the real runner's list --mine, list prints "<location>  <name>" for each VM of the caller's owner that is not destroyed
+# (a dead VM is still listed, as the API still has it); FAIL_LIST=1 makes it fail, as the real one does when the API can't be read.
 set -u
 cmd=$1; shift
 state=${UBI_RUNNER_STATE:-$HOME/.local/state/ubi-runner}
@@ -24,6 +26,7 @@ case "$cmd" in
     if [ "$size" = standard-2 ]; then name=host-$n; else name=vm-$n; fi
     if [ "${UBI_COUNTED:-}" = 1 ] && [ -z "${UBI_RECOVERY_DIR:-}" ]; then echo "UBI_RECOVERY_REQUIRED" >&2; exit 1; fi
     mkdir -p "$(vmdir "$name")" "$state/$name"
+    printf %s "$owner" > "$(vmdir "$name")/.owner"
     printf 'NAME=%s\nIP=%s\nCREATED=yes\nCREATE_AT=%s\n' "$name" "$name" "$(date +%s)" > "$state/$name/env"
     touch "$state/$name/key"
     if [ -n "${UBI_RECOVERY_DIR:-}" ]; then mkdir -p "$UBI_RECOVERY_DIR/$owner"; cp "$state/$name/env" "$UBI_RECOVERY_DIR/$owner/$name.bundle"; fi
@@ -55,6 +58,13 @@ case "$cmd" in
   down)
     [ -z "${FAIL_DOWN:-}" ] || exit 1
     [ ! -d "$(vmdir "$1")" ] || touch "$(vmdir "$1")/.down" ;;
+  list)
+    [ "${1:-}" = --mine ] || exit 2
+    [ -z "${FAIL_LIST:-}" ] || { echo "could not list the project's VMs" >&2; exit 1; }
+    for d in "$UBI_FAKE"/host-* "$UBI_FAKE"/vm-*; do
+      if [ -d "$d" ] && [ ! -e "$d/.down" ] && [ "$(cat "$d/.owner" 2>/dev/null)" = "$owner" ]; then echo "fake  $(basename "$d")"; fi
+    done
+    exit 0 ;;
   recover)
     [ -z "${FAIL_RECOVER:-}" ] || { echo "recovery bundles are sealed with another key" >&2; exit 1; }
     rc=0
