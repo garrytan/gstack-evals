@@ -340,4 +340,6 @@ export interface L1SessionRow {
   contract_check_met: boolean | null;
   /** The no-gstack read audit's hits (none arm). */
   audit_hits: string[];
+  /** The sha256 of the probes.ts that scored this row. */
+  probes_sha256: string;
 }

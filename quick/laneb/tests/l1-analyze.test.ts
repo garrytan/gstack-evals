@@ -116,6 +116,11 @@ describe("every behavior verdict branch (decide)", () => {
 const verdicts = (rep: ReturnType<typeof analyze>, model = "opus") => rep.models.find((m) => m.model === model)!.primaries.map((p) => p.member + " " + p.decision.reading + " " + p.decision.verdict + (p.decision.kind ? " (" + p.decision.kind + ")" : ""));
 
 describe("the whole entry on synthetic tables", () => {
+  test("refuses a table scored by another probes.ts", () => {
+    const rows = table();
+    rows[3] = { ...rows[3]!, probes_sha256: "0".repeat(64) };
+    expect(() => analyze(rows, config())).toThrow(/tabled by probes.ts 000000000000, not the current/);
+  });
   test("KEEP on both members, the gate met, and a model the ceiling refused printed as not run with its MDD", () => {
     const rep = analyze(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 60 }, "off-u": { load: 1 }, "before-t": { complete: 2 }, "after-t": { complete: 50 }, "off-t": { complete: 40 } } }), config({ models: [{ id: "opus", status: "run" }, { id: "sol", status: "not_run" }] }));
     expect(verdicts(rep)).toEqual(["B1 KEEP KEEP", "B3 KEEP KEEP"]);

@@ -351,13 +351,18 @@ const DRIVE = /\/\.capy\/drive\//;
 /** Commands that never read a file's contents: a path among their words is a mention, unless a word substitutes a command. */
 const NO_READ = new Set(["echo", "printf", "cd", "pushd", "popd", "pwd", "mkdir", "touch", "test", "[", "[[", "export", "unset", "type", "which", "command", "hash", "true", "false", ":", "dirname", "basename", "realpath", "readlink", "sleep", "exit"]);
 const PATH_SPLIT = /[\s'"=;|&<>()`]+/;
-/** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies. */
-function bashReadPaths(command: string): string[] {
+/** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies,
+ * with a relative word resolved against the directory the line has cd'd to (the work tree at first). */
+function bashReadPaths(command: string, cwd: string | null): string[] {
   const out: string[] = [];
-  for (const s of simpleCommands(command)) {
+  for (const s of simpleCommands(command, cwd)) {
     const mention = s.words.length > 0 && NO_READ.has(base(s.words[0]!)) && !s.words.some((w) => w.includes("$(") || w.includes("\x60"));
     const texts = [...(mention ? [] : [...s.words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<")).map((r) => r.target)];
-    for (const t of texts) out.push(...t.split(PATH_SPLIT).filter((w) => w.startsWith("/")));
+    for (const t of texts)
+      for (const w of t.split(PATH_SPLIT)) {
+        if (w.startsWith("/")) out.push(w);
+        else if (s.cwd && w && !w.startsWith("-") && w !== s.words[0]) out.push(posix.resolve(s.cwd, w));
+      }
   }
   return out;
 }
@@ -480,6 +485,7 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
   const auditHits: string[] = [];
   const roots = auditRoots(o.home);
   const below = (p: string) => DRIVE.test(p) || roots.some((r) => p.startsWith(r + "/") && p.length > r.length + 1);
+  const above = (p: string) => roots.some((r) => r === p.replace(/\/+$/, "") || r.startsWith(p.replace(/\/+$/, "") + "/"));
   const expand = (s: string) => s.replace(/(^|[\s='"])(~|\$HOME|\$\{HOME\})(?=\/)/g, "$1" + o.home);
   for (const c of calls) {
     const res = results.get(c.id);
@@ -502,8 +508,8 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
     if (c.name === "Read" || c.name === "Bash") {
       for (const m of target.matchAll(/(\S*\/\.claude\/skills\/([^/\s"']+)\/SKILL\.md)/g)) if (m[2] !== "gstack" && under(m[1]!.replace(/^['"]/, ""), o.gstackRoots)) gstackLoads.add(m[2]!);
     }
-    const paths = c.name === "Bash" ? bashReadPaths(target) : [target];
-    const hit = paths.find(below);
+    const paths = c.name === "Bash" ? bashReadPaths(target, root) : [target];
+    const hit = paths.find(below) ?? (paths.some(above) ? res.text.split(PATH_SPLIT).find((w) => w.startsWith("/") && below(w)) : undefined);
     if (hit && (c.name !== "Bash" || res.text.trim())) auditHits.push(c.name + " " + hit.slice(0, 200));
   }
   if (investigate) gstackLoads.add("investigate");

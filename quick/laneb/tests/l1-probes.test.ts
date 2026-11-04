@@ -205,4 +205,14 @@ describe("contract block, turn cap and the read audit", () => {
     expect(run([bash("python3 -c \"print(open('/root/.gstack/config.yaml').read())\"", "x: 1")], none).audit_hits.length).toBe(1);
     expect(run([tool("Read", { file_path: "/root/.claude/skills/investigate/SKILL.md" }, "File does not exist.", true)], none).audit_hits).toEqual([]);
   });
+  test("the read audit resolves relative reads after a cd and catches searches rooted at or above an audit root", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    expect(run([bash("cd /root/.claude/skills && cat investigate/SKILL.md", "---\nname: investigate")], none).audit_hits).toEqual(["Bash /root/.claude/skills/investigate/SKILL.md"]);
+    expect(run([bash("cd ~/.capy/drive/u && cat AGENTS.md", "rules")], none).audit_hits.length).toBe(1);
+    expect(run([bash("cat ../../root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+    expect(run([tool("Grep", { pattern: "name:", path: "/root/.claude/skills" }, "/root/.claude/skills/investigate/SKILL.md")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep -rn 'name:' /root/.claude", "/root/.claude/skills/investigate/SKILL.md:2:name: investigate")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep -rn 'def main' /", "/testbed/app.py:3:def main():")], none).audit_hits).toEqual([]);
+    expect(run([bash("cat README.md src/app.py", "# app")], none).audit_hits).toEqual([]);
+  });
 });

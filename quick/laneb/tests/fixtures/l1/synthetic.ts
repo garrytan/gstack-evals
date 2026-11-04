@@ -1,6 +1,7 @@
 // Synthetic L1 session tables for the analysis tests: deterministic rows, the first k tasks of an arm carry a metric.
 import type { L1Arm, L1Instrument, L1SessionRow } from "../../../../../src/types.ts";
 import type { AuditLabel, Config } from "../../../l1/analyze.ts";
+import { PROBES_SHA256 } from "../../../l1/table.ts";
 
 export const TASKS = Array.from({ length: 80 }, (_, i) => "own" + (i % 25) + "__repo" + (i % 25) + "-" + (100 + i));
 export const PILOT = Array.from({ length: 10 }, (_, i) => "pilot" + i + "__p-" + i);
@@ -12,7 +13,7 @@ export function row(model: string, instrument: L1Instrument, arm: L1Arm, task: s
     outcome: "graded", pass: false, reward: 0, allowance_stop: false, turn_cap: false, reason: "graded", cost_usd: 0.5, tokens: 1000,
     load_investigate: false, gstack_loads: [], repo_loads: [], skill_unresolved: 0, complete: false,
     probe_i: { report: false, fix_edited: false, status: false, check_after_edit: false, edits: 1 },
-    background_at_result: false, contract_block: false, route_hook: true, contract_record: true, contract_check_met: null, audit_hits: [], ...extra,
+    background_at_result: false, contract_block: false, route_hook: true, contract_record: true, contract_check_met: null, audit_hits: [], probes_sha256: PROBES_SHA256, ...extra,
   };
 }
 

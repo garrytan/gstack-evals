@@ -25,6 +25,8 @@ export const PREFIX_SHA256 = {
   after: "5bd9a0c6e900276b4d8a08727bee300c3ce85ba1a08ae47361729d7056c83f61",
 } as const;
 export type Pin = keyof typeof PREFIX_SHA256;
+/** The sha256 of the probes.ts that scores every row this table writes; analyze.ts refuses rows from any other. */
+export const PROBES_SHA256 = createHash("sha256").update(readFileSync(join(import.meta.dir, "probes.ts"))).digest("hex");
 
 export class UsageError extends Error {}
 
@@ -111,6 +113,7 @@ export function sessionRow(dir: string, ctx: TableContext): L1SessionRow | null 
     contract_record: flag(evidence.contract_record),
     contract_check_met: flag(evidence.contract_check_met),
     audit_hits: p.audit_hits,
+    probes_sha256: PROBES_SHA256,
   };
 }
 

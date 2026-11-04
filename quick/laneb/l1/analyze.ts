@@ -359,6 +359,8 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
   const routed = new Set(cfg.routed_stratum);
   const f1Plan: Planned = { tasks: f1Tasks, reps: 1 };
   const probesSha = sha256(readFileSync(PROBES_TS));
+  const stale = rows.find((r) => r.probes_sha256 !== probesSha);
+  if (stale) throw new UsageError("E_USAGE l1 analyze: trial " + stale.trial + " was tabled by probes.ts " + String(stale.probes_sha256).slice(0, 12) + ", not the current " + probesSha.slice(0, 12) + "; rebuild the table with this probes.ts");
   const models = cfg.models.map((m) => {
     const id = m.id;
     const f1: Scope = { model: id, instrument: "f1" };

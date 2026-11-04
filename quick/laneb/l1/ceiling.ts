@@ -29,11 +29,20 @@ export type PlanItem = { item: string; cap_usd: number; status: "planned" | "ope
 export type Plan = { items: PlanItem[]; leftover: { sol: "pending" | "done" | "refused"; particle: "pending" | "done" | "refused" } };
 
 const micros = (usd: number) => Math.round(usd * M);
+const amount = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
 const usd = (m: number) => (m / M).toFixed(2);
 
 export function tally(ledgerRows: Row[], crew: Crew, plan: Plan, exclude: string | null = null) {
   if (!Array.isArray(plan?.items) || !plan.leftover) throw new UsageError("E_USAGE l1 ceiling: the plan needs items [{item, cap_usd, status}] and leftover {sol, particle}");
   if (!Array.isArray(crew?.threads) || typeof crew.captain_credits !== "number") throw new UsageError("E_USAGE l1 ceiling: the crew file needs threads [{code, line, credits, tokens, token_stop, status}] and captain_credits");
+  if (!amount(crew.captain_credits)) throw new UsageError("E_USAGE l1 ceiling: captain_credits must be a number of at least 0");
+  for (const t of crew.threads) {
+    if (!["crew", "sol", "particle"].includes(t?.line)) throw new UsageError("E_USAGE l1 ceiling: thread " + t?.code + " has line " + JSON.stringify(t?.line) + ", not crew, sol or particle");
+    if (!["open", "planned", "done"].includes(t.status)) throw new UsageError("E_USAGE l1 ceiling: thread " + t.code + " has status " + JSON.stringify(t.status) + ", not open, planned or done");
+    if (!amount(t.credits) || !amount(t.tokens)) throw new UsageError("E_USAGE l1 ceiling: thread " + t.code + " needs credits and tokens, each a number of at least 0");
+  }
+  for (const p of plan.items) if (typeof p?.item !== "string" || !amount(p.cap_usd) || !["planned", "open", "done"].includes(p.status)) throw new UsageError("E_USAGE l1 ceiling: plan item " + JSON.stringify(p?.item) + " needs cap_usd, a number of at least 0, and status planned, open or done");
+  for (const k of ["sol", "particle"] as const) if (!["pending", "done", "refused"].includes(plan.leftover[k])) throw new UsageError("E_USAGE l1 ceiling: leftover." + k + " is " + JSON.stringify(plan.leftover[k]) + ", not pending, done or refused");
   const byItem = new Map<string, Row[]>();
   for (const r of ledgerRows) byItem.set(r.item, [...(byItem.get(r.item) ?? []), r]);
   for (const item of byItem.keys()) if (!plan.items.some((p) => p.item === item)) throw new UsageError("E_USAGE l1 ceiling: ledger item " + item + " is not in the plan, so the check can't place it");
@@ -52,7 +61,7 @@ export function tally(ledgerRows: Row[], crew: Crew, plan: Plan, exclude: string
   const allCredits = crewSpent + solSpent + particleSpent;
   const perToken = tokens > 0 ? allCredits / tokens : PLANNING_USD_PER_MTOK;
   const openThreads = crew.threads.filter((t) => t.status !== "done" && t.code !== exclude);
-  for (const t of openThreads) if (typeof t.token_stop !== "number") throw new UsageError("E_USAGE l1 ceiling: open thread " + t.code + " has no token_stop");
+  for (const t of openThreads) if (!amount(t.token_stop)) throw new UsageError("E_USAGE l1 ceiling: open thread " + t.code + " has no token_stop");
   const stops = Math.round(openThreads.reduce((x, t) => x + Math.max(0, t.token_stop! - t.tokens), 0) * perToken);
   const crewHold = Math.max(Math.max(0, micros(CREW_LINE_USD) - crewSpent), stops);
   const captainHold = Math.max(0, micros(CAPTAIN_LINE_USD) - captainSpent);
@@ -75,6 +84,7 @@ export function check(ledgerRows: Row[], crew: Crew, plan: Plan, launch: string)
 
 export function finalRead(ledgerRows: Row[], crew: Crew, plan: Plan, post: string) {
   const t = tally(ledgerRows, crew, plan, post);
+  if (t.perToken === 0) throw new UsageError("E_USAGE l1 ceiling: the crew file holds tokens but no credits, so there is no measured rate to size the post thread's stop");
   const holds = t.captainHold + t.runWorkHold + t.stops;
   const room = micros(CEILING_USD) - t.spentTotal - holds;
   const maxStop = room > 0 ? Math.floor(room / t.perToken) : 0;

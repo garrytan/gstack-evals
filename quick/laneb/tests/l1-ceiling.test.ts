@@ -176,4 +176,36 @@ describe("the command line", () => {
     expect(missing.code).toBe(2);
     expect(missing.err).toStartWith("E_USAGE l1 ceiling: check needs --launch");
   });
+  test("a malformed crew file or plan exits 2, never PASS", () => {
+    const typo = { ...crew(288_000, 36_000), threads: [{ code: "GEVA-1", line: "crew", credit: 288_000, tokens: 800 * M, token_stop: 800 * M, status: "done" }] } as unknown as Crew;
+    const r = run(["check", ...files(atExpected(), typo, plan()), "--launch", "pilot-sol"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toStartWith("E_USAGE l1 ceiling: thread GEVA-1 needs credits and tokens");
+    expect(r.out).toBe("");
+  });
+});
+
+describe("malformed input is refused", () => {
+  test("a missing or non-numeric credits, tokens, token_stop or captain_credits", () => {
+    const bad = (t: Record<string, unknown>) => crew(288_000, 36_000, [{ code: "GEVA-7", line: "crew", credits: 1000, tokens: M, token_stop: 2 * M, status: "open", ...t } as Crew["threads"][number]]);
+    expect(() => tally(atExpected(), bad({ credits: undefined }), plan())).toThrow(/GEVA-7 needs credits and tokens/);
+    expect(() => tally(atExpected(), bad({ tokens: "5" }), plan())).toThrow(/GEVA-7 needs credits and tokens/);
+    expect(() => tally(atExpected(), bad({ credits: -1 }), plan())).toThrow(/GEVA-7 needs credits and tokens/);
+    expect(() => tally(atExpected(), bad({ token_stop: Number.NaN }), plan())).toThrow(/GEVA-7 has no token_stop/);
+    expect(() => tally(atExpected(), { ...crew(288_000, 36_000), captain_credits: Number.NaN }, plan())).toThrow(/captain_credits/);
+  });
+  test("an unknown line or status", () => {
+    const t = (x: Record<string, unknown>) => crew(288_000, 36_000, [{ code: "GEVA-7", line: "crew", credits: 900_000, tokens: M, token_stop: null, status: "done", ...x } as Crew["threads"][number]]);
+    expect(() => check(atExpected(), t({ line: "Crew" }), plan(), "pilot-sol")).toThrow(/GEVA-7 has line "Crew", not crew, sol or particle/);
+    expect(() => check(atExpected(), t({ status: "closed" }), plan(), "pilot-sol")).toThrow(/GEVA-7 has status "closed"/);
+  });
+  test("a plan item with no cap_usd, even with no ledger rows yet, or an unknown leftover state", () => {
+    const typo = { ...plan(), items: [...opusPlan(), { item: "pilot-sol", cap: 100, status: "planned" }] } as unknown as Plan;
+    expect(() => check(atExpected(), crew(288_000, 36_000), typo, "pilot-sol")).toThrow(/plan item "pilot-sol" needs cap_usd/);
+    expect(() => tally(atExpected(), crew(288_000, 36_000), plan(solPlan, { sol: "pending", particle: "skipped" } as unknown as Plan["leftover"]))).toThrow(/leftover.particle is "skipped"/);
+  });
+  test("the final read refuses tokens with no credits instead of an unbounded post stop", () => {
+    const post: Crew["threads"][number] = { code: "GEVA-9", line: "crew", credits: 0, tokens: 0, token_stop: null, status: "planned" };
+    expect(() => finalRead(atExpected(), crew(0, 0, [post]), plan([], { sol: "refused", particle: "refused" }), "GEVA-9")).toThrow(/no measured rate/);
+  });
 });
