@@ -15,7 +15,8 @@
 // bound stops and the other re-sizes alone; with both past it, or no both-alive design inside the line, the Captain's
 // pick C applies: plan-eng-review re-sizes alone first, then autoplan. A lone survivor re-sizes on M1's fixed ladder
 // (prereg section 7); before the confirmatory run, rungs above the screened panel's task count can't run and are passed
-// over, unless the confirmatory prereg says otherwise for a panel already built.
+// over, unless the confirmatory prereg says otherwise for a panel already built. When both skills pass but together
+// overflow the program envelope, plan v3 section 8's trim order stops autoplan first and plan-eng-review re-sizes alone.
 import type { EnvelopeStatus } from "../ledger/envelope.ts";
 import { aloneParts, BOUND, bestPair, costs, G_SKILLS, ladder, meteredPricer, NS, PLANNED, pySum, type GMetered, type GSkill, type Parts, type PriceModel } from "./g-resize.ts";
 
@@ -142,18 +143,22 @@ export function projectionCheck(input: ProjectionInput): Projection {
       else stop("autoplan", why + "; plan-eng-review re-sizes alone first (pick C), so autoplan stops");
     }
   }
-  for (const s of alive) {
+  const sized = (x: SkillProjection) => ({ n: x.design!.n, k: x.design!.k, mdd: x.design!.mdd, remaining: x.remaining_usd! });
+  const capCheck = (s: GSkill) => {
     const x = out[s];
-    if (x.passes && x.projection_usd! > x.cap_usd) stop(s, "the projection " + dollars(x.projection_usd!) + " passes the skill's " + dollars(x.cap_usd) + " cap", { n: x.design!.n, k: x.design!.k, mdd: x.design!.mdd, remaining: x.remaining_usd! });
-  }
+    if (x.passes && x.projection_usd! > x.cap_usd) stop(s, "the projection " + dollars(x.projection_usd!) + " passes the skill's " + dollars(x.cap_usd) + " cap", sized(x));
+  };
+  alive.forEach(capCheck);
   const committed = usd(envelope.total.committed_micros), cap = usd(envelope.total.cap_micros);
-  const projected = committed + alive.filter((s) => out[s].passes).reduce((a, s) => a + out[s].crew_open_usd + out[s].remaining_usd!, 0);
-  const fits = projected <= cap;
-  if (!fits) {
-    for (const s of alive) {
-      const x = out[s];
-      if (x.passes) stop(s, "the program envelope holds " + dollars(committed) + " of its " + dollars(cap) + " and this stage's projection takes it to " + dollars(projected), { n: x.design!.n, k: x.design!.k, mdd: x.design!.mdd, remaining: x.remaining_usd! });
-    }
+  const project = () => committed + alive.filter((s) => out[s].passes).reduce((a, s) => a + out[s].crew_open_usd + out[s].remaining_usd!, 0);
+  const overflow = (p: number) => "the program envelope holds " + dollars(committed) + " of its " + dollars(cap) + " and this stage's projection takes it to " + dollars(p);
+  let projected = project();
+  if (projected > cap && out["plan-eng-review"].passes && out.autoplan.passes) {
+    stop("autoplan", overflow(projected) + "; plan v3 section 8 trims the skill latest in wave 1's order first, so autoplan stops and plan-eng-review re-sizes alone", sized(out.autoplan));
+    if (alone("plan-eng-review", "autoplan stops at the program envelope (plan v3 section 8)")) capCheck("plan-eng-review");
+    projected = project();
   }
+  const fits = projected <= cap;
+  if (!fits) for (const s of alive) if (out[s].passes) stop(s, overflow(projected), sized(out[s]));
   return { stage, skills: out, program: { cap_usd: cap, committed_usd: committed, projected_usd: projected, fits } };
 }
