@@ -144,6 +144,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [ENVELOPE_SKILL_STOP](#envelope_skill_stop) | 2 | U4 |
 | [E_ENVELOPE_MISSING](#e_envelope_missing) | 2 | U4 |
 | [E_ENVELOPE_LATE](#e_envelope_late) | 2 | U4 |
+| [E_MUTATION_DOCKER](#e_mutation_docker) | 2 | U20 |
+| [E_MUTATION_INPUT](#e_mutation_input) | 2 | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -1021,6 +1023,22 @@ A lease on a program's line item reached its expiry after the envelope admitted 
 Fix: Lease again. If it happens again, the machine is stalling between admission and the lease write, or --ttl is too short.
 
 Exit 2. Side effects: None: refused before any spend. The admission stays in the program's record and counts nothing. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_MUTATION_DOCKER
+
+Docker failed while building a mutation tool or scorer image, creating a volume or preparing a tree for the mutation scorer, so the tree got no mutation reading.
+
+Fix: Read the build or prepare log in the message. A tool image builds once with the network; the scorer image and every scoring step need none. Fix the host or the image and score the tree again.
+
+Exit 2. Side effects: Partial: images already built stay cached; the scorer's volumes are removed. Nothing was spent. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_MUTATION_INPUT
+
+The mutation scorer was given a project image that is not on this host.
+
+Fix: Build or load the task's project image first, then score the tree again.
+
+Exit 2. Side effects: None: refused before any container ran. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
