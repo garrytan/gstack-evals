@@ -110,7 +110,9 @@ function writeTargets(parts: string[]): string[] {
 
 /** plan-eng-review: review-sections.md read, the Step 0 Scope Challenge marker, Sections 1 to 4 in order, a test plan written.
  * A section counts at a heading in the pin's forms that has content (a non-empty line that is not a markdown heading)
- * before the next section heading, so a preview list or the completion summary's list lines are not sections. A Bash read
+ * before the next section heading, so a preview list without sub-bullets and the completion summary's list lines are not
+ * sections, while a preview list with sub-bullets and a bold summary with list items still count (open note p2/red-team#1,
+ * pinned by test.failing cases in tests/outcome-skills/exposure.test.ts). A Bash read
  * counts as a simple command whose result is not empty; a Bash write as a simple command that writes the pin's test-plan
  * path, by redirect or tee. Edit and MultiEdit never write a test plan. */
 export function planEngReviewExposure(records: Rec[]): ExposureRead {
