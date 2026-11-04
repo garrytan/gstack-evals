@@ -95,7 +95,7 @@ export function admitG(input: AdmissionInput): Admission {
     if (t.cost_usd === null || !Number.isFinite(t.cost_usd) || t.cost_usd < 0) throw new Error("trial " + t.trial + " of arm " + t.arm + " on task " + t.task + " has no meter record; item 5 reads every session's U4 lease spend");
     if (t.mutation === null) throw new Error("trial " + t.trial + " of arm " + t.arm + " on task " + t.task + " is scored but has no mutation reading");
   }
-  for (const [name, v] of [["auth_paid_usd", input.auth_paid_usd], ["auth_extra_usd", input.auth_extra_usd]] as const) if (!Number.isFinite(v) || v < 0) throw new Error(name + " must be dollars per valid task, 0 or more");
+  for (const [name, v] of [["auth_paid_usd", input.auth_paid_usd], ["auth_extra_usd", input.auth_extra_usd]] as const) if (!(v > 0 && v < 1000)) throw new Error(name + " must be dollars per valid task, above 0 and under 1000, the range resize.py reads its metered inputs in");
   const of = (arm: string) => trials.filter((t) => t.arm === arm);
   const scored = (arm: string) => of(arm).filter((t) => t.status === "scored");
 
@@ -121,29 +121,37 @@ export function admitG(input: AdmissionInput): Admission {
   for (const s of G_SKILLS) {
     const arm = arms.told[s];
     const mine = scored(arm);
-    const sample = input.exposure_sample[s];
-    if (!Array.isArray(sample) || sample.length !== 8) throw new Error("item 2 reads 8 sampled told trials of " + s + ", one on each of 8 tasks, not " + (Array.isArray(sample) ? sample.length : "none"));
-    const tasks = new Set<string>();
-    let exposed = 0;
-    for (const x of sample) {
-      if (tasks.has(x.task)) throw new Error("task " + x.task + " is sampled twice for " + s + "; item 2 takes one trial on each of 8 tasks");
-      tasks.add(x.task);
-      const t = of(arm).find((y) => y.task === x.task && y.trial === x.trial);
-      if (!t || t.status !== "scored" || t.exposed === null) throw new Error("sampled trial " + x.trial + " on task " + x.task + " is not a scored " + s + " trial read by the detector; replace it as prereg section 5 says");
-      if (t.exposed) exposed++;
-    }
     const read = mine.filter((t) => t.exposed !== null);
     exposureAll[s] = { exposed: read.filter((t) => t.exposed).length, trials: read.length };
     const trees = [...none, ...mine];
     const errors = trees.filter((t) => t.mutation === "tool_error").length;
     const noRun = trees.filter((t) => !t.verifier_ran).length;
     const toldRig = rig(arm);
-    items[s] = [
-      headroomItem,
-      { item: 2, name: "exposure", pass: exposed >= 7, reading: exposed + " of 8 sampled told trials exposed (7 needed); " + exposureAll[s].exposed + " of " + exposureAll[s].trials + " told trials read exposed" },
-      { item: 3, name: "instruments", pass: shareAtLeast(trees.length - errors, trees.length, 0.9) && noRun === 0, reading: "mutation tool scored " + (trees.length - errors) + " of " + trees.length + " trees without a tool error (" + pct(trees.length - errors, trees.length) + ", 90% needed); the verifier returned no run for " + noRun },
-      { item: 4, name: "rig", pass: noneRig.gaps <= maxGaps && toldRig.gaps <= maxGaps && noneRig.unexplained + toldRig.unexplained === 0, reading: "gaps after reruns: none " + noneRig.gaps + ", told " + toldRig.gaps + " (at most " + maxGaps + " an arm); unexplained arm stops: none " + noneRig.unexplained + ", told " + toldRig.unexplained },
+    const exposure = (): AdmissionItem => {
+      const sample = input.exposure_sample[s];
+      if (!Array.isArray(sample) || sample.length !== 8) throw new Error("item 2 reads 8 sampled told trials of " + s + ", one on each of 8 tasks, not " + (Array.isArray(sample) ? sample.length : "none"));
+      const tasks = new Set<string>();
+      let exposed = 0;
+      for (const x of sample) {
+        if (tasks.has(x.task)) throw new Error("task " + x.task + " is sampled twice for " + s + "; item 2 takes one trial on each of 8 tasks");
+        tasks.add(x.task);
+        const t = of(arm).find((y) => y.task === x.task && y.trial === x.trial);
+        if ((!t || t.status !== "scored") && toldRig.gaps > maxGaps) return { item: 2, name: "exposure", pass: null, reading: "not read: sampled trial " + x.trial + " on task " + x.task + " is not a scored trial, and the told arm's " + toldRig.gaps + " gaps pass item 4's limit of " + maxGaps + ", so prereg section 5's replacement can't repair the sample" };
+        if (!t || t.status !== "scored" || t.exposed === null) throw new Error("sampled trial " + x.trial + " on task " + x.task + " is not a scored " + s + " trial read by the detector; replace it as prereg section 5 says");
+        if (t.exposed) exposed++;
+      }
+      return { item: 2, name: "exposure", pass: exposed >= 7, reading: exposed + " of 8 sampled told trials exposed (7 needed); " + exposureAll[s].exposed + " of " + exposureAll[s].trials + " told trials read exposed" };
+    };
+    const reads: [AdmissionItem["item"], AdmissionItem["name"], () => AdmissionItem][] = [
+      [2, "exposure", exposure],
+      [3, "instruments", () => ({ item: 3, name: "instruments", pass: shareAtLeast(trees.length - errors, trees.length, 0.9) && noRun === 0, reading: "mutation tool scored " + (trees.length - errors) + " of " + trees.length + " trees without a tool error (" + pct(trees.length - errors, trees.length) + ", 90% needed); the verifier returned no run for " + noRun })],
+      [4, "rig", () => ({ item: 4, name: "rig", pass: noneRig.gaps <= maxGaps && toldRig.gaps <= maxGaps && noneRig.unexplained + toldRig.unexplained === 0, reading: "gaps after reruns: none " + noneRig.gaps + ", told " + toldRig.gaps + " (at most " + maxGaps + " an arm); unexplained arm stops: none " + noneRig.unexplained + ", told " + toldRig.unexplained })],
     ];
+    items[s] = [headroomItem];
+    for (const [item, name, readItem] of reads) {
+      const by = items[s].find((x) => x.pass === false)?.item;
+      items[s].push(by === undefined ? readItem() : { item, name, pass: null, reading: "not read: item " + by + " stopped the skill" });
+    }
     const cost = (xs: SliceTrial[]) => (xs.length ? mean(xs.map((t) => t.cost_usd!)) : null);
     told[s] = { trials: mine.length, all_usd: cost(mine), exposed_usd: cost(mine.filter((t) => t.exposed === true)), unexposed_usd: cost(mine.filter((t) => t.exposed === false)) };
   }
@@ -154,7 +162,7 @@ export function admitG(input: AdmissionInput): Admission {
   if (told.autoplan.all_usd !== null) inputs.M_AP = told.autoplan.all_usd / noneUsd;
   inputs.AUTH_PAID = input.auth_paid_usd;
   inputs.AUTH_EXTRA = input.auth_extra_usd;
-  const firstFail = (s: GSkill) => items[s].find((x) => !x.pass)?.item ?? null;
+  const firstFail = (s: GSkill) => items[s].find((x) => x.pass === false)?.item ?? null;
   const stopped = G_SKILLS.filter((s) => firstFail(s) !== null);
   const m1 = m1Decide(meteredPricer(inputs), stopped);
   const resizeText = renderResizeMetered(inputs);

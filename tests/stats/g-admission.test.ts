@@ -83,6 +83,30 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
     expect(() => admitG(input(gap))).toThrow(/not a scored/);
   });
 
+  test("items read in order and stop at the first failure: an item 1 floor with a malformed or gap-holding sample prints its readings", () => {
+    const gapped = edit(noneSolved(4), (t) => t.arm === PER && t.task === "t00" && t.trial === 1, { status: "gap" });
+    for (const a of [admitG(input(gapped)), admitG(input(noneSolved(4), { exposure_sample: { "plan-eng-review": SAMPLE.slice(1), autoplan: SAMPLE } }))]) {
+      for (const s of ["plan-eng-review", "autoplan"] as const) {
+        expect([a.skills[s].failed, a.skills[s].route, a.skills[s].design]).toEqual([1, "FIX-METHOD (floor)", null]);
+        expect(a.skills[s].items.map((x) => x.pass)).toEqual([false, null, null, null, null]);
+      }
+    }
+  });
+
+  test("a sample the replacement rule can't repair (told gaps past item 4's limit) leaves item 2 unread, and item 4 stops the skill as FIX-METHOD (rig)", () => {
+    const trials = edit(slice(), (t) => t.arm === PER && t.trial === 1 && ["t00", "t01", "t02"].includes(t.task), { status: "gap" });
+    const p = admitG(input(trials)).skills["plan-eng-review"];
+    expect([p.failed, p.route]).toEqual([4, "FIX-METHOD (rig)"]);
+    expect(p.items[1]!.pass).toBeNull();
+    expect(p.items[1]!.reading).toMatch(/can't repair/);
+  });
+
+  test("item 5's AUTH_PAID and AUTH_EXTRA are refused up front outside the (0, 1000) range resize.py reads", () => {
+    expect(() => admitG(input(slice(), { auth_extra_usd: 0 }))).toThrow(/auth_extra_usd/);
+    expect(() => admitG(input(slice(), { auth_paid_usd: 1000 }))).toThrow(/auth_paid_usd/);
+    expect(admitG(input(slice(), { auth_extra_usd: 0.01 })).metered.inputs.AUTH_EXTRA).toBe(0.01);
+  });
+
   test("item 3, instruments: 90% of trees scored without a tool error passes; less, or a tree without a verifier run, fails", () => {
     const four = edit(slice(), (t, i) => t.arm === AP && i < 4, { mutation: "tool_error" });
     expect(admitG(input(four)).skills.autoplan.items[2]!.pass).toBe(true);
