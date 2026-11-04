@@ -156,7 +156,7 @@ describe("why a part ended", () => {
   });
 
   test("a clean batch, or one that ended early for another reason, is neither a cap stop nor a loss, so its unstarted cells are infra", () => {
-    expect(classify(dir({ "pulled/out/vm-run.exit": "0\n", "pulled/jobs/j/.keep": "" }), 0)).toEqual({ launch_exit: 0, vm_run_exit: "0", pulled: true, cap_stop: [], loss: [] });
+    expect(classify(dir({ "pulled/out/vm-run.exit": "0\n", "pulled/jobs/j/.keep": "" }), 0)).toEqual({ launch_exit: 0, vm_run_exit: "0", pulled: true, cap_stop: [], loss: [], unclassified: [] });
     expect(classify(dir({ "pulled/out/vm-run.exit": "6\n", "pulled/jobs/j/.keep": "" }), 6)).toMatchObject({ cap_stop: [], loss: [] });
   });
 });

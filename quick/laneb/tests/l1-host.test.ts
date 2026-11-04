@@ -466,3 +466,126 @@ describe("l1.ts on a fake awake host", () => {
     expect(launchJson(r, "pilot")).toMatchObject({ host: "host-1", vm: "vm-2" });
   }, 120_000);
 });
+
+describe("l1.ts keeps cap stops, salvaged results and session records", () => {
+  test("a salvage that pulls a cap stop the first pull missed ends the item: relaunch is refused and no part VM starts", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { FAIL_PULL: "vm-2", CAP_STOP_AT: "4" }).code).toBe(0);
+    await attachUntil(r, /pilot: finished, launch exit 7/);
+    const re = l1(r, ["relaunch", r.work, "--part", "pilot"]);
+    expect([re.code, re.err]).toEqual([3, expect.stringContaining("a cap stop is never relaunched")]);
+    expect(salvageJson(r)).toMatchObject({ vm: "vm-2", pulled: true, vm_down: true });
+    const result = JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8"));
+    expect([result.cap_stop[0], result.salvage?.pulled]).toEqual([expect.stringContaining("test cap stop"), true]);
+    expect(events(r).match(/ up -s standard-16 /g)).toHaveLength(1);
+    expect(l1(r, ["attach", r.work]).out).toContain("NEXT: host-down: pilot ended at a cap stop");
+  }, 240_000);
+
+  test("when a salvage can't pull a part's records either, a cap stop counts as possible once the item's ledger came within one session cap of its cap, so relaunch is refused", async () => {
+    const r = rig("pilot-opus", { preReserve: 70 });
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { FAIL_PULL: "vm-2" }).code).toBe(0);
+    await attachUntil(r, /pilot: finished, launch exit 7/);
+    writeFileSync(join(r.fake, "vm-2/.dead"), "");
+    const re = l1(r, ["relaunch", r.work, "--part", "pilot"]);
+    expect([re.code, re.err]).toEqual([3, expect.stringContaining("a cap stop can't be ruled out")]);
+    expect(salvageJson(r)).toMatchObject({ vm: "vm-2", pulled: false, vm_down: true });
+    expect(events(r).match(/ up -s standard-16 /g)).toHaveLength(1);
+  }, 240_000);
+
+  test("host-down brings a salvaged part's results home and checks them before it destroys the host; when that pull fails it refuses and the host stays", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { FAIL_PULL: "vm-2" }).code).toBe(0);
+    await attachUntil(r, /pilot: finished, launch exit 7/);
+    expect(existsSync(join(r.work, "pilot/pulled/out/proxy-sessions.jsonl"))).toBe(false);
+    const stuck = l1(r, ["host-down", r.work], { FAIL_PULL_MATCH: "work/pilot/pulled" });
+    expect([stuck.code, stuck.err]).toEqual([3, expect.stringContaining("could not be pulled home")]);
+    expect([existsSync(join(r.fake, "vm-2/.down")), existsSync(join(r.fake, "host-1/.down")), existsSync(r.ledger + ".host.json")]).toEqual([true, false, true]);
+    expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    expect(readFileSync(join(r.work, "pilot/pulled/out/proxy-sessions.jsonl"), "utf8").trim().split("\n")).toHaveLength(32);
+    expect(JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8"))).toMatchObject({ pulled: true, salvage: { pulled: true, vm_down: true } });
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 240_000);
+
+  test("a relaunch that launch.sh kept at exit 7 is salvaged, and its results brought home, before the next part starts", async () => {
+    const r = rig("f1-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "f1-1"], { PAUSE_VM: "vm-2", PAUSE_AT: "5" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/paused")));
+    killController(r, "host-1", "f1-1");
+    await attachUntil(r, /f1-1: CONTROLLER_LOST/);
+    expect(l1(r, ["relaunch", r.work, "--part", "f1-1"], { FAIL_PULL: "vm-3" }).code).toBe(0);
+    await attachUntil(r, /f1-1-relaunch: finished, launch exit 7/);
+    expect(existsSync(join(r.fake, "vm-3/.down"))).toBe(false);
+    expect(l1(r, ["launch", r.work, "--part", "f1-2"]).code).toBe(0);
+    const ev = events(r);
+    expect(ev.indexOf(" down vm-3 ")).toBeGreaterThan(-1);
+    expect(ev.indexOf(" down vm-3 ")).toBeLessThan(ev.lastIndexOf(" up -s standard-16 "));
+    expect(JSON.parse(readFileSync(join(r.work, "f1-1-relaunch.result.json"), "utf8")).salvage).toMatchObject({ vm: "vm-3", pulled: true, vm_down: true });
+    expect(existsSync(join(r.work, "f1-1-relaunch/pulled/out/proxy-sessions.jsonl"))).toBe(true);
+  }, 300_000);
+
+  test("recover never calls its accounting complete while a session the part opened has no closed record: it keeps that reserve open, names the session and ends the item incomplete", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { PAUSE_VM: "vm-2", PROXY_CRASH_AT: "3" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/paused")));
+    expect(l1(r, ["attach", r.work]).out).toContain("pilot: running");
+    const mirror = join(r.work, "host/ledger.jsonl");
+    const lines = readFileSync(mirror, "utf8").trim().split("\n");
+    const settles = lines.map((l, i) => [JSON.parse(l), i] as const).filter(([x]) => x.kind === "settle" && x.id.startsWith("pilot-opus/pilot/s"));
+    writeFileSync(mirror, lines.slice(0, settles[1]![1] + 1).join("\n") + "\n");
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    const opened = readFileSync(join(r.fake, "vm-2/work/run/out/proxy-requests.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.event === "session_open");
+    const lost = opened.at(-1).session;
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("session " + lost)]);
+    expect(recoverJson(r)).toMatchObject({ part_results_pulled: true, complete: false, missing_sessions: [expect.stringContaining(lost)] });
+    expect(openIds(r, "pilot-opus")).toEqual(["pilot-opus/pilot/" + lost]);
+    expect(readRows(r.ledger).find((x) => x.kind === "reserve" && x.id === "pilot-opus/pilot/" + lost)!.usd_micros).toBe(5_000_000);
+    const up = l1(r, ["host-up", r.work]);
+    expect([up.code, up.err]).toEqual([3, expect.stringContaining("recover could not rebuild the ledger")]);
+  }, 300_000);
+
+  test("vm-run.sh's exit 4, the ledger service unreachable before any trial, is an ending the prereg does not class: the next part and a relaunch are refused, and host-down still runs", async () => {
+    const r = rig("f1-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2" }).code).toBe(0);
+    const a = await attachUntil(r, /f1-1: finished, launch exit 4/);
+    expect(a.out).toContain("UNCLASSIFIED: vm-run.sh exited 4");
+    expect(a.out).toContain("NEXT: host-down: f1-1 ended in a way the prereg does not class");
+    expect(JSON.parse(readFileSync(join(r.work, "f1-1.result.json"), "utf8"))).toMatchObject({ vm_run_exit: "4", loss: [], cap_stop: [] });
+    for (const args of [["launch", r.work, "--part", "f1-2"], ["relaunch", r.work, "--part", "f1-1"]]) {
+      const x = l1(r, args);
+      expect([x.code, x.err]).toEqual([3, expect.stringContaining("does not class")]);
+    }
+    expect(events(r).match(/ up -s standard-16 /g)).toHaveLength(1);
+    expect(l1(r, ["host-down", r.work]).code).toBe(0);
+    expect(openIds(r, "f1-opus")).toEqual([]);
+  }, 180_000);
+
+  test("recover after the host dies with the part VM already gone (RECOVER_GONE) ends the item incomplete instead of refusing forever", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    writeFileSync(join(r.fake, "vm-2/.down"), "");
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("was already gone (RECOVER_GONE)")]);
+    expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_vm_gone: true, part_results_pulled: false, complete: false });
+    expect(events(r)).toMatch(/ down host-1 /);
+    expect(existsSync(r.ledger + ".host.json")).toBe(false);
+    const rows = readRows(r.ledger);
+    expect(rows.find((x) => x.kind === "settle" && x.id === "pilot-opus/pilot/vm")).toMatchObject({ recovered: true });
+    expect(rows.find((x) => x.kind === "settle" && x.id === "host-1")).toMatchObject({ recovered: true });
+    const up = l1(r, ["host-up", r.work]);
+    expect([up.code, up.err]).toEqual([3, expect.stringContaining("recover could not rebuild the ledger")]);
+  }, 300_000);
+});
