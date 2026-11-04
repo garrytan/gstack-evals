@@ -163,10 +163,15 @@ describe("plan-eng-review exposure: review-sections read, Step 0 Scope Challenge
   });
 
   test("the pin's own heading forms all count as section markers", () => {
-    const forms = ["### 1. Architecture review", "**2. Code Quality Review**", "### Section 3 — Tests", "4) Performance review"];
+    const forms = ["### 1. Architecture review", "**2. Code Quality Review**", "### Section 3 — Tests", "## 4) Performance review"];
     const rs = base();
     for (const [i, form] of forms.entries()) retext(rs, new RegExp("^## Section " + (i + 1) + ": .*$", "m"), form);
     expect(planEngReviewExposure(rs).exposed).toBe(true);
+  });
+
+  test("rule decision (GSTA-2), not a regression: a bare numbered line such as 4) Performance review is never a section heading", () => {
+    const rs = retext(base(), /^## Section 4: .*$/m, "4) Performance review");
+    expect(failed(planEngReviewExposure(rs))).toEqual([false, "sections_in_order"]);
   });
 
   test("no test plan written, one written elsewhere or a failed write reads unexposed; a Bash heredoc to the pin's path counts", () => {
@@ -244,16 +249,47 @@ describe("plan-eng-review exposure: review-sections read, Step 0 Scope Challenge
     expect(planEngReviewExposure(base()).checks.sections_in_order).toBe(true);
   });
 
-  test.failing("open note p2/red-team#1 (exposure.ts:116, fixed by a follow-up PR from main): a preview list with sub-bullets is not Sections 1 to 4", () => {
-    expect(withSections(["I'll review in this order:\n1. Architecture\n   - boundaries\n2. Code quality\n   - naming\n3. Tests\n   - coverage\n4. Performance\n   - hot paths"])).toBe(false);
+  const four = (f: (n: number, name: string) => string) => ["Architecture", "Code quality", "Test", "Performance"].map((name, i) => f(i + 1, name));
+
+  test("p2/red-team#1: a preview list with sub-bullets, in short or full section names, is not Sections 1 to 4", () => {
+    const texts = [
+      "I'll review in this order:\n1. Architecture\n   - boundaries\n2. Code quality\n   - naming\n3. Tests\n   - coverage\n4. Performance\n   - hot paths",
+      "I'll review in this order:\n" + four((n, name) => n + ". " + name + " review\n   - " + name.toLowerCase() + " points").join("\n"),
+      "I'll review in this order:\n" + four((n, name) => n + ". " + name + " review\n- " + name.toLowerCase() + " points").join("\n"),
+    ];
+    expect(texts.map((t) => [t, withSections([t])])).toEqual(texts.map((t) => [t, false]));
   });
 
-  test.failing("open note p2/red-team#1 (exposure.ts:116, fixed by a follow-up PR from main): a bold summary is not Sections 1 to 4", () => {
+  test("p2/red-team#1: a bold summary is not Sections 1 to 4", () => {
     expect(withSections(["Summary:\n**Architecture review:** 1 issue found\n- process-local store\n**Code quality review:** no issues\n- none\n**Test review:** 1 gap\n- refill boundary\n**Performance review:** no issues\n- none"])).toBe(false);
   });
 
-  test.failing("open note p2/red-team#1 (exposure.ts:116, fixed by a follow-up PR from main): four real headings that carry their verdict on the heading line count as Sections 1 to 4", () => {
+  test("p2/red-team#1: four real headings that carry their verdict on the heading line count as Sections 1 to 4", () => {
     expect(withSections(["## Section 1: Architecture review: no issues found.", "## Section 2: Code quality review: no issues found.", "## Section 3: Test review: no issues found.", "## Section 4: Performance review: no issues found."])).toBe(true);
+  });
+
+  test("fc2/fix-check#1: bold numbered sections with only bullets under them count, in one block or four", () => {
+    const sections = four((n, name) => "**" + n + ". " + name + " review**\n- Issue: process-local store");
+    expect([withSections([sections.join("\n")]), withSections(sections)]).toEqual([true, true]);
+  });
+
+  test("p1/red-team#2: heading-only outlines whose inline text is not the section's name are not Sections 1 to 4", () => {
+    const texts = [four((n, name) => "### Section " + n + " (" + name + ")").join("\n"), four((n) => "## Section " + n + " of 4").join("\n")];
+    expect(texts.map((t) => [t, withSections([t])])).toEqual(texts.map((t) => [t, false]));
+  });
+
+  test("p1/red-team#2: the same headings count with content under them", () => {
+    const texts = [four((n, name) => "### Section " + n + " (" + name + ")\n- Issue: process-local store").join("\n"), four((n) => "## Section " + n + " of 4\nNo issues found.").join("\n")];
+    expect(texts.map((t) => [t, withSections([t])])).toEqual(texts.map((t) => [t, true]));
+  });
+
+  test("the completion summary written as ### headings is not Sections 1 to 4", () => {
+    expect(withSections(["### Architecture Review: 1 issue\n### Code Quality Review: 0 issues\n### Test Review: 1 gap\n### Performance Review: 0 issues"])).toBe(false);
+  });
+
+  test("rule decision (GSTA-2), not a regression: bare numbered sections with only a list under them do not count, at any indentation", () => {
+    const texts = ["", "   "].map((indent) => four((n, name) => n + ". " + name + " review\n" + indent + "- Issue: process-local store").join("\n"));
+    expect(texts.map((t) => [t, withSections([t])])).toEqual(texts.map((t) => [t, false]));
   });
 
   test("a session that stopped before the skill turn reads unexposed, with every check false", () => {

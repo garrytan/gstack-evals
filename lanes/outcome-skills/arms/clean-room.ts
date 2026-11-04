@@ -16,9 +16,10 @@ export const CLEAN_ROOM_SCRIPT = readFileSync(CLEAN_ROOM_SH, "utf8").replace(/\n
 
 // A gstack trace, for O1's scan: $home/.gstack existing; a .claude/skills folder anywhere below a work dir, outside .git,
 // existing; and "gstack" in any case in the name or content of a CLAUDE.md in a parent of a work dir (up to /, or up to
-// CLEAN_ROOM_ROOT when it is set), of $home/CLAUDE.md, of $home/.claude/settings.json (where its hooks live; any mention
-// counts, since sh cannot parse JSON) and of any entry under .claude/commands or .claude/plugins in the home or a work
-// dir. Every path is built from the home and work dir arguments, and a work dir must be absolute.
+// CLEAN_ROOM_ROOT when it is set), of $home/CLAUDE.md, of .claude/settings.json and .claude/settings.local.json in the
+// home or a work dir (where hooks live; any mention counts, since sh cannot parse JSON) and of any entry under
+// .claude/commands, .claude/plugins or .claude/agents in the home or a work dir. Every path is built from the home and
+// work dir arguments, and a work dir must be absolute.
 export const CLEAN_ROOM_O1_SCRIPT = String.raw`exec 3>&2
 hit=0
 bad=0
@@ -41,17 +42,20 @@ for t in find grep dirname; do command -v "$t" >/dev/null 2>&1 || fail "$t is no
 top=$CLEAN_ROOM_ROOT
 [ -n "$top" ] || top=/
 there "$home/.gstack" && found "$home/.gstack"
-for p in "$home/CLAUDE.md" "$home/.claude/settings.json"; do [ -f "$p" ] && named "$p"; done
+for p in "$home/CLAUDE.md" "$home/.claude/settings.json" "$home/.claude/settings.local.json"; do [ -f "$p" ] && named "$p"; done
 tree "$home/.claude/commands"
 tree "$home/.claude/plugins"
+tree "$home/.claude/agents"
 for u in "$@"; do
   case "$u" in /*) ;; *) fail "the work dir $u is not an absolute path"; continue ;; esac
   d=$u
   while [ "$d" != "$top" ] && [ "$d" != / ]; do d=$(dirname "$d"); [ -f "$d/CLAUDE.md" ] && named "$d/CLAUDE.md"; done
   out=$(find "$u" -name .git -prune -o -path '*/.claude/skills' -print) || fail "find could not finish under $u"
   [ -z "$out" ] || { printf "%s\n" "$out" | each; hit=1; }
+  for p in "$u/.claude/settings.json" "$u/.claude/settings.local.json"; do [ -f "$p" ] && named "$p"; done
   tree "$u/.claude/commands"
   tree "$u/.claude/plugins"
+  tree "$u/.claude/agents"
 done
 [ "$bad" = 0 ] || exit 4
 [ "$hit" = 0 ] || exit 3`;
@@ -66,11 +70,14 @@ export function dockerRun(o: { docker: string; image: string; user?: string; mou
   return r;
 }
 
-/** Runs C1's script and O1's scan in the none arm's image, as the session's user, with the session's mounts (docker -v specs) and no network; the image must be present, since it never pulls. Throws E_OUTCOME_CLEAN_ROOM on a hit or when either scan cannot finish. */
+/** Runs C1's script and O1's scan in the none arm's image, as the session's user, with the session's mounts (docker -v specs) and no network; the image must be present, since it never pulls. The image must resolve to digest, its image id (docker image inspect's .Id), and the scans run on that id, so a tag moved after the check cannot change what they read. Throws E_OUTCOME_CLEAN_ROOM on another or unreadable id, on a hit, or when either scan cannot finish. */
 export function cleanRoomPreflight(o: { docker: string; image: string; user?: string; home: string; workdirs: readonly string[]; mounts: readonly string[]; digest: string; timeoutMs?: number }): void {
-  const r = dockerRun(o, [BOTH_SCANS, "clean-room-both", CLEAN_ROOM_SCRIPT, CLEAN_ROOM_O1_SCRIPT, o.home, ...o.workdirs]);
-  if (r.status === 0) return;
   const at = "E_OUTCOME_CLEAN_ROOM outcome-skills none arm: image " + o.image + " (image digest " + o.digest + "): ";
+  const id = spawnSync(o.docker, ["image", "inspect", "--format", "{{.Id}}", o.image], { encoding: "utf8", timeout: 30_000 });
+  const got = id.status === 0 ? (id.stdout ?? "").trim() : null;
+  if (got !== o.digest) throw new Error(at + (got === null ? "docker image inspect could not read the image's id (" + (id.error ? id.error.message : "exit " + (id.status ?? id.signal)) + ")" + (id.stderr?.trim() ? ": " + id.stderr.trim().slice(-300) : "") : "the image's id is " + (got || "empty") + ", not the pinned digest") + "\n  fix: point the none arm at the image the prereg pins, or record that image's id as its digest, then rerun the same command; nothing was spent and no lease is open");
+  const r = dockerRun({ ...o, image: o.digest }, [BOTH_SCANS, "clean-room-both", CLEAN_ROOM_SCRIPT, CLEAN_ROOM_O1_SCRIPT, o.home, ...o.workdirs]);
+  if (r.status === 0) return;
   const found = (r.stdout ?? "").split("\n").filter((l) => l.startsWith("found ")).map((l) => l.slice(6));
   if (r.status === 3 && found.length) throw new Error(at + "found " + found.join(", ") + "\n  fix: remove those paths or mounts from the none arm's session, then rerun the same command; nothing was spent and no lease is open");
   throw new Error(at + "the clean-room check did not finish (" + (r.error ? r.error.message : "exit " + (r.status ?? r.signal)) + ")" + (r.stderr?.trim() ? ": " + r.stderr.trim().slice(-500) : "") + "\n  fix: make the image present and able to run sh with docker run --network none, then rerun the same command; nothing was spent and no lease is open");

@@ -5,7 +5,9 @@
 // also covers the rules in both directions: failing tests dropped and counted, no tests, only failing tests, no mutants,
 // tests the agent did not write left out, tests it changed counted, the transplant reading, and a patch that does not
 // apply. TypeScript checks that a pre-existing test in the agent's test file stays out, and Rust that inline tests cannot
-// be transplanted. Building the tool images needs the network once; scoring never does.
+// be transplanted. Every language covers the runner rule in both directions (a test file that fails to load or collect
+// scores 0; a runner fault the reference tree shares stays a tool error), and Python and Go read a failed listing as a
+// tool error. Building the tool images needs the network once; scoring never does.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -138,6 +140,28 @@ describe.skipIf(!DOCKER)("python: the scoring rules in both directions (GSTACK_E
     expect(JSON.stringify(r)).not.toContain("SECRET-7f3a");
   }, LONG);
 
+  test("runner rule: a test file that fails to import or parse scores 0, because the same runner collects the reference tree's tests", () => {
+    for (const tests of ["from calc.ops import clamp, nope\n\n\ndef test_clamp():\n    assert clamp(5, 0, 10) == 5\n", "from calc.ops import clamp\n\n\ndef test_clamp():\n    assert clamp(5, 0, 10) == (5\n"]) {
+      const r = score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": tests });
+      expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 1, passing: 0 } });
+      expect(r.detail).toContain("collects the reference tree's cleanly");
+    }
+  }, LONG);
+
+  test("runner rule: a test class pytest will not collect, on a tree that collects, stays a tool error (a selection fault)", () => {
+    const tests = "from calc.ops import clamp\n\n\nclass TestClamp:\n    def __init__(self):\n        self.lo = 0\n\n    def test_clamp(self):\n        assert clamp(5, self.lo, 10) == 5\n";
+    expect(score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": tests })).toMatchObject({ status: "tool-error", score: null, tests: { changed: 1 } });
+  }, LONG);
+
+  test("a mutmut listing that fails is a tool error, not no-mutants", () => {
+    expect(score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": F.PY_STRONG, mutants: "not a folder\n" })).toMatchObject({ status: "tool-error", score: null, detail: expect.stringContaining("mutmut could not generate mutants") });
+  }, LONG);
+
+  test("a mutmut listing that finishes with no mutant in the changed function still reads no-mutants", () => {
+    const r = score({ "calc/ops.py": F.PY_BASE["calc/ops.py"] + "\n\ndef ident(x):\n    return x\n", "tests/test_new.py": "from calc.ops import ident\n\n\ndef test_ident():\n    assert ident(3) == 3\n" });
+    expect(r).toMatchObject({ status: "no-mutants", score: null, tests: { changed: 1, passing: 1 } });
+  }, LONG);
+
   test("a pytest that cannot start is a tool error, not tests that failed", () => {
     const r = score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": F.PY_STRONG, "pytest.ini": "[pytest]\naddopts = --no-such-option\n" });
     expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2 } });
@@ -156,6 +180,26 @@ describe.skipIf(!DOCKER)("python: the scoring rules in both directions (GSTACK_E
   }, LONG);
 });
 
+describe.skipIf(!DOCKER)("python: a runner fault the reference tree shares stays a tool error (GSTACK_EVALS_DOCKER=1)", () => {
+  const fixtures: F.Fixture[] = [];
+  afterAll(() => fixtures.forEach((f) => f.cleanup()));
+  const scoreOn = (base: F.Files) => {
+    const fx = F.fixture("python", { ...F.PY_BASE, ...base }, F.PY_EXTRA);
+    fixtures.push(fx);
+    return scoreTree({ lang: "python", image: fx.image, patch: fx.patch({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": F.PY_STRONG }), work: fx.dir + "/work" });
+  };
+
+  test("a conftest.py that raises in the image is a tool error", () => {
+    expect(scoreOn({ "conftest.py": 'raise RuntimeError("broken environment")\n' })).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+  }, LONG);
+
+  test("a package that raises on import in the image fails to collect on both trees, so it is a tool error", () => {
+    const r = scoreOn({ "calc/__init__.py": 'raise RuntimeError("broken environment")\n' });
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("and so do the reference tree's");
+  }, LONG);
+});
+
 describe.skipIf(!DOCKER)("typescript: a pre-existing test in the agent's test file stays out (GSTACK_EVALS_DOCKER=1)", () => {
   let fx: F.Fixture;
   beforeAll(() => {
@@ -168,12 +212,34 @@ describe.skipIf(!DOCKER)("typescript: a pre-existing test in the agent's test fi
     expect(r).toMatchObject({ status: "tool-error", score: null });
   }, LONG);
 
+  test("runner rule: a test file that fails to import or transform scores 0, because the same runner loads the reference tree's tests", () => {
+    for (const body of ['import { clamp } from "./nope";\n\ntest("clamp", () => {\n  expect(clamp(5, 0, 10)).toBe(5);\n});\n', 'import { clamp } from "./ops";\n\ntest("clamp", () => {\n  expect(clamp(5, 0, 10)).toBe(5;\n});\n']) {
+      const r = scoreTree({ lang: "typescript", image: fx.image, patch: fx.patch({ "src/ops.ts": F.TS_IMPL, "src/clamp.test.ts": 'import { expect, test } from "vitest";\n' + body }), work: fx.dir + "/work" });
+      expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 1, passing: 0 } });
+      expect(r.detail).toContain("collects the reference tree's cleanly");
+    }
+  }, LONG);
+
   test("the strong double test in the same file is skipped, so the agent's weak test scores low", () => {
     const ops = "export function double(x: number): number {\n  return x + x;\n}\n";
     const tests = F.TS_BASE["src/ops.test.ts"] + "\ntest(\"double runs\", () => {\n  double(1);\n});\n";
     const r = scoreTree({ lang: "typescript", image: fx.image, patch: fx.patch({ "src/ops.ts": ops, "src/ops.test.ts": tests }), work: fx.dir + "/work" });
     expect(r).toMatchObject({ status: "scored", tests: { changed: 1, passing: 1 } });
     expect(r.score!).toBeLessThanOrEqual(LOW);
+  }, LONG);
+});
+
+describe.skipIf(!DOCKER)("typescript: a setup file that throws in the image stays a tool error (GSTACK_EVALS_DOCKER=1)", () => {
+  let fx: F.Fixture;
+  beforeAll(() => {
+    fx = F.fixture("typescript", { ...F.TS_BASE, "vitest.config.ts": 'export default { test: { setupFiles: ["./setup.ts"] } };\n', "setup.ts": 'throw new Error("broken environment");\n' }, ["RUN cp -a /opt/gstack-mutation/fixture-node/node_modules /testbed/node_modules"]);
+  }, LONG);
+  afterAll(() => fx?.cleanup());
+
+  test("every file fails to load on both trees, so the tree is a tool error", () => {
+    const r = scoreTree({ lang: "typescript", image: fx.image, patch: fx.patch({ "src/ops.ts": F.TS_IMPL, "src/clamp.test.ts": F.TS_STRONG }), work: fx.dir + "/work" });
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("and so do the reference tree's");
   }, LONG);
 });
 
@@ -197,10 +263,38 @@ describe.skipIf(!DOCKER)("rust: inline tests cannot move to gold's tree (GSTACK_
     expect(r.mutants.killed).toBeGreaterThan(0);
   }, LONG);
 
+  test("runner rule: an integration test that does not compile scores 0, because the reference tree's tests build", () => {
+    const r = scoreTree({ lang: "rust", image: fx.image, patch: fx.patch({ "src/lib.rs": F.RS_IMPL, "tests/clamp.rs": "use calc::{clamp, nope};\n\n#[test]\nfn clamps() {\n    assert_eq!(clamp(5, 0, 10), 5);\n}\n" }), work: fx.dir + "/work" });
+    expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 1, passing: 0 } });
+    expect(r.detail).toContain("collects the reference tree's cleanly");
+  }, LONG);
+
   test("the own reading scores and the transplant is not-transplantable", () => {
     const r = scoreTree({ lang: "rust", image: fx.image, patch: fx.patch(STORIES.rust.strong), gold: fx.patch({ "src/lib.rs": F.RS_IMPL }), work: fx.dir + "/work" });
     expect(r.status).toBe("scored");
     expect(r.transplant).toMatchObject({ status: "not-transplantable", score: null });
+  }, LONG);
+});
+
+describe.skipIf(!DOCKER)("rust: a runner fault the reference tree shares stays a tool error (GSTACK_EVALS_DOCKER=1)", () => {
+  const fixtures: F.Fixture[] = [];
+  afterAll(() => fixtures.forEach((f) => f.cleanup()));
+  const scoreOn = (base: F.Files, lib: string) => {
+    const fx = F.fixture("rust", { ...F.RS_BASE, ...base });
+    fixtures.push(fx);
+    return scoreTree({ lang: "rust", image: fx.image, patch: fx.patch({ "src/lib.rs": lib }), work: fx.dir + "/work" });
+  };
+
+  test("a build script that panics in the image is a tool error", () => {
+    const r = scoreOn({ "Cargo.toml": F.RS_BASE["Cargo.toml"]!.replace('edition = "2021"\n', 'edition = "2021"\nbuild = "build.rs"\n'), "build.rs": 'fn main() {\n    panic!("broken environment");\n}\n' }, F.RS_IMPL + F.RS_STRONG_INLINE);
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+  }, LONG);
+
+  test("a test module that does not compile in the image breaks both trees' test builds, so it is a tool error", () => {
+    const env = "\n#[cfg(test)]\nmod env;\n";
+    const r = scoreOn({ "src/lib.rs": F.RS_BASE["src/lib.rs"] + env, "src/env.rs": "fn broken() {\n    undefined();\n}\n" }, F.RS_IMPL + env + F.RS_STRONG_INLINE);
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("and so do the reference tree's");
   }, LONG);
 });
 
@@ -267,8 +361,33 @@ describe.skipIf(!DOCKER)("go: a package that fails, or tests that pass only once
     expect(score({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": F.GO_WEAK, "calc/main_test.go": main })).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 2, passing: 0 } });
   }, LONG);
 
+  test("runner rule: a test file that does not compile scores 0, because the reference tree's tests build", () => {
+    const tests = 'package calc\n\nimport "testing"\n\nfunc TestClamp(t *testing.T) {\n\tif Clamp(5, 0, 10) != five {\n\t\tt.Fatal("clamp")\n\t}\n}\n';
+    const r = score({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": tests });
+    expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 1, passing: 0 } });
+    expect(r.detail).toContain("collects the reference tree's cleanly");
+  }, LONG);
+
+  test("a go-mutesting listing that exits with an error is a tool error, even after it listed every mutant", () => {
+    expect(score({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": F.GO_STRONG, "report.json/keep": "go-mutesting cannot write its report over this folder\n" })).toMatchObject({ status: "tool-error", score: null, detail: expect.stringContaining("go-mutesting could not list mutants") });
+  }, LONG);
+
   test("a test that fails on its second run is dropped before any mutant runs", () => {
     const once = "package calc\n\nimport (\n\t\"os\"\n\t\"testing\"\n)\n\nfunc TestOnce(t *testing.T) {\n\tif _, err := os.Stat(\"/tmp/gstack-once\"); err == nil {\n\t\tt.Fatal(\"second run\")\n\t}\n\t_ = os.WriteFile(\"/tmp/gstack-once\", nil, 0o644)\n\t_ = Clamp(5, 0, 10)\n}\n";
     expect(score({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": once })).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 1, passing: 0 } });
+  }, LONG);
+});
+
+describe.skipIf(!DOCKER)("go: a runner fault the reference tree shares stays a tool error (GSTACK_EVALS_DOCKER=1)", () => {
+  let fx: F.Fixture;
+  beforeAll(() => {
+    fx = F.fixture("go", { ...F.GO_BASE, "calc/zz_test.go": "package calc\n\nfunc broken() { undefined() }\n" });
+  }, LONG);
+  afterAll(() => fx?.cleanup());
+
+  test("a test file that does not compile in the image breaks both trees' test builds, so it is a tool error", () => {
+    const r = scoreTree({ lang: "go", image: fx.image, patch: fx.patch({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": F.GO_STRONG }), work: fx.dir + "/work" });
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("and so do the reference tree's");
   }, LONG);
 });

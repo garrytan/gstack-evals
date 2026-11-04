@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, newLine, parsePatch, sourceRanges, unsafePaths } from "../../lanes/outcome-skills/mutation/diff.ts";
 import { LANGS, SAMPLE_CAP, SAMPLE_SEED, TOOLS } from "../../lanes/outcome-skills/mutation/pins.ts";
-import { outText, rustResults, skipOthers, strykerMutants } from "../../lanes/outcome-skills/mutation/run.ts";
+import { cargoTestUncompiled, goBuildFailed, outText, pytestCollected, pytestUncollected, rustResults, skipOthers, strykerMutants, vitestLoaded, vitestUnloaded } from "../../lanes/outcome-skills/mutation/run.ts";
 import { reading, record, sample, summary, transplantRan, type Outcome } from "../../lanes/outcome-skills/mutation/score.ts";
 import { changedUnits, goUnits, pythonFunctions, pythonModule, pythonUnits, rustModule, rustUnits, tsCallEnd, tsUnits } from "../../lanes/outcome-skills/mutation/units.ts";
 import { unpinnedInstalls } from "../../src/rig/pins.ts";
@@ -307,6 +307,10 @@ describe("scoring rules", () => {
   test("tests that all fail on the tree score 0, never better than writing none", () => {
     expect(reading({ changed: 2, passing: 0, inScope: 5 })).toMatchObject({ status: "no-passing-tests", score: 0, tests: { dropped: 2 } });
   });
+  test("runner rule: tests that fail to collect score 0 as no-passing-tests with the reason, while a tool error still wins", () => {
+    expect(reading({ changed: 2, passing: 0, detail: "collect failed" })).toEqual({ status: "no-passing-tests", score: 0, tests: { changed: 2, passing: 0, dropped: 2 }, mutants: { in_scope: 0, sampled: 0, killed: 0, survived: 0, timeout: 0, error: 0 }, detail: "collect failed" });
+    expect(reading({ changed: 2, passing: 0, toolError: "runner fault", detail: "collect failed" })).toMatchObject({ status: "tool-error", score: null, detail: "runner fault" });
+  });
   test("no mutant, or only timeouts and errors, leaves no score", () => {
     expect(reading({ changed: 1, passing: 1, inScope: 0 })).toMatchObject({ status: "no-mutants", score: null });
     expect(reading({ changed: 1, passing: 1, inScope: 2, sampled: ["a", "b"], outcomes: outcomes({ a: "timeout", b: "error" }) })).toMatchObject({ status: "no-scorable-mutants", score: null, mutants: { timeout: 1, error: 1 } });
@@ -358,6 +362,37 @@ describe("tool output readers", () => {
     const m = (line: number, mutatorName: string, status: string) => ({ mutatorName, replacement: "x", status, location: { start: { line, column: 3 }, end: { line, column: 9 } } });
     const got = strykerMutants(JSON.stringify({ files: { "src/a.ts": { mutants: [m(2, "ConditionalExpression", "Killed"), m(2, "EqualityOperator", "Survived")] } } }));
     expect([...got.keys()]).toEqual(["src/a.ts@2:3-2:9#ConditionalExpression=x", "src/a.ts@2:3-2:9#EqualityOperator=x"]);
+  });
+
+  test("runner rule, pytest: a file-level --collect-only that exits 2 or 5 naming the file fails to collect; exit 0, or 5 with no ERROR line, collects", () => {
+    const broken = "==================================== ERRORS ====================================\n______________________ ERROR collecting tests/test_new.py ______________________\nImportError while importing test module '/testbed/tests/test_new.py'.\nERROR tests/test_new.py\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\nno tests collected, 1 error in 0.07s\n";
+    const none = "tests/test_new.py:4: PytestCollectionWarning: cannot collect test class 'TestClamp' because it has a __init__ constructor (from: tests/test_new.py)\nno tests collected in 0.00s\n";
+    expect([pytestUncollected("2", broken, ["tests/test_new.py"]), pytestUncollected("5", broken, ["tests/test_new.py"]), pytestUncollected("2", broken, ["tests/test_new"]), pytestUncollected("2", broken, ["tests/other.py"]), pytestUncollected("4", broken, ["tests/test_new.py"]), pytestUncollected("5", none, ["tests/test_new.py"])]).toEqual([true, true, false, false, false, false]);
+    expect([pytestCollected("0", "tests/test_base.py::test_double\n\n1 test collected in 0.00s\n"), pytestCollected("5", none), pytestCollected("5", broken), pytestCollected("2", broken), pytestCollected("4", "")]).toEqual([true, true, false, false, false]);
+  });
+
+  test("runner rule, go: a build-fail action or a [build failed] or [setup failed] line fails to build; a clean run does not", () => {
+    expect(goBuildFailed('{"ImportPath":"example.invalid/calc/calc [example.invalid/calc/calc.test]","Action":"build-fail"}\n', "")).toBe(true);
+    expect(goBuildFailed('{"Action":"output","Package":"example.invalid/calc/calc","Output":"FAIL\\texample.invalid/calc/calc [build failed]\\n"}\n', "")).toBe(true);
+    expect(goBuildFailed("", "FAIL\texample.invalid/calc/calc [setup failed]\n")).toBe(true);
+    expect(goBuildFailed('{"Action":"output","Package":"example.invalid/calc/calc","Output":"ok  \\texample.invalid/calc/calc\\n"}\n{"Action":"pass","Package":"example.invalid/calc/calc"}\n', "")).toBe(false);
+  });
+
+  test("runner rule, cargo: exit 101 with a compile error in a test target fails to compile; a library build error or another exit does not", () => {
+    const at = (target: string) => "error[E0432]: unresolved import `calc::nope`\nerror: could not compile `calc` (" + target + ") due to 1 previous error\n";
+    expect([at('test "clamp"'), at("lib test"), at('bin "demo" test')].map((log) => cargoTestUncompiled("101", log))).toEqual(['error: could not compile `calc` (test "clamp")', "error: could not compile `calc` (lib test)", 'error: could not compile `calc` (bin "demo" test)']);
+    expect([cargoTestUncompiled("101", at("lib")), cargoTestUncompiled("101", "error: failed to run custom build command for `calc v0.1.0 (/testbed)`\n"), cargoTestUncompiled("0", at('test "clamp"'))]).toEqual([null, null, null]);
+  });
+
+  test("runner rule, vitest: a file with no assertion results and an error message failed to load; the reference loads when every file has assertion results", () => {
+    const file = (name: string, status: string, n: number, message = "") => ({ name: "/testbed/" + name, status, message, assertionResults: Array.from({ length: n }, () => ({ status: "passed" })) });
+    const report = (...files: object[]) => JSON.stringify({ testResults: files });
+    const broken = report(file("src/clamp.test.ts", "failed", 0, "Cannot find module './nope' imported from /testbed/src/clamp.test.ts"), file("src/ops.test.ts", "passed", 1));
+    expect(vitestUnloaded(broken, ["src/clamp.test.ts", "src/ops.test.ts"], "/testbed")).toEqual(["src/clamp.test.ts"]);
+    expect(vitestUnloaded(report(file("src/clamp.test.ts", "failed", 2)), ["src/clamp.test.ts"], "/testbed")).toEqual([]);
+    expect(vitestUnloaded(report(file("src/clamp.test.ts", "failed", 0)), ["src/clamp.test.ts"], "/testbed")).toEqual([]);
+    expect(vitestUnloaded("not json", ["src/clamp.test.ts"], "/testbed")).toEqual([]);
+    expect([vitestLoaded(report(file("src/ops.test.ts", "passed", 1), file("src/b.test.ts", "failed", 1))), vitestLoaded(report(file("src/ops.test.ts", "failed", 0, "broken environment"))), vitestLoaded(report()), vitestLoaded("")]).toEqual([true, false, false, false]);
   });
 });
 

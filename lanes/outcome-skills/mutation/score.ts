@@ -12,7 +12,8 @@ export type Outcome = "killed" | "survived" | "timeout" | "error";
 /**
  * scored: the score is killed / (killed + survived).
  * no-tests: the patch added or changed no test; score 0.
- * no-passing-tests: every added or changed test failed on the tree, or none ran; score 0.
+ * no-passing-tests: every added or changed test failed on the tree, or none ran, or the tests failed to load or collect
+ *   while the same runner collects the reference tree's tests cleanly; score 0.
  * no-mutants: the tool made no mutant within the restriction; no score.
  * no-scorable-mutants: every sampled mutant timed out or errored; no score.
  * tool-error: the patch, a container or the tool failed, so the tree has no reading; no score.
@@ -73,6 +74,8 @@ export interface ReadingInput {
   outcomes?: Map<string, Outcome>;
   toolError?: string;
   notTransplantable?: string;
+  /** Why no test passed, recorded on a no-passing-tests reading. */
+  detail?: string;
 }
 
 /** Applies the rules in order: no tests, transplant refusal, tool error, no passing tests, no mutants, then the score. */
@@ -81,7 +84,7 @@ export function reading(o: ReadingInput): Reading {
   if (o.changed === 0) return { status: "no-tests", score: 0, tests, mutants: { ...ZERO } };
   if (o.notTransplantable) return { status: "not-transplantable", score: null, tests, mutants: { ...ZERO }, detail: o.notTransplantable };
   if (o.toolError) return { status: "tool-error", score: null, tests, mutants: { ...ZERO, in_scope: o.inScope ?? 0, sampled: o.sampled?.length ?? 0 }, detail: o.toolError };
-  if (o.passing === 0) return { status: "no-passing-tests", score: 0, tests, mutants: { ...ZERO } };
+  if (o.passing === 0) return { status: "no-passing-tests", score: 0, tests, mutants: { ...ZERO }, ...(o.detail ? { detail: o.detail } : {}) };
   const inScope = o.inScope ?? 0;
   if (inScope === 0) return { status: "no-mutants", score: null, tests, mutants: { ...ZERO } };
   const sampled = o.sampled ?? [];
