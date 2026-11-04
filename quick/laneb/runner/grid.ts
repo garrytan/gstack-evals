@@ -17,19 +17,23 @@ export type BatchSpec = {
   max_output_tokens: number;
   verifier_timeout_multiplier: number;
   repo_dir?: string;
+  // The agent's turn ceiling (laneb_agent.py sdk_max_turns), when the cells file sets one; unset keeps the agent's 200.
+  sdk_max_turns?: number;
 };
 
 // Agent options an arm may set, with laneb_agent.py's allowed values (SYSTEM_PROMPTS, SESSION_KINDS). An option
 // left out keeps the agent's default (sdk-default, no session kind) and stays out of the kwargs, so a batch that sets
 // none writes the same JobConfig as before.
 // told takes a skill name rather than a value from a list: the agent opens the prompt with /<skill>.
+// tar names the arm tar a labelled arm runs on (L1's before-u and before-t both run before.tar); it becomes tar_name, which
+// prepare-run reads and the agent never sees. Unset, the tar is the arm's own name.
 // procedure_line names a fixed line a told prompt ends with, after a blank line (R3 amendment 4, plan section 6); it needs
 // told. PROCEDURE_LINES must equal prompt_builder.py's, byte for byte (a keyless test checks).
 export const PROCEDURE_LINES = { "investigate-phases": "Work through /investigate's phases in order, and finish with its DEBUG REPORT." };
 // gstack_hooks=copy runs the arm on laneb_hooks.LanebHooksAgent, which copies the gstack hook state out after the session
 // (R3 amendment 5 section 9 item 2); it is not an agent kwarg.
 export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"], procedure_line: Object.keys(PROCEDURE_LINES), gstack_hooks: ["copy"] };
-export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string; gstack_hooks?: string };
+export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string; gstack_hooks?: string; tar_name?: string };
 const SKILL_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 // One entry of prepare-run's arms list: <arm>[:<option>=<value>]..., for example
@@ -39,11 +43,12 @@ export function armSpec(entry: string): { name: string } & AgentOptions {
   const options: Record<string, string> = {};
   for (const setting of settings) {
     const [, key, value] = /^(\w+)=(.*)$/.exec(setting) ?? [];
-    const allowed = key === "told" ? SKILL_NAME.test(value ?? "") : Object.hasOwn(AGENT_OPTIONS, key ?? "") && AGENT_OPTIONS[key as keyof typeof AGENT_OPTIONS].includes(value);
-    if (!allowed || key in options) {
+    const allowed = key === "told" || key === "tar" ? SKILL_NAME.test(value ?? "") : Object.hasOwn(AGENT_OPTIONS, key ?? "") && AGENT_OPTIONS[key as keyof typeof AGENT_OPTIONS].includes(value);
+    const field = key === "tar" ? "tar_name" : key;
+    if (!allowed || field in options) {
       throw new Error(`E_USAGE arm ${entry}: ${setting} is not one of ${JSON.stringify(AGENT_OPTIONS)}, or is set twice`);
     }
-    options[key] = value;
+    options[field] = value;
   }
   if (options.procedure_line && !options.told) throw new Error(`E_USAGE arm ${entry}: procedure_line needs told`);
   return { name, ...options };
@@ -84,6 +89,7 @@ export function jobConfig(b: BatchSpec) {
         ...(a.told ? { told_skill: a.told } : {}),
         ...(a.procedure_line ? { procedure_line: a.procedure_line } : {}),
         ...(b.repo_dir ? { repo_dir: b.repo_dir } : {}),
+        ...(b.sdk_max_turns ? { sdk_max_turns: b.sdk_max_turns } : {}),
       },
     })),
   );

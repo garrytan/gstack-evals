@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Fake ubi-runner for l1-launch.test.ts. Every VM is a directory $UBI_FAKE/<name>: standard-2 VMs are hosts (host-N),
+# others part VMs (vm-N). ssh runs the command in the VM's directory with HOME set to it; a VM with a .dead file
+# answers nothing. A part VM's bootstrap and a host's bootstrap are skipped; FAIL_HOST_BOOTSTRAP=1 makes the host's fail. up writes a recovery bundle (a copy of the
+# VM's state) when UBI_RECOVERY_DIR is set, and recover restores the state of every bundle this machine lacks. Switches:
+# Like the real runner, recover prints RECOVER_EXISTS and exits 1 for a bundle whose VM this machine already has, and for a
+# bundle whose VM is gone (destroyed or never made: the API's 404) it drops the bundle and prints RECOVER_GONE.
+# FAIL_RECOVER=1 makes recover fail; FAIL_PULL=<vm> makes each pull from that VM fail; FAIL_PULL_MATCH=<text> makes each pull of a path containing it fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
+# runner's idle watchdog, ending an ssh command and its process group after that long (a setsid -f child survives);
+# FAIL_SSH_MATCH=<text> makes an ssh command containing it exit 255, after running it when FAIL_SSH_RUN=1.
+set -u
+cmd=$1; shift
+state=${UBI_RUNNER_STATE:-$HOME/.local/state/ubi-runner}
+owner=$(printf %s "${UBI_OWNER:-}" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9' | cut -c1-12)
+echo "$(date +%s) $cmd $* ttl=${UBI_TTL_HOURS:-} counted=${UBI_COUNTED:-}" >> "$UBI_FAKE/events.log"
+vmdir() { echo "$UBI_FAKE/$1"; }
+dead() { [ ! -d "$(vmdir "$1")" ] || [ -e "$(vmdir "$1")/.dead" ] || [ -e "$(vmdir "$1")/.down" ]; }
+case "$cmd" in
+  up)
+    size=standard-16
+    while [ $# -gt 0 ]; do case $1 in -s) size=$2; shift 2 ;; *) shift ;; esac; done
+    [ -z "${FAIL_UP:-}" ] || exit 1
+    n=$(( $(cat "$UBI_FAKE/counter" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$UBI_FAKE/counter"
+    if [ "$size" = standard-2 ]; then name=host-$n; else name=vm-$n; fi
+    if [ "${UBI_COUNTED:-}" = 1 ] && [ -z "${UBI_RECOVERY_DIR:-}" ]; then echo "UBI_RECOVERY_REQUIRED" >&2; exit 1; fi
+    mkdir -p "$(vmdir "$name")" "$state/$name"
+    printf 'NAME=%s\nIP=%s\nCREATED=yes\nCREATE_AT=%s\n' "$name" "$name" "$(date +%s)" > "$state/$name/env"
+    touch "$state/$name/key"
+    if [ -n "${UBI_RECOVERY_DIR:-}" ]; then mkdir -p "$UBI_RECOVERY_DIR/$owner"; cp "$state/$name/env" "$UBI_RECOVERY_DIR/$owner/$name.bundle"; fi
+    echo "$name" ;;
+  sync)
+    dead "$1" && exit 1
+    mkdir -p "$(vmdir "$1")/$3"; cp -r "$2/." "$(vmdir "$1")/$3/" ;;
+  pull)
+    dead "$1" && exit 1
+    case $1 in vm-*) sleep "${SLOW_PULL:-0}" ;; esac
+    [ "${FAIL_PULL:-}" != "$1" ] || exit 1
+    [ -z "${FAIL_PULL_MATCH:-}" ] || [[ "$2" != *"$FAIL_PULL_MATCH"* ]] || exit 1
+    d=$(vmdir "$1"); mkdir -p "$3"; dest=$(cd "$3" && pwd)
+    (cd "$d" && ls -d $2 >/dev/null 2>&1) || exit 0
+    (cd "$d" && cp -r $2 "$dest/") ;;
+  ssh)
+    name=$1; shift
+    dead "$name" && exit 255
+    [ -d "$state/$name" ] || { echo "no local state for VM '$name'" >&2; exit 1; }
+    c="$*"
+    case "$name:$c" in vm-*:*vm-bootstrap*) exit 0 ;; esac
+    if [ -n "${FAIL_HOST_BOOTSTRAP:-}" ]; then c=${c//bash l1\/laneb\/l1\/host-bootstrap.sh/false}; else c=${c//bash l1\/laneb\/l1\/host-bootstrap.sh/true}; fi
+    d=$(vmdir "$name")
+    if [ -n "${FAIL_SSH_MATCH:-}" ] && [[ "$c" == *"$FAIL_SSH_MATCH"* ]]; then
+      [ -z "${FAIL_SSH_RUN:-}" ] || HOME="$d" bash -c "cd '$d' && $c"
+      exit 255
+    fi
+    if [ -n "${UBI_FAKE_SSH_LIMIT:-}" ]; then HOME="$d" timeout "$UBI_FAKE_SSH_LIMIT" bash -c "cd '$d' && $c"; else HOME="$d" bash -c "cd '$d' && $c"; fi ;;
+  down)
+    [ -z "${FAIL_DOWN:-}" ] || exit 1
+    [ ! -d "$(vmdir "$1")" ] || touch "$(vmdir "$1")/.down" ;;
+  recover)
+    [ -z "${FAIL_RECOVER:-}" ] || { echo "recovery bundles are sealed with another key" >&2; exit 1; }
+    rc=0
+    for b in "$UBI_RECOVERY_DIR/$owner"/*.bundle; do
+      [ -f "$b" ] || continue
+      n=$(basename "$b" .bundle)
+      if [ -e "$state/$n" ]; then echo "RECOVER_FAILED: vm=$n code=RECOVER_EXISTS fix=this machine already has state for $n"; rc=1; continue; fi
+      if [ ! -d "$(vmdir "$n")" ] || [ -e "$(vmdir "$n")/.down" ]; then rm -f "$b"; echo "RECOVER_GONE: vm=$n"; continue; fi
+      mkdir -p "$state/$n"; cp "$b" "$state/$n/env"; touch "$state/$n/key"
+    done
+    exit $rc ;;
+  *) exit 2 ;;
+esac

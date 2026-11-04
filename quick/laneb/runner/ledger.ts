@@ -54,6 +54,11 @@ function appendDurable(path: string, row: Row) {
   try { fsyncSync(fd); } catch {} finally { closeSync(fd); }
 }
 
+// Appends one row as written, with no cap check: L1's recovery (l1/l1.ts) records spend a lost host had already made.
+export function appendRow(path: string, row: Row) {
+  appendDurable(path, row);
+}
+
 export class Ledger {
   constructor(readonly path: string, readonly item: string) {}
 

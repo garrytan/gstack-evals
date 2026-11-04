@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Fake ssh for l1-launch.test.ts: launch.sh's tunnel session to a part VM. It finds the VM from ubi@<name> and runs
+# fake-vm-run.ts there in its own session, as the VM would, and waits for it. When this process dies (the host is lost),
+# fake-vm-run.ts sees its parent go and ends as vm-run.sh does on a HUP: exit 129 after closing every session.
+for a in "$@"; do case $a in ubi@*) vm=${a#ubi@} ;; esac; done
+d="$UBI_FAKE/$vm"
+[ -n "${vm:-}" ] && [ -d "$d" ] && [ ! -e "$d/.dead" ] || exit 255
+prefix=$(printf '%s\n' "$@" | sed -n "s/.*vm-run.sh work\/run \([^ ]*\) .*/\1/p")
+setsid bun "$(dirname "$0")/fake-vm-run.ts" "$d" "$prefix" "$vm" "$$" &
+wait $!
+[ -e "$d/.dead" ] && exit 255
+exit "$(cat "$d/work/run/out/vm-run.exit" 2>/dev/null || echo 255)"
