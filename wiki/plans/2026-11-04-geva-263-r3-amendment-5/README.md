@@ -185,4 +185,4 @@ Under R65 a paid-eval prereg gets one strong reviewer, one gate revision and the
 | File | What it is |
 |---|---|
 | r3b-power.ts.txt | the power simulation, through the pin's analyze() |
-| r3b-power.txt | the commands that ran and every line they printed; the first two were stopped after 13.0 points, as its header says |
+| r3b-power.txt | the commands that ran and every line they printed; the first two were stopped after 13.0 points, so the larger lifts in their commands print no line |
