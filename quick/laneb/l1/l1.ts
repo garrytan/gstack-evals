@@ -238,7 +238,8 @@ const readJsonl = (p: string) => (existsSync(p) ? readFileSync(p, "utf8").split(
 // tunnel dropping under vm-run.sh). Anything else that leaves cells unstarted is not a loss, and those cells are infra.
 // vm-run.sh's exit 4 (the ledger service unreachable before any trial) is neither: the prereg does not class it, so it
 // stops the item until Amendment C does (unclassified). When a part's results were never pulled, a cap stop the item's
-// ledger made possible counts as one (capStopPossible).
+// ledger made possible counts as one (capStopPossible). So it does after the host was lost, since launch.sh's record of a
+// refused VM block (vm-cap-stop) lived on the host; a VM block ($2.40) is under each item's session cap, so the check covers it.
 export function classify(dir: string, launchExit: number | null, extra: { controllerLost?: boolean; hostLost?: boolean; ledger?: { rows: Row[]; since: string; sessionCapUsd: number } } = {}) {
   const out = join(dir, "pulled/out");
   const read = (f: string) => (existsSync(join(out, f)) ? readFileSync(join(out, f), "utf8") : null);
@@ -260,7 +261,7 @@ export function classify(dir: string, launchExit: number | null, extra: { contro
   if (extra.controllerLost) loss.push("the controller was lost before it recorded an exit");
   if (extra.hostLost) loss.push("the awake host was lost");
   const pulled = existsSync(join(out, "vm-run.exit")) && existsSync(join(dir, "pulled/jobs"));
-  if (!pulled && extra.ledger && capStopPossible(extra.ledger.rows, extra.ledger.since, toMicros(extra.ledger.sessionCapUsd))) capStop.push("the part's results were not pulled, and the item's ledger came within one session cap ($" + extra.ledger.sessionCapUsd + ") of its cap while the part ran, so a cap stop can't be ruled out");
+  if ((!pulled || extra.hostLost) && extra.ledger && capStopPossible(extra.ledger.rows, extra.ledger.since, toMicros(extra.ledger.sessionCapUsd))) capStop.push((pulled ? "the awake host was lost with launch.sh's record of any refused VM block" : "the part's results were not pulled") + ", and the item's ledger came within one session cap ($" + extra.ledger.sessionCapUsd + ") of its cap while the part ran, so a cap stop can't be ruled out");
   const unclassified: string[] = [];
   if (vmExit === "4" && !existsSync(join(out, "harbor.log"))) unclassified.push("vm-run.sh exited 4: the ledger service did not answer through the tunnel before any trial started. The prereg does not class this ending, so the item stops until Amendment C does");
   return { launch_exit: launchExit, vm_run_exit: vmExit, pulled, cap_stop: capStop, loss, unclassified };
@@ -414,7 +415,8 @@ export function hostStatus(root: string) {
     const lock = join(work, part + ".salvage.lock"), failed = join(work, part + ".salvage-failed.json");
     parts[part] = { pid: c.pid, started_at: c.started_at, alive: launchExit === null && controllerAlive(c.pid, part), launch_exit: launchExit,
       vm: /^vm: (\S+)$/m.exec(log)?.[1] ?? null, pulled: existsSync(join(work, part, "pulled/out/vm-run.exit")), salvage: existsSync(join(work, part + ".salvage.json")) ? readJson(join(work, part + ".salvage.json")) : null,
-      salvage_failed: existsSync(failed) ? readJson(failed) : null, salvaging: existsSync(lock) && alive(Number(readFileSync(lock, "utf8").trim()), "host-salvage ") };
+      salvage_failed: existsSync(failed) ? readJson(failed) : null, salvaging: existsSync(lock) && alive(Number(readFileSync(lock, "utf8").trim()), "host-salvage "),
+      vm_cap_stop: existsSync(join(work, part, "vm-cap-stop")) ? readFileSync(join(work, part, "vm-cap-stop"), "utf8").trim() : null };
   }
   const bytes = existsSync(ledger) ? readFileSync(ledger) : Buffer.alloc(0);
   return { now: nowSec(), item: env.ITEM, ledger: { path: ledger, sha256: sha256(bytes), bytes: bytes.length }, bound: existsSync(ledger + ".bound") ? readJson(ledger + ".bound") : null, parts, port_open: portTaken(env.LEDGER_PORT ?? L1.host.ledgerPort) };
@@ -778,7 +780,7 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
   const s = st.parts[name];
   const dir = join(work, name);
   if (s.pulled) must(ubi(["pull", host.name, H + "/work/" + name + "/pulled", dir]), "pulling " + name + "'s results");
-  for (const f of ["vm-cap-stop"]) ubi(["pull", host.name, H + "/work/" + name + "/" + f, dir]);
+  if (s.vm_cap_stop) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "vm-cap-stop"), s.vm_cap_stop + "\n"); }
   const ledger = s.launch_exit === 7 && !s.salvage ? undefined : { rows: readRows(mirrorPath(work)), since: readJson(join(work, name + ".launch.json")).at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd };
   const result = { ...classify(dir, s.launch_exit, { controllerLost: s.launch_exit === null, ledger }), salvage: s.salvage, at: new Date().toISOString() };
   writeJson(join(work, name + ".result.json"), result);
@@ -788,7 +790,7 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
 function attach(work: string) {
   const plan = readPlan(work);
   const host = currentHost(work);
-  if (!host) { const ended = itemEnded(work, plan); console.log("NEXT: " + (ended ? "none: " + plan.item + " ended incomplete (" + ended + ") and goes to the Captain" : existsSync(join(work, "host/recover.json")) ? "host-up (after recover), then relaunch" : "host-up")); return; }
+  if (!host) { console.log("NEXT: " + nextWithoutHost(work, plan)); return; }
   if (cleanupPending(work, host)) { console.log("NEXT: host-down (cleanup of a failed host-up is pending)"); return; }
   const st = status(host);
   const unreachable = join(work, "host/unreachable.jsonl");
@@ -825,6 +827,14 @@ function attach(work: string) {
   lines.push("host " + host.name + ": " + ((host.up_at + host.ttl_hours * 3600 - nowSec()) / 3600).toFixed(1) + " h of TTL left");
   lines.push("NEXT: " + next(work, plan));
   console.log(lines.join("\n"));
+}
+
+// With no host up: nothing when the item has ended or every part has finished, else host-up and then the next step.
+function nextWithoutHost(work: string, plan: Plan) {
+  const ended = itemEnded(work, plan);
+  if (ended) return "none: " + plan.item + " ended incomplete (" + ended + ") and goes to the Captain";
+  const n = next(work, plan);
+  return n.startsWith("host-down") ? "none: every part has finished" : "host-up, then " + n;
 }
 
 function next(work: string, plan: Plan): string {
@@ -903,7 +913,9 @@ function recover(work: string) {
   if (partVm) {
     const rec = ubi(["recover"]);
     const state = process.env.UBI_RUNNER_STATE ?? join(process.env.XDG_STATE_HOME ?? join(process.env.HOME ?? "", ".local/state"), "ubi-runner");
-    partGone = !existsSync(join(state, partVm)) && rec.out.split("\n").some((x) => x.trim() === "RECOVER_GONE: vm=" + partVm);
+    const gone = join(work, "host/part-vm-gone.json");
+    partGone = !existsSync(join(state, partVm)) && (rec.out.split("\n").some((x) => x.trim() === "RECOVER_GONE: vm=" + partVm) || (existsSync(gone) && readJson(gone).vm === partVm));
+    if (partGone) writeJson(gone, { vm: partVm, at: nowSec() });
     if (!existsSync(join(state, partVm)) && !partGone) refuse("ubi-runner recover (exit " + rec.code + ") left no local state for part VM " + partVm + ": " + (rec.err || rec.out).trim().split("\n").slice(-2).join(" | ") + "; nothing was destroyed. Fix it, then run recover again");
   }
   const down = ubi(["down", host.name]);
@@ -942,7 +954,7 @@ function recover(work: string) {
   if (existsSync(join(work, "host/bound.json"))) copyFileSync(join(work, "host/bound.json"), ledger + ".bound");
   rmSync(pointerPath(ledger), { force: true });
   recordHost(work, { event: "lost", n: host.n, name: host.name, down_confirmed_at: goneAt, rows_added: add.length });
-  if (running) writeJson(join(work, running.part.name + ".result.json"), { ...classify(join(work, running.part.name), null, { hostLost: true }), at: new Date().toISOString() });
+  if (running) writeJson(join(work, running.part.name + ".result.json"), { ...classify(join(work, running.part.name), null, { hostLost: true, ledger: { rows: [...rows, ...add], since: l.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd } }), at: new Date().toISOString() });
   writeJson(join(work, "host/recover.json"), { ...record, rows_added: add.length, complete });
   if (!complete) {
     const why = missing.length ? "the running part's records miss sessions (" + missing.slice(0, 5).join("; ") + (missing.length > 5 ? "; and " + (missing.length - 5) + " more in host/recover.json" : "") + ")"
@@ -950,7 +962,8 @@ function recover(work: string) {
     console.log("STOP: host " + host.name + " was lost and " + why + "; ledger rows after the last mirror can't be fully rebuilt, so " + plan.item + " ends incomplete and goes to the Captain");
     process.exit(4);
   }
-  console.log("recovered: host " + host.name + " is gone; " + add.length + " ledger rows rebuilt into " + ledger + ". NEXT: host-up, then " + (running ? "relaunch --part " + running.part.name : "launch the next part"));
+  console.log("recovered: host " + host.name + " is gone; " + add.length + " ledger rows rebuilt into " + ledger + ". NEXT: " + nextWithoutHost(work, plan));
+  if (itemEnded(work, plan)) process.exit(4);
 }
 
 // The host's file list for a part's pulled results (host-digest), read before host-down destroys the host.

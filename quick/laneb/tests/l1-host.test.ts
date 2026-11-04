@@ -69,10 +69,10 @@ async function until(f: () => boolean, ms = 60_000) {
   // gstack-timing-ok: a bounded poll for an outcome another process writes, not a fixed wait
   while (!f()) { if (Date.now() > end) throw new Error("timed out"); await Bun.sleep(50); }
 }
-async function attachUntil(r: Rig, want: RegExp) {
+async function attachUntil(r: Rig, want: RegExp, extra: Record<string, string> = {}) {
   let last = "";
   for (let i = 0; i < 300; i++) {
-    const a = l1(r, ["attach", r.work]);
+    const a = l1(r, ["attach", r.work], extra);
     last = a.out + a.err;
     if (want.test(last)) return a;
     // gstack-timing-ok: the agent attaches on a timer; this is that timer, bounded
@@ -588,4 +588,60 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     const up = l1(r, ["host-up", r.work]);
     expect([up.code, up.err]).toEqual([3, expect.stringContaining("recover could not rebuild the ledger")]);
   }, 300_000);
+
+  // launch.sh's answer to a refused VM block (its 409 branch): it writes vm-cap-stop in the part's run dir on the host and
+  // stops the batch. These tests play that branch by hand, since a real refusal needs a block to run out.
+  const blockRefused = (r: Rig) => writeFileSync(join(r.fake, "host-1/l1/work/pilot/vm-cap-stop"), "the ledger refused VM block 2 (pilot-opus/pilot/vm-2, $2.400000) for pilot-opus\n");
+
+  test("a VM-block cap stop counts even when the pull of its record fails: attach reads it from host-status, so the item ends and relaunch is refused", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    blockRefused(r);
+    writeFileSync(join(r.fake, "vm-2/work/run/STOP"), "");
+    const a = await attachUntil(r, /pilot: finished/, { FAIL_PULL_MATCH: "vm-cap-stop" });
+    expect(a.out).toContain("CAP STOP: VM block: the ledger refused VM block 2");
+    expect(a.out).toContain("NEXT: host-down: pilot ended at a cap stop");
+    const re = l1(r, ["relaunch", r.work, "--part", "pilot"], { FAIL_PULL_MATCH: "vm-cap-stop" });
+    expect([re.code, re.err]).toEqual([3, expect.stringContaining("a cap stop is never relaunched")]);
+    expect(events(r).match(/ up -s standard-16 /g)).toHaveLength(1);
+  }, 240_000);
+
+  test("recover after the host dies runs the ledger check even when it pulls the part's records, since a VM-block cap stop recorded on the host is lost with it", async () => {
+    const r = rig("pilot-opus", { preReserve: 65 });
+    await started(r);
+    blockRefused(r);
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("NEXT: none: pilot-opus ended incomplete (pilot ended at a cap stop")]);
+    expect(recoverJson(r)).toMatchObject({ part_results_pulled: true, missing_sessions: [], complete: true });
+    expect(JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8")).cap_stop).toEqual([expect.stringContaining("a cap stop can't be ruled out")]);
+    const up = l1(r, ["host-up", r.work]);
+    expect([up.code, up.err]).toEqual([3, expect.stringContaining("pilot ended at a cap stop")]);
+  }, 300_000);
+
+  test("a recover that refuses after ubi-runner reported the part VM gone still knows it on the next run, since the runner drops the bundle and reports RECOVER_GONE once", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    writeFileSync(join(r.fake, "vm-2/.down"), "");
+    const first = l1(r, ["recover", r.work], { FAIL_DOWN: "1" });
+    expect([first.code, first.err]).toEqual([3, expect.stringContaining("could not be confirmed gone")]);
+    expect(existsSync(join(r.root, "recovery/geva268/vm-2.bundle"))).toBe(false);
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("was already gone (RECOVER_GONE)")]);
+    expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_vm_gone: true, complete: false });
+  }, 300_000);
+
+  test("recover after the host dies with a part that ended at vm-run.sh's exit 4 says the item has ended, not relaunch", async () => {
+    const r = rig("f1-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2", FAIL_PULL: "vm-2" }).code).toBe(0);
+    await loseHost(r, "host-1", "f1-1", "vm-2");
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("NEXT: none: f1-opus ended incomplete (f1-1 ended in a way the prereg does not class")]);
+    expect(recoverJson(r)).toMatchObject({ part_results_pulled: true, complete: true });
+    const up = l1(r, ["host-up", r.work]);
+    expect([up.code, up.err]).toEqual([3, expect.stringContaining("does not class")]);
+  }, 240_000);
 });
