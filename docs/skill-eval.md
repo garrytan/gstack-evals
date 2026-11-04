@@ -66,7 +66,7 @@ A flag row marked "not built" is refused with E_USAGE naming the unit that build
 | `--smoke` | off | Allows the policy's smoke-only models (Fable in the default). |
 | `--no-noise-floor` | off | Drop before2. |
 | `--ledger` | `GSTACK_EVALS_LEDGER`, else the state dir | The machine-local SQLite ledger; refused on a network or FUSE mount. |
-| `--ledger-record` | `GSTACK_EVALS_LEDGER_RECORD`, else the state dir | The approval record. On Capy, point it at your Captain drive. |
+| `--ledger-record` | `GSTACK_EVALS_LEDGER_RECORD`, else the state dir | The approval record. On Capy, a record with no program may sit on your Captain drive; a program's record lives on the local disk of its envelope host ([Program envelopes](budget-ledger.md#program-envelopes)). |
 | `--isolation` | docker | process must be explicit, and a counted run (a real host) refuses it with E_ISOLATION_COUNTED. Under docker, preflight runs task controls in containers on the trial image `doctor` pinned; with no daemon it stops with E_ISOLATION_UNSAFE, and with no pin for this checkout's recipe with E_IMAGE_STALE. |
 | `--parallel` | min(4, available parallelism) | Sessions at once. |
 | `--timeout` | 600 | Seconds per session; a sidecar timeout_s overrides it per task. |
@@ -109,7 +109,7 @@ A real run outlasts one tool call, so run it the way Capy runs long work:
 
 1. Start the eval as a background operation. Capy's limit is six hours per operation; `--dry-run` prints the parallelism and an ETA first, and a Capy machine has few cores.
 2. Register a wait on that operation and end the turn. The wait keeps the machine awake through the operation's own timeout and wakes the thread when it ends.
-3. Keep `--out` at its default under `~/.capy/work`, which survives a wake, and the local ledger at its default on the machine. Point `--ledger-record` at your Captain drive.
+3. Keep `--out` at its default under `~/.capy/work`, which survives a wake, and the local ledger at its default on the machine. Point `--ledger-record` at your Captain drive when the line item is in no program. A program's item runs on the program's envelope host, with `--ledger-record` at the record there ([Program envelopes](budget-ledger.md#program-envelopes)).
 4. While you wait, read `<out>/progress.json`: sessions done, passed, failed, timed out and missing, the cells still running and an ETA. It is rewritten whole after every session.
 5. If the operation ended before the run did (the six-hour limit, or a machine that slept with no wait on it), run the same call with `--resume <out>`. Resume stops the proxy, reconciles its journal, then settles the lease (docs/adapters.md, Lane A), and a session whose cache key changed stops with E_CACHE_STALE before any spend.
 6. If the machine is replaced, its lease stays reserved until `gstack-evals ledger reconcile` records the settlement from the provider's usage export.

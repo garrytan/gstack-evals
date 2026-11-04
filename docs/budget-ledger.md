@@ -8,10 +8,10 @@ The ledger records an approval. It cannot verify one: whoever runs `ledger init`
 
 | Tier | Flag | Variable | Default | What it holds |
 |---|---|---|---|---|
-| Approval record | `--ledger-record <dir>` | `GSTACK_EVALS_LEDGER_RECORD` | `$XDG_STATE_HOME/gstack-evals/record/` (else `~/.local/state/gstack-evals/record/`) | Approvals, leases and lease closes, one write-once JSON file each. Totals are sums over the files. It may live on a Capy drive. |
+| Approval record | `--ledger-record <dir>` | `GSTACK_EVALS_LEDGER_RECORD` | `$XDG_STATE_HOME/gstack-evals/record/` (else `~/.local/state/gstack-evals/record/`) | Approvals, leases and lease closes, one write-once JSON file each. Totals are sums over the files. It may live on a Capy drive, except a program's record (see Program envelopes). |
 | Local ledger | `--ledger <path>` | `GSTACK_EVALS_LEDGER` | `$XDG_STATE_HOME/gstack-evals/ledger.sqlite`; on Capy `~/.capy/work/gstack-evals/ledger.sqlite`; else `~/.local/state/gstack-evals/ledger.sqlite` | A SQLite file that holds one lease's calls against the lease's amount. Never the OS temp dir. |
 
-Only the local ledger is refused on a network or FUSE mount (E_LEDGER_PATH), because SQLite's lock does not hold there. `gstack-evals ledger status` prints both resolved paths and the rule that chose each.
+The local ledger is refused on a network or FUSE mount (E_LEDGER_PATH), because SQLite's lock does not hold there. A program's record is held to the same rule when an envelope entry is written, because an entry slot on such a mount can have more than one winner (see Program envelopes). Any other record may sit on one. `gstack-evals ledger status` prints both resolved paths and the rule that chose each.
 
 The record's files live at `<record>/items/<item>/approval-0001.json`, `lease-0001.json`, `close-0001.json` and so on. Each one is written aside, fsynced and linked into its slot, so it appears whole, and it is read back after it lands. A Capy drive does not support links, so there the file is created exclusively instead. Never edit or delete a record file. A file that does not parse stops the item with E_LEDGER_RECORD until a human repairs it.
 
@@ -51,6 +51,33 @@ gstack-evals ledger settle --lease <lease id>
 gstack-evals ledger status [--item lanea-quick]
 ```
 
+## Program envelopes
+
+A program is a set of line items under one owner-approved total, with a ceiling for each of its skills as well. The outcome-per-skill plan v3 (wiki/plans/2026-11-03-geva-225-outcome-per-skill-plan, build step O6) is the first: $10,000 for wave 1 and $2,000 for each of its six skills. The envelope counts every dollar the program commits, so a stage is refused before it spends rather than after.
+
+```
+gstack-evals ledger envelope --program <name> --cap 10000 --skill-cap 2000 --skills <a,b,...> --credit-rate 1 \
+  --words "<owner's exact words>" --by "<who>" --source "<where>"
+gstack-evals ledger init --cap <usd> --item <name> --admission required --program <name> --skills <a,b> --words ... --by ... --source ...
+gstack-evals ledger lease --item <name> --run <run id> --amount <usd>
+gstack-evals ledger crew --program <name> --thread <code> --credits <n> --skills <a,b> --source "<counter reading>"
+gstack-evals ledger status --program <name>
+```
+
+- `ledger envelope` records the program's ceilings once, with the owner's words, and then mirrors them through gstack-approvals. Of two envelopes recorded at the same moment, only the one on record is mirrored. If the mirror fails, run the same command again; it returns the envelope and mirrors it. The envelope never changes. `--credit-rate` is the dollar price of 1,000 credits of crew model use, a positive amount, and the mirrored approval names it, the record path and the envelope host's machine id.
+- An item joins a program at `init` with `--program` and `--skills`, and that never changes. That first approval is written with schema 2, so a gstack-evals from before program envelopes stops on the item with E_LEDGER_RECORD instead of leasing it past the envelope. Its spend is split evenly across those skills; an odd micro-dollar goes to the first skill named. A family's shared stage names both skills. A survivor's own stage names only the survivor.
+- Each lease on a program's item is the stage's reservation: `--amount` is the stage's projected worst case. Before the lease is written, the ledger checks it in one atomic step. The program's settled spend, its open leases, its admitted leases not yet written and this lease must stay at or under the program's ceiling, and each of the item's skills' lines, with its share of this lease, must stay at or under its ceiling. Otherwise the lease is refused with ENVELOPE_PROGRAM_STOP or ENVELOPE_SKILL_STOP, and nothing is written. Landing exactly on a ceiling is admitted.
+- A lease that passes is written to the program's next entry slot, `<record>/programs/<program>/entry-<slot>.json`, before the lease file itself. The slot is write-once, so of two leases admitted at the same moment one wins it, and the other reads the winner's entry and is checked again. That makes the check and the reservation one step without a lock file a crash could strand.
+- Settling a lease, or the owner's reconcile, moves its metered amount to settled spend and releases the rest. Unknown calls count at their full reservation. A lease that crashes before it settles stays counted at its whole amount, past its expiry, until it is settled or reconciled. An admission whose lease was never written counts until that lease's expiry, after which no call can spend against it. So a lease whose expiry passes after its admission and before it is written is refused with E_ENVELOPE_LATE and not written.
+- No paid call runs without a covering reservation: a call needs a lease in the local ledger, and a lease on a program's item exists only after the envelope admitted it.
+- `ledger crew` records a crew thread's model use, read from its credits counter, as settled spend on its skills' lines, or with `--overhead` on the program's own line only. A reading is cumulative, so the envelope counts each thread's latest reading once; a lower reading, a different split or a cost the ledger cannot hold exactly is refused before it is written. Crew use is spent already, so it is recorded even past a ceiling. The reading that takes a line past its ceiling warns ENVELOPE_OVER once, and every new stage on that line is then refused.
+- `ledger status --program` prints the program's line, each skill's line and the overhead: settled, open, pending (admitted, not yet leased), committed and left. With `--item`, it prints only the lines of that item's skills beside the program's. It warns ENVELOPE_OVER for a line past its ceiling, which crew use or an overspent lease can cause.
+- The envelope counts each dollar once: a lease on its item's split, a thread at its latest reading. A stage that already settled keeps the split it settled under, so a survivor's re-size reserves only the stages not yet spent.
+- Every program read covers every line item in the record, so a damaged item anywhere stops the read with E_LEDGER_RECORD and nothing is admitted until a human repairs it.
+- An entry slot has one winner within one host, like every record slot ([the cross-host finding](../wiki/board/2026-10-28-gsta-16-ledger-cross-host-claim.md)). So an envelope entry is refused with E_LEDGER_PATH when the record is on a network or FUSE mount, a Capy drive included.
+- Each program has exactly one envelope host. Its record lives on that host's local disk, `ledger envelope` runs there once, and the mirrored approval names the host and the record path. The host stays awake for the whole program, such as a named runner VM, and is never a Capy machine that can sleep. Every lease and every crew-use record of the program goes through it. A worker on another machine takes its lease there with `lease --machine <its id> --export <file>`, holds it with `lease --from <file>`, and settles it with `settle --artifact <file>` on the worker and `settle --from <file>` on the host. VM shards work the same way.
+- Nothing in the ledger stops a second host from recording its own envelope for the same program on its own disk, which would give the program a second ceiling. The owner records each program's envelope once, on its host, and checks the host named in the program's approval row before recording another.
+
 ## Admission
 
 Admission is the rig check before money (GSTA-8's CI plan, decision 3). The ledger checks it at the lease, the one boundary Lane A, the replay lane, direct-API arms and judge calibration all cross.
@@ -88,7 +115,7 @@ The workflow's local ledger is the lease's journal, and the ledger cannot see ac
 
 ## On Capy
 
-Keep the local ledger at its default under `~/.capy/work/gstack-evals/` and point the record at your Captain drive, for example `GSTACK_EVALS_LEDGER_RECORD=~/.capy/drive/<captain drive>/ledger-record`. The local ledger file is the run's journal of reservations. If the machine is replaced, its lease stays reserved until `ledger reconcile` records the owner's settlement.
+Keep the local ledger at its default under `~/.capy/work/gstack-evals/`. A record that holds no program may sit on your Captain drive, for example `GSTACK_EVALS_LEDGER_RECORD=~/.capy/drive/<captain drive>/ledger-record`. A program's record may not: the drive is a FUSE mount that every crew machine shares, so envelope entries are refused there, and the record lives on the program's envelope host (Program envelopes). The local ledger file is the run's journal of reservations. If the machine is replaced, its lease stays reserved until `ledger reconcile` records the owner's settlement.
 
 ## In code
 
@@ -99,6 +126,8 @@ Keep the local ledger at its default under `~/.capy/work/gstack-evals/` and poin
 
 `openLease` takes `requireAdmission`, the seam U20 fills, and a `warn` callback for RIG_UNPROVEN.
 
+`src/runner/ledger/envelope.ts` has `recordProgram`, `admitLease` (which `openLease` calls for a program's item), `recordCrew` and `envelopeStatus`.
+
 ## Reason codes
 
-[CAP_STOP](errors.md#cap_stop), [E_LEDGER_MISSING](errors.md#e_ledger_missing), [E_LEDGER_PATH](errors.md#e_ledger_path), [E_LEDGER_RECORD](errors.md#e_ledger_record), [E_LEASE_UNSETTLED](errors.md#e_lease_unsettled), [E_LEASE_CLOSED](errors.md#e_lease_closed), [E_ITEM_BOUND](errors.md#e_item_bound), [E_RIG_UNPROVEN](errors.md#e_rig_unproven), [RIG_UNPROVEN](errors.md#rig_unproven), [LEASE_OVERSPENT](errors.md#lease_overspent), [E_APPROVAL_RECORD](errors.md#e_approval_record), [E_RESERVE_CONFLICT](errors.md#e_reserve_conflict), [E_SETTLE_CONFLICT](errors.md#e_settle_conflict). Every error line on stderr starts with its code.
+[CAP_STOP](errors.md#cap_stop), [E_LEDGER_MISSING](errors.md#e_ledger_missing), [E_LEDGER_PATH](errors.md#e_ledger_path), [E_LEDGER_RECORD](errors.md#e_ledger_record), [E_LEASE_UNSETTLED](errors.md#e_lease_unsettled), [E_LEASE_CLOSED](errors.md#e_lease_closed), [E_ITEM_BOUND](errors.md#e_item_bound), [E_RIG_UNPROVEN](errors.md#e_rig_unproven), [RIG_UNPROVEN](errors.md#rig_unproven), [LEASE_OVERSPENT](errors.md#lease_overspent), [E_APPROVAL_RECORD](errors.md#e_approval_record), [E_RESERVE_CONFLICT](errors.md#e_reserve_conflict), [E_SETTLE_CONFLICT](errors.md#e_settle_conflict), [ENVELOPE_PROGRAM_STOP](errors.md#envelope_program_stop), [ENVELOPE_SKILL_STOP](errors.md#envelope_skill_stop), [E_ENVELOPE_MISSING](errors.md#e_envelope_missing), [E_ENVELOPE_LATE](errors.md#e_envelope_late), [ENVELOPE_OVER](errors.md#envelope_over). Every error line on stderr starts with its code.
