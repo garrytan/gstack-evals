@@ -233,7 +233,7 @@ rule "C3 start rule refusal: the exported startRule at a \$200 cap on the real O
 setup ref-other r3b4-opus; r3b ref-other r3b4-opus run keep-opus "$REC_SOL"; c=$?
 rule "C4 run on r3b4-opus with r3a4-sol's real record" "refused before the bind" "exit $c, $(first 'record' "$W/log/ref-other-run.txt" | sed 's/^E_INTERNAL //'), bound: $([ -e "$W/s/ref-other/r3b4-opus.jsonl.bound" ] && echo yes || echo no)" sh -c "test $c != 0 && test ! -e '$W/s/ref-other/r3b4-opus.jsonl.bound' && grep -q 'not r3a4-opus.s admitted record' '$W/log/ref-other-run.txt'"
 setup ref-oracle r3b4-opus; rm -f "$W/s/ref-oracle/work/grid-2/oracle.json"; r3b ref-oracle r3b4-opus run keep-opus; c=$?
-rule "C5 run with grid-2's oracle.json missing (section 9 item 4)" "refused before the bind" "exit $c, $(first 'oracle.json' "$W/log/ref-oracle-run.txt" | sed 's/^E_INTERNAL //'), bound: $([ -e "$W/s/ref-oracle/r3b4-opus.jsonl.bound" ] && echo yes || echo no)" sh -c "test $c != 0 && test ! -e '$W/s/ref-oracle/r3b4-opus.jsonl.bound'"
+rule "C5 run with grid-2's oracle.json missing (section 9 item 4)" "refused before the bind" "exit $c, $(first 'oracle.json' "$W/log/ref-oracle-run.txt" | sed 's/^E_INTERNAL //'), bound: $([ -e "$W/s/ref-oracle/r3b4-opus.jsonl.bound" ] && echo yes || echo no)" sh -c "test $c != 0 && test ! -e '$W/s/ref-oracle/r3b4-opus.jsonl.bound' && grep -q 'grid-2 has no oracle.json' '$W/log/ref-oracle-run.txt'"
 
 echo "### KEEP on both items, with the leases"
 setup keep-opus r3b4-opus; r3b keep-opus r3b4-opus run keep-opus; rc=$?; ac=$(an keep-opus r3b4-opus)
@@ -295,4 +295,4 @@ echo "report-only lines beside the CUT-CANDIDATE (d1-30):"; grep -E '^(D1 sensit
 echo; echo "## leftovers"
 echo "ports answering: $(for p in $(seq 29915 400 29915) $(seq 29916 29990); do (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && echo -n "$p "; done)none else; bound temporary ledgers: $(ls "$W"/s/*/*.bound 2>/dev/null | wc -l)"
 echo; echo "rules: $rules, failed: $fails"
-[ "$fails" = 0 ] && echo "DRYRUN: ok" || echo "DRYRUN: fail"
+if [ "$fails" = 0 ]; then echo "DRYRUN: ok"; else echo "DRYRUN: fail"; exit 1; fi
