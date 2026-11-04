@@ -69,6 +69,19 @@ The hook readout, as printed: "hook readout: 66 sessions; an evaluating contract
 
 none-rr, run review-units-20261104T123631Z-3fb3: 66 sessions, 62 with findings and 4 empty, 0 cap stops, 0 gaps, 0 held rescues. $48.45.
 
+Driver diagnostics, rr-held.py's readout for each arm as printed:
+
+    held gstack-full-opus: 66 sessions; held rescues 0 (arm.json 0); scored_turn.rule final 66
+    cause gstack-full-opus: clean 66, deadline 0, tasks_pending 0, no session_end 0
+    deadline gstack-full-opus: 0 deadline gaps, block_present_at_deadline 0
+    waited gstack-full-opus: 18 sessions waited, 2785.7 s idle in all
+    held none-opus: 66 sessions; held rescues 0 (arm.json 0); scored_turn.rule final 66
+    cause none-opus: clean 66, deadline 0, tasks_pending 0, no session_end 0
+    deadline none-opus: 0 deadline gaps, block_present_at_deadline 0
+    waited none-opus: 0 sessions waited, 0.0 s idle in all
+
+The background-wait path held: 18 gstack-full sessions waited 2,786 s in all, and none hit the deadline.
+
 ### The comparison
 
 rr-decide.py, as printed:
