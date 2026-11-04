@@ -1008,12 +1008,14 @@ function recover(work: string) {
     writeJson(join(work, p.name + ".result.json"), { ...classify(join(work, p.name), p.s === running ? null : 7, { hostLost: true, ledger: ledgerCheck }), ...salvage, at });
   }
   const run = parts.find((p) => p.s === running);
-  const complete = parts.every((p) => p.pulled && !p.missing.length);
+  // The running part's rows after the last mirror live only in its records. A kept part's rows were all on the mirror before
+  // its launch.sh exited, so it ends the item only when its VM is unknown; otherwise it is a salvage like the host's.
+  const complete = parts.every((p) => (p === run ? p.pulled && !p.missing.length : !!p.vm));
   writeJson(join(work, "host/recover.json"), { host: host.name, down_confirmed_at: goneAt, mirror_sha256: mirrorSha, running: running?.part.name ?? null,
     ...(run ? { part_vm: run.vm, part_vm_gone: run.how === "RECOVER_GONE", part_results_pulled: run.pulled, missing_sessions: run.missing } : {}),
     kept: parts.filter((p) => p !== run).map((p) => ({ part: p.name, vm: p.vm, vm_gone: p.how === "RECOVER_GONE", results_pulled: p.pulled, missing_sessions: p.missing })), rows_added: add.length, complete });
   if (!complete) {
-    const why = parts.filter((p) => !p.pulled || p.missing.length).map((p) => p.missing.length ? p.name + "'s records miss sessions (" + p.missing.slice(0, 5).join("; ") + (p.missing.length > 5 ? "; and " + (p.missing.length - 5) + " more in host/recover.json" : "") + ")"
+    const why = parts.filter((p) => (p === run ? !p.pulled || p.missing.length : !p.vm)).map((p) => p.missing.length ? p.name + "'s records miss sessions (" + p.missing.slice(0, 5).join("; ") + (p.missing.length > 5 ? "; and " + (p.missing.length - 5) + " more in host/recover.json" : "") + ")"
       : p.how === "RECOVER_GONE" ? p.name + "'s VM " + p.vm + " was already gone (RECOVER_GONE), so its records were lost" : p.name + "'s VM records were lost or its VM is unknown").join("; ");
     console.log("STOP: host " + host.name + " was lost and " + why + "; ledger rows after the last mirror can't be fully rebuilt, so " + plan.item + " ends incomplete and goes to the Captain");
     process.exit(4);

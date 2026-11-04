@@ -708,6 +708,24 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     expect(openIds(r, "pilot-opus")).toEqual([]);
   }, 300_000);
 
+  test("a part launch.sh kept at exit 7 whose VM died before the host was lost is salvaged by recover as on a live host: a loss with the ledger check and a vm_death row, and the relaunch runs", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { FAIL_PULL: "vm-2" }).code).toBe(0);
+    await attachUntil(r, /pilot: finished, launch exit 7/);
+    writeFileSync(join(r.fake, "vm-2/.dead"), "");
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
+    expect(recoverJson(r)).toMatchObject({ complete: true, kept: [{ part: "pilot", vm: "vm-2", results_pulled: false }] });
+    expect(JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8"))).toMatchObject({ cap_stop: [], pulled: false, salvage: { by: "recover", vm: "vm-2", pulled: false, vm_down: true } });
+    expect(readFileSync(join(r.work, "relaunch-evidence.jsonl"), "utf8")).toContain("recover could not pull its records");
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["relaunch", r.work, "--part", "pilot"]).out).toContain("every planned cell started; nothing to relaunch");
+  }, 300_000);
+
   test("a relaunch launch.sh kept at exit 7 when the host is lost: recover salvages its VM, and launch refuses the next part while such a part that no salvage reached has no record on the new host", async () => {
     const r = rig("f1-opus");
     expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
