@@ -6,9 +6,10 @@ import { EXPOSURE_BAR, r48, R48_PATHS, renderR48, type R48Input } from "../../sr
 const reading = (delta: number, ci95: [number, number], share = 0.5): ContrastReading => ({ cluster: "repo", tasks: 60, clusters: 20, control_mean: share, treatment_mean: share + delta, delta, se: 0.05, z: delta / 0.05, ci95, p_greater: 0.5, p_less: 0.5, p_two_sided: 1, control_share: share, verdict: "not_distinguished", note: null });
 const contrastOf = (verdict: Verdict, delta: number, ci95: [number, number], share = 0.5): Contrast => ({ arms: { control: "none", treatment: "told" }, verdict, note: null, with_truncated: reading(delta, ci95, share), without_truncated: null, task_clustered: null, truncation: { guard: 0.05, control: 0, treatment: 0, tripped: false }, dropped: [] });
 const costOf = (lo: number, hi: number, m = 2.2): CostGuard => ({ tasks: 60, control: { trials: 180, solved: 90, cost_usd: 180, per_solved_usd: 2, mean_session_usd: 1 }, treatment: { trials: 180, solved: 100, cost_usd: 180 * m, per_solved_usd: 1.8 * m, mean_session_usd: m }, ratio: (lo + hi) / 2, ci95: [lo, hi], holds: hi <= 1.5, reason: "", session_multiple: m });
-const input = (verdict: Verdict, o: Partial<R48Input> & { delta?: number; ci?: [number, number]; cost?: [number, number]; m?: number } = {}): R48Input => ({
-  skill: "plan-eng-review", contrast: contrastOf(verdict, o.delta ?? 0.05, o.ci ?? [-0.1, 0.3]), exposure: { exposed: 22, trials: 24 }, cost: costOf(...(o.cost ?? [1.1, 1.4]), o.m), mdd: 0.186, ...o,
-});
+const input = (verdict: Verdict, o: Partial<Omit<R48Input, "cost">> & { delta?: number; ci?: [number, number]; cost?: [number, number]; m?: number } = {}): R48Input => {
+  const { delta, ci, cost, m, ...rest } = o;
+  return { skill: "plan-eng-review", contrast: contrastOf(verdict, delta ?? 0.05, ci ?? [-0.1, 0.3]), exposure: { exposed: 22, trials: 24 }, cost: costOf(...(cost ?? [1.1, 1.4]), m), mdd: 0.186, ...rest };
+};
 
 describe("R48, plan v3 section 9, in both directions", () => {
   test("below 80% exposure the row is untested (exposure), whatever the contrast says", () => {
