@@ -27,6 +27,16 @@
     "lanes/review-noloss/suites/**": [
       "tests/noloss/catalog.test.ts"
     ],
+    "lanes/outcome-skills/**": [
+      "tests/outcome-skills/autoplan.test.ts",
+      "tests/outcome-skills/clean-room.test.ts",
+      "tests/outcome-skills/exposure.test.ts",
+      "tests/outcome-skills/registry.test.ts",
+      "tests/outcome-skills/told.test.ts"
+    ],
+    "tests/outcome-skills/fixtures/**": [
+      "tests/outcome-skills/exposure.test.ts"
+    ],
     "lanes/real-outcome/**": [
       "tests/real-outcome/agent-units.test.ts",
       "tests/real-outcome/agent.test.ts",
@@ -39,6 +49,9 @@
     ],
     "tests/real-outcome/fixtures/**": [
       "tests/real-outcome/agent.test.ts"
+    ],
+    "tests/stats/fixtures/**": [
+      "tests/stats/outcome-decision.test.ts"
     ],
     "src/errors/codes.ts": [
       "tests/errors.test.ts"

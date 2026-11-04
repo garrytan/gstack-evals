@@ -51,6 +51,7 @@ sequenceDiagram
 | `runner/agent/sitecustomize.py` | Applies a run dir's `order.json` to Harbor's trial order when vm-run.sh sets `LANEB_TRIAL_ORDER`; a file that doesn't name each trial once fails the job before any trial starts. |
 | `tasks/swerebench_r3a4.py`, `tasks/swerebench-r3a4.json` | R3 amendment 4's pool: the 354 SWE-rebench leaderboard Hub tasks created from 2025-10 on that ask for 8 GB or less (the 7 asking 16 GB are left out), each with its Hub content hash, our own digest and its base image pinned by digest. `runner/materialize.ts` pins the file's sha256, and `TASK_SET=swerebench-r3a4` materializes from a local package export (`SWEREBENCH`) into Lane B's separate-verifier form with each task's own resources. Ids, counts and digests only; no task bodies. |
 | `config/` | Proxy routes and prices (including particle-1 and GPT-6.1 Sol on OpenRouter), and the cells with their session caps (`cells.r3.json` for R3, `cells.r3a4.json` for R3 amendment 4). |
+| `l1/` | L1's probes, per-session table, analysis and ceiling check ([l1/README.md](l1/README.md)). |
 
 ## Checks
 

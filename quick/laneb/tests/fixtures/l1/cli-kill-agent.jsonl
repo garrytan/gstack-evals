@@ -1,0 +1,53 @@
+{"type": "SystemMessage", "t": 0.36, "init": {"tools": ["Task", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList", "Edit", "EnterPlanMode", "EnterWorktree", "ExitPlanMode", "ExitWorktree", "ListAgents", "Monitor", "NotebookEdit", "Read", "ReportFindings", "ScheduleWakeup", "SendMessage", "Skill", "TaskStop", "ToolSearch", "Workflow", "Write"], "skills": ["investigate", "projskill", "doctor", "plugin-authoring"], "slash_commands": ["investigate", "projskill", "doctor", "plugin-authoring", "agents", "auto-mode-setup", "autocompact", "clear", "color", "compact", "config", "output-style", "context", "effort", "fast", "focus", "heapdump", "init", "mcp", "model", "__remote-workflow", "workflow-launch-exec", "reload-plugins", "reload-skills", "rename", "security-review", "usage", "insights", "recap", "goal", "list-agents", "team-onboarding"], "model": "claude-opus-5-5", "permissionMode": "default", "cwd": "/testbed", "claude_code_version": "2.1.312", "apiKeySource": "ANTHROPIC_API_KEY"}, "subtype": "init"}
+{"type": "AssistantMessage", "t": 0.41, "content": [{"id": "k1", "name": "Bash", "input": {"command": "sleep 120", "description": "to kill", "run_in_background": true}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "SystemMessage", "t": 0.56, "subtype": "background_tasks_changed"}
+{"type": "TaskStartedMessage", "t": 0.56, "subtype": "task_started"}
+{"type": "UserMessage", "t": 0.57, "content": [{"tool_use_id": "k1", "content": "Command running in background with ID: bozb8xu8n. Output is being written to: /tmp/claude-0/-testbed/session/tasks/bozb8xu8n.output. You will be notified when it completes. To check interim output, use Read on that file path.", "is_error": false}]}
+{"type": "AssistantMessage", "t": 0.59, "content": [{"id": "k2", "name": "TaskStop", "input": {"task_id": "bozb8xu8n"}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "TaskUpdatedMessage", "t": 0.59, "subtype": "task_updated"}
+{"type": "TaskNotificationMessage", "t": 0.59, "subtype": "task_notification", "usage": null}
+{"type": "SystemMessage", "t": 0.6, "subtype": "background_tasks_changed"}
+{"type": "UserMessage", "t": 0.6, "content": [{"tool_use_id": "k2", "content": "{\"message\":\"Successfully stopped task: bozb8xu8n (sleep 120)\",\"task_id\":\"bozb8xu8n\",\"task_type\":\"local_bash\",\"command\":\"sleep 120\"}", "is_error": null}]}
+{"type": "AssistantMessage", "t": 0.61, "content": [{"id": "k3", "name": "Agent", "input": {"description": "default agent", "prompt": "SUBAGENT-MARKER go", "subagent_type": "general-purpose"}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "SystemMessage", "t": 0.62, "subtype": "background_tasks_changed"}
+{"type": "TaskStartedMessage", "t": 0.62, "subtype": "task_started"}
+{"type": "UserMessage", "t": 0.63, "content": [{"tool_use_id": "k3", "content": [{"type": "text", "text": "Async agent launched successfully. (This tool result is internal metadata \u2014 never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: a2ecc3d05b8d9c821 (internal ID - do not mention to user. Use SendMessage with to: 'a2ecc3d05b8d9c821', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives \u2014 do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work \u2014 avoid working with the same files or topics it is using.\noutput_file: /tmp/claude-0/-testbed/session/tasks/a2ecc3d05b8d9c821.output\nDo NOT Read or tail this file via the shell tool \u2014 it is the full subagent JSONL transcript and reading it will overflow your context. If the user asks for progress, say the agent is still running; you'll get a completion notification."}], "is_error": null}]}
+{"type": "AssistantMessage", "t": 0.65, "content": [{"id": "k4a", "name": "Bash", "input": {"command": "sleep 1", "description": "par a", "run_in_background": true}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "AssistantMessage", "t": 0.65, "content": [{"id": "k4b", "name": "Bash", "input": {"command": "sleep 2", "description": "par b", "run_in_background": true}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "SystemMessage", "t": 0.67, "subtype": "background_tasks_changed"}
+{"type": "TaskStartedMessage", "t": 0.67, "subtype": "task_started"}
+{"type": "UserMessage", "t": 0.67, "content": [{"tool_use_id": "k4b", "content": "Command running in background with ID: b2atn8a0i. Output is being written to: /tmp/claude-0/-testbed/session/tasks/b2atn8a0i.output. You will be notified when it completes. To check interim output, use Read on that file path.", "is_error": false}]}
+{"type": "AssistantMessage", "t": 0.67, "content": [{"id": "s1", "name": "Bash", "input": {"command": "sleep 2; echo from-sub", "description": "sub"}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "TaskProgressMessage", "t": 0.67, "subtype": "task_progress", "usage": {"total_tokens": 115, "tool_uses": 1, "duration_ms": 57}}
+{"type": "SystemMessage", "t": 0.68, "subtype": "background_tasks_changed"}
+{"type": "TaskStartedMessage", "t": 0.68, "subtype": "task_started"}
+{"type": "UserMessage", "t": 0.68, "content": [{"tool_use_id": "k4a", "content": "Command running in background with ID: bhvcbapum. Output is being written to: /tmp/claude-0/-testbed/session/tasks/bhvcbapum.output. You will be notified when it completes. To check interim output, use Read on that file path.", "is_error": false}]}
+{"type": "AssistantMessage", "t": 0.7, "content": [{"id": "k5", "name": "Bash", "input": {"command": "sleep 6", "description": "wait"}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "TaskUpdatedMessage", "t": 1.7, "subtype": "task_updated"}
+{"type": "TaskNotificationMessage", "t": 1.7, "subtype": "task_notification", "usage": null}
+{"type": "SystemMessage", "t": 1.7, "subtype": "background_tasks_changed"}
+{"type": "TaskUpdatedMessage", "t": 2.67, "subtype": "task_updated"}
+{"type": "TaskNotificationMessage", "t": 2.67, "subtype": "task_notification", "usage": null}
+{"type": "SystemMessage", "t": 2.67, "subtype": "background_tasks_changed"}
+{"type": "UserMessage", "t": 2.7, "content": [{"tool_use_id": "s1", "content": "from-sub", "is_error": false}]}
+{"type": "AssistantMessage", "t": 2.71, "content": [{"text": "subagent done"}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "TaskUpdatedMessage", "t": 2.75, "subtype": "task_updated"}
+{"type": "TaskNotificationMessage", "t": 2.75, "subtype": "task_notification", "usage": {"total_tokens": 110, "tool_uses": 1, "duration_ms": 2133}}
+{"type": "SystemMessage", "t": 2.75, "subtype": "background_tasks_changed"}
+{"type": "TaskStartedMessage", "t": 3.75, "subtype": "task_started"}
+{"type": "TaskNotificationMessage", "t": 6.71, "subtype": "task_notification", "usage": null}
+{"type": "UserMessage", "t": 6.72, "content": [{"tool_use_id": "k5", "content": "(Bash completed with no output)", "is_error": false}]}
+{"type": "AssistantMessage", "t": 6.75, "content": [{"id": "k6", "name": "Bash", "input": {"command": "exit 1", "description": "bg fail", "run_in_background": true}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "SystemMessage", "t": 6.76, "subtype": "background_tasks_changed"}
+{"type": "TaskStartedMessage", "t": 6.76, "subtype": "task_started"}
+{"type": "UserMessage", "t": 6.76, "content": [{"tool_use_id": "k6", "content": "Command running in background with ID: bdiwlozn2. Output is being written to: /tmp/claude-0/-testbed/session/tasks/bdiwlozn2.output. You will be notified when it completes. To check interim output, use Read on that file path.", "is_error": false}]}
+{"type": "TaskUpdatedMessage", "t": 6.77, "subtype": "task_updated"}
+{"type": "TaskNotificationMessage", "t": 6.77, "subtype": "task_notification", "usage": null}
+{"type": "SystemMessage", "t": 6.77, "subtype": "background_tasks_changed"}
+{"type": "AssistantMessage", "t": 6.77, "content": [{"id": "k7", "name": "Bash", "input": {"command": "sleep 2", "description": "wait2"}}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "UserMessage", "t": 8.79, "content": [{"tool_use_id": "k7", "content": "(Bash completed with no output)", "is_error": false}]}
+{"type": "AssistantMessage", "t": 8.81, "content": [{"text": "all done"}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "UserMessage", "t": 8.82, "content": [{"text": "Stop hook feedback:\nCONTRACT-BLOCK finish the report"}]}
+{"type": "SystemMessage", "t": 8.83, "subtype": "notification"}
+{"type": "AssistantMessage", "t": 8.84, "content": [{"text": "all done"}], "usage": {"input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1}, "stop_reason": null}
+{"type": "ResultMessage", "t": 8.85, "subtype": "success", "result": "all done", "usage": {"input_tokens": 900, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 90, "output_tokens_details": {"thinking_tokens": 0}, "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 0}, "service_tier": "standard", "cache_creation": {"ephemeral_1h_input_tokens": 0, "ephemeral_5m_input_tokens": 0}, "inference_geo": "", "iterations": [], "speed": "standard", "fallback_credit": null}, "total_cost_usd": 0.006599999999999999, "num_turns": 10, "is_error": false, "stop_reason": "end_turn"}
