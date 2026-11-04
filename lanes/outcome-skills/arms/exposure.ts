@@ -74,9 +74,10 @@ let registry: ReturnType<typeof loadRegistry> | null = null;
 const turnOf = (skill: string) => skillTurn((registry ??= loadRegistry()), skill + ":told")!;
 
 const REVIEW_SECTIONS = /(?:^|\/)plan-eng-review\/sections\/review-sections\.md$/;
-const REVIEW_SECTIONS_BASH = /^\s*(?:cat|sed|head|tail|awk|less|more|nl)\s[^<>]*plan-eng-review\/sections\/review-sections\.md(?![\w.])/;
+const REVIEW_SECTIONS_BASH = /^(?!.*\s--(?:help|version)(?![\w-]))\s*(?:cat|head|tail|nl|sed\s+-n\s+(["']?)[\d,$]*p\1)\s[^<>]*plan-eng-review\/sections\/review-sections\.md(?![\w.])/;
 const SCOPE_CHALLENGE = [/^#{1,6}\s+(?:Step 0:\s*)?Scope Challenge\b/, /^\*\*(?:Step 0:\s*)?Scope Challenge\*\*/, /^-\s+Step 0:\s*Scope Challenge\b/];
 const SECTIONS = ([["1", "architecture"], ["2", "code quality"], ["3", "tests?"], ["4", "performance"]] as const).map(([n, name]) => new RegExp("^(?:#{1,6}\\s+|\\*\\*)?(?:section\\s+" + n + "(?![\\d.])|" + n + "[.)]\\s+(?:" + name + ")\\b|(?:" + name + ")\\s+review\\b)", "i"));
+const SECTION_NAME = /^[\s:.)—–-]*(?:architecture|code quality|tests?|performance)?\s*(?:review\b)?/i;
 const TEST_PLAN = /\/projects\/[^/]+\/[^/]+-eng-review-test-plan-[^/]+\.md$/;
 const TEST_PLAN_BASH = /^(?:\$\{?PROJECT_DIR\}?|.*\/projects\/[^/]+)\/[^/]+-eng-review-test-plan-[^/]+\.md$/;
 
@@ -97,9 +98,12 @@ function simpleCommand(command: string): string[] | null {
   return pipes.length ? [head!.slice(0, pipes[0]), head!.slice(pipes[0]! + 1)] : [head!];
 }
 
-/** The files a simple command writes: each > or >> target (never a numbered or & redirect such as 2>), and a tee the pipe feeds. */
+/** The files a simple command writes: each > or >> target outside quotes and before a comment (never a numbered or & redirect
+ * such as 2>), and a tee the pipe feeds. */
 function writeTargets(parts: string[]): string[] {
-  const targets = [...parts[0]!.matchAll(/(?:^|[^\d&>])>>?\s*(["']?)([^\s"'<>|;&]+)\1/g)].map((m) => m[2]!);
+  const head = parts[0]!;
+  const bare = head.replace(/'[^']*'|"(?:[^"\\]|\\.)*"|(?<!\S)#.*/g, (m) => (m[0] === "#" ? " ".repeat(m.length) : m[0] + "_".repeat(m.length - 2) + m[0]));
+  const targets = [...bare.matchAll(/(?:^|[^\d&>])>>?/g)].flatMap((m) => /^\s*(["']?)([^\s"'<>|;&]+)\1/.exec(head.slice(m.index! + m[0].length))?.[2] ?? []);
   if (parts.length === 1) return targets;
   const tee = /^\s*tee(?:\s+-a)?\s+(["']?)([^\s"'<>|;&]+)\1\s*$/.exec(parts[1]!);
   return tee ? [...targets, tee[2]!] : [];
@@ -107,21 +111,25 @@ function writeTargets(parts: string[]): string[] {
 
 /** plan-eng-review: review-sections.md read, the Step 0 Scope Challenge marker, Sections 1 to 4 in order, a test plan written.
  * A section counts at a heading in the pin's forms that has content (a non-empty line that is not a markdown heading)
- * before the next section heading, so a preview list or the completion summary's list lines are not sections. A Bash read
+ * before the next section heading, so a preview list or the completion summary's list lines are not sections. A markdown
+ * heading's own text after the section name is content; under a numbered or bold section line a list item is not. A Bash read
  * counts as a simple command whose result is not empty; a Bash write as a simple command that writes the pin's test-plan
  * path, by redirect or tee. Edit and MultiEdit never write a test plan. */
 export function planEngReviewExposure(records: Rec[]): ExposureRead {
   const { uses, lines } = own(records, turnOf("plan-eng-review"));
   const isSection = (line: string) => SECTIONS.some((re) => re.test(line));
-  const hasBody = (i: number) => {
+  const hasBody = (i: number, re: RegExp) => {
+    const head = lines[i]!.line;
+    const heading = /^#{1,6}\s/.test(head);
+    if (heading && /\w/.test(head.slice(re.exec(head)![0].length).replace(SECTION_NAME, ""))) return true;
     for (const { line } of lines.slice(i + 1)) {
       if (isSection(line)) return false;
-      if (line && !/^#{1,6}\s/.test(line)) return true;
+      if (line && !/^#{1,6}\s/.test(line) && (heading || !/^(?:[-*+]|\d+[.)])\s/.test(line))) return true;
     }
     return false;
   };
   let at = -1;
-  const inOrder = SECTIONS.every((re) => (at = lines.findIndex((l, i) => i > at && re.test(l.line) && hasBody(i))) >= 0);
+  const inOrder = SECTIONS.every((re) => (at = lines.findIndex((l, i) => i > at && re.test(l.line) && hasBody(i, re))) >= 0);
   const bashRead = (u: Use) => {
     const parts = simpleCommand(u.input.command);
     return parts?.length === 1 && REVIEW_SECTIONS_BASH.test(parts[0]!) && u.result!.trim() !== "";
