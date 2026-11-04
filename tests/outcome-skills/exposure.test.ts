@@ -78,6 +78,46 @@ describe("plan-eng-review exposure: review-sections read, Step 0 Scope Challenge
     expect(failed(planEngReviewExposure(listed))).toEqual([false, "review_sections_read"]);
   });
 
+  test("a Bash read or test-plan write counts only as one simple command that ran: no &&, ||, ;, second line, $(, backtick, if or case, and a read must return text", () => {
+    const P = "/root/.gstack/render/claude/plan-eng-review/sections/review-sections.md";
+    const asRead = (command: string, content?: string) => {
+      const rs = base();
+      Object.assign(useOf(rs, "r1"), { name: "Bash", input: { command } });
+      if (content !== undefined) resultOf(rs, "r1").content = content;
+      return planEngReviewExposure(rs).checks.review_sections_read;
+    };
+    for (const command of ["cat " + P, "sed -n '380,520p' " + P, "head -n 600 " + P + " 2>/dev/null"]) expect([command, asRead(command)]).toEqual([command, true]);
+    for (const command of ["false && cat " + P + "; true", "cat " + P + " || true", "cat " + P + "; true", "true\ncat " + P, "echo $(cat " + P + ")", "echo `cat " + P + "`", "if cat " + P + "\nthen true\nfi", "case x in x) cat " + P + " ;; esac", "cat " + P + " | head -5", ": <<'EOF'\ncat " + P + "\nEOF", "cat " + P + " &", "! cat " + P])
+      expect([command, asRead(command)]).toEqual([command, false]);
+    expect(asRead("cat " + P, "")).toBe(false);
+    const T = "/root/.gstack/projects/repo/root-feature-eng-review-test-plan-20261105-101500.md";
+    const asWrite = (command: string) => {
+      const rs = base();
+      Object.assign(useOf(rs, "w2"), { name: "Bash", input: { command } });
+      return planEngReviewExposure(rs).checks.test_plan_written;
+    };
+    for (const command of ["cat > " + T + " <<'EOF'\n# Test Plan\nEOF", "cat <<'EOF' | tee -a " + T + "\n# Test Plan\nEOF", "printf '# Test Plan\\n' >> \"${PROJECT_DIR}/root-feature-eng-review-test-plan-1.md\""])
+      expect([command, asWrite(command)]).toEqual([command, true]);
+    for (const command of ["false && cat > /nonexistent/projects/repo/demo-eng-review-test-plan-x.md; true", ": <<'EOF'\ncat > " + T + "\nEOF", "cat > " + T + " <<'EOF'\n# Test Plan\nEOF\nrm " + T, "cat > " + T + " <<'EOF'\n# Test Plan", "true || printf x > " + T, "printf x > " + T + "; true", "printf x > $(echo " + T + ")", "printf x | tee " + T + " | cat", "printf x | sh -c 'cat > " + T + "'", "printf x > " + T + " &"])
+      expect([command, asWrite(command)]).toEqual([command, false]);
+  });
+
+  test("a Bash test-plan write follows Write's path rule (under /projects/<slug>/ or $PROJECT_DIR), a 2> redirect is not a write, and Edit and MultiEdit never count", () => {
+    const asWrite = (command: string) => {
+      const rs = base();
+      Object.assign(useOf(rs, "w2"), { name: "Bash", input: { command } });
+      return planEngReviewExposure(rs).checks.test_plan_written;
+    };
+    const T = "/root/.gstack/projects/repo/root-feature-eng-review-test-plan-20261105-101500.md";
+    for (const [command, counts] of [["printf x > /tmp/root-feature-eng-review-test-plan-1.md", false], ["printf x > ./root-feature-eng-review-test-plan-1.md", false], ["gstack-slug 2> " + T, false], ["gstack-slug 2>> " + T, false], ["printf x > ~/.gstack/projects/repo/root-feature-eng-review-test-plan-1.md", true], ["printf x > \"$PROJECT_DIR/root-feature-eng-review-test-plan-1.md\"", true]] as const)
+      expect([command, asWrite(command)]).toEqual([command, counts]);
+    for (const name of ["Edit", "MultiEdit"]) {
+      const rs = base();
+      Object.assign(useOf(rs, "w2"), { name, input: { file_path: T, old_string: "", new_string: "# Test Plan\n", edits: [] } });
+      expect([name, ...failed(planEngReviewExposure(rs))]).toEqual([name, false, "test_plan_written"]);
+    }
+  });
+
   test("no Step 0 Scope Challenge marker in the session's own text reads unexposed, though the skill body and the file name it", () => {
     const rs = retext(base(), /^.*Scope Challenge.*$/gm, "Checked the plan's scope.");
     expect(blocks(rs).some((b) => b.type === "tool_result" && JSON.stringify(b.content).includes("## Scope Challenge"))).toBe(true);
@@ -102,6 +142,17 @@ describe("plan-eng-review exposure: review-sections read, Step 0 Scope Challenge
     expect(failed(planEngReviewExposure(swapped))).toEqual([false, "sections_in_order"]);
     const missing = retext(dropText(base(), /^## Section 4/m), /^- Performance Review: .*$/m, "");
     expect(failed(planEngReviewExposure(missing))).toEqual([false, "sections_in_order"]);
+  });
+
+  test("a section counts only as a heading in the pin's forms with content before the next section heading: a preview list, empty headings or the completion summary do not", () => {
+    const sections = [/^## Section 1/m, /^## Section 2/m, /^## Section 3/m, /^## Section 4/m];
+    const without = () => sections.reduce((rs, re) => dropText(rs, re), base());
+    expect(failed(planEngReviewExposure(without()))).toEqual([false, "sections_in_order"]);
+    for (const text of ["Next I review the plan in four sections:\n1. Architecture review\n2. Code quality review\n3. Test review\n4. Performance review", "## Section 1: Architecture review\n\n## Section 2: Code quality review\n\n## Section 3: Test review\n\n## Section 4: Performance review"]) {
+      const rs = without();
+      rs.splice(rs.indexOf(textRecord(rs, /^## Step 0/m)) + 1, 0, { type: "AssistantMessage", t: 0, phase: "t2", parent_tool_use_id: null, content: [{ type: "text", text }] });
+      expect([text, ...failed(planEngReviewExposure(rs))]).toEqual([text, false, "sections_in_order"]);
+    }
   });
 
   test("section headings in turn 1's plan, in the skill body or in a tool result never count", () => {
@@ -179,6 +230,20 @@ describe("autoplan exposure: the frozen configuration, then every phase its scop
     }
   });
 
+  test("the configuration needs at least one CODEX_MODE line from a call that ran: a missing or failed probe reads unexposed", () => {
+    expect(failed(autoplanExposure(dropCall(base(), "s3")))).toEqual([false, "config"]);
+    const errored = base();
+    resultOf(errored, "s3").is_error = true;
+    expect(failed(autoplanExposure(errored))).toEqual([false, "config"]);
+  });
+
+  test("a snapshot init or methodology command that ends at its subcommand or phase still counts", () => {
+    const rs = both();
+    useOf(rs, "s2").input.command = 'bun "/root/.claude/skills/gstack/bin/gstack-autoplan-snapshot.ts" init';
+    useOf(rs, "m1").input.command = 'bun "/root/.claude/skills/gstack/bin/gstack-autoplan-snapshot.ts" methodology ceo';
+    expect(autoplanExposure(rs)).toMatchObject({ exposed: true, phases: ["ceo", "design", "dx", "eng"] });
+  });
+
   test("no readable scope result reads unexposed", () => {
     expect(failed(autoplanExposure(dropCall(base(), "s2")))).toEqual([false, "scope"]);
     const errored = base();
@@ -240,6 +305,14 @@ describe("autoplan exposure: the frozen configuration, then every phase its scop
     expect(failed(autoplanExposure(after))).toEqual([false, "findings_in_order"]);
   });
 
+  test("a publication call that failed, by is_error or a tool_use_error tag, does not count", () => {
+    for (const result of [{ is_error: true, content: "<tool_use_error>Execution cancelled</tool_use_error>" }, { is_error: true, content: "" }, { is_error: false, content: "<tool_use_error>denied by hook</tool_use_error>" }]) {
+      const rs = base();
+      Object.assign(resultOf(rs, "p2"), result);
+      expect([result, autoplanExposure(rs)]).toMatchObject([result, { exposed: false, failed: "findings_in_order", published: ["ceo"] }]);
+    }
+  });
+
   test("the injected skill body and a subagent's output never count as publications", () => {
     const rs = base();
     for (const id of ["p1", "p2"]) for (const r of callRecords(rs, id)) r.parent_tool_use_id = "toolu_native";
@@ -262,6 +335,14 @@ describe("transcripts and the detector table", () => {
     expect(readTranscript(join(dir, "torn.jsonl"))).toMatchObject({ torn: '{"type":"Assist' });
     require("node:fs").writeFileSync(join(dir, "bad.jsonl"), '{"type":"Assist\n' + text);
     expect(() => readTranscript(join(dir, "bad.jsonl"))).toThrow(/^E_OUTCOME_TRANSCRIPT .*line 1/);
+  });
+
+  test("an assistant or user record with no phase or parent_tool_use_id is refused with E_OUTCOME_TRANSCRIPT", () => {
+    for (const key of ["phase", "parent_tool_use_id"]) {
+      const rs = load("plan-eng-review-exposed.jsonl");
+      delete textRecord(rs, /^## Section 1/m)[key];
+      expect(() => planEngReviewExposure(rs)).toThrow(/^E_OUTCOME_TRANSCRIPT record \d+ \(AssistantMessage\) has no phase or parent_tool_use_id/);
+    }
   });
 
   test("a skill with no detector yet, or no skill at all, is refused, not read unexposed", () => {

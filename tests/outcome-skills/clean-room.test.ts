@@ -4,10 +4,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CLEAN_ROOM_SCRIPT, CLEAN_ROOM_SH, cleanRoomPreflight } from "../../lanes/outcome-skills/arms/clean-room.ts";
+import { CLEAN_ROOM_O1_SCRIPT, CLEAN_ROOM_SCRIPT, CLEAN_ROOM_SH, cleanRoomPreflight } from "../../lanes/outcome-skills/arms/clean-room.ts";
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
@@ -75,6 +75,111 @@ describe("the clean-room script (keyless)", () => {
   });
 });
 
+// O1's second scan. A gstack trace is: ~/.gstack existing; a .claude/skills folder anywhere below a work dir, outside
+// .git, existing; or, for a CLAUDE.md in a parent of a work dir, ~/CLAUDE.md, ~/.claude/settings.json (its hooks) and any
+// entry under .claude/commands or .claude/plugins in the home or a work dir, "gstack" in any case in the name or content.
+describe("O1's second clean-room scan (keyless)", () => {
+  const room = () => {
+    const r = fresh();
+    const work = join(r.root, "work", "repo");
+    put(join(work, "src", "app.js"), "export const add = (a, b) => a + b;\n");
+    return { ...r, work };
+  };
+  const scan = (r: ReturnType<typeof room>, workdirs = [r.work], path = process.env.PATH ?? "/usr/bin:/bin") => {
+    const c = spawnSync("sh", ["-c", CLEAN_ROOM_O1_SCRIPT, "clean-room-o1", r.home, ...workdirs], { encoding: "utf8", env: { PATH: path, CLEAN_ROOM_ROOT: r.root } });
+    return { code: c.status, out: c.stdout, err: c.stderr };
+  };
+
+  test("a clean home and work dir exit 0, and look-alikes that name no gstack stay clean", () => {
+    const r = room();
+    put(join(r.root, "work", "CLAUDE.md"), "Write plainly.\n");
+    put(join(r.home, "CLAUDE.md"), "Write plainly.\n");
+    put(join(r.home, ".claude", "settings.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "/opt/hooks/stop" }] }] } }));
+    put(join(r.home, ".claude", "commands", "review.md"), "Review the diff.\n");
+    put(join(r.work, ".claude", "plugins", "lint", "plugin.json"), "{}\n");
+    put(join(r.work, ".git", "modules", "x", ".claude", "skills"));
+    expect(scan(r)).toEqual({ code: 0, out: "", err: "" });
+  });
+
+  test("each gstack trace prints found <path> and exits 3", () => {
+    const traces: [string, (r: ReturnType<typeof room>) => string, string | null][] = [
+      ["~/.gstack, even empty", (r) => join(r.home, ".gstack"), null],
+      ["a skills folder nested in a work dir", (r) => join(r.work, "packages", "api", ".claude", "skills"), null],
+      ["a parent CLAUDE.md naming gstack", (r) => join(r.root, "work", "CLAUDE.md"), "Load gstack before implementing.\n"],
+      ["a CLAUDE.md at the top of the walk", (r) => join(r.root, "CLAUDE.md"), "Use GStack.\n"],
+      ["~/CLAUDE.md", (r) => join(r.home, "CLAUDE.md"), "Use gstack skills.\n"],
+      ["a settings.json hook naming gstack", (r) => join(r.home, ".claude", "settings.json"), JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: "/opt/gstack/hooks/skill-route-hook" }] }] } })],
+      ["a home command named for gstack", (r) => join(r.home, ".claude", "commands", "gstack-review.md"), "Review.\n"],
+      ["a home plugin file naming gstack", (r) => join(r.home, ".claude", "plugins", "p", "plugin.json"), '{"name":"GStack"}\n'],
+      ["a work-dir command naming gstack", (r) => join(r.work, ".claude", "commands", "review.md"), "Run the gstack review.\n"],
+      ["a work-dir plugin folder named for gstack", (r) => join(r.work, ".claude", "plugins", "gstack"), null],
+    ];
+    for (const [name, where, text] of traces) {
+      const r = room();
+      put(where(r), text);
+      const got = scan(r);
+      expect([name, got.code, got.out.split("\n").some((l) => l === "found " + where(r))]).toEqual([name, 3, true]);
+    }
+  });
+
+  test("with dirname off PATH, or a work dir that is not absolute, the scan fails closed with exit 4", () => {
+    const bin = mkdtempSync(join(tmpdir(), "outcome-clean-room-bin-"));
+    roots.push(bin);
+    for (const t of ["sh", "find", "grep"]) symlinkSync(Bun.which(t)!, join(bin, t));
+    const r = room();
+    expect(scan(r, [r.work], bin)).toMatchObject({ code: 4, out: "", err: "clean-room-o1: dirname is not on PATH, so the scan cannot run\n" });
+    expect(scan(r, ["work/repo"])).toMatchObject({ code: 4, err: expect.stringContaining("not an absolute path") });
+  });
+});
+
+// A stub docker records its arguments and runs one body, so the preflight's exit mapping runs keyless.
+const stubDocker = (body: string) => {
+  const d = mkdtempSync(join(tmpdir(), "outcome-stub-docker-"));
+  roots.push(d);
+  const docker = join(d, "docker");
+  writeFileSync(docker, "#!/bin/sh\nif [ \"$1\" = rm ]; then printf '%s\\n' \"$*\" >> '" + join(d, "rm.log") + "'; exit 0; fi\nprintf '%s\\n' \"$@\" > '" + join(d, "run.args") + "'\n" + body + "\n");
+  chmodSync(docker, 0o755);
+  const log = (n: string) => (existsSync(join(d, n)) ? readFileSync(join(d, n), "utf8") : "");
+  return { docker, args: () => log("run.args").split("\n"), rm: () => log("rm.log") };
+};
+const thrown = (f: () => unknown) => {
+  try {
+    f();
+  } catch (e) {
+    return (e as Error).message;
+  }
+  return null;
+};
+
+describe("the clean-room preflight's exit mapping (keyless, stub docker)", () => {
+  const opts = (docker: string) => ({ docker, image: "img:1", home: "/root", workdirs: ["/work/repo"], mounts: ["/src:/work/repo:ro"], digest: "sha256:test" });
+
+  test("exit 0 passes, with both scans in one container call and the flags that let root see other users' homes", () => {
+    const s = stubDocker("exit 0");
+    expect(thrown(() => cleanRoomPreflight(opts(s.docker)))).toBeNull();
+    const a = s.args();
+    const flags = a.slice(0, a.indexOf("img:1"));
+    for (const f of ["--rm", "--pull", "never", "--network", "none", "--cap-drop", "ALL", "--cap-add", "DAC_READ_SEARCH", "--security-opt", "no-new-privileges", "-v", "/src:/work/repo:ro"]) expect([f, flags.includes(f)]).toEqual([f, true]);
+    expect(flags[flags.indexOf("--name") + 1]).toMatch(/^gstack-evals-[0-9a-f]{16}$/);
+    expect(a.join("\n")).toContain(CLEAN_ROOM_SCRIPT);
+    expect(a.join("\n")).toContain(CLEAN_ROOM_O1_SCRIPT);
+  });
+
+  test("exit 3 with hits names them; exit 3 with none, exit 4 or a spawn error did not finish", () => {
+    expect(thrown(() => cleanRoomPreflight(opts(stubDocker("printf 'found /root/.gstack\\nfound /work/CLAUDE.md\\n'; exit 3").docker)))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*sha256:test.*found \/root\/\.gstack, \/work\/CLAUDE\.md\n  fix: /);
+    expect(thrown(() => cleanRoomPreflight(opts(stubDocker("exit 3").docker)))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*did not finish \(exit 3\)/);
+    expect(thrown(() => cleanRoomPreflight(opts(stubDocker("echo 'clean-room: find is not on PATH, so the scan cannot run' >&2; exit 4").docker)))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*did not finish \(exit 4\): clean-room: find is not on PATH/);
+    expect(thrown(() => cleanRoomPreflight(opts(join(tmpdir(), "outcome-no-such-docker-" + process.pid))))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*did not finish \(.*ENOENT/);
+  });
+
+  test("a timed-out run is refused and its named container removed with docker rm -f", () => {
+    const s = stubDocker("exec sleep 5");
+    expect(thrown(() => cleanRoomPreflight({ ...opts(s.docker), timeoutMs: 300 }))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*did not finish/);
+    const a = s.args();
+    expect(s.rm()).toBe("rm -f " + a[a.indexOf("--name") + 1] + "\n");
+  });
+});
+
 const DOCKER = process.env.GSTACK_EVALS_DOCKER === "1";
 const IMAGE = process.env.OUTCOME_OUTCOME_CLEAN_ROOM_IMAGE ?? "busybox:1.36";
 
@@ -108,6 +213,26 @@ describe.skipIf(!DOCKER)("the clean-room preflight in a real container (GSTACK_E
     const r = unit();
     put(join(r.root, "skills", "plan-eng-review", "SKILL.md"), "---\nname: plan-eng-review\n---\n");
     expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", join(r.root, "skills") + ":/root/.claude/skills:ro"], digest: "sha256:test" })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/root\/\.claude\/skills/);
+  });
+
+  test("a Capy drive in another uid's 0700 home is seen, as the session's root would see it", () => {
+    const r = unit();
+    const homes = join(r.root, "homes");
+    put(join(homes, "other", ".capy", "drive", "user-someone", "AGENTS.md"), "Load gstack.\n");
+    const asRoot = (cmd: string) => spawnSync("docker", ["run", "--rm", "--pull", "never", "--network", "none", "-v", homes + ":/x", IMAGE, "sh", "-c", cmd], { encoding: "utf8" });
+    expect(asRoot("chown -R 4242:4242 /x/other && chmod 700 /x/other").status).toBe(0);
+    try {
+      expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", homes + ":/home:ro"], digest: "sha256:test" })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/home\/other\/\.capy\/drive/);
+    } finally {
+      asRoot("chown -R " + process.getuid!() + ":" + process.getgid!() + " /x/other && chmod 755 /x/other");
+    }
+  });
+
+  test("a CLAUDE.md naming gstack in a parent of the work dir is refused", () => {
+    const r = fresh();
+    put(join(r.root, "work", "repo", "src", "app.js"), "export const add = (a, b) => a + b;\n");
+    put(join(r.root, "work", "CLAUDE.md"), "Load gstack before implementing.\n");
+    expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [join(r.root, "work") + ":/work:ro"], digest: "sha256:test" })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/work\/CLAUDE\.md/);
   });
 
   test("an image that cannot run the scan fails closed", () => {

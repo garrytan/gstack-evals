@@ -65,6 +65,13 @@ describe("the G arm registry", () => {
     expect(() => turnScript(reg, "none", "  \n")).toThrow(/^E_OUTCOME_ARM .*statement/);
   });
 
+  test("inherited names such as __proto__ and toString are unknown arms, refused with E_OUTCOME_ARM", () => {
+    for (const arm of ["__proto__", "toString", "constructor", "hasOwnProperty", "toString:forced", "__proto__:told"]) {
+      expect(() => turnScript(reg, arm, STATEMENT)).toThrow(/^E_OUTCOME_ARM /);
+      expect(() => skillTurn(reg, arm)).toThrow(/^E_OUTCOME_ARM /);
+    }
+  });
+
   test("a registry that breaks its shape is refused at load", () => {
     const dir = mkdtempSync(join(tmpdir(), "outcome-registry-"));
     const good = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
@@ -76,6 +83,7 @@ describe("the G arm registry", () => {
       ["a skill turn that does not name its skill", (r) => (r.arms["autoplan:told"].turns[1].text = "/plan-eng-review PLAN.md")],
       ["a clean-room told arm", (r) => (r.arms["autoplan:told"].clean_room = true)],
       ["a G skill without a told arm", (r) => delete r.arms["autoplan:told"]],
+      ["a told arm whose skill is not in its family", (r) => (r.arms["plan-design-review:told"] = { ...structuredClone(r.arms["autoplan:told"]), skill: "plan-design-review", turns: r.arms["autoplan:told"].turns.map((t: any) => (t.skill_turn ? { ...t, text: "/plan-design-review PLAN.md" } : t)) })],
     ];
     for (const [name, edit] of cases) {
       const r = structuredClone(good);
