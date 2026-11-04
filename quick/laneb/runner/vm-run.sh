@@ -190,8 +190,13 @@ while kill -0 $$ 2>/dev/null; do
   fi
   sleep 2
 done) >/dev/null 2>&1 </dev/null &
+# A run dir with order.json (an R3b grid part) runs its paid job in that trial order: runner/agent/sitecustomize.py reads
+# LANEB_TRIAL_ORDER, and the job fails before any trial when the file doesn't name each trial once. The oracle job above
+# keeps Harbor's own order.
+order=""
+[ ! -f "$run/order.json" ] || order="LANEB_TRIAL_ORDER='$run/order.json' "
 set +e
-sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' harbor run -y -c '$run/out/job.resolved.json'" > "$run/out/harbor.log" 2>&1
+sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' ${order}harbor run -y -c '$run/out/job.resolved.json'" > "$run/out/harbor.log" 2>&1
 rc=$?
 set -e
 curl -fsS -X POST 127.0.0.1:$control_port/close-all > "$run/out/close-all.json" || true

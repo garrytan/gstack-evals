@@ -31,7 +31,9 @@
 // end, open route reserves are reconciled from the proxy's sessions file, as launch.sh does, so the screen's bind sees
 // settled rows only.
 //   bun quick/laneb/r3/route-check.ts [--model gpt-6.1-sol | --item r3a4-sol] [--rerun]
-// --item r3a4-sol runs R3 amendment 4's fresh route check on its own item, at cells.r3a4.json's allowance.
+// --item r3a4-sol runs R3 amendment 4's fresh route check on its own item, at cells.r3a4.json's allowance. --item r3b4-sol
+// runs R3 amendment 5's (section 5) on r3b4-sol, the same way, with its told session in the told arm at gstack 699a41cb
+// (ARM_MANIFESTS defaults to arms/manifests/r3b for it).
 // Env: LEDGER (the item's jsonl ledger, approved at the item's cap), ARMS (a directory with none.tar and gstack.tar, or
 // .tar.gz, matching ARM_MANIFESTS, default arms/manifests/r3), the route's provider key (OPENROUTER_API_KEY for Sol; only
 // the proxy sees it), OUT (the work dir, default ~/.capy/work/r3-route-check/<item>), PROXY_CONFIG (default
@@ -51,6 +53,7 @@ import { armSpec, jobConfig } from "../runner/grid.ts";
 import { fromMicros, Ledger, readRows, reconcile, totals } from "../runner/ledger.ts";
 import { loadR3Trial } from "./exposure.ts";
 import { A4, itemCheck, portTaken, R3_ARMS, R3A, R3A4, readRoute, routeRecordPath, SOL, type R3aModel, type RouteVerdict } from "./screen.ts";
+import { R3B4 } from "./r3b.ts";
 
 const LANEB = resolve(import.meta.dir, "..");
 const RUNNER = join(LANEB, "runner");
@@ -173,9 +176,9 @@ async function main(argv: string[]): Promise<number> {
   const rerun = argv.includes("--rerun");
   const args = argv.filter((a) => a !== "--rerun");
   const modelId = args.length === 0 ? SOL : args.length === 2 && args[0] === "--model" ? args[1]! : "";
-  const m: R3aModel | undefined = args.length === 2 && args[0] === "--item" ? R3A4[args[1]!] : R3A[modelId];
+  const m: R3aModel | undefined = args.length === 2 && args[0] === "--item" ? R3A4[args[1]!] ?? R3B4[args[1]!] : R3A[modelId];
   const routeModels = Object.values(R3A).filter((x) => x.routePrefix !== null).map((x) => x.id);
-  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")} | --item r3a4-sol] [--rerun]`);
+  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")} | --item r3a4-sol|r3b4-sol] [--rerun]`);
   if (m.routePrefix === null) throw new Error(`E_USAGE ${m.id} has no route check in R3a (route-checked models: ${routeModels.join(", ")})`);
   const prefix = m.routePrefix;
   const ledger = process.env.LEDGER;
@@ -222,7 +225,7 @@ async function main(argv: string[]): Promise<number> {
 
   const out = resolve(process.env.OUT ?? join(process.env.HOME ?? "", ".capy/work/r3-route-check", m.item));
   mkdirSync(join(out, "arms"), { recursive: true });
-  const manifests = resolve(process.env.ARM_MANIFESTS ?? join(LANEB, "arms/manifests/r3"));
+  const manifests = resolve(process.env.ARM_MANIFESTS ?? join(LANEB, m.armManifests ?? "arms/manifests/r3"));
   const arms = Object.fromEntries(PARTS.map(({ arm }) => {
     const name = armSpec(arm).name;
     const want = JSON.parse(readFileSync(join(manifests, name + ".json"), "utf8")).tar.sha256 as string;

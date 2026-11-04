@@ -95,6 +95,23 @@ describe("vm-run.sh before the paid batch", () => {
 });
 
 describe("vm-run.sh during the paid batch", () => {
+  test("a run dir with order.json runs Harbor with LANEB_TRIAL_ORDER set to it, and one without runs Harbor's own order (R3 amendment 5)", async () => {
+    for (const ordered of [true, false]) {
+      const s = setup(null, true);
+      if (ordered) writeFileSync(join(s.run, "order.json"), "[]");
+      const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });
+      for (let i = 0; i < 200 && !s.sg().includes("harbor running"); i++) await Bun.sleep(50);
+      writeFileSync(join(s.run, "STOP"), "");
+      const timer = setTimeout(() => proc.kill("SIGKILL"), 30_000);
+      await proc.exited;
+      clearTimeout(timer);
+      const line = s.sg().split("\n").find((l) => l.includes("job.resolved.json"))!;
+      if (ordered) expect(line).toContain(`LANEB_TRIAL_ORDER='${s.run}/order.json' harbor run -y -c`);
+      else expect(line).not.toContain("LANEB_TRIAL_ORDER");
+      expect(s.sg()).toContain("pkill -INT -f /bin/harbor run");
+    }
+  }, 90_000);
+
   test("a stop request reaches the running Harbor as one SIGINT; the sessions are closed and the exit code recorded", async () => {
     const s = setup(null, true);
     const proc = Bun.spawn(s.cmd, { env: s.env, stdout: "pipe", stderr: "pipe" });

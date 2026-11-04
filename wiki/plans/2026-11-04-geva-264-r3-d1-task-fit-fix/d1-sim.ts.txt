@@ -1,0 +1,34 @@
+
+// D1 candidates, point estimates only (CUT and D1 use point estimates; KEEP is unchanged).
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R = mulberry32(20261107);
+function gamma(k){ if(k<1){ return gamma(1+k)*Math.pow(R(),1/k);} const d=k-1/3,c=1/Math.sqrt(9*d); for(;;){let x,v; do{ // normal
+ const u1=R(),u2=R(); x=Math.sqrt(-2*Math.log(u1||1e-300))*Math.cos(2*Math.PI*u2); v=1+c*x;}while(v<=0); v=v*v*v; const u=R(); if(u<1-0.0331*x*x*x*x) return d*v; if(Math.log(u)<0.5*x*x+d*(1-v+Math.log(v))) return d*v; } }
+function beta(a,b){const x=gamma(a),y=gamma(b);return x/(x+y)}
+const n=70, reps=3, conc=1.78;
+function sim(m, f, d, sims){
+  const a=m*conc, b=(1-m)*conc+1; // posterior after one failed screen trial
+  let prim0=0, aFire=0, bFire=0, infoSum=0, subSum=0;
+  for(let s=0;s<sims;s++){
+    let sumAll=0, sumSub=0, nSub=0, info=0;
+    for(let t=0;t<n;t++){
+      const unfit = R()<f;
+      const p = unfit?0:beta(a,b);
+      const q = unfit?0:Math.min(1,p+d);
+      let kn=0,kt=0; for(let r=0;r<reps;r++){ if(R()<p)kn++; if(R()<q)kt++; }
+      const diff=(kt-kn)/reps; sumAll+=diff;
+      if(kn+kt>0) info++;
+      const other = R()<p; // other model's one screen trial, shared latent p
+      if(other){ sumSub+=diff; nSub++; }
+    }
+    infoSum+=info; subSum+=nSub;
+    if(sumAll<=0){ prim0++; if(nSub>0 && sumSub>0) aFire++; if(nSub===0) aFire++; if(info<30) bFire++; }
+  }
+  const pc=x=>(100*x/sims).toFixed(1);
+  return {m,f,d, primaryAtOrBelow0:pc(prim0), A_fires:pc(aFire), B_fires:pc(bFire), cutAfterA:pc(prim0-aFire), cutAfterB:pc(prim0-bFire), meanInformative:(infoSum/sims).toFixed(1), meanOtherSolved:(subSum/sims).toFixed(1)};
+}
+const out=[];
+for (const [name,m,f] of [["Opus M1",0.645,0],["Sol M1",0.595,0],["Opus M2",0.645,0.689],["Sol M2",0.595,0.40]]) {
+  for (const d of [0,0.10,0.125]) out.push({name, ...sim(m,f,d,20000)});
+}
+console.log(JSON.stringify(out,null,0).replace(/},{/g,"},\n{"));

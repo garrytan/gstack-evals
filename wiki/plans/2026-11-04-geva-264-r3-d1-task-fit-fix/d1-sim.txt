@@ -1,0 +1,13 @@
+$ bun d1-sim.ts
+[{"name":"Opus M1","m":0.645,"f":0,"d":0,"primaryAtOrBelow0":"50.2","A_fires":"13.2","B_fires":"0.0","cutAfterA":"37.0","cutAfterB":"50.2","meanInformative":"57.7","meanOtherSolved":"28.9"},
+{"name":"Opus M1","m":0.645,"f":0,"d":0.1,"primaryAtOrBelow0":"0.9","A_fires":"0.4","B_fires":"0.0","cutAfterA":"0.6","cutAfterB":"0.9","meanInformative":"61.5","meanOtherSolved":"28.9"},
+{"name":"Opus M1","m":0.645,"f":0,"d":0.125,"primaryAtOrBelow0":"0.2","A_fires":"0.1","B_fires":"0.0","cutAfterA":"0.1","cutAfterB":"0.2","meanInformative":"62.3","meanOtherSolved":"28.9"},
+{"name":"Sol M1","m":0.595,"f":0,"d":0,"primaryAtOrBelow0":"49.6","A_fires":"13.3","B_fires":"0.0","cutAfterA":"36.3","cutAfterB":"49.6","meanInformative":"55.5","meanOtherSolved":"26.6"},
+{"name":"Sol M1","m":0.595,"f":0,"d":0.1,"primaryAtOrBelow0":"0.9","A_fires":"0.3","B_fires":"0.0","cutAfterA":"0.6","cutAfterB":"0.9","meanInformative":"60.0","meanOtherSolved":"26.7"},
+{"name":"Sol M1","m":0.595,"f":0,"d":0.125,"primaryAtOrBelow0":"0.1","A_fires":"0.0","B_fires":"0.0","cutAfterA":"0.1","cutAfterB":"0.1","meanInformative":"61.0","meanOtherSolved":"26.7"},
+{"name":"Opus M2","m":0.645,"f":0.689,"d":0,"primaryAtOrBelow0":"51.4","A_fires":"11.7","B_fires":"51.4","cutAfterA":"39.8","cutAfterB":"0.1","meanInformative":"18.0","meanOtherSolved":"9.0"},
+{"name":"Opus M2","m":0.645,"f":0.689,"d":0.1,"primaryAtOrBelow0":"10.4","A_fires":"2.9","B_fires":"10.4","cutAfterA":"7.5","cutAfterB":"0.0","meanInformative":"19.1","meanOtherSolved":"9.0"},
+{"name":"Opus M2","m":0.645,"f":0.689,"d":0.125,"primaryAtOrBelow0":"6.0","A_fires":"1.9","B_fires":"6.0","cutAfterA":"4.1","cutAfterB":"0.0","meanInformative":"19.4","meanOtherSolved":"9.0"},
+{"name":"Sol M2","m":0.595,"f":0.4,"d":0,"primaryAtOrBelow0":"50.8","A_fires":"13.0","B_fires":"9.1","cutAfterA":"37.8","cutAfterB":"41.7","meanInformative":"33.3","meanOtherSolved":"16.0"},
+{"name":"Sol M2","m":0.595,"f":0.4,"d":0.1,"primaryAtOrBelow0":"3.4","A_fires":"1.1","B_fires":"0.3","cutAfterA":"2.3","cutAfterB":"3.1","meanInformative":"36.0","meanOtherSolved":"16.0"},
+{"name":"Sol M2","m":0.595,"f":0.4,"d":0.125,"primaryAtOrBelow0":"1.2","A_fires":"0.5","B_fires":"0.1","cutAfterA":"0.7","cutAfterB":"1.1","meanInformative":"36.5","meanOtherSolved":"16.0"}]
