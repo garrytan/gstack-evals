@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "phase": "eng",
+  "native": {
+    "model": "anthropic/claude-opus-5-5",
+    "findings": 20,
+    "by_severity": {
+      "Critical": 0,
+      "High": 3,
+      "Medium": 12,
+      "Low": 5,
+      "Informational": 0
+    }
+  },
+  "outside": null,
+  "confirmed": 0,
+  "unverified": 0,
+  "disagree": 0,
+  "new": 0,
+  "native_only": 20,
+  "rows": [],
+  "native_only_ids": [
+    "autoplan-20261103023817-eng-r2-native-1",
+    "autoplan-20261103023817-eng-r2-native-2",
+    "autoplan-20261103023817-eng-r2-native-3",
+    "autoplan-20261103023817-eng-r2-native-4",
+    "autoplan-20261103023817-eng-r2-native-5",
+    "autoplan-20261103023817-eng-r2-native-6",
+    "autoplan-20261103023817-eng-r2-native-7",
+    "autoplan-20261103023817-eng-r2-native-8",
+    "autoplan-20261103023817-eng-r2-native-9",
+    "autoplan-20261103023817-eng-r2-native-10",
+    "autoplan-20261103023817-eng-r2-native-11",
+    "autoplan-20261103023817-eng-r2-native-12",
+    "autoplan-20261103023817-eng-r2-native-13",
+    "autoplan-20261103023817-eng-r2-native-14",
+    "autoplan-20261103023817-eng-r2-native-15",
+    "autoplan-20261103023817-eng-r2-native-16",
+    "autoplan-20261103023817-eng-r2-native-17",
+    "autoplan-20261103023817-eng-r2-native-18",
+    "autoplan-20261103023817-eng-r2-native-19",
+    "autoplan-20261103023817-eng-r2-native-20"
+  ],
+  "coverage": "native_only"
+}

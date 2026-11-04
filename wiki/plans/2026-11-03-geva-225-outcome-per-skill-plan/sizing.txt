@@ -1,0 +1,187 @@
+== house central: MULT=5 (the plan)
+plan-eng-review | G | n 60 x 3 | MDD 18.6 | planned 1213 | crew 160, authoring 275, screening 221, admission 64, Opus confirmatory 492 (none share 101, told 391), reserve 787
+plan-devex-review | X | n 78 x 3 | MDD 15.6 | planned 1593 | crew 160, authoring 412, screening 134, calibration 10, admission 81, Opus confirmatory 796 (none share 161, told 635), reserve 407
+autoplan | G | n 54 x 3 | MDD 19.2 | planned 1652 | crew 160, authoring 275, screening 221, admission 128, Opus confirmatory 868 (none share 83, told 785), reserve 348
+devex-review | X | n 78 x 3 | MDD 15.6 | planned 1617 | crew 160, authoring 412, screening 134, calibration 10, admission 83, Opus confirmatory 818 (none share 161, told 657), reserve 383
+plan-design-review | U | n 60 x 3 | MDD 18.6 | planned 1657 | crew 185, authoring 322, screening 163, calibration 29, admission 110, Opus confirmatory 847 (none share 215, told 632), reserve 343
+design-review | U | n 54 x 3 | MDD 19.2 | planned 1661 | crew 185, authoring 322, screening 163, calibration 29, admission 124, Opus confirmatory 838 (none share 176, told 662), reserve 339
+wave1 planned 9393
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== the 2-point rule's extra rows at house central (chosen)
+plan-eng-review | G | n 54 x 4 | MDD 19.2 | planned 1549 | crew 160, authoring 249, screening 199, admission 64, Opus confirmatory 877 (none share 135, told 469, stand-in 273), reserve 451
+plan-devex-review | X | n 78 x 3 | MDD 15.6 | planned 1593 | crew 160, authoring 412, screening 134, calibration 10, admission 81, Opus confirmatory 796 (none share 161, told 635), reserve 407
+autoplan | G | n 42 x 4 | MDD 19.8 | planned 1636 | crew 160, authoring 249, screening 199, admission 128, Opus confirmatory 900 (none share 86, told 814), reserve 364
+devex-review | X | n 78 x 3 | MDD 15.6 | planned 1617 | crew 160, authoring 412, screening 134, calibration 10, admission 83, Opus confirmatory 818 (none share 161, told 657), reserve 383
+plan-design-review | U | n 60 x 3 | MDD 18.6 | planned 1657 | crew 185, authoring 322, screening 163, calibration 29, admission 110, Opus confirmatory 847 (none share 215, told 632), reserve 343
+design-review | U | n 54 x 3 | MDD 19.2 | planned 1661 | crew 185, authoring 322, screening 163, calibration 29, admission 124, Opus confirmatory 838 (none share 176, told 662), reserve 339
+wave1 planned 9713
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== v2 central: MULT=2.5
+plan-eng-review | G | n 84 x 4 | MDD 13.8 | planned 1198 | crew 160, authoring 378, screening 158, admission 34, Opus confirmatory 468 (none share 92, told 376), reserve 802
+plan-devex-review | X | n 102 x 4 | MDD 12.6 | planned 1697 | crew 160, authoring 531, screening 114, calibration 10, admission 49, Opus confirmatory 833 (none share 194, told 639), reserve 303
+autoplan | G | n 84 x 4 | MDD 13.8 | planned 1679 | crew 160, authoring 378, screening 158, admission 66, Opus confirmatory 918 (none share 92, told 826), reserve 321
+devex-review | X | n 96 x 4 | MDD 13.2 | planned 1657 | crew 160, authoring 531, screening 114, calibration 10, admission 50, Opus confirmatory 792 (none share 172, told 620), reserve 343
+plan-design-review | U | n 78 x 3 | MDD 15.6 | planned 1621 | crew 185, authoring 412, screening 166, calibration 29, admission 77, Opus confirmatory 753 (none share 199, told 554), reserve 379
+design-review | U | n 78 x 3 | MDD 15.6 | planned 1695 | crew 185, authoring 412, screening 166, calibration 29, admission 84, Opus confirmatory 820 (none share 199, told 621), reserve 305
+wave1 planned 9547
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== forced or exposed told, central: MULT=5 TOLD_SCALE=1.15
+plan-eng-review | G | n 42 x 4 | MDD 19.8 | planned 1088 | crew 160, authoring 197, screening 155, admission 72, Opus confirmatory 504 (none share 86, told 418), reserve 912
+plan-devex-review | X | n 78 x 3 | MDD 15.6 | planned 1694 | crew 160, authoring 412, screening 134, calibration 10, admission 89, Opus confirmatory 888 (none share 173, told 715), reserve 306
+autoplan | G | n 42 x 4 | MDD 19.8 | planned 1678 | crew 160, authoring 197, screening 155, admission 145, Opus confirmatory 1020 (none share 86, told 934), reserve 322
+devex-review | X | n 72 x 3 | MDD 16.8 | planned 1640 | crew 160, authoring 412, screening 134, calibration 10, admission 92, Opus confirmatory 832 (none share 148, told 684), reserve 360
+plan-design-review | U | n 54 x 3 | MDD 19.2 | planned 1573 | crew 185, authoring 293, screening 147, calibration 29, admission 119, Opus confirmatory 801 (none share 176, told 625), reserve 427
+design-review | U | n 54 x 3 | MDD 19.2 | planned 1695 | crew 185, authoring 293, screening 147, calibration 29, admission 134, Opus confirmatory 907 (none share 176, told 731), reserve 305
+wave1 planned 9368
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== forced or exposed told, risk: MULT=5 TOLD_SCALE=1.5
+plan-eng-review | G | n 42 x 3 | MDD 22.2 | planned 1072 | crew 160, authoring 197, screening 155, admission 89, Opus confirmatory 471 (none share 65, told 406), reserve 928
+plan-devex-review | X | n 66 x 3 | MDD 17.4 | planned 1644 | crew 160, authoring 352, screening 113, calibration 10, admission 109, Opus confirmatory 900 (none share 136, told 764), reserve 356
+autoplan | G | n 42 x 3 | MDD 22.2 | planned 1674 | crew 160, authoring 197, screening 155, admission 186, Opus confirmatory 976 (none share 65, told 911), reserve 326
+devex-review | X | n 66 x 3 | MDD 17.4 | planned 1676 | crew 160, authoring 352, screening 113, calibration 10, admission 112, Opus confirmatory 928 (none share 136, told 792), reserve 324
+plan-design-review | U | n 42 x 4 | MDD 19.8 | planned 1690 | crew 185, authoring 233, screening 114, calibration 29, admission 138, Opus confirmatory 992 (none share 209, told 783), reserve 310
+design-review | U | n 36 x 4 | MDD 21.0 | planned 1670 | crew 185, authoring 233, screening 114, calibration 29, admission 158, Opus confirmatory 952 (none share 157, told 795), reserve 330
+wave1 planned 9426
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== high: MULT=10
+plan-eng-review | G | n 42 x 3 | MDD 22.2 | planned 1506 | crew 160, authoring 197, screening 307, admission 127, Opus confirmatory 716 (none share 178, told 538), reserve 494
+plan-devex-review | X | n 48 x 3 | MDD 20.4 | planned 1608 | crew 160, authoring 263, screening 140, calibration 10, admission 148, Opus confirmatory 889 (none share 168, told 721), reserve 392
+autoplan | G | n 24 x 3 | MDD 28.8 | planned 1682 | crew 160, authoring 197, screening 307, admission 255, Opus confirmatory 764 (none share 71, told 693), reserve 318
+devex-review | X | n 48 x 3 | MDD 20.4 | planned 1641 | crew 160, authoring 263, screening 140, calibration 10, admission 153, Opus confirmatory 916 (none share 168, told 748), reserve 359
+plan-design-review | U | n 36 x 3 | MDD 24.0 | planned 1530 | crew 185, authoring 203, screening 141, calibration 29, admission 177, Opus confirmatory 796 (none share 169, told 627), reserve 470
+design-review | U | n 36 x 3 | MDD 24.0 | planned 1682 | crew 185, authoring 203, screening 141, calibration 29, admission 205, Opus confirmatory 920 (none share 169, told 751), reserve 318
+wave1 planned 9649
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== high stress: MULT=10 TOLD_SCALE=1.5 AGENT_USER=2.4
+plan-eng-review | G | n 30 x 2 | MDD 31.2 | planned 1154 | crew 160, authoring 145, screening 219, admission 177, Opus confirmatory 453 (none share 71, told 382), reserve 846
+plan-devex-review | X | n 30 x 4 | MDD 23.4 | planned 1648 | crew 160, authoring 173, screening 87, calibration 10, admission 203, Opus confirmatory 1016 (none share 140, told 876), reserve 352
+autoplan | G | n 24 x 2 | MDD 34.8 | planned 1632 | crew 160, authoring 145, screening 219, admission 369, Opus confirmatory 739 (none share 48, told 691), reserve 368
+devex-review | X | n 30 x 4 | MDD 23.4 | planned 1690 | crew 160, authoring 173, screening 87, calibration 10, admission 210, Opus confirmatory 1050 (none share 140, told 910), reserve 310
+plan-design-review | U | n 30 x 2 | MDD 31.2 | planned 1541 | crew 185, authoring 173, screening 162, calibration 58, admission 275, Opus confirmatory 688 (none share 130, told 558), reserve 459
+design-review | U | n 30 x 2 | MDD 31.2 | planned 1685 | crew 185, authoring 173, screening 162, calibration 58, admission 316, Opus confirmatory 791 (none share 130, told 661), reserve 315
+wave1 planned 9350
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== crew at TS's full rate: MULT=5 AUTH_EXTRA=6.2
+plan-eng-review | G | n 36 x 4 | MDD 21.0 | planned 1245 | crew 160, authoring 501, screening 133, admission 64, Opus confirmatory 387 (none share 74, told 313), reserve 755
+plan-devex-review | X | n 48 x 4 | MDD 18.6 | planned 1579 | crew 160, authoring 593, screening 82, calibration 10, admission 81, Opus confirmatory 653 (none share 132, told 521), reserve 421
+autoplan | G | n 36 x 4 | MDD 21.0 | planned 1694 | crew 160, authoring 501, screening 133, admission 128, Opus confirmatory 772 (none share 74, told 698), reserve 306
+devex-review | X | n 48 x 4 | MDD 18.6 | planned 1600 | crew 160, authoring 593, screening 82, calibration 10, admission 83, Opus confirmatory 671 (none share 132, told 539), reserve 400
+plan-design-review | U | n 36 x 4 | MDD 21.0 | planned 1542 | crew 185, authoring 458, screening 98, calibration 29, admission 110, Opus confirmatory 663 (none share 157, told 506), reserve 458
+design-review | U | n 36 x 4 | MDD 21.0 | planned 1639 | crew 185, authoring 458, screening 98, calibration 29, admission 124, Opus confirmatory 745 (none share 157, told 588), reserve 361
+wave1 planned 9299
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== cheaper agent user: MULT=5 AGENT_USER=0.12
+plan-eng-review | G | n 60 x 3 | MDD 18.6 | planned 1213 | crew 160, authoring 275, screening 221, admission 64, Opus confirmatory 492 (none share 101, told 391), reserve 787
+plan-devex-review | X | n 78 x 3 | MDD 15.6 | planned 1593 | crew 160, authoring 412, screening 134, calibration 10, admission 81, Opus confirmatory 796 (none share 161, told 635), reserve 407
+autoplan | G | n 54 x 3 | MDD 19.2 | planned 1652 | crew 160, authoring 275, screening 221, admission 128, Opus confirmatory 868 (none share 83, told 785), reserve 348
+devex-review | X | n 78 x 3 | MDD 15.6 | planned 1617 | crew 160, authoring 412, screening 134, calibration 10, admission 83, Opus confirmatory 818 (none share 161, told 657), reserve 383
+plan-design-review | U | n 90 x 3 | MDD 15.0 | planned 1678 | crew 185, authoring 472, screening 123, calibration 3, admission 71, Opus confirmatory 825 (none share 168, told 657), reserve 322
+design-review | U | n 78 x 3 | MDD 15.6 | planned 1699 | crew 185, authoring 472, screening 123, calibration 3, admission 85, Opus confirmatory 831 (none share 128, told 703), reserve 301
+wave1 planned 9452
+grid x1.2:
+42 2 26.4 28.8
+48 2 24.6 27.0
+60 2 21.6 24.6
+42 4 19.8 21.6
+54 3 19.2 21.6
+60 3 18.6 20.4
+72 3 16.8 18.6
+78 3 15.6 18.0
+90 3 15.0 16.2
+84 4 13.8 15.0
+== one survivor per family, house central
+plan-eng-review {'both': {'n': 60, 'k': 3, 'mdd': 18.6, 'planned': 1213}, 'alone_at_planned_size': 1804, 'survivor': {'n': 60, 'k': 2, 'mdd': 21.6, 'planned': 1612, 'stops': True}}
+autoplan {'both': {'n': 54, 'k': 3, 'mdd': 19.2, 'planned': 1652}, 'alone_at_planned_size': 2147, 'survivor': {'n': 48, 'k': 2, 'mdd': 24.6, 'planned': 1664, 'stops': True}}
+plan-design-review {'both': {'n': 60, 'k': 3, 'mdd': 18.6, 'planned': 1657}, 'alone_at_planned_size': 2345, 'survivor': {'n': 48, 'k': 2, 'mdd': 24.6, 'planned': 1683, 'stops': True}}
+design-review {'both': {'n': 54, 'k': 3, 'mdd': 19.2, 'planned': 1661}, 'alone_at_planned_size': 2257, 'survivor': {'n': 42, 'k': 2, 'mdd': 26.4, 'planned': 1584, 'stops': True}}
+plan-devex-review {'both': {'n': 78, 'k': 3, 'mdd': 15.6, 'planned': 1593}, 'alone_at_planned_size': 2316, 'survivor': {'n': 60, 'k': 2, 'mdd': 21.6, 'planned': 1609, 'stops': True}}
+devex-review {'both': {'n': 78, 'k': 3, 'mdd': 15.6, 'planned': 1617}, 'alone_at_planned_size': 2341, 'survivor': {'n': 60, 'k': 2, 'mdd': 21.6, 'planned': 1623, 'stops': True}}
+wave1 both-pass planned 9393
+== one survivor per family, forced central
+plan-eng-review {'both': {'n': 42, 'k': 4, 'mdd': 19.8, 'planned': 1088}, 'alone_at_planned_size': 1538, 'survivor': {'n': 42, 'k': 4, 'mdd': 19.8, 'planned': 1538, 'stops': False}}
+autoplan {'both': {'n': 42, 'k': 4, 'mdd': 19.8, 'planned': 1678}, 'alone_at_planned_size': 2128, 'survivor': {'n': 42, 'k': 2, 'mdd': 26.4, 'planned': 1575, 'stops': True}}
+plan-design-review {'both': {'n': 54, 'k': 3, 'mdd': 19.2, 'planned': 1573}, 'alone_at_planned_size': 2214, 'survivor': {'n': 42, 'k': 2, 'mdd': 26.4, 'planned': 1559, 'stops': True}}
+design-review {'both': {'n': 54, 'k': 3, 'mdd': 19.2, 'planned': 1695}, 'alone_at_planned_size': 2337, 'survivor': {'n': 42, 'k': 2, 'mdd': 26.4, 'planned': 1630, 'stops': True}}
+plan-devex-review {'both': {'n': 78, 'k': 3, 'mdd': 15.6, 'planned': 1694}, 'alone_at_planned_size': 2405, 'survivor': {'n': 60, 'k': 2, 'mdd': 21.6, 'planned': 1659, 'stops': True}}
+devex-review {'both': {'n': 72, 'k': 3, 'mdd': 16.8, 'planned': 1640}, 'alone_at_planned_size': 2271, 'survivor': {'n': 60, 'k': 2, 'mdd': 21.6, 'planned': 1674, 'stops': True}}
+wave1 both-pass planned 9368

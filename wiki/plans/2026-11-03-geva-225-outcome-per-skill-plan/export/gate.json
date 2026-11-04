@@ -1,0 +1,567 @@
+{
+  "schema_version": 1,
+  "run": "autoplan-20261103023817",
+  "gate_rev": 4,
+  "items": [
+    {
+      "id": "d1",
+      "title": "U's wave-1 confirmatory buys a 15 to 16 point reading the plan says can't move a design skill to a cut [autoplan-20261103023817-ceo-r2-native-7]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "ceo",
+      "item_class": "challenge1",
+      "why": "one voice (native) recommends changing your stated direction",
+      "changes": "cost",
+      "cost": "b reopens ceo and eng",
+      "options": [
+        {
+          "key": "a",
+          "text": "keep your direction",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "accept the change",
+          "changes_plan": true
+        }
+      ],
+      "origin": "ceo|autoplan-20261103023817-ceo-r2-native-7|2026-11-03T14:46:16.878Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|9aa7c14d1f7b75e2",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d1",
+        "chosen": "b",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d2",
+      "title": "Critical: Futility look is one-sided: a skill trending to hurts stops at half the panel and is posted as not distinguished [autoplan-20261103023817-ceo-r2-native-1]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "ceo",
+      "item_class": "finding",
+      "finding": [
+        "autoplan-20261103023817-ceo-r2-native-1"
+      ],
+      "why": "an open Critical finding (native); rec applies its fix to the plan",
+      "cost": "a reopens ceo and eng once the plan is revised",
+      "options": [
+        {
+          "key": "a",
+          "text": "apply the fix to the plan: Stop for futility only when conditional power is under 10% for a true effect of both plus and minus the planned MDD, so a skill whose interim estimate favors none runs the full panel and can read hurts. Print the interim estimate, its 95% interval and its direction at every stop, and have R48 treat an interim estimate in none's favor as a loss lead, not a plain null. Add both cases to O5's keyless dry run.",
+          "changes_plan": true
+        },
+        {
+          "key": "b",
+          "text": "carry it into the build as a blocking task (no plan change)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "ceo|autoplan-20261103023817-ceo-r2-native-1|2026-11-03T14:46:16.878Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|e9b4984683c22dd3|finding",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d2",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d3",
+      "title": "High: The 1.5x cost-per-solved guard can't be passed by most wave-1 told skills at the plan's own 2.2x to 5.0x multiples, and the plan doesn't say whether it binds [autoplan-20261103023817-ceo-r2-native-2]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "ceo",
+      "item_class": "finding",
+      "finding": [
+        "autoplan-20261103023817-ceo-r2-native-2"
+      ],
+      "why": "an open High finding (native); rec applies its fix to the plan",
+      "cost": "a reopens ceo and eng once the plan is revised",
+      "options": [
+        {
+          "key": "a",
+          "text": "apply the fix to the plan: State whether the guard binds told skills and in which form (#169 binds it on H-inv as an upper bound <= 1.5, README.md:178). Print each skill's break-even gain beside its MDD in section 8 (at a 50% control rate: plan-eng-review +23, plan-devex-review and plan-design-review +30, devex-review +33, design-review +50, autoplan unreachable). Define solved for U's and X's cost figure, reuse #169's G3 definition in O4, and write the R48 rule that turns the ratio interval into KEEP or CUT-CANDIDATE. Ask Garry before admission whether 1.5x on hidden-test solves is the bar for a told skill.",
+          "changes_plan": true
+        },
+        {
+          "key": "b",
+          "text": "carry it into the build as a blocking task (no plan change)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "ceo|autoplan-20261103023817-ceo-r2-native-2|2026-11-03T14:46:16.878Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|a54a8eb3c191ada8|finding",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d3",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d4",
+      "title": "High: The promise that wave 1 settles GST-1218 rests on an unnamed after pin and on a null inference the plan disowns [autoplan-20261103023817-ceo-r2-native-3]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "ceo",
+      "item_class": "finding",
+      "finding": [
+        "autoplan-20261103023817-ceo-r2-native-3"
+      ],
+      "why": "an open High finding (native); rec applies its fix to the plan",
+      "cost": "a reopens ceo and eng once the plan is revised",
+      "options": [
+        {
+          "key": "a",
+          "text": "apply the fix to the plan: Replace 'A null rules out a gain of that size' with an interval rule: a gain is ruled out only above the upper 95% bound of told minus none, or against F2's break-even gain. Tie GST-1218's keep-or-cut reading to a told arm on the named after pin. If the pin isn't named by G admission, tell the Captain then that plan-eng-review's and plan-devex-review's rows can only inform GST-1218 (a forced-line verdict can't KEEP or CUT, line 27), and let the Captain choose between waiting and reading the forced line as information.",
+          "changes_plan": true
+        },
+        {
+          "key": "b",
+          "text": "carry it into the build as a blocking task (no plan change)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "ceo|autoplan-20261103023817-ceo-r2-native-3|2026-11-03T14:46:16.878Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|c01f59fa12d2fa4b|finding",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d4",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d5",
+      "title": "High: Central prices sit at half the house's real-task central (R3 amendment 4: 5x Verified) and the price-risk case stresses only the none session [autoplan-20261103023817-ceo-r2-native-4]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "ceo",
+      "item_class": "finding",
+      "finding": [
+        "autoplan-20261103023817-ceo-r2-native-4"
+      ],
+      "why": "an open High finding (native); rec applies its fix to the plan",
+      "cost": "a reopens ceo and eng once the plan is revised",
+      "options": [
+        {
+          "key": "a",
+          "text": "apply the fix to the plan: Stress section 8 at the house central (5x Verified) and high (10x), with particle-1 at quick look 3's 0.41 of Opus, told multiples at 1.5x their central and the agent user at 2x, and print which rows survive and their MDDs. Show the wave-1 table's MDDs at both central and house central. Reuse R3 amendment 4's between-part projection check between admission, screening and confirmatory, so a stage that would push a skill's re-sized MDD past what can change its decision stops before it spends. Recheck particle-1's 2-point fit at admission's metered ratio before any particle-1 spend.",
+          "changes_plan": true
+        },
+        {
+          "key": "b",
+          "text": "carry it into the build as a blocking task (no plan change)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "ceo|autoplan-20261103023817-ceo-r2-native-4|2026-11-03T14:46:16.878Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|01a2a7e0ee838e25|finding",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d5",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d6",
+      "title": "High: autoplan's told arm names no kind, voice count or gate setting; the before pin predates R66's kinds and the 5.0x price assumes the full panel [autoplan-20261103023817-ceo-r2-native-5]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "ceo",
+      "item_class": "finding",
+      "finding": [
+        "autoplan-20261103023817-ceo-r2-native-5"
+      ],
+      "why": "an open High finding (native); rec applies its fix to the plan",
+      "cost": "a reopens ceo and eng once the plan is revised",
+      "options": [
+        {
+          "key": "a",
+          "text": "apply the fix to the plan: Freeze autoplan's told invocation in O1: the kind (crews now run --kind feature on features), the phases scope chooses, the outside voice and its model, the gate answer, and the exact slash line per pin. Meter that configuration on admission sessions before autoplan's place, size and MDD in the wave-1 table are fixed, align the four-way stand-in with it, and name the configuration in every autoplan verdict. If the after pin's default kind differs, the prereg says which one it tests and why.",
+          "changes_plan": true
+        },
+        {
+          "key": "b",
+          "text": "carry it into the build as a blocking task (no plan change)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "ceo|autoplan-20261103023817-ceo-r2-native-5|2026-11-03T14:46:16.878Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|1796b9862c6727c5|finding",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d6",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d7",
+      "title": "High: Per-skill plans assume both skills in a family pass admission; a lone survivor costs $1,986 to $2,376 at its planned size [autoplan-20261103023817-eng-r2-native-1]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "eng",
+      "item_class": "finding",
+      "finding": [
+        "autoplan-20261103023817-eng-r2-native-1"
+      ],
+      "why": "an open High finding (native); rec applies its fix to the plan",
+      "cost": "a reopens eng once the plan is revised",
+      "options": [
+        {
+          "key": "a",
+          "text": "apply the fix to the plan: Price the one-survivor branch per family in section 8. At planned sizes the survivor pays every unspent shared cost (bulk authoring, screening, the whole none arm, the prereg thread) and costs autoplan $1,986, plan-eng-review $2,272, plan-devex-review $2,357, devex-review $2,376, plan-design-review $2,319 and design-review $2,237. Freeze a re-size rule (drop the particle-1 row first, then trials, then tasks) and print the MDD it buys (about 15 to 17 in G and X, 18.6 to 19.2 in U), or stop the survivor when that MDD passes the bound in F4. Apply the same rule when one skill stops at the futility look.",
+          "changes_plan": true
+        },
+        {
+          "key": "b",
+          "text": "carry it into the build as a blocking task (no plan change)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "eng|autoplan-20261103023817-eng-r2-native-1|2026-11-03T15:11:06.518Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|3f138c83b97e427b|finding",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d7",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d8",
+      "title": "High: Told prices come from sessions where the procedure mostly did not run, and the forced arm that decision 3 expects to run has no price [autoplan-20261103023817-eng-r2-native-2]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "eng",
+      "item_class": "finding",
+      "finding": [
+        "autoplan-20261103023817-eng-r2-native-2"
+      ],
+      "why": "an open High finding (native); rec applies its fix to the plan",
+      "cost": "a reopens eng once the plan is revised",
+      "options": [
+        {
+          "key": "a",
+          "text": "apply the fix to the plan: Add forced and told-exposed price rows to section 8. The only metered told session (R3a told /investigate, $0.424) had exposure 2 of 10, E0's $0.236 is a plain none session, and v2 deleted v1's forced row (told plus 15%, with panel v3's forced lines at 1.7 times told on plan units). Price the confirmatory on the arm that will run: forced at told x1.15 central and x1.5 as the risk case (planned designs $1,704 to $1,777 and $1,836 to $2,081, autoplan over its ceiling; re-sized G MDDs 14.4/15.0 and 16.2/15.6). Have admission meter exposed and unexposed told sessions separately, and freeze the pin at admission: a pin named after admission needs a new admission paid from the reserve.",
+          "changes_plan": true
+        },
+        {
+          "key": "b",
+          "text": "carry it into the build as a blocking task (no plan change)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "eng|autoplan-20261103023817-eng-r2-native-2|2026-11-03T15:11:06.518Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|67869d985b297ef2|finding",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d8",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d9",
+      "title": "High: Authoring is priced at TS's paid author and audit spend; the crew thread that mined, built, checked and sealed the tasks cost about five times that and has no line [autoplan-20261103023817-eng-r2-native-3]",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "eng",
+      "item_class": "finding",
+      "finding": [
+        "autoplan-20261103023817-eng-r2-native-3"
+      ],
+      "why": "an open High finding (native); rec applies its fix to the plan",
+      "cost": "a reopens eng once the plan is revised",
+      "options": [
+        {
+          "key": "a",
+          "text": "apply the fix to the plan: Add a crew line per valid task for mining, building, checking and sealing, measured on each family's thin-slice thread and re-sized at admission. TS spent $7.93 of author and auditor calls plus $1.78 of VM for 7 valid tasks while its thread used about 43,500 credits before its /ship tail (GEVA-173.md:16), about $6.20 a valid task. Wave 1 needs about 800 valid tasks (G 372, U 192, X 237). At a fifth of TS's rate the planned designs cost $1,761 to $1,912 and re-size to MDDs of G 14.4/15.0, U 15.6 and X 14.4; at TS's full rate G alone needs about $2,300, more than both G reserves. Also price two preregs per family (admission and confirmatory) inside the $70 line, not one.",
+          "changes_plan": true
+        },
+        {
+          "key": "b",
+          "text": "carry it into the build as a blocking task (no plan change)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "eng|autoplan-20261103023817-eng-r2-native-3|2026-11-03T15:11:06.518Z|9ff6fb7a6baa6820279f73c74f80c30c892348350cbf98578f0a20111e71b283|dca16abb53f34de4|finding",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d9",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "d10",
+      "title": "design closed accepted-with-findings at round 2 (Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the design measurement text is unchanged from the reviewed v1, and its open findings carry to the gate.): 12 open finding(s), Critical=1 High=4 Medium=6 Low=1, carried into tasks.jsonl",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "design",
+      "cap": {
+        "phase": "design",
+        "kind": "deferred"
+      },
+      "item_class": "cap_deferred",
+      "why": "closed deferred by agent:GEVA-2",
+      "cost": "b grants design one more round",
+      "options": [
+        {
+          "key": "a",
+          "text": "accept with findings, deferred to the build",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "reopen design for one more round (an owner budget raise; Eng reruns last)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "cap|deferred-design|567ca855b31a76ba",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d10",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "uc1",
+      "title": "Critical left open when design closed deferred: Agent user acts by role and accessible name at one 1280x720 viewport, so design-review's hierarchy, spacing, slop and mobile fixes and plan-design-review's responsive pass are invisible; the degraded fixture only tests a11y and function defects [autoplan-20261103023817-design-native-1]",
+      "kind": "approval",
+      "recommended": "a",
+      "recommended_basis": "Captain GSTA-2 ruling at gate_rev 4: carry as a blocking build task, as the owner took at gate_rev 2; no third round under R51",
+      "phase": "design",
+      "cap": {
+        "phase": "design",
+        "kind": "blocker",
+        "ref": "autoplan-20261103023817-design-native-1"
+      },
+      "item_class": "cap_blocker",
+      "why": "design closed deferred (Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the design measurement text is unchanged from the reviewed v1, and its open findings carry to the gate.) with this finding open; only you can accept it",
+      "options": [
+        {
+          "key": "a",
+          "text": "carry it into the build as a blocking task (you accept the risk)",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "reopen design for one more round (an owner budget raise; Eng reruns last)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "cap|autoplan-20261103023817-design-native-1|2ed0474e5c06b214",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-uc1",
+        "chosen": "a",
+        "gate_rev": 3
+      },
+      "recommended_by": "agent:GEVA-2"
+    },
+    {
+      "id": "d11",
+      "title": "dx closed accepted-with-findings at round 2 (Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the devex measurement text is unchanged from the reviewed v1, and its open findings carry to the gate.): 16 open finding(s), Critical=1 High=6 Medium=6 Low=3, carried into tasks.jsonl",
+      "kind": "auto",
+      "recommended": "a",
+      "phase": "dx",
+      "cap": {
+        "phase": "dx",
+        "kind": "deferred"
+      },
+      "item_class": "cap_deferred",
+      "why": "closed deferred by agent:GEVA-2",
+      "cost": "b grants dx one more round",
+      "options": [
+        {
+          "key": "a",
+          "text": "accept with findings, deferred to the build",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "reopen dx for one more round (an owner budget raise; Eng reruns last)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "cap|deferred-dx|9947d527ccf27e73",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-d11",
+        "chosen": "a",
+        "gate_rev": 3
+      }
+    },
+    {
+      "id": "uc2",
+      "title": "Critical left open when dx closed deferred: CAP4:docs-only harness:channel interactive CLIs (TUIs, prompts, pagers; the probe's fzf --bind feature is one) can hang a no-terminal agent with no non-interactive rule or per-command timeout [autoplan-20261103023817-dx-native-3]",
+      "kind": "approval",
+      "recommended": "a",
+      "recommended_basis": "Captain GSTA-2 ruling at gate_rev 4: carry as a blocking build task, as the owner took at gate_rev 2; no third round under R51",
+      "phase": "dx",
+      "cap": {
+        "phase": "dx",
+        "kind": "blocker",
+        "ref": "autoplan-20261103023817-dx-native-3"
+      },
+      "item_class": "cap_blocker",
+      "why": "dx closed deferred (Captain GEVA-2 limited the gate_rev 2 re-review to two voices (CEO and Eng). The revision changes cost, scope, arms and staging under the owner's per-skill ceiling; the devex measurement text is unchanged from the reviewed v1, and its open findings carry to the gate.) with this finding open; only you can accept it",
+      "options": [
+        {
+          "key": "a",
+          "text": "carry it into the build as a blocking task (you accept the risk)",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "reopen dx for one more round (an owner budget raise; Eng reruns last)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "cap|autoplan-20261103023817-dx-native-3|b390503ba38b892b",
+      "carried": {
+        "from": "autoplan-20261103023817-r2-uc2",
+        "chosen": "a",
+        "gate_rev": 3
+      },
+      "recommended_by": "agent:GEVA-2"
+    },
+    {
+      "id": "uc3",
+      "title": "plan changed after ceo cap: unreviewed delta (+200 -141 lines, 9ff6fb7a6baa -> 182918be9f1b)",
+      "kind": "approval",
+      "recommended": "a",
+      "recommended_basis": "the run budget; the delta is reviewed during the build",
+      "phase": "ceo",
+      "cap": {
+        "phase": "ceo",
+        "kind": "delta",
+        "ref": "2"
+      },
+      "item_class": "cap_delta",
+      "why": "revise v2 changed the plan after ceo used round 2 of 2, so ceo never reviewed it",
+      "options": [
+        {
+          "key": "a",
+          "text": "accept the unreviewed delta into the approved plan",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "reopen ceo for one more round (an owner budget raise; Eng reruns last)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "cap|delta-2|b14ca581f46a6d9b"
+    },
+    {
+      "id": "uc4",
+      "title": "plan changed after eng cap: unreviewed delta (+200 -141 lines, 9ff6fb7a6baa -> 182918be9f1b)",
+      "kind": "approval",
+      "recommended": "a",
+      "recommended_basis": "the run budget; the delta is reviewed during the build",
+      "phase": "eng",
+      "cap": {
+        "phase": "eng",
+        "kind": "delta",
+        "ref": "2"
+      },
+      "item_class": "cap_delta",
+      "why": "revise v2 changed the plan after eng used round 2 of 2, so eng never reviewed it",
+      "options": [
+        {
+          "key": "a",
+          "text": "accept the unreviewed delta into the approved plan",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "reopen eng for one more round (an owner budget raise)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "cap|delta-2|d4427465cd6808a6"
+    },
+    {
+      "id": "uc5",
+      "title": "plan changed after ceo cap: unreviewed delta (+32 -25 lines, 182918be9f1b -> b18f7150831f)",
+      "kind": "approval",
+      "recommended": "a",
+      "recommended_basis": "the run budget; the delta is reviewed during the build",
+      "phase": "ceo",
+      "cap": {
+        "phase": "ceo",
+        "kind": "delta",
+        "ref": "3"
+      },
+      "item_class": "cap_delta",
+      "why": "revise v3 changed the plan after ceo used round 2 of 2, so ceo never reviewed it",
+      "options": [
+        {
+          "key": "a",
+          "text": "accept the unreviewed delta into the approved plan",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "reopen ceo for one more round (an owner budget raise; Eng reruns last)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "cap|delta-3|b14ca581f46a6d9b"
+    },
+    {
+      "id": "uc6",
+      "title": "plan changed after eng cap: unreviewed delta (+32 -25 lines, 182918be9f1b -> b18f7150831f)",
+      "kind": "approval",
+      "recommended": "a",
+      "recommended_basis": "the run budget; the delta is reviewed during the build",
+      "phase": "eng",
+      "cap": {
+        "phase": "eng",
+        "kind": "delta",
+        "ref": "3"
+      },
+      "item_class": "cap_delta",
+      "why": "revise v3 changed the plan after eng used round 2 of 2, so eng never reviewed it",
+      "options": [
+        {
+          "key": "a",
+          "text": "accept the unreviewed delta into the approved plan",
+          "changes_plan": false
+        },
+        {
+          "key": "b",
+          "text": "reopen eng for one more round (an owner budget raise)",
+          "changes_plan": false
+        }
+      ],
+      "origin": "cap|delta-3|d4427465cd6808a6"
+    },
+    {
+      "id": "p1",
+      "title": "Plan approval",
+      "kind": "approval",
+      "recommended": "b",
+      "item_class": "p1",
+      "options": [
+        {
+          "key": "a",
+          "text": "approve as-is"
+        },
+        {
+          "key": "b",
+          "text": "approve with the recommended changes: d2a, d3a, d4a, d5a, d6a, d7a, d8a, d9a"
+        },
+        {
+          "key": "c",
+          "text": "interrogate (ask questions; stays pending)"
+        },
+        {
+          "key": "d",
+          "text": "rerun every phase on the current plan, Eng last (to review an edited plan instead: gstack-autoplan revise --out <local notes (not committed)> --plan <file>)"
+        },
+        {
+          "key": "e",
+          "text": "reject"
+        }
+      ]
+    }
+  ],
+  "title": "/autoplan final approval gate",
+  "rec_rev": 2,
+  "eli5": {
+    "summary": "We want to know, for each gstack skill, whether the work an AI does comes out better with that skill than without it. Not whether the skill writes a nice review, but whether the code it helps build actually works and is easy for people to use. So we take real changes that real open-source projects made after the AI was trained, where we already hold the answer: the project's own hidden tests. The same AI does the same task with no gstack and with the skill told by name, and we check that it really followed the skill's steps. For design, a separate AI acts as a user and tries to get things done in the screens that were built. For developer tools, a fresh AI tries to use the new feature from the docs alone.\n\nThis first round tests six skills. Each gets at most $2,000, everything included, and the six together get at most $10,000. Each starts with a check whose paid runs cost about $60 to $130. If the plain AI already does the task almost every time, or the skill's steps don't run, that skill stops there and spends nothing more. For its money each test can see a difference of about 16 to 19 points in tasks solved. That is enough to see a big win or a loss, but not a small effect, and every result says so. If prices come in higher and a test could only see 20 points or more, it stops before it spends.",
+    "before_after": "Before: no gstack part has fair evidence that it helps or that it doesn't (R56 table: 0 helps, 0 no effect, 59 of 74 parts never measured). The evals that did run graded proxies, such as whether a review found seeded problems in a plan or a diff, and they mostly could not move. CEO panel v2 hit a ceiling: plain Opus 5.5 found all 12 seeded items. E0 and the panel v3 headroom read did the same (plain Opus found 35 of 36 planted flaws on #191), so seeded-flaw plan panels are ruled out here. Elsewhere Opus loaded the skill and skipped its steps: no specialist and no adversarial pass in 66 of 66 /review sessions, no /investigate debug report in 111 of 111 trials, and no untold skill opened in 481 trials across Opus and particle-1 (Run D). Only one lane, the real-world outcome lane, grades what ships, and it measures gstack's /ship as a whole, not each skill.\n\nAfter: one rig grades wave 1's six skills on the outcome of real work, at no more than $2,000 a skill and $10,000 in all, with every cost included. Every skill verdict reads against no gstack and carries the rate at which the told skill's steps really ran. It prints the smallest difference its budget can see and sits beside cost per solved task, which must stay within 1.5 times no gstack's for a KEEP. Wave 1 tests plan-eng-review and plan-devex-review first (GST-1218 holds both as cut candidates until this test reads), then autoplan, devex-review, plan-design-review and design-review. Each skill gets an admission check whose paid runs cost about $60 to $130 before any larger spend, so a ceiling shows up for about a hundred dollars.",
+    "why": "gstack's rules make every crew run /autoplan before new work and /ship before every merge, and both cost millions of tokens a run. If planning, Krug-style design review and devex review make better code and products, gstack should say so with numbers, and keep them. If they don't, or if a one-line hint does as well, the text that loads on every run is cost with no return, and R56 says it goes. Garry believes planning, design and devex thinking pay off. This plan is built so that belief can come out true or false, and every null carries the MDD its $2,000 bought.",
+    "cause": "Proxy evals kept ending at a ceiling or with zero exposure. The real-world outcome lane (GST-690) showed real repo tasks can sit off the ceiling and can be graded by hidden tests on what shipped. GST-1088 (the gstack overhaul: a discovery hook, an adherence check and a diet) will change whether Opus runs skills at all, and GST-1089 (#169) measures it on /investigate and /review. Garry then asked for the outcome standard on every skill, with planning, design and devex first, and the Captain opened GST-1144.",
+    "decisions": "1. **One shared rig and task pipeline, extended, not a new lane per skill.** Options: (a) extend the real-world outcome lane's rig (Harbor runner, metering proxy and ledger, evaluator-owned sidecar, verifier contract, sealed custody, post-cutoff mining) with the instruments and an arm registry; (b) a lane per skill. Pick (a). Each skill then costs arms and a task family. What would flip it: the lane's P0 pilot showing that its sandbox can't run gstack skills other than /ship fairly.\n2. **Arms: none and told, with an exposure gate, on every skill; a stand-in or untold arm only where it fits.** The stand-in is one or two sentences, written from the skill's own one-line description and public practice, with no gstack words. Told means gstack is installed and the skill is invoked by name. It is scored intention to treat, with the exposure rate printed beside the verdict, and a verdict counts as fair only at 80% exposure or more. A stand-in runs where its cost leaves told minus none's MDD within 2 points of the told-only design, under the 20-point bound (decision 6) and inside the program envelope. At house prices wave 1's plan has none; the G prereg rechecks plan-eng-review's at admission (section 8). Untold runs only if the overhaul's after pin shows untold sessions opening the skill, and only where it fits by the same rule. What would flip it: admission's metered prices coming in well under section 8's, which would let a stand-in in.\n3. **Told arms are confirmatory only on a pin where the steps run.** A told arm on GST-1088's before pin (82db89a) mostly measures skipped steps. Admission runs told on the pin the prereg will use, and that pin is frozen at admission: a pin named later needs a new admission paid from the skill's reserve. Confirmatory told arms use the after pin once gstack's maintainers name it and its told exposure passes the bar. If it isn't named by a confirmatory prereg's date, that prereg uses the forced line (told's line plus one sentence that names the skill's steps) on the before pin and scopes its claim to \"the skill with its steps forced\". A forced-line verdict can't by itself KEEP or CUT the shipped skill text. So plan-eng-review's and plan-devex-review's rows settle GST-1218 only on a told arm on the named after pin. If the pin isn't named by G admission, the Captain hears then that those rows can only inform GST-1218, and chooses between waiting for the pin and reading the forced line as information. What would flip it: the before pin's plain told exposure passing the bar at admission, which the evidence so far says it won't.\n4. **Measures: hidden tests decide.** Adopt hidden-test correctness as the primary for every build family, agent-user completion as the design primary and docs-only first success as the devex primary, with hidden tests as their guard. Under the ceiling, wave 1 also keeps mutation score of agent-written tests and the escaped-defect subset in G, which cost almost nothing. The follow-up change and the U …\n\n_+ more in the plan (plan-active.md)._",
+    "plan_file_sha256": "490b40645600b43d6ef5900fcca9aa71f6593fe5946a314eb5f3a684622d508a"
+  }
+}

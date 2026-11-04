@@ -1,0 +1,30 @@
+
+$ PIN=$PIN bun r3b-power.ts claude-opus-5-5 0.645 1.78 70 3 2000 0,0.109,0.12,0.125,0.13,0.135,0.14,0.15
+claude-opus-5-5 draw=failed m=0.645 c=1.78 n=70 reps=3 sims=2000 d=0.0 points: KEEP 2.2%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 49.6%, mean none pass chance on R3b tasks 0.414
+claude-opus-5-5 draw=failed m=0.645 c=1.78 n=70 reps=3 sims=2000 d=10.9 points: KEEP 72.1%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.4%, mean none pass chance on R3b tasks 0.413
+claude-opus-5-5 draw=failed m=0.645 c=1.78 n=70 reps=3 sims=2000 d=12.0 points: KEEP 79.7%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.5%, mean none pass chance on R3b tasks 0.413
+claude-opus-5-5 draw=failed m=0.645 c=1.78 n=70 reps=3 sims=2000 d=12.5 points: KEEP 83.0%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.1%, mean none pass chance on R3b tasks 0.413
+claude-opus-5-5 draw=failed m=0.645 c=1.78 n=70 reps=3 sims=2000 d=13.0 points: KEEP 86.3%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.1%, mean none pass chance on R3b tasks 0.413
+
+$ PIN=$PIN bun r3b-power.ts gpt-6.1-sol 0.595 1.78 70 3 2000 0,0.109,0.12,0.125,0.13,0.135,0.14,0.15
+gpt-6.1-sol draw=failed m=0.595 c=1.78 n=70 reps=3 sims=2000 d=0.0 points: KEEP 2.7%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 49.0%, mean none pass chance on R3b tasks 0.381
+gpt-6.1-sol draw=failed m=0.595 c=1.78 n=70 reps=3 sims=2000 d=10.9 points: KEEP 72.3%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.6%, mean none pass chance on R3b tasks 0.381
+gpt-6.1-sol draw=failed m=0.595 c=1.78 n=70 reps=3 sims=2000 d=12.0 points: KEEP 81.3%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.1%, mean none pass chance on R3b tasks 0.381
+gpt-6.1-sol draw=failed m=0.595 c=1.78 n=70 reps=3 sims=2000 d=12.5 points: KEEP 83.5%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.3%, mean none pass chance on R3b tasks 0.381
+gpt-6.1-sol draw=failed m=0.595 c=1.78 n=70 reps=3 sims=2000 d=13.0 points: KEEP 87.2%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.0%, mean none pass chance on R3b tasks 0.380
+
+# The check against #112 power.txt (74.2% at 10.9 points), then the spread sensitivity.
+$ PIN=$PIN bun r3b-power.ts check-112 0.5 1.78 70 3 2000 0.109 prior
+check-112 draw=prior m=0.5 c=1.78 n=70 reps=3 sims=2000 d=10.9 points: KEEP 74.2%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.4%, mean none pass chance on R3b tasks 0.499
+$ PIN=$PIN bun r3b-power.ts claude-opus-5-5 0.645 0.5 70 3 1000 0,0.125
+claude-opus-5-5 draw=failed m=0.645 c=0.5 n=70 reps=3 sims=1000 d=0.0 points: KEEP 2.0%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 47.3%, mean none pass chance on R3b tasks 0.216
+claude-opus-5-5 draw=failed m=0.645 c=0.5 n=70 reps=3 sims=1000 d=12.5 points: KEEP 94.2%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.0%, mean none pass chance on R3b tasks 0.215
+$ PIN=$PIN bun r3b-power.ts claude-opus-5-5 0.645 4 70 3 1000 0,0.125
+claude-opus-5-5 draw=failed m=0.645 c=4 n=70 reps=3 sims=1000 d=0.0 points: KEEP 3.0%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 50.8%, mean none pass chance on R3b tasks 0.515
+claude-opus-5-5 draw=failed m=0.645 c=4 n=70 reps=3 sims=1000 d=12.5 points: KEEP 80.0%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.3%, mean none pass chance on R3b tasks 0.514
+$ PIN=$PIN bun r3b-power.ts gpt-6.1-sol 0.595 0.5 70 3 1000 0,0.125
+gpt-6.1-sol draw=failed m=0.595 c=0.5 n=70 reps=3 sims=1000 d=0.0 points: KEEP 2.1%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 48.9%, mean none pass chance on R3b tasks 0.199
+gpt-6.1-sol draw=failed m=0.595 c=0.5 n=70 reps=3 sims=1000 d=12.5 points: KEEP 93.7%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.0%, mean none pass chance on R3b tasks 0.198
+$ PIN=$PIN bun r3b-power.ts gpt-6.1-sol 0.595 4 70 3 1000 0,0.125
+gpt-6.1-sol draw=failed m=0.595 c=4 n=70 reps=3 sims=1000 d=0.0 points: KEEP 3.4%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 50.3%, mean none pass chance on R3b tasks 0.475
+gpt-6.1-sol draw=failed m=0.595 c=4 n=70 reps=3 sims=1000 d=12.5 points: KEEP 80.5%, CUT-CANDIDATE (primary and D1 sensitivity at or below 0) 0.1%, mean none pass chance on R3b tasks 0.475
