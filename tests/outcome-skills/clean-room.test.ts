@@ -76,8 +76,9 @@ describe("the clean-room script (keyless)", () => {
 });
 
 // O1's second scan. A gstack trace is: ~/.gstack existing; a .claude/skills folder anywhere below a work dir, outside
-// .git, existing; or, for a CLAUDE.md in a parent of a work dir, ~/CLAUDE.md, ~/.claude/settings.json (its hooks) and any
-// entry under .claude/commands or .claude/plugins in the home or a work dir, "gstack" in any case in the name or content.
+// .git, existing; or, for a CLAUDE.md in a parent of a work dir, ~/CLAUDE.md, .claude/settings.json and
+// .claude/settings.local.json (their hooks) and any entry under .claude/commands, .claude/plugins or .claude/agents in the
+// home or a work dir, "gstack" in any case in the name or content.
 describe("O1's second clean-room scan (keyless)", () => {
   const room = () => {
     const r = fresh();
@@ -98,6 +99,11 @@ describe("O1's second clean-room scan (keyless)", () => {
     put(join(r.home, ".claude", "commands", "review.md"), "Review the diff.\n");
     put(join(r.work, ".claude", "plugins", "lint", "plugin.json"), "{}\n");
     put(join(r.work, ".git", "modules", "x", ".claude", "skills"));
+    put(join(r.home, ".claude", "settings.local.json"), JSON.stringify({ permissions: { allow: ["Bash(npm test)"] } }));
+    put(join(r.work, ".claude", "settings.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "npm run lint" }] }] } }));
+    put(join(r.work, ".claude", "settings.local.json"), "{}\n");
+    put(join(r.home, ".claude", "agents", "reviewer.md"), "---\nname: reviewer\n---\nReview the diff.\n");
+    put(join(r.work, ".claude", "agents", "tester.md"), "---\nname: tester\n---\nRun the tests.\n");
     expect(scan(r)).toEqual({ code: 0, out: "", err: "" });
   });
 
@@ -113,6 +119,11 @@ describe("O1's second clean-room scan (keyless)", () => {
       ["a home plugin file naming gstack", (r) => join(r.home, ".claude", "plugins", "p", "plugin.json"), '{"name":"GStack"}\n'],
       ["a work-dir command naming gstack", (r) => join(r.work, ".claude", "commands", "review.md"), "Run the gstack review.\n"],
       ["a work-dir plugin folder named for gstack", (r) => join(r.work, ".claude", "plugins", "gstack"), null],
+      ["a home settings.local.json naming gstack", (r) => join(r.home, ".claude", "settings.local.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "/opt/gstack/hooks/stop" }] }] } })],
+      ["a work-dir settings.json hook naming gstack", (r) => join(r.work, ".claude", "settings.json"), JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: "~/.claude/skills/gstack/bin/gstack-skill-route" }] }] } })],
+      ["a work-dir settings.local.json naming gstack", (r) => join(r.work, ".claude", "settings.local.json"), '{"env":{"GSTACK_HOME":"/opt/g"}}\n'],
+      ["a home agent naming gstack", (r) => join(r.home, ".claude", "agents", "reviewer.md"), "---\nname: reviewer\n---\nRun gstack's /review.\n"],
+      ["a work-dir agent named for gstack", (r) => join(r.work, ".claude", "agents", "gstack-ship.md"), "Ship.\n"],
     ];
     for (const [name, where, text] of traces) {
       const r = room();
@@ -133,14 +144,14 @@ describe("O1's second clean-room scan (keyless)", () => {
 });
 
 // A stub docker records its arguments and runs one body, so the preflight's exit mapping runs keyless.
-const stubDocker = (body: string) => {
+const stubDocker = (body: string, inspect = "echo sha256:test") => {
   const d = mkdtempSync(join(tmpdir(), "outcome-stub-docker-"));
   roots.push(d);
   const docker = join(d, "docker");
-  writeFileSync(docker, "#!/bin/sh\nif [ \"$1\" = rm ]; then printf '%s\\n' \"$*\" >> '" + join(d, "rm.log") + "'; exit 0; fi\nprintf '%s\\n' \"$@\" > '" + join(d, "run.args") + "'\n" + body + "\n");
+  writeFileSync(docker, "#!/bin/sh\nif [ \"$1\" = rm ]; then printf '%s\\n' \"$*\" >> '" + join(d, "rm.log") + "'; exit 0; fi\nif [ \"$1\" = image ]; then printf '%s\\n' \"$@\" > '" + join(d, "inspect.args") + "'; " + inspect + "; exit $?; fi\nprintf '%s\\n' \"$@\" > '" + join(d, "run.args") + "'\n" + body + "\n");
   chmodSync(docker, 0o755);
   const log = (n: string) => (existsSync(join(d, n)) ? readFileSync(join(d, n), "utf8") : "");
-  return { docker, args: () => log("run.args").split("\n"), rm: () => log("rm.log") };
+  return { docker, args: () => log("run.args").split("\n"), inspected: () => log("inspect.args").split("\n"), rm: () => log("rm.log") };
 };
 const thrown = (f: () => unknown) => {
   try {
@@ -154,22 +165,33 @@ const thrown = (f: () => unknown) => {
 describe("the clean-room preflight's exit mapping (keyless, stub docker)", () => {
   const opts = (docker: string) => ({ docker, image: "img:1", home: "/root", workdirs: ["/work/repo"], mounts: ["/src:/work/repo:ro"], digest: "sha256:test" });
 
-  test("exit 0 passes, with both scans in one container call and the flags that let root see other users' homes", () => {
+  test("exit 0 passes, with both scans in one container call on the checked image id and the flags that let root see other users' homes", () => {
     const s = stubDocker("exit 0");
     expect(thrown(() => cleanRoomPreflight(opts(s.docker)))).toBeNull();
+    expect(s.inspected().slice(0, 5)).toEqual(["image", "inspect", "--format", "{{.Id}}", "img:1"]);
     const a = s.args();
-    const flags = a.slice(0, a.indexOf("img:1"));
+    expect(a).not.toContain("img:1");
+    const flags = a.slice(0, a.indexOf("sha256:test"));
+    expect(a[a.indexOf("sha256:test") + 1]).toBe("-c");
     for (const f of ["--rm", "--pull", "never", "--network", "none", "--cap-drop", "ALL", "--cap-add", "DAC_READ_SEARCH", "--security-opt", "no-new-privileges", "-v", "/src:/work/repo:ro"]) expect([f, flags.includes(f)]).toEqual([f, true]);
     expect(flags[flags.indexOf("--name") + 1]).toMatch(/^gstack-evals-[0-9a-f]{16}$/);
     expect(a.join("\n")).toContain(CLEAN_ROOM_SCRIPT);
     expect(a.join("\n")).toContain(CLEAN_ROOM_O1_SCRIPT);
   });
 
-  test("exit 3 with hits names them; exit 3 with none, exit 4 or a spawn error did not finish", () => {
+  test("exit 3 with hits names them; exit 3 with none or exit 4 did not finish; a missing docker is refused at the id check", () => {
     expect(thrown(() => cleanRoomPreflight(opts(stubDocker("printf 'found /root/.gstack\\nfound /work/CLAUDE.md\\n'; exit 3").docker)))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*sha256:test.*found \/root\/\.gstack, \/work\/CLAUDE\.md\n  fix: /);
     expect(thrown(() => cleanRoomPreflight(opts(stubDocker("exit 3").docker)))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*did not finish \(exit 3\)/);
     expect(thrown(() => cleanRoomPreflight(opts(stubDocker("echo 'clean-room: find is not on PATH, so the scan cannot run' >&2; exit 4").docker)))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*did not finish \(exit 4\): clean-room: find is not on PATH/);
-    expect(thrown(() => cleanRoomPreflight(opts(join(tmpdir(), "outcome-no-such-docker-" + process.pid))))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*did not finish \(.*ENOENT/);
+    expect(thrown(() => cleanRoomPreflight(opts(join(tmpdir(), "outcome-no-such-docker-" + process.pid))))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*could not read the image's id \(.*ENOENT/);
+  });
+
+  test("tg3/targeted#3: an image whose id is not the pinned digest, or whose id cannot be read, is refused before any scan runs", () => {
+    for (const [inspect, msg] of [["echo sha256:other", /^E_OUTCOME_CLEAN_ROOM .*sha256:test.*the image's id is sha256:other, not the pinned digest\n  fix: /], ["echo 'Error: No such image: img:1' >&2; exit 1", /^E_OUTCOME_CLEAN_ROOM .*could not read the image's id \(exit 1\): Error: No such image: img:1\n  fix: /], ["true", /^E_OUTCOME_CLEAN_ROOM .*the image's id is empty, not the pinned digest/]] as const) {
+      const s = stubDocker("exit 0", inspect);
+      expect([inspect, thrown(() => cleanRoomPreflight(opts(s.docker)))]).toEqual([inspect, expect.stringMatching(msg)]);
+      expect([inspect, s.args()]).toEqual([inspect, [""]]);
+    }
   });
 
   test("a timed-out run is refused and its named container removed with docker rm -f", () => {
@@ -182,6 +204,7 @@ describe("the clean-room preflight's exit mapping (keyless, stub docker)", () =>
 
 const DOCKER = process.env.GSTACK_EVALS_DOCKER === "1";
 const IMAGE = process.env.OUTCOME_OUTCOME_CLEAN_ROOM_IMAGE ?? "busybox:1.36";
+const ID = DOCKER ? spawnSync("docker", ["image", "inspect", "--format", "{{.Id}}", IMAGE], { encoding: "utf8" }).stdout.trim() : "";
 
 describe.skipIf(!DOCKER)("the clean-room preflight in a real container (GSTACK_EVALS_DOCKER=1)", () => {
   const unit = () => {
@@ -192,7 +215,7 @@ describe.skipIf(!DOCKER)("the clean-room preflight in a real container (GSTACK_E
 
   test("a clean image with the unit mounted passes; nothing is written", () => {
     const r = unit();
-    expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro"], digest: "sha256:test" })).not.toThrow();
+    expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro"], digest: ID })).not.toThrow();
   });
 
   test("a seeded drive mount is refused with E_OUTCOME_CLEAN_ROOM, the path, the image digest and a fix, before any lease", () => {
@@ -201,18 +224,18 @@ describe.skipIf(!DOCKER)("the clean-room preflight in a real container (GSTACK_E
       put(join(r.root, "drive", "user-someone", "AGENTS.md"), "Load gstack.\n");
       let err = "";
       try {
-        cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", join(r.root, "drive") + ":" + at + ":ro"], digest: "sha256:test" });
+        cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", join(r.root, "drive") + ":" + at + ":ro"], digest: ID });
       } catch (e) {
         err = (e as Error).message;
       }
-      expect([at, err.startsWith("E_OUTCOME_CLEAN_ROOM "), err.includes("found /root/.capy"), err.includes("sha256:test"), err.includes("fix: ")]).toEqual([at, true, true, true, true]);
+      expect([at, err.startsWith("E_OUTCOME_CLEAN_ROOM "), err.includes("found /root/.capy"), err.includes(ID), err.includes("fix: ")]).toEqual([at, true, true, true, true]);
     }
   });
 
   test("a gstack skills folder in the arm's home is refused", () => {
     const r = unit();
     put(join(r.root, "skills", "plan-eng-review", "SKILL.md"), "---\nname: plan-eng-review\n---\n");
-    expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", join(r.root, "skills") + ":/root/.claude/skills:ro"], digest: "sha256:test" })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/root\/\.claude\/skills/);
+    expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", join(r.root, "skills") + ":/root/.claude/skills:ro"], digest: ID })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/root\/\.claude\/skills/);
   });
 
   test("a Capy drive in another uid's 0700 home is seen, as the session's root would see it", () => {
@@ -222,7 +245,7 @@ describe.skipIf(!DOCKER)("the clean-room preflight in a real container (GSTACK_E
     const asRoot = (cmd: string) => spawnSync("docker", ["run", "--rm", "--pull", "never", "--network", "none", "-v", homes + ":/x", IMAGE, "sh", "-c", cmd], { encoding: "utf8" });
     expect(asRoot("chown -R 4242:4242 /x/other && chmod 700 /x/other").status).toBe(0);
     try {
-      expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", homes + ":/home:ro"], digest: "sha256:test" })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/home\/other\/\.capy\/drive/);
+      expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", homes + ":/home:ro"], digest: ID })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/home\/other\/\.capy\/drive/);
     } finally {
       asRoot("chown -R " + process.getuid!() + ":" + process.getgid!() + " /x/other && chmod 755 /x/other");
     }
@@ -232,10 +255,22 @@ describe.skipIf(!DOCKER)("the clean-room preflight in a real container (GSTACK_E
     const r = fresh();
     put(join(r.root, "work", "repo", "src", "app.js"), "export const add = (a, b) => a + b;\n");
     put(join(r.root, "work", "CLAUDE.md"), "Load gstack before implementing.\n");
-    expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [join(r.root, "work") + ":/work:ro"], digest: "sha256:test" })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/work\/CLAUDE\.md/);
+    expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [join(r.root, "work") + ":/work:ro"], digest: ID })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/work\/CLAUDE\.md/);
   });
 
-  test("an image that cannot run the scan fails closed", () => {
-    expect(() => cleanRoomPreflight({ docker: "docker", image: "gstack-evals-no-such-image:0", home: "/root", workdirs: ["/work/repo"], mounts: [], digest: "sha256:test" })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*did not finish/);
+  test("an image that is not on the host fails closed", () => {
+    expect(() => cleanRoomPreflight({ docker: "docker", image: "gstack-evals-no-such-image:0", home: "/root", workdirs: ["/work/repo"], mounts: [], digest: ID })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*could not read the image's id/);
+  });
+
+  test("tg3/targeted#3: a tag that names another image than the pinned digest is refused, and the pinned image still passes by its tag", () => {
+    const other = "gstack-evals-clean-room-other:" + process.pid;
+    expect(spawnSync("docker", ["build", "--network", "none", "-q", "-t", other, "-"], { input: "FROM " + IMAGE + "\nLABEL gstack-evals-test=other\n", encoding: "utf8" }).status).toBe(0);
+    try {
+      const r = unit();
+      expect(() => cleanRoomPreflight({ docker: "docker", image: other, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro"], digest: ID })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*the image's id is sha256:[0-9a-f]{64}, not the pinned digest/);
+      expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro"], digest: ID })).not.toThrow();
+    } finally {
+      spawnSync("docker", ["image", "rm", "-f", other]);
+    }
   });
 });
