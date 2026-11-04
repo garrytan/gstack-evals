@@ -48,7 +48,7 @@ The transplant reading, when a gold patch is given, applies gold to the starting
 
 ## Tests
 
-tests/outcome-skills/mutation.test.ts runs without Docker: the patch reader, the unit finders, the frozen sample, the rules, the tool output readers and the image pins. tests/outcome-skills/mutation-docker.test.ts runs the real pinned tools on fixture repositories with `GSTACK_EVALS_DOCKER=1`: in each language, tests that pin the behaviour score at least 0.75 and tests that only call the code score at most 0.25 on a sample of the same mutants, plus the rules above in both directions. Building the tool images needs the network once.
+tests/outcome-skills/mutation.test.ts runs without Docker: the patch reader, the unit finders, the frozen sample, the rules, the tool output readers and the image pins. tests/outcome-skills/mutation-docker.test.ts runs the real pinned tools on fixture repositories with `GSTACK_EVALS_DOCKER=1`. In each language, each image records its pinned licence, tests that pin the behaviour score at least 0.75 with each tool's exact killed and survived counts, and tests that only call the code score at most 0.25 on a sample of the same mutants. Python also covers the rules above in both directions, the transplant reading, a patch that does not apply and symlinks planted in the output folder. TypeScript keeps a pre-existing test in the agent's test file out. Rust gets the same verdicts on three runs of one tree, reads inline tests as `not-transplantable` and keeps a same-named test in a target the agent did not touch out. Building the tool images needs the network once.
 
 ## Limits
 
