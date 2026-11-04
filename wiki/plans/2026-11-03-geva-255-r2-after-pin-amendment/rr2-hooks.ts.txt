@@ -13,7 +13,8 @@
 //   A record is copied from that descriptor, and a log's new hard link is kept only when it has the descriptor's device
 //   and inode. A log made and removed with its work dir between two scans is lost. The links dir must be on the launch's
 //   file system. RR2_WATCH_TEST_SWAP=<dir> is the dry run's test hook: right after each open and check, it swaps the
-//   file's folder for a link to <dir>.
+//   file's folder for a link to <dir>. It acts only when a .rr2-dry-run marker sits in the launch dir or above it; set
+//   anywhere else, the watch exits 5 before its first scan.
 // readout: one row per session: whether delta.json lists the contract log, the contract log's lines by event (blocked,
 //   met and met_waived, met_after_block, miss, fail-open: a state-error line, unknown shape: a state-error naming an
 //   unknown transcript shape, deferred: agents-running or agents-stalled, no contract: no-contract-skill, the hook ran but
@@ -67,6 +68,11 @@ if (mode === "watch") {
   let linked = 0, copied = 0;
   const seen = new Map<string, string>();
   const swap = process.env.RR2_WATCH_TEST_SWAP;
+  if (swap) {
+    let d = existsSync(out!) ? realpathSync(out!) : "";
+    while (d && !existsSync(join(d, ".rr2-dry-run"))) d = d === "/" ? "" : dirname(d);
+    if (!d) bad("RR2_WATCH_TEST_SWAP is set, but no .rr2-dry-run marker sits above " + out + "; it is the dry run's test hook only, so unset it");
+  }
   const scan = () => {
     for (const [m, a, t, p] of sessions()) {
       const dest = join(links!, m, a, t, p);

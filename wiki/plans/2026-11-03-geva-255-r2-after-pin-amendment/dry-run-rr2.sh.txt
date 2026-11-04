@@ -212,13 +212,22 @@ step . sh -c "echo files in the links dir: \$(find $WO/links -type f 2>/dev/null
 echo "# Synthetic: a third launch under RR2_WATCH_TEST_SWAP, the watch's test hook, which swaps a file's folder for a link to"
 echo "# an outside folder right after the watch opens and checks the file. The session's log and record are inside its work"
 echo "# dir, and the outside folder holds a log and a record of the same names. The new hard link then names the outside log,"
-echo "# not the open file, so the watch removes it. The record is copied from the open file."
+echo "# not the open file, so the watch removes it. The record is copied from the open file. The hook acts only under the"
+echo "# marker the dry run puts at its work dir's root."
+touch "$W/.rr2-dry-run"
 WS=$W/watch-swap; OS=$WS/outside; SR=$WS/out/runs/m/gstack-full/t/p1/work/t/.gstack-home; mkdir -p "$OS" "$SR/hooks" "$SR/skill-contracts"
 echo "2026-11-03T00:00:01.000Z session=inside event=blocked skill=review" > "$SR/hooks/skill-contract.log"; echo '{"inside": true}' > "$SR/skill-contracts/s.json"
 echo "2026-11-03T00:00:01.000Z session=outside event=met skill=review" > "$OS/skill-contract.log"; echo '{"outside": true}' > "$OS/s.json"
 sleep 1 &
 step '^(watch|E_)' env RR2_WATCH_TEST_SWAP="$OS" bun "$W/bin/rr2-hooks.ts" watch "$WS/out" "$WS/links" $!
 step . sh -c "find $WS/links -type f | sed 's#^$WS/links/##'; cat $WS/links/m/gstack-full/t/p1/records/s.json; test ! -e $WS/links/m/gstack-full/t/p1/skill-contract.log && echo 'no log link: the link named another file'; grep -rlq outside $WS/links || echo 'nothing from the outside folder is in the links dir'"
+echo "# The same hook on a launch dir beside the work dir, with no marker above it: the watch refuses to start (exit 5)"
+echo "# and leaves the session's folders as they were."
+NM=$W-nomark; rm -rf "$NM"; SR=$NM/out/runs/m/gstack-full/t/p1/work/t/.gstack-home; mkdir -p "$NM/outside" "$SR/hooks" "$SR/skill-contracts"
+echo "2026-11-03T00:00:01.000Z session=inside event=blocked skill=review" > "$SR/hooks/skill-contract.log"; echo '{"inside": true}' > "$SR/skill-contracts/s.json"
+sleep 1 &
+step '^(watch|E_)' env RR2_WATCH_TEST_SWAP="$NM/outside" bun "$W/bin/rr2-hooks.ts" watch "$NM/out" "$NM/links" $!
+step . sh -c "ls -A $SR; echo links in the state root: \$(find $SR -type l | wc -l); test ! -e $NM/links && echo 'no links dir'"
 
 echo; echo "## The severity map through the frozen sevmap.ts (section 6)"
 # review-units writes each arm's severity_map from the --severity-map entry named for the arm (src/trial/review/run.ts:497
