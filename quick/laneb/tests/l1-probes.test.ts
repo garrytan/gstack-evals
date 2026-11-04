@@ -282,4 +282,11 @@ describe("contract block, turn cap and the read audit", () => {
     expect(run([bash("sed 's|/root/.gstack/x|y|' f", "# app")], none).audit_hits).toEqual([]);
     expect(run([bash("sed -E 's|/root/.gstack/x|y|gI; s/a/b/2' README.md", "# app")], none).audit_hits).toEqual([]);
   });
+  test("an -e or --regexp after -- is a pattern or file operand, not an option", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    expect(run([bash("grep -- -e /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep -rn -- -e /root/.gstack/config.yaml", "1:x")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep -n -- --regexp /root/.gstack/config.yaml", "1:x")], none).audit_hits.length).toBe(1);
+    expect(run([bash("rg -- -e /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+  });
 });

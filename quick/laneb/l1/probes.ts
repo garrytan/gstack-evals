@@ -375,6 +375,7 @@ function withoutPattern(words: string[]): string[] {
   let given = false;
   for (let k = 0; k < words.length; k++) {
     const w = words[k]!;
+    if (w === "--") { kept.push(...words.slice(k)); break; }
     const joined = /^(-[A-Za-z]*e(?=.)|--(regexp|expression|source)=)/.exec(w);
     if (/^(-[A-Za-z]*e|--regexp|--expression|--source)$/.test(w)) {
       given = true;
