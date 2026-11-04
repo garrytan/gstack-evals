@@ -70,6 +70,8 @@ Lane B's SDK log carries neither the route hook's line nor the contract hook's r
 
 The session is the one top-level transcript. With none, or more than one, every field is null; a failed copy (named in `teardown_errors`) leaves the fields it decides null; an unreadable record leaves both contract fields null. Null means "could not tell", never "did not fire", and `analyze.ts` counts an unrecorded hook as not fired. Real sessions with Claude Code 2.1.312 in the arm images against `arms/l1.ts`'s fake upstream gave: after untold `true, false, null`, after told `false, true, false` (blocked, then a miss), and off and before, untold or told, `false, false, null`; `tests/fixtures/l1/hooks` holds them, cut to their user, assistant, hook and last-prompt lines.
 
+**Trust limit.** The evidence comes from files inside the trial container, and the model under test runs there as root, so a session that writes gstack's exact hook-context attachment into its own transcript, or a contract record with a met run, reads as hooked. R3b's hook-state read has the same trust model. Until the harness moves route evidence outside the container (the proxy's request rows), the L1 analysis cross-checks every trial with `route_hook` true against the proxy's request rows and reports the number that don't match.
+
 ## Tests
 
 ```sh
