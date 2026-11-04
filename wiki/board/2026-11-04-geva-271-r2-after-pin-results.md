@@ -7,7 +7,7 @@ author: GEVA-271
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-04
-status: done
+status: superseded
 source: "Captain drive handoffs/GEVA-271/ (ledger-record/, the wrapper logs, grading/ and sens/), the R2 after-pin run by GEVA-271"
 links:
   - 2026-11-03-geva-255-r2-after-pin-amendment
