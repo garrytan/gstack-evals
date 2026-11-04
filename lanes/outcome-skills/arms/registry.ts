@@ -24,13 +24,15 @@ export type ScriptTurn = { phase: string; text: string; skill_turn: boolean };
 const fail = (why: string): never => {
   throw new Error("E_OUTCOME_ARM " + why);
 };
+const lookup = <T>(table: Record<string, T>, key: string): T | undefined => (Object.hasOwn(table, key) ? table[key] : undefined);
 
 export function loadRegistry(path = REGISTRY_PATH): Registry {
   const reg = JSON.parse(readFileSync(path, "utf8")) as Registry;
   if (reg.schema !== 1 || !reg.arms || !reg.families || !reg.not_run) fail(path + ": not a schema 1 registry with arms, families and not_run");
   for (const [name, arm] of Object.entries(reg.arms)) {
     const bad = (why: string) => fail(path + ": arm " + name + " " + why);
-    if (reg.families[arm.family]?.built !== true) bad("is in family " + arm.family + ", which is not built");
+    const family = lookup(reg.families, arm.family);
+    if (family?.built !== true) bad("is in family " + arm.family + ", which is not built");
     const keys = Object.keys(arm.limits ?? {}).sort();
     if (keys.join() !== [...LIMITS].sort().join() || Object.values(arm.limits).some((v) => typeof v !== "number" || !(v > 0))) bad("needs exactly these limits, each a positive number: " + LIMITS.join(", "));
     if (!Array.isArray(arm.turns) || !arm.turns.length || arm.turns.some((t, i) => t.phase !== "t" + (i + 1) || typeof t.text !== "string" || (i > 0 && t.text.includes(STATEMENT)))) bad("needs turns t1, t2 and so on, with {statement} in turn 1 only");
@@ -40,11 +42,12 @@ export function loadRegistry(path = REGISTRY_PATH): Registry {
       if (name !== "none" || arm.skill !== null || arm.install !== "none" || arm.clean_room !== true || arm.turns.length !== 1 || skillTurns.length) bad("must be the one-turn none arm, with no skill, no install and the clean room");
     } else if (arm.kind === "told") {
       if (!arm.skill || name !== arm.skill + ":told" || arm.install !== "gstack" || arm.clean_room !== false) bad("must be <skill>:told, with the gstack install and no clean room");
+      if (!family!.skills.includes(arm.skill!)) bad("has the skill " + arm.skill + ", which family " + arm.family + " does not hold");
       if (skillTurns.length !== 1 || skillTurns[0]!.text.split(" ")[0] !== "/" + arm.skill) bad("needs exactly one skill turn, and it must open with /" + arm.skill);
     } else bad("has kind " + arm.kind + "; G runs only none and told arms");
   }
-  if (!reg.arms.none) fail(path + ": no none arm");
-  for (const [family, f] of Object.entries(reg.families)) if (f.built) for (const skill of f.skills) if (!reg.arms[skill + ":told"]) fail(path + ": family " + family + " skill " + skill + " has no told arm");
+  if (!lookup(reg.arms, "none")) fail(path + ": no none arm");
+  for (const [family, f] of Object.entries(reg.families)) if (f.built) for (const skill of f.skills) if (!lookup(reg.arms, skill + ":told")) fail(path + ": family " + family + " skill " + skill + " has no told arm");
   return reg;
 }
 
@@ -63,10 +66,11 @@ export function armNames(reg: Registry, skill: string): string[] {
 
 /** The turns an arm sends, in order. {statement} is the task statement with trailing whitespace removed. */
 export function turnScript(reg: Registry, arm: string, statement: string): ScriptTurn[] {
-  const spec = reg.arms[arm];
+  const spec = lookup(reg.arms, arm);
   if (!spec) {
     const [skill, kind] = arm.split(":");
-    const why = skill && kind ? reg.not_run[skill]?.[kind] : undefined;
+    const notRun = skill ? lookup(reg.not_run, skill) : undefined;
+    const why = notRun && kind ? lookup(notRun, kind) : undefined;
     if (why) fail("arm " + arm + " is not run in G: " + why);
     fail("unknown arm " + arm + "; G runs " + Object.keys(reg.arms).join(", "));
   }
@@ -77,6 +81,6 @@ export function turnScript(reg: Registry, arm: string, statement: string): Scrip
 
 /** The phase of the arm's skill turn, or null for the none arm. */
 export function skillTurn(reg: Registry, arm: string): string | null {
-  const spec = reg.arms[arm] ?? fail("unknown arm " + arm);
+  const spec = lookup(reg.arms, arm) ?? fail("unknown arm " + arm);
   return spec.turns.find((t) => t.skill_turn === true)?.phase ?? null;
 }

@@ -1024,7 +1024,7 @@ export const CODES = {
   },
   E_OUTCOME_ARM: {
     exit: 2,
-    meaning: "The outcome-skills arm registry (lanes/outcome-skills/arms/registry.json) refused. Either the file breaks its shape (a told arm without exactly one skill turn that opens with its skill, a turn 1 that does not open with the statement, a missing or non-positive limit, a clean-room told arm, a G skill with no told arm), or a caller asked for something G does not run: a stand-in, forced or untold arm (not run in G, with the prereg's reason), a skill or exposure detector of family X or U (not built), an unknown name, or an empty task statement.",
+    meaning: "The outcome-skills arm registry (lanes/outcome-skills/arms/registry.json) refused. Either the file breaks its shape (a told arm without exactly one skill turn that opens with its skill, a turn 1 that does not open with the statement, a missing or non-positive limit, a clean-room told arm, a told arm whose skill its family does not hold, a G skill with no told arm), or a caller asked for something G does not run: a stand-in, forced or untold arm (not run in G, with the prereg's reason), a skill or exposure detector of family X or U (not built), an unknown name (an inherited name such as __proto__ or toString included), or an empty task statement.",
     fix: "Read the message. Use an arm that armNames lists for a G skill. A registry edit keeps the G prereg's turn texts, whose sha256s tests/outcome-skills/registry.test.ts pins; X and U arms and detectors come with their own families.",
     side_effects: NO_SPEND,
     retry_safe: false,
@@ -1051,8 +1051,8 @@ export const CODES = {
   },
   E_OUTCOME_TOLD_INSTALL: {
     exit: 2,
-    meaning: "The told install (lanes/outcome-skills/arms/told-install.sh and told.ts) does not match the pin's lite manifest: the home was not clean, the checkout is not 699a41cb at 1.94.39.0, a pin source file the detectors were built from differs, config.yaml does not set claude_loadout: lite, the lite render's file count or tree digest differs from #193's, or the hooks differ.",
-    fix: "Install again into a fresh HOME with told-install.sh, and never edit a rendered file. A different digest from a clean install means the install changed, which goes to the Captain.",
+    meaning: "The told install (lanes/outcome-skills/arms/told-install.sh and told.ts) does not match the pin's lite manifest: the home was not clean, the checkout is not 699a41cb at 1.94.39.0, a pin source file the detectors were built from differs, config.yaml does not set claude_loadout: lite, the lite render's file count or tree digest differs from #193's or it holds a broken link, settings.json is missing or not JSON, the hooks differ, a hook command is not its source's pin file under the HOME the session sees (.claude/skills/gstack/hosts/claude/hooks/<name>), a hook file's sha256 differs from the pin's, or git status shows a change in the checkout. Or the told runtime preflight did not find bun on the session's PATH in the arm's image, or could not finish.",
+    fix: "Install again into a fresh HOME with told-install.sh, at the path the session will see as HOME, and never edit a rendered or checked-out file. Put bun on the image's PATH for the session's user. A different digest from a clean install means the install changed, which goes to the Captain.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
@@ -1060,7 +1060,7 @@ export const CODES = {
   },
   E_OUTCOME_CLEAN_ROOM: {
     exit: 2,
-    meaning: "The none arm's clean-room preflight (lanes/outcome-skills/arms/clean-room.ts, running panel v3 C1's script) found a Capy drive or gstack in the arm's session: a .capy, .local/share/gstack or .claude/skills path in its home, a Capy drive mounted under any home directory or under /root, a home or work-tree AGENTS.md or CLAUDE.md that names gstack, or a work tree's .claude/skills. Or the scan could not finish in the image. Each hit is named.",
+    meaning: "The none arm's clean-room preflight (lanes/outcome-skills/arms/clean-room.ts, running panel v3 C1's script) found a Capy drive or gstack in the arm's session. C1's scan: a .capy, .local/share/gstack or .claude/skills path in its home, a Capy drive mounted under any home directory or under /root (seen through other users' 0700 homes), a home or work-tree AGENTS.md or CLAUDE.md that names gstack, or a work tree's .claude/skills. O1's second scan: a .gstack in the home, a .claude/skills folder anywhere in a work tree outside .git, or gstack named in a CLAUDE.md in a parent of a work dir, the home's CLAUDE.md, the home's .claude/settings.json (its hooks), or an entry under .claude/commands or .claude/plugins in the home or a work dir. Or either scan could not finish in the image. Each hit is named.",
     fix: "Remove the named path or mount from the none arm's session, or make the image present and able to run sh with no network, then rerun the same command. The refusal comes before any lease.",
     side_effects: NO_SPEND,
     retry_safe: true,

@@ -93,7 +93,7 @@ describe("the told arm's runtime preflight (keyless, stub docker)", () => {
     const flags = a.slice(0, a.indexOf("img:1"));
     for (const f of ["--rm", "--pull", "never", "--network", "none", "--user", "1000:1000", "-v", "/h:/root", "PATH=" + ENV.PATH, "HOME=/root"]) expect([f, flags.includes(f)]).toEqual([f, true]);
     expect(flags[flags.indexOf("--name") + 1]).toMatch(/^gstack-evals-[0-9a-f]{16}$/);
-    expect(a.slice(a.indexOf("img:1"))).toContain("command -v bun");
+    expect(a.slice(a.indexOf("img:1"))).toContain("command -v bun || exit 1");
   });
 
   test("no bun, a run that did not finish or a spawn error is refused with E_OUTCOME_TOLD_INSTALL", () => {
