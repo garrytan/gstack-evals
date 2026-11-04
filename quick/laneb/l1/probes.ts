@@ -357,22 +357,42 @@ const DRIVE = /\/\.capy\/drive\//;
 const NO_READ = new Set(["echo", "printf", "cd", "pushd", "popd", "pwd", "mkdir", "touch", "test", "[", "[[", "export", "unset", "type", "which", "command", "hash", "true", "false", ":", "dirname", "basename", "realpath", "readlink", "sleep", "exit"]);
 const PATH_SPLIT = /[\s'"=;|&<>()`]+/;
 const GREP = new Set(["grep", "egrep", "fgrep", "rg", "ag", "ack"]);
-/** A grep's words without its patterns, and a sed's or awk's without its script: each -e operand, or the first operand when
- * no -e or -f gives one, names no file the command reads. An -f file is a read and stays. */
+const HERE_SKIP = new Set(["grep", "egrep", "fgrep", "rg"]);
+const SUBSTITUTES = /\$\(|\x60|<\(/;
+const SED_TEXT = /s(.)(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\1|y(.)(?:\\.|(?!\2)[^\\\n])*\2(?:\\.|(?!\2)[^\\\n])*\2|\/(?:\\.|[^/\\\n])*\/|\\(.)(?:\\.|(?!\3)[^\\\n])*\3/g;
+/** Whether a pattern or script operand names nothing the command reads: a literal with no substitution and, for sed, no r, R,
+ * w, W or e command or flag outside its s and y operands and addresses, and for awk, no getline, system(, pipe or redirect. */
+function inert(cmd: string, op: string): boolean {
+  if (SUBSTITUTES.test(op)) return false;
+  if (cmd === "sed") return !/[rRwWe]/.test(op.replace(SED_TEXT, ""));
+  if (cmd !== "awk" && cmd !== "gawk" && cmd !== "mawk") return true;
+  return !/getline|system\(|[|<>]/.test(op);
+}
+/** A grep's words without its patterns, and a sed's or awk's without its script: each inert -e operand, or the first operand
+ * when no -e or -f gives one and it is inert, names no file the command reads. An -f file is a read and stays. */
 function withoutPattern(words: string[]): string[] {
   const cmd = base(words[0] ?? "");
   const valued = GREP.has(cmd) ? /^-[ABCmdD]$/ : cmd === "sed" ? /^-l$/ : cmd === "awk" || cmd === "gawk" || cmd === "mawk" ? /^-[vF]$/ : null;
   if (!valued) return words;
   const kept: string[] = [];
+  let given = false;
   for (let k = 0; k < words.length; k++) {
-    if (/^(-[A-Za-z]*e|--regexp|--expression|--source)$/.test(words[k]!)) k++;
-    else if (!/^(-[A-Za-z]*e.|--(regexp|expression|source)=)/.test(words[k]!)) kept.push(words[k]!);
+    const w = words[k]!;
+    const joined = /^(-[A-Za-z]*e(?=.)|--(regexp|expression|source)=)/.exec(w);
+    if (/^(-[A-Za-z]*e|--regexp|--expression|--source)$/.test(w)) {
+      given = true;
+      if (!inert(cmd, words[k + 1] ?? "")) kept.push(w, ...words.slice(k + 1, k + 2));
+      k++;
+    } else if (joined) {
+      given = true;
+      if (!inert(cmd, w.slice(joined[0].length))) kept.push(w);
+    } else kept.push(w);
   }
-  if (kept.length < words.length || kept.some((w) => /^(-[A-Za-z]*f|--file)/.test(w))) return kept;
+  if (given || kept.some((w) => /^(-[A-Za-z]*f|--file)/.test(w))) return kept;
   let k = 1;
   while (k < kept.length && kept[k]!.startsWith("-") && kept[k] !== "--") k += valued.test(kept[k]!) ? 2 : 1;
   if (kept[k] === "--") k++;
-  return kept.filter((_, i) => i !== k);
+  return kept.filter((w, i) => i !== k || !inert(cmd, w));
 }
 /** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies,
  * with a relative word resolved against the directory the line has cd'd to (the work tree at first). */
@@ -381,7 +401,7 @@ function bashReadPaths(command: string, cwd: string | null): string[] {
   for (const s of simpleCommands(command, cwd)) {
     const words = withoutPattern(s.words);
     const mention = words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
-    const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && r.op !== "<<<").map((r) => r.target)];
+    const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(s.words[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
     for (const t of texts)
       for (const w of t.split(PATH_SPLIT)) {
         if (w.startsWith("/")) out.push(w);
