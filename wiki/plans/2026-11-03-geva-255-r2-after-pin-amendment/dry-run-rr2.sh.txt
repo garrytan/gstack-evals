@@ -173,7 +173,9 @@ import glob, json, os, sys
 fx, links = sys.argv[1], sys.argv[2]
 dirs = sorted(d for d in glob.glob(fx + "/runs/*/*/*/p1") if os.path.exists(d + "/trial.json"))
 early = "Report.\n\n```json\n" + json.dumps([{"file": "src/a.ts", "line": 1, "severity": "INFORMATIONAL", "claim": "dry-run fixture finding", "evidence": "fixture"}]) + "\n```\n"
+edited = 0
 for k, d in enumerate(dirs[:2]):
+    edited += 1
     t = d + "/host/transcript.ndjson"; ms = [json.loads(l) for l in open(t) if l.strip()]
     i = next(i for i, m in enumerate(ms) if m.get("type") == "assistant" and not m.get("parent_tool_use_id") and any(b.get("type") == "tool_use" and b.get("name") in ("Agent", "Task") for b in m["message"]["content"]))
     ms.insert(i, dict(ms[i], message=dict(ms[i]["message"], content=[{"type": "text", "text": early}])))
@@ -183,10 +185,12 @@ for k, d in enumerate(dirs[:2]):
         rel = os.path.relpath(d, fx + "/runs"); os.makedirs(links + "/" + rel, exist_ok=True)
         open(links + "/" + rel + "/skill-contract.log", "w").write("2026-11-03T00:00:01.000Z session=fx event=blocked skill=review missing=specialists-dispatched waived=-\n2026-11-03T00:00:09.000Z session=fx event=met_after_block skill=review missing=- waived=-\n")
         open(links + "/" + rel + "/skill-route.log", "w").write("2026-11-03T00:00:00.000Z session=fx event=routed skill=review score=9 variant=a\n")
-d = dirs[2]; rel = os.path.relpath(d, fx + "/runs"); os.makedirs(links + "/" + rel, exist_ok=True)
-dl = json.load(open(d + "/delta.json")); dl["added"].append(".gstack-home/hooks/skill-contract.log"); json.dump(dl, open(d + "/delta.json", "w"))
-open(links + "/" + rel + "/skill-contract.log", "w").write("2026-11-03T00:00:01.000Z session=fx3 event=blocked skill=review missing=adversarial-pass waived=-\n2026-11-03T00:00:09.000Z session=fx3 event=met_after_block skill=review missing=- waived=-\n")
-print("fixture sessions edited: %d of %d" % (min(2, len(dirs)), len(dirs)))' "$FX" "$FX.hooks"
+if len(dirs) > 2:
+    edited += 1
+    d = dirs[2]; rel = os.path.relpath(d, fx + "/runs"); os.makedirs(links + "/" + rel, exist_ok=True)
+    dl = json.load(open(d + "/delta.json")); dl["added"].append(".gstack-home/hooks/skill-contract.log"); json.dump(dl, open(d + "/delta.json", "w"))
+    open(links + "/" + rel + "/skill-contract.log", "w").write("2026-11-03T00:00:01.000Z session=fx3 event=blocked skill=review missing=adversarial-pass waived=-\n2026-11-03T00:00:09.000Z session=fx3 event=met_after_block skill=review missing=- waived=-\n")
+print("fixture sessions edited: %d of %d" % (edited, len(dirs)))' "$FX" "$FX.hooks"
 step . RO "$FX" "$FX.hooks" --smoke
 echo "# The watch on a synthetic launch: a writer plays one session that creates the contract log and a record, appends a"
 echo "# second line, then removes its work dir; the watch ends when the writer does. The session also planted a routing log"
@@ -197,6 +201,24 @@ ln -s /etc/hostname "$SR/hooks/skill-route.log"; ln -s /etc/hostname "$SR/skill-
   sleep 1; echo "2026-11-03T00:00:02.000Z session=w event=met_after_block skill=review" >> "$SR/hooks/skill-contract.log"; sleep 1; rm -rf "$WT/out/runs/m/gstack-full/t/p1/work" ) &
 step '^(watch|E_)' bun "$W/bin/rr2-hooks.ts" watch "$WT/out" "$WT/links" $!
 step . sh -c "cat $WT/links/m/gstack-full/t/p1/skill-contract.log; ls $WT/links/m/gstack-full/t/p1/records; test ! -e $WT/out/runs/m/gstack-full/t/p1/work && echo 'the work dir is gone; the linked log keeps both lines'; test ! -e $WT/links/m/gstack-full/t/p1/skill-route.log && echo 'the planted routing link was not taken'"
+echo "# Synthetic: a second launch whose session has hooks/ and skill-contracts/ as links to a folder outside its work dir"
+echo "# (on the same file system), which holds a contract log and a record. The watch takes neither."
+WO=$W/watch-out; OD=$WO/outside; SR=$WO/out/runs/m/gstack-full/t/p1/work/t/.gstack-home; mkdir -p "$OD" "$SR"
+echo "2026-11-03T00:00:01.000Z session=outside event=met skill=review" > "$OD/skill-contract.log"; echo '{"outside": true}' > "$OD/o.json"
+ln -s "$OD" "$SR/hooks"; ln -s "$OD" "$SR/skill-contracts"
+sleep 1 &
+step '^(watch|E_)' bun "$W/bin/rr2-hooks.ts" watch "$WO/out" "$WO/links" $!
+step . sh -c "echo files in the links dir: \$(find $WO/links -type f 2>/dev/null | wc -l)"
+echo "# Synthetic: a third launch under RR2_WATCH_TEST_SWAP, the watch's test hook, which swaps a file's folder for a link to"
+echo "# an outside folder right after the watch opens and checks the file. The session's log and record are inside its work"
+echo "# dir, and the outside folder holds a log and a record of the same names. The new hard link then names the outside log,"
+echo "# not the open file, so the watch removes it. The record is copied from the open file."
+WS=$W/watch-swap; OS=$WS/outside; SR=$WS/out/runs/m/gstack-full/t/p1/work/t/.gstack-home; mkdir -p "$OS" "$SR/hooks" "$SR/skill-contracts"
+echo "2026-11-03T00:00:01.000Z session=inside event=blocked skill=review" > "$SR/hooks/skill-contract.log"; echo '{"inside": true}' > "$SR/skill-contracts/s.json"
+echo "2026-11-03T00:00:01.000Z session=outside event=met skill=review" > "$OS/skill-contract.log"; echo '{"outside": true}' > "$OS/s.json"
+sleep 1 &
+step '^(watch|E_)' env RR2_WATCH_TEST_SWAP="$OS" bun "$W/bin/rr2-hooks.ts" watch "$WS/out" "$WS/links" $!
+step . sh -c "find $WS/links -type f | sed 's#^$WS/links/##'; cat $WS/links/m/gstack-full/t/p1/records/s.json; test ! -e $WS/links/m/gstack-full/t/p1/skill-contract.log && echo 'no log link: the link named another file'; grep -rlq outside $WS/links || echo 'nothing from the outside folder is in the links dir'"
 
 echo; echo "## The severity map through the frozen sevmap.ts (section 6)"
 # review-units writes each arm's severity_map from the --severity-map entry named for the arm (src/trial/review/run.ts:497

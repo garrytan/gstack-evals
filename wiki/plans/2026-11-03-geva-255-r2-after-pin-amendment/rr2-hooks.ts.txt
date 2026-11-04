@@ -8,9 +8,12 @@
 //   and hooks/skill-route.log into <links dir>/<model>/<arm>/<task>/p<pass>/, and copies each skill-contracts/*.json
 //   record into records/ there when its size or mtime changes. Both hooks append to their log in place (appendHookTrace in
 //   lib/skill-route.ts at 699a41cb), so one link sees every later line and outlives the work dir. A record is rewritten by
-//   rename, so it is copied. The agent can write its state root, so only a regular file whose real path is inside the
-//   session's work dir is linked, and a record is copied through a descriptor opened without following links. A log made
-//   and removed with its work dir between two scans is lost. The links dir must be on the launch's file system.
+//   rename, so it is copied. The agent can write its state root, so the watch opens each file without following a final
+//   link and takes it only when the open descriptor is a regular file whose real path is inside the session's work dir.
+//   A record is copied from that descriptor, and a log's new hard link is kept only when it has the descriptor's device
+//   and inode. A log made and removed with its work dir between two scans is lost. The links dir must be on the launch's
+//   file system. RR2_WATCH_TEST_SWAP=<dir> is the dry run's test hook: right after each open and check, it swaps the
+//   file's folder for a link to <dir>.
 // readout: one row per session: whether delta.json lists the contract log, the contract log's lines by event (blocked,
 //   met and met_waived, met_after_block, miss, fail-open: a state-error line, unknown shape: a state-error naming an
 //   unknown transcript shape, deferred: agents-running or agents-stalled, no contract: no-contract-skill, the hook ran but
@@ -29,8 +32,8 @@
 // Exit 0, 3 (HOOK_SILENT, --smoke only), 5 bad input.
 // Usage: bun rr2-hooks.ts watch <launch out dir> <links dir> <launch pid>
 //        B=<gstack-evals at 176fdc7> MAP=<reader map> bun rr2-hooks.ts readout <launch out dir> <links dir> [--smoke]
-import { closeSync, constants, existsSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, constants, existsSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 const bad = (why: string): never => {
   console.error("E_RR2_HOOKS " + why + "; fix: see the usage lines at the top of rr2-hooks.ts");
@@ -63,50 +66,61 @@ if (mode === "watch") {
   };
   let linked = 0, copied = 0;
   const seen = new Map<string, string>();
+  const swap = process.env.RR2_WATCH_TEST_SWAP;
   const scan = () => {
     for (const [m, a, t, p] of sessions()) {
       const dest = join(links!, m, a, t, p);
       const work = join(runs, m, a, t, p, "work");
-      const inside = (f: string) => {
+      const open = (f: string) => {
+        let fd: number | null = null;
         try {
-          return regular(f) && realpathSync(f).startsWith(realpathSync(work) + "/");
-        } catch {
-          return false;
-        }
+          fd = openSync(f, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+          if (fstatSync(fd).isFile() && realpathSync("/proc/self/fd/" + fd).startsWith(realpathSync(work) + "/")) {
+            if (swap) {
+              renameSync(dirname(f), dirname(f) + ".swapped");
+              symlinkSync(swap, dirname(f));
+            }
+            return fd;
+          }
+        } catch {}
+        if (fd !== null) closeSync(fd);
+        return null;
       };
       for (const w of ls(work)) {
         const root = join(work, w, ".gstack-home");
         for (const name of LOGS) {
           const f = join(root, "hooks", name);
-          if (existsSync(join(dest, name)) || !inside(f)) continue;
+          if (existsSync(join(dest, name))) continue;
+          const fd = open(f);
+          if (fd === null) continue;
           mkdirSync(dest, { recursive: true });
           try {
             linkSync(f, join(dest, name));
-            linked++;
+            const s = fstatSync(fd), l = lstatSync(join(dest, name));
+            if (l.dev === s.dev && l.ino === s.ino) linked++;
+            else unlinkSync(join(dest, name));
           } catch (e) {
             const code = (e as NodeJS.ErrnoException).code;
             if (code === "EXDEV") bad("the links dir is not on the launch's file system");
             if (code !== "ENOENT" && code !== "EEXIST") throw e;
+          } finally {
+            closeSync(fd);
           }
         }
         for (const r of ls(join(root, "skill-contracts")).filter((x) => x.endsWith(".json"))) {
           const f = join(root, "skill-contracts", r);
-          if (!inside(f)) continue;
-          let fd: number | null = null;
+          const fd = open(f);
+          if (fd === null) continue;
           try {
-            fd = openSync(f, constants.O_RDONLY | constants.O_NOFOLLOW);
             const s = fstatSync(fd);
             const key = s.size + ":" + s.mtimeMs;
-            if (!s.isFile() || seen.get(f) === key) continue;
+            if (seen.get(f) === key) continue;
             mkdirSync(join(dest, "records"), { recursive: true });
             writeFileSync(join(dest, "records", r), readFileSync(fd));
             seen.set(f, key);
             copied++;
-          } catch (e) {
-            const code = (e as NodeJS.ErrnoException).code;
-            if (code !== "ENOENT" && code !== "ELOOP") throw e;
           } finally {
-            if (fd !== null) closeSync(fd);
+            closeSync(fd);
           }
         }
       }
