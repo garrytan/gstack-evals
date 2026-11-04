@@ -13,11 +13,11 @@ links:
   - lanes/real-outcome/score/analysis.ts
   - src/runner/stats/paired.ts
   - garrytan/gstack-evals#193
-source: "Written by GEVA-262 for issue GST-1309 (parent GST-1307) from the Captain's brief of 2026-11-04, under plan v3 (2026-11-03-geva-225-outcome-per-skill-plan, merged as 5f13212)."
+source: "Written by GEVA-262 for issue GST-1309 (parent GST-1307) from the Captain's brief of 2026-11-04, under plan v3 (2026-11-03-geva-225-outcome-per-skill-plan, merged as 5f13212). Reviewed through gstack /autoplan run autoplan-geva262-20261104004035 (lean: one Opus 5.5 reviewer, one round, gstack 1.95.2.0); gate_rev 1 answered rec, A and C by the Captain (GSTA-2). The Implementation plan section is the approved text."
 attachments:
-  - 90afd54316b6318d7907b1e5a1d57013b26f4081d2b70029b118721cab4c9e90  power.py
-  - cc11db167fb93df6a8907a4777a271dc19735a24a545f3813dcbe922ba3658c2  power.txt
-  - 5e3acedb68f0c7ba3eef9e04a66641d3a9663294568dcf6402b5a46f051dfbc5  resize.py
+  - 3a384d25487282d3c26c09e013bfcaca2ec2fcd45d5e0bb2959439b44a248e42  power.py
+  - 102d84516e8a49023d50cbeef55f46ebb018b1a5fe00ccfab1688c95db471978  power.txt
+  - e318b502b636dc3647a52b3eed1923c29a22d514021848f574977304236ffa32  resize.py
   - 7aa4bfdd6cad4ae453b8b7c4b1a7168ab7556a390d582dd6e2a0a8d073768d08  resize.txt
 ---
 
@@ -27,7 +27,7 @@ GEVA-262, issue GST-1309 (parent GST-1307), Captain GEVA-2. Plan only: nothing i
 
 ## Approval
 
-The Captain scoped this post on 2026-11-04 and directed its six points, M1 among them. Review follows R65 for a paid-eval prereg: one strong reviewer, one gate revision and the outside-terms question, then a light /ship. This post approves no spend. A paid stage starts only under the start rules in section 10: O6 merged, the stage's cap recorded in the Captain's approvals/ after this post merges, and O6's envelope check passing for that stage.
+The Captain scoped this post on 2026-11-04 and directed its six points, M1 among them. Review followed R65 for a paid-eval prereg: one strong reviewer, one gate revision and the outside-terms question, then a light /ship. Gate_rev 1 of /autoplan run autoplan-geva262-20261104004035 (rec_hash f20b03f40946) was answered by the Captain (GSTA-2) on 2026-11-04: rec (d1a, d2a, d3a and p1b), A (G's confirmatory panel holds at most 3 tasks per repository, with plan v3's 8 as the written-in fallback) and C (when both G skills are past the 20-point bound, autoplan stops first and plan-eng-review re-sizes alone). This post approves no spend. A paid stage starts only under the start rules in section 10: O6 merged, the stage's cap recorded in the Captain's approvals/ after this post merges, and O6's envelope check passing for that stage.
 
 ## ELI5
 
@@ -38,7 +38,7 @@ This post fixes every rule of that check before it runs. It names the gstack ver
 ## Before → after
 
 - **Before:** plan v3 leaves G's pin, told install, autoplan's told kind, slice rules, caps and start rules to this prereg. Under plan v3's survivor order, if autoplan fails admission, plan-eng-review re-sizes to 60 tasks x 2 trials, passes the 20-point bound and stops, so the GST-1218 reading is lost. Plan v3's power grid is a t-test times 1.2, not the test that decides.
-- **After:** every admission rule is frozen, with the pin 699a41cb, the told lines, the caps, the reservation mechanics and the start rules. A lone G survivor re-sizes on a fixed tasks-for-trials ladder, so plan-eng-review alone runs at 48 x 4 for $1,650 with an 18.6-point MDD at house prices. The lane's own decision rule is simulated exactly: power at every MDD this post claims is 0.82 or more across the control rates and clustering we expect, and its false-claim rate under a true null is under the nominal level.
+- **After:** every admission rule is frozen, with the pin 699a41cb, the told lines, the caps, the reservation mechanics and the start rules. A lone G survivor re-sizes on a fixed tasks-for-trials ladder, so plan-eng-review alone runs at 48 x 4 for $1,650 with an 18.6-point MDD at house prices. The lane's own decision rule is simulated exactly: power at every MDD this post claims is 0.817 or more across the control rates and clustering we expect, with at most 3 tasks per repository, and its false-claim rate under a true null is under the nominal level.
 
 ## Why it matters
 
@@ -58,7 +58,8 @@ GST-1218 holds plan-eng-review and plan-devex-review as cut candidates. The proj
 3. **Opus 5.5 is the only model under test.** Plan v3 leaves GPT-6.1 Sol out of wave 1 on price, and particle-1 is left to admission's 2-point recheck. This post runs no particle-1 session; a particle-1 row that the recheck admits comes back as an amendment (section 4).
 4. **autoplan is tested in its default kind at the pin, which is full.** In a Claude Code session outside Capy, the after pin runs the full panel unless told --kind feature (section 4). That is what a gstack user gets, and plan v3's 5.0 price multiple assumes it.
 5. **M1 replaces d7's survivor order for G.** A lone survivor tries its planned size, then 4 trials at the same tasks, then 4 trials at 6 fewer tasks each step, and takes the first design inside the $1,700 line and under the 20-point bound (section 7).
-6. **Sizing stays on plan v3's grid; power is checked by exact simulation.** The exact simulation shows the grid is conservative by 1 to 4 points. This post keeps plan v3's numbers and reports the check, because changing the sizing scale is a plan v3 change that belongs to the Captain (section 8).
+6. **G's confirmatory panel holds at most 3 tasks per repository.** Plan v3 allows 8, and at 8 the worst-case power at the claimed MDDs falls to about 0.70 (section 8). The Captain chose the cap of 3, with plan v3's 8 written in as the fallback if screening can't fill it.
+7. **Sizing stays on plan v3's grid; power is checked by exact simulation.** The exact simulation shows the grid is conservative by 1 to 4 points. This post keeps plan v3's numbers and reports the check, because changing the sizing scale is a plan v3 change that belongs to the Captain (section 8).
 
 ## Implementation plan
 
@@ -66,8 +67,8 @@ GST-1218 holds plan-eng-review and plan-devex-review as cut candidates. The proj
 
 Every plan v3 rule this post doesn't name stands as written, and "plan v3 N" points to its section N.
 
-- **Changed, for family G only (the Captain's M1):** the one-survivor re-size order (plan v3 6 and 8, d7). Section 7 freezes the new ladder and its order of stops. Families X and U keep d7.
-- **Filled in, where plan v3 leaves the detail to this prereg:** the pin and its install (section 2), the slice's composition (section 3), the told lines and autoplan's kind (section 4), the untold, stand-in and particle-1 rows (section 4), session limits, caps and reserve mechanics (sections 5 and 9), admission's exact rule and the inputs its re-size reads (section 6) and start rules (section 10).
+- **Changed, for family G only (the Captain's M1, with pick C):** the one-survivor re-size order (plan v3 6 and 8, d7), and which skill stops first when both pass the bound at admission item 5 (plan v3 6). Section 7 freezes the ladder and the order of stops. Families X and U keep d7.
+- **Filled in, where plan v3 leaves the detail to this prereg:** the pin and its install (section 2), the slice's composition (section 3), the told lines and autoplan's kind (section 4), the untold, stand-in and particle-1 rows (section 4), session limits, caps and reserve mechanics (sections 5 and 9), admission's exact rule and the inputs its re-size reads (section 6), G's decision configuration and the confirmatory panel's cap of 3 tasks per repository (section 8, the Captain's pick A) and start rules (section 10).
 - **Unchanged and restated only for reading:** the measures and scoring rules (plan v3 3), the arms' turn scripts (plan v3 4), the decision test (plan v3 4), the R48 and R61 routes (plan v3 9), custody (plan v3 12) and outside terms (plan v3 11).
 
 ### 2. Pins
@@ -119,14 +120,14 @@ Plan v3 3's rules hold as written: solved (the final tree passes every hidden te
 
 **Session limits at admission.** Plan v3 freezes confirmatory limits at a multiple of admission's p95, so admission needs its own: none $8 of model calls, 200 agent turns and 90 minutes; told plan-eng-review $20, 200 turns and 120 minutes; told autoplan $45, 400 turns and 240 minutes. Each dollar limit is about 8 to 10 times plan v3's house price for the arm, so a limit binds only on a session far past the plan. A session that hits a limit is an arm stop, counted in item 4 and charged at its metered cost in item 5.
 
-**Order.** Every arm's sessions run interleaved in one order drawn with seed 20261104, trial 1 on every task before any trial 2.
+**Order and draws.** Tasks are identified by their sealed labels, sorted. Every arm's sessions run interleaved: for trial 1, then trial 2, Python's random.Random(20261104 + trial).shuffle orders the sorted list of (arm, label) pairs. The exposure sample (section 6, item 2) is random.Random(20261105).sample(labels, 8); for the i-th drawn task, random.Random(20261105 + i).randrange(2) picks trial 1 or 2. A picked trial that is still a gap after its rerun is replaced by the same task's other trial; if both are gaps, by the first task in random.Random(20261106).sample(labels, 12) not already drawn.
 
 ### 6. Admission rule
 
 Per skill, on the slice, Opus 5.5 only. Each item is read from the frozen data, and the first that fails decides the route.
 
 1. **Headroom.** none's solved share over its valid trials is between 0.20 and 0.80, both ends included. With 24 valid trials that is 5 to 19 solved. The none arm is shared, so a headroom failure stops both skills: below 0.20 as FIX-METHOD (floor), above 0.80 as FIX-METHOD (saturation), with R61's one ceiling raise as a proposal that needs its own price and approval (plan v3 9).
-2. **Exposure.** 8 told trials per skill, one on each of 8 tasks drawn with seed 20261105 and one of each task's two trials drawn with the same seed, are read by the skill's detector. Pass at 7 or more exposed. The exposure of all 24 told trials prints as a description. A failure stops that skill as FIX-METHOD (exposure).
+2. **Exposure.** 8 told trials per skill, drawn as section 5 says (one trial on each of 8 tasks), are read by the skill's detector. Pass at 7 or more exposed. The exposure of all 24 told trials prints as a description. A failure stops that skill as FIX-METHOD (exposure).
 3. **Instruments.** The mutation tool scores at least 90% of the trees in the skill's comparison (its 24 told trees and the 24 none trees) without a tool error, and the verifier returns a run for every tree. A failure stops the skill as FIX-METHOD (instrument), with the fix named.
 4. **Rig.** At most 1 gap per arm after reruns (5% of 24, rounded down), and every arm stop explained by the lane's frozen termination taxonomy.
 5. **Price and power.** resize.py runs with the metered inputs. MULT is none's mean session cost over $0.191. M_PER and M_AP are each told arm's mean session cost over none's, across all its told sessions, because the confirmatory told arm is scored intention to treat; exposed and unexposed told means print apart. AUTH_PAID is the slice's paid author and audit dollars per valid task, and AUTH_EXTRA its crew dollars per valid task over the second six valid tasks. The in-band yield stays at plan v3's 30%, which the projection check after screening re-reads (plan v3 6). The both-alive re-size is cost.py's frozen sizing. A skill whose re-sized MDD passes the 20-point bound stops as FIX-METHOD (price). Section 7 says what the other skill does.
@@ -135,11 +136,11 @@ A skill that passes all five goes to stage 4 at the design item 5 printed, throu
 
 ### 7. One survivor in G: the M1 ladder
 
-M1 replaces plan v3's d7 order for G. It applies whenever exactly one G skill is left before the confirmatory run starts: after a stop at admission items 1 to 5, or at the projection check after screening.
+M1 replaces plan v3's d7 order for G. It applies whenever exactly one G skill is left before the confirmatory run starts: after a stop at admission items 1 to 5, or at the projection check after screening. It also governs a lone survivor after a sibling's futility stop; the confirmatory prereg says how it applies to a panel already built, and at these sizes the look can't fire (section 8).
 
-**Which skill survives.** A skill that fails items 1 to 4 stops, and the other re-sizes alone. If item 5's both-alive re-size leaves one skill past the bound, that skill stops and the other re-sizes alone. If both are past it, autoplan stops first, as plan v3 8's envelope would trim it before plan-eng-review, and plan-eng-review re-sizes alone.
+**Which skill survives.** A skill that fails items 1 to 4 stops, and the other re-sizes alone. If item 5's both-alive re-size leaves one skill past the bound, that skill stops and the other re-sizes alone. If both are past it, autoplan stops first, as plan v3 8's envelope would trim it before plan-eng-review, and plan-eng-review re-sizes alone (the Captain's pick C, because it keeps P1's plan-eng-review read, which is why M1 exists).
 
-**The ladder,** a fixed order with no search (resize.py): drop a particle-1 row if there is one (G's plan has none); then try, in order, the survivor's both-alive size n0 x k0, then n0 x 4 if k0 is under 4, then 4 trials at n0 - 6, n0 - 12 and so on down to 24 tasks. The design is the first rung whose alone price, by survivor.py's frozen model, is inside the $1,700 plan line and whose MDD, by plan v3's grid times 1.2, is at most 20 points. If no rung qualifies, the survivor stops as FIX-METHOD (price). The alone price charges the survivor every shared cost still to come, as plan v3 8 does.
+**The ladder,** a fixed order with no search (resize.py): drop a particle-1 row if there is one (G's plan has none); then try, in order, the survivor's both-alive size n0 x k0, then n0 x 4 if k0 is under 4, then 4 trials at n0 - 6, n0 - 12 and so on down to 24 tasks. The design is the first rung whose alone price, by survivor.py's frozen model, is inside the $1,700 plan line and whose MDD, by plan v3's grid times 1.2, is at most 20 points. If no rung qualifies, the survivor stops as FIX-METHOD (price). survivor.py's alone price charges the survivor half of G's crew and calibration lines, the whole slice authoring and admission none arm, its own told admission and every bulk cost still to come, so it counts about $28 of already-spent shared cost twice, on the safe side.
 
 **What it gives** (resize.txt):
 
@@ -157,19 +158,21 @@ So P1's plan-eng-review reading survives an autoplan stop at house prices and at
 
 ### 8. Power and null size, simulated on the deciding test
 
-power.py drives the decision rule as analysis.ts and paired.ts compute it, with no closed form. Each task's arm score is the mean of its trials, delta is the mean paired difference, z uses the cluster-robust standard error over repositories, and a reading counts as helps or hurts only when |z| > 1.96 and the exact repository sign-flip one-sided p in z's direction is at most 0.025, counted inclusively as paired.ts does; none above 85% makes no claim. Panels use 20 repositories, plan v3's floor, the fewest clusters the rules allow. The told rate is the none rate plus a shift, a task effect (sd 0.15) and a repository effect sized to the stated intraclass correlation of the task difference, clipped to [0, 1]; the shift is solved so the true mean difference equals the effect exactly after clipping. Nulls are null: the strict null sets told equal to none, and the heterogeneous null adds a symmetric perturbation that needs no clipping. 4,000 simulations a point, 20,000 a null point, seed 20261104 (power.txt).
+power.py drives the decision rule as analysis.ts and paired.ts compute it, with no closed form. Each task's arm score is the mean of its trials, delta is the mean paired difference, z uses the cluster-robust standard error over repositories, and a reading counts as helps or hurts only when |z| > 1.96 and the exact repository sign-flip one-sided p in z's direction is at most 0.025, counted inclusively as paired.ts does; none above 85% makes no claim. Panels use 20 repositories, plan v3's floor, the fewest clusters the rules allow, in the most concentrated layout that keeps at most 3 tasks per repository (decision 6). The told rate is the none rate plus a shift, a task effect (sd 0.15) and a repository effect sized to the stated intraclass correlation of the task difference, clipped to [0, 1]; the shift is solved so the true mean difference equals the effect exactly after clipping. Nulls are null: the strict null sets told equal to none, and the heterogeneous null adds a symmetric perturbation that needs no clipping. 4,000 simulations a point, 20,000 a null point, seed 20261104 (power.txt).
 
 The control rates we expect come from G's frozen screen (2 none trials, a third on 0 of 2, kept at 1 of 2 or 1 of 3) applied to a U-shaped pool: mean none rate 0.48. "plan v3 band" is plan v3's own model (rates from 0.15 to 0.85 around 0.5), the hardest case here.
 
 | Design | Claimed MDD | Power at the claimed MDD: expected (ICC 0.05) / worst (plan v3 band, ICC 0.10) | Simulated MDD: expected / worst |
 |---|---|---|---|
 | plan-eng-review, both alive, 60 x 3 | 18.6 | 0.926 / 0.841 | 15.5 / 18.0 |
-| autoplan, both alive, 54 x 3 | 19.2 | 0.910 / 0.820 | 16.5 / 19.0 |
-| plan-eng-review alone under M1, 48 x 4 | 18.6 | 0.923 / 0.848 | 15.5 / 17.5 |
-| 42 x 4 (forced price, both alive or alone) | 19.8 | 0.933 / 0.866 | 16.5 / 18.5 |
+| autoplan, both alive, 54 x 3 | 19.2 | 0.910 / 0.817 | 17.0 / 19.0 |
+| plan-eng-review alone under M1, 48 x 4 | 18.6 | 0.913 / 0.843 | 16.0 / 18.0 |
+| 42 x 4 (forced price, both alive or alone) | 19.8 | 0.925 / 0.851 | 17.0 / 19.0 |
 | plan-eng-review alone under d7, 60 x 2 (for comparison) | 21.6 | 0.906 / 0.806 | 19.0 / 21.5 |
 
-For the four designs this post can run, power at the claimed MDD is 0.82 or more in every scenario, including control means of 0.30 and 0.70 and an unscreened flat pool. The claims hold.
+For the four designs this post can run, power at the claimed MDD is 0.817 or more in every scenario, including control means of 0.30 and 0.70 and an unscreened flat pool. The lowest is autoplan at 54 x 3 in the plan v3 band at ICC 0.10. The claims hold.
+
+**The repository cap and its fallback.** G's confirmatory panel takes at most 3 tasks from any one repository (decision 6). The Captain's rule: if the screened pool can't fill at least 20 repositories at 3 tasks each, the panel falls back to plan v3's limit of 8 per repository, with no new decision. The fallback's worst case is printed here before any spend. At plan v3's 8, in the most concentrated layout that limit allows, power at the claimed MDD in the plan v3 band at ICC 0.10 is 0.707 for plan-eng-review at 60 x 3, 0.698 for autoplan at 54 x 3, 0.730 for plan-eng-review alone at 48 x 4 and 0.732 at 42 x 4. The simulated MDD in that case is 20.5 to 21.5 points, so a 20-point effect would be missed more than 20% of the time. On the screened pool it is 0.831 to 0.854 at ICC 0.05 and 0.883 to 0.906 at ICC 0 (power.txt, fallback block). A results post that ran under the fallback says so beside every verdict.
 
 **Null size.** Under both nulls, at ICC 0 and 0.10, a helps reading came in 1.6% to 2.0% of simulations and any claim in 3.4% to 4.0%, against nominal 2.5% and 5%. Requiring both the z crossing and the inclusive sign-flip p makes the rule conservative.
 
@@ -186,12 +189,14 @@ Each skill's evaluation is capped at $2,000 all-in and the program at $10,000 (p
 | Stage | Expected at house prices | Cap, reserved by O6 before the stage starts | Charged to |
 |---|---|---|---|
 | T-G paid author and audit calls, and VM | about $20 (TS's $1.39 per valid task, plus VM) | $60 | split evenly |
-| Admission none arm, model calls (24 sessions) | $25 | $192 (24 x $8) | split evenly |
-| Admission told plan-eng-review, model calls (24 sessions) | $52 | $480 (24 x $20) | plan-eng-review |
-| Admission told autoplan, model calls (24 sessions) | $116 | $1,080 (24 x $45) | autoplan |
+| Admission none arm, model calls (24 sessions and 2 reruns) | $25 | $229 (26 x $8 x 1.1) | split evenly |
+| Admission told plan-eng-review, model calls (24 sessions and 2 reruns) | $52 | $572 (26 x $20 x 1.1) | plan-eng-review |
+| Admission told autoplan, model calls (24 sessions and 2 reruns) | $116 | $1,287 (26 x $45 x 1.1) | autoplan |
 | Admission VM and host time, 40 hours at $0.60 | about $10 | $24 | split evenly |
 
-Each model-call cap is the session limit times the sessions, so no admission batch can pass its cap and a cap stop can't cut a batch short. At these caps plan-eng-review reserves $618 and autoplan $1,218 for the slice and admission, and both stay inside $2,000 with their crew shares. Crew threads (T-G, the admission run and its results post) work under token caps in their own briefs, sized to plan v3's crew lines; this thread counts in G's $70 prereg-and-run line.
+Each model-call cap covers every session and 2 gap reruns per arm at their session limits, plus 10% for the call in flight when a session reaches its limit: O1's harness enforces each limit at the metering proxy, so a session can pass it by at most that call. If O5's dry run shows a larger overshoot, the stage does not start. A third gap in an arm gets no rerun and stays a gap for item 4. A host-hour cap stop ends the batch incomplete: sessions not run count as gaps, and the batch is never rerun to change a verdict. At these caps plan-eng-review reserves $729 and autoplan $1,444 for the slice and admission, and both stay inside $2,000 with their crew shares.
+
+**Crew threads.** Crew model use (the T-G thread, the admission run thread and its results post, under token caps in their own briefs sized to plan v3's crew lines) is not a ledger call, so O6 can't meter it. Each crew thread's token cap, at about $1 per 1,000 credits, counts as an open reservation against its skills from the thread's start, and its credits move to settled spend at each stage boundary. This thread counts in G's $70 prereg-and-run line.
 
 **Reserve mechanics.** A skill's reserve is its $2,000 cap less its plan: $787 for plan-eng-review and $348 for autoplan at house prices. It pays overruns on crew lines (the slice thread is likely to pass plan v3's $14 slice crew line, as TS's thread did), gap reruns, and a new admission if a pin changes. It never pays a retry to change a verdict. Admission's re-size puts every design inside the $1,700 line, so at least $300 stays in reserve.
 
@@ -218,9 +223,10 @@ An admission results post, in its own PR, reports per skill: none's solved share
 
 Asked of every reviewer (R65): are any outside terms, licences or rights involved? Yes:
 
-- **Task repositories.** MIT, Apache-2.0 or BSD only, with the SPDX id read from the base commit's LICENSE file and recorded. Statements are rewritten in our words, and no issue text, code or test is published. Repositories are named in a results post only after a terms check per repository (plan v3 11).
+- **Task repositories.** MIT, Apache-2.0, BSD-2-Clause or BSD-3-Clause only, with the SPDX id read from the base commit's LICENSE file and recorded. Statements are rewritten in our words, and no issue text, code or test is published. Repositories are named in a results post only after a terms check per repository (plan v3 11).
 - **Tools.** gstack (MIT) at the pin. The mutation tools of plan v3 10: cargo-mutants (MIT), StrykerJS (Apache-2.0), mutmut (BSD-3-Clause) and go-mutesting (MIT). numpy (BSD-3-Clause) for power.py only.
-- **Model and harness.** Claude Code is proprietary software under Anthropic's terms, here driving Anthropic's own Opus 5.5 through Anthropic's API, so the gateway question in plan v3 11 does not arise. No OpenRouter call runs under this prereg. Not verified: Anthropic's terms on publishing comparative results; the results post checks them before it names numbers.
+- **Model and harness.** Claude Code is proprietary software under Anthropic's terms, here driving Anthropic's own Opus 5.5 through Anthropic's API, so the gateway question in plan v3 11 does not arise for any admission session. Not verified: Anthropic's terms on publishing comparative results; the results post checks them before it names numbers.
+- **T-G's paid calls.** The author model, from a family other than Anthropic, is named in the T-G brief before any call, with its provider's terms. The audits run on Opus 5.5 (Anthropic's commercial terms) and GPT-6.1 Sol (OpenAI's services agreement and usage policies). Sealed task bodies go to these providers, so the T-G brief cites each provider's clause on training with API inputs before any body is sent, and any call through OpenRouter carries the data-collection deny (plan v3 11).
 - **No benchmark dataset.** Tasks are mined from public repositories, so no benchmark licence applies.
 
 ### 13. Not in scope
@@ -229,4 +235,9 @@ Building O1 to O6, running anything, the X and U families' preregs, the confirma
 
 ## Review record
 
-The lean /autoplan review of this plan (R65: one reviewer, one gate revision, the outside-terms question) is recorded here before the pull request is called ready.
+gstack /autoplan run autoplan-geva262-20261104004035 on gstack 1.95.2.0, lean kind (R65): one Opus 5.5 reviewer at high effort read the Implementation plan with the draft bundle, reran power.py and resize.py (both reproduced their attached outputs byte for byte) and answered the outside-terms question. It raised 11 findings: 3 High, 4 Medium and 4 Low. The gate (gate_rev 1, rec_hash f20b03f40946) carried the three Highs; the Captain (GSTA-2) answered rec, A and C on 2026-11-04, and the revision applied them without re-review, as the lean kind does.
+
+- d1 (High): G's decision rule is now frozen as one final look at alpha 0.05 (section 8). The reviewer measured that the lane's default two-look boundary of 1.977 cut the worst-case power of 54 x 3 from 0.820 to 0.814 on the earlier even layout.
+- d2 (High): power.py now uses the most concentrated layout the panel rule allows and prints plan v3's 8-per-repository case. At 8 the worst case fell under 0.80, so the Captain capped G's panel at 3 tasks per repository (pick A), with 8 as the written-in fallback.
+- d3 (High): resize.py's input checks exit with a code and a fix.
+- Medium and Low, fixed in the same revision: crew threads and gap reruns now hold reservations, and caps carry headroom for the call in flight (section 9); T-G's paid calls are in the outside terms; the futility finding went to the Captain, and the confirmatory prereg owns it; the stop order joined M1 as a listed change; the alone price is described as survivor.py computes it; the flat-pool scenario is named as screened; and the session order and exposure sample have frozen draws.

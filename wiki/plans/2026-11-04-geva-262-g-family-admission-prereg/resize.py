@@ -22,9 +22,22 @@ PINS = {"cost.py": "1ce669d3bc1408b4ac232552030d01756c74e26713c16375317dedd37827
         "survivor.py": "64b05e7c5652a9f9549004eba218b6c11986e7b485094a4ad2906b40cbfc0624",
         "mdd-grid.json": "c15ea043bdf715ce227b962eeed9f9bf9edcbe87e0103118d9bd16c384878f15"}
 for f, h in PINS.items():
-    got = hashlib.sha256(open(os.path.join(P, f), "rb").read()).hexdigest()
+    path = os.path.join(P, f)
+    if not os.path.isfile(path):
+        sys.exit("E_PLAN_INPUT_MISSING: %s not found; fix: run resize.py from its folder in a gstack-evals checkout that holds plan v3 as merged at 5f13212" % path)
+    got = hashlib.sha256(open(path, "rb").read()).hexdigest()
     if got != h:
-        sys.exit("plan v3 input %s changed: %s" % (f, got))
+        sys.exit("E_PLAN_INPUT_CHANGED: %s sha256 %s, pinned %s; fix: restore it from 5f13212, or change the pin only in a superseding prereg" % (f, got, h))
+
+NUMERIC = ("MULT", "M_PER", "M_AP", "AUTH_PAID", "AUTH_EXTRA", "YIELD_G", "TOLD_SCALE")
+for k in NUMERIC:
+    if k in os.environ:
+        try:
+            v = float(os.environ[k])
+        except ValueError:
+            v = float("nan")
+        if not (v > 0 and v < 1000) or (k == "YIELD_G" and v > 1):
+            sys.exit("E_RESIZE_INPUT: %s=%r is not a positive number%s; fix: pass the metered value from section 6, item 5" % (k, os.environ[k], " at most 1" if k == "YIELD_G" else ""))
 
 def model(env):
     saved = {k: os.environ.get(k) for k in env}
@@ -109,7 +122,7 @@ def run(name, env):
                 other, round(at_admission(ns, other)), round(g_total), tot[0] + tot[1], round(total), ENVELOPE, "fits" if total <= ENVELOPE else "OVER"))
 
 if __name__ == "__main__":
-    extra = {k: os.environ[k] for k in ("MULT", "M_PER", "M_AP", "AUTH_PAID", "AUTH_EXTRA", "YIELD_G", "TOLD_SCALE") if k in os.environ}
+    extra = {k: os.environ[k] for k in NUMERIC if k in os.environ}
     if extra:
         run("metered inputs " + json.dumps(extra, sort_keys=True), dict({"P1RATIO": "0.41", "AUTH_EXTRA": "1.2"}, **extra))
     else:

@@ -10,7 +10,9 @@
 #     direction is at most 1 - Phi(1.959964) = 0.025, counted inclusively (null sum >= observed), as paired.ts does;
 #   - the ceiling rule: none's trial share above 0.85 makes no claim.
 # The futility look (plan v3 section 6) is simulated separately in its B-value form, because O4 has not frozen its
-# conditional-power formula yet. Data model: 20 repositories (plan v3's floor), tasks spread as evenly as possible;
+# conditional-power formula yet. Data model: 20 repositories (plan v3's floor) in the most concentrated layout the
+# frozen cap allows: as many repositories at the cap as the task count permits, one remainder, the rest at 1 task.
+# The main tables use this prereg's cap of 3 tasks per repository; the fallback block uses plan v3's 8;
 # per-task none rate p from the control scenario; told rate q = clip(p + d + a_repo + e_task, 0, 1) with e ~ N(0, 0.15)
 # and a_repo sized to the stated ICC of the observed task difference; d is solved so the panel's true mean
 # difference E[q - p] equals the effect exactly, after clipping. Nulls are null: strict (q = p) or heterogeneous with a
@@ -36,9 +38,10 @@ D = os.path.dirname(os.path.abspath(__file__))
 def phi(x):
     return 0.5 * (1 + math.erf(x / math.sqrt(2)))
 
-def repo_of(n, g=G_REPOS):
-    base, extra = divmod(n, g)
-    sizes = [base + 1] * extra + [base] * (g - extra)
+def repo_of(n, cap, g=G_REPOS):
+    a = min((n - g) // (cap - 1), g)
+    sizes = [cap] * g if a == g else [cap] * a + [n - cap * a - (g - a - 1)] + [1] * (g - a - 1)
+    assert sum(sizes) == n and len(sizes) == g and 1 <= min(sizes) and max(sizes) <= cap, (n, cap, sizes)
     return np.repeat(np.arange(g), sizes), np.array(sizes)
 
 def screen_pass(p):
@@ -116,10 +119,10 @@ def decide(Acnt, Bcnt, repo, sizes, k):
     return claim & (z > 0), claim & (z < 0), ceiling, z, se
 
 class World:
-    def __init__(self, n, k, shape, icc, sims, seed):
+    def __init__(self, n, k, shape, icc, sims, seed, cap=3):
         rng = np.random.default_rng(seed)
         self.n, self.k, self.shape, self.icc = n, k, shape, icc
-        self.repo, self.sizes = repo_of(n)
+        self.repo, self.sizes = repo_of(n, cap)
         self.rng_cal = np.random.default_rng(seed + 1)
         self.p = draw_p(rng, shape, sims * n).reshape(sims, n)
         self.e = rng.normal(0, SD_EFF, (sims, n))
@@ -221,7 +224,7 @@ DESIGNS = [
 
 def main():
     print("power.py (GEVA-262): the lane's decision rule, simulated; seed %d, %d sims a point, %d a null point, %d repositories" % (SEED, SIMS, SIMS_NULL, G_REPOS))
-    print("columns: design | tasks x trials | ICC | control scenario (its mean none rate) | power at the plan's MDD | simulated MDD (80%%) | ceiling share at that MDD")
+    print("columns: design | tasks x trials | ICC | control scenario (its mean none rate) | power at the plan's MDD | simulated MDD (80%%) | ceiling share at that MDD; at most 3 tasks per repository")
     for i, (name, n, k, claim) in enumerate(DESIGNS):
         for icc in (0.0, 0.05, 0.10):
             for sname, shape in SCENARIOS.items():
@@ -242,6 +245,13 @@ def main():
                 helps, hurts, ceil, z, se = decide(A, B, w.repo, w.sizes, k)
                 print("%dx%d | ICC %.2f | %s null | helps %.4f | any claim %.4f" % (n, k, icc, kind, float(helps.mean()), float((helps | hurts).mean())))
                 sys.stdout.flush()
+    print("fallback layout, plan v3's limit of 8 tasks per repository at its most concentrated (the prereg's fallback if the pool can't fill the cap of 3):")
+    for i, (name, n, k, claim) in enumerate(DESIGNS[:4]):
+        for sname, icc in (("screened U-pool", 0.0), ("screened U-pool", 0.05), ("plan v3 band", 0.10)):
+            w = World(n, k, SCENARIOS[sname], icc, SIMS, SEED + 70000 + 1000 * i + int(icc * 100), cap=8)
+            pw, ce = w.power(claim / 100)
+            print("%s | %dx%d | sizes %s | ICC %.2f | %s | %.3f at %.1f | %s" % (name, n, k, "-".join(map(str, w.sizes)), icc, sname, pw, claim, mdd_search(w)))
+            sys.stdout.flush()
     print("futility look, B-value form at a random half (stop when conditional power for +MDD and for -MDD are both under 10%):")
     for i, (name, n, k, claim) in enumerate(DESIGNS[:4]):
         w = World(n, k, SCENARIOS["screened U-pool"], 0.0, SIMS, SEED + 90000 + i)
