@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { armSpec, jobConfig } from "../runner/grid.ts";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
-import { itemCheck, OPUS, R3_ARMS, routePassed, SOL } from "../r3/screen.ts";
+import { admission, itemCheck, OPUS, R3_ARMS, R3A4, routePassed, SOL } from "../r3/screen.ts";
 import { armCheck, capSizing, formulaMdd, gridOrder, gridOutcome, gridProjection, hookState, idsSha, keepRate, phaseHeadings, PIN, R3B, R3B4, recheckGate, recheckStopLine, recheckTasks, repoSkills, startRule, taskList, type GridTrial } from "../r3/r3b.ts";
 
 const laneb = join(import.meta.dir, "..");
@@ -160,9 +160,11 @@ describe("the re-check gate", () => {
   });
 });
 
-function record(m = opus, o: { none?: number; told?: number } = {}) {
+// R3a4's admission() writes pilot.tasks in the order loadR3Jobs read the result directories, not the draw order.
+const admittedPilot = () => admission([], [...recheckTasks()].sort().map((task) => gt({ task, arm: "gstack" })), R3A4["r3a4-opus"]!).record.pilot as { tasks: string[] };
+function record(m = opus, o: { none?: number; told?: number; pilot?: string[] } = {}) {
   const p = join(tmp("r3b-rec-"), "record.json");
-  writeFileSync(p, JSON.stringify({ item: m.from, outcome: "admitted", n: 70, r3b_tasks: tasks(m), pilot: { tasks: recheckTasks() }, measured_cost_per_trial_usd: { none: o.none ?? m.basis.screenNoneUsd, told: o.told ?? m.basis.pilotToldUsd } }));
+  writeFileSync(p, JSON.stringify({ item: m.from, outcome: "admitted", n: 70, r3b_tasks: tasks(m), pilot: { tasks: o.pilot ?? admittedPilot().tasks }, measured_cost_per_trial_usd: { none: o.none ?? m.basis.screenNoneUsd, told: o.told ?? m.basis.pilotToldUsd } }));
   return p;
 }
 
@@ -174,6 +176,16 @@ describe("the start rule and the projection checks", () => {
     expect(over.ok).toBe(false);
     expect(over.line).toEndWith("passes r3b4-opus's $376 cap; r3b4-opus does not bind");
     expect(() => startRule(record(sol), opus, 376)).toThrow("not r3a4-opus's admitted record");
+  });
+
+  test("the start rule takes the pilot's 10 tasks in any order, as R3a4's admission wrote them, and refuses another set", () => {
+    expect(admittedPilot().tasks).not.toEqual(recheckTasks());
+    expect(startRule(record(opus), opus, 376).ok).toBe(true);
+    expect(startRule(record(sol, { pilot: [...recheckTasks()].reverse() }), sol, 393).ok).toBe(true);
+    const re = recheckTasks();
+    expect(() => startRule(record(opus, { pilot: [...re.slice(1), tasks()[0]!] }), opus, 376)).toThrow("pilot tasks are not tasks/r3b-recheck.txt");
+    expect(() => startRule(record(opus, { pilot: [...re.slice(1), re[1]!] }), opus, 376)).toThrow("pilot tasks are not tasks/r3b-recheck.txt");
+    expect(() => startRule(record(opus, { pilot: re.slice(1) }), opus, 376)).toThrow("pilot tasks are not tasks/r3b-recheck.txt");
   });
 
   test("after the re-check the projection uses the screen's none cost and the re-check's told mean x 1.160; over the cap it stops before grid-1", () => {
@@ -227,6 +239,19 @@ describe("the outcome on a complete grid", () => {
     const o = outcome(grid(stops(11)));
     expect(o.verdict).toBe("FIX-METHOD (truncation)");
     expect(o.lines.at(-1)).toContain("5.2% of told sessions ended at the $12 allowance against 0.0% of none sessions");
+  });
+
+  test("the truncation bound counts allowance stops in infra sessions too: 12 told stops with no reward is FIX-METHOD (truncation), 10 is not", () => {
+    const stops = (n: number) => { let k = 0; return (i: number, r: number, arm: string) => { const stop = arm === "gstack" && i >= 40 && k++ < n; return { ...keep(i, r, arm), budget: stop, infra: stop }; }; };
+    const below = outcome(grid(stops(10)));
+    expect(below.verdict).toBe("KEEP");
+    expect(below.lines).toContain("allowance stops: told 10 of 210 sessions (4.8%), none 0 of 210 (0.0%), infra included; the truncation bound is 5 points");
+    const o = outcome(grid(stops(12)));
+    expect(o.verdict).toBe("FIX-METHOD (truncation)");
+    const a = o.record.allowance_stops;
+    expect([a.told, a.none, a.sessions]).toEqual([12, 0, { told: 210, none: 210 }]);
+    expect(a.points_apart).toBeCloseTo((100 * 12) / 210, 9);
+    expect(o.lines.at(-1)).toContain("5.7% of told sessions ended at the $12 allowance against 0.0% of none sessions");
   });
 
   test("D1 as fixed: a primary at or below zero is CUT-CANDIDATE with 30 solved tasks and FIX-METHOD (task fit) with 29", () => {

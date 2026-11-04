@@ -118,6 +118,7 @@ echo; echo "## assertions"
 fails=0
 ok() { if "${@:2}"; then echo "PASS $1"; else echo "FAIL $1"; fails=$((fails + 1)); fi; }
 h() { jq -e "$2" "$W/hooks-$1.json" > /dev/null 2>&1; }
+both() { h "$1" "$3" && h "$2" "$3"; }
 trials() { local n=0 d; for d in "$R"/jobs/r3b-hookcheck/*/; do [ -f "$d/config.json" ] || continue; n=$((n + 1)); [ "$(cat "$d/verifier/reward.txt" 2>/dev/null)" = 1 ] || return 1; [ "$(jq -r '.exception_info.exception_type // "none"' "$d/result.json" 2>/dev/null)" = none ] || return 1; done; [ "$n" = 4 ]; }
 first2() { for d in "$R"/jobs/r3b-hookcheck/*/; do [ -f "$d/result.json" ] && echo "$(jq -r .started_at "$d/result.json") $(jq -r '.task.path | split("/") | last' "$d/config.json")/$(jq -r .agent.kwargs.arm "$d/config.json")"; done | sort | head -2 | cut -d' ' -f2 | sort | paste -sd' '; }
 ok "the arm check passes: both hook entries in the told arm's settings.json" grep -q '^arm-check: pass' "$W/arm-check.txt"
@@ -128,6 +129,6 @@ ok "all four trials (2 tasks x none and told) reach the verifier with reward 1 a
 ok "told demo__unmet: the Stop hook ran and held a stop back (event blocked)" h demo__unmet-gstack '.stop_hook_ran == true and .held_back == true'
 ok "told demo__unmet: the hook let the next stop through once the report came (met_after_block)" h demo__unmet-gstack '.outcome == "met_after_block"'
 ok "told demo__met: the Stop hook ran and passed the stop with no block (event met)" h demo__met-gstack '.stop_hook_ran == true and .held_back == false and .outcome == "met"'
-ok "both told trials: the route hook logged a line" h demo__met-gstack '.route_hook_ran == true' && h demo__unmet-gstack '.route_hook_ran == true'
-ok "both none trials: no gstack hook state" h demo__met-none '.stop_hook_ran == false and .route_hook_ran == false and .files == 0' && h demo__unmet-none '.stop_hook_ran == false and .route_hook_ran == false and .files == 0'
+ok "both told trials: the route hook logged a line" both demo__met-gstack demo__unmet-gstack '.route_hook_ran == true'
+ok "both none trials: no gstack hook state" both demo__met-none demo__unmet-none '.stop_hook_ran == false and .route_hook_ran == false and .files == 0'
 exit $((fails > 0))

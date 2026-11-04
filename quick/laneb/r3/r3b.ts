@@ -233,7 +233,7 @@ export function startRule(recordPath: string, m: R3bItem, capUsd: number) {
   try { rec = JSON.parse(readFileSync(recordPath, "utf8")); } catch { throw new Error("E_USAGE R3A4_RECORD " + JSON.stringify(recordPath) + " is not readable JSON; set it to " + m.from + "'s record.json"); }
   if (rec.item !== m.from || rec.outcome !== "admitted") throw new Error(recordPath + " is " + rec.item + "'s record with outcome " + rec.outcome + ", not " + m.from + "'s admitted record");
   if (JSON.stringify(rec.r3b_tasks) !== JSON.stringify(taskList(m.tasksFile, m.tasksSha256))) throw new Error(recordPath + "'s r3b_tasks are not " + m.tasksFile);
-  if (JSON.stringify(rec.pilot?.tasks) !== JSON.stringify(recheckTasks())) throw new Error(recordPath + "'s pilot tasks are not " + R3B.recheckFile);
+  if (JSON.stringify([...(rec.pilot?.tasks ?? [])].sort()) !== JSON.stringify([...recheckTasks()].sort())) throw new Error(recordPath + "'s pilot tasks are not " + R3B.recheckFile);
   const none = rec.measured_cost_per_trial_usd?.none, told = rec.measured_cost_per_trial_usd?.told;
   if (rec.n !== R3B.n || !Number.isFinite(none) || !Number.isFinite(told)) throw new Error(recordPath + " has no n of " + R3B.n + " or no measured none and told cost per trial");
   const usd = rec.n * 3 * (none + told), ok = usd <= capUsd;
@@ -505,14 +505,16 @@ export function overlapLine() {
 
 export type Verdict = "KEEP" | "CUT-CANDIDATE" | "FIX-METHOD (exposure)" | "FIX-METHOD (truncation)" | "FIX-METHOD (task fit)" | "FIX-METHOD (power)";
 // The outcome on a complete grid (#112 section 4.6, amendment 4 section 12 with D1 as fixed, amendment 5 section 5) and the
-// report-only counts beside it. Every graded told grid trial counts in every contrast.
+// report-only counts beside it. Every graded told grid trial counts in every contrast; the E1 truncation bound counts every
+// grid session, infra included, since it compares sessions that ended at the allowance.
 export function gridOutcome(grid: GridTrial[], m: R3bItem, o: { sims: number; repoOf?: Map<string, string> }) {
   const graded = grid.filter((t) => t.outcome !== "infra");
   const told = graded.filter((t) => t.arm === TOLD), none = graded.filter((t) => t.arm === NONE);
   const exposed = told.filter((t) => t.exposed).length, exposure = told.length ? exposed / told.length : 0;
   const stops = (ts: R3Trial[]) => ts.filter((t) => t.budget_stop).length;
   const share = (ts: R3Trial[]) => (ts.length ? stops(ts) / ts.length : 0);
-  const truncation = 100 * (share(told) - share(none));
+  const toldRun = grid.filter((t) => t.arm === TOLD), noneRun = grid.filter((t) => t.arm === NONE);
+  const truncation = 100 * (share(toldRun) - share(noneRun));
   const opts = { models: [m.id], arms: [NONE, TOLD], reference: m.id, seed: R3B.seed, b: R3B.draws };
   const rep = analyzeTrials(grid.map(toTrial), opts);
   const primary = rep.contrasts.find((c) => c.contrast === TOLD + " - " + NONE)!;
@@ -531,7 +533,7 @@ export function gridOutcome(grid: GridTrial[], m: R3bItem, o: { sims: number; re
   const ci = (c: { diff: number; lo: number; hi: number }) => pts(c.diff) + " points (95% CI " + pts(c.lo) + " to " + pts(c.hi) + ")";
   lines.push("grid: none " + rate(NONE).passes + " of " + rate(NONE).trials + " graded trials passed (control rate " + pct(rate(NONE).rate) + "), told " + rate(TOLD).passes + " of " + rate(TOLD).trials + " (" + pct(rate(TOLD).rate) + "); " + pairedTasks.length + " paired tasks");
   lines.push("exposure: " + exposed + " of " + told.length + " graded told grid trials exposed (" + pct(exposure) + "; the gate needs 90%)");
-  lines.push("allowance stops: told " + stops(told) + " of " + told.length + " (" + pct(share(told)) + "), none " + stops(none) + " of " + none.length + " (" + pct(share(none)) + "); the truncation bound is 5 points");
+  lines.push("allowance stops: told " + stops(toldRun) + " of " + toldRun.length + " sessions (" + pct(share(toldRun)) + "), none " + stops(noneRun) + " of " + noneRun.length + " (" + pct(share(noneRun)) + "), infra included; the truncation bound is 5 points");
   lines.push("primary: told minus none " + ci(primary) + " on " + primary.tasks + " paired tasks");
   lines.push("D1 sensitivity: " + sensSet.length + " paired tasks solved by at least one graded grid trial in either arm" + (sens ? "; told minus none " + ci(sens) + " on them" : "; the set is empty"));
   // Report-only from here (amendment 5 section 5, amendment 4 sections 7 and 12, GSTA-2's sentence).
@@ -573,18 +575,18 @@ export function gridOutcome(grid: GridTrial[], m: R3bItem, o: { sims: number; re
   const head = "R3b outcome" + m.tag + ": " + verdict + ". ";
   const outcomeLine = {
     "KEEP": head + "The " + arm + " beats none by " + ci(primary) + " on " + primary.tasks + " paired tasks.",
-    "CUT-CANDIDATE": head + "The " + arm + " minus none is at or below zero: " + ci(primary) + " on " + primary.tasks + " paired tasks, and " + (sens ? ci(sens) : "") + " on the " + sensSet.length + "-task D1 sensitivity set; control rate " + pct(rate(NONE).rate) + ", MDD " + R3B.frozenMddPoints + " points, procedure visible in " + pct(exposure) + ", allowance stops told " + stops(told) + " and none " + stops(none) + ". That means no lift of MDD size, not proof of zero.",
+    "CUT-CANDIDATE": head + "The " + arm + " minus none is at or below zero: " + ci(primary) + " on " + primary.tasks + " paired tasks, and " + (sens ? ci(sens) : "") + " on the " + sensSet.length + "-task D1 sensitivity set; control rate " + pct(rate(NONE).rate) + ", MDD " + R3B.frozenMddPoints + " points, procedure visible in " + pct(exposure) + ", allowance stops told " + stops(toldRun) + " and none " + stops(noneRun) + ". That means no lift of MDD size, not proof of zero.",
     "FIX-METHOD (task fit)": head + "The primary is at or below zero (" + ci(primary) + "), and " + (sensSet.length < R3B.d1MinTasks ? "only " + sensSet.length + " tasks were solved by any graded grid trial, fewer than " + R3B.d1MinTasks : "the D1 sensitivity contrast is above zero") + ".",
     "FIX-METHOD (power)": head + "Told minus none is " + ci(primary) + ": above zero, with an interval that includes zero.",
     "FIX-METHOD (exposure)": head + "The procedure was visible in " + exposed + " of " + told.length + " graded told grid trials (" + pct(exposure) + "), under 90%.",
-    "FIX-METHOD (truncation)": head + pct(share(told)) + " of told sessions ended at the $" + R3B.allowanceUsd + " allowance against " + pct(share(none)) + " of none sessions, more than 5 points apart.",
+    "FIX-METHOD (truncation)": head + pct(share(toldRun)) + " of told sessions ended at the $" + R3B.allowanceUsd + " allowance against " + pct(share(noneRun)) + " of none sessions, more than 5 points apart.",
   }[verdict];
   lines.push(outcomeLine);
   const exit = verdict === "KEEP" ? 0 : verdict === "CUT-CANDIDATE" ? 3 : 5;
   return {
     verdict, exit, lines, record: {
       outcome: verdict, primary, sensitivity: { tasks: sensSet.length, set: sensSet, contrast: sens }, exposure: { exposed, graded_told: told.length, rate: exposure },
-      allowance_stops: { told: stops(told), none: stops(none), points_apart: truncation }, pass_rates: rep.passRates, paired_tasks: pairedTasks.length,
+      allowance_stops: { told: stops(toldRun), none: stops(noneRun), sessions: { told: toldRun.length, none: noneRun.length }, points_apart: truncation }, pass_rates: rep.passRates, paired_tasks: pairedTasks.length,
       repository_interval: repo, stricter_indicator: phases, stop_hook: hooks, task_repo_skills: rs, cross_model_overlap: overlap, mdd_points: mdd,
     },
   };
