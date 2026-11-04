@@ -334,4 +334,17 @@ step . sh -c "echo sessions journaled: \$(grep -c . $W/run/none-p2/cells.ndjson)
 echo "# A \$79 cap at 2 in parallel is below one round of 2 at \$40, so CAP_STOP before any session; at 4 in parallel a \$159 cap stops the same way."
 step '^(stub run|CAP_STOP|E_)' SP 2 "$S" "$W/run/none-p2-79" none pause --cap 79
 step '^(stub run|CAP_STOP|E_)' SP 4 "$S" "$W/run/none-p4-159" none pause --cap 159
+
+echo; echo "## The watch and the readout when a session's files go missing (section 7)"
+echo "# Synthetic: a session whose skill-contracts folder can't be read while the watch runs, as when runTrial removes a work"
+echo "# dir between two reads of one scan. The watch keeps scanning to the launch's end and links the log."
+WE=$W/watch-err; SR=$WE/out/runs/m/gstack-full/t/p1/work/t/.gstack-home; mkdir -p "$SR/hooks" "$SR/skill-contracts"
+echo "2026-11-03T00:00:01.000Z session=e event=blocked skill=review" > "$SR/hooks/skill-contract.log"; chmod 000 "$SR/skill-contracts"
+( sleep 2; chmod 755 "$SR/skill-contracts" ) &
+step '^(watch|E_)' bun "$W/bin/rr2-hooks.ts" watch "$WE/out" "$WE/links" $!
+step . cat "$WE/links/m/gstack-full/t/p1/skill-contract.log"
+echo "# Synthetic copy of the stub smoke whose first session has no delta.json, as a capped session ends, and no linked log:"
+echo "# its exposure reads unknown (log lost), not unprompted."
+FN=$W/run/hooks-nodelta; cp -a "$W/run/rr2-smoke-full" "$FN"; rm "$(ls -d "$FN"/runs/*/*/*/p1 | head -1)/delta.json"
+step . RO "$FN" "$FN.hooks"
 echo; echo "## Done"

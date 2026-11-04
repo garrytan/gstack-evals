@@ -43,7 +43,13 @@ const bad = (why: string): never => {
 const [mode, out, links, third] = process.argv.slice(2);
 if (!out || !links || !["watch", "readout"].includes(mode ?? "")) bad("usage: bun rr2-hooks.ts watch <out> <links> <pid> | readout <out> <links> [--smoke]");
 const runs = join(out!, "runs");
-const ls = (dir: string) => (existsSync(dir) ? readdirSync(dir).sort() : []);
+const ls = (dir: string) => {
+  try {
+    return readdirSync(dir).sort();
+  } catch {
+    return [];
+  }
+};
 const sessions = () => ls(runs).flatMap((m) => ls(join(runs, m)).flatMap((a) => ls(join(runs, m, a)).flatMap((t) => ls(join(runs, m, a, t)).filter((p) => /^p\d+$/.test(p)).map((p) => [m, a, t, p] as const))));
 const LOGS = ["skill-contract.log", "skill-route.log"];
 const regular = (f: string) => {
@@ -203,7 +209,7 @@ for (const [m, a, t, p] of sessions()) {
   const transcript = read(join(dir, "host", "transcript.ndjson"));
   const unmet = (transcript.match(/SKILL_CONTRACT_UNMET/g) ?? []).length;
   const tm = timing(transcript);
-  const lost = listed && !regular(join(links!, m, a, t, p, "skill-contract.log"));
+  const lost = (listed || !delta) && !regular(join(links!, m, a, t, p, "skill-contract.log"));
   const dispatchBlock = contract.some((e) => e.event === "blocked" && (/ missing=(\S+)/.exec(e.line)?.[1] ?? "").replace(/"/g, "").split(",").some((x) => x === "specialists-dispatched" || x === "adversarial-pass"));
   const exposure = !tm.both ? "absent" : lost ? "unknown (log lost)" : dispatchBlock ? "after-hook" : tm.before ? "unprompted" : "late, no dispatch block";
   if (listed || contract.length) logged++;
