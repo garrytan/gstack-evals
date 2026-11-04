@@ -368,11 +368,11 @@ function inert(cmd: string, op: string): boolean {
 // The options of grep (egrep, fgrep), rg, ag and ack that the positional drop knows: short flags that take no value, short
 // options whose value follows (glued, or as the next word), long flags with no value, and long options that take one, given
 // with = only. Any other option, a long option's value as the next word, and ag's and ack's -A, -B, -C and -D (optional or no
-// values) make the whole command scan as a read.
+// values) make the whole command scan as a read, as does ag's and ack's -g (a file-name pattern, with no search pattern after it).
 const GREP_SHORT: Record<string, { flags: string; valued: string }> = {
   grep: { flags: "abcEFGHhIiLlnoPqRrsTUuVvwxyZz0123456789", valued: "ABCDdm" },
   rg: { flags: "abcFHhIiLlNnoPpqSsUuVvwxz0", valued: "ABCEMTdgjmrt" },
-  ag: { flags: "acFHiLlnQSsUuvwz", valued: "Ggmp" },
+  ag: { flags: "acFHiLlnQSsUuvwz", valued: "Gmp" },
   ack: { flags: "cHhiLlnQsvwx", valued: "m" },
 };
 const GREP_LONG_FLAGS = new Set(["--ignore-case", "--no-ignore-case", "--smart-case", "--case-sensitive", "--line-number", "--no-line-number", "--with-filename", "--no-filename", "--count", "--only-matching", "--invert-match", "--word-regexp", "--line-regexp", "--fixed-strings", "--extended-regexp", "--basic-regexp", "--perl-regexp", "--recursive", "--dereference-recursive", "--hidden", "--no-ignore", "--follow", "--quiet", "--silent", "--no-messages", "--null", "--text", "--no-heading", "--heading", "--column", "--byte-offset", "--literal", "--vimgrep", "--json", "--multiline", "--search-zip", "--null-data"]);

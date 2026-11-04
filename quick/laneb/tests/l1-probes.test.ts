@@ -283,6 +283,9 @@ describe("contract block, turn cap and the read audit", () => {
     for (const cmd of ["grep --exclude-from /root/.gstack/ignore name README.md", "rg --ignore-file /root/.gstack/ignore name .", "rg --pre /root/.gstack/bin/x name README.md", "ag -D name /root/.gstack/config.yaml", "ag -A name /root/.gstack/config.yaml",
       "ack -A name /root/.gstack/config.yaml", "grep -Q /root/.gstack/config.yaml README.md", "grep --frobnicate /root/.gstack/config.yaml README.md", "rg --frob=1 /root/.gstack/config.yaml README.md", "grep -nA /root/.gstack/config.yaml README.md"])
       expect([cmd, run([bash(cmd, "3:x")], none).audit_hits.length]).toEqual([cmd, 1]);
+    expect(run([bash("ag -g . /root/.gstack", "/root/.gstack/config.yaml")], none).audit_hits.length).toBe(1);
+    expect(run([bash("ag -g SKILL /root/.claude/skills", "/root/.claude/skills/gstack/SKILL.md")], none).audit_hits.length).toBe(1);
+    expect(run([bash("ag -G md /root/.gstack/config README.md", "3:see /root/.gstack/config")], none).audit_hits).toEqual([]);
     for (const cmd of ["grep -n -A 2 /root/.gstack/config README.md", "grep -nA2 /root/.gstack/config README.md", "grep -rn --include=*.py /root/.gstack/config .", "rg -n -t py /root/.gstack/config src", "rg -uu --glob=*.md -C3 /root/.gstack/config .", "ag -i /root/.gstack/config README.md", "egrep -c /root/.gstack/config README.md", "grep -- /root/.gstack/config README.md"])
       expect([cmd, run([bash(cmd, "3:see /root/.gstack/config")], none).audit_hits]).toEqual([cmd, []]);
     expect(run([bash("grep -i name -- /root/.gstack/config.yaml", "name: x")], none).audit_hits.length).toBe(1);
