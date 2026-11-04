@@ -226,3 +226,7 @@ Asked of every reviewer (R65): are any outside terms, licences or rights involve
 ### 13. Not in scope
 
 Building O1 to O6, running anything, the X and U families' preregs, the confirmatory prereg, and any change to plan v3's sizing scale, futility look or survivor rule outside family G.
+
+## Review record
+
+The lean /autoplan review of this plan (R65: one reviewer, one gate revision, the outside-terms question) is recorded here before the pull request is called ready.
