@@ -182,6 +182,11 @@ describe("the command line", () => {
     expect(r.code).toBe(2);
     expect(r.err).toStartWith("E_USAGE l1 ceiling: thread GEVA-1 needs credits and tokens");
     expect(r.out).toBe("");
+    const args = files(atExpected(), crew(288_000, 36_000), plan());
+    args[1] = join(dir, "no-such-ledger.jsonl");
+    const gone = run(["check", ...args, "--launch", "pilot-sol"]);
+    expect(gone.code).toBe(2);
+    expect(gone.err).toStartWith("E_USAGE l1 ceiling: no ledger at");
   });
 });
 
@@ -203,6 +208,13 @@ describe("malformed input is refused", () => {
     const typo = { ...plan(), items: [...opusPlan(), { item: "pilot-sol", cap: 100, status: "planned" }] } as unknown as Plan;
     expect(() => check(atExpected(), crew(288_000, 36_000), typo, "pilot-sol")).toThrow(/plan item "pilot-sol" needs cap_usd/);
     expect(() => tally(atExpected(), crew(288_000, 36_000), plan(solPlan, { sol: "pending", particle: "skipped" } as unknown as Plan["leftover"]))).toThrow(/leftover.particle is "skipped"/);
+  });
+  test("check refuses tokens with no credits instead of holding open stops at zero", () => {
+    const open: Crew["threads"][number] = { code: "GEVA-8", line: "sol", credits: 0, tokens: 0, token_stop: 2000 * M, status: "open" };
+    expect(() => check(atExpected(), crew(0, 0, [open]), plan(), "pilot-sol")).toThrow(/no measured rate/);
+  });
+  test("a done item with no ledger rows is refused, not counted at $0", () => {
+    expect(() => check(atExpected().filter((r) => r.item !== "tb2-opus"), crew(288_000, 36_000), plan(), "pilot-sol")).toThrow(/tb2-opus is done but has no ledger rows/);
   });
   test("the final read refuses tokens with no credits instead of an unbounded post stop", () => {
     const post: Crew["threads"][number] = { code: "GEVA-9", line: "crew", credits: 0, tokens: 0, token_stop: null, status: "planned" };

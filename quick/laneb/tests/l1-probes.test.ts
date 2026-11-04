@@ -214,5 +214,11 @@ describe("contract block, turn cap and the read audit", () => {
     expect(run([bash("grep -rn 'name:' /root/.claude", "/root/.claude/skills/investigate/SKILL.md:2:name: investigate")], none).audit_hits.length).toBe(1);
     expect(run([bash("grep -rn 'def main' /", "/testbed/app.py:3:def main():")], none).audit_hits).toEqual([]);
     expect(run([bash("cat README.md src/app.py", "# app")], none).audit_hits).toEqual([]);
+    expect(run([bash("cd ~ && cat .claude/skills/investigate/SKILL.md", "---\nname: investigate")], none).audit_hits.length).toBe(1);
+    expect(run([bash("cd $HOME && cat .gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+    expect(run([bash("(cd /root/.claude/skills && pwd); cat README.md", "/root/.claude/skills\n# app")], none).audit_hits).toEqual([]);
+    expect(run([bash("cd /root && grep -n .gstack/config /testbed/README.md", "3:see .gstack/config")], none).audit_hits).toEqual([]);
+    expect(run([bash("grep -n -A 2 /root/.gstack/config /testbed/README.md", "3:see /root/.gstack/config")], none).audit_hits).toEqual([]);
+    expect(run([bash("grep -e name /root/.claude/skills/investigate/SKILL.md", "name: investigate")], none).audit_hits.length).toBe(1);
   });
 });

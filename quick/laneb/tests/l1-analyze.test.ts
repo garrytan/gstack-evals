@@ -120,6 +120,11 @@ describe("the whole entry on synthetic tables", () => {
     const rows = table();
     rows[3] = { ...rows[3]!, probes_sha256: "0".repeat(64) };
     expect(() => analyze(rows, config())).toThrow(/tabled by probes.ts 000000000000, not the current/);
+    const dir = mkdtempSync(join(tmpdir(), "l1-stale-"));
+    writeFileSync(join(dir, "sessions.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+    const p = Bun.spawnSync(["bun", join(import.meta.dir, "../l1/analyze.ts"), "audit-sample", join(dir, "sessions.jsonl"), "opus"]);
+    expect(p.exitCode).toBe(2);
+    expect(p.stderr.toString()).toContain("tabled by probes.ts 000000000000");
   });
   test("KEEP on both members, the gate met, and a model the ceiling refused printed as not run with its MDD", () => {
     const rep = analyze(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 60 }, "off-u": { load: 1 }, "before-t": { complete: 2 }, "after-t": { complete: 50 }, "off-t": { complete: 40 } } }), config({ models: [{ id: "opus", status: "run" }, { id: "sol", status: "not_run" }] }));

@@ -10,7 +10,7 @@
 // remainder ($15) while that model is pending. check refuses a launch whose sum passes $2,000, and a launch while any item,
 // the launch's own included, holds open reservations (items and the parts of one item launch one at a time). final gives the all-in figure before the results post and the largest token stop the post
 // thread can have so that figure, the holds still open and the stop at the measured rate stay at or under $2,000.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readRows, totals, type Row } from "../runner/ledger.ts";
 
 export const CEILING_USD = 2000;
@@ -62,6 +62,8 @@ export function tally(ledgerRows: Row[], crew: Crew, plan: Plan, exclude: string
   const perToken = tokens > 0 ? allCredits / tokens : PLANNING_USD_PER_MTOK;
   const openThreads = crew.threads.filter((t) => t.status !== "done" && t.code !== exclude);
   for (const t of openThreads) if (!amount(t.token_stop)) throw new UsageError("E_USAGE l1 ceiling: open thread " + t.code + " has no token_stop");
+  for (const i of items) if (i.status === "done" && !byItem.has(i.item)) throw new UsageError("E_USAGE l1 ceiling: item " + i.item + " is done but has no ledger rows, so its spend can't be counted");
+  if (perToken === 0 && openThreads.some((t) => t.token_stop! > t.tokens)) throw new UsageError("E_USAGE l1 ceiling: the crew file holds tokens but no credits, so there is no measured rate to hold the open stops at");
   const stops = Math.round(openThreads.reduce((x, t) => x + Math.max(0, t.token_stop! - t.tokens), 0) * perToken);
   const crewHold = Math.max(Math.max(0, micros(CREW_LINE_USD) - crewSpent), stops);
   const captainHold = Math.max(0, micros(CAPTAIN_LINE_USD) - captainSpent);
@@ -109,6 +111,7 @@ if (import.meta.main) {
   try {
     const ledgers = flag("--ledger"), crewPath = flag("--crew")[0], planPath = flag("--plan")[0];
     if ((cmd !== "check" && cmd !== "final") || !ledgers.length || !crewPath || !planPath) throw new UsageError("E_USAGE usage: bun quick/laneb/l1/ceiling.ts check|final --ledger <ledger.jsonl> [--ledger ...] --crew <crew.json> --plan <plan.json> (--launch <item> | --post <thread>)");
+    for (const p of ledgers) if (!existsSync(p)) throw new UsageError("E_USAGE l1 ceiling: no ledger at " + p);
     const rows = ledgers.flatMap((p) => readRows(p));
     const crew = JSON.parse(readFileSync(crewPath, "utf8")) as Crew;
     const plan = JSON.parse(readFileSync(planPath, "utf8")) as Plan;

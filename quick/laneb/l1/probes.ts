@@ -223,10 +223,15 @@ export function simpleCommands(line: string, cwd: string | null = null, depth = 
     }
     cur = { words: [], redirects: [], heredocs: [], cwd: here };
   };
+  const scopes: (string | null)[] = [];
   const toks = tokenize(line);
   for (let k = 0; k < toks.length; k++) {
     const t = toks[k]!;
-    if (t.kind === "op") end();
+    if (t.kind === "op") {
+      end();
+      if (t.value === "(") scopes.push(here);
+      else if (t.value === ")" && scopes.length) cur.cwd = here = scopes.pop()!;
+    }
     else if (t.kind === "heredoc") cur.heredocs.push(t.body);
     else if (t.kind === "redir") {
       const next = toks[k + 1];
@@ -351,13 +356,23 @@ const DRIVE = /\/\.capy\/drive\//;
 /** Commands that never read a file's contents: a path among their words is a mention, unless a word substitutes a command. */
 const NO_READ = new Set(["echo", "printf", "cd", "pushd", "popd", "pwd", "mkdir", "touch", "test", "[", "[[", "export", "unset", "type", "which", "command", "hash", "true", "false", ":", "dirname", "basename", "realpath", "readlink", "sleep", "exit"]);
 const PATH_SPLIT = /[\s'"=;|&<>()`]+/;
+const GREP = new Set(["grep", "egrep", "fgrep", "rg", "ag", "ack"]);
+/** A grep's words without its pattern (the first operand when no -e or -f gives it), which names no file it reads. */
+function withoutPattern(words: string[]): string[] {
+  if (!GREP.has(base(words[0] ?? "")) || words.some((w) => /^(-[A-Za-z]*[ef]|--regexp|--file)/.test(w))) return words;
+  let k = 1;
+  while (k < words.length && words[k]!.startsWith("-") && words[k] !== "--") k += /^-[ABCmdD]$/.test(words[k]!) ? 2 : 1;
+  if (words[k] === "--") k++;
+  return words.filter((_, i) => i !== k);
+}
 /** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies,
  * with a relative word resolved against the directory the line has cd'd to (the work tree at first). */
 function bashReadPaths(command: string, cwd: string | null): string[] {
   const out: string[] = [];
   for (const s of simpleCommands(command, cwd)) {
-    const mention = s.words.length > 0 && NO_READ.has(base(s.words[0]!)) && !s.words.some((w) => w.includes("$(") || w.includes("\x60"));
-    const texts = [...(mention ? [] : [...s.words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<")).map((r) => r.target)];
+    const words = withoutPattern(s.words);
+    const mention = words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
+    const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<")).map((r) => r.target)];
     for (const t of texts)
       for (const w of t.split(PATH_SPLIT)) {
         if (w.startsWith("/")) out.push(w);
@@ -486,7 +501,7 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
   const roots = auditRoots(o.home);
   const below = (p: string) => DRIVE.test(p) || roots.some((r) => p.startsWith(r + "/") && p.length > r.length + 1);
   const above = (p: string) => roots.some((r) => r === p.replace(/\/+$/, "") || r.startsWith(p.replace(/\/+$/, "") + "/"));
-  const expand = (s: string) => s.replace(/(^|[\s='"])(~|\$HOME|\$\{HOME\})(?=\/)/g, "$1" + o.home);
+  const expand = (s: string) => s.replace(/(^|[\s='"])(~|\$HOME|\$\{HOME\})(?=\/|$|[\s;&|)'"])/g, "$1" + o.home);
   for (const c of calls) {
     const res = results.get(c.id);
     if (!res || res.error) continue;

@@ -346,6 +346,14 @@ const taskList = (v: string[] | string | undefined, fallback: string | null): st
   return path ? readFileSync(path, "utf8").split(/\s+/).filter(Boolean) : [];
 };
 
+/** The current probes.ts sha256, refusing a table with any row scored by another probes.ts. */
+export function currentProbes(rows: L1SessionRow[]): string {
+  const sha = sha256(readFileSync(PROBES_TS));
+  const stale = rows.find((r) => r.probes_sha256 !== sha);
+  if (stale) throw new UsageError("E_USAGE l1 analyze: trial " + stale.trial + " was tabled by probes.ts " + String(stale.probes_sha256).slice(0, 12) + ", not the current " + sha.slice(0, 12) + "; rebuild the table with this probes.ts");
+  return sha;
+}
+
 export function analyze(rows: L1SessionRow[], cfg: Config) {
   if (!Array.isArray(cfg.models) || !cfg.models.length) throw new UsageError("E_USAGE l1 analyze: the config needs models, each {id, status: run | not_run}");
   if (!Array.isArray(cfg.routed_stratum)) throw new UsageError("E_USAGE l1 analyze: the config needs routed_stratum, the F1 tasks Amendment C's routing table sends to /investigate (may be empty)");
@@ -358,9 +366,7 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
   const labels: AuditLabel[] = Array.isArray(cfg.audit) ? cfg.audit : typeof cfg.audit === "string" ? readFileSync(cfg.audit, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)) : [];
   const routed = new Set(cfg.routed_stratum);
   const f1Plan: Planned = { tasks: f1Tasks, reps: 1 };
-  const probesSha = sha256(readFileSync(PROBES_TS));
-  const stale = rows.find((r) => r.probes_sha256 !== probesSha);
-  if (stale) throw new UsageError("E_USAGE l1 analyze: trial " + stale.trial + " was tabled by probes.ts " + String(stale.probes_sha256).slice(0, 12) + ", not the current " + probesSha.slice(0, 12) + "; rebuild the table with this probes.ts");
+  const probesSha = currentProbes(rows);
   const models = cfg.models.map((m) => {
     const id = m.id;
     const f1: Scope = { model: id, instrument: "f1" };
@@ -499,6 +505,7 @@ if (import.meta.main) {
     if ((cmd !== "report" && cmd !== "audit-sample") || !tablePath || !cfgPath) throw new UsageError("E_USAGE usage: bun quick/laneb/l1/analyze.ts report <sessions.jsonl> <config.json> [report.json] | audit-sample <sessions.jsonl> <model>");
     const rows = readFileSync(tablePath, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as L1SessionRow);
     if (rows.some((r) => r.schema !== "l1-session/1")) throw new UsageError("E_USAGE l1 analyze: every row must have schema l1-session/1");
+    currentProbes(rows);
     if (cmd === "audit-sample") console.log(auditSample(rows, cfgPath).map((x) => JSON.stringify(x)).join("\n"));
     else {
       const rep = analyze(rows, JSON.parse(readFileSync(cfgPath, "utf8")));
