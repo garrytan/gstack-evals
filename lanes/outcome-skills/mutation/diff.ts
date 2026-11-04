@@ -10,8 +10,11 @@ export interface FileChange {
   newPath: string | null;
   /** Line numbers in the new file of every added line. */
   added: number[];
-  /** Positions in the new file next to removed lines: the line that now stands where they were, at least 1. */
-  removedAt: number[];
+  /** Line numbers in the old file of every removed line. */
+  removed: number[];
+  /** Each kept line inside a hunk as [old, new], and after each hunk its last old line and the shift from old to new. */
+  kept: [number, number][];
+  shifts: [number, number][];
   binary: boolean;
 }
 
@@ -50,7 +53,7 @@ export function parsePatch(patch: string): FileChange[] {
     const line = lines[i]!;
     if (line.startsWith("diff --git ")) {
       const m = /^diff --git (.+?) (b\/.+|"b\/.+")$/.exec(line);
-      cur = { oldPath: m ? stripSide(m[1]!) : null, newPath: m ? stripSide(m[2]!) : null, added: [], removedAt: [], binary: false };
+      cur = { oldPath: m ? stripSide(m[1]!) : null, newPath: m ? stripSide(m[2]!) : null, added: [], removed: [], kept: [], shifts: [], binary: false };
       out.push(cur);
       continue;
     }
@@ -67,7 +70,9 @@ export function parsePatch(patch: string): FileChange[] {
       if (!h) continue;
       let oldLeft = h[2] === undefined ? 1 : Number(h[2]);
       let newLeft = h[4] === undefined ? 1 : Number(h[4]);
+      let o = Number(h[1]);
       let n = Number(h[3]);
+      if (oldLeft === 0) o += 1;
       if (newLeft === 0) n += 1;
       while ((oldLeft > 0 || newLeft > 0) && i + 1 < lines.length) {
         const body = lines[++i]!;
@@ -76,14 +81,15 @@ export function parsePatch(patch: string): FileChange[] {
           cur.added.push(n++);
           newLeft--;
         } else if (body.startsWith("-")) {
-          cur.removedAt.push(Math.max(1, n));
+          cur.removed.push(o++);
           oldLeft--;
         } else {
-          n++;
+          cur.kept.push([o++, n++]);
           oldLeft--;
           newLeft--;
         }
       }
+      cur.shifts.push([o - 1, n - o]);
     }
   }
   return out;
@@ -113,8 +119,15 @@ export function classify(lang: Lang, path: string): "source" | "test" | "other" 
   }
 }
 
-/** The lines of the new file the patch touched: added lines, and the positions next to removed ones. */
-export const touched = (f: FileChange): Set<number> => new Set([...f.added, ...f.removedAt]);
+/** Where a line of the old file stands in the new one, or null when the patch removed it. */
+export function newLine(f: FileChange, old: number): number | null {
+  if (f.removed.includes(old)) return null;
+  const k = f.kept.find(([a]) => a === old);
+  if (k) return k[1];
+  let shift = 0;
+  for (const [last, s] of f.shifts) if (last < old) shift = s;
+  return old + shift;
+}
 
 /** Changed source lines per file, as sorted [start, end] ranges of added lines. Removed lines leave nothing to mutate. */
 export function sourceRanges(lang: Lang, changes: FileChange[]): Map<string, [number, number][]> {

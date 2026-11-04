@@ -7,11 +7,11 @@
 // the failures, list the tool's mutants within its restriction, sample at most SAMPLE_CAP with the frozen seed, run them
 // against the passing tests, and score. With a gold patch the same tests run on gold's tree against gold's mutants.
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { docker, dockerRun, type DockerResult } from "../../real-outcome/task/docker.ts";
 import { REPO_DIR } from "../../real-outcome/task/format.ts";
-import { classify, parsePatch, sourceRanges, touched, type FileChange } from "./diff.ts";
+import { classify, parsePatch, sourceRanges, type FileChange } from "./diff.ts";
 import { SAMPLE_CAP, SAMPLE_SEED, TOOLS, type Lang } from "./pins.ts";
 import { reading, record, sample, type MutationRecord, type Outcome, type Reading } from "./score.ts";
 import { changedUnits, goUnits, pythonFunctions, pythonModule, pythonUnits, rustUnits, tsUnits, type Unit } from "./units.ts";
@@ -88,9 +88,14 @@ export interface ScoreOptions {
 
 interface Tree {
   volume: string;
+  /** Host folder the scorer writes the tools' inputs to, mounted read-only at /in. */
+  in: string;
+  /** Host folder the containers write to, mounted at /out; read only through outText. */
   out: string;
   changes: FileChange[];
+  /** The changed files after the patch, and before it (by old path). */
   files: Map<string, string>;
+  old: Map<string, string>;
   list: Set<string>;
 }
 
@@ -121,13 +126,30 @@ interface Adapter {
 }
 
 const read = (p: string) => (existsSync(p) ? readFileSync(p, "utf8") : "");
+const OUT_MAX = 64 * 1024 * 1024;
+
+/** A regular file a container wrote under out, or null. The agent's tests run with out mounted, so a symlink anywhere on
+ * the path, a non-file or a file past 64 MiB is refused rather than read on the host. Every container has exited by then. */
+export function outText(out: string, name: string): string | null {
+  let p = out;
+  for (const part of name.split("/")) {
+    p = join(p, part);
+    const st = lstatSync(p, { throwIfNoEntry: false });
+    if (!st || st.isSymbolicLink()) return null;
+  }
+  const st = lstatSync(p)!;
+  return st.isFile() && st.size <= OUT_MAX ? readFileSync(p, "utf8") : null;
+}
+const got = (ctx: Ctx, name: string) => outText(ctx.tree.out, name) ?? "";
+const has = (ctx: Ctx, name: string) => outText(ctx.tree.out, name) !== null;
+const put = (ctx: Ctx, name: string, text: string) => writeFileSync(join(ctx.tree.in, name), text);
 const tail = (r: DockerResult) => (r.timed_out ? "timed out" : "exit " + r.status) + ": " + (r.stderr || r.stdout).trim().slice(-600);
 
 /** Copies the repository into a fresh volume, applies the patch and any overlay files, and reads back the changed files
  * and the tree's file list. Returns null for a patch that does not apply. */
 function prepare(repoDir: string, image: string, dir: string, patch: string, overlay: Map<string, string>): Tree | null {
   rmSync(dir, { recursive: true, force: true });
-  for (const d of ["input/overlay", "status", "out"]) mkdirSync(join(dir, d), { recursive: true });
+  for (const d of ["input/overlay", "status", "in", "out"]) mkdirSync(join(dir, d), { recursive: true });
   chmodSync(join(dir, "status"), 0o777);
   chmodSync(join(dir, "out"), 0o777);
   const changes = parsePatch(patch);
@@ -138,6 +160,8 @@ function prepare(repoDir: string, image: string, dir: string, patch: string, ove
   }
   const want = [...new Set([...changes.map((c) => c.newPath).filter((p): p is string => !!p), ...overlay.keys()])];
   writeFileSync(join(dir, "input/want.txt"), want.join("\n") + "\n");
+  const wantOld = [...new Set(changes.map((c) => c.oldPath).filter((p): p is string => !!p))];
+  writeFileSync(join(dir, "input/want-old.txt"), wantOld.join("\n") + "\n");
   const volume = "gstack-mutation-" + randomBytes(6).toString("hex");
   if (docker(["volume", "create", volume]).status !== 0) throw new MutationError("E_MUTATION_DOCKER", "docker volume create failed");
   const excludes = DEPS.flatMap((d) => ["--exclude=" + d, "--exclude=" + d + "/*", "--exclude=*/" + d, "--exclude=*/" + d + "/*"]).join(" ");
@@ -145,6 +169,7 @@ function prepare(repoDir: string, image: string, dir: string, patch: string, ove
     "set -eu",
     'cp -a "$SRC/." /work/',
     "cd /work",
+    'while IFS= read -r p; do if [ -n "$p" ] && [ -f "$p" ] && [ ! -L "$p" ]; then mkdir -p "/status/old/$(dirname "$p")" && cp "$p" "/status/old/$p"; fi; done < /input/want-old.txt',
     "if [ -s /input/tree.patch ]; then git -c core.hooksPath=/dev/null -c core.fsmonitor=false apply --whitespace=nowarn " + excludes + " /input/tree.patch 2>/status/apply.err || { echo patch=failed > /status/prepare.txt; exit 0; }; fi",
     "cp -a /input/overlay/. /work/",
     'while IFS= read -r p; do if [ -n "$p" ] && [ -f "$p" ] && [ ! -L "$p" ]; then mkdir -p "/status/files/$(dirname "$p")" && cp "$p" "/status/files/$p"; fi; done < /input/want.txt',
@@ -159,8 +184,10 @@ function prepare(repoDir: string, image: string, dir: string, patch: string, ove
   if (r.status !== 0 || state !== "done") throw new MutationError("E_MUTATION_DOCKER", "prepare failed (" + tail(r) + ")");
   const files = new Map<string, string>();
   for (const p of want) if (existsSync(join(dir, "status/files", p))) files.set(p, readFileSync(join(dir, "status/files", p), "utf8"));
+  const old = new Map<string, string>();
+  for (const p of wantOld) if (existsSync(join(dir, "status/old", p))) old.set(p, readFileSync(join(dir, "status/old", p), "utf8"));
   const list = new Set(read(join(dir, "status/list.txt")).split("\n").filter(Boolean));
-  return { volume, out: join(dir, "out"), changes, files, list };
+  return { volume, in: join(dir, "in"), out: join(dir, "out"), changes, files, old, list };
 }
 
 function context(o: Opts, image: string, tree: Tree, env: Record<string, string>): Ctx {
@@ -171,13 +198,18 @@ function context(o: Opts, image: string, tree: Tree, env: Record<string, string>
       const e = Object.entries({ ...env, ...more }).flatMap(([k, v]) => ["-e", k + "=" + v]);
       return dockerRun(
         "gstack-mutation-run-" + randomBytes(6).toString("hex"),
-        ["--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=4g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus), "--memory", o.memory, "--pids-limit", "4096", "-e", "HOME=/tmp", ...e, "-v", tree.volume + ":" + o.repoDir, "-v", tree.out + ":/out", "--workdir", o.repoDir, "--entrypoint", "sh", image, "-c", script],
+        ["--rm", "--network", "none", "--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=4g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", String(o.cpus), "--memory", o.memory, "--pids-limit", "4096", "-e", "HOME=/tmp", ...e, "-v", tree.volume + ":" + o.repoDir, "-v", tree.in + ":/in:ro", "-v", tree.out + ":/out", "--workdir", o.repoDir, "--entrypoint", "sh", image, "-c", script],
         { timeoutMs: o.stepMs },
       );
     },
   };
 }
 
+/** The units in one changed file that the patch added or changed, judged against the file's units before the patch. */
+const agentUnits = (ctx: Ctx, c: FileChange, find: (path: string, text: string) => Unit[]) => {
+  const before = c.oldPath === null ? undefined : ctx.tree.old.get(c.oldPath);
+  return changedUnits(find(c.newPath!, ctx.tree.files.get(c.newPath!)!), c, before === undefined ? [] : find(c.newPath!, before));
+};
 const testFiles = (ctx: Ctx, kinds: string[]) => ctx.tree.changes.filter((c) => c.newPath && !c.binary && ctx.tree.files.has(c.newPath) && kinds.includes(classify(ctx.o.lang, c.newPath)));
 const reEscape = (s: string) => s.replace(/[.*+?^$()|[\]\\{}\/]/g, "\\$&");
 
@@ -188,7 +220,7 @@ const META = "\"$PY\" -c \"import json,pathlib; json.dump({k:v for m in pathlib.
 
 const PY_WRITE_CONFIG = [
   "import json, pathlib, re, configparser",
-  "cfg = json.load(open('/out/py-config.json'))",
+  "cfg = json.load(open('/in/py-config.json'))",
   "p = pathlib.Path('pyproject.toml')",
   "text = p.read_text() if p.exists() else ''",
   "if re.search(r'(?m)^\\[tool\\.mutmut\\]', text):",
@@ -230,11 +262,11 @@ function junitCases(xml: string): { classname: string; name: string; ok: boolean
 }
 
 const python: Adapter = {
-  units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => changedUnits(pythonUnits(c.newPath!, ctx.tree.files.get(c.newPath!)!), touched(c))),
+  units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => agentUnits(ctx, c, pythonUnits)),
   baseline(ctx, units) {
     const r = ctx.run('"$PY" -m pytest -p no:cacheprovider -q --junitxml=/out/py-baseline.xml ' + units.map((u) => q(u.name)).join(" ") + " > /out/py-baseline.log 2>&1; echo $? > /out/py-baseline.exit");
-    if (r.status !== 0 || !existsSync(join(ctx.tree.out, "py-baseline.exit"))) return { passing: [], error: "pytest did not run (" + tail(r) + ")" };
-    const cases = junitCases(read(join(ctx.tree.out, "py-baseline.xml")));
+    if (r.status !== 0 || !has(ctx, "py-baseline.exit")) return { passing: [], error: "pytest did not run (" + tail(r) + ")" };
+    const cases = junitCases(got(ctx, "py-baseline.xml"));
     return {
       passing: units.filter((u) => {
         const [file, ...rest] = u.name.split("::");
@@ -253,21 +285,21 @@ const python: Adapter = {
       for (const fn of pythonFunctions(text)) if (ranges.some(([s, e]) => s <= fn.end && e >= fn.start)) scope.add((mod ? mod + "." : "") + fn.mangled);
     }
     if (scope.size === 0) return { ids: [] };
-    writeFileSync(join(ctx.tree.out, "py-config.json"), pyConfig(ctx, scopePatch, []));
-    writeFileSync(join(ctx.tree.out, "py-write-config.py"), PY_WRITE_CONFIG);
-    const r = ctx.run('"$PY" /out/py-write-config.py && ' + MUTMUT + " run --max-children 2 'gstack_mutation_list_only*' > /out/py-list.log 2>&1; " + META);
-    if (r.status !== 0 || !existsSync(join(ctx.tree.out, "py-meta.json"))) return { ids: [], error: "mutmut could not generate mutants (" + tail(r) + "): " + read(join(ctx.tree.out, "py-list.log")).slice(-600) };
-    const keys = Object.keys(JSON.parse(read(join(ctx.tree.out, "py-meta.json"))) as Record<string, unknown>);
+    put(ctx, "py-config.json", pyConfig(ctx, scopePatch, []));
+    put(ctx, "py-write-config.py", PY_WRITE_CONFIG);
+    const r = ctx.run('"$PY" /in/py-write-config.py && ' + MUTMUT + " run --max-children 2 'gstack_mutation_list_only*' > /out/py-list.log 2>&1; " + META);
+    if (r.status !== 0 || !has(ctx, "py-meta.json")) return { ids: [], error: "mutmut could not generate mutants (" + tail(r) + "): " + got(ctx, "py-list.log").slice(-600) };
+    const keys = Object.keys(JSON.parse(got(ctx, "py-meta.json")) as Record<string, unknown>);
     return { ids: keys.filter((k) => scope.has(k.split("__mutmut_")[0]!)) };
   },
   run(ctx, scopePatch, sampled, tests) {
-    writeFileSync(join(ctx.tree.out, "py-config.json"), pyConfig(ctx, scopePatch, tests));
+    put(ctx, "py-config.json", pyConfig(ctx, scopePatch, tests));
     rmSync(join(ctx.tree.out, "py-meta.json"), { force: true });
-    const r = ctx.run('rm -rf mutants && "$PY" /out/py-write-config.py && ' + MUTMUT + " run --max-children 2 " + sampled.map(q).join(" ") + " > /out/py-run.log 2>&1; echo $? > /out/py-run.exit; " + META);
-    if (r.status !== 0 || !existsSync(join(ctx.tree.out, "py-meta.json"))) return { outcomes: new Map(), error: "mutmut did not run (" + tail(r) + ")" };
-    const exit = read(join(ctx.tree.out, "py-run.exit")).trim();
-    if (exit !== "0") return { outcomes: new Map(), error: "mutmut exited " + exit + ": " + read(join(ctx.tree.out, "py-run.log")).slice(-600) };
-    const meta = JSON.parse(read(join(ctx.tree.out, "py-meta.json"))) as Record<string, number | null>;
+    const r = ctx.run('rm -rf mutants && "$PY" /in/py-write-config.py && ' + MUTMUT + " run --max-children 2 " + sampled.map(q).join(" ") + " > /out/py-run.log 2>&1; echo $? > /out/py-run.exit; " + META);
+    if (r.status !== 0 || !has(ctx, "py-meta.json")) return { outcomes: new Map(), error: "mutmut did not run (" + tail(r) + ")" };
+    const exit = got(ctx, "py-run.exit").trim();
+    if (exit !== "0") return { outcomes: new Map(), error: "mutmut exited " + exit + ": " + got(ctx, "py-run.log").slice(-600) };
+    const meta = JSON.parse(got(ctx, "py-meta.json")) as Record<string, number | null>;
     const outcomes = new Map<string, Outcome>();
     for (const id of sampled) {
       const code = meta[id];
@@ -284,7 +316,7 @@ const GM_EXEC = [
   "#!/bin/sh",
   'id="$MUTATE_ORIGINAL:$(sha256sum "$MUTATE_CHANGED" | cut -c1-16)"',
   "if [ \"$GM_MODE\" = list ]; then printf '%s\\n' \"$id\" >> /out/gm-list.txt; exit 2; fi",
-  'grep -qxF "$id" /out/gm-sample.txt || exit 2',
+  'grep -qxF "$id" /in/gm-sample.txt || exit 2',
   'cp "$MUTATE_ORIGINAL" /tmp/gm-orig.go && cp "$MUTATE_CHANGED" "$MUTATE_ORIGINAL"',
   "outcome=survived",
   "while IFS=$(printf '\\t') read -r pkg regex; do",
@@ -294,7 +326,7 @@ const GM_EXEC = [
   '  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then outcome=timeout; break; fi',
   "  if grep -q '\"Action\":\"build-fail\"' /tmp/gm-out.json || grep -q '\\[build failed\\]\\|\\[setup failed\\]' /tmp/gm-out.json /tmp/gm-err.txt; then outcome=error; break; fi",
   '  if [ "$rc" -ne 0 ]; then outcome=killed; break; fi',
-  "done < /out/gm-tests.txt",
+  "done < /in/gm-tests.txt",
   'cp /tmp/gm-orig.go "$MUTATE_ORIGINAL"',
   "printf '%s\\t%s\\n' \"$id\" \"$outcome\" >> /out/gm-outcomes.txt",
   'case "$outcome" in killed) exit 0 ;; survived) exit 1 ;; *) exit 2 ;; esac',
@@ -321,15 +353,15 @@ const GM = "/opt/gstack-mutation/go/bin/go-mutesting";
 const goFiles = (ctx: Ctx, scopePatch: string) => [...sourceRanges("go", parsePatch(scopePatch)).keys()].filter((f) => ctx.tree.list.has(f));
 
 const go: Adapter = {
-  units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => changedUnits(goUnits(c.newPath!, ctx.tree.files.get(c.newPath!)!), touched(c))),
+  units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => agentUnits(ctx, c, goUnits)),
   baseline(ctx, units) {
     const pkgs = [...goByPkg(units)];
     const script = pkgs.map(([pkg, us], i) => "go test -count=1 -vet=off -json -run " + q(goRegex(us)) + " " + q("./" + pkg) + " > /out/go-base-" + i + ".jsonl 2> /out/go-base-" + i + ".err").join("; ") + "; echo ok > /out/go-base.done";
     const r = ctx.run(script);
-    if (r.status !== 0 || !existsSync(join(ctx.tree.out, "go-base.done"))) return { passing: [], error: "go test did not run (" + tail(r) + ")" };
+    if (r.status !== 0 || !has(ctx, "go-base.done")) return { passing: [], error: "go test did not run (" + tail(r) + ")" };
     const passing: Unit[] = [];
     pkgs.forEach(([, us], i) => {
-      const ev = goEvents(read(join(ctx.tree.out, "go-base-" + i + ".jsonl")));
+      const ev = goEvents(got(ctx, "go-base-" + i + ".jsonl"));
       for (const u of us) if (ev.some((e) => e.Action === "pass" && e.Test === u.name) && !ev.some((e) => e.Action === "fail" && e.Test === u.name)) passing.push(u);
     });
     return { passing };
@@ -337,23 +369,23 @@ const go: Adapter = {
   mutants(ctx, scopePatch) {
     const files = goFiles(ctx, scopePatch);
     if (files.length === 0) return { ids: [] };
-    writeFileSync(join(ctx.tree.out, "gm-exec.sh"), GM_EXEC);
+    put(ctx, "gm-exec.sh", GM_EXEC);
     rmSync(join(ctx.tree.out, "gm-list.txt"), { force: true });
-    const r = ctx.run(GM + ' --exec "sh /out/gm-exec.sh" ' + files.map((f) => q("./" + f)).join(" ") + " > /out/gm-list.log 2>&1; touch /out/gm-list.txt", { GM_MODE: "list" });
-    const log = read(join(ctx.tree.out, "gm-list.log"));
+    const r = ctx.run(GM + ' --exec "sh /in/gm-exec.sh" ' + files.map((f) => q("./" + f)).join(" ") + " > /out/gm-list.log 2>&1; touch /out/gm-list.txt", { GM_MODE: "list" });
+    const log = got(ctx, "gm-list.log");
     if (r.status !== 0 || /INTERNAL ERROR|panic:/.test(log)) return { ids: [], error: "go-mutesting could not list mutants (" + tail(r) + "): " + log.slice(-600) };
-    return { ids: [...new Set(read(join(ctx.tree.out, "gm-list.txt")).split("\n").filter(Boolean))] };
+    return { ids: [...new Set(got(ctx, "gm-list.txt").split("\n").filter(Boolean))] };
   },
   run(ctx, scopePatch, sampled, tests) {
-    writeFileSync(join(ctx.tree.out, "gm-exec.sh"), GM_EXEC);
-    writeFileSync(join(ctx.tree.out, "gm-sample.txt"), sampled.join("\n") + "\n");
-    writeFileSync(join(ctx.tree.out, "gm-tests.txt"), [...goByPkg(tests)].map(([pkg, us]) => pkg + "\t" + goRegex(us)).join("\n") + "\n");
+    put(ctx, "gm-exec.sh", GM_EXEC);
+    put(ctx, "gm-sample.txt", sampled.join("\n") + "\n");
+    put(ctx, "gm-tests.txt", [...goByPkg(tests)].map(([pkg, us]) => pkg + "\t" + goRegex(us)).join("\n") + "\n");
     rmSync(join(ctx.tree.out, "gm-outcomes.txt"), { force: true });
-    const r = ctx.run(GM + ' --exec "sh /out/gm-exec.sh" ' + goFiles(ctx, scopePatch).map((f) => q("./" + f)).join(" ") + " > /out/gm-run.log 2>&1; touch /out/gm-outcomes.txt", { GM_MODE: "run", GM_TIMEOUT: "120" });
-    const log = read(join(ctx.tree.out, "gm-run.log"));
+    const r = ctx.run(GM + ' --exec "sh /in/gm-exec.sh" ' + goFiles(ctx, scopePatch).map((f) => q("./" + f)).join(" ") + " > /out/gm-run.log 2>&1; touch /out/gm-outcomes.txt", { GM_MODE: "run", GM_TIMEOUT: "120" });
+    const log = got(ctx, "gm-run.log");
     if (r.status !== 0) return { outcomes: new Map(), error: "go-mutesting did not run (" + tail(r) + ")" };
     const outcomes = new Map<string, Outcome>();
-    for (const l of read(join(ctx.tree.out, "gm-outcomes.txt")).split("\n").filter(Boolean)) {
+    for (const l of got(ctx, "gm-outcomes.txt").split("\n").filter(Boolean)) {
       const [id, outcome] = l.split("\t");
       outcomes.set(id!, outcome as Outcome);
     }
@@ -395,36 +427,55 @@ export function rustResults(log: string): Map<string, boolean> {
 
 const exactArgs = (units: Unit[]) => "-- --exact " + [...new Set(units.map((u) => u.name))].map(q).join(" ");
 
+/** cargo test's target flags for the units, so a same-named test in a target the agent did not touch never runs: each
+ * integration test by name, and the library, or the binaries when the file is one or the crate has no library. */
+function rustTargets(ctx: Ctx, units: Unit[]): string {
+  const flags = new Set<string>();
+  for (const u of units) {
+    if (u.scope !== "unit") {
+      flags.add("--test " + q(u.scope));
+      continue;
+    }
+    const root = crateRoot(ctx.tree.list, u.file);
+    const src = root === "." ? "src/" : root + "/src/";
+    flags.add(ctx.tree.list.has(src + "lib.rs") && u.file !== src + "main.rs" && !u.file.startsWith(src + "bin/") ? "--lib" : "--bins");
+  }
+  return [...flags].join(" ");
+}
+
 const rust: Adapter = {
   units: (ctx) =>
     testFiles(ctx, ["test", "source"]).flatMap((c) => {
       const root = crateRoot(ctx.tree.list, c.newPath!);
-      return changedUnits(rustUnits(c.newPath!, root === "." ? c.newPath! : posix.relative(root, c.newPath!), ctx.tree.files.get(c.newPath!)!), touched(c));
+      return agentUnits(ctx, c, (p, text) => rustUnits(p, root === "." ? p : posix.relative(root, p), text));
     }),
   baseline(ctx, units) {
     if (!ctx.tree.list.has("Cargo.toml")) return { passing: [], error: "no Cargo.toml at the repository root" };
-    const r = ctx.run(CARGO_ENV + "cargo test --no-fail-fast --workspace --tests " + exactArgs(units) + " > /out/rs-base.log 2>&1; echo $? > /out/rs-base.exit");
-    if (r.status !== 0 || !existsSync(join(ctx.tree.out, "rs-base.exit"))) return { passing: [], error: "cargo test did not run (" + tail(r) + ")" };
-    const res = rustResults(read(join(ctx.tree.out, "rs-base.log")));
+    const r = ctx.run(CARGO_ENV + "cargo test --no-fail-fast --workspace " + rustTargets(ctx, units) + " " + exactArgs(units) + " > /out/rs-base.log 2>&1; echo $? > /out/rs-base.exit");
+    if (r.status !== 0 || !has(ctx, "rs-base.exit")) return { passing: [], error: "cargo test did not run (" + tail(r) + ")" };
+    const log = got(ctx, "rs-base.log");
+    const ran = [...log.matchAll(/^test \S+ \.\.\. /gm)].length;
+    if (ran > units.length) return { passing: [], error: ran + " tests ran for " + units.length + " the agent wrote: an unchanged test shares an exact name with one of them in a target the scorer runs" };
+    const res = rustResults(log);
     return { passing: units.filter((u) => res.get(u.scope + "\t" + u.name) === true) };
   },
   mutants(ctx, scopePatch) {
-    writeFileSync(join(ctx.tree.out, "scope.patch"), scopePatch);
-    const r = ctx.run(CARGO_ENV + CM + " --list --in-diff /out/scope.patch > /out/cm-list.txt 2> /out/cm-list.err; echo $? > /out/cm-list.exit");
-    const exit = read(join(ctx.tree.out, "cm-list.exit")).trim();
-    if (r.status !== 0 || exit !== "0") return { ids: [], error: "cargo-mutants could not list mutants (exit " + (exit || r.status) + "): " + read(join(ctx.tree.out, "cm-list.err")).slice(-600) };
-    return { ids: [...new Set(read(join(ctx.tree.out, "cm-list.txt")).split("\n").filter(Boolean))] };
+    put(ctx, "scope.patch", scopePatch);
+    const r = ctx.run(CARGO_ENV + CM + " --list --in-diff /in/scope.patch > /out/cm-list.txt 2> /out/cm-list.err; echo $? > /out/cm-list.exit");
+    const exit = got(ctx, "cm-list.exit").trim();
+    if (r.status !== 0 || exit !== "0") return { ids: [], error: "cargo-mutants could not list mutants (exit " + (exit || r.status) + "): " + got(ctx, "cm-list.err").slice(-600) };
+    return { ids: [...new Set(got(ctx, "cm-list.txt").split("\n").filter(Boolean))] };
   },
   run(ctx, scopePatch, sampled, tests) {
-    writeFileSync(join(ctx.tree.out, "scope.patch"), scopePatch);
-    writeFileSync(join(ctx.tree.out, "cm-re.txt"), "^(?:" + sampled.map(reEscape).join("|") + ")$");
-    const r = ctx.run(CARGO_ENV + CM + ' --in-diff /out/scope.patch --no-shuffle --jobs 2 --minimum-test-timeout 30 --output /tmp/cm -F "$(cat /out/cm-re.txt)" -- --tests ' + exactArgs(tests) + " > /out/cm-run.log 2>&1; echo $? > /out/cm-run.exit; mkdir -p /out/cm; cp /tmp/cm/mutants.out/*.txt /out/cm/ 2>/dev/null; true");
-    const exit = read(join(ctx.tree.out, "cm-run.exit")).trim();
-    if (r.status !== 0 || !["0", "2", "3"].includes(exit)) return { outcomes: new Map(), error: "cargo-mutants exited " + (exit || r.status) + ": " + read(join(ctx.tree.out, "cm-run.log")).slice(-600) };
+    put(ctx, "scope.patch", scopePatch);
+    put(ctx, "cm-re.txt", "^(?:" + sampled.map(reEscape).join("|") + ")$");
+    const r = ctx.run(CARGO_ENV + "unset CARGO_TARGET_DIR; " + CM + ' --in-diff /in/scope.patch --no-shuffle --jobs 2 --minimum-test-timeout 30 --output /tmp/cm --test-workspace=true -F "$(cat /in/cm-re.txt)" -- ' + rustTargets(ctx, tests) + " " + exactArgs(tests) + " > /out/cm-run.log 2>&1; echo $? > /out/cm-run.exit; mkdir -p /out/cm; cp /tmp/cm/mutants.out/*.txt /out/cm/ 2>/dev/null; true");
+    const exit = got(ctx, "cm-run.exit").trim();
+    if (r.status !== 0 || !["0", "2", "3"].includes(exit)) return { outcomes: new Map(), error: "cargo-mutants exited " + (exit || r.status) + ": " + got(ctx, "cm-run.log").slice(-600) };
     const outcomes = new Map<string, Outcome>();
     const want = new Set(sampled);
     for (const [file, outcome] of [["caught.txt", "killed"], ["missed.txt", "survived"], ["timeout.txt", "timeout"], ["unviable.txt", "error"]] as const)
-      for (const id of read(join(ctx.tree.out, "cm", file)).split("\n")) if (want.has(id)) outcomes.set(id, outcome);
+      for (const id of got(ctx, "cm/" + file).split("\n")) if (want.has(id)) outcomes.set(id, outcome);
     return { outcomes };
   },
 };
@@ -467,12 +518,12 @@ export function skipOthers(file: string, text: string, keep: Set<number>): strin
 }
 
 const typescript: Adapter = {
-  units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => changedUnits(tsUnits(c.newPath!, ctx.tree.files.get(c.newPath!)!), touched(c))),
+  units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => agentUnits(ctx, c, tsUnits)),
   baseline(ctx, units) {
     const files = [...new Set(units.map((u) => u.file))];
     const r = ctx.run("node node_modules/vitest/vitest.mjs run --reporter=json --outputFile=/out/vt-base.json --includeTaskLocation " + files.map(q).join(" ") + " > /out/vt-base.log 2>&1; echo $? > /out/vt-base.exit");
-    if (r.status !== 0 || !existsSync(join(ctx.tree.out, "vt-base.exit"))) return { passing: [], error: "vitest did not run (" + tail(r) + ")" };
-    const results = existsSync(join(ctx.tree.out, "vt-base.json")) ? (JSON.parse(read(join(ctx.tree.out, "vt-base.json"))) as { testResults: { name: string; assertionResults: { status: string; location?: { line: number } }[] }[] }).testResults : [];
+    if (r.status !== 0 || !has(ctx, "vt-base.exit")) return { passing: [], error: "vitest did not run (" + tail(r) + ")" };
+    const results = has(ctx, "vt-base.json") ? (JSON.parse(got(ctx, "vt-base.json")) as { testResults: { name: string; assertionResults: { status: string; location?: { line: number } }[] }[] }).testResults : [];
     const byLine = new Map<string, string[]>();
     for (const t of results) {
       const file = posix.relative(ctx.o.repoDir, t.name);
@@ -483,33 +534,33 @@ const typescript: Adapter = {
   mutants(ctx, scopePatch) {
     const mutate = [...sourceRanges("typescript", parsePatch(scopePatch))].filter(([f]) => ctx.tree.list.has(f)).flatMap(([f, rs]) => rs.map(([s, e]) => f + ":" + s + "-" + e));
     if (mutate.length === 0) return { ids: [] };
-    writeFileSync(join(ctx.tree.out, "st-list.json"), JSON.stringify({ testRunner: "command", commandRunner: { command: "true" }, coverageAnalysis: "off", mutate, reporters: ["json"], jsonReporter: { fileName: "/out/st-list-report.json" }, tempDirName: "/tmp/stryker-tmp", concurrency: 2, plugins: [], logLevel: "warn", allowEmpty: true }));
-    const r = ctx.run(STRYKER + " /out/st-list.json > /out/st-list.log 2>&1; echo $? > /out/st-list.exit");
-    const exit = read(join(ctx.tree.out, "st-list.exit")).trim();
-    if (r.status !== 0 || exit !== "0" || !existsSync(join(ctx.tree.out, "st-list-report.json"))) return { ids: [], error: "Stryker could not list mutants (exit " + (exit || r.status) + "): " + read(join(ctx.tree.out, "st-list.log")).slice(-600) };
-    return { ids: [...strykerMutants(read(join(ctx.tree.out, "st-list-report.json"))).keys()] };
+    put(ctx, "st-list.json", JSON.stringify({ testRunner: "command", commandRunner: { command: "true" }, coverageAnalysis: "off", mutate, reporters: ["json"], jsonReporter: { fileName: "/out/st-list-report.json" }, tempDirName: "/tmp/stryker-tmp", concurrency: 2, plugins: [], logLevel: "warn", allowEmpty: true }));
+    const r = ctx.run(STRYKER + " /in/st-list.json > /out/st-list.log 2>&1; echo $? > /out/st-list.exit");
+    const exit = got(ctx, "st-list.exit").trim();
+    if (r.status !== 0 || exit !== "0" || !has(ctx, "st-list-report.json")) return { ids: [], error: "Stryker could not list mutants (exit " + (exit || r.status) + "): " + got(ctx, "st-list.log").slice(-600) };
+    return { ids: [...strykerMutants(got(ctx, "st-list-report.json")).keys()] };
   },
   run(ctx, _scopePatch, sampled, tests) {
     const files = [...new Set(tests.map((u) => u.file))];
-    files.forEach((f, i) => writeFileSync(join(ctx.tree.out, "kept-" + i + ".txt"), skipOthers(f, ctx.tree.files.get(f)!, new Set(tests.filter((u) => u.file === f).map((u) => u.start)))));
+    files.forEach((f, i) => put(ctx, "kept-" + i + ".txt", skipOthers(f, ctx.tree.files.get(f)!, new Set(tests.filter((u) => u.file === f).map((u) => u.start)))));
     const base = VITEST_CONFIGS.find((f) => ctx.tree.list.has(f));
     const include = JSON.stringify(files);
     writeFileSync(
-      join(ctx.tree.out, "vitest.config.mts"),
+      join(ctx.tree.in, "vitest.config.mts"),
       base
         ? "import base from './" + base + "';\nconst c: any = typeof base === 'function' ? await (base as any)({ command: 'serve', mode: 'test' }) : await base;\nexport default { ...c, test: { ...(c.test ?? {}), include: " + include + " } };\n"
         : "export default { test: { include: " + include + " } };\n",
     );
     const mutate = [...new Set(sampled.map((id) => /^(.*)@(\d+):(\d+)-(\d+):(\d+)#/.exec(id)!).map((m) => m[1] + ":" + m[2] + ":" + (Number(m[3]) - 1) + "-" + m[4] + ":" + (Number(m[5]) - 1)))];
-    writeFileSync(join(ctx.tree.out, "st-run.json"), JSON.stringify({ testRunner: "vitest", vitest: { configFile: ".gstack-mutation.vitest.config.mts", related: false }, coverageAnalysis: "perTest", mutate, reporters: ["json"], jsonReporter: { fileName: "/out/st-run-report.json" }, tempDirName: "/tmp/stryker-tmp", concurrency: 2, timeoutMS: 10000, logLevel: "warn", allowEmpty: true }));
-    const copies = files.map((f, i) => "cp /out/kept-" + i + ".txt " + q(f) + " && ").join("");
-    const r = ctx.run(copies + "cp /out/vitest.config.mts .gstack-mutation.vitest.config.mts || exit " + STRYKER_PREP_FAILED + "; " + STRYKER + " /out/st-run.json > /out/st-run.log 2>&1; echo $? > /out/st-run.exit");
-    const exit = read(join(ctx.tree.out, "st-run.exit")).trim();
-    if (r.status !== 0 || exit !== "0" || !existsSync(join(ctx.tree.out, "st-run-report.json"))) return { outcomes: new Map(), error: "Stryker exited " + (exit || r.status) + ": " + read(join(ctx.tree.out, "st-run.log")).slice(-600) };
-    const got = strykerMutants(read(join(ctx.tree.out, "st-run-report.json")));
+    put(ctx, "st-run.json", JSON.stringify({ testRunner: "vitest", vitest: { configFile: ".gstack-mutation.vitest.config.mts", related: false }, coverageAnalysis: "perTest", mutate, reporters: ["json"], jsonReporter: { fileName: "/out/st-run-report.json" }, tempDirName: "/tmp/stryker-tmp", concurrency: 2, timeoutMS: 10000, logLevel: "warn", allowEmpty: true }));
+    const copies = files.map((f, i) => "cp /in/kept-" + i + ".txt " + q(f) + " && ").join("");
+    const r = ctx.run(copies + "cp /in/vitest.config.mts .gstack-mutation.vitest.config.mts || exit " + STRYKER_PREP_FAILED + "; " + STRYKER + " /in/st-run.json > /out/st-run.log 2>&1; echo $? > /out/st-run.exit");
+    const exit = got(ctx, "st-run.exit").trim();
+    if (r.status !== 0 || exit !== "0" || !has(ctx, "st-run-report.json")) return { outcomes: new Map(), error: "Stryker exited " + (exit || r.status) + ": " + got(ctx, "st-run.log").slice(-600) };
+    const found = strykerMutants(got(ctx, "st-run-report.json"));
     const outcomes = new Map<string, Outcome>();
     for (const id of sampled) {
-      const m = got.get(id);
+      const m = found.get(id);
       if (m) outcomes.set(id, m.status === "Killed" ? "killed" : m.status === "Survived" || m.status === "NoCoverage" ? "survived" : m.status === "Timeout" ? "timeout" : "error");
     }
     return { outcomes };

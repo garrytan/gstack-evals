@@ -2,7 +2,9 @@
 // Finds the test units in a file and the lines each spans, so the scorer runs only the tests the agent added or changed:
 // those whose span holds a line the patch touched (outcome-per-skill plan v3, section 3). Python units are pytest functions
 // and methods, Go units are TestXxx functions, Rust units are #[test] functions, and TypeScript units are test() and it()
-// calls. Also maps changed Python lines to the functions mutmut names its mutants after.
+// calls. Also maps changed Python lines to the functions mutmut names its mutants after. Strings and comments are never
+// read as code.
+import { newLine, type FileChange } from "./diff.ts";
 
 export interface Unit {
   file: string;
@@ -17,17 +19,46 @@ export interface Unit {
 const indent = (s: string) => s.length - s.trimStart().length;
 const blank = (s: string) => s.trim() === "" || s.trimStart().startsWith("#");
 
+/** For each line, whether it starts a logical line: outside any string, bracket or backslash continuation. */
+function pyLineStarts(lines: string[]): boolean[] {
+  const starts: boolean[] = [];
+  let depth = 0;
+  let quote = "";
+  let cont = false;
+  for (const s of lines) {
+    starts.push(depth === 0 && quote === "" && !cont);
+    cont = false;
+    for (let k = 0; k < s.length; k++) {
+      const ch = s[k]!;
+      if (quote) {
+        if (ch === "\\") k++;
+        else if (s.startsWith(quote, k)) {
+          k += quote.length - 1;
+          quote = "";
+        }
+        continue;
+      }
+      if (ch === "#") break;
+      if (ch === '"' || ch === "'") {
+        quote = s.startsWith(ch.repeat(3), k) ? ch.repeat(3) : ch;
+        k += quote.length - 1;
+      } else if ("([{".includes(ch)) depth++;
+      else if (")]}".includes(ch)) depth = Math.max(0, depth - 1);
+      else if (ch === "\\" && k === s.length - 1) cont = true;
+    }
+    if (quote.length === 1) quote = "";
+  }
+  return starts;
+}
+
 /** The last line of an indented Python block that opens at line index i (0-based), 1-based. */
-function pyBlockEnd(lines: string[], i: number): number {
+function pyBlockEnd(lines: string[], starts: boolean[], i: number): number {
   const base = indent(lines[i]!);
   let end = i;
-  let open = 0;
-  for (let j = i; j < lines.length; j++) {
+  for (let j = i + 1; j < lines.length; j++) {
     const s = lines[j]!;
-    if (j > i && open === 0 && !blank(s) && indent(s) <= base) break;
-    if (!blank(s)) end = j;
-    for (const ch of s.replace(/#.*$/, "")) open += "([{".includes(ch) ? 1 : ")]}".includes(ch) ? -1 : 0;
-    if (open < 0) open = 0;
+    if (starts[j] && !blank(s) && indent(s) <= base) break;
+    if (!starts[j] || !blank(s)) end = j;
   }
   return end + 1;
 }
@@ -41,22 +72,24 @@ function pyDecoStart(lines: string[], i: number): number {
 
 export function pythonUnits(file: string, text: string): Unit[] {
   const lines = text.split("\n");
+  const starts = pyLineStarts(lines);
   const out: Unit[] = [];
   let cls: { name: string; end: number; body: number | null } | null = null;
   lines.forEach((s, i) => {
     if (cls && i + 1 > cls.end) cls = null;
+    if (!starts[i]) return;
     const c = /^class\s+(Test\w*)\b[^:]*:/.exec(s);
     if (c) {
-      cls = { name: c[1]!, end: pyBlockEnd(lines, i), body: null };
+      cls = { name: c[1]!, end: pyBlockEnd(lines, starts, i), body: null };
       return;
     }
     const d = /^(\s*)(?:async\s+)?def\s+(test\w*)\s*\(/.exec(s);
     if (!d) return;
     const ind = d[1]!.length;
-    if (ind === 0) out.push({ file, name: file + "::" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, i), scope: "" });
+    if (ind === 0) out.push({ file, name: file + "::" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, starts, i), scope: "" });
     else if (cls) {
       cls.body ??= ind;
-      if (ind === cls.body) out.push({ file, name: file + "::" + cls.name + "::" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, i), scope: "" });
+      if (ind === cls.body) out.push({ file, name: file + "::" + cls.name + "::" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, starts, i), scope: "" });
     }
   });
   return out;
@@ -65,22 +98,24 @@ export function pythonUnits(file: string, text: string): Unit[] {
 /** Top-level functions and the methods of top-level classes, the functions mutmut mutates, with mutmut's mangled names. */
 export function pythonFunctions(text: string): { mangled: string; start: number; end: number }[] {
   const lines = text.split("\n");
+  const starts = pyLineStarts(lines);
   const out: { mangled: string; start: number; end: number }[] = [];
   let cls: { name: string; end: number; body: number | null } | null = null;
   lines.forEach((s, i) => {
     if (cls && i + 1 > cls.end) cls = null;
+    if (!starts[i]) return;
     const c = /^class\s+(\w+)\b[^:]*:/.exec(s);
     if (c) {
-      cls = { name: c[1]!, end: pyBlockEnd(lines, i), body: null };
+      cls = { name: c[1]!, end: pyBlockEnd(lines, starts, i), body: null };
       return;
     }
     const d = /^(\s*)(?:async\s+)?def\s+(\w+)\s*\(/.exec(s);
     if (!d) return;
     const ind = d[1]!.length;
-    if (ind === 0) out.push({ mangled: "x_" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, i) });
+    if (ind === 0) out.push({ mangled: "x_" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, starts, i) });
     else if (cls) {
       cls.body ??= ind;
-      if (ind === cls.body) out.push({ mangled: "x\u01c1" + cls.name + "\u01c1" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, i) });
+      if (ind === cls.body) out.push({ mangled: "x\u01c1" + cls.name + "\u01c1" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, starts, i) });
     }
   });
   return out;
@@ -92,8 +127,93 @@ export function pythonModule(path: string): string {
   return m.endsWith(".__init__") ? m.slice(0, -9) : m === "__init__" ? "" : m;
 }
 
+/** The text with comments and the insides of string, rune and template literals turned to spaces, newlines kept, so every
+ * line and column stays where it was. Go's backquote strings are raw; TypeScript keeps the code inside a template's ${}
+ * and blanks regex literals, told from division by the token before them. */
+function blankLiterals(text: string, ts: boolean): string {
+  const out = text.split("");
+  const n = text.length;
+  const blankOut = (a: number, b: number) => {
+    for (let k = a; k < b && k < n; k++) if (out[k] !== "\n") out[k] = " ";
+  };
+  const template = (i: number): number => {
+    let s = i;
+    while (i < n && text[i] !== "\u0060") {
+      if (text[i] === "\\") i += 2;
+      else if (text.startsWith("${", i)) {
+        blankOut(s, i);
+        i = code(i + 2, true);
+        s = i;
+      } else i++;
+    }
+    blankOut(s, i);
+    return i + 1;
+  };
+  const code = (i: number, inExpr: boolean): number => {
+    let depth = 0;
+    let prev = "(";
+    while (i < n) {
+      const ch = text[i]!;
+      if (text.startsWith("//", i)) {
+        const e = text.indexOf("\n", i);
+        blankOut(i, e < 0 ? n : e);
+        i = e < 0 ? n : e;
+        continue;
+      }
+      if (text.startsWith("/*", i)) {
+        const e = text.indexOf("*/", i + 2);
+        blankOut(i, e < 0 ? n : e + 2);
+        i = e < 0 ? n : e + 2;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        let k = i + 1;
+        while (k < n && text[k] !== ch && text[k] !== "\n") k += text[k] === "\\" ? 2 : 1;
+        blankOut(i + 1, k);
+        i = k + 1;
+        prev = "a";
+        continue;
+      }
+      if (ch === "\u0060") {
+        if (ts) i = template(i + 1);
+        else {
+          const e = text.indexOf("\u0060", i + 1);
+          blankOut(i + 1, e < 0 ? n : e);
+          i = e < 0 ? n : e + 1;
+        }
+        prev = "a";
+        continue;
+      }
+      if (ts && ch === "/" && /[(,=:[!&|?{};+\-*%<>~^]/.test(prev)) {
+        let k = i + 1;
+        let cls = false;
+        while (k < n && text[k] !== "\n" && (cls || text[k] !== "/")) {
+          if (text[k] === "\\") k++;
+          else if (text[k] === "[") cls = true;
+          else if (text[k] === "]") cls = false;
+          k++;
+        }
+        blankOut(i + 1, k);
+        i = k + 1;
+        prev = "a";
+        continue;
+      }
+      if (inExpr && ch === "{") depth++;
+      else if (inExpr && ch === "}") {
+        if (depth === 0) return i + 1;
+        depth--;
+      }
+      if (!/\s/.test(ch)) prev = /[\w$]/.test(ch) ? "a" : ch;
+      i++;
+    }
+    return n;
+  };
+  code(0, false);
+  return out.join("");
+}
+
 export function goUnits(file: string, text: string): Unit[] {
-  const lines = text.split("\n");
+  const lines = blankLiterals(text, false).split("\n");
   const out: Unit[] = [];
   const dir = file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : ".";
   lines.forEach((s, i) => {
@@ -324,7 +444,7 @@ function skipTemplate(text: string, i: number): number {
 /** Each test() or it() call in a TypeScript or JavaScript test file, found by its line; vitest reports the same line. */
 export function tsUnits(file: string, text: string): Unit[] {
   const out: Unit[] = [];
-  text.split("\n").forEach((s, i) => {
+  blankLiterals(text, true).split("\n").forEach((s, i) => {
     const re = /(^|[^.\w$])((?:it|test)(?:\.\w+(?:\([^()]*\))?)*)\s*[(\u0060]/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(s))) {
@@ -335,5 +455,20 @@ export function tsUnits(file: string, text: string): Unit[] {
   return out;
 }
 
-/** The units whose span holds a touched line. */
-export const changedUnits = (units: Unit[], lines: Set<number>): Unit[] => units.filter((u) => [...lines].some((n) => n >= u.start && n <= u.end));
+/** The units the patch added or changed: those whose span holds an added line, and those whose old span (in before, the
+ * same file's units before the patch) held a removed line, found by the first line of theirs the patch kept. So a test the
+ * patch deleted whole changes none of its neighbours, and a test that only lost lines still counts as changed. */
+export function changedUnits(units: Unit[], change: FileChange, before: Unit[] = []): Unit[] {
+  const lines = new Set(change.added);
+  for (const u of before) {
+    if (!change.removed.some((n) => n >= u.start && n <= u.end)) continue;
+    for (let n = u.start; n <= u.end; n++) {
+      const now = newLine(change, n);
+      if (now !== null) {
+        lines.add(now);
+        break;
+      }
+    }
+  }
+  return units.filter((u) => [...lines].some((n) => n >= u.start && n <= u.end));
+}

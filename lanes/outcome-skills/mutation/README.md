@@ -20,16 +20,16 @@ pins.ts holds this table and the record carries it. Each tool image under images
 The tree is a git patch against a project image that holds the repository at its starting tree with its dependencies, as the verifier's task image does. `scoreTree()` in run.ts:
 
 1. Builds a scorer image on the project image with no network: it copies the tool in. Python installs mutmut's wheels into a folder of their own that is appended to `sys.path`, so the project's own packages, pytest included, still win. TypeScript links the project's vitest into Stryker's folder, so the runner uses the project's version and config.
-2. Prepares a fresh volume as root with no network: copies the repository, applies the patch as the verifier does, and reads back the changed files and the file list.
-3. Finds the test units the patch added or changed: a unit counts when a line the patch touched falls inside it. Units are pytest functions and methods, Go `TestXxx` functions, Rust `#[test]` functions, and TypeScript `test()` and `it()` calls.
+2. Prepares a fresh volume as root with no network: copies the repository, keeps the changed files as they were, applies the patch as the verifier does, and reads back the changed files and the file list.
+3. Finds the test units the patch added or changed: a unit counts when an added line falls inside it, or when a removed line fell inside it before the patch and some of its lines remain. So a test deleted whole credits none of its neighbours. Units are pytest functions and methods, Go `TestXxx` functions, Rust `#[test]` functions, and TypeScript `test()` and `it()` calls, found in code only: text inside strings, comments, templates and regex literals is never taken for a unit or a block boundary.
 4. Runs those units on the tree. A unit that fails, errors, is skipped or never runs is dropped and counted.
 5. Lists the tool's mutants within its restriction, samples at most 200 by the order of sha256(seed, id) with the frozen seed, and runs them against the passing units only.
 6. Scores.
 7. Removes its volumes and hands the work folder, which keeps each step's logs, back to the caller's user.
 
-Every step after the prepare runs as uid 10001 with no network, no capabilities, a read-only root, a tmpfs /tmp and CPU, memory and process limits. The tools need no network: Go runs with `GOPROXY=off` and `GOTOOLCHAIN=local`, Cargo with `CARGO_NET_OFFLINE=true`.
+Every step after the prepare runs as uid 10001 with no network, no capabilities, a read-only root, a tmpfs /tmp and CPU, memory and process limits. The scorer's inputs to the tools (configs, exec scripts, the sample, Stryker's rewritten test files) sit in a folder mounted read-only at /in. The containers write only to /out, and the host reads /out through regular files only: a symlink anywhere on the path, a non-file, or a file over 64 MiB counts as missing. The tools need no network: Go runs with `GOPROXY=off` and `GOTOOLCHAIN=local`, Cargo with `CARGO_NET_OFFLINE=true`.
 
-How each tool runs only the agent's tests: pytest node ids in mutmut's test selection; `go test -run` with the exact names, per package; `cargo test -- --exact` with the full test paths; and for Stryker, every other `test()` or `it()` call in the agent's test files is turned into `.skip` in the scorer's copy, because the vitest runner clears any name filter for its dry run.
+How each tool runs only the agent's tests: pytest node ids in mutmut's test selection; `go test -run` with the exact names, per package; `cargo test` limited to the targets that hold the agent's tests (`--test <name>`, `--lib` or `--bins`) with `-- --exact` and the full test paths, across the workspace; and for Stryker, every other `test()` or `it()` call in the agent's test files is turned into `.skip` in the scorer's copy, because the vitest runner clears any name filter for its dry run.
 
 How each tool's sample runs: cargo-mutants with `-F` naming the sampled mutants exactly; mutmut with the sampled mutant names; go-mutesting through an exec script that runs only sampled mutants and records each outcome, checked against go-mutesting's own score line; Stryker with each sampled mutant's exact location as a `mutate` range, keeping only the sampled mutants from its report.
 
@@ -57,4 +57,7 @@ tests/outcome-skills/mutation.test.ts runs without Docker: the patch reader, the
 - A sampled Stryker mutant whose location holds other mutants, such as a block statement, runs those too; only the sampled ones are scored.
 - Rust doc tests and tests outside `--tests` targets are not units. TypeScript units are found by their `test(` or `it(` call sites; tests built by helpers that wrap those calls are not found.
 - Go runs `go test -vet=off`, so a mutant that only breaks a vet check is judged by the tests.
+- cargo-mutants builds each of its two jobs in its own copy of the tree under the 4 GiB tmpfs /tmp, with its own target folder; sharing one made parallel jobs test each other's builds. A crate whose builds outgrow /tmp reads as a tool error.
+- If an unchanged Rust test has the same full path as one of the agent's tests in a target the scorer runs, the tree is a tool error, because their runs can't be told apart.
+- The agent's tests run in the same container as the tool, so a test written to tamper with the tool's own records could fake outcomes. The scorer keeps its inputs read-only and never follows the containers' output on the host, but it does not defend the tool's records inside the container.
 - CI's rig tier does not run the Docker test yet; run it with `GSTACK_EVALS_DOCKER=1 bun test tests/outcome-skills`.

@@ -153,9 +153,10 @@ describe("test units", () => {
       ["tests/test_x.py::test_a", 3, 5],
       ["tests/test_x.py::TestB::test_c", 13, 15],
     ]);
-    expect(changedUnits(units, new Set([9])).length).toBe(0);
-    expect(changedUnits(units, new Set([15])).map((u) => u.name)).toEqual(["tests/test_x.py::TestB::test_c"]);
-    expect(changedUnits(units, new Set([3])).map((u) => u.name)).toEqual(["tests/test_x.py::test_a"]);
+    const adds = (...added: number[]) => ({ oldPath: "tests/test_x.py", newPath: "tests/test_x.py", added, removed: [], kept: [], shifts: [], binary: false });
+    expect(changedUnits(units, adds(9)).length).toBe(0);
+    expect(changedUnits(units, adds(15)).map((u) => u.name)).toEqual(["tests/test_x.py::TestB::test_c"]);
+    expect(changedUnits(units, adds(3)).map((u) => u.name)).toEqual(["tests/test_x.py::test_a"]);
   });
 
   test("Python functions get mutmut's mangled names and module paths", () => {
