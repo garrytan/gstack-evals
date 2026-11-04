@@ -434,54 +434,27 @@ export function rustResults(log: string): Map<string, boolean> {
 
 const exactArgs = (units: Unit[]) => "-- --exact " + [...new Set(units.map((u) => u.name))].map(q).join(" ");
 
-/** The harnesses that may hold a unit, so a same-named test in a target the agent did not touch never runs: its
- * integration test ("test <name>"); "bin", every binary, for a binary's own files or a crate with no library; "lib" for
- * lib.rs; and for other files under src, "lib", plus "bin" when the crate has both, since either may declare the module. */
-function rustHarnesses(list: Set<string>, u: Unit): string[] {
-  if (u.scope !== "unit") return ["test " + u.scope];
-  const root = crateRoot(list, u.file);
-  const src = root === "." ? "src/" : root + "/src/";
-  if (u.file === src + "main.rs" || u.file.startsWith(src + "bin/") || !list.has(src + "lib.rs")) return ["bin"];
-  if (u.file === src + "lib.rs" || !(list.has(src + "main.rs") || [...list].some((p) => p.startsWith(src + "bin/")))) return ["lib"];
-  return ["lib", "bin"];
-}
-
+/** cargo test's target flags for the units, so a same-named test in a target the agent did not touch never runs: each
+ * integration test by name; the binaries for a binary's own files; and for other files under src, the library, plus the
+ * binaries when the crate has both, since either may declare the module. */
 function rustTargets(ctx: Ctx, units: Unit[]): string {
-  const flags = units.flatMap((u) => rustHarnesses(ctx.tree.list, u)).map((h) => (h === "lib" ? "--lib" : h === "bin" ? "--bins" : "--test " + q(h.slice(5))));
-  return [...new Set(flags)].join(" ");
-}
-
-/** Why cargo test's log can't be read as the agent's units alone, or null. Each harness (the libraries, the binaries, or
- * one integration test) may run a name only as often as the agent wrote it there, so an unchanged test with the same
- * path in the same harness is a collision. A module both the library and a binary compile runs once in each; in a tree
- * with more than one Cargo.toml it may run only once, since another package's binary could hold the same path. */
-export function rustCollision(log: string, units: Unit[], list: Set<string>): string | null {
-  const onePackage = [...list].filter((p) => posix.basename(p) === "Cargo.toml").length === 1;
-  const allowed = new Map<string, number>();
-  const add = (k: string, n: number) => allowed.set(k, (allowed.get(k) ?? 0) + n);
+  const flags = new Set<string>();
   for (const u of units) {
-    const hs = rustHarnesses(list, u);
-    for (const h of hs) add(h + "\t" + u.name, 1);
-    add("*\t" + u.name, onePackage ? hs.length : 1);
-  }
-  const runs = new Map<string, number>();
-  let harness = "lib";
-  for (const line of log.split("\n")) {
-    const run = /^\s*Running (?:unittests )?(\S+)/.exec(line);
-    if (run) {
-      const m = /(?:^|\/)tests\/([^/]+?)(?:\.rs|\/main\.rs)$/.exec(run[1]!);
-      harness = m ? "test " + m[1] : /(?:^|\/)src\/lib\.rs$/.test(run[1]!) ? "lib" : "bin";
+    if (u.scope !== "unit") {
+      flags.add("--test " + q(u.scope));
       continue;
     }
-    const t = /^test (\S+) \.\.\. /.exec(line);
-    if (!t) continue;
-    for (const k of [harness + "\t" + t[1], "*\t" + t[1]]) {
-      runs.set(k, (runs.get(k) ?? 0) + 1);
-      if (runs.get(k)! > (allowed.get(k) ?? 0))
-        return "test " + t[1] + " ran " + runs.get(k) + " times " + (k.startsWith("*") ? "across harnesses" : "in harness " + harness) + ", more than the agent's tests account for: an unchanged test may share its exact path";
+    const root = crateRoot(ctx.tree.list, u.file);
+    const src = root === "." ? "src/" : root + "/src/";
+    const bin = u.file === src + "main.rs" || u.file.startsWith(src + "bin/");
+    const hasBins = ctx.tree.list.has(src + "main.rs") || [...ctx.tree.list].some((p) => p.startsWith(src + "bin/"));
+    if (bin || !ctx.tree.list.has(src + "lib.rs")) flags.add("--bins");
+    else {
+      flags.add("--lib");
+      if (hasBins) flags.add("--bins");
     }
   }
-  return null;
+  return [...flags].join(" ");
 }
 
 const rust: Adapter = {
@@ -498,8 +471,7 @@ const rust: Adapter = {
     const exit = got(ctx, "rs-base.exit").trim();
     const ran = [...log.matchAll(/^test \S+ \.\.\. /gm)].length;
     if ((exit !== "0" && exit !== "101") || ran === 0) return { passing: [], error: "cargo test ran none of the selected tests (exit " + exit + "): " + log.slice(-600) };
-    const clash = rustCollision(log, units, ctx.tree.list);
-    if (clash) return { passing: [], error: clash };
+    if (ran > units.length) return { passing: [], error: ran + " tests ran for " + units.length + " the agent wrote: an unchanged test shares an exact name with one of them in a target the scorer runs" };
     const res = rustResults(log);
     return { passing: units.filter((u) => res.get(u.scope + "\t" + u.name) === true) };
   },

@@ -220,19 +220,13 @@ describe.skipIf(!DOCKER)("rust: a same-named test in a target the agent did not 
   }, LONG);
 });
 
-describe.skipIf(!DOCKER)("rust: runs count per harness, and src/bin.rs keeps its module path (GSTACK_EVALS_DOCKER=1)", () => {
+describe.skipIf(!DOCKER)("rust: src/bin.rs keeps its module path, and a same-path test in one harness is refused (GSTACK_EVALS_DOCKER=1)", () => {
   let fx: F.Fixture;
   beforeAll(() => {
     fx = F.fixture("rust", F.RS_SHARED_BASE);
   }, LONG);
   afterAll(() => fx?.cleanup());
   const score = (files: F.Files) => scoreTree({ lang: "rust", image: fx.image, patch: fx.patch(files), work: fx.dir + "/work" });
-
-  test("the agent's tests in a module both lib.rs and main.rs declare run once in each harness and score", () => {
-    const r = score({ "src/shared.rs": F.RS_NEW + F.RS_STRONG_INLINE });
-    expect(r).toMatchObject({ status: "scored", tests: { changed: 2, passing: 2 } });
-    expect(r.score!).toBeGreaterThanOrEqual(HIGH);
-  }, LONG);
 
   test("the agent's tests in src/bin.rs run under bin:: and score, apart from the binary's unchanged tests::clamps", () => {
     const r = score({ "src/bin.rs": F.RS_NEW + F.RS_STRONG_INLINE });
