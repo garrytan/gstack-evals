@@ -5,22 +5,22 @@ plan-eng-review alone (autoplan stops at admission): M1 ladder [60x3 $1804 MDD 1
 autoplan alone (plan-eng-review stops at admission): M1 ladder [54x3 $2147 MDD 19.2, 54x4 $2464 MDD 17.4, 48x4 $2228 MDD 18.6, 42x4 $1991 MDD 19.8, 36x4 $1754 MDD 21.0, 30x4 $1517 MDD 23.4, 24x4 $1280 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 48x2 MDD 24.6 (stops)
 == forced or exposed told, 1.15 times told
 both alive: plan-eng-review 42x4 MDD 19.8 $1088; autoplan 42x4 MDD 19.8 $1678; wave 1 plans $9368 at these prices
-plan-eng-review alone (autoplan stops at admission): M1 ladder [42x4 $1538 MDD 19.8] -> runs 42x4, MDD 19.8, $1538, reserve $462 of its $2000 cap; d7 would give 42x4 MDD 19.8 (runs)
+plan-eng-review alone (autoplan stops at admission): M1 ladder [60x3 $1868 MDD 18.6, 60x4 $2079 MDD 16.8, 54x4 $1898 MDD 17.4, 48x4 $1718 MDD 18.6, 42x4 $1538 MDD 19.8] -> runs 42x4, MDD 19.8, $1538, reserve $462 of its $2000 cap; d7 would give 42x4 MDD 19.8 (runs)
   envelope: autoplan settles about $321 at admission; G then plans $1859 against $2766 with both alive; wave 1 plans $8461 of the $10000 envelope (fits)
-autoplan alone (plan-eng-review stops at admission): M1 ladder [42x4 $2128 MDD 19.8, 36x4 $1874 MDD 21.0, 30x4 $1620 MDD 23.4, 24x4 $1366 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 42x2 MDD 26.4 (stops)
+autoplan alone (plan-eng-review stops at admission): M1 ladder [54x3 $2281 MDD 19.2, 54x4 $2636 MDD 17.4, 48x4 $2382 MDD 18.6, 42x4 $2128 MDD 19.8, 36x4 $1874 MDD 21.0, 30x4 $1620 MDD 23.4, 24x4 $1366 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 42x2 MDD 26.4 (stops)
 == forced or exposed told, 1.5 times told
 both alive: plan-eng-review 42x3 MDD 22.2 $1072; autoplan 42x3 MDD 22.2 $1674; wave 1 plans $9426 at these prices
   past the 20-point bound with both alive: plan-eng-review, autoplan; autoplan stops at admission item 5 and plan-eng-review re-sizes alone
-plan-eng-review alone (autoplan stops at admission): M1 ladder [42x3 $1501 MDD 22.2, 42x4 $1679 MDD 19.8] -> runs 42x4, MDD 19.8, $1679, reserve $321 of its $2000 cap; d7 would give 42x3 MDD 22.2 (stops)
+plan-eng-review alone (autoplan stops at admission): M1 ladder [60x3 $2018 MDD 18.6, 60x4 $2273 MDD 16.8, 54x4 $2075 MDD 17.4, 48x4 $1877 MDD 18.6, 42x4 $1679 MDD 19.8] -> runs 42x4, MDD 19.8, $1679, reserve $321 of its $2000 cap; d7 would give 42x3 MDD 22.2 (stops)
   envelope: autoplan settles about $361 at admission; G then plans $2040 against $2746 with both alive; wave 1 plans $8720 of the $10000 envelope (fits)
-autoplan alone (plan-eng-review stops at admission): M1 ladder [42x3 $2102 MDD 22.2, 42x4 $2449 MDD 19.8, 36x4 $2155 MDD 21.0, 30x4 $1860 MDD 23.4, 24x4 $1566 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 36x2 MDD 28.8 (stops)
+autoplan alone (plan-eng-review stops at admission): M1 ladder [54x3 $2592 MDD 19.2, 54x4 $3037 MDD 17.4, 48x4 $2743 MDD 18.6, 42x4 $2449 MDD 19.8, 36x4 $2155 MDD 21.0, 30x4 $1860 MDD 23.4, 24x4 $1566 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 36x2 MDD 28.8 (stops)
 == high, 10 times a Verified session
 both alive: plan-eng-review 42x3 MDD 22.2 $1506; autoplan 24x3 MDD 28.8 $1682; wave 1 plans $9649 at these prices
-  past the 20-point bound with both alive: plan-eng-review, autoplan; autoplan stops at admission item 5 and plan-eng-review re-sizes alone
-plan-eng-review alone (autoplan stops at admission): M1 ladder [42x3 $2105 MDD 22.2, 42x4 $2367 MDD 19.8, 36x4 $2078 MDD 21.0, 30x4 $1788 MDD 23.4, 24x4 $1499 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 36x2 MDD 28.8 (stops)
-autoplan alone (plan-eng-review stops at admission): M1 ladder [24x3 $1862 MDD 28.8, 24x4 $2141 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 24x2 MDD 34.8 (stops)
+  past the 20-point bound with both alive: plan-eng-review, autoplan; neither finds an alone design: both skills stop at admission as FIX-METHOD (price)
+plan-eng-review alone (autoplan stops at admission): M1 ladder [60x3 $2861 MDD 18.6, 60x4 $3236 MDD 16.8, 54x4 $2946 MDD 17.4, 48x4 $2657 MDD 18.6, 42x4 $2367 MDD 19.8, 36x4 $2078 MDD 21.0, 30x4 $1788 MDD 23.4, 24x4 $1499 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 36x2 MDD 28.8 (stops)
+autoplan alone (plan-eng-review stops at admission): M1 ladder [54x3 $3603 MDD 19.2, 54x4 $4230 MDD 17.4, 48x4 $3812 MDD 18.6, 42x4 $3394 MDD 19.8, 36x4 $2976 MDD 21.0, 30x4 $2559 MDD 23.4, 24x4 $2141 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 24x2 MDD 34.8 (stops)
 == crew line at TS's full rate
 both alive: plan-eng-review 36x4 MDD 21.0 $1245; autoplan 36x4 MDD 21.0 $1694; wave 1 plans $9299 at these prices
-  past the 20-point bound with both alive: plan-eng-review, autoplan; autoplan stops at admission item 5 and plan-eng-review re-sizes alone
-plan-eng-review alone (autoplan stops at admission): M1 ladder [36x4 $1964 MDD 21.0, 30x4 $1692 MDD 23.4, 24x4 $1419 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 30x2 MDD 31.2 (stops)
-autoplan alone (plan-eng-review stops at admission): M1 ladder [36x4 $2414 MDD 21.0, 30x4 $2077 MDD 23.4, 24x4 $1740 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 24x2 MDD 34.8 (stops)
+  past the 20-point bound with both alive: plan-eng-review, autoplan; neither finds an alone design: both skills stop at admission as FIX-METHOD (price)
+plan-eng-review alone (autoplan stops at admission): M1 ladder [60x3 $2864 MDD 18.6, 60x4 $3055 MDD 16.8, 54x4 $2783 MDD 17.4, 48x4 $2510 MDD 18.6, 42x4 $2237 MDD 19.8, 36x4 $1964 MDD 21.0, 30x4 $1692 MDD 23.4, 24x4 $1419 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 30x2 MDD 31.2 (stops)
+autoplan alone (plan-eng-review stops at admission): M1 ladder [54x3 $3107 MDD 19.2, 54x4 $3424 MDD 17.4, 48x4 $3088 MDD 18.6, 42x4 $2751 MDD 19.8, 36x4 $2414 MDD 21.0, 30x4 $2077 MDD 23.4, 24x4 $1740 MDD 26.4] -> stops, FIX-METHOD (price); d7 would give 24x2 MDD 34.8 (stops)

@@ -39,6 +39,7 @@ def phi(x):
     return 0.5 * (1 + math.erf(x / math.sqrt(2)))
 
 def repo_of(n, cap, g=G_REPOS):
+    if n > cap * g: sys.exit("power.py: %d tasks can't fit %d repositories at %d per repository; fix: use at most %d tasks" % (n, g, cap, cap * g))
     a = min((n - g) // (cap - 1), g)
     sizes = [cap] * g if a == g else [cap] * a + [n - cap * a - (g - a - 1)] + [1] * (g - a - 1)
     assert sum(sizes) == n and len(sizes) == g and 1 <= min(sizes) and max(sizes) <= cap, (n, cap, sizes)

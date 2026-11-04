@@ -4,17 +4,20 @@
 # It reuses plan v3's frozen price model (cost.py, survivor.py's alone()) and MDD grid (mdd-grid.json times 1.2)
 # from the merged plan bundle, checked by sha256 before use, and changes none of their numbers.
 # M1 replaces d7's order (particle-1, then trials, then tasks) for G only. The ladder is fixed, with no search:
-#   rung 1: the survivor's both-alive size at the same prices (n0 x k0, from cost.py's frozen sizing);
+#   rung 1: the survivor's plan v3 planned size priced alone (n0 x k0: 60 x 3 for plan-eng-review, 54 x 3 for autoplan);
 #   rung 2: n0 x 4, when k0 is under 4 (trials added);
 #   rung 3 on: k = 4 trials, tasks n0-6, n0-12, ... down to 24 (tasks traded for trials);
 # the design is the first rung inside the $1,700 plan line whose MDD (plan v3's grid times 1.2) is at most the
 # 20-point bound. If no rung qualifies, the survivor stops as FIX-METHOD (price). A particle-1 row would be dropped
 # first; G's plan has none. Which skill survives: a skill that fails admission items 1 to 4 stops and the other
-# re-sizes alone; if the both-alive re-size leaves a skill past the bound, that skill stops, and if both are past it,
-# autoplan stops (plan v3's envelope trims it before plan-eng-review) and plan-eng-review re-sizes alone.
-# Env (admission's metered inputs; defaults are plan v3's house central): MULT (Opus none session over a Verified
-# session's $0.191), M_PER and M_AP (told session multiples of none for plan-eng-review and autoplan), AUTH_PAID
-# (paid author and audit dollars per valid task), AUTH_EXTRA (crew dollars per valid task), YIELD_G (in-band yield).
+# re-sizes alone; if the both-alive re-size leaves one skill past the bound, that skill stops and the other re-sizes
+# alone; if both are past it, or no both-alive design fits the plan line, plan-eng-review re-sizes alone first, then
+# autoplan if plan-eng-review finds no rung, and both stop only if neither finds one (P1's order).
+# Env (admission's metered inputs; with none set it prints plan v3's planning cases): MULT (required: Opus none
+# session over a Verified session's $0.191), M_PER and M_AP (told session multiples of none for plan-eng-review and
+# autoplan), AUTH_PAID (paid author and audit dollars per valid task), AUTH_EXTRA (crew dollars per valid task).
+# Metered inputs price G only; U and X stay at plan v3's house central. YIELD_G (G's in-band yield is frozen at
+# plan v3's) and TOLD_SCALE (a planning case, not a metered input) are refused.
 import hashlib, json, os, sys
 D = os.path.dirname(os.path.abspath(__file__))
 P = os.path.join(D, "..", "2026-11-03-geva-225-outcome-per-skill-plan")
@@ -29,15 +32,18 @@ for f, h in PINS.items():
     if got != h:
         sys.exit("resize.py: plan v3 input changed: %s sha256 %s, pinned %s; fix: restore it from 5f13212, or change the pin only in a superseding prereg" % (f, got, h))
 
-NUMERIC = ("MULT", "M_PER", "M_AP", "AUTH_PAID", "AUTH_EXTRA", "YIELD_G", "TOLD_SCALE")
+NUMERIC = ("MULT", "M_PER", "M_AP", "AUTH_PAID", "AUTH_EXTRA")
+for k in ("YIELD_G", "TOLD_SCALE"):
+    if k in os.environ:
+        sys.exit("resize.py: refused input: %s is set; fix: unset it, because %s" % (k, "G's in-band yield is frozen at plan v3's" if k == "YIELD_G" else "it names a planning case, not a metered input"))
 for k in NUMERIC:
     if k in os.environ:
         try:
             v = float(os.environ[k])
         except ValueError:
             v = float("nan")
-        if not (v > 0 and v < 1000) or (k == "YIELD_G" and v > 1):
-            sys.exit("resize.py: bad metered input: %s=%r is not a positive number%s; fix: pass the metered value from section 6, item 5" % (k, os.environ[k], " at most 1" if k == "YIELD_G" else ""))
+        if not (v > 0 and v < 1000):
+            sys.exit("resize.py: bad metered input: %s=%r is not a positive number; fix: pass the metered value from section 6, item 5" % (k, os.environ[k]))
 
 def model(env):
     saved = {k: os.environ.get(k) for k in env}
@@ -52,8 +58,9 @@ def model(env):
     if "M_PER" in env: ns["TOLD"]["plan-eng-review"] = float(env["M_PER"])
     if "M_AP" in env: ns["TOLD"]["autoplan"] = float(env["M_AP"])
     if "AUTH_PAID" in env: ns["AUTH"]["G"] = float(env["AUTH_PAID"]) + float(env.get("AUTH_EXTRA", "1.2"))
-    if "YIELD_G" in env: ns["YIELD"]["G"] = float(env["YIELD_G"])
     return ns
+
+PLANNED = {"plan-eng-review": (60, 3), "autoplan": (54, 3)}
 
 def ladder(ns, s, n0, k0):
     rungs = [(n0, k0)] + ([(n0, 4)] if k0 < 4 else []) + [(n, 4) for n in range(n0 - 6, 23, -6)]
@@ -88,45 +95,64 @@ CASES = [
 ]
 ENVELOPE, CAP = 10000, 2000
 
-def wave1(ns):
+def wave1(ns, ref):
     t = 0
     for f in ns["FAM"]:
-        b = ns["best"](f, (0, 0), (0, 0))
+        b = (ns if f == "G" else ref)["best"](f, (0, 0), (0, 0))
         t += sum(round(sum(c.values())) for c in b[4]) if b else 0
     return t
 
-def run(name, env):
+def order(alone):
+    if not alone["plan-eng-review"]["stops"]:
+        return "autoplan stops at admission item 5 and plan-eng-review re-sizes alone"
+    if not alone["autoplan"]["stops"]:
+        return "plan-eng-review finds no alone design and stops; autoplan re-sizes alone"
+    return "neither finds an alone design: both skills stop at admission as FIX-METHOD (price)"
+
+def run(name, env, metered=False):
     ns = model(env)
+    w1 = wave1(ns, model(dict(CASES[0][1])) if metered else ns)
     base = ns["best"]("G", (0, 0), (0, 0))
+    alone = {s: ladder(ns, s, *PLANNED[s]) for s in PLANNED}
     print("== " + name)
     if base is None:
-        print("no both-alive G design fits the $1,700 line: both skills stop at admission as FIX-METHOD (price)")
-        return
-    (n1, n2), k = base[1], base[2]
-    tot = [round(sum(c.values())) for c in base[4]]
-    w1 = wave1(ns)
-    over = [s for s, m in zip(("plan-eng-review", "autoplan"), base[3]) if m > ns["BOUND"]]
-    print("both alive: plan-eng-review %dx%d MDD %s $%d; autoplan %dx%d MDD %s $%d; wave 1 plans $%d at these prices" % (n1, k, base[3][0], tot[0], n2, k, base[3][1], tot[1], w1))
-    if over:
-        stop = "autoplan" if len(over) == 2 else over[0]
-        keep = "autoplan" if stop == "plan-eng-review" else "plan-eng-review"
-        print("  past the 20-point bound with both alive: %s; %s stops at admission item 5 and %s re-sizes alone" % (", ".join(over), stop, keep))
-    for s, other, n0 in (("plan-eng-review", "autoplan", n1), ("autoplan", "plan-eng-review", n2)):
-        m1, old = ladder(ns, s, n0, k), d7(ns, s, n0, k)
+        print("no both-alive G design fits the $1,700 line: " + order(alone))
+        sizes = PLANNED
+    else:
+        (n1, n2), k = base[1], base[2]
+        tot = [round(sum(c.values())) for c in base[4]]
+        sizes = {"plan-eng-review": (n1, k), "autoplan": (n2, k)}
+        over = [s for s, m in zip(("plan-eng-review", "autoplan"), base[3]) if m > ns["BOUND"]]
+        print("both alive: plan-eng-review %dx%d MDD %s $%d; autoplan %dx%d MDD %s $%d; wave 1 plans $%d at these prices" % (n1, k, base[3][0], tot[0], n2, k, base[3][1], tot[1], w1))
+        if len(over) == 1:
+            keep = "autoplan" if over[0] == "plan-eng-review" else "plan-eng-review"
+            print("  past the 20-point bound with both alive: %s; %s stops at admission item 5 and %s re-sizes alone" % (over[0], over[0], keep))
+        elif over:
+            print("  past the 20-point bound with both alive: %s; %s" % (", ".join(over), order(alone)))
+    for s, other in (("plan-eng-review", "autoplan"), ("autoplan", "plan-eng-review")):
+        m1, old = alone[s], d7(ns, s, *sizes[s])
         rungs = ", ".join("%dx%d $%d MDD %s" % t for t in m1["tried"])
         verdict = "stops, FIX-METHOD (price)" if m1["stops"] else "runs %dx%d, MDD %s, $%d, reserve $%d of its $%d cap" % (m1["n"], m1["k"], m1["mdd"], m1["price"], CAP - m1["price"], CAP)
         print("%s alone (%s stops at admission): M1 ladder [%s] -> %s; d7 would give %dx%d MDD %s (%s)" % (
             s, other, rungs, verdict, old["n"], old["k"], old["mdd"], "stops" if old["stops"] else "runs"))
-        if not m1["stops"]:
-            g_total = at_admission(ns, other) + m1["price"]
+        if m1["stops"]:
+            continue
+        g_total = at_admission(ns, other) + m1["price"]
+        if base is None:
+            total = w1 + g_total
+            print("  envelope: %s settles about $%d at admission; G then plans $%d with no both-alive design; wave 1 plans $%d of the $%d envelope (%s)" % (
+                other, round(at_admission(ns, other)), round(g_total), round(total), ENVELOPE, "fits" if total <= ENVELOPE else "OVER"))
+        else:
             total = w1 - tot[0] - tot[1] + g_total
             print("  envelope: %s settles about $%d at admission; G then plans $%d against $%d with both alive; wave 1 plans $%d of the $%d envelope (%s)" % (
                 other, round(at_admission(ns, other)), round(g_total), tot[0] + tot[1], round(total), ENVELOPE, "fits" if total <= ENVELOPE else "OVER"))
 
 if __name__ == "__main__":
     extra = {k: os.environ[k] for k in NUMERIC if k in os.environ}
+    if extra and "MULT" not in extra:
+        sys.exit("resize.py: bad metered input: MULT is missing; fix: pass none's metered mean session cost over $0.191 (section 6, item 5)")
     if extra:
-        run("metered inputs " + json.dumps(extra, sort_keys=True), dict({"P1RATIO": "0.41", "AUTH_EXTRA": "1.2"}, **extra))
+        run("metered inputs " + json.dumps(extra, sort_keys=True), dict({"P1RATIO": "0.41", "AUTH_EXTRA": "1.2"}, **extra), metered=True)
     else:
         for name, env in CASES:
             run(name, env)
