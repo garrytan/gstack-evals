@@ -34,6 +34,9 @@ const STORIES: Record<Lang, Story> = {
 };
 
 const LICENCE_DIR: Record<Lang, string> = { rust: "rust", typescript: "node", python: "python", go: "go" };
+// The pinned tools' verdicts on the strong trees, [killed, survived]. Every survivor left is a mutant the strong tests
+// cannot tell apart (in Rust, < to <= and > to >= at clamp's bounds), so the counts never move between runs.
+const STRONG: Record<Lang, [number, number]> = { python: [8, 2], go: [14, 4], rust: [17, 2], typescript: [17, 2] };
 
 for (const lang of Object.keys(STORIES) as Lang[]) {
   describe.skipIf(!DOCKER)(lang + ": " + TOOLS[lang].tool + " " + TOOLS[lang].version + " (GSTACK_EVALS_DOCKER=1)", () => {
@@ -56,6 +59,7 @@ for (const lang of Object.keys(STORIES) as Lang[]) {
       expect(strong).toMatchObject({ status: "scored", lang, tool_version: TOOLS[lang].version, restriction: TOOLS[lang].restriction, tests: { changed: 2, passing: 2, dropped: 0 }, mutants: { timeout: 0, error: 0 } });
       expect(strong.mutants.sampled).toBe(strong.mutants.in_scope);
       expect(strong.score!).toBeGreaterThanOrEqual(HIGH);
+      expect([strong.mutants.killed, strong.mutants.survived]).toEqual(STRONG[lang]);
       console.log(lang + " strong: " + strong.mutants.killed + " of " + (strong.mutants.killed + strong.mutants.survived) + " killed");
     }, LONG);
 
@@ -162,6 +166,12 @@ describe.skipIf(!DOCKER)("rust: inline tests cannot move to gold's tree (GSTACK_
     fx = F.rustFixture();
   }, LONG);
   afterAll(() => fx?.cleanup());
+
+  test("the same tree gets the same verdicts three times: parallel cargo-mutants jobs never share a build", () => {
+    const runs = [0, 1, 2].map(() => scoreTree({ lang: "rust", image: fx.image, patch: fx.patch(STORIES.rust.strong), work: fx.dir + "/work" }).mutants);
+    expect(runs).toEqual([runs[0]!, runs[0]!, runs[0]!]);
+    expect([runs[0]!.killed, runs[0]!.survived]).toEqual(STRONG.rust);
+  }, LONG);
 
   test("the own reading scores and the transplant is not-transplantable", () => {
     const r = scoreTree({ lang: "rust", image: fx.image, patch: fx.patch(STORIES.rust.strong), gold: fx.patch({ "src/lib.rs": F.RS_IMPL }), work: fx.dir + "/work" });
