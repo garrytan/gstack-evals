@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { check, finalRead, tally, UsageError, type Crew, type Plan } from "../l1/ceiling.ts";
-import type { Row } from "../runner/ledger.ts";
+import { readRows, type Row } from "../runner/ledger.ts";
 
 const M = 1_000_000;
 let n = 0;
@@ -110,6 +110,32 @@ describe("the ceiling check before a launch", () => {
     expect(second.why).toContain("f1-opus still holds open reservations");
     expect(() => check(atExpected(), crew(0, 0), plan(), "f1-particle")).toThrow(UsageError);
     expect(() => check(atExpected(), crew(0, 0), plan(), "f1-opus")).toThrow(/not a planned or open item/);
+  });
+  test("a dead part's relaunch: refused while its reserves are open, admitted once each is settled at its full reserved amount, which still counts against the cap", () => {
+    const ledger = join(mkdtempSync(join(tmpdir(), "l1-relaunch-")), "f1-opus.jsonl");
+    const dead: Row[] = [
+      { ts: "t", item: "f1-opus", kind: "reserve", id: "f1-p2-vm", usd_micros: 2.4 * M },
+      { ts: "t", item: "f1-opus", kind: "reserve", id: "f1-p2-s1", usd_micros: 5 * M },
+      { ts: "t", item: "f1-opus", kind: "reserve", id: "f1-p2-s2", usd_micros: 5 * M },
+    ];
+    writeFileSync(ledger, [...rows("f1-opus", 680, [400, 255]), ...dead].map((r) => JSON.stringify(r)).join("\n") + "\n");
+    const p: Plan = { items: [{ item: "pilot-opus", cap_usd: 80, status: "done" }, { item: "f1-opus", cap_usd: 680, status: "open" }, { item: "tb2-opus", cap_usd: 180, status: "planned" }], leftover: { sol: "refused", particle: "refused" } };
+    const all = () => [...rows("pilot-opus", 80, [26.08]), ...readRows(ledger)];
+    const before = check(all(), crew(288_000, 36_000), p, "f1-opus");
+    expect(before.ok).toBe(false);
+    expect(before.why).toContain("f1-opus still holds open reservations");
+    expect(before.why).toContain("settle each of its open reserves at its full reserved amount");
+    const cli = (args: string[]) => Bun.spawnSync(["bun", join(import.meta.dir, "../runner/ledger.ts"), ...args, "--path", ledger, "--item", "f1-opus"]).exitCode;
+    for (const r of dead) expect(cli(["settle", "--id", r.id, "--usd", String(r.usd_micros / M), "--detail", "VM l1-f1-p2 confirmed gone"])).toBe(0);
+    const after = check(all(), crew(288_000, 36_000), p, "f1-opus");
+    expect(after.ok).toBe(true);
+    const f1 = after.tally.items.find((i) => i.item === "f1-opus")!;
+    expect(dollars(f1.settled)).toBeCloseTo(655 + 12.4, 6);
+    expect(f1.reserved).toBe(0);
+    expect(after.tally.total).toBe(before.tally.total);
+    expect(readRows(ledger).filter((r) => r.kind === "settle" && r.id.startsWith("f1-p2-")).every((r) => r.usd_micros === r.reserved_micros && r.kind_detail === "VM l1-f1-p2 confirmed gone")).toBe(true);
+    expect(cli(["reserve", "--id", "f1-p2r-vm", "--usd", "12.7"])).toBe(3);
+    expect(cli(["reserve", "--id", "f1-p2r-vm", "--usd", "12.6"])).toBe(0);
   });
   test("fails closed on a ledger item missing from the plan, a cap that differs from the ledger, and an open thread without a stop", () => {
     expect(() => tally([...atExpected(), ...rows("laneb-quick", 50, [1])], crew(0, 0), plan())).toThrow(/laneb-quick is not in the plan/);

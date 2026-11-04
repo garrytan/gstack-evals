@@ -80,7 +80,7 @@ export function check(ledgerRows: Row[], crew: Crew, plan: Plan, launch: string)
   const busy = t.items.filter((i) => i.open_ids > 0).map((i) => i.item);
   const over = t.total > micros(CEILING_USD);
   const ok = !over && !busy.length;
-  const why = over ? "the sum $" + usd(t.total) + " with " + launch + "'s cap passes $" + usd(micros(CEILING_USD)) : busy.length ? busy.join(", ") + " still holds open reservations: items launch one at a time" : "the sum $" + usd(t.total) + " with " + launch + "'s cap is at or under $" + usd(micros(CEILING_USD));
+  const why = over ? "the sum $" + usd(t.total) + " with " + launch + "'s cap passes $" + usd(micros(CEILING_USD)) : busy.length ? busy.join(", ") + " still holds open reservations: items launch one at a time; after a part's VM is confirmed gone, settle each of its open reserves at its full reserved amount (bun quick/laneb/runner/ledger.ts settle --detail <the dead VM>), then run this check for its one relaunch" : "the sum $" + usd(t.total) + " with " + launch + "'s cap is at or under $" + usd(micros(CEILING_USD));
   return { ok, launch, why, tally: t };
 }
 

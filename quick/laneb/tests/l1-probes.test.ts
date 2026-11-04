@@ -221,4 +221,25 @@ describe("contract block, turn cap and the read audit", () => {
     expect(run([bash("grep -n -A 2 /root/.gstack/config /testbed/README.md", "3:see /root/.gstack/config")], none).audit_hits).toEqual([]);
     expect(run([bash("grep -e name /root/.claude/skills/investigate/SKILL.md", "name: investigate")], none).audit_hits.length).toBe(1);
   });
+  test("a grep -e pattern, a here-string body and a sed or awk script name no file the command reads", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    expect(run([bash("grep -e /root/.gstack/config /testbed/README.md", "3:see /root/.gstack/config")], none).audit_hits).toEqual([]);
+    expect(run([bash("grep -n --regexp=/root/.gstack/config README.md", "3:see /root/.gstack/config")], none).audit_hits).toEqual([]);
+    expect(run([bash("grep -ie /root/.claude/skills/investigate -e x README.md", "3:see /root/.claude/skills/investigate")], none).audit_hits).toEqual([]);
+    expect(run([bash("grep gstack <<< \"/root/.gstack/config.yaml\"", "/root/.gstack/config.yaml")], none).audit_hits).toEqual([]);
+    expect(run([bash("sed 's|/root/.gstack/x|y|' README.md", "# app")], none).audit_hits).toEqual([]);
+    expect(run([bash("sed -n -e 's|/root/.gstack/x|y|p' README.md", "y")], none).audit_hits).toEqual([]);
+    expect(run([bash("awk 'index($0, \"/root/.gstack/config\")' README.md", "see /root/.gstack/config")], none).audit_hits).toEqual([]);
+  });
+  test("grep -f's file and the existing read shapes still count as reads", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    expect(run([bash("grep -f /root/.gstack/config.yaml /testbed/README.md", "3:x")], none).audit_hits).toEqual(["Bash /root/.gstack/config.yaml"]);
+    expect(run([bash("grep -e x -f ~/.claude/skills/investigate/SKILL.md README.md", "3:x")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep name /root/.claude/skills/investigate/SKILL.md", "name: investigate")], none).audit_hits.length).toBe(1);
+    expect(run([bash("sed -n 1,5p /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+    expect(run([bash("sed -e 's/a/b/' ~/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+    expect(run([bash("awk '{print}' /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+    expect(run([bash("awk -F: -v n=1 '{print $n}' /root/.gstack/config.yaml", "x")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep x < /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+  });
 });
