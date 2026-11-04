@@ -223,9 +223,9 @@ describe("contract block, turn cap and the read audit", () => {
   });
   test("a grep -e pattern, a here-string body and a sed or awk script name no file the command reads", () => {
     const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
-    expect(run([bash("grep -e /root/.gstack/config /testbed/README.md", "3:see /root/.gstack/config")], none).audit_hits).toEqual([]);
-    expect(run([bash("grep -n --regexp=/root/.gstack/config README.md", "3:see /root/.gstack/config")], none).audit_hits).toEqual([]);
-    expect(run([bash("grep -ie /root/.claude/skills/investigate -e x README.md", "3:see /root/.claude/skills/investigate")], none).audit_hits).toEqual([]);
+    expect(run([bash("grep -e /root/.gstack/config /testbed/README.md", "3:see /root/.gstack/config")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep -n --regexp=/root/.gstack/config README.md", "3:see /root/.gstack/config")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep -ie /root/.claude/skills/investigate -e x README.md", "3:see /root/.claude/skills/investigate")], none).audit_hits.length).toBe(1);
     expect(run([bash("grep gstack <<< \"/root/.gstack/config.yaml\"", "/root/.gstack/config.yaml")], none).audit_hits).toEqual([]);
     expect(run([bash("sed 's|/root/.gstack/x|y|' README.md", "# app")], none).audit_hits).toEqual([]);
     expect(run([bash("sed -n -e 's|/root/.gstack/x|y|p' README.md", "y")], none).audit_hits).toEqual([]);
@@ -249,7 +249,7 @@ describe("contract block, turn cap and the read audit", () => {
     expect(run([bash("grep --regexp=\"$(cat /root/.gstack/config.yaml)\" README.md", "3:x")], none).audit_hits.length).toBe(1);
     expect(run([bash("grep -e \x60cat /root/.gstack/config.yaml\x60 README.md", "3:x")], none).audit_hits.length).toBe(1);
     expect(run([bash("sed \"$(cat /root/.gstack/s.sed)\" README.md", "# app")], none).audit_hits.length).toBe(1);
-    expect(run([bash("grep -e /root/.gstack/config README.md", "3:see /root/.gstack/config")], none).audit_hits).toEqual([]);
+    expect(run([bash("grep -e /root/.gstack/config README.md", "3:see /root/.gstack/config")], none).audit_hits.length).toBe(1);
   });
   test("a here-string is skipped only for grep, egrep, fgrep and rg with a literal body", () => {
     const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
@@ -288,5 +288,11 @@ describe("contract block, turn cap and the read audit", () => {
     expect(run([bash("grep -rn -- -e /root/.gstack/config.yaml", "1:x")], none).audit_hits.length).toBe(1);
     expect(run([bash("grep -n -- --regexp /root/.gstack/config.yaml", "1:x")], none).audit_hits.length).toBe(1);
     expect(run([bash("rg -- -e /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+  });
+  test("a grep with any -e, -f or --regexp word is scanned whole, as at a452b49", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    expect(run([bash("rg useState -tvue /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+    expect(run([bash("rg TODO -tcmake /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
+    expect(run([bash("grep TODO -drecurse /root/.gstack/config.yaml", "x: 1")], none).audit_hits.length).toBe(1);
   });
 });

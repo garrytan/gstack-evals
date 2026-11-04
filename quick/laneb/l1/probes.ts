@@ -365,12 +365,13 @@ const SED_PLAIN = /^\s*s([^\\\n])(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\
 function inert(cmd: string, op: string): boolean {
   return !SUBSTITUTES.test(op) && (cmd !== "sed" || SED_PLAIN.test(op));
 }
-/** A grep's words without its patterns, and a sed's without its script: each inert -e operand, or the first operand when no
- * -e or -f gives one and it is inert, names no file the command reads. An -f file is a read and stays; awk is scanned whole. */
+/** A grep's words without its pattern, and a sed's without its script: the first operand when no -e or -f gives one and it is
+ * inert, and each inert sed -e operand, names no file the command reads. A grep with any -e, -f or --regexp word, an -f file
+ * and every awk script are scanned whole. */
 function withoutPattern(words: string[]): string[] {
   const cmd = base(words[0] ?? "");
   const valued = GREP.has(cmd) ? /^-[ABCmdD]$/ : cmd === "sed" ? /^-l$/ : null;
-  if (!valued) return words;
+  if (!valued || (GREP.has(cmd) && words.some((w) => /^(-[A-Za-z]*[ef]|--regexp|--file)/.test(w)))) return words;
   const kept: string[] = [];
   let given = false;
   for (let k = 0; k < words.length; k++) {
