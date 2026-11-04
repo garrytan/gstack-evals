@@ -359,20 +359,17 @@ const PATH_SPLIT = /[\s'"=;|&<>()`]+/;
 const GREP = new Set(["grep", "egrep", "fgrep", "rg", "ag", "ack"]);
 const HERE_SKIP = new Set(["grep", "egrep", "fgrep", "rg"]);
 const SUBSTITUTES = /\$\(|\x60|<\(/;
-const SED_TEXT = /s(.)(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\1|y(.)(?:\\.|(?!\2)[^\\\n])*\2(?:\\.|(?!\2)[^\\\n])*\2|\/(?:\\.|[^/\\\n])*\/|\\(.)(?:\\.|(?!\3)[^\\\n])*\3/g;
-/** Whether a pattern or script operand names nothing the command reads: a literal with no substitution and, for sed, no r, R,
- * w, W or e command or flag outside its s and y operands and addresses, and for awk, no getline, system(, pipe or redirect. */
+const SED_PLAIN = /^\s*s([^\\\n])(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\1[gpiImM0-9]*(?:\s*[;\n]\s*s([^\\\n])(?:\\.|(?!\2)[^\\\n])*\2(?:\\.|(?!\2)[^\\\n])*\2[gpiImM0-9]*)*\s*;?\s*$/;
+/** Whether a grep pattern or sed script names nothing the command reads: a literal with no substitution and, for sed, nothing
+ * but s commands whose flags are among g, p, i, I, m, M and digits. */
 function inert(cmd: string, op: string): boolean {
-  if (SUBSTITUTES.test(op)) return false;
-  if (cmd === "sed") return !/[rRwWe]/.test(op.replace(SED_TEXT, ""));
-  if (cmd !== "awk" && cmd !== "gawk" && cmd !== "mawk") return true;
-  return !/getline|system\(|[|<>]/.test(op);
+  return !SUBSTITUTES.test(op) && (cmd !== "sed" || SED_PLAIN.test(op));
 }
-/** A grep's words without its patterns, and a sed's or awk's without its script: each inert -e operand, or the first operand
- * when no -e or -f gives one and it is inert, names no file the command reads. An -f file is a read and stays. */
+/** A grep's words without its patterns, and a sed's without its script: each inert -e operand, or the first operand when no
+ * -e or -f gives one and it is inert, names no file the command reads. An -f file is a read and stays; awk is scanned whole. */
 function withoutPattern(words: string[]): string[] {
   const cmd = base(words[0] ?? "");
-  const valued = GREP.has(cmd) ? /^-[ABCmdD]$/ : cmd === "sed" ? /^-l$/ : cmd === "awk" || cmd === "gawk" || cmd === "mawk" ? /^-[vF]$/ : null;
+  const valued = GREP.has(cmd) ? /^-[ABCmdD]$/ : cmd === "sed" ? /^-l$/ : null;
   if (!valued) return words;
   const kept: string[] = [];
   let given = false;
