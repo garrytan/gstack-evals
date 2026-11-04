@@ -240,6 +240,8 @@ const readJsonl = (p: string) => (existsSync(p) ? readFileSync(p, "utf8").split(
 // stops the item until Amendment C does (unclassified). When a part's results were never pulled, a cap stop the item's
 // ledger made possible counts as one (capStopPossible). So it does after the host was lost, since launch.sh's record of a
 // refused VM block (vm-cap-stop) lived on the host; a VM block ($2.40) is under each item's session cap, so the check covers it.
+// After a lost host, recover's check counts every rebuilt reserve (sessions, VM block, host) as open before any rebuilt
+// settle, since rebuilt rows carry no times, and overstating the overlap can only turn a relaunch into a cap stop, never the reverse.
 export function classify(dir: string, launchExit: number | null, extra: { controllerLost?: boolean; hostLost?: boolean; ledger?: { rows: Row[]; since: string; sessionCapUsd: number } } = {}) {
   const out = join(dir, "pulled/out");
   const read = (f: string) => (existsSync(join(out, f)) ? readFileSync(join(out, f), "utf8") : null);
@@ -954,7 +956,7 @@ function recover(work: string) {
   if (existsSync(join(work, "host/bound.json"))) copyFileSync(join(work, "host/bound.json"), ledger + ".bound");
   rmSync(pointerPath(ledger), { force: true });
   recordHost(work, { event: "lost", n: host.n, name: host.name, down_confirmed_at: goneAt, rows_added: add.length });
-  if (running) writeJson(join(work, running.part.name + ".result.json"), { ...classify(join(work, running.part.name), null, { hostLost: true, ledger: { rows: [...rows, ...add], since: l.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd } }), at: new Date().toISOString() });
+  if (running) writeJson(join(work, running.part.name + ".result.json"), { ...classify(join(work, running.part.name), null, { hostLost: true, ledger: { rows: [...rows, ...add.filter((x) => x.kind === "reserve"), ...add.filter((x) => x.kind !== "reserve")], since: l.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd } }), at: new Date().toISOString() });
   writeJson(join(work, "host/recover.json"), { ...record, rows_added: add.length, complete });
   if (!complete) {
     const why = missing.length ? "the running part's records miss sessions (" + missing.slice(0, 5).join("; ") + (missing.length > 5 ? "; and " + (missing.length - 5) + " more in host/recover.json" : "") + ")"

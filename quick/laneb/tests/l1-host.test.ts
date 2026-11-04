@@ -644,4 +644,21 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     const up = l1(r, ["host-up", r.work]);
     expect([up.code, up.err]).toEqual([3, expect.stringContaining("does not class")]);
   }, 240_000);
+
+  test("recover counts every rebuilt session as open at once when it checks for a cap stop, since restoreRows replays each session as a reserve then a settle: two unmirrored sessions and a refused VM block read as a cap stop, not a relaunch", async () => {
+    const r = rig("pilot-opus", { preReserve: 60.5 });
+    await started(r);
+    expect(l1(r, ["attach", r.work]).out).toContain("pilot: running");
+    const mirror = join(r.work, "host/ledger.jsonl");
+    const lines = readFileSync(mirror, "utf8").trim().split("\n");
+    const settles = lines.map((l, i) => [JSON.parse(l), i] as const).filter(([x]) => x.kind === "settle" && x.id.startsWith("pilot-opus/pilot/s"));
+    writeFileSync(mirror, lines.slice(0, settles[1]![1] + 1).join("\n") + "\n");
+    blockRefused(r);
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("NEXT: none: pilot-opus ended incomplete (pilot ended at a cap stop")]);
+    expect(JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8")).cap_stop).toEqual([expect.stringContaining("a cap stop can't be ruled out")]);
+    const up = l1(r, ["host-up", r.work]);
+    expect([up.code, up.err]).toEqual([3, expect.stringContaining("pilot ended at a cap stop")]);
+  }, 300_000);
 });
