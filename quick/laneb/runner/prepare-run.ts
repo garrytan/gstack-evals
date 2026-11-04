@@ -19,6 +19,33 @@ import { armSpec, jobConfig, PROCEDURE_LINES } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
+// Copies every arm's tar into <run>/arms. Each must be the preregistered bytes: its tar sha256 must equal the committed
+// manifest's. Arms that share a tar (tar=<name>) share one copy of it in the run dir and one manifest.
+export function stageArms(armsCsv: string, o: { armDir: string; run: string; root: string; armManifests: string; vm: string }) {
+  const arms = armsCsv.split(",").map((entry) => {
+    const { name, tar_name, ...options } = armSpec(entry);
+    const file = tar_name ?? name;
+    const tar = `${o.vm}/run/arms/${file}.tar`;
+    const manifestPath = join(o.root, o.armManifests, `${file}.json`);
+    const want = process.env.ALLOW_UNREGISTERED_ARMS === "1" && !existsSync(manifestPath) ? null : JSON.parse(readFileSync(manifestPath, "utf8")).tar.sha256;
+    const gz = join(o.armDir, `${file}.tar.gz`);
+    let got: string;
+    let extra = {};
+    if (existsSync(gz)) {
+      copyFileSync(gz, join(o.run, "arms", `${file}.tar.gz`));
+      got = Bun.spawnSync(["sh", "-c", 'gzip -dc "$1" | sha256sum', "sh", gz]).stdout.toString().split(" ")[0]!;
+      extra = { gz_sha256: sha256(gz) };
+    } else {
+      copyFileSync(join(o.armDir, `${file}.tar`), join(o.run, "arms", `${file}.tar`));
+      got = sha256(join(o.run, "arms", `${file}.tar`));
+    }
+    if (want !== null && got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (${o.armManifests}/${file}.json)`);
+    return { name, tar, sha256: got, ...extra, options, ...(tar_name ? { tar_name } : {}) };
+  });
+  if (new Set(arms.map((a) => a.name)).size !== arms.length) throw new Error(`E_USAGE arms ${armsCsv}: an arm is named twice`);
+  return arms;
+}
+
 if (import.meta.main) {
   const [runArg, jobName, modelsCsv, armsCsv, armDir, attempts, concurrent] = Bun.argv.slice(2);
   if (!concurrent) throw new Error("E_USAGE usage: prepare-run.ts <run dir> <job name> <models csv> <arms csv> <arm tar dir> <attempts> <concurrent>");
@@ -68,27 +95,7 @@ if (import.meta.main) {
       tasks[id] = m;
     }
   }
-  // Every arm must be the preregistered bytes: its tar sha256 must equal the committed manifest's.
-  const arms = armsCsv.split(",").map((entry) => {
-    const { name, ...options } = armSpec(entry);
-    const tar = `${vm}/run/arms/${name}.tar`;
-    const manifestPath = join(root, armManifests, `${name}.json`);
-    const want = process.env.ALLOW_UNREGISTERED_ARMS === "1" && !existsSync(manifestPath) ? null : JSON.parse(readFileSync(manifestPath, "utf8")).tar.sha256;
-    const gz = join(armDir, `${name}.tar.gz`);
-    let got: string;
-    let extra = {};
-    if (existsSync(gz)) {
-      copyFileSync(gz, join(run, "arms", `${name}.tar.gz`));
-      got = Bun.spawnSync(["sh", "-c", 'gzip -dc "$1" | sha256sum', "sh", gz]).stdout.toString().split(" ")[0];
-      extra = { gz_sha256: sha256(gz) };
-    } else {
-      copyFileSync(join(armDir, `${name}.tar`), join(run, "arms", `${name}.tar`));
-      got = sha256(join(run, "arms", `${name}.tar`));
-    }
-    if (want !== null && got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (${armManifests}/${name}.json)`);
-    return { name, tar, sha256: got, ...extra, options };
-  });
-  if (new Set(arms.map((a) => a.name)).size !== arms.length) throw new Error(`E_USAGE arms ${armsCsv}: an arm is named twice`);
+  const arms = stageArms(armsCsv, { armDir: armDir!, run, root, armManifests, vm });
   const models = modelsCsv.split(",").map((id) => {
     const m = cells.models.find((c: any) => c.id === id);
     if (!m) throw new Error(`unknown model ${id}`);
@@ -97,6 +104,7 @@ if (import.meta.main) {
   copyFileSync(join(root, "config/proxy.json"), join(run, "proxy.json"));
   const job = jobConfig({
     job_name: jobName, tasks_dir: `${vm}/run/tasks`, tasks: final, models, arms: arms.map(({ name, tar, sha256, options }) => ({ name, tar, sha256, ...options })),
+    ...(cells.sdk_max_turns ? { sdk_max_turns: cells.sdk_max_turns } : {}),
     attempts: Number(attempts), n_concurrent: Number(concurrent), agent_dir: `${vm}/runner/agent`, runner_dir: `${vm}/runner`,
     base_url: "http://__GATEWAY__:8787", max_output_tokens: cells.max_output_tokens, verifier_timeout_multiplier: cells.verifier_timeout_multiplier,
     ...(taskSet === "swebv-r3" || taskSet === "swerebench-r3a4" ? { repo_dir: "/testbed" } : {}),

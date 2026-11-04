@@ -52,7 +52,7 @@ export function skillNames(root: string, skillsDir = ".claude/skills"): string[]
   }
 }
 
-export function manifest(arm: string, root: string, tarPath: string, meta: Record<string, string>, skillsDir = ".claude/skills") {
+export function manifest(arm: string, root: string, tarPath: string, meta: Record<string, unknown>, skillsDir = ".claude/skills") {
   const entries = walk(root);
   const skillsPrefix = skillsDir + "/";
   const files = entries.filter((e) => e.type === "file");

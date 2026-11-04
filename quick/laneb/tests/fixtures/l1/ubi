@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Fake ubi-runner for l1-launch.test.ts. Every VM is a directory $UBI_FAKE/<name>: standard-2 VMs are hosts (host-N),
+# others part VMs (vm-N). ssh runs the command in the VM's directory with HOME set to it; a VM with a .dead file
+# answers nothing. A part VM's bootstrap and a host's bootstrap are skipped. up writes a recovery bundle (a copy of the
+# VM's state) when UBI_RECOVERY_DIR is set, and recover restores the state of every bundle this machine lacks.
+set -u
+cmd=$1; shift
+state=${UBI_RUNNER_STATE:-$HOME/.local/state/ubi-runner}
+owner=$(printf %s "${UBI_OWNER:-}" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9' | cut -c1-12)
+echo "$(date +%s) $cmd $* ttl=${UBI_TTL_HOURS:-} counted=${UBI_COUNTED:-}" >> "$UBI_FAKE/events.log"
+vmdir() { echo "$UBI_FAKE/$1"; }
+dead() { [ ! -d "$(vmdir "$1")" ] || [ -e "$(vmdir "$1")/.dead" ] || [ -e "$(vmdir "$1")/.down" ]; }
+case "$cmd" in
+  up)
+    size=standard-16
+    while [ $# -gt 0 ]; do case $1 in -s) size=$2; shift 2 ;; *) shift ;; esac; done
+    [ -z "${FAIL_UP:-}" ] || exit 1
+    n=$(( $(cat "$UBI_FAKE/counter" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$UBI_FAKE/counter"
+    if [ "$size" = standard-2 ]; then name=host-$n; else name=vm-$n; fi
+    if [ "${UBI_COUNTED:-}" = 1 ] && [ -z "${UBI_RECOVERY_DIR:-}" ]; then echo "UBI_RECOVERY_REQUIRED" >&2; exit 1; fi
+    mkdir -p "$(vmdir "$name")" "$state/$name"
+    printf 'NAME=%s\nIP=%s\nCREATED=yes\nCREATE_AT=%s\n' "$name" "$name" "$(date +%s)" > "$state/$name/env"
+    touch "$state/$name/key"
+    if [ -n "${UBI_RECOVERY_DIR:-}" ]; then mkdir -p "$UBI_RECOVERY_DIR/$owner"; cp "$state/$name/env" "$UBI_RECOVERY_DIR/$owner/$name.bundle"; fi
+    echo "$name" ;;
+  sync)
+    dead "$1" && exit 1
+    mkdir -p "$(vmdir "$1")/$3"; cp -r "$2/." "$(vmdir "$1")/$3/" ;;
+  pull)
+    dead "$1" && exit 1
+    d=$(vmdir "$1"); mkdir -p "$3"; dest=$(cd "$3" && pwd)
+    (cd "$d" && ls -d $2 >/dev/null 2>&1) || exit 0
+    (cd "$d" && cp -r $2 "$dest/") ;;
+  ssh)
+    name=$1; shift
+    dead "$name" && exit 255
+    [ -d "$state/$name" ] || { echo "no local state for VM '$name'" >&2; exit 1; }
+    c="$*"
+    case "$name:$c" in vm-*:*vm-bootstrap*) exit 0 ;; esac
+    c=${c//bash l1\/laneb\/l1\/host-bootstrap.sh/true}
+    d=$(vmdir "$name")
+    HOME="$d" bash -c "cd '$d' && $c" ;;
+  down)
+    [ -z "${FAIL_DOWN:-}" ] || exit 1
+    [ ! -d "$(vmdir "$1")" ] || touch "$(vmdir "$1")/.down" ;;
+  recover)
+    for b in "$UBI_RECOVERY_DIR/$owner"/*.bundle; do
+      [ -f "$b" ] || continue
+      n=$(basename "$b" .bundle)
+      [ -e "$state/$n" ] && continue
+      mkdir -p "$state/$n"; cp "$b" "$state/$n/env"; touch "$state/$n/key"
+    done ;;
+  *) exit 2 ;;
+esac

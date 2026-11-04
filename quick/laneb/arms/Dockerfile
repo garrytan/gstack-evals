@@ -10,7 +10,13 @@
 #               result for gstack at the pinned sha, with paths relative to
 #               /root (.claude/..., .gstack/...).
 #   check       BASE_IMAGE plus the runtime, with /opt/laneb/bin appended to
-#               PATH, for check-arms.sh.
+#               PATH, for check-arms.sh and check-l1.sh.
+#   gstack-l1-tar
+#               /arm.tar, /gstack-config.tsv and /loadout.lock.json for one L1 arm: the real
+#               `./setup --host claude --no-browser --loadout <GSTACK_LOADOUT>`
+#               result at the pin in the "gstack" context, the same seeded user
+#               as gstack-tar, then skill_routing and skill_contracts set off
+#               when GSTACK_OFF_KEYS=true.
 #
 # The gstack checkout comes in as the named build context "gstack".
 
@@ -126,6 +132,79 @@ RUN set -eu; \
 
 FROM scratch AS gstack-tar
 COPY --from=gstack-build /out/gstack.tar /gstack.tar
+
+# L1 arms (wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000, sections 2
+# and 10). The same builder, setup run, seeded user and self-contained,
+# canonical tree as gstack-build, with the loadout and the off keys as ARGs.
+FROM ${BUILDER_IMAGE} AS gstack-l1-build
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential ca-certificates curl git unzip xz-utils python3 \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=runtime / /
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV HOME=/root \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/laneb/bin \
+    CLAUDE_CONFIG_DIR=/root/.claude
+COPY --from=gstack . /root/.claude/skills/gstack
+ARG GSTACK_LOADOUT=lite
+RUN cd /root/.claude/skills/gstack && ./setup --host claude --no-browser --loadout "$GSTACK_LOADOUT"
+ARG GSTACK_UPDATE_CHECK=false
+ARG GSTACK_ONBOARDING_SEEN=true
+RUN set -eu; \
+    cfg=/root/.claude/skills/gstack/bin/gstack-config; \
+    if [ "$GSTACK_UPDATE_CHECK" = false ]; then "$cfg" set update_check false; fi; \
+    if [ "$GSTACK_ONBOARDING_SEEN" = true ]; then \
+      for m in .feature-prompted-model-overlay .completeness-intro-seen .telemetry-prompted \
+               .proactive-prompted .activated .first-loop-tip-shown; do \
+        touch "/root/.gstack/$m"; \
+      done; \
+      "$cfg" set routing_declined true; \
+    fi
+# The off arm: both switches off in the arm's state root, after the seeded
+# user. The hooks stay registered and exit silently.
+ARG GSTACK_OFF_KEYS=false
+RUN set -eu; \
+    cfg=/root/.claude/skills/gstack/bin/gstack-config; \
+    if [ "$GSTACK_OFF_KEYS" = true ]; then "$cfg" set skill_routing off; "$cfg" set skill_contracts off; fi
+# The same steps as gstack-build, with two differences. Only absolute symlinks
+# become copies: the checkout's own relative link (connect-chrome, tracked in
+# git as a link to open-gstack-browser) stays a link, because the pin's
+# gstack-modules render counts a real connect-chrome folder as a 205th lite
+# file. And one more volatile fix: setup backs up
+# settings.json each time it registers a hook, as settings.json.bak.<time>.<pid>.<random>,
+# and points settings.json.bak-latest at the newest; those rollback copies go.
+# After the tar is written, so nothing here can change it: gstack-config's view
+# of both switches, and the lite lock from the pin's own gstack-modules render
+# at setup's render path (setup's render is moved aside and put back, as
+# GEVA-254's install-pin.sh did).
+RUN set -eu; \
+    mapfile -d '' links < <(find /root/.claude -type l -lname '/*' -not -path '*/node_modules/*' -print0); \
+    for link in "${links[@]}"; do \
+      target="$(readlink -f "$link")"; rm "$link"; cp -a --dereference "$target" "$link"; \
+    done; \
+    test -z "$(find /root/.claude -type l -lname '/*')"; \
+    test -z "$(find -L /root/.claude -type l)"; \
+    test -z "$(find /root/.claude -type l -not -path '*/node_modules/*' -exec readlink -f {} \; | grep -v '^/root/')"; \
+    rm -rf /root/.claude/.claude.json /root/.claude/backups; \
+    rm -f /root/.claude/settings.json.bak.* /root/.claude/settings.json.bak-latest; \
+    sed -i -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z/1970-01-01T00:00:00Z/g' /root/.gstack/installs.tsv; \
+    rm -f /root/.gstack/.gbrain-local-status-cache.json; \
+    : > /root/.claude/skills/gstack/bin/.gstack-cso-build.log; \
+    git_dir=/root/.claude/skills/gstack/.git; \
+    rm -rf "$git_dir/logs" "$git_dir/ORIG_HEAD"; \
+    rm -f "$git_dir/index"; git --git-dir="$git_dir" read-tree HEAD; \
+    mkdir /out; \
+    tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu \
+      -C /root -cf /out/arm.tar .claude .gstack; \
+    g=/root/.claude/skills/gstack; render=/root/.gstack/render/claude; \
+    for k in skill_routing skill_contracts; do printf '%s\t%s\n' "$k" "$("$g/bin/gstack-config" get "$k")"; done > /out/gstack-config.tsv; \
+    mv "$render" "$render.setup"; \
+    (cd "$g" && bin/gstack-modules render --host claude --loadout "$GSTACK_LOADOUT" --out-dir "$render" > /dev/null); \
+    cp "$render/loadout.lock.json" /out/loadout.lock.json; \
+    rm -rf "$render"; mv "$render.setup" "$render"
+
+FROM scratch AS gstack-l1-tar
+COPY --from=gstack-l1-build /out/ /
 
 FROM ${BASE_IMAGE} AS check
 COPY --from=runtime / /
