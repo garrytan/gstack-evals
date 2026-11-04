@@ -33,6 +33,10 @@
       "tests/real-outcome/arms.test.ts",
       "tests/real-outcome/sandbox.test.ts"
     ],
+    "lanes/outcome-skills/mutation/**": [
+      "tests/outcome-skills/mutation-docker.test.ts",
+      "tests/outcome-skills/mutation.test.ts"
+    ],
     "tests/real-outcome/*.py": [
       "tests/real-outcome/agent-units.test.ts",
       "tests/real-outcome/agent.test.ts"
