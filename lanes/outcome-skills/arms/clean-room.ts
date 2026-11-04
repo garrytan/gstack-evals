@@ -20,7 +20,8 @@ export const CLEAN_ROOM_SCRIPT = readFileSync(CLEAN_ROOM_SH, "utf8").replace(/\n
 // home or a work dir (where hooks live; any mention counts, since sh cannot parse JSON) and of any entry under
 // .claude/commands, .claude/plugins or .claude/agents in the home or a work dir. Present at all, whatever they hold
 // (GSTA-2): CLAUDE.local.md and .mcp.json in the home or a work dir, a CLAUDE.local.md in a parent of a work dir,
-// ~/.claude.json, and each entry under /etc/claude-code (Claude Code's managed settings), or /etc/claude-code itself when it
+// ~/.claude.json, ~/.claude/.claude.json (the global config file when CLAUDE_CONFIG_DIR is ~/.claude, as the arm sets it),
+// and each entry under /etc/claude-code (Claude Code's managed settings), or /etc/claude-code itself when it
 // is not a plain folder. Every path is built from the home and work dir arguments, or from CLEAN_ROOM_ROOT for
 // /etc/claude-code, and a work dir must be absolute.
 export const CLEAN_ROOM_O1_SCRIPT = String.raw`exec 3>&2
@@ -45,7 +46,7 @@ for t in find grep dirname; do command -v "$t" >/dev/null 2>&1 || fail "$t is no
 top=$CLEAN_ROOM_ROOT
 [ -n "$top" ] || top=/
 there "$home/.gstack" && found "$home/.gstack"
-for p in "$home/CLAUDE.local.md" "$home/.mcp.json" "$home/.claude.json"; do there "$p" && found "$p"; done
+for p in "$home/CLAUDE.local.md" "$home/.mcp.json" "$home/.claude.json" "$home/.claude/.claude.json"; do there "$p" && found "$p"; done
 cc=$CLEAN_ROOM_ROOT/etc/claude-code
 if [ -d "$cc" ] && [ ! -L "$cc" ]; then
   out=$(find "$cc" -mindepth 1) || fail "find could not finish under $cc"

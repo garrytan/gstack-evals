@@ -156,6 +156,20 @@ describe("O1's second clean-room scan (keyless)", () => {
     expect(scan(r)).toMatchObject({ code: 3, out: "found " + join(r.root, "etc", "claude-code") + "\n" });
   });
 
+  test("GSTA-2: the global config in the arm's config dir (CLAUDE_CONFIG_DIR=~/.claude), ~/.claude/.claude.json, is a hit whatever it holds", () => {
+    const r = room();
+    put(join(r.home, ".claude", ".claude.json"), '{"numStartups":1}\n');
+    expect(scan(r)).toMatchObject({ code: 3, out: "found " + join(r.home, ".claude", ".claude.json") + "\n" });
+  });
+
+  test("GSTA-2: a config dir with no .claude.json, only look-alike names, stays clean", () => {
+    const r = room();
+    put(join(r.home, ".claude", "claude.json"), "{}\n");
+    put(join(r.home, ".claude", ".claude.json.d", "x"), "{}\n");
+    put(join(r.work, ".claude", ".claude.json"), "{}\n");
+    expect(scan(r)).toEqual({ code: 0, out: "", err: "" });
+  });
+
   test("GSTA-2: none of those paths, an empty /etc/claude-code and look-alike names stay clean", () => {
     const r = room();
     put(join(r.root, "etc", "claude-code"));
@@ -299,6 +313,7 @@ describe.skipIf(!DOCKER)("the clean-room preflight in a real container (GSTACK_E
       ["/root/CLAUDE.local.md", (r) => [join(r.root, "CLAUDE.local.md") + ":/root/CLAUDE.local.md:ro"]],
       ["/work/repo/CLAUDE.local.md", () => []],
       ["/root/.claude.json", (r) => [join(r.root, ".claude.json") + ":/root/.claude.json:ro"]],
+      ["/root/.claude/.claude.json", (r) => [join(r.root, ".claude.json") + ":/root/.claude/.claude.json:ro"]],
       ["/work/repo/.mcp.json", () => []],
       ["/root/.mcp.json", (r) => [join(r.root, ".mcp.json") + ":/root/.mcp.json:ro"]],
     ];
