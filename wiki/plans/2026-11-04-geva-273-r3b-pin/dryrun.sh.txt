@@ -1,0 +1,298 @@
+#!/usr/bin/env bash
+# R3b pin post dry run (GEVA-270), keyless. Drives every rule of R3 amendment 5 sections 4, 5 and 9 with the D1 fix
+# (wiki/plans/2026-11-04-geva-264-r3-d1-task-fit-fix) through r3b.ts's own subcommands, at the commit given, in the style
+# of amendment 4's e2e-r3a4.sh.txt and dry-run-r3a4.sh.txt.
+#   Part 0  git archive of the commit outside any git work tree; bun install --frozen-lockfile.
+#   Part A  the told arm: rebuilt from the project drive's six parts, every sha256 checked against SHA256SUMS.txt and the
+#           committed manifest (tar, gz, tree digest from gstack.files.tsv, settings.json and its hook entries); arm-check
+#           both ways; the none arm rebuilt with arms/build.sh (Docker, keyless) and compared with manifests/r3/none.json.
+#   Part B  prepare both items on temporary ledgers approved at their caps, against the real SWE-rebench export (the pinned
+#           Harbor f3a5a92's export of swe-rebench/swe-rebench-leaderboard at sha256:ebe7444e..., checked with
+#           tasks/swerebench_r3a4.py in its default --check mode). prepare sets ORACLE=1 itself; each part's oracle.json is checked against
+#           its job's task ids. Sol's prepare is refused first with no route record; then a fixture pass record for
+#           r3b4-sol, in the shape route-check.ts writes, goes beside its ledger. No route check ran.
+#   Part C  scenarios. Each copies a prepared work dir (hard links), approves a fresh temporary ledger at the item's cap and
+#           runs r3b.ts run (and resume) for real: launch.sh reserves and settles the VM blocks, starts the item's ledger
+#           service and runs the batch. The Ubicloud runner is a stub (adapted from tests/fixtures/launch/ubi, syncing
+#           with hard links) and ssh is a stub that plays vm-run.sh: it reserves and settles one $12 session lease per
+#           planned trial through the ledger service, as the proxy does, in the part's order.json order, and writes each
+#           trial's files in the shape tests/r3b.test.ts's work() writes them. No VM starts and no model is called.
+#           r3b.ts analyze then reads the pulled parts. The start-rule refusal at a lower cap goes through the exported
+#           startRule, since itemCheck fixes each cap and both real R3a4 records fit theirs.
+# Every rule line reads "ok" or "FAIL" with its expected and observed outcome; the last line is DRYRUN: ok or DRYRUN: fail.
+# Usage: bash dryrun.sh <commit> [<work dir>]   env: G (the gstack-evals git checkout, default /workspace/gstack-evals),
+#   ARMPARTS (the told arm's parts), REC_OPUS and REC_SOL (the real R3a4 records), SWEREBENCH (the export; downloaded with
+#   the pinned Harbor into the work dir when unset), UBI_OWNER (default GEVA-270), R3B_MDD_SIMS (default 20, report-only).
+set -u
+COMMIT=${1:?usage: dryrun.sh <commit> [<work dir>]}
+G=${G:-/workspace/gstack-evals}
+SHORT=$(git -C "$G" rev-parse --short=7 "$COMMIT") || exit 2
+FULL=$(git -C "$G" rev-parse "$COMMIT")
+W=$(mkdir -p "${2:-$HOME/.capy/work/pin-post/run-$SHORT}" && cd "${2:-$HOME/.capy/work/pin-post/run-$SHORT}" && pwd)
+ARMPARTS=${ARMPARTS:-$HOME/.capy/drive/project-gstack-evals/laneb-arms/r3b-gstack-699a41cb}
+CAPT=$HOME/.capy/drive/captain-gstack-evals/handoffs
+REC_OPUS=${REC_OPUS:-$CAPT/GEVA-248/record/record.json}
+REC_SOL=${REC_SOL:-$CAPT/GEVA-249/r3a4-sol/record.json}
+UBI_OWNER=${UBI_OWNER:-GEVA-270}
+export R3B_MDD_SIMS=${R3B_MDD_SIMS:-20}
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN
+E=$W/export L=$W/export/quick/laneb
+mkdir -p "$W/log" "$W/bin/vm" "$W/scen" "$W/s" "$W/prep" "$W/arms" "$W/approvals"
+HIDE="s#$W#\$W#g; s#$ARMPARTS#\$ARMPARTS#g; s#$CAPT#\$CAPT#g; s#$HOME#~#g"
+fails=0 rules=0
+# rule <label> <expected> <observed> <test command...>
+rule() { local label=$1 want=$2 got=$3; shift 3; rules=$((rules + 1)); if "$@" > /dev/null 2>&1; then echo "ok   $label | expected: $want | observed: $got" | sed "$HIDE"; else fails=$((fails + 1)); echo "FAIL $label | expected: $want | observed: $got" | sed "$HIDE"; fi; }
+first() { grep -E -m1 -- "$1" "$2" 2>/dev/null | cut -c1-400 || true; }
+has() { grep -E -q -- "$1" "$2"; }
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN; do echo "$k: $([ -n "${!k+x}" ] && echo set || echo unset)"; done
+echo "commit $FULL; bun $(bun --version); docker $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
+
+echo; echo "## Part 0: export"
+rm -rf "$E" && mkdir -p "$E" && git -C "$G" archive "$FULL" | tar -x -C "$E"
+(cd "$E" && bun install --frozen-lockfile > "$W/log/bun-install.txt" 2>&1); echo "bun install exit $?; $(find "$E" -path "$E/node_modules" -prune -o -type f -print | wc -l) files exported"
+rule "P0 the export is outside any git work tree" "git rev-parse fails in the export" "$(cd "$E" && git rev-parse --show-toplevel 2>&1 | head -1)" sh -c "cd '$E' && ! git rev-parse --show-toplevel"
+
+echo; echo "## Part A: the told arm and the none arm"
+A=$W/arms
+(cd "$ARMPARTS" && grep -v whole: SHA256SUMS.txt | sha256sum -c -) > "$W/log/parts.txt" 2>&1; pc=$?
+rule "A1 the six drive parts match SHA256SUMS.txt" "6 OK" "$(grep -c ': OK$' "$W/log/parts.txt") OK, exit $pc" test "$pc" = 0 -a "$(grep -c ': OK$' "$W/log/parts.txt")" = 6
+cat "$ARMPARTS"/gstack-e93a3aa4e1e4.tar.gz.part-0* > "$A/gstack.tar.gz"
+GZ=$(sha256sum "$A/gstack.tar.gz" | cut -c1-64); gunzip -kf "$A/gstack.tar.gz"; TAR=$(sha256sum "$A/gstack.tar" | cut -c1-64)
+M=$L/arms/manifests/r3b/gstack.json
+MT=$(jq -r .tar.sha256 "$M") MGZ=$(jq -r .tar_gz_sha256 "$M") MTREE=$(jq -r .tree.digest "$M") MSET=$(jq -r .settings.sha256 "$M")
+CODE_TAR=$(cd "$E" && bun -e 'const { TOLD_TAR_SHA256 } = await import("./quick/laneb/r3/r3b.ts"); console.log(TOLD_TAR_SHA256)')
+rule "A2 whole gz sha256 matches SHA256SUMS.txt and the manifest's tar_gz_sha256" "$MGZ" "$GZ" test "$GZ" = "$MGZ" -a "$GZ" = "$(sed -n 's/ *whole:gstack.tar.gz$//p' "$ARMPARTS/SHA256SUMS.txt")"
+rule "A3 gunzip -k tar sha256 matches the manifest, r3b.ts TOLD_TAR_SHA256 and SHA256SUMS.txt" "$MT" "$TAR (code $CODE_TAR)" test "$TAR" = "$MT" -a "$TAR" = "$CODE_TAR" -a "$TAR" = "$(sed -n 's/ *whole:gstack.tar$//p' "$ARMPARTS/SHA256SUMS.txt")"
+TSV=$(sha256sum "$ARMPARTS/gstack.files.tsv" | cut -c1-64)
+TREE=$(cd "$E" && bun -e '
+const rows = require("node:fs").readFileSync(process.argv[1], "utf8").trim().split("\n").slice(1).map((l) => l.split("\t")).filter((r) => r[3] === "file" || r[3] === "link");
+rows.sort((a, b) => Buffer.compare(Buffer.from(a[4]), Buffer.from(b[4])));
+console.log(require("node:crypto").createHash("sha256").update(rows.map((r) => r[0] + "  " + r[4] + "\n").join("")).digest("hex"));' "$ARMPARTS/gstack.files.tsv")
+rule "A4 tree digest recomputed from gstack.files.tsv (tree.ts's method) matches the manifest" "$MTREE" "$TREE (files.tsv sha256 $TSV)" test "$TREE" = "$MTREE"
+SET=$(tar -xOf "$A/gstack.tar" .claude/settings.json | sha256sum | cut -c1-64)
+HOOKS=$(tar -xOf "$A/gstack.tar" .claude/settings.json | jq -c '[.hooks | to_entries[] | .key as $e | .value[] | .hooks[] | ($e + " " + (.command | split("/") | last))]')
+rule "A5 settings.json in the tar matches the manifest and registers the route and contract hooks" "$MSET with UserPromptSubmit skill-route-hook and Stop skill-contract-stop-hook" "$SET $HOOKS" sh -c "test '$SET' = '$MSET' && echo '$HOOKS' | grep -q 'UserPromptSubmit skill-route-hook' && echo '$HOOKS' | grep -q 'Stop skill-contract-stop-hook'"
+HF=$(tar -tf "$A/gstack.tar" | grep -cE '^\.claude/skills/gstack/hosts/claude/hooks/(skill-route-hook|skill-contract-stop-hook)$')
+rule "A6 both hook scripts are in the tar at the registered paths" "2" "$HF" test "$HF" = 2
+rm -f "$A/gstack.tar"
+(cd "$E" && bun quick/laneb/r3/r3b.ts arm-check) > "$W/log/arm-check.txt" 2>&1; c=$?
+rule "A7 arm-check on the committed manifests" "exit 0, pass" "exit $c, $(cut -c1-160 "$W/log/arm-check.txt")" test "$c" = 0
+mkdir -p "$W/arm-neg" && cp "$L"/arms/manifests/r3b/*.json "$W/arm-neg/" && jq '.settings.hooks |= map(select(.event != "UserPromptSubmit"))' "$M" > "$W/arm-neg/gstack.json"
+(cd "$E" && bun quick/laneb/r3/r3b.ts arm-check "$W/arm-neg") > "$W/log/arm-check-neg.txt" 2>&1; c=$?
+rule "A8 arm-check on a manifest copy with the UserPromptSubmit entry removed" "exit 1, FAIL naming skill-route-hook" "exit $c, $(cut -c1-200 "$W/log/arm-check-neg.txt")" sh -c "test $c = 1 && grep -q 'register no UserPromptSubmit hook running skill-route-hook' '$W/log/arm-check-neg.txt'"
+mkdir -p "$W/none-build/manifests"
+(cd "$L/arms" && ARMS=none MANIFESTS="$W/none-build/manifests" bash build.sh "$W/none-build/out") > "$W/log/none-build.txt" 2>&1; c=$?
+rule "A9 the none arm rebuilt with arms/build.sh matches manifests/r3/none.json and r3b/none.json byte for byte" "identical, tar 8bab4833" "build exit $c, $(jq -r .tar.sha256 "$W/none-build/manifests/none.json" 2>/dev/null)" sh -c "test $c = 0 && cmp '$W/none-build/manifests/none.json' '$L/arms/manifests/r3/none.json' && cmp '$W/none-build/manifests/none.json' '$L/arms/manifests/r3b/none.json'"
+cp "$W/none-build/out/none.tar.gz" "$A/none.tar.gz"; rm -rf "$W/none-build/out/gstack.tar" "$W/none-build/out/gstack-src" "$W/none-build/out/trees"
+
+echo; echo "## Part B: prepare against the real SWE-rebench export"
+if [ -z "${SWEREBENCH:-}" ]; then
+  if [ ! -d "$W/ref/swe-rebench-leaderboard" ]; then
+    UV_TOOL_DIR="$W/uv-tools" UV_TOOL_BIN_DIR="$W/bin" uv tool install --quiet --force "harbor @ git+https://github.com/harbor-framework/harbor@f3a5a923f6d722472c9e797af836ae4425fb215f" > "$W/log/harbor-install.txt" 2>&1
+    "$W/bin/harbor" datasets download "swe-rebench/swe-rebench-leaderboard@sha256:ebe7444e313a0d8db94fa541139826eaebe2b0abcd4900c6f73e750494910dca" -o "$W/ref" > "$W/log/download.txt" 2>&1
+  fi
+  SWEREBENCH=$W/ref/swe-rebench-leaderboard
+fi
+HIDE="$HIDE; s#$SWEREBENCH#\$SWEREBENCH#g"
+(cd "$L/tasks" && python3 swerebench_r3a4.py --export "$SWEREBENCH") > "$W/log/pool-check.txt" 2>&1; c=$?
+rule "B1 the export holds the pool: swerebench_r3a4.py (its default --check mode)" "exit 0" "exit $c, $(ls "$SWEREBENCH" | wc -l) tasks in the export; $(tail -1 "$W/log/pool-check.txt" | cut -c1-200)" test "$c" = 0
+cat > "$W/bin/approve.ts" <<'EOF'
+const { Ledger } = await import(process.argv[2] + "/runner/ledger.ts");
+new Ledger(process.env.LEDGER!, process.argv[3]).approve(Number(process.argv[4]), { words: "dry run, temporary ledger, no spend", by: "dry run", source: "dry run" });
+EOF
+approve() { LEDGER=$1 bun "$W/bin/approve.ts" "$L" "$2" "$3"; }
+# route <ledger>: a passed route record for r3b4-sol on the parts' proxy config, in the shape route-check.ts writes.
+route() { jq -n --arg cfg "$(sha256sum "$L/config/proxy.json" | cut -c1-64)" '{item: "r3b4-sol", model: "gpt-6.1-sol", verdict: "pass", reason: "dry-run fixture record, no route check ran", incomplete: null, proxy_config_sha256: $cfg, sessions: []}' > "$1.route.json"; }
+prep() { (cd "$E" && LEDGER=$1 ARMS="$A" SWEREBENCH="$SWEREBENCH" bun quick/laneb/r3/r3b.ts prepare "$2" --item "$3"); }
+for it in r3b4-opus:376 r3b4-sol:393; do
+  item=${it%:*} cap=${it#*:} P=$W/prep/${it%:*}; rm -rf "$P"; mkdir -p "$P"; approve "$P/$item.jsonl" "$item" "$cap"
+  if [ "$item" = r3b4-sol ]; then
+    prep "$P/$item.jsonl" "$P/work-refused" "$item" > "$W/log/prep-sol-refused.txt" 2>&1; c=$?
+    rule "B2 Sol's prepare with no route record on r3b4-sol" "refused, nothing prepared" "exit $c, $(first 'route check' "$W/log/prep-sol-refused.txt")" sh -c "test $c != 0 && test ! -e '$P/work-refused/plan.json'"
+    route "$P/$item.jsonl"
+  fi
+  prep "$P/$item.jsonl" "$P/work" "$item" > "$W/log/prep-$item.txt" 2>&1; c=$?
+  ok=$(cd "$P/work" && for d in recheck grid-1 grid-2 grid-3; do [ -f "$d/oracle.json" ] && [ "$(jq -c '[.tasks[].path] | sort' "$d/oracle.json")" = "$(jq -c '[.tasks[].path] | sort' "$d/job.json")" ] && [ "$(jq -r '.agents[0].name' "$d/oracle.json")" = oracle ] && echo "$d:$(jq '.tasks | length' "$d/oracle.json")"; done | tr '\n' ' ')
+  rule "B3 prepare $item: every part has oracle.json with its job's task ids (ORACLE=1)" "recheck:10 grid-1:70 grid-2:70 grid-3:70" "exit $c, $ok" test "$ok" = "recheck:10 grid-1:70 grid-2:70 grid-3:70 "
+  rule "B4 prepare $item: grid parts carry the seed 20261106 order, recheck none; plan.json names the item and cap" "3 order.json files, plan item $item cap $cap" "$(ls "$P"/work/*/order.json 2>/dev/null | wc -l) order.json, plan $(jq -r '.item + " cap " + (.cap_usd|tostring) + " order " + .order_sha256[0:12]' "$P/work/plan.json" 2>/dev/null)" sh -c "test \$(ls '$P'/work/*/order.json | wc -l) = 3 && test ! -e '$P/work/recheck/order.json' && test \"\$(jq -r .item '$P/work/plan.json')\" = $item"
+  rule "B5 prepare $item: the told arm in each part is the pinned tar on LanebHooksAgent" "gstack e93a3aa4, laneb_hooks:LanebHooksAgent" "$(jq -r '.agents[] | select(.kwargs.arm == "gstack") | .kwargs.arm_sha256[0:8] + " " + .import_path' "$P/work/grid-1/job.json" | head -1)" sh -c "test \"\$(jq -r '[.agents[] | select(.kwargs.arm == \"gstack\") | .kwargs.arm_sha256 + .import_path] | unique | .[]' '$P'/work/*/job.json | sort -u)\" = '${TAR}laneb_hooks:LanebHooksAgent'"
+done
+
+echo; echo "## Part C: run, resume and analyze, scenario by scenario"
+cat > "$W/bin/play-vm-run.ts" <<'EOF'
+// Plays vm-run.sh for launch.sh's batch ssh, adapted from amendment 4's dry run (itself from tests/fixtures/launch/ssh).
+// The "VM" is $VM. It runs the part's planned trials in the part's order (order.json for a grid part, the job's tasks for
+// the re-check), reserving each session at the cells' $12 cap and settling it through the item's ledger service on
+// LEDGER_PORT, as the proxy does, and writes each trial's files in the shape tests/r3b.test.ts's work() writes them. The
+// scenario module named by SCEN gives, per trial, pass, infra, shown (procedure visible), spend and budget (allowance stop).
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const { R3B4, recheckTasks, taskList } = await import(process.env.L + "/r3/r3b.ts");
+const scen = (await import(process.env.SCEN!)).default;
+const m = /vm-run\.sh work\/run (\S+) (\S+)/.exec(process.argv.at(-1) ?? "");
+const prefix = m![1]!, item = prefix.replace(/-(recheck|grid-\d)\/$/, ""), part = prefix.slice(item.length + 1, -1);
+const it = R3B4[item]!, ids: string[] = part === "recheck" ? recheckTasks() : taskList(it.tasksFile, it.tasksSha256);
+const run = join(process.env.VM!, "work/run"), port = process.env.LEDGER_PORT!;
+appendFileSync(process.env.EVENTS!, "batch started: vm-run.sh work/run " + prefix + " " + m![2] + "\n");
+for (const d of ["out", "jobs"]) rmSync(join(run, d), { recursive: true, force: true });
+mkdirSync(join(run, "out"), { recursive: true });
+const job = JSON.parse(readFileSync(join(run, "job.json"), "utf8"));
+const plan: [string, string][] = part === "recheck" ? job.tasks.map((t: any) => [String(t.path).split("/").at(-1), "gstack"]) : JSON.parse(readFileSync(join(run, "order.json"), "utf8"));
+const call = async (path: string, body: object) => (await fetch("http://127.0.0.1:" + port + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json() as any;
+let rc = 0;
+for (const [k, [task, arm]] of plan.entries()) {
+  const i = ids.indexOf(task), kw = job.agents.find((a: any) => a.kwargs.arm === arm).kwargs, told = arm === "gstack";
+  const t = { pass: false, infra: false, shown: true, spend: 0.5, budget: false, ...(part === "recheck" ? scen.recheck(i) : scen.grid(Number(part.slice(5)), i, arm)) };
+  const name = task.slice(0, 20) + "__" + arm + "__" + k, sid = "s-" + k, d = join(run, "jobs", job.job_name, name);
+  const r = await call("/reserve", { id: prefix + sid, usd_micros: 12_000_000, meta: { trial: name + "__env" } });
+  if (!r.ok) { writeFileSync(join(run, "out/proxy-status-end.json"), JSON.stringify({ cap_stop: "ledger refused a reserve for " + name })); rc = 130; break; }
+  mkdirSync(join(d, "evaluator"), { recursive: true });
+  writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: "/vm/run/tasks/" + task }, agent: { name: "laneb-claude-code", kwargs: { arm, upstream_model: kw.upstream_model, ...(told ? { told_skill: kw.told_skill, procedure_line: kw.procedure_line } : {}) } } }));
+  writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: name, verifier_result: t.infra ? null : { rewards: { reward: t.pass ? 1 : 0 } }, exception_info: null }));
+  writeFileSync(join(d, "evaluator/sdk-messages.jsonl"), JSON.stringify({ type: "AssistantMessage", content: [{ text: told && t.shown ? "## Phase 1\nDEBUG REPORT" : "Fixed it." }] }) + "\n");
+  if (told) { mkdirSync(join(d, "evaluator/gstack-hooks/hooks"), { recursive: true }); writeFileSync(join(d, "evaluator/gstack-hooks/hooks/skill-contract.log"), "2026-11-04T00:00:00Z session=" + sid + " event=" + (t.shown ? "met" : "blocked") + "\n"); }
+  const micros = Math.round(t.spend * 1e6);
+  appendFileSync(join(run, "out/proxy-sessions.jsonl"), JSON.stringify({ id: sid, trial: name + "__env", model: kw.upstream_model, spent_micros: micros, ok_responses: t.infra ? 0 : 3, requests: 4, refused: t.budget ? 1 : 0, refused_budget: t.budget ? 1 : 0, opened_at: "2026-11-04T00:00:00Z", closed_at: "2026-11-04T01:00:00Z", cmd_expanded: told, cmd_names: told ? ["investigate"] : [] }) + "\n");
+  await call("/settle", { id: prefix + sid, usd_micros: micros });
+}
+if (rc === 0) writeFileSync(join(run, "out/proxy-status-end.json"), JSON.stringify({ cap_stop: null }));
+writeFileSync(join(run, "out/vm-run.exit"), rc + "\n");
+appendFileSync(process.env.EVENTS!, "batch ended " + rc + "\n");
+process.exit(rc);
+EOF
+printf '#!/usr/bin/env bash\nexec bun %s "$@"\n' "$W/bin/play-vm-run.ts" > "$W/bin/vm/ssh" && chmod +x "$W/bin/vm/ssh"
+cat > "$W/bin/launch-ubi" <<'EOF'
+#!/usr/bin/env bash
+# Stub ubi-runner, adapted from tests/fixtures/launch/ubi: the "VM" is the directory $VM, made fresh at each up; sync uses
+# hard links so the arm tars aren't copied; every call is logged to $EVENTS. No Ubicloud call.
+set -u
+cmd=$1; shift
+echo "$cmd $*" >> "$EVENTS"
+case "$cmd" in
+  up) rm -rf "$VM"; mkdir -p "$VM" "$STATE/vm-1"; echo "IP=127.0.0.1" > "$STATE/vm-1/env"; touch "$STATE/vm-1/key"; echo vm-1 ;;
+  sync) mkdir -p "$VM/$3"; cp -rl "$2/." "$VM/$3/" ;;
+  ssh) case "$2" in
+         *STOP*) touch "$VM/work/run/STOP" ;;
+         *vm-run.exit*) test -f "$VM/work/run/out/vm-run.exit" ;;
+         *"find out jobs"*) cd "$VM/work/run" && find out jobs -type f | wc -l ;;
+         *) timeout 5 cat > /dev/null || true ;;
+       esac ;;
+  pull) cp -r "$VM/$2" "$3/" ;;
+  down) ;;
+esac
+EOF
+chmod +x "$W/bin/launch-ubi"
+# Scenario modules: i is the task's index in the frozen list (tasks/r3b-<model>.txt, or tasks/r3b-recheck.txt), p the grid part.
+scen() { printf 'export default { recheck: (i: number) => (%s), grid: (p: number, i: number, arm: string) => (%s) };\n' "$2" "$3" > "$W/scen/$1.ts"; }
+KEEPG='{ pass: arm === "gstack" && i < 40, spend: arm === "gstack" ? 0.6 : 0.4 }'
+scen keep-opus '{ spend: 0.5 }' '{ pass: arm === "gstack" && i < 40, spend: arm === "gstack" ? 0.6 : 0.4, budget: arm === "gstack" && p === 1 && i < 10 }'
+scen keep-sol '{ infra: i === 0, shown: i >= 1 && i <= 7, spend: 0.5 }' "$KEEPG"
+scen recheck-6 '{ shown: i < 6, spend: 0.5 }' "$KEEPG"
+scen recheck-infra2 '{ infra: i < 2, spend: 0.5 }' "$KEEPG"
+scen proj-recheck '{ spend: 1.0 }' "$KEEPG"
+scen proj-grid1 '{ spend: 0.5 }' '{ pass: arm === "gstack" && i < 40, spend: p === 1 ? (arm === "gstack" ? 2.0 : 0.5) : 0.4 }'
+scen exp-189 '{ spend: 0.5 }' '{ pass: arm === "gstack" && i < 40, spend: 0.5, shown: !(arm === "gstack" && p === 1 && i < 21) }'
+scen exp-188 '{ spend: 0.5 }' '{ pass: arm === "gstack" && i < 40, spend: 0.5, shown: !(arm === "gstack" && p === 1 && i < 22) }'
+scen infra-part15 '{ spend: 0.5 }' '{ pass: arm === "gstack" && i < 40, spend: 0.5, infra: arm === "none" && p === 2 && i < 15 }'
+scen infra-14-21 '{ spend: 0.5 }' '{ pass: arm === "gstack" && i < 40, spend: 0.5, infra: arm === "none" && i < (p === 1 ? 14 : p === 2 ? 7 : 0) }'
+scen infra-cell22 '{ spend: 0.5 }' '{ pass: arm === "gstack" && i < 40, spend: 0.5, infra: arm === "none" && i < (p === 3 ? 8 : 7) }'
+scen trunc-11 '{ spend: 0.5 }' '{ pass: arm === "gstack" && i < 40, spend: 0.5, budget: arm === "gstack" && p === 1 && i < 11 }'
+scen d1-30 '{ spend: 0.5 }' '{ pass: i < 30, spend: 0.5 }'
+scen d1-29 '{ spend: 0.5 }' '{ pass: i < 29, spend: 0.5 }'
+scen power '{ spend: 0.5 }' '{ pass: i < 30 || (arm === "gstack" && p === 1 && i === 30), spend: 0.5 }'
+port=29915
+# setup <name> <item>: a hard-linked copy of the item's prepared work dir and a fresh ledger approved at its cap.
+setup() {
+  local x=$W/s/$1 item=$2 cap; cap=$([ "$item" = r3b4-opus ] && echo 376 || echo 393)
+  rm -rf "$x"; mkdir -p "$x/state"; cp -al "$W/prep/$item/work" "$x/work"; approve "$x/$item.jsonl" "$item" "$cap"
+  [ "$item" = r3b4-opus ] || route "$x/$item.jsonl"
+}
+# r3b <name> <item> <cmd> <scenario> [record]: r3b.ts with the stub runner and the stub ssh; output in log/<name>-<cmd>.txt.
+r3b() {
+  local x=$W/s/$1 item=$2 cmd=$3 sc=$4 rec=${5:-}; port=$((port + 1))
+  [ -n "$rec" ] || rec=$([ "$item" = r3b4-opus ] && echo "$REC_OPUS" || echo "$REC_SOL")
+  (cd "$E" && env PATH="$W/bin/vm:$PATH" L="$L" SCEN="$W/scen/$sc.ts" UBICLOUD_API_KEY=dry-run-placeholder-not-a-key LEDGER="$x/$item.jsonl" \
+    UBI_OWNER="$UBI_OWNER" UBI_RUNNER="$W/bin/launch-ubi" UBI_RUNNER_STATE="$x/state" STATE="$x/state" VM="$x/vm" EVENTS="$x/events.log" \
+    PULL_RETRY_SEC=0 UBI_TTL_HOURS=12 VM_USD_PER_HOUR=0.60 VM_RESERVE_HOURS=4 LEDGER_PORT="$port" R3A4_RECORD="$rec" \
+    bun quick/laneb/r3/r3b.ts "$cmd" "$x/work" --item "$item") < /dev/null > "$W/log/$1-$cmd.txt" 2>&1
+}
+an() { local c; r3b "$1" "$2" analyze x; c=$?; cp "$W/log/$1-analyze.txt" "$W/log/$1-analyze-$c.txt"; echo $c; }
+outcome() { first '^R3b outcome|^R3b did not run' "$W/log/$1-analyze.txt"; }
+launched() { ls "$W/s/$1/work" | grep -E 'launch-exit$|projection-stop|gate-stop|raised$' | tr '\n' ' '; }
+
+echo "### the start rule"
+(cd "$E" && bun -e '
+const { R3B4, startRule } = await import("./quick/laneb/r3/r3b.ts");
+for (const [item, rec] of [["r3b4-opus", process.argv[1]], ["r3b4-sol", process.argv[2]]]) { const m = R3B4[item]; const s = startRule(rec, m, m.capUsd); console.log(item + " " + (s.ok ? "fits" : "refused") + " " + s.line); }
+const low = startRule(process.argv[1], R3B4["r3b4-opus"], 200); console.log("r3b4-opus-at-200 " + (low.ok ? "fits" : "refused") + " " + low.line);' "$REC_OPUS" "$REC_SOL") > "$W/log/start-rule.txt" 2>&1
+sed "$HIDE" "$W/log/start-rule.txt"
+echo "real records: r3a4-opus sha256 $(sha256sum "$REC_OPUS" | cut -c1-12), r3a4-sol sha256 $(sha256sum "$REC_SOL" | cut -c1-12)"
+rule "C1 start rule, r3b4-opus on r3a4-opus's real record" "fits \$376 at \$232.36" "$(first '^r3b4-opus fits' "$W/log/start-rule.txt" | cut -c16-)" has '^r3b4-opus fits start rule: projection \$232\.36 .* fits r3b4-opus.s \$376 cap' "$W/log/start-rule.txt"
+rule "C2 start rule, r3b4-sol on r3a4-sol's real record" "fits \$393 at \$280.30" "$(first '^r3b4-sol fits' "$W/log/start-rule.txt" | cut -c15-)" has '^r3b4-sol fits start rule: projection \$280\.30 .* fits r3b4-sol.s \$393 cap' "$W/log/start-rule.txt"
+rule "C3 start rule refusal: the exported startRule at a \$200 cap on the real Opus record" "passes the cap, does not bind" "$(first 'at-200' "$W/log/start-rule.txt" | cut -c26-)" has 'r3b4-opus-at-200 refused .*passes r3b4-opus.s \$200 cap; r3b4-opus does not bind' "$W/log/start-rule.txt"
+setup ref-other r3b4-opus; r3b ref-other r3b4-opus run keep-opus "$REC_SOL"; c=$?
+rule "C4 run on r3b4-opus with r3a4-sol's real record" "refused before the bind" "exit $c, $(first 'record' "$W/log/ref-other-run.txt" | sed 's/^E_INTERNAL //'), bound: $([ -e "$W/s/ref-other/r3b4-opus.jsonl.bound" ] && echo yes || echo no)" sh -c "test $c != 0 && test ! -e '$W/s/ref-other/r3b4-opus.jsonl.bound' && grep -q 'not r3a4-opus.s admitted record' '$W/log/ref-other-run.txt'"
+setup ref-oracle r3b4-opus; rm -f "$W/s/ref-oracle/work/grid-2/oracle.json"; r3b ref-oracle r3b4-opus run keep-opus; c=$?
+rule "C5 run with grid-2's oracle.json missing (section 9 item 4)" "refused before the bind" "exit $c, $(first 'oracle.json' "$W/log/ref-oracle-run.txt" | sed 's/^E_INTERNAL //'), bound: $([ -e "$W/s/ref-oracle/r3b4-opus.jsonl.bound" ] && echo yes || echo no)" sh -c "test $c != 0 && test ! -e '$W/s/ref-oracle/r3b4-opus.jsonl.bound'"
+
+echo "### KEEP on both items, with the leases"
+setup keep-opus r3b4-opus; r3b keep-opus r3b4-opus run keep-opus; rc=$?; ac=$(an keep-opus r3b4-opus)
+rule "D1 r3b4-opus run binds on the real record and runs all four parts" "start rule fits, re-check 10 of 10 passes, every projection fits" "run exit $rc; $(first '^re-check' "$W/log/keep-opus-run.txt"); launched: $(launched keep-opus)" sh -c "test $rc = 0 && grep -q '^start rule: projection \$232.36' '$W/log/keep-opus-run.txt' && grep -q '^re-check: 10 of 10 graded told trials exposed' '$W/log/keep-opus-run.txt' && test \$(grep -c 'starts\$' '$W/log/keep-opus-run.txt') = 3 && test -e '$W/s/keep-opus/work/grid-3.launch-exit'"
+rule "D2 one lease per trial and VM block on r3b4-opus's temporary ledger, opened and settled" "434 reserve and 434 settle rows (430 sessions, 4 VM blocks), open reserves 0" "$(jq -s -c '[(map(select(.kind == "reserve")) | length), (map(select(.kind == "settle")) | length)]' "$W/s/keep-opus/r3b4-opus.jsonl") reserve/settle rows; $(first '^r3b4-opus: settled' "$W/log/keep-opus-analyze.txt")" sh -c "test \"\$(jq -s -c '[(map(select(.kind == \"reserve\")) | length), (map(select(.kind == \"settle\")) | length)]' '$W/s/keep-opus/r3b4-opus.jsonl')\" = '[434,434]' && grep -q 'open reserves 0' '$W/log/keep-opus-analyze.txt'"
+rule "D3 KEEP, Opus; 10 told allowance stops (4.8 points) stay inside the truncation bound" "exit 0, KEEP" "exit $ac, $(outcome keep-opus | cut -c1-120); $(first '^allowance stops' "$W/log/keep-opus-analyze.txt")" sh -c "test $ac = 0 && grep -q 'R3b outcome for Opus 5.5: KEEP' '$W/log/keep-opus-analyze.txt' && grep -q 'told 10 of 210 sessions (4.8%)' '$W/log/keep-opus-analyze.txt'"
+setup keep-sol r3b4-sol; r3b keep-sol r3b4-sol run keep-sol; rc=$?; ac=$(an keep-sol r3b4-sol)
+rule "D4 r3b4-sol run binds (route record on r3b4-sol); the re-check passes at 7 of 9 graded with 1 infra" "start rule fits, re-check passes, all four parts run" "run exit $rc; $(first '^re-check' "$W/log/keep-sol-run.txt"); launched: $(launched keep-sol)" sh -c "test $rc = 0 && grep -q '^start rule: projection \$280.30' '$W/log/keep-sol-run.txt' && grep -q '^re-check: 7 of 9 graded told trials exposed' '$W/log/keep-sol-run.txt' && test -e '$W/s/keep-sol/work/grid-3.launch-exit'"
+rule "D5 one lease per trial and VM block on r3b4-sol's temporary ledger, opened and settled; KEEP, Sol" "434 reserve and 434 settle rows, open reserves 0, exit 0 KEEP" "exit $ac, $(jq -s -c '[(map(select(.kind == "reserve")) | length), (map(select(.kind == "settle")) | length)]' "$W/s/keep-sol/r3b4-sol.jsonl") rows; $(first '^r3b4-sol: settled' "$W/log/keep-sol-analyze.txt"); $(outcome keep-sol | cut -c1-60)" sh -c "test $ac = 0 && test \"\$(jq -s -c '[(map(select(.kind == \"reserve\")) | length), (map(select(.kind == \"settle\")) | length)]' '$W/s/keep-sol/r3b4-sol.jsonl')\" = '[434,434]' && grep -q 'open reserves 0' '$W/log/keep-sol-analyze.txt' && grep -q 'R3b outcome for GPT-6.1 Sol: KEEP' '$W/log/keep-sol-analyze.txt'"
+T=$(ls -d "$W"/s/keep-opus/work/grid-1/pulled/jobs/*/*__gstack__* | head -1)
+(cd "$E" && bun quick/laneb/r3/r3b.ts hooks "$T") > "$W/log/hooks.txt" 2>&1
+echo "hooks reader on one told trial (report only): $(cat "$W/log/hooks.txt")"
+
+echo "### the re-check gate"
+setup recheck-6 r3b4-opus; r3b recheck-6 r3b4-opus run recheck-6; rc=$?; ac=$(an recheck-6 r3b4-opus)
+rule "E1 re-check 6 of 10 exposed stops R3b with the frozen line before grid-1" "no grid part launched; analyze exit 6, the stop line, FIX-METHOD (exposure)" "run exit $rc, launched: $(launched recheck-6); analyze exit $ac, $(first '^R3b did not run' "$W/log/recheck-6-analyze.txt")" sh -c "test $ac = 6 && test ! -e '$W/s/recheck-6/work/grid-1.launch-exit' && grep -qx 'R3b did not run for Opus 5.5: told /investigate at 699a41cb showed the procedure in 6 of 10 re-check trials, under 7.' '$W/log/recheck-6-analyze.txt' && grep -q 'FIX-METHOD (exposure)' '$W/log/recheck-6-analyze.txt'"
+setup recheck-infra2 r3b4-opus; r3b recheck-infra2 r3b4-opus run recheck-infra2; rc=$?; ac=$(an recheck-infra2 r3b4-opus)
+rule "E2 two infra re-check trials make it incomplete" "no grid part launched; analyze exit 4 FIX-METHOD (harness limits)" "run: $(first 'recheck is incomplete' "$W/log/recheck-infra2-run.txt" | cut -c1-120); analyze exit $ac, $(outcome recheck-infra2 | cut -c1-200)" sh -c "test $ac = 4 && test ! -e '$W/s/recheck-infra2/work/grid-1.launch-exit' && grep -q 'recheck: 2 of 10 trials are infra, two or more). FIX-METHOD (harness limits)' '$W/log/recheck-infra2-analyze.txt'"
+
+echo "### the projection stop, raise and resume"
+setup proj r3b4-opus; r3b proj r3b4-opus run proj-recheck; rc=$?
+rule "F1 a projection over the cap after the re-check stops before grid-1" "grid-1.projection-stop, grid-1 not launched" "run exit $rc; $(first '^after recheck' "$W/log/proj-run.txt"); launched: $(launched proj)" sh -c "test -e '$W/s/proj/work/grid-1.projection-stop' && test ! -e '$W/s/proj/work/grid-1.launch-exit' && grep -q 'passes r3b4-opus.s \$376 cap; the run stops before grid-1' '$W/log/proj-run.txt'"
+ac=$(an proj r3b4-opus); cp "$W/log/proj-analyze.txt" "$W/log/proj-analyze-stopped.txt"
+rule "F2 analyze while stopped: incomplete for cost limits" "exit 4, FIX-METHOD (cost limits)" "exit $ac, $(outcome proj | cut -c1-220)" sh -c "test $ac = 4 && grep -q 'grid-1 was not launched: after recheck: projection .*FIX-METHOD (cost limits)' '$W/log/proj-analyze.txt'"
+r3b proj r3b4-opus resume proj-recheck; c=$?; cp "$W/log/proj-resume.txt" "$W/log/proj-resume-none.txt"
+rule "F3 resume with no recorded raise" "refused, grid-1 stays stopped" "exit $c, $(first 'no cap raise' "$W/log/proj-resume.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && grep -q 'no cap raise is recorded' '$W/log/proj-resume.txt' && test -e '$W/s/proj/work/grid-1.projection-stop'"
+printf 'Dry-run raise record (scratch, not the Captain drive). No real cap is raised by this file.\n' > "$W/approvals/dry-run-raise.md"
+(cd "$L" && bun runner/ledger.ts raise --path "$W/s/proj/r3b4-opus.jsonl" --item r3b4-opus --usd 400 --approved-by "$W/approvals/dry-run-raise.md") > "$W/log/raise-400.txt" 2>&1
+r3b proj r3b4-opus resume proj-recheck; c=$?; cp "$W/log/proj-resume.txt" "$W/log/proj-resume-400.txt"
+rule "F4 resume after ledger.ts raise --approved-by <file> to \$400, which the projection still passes" "refused, grid-1 stays stopped, no grid-1 lease" "exit $c, $(first 'still passes' "$W/log/proj-resume.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && grep -q 'still passes r3b4-opus.s raised \$400 cap; grid-1 stays stopped' '$W/log/proj-resume.txt' && test -e '$W/s/proj/work/grid-1.projection-stop' && ! grep -q 'r3b4-opus-grid-1/' '$W/s/proj/r3b4-opus.jsonl'"
+(cd "$L" && bun runner/ledger.ts raise --path "$W/s/proj/r3b4-opus.jsonl" --item r3b4-opus --usd 460 --approved-by "$W/approvals/dry-run-raise.md") > "$W/log/raise-460.txt" 2>&1
+r3b proj r3b4-opus resume proj-recheck; c=$?; cp "$W/log/proj-resume.txt" "$W/log/proj-resume-460.txt"
+rule "F5 resume after a raise to \$460 that the projection fits" "accepted once: grid-1 to grid-3 run; cap-raise-grid-1.json names raise-2" "exit $c, $(first 'grid-1 starts' "$W/log/proj-resume.txt"); raise $(jq -c '.raise | {id, usd_micros}' "$W/s/proj/work/cap-raise-grid-1.json" 2>/dev/null); launched: $(launched proj)" sh -c "test $c = 0 && grep -q 'fits r3b4-opus.s \$460 cap; grid-1 starts' '$W/log/proj-resume.txt' && test -e '$W/s/proj/work/grid-3.launch-exit' && jq -e '.raise.id == \"raise-2\" and .raise.usd_micros == 460000000' '$W/s/proj/work/cap-raise-grid-1.json'"
+r3b proj r3b4-opus resume proj-recheck; c=$?; cp "$W/log/proj-resume.txt" "$W/log/proj-resume-again.txt"
+rule "F6 a second resume after the stop was used" "refused: no projection stop" "exit $c, $(first 'no projection stop' "$W/log/proj-resume.txt" | sed 's/^E_INTERNAL //' | cut -c1-160)" sh -c "test $c != 0 && grep -q 'has no projection stop' '$W/log/proj-resume.txt'"
+ac=$(an proj r3b4-opus)
+rule "F7 analyze after the resumed run" "exit 0, KEEP, settled under the raised \$460" "exit $ac, $(first '^r3b4-opus: settled' "$W/log/proj-analyze.txt"); $(outcome proj | cut -c1-60)" sh -c "test $ac = 0 && grep -q 'of \$460, open reserves 0' '$W/log/proj-analyze.txt'"
+setup proj-g1 r3b4-sol; r3b proj-g1 r3b4-sol run proj-grid1; rc=$?; ac=$(an proj-g1 r3b4-sol)
+rule "F8 from grid-1 on the projection uses the grid's own costs; over the cap it stops before grid-2, and with no raise R3b is incomplete" "grid-2.projection-stop; analyze exit 4 FIX-METHOD (cost limits)" "$(first '^after grid-1' "$W/log/proj-g1-run.txt" | cut -c1-230); analyze exit $ac" sh -c "test -e '$W/s/proj-g1/work/grid-2.projection-stop' && test ! -e '$W/s/proj-g1/work/grid-2.launch-exit' && test $ac = 4 && grep -q 'grid-2 was not launched: after grid-1: .*FIX-METHOD (cost limits)' '$W/log/proj-g1-analyze.txt'"
+
+echo "### the grid rules"
+grid_case() { # grid_case <label> <scenario> <want exit> <want text> <ERE in analyze's output>
+  setup "$2" r3b4-opus; r3b "$2" r3b4-opus run "$2"; local rc=$? ac; ac=$(an "$2" r3b4-opus)
+  rule "$1" "exit $3, $4" "run exit $rc, analyze exit $ac, $(outcome "$2" | cut -c1-230)" sh -c "test $ac = $3 && grep -Eq -- '$5' '$W/log/$2-analyze.txt'"
+}
+grid_case "G1 exposure 189 of 210 graded told grid trials passes the 90% gate" exp-189 0 "KEEP" "^exposure: 189 of 210 graded told grid trials exposed"
+grid_case "G2 exposure 188 of 210 is under 90%" exp-188 5 "FIX-METHOD (exposure)" "FIX-METHOD \(exposure\)\. The procedure was visible in 188 of 210"
+grid_case "G3 infra bound in a part: 15 of grid-2's 140 trials" infra-part15 4 "incomplete, FIX-METHOD (harness limits)" "grid-2: 15 of 140 trials are infra, over 10%\)\. FIX-METHOD \(harness limits\)"
+rule "G3b the run stops at the incomplete part" "grid-3 not launched" "launched: $(launched infra-part15)" test ! -e "$W/s/infra-part15/work/grid-3.launch-exit"
+grid_case "G4 infra 14 of a part's 140 and 21 of the none cell's 210 stay inside both bounds" infra-14-21 0 "KEEP" "R3b outcome for Opus 5\.5: KEEP"
+grid_case "G5 infra bound in a cell: 22 of the none cell's 210 (7, 7 and 8 by part)" infra-cell22 4 "incomplete, FIX-METHOD (harness limits)" "22 of 210 none grid trials are infra, over 10%\)\. FIX-METHOD \(harness limits\)"
+grid_case "G6 E1 truncation bound: 11 told allowance stops against 0 (5.2 points)" trunc-11 5 "FIX-METHOD (truncation)" "FIX-METHOD \(truncation\)\. 5\.2% of told sessions"
+grid_case "G7 D1 fixed: primary at or below zero, 30 solved tasks, sensitivity at or below zero" d1-30 3 "CUT-CANDIDATE" "R3b outcome for Opus 5\.5: CUT-CANDIDATE.*on the 30-task D1 sensitivity set"
+grid_case "G8 D1 fixed: primary at or below zero with 29 solved tasks" d1-29 5 "FIX-METHOD (task fit)" "FIX-METHOD \(task fit\)\. The primary is at or below zero .*only 29 tasks were solved by any graded grid trial, fewer than 30"
+grid_case "G9 a positive primary whose interval includes zero" power 5 "FIX-METHOD (power), with the MDD at the realized n" "FIX-METHOD \(power\)\. Told minus none is \+0\.5 points"
+rule "G9b the MDD lines beside FIX-METHOD (power)" "MDD at the realized n of 70 paired tasks" "$(first '^MDD at the realized' "$W/log/power-analyze.txt" | cut -c1-200)" has '^MDD at the realized n of 70' "$W/log/power-analyze.txt"
+echo "report-only lines beside the CUT-CANDIDATE (d1-30):"; grep -E '^(D1 sensitivity|cross-model overlap|MDD|repository-clustered|Stop hook)' "$W/log/d1-30-analyze.txt" | cut -c1-260 | sed 's/^/  /'
+
+echo; echo "## leftovers"
+echo "ports answering: $(for p in $(seq 29915 400 29915) $(seq 29916 29990); do (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && echo -n "$p "; done)none else; bound temporary ledgers: $(ls "$W"/s/*/*.bound 2>/dev/null | wc -l)"
+echo; echo "rules: $rules, failed: $fails"
+[ "$fails" = 0 ] && echo "DRYRUN: ok" || echo "DRYRUN: fail"
