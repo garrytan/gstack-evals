@@ -121,6 +121,7 @@ if (import.meta.main) {
     wrapper_sha256: sha256(join(here, "prompt-wrapper.md")), persona_sha256: sha256(join(here, "agent/persona.json")),
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
     arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "", told_skill: options.told ?? "",
+      ...(options.gstack_hooks ? { gstack_hooks: options.gstack_hooks } : {}),
       ...(options.procedure_line ? { procedure_line: options.procedure_line, procedure_line_sha256: createHash("sha256").update(PROCEDURE_LINES[options.procedure_line as keyof typeof PROCEDURE_LINES]).digest("hex") } : {}) })), tasks,
   };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");

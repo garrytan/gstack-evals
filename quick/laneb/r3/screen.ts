@@ -74,6 +74,8 @@ export type R3aModel = {
   projection: (n: number, cNone: number, cTold: number) => { text: string; usd: Record<string, number> };
   // R3 amendment 4's items only: the session allowance (cells.r3a4.json) that a trial with no metered cost counts at.
   a4?: { allowanceUsd: number };
+  // The arm manifest directory under quick/laneb its route check reads, when not arms/manifests/r3 (R3b's items).
+  armManifests?: string;
 };
 export const R3A: Record<string, R3aModel> = {
   [OPUS]: {
@@ -316,7 +318,7 @@ export function portTaken(host: string, port: string): boolean {
   return Bun.spawnSync(["bash", "-c", 'exec 3<>"/dev/tcp/$1/$2"', "bash", host, port], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
 }
 
-function sh(cmd: string[], env: Record<string, string | undefined>) {
+export function sh(cmd: string[], env: Record<string, string | undefined>) {
   const p = Bun.spawnSync(cmd, { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
   return p.exitCode ?? 1;
 }
@@ -372,7 +374,7 @@ function prepare(work: string, m: R3aModel) {
 }
 
 // run's and resume's checks of the VM, runner and ledger port settings, before anything launches.
-function launchEnv(m: R3aModel, state = `${m.item} is still unbound`) {
+export function launchEnv(m: R3aModel, state = `${m.item} is still unbound`) {
   const rate = process.env.VM_USD_PER_HOUR ?? "", hours = process.env.VM_RESERVE_HOURS ?? "4";
   if (!rate) throw new Error(`E_USAGE set VM_USD_PER_HOUR so the VM hours settle to ${m.item}`);
   vmBlock(rate, hours, m.capUsd);
@@ -470,9 +472,9 @@ function resume(work: string, m: R3aModel) {
   }
 }
 
-const PROXY_FILES = ["cap-stop.json", "proxy-status-end.json", "proxy-sessions.jsonl"];
+export const PROXY_FILES = ["cap-stop.json", "proxy-status-end.json", "proxy-sessions.jsonl"];
 
-function unreadable(path: string): boolean {
+export function unreadable(path: string): boolean {
   try {
     const text = readFileSync(path, "utf8");
     if (!text.trim()) return true;

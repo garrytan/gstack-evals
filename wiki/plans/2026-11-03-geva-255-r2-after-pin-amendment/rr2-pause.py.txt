@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+# The pause rule for R2 at the overhaul's after pin (GEVA-255 amendment, section 5). It is #154's rr-pause.py (sha256
+# d421b6c1..., in 2026-11-02-geva-195-r2-rerun-amendment) with three changes. The items are this post's five. The line is
+# the $2,000 all-in ceiling less the crew threads' model use so far on this line and a $100 crew reserve, in place of $4,500.
+# And --recost reads the exposure smoke's cost.tsv for the grid's start rule. The rest is rr-pause.py's: the approval record
+# in 176fdc7's layout (<record>/items/<item>/approval-NNNN.json, lease-NNNN.json and close-NNNN.json, a close in its
+# lease's slot), settled as each closed lease's spent_micros plus its unknown_micros, reserved as each open lease's
+# reserved_micros, the judge lease that reserves all its item has left, and --append with its RR_PAUSE_STOP marker, which
+# #154's rr-decide.py skips.
+# headroom = $2,000 - crew - $100 - settled - reserved over the five items. crew is the crew threads' model use on this line
+# since 2026-11-03 13:30Z, in dollars at $1 per 1,000 Capy credits, which the operator reads from each thread's counter
+# (GEVA-255, the run thread, any successor and their subagents) right before the launch and passes with --crew.
+# It exits 3, the pause, when the headroom is below one launch round's worst case: parallel x $40 for a review-units launch,
+# and for a judge launch the larger of the batch's printed worst case and the item's cap less its committed spend.
+# --recost: the grid starts only when 66 sessions at the smoke's dearest session, plus one round at the allowance, fit under
+# rr2-grid-full's cap less its committed spend. It reads the smoke's cost.tsv rows with scope all, needs exactly 3 of them,
+# each with a usd value and 0 unknown calls, and exits 3 when the projection does not fit.
+# Exit 0 to go on, 3 to stop and report to the Captain, 5 on bad input.
+# Usage: python3 rr2-pause.py <record dir> <next item> <parallel> --crew <usd> [<round worst case in dollars>]
+#        python3 rr2-pause.py --append <launch stderr> <launch exit code> <run log> <spend cap> <item's remaining cap>
+#        python3 rr2-pause.py --recost <record dir> <smoke cost.tsv> <parallel>
+import csv, json, os, re, sys
+
+JUDGE = {"rr2-judge-match", "rr2-judge-adjudicate"}
+ITEMS = ["rr2-smoke-full", "rr2-grid-full", "rr2-grid-none", "rr2-judge-match", "rr2-judge-adjudicate"]
+CEILING, CREW_RESERVE, ALLOWANCE, GRID = 2000 * 10**6, 100 * 10**6, 40 * 10**6, 66
+FILE = re.compile(r"^(approval|lease|close)-(\d{4})\.json$")
+usd = lambda m: "$%.2f" % (m / 1e6)
+MARK = "RR_PAUSE_STOP"
+ROUND_STOP = re.compile(r"CAP_STOP the next round's worst case \(\d+ sessions at their allowance\) does not fit under the cap")
+micros = lambda x: round(float(x.lstrip("$").replace(",", "")) * 1e6)
+
+
+def item(record, name):
+    d = os.path.join(record, "items", name)
+    files = [json.load(open(os.path.join(d, n))) for n in sorted(os.listdir(d)) if FILE.match(n)] if os.path.isdir(d) else []
+    leases = [f for f in files if f["kind"] == "lease"]
+    closes = {f["seq"]: f for f in files if f["kind"] == "close"}
+    for seq, c in closes.items():
+        if not any(l["seq"] == seq and l["lease_id"] == c["lease_id"] for l in leases):
+            raise ValueError("item %s: close %d names lease %s, which is not the lease in that slot" % (name, seq, c["lease_id"]))
+    approvals = [f for f in files if f["kind"] == "approval"]
+    settled = sum(closes[l["seq"]]["spent_micros"] + closes[l["seq"]]["unknown_micros"] for l in leases if l["seq"] in closes)
+    reserved = sum(l["reserved_micros"] for l in leases if l["seq"] not in closes)
+    return (approvals[-1]["cap_micros"] if approvals else None), settled, reserved
+
+
+try:
+    if sys.argv[1:2] == ["--append"]:
+        launch, code, log = sys.argv[2], int(sys.argv[3]), sys.argv[4]
+        pause = micros(sys.argv[5]) < micros(sys.argv[6])
+        lines = open(launch, encoding="utf-8").read().splitlines()
+        if any(x.startswith(MARK) for x in lines):
+            raise ValueError("the launch's stderr %s already carries the pause marker %s" % (launch, MARK))
+        lines = [MARK + " " + x if pause and ROUND_STOP.fullmatch(x) else x for x in lines]
+        with open(log, "a", encoding="utf-8") as f:
+            f.write("".join(x + "\n" for x in lines) + "review-units exit %d\n" % code)
+        print("pause: appended %d lines and review-units exit %d to the run log; %d marked %s as the pause's stop%s" % (len(lines), code, sum(x.startswith(MARK) for x in lines), MARK, "" if pause else " (the item's remaining cap set this launch's spend cap, so nothing is the pause)"))
+        sys.exit(0)
+    if sys.argv[1:2] == ["--recost"]:
+        record, tsv, parallel = sys.argv[2], sys.argv[3], int(sys.argv[4])
+        if parallel < 1:
+            raise ValueError("parallel must be at least 1")
+        rows = [r for r in csv.DictReader(open(tsv, encoding="utf-8"), delimiter="\t") if r.get("scope") == "all"]
+        if len(rows) != 3:
+            raise ValueError("the smoke's cost.tsv has %d session rows with scope all, not 3" % len(rows))
+        if any(r.get("usd") in (None, "") or (r.get("unknown_calls") or "0") != "0" for r in rows):
+            raise ValueError("a smoke session row has no usd value or unknown calls, so its cost is not known")
+        dear = max(micros(r["usd"]) for r in rows)
+        cap, s, r = item(record, "rr2-grid-full")
+        if cap is None:
+            raise ValueError("item rr2-grid-full has no approval on record")
+        need = GRID * dear + parallel * ALLOWANCE
+        left = cap - s - r
+        print("recost: smoke sessions %s; dearest %s; %d sessions at that plus one round of %d at $40 is %s; rr2-grid-full has %s left of %s" % (", ".join(usd(micros(x["usd"])) for x in rows), usd(dear), GRID, parallel, usd(need), usd(left), usd(cap)))
+        if need > left:
+            print("recost: STOP. The grid does not fit its cap at the smoke's dearest session: start no grid and report to the Captain.")
+            sys.exit(3)
+        print("recost: the grid fits its cap")
+        sys.exit(0)
+    args = sys.argv[1:]
+    if "--crew" not in args:
+        raise ValueError("usage: rr2-pause.py <record dir> <next item> <parallel> --crew <usd> [<round worst case>]")
+    k = args.index("--crew")
+    crew = micros(args[k + 1])
+    args = args[:k] + args[k + 2:]
+    record, nxt, parallel = args[0], args[1], int(args[2])
+    if nxt not in ITEMS or parallel < 1 or crew < 0 or not os.path.isdir(os.path.join(record, "items")):
+        raise ValueError("usage: rr2-pause.py <record dir> <one of %s> <parallel> --crew <usd> [<round worst case>]" % ", ".join(ITEMS))
+    state = {n: item(record, n) for n in ITEMS}
+    settled = sum(s for _, s, _ in state.values())
+    reserved = sum(r for _, _, r in state.values())
+    for n in ITEMS:
+        c, s, r = state[n]
+        print("item %s: cap %s, settled %s, reserved %s" % (n, "none" if c is None else usd(c), usd(s), usd(r)))
+    head = CEILING - crew - CREW_RESERVE - settled - reserved
+    rnd = round(float(args[3]) * 1e6) if len(args) > 3 else parallel * ALLOWANCE
+    cap, s, r = state[nxt]
+    if cap is None:
+        raise ValueError("item %s has no approval on record" % nxt)
+    left = cap - s - r
+    if nxt in JUDGE:
+        rnd = max(rnd if len(args) > 3 else 0, left)
+    spend = min(left, head)
+    print("pause: crew use %s and a crew reserve of $100.00; settled %s and reserved %s over the five items; headroom %s of $2000.00; one round of %s costs at most %s" % (usd(crew), usd(settled), usd(reserved), usd(head), nxt, usd(rnd)))
+    if head < rnd:
+        print("pause: STOP. The headroom is below one round's worst case: launch nothing, report to the Captain, and resume only on the Captain's word, inside the ceiling.")
+        sys.exit(3)
+    if nxt in JUDGE:
+        print("pause: launch the judge batch on %s; its lease reserves the item's %s left, which fits the headroom" % (nxt, usd(left)))
+        sys.exit(0)
+    print("pause: launch %s with --spend-cap %.2f (the smaller of the item's %s left and the headroom)%s" % (nxt, spend / 1e6, usd(left), "; that is below one round, so review-units stops with CAP_STOP before a session" if spend < rnd else ""))
+except SystemExit:
+    raise
+except Exception as e:
+    print("E_RR_PAUSE %s: %s" % (type(e).__name__, e))
+    sys.exit(5)
