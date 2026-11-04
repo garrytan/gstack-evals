@@ -212,6 +212,33 @@ describe("the start rule and the projection checks", () => {
     expect(p.record.projection_usd).toBeCloseTo(60 + 2 * (70 * mean(none) + 70 * mean(told) + 5) + 79.2, 6);
     expect(p.line).toContain("fits r3b4-opus's $376 cap; grid-2 starts");
   });
+
+  test("an infra trial with no metered cost stays out of the projection's means, as in admission(); a graded trial with none still counts at $12", () => {
+    const c = 0.736251;
+    const rows = [{ ts: "", item: "r3b4-opus", kind: "approval" as const, id: "approval", usd_micros: 376e6 }, { ts: "", item: "r3b4-opus", kind: "settle" as const, id: "r3b4-opus-recheck/s", usd_micros: toMicros(10 * c) }];
+    const at = { rows, m: opus, capUsd: 376, after: "recheck", next: "grid-1", done: 0, grid: [], gridVmUsd: 0 };
+    const graded = recheckTasks().map((task) => gt({ task, arm: "gstack", spent: c }));
+    const vm = 70 * (0.0306 * (0.460213 / 0.370227) + 0.0537 * 1.16) * 0.6;
+    const all = gridProjection({ ...at, recheck: graded });
+    expect(all.record.projection_usd).toBeCloseTo(10 * c + 3 * (70 * 0.460213 + 70 * c * 1.16 + vm) + 79.2, 6);
+    expect(all.record.projection_usd).toBeCloseTo(375.2, 1);
+    expect(all.over).toBe(false);
+    const infra = [{ ...gt({ task: graded[0]!.task, arm: "gstack", infra: true }), cost_usd: null }, ...graded.slice(1)];
+    const p = gridProjection({ ...at, recheck: infra });
+    expect(p.record.told_usd).toBeCloseTo(c * 1.16, 9);
+    expect(p.record.projection_usd).toBeCloseTo(all.record.projection_usd, 9);
+    expect(p.over).toBe(false);
+    expect(p.line).toContain("fits r3b4-opus's $376 cap; grid-1 starts");
+    const unmetered = [{ ...graded[0]!, cost_usd: null }, ...graded.slice(1)];
+    expect(gridProjection({ ...at, recheck: unmetered }).record.told_usd).toBeCloseTo(((9 * c + 12) / 10) * 1.16, 9);
+    const g = grid((_i, _r, arm) => ({ spent: arm === "none" ? 0.5 : 0.9 })).filter((_t, k) => k % 6 < 2);
+    const told = g.findIndex((t) => t.arm === "gstack"), none = g.findIndex((t) => t.arm === "none");
+    g[told] = { ...g[told]!, outcome: "infra", reward: null, cost_usd: null };
+    g[none] = { ...g[none]!, outcome: "infra", reward: null, cost_usd: null };
+    const after1 = gridProjection({ ...at, after: "grid-1", next: "grid-2", done: 1, recheck: [], grid: g, gridVmUsd: 5 });
+    expect(after1.record.told_usd).toBeCloseTo(0.9, 9);
+    expect(after1.record.none_usd).toBeCloseTo(0.5, 9);
+  });
 });
 
 describe("the outcome on a complete grid", () => {

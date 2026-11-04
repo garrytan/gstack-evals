@@ -240,11 +240,12 @@ export function startRule(recordPath: string, m: R3bItem, capUsd: number) {
   return { ok, usd, line: "start rule: projection $" + usd.toFixed(2) + " = " + rec.n + " x 3 x ($" + none.toFixed(4) + " none + $" + told.toFixed(4) + " told), from " + m.from + "'s record, " + (ok ? "fits" : "passes") + " " + m.item + "'s $" + capUsd + " cap" + (ok ? "" : "; " + m.item + " does not bind") };
 }
 
-const meanCost = (ts: R3Trial[]) => (ts.length ? ts.reduce((s, t) => s + (t.cost_usd ?? R3B.allowanceUsd), 0) / ts.length : null);
+const meanCost = (all: R3Trial[]) => { const ts = all.filter((t) => t.outcome !== "infra"); return ts.length ? ts.reduce((s, t) => s + (t.cost_usd ?? R3B.allowanceUsd), 0) / ts.length : null; };
 export const vmSettled = (rows: Row[], prefix: string) => fromMicros(rows.filter((r) => r.kind === "settle" && r.id.startsWith(prefix) && String(r.kind_detail ?? "").startsWith("VM hours")).reduce((s, r) => s + r.usd_micros, 0));
 
 // The projection after a part (section 5), from cost data only. done is the number of grid parts completed, grid their
-// trials and gridVmUsd their settled VM cost. A trial with no metered cost counts at the $12 allowance.
+// trials and gridVmUsd their settled VM cost. Each mean is over graded trials, the basis admission() measured the cap on:
+// infra trials stay out, and a graded trial with no metered cost counts at the $12 allowance.
 export function gridProjection(o: { rows: Row[]; m: R3bItem; capUsd: number; after: string; next: string; done: number; recheck: R3Trial[]; grid: R3Trial[]; gridVmUsd: number }) {
   const { m, capUsd } = o, b = m.basis, remaining = R3B.gridParts - o.done;
   const settled = fromMicros(totals(o.rows).settledMicros);

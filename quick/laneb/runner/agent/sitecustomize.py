@@ -23,10 +23,10 @@ def _install(path):
         trials = build(config, task_configs, job_id=job_id)
         by_key = {}
         for t in trials:
-            key = (Path(str(t.task.path)).name, str((t.agent.kwargs or {}).get("arm")))
-            if key in by_key:
-                raise RuntimeError(f"LANEB_TRIAL_ORDER: the job has more than one trial for {key}")
-            by_key[key] = t
+            slot = (Path(str(t.task.path)).name, str((t.agent.kwargs or {}).get("arm")))
+            if slot in by_key:
+                raise RuntimeError(f"LANEB_TRIAL_ORDER: the job has more than one trial for {slot}")
+            by_key[slot] = t
         if len(set(order)) != len(order) or set(order) != set(by_key):
             raise RuntimeError(f"LANEB_TRIAL_ORDER {path} does not name each of the job's {len(by_key)} trials once")
         print(f"laneb order: applied {len(order)} trials from {path}", file=sys.stderr, flush=True)
