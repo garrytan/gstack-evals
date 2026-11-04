@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# resize_test.py: keyless checks of resize.py's survivor order (GEVA-262, GST-1309), written before the /ship pass 1 fix.
-# Run from this folder: python3 resize_test.py. Needs only Python 3 and plan v3's merged bundle beside this one.
+# resize_check.py: keyless checks of resize.py's survivor order (GEVA-262, GST-1309), written before the /ship pass 1 fix.
+# Run from this folder: python3 resize_check.py. Needs only Python 3 and plan v3's merged bundle beside this one.
 import hashlib, os, re, subprocess, sys, unittest
 D = os.path.dirname(os.path.abspath(__file__))
 HOUSE_SHA = "748edeac960a2923f56f5a7d31c3865bec8b10ae4d65917523ca8ad5ddb0d8e1"
