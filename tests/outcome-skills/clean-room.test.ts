@@ -133,6 +133,78 @@ describe("O1's second clean-room scan (keyless)", () => {
     }
   });
 
+  test("GSTA-2: CLAUDE.local.md, .mcp.json, ~/.claude.json and Claude Code's managed settings are hits whatever they hold", () => {
+    const paths: [string, (r: ReturnType<typeof room>) => string, string | null][] = [
+      ["managed-settings.json under /etc/claude-code", (r) => join(r.root, "etc", "claude-code", "managed-settings.json"), "{}\n"],
+      ["a folder under /etc/claude-code", (r) => join(r.root, "etc", "claude-code", "policies"), null],
+      ["~/CLAUDE.local.md", (r) => join(r.home, "CLAUDE.local.md"), "Write plainly.\n"],
+      ["a work dir's CLAUDE.local.md", (r) => join(r.work, "CLAUDE.local.md"), "Write plainly.\n"],
+      ["a CLAUDE.local.md in a parent of the work dir", (r) => join(r.root, "work", "CLAUDE.local.md"), ""],
+      ["~/.claude.json", (r) => join(r.home, ".claude.json"), '{"numStartups":1}\n'],
+      ["a work dir's .mcp.json", (r) => join(r.work, ".mcp.json"), '{"mcpServers":{}}\n'],
+      ["~/.mcp.json", (r) => join(r.home, ".mcp.json"), '{"mcpServers":{}}\n'],
+    ];
+    for (const [name, where, text] of paths) {
+      const r = room();
+      put(where(r), text);
+      const got = scan(r);
+      expect([name, got.code, got.out.split("\n").some((l) => l === "found " + where(r))]).toEqual([name, 3, true]);
+    }
+    const r = room();
+    mkdirSync(join(r.root, "etc"), { recursive: true });
+    writeFileSync(join(r.root, "etc", "claude-code"), "{}\n");
+    expect(scan(r)).toMatchObject({ code: 3, out: "found " + join(r.root, "etc", "claude-code") + "\n" });
+  });
+
+  test("GSTA-2: the global config in the arm's config dir (CLAUDE_CONFIG_DIR=~/.claude), ~/.claude/.claude.json, is a hit whatever it holds", () => {
+    const r = room();
+    put(join(r.home, ".claude", ".claude.json"), '{"numStartups":1}\n');
+    expect(scan(r)).toMatchObject({ code: 3, out: "found " + join(r.home, ".claude", ".claude.json") + "\n" });
+  });
+
+  test("GSTA-2: a rules file in the home or a work dir, or an auto-memory file, that names gstack is a hit", () => {
+    const paths: [string, (r: ReturnType<typeof room>) => string][] = [
+      ["~/.claude/rules", (r) => join(r.home, ".claude", "rules", "style.md")],
+      ["a work dir's .claude/rules, in a subfolder", (r) => join(r.work, ".claude", "rules", "team", "ship.md")],
+      ["auto memory under ~/.claude/projects", (r) => join(r.home, ".claude", "projects", "-work-repo", "memory", "MEMORY.md")],
+    ];
+    for (const [name, where] of paths) {
+      const r = room();
+      put(where(r), "Run /ship from GStack before every push.\n");
+      const got = scan(r);
+      expect([name, got.code, got.out.split("\n").some((l) => l === "found " + where(r))]).toEqual([name, 3, true]);
+    }
+  });
+
+  test("GSTA-2: rules and auto-memory files that do not name gstack stay clean", () => {
+    const r = room();
+    put(join(r.home, ".claude", "rules", "style.md"), "Write plainly.\n");
+    put(join(r.work, ".claude", "rules", "team", "tests.md"), "Run bun test before a push.\n");
+    put(join(r.home, ".claude", "projects", "-work-repo", "memory", "MEMORY.md"), "The repo uses bun.\n");
+    put(join(r.home, ".claude", "projects", "-work-repo", "notes.md"), "Nothing here.\n");
+    expect(scan(r)).toEqual({ code: 0, out: "", err: "" });
+  });
+
+  test("GSTA-2: a config dir with no .claude.json, only look-alike names, stays clean", () => {
+    const r = room();
+    put(join(r.home, ".claude", "claude.json"), "{}\n");
+    put(join(r.home, ".claude", ".claude.json.d", "x"), "{}\n");
+    put(join(r.work, ".claude", ".claude.json"), "{}\n");
+    expect(scan(r)).toEqual({ code: 0, out: "", err: "" });
+  });
+
+  test("GSTA-2: none of those paths, an empty /etc/claude-code and look-alike names stay clean", () => {
+    const r = room();
+    put(join(r.root, "etc", "claude-code"));
+    put(join(r.work, "docs", "mcp.json"), '{"mcpServers":{}}\n');
+    put(join(r.work, "docs", "CLAUDE.local.md"), "Notes.\n");
+    put(join(r.work, "mcp.json"), "{}\n");
+    put(join(r.home, "claude.json"), "{}\n");
+    put(join(r.home, ".claude", "claude.json"), "{}\n");
+    put(join(r.root, "etc", "claude-code-old", "managed-settings.json"), "{}\n");
+    expect(scan(r)).toEqual({ code: 0, out: "", err: "" });
+  });
+
   test("with dirname off PATH, or a work dir that is not absolute, the scan fails closed with exit 4", () => {
     const bin = mkdtempSync(join(tmpdir(), "outcome-clean-room-bin-"));
     roots.push(bin);
@@ -256,6 +328,33 @@ describe.skipIf(!DOCKER)("the clean-room preflight in a real container (GSTACK_E
     put(join(r.root, "work", "repo", "src", "app.js"), "export const add = (a, b) => a + b;\n");
     put(join(r.root, "work", "CLAUDE.md"), "Load gstack before implementing.\n");
     expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [join(r.root, "work") + ":/work:ro"], digest: ID })).toThrow(/^E_OUTCOME_CLEAN_ROOM .*found \/work\/CLAUDE\.md/);
+  });
+
+  test("GSTA-2: managed settings, CLAUDE.local.md, ~/.claude.json and .mcp.json in the session are refused, each named", () => {
+    const cases: [string, (r: ReturnType<typeof fresh>) => string[]][] = [
+      ["/etc/claude-code/managed-settings.json", (r) => [join(r.root, "managed") + ":/etc/claude-code:ro"]],
+      ["/root/CLAUDE.local.md", (r) => [join(r.root, "CLAUDE.local.md") + ":/root/CLAUDE.local.md:ro"]],
+      ["/work/repo/CLAUDE.local.md", () => []],
+      ["/root/.claude.json", (r) => [join(r.root, ".claude.json") + ":/root/.claude.json:ro"]],
+      ["/root/.claude/.claude.json", (r) => [join(r.root, ".claude.json") + ":/root/.claude/.claude.json:ro"]],
+      ["/work/repo/.mcp.json", () => []],
+      ["/root/.mcp.json", (r) => [join(r.root, ".mcp.json") + ":/root/.mcp.json:ro"]],
+    ];
+    for (const [path, mounts] of cases) {
+      const r = unit();
+      put(join(r.root, "managed", "managed-settings.json"), "{}\n");
+      for (const n of ["CLAUDE.local.md", ".claude.json", ".mcp.json"]) put(join(r.root, n), "{}\n");
+      if (path.startsWith("/work/repo/")) put(join(r.unit, path.slice("/work/repo/".length)), "{}\n");
+      const err = thrown(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", ...mounts(r)], digest: ID })) ?? "";
+      expect([path, err.startsWith("E_OUTCOME_CLEAN_ROOM "), err.includes("found " + path)]).toEqual([path, true, true]);
+    }
+  });
+
+  test("GSTA-2: a session with none of those files, and look-alike names, still passes", () => {
+    const r = unit();
+    put(join(r.unit, "docs", "mcp.json"), "{}\n");
+    put(join(r.root, "cc"));
+    expect(() => cleanRoomPreflight({ docker: "docker", image: IMAGE, home: "/root", workdirs: ["/work/repo"], mounts: [r.unit + ":/work/repo:ro", join(r.root, "cc") + ":/etc/claude-code:ro"], digest: ID })).not.toThrow();
   });
 
   test("an image that is not on the host fails closed", () => {

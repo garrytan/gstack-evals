@@ -17,9 +17,14 @@ export const CLEAN_ROOM_SCRIPT = readFileSync(CLEAN_ROOM_SH, "utf8").replace(/\n
 // A gstack trace, for O1's scan: $home/.gstack existing; a .claude/skills folder anywhere below a work dir, outside .git,
 // existing; and "gstack" in any case in the name or content of a CLAUDE.md in a parent of a work dir (up to /, or up to
 // CLEAN_ROOM_ROOT when it is set), of $home/CLAUDE.md, of .claude/settings.json and .claude/settings.local.json in the
-// home or a work dir (where hooks live; any mention counts, since sh cannot parse JSON) and of any entry under
-// .claude/commands, .claude/plugins or .claude/agents in the home or a work dir. Every path is built from the home and
-// work dir arguments, and a work dir must be absolute.
+// home or a work dir (where hooks live; any mention counts, since sh cannot parse JSON), of any entry under
+// .claude/commands, .claude/plugins, .claude/agents or .claude/rules in the home or a work dir, and of any entry under
+// $home/.claude/projects/*/memory (Claude Code's auto memory). Present at all, whatever they hold
+// (GSTA-2): CLAUDE.local.md and .mcp.json in the home or a work dir, a CLAUDE.local.md in a parent of a work dir,
+// ~/.claude.json, ~/.claude/.claude.json (the global config file when CLAUDE_CONFIG_DIR is ~/.claude, as the arm sets it),
+// and each entry under /etc/claude-code (Claude Code's managed settings), or /etc/claude-code itself when it
+// is not a plain folder. Every path is built from the home and work dir arguments, or from CLEAN_ROOM_ROOT for
+// /etc/claude-code, and a work dir must be absolute.
 export const CLEAN_ROOM_O1_SCRIPT = String.raw`exec 3>&2
 hit=0
 bad=0
@@ -42,20 +47,30 @@ for t in find grep dirname; do command -v "$t" >/dev/null 2>&1 || fail "$t is no
 top=$CLEAN_ROOM_ROOT
 [ -n "$top" ] || top=/
 there "$home/.gstack" && found "$home/.gstack"
+for p in "$home/CLAUDE.local.md" "$home/.mcp.json" "$home/.claude.json" "$home/.claude/.claude.json"; do there "$p" && found "$p"; done
+cc=$CLEAN_ROOM_ROOT/etc/claude-code
+if [ -d "$cc" ] && [ ! -L "$cc" ]; then
+  out=$(find "$cc" -mindepth 1) || fail "find could not finish under $cc"
+  [ -z "$out" ] || { printf "%s\n" "$out" | each; hit=1; }
+elif there "$cc"; then found "$cc"; fi
 for p in "$home/CLAUDE.md" "$home/.claude/settings.json" "$home/.claude/settings.local.json"; do [ -f "$p" ] && named "$p"; done
 tree "$home/.claude/commands"
 tree "$home/.claude/plugins"
 tree "$home/.claude/agents"
+tree "$home/.claude/rules"
+for m in "$home"/.claude/projects/*/memory; do tree "$m"; done
 for u in "$@"; do
   case "$u" in /*) ;; *) fail "the work dir $u is not an absolute path"; continue ;; esac
   d=$u
-  while [ "$d" != "$top" ] && [ "$d" != / ]; do d=$(dirname "$d"); [ -f "$d/CLAUDE.md" ] && named "$d/CLAUDE.md"; done
+  while [ "$d" != "$top" ] && [ "$d" != / ]; do d=$(dirname "$d"); [ -f "$d/CLAUDE.md" ] && named "$d/CLAUDE.md"; there "$d/CLAUDE.local.md" && found "$d/CLAUDE.local.md"; done
+  for p in "$u/CLAUDE.local.md" "$u/.mcp.json"; do there "$p" && found "$p"; done
   out=$(find "$u" -name .git -prune -o -path '*/.claude/skills' -print) || fail "find could not finish under $u"
   [ -z "$out" ] || { printf "%s\n" "$out" | each; hit=1; }
   for p in "$u/.claude/settings.json" "$u/.claude/settings.local.json"; do [ -f "$p" ] && named "$p"; done
   tree "$u/.claude/commands"
   tree "$u/.claude/plugins"
   tree "$u/.claude/agents"
+  tree "$u/.claude/rules"
 done
 [ "$bad" = 0 ] || exit 4
 [ "$hit" = 0 ] || exit 3`;

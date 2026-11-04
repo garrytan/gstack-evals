@@ -264,8 +264,35 @@ describe("plan-eng-review exposure: review-sections read, Step 0 Scope Challenge
     expect(withSections(["Summary:\n**Architecture review:** 1 issue found\n- process-local store\n**Code quality review:** no issues\n- none\n**Test review:** 1 gap\n- refill boundary\n**Performance review:** no issues\n- none"])).toBe(false);
   });
 
-  test("p2/red-team#1: four real headings that carry their verdict on the heading line count as Sections 1 to 4", () => {
-    expect(withSections(["## Section 1: Architecture review: no issues found.", "## Section 2: Code quality review: no issues found.", "## Section 3: Test review: no issues found.", "## Section 4: Performance review: no issues found."])).toBe(true);
+  test("rule decision (GSTA-2), not a regression: four headings that carry their verdict on the heading line, with nothing under them, are not Sections 1 to 4", () => {
+    expect(withSections(["## Section 1: Architecture review: no issues found.", "## Section 2: Code quality review: no issues found.", "## Section 3: Test review: no issues found.", "## Section 4: Performance review: no issues found."])).toBe(false);
+  });
+
+  test("the same verdict headings count with one finding line under each", () => {
+    expect(withSections(four((n, name) => "## Section " + n + ": " + name + " review: no issues found.\nChecked the store boundary and the refill path."))).toBe(true);
+  });
+
+  test("GSTA-2: text after a section's name counts only when content follows before the next section heading, and an inline verdict is never content", () => {
+    const rest = four((n, name) => "### Section " + n + ": " + name + " review\n- Issue: process-local store").slice(1);
+    const heads = ["### Section 1: Architecture (boundaries, coupling)", "### Section 1: Architecture review — skipped", "## Section 1: Architecture review: no issues found."];
+    expect(heads.map((h) => [h, withSections([[h, ...rest].join("\n")])])).toEqual(heads.map((h) => [h, false]));
+    expect(heads.map((h) => [h, withSections([[h, "- Issue: the cache has no owner", ...rest].join("\n")])])).toEqual(heads.map((h) => [h, true]));
+  });
+
+  test("GSTA-2: a section's body ends at the next heading of the same or higher level, so an inline-only Section 4 before the completion summary does not count", () => {
+    const three = ["## Section 1: Architecture review", "- Issue: process-local store", "## Section 2: Code quality review", "- Issue: naming", "## Section 3: Test review", "- Gap: refill boundary"];
+    const summary = ["## Completion summary", "- Step 0: Scope Challenge — scope accepted as-is"];
+    for (const four of ["## Section 4: Performance review: no issues found.", "### 4. Performance review", "**4. Performance Review**: no issues"]) expect([four, withSections([[...three, four, ...summary].join("\n")])]).toEqual([four, false]);
+  });
+
+  test("GSTA-2: content under a deeper heading inside a section counts, as in ## Section 4 with ### 4.1 under it", () => {
+    const text = ["## Section 1: Architecture review", "- Issue: process-local store", "## Section 2: Code quality review", "- Issue: naming", "## Section 3: Test review", "- Gap: refill boundary", "## Section 4: Performance review", "### 4.1 Hot path", "- Checked the refill loop", "## Completion summary", "- Step 0: Scope Challenge — scope accepted as-is"].join("\n");
+    expect(withSections([text])).toBe(true);
+  });
+
+  test("the pin's own forms count with bullets under them: ### 1. Architecture review and **2. Code Quality Review**", () => {
+    const text = ["### 1. Architecture review", "- Issue: process-local store", "**2. Code Quality Review**", "- Issue: naming", "### 3. Test review", "- Gap: refill boundary", "### 4. Performance review", "- None found in the hot path"].join("\n");
+    expect(withSections([text])).toBe(true);
   });
 
   test("fc2/fix-check#1: bold numbered sections with only bullets under them count, in one block or four", () => {

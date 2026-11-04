@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, newLine, parsePatch, sourceRanges, unsafePaths } from "../../lanes/outcome-skills/mutation/diff.ts";
 import { LANGS, SAMPLE_CAP, SAMPLE_SEED, TOOLS } from "../../lanes/outcome-skills/mutation/pins.ts";
-import { cargoTestUncompiled, goBuildFailed, outText, pytestCollected, pytestUncollected, rustResults, skipOthers, strykerMutants, vitestLoaded, vitestUnloaded } from "../../lanes/outcome-skills/mutation/run.ts";
+import { cargoTestUncompiled, goBuildFailed, goListedNothing, goListedTests, outText, pytestCollected, pytestRuns, pytestSkippedAll, pytestUncollected, rustResults, skipOthers, strykerMutants, vitestLoaded, vitestUnloaded } from "../../lanes/outcome-skills/mutation/run.ts";
 import { reading, record, sample, summary, transplantRan, type Outcome } from "../../lanes/outcome-skills/mutation/score.ts";
 import { changedUnits, goUnits, pythonFunctions, pythonModule, pythonUnits, rustModule, rustUnits, tsCallEnd, tsUnits } from "../../lanes/outcome-skills/mutation/units.ts";
 import { unpinnedInstalls } from "../../src/rig/pins.ts";
@@ -369,6 +369,20 @@ describe("tool output readers", () => {
     const none = "tests/test_new.py:4: PytestCollectionWarning: cannot collect test class 'TestClamp' because it has a __init__ constructor (from: tests/test_new.py)\nno tests collected in 0.00s\n";
     expect([pytestUncollected("2", broken, ["tests/test_new.py"]), pytestUncollected("5", broken, ["tests/test_new.py"]), pytestUncollected("2", broken, ["tests/test_new"]), pytestUncollected("2", broken, ["tests/other.py"]), pytestUncollected("4", broken, ["tests/test_new.py"]), pytestUncollected("5", none, ["tests/test_new.py"])]).toEqual([true, true, false, false, false, false]);
     expect([pytestCollected("0", "tests/test_base.py::test_double\n\n1 test collected in 0.00s\n"), pytestCollected("5", none), pytestCollected("5", broken), pytestCollected("2", broken), pytestCollected("4", "")]).toEqual([true, true, false, false, false]);
+  });
+
+  test("runner rule (GSTA-2), pytest: a --collect-only -rs exit 5 whose SKIPPED lines name every file runs nothing; a test class pytest will not collect, an error or one file left over does not", () => {
+    const skipped = "\n=========================== short test summary info ============================\nSKIPPED [1] tests/test_new.py:2: could not import 'not_a_real_module': No module named 'not_a_real_module'\nno tests collected in 0.01s\n";
+    const none = "tests/test_new.py:4: PytestCollectionWarning: cannot collect test class 'TestClamp' because it has a __init__ constructor (from: tests/test_new.py)\nno tests collected in 0.00s\n";
+    const broken = "______________________ ERROR collecting tests/test_new.py ______________________\nERROR tests/test_new.py\n" + skipped;
+    expect([pytestSkippedAll("5", skipped, ["tests/test_new.py"]), pytestSkippedAll("5", skipped, ["tests/test_new.py", "tests/test_more.py"]), pytestSkippedAll("5", skipped, ["tests/test_new"]), pytestSkippedAll("0", skipped, ["tests/test_new.py"]), pytestSkippedAll("5", none, ["tests/test_new.py"]), pytestSkippedAll("5", broken, ["tests/test_new.py"])]).toEqual([true, false, false, false, false, false]);
+    expect([pytestRuns("0", "tests/test_base.py::test_double\n\n1 test collected in 0.01s\n"), pytestRuns("5", skipped), pytestRuns("0", "tests/test_base.py::test_double\n" + skipped.replace("no tests collected", "1 test collected, 1 skipped")), pytestRuns("5", none), pytestRuns("2", broken)]).toEqual([true, false, false, false, false]);
+  });
+
+  test("runner rule (GSTA-2), go: -list . that exits 0 with only its ok line listed nothing; a listed test, no test files or a failure did not", () => {
+    const ok = "ok  \texample.invalid/calc/calc\t0.002s\n";
+    expect([goListedNothing("0", ok), goListedNothing("0", "TestClamp\nTestSign\n" + ok), goListedNothing("0", "?   \texample.invalid/calc/calc\t[no test files]\n"), goListedNothing("1", "FAIL\texample.invalid/calc/calc\t0.002s\n"), goListedNothing("0", "setting up\n" + ok), goListedNothing("0", "")]).toEqual([true, false, false, false, false, false]);
+    expect([goListedTests("0", "TestDouble\n" + ok), goListedTests("0", ok), goListedTests("1", "TestDouble\nFAIL\texample.invalid/calc/calc\t0.002s\n"), goListedTests("0", "ExampleDouble\n" + ok)]).toEqual([true, false, false, false]);
   });
 
   test("runner rule, go: a build-fail action or a [build failed] or [setup failed] line fails to build; a clean run does not", () => {

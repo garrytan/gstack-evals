@@ -6,8 +6,9 @@
 // tests the agent did not write left out, tests it changed counted, the transplant reading, and a patch that does not
 // apply. TypeScript checks that a pre-existing test in the agent's test file stays out, and Rust that inline tests cannot
 // be transplanted. Every language covers the runner rule in both directions (a test file that fails to load or collect
-// scores 0; a runner fault the reference tree shares stays a tool error), and Python and Go read a failed listing as a
-// tool error. Building the tool images needs the network once; scoring never does.
+// scores 0; a runner fault the reference tree shares stays a tool error), Python and Go cover its refinement in both
+// directions (tests that load but run nothing score 0; a reference tree that runs nothing too stays a tool error),
+// TypeScript and Rust pin that all-skipped tests already score 0, and Python and Go read a failed listing as a tool error. Building the tool images needs the network once; scoring never does.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -153,6 +154,27 @@ describe.skipIf(!DOCKER)("python: the scoring rules in both directions (GSTACK_E
     expect(score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": tests })).toMatchObject({ status: "tool-error", score: null, tests: { changed: 1 } });
   }, LONG);
 
+  test("runner rule (GSTA-2): tests that load but run nothing, skipped at module level, score 0, because the same runner runs the reference tree's tests", () => {
+    const r = score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": 'import pytest\npytest.importorskip("not_a_real_module")\n' + F.PY_STRONG });
+    expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("load but run nothing");
+    expect(r.detail).toContain("runs the reference tree's");
+  }, LONG);
+
+  test("runner rule (GSTA-2): tests skipped at module level in a folder the reference tree does not have stay a tool error, as a new Go package does", () => {
+    const r = score({ "calc/ops.py": F.PY_IMPL, "tests/extra/test_new.py": 'import pytest\npytest.importorskip("not_a_real_module")\n' + F.PY_STRONG });
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("and so do the reference tree's");
+    expect(r.detail).toContain("the reference tree lacks the agent's test folder: tests/extra");
+  }, LONG);
+
+  test("runner rule (GSTA-2): tests skipped at module level across a folder the reference tree has and one it lacks stay a tool error, as Go needs every package", () => {
+    const skip = 'import pytest\npytest.importorskip("not_a_real_module")\n' + F.PY_STRONG;
+    const r = score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": skip, "tests/extra/test_more.py": skip });
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { passing: 0 } });
+    expect(r.detail).toContain("the reference tree lacks the agent's test folder: tests/extra");
+  }, LONG);
+
   test("a mutmut listing that fails is a tool error, not no-mutants", () => {
     expect(score({ "calc/ops.py": F.PY_IMPL, "tests/test_new.py": F.PY_STRONG, mutants: "not a folder\n" })).toMatchObject({ status: "tool-error", score: null, detail: expect.stringContaining("mutmut could not generate mutants") });
   }, LONG);
@@ -193,6 +215,15 @@ describe.skipIf(!DOCKER)("python: a runner fault the reference tree shares stays
     expect(scoreOn({ "conftest.py": 'raise RuntimeError("broken environment")\n' })).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
   }, LONG);
 
+  test("runner rule (GSTA-2): when the reference tree's own tests skip at module level too, tests that run nothing stay a tool error", () => {
+    const skipped = 'import pytest\npytest.importorskip("not_a_real_module")\n' + F.PY_BASE["tests/test_base.py"];
+    const fx = F.fixture("python", { ...F.PY_BASE, "tests/test_base.py": skipped }, F.PY_EXTRA);
+    fixtures.push(fx);
+    const r = scoreTree({ lang: "python", image: fx.image, patch: fx.patch({ "calc/ops.py": F.PY_IMPL, "tests/test_base.py": skipped + "\n\n" + F.PY_STRONG }), work: fx.dir + "/work" });
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("and so do the reference tree's");
+  }, LONG);
+
   test("a package that raises on import in the image fails to collect on both trees, so it is a tool error", () => {
     const r = scoreOn({ "calc/__init__.py": 'raise RuntimeError("broken environment")\n' });
     expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
@@ -217,6 +248,16 @@ describe.skipIf(!DOCKER)("typescript: a pre-existing test in the agent's test fi
       const r = scoreTree({ lang: "typescript", image: fx.image, patch: fx.patch({ "src/ops.ts": F.TS_IMPL, "src/clamp.test.ts": 'import { expect, test } from "vitest";\n' + body }), work: fx.dir + "/work" });
       expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 1, passing: 0 } });
       expect(r.detail).toContain("collects the reference tree's cleanly");
+    }
+  }, LONG);
+
+  test("tests that are all skipped, by test.skip or describe.skip, already score 0, so GSTA-2's run-nothing rule needs no TypeScript reading", () => {
+    const split = F.TS_STRONG.indexOf("\n\ntest(");
+    const wrapped = F.TS_STRONG.slice(0, split).replace("import { expect, test }", "import { describe, expect, test }") + '\n\ndescribe.skip("all", () => {' + F.TS_STRONG.slice(split) + "});\n";
+    for (const body of [F.TS_STRONG.replace(/\btest\(/g, "test.skip("), wrapped]) {
+      const r = scoreTree({ lang: "typescript", image: fx.image, patch: fx.patch({ "src/ops.ts": F.TS_IMPL, "src/clamp.test.ts": body }), work: fx.dir + "/work" });
+      expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 2, passing: 0 } });
+      expect(r.detail).toBeUndefined();
     }
   }, LONG);
 
@@ -267,6 +308,14 @@ describe.skipIf(!DOCKER)("rust: inline tests cannot move to gold's tree (GSTACK_
     const r = scoreTree({ lang: "rust", image: fx.image, patch: fx.patch({ "src/lib.rs": F.RS_IMPL, "tests/clamp.rs": "use calc::{clamp, nope};\n\n#[test]\nfn clamps() {\n    assert_eq!(clamp(5, 0, 10), 5);\n}\n" }), work: fx.dir + "/work" });
     expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 1, passing: 0 } });
     expect(r.detail).toContain("collects the reference tree's cleanly");
+  }, LONG);
+
+  test("tests that are all #[ignore], inline or in an integration target, already score 0, so GSTA-2's run-nothing rule needs no Rust reading", () => {
+    for (const files of <F.Files[]>[{ "src/lib.rs": F.RS_IMPL + F.RS_STRONG_INLINE.replace(/#\[test\]/g, "#[test]\n    #[ignore]") }, { "src/lib.rs": F.RS_IMPL, "tests/runs.rs": F.RS_WEAK_INTEGRATION.replace(/#\[test\]/g, "#[test]\n#[ignore]") }]) {
+      const r = scoreTree({ lang: "rust", image: fx.image, patch: fx.patch(files), work: fx.dir + "/work" });
+      expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 2, passing: 0 } });
+      expect(r.detail).toBeUndefined();
+    }
   }, LONG);
 
   test("the own reading scores and the transplant is not-transplantable", () => {
@@ -361,6 +410,13 @@ describe.skipIf(!DOCKER)("go: a package that fails, or tests that pass only once
     expect(score({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": F.GO_WEAK, "calc/main_test.go": main })).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 2, passing: 0 } });
   }, LONG);
 
+  test("runner rule (GSTA-2): a TestMain that exits before m.Run runs no test, so the tree scores 0, because the same runner runs the reference tree's tests", () => {
+    const r = score({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": F.GO_STRONG, "calc/main_test.go": "package calc\n\nimport (\n\t\"os\"\n\t\"testing\"\n)\n\nfunc TestMain(m *testing.M) {\n\tos.Exit(0)\n}\n" });
+    expect(r).toMatchObject({ status: "no-passing-tests", score: 0, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("load but run nothing");
+    expect(r.detail).toContain("runs the reference tree's");
+  }, LONG);
+
   test("runner rule: a test file that does not compile scores 0, because the reference tree's tests build", () => {
     const tests = 'package calc\n\nimport "testing"\n\nfunc TestClamp(t *testing.T) {\n\tif Clamp(5, 0, 10) != five {\n\t\tt.Fatal("clamp")\n\t}\n}\n';
     const r = score({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": tests });
@@ -386,6 +442,20 @@ describe.skipIf(!DOCKER)("go: a runner fault the reference tree shares stays a t
   afterAll(() => fx?.cleanup());
 
   test("a test file that does not compile in the image breaks both trees' test builds, so it is a tool error", () => {
+    const r = scoreTree({ lang: "go", image: fx.image, patch: fx.patch({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": F.GO_STRONG }), work: fx.dir + "/work" });
+    expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
+    expect(r.detail).toContain("and so do the reference tree's");
+  }, LONG);
+});
+
+describe.skipIf(!DOCKER)("go: a TestMain the reference tree shares, exiting before m.Run, stays a tool error (GSTACK_EVALS_DOCKER=1)", () => {
+  let fx: F.Fixture;
+  beforeAll(() => {
+    fx = F.fixture("go", { ...F.GO_BASE, "calc/main_test.go": "package calc\n\nimport (\n\t\"os\"\n\t\"testing\"\n)\n\nfunc TestMain(m *testing.M) {\n\tos.Exit(0)\n}\n" });
+  }, LONG);
+  afterAll(() => fx?.cleanup());
+
+  test("runner rule (GSTA-2): the image's own TestMain exits 0 before m.Run, so the reference tree runs nothing too and the tree is a tool error", () => {
     const r = scoreTree({ lang: "go", image: fx.image, patch: fx.patch({ "calc/clamp.go": F.GO_IMPL, "calc/clamp_test.go": F.GO_STRONG }), work: fx.dir + "/work" });
     expect(r).toMatchObject({ status: "tool-error", score: null, tests: { changed: 2, passing: 0 } });
     expect(r.detail).toContain("and so do the reference tree's");

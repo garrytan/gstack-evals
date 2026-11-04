@@ -67,4 +67,10 @@ describe("reason-code registry", () => {
   test("docs/errors.md is fresh", () => {
     expect(readFileSync(ERRORS_DOC, "utf8")).toBe(renderErrorsDoc());
   });
+
+  test("E_OUTCOME_CLEAN_ROOM's doc entry names the settings and agents scans, the paths present at all and the image-digest refusal, with a fix for it", () => {
+    const doc = readFileSync(ERRORS_DOC, "utf8");
+    const entry = doc.slice(doc.indexOf("\n### E_OUTCOME_CLEAN_ROOM\n"), doc.indexOf("\n### ", doc.indexOf("\n### E_OUTCOME_CLEAN_ROOM\n") + 1));
+    for (const words of [".claude/settings.json", ".claude/settings.local.json", ".claude/agents", ".claude/rules", ".claude/projects/*/memory", "CLAUDE.local.md", ".mcp.json", "~/.claude.json", "~/.claude/.claude.json", "/etc/claude-code", "docker image inspect --format '{{.Id}}'", "pull or load it by digest"]) expect([words, entry.includes(words)]).toEqual([words, true]);
+  });
 });
