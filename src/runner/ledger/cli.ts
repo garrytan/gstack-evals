@@ -2,7 +2,8 @@
 // docs/budget-ledger.md is the guide; every error line on stderr starts with its reason code.
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { CODES, docAnchor, type ReasonCode } from "../../errors/codes.ts";
-import { approvalsBin, mirrorApproval } from "./approvals.ts";
+import { approvalsBin, mirrorApproval, mirrorEnvelope } from "./approvals.ts";
+import { envelopeStatus, recordCrew, recordProgram, type EnvelopeLine } from "./envelope.ts";
 import { exportLease, importSettlement, ledgerStatus, openLease, reconcileLease, recordApproval, settleLease } from "./ledger.ts";
 import { openLocalLedger } from "./local.ts";
 import { parseUsd, usd } from "./money.ts";
@@ -12,9 +13,11 @@ import { isRecordFile, LedgerError, type Admission, type Quote } from "./record.
 export const HELP = `Usage: gstack-evals ledger <command> [options]
 
   init      --cap <usd> --item <name> --admission required|warn --words <text> --by <who> --source <ref> [--branch <name>]
+            [--program <name> --skills <a,b>]
             Record a line item's first approved cap with the owner's exact words, mirrored through gstack-approvals.
             Repeat --words for several quotes; give --by and --source once for all of them, or once per --words.
             --admission required makes every lease wait for a rig admission record; warn only warns. It never changes.
+            --program joins the item to a program's envelope, its spend split evenly across --skills. It never changes.
   raise     (the same flags but --admission) Record a higher cap for a line item.
   lease     --item <name> --run <id> [--amount <usd>] [--ttl <hours>] [--machine <id> --export <file>]
             Lease a line item for a run. The first lease binds the item to that run. --ttl is 24 by default, at most
@@ -27,18 +30,28 @@ export const HELP = `Usage: gstack-evals ledger <command> [options]
   reconcile --lease <id> --spent <usd> --words <text> --by <who> --source <provider usage export>
             The owner's settlement of a lease whose machine or local ledger is gone.
   status    [--item <name>]              Caps, committed spend, open leases and the approval words per line item.
+  envelope  --program <name> --cap <usd> --skill-cap <usd> --skills <a,b,...> --credit-rate <usd per 1000 credits>
+            --words <text> --by <who> --source <ref> [--branch <name>]
+            Record a program's envelope with the owner's exact words: a ceiling for the program and one for each skill.
+            Every lease on its items is admitted against both, counting settled spend and every open reservation.
+  crew      --program <name> --thread <code> --credits <n> --skills <a,b> | --overhead --source <ref>
+            Record a crew thread's model use, its cumulative credits reading, as settled spend on its skills' lines.
+  status    --program <name>             The envelope's lines: settled, open and admitted spend, and what is left.
 
 Every command takes --ledger <path> (GSTACK_EVALS_LEDGER), --ledger-record <dir> (GSTACK_EVALS_LEDGER_RECORD)
 and --json. Amounts are dollars with up to six decimals. Guide: docs/budget-ledger.md`;
 
 const ALLOWED: Record<string, string[]> = {
-  init: ["--cap", "--item", "--admission", "--words", "--by", "--source", "--branch"],
+  init: ["--cap", "--item", "--admission", "--words", "--by", "--source", "--branch", "--program", "--skills"],
   raise: ["--cap", "--item", "--words", "--by", "--source", "--branch"],
   lease: ["--item", "--run", "--amount", "--ttl", "--machine", "--export", "--from", "--lease"],
   settle: ["--lease", "--artifact", "--from"],
   reconcile: ["--lease", "--spent", "--words", "--by", "--source"],
-  status: ["--item"],
+  status: ["--item", "--program"],
+  envelope: ["--program", "--cap", "--skill-cap", "--skills", "--credit-rate", "--words", "--by", "--source", "--branch"],
+  crew: ["--program", "--thread", "--credits", "--skills", "--overhead", "--source"],
 };
+const BOOLEAN = new Set(["--overhead"]);
 const REPEATABLE = new Set(["--words", "--by", "--source"]);
 const FLAGS = new Set([...Object.values(ALLOWED).flat(), "--ledger", "--ledger-record", "--json"]);
 
@@ -82,6 +95,11 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
         continue;
       }
       if (![...allowed, "--ledger", "--ledger-record"].includes(flag)) throw new Usage("gstack-evals ledger " + cmd + " does not take " + flag);
+      if (BOOLEAN.has(flag)) {
+        if (flags.has(flag)) throw new Usage(flag + " is given twice");
+        flags.set(flag, []);
+        continue;
+      }
       const value = rest[++i];
       if (value === undefined || FLAGS.has(value)) throw new Usage(flag + " needs a value");
       if (flags.has(flag) && !REPEATABLE.has(flag)) throw new Usage(flag + " is given twice");
@@ -90,6 +108,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
     const one = (flag: string) => flags.get(flag)?.[0];
     const need = (flag: string) => one(flag) ?? fail("gstack-evals ledger " + cmd + " needs " + flag);
     const dollars = (flag: string) => parseUsd(need(flag)) ?? fail(flag + " must be dollars with up to six decimals, not " + JSON.stringify(one(flag)));
+    const list = (flag: string) => (flags.has(flag) ? need(flag).split(",").map((s) => s.trim()) : undefined);
     const record = recordPath(one("--ledger-record"), env).path;
     const local = () => openLocalLedger(ledgerPath(one("--ledger"), env));
     const print = (value: unknown, line: string) => io.out(json ? JSON.stringify(value, null, 2) : line);
@@ -99,10 +118,28 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
     if (cmd === "init" || cmd === "raise") {
       const admission = one("--admission");
       if (admission !== undefined && admission !== "required" && admission !== "warn") throw new Usage("--admission is required or warn, not " + JSON.stringify(admission));
-      const a = { action: cmd as "init" | "raise", item: need("--item"), cap_micros: dollars("--cap"), quotes: quotes(flags), admission: admission as Admission | undefined };
+      const a = { action: cmd as "init" | "raise", item: need("--item"), cap_micros: dollars("--cap"), quotes: quotes(flags), admission: admission as Admission | undefined, program: one("--program"), skills: list("--skills") };
       const mirror = { bin: approvalsBin(env), ...a, record, branch: one("--branch") };
       const file = recordApproval(record, a, () => mirrorApproval(mirror));
-      print(file, "APPROVED: item=" + file.item + " cap=" + usd(file.cap_micros) + (file.admission ? " admission=" + file.admission : "") + " approval=" + file.seq + " record=" + record);
+      print(file, "APPROVED: item=" + file.item + " cap=" + usd(file.cap_micros) + (file.admission ? " admission=" + file.admission : "") + (file.program ? " program=" + file.program + " skills=" + file.skills!.join(",") : "") + " approval=" + file.seq + " record=" + record);
+    } else if (cmd === "envelope") {
+      const p = { program: need("--program"), cap_micros: dollars("--cap"), skill_cap_micros: dollars("--skill-cap"), skills: list("--skills") ?? fail("gstack-evals ledger envelope needs --skills"), credit_rate_micros: dollars("--credit-rate"), quotes: quotes(flags) };
+      const file = recordProgram(record, p, () => mirrorEnvelope({ bin: approvalsBin(env), ...p, record, branch: one("--branch") }));
+      print(file, "ENVELOPE: program=" + file.program + " cap=" + usd(file.cap_micros) + " skill_cap=" + usd(file.skill_cap_micros) + " skills=" + file.skills.join(",") + " credit_rate=" + usd(file.credit_rate_micros) + " per 1000 credits record=" + record);
+    } else if (cmd === "crew") {
+      if (flags.has("--overhead") === flags.has("--skills")) throw new Usage("crew use goes on --skills <a,b> or on --overhead, the program's own line");
+      const credits = need("--credits");
+      const c = { program: need("--program"), thread: need("--thread"), credits_micros: (credits.startsWith("$") ? null : parseUsd(credits)) ?? fail("--credits must be a number with up to six decimals, not " + JSON.stringify(credits)), skills: list("--skills") ?? [], source: need("--source") };
+      const file = recordCrew(record, c, warn);
+      print(file, "CREW: program=" + file.program + " thread=" + file.thread + " credits=" + usd(file.credits_micros).slice(1).replace(/\.00$/, "") + " spent=" + usd(file.spent_micros) + " skills=" + (file.skills.join(",") || "overhead") + " entry=" + file.seq + " record=" + record);
+    } else if (cmd === "status" && flags.has("--program")) {
+      const s = envelopeStatus(record, need("--program"));
+      const text = (l: EnvelopeLine) => "cap=" + usd(l.cap_micros) + " committed=" + usd(l.committed_micros) + " settled=" + usd(l.settled_micros) + " open=" + usd(l.open_micros) + " pending=" + usd(l.pending_micros) + " left=" + usd(l.left_micros);
+      const lines = ["ENVELOPE: program=" + s.program.program + " " + text(s.total), ...Object.entries(s.skills).map(([skill, l]) => "SKILL: " + skill + " " + text(l)), "OVERHEAD: settled=" + usd(s.overhead_micros), "ITEMS: " + (s.items.join(",") || "-")];
+      for (const [name, l] of [["program " + s.program.program, s.total] as const, ...Object.entries(s.skills).map(([skill, l]) => ["skill " + skill, l] as const)]) {
+        if (l.left_micros < 0) warn("ENVELOPE_OVER", name + " holds " + usd(l.committed_micros) + ", past its " + usd(l.cap_micros) + " ceiling; every new stage on it is refused");
+      }
+      print(s, lines.join("\n"));
     } else if (cmd === "lease" && flags.has("--from")) {
       const file = readJson(need("--from"));
       if (!isRecordFile(file) || file.kind !== "lease") throw new Usage(one("--from") + " is not a lease export");

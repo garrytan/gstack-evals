@@ -8,9 +8,10 @@ import { hostname } from "node:os";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { rigAdmission } from "../../rig/admission.ts";
 import type { Lease } from "../../types.ts";
+import { admitLease, programSkills } from "./envelope.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { isRecordFile, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { checkQuotes, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_LEASE_TTL_MS = 7 * DEFAULT_LEASE_TTL_MS;
@@ -43,31 +44,35 @@ function write(record: string, file: RecordFile, code: ReasonCode = "E_LEDGER_RE
   }
 }
 
-function checkQuotes(quotes: Quote[]): void {
-  if (quotes.length === 0 || quotes.some((q) => !q.words.trim() || !q.by.trim() || !q.source.trim())) {
-    throw new LedgerError("E_USAGE", "every approval and reconcile needs the owner's exact words (--words), who said them (--by) and where (--source)");
-  }
-}
-
 const sameQuotes = (a: Quote[] | undefined, b: Quote[]) => JSON.stringify(a) === JSON.stringify(b);
 const closeText = (c: CloseFile) => c.how + " at " + usd(c.spent_micros) + " spent and " + usd(c.unknown_micros) + " unknown";
 
 /**
  * Records a line item's first cap (init) or a higher one (raise). Retrying the same approval returns the recorded one.
+ * An init may join the item to a program's envelope and name the skills that share its spend; that never changes.
  * mirror runs after every check and before the write, so no approval is recorded until the mirror succeeds.
  */
-export function recordApproval(record: string, a: { action: "init" | "raise"; item: string; cap_micros: number; quotes: Quote[]; admission?: Admission; now?: Date }, mirror?: () => void): ApprovalFile {
+export function recordApproval(record: string, a: { action: "init" | "raise"; item: string; cap_micros: number; quotes: Quote[]; admission?: Admission; program?: string; skills?: string[]; now?: Date }, mirror?: () => void): ApprovalFile {
   if (!isMicros(a.cap_micros) || a.cap_micros === 0) throw new LedgerError("E_USAGE", "a cap must be a positive amount of dollars");
   if (a.action === "init" && a.admission !== "required" && a.admission !== "warn") throw new LedgerError("E_USAGE", "init needs --admission required or --admission warn");
   if (a.action === "raise" && a.admission !== undefined) throw new LedgerError("E_USAGE", "a line item's admission is fixed at init; raise cannot change it");
+  if (a.action === "raise" && (a.program !== undefined || a.skills !== undefined)) throw new LedgerError("E_USAGE", "a line item's program and skills are fixed at init; raise cannot change them");
+  if ((a.program === undefined) !== (a.skills === undefined)) throw new LedgerError("E_USAGE", "an item joins a program with both --program and --skills");
+  if (a.skills !== undefined && !isSkillList(a.skills)) throw new LedgerError("E_USAGE", "--skills names one or more distinct skills of the program");
   checkQuotes(a.quotes);
+  if (a.program !== undefined) {
+    const skills = programSkills(record, a.program);
+    const missing = a.skills!.find((s) => !skills.includes(s));
+    if (missing) throw new LedgerError("E_USAGE", "program " + a.program + " has no skill " + missing + "; its skills are " + skills.join(", "));
+  }
   const state = read(record, a.item);
   const last = state.approvals.at(-1);
-  if (last && last.action === a.action && last.cap_micros === a.cap_micros && last.admission === a.admission && sameQuotes(last.quotes, a.quotes)) return last;
+  const sameMembership = last?.program === a.program && JSON.stringify(last?.skills) === JSON.stringify(a.skills);
+  if (last && last.action === a.action && last.cap_micros === a.cap_micros && last.admission === a.admission && sameMembership && sameQuotes(last.quotes, a.quotes)) return last;
   if (a.action === "init" && last) throw new LedgerError("E_USAGE", "line item " + a.item + " already has an approved cap of " + usd(last.cap_micros) + "; record a higher one with gstack-evals ledger raise");
   if (a.action === "raise" && !last) throw new LedgerError("E_LEDGER_MISSING", "line item " + a.item + " has no approved cap to raise in " + record + "; " + ESCALATE);
   if (last && a.cap_micros <= last.cap_micros) throw new LedgerError("E_USAGE", "raise records a higher cap; line item " + a.item + " is already at " + usd(last.cap_micros));
-  const file: ApprovalFile = { schema: 1, kind: "approval", item: a.item, seq: state.approvals.length + 1, action: a.action, cap_micros: a.cap_micros, quotes: a.quotes, ...(a.admission ? { admission: a.admission } : {}), recorded_at: (a.now ?? new Date()).toISOString() };
+  const file: ApprovalFile = { schema: 1, kind: "approval", item: a.item, seq: state.approvals.length + 1, action: a.action, cap_micros: a.cap_micros, quotes: a.quotes, ...(a.admission ? { admission: a.admission } : {}), ...(a.program ? { program: a.program, skills: a.skills } : {}), recorded_at: (a.now ?? new Date()).toISOString() };
   mirror?.();
   if (typeof write(record, file) === "object") throw new LedgerError("E_LEDGER_RECORD", "another approval for line item " + a.item + " was recorded at the same moment; read gstack-evals ledger status, then record again if it is still needed");
   return file;
@@ -109,7 +114,11 @@ export interface LeaseRequest {
  */
 export type RequireAdmission = (record: string, lease: LeaseFile) => string | null;
 
-/** Leases a line item for a run, in the record and, when given, in this machine's local ledger. */
+/**
+ * Leases a line item for a run, in the record and, when given, in this machine's local ledger. A lease on a program's
+ * item is admitted against the program's envelope first (envelope.ts), so it is refused before anything is written
+ * when it would take the program or one of the item's skills past its ceiling.
+ */
 export function openLease(record: string, local: LocalLedger | null, req: LeaseRequest): Lease {
   const state = read(record, req.item);
   admit(record, state, req.run_id);
@@ -138,6 +147,7 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
   const unproven = state.admission && (req.requireAdmission ?? rigAdmission())(record, file);
   if (unproven && state.admission === "required") throw new LedgerError("E_RIG_UNPROVEN", "line item " + req.item + " requires admission: " + unproven);
   if (unproven) req.warn?.("RIG_UNPROVEN", "line item " + req.item + " leased without admission: " + unproven);
+  if (state.program !== null) admitLease(record, state, file, { now });
   if (typeof write(record, file) === "object") {
     admit(record, read(record, req.item), req.run_id);
     throw new LedgerError("E_LEASE_UNSETTLED", "another lease on line item " + req.item + " was written at the same moment; read gstack-evals ledger status");

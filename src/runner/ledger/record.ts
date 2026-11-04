@@ -41,6 +41,9 @@ export interface ApprovalFile extends Slot {
   quotes: Quote[];
   /** On init only, and never changed after: whether a lease on the item needs an admission record (GSTA-8, decision 3). */
   admission?: Admission;
+  /** On init only, and never changed after: the program envelope the item's leases are admitted against, and the skills whose lines share its spend evenly. */
+  program?: string;
+  skills?: string[];
   recorded_at: string;
 }
 
@@ -87,20 +90,34 @@ function checkItem(item: string): void {
 
 export const isTime = (text: unknown): boolean => typeof text === "string" && !Number.isNaN(Date.parse(text));
 
+export function checkQuotes(quotes: Quote[]): void {
+  if (quotes.length === 0 || quotes.some((q) => !q.words.trim() || !q.by.trim() || !q.source.trim())) {
+    throw new LedgerError("E_USAGE", "every approval and reconcile needs the owner's exact words (--words), who said them (--by) and where (--source)");
+  }
+}
+
+/** A non-empty list of distinct skill names, each shaped like a line item name. */
+export const isSkillList = (skills: unknown): skills is string[] => Array.isArray(skills) && skills.length > 0 && skills.every((s) => typeof s === "string" && ITEM_NAME.test(s)) && new Set(skills).size === skills.length;
+
 export const slotPath = (record: string, f: { kind: string; item: string; seq: number }) => join(record, "items", f.item, f.kind + "-" + String(f.seq).padStart(4, "0") + ".json");
 
-/**
- * Writes a record file once. A file already in the slot with the same bytes is "present", so a retried write is
- * idempotent; one with other bytes is a conflict. The file appears whole: it is written and fsynced aside, then linked
- * into place, which fails when the slot is taken. Where links are unsupported it is created exclusively instead. The
- * directory entries are fsynced before the write is acknowledged, new directories included, and again when a retry
- * finds its own bytes already there.
- */
+/** Writes a record file once into its slot; see claimSlot. */
 export function writeOnce(record: string, file: RecordFile): "written" | "present" | { conflict: RecordFile } {
   checkItem(file.item);
   if (file.seq > MAX_SLOT) throw new LedgerError("E_LEDGER_RECORD", "line item " + file.item + " has used all " + MAX_SLOT + " " + file.kind + " slots in " + record);
   const path = slotPath(record, file);
-  const text = JSON.stringify(file, null, 2) + "\n";
+  const result = claimSlot(path, JSON.stringify(file, null, 2) + "\n");
+  return typeof result === "object" ? { conflict: parseFile(path, result.held) } : result;
+}
+
+/**
+ * Claims a write-once slot. A file already in the slot with the same bytes is "present", so a retried write is
+ * idempotent; one with other bytes is returned as held. The file appears whole: it is written and fsynced aside, then
+ * linked into place, which fails when the slot is taken. Where links are unsupported it is created exclusively instead.
+ * The directory entries are fsynced before the write is acknowledged, new directories included, and again when a retry
+ * finds its own bytes already there.
+ */
+export function claimSlot(path: string, text: string): "written" | "present" | { held: string } {
   const dir = dirname(path);
   const firstNew = mkdirSync(dir, { recursive: true });
   for (let d = dir; firstNew !== undefined; d = dirname(d)) {
@@ -127,7 +144,7 @@ export function writeOnce(record: string, file: RecordFile): "written" | "presen
   const back = readFileSync(path, "utf8");
   if (back === text) return created ? "written" : "present";
   if (created) throw new Error("the read-back of " + path + " does not match what was written");
-  return { conflict: parseFile(path, back) };
+  return { held: back };
 }
 
 function writeDurably(path: string, text: string): void {
@@ -166,7 +183,10 @@ function syncDir(dir: string): void {
 export function isRecordFile(f: unknown): f is RecordFile {
   const r = f as RecordFile | null;
   if (typeof r !== "object" || r === null || r.schema !== 1 || typeof r.item !== "string" || !ITEM_NAME.test(r.item) || !Number.isSafeInteger(r.seq)) return false;
-  if (r.kind === "approval") return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0 && (r.action === "init" ? r.admission === "required" || r.admission === "warn" : r.admission === undefined);
+  if (r.kind === "approval") {
+    const member = r.program === undefined ? r.skills === undefined : r.action === "init" && ITEM_NAME.test(r.program) && isSkillList(r.skills);
+    return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0 && (r.action === "init" ? r.admission === "required" || r.admission === "warn" : r.admission === undefined) && member;
+  }
   if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && isTime(r.expires_at);
   return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string";
 }
@@ -190,6 +210,9 @@ export interface ItemState {
   /** The latest approved cap, or null when none is on record. */
   cap_micros: number | null;
   admission: Admission | null;
+  /** The program envelope the item belongs to, and the skills its spend is split across, from its first approval. */
+  program: string | null;
+  skills: string[];
   /** Closed leases count what they spent; open leases count their whole reserved amount. */
   committed_micros: number;
   /** The run the item is bound to: the run of its first lease. */
@@ -221,6 +244,8 @@ export function readItem(record: string, item: string): ItemState {
     leases,
     cap_micros: approvals.at(-1)?.cap_micros ?? null,
     admission: approvals[0]?.admission ?? null,
+    program: approvals[0]?.program ?? null,
+    skills: approvals[0]?.skills ?? [],
     committed_micros: leases.reduce((sum, { lease, close }) => sum + (close ? close.spent_micros + close.unknown_micros : lease.reserved_micros), 0),
     run_id: leases[0]?.lease.run_id ?? null,
     open: leases.find((l) => l.close === null)?.lease ?? null,

@@ -135,6 +135,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_REAL_SCORE_GRADE](#e_real_score_grade) | 2 | U20 |
 | [E_REAL_SCORE_CONFIG](#e_real_score_config) | 2 | U20 |
 | [E_WASTE_INPUT](#e_waste_input) | 2 | U15 |
+| [ENVELOPE_PROGRAM_STOP](#envelope_program_stop) | 2 | U4 |
+| [ENVELOPE_SKILL_STOP](#envelope_skill_stop) | 2 | U4 |
+| [E_ENVELOPE_MISSING](#e_envelope_missing) | 2 | U4 |
+| [ENVELOPE_OVER](#envelope_over) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -940,6 +944,30 @@ Fix: Re-export the thread (src/waste/README.md shows the export program) or fix 
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U15.
 
+### ENVELOPE_PROGRAM_STOP
+
+A lease on a program's line item was refused before anything was written: the program's settled spend, its open leases, its admitted leases not yet written and this lease would pass the program's envelope. The message gives each figure.
+
+Fix: Nothing was spent or reserved. Read gstack-evals ledger status --program &lt;program>, settle any lease whose stage has finished (settling releases what it did not spend), then lease less or stop the stage as incomplete. Never rerun to change a verdict. A larger envelope needs the owner's words and a new program.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+
+### ENVELOPE_SKILL_STOP
+
+A lease on a program's line item was refused before anything was written: for one of the item's skills, the line's settled spend, open leases, admitted leases not yet written and its even share of this lease would pass the skill's ceiling. The message names the skill and gives each figure.
+
+Fix: Nothing was spent or reserved. Read gstack-evals ledger status --program &lt;program>, settle any lease whose stage has finished, then lease less or stop the skill as incomplete. Never rerun to change a verdict, and never move a stage to another skill's line to fit it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+
+### E_ENVELOPE_MISSING
+
+No envelope is on record for the program a command names: a line item joining it at init, a crew reading or a status read. The CLI never implies a ceiling.
+
+Fix: Check --program and --ledger-record. Otherwise escalate: the owner's program and skill ceilings are recorded with gstack-evals ledger envelope and their exact words (docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U4.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -1111,3 +1139,11 @@ A review no-loss comparison reached LOSS, so its reference caught more blockers,
 Fix: Report the LOSS with its false-alarm reading and no claim. Adjudicate any unadjudicated must-fix finding on the decoys; never widen the margin after the run.
 
 Warning. Owner: U13.
+
+### ENVELOPE_OVER
+
+A program's line, or one of its skills' lines, holds more than its ceiling: crew use is recorded after it is spent, and a lease can close above its reservation (LEASE_OVERSPENT). The spend is recorded as it is, and every new stage on that line is refused.
+
+Fix: Nothing to undo: the money is spent and recorded. Report it to the Captain with gstack-evals ledger status --program &lt;program>. The line's skill stops as incomplete.
+
+Warning. Owner: U4.

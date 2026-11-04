@@ -362,9 +362,9 @@ describe("gstack-evals ledger envelope, crew and status --program", () => {
     expect(env1).toMatchObject({ code: 0, err: "" });
     expect(env1.out).toStartWith("ENVELOPE: program=wave1 cap=$10000.00 skill_cap=$2000.00 skills=" + SKILLS.join(",") + " credit_rate=$1.00 per 1000 credits");
     expect(readFileSync(join(dir, "calls.log"), "utf8")).toContain("Approve a gstack-evals program envelope of $10000.00 for program wave1, with $2000.00 for each of its 6 skills");
-    expect((await cli("init", "--cap", "2500", "--item", "g-admission", "--admission", "warn", "--program", "wave1", "--skills", PE + "," + AP, ...words)).code).toBe(0);
+    expect((await cli("init", "--cap", "5000", "--item", "g-admission", "--admission", "warn", "--program", "wave1", "--skills", PE + "," + AP, ...words)).code).toBe(0);
     expect((await cli("init", "--cap", "10", "--item", "x", "--admission", "warn", "--skills", PE, ...words)).err).toStartWith("E_USAGE ");
-    const refused = await cli("lease", "--item", "g-admission", "--run", "run-g", "--amount", "2500");
+    const refused = await cli("lease", "--item", "g-admission", "--run", "run-g", "--amount", "4200");
     expect(refused.code).toBe(2);
     expect(refused.err.split("\n").filter((l) => !l.startsWith("RIG_UNPROVEN ")).every((l) => l.startsWith("ENVELOPE_SKILL_STOP "))).toBe(true);
     expect((await cli("lease", "--item", "g-admission", "--run", "run-g", "--amount", "1200")).code).toBe(0);

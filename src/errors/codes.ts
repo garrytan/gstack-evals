@@ -1085,6 +1085,39 @@ export const CODES = {
     resumable: false,
     owner: "U15",
   },
+  ENVELOPE_PROGRAM_STOP: {
+    exit: 2,
+    meaning: "A lease on a program's line item was refused before anything was written: the program's settled spend, its open leases, its admitted leases not yet written and this lease would pass the program's envelope. The message gives each figure.",
+    fix: "Nothing was spent or reserved. Read gstack-evals ledger status --program <program>, settle any lease whose stage has finished (settling releases what it did not spend), then lease less or stop the stage as incomplete. Never rerun to change a verdict. A larger envelope needs the owner's words and a new program.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U4",
+  },
+  ENVELOPE_SKILL_STOP: {
+    exit: 2,
+    meaning: "A lease on a program's line item was refused before anything was written: for one of the item's skills, the line's settled spend, open leases, admitted leases not yet written and its even share of this lease would pass the skill's ceiling. The message names the skill and gives each figure.",
+    fix: "Nothing was spent or reserved. Read gstack-evals ledger status --program <program>, settle any lease whose stage has finished, then lease less or stop the skill as incomplete. Never rerun to change a verdict, and never move a stage to another skill's line to fit it.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U4",
+  },
+  E_ENVELOPE_MISSING: {
+    exit: 2,
+    meaning: "No envelope is on record for the program a command names: a line item joining it at init, a crew reading or a status read. The CLI never implies a ceiling.",
+    fix: "Check --program and --ledger-record. Otherwise escalate: the owner's program and skill ceilings are recorded with gstack-evals ledger envelope and their exact words (docs/budget-ledger.md). On Capy, ask your Captain through a needs-you report.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U4",
+  },
+  ENVELOPE_OVER: {
+    exit: null,
+    meaning: "A program's line, or one of its skills' lines, holds more than its ceiling: crew use is recorded after it is spent, and a lease can close above its reservation (LEASE_OVERSPENT). The spend is recorded as it is, and every new stage on that line is refused.",
+    fix: "Nothing to undo: the money is spent and recorded. Report it to the Captain with gstack-evals ledger status --program <program>. The line's skill stops as incomplete.",
+    owner: "U4",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

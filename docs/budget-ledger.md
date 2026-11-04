@@ -51,6 +51,31 @@ gstack-evals ledger settle --lease <lease id>
 gstack-evals ledger status [--item lanea-quick]
 ```
 
+## Program envelopes
+
+A program is a set of line items under one owner-approved total, with a ceiling for each of its skills as well. The outcome-per-skill plan v3 (wiki/plans/2026-11-03-geva-225-outcome-per-skill-plan, build step O6) is the first: $10,000 for wave 1 and $2,000 for each of its six skills. The envelope counts every dollar the program commits, so a stage is refused before it spends rather than after.
+
+```
+gstack-evals ledger envelope --program <name> --cap 10000 --skill-cap 2000 --skills <a,b,...> --credit-rate 1 \
+  --words "<owner's exact words>" --by "<who>" --source "<where>"
+gstack-evals ledger init --cap <usd> --item <name> --admission required --program <name> --skills <a,b> --words ... --by ... --source ...
+gstack-evals ledger lease --item <name> --run <run id> --amount <usd>
+gstack-evals ledger crew --program <name> --thread <code> --credits <n> --skills <a,b> --source "<counter reading>"
+gstack-evals ledger status --program <name>
+```
+
+- `ledger envelope` records the program's ceilings once, with the owner's words, mirrored through gstack-approvals like `init`. It never changes. `--credit-rate` is the dollar price of 1,000 credits of crew model use.
+- An item joins a program at `init` with `--program` and `--skills`, and that never changes. Its spend is split evenly across those skills; an odd micro-dollar goes to the first skill named. A family's shared stage names both skills. A survivor's own stage names only the survivor.
+- Each lease on a program's item is the stage's reservation: `--amount` is the stage's projected worst case. Before the lease is written, the ledger checks it in one atomic step. The program's settled spend, its open leases, its admitted leases not yet written and this lease must stay at or under the program's ceiling, and each of the item's skills' lines, with its share of this lease, must stay at or under its ceiling. Otherwise the lease is refused with ENVELOPE_PROGRAM_STOP or ENVELOPE_SKILL_STOP, and nothing is written. Landing exactly on a ceiling is admitted.
+- A lease that passes is written to the program's next entry slot, `<record>/programs/<program>/entry-<slot>.json`, before the lease file itself. The slot is write-once, so of two leases admitted at the same moment one wins it, and the other reads the winner's entry and is checked again. That makes the check and the reservation one step without a lock file a crash could strand.
+- Settling a lease, or the owner's reconcile, moves its metered amount to settled spend and releases the rest. Unknown calls count at their full reservation. A lease that crashes before it settles stays counted at its whole amount, past its expiry, until it is settled or reconciled. An admission whose lease was never written counts until that lease's expiry, after which no call can spend against it.
+- No paid call runs without a covering reservation: a call needs a lease in the local ledger, and a lease on a program's item exists only after the envelope admitted it.
+- `ledger crew` records a crew thread's model use, read from its credits counter, as settled spend on its skills' lines, or with `--overhead` on the program's own line only. A reading is cumulative, so the envelope counts each thread's latest reading once; a lower reading or a different split is refused. Crew use is spent already, so it is recorded even past a ceiling, with an ENVELOPE_OVER warning, and every new stage on that line is then refused.
+- `ledger status --program` prints the program's line, each skill's line and the overhead: settled, open, pending (admitted, not yet leased), committed and left. It warns ENVELOPE_OVER for a line past its ceiling, which crew use or an overspent lease can cause.
+- The envelope counts each dollar once: a lease on its item's split, a thread at its latest reading. A stage that already settled keeps the split it settled under, so a survivor's re-size reserves only the stages not yet spent.
+- Every program read covers every line item in the record, so a damaged item anywhere stops the read with E_LEDGER_RECORD and nothing is admitted until a human repairs it.
+- An entry slot has one winner within one host, like every record slot ([the cross-host finding](../wiki/board/2026-10-28-gsta-16-ledger-cross-host-claim.md)). Admit a program's leases from one host until a cross-host claim lands. Exported leases are admitted where they are exported, so VM shards are covered.
+
 ## Admission
 
 Admission is the rig check before money (GSTA-8's CI plan, decision 3). The ledger checks it at the lease, the one boundary Lane A, the replay lane, direct-API arms and judge calibration all cross.
@@ -99,6 +124,8 @@ Keep the local ledger at its default under `~/.capy/work/gstack-evals/` and poin
 
 `openLease` takes `requireAdmission`, the seam U20 fills, and a `warn` callback for RIG_UNPROVEN.
 
+`src/runner/ledger/envelope.ts` has `recordProgram`, `admitLease` (which `openLease` calls for a program's item), `recordCrew` and `envelopeStatus`.
+
 ## Reason codes
 
-[CAP_STOP](errors.md#cap_stop), [E_LEDGER_MISSING](errors.md#e_ledger_missing), [E_LEDGER_PATH](errors.md#e_ledger_path), [E_LEDGER_RECORD](errors.md#e_ledger_record), [E_LEASE_UNSETTLED](errors.md#e_lease_unsettled), [E_LEASE_CLOSED](errors.md#e_lease_closed), [E_ITEM_BOUND](errors.md#e_item_bound), [E_RIG_UNPROVEN](errors.md#e_rig_unproven), [RIG_UNPROVEN](errors.md#rig_unproven), [LEASE_OVERSPENT](errors.md#lease_overspent), [E_APPROVAL_RECORD](errors.md#e_approval_record), [E_RESERVE_CONFLICT](errors.md#e_reserve_conflict), [E_SETTLE_CONFLICT](errors.md#e_settle_conflict). Every error line on stderr starts with its code.
+[CAP_STOP](errors.md#cap_stop), [E_LEDGER_MISSING](errors.md#e_ledger_missing), [E_LEDGER_PATH](errors.md#e_ledger_path), [E_LEDGER_RECORD](errors.md#e_ledger_record), [E_LEASE_UNSETTLED](errors.md#e_lease_unsettled), [E_LEASE_CLOSED](errors.md#e_lease_closed), [E_ITEM_BOUND](errors.md#e_item_bound), [E_RIG_UNPROVEN](errors.md#e_rig_unproven), [RIG_UNPROVEN](errors.md#rig_unproven), [LEASE_OVERSPENT](errors.md#lease_overspent), [E_APPROVAL_RECORD](errors.md#e_approval_record), [E_RESERVE_CONFLICT](errors.md#e_reserve_conflict), [E_SETTLE_CONFLICT](errors.md#e_settle_conflict), [ENVELOPE_PROGRAM_STOP](errors.md#envelope_program_stop), [ENVELOPE_SKILL_STOP](errors.md#envelope_skill_stop), [E_ENVELOPE_MISSING](errors.md#e_envelope_missing), [ENVELOPE_OVER](errors.md#envelope_over). Every error line on stderr starts with its code.
