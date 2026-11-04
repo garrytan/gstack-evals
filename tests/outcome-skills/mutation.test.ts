@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { classify, newLine, parsePatch, sourceRanges } from "../../lanes/outcome-skills/mutation/diff.ts";
+import { classify, newLine, parsePatch, sourceRanges, unsafePaths } from "../../lanes/outcome-skills/mutation/diff.ts";
 import { LANGS, SAMPLE_CAP, SAMPLE_SEED, TOOLS } from "../../lanes/outcome-skills/mutation/pins.ts";
 import { outText, rustResults, skipOthers, strykerMutants } from "../../lanes/outcome-skills/mutation/run.ts";
 import { reading, record, sample, summary, transplantRan, type Outcome } from "../../lanes/outcome-skills/mutation/score.ts";
@@ -75,6 +75,16 @@ describe("patch reader", () => {
     expect([1, 2, 3, 4, 5, 8, 9, 10].map((n) => newLine(f, n))).toEqual([1, 2, null, null, 3, 6, 7, 9]);
   });
 
+  test("header lines after a hunk are not headers, and paths that leave the repository are named", () => {
+    const p = "diff --git a/a_test.go b/a_test.go\n--- a/a_test.go\n+++ b/a_test.go\n@@ -1 +1 @@\n-x\n+y\n--- a/../../tmp/zz_test.go\n+++ b/../../tmp/zz_test.go\n";
+    expect(parsePatch(p).map((f) => [f.oldPath, f.newPath])).toEqual([["a_test.go", "a_test.go"]]);
+    const paths = (o: string | null, n: string | null) => [{ oldPath: o, newPath: n, added: [], removed: [], kept: [], shifts: [], binary: false }];
+    expect(unsafePaths(paths("a/b.py", "a/b.py"))).toEqual([]);
+    expect(unsafePaths(paths(null, ".tox/../../x_test.py"))).toEqual([".tox/../../x_test.py"]);
+    expect(unsafePaths(paths("/etc/passwd", null))).toEqual(["/etc/passwd"]);
+    expect(unsafePaths(paths("a/./b.py", "a//b.py"))).toEqual(["a/./b.py", "a//b.py"]);
+  });
+
   test("source ranges merge adjacent added lines and skip tests and deleted files", () => {
     expect([...sourceRanges("python", parsePatch(PATCH))]).toEqual([["calc/ops.py", [[2, 4]]]]);
   });
@@ -134,6 +144,14 @@ describe("test units", () => {
   test("Go tests inside raw strings are not units, and a brace line inside one does not end a test", () => {
     const text = "package a\n\nfunc TestReal(t *testing.T) {\n\tsrc := `\nfunc TestFake(t *testing.T) {\n}\n`\n\t_ = src\n}\n";
     expect(goUnits("a_test.go", text).map((u) => [u.name, u.start, u.end])).toEqual([["TestReal", 3, 9]]);
+  });
+
+  test("a test's span covers its whole decorator, so a new case in a multiline parametrize table counts", () => {
+    const before = "import pytest\n\n\n@pytest.mark.parametrize(\n    \"x\",\n    [1],\n)\ndef test_x(x):\n    assert x\n";
+    const after = before.replace("    [1],\n", "    [1, 2],\n");
+    const p = "diff --git a/t.py b/t.py\n--- a/t.py\n+++ b/t.py\n@@ -5,3 +5,3 @@\n     \"x\",\n-    [1],\n+    [1, 2],\n )\n";
+    expect(pythonUnits("t.py", after).map((u) => [u.name, u.start, u.end])).toEqual([["t.py::test_x", 4, 9]]);
+    expect(changedUnits(pythonUnits("t.py", after), parsePatch(p)[0]!, pythonUnits("t.py", before)).map((u) => u.name)).toEqual(["t.py::test_x"]);
   });
 
   test("a deleted test credits no neighbour, and a test that lost only lines still counts as changed", () => {
@@ -209,6 +227,7 @@ describe("test units", () => {
       ["parse::tests::inner::three", 19, 20, "unit"],
     ]);
     expect(rustModule("src/lib.rs")).toEqual({ target: "unit", path: [] });
+    expect([rustModule("src/main.rs"), rustModule("src/bin/demo.rs"), rustModule("src/bin/demo/main.rs"), rustModule("src/bin/demo/util.rs")].map((m) => m.path)).toEqual([[], [], [], ["util"]]);
     expect(rustModule("src/a/b.rs")).toEqual({ target: "unit", path: ["a", "b"] });
     expect(rustModule("tests/it.rs")).toEqual({ target: "it", path: [] });
     expect(rustModule("tests/big/main.rs")).toEqual({ target: "big", path: [] });

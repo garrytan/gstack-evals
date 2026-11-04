@@ -84,7 +84,8 @@ export const PY_GOLD = "def double(x):\n    return x * 2\n\n\ndef clamp(x, lo, h
 export const PY_STRONG = "from calc.ops import clamp, sign\n\n\ndef test_clamp():\n    assert clamp(5, 0, 10) == 5\n    assert clamp(-1, 0, 10) == 0\n    assert clamp(11, 0, 10) == 10\n    assert clamp(0, 0, 10) == 0\n    assert clamp(10, 0, 10) == 10\n\n\ndef test_sign():\n    assert sign(3) == 1\n    assert sign(1) == 1\n    assert sign(-3) == -1\n    assert sign(-1) == -1\n    assert sign(0) == 0\n";
 export const PY_WEAK = "from calc.ops import clamp, sign\n\n\ndef test_clamp_runs():\n    clamp(5, 0, 10)\n\n\ndef test_sign_runs():\n    sign(0)\n";
 export const PY_FAILING = "\n\ndef test_wrong():\n    assert clamp(1, 0, 10) == 2\n";
-export const pythonFixture = () => fixture("python", PY_BASE, ["RUN python -m pip install --no-index --no-deps --require-hashes --disable-pip-version-check --find-links /opt/gstack-mutation/python/wheels -r /opt/gstack-mutation/python/requirements.txt"]);
+export const PY_EXTRA = ["RUN python -m pip install --no-index --no-deps --require-hashes --disable-pip-version-check --find-links /opt/gstack-mutation/python/wheels -r /opt/gstack-mutation/python/requirements.txt"];
+export const pythonFixture = () => fixture("python", PY_BASE, PY_EXTRA);
 
 // ---------- Go ----------
 
