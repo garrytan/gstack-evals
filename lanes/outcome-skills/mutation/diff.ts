@@ -43,21 +43,26 @@ const stripSide = (p: string): string | null => {
   return /^[ab]\//.test(u) ? u.slice(2) : u;
 };
 
-/** Every file the patch touches, with the new-file lines it added. Hunks are read by their line counts, so a content
- * line that starts with "---" or "+++" is never taken for a header. */
+/** Every file the patch touches, with the new-file lines it added. Hunks are read by their line counts, and header lines
+ * count only before a file's first hunk, as git apply reads them, so a line that starts with "---" or "+++" in or after a
+ * hunk is never taken for a header. */
 export function parsePatch(patch: string): FileChange[] {
   const out: FileChange[] = [];
   const lines = patch.split("\n");
   let cur: FileChange | null = null;
+  let header = false;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     if (line.startsWith("diff --git ")) {
+      header = true;
       const m = /^diff --git (.+?) (b\/.+|"b\/.+")$/.exec(line);
       cur = { oldPath: m ? stripSide(m[1]!) : null, newPath: m ? stripSide(m[2]!) : null, added: [], removed: [], kept: [], shifts: [], binary: false };
       out.push(cur);
       continue;
     }
     if (!cur) continue;
+    if (line.startsWith("@@")) header = false;
+    else if (!header) continue;
     if (line.startsWith("new file mode")) cur.oldPath = null;
     else if (line.startsWith("deleted file mode")) cur.newPath = null;
     else if (line.startsWith("rename from ")) cur.oldPath = unquote(line.slice(12));
@@ -118,6 +123,11 @@ export function classify(lang: Lang, path: string): "source" | "test" | "other" 
       return /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) || /(^|\/)__tests__\//.test(path) ? "test" : "source";
   }
 }
+
+/** The patch's paths that would leave the repository or name it ambiguously: absolute, or with an empty, "." or ".."
+ * segment. The scorer refuses such a patch as one that does not apply. */
+export const unsafePaths = (changes: FileChange[]): string[] =>
+  changes.flatMap((c) => [c.oldPath, c.newPath]).filter((p): p is string => p !== null && (p.startsWith("/") || p.split("/").some((s) => s === "" || s === "." || s === "..")));
 
 /** Where a line of the old file stands in the new one, or null when the patch removed it. */
 export function newLine(f: FileChange, old: number): number | null {

@@ -63,10 +63,14 @@ function pyBlockEnd(lines: string[], starts: boolean[], i: number): number {
   return end + 1;
 }
 
-/** The first line of a def's decorators, 1-based. */
-function pyDecoStart(lines: string[], i: number): number {
+/** The first line of a def's decorators, 1-based, each decorator's continuation lines included. */
+function pyDecoStart(lines: string[], starts: boolean[], i: number): number {
   let s = i;
-  while (s > 0 && lines[s - 1]!.trimStart().startsWith("@") && indent(lines[s - 1]!) === indent(lines[i]!)) s--;
+  for (let k = i - 1; k >= 0; k--) {
+    if (!starts[k]) continue;
+    if (!lines[k]!.trimStart().startsWith("@") || indent(lines[k]!) !== indent(lines[i]!)) break;
+    s = k;
+  }
   return s + 1;
 }
 
@@ -86,10 +90,10 @@ export function pythonUnits(file: string, text: string): Unit[] {
     const d = /^(\s*)(?:async\s+)?def\s+(test\w*)\s*\(/.exec(s);
     if (!d) return;
     const ind = d[1]!.length;
-    if (ind === 0) out.push({ file, name: file + "::" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, starts, i), scope: "" });
+    if (ind === 0) out.push({ file, name: file + "::" + d[2], start: pyDecoStart(lines, starts, i), end: pyBlockEnd(lines, starts, i), scope: "" });
     else if (cls) {
       cls.body ??= ind;
-      if (ind === cls.body) out.push({ file, name: file + "::" + cls.name + "::" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, starts, i), scope: "" });
+      if (ind === cls.body) out.push({ file, name: file + "::" + cls.name + "::" + d[2], start: pyDecoStart(lines, starts, i), end: pyBlockEnd(lines, starts, i), scope: "" });
     }
   });
   return out;
@@ -112,10 +116,10 @@ export function pythonFunctions(text: string): { mangled: string; start: number;
     const d = /^(\s*)(?:async\s+)?def\s+(\w+)\s*\(/.exec(s);
     if (!d) return;
     const ind = d[1]!.length;
-    if (ind === 0) out.push({ mangled: "x_" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, starts, i) });
+    if (ind === 0) out.push({ mangled: "x_" + d[2], start: pyDecoStart(lines, starts, i), end: pyBlockEnd(lines, starts, i) });
     else if (cls) {
       cls.body ??= ind;
-      if (ind === cls.body) out.push({ mangled: "x\u01c1" + cls.name + "\u01c1" + d[2], start: pyDecoStart(lines, i), end: pyBlockEnd(lines, starts, i) });
+      if (ind === cls.body) out.push({ mangled: "x\u01c1" + cls.name + "\u01c1" + d[2], start: pyDecoStart(lines, starts, i), end: pyBlockEnd(lines, starts, i) });
     }
   });
   return out;
@@ -297,6 +301,7 @@ export function rustModule(rel: string): { target: string; path: string[] } {
     return { target: parts[0]!, path: parts.slice(1).filter((p) => p !== "main" && p !== "mod") };
   }
   const parts = rel.replace(/^src\//, "").replace(/\.rs$/, "").split("/");
+  if (parts[0] === "bin") parts.splice(0, parts.length > 2 ? 2 : parts.length);
   if (parts.length === 1 && (parts[0] === "lib" || parts[0] === "main")) return { target: "unit", path: [] };
   if (parts[parts.length - 1] === "mod") parts.pop();
   return { target: "unit", path: parts };

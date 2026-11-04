@@ -14,7 +14,7 @@ import { scorerImage, toolImage } from "../../lanes/outcome-skills/mutation/run.
 export type Files = Record<string, string>;
 
 const git = (cwd: string, args: string[]) => {
-  const r = spawnSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8" });
+  const r = spawnSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "-c", "gc.auto=0", "-c", "maintenance.auto=false", ...args], { cwd, encoding: "utf8" });
   if (r.status !== 0) throw new Error("git " + args.join(" ") + ": " + r.stderr);
   return r.stdout;
 };

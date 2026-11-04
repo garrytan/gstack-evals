@@ -11,7 +11,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writ
 import { join, posix } from "node:path";
 import { docker, dockerRun, type DockerResult } from "../../real-outcome/task/docker.ts";
 import { REPO_DIR } from "../../real-outcome/task/format.ts";
-import { classify, parsePatch, sourceRanges, type FileChange } from "./diff.ts";
+import { classify, parsePatch, sourceRanges, unsafePaths, type FileChange } from "./diff.ts";
 import { SAMPLE_CAP, SAMPLE_SEED, TOOLS, type Lang } from "./pins.ts";
 import { reading, record, sample, type MutationRecord, type Outcome, type Reading } from "./score.ts";
 import { changedUnits, goUnits, pythonFunctions, pythonModule, pythonUnits, rustUnits, tsUnits, type Unit } from "./units.ts";
@@ -251,8 +251,7 @@ function pyConfig(ctx: Ctx, scopePatch: string, tests: Unit[]): string {
     while (posix.dirname(dir) !== "." && ctx.tree.list.has(posix.join(posix.dirname(dir), "__init__.py"))) dir = posix.dirname(dir);
     roots.add(dir);
   }
-  const copies = new Set(tests.map((u) => u.file.split("/")[0]!).filter((p) => !p.endsWith(".py")));
-  for (const f of ["conftest.py", "pytest.ini", "tox.ini"]) if (ctx.tree.list.has(f)) copies.add(f);
+  const copies = new Set([...ctx.tree.list].map((p) => p.split("/")[0]!).filter((p) => p !== "mutants"));
   return JSON.stringify({ source_paths: [...roots].sort(), pytest_add_cli_args_test_selection: tests.map((u) => u.name), pytest_add_cli_args: ["-p", "no:cacheprovider"], also_copy: [...copies].sort(), use_git_change_detection: false });
 }
 
@@ -266,15 +265,15 @@ const python: Adapter = {
   baseline(ctx, units) {
     const r = ctx.run('"$PY" -m pytest -p no:cacheprovider -q --junitxml=/out/py-baseline.xml ' + units.map((u) => q(u.name)).join(" ") + " > /out/py-baseline.log 2>&1; echo $? > /out/py-baseline.exit");
     if (r.status !== 0 || !has(ctx, "py-baseline.exit")) return { passing: [], error: "pytest did not run (" + tail(r) + ")" };
+    const exit = got(ctx, "py-baseline.exit").trim();
     const cases = junitCases(got(ctx, "py-baseline.xml"));
-    return {
-      passing: units.filter((u) => {
-        const [file, ...rest] = u.name.split("::");
-        const cls = [file!.replace(/\.py$/, "").split("/").join("."), ...rest.slice(0, -1)].join(".");
-        const mine = cases.filter((c) => c.classname === cls && c.name.split("[")[0] === rest[rest.length - 1]);
-        return mine.length > 0 && mine.every((c) => c.ok);
-      }),
+    const mine = (u: Unit) => {
+      const [file, ...rest] = u.name.split("::");
+      const cls = [file!.replace(/\.py$/, "").split("/").join("."), ...rest.slice(0, -1)].join(".");
+      return cases.filter((c) => c.classname === cls && c.name.split("[")[0] === rest[rest.length - 1]);
     };
+    if ((exit !== "0" && exit !== "1") || !units.some((u) => mine(u).length > 0)) return { passing: [], error: "pytest did not run the selected tests (exit " + exit + "): " + got(ctx, "py-baseline.log").slice(-600) };
+    return { passing: units.filter((u) => mine(u).every((c) => c.ok) && mine(u).length > 0) };
   },
   mutants(ctx, scopePatch) {
     const scope = new Set<string>();
@@ -354,17 +353,25 @@ const goFiles = (ctx: Ctx, scopePatch: string) => [...sourceRanges("go", parsePa
 
 const go: Adapter = {
   units: (ctx) => testFiles(ctx, ["test"]).flatMap((c) => agentUnits(ctx, c, goUnits)),
+  /** Each test must pass twice in one container, as the first two mutant runs in go-mutesting's one container will run it,
+   * and the passing ones must then pass together: a package that fails anyway (a TestMain that exits 1) or a test that
+   * passes only once would turn every mutant into a kill, since go-mutesting runs no unmutated control of its own. */
   baseline(ctx, units) {
     const pkgs = [...goByPkg(units)];
-    const script = pkgs.map(([pkg, us], i) => "go test -count=1 -vet=off -json -run " + q(goRegex(us)) + " " + q("./" + pkg) + " > /out/go-base-" + i + ".jsonl 2> /out/go-base-" + i + ".err").join("; ") + "; echo ok > /out/go-base.done";
+    const script = pkgs.map(([pkg, us], i) => { const t = "go test -count=1 -vet=off -json -run " + q(goRegex(us)) + " " + q("./" + pkg); return t + " > /out/go-base-" + i + ".jsonl 2> /out/go-base-" + i + ".err; echo $? > /out/go-base-" + i + ".exit; " + t + " > /out/go-again-" + i + ".jsonl 2>/dev/null"; }).join("; ") + "; echo ok > /out/go-base.done";
     const r = ctx.run(script);
     if (r.status !== 0 || !has(ctx, "go-base.done")) return { passing: [], error: "go test did not run (" + tail(r) + ")" };
-    const passing: Unit[] = [];
-    pkgs.forEach(([, us], i) => {
-      const ev = goEvents(got(ctx, "go-base-" + i + ".jsonl"));
-      for (const u of us) if (ev.some((e) => e.Action === "pass" && e.Test === u.name) && !ev.some((e) => e.Action === "fail" && e.Test === u.name)) passing.push(u);
-    });
-    return { passing };
+    const runs = pkgs.map((_, i) => goEvents(got(ctx, "go-base-" + i + ".jsonl")));
+    const exits = pkgs.map((_, i) => got(ctx, "go-base-" + i + ".exit").trim());
+    if (exits.some((x) => x !== "0" && x !== "1") || !pkgs.some(([, us], i) => runs[i]!.some((e) => us.some((u) => e.Test === u.name)))) return { passing: [], error: "go test ran none of the selected tests: " + pkgs.map((_, i) => got(ctx, "go-base-" + i + ".err")).join("\n").slice(-600) };
+    const again = pkgs.map((_, i) => goEvents(got(ctx, "go-again-" + i + ".jsonl")));
+    const ok = (ev: { Action?: string; Test?: string }[], u: Unit) => ev.some((e) => e.Action === "pass" && e.Test === u.name) && !ev.some((e) => e.Action === "fail" && e.Test === u.name);
+    const passed = pkgs.map(([, us], i) => us.filter((u) => ok(runs[i]!, u) && ok(again[i]!, u)));
+    const kept = pkgs.map(([pkg], i) => [pkg, passed[i]!] as const).filter(([, us]) => us.length > 0);
+    if (kept.length === 0) return { passing: [] };
+    const c = ctx.run(kept.map(([pkg, us], i) => "go test -count=1 -vet=off -run " + q(goRegex(us)) + " " + q("./" + pkg) + " > /out/go-control-" + i + ".log 2>&1; echo $? > /out/go-control-" + i + ".exit").join("; "));
+    if (c.status !== 0) return { passing: [], error: "go test did not run (" + tail(c) + ")" };
+    return { passing: kept.flatMap(([, us], i) => (got(ctx, "go-control-" + i + ".exit").trim() === "0" ? us : [])) };
   },
   mutants(ctx, scopePatch) {
     const files = goFiles(ctx, scopePatch);
@@ -428,7 +435,8 @@ export function rustResults(log: string): Map<string, boolean> {
 const exactArgs = (units: Unit[]) => "-- --exact " + [...new Set(units.map((u) => u.name))].map(q).join(" ");
 
 /** cargo test's target flags for the units, so a same-named test in a target the agent did not touch never runs: each
- * integration test by name, and the library, or the binaries when the file is one or the crate has no library. */
+ * integration test by name; the binaries for a binary's own files; and for other files under src, the library, plus the
+ * binaries when the crate has both, since either may declare the module. */
 function rustTargets(ctx: Ctx, units: Unit[]): string {
   const flags = new Set<string>();
   for (const u of units) {
@@ -438,7 +446,13 @@ function rustTargets(ctx: Ctx, units: Unit[]): string {
     }
     const root = crateRoot(ctx.tree.list, u.file);
     const src = root === "." ? "src/" : root + "/src/";
-    flags.add(ctx.tree.list.has(src + "lib.rs") && u.file !== src + "main.rs" && !u.file.startsWith(src + "bin/") ? "--lib" : "--bins");
+    const bin = u.file === src + "main.rs" || u.file.startsWith(src + "bin/");
+    const hasBins = ctx.tree.list.has(src + "main.rs") || [...ctx.tree.list].some((p) => p.startsWith(src + "bin/"));
+    if (bin || !ctx.tree.list.has(src + "lib.rs")) flags.add("--bins");
+    else {
+      flags.add("--lib");
+      if (hasBins) flags.add("--bins");
+    }
   }
   return [...flags].join(" ");
 }
@@ -454,7 +468,9 @@ const rust: Adapter = {
     const r = ctx.run(CARGO_ENV + "cargo test --no-fail-fast --workspace " + rustTargets(ctx, units) + " " + exactArgs(units) + " > /out/rs-base.log 2>&1; echo $? > /out/rs-base.exit");
     if (r.status !== 0 || !has(ctx, "rs-base.exit")) return { passing: [], error: "cargo test did not run (" + tail(r) + ")" };
     const log = got(ctx, "rs-base.log");
+    const exit = got(ctx, "rs-base.exit").trim();
     const ran = [...log.matchAll(/^test \S+ \.\.\. /gm)].length;
+    if ((exit !== "0" && exit !== "101") || ran === 0) return { passing: [], error: "cargo test ran none of the selected tests (exit " + exit + "): " + log.slice(-600) };
     if (ran > units.length) return { passing: [], error: ran + " tests ran for " + units.length + " the agent wrote: an unchanged test shares an exact name with one of them in a target the scorer runs" };
     const res = rustResults(log);
     return { passing: units.filter((u) => res.get(u.scope + "\t" + u.name) === true) };
@@ -523,12 +539,15 @@ const typescript: Adapter = {
     const files = [...new Set(units.map((u) => u.file))];
     const r = ctx.run("node node_modules/vitest/vitest.mjs run --reporter=json --outputFile=/out/vt-base.json --includeTaskLocation " + files.map(q).join(" ") + " > /out/vt-base.log 2>&1; echo $? > /out/vt-base.exit");
     if (r.status !== 0 || !has(ctx, "vt-base.exit")) return { passing: [], error: "vitest did not run (" + tail(r) + ")" };
-    const results = has(ctx, "vt-base.json") ? (JSON.parse(got(ctx, "vt-base.json")) as { testResults: { name: string; assertionResults: { status: string; location?: { line: number } }[] }[] }).testResults : [];
+    const exit = got(ctx, "vt-base.exit").trim();
+    if ((exit !== "0" && exit !== "1") || !has(ctx, "vt-base.json")) return { passing: [], error: "vitest did not run the selected tests (exit " + exit + "): " + got(ctx, "vt-base.log").slice(-600) };
+    const results = (JSON.parse(got(ctx, "vt-base.json")) as { testResults: { name: string; assertionResults: { status: string; location?: { line: number } }[] }[] }).testResults;
     const byLine = new Map<string, string[]>();
     for (const t of results) {
       const file = posix.relative(ctx.o.repoDir, t.name);
       for (const a of t.assertionResults) if (a.location) byLine.set(file + ":" + a.location.line, [...(byLine.get(file + ":" + a.location.line) ?? []), a.status]);
     }
+    if (!units.some((u) => byLine.has(u.file + ":" + u.start))) return { passing: [], error: "vitest's report names none of the selected tests: " + got(ctx, "vt-base.log").slice(-600) };
     return { passing: units.filter((u) => (byLine.get(u.file + ":" + u.start) ?? []).length > 0 && byLine.get(u.file + ":" + u.start)!.every((s) => s === "passed")) };
   },
   mutants(ctx, scopePatch) {
@@ -604,6 +623,7 @@ export function scoreTree(opts: ScoreOptions): MutationRecord {
   const volumes: string[] = [];
   const done = (own: Reading, transplant?: Reading) => record(o.lang, own, transplant, cap, seed);
   try {
+    if (unsafePaths(parsePatch(opts.patch)).length > 0) return done(reading({ changed: 1, passing: 0, toolError: "the patch names a path outside the repository" }));
     const tree = prepare(o.repoDir, image, join(dir, "own"), opts.patch, new Map());
     if (!tree) return done(reading({ changed: 1, passing: 0, toolError: "the patch does not apply to the image's tree" }));
     volumes.push(tree.volume);
@@ -615,6 +635,7 @@ export function scoreTree(opts: ScoreOptions): MutationRecord {
     const inline = units.filter((u) => classify(o.lang, u.file) !== "test");
     if (inline.length > 0) return done(own, reading({ changed: units.length, passing: 0, notTransplantable: inline.length + " of the tests sit inside source files" }));
     const overlay = new Map([...new Set(units.map((u) => u.file))].map((f) => [f, tree.files.get(f)!] as const));
+    if (unsafePaths(parsePatch(opts.gold)).length > 0) return done(own, reading({ changed: units.length, passing: 0, toolError: "the gold patch names a path outside the repository" }));
     const goldTree = prepare(o.repoDir, image, join(dir, "gold"), opts.gold, overlay);
     if (!goldTree) return done(own, reading({ changed: units.length, passing: 0, toolError: "the gold patch does not apply to the image's tree" }));
     volumes.push(goldTree.volume);

@@ -119,12 +119,12 @@ describe.skipIf(!DOCKER)("python: the scoring rules in both directions (GSTACK_E
     expect(r.transplant!.score!).toBeGreaterThanOrEqual(HIGH);
   }, LONG);
 
-  test("tests that need the agent's own names cannot run on gold, and the transplant says so", () => {
+  test("tests that need the agent's own names cannot run on gold, and the transplant reads tool-error", () => {
     const own = F.PY_IMPL + "\n\ndef clamp_unit(x):\n    return clamp(x, 0, 1)\n";
     const tests = "from calc.ops import clamp_unit\n\n\ndef test_unit():\n    assert clamp_unit(2) == 1\n    assert clamp_unit(-1) == 0\n";
     const r = score({ "calc/ops.py": own, "tests/test_new.py": tests }, { gold: fx.patch({ "calc/ops.py": F.PY_GOLD }) });
     expect(r.status).toBe("scored");
-    expect(r.transplant).toMatchObject({ status: "no-passing-tests", tests: { changed: 1, passing: 0 } });
+    expect(r.transplant).toMatchObject({ status: "tool-error", score: null, tests: { changed: 1, passing: 0 } });
   }, LONG);
 
   test("symlinks the agent's tests plant in the output folder are never followed on the host", () => {
