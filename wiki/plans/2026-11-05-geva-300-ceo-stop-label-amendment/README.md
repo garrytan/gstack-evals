@@ -19,8 +19,8 @@ links:
 attachments:
   - 2222e0cfa65f9f105d6645a70fc6a4bed67d9f0f75033d6e935cdebb7fcaf179  ceo-rule.ts.txt
   - 8ce33cf3eec0afd819689f430bb599fa320569e5d4d2d45b842412f39c07dadc  dryrun.ts.txt
-  - a8a02e138681807b068e3f16c227dcd4adb424d4d85b4d8c8a6e99e7b45e4a09  dryrun.txt
-  - ff6b6d559c5438fa0b9cd194618be4b2198820e6265ad482afbcf245071ea2a2  dryrun-merged.txt
+  - d12aa8c7ee1542246baa457100deff10799e25c46bce8cdb5e41a39c1b4891f2  dryrun.txt
+  - 9d4eaf6d1a73e9154b112ac364a3785622eef2dee2e81ac01336bf6fa23751a3  dryrun-merged.txt
 ---
 
 # CEO outcome eval amendment: the judge-wait stop label, the judge effort, the harness readings and the start order
