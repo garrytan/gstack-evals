@@ -61,7 +61,8 @@
 //   reruns a cell an earlier stops.json lists as stopped (a cap stop is never retried): it carries the cell, with its
 //   settled usd and wall_s, into the new stops.json under a CAP_STOP, and runs the unstarted cells. A stops.json that
 //   doesn't parse refuses the resume before any session. units.json records the suite binding (ceoSuiteBinding) that
-//   ceo rows check --units against, and the receipts sink also gets every session's host/transcript.ndjson, which rows
+//   ceo rows check --units against, and a resume whose binding differs from the one units.json holds is refused before
+//   any session, because session keys don't cover key.json. And the receipts sink also gets every session's host/transcript.ndjson, which rows
 //   read. The out dir must sit outside the repo.
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
@@ -342,6 +343,17 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const ceo = plan?.lens === CEO_LENS;
   const lens: PlanLens = "ceo";
   if (ceo && insideRepo(o.out)) throw new Error("E_USAGE: a ceo-outcome run holds review text, and its out dir " + o.out + " is inside the repo\n  fix: write the run to an --out outside the repo");
+  if (ceo && existsSync(join(o.out, "units.json"))) {
+    const file = join(o.out, "units.json");
+    let prior: Partial<ReviewRunInput["suite"]> | undefined;
+    try {
+      prior = JSON.parse(readFileSync(file, "utf8"))?.suite;
+    } catch {
+      throw new Error("E_USAGE: " + file + " is not JSON, so this resume cannot check the suite binding (catalogs_sha256) the run started with\n  fix: restore units.json from the run's receipts sink copy, or start a new run in a new --out");
+    }
+    const bindingOf = (s: Partial<ReviewRunInput["suite"]> | undefined) => JSON.stringify([s?.id ?? null, s?.sha256 ?? null, s?.catalogs_sha256 ?? null, s?.units_dir ?? null, s?.unit_ids ?? null]);
+    if (bindingOf(prior) !== bindingOf(o.suite)) throw new Error("E_USAGE: " + file + " binds suite " + (prior?.id ?? "none") + " (catalogs_sha256 " + (prior?.catalogs_sha256 ?? "none") + ", units dir " + (prior?.units_dir ?? "none") + "), and this resume gives suite " + o.suite.id + " (catalogs_sha256 " + (o.suite.catalogs_sha256 ?? "none") + ", units dir " + (o.suite.units_dir ?? "none") + "); its cached cells would be labelled with units they did not run on\n  fix: resume with the units dir and suite the run started with, or start a new run in a new --out");
+  }
   if (plan && o.host !== "claude") throw new Error("E_USAGE: plan units score from the Claude Code driver's model_output, which host " + o.host + " does not record; run plan units with host claude");
   const modelsOf = (arm: string): readonly string[] => o.armModels?.[arm] ?? o.models;
   const ids = new Set<string>();

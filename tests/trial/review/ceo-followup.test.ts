@@ -261,7 +261,7 @@ function unitFixture(): PreparedUnit {
   return { unit, task: unitTaskId(unit), base_branch: "main", merge_base: repo.merge_base, tree: tree.dir, tree_sha256: tree.tree_sha256, instructions: repo.instructions, check: null };
 }
 const BLOCK = FENCE + "ceo-outcome\n" + JSON.stringify({ top: [{ issue: "No opt-out for existing users.", evidence: "plan.md", fix: "Add a flag." }], forecast: 30 }) + "\n" + FENCE;
-async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, calls: number[], env: Record<string, string> = {}, reuse = new Map()) {
+async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, calls: number[], env: Record<string, string> = {}, reuse = new Map(), suite: ReviewRunInput["suite"] = { id: "ceo-followup", sha256: null }) {
   const h = harness(() => [{ type: "text", text: "unused" }]);
   const passOf = new Map<string, number>();
   const rig = {
@@ -289,7 +289,7 @@ async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, c
       },
     }),
   } as unknown as HostRig;
-  const input: ReviewRunInput = { host: "claude", suite: { id: "ceo-followup", sha256: null }, units: [unit], arms: [{ name: "none", told: "none" }], models: [OPUS], passes: 3, parallel: 1, timeoutS: 30, cap: 50_000_000, runId: "ceo-followup", out, date: "2026-11-05", policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: null, plan: { lens: "ceo-outcome" }, reuse, env };
+  const input: ReviewRunInput = { host: "claude", suite, units: [unit], arms: [{ name: "none", told: "none" }], models: [OPUS], passes: 3, parallel: 1, timeoutS: 30, cap: 50_000_000, runId: "ceo-followup", out, date: "2026-11-05", policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: null, plan: { lens: "ceo-outcome" }, reuse, env };
   try {
     return await runReviewUnits(input, rig);
   } finally {
@@ -330,6 +330,37 @@ describe("item 2 (note 17): --resume never reruns a cell a cap stop ended", () =
     const calls: number[] = [];
     await expect(ceoRun(out, unit, null, calls, {}, readReviewJournal(out))).rejects.toThrow("stops.json");
     expect(calls).toEqual([]);
+  }, 60_000);
+});
+
+describe("review finding 01M6P4PKCJ1CYR3TQ02HVJMWE8: --resume keeps the suite binding the run started with", () => {
+  // Value: protects=cached cells stay labelled with the units dir they ran on, because session keys don't cover key.json; fails_when=a resume after a key.json-only edit reuses every cell and rewrites units.json with the new catalogs_sha256, so rows, packets and readings accept old results against the new key; why_new=Capy review of #229; seam=runReviewUnits on a prior ceo-outcome out dir; no_claim=the CLI's recompute of the binding
+  const bound = (unitId: string) => ({ id: "ceo-followup", sha256: null, catalogs_sha256: "a".repeat(64), units_dir: "units", unit_ids: [unitId] });
+  test("a resume whose units dir hashes to another catalogs_sha256 is refused before any session", async () => {
+    const out = durable();
+    const unit = unitFixture();
+    await ceoRun(out, unit, 1, [], {}, new Map(), bound(unit.unit.id));
+    expect(json(join(out, "units.json")).suite.catalogs_sha256).toBe("a".repeat(64));
+    const calls: number[] = [];
+    await expect(ceoRun(out, unit, null, calls, {}, readReviewJournal(out), { ...bound(unit.unit.id), catalogs_sha256: "b".repeat(64) })).rejects.toThrow(/units\.json[\s\S]*catalogs_sha256/);
+    expect(calls).toEqual([]);
+    expect(json(join(out, "units.json")).suite.catalogs_sha256).toBe("a".repeat(64));
+  }, 60_000);
+  test("a run that recorded no binding refuses a resume that carries one", async () => {
+    const out = durable();
+    const unit = unitFixture();
+    await ceoRun(out, unit, 1, []);
+    const calls: number[] = [];
+    await expect(ceoRun(out, unit, null, calls, {}, readReviewJournal(out), bound(unit.unit.id))).rejects.toThrow(/units\.json[\s\S]*catalogs_sha256/);
+    expect(calls).toEqual([]);
+  }, 60_000);
+  test("a resume with the same binding runs the unstarted cells", async () => {
+    const out = durable();
+    const unit = unitFixture();
+    await ceoRun(out, unit, 1, [], {}, new Map(), bound(unit.unit.id));
+    const calls: number[] = [];
+    await ceoRun(out, unit, null, calls, {}, readReviewJournal(out), bound(unit.unit.id));
+    expect(calls.sort()).toEqual([2, 3]);
   }, 60_000);
 });
 

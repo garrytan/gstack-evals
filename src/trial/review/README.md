@@ -207,7 +207,8 @@ as its amendments change it), with `--sealed-root` when the suite is sealed. ceo
 - units.json records the suite binding: the units dir's digest (`catalogs_sha256`, the suite stub's catalogs digest),
   its name and the suite's unit ids. `gstack-evals ceo rows`, `packets` and `readings` refuse a `--units` dir that
   doesn't hash to it, so no key.json or plan.md can change after the runs. rows.json and readings.json carry the
-  binding, and so does the packet key as `catalogs_sha256`.
+  binding, and so does the packet key as `catalogs_sha256`. A `--resume` whose binding differs from the one
+  units.json holds is refused before any session, because session keys don't cover key.json.
 - rows.json records `exposure_sha256` (ceo-exposure.ts's digest) beside `parser_sha256`, and packets and readings
   refuse rows from another one. Each row carries `model_id`, and rows read only the three model ids the
   preregistration names, by their exact policy keys.
