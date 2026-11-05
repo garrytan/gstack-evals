@@ -1,0 +1,342 @@
+#!/usr/bin/env bash
+# G O5 pin post dry run (GEVA-282, GST-1361), keyless: no key, no VM, no model call. It drives every start-rule check of
+# the G prereg (2026-11-04-geva-262-g-family-admission-prereg, section 10 item 6) and plan v3's O5 line (section 13 item 6)
+# at the commit given, exported with git archive outside any git work tree, plus the checks the Part 2 brief adds.
+#   Part A  the told arm: gstack 699a41cb fetched by sha, told-install.sh into a clean HOME, checkToldHome, the lite
+#           render reproduced byte for byte by gstack-modules render (l1.ts liteMatch), and O1's pin tests.
+#   Part C  the clean room: cleanRoomPreflight in a stand-in image (busybox, by image id) refusing a seeded drive mount
+#           and each path O1's second scan reads, passing a clean room, refusing another digest.
+#   Part L  O6's envelope and U4 leases on a temporary ledger: one lease opened and settled per frozen stage (prereg
+#           section 9), a lease the envelope refuses, and each admission arm's session limit at a metering proxy slot
+#           whose upstream is a stub, so the overshoot past the limit is measured.
+#   Part F  the futility look both ways, on made-up trials.
+#   Part R  the metered inputs as GSTA-2 decided (A): resize.py in both directions, and admission.sh.txt.
+#   Part D  O2's Docker suite with the clean-room Docker tests (GSTACK_EVALS_DOCKER=1), as #210 counted it (57 + 26 tests),
+#           compared with #210's counts, and the tool images it built.
+# Each check prints one line; the first miss prints DRYRUN: fail and exits 1. The last rule (Z1) checks that no container
+# and no open lease is left. The last line is DRYRUN: ok.
+# Usage: bash dryrun.sh.txt <commit> [<work dir>]   env: G (the gstack-evals checkout, default /workspace/gstack-evals),
+#   GSTACK_REPO (default https://git.capy.ai/garrytan/gstack.git), CLEAN_ROOM_IMAGE (default busybox:1.36).
+#   An existing work dir is wiped only when it holds the .g-o5-dryrun marker this script writes; otherwise it refuses (exit 2).
+set -u -o pipefail
+COMMIT=${1:?usage: bash dryrun.sh.txt <commit> [<work dir>]}
+G=${G:-/workspace/gstack-evals}
+HERE=$(cd "$(dirname "$0")" && pwd)
+FULL=$(git -C "$G" rev-parse "$COMMIT^{commit}") || exit 2
+W=${2:-$HOME/.capy/work/g-o5-dryrun/run-${FULL:0:7}}
+if [ -e "$W" ] && [ ! -e "$W/.g-o5-dryrun" ]; then echo "E_USAGE dryrun: $W exists and holds no .g-o5-dryrun marker; pass a new work dir" >&2; exit 2; fi
+rm -rf "$W" && mkdir -p "$W" && touch "$W/.g-o5-dryrun" && W=$(cd "$W" && pwd)
+GSTACK_REPO=${GSTACK_REPO:-https://git.capy.ai/garrytan/gstack.git}
+IMAGE=${CLEAN_ROOM_IMAGE:-busybox:1.36}
+PIN=699a41cb6808e01240d02e82247693f9170d401a
+CR_HOME=/home/agent
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN AGENT_USER MULT M_PER M_AP AUTH_PAID AUTH_EXTRA YIELD_G TOLD_SCALE
+E=$W/export
+export E W CR_HOME
+mkdir -p "$E" "$W/log" "$W/drv" "$W/s"
+HIDE="s#$W#\$W#g; s#$HOME#~#g; s#$CR_HOME#\$CR_HOME#g"
+rules=0
+say() { printf '%s\n' "$1" | sed "$HIDE"; }
+stop() { say "FAIL $1"; echo; echo "rules: $rules, failed: 1"; echo "DRYRUN: fail"; exit 1; }
+# rule <label> <expected> <observed> <test command...>
+rule() { local label=$1 want=$2 got=$3; shift 3; rules=$((rules + 1)); if "$@" > /dev/null 2>&1; then say "ok   $label | expected: $want | observed: $got"; else stop "$label | expected: $want | observed: $got"; fi; }
+# drive <name> <command...>: a driver prints its own ok lines and stops at its first FAIL line.
+drive() { local name=$1; shift; (cd "$E" && "$@") > "$W/log/$name.out" 2> "$W/log/$name.err"; local c=$?; sed "$HIDE" "$W/log/$name.out" | grep -v '^FAIL'; rules=$((rules + $(grep -c '^ok ' "$W/log/$name.out"))); if [ $c != 0 ] || grep -q '^FAIL' "$W/log/$name.out"; then stop "$(grep -m1 '^FAIL' "$W/log/$name.out" | cut -c6- || true)$( [ $c = 0 ] || printf ' (driver %s exited %s: %s)' "$name" "$c" "$(tail -c 300 "$W/log/$name.err" | tr '\n' ' ')")"; fi; }
+first() { grep -E -m1 -- "$1" "$2" 2>/dev/null | cut -c1-240 || true; }
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY AGENT_USER; do echo "$k: $([ -n "${!k+x}" ] && echo set || echo unset)"; done
+echo "commit $FULL; bun $(bun --version); docker $(docker version --format '{{.Server.Version}}' 2>/dev/null); python $(python3 -c 'import sys; print(sys.version.split()[0])')"
+cat > "$W/drv/lib.ts" <<'EOF'
+export const line = (ok: boolean, label: string, want: string, got: string) => {
+  console.log((ok ? "ok   " : "FAIL ") + label + " | expected: " + want + " | observed: " + got);
+  if (!ok) process.exit(1);
+};
+export const usd = (m: number) => "$" + (m / 1e6).toFixed(2);
+EOF
+
+echo; echo "## Part 0: export"
+git -C "$G" archive "$FULL" | tar -x -C "$E"
+(cd "$E" && bun install --frozen-lockfile) > "$W/log/bun-install.txt" 2>&1; c=$?
+rule "P0 the export is outside any git work tree, and bun install --frozen-lockfile passes" "git rev-parse fails; install exit 0" "install exit $c; $(cd "$E" && git rev-parse --show-toplevel 2>&1 | head -1)" sh -c "test $c = 0 && cd '$E' && ! git rev-parse --show-toplevel"
+
+echo; echo "## Part A: the told arm at gstack $PIN"
+SRC=$W/gstack.git
+{ git init -q --bare "$SRC" && git -C "$SRC" fetch -q --depth 1 "$GSTACK_REPO" "$PIN" && git -C "$SRC" update-ref refs/heads/pin "$PIN" && git -C "$SRC" symbolic-ref HEAD refs/heads/pin; } > "$W/log/fetch.txt" 2>&1; c=$?
+ARCH=$(git -C "$SRC" archive --format=tar "$PIN" 2>/dev/null | sha256sum | cut -c1-64)
+L1M=$E/quick/laneb/arms/manifests/l1/after.json
+rule "A1 gstack fetched by sha (git fetch --depth 1 <repo> <sha>); its git archive matches #202's after-pin manifest" "$(jq -r .git_archive_sha256 "$L1M")" "fetch exit $c, $ARCH" test "$c" = 0 -a "$ARCH" = "$(jq -r .git_archive_sha256 "$L1M")"
+H=$W/told-home
+TP="$(dirname "$(command -v bun)"):/usr/local/bin:/usr/bin:/bin"
+TOLD_PATH=$TP bash "$E/lanes/outcome-skills/arms/told-install.sh" "$SRC" "$H" > "$W/log/told-install.txt" 2>&1; c=$?
+rule "A2 told-install.sh (./setup --host claude --loadout lite) into a clean HOME" "exit 0" "exit $c, $(tail -1 "$W/log/told-install.txt" | cut -c1-80)" test "$c" = 0
+R=$H/.gstack/render/claude
+mv "$R" "$R.installed" && (cd "$H/.claude/skills/gstack" && env -i HOME="$H" PATH="$TP" USER=user LANG=C.UTF-8 TERM=dumb ./bin/gstack-modules render --host claude --loadout lite --out-dir "$R") > "$W/log/render.txt" 2>&1; c=$?
+mv "$R" "$W/fresh-render" 2>/dev/null; mv "$R.installed" "$R"
+cat > "$W/drv/told.ts" <<'EOF'
+import { readFileSync } from "node:fs";
+import { line } from "../drv/lib.ts";
+const E = process.env.E!, W = process.env.W!, H = W + "/told-home";
+const { checkToldHome, TOLD_PIN } = await import(E + "/lanes/outcome-skills/arms/told.ts");
+const { liteMatch, liteLock } = await import(E + "/quick/laneb/arms/l1.ts");
+const after = JSON.parse(readFileSync(E + "/quick/laneb/arms/manifests/l1/after.json", "utf8"));
+const row = readFileSync(E + "/wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000/install-manifest.md", "utf8").split("\n").find((l) => l.includes("lite tree digest, normalized (setup render)")) ?? "";
+let r: any;
+try { r = checkToldHome(H); } catch (e) { r = { ok: false, why: (e as Error).message.slice(0, 300) }; }
+line(r.ok === true, "A3 checkToldHome: pin sha and version, the pin's source and hook sha256s, the hooks, a clean checkout", "pass at " + TOLD_PIN.sha.slice(0, 8) + " " + TOLD_PIN.version, r.ok ? "pass, hooks " + JSON.stringify(r.hooks) : r.why);
+const ok4 = r.files === 204 && r.digest === TOLD_PIN.lite_tree_digest && r.digest === after.lite.tree_digest_normalized && row.includes(r.digest);
+line(ok4, "A4 the installed lite render's tree digest equals told.ts TOLD_PIN, #202's after.json and #193's install-manifest.md (setup render row)", "204 files, " + TOLD_PIN.lite_tree_digest, r.files + " files, " + r.digest + (row.includes(r.digest) ? " (in #193's row)" : " (not in #193's row)"));
+const fresh = W + "/fresh-render";
+let m: any;
+try { m = liteMatch(H + "/.gstack/render/claude", fresh); } catch (e) { m = { problems: [(e as Error).message.slice(0, 200)], matched: 0, files: 0 }; }
+const lock = (() => { try { return liteLock(fresh + "/loadout.lock.json"); } catch { return null; } })();
+line(m.problems.length === 0 && m.matched === 204 && lock?.spec_sha256 === TOLD_PIN.lite_spec_sha256, "A5 a fresh gstack-modules render of the pin's lite lock matches the installed render byte for byte, nothing extra", "204 of 204 lock files identical, spec " + TOLD_PIN.lite_spec_sha256.slice(0, 12), m.matched + " of " + (lock?.files ?? "?") + " identical, spec " + (lock?.spec_sha256 ?? "none").slice(0, 12) + ", lock sha256 " + (lock?.lock_sha256 ?? "none") + (lock?.lock_sha256 === after.lite.lock_sha256 ? " (= #202's)" : " (#202's " + after.lite.lock_sha256 + ")") + (m.problems.length ? "; " + m.problems.slice(0, 3).join("; ") : ""));
+EOF
+rule "A5a gstack-modules render at the pin" "exit 0" "exit $c" test "$c" = 0
+drive told bun "$W/drv/told.ts"
+docker image inspect "$IMAGE" > /dev/null 2>&1 || docker pull -q "$IMAGE" > "$W/log/pull.txt" 2>&1
+(cd "$E" && GSTACK_EVALS_DOCKER=1 OUTCOME_TOLD_HOME="$H" OUTCOME_GSTACK_PIN="$H/.claude/skills/gstack" bun test tests/outcome-skills/told.test.ts tests/outcome-skills/autoplan.test.ts) > "$W/log/pin-tests.txt" 2>&1; c=$?
+PT="$(grep -Eo '^ *[0-9]+ (pass|skip|fail)' "$W/log/pin-tests.txt" | tr -s ' ' | tr '\n' ',' | sed 's/^ //')"
+rule "A6 O1's pin tests with OUTCOME_TOLD_HOME and OUTCOME_GSTACK_PIN set (told.test.ts, autoplan.test.ts)" "exit 0, 0 fail, 0 skip" "exit $c,$PT" sh -c "test $c = 0 && grep -Eq '^ *0 fail' '$W/log/pin-tests.txt' && ! grep -Eq '^ *[1-9][0-9]* skip' '$W/log/pin-tests.txt'"
+
+echo; echo "## Part C: the clean room (cleanRoomPreflight)"
+ID=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null)
+echo "stand-in image $IMAGE, id $ID"
+export IMAGE ID
+cat > "$W/drv/clean.ts" <<'EOF'
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { line } from "../drv/lib.ts";
+const E = process.env.E!, W = process.env.W!, CRH = process.env.CR_HOME!;
+const { cleanRoomPreflight } = await import(E + "/lanes/outcome-skills/arms/clean-room.ts");
+let n = 0;
+const MAP: Record<string, string> = { [CRH + "/.capy/drive"]: "drive", "/etc/claude-code": "etc-claude-code", "/root": "home", "/work": "work" };
+function room(seed: [string, string | null][], digest = process.env.ID!): string | null {
+  const d = W + "/cr/" + ++n;
+  mkdirSync(d + "/home", { recursive: true });
+  mkdirSync(d + "/work/repo", { recursive: true });
+  writeFileSync(d + "/work/repo/README.md", "a task repository\n");
+  for (const [p, c] of seed) {
+    const k = Object.keys(MAP).find((k) => p === k || p.startsWith(k + "/"))!;
+    const host = d + "/" + MAP[k] + p.slice(k.length);
+    if (c === null) mkdirSync(host, { recursive: true });
+    else { mkdirSync(dirname(host), { recursive: true }); writeFileSync(host, c); }
+  }
+  const mounts = [d + "/home:/root", d + "/work:/work", ...(existsSync(d + "/etc-claude-code") ? [d + "/etc-claude-code:/etc/claude-code"] : []), ...(existsSync(d + "/drive") ? [d + "/drive:" + CRH + "/.capy/drive"] : [])];
+  try { cleanRoomPreflight({ docker: "docker", image: process.env.IMAGE!, home: "/root", workdirs: ["/work/repo"], mounts, digest }); return null; } catch (e) { return (e as Error).message; }
+}
+const found = (msg: string | null) => (msg && /\): found (.*)$/m.exec(msg.split("\n")[0]!)?.[1]?.split(", ")) || [];
+const clean = room([]);
+line(clean === null, "C0 a clean home (/root) and work dir (/work/repo)", "passes", clean === null ? "passes" : clean.split("\n")[0]!.slice(0, 200));
+const other = room([], "sha256:" + "0".repeat(64));
+line(!!other && other.startsWith("E_OUTCOME_CLEAN_ROOM") && other.includes("not the pinned digest"), "C1 the preflight with another digest than the image's id", "E_OUTCOME_CLEAN_ROOM, not the pinned digest", (other ?? "passed").split("\n")[0]!.slice(0, 200));
+const mention = "a note that names gstack\n";
+const cases: [string, string, string | null, string][] = [
+  ["C2 a seeded drive mount (C1's scan)", CRH + "/.capy/drive/notes.md", "drive file\n", CRH + "/.capy/drive"],
+  ["C3 a drive in the home (C1's scan)", "/root/.capy/drive/notes.md", "drive file\n", "/root/.capy/drive"],
+  ["C4 second scan: $home/.gstack", "/root/.gstack", null, "/root/.gstack"],
+  ["C5 second scan: $home/CLAUDE.local.md, present at all", "/root/CLAUDE.local.md", "notes\n", "/root/CLAUDE.local.md"],
+  ["C6 second scan: $home/.mcp.json, present at all", "/root/.mcp.json", "{}\n", "/root/.mcp.json"],
+  ["C7 second scan: ~/.claude.json, present at all", "/root/.claude.json", "{}\n", "/root/.claude.json"],
+  ["C8 second scan: $home/.claude/.claude.json, present at all", "/root/.claude/.claude.json", "{}\n", "/root/.claude/.claude.json"],
+  ["C9 second scan: an entry under /etc/claude-code", "/etc/claude-code/managed-settings.json", "{}\n", "/etc/claude-code/managed-settings.json"],
+  ["C10 second scan: $home/CLAUDE.md naming gstack", "/root/CLAUDE.md", mention, "/root/CLAUDE.md"],
+  ["C11 second scan: $home/.claude/settings.json naming gstack", "/root/.claude/settings.json", "{\"hooks\": \"gstack-hook\"}\n", "/root/.claude/settings.json"],
+  ["C12 second scan: $home/.claude/settings.local.json naming gstack", "/root/.claude/settings.local.json", "{\"hooks\": \"gstack-hook\"}\n", "/root/.claude/settings.local.json"],
+  ["C13 second scan: $home/.claude/commands", "/root/.claude/commands/plan.md", mention, "/root/.claude/commands/plan.md"],
+  ["C14 second scan: $home/.claude/plugins", "/root/.claude/plugins/p/plugin.json", mention, "/root/.claude/plugins/p/plugin.json"],
+  ["C15 second scan: $home/.claude/agents", "/root/.claude/agents/a.md", mention, "/root/.claude/agents/a.md"],
+  ["C16 second scan: $home/.claude/rules", "/root/.claude/rules/r.md", mention, "/root/.claude/rules/r.md"],
+  ["C17 second scan: $home/.claude/projects/*/memory", "/root/.claude/projects/-work-repo/memory/MEMORY.md", mention, "/root/.claude/projects/-work-repo/memory/MEMORY.md"],
+  ["C18 second scan: CLAUDE.md naming gstack in a parent of the work dir", "/work/CLAUDE.md", mention, "/work/CLAUDE.md"],
+  ["C19 second scan: CLAUDE.local.md in a parent of the work dir, present at all", "/work/CLAUDE.local.md", "notes\n", "/work/CLAUDE.local.md"],
+  ["C20 second scan: CLAUDE.local.md in the work dir, present at all", "/work/repo/CLAUDE.local.md", "notes\n", "/work/repo/CLAUDE.local.md"],
+  ["C21 second scan: .mcp.json in the work dir, present at all", "/work/repo/.mcp.json", "{}\n", "/work/repo/.mcp.json"],
+  ["C22 second scan: a .claude/skills folder below the work dir", "/work/repo/pkg/.claude/skills/x/SKILL.md", "x\n", "/work/repo/pkg/.claude/skills"],
+  ["C23 second scan: the work dir's .claude/settings.json naming gstack", "/work/repo/.claude/settings.json", "{\"hooks\": \"gstack-hook\"}\n", "/work/repo/.claude/settings.json"],
+  ["C24 second scan: the work dir's .claude/settings.local.json naming gstack", "/work/repo/.claude/settings.local.json", "{\"hooks\": \"gstack-hook\"}\n", "/work/repo/.claude/settings.local.json"],
+  ["C25 second scan: the work dir's .claude/commands", "/work/repo/.claude/commands/c.md", mention, "/work/repo/.claude/commands/c.md"],
+  ["C26 second scan: the work dir's .claude/plugins", "/work/repo/.claude/plugins/p.json", mention, "/work/repo/.claude/plugins/p.json"],
+  ["C27 second scan: the work dir's .claude/agents", "/work/repo/.claude/agents/a.md", mention, "/work/repo/.claude/agents/a.md"],
+  ["C28 second scan: the work dir's .claude/rules", "/work/repo/.claude/rules/r.md", mention, "/work/repo/.claude/rules/r.md"],
+];
+for (const [label, path, content, want] of cases) {
+  const msg = room([[path, content]]);
+  const f = found(msg);
+  line(!!msg && msg.startsWith("E_OUTCOME_CLEAN_ROOM") && f.includes(want), label, "refused, found " + want, msg ? (msg.startsWith("E_OUTCOME_CLEAN_ROOM") ? "refused, found " + f.join(", ") : msg.split("\n")[0]!.slice(0, 200)) : "passed");
+}
+const anyCase = room([["/work/CLAUDE.md", "a note that names GStack\n"]]);
+line(!!anyCase && anyCase.startsWith("E_OUTCOME_CLEAN_ROOM") && found(anyCase).includes("/work/CLAUDE.md"), "C30 second scan: CLAUDE.md naming GStack (any case) in a parent of the work dir", "refused, found /work/CLAUDE.md", anyCase ? "refused, found " + found(anyCase).join(", ") : "passed");
+const ccFile = room([["/etc/claude-code", "{}\n"]]);
+line(!!ccFile && ccFile.startsWith("E_OUTCOME_CLEAN_ROOM") && found(ccFile).includes("/etc/claude-code"), "C31 second scan: /etc/claude-code as a file, not a plain folder", "refused, found /etc/claude-code", ccFile ? (ccFile.startsWith("E_OUTCOME_CLEAN_ROOM") ? "refused, found " + found(ccFile).join(", ") : ccFile.split("\n")[0]!.slice(0, 200)) : "passed");
+const quiet = room([["/root/.claude/settings.json", "{\"theme\": \"dark\"}\n"], ["/work/repo/.claude/commands/c.md", "plain notes\n"]]);
+line(quiet === null, "C29 settings.json and a command that do not name gstack (content scan, not presence)", "passes", quiet === null ? "passes" : quiet.split("\n")[0]!.slice(0, 200));
+EOF
+drive clean bun "$W/drv/clean.ts"
+
+echo; echo "## Part L: O6's envelope and one U4 lease per frozen stage, on a temporary ledger"
+LD=$W/ledger
+mkdir -p "$LD"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/approvals-stub.log"\n' "$LD" > "$LD/approvals-stub"; chmod +x "$LD/approvals-stub"
+export GSTACK_EVALS_APPROVALS_BIN=$LD/approvals-stub GSTACK_EVALS_LEDGER=$LD/ledger.sqlite GSTACK_EVALS_LEDGER_RECORD=$LD/record
+echo "temporary ledger $LD; gstack-approvals is a stub that writes its rows to $LD/approvals-stub.log only" | sed "$HIDE"
+LG() { (cd "$E" && ./bin/gstack-evals ledger "$@"); }
+PROG=g-o5-dryrun
+WORDS="dry-run fixture words on a temporary ledger, not an approval"
+LG envelope --program $PROG --cap 10000 --skill-cap 2000 --skills plan-eng-review,autoplan,plan-devex-review,devex-review,plan-design-review,design-review --credit-rate 1 --words "$WORDS" --by GEVA-282 --source dryrun.sh.txt --json > "$LD/envelope.json" 2> "$LD/envelope.err"; c=$?
+rule "L1 the program envelope: \$10,000, \$2,000 a skill, the six wave-1 skills" "recorded" "exit $c, cap $(jq -r '.cap_micros / 1e6' "$LD/envelope.json" 2>/dev/null), skill cap $(jq -r '.skill_cap_micros / 1e6' "$LD/envelope.json" 2>/dev/null)" test "$c" = 0
+STAGES="g-tg:60:plan-eng-review,autoplan g-adm-none:229:plan-eng-review,autoplan g-adm-per:572:plan-eng-review g-adm-ap:1287:autoplan g-adm-vm:24:plan-eng-review,autoplan"
+for st in $STAGES; do
+  IFS=: read -r item cap sk <<< "$st"
+  LG init --cap "$cap" --item "$item" --admission warn --words "$WORDS" --by GEVA-282 --source dryrun.sh.txt --program $PROG --skills "$sk" --json > "$LD/$item.init.json" 2> "$LD/$item.init.err"; c=$?
+  LG lease --item "$item" --run "dryrun-$item" --json > "$LD/$item.lease.json" 2> "$LD/$item.lease.err"; d=$?
+  rule "L2 $item: init at its prereg cap and one lease, admitted by O6's envelope" "lease open at \$$cap on $sk" "init exit $c, lease exit $d, $(jq -r '.lease_id + " " + .state + " $" + ((.reserved_micros / 1e6) | tostring)' "$LD/$item.lease.json" 2>/dev/null)" sh -c "test $c = 0 && test $d = 0 && test \"\$(jq -r .reserved_micros '$LD/$item.lease.json')\" = $((cap * 1000000))"
+done
+RU=0; for st in $STAGES; do grep -q '^RIG_UNPROVEN' "$LD/${st%%:*}.lease.err" && RU=$((RU + 1)); done
+rule "L2a every stage lease above opened with --admission warn and printed RIG_UNPROVEN (a paid item uses --admission required)" "5 of 5 leases print RIG_UNPROVEN" "$RU of 5; g-tg: $(grep -m1 '^RIG_UNPROVEN' "$LD/g-tg.lease.err" | cut -c1-200)" test "$RU" = 5
+LG status --program $PROG --json > "$LD/status-open.json" 2>&1
+PO=$(jq -r '.skills["plan-eng-review"].open_micros' "$LD/status-open.json"); AO=$(jq -r '.skills.autoplan.open_micros' "$LD/status-open.json")
+rule "L3 with every stage open, the envelope holds plan-eng-review's and autoplan's reservations (prereg 9: \$729 and \$1,444)" "728500000 and 1443500000 micros open" "$PO and $AO micros open" test "$PO" = 728500000 -a "$AO" = 1443500000
+LG init --cap 600 --item g-probe-ap --admission warn --words "$WORDS" --by GEVA-282 --source dryrun.sh.txt --program $PROG --skills autoplan --json > /dev/null 2>&1
+LG lease --item g-probe-ap --run dryrun-probe --json > "$LD/probe.json" 2> "$LD/probe.err"; c=$?
+rule "L4 a further \$600 autoplan lease while autoplan holds \$1,443.50 is refused by the envelope" "refused, nothing leased" "exit $c, $(head -1 "$LD/probe.err" | cut -c1-200)" sh -c "test $c != 0 && grep -q '^ENVELOPE_SKILL_STOP' '$LD/probe.err' && test ! -s '$LD/probe.json'"
+cat > "$W/drv/spend.ts" <<'EOF'
+import { randomBytes } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { line, usd } from "../drv/lib.ts";
+const E = process.env.E!, W = process.env.W!;
+const [item, leaseId, mode, arg] = process.argv.slice(2) as [string, string, string, string];
+const { openLocalLedger } = await import(E + "/src/runner/ledger/local.ts");
+const { ledgerPath } = await import(E + "/src/runner/ledger/paths.ts");
+const { MeteringProxy } = await import(E + "/src/runner/proxy/metering-proxy.ts");
+const local = openLocalLedger(ledgerPath());
+if (mode === "direct") {
+  const micros = Math.round(Number(arg) * 1e6);
+  const r: any = await local.reserve({ idempotency_key: "dryrun-" + item + "-1", lease_id: leaseId, cell: { run_id: "dryrun-" + item, arm: item, task: "stub", model: "stub", trial: 1, attempt: 1, meter_id: "dryrun-" + item }, max_micros: micros });
+  const s: any = r.ok ? await local.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }) : r;
+  writeFileSync(W + "/s/" + item + ".spent", String(micros) + "\n");
+  line(r.ok && s.ok, "L5 " + item + ": one stub reservation reserved and settled on the lease", usd(micros) + " settled", r.ok ? (s.ok ? usd(s.reservation.spent_micros) + " settled" : s.code + " " + s.message) : r.code + " " + r.message);
+} else {
+  const reg = JSON.parse(readFileSync(E + "/lanes/outcome-skills/arms/registry.json", "utf8"));
+  const limit = Math.round(reg.arms[arg].limits.session_cap_usd * 1e6);
+  let sent = 0;
+  const proxy = new MeteringProxy({ ledger: local, leaseId, host: "127.0.0.1", managementSocket: W + "/s/" + item + ".sock", managementToken: randomBytes(24).toString("hex"), journal: W + "/s/" + item + ".journal.ndjson", retry: { attempts: 1, elapsed_ms: 60_000 }, env: { ANTHROPIC_API_KEY: "dryrun-placeholder-not-a-key" },
+    fetch: async () => { sent++; return Response.json({ id: "msg_dryrun", type: "message", role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 30000, output_tokens: 4000 } }); } });
+  proxy.start();
+  const b = proxy.bind({ cell: { run_id: "dryrun-" + item, arm: arg, task: "stub-task", model: "claude-opus-5-5", trial: 1, attempt: 1 }, models: ["anthropic:claude-opus-5-5"], allowance_micros: limit });
+  let calls = 0, refusal = "";
+  for (let i = 0; i < 5000 && !refusal; i++) {
+    const res = await fetch("http://127.0.0.1:" + proxy.port + "/" + b.slot + "/anthropic/v1/messages", { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json", "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: "claude-opus-5-5", messages: [{ role: "user", content: "stub turn " + i }] }) });
+    const text = await res.text();
+    if (res.status === 200) calls++;
+    else { let j: any = {}; try { j = JSON.parse(text); } catch {} refusal = res.status + " " + (j.code ?? "") + " " + String(j.detail ?? text).slice(0, 150); }
+  }
+  const m: any = await proxy.finalize(b.meter_id);
+  proxy.unbind(b.slot);
+  proxy.stop();
+  writeFileSync(W + "/s/" + item + ".spent", String(m.micros) + "\n");
+  const over = Math.max(0, m.micros - limit) / limit;
+  line(/E_ALLOWANCE/.test(refusal) && m.micros <= limit * 1.1 && m.unknown === 0 && sent === calls, "S " + arg + " session limit " + usd(limit) + " (registry.json) at a proxy slot on " + item + "'s lease, stub upstream", "the slot refuses before the limit; overshoot at most 10%", calls + " calls settled " + usd(m.micros) + ", then " + refusal + "; overshoot " + (100 * over).toFixed(1) + "%");
+}
+EOF
+for st in g-tg:direct:7.93 g-adm-none:proxy:none g-adm-per:proxy:plan-eng-review:told g-adm-ap:proxy:autoplan:told g-adm-vm:direct:1.20; do
+  item=${st%%:*}; rest=${st#*:}; mode=${rest%%:*}; arg=${rest#*:}
+  drive "spend-$item" bun "$W/drv/spend.ts" "$item" "$(jq -r .lease_id "$LD/$item.lease.json")" "$mode" "$arg"
+done
+for st in $STAGES; do
+  item=${st%%:*}
+  LG settle --lease "$(jq -r .lease_id "$LD/$item.lease.json")" --json > "$LD/$item.settle.json" 2> "$LD/$item.settle.err"; c=$?
+  rule "L6 $item: the lease settles into the record" "closed" "exit $c, spent $(jq -r '((.spent_micros // 0) + (.unknown_micros // 0)) / 1e6' "$LD/$item.settle.json" 2>/dev/null)" test "$c" = 0
+done
+LG status --program $PROG --json > "$LD/status-closed.json" 2>&1
+SP=$(cat "$W"/s/*.spent 2>/dev/null | jq -s 'add // 0'); NS=$(ls "$W"/s/*.spent 2>/dev/null | wc -l)
+rule "L7 after settlement: nothing open on any line; settled spend is what the stubs reported spending" "open 0; settled = sum of the five stubs' own spend" "open $(jq -r '.total.open_micros' "$LD/status-closed.json"), settled $(jq -r '.total.settled_micros' "$LD/status-closed.json") micros, stubs $SP micros from $NS files" sh -c "test \"\$(jq -r .total.open_micros '$LD/status-closed.json')\" = 0 && test $NS = 5 && test \"\$(jq -r .total.settled_micros '$LD/status-closed.json')\" = '$SP'"
+
+echo; echo "## Part F: the futility look (plan v3 section 6), made-up trials"
+cat > "$W/drv/futility.ts" <<'EOF'
+import { line } from "../drv/lib.ts";
+const { futilityLook, G_FUTILITY } = await import(process.env.E + "/src/runner/stats/outcome-decision.ts");
+const panel = Array.from({ length: 60 }, (_, i) => "t" + String(i + 1).padStart(2, "0"));
+const half = panel.slice(0, 30);
+const ARMS = { control: "none", treatment: "told" };
+const trials = (solved: (arm: string, i: number) => number) => panel.flatMap((task, i) => ["none", "told"].flatMap((arm) => [1, 2, 3].map((trial) => ({ task, repo: "r" + (i % 20), arm, trial, status: "scored", solved: trial <= solved(arm, i), truncated: false, cost_usd: 1, exposed: arm === "told" ? true : null }))));
+const look = (f: (arm: string, i: number) => number) => futilityLook(trials(f), ARMS, { half, panel, mdd: 0.186 });
+const show = (x: any) => "delta " + x.delta.toFixed(3) + ", cp+ " + x.cp_plus.toFixed(3) + ", cp- " + x.cp_minus.toFixed(3) + ", stop " + x.stop + ", " + x.direction + ", loss lead " + x.loss_lead;
+const helps = look((arm, i) => (arm === "told" ? (i % 3 === 0 ? 1 : 3) : i % 2 === 0 ? 1 : 0));
+line(!helps.stop && helps.direction === "helps" && helps.cp_plus >= G_FUTILITY.threshold, "F1 an interim estimate trending helps (MDD 18.6 points, t = 1/2)", "no stop, direction helps", show(helps));
+const hurts = look((arm, i) => (arm === "none" ? (i % 3 === 0 ? 1 : 3) : i % 2 === 0 ? 1 : 0));
+line(!hurts.stop && hurts.direction === "hurts" && hurts.cp_minus >= G_FUTILITY.threshold && !hurts.loss_lead, "F2 an interim estimate trending hurts", "no stop, direction hurts", show(hurts));
+const flat = look((arm, i) => ((arm === "told") === (i % 2 === 1) ? 3 : 0));
+line(flat.stop && !flat.loss_lead && flat.cp_plus < 0.1 && flat.cp_minus < 0.1, "F3 a flat interim estimate", "stop: both conditional powers under 10%, no loss lead", show(flat));
+const lead = look((arm, i) => ((arm === "told") === (i % 2 === 1) && !(arm === "told" && i === 1) ? 3 : 0));
+line(lead.stop && lead.loss_lead && lead.direction === "hurts", "F4 a flat estimate leaning to none", "stop, loss lead", show(lead));
+EOF
+drive futility bun "$W/drv/futility.ts"
+
+echo; echo "## Part R: the metered inputs (GSTA-2's decision A)"
+RD=$E/wiki/plans/2026-11-04-geva-262-g-family-admission-prereg
+rz() { local out=$1; shift; (cd "$RD" && env -u AGENT_USER "$@" python3 resize.py) > "$W/log/$out.txt" 2>&1; echo $? > "$W/log/$out.exit"; }
+w1() { grep -m1 -Eo 'wave 1 plans \$[0-9]+' "$W/log/$1.txt" | grep -Eo '[0-9]+$'; }
+tailsame() { cmp -s <(tail -n +2 "$W/log/$1.txt") <(tail -n +2 "$W/log/$2.txt"); }
+rz house MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39
+rule "R1 resize.py with the four inputs at plan v3's house values, AGENT_USER unset" "exit 0, wave 1 plans \$9393" "exit $(cat "$W/log/house.exit"), \$$(w1 house)" test "$(cat "$W/log/house.exit")" = 0 -a "$(w1 house)" = 9393
+rz agent AGENT_USER=9.99 MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39
+rule "R2 the same with AGENT_USER set to a fixture value: not refused, and the wave-1 figure moves" "exit 0, wave 1 not \$9393" "exit $(cat "$W/log/agent.exit"), \$$(w1 agent)" test "$(cat "$W/log/agent.exit")" = 0 -a "$(w1 agent)" != 9393
+rz noper MULT=5 M_AP=5 AUTH_PAID=1.39
+rule "R3 M_PER missing: not refused, plan v3's house multiple 2.2 taken" "exit 0, output after the inputs line identical to R1" "exit $(cat "$W/log/noper.exit"), $(tailsame noper house && echo identical || echo differs)" bash -c "test $(cat "$W/log/noper.exit") = 0 && cmp -s <(tail -n +2 '$W/log/noper.txt') <(tail -n +2 '$W/log/house.txt')"
+rz noap MULT=5 M_PER=2.2 AUTH_PAID=1.39
+rule "R4 M_AP missing: not refused, house multiple 5.0 taken" "exit 0, identical to R1" "exit $(cat "$W/log/noap.exit"), $(tailsame noap house && echo identical || echo differs)" bash -c "test $(cat "$W/log/noap.exit") = 0 && cmp -s <(tail -n +2 '$W/log/noap.txt') <(tail -n +2 '$W/log/house.txt')"
+rz noauth MULT=5 M_PER=2.2 M_AP=5
+rule "R5 AUTH_PAID missing: not refused, the house author line taken" "exit 0, identical to R1" "exit $(cat "$W/log/noauth.exit"), $(tailsame noauth house && echo identical || echo differs)" bash -c "test $(cat "$W/log/noauth.exit") = 0 && cmp -s <(tail -n +2 '$W/log/noauth.txt') <(tail -n +2 '$W/log/house.txt')"
+rz nomult M_PER=2.2 M_AP=5 AUTH_PAID=1.39
+rule "R6 MULT missing: refused" "exit 1, MULT is missing" "exit $(cat "$W/log/nomult.exit"), $(head -1 "$W/log/nomult.txt" | cut -c1-90)" bash -c "test $(cat "$W/log/nomult.exit") = 1 && grep -q 'MULT is missing' '$W/log/nomult.txt'"
+ADM=$HERE/admission.sh.txt
+adm() { local out=$1; shift; env -u AGENT_USER -u MULT -u M_PER -u M_AP -u AUTH_PAID "$@" bash "$ADM" "$E" > "$W/log/$out.txt" 2> "$W/log/$out.err"; echo $? > "$W/log/$out.exit"; }
+adm adm-ok MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39
+HEAD5=$(head -5 "$W/log/adm-ok.txt" | tr '\n' ';')
+A6=$(sed -n 6p "$W/log/adm-ok.txt")
+rule "R7a admission.sh.txt with AUTH_EXTRA unset says so, and resize.py falls back to 1.2 (no refusal)" "AUTH_EXTRA: unset, resize.py reads 1.2" "$A6" test "$A6" = "AUTH_EXTRA: unset, resize.py reads 1.2"
+rule "R7 admission.sh.txt with the four values and AGENT_USER unset prints them first, then resize.py's output" "MULT: 5;M_PER: 2.2;M_AP: 5;AUTH_PAID: 1.39;AGENT_USER: unset; then R1's lines; exit 0" "$HEAD5 exit $(cat "$W/log/adm-ok.exit"), $(cmp -s <(tail -n +7 "$W/log/adm-ok.txt") "$W/log/house.txt" && echo "R1's lines" || echo "other lines")" bash -c "test $(cat "$W/log/adm-ok.exit") = 0 && test '$HEAD5' = 'MULT: 5;M_PER: 2.2;M_AP: 5;AUTH_PAID: 1.39;AGENT_USER: unset;' && cmp -s <(tail -n +7 '$W/log/adm-ok.txt') '$W/log/house.txt'"
+adm adm-agent AGENT_USER=9.99 MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39
+rule "R8 admission.sh.txt with AGENT_USER set" "refused, exit 2, AGENT_USER: set, no re-size, no value printed" "exit $(cat "$W/log/adm-agent.exit"), $(sed -n 5p "$W/log/adm-agent.txt"); $(head -1 "$W/log/adm-agent.err" | cut -c1-80)" bash -c "test $(cat "$W/log/adm-agent.exit") = 2 && sed -n 5p '$W/log/adm-agent.txt' | grep -qx 'AGENT_USER: set' && ! grep -q 'wave 1' '$W/log/adm-agent.txt' && ! grep -q '9.99' '$W/log/adm-agent.txt' '$W/log/adm-agent.err'"
+for k in MULT M_PER M_AP AUTH_PAID; do
+  args=(MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39); keep=(); for a in "${args[@]}"; do [ "${a%%=*}" = "$k" ] || keep+=("$a"); done
+  adm "adm-no-$k" "${keep[@]}"
+  rule "R9 admission.sh.txt without $k" "refused, exit 2, $k: missing, no re-size" "exit $(cat "$W/log/adm-no-$k.exit"), $(head -1 "$W/log/adm-no-$k.err" | cut -c1-90)" bash -c "test $(cat "$W/log/adm-no-$k.exit") = 2 && grep -qx '$k: missing' '$W/log/adm-no-$k.txt' && ! grep -q 'wave 1' '$W/log/adm-no-$k.txt'"
+done
+for k in YIELD_G TOLD_SCALE; do
+  adm "adm-$k" "$k=1.15" MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39
+  rule "R10 admission.sh.txt with $k set" "refused, exit 2, $k is set, no re-size" "exit $(cat "$W/log/adm-$k.exit"), $(head -1 "$W/log/adm-$k.err" | cut -c1-90)" bash -c "test $(cat "$W/log/adm-$k.exit") = 2 && grep -q '$k is set' '$W/log/adm-$k.err' && ! grep -q 'wave 1' '$W/log/adm-$k.txt'"
+done
+BR=$W/badroot/wiki/plans/2026-11-04-geva-262-g-family-admission-prereg
+mkdir -p "$BR" && { cat "$RD/resize.py"; echo "# one added line"; } > "$BR/resize.py"
+env -u AGENT_USER MULT=5 M_PER=2.2 M_AP=5 AUTH_PAID=1.39 bash "$ADM" "$W/badroot" > "$W/log/adm-sha.txt" 2> "$W/log/adm-sha.err"; echo $? > "$W/log/adm-sha.exit"
+rule "R11 admission.sh.txt with a resize.py that is not the prereg's attachment" "refused, exit 2, sha256 not the attachment, no re-size" "exit $(cat "$W/log/adm-sha.exit"), $(grep -o 'has sha256 .*' "$W/log/adm-sha.err" | cut -c1-150)" bash -c "test $(cat "$W/log/adm-sha.exit") = 2 && grep -q 'not the prereg.s attachment 1265268921e9' '$W/log/adm-sha.err' && ! grep -q 'wave 1' '$W/log/adm-sha.txt'"
+
+echo; echo "## Part D: O2's Docker suite at $FULL"
+(cd "$E" && GSTACK_EVALS_DOCKER=1 bun test tests/outcome-skills/mutation-docker.test.ts tests/outcome-skills/clean-room.test.ts --timeout 1800000) > "$W/log/docker-suite.txt" 2>&1; c=$?
+NP=$(grep -Eo '^ *[0-9]+ pass' "$W/log/docker-suite.txt" | tr -dc 0-9); NF=$(grep -Eo '^ *[0-9]+ fail' "$W/log/docker-suite.txt" | tr -dc 0-9)
+rule "D1 GSTACK_EVALS_DOCKER=1 bun test tests/outcome-skills/mutation-docker.test.ts tests/outcome-skills/clean-room.test.ts (#210: 83 pass, 0 fail)" "exit 0, 83 pass, 0 fail" "exit $c, $NP pass, $NF fail" test "$c" = 0 -a "$NP" = 83 -a "$NF" = 0
+KS=$(for l in python go rust typescript; do grep -m1 -Eo "^$l strong: [0-9]+ of [0-9]+" "$W/log/docker-suite.txt"; done | tr '\n' ';')
+rule "D2 strong trees killed, per language (#210: Python 8/10, Go 14/18, Rust 17/19, TypeScript 17/19)" "python strong: 8 of 10;go strong: 14 of 18;rust strong: 17 of 19;typescript strong: 17 of 19;" "$KS" test "$KS" = "python strong: 8 of 10;go strong: 14 of 18;rust strong: 17 of 19;typescript strong: 17 of 19;"
+KW=$(for l in python go rust typescript; do grep -m1 -Eo "^$l weak: [0-9]+ of [0-9]+" "$W/log/docker-suite.txt"; done | tr '\n' ';')
+rule "D3 weak trees killed, per language (#210: 0 of 4 in every language)" "python weak: 0 of 4;go weak: 0 of 4;rust weak: 0 of 4;typescript weak: 0 of 4;" "$KW" test "$KW" = "python weak: 0 of 4;go weak: 0 of 4;rust weak: 0 of 4;typescript weak: 0 of 4;"
+cat > "$W/drv/tools.ts" <<'EOF'
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { line } from "../drv/lib.ts";
+const E = process.env.E!;
+const { TOOLS, LANGS } = await import(E + "/lanes/outcome-skills/mutation/pins.ts");
+const { toolImage } = await import(E + "/lanes/outcome-skills/mutation/run.ts");
+for (const lang of LANGS) {
+  const tag = toolImage(lang), t = TOOLS[lang];
+  const id = spawnSync("docker", ["image", "inspect", "--format", "{{.Id}}", tag], { encoding: "utf8" }).stdout.trim();
+  const from = /^FROM\s+(\S+)/m.exec(readFileSync(E + "/lanes/outcome-skills/mutation/" + t.dockerfile, "utf8"))?.[1] ?? "?";
+  line(/^sha256:[0-9a-f]{64}$/.test(id), "D4 " + lang + " tool image " + tag, "built by the suite", t.tool + " " + t.version + " (" + t.licence + "), image " + id + ", from " + from);
+}
+EOF
+drive tools bun "$W/drv/tools.ts"
+
+echo; echo "## leftovers"
+NC=$(docker ps -aq --filter name=gstack-evals- | wc -l); NL=$(LG status --json 2>/dev/null | jq '[.items[] | select(.open_lease != null)] | length')
+rule "Z1 no leftovers: no container named gstack-evals-* and no open lease on the temporary ledger" "0 containers, 0 open leases" "$NC containers, $([ -n "$NL" ] && echo "$NL" || echo unknown) open leases" test "$NC" = 0 -a "$NL" = 0
+echo; echo "rules: $rules, failed: 0"
+echo "DRYRUN: ok"
