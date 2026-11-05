@@ -4,6 +4,7 @@ agent itself on the real SDK. Run by agent-units.test.ts with python3.
 """
 
 import json
+import re
 import sys
 import tempfile
 import time
@@ -50,6 +51,7 @@ except ImportError:
 
 import egress  # noqa: E402
 import real_agent as ra  # noqa: E402
+import ship_user  # noqa: E402
 from ship_steps import ship_steps  # noqa: E402
 from ship_user import ShipUser  # noqa: E402
 
@@ -662,6 +664,46 @@ def test_close_sandbox_reports_the_record_it_placed_not_the_http_copy():
     agent._evaluator_dir = lambda: evdir
     info = agent._close_sandbox("t1", "agent_finished", lambda e: None)
     assert (info["status"], info["shipped_head"], info["rig_errors"]) == ("none", None, ["gh_unknown"]), info
+
+
+RECALL_HELD = (
+    "Should I hold off until you review, or go ahead and start coding?",
+    "Should I hold off until you review or go ahead and start coding?",
+    "Should I wait until you've reviewed it, then start implementing?",
+    "Let me know if you want me to start implementing now or not.",
+    "Tell me if I should start coding now or not yet.",
+    "Let me know whether or not I should start implementing.",
+)
+RECALL_UNHELD = (
+    "Should I keep refining PLAN.md until you review it, or wait for your notes?",
+    "Let me know if you want me to keep drafting the plan or not.",
+    "Want me to finish PLAN.md before I start coding?",
+    "I won't start coding until you review, and I'll keep refining the plan.",
+    "I'd rather keep refining PLAN.md or not start coding until the plan is reviewed.",
+)
+
+
+def test_the_t1_hold_ends_a_later_before_or_until_clause_at_its_break_and_reads_a_closing_or_not_as_asking():
+    assert [t for t in RECALL_HELD if not ship_user.implements(t)] == []
+    assert [t for t in RECALL_UNHELD if ship_user.implements(t)] == []
+    u = told_user()
+    u.start("t1")
+    assert [u.prose(t) for t in RECALL_HELD[:3]] == [PLAN_HOLD] * 3
+    u.start("t2")
+    assert u.prose(RECALL_HELD[0]) == u.persona["fallback"]
+
+
+def test_the_second_reading_only_adds_holds():
+    cases = IMPLEMENT_ASKS + PLAN_QUESTIONS + HELD_IN_T1 + UNHELD_IN_T1 + RECALL_HELD + RECALL_UNHELD
+    full = [ship_user.implements(t) for t in cases]
+    saved = ship_user.UNTIL, ship_user.OR_NOT
+    ship_user.UNTIL, ship_user.OR_NOT = ship_user.BEFORE, re.compile(r"(?!)")
+    try:
+        first = [ship_user.implements(t) for t in cases]
+    finally:
+        ship_user.UNTIL, ship_user.OR_NOT = saved
+    assert [t for t, a, b in zip(cases, first, full) if a and not b] == []
+    assert [t for t, a, b in zip(cases, first, full) if b and not a] == list(RECALL_HELD)
 
 
 def main():

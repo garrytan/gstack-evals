@@ -9,6 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bind, check, pin, publicForm, readManifest, tagFor, treeDigest, type ImageManifest } from "../../lanes/outcome-skills/images/manifest.ts";
 import { fileDigests, walk } from "../../lanes/real-outcome/task/format.ts";
+import { buildTask } from "../../lanes/real-outcome/task/build.ts";
+import { CODES } from "../../src/errors/codes.ts";
+import { buildRepo, calcCommits, calcSpecs } from "../real/fixture.ts";
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
@@ -18,6 +21,9 @@ const fresh = () => {
   return d;
 };
 const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
+const BIN = join(import.meta.dir, "..", "..", "bin", "gstack-evals");
+const BARE = "sha256:" + "1".repeat(64);
+const LAYERED = "sha256:" + "2".repeat(64);
 const ID = "sha256:" + "a".repeat(64);
 const OTHER = "sha256:" + "b".repeat(64);
 const TOML = 'schema_version = "1.4"\n\n[metadata]\nlane = "real-outcome"\n\n[environment]\nnetwork_mode = "no-network"\nbuild_timeout_sec = 1800.0\nos = "linux"\n';
@@ -192,7 +198,7 @@ describe("the T-G image manifest (keyless)", () => {
   test("images check prints a multiline refusal with every stderr line led by its reason code", () => {
     const root = fresh();
     const { path } = manifest(root, task(root));
-    const p = Bun.spawnSync(["bun", join(import.meta.dir, "..", "..", "bin", "gstack-evals"), "outcome", "images", "check", path], { env: { ...process.env, DOCKER: stubDocker(root, OTHER).docker }, stdout: "pipe", stderr: "pipe" });
+    const p = Bun.spawnSync(["bun", join(import.meta.dir, "..", "..", "bin", "gstack-evals"), "outcome", "images", "check", path, "--sha256", sha(readFileSync(path))], { env: { ...process.env, DOCKER: stubDocker(root, OTHER).docker }, stdout: "pipe", stderr: "pipe" });
     const err = p.stderr.toString().trim().split("\n");
     expect(p.exitCode).toBe(2);
     expect(err.length).toBeGreaterThan(3);
@@ -238,8 +244,115 @@ describe("the T-G image manifest (keyless)", () => {
     const out = (r.stdout ?? "") + (r.stderr ?? "");
     if (r.status !== 0) console.log(out);
     expect(out).not.toContain("FAIL");
-    expect(out.match(/^PASS /gm)?.length).toBe(4);
+    expect(out.match(/^PASS /gm)?.length).toBe(8);
     expect(r.status).toBe(0);
+  });
+  test("check reads only the manifest the readiness post recorded: --sha256 is required, and a manifest with other bytes is refused", () => {
+    const root = fresh();
+    const { path } = manifest(root, task(root));
+    const recorded = sha(readFileSync(path));
+    expect(readManifest(path, recorded).rows.length).toBe(1);
+    expect(thrown(() => readManifest(path, "0".repeat(64)))).toMatch(/^E_OUTCOME_IMAGE .*manifest\.json has sha256 [0-9a-f]{64}, not the recorded 0{64}$/);
+    const cli = (...extra: string[]) => Bun.spawnSync(["bun", BIN, "outcome", "images", "check", path, ...extra], { env: { ...process.env, DOCKER: stubDocker(fresh(), ID, 0).docker }, stdout: "pipe", stderr: "pipe" });
+    const none = cli();
+    expect(none.exitCode).toBe(2);
+    expect(none.stderr.toString()).toMatch(/^E_USAGE images check needs --sha256/);
+    const other = cli("--sha256", "0".repeat(64));
+    expect(other.exitCode).toBe(2);
+    expect(other.stderr.toString()).toMatch(/^E_OUTCOME_IMAGE .*not the recorded 0{64}/);
+    const ok = cli("--sha256", recorded);
+    expect(ok.exitCode).toBe(0);
+    expect(ok.stdout.toString()).toContain("TG_IMAGES: ok rows=1");
+  });
+
+  test("the environment digest counts each file's executable bit: bind refuses a mode changed after pin, and binds the mode pin saw", () => {
+    const root = fresh();
+    const d = task(root);
+    const before = treeDigest(join(d, "environment"));
+    chmodSync(join(d, "environment", "f"), 0o755);
+    expect(treeDigest(join(d, "environment"))).not.toBe(before);
+    const { m } = manifest(root, d);
+    expect(bind(d, m, "rox", join(root, "run"), stubDocker(root, ID).docker).image_id).toBe(ID);
+    chmodSync(join(d, "environment", "f"), 0o644);
+    expect(thrown(() => bind(d, m, "rox", join(root, "run2"), stubDocker(fresh(), ID).docker))).toMatch(/^E_OUTCOME_IMAGE .*environment has digest .*not the manifest row's/);
+    expect(existsSync(join(root, "run2"))).toBe(false);
+  });
+
+  test("two binds on one out: the second refuses with E_USAGE while the first holds out, and the first one's copy stands", async () => {
+    const root = fresh();
+    const d = task(root);
+    const { path } = manifest(root, d);
+    const slow = join(root, "slow-docker");
+    writeFileSync(slow, "#!/bin/sh\ncase \"$1\" in\n  tag) sleep 3 ;;\n  image) echo " + ID + " ;;\nesac\n", { mode: 0o755 });
+    const out = join(root, "run");
+    const args = ["bun", BIN, "outcome", "images", "bind", path, "--task", d, "--label", "rox", "--out", out];
+    const fast = () => ({ env: { ...process.env, DOCKER: stubDocker(fresh(), ID).docker }, stdout: "pipe" as const, stderr: "pipe" as const });
+    const first = Bun.spawn(args, { env: { ...process.env, DOCKER: slow }, stdout: "pipe", stderr: "pipe" });
+    for (let i = 0; i < 200 && !existsSync(join(out, "task.toml")); i++) await Bun.sleep(25);
+    const second = Bun.spawnSync(args, fast());
+    const err = second.stderr.toString().trim().split("\n");
+    expect(second.exitCode).toBe(2);
+    expect(err[0]).toMatch(/^E_USAGE .*run is held by another bind/);
+    for (const l of err) expect(l).toMatch(/^E_USAGE /);
+    expect(await first.exited).toBe(0);
+    expect(readFileSync(join(out, "environment", "Dockerfile"), "utf8")).toBe("FROM " + tagFor(ID) + "\n");
+    expect(existsSync(out + ".bind-lock")).toBe(false);
+    const third = Bun.spawnSync(args, fast());
+    expect(third.exitCode).toBe(2);
+    expect(third.stderr.toString()).toMatch(/^E_OUTCOME_IMAGE .*run exists; bind writes a new run copy/);
+  }, 60_000);
+
+  /** A docker for pin: a task build answers BARE (after writing race, as another pin finishing first would), the runtime
+   *  layer's build (its Dockerfile names laneb-claude) keeps its Dockerfile and answers LAYERED, image inspect answers BARE. */
+  const pinDocker = (root: string, race = "") => {
+    const dir = join(root, "pin-bin");
+    mkdirSync(dir, { recursive: true });
+    const log = join(root, "pin-docker.log");
+    const lines = ["#!/bin/sh", "echo \"$*\" >> " + log, "if [ \"$1\" = build ]; then", "  for a; do ctx=\"$a\"; done",
+      "  if grep -q laneb-claude \"$ctx/Dockerfile\" 2>/dev/null; then cp \"$ctx/Dockerfile\" " + join(root, "runtime.Dockerfile") + "; echo " + LAYERED + "; exit 0; fi",
+      ...(race ? ["  printf 'another pin\\n' > " + race] : []), "  echo " + BARE + "; exit 0", "fi", "if [ \"$1\" = image ]; then echo " + BARE + "; fi"];
+    writeFileSync(join(dir, "docker"), lines.join("\n") + "\n", { mode: 0o755 });
+    return { path: dir + ":" + process.env.PATH, log };
+  };
+  const fixtureTask = (root: string) => {
+    const calc = join(root, "calc");
+    const dir = join(root, "k1");
+    buildTask(calcSpecs(root, buildRepo(calc, calcCommits())).k1, calc, dir);
+    return dir;
+  };
+  const pinCli = (out: string, dir: string, path: string) => Bun.spawnSync(["bun", BIN, "outcome", "images", "pin", "--out", out, "--set", "T-G", "--commit", "c", dir], { env: { ...process.env, PATH: path }, stdout: "pipe", stderr: "pipe" });
+
+  test("pin lays quick/laneb's runtime layer on each task image and pins that final image's id (a stand-in docker)", () => {
+    const root = fresh();
+    const dir = fixtureTask(root);
+    const d = pinDocker(root);
+    const out = join(root, "m.json");
+    const p = pinCli(out, dir, d.path);
+    if (p.exitCode !== 0) console.log(p.stderr.toString());
+    expect(p.exitCode).toBe(0);
+    expect(readManifest(out).rows.map((r) => r.image_id)).toEqual([LAYERED]);
+    const tag = readFileSync(d.log, "utf8").split("\n").find((l) => l.startsWith("build -q -t "))!.split(" ")[3];
+    const runner = join(import.meta.dir, "..", "..", "quick", "laneb", "runner");
+    expect(readFileSync(join(root, "runtime.Dockerfile"), "utf8")).toBe(readFileSync(join(runner, "runtime-stages.Dockerfile"), "utf8") + "\nFROM " + tag + "\n\n" + readFileSync(join(runner, "runtime-copy.Dockerfile"), "utf8"));
+  }, 120_000);
+
+  test("pin never replaces a manifest another pin wrote while it built: its write is an exclusive create", () => {
+    const root = fresh();
+    const dir = fixtureTask(root);
+    const out = join(root, "m.json");
+    const p = pinCli(out, dir, pinDocker(root, out).path);
+    const err = p.stderr.toString().trim().split("\n");
+    expect(p.exitCode).toBe(2);
+    expect(err[0]).toMatch(/^E_OUTCOME_IMAGE .*m\.json exists; pin writes a new manifest/);
+    expect(readFileSync(out, "utf8")).toBe("another pin\n");
+  }, 120_000);
+
+  test("the reason codes name every refusal the image path makes, and the header says pin runs on a keyless build host", () => {
+    for (const s of ["sha256 is not the --sha256", "no manifest row for --label", "an out path inside the task dir", "a task.json that is not JSON", "a docker tag that failed", "executable bits", "runtime layer did not build"]) expect(CODES.E_OUTCOME_IMAGE.meaning).toContain(s);
+    for (const s of ["image_id is not a sha256:<64 hex> id", "manifest_sha256", "no row for task_label", "pins another image than image_id", "docker inspect could not read", "runs another image than image_id"]) expect(CODES.E_REAL_SANDBOX_SETUP.meaning).toContain(s);
+    const header = readFileSync(join(import.meta.dir, "..", "..", "lanes", "outcome-skills", "images", "manifest.ts"), "utf8").split("\nimport ")[0]!;
+    expect(header).toContain("pin runs on a keyless build host");
+    expect(header).not.toContain("on the envelope host");
   });
 });
 

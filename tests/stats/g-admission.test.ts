@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admitG, authPaidFromLedger, t1WritesOutsidePlan, unknownFromRun, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
+import { admitG, authPaidFromLedger, t1OutsidePlan, t1WritesOutsidePlan, unknownFromRun, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
 import { m1Decide, meteredPricer, renderResizeMetered } from "../../src/runner/stats/g-resize.ts";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -201,6 +201,19 @@ describe("t1 writes outside PLAN.md, from the phase-tagged records (report only,
   const use = (phase: string, id: string, name: string, input: Record<string, unknown>, parent: string | null = null) => ({ type: "AssistantMessage", phase, parent_tool_use_id: parent, content: [{ type: "tool_use", id, name, input }] });
   const result = (phase: string, id: string, content: string, is_error = false, parent: string | null = null) => ({ type: "UserMessage", phase, parent_tool_use_id: parent, content: [{ type: "tool_result", tool_use_id: id, content, is_error }] });
   const bash = (id: string, command: string, phase = "t1") => use(phase, id, "Bash", { command });
+
+  test("t1OutsidePlan builds each told trial's t1 reading from its own records, and admission prints the real count beside exposure", () => {
+    const wrote = [use("t1", "a", "Write", { file_path: "/testbed/PLAN.md", content: "# Plan" }), result("t1", "a", "ok"), use("t1", "b", "Write", { file_path: "/testbed/src/app.py", content: "x" }), result("t1", "b", "ok")];
+    const kept = [use("t1", "c", "Write", { file_path: "/testbed/PLAN.md", content: "# Plan" }), result("t1", "c", "ok"), use("t2", "d", "Write", { file_path: "/testbed/src/app.py", content: "x" }), result("t2", "d", "ok")];
+    const untagged = [{ type: "AssistantMessage", parent_tool_use_id: null, content: [{ type: "tool_use", id: "e", name: "Write", input: { file_path: "/testbed/src/app.py" } }] }, result("t1", "e", "ok")];
+    expect([t1OutsidePlan(wrote), t1OutsidePlan(kept), t1OutsidePlan(untagged)]).toEqual([true, false, null]);
+    const records: Record<string, Record<string, any>[]> = { "t00/1": wrote, "t00/2": kept, "t01/1": untagged };
+    const trials = slice().map((t) => (t.arm === PER && records[t.task + "/" + t.trial] ? { ...t, t1_outside_plan: t1OutsidePlan(records[t.task + "/" + t.trial]!) } : t));
+    const a = admitG(input(trials));
+    expect(a.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 1, read: 2 });
+    expect(a.skills["plan-eng-review"].items[1]!.reading).toMatch(/; report only: 1 of 2 told trials wrote outside PLAN\.md in t1 \(22 not read\)$/);
+    expect(a.skills.autoplan.t1_outside_plan).toEqual({ wrote: 0, read: 0 });
+  });
 
   test("an edit tool's write outside PLAN.md in t1 counts, a subagent's included; PLAN.md, later turns, failed edits and reads don't", () => {
     expect(t1WritesOutsidePlan([

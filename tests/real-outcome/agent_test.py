@@ -8,6 +8,7 @@ replaced. Run by agent.test.ts with REAL_SIDECAR set to the sidecar's control UR
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import shutil
@@ -274,7 +275,9 @@ def test_told_arm_turn_two_is_the_slash_command():
 
 def u4(case, answer=None, **opts):
     """Switches a Case to the outcome-skills driver's U4 mode; answer is what its control plane returns for an open."""
-    for k, v in {"ledger": "u4", "task_label": "t-1", "trial_n": 1, "image_id": IMAGE, **opts}.items():
+    manifest = case.dir / "tg-images.json"
+    manifest.write_text(json.dumps({"schema": "tg-images.v1", "rows": [{"label": "t-1", "image_id": IMAGE}]}))
+    for k, v in {"ledger": "u4", "task_label": "t-1", "trial_n": 1, "image_id": IMAGE, "manifest": str(manifest), "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(), **opts}.items():
         setattr(case.agent.options, k, v)
     case.agent._container_image = lambda container: IMAGE
     slot = {"id": "s-1", "token": "real-session-token", "ledger": "u4", "item": "g-none", "lease_id": "g-none.0001.abcdef", "meter_id": "m_1", "base_url": "http://127.0.0.1:9/s_slot/anthropic"}
