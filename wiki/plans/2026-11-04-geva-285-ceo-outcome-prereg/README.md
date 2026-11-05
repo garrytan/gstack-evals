@@ -17,12 +17,12 @@ links:
   - GST-538
   - GST-1218
 attachments:
-  - c9a4d4ba02b37bb1a3bb28553fb827ed14114b69a64442df6586f1f3033103ba  ceo-rule.ts.txt
-  - 92543d86288b33fb4142b2283a57e41102b83dc485cde37605adcbd35ca608a9  dryrun.ts.txt
-  - a022bcd3d3a39543e7be416d1e762ac2b602812771fc8ce3dfed58c440f81566  dryrun.txt
+  - f338bd81e4388d9ca0bf3b2e623820d03c78967f2a99e908dd07446cb2d60a9b  ceo-rule.ts.txt
+  - 2d2bc96f1aa2478a38e21a1e9bdbe29ffbc7b06e6ee166fbfcb5f413589d314c  dryrun.ts.txt
+  - 06ecc867a4336cc442eb9a9899ca1e270f21435861b6142dea24d339dbfde06f  dryrun.txt
   - 83d5d644b97aa87003ea38a8cb273b64590f1c50129430612af2432072852589  judge-brief.md
-  - 2962550db13132b225567a436e8373a4fe253abbbe14f37a38750a9049256e0e  power.py
-  - 7bc046fa96fe5904f4fa2febda4fc73a5388f552367ab5e2e6976acb5df6c857  power.txt
+  - a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499  power.py
+  - ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f  power.txt
   - dd3a6d40cfbe4832f9a37da0a6c6cc86ce711054354097a475f964a62bb02aff  stock-list.txt
   - b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862  template.txt
   - 13ce9eaee6218e8359c32966f8efe82722dc605feb94b3253e42381ac9153253  unit-brief.md
@@ -34,11 +34,11 @@ GEVA-285, issue GST-1389, Captain GEVA-2. Plan only: nothing in this post spends
 
 ## Approval
 
-Approved at gate_rev 1 of /autoplan run autoplan-20261105002249 (lean, one Opus 5.5 reviewer). The review returned 31 findings. The Captain took every recommended change and asked for every Medium and Low finding as well; this v2 folds them all in (Review record), and the lean run applied the accepted changes without a second review, as a lean run does. This post approves no spend. No paid call of any kind, the stage 1 headroom check included, starts before this post merges and the Captain records each item's cap in approvals/ (section 14).
+Approved at gate_rev 1 of /autoplan run autoplan-20261105002249 (lean, one Opus 5.5 reviewer). The review returned 31 findings. The Captain took every recommended change and asked for every Medium and Low finding as well; this v2 folds them all in (Review record), and the lean run applied the accepted changes without a second review, as a lean run does. Capy's review of PR #214 then found three issues, fixed here too. The project owner approved this $2,000 all-in line on 2026-11-05, outside the $10,000 program (approvals/2026-11-05-ceo-eval-line.md). This post approves no item's spend. No paid call of any kind, the stage 1 headroom check included, starts before this post merges and the Captain records each item's cap in approvals/ (section 14).
 
 ## ELI5
 
-Four times we tested gstack's CEO plan review by hiding a flaw in a plan and checking whether the review found it. Plain Opus 5.5 found almost every flaw on its own, so those tests could not show any help. This test is harder in a way that matters: it uses real plans that real open-source projects proposed after Opus 5.5's stated training cutoff, where the public record shows what happened next. Some plans were rejected, reversed or cut back, and the record says why. A review scores when its top three concerns include that real reason. A review that lists twenty worries can't win, because only three count, and each is cut to 40 words. Before any real spend, a cheap check (about $43) runs plain Opus on 20 plans, and if plain Opus already names the real reason most of the time, we stop and report. If there is room, we compare gstack's CEO review, run inside /autoplan and on its own, against no gstack on 64 more plans, on Opus 5.5, GPT-6.1 Sol and particle-1, for at most $2,000 in all, our own model use included.
+Four times we tested gstack's CEO plan review by hiding a flaw in a plan and checking whether the review found it. Plain Opus 5.5 found almost every flaw on its own, so those tests could not show any help. This test is harder in a way that matters: it uses real plans that real open-source projects proposed after Opus 5.5's stated training cutoff, where the public record shows what happened next. Some plans were rejected, reversed or cut back, and the record says why. A review scores when its top three concerns include that real reason. A review that lists twenty worries can't win, because only three count, and each is cut to 40 words. Before any real spend, a cheap check (about $42) runs plain Opus on 20 plans, and if plain Opus already names the real reason most of the time, we stop and report. If there is room, we compare gstack's CEO review, run inside /autoplan and on its own, against no gstack on 64 more plans, on Opus 5.5, GPT-6.1 Sol and particle-1, for at most $2,000 in all, our own model use included.
 
 ## Before → after
 
@@ -83,7 +83,7 @@ For each model under test, on real plans whose outcome came after Opus 5.5's sta
 |---|---|---|---|
 | Ground truth | what the public record says happened | an author's planted issue | hidden tests on what ships |
 | Why plain Opus might miss | the deciding issue is real, unsignposted, and competes with many plausible concerns for three slots | the issue is buried among decoys | the review must change the build |
-| Saturation risk | unknown; stage 1 measures it for about $43 | high: four authored panels saturated, and the panel v3 audit found that a fair authored item is a findable one | low, but the effect is indirect |
+| Saturation risk | unknown; stage 1 measures it for about $42 | high: four authored panels saturated, and the panel v3 audit found that a fair authored item is a findable one | low, but the effect is indirect |
 | Cost per scored unit-pass, all cells | about $7.40 | about the same | several times more: a build session per cell |
 | Overlap | none | the retired seeded-flaw line | GST-1144's later vague-intent program owns plan-ceo-review's build test |
 
@@ -205,7 +205,7 @@ The exposure rate of an arm and model is the share of its sessions on changed un
 5. Exposure smoke: a gstack arm is admitted on a model when both of its smoke sessions are exposed, wrote a parsable block and finished within 1800 s, half the timeout. An arm that fails is UNTESTED on that model in stage 2 and isn't run there. If autoplan-ceo fails on Opus, stage 2 doesn't start, and the question goes to the Captain as FIX-METHOD on the harness.
 6. Projection check (ceo-rule.ts projection), on stage 2's envelope (section 13):
    - Per-session spend: each model's none from stage 1's median none session on that model; each gstack cell from the larger of its two smoke sessions; lens at 1.2 times Opus none's median, since stage 1 doesn't run it.
-   - Each stage 2 run item's projection is its unit-passes times the per-session spend of each cell it runs. Its cap is 1.4 times its own projection, rounded up to the dollar. So no item is projected past its own cap, and the Captain records these caps, not the planning caps in section 13.
+   - Each stage 2 run item's projection is its unit-passes times the per-session spend of each cell it runs. Its cap is 1.25 times its own projection plus one full round of sessions at their allowance, rounded up to the dollar. review-units starts a round only when the spend so far plus every session in that round at its allowance fits under the item's cap (src/trial/review/run.ts, the round loop); a round holds max(1, floor(3 / arms)) unit-passes with every arm the invocation runs. So every round admits until an item's spend passes 1.25 times its projection, and the check prints that it does for each item. The Captain records these caps, not the planning caps in section 13.
    - Judges: stage 1's settled judge spend times 64/20 for the units times 3 for the larger packets, with a floor of twice that, at least $70.
    - It fits when the six run caps plus the judge floor are at most the envelope. Otherwise cuts apply in this order until it fits: held units at 1 pass; standalone on particle-1 dropped; standalone on Sol dropped; lens dropped; every Sol and particle-1 cell at 1 pass (their contrasts stay paired, with a wider MDD that the results post states). If it still doesn't fit, stage 2 doesn't start, and the question goes to the Captain.
 
@@ -223,7 +223,7 @@ Sol and particle-1 rates print beside Opus's and decide nothing. The bar and its
 
 **Stage 2 stock check.** The stock rows sit in every changed packet. If they hit D on more than 3 of the changed comparison units, every contrast reads untested (judge), since a brief that credits categories can't grade the comparison.
 
-**MDD and size after drops.** The MDD printed with each verdict is read between power.txt's rows for the number of changed units left after leak drops (47 units print 0.18). Under 36 changed units after leak drops, the comparison stops and reports; that is an analysis rule, beside section 14's authoring rule.
+**MDD and size after drops.** The MDD printed with each verdict is read between power.txt's rows for that contrast's own retained units and the passes its model ran: two-pass rows normally, one-pass rows for a model the last cut runs at 1 pass (48 units print 0.18 at 2 passes and 0.26 at 1). The header prints the two-pass MDD for the changed units left after leak drops. Under 36 changed units after leak drops, the comparison stops and reports; that is an analysis rule, beside section 14's authoring rule.
 
 **Secondaries, deciding nothing:** rank-weighted hit, slot precision, forecast Brier and AUC; lens minus none and autoplan-ceo minus lens on Opus; the cross-family sensitivity; both strict strata; rates by category and by maintainer or outside proposer for every cell; the per-protocol read; no-block, gap and unjudged counts; mean issue length; cost per review and cost per hit for each cell.
 
@@ -241,37 +241,40 @@ power.py simulates the primary test exactly: unit difficulty from a Beta with me
 | 48 | 0.55 | 0.5 | 0.16 | 0.18 |
 | 36 (yield floor) | 0.40 | 0.5 | 0.19 | 0.21 |
 | 54 (alternative) | 0.40 | 0.5 | 0.15 | 0.17 |
+| 48, 1 pass (last cut, Sol and particle-1) | 0.40 | 0.5 | 0.23 | 0.26 |
+| 48, 1 pass | 0.40 | 0.3 | 0.26 | 0.29 |
+| 36, 1 pass | 0.40 | 0.5 | 0.27 | 0.30 |
 
-The stated MDD is 18 points: a gain of that size or more on Opus is found 80% of the time, and a smaller true gain may read not distinguished. The 18 rests on ICC 0.5; at ICC 0.3 it is 21 points, and stage 1 prints the measured ICC and the nearest row. Tau of 0 or 0.5 moves no row by more than 0.01 (power.txt). The bar check in power.txt: at the top of the HEADROOM band, 28 of 48 with a design effect of 2 (ICC 0.5 over 3 passes), the Clopper-Pearson upper 95% bound on 14 of 24 effective readings is 0.779, so the comparison has at least about 0.22 of room against an MDD of 0.18.
+Every row runs 2 passes unless it says 1. The stated MDD is 18 points: a gain of that size or more on Opus is found 80% of the time, and a smaller true gain may read not distinguished. The 18 rests on ICC 0.5; at ICC 0.3 it is 21 points, and stage 1 prints the measured ICC and the nearest row. Tau of 0 or 0.5 moves no row by more than 0.01 (power.txt). The bar check in power.txt: at the top of the HEADROOM band, 28 of 48 with a design effect of 2 (ICC 0.5 over 3 passes), the Clopper-Pearson upper 95% bound on 14 of 24 effective readings is 0.779, so the comparison has at least about 0.22 of room against an MDD of 0.18.
 
 **Prior, stated before any data.** We expect a true gain on Opus of 0 to 10 points: the CEO procedure adds premise and scope challenges a frontier model often raises unprompted, and a cap of three slots limits what a longer review can add. So "not distinguished" is the likeliest result, and the post says so now. The test can still find a gain or a loss of 18 points or more, and a null with the control rate, the interval and the MDD still tells gstack's research where the skill's effect is not.
 
 ### 13. Money
 
-The whole CEO eval is held to $2,000 all-in. That counts this design thread's model use and any successor's, every crew thread on the CEO line at about $1 per 1,000 credits (R42), runner VMs, the judges, the lens arm and the headroom check. Paid calls go through the ledger, one item per review-units invocation or judge read, each with a cap the Captain records in approvals/ before it opens a lease. Stage 2's envelope is sized net of the crew line and stage 1: $2,000 less $430 less $120 is $1,450.
+The whole CEO eval is held to $2,000 all-in. That counts this design thread's model use and any successor's, every crew thread on the CEO line at about $1 per 1,000 credits (R42), runner VMs, the judges, the lens arm and the headroom check. Paid calls go through the ledger, one item per review-units invocation or judge read, each with a cap the Captain records in approvals/ before it opens a lease. Stage 2's envelope is sized net of the crew line and stage 1: $2,000 less $430 less $160 is $1,410.
 
 | Item | Stage | What runs | Sessions | Projected | Cap |
 |---|---|---|---|---|---|
 | Crew, every thread on the CEO line | all | design, B0, B1, custody and authoring, pin post, runs, results, runner VMs | | about $330 ($18 spent to 2026-11-04) | $430.00 |
-| ceo-o-hr-opus-none | 1 | none on Opus, 20 units, 3 passes | 60 | $15.00 | $40.00 |
-| ceo-o-hr-sol-none | 1 | none on Sol, 2 passes | 40 | $6.00 | $16.00 |
-| ceo-o-hr-particle-none | 1 | none on particle-1, 2 passes | 40 | $2.40 | $8.00 |
-| ceo-o-hr-smoke-opus-a, -opus-p | 1 | autoplan-ceo, then standalone, 2 sessions each on Opus | 4 | $6.00, $1.40 | $18.00, $4.00 |
-| ceo-o-hr-smoke-sol-a, -sol-p | 1 | the same on Sol | 4 | $3.60, $0.84 | $8.00, $2.00 |
-| ceo-o-hr-smoke-particle-a, -particle-p | 1 | the same on particle-1 | 4 | $1.20, $0.30 | $3.00, $1.00 |
-| ceo-o-hr-judge-sol, -opus, -sonnet | 1 | three reads of 20 packets | about 60 requests | $6.00 | each: $120 less every earlier item's settled spend |
-| **Stage 1** | | | 152 | **$42.74** | **$120.00** |
-| ceo-o-cmp-opus-p | 2 | none, standalone and lens on Opus | 384 | $160.00 | $224.00 |
-| ceo-o-cmp-opus-a | 2 | autoplan-ceo on Opus | 128 | $384.00 | $538.00 |
-| ceo-o-cmp-sol-p | 2 | none and standalone on Sol | 256 | $72.96 | $103.00 |
-| ceo-o-cmp-sol-a | 2 | autoplan-ceo on Sol | 128 | $230.40 | $323.00 |
-| ceo-o-cmp-particle-p | 2 | none and standalone on particle-1 | 256 | $26.88 | $38.00 |
-| ceo-o-cmp-particle-a | 2 | autoplan-ceo on particle-1 | 128 | $76.80 | $108.00 |
-| ceo-o-cmp-judge-sol, -opus, -sonnet | 2 | three reads of 64 packets | about 200 requests | $57.60 | each: $1,450 less stage 2's settled spend; floor $116 in all |
-| **Stage 2** | | | 1,280 | **$1,008.64** | **$1,450.00** |
-| **All-in** | | | | **about $1,381** | **$2,000.00** |
+| ceo-o-hr-opus-none | 1 | none on Opus, 20 units, 3 passes | 60 | $15.00 | $52.00 |
+| ceo-o-hr-sol-none | 1 | none on Sol, 2 passes | 40 | $6.00 | $23.00 |
+| ceo-o-hr-particle-none | 1 | none on particle-1, 2 passes | 40 | $2.40 | $6.00 |
+| ceo-o-hr-smoke-opus-a, -opus-p | 1 | autoplan-ceo, then standalone, 2 sessions each on Opus | 4 | $6.00, $1.40 | $25.00, $15.00 |
+| ceo-o-hr-smoke-sol-a, -sol-p | 1 | the same on Sol | 4 | $3.60, $0.84 | $13.00, $8.00 |
+| ceo-o-hr-smoke-particle-a, -particle-p | 1 | the same on particle-1 | 4 | $0.66, $0.30 | $1.00, $1.00 |
+| ceo-o-hr-judge-sol, -opus, -sonnet | 1 | three reads of 20 packets | about 60 requests | $6.00 | each: $160 less every earlier item's settled spend |
+| **Stage 1** | | | 152 | **$42.20** | **$160.00** |
+| ceo-o-cmp-opus-p | 2 | none, standalone and lens on Opus | 384 | $160.00 | $222.00 |
+| ceo-o-cmp-opus-a | 2 | autoplan-ceo on Opus | 128 | $384.00 | $516.00 |
+| ceo-o-cmp-sol-p | 2 | none and standalone on Sol | 256 | $72.96 | $99.00 |
+| ceo-o-cmp-sol-a | 2 | autoplan-ceo on Sol | 128 | $230.40 | $306.00 |
+| ceo-o-cmp-particle-p | 2 | none and standalone on particle-1 | 256 | $26.88 | $34.00 |
+| ceo-o-cmp-particle-a | 2 | autoplan-ceo on particle-1 | 128 | $42.24 | $54.00 |
+| ceo-o-cmp-judge-sol, -opus, -sonnet | 2 | three reads of 64 packets | about 200 requests | $57.60 | each: $1,410 less stage 2's settled spend; floor $116 in all |
+| **Stage 2** | | | 1,280 | **$974.08** | **$1,410.00** |
+| **All-in** | | | | **about $1,346** | **$2,000.00** |
 
-Stage 2's caps in this table are planning caps: 1.4 times each item's planned projection, which with a $116 judge floor fill the $1,450 envelope exactly. The caps the Captain records come from section 10's projection check on measured costs. Stage 1's run caps sum to $100 of $120, so the judges keep a $20 floor. Smoke runs one invocation per arm and model, so each is its own item; the six smoke caps sum to $36, weighted toward the unmeasured autoplan arm. Review-units invocations run arms that share a told skill, so in stage 2 standalone, none and lens share an invocation and the autoplan arm has its own. The pin post freezes each item's exact command.
+Stage 2's caps in this table are planning caps under section 10's rule (1.25 times each item's planned projection plus one full round at allowance); with the $116 judge floor they use $1,347 of $1,410. The caps the Captain records come from section 10's projection check on measured costs. Stage 1's caps cover review-units' round admission: each none item's cap is twice its projection plus one full round of three sessions at their allowance, so every round admits even at twice the projected spend, and each smoke item's cap covers its one round of two sessions at full allowance ($24.00, $14.08, $12.00, $7.04, $0.66 and $0.38). Stage 1's run caps sum to $144 of $160, so the judges keep a $16 floor. Smoke runs one invocation per arm and model, so each is its own item; the six smoke caps sum to $63. Review-units invocations run arms that share a told skill, so in stage 2 standalone, none and lens share an invocation and the autoplan arm has its own. The pin post freezes each item's exact command.
 
 **Per-session projections**, before any measurement of these units:
 
@@ -279,7 +282,7 @@ Stage 2's caps in this table are planning caps: 1.4 times each item's planned pr
 |---|---|---|---|---|
 | none | $0.25 | $0.15 | $0.06 | CEO v2's none median was $0.126 on small units and the panel v3 headroom check's mean $0.313 on 400 KiB trees; these units hold a plan and one context file. Sol at 0.6 of Opus (half the token price, more tokens), particle-1 at 0.21 (the headroom check's ratio) |
 | standalone | $0.70 | $0.42 | $0.15 | CEO v2's forced median of $0.569 |
-| autoplan-ceo | $3.00 | $1.80 | $0.60 | never measured: about five times the forced arm; the smoke measures it and the projection check acts on it |
+| autoplan-ceo | $3.00 | $1.80 | $0.33 | never measured: about five times the forced arm; the smoke measures it and the projection check acts on it. On particle-1 five times would be $0.75, past the arm's $0.33 allowance, so the plan uses the allowance |
 | lens | $0.30 | | | none plus one line |
 
 Prices are the scorer's table (src/runner/pricing/prices.ts at b7b6aec, as the panel v3 headroom results quote it), in dollars per million tokens: Opus 5.5 input 4, output 20, cache read 0.20, cache write 5; Sonnet 5.5 input 2, output 10, cache read 0.20, cache write 2.50; GPT-6.1 Sol input 2, output 10, cache read 0.10, cache write 2.50, and above 272k prompt tokens 4, 15, 0.20 and 5 for the whole request; particle-1 input 0.10, output 1, cache read 0.003. The pin post re-reads the table at its pin.
@@ -293,7 +296,7 @@ Prices are the scorer's table (src/runner/pricing/prices.ts at b7b6aec, as the p
 Nothing here spends until every rule before it holds.
 
 1. This post is merged.
-2. The project owner has answered on this $2,000 line, and the Captain has recorded each stage 1 item's cap in approvals/. No paid call of any kind runs before that, the stage 1 headroom check included.
+2. The project owner approved this $2,000 all-in line on 2026-11-05 (approvals/2026-11-05-ceo-eval-line.md), and the Captain has recorded each stage 1 item's cap in approvals/. No paid call of any kind runs before that, the stage 1 headroom check included.
 3. **B0, the free yield screen**, runs before B1 spends: a script with no model call applies the licence, star, 400-word and first-version rules (unit-brief.md section 1, items 1 to 3) to section 4's probe pools through GitHub's API and posts the counts. Fewer than 160 changed candidates surviving goes to the Captain before B1 starts, with the yield rule's 36-unit floor and its MDD.
 4. **B1, the harness build**, is merged through /ship: a `ceo-outcome` plan lens in src/trial/review with template.txt's text and its sha256 pinned in a test, the parser and section 6's end-state table (the follow-up turn and the 40-word cut included), gstack-auto released at min_version 1.93.0.0 (GST-538), the standalone arm's forced line, section 7's two detectors at 699a41cb, section 8's blind packet builder with both stock rows and the judge-failure handling, judge-brief.md wired into judge-run, and a readings script that writes the readings.json ceo-rule.ts reads.
 5. **The pin post** is merged: the scorer pin, every item's exact command (one item per invocation), the sha256s of the template, brief and stock list as the scorer holds them (equal to this post's), review-units --dry-run with the frozen flags on one public smoke unit (the autoplan arm's outside voice confirmed as section 5 says), one ledger lease opened and settled per item on a temporary ledger, and the data-use check of section 16.
@@ -331,7 +334,8 @@ A finding file in the insight plan's template: the stage 1 block, or the stop re
 - **Judges share families with arms.** The cross-family sensitivity prints beside each contrast.
 - **Offline reviews.** plan-ceo-review's landscape check wants web research, which no arm can do here. Every arm is equally offline.
 - **The autoplan arm's cost is unmeasured.** The smoke measures it before stage 2, and the projection's per-item caps and cut order protect the Opus contrasts.
-- **Another ceiling.** Stage 1 finds it for about $43 and stops.
+- **Allowances bind on particle-1.** The same token allowance costs particle-1 $0.19 a session ($0.33 in the autoplan arm), and particle-1 used about five times Opus's tokens in the panel v3 headroom check. Some particle-1 sessions may stop at their allowance; section 6 scores the last block before the stop, and the no-block rate prints per cell.
+- **Another ceiling.** Stage 1 finds it for about $42 and stops.
 
 ### 19. Not in scope
 
@@ -349,7 +353,7 @@ The downstream build test (GST-1144's vague-intent program), plan-eng-review, pl
 | ceo-rule.ts.txt | the headroom rule, projection check, all-in check and stage 2 analysis, reading readings.json |
 | dryrun.ts.txt, dryrun.txt | the keyless dry run and its output |
 
-The dry run drives every frozen rule on synthetic readings, with no key in its environment: each headroom outcome (HEADROOM, CEILING, FLOOR, NO READ, STOCK FAIL on either row, a leak drop and the band edges at n = 48), the final-label splits (an R against none split that Sonnet calls D stays not D), judge failures, the positive-agreement gate, the smoke admissions (exposure, a missing block and wall time), the projection check's per-item caps, every step of its cut order and its stop, the all-in check, stage 2's verdicts (helps, hurts, not distinguished, untested on exposure, coverage and the stock check) with fixed Holm families, per-contrast gap drops, the MDD read between rows and the under-36 stop, the secondaries, and one ledger lease opened and settled per frozen item and invocation on a temporary ledger, with a second run on a settled item refused. Rerun it from a directory holding the bundle's files, with the two scripts renamed to drop .txt: `env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun dryrun.ts <scorer checkout> <scratch dir>`.
+The dry run drives every frozen rule on synthetic readings, with no key in its environment: each headroom outcome (HEADROOM, CEILING, FLOOR, NO READ, STOCK FAIL on either row, a leak drop and the band edges at n = 48), the final-label splits (an R against none split that Sonnet calls D stays not D), judge failures, the positive-agreement gate, the smoke admissions (exposure, a missing block and wall time), the projection check's per-item caps and their round admission, every step of its cut order and its stop, round admission at stage 1's fixed caps (and v1's smoke caps refused), the all-in check, stage 2's verdicts (helps, hurts, not distinguished, untested on exposure, coverage and the stock check) with fixed Holm families, per-contrast gap drops, a contrast with no usable pairs, the MDD read between rows for each contrast's passes and the under-36 stop, the secondaries, and one ledger lease opened and settled per frozen item and invocation on a temporary ledger, with a second run on a settled item refused. Rerun it from a directory holding the bundle's files, with the two scripts renamed to drop .txt: `env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun dryrun.ts <scorer checkout> <scratch dir>`.
 
 ## Review record
 
@@ -357,7 +361,7 @@ Gate 1 of /autoplan run autoplan-20261105002249 (`--kind feature`, one lean Opus
 
 | Finding | v2 |
 |---|---|
-| Critical: the projection checked only stage 2's total, so one item could pass its own cap | section 10 rule 6: per-item caps at 1.4 times each item's projection, the larger smoke session, a fifth cut |
+| Critical: the projection checked only stage 2's total, so one item could pass its own cap | section 10 rule 6: per-item caps from each item's own projection, the larger smoke session, a fifth cut |
 | High: Sonnet could make a D neither Sol nor Opus gave | section 8, final label |
 | High: Holm ran only over tested contrasts | section 11, families fixed at stage 2's start |
 | High: failure classes unsettled | section 6, end-state table; no repair reruns |
@@ -389,6 +393,14 @@ Gate 1 of /autoplan run autoplan-20261105002249 (`--kind feature`, one lean Opus
 | Low: the repair rerun's mechanism | section 6: removed |
 | Informational: cite GitHub's research terms | section 16 |
 | Captain: crew line and net envelope; no paid call before caps | section 13, section 14 rule 2 |
+
+Capy's review of PR #214 then found three issues, all fixed in this version:
+
+| Finding | v2 |
+|---|---|
+| High: smoke caps sat below review-units' round admission, so the Opus autoplan smoke could never start | section 10 rule 6 and section 13: every cap covers one full round at allowance; stage 1's envelope rises to $160 and stage 2's falls to $1,410; ceo-rule.ts admission and the dry run check it |
+| Medium: a contrast with no usable pairs crashed the comparison | ceo-rule.ts compare: untested (coverage) at p = 1, with an all-gap fixture in the dry run |
+| Medium: one-pass cuts kept the two-pass MDD | power.py's one-pass rows; each contrast reads its MDD for its passes and retained units (section 11) |
 
 ## Disclosures
 

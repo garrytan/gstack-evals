@@ -40,7 +40,7 @@ type Label = "D" | "R1" | "R2" | "R3" | "none";
 const agree = (l: Label) => ({ sol: l, opus: l, sonnet: l });
 const missLabels = () => [agree("none"), agree("R1"), agree("none")];
 const hitLabels = (rank = 1) => [0, 1, 2].map((i) => agree(i === rank - 1 ? "D" : "none"));
-const PLANNED: Record<string, Record<string, number>> = { opus: { none: 0.25, "autoplan-ceo": 3, standalone: 0.7, lens: 0.3 }, sol: { none: 0.15, "autoplan-ceo": 1.8, standalone: 0.42 }, particle: { none: 0.06, "autoplan-ceo": 0.6, standalone: 0.15 } };
+const PLANNED: Record<string, Record<string, number>> = { opus: { none: 0.25, "autoplan-ceo": 3, standalone: 0.7, lens: 0.3 }, sol: { none: 0.15, "autoplan-ceo": 1.8, standalone: 0.42 }, particle: { none: 0.06, "autoplan-ceo": 0.33, standalone: 0.15 } };
 const POSTED = ["2026-07-20", "2026-09-12", "2026-10-03", "2026-08-02"];
 const CATS = ["scope", "premise or demand", "user impact or migration", "direction or strategy fit"];
 let rid = 0;
@@ -85,7 +85,7 @@ function stage1(o: S1) {
 }
 
 // Stage 2: changed + 16 held units, 2 passes. hits[model][arm] is the number of changed units hit in both passes.
-type S2 = { hits: Record<string, Record<string, number>>; exposure?: Record<string, number>; gapUnits?: Record<string, number>; noBlock?: Record<string, number>; unjudged?: Record<string, number>; nullForecast?: Record<string, number>; changed?: number; skip?: string[]; family?: Record<string, string[]>; stockB?: number };
+type S2 = { hits: Record<string, Record<string, number>>; passes?: Record<string, number>; exposure?: Record<string, number>; gapUnits?: Record<string, number>; noBlock?: Record<string, number>; unjudged?: Record<string, number>; nullForecast?: Record<string, number>; changed?: number; skip?: string[]; family?: Record<string, string[]>; stockB?: number };
 function stage2(o: S2) {
   rid = 0;
   const nc = o.changed ?? 48;
@@ -96,7 +96,7 @@ function stage2(o: S2) {
     if ((o.skip ?? []).includes(key)) continue;
     const exp = o.exposure?.[key] ?? 1;
     let n = 0;
-    for (const u of units) for (let p = 1; p <= 2; p++) {
+    for (const u of units) for (let p = 1; p <= (o.passes?.[model] ?? 2); p++) {
       const idx = Number(u.id.slice(1)), ch = u.kind === "changed";
       const r: any = review(u.id, arm, model, p, ch && idx < h, { forecast: ch ? 25 : 80 });
       if (arm !== "none" && arm !== "lens") r.exposed = ch ? n++ < Math.round(exp * nc * 2) : true;
@@ -169,21 +169,42 @@ await section("c. Stage 1 smoke admissions", () => {
 });
 
 await section("d. Projection check: per-item caps and the cut order", () => {
-  const base = { envelope: 1450, changed: 48, held: 16, stage1_judges: 4.7, untested: [] as string[] };
+  const base = { envelope: 1410, changed: 48, held: 16, stage1_judges: 4.7, untested: [] as string[] };
   const fits = rule("projection", { ...base, stage1: stage1({ m: 20 }) }, "proj-plan");
-  check("planned per-session costs -> PASS as planned, caps 1.4 times each item's projection, total $1425.00 of $1450.00", /Projection: PASS at 'as planned'/.test(fits) && /as planned: caps ceo-o-cmp-opus-p \$224\.00, ceo-o-cmp-opus-a \$538\.00, ceo-o-cmp-sol-p \$103\.00, ceo-o-cmp-sol-a \$323\.00, ceo-o-cmp-particle-p \$38\.00, ceo-o-cmp-particle-a \$108\.00, judges \$91\.00; total \$1425\.00 -> fits/.test(fits));
-  show(fits, /^(Stage 2 projection|  per session|  as planned)/);
+  check("planned per-session costs -> PASS as planned, each cap 1.25 times its item's projection plus one full round at allowance, total $1322.00 of $1410.00, every round admits", /Projection: PASS at 'as planned'/.test(fits) && /as planned: caps ceo-o-cmp-opus-p \$222\.00, ceo-o-cmp-opus-a \$516\.00, ceo-o-cmp-sol-p \$99\.00, ceo-o-cmp-sol-a \$306\.00, ceo-o-cmp-particle-p \$34\.00, ceo-o-cmp-particle-a \$54\.00, judges \$91\.00; total \$1322\.00 -> fits/.test(fits) && /round admission: every item's rounds admit at 1\.25 times its projected spend/.test(fits));
+  show(fits, /^(Stage 2 projection|  per session|  as planned|  round admission)/);
   const steps: [string, S1, RegExp][] = [
-    ["autoplan smoke sessions $2.00 and $3.20 on Opus -> projected from $3.20, the larger -> held units at 1 pass", { m: 20, smokeUsd: { "autoplan-ceo:opus": [2.0, 3.2] } }, /PASS at 'held units at 1 pass'/],
-    ["autoplan $3.80 on Opus, standalone $1.00 on particle-1 -> standalone on particle-1 dropped", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 3.8], "standalone:particle": [0.9, 1.0] } }, /PASS at 'standalone on particle-1 dropped'/],
-    ["autoplan $4.20 on Opus, standalone $1.20 on Sol -> standalone on Sol dropped", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.2], "standalone:sol": [1.0, 1.2] } }, /PASS at 'standalone on Sol dropped'/],
-    ["autoplan $4.60 and none $0.60 on Opus, standalone $1.20 on Sol -> lens dropped", { m: 20, noneUsd: { opus: 0.6 }, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.6], "standalone:sol": [1.0, 1.2] } }, /PASS at 'lens dropped'/],
-    ["autoplan $5.20 on Opus -> Sol and particle-1 cells at 1 pass", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 5.2] } }, /PASS at 'Sol and particle-1 cells at 1 pass'.*1 pass on sol, particle/],
+    ["autoplan smoke sessions $2.00 and $3.60 on Opus -> projected from $3.60, the larger -> held units at 1 pass", { m: 20, smokeUsd: { "autoplan-ceo:opus": [2.0, 3.6] } }, /PASS at 'held units at 1 pass'/],
+    ["autoplan $4.70 on Opus, standalone $0.19 on particle-1 -> standalone on particle-1 dropped", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.7], "standalone:particle": [0.15, 0.19] } }, /PASS at 'standalone on particle-1 dropped'/],
+    ["autoplan $4.60 on Opus, standalone $1.20 on Sol -> standalone on Sol dropped", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.6], "standalone:sol": [1.0, 1.2] } }, /PASS at 'standalone on Sol dropped'/],
+    ["autoplan $4.90 and none $0.60 on Opus, standalone $1.20 on Sol -> lens dropped", { m: 20, noneUsd: { opus: 0.6 }, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.9], "standalone:sol": [1.0, 1.2] } }, /PASS at 'lens dropped'/],
+    ["autoplan $6.00 on Opus -> Sol and particle-1 cells at 1 pass", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 6.0] } }, /PASS at 'Sol and particle-1 cells at 1 pass'.*1 pass on sol, particle/],
     ["autoplan $8.00 on Opus -> stop", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 8.0] } }, /Projection: STOP, over the envelope after every cut/],
   ];
-  for (const [label, s1, want] of steps) { const o = rule("projection", { ...base, stage1: stage1(s1) }, "proj-" + tagOf(label)); check(label, want.test(o)); if (label.startsWith("autoplan smoke")) check("the per-session line projects autoplan-ceo on Opus at $3.20", /autoplan-ceo:opus \$3\.20/.test(o)); }
+  for (const [label, s1, want] of steps) { const o = rule("projection", { ...base, stage1: stage1(s1) }, "proj-" + tagOf(label)); check(label + (want.test(o) ? "" : " [got: " + (o.split("\n").find((l) => l.startsWith("Projection")) ?? "") + "]"), want.test(o)); if (label.startsWith("autoplan smoke")) check("the per-session line projects autoplan-ceo on Opus at $3.60", /autoplan-ceo:opus \$3\.60/.test(o)); }
   const un = rule("projection", { ...base, untested: ["standalone:particle"], stage1: stage1({ m: 20 }) }, "proj-untested");
   check("an UNTESTED cell is left out of the projection and the cells to run", !/standalone:particle/.test(un.split("\n").find((l) => l.startsWith("Projection: PASS")) ?? "standalone:particle"));
+});
+
+await section("d2. Round admission at stage 1's fixed caps", () => {
+  const items = (caps: Record<string, number>, k = 1) => [
+    { item: "ceo-o-hr-opus-none", model: "opus", cap: caps.on, up: 60, arms: ["none"], usd: { none: 0.25 * k } },
+    { item: "ceo-o-hr-sol-none", model: "sol", cap: caps.sn, up: 40, arms: ["none"], usd: { none: 0.15 * k } },
+    { item: "ceo-o-hr-particle-none", model: "particle", cap: caps.pn, up: 40, arms: ["none"], usd: { none: 0.06 * k } },
+    { item: "ceo-o-hr-smoke-opus-a", model: "opus", cap: caps.oa, up: 2, arms: ["autoplan-ceo"], usd: { "autoplan-ceo": 3 * k } },
+    { item: "ceo-o-hr-smoke-opus-p", model: "opus", cap: caps.op, up: 2, arms: ["standalone"], usd: { standalone: 0.7 * k } },
+    { item: "ceo-o-hr-smoke-sol-a", model: "sol", cap: caps.sa, up: 2, arms: ["autoplan-ceo"], usd: { "autoplan-ceo": 1.8 * k } },
+    { item: "ceo-o-hr-smoke-sol-p", model: "sol", cap: caps.sp, up: 2, arms: ["standalone"], usd: { standalone: 0.42 * k } },
+    { item: "ceo-o-hr-smoke-particle-a", model: "particle", cap: caps.pa, up: 2, arms: ["autoplan-ceo"], usd: { "autoplan-ceo": 0.33 * k } },
+    { item: "ceo-o-hr-smoke-particle-p", model: "particle", cap: caps.pp, up: 2, arms: ["standalone"], usd: { standalone: 0.15 * k } },
+  ];
+  const frozen = { on: 52, sn: 23, pn: 6, oa: 25, op: 15, sa: 13, sp: 8, pa: 1, pp: 1 };
+  const at1 = rule("admission", { items: items(frozen) }, "adm-frozen");
+  check("the frozen stage 1 caps admit every round at the projected spend", /^Admission: PASS$/m.test(at1));
+  show(at1, /^  /);
+  check("the frozen stage 1 caps still admit every round at twice the projected spend", /^Admission: PASS$/m.test(rule("admission", { items: items(frozen, 2) }, "adm-frozen-2x")));
+  const v1 = rule("admission", { items: items({ ...frozen, oa: 18, op: 4, sa: 8, sp: 2 }) }, "adm-v1");
+  check("v1's smoke caps ($18, $4, $8, $2) refuse their only round, as the PR review found", /^Admission: FAIL on 4 item\(s\)$/m.test(v1) && /ceo-o-hr-smoke-opus-a: .*REFUSED at round 1 \(\$0\.00 spent \+ \$24\.00 > \$18\.00\)/.test(v1));
 });
 
 await section("e. All-in check", () => {
@@ -210,11 +231,16 @@ await section("f. Stage 2 verdicts, Holm families, exposure, coverage, gaps, mis
   const d3a = rule("compare", stage2({ hits: { opus: { none: 17, "autoplan-ceo": 27, standalone: 17, lens: 17 } }, family: { opus: ["autoplan-ceo", "standalone"], sol: [], particle: [] }, exposure: { "standalone:opus": 0.79 } }), "cmp-d3-079");
   const d3b = rule("compare", stage2({ hits: { opus: { none: 17, "autoplan-ceo": 27, standalone: 17, lens: 17 } }, family: { opus: ["autoplan-ceo", "standalone"], sol: [], particle: [] }, exposure: { "standalone:opus": 0.81 } }), "cmp-d3-081");
   check("identical autoplan data reads the same Holm p (" + holmOf(d3a) + " and " + holmOf(d3b) + ") whether standalone reads untested at exposure 0.792 or is tested with no difference at 0.813", !!holmOf(d3a) && holmOf(d3a) === holmOf(d3b) && /untested \(exposure 0\.792/.test(d3a) && /standalone - none: .*exposure 0\.813.*-> not distinguished/.test(d3b));
+  const zero = rule("compare", stage2({ hits, family, gapUnits: { "autoplan-ceo:particle": 48 } }), "cmp-zero-pairs");
+  check("an arm whose every changed session is a gap -> no usable pairs, untested (coverage 0.000) at p = 1, and the rest of the report still prints", /autoplan-ceo - none: no usable pairs, coverage 0\.000 -> untested \(coverage 0\.000 under 0\.90\), p = 1 in Holm/.test(zero) && /0\.723 - 0\.354|-> helps/.test(zero) && /^  category /m.test(zero));
+  const one = rule("compare", stage2({ hits: { opus: hits.opus, sol: { none: 24, "autoplan-ceo": 26, standalone: 25 }, particle: { none: 10, "autoplan-ceo": 11 } }, family, passes: { sol: 1, particle: 1 } }), "cmp-one-pass");
+  check("Sol and particle-1 at 1 pass -> their contrasts read the one-pass MDD (0.26 at 48 units), Opus keeps 0.18", /Model sol: none hit@3 0\.500 on 48 unit-passes at 1 pass;/.test(one) && /Model sol:[\s\S]*autoplan-ceo - none: .*-> not distinguished \(MDD 0\.26\)/.test(one) && /Model opus:[\s\S]*standalone - none: .*-> not distinguished \(MDD 0\.18\)/.test(one));
+  show(one, /^Model sol|^  (autoplan-ceo|standalone) - none: 0\.5/);
   const s3 = rule("compare", stage2({ hits, family, stockB: 3 }), "cmp-stock3");
   const s4 = rule("compare", stage2({ hits, family, stockB: 4 }), "cmp-stock4");
   check("stage 2 stock rows hit 3 of 48 -> verdicts stand; 4 of 48 -> STOCK FAIL, every contrast untested (judge)", !/STOCK FAIL/.test(s3) && /-> helps/.test(s3) && /STOCK FAIL, every contrast reads untested/.test(s4) && !/-> (helps|hurts)/.test(s4) && /untested \(judge: stock rows hit 4\)/.test(s4));
   const ce = rule("compare", stage2({ hits: { opus: { none: 30, "autoplan-ceo": 31, standalone: 30, lens: 30 } } }), "cmp-ceiling");
-  check("Opus none at 0.625 in stage 2 -> CEILING flag on both contrasts", /none hit@3 0\.625 on 96 unit-passes; Holm family autoplan-ceo, standalone; CEILING flag/.test(ce) && (ce.match(/\[CEILING\]/g) ?? []).length === 2);
+  check("Opus none at 0.625 in stage 2 -> CEILING flag on both contrasts", /none hit@3 0\.625 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone; CEILING flag/.test(ce) && (ce.match(/\[CEILING\]/g) ?? []).length === 2);
   for (const [n, want] of [[47, /for this n 0\.18$/m], [40, /for this n 0\.20$/m], [36, /for this n 0\.21$/m], [35, /Verdict: STOP, under 36 changed units/]] as [number, RegExp][]) {
     const out = rule("compare", stage2({ hits: { opus: { none: 10, "autoplan-ceo": 20, standalone: 10, lens: 10 } }, changed: n }), "cmp-n" + n);
     check(n + " changed units after leak drops -> " + (n < 36 ? "STOP" : "MDD read between power.txt's rows"), want.test(out));
@@ -248,10 +274,10 @@ await section("g. Ledger: every frozen item at its cap, one lease opened and set
   const M = (usdx: number) => Math.round(usdx * 1e6);
   const OP = "claude-opus-5-5", SOL = "openai/gpt-6.1-sol", PA = "particle-ai/particle-1";
   const STAGES: Array<{ name: string; envelope: number; floor: number; items: Array<[string, number | null, string, number, string]> }> = [
-    { name: "stage 1", envelope: M(120), floor: M(20), items: [["ceo-o-hr-opus-none", M(40), OP, M(15), "trial"], ["ceo-o-hr-sol-none", M(16), SOL, M(6), "trial"], ["ceo-o-hr-particle-none", M(8), PA, M(2.4), "trial"], ["ceo-o-hr-smoke-opus-a", M(18), OP, M(6), "trial"], ["ceo-o-hr-smoke-opus-p", M(4), OP, M(1.4), "trial"], ["ceo-o-hr-smoke-sol-a", M(8), SOL, M(3.6), "trial"], ["ceo-o-hr-smoke-sol-p", M(2), SOL, M(0.84), "trial"], ["ceo-o-hr-smoke-particle-a", M(3), PA, M(1.2), "trial"], ["ceo-o-hr-smoke-particle-p", M(1), PA, M(0.3), "trial"], ["ceo-o-hr-judge-sol", null, "gpt-6.1-sol", M(2), "direct"], ["ceo-o-hr-judge-opus", null, OP, M(2), "direct"], ["ceo-o-hr-judge-sonnet", null, "claude-sonnet-5-5", M(2), "direct"]] },
-    { name: "stage 2", envelope: M(1450), floor: M(116), items: [["ceo-o-cmp-opus-p", M(224), OP, M(160), "trial"], ["ceo-o-cmp-opus-a", M(538), OP, M(384), "trial"], ["ceo-o-cmp-sol-p", M(103), SOL, M(72.96), "trial"], ["ceo-o-cmp-sol-a", M(323), SOL, M(230.4), "trial"], ["ceo-o-cmp-particle-p", M(38), PA, M(26.88), "trial"], ["ceo-o-cmp-particle-a", M(108), PA, M(76.8), "trial"], ["ceo-o-cmp-judge-sol", null, "gpt-6.1-sol", M(19.2), "direct"], ["ceo-o-cmp-judge-opus", null, OP, M(19.2), "direct"], ["ceo-o-cmp-judge-sonnet", null, "claude-sonnet-5-5", M(19.2), "direct"]] },
+    { name: "stage 1", envelope: M(160), floor: M(16), items: [["ceo-o-hr-opus-none", M(52), OP, M(15), "trial"], ["ceo-o-hr-sol-none", M(23), SOL, M(6), "trial"], ["ceo-o-hr-particle-none", M(6), PA, M(2.4), "trial"], ["ceo-o-hr-smoke-opus-a", M(25), OP, M(6), "trial"], ["ceo-o-hr-smoke-opus-p", M(15), OP, M(1.4), "trial"], ["ceo-o-hr-smoke-sol-a", M(13), SOL, M(3.6), "trial"], ["ceo-o-hr-smoke-sol-p", M(8), SOL, M(0.84), "trial"], ["ceo-o-hr-smoke-particle-a", M(1), PA, M(0.66), "trial"], ["ceo-o-hr-smoke-particle-p", M(1), PA, M(0.3), "trial"], ["ceo-o-hr-judge-sol", null, "gpt-6.1-sol", M(2), "direct"], ["ceo-o-hr-judge-opus", null, OP, M(2), "direct"], ["ceo-o-hr-judge-sonnet", null, "claude-sonnet-5-5", M(2), "direct"]] },
+    { name: "stage 2", envelope: M(1410), floor: M(116), items: [["ceo-o-cmp-opus-p", M(222), OP, M(160), "trial"], ["ceo-o-cmp-opus-a", M(516), OP, M(384), "trial"], ["ceo-o-cmp-sol-p", M(99), SOL, M(72.96), "trial"], ["ceo-o-cmp-sol-a", M(306), SOL, M(230.4), "trial"], ["ceo-o-cmp-particle-p", M(34), PA, M(26.88), "trial"], ["ceo-o-cmp-particle-a", M(54), PA, M(42.24), "trial"], ["ceo-o-cmp-judge-sol", null, "gpt-6.1-sol", M(19.2), "direct"], ["ceo-o-cmp-judge-opus", null, OP, M(19.2), "direct"], ["ceo-o-cmp-judge-sonnet", null, "claude-sonnet-5-5", M(19.2), "direct"]] },
   ];
-  check("the six stage 1 smoke items (one per model and invocation) cap at $36.00 in all", STAGES[0]!.items.filter((i) => i[0].includes("smoke")).reduce((a, i) => a + i[1]!, 0) === M(36));
+  check("the six stage 1 smoke items (one per model and invocation) cap at $63.00 in all, each covering its one round at full allowance", STAGES[0]!.items.filter((i) => i[0].includes("smoke")).reduce((a, i) => a + i[1]!, 0) === M(63));
   for (const st of STAGES) {
     const runCaps = st.items.filter((i) => i[1] !== null).reduce((a, i) => a + i[1]!, 0);
     check(st.name + ": run caps $" + (runCaps / 1e6).toFixed(2) + " leave the judges at least the $" + (st.floor / 1e6).toFixed(2) + " floor of the $" + (st.envelope / 1e6).toFixed(2) + " envelope", st.envelope - runCaps >= st.floor);

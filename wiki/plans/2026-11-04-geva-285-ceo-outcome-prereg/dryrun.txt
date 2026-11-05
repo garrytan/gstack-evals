@@ -3,13 +3,13 @@ PASS template.txt sha256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72a
 PASS judge-brief.md sha256 83d5d644b97aa87003ea38a8cb273b64590f1c50129430612af2432072852589
 PASS stock-list.txt sha256 dd3a6d40cfbe4832f9a37da0a6c6cc86ce711054354097a475f964a62bb02aff
 PASS unit-brief.md sha256 13ce9eaee6218e8359c32966f8efe82722dc605feb94b3253e42381ac9153253
-PASS power.py sha256 2962550db13132b225567a436e8373a4fe253abbbe14f37a38750a9049256e0e
-PASS power.txt sha256 7bc046fa96fe5904f4fa2febda4fc73a5388f552367ab5e2e6976acb5df6c857
-PASS ceo-rule.ts sha256 c9a4d4ba02b37bb1a3bb28553fb827ed14114b69a64442df6586f1f3033103ba
+PASS power.py sha256 a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499
+PASS power.txt sha256 ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f
+PASS ceo-rule.ts sha256 f338bd81e4388d9ca0bf3b2e623820d03c78967f2a99e908dd07446cb2d60a9b
 PASS the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast
 PASS the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative)
 PASS the judge brief reads each issue's first 40 words and judges it on its first problem
-    scorer HEAD 17253ec47e4cb13b1c9b0ce09615762d958b4cb1 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
+    scorer HEAD 68298b412f15d8dbc649618cbdea69ec139875ab (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
 
 ## b. Stage 1 headroom rule: every outcome
 PASS m 20 of 48 -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
@@ -47,22 +47,37 @@ PASS CEILING with clean smoke -> stage 2 does not start
     Smoke standalone on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.70 -> admitted
     Smoke autoplan-ceo on sol: 2 of 2 exposed, 2 with a block, longest 2400 s, larger session $1.80 -> UNTESTED in stage 2
     Smoke standalone on sol: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.42 -> admitted
-    Smoke autoplan-ceo on particle: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.60 -> admitted
+    Smoke autoplan-ceo on particle: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.33 -> admitted
     Smoke standalone on particle: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.15 -> admitted
 
 ## d. Projection check: per-item caps and the cut order
-PASS planned per-session costs -> PASS as planned, caps 1.4 times each item's projection, total $1425.00 of $1450.00
-    Stage 2 projection check (GEVA-285): envelope $1450.00; judges projected $45.12 (stage 1's $4.70 x 64/20 x 3), judge floor $91.00
-      per session: none:opus $0.25, autoplan-ceo:opus $3.00, standalone:opus $0.70, lens:opus $0.30, none:sol $0.15, autoplan-ceo:sol $1.80, standalone:sol $0.42, none:particle $0.06, autoplan-ceo:particle $0.60, standalone:particle $0.15
-      as planned: caps ceo-o-cmp-opus-p $224.00, ceo-o-cmp-opus-a $538.00, ceo-o-cmp-sol-p $103.00, ceo-o-cmp-sol-a $323.00, ceo-o-cmp-particle-p $38.00, ceo-o-cmp-particle-a $108.00, judges $91.00; total $1425.00 -> fits
-PASS autoplan smoke sessions $2.00 and $3.20 on Opus -> projected from $3.20, the larger -> held units at 1 pass
-PASS the per-session line projects autoplan-ceo on Opus at $3.20
-PASS autoplan $3.80 on Opus, standalone $1.00 on particle-1 -> standalone on particle-1 dropped
-PASS autoplan $4.20 on Opus, standalone $1.20 on Sol -> standalone on Sol dropped
-PASS autoplan $4.60 and none $0.60 on Opus, standalone $1.20 on Sol -> lens dropped
-PASS autoplan $5.20 on Opus -> Sol and particle-1 cells at 1 pass
+PASS planned per-session costs -> PASS as planned, each cap 1.25 times its item's projection plus one full round at allowance, total $1322.00 of $1410.00, every round admits
+    Stage 2 projection check (GEVA-285): envelope $1410.00; judges projected $45.12 (stage 1's $4.70 x 64/20 x 3), judge floor $91.00
+      per session: none:opus $0.25, autoplan-ceo:opus $3.00, standalone:opus $0.70, lens:opus $0.30, none:sol $0.15, autoplan-ceo:sol $1.80, standalone:sol $0.42, none:particle $0.06, autoplan-ceo:particle $0.33, standalone:particle $0.15
+      as planned: caps ceo-o-cmp-opus-p $222.00, ceo-o-cmp-opus-a $516.00, ceo-o-cmp-sol-p $99.00, ceo-o-cmp-sol-a $306.00, ceo-o-cmp-particle-p $34.00, ceo-o-cmp-particle-a $54.00, judges $91.00; total $1322.00 -> fits
+      round admission: every item's rounds admit at 1.25 times its projected spend
+PASS autoplan smoke sessions $2.00 and $3.60 on Opus -> projected from $3.60, the larger -> held units at 1 pass
+PASS the per-session line projects autoplan-ceo on Opus at $3.60
+PASS autoplan $4.70 on Opus, standalone $0.19 on particle-1 -> standalone on particle-1 dropped
+PASS autoplan $4.60 on Opus, standalone $1.20 on Sol -> standalone on Sol dropped
+PASS autoplan $4.90 and none $0.60 on Opus, standalone $1.20 on Sol -> lens dropped
+PASS autoplan $6.00 on Opus -> Sol and particle-1 cells at 1 pass
 PASS autoplan $8.00 on Opus -> stop
 PASS an UNTESTED cell is left out of the projection and the cells to run
+
+## d2. Round admission at stage 1's fixed caps
+PASS the frozen stage 1 caps admit every round at the projected spend
+      ceo-o-hr-opus-none: 20 round(s), a full round $21.12 at allowance, cap $52.00: every round admits ($15.00 spent at the projection)
+      ceo-o-hr-sol-none: 14 round(s), a full round $10.56 at allowance, cap $23.00: every round admits ($6.00 spent at the projection)
+      ceo-o-hr-particle-none: 14 round(s), a full round $0.58 at allowance, cap $6.00: every round admits ($2.40 spent at the projection)
+      ceo-o-hr-smoke-opus-a: 1 round(s), a full round $24.00 at allowance, cap $25.00: every round admits ($6.00 spent at the projection)
+      ceo-o-hr-smoke-opus-p: 1 round(s), a full round $14.08 at allowance, cap $15.00: every round admits ($1.40 spent at the projection)
+      ceo-o-hr-smoke-sol-a: 1 round(s), a full round $12.00 at allowance, cap $13.00: every round admits ($3.60 spent at the projection)
+      ceo-o-hr-smoke-sol-p: 1 round(s), a full round $7.04 at allowance, cap $8.00: every round admits ($0.84 spent at the projection)
+      ceo-o-hr-smoke-particle-a: 1 round(s), a full round $0.66 at allowance, cap $1.00: every round admits ($0.66 spent at the projection)
+      ceo-o-hr-smoke-particle-p: 1 round(s), a full round $0.38 at allowance, cap $1.00: every round admits ($0.30 spent at the projection)
+PASS the frozen stage 1 caps still admit every round at twice the projected spend
+PASS v1's smoke caps ($18, $4, $8, $2) refuse their only round, as the PR review found
 
 ## e. All-in check
 PASS $180 + $150 + $43 + $1,450 = $1,823 -> PASS
@@ -72,13 +87,13 @@ PASS $300 + $250 + $60 + $1,450 = $2,060 -> stage 2 envelope drops to $1,390 and
     Leak drops: 0; changed units 48, held 16; MDD at Holm's first step for this n 0.18
     Stock rows: hit D on 0 of 48 changed units (at most 3)
     Agreement, Sol vs Opus on D: n 3646; both D 326, Sol only 0, Opus only 0, neither 3320; positive agreement on D 1.000, raw 1.000, PABAK 1.000, kappa 1.000
-    Model opus: none hit@3 0.354 on 96 unit-passes; Holm family autoplan-ceo, standalone
+    Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
       autoplan-ceo - none: 0.723 - 0.362 = +0.362, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 0.979 -> helps
       standalone - none: 0.292 - 0.354 = -0.063, 95% CI [-0.146, 0.021], p 0.377 (monte-carlo-sign-flip), Holm p 0.377, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.18)
-    Model sol: none hit@3 0.500 on 96 unit-passes; Holm family autoplan-ceo, standalone
+    Model sol: none hit@3 0.500 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
       autoplan-ceo - none: 0.125 - 0.500 = -0.375, 95% CI [-0.521, -0.250], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 1.000 -> hurts
       standalone - none: 0.542 - 0.500 = +0.042, 95% CI [0.000, 0.104], p 0.498 (monte-carlo-sign-flip), Holm p 1.000, exposure 0.500, coverage 1.000 -> untested (exposure 0.500 under 0.80), p = 1 in Holm
-    Model particle: none hit@3 0.208 on 96 unit-passes; Holm family autoplan-ceo
+    Model particle: none hit@3 0.208 on 96 unit-passes at 2 passes; Holm family autoplan-ceo
       autoplan-ceo - none: 0.286 - 0.238 = +0.048, 95% CI [0.000, 0.119], p 0.501 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 0.875 -> untested (coverage 0.875 under 0.90), p = 1 in Holm
 PASS Opus autoplan-ceo, 2 unjudged reviews dropped from its own contrast and 10 null forecasts kept as hits: 68 of 94 against 34 of 94 = +0.362, coverage 0.979 -> helps
 PASS 6 lens gap units on Opus leave the autoplan-ceo and standalone contrasts untouched
@@ -87,6 +102,11 @@ PASS Sol autoplan-ceo -0.375 -> hurts
 PASS Sol standalone at exposure 0.500 -> untested (exposure), kept in Sol's Holm family at p = 1
 PASS particle-1 family is autoplan-ceo alone (standalone never started stage 2) and that contrast, with 6 of 48 units in a gap (coverage 0.875), is untested (coverage)
 PASS identical autoplan data reads the same Holm p (0.003 and 0.003) whether standalone reads untested at exposure 0.792 or is tested with no difference at 0.813
+PASS an arm whose every changed session is a gap -> no usable pairs, untested (coverage 0.000) at p = 1, and the rest of the report still prints
+PASS Sol and particle-1 at 1 pass -> their contrasts read the one-pass MDD (0.26 at 48 units), Opus keeps 0.18
+    Model sol: none hit@3 0.500 on 48 unit-passes at 1 pass; Holm family autoplan-ceo, standalone
+      autoplan-ceo - none: 0.542 - 0.500 = +0.042, 95% CI [0.000, 0.104], p 0.498 (monte-carlo-sign-flip), Holm p 0.997, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.26)
+      standalone - none: 0.521 - 0.500 = +0.021, 95% CI [0.000, 0.063], p 1.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.26)
 PASS stage 2 stock rows hit 3 of 48 -> verdicts stand; 4 of 48 -> STOCK FAIL, every contrast untested (judge)
 PASS Opus none at 0.625 in stage 2 -> CEILING flag on both contrasts
 PASS 47 changed units after leak drops -> MDD read between power.txt's rows
@@ -94,7 +114,7 @@ PASS 40 changed units after leak drops -> MDD read between power.txt's rows
 PASS 36 changed units after leak drops -> MDD read between power.txt's rows
 PASS 35 changed units after leak drops -> STOP
       autoplan-ceo:opus: hit@3 0.723, rank-weighted 0.486, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.723, strict from 2026-09-01 0.723 (47), from 2026-10-01 0.696 (23), maintainer 0.750, outside 0.710, no-block 0/128, gaps or unjudged 2, mean issue words 34.7, cost per review $3.00, per hit $5.65
-      autoplan-ceo:particle: hit@3 0.286, rank-weighted 0.190, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.286, strict from 2026-09-01 0.286 (42), from 2026-10-01 0.300 (20), maintainer 0.286, outside 0.286, no-block 0/128, gaps or unjudged 12, mean issue words 34.7, cost per review $0.60, per hit $3.20
+      autoplan-ceo:particle: hit@3 0.286, rank-weighted 0.190, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.286, strict from 2026-09-01 0.286 (42), from 2026-10-01 0.300 (20), maintainer 0.286, outside 0.286, no-block 0/128, gaps or unjudged 12, mean issue words 34.7, cost per review $0.33, per hit $1.76
       autoplan-ceo:sol: hit@3 0.125, rank-weighted 0.083, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.125, strict from 2026-09-01 0.125 (48), from 2026-10-01 0.083 (24), maintainer 0.125, outside 0.125, no-block 0/128, gaps or unjudged 0, mean issue words 34.7, cost per review $1.80, per hit $19.20
       lens:opus: hit@3 0.476, rank-weighted 0.317, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.476, strict from 2026-09-01 0.476 (42), from 2026-10-01 0.500 (20), maintainer 0.500, outside 0.464, no-block 0/128, gaps or unjudged 12, mean issue words 34.7, cost per review $0.30, per hit $0.96
       none:opus: hit@3 0.354, rank-weighted 0.236, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.354, strict from 2026-09-01 0.333 (48), from 2026-10-01 0.333 (24), maintainer 0.375, outside 0.344, no-block 0/128, gaps or unjudged 0, mean issue words 34.7, cost per review $0.25, per hit $0.94
@@ -115,76 +135,76 @@ PASS no-block rate, gaps or unjudged and mean issue words print per cell
 
 ## g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation
 A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Run items (one per review-units invocation) open a trial-proof lease at their cap, judge items a direct-proof lease for what is left of their envelope, all with --admission warn. Each item settles at its projected spend. Stage 2's caps here are the planning caps; the real ones come from the projection check.
-PASS the six stage 1 smoke items (one per model and invocation) cap at $36.00 in all
-PASS stage 1: run caps $100.00 leave the judges at least the $20.00 floor of the $120.00 envelope
-PASS ceo-o-hr-opus-none recorded at $40.00
+PASS the six stage 1 smoke items (one per model and invocation) cap at $63.00 in all, each covering its one round at full allowance
+PASS stage 1: run caps $144.00 leave the judges at least the $16.00 floor of the $160.00 envelope
+PASS ceo-o-hr-opus-none recorded at $52.00
 PASS ceo-o-hr-opus-none: one lease opened (RIG_UNPROVEN) and settled at $15.00, bound to its run
 PASS ceo-o-hr-opus-none: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-sol-none recorded at $16.00
+PASS ceo-o-hr-sol-none recorded at $23.00
 PASS ceo-o-hr-sol-none: one lease opened (RIG_UNPROVEN) and settled at $6.00, bound to its run
 PASS ceo-o-hr-sol-none: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-particle-none recorded at $8.00
+PASS ceo-o-hr-particle-none recorded at $6.00
 PASS ceo-o-hr-particle-none: one lease opened (RIG_UNPROVEN) and settled at $2.40, bound to its run
 PASS ceo-o-hr-particle-none: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-smoke-opus-a recorded at $18.00
+PASS ceo-o-hr-smoke-opus-a recorded at $25.00
 PASS ceo-o-hr-smoke-opus-a: one lease opened (RIG_UNPROVEN) and settled at $6.00, bound to its run
 PASS ceo-o-hr-smoke-opus-a: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-smoke-opus-p recorded at $4.00
+PASS ceo-o-hr-smoke-opus-p recorded at $15.00
 PASS ceo-o-hr-smoke-opus-p: one lease opened (RIG_UNPROVEN) and settled at $1.40, bound to its run
 PASS ceo-o-hr-smoke-opus-p: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-smoke-sol-a recorded at $8.00
+PASS ceo-o-hr-smoke-sol-a recorded at $13.00
 PASS ceo-o-hr-smoke-sol-a: one lease opened (RIG_UNPROVEN) and settled at $3.60, bound to its run
 PASS ceo-o-hr-smoke-sol-a: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-smoke-sol-p recorded at $2.00
+PASS ceo-o-hr-smoke-sol-p recorded at $8.00
 PASS ceo-o-hr-smoke-sol-p: one lease opened (RIG_UNPROVEN) and settled at $0.84, bound to its run
 PASS ceo-o-hr-smoke-sol-p: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-smoke-particle-a recorded at $3.00
-PASS ceo-o-hr-smoke-particle-a: one lease opened (RIG_UNPROVEN) and settled at $1.20, bound to its run
+PASS ceo-o-hr-smoke-particle-a recorded at $1.00
+PASS ceo-o-hr-smoke-particle-a: one lease opened (RIG_UNPROVEN) and settled at $0.66, bound to its run
 PASS ceo-o-hr-smoke-particle-a: a second run on the settled item refuses with E_ITEM_BOUND
 PASS ceo-o-hr-smoke-particle-p recorded at $1.00
 PASS ceo-o-hr-smoke-particle-p: one lease opened (RIG_UNPROVEN) and settled at $0.30, bound to its run
 PASS ceo-o-hr-smoke-particle-p: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-judge-sol recorded at $83.26 ($120.00 less $36.74 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-sol recorded at $123.80 ($160.00 less $36.20 settled by every earlier stage 1 item, rounded down to the cent)
 PASS ceo-o-hr-judge-sol: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
 PASS ceo-o-hr-judge-sol: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-judge-opus recorded at $81.26 ($120.00 less $38.74 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-opus recorded at $121.80 ($160.00 less $38.20 settled by every earlier stage 1 item, rounded down to the cent)
 PASS ceo-o-hr-judge-opus: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
 PASS ceo-o-hr-judge-opus: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-hr-judge-sonnet recorded at $79.26 ($120.00 less $40.74 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-sonnet recorded at $119.80 ($160.00 less $40.20 settled by every earlier stage 1 item, rounded down to the cent)
 PASS ceo-o-hr-judge-sonnet: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
 PASS ceo-o-hr-judge-sonnet: a second run on the settled item refuses with E_ITEM_BOUND
-    stage 1 settled in all: $42.74 of the $120.00 envelope
-PASS stage 2: run caps $1334.00 leave the judges at least the $116.00 floor of the $1450.00 envelope
-PASS ceo-o-cmp-opus-p recorded at $224.00
+    stage 1 settled in all: $42.20 of the $160.00 envelope
+PASS stage 2: run caps $1231.00 leave the judges at least the $116.00 floor of the $1410.00 envelope
+PASS ceo-o-cmp-opus-p recorded at $222.00
 PASS ceo-o-cmp-opus-p: one lease opened (RIG_UNPROVEN) and settled at $160.00, bound to its run
 PASS ceo-o-cmp-opus-p: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-cmp-opus-a recorded at $538.00
+PASS ceo-o-cmp-opus-a recorded at $516.00
 PASS ceo-o-cmp-opus-a: one lease opened (RIG_UNPROVEN) and settled at $384.00, bound to its run
 PASS ceo-o-cmp-opus-a: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-cmp-sol-p recorded at $103.00
+PASS ceo-o-cmp-sol-p recorded at $99.00
 PASS ceo-o-cmp-sol-p: one lease opened (RIG_UNPROVEN) and settled at $72.96, bound to its run
 PASS ceo-o-cmp-sol-p: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-cmp-sol-a recorded at $323.00
+PASS ceo-o-cmp-sol-a recorded at $306.00
 PASS ceo-o-cmp-sol-a: one lease opened (RIG_UNPROVEN) and settled at $230.40, bound to its run
 PASS ceo-o-cmp-sol-a: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-cmp-particle-p recorded at $38.00
+PASS ceo-o-cmp-particle-p recorded at $34.00
 PASS ceo-o-cmp-particle-p: one lease opened (RIG_UNPROVEN) and settled at $26.88, bound to its run
 PASS ceo-o-cmp-particle-p: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-cmp-particle-a recorded at $108.00
-PASS ceo-o-cmp-particle-a: one lease opened (RIG_UNPROVEN) and settled at $76.80, bound to its run
+PASS ceo-o-cmp-particle-a recorded at $54.00
+PASS ceo-o-cmp-particle-a: one lease opened (RIG_UNPROVEN) and settled at $42.24, bound to its run
 PASS ceo-o-cmp-particle-a: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-cmp-judge-sol recorded at $498.96 ($1450.00 less $951.04 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-sol recorded at $493.52 ($1410.00 less $916.48 settled by every earlier stage 2 item, rounded down to the cent)
 PASS ceo-o-cmp-judge-sol: one lease opened (RIG_UNPROVEN) and settled at $19.20, bound to its run
 PASS ceo-o-cmp-judge-sol: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-cmp-judge-opus recorded at $479.76 ($1450.00 less $970.24 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-opus recorded at $474.32 ($1410.00 less $935.68 settled by every earlier stage 2 item, rounded down to the cent)
 PASS ceo-o-cmp-judge-opus: one lease opened (RIG_UNPROVEN) and settled at $19.20, bound to its run
 PASS ceo-o-cmp-judge-opus: a second run on the settled item refuses with E_ITEM_BOUND
-PASS ceo-o-cmp-judge-sonnet recorded at $460.56 ($1450.00 less $989.44 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-sonnet recorded at $455.12 ($1410.00 less $954.88 settled by every earlier stage 2 item, rounded down to the cent)
 PASS ceo-o-cmp-judge-sonnet: one lease opened (RIG_UNPROVEN) and settled at $19.20, bound to its run
 PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITEM_BOUND
-    stage 2 settled in all: $1008.64 of the $1450.00 envelope
+    stage 2 settled in all: $974.08 of the $1410.00 envelope
 
 ## Leak check
 PASS the transcript prints no home path and no key name's value
 
-PASS 128, FAIL 0
+PASS 133, FAIL 0

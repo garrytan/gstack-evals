@@ -93,3 +93,12 @@ hi_m, lo_m = int(0.60 * n), -(-15 * n // 100)
 print("bar check: n %d, design effect %.1f, effective n %d" % (n, deff, neff))
 print("top edge %d of %d = %.3f: effective %d of %d, Clopper-Pearson upper 95%% bound %.3f, room to 1.0 %.3f" % (hi_m, n, hi_m / n, round(hi_m / deff), neff, cp_upper(round(hi_m / deff), neff), 1 - cp_upper(round(hi_m / deff), neff)))
 print("bottom edge %d of %d = %.3f: effective %d of %d, Clopper-Pearson lower 95%% bound %.3f" % (lo_m, n, lo_m / n, round(lo_m / deff), neff, cp_lower(round(lo_m / deff), neff)))
+
+# One-pass rows: the projection's last cut runs every Sol and particle-1 cell at 1 pass, so those contrasts read their
+# MDD here (control 0.40, tau 0.5). They follow the bar check so every row above keeps its random stream.
+f = lambda m: "none<=0.40" if m is None else "%.2f" % m
+for n in (36, 48, 54, 64):
+    for rho in (0.3, 0.5):
+        m5 = mdd(0.40, rho, 0.5, n, 1, 0.05, rng)
+        m25 = mdd(0.40, rho, 0.5, n, 1, 0.025, rng)
+        print("p0 %.2f  rho %.1f  tau %.1f  n %2d  passes 1  MDD05 %s  MDD025 %s" % (0.40, rho, 0.5, n, f(m5), f(m25)))
