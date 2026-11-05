@@ -166,8 +166,14 @@ export function cal2Tasks(tr: ReturnType<typeof tiers>, cal: TrialRow[]): string
   return tr.t4.filter((t) => failed.has(t));
 }
 
-// Localization (report only, ladder D1) reads all of the session's assistant text in order (a list of messages is
-// joined with a blank line between them) and nothing else. The last closing block in it counts, so a block written
+// mainText: closingBlock's input, the session's main-thread assistant text blocks in order. From Claude Code's message
+// stream it takes the text content blocks of assistant messages that carry no parent_tool_use_id; a thinking block, a
+// tool call and any subagent message (one with a parent_tool_use_id) are never read. Every arm is fed this way.
+export function mainText(stream: { type?: string; parent_tool_use_id?: string | null; message?: { content?: unknown } }[]): string[] {
+  return stream.filter((x) => x.type === "assistant" && !x.parent_tool_use_id).flatMap((x): any[] => { const c = x.message?.content; return Array.isArray(c) ? c : []; }).filter((b) => b?.type === "text" && typeof b.text === "string").map((b) => b.text as string);
+}
+// Localization (report only, ladder D1) reads only mainText's blocks, in order (a list of blocks is joined with a blank
+// line between them): no thinking block and no subagent text. The last closing block in that text counts, so a block written
 // before a Stop hook continuation still counts and a DEBUG REPORT never does: the last line that, trimmed of
 // non-alphanumeric characters at both ends, reads "root cause files" in any case, then the non-empty lines after it up
 // to the first blank line, at most three. Each entry loses a list marker, backticks and asterisks; a markdown link
@@ -199,14 +205,17 @@ export function goldFiles(patch: string): string[] {
 export const locHit = (block: string[], gold: string[], k: number) => block.slice(0, k).some((f) => gold.includes(f));
 export const locRank = (block: string[], gold: string[]) => { const i = block.slice(0, 3).findIndex((f) => gold.includes(f)); return i < 0 ? 0 : R3C.locWeights[i]!; };
 // Graded secondary (report only): the share of the task's FAIL_TO_PASS tests that passed, under the PASS_TO_PASS gate:
-// 0 when any PASS_TO_PASS test did not pass. status maps each test the verifier ran to "pass" or anything else; a test
-// missing from it did not pass. null when the task lists no FAIL_TO_PASS test (out of the measure, counted). A trial
-// whose hidden tests all pass scores 1, as its reward does.
+// 0 when any PASS_TO_PASS test did not pass. status maps each test the verifier ran to "pass" when its status is one the
+// task's own grading counts toward its reward, and to anything else otherwise; a test missing from it did not pass.
+// null, never 1, when the task lists no FAIL_TO_PASS test (out of the measure, counted). A trial whose hidden tests all
+// pass scores 1, as its reward does. On the oracle gate, oracleF2p counts how many oracle trials score 1 and how many
+// score null, report only: it never stops a part.
 export function f2pShare(status: Record<string, string>, f2p: string[], p2p: string[]): number | null {
   if (!f2p.length) return null;
   if (!p2p.every((t) => status[t] === "pass")) return 0;
   return f2p.filter((t) => status[t] === "pass").length / f2p.length;
 }
+export const oracleF2p = (shares: (number | null)[]) => ({ trials: shares.length, one: shares.filter((s) => s === 1).length, nulls: shares.filter((s) => s === null).length });
 
 // Admission: every none trial of this model on the task (in hand and calibration), at least R3C.minTrials of them, and a
 // measured none rate inside the band, both ends included.
@@ -379,10 +388,12 @@ export const pairUsd = (m: Model, noneUsd: number) => noneUsd * (1 + R3C.cost[m]
 // of the id) and each admitted task's posterior under the law refitted on every none trial of this model, in hand and
 // calibration, so the law is fitted across every candidate and the keep rule is part of what the posterior conditions
 // on; never a task's measured rate. Counts use graded calibration trials only (an infra or ungraded trial is not rerun
-// and does not count); the none cost per trial averages every calibration none trial with a cost, graded or not. The
-// money is the item's cap less settled spend (the item ledger's settled total when admit runs) less the reserve headroom.
-// The pair is priced from the admitted tasks' graded calibration none trials; a missing cost on any of them, or no such
-// trial, leaves it unpriced, and admission stops. The mean over every calibration none trial is report only.
+// and does not count). The money is the item's cap less settled spend (the item ledger's settled total when admit runs)
+// less the reserve headroom. The pair is priced from the mean cost of every calibration none trial on the admitted
+// tasks, whatever its outcome (graded, infra or ungraded), since a trial that isn't graded is still paid for and not
+// rerun; a null cost on any of them, or no such trial,
+// leaves it unpriced, and admission stops, so a missing cost never counts as $0. The mean over every calibration none
+// trial, on any task, is report only.
 function admissionInputs(h: InHand, m: Model, cal: TrialRow[], o: { capUsd: number; settledUsd: number }) {
   const tr = tiers(h, m), own = new Map(h.none[m]);
   const calRows = cal.filter((t) => t.arm === "none" && /^cal-/.test(t.part)), calNone = calRows.filter(graded);
@@ -393,7 +404,7 @@ function admissionInputs(h: InHand, m: Model, cal: TrialRow[], o: { capUsd: numb
   if (cut) list = [...list].sort((a, b) => (h.dist.get(b) ?? 0) - (h.dist.get(a) ?? 0) || (sha(a) < sha(b) ? -1 : 1)).slice(0, R3C.maxTasks).sort();
   const g = npmle([...own.values()]);
   const posts = list.map((t) => posterior(g, own.get(t)));
-  const listed = new Set(list), priced = calNone.filter((t) => listed.has(t.task));
+  const listed = new Set(list), priced = calRows.filter((t) => listed.has(t.task));
   const meanUsd = (rows: TrialRow[]) => (rows.length && rows.every((t) => typeof t.cost_usd === "number" && Number.isFinite(t.cost_usd)) ? rows.reduce((z, t) => z + t.cost_usd!, 0) / rows.length : NaN);
   const noneUsd = meanUsd(priced), poolNoneUsd = meanUsd(calRows);
   const pair = pairUsd(m, noneUsd);
@@ -421,7 +432,7 @@ export function admission(h: InHand, m: Model, cal: TrialRow[], o: { capUsd: num
   const far = list.filter((t) => h.dist.get(t) === 2).length;
   const base = { model: m, n: list.length, cut: x.cut, far, listSha256: idsSha(list), list, calNone: x.calNone, priced: x.priced, noneUsd: x.noneUsd, poolNoneUsd: x.poolNoneUsd, poolTrials: x.poolTrials, pairUsd: pair, rAfford, bandMassRefit: bandMass(x.g), meanPosteriorRate: posts.length ? posts.reduce((z, w) => z + w.reduce((y, v, j) => y + v * GRID[j]!, 0), 0) / posts.length : NaN };
   if (list.length < R3C.nMin) return { ...base, go: false, reason: "admitted " + list.length + " tasks, under " + R3C.nMin };
-  if (!Number.isFinite(pair)) return { ...base, go: false, reason: "the grid can't be priced: a graded calibration none trial on an admitted task has no cost, or there is no such trial" };
+  if (!Number.isFinite(pair)) return { ...base, go: false, reason: "the grid can't be priced: a calibration none trial on an admitted task has no cost, or there is no such trial" };
   if (rAfford < R3C.rMin) return { ...base, go: false, reason: "the money left buys " + rAfford + " replicates, under " + R3C.rMin };
   const R = chooseR(posts, rAfford, o.sims);
   const mdd = mddPoints(posts, R, o.sims), nullSize = keepRate(posts, R, 0, o.sims), mddSplit = mddPoints(posts, R, o.sims, true);
@@ -441,7 +452,7 @@ export function admissionLines(a: ReturnType<typeof admission>): string[] {
   const x = a as any;
   const lines = [
     "r3c admission " + a.model + ": " + a.n + " tasks admitted (sha256 " + a.listSha256 + (a.cut ? ", cut to " + R3C.maxTasks : "") + "; " + a.far + " far) from " + a.calNone + " calibration none trials; refitted band mass " + (100 * a.bandMassRefit).toFixed(1) + "%, mean posterior none rate " + (Number.isFinite(a.meanPosteriorRate) ? a.meanPosteriorRate.toFixed(3) : "n/a"),
-    "money: none $" + (Number.isFinite(a.noneUsd) ? a.noneUsd.toFixed(3) : "n/a") + " a trial (" + a.priced + " graded calibration none trials on the admitted tasks), $" + (Number.isFinite(a.pairUsd) ? a.pairUsd.toFixed(3) : "n/a") + " a task-replicate pair, " + a.rAfford + " replicates affordable",
+    "money: none $" + (Number.isFinite(a.noneUsd) ? a.noneUsd.toFixed(3) : "n/a") + " a trial (" + a.priced + " calibration none trials on the admitted tasks), $" + (Number.isFinite(a.pairUsd) ? a.pairUsd.toFixed(3) : "n/a") + " a task-replicate pair, " + a.rAfford + " replicates affordable",
     "report only: the mean over every calibration none trial $" + (Number.isFinite(a.poolNoneUsd) ? a.poolNoneUsd.toFixed(3) : "n/a") + " a trial (" + a.poolTrials + " trials)",
   ];
   if (x.beta) lines.push("report only, beta-binomial law (a " + x.beta.a.toFixed(3) + ", b " + x.beta.b.toFixed(3) + ", band mass " + (100 * x.beta.bandMass).toFixed(1) + "%): MDD " + x.beta.mdd + " points, null size " + (100 * x.beta.nullSize).toFixed(1) + "% at " + x.R + " replicates");
@@ -550,9 +561,14 @@ function selftest(): number {
   if (envSims === undefined) delete process.env.R3C_SIMS; else process.env.R3C_SIMS = envSims;
   const oneSim = admission(fourteen.h, "opus", fourteen.cal, { capUsd: 700, settledUsd: 100, sims: 1 }) as any;
   check("admit runs the frozen 2,000 simulated grids with R3C_SIMS=1 set, and 1 grid answers differently from 200", JSON.stringify(admitO) === JSON.stringify({ capUsd: 700, settledUsd: 100, sims: 2000 }) && JSON.stringify([oneSim.go, oneSim.R, oneSim.mdd]) !== JSON.stringify([ok.go, ok.R, ok.mdd]));
-  const priced = big(14, 2, 4), dearCal = [...priced.cal.map((t) => (t.task === "m00" ? { ...t, cost_usd: 1.2 } : t)), ...Array.from({ length: 4 }, () => ({ part: "cal-1", task: "x99", arm: "none", outcome: "fail", cost_usd: 2 })), { part: "cal-1", task: "m01", arm: "none", outcome: "infra", cost_usd: 5 }];
-  const pa = admission(priced.h, "opus", dearCal, { capUsd: 100, settledUsd: 0, sims: 10 }) as any;
-  check("the pair is priced from the admitted tasks' graded calibration none trials, not an unadmitted task's or an infra trial's, and the mean over every trial is report only", Math.abs(pa.noneUsd - (13 * 4 * 0.4 + 4 * 1.2) / 56) < 1e-12 && pa.priced === 56 && pa.poolTrials === 61 && pa.poolNoneUsd > pa.noneUsd);
+  const priced = big(14, 2, 4), dear = priced.cal.map((t) => (t.task === "m00" ? { ...t, cost_usd: 1.2 } : t)), away: TrialRow[] = Array.from({ length: 4 }, () => ({ part: "cal-1", task: "x99", arm: "none", outcome: "fail", cost_usd: 2 })), infra: TrialRow = { part: "cal-1", task: "m01", arm: "none", outcome: "infra", cost_usd: 5 };
+  const price = (rows: TrialRow[]) => admission(priced.h, "opus", rows, { capUsd: 100, settledUsd: 0, sims: 10 }) as any;
+  const pa = price([...dear, ...away, infra]), noInfra = price([...dear, ...away]), flat = price([...priced.cal, ...away, infra]), home = price([...dear, infra]);
+  check("an admitted task's infra calibration none trial enters the pair's price: its $5 is in the mean, and without it the mean is the graded trials' alone", Math.abs(pa.noneUsd - (13 * 4 * 0.4 + 4 * 1.2 + 5) / 57) < 1e-12 && pa.priced === 57 && Math.abs(noInfra.noneUsd - (13 * 4 * 0.4 + 4 * 1.2) / 56) < 1e-12 && noInfra.priced === 56);
+  check("an admitted task's graded calibration none trial enters the price: m00 at $1.20 a trial raises the mean over the flat $0.40 rows", Math.abs(flat.noneUsd - (14 * 4 * 0.4 + 5) / 57) < 1e-12 && pa.noneUsd > flat.noneUsd);
+  check("a trial on a task that isn't admitted never enters the price, and the mean over every calibration none trial is report only", pa.noneUsd === home.noneUsd && pa.priced === home.priced && pa.poolTrials === 61 && home.poolTrials === 57 && pa.poolNoneUsd > pa.noneUsd);
+  const nulInfra = price([...priced.cal, { ...infra, cost_usd: null }]), nulAway = price([...priced.cal, { ...away[0]!, cost_usd: null }]);
+  check("a null cost fails closed on an infra trial too: a null-cost infra trial on an admitted task leaves the pair unpriced and stops admission, and a null on a task that isn't admitted leaves the price alone", Number.isNaN(nulInfra.noneUsd) && !nulInfra.go && String(nulInfra.reason).startsWith("the grid can't be priced") && Math.abs(nulAway.noneUsd - 0.4) < 1e-12 && Number.isNaN(nulAway.poolNoneUsd));
   const nul = admission(fourteen.h, "opus", fourteen.cal.map((t, i) => (i === 0 ? { ...t, cost_usd: null } : t)), { capUsd: 700, settledUsd: 100, sims: 10 }) as any;
   check("a missing cost fails closed: a null cost_usd on an admitted task's calibration trial stops admission, a blank TSV cost reads null, and a spend sum that meets a null is NaN, never $0", !nul.go && String(nul.reason).startsWith("the grid can't be priced") && tsvRows("part\ttask\tarm\toutcome\tcost_usd\ncal-1\tm00\tnone\tpass\t")[0]!.cost_usd === null && Number.isNaN(calSpendUsd("opus", [{ part: "cal-1", task: "m00", arm: "none", outcome: "pass", cost_usd: null }])));
   const forty = big(40, 2, 4);
@@ -581,6 +597,13 @@ function selftest(): number {
   check("the session's assistant text is read in order: a told session the Stop hook held back, whose only block comes before the continuation, scores a hit, where its final message alone has no block", locHit(closingBlock(heldBack), gold, 1) && closingBlock(heldBack[1]!).length === 0);
   check("of two blocks in one session the later counts, and none-arm results on the fixtures don't change", JSON.stringify(closingBlock(["ROOT CAUSE FILES\nsrc/x.py", "ROOT CAUSE FILES\nsrc/pkg/core.py"])) === JSON.stringify(["src/pkg/core.py"]) && JSON.stringify(closingBlock(["Looking at the parser first.", noneFinal])) === JSON.stringify(closingBlock(noneFinal)) && locHit(closingBlock([noneFinal]), gold, 1) && locRank(closingBlock([noneFinal]), gold) === 1);
   check("closingBlock strips a trailing colon, quotes and brackets, and takes a markdown link's target", JSON.stringify(closingBlock("ROOT CAUSE FILES\n1. `src/pkg/core.py`: drops the last item\n- src/pkg/util.py:40: off by one\n\"src/a.py\"")) === JSON.stringify(["src/pkg/core.py", "src/pkg/util.py", "src/a.py"]) && JSON.stringify(closingBlock("ROOT CAUSE FILES\n[the parser](src/pkg/core.py)\n(src/b.py:12),\n'src/c.py';")) === JSON.stringify(["src/pkg/core.py", "src/b.py", "src/c.py"]));
+  const msg = (content: object[], parent: string | null = null) => ({ type: "assistant", parent_tool_use_id: parent, message: { content } });
+  const txt = (text: string) => ({ type: "text", text }), think = (thinking: string) => ({ type: "thinking", thinking });
+  check("none arm: a block only in a thinking block or only in a subagent message is not read, and a main-thread block is read even when a later thinking or subagent block names another file", closingBlock(mainText([msg([think(noneFinal), txt("I fixed the off-by-one in the parser.")])])).length === 0 && closingBlock(mainText([msg([txt("I fixed the off-by-one in the parser.")]), msg([txt(noneFinal)], "toolu_1")])).length === 0 && locHit(closingBlock(mainText([msg([txt(noneFinal)]), msg([think("ROOT CAUSE FILES\nsrc/x.py")]), msg([txt("ROOT CAUSE FILES\nsrc/y.py")], "toolu_1")])), gold, 1));
+  const toldDebug = toldFinal.split("\n\nROOT")[0]!, toldRight = toldDebug + "\n\nROOT CAUSE FILES\nsrc/pkg/core.py";
+  check("told arm: a block only in a thinking block or only in a subagent message is not read, and a main-thread block is read even when a later thinking or subagent block names another file", closingBlock(mainText([msg([think(toldRight), txt(toldDebug)])])).length === 0 && closingBlock(mainText([msg([txt(toldDebug)]), msg([txt(toldRight)], "toolu_2")])).length === 0 && locHit(closingBlock(mainText([msg([txt(toldRight)]), msg([think("ROOT CAUSE FILES\nsrc/x.py"), { type: "tool_use", name: "Task", input: {} }]), msg([txt("ROOT CAUSE FILES\nsrc/y.py")], "toolu_2")])), gold, 1));
+  const allPass = Object.fromEntries([...f2, ...p2].map((t) => [t, "pass"])), noF2p = f2pShare(allPass, [], p2), oc = oracleF2p([f2pShare(allPass, f2, p2), noF2p, f2pShare(allPass, f2, p2)]);
+  check("f2pShare: a task with no FAIL_TO_PASS test scores null, not 1, even when every PASS_TO_PASS test passes, and the oracle count counts it as null beside the 1s rather than failing it", noF2p === null && JSON.stringify(oc) === JSON.stringify({ trials: 3, one: 2, nulls: 1 }));
   check("the closing line is one text for every arm and names no skill", !/investigate|debug report|gstack|skill/i.test(R3C.closingLine) && R3C.closingLine.includes("ROOT CAUSE FILES"));
   return bad ? 1 : 0;
 }

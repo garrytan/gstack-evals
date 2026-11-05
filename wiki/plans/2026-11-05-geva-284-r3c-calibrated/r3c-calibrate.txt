@@ -1,8 +1,9 @@
 # r3c calibrate: how R3C.power.searchTarget was set (R3 amendment 6, section 6)
 # Ran on 2026-11-05 from this post's r3c.ts.txt with PIN a git archive export of 17253ec4 (quick/ and src/ match e96a6a98); the
 # file then differed from the committed one only in comments, the calread command and chooseR's level argument, which
-# calibrate sets to R3C.power.target (0.80), the level it ran at. The committed file also prices the pair from the
-# admitted tasks' graded calibration none trials and fails closed on a missing cost; every simulated trial costs $0.43
+# calibrate sets to R3C.power.target (0.80), the level it ran at. The committed file also adds mainText, oracleF2p and
+# selftests, none of which calibrate calls, prices the pair from every calibration none trial on the admitted tasks,
+# graded or not, and fails closed on a missing cost; every simulated trial costs $0.43
 # and none is missing, so the numbers below stand. Four slices, 15 calibrations each, R3C_SIMS=2000:
 $ PIN=<export> bun r3c.ts calibrate <in-hand> --model opus --cap-usd 750 --runs 15 --first 0
 {"run":1,"n":19,"R":17,"fitted":[0.6595,0.7495,0.8275,0.888,0.9265,0.958,0.9795,0.9875],"truth":[0.6235,0.7115,0.799,0.8565,0.909,0.947,0.9685,0.9775]}

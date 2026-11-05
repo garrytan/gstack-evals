@@ -3,9 +3,9 @@
 # each command in slices of 10 runs (--first), run side by side.
 # Search level 0.87 ran on r3c.ts.txt sha256 00c064cf905cbb5c16b32b71b382be1620730570be341ef8b55b26bd778320fe. The committed
 # file adds ladder D1 and the graded secondaries (closingLine, closingBlock, goldFiles, locHit, locRank, f2pShare,
-# ladderLines, forecast's admitted-rate mean and their selftests) and moves one selftest fixture from 12 to 14 tasks;
-# every function validate calls is byte-identical except admission's pricing (the admitted tasks' graded calibration
-# none trials, not every trial), calSpendUsd's and the TSV reader's missing-cost rules and admission's unpriced STOP.
+# ladderLines, forecast's admitted-rate mean, mainText, oracleF2p and their selftests) and moves one selftest fixture from 12 to 14 tasks;
+# every function validate calls is byte-identical except admission's pricing (every calibration none trial on the
+# admitted tasks, graded or not, not every trial), calSpendUsd's and the TSV reader's missing-cost rules and admission's unpriced STOP.
 # Every simulated trial costs $0.43 and none is missing, so these lines stand.
 # Search level 0.83, further down, ran on the earlier version of this file that the level was raised from.
 # Totals at 0.87: NPMLE truth, GO in 36 of 40, MDD mean 10.72, true power at it mean 84.7% (SE 1.0; 6 of 36 runs under
