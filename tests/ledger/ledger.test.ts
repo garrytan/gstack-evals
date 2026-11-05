@@ -495,3 +495,88 @@ describe("lease holders (GST-1381)", () => {
     local.close();
   });
 });
+
+describe("a cap stop reaches every close of its lease", () => {
+  test("settle --from copies the record's stop into a sealed workflow's close, and keeps an artifact's own cap_stop when the record holds none", () => {
+    const { record } = setup();
+    const lease = openLease(record, null, { item: "lanea", run_id: "sealed-1", machine_id: "workflow:sealed-repo", amount_micros: 3 * DOLLAR });
+    const workflow = LocalLedger.open(join(scratch(), "workflow.sqlite"));
+    workflow.addLease(exportLease(record, lease.lease_id));
+    const artifact = JSON.parse(JSON.stringify(settleLease(null, workflow, lease.lease_id)));
+    expect(artifact.cap_stop).toBeUndefined();
+    recordStop(record, lease.lease_id, "autoplan:told only");
+    expect(importSettlement(record, artifact).cap_stop).toBe("autoplan:told only");
+    expect(importSettlement(record, artifact).cap_stop).toBe("autoplan:told only");
+    expect(readItem(record, "lanea").leases[0]!.close?.cap_stop).toBe("autoplan:told only");
+
+    const other = setup();
+    const second = openLease(other.record, null, { item: "lanea", run_id: "sealed-2", machine_id: "workflow:sealed-repo", amount_micros: 3 * DOLLAR });
+    const held = LocalLedger.open(join(scratch(), "workflow.sqlite"));
+    held.addLease(exportLease(other.record, second.lease_id));
+    const stopped = { ...settleLease(null, held, second.lease_id), cap_stop: "none only" };
+    expect(importSettlement(other.record, stopped).cap_stop).toBe("none only");
+    expect(codeOf(() => openLease(other.record, null, { item: "lanea", run_id: "sealed-2", machine_id: "workflow:sealed-repo", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+    expect(codeOf(() => importSettlement(other.record, { ...stopped, cap_stop: "" }))).toBe("E_USAGE");
+  });
+
+  test("a reconcile copies the record's stop into the owner's close", () => {
+    const { dir, record } = setup();
+    const lease = openLease(record, null, { item: "lanea", run_id: "run-a", machine_id: "m-gone", amount_micros: DOLLAR });
+    recordStop(record, lease.lease_id, "plan-eng-review:told only");
+    const exportFile = join(dir, "usage.csv");
+    writeFileSync(exportFile, "date,cost\n");
+    const owner = { lease_id: lease.lease_id, spent_micros: 400_000, quotes: [quote], source: exportFile, now: new Date(Date.parse(lease.expires_at) + 1) };
+    expect(reconcileLease(record, owner).cap_stop).toBe("plan-eng-review:told only");
+    expect(reconcileLease(record, owner).cap_stop).toBe("plan-eng-review:told only");
+    expect(readItem(record, "lanea").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+  });
+
+  test("a close staged with a cap stop keeps it, so a settle retry with no stop record still writes the stop", () => {
+    const { record, local } = setup();
+    const lease = openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR });
+    const items = join(record, "items", "lanea");
+    chmodSync(items, 0o555);
+    try {
+      expect(codeOf(() => settleLease(record, local, lease.lease_id, undefined, "plan-eng-review:told only"))).toBe("E_LEASE_UNSETTLED");
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    expect(settleLease(record, local, lease.lease_id).cap_stop).toBe("plan-eng-review:told only");
+    expect(readItem(record, "lanea").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+    expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+  });
+
+  test("a stop given after the close was staged without one still goes into the close", async () => {
+    const { record, local } = setup();
+    const lease = openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR });
+    const items = join(record, "items", "lanea");
+    chmodSync(items, 0o555);
+    try {
+      expect(codeOf(() => settleLease(record, local, lease.lease_id))).toBe("E_LEASE_UNSETTLED");
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    recordStop(record, lease.lease_id, "none only");
+    expect(settleLease(record, local, lease.lease_id).cap_stop).toBe("none only");
+    expect(readItem(record, "lanea").leases[0]!.close?.cap_stop).toBe("none only");
+  });
+
+  test("a stop written after a lease closed leaves the close as written, so a settle or import retry answers the same close (adversarial-native#3)", () => {
+    const dir = scratch();
+    const record = join(dir, "record");
+    for (const item of ["lanea", "laneb"]) recordApproval(record, { action: "init", item, cap_micros: 10_000_000, quotes: [quote], admission: "warn" });
+    const sealed = openLease(record, null, { item: "lanea", run_id: "s1", machine_id: "workflow:x", amount_micros: 3_000_000 });
+    const wf = LocalLedger.open(join(dir, "wf.sqlite"));
+    wf.addLease(exportLease(record, sealed.lease_id));
+    const artifact = JSON.parse(JSON.stringify(settleLease(null, wf, sealed.lease_id)));
+    const imported = importSettlement(record, artifact);
+    recordStop(record, sealed.lease_id, "all: none");
+    expect(importSettlement(record, artifact)).toEqual(imported);
+    const local = LocalLedger.open(join(dir, "m.sqlite"));
+    const lease = openLease(record, local, { item: "laneb", run_id: "r1", machine_id: "m", amount_micros: 3_000_000 });
+    const settled = settleLease(record, local, lease.lease_id);
+    recordStop(record, lease.lease_id, "all: none");
+    expect(settleLease(record, local, lease.lease_id)).toEqual(settled);
+    expect(local.getLease(lease.lease_id)!.close).toEqual(settled);
+  });
+});

@@ -1,5 +1,35 @@
 # Outcome-skills session driver
 
+`gstack-evals outcome serve` runs one G admission batch on the program's envelope host: one U4 lease per stage at its line item's cap, one metering-proxy slot per session, and a control plane on 127.0.0.1 that real_agent opens and closes sessions on. The leases, their closes and every cap stop live in O6's record.
+
 ## Operator rule: a driver failure ends the item
 
-If the driver fails with E_INTERNAL or E_LEASE_UNSETTLED, each line item it was serving ends incomplete, and the driver is not launched again for that item unless GSTA-2 reads the ledger and rules otherwise. The driver writes a cap stop to O6's record before it answers the 409 that reports it. If that record can't be written when the stop fires, the driver answers 500 E_INTERNAL instead, no stop record lands, and a relaunch would reopen the item on what its cap has left. GST-1413 owns turning this rule into code before G's first paid run.
+If the driver fails with E_INTERNAL or E_LEASE_UNSETTLED, each line item it was serving ends incomplete, and the driver is not launched again for that item unless GSTA-2 reads the ledger and rules otherwise.
+
+## Cap stops
+
+When a stage runs out of room, the driver drains it as cap_stop, then writes the stop into O6's record (`items/<item>/stop-<slot>.json`) before it answers the 409 CAP_STOP. A none stop drains every stage and writes a stop on each stage's item. From then on O6 admits no new lease on a stopped item, and a relaunch for it is refused with CAP_STOP.
+
+If the stop can't be written, for example because the item's directory in the record is read-only, the driver appends a `stop` line for each stopped stage to the run directory's sessions.jsonl, answers 500 E_INTERNAL, stops every stage and exits 2. The stage was drained as cap_stop first, so every close of its lease still carries the stop as `cap_stop`:
+
+- the driver's own settle, when the record is writable again by then;
+- a later `gstack-evals ledger settle --lease`, because the driver keeps the stop in its local ledger before it writes the stop record, and the local ledger puts it in every close it stages for the lease;
+- a relaunch's recovery, which reads the `stop` line.
+
+A told stage counts as finished only when it ended completed or cap_stop. After a told cap stop, none drains and settles as completed only once every told stage has finished. A told stage that ended lease_expired or failed may still owe trials on a relaunch, so none keeps serving.
+
+## What a session's close answers
+
+`spent_micros` is the session's settled spend at its close: its calls with a recorded cost. `unknown_micros` is the full reservation O6 still holds for its calls with no recorded cost at that moment, a call still in flight or priced only in the proxy journal included, and `unknown_calls` counts those calls. real_agent passes `spent_micros` on as the trial's cost_usd, so admission's metered means use settled spend and never price an unknown call. `unknownFromRun` reads the same answers from the run directory's `close` lines and counts each arm's calls of unknown cost for item 5 to print, even when the lease's close later settles them. The cap path still counts every unknown call at its full reservation: the room check, the lease's close and the envelope.
+
+## Settling a lease the driver left open
+
+The driver exits 2 and prints E_LEASE_UNSETTLED with each lease id it could not settle, and a launch is refused with E_LEASE_UNSETTLED while one of its stage items holds an open lease. Settle such a lease with the ledger's own commands. No step below edits O6's record, the local ledger, sessions.jsonl or a proxy journal by hand.
+
+1. Stop any driver still serving the run directory with POST /stop or SIGTERM, so no lease is settled while a live driver meters it.
+2. On the envelope host, read `gstack-evals ledger status --item <item>` for each item the driver served and `gstack-evals ledger status --program <program>`. Send the readings and the driver's log lines to the reader the operator rule names, who rules under it.
+3. When that reader rules a relaunch, launch the driver again on the envelope host with the same `--run`, `--dir`, `--record` and `--ledger`. Before preflight, its recovery settles every open lease the run directory holds, whatever stages the launch lists: it reconciles the lease's proxy journal, writes a `close` line with reason `recovered` for each session sessions.jsonl still shows open on the lease, with its figures from the local ledger at that point so `unknownFromRun` counts its unknown calls, copies any cap stop into the close and prints STAGE_RECOVERED. The launch then serves the stages it lists, unless one of them is stopped, which refuses the whole launch with CAP_STOP before any lease opens.
+4. Otherwise settle each open lease on the envelope host with `gstack-evals ledger settle --lease <lease id>`, pointed at the driver's record and local ledger. The close copies a stop the record holds on the lease, or one the local ledger staged with it. A call whose outcome only the proxy journal holds stays unknown at its full reservation, as the cap path counts it.
+5. If the envelope host's local ledger is gone, the owner reconciles the lease after it expires with `gstack-evals ledger reconcile`, from the provider's usage export (docs/budget-ledger.md).
+
+A launch refused at preflight, E_RIG_UNPROVEN included, opens no lease, and a refusal while the driver opens its stages settles every lease it opened at $0, so neither leaves a lease to settle. Write the missing admission record with `gstack-evals rig admit` for the slot the message names, then launch again.

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   reservation_id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, lease_id TEXT NOT NULL REFERENCES leases (lease_id),
   cell TEXT NOT NULL, max_micros INTEGER NOT NULL, state TEXT NOT NULL, spent_micros INTEGER, usage TEXT, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS reservations_lease ON reservations (lease_id, state);
+CREATE TABLE IF NOT EXISTS stops (lease_id TEXT PRIMARY KEY, scope TEXT NOT NULL);
 `;
 
 interface Row {
@@ -108,15 +109,24 @@ export class LocalLedger implements ReservationLedger {
     return row.held;
   }
 
-  /** Per meter id on the lease: what it holds, counted as held() counts the lease, and the token usage of its settled calls. */
-  meters(lease_id: string): Map<string, { held_micros: number; usage: TokenUsage }> {
+  /**
+   * Per meter id on the lease: what it holds, counted as held() counts the lease, split into its settled calls' spend
+   * and the full reservations of its calls with no recorded cost, the count of those calls, and the token usage of its
+   * settled calls.
+   */
+  meters(lease_id: string): Map<string, { held_micros: number; spent_micros: number; unknown_micros: number; unknown_calls: number; usage: TokenUsage }> {
     const rows = this.db.query("SELECT cell, state, max_micros, spent_micros, usage FROM reservations WHERE lease_id = ?").all(lease_id) as Pick<Row, "cell" | "state" | "max_micros" | "spent_micros" | "usage">[];
-    const out = new Map<string, { held_micros: number; usage: TokenUsage }>();
+    const out = new Map<string, { held_micros: number; spent_micros: number; unknown_micros: number; unknown_calls: number; usage: TokenUsage }>();
     for (const r of rows) {
       const id = (JSON.parse(r.cell) as CellAttempt).meter_id;
       let m = out.get(id);
-      if (!m) out.set(id, (m = { held_micros: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }));
-      m.held_micros += r.state === "settled" ? (r.spent_micros ?? 0) : r.max_micros;
+      if (!m) out.set(id, (m = { held_micros: 0, spent_micros: 0, unknown_micros: 0, unknown_calls: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }));
+      if (r.state === "settled") m.spent_micros += r.spent_micros ?? 0;
+      else {
+        m.unknown_micros += r.max_micros;
+        m.unknown_calls++;
+      }
+      m.held_micros = m.spent_micros + m.unknown_micros;
       if (r.state === "settled" && r.usage) for (const [k, v] of Object.entries(JSON.parse(r.usage) as TokenUsage)) m.usage[k as keyof TokenUsage] += v;
     }
     return out;
@@ -162,15 +172,28 @@ export class LocalLedger implements ReservationLedger {
     });
   }
 
+  /** Keeps the first cap stop given for a lease, before its close is staged, so every later settle of the lease carries it. */
+  stageStop(lease_id: string, scope: string): void {
+    this.db.run("INSERT OR IGNORE INTO stops (lease_id, scope) VALUES (?, ?)", [lease_id, scope]);
+  }
+
   /**
    * Fixes the lease's close once and stores it, so every retry writes the same bytes to the record. Calls still
-   * reserved become unknown: their charge is kept and a later settle of them is a conflict.
+   * reserved become unknown: their charge is kept and a later settle of them is a conflict. A cap stop's scope, given
+   * here or kept earlier by stageStop, is stored with the close the first time one is given, so every later settle
+   * keeps it, even one that is given none. Once the close is in the record, a stop given later leaves it as written.
    */
-  stageClose(lease_id: string): CloseFile {
+  stageClose(lease_id: string, cap_stop?: string): CloseFile {
     return this.tx(() => {
       const lease = this.getLease(lease_id);
       if (!lease) throw new LedgerError("E_LEASE_UNSETTLED", "no lease " + lease_id + " in the local ledger " + this.path + "; settle it on the machine whose local ledger holds it, or, if that machine or its local ledger is gone, the owner reconciles it after it expires");
-      if (lease.close) return lease.close;
+      cap_stop ??= (this.db.query("SELECT scope FROM stops WHERE lease_id = ?").get(lease_id) as { scope: string } | null)?.scope;
+      if (lease.close) {
+        if (lease.close.cap_stop || !cap_stop || lease.state !== "closing") return lease.close;
+        const stopped: CloseFile = { ...lease.close, cap_stop };
+        this.db.run("UPDATE leases SET close = ? WHERE lease_id = ?", [JSON.stringify(stopped), lease_id]);
+        return stopped;
+      }
       this.db.run("UPDATE reservations SET state = 'unknown' WHERE lease_id = ? AND state = 'reserved'", [lease_id]);
       const rows = this.db.query("SELECT * FROM reservations WHERE lease_id = ?").all(lease_id) as Row[];
       const settled = rows.filter((r) => r.state === "settled");
@@ -189,6 +212,7 @@ export class LocalLedger implements ReservationLedger {
         unknown_calls: unknown.length,
         usage,
         closed_at: this.now().toISOString(),
+        ...(cap_stop ? { cap_stop } : {}),
       };
       this.db.run("UPDATE leases SET state = 'closing', close = ? WHERE lease_id = ?", [JSON.stringify(close), lease_id]);
       return close;
