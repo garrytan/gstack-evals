@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
-import { cellKey, ITEMS, plannedCells, sha256, trialTasksFrom } from "../l1/l1.ts";
+import { cellKey, classify, EXIT4_LOSS, ITEMS, plannedCells, sha256, trialTasksFrom } from "../l1/l1.ts";
 
 // l1.ts end to end on a fake awake host. fixtures/l1/ubi plays ubi-runner: each VM is a directory under UBI_FAKE, and ssh
 // runs a command in it with HOME set to it, so the host runs the real host.sh, launch.sh and ledger service. fixtures/l1/ssh
@@ -32,7 +32,7 @@ function rig(item: string, o: { cap?: number; preReserve?: number } = {}): Rig {
   l.approve(o.cap ?? ITEMS[item]!.capUsd, { quotes: ["test approval"] });
   if (o.preReserve) l.reserve("host-9", toMicros(o.preReserve));
   const tb2 = join(root, "tb2-parts.txt");
-  writeFileSync(tb2, tb2Text());
+  writeFileSync(tb2, readFileSync(join(import.meta.dir, "../../../wiki/plans/2026-11-05-geva-294-l1-amendment-c/tb2-parts.txt")));
   const env: Record<string, string> = {
     PATH: FIX + ":" + process.env.PATH, HOME: process.env.HOME ?? root,
     UBI_FAKE: fake, UBI_RUNNER: join(FIX, "ubi"), UBI_RUNNER_SHA256: sha256(readFileSync(join(FIX, "ubi"))), UBI_RUNNER_STATE: state, UBI_RECOVERY_DIR: recovery, UBI_OWNER: "GEVA-268",
@@ -132,6 +132,10 @@ describe("l1.ts before any spend", () => {
     expect(l1(r, ["launch", r.work, "--part", "pilot"]).err).toContain("no host is up");
     const tb2 = rig("tb2-opus");
     expect(l1(tb2, ["prepare", tb2.work, "--item", "tb2-opus"], { TB2_PARTS_SHA256: "0".repeat(64) }).code).toBe(2);
+    const other = join(tb2.root, "other-split.txt");
+    writeFileSync(other, tb2Text());
+    const unpinned = l1(tb2, ["prepare", tb2.work, "--item", "tb2-opus"], { TB2_PARTS: other, TB2_PARTS_SHA256: sha256(readFileSync(other)) });
+    expect([unpinned.code, unpinned.err]).toEqual([2, expect.stringContaining("57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125")]);
     const ok = l1(tb2, ["prepare", tb2.work, "--item", "tb2-opus"]);
     expect([ok.code, plan(tb2).parts.map((p: any) => p.name), plan(tb2).host_ttl_hours]).toEqual([0, ["tb2-1", "tb2-2"], 78]);
     expect(ok.out).toContain("tb2-1 (190 sessions), tb2-2 (180 sessions)");
@@ -573,22 +577,86 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     expect([up.code, up.err]).toEqual([3, expect.stringContaining("recover could not rebuild the ledger")]);
   }, 300_000);
 
-  test("vm-run.sh's exit 4, the ledger service unreachable before any trial, is an ending the prereg does not class: the next part and a relaunch are refused, and host-down still runs", async () => {
+  // Amendment C classes vm-run.sh's exit 4 (the ledger service unreachable through the tunnel before any pull or trial) as
+  // section 6's lost ledger service, fail-closed: every cell is relaunched once only when the item's ledger holds no session
+  // record for the part, and that relaunch is the part's one relaunch, so a loss in it ends the item incomplete.
+  const plantSession = (r: Rig, part: string) => {
+    const p = plan(r).parts.find((x: any) => x.name === part);
+    const task: string = p.rects[0].tasks[0], arm: string = p.rects[0].arms[0];
+    const trial = task.slice(0, 32).replace(/[_-]+$/, "") + "__plant01__env";
+    const hostLedger = join(r.fake, "host-1/l1/ledger/f1-opus.jsonl");
+    for (const kind of ["reserve", "settle"]) writeFileSync(hostLedger, readFileSync(hostLedger, "utf8") + JSON.stringify({ ts: new Date().toISOString(), item: "f1-opus", kind, id: p.prefix + "s-planted", usd_micros: 100_000, trial, arm }) + "\n");
+    return { task, arm };
+  };
+  test("vm-run.sh's exit 4 with no session record for the part on the item's ledger is section 6's lost ledger service: the part's one relaunch runs every planned cell, and the next part then launches", async () => {
     const r = rig("f1-opus");
     expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
     expect(l1(r, ["host-up", r.work]).code).toBe(0);
     expect(l1(r, ["launch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2" }).code).toBe(0);
     const a = await attachUntil(r, /f1-1: finished, launch exit 4/);
-    expect(a.out).toContain("UNCLASSIFIED: vm-run.sh exited 4");
-    expect(a.out).toContain("NEXT: host-down: f1-1 ended in a way the prereg does not class");
-    expect(JSON.parse(readFileSync(join(r.work, "f1-1.result.json"), "utf8"))).toMatchObject({ vm_run_exit: "4", loss: [], cap_stop: [] });
-    for (const args of [["launch", r.work, "--part", "f1-2"], ["relaunch", r.work, "--part", "f1-1"]]) {
-      const x = l1(r, args);
-      expect([x.code, x.err]).toEqual([3, expect.stringContaining("does not class")]);
-    }
-    expect(events(r).match(/ up -s standard-16 /g)).toHaveLength(1);
+    expect(a.out).toContain("LOSS: vm-run.sh exited 4");
+    expect(a.out).toContain("NEXT: relaunch --part f1-1");
+    expect(JSON.parse(readFileSync(join(r.work, "f1-1.result.json"), "utf8"))).toMatchObject({ vm_run_exit: "4", cap_stop: [], unclassified: [] });
+    expect(l1(r, ["launch", r.work, "--part", "f1-2"]).err).toContain("run relaunch for it first");
+    const re = l1(r, ["relaunch", r.work, "--part", "f1-1"]);
+    expect([re.code, re.out]).toEqual([0, expect.stringContaining("f1-1-relaunch: controller started on host-1")]);
+    const rel = JSON.parse(readFileSync(join(r.work, "f1-1.relaunch.json"), "utf8"));
+    expect(rel.never_started.reduce((s: number, c: any) => s + c.replicates, 0)).toBe(140);
+    await attachUntil(r, /NEXT: launch --part f1-2/);
+    expect(ranCells(join(r.work, "f1-1-relaunch"))).toHaveLength(140);
+    expect(l1(r, ["relaunch", r.work, "--part", "f1-1"]).err).toContain("relaunched already");
+    expect(new Ledger(join(r.fake, "host-1/l1/ledger/f1-opus.jsonl"), "f1-opus").status().openIds).toEqual(["host-1"]);
+  }, 300_000);
+
+  test("an exit-4 relaunch is the part's one relaunch: when it ends with a loss too, the item ends incomplete, the next part and another relaunch are refused, and host-down still runs", async () => {
+    const r = rig("f1-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2" }).code).toBe(0);
+    await attachUntil(r, /NEXT: relaunch --part f1-1/);
+    expect(l1(r, ["relaunch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-3" }).code).toBe(0);
+    const a = await attachUntil(r, /f1-1-relaunch: finished, launch exit 4/);
+    expect(a.out).toContain("NEXT: host-down: f1-1-relaunch ended with a loss after f1-1's one relaunch for vm-run.sh's exit 4, so f1-opus ends incomplete and goes to the Captain");
+    for (const args of [["launch", r.work, "--part", "f1-2"], ["relaunch", r.work, "--part", "f1-1"]]) expect(l1(r, args).code).toBe(3);
+    expect(l1(r, ["launch", r.work, "--part", "f1-2"]).err).toContain("has ended incomplete: f1-1-relaunch ended with a loss");
+    expect(events(r).match(/ up -s standard-16 /g)).toHaveLength(2);
     expect(l1(r, ["host-down", r.work]).code).toBe(0);
     expect(openIds(r, "f1-opus")).toEqual([]);
+  }, 300_000);
+
+  test("exit 4 fails closed: with a session record for the part on the item's ledger it takes the lost-evidence path, a loss whose relaunch runs only the cells that never started, or a cap stop when the ledger came within one session cap of the cap", async () => {
+    const r = rig("f1-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2" }).code).toBe(0);
+    const planted = plantSession(r, "f1-1");
+    const a = await attachUntil(r, /f1-1: finished, launch exit 4/);
+    expect(a.out).toContain("session record for this part");
+    expect(a.out).toContain("NEXT: relaunch --part f1-1");
+    expect(l1(r, ["relaunch", r.work, "--part", "f1-1"]).code).toBe(0);
+    const rel = JSON.parse(readFileSync(join(r.work, "f1-1.relaunch.json"), "utf8"));
+    expect(rel.never_started.reduce((s: number, c: any) => s + c.replicates, 0)).toBe(139);
+    expect(rel.never_started.some((c: any) => c.task === planted.task && c.arm === planted.arm)).toBe(false);
+
+    const tight = rig("f1-opus", { preReserve: 666 });
+    expect(l1(tight, ["prepare", tight.work, "--item", "f1-opus"]).code).toBe(0);
+    expect(l1(tight, ["host-up", tight.work]).code).toBe(0);
+    expect(l1(tight, ["launch", tight.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2" }).code).toBe(0);
+    plantSession(tight, "f1-1");
+    const b = await attachUntil(tight, /f1-1: finished, launch exit 4/);
+    expect(b.out).toContain("CAP STOP:");
+    expect(b.out).toContain("ended at a cap stop");
+    expect(l1(tight, ["relaunch", tight.work, "--part", "f1-1"]).code).toBe(3);
+  }, 300_000);
+
+  test("exit 4 with no session record relaunches even when the ledger is within one session cap of its cap, since no trial started", async () => {
+    const r = rig("f1-opus", { preReserve: 666 });
+    expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2" }).code).toBe(0);
+    const a = await attachUntil(r, /f1-1: finished, launch exit 4/);
+    expect(a.out).not.toContain("CAP STOP");
+    expect(a.out).toContain("NEXT: relaunch --part f1-1");
   }, 180_000);
 
   test("recover after the host dies with the part VM already gone (RECOVER_GONE) ends the item incomplete instead of refusing forever", async () => {
@@ -654,17 +722,19 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_vm_gone: true, complete: false });
   }, 300_000);
 
-  test("recover after the host dies with a part that ended at vm-run.sh's exit 4 says the item has ended, not relaunch", async () => {
+  test("recover after the host dies with a part that ended at vm-run.sh's exit 4 and no session record classes it as a lost ledger service: NEXT is host-up, then the part's one relaunch", async () => {
     const r = rig("f1-opus");
     expect(l1(r, ["prepare", r.work, "--item", "f1-opus"]).code).toBe(0);
     expect(l1(r, ["host-up", r.work]).code).toBe(0);
     expect(l1(r, ["launch", r.work, "--part", "f1-1"], { TUNNEL_DOWN_VM: "vm-2", FAIL_PULL: "vm-2" }).code).toBe(0);
     await loseHost(r, "host-1", "f1-1", "vm-2");
     const rec = l1(r, ["recover", r.work]);
-    expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("NEXT: none: f1-opus ended incomplete (f1-1 ended in a way the prereg does not class")]);
+    expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part f1-1")]);
     expect(recoverJson(r)).toMatchObject({ part_results_pulled: true, complete: true });
-    const up = l1(r, ["host-up", r.work]);
-    expect([up.code, up.err]).toEqual([3, expect.stringContaining("does not class")]);
+    const res = JSON.parse(readFileSync(join(r.work, "f1-1.result.json"), "utf8"));
+    expect(res).toMatchObject({ vm_run_exit: "4", cap_stop: [], unclassified: [] });
+    expect(res.loss).toEqual(expect.arrayContaining([expect.stringContaining("no session record for this part"), "the awake host was lost"]));
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
   }, 240_000);
 
   test("recover counts every rebuilt session as open at once when it checks for a cap stop, since restoreRows replays each session as a reserve then a settle: two unmirrored sessions and a refused VM block read as a cap stop, not a relaunch", async () => {
@@ -937,4 +1007,32 @@ describe("recover's crash-and-rerun edges", () => {
     expect(readFileSync(join(r.work, "relaunch-evidence.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ event: "vm_death", part: "pilot", vm: "vm-2", confirmed_by: expect.stringContaining("RECOVER_GONE") })]);
     expect(l1(r, ["host-up", r.work]).code).toBe(0);
   }, 300_000);
+});
+
+describe("classify: exit 4's second guard names the part's VM blocks exactly (the Captain's B1 ruling)", () => {
+  // Value: protects=exit 4 relaunching every cell only when the part has no session record; fails_when=a session reserve alone relaunches every cell, or an id that only starts like a VM block is skipped; why_new=GEVA-296; seam=l1.ts classify; no_claim=launch.sh's block ids, which the l1-host fake drives
+  const prefix = "run-1/f1-1/";
+  const exit4 = (...ids: string[]) => {
+    const root = mkdtempSync(join(tmpdir(), "l1-classify-"));
+    mkdirSync(join(root, "part", "pulled", "out"), { recursive: true });
+    writeFileSync(join(root, "part", "pulled", "out", "vm-run.exit"), "4\n");
+    const ledger = join(root, "f1-opus.jsonl");
+    const l = new Ledger(ledger, "f1-opus");
+    l.approve(680, { quotes: ["test approval"] });
+    for (const id of ids) l.reserve(prefix + id, toMicros(2.4));
+    return classify(join(root, "part"), 0, { ledger: { rows: readRows(ledger), since: "2026-01-01T00:00:00.000Z", sessionCapUsd: 5, prefix } });
+  };
+  const allCells = EXIT4_LOSS + ", and the item's ledger holds no session record for this part, so no trial started";
+  const lostEvidence = EXIT4_LOSS + ", but the item's ledger holds a session record for this part, so it is read as a part whose records were lost";
+  test("only <prefix>vm and <prefix>vm-2 on the ledger: every planned cell relaunches", () => {
+    const c = exit4("vm", "vm-2");
+    expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[allCells], [], []]);
+  });
+  test("a reserve-only session row under the part's prefix takes the lost-evidence path, not the every-cell relaunch", () => {
+    const c = exit4("vm", "trial-a/session-1");
+    expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[lostEvidence], [], []]);
+  });
+  test("an id that only starts like a VM block counts as a session record", () => {
+    for (const id of ["vm-2x", "vmx"]) expect(exit4("vm", id).loss).toEqual([lostEvidence]);
+  });
 });

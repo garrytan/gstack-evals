@@ -4,7 +4,7 @@
 //
 // The sum: every L1 ledger item's settled and reserved spend (an item not yet done counts at the larger of that and its cap,
 // so the caps of every planned item still to run are in it); the credits / 1000 of every L1 thread and of the Captain's
-// booked L1 turns; and a holdback. The holdback is the larger of the crew line's unspent remainder ($400 less crew spend, never
+// booked L1 turns; and a holdback. The holdback is the larger of the crew line's unspent remainder ($700 less crew spend, never
 // below zero) and the sum over open and planned L1 threads (crew and run-work lines alike) of each one's unspent token stop at
 // the measured L1 dollars per token so far, plus the Captain line's unspent remainder ($40) and each leftover model's run-work
 // remainder ($15) while that model is pending. check refuses a launch whose sum passes $2,000, and a launch while any item,
@@ -14,7 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { readRows, totals, type Row } from "../runner/ledger.ts";
 
 export const CEILING_USD = 2000;
-export const CREW_LINE_USD = 400;
+export const CREW_LINE_USD = 700;
 export const CAPTAIN_LINE_USD = 40;
 export const RUN_WORK_LINE_USD = 15;
 /** Section 9's planning rate, used only until any L1 thread has a token reading. */
