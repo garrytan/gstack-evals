@@ -218,6 +218,37 @@ describe("item 7 (the Captain's include, 2026-11-05): printf -v writes no Findin
   });
 });
 
+describe("review round 2 (#229 Step 11): the handoff and printf checks read shell words", () => {
+  // Value: protects=handoff_ceo_only and findings_written read the arguments the shell passes, so a comment or quoted text can't stand in for --ceo-only, hide --auto, or hide printf -v; fails_when=a comment, quoted --decisions text, a quoted "--auto", a comment-only call, printf "-v" or printf -vx reads exposed, or a real call with --auto in its quoted text or a quoted "--ceo-only" reads unexposed; why_new=#229 Step 11 outside voice and adversarial reader; seam=autoplanCeoExposure; no_claim=the rest of the handoff call form
+  const EXE = "~/.claude/skills/gstack/bin/gstack-ceo-mode-handoff";
+  test("comments, quoted text and a quoted --auto never read as the handoff run with --ceo-only", () => {
+    const fakes = [
+      EXE + ' "HOLD SCOPE" # --ceo-only',
+      EXE + ' HOLD_SCOPE --decisions "note --ceo-only ignored"',
+      CALL + ' "--auto"',
+      "#/gstack-ceo-mode-handoff HOLD_SCOPE --ceo-only",
+    ];
+    for (const c of fakes) expect([c, handoff(c, "ok")]).toEqual([c, false]);
+  });
+  test("the documented call forms still read exposed, with --auto inside quoted text or a quoted --ceo-only", () => {
+    const real = [
+      CALL,
+      CALL + '; echo "HANDOFF_EXIT: $?"',
+      CALL + " 2>&1",
+      CALL + " 2>&1 | tee " + AP + "/handoff.txt",
+      EXE + ' "HOLD SCOPE" --ceo-only --decisions "D2: drop the --auto flag idea"',
+      EXE + ' "HOLD SCOPE" "--ceo-only" --decisions "none"',
+    ];
+    for (const c of real) expect([c, handoff(c)]).toEqual([c, true]);
+  });
+  test("printf with a quoted or attached -v writes no Findings", () => {
+    const at = (c: string) => autoplanCeoExposure(nd(bash(CALL, LINE), bash(c, ""))).checks.findings_written;
+    expect(at("printf \"-v\" x '\\n## Findings\\nNone.\\n' > " + AP + "/ceo-review.md")).toBe(false);
+    expect(at("printf -vx '\\n## Findings\\nNone.\\n' > " + AP + "/ceo-review.md")).toBe(false);
+    expect(at("printf '## Findings\\nNone.\\n' > " + AP + "/ceo-review.md")).toBe(true);
+  });
+});
+
 describe("rows diagnostics count the sessions that named the handoff and read unexposed", () => {
   // Value: protects=a false unexposed under the strict handoff rule shows up per cell; fails_when=such sessions read unexposed silently; why_new=the Captain's cut-line rule (2026-11-05); seam=ceo rows; no_claim=none beyond protects
   test("one autoplan-ceo smoke session that grepped the handoff counts once", async () => {

@@ -12,13 +12,13 @@
 //   text, upper case, with a space or an underscore (HOLD SCOPE or HOLD_SCOPE).
 // - autoplan-ceo: a successful Bash call that runs gstack-ceo-mode-handoff itself (GST-1437 and the Captain's rule of
 //   2026-11-05): split at top-level ;, && and newlines, exactly one segment is the handoff call (a mode first, then
-//   --ceo-only, no --auto), with only 2>&1, >&2 or 2>/dev/null as redirections and at most one pipe into tee, head, tail
+//   --ceo-only, no --auto, read from its shell words, so a comment or quoted text never counts), with only 2>&1, >&2 or 2>/dev/null as redirections and at most one pipe into tee, head, tail
 //   or cat carrying only flags and file arguments; every other segment is cd <dir>, VAR=value or a word-only status
 //   echo such as echo "HANDOFF_EXIT: $?". ||, $(, backticks, a backslash or any other command fails it, so a grep or a
 //   printf of the line never passes. A call with a pipe or another segment also needs the line --ceo-only prints
 //   ("Auto-selected review mode → <MODE> (CEO-only run: Step 0E's rule)") in its own result. And a successful write of a
 //   file named ceo-review.md whose written text holds a line starting "## Findings": a Write, an Edit or MultiEdit (so a
-//   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, which writes no text).
+//   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, quoted or attached, which writes no text).
 //   handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows can count the
 //   sessions that named it and still read unexposed.
 import { createHash } from "node:crypto";
@@ -128,9 +128,34 @@ function ceoReviewText(u: Use): string | null {
   if (u.name !== "Bash" || typeof u.input.command !== "string") return null;
   const parts = simpleCommand(u.input.command);
   if (!parts || !writeTargets(parts).some((t) => CEO_REVIEW.test(t))) return null;
-  if (/^\s*printf\s+(?:-\S+\s+)*-v\b/.test(parts[0]!)) return "";
+  const pw = words(parts[0]!);
+  if (!pw) return "";
+  if (pw[0] === "printf") for (const w of pw.slice(1)) {
+    if (w === "--" || !w.startsWith("-")) break;
+    if (w.startsWith("-v")) return "";
+  }
   const [head, ...body] = u.input.command.split("\n");
   return [head!.replace(/\\n/g, "\n").replace(/^\s*(?:echo(?:\s+-[neE]+)*|printf)\s+(["']?)/, ""), ...body].join("\n");
+}
+
+/** A command's shell words with their quotes removed, ending at an unquoted # that starts a word (a comment); null on an open quote. */
+function words(command: string): string[] | null {
+  const out: string[] = [];
+  let cur: string | null = null;
+  let quote: string | null = null;
+  for (const c of command) {
+    if (quote) {
+      if (c === quote) quote = null;
+      else cur += c;
+    } else if (/\s/.test(c)) {
+      if (cur !== null) out.push(cur), (cur = null);
+    } else if (c === "#" && cur === null) break;
+    else if (c === "'" || c === '"') (quote = c), (cur ??= "");
+    else cur = (cur ?? "") + c;
+  }
+  if (quote) return null;
+  if (cur !== null) out.push(cur);
+  return out;
 }
 
 /** A command split at its top-level ;, && and newlines, then each part at its top-level pipes; null when it holds ||, a
@@ -177,7 +202,8 @@ function ranHandoff(command: string, result: string): boolean {
   if (segs.some((s) => s !== calls[0] && !(s.length === 1 && (CD.test(s[0]!) || ASSIGN.test(s[0]!) || STATUS_ECHO.test(s[0]!))))) return false;
   const bare = call!.replace(REDIRECTS, " ");
   if (/[<>&]/.test(bare.replace(/'[^']*'|"[^"]*"/g, "''"))) return false;
-  if (!HANDOFF_CALL.test(bare) || !/\s--ceo-only(?=\s|$)/.test(bare) || /\s--auto(?=\s|$)/.test(bare)) return false;
+  const argv = words(bare);
+  if (!argv || !HANDOFF_CALL.test(bare) || !/(?:^|\/)gstack-ceo-mode-handoff$/.test(argv[0] ?? "") || !argv.includes("--ceo-only") || argv.includes("--auto")) return false;
   return (segs.length === 1 && pipe.length === 0) || HANDOFF_LINE.test(result);
 }
 
