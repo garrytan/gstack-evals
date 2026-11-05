@@ -4,10 +4,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bind, check, publicForm, readManifest, tagFor, treeDigest, type ImageManifest } from "../../lanes/outcome-skills/images/manifest.ts";
+import { fileDigests, walk } from "../../lanes/real-outcome/task/format.ts";
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
@@ -25,12 +26,12 @@ function task(root: string, from = "FROM busybox:1.36\nCOPY f /testbed/f\n") {
   const d = join(root, "task");
   mkdirSync(join(d, "environment"), { recursive: true });
   mkdirSync(join(d, "tests"), { recursive: true });
-  writeFileSync(join(d, "task.json"), JSON.stringify({ id: "rox", kind: "K3" }));
   writeFileSync(join(d, "task.toml"), TOML);
   writeFileSync(join(d, "instruction.md"), "Add it.\n");
   writeFileSync(join(d, "environment", "Dockerfile"), from);
   writeFileSync(join(d, "environment", "f"), "x\n");
   writeFileSync(join(d, "tests", "t.py"), "def test(): pass\n");
+  writeFileSync(join(d, "task.json"), JSON.stringify({ id: "rox", kind: "K3", files: fileDigests(d) }));
   return d;
 }
 function manifest(root: string, d: string, image = ID): { path: string; m: ImageManifest } {
@@ -113,6 +114,46 @@ describe("the T-G image manifest (keyless)", () => {
     expect(thrown(() => bind(d, m, "rox", out, stubDocker(root, ID).docker))).toMatch(/task.json has sha256 .*not the manifest row's/);
     mkdirSync(out);
     expect(thrown(() => bind(d, m, "rox", out, stubDocker(root, ID).docker))).toMatch(/exists; bind writes a new run copy/);
+  });
+
+  test.each([
+    ["an edited file", /: instruction\.md differ from task\.json's file digests/, (d: string) => writeFileSync(join(d, "instruction.md"), "Add it, and delete the tests.\n")],
+    ["an added file", /: tests\/extra\.py differ from task\.json's file digests/, (d: string) => writeFileSync(join(d, "tests", "extra.py"), "def test_more(): pass\n")],
+    ["a deleted file", /: tests\/t\.py differ from task\.json's file digests/, (d: string) => rmSync(join(d, "tests", "t.py"))],
+    ["a symlink", /holds symlinks \(tests\/link\.md\)/, (d: string) => symlinkSync(join(d, "instruction.md"), join(d, "tests", "link.md"))],
+  ] as const)("bind refuses a task dir with %s against task.json's digests, before any run copy", (_what, why, edit) => {
+    const root = fresh();
+    const d = task(root);
+    const { m } = manifest(root, d);
+    const out = join(root, "run");
+    edit(d);
+    expect(thrown(() => bind(d, m, "rox", out, stubDocker(root, ID).docker))).toMatch(new RegExp("^E_OUTCOME_IMAGE .*" + why.source));
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("the run copy holds its own bytes: no symlinks, and an edit to the task dir after bind does not reach it", () => {
+    const root = fresh();
+    const d = task(root);
+    const { m } = manifest(root, d);
+    const out = join(root, "run");
+    bind(d, m, "rox", out, stubDocker(root, ID).docker);
+    expect(walk(out).links).toEqual([]);
+    for (const f of walk(out).files) expect(lstatSync(join(out, f)).isFile()).toBe(true);
+    writeFileSync(join(d, "instruction.md"), "Something else.\n");
+    writeFileSync(join(d, "tests", "t.py"), "def test(): assert False\n");
+    expect(readFileSync(join(out, "instruction.md"), "utf8")).toBe("Add it.\n");
+    expect(readFileSync(join(out, "tests", "t.py"), "utf8")).toBe("def test(): pass\n");
+  });
+
+  test("images check prints a multiline refusal with every stderr line led by its reason code", () => {
+    const root = fresh();
+    const { path } = manifest(root, task(root));
+    const p = Bun.spawnSync(["bun", join(import.meta.dir, "..", "..", "bin", "gstack-evals"), "outcome", "images", "check", path], { env: { ...process.env, DOCKER: stubDocker(root, OTHER).docker }, stdout: "pipe", stderr: "pipe" });
+    const err = p.stderr.toString().trim().split("\n");
+    expect(p.exitCode).toBe(2);
+    expect(err.length).toBeGreaterThan(3);
+    expect(err.some((l) => l.includes("fix: point the none arm"))).toBe(true);
+    for (const l of err) expect(l).toMatch(/^E_OUTCOME_CLEAN_ROOM /);
   });
 
   test("check refuses a row whose image id is not the pinned one, and passes a present, clean image", () => {

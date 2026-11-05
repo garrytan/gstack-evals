@@ -29,7 +29,7 @@ writes a task's run copy whose image is the pinned one and prints image_id=, whi
 Guide: lanes/outcome-skills/driver/README.md, "Trial images".`;
 
 function lines(code: ReasonCode, message: string): string {
-  return [message, "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].map((l) => code + " " + l).join("\n");
+  return [...message.split("\n"), "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].map((l) => code + " " + l).join("\n");
 }
 
 export async function main(argv: string[]): Promise<number> {

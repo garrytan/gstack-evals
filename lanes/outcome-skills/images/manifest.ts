@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileDigests, readTask, walk } from "../../real-outcome/task/format.ts";
 import { cleanRoomPreflight } from "../arms/clean-room.ts";
 
 export const HOME = "/root";
@@ -73,7 +74,6 @@ export function readManifest(path: string): ImageManifest {
 export async function pin(dirs: string[], out: string, set: string, commit: string): Promise<ImageManifest> {
   if (existsSync(out)) fail(out + " exists; pin writes a new manifest");
   const { buildImage } = await import("../../real-outcome/task/check.ts");
-  const { readTask } = await import("../../real-outcome/task/format.ts");
   const rows = dirs.map((d): ImageRow => {
     const t = readTask(d);
     return { label: t.id, kind: t.kind, task_json_sha256: sha(readFileSync(join(d, "task.json"))), environment_sha256: treeDigest(join(d, "environment")), image_id: buildImage(d, t).id };
@@ -100,28 +100,44 @@ export function publicForm(m: ImageManifest, manifestBytes: Buffer) {
 
 export const tagFor = (imageId: string) => "gstack-evals-tg-" + imageId.slice(7, 19) + ":pinned";
 
-/** The task's run copy for Harbor, bound to its row's image. Refuses a task dir that is not the pinned one, an image that
- *  is missing or moved, and an out dir that exists. */
+/** The task's run copy for Harbor, bound to its row's image. The checks read the copy itself, so the bytes Harbor gets are
+ *  the bytes checked. Refuses a task dir that is not the pinned one (task.json, environment, any file against task.json's
+ *  file digests, any symlink), an image that is missing or moved, and an out dir that exists; a refusal leaves no copy. */
 export function bind(taskDir: string, m: ImageManifest, label: string, out: string, docker = "docker"): { image_id: string; tag: string; out: string } {
   const row = m.rows.find((r) => r.label === label) ?? fail("no row for label " + label + " in the manifest");
   if (existsSync(out)) fail(out + " exists; bind writes a new run copy");
-  const got = sha(readFileSync(join(taskDir, "task.json")));
-  if (got !== row.task_json_sha256) fail(taskDir + "/task.json has sha256 " + got + ", not the manifest row's " + row.task_json_sha256);
-  const env = treeDigest(join(taskDir, "environment"));
-  if (env !== row.environment_sha256) fail(taskDir + "/environment has digest " + env + ", not the manifest row's " + row.environment_sha256);
   const tag = tagFor(row.image_id);
-  const t = spawnSync(docker, ["tag", row.image_id, tag], { encoding: "utf8", timeout: 30_000 });
-  if (t.status !== 0) fail("docker tag " + row.image_id + " failed (exit " + (t.status ?? t.signal) + "): " + (t.stderr ?? "").trim().slice(-300));
-  const id = spawnSync(docker, ["image", "inspect", "--format", "{{.Id}}", tag], { encoding: "utf8", timeout: 30_000 });
-  if (id.status !== 0 || id.stdout.trim() !== row.image_id) fail("the tag " + tag + " resolves to " + (id.stdout ?? "").trim() + ", not " + row.image_id);
-  cpSync(taskDir, out, { recursive: true, filter: (src) => relative(taskDir, src) !== "environment" && !relative(taskDir, src).startsWith("environment/") });
-  mkdirSync(join(out, "environment"));
-  writeFileSync(join(out, "environment", "Dockerfile"), "FROM " + tag + "\n");
-  const toml = readFileSync(join(taskDir, "task.toml"), "utf8");
-  if (!/^\[environment\]$/m.test(toml) || /^\s*docker_image\s*=/m.test(toml)) {
+  try {
+    cpSync(taskDir, out, { recursive: true });
+    const { links } = walk(out);
+    if (links.length) fail(taskDir + " holds symlinks (" + links.join(", ") + "); a run copy takes only the task's own files");
+    const raw = readFileSync(join(out, "task.json"));
+    const got = sha(raw);
+    if (got !== row.task_json_sha256) fail(taskDir + "/task.json has sha256 " + got + ", not the manifest row's " + row.task_json_sha256);
+    const env = treeDigest(join(out, "environment"));
+    if (env !== row.environment_sha256) fail(taskDir + "/environment has digest " + env + ", not the manifest row's " + row.environment_sha256);
+    let want: Record<string, string>;
+    try {
+      want = JSON.parse(raw.toString("utf8")).files ?? {};
+    } catch (e) {
+      return fail(taskDir + "/task.json is not JSON: " + (e as Error).message);
+    }
+    const have = fileDigests(out);
+    const drift = [...new Set([...Object.keys(have), ...Object.keys(want)])].filter((f) => have[f] !== want[f]).sort();
+    if (drift.length) fail(taskDir + ": " + drift.join(", ") + " differ from task.json's file digests");
+    const toml = readFileSync(join(out, "task.toml"), "utf8");
+    if (!/^\[environment\]$/m.test(toml) || /^\s*docker_image\s*=/m.test(toml)) fail(taskDir + "/task.toml needs an [environment] section and no docker_image of its own");
+    const t = spawnSync(docker, ["tag", row.image_id, tag], { encoding: "utf8", timeout: 30_000 });
+    if (t.status !== 0) fail("docker tag " + row.image_id + " failed (exit " + (t.status ?? t.signal) + "): " + (t.stderr ?? "").trim().slice(-300));
+    const id = spawnSync(docker, ["image", "inspect", "--format", "{{.Id}}", tag], { encoding: "utf8", timeout: 30_000 });
+    if (id.status !== 0 || id.stdout.trim() !== row.image_id) fail("the tag " + tag + " resolves to " + (id.stdout ?? "").trim() + ", not " + row.image_id);
+    rmSync(join(out, "environment"), { recursive: true, force: true });
+    mkdirSync(join(out, "environment"));
+    writeFileSync(join(out, "environment", "Dockerfile"), "FROM " + tag + "\n");
+    writeFileSync(join(out, "task.toml"), toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(tag)));
+  } catch (e) {
     rmSync(out, { recursive: true, force: true });
-    fail(taskDir + "/task.toml needs an [environment] section and no docker_image of its own");
+    throw e;
   }
-  writeFileSync(join(out, "task.toml"), toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(tag)));
   return { image_id: row.image_id, tag, out };
 }

@@ -1099,7 +1099,7 @@ export const CODES = {
   },
   E_OUTCOME_IMAGE: {
     exit: 2,
-    meaning: "T-G's image manifest or a trial's binding to it does not hold (lanes/outcome-skills/images/manifest.ts): the manifest is unreadable, has a row with no sha256 image id, digests or label of its own, or is not tg-images.v1 with home /root and work dir /testbed; or bind found a task dir whose task.json or environment digest differs from its row, an image the manifest pins that is missing or whose local tag resolves to another id, an out dir that exists, or a task.toml with no [environment] section or a docker_image of its own; or pin's out file exists.",
+    meaning: "T-G's image manifest or a trial's binding to it does not hold (lanes/outcome-skills/images/manifest.ts): the manifest is unreadable, has a row with no sha256 image id, digests or label of its own, or is not tg-images.v1 with home /root and work dir /testbed; or bind found a task dir whose task.json or environment digest differs from its row, a file that differs from task.json's file digests (edited, added or deleted), a symlink, an image the manifest pins that is missing or whose local tag resolves to another id, an out dir that exists, or a task.toml with no [environment] section or a docker_image of its own; or pin's out file exists.",
     fix: "Bind the task dir the manifest was pinned from, on the host whose Docker holds the pinned images (the envelope host), into a new out dir. When an image is gone or moved, rebuild it with pin into a new manifest and record that manifest's digests before any session. Nothing was spent and no lease is open.",
     side_effects: NO_SPEND,
     retry_safe: true,
