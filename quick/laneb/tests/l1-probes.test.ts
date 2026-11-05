@@ -313,6 +313,17 @@ describe("contract block, turn cap and the read audit", () => {
     expect(["echo /root/.gstack/config.yaml > /tmp/l; xargs cat < /tmp/l", "echo /root/.gstack/config.yaml > /tmp/l; xargs -a /tmp/l cat",
       "echo /root/.gstack/config.yaml | tee /tmp/l; cat /tmp/l | xargs cat", "export P=/root/.gstack/config.yaml; echo $P | xargs cat",
       "pushd /root/.gstack; ls | xargs cat"].map(hits)).toEqual([1, 1, 1, 1, 1]);
+    expect(["printf -v P %s /root/.gstack/config.yaml; echo \"$P\" | xargs cat", "printf -vP %s /root/.gstack/config.yaml; echo \"$P\" | xargs cat",
+      "P=/root/.gstack/config.yaml; echo \"$P\" | xargs cat", "A=1 P=/root/.gstack/config.yaml; echo \"$P\" | xargs cat"].map(hits)).toEqual([1, 1, 1, 1]);
+    expect(["printf -v P %s /root/.gstack/config.yaml", "P=/root/.gstack/config.yaml", "P=/root/.gstack/config.yaml; echo \"$P\""].map(hits)).toEqual([0, 0, 0]);
+  });
+  // Value: protects=the none arm's read audit; fails_when=the hand-off rule's over-reporting changes from main's line-wide flag;
+  // why_new=pins two lines that read contaminated on main and still do; seam=probes.ts bashReadPaths hands; no_claim=these are the
+  // right answers, only main's
+  test("the hand-off rule keeps main's answer on a hand after the xargs and on a mention piped into a non-xargs command", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    const hits = (cmd: string) => run([bash(cmd, "x: 1")], none).audit_hits.length;
+    expect(["ls | xargs -n1 echo; echo /root/.gstack/x > /dev/null", "echo /root/.gstack/x | wc -l; ls | xargs -n1 echo"].map(hits)).toEqual([1, 1]);
   });
   // Value: protects=the none arm's read audit; fails_when=a find -exec or an xargs reader over an ancestor of an audit root reads
   // clean, or one that runs echo, or is rooted outside every audit root, reads as a read; why_new=find ~ -name SKILL.md -exec

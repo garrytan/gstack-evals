@@ -61,7 +61,7 @@ const stripReadNumbers = (s: string) => s.split("\n").map((l) => l.replace(/^\s*
 
 // ---- shell lines -------------------------------------------------------------------------------------------------------
 
-export type Simple = { words: string[]; redirects: { op: string; target: string }[]; heredocs: string[]; cwd: string | null; pipeline: number };
+export type Simple = { words: string[]; redirects: { op: string; target: string }[]; heredocs: string[]; cwd: string | null; pipeline: number; assigns: string[] };
 
 const RESERVED = new Set(["!", "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "time", "{", "}"]);
 const COMPOUND = new Set(["if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for", "select", "case", "esac", "function", "{", "}"]);
@@ -204,24 +204,27 @@ function tokenize(src: string): Tok[] {
 /** The simple commands of a shell line, in order, after cd, env prefixes, reserved words, subshells and sh -c are unwrapped.
  * pipeline numbers the pipelines: commands joined by | or |& (a line break after the pipe included) share one. A line with a
  * subshell, a brace group or a compound command (if, for, while, until, select, case, function) is one pipeline, and so is
- * everything an sh -c runs, since output can flow out of any of them. */
+ * everything an sh -c runs, since output can flow out of any of them. A command that only assigns variables is kept, with no words
+ * and its assignment words in assigns; every other command's assigns is empty. */
 export function simpleCommands(line: string, cwd: string | null = null, depth = 0): Simple[] {
   const out: Simple[] = [];
   let pipeline = 0;
   let flat = true;
   let start = true;
-  let cur: Simple = { words: [], redirects: [], heredocs: [], cwd, pipeline };
+  let cur: Simple = { words: [], redirects: [], heredocs: [], cwd, pipeline, assigns: [] };
   let here = cwd;
   const end = () => {
     const before = out.length;
     let w = cur.words;
     while (w.length && (RESERVED.has(w[0]!) || ASSIGN.test(w[0]!))) w = w.slice(1);
+    const assigns = w.length ? [] : cur.words.filter((x) => ASSIGN.test(x));
     if (w[0] === "env") {
       w = w.slice(1);
       while (w.length && (ASSIGN.test(w[0]!) || w[0]!.startsWith("-"))) w = w.slice(["-u", "--unset", "-C", "--chdir"].includes(w[0]!) ? 2 : 1);
     }
     cur.words = w;
-    if (w.length || cur.redirects.length) {
+    cur.assigns = assigns;
+    if (w.length || cur.redirects.length || assigns.length) {
       if ((w[0] === "bash" || w[0] === "sh") && w[1] === "-c" && typeof w[2] === "string" && depth < 4) out.push(...simpleCommands(w[2], here, depth + 1).map((c) => ({ ...c, pipeline })));
       else {
         cur.cwd = here;
@@ -230,7 +233,7 @@ export function simpleCommands(line: string, cwd: string | null = null, depth = 
         if (w[0] === "cd") here = w[1] && !w[1].startsWith("-") ? (here ? posix.resolve(here, w[1]) : posix.isAbsolute(w[1]) ? posix.normalize(w[1]) : null) : here;
       }
     }
-    cur = { words: [], redirects: [], heredocs: [], cwd: here, pipeline };
+    cur = { words: [], redirects: [], heredocs: [], cwd: here, pipeline, assigns: [] };
     return out.length > before;
   };
   const scopes: (string | null)[] = [];
@@ -515,8 +518,9 @@ function findParts(all: string[]): { starts: string[]; execs: string[][] } {
  * path in a pipeline that feeds xargs, where no command's words are a mention: each one reads whatever lies inside it. A tree
  * whose command reads (the find's -exec or the xargs' command is not one that never reads) also reads below a tree that
  * holds an audit root, and a find's start paths (the work directory when it names none) count as its trees. On a line with an
- * xargs, a command that can hand a path to a later pipeline feeds xargs too: one that pipes into another command or writes
- * through an output redirect, and cd, pushd and export, which hand on a directory or a variable. */
+ * xargs, a command that could hand a path to another pipeline feeds xargs too, wherever it sits on the line: one that pipes into
+ * another command or writes through an output redirect, cd, pushd and export, which hand on a directory or a variable, a printf
+ * with -v, and a command that only assigns variables. */
 function bashReadPaths(command: string, cwd: string | null): { paths: string[]; trees: { path: string; reads: boolean }[] } {
   const out: string[] = [], trees: { path: string; reads: boolean }[] = [];
   const simples = simpleCommands(command, cwd).map((s) => ({ s, all: unwrap(s.words) }));
@@ -524,14 +528,14 @@ function bashReadPaths(command: string, cwd: string | null): { paths: string[]; 
   for (const { s, all } of simples) if (base(all[0] ?? "") === "xargs") xargs.set(s.pipeline, xargs.get(s.pipeline) === true || reader(xargsCommand(all)));
   const last = new Map(simples.map(({ s }) => [s.pipeline, s]));
   for (const { s, all } of simples) {
-    const hands = xargs.size > 0 && (last.get(s.pipeline) !== s || HANDS.has(base(all[0] ?? "")) || s.redirects.some((r) => r.op.includes(">") && !(r.op.endsWith("&") && /^(\d+|-)$/.test(r.target))));
+    const hands = xargs.size > 0 && (last.get(s.pipeline) !== s || s.assigns.length > 0 || HANDS.has(base(all[0] ?? "")) || (base(all[0] ?? "") === "printf" && all.some((w) => /^-[A-Za-z]*v/.test(w))) || s.redirects.some((r) => r.op.includes(">") && !(r.op.endsWith("&") && /^(\d+|-)$/.test(r.target))));
     const fed = xargs.has(s.pipeline) || hands;
     const words = withoutPattern(all);
     const mention = !fed && words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
     const find = base(all[0] ?? "") === "find" ? findParts(all) : null;
     const tree = fed || !!find?.execs.length;
     const reads = xargs.get(s.pipeline) === true || (hands && [...xargs.values()].includes(true)) || !!find?.execs.some(reader);
-    const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(all[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
+    const texts = [...(mention ? [] : [...words, ...(fed ? s.assigns : []), ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(all[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
     const sed = SED.has(base(all[0] ?? ""));
     for (const t of texts)
       for (const w of t.split(PATH_SPLIT)) {
