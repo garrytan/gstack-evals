@@ -112,6 +112,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [NONE_MATCHES](#none_matches) | warning | U6 |
 | [DELTA_DROPPED](#delta_dropped) | warning | U9 |
 | [BROKEN_TASK](#broken_task) | warning | U6 |
+| [JUDGE_REPLY_REFUSED](#judge_reply_refused) | warning | U13 |
 | [REPLY_MISALIGNED](#reply_misaligned) | warning | U10 |
 | [PDF_INPUT](#pdf_input) | warning | U7 |
 | [NEGATIVE_UNVALIDATED](#negative_unvalidated) | warning | U5 |
@@ -1150,6 +1151,14 @@ A task failed in every run of every arm. It counts as broken until it is repaire
 Fix: Repair the task's setup, prompt or check, or drop it, and commit a relock.
 
 Warning. Owner: U6.
+
+### JUDGE_REPLY_REFUSED
+
+A noloss judge-run --ceo reply broke the prereg's section 8 failure rule: no block, a line that is not JSON, a review the packet doesn't hold, a review answered twice, or a list of the wrong length. It gets one retry in a fresh request; a second refusal leaves the packet missing with the cause in replies.json.
+
+Fix: Nothing to do for one refusal. For a packet left missing, read its raw replies under raw/ in the judge run's --out.
+
+Warning. Owner: U13.
 
 ### REPLY_MISALIGNED
 

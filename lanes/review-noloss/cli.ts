@@ -143,6 +143,13 @@ only, and loads only with --sealed-root, where its digests and counts must hold.
       clone of its repo) and the run writes unverifiable.tsv. impact.tsv and verifiable.tsv bind each row to its batch and
       the finding's sha256. --dry-run checks everything, prints each request's worst case at 3 sends and the item's cap
       beside the total, and spends and writes nothing. Defaults: --concurrency 4, the default model policy.
+  judge-run --ceo --packets <dir> --key <file> --brief <judge-brief.md> --judge <provider/model> --item <ledger item>
+        --out <dir> [--concurrency <n>] [--ledger <path>] [--record <dir>] [--policy <file>] [--dry-run]
+      The CEO outcome eval's judge read, one judge per run, from ceo packets' output. Sends the brief's text above its
+      rule with each D packet and the text below it with each remedy packet, with the same proxy, lease and retry budget.
+      The Sol route sends reasoning effort medium; the Anthropic routes send no thinking field. A malformed reply gets one
+      retry; a second failure marks that judge's calls for the packet missing. Writes replies.json, with every packet
+      answered or missing with its cause. --out must sit outside the repo.
 
 Exit codes. Verification reads the verdict line and the first reason code, never exit 2 alone. score: 0 NO_LOSS with the size rule met, 1 LOSS, 2 otherwise (NOT_DISTINGUISHED, a NO_LOSS below or
 without the size rule, which warns NOLOSS_UNDERPOWERED, no verdict, or a refusal). Other commands: 0 on success, 2 on
