@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
@@ -797,5 +797,136 @@ describe("l1.ts keeps cap stops, salvaged results and session records", () => {
     expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
     expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_vm_gone: false, part_results_pulled: true, complete: true });
     expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 300_000);
+});
+
+describe("recover's crash-and-rerun edges", () => {
+  const goneFile = (r: Rig) => join(r.work, "host/part-vm-gone.json");
+  // recover dies after the part VM's down: here because host/pointer is missing, which it reads only after every part VM.
+  // Returns the call that puts the pointer back.
+  const crashAfterDown = (r: Rig) => {
+    const pointer = join(r.work, "host/pointer"), saved = readFileSync(pointer);
+    rmSync(pointer);
+    expect(l1(r, ["recover", r.work]).code).toBe(1);
+    expect(events(r)).toMatch(/ down vm-2 /);
+    return () => writeFileSync(pointer, saved);
+  };
+  const downAt = (r: Rig, vm: string) => Number(events(r).split("\n").find((l) => l.includes(" down " + vm + " "))!.split(" ")[0]);
+  const vmHours = (r: Rig) => Number(/VM hours: ([\d.]+) h/.exec(String(readRows(r.ledger).find((x) => x.kind === "settle" && x.id === "pilot-opus/pilot/vm")!.kind_detail))![1]);
+  const startedAt = (r: Rig) => { const l = launchJson(r, "pilot"); return Number(l.controller_started_at ?? Date.parse(l.at) / 1000); };
+  // pilot on host-1 with launch.sh's pull failing, so launch.sh exits 7 and keeps vm-2; then the host is lost.
+  const keptLost = async (r: Rig) => {
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { FAIL_PULL: "vm-2" }).code).toBe(0);
+    await attachUntil(r, /pilot: finished, launch exit 7/);
+    await loseHost(r, "host-1", "pilot", "vm-2");
+  };
+
+  test("part-vm-gone.json is replaced by a rename, never rewritten in place, and a clean recover charges the part VM up to its own down; a torn file makes recover refuse by name and destroy nothing", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    writeFileSync(goneFile(r), JSON.stringify({ vms: [], at: 1 }));
+    const before = statSync(goneFile(r)).ino;
+    expect(l1(r, ["recover", r.work]).code).toBe(0);
+    expect(statSync(goneFile(r)).ino).not.toBe(before);
+    expect(Math.abs(vmHours(r) * 3600 - (downAt(r, "vm-2") - startedAt(r)))).toBeLessThanOrEqual(2);
+
+    const t = rig("pilot-opus");
+    await started(t);
+    await loseHost(t, "host-1", "pilot", "vm-2");
+    writeFileSync(goneFile(t), '{"vms":[{"vm":');
+    const rec = l1(t, ["recover", t.work]);
+    expect([rec.code, rec.err]).toEqual([3, expect.stringContaining("host/part-vm-gone.json")]);
+    expect(events(t)).not.toMatch(/ (down (host-1|vm-2)|recover) /);
+    expect(existsSync(join(t.work, "host/recover.json"))).toBe(false);
+  }, 300_000);
+
+  test("a rerun takes the part VM from part-vm-gone.json when launch.json names none, though the first run's down dropped the bundle it was found by", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { L1_BUNDLE_WAIT_SEC: "0", PAUSE_VM: "vm-2", PAUSE_AT: "3" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/paused")));
+    copyFileSync(join(r.fake, "host-1/l1/recovery/geva268/vm-2.bundle"), join(r.env.UBI_RECOVERY_DIR!, "geva268/vm-2.bundle"));
+    expect(launchJson(r, "pilot").vm).toBeUndefined();
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    crashAfterDown(r)();
+    expect(existsSync(join(r.env.UBI_RECOVERY_DIR!, "geva268/vm-2.bundle"))).toBe(false);
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
+    expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_results_pulled: true, complete: true });
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 300_000);
+
+  test("an entry an earlier recover wrote with no part, before a part VM's down that failed, leaves that VM to the bundle and the stray check", async () => {
+    const r = rig("pilot-opus");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { L1_BUNDLE_WAIT_SEC: "0", PAUSE_VM: "vm-2", PAUSE_AT: "3" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/paused")));
+    copyFileSync(join(r.fake, "host-1/l1/recovery/geva268/vm-2.bundle"), join(r.env.UBI_RECOVERY_DIR!, "geva268/vm-2.bundle"));
+    expect(launchJson(r, "pilot").vm).toBeUndefined();
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    writeFileSync(goneFile(r), JSON.stringify({ vms: [{ vm: "vm-2", pulled: false, how: "down" }], at: 1 }));
+    expect(l1(r, ["recover", r.work]).code).toBe(0);
+    expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_results_pulled: true, complete: true });
+    expect(events(r)).toMatch(/ down vm-2 /);
+    expect(openIds(r, "pilot-opus")).toEqual([]);
+  }, 300_000);
+
+  test("a rerun charges the part VM's hours up to the down the first run confirmed, not up to its own clock", async () => {
+    const r = rig("pilot-opus");
+    await started(r);
+    await loseHost(r, "host-1", "pilot", "vm-2");
+    const restore = crashAfterDown(r);
+    // gstack-timing-ok: the rerun has to come measurably later than the first run's down; this is that gap, not a poll
+    await Bun.sleep(3000);
+    restore();
+    expect(l1(r, ["recover", r.work]).code).toBe(0);
+    expect(Math.abs(vmHours(r) * 3600 - (downAt(r, "vm-2") - startedAt(r)))).toBeLessThanOrEqual(2);
+  }, 300_000);
+
+  test("recover pulls a kept part the way salvage does: a pull that fails once is tried again, and a copy whose file count differs from the VM's is not pulled", async () => {
+    const once = rig("pilot-opus");
+    await keptLost(once);
+    expect(l1(once, ["recover", once.work], { FAIL_PULL_ONCE: "vm-2" }).code).toBe(0);
+    expect(recoverJson(once)).toMatchObject({ complete: true, kept: [{ part: "pilot", vm: "vm-2", results_pulled: true }] });
+
+    const short = rig("pilot-opus");
+    await keptLost(short);
+    expect(l1(short, ["recover", short.work], { SHORT_PULL: "vm-2" }).code).toBe(0);
+    expect(recoverJson(short)).toMatchObject({ complete: true, kept: [{ part: "pilot", vm: "vm-2", results_pulled: false }] });
+    expect(readFileSync(join(short.work, "relaunch-evidence.jsonl"), "utf8")).toContain("recover could not pull its records");
+  }, 400_000);
+
+  test("a rerun reads a RECOVER_GONE entry in the shape recover writes, with its part, and in the {vms: [names]} shape an earlier commit wrote", async () => {
+    for (const plant of [null, { vms: ["vm-2"], at: 1 }]) {
+      const r = rig("pilot-opus");
+      await started(r);
+      await loseHost(r, "host-1", "pilot", "vm-2");
+      writeFileSync(join(r.fake, "vm-2/.down"), "");
+      expect(l1(r, ["recover", r.work], { FAIL_DOWN: "1" }).code).toBe(3);
+      expect(JSON.parse(readFileSync(goneFile(r), "utf8")).vms).toEqual([expect.objectContaining({ part: "pilot", vm: "vm-2", pulled: false, how: "RECOVER_GONE" })]);
+      if (plant) writeFileSync(goneFile(r), JSON.stringify(plant));
+      const rec = l1(r, ["recover", r.work]);
+      expect([rec.code, rec.out]).toEqual([4, expect.stringContaining("was already gone (RECOVER_GONE)")]);
+      expect(recoverJson(r)).toMatchObject({ part_vm: "vm-2", part_vm_gone: true, complete: false });
+    }
+  }, 400_000);
+
+  test("a kept exit-7 part whose VM ubi-runner reports gone (RECOVER_GONE) at recover is a loss with a vm_death row, and the item does not end", async () => {
+    const r = rig("pilot-opus");
+    await keptLost(r);
+    writeFileSync(join(r.fake, "vm-2/.down"), "");
+    const rec = l1(r, ["recover", r.work]);
+    expect([rec.code, rec.out]).toEqual([0, expect.stringContaining("NEXT: host-up, then relaunch --part pilot")]);
+    expect(recoverJson(r)).toMatchObject({ complete: true, kept: [{ part: "pilot", vm: "vm-2", vm_gone: true, results_pulled: false }] });
+    const result = JSON.parse(readFileSync(join(r.work, "pilot.result.json"), "utf8"));
+    expect(result).toMatchObject({ cap_stop: [], salvage: { by: "recover", vm: "vm-2", vm_gone: true, pulled: false } });
+    expect(result.loss).toContain("the awake host was lost");
+    expect(readFileSync(join(r.work, "relaunch-evidence.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ event: "vm_death", part: "pilot", vm: "vm-2", confirmed_by: expect.stringContaining("RECOVER_GONE") })]);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
   }, 300_000);
 });
