@@ -52,6 +52,11 @@ export async function main(argv: string[]): Promise<number> {
     console.error(lines("E_USAGE", "serve needs " + [...missing, ...(stages.length ? [] : ["--stage"])].join(", ")));
     return 2;
   }
+  const bad = ["--planned", "--reruns", "--control-port", "--ttl-hours"].find((k) => flags.has(k) && !/^\d+(\.\d+)?$/.test(flags.get(k)!));
+  if (bad) {
+    console.error(lines("E_USAGE", bad + " takes a number, not " + flags.get(bad)));
+    return 2;
+  }
   const num = (k: string) => (flags.has(k) ? Number(flags.get(k)) : undefined);
   const ttlHours = num("--ttl-hours");
   let local: ReturnType<typeof openLocalLedger> | null = null;

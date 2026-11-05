@@ -26,6 +26,7 @@ describe("gstack-evals outcome", () => {
     ["a flag with no value", ["serve", ...base, "--stage"], "--stage needs a value"],
     ["a malformed --stage", ["serve", ...base, "--stage", "noequals"], "--stage takes <item>=<arm>"],
     ["no --stage", ["serve", ...base], "serve needs --stage"],
+    ["a non-numeric --control-port", ["serve", ...base, "--stage", "a=b", "--control-port", "abc"], "--control-port takes a number"],
     ["a missing --envelope-host", ["serve", "--run", "r1", "--host", "127.0.0.1", "--dir", "/x", "--stage", "a=b"], "serve needs --envelope-host"],
   ])("%s exits 2 with E_USAGE", (_name, args, msg) => {
     const r = run(...(args as string[]));

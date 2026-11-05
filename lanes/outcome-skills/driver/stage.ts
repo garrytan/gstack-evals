@@ -3,7 +3,7 @@
 // 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. Every lease is admitted by O6's envelope through
 // openLease, and every exit path settles every lease it opened.
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { rigAdmission } from "../../../src/rig/admission.ts";
@@ -12,7 +12,7 @@ import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, settleLease, type
 import type { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
 import { LedgerError, readItem, type CloseFile, type LeaseFile } from "../../../src/runner/ledger/record.ts";
-import { MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
+import { isTrialNetworkHost, MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { loadRegistry, type Registry } from "../arms/registry.ts";
 
 export const DEFAULT_TTL_MS = 72 * 3_600_000;
@@ -114,7 +114,7 @@ interface Stage {
 export interface Served {
   control: string;
   stages: Array<{ item: string; arm: string; lease_id: string; reserved_micros: number; proxy: string }>;
-  /** Resolves with the exit code once every stage is settled: 0, or 2 when a lease is still open. */
+  /** Resolves with the exit code once every stage is settled: 0, or 2 when a lease is still open or a stage ended failed. */
   done: Promise<number>;
   stop(ended?: Ended): Promise<number>;
 }
@@ -132,12 +132,45 @@ export function refusal(code: ReasonCode, status: number, detail: string, extra:
 const urlHost = (host: string) => (host.includes(":") ? "[" + host + "]" : host);
 const sorted = (v: unknown): unknown => (Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted((v as Record<string, unknown>)[k])])) : v);
 
+/** One live driver per run directory, so recovery never settles a lease a live driver still meters. A lock whose process is gone is taken over. */
+function takeLock(file: string): string {
+  try {
+    writeFileSync(file, String(process.pid), { flag: "wx" });
+    return file;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+  }
+  const pid = Number(readFileSync(file, "utf8"));
+  let alive = false;
+  if (Number.isSafeInteger(pid) && pid > 0) {
+    try {
+      process.kill(pid, 0);
+      alive = true;
+    } catch (e) {
+      alive = (e as NodeJS.ErrnoException).code === "EPERM";
+    }
+  }
+  if (alive) fail("E_USAGE", "driver process " + pid + " still serves this run directory (" + file + "); stop it with POST /stop or SIGTERM before launching another, so its leases are not settled under it; nothing was recovered or opened");
+  writeFileSync(file, String(process.pid));
+  return file;
+}
+
 /**
  * Recovers the open leases an earlier driver of this run left in this run directory (leases.jsonl) on this machine,
  * preflights every stage, opens one lease and one proxy per stage, then serves. A lease the driver did not open, such as
  * the program's T-G or VM lease on the same run, is never touched.
  */
 export async function serveStages(o: ServeOptions): Promise<Served> {
+  const held = { lock: null as string | null };
+  try {
+    return await serve(o, held);
+  } catch (error) {
+    if (held.lock) rmSync(held.lock, { force: true });
+    throw error;
+  }
+}
+
+async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Served> {
   const log = o.log ?? ((line: string) => console.error(line));
   const warn = (code: ReasonCode, message: string) => log(code + " " + message);
   const now = o.now ?? Date.now;
@@ -149,19 +182,38 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
   const ttl = o.ttl_ms ?? DEFAULT_TTL_MS;
   if (!Number.isSafeInteger(planned) || planned < 1 || !Number.isSafeInteger(reruns) || reruns < 0) fail("E_USAGE", "planned sessions must be at least 1 and reruns at least 0, as whole numbers");
   if (!Number.isSafeInteger(ttl) || ttl <= 0 || ttl > MAX_LEASE_TTL_MS) fail("E_USAGE", "the lease time to live must be a whole number of milliseconds from 1 to " + MAX_LEASE_TTL_MS + " (7 days), not " + ttl);
+  if (o.control_port !== undefined && !(Number.isSafeInteger(o.control_port) && o.control_port >= 0 && o.control_port <= 65535)) fail("E_USAGE", "the control port must be a whole number from 0 to 65535, not " + o.control_port);
+  if (!isTrialNetworkHost(o.host)) fail("E_USAGE", "--host " + o.host + " is not a loopback or private IP literal, which the metering proxies listen on; nothing was opened");
+  try {
+    Bun.listen({ hostname: o.host, port: 0, socket: { data() {} } }).stop(true);
+  } catch (e) {
+    fail("E_USAGE", "can't listen on --host " + o.host + " (" + (e as Error).message + "); give an address on this machine; nothing was opened");
+  }
   if (!o.stages.length) fail("E_USAGE", "name at least one --stage <item>=<arm>");
   for (const st of o.stages) if (!Object.hasOwn(reg.arms, st.arm)) fail("E_USAGE", "stage " + st.item + " names arm " + st.arm + ", which the registry does not hold; it holds " + Object.keys(reg.arms).join(", "));
   if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(o.stages.map((s) => s.arm)).size !== o.stages.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
   mkdirSync(o.dir, { recursive: true });
+  held.lock = takeLock(join(o.dir, "driver.lock"));
   const sessionsFile = join(o.dir, "sessions.jsonl");
   const record = (line: Record<string, unknown>) => appendFileSync(sessionsFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
 
   const leasesFile = join(o.dir, "leases.jsonl");
-  const ours = new Set(existsSync(leasesFile) ? readFileSync(leasesFile, "utf8").split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { lease_id: string }).lease_id) : []);
+  const ours = new Set<string>();
+  const opening = new Set<string>();
+  for (const line of existsSync(leasesFile) ? readFileSync(leasesFile, "utf8").split("\n") : []) {
+    let e: { item?: string; seq?: number; lease_id?: string } | null;
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (e?.lease_id) ours.add(e.lease_id);
+    else if (e?.item) opening.add(e.item + "#" + e.seq);
+  }
   const failures: string[] = [];
   for (const item of ledgerStatus(o.record)) {
     const lease = item.open_lease;
-    if (!lease || !ours.has(lease.lease_id) || lease.run_id !== o.run_id || lease.machine_id !== machine) continue;
+    if (!lease || !(ours.has(lease.lease_id) || opening.has(item.item + "#" + Number(lease.lease_id.split(".").at(-2)))) || lease.run_id !== o.run_id || lease.machine_id !== machine) continue;
     try {
       const journal = join(o.dir, lease.lease_id + ".journal.ndjson");
       if (existsSync(journal)) {
@@ -177,10 +229,31 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
   if (failures.length) fail("E_LEASE_UNSETTLED", "recovery could not settle " + failures.join("; ") + "; nothing new was opened. Settle each with gstack-evals ledger settle --lease <id> on this machine, then launch the driver again");
 
   const at = new Date(now());
+  const capped = new Map<string, { at: string; scope: string }>();
+  for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
+    let e: { at?: string; run_id?: string; event?: string; item?: string; ended?: string; code?: string; scope?: string | null } | null;
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!e?.item || e.run_id !== o.run_id || !((e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) continue;
+    const stop = { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" };
+    if (!capped.has(e.item)) capped.set(e.item, stop);
+    if (stop.scope.startsWith("all") && !capped.has("")) capped.set("", stop);
+  }
+
   const plans = o.stages.map((st) => {
     const s = readItem(o.record, st.item);
+    const unclaimed = s.leases.filter((l) => l.lease.run_id === o.run_id && !ours.has(l.lease.lease_id) && !opening.has(st.item + "#" + l.lease.seq)).map((l) => l.lease.lease_id);
+    if (unclaimed.length) fail("E_USAGE", "line item " + st.item + " holds run " + o.run_id + "'s leases " + unclaimed.join(", ") + ", which this run directory (" + o.dir + ") did not open; relaunch with the run directory that opened them, so the run's cap stops and trial counts carry over; nothing was opened");
+    const stop = capped.get("") ?? capped.get(st.item);
+    if (stop) fail("CAP_STOP", (capped.has("") ? "the none stage cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends both skills incomplete" : "stage " + st.item + " cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends its skill incomplete") + "; a cap stop is not retried (plan section 6); nothing was opened");
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
     if (s.program === null) return fail("E_USAGE", "line item " + st.item + " is in no program; a G stage is admitted by O6's envelope, so its item joins the program with --program at init; nothing was opened");
+    const arm = reg.arms[st.arm]!;
+    const want = arm.kind === "told" ? [arm.skill!] : [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
+    if (s.skills.length !== want.length || want.some((k) => !s.skills.includes(k))) fail("E_USAGE", "line item " + st.item + " splits its spend across " + (s.skills.join(", ") || "no skill") + ", but arm " + st.arm + " spends for " + want.join(", ") + "; a stage's item carries its own arm's skills, so the envelope charges the skill that spends; nothing was opened");
     if (s.run_id !== null && s.run_id !== o.run_id) fail("E_ITEM_BOUND", "line item " + st.item + " is bound to run " + s.run_id + ", so run " + o.run_id + " cannot spend from it; nothing was opened");
     if (s.open) fail("E_LEASE_UNSETTLED", "lease " + s.open.lease_id + " on line item " + st.item + " (machine " + s.open.machine_id + ", run " + s.open.run_id + ") is still open; settle it on that machine, then launch the driver again; nothing was opened");
     const left = s.cap_micros - s.committed_micros;
@@ -209,9 +282,55 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
     }
   }
 
+  let control: ReturnType<typeof Bun.serve>;
+  try {
+    control = Bun.serve({
+      hostname: "127.0.0.1",
+      port: o.control_port ?? 0,
+      fetch: async (req) => {
+        const path = new URL(req.url).pathname;
+        try {
+          if (req.method === "GET" && path === "/status") return Response.json(status());
+          if (req.method === "POST" && path === "/sessions") {
+            const ctx: Record<string, unknown> = {};
+            const res = await open(req, ctx);
+            if (!res.ok) {
+              const p = (await res.clone().json()) as Record<string, unknown>;
+              record({ event: "refuse", code: p.code, status: res.status, ...ctx, ...(p.item ? { item: p.item } : {}), ...(p.scope ? { scope: p.scope } : {}), detail: p.detail });
+            }
+            return res;
+          }
+          const m = path.match(/^\/sessions\/([A-Za-z0-9_-]+)\/close$/);
+          if (req.method === "POST" && m) {
+            const sess = sessions.get(m[1]!);
+            if (!sess) return refusal("E_USAGE", 404, "no session " + m[1]);
+            let reason = "agent_finished";
+            try {
+              const b = (await req.json()) as { reason?: unknown };
+              if (typeof b?.reason === "string" && b.reason) reason = b.reason;
+            } catch {}
+            return Response.json(await closeSession(sess, reason));
+          }
+          if (req.method === "POST" && path === "/stop") {
+            setTimeout(() => void stop(), 0);
+            return Response.json({ stopping: true });
+          }
+          return refusal("E_USAGE", 404, "no route " + req.method + " " + path + "; the driver serves POST /sessions, POST /sessions/<id>/close, GET /status and POST /stop");
+        } catch (e) {
+          log("E_INTERNAL outcome driver: " + req.method + " " + path + " failed: " + (e as Error).message + "; stopping every stage");
+          void stop("failed");
+          return refusal("E_INTERNAL", 500, "the driver failed and is stopping every stage");
+        }
+      },
+    });
+  } catch (error) {
+    return fail("E_USAGE", "the control plane can't listen on 127.0.0.1:" + (o.control_port ?? 0) + " (" + (error as Error).message + "); nothing was opened");
+  }
+
   const stages: Stage[] = [];
   const opened: string[] = [];
   const unwind = (error: unknown): never => {
+    void control.stop(true);
     for (const s of stages) {
       try {
         s.proxy.stop();
@@ -228,6 +347,7 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
   };
   for (const [i, { st }] of plans.entries()) {
     try {
+      appendFileSync(leasesFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, item: st.item, seq: plans[i]!.s.leases.length + 1, opening: true }) + "\n");
       const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, ttl_ms: ttl, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
       opened.push(lease.lease_id);
       appendFileSync(leasesFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, item: st.item, lease_id: lease.lease_id }) + "\n");
@@ -323,6 +443,7 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
         s.ended = "failed";
         log("E_LEASE_UNSETTLED outcome driver: stage " + s.item + " lease " + s.lease_id + " did not settle: " + (e as Error).message + "; settle it with gstack-evals ledger settle --lease " + s.lease_id + " on this machine");
       }
+      record({ event: "settled", item: s.item, lease_id: s.lease_id, ended: s.ended, scope: s.scope });
       if (stages.every((x) => x.state === "stopped")) void finish();
     })();
     return s.settling;
@@ -351,7 +472,8 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
       await control.stop();
       const open = ledgerStatus(o.record).filter((i) => stages.some((s) => s.item === i.item) && i.open_lease);
       if (open.length) log("E_LEASE_UNSETTLED outcome driver: still open: " + open.map((i) => i.open_lease!.lease_id).join(", ") + "; settle each with gstack-evals ledger settle --lease <id> on this machine");
-      const code = open.length ? 2 : 0;
+      const code = open.length || stages.some((s) => s.ended === "failed") ? 2 : 0;
+      if (held.lock) rmSync(held.lock, { force: true });
       resolveDone(code);
       return code;
     })();
@@ -445,50 +567,6 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
     }),
   });
 
-  let control: ReturnType<typeof Bun.serve>;
-  try {
-    control = Bun.serve({
-      hostname: "127.0.0.1",
-      port: o.control_port ?? 0,
-      fetch: async (req) => {
-        const path = new URL(req.url).pathname;
-        try {
-          if (req.method === "GET" && path === "/status") return Response.json(status());
-          if (req.method === "POST" && path === "/sessions") {
-            const ctx: Record<string, unknown> = {};
-            const res = await open(req, ctx);
-            if (!res.ok) {
-              const p = (await res.clone().json()) as Record<string, unknown>;
-              record({ event: "refuse", code: p.code, status: res.status, ...ctx, ...(p.item ? { item: p.item } : {}), ...(p.scope ? { scope: p.scope } : {}), detail: p.detail });
-            }
-            return res;
-          }
-          const m = path.match(/^\/sessions\/([A-Za-z0-9_-]+)\/close$/);
-          if (req.method === "POST" && m) {
-            const sess = sessions.get(m[1]!);
-            if (!sess) return refusal("E_USAGE", 404, "no session " + m[1]);
-            let reason = "agent_finished";
-            try {
-              const b = (await req.json()) as { reason?: unknown };
-              if (typeof b?.reason === "string" && b.reason) reason = b.reason;
-            } catch {}
-            return Response.json(await closeSession(sess, reason));
-          }
-          if (req.method === "POST" && path === "/stop") {
-            setTimeout(() => void stop(), 0);
-            return Response.json({ stopping: true });
-          }
-          return refusal("E_USAGE", 404, "no route " + req.method + " " + path + "; the driver serves POST /sessions, POST /sessions/<id>/close, GET /status and POST /stop");
-        } catch (e) {
-          log("E_INTERNAL outcome driver: " + req.method + " " + path + " failed: " + (e as Error).message + "; stopping every stage");
-          void stop("failed");
-          return refusal("E_INTERNAL", 500, "the driver failed and is stopping every stage");
-        }
-      },
-    });
-  } catch (error) {
-    return unwind(error);
-  }
 
   return {
     control: "http://127.0.0.1:" + control.port,

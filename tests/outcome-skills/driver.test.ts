@@ -74,14 +74,13 @@ describe("the outcome-skills session driver", () => {
     for (const item of ["i-pe", "i-free"]) expect(readItem(w.record, item).leases).toHaveLength(0);
   });
 
-  test("a proxy that can't start unwinds every lease the batch opened, at $0", async () => {
+  test("a host the proxies can't listen on is refused before any lease", async () => {
     const w = world({ "i-none": 229, "i-pe": 572 });
-    expect(await codeOf(w.serve([NONE, PE], { host: "0.0.0.0" }))).toContain("E_USAGE");
-    expect(readItem(w.record, "i-none").leases.map((l) => l.close?.spent_micros)).toEqual([0]);
-    expect(readItem(w.record, "i-pe").leases).toHaveLength(0);
+    for (const host of ["0.0.0.0", "10.255.255.254"]) expect(await codeOf(w.serve([NONE, PE], { host }))).toBe("E_USAGE");
+    for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).leases).toHaveLength(0);
   });
 
-  test("a control port that can't bind unwinds every stage lease, at $0", async () => {
+  test("a control port that can't bind, or is out of range, is refused before any lease", async () => {
     const w = world({ "i-none": 229, "i-pe": 572 });
     const busy = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("busy") });
     try {
@@ -89,10 +88,8 @@ describe("the outcome-skills session driver", () => {
     } finally {
       busy.stop(true);
     }
-    for (const item of ["i-none", "i-pe"]) {
-      expect(readItem(w.record, item).open ?? null).toBeNull();
-      expect(readItem(w.record, item).leases.map((l) => l.close?.spent_micros)).toEqual([0]);
-    }
+    expect(await codeOf(w.serve([NONE, PE], { control_port: 70_000 }))).toBe("E_USAGE");
+    for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).leases).toHaveLength(0);
   });
 
   test("one lease per stage at its cap; a session's slot meters its calls; stop settles every lease", async () => {
@@ -182,9 +179,11 @@ describe("the outcome-skills session driver", () => {
     const a = await post(served.control + "/sessions", body("plan-eng-review:told", "a", 1));
     expect((await post(served.control + "/sessions", body("plan-eng-review:told", "a", 2))).status).toBe(409);
     await post(served.control + "/sessions/" + a.json.id + "/close", {});
-    expect((await post(served.control + "/sessions", body("none", "a", 1))).status).toBe(200);
-    expect((await post(served.control + "/sessions", body("autoplan:told", "a", 1))).status).toBe(200);
+    const n = await post(served.control + "/sessions", body("none", "a", 1));
+    const ap = await post(served.control + "/sessions", body("autoplan:told", "a", 1));
+    expect([n.status, ap.status]).toEqual([200, 200]);
     expect(w.logs.find((l) => l.includes("item=i-pe"))).toContain("ended=cap_stop scope=plan-eng-review:told only");
+    for (const s of [n, ap]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
     expect(await served.stop()).toBe(0);
   });
 
@@ -222,5 +221,84 @@ describe("the outcome-skills session driver", () => {
     expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
     expect(readItem(w.record, "i-tg").open?.lease_id).toBe(tg.lease_id);
     await served.stop();
+  });
+  test("a second driver on the same run directory is refused while the first serves, and launches once it stops", async () => {
+    const w = world({ "i-none": 229 });
+    const first = await w.serve([NONE]);
+    const lease = readItem(w.record, "i-none").open?.lease_id;
+    expect(await codeOf(w.serve([NONE]))).toBe("E_USAGE");
+    expect(readItem(w.record, "i-none").open?.lease_id).toBe(lease);
+    expect(await first.stop()).toBe(0);
+    const again = await w.serve([NONE]);
+    expect(readItem(w.record, "i-none").leases).toHaveLength(2);
+    await again.stop();
+  });
+
+  test("a stage whose line item carries other skills than its arm's is refused before any lease", async () => {
+    const w = world({ "i-pe": 572, "i-none": 229 });
+    expect(await codeOf(w.serve([{ item: "i-pe", arm: "autoplan:told" }]))).toBe("E_USAGE");
+    expect(await codeOf(w.serve([{ item: "i-pe", arm: "none" }]))).toBe("E_USAGE");
+    expect(await codeOf(w.serve([{ item: "i-none", arm: "plan-eng-review:told" }]))).toBe("E_USAGE");
+    for (const item of ["i-pe", "i-none"]) expect(readItem(w.record, item).leases).toHaveLength(0);
+  });
+
+  test("a stop that cuts a live session ends its stage failed, and the driver exits 2", async () => {
+    const w = world({ "i-none": 229 });
+    const served = await w.serve([NONE]);
+    expect((await post(served.control + "/sessions", body("none", "a", 1))).status).toBe(200);
+    expect(await served.stop()).toBe(2);
+    expect(await served.done).toBe(2);
+    expect(w.logs.some((l) => l.startsWith("STAGE_SETTLED item=i-none") && l.includes("ended=failed"))).toBe(true);
+  });
+
+  test("relaunch recovers a lease whose ownership line is torn, or was never written after the open", async () => {
+    const w = world({ "i-none": 229 });
+    const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
+    mkdirSync(w.dir, { recursive: true });
+    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-none", seq: 1, opening: true }) + "\n" + '{"lease_id":"i-none.00');
+    const served = await w.serve([NONE]);
+    expect(w.logs.some((l) => l.startsWith("STAGE_RECOVERED item=i-none lease=" + left.lease_id))).toBe(true);
+    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
+    await served.stop();
+  });
+  const capStopped = async (w: ReturnType<typeof world>, stages: StageSpec[], arm: string) => {
+    const served = await w.serve(stages);
+    const open = (task: string) => post(served.control + "/sessions", body(arm, task, 1));
+    const [a, b] = [await open("a"), await open("b")];
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect((await open("c")).status).toBe(409);
+    for (const s of [a, b]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.done).toBe(0);
+  };
+
+  test("a told stage that cap-stopped is not reopened by a relaunch from the same run directory", async () => {
+    const w = world({ "i-pe": 50 });
+    await capStopped(w, [PE], "plan-eng-review:told");
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+  });
+
+  test("a cap-stopped item is not reopened from a new run directory either", async () => {
+    const w = world({ "i-pe": 50 });
+    await capStopped(w, [PE], "plan-eng-review:told");
+    expect(await codeOf(w.serve([PE], { dir: join(w.root, "run2") }))).toBe("E_USAGE");
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+  });
+
+  test("after a none cap stop, a relaunch refuses every stage", async () => {
+    const w = world({ "i-none": 20, "i-pe": 572 });
+    await capStopped(w, [NONE, PE], "none");
+    for (const stages of [[PE], [NONE, PE]]) expect(await codeOf(w.serve(stages))).toBe("CAP_STOP");
+    for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).leases).toHaveLength(1);
+  });
+
+  test("a stage that ended lease_expired reopens on a relaunch from the same run directory", async () => {
+    const w = world({ "i-none": 229 });
+    const served = await w.serve([NONE], { ttl_ms: 3_600_000 });
+    expect((await post(served.control + "/sessions", body("none", "a", 1))).status).toBe(503);
+    expect(await served.done).toBe(0);
+    const again = await w.serve([NONE]);
+    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
+    await again.stop();
   });
 });
