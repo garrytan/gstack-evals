@@ -19,7 +19,8 @@
 //   ("Auto-selected review mode → <MODE> (CEO-only run: Step 0E's rule)") in its own result. And a successful write of a
 //   file named ceo-review.md whose written text holds a line starting "## Findings": a Write, an Edit or MultiEdit (so a
 //   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, quoted or attached, which writes no text, and never a first line
-//   with a backslash outside single quotes, the rule segments() uses, since words() does not model bash escapes).
+//   with a backslash outside single quotes, the rule segments() uses, since words() does not model bash escapes). A \n
+//   reads as a newline only where bash expands it: in printf's format and after echo -e; printf's arguments don't count.
 //   handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows can count the
 //   sessions that named it and still read unexposed.
 import { createHash } from "node:crypto";
@@ -133,11 +134,18 @@ function ceoReviewText(u: Use): string | null {
   if (head!.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (m) => (m[0] === "'" ? "" : m)).includes("\\")) return "";
   const pw = words(parts[0]!);
   if (!pw) return "";
-  if (pw[0] === "printf") for (const w of pw.slice(1)) {
-    if (w === "--" || !w.startsWith("-")) break;
-    if (w.startsWith("-v")) return "";
+  if (pw[0] === "printf") {
+    let i = 1;
+    for (; i < pw.length && pw[i] !== "--" && pw[i]!.startsWith("-"); i++) if (pw[i]!.startsWith("-v")) return "";
+    return (pw[pw[i] === "--" ? i + 1 : i] ?? "").replace(/\\n/g, "\n");
   }
-  return [head!.replace(/\\n/g, "\n").replace(/^\s*(?:echo(?:\s+-[neE]+)*|printf)\s+(["']?)/, ""), ...body].join("\n");
+  let escapes = false;
+  if (pw[0] === "echo") for (const w of pw.slice(1)) {
+    if (!/^-[neE]+$/.test(w)) break;
+    for (const c of w.slice(1)) if (c !== "n") escapes = c === "e";
+  }
+  const text = head!.replace(/^\s*echo(?:\s+-[neE]+)*\s+(["']?)/, "");
+  return [escapes ? text.replace(/\\n/g, "\n") : text, ...body].join("\n");
 }
 
 /** A command's shell words with their quotes removed, ending at an unquoted # that starts a word (a comment); null on an open quote. */

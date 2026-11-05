@@ -284,6 +284,27 @@ describe("backslash escapes (#229's Capy Low): a first line with a backslash out
   });
 });
 
+describe("escape expansion (#230 ruling): only printf's format and echo -e expand \\n, as bash does", () => {
+  // Value: protects=findings_written reads the text bash writes, so a literal \\n never makes a Findings line; fails_when=plain echo or a printf argument expands \\n into a Findings line (fail open), or echo -e or a single-quoted printf format stops reading written; why_new=the Captain's ruling on #230 (2026-11-05); seam=autoplanCeoExposure; no_claim=printf's other escapes and %b, which the check does not model
+  const F = AP + "/ceo-review.md";
+  const at = (c: string) => autoplanCeoExposure(nd(bash(CALL, LINE), bash(c, ""))).checks.findings_written;
+  test("plain echo, echo -e then -E, and a printf argument write a literal \\n, not a Findings line", () => {
+    const fakes = ["echo 'x\\n## Findings' > " + F, "echo -n 'x\\n## Findings' > " + F, "echo -e -E 'x\\n## Findings' > " + F, "printf '%s\\n' 'x\\n## Findings' > " + F];
+    for (const c of fakes) expect([c, at(c)]).toEqual([c, false]);
+  });
+  test("echo -e and a single-quoted printf format still expand \\n into a Findings line", () => {
+    const real = [
+      "echo -e 'x\\n## Findings' > " + F,
+      "echo -ne 'x\\n## Findings' > " + F,
+      "echo -n -e 'x\\n## Findings' >> " + F,
+      "printf 'x\\n## Findings\\n' > " + F,
+      "printf -- '## Findings\\nNone.\\n' > " + F,
+      "printf '## Findings\\n%s\\n' 'None.' > " + F,
+    ];
+    for (const c of real) expect([c, at(c)]).toEqual([c, true]);
+  });
+});
+
 describe("rows diagnostics count the sessions that named the handoff and read unexposed", () => {
   // Value: protects=a false unexposed under the strict handoff rule shows up per cell; fails_when=such sessions read unexposed silently; why_new=the Captain's cut-line rule (2026-11-05); seam=ceo rows; no_claim=none beyond protects
   test("one autoplan-ceo smoke session that grepped the handoff counts once", async () => {
