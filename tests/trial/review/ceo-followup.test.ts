@@ -317,8 +317,11 @@ describe("escape expansion (#230 ruling): only printf's format and echo -e expan
   test("a heredoc body counts for a bare cat and for tee, wherever the redirects sit; other commands read unwritten", () => {
     const doc = " <<'EOF'\n## Findings\n- High: no bound.\nEOF";
     const unwritten = ["echo 'x' > " + F + doc, "printf 'x' > " + F + doc, "true > " + F + doc, "sed 's/^## /# /' > " + F + doc, "sed '' > " + F + doc, "cat -n > " + F + doc, "cat notes.md > " + F + doc];
-    for (const c of unwritten) expect([c, at(c)]).toEqual([c, false]);
     const written = ["cat > " + F + doc, "cat >> " + F + doc, "cat - > " + F + doc, "cat" + doc.replace("\n", " > " + F + "\n"), "cat" + doc.replace("\n", " | tee " + F + "\n"), "> " + F + " cat" + doc, ">" + F + " cat" + doc, "tee " + F + doc, "tee -a " + F + doc];
+    written.push(...[" 2>&1", " >/dev/null", " 2>/dev/null", " | cat"].map((tail) => "tee " + F + doc.replace("\n", tail + "\n")));
+    written.push("printf '## Findings\\n' | tee " + F + " >/dev/null", "printf '## Findings\\n' | tee -a " + F + " 2>&1");
+    unwritten.push("tee notes.md" + doc, "printf '## Findings\\n' | tee notes.md >/dev/null");
+    for (const c of unwritten) expect([c, at(c)]).toEqual([c, false]);
     for (const c of written) expect([c, at(c)]).toEqual([c, true]);
   });
 });

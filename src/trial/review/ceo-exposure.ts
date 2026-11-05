@@ -104,12 +104,22 @@ function writeTargets(parts: string[]): string[] {
   const head = parts[0]!;
   const bare = head.replace(/'[^']*'|"(?:[^"\\]|\\.)*"|(?<!\S)#.*/g, (m) => (m[0] === "#" ? " ".repeat(m.length) : m[0] + "_".repeat(m.length - 2) + m[0]));
   const targets = [...bare.matchAll(/(?:^|[^\d&>])>>?/g)].flatMap((m) => /^\s*(["']?)([^\s"'<>|;&]+)\1/.exec(head.slice(m.index! + m[0].length))?.[2] ?? []);
-  if (parts.length === 1) {
-    const doc = /^\s*tee(?:\s+-a)?\s+(["']?)([^\s"'<>|;&]+)\1\s+<<-?\s*(["']?)\w+\3\s*$/.exec(head);
-    return doc ? [...targets, doc[2]!] : targets;
-  }
-  const tee = /^\s*tee(?:\s+-a)?\s+(["']?)([^\s"'<>|;&]+)\1\s*$/.exec(parts[1]!);
-  return tee ? [...targets, tee[2]!] : [];
+  const teeFiles = (part: string) => {
+    const argv = commandWords(part);
+    return argv?.[0] === "tee" ? argv.slice(1).filter((a) => !a.startsWith("-")) : [];
+  };
+  if (parts.length === 1) return [...targets, ...teeFiles(head)];
+  const tee = teeFiles(parts[1]!);
+  return tee.length ? [...targets, ...tee] : teeFiles(head);
+}
+
+/** A command line's shell words after every redirection outside quotes and comments is cut, or null on an open quote. */
+function commandWords(line: string): string[] | null {
+  const bare = line.replace(/'[^']*'|"(?:[^"\\]|\\.)*"|(?<!\S)#.*/g, (m) => (m[0] === "#" ? " ".repeat(m.length) : m[0] + "_".repeat(m.length - 2) + m[0]));
+  let kept = "";
+  let at = 0;
+  for (const m of bare.matchAll(/(?:(?<!\S)[\d&]+)?[<>]+[-|]?\s*(?:&\d*-?|"[^"]*"|'[^']*'|[^\s"'<>|;&]+)/g)) (kept += line.slice(at, m.index!) + " "), (at = m.index! + m[0].length);
+  return words(kept + line.slice(at));
 }
 
 const exposure = (detector: CeoExposure["detector"], checks: Record<string, boolean>): CeoExposure => ({ detector, exposed: Object.values(checks).every(Boolean), failed: Object.entries(checks).find(([, v]) => !v)?.[0] ?? null, checks });
@@ -140,12 +150,7 @@ function ceoReviewText(u: Use): string | null {
   if (!parts || !writeTargets(parts).some((t) => CEO_REVIEW.test(t))) return null;
   const [head, ...body] = u.input.command.split("\n");
   if (head!.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (m) => (m[0] === "'" ? "" : m)).includes("\\")) return "";
-  const line = parts[0]!;
-  const bare = line.replace(/'[^']*'|"(?:[^"\\]|\\.)*"|(?<!\S)#.*/g, (m) => (m[0] === "#" ? " ".repeat(m.length) : m[0] + "_".repeat(m.length - 2) + m[0]));
-  let argLine = "";
-  let at = 0;
-  for (const m of bare.matchAll(/(?:(?<!\S)[\d&]+)?[<>]+[-|]?\s*(?:&\d*-?|"[^"]*"|'[^']*'|[^\s"'<>|;&]+)/g)) (argLine += line.slice(at, m.index!) + " "), (at = m.index! + m[0].length);
-  const argv = words(argLine + line.slice(at));
+  const argv = commandWords(parts[0]!);
   if (!argv) return "";
   const [cmd, ...args] = argv;
   if (cmd === "printf") {
