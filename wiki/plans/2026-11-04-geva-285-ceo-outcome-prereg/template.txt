@@ -1,0 +1,5 @@
+The plan is plan.md at the root of this repository. The context it was written in is in context/; read what you need. Do not commit or push.
+
+End your reply with one fenced block whose info string is ceo-outcome. It holds one JSON object with two fields:
+- "top": an array of at most 3 objects, most important first: the issues most likely to decide whether this plan works out. Each object has "issue" (what will go wrong or matter, in at most 40 words; judges see only the first 40 words of each issue), "evidence" (what in plan.md or context/ shows it) and "fix" (what the plan should change). Use an empty array when you see no issue that could decide the outcome.
+- "forecast": a whole number from 0 to 100, your probability that this plan, as written, is carried out and still in place 60 days after it ships, with no reversal and no major cut in scope.

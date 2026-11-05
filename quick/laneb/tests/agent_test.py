@@ -527,6 +527,210 @@ def test_a_hook_state_copy_that_fails_or_escapes_is_recorded_after_the_close(tmp
         assert not (tmp / "escape.log").exists() and not (tmp / "trial" / "evaluator" / "escape.log").exists()
 
 
+# L1 hook evidence. The fixtures under fixtures/l1/hooks are real sessions: Claude Code 2.1.312 in the L1 arm images (after,
+# off and before, gstack 699a41cb and 82db89ab) against arms/l1.ts's fake upstream, the after arm untold and told
+# (/investigate) with arms/l1.ts's FIXTURE_PROMPT. Each holds what the container had after the session under
+# /root/.claude/projects (the transcript, cut to its user, assistant, hook and last-prompt lines) and /root/.gstack (the hook
+# logs and contract records the after pin's hooks wrote).
+HOOK_FIX = Path(__file__).parent / "fixtures" / "l1" / "hooks"
+
+
+def _dir_tar(root: Path) -> bytes:
+    files = {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()} if root.is_dir() else {}
+    return _hook_tar(files) if files else b""
+
+
+def evidence_agent(tmp, fake, case="", gstack=None, transcripts=None, fail=()):
+    """A hooks agent whose container holds a fixture case's hook state and transcripts; fail lists copy scripts that exit 2."""
+    a = hooks_agent(tmp, fake)
+    plain = a._exec
+    state = {lh.GSTACK_HOOK_STATE: _dir_tar(HOOK_FIX / case / "gstack") if gstack is None else gstack,
+             lh.CLAUDE_TRANSCRIPTS: _dir_tar(HOOK_FIX / case / "claude-projects") if transcripts is None else transcripts}
+
+    def exec_(container, script, stdin=None, timeout=300):
+        if script not in state:
+            return plain(container, script, stdin, timeout)
+        fake.calls.append(("exec", script[:40], timeout))
+        return subprocess.CompletedProcess(script, 2, b"", b"tar: failed") if script in fail else subprocess.CompletedProcess(script, 0, state[script], b"")
+
+    a._exec = exec_
+    return a
+
+
+def l1(tmp):
+    ev = json.loads((tmp / "trial" / "evaluator" / "l1-evidence.json").read_text())
+    summary = json.loads((tmp / "trial" / "evaluator" / "laneb-summary.json").read_text())
+    assert {k: summary[k] for k in ev} == ev, summary
+    return [ev["route_hook"], ev["contract_record"], ev["contract_check_met"]], summary
+
+
+def _transcript(case):
+    return next((HOOK_FIX / case / "claude-projects").glob("*/*.jsonl"))
+
+
+def _tar_one(name, data):
+    return _hook_tar({name: data})
+
+
+def test_l1_evidence_from_real_sessions_in_the_after_arm(tmp):
+    run(evidence_agent(tmp, Fake(tmp), "after-untold"))
+    assert l1(tmp)[0] == [True, False, None]
+    run(evidence_agent(tmp, Fake(tmp), "after-told"))
+    assert l1(tmp)[0] == [False, True, False]
+
+
+def test_l1_evidence_in_the_none_before_and_off_arms_is_false_false_null(tmp):
+    for case in ("off-untold", "before-told"):
+        run(evidence_agent(tmp, Fake(tmp), case))
+        assert l1(tmp)[0] == [False, False, None], case
+    run(evidence_agent(tmp, Fake(tmp), "before-told", gstack=b""))
+    assert l1(tmp)[0] == [False, False, None]
+
+
+def test_a_silent_route_hook_or_the_mark_in_a_tool_result_reads_false(tmp):
+    t = _transcript("after-untold")
+    lines = t.read_text().splitlines()
+    silent = "\n".join(l for l in lines if "hook_additional_context" not in l) + "\n"
+    assert silent.count("\n") == len(lines) - 1
+    run(evidence_agent(tmp, Fake(tmp), "after-untold", transcripts=_tar_one("-app/" + t.name, silent.encode())))
+    assert l1(tmp)[0] == [False, False, None]
+    read = json.dumps({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "content": lh.ROUTE_MARK + " matched ..."}]}})
+    run(evidence_agent(tmp, Fake(tmp), "after-untold", transcripts=_tar_one("-app/" + t.name, (silent + read + "\n").encode())))
+    assert l1(tmp)[0] == [False, False, None]
+
+
+def test_the_contract_records_last_investigate_run_decides_met(tmp):
+    rec_path = next((HOOK_FIX / "after-told" / "gstack" / "skill-contracts").glob("*.json"))
+    rec = json.loads(rec_path.read_text())
+    logs = {"hooks/" + p.name: p.read_bytes() for p in (HOOK_FIX / "after-told" / "gstack" / "hooks").iterdir()}
+    for outcome, met in (("met", True), ("met_after_block", True), ("met_waived", True), ("blocked", False), ("miss", False), ("deferred", None)):
+        runs = {"investigate@3": {**rec["runs"]["investigate@3"], "outcome": outcome, "updated_at": "2026-11-04T14:57:40.000Z"},
+                "investigate@1": {**rec["runs"]["investigate@3"], "outcome": "miss", "updated_at": "2026-11-04T14:57:20.000Z"}}
+        state = _hook_tar({**logs, "skill-contracts/" + rec_path.name: json.dumps({**rec, "runs": runs}).encode()})
+        run(evidence_agent(tmp, Fake(tmp), "after-told", gstack=state))
+        assert l1(tmp)[0] == [False, True, met], outcome
+    other = _hook_tar({"skill-contracts/" + rec_path.name: json.dumps({**rec, "runs": {"review@4": {"skill": "review", "outcome": "met"}}}).encode()})
+    run(evidence_agent(tmp, Fake(tmp), "after-told", gstack=other))
+    assert l1(tmp)[0] == [False, True, None]
+    broken = _hook_tar({"skill-contracts/" + rec_path.name: b"{not json"})
+    run(evidence_agent(tmp, Fake(tmp), "after-told", gstack=broken))
+    assert l1(tmp)[0] == [False, None, None]
+
+
+def test_an_investigate_run_with_no_iso_updated_at_leaves_met_null(tmp):
+    # A run with no updated_at sorted as "None", after every ISO date, so it decided the outcome; a number sorted before.
+    rec_path = next((HOOK_FIX / "after-told" / "gstack" / "skill-contracts").glob("*.json"))
+    rec = json.loads(rec_path.read_text())
+    base = rec["runs"]["investigate@3"]
+    for odd in ({k: v for k, v in base.items() if k != "updated_at"}, {**base, "updated_at": 1762268260000}, {**base, "updated_at": None}):
+        runs = {"investigate@1": {**base, "outcome": "met", "updated_at": "2026-11-04T14:57:40.000Z"}, "investigate@2": {**odd, "outcome": "miss"}}
+        state = _hook_tar({"skill-contracts/" + rec_path.name: json.dumps({**rec, "runs": runs}).encode()})
+        run(evidence_agent(tmp, Fake(tmp), "after-told", gstack=state))
+        assert l1(tmp)[0] == [False, True, None], odd.get("updated_at")
+
+
+def test_a_missing_or_ambiguous_transcript_is_null_not_false(tmp):
+    run(evidence_agent(tmp, Fake(tmp), "after-told", transcripts=b""))
+    assert l1(tmp)[0] == [None, None, None]
+    t = _transcript("after-told")
+    two = _hook_tar({"-app/" + t.name: t.read_bytes(), "-app/0ec3d633-4c98-4c9b-a3a6-3dbbb46b8800.jsonl": _transcript("off-untold").read_bytes()})
+    run(evidence_agent(tmp, Fake(tmp), "after-told", transcripts=two))
+    assert l1(tmp)[0] == [None, None, None]
+    sub = _hook_tar({"-app/" + t.name: t.read_bytes(), "-app/" + t.stem + "/subagents/agent-1.jsonl": b"{}\n"})
+    run(evidence_agent(tmp, Fake(tmp), "after-told", transcripts=sub))
+    assert l1(tmp)[0] == [False, True, False]
+    assert (tmp / "trial" / "evaluator" / "claude-projects" / "-app" / t.stem / "subagents" / "agent-1.jsonl").exists()
+
+
+def test_a_failed_copy_is_recorded_leaves_its_fields_null_and_never_skips_the_patch_or_close(tmp):
+    for fail, want in (((lh.CLAUDE_TRANSCRIPTS,), [None, None, None]), ((lh.GSTACK_HOOK_STATE,), [False, None, None]), ((lh.CLAUDE_TRANSCRIPTS, lh.GSTACK_HOOK_STATE), [None, None, None])):
+        fake = Fake(tmp)
+        run(evidence_agent(tmp, fake, "after-told", fail=fail))
+        got, summary = l1(tmp)
+        assert got == want, fail
+        assert {"transcripts" if s == lh.CLAUDE_TRANSCRIPTS else "gstack_hooks" for s in fail} <= set(summary["teardown_errors"]), summary["teardown_errors"]
+        assert summary["patch"]["event"] == "patch" and summary["session"]["ok_responses"] == 2
+        close = fake.calls.index(("post", "close", 120))
+        assert all(fake.calls.index(("exec", s[:40], la.PROBE_TIMEOUT_S)) > close for s in (lh.GSTACK_HOOK_STATE, lh.CLAUDE_TRANSCRIPTS))
+
+
+def test_the_hook_record_paths_are_the_after_pins(tmp):
+    # gstack 699a41cb: lib/state-root.ts resolveStateRoot ($HOME/.gstack with no GSTACK_STATE_ROOT, GSTACK_HOME or
+    # GSTACK_STATE_DIR), lib/skill-contract.ts recordPath (<root>/skill-contracts/<session id>.json) and lib/skill-route.ts
+    # traceLogPath (<root>/hooks/<hook>.log, lines "<time> session=<id> event=<event> ..."). Claude Code 2.1.312 keeps the
+    # session transcript at $CLAUDE_CONFIG_DIR/projects/<cwd with / as ->/<session id>.jsonl.
+    assert lh.GSTACK_HOOK_STATE.startswith("cd /root/.gstack 2>/dev/null || exit 0;") and "for d in hooks skill-contracts;" in lh.GSTACK_HOOK_STATE
+    assert lh.CLAUDE_TRANSCRIPTS.startswith("cd /root/.claude/projects 2>/dev/null || exit 0;") and "*/*.jsonl */*/subagents/*.jsonl" in lh.CLAUDE_TRANSCRIPTS
+    t = _transcript("after-told")
+    rec = json.loads((HOOK_FIX / "after-told" / "gstack" / "skill-contracts" / (t.stem + ".json")).read_text())
+    assert rec["session_id"] == t.stem and rec["transcript_path"] == "/root/.claude/projects/-app/" + t.name
+    for case, hook, event in (("after-told", "skill-contract", "event=blocked"), ("after-told", "skill-route", "event=no-route reason=slash-command"), ("after-untold", "skill-route", "event=routed skill=investigate")):
+        session = _transcript(case).stem
+        assert any(("session=" + session + " " + event) in line for line in (HOOK_FIX / case / "gstack" / "hooks" / (hook + ".log")).read_text().splitlines()), (case, hook)
+
+
+def test_both_copy_scripts_run_under_the_real_sh_and_tar_on_a_leading_dash_project_folder(tmp):
+    # Claude Code names a project folder after the cwd, so it starts with a dash (-app). The copy scripts run as written,
+    # under sh and the host's tar, against the after-told session's real tree.
+    roots = {"/root/.claude/projects": HOOK_FIX / "after-told" / "claude-projects", "/root/.gstack": HOOK_FIX / "after-told" / "gstack"}
+    fake = Fake(tmp)
+    a = hooks_agent(tmp, fake)
+    plain = a._exec
+
+    def exec_(container, script, stdin=None, timeout=300):
+        if script not in (lh.GSTACK_HOOK_STATE, lh.CLAUDE_TRANSCRIPTS):
+            return plain(container, script, stdin, timeout)
+        for path, real in roots.items():
+            script = script.replace(path, str(real))
+        return subprocess.run(["sh", "-c", script], capture_output=True, timeout=timeout)
+
+    a._exec = exec_
+    run(a)
+    got, summary = l1(tmp)
+    assert not {"transcripts", "gstack_hooks"} & set(summary["teardown_errors"]), summary["teardown_errors"]
+    assert got == [False, True, False]
+    assert next((tmp / "trial" / "evaluator" / "claude-projects" / "-app").glob("*.jsonl")).stem == _transcript("after-told").stem
+    assert (tmp / "trial" / "evaluator" / "gstack-hooks" / "hooks" / "skill-contract.log").exists()
+
+
+def test_a_copy_whose_tar_passes_the_cap_is_refused_inside_the_container(tmp):
+    # Both copy scripts measure their tar before they send it, so a tree past the cap is a failed copy (fields null), never a
+    # tar the agent buffers whole. The cap is lowered to 1 KiB here; the real scripts run under sh and tar.
+    roots = {"/root/.claude/projects": HOOK_FIX / "after-told" / "claude-projects", "/root/.gstack": HOOK_FIX / "after-told" / "gstack"}
+    fake = Fake(tmp)
+    a = hooks_agent(tmp, fake)
+    plain = a._exec
+
+    def exec_(container, script, stdin=None, timeout=300):
+        if script not in (lh.GSTACK_HOOK_STATE, lh.CLAUDE_TRANSCRIPTS):
+            return plain(container, script, stdin, timeout)
+        for path, real in roots.items():
+            script = script.replace(path, str(real))
+        return subprocess.run(["sh", "-c", script.replace(str(lh.TREE_CAP_BYTES), "1024")], capture_output=True, timeout=timeout)
+
+    a._exec = exec_
+    run(a)
+    got, summary = l1(tmp)
+    assert got == [None, None, None]
+    assert "over the 1024-byte cap" in summary["teardown_errors"]["transcripts"], summary["teardown_errors"]
+    assert "over the 1024-byte cap" in summary["teardown_errors"]["gstack_hooks"], summary["teardown_errors"]
+    assert str(lh.TREE_CAP_BYTES) in lh.CLAUDE_TRANSCRIPTS and str(lh.TREE_CAP_BYTES) in lh.GSTACK_HOOK_STATE
+
+
+def test_a_tree_that_grows_between_the_measure_and_the_send_still_sends_at_most_the_cap(tmp):
+    # A process the model left running can grow the tree while the copy runs. The tar shim here prints a small archive the
+    # first time (the measure) and a megabyte after that, so a send with no bound would pass the megabyte on; the bounded
+    # send passes at most the cap plus one byte and is refused in the container. The cap is lowered to 1 KiB.
+    shim = tmp / "bin"
+    shim.mkdir()
+    (shim / "tar").write_text('#!/bin/sh\nn=$(cat "$COUNT" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNT"\nif [ "$n" -eq 1 ]; then printf small; else head -c 1000000 /dev/zero; fi\n')
+    (shim / "tar").chmod(0o755)
+    env = {**os.environ, "PATH": f"{shim}:{os.environ['PATH']}", "COUNT": str(tmp / "count")}
+    res = subprocess.run(["sh", "-c", lh._CAPPED_TAR.replace(str(lh.TREE_CAP_BYTES), "1024"), "sh", "x"], capture_output=True, env=env, timeout=60)
+    assert len(res.stdout) <= 1025, len(res.stdout)
+    assert res.returncode == 3 and b"grew past the 1024-byte cap" in res.stderr, (res.returncode, res.stderr)
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted((k, v) for k, v in globals().items() if k.startswith("test_")):

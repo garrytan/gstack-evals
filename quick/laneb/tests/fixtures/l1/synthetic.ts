@@ -1,6 +1,6 @@
 // Synthetic L1 session tables for the analysis tests: deterministic rows, the first k tasks of an arm carry a metric.
 import type { L1Arm, L1Instrument, L1SessionRow } from "../../../../../src/types.ts";
-import type { AuditLabel, Config } from "../../../l1/analyze.ts";
+import { auditSample, type AuditLabel, type Config } from "../../../l1/analyze.ts";
 import { PROBES_SHA256 } from "../../../l1/table.ts";
 
 export const TASKS = Array.from({ length: 80 }, (_, i) => "own" + (i % 25) + "__repo" + (i % 25) + "-" + (100 + i));
@@ -13,7 +13,7 @@ export function row(model: string, instrument: L1Instrument, arm: L1Arm, task: s
     outcome: "graded", pass: false, reward: 0, allowance_stop: false, turn_cap: false, reason: "graded", cost_usd: 0.5, tokens: 1000,
     load_investigate: false, gstack_loads: [], repo_loads: [], skill_unresolved: 0, complete: false,
     probe_i: { report: false, fix_edited: false, status: false, check_after_edit: false, edits: 1 },
-    background_at_result: false, contract_block: false, route_hook: true, contract_record: true, contract_check_met: null, audit_hits: [], probes_sha256: PROBES_SHA256, ...extra,
+    background_at_result: false, contract_block: false, route_hook: true, route_hook_transcript: true, contract_record: true, contract_check_met: null, audit_hits: [], probes_sha256: PROBES_SHA256, ...extra,
   };
 }
 
@@ -38,8 +38,16 @@ export function table(o: { model?: string; f1?: Counts; pilot?: { load?: number;
   return out;
 }
 
-export const passingAudit = (model = "opus"): AuditLabel[] =>
-  (["L", "I"] as const).flatMap((probe) => Array.from({ length: 40 }, (_, i) => ({ probe, model, trial: probe + i, probe_value: i < 20, reader_value: i < 20 })));
+/** Labels a blind reader agreed with: 40 per probe on made-up trials, or, given a table, one per session of its audit sample. */
+export const passingAudit = (model = "opus", rows?: L1SessionRow[]): AuditLabel[] => {
+  if (!rows) return (["L", "I"] as const).flatMap((probe) => Array.from({ length: 40 }, (_, i) => ({ probe, model, trial: probe + i, probe_value: i < 20, reader_value: i < 20 })));
+  const byTrial = new Map(rows.filter((r) => r.model === model).map((r) => [r.trial, r]));
+  return auditSample(rows, model).map((s) => {
+    const r = byTrial.get(s.trial)!;
+    const v = s.probe === "L" ? r.load_investigate : r.complete;
+    return { probe: s.probe, model, trial: s.trial, probe_value: v, reader_value: v };
+  });
+};
 
 export const config = (extra: Partial<Config> = {}): Config => ({
   models: [{ id: "opus", status: "run" }], f1_tasks: TASKS, pilot_tasks: PILOT, tb2_tasks: [], routed_stratum: TASKS.slice(0, 40), construction_checks: true, audit: passingAudit(), ...extra,

@@ -5,8 +5,9 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admit, analyze, auditResult, auditSample, decide, holm, interp, markdown, readPowerTable, signFlipP, wilsonUpper, POWER_TXT, type DecideIn } from "../l1/analyze.ts";
-import { config, passingAudit, row, table, TASKS } from "./fixtures/l1/synthetic.ts";
+import { admit, analyze, auditResult, auditSample, coverage, decide, holm, interp, markdown, readPowerTable, signFlipP, wilsonUpper, POWER_TXT, TB2_ARMS, type Config, type DecideIn } from "../l1/analyze.ts";
+import type { L1SessionRow } from "../../../src/types.ts";
+import { config, passingAudit, PILOT, row, table, TASKS } from "./fixtures/l1/synthetic.ts";
 
 const power = readPowerTable();
 const SLOW = 60_000;
@@ -115,6 +116,25 @@ describe("every behavior verdict branch (decide)", () => {
 
 const verdicts = (rep: ReturnType<typeof analyze>, model = "opus") => rep.models.find((m) => m.model === model)!.primaries.map((p) => p.member + " " + p.decision.reading + " " + p.decision.verdict + (p.decision.kind ? " (" + p.decision.kind + ")" : ""));
 
+/** The whole entry with a blind audit that agrees with the probes on this table's audit sample, unless extra names another. */
+const run = (rows: L1SessionRow[], extra: Partial<Config> = {}) => analyze(rows, config({ audit: passingAudit("opus", rows), ...extra }));
+
+describe("coverage (#169 7.5)", () => {
+  const scope = { model: "opus", instrument: "f1" as const };
+  test("an empty plan is not covered; a full one is", () => {
+    expect(coverage(table(), scope, ["after-u", "before-u"], { tasks: [], reps: 1 }).ok).toBe(false);
+    expect(coverage(table(), scope, ["after-u", "before-u"], { tasks: TASKS, reps: 1 }).ok).toBe(true);
+  });
+  test("graded sessions outside the plan, or past its replicates, do not count", () => {
+    const plan = { tasks: TASKS.slice(0, 10), reps: 2 };
+    expect(coverage(table(), scope, ["after-u"], plan)).toMatchObject({ ok: false, per: [{ arm: "after-u", graded: 10, planned: 20 }] });
+    const rows = [...table({ tasks: TASKS.slice(0, 10) }), ...TASKS.slice(0, 5).flatMap((t) => Array.from({ length: 4 }, () => row("opus", "f1", "after-u", t)))];
+    expect(coverage(rows, scope, ["after-u"], plan)).toMatchObject({ ok: false, per: [{ arm: "after-u", graded: 15, planned: 20 }] });
+    const full = [...rows, ...TASKS.slice(5, 10).map((t) => row("opus", "f1", "after-u", t))];
+    expect(coverage(full, scope, ["after-u"], plan)).toMatchObject({ ok: true, per: [{ arm: "after-u", graded: 20, planned: 20 }], clusters_missing: 0 });
+  });
+});
+
 describe("the whole entry on synthetic tables", () => {
   test("refuses a table scored by another probes.ts", () => {
     const rows = table();
@@ -127,7 +147,7 @@ describe("the whole entry on synthetic tables", () => {
     expect(p.stderr.toString()).toContain("tabled by probes.ts 000000000000");
   });
   test("KEEP on both members, the gate met, and a model the ceiling refused printed as not run with its MDD", () => {
-    const rep = analyze(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 60 }, "off-u": { load: 1 }, "before-t": { complete: 2 }, "after-t": { complete: 50 }, "off-t": { complete: 40 } } }), config({ models: [{ id: "opus", status: "run" }, { id: "sol", status: "not_run" }] }));
+    const rep = run(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 60 }, "off-u": { load: 1 }, "before-t": { complete: 2 }, "after-t": { complete: 50 }, "off-t": { complete: 40 } } }), { models: [{ id: "opus", status: "run" }, { id: "sol", status: "not_run" }] });
     expect(verdicts(rep)).toEqual(["B1 KEEP KEEP", "B3 KEEP KEEP"]);
     const opus = rep.models[0]!;
     expect(opus.gate).toMatchObject({ n: 80, complete: 50, met: true });
@@ -140,13 +160,13 @@ describe("the whole entry on synthetic tables", () => {
     expect(markdown(rep)).toContain("not run under the $2,000 ceiling");
   }, SLOW);
   test("a powered loss is CUT-CANDIDATE, and a clean null on a low before rate is CUT-CANDIDATE", () => {
-    const rep = analyze(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 1 }, "before-t": { complete: 56 }, "after-t": { complete: 8 } } }), config());
+    const rep = run(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 1 }, "before-t": { complete: 56 }, "after-t": { complete: 8 } } }));
     expect(verdicts(rep)).toEqual(["B1 NULL CUT-CANDIDATE", "B3 LOSS CUT-CANDIDATE"]);
     expect(rep.models[0]!.gate.met).toBe(false);
   }, SLOW);
   test("not admitted at 2 of 10, Holm keeps two members, and O5 prints with no verdict at a 67% before-t rate", () => {
     const tasks = Array.from({ length: 100 }, (_, i) => "o" + (i % 30) + "__r" + (i % 30) + "-" + i);
-    const rep = analyze(table({ tasks, pilot: { load: 2 }, f1: { "before-u": { load: 1 }, "after-u": { load: 70 }, "before-t": { complete: 1, pass: 67 }, "after-t": { complete: 60, pass: 70 } } }), config({ f1_tasks: tasks, routed_stratum: tasks.slice(0, 50) }));
+    const rep = run(table({ tasks, pilot: { load: 2 }, f1: { "before-u": { load: 1 }, "after-u": { load: 70 }, "before-t": { complete: 1, pass: 67 }, "after-t": { complete: 60, pass: 70 } } }), { f1_tasks: tasks, routed_stratum: tasks.slice(0, 50) });
     expect(verdicts(rep)).toEqual(["B1 NOT_ADMITTED FIX-METHOD (saturation)", "B3 KEEP KEEP"]);
     const [b1, b3] = rep.models[0]!.primaries;
     expect(b1!.admission).toMatchObject({ status: "not_admitted", x: 2, n: 10 });
@@ -161,25 +181,25 @@ describe("the whole entry on synthetic tables", () => {
     expect(md).toMatch(/\| O5 \(descriptive\) \|[^\n]*\| - \|/);
   }, SLOW);
   test("cap stops over 10% in a contrast arm and background work over 10% send nulls to harness limit", () => {
-    const rep = analyze(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 2 }, "before-t": { complete: 1 }, "after-t": { complete: 2 } }, extra: (arm, i) => (arm === "after-u" && i < 9 ? { allowance_stop: true } : arm === "after-t" && i < 9 ? { background_at_result: true } : {}) }), config());
+    const rep = run(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 2 }, "before-t": { complete: 1 }, "after-t": { complete: 2 } }, extra: (arm, i) => (arm === "after-u" && i < 9 ? { allowance_stop: true } : arm === "after-t" && i < 9 ? { background_at_result: true } : {}) }));
     expect(verdicts(rep)).toEqual(["B1 NULL FIX-METHOD (harness limit)", "B3 NULL FIX-METHOD (harness limit)"]);
     expect(rep.models[0]!.secondary.S13.f1["after-t"]).toEqual({ sessions: 80, background: 9, over: true });
   }, SLOW);
   test("a missing audit sends nulls to method; unrecorded hooks send them to exposure", () => {
     const counts = { "before-u": { load: 1 }, "after-u": { load: 2 }, "before-t": { complete: 1 }, "after-t": { complete: 2 } };
-    expect(verdicts(analyze(table({ f1: counts }), config({ audit: [] })))).toEqual(["B1 NULL FIX-METHOD (method)", "B3 NULL FIX-METHOD (method)"]);
-    const rep = analyze(table({ f1: counts, extra: () => ({ route_hook: null, contract_record: null }) }), config());
+    expect(verdicts(run(table({ f1: counts }), { audit: [] }))).toEqual(["B1 NULL FIX-METHOD (method)", "B3 NULL FIX-METHOD (method)"]);
+    const rep = run(table({ f1: counts, extra: () => ({ route_hook: null, contract_record: null }) }));
     expect(verdicts(rep)).toEqual(["B1 NULL FIX-METHOD (exposure)", "B3 NULL FIX-METHOD (exposure)"]);
     expect(rep.models[0]!.secondary.S11.route_hook_after_u).toMatchObject({ n: 80, fired: 0, unrecorded: 80, routed_n: 40 });
   }, SLOW);
   test("coverage under 90% gives no outcome; a before rate of 30% is not powered, for a null and for a rise", () => {
-    const rep = analyze(table({ f1: { "before-u": { load: 24 }, "after-u": { load: 24 }, "before-t": { complete: 1 }, "after-t": { complete: 40 } }, extra: (arm, i) => (arm === "after-t" && i >= 71 ? { outcome: "infra" } : {}) }), config());
+    const rep = run(table({ f1: { "before-u": { load: 24 }, "after-u": { load: 24 }, "before-t": { complete: 1 }, "after-t": { complete: 40 } }, extra: (arm, i) => (arm === "after-t" && i >= 71 ? { outcome: "infra" } : {}) }));
     expect(verdicts(rep)).toEqual(["B1 NULL FIX-METHOD (saturation)", "B3 NO_OUTCOME FIX-METHOD (harness limit)"]);
-    const rise = analyze(table({ f1: { "before-u": { load: 24 }, "after-u": { load: 70 }, "before-t": { complete: 1 }, "after-t": { complete: 1 } } }), config());
+    const rise = run(table({ f1: { "before-u": { load: 24 }, "after-u": { load: 70 }, "before-t": { complete: 1 }, "after-t": { complete: 1 } } }));
     expect(verdicts(rise)[0]).toBe("B1 KEEP FIX-METHOD (saturation)");
   }, SLOW);
   test("descriptive contrasts and O5 follow the coverage rule: under 90% graded in an arm gives no outcome", () => {
-    const rep = analyze(table({ f1: { "before-u": { load: 1, pass: 10 }, "after-u": { load: 2, pass: 20 }, "before-t": { complete: 1 }, "after-t": { complete: 2 } }, extra: (arm, i) => (arm === "none" && i > 0 ? { outcome: "infra" } : arm === "after-t" && i >= 70 ? { outcome: "infra" } : {}) }), config());
+    const rep = run(table({ f1: { "before-u": { load: 1, pass: 10 }, "after-u": { load: 2, pass: 20 }, "before-t": { complete: 1 }, "after-t": { complete: 2 } }, extra: (arm, i) => (arm === "none" && i > 0 ? { outcome: "infra" } : arm === "after-t" && i >= 70 ? { outcome: "infra" } : {}) }));
     const m = rep.models[0]!;
     expect(m.secondary.S1.map((c) => c.coverage!.ok)).toEqual([false, false]);
     expect(m.secondary.S5.map((c) => c.coverage!.ok)).toEqual([false, false]);
@@ -193,7 +213,7 @@ describe("the whole entry on synthetic tables", () => {
     expect(md).not.toContain("O5: +");
   }, SLOW);
   test("B1 also prints on the routed stratum", () => {
-    const rep = analyze(table({ f1: { "after-u": { load: 30 } } }), config({ routed_stratum: TASKS.slice(0, 40) }));
+    const rep = run(table({ f1: { "after-u": { load: 30 } } }), { routed_stratum: TASKS.slice(0, 40) });
     const m = rep.models[0]!;
     expect(m.primaries[0]!.contrast.est).toBeCloseTo(30 / 80, 9);
     expect(m.b1_routed).toMatchObject({ a: "after-u", b: "before-u", metric: "load", tasks: 40, a_n: 40, coverage: { ok: true, clusters_planned: 40 } });
@@ -202,9 +222,55 @@ describe("the whole entry on synthetic tables", () => {
   }, SLOW);
   test("the repository interval resamples repositories, so clustered gains widen it", () => {
     const tasks = Array.from({ length: 80 }, (_, i) => "o" + Math.floor(i / 8) + "__r" + Math.floor(i / 8) + "-" + i);
-    const rep = analyze(table({ tasks, f1: { "before-u": { load: 0 }, "after-u": { load: 24 } } }), config({ f1_tasks: tasks, routed_stratum: tasks }));
+    const rep = run(table({ tasks, f1: { "before-u": { load: 0 }, "after-u": { load: 24 } } }), { f1_tasks: tasks, routed_stratum: tasks });
     const c = rep.models[0]!.primaries[0]!.contrast;
     expect(c.repo_ci.hi - c.repo_ci.lo).toBeGreaterThan(c.task_ci.hi - c.task_ci.lo);
+  }, SLOW);
+  test("an empty routed stratum prints B1's routed line as no outcome", () => {
+    const rep = run(table({ f1: { "after-u": { load: 30 } } }), { routed_stratum: [] });
+    expect(rep.models[0]!.b1_routed.coverage).toMatchObject({ ok: false, clusters_planned: 0 });
+    expect(markdown(rep)).toMatch(/\| B1 routed stratum \|[^\n]*\| no outcome \(coverage\) \| - \| - \| - \|/);
+  }, SLOW);
+  test("a table with TB2 rows needs tb2_tasks and tb2_fit_stratum, and S12 follows the coverage rule", () => {
+    const tb2Tasks = Array.from({ length: 10 }, (_, i) => "tb2-task-" + i);
+    const tb2 = (infra: number) => TB2_ARMS.flatMap((arm) => tb2Tasks.flatMap((t, i) => [0, 1].map((k) => row("opus", "tb2", arm, t, { trial: ["tb2", arm, t, k].join("/"), ...(arm === "after-t" && i < infra ? { outcome: "infra" as const } : {}) }))));
+    const rows = [...table(), ...tb2(0)];
+    expect(() => run(rows)).toThrow(/tb2_tasks/);
+    expect(() => run(rows, { tb2_tasks: tb2Tasks })).toThrow(/tb2_fit_stratum/);
+    expect(() => run(table(), { models: [{ id: "opus", status: "run" }] })).not.toThrow();
+    const ok = run(rows, { tb2_tasks: tb2Tasks, tb2_fit_stratum: tb2Tasks.slice(0, 5) }).models[0]!.secondary.S12;
+    expect([ok.tb2_coverage.ok, ok.tb2_b1.coverage!.ok, ok.tb2_b3.coverage!.ok, ok.fit_b1.coverage!.ok]).toEqual([true, true, true, true]);
+    const rep = run([...table(), ...tb2(2)], { tb2_tasks: tb2Tasks, tb2_fit_stratum: [] });
+    const s12 = rep.models[0]!.secondary.S12;
+    expect([s12.tb2_coverage.ok, s12.tb2_b1.coverage!.ok, s12.tb2_b3.coverage!.ok, s12.fit_b1.coverage!.ok]).toEqual([false, true, false, false]);
+    const md = markdown(rep);
+    expect(md).toMatch(/\| S12 TB2 B3 \|[^\n]*\| no outcome \(coverage\) \|/);
+    expect(md).toMatch(/\| S12 TB2 fit B1 \|[^\n]*\| no outcome \(coverage\) \|/);
+    expect(md).not.toMatch(/\| S12 TB2 B1 \|[^\n]*no outcome/);
+  }, SLOW);
+  test("the probe audit judges only the table it was sampled from: one label per sampled session, with the table's value", () => {
+    const rows = table({ f1: { "before-u": { load: 1 }, "after-u": { load: 2 }, "before-t": { complete: 1 }, "after-t": { complete: 2 } } });
+    const audits = (extra: Partial<Config>) => run(rows, extra).models[0]!.primaries.map((p) => p.audit.pass);
+    const joined = passingAudit("opus", rows);
+    expect(audits({})).toEqual([true, true]);
+    expect(audits({ audit: passingAudit() })).toEqual([false, false]);
+    expect(audits({ audit: [...joined.filter((l) => l.probe === "I"), joined.find((l) => l.probe === "L")!] })).toEqual([false, true]);
+    expect(audits({ audit: joined.map((l, i) => (i === 0 ? { ...l, probe_value: !l.probe_value, reader_value: !l.reader_value } : l)) })).toEqual([false, true]);
+    expect(audits({ audit: [...joined, { probe: "I", model: "opus", trial: "f1/none/" + TASKS[0], probe_value: false, reader_value: false }] })).toEqual([true, false]);
+    expect(run(rows, { audit: passingAudit() }).models[0]!.primaries[0]!.audit).toMatchObject({ rule: "unjoined", pass: false });
+  }, SLOW);
+  test("labels outside the audit sample, or with a value that is not boolean, fail the audit join", () => {
+    const rows = table({ f1: { "before-u": { load: 1 }, "after-u": { load: 60 }, "off-u": { load: 1 }, "before-t": { complete: 2 }, "after-t": { complete: 50 }, "off-t": { complete: 40 } } });
+    const sampled = new Set(auditSample(rows, "opus").map((s) => s.trial));
+    const junk = (["L", "I"] as const).flatMap((probe) => Array.from({ length: 40 }, (_, i) => ({ probe, model: "opus", trial: `junk/${probe}/${i}` })));
+    expect(junk.some((l) => sampled.has(l.trial))).toBe(false);
+    const rep = run(rows, { audit: junk as any });
+    expect(rep.models[0]!.primaries.map((p) => [p.audit.rule, p.audit.pass])).toEqual([["unjoined", false], ["unjoined", false]]);
+    expect(verdicts(rep)).not.toContain("B1 KEEP KEEP");
+    const joined = passingAudit("opus", rows);
+    const { reader_value: _r, ...noReader } = joined[0]!;
+    const audits = run(rows, { audit: [noReader as any, ...joined.slice(1)] }).models[0]!.primaries.map((p) => p.audit.pass);
+    expect(audits).toEqual([false, true]);
   }, SLOW);
   test("a config without routed_stratum or construction_checks is refused", () => {
     const { routed_stratum: _r, ...noRouted } = config();
@@ -213,3 +279,88 @@ describe("the whole entry on synthetic tables", () => {
     expect(() => analyze([row("opus", "f1", "none", TASKS[0]!)], noChecks as any)).toThrow(/construction_checks/);
   });
 });
+
+describe("inputs on the verdict path fail closed", () => {
+  const counts = { "before-u": { load: 1 }, "after-u": { load: 1 }, "before-t": { complete: 56 }, "after-t": { complete: 8 } };
+  const clean = () => table({ f1: counts });
+  const CLEAN = ["B1 NULL CUT-CANDIDATE", "B3 LOSS CUT-CANDIDATE"];
+  const swap = <T,>(xs: T[], i: number, x: unknown) => xs.map((y, j) => (j === i ? x : y)) as T[];
+  const refused = (f: () => unknown) => {
+    try { f(); } catch (e) { return /^E_USAGE l1 analyze: /.test(String((e as Error).message)); }
+    return false;
+  };
+  test("sessions outside the plan are refused, not read: 100 unplanned pairs beside 80 planned ones would turn a null into KEEP", () => {
+    expect(verdicts(run(clean()))).toEqual(CLEAN);
+    const extra = Array.from({ length: 100 }, (_, i) => "extra" + i + "__x" + i + "-" + i);
+    const rows = [...clean(), ...extra.flatMap((t) => [row("opus", "f1", "after-u", t, { load_investigate: true }), row("opus", "f1", "before-u", t)])];
+    expect(() => run(rows)).toThrow(/E_USAGE l1 analyze: trial f1\/after-u\/extra0__x0-0 \(f1, after-u, extra0__x0-0\) is not a planned session/);
+    const tb2 = { tb2_tasks: ["tb2-a"], tb2_fit_stratum: [] };
+    const unplanned = [row("opus", "tb2", "after-u", "tb2-b"), row("opus", "tb2", "off-u", "tb2-a"), row("opus", "pilot", "after-u", PILOT[0]!), row("opus", "smoke", "before-u", PILOT[0]!), row("opus", "smoke", "after-u", TASKS[0]!), row("opus", "f1", "none", PILOT[0]!)];
+    expect(unplanned.filter((r) => !refused(() => run([...clean(), r], tb2))).map((r) => r.trial)).toEqual([]);
+    expect(verdicts(run([...clean(), row("opus", "smoke", "after-u", PILOT[0]!), row("opus", "tb2", "after-u", "tb2-a")], tb2))).toEqual(CLEAN);
+  }, 300_000);
+  test("a repeated trial, or more graded sessions on a task and arm than the plan's replicates, is refused; a relaunched cell beside its infra row is read", () => {
+    const rows = table({ f1: counts, pilot: { load: 2 } });
+    expect(verdicts(run(rows))).toEqual(["B1 NOT_ADMITTED FIX-METHOD (saturation)", "B3 LOSS CUT-CANDIDATE"]);
+    const pilot = rows.filter((r) => r.instrument === "pilot" && r.arm === "before-u" && !r.load_investigate);
+    expect(() => run([...rows, ...pilot])).toThrow(/E_USAGE l1 analyze: row 581 repeats trial pilot\/before-u\/pilot2__p-2/);
+    expect(() => run([...rows, ...pilot.map((r) => ({ ...r, trial: r.trial + "/again" }))])).toThrow(/E_USAGE l1 analyze: trial pilot\/before-u\/pilot2__p-2\/again is graded session 2 on \(pilot, before-u, pilot2__p-2\), past the plan's 1/);
+    const first = rows.find((r) => r.instrument === "f1" && r.arm === "after-u")!;
+    expect(verdicts(run([...rows, { ...first, trial: first.trial + "/first", outcome: "infra", reason: "no result.json" }]))).toEqual(verdicts(run(rows)));
+  }, 300_000);
+  test("a row missing a field the analysis reads, or holding the wrong type, is refused", () => {
+    const bad: Record<string, unknown> = { schema: "l1-session/2", model: 5, instrument: "F1", arm: "after", task: "", repo: 7, trial: 1, outcome: "Graded", pass: "false", allowance_stop: 0, turn_cap: "no", load_investigate: "1", complete: 1, background_at_result: null, contract_block: "x", route_hook: "true", route_hook_transcript: "yes", contract_record: 1, contract_check_met: "met", cost_usd: "0.5", tokens: "1000", gstack_loads: "investigate", repo_loads: [1], audit_hits: null, probes_sha256: 0 };
+    const rows = clean();
+    const cfg = config({ audit: passingAudit("opus", rows) });
+    const i = rows.findIndex((r) => r.instrument === "f1" && r.arm === "after-u");
+    const accepted = Object.entries(bad).flatMap(([k, v]) => {
+      const { [k]: _, ...missing } = rows[i] as unknown as Record<string, unknown>;
+      return [refused(() => analyze(swap(rows, i, missing), cfg)) ? [] : [k + " missing"], refused(() => analyze(swap(rows, i, { ...rows[i], [k]: v }), cfg)) ? [] : [k + " " + JSON.stringify(v)]].flat();
+    });
+    expect(accepted).toEqual([]);
+  }, 900_000);
+  test("rows of a model the config does not name are refused", () => {
+    const sol = table({ model: "sol" }).map((r) => ({ ...r, trial: "sol/" + r.trial }));
+    expect(() => run([...clean(), ...sol])).toThrow(/E_USAGE l1 analyze: trial sol\/f1\/none\/own0__repo0-100 has model sol, which the config does not name/);
+  }, 300_000);
+  test("a config with an unknown or repeated model, a task list that is not distinct names, a dropped_by_design that is not boolean or bad replicates is refused", () => {
+    const rows = clean();
+    const bad: Partial<Config>[] = [
+      { models: [{ id: "opus", status: "skip" as "run" }] },
+      { models: [{ id: "opus", status: "run" }, { id: "opus", status: "not_run" }] },
+      { f1_tasks: 42 as unknown as string[] },
+      { f1_tasks: [...TASKS, TASKS[0]!] },
+      { pilot_tasks: [1, 2] as unknown as string[] },
+      { tb2_tasks: {} as unknown as string[] },
+      { dropped_by_design: "true" as unknown as boolean },
+      { tb2_replicates: 0 },
+      { tb2_replicates: "2" as unknown as number },
+    ];
+    expect(bad.filter((extra) => !refused(() => run(rows, extra)))).toEqual([]);
+    expect(verdicts(run(rows, { dropped_by_design: true }))).toEqual(["B1 NULL FIX-METHOD (method)", "B3 LOSS CUT-CANDIDATE"]);
+  }, 900_000);
+  test("S11 counts the sessions where the proxy and the transcript disagree on the route hook", () => {
+    const rows = table({ f1: counts, extra: (arm, i) => (arm === "after-u" && i < 3 ? { route_hook_transcript: false } : arm === "off-u" && i < 2 ? { route_hook: false } : arm === "none" && i < 4 ? { route_hook_transcript: null } : {}) });
+    const rep = run(rows);
+    expect(rep.models[0]!.secondary.S11.route_disagree).toEqual({ recorded: 576, disagree: 5 });
+    expect(markdown(rep)).toContain('"route_disagree":{"recorded":576,"disagree":5}');
+  }, 300_000);
+  test("an empty arm gives no verdict: no admission, no outcome or no exposure", () => {
+    const rows = clean();
+    const without = (f: (r: L1SessionRow) => boolean) => rows.filter((r) => !f(r));
+    expect(verdicts(run(without((r) => r.instrument === "pilot" && r.arm === "before-u")))[0]).toBe("B1 NO_ADMISSION NONE");
+    expect(verdicts(run(without((r) => r.instrument === "f1" && r.arm === "after-u")))[0]).toBe("B1 NO_OUTCOME FIX-METHOD (harness limit)");
+    expect(verdicts(run(without((r) => r.instrument === "f1" && r.arm === "before-t")))[1]).toBe("B3 NO_OUTCOME FIX-METHOD (harness limit)");
+    expect(verdicts(run(rows.map((r) => (r.instrument === "f1" && r.arm === "after-t" ? { ...r, outcome: "infra" as const } : r))))[1]).toBe("B3 NO_OUTCOME FIX-METHOD (harness limit)");
+    expect(verdicts(run(rows, { routed_stratum: [] }))[0]).toBe("B1 NULL FIX-METHOD (exposure)");
+  }, 300_000);
+  test("audit labels missing a value, holding a string, repeated, under another model id or absent fail the audit", () => {
+    const rows = clean();
+    const joined = passingAudit("opus", rows);
+    const i = joined.findIndex((l) => l.probe === "L");
+    const { probe_value: _p, ...noValue } = joined[i]!;
+    const cases = [swap(joined, i, noValue), swap(joined, i, { ...joined[i], probe_value: String(joined[i]!.probe_value) }), [...joined, joined[i]!], joined.map((l) => (l.probe === "L" ? { ...l, model: "Opus" } : l)), joined.filter((l) => l.probe !== "L")];
+    expect(cases.map((audit) => run(rows, { audit: audit as never }).models[0]!.primaries[0]!.audit.pass)).toEqual([false, false, false, false, false]);
+  }, 300_000);
+});
+

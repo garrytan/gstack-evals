@@ -1,0 +1,6 @@
+A: The plan does not show that enough users need this to justify the work and the maintenance it adds.
+A: The change may break or confuse existing users who rely on current behavior, and the plan has no migration path.
+A: The scope is too large for one step; start smaller and prove the value first.
+B: This belongs in a plugin, an extension or a separate project rather than in the core, and it does not fit the project's stated direction.
+B: The maintainers would carry the ongoing support cost of this, and the plan does not say who keeps it working.
+B: An existing feature or a simpler alternative already covers most of this need, and the plan does not compare against it.

@@ -63,6 +63,15 @@ export const asksLongTtl = (body: string) => /"ttl":"(?!5m")/.test(body);
 // per token. The slack covers tokens the provider adds around tools and system text. Image and document blocks are billed
 // by pixels and pages, not bytes, so an Anthropic route never sends them on the byte bound (hasMedia); on OpenRouter
 // that gap stays open and the settle's over_reserve flag shows any session it pushed past its reserve.
+// Route evidence (the L1 harness follow-up): the after pin's UserPromptSubmit route hook puts this line in the user turn it
+// adds context to (arms/l1.ts and runner/agent/laneb_hooks.py hold the same string). A request counts as evidence only when
+// it reached the proxy before the session had been handed any 200 response: until then the model has produced no output, so
+// no tool ran and nothing in the container acted for it, and the line came from Claude Code, the hook or the task. Task text
+// that quotes the line, or context a task puts in the first request, reads as evidence without the hook; this change does not
+// close that gap, and a later harness unit has to.
+export const ROUTE_MARK = "gstack skill routing (UserPromptSubmit hook;";
+const ROUTE_MARK_JSON = JSON.stringify(ROUTE_MARK).slice(1, -1);
+
 export const COUNT_SLACK_TOKENS = 64;
 export const BYTE_SLACK_TOKENS = 1024;
 export const COUNT_FIELDS = ["model", "messages", "system", "tools", "tool_choice", "thinking"];
@@ -204,6 +213,8 @@ type Session = {
   cmdExpanded?: boolean;
   cmdNames?: string[];
   firstReqPromptTokens?: number;
+  outputReturned?: boolean;
+  routeMarkBeforeOutput?: boolean;
 };
 
 type OpenBody = { trial: string; model: string; cap_usd: number; meta?: Record<string, unknown>; open_key?: unknown };
@@ -249,6 +260,7 @@ export function startProxy(opts: ProxyOptions) {
     id: s.id, trial: s.trial, model: s.model, cap_micros: s.capMicros, spent_micros: s.spentMicros, usage: s.usage,
     requests: s.requests, ok_responses: s.okResponses, refused: s.refused, refused_budget: s.refusedBudget, requested_models: s.requestedModels, open: s.open, opened_at: s.openedAt, closed_at: s.closedAt, settled: s.settled, meta: s.meta,
     cmd_expanded: s.cmdExpanded ?? null, cmd_names: s.cmdNames ?? null, first_req_prompt_tokens: s.firstReqPromptTokens ?? null,
+    route_mark_before_output: s.routeMarkBeforeOutput ?? null,
   });
 
   // Stop admission, let in-flight requests finish for closeWaitMs, then abort the rest and charge each its worst case,
@@ -400,6 +412,7 @@ export function startProxy(opts: ProxyOptions) {
       const token = req.headers.get("x-api-key") ?? (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
       const s = token ? byToken.get(token) : undefined;
       if (!s || !s.open) return anthropicError(401, "authentication_error", "laneb proxy: unknown or closed session");
+      const beforeOutput = !s.outputReturned;
       const model = opts.config.models[s.model];
       const route = opts.config.routes[model.route];
       const raw = await req.text();
@@ -410,9 +423,12 @@ export function startProxy(opts: ProxyOptions) {
       s.requestedModels[requested] = (s.requestedModels[requested] ?? 0) + 1;
       const isCount = url.pathname.endsWith("/count_tokens");
       if (!url.pathname.endsWith("/v1/messages") && !isCount) return anthropicError(404, "not_found_error", "laneb proxy: only /v1/messages is served");
+      const routeMark = !isCount && JSON.stringify(body.messages ?? null).includes(ROUTE_MARK_JSON);
+      const routeEvidence = isCount ? {} : { route_mark: routeMark, before_output: beforeOutput };
+      if (!isCount && beforeOutput) s.routeMarkBeforeOutput = s.routeMarkBeforeOutput === true || routeMark;
       const refuse = (reason: string, message: string, extra: Record<string, unknown> = {}) => {
         s.refused++;
-        log({ event: "refused", session: s.id, reason, ...extra });
+        log({ event: "refused", session: s.id, reason, ...routeEvidence, ...extra });
         return anthropicError(400, "invalid_request_error", "laneb proxy: " + message);
       };
       const server = serverTools(body);
@@ -495,7 +511,7 @@ export function startProxy(opts: ProxyOptions) {
       // a 200 without usage, or a request that failed after it may have reached the provider.
       const account = (usage: Usage, providerCost: number | null, status: number, stream: boolean, stopReason: string | null, complete: boolean, extra: Record<string, unknown> = {}) => {
         const micros = complete ? costMicros(usage, priceFor(usage, model)) : worst;
-        const entry = { session: s.id, trial: s.trial, model: s.model, request: rid, requested_model: requested, upstream_model: model.upstream_model, status, stream, complete, usage, cost_micros: micros, worst_micros: worst, input_tokens_bound: inputTokens, counted, body_bytes: outBody.length, max_tokens: body.max_tokens, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started, ...extra };
+        const entry = { session: s.id, trial: s.trial, model: s.model, request: rid, requested_model: requested, upstream_model: model.upstream_model, status, stream, complete, usage, cost_micros: micros, worst_micros: worst, input_tokens_bound: inputTokens, counted, body_bytes: outBody.length, max_tokens: body.max_tokens, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started, ...routeEvidence, ...extra };
         if (!s.pending.delete(rid)) { log({ event: "late_usage", ...entry }); return; }
         if (status === 200 && !extra.sse_error && !extra.error) s.okResponses++;
         s.spentMicros += micros;
@@ -533,6 +549,7 @@ export function startProxy(opts: ProxyOptions) {
           if (upstream.status >= 400) log({ event: "upstream_status", session: s.id, status: upstream.status, error_type: j.error?.type, message: String(j.error?.message ?? "").slice(0, 300) });
         } catch {}
         account(usage, providerCost, upstream.status, false, stopReason, upstream.status !== 200 || hasUsage);
+        if (upstream.status === 200) s.outputReturned = true;
         return new Response(text, { status: upstream.status, headers: responseHeaders(upstream, { "content-type": contentType || "application/json" }) });
       }
       const parser = new SseUsage();
@@ -572,6 +589,7 @@ export function startProxy(opts: ProxyOptions) {
         },
         cancel() { cancelled = true; void readToEnd(); },
       });
+      if (upstream.status === 200) s.outputReturned = true;
       return new Response(out, { status: upstream.status, headers: responseHeaders(upstream, { "content-type": contentType, "cache-control": "no-cache" }) });
     },
   });

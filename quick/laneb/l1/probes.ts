@@ -357,21 +357,65 @@ const DRIVE = /\/\.capy\/drive\//;
 const NO_READ = new Set(["echo", "printf", "cd", "pushd", "popd", "pwd", "mkdir", "touch", "test", "[", "[[", "export", "unset", "type", "which", "command", "hash", "true", "false", ":", "dirname", "basename", "realpath", "readlink", "sleep", "exit"]);
 const PATH_SPLIT = /[\s'"=;|&<>()`]+/;
 const GREP = new Set(["grep", "egrep", "fgrep", "rg", "ag", "ack"]);
+const SED = new Set(["sed", "gsed"]);
 const HERE_SKIP = new Set(["grep", "egrep", "fgrep", "rg"]);
 const SUBSTITUTES = /\$\(|\x60|<\(/;
 const SED_PLAIN = /^\s*s([^\\\n])(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\1[gpiImM0-9]*(?:\s*[;\n]\s*s([^\\\n])(?:\\.|(?!\2)[^\\\n])*\2(?:\\.|(?!\2)[^\\\n])*\2[gpiImM0-9]*)*\s*;?\s*$/;
 /** Whether a grep pattern or sed script names nothing the command reads: a literal with no substitution and, for sed, nothing
  * but s commands whose flags are among g, p, i, I, m, M and digits. */
 function inert(cmd: string, op: string): boolean {
-  return !SUBSTITUTES.test(op) && (cmd !== "sed" || SED_PLAIN.test(op));
+  return !SUBSTITUTES.test(op) && (!SED.has(cmd) || SED_PLAIN.test(op));
+}
+// The options of grep (egrep, fgrep), rg, ag and ack that the positional drop knows: short flags that take no value, short
+// options whose value follows (glued, or as the next word), long flags with no value, and long options that take one, given
+// with = only. Any other option, a long option's value as the next word, and ag's and ack's -A, -B, -C and -D (optional or no
+// values) make the whole command scan as a read, as does ag's and ack's -g (a file-name pattern, with no search pattern after it).
+const GREP_SHORT: Record<string, { flags: string; valued: string }> = {
+  grep: { flags: "abcEFGHhIiLlnoPqRrsTUuVvwxyZz0123456789", valued: "ABCDdm" },
+  rg: { flags: "abcFHhIiLlNnoPpqSsUuVvwxz0", valued: "ABCEMTdgjmrt" },
+  ag: { flags: "acFHiLlnQSsUuvwz", valued: "Gmp" },
+  ack: { flags: "cHhiLlnQsvwx", valued: "m" },
+};
+const GREP_LONG_FLAGS = new Set(["--ignore-case", "--no-ignore-case", "--smart-case", "--case-sensitive", "--line-number", "--no-line-number", "--with-filename", "--no-filename", "--count", "--only-matching", "--invert-match", "--word-regexp", "--line-regexp", "--fixed-strings", "--extended-regexp", "--basic-regexp", "--perl-regexp", "--recursive", "--dereference-recursive", "--hidden", "--no-ignore", "--follow", "--quiet", "--silent", "--no-messages", "--null", "--text", "--no-heading", "--heading", "--column", "--byte-offset", "--literal", "--vimgrep", "--json", "--multiline", "--search-zip", "--null-data"]);
+const GREP_LONG_VALUED = new Set(["--context", "--after-context", "--before-context", "--max-count", "--include", "--exclude", "--exclude-dir", "--glob", "--iglob", "--type", "--type-not", "--max-depth", "--color", "--colour", "--binary-files", "--directories", "--devices", "--sort", "--sortr"]);
+/** The index of a grep, rg, ag or ack's pattern among its words (the first operand, or the word after a leading --), or -1
+ * when an option is not in the table above. */
+function grepPattern(cmd: string, words: string[]): number {
+  const o = GREP_SHORT[cmd === "egrep" || cmd === "fgrep" ? "grep" : cmd]!;
+  let pattern = -1;
+  for (let k = 1; k < words.length; k++) {
+    const w = words[k]!;
+    if (w === "--") return pattern >= 0 ? pattern : k + 1 < words.length ? k + 1 : -1;
+    if (!w.startsWith("-") || w === "-") {
+      if (pattern < 0) pattern = k;
+      continue;
+    }
+    if (w.startsWith("--")) {
+      const eq = w.indexOf("=");
+      if (eq > 0 ? !GREP_LONG_VALUED.has(w.slice(0, eq)) : !GREP_LONG_FLAGS.has(w)) return -1;
+      continue;
+    }
+    for (let i = 1; i < w.length; i++) {
+      if (o.valued.includes(w[i]!)) {
+        if (i === w.length - 1) k++;
+        break;
+      }
+      if (!o.flags.includes(w[i]!)) return -1;
+    }
+  }
+  return pattern;
 }
 /** A grep's words without its pattern, and a sed's without its script: the first operand when no -e or -f gives one and it is
- * inert, and each inert sed -e operand, names no file the command reads. A grep with any -e, -f or --regexp word, an -f file
- * and every awk script are scanned whole. */
+ * inert, and each inert sed -e operand, names no file the command reads. A grep with any -e, -f or --regexp word, or any
+ * option grepPattern does not know, an -f file and every awk script are scanned whole. */
 function withoutPattern(words: string[]): string[] {
   const cmd = base(words[0] ?? "");
-  const valued = GREP.has(cmd) ? /^-[ABCmdD]$/ : cmd === "sed" ? /^-l$/ : null;
-  if (!valued || (GREP.has(cmd) && words.some((w) => /^(-[A-Za-z]*[ef]|--regexp|--file)/.test(w)))) return words;
+  if (GREP.has(cmd)) {
+    const k = words.some((w) => /^(-[A-Za-z]*[ef]|--regexp|--file)/.test(w)) ? -1 : grepPattern(cmd, words);
+    return k < 0 ? words : words.filter((w, i) => i !== k || !inert(cmd, w));
+  }
+  const valued = SED.has(cmd) ? /^-l$/ : null;
+  if (!valued) return words;
   const kept: string[] = [];
   let given = false;
   for (let k = 0; k < words.length; k++) {
@@ -394,20 +438,35 @@ function withoutPattern(words: string[]): string[] {
   return kept.filter((w, i) => i !== k || !inert(cmd, w));
 }
 /** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies,
- * with a relative word resolved against the directory the line has cd'd to (the work tree at first). */
-function bashReadPaths(command: string, cwd: string | null): string[] {
-  const out: string[] = [];
-  for (const s of simpleCommands(command, cwd)) {
-    const words = withoutPattern(s.words);
-    const mention = words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
-    const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(s.words[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
+ * with a relative word resolved against the directory the line has cd'd to (the work tree at first). busybox, and command
+ * other than command -v or -V, in front of a command are dropped, and gsed is read as sed. In a sed command a "/" right after
+ * r, R, w or W, or after a -f glued to sed's option letters (-f/root/x), also starts a path, so a filename glued to sed's file
+ * commands (1r/root/x, s/a/b/w/root/x) is found, while a sed address or a file operand that only holds such a path in its
+ * middle is not a read of it. The trees are the paths of a find that runs -exec, -execdir, -ok or -okdir, and every path on
+ * a line that pipes into xargs, where no command's words are a mention: each one reads whatever lies inside it. */
+function bashReadPaths(command: string, cwd: string | null): { paths: string[]; trees: string[] } {
+  const out: string[] = [], trees: string[] = [];
+  const simples = simpleCommands(command, cwd).map((s) => {
+    let all = s.words;
+    for (let b = base(all[0] ?? ""); all.length > 1 && (b === "busybox" || (b === "command" && !/^-[A-Za-z]*[vV]/.test(all[1]!))); b = base(all[0] ?? "")) all = all.slice(b === "command" && all[1] === "-p" ? 2 : 1);
+    return { s, all };
+  });
+  const xargs = simples.some(({ all }) => base(all[0] ?? "") === "xargs");
+  for (const { s, all } of simples) {
+    const words = withoutPattern(all);
+    const mention = !xargs && words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
+    const tree = xargs || (base(all[0] ?? "") === "find" && all.some((w) => /^-(exec|execdir|ok|okdir)$/.test(w)));
+    const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(all[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
+    const sed = SED.has(base(all[0] ?? ""));
     for (const t of texts)
       for (const w of t.split(PATH_SPLIT)) {
-        if (w.startsWith("/")) out.push(w);
-        else if (s.cwd && w && !w.startsWith("-") && w !== s.words[0]) out.push(posix.resolve(s.cwd, w));
+        const p = w.startsWith("/") ? w : s.cwd && w && !w.startsWith("-") && w !== all[0] ? posix.resolve(s.cwd, w) : null;
+        if (p) out.push(p);
+        if (p && tree) trees.push(p);
+        if (sed) for (let i = w.indexOf("/", 1); i > 0; i = w.indexOf("/", i + 1)) if ("rRwW".includes(w[i - 1]!) || /^-[A-Za-z]*f$/.test(w.slice(0, i))) out.push(w.slice(i));
       }
   }
-  return out;
+  return { paths: out, trees };
 }
 
 export type ProbeI = { complete: boolean; report: boolean; fix_edited: boolean; status: boolean; check_after_edit: boolean; edits: number };
@@ -529,7 +588,7 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
   const roots = auditRoots(o.home);
   const below = (p: string) => DRIVE.test(p) || roots.some((r) => p.startsWith(r + "/") && p.length > r.length + 1);
   const above = (p: string) => roots.some((r) => r === p.replace(/\/+$/, "") || r.startsWith(p.replace(/\/+$/, "") + "/"));
-  const expand = (s: string) => s.replace(/(^|[\s='"])(~|\$HOME|\$\{HOME\})(?=\/|$|[\s;&|)'"])/g, "$1" + o.home);
+  const expand = (s: string) => s.replace(/(^|[\s='"])~(?=\/|$|[\s;&|)'"])/g, "$1" + o.home).replace(/\$\{HOME(?::?[-=?][^}]*)?\}|\$HOME(?![A-Za-z0-9_])/g, o.home);
   for (const c of calls) {
     const res = results.get(c.id);
     if (!res || res.error) continue;
@@ -551,8 +610,8 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
     if (c.name === "Read" || c.name === "Bash") {
       for (const m of target.matchAll(/(\S*\/\.claude\/skills\/([^/\s"']+)\/SKILL\.md)/g)) if (m[2] !== "gstack" && under(m[1]!.replace(/^['"]/, ""), o.gstackRoots)) gstackLoads.add(m[2]!);
     }
-    const paths = c.name === "Bash" ? bashReadPaths(target, root) : [target];
-    const hit = paths.find(below) ?? (paths.some(above) ? res.text.split(PATH_SPLIT).find((w) => w.startsWith("/") && below(w)) : undefined);
+    const { paths, trees } = c.name === "Bash" ? bashReadPaths(target, root) : { paths: [target], trees: [] as string[] };
+    const hit = paths.find(below) ?? trees.find((t) => below(posix.join(t, "f"))) ?? (paths.some(above) ? res.text.split(PATH_SPLIT).find((w) => w.startsWith("/") && below(w)) : undefined);
     if (hit && (c.name !== "Bash" || res.text.trim())) auditHits.push(c.name + " " + hit.slice(0, 200));
   }
   if (investigate) gstackLoads.add("investigate");

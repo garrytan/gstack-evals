@@ -47,15 +47,17 @@ export const L1 = {
 };
 
 // The seven arms (prereg section 4): a label each, on one of four tars, all on Claude Code's own system prompt. Told arms
-// open the prompt with "/investigate ". No arm sets a procedure line or a GSTACK_* variable.
+// open the prompt with "/investigate ". No arm sets a procedure line or a GSTACK_* variable. Every arm runs on
+// laneb_hooks.LanebHooksAgent (gstack_hooks=copy), which copies the hook state and transcripts out after the session closes and
+// writes evaluator/l1-evidence.json; it changes nothing in the session.
 export const ARM_SPECS: Record<string, string> = {
-  none: "none:system_prompt=claude-code-preset",
-  "before-u": "before-u:tar=before:system_prompt=claude-code-preset",
-  "after-u": "after-u:tar=after:system_prompt=claude-code-preset",
-  "off-u": "off-u:tar=off:system_prompt=claude-code-preset",
-  "before-t": "before-t:tar=before:told=investigate:system_prompt=claude-code-preset",
-  "after-t": "after-t:tar=after:told=investigate:system_prompt=claude-code-preset",
-  "off-t": "off-t:tar=off:told=investigate:system_prompt=claude-code-preset",
+  none: "none:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "before-u": "before-u:tar=before:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "after-u": "after-u:tar=after:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "off-u": "off-u:tar=off:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "before-t": "before-t:tar=before:told=investigate:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "after-t": "after-t:tar=after:told=investigate:system_prompt=claude-code-preset:gstack_hooks=copy",
+  "off-t": "off-t:tar=off:told=investigate:system_prompt=claude-code-preset:gstack_hooks=copy",
 };
 const SEVEN = ["none", "before-u", "after-u", "before-t", "after-t", "off-u", "off-t"];
 const FIVE = ["none", "before-u", "after-u", "before-t", "after-t"];
@@ -462,16 +464,7 @@ function hostSalvage(root: string, part: string, prefix: string) {
   const ubi = (args: string[]) => { const p = Bun.spawnSync([S, ...args], { env: ubiEnv, stdout: "pipe", stderr: "pipe" }); return { code: p.exitCode ?? 1, out: p.stdout.toString() }; };
   const record: Record<string, unknown> = { part, at: new Date().toISOString(), vm };
   let pulled = false;
-  if (vm && ubi(["ssh", vm, "touch work/run/STOP"]).code === 0) {
-    const deadline = Date.now() + Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) * 1000;
-    while (Date.now() < deadline && ubi(["ssh", vm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
-    for (let i = 0; i < 3 && !pulled; i++) {
-      mkdirSync(join(dir, "pulled"), { recursive: true });
-      const remote = ubi(["ssh", vm, "cd work/run && find out jobs -type f | wc -l"]).out.trim();
-      pulled = ubi(["ssh", vm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", vm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", vm, "work/run/jobs", join(dir, "pulled")]).code === 0
-        && remote === Bun.spawnSync(["bash", "-c", "cd \"$1\" && find out jobs -type f | wc -l", "bash", join(dir, "pulled")]).stdout.toString().trim();
-    }
-  }
+  if (vm) pulled = stopAndPull(ubi, vm, dir);
   record.pulled = pulled;
   const port = env.LEDGER_PORT ?? L1.host.ledgerPort;
   Bun.spawnSync(["pkill", "-f", "--", "-R 127.0.0.1:9911:127.0.0.1:" + port + " "]);
@@ -490,6 +483,21 @@ function hostSalvage(root: string, part: string, prefix: string) {
   record.vm_settles = shares;
   writeJsonAtomic(join(work, part + ".salvage.json"), record);
   console.log(JSON.stringify(record));
+}
+
+// Stops a part VM's batch, waits for vm-run.sh to close every session, then pulls out/ and jobs/ into <dir>/pulled: up to 3
+// tries, each checked by comparing the VM's file count with the copy's. salvage on the host and recover on the agent share it.
+function stopAndPull(ubi: (args: string[]) => { code: number; out: string }, vm: string, dir: string): boolean {
+  if (ubi(["ssh", vm, "touch work/run/STOP"]).code !== 0) return false;
+  const deadline = Date.now() + Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) * 1000;
+  while (Date.now() < deadline && ubi(["ssh", vm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
+  for (let i = 0; i < 3; i++) {
+    mkdirSync(join(dir, "pulled"), { recursive: true });
+    const remote = ubi(["ssh", vm, "cd work/run && find out jobs -type f | wc -l"]).out.trim();
+    if (ubi(["ssh", vm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", vm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", vm, "work/run/jobs", join(dir, "pulled")]).code === 0
+      && remote === Bun.spawnSync(["bash", "-c", "cd \"$1\" && find out jobs -type f | wc -l", "bash", join(dir, "pulled")]).stdout.toString().trim()) return true;
+  }
+  return false;
 }
 
 // relaunch starts host-salvage detached on the host and polls host-status, so no ssh call outlives ubi-runner's idle
@@ -923,16 +931,36 @@ function recover(work: string) {
   if (status(host)) refuse("host " + host.name + " answers; run attach");
   if (ubi(["ssh", host.name, "true"]).code === 0) refuse("host " + host.name + " answers ssh, so it is not lost and nothing is destroyed; host-status fails on it. Check ~/" + H + " on it");
   if (!existsSync(mirrorPath(work))) refuse("no ledger mirror in " + work + "; nothing to rebuild from");
+  // The part VMs an earlier run of recover saw gone, each with its part: ubi-runner reports RECOVER_GONE once and drops the
+  // bundle, and its down drops the VM's local state and bundle, so a rerun after a refusal or a crash learns them only from
+  // this file, the VM of a part launch.json names none for included. confirmed_at is when ubi-runner down confirmed the VM
+  // gone, and seen_at when recover first saw it gone. The earlier shapes named RECOVER_GONE VMs only: {vm, at} and {vms: [names]}.
+  const goneFile = join(work, "host/part-vm-gone.json");
+  type Gone = { part?: string; vm: string; pulled: boolean; how: string; seen_at?: number; confirmed_at?: number };
+  let done: Gone[] = [];
+  if (existsSync(goneFile)) {
+    let seen: any;
+    try { seen = readJson(goneFile); } catch { seen = null; }
+    const list = seen && typeof seen === "object" ? (seen.vms ?? (typeof seen.vm === "string" ? [seen.vm] : null)) : null;
+    if (!Array.isArray(list) || !list.every((d) => typeof d === "string" || (d && typeof d === "object" && typeof d.vm === "string" && typeof d.how === "string")))
+      refuse("host/part-vm-gone.json in " + work + " is unreadable or has an unknown shape, so the part VMs an earlier recover saw gone can't be told; nothing was destroyed. Restore it or move it aside after checking ubi-runner list --mine, then run recover again");
+    done = list.map((d: any) => (typeof d === "string" ? { vm: d, pulled: false, how: "RECOVER_GONE" } : { ...d, pulled: d.pulled === true }));
+  }
+  const markGone = (p: { name: string; vm: string | null; pulled: boolean }, how: string, when: { seen_at?: number; confirmed_at?: number } = {}) => {
+    done = [...done.filter((d) => d.vm !== p.vm), { part: p.name, vm: p.vm!, pulled: p.pulled, how, ...when }];
+    writeJsonAtomic(goneFile, { vms: done, at: nowSec() });
+  };
   const states = partState(work, plan);
   const running = states.find((s) => s.launched && !s.result);
   // Every part whose VM may still run under the lost host: the running part, and each part launch.sh kept at exit 7 that no
   // salvage reached. Each one's VM is stopped, pulled and destroyed, and the part is classified again with the ledger check.
   const held = states.filter((s) => s === running || (s.launched && s.result?.launch_exit === 7 && !s.result.salvage));
-  const claimed = new Set([...hosts(work).map((r) => r.name), ...states.filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm)]);
+  const claimed = new Set([...hosts(work).map((r) => r.name), ...states.filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm), ...done.filter((d) => d.part).map((d) => d.vm)]);
   const parts = held.map((s) => {
     const l = readJson(join(work, s.part.name + ".launch.json"));
-    const found = l.vm ? [] : unclaimedBundles(join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag()), claimed, Date.parse(l.at));
-    return { s, l, name: s.part.name as string, vm: (l.vm ?? (found.length === 1 ? found[0] : null)) as string | null, how: null as string | null, pulled: false, missing: [] as string[] };
+    const entry = l.vm ? undefined : done.find((d) => d.part === s.part.name);
+    const found = l.vm || entry ? [] : unclaimedBundles(join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag()), claimed, Date.parse(l.at));
+    return { s, l, name: s.part.name as string, vm: (l.vm ?? entry?.vm ?? (found.length === 1 ? found[0] : null)) as string | null, how: null as string | null, pulled: false, missing: [] as string[] };
   });
   const picked = parts.filter((p) => !p.l.vm && p.vm).map((p) => p.vm);
   for (const p of parts) if (!p.l.vm && picked.filter((v) => v === p.vm).length > 1) p.vm = null;
@@ -946,20 +974,13 @@ function recover(work: string) {
     const strays = ls.out.split("\n").map((x) => x.trim().split(/\s+/).at(-1) ?? "").filter((n) => n && !named.has(n));
     if (strays.length) refuse("the VM of " + unknown + " is unknown, and ubi-runner lists VMs of this owner that no host or part names (" + strays.join(", ") + "), so it may still be running; nothing was destroyed. Destroy each one that is this run's with ubi-runner down <vm>, then run recover again");
   }
-  // The part VMs an earlier run of recover saw gone: ubi-runner reports RECOVER_GONE once and drops the bundle, and its down
-  // drops the VM's local state and bundle, so a rerun after a refusal or a crash learns them only from this file. Its first
-  // shape named one RECOVER_GONE VM.
   const state = process.env.UBI_RUNNER_STATE ?? join(process.env.XDG_STATE_HOME ?? join(process.env.HOME ?? "", ".local/state"), "ubi-runner");
-  const goneFile = join(work, "host/part-vm-gone.json");
-  const seen = existsSync(goneFile) ? readJson(goneFile) : {};
-  let done: { vm: string; pulled: boolean; how: string }[] = seen.vms ?? (seen.vm ? [{ vm: seen.vm, pulled: false, how: "RECOVER_GONE" }] : []);
-  const markGone = (vm: string, pulled: boolean, how: string) => { done = [...done.filter((d) => d.vm !== vm), { vm, pulled, how }]; writeJson(goneFile, { vms: done, at: nowSec() }); };
   if (parts.some((p) => p.vm)) {
     const rec = ubi(["recover"]);
     for (const p of parts) {
       const d = done.find((x) => x.vm === p.vm);
       if (d) Object.assign(p, { how: d.how, pulled: d.pulled });
-      else if (p.vm && !existsSync(join(state, p.vm)) && rec.out.split("\n").some((x) => x.trim() === "RECOVER_GONE: vm=" + p.vm)) { p.how = "RECOVER_GONE"; markGone(p.vm, false, p.how); }
+      else if (p.vm && !existsSync(join(state, p.vm)) && rec.out.split("\n").some((x) => x.trim() === "RECOVER_GONE: vm=" + p.vm)) { p.how = "RECOVER_GONE"; markGone(p, p.how, { seen_at: nowSec() }); }
     }
     const stateless = parts.find((p) => p.vm && !p.how && !existsSync(join(state, p.vm)));
     if (stateless) refuse("ubi-runner recover (exit " + rec.code + ") left no local state for part VM " + stateless.vm + ": " + (rec.err || rec.out).trim().split("\n").slice(-2).join(" | ") + "; nothing was destroyed. Fix it, then run recover again");
@@ -973,18 +994,17 @@ function recover(work: string) {
   for (const p of parts) {
     const dir = join(work, p.name), prefix = p.s.part.prefix;
     let vm: { id: string; hours: number } | undefined, sessions: any[] | undefined, open: any[] | undefined;
-    if (p.vm && p.how !== "RECOVER_GONE") {
-      if (!p.pulled && existsSync(join(state, p.vm)) && ubi(["ssh", p.vm, "touch work/run/STOP"]).code === 0) {
-        const deadline = Date.now() + Number(process.env.L1_SALVAGE_WAIT_SEC ?? 1800) * 1000;
-        while (Date.now() < deadline && ubi(["ssh", p.vm, "test -f work/run/out/vm-run.exit"]).code !== 0) Bun.sleepSync(Number(process.env.L1_POLL_SEC ?? 20) * 1000);
-        mkdirSync(join(dir, "pulled"), { recursive: true });
-        p.pulled = ubi(["ssh", p.vm, "test -f work/run/out/vm-run.exit"]).code === 0 && ubi(["pull", p.vm, "work/run/out", join(dir, "pulled")]).code === 0 && ubi(["pull", p.vm, "work/run/jobs", join(dir, "pulled")]).code === 0;
-      }
+    if (p.vm && p.how !== "RECOVER_GONE" && !done.find((d) => d.vm === p.vm)?.confirmed_at) {
+      if (!p.pulled && existsSync(join(state, p.vm))) p.pulled = stopAndPull(ubi, p.vm, dir);
       p.how = "down";
-      markGone(p.vm, p.pulled, p.how);
+      markGone(p, p.how);
       if (ubi(["down", p.vm]).code !== 0) refuse("part VM " + p.vm + " could not be confirmed gone; run recover again");
+      markGone(p, p.how, { confirmed_at: nowSec() });
     }
-    if (p.vm) vm = { id: prefix + "vm", hours: (nowSec() - Number(p.l.controller_started_at ?? Date.parse(p.l.at) / 1000)) / 3600 };
+    // A part VM's hours run to the down that confirmed it gone, or for RECOVER_GONE to when recover first saw it gone, even
+    // on a rerun; a VM with neither recorded (an earlier shape of the file) is charged up to now, an upper bound.
+    const gone = done.find((d) => d.vm === p.vm);
+    if (p.vm) vm = { id: prefix + "vm", hours: ((gone?.confirmed_at ?? gone?.seen_at ?? nowSec()) - Number(p.l.controller_started_at ?? Date.parse(p.l.at) / 1000)) / 3600 };
     if (p.pulled) ({ closed: sessions, open, missing: p.missing } = sessionRecords(join(dir, "pulled/out"), prefix, rows));
     add.push(...restoreRows([...rows, ...add], { item: plan.item, prefix, sessions, open, vm, hostId: host.reserve_id, hostHours, at }));
     if (p.vm && !p.pulled) recordVmDeath(work, p.name, prefix, p.vm, p.how === "RECOVER_GONE" ? "ubi-runner recover reported it gone (RECOVER_GONE)" : "recover could not pull its records, and ubi-runner down confirmed it gone", totals([...rows, ...add]).openIds);
