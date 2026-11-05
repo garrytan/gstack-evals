@@ -388,6 +388,8 @@ IMPLEMENT_ASKS = (
     "Want me to implement Phase 1?",
     "Let's implement it.",
     "Do you want me to start implementing or not?",
+    "Want me to start building?",
+    "Should I execute the plan?",
 )
 PLAN_QUESTIONS = (
     "Which storage should the plan use?",
@@ -406,6 +408,7 @@ PLAN_QUESTIONS = (
     "How should I proceed?",
     "I will not write code until the plan is reviewed.",
     "Ready to commit and open a PR?",
+    "Should I start building the plan's test section?",
 )
 
 

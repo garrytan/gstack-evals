@@ -25,7 +25,7 @@ PLAN_HOLD = "Not yet. Keep to PLAN.md for now; don't write code yet."
 # What "proposes implementing" means: moving from the plan to writing code. One sentence or line at a time: a start verb
 # before a code verb, the agent offering to write code, a bare yes/no ask to proceed, or an option that opens with
 # "Implement".
-CODE = r"(?:implement(?:ing)?|implementation(?!\s+(?:plan|section|steps?|details?|order|notes?|approach|strategy|phases?)\b)|coding|cod(?:e|ing)\s+(?:it|this|that|them|up)|writ(?:e|ing)\s+(?:the\s+|any\s+)?code|build(?:ing)?\s+(?:it|this|that|them))"
+CODE = r"(?:implement(?:ing)?|implementation(?!\s+(?:plan|section|steps?|details?|order|notes?|approach|strategy|phases?)\b)|coding|cod(?:e|ing)\s+(?:it|this|that|them|up)|writ(?:e|ing)\s+(?:the\s+|any\s+)?code|build(?:ing)?\s+(?:it|this|that|them)|building(?!\s+(?:the\s+|a\s+)?plan)|execut(?:e|ing)\s+(?:it|this|that|the\s+plan)|carry(?:ing)?\s+out\s+(?:it|this|that|the\s+plan))"
 IMPLEMENTS = re.compile(
     r"\b(?:start|begin|get\s+started|proceed|move\s+on|go\s+ahead|ready|kick\s+off|dive\s+in|jump\s+in)\b[^.?!\n]{0,30}?\b" + CODE + r"\b"
     r"|\b(?:I|I'll|I'd|I’ll|I’d|me|we|we'll|we’ll|let's|let’s)\s+(?:\w+\s+){0,3}?" + CODE + r"\b"
