@@ -2,10 +2,10 @@
 // judge-run --ceo: the brief's two pinned reads, the judge request bodies (Sol at reasoning effort medium, the Anthropic
 // judges with no thinking field), section 8's failure rule with one retry, a duplicated review line, and a stopped run.
 import { afterAll, describe, expect, test } from "bun:test";
-import { readFileSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { ceoBriefReads, ceoReplyAnswers, CEO_D_READ_SHA256, CEO_REM_READ_SHA256 } from "../../../lanes/review-noloss/judge-run.ts";
-import { BRIEF, ceo, dBlock, honest, JUDGES, judgeRun, ledger, pipeline, remBlock, ROOT, runDir, SMOKE, STAGE1_NONE, tmp, U1, U2, U3, unitsDir, upstream, type Sent } from "./ceo-pipeline.ts";
+import { BRIEF, ceo, dBlock, honest, JUDGES, judgeRun, ledger, pipeline, remBlock, ROOT, runDir, sessionDir, SMOKE, STAGE1_NONE, tmp, U1, U2, U3, unitsDir, upstream, type Sent } from "./ceo-pipeline.ts";
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -135,6 +135,7 @@ describe("noloss judge-run --ceo", () => {
     expect(ceoReplyAnswers("D", rv, dBlock(ok) + dBlock(ok))).toContain("2 ceo-judge blocks");
     expect(ceoReplyAnswers("D", rv, dBlock([...ok, ok[0]]))).toContain("twice");
     expect(ceoReplyAnswers("D", rv, dBlock([...ok, { review: "rz", labels: [], leak: "no" }]))).toContain("doesn't hold");
+    expect(ceoReplyAnswers("D", rv, dBlock([...ok, { review: "the plan ships before the audit", labels: [], leak: "no" }]))).not.toContain("audit");
     expect(ceoReplyAnswers("D", rv, dBlock([ok[0], { ...ok[1], labels: ["D"] }]))).toContain("not 3");
     expect(ceoReplyAnswers("D", rv, dBlock([ok[0], { ...ok[1], labels: ["D2", "none", "none"] }]))).toContain("label outside");
     expect(ceoReplyAnswers("D", rv, dBlock([ok[0], { ...ok[1], leak: "maybe" }]))).toContain("leak");
@@ -190,6 +191,7 @@ describe("noloss judge-run --ceo", () => {
     const sol = await judgeRun(args(JUDGES.sol, "sol", "sol"), upstream(sent, flaky));
     expect(sol.code).toBe(0);
     expect(sol.err).toContain(dU1 + " was refused (attempt 1)");
+    expect(sol.err).toContain("JUDGE_REPLY_REFUSED: noloss judge-run --ceo: the reply for ");
     expect(sol.err).toContain("twice");
     const replies = JSON.parse(readFileSync(join(d, "sol", "replies.json"), "utf8"));
     expect(replies.packets.find((p: any) => p.file === dU1)).toMatchObject({ status: "answered", attempts: 2 });
@@ -225,6 +227,36 @@ describe("noloss judge-run --ceo", () => {
     const r = await judgeRun(args("anthropic/claude-haiku-5-5", "sol", "out"));
     expect(r.code).toBe(2);
     expect(lastLine(r.err)).toMatch(/^fix: pass --judge openai\/gpt-6.1-sol/);
+  });
+});
+
+describe("review fixes on #225", () => {
+  test("--checks fails transcript_readable for a none session whose transcript is gone, though its journal parse is a block", async () => {
+    const d = fresh("checks-none-transcript");
+    const run = runDir(d, "run", [...SMOKE, ...STAGE1_NONE]);
+    rmSync(join(sessionDir(run, { model: "opus", arm: "none", unit: U1, pass: 2 }), "transcript.ndjson"));
+    const r = await ceo(["rows", "--stage", "1", "--units", join(d, "units"), "--run", run, "--checks"]);
+    expect(r.code).toBe(1);
+    expect(r.out.split("\n").find((l) => l.startsWith("checks: "))!).toContain("none:opus:" + U1 + ":p2 (transcript_readable)");
+  });
+
+  test("packets refuses a --key that reaches --out through a symlink", async () => {
+    const d = fresh("packets-alias");
+    mkdirSync(join(d, "packets"));
+    symlinkSync(join(d, "packets"), join(d, "alias"));
+    const r = await ceo(["packets", "--rows", join(d, "rows.json"), "--units", join(d, "units"), "--seed", "3", "--out", join(d, "packets"), "--key", join(d, "alias", "key.json")]);
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("is inside --out");
+  });
+
+  test("judge-run --ceo refuses a --key that reaches --packets through a symlink", async () => {
+    const d = fresh("judge-alias");
+    mkdirSync(join(d, "packets"));
+    symlinkSync(join(d, "packets"), join(d, "alias"));
+    const r = await judgeRun(["--packets", join(d, "packets"), "--key", join(d, "alias", "key.json"), "--brief", BRIEF, "--judge", JUDGES.sol, "--item", "sol", "--out", join(d, "out")]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("E_NOLOSS_BLIND");
+    expect(r.err).toContain("is inside --packets");
   });
 });
 const FENCE_END = "\x60\x60\x60\n";

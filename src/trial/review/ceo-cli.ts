@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { ceoKeyProblems, insideRepo } from "../../../lanes/review-noloss/suite.ts";
+import { ceoKeyProblems, insideRepo, realPath } from "../../../lanes/review-noloss/suite.ts";
 import { seededRandom } from "../../runner/stats/paired.ts";
 import type { Termination } from "../../types.ts";
 import { autoplanCeoExposure, standaloneExposure } from "./ceo-exposure.ts";
@@ -251,16 +251,13 @@ function sessionRow(id: string, p: { unit: string; arm: ScoreArm; model: Model3;
   if (strict && !determinate) refuse(id + " in " + f.run + " holds end state " + JSON.stringify(stored) + ", but section 6's table reads " + JSON.stringify(derived) + " from its termination and stored parse", "run ceo rows --checks to see the session's checks; the journal line was changed after the run, so restore it from the run's sink copy");
   const status = (determinate ? stored : "gap") as CeoRow["status"];
   if (!Number.isFinite(co.usd) || co.usd < 0) refuse(id + " in " + f.run + " has no settled spend (ceo_outcome.usd)", "restore the journal from the run's sink copy");
-  let exposure: { checks: Record<string, boolean>; exposed: boolean } | null = null;
-  if (GSTACK.includes(p.arm)) {
-    let text = "";
-    try {
-      text = readFileSync(join(f.run, "runs", f.model_id.replaceAll("/", "_"), f.ceo_arm, f.task ?? "", "p" + f.pass, "host", "transcript.ndjson"), "utf8");
-    } catch {
-      text = "";
-    }
-    exposure = p.arm === "standalone" ? standaloneExposure(text) : autoplanCeoExposure(text);
+  let text: string | null = null;
+  try {
+    text = readFileSync(join(f.run, "runs", f.model_id.replaceAll("/", "_"), f.ceo_arm, f.task ?? "", "p" + f.pass, "host", "transcript.ndjson"), "utf8");
+  } catch {
+    text = null;
   }
+  const exposure = GSTACK.includes(p.arm) ? (p.arm === "standalone" ? standaloneExposure(text ?? "") : autoplanCeoExposure(text ?? "")) : null;
   const fields = status === "scored" ? ceoRowFields(parse) : { issues: [], words: [], fixes: [], fix_words: [] };
   const row: CeoRow = {
     ...base,
@@ -275,7 +272,7 @@ function sessionRow(id: string, p: { unit: string; arm: ScoreArm; model: Model3;
     over_three: parse.kind === "block" && parse.top.length > 3,
     zero_output: e.record?.model_output === false,
   };
-  const checks: [string, boolean][] = [["journaled", true], ["transcript_readable", parse.kind !== "unreadable"], ["block", parse.kind === "block"], ["end_state_determinate", determinate], ["scored", status === "scored"], ...Object.entries(exposure?.checks ?? {})];
+  const checks: [string, boolean][] = [["journaled", true], ["transcript_readable", text !== null && parse.kind !== "unreadable"], ["block", parse.kind === "block"], ["end_state_determinate", determinate], ["scored", status === "scored"], ...Object.entries(exposure?.checks ?? {})];
   return { row, checks };
 }
 
@@ -430,7 +427,7 @@ function packetsCmd(argv: string[], io: Io): number {
   const flags = parseFlags(argv, { "--rows": "value", "--units": "value", "--seed": "value", "--out": "value", "--key": "value" });
   const out = sealedOut(need(flags, "--out"), "--out");
   const keyPath = sealedOut(need(flags, "--key"), "--key");
-  if (inside(keyPath, out)) refuse("--key " + keyPath + " is inside --out " + out + "; the key maps opaque ids back to rows and must never travel with the packets", "write the key beside --out, not in it");
+  if (inside(realPath(keyPath) ?? keyPath, realPath(out) ?? out)) refuse("--key " + keyPath + " is inside --out " + out + "; the key maps opaque ids back to rows and must never travel with the packets", "write the key beside --out, not in it");
   if (existsSync(out) && readdirSync(out).length) refuse("--out " + out + " is not empty", "give each packet build a new directory");
   const seedText = need(flags, "--seed");
   const seed = Number(seedText);

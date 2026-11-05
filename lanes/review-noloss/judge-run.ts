@@ -36,7 +36,7 @@ import type { Ruling } from "./contract.ts";
 import { readArmDir } from "./ingest.ts";
 import { fieldText, findingSha256, judgeSets, leakRules, loadKey, packetAnswers, packetMask, packetRulings, type JudgeRole, type KeyEntry, type Unjudged } from "./judge.ts";
 import { ScoreError } from "./score.ts";
-import { holdsSealed, insideRepo, loadSuite, sealedAs, sha256, unitRef } from "./suite.ts";
+import { holdsSealed, insideRepo, loadSuite, realPath, sealedAs, sha256, unitRef } from "./suite.ts";
 
 const MAX_OUTPUT_TOKENS = 16000;
 /** Per request: at most 3 sends, the first included, and no new send once 900 s have passed since the first began. */
@@ -463,7 +463,7 @@ export function ceoReplyAnswers(read: "D" | "rem", reviews: Array<{ review: stri
     }
     if (!o || typeof o !== "object" || typeof o.review !== "string") return "a line of the " + info + " block names no review";
     const r = reviews.find((x) => x.review === o.review);
-    if (!r) return "the block answers review " + JSON.stringify(o.review) + ", which the packet doesn't hold";
+    if (!r) return "the block answers a review the packet doesn't hold";
     if (Object.hasOwn(got, o.review)) return "the block answers review " + o.review + " twice";
     const list = read === "D" ? o.labels : o.rem;
     if (!Array.isArray(list) || list.length !== r.issues) return "review " + o.review + "'s " + (read === "D" ? "labels" : "rem") + " list has " + (Array.isArray(list) ? list.length : "no") + " entries, not " + r.issues;
@@ -499,8 +499,9 @@ async function ceoJudgeRunCmd(argv: string[], io: NolossIo, o: { env?: Record<st
   if (insideRepo(out)) ceoUsage("--out " + out + " is inside the repo; judge replies are keyed to sealed packets and stay sealed", "give --out a new directory outside the repo, beside the packets");
   const packetsDir = resolve(one("--packets"));
   const keyPath = resolve(one("--key"));
-  if (inside(out, packetsDir)) ceoUsage("--out " + out + " is inside --packets " + packetsDir, "write the replies beside the packets, never among them");
-  if (inside(keyPath, packetsDir)) blind("--key " + keyPath + " is inside --packets " + packetsDir + "; the key maps opaque ids back to rows and must never travel with the packets\nfix: move the key beside --packets and pass it from there");
+  const real = (p: string) => realPath(p) ?? p;
+  if (inside(real(out), real(packetsDir))) ceoUsage("--out " + out + " is inside --packets " + packetsDir, "write the replies beside the packets, never among them");
+  if (inside(real(keyPath), real(packetsDir))) blind("--key " + keyPath + " is inside --packets " + packetsDir + "; the key maps opaque ids back to rows and must never travel with the packets\nfix: move the key beside --packets and pass it from there");
   if (existsSync(out) && readdirSync(out).length) ceoUsage("--out " + out + " is not empty", "give each judge run a new directory; a stopped run doesn't resume");
   const keyText = read(keyPath, "the packet key");
   let key: { kind?: string; packets?: Array<{ file: string; unit: string; read: "D" | "rem"; sha256: string }> };
@@ -614,7 +615,7 @@ async function ceoJudgeRunCmd(argv: string[], io: NolossIo, o: { env?: Record<st
         return;
       }
       reason = got;
-      io.err("noloss judge-run --ceo: the reply for " + p.file + " was refused (attempt " + attempt + "): " + reason);
+      io.err("JUDGE_REPLY_REFUSED: noloss judge-run --ceo: the reply for " + p.file + " was refused (attempt " + attempt + "): " + reason);
     }
     results.set(p.file, { status: "missing", cause: "refused twice: " + reason });
   };

@@ -490,7 +490,7 @@ export function sealedLeaks(suite: Suite, text: string): string[] {
  * (a loop) the result is null, which insideRepo counts as inside. Any other missing path is the realpath of its nearest
  * existing ancestor, then the rest of the path.
  */
-const realPath = (p: string, hops = 0): string | null => {
+export const realPath = (p: string, hops = 0): string | null => {
   try {
     return realpathSync(p);
   } catch {
