@@ -479,6 +479,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         s.close = settleLease(o.record, o.local, s.lease_id, warn, s.ended === "cap_stop" ? s.scope || "cap_stop" : undefined);
         log("STAGE_SETTLED item=" + s.item + " arm=" + s.arm + " lease=" + s.lease_id + " spent=" + usd(s.close.spent_micros) + " unknown=" + usd(s.close.unknown_micros) + " sessions=" + s.finished + " ended=" + s.ended + (s.scope ? " scope=" + s.scope : ""));
       } catch (e) {
+        failed = true;
         if (s.ended !== "cap_stop") s.ended = "failed";
         log("E_LEASE_UNSETTLED outcome driver: stage " + s.item + " lease " + s.lease_id + " did not settle: " + (e as Error).message + "; settle it with gstack-evals ledger settle --lease " + s.lease_id + " on this machine");
       }

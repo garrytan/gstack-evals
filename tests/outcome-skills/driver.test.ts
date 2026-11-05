@@ -947,4 +947,20 @@ describe("the outcome-skills session driver", () => {
     expect(recovered.unknown_calls).toBe(1);
     expect(unknownFromRun(w.dir, ["i-pe"])).toEqual({ calls: 1, micros: recovered.unknown_micros });
   });
+
+  test("a cap-stopped stage whose settle throws after its close is in the record exits 2, keeping ended cap_stop (pass-2 red-team#1)", async () => {
+    const w = world({ "i-pe": 50 });
+    const served = await w.serve([PE]);
+    const open = (task: string) => post(served.control + "/sessions", body("plan-eng-review:told", task, 1));
+    const [a, b] = [await open("a"), await open("b")];
+    expect((await open("c")).status).toBe(409);
+    w.local.markClosed = () => {
+      throw new Error("markClosed failed after the record write");
+    };
+    for (const s of [a, b]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.done).toBe(2);
+    expect(readItem(w.record, "i-pe").leases[0]?.close?.cap_stop).toBe("plan-eng-review:told only");
+    expect(w.logs.some((l) => l.startsWith("E_LEASE_UNSETTLED outcome driver: stage i-pe"))).toBe(true);
+    expect(w.logs.some((l) => l.startsWith("STAGE_SETTLED"))).toBe(false);
+  });
 });
