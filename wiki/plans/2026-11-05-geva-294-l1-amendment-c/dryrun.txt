@@ -1,0 +1,100 @@
+ANTHROPIC_API_KEY: unset
+OPENAI_API_KEY: unset
+OPENROUTER_API_KEY: unset
+UBICLOUD_API_KEY: unset
+UBICLOUD_API_TOKEN: unset
+commit 847b741c70c137caebed6f96b42ced36b06b2ce3; bun 1.4.4; docker 29.9.2
+
+## Part 0: export
+bun install exit 0
+ok   P0 the export is outside any git work tree | expected: git rev-parse fails | observed: fatal: not a git repository (or any of the parent directories): .git
+
+## Part A: pins
+ok   A1 the none arm's tar.gz and tar match manifests/l1/none.json | expected: 6e55e7062d67321245fdec133dd05f409a766ee601777e9634038440bfc9dcf5 / 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e | observed: 6e55e7062d67321245fdec133dd05f409a766ee601777e9634038440bfc9dcf5 / 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e
+ok   A1 the before arm's tar.gz and tar match manifests/l1/before.json | expected: 67f6e6156282f0df28fdb3352046b5f7f1c02e9287c27737d790f278695cdf55 / e28da7d021fc530de9dc577cd4ebe9e28dc7773fd46ea006ca03c9f75701f29c | observed: 67f6e6156282f0df28fdb3352046b5f7f1c02e9287c27737d790f278695cdf55 / e28da7d021fc530de9dc577cd4ebe9e28dc7773fd46ea006ca03c9f75701f29c
+ok   A1 the after arm's tar.gz and tar match manifests/l1/after.json | expected: 5c2fd75d1562fd7c575907a8b0fa8e6e6d335c93c53a0a8cbef42df7a51685e1 / 604cdb537ccf2e62cace277262c8ec75341dd4fb4714a3135ce82e3725c47cac | observed: 5c2fd75d1562fd7c575907a8b0fa8e6e6d335c93c53a0a8cbef42df7a51685e1 / 604cdb537ccf2e62cace277262c8ec75341dd4fb4714a3135ce82e3725c47cac
+ok   A1 the off arm's tar.gz and tar match manifests/l1/off.json | expected: 2e86902f090b33581b3e6b2b905f2545fbce77282c85f0f397abbe33745f1c2a / a44be22f05a5ed681fc437371cb5c2bf057165b4e2aad2813f354d9d3c95daa9 | observed: 2e86902f090b33581b3e6b2b905f2545fbce77282c85f0f397abbe33745f1c2a / a44be22f05a5ed681fc437371cb5c2bf057165b4e2aad2813f354d9d3c95daa9
+source digests:
+  efeb634a38db43799382b337d70b35161fbb4c6e64b20fb3787dc3325227e7d3  quick/laneb/l1/analyze.ts
+  7455dd12f4b18e05d0c9b1533404eed6919d92df592720c003ddcf066382515b  quick/laneb/l1/audit.ts
+  d1e4e96b3ff31401bf698ecbe96a3d7c561a5bf14995da626f6df61afb050337  quick/laneb/l1/ceiling.ts
+  25ebe4373dbc84a3e7bd494d1b2536faf5a17ae44d895a6c8f7bb2cdf6e88df3  quick/laneb/l1/l1.ts
+  637e605fbb3af7ea7195c07169e606b1ee719d6e7a1969b78ee63529b6a19b5a  quick/laneb/l1/probes-8e6795a.ts
+  47d55b3ea29af9617e889132c8ea7ba3f83660aa0623f29414b7b05659af6a38  quick/laneb/l1/probes.ts
+  b91f698abaa988535f9f5dabf38c46c606e44d7a69a0471a748cfc5bd05217d3  quick/laneb/l1/table.ts
+  46f53019d89ab98eae51c808d7217476cc8d49a55f7bc83e190541edf87209e8  quick/laneb/runner/vm-run.sh
+  2c3cadcbd0876263ccbc669537948415fbd1bb898f8dab0a4988ed1a36ab9cc9  quick/laneb/runner/task-hooks.sh
+  ecb81c63aa35dc03c79eac11ab6149c24b26de2ef1b884c651b6e2e62ccc5f38  quick/laneb/runner/launch.sh
+  6aa837b10ac7ae00c125c69e2800be15a52385c7e08a7d96140008eed3921a7a  quick/laneb/runner/vm-bootstrap.sh
+  638bac674ebac441c9a487592290c89a5bbf9bbafdd86e11b5fb3b724e92f009  quick/laneb/runner/proxy.ts
+  4de6db04538255e3e74ca507615305ca815bd4ec8cf0fe9b375aa21eebf2acc4  quick/laneb/runner/ledger.ts
+  08b2487be88d941c8db67f13d69736dc87c2b6d66cf7fa16f07b4ed3ff9f44da  quick/laneb/runner/prepare-run.ts
+  6eebf16bae4064f318bcdfa9c70d3f02354a25d5d4713dc8ff25f16b2b6a8c9d  quick/laneb/tasks/tasks.json
+  990b5b102dc70c882ff2441e3806f1ccc91230e5f0987910be7b6179ec0613fd  src/types.ts
+ok   A2 table.ts's PROBES_SHA256 is probes.ts's sha256 | expected: 47d55b3ea29af9617e889132c8ea7ba3f83660aa0623f29414b7b05659af6a38 | observed: 47d55b3ea29af9617e889132c8ea7ba3f83660aa0623f29414b7b05659af6a38
+ok   A3 probes-8e6795a.ts is 8e6795a's probes.ts byte for byte, and audit.ts pins its sha256 | expected: blob 76d8819e1f0981d6a8e4e1e6461538cfb9ff2575, sha256 637e605fbb3af7ea7195c07169e606b1ee719d6e7a1969b78ee63529b6a19b5a | observed: blob 76d8819e1f0981d6a8e4e1e6461538cfb9ff2575, sha256 637e605fbb3af7ea7195c07169e606b1ee719d6e7a1969b78ee63529b6a19b5a
+ok   A4 routes.tsv (117 prompts at the after pin) is the routing table GEVA-294's Subagent 2 wrote | expected: 6760231e5e05d72c725cfea3045c1004289d0c080a86f6da62734c086d891885, 117 rows | observed: 6760231e5e05d72c725cfea3045c1004289d0c080a86f6da62734c086d891885, 117 rows
+ok   A4b route.ts reruns the 117 stored prompts through the after arm's hook and gstack-skill-route and writes routes.tsv again | expected: exit 0, the same bytes, 0 disagreements | observed: exit 0, 6760231e5e05d72c725cfea3045c1004289d0c080a86f6da62734c086d891885; hook vs gstack-skill-route disagreements: 0
+ok   A5 routed-stratum.txt is routes.tsv's F rows routed to investigate, every one in F1's 80 | expected: 19 of 80 F rows, sha256 077f02e3c52b8da92c5699f5af70a885fd509bde94d4188093e9c03a359ea6e9, 0 outside f-tasks.txt | observed: 19 of 80 F rows, sha256 077f02e3c52b8da92c5699f5af70a885fd509bde94d4188093e9c03a359ea6e9, 0 outside
+ok   A6 split.py rewrites tb2-parts.txt byte for byte (37 tasks, 19 and 18) | expected: exit 0, 57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125 | observed: exit 0, 57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125; TB2 twin 37 582ba69f50ff8eb121fb87d622f3e3bc6a39310910d29f8ea3afdaa6eb9e53eb;TB2 part 1 19 f6f3cfdc3afa83cfe2f6763e1ab9042adf27ecdddb692cc14894e882690df714;TB2 part 2 18 f3e322324a0f55b81f6e6cfbf6629c96327a046ba6ccd19f5b4d79b59d52ff4e;
+ok   A7 every TB2 twin task is in tasks.json's main, reserves or extension, so prepare-run admits it | expected: 0 of 37 missing | observed: 0 of 37 missing
+ok   A9 l1.ts plans the TB2 twin from tb2-parts.txt | expected: tb2-1:19 tasks tb2-2:18 tasks, 370 sessions | observed: tb2-1:19 tasks tb2-2:18 tasks, 370 sessions
+ok   A8 price.txt is the merged prereg's (dcdf8dc) | expected: b04fcf023f71ffdfc2aa4e355293bf182cc9d05112b7cb70619ed6c9ecadc3fc | observed: b04fcf023f71ffdfc2aa4e355293bf182cc9d05112b7cb70619ed6c9ecadc3fc
+
+## Part B: the real CLI against a fake upstream
+ok   B1 the real-CLI record's sha256 | expected: d9d08ac785982939da4e496b06c376fd0591da78277229e1a3467fd0e0a658a7 | observed: d9d08ac785982939da4e496b06c376fd0591da78277229e1a3467fd0e0a658a7
+ok   B2 route_hook from the proxy's rows: true for after untold only | expected: after-t=false after-u=true before-t=false before-u=false none=false off-t=false off-u=false | observed: after-t=false after-u=true before-t=false before-u=false none=false off-t=false off-u=false
+ok   B3 the proxy and the transcript disagree on no session that carries both | expected: 0 of 7 | observed: 0 of 7
+ok   B4 all seven sessions are graded rows | expected: 7 | observed: 7
+ok   B5 table.ts at this commit rebuilds the record's seven rows | expected: exit 0, same rows | observed: exit 0, same rows; wrote 7 rows to $W/d/sessions.jsonl
+
+## Part C: the keyless tests that drive each frozen rule
+ok   C0 tests/l1-probes.test.ts | expected: every test passes | observed: 48 pass, 0 fail, 0 skip
+ok   C0 tests/l1-table.test.ts | expected: every test passes | observed: 17 pass, 0 fail, 0 skip
+ok   C0 tests/l1-analyze.test.ts | expected: every test passes | observed: 37 pass, 0 fail, 0 skip
+ok   C0 tests/l1-ceiling.test.ts | expected: every test passes | observed: 24 pass, 0 fail, 0 skip
+ok   C0 tests/l1-host.test.ts | expected: every test passes | observed: 48 pass, 0 fail, 0 skip
+ok   C0 tests/l1-launch.test.ts | expected: every test passes | observed: 27 pass, 0 fail, 0 skip
+ok   C0 tests/l1-audit.test.ts | expected: every test passes | observed: 7 pass, 0 fail, 0 skip
+ok   C0 tests/vm-run.test.ts | expected: every test passes | observed: 25 pass, 0 fail, 0 skip
+ok   C0 tests/proxy-route.test.ts | expected: every test passes | observed: 9 pass, 0 fail, 0 skip
+ok   C0 tests/agent.test.ts | expected: every test passes | observed: 2 pass, 0 fail, 0 skip
+ok   C0 tests/grid.test.ts | expected: every test passes | observed: 8 pass, 0 fail, 0 skip
+ok   C0 tests/ledger-serve.test.ts | expected: every test passes | observed: 1 pass, 0 fail, 0 skip
+ok   C1 one ledger item bound per run: a used item, a cap unlike approvals/ and an unpinned TB2 split are refused | expected: passes (l1-host: prepare and host-up refuse a used item) | observed: 1 pass, 0 fail
+ok   C2 the pilot: every planned cell once in the seeded order on the bound run | expected: passes (l1-host: pilot: host-up reserves the host's hours first) | observed: 1 pass, 0 fail
+ok   C3 F1's parts in order; a cap stop ends the item and refuses the next part and the relaunch | expected: passes (l1-host: f1: a part launched out of order is refused) | observed: 1 pass, 0 fail
+ok   C4 a part's controller killed: the one relaunch runs only the cells that never started | expected: passes (l1-host: a lost controller: host-down is refused) | observed: 1 pass, 0 fail
+ok   C5 a part's VM killed: a vm_death row, the one relaunch, and a second relaunch refused | expected: passes (l1-host: the relaunch evidence: a part VM that dies mid-part) | observed: 1 pass, 0 fail
+ok   C6 the host killed mid-part: recover rebuilds the ledger, then the relaunch | expected: passes (l1-host: Amendment C's dry run: the host dies mid-part) | observed: 1 pass, 0 fail
+ok   C7 U1's lost-evidence cap-stop rule (the Captain's first bullet) | expected: passes (l1-host: within one session cap of its cap, so relaunch is refused) | observed: 1 pass, 0 fail
+ok   C8 the same rule after a lost host, with the records pulled | expected: passes (l1-host: recover after the host dies runs the ledger check even when it pulls) | observed: 1 pass, 0 fail
+ok   C9 rebuilt sessions count as open at once in recover's cap-stop check | expected: passes (l1-host: recover counts every rebuilt session as open at once) | observed: 1 pass, 0 fail
+ok   C10 an unknown part VM: recover destroys nothing until the stray check clears | expected: passes (l1-host: with none the part VM is unknown) | observed: 1 pass, 0 fail
+ok   C11 an exit-7 part when the host is lost is salvaged by recover | expected: passes (l1-host: a part launch.sh kept at exit 7 when the host is lost) | observed: 1 pass, 0 fail
+ok   C12 B1: exit 4 with no session record is a lost ledger service, and the relaunch runs every cell | expected: passes (l1-host: exit 4 with no session record for the part) | observed: 1 pass, 0 fail
+ok   C13 B1, first guard: the exit-4 relaunch is the part's one relaunch | expected: passes (l1-host: an exit-4 relaunch is the part's one relaunch) | observed: 1 pass, 0 fail
+ok   C14 B1, second guard: exit 4 with a session record takes the lost-evidence path | expected: passes (l1-host: exit 4 fails closed) | observed: 1 pass, 0 fail
+ok   C15 B1: exit 4 relaunches even within one session cap, since no trial started | expected: passes (l1-host: exit 4 with no session record relaunches even when) | observed: 1 pass, 0 fail
+ok   C16 B1 after a lost host: recover's NEXT is host-up, then the one relaunch | expected: passes (l1-host: ended at vm-run.sh's exit 4 and no session record) | observed: 1 pass, 0 fail
+ok   C17 A1: the holdback at the $700 crew line | expected: passes (l1-ceiling: holdback) | observed: 1 pass, 0 fail
+ok   C18 the TB2 twin's tasks are admitted by prepare-run | expected: passes (l1-launch: TB2 twin) | observed: 2 pass, 0 fail
+ok   C19 the task-image hook log | expected: passes (vm-run: task-hooks.sh (L1 Amendment C)) | observed: 2 pass, 0 fail
+ok   C20 procedure (a) | expected: passes (l1-audit: procedure (a)) | observed: 1 pass, 0 fail
+ok   C21 procedure (b) | expected: passes (l1-audit: procedure (b)) | observed: 2 pass, 0 fail
+
+## Part D: direct drives
+ok   D1 A1: the pilot's check at the $700 crew line with crew at $449: holdback $321 (crew $251, Captain $40, run work $30) | expected: exit 0, CEILING PASS, holdback $321.00 = crew $251.00 | observed: exit 0, CEILING PASS pilot-opus: the sum $1710.00 with pilot-opus's cap is at or under $2000.00; holdback $321.00 = crew $251.00 
+ok   D2 Opus items settled at their caps, Sol's pilot alone planned: passes | expected: exit 0, CEILING PASS | observed: exit 0, CEILING PASS pilot-sol: the sum $1810.00 with pilot-sol's cap is at or under $2000.00
+ok   D3 with F1-Sol's $730 planned as well, the Sol pilot is refused | expected: exit 1, CEILING REFUSE | observed: exit 1, CEILING REFUSE pilot-sol: the sum $2540.00 with pilot-sol's cap passes $2000.00
+ok   D4 the Captain's second bullet: the dead VM's open reserves stay open through the relaunch, which fails closed (cap $18; without them the session would fit) | expected: a $5 relaunch session past the cap is refused, exit 3 | observed: exit 3, {"ok":false,"reason":"cap","totals":{"capMicros":18000000,"settledMicros":2400000,"openReservedMicros":12400000,"openIds
+ok   D5 after the relaunch ends, they are settled at full on the item's ledger, before the next part's ceiling check | expected: open f1-1-s1,f1-1-s2, then none; settled $14.80 | observed: open f1-1-s1,f1-1-s2, then ''; {"cap_usd":18,"settled_usd":14.8,"open_reserved_usd":0,"open_ids":0}
+ok   D6 task-hooks.sh against real images: a work tree hook and a build-context hook read yes, a Stop hook no, an image never pulled unknown | expected: exit 0, t-clean=no t-ctx=yes t-hook=yes t-missing=unknown | observed: exit 0, t-clean=no t-ctx=yes t-hook=yes t-missing=unknown
+ok   D7 the scan pulls nothing, and t-hook's workdir comes from the image | expected: absent; /testbed /testbed/.claude/settings.json | observed: absent; /testbed /testbed/.claude/settings.json
+ok   D8 procedure (a) prints each call the line-wide rule flags and the scoped rule does not | expected: exit 0, line-wide only 2 calls in 2 sessions (n-added, n-quiet), scoped only 0 | observed: exit 0, xargs-audit: 4 none sessions, 4 tool calls; line-wide only 2 calls in 2 sessions; scoped only 0 calls in 0 sessions; 0 calls hit by both with different hits
+ok   D9 procedure (b) against the real arm tars: a real read of a gstack file stands, a mention is overturned, a line-wide-only real read is added | expected: exit 0, n-added=added n-overturned=overturned n-stands=stands | observed: exit 0, n-added=added n-overturned=overturned n-stands=stands; # contamination: 4 none sessions, 522383 gstack lines; the merged rule drops 2: stands 1, overturned 1; added 1
+ok   D10 apply rewrites the table: overturned back to graded, added dropped, the rest as they were | expected: exit 0, n-stands=contaminated n-overturned=graded n-added=contaminated n-quiet=graded | observed: exit 0, n-stands=contaminated n-overturned=graded n-added=contaminated n-quiet=graded; apply: 1 rows back to graded, 1 rows now contaminated, 1 decisions left their row as it was
+ok   D11 both procedures over the real-CLI none session | expected: no decision; no disagreement | observed: # contamination: 1 none sessions, 522383 gstack lines; the merged rule drops 0: stands 0, overturned 0; added 0; xargs-audit: 1 none sessions, 1 tool calls; line-wide only 0 calls in 0 sessions; scoped only 0 calls in 0 sessions; 0 calls hit by both wit
+
+rules: 63, failed: 0
+DRYRUN: ok
