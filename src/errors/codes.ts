@@ -1136,7 +1136,7 @@ export const CODES = {
   E_REAL_SCORE_INPUT: {
     exit: 2,
     meaning: "The real-outcome scorer could not read a trial's records as the lane defines them: a shipment.json that is not a real-outcome/shipment/v1 record, an arm that arms.json does not list, a K4 task with no replay role, a task bundle without the starting commit, a gold patch that does not apply, a trial-score.json of another schema, or a termination reason the taxonomy does not class. It also means a tree needed grading with no --image-id, or with a pinned image that is not on this host with that id or is not the image the trial logged, or that --task names a bound run copy rather than the task dir. Nothing was scored.",
-    fix: "Read the message. A missing record means the trial is infra (rig reason), never a fail. An unclassed termination needs B7's frozen taxonomy (--taxonomy) to class it before any trial is scored. Grade in the task's pinned image: pass --image-id from its image manifest row, load the image with docker load (which keeps its id), and pass --task the original task dir, never its run copy.",
+    fix: "Read the message. A missing record means the trial is infra (rig reason), never a fail. An unclassed termination needs B7's frozen taxonomy (--taxonomy) to class it before any trial is scored. Grade in the task's pinned image: pass --image-id from its image manifest row, load the image with docker load (which keeps its id), and pass --task the original task dir, never its run copy. Only a trial whose session logged its image (U4) is graded.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,

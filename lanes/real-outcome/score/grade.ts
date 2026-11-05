@@ -95,11 +95,12 @@ export function treeGrade(task: TaskJson, tree: TreeResult): TreeGrade {
   };
 }
 
-function dockerGrader(o: GradeOptions, task: TaskJson): Grader {
+function dockerGrader(o: GradeOptions, task: TaskJson, ran: Set<string>): Grader {
   let image: string | null = null;
   return (label, patch) => {
     if (image === null) {
       if (!/^sha256:[0-9a-f]{64}$/.test(o.imageId ?? "")) throw new ScoreError("E_REAL_SCORE_INPUT", "grading a tree needs the task's pinned image id (--image-id sha256:<64 hex>, its image manifest row's), not " + JSON.stringify(o.imageId ?? null) + "; scoring never builds the task image");
+      if (ran.size === 0) throw new ScoreError("E_REAL_SCORE_INPUT", "the trial logged no image event (usersim-events.jsonl), so nothing ties --image-id " + o.imageId + " to the image it ran in; a tree is graded only for a trial whose session checked its image (U4)");
       const got = docker(["image", "inspect", "-f", "{{.Id}}", o.imageId!], { timeoutMs: 60000 });
       if (got.status !== 0 || got.stdout.trim() !== o.imageId) throw new ScoreError("E_REAL_SCORE_INPUT", "the pinned image " + o.imageId + " is not on this host with that id (docker image inspect: " + (got.stdout.trim() || got.stderr.trim().slice(-200)) + "); docker load keeps an image's id");
       image = o.imageId!;
@@ -278,7 +279,7 @@ export function scoreTrial(opts: GradeOptions): TrialEvidence {
     if (t === null) finalMiss = { status: "not_applied", reason: "final.patch does not apply to base_commit " + task.base_commit };
   }
   const shippedPatch = shipped ? repo.diff(start, shipped) : null;
-  const grader = o.grade ?? dockerGrader(o, task);
+  const grader = o.grade ?? dockerGrader(o, task, ran);
   const graded = (label: "shipped" | "held" | "turn1" | "final", patch: string | null): TreeGrade | null => (patch === null ? null : grader(label, patch));
 
   let deleted: string[] = [];
