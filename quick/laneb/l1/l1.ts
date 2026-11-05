@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { rng } from "../analysis/analyze.ts";
 import { appendRow, fromMicros, Ledger, readRows, reconcile, toMicros, totals, type Row } from "../runner/ledger.ts";
+import { ROUTE_MARK } from "../runner/proxy.ts";
 
 const LANEB = resolve(import.meta.dir, "..");
 const REPO = resolve(LANEB, "../..");
@@ -608,6 +609,14 @@ function preparePart(work: string, p: PartPlan, def: ItemDef, arms: string) {
   const attempts = String(Math.max(...p.rects.map((x) => x.attempts)));
   const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), L1.model, labels.map((a) => ARM_SPECS[a]!).join(","), arms, attempts, String(L1.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) throw new Error("prepare-run for " + p.name + " exited " + r.exitCode);
+  // The proxy can't tell the route hook's line from a copy in the task prompt (runner/proxy.ts routeMark), so a task whose
+  // instruction holds it never runs. The work tree's CLAUDE.md and the rest of the context Claude Code loads by itself sit in
+  // the task image, which prepare does not hold; a session whose first request carries the line there reads quoted.
+  for (const t of tasks) {
+    const f = join(dir, "tasks", t, "instruction.md");
+    if (!existsSync(f)) refuse(p.name + ": prepare-run wrote no instruction for " + t + ", so it can't be checked for the route hook's line");
+    if (readFileSync(f, "utf8").includes(ROUTE_MARK)) refuse(t + "'s instruction holds the route hook's line (" + ROUTE_MARK + "), which the proxy can't tell from the hook; it never runs");
+  }
   const jobs = splitJobs(readJson(join(dir, "job.json")), p.rects);
   jobs.forEach((j, i) => writeJson(join(dir, jobFile(i)), j));
   writeFileSync(join(dir, "STOP_ON_CAP"), "");
