@@ -13,7 +13,8 @@
   ],
   "dependencies": {
     "bin/gstack-evals": [
-      "tests/cli.test.ts"
+      "tests/cli.test.ts",
+      "tests/outcome-skills/cli.test.ts"
     ],
     "VERSION": [
       "tests/cli.test.ts"
@@ -30,6 +31,7 @@
     "lanes/outcome-skills/**": [
       "tests/outcome-skills/autoplan.test.ts",
       "tests/outcome-skills/clean-room.test.ts",
+      "tests/outcome-skills/cli.test.ts",
       "tests/outcome-skills/driver-dryrun.test.ts",
       "tests/outcome-skills/exposure.test.ts",
       "tests/outcome-skills/registry.test.ts",
