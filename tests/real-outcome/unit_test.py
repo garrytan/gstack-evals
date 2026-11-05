@@ -403,6 +403,10 @@ IMPLEMENT_ASKS = (
     "Want me to proceed with the review?",
     "How should I proceed?",
     "I can make these changes now.",
+    "Shall I proceed with the plan?",
+    "Want me to go ahead with the plan?",
+    "Should I go ahead with PLAN.md as written?",
+    "I'll proceed with the plan once you confirm.",
 )
 PLAN_QUESTIONS = (
     "Which storage should the plan use?",
@@ -421,7 +425,9 @@ PLAN_QUESTIONS = (
     "Should the plan cover the retry path?",
     "Want me to add a section on retries to PLAN.md?",
     "Want me to make these changes to the plan?",
-    "Shall I proceed with the plan?",
+    "Shall I continue with the plan?",
+    "Should I continue the plan?",
+    "Want me to proceed with the plan's risks section?",
     "Want me to continue with the plan's risks section?",
     "Should I go ahead with option B?",
     "Should the start date be optional?",
@@ -497,9 +503,10 @@ def test_turn_one_choices_between_plan_options_are_not_held():
     a = u.answer([
         q("Where should I begin?", "Start on the parser (Recommended)", "Expand the plan"),
         q("Which next step?", "Expand PLAN.md's test section", "Proceed"),
+        q("What now?", "Proceed with the plan as written (Recommended)", "Revise the plan"),
     ])
-    assert a == {"Where should I begin?": PLAN_HOLD, "Which next step?": PLAN_HOLD}, a
-    assert u.counts["t1"]["hold"] == 2, u.counts
+    assert a == {"Where should I begin?": PLAN_HOLD, "Which next step?": PLAN_HOLD, "What now?": PLAN_HOLD}, a
+    assert u.counts["t1"]["hold"] == 3, u.counts
 
 
 def test_turn_one_plan_questions_are_not_held():
