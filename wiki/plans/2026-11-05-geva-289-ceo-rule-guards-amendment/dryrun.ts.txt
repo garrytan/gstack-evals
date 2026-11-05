@@ -430,6 +430,21 @@ await section("f2. Input guards added by the amendment (GST-1407): each refusal 
   accept("compare", "Sol and particle-1 at 1 pass with held_passes 1, the last cut", stage2({ hits: hits1, family: fam1, passes: { sol: 1, particle: 1 }, heldPasses: 1 }), ONE);
   refuse("compare", "Sol and particle-1 at 1 pass with held_passes 2", stage2({ hits: hits1, family: fam1, passes: { sol: 1, particle: 1 } }), SHAPE + "opus 2, sol 1, particle 1, held_passes 2", /^Model sol: /);
   accept("compare", "the same passes with held_passes 1", stage2({ hits: hits1, family: fam1, passes: { sol: 1, particle: 1 }, heldPasses: 1 }), ONE);
+
+  say("  Found in this post's /ship review: judge call counts and smoke wall time");
+  const NULLS = () => [0, 1, 2].map(() => ({ sol: null, opus: null, sonnet: null }));
+  const hitRows10 = (f: (r: any) => void) => (d: any) => { let n = 0; for (const r of d.reviews) if (!r.smoke && r.arm === "none" && r.model === "opus" && r.status === "scored" && r.labels.some((c: any) => c.sol === "D") && n < 10) { n++; f(r); } };
+  refuse("headroom", "stock rows A on c0 and c1, the two it hit, cut to one judge call each", edit(s1({ stockA: 2 }), (d) => { for (const s of d.stock) if (s.row === "A" && (s.unit === "c0" || s.unit === "c1")) s.labels = s.labels.slice(0, 1); }), "E_USAGE readings stock row breaks the row contract on label count; first: row A on unit c0", HR);
+  accept("headroom", "the same rows with all three calls", s1({ stockA: 2 }), [/^Verdict: STOCK FAIL \(a stock row hit D on 2 of 16 changed units/]);
+  refuse("headroom", "10 scored Opus none hit rows with labels [] and three issues each", edit(s1({ m: 29 }), hitRows10((r) => { r.labels = []; })), CONTRACT + "label count; first: none on opus, unit c0, pass 1", HR);
+  accept("headroom", "the same 10 rows with three missing (null) calls each, unjudged", edit(s1({ m: 29 }), hitRows10((r) => { r.labels = NULLS(); })), [/^Verdict: NO READ \(gaps, unjudged and incomplete 10 of 48 planned Opus none readings, over 10%\)/]);
+  const dropD = (d: any) => { for (const r of d.reviews) if (!r.smoke && r.arm === "none" && r.model === "opus" && r.status === "scored") r.labels = r.labels.filter((c: any) => c.sol !== "D"); };
+  const dropped = edit(s2(), dropD), firstDropped = dropped.reviews.find((r: any) => !r.smoke && r.arm === "none" && r.model === "opus" && r.status === "scored" && r.labels.length !== 3);
+  refuse("compare", "every Opus none row with its D call dropped from labels", dropped, CONTRACT + "label count; first: none on opus, unit " + firstDropped.unit + ", pass " + firstDropped.pass, CMP);
+  accept("compare", "the same readings unedited", s2(), [OK2]);
+  const wallOf = (w: unknown) => (d: any) => { for (const r of d.reviews) if (r.smoke && r.arm === "autoplan-ceo" && r.model === "opus") r.wall_s = w; };
+  refuse("headroom", "the autoplan-ceo Opus smoke rows with wall_s an empty string", edit(s1(), wallOf("")), CONTRACT + "wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1", SMOKE);
+  accept("headroom", "the same rows with wall_s 4000", edit(s1(), wallOf(4000)), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 4000 s/, /^Stage 2: does not start; autoplan-ceo failed its smoke on Opus/]);
 });
 
 await section("g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation", async () => {

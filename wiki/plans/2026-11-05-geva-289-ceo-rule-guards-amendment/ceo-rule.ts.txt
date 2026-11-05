@@ -78,7 +78,7 @@ const STATUSES = ["scored", "no-block", "gap", "incomplete"];
 const LABELS = ["D", "R1", "R2", "R3", "none"];
 const callsOk = (ls: unknown) => Array.isArray(ls) && ls.every((c: any) => typeof c === "object" && c !== null && ["sol", "opus", "sonnet"].every((j) => c[j] === null || LABELS.includes(c[j])));
 // The row contract: every row, incomplete ones included, carries these fields with these types.
-const rowFault = (r: Review) => (typeof r.id !== "string" ? "id" : !callsOk(r.labels) ? "labels" : typeof r.leak?.sol !== "boolean" || typeof r.leak?.opus !== "boolean" ? "leak" : !Array.isArray(r.words) || !r.words.every((w) => typeof w === "number") ? "words" : !(r.exposed === null || typeof r.exposed === "boolean") ? "exposed" : !(r.forecast === null || typeof r.forecast === "number") ? "forecast" : typeof r.usd !== "number" ? "usd" : null);
+const rowFault = (r: Review) => (typeof r.id !== "string" ? "id" : !callsOk(r.labels) ? "labels" : typeof r.leak?.sol !== "boolean" || typeof r.leak?.opus !== "boolean" ? "leak" : !Array.isArray(r.words) || !r.words.every((w) => typeof w === "number") ? "words" : r.status === "scored" && r.labels.length !== Math.min(3, r.words.length) ? "label count" : !(r.exposed === null || typeof r.exposed === "boolean") ? "exposed" : !(r.forecast === null || typeof r.forecast === "number") ? "forecast" : typeof r.usd !== "number" ? "usd" : !(r.wall_s === undefined || r.wall_s === null || typeof r.wall_s === "number") ? "wall_s" : null);
 const arrays = (rd: Readings) => { if (!Array.isArray(rd?.units) || !Array.isArray(rd.reviews) || !Array.isArray(rd.stock)) throw new Error("E_USAGE readings must carry units, reviews and stock as arrays"); };
 // Every guard runs before any rule reads a field. passesOf gives each unit's planned passes for a model; smoke is true for
 // stage 1, whose readings carry two smoke sessions per gstack arm and model, on the same two units for every cell.
@@ -118,6 +118,7 @@ function checkPlan(rd: Readings, cells: [Arm, Model][], passesOf: (m: Model, u: 
   for (const s of rd.stock) {
     const at = "row " + s.row + " on unit " + s.unit;
     if (!callsOk(s.labels)) throw new Error("E_USAGE readings stock row breaks the row contract on labels; first: " + at);
+    if (s.labels.length !== 3) throw new Error("E_USAGE readings stock row breaks the row contract on label count; first: " + at);
     if ((s.row !== "A" && s.row !== "B") || units.get(s.unit)?.kind !== "changed") throw new Error(STOCK + "; first row outside the plan: " + at);
     if (stock.has(s.row + ":" + s.unit)) throw new Error(STOCK + "; first duplicate: " + at);
     stock.add(s.row + ":" + s.unit);
