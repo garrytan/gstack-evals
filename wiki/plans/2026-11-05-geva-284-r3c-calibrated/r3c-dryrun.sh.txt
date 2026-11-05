@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# R3c keyless dry run (R3 amendment 6, section 14). Exports the named gstack-evals commit, runs r3c.ts's selftest, then
+# plan and forecast on the real in-hand records for both models (Sol's to show why it is left out), and admit on the
+# simulated Opus calibration that forecast emits: once at the r3c-opus cap, once at a cap too small to buy a grid, and
+# once more at the cap with R3C_SIMS=1, which admit must ignore: the script exits 1 if those lines differ.
+# No model call, no VM, no key. Usage: r3c-dryrun.sh <commit> <in-hand dir> <out dir>
+set -euo pipefail
+commit=$1 inhand=$2 out=$3
+here=$(cd "$(dirname "$0")" && pwd)
+mkdir -p "$out/pin"
+git -C "$(git -C "$here" rev-parse --show-toplevel)" archive "$commit" | tar -x -C "$out/pin"
+cp "$here/r3c.ts.txt" "$out/r3c.ts"
+cp "$here/r3c-taskfit.tsv" "$inhand/r3c-taskfit.tsv"
+export PIN="$out/pin"
+cd "$out"
+echo "commit $commit"
+sha256sum r3c.ts "$inhand"/*.jsonl "$inhand"/*.tsv "$inhand"/r3a4-drop-list.json | sed "s|$inhand/||"
+echo "\$ bun r3c.ts selftest"; bun r3c.ts selftest
+for m in opus sol; do
+  echo "\$ bun r3c.ts plan <in-hand> --model $m"; bun r3c.ts plan "$inhand" --model $m
+  echo "\$ bun r3c.ts forecast <in-hand> --model $m --emit cal-$m.jsonl"; bun r3c.ts forecast "$inhand" --model $m --emit "cal-$m.jsonl"
+done
+echo "sha256 cal-opus.jsonl $(sha256sum cal-opus.jsonl | cut -d' ' -f1)"
+settled=$(jq -s '[.[].cost_usd] | add + length * 0.0306 * 0.6' cal-opus.jsonl | xargs printf '%.2f')
+echo "simulated calibration spend \$$settled ($(wc -l < cal-opus.jsonl) none trials at \$0.43 plus VM)"
+for cap in 750 400; do
+  echo "\$ bun r3c.ts admit <in-hand> --model opus --calibration cal-opus.jsonl --cap-usd $cap --settled-usd $settled"
+  rc=0; bun r3c.ts admit "$inhand" --model opus --calibration cal-opus.jsonl --cap-usd $cap --settled-usd "$settled" > "admit-$cap.txt" || rc=$?
+  cat "admit-$cap.txt"; echo "exit $rc"
+done
+echo "\$ R3C_SIMS=1 bun r3c.ts admit <in-hand> --model opus --calibration cal-opus.jsonl --cap-usd 750 --settled-usd $settled"
+rc=0; R3C_SIMS=1 bun r3c.ts admit "$inhand" --model opus --calibration cal-opus.jsonl --cap-usd 750 --settled-usd "$settled" > admit-750-sims1.txt || rc=$?
+if cmp -s admit-750.txt admit-750-sims1.txt; then echo "exit $rc; the same lines as the run without R3C_SIMS"; else echo "exit $rc; the lines differ from the run without R3C_SIMS"; cat admit-750-sims1.txt; exit 1; fi

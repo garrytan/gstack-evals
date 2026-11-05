@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""R3c task fit (R3 amendment 6 section 5): how far each pool task's symptom sits from its root cause, from public rows only.
+
+Reads the Hugging Face rows of nebius/SWE-rebench-leaderboard at revision 34d5a58 (the revision R3 amendment 4's pool pins)
+and, for each of the 354 pool tasks, compares the issue text (problem_statement) with the gold patch. A patched file is
+"named" when its path, its file name, its dotted module path, or a stem of 5 or more characters that is not a generic name
+appears in the issue text (case-insensitive, the stem as a whole word). A patched function or class is "named" when a name
+of 4 or more characters from a hunk header or a changed def or class line appears as a whole word. Test files are left out.
+  dist 0 (near): the issue names a patched file
+  dist 1 (mid):  it names no patched file but names a patched function or class
+  dist 2 (far):  it names neither
+Writes one tab-separated line per task (id, files, named_files, funcs, named_funcs, dist): counts only, no task text.
+  uv run --with pyarrow python3 r3c-taskfit.py <dir with the revision's parquet files> <pool json> > r3c-taskfit.tsv
+"""
+import glob, json, re, sys
+import pyarrow.parquet as pq
+
+GENERIC = {"utils", "types", "models", "config", "common", "client", "server", "base", "core", "__init__"}
+TEST = re.compile(r"(^|/)(tests?|testing)/|test_[^/]*\.py$|_test\.(py|go|ts|js)$|\.test\.|spec\.")
+
+def files(patch):
+    return [f for f in re.findall(r"^diff --git a/(\S+) b/", patch, re.M) if not TEST.search(f)]
+
+def funcs(patch):
+    names = set(m.group(1) for m in re.finditer(r"^@@[^@]*@@\s*(?:async\s+)?(?:def|class|func|function)\s+([A-Za-z_][A-Za-z0-9_]*)", patch, re.M))
+    names |= set(m.group(1) for m in re.finditer(r"^[+-]\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_][A-Za-z0-9_]*)", patch, re.M))
+    return sorted(names)
+
+def named_file(f, low):
+    base = f.rsplit("/", 1)[-1]
+    stem = base.rsplit(".", 1)[0].lower()
+    mod = f.rsplit(".", 1)[0].replace("/", ".").lower()
+    if f.lower() in low or base.lower() in low or mod in low:
+        return True
+    return len(stem) >= 5 and stem not in GENERIC and re.search(r"\b" + re.escape(stem) + r"\b", low) is not None
+
+def main(rows_dir, pool_json):
+    rows = {}
+    for p in sorted(glob.glob(rows_dir + "/*.parquet")):
+        for r in pq.read_table(p, columns=["instance_id", "problem_statement", "patch"]).to_pylist():
+            rows.setdefault(r["instance_id"], r)
+    ids = [t["task_id"] for t in json.load(open(pool_json))["tasks"]]
+    missing = [i for i in ids if i not in rows]
+    if missing:
+        raise SystemExit(f"{len(missing)} pool tasks have no row: {missing[:3]}")
+    print("task\tfiles\tnamed_files\tfuncs\tnamed_funcs\tdist")
+    for i in sorted(ids):
+        ps, patch = rows[i]["problem_statement"] or "", rows[i]["patch"] or ""
+        fs, fn, low = files(patch), funcs(patch), ps.lower()
+        nf = sum(1 for f in fs if named_file(f, low))
+        nfn = sum(1 for n in fn if len(n) >= 4 and re.search(r"\b" + re.escape(n) + r"\b", ps))
+        dist = 0 if nf or not fs else (1 if nfn else 2)
+        print(f"{i}\t{len(fs)}\t{nf}\t{len(fn)}\t{nfn}\t{dist}")
+
+if __name__ == "__main__":
+    main(sys.argv[1], sys.argv[2])

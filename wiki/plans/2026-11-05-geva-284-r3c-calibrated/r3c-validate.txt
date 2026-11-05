@@ -1,0 +1,137 @@
+# r3c validate: true power at the claimed MDD under the frozen search level (R3 amendment 6, section 6)
+# Ran on 2026-11-05 with PIN a git archive export of 17253ec4 (quick/ and src/ match e96a6a98), R3C_SIMS=2000, cap $750,
+# each command in slices of 10 runs (--first), run side by side.
+# Search level 0.87 ran on r3c.ts.txt sha256 00c064cf905cbb5c16b32b71b382be1620730570be341ef8b55b26bd778320fe. The committed
+# file adds ladder D1 and the graded secondaries (closingLine, closingBlock, goldFiles, locHit, locRank, f2pShare,
+# ladderLines, forecast's admitted-rate mean, mainText, oracleF2p and their selftests) and moves one selftest fixture from 12 to 14 tasks;
+# every function validate calls is byte-identical except admission's pricing (every calibration none trial on the
+# admitted tasks, graded or not, not every trial), calSpendUsd's and the TSV reader's missing-cost rules and admission's unpriced STOP.
+# Every simulated trial costs $0.43 and none is missing, so these lines stand.
+# Search level 0.83, further down, ran on the earlier version of this file that the level was raised from.
+# Totals at 0.87: NPMLE truth, GO in 36 of 40, MDD mean 10.72, true power at it mean 84.7% (SE 1.0; 6 of 36 runs under
+# 80%, min 67.7%), spend before reserve mean $615.46 (max $670.42). Beta truth, GO in 17 of 20, MDD mean 10.38, true
+# power mean 87.6% (SE 1.2; 2 under 80%), spend mean $599.88 (max $668.71).
+# Totals at 0.83: NPMLE truth, GO in 19 of 20, MDD mean 10.26, true power mean 78.2% (SE 1.7; 10 under 80%). Beta truth,
+# GO in 17 of 20, MDD mean 10.06, true power mean 83.1% (SE 1.4).
+## search level 0.87
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth npmle --runs 10 --first 0
+run 1: GO n 19 R 20 MDD 10 true power 85.4% spend $646.48
+run 2: GO n 14 R 24 MDD 11 true power 84.1% spend $602.36
+run 3: GO n 13 R 24 MDD 11 true power 86.6% spend $563.63
+run 4: STOP n 19 R 20 MDD 10 true power 80.2% spend $208.94 (null size 5.1% over 5%)
+run 5: STOP n 9 spend $201.76 (admitted 9 tasks, under 10)
+run 6: GO n 17 R 23 MDD 11.5 true power 89.3% spend $657.50
+run 7: GO n 12 R 24 MDD 12 true power 89.5% spend $532.07
+run 8: GO n 20 R 18 MDD 10 true power 77.1% spend $621.37
+run 9: GO n 21 R 15 MDD 10 true power 74.9% spend $570.71
+run 10: GO n 20 R 17 MDD 10 true power 78.9% spend $596.27
+r3c validate opus (truth npmle) at cap $750: GO in 8 of 10; MDD mean 10.7 (min 10, max 12); true power at the claimed MDD mean 83.2% (target 80%); spend before reserve mean $598.80 (max $657.50)
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth npmle --runs 10 --first 10
+run 11: GO n 16 R 24 MDD 11 true power 89.5% spend $649.34
+run 12: GO n 19 R 20 MDD 11.5 true power 90.4% spend $653.65
+run 13: GO n 20 R 15 MDD 10 true power 75.6% spend $555.02
+run 14: GO n 15 R 23 MDD 10 true power 82.2% spend $607.47
+run 15: GO n 15 R 24 MDD 12 true power 94.2% spend $619.58
+run 16: GO n 21 R 18 MDD 10 true power 80.8% spend $654.91
+run 17: GO n 14 R 24 MDD 11.5 true power 88.8% spend $598.78
+run 18: GO n 21 R 18 MDD 11.5 true power 89.6% spend $653.11
+run 19: GO n 13 R 22 MDD 10 true power 71.8% spend $544.09
+run 20: GO n 15 R 17 MDD 10 true power 67.7% spend $500.78
+r3c validate opus (truth npmle) at cap $750: GO in 10 of 10; MDD mean 10.8 (min 10, max 12); true power at the claimed MDD mean 83.0% (target 80%); spend before reserve mean $603.67 (max $654.91)
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth npmle --runs 10 --first 20
+run 21: GO n 16 R 24 MDD 11 true power 88.3% spend $649.34
+run 22: STOP n 11 R 24 MDD 13 true power 89.5% spend $207.14 (the MDD at 24 replicates is 13 points, over 12.5)
+run 23: GO n 17 R 21 MDD 10 true power 81.0% spend $621.46
+run 24: GO n 14 R 24 MDD 11 true power 86.7% spend $593.40
+run 25: GO n 16 R 24 MDD 11 true power 89.8% spend $651.14
+run 26: GO n 17 R 20 MDD 10 true power 82.3% spend $601.65
+run 27: GO n 17 R 23 MDD 11 true power 90.6% spend $662.88
+run 28: GO n 20 R 19 MDD 10.5 true power 85.0% spend $648.27
+run 29: GO n 15 R 24 MDD 12 true power 91.8% spend $621.37
+run 30: GO n 19 R 21 MDD 10.5 true power 88.1% spend $670.42
+r3c validate opus (truth npmle) at cap $750: GO in 9 of 10; MDD mean 10.8 (min 10, max 12); true power at the claimed MDD mean 87.1% (target 80%); spend before reserve mean $635.55 (max $670.42)
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth npmle --runs 10 --first 30
+run 31: GO n 18 R 22 MDD 10 true power 83.3% spend $668.71
+run 32: GO n 18 R 19 MDD 10 true power 81.0% spend $605.77
+run 33: STOP n 10 R 24 MDD 14.5 true power 91.8% spend $198.18 (the MDD at 24 replicates is 14.5 points, over 12.5)
+run 34: GO n 16 R 23 MDD 10 true power 88.5% spend $628.90
+run 35: GO n 19 R 21 MDD 10.5 true power 84.2% spend $668.62
+run 36: GO n 20 R 17 MDD 10 true power 81.0% spend $598.06
+run 37: GO n 14 R 24 MDD 11.5 true power 88.2% spend $602.36
+run 38: GO n 22 R 17 MDD 10.5 true power 82.3% spend $646.66
+run 39: GO n 12 R 24 MDD 12 true power 87.7% spend $537.45
+run 40: GO n 16 R 24 MDD 11.5 true power 92.0% spend $652.93
+r3c validate opus (truth npmle) at cap $750: GO in 9 of 10; MDD mean 10.7 (min 10, max 12); true power at the claimed MDD mean 85.4% (target 80%); spend before reserve mean $623.27 (max $668.71)
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth beta --runs 10 --first 0
+run 1: GO n 15 R 23 MDD 10 true power 85.4% spend $607.47
+run 2: GO n 14 R 23 MDD 10 true power 85.3% spend $584.25
+run 3: STOP n 8 spend $199.97 (admitted 8 tasks, under 10)
+run 4: GO n 15 R 24 MDD 10.5 true power 88.9% spend $628.54
+run 5: STOP n 8 spend $199.97 (admitted 8 tasks, under 10)
+run 6: GO n 18 R 21 MDD 10 true power 87.3% spend $642.35
+run 7: GO n 15 R 23 MDD 10 true power 89.8% spend $598.51
+run 8: GO n 15 R 24 MDD 11 true power 91.4% spend $619.58
+run 9: GO n 23 R 17 MDD 11 true power 91.3% spend $659.30
+run 10: GO n 17 R 23 MDD 10.5 true power 92.4% spend $655.71
+r3c validate opus (truth beta) at cap $750: GO in 8 of 10; MDD mean 10.4 (min 10, max 11); true power at the claimed MDD mean 89.0% (target 80%); spend before reserve mean $624.46 (max $659.30)
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth beta --runs 10 --first 10
+run 11: GO n 13 R 24 MDD 10.5 true power 90.5% spend $565.42
+run 12: GO n 19 R 20 MDD 11 true power 91.0% spend $653.65
+run 13: GO n 18 R 22 MDD 11 true power 94.8% spend $668.71
+run 14: STOP n 10 R 24 MDD 14 true power 93.0% spend $199.97 (the MDD at 24 replicates is 14 points, over 12.5)
+run 15: GO n 12 R 24 MDD 10.5 true power 88.7% spend $535.66
+run 16: GO n 18 R 17 MDD 10 true power 78.6% spend $563.81
+run 17: GO n 12 R 23 MDD 10 true power 83.2% spend $527.05
+run 18: GO n 24 R 15 MDD 10 true power 86.3% spend $635.72
+run 19: GO n 12 R 18 MDD 10 true power 74.7% spend $457.11
+run 20: GO n 14 R 24 MDD 10.5 true power 88.8% spend $595.19
+r3c validate opus (truth beta) at cap $750: GO in 9 of 10; MDD mean 10.4 (min 10, max 11); true power at the claimed MDD mean 86.3% (target 80%); spend before reserve mean $578.04 (max $668.71)
+## search level 0.83
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth npmle --runs 10 --first 0
+run 1: GO n 19 R 18 MDD 10 true power 80.6% spend $602.18
+run 2: GO n 14 R 24 MDD 10 true power 77.6% spend $602.36
+run 3: GO n 13 R 24 MDD 10.5 true power 84.0% spend $563.63
+run 4: GO n 19 R 18 MDD 10 true power 75.1% spend $607.56
+run 5: STOP n 9 spend $201.76 (admitted 9 tasks, under 10)
+run 6: GO n 17 R 23 MDD 10.5 true power 83.9% spend $657.50
+run 7: GO n 12 R 24 MDD 11 true power 83.7% spend $532.07
+run 8: GO n 20 R 17 MDD 9.5 true power 71.5% spend $598.06
+run 9: GO n 21 R 13 MDD 10 true power 69.5% spend $521.76
+run 10: GO n 20 R 15 MDD 10 true power 74.4% spend $549.64
+r3c validate opus (truth npmle) at cap $750: GO in 9 of 10; MDD mean 10.2 (min 9.5, max 11); true power at the claimed MDD mean 77.8% (target 80%); spend before reserve mean $581.64 (max $657.50)
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth npmle --runs 10 --first 10
+run 11: GO n 16 R 24 MDD 10 true power 83.2% spend $649.34
+run 12: GO n 19 R 20 MDD 10.5 true power 85.5% spend $653.65
+run 13: GO n 20 R 13 MDD 10 true power 69.8% spend $508.40
+run 14: GO n 15 R 20 MDD 10 true power 75.3% spend $555.02
+run 15: GO n 15 R 24 MDD 11.5 true power 92.5% spend $619.58
+run 16: GO n 21 R 16 MDD 10 true power 77.1% spend $605.95
+run 17: GO n 14 R 24 MDD 10.5 true power 82.8% spend $598.78
+run 18: GO n 21 R 18 MDD 11 true power 87.1% spend $653.11
+run 19: GO n 13 R 20 MDD 10 true power 68.0% spend $513.78
+run 20: GO n 15 R 16 MDD 10 true power 64.5% spend $483.29
+r3c validate opus (truth npmle) at cap $750: GO in 10 of 10; MDD mean 10.3 (min 10, max 11.5); true power at the claimed MDD mean 78.6% (target 80%); spend before reserve mean $584.09 (max $653.65)
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth beta --runs 10 --first 0
+run 1: GO n 15 R 21 MDD 10 true power 83.1% spend $572.51
+run 2: GO n 14 R 20 MDD 10 true power 80.5% spend $535.30
+run 3: STOP n 8 spend $199.97 (admitted 8 tasks, under 10)
+run 4: GO n 15 R 21 MDD 10 true power 81.0% spend $576.09
+run 5: STOP n 8 spend $199.97 (admitted 8 tasks, under 10)
+run 6: GO n 18 R 19 MDD 10 true power 83.7% spend $600.39
+run 7: GO n 15 R 21 MDD 10 true power 87.6% spend $563.54
+run 8: GO n 15 R 24 MDD 10 true power 86.1% spend $619.58
+run 9: GO n 23 R 17 MDD 10 true power 86.0% spend $659.30
+run 10: GO n 17 R 21 MDD 10 true power 88.0% spend $616.08
+r3c validate opus (truth beta) at cap $750: GO in 8 of 10; MDD mean 10.0 (min 10, max 10); true power at the claimed MDD mean 84.5% (target 80%); spend before reserve mean $592.85 (max $659.30)
+$ R3C_SIMS=2000 bun r3c.ts validate <in-hand> --model opus --cap-usd 750 --truth beta --runs 10 --first 10
+run 11: GO n 13 R 23 MDD 10 true power 85.9% spend $550.27
+run 12: GO n 19 R 20 MDD 10.5 true power 88.7% spend $653.65
+run 13: GO n 18 R 22 MDD 10.5 true power 92.9% spend $668.71
+run 14: STOP n 10 R 24 MDD 13 true power 89.9% spend $199.97 (the MDD at 24 replicates is 13 points, over 12.5)
+run 15: GO n 12 R 24 MDD 10 true power 85.9% spend $535.66
+run 16: GO n 18 R 15 MDD 10 true power 73.4% spend $521.85
+run 17: GO n 12 R 21 MDD 10 true power 80.6% spend $499.08
+run 18: GO n 24 R 12 MDD 10 true power 78.6% spend $551.80
+run 19: GO n 12 R 16 MDD 10 true power 67.8% spend $429.14
+run 20: GO n 14 R 23 MDD 10 true power 83.3% spend $578.87
+r3c validate opus (truth beta) at cap $750: GO in 9 of 10; MDD mean 10.1 (min 10, max 10.5); true power at the claimed MDD mean 81.9% (target 80%); spend before reserve mean $554.34 (max $668.71)
