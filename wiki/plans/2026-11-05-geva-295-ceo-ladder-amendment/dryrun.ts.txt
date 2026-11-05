@@ -31,6 +31,7 @@ const section = async (title: string, fn: () => Promise<void> | void) => {
 // fill() adds the ladder amendment's row fields to any fixture row or call that lacks them, so the guard amendment's cases
 // read as before: a scored row's issues follow its words (each cut to 40 words), a row that isn't scored carries no issues
 // and no words, and a call on a keyed unit carries rem following its own D call (stock calls: no), null on any other unit.
+// Each row's fixes follow its issues the same way, with fix_words equal to its words.
 // A case that tests a missing field fills first, deletes the field and runs raw.
 const wordsOf = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Array(Math.min(40, n)).fill("word").join(" ") : "");
 const remOf = (c: any, stock: boolean) => Object.fromEntries(["sol", "opus", "sonnet"].map((j) => [j, c[j] === null || c[j] === undefined ? null : !stock && c[j] === "D"]));
@@ -41,6 +42,7 @@ function fill(d: any): any {
   const calls = (ls: any, stock: boolean, unit: string) => { if (Array.isArray(ls)) for (const c of ls) if (c && typeof c === "object" && !("rem" in c)) c.rem = keyed.get(unit) ? remOf(c, stock) : null; };
   for (const r of Array.isArray(d.reviews) ? d.reviews : []) {
     if (!("issues" in r)) { if (r.status === "scored") r.issues = Array.isArray(r.words) ? r.words.map(wordsOf) : []; else { r.issues = []; if (Array.isArray(r.words)) r.words = []; } }
+    if (!("fixes" in r)) { r.fix_words = Array.isArray(r.words) ? [...r.words] : []; r.fixes = r.fix_words.map(wordsOf); }
     calls(r.labels, false, r.unit);
   }
   for (const s of Array.isArray(d.stock) ? d.stock : []) calls(s.labels, true, s.unit);
@@ -102,10 +104,10 @@ const stockOf = (units: any[], hitA: (i: number) => boolean, hitB: (i: number) =
 // per gstack arm per model on c0 and c1.
 // Opus none's hits are at rank 1 unless ranks is mixed or rank1 sets how many hits, in reading order, are at rank 1 (the
 // rest at rank 2). remYes gives rem yes to the first keyed hits and no to the rest; remNull makes the D call's rem
-// unjudged on the readings it names; solOnlyRem gives Sol alone a rem yes on that many cells of misses on keyed units;
+// unjudged on the readings it names and remYesAt makes it yes there; solOnlyRem gives Sol alone a rem yes on that many cells of misses on keyed units;
 // stockRem and stockRemUnjudged set the first stock issue of row A's rem; splitRem turns the first miss on a keyed unit into
 // a split D at rank 1 with a split rem.
-type S1 = { ranks?: "mixed"; rank1?: number; keyed?: (i: number) => boolean; remYes?: number; remNull?: number[]; solOnlyRem?: number; stockRem?: string[]; stockRemUnjudged?: string[]; splitRem?: boolean; m: number; incomplete?: number; stockA?: number; stockB?: number; stockSame?: boolean; leakUnits?: number; gaps?: number; smokeFail?: string[]; smokeSlow?: string[]; smokeNoBlock?: string[]; splitDecides?: boolean; judgeFail?: boolean; lowAgree?: boolean; smokeUsd?: Record<string, [number, number]>; noneUsd?: Record<string, number> };
+type S1 = { ranks?: "mixed"; rank1?: number; keyed?: (i: number) => boolean; remYes?: number; remNull?: number[]; remYesAt?: number[]; solOnlyRem?: number; stockRem?: string[]; stockRemUnjudged?: string[]; splitRem?: boolean; m: number; incomplete?: number; stockA?: number; stockB?: number; stockSame?: boolean; leakUnits?: number; gaps?: number; smokeFail?: string[]; smokeSlow?: string[]; smokeNoBlock?: string[]; splitDecides?: boolean; judgeFail?: boolean; lowAgree?: boolean; smokeUsd?: Record<string, [number, number]>; noneUsd?: Record<string, number> };
 function stage1(o: S1) {
   rid = 0;
   const units = unitsOf(16, 4, o.keyed);
@@ -131,6 +133,7 @@ function stage1(o: S1) {
   if (o.lowAgree) for (const r of reviews) if (r.status === "scored" && r.labels[0]?.sol === "none" && r.labels[1]?.sol === "R1") r.labels[0] = { sol: "D", opus: "none", sonnet: "none" };
   if (o.remYes !== undefined) { let n = 0; for (const r of opusNone) if (r.status === "scored" && isKeyed(r.unit) && r.labels.some((c: any) => c.sol === "D")) for (const c of r.labels) c.rem = remAll(c.sol === "D" ? n++ < o.remYes : false); }
   for (const k of o.remNull ?? []) opusNone[k].labels.find((c: any) => c.sol === "D").rem = { sol: true, opus: false, sonnet: null };
+  for (const k of o.remYesAt ?? []) opusNone[k].labels.find((c: any) => c.sol === "D").rem = remAll(true);
   if (o.splitRem) { const r = opusNone.find((r) => r.status === "scored" && isKeyed(r.unit) && !r.labels.some((c: any) => c.sol === "D")); r.labels = [{ sol: "D", opus: "none", sonnet: "D", rem: { sol: true, opus: false, sonnet: true } }, agree("none"), agree("none")]; }
   if (o.solOnlyRem) { let n = 0; for (const r of reviews) if (r.arm === "none" && r.status === "scored" && isKeyed(r.unit) && !r.labels.some((c: any) => c.sol === "D")) for (const c of r.labels) if (n < o.solOnlyRem) { c.rem = { sol: true, opus: false, sonnet: false }; n++; } }
   for (let l = 0; l < (o.leakUnits ?? 0); l++) for (const r of reviews.filter((r) => r.unit === "c" + (15 - l)).slice(0, 2)) r.leak = { sol: true, opus: true };
@@ -193,8 +196,8 @@ await section("a. Frozen files", () => {
   const cut = b.indexOf("\n\n---\n");
   check("the judge brief's D read, the text above its rule, is byte for byte the preregistration's brief (sha256 83d5d644...52589)", cut > 0 && createHash("sha256").update(b.slice(0, cut + 1)).digest("hex") === "83d5d644b97aa87003ea38a8cb273b64590f1c50129430612af2432072852589");
   check("the remedy read below the rule answers rem per issue on its fix's first remedy, in a ceo-judge-rem block", b.includes("## Remedy read") && b.includes("ceo-judge-rem") && b.includes("Only the first remedy a fix states counts"));
-  const head = spawnSync("git", ["-C", scorer, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
-  say("    scorer HEAD " + head + " (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)");
+  const head = spawnSync("git", ["-C", scorer, "rev-parse", "HEAD:src/runner"], { encoding: "utf8" }).stdout.trim();
+  say("    scorer src/runner tree " + head + " (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)");
 });
 
 await section("b. Stage 1 headroom rule: every outcome", () => {
@@ -553,7 +556,7 @@ await section("f3. The ladder amendment: the 10x tier, the fallback, the frozen 
   say("  The 10x tier on HEADROOM readings, with every new stage 1 line");
   const hr = reads("headroom", "m 20 of 48, every hit at rank 1 with rem yes on keyed units", s1(), [/^Verdict: HEADROOM \(20 of 48/, /^10x tier, Opus none: G_R 0\.417 \(240 twelfths over 48 readings\), strict10 0\.417, h1 0\.417; band G_R 0\.25 to 0\.50 and strict10 at most 0\.20: strict10 over 0\.20; reviews unjudged for G_R, gaps and incomplete 0 of 48 planned$/, /^Remedy: keyed on 12 of 16 changed units \(share 0\.750\); rem agreement, Sol vs Opus, n \d+, both yes 47, Sol only 0, Opus only 0, positive agreement 1\.000 .*; stock fix scores rem on 0 of 12 keyed units \(at most 1\); G_R form rem \(rem in\)$/, /^Opus none: G_R 0\.417 \(48\), strict10 0\.417 \(48\), h1 0\.417 \(48\); rem rate 1\.000 \(15\), by kind: scope .*, alternative .*, approach .*, not_build .*; decoy-first 0\.000 \(\d+\); second-order hit@3 .*, G_R .*$/, /^Opus none hit@3 on keyed units 0\.417 \(36\), on unkeyed units 0\.417 \(12\)$/, /^k on hit@3 = 0\.95 \/ hit@3 = 2\.280 \[[0-9.]+, [0-9.]+\]; k on strict10 = 2\.280 \[/, /^G_R MDD at 48 changed units, 2 passes, at this keyed share: 0\.12, hit-only 0\.12, keyed row 0\.75 \(power-gr\.txt; decides nothing\)$/, /^Budget anchor: Opus none median session \$0\.25, the CEO anchor; both tiers read these sessions \(ratio 1\.00\); seeded panel v2's median \$0\.13, ratio 1\.984, from the move to real-outcome units \(decides nothing\)$/, /^Descriptive, sol none hit@3: 16 of 32; G_R 0\.\d{3} on 32$/]);
   void hr;
-  reads("headroom", "G_R's lower edge on HEADROOM readings: 18 hits of 48, all at rank 2, no unit keyed -> 144 twelfths, 0.250, in band; strict10 0 prints k as a bound", s1({ m: 18, rank1: 0, keyed: () => false }), [/^Verdict: HEADROOM \(18 of 48/, /^10x tier, Opus none: G_R 0\.250 \(144 twelfths over 48 readings\), strict10 0\.000, h1 0\.000; .*: in band;/, /; k on strict10 = over 0\.95 \/ 0\.000 \(strict10 is 0; the bound is its 97\.5th bootstrap percentile\);/, /G_R form norem \(rem out: no rem cell either judge called yes\)$/]);
+  reads("headroom", "G_R's lower edge on HEADROOM readings: 18 hits of 48, all at rank 2, no unit keyed -> 144 twelfths, 0.250, in band; strict10 0 prints k as not estimable", s1({ m: 18, rank1: 0, keyed: () => false }), [/^Verdict: HEADROOM \(18 of 48/, /^10x tier, Opus none: G_R 0\.250 \(144 twelfths over 48 readings\), strict10 0\.000, h1 0\.000; .*: in band;/, /; k on strict10 = not estimable \(strict10 is 0 on every reading\);/, /G_R form norem \(rem out: no rem cell either judge called yes\)$/]);
   reads("headroom", "  and 17 hits: 136 twelfths, 0.236, under the band (decides nothing on HEADROOM)", s1({ m: 17, rank1: 0, keyed: () => false }), [/^Verdict: HEADROOM \(17 of 48/, /^10x tier, Opus none: G_R 0\.236 \(136 twelfths over 48 readings\), .*: G_R under 0\.25;/]);
   reads("headroom", "a split D call (Sol D, Opus none, Sonnet D) whose rem splits the same way on keyed unit c4: final D at rank 1 with final rem yes adds 12 twelfths", s1({ splitRem: true }), [/^Verdict: HEADROOM \(21 of 48/, /^10x tier, Opus none: G_R 0\.438 \(252 twelfths over 48 readings\)/]);
 
@@ -566,11 +569,18 @@ await section("f3. The ladder amendment: the 10x tier, the fallback, the frozen 
   const K6 = { ...FB, keyed: (i: number) => i < 6, remYes: 3 };
   reads("headroom", "units c0 to c5 keyed (share 0.375), rem yes on 3 keyed hits: 287 twelfths, 0.498 -> FALLBACK", s1(K6), [/^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.498 from 0\.25 to 0\.50, strict10 0\.146 at most 0\.20, 0 of 48 planned readings out\)/, /^Remedy: keyed on 6 of 16 changed units \(share 0\.375\)/]);
   reads("headroom", "  keyed share 0.313 (c0 to c4): 292 twelfths, 0.507 -> CEILING, saturated", s1({ ...K6, keyed: (i) => i < 5 }), [/^Verdict: CEILING \(34 of 48/, /^10x reading: saturated \(G_R 0\.507, strict10 0\.167,/, /^Remedy: keyed on 5 of 16 changed units \(share 0\.313\)/]);
-  reads("headroom", "4 keyed hits with an unjudged rem (4 of 48 out, 10% or less): G_R on the other 44 is 263 twelfths, 0.498 -> FALLBACK", s1({ ...K6, remNull: [16, 17, 18, 19] }), [/^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.498 from 0\.25 to 0\.50, strict10 0\.159 at most 0\.20, 4 of 48 planned readings out\)/]);
+  reads("headroom", "4 keyed hits with an unjudged rem (4 of 48 out, 10% or less): G_R on the other 44 is 263 twelfths, 0.498, in band, but 299 twelfths, 0.519 with the 4 rems scored yes -> CEILING, and the 10x reading is FIX-METHOD (judge)", s1({ ...K6, remNull: [16, 17, 18, 19] }), [/^Verdict: CEILING \(34 of 48 = 0\.708 > 0\.60\): stop$/, /^10x reading: FIX-METHOD \(judge\), never saturation: 4 unjudged rem decide the reading \(left out: G_R 0\.498, strict10 0\.159; scored yes: G_R 0\.519, strict10 0\.146; scored no: G_R 0\.498, strict10 0\.146\)$/, /^Stage 2: does not start$/]);
+  reads("headroom", "  the same 4 rems judged no (the readings above): 287 twelfths, 0.498 -> FALLBACK", s1(K6), [/^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.498 from 0\.25 to 0\.50, strict10 0\.146 at most 0\.20, 0 of 48 planned readings out\)/]);
+  reads("headroom", "  the same 4 rems judged yes: 299 twelfths, 0.519 -> CEILING, saturated", s1({ ...K6, remYesAt: [16, 17, 18, 19] }), [/^Verdict: CEILING \(34 of 48/, /^10x reading: saturated \(G_R 0\.519, /]);
+  const K8 = { ...FB, rank1: 9, keyed: (i: number) => i < 8, remYes: 8 };
+  reads("headroom", "units c0 to c7 keyed, rem yes on the 8 keyed hits at rank 1: G_R 0.500, strict10 0.188 -> FALLBACK", s1(K8), [/^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.500 from 0\.25 to 0\.50, strict10 0\.188 at most 0\.20, 0 of 48 planned readings out\)/]);
+  reads("headroom", "  4 keyed hits at rank 2 with an unjudged rem: strict10 on the other 44 is 0.205, saturated, but 0.188 with the 4 rems scored no -> CEILING, and the 10x reading is FIX-METHOD (judge), never saturation", s1({ ...K8, remNull: [16, 17, 18, 19] }), [/^Verdict: CEILING \(34 of 48 = 0\.708 > 0\.60\): stop$/, /^10x reading: FIX-METHOD \(judge\), never saturation: 4 unjudged rem decide the reading \(left out: G_R 0\.500, strict10 0\.205; scored yes: G_R 0\.521, strict10 0\.188; scored no: G_R 0\.500, strict10 0\.188\)$/]);
   reads("headroom", "  5 of 48 out (over 10%): CEILING, and the 10x reading is FIX-METHOD (judge)", s1({ ...K6, remNull: [16, 17, 18, 19, 20] }), [/^Verdict: CEILING \(34 of 48/, /^10x reading: FIX-METHOD \(judge\), never saturation: reviews unjudged for G_R, gaps and incomplete 5 of 48 planned readings, over 10%$/]);
   const both = (d: any) => { const f = fill(structuredClone(d)); const k = new Set(f.units.filter((u: any) => u.remedy).map((u: any) => u.id)); let n = 0; for (const r of f.reviews) if (!r.smoke && r.status === "scored" && k.has(r.unit)) for (const c of r.labels.slice(0, 3)) if (c.rem?.sol && c.rem?.opus) n++; for (const s of f.stock) if (k.has(s.unit)) for (const c of s.labels) if (c.rem?.sol && c.rem?.opus) n++; return n; };
   const xIn = Math.floor((6 * both(s1())) / 7);
   reads("headroom", "rem agreement just at or above 0.70: " + xIn + " Sol-only rem cells against " + both(s1()) + " both-yes cells -> rem stays in", s1({ solOnlyRem: xIn }), [new RegExp("^Remedy: .*Sol only " + xIn + ", Opus only 0, positive agreement 0\\.7\\d\\d .*G_R form rem \\(rem in\\)$")]);
+  reads("headroom", "units c0 and c1 keyed, rem no on Opus none's keyed hits: both judges say yes on 4 rem cells, all shared -> under the minimum of 5, rem leaves G_R", s1({ m: 20, keyed: (i: number) => i < 2, remYes: 0 }), [/^Remedy: .*G_R form norem \(rem out: both judges say yes on 4 rem cells, under 5\)$/]);
+  reads("headroom", "  rem yes on 1 keyed hit: 5 shared yes cells -> rem stays in", s1({ m: 20, keyed: (i: number) => i < 2, remYes: 1 }), [/^Remedy: .*G_R form rem \(rem in\)$/]);
   reads("headroom", "  one Sol-only cell more: under 0.70 -> rem leaves G_R", s1({ solOnlyRem: xIn + 1 }), [new RegExp("^Remedy: .*Sol only " + (xIn + 1) + ", .*G_R form norem \\(rem out: positive agreement on rem 0\\.6\\d\\d under 0\\.70\\)$")]);
   reads("headroom", "the stock fix scores rem on 1 keyed unit (c0) -> rem stays in", s1({ stockRem: ["c0"] }), [/^Remedy: .*stock fix scores rem on 1 of 12 keyed units \(at most 1\); G_R form rem \(rem in\)$/]);
   reads("headroom", "  on 2 (c0 and c1) -> rem leaves G_R", s1({ stockRem: ["c0", "c1"] }), [/^Remedy: .*stock fix scores rem on 2 of 12 keyed units \(at most 1\); G_R form norem \(rem out: the stock fix scores rem on 2 keyed units, more than 1\)$/]);
@@ -628,7 +638,7 @@ await section("f3. The ladder amendment: the 10x tier, the fallback, the frozen 
   refuse("compare", "a PASS line with no cells list", s2(), "E_USAGE the projection output's PASS line doesn't parse", { proj: swap(asPlanned, /^Projection: PASS/, "Projection: PASS at 'as planned'; record these caps; held passes 2") });
   accept("compare", "the 'as planned' output with CRLF line ends, bound by the sha256 of those bytes", s2(), [OKP], { proj: asPlanned.replace(/\n/g, "\r\n") });
 
-  say("  The issue count: each row's issues against its labels and words");
+  say("  The issue count: each row's issues and fixes against its labels and word counts");
   const filled = (o: Partial<S2> = {}) => fill(s2(o));
   const RUN = { proj: asPlanned }, RAW = { proj: asPlanned, raw: true };
   const firstHit = (d: any) => rowOf(d, "none", "opus", "c0", 1);
@@ -637,6 +647,10 @@ await section("f3. The ladder amendment: the 10x tier, the fallback, the frozen 
   refuse("compare", "issue 1 at 30 words where words says 28", edit(filled(), (d) => { firstHit(d).issues[0] = Array(30).fill("word").join(" "); }), CONTRACT + "issues against words; first: none on opus, unit c0, pass 1", RAW);
   refuse("compare", "issue 3 at 41 words, not cut to 40", edit(filled(), (d) => { firstHit(d).issues[2] = Array(41).fill("word").join(" "); }), CONTRACT + "issues against words; first: none on opus, unit c0, pass 1", RAW);
   accept("compare", "issue 3 cut to its first 40 words, words 41", edit(filled(), (d) => { firstHit(d).issues[2] = Array(40).fill("word").join("\t"); }), [OKP], RAW);
+  refuse("compare", "fix 1 at 30 words where fix_words says 28", edit(filled(), (d) => { firstHit(d).fixes[0] = Array(30).fill("word").join(" "); }), CONTRACT + "fixes against fix_words; first: none on opus, unit c0, pass 1", RAW);
+  refuse("compare", "three issues and two fixes", edit(filled(), (d) => { firstHit(d).fixes.pop(); firstHit(d).fix_words.pop(); }), CONTRACT + "fixes against fix_words; first: none on opus, unit c0, pass 1", RAW);
+  refuse("compare", "a row with no fixes", edit(filled(), (d) => { delete firstHit(d).fixes; }), CONTRACT + "fixes; first: none on opus, unit c0, pass 1", RAW);
+  accept("compare", "fix 1 empty with fix_words 0 (the review gave no fix; the remedy packet shows 'no fix')", edit(filled(), (d) => { firstHit(d).fixes[0] = ""; firstHit(d).fix_words[0] = 0; }), [OKP], RAW);
   const nb = (o: (r: any) => void) => edit(filled({ noBlock: { "standalone:opus": 4 } }), (d) => o(rowOf(d, "standalone", "opus", "c0", 1)));
   refuse("compare", "a no-block row (standalone on opus, c0) carrying one issue", nb((r) => { r.issues = ["one two three"]; r.words = [3]; }), CONTRACT + "issues on a row that isn't scored; first: standalone on opus, unit c0, pass 1", RAW);
   accept("compare", "the same row with no issues and no words", nb(() => {}), [OKP], RAW);

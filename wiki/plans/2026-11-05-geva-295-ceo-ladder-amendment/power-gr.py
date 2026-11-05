@@ -27,6 +27,9 @@ SIMS = 1200
 FLIPS = 800
 STEPS = np.round(np.arange(0.02, 0.41, 0.01), 2)
 REGIMES = {"headroom": (0.45, 0.45, 0.40), "fallback": (0.70, 0.30, 0.25)}
+# The norem form's fallback rows start at hit@3 0.65, the highest hit@3 at which the norem form can fall back at h1 given a
+# hit 0.30 (G_R 0.498); at 0.70 its G_R is 0.537, outside the band, so no FALLBACK reading could come from there.
+NOREM_FALLBACK_P0 = 0.65
 
 def logit(p): return np.log(p / (1 - p))
 def expit(x): return 1 / (1 + np.exp(-x))
@@ -146,7 +149,7 @@ for regime, (p0, c1, cr) in REGIMES.items():
     for form, k in (("rem", 1.0), ("rem", 0.75), ("rem", 0.5), ("norem", 1.0)):
         for model in ("all", "hit"):
             for rho in (0.3, 0.5):
-                row(regime, p0, c1, cr, form, k, 0.0, model, rho, SIZES)
+                row(regime, NOREM_FALLBACK_P0 if (regime, form) == ("fallback", "norem") else p0, c1, cr, form, k, 0.0, model, rho, SIZES)
 for model in ("all", "hit"):
     row("fallback", 0.70, 0.30, 0.25, "rem", 0.75, 0.15, model, 0.5, SIZES[:4])
 # ceo-rule.ts reads the rows of stage 1's regime (headroom or fallback), the form stage 1 set, the keyed share at or below the

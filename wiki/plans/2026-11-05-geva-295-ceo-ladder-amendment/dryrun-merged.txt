@@ -5,15 +5,15 @@ PASS stock-list.txt sha256 9ecbc78e696836bd11c3e89df1cc1cb0b0e28940b92e7dd3a9684
 PASS unit-brief.md sha256 7200df2df9fd14a38c4766cd7e0043dda49624b8d4f23aeb8d1142bf8158ff5d
 PASS power.py sha256 a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499
 PASS power.txt sha256 ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f
-PASS power-gr.py sha256 f44454008661f2b86e0345abe4d2a9c964d4870e14c48af2d48fb55fe401855e
-PASS power-gr.txt sha256 c428f67bda8a2cf4e02f5b03bbc9ee61c66fae52bd023ed4e47b0a31959cd5b2
+PASS power-gr.py sha256 a75c25467e4ab54591ce810245aba737f3f2c97e77e1f2987e03d869ab04ba1e
+PASS power-gr.txt sha256 d0e28ffd59ee69e1fdb1f578bc29ca43489b7a6f245feb38f06f6ae85a8327f3
 PASS ceo-rule.ts sha256 f9416e2b075e6ad66a8dd4460587be44b909a192f40461f404dedf72c0b76f18
 PASS the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast
 PASS the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative), each issue followed by its stock fix, and each row's fixes say don't build it, reuse an existing tool and cut it to a minimal version once each
 PASS the judge brief reads each issue's first 40 words and judges it on its first problem
 PASS the judge brief's D read, the text above its rule, is byte for byte the preregistration's brief (sha256 83d5d644...52589)
 PASS the remedy read below the rule answers rem per issue on its fix's first remedy, in a ceo-judge-rem block
-    scorer HEAD 4bccf5a029b30a569b6ea0c96d955b9ad2f35d50 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
+    scorer src/runner tree 6cda223f77f60670594f339f2517114d092137f8 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
 
 ## b. Stage 1 headroom rule: every outcome
 PASS m 20 of 48 -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
@@ -256,7 +256,7 @@ PASS reads the same on 3 changed units: the verdicts stand -> exit 0: Stock rows
 ## f3. The ladder amendment: the 10x tier, the fallback, the frozen plan, the issue count and finite numbers; each refusal on its repro, then its accept twin
   The 10x tier on HEADROOM readings, with every new stage 1 line
 FAIL m 20 of 48, every hit at rank 1 with rem yes on keyed units -> exit 0: missing /^10x tier, Opus none: G_R 0\.417 \(240 twelfths over 48 readings\), strict10 0\.417, h1 0\.417; band G_R 0\.25 to 0\.50 and strict10 at most 0\.20: strict10 over 0\.20; reviews unjudged for G_R, gaps and incomplete 0 of 48 planned$/, /^Remedy: keyed on 12 of 16 changed units \(share 0\.750\); rem agreement, Sol vs Opus, n \d+, both yes 47, Sol only 0, Opus only 0, positive agreement 1\.000 .*; stock fix scores rem on 0 of 12 keyed units \(at most 1\); G_R form rem \(rem in\)$/, /^Opus none: G_R 0\.417 \(48\), strict10 0\.417 \(48\), h1 0\.417 \(48\); rem rate 1\.000 \(15\), by kind: scope .*, alternative .*, approach .*, not_build .*; decoy-first 0\.000 \(\d+\); second-order hit@3 .*, G_R .*$/, /^Opus none hit@3 on keyed units 0\.417 \(36\), on unkeyed units 0\.417 \(12\)$/, /^k on hit@3 = 0\.95 \/ hit@3 = 2\.280 \[[0-9.]+, [0-9.]+\]; k on strict10 = 2\.280 \[/, /^G_R MDD at 48 changed units, 2 passes, at this keyed share: 0\.12, hit-only 0\.12, keyed row 0\.75 \(power-gr\.txt; decides nothing\)$/, /^Budget anchor: Opus none median session \$0\.25, the CEO anchor; both tiers read these sessions \(ratio 1\.00\); seeded panel v2's median \$0\.13, ratio 1\.984, from the move to real-outcome units \(decides nothing\)$/, /^Descriptive, sol none hit@3: 16 of 32; G_R 0\.\d{3} on 32$/
-FAIL G_R's lower edge on HEADROOM readings: 18 hits of 48, all at rank 2, no unit keyed -> 144 twelfths, 0.250, in band; strict10 0 prints k as a bound -> exit 0: missing /^10x tier, Opus none: G_R 0\.250 \(144 twelfths over 48 readings\), strict10 0\.000, h1 0\.000; .*: in band;/, /; k on strict10 = over 0\.95 \/ 0\.000 \(strict10 is 0; the bound is its 97\.5th bootstrap percentile\);/, /G_R form norem \(rem out: no rem cell either judge called yes\)$/
+FAIL G_R's lower edge on HEADROOM readings: 18 hits of 48, all at rank 2, no unit keyed -> 144 twelfths, 0.250, in band; strict10 0 prints k as not estimable -> exit 0: missing /^10x tier, Opus none: G_R 0\.250 \(144 twelfths over 48 readings\), strict10 0\.000, h1 0\.000; .*: in band;/, /; k on strict10 = not estimable \(strict10 is 0 on every reading\);/, /G_R form norem \(rem out: no rem cell either judge called yes\)$/
 FAIL   and 17 hits: 136 twelfths, 0.236, under the band (decides nothing on HEADROOM) -> exit 0: missing /^10x tier, Opus none: G_R 0\.236 \(136 twelfths over 48 readings\), .*: G_R under 0\.25;/
 FAIL a split D call (Sol D, Opus none, Sonnet D) whose rem splits the same way on keyed unit c4: final D at rank 1 with final rem yes adds 12 twelfths -> exit 0: missing /^10x tier, Opus none: G_R 0\.438 \(252 twelfths over 48 readings\)/
   The fallback on both sides of each condition (hit@3 34 of 48 = 0.708 unless stated)
@@ -266,9 +266,15 @@ FAIL strict10 exactly 0.200: 28 hits of 45 (3 gaps), 9 at rank 1, no unit keyed 
 FAIL   10 at rank 1: strict10 0.222 -> CEILING; rem is out, so the 10x reading is FIX-METHOD (judge), never saturation -> exit 0: missing /^10x reading: FIX-METHOD \(judge\), never saturation: rem out: no rem cell either judge called yes$/
 FAIL units c0 to c5 keyed (share 0.375), rem yes on 3 keyed hits: 287 twelfths, 0.498 -> FALLBACK -> exit 0: missing /^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.498 from 0\.25 to 0\.50, strict10 0\.146 at most 0\.20, 0 of 48 planned readings out\)/, /^Remedy: keyed on 6 of 16 changed units \(share 0\.375\)/
 FAIL   keyed share 0.313 (c0 to c4): 292 twelfths, 0.507 -> CEILING, saturated -> exit 0: missing /^10x reading: saturated \(G_R 0\.507, strict10 0\.167,/, /^Remedy: keyed on 5 of 16 changed units \(share 0\.313\)/
-FAIL 4 keyed hits with an unjudged rem (4 of 48 out, 10% or less): G_R on the other 44 is 263 twelfths, 0.498 -> FALLBACK -> exit 0: missing /^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.498 from 0\.25 to 0\.50, strict10 0\.159 at most 0\.20, 4 of 48 planned readings out\)/
+FAIL 4 keyed hits with an unjudged rem (4 of 48 out, 10% or less): G_R on the other 44 is 263 twelfths, 0.498, in band, but 299 twelfths, 0.519 with the 4 rems scored yes -> CEILING, and the 10x reading is FIX-METHOD (judge) -> exit 0: missing /^10x reading: FIX-METHOD \(judge\), never saturation: 4 unjudged rem decide the reading \(left out: G_R 0\.498, strict10 0\.159; scored yes: G_R 0\.519, strict10 0\.146; scored no: G_R 0\.498, strict10 0\.146\)$/
+FAIL   the same 4 rems judged no (the readings above): 287 twelfths, 0.498 -> FALLBACK -> exit 0: missing /^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.498 from 0\.25 to 0\.50, strict10 0\.146 at most 0\.20, 0 of 48 planned readings out\)/
+FAIL   the same 4 rems judged yes: 299 twelfths, 0.519 -> CEILING, saturated -> exit 0: missing /^10x reading: saturated \(G_R 0\.519, /
+FAIL units c0 to c7 keyed, rem yes on the 8 keyed hits at rank 1: G_R 0.500, strict10 0.188 -> FALLBACK -> exit 0: missing /^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.500 from 0\.25 to 0\.50, strict10 0\.188 at most 0\.20, 0 of 48 planned readings out\)/
+FAIL   4 keyed hits at rank 2 with an unjudged rem: strict10 on the other 44 is 0.205, saturated, but 0.188 with the 4 rems scored no -> CEILING, and the 10x reading is FIX-METHOD (judge), never saturation -> exit 0: missing /^10x reading: FIX-METHOD \(judge\), never saturation: 4 unjudged rem decide the reading \(left out: G_R 0\.500, strict10 0\.205; scored yes: G_R 0\.521, strict10 0\.188; scored no: G_R 0\.500, strict10 0\.188\)$/
 FAIL   5 of 48 out (over 10%): CEILING, and the 10x reading is FIX-METHOD (judge) -> exit 0: missing /^10x reading: FIX-METHOD \(judge\), never saturation: reviews unjudged for G_R, gaps and incomplete 5 of 48 planned readings, over 10%$/
 FAIL rem agreement just at or above 0.70: 40 Sol-only rem cells against 47 both-yes cells -> rem stays in -> exit 0: missing /^Remedy: .*Sol only 40, Opus only 0, positive agreement 0\.7\d\d .*G_R form rem \(rem in\)$/
+FAIL units c0 and c1 keyed, rem no on Opus none's keyed hits: both judges say yes on 4 rem cells, all shared -> under the minimum of 5, rem leaves G_R -> exit 0: missing /^Remedy: .*G_R form norem \(rem out: both judges say yes on 4 rem cells, under 5\)$/
+FAIL   rem yes on 1 keyed hit: 5 shared yes cells -> rem stays in -> exit 0: missing /^Remedy: .*G_R form rem \(rem in\)$/
 FAIL   one Sol-only cell more: under 0.70 -> rem leaves G_R -> exit 0: missing /^Remedy: .*Sol only 41, .*G_R form norem \(rem out: positive agreement on rem 0\.6\d\d under 0\.70\)$/
 FAIL the stock fix scores rem on 1 keyed unit (c0) -> rem stays in -> exit 0: missing /^Remedy: .*stock fix scores rem on 1 of 12 keyed units \(at most 1\); G_R form rem \(rem in\)$/
 FAIL   on 2 (c0 and c1) -> rem leaves G_R -> exit 0: missing /^Remedy: .*stock fix scores rem on 2 of 12 keyed units \(at most 1\); G_R form norem \(rem out: the stock fix scores rem on 2 keyed units, more than 1\)$/
@@ -303,12 +309,16 @@ FAIL refuse a projection output whose Primary is none -> exit 0: no refusal
 FAIL refuse a Primary line that pairs G_R with HEADROOM -> exit 0: no refusal
 FAIL refuse a PASS line with no cells list -> exit 0: no refusal
 FAIL   accept twin: the 'as planned' output with CRLF line ends, bound by the sha256 of those bytes -> exit 0: missing /^Frozen plan: the projection output's sha256 [0-9a-f]{64} matches the recorded value; primary hit@3 \(stage 1 HEADROOM\); G_R form rem; family, passes, held passes and lens match its PASS line$/
-  The issue count: each row's issues against its labels and words
+  The issue count: each row's issues and fixes against its labels and word counts
 FAIL refuse an issue dropped from labels and words but kept in issues (none on opus, c0, pass 1; the guard amendment's open note) -> exit 0: no refusal
 FAIL   accept twin: the same row with all three issues -> exit 0: missing /^Frozen plan: the projection output's sha256 [0-9a-f]{64} matches the recorded value; primary hit@3 \(stage 1 HEADROOM\); G_R form rem; family, passes, held passes and lens match its PASS line$/
 FAIL refuse issue 1 at 30 words where words says 28 -> exit 0: no refusal
 FAIL refuse issue 3 at 41 words, not cut to 40 -> exit 0: no refusal
 FAIL   accept twin: issue 3 cut to its first 40 words, words 41 -> exit 0: missing /^Frozen plan: the projection output's sha256 [0-9a-f]{64} matches the recorded value; primary hit@3 \(stage 1 HEADROOM\); G_R form rem; family, passes, held passes and lens match its PASS line$/
+FAIL refuse fix 1 at 30 words where fix_words says 28 -> exit 0: no refusal
+FAIL refuse three issues and two fixes -> exit 0: no refusal
+FAIL refuse a row with no fixes -> exit 0: no refusal
+FAIL   accept twin: fix 1 empty with fix_words 0 (the review gave no fix; the remedy packet shows 'no fix') -> exit 0: missing /^Frozen plan: the projection output's sha256 [0-9a-f]{64} matches the recorded value; primary hit@3 \(stage 1 HEADROOM\); G_R form rem; family, passes, held passes and lens match its PASS line$/
 FAIL refuse a no-block row (standalone on opus, c0) carrying one issue -> exit 0: no refusal
 FAIL   accept twin: the same row with no issues and no words -> exit 0: missing /^Frozen plan: the projection output's sha256 [0-9a-f]{64} matches the recorded value; primary hit@3 \(stage 1 HEADROOM\); G_R form rem; family, passes, held passes and lens match its PASS line$/
 FAIL refuse a scored row with no issues field -> exit 0: no refusal
@@ -431,4 +441,4 @@ PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITE
 ## Leak check
 PASS the transcript prints no home path and no key name's value
 
-PASS 241, FAIL 87
+PASS 241, FAIL 97

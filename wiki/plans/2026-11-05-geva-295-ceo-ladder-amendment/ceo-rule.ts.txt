@@ -5,7 +5,7 @@
 //     counts as a possible D).
 //   2026-11-05-geva-295-ceo-ladder-amendment: the 10x tier (G_R, strict10, rem and each unit's remedy fields), the
 //     CEILING fallback, stage 2's primary and Holm family read from the projection output the Captain recorded, each
-//     row's issues checked against its labels and words, and finite numbers only.
+//     row's issues and fixes checked against its labels and word counts, and finite numbers only.
 // It reads files and prints; it calls no model and needs no key.
 //   bun ceo-rule.ts headroom <readings.json>     stage 1: leak drops, NO READ, STOCK FAIL, the band and the fallback, smoke admissions, agreement, ICC, the 10x tier
 //   bun ceo-rule.ts projection <projection.json> stage 1 to 2: the primary, per-item projection, derived caps and the frozen cut order
@@ -26,7 +26,7 @@ type Model = "opus" | "sol" | "particle";
 type Arm = "none" | "autoplan-ceo" | "standalone" | "lens";
 type Kind = "scope" | "alternative" | "approach" | "not_build";
 type Unit = { id: string; kind: "changed" | "held"; strict: string | null; category: string; role: "maintainer" | "outside"; remedy: boolean; remedy_kind: Kind | null; decoy: "R1" | "R2" | "R3" | null; second_order: boolean };
-type Review = { id: string; unit: string; arm: Arm; model: Model; pass: number; smoke?: boolean; status: "scored" | "no-block" | "gap" | "incomplete"; exposed: boolean | null; labels: Calls[]; issues: string[]; words: number[]; leak: { sol: boolean; opus: boolean }; forecast: number | null; usd: number; wall_s?: number };
+type Review = { id: string; unit: string; arm: Arm; model: Model; pass: number; smoke?: boolean; status: "scored" | "no-block" | "gap" | "incomplete"; exposed: boolean | null; labels: Calls[]; issues: string[]; words: number[]; fixes: string[]; fix_words: number[]; leak: { sol: boolean; opus: boolean }; forecast: number | null; usd: number; wall_s?: number };
 type Readings = { stage: 1 | 2; units: Unit[]; reviews: Review[]; stock: { unit: string; row: "A" | "B"; labels: Calls[] }[]; family?: Record<Model, Arm[]>; passes?: Record<Model, 1 | 2>; held_passes?: 1 | 2; lens?: boolean };
 type Form = "rem" | "norem";
 type Measure = "hit@3" | "G_R";
@@ -70,10 +70,10 @@ const GR_ROWS: Record<string, [number, number | string][]> = {
   "fallback/rem/0.50/1/all": [[36,0.16], [48,0.14], [54,0.13], [64,0.12]],
   "fallback/rem/0.50/2/hit": [[36,0.12], [48,0.1], [54,0.1], [64,0.09]],
   "fallback/rem/0.50/1/hit": [[36,0.16], [48,0.14], [54,0.13], [64,0.12]],
-  "fallback/norem/-/2/all": [[36,0.13], [48,0.12], [54,0.11], [64,0.1]],
-  "fallback/norem/-/1/all": [[36,0.18], [48,0.16], [54,0.15], [64,0.14]],
-  "fallback/norem/-/2/hit": [[36,0.14], [48,0.11], [54,0.11], [64,0.1]],
-  "fallback/norem/-/1/hit": [[36,0.18], [48,0.15], [54,0.15], [64,0.14]],
+  "fallback/norem/-/2/all": [[36,0.14], [48,0.12], [54,0.12], [64,0.1]],
+  "fallback/norem/-/1/all": [[36,0.19], [48,0.17], [54,0.16], [64,0.15]],
+  "fallback/norem/-/2/hit": [[36,0.14], [48,0.12], [54,0.11], [64,0.11]],
+  "fallback/norem/-/1/hit": [[36,0.19], [48,0.16], [54,0.15], [64,0.14]],
 };
 const S0 = 0.95, ANCHOR_V2 = 0.126;
 const PARALLEL = 3;
@@ -149,7 +149,7 @@ function rem(r: Review, u: Unit, form: Form): 0 | 1 | null {
   return v === null ? null : v ? 1 : 0;
 }
 const gr12 = (r: Review, u: Unit, form: Form, remAs: 0 | 1 = 0) => (keyed(u, form) ? 6 * hit(r) + 3 * h1(r) + 3 * (rem(r, u, form) ?? remAs) : 8 * hit(r) + 4 * h1(r));
-const strict10 = (r: Review, u: Unit, form: Form) => (keyed(u, form) ? h1(r) * (rem(r, u, form) ?? 0) : h1(r));
+const strict10 = (r: Review, u: Unit, form: Form, remAs: 0 | 1 = 0) => (keyed(u, form) ? h1(r) * (rem(r, u, form) ?? remAs) : h1(r));
 const grOut = (r: Review, u: Unit, form: Form) => out_(r) || rem(r, u, form) === null;
 const decoyFirst = (r: Review, u: Unit) => (r.status === "scored" && r.labels.length > 0 && final(r.labels[0]!) === u.decoy ? 1 : 0);
 
@@ -172,6 +172,9 @@ const rowFault = (r: Review) =>
   : r.status !== "scored" && r.issues.length > 0 ? "issues on a row that isn't scored"
   : r.smoke && r.labels.length > 0 ? "calls on a smoke row"
   : r.status === "scored" && !r.smoke && r.labels.length !== Math.min(3, r.issues.length) ? "label count"
+  : !Array.isArray(r.fixes) || !r.fixes.every((s) => typeof s === "string") ? "fixes"
+  : !Array.isArray(r.fix_words) || !r.fix_words.every((w) => Number.isInteger(w) && w >= 0) ? "fix_words"
+  : r.fixes.length !== r.issues.length || r.fix_words.length !== r.issues.length || r.fixes.some((s, i) => wc(s) !== Math.min(40, r.fix_words[i]!)) ? "fixes against fix_words"
   : !(r.exposed === null || typeof r.exposed === "boolean") ? "exposed"
   : !(r.forecast === null || fin(r.forecast)) ? "forecast"
   : !fin(r.usd) || r.usd < 0 ? "usd"
@@ -290,7 +293,10 @@ function agreement(rd: Readings, units: Set<string>) {
 const agreementLine = (ag: ReturnType<typeof agreement>) => "n " + ag.n + "; both D " + ag.both + ", Sol only " + ag.solOnly + ", Opus only " + ag.opusOnly + ", neither " + ag.neither + "; positive agreement on D " + f3(ag.psa) + ", raw " + f3(ag.raw) + ", PABAK " + f3(ag.pabak) + ", kappa " + f3(ag.kappa);
 // Positive agreement on rem, Sol against Opus, over every rem cell: every top-three call of every scored review and every
 // stock call on a keyed unit. The gate holds when 2 both / (2 both + Sol only + Opus only) is at least 0.70, compared in
-// integers, and at least one cell has a yes.
+// integers, and both judges say yes on at least REM_MIN_BOTH cells. 5 is the fewest shared yes cells at which a record with
+// every yes call shared puts the one-sided 95% Clopper-Pearson lower bound on the shared share of yes calls (2 both out of
+// 2 both + Sol only + Opus only) at 0.70 or above: 0.05^(1/10) = 0.741, where 4 cells give 0.05^(1/8) = 0.688.
+const REM_MIN_BOTH = 5;
 function remCells(rd: Readings, ids: Set<string>, units: Map<string, Unit>) {
   const of = (u: string) => ids.has(u) && units.get(u)!.remedy;
   return [...rd.reviews.filter((r) => !r.smoke && r.status === "scored" && of(r.unit)).flatMap((r) => top3(r.labels).map((c) => ({ u: r.unit, rem: c.rem! }))), ...rd.stock.filter((s) => of(s.unit)).flatMap((s) => top3(s.labels).map((c) => ({ u: s.unit, rem: c.rem! })))];
@@ -303,7 +309,7 @@ function remAgreement(cells: { u: string; rem: Rem }[]) {
     if (r.sol && r.opus) both++; else if (r.sol) solOnly++; else if (r.opus) opusOnly++;
   }
   const den = 2 * both + solOnly + opusOnly;
-  return { n, both, solOnly, opusOnly, psa: den ? (2 * both) / den : NaN, pass: den > 0 && 20 * both >= 7 * den };
+  return { n, both, solOnly, opusOnly, psa: den ? (2 * both) / den : NaN, pass: both >= REM_MIN_BOTH && 20 * both >= 7 * den };
 }
 // A seeded cluster bootstrap over units: the 2.5th and 97.5th percentiles of stat on resampled units.
 function boot(ids: string[], stat: (sample: string[]) => number): [number, number] | null {
@@ -373,20 +379,27 @@ function stage1Read(rd: Readings) {
   const remAg = remAgreement(cells);
   const fix = stockFix(rd, ids, units);
   const form: Form = remAg.pass && fix.n <= 1 ? "rem" : "norem";
-  const formWhy = form === "rem" ? "rem in" : !remAg.pass ? "rem out: " + (remAg.n && 2 * remAg.both + remAg.solOnly + remAg.opusOnly ? "positive agreement on rem " + f3(remAg.psa) + " under 0.70" : "no rem cell either judge called yes") : "rem out: the stock fix scores rem on " + fix.n + " keyed units, more than 1";
+  const formWhy = form === "rem" ? "rem in" : !remAg.pass ? "rem out: " + (!(2 * remAg.both + remAg.solOnly + remAg.opusOnly) ? "no rem cell either judge called yes" : remAg.both < REM_MIN_BOTH ? "both judges say yes on " + remAg.both + " rem cells, under " + REM_MIN_BOTH : "positive agreement on rem " + f3(remAg.psa) + " under 0.70") : "rem out: the stock fix scores rem on " + fix.n + " keyed units, more than 1";
   const uOf = (r: Review) => units.get(r.unit)!;
   const gRead = opus.filter((r) => !grOut(r, uOf(r), form));
   const gOut = opus.length - gRead.length, nG = gRead.length;
   const g12 = sum(gRead.map((r) => gr12(r, uOf(r), form))), st = sum(gRead.map((r) => strict10(r, uOf(r), form)));
   const gInBand = nG > 0 && g12 >= 3 * nG && g12 <= 6 * nG, stOk = nG > 0 && 5 * st <= nG, outOk = 10 * gOut <= planned;
+  // Unjudged rem must not decide the reading. FALLBACK also needs the band with every unjudged rem scored yes, and a
+  // saturated 10x reading also needs saturation with every unjudged rem scored no.
+  const nY = read.length, unj = read.length - nG;
+  const g12Y = sum(read.map((r) => gr12(r, uOf(r), form, 1))), stY = sum(read.map((r) => strict10(r, uOf(r), form, 1)));
+  const g12N = sum(read.map((r) => gr12(r, uOf(r), form, 0))), stN = sum(read.map((r) => strict10(r, uOf(r), form, 0)));
+  const yesInBand = nY > 0 && g12Y >= 3 * nY && g12Y <= 6 * nY && 5 * stY <= nY;
+  const sat = (g: number, s_: number, k: number) => g > 6 * k || 5 * s_ > k;
   const band = { lo: Math.ceil(BAND.lo * n - 1e-9), hi: Math.floor(BAND.hi * n + 1e-9) };
   let kind: "NO READ" | "STOCK FAIL" | "CEILING" | "FALLBACK" | "FLOOR" | "HEADROOM";
   if (changed.length < 12 || n === 0 || outs / planned > 0.1) kind = "NO READ";
   else if (stock > 1) kind = "STOCK FAIL";
-  else if (m / n > BAND.hi) kind = gInBand && stOk && outOk ? "FALLBACK" : "CEILING";
+  else if (m / n > BAND.hi) kind = gInBand && stOk && outOk && yesInBand ? "FALLBACK" : "CEILING";
   else if (m / n < BAND.lo) kind = "FLOOR";
   else kind = "HEADROOM";
-  const tenX = kind !== "CEILING" ? null : form === "rem" && outOk && (g12 > 6 * nG || 5 * st > nG) ? "saturated (G_R " + f3(g12 / (12 * nG)) + ", strict10 " + f3(st / nG) + ", rem in, " + gOut + " of " + planned + " planned readings out): a saturation stop on both tiers" : "FIX-METHOD (judge), never saturation: " + (form === "norem" ? formWhy : "reviews unjudged for G_R, gaps and incomplete " + gOut + " of " + planned + " planned readings, over 10%");
+  const tenX = kind !== "CEILING" ? null : form === "rem" && outOk && sat(g12, st, nG) && sat(g12N, stN, nY) ? "saturated (G_R " + f3(g12 / (12 * nG)) + ", strict10 " + f3(st / nG) + ", rem in, " + gOut + " of " + planned + " planned readings out): a saturation stop on both tiers" : "FIX-METHOD (judge), never saturation: " + (form === "norem" ? formWhy : !outOk ? "reviews unjudged for G_R, gaps and incomplete " + gOut + " of " + planned + " planned readings, over 10%" : unj + " unjudged rem decide the reading (left out: G_R " + f3(g12 / (12 * nG)) + ", strict10 " + f3(st / nG) + "; scored yes: G_R " + f3(g12Y / (12 * nY)) + ", strict10 " + f3(stY / nY) + "; scored no: G_R " + f3(g12N / (12 * nY)) + ", strict10 " + f3(stN / nY) + ")");
   return { drops, units, changed, ids, planned, opus, outs, read, m, n, band, stock, stockNote, cells, remAg, fix, form, formWhy, gRead, gOut, nG, g12, st, gInBand, stOk, outOk, kind, tenX };
 }
 
@@ -431,8 +444,7 @@ function headroom(rd: Readings) {
   const uIds = [...s.ids];
   const kHit = boot(uIds, (smp) => S0 / byUnit(s.read, (r) => hit(r))(smp));
   const sRate = byUnit(s.gRead, (r) => strict10(r, s.units.get(r.unit)!, s.form))(uIds);
-  const sUpper = boot(uIds, byUnit(s.gRead, (r) => strict10(r, s.units.get(r.unit)!, s.form)));
-  say("k on hit@3 = 0.95 / hit@3 = " + f3(n && m ? S0 / (m / n) : NaN) + " " + ci(kHit) + "; k on strict10 = " + (sRate > 0 ? f3(S0 / sRate) + " " + ci(boot(uIds, (smp) => S0 / byUnit(s.gRead, (r) => strict10(r, s.units.get(r.unit)!, s.form))(smp))) : "over 0.95 / " + f3(sUpper ? sUpper[1] : NaN) + " (strict10 is 0; the bound is its 97.5th bootstrap percentile)") + "; 0.95 is the ladder's pooled s0 (decides nothing)");
+  say("k on hit@3 = 0.95 / hit@3 = " + f3(n && m ? S0 / (m / n) : NaN) + " " + ci(kHit) + "; k on strict10 = " + (sRate > 0 ? f3(S0 / sRate) + " " + ci(boot(uIds, (smp) => S0 / byUnit(s.gRead, (r) => strict10(r, s.units.get(r.unit)!, s.form))(smp))) : "not estimable (strict10 is 0 on every reading)") + "; 0.95 is the ladder's pooled s0 (decides nothing)");
   const share = s.changed.length ? keyedIds.length / s.changed.length : 0;
   say("G_R MDD at 48 changed units, 2 passes, at this keyed share: " + grMddText(grMdd(s.kind === "FALLBACK" || s.kind === "CEILING" ? "fallback" : "headroom", s.form, share, 2, 48)) + " (power-gr.txt; decides nothing)");
   const med = median(rd.reviews.filter((r) => !r.smoke && r.model === "opus" && r.arm === "none" && sessionRan(r)).map((r) => r.usd));
