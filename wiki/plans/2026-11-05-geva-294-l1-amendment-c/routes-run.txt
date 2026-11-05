@@ -1,0 +1,11 @@
+after arm tar sha256 604cdb537ccf2e62cace277262c8ec75341dd4fb4714a3135ce82e3725c47cac
+arm gstack vs clean clone at 699a41cb6808e01240d02e82247693f9170d401a (lib, hosts/claude/hooks, bin/gstack-skill-route): 0 + 0 + 0 differing
+final.json at laneb-discovery-3-runner sha256 9ccfec13f01c150f4ec838e19285375a1f034522c1a069c0ee83d75d12dd56d9; tb2-tasks.txt 37 tasks, sha256 582ba69f50ff8eb121fb87d622f3e3bc6a39310910d29f8ea3afdaa6eb9e53eb
+f-tasks.txt sha256 b14dd044e4dfba0b217bb267566753585fcffdc05b42dc93d95887d192d3f4ee
+built 80 f and 37 tb2 prompts; wrapper sha256 2e0674a8e1d65dfd7e511e7f7255235410d75a65fe49d7ce03c9d54202089d00
+hook command: /root/.claude/skills/gstack/hosts/claude/hooks/skill-route-hook
+counts f: investigate=19, none=44, qa=6, review=1, verify=10
+counts tb2: investigate=4, none=30, qa=1, verify=2
+hook vs gstack-skill-route disagreements: 0
+routed stratum (F to investigate): 19 tasks, sha256 077f02e3c52b8da92c5699f5af70a885fd509bde94d4188093e9c03a359ea6e9
+routes.tsv sha256 6760231e5e05d72c725cfea3045c1004289d0c080a86f6da62734c086d891885

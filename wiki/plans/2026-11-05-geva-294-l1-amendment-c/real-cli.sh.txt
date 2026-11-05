@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# GEVA-294 (L1 Amendment C, GST-1424): keyless real-CLI dry run of the metering proxy's route evidence.
+#
+#   real-cli.sh <gstack-evals checkout> <L1 arm tars folder> [out dir]
+#
+# Seven real sessions (none, before-u, before-t, after-u, after-t, off-u, off-t) on one small local fixture task:
+# the pinned Harbor (f3a5a923, with claude-agent-sdk 0.2.174) runs laneb_hooks.LanebHooksAgent with each L1 arm's
+# kwargs from ARM_SPECS (quick/laneb/l1/l1.ts) through grid.ts's jobConfig, and Claude Code 2.1.312 runs inside the
+# task container with the arm tar in /root and CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. Every request goes through the
+# real runner/proxy.ts, with a real runner/ledger.ts service, to a fake upstream on 127.0.0.1 that never calls a model.
+# Then quick/laneb/l1/table.ts builds the per-session table, and this script prints one line per session and the
+# count of rows whose proxy and transcript readings are both non-null and disagree.
+#
+# No provider key reaches any process: every command that starts the proxy, Harbor or Claude Code runs under
+# env -u for the four provider keys, and the proxy's only route points at the fake upstream.
+# Departures from a VM part (vm-run.sh): the task runs with network_mode public, because this kernel can't run
+# Harbor's nftables egress sidecar; the proxy, ledger and fake upstream use ports 18787, 18788, 19911 and 18799, so
+# a Lane B rig on the default ports never meets this one, and each agent's kwargs set control_url to match.
+set -euo pipefail
+co=$(cd "${1:?usage: real-cli.sh <checkout> <tars dir> [out dir]}" && pwd)
+tars=$(cd "${2:?usage: real-cli.sh <checkout> <tars dir> [out dir]}" && pwd)
+out=$(mkdir -p "${3:-$PWD/real-cli-out}" && cd "${3:-$PWD/real-cli-out}" && pwd)
+laneb=$co/quick/laneb
+DATA=${DATA_PORT:-18787} CONTROL=${CONTROL_PORT:-18788} LEDGER=${LEDGER_PORT:-19911} FAKE=${FAKE_PORT:-18799}
+noKeys=(env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u UBICLOUD_API_KEY)
+export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
+command -v harbor >/dev/null || { echo "E_USAGE harbor is not on PATH; install it as runner/vm-bootstrap.sh does" >&2; exit 2; }
+for arm in none before after off; do [ -f "$tars/$arm.tar" ] || { echo "E_USAGE $tars/$arm.tar is missing" >&2; exit 2; }; done
+rm -rf "$out/tasks" "$out/jobs" "$out/prefix" && mkdir -p "$out/tasks/l1-fixture" "$out/prefix"
+rm -f "$out"/proxy-requests.jsonl "$out"/proxy-sessions.jsonl "$out"/fake-upstream.jsonl "$out"/ledger.jsonl* "$out"/sessions.jsonl "$out"/summary.txt
+
+# The fixture task, in the shape materialize.ts writes: the arm-neutral runtime stages, the task image, the runtime copy.
+t=$out/tasks/l1-fixture
+mkdir -p "$t/environment/repo" "$t/tests/repo"
+cat > "$t/task.toml" <<'EOF'
+schema_version = "1.4"
+
+[metadata]
+purpose = "GEVA-294 keyless real-CLI route evidence dry run against a fake upstream"
+
+[verifier]
+timeout_sec = 120.0
+environment_mode = "separate"
+network_mode = "public"
+
+[agent]
+timeout_sec = 600.0
+network_mode = "public"
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 900.0
+os = "linux"
+EOF
+printf '%s\n' "The test suite fails with a KeyError in the parser after the last change. Find the root cause and fix it." > "$t/instruction.md"
+cat > "$t/environment/repo/lineparser.py" <<'EOF'
+def parse(line):
+    fields = dict(part.split("=", 1) for part in line.split(";") if part)
+    return {"name": fields["username"], "age": int(fields["age"])}
+EOF
+cat > "$t/environment/repo/test_parser.py" <<'EOF'
+from lineparser import parse
+
+assert parse("name=ada;age=36") == {"name": "ada", "age": 36}
+print("ok")
+EOF
+cp "$t/environment/repo/"*.py "$t/tests/repo/"
+{ cat "$laneb/runner/runtime-stages.Dockerfile"
+  cat <<'EOF'
+FROM python:3.11-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /testbed
+COPY repo/ /testbed/
+RUN git init -q && git -c user.email=fixture@example.com -c user.name=fixture add -A && git -c user.email=fixture@example.com -c user.name=fixture commit -qm base
+
+EOF
+  cat "$laneb/runner/runtime-copy.Dockerfile"; } > "$t/environment/Dockerfile"
+cat > "$t/tests/Dockerfile" <<'EOF'
+FROM python:3.11-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+WORKDIR /testbed
+COPY repo/ /testbed/
+RUN git init -q && git -c user.email=fixture@example.com -c user.name=fixture add -A && git -c user.email=fixture@example.com -c user.name=fixture commit -qm base
+COPY test.sh /tests/test.sh
+EOF
+cat > "$t/tests/test.sh" <<'EOF'
+#!/bin/bash
+set -u
+mkdir -p /logs/verifier
+cd /testbed
+patch=/logs/artifacts/model.patch
+applied=0
+if [ -s "$patch" ] && git apply --whitespace=nowarn "$patch"; then applied=1; fi
+passed=0
+python3 test_parser.py && passed=1
+echo "applied=$applied passed=$passed"
+echo $(( applied && passed )) > /logs/verifier/reward.txt
+EOF
+chmod +x "$t/tests/test.sh"
+
+# The fake upstream: sse() from runner/fake_upstream.ts and REPLY_DELAY_MS from arms/l1.ts (the Stop hooks need the
+# transcript written before they run). A turn that offers Bash gets one Bash call that fixes the key and runs the test,
+# then text; any other request gets text.
+cat > "$out/fake-upstream.ts" <<EOF
+import { appendFileSync } from "node:fs";
+import { sse, toolResults, type Block } from "$laneb/runner/fake_upstream.ts";
+import { REPLY_DELAY_MS } from "$laneb/arms/l1.ts";
+const FIX = "sed -i 's/fields\\\\[\"username\"\\\\]/fields[\"name\"]/' lineparser.py && python3 test_parser.py";
+const turn = (body: any, tools: string[]): Block[] => {
+  if (!tools.includes("Bash")) return [{ type: "text", text: "ok" }];
+  if (!("toolu_fix_1" in toolResults(body.messages))) return [{ type: "tool_use", id: "toolu_fix_1", name: "Bash", input: { command: FIX, description: "Fix the key and run the test" } }];
+  return [{ type: "text", text: "DONE: parse() read fields[\"username\"] but the lines carry name=, so it raised KeyError. It now reads name and test_parser.py passes." }];
+};
+Bun.serve({ hostname: "127.0.0.1", port: $FAKE, async fetch(req) {
+  const path = new URL(req.url).pathname;
+  if (req.method !== "POST") return Response.json({ ok: true });
+  const body = (await req.json()) as any;
+  const tools: string[] = Array.isArray(body.tools) ? body.tools.map((t: any) => t.name) : [];
+  if (path.endsWith("/count_tokens")) { appendFileSync("$out/fake-upstream.jsonl", JSON.stringify({ path }) + "\n"); return Response.json({ input_tokens: 10 }); }
+  const blocks = turn(body, tools);
+  appendFileSync("$out/fake-upstream.jsonl", JSON.stringify({ path, model: body.model, stream: Boolean(body.stream), n_tools: tools.length, reply: blocks.map((b) => (b.type === "tool_use" ? b.name : "text")) }) + "\n");
+  await Bun.sleep(REPLY_DELAY_MS);
+  if (!body.stream) return Response.json({ id: "msg_fake", type: "message", role: "assistant", model: body.model, content: blocks, stop_reason: blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn", usage: { input_tokens: 1200, cache_creation_input_tokens: 300, cache_read_input_tokens: 5000, output_tokens: 150 } });
+  return new Response(sse(body.model, blocks), { headers: { "content-type": "text/event-stream" } });
+} });
+console.log("fake upstream on 127.0.0.1:$FAKE");
+EOF
+
+gw=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+cat > "$out/proxy.json" <<EOF
+{"routes": {"fake": {"base_url": "http://127.0.0.1:$FAKE", "key_env": "FAKE_UPSTREAM_KEY", "auth": "x-api-key", "count_tokens": "estimate"}},
+ "models": {"claude-opus-5-5": {"route": "fake", "upstream_model": "claude-opus-5-5", "price_per_mtok": {"input": 4, "output": 20, "cache_write_5m": 5, "cache_write_1h": 8, "cache_read": 0.2}}}}
+EOF
+
+# The Harbor job: grid.ts's jobConfig with each L1 arm's spec from ARM_SPECS, the tar its manifest names (sha256 checked),
+# and cells.l1.json's model, session cap, output tokens and turns.
+cat > "$out/make-job.ts" <<EOF
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { armSpec, jobConfig } from "$laneb/runner/grid.ts";
+import { ARM_SPECS } from "$laneb/l1/l1.ts";
+const cells = JSON.parse(readFileSync("$laneb/config/cells.l1.json", "utf8"));
+const labels = ["none", "before-u", "before-t", "after-u", "after-t", "off-u", "off-t"];
+const arms = labels.map((label) => {
+  const { name, tar_name, ...opts } = armSpec(ARM_SPECS[label]!);
+  const file = tar_name ?? name;
+  const tar = "$tars/" + file + ".tar";
+  const want = JSON.parse(readFileSync("$laneb/arms/manifests/l1/" + file + ".json", "utf8")).tar.sha256;
+  const got = createHash("sha256").update(readFileSync(tar)).digest("hex");
+  if (got !== want) throw new Error("arm " + label + ": " + tar + " sha256 " + got + " is not the manifest's " + want);
+  return { name, tar, sha256: got, ...opts };
+});
+const job = jobConfig({ job_name: "real-cli", tasks_dir: "$out/tasks", tasks: ["l1-fixture"], models: cells.models, arms, attempts: 1, n_concurrent: 2,
+  agent_dir: "$laneb/runner/agent", runner_dir: "$laneb/runner", base_url: "http://$gw:$DATA", max_output_tokens: cells.max_output_tokens,
+  verifier_timeout_multiplier: cells.verifier_timeout_multiplier, repo_dir: "/testbed", sdk_max_turns: cells.sdk_max_turns });
+for (const a of job.agents) (a.kwargs as Record<string, unknown>).control_url = "http://127.0.0.1:$CONTROL";
+writeFileSync("$out/job.json", JSON.stringify(job, null, 2) + "\n");
+console.log("job.json: " + job.agents.map((a) => a.kwargs.arm + "=" + a.import_path).join(" "));
+EOF
+"${noKeys[@]}" bun "$out/make-job.ts"
+
+pids=()
+cleanup() { curl -fsS -X POST "127.0.0.1:$CONTROL/close-all" > /dev/null 2>&1 || true; for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; }
+trap cleanup EXIT
+"${noKeys[@]}" bun -e "import {Ledger} from '$laneb/runner/ledger.ts'; new Ledger('$out/ledger.jsonl','real-cli').approve(20, {words: 'GEVA-294 keyless dry run, fake upstream, no spend', by: 'GEVA-294'})" >/dev/null
+"${noKeys[@]}" bun "$out/fake-upstream.ts" > "$out/fake-upstream.log" 2>&1 & pids+=($!)
+"${noKeys[@]}" bun "$laneb/runner/ledger.ts" serve --path "$out/ledger.jsonl" --item real-cli --port "$LEDGER" > "$out/ledger.log" 2>&1 & pids+=($!)
+"${noKeys[@]}" FAKE_UPSTREAM_KEY=fake-not-a-key bun "$laneb/runner/proxy.ts" --config "$out/proxy.json" --data-host "$gw" --data-port "$DATA" --control-port "$CONTROL" \
+  --log "$out/proxy-requests.jsonl" --sessions "$out/proxy-sessions.jsonl" --ledger-url "http://127.0.0.1:$LEDGER" --ledger-prefix real-cli- --global-cap-usd 20 > "$out/proxy.log" 2>&1 & pids+=($!)
+for _ in $(seq 1 60); do curl -fsS "127.0.0.1:$CONTROL/healthz" >/dev/null 2>&1 && curl -fsS "127.0.0.1:$FAKE/" >/dev/null 2>&1 && curl -fsS "127.0.0.1:$LEDGER/status" >/dev/null 2>&1 && break; sleep 0.5; done
+curl -fsS "127.0.0.1:$CONTROL/healthz" >/dev/null || { echo "E_INTERNAL proxy not healthy, see $out/proxy.log" >&2; exit 1; }
+
+rc=0
+(cd "$out" && "${noKeys[@]}" ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH="$laneb/runner/agent" harbor run -y -c "$out/job.json") > "$out/harbor.log" 2>&1 || rc=$?
+[ "$rc" -eq 0 ] || echo "harbor exited $rc (see $out/harbor.log)" >&2
+curl -fsS -X POST "127.0.0.1:$CONTROL/close-all" > "$out/close-all.json" || true
+curl -fsS "127.0.0.1:$CONTROL/totals" > "$out/proxy-totals.json" || true
+
+# Probe L prefixes: each pin's installed investigate/SKILL.md, read from the tars.
+for pin in before after; do
+  f=$(tar -tf "$tars/$pin.tar" | grep -E '^(\./)?\.claude/skills/investigate/SKILL\.md$' | head -1)
+  [ -n "$f" ] || { echo "E_INTERNAL no .claude/skills/investigate/SKILL.md in $tars/$pin.tar" >&2; exit 1; }
+  tar -xOf "$tars/$pin.tar" "$f" > "$out/prefix/$pin-investigate-SKILL.md"
+done
+cat > "$out/table-config.json" <<EOF
+{"jobs": [{"dir": "$out/jobs/real-cli", "instrument": "f1", "part": "real-cli"}], "sessions": ["$out/proxy-sessions.jsonl"],
+ "prefixes": {"before": "$out/prefix/before-investigate-SKILL.md", "after": "$out/prefix/after-investigate-SKILL.md"}}
+EOF
+"${noKeys[@]}" bun "$laneb/l1/table.ts" "$out/table-config.json" "$out/sessions.jsonl"
+
+# One line per session: the table's row, the proxy's session rows and the route_mark of each request line.
+"${noKeys[@]}" bun -e "
+const fs = require('node:fs');
+const lines = (p) => fs.existsSync(p) ? fs.readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+const rows = lines('$out/sessions.jsonl');
+const sessions = lines('$out/proxy-sessions.jsonl');
+const reqs = lines('$out/proxy-requests.jsonl').filter((r) => 'route_mark' in r);
+const order = ['none', 'before-u', 'before-t', 'after-u', 'after-t', 'off-u', 'off-t'];
+rows.sort((a, b) => order.indexOf(a.arm) - order.indexOf(b.arm));
+for (const r of rows) {
+  const last = new Map(sessions.filter((s) => String(s.trial).replace(/__env\$/, '') === r.trial).map((s) => [s.id, s]));
+  const marks = [...last.values()].map((s) => s.route_mark_before_output);
+  const rm = reqs.filter((q) => last.has(q.session)).map((q) => String(q.route_mark) + (q.before_output ? '/pre' : '/post'));
+  console.log('session arm=' + r.arm + ' outcome=' + r.outcome + ' reward=' + r.reward + ' route_hook=' + r.route_hook + ' route_hook_transcript=' + r.route_hook_transcript +
+    ' route_mark_before_output=' + JSON.stringify(marks) + ' request_route_marks=' + JSON.stringify(rm) + ' contract_record=' + r.contract_record + ' contract_check_met=' + r.contract_check_met + ' trial=' + r.trial);
+}
+const both = rows.filter((r) => r.route_hook !== null && r.route_hook_transcript !== null);
+console.log('route_disagree=' + both.filter((r) => r.route_hook !== r.route_hook_transcript).length + ' of ' + both.length + ' sessions with both readings (rows=' + rows.length + ')');
+" | tee "$out/summary.txt"

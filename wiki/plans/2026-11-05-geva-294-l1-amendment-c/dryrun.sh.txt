@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# L1 Amendment C dry run (GEVA-294), keyless. Drives every frozen rule of the L1 superseding preregistration's section 10, and
+# what Amendment C adds, at the commit given, in the style of the R3b pin post's dryrun.sh.txt.
+#   Part 0  git archive of the commit outside any git work tree; bun install --frozen-lockfile.
+#   Part A  pins: the four arm tars against their committed manifests, the source digests, the routing table and the routed
+#           stratum it fixes, the TB2 twin's split, price.txt.
+#   Part B  the real Claude Code 2.1.312 sessions against a fake upstream (real-cli.sh, run by GEVA-294's Subagent 1 at 5c0a5c5;
+#           this commit leaves that path unchanged): the record's digest, its route evidence, and table.ts at this commit run
+#           again over it.
+#   Part C  every keyless test file that drives a frozen rule, run once in the export, with one rule line per frozen rule.
+#   Part D  direct drives with the real CLIs: the ceiling check at the $700 crew line, a dead VM's reserves through the relaunch
+#           and settled at full after it, task-hooks.sh against real Docker images, and audit.ts's procedures (a) and (b)
+#           against the real arm tars.
+# Every rule line reads "ok" or "FAIL" with its expected and observed outcome; the last line is DRYRUN: ok or DRYRUN: fail.
+# Usage: bash dryrun.sh <commit> [<work dir>]   env: G (the gstack-evals checkout, default /workspace/gstack-evals), ARMS (the
+#   output of quick/laneb/arms/build.sh l1, default ~/.capy/work/laneb-arms-l1), REALCLI (real-cli-sessions.tar.gz), ROUTES (the
+#   work dir routes.sh.txt ran in: its built prompts, the extracted after arm and the gstack clone at 699a41cb).
+set -u
+COMMIT=${1:?usage: dryrun.sh <commit> [<work dir>]}
+G=${G:-/workspace/gstack-evals}
+FULL=$(git -C "$G" rev-parse "$COMMIT") || exit 2
+SHORT=${FULL:0:7}
+W=$(mkdir -p "${2:-$HOME/.capy/work/geva-294/dryrun-$SHORT}" && cd "${2:-$HOME/.capy/work/geva-294/dryrun-$SHORT}" && pwd)
+ARMS=${ARMS:-$HOME/.capy/work/laneb-arms-l1}
+ROUTES=${ROUTES:-$HOME/.capy/work/geva-294/routes}
+REALCLI=${REALCLI:-$HOME/.capy/work/geva-294/real-cli/real-cli-sessions.tar.gz}
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN
+E=$W/export L=$W/export/quick/laneb
+B=$E/wiki/plans/2026-11-05-geva-294-l1-amendment-c P=$E/wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000
+rm -rf "$W/log" "$W/d" && mkdir -p "$W/log" "$W/d"
+HIDE="s#$W#\$W#g; s#$ARMS#\$ARMS#g; s#$HOME#~#g"
+fails=0 rules=0
+# rule <label> <expected> <observed> <test command...>
+rule() { local label=$1 want=$2 got=$3; shift 3; rules=$((rules + 1)); if "$@" > /dev/null 2>&1; then echo "ok   $label | expected: $want | observed: $got" | sed "$HIDE"; else fails=$((fails + 1)); echo "FAIL $label | expected: $want | observed: $got" | sed "$HIDE"; fi; }
+sha() { sha256sum "$1" | cut -c1-64; }
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN; do echo "$k: $([ -n "${!k+x}" ] && echo set || echo unset)"; done
+echo "commit $FULL; bun $(bun --version); docker $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
+
+echo; echo "## Part 0: export"
+rm -rf "$E" && mkdir -p "$E" && git -C "$G" archive "$FULL" | tar -x -C "$E"
+(cd "$E" && bun install --frozen-lockfile > "$W/log/bun-install.txt" 2>&1); echo "bun install exit $?"
+rule "P0 the export is outside any git work tree" "git rev-parse fails" "$(cd "$E" && git rev-parse --show-toplevel 2>&1 | head -1)" sh -c "cd '$E' && ! git rev-parse --show-toplevel"
+
+echo; echo "## Part A: pins"
+for a in none before after off; do
+  M=$L/arms/manifests/l1/$a.json
+  WG=$(jq -r .tar_gz_sha256 "$M") WT=$(jq -r .tar.sha256 "$M") GZ=$(sha "$ARMS/$a.tar.gz") TAR=$(sha "$ARMS/$a.tar")
+  rule "A1 the $a arm's tar.gz and tar match manifests/l1/$a.json" "$WG / $WT" "$GZ / $TAR" test "$GZ" = "$WG" -a "$TAR" = "$WT"
+done
+(cd "$E" && sha256sum quick/laneb/l1/*.ts quick/laneb/runner/vm-run.sh quick/laneb/runner/task-hooks.sh quick/laneb/runner/launch.sh quick/laneb/runner/vm-bootstrap.sh quick/laneb/runner/proxy.ts quick/laneb/runner/ledger.ts quick/laneb/runner/prepare-run.ts quick/laneb/tasks/tasks.json src/types.ts) > "$W/log/sources.txt"
+echo "source digests:"; sed 's/^/  /' "$W/log/sources.txt"
+PS=$(cd "$E" && bun -e 'const { PROBES_SHA256 } = await import("./quick/laneb/l1/table.ts"); console.log(PROBES_SHA256)')
+rule "A2 table.ts's PROBES_SHA256 is probes.ts's sha256" "$(sha "$L/l1/probes.ts")" "$PS" test "$PS" = "$(sha "$L/l1/probes.ts")"
+LWC=$(cd "$E" && bun -e 'const { LINEWIDE_SHA256 } = await import("./quick/laneb/l1/audit.ts"); console.log(LINEWIDE_SHA256)')
+BLOB=$(git -C "$G" rev-parse 8e6795a:quick/laneb/l1/probes.ts) HO=$(git hash-object "$L/l1/probes-8e6795a.ts")
+rule "A3 probes-8e6795a.ts is 8e6795a's probes.ts byte for byte, and audit.ts pins its sha256" "blob $BLOB, sha256 $LWC" "blob $HO, sha256 $(sha "$L/l1/probes-8e6795a.ts")" test "$HO" = "$BLOB" -a "$(sha "$L/l1/probes-8e6795a.ts")" = "$LWC"
+rule "A4 routes.tsv (117 prompts at the after pin) is the routing table GEVA-294's Subagent 2 wrote" "6760231e5e05d72c725cfea3045c1004289d0c080a86f6da62734c086d891885, 117 rows" "$(sha "$B/routes.tsv"), $(($(wc -l < "$B/routes.tsv") - 1)) rows" test "$(sha "$B/routes.tsv")" = 6760231e5e05d72c725cfea3045c1004289d0c080a86f6da62734c086d891885
+mkdir -p "$W/d/routes" && cp "$B/route.ts.txt" "$W/d/routes/route.ts"
+(cd "$W/d/routes" && bun route.ts "$ROUTES/prompts" "$ROUTES/arm-home" "$ROUTES/src/gstack" "$W/d/routes") > "$W/log/route.txt" 2>&1; ro=$?
+rule "A4b route.ts reruns the 117 stored prompts through the after arm's hook and gstack-skill-route and writes routes.tsv again" "exit 0, the same bytes, 0 disagreements" "exit $ro, $(sha "$W/d/routes/routes.tsv" 2>/dev/null); $(grep -i disagree "$W/log/route.txt" | head -1)" sh -c "test $ro = 0 && cmp -s '$W/d/routes/routes.tsv' '$B/routes.tsv'"
+awk -F'\t' '$1 == "f" && $4 == "investigate" { print $2 }' "$B/routes.tsv" | sort > "$W/log/routed.txt"
+OUT=$(comm -23 "$W/log/routed.txt" <(sort "$P/f-tasks.txt") | wc -l) NF1=$(awk -F'\t' '$1 == "f"' "$B/routes.tsv" | wc -l)
+rule "A5 routed-stratum.txt is routes.tsv's F rows routed to investigate, every one in F1's 80" "19 of 80 F rows, sha256 077f02e3c52b8da92c5699f5af70a885fd509bde94d4188093e9c03a359ea6e9, 0 outside f-tasks.txt" "$(wc -l < "$W/log/routed.txt") of $NF1 F rows, sha256 $(sha "$B/routed-stratum.txt"), $OUT outside" sh -c "cmp -s '$W/log/routed.txt' '$B/routed-stratum.txt' && test '$(sha "$B/routed-stratum.txt")' = 077f02e3c52b8da92c5699f5af70a885fd509bde94d4188093e9c03a359ea6e9 -a $OUT = 0 -a $NF1 = 80"
+(cd "$B" && python3 split.py) > "$W/log/split.txt" 2>&1; sc=$?
+rule "A6 split.py rewrites tb2-parts.txt byte for byte (37 tasks, 19 and 18)" "exit 0, 57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125" "exit $sc, $(sha "$B/tb2-parts.txt"); $(tr '\n' ';' < "$W/log/split.txt")" test "$sc" = 0 -a "$(sha "$B/tb2-parts.txt")" = 57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125
+MISS=$(cd "$E" && bun -e '
+const t = JSON.parse(require("node:fs").readFileSync("quick/laneb/tasks/tasks.json", "utf8"));
+const have = new Set(["main", "reserves", "extension"].flatMap((k) => (Array.isArray(t[k]) ? t[k] : Object.values(t[k] ?? {})).map((x) => (typeof x === "string" ? x : x.task_id ?? x.name))));
+const want = require("node:fs").readFileSync(process.argv[1], "utf8").split(/\s+/).filter(Boolean);
+console.log(want.filter((w) => !have.has(w)).length + " of " + want.length);' "$B/tb2-tasks.txt")
+rule "A7 every TB2 twin task is in tasks.json's main, reserves or extension, so prepare-run admits it" "0 of 37 missing" "$MISS missing" test "$MISS" = "0 of 37"
+TB=$(cd "$E/quick/laneb" && bun -e '
+const { itemParts } = await import("./l1/l1.ts");
+const parts = itemParts("tb2-opus", { tb2Parts: require("node:fs").readFileSync(process.argv[1], "utf8") });
+console.log(parts.map((p) => p.name + ":" + p.rects.reduce((n, r) => n + r.tasks.length, 0) + " tasks").join(" ") + ", " + parts.reduce((n, p) => n + p.rects.reduce((m, r) => m + r.tasks.length * r.arms.length * r.attempts, 0), 0) + " sessions");' "$B/tb2-parts.txt" 2>&1)
+rule "A9 l1.ts plans the TB2 twin from tb2-parts.txt" "tb2-1:19 tasks tb2-2:18 tasks, 370 sessions" "$TB" test "$TB" = "tb2-1:19 tasks tb2-2:18 tasks, 370 sessions"
+PW=$(git -C "$G" show dcdf8dc0569451c96dee86073aac771c07a4896e:wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000/price.txt | sha256sum | cut -c1-64)
+rule "A8 price.txt is the merged prereg's (dcdf8dc)" "$PW" "$(sha "$P/price.txt")" test "$(sha "$P/price.txt")" = "$PW"
+
+echo; echo "## Part B: the real CLI against a fake upstream"
+rule "B1 the real-CLI record's sha256" "d9d08ac785982939da4e496b06c376fd0591da78277229e1a3467fd0e0a658a7" "$(sha "$REALCLI")" test "$(sha "$REALCLI")" = d9d08ac785982939da4e496b06c376fd0591da78277229e1a3467fd0e0a658a7
+R=$W/d/realcli && mkdir -p "$R" && tar -xzf "$REALCLI" -C "$R"
+S=$(find "$R" -name sessions.jsonl | head -1) PSJ=$(find "$R" -name proxy-sessions.jsonl | head -1) RJ=$(dirname "$(dirname "$(find "$R" -name result.json | head -1)")")
+OBS=$(jq -r '.arm + "=" + (.route_hook | tostring)' "$S" | sort | paste -sd' ')
+rule "B2 route_hook from the proxy's rows: true for after untold only" "after-t=false after-u=true before-t=false before-u=false none=false off-t=false off-u=false" "$OBS" test "$OBS" = "after-t=false after-u=true before-t=false before-u=false none=false off-t=false off-u=false"
+DIS=$(jq -s '[.[] | select(.route_hook != null and .route_hook_transcript != null and .route_hook != .route_hook_transcript)] | length' "$S")
+rule "B3 the proxy and the transcript disagree on no session that carries both" "0 of 7" "$DIS of $(jq -s '[.[] | select(.route_hook != null and .route_hook_transcript != null)] | length' "$S")" test "$DIS" = 0
+GR=$(jq -r 'select(.outcome == "graded") | .arm' "$S" | wc -l)
+rule "B4 all seven sessions are graded rows" "7" "$GR" test "$GR" = 7
+for pin in before after; do tar -xOf "$ARMS/$pin.tar" .claude/skills/investigate/SKILL.md > "$W/d/$pin-SKILL.md"; done
+(cd "$E" && bun -e '
+const fs = require("node:fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({ jobs: [{ dir: process.argv[2], instrument: "f1", part: "real-cli" }], sessions: [process.argv[3]], prefixes: { before: process.argv[4], after: process.argv[5] } }));' "$W/d/table-config.json" "$RJ" "$PSJ" "$W/d/before-SKILL.md" "$W/d/after-SKILL.md" && bun quick/laneb/l1/table.ts "$W/d/table-config.json" "$W/d/sessions.jsonl") > "$W/log/table.txt" 2>&1; tc=$?
+SAME=$(diff <(jq -c 'del(.probes_sha256)' "$S" | sort) <(jq -c 'del(.probes_sha256)' "$W/d/sessions.jsonl" 2>/dev/null | sort) > /dev/null && echo same || echo different)
+rule "B5 table.ts at this commit rebuilds the record's seven rows" "exit 0, same rows" "exit $tc, $SAME rows; $(head -1 "$W/log/table.txt")" test "$tc" = 0 -a "$SAME" = same
+
+echo; echo "## Part C: the keyless tests that drive each frozen rule"
+for t in l1-probes l1-table l1-analyze l1-ceiling l1-host l1-launch l1-audit vm-run proxy-route agent grid ledger-serve; do
+  (cd "$E" && bun test "quick/laneb/tests/$t.test.ts") > "$W/log/$t.txt" 2>&1
+  np=$(grep -cE '^\(pass\)' "$W/log/$t.txt"); nf=$(grep -cE '^\(fail\)' "$W/log/$t.txt"); ns=$(grep -cE '^\(skip\)' "$W/log/$t.txt")
+  rule "C0 tests/$t.test.ts" "every test passes" "$np pass, $nf fail, $ns skip" test "$np" -gt 0 -a "$nf" = 0
+done
+# named <label> <file> <text in the test's name>
+named() { local np nf; np=$(grep -E '^\(pass\)' "$W/log/$2.txt" | grep -cF -- "$3"); nf=$(grep -E '^\(fail\)' "$W/log/$2.txt" | grep -cF -- "$3"); rule "$1" "passes ($2: $3)" "$np pass, $nf fail" test "$np" -ge 1 -a "$nf" = 0; }
+named "C1 one ledger item bound per run: a used item, a cap unlike approvals/ and an unpinned TB2 split are refused" l1-host "prepare and host-up refuse a used item"
+named "C2 the pilot: every planned cell once in the seeded order on the bound run" l1-host "pilot: host-up reserves the host's hours first"
+named "C3 F1's parts in order; a cap stop ends the item and refuses the next part and the relaunch" l1-host "f1: a part launched out of order is refused"
+named "C4 a part's controller killed: the one relaunch runs only the cells that never started" l1-host "a lost controller: host-down is refused"
+named "C5 a part's VM killed: a vm_death row, the one relaunch, and a second relaunch refused" l1-host "the relaunch evidence: a part VM that dies mid-part"
+named "C6 the host killed mid-part: recover rebuilds the ledger, then the relaunch" l1-host "Amendment C's dry run: the host dies mid-part"
+named "C7 U1's lost-evidence cap-stop rule (the Captain's first bullet)" l1-host "within one session cap of its cap, so relaunch is refused"
+named "C8 the same rule after a lost host, with the records pulled" l1-host "recover after the host dies runs the ledger check even when it pulls"
+named "C9 rebuilt sessions count as open at once in recover's cap-stop check" l1-host "recover counts every rebuilt session as open at once"
+named "C10 an unknown part VM: recover destroys nothing until the stray check clears" l1-host "with none the part VM is unknown"
+named "C11 an exit-7 part when the host is lost is salvaged by recover" l1-host "a part launch.sh kept at exit 7 when the host is lost"
+named "C12 B1: exit 4 with no session record is a lost ledger service, and the relaunch runs every cell" l1-host "exit 4 with no session record for the part"
+named "C13 B1, first guard: the exit-4 relaunch is the part's one relaunch" l1-host "an exit-4 relaunch is the part's one relaunch"
+named "C14 B1, second guard: exit 4 with a session record takes the lost-evidence path" l1-host "exit 4 fails closed"
+named "C15 B1: exit 4 relaunches even within one session cap, since no trial started" l1-host "exit 4 with no session record relaunches even when"
+named "C16 B1 after a lost host: recover's NEXT is host-up, then the one relaunch" l1-host "ended at vm-run.sh's exit 4 and no session record"
+named "C17 A1: the holdback at the \$700 crew line" l1-ceiling "holdback"
+named "C18 the TB2 twin's tasks are admitted by prepare-run" l1-launch "TB2 twin"
+named "C19 the task-image hook log" vm-run "task-hooks.sh (L1 Amendment C)"
+named "C20 procedure (a)" l1-audit "procedure (a)"
+named "C21 procedure (b)" l1-audit "procedure (b)"
+
+echo; echo "## Part D: direct drives"
+D=$W/d/ceil && mkdir -p "$D"
+(cd "$E" && bun -e '
+const fs = require("node:fs"), dir = process.argv[1];
+const { Ledger } = await import("./quick/laneb/runner/ledger.ts");
+const crew = { as_of: "2026-11-05", captain_credits: 0, threads: [["GEVA-254", 20640], ["GEVA-258", 34970], ["GEVA-268", 64810], ["GEVA-269", 73540], ["GEVA-274", 73360], ["GEVA-278", 40390], ["GEVA-279", 61970], ["GEVA-290", 40000], ["GEVA-294", 39320]].map(([code, credits]) => ({ code, line: "crew", credits, tokens: credits * 2800, token_stop: null, status: "done" })) };
+fs.writeFileSync(dir + "/crew.json", JSON.stringify(crew));
+const plan = (s, sol) => ({ items: [{ item: "pilot-opus", cap_usd: 80, status: s }, { item: "f1-opus", cap_usd: 680, status: s }, { item: "tb2-opus", cap_usd: 180, status: s }, ...sol], leftover: { sol: "pending", particle: "pending" } });
+fs.writeFileSync(dir + "/plan-start.json", JSON.stringify(plan("planned", [])));
+fs.writeFileSync(dir + "/plan-sol-pilot.json", JSON.stringify(plan("done", [{ item: "pilot-sol", cap_usd: 100, status: "planned" }])));
+fs.writeFileSync(dir + "/plan-sol-both.json", JSON.stringify(plan("done", [{ item: "pilot-sol", cap_usd: 100, status: "planned" }, { item: "f1-sol", cap_usd: 730, status: "planned" }])));
+new Ledger(dir + "/start.jsonl", "pilot-opus").approve(80, { approved_by: "dry run" });
+for (const [item, cap] of [["pilot-opus", 80], ["f1-opus", 680], ["tb2-opus", 180]]) { const l = new Ledger(dir + "/" + item + ".jsonl", item); l.approve(cap, { approved_by: "dry run" }); l.reserve(item + "-all", cap * 1e6); l.settle(item + "-all", cap * 1e6); }' "$D") > "$W/log/ceil-setup.txt" 2>&1
+C=$L/l1/ceiling.ts
+bun "$C" check --ledger "$D/start.jsonl" --crew "$D/crew.json" --plan "$D/plan-start.json" --launch pilot-opus > "$W/log/ceil-1.txt" 2>&1; c1=$?
+rule "D1 A1: the pilot's check at the \$700 crew line with crew at \$449: holdback \$321 (crew \$251, Captain \$40, run work \$30)" "exit 0, CEILING PASS, holdback \$321.00 = crew \$251.00" "exit $c1, $(head -1 "$W/log/ceil-1.txt" | cut -c1-140); $(grep -o 'holdback [^(]*' "$W/log/ceil-1.txt")" sh -c "test $c1 = 0 && grep -q 'holdback .321.00 = crew .251.00' '$W/log/ceil-1.txt'"
+bun "$C" check --ledger "$D/pilot-opus.jsonl" --ledger "$D/f1-opus.jsonl" --ledger "$D/tb2-opus.jsonl" --crew "$D/crew.json" --plan "$D/plan-sol-pilot.json" --launch pilot-sol > "$W/log/ceil-2.txt" 2>&1; c2=$?
+rule "D2 Opus items settled at their caps, Sol's pilot alone planned: passes" "exit 0, CEILING PASS" "exit $c2, $(head -1 "$W/log/ceil-2.txt" | cut -c1-160)" test "$c2" = 0
+bun "$C" check --ledger "$D/pilot-opus.jsonl" --ledger "$D/f1-opus.jsonl" --ledger "$D/tb2-opus.jsonl" --crew "$D/crew.json" --plan "$D/plan-sol-both.json" --launch pilot-sol > "$W/log/ceil-3.txt" 2>&1; c3=$?
+rule "D3 with F1-Sol's \$730 planned as well, the Sol pilot is refused" "exit 1, CEILING REFUSE" "exit $c3, $(head -1 "$W/log/ceil-3.txt" | cut -c1-160)" sh -c "test $c3 = 1 && grep -q 'CEILING REFUSE' '$W/log/ceil-3.txt'"
+LD=$W/d/dead.jsonl
+lg() { bun "$L/runner/ledger.ts" "$@"; }
+(cd "$E" && bun -e 'const { Ledger } = await import("./quick/laneb/runner/ledger.ts"); new Ledger(process.argv[1], "f1-opus").approve(18, { approved_by: "dry run" });' "$LD")
+for x in "f1-1-vm 2.40" "f1-1-s1 5" "f1-1-s2 5"; do set -- $x; lg reserve --path "$LD" --item f1-opus --id "$1" --usd "$2" > /dev/null; done
+lg settle --path "$LD" --item f1-opus --id f1-1-vm --usd 2.40 --detail "the dead part VM's block" > /dev/null
+lg reserve --path "$LD" --item f1-opus --id f1-1-relaunch-vm --usd 2.40 > /dev/null
+lg reserve --path "$LD" --item f1-opus --id f1-1-relaunch-s1 --usd 5 > "$W/log/dead-refused.txt"; r1=$?
+rule "D4 the Captain's second bullet: the dead VM's open reserves stay open through the relaunch, which fails closed (cap \$18; without them the session would fit)" "a \$5 relaunch session past the cap is refused, exit 3" "exit $r1, $(cut -c1-120 "$W/log/dead-refused.txt")" test "$r1" = 3
+lg settle --path "$LD" --item f1-opus --id f1-1-relaunch-vm --usd 2.40 > /dev/null
+OPEN1=$(lg open --path "$LD" --item f1-opus | paste -sd,)
+for id in f1-1-s1 f1-1-s2; do lg settle --path "$LD" --item f1-opus --id $id --usd 5 --detail "dead part VM f1-1-vm, settled at full after the relaunch" > /dev/null; done
+OPEN2=$(lg open --path "$LD" --item f1-opus | paste -sd,) ST=$(lg status --path "$LD" --item f1-opus)
+rule "D5 after the relaunch ends, they are settled at full on the item's ledger, before the next part's ceiling check" "open f1-1-s1,f1-1-s2, then none; settled \$14.80" "open $OPEN1, then '$OPEN2'; $ST" sh -c "test '$OPEN1' = 'f1-1-s1,f1-1-s2' -a -z '$OPEN2' && echo '$ST' | grep -q 'settled_usd.:14.8'"
+H=$W/d/hooks && mkdir -p "$H/bin" "$H/run/tasks"
+printf '#!/usr/bin/env bash\n[ "$1" = docker ] && [ "$2" = -c ] && exec bash -c "$3"\nexit 2\n' > "$H/bin/sg" && chmod 755 "$H/bin/sg"
+docker pull -q busybox:1.37 > "$W/log/busybox.txt" 2>&1
+printf 'FROM busybox:1.37\nRUN mkdir -p /testbed/.claude && echo %s > /testbed/.claude/settings.json\nWORKDIR /testbed\n' "'{\"hooks\":{\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"echo hi\"}]}]}}'" | docker build -q -t laneb-dryrun-hook:1 - > /dev/null 2>&1
+printf 'FROM busybox:1.37\nRUN mkdir -p /testbed/.claude && echo %s > /testbed/.claude/settings.json\nWORKDIR /testbed\n' "'{\"hooks\":{\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"true\"}]}]}}'" | docker build -q -t laneb-dryrun-clean:1 - > /dev/null 2>&1
+docker rmi laneb-dryrun-missing:1 > /dev/null 2>&1
+for t in hook clean missing ctx; do mkdir -p "$H/run/tasks/t-$t/environment"; done
+printf 'FROM laneb-dryrun-hook:1\n' > "$H/run/tasks/t-hook/environment/Dockerfile"
+printf 'FROM laneb-dryrun-clean:1\nWORKDIR /testbed\n' > "$H/run/tasks/t-clean/environment/Dockerfile"
+printf 'FROM laneb-dryrun-missing:1\n' > "$H/run/tasks/t-missing/environment/Dockerfile"
+printf 'FROM laneb-dryrun-clean:1\nCOPY repo /testbed\n' > "$H/run/tasks/t-ctx/environment/Dockerfile"
+mkdir -p "$H/run/tasks/t-ctx/environment/repo/.claude" && echo '{"hooks":{"UserPromptSubmit":[]}}' > "$H/run/tasks/t-ctx/environment/repo/.claude/settings.local.json"
+PATH="$H/bin:$PATH" bash "$L/runner/task-hooks.sh" "$H/run" > "$W/log/task-hooks.tsv" 2> "$W/log/task-hooks.err"; th=$?
+HK=$(awk -F'\t' 'NR > 1 { print $1 "=" $4 }' "$W/log/task-hooks.tsv" | paste -sd' ')
+rule "D6 task-hooks.sh against real images: a work tree hook and a build-context hook read yes, a Stop hook no, an image never pulled unknown" "exit 0, t-clean=no t-ctx=yes t-hook=yes t-missing=unknown" "exit $th, $HK" test "$th" = 0 -a "$HK" = "t-clean=no t-ctx=yes t-hook=yes t-missing=unknown"
+GONE=$(docker image inspect laneb-dryrun-missing:1 > /dev/null 2>&1 && echo present || echo absent)
+rule "D7 the scan pulls nothing, and t-hook's workdir comes from the image" "absent; /testbed /testbed/.claude/settings.json" "$GONE; $(awk -F'\t' '$1 == "t-hook" { print $3 " " $5 }' "$W/log/task-hooks.tsv")" sh -c "test $GONE = absent && grep -qP '^t-hook\tlaneb-dryrun-hook:1\t/testbed\tyes\t/testbed/.claude/settings.json$' '$W/log/task-hooks.tsv'"
+A=$W/d/audit && mkdir -p "$A"
+LINE=$(awk 'length($0) > 60' "$W/d/after-SKILL.md" | sed -n 3p)
+(cd "$E" && bun -e '
+const fs = require("node:fs"), [dir, line] = process.argv.slice(1);
+let n = 0;
+const bash = (command, out) => { const id = "toolu_" + ++n; return [{ type: "AssistantMessage", content: [{ id, name: "Bash", input: { command } }] }, { type: "UserMessage", content: [{ tool_use_id: id, content: out, is_error: false }] }]; };
+const LW = "echo ~/.claude/skills/investigate/SKILL.md; ls | xargs wc -l";
+const trials = { "n-stands": ["none", bash("cat ~/.claude/skills/investigate/SKILL.md", "---\n" + line + "\n")], "n-overturned": ["none", bash("cat ~/.gstack/config.yaml 2>/dev/null || echo none", "none")], "n-added": ["none", bash(LW, "  3 a.py\n" + line)], "n-quiet": ["none", bash(LW, "  3 total")], "a-gstack": ["after-u", bash("cat ~/.claude/skills/investigate/SKILL.md", line)] };
+for (const [t, [arm, calls]] of Object.entries(trials)) {
+  fs.mkdirSync(dir + "/job/" + t + "/evaluator", { recursive: true });
+  fs.writeFileSync(dir + "/job/" + t + "/config.json", JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm } } }));
+  fs.writeFileSync(dir + "/job/" + t + "/evaluator/sdk-messages.jsonl", [{ type: "SystemMessage", subtype: "init", init: { cwd: "/testbed" } }, ...calls].map((r) => JSON.stringify(r)).join("\n") + "\n");
+}
+const { row } = await import("./quick/laneb/tests/fixtures/l1/synthetic.ts");
+const rows = [row("opus", "f1", "none", "t1", { trial: "n-stands", outcome: "contaminated" }), row("opus", "f1", "none", "t2", { trial: "n-overturned", outcome: "contaminated" }), row("opus", "f1", "none", "t3", { trial: "n-added", outcome: "graded" }), row("opus", "f1", "none", "t4", { trial: "n-quiet", outcome: "graded" })];
+fs.writeFileSync(dir + "/sessions.jsonl", rows.map((r) => JSON.stringify(r)).join("\n") + "\n");' "$A" "$LINE")
+bun "$L/l1/audit.ts" xargs "$A/job" > "$W/log/xargs.txt" 2>&1; xa=$?
+rule "D8 procedure (a) prints each call the line-wide rule flags and the scoped rule does not" "exit 0, line-wide only 2 calls in 2 sessions (n-added, n-quiet), scoped only 0" "exit $xa, $(tail -1 "$W/log/xargs.txt")" sh -c "test $xa = 0 && grep -q 'line-wide only 2 calls in 2 sessions; scoped only 0 calls' '$W/log/xargs.txt' && test \$(grep -c '^line-wide only' '$W/log/xargs.txt') = 2"
+bun "$L/l1/audit.ts" contamination "$ARMS" "$A/job" > "$A/decisions.tsv" 2> "$W/log/contamination.err"; ca=$?
+DEC=$(awk -F'\t' 'NR > 1 && !/^#/ { print $1 "=" $2 }' "$A/decisions.tsv" | paste -sd' ')
+rule "D9 procedure (b) against the real arm tars: a real read of a gstack file stands, a mention is overturned, a line-wide-only real read is added" "exit 0, n-added=added n-overturned=overturned n-stands=stands" "exit $ca, $DEC; $(tail -1 "$A/decisions.tsv")" test "$ca" = 0 -a "$DEC" = "n-added=added n-overturned=overturned n-stands=stands"
+bun "$L/l1/audit.ts" apply "$A/decisions.tsv" "$A/sessions.jsonl" "$A/sessions-audited.jsonl" > "$W/log/apply.txt" 2>&1; aa=$?
+AP=$(jq -r '.trial + "=" + .outcome' "$A/sessions-audited.jsonl" 2>/dev/null | paste -sd' ')
+rule "D10 apply rewrites the table: overturned back to graded, added dropped, the rest as they were" "exit 0, n-stands=contaminated n-overturned=graded n-added=contaminated n-quiet=graded" "exit $aa, $AP; $(cat "$W/log/apply.txt")" test "$aa" = 0 -a "$AP" = "n-stands=contaminated n-overturned=graded n-added=contaminated n-quiet=graded"
+bun "$L/l1/audit.ts" contamination "$ARMS" "$RJ" > "$W/log/realcli-decisions.tsv" 2>&1; bun "$L/l1/audit.ts" xargs "$RJ" > "$W/log/realcli-xargs.txt" 2>&1
+rule "D11 both procedures over the real-CLI none session" "no decision; no disagreement" "$(tail -1 "$W/log/realcli-decisions.tsv" | cut -c1-140); $(tail -1 "$W/log/realcli-xargs.txt" | cut -c1-140)" sh -c "grep -q 'drops 0: stands 0, overturned 0; added 0' '$W/log/realcli-decisions.tsv' && grep -q '1 none sessions.*line-wide only 0 calls in 0 sessions; scoped only 0' '$W/log/realcli-xargs.txt'"
+docker rmi -f laneb-dryrun-hook:1 laneb-dryrun-clean:1 > /dev/null 2>&1
+
+echo
+echo "rules: $rules, failed: $fails"
+[ "$fails" = 0 ] && echo "DRYRUN: ok" || echo "DRYRUN: fail"
+[ "$fails" = 0 ]

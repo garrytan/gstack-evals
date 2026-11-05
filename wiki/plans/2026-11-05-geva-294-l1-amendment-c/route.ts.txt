@@ -1,0 +1,54 @@
+// Route each built prompt the way the after arm does at run time, keylessly.
+// 1. The registered UserPromptSubmit hook: the arm's own settings.json command, run with HOME at the extracted arm and
+//    a Claude Code-shaped payload on stdin; its stdout additionalContext line is the route.
+// 2. Cross-check: gstack-skill-route --explain <prompt> --json from a clean gstack clone at the pin, same HOME.
+// Usage: bun route.ts <prompts dir> <arm home> <gstack clone> <out dir>
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+const [promptsDir, armHome, clone, out] = Bun.argv.slice(2);
+const settings = JSON.parse(readFileSync(armHome + "/.claude/settings.json", "utf8"));
+const reg = settings.hooks.UserPromptSubmit.flatMap((e: any) => e.hooks).map((h: any) => h.command);
+if (reg.length !== 1) throw new Error("expected one UserPromptSubmit hook, got " + JSON.stringify(reg));
+const hookCmd = reg[0].replace(/^\/root\//, armHome + "/");
+const env = { PATH: process.env.PATH!, HOME: armHome, LANG: "C.UTF-8" };
+const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
+const rows: string[] = [], detail: string[] = [], disagree: string[] = [];
+const counts: Record<string, Record<string, number>> = {};
+for (const inst of ["f", "tb2"]) {
+  counts[inst] = {};
+  for (const file of readdirSync(promptsDir + "/" + inst).filter((f) => f.endsWith(".txt")).sort()) {
+    const task = file.slice(0, -4);
+    const bytes = readFileSync(promptsDir + "/" + inst + "/" + file);
+    const prompt = bytes.toString("utf8");
+    const payload = JSON.stringify({ session_id: "routes-" + task, transcript_path: "/tmp/routes-" + task + ".jsonl", cwd: inst === "f" ? "/testbed" : "/app", permission_mode: "bypassPermissions", hook_event_name: "UserPromptSubmit", prompt });
+    const t0 = performance.now();
+    const h = Bun.spawnSync([hookCmd], { stdin: Buffer.from(payload), env });
+    const ms = Math.round(performance.now() - t0);
+    const hs = h.stdout.toString();
+    const hookLine: string | null = hs.trim() ? JSON.parse(hs).hookSpecificOutput.additionalContext : null;
+    let cli: any = null, cliErr = "";
+    try {
+      const c = Bun.spawnSync([clone + "/bin/gstack-skill-route", "--explain", prompt, "--json"], { env });
+      if (c.exitCode === 0) cli = JSON.parse(c.stdout.toString()); else cliErr = "exit " + c.exitCode + " " + c.stderr.toString().slice(0, 120);
+    } catch (e) { cliErr = String(e).slice(0, 120); }
+    const routed: string = cli?.route ?? "none";
+    const top = cli?.candidates?.[0];
+    const score = cli?.route ? top.score : (top?.score ?? 0);
+    const agree = cli ? (hookLine ?? null) === (cli.hint ?? null) : false;
+    if (!agree) disagree.push([inst, task, JSON.stringify(hookLine), cli ? JSON.stringify(cli.hint) : cliErr].join("\t"));
+    const skill = cli ? routed : hookLine ? "hook-only:" + hookLine.slice(0, 40) : "none";
+    counts[inst][skill] = (counts[inst][skill] ?? 0) + 1;
+    rows.push([inst, task, sha(bytes), skill, String(score)].join("\t"));
+    detail.push([inst, task, sha(bytes), skill, String(score), cli?.reason ?? "", top ? top.skill + ":" + top.score + ":" + top.trigger : "-", String(prompt.length), String(ms), String(h.exitCode), hookLine ?? "", agree ? "agree" : "DISAGREE"].join("\t"));
+  }
+}
+writeFileSync(out + "/routes.tsv", "instrument\ttask\tprompt_sha256\troute\tscore\n" + rows.join("\n") + "\n");
+writeFileSync(out + "/routes-detail.tsv", "instrument\ttask\tprompt_sha256\troute\tscore\tno_route_reason\ttop_candidate\tjs_length\thook_ms\thook_exit\thook_additionalContext\thook_vs_cli\n" + detail.join("\n") + "\n");
+writeFileSync(out + "/disagreements.tsv", disagree.join("\n") + (disagree.length ? "\n" : ""));
+const stratum = rows.map((r) => r.split("\t")).filter((r) => r[0] === "f" && r[3] === "investigate").map((r) => r[1]).sort();
+const st = stratum.map((t) => t + "\n").join("");
+writeFileSync(out + "/routed-stratum.txt", st);
+console.log("hook command: " + reg[0]);
+for (const inst of Object.keys(counts)) console.log("counts " + inst + ": " + Object.entries(counts[inst]).sort().map(([k, v]) => k + "=" + v).join(", "));
+console.log("hook vs gstack-skill-route disagreements: " + disagree.length);
+console.log("routed stratum (F to investigate): " + stratum.length + " tasks, sha256 " + sha(st));
