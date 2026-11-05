@@ -12,7 +12,7 @@
 # subagent message is not read), never a wrong file, that the told arm's contract Stop hook lets a DEBUG REPORT followed by the closing block
 # stop and refuses the unmet stop while the block before its continuation still counts, that Harbor keeps report.json and the
 # oracle's model.patch, and that Harbor runs a job that lists a task twice in order.json's order. It copies each trial's
-# sdk-messages.jsonl to <work dir>/capture/.
+# sdk-messages.jsonl to <work dir>/capture/; tests/fixtures/r3c holds one trial of each task and arm from a run of it.
 # No provider key exists in any process: ~/.laneb-keys holds a placeholder for the run and is removed after. The task network
 # is public, as in every local e2e, because a Capy machine's kernel can't run Harbor's egress sidecar.
 # Needs docker, harbor (uv tool install at vm-bootstrap.sh's pin, with the pinned Agent SDK), bun, jq and python3.

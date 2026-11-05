@@ -283,8 +283,11 @@ describe("the start rule and the projections", () => {
     expect(g.record.told_usd).toBeCloseTo(0.5 * 0.685 / 0.43);
     expect(g.record.vm_usd).toBeCloseTo(120 * 0.6 * (0.0306 + 0.0537));
     expect(g.over).toBe(false);
-    const bad = gridProjection({ rows: ledger(0), capUsd: 750, next: "grid-1", n: 12, remainingReps: 10, admitNoneUsd: Number.NaN, done: [], doneVmUsd: 0 });
-    expect(bad.over).toBe(true);
+    for (const admitNoneUsd of [Number.NaN, null as unknown as number]) {
+      const bad = gridProjection({ rows: ledger(0), capUsd: 750, next: "grid-1", n: 12, remainingReps: 10, admitNoneUsd, done: [], doneVmUsd: 0 });
+      expect(bad.over).toBe(true);
+      expect(bad.line).toContain("the run stops before grid-1");
+    }
     const later = gridProjection({ rows: ledger(400), capUsd: 750, next: "grid-2", n: 12, remainingReps: 6, admitNoneUsd: 0.5, done: [rt({ task: "a", arm: "none", spent: 2 }), rt({ task: "a", arm: "gstack", spent: null })], doneVmUsd: 1 });
     expect([later.record.none_usd, later.record.told_usd, later.record.vm_usd]).toEqual([2, 12, 72]);
   });

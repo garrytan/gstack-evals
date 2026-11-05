@@ -95,6 +95,7 @@ const part = (name: string): Part => ({ name, job: RUN.item + "-" + name, arm: n
 const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const writeJson = (p: string, v: unknown) => writeFileSync(p, JSON.stringify(v, null, 2) + "\n");
+const fmt = (x: unknown, d: number) => (typeof x === "number" && Number.isFinite(x) ? x.toFixed(d) : "n/a");
 const draw = <T>(seed: number, items: T[]): T[] => { const r = rng(seed), left = [...items], out: T[] = []; while (left.length) out.push(left.splice(Math.floor(r() * left.length), 1)[0]!); return out; };
 
 // cal-1's split: every candidate repeated by its tier's trial count (calibrationPlan's order), shuffled with seed 20261112,
@@ -137,8 +138,8 @@ export function gridProjection(o: GridState) {
   const told = o.done.length ? meanCost(o.done.filter((t) => t.arm === TOLD)) ?? RUN.allowanceUsd : o.admitNoneUsd * c.toldOverNone;
   const pairs = o.n * o.remainingReps;
   const vm = o.done.length ? pairs * 2 * (o.doneVmUsd / o.done.length) : pairs * R3C.vmUsdPerHour * (c.vmHoursNone + c.vmHoursTold);
-  const usd = settled + pairs * (none + told) + vm + R3C.reserveUsd, over = !Number.isFinite(usd) || usd > o.capUsd + 1e-9;
-  const line = "before " + o.next + ": projection $" + usd.toFixed(2) + " (settled $" + settled.toFixed(2) + "; " + pairs + " task-replicate pairs at $" + none.toFixed(4) + " none and $" + told.toFixed(4) + " told, VM $" + vm.toFixed(2) + "; reserve headroom $" + R3C.reserveUsd.toFixed(2) + ") " + (over ? "passes" : "fits") + " " + RUN.item + "'s $" + o.capUsd + " cap" + (over ? "; the run stops before " + o.next + " and the Captain decides a raise" : "; " + o.next + " starts");
+  const usd = settled + pairs * (none + told) + vm + R3C.reserveUsd, over = ![none, told, vm, usd].every((x) => typeof x === "number" && Number.isFinite(x)) || usd > o.capUsd + 1e-9;
+  const line = "before " + o.next + ": projection $" + fmt(usd, 2) + " (settled $" + settled.toFixed(2) + "; " + pairs + " task-replicate pairs at $" + fmt(none, 4) + " none and $" + fmt(told, 4) + " told, VM $" + fmt(vm, 2) + "; reserve headroom $" + R3C.reserveUsd.toFixed(2) + ") " + (over ? "passes" : "fits") + " " + RUN.item + "'s $" + o.capUsd + " cap" + (over ? "; the run stops before " + o.next + " and the Captain decides a raise" : "; " + o.next + " starts");
   return { over, line, record: { next: o.next, projection_usd: usd, cap_usd: o.capUsd, settled_usd: settled, remaining_pairs: pairs, none_usd: none, told_usd: told, vm_usd: vm, reserve_usd: R3C.reserveUsd, over } };
 }
 
