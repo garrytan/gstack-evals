@@ -1211,9 +1211,9 @@ Warning. Owner: U4.
 
 ### SESSIONS_OPEN
 
-ledger settle or ledger reconcile closed a driver's lease, but could not write a close line for the sessions its run directory's sessions.jsonl still shows open on it: that file is not on this machine, or a settle ran where the local ledger does not hold the lease. The close is in the record and nothing about the money changes, but unknownFromRun refuses admission item 5 for the run while a session has no close line.
+ledger settle or ledger reconcile closed a driver's lease, but could not write a close line for the sessions its run directory's sessions.jsonl still shows open on it: that file is not on this machine, a settle ran where the local ledger does not hold the lease, or settle --from imported the close, which carries no per-session figures. The close is in the record and nothing about the money changes, but unknownFromRun refuses admission item 5 for the run while a session has no close line.
 
-Fix: Run the same command again on the envelope host that holds the run directory and the lease's local ledger. A retry answers the close already in the record and writes only the missing close lines. Never edit sessions.jsonl by hand.
+Fix: Run the same command again on the envelope host that holds the run directory and the lease's local ledger; after settle --from, run ledger settle --lease &lt;lease> there instead. A retry answers the close already in the record and writes only the missing close lines. Never edit sessions.jsonl by hand.
 
 Warning. Owner: U4.
 
