@@ -80,6 +80,8 @@ export interface CloseFile extends Slot {
   unknown_calls: number;
   usage: TokenUsage | null;
   closed_at: string;
+  /** Set when the lease closed on a cap stop: the stop's scope. No new lease is admitted on the item after it. */
+  cap_stop?: string;
   /** Reconciled only: the owner's words and the provider usage export they settled from. */
   quotes?: Quote[];
   source?: string;
@@ -211,7 +213,7 @@ export function isRecordFile(f: unknown): f is RecordFile {
     return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0 && (r.action === "init" ? r.admission === "required" || r.admission === "warn" : r.admission === undefined) && member;
   }
   if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && isTime(r.expires_at) && (r.holder === undefined || isHolder(r.holder));
-  return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string";
+  return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string" && (r.cap_stop === undefined || (typeof r.cap_stop === "string" && r.cap_stop.length > 0));
 }
 
 function parseFile(path: string, text: string): RecordFile {
@@ -273,6 +275,12 @@ export function readItem(record: string, item: string): ItemState {
     run_id: leases[0]?.lease.run_id ?? null,
     open: leases.find((l) => l.close === null)?.lease ?? null,
   };
+}
+
+/** A cap stop is a ledger fact: once a close on the item records one, no new lease on it is admitted, because a cap stop is not retried. */
+export function capStopRefusal(state: ItemState): LedgerError | null {
+  const stop = state.leases.find((l) => l.close?.cap_stop)?.close;
+  return stop ? new LedgerError("CAP_STOP", "line item " + state.item + " cap-stopped in run " + state.run_id + " when lease " + stop.lease_id + " closed at " + stop.closed_at + " (scope " + stop.cap_stop + "); a cap stop is not retried, so no new lease is admitted on it") : null;
 }
 
 export function listItems(record: string): string[] {

@@ -206,6 +206,18 @@ try { openLease(record, null, { item, run_id: "run-" + item, amount_micros: 1200
     expect([inner, outer, checks]).toEqual(["ok", "E_USAGE", 1]);
     expect(envelopeStatus(w.record, "wave1").total).toMatchObject({ open_micros: 100 * D, pending_micros: 0 });
   });
+
+  test("admitLease refuses a lease on an item whose record holds a cap-stop close, before any entry is claimed", () => {
+    const w = world();
+    stage(w.record, "pe-stop", [PE], 100 * D);
+    const first = lease(w.record, w.local, "pe-stop", 40 * D);
+    settleLease(w.record, w.local, first.lease_id, undefined, "all: none's cap stop ends both skills incomplete");
+    const now = new Date();
+    const before = envelopeStatus(w.record, "wave1").total;
+    const file: LeaseFile = { ...leaseFile("pe-stop", 10 * D, new Date(now.getTime() + 3_600_000), now), seq: 2, lease_id: "pe-stop.0002.abcdef" };
+    expect(codeOf(() => admitLease(w.record, readItem(w.record, "pe-stop"), file))).toBe("CAP_STOP");
+    expect(envelopeStatus(w.record, "wave1").total).toEqual(before);
+  });
 });
 
 describe("settling and crashes", () => {

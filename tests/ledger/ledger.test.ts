@@ -466,4 +466,17 @@ describe("lease holders (GST-1381)", () => {
     expect(readItem(record, "e").leases).toHaveLength(0);
     local.close();
   });
+
+  test("a close that records a cap stop refuses every new lease on its item with CAP_STOP, and a close without one still reads", () => {
+    const { record, local } = holderWorld(["capped", "plain"]);
+    const first = openLease(record, local, { item: "capped", run_id: "run-a", amount_micros: 4 * DOLLAR });
+    expect(settleLease(record, local, first.lease_id, undefined, "told only").cap_stop).toBe("told only");
+    expect(readItem(record, "capped").leases[0]!.close?.cap_stop).toBe("told only");
+    expect(codeOf(() => openLease(record, local, { item: "capped", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+    expect(readItem(record, "capped").leases).toHaveLength(1);
+    const plain = openLease(record, local, { item: "plain", run_id: "run-a", amount_micros: 4 * DOLLAR });
+    expect(settleLease(record, local, plain.lease_id)).not.toHaveProperty("cap_stop");
+    expect(openLease(record, local, { item: "plain", run_id: "run-a", amount_micros: DOLLAR }).lease_id).toStartWith("plain.0002.");
+    local.close();
+  });
 });

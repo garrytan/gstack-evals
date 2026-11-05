@@ -216,8 +216,8 @@ describe("the outcome-skills session driver", () => {
   test("relaunch from the bound run directory recovers a lease its crashed launch left open, never one that names no holder, and only from there (Capy 01M6N3WWX2)", async () => {
     const w = world({ "i-none": 229, "i-tg": 60 });
     mkdirSync(w.dir, { recursive: true });
-    writeFileSync(join(w.dir, "sessions.jsonl"), "");
     const crashed = { dir: realpathSync(w.dir), nonce: "0123456789abcdef" };
+    writeFileSync(join(w.dir, "sessions.jsonl"), JSON.stringify({ run_id: "r1", event: "launch", nonce: crashed.nonce }) + "\n");
     const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", holder: crashed, requireAdmission: () => null });
     const tg = openLease(w.record, w.local, { item: "i-tg", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
     const elsewhere = await refused(w.serve([NONE], { dir: join(w.root, "runB") }));
@@ -230,6 +230,21 @@ describe("the outcome-skills session driver", () => {
     expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
     expect(readItem(w.record, "i-tg").open?.lease_id).toBe(tg.lease_id);
     expect(await served.stop()).toBe(0);
+  });
+
+  test("recovery writes a cap stop its crashed launch recorded into the lease's close, so a later relaunch with sessions.jsonl emptied is still refused", async () => {
+    const w = world({ "i-pe": 572 });
+    mkdirSync(w.dir, { recursive: true });
+    const crashed = { dir: realpathSync(w.dir), nonce: "0123456789abcdef" };
+    const left = openLease(w.record, w.local, { item: "i-pe", run_id: "r1", machine_id: "m1", holder: crashed, requireAdmission: () => null });
+    const file = join(w.dir, "sessions.jsonl");
+    writeFileSync(file, [{ run_id: "r1", event: "launch", nonce: crashed.nonce }, { at: "2026-11-05T00:00:00.000Z", run_id: "r1", event: "refuse", code: "CAP_STOP", item: "i-pe", scope: "plan-eng-review:told only" }].map((l) => JSON.stringify(l) + "\n").join(""));
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    expect(w.logs.some((l) => l.startsWith("STAGE_RECOVERED item=i-pe lease=" + left.lease_id))).toBe(true);
+    expect(readItem(w.record, "i-pe").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+    writeFileSync(file, "");
+    expect(["CAP_STOP", "E_USAGE"]).toContain(await codeOf(w.serve([PE])));
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
   });
 
   test("a second driver on the same run directory is refused while the first serves, and launches once it stops", async () => {
@@ -382,6 +397,16 @@ describe("the outcome-skills session driver", () => {
     for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).leases).toHaveLength(1);
   });
 
+  test("a none cap stop is read from the ledger: with sessions.jsonl cut back to its launch and open lines, a relaunch of a told stage is refused before any lease", async () => {
+    const w = world({ "i-none": 20, "i-pe": 572 });
+    await capStopped(w, [NONE], "none");
+    expect(readItem(w.record, "i-none").leases[0]!.close?.cap_stop).toStartWith("all");
+    const file = join(w.dir, "sessions.jsonl");
+    writeFileSync(file, readFileSync(file, "utf8").split("\n").filter((l) => /"event":"(launch|open)"/.test(l)).join("\n") + "\n");
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(0);
+  });
+
   test("a stage that ended lease_expired reopens on a relaunch from the same run directory", async () => {
     const w = world({ "i-none": 229 });
     const served = await w.serve([NONE], { ttl_ms: 3_600_000 });
@@ -435,5 +460,52 @@ describe("the outcome-skills session driver", () => {
   test("a launch whose approval record is missing is refused with E_LEDGER_MISSING before it takes any lock (Capy 01M6N9A46QRD6XG1V5FRJFXDNQ)", async () => {
     const w = world({});
     expect(await codeOf(w.serve([NONE], { record: join(w.root, "absent", "record") }))).toBe("E_LEDGER_MISSING");
+  });
+
+  test("a cap stop is a ledger fact: a relaunch from the bound directory with its sessions.jsonl emptied is refused, with one lease (pass 2, targeted#1)", async () => {
+    const w = world({ "i-pe": 50 });
+    await capStopped(w, [PE], "plan-eng-review:told");
+    expect(readItem(w.record, "i-pe").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+    writeFileSync(join(w.dir, "sessions.jsonl"), "");
+    expect(["CAP_STOP", "E_USAGE"]).toContain(await codeOf(w.serve([PE])));
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+  });
+
+  test("a sessions.jsonl restored from after the launch wrote its nonce but before the cap stop is refused, with one lease (pass 2, targeted#1)", async () => {
+    const w = world({ "i-pe": 50 });
+    const served = await w.serve([PE]);
+    const open = (task: string) => post(served.control + "/sessions", body("plan-eng-review:told", task, 1));
+    const a = await open("a");
+    expect(a.status).toBe(200);
+    const snapshot = readFileSync(join(w.dir, "sessions.jsonl"), "utf8");
+    expect(snapshot).toContain('"event":"launch"');
+    const b = await open("b");
+    expect((await open("c")).status).toBe(409);
+    for (const s of [a, b]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.done).toBe(0);
+    writeFileSync(join(w.dir, "sessions.jsonl"), snapshot);
+    expect(["CAP_STOP", "E_USAGE"]).toContain(await codeOf(w.serve([PE])));
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+  });
+
+  test("a sessions.jsonl that names fewer sessions than the ledger holds reservations for is refused, and an honest relaunch from the same directory still serves", async () => {
+    const w = world({ "i-none": 229 });
+    const served = await w.serve([NONE]);
+    const snapshot = readFileSync(join(w.dir, "sessions.jsonl"), "utf8");
+    const a = await post(served.control + "/sessions", body("none", "a", 1));
+    expect((await call(a.json)).status).toBe(200);
+    await post(served.control + "/sessions/" + a.json.id + "/close", {});
+    expect(await served.stop()).toBe(0);
+    const honest = readFileSync(join(w.dir, "sessions.jsonl"), "utf8");
+    writeFileSync(join(w.dir, "sessions.jsonl"), snapshot);
+    const err = await refused(w.serve([NONE]));
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain("sessions.jsonl");
+    expect(err?.message).not.toMatch(NO_HAND);
+    expect(readItem(w.record, "i-none").leases).toHaveLength(1);
+    writeFileSync(join(w.dir, "sessions.jsonl"), honest);
+    const again = await w.serve([NONE]);
+    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
+    expect(await again.stop()).toBe(0);
   });
 });

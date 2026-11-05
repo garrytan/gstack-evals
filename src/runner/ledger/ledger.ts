@@ -11,7 +11,7 @@ import type { Lease } from "../../types.ts";
 import { admitLease, programSkills } from "./envelope.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { checkQuotes, holderBound, isHolder, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type Holder, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { capStopRefusal, checkQuotes, holderBound, isHolder, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type Holder, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_LEASE_TTL_MS = 7 * DEFAULT_LEASE_TTL_MS;
@@ -81,6 +81,8 @@ export function recordApproval(record: string, a: { action: "init" | "raise"; it
 function admit(record: string, state: ItemState, run_id: string): void {
   if (state.cap_micros === null) throw new LedgerError("E_LEDGER_MISSING", "no approved cap is on record for line item " + state.item + " in " + record + "; " + ESCALATE);
   if (state.run_id !== null && state.run_id !== run_id) throw new LedgerError("E_ITEM_BOUND", "line item " + state.item + " is bound to run " + state.run_id + ", so run " + run_id + " cannot spend from it");
+  const stop = capStopRefusal(state);
+  if (stop) throw stop;
   const open = state.open;
   if (open) {
     throw new LedgerError(
@@ -216,14 +218,16 @@ function warnOverspent(lease: LeaseFile, close: CloseFile, warn?: (code: ReasonC
 /**
  * Closes a lease from this machine's local ledger into the record. Idempotent by lease id: a retry writes the same
  * bytes. With record null, for a workflow that cannot reach the record, it only returns the close as the settle artifact.
- * A close above the lease's amount is recorded as it is, with a LEASE_OVERSPENT warning.
+ * A close above the lease's amount is recorded as it is, with a LEASE_OVERSPENT warning. cap_stop, the scope of a cap
+ * stop the lease closed on, goes into the close, so no new lease on the item is admitted after it.
  */
-export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void): CloseFile {
+export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void, cap_stop?: string): CloseFile {
   if (record !== null) {
     const { close: prior } = findLease(record, lease_id);
     if (prior && !local.getLease(lease_id)) return prior;
   }
-  const close = local.stageClose(lease_id);
+  const staged = local.stageClose(lease_id);
+  const close: CloseFile = cap_stop ? { ...staged, cap_stop } : staged;
   warnOverspent(local.getLease(lease_id)!.file, close, warn);
   if (record === null) return close;
   const result = write(record, close, "E_LEASE_UNSETTLED");

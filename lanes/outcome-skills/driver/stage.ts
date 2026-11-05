@@ -2,8 +2,10 @@
 // stage at its line item's cap (G prereg section 9), one metering-proxy slot per session, and a control plane on
 // 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. Every lease is admitted by O6's envelope through
 // openLease, and every exit path settles every lease it opened. Each lease names its holder, the run directory and the
-// launch's nonce, and a run binds to the directory of its first lease, so that directory's sessions.jsonl holds every cap
-// stop and trial count of the run.
+// launch's nonce, and a run binds to the directory of its first lease, so that directory's sessions.jsonl holds the run's
+// trial counts. The ledger is the only trust root: a lease that closes on a cap stop records it in its close, after which
+// O6 admits no new lease on that item, and a launch whose sessions.jsonl does not name every launch and session meter the
+// ledger holds for the run is refused.
 import { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -222,12 +224,26 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   const rival = rivalHolder(o.record, o.run_id, dir);
   if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
   const sessionsFile = join(dir, "sessions.jsonl");
-  if (!existsSync(sessionsFile)) {
-    const bound = listItems(o.record).flatMap((item) => readItem(o.record, item).leases.filter(({ lease }) => lease.run_id === o.run_id && lease.holder?.dir === dir).map(({ lease }) => lease.lease_id));
-    if (bound.length) fail("E_USAGE", "run " + o.run_id + " is bound to " + dir + " by leases " + bound.join(", ") + ", but " + sessionsFile + " is gone, so the run's cap stops and trial counts can't be read and the run can't be served again; nothing was recovered, settled or opened. Settle any of those leases still open with gstack-evals ledger settle --lease <id> on its machine");
-    appendFileSync(sessionsFile, "");
-  }
   const record = (line: Record<string, unknown>) => appendFileSync(sessionsFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
+  const lines: Array<{ at?: string; event?: string; item?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string }> = [];
+  for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
+    try {
+      const e = JSON.parse(line);
+      if (e?.run_id === o.run_id) lines.push(e);
+    } catch {}
+  }
+  const launches = new Set(lines.flatMap((e) => (e.event === "launch" && e.nonce ? [e.nonce] : [])));
+  const meters = new Set(lines.flatMap((e) => (e.event === "open" && e.meter_id ? [e.meter_id] : [])));
+  const bound = listItems(o.record).flatMap((item) => readItem(o.record, item).leases.filter(({ lease }) => lease.run_id === o.run_id && lease.holder?.dir === dir));
+  const unaccounted = bound.flatMap(({ lease }) => (launches.has(lease.holder!.nonce) ? [...o.local.meters(lease.lease_id).keys()].filter((m) => !meters.has(m)).map((m) => lease.lease_id + " (session meter " + m + ")") : [lease.lease_id + " (launch " + lease.holder!.nonce + ")"]));
+  if (unaccounted.length) fail("E_USAGE", sessionsFile + " does not account for run " + o.run_id + "'s ledger: it names no launch or session for " + unaccounted.join(", ") + ". The ledger is the run's record, so a sessions.jsonl that is missing, emptied or restored from an earlier point can't serve the run; nothing was recovered, settled or opened");
+  const capped = new Map<string, { at: string; scope: string }>();
+  const noteStop = (item: string, stop: { at: string; scope: string }) => {
+    if (!capped.has(item)) capped.set(item, stop);
+    if (stop.scope.startsWith("all") && !capped.has("")) capped.set("", stop);
+  };
+  for (const { close } of bound) if (close?.cap_stop) noteStop(close.item, { at: close.closed_at, scope: close.cap_stop });
+  for (const e of lines) if (e.item && ((e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });
 
   const failures: string[] = [];
   for (const item of listItems(o.record)) {
@@ -239,7 +255,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         const rec = await reconcileJournal(journal, o.local);
         for (const r of rec.refused) warn(r.code as ReasonCode, "recovering lease " + lease.lease_id + ": " + r.message);
       } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
-      const close = settleLease(o.record, o.local, lease.lease_id, warn);
+      const stop = capped.get("") ?? capped.get(item);
+      const close = settleLease(o.record, o.local, lease.lease_id, warn, stop ? stop.scope || "cap_stop" : undefined);
       log("STAGE_RECOVERED item=" + item + " lease=" + lease.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " unknown_calls=" + close.unknown_calls);
     } catch (error) {
       failures.push(lease.lease_id + " (" + (error as Error).message + ")");
@@ -248,20 +265,6 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   if (failures.length) fail("E_LEASE_UNSETTLED", "recovery could not settle " + failures.join("; ") + "; nothing new was opened. Settle each with gstack-evals ledger settle --lease <id> on this machine, then launch the driver again");
 
   const at = new Date(now());
-  const capped = new Map<string, { at: string; scope: string }>();
-  for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
-    let e: { at?: string; run_id?: string; event?: string; item?: string; ended?: string; code?: string; scope?: string | null } | null;
-    try {
-      e = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (!e?.item || e.run_id !== o.run_id || !((e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) continue;
-    const stop = { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" };
-    if (!capped.has(e.item)) capped.set(e.item, stop);
-    if (stop.scope.startsWith("all") && !capped.has("")) capped.set("", stop);
-  }
-
   const plans = o.stages.map((st) => {
     const s = readItem(o.record, st.item);
     const unheld = s.leases.filter((l) => l.lease.run_id === o.run_id && l.lease.holder?.dir !== dir).map((l) => l.lease);
@@ -364,6 +367,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     }
     throw error;
   };
+  record({ event: "launch", nonce: holder.nonce });
   for (const [i, { st }] of plans.entries()) {
     try {
       const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, holder, ttl_ms: ttl, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
@@ -454,7 +458,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         s.proxy.stop();
         const rec = await reconcileJournal(s.journal, o.local);
         for (const r of rec.refused) warn(r.code as ReasonCode, "settling lease " + s.lease_id + ": " + r.message);
-        s.close = settleLease(o.record, o.local, s.lease_id, warn);
+        s.close = settleLease(o.record, o.local, s.lease_id, warn, s.ended === "cap_stop" ? s.scope || "cap_stop" : undefined);
         log("STAGE_SETTLED item=" + s.item + " arm=" + s.arm + " lease=" + s.lease_id + " spent=" + usd(s.close.spent_micros) + " unknown=" + usd(s.close.unknown_micros) + " sessions=" + s.finished + " ended=" + s.ended + (s.scope ? " scope=" + s.scope : ""));
       } catch (e) {
         s.ended = "failed";
