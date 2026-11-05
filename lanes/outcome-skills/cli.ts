@@ -24,7 +24,8 @@ Usage: gstack-evals outcome images pin --out <manifest.json> --set <name> --comm
        gstack-evals outcome images public <manifest.json>
        gstack-evals outcome images bind <manifest.json> --task <task dir> --label <label> --out <run copy>
 
-pin builds each task's image with quick/laneb's runtime layer on top, on a keyless build host, and writes the manifest.
+pin builds each task's image with quick/laneb's runtime layer on top, on a keyless build host, checks there that gold
+passes every required test and the empty change fails one, and writes the manifest.
 check runs before any session or lease, on the manifest whose sha256 the readiness post records (--sha256): every row's
 image present with its pinned id and clean by cleanRoomPreflight. public prints the committed form, digests only. bind
 writes a task's run copy whose image is the pinned one and prints image_id=, which real_agent's image_id takes beside the

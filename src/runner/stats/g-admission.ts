@@ -212,10 +212,11 @@ export function admitG(input: AdmissionInput): Admission {
 }
 
 /** Report only: one told trial's t1_outside_plan from its own phase-tagged records (sdk-messages.jsonl): true when
- * t1WritesOutsidePlan finds a write outside PLAN.md in t1, false when it finds none, and null, not read, when a message
- * record has no phase, since its turn is unknown. */
+ * t1WritesOutsidePlan finds a write outside PLAN.md in t1, false when it finds none, and null, not read, when the records
+ * hold no message record, or one has no phase, since its turn is unknown. */
 export function t1OutsidePlan(records: Record<string, any>[]): boolean | null {
-  if (records.some((r) => (r.type === "AssistantMessage" || r.type === "UserMessage") && typeof r.phase !== "string")) return null;
+  const messages = records.filter((r) => r.type === "AssistantMessage" || r.type === "UserMessage");
+  if (messages.length === 0 || messages.some((r) => typeof r.phase !== "string")) return null;
   return t1WritesOutsidePlan(records).length > 0;
 }
 

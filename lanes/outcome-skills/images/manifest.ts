@@ -1,6 +1,7 @@
 // T-G's per-task image manifest and the trial-image binding (G admission readiness; the O5 pin post's open start condition
 // 1). pin runs on a keyless build host: it builds each sealed task's image with the lane's buildImage, lays quick/laneb's
-// runtime layer on top (claude, node and bun under /usr/local/bin and /opt/laneb/bin), and writes one row per task with
+// runtime layer on top of the image id it built (claude, node and bun under /usr/local/bin and /opt/laneb/bin), checks in
+// that final image that gold passes every required test and the empty change fails one, and writes one row per task with
 // that final image's id. check runs before any session or lease, on the manifest whose sha256 the readiness post records:
 // each row's image must be present with exactly its pinned id, and cleanRoomPreflight (C1's scan and O1's second scan, by
 // image id, no network) must pass on it with the none arm's home and work dir. bind writes a task's run copy for Harbor,
@@ -15,7 +16,8 @@ import { closeSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openS
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { docker as dockerCli } from "../../real-outcome/task/docker.ts";
-import { fileDigests, readTask, walk } from "../../real-outcome/task/format.ts";
+import { fileDigests, readTask, walk, type TaskJson } from "../../real-outcome/task/format.ts";
+import { idResults, requiredTests, stopped, verifyTree } from "../../real-outcome/task/verify.ts";
 import { cleanRoomPreflight } from "../arms/clean-room.ts";
 
 export const HOME = "/root";
@@ -87,28 +89,61 @@ function valid(m: ImageManifest, path: string): ImageManifest {
 }
 
 /** The image a trial runs: the task image with quick/laneb's runtime layer on top, laid on as materializeTb2 lays it on a
- *  prebuilt image (claude, node and bun under /usr/local/bin and /opt/laneb/bin, at the end of PATH). Returns its id. */
-function withRuntime(taskTag: string): string {
+ *  prebuilt image (claude, node and bun under /usr/local/bin and /opt/laneb/bin, at the end of PATH). It builds FROM a tag
+ *  named for baseId, the id buildImage built, so a build that moves the task's shared tag meanwhile cannot change the base.
+ *  Returns the final image's id. */
+function withRuntime(baseId: string): string {
+  if (!ID.test(baseId)) fail("the task image's id is " + JSON.stringify(baseId) + ", not a sha256:<64 hex> id; the runtime layer needs the image buildImage built");
+  const base = "gstack-evals-tg-base:" + baseId.slice(7);
+  const t = dockerCli(["tag", baseId, base], { timeoutMs: 60000 });
+  if (t.status !== 0) fail("docker tag " + baseId + " " + base + " failed (exit " + t.status + "): " + t.stderr.trim().slice(-300));
   const ctx = mkdtempSync(join(tmpdir(), "tg-runtime-"));
   try {
-    writeFileSync(join(ctx, "Dockerfile"), readFileSync(join(RUNNER, "runtime-stages.Dockerfile"), "utf8") + "\nFROM " + taskTag + "\n\n" + readFileSync(join(RUNNER, "runtime-copy.Dockerfile"), "utf8"));
+    writeFileSync(join(ctx, "Dockerfile"), readFileSync(join(RUNNER, "runtime-stages.Dockerfile"), "utf8") + "\nFROM " + base + "\n\n" + readFileSync(join(RUNNER, "runtime-copy.Dockerfile"), "utf8"));
     const b = dockerCli(["build", "-q", ctx], { timeoutMs: 1800000 });
     const id = b.stdout.trim().split("\n").pop() ?? "";
-    if (b.status !== 0 || !ID.test(id)) fail("the runtime layer on " + taskTag + " did not build (exit " + b.status + "): " + b.stderr.trim().slice(-600));
+    if (b.status !== 0 || !ID.test(id)) fail("the runtime layer on " + baseId + " did not build (exit " + b.status + "): " + b.stderr.trim().slice(-600));
     return id;
   } finally {
     rmSync(ctx, { recursive: true, force: true });
   }
 }
 
-/** Builds each task's image with the lane's buildImage (keyless for upstream tasks) and the runtime layer on top, and writes
- *  the manifest, rows by label, with an exclusive create: a manifest another pin wrote meanwhile is never replaced. */
+/** Check's V1 and V6 in the image a task's trials run and are graded in, one verifier run each: gold must pass every
+ *  required test and the empty change must fail one (a decoy's gold is the empty change, and the empty-change rule does not
+ *  apply to it). A layer that flips a hidden test refuses the row, naming the test, so no trial is graded against an
+ *  oracle that does not hold in its image. */
+function verifyOracle(d: string, t: TaskJson, required: string[], image: string): void {
+  const work = mkdtempSync(join(tmpdir(), "tg-oracle-"));
+  try {
+    const tree = (label: string, patch: string) => verifyTree({ taskDir: d, task: t, image, label, patch, runs: 1, seed: 1, work });
+    const where = " in the pinned image " + image + ", where its trials run and are graded; pin writes no manifest";
+    const decoy = t.replay?.role === "decoy";
+    const gold = tree("gold", decoy ? "" : readFileSync(join(d, "solution", "gold.patch"), "utf8"));
+    if (gold.prepare.patch === "failed") fail(t.id + ": solution/gold.patch does not apply (" + gold.prepare.error + ")" + where);
+    if (gold.runs.some(stopped)) fail(t.id + ": gold's verifier run stopped (it timed out, filled /out or was killed)" + where);
+    const failing = required.filter((id) => idResults(gold, id).some((r) => r.status !== "pass"));
+    if (failing.length) fail(t.id + ": gold fails " + failing.join(", ") + where);
+    if (decoy) return;
+    const empty = tree("empty", "");
+    if (required.every((id) => idResults(empty, id).every((r) => r.status === "pass"))) fail(t.id + ": the empty change passes every required test" + where);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/** Builds each task's image with the lane's buildImage (keyless for upstream tasks) and the runtime layer on top, checks
+ *  the task's oracle in that final image (verifyOracle), and writes the manifest, rows by label, with an exclusive create:
+ *  a manifest another pin wrote meanwhile is never replaced. */
 export async function pin(dirs: string[], out: string, set: string, commit: string): Promise<ImageManifest> {
   if (existsSync(out)) fail(out + " exists; pin writes a new manifest");
   const { buildImage } = await import("../../real-outcome/task/check.ts");
   const rows = dirs.map((d): ImageRow => {
     const t = readTask(d);
-    return { label: t.id, kind: t.kind, task_json_sha256: sha(readFileSync(join(d, "task.json"))), environment_sha256: treeDigest(join(d, "environment")), image_id: withRuntime(buildImage(d, t).tag) };
+    const required = requiredTests(t);
+    const image_id = withRuntime(buildImage(d, t).id);
+    verifyOracle(d, t, required, image_id);
+    return { label: t.id, kind: t.kind, task_json_sha256: sha(readFileSync(join(d, "task.json"))), environment_sha256: treeDigest(join(d, "environment")), image_id };
   });
   rows.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
   const m = valid({ schema: "tg-images.v1", set, gstack_evals: commit, home: HOME, workdir: WORKDIR, rows }, out);
@@ -142,8 +177,8 @@ export const tagFor = (imageId: string) => "gstack-evals-tg-" + imageId.slice(7,
  *  file digests, any symlink), an image that is missing or moved, and an out dir that exists; a refusal leaves no copy.
  *  Before any write it refuses a task dir path that is a symlink and an out path that is or lies in the task dir, and it
  *  writes only once the copy is a real directory of its own, so no write reaches the task it copied. It holds out + ".bind-lock"
- *  (an exclusive create) for its whole run and creates out itself, so a second bind on the same out refuses (E_USAGE) and
- *  never removes the first one's copy. */
+ *  (an exclusive create) for its whole run and creates out itself, after any missing parent, so a second bind on the same
+ *  out refuses (E_USAGE) and never removes the first one's copy. */
 export function bind(taskDir: string, m: ImageManifest, label: string, out: string, docker = "docker"): { image_id: string; tag: string; out: string } {
   const row = m.rows.find((r) => r.label === label) ?? fail("no row for label " + label + " in the manifest");
   if (lstatSync(taskDir.replace(/\/+$/, ""), { throwIfNoEntry: false })?.isSymbolicLink()) fail(taskDir + " is a symlink; bind takes the task dir itself, so no write reaches the task it points at");
@@ -153,6 +188,7 @@ export function bind(taskDir: string, m: ImageManifest, label: string, out: stri
   if (within(resolved(out))) fail(out + " lies inside the task dir " + src + "; a run copy is a directory of its own");
   const tag = tagFor(row.image_id);
   const lock = out.replace(/\/+$/, "") + ".bind-lock";
+  mkdirSync(dirname(lock), { recursive: true });
   try {
     closeSync(openSync(lock, "wx"));
   } catch (e) {
