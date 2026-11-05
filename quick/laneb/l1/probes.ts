@@ -61,9 +61,10 @@ const stripReadNumbers = (s: string) => s.split("\n").map((l) => l.replace(/^\s*
 
 // ---- shell lines -------------------------------------------------------------------------------------------------------
 
-export type Simple = { words: string[]; redirects: { op: string; target: string }[]; heredocs: string[]; cwd: string | null };
+export type Simple = { words: string[]; redirects: { op: string; target: string }[]; heredocs: string[]; cwd: string | null; pipeline: number };
 
 const RESERVED = new Set(["!", "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "time", "{", "}"]);
+const COMPOUND = new Set(["if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for", "select", "case", "esac", "function", "{", "}"]);
 const ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
 type Tok = { kind: "word"; raw: string; value: string } | { kind: "op"; value: string } | { kind: "redir"; op: string } | { kind: "heredoc"; body: string };
@@ -200,12 +201,19 @@ function tokenize(src: string): Tok[] {
   return toks;
 }
 
-/** The simple commands of a shell line, in order, after cd, env prefixes, reserved words, subshells and sh -c are unwrapped. */
+/** The simple commands of a shell line, in order, after cd, env prefixes, reserved words, subshells and sh -c are unwrapped.
+ * pipeline numbers the pipelines: commands joined by | or |& (a line break after the pipe included) share one. A line with a
+ * subshell, a brace group or a compound command (if, for, while, until, select, case, function) is one pipeline, and so is
+ * everything an sh -c runs, since output can flow out of any of them. */
 export function simpleCommands(line: string, cwd: string | null = null, depth = 0): Simple[] {
   const out: Simple[] = [];
-  let cur: Simple = { words: [], redirects: [], heredocs: [], cwd };
+  let pipeline = 0;
+  let flat = true;
+  let start = true;
+  let cur: Simple = { words: [], redirects: [], heredocs: [], cwd, pipeline };
   let here = cwd;
   const end = () => {
+    const before = out.length;
     let w = cur.words;
     while (w.length && (RESERVED.has(w[0]!) || ASSIGN.test(w[0]!))) w = w.slice(1);
     if (w[0] === "env") {
@@ -214,21 +222,25 @@ export function simpleCommands(line: string, cwd: string | null = null, depth = 
     }
     cur.words = w;
     if (w.length || cur.redirects.length) {
-      if ((w[0] === "bash" || w[0] === "sh") && w[1] === "-c" && typeof w[2] === "string" && depth < 4) out.push(...simpleCommands(w[2], here, depth + 1));
+      if ((w[0] === "bash" || w[0] === "sh") && w[1] === "-c" && typeof w[2] === "string" && depth < 4) out.push(...simpleCommands(w[2], here, depth + 1).map((c) => ({ ...c, pipeline })));
       else {
         cur.cwd = here;
+        cur.pipeline = pipeline;
         out.push(cur);
         if (w[0] === "cd") here = w[1] && !w[1].startsWith("-") ? (here ? posix.resolve(here, w[1]) : posix.isAbsolute(w[1]) ? posix.normalize(w[1]) : null) : here;
       }
     }
-    cur = { words: [], redirects: [], heredocs: [], cwd: here };
+    cur = { words: [], redirects: [], heredocs: [], cwd: here, pipeline };
+    return out.length > before;
   };
   const scopes: (string | null)[] = [];
   const toks = tokenize(line);
   for (let k = 0; k < toks.length; k++) {
     const t = toks[k]!;
     if (t.kind === "op") {
-      end();
+      if (end() && t.value !== "|" && t.value !== "|&") pipeline++;
+      if (t.value === "(" || t.value === ")" || t.value === ";;") flat = false;
+      start = true;
       if (t.value === "(") scopes.push(here);
       else if (t.value === ")" && scopes.length) cur.cwd = here = scopes.pop()!;
     }
@@ -236,10 +248,14 @@ export function simpleCommands(line: string, cwd: string | null = null, depth = 
     else if (t.kind === "redir") {
       const next = toks[k + 1];
       if (next?.kind === "word") { cur.redirects.push({ op: t.op, target: next.value }); k++; }
-    } else cur.words.push(t.value);
+    } else {
+      if (start && COMPOUND.has(t.value)) flat = false;
+      start = RESERVED.has(t.value) || ASSIGN.test(t.value);
+      cur.words.push(t.value);
+    }
   }
   end();
-  return out;
+  return flat ? out : out.map((c) => ({ ...c, pipeline: 0 }));
 }
 
 const base = (w: string) => w.split("/").filter(Boolean).at(-1) ?? w;
@@ -437,34 +453,78 @@ function withoutPattern(words: string[]): string[] {
   if (kept[k] === "--") k++;
   return kept.filter((w, i) => i !== k || !inert(cmd, w));
 }
+/** A command's words with busybox, and command with its options, dropped from the front; command -v or -V (an option word
+ * holding v or V, as in -p -v or -pv) only names its operand, so it is kept and reads as a mention. */
+function unwrap(words: string[]): string[] {
+  let all = words;
+  for (;;) {
+    const b = base(all[0] ?? "");
+    if (all.length < 2 || (b !== "busybox" && b !== "command")) return all;
+    let k = 1;
+    if (b === "command") {
+      while (k < all.length && /^-[A-Za-z]+$/.test(all[k]!)) k++;
+      if (all.slice(1, k).some((o) => /[vV]/.test(o))) return all;
+      if (all[k] === "--") k++;
+    }
+    all = all.slice(k);
+  }
+}
+/** Whether the command a find -exec or an xargs runs reads what it is handed: anything but a command that never reads. */
+const reader = (words: string[]) => { const w = unwrap(words); return w.length > 0 && !NO_READ.has(base(w[0]!)); };
+/** The command an xargs runs: its words after xargs' options (GNU's valued options take the next word). No command is echo. */
+function xargsCommand(all: string[]): string[] {
+  let k = 1;
+  while (k < all.length && all[k]!.startsWith("-") && all[k] !== "--") k += /^-[adEILnPs]$|^--(arg-file|delimiter|max-args|max-procs|max-chars|process-slot-var)$/.test(all[k]!) ? 2 : 1;
+  return all.slice(all[k] === "--" ? k + 1 : k);
+}
+/** A find's start paths (its operands before the first expression word, or "." with none) and the commands its -exec,
+ * -execdir, -ok and -okdir run. */
+function findParts(all: string[]): { starts: string[]; execs: string[][] } {
+  let k = 1;
+  while (k < all.length && /^-([HLP]|O\d*|D)$/.test(all[k]!)) k += all[k] === "-D" ? 2 : 1;
+  const starts: string[] = [];
+  while (k < all.length && !/^[-(!,]/.test(all[k]!)) starts.push(all[k++]!);
+  const execs: string[][] = [];
+  for (let i = k; i < all.length; i++) {
+    if (!/^-(exec|execdir|ok|okdir)$/.test(all[i]!)) continue;
+    let j = i + 1;
+    while (j < all.length && all[j] !== ";" && all[j] !== "+") j++;
+    execs.push(all.slice(i + 1, j));
+    i = j;
+  }
+  return { starts: starts.length ? starts : ["."], execs };
+}
 /** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies,
  * with a relative word resolved against the directory the line has cd'd to (the work tree at first). busybox, and command
- * other than command -v or -V, in front of a command are dropped, and gsed is read as sed. In a sed command a "/" right after
- * r, R, w or W, or after a -f glued to sed's option letters (-f/root/x), also starts a path, so a filename glued to sed's file
- * commands (1r/root/x, s/a/b/w/root/x) is found, while a sed address or a file operand that only holds such a path in its
- * middle is not a read of it. The trees are the paths of a find that runs -exec, -execdir, -ok or -okdir, and every path on
- * a line that pipes into xargs, where no command's words are a mention: each one reads whatever lies inside it. */
-function bashReadPaths(command: string, cwd: string | null): { paths: string[]; trees: string[] } {
-  const out: string[] = [], trees: string[] = [];
-  const simples = simpleCommands(command, cwd).map((s) => {
-    let all = s.words;
-    for (let b = base(all[0] ?? ""); all.length > 1 && (b === "busybox" || (b === "command" && !/^-[A-Za-z]*[vV]/.test(all[1]!))); b = base(all[0] ?? "")) all = all.slice(b === "command" && all[1] === "-p" ? 2 : 1);
-    return { s, all };
-  });
-  const xargs = simples.some(({ all }) => base(all[0] ?? "") === "xargs");
+ * other than command -v or -V, in front of a command are dropped (unwrap), and gsed is read as sed. In a sed command a "/"
+ * right after r, R, w or W, or after a -f glued to sed's option letters (-f/root/x), also starts a path, so a filename glued to
+ * sed's file commands (1r/root/x, s/a/b/w/root/x) is found, while a sed address or a file operand that only holds such a path
+ * in its middle is not a read of it. The trees are the paths of a find that runs -exec, -execdir, -ok or -okdir, and every
+ * path in a pipeline that feeds xargs, where no command's words are a mention: each one reads whatever lies inside it. A tree
+ * whose command reads (the find's -exec or the xargs' command is not one that never reads) also reads below a tree that
+ * holds an audit root, and a find's start paths (the work directory when it names none) count as its trees. */
+function bashReadPaths(command: string, cwd: string | null): { paths: string[]; trees: { path: string; reads: boolean }[] } {
+  const out: string[] = [], trees: { path: string; reads: boolean }[] = [];
+  const simples = simpleCommands(command, cwd).map((s) => ({ s, all: unwrap(s.words) }));
+  const xargs = new Map<number, boolean>();
+  for (const { s, all } of simples) if (base(all[0] ?? "") === "xargs") xargs.set(s.pipeline, xargs.get(s.pipeline) === true || reader(xargsCommand(all)));
   for (const { s, all } of simples) {
+    const fed = xargs.has(s.pipeline);
     const words = withoutPattern(all);
-    const mention = !xargs && words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
-    const tree = xargs || (base(all[0] ?? "") === "find" && all.some((w) => /^-(exec|execdir|ok|okdir)$/.test(w)));
+    const mention = !fed && words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
+    const find = base(all[0] ?? "") === "find" ? findParts(all) : null;
+    const tree = fed || !!find?.execs.length;
+    const reads = xargs.get(s.pipeline) === true || !!find?.execs.some(reader);
     const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(all[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
     const sed = SED.has(base(all[0] ?? ""));
     for (const t of texts)
       for (const w of t.split(PATH_SPLIT)) {
         const p = w.startsWith("/") ? w : s.cwd && w && !w.startsWith("-") && w !== all[0] ? posix.resolve(s.cwd, w) : null;
         if (p) out.push(p);
-        if (p && tree) trees.push(p);
+        if (p && tree) trees.push({ path: p, reads });
         if (sed) for (let i = w.indexOf("/", 1); i > 0; i = w.indexOf("/", i + 1)) if ("rRwW".includes(w[i - 1]!) || /^-[A-Za-z]*f$/.test(w.slice(0, i))) out.push(w.slice(i));
       }
+    if (find && reads) for (const w of find.starts) trees.push({ path: w.startsWith("/") ? posix.normalize(w) : s.cwd ? posix.resolve(s.cwd, w) : "/", reads });
   }
   return { paths: out, trees };
 }
@@ -610,8 +670,8 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
     if (c.name === "Read" || c.name === "Bash") {
       for (const m of target.matchAll(/(\S*\/\.claude\/skills\/([^/\s"']+)\/SKILL\.md)/g)) if (m[2] !== "gstack" && under(m[1]!.replace(/^['"]/, ""), o.gstackRoots)) gstackLoads.add(m[2]!);
     }
-    const { paths, trees } = c.name === "Bash" ? bashReadPaths(target, root) : { paths: [target], trees: [] as string[] };
-    const hit = paths.find(below) ?? trees.find((t) => below(posix.join(t, "f"))) ?? (paths.some(above) ? res.text.split(PATH_SPLIT).find((w) => w.startsWith("/") && below(w)) : undefined);
+    const { paths, trees } = c.name === "Bash" ? bashReadPaths(target, root) : { paths: [target], trees: [] as { path: string; reads: boolean }[] };
+    const hit = paths.find(below) ?? trees.find((t) => below(posix.join(t.path, "f")) || (t.reads && above(t.path)))?.path ?? (paths.some(above) ? res.text.split(PATH_SPLIT).find((w) => w.startsWith("/") && below(w)) : undefined);
     if (hit && (c.name !== "Bash" || res.text.trim())) auditHits.push(c.name + " " + hit.slice(0, 200));
   }
   if (investigate) gstackLoads.add("investigate");

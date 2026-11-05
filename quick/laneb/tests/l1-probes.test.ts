@@ -288,8 +288,40 @@ describe("contract block, turn cap and the read audit", () => {
     const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
     const hits = (cmd: string) => run([bash(cmd, "x: 1")], none).audit_hits.length;
     expect(["sed -f/root/.gstack/config.yaml README.md", "sed -nf/root/.gstack/config.yaml README.md", "command cat /root/.gstack/config.yaml", "command -p cat /root/.gstack/config.yaml", "find /root/.gstack -name '*.md' -exec cat {} +", "find /root/.claude/skills -execdir cat {} ';'",
-      "echo /root/.gstack/config.yaml | xargs cat", "find /root/.gstack -type f -print0 | xargs -0 cat", "ls /root/.gstack | xargs cat", "sed -n p ${HOME:-/root}/.gstack/config.yaml", "cat ${HOME-/root}/.claude/skills/x/SKILL.md"].map(hits)).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
-    expect(["command -v cat", "find /root/.gstack -name '*.md'", "find / -name '*.md' -exec cat {} +", "find . -name '*.md' -exec cat {} +", "echo /root/.gstack/config.yaml", "sed -f script.sed README.md"].map(hits)).toEqual([0, 0, 0, 0, 0, 0]);
+      "echo /root/.gstack/config.yaml | xargs cat", "find /root/.gstack -type f -print0 | xargs -0 cat", "ls /root/.gstack | xargs cat", "sed -n p ${HOME:-/root}/.gstack/config.yaml", "cat ${HOME-/root}/.claude/skills/x/SKILL.md", "find / -name '*.md' -exec cat {} +"].map(hits)).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    expect(["command -v cat", "find /root/.gstack -name '*.md'", "find . -name '*.md' -exec cat {} +", "echo /root/.gstack/config.yaml", "sed -f script.sed README.md"].map(hits)).toEqual([0, 0, 0, 0, 0]);
+  });
+  // Value: protects=the none arm's read audit; fails_when=a path in a command xargs is not fed by reads as a read, or a command
+  // that feeds xargs through a pipe, a continued line, a group, a compound command or sh -c reads as a mention; why_new=the xargs
+  // flag spanned the whole Bash line; seam=probes.ts simpleCommands pipeline, bashReadPaths; no_claim=none
+  test("the xargs flag covers the pipeline that feeds xargs, not the rest of the Bash line", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    const hits = (cmd: string, out = "x: 1") => run([bash(cmd, out)], none).audit_hits.length;
+    expect(["echo ~/.claude/skills/investigate/SKILL.md; ls | xargs wc -l", "echo /root/.gstack/config.yaml && find . -name '*.py' | xargs grep -l main", "test -e ~/.gstack/x || git ls-files | xargs cat", "printf '%s' ~/.gstack/x\nls src | xargs cat"].map((c) => hits(c))).toEqual([0, 0, 0, 0]);
+    expect(["echo ~/.claude/skills/investigate/SKILL.md | xargs cat", "echo /root/.gstack/config.yaml |\n  xargs cat", "{ echo ~/.gstack/config.yaml; echo x; } | xargs cat", "(echo ~/.gstack/config.yaml; true) | xargs cat",
+      "if true; then echo ~/.gstack/config.yaml; fi | xargs cat", "bash -c 'echo ~/.gstack/config.yaml; true' | xargs cat", "echo /root/.gstack/config.yaml |& xargs cat"].map((c) => hits(c))).toEqual([1, 1, 1, 1, 1, 1, 1]);
+    expect(simpleCommands("a | b; c && d |\n e").map((s) => s.pipeline)).toEqual([0, 0, 1, 2, 2]);
+    expect(simpleCommands("a; (b) | c").map((s) => s.pipeline)).toEqual([0, 0, 0]);
+  });
+  // Value: protects=the none arm's read audit; fails_when=a find -exec or an xargs reader over an ancestor of an audit root reads
+  // clean, or one that runs echo, or is rooted outside every audit root, reads as a read; why_new=find ~ -name SKILL.md -exec
+  // cat {} + read clean; seam=probes.ts findParts, bashReadPaths trees; no_claim=-maxdepth, -prune and name filters are not read
+  test("a find -exec or an xargs that reads, rooted above an audit root, reads below it; one rooted elsewhere or running echo does not", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    expect(run([bash("find ~ -name SKILL.md -exec cat {} +", "---\nname: investigate")], none).audit_hits).toEqual(["Bash /root"]);
+    const hits = (cmd: string, out = "---") => run([bash(cmd, out)], none).audit_hits.length;
+    expect(["find / -path '*skills*' -name SKILL.md -exec head -5 {} \\;", "cd ~ && find -name SKILL.md -exec cat {} +", "cd / && find . -name SKILL.md -ok cat {} ';'", "find -L ~/.claude -name '*.md' -execdir cat {} +",
+      "find ~ -name SKILL.md -print0 | xargs -0 cat", "find ~ -name '*.md' | xargs -n 1 -I {} cat {}", "find $HOME -name '*.md' | xargs command -p head"].map((c) => hits(c))).toEqual([1, 1, 1, 1, 1, 1, 1]);
+    expect(["find /testbed -name '*.py' -exec cat {} +", "find ~ -maxdepth 1 -name '*.txt' -exec echo found {} \\;", "find ~ -name '*.txt' | xargs echo", "find ~ -name '*.txt' | xargs", "find ~ -name '*.txt' -exec printf '%s\\n' {} +"].map((c) => hits(c, "found"))).toEqual([0, 0, 0, 0, 0]);
+  });
+  // Value: protects=the none arm's read audit; fails_when=command -p -v, -pv or -p -V of a gstack path reads as a read, or command -p
+  // in front of a reader reads as a mention; why_new=command -p -v dropped command and its -p and read the path; seam=probes.ts
+  // unwrap; no_claim=none
+  test("command -v or -V names its operand without reading it, whatever options come first; command -p in front of a reader still reads", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    const hits = (cmd: string, out: string) => run([bash(cmd, out)], none).audit_hits.length;
+    expect([hits("command -p -v /root/.gstack/bin/gstack-config", "/root/.gstack/bin/gstack-config"), hits("command -pv ~/.local/share/gstack/bin/x", "/root/.local/share/gstack/bin/x"), hits("command -p -V ~/.gstack/bin/x", "x is /root/.gstack/bin/x")]).toEqual([0, 0, 0]);
+    expect([hits("command -p cat /root/.gstack/config.yaml", "x: 1"), hits("command -p -- cat ~/.gstack/config.yaml", "x: 1"), hits("busybox command -p cat ~/.gstack/config.yaml", "x: 1")]).toEqual([1, 1, 1]);
   });
   test("a grep, rg, ag or ack option the table does not know, or a value it would misplace, scans the whole command", () => {
     const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };

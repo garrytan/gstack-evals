@@ -117,7 +117,7 @@ describe("session outcomes (section 6)", () => {
   test("a retried trial reads true only when every attempt a request reached says true; an attempt no request reached holds no evidence", () => {
     const t = trial({ arm: "after-u" });
     const read = (...marks: unknown[]) => sessionRow(t.dir, { ...ctx(), sessions: new Map([[t.name, marks.map((m, i) => ({ id: "s" + i, trial: t.name + "__env", spent_micros: 1, ok_responses: 1, requests: 1, refused: 0, refused_budget: 0, opened_at: "2026-11-04T00:0" + i + ":00Z", ...(m === "absent" ? {} : { route_mark_before_output: m }) }))]]) })!.route_hook;
-    expect([read(true, true), read(true, false), read(false, true), read(null, true), read(null), read(true, "absent"), read(true, "yes")]).toEqual([true, false, false, true, null, null, null]);
+    expect([read(true, true), read(true, false), read(false, true), read(null, true), read(null), read(true, "absent"), read(true, "yes"), read(true, "quoted"), read("quoted")]).toEqual([true, false, false, true, null, null, null, null, null]);
   });
   test("every row the table writes passes the analysis' row check", () => {
     const made = [trial(), trial({ reward: null, exc: "VerifierTimeoutError" }), trial({ reward: null, exc: "LedgerCapStop" }), trial({ arm: "none", msgs: [A({ id: "r", name: "Read", input: { file_path: "/root/.gstack/x" } }), U({ tool_use_id: "r", content: "1\tx", is_error: null })] }), trial({ arm: "after-u", evidence: { route_hook: true, contract_record: true, contract_check_met: false } })];

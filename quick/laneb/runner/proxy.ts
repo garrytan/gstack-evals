@@ -63,14 +63,32 @@ export const asksLongTtl = (body: string) => /"ttl":"(?!5m")/.test(body);
 // per token. The slack covers tokens the provider adds around tools and system text. Image and document blocks are billed
 // by pixels and pages, not bytes, so an Anthropic route never sends them on the byte bound (hasMedia); on OpenRouter
 // that gap stays open and the settle's over_reserve flag shows any session it pushed past its reserve.
-// Route evidence (the L1 harness follow-up): the after pin's UserPromptSubmit route hook puts this line in the user turn it
-// adds context to (arms/l1.ts and runner/agent/laneb_hooks.py hold the same string). A request counts as evidence only when
-// it reached the proxy before the session had been handed any 200 response: until then the model has produced no output, so
-// no tool ran and nothing in the container acted for it, and the line came from Claude Code, the hook or the task. Task text
-// that quotes the line, or context a task puts in the first request, reads as evidence without the hook; this change does not
-// close that gap, and a later harness unit has to.
+// Route evidence: the after pin's UserPromptSubmit route hook prints this line as added context (arms/l1.ts and
+// runner/agent/laneb_hooks.py hold the same string). Claude Code 2.1.312, run keyless under the pinned Agent SDK through this
+// proxy to a fake upstream, puts a UserPromptSubmit hook's added context in the first request's role "system" message, after
+// the skill listing, as a paragraph of its own: "\n\nUserPromptSubmit hook additional context: <text>", ended by "\n\n". The task
+// prompt, CLAUDE.md and the files it loads with it, and git status arrive in the user message, and skill descriptions arrive
+// in the listing with their line breaks folded to spaces, so none of them makes that paragraph. A request is route evidence
+// (true) only when the line sits in that paragraph and appears nowhere else in the request; one that carries the line anywhere
+// else, or twice, is "quoted": the proxy can't tell the hook from a copy. Only requests that reached the proxy before the
+// session had been handed any 200 response count: until then the model has produced no output, so nothing in the container
+// acted for it. A task's own UserPromptSubmit hook prints the same paragraph and is not told apart (l1/README.md, trust limit).
 export const ROUTE_MARK = "gstack skill routing (UserPromptSubmit hook;";
 const ROUTE_MARK_JSON = JSON.stringify(ROUTE_MARK).slice(1, -1);
+export const ROUTE_CONTEXT = "\n\nUserPromptSubmit hook additional context: " + ROUTE_MARK;
+export type RouteMark = boolean | "quoted";
+export function routeMark(body: any): RouteMark {
+  const count = JSON.stringify(body).split(ROUTE_MARK_JSON).length - 1;
+  if (count === 0) return false;
+  const system = (Array.isArray(body.messages) ? body.messages : []).filter((m: any) => m?.role === "system" && Array.isArray(m.content)).flatMap((m: any) => m.content);
+  const paragraphs = system.filter((b: any) => {
+    if (b?.type !== "text" || typeof b.text !== "string") return false;
+    const at = b.text.indexOf(ROUTE_CONTEXT);
+    const end = at < 0 ? -1 : b.text.indexOf("\n", at + ROUTE_CONTEXT.length);
+    return at >= 0 && (end < 0 || b.text.startsWith("\n\n", end));
+  });
+  return count === 1 && paragraphs.length === 1 ? true : "quoted";
+}
 
 export const COUNT_SLACK_TOKENS = 64;
 export const BYTE_SLACK_TOKENS = 1024;
@@ -214,7 +232,7 @@ type Session = {
   cmdNames?: string[];
   firstReqPromptTokens?: number;
   outputReturned?: boolean;
-  routeMarkBeforeOutput?: boolean;
+  routeMarkBeforeOutput?: RouteMark;
 };
 
 type OpenBody = { trial: string; model: string; cap_usd: number; meta?: Record<string, unknown>; open_key?: unknown };
@@ -423,9 +441,9 @@ export function startProxy(opts: ProxyOptions) {
       s.requestedModels[requested] = (s.requestedModels[requested] ?? 0) + 1;
       const isCount = url.pathname.endsWith("/count_tokens");
       if (!url.pathname.endsWith("/v1/messages") && !isCount) return anthropicError(404, "not_found_error", "laneb proxy: only /v1/messages is served");
-      const routeMark = !isCount && JSON.stringify(body.messages ?? null).includes(ROUTE_MARK_JSON);
-      const routeEvidence = isCount ? {} : { route_mark: routeMark, before_output: beforeOutput };
-      if (!isCount && beforeOutput) s.routeMarkBeforeOutput = s.routeMarkBeforeOutput === true || routeMark;
+      const mark = isCount ? false : routeMark(body);
+      const routeEvidence = isCount ? {} : { route_mark: mark, before_output: beforeOutput };
+      if (!isCount && beforeOutput) s.routeMarkBeforeOutput = s.routeMarkBeforeOutput === "quoted" || mark === "quoted" ? "quoted" : s.routeMarkBeforeOutput === true || mark;
       const refuse = (reason: string, message: string, extra: Record<string, unknown> = {}) => {
         s.refused++;
         log({ event: "refused", session: s.id, reason, ...routeEvidence, ...extra });

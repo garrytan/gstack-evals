@@ -137,6 +137,14 @@ describe("l1.ts before any spend", () => {
     expect(ok.out).toContain("tb2-1 (190 sessions), tb2-2 (180 sessions)");
     for (const x of [used, cap, r, tb2]) expect(events(x)).not.toContain(" up ");
   }, 60_000);
+  test("prepare refuses a planned task whose instruction holds the route hook's line and writes no plan; the same item prepares without it", () => {
+    const quoting = rig("pilot-opus");
+    const a = l1(quoting, ["prepare", quoting.work, "--item", "pilot-opus"], { FAKE_QUOTE_TASK: "BerriAI__litellm-15753" });
+    expect([a.code, a.err]).toEqual([3, expect.stringContaining("BerriAI__litellm-15753's instruction holds the route hook's line")]);
+    expect(existsSync(join(quoting.work, "plan.json"))).toBe(false);
+    const other = rig("pilot-opus");
+    expect(l1(other, ["prepare", other.work, "--item", "pilot-opus"], { FAKE_QUOTE_TASK: "not-a-planned-task" }).code).toBe(0);
+  }, 60_000);
 
   test("host-up: when the ledger refuses the host's hours it is a cap stop (exit 9), and no host starts", () => {
     const r = rig("pilot-opus", { preReserve: 78 });
