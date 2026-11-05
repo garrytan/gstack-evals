@@ -70,7 +70,7 @@ def implements(text: str, plan_choice: bool = False) -> bool:
     for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
         sentence = BEFORE.sub("", OPTION.sub("", sentence.strip())).strip()
         clauses = [sentence] if sentence.endswith("?") or not NEGATED.search(sentence) else [c.strip() for c in CLAUSE.split(sentence) if not NEGATED.search(c)]
-        exempt = plan_choice or (PLANNED.search(sentence) and not proceeds(sentence)) or (BARE.search(sentence) and DRAFTS.search(prior))
+        exempt = plan_choice or (PLANNED.search(sentence) and not proceeds(sentence)) or (BARE.search(sentence) and DRAFTS.search(prior) and not NEGATED.search(prior))
         if any(IMPLEMENTS.search(c) or (GENERIC.search(c) and not exempt) for c in clauses):
             return True
         prior = sentence
