@@ -255,7 +255,6 @@ function sessionRow(id: string, p: { unit: string; arm: ScoreArm; model: Model3;
   const stored = co.end_state;
   const determinate = derived !== null && stored === derived && derived !== "incomplete";
   if (strict && !determinate) refuse(id + " in " + f.run + " holds end state " + JSON.stringify(stored) + ", but section 6's table reads " + JSON.stringify(derived) + " from its termination and stored parse", "run ceo rows --checks to see the session's checks; the journal line was changed after the run, so restore it from the run's sink copy");
-  const status = (determinate ? stored : "gap") as CeoRow["status"];
   if (!Number.isFinite(co.usd) || co.usd < 0) refuse(id + " in " + f.run + " has no settled spend (ceo_outcome.usd)", "restore the journal from the run's sink copy");
   let text: string | null = null;
   try {
@@ -263,7 +262,9 @@ function sessionRow(id: string, p: { unit: string; arm: ScoreArm; model: Model3;
   } catch {
     text = null;
   }
-  const exposure = GSTACK.includes(p.arm) ? (p.arm === "standalone" ? standaloneExposure(text ?? "") : autoplanCeoExposure(text ?? "")) : null;
+  const lost = GSTACK.includes(p.arm) && text === null;
+  const status = (determinate && !lost ? stored : "gap") as CeoRow["status"];
+  const exposure = GSTACK.includes(p.arm) && !lost ? (p.arm === "standalone" ? standaloneExposure(text!) : autoplanCeoExposure(text!)) : null;
   const fields = status === "scored" ? ceoRowFields(parse) : { issues: [], words: [], fixes: [], fix_words: [] };
   const row: CeoRow = {
     ...base,
@@ -348,6 +349,7 @@ function rowsCmd(argv: string[], io: Io): number {
     return 1;
   }
   const rows = b.rows.map((c) => c.row);
+  for (const { row, checks } of b.rows) if (row.status === "gap" && checks.some(([k, ok]) => k === "transcript_readable" && !ok) && GSTACK.includes(row.arm)) io.out("gap: " + row.id + " (transcript unreadable)");
   const cells = new Map<string, CeoRow[]>();
   for (const r of rows) cells.set((r.smoke ? "smoke " : "") + r.arm + ":" + r.model, [...(cells.get((r.smoke ? "smoke " : "") + r.arm + ":" + r.model) ?? []), r]);
   for (const [cell, rs] of cells) {

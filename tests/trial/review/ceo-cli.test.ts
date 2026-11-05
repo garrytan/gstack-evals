@@ -267,6 +267,18 @@ describe("review fixes on #225", () => {
     expect(r.out.split("\n").find((l) => l.startsWith("checks: "))!).toContain("none:opus:" + U1 + ":p2 (transcript_readable)");
   });
 
+  test("rows writes a gstack session whose transcript is gone as a gap with exposed null, counted and printed with the gaps", async () => {
+    const d = fresh("rows-gstack-transcript");
+    const run = runDir(d, "run", [...SMOKE, ...STAGE1_NONE]);
+    rmSync(join(sessionDir(run, { model: "opus", arm: "gstack-forced", unit: U1, pass: 1 }), "transcript.ndjson"));
+    const r = await ceo(["rows", "--stage", "1", "--units", join(d, "units"), "--run", run, "--out", join(d, "rows.json")]);
+    expect(r.code).toBe(0);
+    const row = JSON.parse(readFileSync(join(d, "rows.json"), "utf8")).rows.find((x: any) => x.id === "smoke:standalone:opus:" + U1 + ":p1");
+    expect(row).toMatchObject({ status: "gap", exposed: null, forecast: null, issues: [], words: [] });
+    expect(r.out).toContain("cell smoke standalone:opus: 2 planned; 1 scored, 0 no-block, 1 gap, 0 incomplete");
+    expect(r.out).toContain("gap: smoke:standalone:opus:" + U1 + ":p1 (transcript unreadable)");
+  });
+
   test("packets refuses a --key that reaches --out through a symlink", async () => {
     const d = fresh("packets-alias");
     mkdirSync(join(d, "packets"));
