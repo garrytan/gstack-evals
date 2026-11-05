@@ -22,6 +22,7 @@ attachments:
   - d57dc67309c63e4e571cc4c405b615adf815df0254b4e116814767c765220435  r3c.ts.txt
   - f4739896f0cf5e0ecbd2b24bb76d39f00088d2d528d725891957b0ccbc746d56  r3c-taskfit.py.txt
   - b8298156309d020770ce94741531aa40a58f2d222faf0776a16acb4f4d20b54d  r3c-taskfit.tsv
+  - 062f5264ec3270fdf3ca367f92a44cfba36d2ba70c51651b6361d8aa6622fefb  r3c-taskfit-testhunks.txt
   - bb4009e6a239e4304bbe9e928f3f5386eb2d02e3feccaa8ce9aa42b32cd9eb7e  r3c-calibrate.txt
   - 74d1843ce6ae3ea704a0bf3b60304caeb782b877ce786556b31735355cce8bbb  r3c-validate.txt
   - 7e0447eccb6109ae373605fa86e5c1d66dce7e92c74df579b74a134990918e43  r3c-dryrun.sh.txt
@@ -93,7 +94,7 @@ A task is admitted when Opus has at least 4 graded none trials on it (in hand pl
 - **The task model.** A nonparametric maximum-likelihood mixing law for per-task none chances on the grid i/40, fitted by 2,000 EM steps from a uniform start to every Opus none trial in hand, so it is deterministic. It puts 24.8% of the pool at p = 0 and 47.5% at p = 1. That is why one screen trial overstated R3b's headroom.
 - **A second law, report only.** The beta-binomial maximum-likelihood law on the same trials (a = 0.079, b = 0.041) puts 7.2% of Opus's pool in the band, against the NPMLE's 8.5%, at a log-likelihood 0.2 below it. The review's figure of 18.3% for a beta law did not reproduce: Beta(0.1, 0.05), the law it named, has 8.3% of its mass in [0.2, 0.8]. In-hand data are 130 single-trial tasks and 70 four-trial tasks chosen for failing, so the law's shape inside the band is only loosely pinned down; validate checks the rule with truth drawn from each law (section 6).
 - **Forecast** (r3c.ts forecast, 2,000 simulated calibrations, each candidate's chance drawn from its posterior under the law): the fitted law puts 8.5% of Opus's pool in the band and expects 6.8 in-band candidates in t1, 1.5 in t2, 4.7 in t3 and 7.8 in t4. Admitted: a mean of 16.7 tasks (p10 13, median 17, p90 21), 83% of them truly in band; at least 10 in 99.3% of simulated calibrations; 457 calibration trials on average.
-- **Far tasks.** r3c-taskfit.py.txt labels each task by the distance from the issue text to the gold patch: 0 when the issue names a patched file, 1 when it names only a patched function or class, 2 (far) when it names neither: 205, 31 and 118 of the pool. Screen pass rates by distance are not ordered (Opus 0.62, 0.70 and 0.67), so distance is not a difficulty proxy here, and filtering on it would leave about 6 in-band tasks. It is reported, not filtered on. The labeller also reads function names from hunks in test files. With those left out, two tasks' function counts drop by one and no distance label changes (rerun on the same rows).
+- **Far tasks.** r3c-taskfit.py.txt labels each task by the distance from the issue text to the gold patch: 0 when the issue names a patched file, 1 when it names only a patched function or class, 2 (far) when it names neither: 205, 31 and 118 of the pool. Screen pass rates by distance are not ordered (Opus 0.62, 0.70 and 0.67), so distance is not a difficulty proxy here, and filtering on it would leave about 6 in-band tasks. It is reported, not filtered on. The labeller also reads function names from hunks in test files. With those left out, two tasks' function counts drop by one and no distance label changes (r3c-taskfit-testhunks.txt).
 
 ## 6. Admission: the grid's size and MDD from measured rates
 
@@ -190,6 +191,7 @@ After gate 1, two more changes came in, both accepted by the Captain:
 | r3c.ts.txt | the frozen keyless rules: plan, forecast with the ladder lines, admit, validate, calibrate, the closing-block scorer and selftest |
 | r3c-taskfit.py.txt | the task-distance labeller |
 | r3c-taskfit.tsv | its output: per task, the patched files and functions, how many the issue names, and the distance |
+| r3c-taskfit-testhunks.txt | a rerun of the labeller with test-file hunks left out of its function names, diffed against r3c-taskfit.tsv |
 | r3c-calibrate.txt | the calibration study's command and every line it printed |
 | r3c-validate.txt | the validation runs' commands and every line they printed |
 | r3c-dryrun.sh.txt | the keyless dry run |
