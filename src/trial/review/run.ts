@@ -62,7 +62,8 @@
 //   settled usd and wall_s, into the new stops.json under a CAP_STOP, and runs the unstarted cells. A stops.json that
 //   doesn't parse refuses the resume before any session. units.json records the suite binding (ceoSuiteBinding) that
 //   ceo rows check --units against, and a resume whose binding differs from the one units.json holds is refused before
-//   any session, because session keys don't cover key.json. And the receipts sink also gets every session's host/transcript.ndjson, which rows
+//   any session, because session keys don't cover key.json. units.json is written before the first session, so a
+//   resume whose out dir holds cells, or a stops.json, but no units.json is refused too. And the receipts sink also gets every session's host/transcript.ndjson, which rows
 //   read. The out dir must sit outside the repo.
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
@@ -343,6 +344,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const ceo = plan?.lens === CEO_LENS;
   const lens: PlanLens = "ceo";
   if (ceo && insideRepo(o.out)) throw new Error("E_USAGE: a ceo-outcome run holds review text, and its out dir " + o.out + " is inside the repo\n  fix: write the run to an --out outside the repo");
+  if (ceo && !existsSync(join(o.out, "units.json")) && ((o.reuse?.size ?? 0) > 0 || existsSync(join(o.out, "stops.json")) || (existsSync(join(o.out, "cells.ndjson")) && readFileSync(join(o.out, "cells.ndjson"), "utf8").trim() !== ""))) throw new Error("E_USAGE: " + o.out + " holds cells from an earlier attempt but no units.json, so this resume cannot check the suite binding (catalogs_sha256) those cells ran on\n  fix: restore units.json from the run's receipts sink copy, or start a new run in a new --out");
   if (ceo && existsSync(join(o.out, "units.json"))) {
     const file = join(o.out, "units.json");
     let prior: Partial<ReviewRunInput["suite"]> | undefined;
@@ -425,7 +427,9 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const carried = ceo ? [...readCeoStops(o.out)].filter(([id]) => !entries.has(id)).map(([, c]) => c) : [];
   const settled = new Set([...entries.keys(), ...carried.map((c) => reviewCellId(c.cell))]);
 
+  const unitsJson = JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n";
   mkdirSync(o.out, { recursive: true });
+  if (ceo) writeFileSync(join(o.out, "units.json"), unitsJson);
   const empty = join(o.out, "fixtures");
   mkdirSync(empty, { recursive: true });
   const journal = join(o.out, "cells.ndjson");
@@ -621,7 +625,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   writeFileSync(join(o.out, "parses.tsv"), parseRows.join("\n") + "\n");
   if (plan) writeFileSync(join(o.out, "modes.tsv"), modeRows.join("\n") + "\n");
   writeFileSync(join(o.out, "refusals.tsv"), refusalsTsv(refusals));
-  writeFileSync(join(o.out, "units.json"), JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n");
+  writeFileSync(join(o.out, "units.json"), unitsJson);
 
   const copied = "sink" in sink && sink.sink ? copyToSink(o.out, receipts, sink.sink) : [];
   return result(armDirs, copied);

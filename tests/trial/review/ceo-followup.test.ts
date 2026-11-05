@@ -5,7 +5,7 @@
 // Keyless: the runs use a stub driver and the rows use ceo-pipeline.ts's synthetic run dirs.
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { catalogsDigest, checkSuite, type Suite } from "../../../lanes/review-noloss/suite.ts";
@@ -260,6 +260,7 @@ function unitFixture(): PreparedUnit {
   const tree = buildUnitTree({ repo, task: unitTaskId(unit), dest: join(s, "tree", "tree"), image: "unused", test: null, install: null, scratch: join(s, "build"), run: () => { throw new Error("a plan unit runs no container"); } });
   return { unit, task: unitTaskId(unit), base_branch: "main", merge_base: repo.merge_base, tree: tree.dir, tree_sha256: tree.tree_sha256, instructions: repo.instructions, check: null };
 }
+const unitsSeen: boolean[] = [];
 const BLOCK = FENCE + "ceo-outcome\n" + JSON.stringify({ top: [{ issue: "No opt-out for existing users.", evidence: "plan.md", fix: "Add a flag." }], forecast: 30 }) + "\n" + FENCE;
 async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, calls: number[], env: Record<string, string> = {}, reuse = new Map(), suite: ReviewRunInput["suite"] = { id: "ceo-followup", sha256: null }) {
   const h = harness(() => [{ type: "text", text: "unused" }]);
@@ -283,6 +284,7 @@ async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, c
       run: async (): Promise<AgentOutcome> => {
         const pass = passOf.get(o.proxy.slot)!;
         calls.push(pass);
+        unitsSeen.push(existsSync(join(out, "units.json")));
         mkdirSync(o.out, { recursive: true });
         writeFileSync(join(o.out, "transcript.ndjson"), JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Review.\n\n" + BLOCK }] }, parent_tool_use_id: null }) + "\n");
         return { turns: ["Review.\n\n" + BLOCK], termination: pass === capPass ? { kind: "cap_stop" } : { kind: "completed" }, model_output: true, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: 1, loaded_bytes: null };
@@ -353,6 +355,25 @@ describe("review finding 01M6P4PKCJ1CYR3TQ02HVJMWE8: --resume keeps the suite bi
     const calls: number[] = [];
     await expect(ceoRun(out, unit, null, calls, {}, readReviewJournal(out), bound(unit.unit.id))).rejects.toThrow(/units\.json[\s\S]*catalogs_sha256/);
     expect(calls).toEqual([]);
+  }, 60_000);
+  test("a resume whose out dir holds cells but no units.json is refused before any session", async () => {
+    // Value: protects=the binding check can't be skipped by deleting units.json; fails_when=a resume with cells.ndjson and no units.json reuses the cells and writes a fresh units.json with the new binding; why_new=Capy re-review of #229 (01M6P5DGW1MQ9H01BWV1HS9HGG); seam=runReviewUnits on a prior ceo-outcome out dir; no_claim=a units.json restored from elsewhere
+    const out = durable();
+    const unit = unitFixture();
+    await ceoRun(out, unit, 3, [], {}, new Map(), bound(unit.unit.id));
+    expect(readFileSync(join(out, "cells.ndjson"), "utf8").trim()).not.toBe("");
+    rmSync(join(out, "units.json"));
+    const calls: number[] = [];
+    await expect(ceoRun(out, unit, null, calls, {}, readReviewJournal(out), { ...bound(unit.unit.id), catalogs_sha256: "b".repeat(64) })).rejects.toThrow(/units\.json/);
+    expect(calls).toEqual([]);
+    expect(existsSync(join(out, "units.json"))).toBe(false);
+  }, 60_000);
+  test("units.json holds the binding before the first session, so a run lost mid-way can still resume", async () => {
+    const out = durable();
+    const unit = unitFixture();
+    unitsSeen.length = 0;
+    await ceoRun(out, unit, null, [], {}, new Map(), bound(unit.unit.id));
+    expect(unitsSeen).toEqual([true, true, true]);
   }, 60_000);
   test("a resume with the same binding runs the unstarted cells", async () => {
     const out = durable();
