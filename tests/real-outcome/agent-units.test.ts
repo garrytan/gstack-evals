@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { loadRegistry, REGISTRY_PATH, turnScript } from "../../lanes/outcome-skills/arms/registry.ts";
 
 const run = (file: string, env: Record<string, string> = {}, timeout = 120_000) => {
   const r = spawnSync("python3", [join(import.meta.dir, file)], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1", ...env }, encoding: "utf8", timeout });
@@ -16,8 +17,17 @@ const run = (file: string, env: Record<string, string> = {}, timeout = 120_000) 
 test("ship persona, /ship step log, egress rules and turn texts", () => {
   const r = run("unit_test.py");
   expect(r.out).not.toContain("FAIL");
-  expect(r.out.match(/^PASS /gm)?.length).toBe(17);
+  expect(r.out.match(/^PASS /gm)?.length).toBe(24);
   expect(r.status).toBe(0);
+});
+
+test("real_agent sends each G registry arm's turns exactly as turnScript writes them, trailing whitespace included", () => {
+  const statements = ["Add it.", "Add it.\n", "Add it. \t\r\n", "Add it.\u00a0\u2028\u3000\ufeff", "Add it.\x1c\x85", "  Lead and trail.  \n\n"];
+  const code = "import json, sys; sys.path.insert(0, sys.argv[1]); import unit_test as u; reg = json.load(open(sys.argv[2])); print(json.dumps([[u.ra.phase_texts({'kind': 'K3'}, reg, arm, s) for arm in sorted(reg['arms'])] for s in json.loads(sys.argv[3])]))";
+  const r = spawnSync("python3", ["-c", code, import.meta.dir, REGISTRY_PATH, JSON.stringify(statements)], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }, encoding: "utf8" });
+  if (r.status !== 0) console.log(r.stdout + r.stderr);
+  const reg = loadRegistry();
+  expect(JSON.parse(r.stdout)).toEqual(statements.map((s) => Object.keys(reg.arms).sort().map((arm) => turnScript(reg, arm, s).map((t) => [t.phase, t.text]))));
 });
 
 describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("the egress rules on real Docker (GSTACK_EVALS_DOCKER=1)", () => {

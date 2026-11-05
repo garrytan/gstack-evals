@@ -32,8 +32,14 @@ class ShipUser:
         with self.log_path.open("a") as f:
             f.write(json.dumps(event, default=str) + "\n")
 
+    def per_turn(self, phases: list) -> None:
+        """A registry arm (family G) counts per turn (t1, t2, ...) instead of build and ship. It never holds shipping,
+        since only a build turn does."""
+        self.counts = {p: {"questions": 0, "recommended": 0, "fallback": 0, "hold": 0, "prose": 0, "prose_unanswered": 0} for p in phases}
+        self.phase = phases[0]
+
     def start(self, phase: str) -> None:
-        assert phase in PHASES, phase
+        assert phase in self.counts, phase
         self.phase = phase
         self.prose_used = 0
         self.log({"event": "phase", "phase": phase})

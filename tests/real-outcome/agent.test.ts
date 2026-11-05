@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { autoplanExposure, planEngReviewExposure, readTranscript } from "../../lanes/outcome-skills/arms/exposure.ts";
 
 const PYTHON = process.env.REAL_OUTCOME_PYTHON ?? join(homedir(), ".capy/work/real/venv/bin/python");
 const HAS_SDK = existsSync(PYTHON) && spawnSync(PYTHON, ["-c", "import claude_agent_sdk, harbor; assert claude_agent_sdk.__version__ == '0.2.174'"]).status === 0;
@@ -36,11 +37,19 @@ describe.skipIf(!HAS_SDK)("the two-turn agent on the real pinned Agent SDK, with
   test("waits for quiet between turns, freezes the env, keeps Claude Code's system prompt and ships through the sandbox", () => {
     expect(control).toStartWith("http://127.0.0.1:");
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
-    const r = spawnSync(PYTHON, [join(import.meta.dir, "agent_test.py")], { env: { ...env, PYTHONDONTWRITEBYTECODE: "1", REAL_SIDECAR: control, REAL_NODE: process.execPath }, encoding: "utf8", timeout: 240_000 });
+    const keep = mkdtempSync(join(tmpdir(), "real-agent-keep-"));
+    const r = spawnSync(PYTHON, [join(import.meta.dir, "agent_test.py")], { env: { ...env, PYTHONDONTWRITEBYTECODE: "1", REAL_SIDECAR: control, REAL_NODE: process.execPath, REAL_KEEP: keep }, encoding: "utf8", timeout: 240_000 });
     const out = r.stdout + r.stderr;
     if (r.status !== 0) console.log(out);
     expect(out).not.toContain("FAIL");
-    expect(out.match(/^PASS /gm)?.length).toBe(16);
+    expect(out.match(/^PASS /gm)?.length).toBe(21);
     expect(r.status).toBe(0);
+    const records = (name: string) => readTranscript(join(keep, name + ".jsonl")).records;
+    const read = (name: string) => planEngReviewExposure(records(name));
+    expect(read("g-pe")).toMatchObject({ exposed: true, failed: null });
+    expect(() => read("g-keyless")).toThrow("E_OUTCOME_TRANSCRIPT");
+    expect(autoplanExposure(records("g-ap"))).toMatchObject({ exposed: true, failed: null, phases: ["ceo", "eng"], published: ["ceo", "eng"] });
+    expect(read("g-pe-subagent")).toMatchObject({ exposed: false, failed: "review_sections_read", checks: { review_sections_read: false, scope_challenge: false, sections_in_order: false, test_plan_written: false } });
+    rmSync(keep, { recursive: true, force: true });
   }, 300_000);
 });

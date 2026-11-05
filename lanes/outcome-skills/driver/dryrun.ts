@@ -7,7 +7,7 @@
 // reaped. --seed <name> plants one fault that a named check must catch. Usage: bun dryrun.ts [--seed <name>]
 import { Database } from "bun:sqlite";
 import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,18 +18,20 @@ import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { ledgerPath } from "../../../src/runner/ledger/paths.ts";
 import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
 import { meteredPricer } from "../../../src/runner/stats/g-resize.ts";
-import { loadRegistry, REGISTRY_PATH } from "../arms/registry.ts";
+import { detectExposure } from "../arms/exposure.ts";
+import { loadRegistry, REGISTRY_PATH, turnScript } from "../arms/registry.ts";
 import type { StageSpec } from "./stage.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
 const BIN = join(ROOT, "bin/gstack-evals");
 const PYTHON = process.env.REAL_OUTCOME_PYTHON ?? join(homedir(), ".capy/work/real/venv/bin/python");
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK)_[A-Z_]*KEY$|_TOKEN$/;
-export const SEEDS = ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "l7-extra", "l7-missing", "l7-swap", "l7-cache-rate", "z1-container", "z1-volume", "z1-lease", "z1-after-fail"] as const;
+export const SEEDS = ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "l7-extra", "l7-missing", "l7-swap", "l7-cache-rate", "z1-container", "z1-volume", "z1-lease", "z1-after-fail", "u8-turns", "u8-parent"] as const;
 const PROGRAM = "g-dryrun";
 const RUN = "dryrun-g";
 const SKILLS = "plan-eng-review,autoplan,plan-devex-review,devex-review,plan-design-review,design-review";
 const WORDS = "dry-run fixture words on a temporary ledger, not an approval";
+const STATEMENT = "Add a mul function to src/app.js.";
 const Z1_PREFIXES = ["gstack-evals-", "gstack-mutation-prepare-", "gstack-mutation-run-"];
 const STAGES: StageSpec[] = [
   { item: "g-none", arm: "none" },
@@ -246,22 +248,26 @@ async function main(argv: string[]): Promise<number> {
     return existsSync(f) ? readFileSync(f, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, any>) : [];
   };
 
-  const lane = JSON.parse(readFileSync(join(ROOT, "lanes/real-outcome/arms/arms.json"), "utf8"));
   const reg = loadRegistry();
-  const arms = { ...lane, arms: Object.fromEntries(Object.entries(reg.arms).map(([name, a]) => [name, { ...lane.arms[a.kind === "none" ? "none" : "gstack"], limits: { ...a.limits, quiet_sec: 1 } }])) };
-  const armsPath = join(W, "stand-in-arms.json");
-  writeFileSync(armsPath, JSON.stringify(arms, null, 2));
+  const armsPath = join(W, "g-arms.json");
+  writeFileSync(armsPath, JSON.stringify({ ...reg, arms: Object.fromEntries(Object.entries(reg.arms).map(([name, a]) => [name, { ...a, limits: { ...a.limits, quiet_sec: 1 } }])) }, null, 2));
+  const standIn = () => {
+    const lane = JSON.parse(readFileSync(join(ROOT, "lanes/real-outcome/arms/arms.json"), "utf8"));
+    const path = join(W, "stand-in-arms.json");
+    writeFileSync(path, JSON.stringify({ ...lane, arms: Object.fromEntries(Object.entries(reg.arms).map(([name, a]) => [name, { ...lane.arms[a.kind === "none" ? "none" : "gstack"], limits: { ...a.limits, quiet_sec: 1 } }])) }, null, 2));
+    return path;
+  };
   const sidecar = spawn(process.execPath, [BIN, "real", "sandbox", "serve", "--root", join(W, "sidecar"), "--agent-host", "127.0.0.1", "--agent-port", "0", "--control-port", "0"], { env: ENV, stdio: ["ignore", "pipe", "inherit"] });
   procs.push(sidecar);
   const sidecarUrl = await new Promise<string>((r) => lines(sidecar.stdout!, (l) => /control=(\S+)/.test(l) && r(/control=(\S+)/.exec(l)![1]!)));
 
-  type SessionResult = { error: { type: string; message: string } | null; stub: Array<Record<string, any>>; summary: Record<string, any> | null; events: string[] };
+  type SessionResult = { error: { type: string; message: string } | null; stub: Array<Record<string, any>>; summary: Record<string, any> | null; events: string[]; turns: { phases?: string[]; sha256?: string[] } | null; records: Array<Record<string, any>> };
   let sessionN = 0;
   const session = (a: Record<string, unknown>): Promise<SessionResult> =>
     new Promise((resolve, reject) => {
       const dir = join(W, "sessions", String(++sessionN));
       mkdirSync(dir, { recursive: true });
-      const p = spawn(PYTHON, [join(import.meta.dir, "dryrun_session.py"), JSON.stringify({ dir, sidecar: sidecarUrl, node: process.execPath, arms_path: armsPath, ledger: "u4", ...a })], { env: ENV, stdio: ["ignore", "pipe", "pipe"] });
+      const p = spawn(PYTHON, [join(import.meta.dir, "dryrun_session.py"), JSON.stringify({ dir, sidecar: sidecarUrl, node: process.execPath, arms_path: armsPath, ledger: "u4", statement: STATEMENT, ...a })], { env: ENV, stdio: ["ignore", "pipe", "pipe"] });
       procs.push(p);
       let out = "";
       let err = "";
@@ -420,6 +426,41 @@ async function main(argv: string[]): Promise<number> {
       await within(E2.exited, 60_000);
     }
     rule("U7 a driver killed mid-call is recovered on relaunch for the same run", "STAGE_RECOVERED, lease 1 closed with the held call unknown at its full reservation, slot 2 opened on what is left", "first call " + first.status + ", " + (E2.err().includes("STAGE_RECOVERED item=g-u7") ? "STAGE_RECOVERED" : "no recovery (" + E2.err().split("\n")[0]!.slice(0, 120) + ")") + ", lease 1 " + (c1 ? "closed spent $" + c1.spent_micros / 1e6 + " unknown " + c1.unknown_calls + " at $" + c1.unknown_micros / 1e6 + " (held call reserved $" + (heldMax ?? 0) / 1e6 + ")" : "open") + ", lease 2 " + (l2 ? "$" + l2.reserved_micros / 1e6 : "none"), first.status === 200 && E2.err().includes("STAGE_RECOVERED item=g-u7") && !!c1 && c1.unknown_calls === 1 && c1.unknown_micros === heldMax && l2?.seq === 2 && l2.reserved_micros === 20e6 - c1.spent_micros - c1.unknown_micros);
+
+    // U8: G's registry turns, and the turn and parent_tool_use_id the exposure detectors read on every message.
+    const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+    const u8: string[] = [];
+    let u8ok = true;
+    for (const s of STAGES) {
+      const r = await session({ arm: s.arm, control_url: A.control, base_url: proxyRoot(A, s.item), task: "t-u8", trial_n: 1, calls: 1, scenario: "g_turns", label: label(RUN, s.arm, "t-u8", 1), ...(seed === "u8-turns" ? { arms_path: standIn() } : {}), ...(seed === "u8-parent" ? { drop_parent: true } : {}) });
+      const want = turnScript(reg, s.arm, STATEMENT);
+      const phases = want.map((t) => t.phase);
+      const sent = r.stub.filter((e) => e.event === "user").map((e) => e.text);
+      const limits = r.summary?.limits as Record<string, unknown> | undefined;
+      const limitsOk = limits?.quiet_sec === 1 && JSON.stringify({ ...limits, quiet_sec: reg.arms[s.arm]!.limits.quiet_sec }) === JSON.stringify(reg.arms[s.arm]!.limits);
+      const api = r.stub.filter((e) => e.event === "api");
+      const callOk = api.length === 1 && api[0]!.status === 200;
+      const turnsOk = JSON.stringify(sent) === JSON.stringify(want.map((t) => t.text)) && JSON.stringify(r.turns?.phases) === JSON.stringify(phases) && want.every((t, i) => r.turns?.sha256?.[i] === sha(t.text));
+      const loose = r.records.filter((m) => !phases.includes(m.phase) || !("parent_tool_use_id" in m)).length;
+      const agents = new Set<string>(r.records.flatMap((m) => (m.parent_tool_use_id === null && Array.isArray(m.content) ? m.content.filter((b: Record<string, any>) => b?.type === "tool_use" && b.name === "Agent").map((b: Record<string, any>) => m.phase + " " + b.id) : [])));
+      const nested = phases.every((p) => r.records.some((m) => m.phase === p && typeof m.parent_tool_use_id === "string" && agents.has(p + " " + m.parent_tool_use_id)));
+      const skill = reg.arms[s.arm]!.skill;
+      let read = "no detector";
+      let readOk = skill === null;
+      if (skill) {
+        try {
+          const e = detectExposure(skill, r.records);
+          read = skill + "'s detector reads " + (e.exposed ? "exposed" : "unexposed at " + e.failed);
+          readOk = e.exposed;
+        } catch (e) {
+          read = skill + "'s detector refused: " + (e as Error).message.slice(0, 120);
+        }
+      }
+      const good = r.error === null && limitsOk && callOk && turnsOk && r.records.length > 0 && loose === 0 && nested && readOk;
+      u8ok &&= good;
+      u8.push(s.arm + ": " + (r.error ? r.error.type + " " + r.error.message.slice(0, 120) + ", " : "") + (limitsOk ? "the registry's limits at quiet_sec 1" : "limits " + JSON.stringify(limits ?? null)) + ", metered call " + api.map((e) => e.status).join("+") + ", turns " + (r.turns?.phases ?? []).join("+") + (turnsOk ? " as turnScript writes them" : ", not turnScript's") + ", " + r.records.length + " message records, " + loose + " without a registry turn or parent_tool_use_id, subagent messages " + (nested ? "under their Agent call in every turn" : "missing their Agent call's id") + ", " + read);
+    }
+    rule("U8 real_agent sends G's registry turns and records each message's turn and parent_tool_use_id", "each session ran the registry's limits (quiet_sec 1) and its one metered call was answered 200; t1 for none and t1 to t3 for each told arm, byte for byte as turnScript writes them; every message record with its turn and parent_tool_use_id, a subagent's under its Agent call; each told skill's detector reads its session exposed", u8.join("; "), u8ok);
 
     await fetch(A.control + "/stop", { method: "POST" });
     const aCode = await within(A.exited, 120_000);
