@@ -85,7 +85,8 @@ Fix-check notes 1 to 3 are the same defects as gaps 3, 5 and 4, so those gaps cl
 Rerun it from a directory holding the prereg's bundle files with this post's files copied over them, and the two scripts renamed to drop .txt:
 
 ```
-cp wiki/plans/2026-11-04-geva-285-ceo-outcome-prereg/* wiki/plans/2026-11-05-geva-289-ceo-rule-guards-amendment/* <dir>
+cp wiki/plans/2026-11-04-geva-285-ceo-outcome-prereg/* <dir>
+cp wiki/plans/2026-11-05-geva-289-ceo-rule-guards-amendment/* <dir>
 cd <dir> && mv ceo-rule.ts.txt ceo-rule.ts && mv dryrun.ts.txt dryrun.ts
 env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun dryrun.ts <scorer checkout> <scratch dir>
 ```
