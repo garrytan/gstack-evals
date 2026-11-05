@@ -8,7 +8,8 @@ that ships, gets no reply, since the ship turn answers it. src/usersim's global 
 
 A registry arm (family G) counts per turn. In its turns before the skill turn (G ruling A on red-team #1), an ask that
 proposes implementing gets PLAN_HOLD instead, counted as a hold: a closing ask that implements() reads in its question
-or recommendation, or an AskUserQuestion whose question, or the option the persona would pick, proposes it. A hold
+or recommendation, or an AskUserQuestion whose question, or the option the persona would pick, proposes it. A generic
+action ask counts too, unless it names the plan, or the persona would pick among options that each name it. A hold
 reply spends the turn's prose allowance like any other. Every other answer, and every answer from the skill turn on, is
 unchanged.
 """
@@ -22,28 +23,37 @@ PHASES = ("build", "ship")
 # A sentence that proposes the agent's next step: what "Go with your recommendation." would approve.
 RECOMMENDS = re.compile(r"\b(recommend|suggest|propose|next steps?|I'd|I would|I can|I could|I'll|I will|let me|ready to)\b", re.I)
 PLAN_HOLD = "Not yet. Keep to PLAN.md for now; don't write code yet."
-# What "proposes implementing" means: moving from the plan to writing code. One sentence or line at a time: a start verb
-# before a code verb, the agent offering to write code, a bare yes/no ask to proceed, or an option that opens with
-# "Implement".
+# What "proposes implementing" means, one sentence or line at a time. An implement ask names writing code: a start verb
+# before a code verb, the agent offering to write code, or an option that opens with "Implement". A generic action ask
+# (proceed, go ahead, continue, get started, make these changes, do that, a bare "Should I?") means the same in a turn
+# before the skill turn, unless its sentence names the plan, PLAN.md, a section or an option.
 CODE = r"(?:implement(?:ing)?|implementation(?!\s+(?:plan|section|steps?|details?|order|notes?|approach|strategy|phases?)\b)|coding|cod(?:e|ing)\s+(?:it|this|that|them|up)|writ(?:e|ing)\s+(?:the\s+|any\s+)?code|build(?:ing)?\s+(?:it|this|that|them)|building(?!\s+(?:the\s+|a\s+)?plan)|execut(?:e|ing)\s+(?:it|this|that|the\s+plan)|carry(?:ing)?\s+out\s+(?:it|this|that|the\s+plan))"
 IMPLEMENTS = re.compile(
     r"\b(?:start|begin|get\s+started|proceed|move\s+on|go\s+ahead|ready|kick\s+off|dive\s+in|jump\s+in)\b[^.?!\n]{0,30}?\b" + CODE + r"\b"
     r"|\b(?:I|I'll|I'd|I’ll|I’d|me|we|we'll|we’ll|let's|let’s)\s+(?:\w+\s+){0,3}?" + CODE + r"\b"
-    r"|^(?:(?:so|ok(?:ay)?),?\s+)?(?:(?:shall|should|can|may)\s+(?:I|we)|(?:do\s+you\s+)?(?:want|would\s+you\s+like)\s+me\s+to|ready\s+(?:for\s+me\s+)?to|ok(?:ay)?\s+to)\s+(?:proceed|go\s+ahead|start|begin|get\s+started)(?:\s+(?:(?:with|on)\s+(?:it|this|that|the\s+plan|(?:step|phase)\s+\d+)|now))?\s*[?.!]?$"
     r"|^(?:yes,?\s+)?implement(?:ing)?\b(?!\s+(?:with|using|via|as|in)\b)",
     re.I)
+ACT = r"(?:proceed|go\s+ahead|continue|carry\s+on|keep\s+going|get\s+started|get\s+going|start|begin|move\s+(?:on|forward|ahead)|kick\s+(?:it\s+|things\s+)?off|dive\s+in|jump\s+in|get\s+to\s+work|(?:make|apply|do)\s+(?:(?:these|those|the|this|that|any|all(?:\s+(?:the|these|those))?)\s+)?(?:\w+\s+){0,2}?(?:changes?|edits?|fix(?:es)?|updates?|modifications?)|(?:do|handle|tackle|take\s+care\s+of)\s+(?:it|that|this|them))\b"
+GENERIC = re.compile(
+    r"\b(?:I|I'll|I'd|I’ll|I’d|me|we|we'll|we’ll|let's|let’s|ready|ok(?:ay)?|like)\s+(?:\w+\s+){0,2}?(?:to\s+)?" + ACT
+    + r"|^(?:yes,?\s+)?" + ACT
+    + r"|^(?:(?:shall|should|can|may)\s+(?:I|we)|(?:do\s+you\s+)?(?:want|would\s+you\s+like)\s+me\s+to)\s*\?$",
+    re.I)
+PLANNED = re.compile(r"\bplan(?:s|'s|’s)?\b|\bsections?\b|\b(?:options?|alternatives?)\b", re.I)
 BEFORE = re.compile(r"\b(?:before|until)\b[^.?!\n]*", re.I)
 NEGATED = re.compile(r"\b(?:not|never)\b|n['’]t\b", re.I)
 
 
-def implements(text: str) -> bool:
+def implements(text: str, plan_choice: bool = False) -> bool:
     """Whether text proposes implementing. A before or until clause names what comes later, so it is dropped first, and
-    a statement (not a question) with not, never or n't declines rather than proposes."""
+    a statement (not a question) with not, never or n't declines rather than proposes. A generic action ask is exempt
+    when its sentence names the plan, or when plan_choice says the answer picks among options that each name it."""
     for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
         sentence = sentence.strip()
         if NEGATED.search(sentence) and not sentence.endswith("?"):
             continue
-        if IMPLEMENTS.search(BEFORE.sub("", sentence).strip()):
+        sentence = BEFORE.sub("", sentence).strip()
+        if IMPLEMENTS.search(sentence) or (GENERIC.search(sentence) and not plan_choice and not PLANNED.search(sentence)):
             return True
     return False
 
@@ -88,7 +98,9 @@ class ShipUser:
         options = question.get("options", []) or []
         text = lambda option: str(option.get("label", "")) + " " + str(option.get("description", ""))
         picked = next((o for o in options if any(marker in text(o).lower().replace("not recommended", "") for marker in self.persona["recommended_markers"])), None)
-        if self.phase in self.plan_turns and implements("\n".join([str(question.get("question", ""))] + [text(o) for o in ([picked] if picked else options)])):
+        chosen = [picked] if picked else options
+        plan_choice = bool(chosen) and all(PLANNED.search(text(o)) for o in chosen)
+        if self.phase in self.plan_turns and implements("\n".join([str(question.get("question", ""))] + [text(o) for o in chosen]), plan_choice):
             return PLAN_HOLD, "hold"
         if picked:
             return str(picked.get("label", "")), "recommended"

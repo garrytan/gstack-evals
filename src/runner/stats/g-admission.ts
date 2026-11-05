@@ -216,9 +216,11 @@ const isPlan = (path: string) => path.split("/").pop() === "PLAN.md";
 /**
  * Report only (G ruling A on red-team #1): what a told session wrote outside PLAN.md in t1, read from the phase-tagged
  * records real_agent keeps, a subagent's included. An edit tool's call (Write, Edit, MultiEdit, NotebookEdit) counts by
- * its path unless its result is an error. A Bash call counts, whatever its exit, when it redirects into a file, tees
- * into one or edits in place (sed -i, perl -i, git apply, patch); heredoc bodies and quoted text are not read, and a
- * /dev/ target does not count. A call whose result carries a tool_use_error never ran. A file named PLAN.md never counts.
+ * its path unless its result is an error. A Bash call counts, whatever its exit, when it sends stdout into a file (>, >>,
+ * 1>, &>), tees into one, edits a file in place (sed -i, perl -i) or applies a patch (git apply, patch). Its words are
+ * read as the shell splits them, so an operator inside quotes is text and a quoted file name is a file; heredoc bodies
+ * are skipped, and a /dev/ target does not count. A call whose result carries a tool_use_error never ran. A file named
+ * PLAN.md never counts.
  */
 export function t1WritesOutsidePlan(records: Record<string, any>[]): string[] {
   const results = new Map<string, Record<string, any>>();
@@ -250,16 +252,92 @@ function bashWrites(command: string): string[] {
     kept.push(line);
     heredoc = /<<-?\s*(["']?)(\w+)\1/.exec(line)?.[2] ?? null;
   }
-  const shell = kept.join("\n");
-  const bare = shell.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''");
-  const targets = [...shell.matchAll(/(?:^|[^\d&>])>>?\s*(["'])([^"'\n]+)\1/g)].map((m) => m[2]!).concat([...bare.matchAll(/(?:^|[^\d&>])>>?\s*([^\s;|&<>()'"]+)/g)].map((m) => m[1]!));
-  const tees = [...bare.matchAll(/\btee\s+(?:-\w+\s+)*([^\s;|&<>()'"]+)/g)].map((m) => m[1]!);
-  const keep = (p: string) => !isPlan(p) && !p.startsWith("/dev/");
-  return [
-    ...targets.filter(keep).map((p) => "Bash > " + p),
-    ...tees.filter(keep).map((p) => "Bash tee " + p),
-    ...(/\b(?:sed|perl)\s+(?:-\w+\s+)*-\w*i|\bgit\s+apply\b|(?:^|[;&|]\s*)patch\b/.test(bare) ? ["Bash edit: " + command.split("\n")[0]!.slice(0, 120)] : []),
-  ];
+  const edit = "Bash edit: " + command.split("\n")[0]!.slice(0, 120);
+  const keep = (path: string) => !isPlan(path) && !path.startsWith("/dev/");
+  const found: string[] = [];
+  let words: string[] = [];
+  const run = () => {
+    const at = words.findIndex((w) => !/^\w+=/.test(w));
+    const [cmd, ...args] = at < 0 ? [] : words.slice(at);
+    const name = cmd?.split("/").pop();
+    words = [];
+    if (name === "tee") found.push(...args.filter((a) => !a.startsWith("-") && keep(a)).map((a) => "Bash tee " + a));
+    if ((name === "git" && args[0] === "apply") || name === "patch") found.push(edit);
+    if ((name !== "sed" && name !== "perl") || !args.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith("--in-place"))) return;
+    const files: string[] = [];
+    let script = false;
+    for (let j = 0; j < args.length; j++) {
+      const a = args[j]!;
+      if (/^-[a-zA-Z]*[eEf]$|^--(?:expression|file)$/.test(a)) {
+        script = true;
+        j++;
+      } else if (!a.startsWith("-")) {
+        if (script) files.push(a);
+        script = true;
+      }
+    }
+    if (files.some(keep)) found.push(edit);
+  };
+  const tokens = shellTokens(kept.join("\n"));
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    const next = tokens[i + 1];
+    if ("word" in t) words.push(t.word);
+    else if (/^(?:1?>>?|&>>?|>\|)$/.test(t.op) && next && "word" in next) {
+      if (keep(next.word)) found.push("Bash > " + next.word);
+      i++;
+    } else if (/[<>]/.test(t.op)) {
+      if (next && "word" in next) i++;
+    } else run();
+  }
+  run();
+  return found;
+}
+
+/** Shell words and operators. Quotes and backslashes are honoured, so an operator inside quotes stays in its word, and a
+ * digit word glued to ">" is that redirect's file descriptor. A newline ends a command. */
+function shellTokens(shell: string): Array<{ word: string } | { op: string }> {
+  const tokens: Array<{ word: string } | { op: string }> = [];
+  let word = "";
+  let open = false;
+  const end = () => {
+    if (open) tokens.push({ word });
+    word = "";
+    open = false;
+  };
+  for (let i = 0; i < shell.length; i++) {
+    const c = shell[i]!;
+    if (c === "'") {
+      const close = shell.indexOf("'", i + 1);
+      const stop = close < 0 ? shell.length : close;
+      word += shell.slice(i + 1, stop);
+      open = true;
+      i = stop;
+    } else if (c === '"') {
+      open = true;
+      for (i++; i < shell.length && shell[i] !== '"'; i++) word += shell[i] === "\\" && i + 1 < shell.length ? shell[++i] : shell[i];
+    } else if (c === "\\") {
+      open = true;
+      word += shell[++i] ?? "";
+    } else if (/\s/.test(c)) {
+      end();
+      if (c === "\n") tokens.push({ op: ";" });
+    } else if ("|&;<>()".includes(c)) {
+      let op = c;
+      if (c === ">" && open && /^\d+$/.test(word)) {
+        op = word + c;
+        open = false;
+      }
+      end();
+      while (op.length < 4 && i + 1 < shell.length && "|&<>".includes(shell[i + 1]!)) op += shell[++i];
+      tokens.push({ op });
+    } else {
+      word += c;
+      open = true;
+    }
+  }
+  end();
+  return tokens;
 }
 
 /** Every close on the named line items; each item must hold a lease and every lease must be closed. */
