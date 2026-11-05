@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "session_id": "9ab9be3e-467b-4de0-a732-bead82e3b108",
+  "transcript_path": "/root/.claude/projects/-app/9ab9be3e-467b-4de0-a732-bead82e3b108.jsonl",
+  "runs": {
+    "investigate@3": {
+      "skill": "investigate",
+      "load_line": 3,
+      "outcome": "miss",
+      "missing": [
+        "debug-report"
+      ],
+      "waived": [],
+      "blocked_at": "2026-11-04T14:57:29.821Z",
+      "updated_at": "2026-11-04T14:57:31.893Z"
+    }
+  }
+}
