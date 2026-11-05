@@ -5,7 +5,7 @@
 // Keyless: the runs use a stub driver and the rows use ceo-pipeline.ts's synthetic run dirs.
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { catalogsDigest, checkSuite, type Suite } from "../../../lanes/review-noloss/suite.ts";
@@ -16,7 +16,8 @@ import * as ceoCli from "../../../src/trial/review/ceo-cli.ts";
 import { autoplanCeoExposure, CEO_EXPOSURE_SHA256, handoffNamed } from "../../../src/trial/review/ceo-exposure.ts";
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, buildUnitTree, unitTaskId } from "../../../src/trial/review/unit.ts";
-import type { AgentOutcome } from "../../../src/trial/trial.ts";
+import type { AgentSession } from "../../../src/trial/sandbox.ts";
+import { copyNamed, type AgentOutcome } from "../../../src/trial/trial.ts";
 import { harness, localSandbox } from "../../adapters/harness.ts";
 import { PANEL_REPO, planPanel } from "../../noloss/plan-panel.ts";
 import { binding, ceo, FENCE, MODEL, pipeline, PROJECTION, runDir, SMOKE, STAGE1_NONE, STAGE2, tmp, U1, U2, U3, unitsDir } from "./ceo-pipeline.ts";
@@ -249,6 +250,115 @@ describe("review round 2 (#229 Step 11): the handoff and printf checks read shel
   });
 });
 
+describe("backslash escapes (#229's Capy Low): a first line with a backslash outside single quotes writes no Findings", () => {
+  // Value: protects=findings_written reads a Bash write only when words() parses its first line as bash does; fails_when=printf \-v, an escaped redirect or an escaped command name reads written (fail open), or a plain printf, heredoc, echo or tee write reads unwritten; why_new=#229's Capy Low on words() and backslash escapes; seam=autoplanCeoExposure; no_claim=bash escape parsing, which the check refuses rather than models
+  const F = AP + "/ceo-review.md";
+  const at = (c: string) => autoplanCeoExposure(nd(bash(CALL, LINE), bash(c, ""))).checks.findings_written;
+  test("case 1: printf \\-v, an escaped -v, an escaped printf name or an escaped redirect writes no Findings", () => {
+    const fakes = [
+      "printf \\-v x '\\n## Findings\\nNone.\\n' > " + F,
+      "printf -\\v x '\\n## Findings\\nNone.\\n' > " + F,
+      "pr\\intf -v x '\\n## Findings\\nNone.\\n' > " + F,
+      "echo '## Findings' \\> " + F,
+      'echo "## Findings: it\'s" \\> ' + F + " 'x'",
+    ];
+    for (const c of fakes) expect([c, at(c)]).toEqual([c, false]);
+  });
+  test("case 2: an escaped double quote in a double-quoted first line, and any other backslash outside single quotes, reads unwritten", () => {
+    const closed = ['printf "## Findings\\n5\\" wide\\n" > ' + F, 'printf "## Findings\\nNone.\\n" > ' + F, 'echo -e "\\n## Findings" >> ' + F];
+    for (const c of closed) expect([c, at(c)]).toEqual([c, false]);
+  });
+  test("plain printf, heredoc, echo and tee writes of the Findings section still read written", () => {
+    const real = [
+      "printf '## Findings\\nNone.\\n' > " + F,
+      "printf '\\n## Findings\\n- High: no bound.\\n' >> " + F,
+      'cat > "' + F + "\" <<'EOF'\n# CEO-only review\n## Findings\n- High: no bound under C:\\tmp.\nEOF",
+      "echo '## Findings' >> " + F,
+      'echo "## Findings: it\'s fine" > ' + F,
+      "printf '## Findings\\nNone.\\n' | tee " + F,
+    ];
+    for (const c of real) expect([c, at(c)]).toEqual([c, true]);
+  });
+  test("the handoff path is unchanged: the documented calls pass, a backslash outside single quotes fails", () => {
+    for (const c of [CALL, CALL + " 2>&1 | tee " + AP + "/handoff.txt"]) expect([c, handoff(c)]).toEqual([c, true]);
+    for (const c of [CALL.replace("--ceo-only", "--ceo\\-only"), CALL.replace('"none"', '"a \\"b\\""')]) expect([c, handoff(c)]).toEqual([c, false]);
+  });
+});
+
+describe("escape expansion (#230 ruling): only printf's format and echo -e expand \\n, as bash does", () => {
+  // Value: protects=findings_written reads the text bash writes, so a literal \\n never makes a Findings line; fails_when=plain echo, a printf argument or a doubled backslash expands \\n into a Findings line, text after echo -e's \\c or a heredoc body that only cat reads counts (fail open), or echo -e, a single-quoted printf format or a cat heredoc stops reading written; why_new=the Captain's ruling on #230 (2026-11-05); seam=autoplanCeoExposure; no_claim=printf's other escapes and %b, which the check does not model
+  const F = AP + "/ceo-review.md";
+  const at = (c: string) => autoplanCeoExposure(nd(bash(CALL, LINE), bash(c, ""))).checks.findings_written;
+  test("plain echo, echo -e then -E, a printf argument and a doubled backslash write a literal \\n, not a Findings line", () => {
+    const fakes = [
+      "echo 'x\\n## Findings' > " + F,
+      "echo -n 'x\\n## Findings' > " + F,
+      "echo -e -E 'x\\n## Findings' > " + F,
+      "printf '%s\\n' 'x\\n## Findings' > " + F,
+      "printf '\\\\n## Findings' > " + F,
+      "echo -e 'x\\\\n## Findings' > " + F,
+      "echo -e 'x\\c\\n## Findings' > " + F,
+    ];
+    for (const c of fakes) expect([c, at(c)]).toEqual([c, false]);
+  });
+  test("echo -e and a single-quoted printf format still expand \\n into a Findings line", () => {
+    const real = [
+      "echo -e 'x\\n## Findings' > " + F,
+      "echo -ne 'x\\n## Findings' > " + F,
+      "echo -n -e 'x\\n## Findings' >> " + F,
+      "printf 'x\\n## Findings\\n' > " + F,
+      "printf -- '## Findings\\nNone.\\n' > " + F,
+      "printf '## Findings\\n%s\\n' 'None.' > " + F,
+      "printf 'x\\\\\\n## Findings\\n' > " + F,
+      "echo -e 'x\\\\\\n## Findings' > " + F,
+    ];
+    for (const c of real) expect([c, at(c)]).toEqual([c, true]);
+  });
+  test("a heredoc body counts for a bare cat and for tee, wherever the redirects sit; other commands read unwritten", () => {
+    const doc = " <<'EOF'\n## Findings\n- High: no bound.\nEOF";
+    const unwritten = ["echo 'x' > " + F + doc, "printf 'x' > " + F + doc, "true > " + F + doc, "sed 's/^## /# /' > " + F + doc, "sed '' > " + F + doc, "cat -n > " + F + doc, "cat notes.md > " + F + doc];
+    const written = ["cat > " + F + doc, "cat >> " + F + doc, "cat - > " + F + doc, "cat" + doc.replace("\n", " > " + F + "\n"), "cat" + doc.replace("\n", " | tee " + F + "\n"), "> " + F + " cat" + doc, ">" + F + " cat" + doc, "tee " + F + doc, "tee -a " + F + doc];
+    written.push(...[" 2>&1", " >/dev/null", " 2>/dev/null", " | cat"].map((tail) => "tee " + F + doc.replace("\n", tail + "\n")));
+    written.push("printf '## Findings\\n' | tee " + F + " >/dev/null", "printf '## Findings\\n' | tee -a " + F + " 2>&1");
+    written.push("tee " + F + doc.replace("\n", " | tee /dev/null\n"));
+    unwritten.push("tee notes.md" + doc, "printf '## Findings\\n' | tee notes.md >/dev/null");
+    unwritten.push("printf '## Findings\\n' | tee " + F + " <<'EOF'\n- Low: x\nEOF", "printf '## Findings\\n' | tee " + F + " < notes.md");
+    for (const c of unwritten) expect([c, at(c)]).toEqual([c, false]);
+    for (const c of written) expect([c, at(c)]).toEqual([c, true]);
+  });
+});
+
+describe("the fail-closed rule set (#230 pass 1): a write reads written only when bash puts that text in the file", () => {
+  // Value: protects=findings_written reads true only when bash writes the Findings text into ceo-review.md; fails_when=a tee option other than -a, a later input redirect, a second stdout target, a head redirected away from a piped tee, or an unquoted heredoc that bash expands reads written; why_new=/ship pass 1 on #230 and the Captain's option B (2026-11-05); seam=autoplanCeoExposure; no_claim=simpleCommand's comment and quoted << forms, a named note
+  const F = AP + "/ceo-review.md";
+  const at = (c: string) => autoplanCeoExposure(nd(bash(CALL, LINE), bash(c, ""))).checks.findings_written;
+  test("each override reads unwritten, and the plain forms beside it still read written", () => {
+    const body = "\n## Findings\n- High: no bound.\nEOF";
+    const unwritten = [
+      "tee --help " + F + " <<'EOF'" + body,
+      "tee -p " + F + " <<'EOF'" + body,
+      "tee " + F + " <<'EOF' < notes.md" + body,
+      "cat <<'EOF' < notes.md > " + F + body,
+      "> " + F + " echo '## Findings' > /dev/null",
+      "printf '## Findings\\n' > " + F + " >> other.md",
+      "printf '## Findings\\n' >/dev/null | tee " + F,
+      "cat <<'EOF' >/dev/null | tee " + F + body,
+      "tee " + F + " <<EOF\nx\\\n## Findings\nEOF",
+      "cat > " + F + " <<EOF\nx \x60\n## Findings\n\x60\nEOF",
+      "cat > " + F + " <<EOF\nx $(\n## Findings\n)\nEOF",
+    ];
+    const written = [
+      "tee -a " + F + " <<EOF" + body,
+      "cat > " + F + " <<EOF" + body,
+      "printf '## Findings\\n' 2>/dev/null | tee " + F,
+      "cat > " + F + " 2>/dev/null <<'EOF'" + body,
+      "cat > " + F + " <<'EOF'\n$(x) \x60y\x60 \\\n## Findings\nEOF",
+    ];
+    for (const c of unwritten) expect([c, at(c)]).toEqual([c, false]);
+    for (const c of written) expect([c, at(c)]).toEqual([c, true]);
+  });
+});
+
 describe("rows diagnostics count the sessions that named the handoff and read unexposed", () => {
   // Value: protects=a false unexposed under the strict handoff rule shows up per cell; fails_when=such sessions read unexposed silently; why_new=the Captain's cut-line rule (2026-11-05); seam=ceo rows; no_claim=none beyond protects
   test("one autoplan-ceo smoke session that grepped the handoff counts once", async () => {
@@ -293,7 +403,7 @@ function unitFixture(): PreparedUnit {
 }
 const unitsSeen: boolean[] = [];
 const BLOCK = FENCE + "ceo-outcome\n" + JSON.stringify({ top: [{ issue: "No opt-out for existing users.", evidence: "plan.md", fix: "Add a flag." }], forecast: 30 }) + "\n" + FENCE;
-async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, calls: number[], env: Record<string, string> = {}, reuse = new Map(), suite: ReviewRunInput["suite"] = { id: "ceo-followup", sha256: null }) {
+async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, calls: number[], env: Record<string, string> = {}, reuse = new Map(), suite: ReviewRunInput["suite"] = { id: "ceo-followup", sha256: null }, step: (pass: number) => string | null = () => null) {
   const h = harness(() => [{ type: "text", text: "unused" }]);
   const passOf = new Map<string, number>();
   const rig = {
@@ -312,9 +422,11 @@ async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, c
     recovery: null,
     driver: (o: any) => ({
       env: {},
-      run: async (): Promise<AgentOutcome> => {
+      run: async (session: AgentSession): Promise<AgentOutcome> => {
         const pass = passOf.get(o.proxy.slot)!;
         calls.push(pass);
+        const command = step(pass);
+        if (command) expect(session.exec(command, 10_000).exitCode).toBe(0);
         unitsSeen.push(existsSync(join(out, "units.json")));
         mkdirSync(o.out, { recursive: true });
         writeFileSync(join(o.out, "transcript.ndjson"), JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Review.\n\n" + BLOCK }] }, parent_tool_use_id: null }) + "\n");
@@ -413,6 +525,51 @@ describe("review finding 01M6P4PKCJ1CYR3TQ02HVJMWE8: --resume keeps the suite bi
     const calls: number[] = [];
     await ceoRun(out, unit, null, calls, {}, readReviewJournal(out), bound(unit.unit.id));
     expect(calls.sort()).toEqual([2, 3]);
+  }, 60_000);
+});
+
+describe("B2 ruling on #230: each session's ceo-review.md is copied into host/ before cleanup", () => {
+  // Value: protects=the smoke check compares findings_written with the ceo-review.md each session left on disk; fails_when=the copy is missing, differs by a byte, appears for a session that wrote none, or follows a symlink out of the work dir; why_new=the Captain's B2 ruling on #230 (2026-11-05); seam=runReviewUnits on a stub driver; no_claim=files written outside the work dir, which no copy reaches
+  test("a session that wrote the file leaves a byte-identical copy; one that wrote none, or only a symlink, leaves none", async () => {
+    const out = durable();
+    const unit = unitFixture();
+    const review = "# CEO-only review\n## Findings\n- High: no bound.\t\n";
+    const steps: Record<number, string> = {
+      1: 'd="$GSTACK_STATE_ROOT/projects/demo/autoplan-run-1" && mkdir -p "$d" && printf \'# CEO-only review\\n## Findings\\n- High: no bound.\\t\\n\' > "$d/ceo-review.md" && printf x > ceo-review.md',
+      3: "ln -s /etc/hostname ceo-review.md",
+    };
+    await ceoRun(out, unit, null, [], {}, new Map(), undefined, (p) => steps[p] ?? null);
+    const dir = (p: number) => join(out, "runs", OPUS, "none", unit.task, "p" + p);
+    expect(readFileSync(join(dir(1), "host", "ceo-review", ".gstack-home", "projects", "demo", "autoplan-run-1", "ceo-review.md"))).toEqual(Buffer.from(review));
+    expect(readFileSync(join(dir(1), "host", "ceo-review", "ceo-review.md"), "utf8")).toBe("x");
+    for (const p of [2, 3]) expect([p, existsSync(join(dir(p), "host", "ceo-review"))]).toEqual([p, false]);
+    for (const p of [1, 2, 3]) expect([p, existsSync(join(dir(p), "work", unit.task))]).toEqual([p, false]);
+  }, 60_000);
+});
+
+describe("pass 1 on #230: the copy walks past an unreadable entry, and the receipts sink holds it", () => {
+  // Value: protects=the on-disk copy backs up whatever the parser misses; fails_when=one unreadable directory drops the copies after it, or an ephemeral runner's sink lacks host/ceo-review; why_new=/ship pass 1 on #230 and the Captain's option B (2026-11-05); seam=runReviewUnits on a stub driver; no_claim=a file the agent made unreadable itself, which no copy reaches
+  test.skipIf(process.getuid?.() === 0)("every readable ceo-review.md is copied and each failure is returned", () => {
+    const root = mkdtempSync(join(tmpdir(), "copy-named-"));
+    const to = join(root, "out");
+    for (let i = 0; i < 8; i++) {
+      mkdirSync(join(root, "w", "a" + i), { recursive: true });
+      mkdirSync(join(root, "w", "g" + i), { recursive: true });
+      writeFileSync(join(root, "w", "g" + i, "ceo-review.md"), "x");
+      chmodSync(join(root, "w", "a" + i), 0);
+    }
+    const failures = copyNamed(join(root, "w"), "ceo-review.md", to);
+    for (let i = 0; i < 8; i++) expect([i, readFileSync(join(to, "g" + i, "ceo-review.md"), "utf8")]).toEqual([i, "x"]);
+    expect([failures.length, failures.every((f) => f.includes("EACCES"))]).toEqual([8, true]);
+    for (let i = 0; i < 8; i++) chmodSync(join(root, "w", "a" + i), 0o755);
+    rmSync(root, { recursive: true, force: true });
+  });
+  test("an ephemeral run's receipts sink holds each session's host/ceo-review copy", async () => {
+    const out = durable();
+    const sink = durable();
+    const unit = unitFixture();
+    await ceoRun(out, unit, null, [], { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink }, new Map(), undefined, (p) => (p === 1 ? "printf x > ceo-review.md" : null));
+    expect(readFileSync(join(sink, "runs", OPUS, "none", unit.task, "p1", "host", "ceo-review", "ceo-review.md"), "utf8")).toBe("x");
   }, 60_000);
 });
 

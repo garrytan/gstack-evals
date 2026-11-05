@@ -9,7 +9,7 @@
 // before the check runs; if the check passes, it runs again on that copy without the placeholders, and the trial passes
 // only when that run passes too. A fail or an error in that run, or a copy that cannot be built, is a fail, never a
 // missing cell.
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ReasonCode } from "../errors/codes.ts";
 import { judgeCheck } from "../skill-eval/contract/check.ts";
@@ -71,6 +71,9 @@ export interface TrialSpec {
   source?: Record<string, string | undefined>;
   /** Keep the work, baseline and grade trees after the trial. */
   keep?: boolean;
+  /** Before the trees are removed, every regular file under the work dir named name is copied to the same relative path
+   * under to, byte for byte, such as a ceo-outcome session's ceo-review.md; a symlink is never followed. */
+  copyOut?: { name: string; to: string };
   /** How the trees are removed (src/trial/cleanup.ts): an image removes root-owned leftovers. */
   cleanup?: CleanupOptions;
   /** Keys appended to the gstack state root's config.yaml after the seed: a stack cell's gstack config (src/arms/cells.ts). */
@@ -97,6 +100,29 @@ const PATH = "/usr/local/bin:/usr/bin:/bin";
 const DELTA_FILE = ".skill-eval-delta.json";
 const tail = (r: StepResult) => r.stderr.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
 
+/** Copies each regular file named name under root to the same relative path under to; symlinks are skipped, never followed.
+ * Returns one line for each directory it could not read and each file it could not copy, so one bad entry never drops the rest. */
+export function copyNamed(root: string, name: string, to: string, rel = ""): string[] {
+  let entries;
+  try {
+    entries = readdirSync(join(root, rel), { withFileTypes: true });
+  } catch (e) {
+    return [String(e)];
+  }
+  return entries.flatMap((e) => {
+    const path = join(rel, e.name);
+    if (e.isDirectory()) return copyNamed(root, name, to, path);
+    if (!e.isFile() || e.name !== name) return [];
+    try {
+      mkdirSync(join(to, rel), { recursive: true });
+      copyFileSync(join(root, path), join(to, path));
+      return [];
+    } catch (err) {
+      return [String(err)];
+    }
+  });
+}
+
 export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   const started = Date.now();
   const { task, sandbox } = spec;
@@ -120,6 +146,10 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   };
   const finish = (delta: Delta | null): TrialRun => {
     record.wall_ms = Date.now() - started;
+    if (spec.copyOut) {
+      const failures = copyNamed(work, spec.copyOut.name, spec.copyOut.to);
+      if (failures.length) logs.copy_out = failures;
+    }
     const leftovers = spec.keep ? [] : [work, baseline, grade, bare, fixtures].flatMap((tree) => removeTree(tree, spec.cleanup) ?? []);
     if (leftovers.length) logs.leftovers = leftovers;
     writeFileSync(join(spec.dir, "trial.json"), JSON.stringify({ record, delta, logs }, null, 2) + "\n");
