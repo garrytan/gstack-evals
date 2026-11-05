@@ -569,6 +569,9 @@ HELD_IN_T1 = (
     "I can start building the plan now. Should I?",
     "Section 2 of the plan is next. Should I?",
     "Should I proceed with implementing the plan?",
+    "Don't draft the plan yet. Should I?",
+    "I won't update the plan; I can make the changes directly. Should I?",
+    "Not writing the plan, just implementing. Should I?",
 )
 UNHELD_IN_T1 = (
     "Want me to proceed with writing PLAN.md?",
@@ -578,6 +581,7 @@ UNHELD_IN_T1 = (
     "Should I proceed with finishing PLAN.md?",
     "Want me to go ahead with revising the plan?",
     "I can finish drafting PLAN.md now. Should I?",
+    "I can write the plan next. Should I?",
     "Should I build out the plan?",
     "Should I build out the plan's risks section?",
     "Before writing code, I'll finish the plan.",
