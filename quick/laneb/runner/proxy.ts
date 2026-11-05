@@ -67,8 +67,8 @@ export const asksLongTtl = (body: string) => /"ttl":"(?!5m")/.test(body);
 // adds context to (arms/l1.ts and runner/agent/laneb_hooks.py hold the same string). A request counts as evidence only when
 // it reached the proxy before the session had been handed any 200 response: until then the model has produced no output, so
 // no tool ran and nothing in the container acted for it, and the line came from Claude Code, the hook or the task. Task text
-// that quotes the line, or context a task puts in the first request, reads as evidence without the hook until the harness
-// follow-up unit lands.
+// that quotes the line, or context a task puts in the first request, reads as evidence without the hook; this change does not
+// close that gap, and a later harness unit has to.
 export const ROUTE_MARK = "gstack skill routing (UserPromptSubmit hook;";
 const ROUTE_MARK_JSON = JSON.stringify(ROUTE_MARK).slice(1, -1);
 
