@@ -2,8 +2,11 @@
 # Ran on 2026-11-05 with PIN a git archive export of 17253ec4 (quick/ and src/ match e96a6a98), R3C_SIMS=2000, cap $750,
 # each command in slices of 10 runs (--first), run side by side.
 # Search level 0.87 ran on r3c.ts.txt sha256 00c064cf905cbb5c16b32b71b382be1620730570be341ef8b55b26bd778320fe. The committed
-# file adds ladder D1 (closingLine, closingBlock, goldFiles, locHit, ladderLines, forecast's admitted-rate mean and their
-# selftests) and moves one selftest fixture from 12 to 14 tasks; every function validate calls is byte-identical.
+# file adds ladder D1 and the graded secondaries (closingLine, closingBlock, goldFiles, locHit, locRank, f2pShare,
+# ladderLines, forecast's admitted-rate mean and their selftests) and moves one selftest fixture from 12 to 14 tasks;
+# every function validate calls is byte-identical except admission's pricing (the admitted tasks' graded calibration
+# none trials, not every trial), calSpendUsd's and the TSV reader's missing-cost rules and admission's unpriced STOP.
+# Every simulated trial costs $0.43 and none is missing, so these lines stand.
 # Search level 0.83, further down, ran on the earlier version of this file that the level was raised from.
 # Totals at 0.87: NPMLE truth, GO in 36 of 40, MDD mean 10.72, true power at it mean 84.7% (SE 1.0; 6 of 36 runs under
 # 80%, min 67.7%), spend before reserve mean $615.46 (max $670.42). Beta truth, GO in 17 of 20, MDD mean 10.38, true

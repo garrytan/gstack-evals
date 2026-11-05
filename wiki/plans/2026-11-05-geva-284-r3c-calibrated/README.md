@@ -19,14 +19,14 @@ links:
   - GST-1201
   - GST-1388
 attachments:
-  - d57dc67309c63e4e571cc4c405b615adf815df0254b4e116814767c765220435  r3c.ts.txt
+  - 18bc1b8f38c9d64f9cb40c5005136eed8cad8a0a50d00012ad5bb8656a28ded5  r3c.ts.txt
   - f4739896f0cf5e0ecbd2b24bb76d39f00088d2d528d725891957b0ccbc746d56  r3c-taskfit.py.txt
   - b8298156309d020770ce94741531aa40a58f2d222faf0776a16acb4f4d20b54d  r3c-taskfit.tsv
   - 062f5264ec3270fdf3ca367f92a44cfba36d2ba70c51651b6361d8aa6622fefb  r3c-taskfit-testhunks.txt
-  - bb4009e6a239e4304bbe9e928f3f5386eb2d02e3feccaa8ce9aa42b32cd9eb7e  r3c-calibrate.txt
-  - 74d1843ce6ae3ea704a0bf3b60304caeb782b877ce786556b31735355cce8bbb  r3c-validate.txt
-  - 7e0447eccb6109ae373605fa86e5c1d66dce7e92c74df579b74a134990918e43  r3c-dryrun.sh.txt
-  - 43796fdbeed02addeea78edf42dc4cb4606b7451c1b14a6046f17452bcc77e7d  r3c-dryrun.txt
+  - f00c5c2f0eb6f372f864f0bf584c69ff65bcd80882670b99309459bc93b03f07  r3c-calibrate.txt
+  - 751d22d25a97b519922e8c812a0b04960846f901c1e3be4f48d175e9f100f992  r3c-validate.txt
+  - 06cc46b3054603d33b613921622b67ac9510427c8d443179a4dc3e22d231878f  r3c-dryrun.sh.txt
+  - 04b006e4c843ac21a44c0c98d92d670c9f618231fa5f70138857d0c6d9c2b9f7  r3c-dryrun.txt
 ---
 
 # R3 amendment 6: R3c on tasks with measured headroom
@@ -42,6 +42,7 @@ R3b could not say whether told /investigate helps, because Opus 5.5 and GPT-6.1 
 - **Grid size and MDD.** Set by a frozen admission rule from the measured rates, after calibration and before any grid trial, with a power level calibrated by simulation (section 6).
 - **Two rules.** No told exposure re-check, and D1's floor scaled to the grid's size (section 7).
 - **One closing block for every arm (ladder D1).** Every arm's prompt ends with the same closing line, which asks for up to three ranked root-cause files. Localization is scored from that block only, never from the DEBUG REPORT (section 7).
+- **Two graded secondaries (ladder flags).** Every trial records the verifier's per-test results. R3c reports the FAIL_TO_PASS share under the PASS_TO_PASS gate and the closing block's localization rank, and neither gates anything (section 7).
 - **Unchanged.** The told arm (gstack 699a41cb with the procedure line, sha256 d369da3eacc80085787edc864ffddae08aa6bb83627e027d4b1121eac0aa2f9f) and the none arm (the same tar, harness, Claude Code 2.1.312, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, the plain prompt with the closing line added, and no drive or gstack in its container), the $12 allowance, the oracle gate, the 90% exposure gate on graded told grid trials, analyze()'s task-clustered bootstrap (10,000 draws, seed 20261101), the E1 truncation bound, the 10% infra bounds, the end states, and projection checks with raise and resume.
 
 **/investigate's 2x tier.** The difficulty ladder (GEVA-292) names R3c as /investigate's 2x tier. Its k is a strict none rate on a reference set over the rate on the tier, at the same session budget. r3c.ts forecast prints it from data in hand, with the forecast's mean true none rate on admitted tasks as the tier's rate:
@@ -102,16 +103,16 @@ After cal-2 settles, \`bun r3c.ts admit <in-hand dir> --model opus --calibration
 
 1. **Admitted list.** Every candidate in the band. Over 40 keeps far tasks first, then distance 1, then distance 0, each ordered by sha256 of the id.
 2. **Per-task chances.** The law is refitted on every Opus none trial, calibration included, so it is fitted across every candidate. Each admitted task's chance is its posterior under that law given all its trials. The keep rule is a function of those trials, so the posterior already conditions on it, and a task's measured rate is never treated as its true rate. This is the fix the R3b results post's outside voice named.
-3. **Money.** The cap, less settled spend, less $79.20 of reserve headroom (amendment 5 section 8), over n times the cost of one task-replicate pair: the calibration's mean none cost per trial times (1 + 1.593, R3b's Opus told over none), plus VM at R3b's hours per trial (0.0306 none, 0.0537 told) at $0.60 an hour. That gives the affordable replicate count, at most 24.
+3. **Money.** The cap, less settled spend, less $79.20 of reserve headroom (amendment 5 section 8), over n times the cost of one task-replicate pair: the mean cost of the admitted tasks' graded calibration none trials times (1 + 1.593, R3b's Opus told over none), plus VM at R3b's hours per trial (0.0306 none, 0.0537 told) at $0.60 an hour. That gives the affordable replicate count, at most 24. A missing cost on any of those trials stops admission; it never counts as $0. The mean over every calibration none trial is printed beside it, report only.
 4. **R.** The smallest replicate count from 3 at which simulated KEEP at a 10-point lift reaches the search level, found by bisection; if the affordable maximum doesn't reach it, the affordable maximum.
-5. **MDD.** The smallest lift on a 0.5-point grid at which simulated KEEP reaches the search level at that R. Each simulated grid draws each task's none chance from its posterior, sets told = min(1, p + d), runs R replicates per arm, and calls KEEP when analyze()'s paired task-clustered 95% interval (10,000 draws, seed 20261101) is above zero; 2,000 simulated grids per point, seed 20261109.
+5. **MDD.** The smallest lift on a 0.5-point grid at which simulated KEEP reaches the search level at that R. Each simulated grid draws each task's none chance from its posterior, sets told = min(1, p + d), runs R replicates per arm, and calls KEEP when analyze()'s paired task-clustered 95% interval (10,000 draws, seed 20261101) is above zero; 2,000 simulated grids per point, seed 20261109; admit always runs 2,000 and ignores R3C_SIMS.
 6. **GO** needs at least 10 admitted tasks, an affordable maximum of at least 3, an MDD of at most 12.5 points, and a null size (simulated KEEP at no lift) of at most 5%. Otherwise STOP: no grid runs, the item ends, and the results post reports the admitted count, the measured rates and the MDD the money could buy.
 
 admit prints the list's sha256, n, R, the MDD and the projection, and exits 0 on GO and 5 on STOP. Those lines freeze the grid, and the run thread sends them to the Captain before grid-1. Report only, beside them: the MDD if the lift sits on half the tasks, and the MDD and null size with posteriors under the refitted beta-binomial law.
 
 **The search level is calibrated, so the claimed MDD has 80% power on average.** The fitted law is an estimate, and a rule that treats it as known overstates power: at a search level of 80%, true power at the claimed MDD averaged 78.4%. r3c.ts calibrate measured the gap on 60 simulated calibrations at the $750 cap, with each candidate's true chance drawn from its in-hand posterior: for each admitted list it records simulated KEEP under the refitted law and on the true chances at lifts of 8 to 15 points. At a search level of 0.80 the true power averaged 78.4% (SE 0.8), at 0.81 80.0%, at 0.83 81.4%, and at 0.87 85.3% with a mean MDD of 11.31 points over 56 runs (r3c-calibrate.txt). calibrate holds each run's R at the one chosen at 0.80, so it can't see the optimism of choosing R on the same simulated curve. validate at 0.83 showed it: true power averaged 78.2% (SE 1.7) over 19 GO runs under the NPMLE truth, and 83.1% (SE 1.4) under the beta truth. So the search level is 0.87, and the claimed power stays 80%.
 
-**Validation (report only).** r3c.ts validate admits simulated calibrations at the cap with the frozen search level, and measures true power at each claimed MDD (r3c-validate.txt). Under the NPMLE truth, 36 of 40 reached GO, with a mean MDD of 10.72 points and true power at it averaging 84.7% (SE 1.0; 6 runs under 80%, the lowest 67.7%). Under the beta truth, 17 of 20 reached GO, with a mean MDD of 10.38 points and true power averaging 87.6% (SE 1.2). The STOPs were too few admitted tasks, an MDD over 12.5 points at 24 replicates, and one null size of 5.1%. The 80% holds on average over calibrations, not for every admitted list.
+**Validation (report only).** r3c.ts validate admits simulated calibrations at the cap with the frozen search level, and measures true power at each claimed MDD (r3c-validate.txt). Under the NPMLE truth, 36 of 40 reached GO, with a mean MDD of 10.72 points and true power at it averaging 84.7% (SE 1.0; 6 runs under 80%, the lowest 67.7%). Under the beta truth, 17 of 20 reached GO, with a mean MDD of 10.38 points and true power averaging 87.6% (SE 1.2). The STOPs were too few admitted tasks, an MDD over 12.5 points at 24 replicates, and one null size of 5.1%. The 80% holds on average over calibrations, not for every admitted list. validate and calibrate draw their simulated calibrations from the same seed (validateSeed), so validate's NPMLE runs reuse calibrate's simulated calibrations, and this check of the 0.87 level is in-sample, not an independent test.
 
 ## 7. The grid and the outcome
 
@@ -119,7 +120,8 @@ admit prints the list's sha256, n, R, the MDD and the projection, and exits 0 on
 - **No told exposure re-check.** R3b re-checked this exact told arm (10 of 10 on each model), and its Opus grid showed the procedure in 209 of 210 told trials. The 90% gate on R3c's own told grid trials still decides FIX-METHOD (exposure). Nothing stops the grid early if exposure falls; the gate reads the whole grid, as R3b's did.
 - **D1, scaled.** The sensitivity set is the grid tasks that at least one graded grid trial, in either arm, solved. If the primary says CUT-CANDIDATE and the set holds fewer than ceil(3n/7) tasks, the outcome is FIX-METHOD (task fit). That keeps the D1 fix's 30 of 70 as a share. Admission already requires measured headroom, so this check is not expected to fire; the report-only share of admitted tasks the grid's none arm puts outside the band is the task-fit evidence to read.
 - **Outcome.** KEEP when the 95% interval of told minus none is above zero; otherwise the D1 fix's order, the E1 truncation bound and the end states, unchanged.
-- **Localization (report only, ladder D1).** Every arm's prompt ends, after a blank line, with the same closing line (R3C.closingLine in r3c.ts.txt), which in the told arm comes after the procedure line: "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first." r3c.ts closingBlock reads the last such block in the session's final message and nothing else, so a DEBUG REPORT never scores. A task's root-cause files are the non-test files its oracle patch changes (goldFiles). Reported per arm: the share of trials with a block, hit@1 and hit@3, and told minus none for each with analyze()'s task-clustered bootstrap. A missing block is a miss. The primary stays hidden-test pass, and nothing here decides an outcome. The selftest scores a none trial with a correct block and no DEBUG REPORT as a hit, and a told trial whose DEBUG REPORT names the right file but whose block doesn't as no hit.
+- **Localization (report only, ladder D1).** Every arm's prompt ends, after a blank line, with the same closing line (R3C.closingLine in r3c.ts.txt), which in the told arm comes after the procedure line: "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first." r3c.ts closingBlock reads all of the session's assistant text in order and takes the last such block in it, so a block written before a Stop hook continuation still counts and a DEBUG REPORT never scores. A task's root-cause files are the non-test files its oracle patch changes (goldFiles). Reported per arm: the share of trials with a block, hit@1 and hit@3, and told minus none for each with analyze()'s task-clustered bootstrap. Told hit@1 and hit@3 are also reported split by whether the Stop hook held a stop back. A missing block is a miss. The primary stays hidden-test pass, and nothing here decides an outcome. The selftest scores a none trial with a correct block and no DEBUG REPORT as a hit, and a told trial whose DEBUG REPORT names the right file but whose block doesn't as no hit, and it reads a told session's only block when that block comes before the hook's continuation.
+- **Graded secondaries (report only, ladder flags).** Every trial, calibration included, records the verifier's result for each FAIL_TO_PASS and PASS_TO_PASS test. r3c.ts f2pShare scores the share of FAIL_TO_PASS tests that pass, and 0 when any PASS_TO_PASS test does not. A test missing from the record does not pass, and a task with no FAIL_TO_PASS test is out of the measure, counted. r3c.ts locRank scores the closing block's first root-cause file 1, 2/3 or 1/3 by its rank, else 0. Both are reported per arm, with told minus none on analyze()'s task-clustered bootstrap, and neither gates or decides anything. With these records kept, the calibration and grid trials can also serve a later 10x tier. The selftest drives both scorers both ways: a none trial whose block names the file second scores 2/3, a told trial whose DEBUG REPORT is right and whose block is wrong scores 0, and one PASS_TO_PASS failure scores 0 even when every FAIL_TO_PASS test passes.
 - **Reported beside the verdict, deciding nothing.** The grid's none rate, the frozen MDD and its half-tasks and beta-law values, the MDD re-simulated at the grid's own rates, the far-task contrast and its n, the exposure rate, Stop hook counts, cost per success, allowance stops, and the share of admitted tasks the grid's none arm puts outside the band.
 
 ## 8. Budget: /investigate's $2,000 line
@@ -134,12 +136,14 @@ All-in from 2026-11-03 13:30Z: paid calls, VMs and crew model use at about $1 pe
 | Crew counters: GEVA-248 12,668, GEVA-249 17,045, GEVA-263 22,059, GEVA-264 23,890, GEVA-270 26,748, GEVA-273 19,812, GEVA-275 11,234, GEVA-276 22,948 and GEVA-283 16,469 credits, 172,873 in all | $172.87 |
 | **All-in so far** | **$882.15** |
 | **Left before R3c** | **$1,117.85** |
-| GEVA-284 (this post, its /ship included) at its 130M-token stop, at 398 credits per million tokens measured here | $51.73 |
+| GEVA-284 (this post, its /ship included) at its 165M-token hard stop, at 398 credits per million tokens measured here | $65.67 |
 | R3c crew still to come: the build and its /ship $50.64 (as GEVA-264 and GEVA-270), the pin post $19.81 (as GEVA-273), one run thread $35.00 (GEVA-276's $22.95, raised for R3c's larger run) and the results post $16.47 (as GEVA-283) | $121.92 |
 | R3c controller host, at its $20 cap | $20.00 |
 | r3c-opus at its cap | $750.00 |
-| **Line total at caps** | **$1,825.80** |
-| **Unallocated** | **$174.20** |
+| **Line total at caps** | **$1,839.74** |
+| **Unallocated** | **$160.26** |
+
+Amounts are ledger and counter values rounded to the cent, so a total can differ by a cent from the sum of its rounded rows.
 
 The R3b results post's tally (about $879, about $1,121 left) already read the counters. Its 13,342-credit excess over the threads' reports is inside its $155, not on top of it. GEVA-276 and GEVA-283 rose after that reading. GEVA-247 (amendment 4, started 10:29Z on 2026-11-03, 40,352 credits) is not on the line, as amendment 5 section 7 and the R3b results post counted it. The unallocated money is not a reserve; only a raise the Captain records can draw on it.
 
@@ -153,7 +157,7 @@ One item, r3c-opus, on its own ledger, holds cal-1a to cal-1c, cal-2 and the gri
 
 ## 10. Before any spend
 
-1. **Build PR** to quick/laneb, money class: item r3c-opus with its cap checked against the approval row; parts cal-1a to cal-1c, cal-2 and grid-k; the rules of sections 3 to 7 taken from r3c.ts.txt unchanged (tiers, calibration plan, admission, MDD); the projection checks; the infra rule; the D1 scaling; the closing line in prompt_builder.py and grid.ts for every arm, byte-equal to R3C.closingLine (a keyless test checks); each task's oracle patch kept for goldFiles; a keyless check that the pinned told arm's Stop hook lets a final message with a DEBUG REPORT followed by the closing block stop; the localization lines from closingBlock and locHit unchanged; the report-only lines; E_PIN_MISMATCH registered in src/errors/codes.ts; and keyless tests for each.
+1. **Build PR** to quick/laneb, money class: item r3c-opus with its cap checked against the approval row; parts cal-1a to cal-1c, cal-2 and grid-k; the rules of sections 3 to 7 taken from r3c.ts.txt unchanged (tiers, calibration plan, admission, MDD); the projection checks; the infra rule; the D1 scaling; the closing line in prompt_builder.py and grid.ts for every arm, byte-equal to R3C.closingLine (a keyless test checks); each task's oracle patch kept for goldFiles; a keyless check that the pinned told arm's Stop hook lets a final message with a DEBUG REPORT followed by the closing block stop; closingBlock fed all of each session's assistant text in order, with a keyless case where the hook holds a stop back once and the block comes before the continuation; the localization lines from closingBlock, locHit and locRank unchanged; every trial's per-test record (each FAIL_TO_PASS and PASS_TO_PASS test with the status the task's own grading gives it), checked on the oracle gate, where every oracle trial must score f2pShare 1; f2pShare unchanged; the report-only lines; E_PIN_MISMATCH registered in src/errors/codes.ts; and keyless tests for each.
 2. **Pin post** naming the build's merge commit, with a keyless dry run at that commit that drives every rule with one ledger lease on a temporary ledger.
 3. **Caps.** The Captain records r3c-opus's cap in approvals/ after the pin post merges. Then the run thread starts. No paid call happens before that.
 
@@ -166,7 +170,7 @@ The one question R65 asks: are any outside terms, licences or rights involved? N
 - **The task law.** The posteriors rest on a law fitted mostly to single-trial screen data and R3b's selected failures. A beta-binomial law fits as well and agrees on band mass (section 5), and validate checks the rule under both, but neither check reaches a law unlike both.
 - **Null size.** At about 18 tasks the frozen bootstrap's false-KEEP rate runs near 5%, twice its nominal one-sided 2.5%, so the null-size STOP can fire on a good list. The rule keeps the 5% limit, because a KEEP at a higher false-positive rate is not the claim #112 makes.
 - **Scope.** The band holds about 8% of the pool, so a verdict speaks for mid-difficulty SWE-rebench tasks only. Sol is untested here (section 2). A harder source with more tasks in Sol's band, such as SWE-bench Pro's hard split through Harbor's swebenchpro adapter, is a separate track.
-- **The closing line.** It is new to both arms. R3a4's and R3b's in-hand none rates were measured without it, and they only choose candidates; calibration measures every admitted task's rate with it. Its effect on pass rates is not measured.
+- **The closing line.** It is new to both arms. R3a4's and R3b's in-hand none rates were measured without it. Admission counts those in-hand trials together with the calibration trials, which carry the line, in both the band test and the posteriors that set R and the MDD. Its effect on pass rates is not measured.
 - **Carried from amendment 5.** Contamination still biases toward a null. The procedure line asks for phases the pinned skill no longer numbers, and the Stop hook can write the gate's evidence.
 
 ## 13. Review
@@ -182,13 +186,14 @@ Under R65 a paid-eval prereg gets one strong reviewer, one gate revision and the
 After gate 1, two more changes came in, both accepted by the Captain:
 
 - **The search level.** Validation at 0.83 put true power under 80% (section 6), so the level is 0.87.
+- **The ladder's other flags.** The ladder post (#219) lists five flags for R3c before caps freeze. The closing block is below. The cost anchor is the 0.94 session-cost ratio (section 1). The keep-rule simulation is section 6's validation, run under both the NPMLE and the beta truth. The per-test record and the two graded secondaries are in section 7.
 - **Ladder D1.** The difficulty ladder's review (GEVA-292, finding D1) found that /investigate's localization milestone read the DEBUG REPORT, which the none arm never writes, so it leaned toward told. R3c takes the fix before caps freeze: one closing block for every arm, localization scored from it only, both ways in the selftest, and the ladder's k and cost ratio printed from data in hand (sections 1 and 7).
 
 ## 14. Attachments
 
 | File | What it is |
 |---|---|
-| r3c.ts.txt | the frozen keyless rules: plan, forecast with the ladder lines, admit, validate, calibrate, the closing-block scorer and selftest |
+| r3c.ts.txt | the frozen keyless rules: plan, forecast with the ladder lines, admit, validate, calibrate, the closing-block scorer, the graded secondaries and selftest |
 | r3c-taskfit.py.txt | the task-distance labeller |
 | r3c-taskfit.tsv | its output: per task, the patched files and functions, how many the issue names, and the distance |
 | r3c-taskfit-testhunks.txt | a rerun of the labeller with test-file hunks left out of its function names, diffed against r3c-taskfit.tsv |

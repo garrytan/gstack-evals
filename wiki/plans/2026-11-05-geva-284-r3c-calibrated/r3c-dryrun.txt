@@ -1,5 +1,5 @@
 commit e96a6a9897058cb718dfd00b201faa56c972758e
-d57dc67309c63e4e571cc4c405b615adf815df0254b4e116814767c765220435  r3c.ts
+18bc1b8f38c9d64f9cb40c5005136eed8cad8a0a50d00012ad5bb8656a28ded5  r3c.ts
 d7c87e34cc5bdeffd79c08cb9fc2decc0ea4da832048b9e74ccaadfd81638880  opus-r3a4.jsonl
 6ecac9f836a8b9638d403dc0bb4c000c71470f8b3cb510bf3897901ccfff126d  sol-r3a4.jsonl
 2176856539f12ad8a255e68964960859bd6e4ae067a9970c86158e34193a88f8  opus-r3b.tsv
@@ -22,8 +22,11 @@ PASS told and pilot trials never count as none
 PASS STOP when under 10 tasks are admitted
 PASS STOP when the money buys under 3 replicates
 PASS GO with 14 tasks at 0.5: 10 points out of reach, so R is the affordable maximum (24) and its MDD is at most 12.5
+PASS admit runs the frozen 2,000 simulated grids with R3C_SIMS=1 set, and 1 grid answers differently from 200
+PASS the pair is priced from the admitted tasks' graded calibration none trials, not an unadmitted task's or an infra trial's, and the mean over every trial is report only
+PASS a missing cost fails closed: a null cost_usd on an admitted task's calibration trial stops admission, a blank TSV cost reads null, and a spend sum that meets a null is NaN, never $0
 PASS GO with 40 tasks at 0.5 and money to spare: R is the smallest that reaches 10 points, under the affordable maximum
-PASS STOP when the affordable R can't reach 12.5 points
+PASS STOP when the affordable R can't reach 12.5 points, on the MDD branch, not the null size
 PASS over 40 admitted keeps 40, far tasks first
 PASS goldFiles keeps the oracle patch's non-test files
 PASS closingBlock reads list markers, backticks, line references and /testbed/, at most three entries
@@ -31,6 +34,13 @@ PASS a none trial with a correct closing block and no DEBUG REPORT scores a hit
 PASS a told trial whose DEBUG REPORT is right but whose closing block is wrong scores no hit
 PASS a told trial with a right DEBUG REPORT and no closing block scores no hit
 PASS the last closing block counts, and a fourth entry never does
+PASS locRank weighs the first root-cause file 1, 2/3 or 1/3 by rank: a none trial with it second scores 2/3
+PASS locRank gives a told trial whose DEBUG REPORT is right but whose closing block is wrong 0, and a fourth entry 0
+PASS f2pShare: 2 of 4 FAIL_TO_PASS passing under a clean PASS_TO_PASS gate scores 0.5, and all passing scores 1
+PASS f2pShare: one PASS_TO_PASS failure scores 0 with every FAIL_TO_PASS passing, a missing test does not pass, and no FAIL_TO_PASS is out
+PASS the session's assistant text is read in order: a told session the Stop hook held back, whose only block comes before the continuation, scores a hit, where its final message alone has no block
+PASS of two blocks in one session the later counts, and none-arm results on the fixtures don't change
+PASS closingBlock strips a trailing colon, quotes and brackets, and takes a markdown link's target
 PASS the closing line is one text for every arm and names no skill
 $ bun r3c.ts plan <in-hand> --model opus
 r3c plan opus: kept pool 346; tiers t1 16, t2 20, t3 55, t4 110, floor 54, out 91
@@ -68,14 +78,18 @@ sha256 cal-opus.jsonl 3c96af0db49f6edbdfb86198cc5c98cd507657200d14858d8329cf62b2
 simulated calibration spend $210.73 (470 none trials at $0.43 plus VM)
 $ bun r3c.ts admit <in-hand> --model opus --calibration cal-opus.jsonl --cap-usd 750 --settled-usd 210.73
 r3c admission opus: 16 tasks admitted (sha256 6f09de45b508c949b019808aff745123c46cfff58441cdb68944fae4ddd3451c; 7 far) from 470 calibration none trials; refitted band mass 8.8%, mean posterior none rate 0.563
-money: none $0.430 a trial, $1.166 a task-replicate pair, 24 replicates affordable
+money: none $0.430 a trial (62 graded calibration none trials on the admitted tasks), $1.166 a task-replicate pair, 24 replicates affordable
+report only: the mean over every calibration none trial $0.430 a trial (470 trials)
 report only, beta-binomial law (a 0.088, b 0.051, band mass 8.5%): MDD 10.5 points, null size 4.0% at 21 replicates
 R3c grid for opus: GO with 16 tasks x 21 replicates x {none, told}; MDD 10 points (16.5 if the lift sits on half the tasks, report only); null size 4.2%; projection $681.56
 exit 0
 $ bun r3c.ts admit <in-hand> --model opus --calibration cal-opus.jsonl --cap-usd 400 --settled-usd 210.73
 r3c admission opus: 16 tasks admitted (sha256 6f09de45b508c949b019808aff745123c46cfff58441cdb68944fae4ddd3451c; 7 far) from 470 calibration none trials; refitted band mass 8.8%, mean posterior none rate 0.563
-money: none $0.430 a trial, $1.166 a task-replicate pair, 5 replicates affordable
+money: none $0.430 a trial (62 graded calibration none trials on the admitted tasks), $1.166 a task-replicate pair, 5 replicates affordable
+report only: the mean over every calibration none trial $0.430 a trial (470 trials)
 report only, beta-binomial law (a 0.088, b 0.051, band mass 8.5%): MDD 22 points, null size 3.4% at 5 replicates
 R3c grid for opus: STOP, the MDD at 5 replicates is 19.5 points, over 12.5
 exit 5
+$ R3C_SIMS=1 bun r3c.ts admit <in-hand> --model opus --calibration cal-opus.jsonl --cap-usd 750 --settled-usd 210.73
+exit 0; the same lines as the run without R3C_SIMS
 EXIT 0
