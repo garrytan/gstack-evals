@@ -1,0 +1,21 @@
+# r3c taskfit: function names from test-file hunks (Capy review of PR #220)
+# r3c-taskfit.py.txt's funcs() reads function names from the whole gold patch, test-file hunks included. This rerun drops
+# test-file hunks before funcs() reads the patch, on the same rows (nebius/SWE-rebench-leaderboard at revision 34d5a58)
+# and pool (quick/laneb/tasks/swerebench-r3a4.json at e96a6a98), and diffs its output against r3c-taskfit.tsv.
+# The change, one line added at the top of funcs():
+#     patch = "".join(p for p in re.split(r"(?m)^(?=diff --git )", patch) if not TEST.search((re.match(r"diff --git a/(\S+) b/", p) or [None, ""])[1]))
+# Columns: task, files, named_files, funcs, named_funcs, dist. Only funcs changes, on two tasks; no named_funcs or dist
+# value changes, so the far labels and the pinned r3c-taskfit.tsv stand.
+$ uv run --with pyarrow python3 r3c-taskfit.py <rows dir> <pool json> | sha256sum
+b8298156309d020770ce94741531aa40a58f2d222faf0776a16acb4f4d20b54d  (the sha256 of r3c-taskfit.tsv)
+$ uv run --with pyarrow python3 r3c-taskfit-nohunks.py <rows dir> <pool json> | sha256sum
+205e167ad32eb9ec8781dc4c08836a94773207f464a3f017cc85a9830e3f9064
+$ diff r3c-taskfit.tsv <the second output>
+20c20
+< BrianPugh__cyclopts-701	0	0	1	0	0
+---
+> BrianPugh__cyclopts-701	0	0	0	0	0
+31c31
+< Ultraplot__UltraPlot-357	1	0	5	1	1
+---
+> Ultraplot__UltraPlot-357	1	0	4	1	1
