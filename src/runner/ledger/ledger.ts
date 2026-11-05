@@ -246,14 +246,26 @@ export function recordedStop(record: string, lease_id: string): string | undefin
  * stop the lease closed on, goes into the close, and so does the scope of a stop record on the lease, so no new lease on
  * the item is admitted after it. The local ledger keeps the first stop it is given, by stageStop or with the staged
  * close, so a retry writes it even when the record holds no stop record, as after a stop that could not be written. A
- * stop written after the close is in the record leaves the close as written, so a retry answers it.
+ * stop written after the close is in the record leaves the close as written, so a retry answers it. When the record
+ * already holds the close this ledger staged, give or take cap_stop, as after a settle cut between the record write and
+ * markClosed, the settle answers the record's close and marks the local lease closed. A stop the record does not hold
+ * yet, given here or kept in this ledger, is then written as the lease's stop record, which refuses every new lease.
  */
 export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void, cap_stop?: string): CloseFile {
   let scope = cap_stop;
   if (record !== null) {
-    const { state, close: prior } = findLease(record, lease_id);
-    if (prior && !local.getLease(lease_id)) return prior;
-    scope ??= stopOn(state, lease_id);
+    const { state, lease, close: prior } = findLease(record, lease_id);
+    const held = local.getLease(lease_id);
+    if (prior && !held) return prior;
+    const recorded = stopOn(state, lease_id);
+    scope ??= recorded;
+    if (prior && held?.close && sameClose(prior, held.close)) {
+      const stop = scope ?? local.stagedStop(lease_id);
+      if (stop && !prior.cap_stop && !recorded) recordStop(record, lease_id, stop);
+      if (held.state === "closing") local.markClosed(lease_id, "settled");
+      warnOverspent(lease, prior, warn);
+      return prior;
+    }
   }
   const close = local.stageClose(lease_id, scope);
   warnOverspent(local.getLease(lease_id)!.file, close, warn);
@@ -262,6 +274,13 @@ export function settleLease(record: string | null, local: LocalLedger, lease_id:
   if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + lease_id + " is already " + closeText(result.conflict as CloseFile) + " in the approval record; this settle says " + closeText(close));
   local.markClosed(lease_id, "settled");
   return close;
+}
+
+/** Two closes of one lease that differ at most in cap_stop. */
+function sameClose(a: CloseFile, b: CloseFile): boolean {
+  const { cap_stop: _a, ...x } = a;
+  const { cap_stop: _b, ...y } = b;
+  return JSON.stringify(x) === JSON.stringify(y);
 }
 
 const SETTLED_KEYS = "closed_at,how,item,kind,lease_id,schema,seq,spent_micros,unknown_calls,unknown_micros,usage";

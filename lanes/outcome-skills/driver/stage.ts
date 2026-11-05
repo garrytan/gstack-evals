@@ -17,6 +17,7 @@ import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, recordStop, rival
 import type { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
 import { holderBound, LedgerError, listItems, readItem, type CloseFile, type Holder, type LeaseFile } from "../../../src/runner/ledger/record.ts";
+import { closeOpenSessions, meterFigures } from "../../../src/runner/ledger/sessions.ts";
 import { isTrialNetworkHost, MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { loadRegistry, type Registry } from "../arms/registry.ts";
 
@@ -252,6 +253,12 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     for (const stop of s.stops) if (stop.run_id === o.run_id) noteStop(s.item, { at: stop.at, scope: stop.scope });
     for (const { lease, close } of s.leases) if (close?.cap_stop && lease.run_id === o.run_id) noteStop(s.item, { at: close.closed_at, scope: close.cap_stop });
   }
+  for (const s of states) {
+    for (const { lease } of s.leases) {
+      const scope = lease.run_id === o.run_id ? o.local.stagedStop(lease.lease_id) : undefined;
+      if (scope) noteStop(s.item, { at: "an unrecorded time (a stop staged in the local ledger " + o.local.path + ")", scope });
+    }
+  }
   for (const e of lines) if (e.item && (e.event === "stop" || (e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });
 
   const failures: string[] = [];
@@ -264,12 +271,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         const rec = await reconcileJournal(journal, o.local);
         for (const r of rec.refused) warn(r.code as ReasonCode, "recovering lease " + lease.lease_id + ": " + r.message);
       } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
-      const closed = new Set(lines.flatMap((e) => (e.event === "close" && e.id ? [e.id] : [])));
-      for (const e of lines) {
-        if (e.event !== "open" || e.lease_id !== lease.lease_id || !e.id || closed.has(e.id)) continue;
-        const m = o.local.meters(lease.lease_id).get(e.meter_id ?? "");
-        record({ event: "close", item, id: e.id, reason: "recovered", lease_id: lease.lease_id, meter_id: e.meter_id, spent_micros: m?.spent_micros ?? 0, unknown_micros: m?.unknown_micros ?? 0, unknown_calls: m?.unknown_calls ?? 0 });
-      }
+      closeOpenSessions(lease, "recovered", meterFigures(o.local, lease.lease_id), new Date(now()));
       const stop = capped.get("") ?? capped.get(item);
       const close = settleLease(o.record, o.local, lease.lease_id, warn, stop ? stop.scope || "cap_stop" : undefined);
       log("STAGE_RECOVERED item=" + item + " lease=" + lease.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " unknown_calls=" + close.unknown_calls);

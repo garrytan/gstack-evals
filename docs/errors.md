@@ -118,6 +118,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [RIG_UNPROVEN](#rig_unproven) | warning | U4 |
 | [LEASE_OVERSPENT](#lease_overspent) | warning | U4 |
 | [JOURNAL_MISSING](#journal_missing) | warning | U4 |
+| [SESSIONS_OPEN](#sessions_open) | warning | U4 |
 | [STAGE_RECOVERED](#stage_recovered) | warning | U4 |
 | [STAGE_SETTLED](#stage_settled) | warning | U4 |
 | [CLEANUP_INCOMPLETE](#cleanup_incomplete) | warning | U9 |
@@ -1196,6 +1197,14 @@ Warning. Owner: U4.
 The outcome-skills driver recovered an open lease from an earlier run on this machine and found no proxy journal for it, so nothing tells which of its calls were answered. The settle keeps every call still reserved at its full reservation.
 
 Fix: Nothing to undo: the lease closes charging every unanswered call in full, which can only overstate spend. Recovery runs only from the run directory that holds the lease, so a missing journal means the earlier driver stopped before its proxy started, or the journal was removed.
+
+Warning. Owner: U4.
+
+### SESSIONS_OPEN
+
+ledger settle or ledger reconcile closed a driver's lease, but could not write a close line for the sessions its run directory's sessions.jsonl still shows open on it: that file is not on this machine, or a settle ran where the local ledger does not hold the lease. The close is in the record and nothing about the money changes, but unknownFromRun refuses admission item 5 for the run while a session has no close line.
+
+Fix: Run the same command again on the envelope host that holds the run directory and the lease's local ledger. A retry answers the close already in the record and writes only the missing close lines. Never edit sessions.jsonl by hand.
 
 Warning. Owner: U4.
 
