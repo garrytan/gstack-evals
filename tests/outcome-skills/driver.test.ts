@@ -3,7 +3,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
@@ -12,6 +12,7 @@ import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem } from "../../src/runner/ledger/record.ts";
 import { loadRegistry, type Registry } from "../../lanes/outcome-skills/arms/registry.ts";
 import { serveStages, type ServeOptions, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
+import { ledgerCli } from "../../src/runner/ledger/cli.ts";
 import { unknownFromRun } from "../../src/runner/stats/g-admission.ts";
 
 const D = 1_000_000;
@@ -964,3 +965,144 @@ describe("the outcome-skills session driver", () => {
     expect(w.logs.some((l) => l.startsWith("STAGE_SETTLED"))).toBe(false);
   });
 });
+
+describe("settle paths close the run's open sessions, a staged none stop refuses every relaunch, and a settle cut before markClosed recovers (GST-1433)", () => {
+  const spawnDriver = async (w: ReturnType<typeof world>, stages: StageSpec[], patch: string[] = []) => {
+    const at = (path: string) => JSON.stringify(join(import.meta.dir, "../..", path));
+    const child = join(w.root, "child.ts");
+    writeFileSync(child, [
+      "import { serveStages } from " + at("lanes/outcome-skills/driver/stage.ts") + ";",
+      "import { LocalLedger } from " + at("src/runner/ledger/local.ts") + ";",
+      "const local = LocalLedger.open(" + JSON.stringify(join(w.root, "ledger.sqlite")) + ");",
+      ...patch,
+      "const fetch = () => new Promise<Response>(() => {});",
+      "const served = await serveStages({ record: " + JSON.stringify(w.record) + ', local, run_id: "r1", envelope_host: "m1", machine: "m1", stages: ' + JSON.stringify(stages) + ', host: "127.0.0.1", dir: ' + JSON.stringify(w.dir) + ', fetch, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key" }, log: () => {} });',
+      'console.log("CONTROL " + served.control);',
+      "await new Promise(() => {});",
+    ].join("\n"));
+    const proc = Bun.spawn(["bun", child], { stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.getReader();
+    let out = "";
+    while (!out.includes("\n")) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      out += new TextDecoder().decode(value);
+    }
+    const control = out.match(/CONTROL (\S+)/)?.[1];
+    expect(control).toBeDefined();
+    return { proc, control: control! };
+  };
+  const ledger = async (w: ReturnType<typeof world>, ...argv: string[]) => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await ledgerCli(argv, { out: (s) => out.push(s), err: (s) => err.push(s) }, { GSTACK_EVALS_LEDGER_RECORD: w.record, GSTACK_EVALS_LEDGER: join(w.root, "ledger.sqlite"), PATH: "" });
+    return { code, out: out.join("\n"), err: err.join("\n") };
+  };
+  const sessionLines = (dir: string) => readFileSync(join(dir, "sessions.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, any>);
+
+  test("ledger settle --lease on a lease a killed driver left open writes a settled close line for each session still open on it, so unknownFromRun reads the run, and a retry adds none (item 1)", async () => {
+    const w = world({ "i-pe": 572 });
+    const { proc, control } = await spawnDriver(w, [PE]);
+    const a = await post(control + "/sessions", body("plan-eng-review:told", "a", 1));
+    const b = await post(control + "/sessions", body("plan-eng-review:told", "b", 1));
+    expect([a.status, b.status]).toEqual([200, 200]);
+    void call(a.json).catch(() => {});
+    // gstack-timing-ok: lets the call reach the stub upstream and reserve before the kill; the assertions are on the ledger and the close lines, never on elapsed time
+    await Bun.sleep(300);
+    proc.kill(9);
+    await proc.exited;
+    expect(() => unknownFromRun(w.dir, ["i-pe"])).toThrow(/open/);
+    const lease = readItem(w.record, "i-pe").open!;
+    const settled = await ledger(w, "settle", "--lease", lease.lease_id);
+    expect(settled.code).toBe(0);
+    const close = readItem(w.record, "i-pe").leases[0]!.close!;
+    expect(close.unknown_calls).toBe(1);
+    const closes = sessionLines(w.dir).filter((e) => e.event === "close");
+    expect(closes.map((e) => [e.id, e.reason, e.lease_id, e.run_id, e.unknown_calls]).sort()).toEqual([[a.json.id, "settled", lease.lease_id, "r1", 1], [b.json.id, "settled", lease.lease_id, "r1", 0]].sort());
+    expect(unknownFromRun(w.dir, ["i-pe"])).toEqual({ calls: close.unknown_calls, micros: close.unknown_micros });
+    expect((await ledger(w, "settle", "--lease", lease.lease_id)).code).toBe(0);
+    expect(sessionLines(w.dir).filter((e) => e.event === "close")).toHaveLength(2);
+  });
+
+  test("ledger reconcile on a driver lease whose local ledger is gone writes a reconciled close line for each session still open on it, with the close's unknown figures (item 1)", async () => {
+    const w = world({ "i-pe": 572 });
+    mkdirSync(w.dir, { recursive: true });
+    const holder = { dir: realpathSync(w.dir), nonce: "0123456789abcdef" };
+    const lease = openLease(w.record, null, { item: "i-pe", run_id: "r1", machine_id: "m1", holder, ttl_ms: 1_000, requireAdmission: () => null });
+    writeFileSync(join(w.dir, "sessions.jsonl"), [
+      { run_id: "r1", event: "launch", nonce: holder.nonce },
+      { run_id: "r1", event: "open", id: "ses_a", item: "i-pe", arm: "plan-eng-review:told", task: "a", trial_n: 1, lease_id: lease.lease_id, meter_id: "m-a" },
+    ].map((l) => JSON.stringify(l) + "\n").join(""));
+    expect(() => unknownFromRun(w.dir, ["i-pe"])).toThrow(/open/);
+    // gstack-timing-ok: waits past the lease.s 1 s expiry, which reconcile requires; the assertions are on the record and the close line
+    await Bun.sleep(1_100);
+    const usageFile = join(w.root, "usage.csv");
+    writeFileSync(usageFile, "date,cost\n");
+    const reconcile = () => ledger(w, "reconcile", "--lease", lease.lease_id, "--spent", "3.10", "--words", "settle it at the export", "--by", "Approver", "--source", usageFile);
+    renameSync(w.dir, w.dir + ".away");
+    const away = await reconcile();
+    expect(away.code).toBe(0);
+    expect(away.err).toStartWith("SESSIONS_OPEN lease " + lease.lease_id + " is closed");
+    renameSync(w.dir + ".away", w.dir);
+    expect(sessionLines(w.dir).filter((e) => e.event === "close")).toHaveLength(0);
+    const r = await reconcile();
+    expect([r.code, r.err]).toEqual([0, ""]);
+    const closes = sessionLines(w.dir).filter((e) => e.event === "close");
+    expect(closes).toHaveLength(1);
+    expect(closes[0]).toMatchObject({ id: "ses_a", reason: "reconciled", lease_id: lease.lease_id, run_id: "r1", unknown_calls: 0, unknown_micros: 0 });
+    expect(unknownFromRun(w.dir, ["i-pe"])).toEqual({ calls: 0, micros: 0 });
+  });
+
+  test("a driver killed after it staged none's all-arms stop and before the stop records were written refuses a relaunch that names any stage, a told stage it never served included (item 2)", async () => {
+    const w = world({ "i-none": 20, "i-pe": 572, "i-ap": 50 });
+    const { proc, control } = await spawnDriver(w, [NONE, PE], [
+      "let staged = 0;",
+      "const stageStop = local.stageStop.bind(local);",
+      'local.stageStop = (id: string, scope: string) => { stageStop(id, scope); if (++staged === 2) process.kill(process.pid, "SIGKILL"); };',
+    ]);
+    for (const n of [1, 2]) expect((await post(control + "/sessions", body("none", "a", n))).status).toBe(200);
+    await post(control + "/sessions", body("none", "a", 3)).catch(() => null);
+    await proc.exited;
+    for (const item of ["i-none", "i-pe"]) {
+      expect(readItem(w.record, item).stops).toHaveLength(0);
+      expect(readItem(w.record, item).open).not.toBeNull();
+    }
+    expect(await codeOf(w.serve([AP]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-ap").leases).toHaveLength(0);
+    for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).leases.map((l) => l.close?.cap_stop)).toEqual(["all: none's cap stop ends both skills incomplete"]);
+    expect(await codeOf(w.serve([NONE, AP]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-ap").leases).toHaveLength(0);
+  }, 30_000);
+
+  test("a settle cut between its record write and markClosed, then a none stop on the lease, settles by hand to the record's close and marks the local lease closed; the stop record still refuses (item 3)", async () => {
+    const w = world({ "i-none": 20, "i-ap": 1287 });
+    const served = await w.serve([NONE, AP], { ttl_ms: 3 * 3_600_000 });
+    const apLease = served.stages.find((s) => s.item === "i-ap")!.lease_id;
+    const markClosed = w.local.markClosed.bind(w.local);
+    w.local.markClosed = (id, how) => {
+      if (id === apLease) throw new Error("killed before markClosed");
+      markClosed(id, how);
+    };
+    expect((await post(served.control + "/sessions", body("autoplan:told", "a", 1))).status).toBe(503);
+    // gstack-timing-ok: a bounded wait for the drained stage's close to reach the record; the assertion is on the record, never on elapsed time
+    for (let i = 0; i < 250 && !readItem(w.record, "i-ap").leases[0]?.close; i++) await Bun.sleep(20);
+    w.local.markClosed = markClosed;
+    const written = readItem(w.record, "i-ap").leases[0]!.close!;
+    expect(written.cap_stop).toBeUndefined();
+    expect(w.local.getLease(apLease)!.state).toBe("closing");
+    const [a, b] = [await post(served.control + "/sessions", body("none", "a", 1)), await post(served.control + "/sessions", body("none", "a", 2))];
+    expect((await post(served.control + "/sessions", body("none", "a", 3))).status).toBe(409);
+    for (const s of [a, b]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.done).toBe(2);
+    expect(readItem(w.record, "i-ap").stops.map((s) => s.scope)).toEqual(["all: none's cap stop ends both skills incomplete"]);
+    const settled = await ledger(w, "settle", "--lease", apLease, "--json");
+    expect(settled.code).toBe(0);
+    expect(JSON.parse(settled.out)).toEqual(written);
+    expect(w.local.getLease(apLease)!.state).toBe("settled");
+    expect((await ledger(w, "settle", "--lease", apLease)).code).toBe(0);
+    expect(readItem(w.record, "i-ap").leases[0]!.close).toEqual(written);
+    expect(() => openLease(w.record, w.local, { item: "i-ap", run_id: "r1", machine_id: "m1", requireAdmission: () => null })).toThrow(/cap-stopped/);
+    expect(await codeOf(w.serve([AP]))).toBe("CAP_STOP");
+  });
+});
+

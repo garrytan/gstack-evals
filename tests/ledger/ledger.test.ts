@@ -580,3 +580,52 @@ describe("a cap stop reaches every close of its lease", () => {
     expect(local.getLease(lease.lease_id)!.close).toEqual(settled);
   });
 });
+
+describe("a settle cut between its record write and markClosed (GST-1433 item 3)", () => {
+  const cut = () => {
+    const { record, local } = setup();
+    const lease = openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR });
+    const markClosed = local.markClosed.bind(local);
+    local.markClosed = () => {
+      throw new Error("killed before markClosed");
+    };
+    expect(() => settleLease(record, local, lease.lease_id)).toThrow("killed before markClosed");
+    local.markClosed = markClosed;
+    expect(local.getLease(lease.lease_id)!.state).toBe("closing");
+    return { record, local, lease, written: readItem(record, "lanea").leases[0]!.close! };
+  };
+
+  test("a later stop record leaves the record's close as written: the settle answers it, marks the local lease closed, and the stop refuses a new lease", () => {
+    const { record, local, lease, written } = cut();
+    recordStop(record, lease.lease_id, "all: none");
+    expect(settleLease(record, local, lease.lease_id)).toEqual(written);
+    expect(local.getLease(lease.lease_id)!.state).toBe("settled");
+    expect(settleLease(record, local, lease.lease_id)).toEqual(written);
+    expect(readItem(record, "lanea").leases[0]!.close).toEqual(written);
+    expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+  });
+
+  test("a stop only the local ledger holds is written into the record as a stop record, so the record refuses a new lease", () => {
+    const { record, local, lease, written } = cut();
+    local.stageStop(lease.lease_id, "all: none");
+    expect(settleLease(record, local, lease.lease_id)).toEqual(written);
+    expect(local.getLease(lease.lease_id)!.state).toBe("settled");
+    expect(readItem(record, "lanea").stops.map((s) => [s.lease_id, s.scope])).toEqual([[lease.lease_id, "all: none"]]);
+    expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+  });
+
+  test("a settle given a stop by its caller answers the record's close and writes that stop", () => {
+    const { record, local, lease, written } = cut();
+    expect(settleLease(record, local, lease.lease_id, undefined, "plan-eng-review:told only")).toEqual(written);
+    expect(readItem(record, "lanea").stops.map((s) => s.scope)).toEqual(["plan-eng-review:told only"]);
+    expect(local.getLease(lease.lease_id)!.state).toBe("settled");
+  });
+
+  test("a close the local ledger restaged with a stop the record never got answers the record's close and writes that stop", () => {
+    const { record, local, lease, written } = cut();
+    expect(local.stageClose(lease.lease_id, "all: none").cap_stop).toBe("all: none");
+    expect(settleLease(record, local, lease.lease_id)).toEqual(written);
+    expect(readItem(record, "lanea").stops.map((s) => s.scope)).toEqual(["all: none"]);
+    expect(local.getLease(lease.lease_id)!.state).toBe("settled");
+  });
+});
