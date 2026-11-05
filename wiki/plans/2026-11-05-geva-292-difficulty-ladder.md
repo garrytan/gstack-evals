@@ -92,7 +92,7 @@ Planning lines use a pooled s0 of 0.95, rounded down from these counts so that t
 | 2x | 0.35 to 0.60 | 1.6 to 2.7 | the strict measure (binary) | 0.35 to 0.60 |
 | 10x | 0.05 to 0.20 | 4.8 to 19 | graded (section 4) | 0.25 to 0.50 |
 
-Room: at the 2x band's top edge 40 points sit above plain Opus, against binary MDDs of 15 to 21 points (section 10), and at its bottom edge an 18-point loss still shows. The 10x band leaves at least 50 points above and 25 below on the graded score.
+Room: at the 2x band's top edge 40 points sit above plain Opus, against binary MDDs of 15 to 19 points on the planning lines and 11 to 25 across all lines (section 10), and at its bottom edge an 18-point loss still shows. The 10x band leaves at least 50 points above and 25 below on the graded score.
 
 CEO's frozen bar, hit@3 from 0.15 to 0.60, spans k from 1.6 to 6.3. When CEO's hit@3 reads below 0.35, results label that tier by its measured k, not as 2x.
 
@@ -394,7 +394,7 @@ Flags before freezes:
 - Supply binds CEO and design, and the free counts so far put CEO well short of its bar.
 - s0 of 0.95 rests on small panels; k prints with its interval and its measure.
 - A skill could learn the strict format (rank one issue first and name its fix). Every arm gets the same template, so the format gives gstack no edge.
-- No tier buys a gain smaller than its MDD: 15 to 21 points on a binary 2x primary, 12 to 14 on G_R's own scale under the favourable shift model.
+- No tier buys a gain smaller than its MDD: 15 to 19 points on a planning line's binary 2x primary (11 to 25 across all lines), 12 to 14 on G_R's own scale under the favourable shift model.
 
 ### 14. Not in scope
 
@@ -402,7 +402,7 @@ Any paid call; any change to a merged preregistration (the CEO amendment would b
 
 ## Review record
 
-Lean /autoplan (feature kind, --no-ui --no-dx), run autoplan-20261105061537, one Opus 5.5 reviewer, one round: 19 findings, 0 Critical, 3 High, 11 Medium, 4 Low, 1 Informational. Gate 1 went to the Captain, who answered rec at gate_rev 1 (rec_hash dfeb38e40727): A1, B1, C1 and D1, plus all 15 Medium, Low and Info findings. Where each lands in v2:
+Lean /autoplan (feature kind, --no-ui --no-dx), run autoplan-20261105061537, one Opus 5.5 reviewer, one round: 19 findings, 0 Critical, 3 High, 11 Medium, 4 Low, 1 Informational. Gate 1 went to the Captain, who answered rec at gate_rev 1 (rec_hash dfeb38e40727): A1, B1, C1 and D1, plus all 15 other Medium, Low and Info findings. The gate carried four findings as decisions: A1 is F9, a Medium finding on ordering, and B1, C1 and D1 are the three High findings, F1 to F3. Where each lands in v2:
 
 - A1 (count supply first): Big decision 4, section 6.1's supply table and bar, section 11 row 1.
 - B1 (anchor on the current design, state the doubling): Big decision 5, section 2's anchor table, section 6.1's cost note.
