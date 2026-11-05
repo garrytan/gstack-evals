@@ -22,6 +22,11 @@ tests/real-outcome/arms.test.ts). Per trial it:
 With ledger "u4" (GST-1381) the session opens on the outcome-skills driver (lanes/outcome-skills/driver), which answers
 with a U4 slot on its stage's lease; the session's base URL is that slot's, and an answer that is not a U4 slot is closed
 and refused before any model call. An arms file in the outcome-skills registry's shape runs only with ledger "u4".
+
+A registry arm (family G) sends its turns t1, t2 and so on in place of build and ship, each after the previous is quiet,
+with no turn-1 snapshot; the persona and skill_calls count per turn. Every message record in sdk-messages.jsonl names
+the turn it arrived in (phase) and, wherever the SDK's message has one, its parent_tool_use_id (null for the session's
+own messages, the Agent call's id for a subagent's). G's exposure detectors read both, and refuse a record without them.
 """
 
 import asyncio
@@ -61,6 +66,10 @@ FREEZE = (
     'do unset "$v"; done; exec claude "$@"'
 )
 TRIAL_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+# JavaScript's \s, so a registry turn's {statement} is trimmed exactly as registry.ts turnScript trims it.
+JS_SPACE = "[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]"
+JS_TRAILING_SPACE = re.compile(JS_SPACE + "+\\Z")
+STATEMENT = "{statement}"
 
 
 class SandboxSetupError(RuntimeError):
@@ -93,7 +102,7 @@ def _block(b) -> dict:
 
 def message_record(message, t: float) -> dict:
     record = {"type": type(message).__name__, "t": round(t, 2)}
-    for attr in ("subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason", "data"):
+    for attr in ("subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason", "data", "parent_tool_use_id"):
         if hasattr(message, attr):
             record[attr] = getattr(message, attr)
     content = getattr(message, "content", None)
@@ -106,8 +115,17 @@ def message_record(message, t: float) -> dict:
 
 def phase_texts(task: dict, arms: dict, arm: str, instruction: str) -> list:
     """The user turns, in order: (phase, text). K4 has no build turn: the arm's replay turn carries the one-line
-    description beside its turn 2 (after it, except that a slash command leads so Claude Code loads the skill)."""
+    description beside its turn 2 (after it, except that a slash command leads so Claude Code loads the skill). An
+    outcome-skills registry arm sends its turns t1, t2 and so on as registry.ts turnScript writes them: {statement} in
+    turn 1 is the statement with trailing whitespace (JavaScript's) removed. G runs no K4 task and no empty statement."""
     spec = arms["arms"][arm]
+    if "families" in arms:
+        if task["kind"] == "K4":
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP arm {arm} is a registry arm, and G's registry has no K4 replay turn; fix: run K4 tasks on a lane arm (lanes/real-outcome/arms/arms.json), or drop the task from G's task list")
+        statement = JS_TRAILING_SPACE.sub("", instruction)
+        if not statement:
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP arm {arm}: the task statement is empty; fix: check the task's instruction file, which is blank after trimming")
+        return [(t["phase"], statement + t["text"][len(STATEMENT):] if t["text"].startswith(STATEMENT) else t["text"]) for t in spec["turns"]]
     if task["kind"] == "K4":
         return [("ship", spec["replay"].replace("{description}", task["replay"]["description"].strip()))]
     return [("build", instruction.rstrip() + "\n\n" + arms["build_suffix"]), ("ship", spec["turn2"])]
@@ -319,6 +337,9 @@ class RealAgent(lb.LanebAgent):
             raise SandboxSetupError("E_REAL_SANDBOX_SETUP a U4 session names its task and trial: set task_label and trial_n (from 1)")
         self.limits = arms["arms"][self.options.arm]["limits"]
         phases = phase_texts(task, arms, self.options.arm, instruction)
+        self.registry = "families" in arms
+        if self.registry:
+            user.per_turn([p for p, _ in phases])
         log({"event": "turns", "arm": self.options.arm, "kind": task["kind"], "phases": [p for p, _ in phases], "sha256": [hashlib.sha256(t.encode()).hexdigest() for _, t in phases], "limits": self.limits, "frozen_env": FROZEN_ENV})
         base_url = self._resolve_auth_env().get("ANTHROPIC_BASE_URL")
         if not base_url:
@@ -501,7 +522,7 @@ class RealAgent(lb.LanebAgent):
         real = {
             "trial": trial, "arm": self.options.arm, "kind": task["kind"], "termination": outcome["termination"], "phases": outcome["phases"],
             "limits": self.limits, "frozen_env": FROZEN_ENV, "sandbox": sandbox, "shipment": shipment, "turn1": outcome["turn1"], "final": final,
-            "persona": user.counts, "ship_steps": ship_phase["steps"], "skill_calls": {"build": ship_steps(by_phase.get("build", []))["skill_calls"], "ship": ship_phase["skill_calls"]},
+            "persona": user.counts, "ship_steps": ship_phase["steps"], "skill_calls": {p: ship_steps(by_phase.get(p, []))["skill_calls"] for p in (by_phase if self.registry else ("build", "ship"))},
             "tool_calls": steps["tool_calls"], "proxy": {k: (summary["session"] or {}).get(k) for k in ("spent_micros", "requests", "ok_responses", "refused")}, "errors": errors,
         }
         (self._evaluator_dir() / "real-summary.json").write_text(json.dumps(real, indent=2, default=str))

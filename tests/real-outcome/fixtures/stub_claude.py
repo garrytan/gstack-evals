@@ -35,12 +35,21 @@ def uid():
     return f"u{n}"
 
 
-def assistant(*blocks):
-    out({"type": "assistant", "message": {"id": uid(), "type": "message", "role": "assistant", "model": "stub", "content": list(blocks), "stop_reason": None, "usage": {"input_tokens": 1, "output_tokens": 1}}, "parent_tool_use_id": None, "session_id": "s", "uuid": uid()})
+def assistant(*blocks, parent=None):
+    out({"type": "assistant", "message": {"id": uid(), "type": "message", "role": "assistant", "model": "stub", "content": list(blocks), "stop_reason": None, "usage": {"input_tokens": 1, "output_tokens": 1}}, "parent_tool_use_id": parent, "session_id": "s", "uuid": uid()})
 
 
-def text(t):
-    assistant({"type": "text", "text": t})
+def text(t, parent=None):
+    assistant({"type": "text", "text": t}, parent=parent)
+
+
+def tool(name, tool_input, output, parent=None):
+    """A tool call and its ok result as the session records them, made by the main session or, with parent set to an
+    Agent call's id, by that subagent. Nothing runs."""
+    tid = uid()
+    assistant({"type": "tool_use", "id": tid, "name": name, "input": tool_input}, parent=parent)
+    out({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tid, "content": output, "is_error": False}]}, "parent_tool_use_id": parent, "session_id": "s", "uuid": uid()})
+    return tid
 
 
 def result(subtype="success", is_error=False):
@@ -111,6 +120,36 @@ def ask(questions):
             return answers
         if m.get("type") == "user":
             pending.append(m)
+
+
+def model_calls():
+    """Model calls through ANTHROPIC_BASE_URL with ANTHROPIC_API_KEY, as Claude Code makes them: STUB_CALLS of them, or
+    until one is refused. Every fifth asks for plain JSON, the rest stream. Each names STUB_LABEL and its number, so the
+    dry run's stub upstream can match its answers to the ledger call by call. Returns how many it made."""
+    import urllib.error
+    import urllib.request
+
+    calls = os.environ.get("STUB_CALLS", "3")
+    base = os.environ["ANTHROPIC_BASE_URL"].rstrip("/")
+    k = 0
+    while calls == "until_refused" or k < int(calls):
+        k += 1
+        stream = k % 5 != 0
+        body = {"model": os.environ["ANTHROPIC_MODEL"], "max_tokens": 32000, "stream": stream, "messages": [{"role": "user", "content": f"dryrun-call {os.environ['STUB_LABEL']} {k}"}]}
+        req = urllib.request.Request(base + "/v1/messages", data=json.dumps(body).encode(), headers={"content-type": "application/json", "x-api-key": os.environ["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01"}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as res:
+                raw = res.read().decode()
+                log("api", n=k, status=res.status, stream=stream, sse=raw.startswith("event:"))
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode(errors="replace")
+            try:
+                code = json.loads(raw).get("code")
+            except ValueError:
+                code = None
+            log("api", n=k, status=e.code, code=code)
+            break
+    return k
 
 
 if sys.argv[1:] in (["-v"], ["--version"]):
@@ -186,37 +225,53 @@ elif SCENARIO == "turn_never_ends":
     text("Working.")
     next_user()
 elif SCENARIO == "u4_calls":
-    # Model calls through ANTHROPIC_BASE_URL with ANTHROPIC_API_KEY, as Claude Code makes them: STUB_CALLS of them, or
-    # until one is refused. Every fifth asks for plain JSON, the rest stream. Each names STUB_LABEL and its number, so
-    # the dry run's stub upstream can match its answers to the ledger call by call.
-    import urllib.error
-    import urllib.request
-
-    calls = os.environ.get("STUB_CALLS", "3")
-    base = os.environ["ANTHROPIC_BASE_URL"].rstrip("/")
-    k = 0
-    while calls == "until_refused" or k < int(calls):
-        k += 1
-        stream = k % 5 != 0
-        body = {"model": os.environ["ANTHROPIC_MODEL"], "max_tokens": 32000, "stream": stream, "messages": [{"role": "user", "content": f"dryrun-call {os.environ['STUB_LABEL']} {k}"}]}
-        req = urllib.request.Request(base + "/v1/messages", data=json.dumps(body).encode(), headers={"content-type": "application/json", "x-api-key": os.environ["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01"}, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=60) as res:
-                raw = res.read().decode()
-                log("api", n=k, status=res.status, stream=stream, sse=raw.startswith("event:"))
-        except urllib.error.HTTPError as e:
-            raw = e.read().decode(errors="replace")
-            try:
-                code = json.loads(raw).get("code")
-            except ValueError:
-                code = None
-            log("api", n=k, status=e.code, code=code)
-            break
-    text(f"Made {k} calls.")
+    text(f"Made {model_calls()} calls.")
     result()
 elif SCENARIO == "max_turns":
     text("Working.")
     result("error_max_turns", True)
+elif SCENARIO == "g_turns":
+    # G's registry turns. Each turn the main session starts one Agent subagent, whose message carries the
+    # Agent call's id as parent_tool_use_id, then reports. A /plan-eng-review turn also leaves the marks that skill's
+    # exposure detector reads: from the main session, or with STUB_G_FROM=subagent from inside the subagent. An /autoplan
+    # turn replays the main session's t2 messages of the frozen exposed fixture (tests/outcome-skills/fixtures).
+    AUTOPLAN = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../outcome-skills/fixtures/autoplan-exposed.jsonl")
+
+    def autoplan_replay():
+        for r in map(json.loads, open(AUTOPLAN)):
+            if r.get("phase") != "t2" or r.get("parent_tool_use_id") is not None:
+                continue
+            if r["type"] == "AssistantMessage":
+                assistant(*r["content"])
+            elif r["type"] == "UserMessage":
+                out({"type": "user", "message": {"role": "user", "content": r["content"]}, "parent_tool_use_id": None, "session_id": "s", "uuid": uid()})
+
+    def plan_eng_review_marks(parent):
+        tool("Read", {"file_path": "/root/.claude/skills/gstack/plan-eng-review/sections/review-sections.md"}, "# Review sections", parent)
+        text("## Step 0: Scope Challenge\nThe plan is the right size.\n\n### 1. Architecture review\nOne module changes.\n\n### 2. Code quality review\nNo duplication.\n\n### 3. Test review\nOne unit test covers mul.\n\n### 4. Performance review\nNo hot path.", parent)
+        tool("Write", {"file_path": "/root/.gstack/projects/repo/main-eng-review-test-plan-20261105.md", "content": "# Test plan\n- mul(2, 3) is 6\n"}, "File created successfully", parent)
+
+    def g_turn(t):
+        review = t.startswith("/plan-eng-review")
+        inside = os.environ.get("STUB_G_FROM") == "subagent"
+        aid = uid()
+        assistant({"type": "tool_use", "id": aid, "name": "Agent", "input": {"description": "Survey", "prompt": "List the source files."}})
+        text("src/app.js holds add.", aid)
+        if review and inside:
+            plan_eng_review_marks(aid)
+        out({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": aid, "content": "src/app.js holds add.", "is_error": False}]}, "parent_tool_use_id": None, "session_id": "s", "uuid": uid()})
+        if review and not inside:
+            plan_eng_review_marks(None)
+        if t.startswith("/autoplan"):
+            autoplan_replay()
+        text("Done with this turn.")
+        result()
+
+    if os.environ.get("STUB_CALLS"):
+        model_calls()
+    g_turn(first)
+    while True:
+        g_turn(next_user())
 else:
     text("Ready.")
     result()
