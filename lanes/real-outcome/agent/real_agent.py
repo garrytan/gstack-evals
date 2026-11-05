@@ -24,7 +24,8 @@ with a U4 slot on its stage's lease; the session's base URL is that slot's, and 
 and refused before any model call. An arms file in the outcome-skills registry's shape runs only with ledger "u4".
 
 A registry arm (family G) sends its turns t1, t2 and so on in place of build and ship, each after the previous is quiet,
-with no turn-1 snapshot; the persona and skill_calls count per turn. Every message record in sdk-messages.jsonl names
+with no turn-1 snapshot; the persona and skill_calls count per turn, and the persona holds code in the turns before the
+arm's skill turn (plan_turns; none for the none arm). Every message record in sdk-messages.jsonl names
 the turn it arrived in (phase) and, wherever the frame Claude Code sent carries the key, its parent_tool_use_id (null for
 the session's own messages, the Agent call's id for a subagent's). G's exposure detectors read both, and refuse a record
 without them. A registry arm's turns must be t1 to tn.
@@ -167,6 +168,17 @@ def phase_texts(task: dict, arms: dict, arm: str, instruction: str) -> list:
     if task["kind"] == "K4":
         return [("ship", spec["replay"].replace("{description}", task["replay"]["description"].strip()))]
     return [("build", instruction.rstrip() + "\n\n" + arms["build_suffix"]), ("ship", spec["turn2"])]
+
+
+def plan_turns(arms: dict, arm: str) -> list:
+    """A registry arm's turns before its skill turn (the one registry.json marks skill_turn, as registry.ts skillTurn
+    reads it), where the persona holds code (G ruling A). The none arm has no skill turn and a lane arm has no registry
+    turns, so neither holds code in any turn."""
+    if "families" not in arms:
+        return []
+    turns = arms["arms"][arm]["turns"]
+    skill = next((i for i, t in enumerate(turns) if t.get("skill_turn") is True), 0)
+    return [t["phase"] for t in turns[:skill]]
 
 
 SNAPSHOT = r"""set -e
@@ -398,7 +410,7 @@ class RealAgent(lb.LanebAgent):
         phases = phase_texts(task, arms, self.options.arm, instruction)
         self.registry = "families" in arms
         if self.registry:
-            user.per_turn([p for p, _ in phases])
+            user.per_turn([p for p, _ in phases], plan_turns(arms, self.options.arm))
         log({"event": "turns", "arm": self.options.arm, "kind": task["kind"], "phases": [p for p, _ in phases], "sha256": [hashlib.sha256(t.encode()).hexdigest() for _, t in phases], "limits": self.limits, "frozen_env": FROZEN_ENV})
         base_url = self._resolve_auth_env().get("ANTHROPIC_BASE_URL")
         if not base_url:

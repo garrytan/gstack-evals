@@ -409,6 +409,32 @@ def test_g_none_arm_sends_turn_one_only():
     check({r["phase"] for r in messages(c)} == {"t1"}, "a none record outside t1")
 
 
+PLAN_HOLD = "Not yet. Keep to PLAN.md for now; don't write code yet."
+FALLBACK = "Go with your recommendation."
+NEXT = "How would you like to proceed?"
+
+
+def test_g_told_arm_holds_code_through_the_sdk_in_turn_one_only():
+    c = u4(Case("g-pe-ask", arm="plan-eng-review:told", scenario="g_turns", registry=True))
+    c.env["STUB_G_ASK"] = "1"
+    c.run()
+    t1, t2, t3 = turn_texts("plan-eng-review:told")
+    check(c.users() == [t1, PLAN_HOLD, t2, FALLBACK, t3, FALLBACK], c.users())
+    answers = [e["answers"] for e in c.events if e["event"] == "answers"]
+    check(answers == [{NEXT: PLAN_HOLD}, {NEXT: "Implement now (Recommended)"}, {NEXT: "Implement now (Recommended)"}], answers)
+    check([c.summary["persona"][p]["hold"] for p in ("t1", "t2", "t3")] == [2, 0, 0], c.summary["persona"])
+
+
+def test_g_none_arm_keeps_todays_answers_through_the_sdk():
+    c = u4(Case("g-none-ask", arm="none", scenario="g_turns", registry=True))
+    c.env["STUB_G_ASK"] = "1"
+    c.run()
+    check(c.users() == turn_texts("none") + [FALLBACK], c.users())
+    answers = [e["answers"] for e in c.events if e["event"] == "answers"]
+    check(answers == [{NEXT: "Implement now (Recommended)"}], answers)
+    check(c.summary["persona"]["t1"]["hold"] == 0, c.summary["persona"])
+
+
 def main():
     failed = 0
     for name, fn in list(globals().items()):

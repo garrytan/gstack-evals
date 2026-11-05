@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admitG, authPaidFromLedger, unknownFromRun, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
+import { admitG, authPaidFromLedger, t1WritesOutsidePlan, unknownFromRun, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
 import { m1Decide, meteredPricer, renderResizeMetered } from "../../src/runner/stats/g-resize.ts";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -174,6 +174,197 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
     expect(() => admitG(input(slice(), { unknown_calls: undefined as never }))).toThrow(/unknown cost/);
     expect(() => admitG(input(slice(), { unknown_calls: { ...unknown, autoplan: { calls: -1, micros: 0 } } }))).toThrow(/unknown cost/);
     expect(() => admitG(input(slice(), { unknown_calls: { ...unknown, none: { calls: 1, micros: 0.5 } } }))).toThrow(/unknown cost/);
+  });
+
+  test("told trials that wrote outside PLAN.md in t1 print beside exposure, report only: no item, route or design moves", () => {
+    const read = edit(slice(), (t) => t.arm !== NONE, { t1_outside_plan: false });
+    const wrote = edit(read, (t, i) => t.arm === PER && i < 3, { t1_outside_plan: true });
+    const unread = edit(wrote, (t, i) => t.arm === AP && i < 2, { t1_outside_plan: null });
+    const base = admitG(input(slice()));
+    const a = admitG(input(unread));
+    expect(a.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 3, read: 24 });
+    expect(a.skills.autoplan.t1_outside_plan).toEqual({ wrote: 0, read: 22 });
+    expect(base.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 0, read: 0 });
+    expect(a.skills["plan-eng-review"].items[1]!.reading).toMatch(/^8 of 8 sampled told trials exposed .*; report only: 3 of 24 told trials wrote outside PLAN\.md in t1$/);
+    expect(a.skills.autoplan.items[1]!.reading).toMatch(/; report only: 0 of 22 told trials wrote outside PLAN\.md in t1 \(2 not read\)$/);
+    for (const s of ["plan-eng-review", "autoplan"] as const) {
+      expect(a.skills[s].items.map((x) => x.pass)).toEqual(base.skills[s].items.map((x) => x.pass));
+      expect([a.skills[s].failed, a.skills[s].route, a.skills[s].design]).toEqual([base.skills[s].failed, base.skills[s].route, base.skills[s].design]);
+    }
+    const stopped = admitG(input(edit(noneSolved(4), (t, i) => t.arm === PER && i < 3, { t1_outside_plan: true })));
+    expect(stopped.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 3, read: 3 });
+    expect(stopped.skills["plan-eng-review"].items[1]!.pass).toBeNull();
+  });
+});
+
+describe("t1 writes outside PLAN.md, from the phase-tagged records (report only, G ruling A on red-team #1)", () => {
+  const use = (phase: string, id: string, name: string, input: Record<string, unknown>, parent: string | null = null) => ({ type: "AssistantMessage", phase, parent_tool_use_id: parent, content: [{ type: "tool_use", id, name, input }] });
+  const result = (phase: string, id: string, content: string, is_error = false, parent: string | null = null) => ({ type: "UserMessage", phase, parent_tool_use_id: parent, content: [{ type: "tool_result", tool_use_id: id, content, is_error }] });
+  const bash = (id: string, command: string, phase = "t1") => use(phase, id, "Bash", { command });
+
+  test("an edit tool's write outside PLAN.md in t1 counts, a subagent's included; PLAN.md, later turns, failed edits and reads don't", () => {
+    expect(t1WritesOutsidePlan([
+      use("t1", "a", "Write", { file_path: "/testbed/PLAN.md", content: "# Plan" }), result("t1", "a", "ok"),
+      use("t1", "b", "Edit", { file_path: "/testbed/docs/PLAN.md", old_string: "a", new_string: "b" }), result("t1", "b", "ok"),
+      use("t1", "c", "Read", { file_path: "/testbed/src/app.ts" }), result("t1", "c", "..."),
+      use("t1", "d", "Edit", { file_path: "/testbed/src/app.ts", old_string: "x", new_string: "y" }), result("t1", "d", "String not found", true),
+      use("t1", "e", "Write", { file_path: "/testbed/src/new.ts", content: "x" }), result("t1", "e", "<tool_use_error>denied</tool_use_error>"),
+      use("t2", "f", "Write", { file_path: "/testbed/src/later.ts", content: "x" }), result("t2", "f", "ok"),
+      use("t3", "g", "Edit", { file_path: "/testbed/src/app.ts", old_string: "x", new_string: "y" }), result("t3", "g", "ok"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      use("t1", "a", "Write", { file_path: "/testbed/src/app.ts", content: "x" }), result("t1", "a", "ok"),
+      use("t1", "b", "MultiEdit", { file_path: "/testbed/src/b.ts", edits: [] }), result("t1", "b", "ok", false, "agent1"),
+      use("t1", "c", "NotebookEdit", { notebook_path: "/testbed/n.ipynb", new_source: "x" }),
+      use("t1", "d", "Edit", { file_path: "/testbed/PLAN.md.bak", old_string: "a", new_string: "b" }, "agent1"), result("t1", "d", "ok", false, "agent1"),
+    ])).toEqual(["Write /testbed/src/app.ts", "MultiEdit /testbed/src/b.ts", "NotebookEdit /testbed/n.ipynb", "Edit /testbed/PLAN.md.bak"]);
+  });
+
+  test("a Bash call counts when it redirects into a file, tees or edits in place, even when it exits non-zero; PLAN.md, /dev/null, heredoc bodies and quoted text don't", () => {
+    expect(t1WritesOutsidePlan([
+      bash("a", "cat > PLAN.md <<'EOF'\n# Plan\nif a > b: use x\nEOF"),
+      bash("b", "pytest -q 2>&1 | tail -5; ls > /dev/null"),
+      bash("c", "python3 -c \"print(1 if 3 > 2 else 0)\""),
+      bash("d", "grep -rn 'a > b' src/"),
+      bash("e", "cat > src/app.py <<EOF\nprint(1)\nEOF", "t3"),
+      bash("f", "sed -i 's/a/b/' PLAN.md"),
+      bash("g", "perl -pi -e 's/a/b/' PLAN.md"),
+      bash("h", "grep 'a > \"b\"' src/app.ts"),
+      bash("i", "cat PLAN.md | tee /dev/stderr"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      bash("a", "mkdir -p src && cat > src/app.py <<'EOF'\nprint(1)\nEOF"), result("t1", "a", "exit 1", true),
+      bash("b", "echo x >> \"notes/todo.txt\""),
+      bash("c", "printf '%s' x | tee -a src/log.ts"),
+      bash("d", "sed -i 's/a/b/' src/app.ts"),
+      bash("e", "git apply fix.patch"),
+      bash("f", "echo x > /tmp/scratch.txt"),
+      bash("g", "echo x > PLAN.md"),
+      bash("h", "sed -i.bak -e 's/a/b/' PLAN.md src/b.ts"),
+      bash("i", "printf x | tee \"src/c.ts\""),
+      bash("j", "FOO=1 echo x 1> 'src/d.ts' 2> err.log"),
+    ])).toEqual(["Bash > src/app.py", "Bash > notes/todo.txt", "Bash tee src/log.ts", "Bash edit: sed -i 's/a/b/' src/app.ts", "Bash edit: git apply fix.patch", "Bash > /tmp/scratch.txt", "Bash edit: sed -i.bak -e 's/a/b/' PLAN.md src/b.ts", "Bash tee src/c.ts", "Bash > src/d.ts"]);
+  });
+
+  test("a write behind a shell keyword or a wrapper counts, and bash -c reads its script; sed -i under xargs counts, since its files come from stdin", () => {
+    expect(t1WritesOutsidePlan([
+      bash("a", "for f in a; do sed -i 's/a/b/' PLAN.md; done"),
+      bash("b", "if true; then sed -i 's/a/b/' PLAN.md; fi"),
+      bash("c", "echo x | sudo tee -a PLAN.md"),
+      bash("d", "timeout 5 grep -rn tee src"),
+      bash("e", "echo sudo sed -i s/a/b/ src/a.ts"),
+      bash("f", "bash -c \"sed -i 's/a/b/' PLAN.md\""),
+      bash("g", "env LC_ALL=C sed -n 1p src/a.ts"),
+      bash("h", "ls | xargs grep -l tee"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      bash("a", "for f in src/*.ts; do sed -i 's/a/b/' \"$f\"; done"),
+      bash("b", "find . -name '*.ts' | xargs sed -i 's/a/b/'"),
+      bash("c", "echo x | sudo -u root tee src/x.ts"),
+      bash("d", "env LC_ALL=C timeout 10 perl -pi -e 's/a/b/' src/y.ts"),
+      bash("e", "if [ -f x ]; then sed -i 's/a/b/' src/z.ts; fi"),
+      bash("f", "{ printf x | tee src/w.ts; }"),
+      bash("g", "bash -c \"sed -i 's/a/b/' src/v.ts\""),
+      bash("h", "xargs -0 -I {} sed -i 's/a/b/' {} < files.txt"),
+      bash("i", "sudo bash -lc 'echo x > src/t.ts'"),
+      bash("j", "nohup sed -i 's/a/b/' src/u.ts &"),
+      bash("k", "echo x | sudo -E tee src/s.ts"),
+    ])).toEqual([
+      "Bash edit: for f in src/*.ts; do sed -i 's/a/b/' \"$f\"; done",
+      "Bash edit: find . -name '*.ts' | xargs sed -i 's/a/b/'",
+      "Bash tee src/x.ts",
+      "Bash edit: env LC_ALL=C timeout 10 perl -pi -e 's/a/b/' src/y.ts",
+      "Bash edit: if [ -f x ]; then sed -i 's/a/b/' src/z.ts; fi",
+      "Bash tee src/w.ts",
+      "Bash edit: sed -i 's/a/b/' src/v.ts",
+      "Bash edit: xargs -0 -I {} sed -i 's/a/b/' {} < files.txt",
+      "Bash > src/t.ts",
+      "Bash edit: nohup sed -i 's/a/b/' src/u.ts &",
+      "Bash tee src/s.ts",
+    ]);
+  });
+
+  test("sed's and perl's options read as GNU sed and perl read them, and a wrapper flag takes the next word only when it takes a value", () => {
+    expect(t1WritesOutsidePlan([
+      bash("a", "sed -E -i 's/a/b/' PLAN.md"),
+      bash("b", "sed -i '' 's/a/b/' PLAN.md"),
+      bash("c", "sed -i .bak 's/a/b/' PLAN.md"),
+      bash("d", "sed -r -n -l 80 -i 's/a/b/' PLAN.md"),
+      bash("e", "perl -i -f -pe 's/a/b/' PLAN.md"),
+      bash("f", "echo x | sudo -E grep -rn tee src/"),
+      bash("g", "env -i grep -rn tee src/"),
+      bash("h", "sudo -n grep -l sed src/"),
+      bash("i", "sed -i.prev 's/a/b/' PLAN.md"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      bash("a", "sed -E -i 's/a/b/' src/a.ts"),
+      bash("b", "sed -i '' 's/a/b/' src/b.ts"),
+      bash("c", "sed --expression='s/a/b/' -i src/c.ts"),
+      bash("d", "sed -e's/a/b/' -i src/d.ts"),
+      bash("e", "perl -pi -e's/a/b/' src/e.ts"),
+      bash("f", "sed -ie 's/a/b/' src/f.ts"),
+      bash("g", "sed -e 's/a/b/' -i .env"),
+      bash("h", "echo x | sudo -n tee src/h.ts"),
+      bash("i", "sudo -g staff sed -i 's/a/b/' src/i.ts"),
+      bash("j", "env -u HOME timeout -s KILL 5 sed -i 's/a/b/' src/j.ts"),
+      bash("k", "xargs -d x -n 1 sed -i 's/a/b/' < list.txt"),
+    ])).toEqual([
+      "Bash edit: sed -E -i 's/a/b/' src/a.ts",
+      "Bash edit: sed -i '' 's/a/b/' src/b.ts",
+      "Bash edit: sed --expression='s/a/b/' -i src/c.ts",
+      "Bash edit: sed -e's/a/b/' -i src/d.ts",
+      "Bash edit: perl -pi -e's/a/b/' src/e.ts",
+      "Bash edit: sed -ie 's/a/b/' src/f.ts",
+      "Bash edit: sed -e 's/a/b/' -i .env",
+      "Bash tee src/h.ts",
+      "Bash edit: sudo -g staff sed -i 's/a/b/' src/i.ts",
+      "Bash edit: env -u HOME timeout -s KILL 5 sed -i 's/a/b/' src/j.ts",
+      "Bash edit: xargs -d x -n 1 sed -i 's/a/b/' < list.txt",
+    ]);
+  });
+
+  test("heredocs, comments, [[ ]], (( )) and $(( )) read as the shell reads them; perl's value switches, git -C and >& too", () => {
+    expect(t1WritesOutsidePlan([
+      bash("a", "ls src # results > notes"),
+      bash("b", "echo x # > src/app.ts"),
+      bash("c", "[[ $a > $b ]] && echo ok"),
+      bash("d", "(( n > 0 )) && echo ok"),
+      bash("e", "perl -Mstrict -ne 'print if /foo/' src/app.ts"),
+      bash("f", "perl -Ilib bin/check.pl data.txt; perl -I lib -pi fix.pl PLAN.md"),
+      bash("g", "echo x >&2; echo y 1>&2"),
+      bash("h", "cat > PLAN.md <<'END-PLAN'\n- step: run a > b\n- don't edit yet\nEND-PLAN"),
+      bash("i", "cat > PLAN.md <<-EOF\n\ta > b\n\tEOF"),
+      bash("j", "cat > PLAN.md <<\\EOF\na > b\nEOF"),
+      bash("k", "echo $(( 1 << 2 )) && cat <<< 'a > b'"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      bash("a", "cat <<< hi\nsed -i 's/a/b/' src/a.ts"),
+      bash("b", "echo $((1<<2))\necho x > src/b.ts"),
+      bash("c", "grep '<<EOF' README.md\nsed -i 's/a/b/' src/c.ts"),
+      bash("d", "cat > PLAN.md <<'END-PLAN'\nrun a > b\ndon't\nEND-PLAN\necho x > src/d.ts"),
+      bash("e", "grep x f # don't\nsed -i 's/a/b/' src/e.ts"),
+      bash("f", "git -C repo apply fix.patch"),
+      bash("g", "echo hi >& src/g.ts"),
+      bash("h", "if [[ -f x ]]; then echo x > src/h.ts; fi"),
+      bash("i", "perl -Mstrict -pi -e 's/a/b/' src/i.ts"),
+      bash("j", "cat <<EOF > src/j.ts\nx > y\nEOF\necho z >> src/k.ts"),
+      bash("l", "echo x > src/l.ts; grep -r tool_use_error logs"), result("t1", "l", "logs/a.txt: <tool_use_error>denied</tool_use_error>"),
+      bash("m", "cat > PLAN.md <<-EOF\n\ta > b\n\tEOF\necho x > src/m.ts"),
+    ])).toEqual([
+      "Bash edit: cat <<< hi",
+      "Bash > src/b.ts",
+      "Bash edit: grep '<<EOF' README.md",
+      "Bash > src/d.ts",
+      "Bash edit: grep x f # don't",
+      "Bash edit: git -C repo apply fix.patch",
+      "Bash > src/g.ts",
+      "Bash > src/h.ts",
+      "Bash edit: perl -Mstrict -pi -e 's/a/b/' src/i.ts",
+      "Bash > src/j.ts",
+      "Bash > src/k.ts",
+      "Bash > src/l.ts",
+      "Bash > src/m.ts",
+    ]);
   });
 });
 

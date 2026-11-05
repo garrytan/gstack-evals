@@ -5,6 +5,15 @@ One persona for every arm, scoped to the trial: it never enters the container. I
 or answers "Go with your recommendation." A turn that ends on a prose question gets the same answer, at most
 prose_replies_per_turn times per turn; in the build turn, a closing question about shipping, or a recommended next step
 that ships, gets no reply, since the ship turn answers it. src/usersim's global guards are untouched. Every question, answer and source is logged and counted.
+
+A registry arm (family G) counts per turn. In its turns before the skill turn (G ruling A on red-team #1), an ask that
+proposes implementing gets PLAN_HOLD instead, counted as a hold: a closing ask that implements() reads in its question
+or recommendation, or an AskUserQuestion whose question, or the option the persona would pick, proposes it. A generic
+action ask counts too, unless it names the plan, or the persona would pick among options that each name it. An option's
+leading marker (A), 1., (b), -) is read past, a leading before or until clause ends at its comma, and a negation drops
+only its own clause. A bare "Should I?" reads the sentence before it: an offer to draft the plan exempts it. A hold
+reply spends the turn's prose allowance like any other. Every other answer, and every answer from the skill turn on, is
+unchanged.
 """
 
 import json
@@ -15,6 +24,57 @@ from pathlib import Path
 PHASES = ("build", "ship")
 # A sentence that proposes the agent's next step: what "Go with your recommendation." would approve.
 RECOMMENDS = re.compile(r"\b(recommend|suggest|propose|next steps?|I'd|I would|I can|I could|I'll|I will|let me|ready to)\b", re.I)
+PLAN_HOLD = "Not yet. Keep to PLAN.md for now; don't write code yet."
+# What "proposes implementing" means, one sentence or line at a time. An implement ask names writing code: a start verb
+# before a code verb, the agent offering to write code, or an option that opens with "Implement". A generic action ask
+# (proceed, go ahead, continue, get started, make these changes, do that, a bare "Should I?") means the same in a turn
+# before the skill turn, unless its sentence names the plan, PLAN.md, a section or an option. "Proceed with" and "go
+# ahead with" stay held when they name the plan; only a section, an option or a drafting verb right after "with"
+# (writing, drafting, updating, finishing, revising) exempts them.
+CODE = r"(?:implement(?:ing)?|implementation(?!\s+(?:plan|section|steps?|details?|order|notes?|approach|strategy|phases?)\b)|coding|cod(?:e|ing)\s+(?:it|this|that|them|up)|writ(?:e|ing)\s+(?:the\s+|any\s+)?code|build(?:ing)?\s+(?:it|this|that|them)|building(?!\s+(?:the\s+|a\s+)?plan)|build(?:ing)?\s+out(?!\s+(?:the\s+|a\s+)?plan)|wir(?:e|ing)\s+(?:(?:it|this|that|them)\s+)?up|execut(?:e|ing)\s+(?:it|this|that|the\s+plan)|carry(?:ing)?\s+out\s+(?:it|this|that|the\s+plan))"
+IMPLEMENTS = re.compile(
+    r"\b(?:start|begin|get\s+started|proceed|move\s+on|go\s+ahead|ready|kick\s+off|dive\s+in|jump\s+in)\b[^.?!\n]{0,30}?\b" + CODE + r"\b"
+    r"|\b(?:I|I'll|I'd|I’ll|I’d|me|we|we'll|we’ll|let's|let’s)\s+(?:\w+\s+){0,3}?" + CODE + r"\b"
+    r"|^(?:yes,?\s+)?implement(?:ing)?\b(?!\s+(?:with|using|via|as|in)\b)",
+    re.I)
+ACT = r"(?:proceed|go\s+ahead|continue|carry\s+on|keep\s+going|get\s+started|get\s+going|start|begin|move\s+(?:on|forward|ahead)|kick\s+(?:it\s+|things\s+)?off|dive\s+in|jump\s+in|get\s+to\s+work|(?:make|apply|do)\s+(?:(?:these|those|the|this|that|any|all(?:\s+(?:the|these|those))?)\s+)?(?:\w+\s+){0,2}?(?:changes?|edits?|fix(?:es)?|updates?|modifications?)|(?:do|handle|tackle|take\s+care\s+of)\s+(?:it|that|this|them))\b"
+BARE = re.compile(r"^(?:(?:shall|should|can|may)\s+(?:I|we)|(?:do\s+you\s+)?(?:want|would\s+you\s+like)\s+me\s+to)\s*\?$", re.I)
+GENERIC = re.compile(
+    r"\b(?:I|I'll|I'd|I’ll|I’d|me|we|we'll|we’ll|let's|let’s|ready|ok(?:ay)?|like)\s+(?:\w+\s+){0,2}?(?:to\s+)?" + ACT
+    + r"|^(?:yes,?\s+)?" + ACT + r"|" + BARE.pattern,
+    re.I)
+CHOICE = re.compile(r"\bsections?\b|\b(?:options?|alternatives?)\b", re.I)
+PLANNED = re.compile(r"\bplan(?:s|'s|’s)?\b|" + CHOICE.pattern, re.I)
+DRAFTING = r"writing|drafting|updating|finishing|revising"
+PROCEED_WITH = re.compile(r"\b(?:proceed|go\s+ahead)\s+with\b(?!\s+(?:" + DRAFTING + r")\b)", re.I)
+DRAFTS = re.compile(r"\b(?:write|draft|update|finish|revise|" + DRAFTING + r")\b[^.?!\n]{0,40}?\bplan(?:s|'s|’s)?\b", re.I)
+OPTION = re.compile(r"^(?:[-*•]\s*)?\**\(?(?:[A-Za-z]|\d{1,2})[).:]\**\s+|^[-*•]\s+")
+BEFORE = re.compile(r"^(?:before|until)\b[^,]*,\s*|\b(?:before|until)\b[^.?!\n]*", re.I)
+CLAUSE = re.compile(r"[,;:]|\s[-–—]\s|\bbut\b", re.I)
+NEGATED = re.compile(r"\b(?:not|never)\b|n['’]t\b", re.I)
+
+
+def proceeds(text: str) -> bool:
+    """"Proceed with" or "go ahead with" the plan itself, not one of its sections or options: writing the code."""
+    return bool(PROCEED_WITH.search(text)) and not CHOICE.search(text)
+
+
+def implements(text: str, plan_choice: bool = False) -> bool:
+    """Whether text proposes implementing. An option's leading marker is read past. A before or until clause names what
+    comes later, so it is dropped first: a leading one up to its comma, any other to the sentence's end. In a statement
+    (not a question), a clause with not, never or n't declines rather than proposes, so it is dropped and the rest is
+    read. A generic action ask is exempt when its sentence names the plan, or when plan_choice says the answer picks
+    among plan options; but an ask that proceeds() means writing the code even when it names the plan. A bare
+    "Should I?" is exempt when the sentence before it offers to draft the plan."""
+    prior = ""
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
+        sentence = BEFORE.sub("", OPTION.sub("", sentence.strip())).strip()
+        clauses = [sentence] if sentence.endswith("?") or not NEGATED.search(sentence) else [c.strip() for c in CLAUSE.split(sentence) if not NEGATED.search(c)]
+        exempt = plan_choice or (PLANNED.search(sentence) and not proceeds(sentence)) or (BARE.search(sentence) and DRAFTS.search(prior) and not NEGATED.search(prior))
+        if any(IMPLEMENTS.search(c) or (GENERIC.search(c) and not exempt) for c in clauses):
+            return True
+        prior = sentence
+    return False
 
 
 class ShipUser:
@@ -24,6 +84,7 @@ class ShipUser:
         self.ship_words = re.compile(persona["ship_words"], re.I)
         self.asks = re.compile(persona["asks_user"], re.I)
         self.phase = "build"
+        self.plan_turns = frozenset()
         self.counts = {p: {"questions": 0, "recommended": 0, "fallback": 0, "hold": 0, "prose": 0, "prose_unanswered": 0} for p in PHASES}
         self.prose_used = 0
 
@@ -32,10 +93,12 @@ class ShipUser:
         with self.log_path.open("a") as f:
             f.write(json.dumps(event, default=str) + "\n")
 
-    def per_turn(self, phases: list) -> None:
+    def per_turn(self, phases: list, plan_turns: list = ()) -> None:
         """A registry arm (family G) counts per turn (t1, t2, ...) instead of build and ship. It never holds shipping,
-        since only a build turn does."""
+        since only a build turn does. plan_turns are the turns before the arm's skill turn, where it holds code."""
+        assert set(plan_turns) <= set(phases), (plan_turns, phases)
         self.counts = {p: {"questions": 0, "recommended": 0, "fallback": 0, "hold": 0, "prose": 0, "prose_unanswered": 0} for p in phases}
+        self.plan_turns = frozenset(plan_turns)
         self.phase = phases[0]
 
     def start(self, phase: str) -> None:
@@ -51,10 +114,15 @@ class ShipUser:
         labels = " ".join(str(o.get("label", "")) + " " + str(o.get("description", "")) for o in question.get("options", []) or [])
         if self.phase == "build" and self.ship_words.search(str(question.get("question", "")) + " " + labels):
             return self.persona["hold"], "hold"
-        for option in question.get("options", []) or []:
-            text = (str(option.get("label", "")) + " " + str(option.get("description", ""))).lower().replace("not recommended", "")
-            if any(marker in text for marker in self.persona["recommended_markers"]):
-                return str(option.get("label", "")), "recommended"
+        options = question.get("options", []) or []
+        text = lambda option: str(option.get("label", "")) + " " + str(option.get("description", ""))
+        picked = next((o for o in options if any(marker in text(o).lower().replace("not recommended", "") for marker in self.persona["recommended_markers"])), None)
+        chosen = [picked] if picked else options
+        plan_choice = bool(chosen) and all(PLANNED.search(text(o)) and not proceeds(text(o)) for o in chosen)
+        if self.phase in self.plan_turns and implements("\n".join([str(question.get("question", ""))] + [text(o) for o in chosen]), plan_choice):
+            return PLAN_HOLD, "hold"
+        if picked:
+            return str(picked.get("label", "")), "recommended"
         return self.persona["fallback"], "fallback"
 
     def answer(self, questions: list) -> dict:
@@ -77,7 +145,8 @@ class ShipUser:
         lines that ends in one, or the whole last paragraph when only the asks pattern matched."""
         tail = (text or "").strip()[-600:]
         last = tail.split("\n\n")[-1]
-        asked = [s for s in re.split(r"(?<=[.!?])\s+", last) if s.rstrip().endswith("?")]
+        said = re.split(r"(?<=[.!?])\s+", last)
+        asked = [(said[i - 1] + " " if i and BARE.search(s.strip()) else "") + s for i, s in enumerate(said) if s.rstrip().endswith("?")]
         asked += [line for line in tail.splitlines()[-3:] if line.rstrip().endswith("?")]
         return "\n".join(asked) or (last if self.asks.search(last) else "")
 
@@ -100,6 +169,10 @@ class ShipUser:
             self.log({"event": "prose", "phase": self.phase, "text": (text or "")[-300:], "answer": None, "source": why})
             return None
         self.prose_used += 1
+        if self.phase in self.plan_turns and implements(self.question(text) + "\n" + self.recommendation(text)):
+            self.counts[self.phase]["hold"] += 1
+            self.log({"event": "prose", "phase": self.phase, "text": (text or "")[-300:], "answer": PLAN_HOLD, "source": "hold"})
+            return PLAN_HOLD
         self.counts[self.phase]["prose"] += 1
         self.log({"event": "prose", "phase": self.phase, "text": (text or "")[-300:], "answer": self.persona["fallback"], "source": "fallback"})
         return self.persona["fallback"]

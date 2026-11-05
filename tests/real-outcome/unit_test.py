@@ -366,6 +366,250 @@ def test_registry_turns_count_per_turn_and_never_hold_shipping():
     assert all(c == {"questions": 2, "recommended": 1, "fallback": 1, "hold": 0, "prose": 0, "prose_unanswered": 0} for c in u.counts.values()), u.counts
 
 
+PLAN_HOLD = "Not yet. Keep to PLAN.md for now; don't write code yet."
+CLOSING_ASK = "I've drafted the plan in PLAN.md.\n\nWant me to start implementing?"
+IMPLEMENT_Q = q("How would you like to proceed?", "Implement now (Recommended)", "Revise the plan")
+IMPLEMENT_ASKS = (
+    "The plan is in PLAN.md. Want me to start implementing?",
+    "Should I go ahead and implement it?",
+    "Shall I proceed?",
+    "Would you like me to proceed?",
+    "Ready for me to start coding?",
+    "Next, I'd implement the parser in src/parse.ts.",
+    "Implement now (Recommended)",
+    "Yes, implement the plan (Recommended)",
+    "Proceed with implementation (Recommended)",
+    "Should I start the implementation now?",
+    "Let me know if you'd like me to adjust anything or start implementing.",
+    "Want me to build it?",
+    "Should I begin writing the code?",
+    "Shall I start on step 1?",
+    "Want me to implement Phase 1?",
+    "Let's implement it.",
+    "Do you want me to start implementing or not?",
+    "Want me to start building?",
+    "Should I execute the plan?",
+    "Want me to make these changes?",
+    "Shall I continue?",
+    "Should I go ahead?",
+    "Shall we get started?",
+    "Would you like me to continue?",
+    "Want me to do that?",
+    "Should I?",
+    "Let me know how you'd like to proceed.",
+    "OK to proceed?",
+    "Should I start on the parser?",
+    "Want me to apply these edits?",
+    "Want me to proceed with the review?",
+    "How should I proceed?",
+    "I can make these changes now.",
+    "Shall I proceed with the plan?",
+    "Want me to go ahead with the plan?",
+    "Should I go ahead with PLAN.md as written?",
+    "I'll proceed with the plan once you confirm.",
+)
+PLAN_QUESTIONS = (
+    "Which storage should the plan use?",
+    "SQLite (Recommended)",
+    "Should the plan cover the migration?",
+    "Yes, include it (Recommended)",
+    "I've drafted the plan in PLAN.md. Want me to add more detail on the error handling?",
+    "Want me to refine the plan before I start implementing?",
+    "Before I start implementing, want me to refine anything?",
+    "Should the implementation use async I/O?",
+    "Let me know if the implementation plan looks right.",
+    "Should I add an implementation section to PLAN.md?",
+    "Implement with Redis (Recommended)",
+    "Should I start writing the plan?",
+    "I will not write code until the plan is reviewed.",
+    "Should the plan cover the retry path?",
+    "Want me to add a section on retries to PLAN.md?",
+    "Want me to make these changes to the plan?",
+    "Shall I continue with the plan?",
+    "Should I continue the plan?",
+    "Want me to proceed with the plan's risks section?",
+    "Want me to continue with the plan's risks section?",
+    "Should I go ahead with option B?",
+    "Should the start date be optional?",
+    "Let me know if you want me to make any changes to PLAN.md.",
+    "Ready to commit and open a PR?",
+    "Should I start building the plan's test section?",
+)
+
+
+def told_user():
+    u = user()
+    u.per_turn(["t1", "t2", "t3"], ra.plan_turns(REGISTRY, "plan-eng-review:told"))
+    return u
+
+
+def test_plan_turns_are_the_turns_before_each_registry_arms_skill_turn():
+    assert ra.plan_turns(REGISTRY, "plan-eng-review:told") == ["t1"]
+    assert ra.plan_turns(REGISTRY, "autoplan:told") == ["t1"]
+    assert ra.plan_turns(REGISTRY, "none") == []
+    assert ra.plan_turns(ARMS, "none") == [] and ra.plan_turns(ARMS, "gstack") == []
+
+
+def test_told_turn_one_holds_a_closing_ask_to_implement():
+    u = told_user()
+    u.start("t1")
+    assert u.prose(CLOSING_ASK) == PLAN_HOLD
+    assert u.counts["t1"] == {"questions": 0, "recommended": 0, "fallback": 0, "hold": 1, "prose": 0, "prose_unanswered": 0}, u.counts
+    events = [json.loads(line) for line in u.log_path.read_text().splitlines()]
+    assert [(e["answer"], e["source"]) for e in events if e["event"] == "prose"] == [(PLAN_HOLD, "hold")], events
+
+
+def test_told_turn_one_holds_a_recommended_implement_option():
+    u = told_user()
+    u.start("t1")
+    assert u.answer([IMPLEMENT_Q, q("Should I start implementing now?", "Yes", "No")]) == {"How would you like to proceed?": PLAN_HOLD, "Should I start implementing now?": PLAN_HOLD}
+    assert u.counts["t1"] == {"questions": 2, "recommended": 0, "fallback": 0, "hold": 2, "prose": 0, "prose_unanswered": 0}, u.counts
+    events = [json.loads(line) for line in u.log_path.read_text().splitlines()]
+    assert [(e["answer"], e["source"]) for e in events if e["event"] == "question"] == [(PLAN_HOLD, "hold")] * 2, events
+    u = told_user()
+    u.start("t1")
+    assert u.answer([q("Should I go ahead?", "Yes, proceed with the plan (Recommended)", "No")]) == {"Should I go ahead?": PLAN_HOLD}
+
+
+def test_told_turns_from_the_skill_turn_on_keep_todays_answers():
+    u = told_user()
+    for phase in ("t2", "t3"):
+        u.start(phase)
+        assert u.prose(CLOSING_ASK) == PERSONA["fallback"], phase
+        assert u.answer([IMPLEMENT_Q]) == {"How would you like to proceed?": "Implement now (Recommended)"}, phase
+        assert u.counts[phase] == {"questions": 1, "recommended": 1, "fallback": 0, "hold": 0, "prose": 1, "prose_unanswered": 0}, u.counts
+
+
+def test_gstacks_questions_in_the_skill_turn_still_get_the_rec_line():
+    u = told_user()
+    u.start("t2")
+    a = u.answer([
+        q("Scope challenge: reduce the scope?", "A) Keep the scope as planned (Recommended)", "B) Cut the retry layer"),
+        q("The review is done. Ready to implement the reviewed plan?", "A) Yes, implement it (Recommended)", "B) Not yet"),
+        q("Which test framework?", "pytest", "unittest"),
+    ])
+    assert a == {"Scope challenge: reduce the scope?": "A) Keep the scope as planned (Recommended)", "The review is done. Ready to implement the reviewed plan?": "A) Yes, implement it (Recommended)", "Which test framework?": PERSONA["fallback"]}, a
+    assert u.prose("Review complete.\n\nShould I start implementing the reviewed plan?") == PERSONA["fallback"]
+    assert u.counts["t2"]["hold"] == 0, u.counts
+
+
+def test_turn_one_choices_between_plan_options_are_not_held():
+    u = told_user()
+    u.start("t1")
+    a = u.answer([
+        q("How should I proceed?", "Add caching to the plan (Recommended)", "Keep the plan minimal"),
+        q("Which plan section next?", "Risks", "Tests"),
+        q("Should I go ahead with one of these?", "Expand PLAN.md's test section", "Add a rollback step to the plan"),
+    ])
+    assert a == {"How should I proceed?": "Add caching to the plan (Recommended)", "Which plan section next?": PERSONA["fallback"], "Should I go ahead with one of these?": PERSONA["fallback"]}, a
+    assert u.counts["t1"]["hold"] == 0, u.counts
+    a = u.answer([
+        q("Where should I begin?", "Start on the parser (Recommended)", "Expand the plan"),
+        q("Which next step?", "Expand PLAN.md's test section", "Proceed"),
+        q("What now?", "Proceed with the plan as written (Recommended)", "Revise the plan"),
+    ])
+    assert a == {"Where should I begin?": PLAN_HOLD, "Which next step?": PLAN_HOLD, "What now?": PLAN_HOLD}, a
+    assert u.counts["t1"]["hold"] == 3, u.counts
+
+
+def test_turn_one_plan_questions_are_not_held():
+    u = told_user()
+    u.start("t1")
+    a = u.answer([q("Which storage should the plan use?", "SQLite (Recommended)", "Postgres"), q("Should the plan cover the migration?", "Yes, include it (Recommended)", "No"), q("Which name?", "foo", "bar")])
+    assert a == {"Which storage should the plan use?": "SQLite (Recommended)", "Should the plan cover the migration?": "Yes, include it (Recommended)", "Which name?": PERSONA["fallback"]}, a
+    assert u.prose("I've drafted the plan in PLAN.md.\n\nWant me to add more detail on the error handling?") == PERSONA["fallback"]
+    assert u.prose("Want me to refine the plan before I start implementing?") == PERSONA["fallback"]
+    assert u.counts["t1"]["hold"] == 0, u.counts
+
+
+def test_the_none_arms_one_turn_keeps_todays_answers():
+    u = user()
+    u.per_turn(["t1"], ra.plan_turns(REGISTRY, "none"))
+    u.start("t1")
+    assert u.prose("I found the bug in the parser.\n\nWant me to start implementing the fix?") == PERSONA["fallback"]
+    assert u.answer([IMPLEMENT_Q]) == {"How would you like to proceed?": "Implement now (Recommended)"}
+    assert u.counts["t1"] == {"questions": 1, "recommended": 1, "fallback": 0, "hold": 0, "prose": 1, "prose_unanswered": 0}, u.counts
+
+
+def test_a_turn_one_hold_spends_the_prose_allowance():
+    u = told_user()
+    u.start("t1")
+    for _ in range(PERSONA["prose_replies_per_turn"]):
+        assert u.prose(CLOSING_ASK) == PLAN_HOLD
+    assert u.prose(CLOSING_ASK) is None
+    assert u.counts["t1"]["hold"] == PERSONA["prose_replies_per_turn"] and u.counts["t1"]["prose_unanswered"] == 1, u.counts
+
+
+def test_the_implement_matcher_holds_implement_asks_and_not_plan_questions():
+    import ship_user
+    assert [t for t in IMPLEMENT_ASKS if not ship_user.implements(t)] == []
+    assert [t for t in PLAN_QUESTIONS if ship_user.implements(t)] == []
+    for asks, want in ((IMPLEMENT_ASKS, PLAN_HOLD), (PLAN_QUESTIONS, PERSONA["fallback"])):
+        for text in (t for t in asks if t.endswith("?")):
+            u = told_user()
+            u.start("t1")
+            assert u.prose("I've drafted the plan in PLAN.md.\n\n" + text) == want, text
+
+
+HELD_IN_T1 = (
+    "A) Implement now (Recommended)",
+    "(b) Implement the parser first",
+    "- Implement now",
+    "**A)** Implement now",
+    "Before we discuss tests, should I start implementing?",
+    "Before we go further, shall I implement the plan now?",
+    "I'll implement the parser now, not the CLI. Sound good?",
+    "I'll implement the parser but not the CLI.",
+    "I recommend implementing the parser; it is not risky.",
+    "Implement now (Recommended), but do not change the public API",
+    "PLAN.md is done. Ready for me to wire it up?",
+    "Want me to wire up the CLI?",
+    "Want me to build out the parser?",
+    "Should I build it out?",
+    "I can start building the plan now. Should I?",
+    "Section 2 of the plan is next. Should I?",
+    "Should I proceed with implementing the plan?",
+    "Don't draft the plan yet. Should I?",
+    "I won't update the plan; I can make the changes directly. Should I?",
+    "Not writing the plan, just implementing. Should I?",
+)
+UNHELD_IN_T1 = (
+    "Want me to proceed with writing PLAN.md?",
+    "Should I go ahead with drafting the plan in PLAN.md?",
+    "Let me know if you want me to proceed with drafting PLAN.md.",
+    "Shall I go ahead with updating the plan?",
+    "Should I proceed with finishing PLAN.md?",
+    "Want me to go ahead with revising the plan?",
+    "I can finish drafting PLAN.md now. Should I?",
+    "I can write the plan next. Should I?",
+    "Should I build out the plan?",
+    "Should I build out the plan's risks section?",
+    "Before writing code, I'll finish the plan.",
+    "I won't implement anything yet; I'll keep to PLAN.md.",
+    "I'm not going to write code yet, but I can tighten the plan.",
+    "B) Keep refining the plan (Recommended)",
+)
+
+
+def test_the_t1_hold_reads_option_markers_leading_clauses_and_negation_by_clause():
+    import ship_user
+    assert [t for t in HELD_IN_T1 if not ship_user.implements(t)] == []
+    assert [t for t in UNHELD_IN_T1 if ship_user.implements(t)] == []
+    for texts, want in ((HELD_IN_T1, PLAN_HOLD), (UNHELD_IN_T1, PERSONA["fallback"])):
+        for text in (t for t in texts if t.endswith("?")):
+            u = told_user()
+            u.start("t1")
+            assert u.prose("I've read the code.\n\n" + text) == want, text
+    u = told_user()
+    u.start("t1")
+    answers = u.answer([
+        q("Which next step?", "A) Implement now (Recommended)", "B) Revise PLAN.md"),
+        q("What now?", "Implement now (Recommended), but do not change the public API", "Revise the plan"),
+        q("Next?", "A) Implement now", "B) Keep refining the plan (Recommended)"),
+    ])
+    assert answers == {"Which next step?": PLAN_HOLD, "What now?": PLAN_HOLD, "Next?": "B) Keep refining the plan (Recommended)"}, answers
+
+
 def test_frozen_env_pattern():
     import re
     pat = re.compile(ra.FROZEN_ENV)

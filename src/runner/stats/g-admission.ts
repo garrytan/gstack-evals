@@ -21,6 +21,8 @@
 // settled U4 leases (authPaidFromLedger).
 // The exposure sample is drawn as prereg section 5 says (Python's random.Random(20261105), with its replacement rule)
 // and passed in; admitG checks its shape.
+// Beside exposure it prints, report only, how many told trials wrote outside PLAN.md in t1 (t1WritesOutsidePlan, G
+// ruling A on red-team #1). The count decides no item.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { usd } from "../ledger/money.ts";
@@ -35,6 +37,8 @@ export interface SliceTrial extends OutcomeTrial {
   verifier_ran: boolean;
   /** On an arm stop, whether the lane's frozen termination taxonomy explains it; null otherwise. */
   stop_explained: boolean | null;
+  /** Told trials only, report only: whether t1WritesOutsidePlan found a write in t1; null or absent when not read. */
+  t1_outside_plan?: boolean | null;
 }
 
 export interface AdmissionInput {
@@ -75,6 +79,8 @@ export interface SkillAdmission {
   design: Run | null;
   /** All scored told trials the detector read, as a description. */
   exposure_all: { exposed: number; trials: number };
+  /** Report only: of the scored told trials with a t1 reading, how many wrote outside PLAN.md in t1. */
+  t1_outside_plan: { wrote: number; read: number };
 }
 
 export interface ToldMeter {
@@ -136,11 +142,14 @@ export function admitG(input: AdmissionInput): Admission {
   const items = {} as Record<GSkill, AdmissionItem[]>;
   const told = {} as Record<GSkill, ToldMeter>;
   const exposureAll = {} as Record<GSkill, { exposed: number; trials: number }>;
+  const outsidePlan = {} as Record<GSkill, { wrote: number; read: number }>;
   for (const s of G_SKILLS) {
     const arm = arms.told[s];
     const mine = scored(arm);
     const read = mine.filter((t) => t.exposed !== null);
     exposureAll[s] = { exposed: read.filter((t) => t.exposed).length, trials: read.length };
+    const t1Read = mine.filter((t) => typeof t.t1_outside_plan === "boolean");
+    outsidePlan[s] = { wrote: t1Read.filter((t) => t.t1_outside_plan).length, read: t1Read.length };
     const trees = [...none, ...mine];
     const errors = trees.filter((t) => t.mutation === "tool_error").length;
     const noRun = trees.filter((t) => !t.verifier_ran).length;
@@ -157,7 +166,9 @@ export function admitG(input: AdmissionInput): Admission {
         if (!t || t.status !== "scored" || t.exposed === null) throw new Error("sampled trial " + x.trial + " on task " + x.task + " is not a scored " + s + " trial read by the detector; replace it as prereg section 5 says");
         if (t.exposed) exposed++;
       }
-      return { item: 2, name: "exposure", pass: exposed >= 7, reading: exposed + " of 8 sampled told trials exposed (7 needed); " + exposureAll[s].exposed + " of " + exposureAll[s].trials + " told trials read exposed" };
+      const unread = mine.length - outsidePlan[s].read;
+      const t1 = "; report only: " + outsidePlan[s].wrote + " of " + outsidePlan[s].read + " told trials wrote outside PLAN.md in t1" + (unread ? " (" + unread + " not read)" : "");
+      return { item: 2, name: "exposure", pass: exposed >= 7, reading: exposed + " of 8 sampled told trials exposed (7 needed); " + exposureAll[s].exposed + " of " + exposureAll[s].trials + " told trials read exposed" + t1 };
     };
     const reads: [AdmissionItem["item"], AdmissionItem["name"], () => AdmissionItem][] = [
       [2, "exposure", exposure],
@@ -192,11 +203,224 @@ export function admitG(input: AdmissionInput): Admission {
     const price: AdmissionItem = { item: 5, name: "price and power", pass: early === null ? design !== null : null, reading: early === null ? (design ? "runs " + design.n + "x" + design.k + ", MDD " + design.mdd + ", $" + design.price + "; " + m1.reason : "stops: " + m1.reason) + unpriced : "not read: item " + early + " stopped the skill" };
     const failed = early ?? (design === null ? 5 : null);
     skills[s] = {
-      skill: s, failed, design, exposure_all: exposureAll[s], items: [...items[s], price],
+      skill: s, failed, design, exposure_all: exposureAll[s], t1_outside_plan: outsidePlan[s], items: [...items[s], price],
       route: failed === null ? "stage 4" : failed === 1 ? headroomRoute! : ROUTES[failed],
     };
   }
   return { headroom: { solved, valid: none.length, share: solved / none.length }, skills, metered: { inputs, none_usd: noneUsd, told, unknown_calls: unknown }, m1, resize_text: resizeText };
+}
+
+const EDIT_PATHS = new Map([["Write", "file_path"], ["Edit", "file_path"], ["MultiEdit", "file_path"], ["NotebookEdit", "notebook_path"]]);
+const isPlan = (path: string) => path.split("/").pop() === "PLAN.md";
+
+/**
+ * Report only (G ruling A on red-team #1): what a told session wrote outside PLAN.md in t1, read from the phase-tagged
+ * records real_agent keeps, a subagent's included. An edit tool's call (Write, Edit, MultiEdit, NotebookEdit) counts by
+ * its path unless its result is an error. A Bash call counts, whatever its exit, when it sends stdout into a file (>, >>,
+ * 1>, &>, >&), tees into one, edits a file in place (sed -i, perl -i) or applies a patch (git apply, git -C dir apply,
+ * patch). Its words are read as the shell splits them, so an operator inside quotes is text and a quoted file name is a
+ * file; heredoc bodies are skipped (<< and <<- with any delimiter, never <<<), comments are skipped, > inside [[ ]],
+ * (( )) and $(( )) is not a redirect, and a /dev/ target does not count. A call whose result opens with a
+ * tool_use_error never ran. A file named PLAN.md never counts. A command behind a shell keyword (do, then, {) or a
+ * wrapper (sudo, env, timeout, xargs) counts, bash -c and sh -c read their script the same way, and sed -i under xargs
+ * counts, since its files come from stdin. A wrapper's flag takes the next word only when it takes a value (sudo -u,
+ * env -u, timeout -s, xargs -I and the like). sed's and perl's options read as GNU sed and perl read them: sed's -e, -f
+ * and -l and perl's -e and -E take a value, attached or next; perl's -M, -m, -I, -x, -F, -C, -d and -D take the rest
+ * of their cluster (a bare -I the next word); -i's attached suffix ends its cluster; and sed's '' or .bak right after a
+ * bare -i, before any script, is a BSD-style suffix.
+ *
+ * The count is skewed both ways. It misses writes it does not read: cp, mv, rm, a stderr redirect (2>), find -exec, a
+ * script or interpreter fed by a heredoc, and any file a program opens itself. And it counts scratch files outside the
+ * repository, such as /tmp, as writes outside PLAN.md.
+ */
+export function t1WritesOutsidePlan(records: Record<string, any>[]): string[] {
+  const results = new Map<string, Record<string, any>>();
+  for (const r of records) if (r.type === "UserMessage" && Array.isArray(r.content)) for (const b of r.content) if (b?.type === "tool_result") results.set(b.tool_use_id, b);
+  const found: string[] = [];
+  for (const r of records) {
+    if (r.type !== "AssistantMessage" || r.phase !== "t1" || !Array.isArray(r.content)) continue;
+    for (const b of r.content) {
+      if (b?.type !== "tool_use") continue;
+      const res = results.get(b.id);
+      const said = typeof res?.content === "string" ? res.content : Array.isArray(res?.content) ? String(res.content.find((x: any) => x?.type === "text")?.text ?? "") : "";
+      if (said.trimStart().startsWith("<tool_use_error>")) continue;
+      const key = EDIT_PATHS.get(b.name);
+      const path = key ? b.input?.[key] : undefined;
+      if (typeof path === "string" && !isPlan(path) && res?.is_error !== true) found.push(b.name + " " + path);
+      if (b.name === "Bash" && typeof b.input?.command === "string") found.push(...bashWrites(b.input.command));
+    }
+  }
+  return [...new Set(found)];
+}
+
+const KEYWORDS = new Set(["!", "{", "do", "then", "else", "elif", "if", "while", "until"]);
+const WRAPPERS = new Map<string, string[]>([
+  ["sudo", ["-u", "-g", "-C", "-D", "-h", "-p", "-R", "-r", "-t", "-T", "-U", "--user", "--group", "--close-from", "--chdir", "--host", "--prompt", "--chroot", "--role", "--type", "--command-timeout", "--other-user"]],
+  ["env", ["-u", "-C", "-S", "--unset", "--chdir", "--split-string"]],
+  ["xargs", ["-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "--arg-file", "--delimiter", "--eof", "--max-args", "--max-chars", "--max-lines", "--max-procs", "--process-slot-var"]],
+  ["nohup", []],
+  ["exec", ["-a"]],
+  ["command", []],
+  ["builtin", []],
+  ["time", ["-f", "-o", "--format", "--output"]],
+  ["timeout", ["-k", "-s", "--kill-after", "--signal"]],
+  ["nice", ["-n", "--adjustment"]],
+  ["stdbuf", ["-i", "-o", "-e", "--input", "--output", "--error"]],
+]);
+const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"];
+const base = (word?: string) => word?.split("/").pop() ?? "";
+
+function bashWrites(command: string): string[] {
+  const edit = "Bash edit: " + command.split("\n")[0]!.slice(0, 120);
+  const keep = (path: string) => !isPlan(path) && !path.startsWith("/dev/");
+  const found: string[] = [];
+  let words: string[] = [];
+  const run = () => {
+    let at = words.findIndex((w) => !/^\w+=/.test(w) && !KEYWORDS.has(w));
+    let xargs = false;
+    while (at >= 0 && WRAPPERS.has(base(words[at]))) {
+      const valued = WRAPPERS.get(base(words[at]))!;
+      xargs ||= base(words[at]) === "xargs";
+      do at++;
+      while (at < words.length && (/^-|^\w+=|^\d/.test(words[at]!) || valued.includes(words[at - 1]!)));
+    }
+    const [cmd, ...args] = at < 0 ? [] : words.slice(at);
+    const name = base(cmd);
+    words = [];
+    const dashC = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
+    if ((name === "bash" || name === "sh") && dashC >= 0 && args[dashC + 1] !== undefined) found.push(...bashWrites(args[dashC + 1]!));
+    if (name === "tee") found.push(...args.filter((a) => !a.startsWith("-") && keep(a)).map((a) => "Bash tee " + a));
+    let sub = 0;
+    while (name === "git" && args[sub]?.startsWith("-")) sub += GIT_VALUES.includes(args[sub]!) ? 2 : 1;
+    if ((name === "git" && args[sub] === "apply") || name === "patch") found.push(edit);
+    if (name !== "sed" && name !== "perl") return;
+    const files: string[] = [];
+    const takes = name === "sed" ? "efl" : "eE";
+    let script = false;
+    let inPlace = false;
+    for (let j = 0; j < args.length; j++) {
+      const a = args[j]!;
+      if (name === "sed" && /^--(?:expression|file|line-length)(?:=|$)/.test(a)) {
+        script ||= !a.startsWith("--line-length");
+        if (!a.includes("=")) j++;
+      } else if (name === "sed" && /^--in-place(?:=|$)/.test(a)) inPlace = true;
+      else if (/^-[^-]/.test(a)) {
+        for (let k = 1; k < a.length; k++) {
+          const c = a[k]!;
+          if (c === "i") {
+            inPlace = true;
+            if (name === "sed" && k === a.length - 1 && !script && /^(?:\.|$)/.test(args[j + 1] ?? "-")) j++;
+            break;
+          }
+          if (takes.includes(c)) {
+            script ||= c !== "l";
+            if (k === a.length - 1) j++;
+            break;
+          }
+          if (name === "perl" && "MmIxFCdD".includes(c)) {
+            if (c === "I" && k === a.length - 1) j++;
+            break;
+          }
+        }
+      } else if (!a.startsWith("-")) {
+        if (script) files.push(a);
+        script = true;
+      }
+    }
+    if (inPlace && (xargs || files.some(keep))) found.push(edit);
+  };
+  const tokens = shellTokens(command);
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    const next = tokens[i + 1];
+    if ("word" in t && t.word === "[[" && words.every((w) => /^\w+=/.test(w) || KEYWORDS.has(w))) {
+      let u = tokens[++i];
+      while (u && !("word" in u && u.word === "]]")) u = tokens[++i];
+    } else if ("word" in t) words.push(t.word);
+    else if (/^(?:1?>>?|&>>?|>\||1?>&)$/.test(t.op) && next && "word" in next) {
+      if (keep(next.word) && !(t.op.endsWith("&") && /^(?:\d+|-)$/.test(next.word))) found.push("Bash > " + next.word);
+      i++;
+    } else if (/[<>]/.test(t.op)) {
+      if (next && "word" in next) i++;
+    } else run();
+  }
+  run();
+  return found;
+}
+
+/** Shell words and operators. Quotes and backslashes are honoured, so an operator inside quotes stays in its word, and a
+ * digit word glued to ">" is that redirect's file descriptor. A newline ends a command. An unquoted # that starts a word
+ * comments out the rest of its line; $(( )) and (( )) are one word; and after << or <<- (not <<<), the next word is a
+ * heredoc delimiter, whose body lines up to the delimiter's own line are skipped at the end of the line. */
+function shellTokens(shell: string): Array<{ word: string } | { op: string }> {
+  const tokens: Array<{ word: string } | { op: string }> = [];
+  const heredocs: string[] = [];
+  let delimiter = false;
+  let word = "";
+  let open = false;
+  const end = () => {
+    if (open) tokens.push({ word });
+    if (open && delimiter) heredocs.push(word);
+    delimiter &&= !open;
+    word = "";
+    open = false;
+  };
+  for (let i = 0; i < shell.length; i++) {
+    const c = shell[i]!;
+    if (c === "#" && !open) {
+      while (i + 1 < shell.length && shell[i + 1] !== "\n") i++;
+    } else if ((c === "$" || (c === "(" && !open)) && shell.startsWith("((", c === "$" ? i + 1 : i)) {
+      let depth = 0;
+      let k = c === "$" ? i + 1 : i;
+      for (; k < shell.length; k++) if (shell[k] === "(") depth++;
+      else if (shell[k] === ")" && --depth === 0) break;
+      word += shell.slice(i, k + 1);
+      open = true;
+      i = k;
+    } else if (c === "'") {
+      const close = shell.indexOf("'", i + 1);
+      const stop = close < 0 ? shell.length : close;
+      word += shell.slice(i + 1, stop);
+      open = true;
+      i = stop;
+    } else if (c === '"') {
+      open = true;
+      for (i++; i < shell.length && shell[i] !== '"'; i++) word += shell[i] === "\\" && i + 1 < shell.length ? shell[++i] : shell[i];
+    } else if (c === "\\") {
+      open = true;
+      word += shell[++i] ?? "";
+    } else if (/\s/.test(c)) {
+      end();
+      if (c !== "\n") continue;
+      tokens.push({ op: ";" });
+      for (const stop of heredocs.splice(0)) {
+        let at = i + 1;
+        while (at < shell.length) {
+          const nl = shell.indexOf("\n", at);
+          const line = shell.slice(at, nl < 0 ? shell.length : nl);
+          at = nl < 0 ? shell.length : nl + 1;
+          if (line.trim() === stop) break;
+        }
+        i = at - 1;
+      }
+    } else if ("|&;<>()".includes(c)) {
+      let op = c;
+      if (c === ">" && open && /^\d+$/.test(word)) {
+        op = word + c;
+        open = false;
+      }
+      end();
+      while (op.length < 4 && i + 1 < shell.length && "|&<>".includes(shell[i + 1]!)) op += shell[++i];
+      if (op === "<<" && shell[i + 1] === "-") op += shell[++i];
+      delimiter = op === "<<" || op === "<<-";
+      tokens.push({ op });
+    } else {
+      word += c;
+      open = true;
+    }
+  }
+  end();
+  return tokens;
 }
 
 /** Every close on the named line items; each item must hold a lease and every lease must be closed. */
