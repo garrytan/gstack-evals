@@ -110,6 +110,12 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
     expect(p.items[3]!.pass).toBeNull();
   });
 
+  for (const [skill, arm, key] of [["plan-eng-review", PER, "M_PER"], ["autoplan", AP, "M_AP"]] as const) {
+    test("a told arm with no scored trial is refused instead of leaving " + key + " out of item 5, even when an earlier item already stopped it (GST-1374)", () => {
+      const trials = edit(noneSolved(4), (t) => t.arm === arm, { status: "gap", cost_usd: null, mutation: null, exposed: null });
+      expect(() => admitG(input(trials))).toThrow(new RegExp(skill + ":? .*no scored trial.*" + key));
+    });
+  }
   test("item 5's AUTH_PAID and AUTH_EXTRA are refused up front outside the (0, 1000) range resize.py reads", () => {
     expect(() => admitG(input(slice(), { auth_extra_usd: 0 }))).toThrow(/auth_extra_usd/);
     expect(() => admitG(input(slice(), { auth_paid_usd: 1000 }))).toThrow(/auth_paid_usd/);

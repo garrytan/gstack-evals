@@ -64,7 +64,7 @@ export interface SkillAdmission {
 
 export interface ToldMeter {
   trials: number;
-  /** null when the arm has no scored trial; its multiple then stays out of the metered inputs. */
+  /** null when the arm has no scored trial, which admitG refuses: item 5 needs its multiple. */
   all_usd: number | null;
   exposed_usd: number | null;
   unexposed_usd: number | null;
@@ -156,11 +156,10 @@ export function admitG(input: AdmissionInput): Admission {
   }
 
   const noneUsd = mean(none.map((t) => t.cost_usd!));
-  const inputs: GMetered = { MULT: noneUsd / V_SESSION };
-  if (told["plan-eng-review"].all_usd !== null) inputs.M_PER = told["plan-eng-review"].all_usd / noneUsd;
-  if (told.autoplan.all_usd !== null) inputs.M_AP = told.autoplan.all_usd / noneUsd;
-  inputs.AUTH_PAID = input.auth_paid_usd;
-  inputs.AUTH_EXTRA = input.auth_extra_usd;
+  for (const [s, key] of [["plan-eng-review", "M_PER"], ["autoplan", "M_AP"]] as const) {
+    if (told[s].all_usd === null) throw new Error(s + ": the told arm " + arms.told[s] + " has no scored trial, so " + key + " can't be metered; item 5 needs every told arm's metered multiple (G prereg section 6, item 5), and a value set by hand would set a frozen admission rule");
+  }
+  const inputs: GMetered = { MULT: noneUsd / V_SESSION, M_PER: told["plan-eng-review"].all_usd! / noneUsd, M_AP: told.autoplan.all_usd! / noneUsd, AUTH_PAID: input.auth_paid_usd, AUTH_EXTRA: input.auth_extra_usd };
   const firstFail = (s: GSkill) => items[s].find((x) => x.pass === false)?.item ?? null;
   const stopped = G_SKILLS.filter((s) => firstFail(s) !== null);
   const m1 = m1Decide(meteredPricer(inputs), stopped);

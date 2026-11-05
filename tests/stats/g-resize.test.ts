@@ -16,6 +16,8 @@ function python(script: string, env: Record<string, string> = {}): string {
   return r.stdout;
 }
 const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+/** Admission's four required inputs, with plan v3's house values for any a case leaves to resize.py's defaults. */
+const full = (m: Partial<GMetered> & { MULT: number }): GMetered => ({ M_PER: 2.2, M_AP: 5, AUTH_PAID: 1.39, ...m });
 const asEnv = (m: GMetered) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, String(v)]));
 
 describe("the port reads plan v3's frozen bundle", () => {
@@ -55,7 +57,7 @@ describe("resize.py, byte for byte", () => {
     { MULT: 3.1, M_PER: 1.9, M_AP: 4.4 },
     { MULT: 6.5, M_PER: 2.4, M_AP: 3.2, AUTH_EXTRA: 0.8 },
     { MULT: 5.25, M_PER: 2.53, M_AP: 5.75, AUTH_PAID: 1.1 },
-  ];
+  ].map(full);
   for (const m of metered) {
     test("metered " + JSON.stringify(m) + " prints what resize.py prints", () => {
       expect(renderResizeMetered(m)).toBe(python(join(PREREG, "resize.py"), asEnv(m)));
@@ -64,8 +66,8 @@ describe("resize.py, byte for byte", () => {
 
   test("metered inputs are checked as resize.py checks them", () => {
     expect(() => renderResizeMetered({} as GMetered)).toThrow(/MULT/);
-    for (const bad of [0, -1, 1000, NaN, Infinity]) expect(() => renderResizeMetered({ MULT: bad })).toThrow(/bad metered input/);
-    expect(() => renderResizeMetered({ MULT: 5, M_AP: 0 })).toThrow(/M_AP/);
+    for (const bad of [0, -1, 1000, NaN, Infinity]) expect(() => renderResizeMetered({ MULT: bad } as GMetered)).toThrow(/bad metered input/);
+    expect(() => renderResizeMetered({ MULT: 5, M_AP: 0 } as GMetered)).toThrow(/M_AP/);
   });
 });
 
@@ -85,7 +87,7 @@ describe("cost.py's frozen sizing", () => {
 });
 
 describe("M1's survivor order, the Captain's pick C", () => {
-  const house = meteredPricer({ MULT: 5, AUTH_EXTRA: 1.2 });
+  const house = meteredPricer(full({ MULT: 5, AUTH_EXTRA: 1.2 }));
   test("both alive at house prices: plan v3's sizes", () => {
     const o = m1Decide(house, []);
     expect(o.runs["plan-eng-review"]).toMatchObject({ n: 60, k: 3, mdd: 18.6 });
@@ -107,10 +109,10 @@ describe("M1's survivor order, the Captain's pick C", () => {
     return m ? { n: Number(m[1]), k: Number(m[2]), mdd: Number(m[3]), price: Number(m[4]) } : null;
   };
   const cases: Array<[GMetered, string, "plan-eng-review" | "autoplan" | null]> = [
-    [{ MULT: 5, M_PER: 2.2, M_AP: 10 }, "both past the bound: autoplan stops, plan-eng-review alone", "plan-eng-review"],
-    [{ MULT: 5, M_PER: 2.2, M_AP: 30, AUTH_PAID: 1.39, AUTH_EXTRA: 1.2 }, "no both-alive design: plan-eng-review alone", "plan-eng-review"],
-    [{ MULT: 5, M_PER: 30, M_AP: 2.2 }, "plan-eng-review finds no rung: autoplan alone", "autoplan"],
-    [{ MULT: 5, M_PER: 30, M_AP: 30 }, "neither finds a rung: both stop", null],
+    [full({ MULT: 5, M_PER: 2.2, M_AP: 10 }), "both past the bound: autoplan stops, plan-eng-review alone", "plan-eng-review"],
+    [full({ MULT: 5, M_PER: 2.2, M_AP: 30, AUTH_PAID: 1.39, AUTH_EXTRA: 1.2 }), "no both-alive design: plan-eng-review alone", "plan-eng-review"],
+    [full({ MULT: 5, M_PER: 30, M_AP: 2.2 }), "plan-eng-review finds no rung: autoplan alone", "autoplan"],
+    [full({ MULT: 5, M_PER: 30, M_AP: 30 }), "neither finds a rung: both stop", null],
   ];
   for (const [m, name, survivor] of cases) {
     test(name, () => {
@@ -120,7 +122,7 @@ describe("M1's survivor order, the Captain's pick C", () => {
     });
   }
   test("one past the bound with both alive: it stops, the other re-sizes alone", () => {
-    const m: GMetered = { MULT: 5, M_PER: 2.2, M_AP: 6.4 };
+    const m: GMetered = full({ MULT: 5, M_PER: 2.2, M_AP: 6.4 });
     const text = renderResizeMetered(m);
     const o = m1Decide(meteredPricer(m), []);
     if (text.includes("past the 20-point bound with both alive: autoplan; autoplan stops")) {
@@ -137,4 +139,32 @@ describe("M1's survivor order, the Captain's pick C", () => {
     expect(d7(M, "plan-eng-review", 60, 3)).toMatchObject({ n: 60, k: 2, mdd: 21.6, stops: true });
     expect(bestPair(pairPrice(M, "G"))!.n).toEqual([60, 54]);
   });
+});
+
+describe("admission's metered inputs fail closed (GST-1374)", () => {
+  const full: GMetered = { MULT: 5, M_PER: 2.2, M_AP: 5, AUTH_PAID: 1.39 };
+  for (const k of ["MULT", "M_PER", "M_AP", "AUTH_PAID"] as const) {
+    test(k + " missing is refused, as resize.py would otherwise take plan v3's house value without a word", () => {
+      const m: Partial<GMetered> = { ...full };
+      delete m[k];
+      expect(() => renderResizeMetered(m as GMetered)).toThrow(new RegExp("bad metered input: " + k + " is missing"));
+      expect(() => meteredPricer(m as GMetered)).toThrow(new RegExp(k + " is missing"));
+    });
+  }
+  test("AUTH_EXTRA stays optional: resize.py reads 1.2 without it, and so does the port", () => {
+    expect(renderResizeMetered(full)).toBe(python(join(PREREG, "resize.py"), asEnv(full)));
+  });
+  for (const value of ["9.99", ""]) {
+    test("a set AGENT_USER (" + JSON.stringify(value) + ") is refused before anything is priced, because cost.py reads it and it moves the wave-1 figure", () => {
+      const saved = process.env.AGENT_USER;
+      process.env.AGENT_USER = value;
+      try {
+        expect(() => renderResizeMetered(full)).toThrow(/refused input: AGENT_USER is set/);
+        expect(() => meteredPricer(full)).toThrow(/AGENT_USER is set/);
+      } finally {
+        if (saved === undefined) delete process.env.AGENT_USER;
+        else process.env.AGENT_USER = saved;
+      }
+    });
+  }
 });

@@ -300,18 +300,25 @@ export function atAdmission(M: PriceModel, s: GSkill): number {
   return shared / 2 + SLICE * 2 * (M.NONE * M.TOLD[s]! + VM + me);
 }
 
-/** Admission's metered inputs (prereg section 6, item 5): MULT is none's mean session over a Verified session's $0.191, M_PER and M_AP told's session multiples, AUTH_PAID paid author and audit dollars per valid task, AUTH_EXTRA crew dollars per valid task. */
+/** Admission's metered inputs (prereg section 6, item 5): MULT is none's mean session over a Verified session's $0.191, M_PER and M_AP told's session multiples, AUTH_PAID paid author and audit dollars per valid task, AUTH_EXTRA crew dollars per valid task. The first four are required (GST-1374): resize.py would take plan v3's house value for a missing M_PER, M_AP or AUTH_PAID without a word. AUTH_EXTRA reads 1.2 when absent, as resize.py does. */
 export interface GMetered {
   MULT: number;
-  M_PER?: number;
-  M_AP?: number;
-  AUTH_PAID?: number;
+  M_PER: number;
+  M_AP: number;
+  AUTH_PAID: number;
   AUTH_EXTRA?: number;
 }
 
 const NUMERIC = ["MULT", "M_PER", "M_AP", "AUTH_PAID", "AUTH_EXTRA"] as const;
+const MISSING_FIX: Record<string, string> = {
+  MULT: "pass none's metered mean session cost over $0.191 (section 6, item 5)",
+  M_PER: "pass told plan-eng-review's metered mean session cost over none's (section 6, item 5)",
+  M_AP: "pass told autoplan's metered mean session cost over none's (section 6, item 5)",
+  AUTH_PAID: "pass the slice's paid author and audit dollars per valid task (section 6, item 5)",
+};
 
 function meteredEnv(m: GMetered): Record<string, string> {
+  if (process.env.AGENT_USER !== undefined) throw new Error("resize: refused input: AGENT_USER is set; unset it, because cost.py reads it and it moves the wave-1 figure (G prereg section 6, item 5)");
   if (m === null || typeof m !== "object") throw new Error("resize: bad metered input: expected an object of metered values");
   for (const k of Object.keys(m)) {
     if (k === "YIELD_G" || k === "TOLD_SCALE") throw new Error("resize: refused input: " + k + " is set; " + (k === "YIELD_G" ? "G's in-band yield is frozen at plan v3's" : "it names a planning case, not a metered input"));
@@ -324,7 +331,7 @@ function meteredEnv(m: GMetered): Record<string, string> {
     if (typeof v !== "number" || !(v > 0 && v < 1000)) throw new Error("resize: bad metered input: " + k + "='" + String(v) + "' is not a positive number; fix: pass the metered value from section 6, item 5");
     extra[k] = String(v);
   }
-  if (!("MULT" in extra)) throw new Error("resize: bad metered input: MULT is missing; fix: pass none's metered mean session cost over $0.191 (section 6, item 5)");
+  for (const k of Object.keys(MISSING_FIX)) if (!(k in extra)) throw new Error("resize: bad metered input: " + k + " is missing; fix: " + MISSING_FIX[k]);
   return extra;
 }
 
