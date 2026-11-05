@@ -1088,6 +1088,8 @@ describe("settle paths close the run's open sessions, a staged none stop refuses
     expect(imported.code).toBe(0);
     expect(imported.err).toStartWith("SESSIONS_OPEN lease " + lease.lease_id + " is closed");
     expect(imported.err).toContain("gstack-evals ledger settle --lease " + lease.lease_id);
+    expect(imported.err).toContain("the imported close carries no per-session figures");
+    expect(imported.err).not.toContain("does not hold the lease");
     expect(readFileSync(join(w.dir, "sessions.jsonl"), "utf8")).toBe(before);
     const settled = await ledger(w, "settle", "--lease", lease.lease_id);
     expect([settled.code, settled.err]).toEqual([0, ""]);
@@ -1105,6 +1107,26 @@ describe("settle paths close the run's open sessions, a staged none stop refuses
     expect(await first.stop()).toBe(0);
     const second = await w.serve([PE]);
     expect(await second.stop()).toBe(0);
+  });
+
+  test("a line cut short mid-serve leaves the next line on a fresh line, so the session's open line still parses (pass-2 red-team#1)", async () => {
+    const w = world({ "i-pe": 572 });
+    const served = await w.serve([PE]);
+    appendFileSync(join(w.dir, "sessions.jsonl"), '{"run_id":"r1","event":"op');
+    const a = await post(served.control + "/sessions", body("plan-eng-review:told", "a", 1));
+    expect(a.status).toBe(200);
+    const parsed = () => readFileSync(join(w.dir, "sessions.jsonl"), "utf8").split("\n").flatMap((l) => {
+      try {
+        return [JSON.parse(l) as Record<string, any>];
+      } catch {
+        return [];
+      }
+    });
+    expect(parsed().filter((e) => e.event === "open").map((e) => e.id)).toEqual([a.json.id]);
+    await post(served.control + "/sessions/" + a.json.id + "/close", {});
+    expect(await served.stop()).toBe(0);
+    expect(parsed().filter((e) => e.event === "close").map((e) => e.id)).toEqual([a.json.id]);
+    expect(unknownFromRun(w.dir, ["i-pe"])).toEqual({ calls: 0, micros: 0 });
   });
 
   test("a driver killed after it staged none's all-arms stop and before the stop records were written refuses a relaunch that names any stage, a told stage it never served included (item 2)", async () => {
