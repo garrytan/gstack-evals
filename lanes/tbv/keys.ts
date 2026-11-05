@@ -7,3 +7,10 @@ import type { Extract, History, Key } from "./types.ts";
 export function parseKey(reply: string, history: History, extract: Extract): Key | string {
   return notBuilt("parseKey");
 }
+
+export const keyPrompt = (brief: string, history: History, extract: Extract): string => notBuilt("keyPrompt");
+export const auditPrompt = (brief: string, key: Key, history: History): string => notBuilt("auditPrompt");
+export const parseAudit = (reply: string, key: Key): { rejected: string[]; missing: string[] } | string => notBuilt("parseAudit");
+export const settleKey = (key: Key, audits: unknown[], clean: boolean): { key: Key; drop: string | null } => notBuilt("settleKey");
+export const writeKeys = async (o: Record<string, unknown>): Promise<{ kept: Key[]; dropped: Array<{ task: string; reason: string }> }> => notBuilt("writeKeys");
+export const run = async (argv: string[], io: unknown, deps: Record<string, unknown> = {}): Promise<number> => notBuilt("tbv keys");

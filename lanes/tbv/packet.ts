@@ -2,7 +2,7 @@
 // Judge packets (prereg section 7): one first packet per reading, a D2 packet, the stock and oracle controls, and the
 // packet key kept apart.
 import { notBuilt } from "./errors.ts";
-import type { Key } from "./types.ts";
+import type { Key, Packet, PacketKeyEntry } from "./types.ts";
 
 /** The oracle report: the key's fact statements joined, cut to 250 words. */
 export function oracleReport(key: Key): string {
@@ -12,3 +12,8 @@ export function oracleReport(key: Key): string {
 export function withBoundary(reply: string): string {
   return notBuilt("withBoundary");
 }
+
+export const BOUNDARY = "<<<BOUNDARY>>>";
+export const buildPackets = (o: Record<string, unknown>): { packets: Packet[]; entries: PacketKeyEntry[] } => notBuilt("buildPackets");
+export const writePackets = (dir: string, keyPath: string, built: { packets: Packet[]; entries: PacketKeyEntry[] }): void => notBuilt("writePackets");
+export const run = async (argv: string[], io: unknown): Promise<number> => notBuilt("tbv packets");
