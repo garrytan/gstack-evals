@@ -17,7 +17,7 @@ links:
 
 # L1 Amendment D
 
-Amendment D changes pins and records one voided run. It changes no primary, cap, arm, draw, rule or price. Everything [Amendment C](../2026-11-05-geva-294-l1-amendment-c/README.md) pins stands unless a row below replaces it.
+Amendment D changes pins and records one voided run. It changes no primary, cap, arm, draw, rule or price. Everything [Amendment C](2026-11-05-geva-294-l1-amendment-c/README.md) pins stands unless a row below replaces it.
 
 ## What happened
 
