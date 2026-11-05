@@ -4,9 +4,9 @@
 // openLease, and every exit path settles every lease it opened. Each lease names its holder, the run directory and the
 // launch's nonce, and a run binds to the directory of its first lease, so that directory's sessions.jsonl holds every cap
 // stop and trial count of the run.
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { rigAdmission } from "../../../src/rig/admission.ts";
 import { envelopeStatus, split } from "../../../src/runner/ledger/envelope.ts";
@@ -134,8 +134,11 @@ export function refusal(code: ReasonCode, status: number, detail: string, extra:
 const urlHost = (host: string) => (host.includes(":") ? "[" + host + "]" : host);
 const sorted = (v: unknown): unknown => (Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted((v as Record<string, unknown>)[k])])) : v);
 
-/** One live driver per run directory, so recovery never settles a lease a live driver still meters. A lock whose process is gone is taken over. */
-function takeLock(file: string): string {
+/**
+ * One live driver per run directory, so recovery never settles a lease a live driver still meters, and one per run on the
+ * envelope host, so two directories never bind one run at the same moment. A lock whose process is gone is taken over.
+ */
+function takeLock(file: string, what: string): string {
   try {
     writeFileSync(file, String(process.pid), { flag: "wx" });
     return file;
@@ -152,7 +155,7 @@ function takeLock(file: string): string {
       alive = (e as NodeJS.ErrnoException).code === "EPERM";
     }
   }
-  if (alive) fail("E_USAGE", "driver process " + pid + " still serves this run directory (" + file + "); stop it with POST /stop or SIGTERM before launching another, so its leases are not settled under it; nothing was recovered or opened");
+  if (alive) fail("E_USAGE", "driver process " + pid + " still serves " + what + " (" + file + "); stop it with POST /stop or SIGTERM before launching another, so its leases are not settled under it; nothing was recovered or opened");
   writeFileSync(file, String(process.pid));
   return file;
 }
@@ -163,16 +166,16 @@ function takeLock(file: string): string {
  * holder, such as the program's T-G or VM lease on the same run, is never touched.
  */
 export async function serveStages(o: ServeOptions): Promise<Served> {
-  const held = { lock: null as string | null };
+  const held = { locks: [] as string[] };
   try {
     return await serve(o, held);
   } catch (error) {
-    if (held.lock) rmSync(held.lock, { force: true });
+    for (const lock of held.locks) rmSync(lock, { force: true });
     throw error;
   }
 }
 
-async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Served> {
+async function serve(o: ServeOptions, held: { locks: string[] }): Promise<Served> {
   const log = o.log ?? ((line: string) => console.error(line));
   const warn = (code: ReasonCode, message: string) => log(code + " " + message);
   const now = o.now ?? Date.now;
@@ -196,11 +199,18 @@ async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Se
   if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(o.stages.map((s) => s.arm)).size !== o.stages.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
   mkdirSync(o.dir, { recursive: true });
   const dir = realpathSync(o.dir);
-  held.lock = takeLock(join(dir, "driver.lock"));
+  const ledger = realpathSync(o.record);
+  held.locks.push(takeLock(join(dirname(ledger), "." + basename(ledger) + ".run-" + createHash("sha256").update(o.run_id).digest("hex").slice(0, 16) + ".lock"), "run " + o.run_id));
+  held.locks.push(takeLock(join(dir, "driver.lock"), "this run directory"));
   const holder: Holder = { dir, nonce: randomBytes(8).toString("hex") };
   const rival = rivalHolder(o.record, o.run_id, dir);
   if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
   const sessionsFile = join(dir, "sessions.jsonl");
+  if (!existsSync(sessionsFile)) {
+    const bound = listItems(o.record).flatMap((item) => readItem(o.record, item).leases.filter(({ lease }) => lease.run_id === o.run_id && lease.holder?.dir === dir).map(({ lease }) => lease.lease_id));
+    if (bound.length) fail("E_USAGE", "run " + o.run_id + " is bound to " + dir + " by leases " + bound.join(", ") + ", but " + sessionsFile + " is gone, so the run's cap stops and trial counts can't be read and the run can't be served again; nothing was recovered, settled or opened. Settle any of those leases still open with gstack-evals ledger settle --lease <id> on its machine");
+    appendFileSync(sessionsFile, "");
+  }
   const record = (line: Record<string, unknown>) => appendFileSync(sessionsFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
 
   const failures: string[] = [];
@@ -464,7 +474,7 @@ async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Se
       const open = ledgerStatus(o.record).filter((i) => stages.some((s) => s.item === i.item) && i.open_lease);
       if (open.length) log("E_LEASE_UNSETTLED outcome driver: still open: " + open.map((i) => i.open_lease!.lease_id).join(", ") + "; settle each with gstack-evals ledger settle --lease <id> on this machine");
       const code = open.length || stages.some((s) => s.ended === "failed") ? 2 : 0;
-      if (held.lock) rmSync(held.lock, { force: true });
+      for (const lock of held.locks) rmSync(lock, { force: true });
       resolveDone(code);
       return code;
     })();

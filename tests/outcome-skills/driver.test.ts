@@ -214,6 +214,7 @@ describe("the outcome-skills session driver", () => {
   test("relaunch from the bound run directory recovers a lease its crashed launch left open, never one that names no holder, and only from there (Capy 01M6N3WWX2)", async () => {
     const w = world({ "i-none": 229, "i-tg": 60 });
     mkdirSync(w.dir, { recursive: true });
+    writeFileSync(join(w.dir, "sessions.jsonl"), "");
     const crashed = { dir: realpathSync(w.dir), nonce: "0123456789abcdef" };
     const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", holder: crashed, requireAdmission: () => null });
     const tg = openLease(w.record, w.local, { item: "i-tg", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
@@ -387,5 +388,31 @@ describe("the outcome-skills session driver", () => {
     const again = await w.serve([NONE]);
     expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
     await again.stop();
+  });
+
+  test("a run whose bound directory lost its sessions.jsonl is refused on any machine, so a cap stop it recorded is never retried (adversarial-native#1, targeted#1)", async () => {
+    const w = world({ "i-pe": 50 });
+    await capStopped(w, [PE], "plan-eng-review:told");
+    rmSync(w.dir, { recursive: true, force: true });
+    for (const more of [{}, { machine: "m2", envelope_host: "m2" }]) {
+      const err = await refused(w.serve([PE], more));
+      expect(err?.code).toBe("E_USAGE");
+      expect(err?.message).toContain("sessions.jsonl");
+    }
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+  });
+
+  test("two launches of one run from two directories never both bind it, even on two programs at the same moment (outside-voice#1)", async () => {
+    const w = world({ "i-pe": 572 });
+    recordProgram(w.record, { program: "w2", cap_micros: 10_000 * D, skill_cap_micros: 2_000 * D, skills: ["plan-eng-review", "autoplan"], credit_rate_micros: D, quotes: [quote] });
+    recordApproval(w.record, { action: "init", item: "i-ap", cap_micros: 1287 * D, quotes: [quote], admission: "required", program: "w2", skills: ["autoplan"] });
+    let calls = 0;
+    let inner: ReturnType<typeof w.serve> | null = null;
+    const first = await w.serve([PE], { requireAdmission: () => { if (++calls === 2) inner = w.serve([AP], { dir: join(w.root, "run2") }); return null; } });
+    const second = await inner!.then(async (s) => { await s.stop(); return null; }, (e) => e as LedgerError);
+    expect(second?.code).toBe("E_USAGE");
+    expect(readItem(w.record, "i-ap").leases).toHaveLength(0);
+    expect(readItem(w.record, "i-pe").open?.holder?.dir).toBe(realpathSync(w.dir));
+    expect(await first.stop()).toBe(0);
   });
 });
