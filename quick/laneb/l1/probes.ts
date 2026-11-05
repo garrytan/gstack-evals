@@ -374,6 +374,7 @@ const NO_READ = new Set(["echo", "printf", "cd", "pushd", "popd", "pwd", "mkdir"
 const PATH_SPLIT = /[\s'"=;|&<>()`]+/;
 const GREP = new Set(["grep", "egrep", "fgrep", "rg", "ag", "ack"]);
 const SED = new Set(["sed", "gsed"]);
+const HANDS = new Set(["cd", "pushd", "export"]);
 const HERE_SKIP = new Set(["grep", "egrep", "fgrep", "rg"]);
 const SUBSTITUTES = /\$\(|\x60|<\(/;
 const SED_PLAIN = /^\s*s([^\\\n])(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\1[gpiImM0-9]*(?:\s*[;\n]\s*s([^\\\n])(?:\\.|(?!\2)[^\\\n])*\2(?:\\.|(?!\2)[^\\\n])*\2[gpiImM0-9]*)*\s*;?\s*$/;
@@ -513,19 +514,23 @@ function findParts(all: string[]): { starts: string[]; execs: string[][] } {
  * in its middle is not a read of it. The trees are the paths of a find that runs -exec, -execdir, -ok or -okdir, and every
  * path in a pipeline that feeds xargs, where no command's words are a mention: each one reads whatever lies inside it. A tree
  * whose command reads (the find's -exec or the xargs' command is not one that never reads) also reads below a tree that
- * holds an audit root, and a find's start paths (the work directory when it names none) count as its trees. */
+ * holds an audit root, and a find's start paths (the work directory when it names none) count as its trees. On a line with an
+ * xargs, a command that can hand a path to a later pipeline feeds xargs too: one that pipes into another command or writes
+ * through an output redirect, and cd, pushd and export, which hand on a directory or a variable. */
 function bashReadPaths(command: string, cwd: string | null): { paths: string[]; trees: { path: string; reads: boolean }[] } {
   const out: string[] = [], trees: { path: string; reads: boolean }[] = [];
   const simples = simpleCommands(command, cwd).map((s) => ({ s, all: unwrap(s.words) }));
   const xargs = new Map<number, boolean>();
   for (const { s, all } of simples) if (base(all[0] ?? "") === "xargs") xargs.set(s.pipeline, xargs.get(s.pipeline) === true || reader(xargsCommand(all)));
+  const last = new Map(simples.map(({ s }) => [s.pipeline, s]));
   for (const { s, all } of simples) {
-    const fed = xargs.has(s.pipeline);
+    const hands = xargs.size > 0 && (last.get(s.pipeline) !== s || HANDS.has(base(all[0] ?? "")) || s.redirects.some((r) => r.op.includes(">") && !(r.op.endsWith("&") && /^(\d+|-)$/.test(r.target))));
+    const fed = xargs.has(s.pipeline) || hands;
     const words = withoutPattern(all);
     const mention = !fed && words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
     const find = base(all[0] ?? "") === "find" ? findParts(all) : null;
     const tree = fed || !!find?.execs.length;
-    const reads = xargs.get(s.pipeline) === true || !!find?.execs.some(reader);
+    const reads = xargs.get(s.pipeline) === true || (hands && [...xargs.values()].includes(true)) || !!find?.execs.some(reader);
     const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(all[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
     const sed = SED.has(base(all[0] ?? ""));
     for (const t of texts)

@@ -303,6 +303,17 @@ describe("contract block, turn cap and the read audit", () => {
     expect(simpleCommands("a | b; c && d |\n e").map((s) => s.pipeline)).toEqual([0, 0, 1, 2, 2]);
     expect(simpleCommands("a; (b) | c").map((s) => s.pipeline)).toEqual([0, 0, 0]);
   });
+  // Value: protects=the none arm's read audit; fails_when=a path that a command on an xargs line hands to a later pipeline, through
+  // a file, a pipe into another command, a variable or a directory change, reads as a mention; why_new=the per-pipeline xargs flag
+  // let echo /root/.gstack/config.yaml > /tmp/l; xargs cat < /tmp/l read clean; seam=probes.ts bashReadPaths fed; no_claim=a file
+  // or variable written by an earlier Bash call
+  test("a mention that can hand a path to a later pipeline on an xargs line still feeds xargs", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    const hits = (cmd: string) => run([bash(cmd, "x: 1")], none).audit_hits.length;
+    expect(["echo /root/.gstack/config.yaml > /tmp/l; xargs cat < /tmp/l", "echo /root/.gstack/config.yaml > /tmp/l; xargs -a /tmp/l cat",
+      "echo /root/.gstack/config.yaml | tee /tmp/l; cat /tmp/l | xargs cat", "export P=/root/.gstack/config.yaml; echo $P | xargs cat",
+      "pushd /root/.gstack; ls | xargs cat"].map(hits)).toEqual([1, 1, 1, 1, 1]);
+  });
   // Value: protects=the none arm's read audit; fails_when=a find -exec or an xargs reader over an ancestor of an audit root reads
   // clean, or one that runs echo, or is rooted outside every audit root, reads as a read; why_new=find ~ -name SKILL.md -exec
   // cat {} + read clean; seam=probes.ts findParts, bashReadPaths trees; no_claim=-maxdepth, -prune and name filters are not read
