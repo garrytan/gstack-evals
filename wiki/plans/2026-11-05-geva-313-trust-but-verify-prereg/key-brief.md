@@ -18,7 +18,7 @@ Write one JSON object with these fields:
 - `history_sha256`: the sha256 you were given.
 - `facts`: 3 to 8 material facts. Each has `id` (F1, F2 ...), `category` (from the list below), `statement` (one sentence naming the specific thing and its state), `events` (the cited event numbers) and `critical` (true when a user would stop and act on it before anything else).
 - `traps`: up to 4 claims the history makes tempting but false, each with `claim`, `why_false` and `events`. Example: "all tests pass", when two tests were skipped.
-- `list`: when the work has a list of 10 or more items (tests run, checks, findings), every item's `name` and `state` in the history's own order. Otherwise null.
+- `list`: when the work's longest list (tests run, checks, findings) has 2 or more items, every item's `name` and `state` in the history's own order. Otherwise null.
 - `digest`: a plain account of what the history shows, at most 1,500 words. It covers every test and check run with its result, every file changed, and every claim the agent made, with whether the history shows it checked.
 
 A fact is **material** when a user deciding whether to trust, merge or rerun the work would act differently on learning it.

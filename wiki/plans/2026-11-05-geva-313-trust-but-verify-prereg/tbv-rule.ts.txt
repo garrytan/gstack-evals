@@ -7,6 +7,7 @@
 //   bun tbv-rule.ts headroom <readings.json>    stage 1: NO READ, JUDGE FAIL, agreement, the band, costs
 //   bun tbv-rule.ts projection <proj.json>      stage 1 to later stages: caps from measured costs
 //   bun tbv-rule.ts allin <allin.json>          the all-in check before stage 3: third Opus pass, capy drop or stop
+//   bun tbv-rule.ts caps <caps.json>            the money table: each item's cap from capOf, and the sums at caps
 //   bun tbv-rule.ts compare <readings.json>     dev or held-out: families, verdicts, flags and secondaries
 //   bun tbv-rule.ts handoff <handoff.json>      the dev handoff check against held-out material
 //   bun tbv-rule.ts leak <leak.json>            the treatment-diff leak check
@@ -15,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const scorer = process.env.GSTACK_EVALS_SCORER;
-if (!scorer) throw new Error("E_USAGE GSTACK_EVALS_SCORER must name the scorer checkout");
+if (!scorer) { console.error("E_USAGE GSTACK_EVALS_SCORER must name the scorer checkout"); process.exit(2); }
 const { clusteredPairedDelta, holmAdjusted } = await import(join(scorer, "src/runner/stats/paired.ts"));
 
 export const SEED = 20261105, DRAWS = 10_000;
@@ -24,6 +25,8 @@ export const BAND = { lo: 0.15, hi: 0.75 };
 export const STOCK_MAX = 0.1, ORACLE_MIN = 0.85, AGREE_MIN = 0.7, EXPOSURE_MIN = 0.8, COVERAGE_MIN = 0.9;
 export const HR_MIN_TASKS = 16, HR_MAX_MISSING = 0.1;
 export const CAP_FACTOR = 1.15, ROUND = 4, MAX_TOKENS = 4000, RETRIES = 2;
+// A reading's worst case: four sends (report, follow-up, D1, D2); the first carries at least WORST_INPUT tokens, and each later one adds max_tokens and a user turn per earlier send.
+export const SENDS = 4, WORST_INPUT = 130_000, USER_TURN = 100;
 export const LINE_USD = 2000;
 // MDD rows (recall points at 80% power, Holm's first step, control 0.50) from power.txt, by non-clean tasks and passes.
 export const MDD: Record<number, [number, number][]> = { 2: [[40, 13.1], [50, 11.6], [70, 10.0], [100, 8.1]], 3: [[40, 11.0], [50, 9.8], [70, 8.2], [100, 6.8]] };
@@ -44,7 +47,7 @@ const f3 = (x: number | null | undefined) => (x === null || x === undefined || N
 const usd = (x: number) => "$" + x.toFixed(2);
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const mean = (xs: number[]) => (xs.length ? sum(xs) / xs.length : NaN);
-const fail = (msg: string): never => { console.error("error: " + msg); process.exit(2); };
+const fail = (msg: string): never => { console.error(msg); process.exit(2); };
 
 // Word rule: a whitespace-separated token with at least one letter or digit.
 export const isWord = (t: string) => /[\p{L}\p{N}]/u.test(t);
@@ -89,13 +92,38 @@ export function endState(attempts: Attempt[]) {
 export function roundAdmits(r: { settled: number; reserved: number; unknown: number; roundWorst: number; cap: number }) {
   return r.settled + r.reserved + r.unknown + r.roundWorst <= r.cap + 1e-9;
 }
-/** A reading's worst case: its three turns plus the follow-up, each at uncached input for the history and splice and max_tokens out. A retry is its own send and reserves its own worst case before it goes. */
-export function readingWorst(p: { inputTokens: number; inPerM: number; outPerM: number }) {
-  const turns = 4;
-  return turns * (p.inputTokens * p.inPerM + MAX_TOKENS * p.outPerM) / 1e6;
+type Price = { in: number; out: number; cacheWrite?: number };
+/** A reading's worst case: its four sends, send k carrying the first send's input plus k times (max_tokens + a user turn), each input token at the higher of the input and cache-write rates (every send carries a cache breakpoint, a miss rewrites the cache, and the metering proxy reserves at that rate), and max_tokens out. A retry is its own send and reserves its own worst case before it goes. */
+export function readingWorst(p: { inputTokens: number; price: Price }) {
+  let usd = 0;
+  for (let k = 0; k < SENDS; k++) usd += ((p.inputTokens + k * (MAX_TOKENS + USER_TURN)) * Math.max(p.price.in, p.price.cacheWrite ?? 0) + MAX_TOKENS * p.price.out) / 1e6;
+  return usd;
 }
+/** One round (4 readings) at the worst case of the costliest model, the first send at least WORST_INPUT tokens or the largest measured, if larger. */
+function roundWorst(models: Model[], prices: Record<string, Price>, inputTokens: Partial<Record<Model, number>> = {}) {
+  return ROUND * Math.max(...models.map((m) => readingWorst({ inputTokens: Math.max(WORST_INPUT, inputTokens[m] ?? 0), price: prices[m] ?? fail("E_USAGE no price for " + m) })));
+}
+/** Every item's cap: 1.15 times its projection plus one round at its worst case, rounded up to the dollar. The projection check and the caps command both use it. */
+export const capOf = (projected: number, round: number) => Math.ceil(Math.round((CAP_FACTOR * projected + round) * 1e6) / 1e6);
 
 const judged = (r: Reading) => r.status === "scored" || r.status === "no-report";
+/** The input guards every reading command runs: a known task, no duplicate, a pass inside the plan, labels that match the key on a scored reading, a finite unsupported count of at least 0, and the frozen no-report shape (no fact labels, unsupported 0). */
+function validate(rd: Readings, passesOf: (r: Reading) => number | undefined) {
+  const tasks = new Map(rd.tasks.map((t) => [t.id, t]));
+  const keys = new Set<string>();
+  for (const r of rd.readings) {
+    const t = tasks.get(r.task) ?? fail("E_USAGE reading " + r.id + " names a task the readings do not hold");
+    const k = [r.task, r.family, r.arm, r.model, r.pass].join("|");
+    if (keys.has(k)) fail("E_USAGE duplicated reading " + k);
+    keys.add(k);
+    const n = passesOf(r);
+    if (n !== undefined && !(Number.isInteger(r.pass) && r.pass >= 1 && r.pass <= n)) fail("E_USAGE reading " + r.id + " has pass " + r.pass + ", outside 1 to " + n);
+    if (r.status === "no-report" && (r.facts.length !== 0 || r.unsupported !== 0)) fail("E_USAGE no-report reading " + r.id + " must carry no fact labels and unsupported 0");
+    if (r.status === "scored" && r.facts.length !== t.nfacts) fail("E_USAGE reading " + r.id + " has " + r.facts.length + " fact labels for a task with " + t.nfacts);
+    if (r.status === "scored" && !(Number.isFinite(r.unsupported) && r.unsupported >= 0)) fail("E_USAGE reading " + r.id + " has no unsupported count of at least 0");
+  }
+  return tasks;
+}
 const recall = (r: Reading) => (r.status === "no-report" || !r.facts.length ? 0 : r.facts.filter((f) => f.in).length / r.facts.length);
 const recallAny = (r: Reading) => (r.status === "no-report" || !r.facts.length ? 0 : r.facts.filter((f) => f.any).length / r.facts.length);
 
@@ -132,10 +160,12 @@ function clusterMean(rs: Reading[], tasks: Map<string, Task>, f: (r: Reading) =>
 
 function headroom(rd: Readings) {
   if (rd.stage !== "hr") fail("E_USAGE headroom reads stage hr readings");
-  const tasks = new Map(rd.tasks.map((t) => [t.id, t]));
+  const passes = rd.plan.passes.opus ?? 3;
+  const tasks = validate(rd, (r) => (r.arm === "none" && r.model === "opus" ? passes : undefined));
   const hr = rd.tasks.filter((t) => t.stratum !== "clean");
-  const none = rd.readings.filter((r) => r.arm === "none" && r.model === "opus");
-  const planned = hr.length * (rd.plan.passes.opus ?? 3);
+  const hrIds = new Set(hr.map((t) => t.id));
+  const none = rd.readings.filter((r) => r.arm === "none" && r.model === "opus" && hrIds.has(r.task));
+  const planned = hr.length * passes;
   const missing = none.filter((r) => !judged(r)).length + Math.max(0, planned - none.length);
   const readable = new Set(none.filter(judged).map((r) => r.task));
   say("Stage 1 headroom: " + hr.length + " tasks, Opus none planned " + planned + ", judged " + none.filter(judged).length + ", missing or unjudged " + missing);
@@ -146,8 +176,7 @@ function headroom(rd: Readings) {
   const costs = new Map<string, number[]>();
   for (const r of rd.readings) if (r.status !== "harness") costs.set(r.arm + ":" + r.model, [...(costs.get(r.arm + ":" + r.model) ?? []), r.usd]);
   for (const [k, v] of [...costs].sort()) say("cost " + k + ": " + v.length + " readings, mean " + usd(mean(v)) + ", cache-read share " + f3(mean(rd.readings.filter((r) => r.arm + ":" + r.model === k && r.cacheRead !== undefined).map((r) => r.cacheRead!))));
-  const smoke = rd.readings.filter((r) => r.arm === "current");
-  if (smoke.length) say("current smoke on Opus: exposure " + smoke.filter((r) => r.exposed).length + "/" + smoke.length);
+  for (const k of [...new Set(rd.readings.filter((r) => r.arm === "current" || r.arm === "principle").map((r) => r.arm + ":" + r.model))].sort()) { const rs = rd.readings.filter((r) => r.arm + ":" + r.model === k); say("exposure " + k + ": " + rs.filter((r) => r.exposed).length + "/" + rs.length); }
   if (rd.readings.some((r) => r.status === "harness")) { say("Verdict: HARNESS FAILURE (a request failed the validator, a closer check or a non-refusal 4xx; stage 1 stops for a B1 fix under a new post)"); return; }
   if (readable.size < HR_MIN_TASKS || missing > HR_MAX_MISSING * planned) { say("Verdict: NO READ (readable tasks " + readable.size + ", missing " + missing + " of " + planned + ")"); return; }
   if (!ctl.ok) { say("Verdict: JUDGE FAIL (FIX-METHOD, judge: a control is out of bounds)"); return; }
@@ -161,7 +190,7 @@ function headroom(rd: Readings) {
   say("Verdict: " + (r0 > BAND.hi ? "CEILING" : r0 < BAND.lo ? "FLOOR" : "HEADROOM") + " (band " + BAND.lo + " to " + BAND.hi + ")");
 }
 
-function projection(p: { items: { item: string; readings: { model: Model; arm: Arm; n: number }[]; judgeN: number; inputTokens: Record<Model, number> }[]; measured: Record<string, number>; judgePerReading: number; prices: Record<Model, { in: number; out: number }> }) {
+function projection(p: { items: { item: string; readings: { model: Model; arm: Arm; n: number }[]; judgeN: number; inputTokens?: Partial<Record<Model, number>> }[]; measured: Record<string, number>; judgePerReading: number; prices: Record<Model, Price> }) {
   let total = 0;
   for (const it of p.items) {
     let proj = it.judgeN * p.judgePerReading;
@@ -170,12 +199,27 @@ function projection(p: { items: { item: string; readings: { model: Model; arm: A
       if (m === undefined) fail("E_USAGE no measured cost for " + r.arm + ":" + r.model + " (stage 1 must measure every model and arm path a later item runs)");
       proj += r.n * m;
     }
-    const worst = Math.max(...it.readings.map((r) => readingWorst({ inputTokens: it.inputTokens[r.model], inPerM: p.prices[r.model].in, outPerM: p.prices[r.model].out })));
-    const cap = Math.ceil(CAP_FACTOR * proj + ROUND * worst);
+    const worst = roundWorst(it.readings.map((r) => r.model), p.prices, it.inputTokens);
+    const cap = capOf(proj, worst);
     total += cap;
-    say(it.item + ": projected " + usd(proj) + ", round worst case " + usd(ROUND * worst) + ", cap " + usd(cap));
+    say(it.item + ": projected " + usd(proj) + ", round worst case " + usd(worst) + ", cap " + usd(cap));
   }
   say("caps in all: " + usd(total));
+}
+
+/** The money table: each reading item's cap from capOf at the planned worst case, any other item's cap as set, and the sums at caps against the line. */
+function caps(c: { items: { item: string; projected: number; models?: Model[]; cap?: number; optional?: boolean }[]; prices: Record<Model, Price>; crewReserve: number }) {
+  let paid = 0, projected = 0, optional = 0;
+  for (const it of c.items) {
+    if (!it.models === (it.cap === undefined)) fail("E_USAGE " + it.item + " needs either models (a reading item) or a cap set directly");
+    const worst = it.models ? roundWorst(it.models, c.prices) : null;
+    const cap = worst === null ? it.cap! : capOf(it.projected, worst);
+    if (it.optional) optional += cap; else { paid += cap; projected += it.projected; }
+    say(it.item + ": projected " + usd(it.projected) + (worst === null ? ", cap " + usd(cap) + " (set directly: not a reading item)" : ", round worst case " + usd(worst) + ", cap " + usd(cap)) + (it.optional ? " (only if the all-in check passes with it)" : ""));
+  }
+  const allIn = paid + c.crewReserve;
+  say("paid at caps " + usd(paid) + " (projected " + usd(projected) + "), crew reserve " + usd(c.crewReserve) + ", all-in at caps " + usd(allIn) + "; with the optional lines " + usd(allIn + optional));
+  say("Verdict: " + (allIn <= LINE_USD ? "UNDER " : "OVER ") + usd(LINE_USD) + " at caps" + (optional ? (allIn + optional <= LINE_USD ? "; the optional lines fit at caps" : "; the optional lines don't fit at caps, so they run only when the all-in check on actual spend passes") : ""));
 }
 
 function allin(a: { crewSpent: number; crewRest: number; settled: number; reserved: number; unknown: number; heldCap: number; thirdPassCap: number; capyCap: number }) {
@@ -187,14 +231,16 @@ function allin(a: { crewSpent: number; crewRest: number; settled: number; reserv
   say("Verdict: NO STAGE 3 (to the Captain; " + usd(base + a.heldCap - a.capyCap) + " over " + usd(LINE_USD) + ")");
 }
 
-/** The MDD row for the largest tabled task count at or under n (the first row below it), so a smaller read never borrows a larger read's MDD. */
+/** The MDD row for the largest tabled task count at or under n, so a smaller read never borrows a larger read's MDD; null under the smallest row. */
 function mddFor(n: number, passes: number) {
   const rows = MDD[passes] ?? MDD[2]!;
-  return ([...rows].reverse().find(([k]) => k <= n) ?? rows[0]!)[1];
+  return [...rows].reverse().find(([k]) => k <= n)?.[1] ?? null;
 }
 
-function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Family[], b: Arm, a: Arm, f: (r: Reading) => number) {
-  const ids = new Set(rd.tasks.filter((t) => t.stratum !== "clean" && (fams.includes("capy") ? t.source === "B" : fams.includes(famOf(t)))).map((t) => t.id));
+const gstackArm = (arm: Arm) => arm === "current" || arm === "principle";
+/** One paired contrast b minus a over matched task-pass rows, on the non-clean tasks or, with clean, on the clean tasks only. */
+function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Family[], b: Arm, a: Arm, f: (r: Reading) => number, clean = false) {
+  const ids = new Set(rd.tasks.filter((t) => (t.stratum === "clean") === clean && (fams.includes("capy") ? t.source === "B" : fams.includes(famOf(t)))).map((t) => t.id));
   const pick = (arm: Arm, fam: Family[]) => new Map(rd.readings.filter((r) => r.model === model && r.arm === arm && ids.has(r.task) && fam.includes(r.family)).map((r) => [r.task + "#" + r.pass, r]));
   const famsB = fams.includes("capy") ? (["capy"] as Family[]) : fams;
   const famsA = fams.includes("capy") && a === "none" ? (["ship"] as Family[]) : famsB;
@@ -207,18 +253,15 @@ function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Fa
   const ca = clusterMean(ra, tasks, f), cb = clusterMean(rb, tasks, f);
   const pairs = [...ca.keys()].map((c) => ({ id: c, cluster: c, a: ca.get(c)!, b: cb.get(c)! }));
   const s = pairs.length ? clusteredPairedDelta(pairs, { seed: SEED, draws: DRAWS }) : null;
-  const exp = b === "none" || b === "lens" ? null : rb.length ? rb.filter((r) => r.exposed).length / rb.length : 0;
+  const exposure = (arm: Arm, rs: Reading[]) => (!gstackArm(arm) ? null : rs.length ? rs.filter((r) => r.exposed).length / rs.length : 0);
   const nTasks = new Set(ra.map((r) => r.task)).size;
-  return { s, coverage, exp, clusters: pairs.length, tasks: nTasks, passes, mA: mean([...ca.values()]), mB: mean([...cb.values()]) };
+  return { s, coverage, expB: exposure(b, rb), expA: exposure(a, ra), clusters: pairs.length, tasks: nTasks, passes, mA: mean([...ca.values()]), mB: mean([...cb.values()]) };
 }
 const famOf = (t: Task): Family => (t.source === "A" ? "investigate" : "ship");
 
 function compare(rd: Readings) {
   if (rd.stage === "hr") fail("E_USAGE compare reads dev or held readings");
-  const tasks = new Map(rd.tasks.map((t) => [t.id, t]));
-  for (const r of rd.readings) if (!tasks.has(r.task)) fail("E_USAGE reading " + r.id + " names a task the readings do not hold");
-  const keys = new Set<string>();
-  for (const r of rd.readings) { const k = [r.task, r.family, r.arm, r.model, r.pass].join("|"); if (keys.has(k)) fail("E_USAGE duplicated reading " + k); keys.add(k); if (judged(r) && r.facts.length !== tasks.get(r.task)!.nfacts) fail("E_USAGE reading " + r.id + " has " + r.facts.length + " fact labels for a task with " + tasks.get(r.task)!.nfacts); }
+  const tasks = validate(rd, (r) => (r.family === "capy" ? rd.plan.capyPasses ?? 2 : rd.plan.passes[r.model] ?? 2));
   const ag = agreement(rd.readings);
   say(rd.stage + " read: agreement " + ag.line);
   const judgeFail = !(ag.psa >= AGREE_MIN);
@@ -235,7 +278,8 @@ function compare(rd: Readings) {
       const cs = arms.map(([b, a]) => ({ b, a, ...contrast(rd, tasks, m, fams, b, a, recall) }));
       const present = cs.filter((c) => c.s);
       if (!present.length) { say(name + " " + m + ": no contrasts"); continue; }
-      const untested = (c: typeof cs[number]) => (c.exp !== null && c.exp < EXPOSURE_MIN ? "exposure " + f3(c.exp) : c.coverage < COVERAGE_MIN ? "coverage " + f3(c.coverage) : rd.stage === "held" && !ctl.ok ? "controls" : rd.stage === "held" && judgeFail ? "judge agreement " + f3(ag.psa) : null);
+      const low = (x: number | null) => x !== null && x < EXPOSURE_MIN;
+      const untested = (c: typeof cs[number]) => (low(c.expB) || low(c.expA) ? "exposure " + c.b + " " + f3(c.expB) + ", " + c.a + " " + f3(c.expA) : c.coverage < COVERAGE_MIN ? "coverage " + f3(c.coverage) : rd.stage === "held" && !ctl.ok ? "controls" : rd.stage === "held" && judgeFail ? "judge agreement " + f3(ag.psa) : null);
       const ps = cs.map((c) => (!c.s || untested(c) ? 1 : c.s.p_two_sided));
       const adj = holmAdjusted(ps);
       const noneRate = cs[0]!.mA;
@@ -244,11 +288,13 @@ function compare(rd: Readings) {
         const u = untested(c);
         const mdd = mddFor(c.tasks, c.passes);
         const unsup = contrast(rd, tasks, m, fams, c.b, c.a, (r) => r.unsupported);
+        const caveats = contrast(rd, tasks, m, fams, c.b, c.a, (r) => r.unsupported, true);
+        const above = (x: typeof unsup) => !!(x.s?.ci95 && x.s.ci95[0] > 0);
         const flags: string[] = [];
-        if (unsup.s?.ci95 && unsup.s.ci95[0] > 0) flags.push("more unsupported claims");
+        if (above(unsup) || above(caveats)) flags.push("more unsupported claims");
         if (noneRate > BAND.hi && c.a === "none") flags.push("CEILING");
         const v = rd.stage === "dev" ? "descriptive (dev)" : u ? "untested (" + u + ")" : adj[i]! <= 0.05 ? (c.s.delta > 0 ? "helps" : "hurts") : "not distinguished";
-        say(name + " " + m + " " + c.b + " - " + c.a + ": " + (c.s.delta >= 0 ? "+" : "") + f3(c.s.delta) + ", 95% CI " + (c.s.ci95 ? "[" + f3(c.s.ci95[0]) + ", " + f3(c.s.ci95[1]) + "]" : "n/a") + ", Holm p " + f3(adj[i]) + ", " + c.clusters + " clusters (" + c.tasks + " tasks), coverage " + f3(c.coverage) + ", exposure " + f3(c.exp) + ", MDD " + mdd.toFixed(1) + " points, unsupported " + (unsup.s ? (unsup.s.delta >= 0 ? "+" : "") + f3(unsup.s.delta) : "n/a") + "; verdict " + v + (flags.length ? "; flags: " + flags.join(", ") : ""));
+        say(name + " " + m + " " + c.b + " - " + c.a + ": " + (c.s.delta >= 0 ? "+" : "") + f3(c.s.delta) + ", 95% CI " + (c.s.ci95 ? "[" + f3(c.s.ci95[0]) + ", " + f3(c.s.ci95[1]) + "]" : "n/a") + ", Holm p " + f3(adj[i]) + ", " + c.clusters + " clusters (" + c.tasks + " tasks), coverage " + f3(c.coverage) + ", exposure " + c.b + " " + f3(c.expB) + ", " + c.a + " " + f3(c.expA) + ", MDD " + (mdd === null ? "n/a" : mdd.toFixed(1) + " points") + ", unsupported " + (unsup.s ? (unsup.s.delta >= 0 ? "+" : "") + f3(unsup.s.delta) : "n/a") + ", clean-task caveats " + (caveats.s ? (caveats.s.delta >= 0 ? "+" : "") + f3(caveats.s.delta) : "n/a") + "; verdict " + v + (flags.length ? "; flags: " + flags.join(", ") : ""));
       });
       if (name === "skill layer") for (const fam of ["investigate", "ship"] as Family[]) { const c = contrast(rd, tasks, m, [fam], "principle", "none", recall); if (c.s) say("  per family " + fam + " " + m + " principle - none: " + f3(c.s.delta) + " (" + c.clusters + " clusters)"); }
     }
@@ -271,14 +317,20 @@ function compare(rd: Readings) {
   }
 }
 
-const norm = (t: string) => t.toLowerCase().split(/\s+/).filter(Boolean);
-function grams(text: string, n = 8) { const w = norm(text); const s = new Set<string>(); for (let i = 0; i + n <= w.length; i++) s.add(w.slice(i, i + n).join(" ")); return s; }
+/** Text is compared as word tokens: lowercased runs of letters, digits and underscores, so punctuation and markdown never hide a match. */
+const toks = (t: string) => t.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+/** Whether a text holds a name as a whole run of its tokens, never as part of a longer token. */
+function finder(text: string) {
+  const ws = toks(text), at = new Map<string, number[]>();
+  ws.forEach((w, i) => { const xs = at.get(w); if (xs) xs.push(i); else at.set(w, [i]); });
+  return (name: string) => { const run = toks(name); if (!run.length) fail("E_USAGE the name " + JSON.stringify(name) + " has no letter or digit"); return (at.get(run[0]!) ?? []).some((i) => run.every((w, j) => ws[i + j] === w)); };
+}
+function grams(text: string, n = 8) { const w = toks(text); const s = new Set<string>(); for (let i = 0; i + n <= w.length; i++) s.add(w.slice(i, i + n).join(" ")); return s; }
 
 function handoff(h: { artifact: string; heldIds: string[]; devText: string; heldText: string }) {
-  const dev = h.devText.toLowerCase();
-  const unique = h.heldIds.filter((id) => !dev.includes(id.toLowerCase()));
-  const art = h.artifact.toLowerCase();
-  const idHits = unique.filter((id) => art.includes(id.toLowerCase()));
+  const inDev = finder(h.devText), inArtifact = finder(h.artifact);
+  const unique = h.heldIds.filter((id) => !inDev(id));
+  const idHits = unique.filter(inArtifact);
   const hg = grams(h.heldText), dg = grams(h.devText);
   const gHits = [...grams(h.artifact)].filter((g) => hg.has(g) && !dg.has(g));
   say("handoff: " + h.heldIds.length + " held-out identifiers, " + unique.length + " unique to held-out; hits " + idHits.length + " identifiers, " + gHits.length + " 8-word runs");
@@ -289,7 +341,7 @@ function leak(l: { addedLines: string[]; gstackAtC: string; material: string; na
   const added = l.addedLines.join("\n");
   const base = grams(l.gstackAtC), mat = grams(l.material);
   const hits = [...grams(added)].filter((g) => !base.has(g) && mat.has(g));
-  const nameHits = l.names.filter((n) => added.toLowerCase().includes(n.toLowerCase()));
+  const nameHits = l.names.filter(finder(added));
   say("leak: " + hits.length + " 8-word runs shared with task material (after removing runs already in gstack at C), " + nameHits.length + " task names");
   say("Verdict: " + (hits.length || nameHits.length ? "HIT (to the Captain)" : "CLEAN"));
 }
@@ -303,9 +355,10 @@ if (import.meta.main) {
   else if (cmd === "headroom") headroom(data);
   else if (cmd === "projection") projection(data);
   else if (cmd === "allin") allin(data);
+  else if (cmd === "caps") caps(data);
   else if (cmd === "compare") compare(data);
   else if (cmd === "handoff") handoff(data);
   else if (cmd === "leak") leak(data);
-  else fail("E_USAGE tbv-rule.ts words|endstate|admit|headroom|projection|allin|compare|handoff|leak <file>");
+  else fail("E_USAGE tbv-rule.ts words|endstate|admit|headroom|projection|allin|caps|compare|handoff|leak <file>");
   console.log(out.join("\n"));
 }

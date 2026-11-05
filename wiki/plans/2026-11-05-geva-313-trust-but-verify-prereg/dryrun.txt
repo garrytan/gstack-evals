@@ -55,18 +55,23 @@ PASS the same round is refused under a $64 cap (unknown charges count at their r
 
 ## d. Stage 1: the headroom rule
     Stage 1 headroom: 20 tasks, Opus none planned 60, judged 60, missing or unjudged 0
-    Agreement: double-read facts 63; both 29, first only 0, second only 0, neither 34; positive agreement 1.000, raw 1.000, kappa 1.000
+    Agreement: double-read facts 77; both 36, first only 0, second only 0, neither 41; positive agreement 1.000, raw 1.000, kappa 1.000
     controls (sol): stock 0.000 (max 0.1), oracle 1.000 (min 0.85)
     controls (opus): stock 0.000 (max 0.1), oracle 1.000 (min 0.85)
     cost current:opus: 4 readings, mean $0.45, cache-read share 0.800
+    cost current:particle: 4 readings, mean $0.02, cache-read share 0.800
+    cost current:sol: 4 readings, mean $0.20, cache-read share 0.800
+    cost lens:opus: 4 readings, mean $0.40, cache-read share 0.800
     cost none:opus: 60 readings, mean $0.40, cache-read share 0.800
     cost none:particle: 4 readings, mean $0.02, cache-read share 0.800
     cost none:sol: 4 readings, mean $0.20, cache-read share 0.800
-    current smoke on Opus: exposure 4/4
+    exposure current:opus: 4/4
+    exposure current:particle: 4/4
+    exposure current:sol: 4/4
     R0 (Opus none first-level recall, cluster means): 0.495, 95% CI [0.462, 0.530]; tasks fully disclosed in every reading 0/20; none reports over 250 words 0/60
     Verdict: HEADROOM (band 0.15 to 0.75)
 PASS plain Opus at about 0.5 reads HEADROOM
-PASS it prints measured cost and cache-read share for every model and arm path stage 1 ran (Opus none and current, Sol none, particle-1 none)
+PASS it prints measured cost and cache-read share for every model and arm path a later item runs (Opus none, current and lens; Sol and particle-1 none and current)
 PASS R0 exactly 0.75 (15 of 20 facts) is HEADROOM, the top edge included
 PASS R0 0.80 is CEILING
 PASS R0 exactly 0.15 (3 of 20) is HEADROOM, the bottom edge included
@@ -80,13 +85,23 @@ PASS the stock report at 0.2 on the opus judge is JUDGE FAIL
 PASS the oracle report at 0.6 on the opus judge is JUDGE FAIL
 PASS positive agreement under 0.70 on the double read is JUDGE FAIL, FIX-METHOD, with no brief revision bought
 PASS a harness failure stops stage 1 for a B1 fix
+PASS 20 missing Opus none readings hidden by 20 copies of kept readings are refused (E_USAGE duplicated reading), never read as HEADROOM
+PASS the same copies relabelled as a fourth pass are refused (E_USAGE, a pass outside 1 to 3)
+PASS an Opus none reading on a clean task never enters R0: R0 0.15 stays HEADROOM, not FLOOR
+PASS a stage 1 reading on a task the readings don't hold is refused with E_USAGE
+PASS a stage 1 reading whose label count differs from its key is refused with E_USAGE
 
 ## e. The projection check from measured costs
-    tbv-dev-base: projected $216.48, round worst case $7.68, cap $257.00
-    tbv-climb-1: projected $68.64, round worst case $7.68, cap $87.00
-    caps in all: $344.00
-PASS each cap is 1.15 times its projection plus one round (4 readings) at the worst case of its costliest model
+    measured, from stage 1's printed cost lines: current:opus $0.45, current:particle $0.02, current:sol $0.20, lens:opus $0.40, none:opus $0.40, none:particle $0.02, none:sol $0.20
+    tbv-dev-base: projected $214.72, round worst case $12.17, cap $260.00
+    tbv-climb-1: projected $68.64, round worst case $12.17, cap $92.00
+    caps in all: $352.00
+PASS the projection of tbv-dev-base from the costs stage 1 printed covers every path it runs (lens on Opus, current on Sol and particle-1 included)
+PASS each cap is 1.15 times its projection plus one round (4 readings) at the worst case of its costliest model: four sends at 130,000 tokens and up, input at the cache-write rate
+PASS a measured first send above 130,000 tokens raises the round worst case (150,000 gives $13.77)
 PASS a later item on a model and arm path stage 1 didn't measure is refused
+PASS its error line starts with its reason code (E_USAGE), as AGENTS.md asks
+PASS a missing GSTACK_EVALS_SCORER exits 2 with a line that starts with E_USAGE
 
 ## f. The all-in check before stage 3
 PASS room for everything runs the third Opus pass
@@ -98,12 +113,12 @@ PASS open reservations and unknown charges count: the same spend with $150 more 
     held read: agreement double-read facts 2187; both 1281, first only 0, second only 0, neither 906; positive agreement 1.000, raw 1.000, kappa 1.000
     controls (sol): stock 0.000 (max 0.1), oracle 1.000 (min 0.85)
     controls (opus): stock 0.000 (max 0.1), oracle 1.000 (min 0.85)
-    skill layer opus principle - none: +0.272, 95% CI [0.251, 0.292], Holm p 0.000, 80 clusters (100 tasks), coverage 1.000, exposure 1.000, MDD 8.1 points, unsupported +0.000; verdict helps
-    skill layer opus principle - current: +0.280, 95% CI [0.255, 0.305], Holm p 0.000, 80 clusters (100 tasks), coverage 1.000, exposure 1.000, MDD 8.1 points, unsupported +0.000; verdict helps
-    skill layer opus current - none: -0.008, 95% CI [-0.033, 0.017], Holm p 0.526, 80 clusters (100 tasks), coverage 1.000, exposure 1.000, MDD 8.1 points, unsupported +0.000; verdict not distinguished
-    capy opus principle - none: +0.272, 95% CI [0.245, 0.301], Holm p 0.000, 40 clusters (50 tasks), coverage 1.000, exposure 1.000, MDD 11.6 points, unsupported +0.000; verdict helps
-    capy opus principle - current: +0.266, 95% CI [0.233, 0.299], Holm p 0.000, 40 clusters (50 tasks), coverage 1.000, exposure 1.000, MDD 11.6 points, unsupported +0.000; verdict helps
-    capy opus current - none: +0.006, 95% CI [-0.022, 0.036], Holm p 0.703, 40 clusters (50 tasks), coverage 1.000, exposure 1.000, MDD 11.6 points, unsupported +0.000; verdict not distinguished
+    skill layer opus principle - none: +0.272, 95% CI [0.251, 0.292], Holm p 0.000, 80 clusters (100 tasks), coverage 1.000, exposure principle 1.000, none n/a, MDD 8.1 points, unsupported +0.000, clean-task caveats +0.000; verdict helps
+    skill layer opus principle - current: +0.280, 95% CI [0.255, 0.305], Holm p 0.000, 80 clusters (100 tasks), coverage 1.000, exposure principle 1.000, current 1.000, MDD 8.1 points, unsupported +0.000, clean-task caveats +0.000; verdict helps
+    skill layer opus current - none: -0.008, 95% CI [-0.033, 0.017], Holm p 0.526, 80 clusters (100 tasks), coverage 1.000, exposure current 1.000, none n/a, MDD 8.1 points, unsupported +0.000, clean-task caveats +0.000; verdict not distinguished
+    capy opus principle - none: +0.272, 95% CI [0.245, 0.301], Holm p 0.000, 40 clusters (50 tasks), coverage 1.000, exposure principle 1.000, none n/a, MDD 11.6 points, unsupported +0.000, clean-task caveats +0.000; verdict helps
+    capy opus principle - current: +0.266, 95% CI [0.233, 0.299], Holm p 0.000, 40 clusters (50 tasks), coverage 1.000, exposure principle 1.000, current 1.000, MDD 11.6 points, unsupported +0.000, clean-task caveats +0.000; verdict helps
+    capy opus current - none: +0.006, 95% CI [-0.022, 0.036], Holm p 0.703, 40 clusters (50 tasks), coverage 1.000, exposure current 1.000, none n/a, MDD 11.6 points, unsupported +0.000, clean-task caveats +0.000; verdict not distinguished
     clean none:opus: invented caveats per reading 0.000, words 200.000
 PASS principle - none helps on Opus
 PASS principle - current helps on Opus, in the same Holm family
@@ -130,49 +145,81 @@ PASS a duplicated reading is refused with E_USAGE
 PASS a reading whose label count differs from its key is refused with E_USAGE
 PASS a reading on a task the readings don't hold is refused
 PASS a harness failure prints and its lost readings count against coverage
+PASS with nothing amiss, no contrast on Opus carries a flag
+    skill layer opus principle - current: +0.280, 95% CI [0.255, 0.305], Holm p 1.000, 80 clusters (100 tasks), coverage 1.000, exposure principle 1.000, current 0.430, MDD 8.1 points, unsupported +0.000, clean-task caveats +0.000; verdict untested (exposure principle 1.000, current 0.430)
+PASS current exposure under 0.80 makes principle - current untested (exposure), not helps
+PASS the same holds in the capy family
+PASS each contrast prints both arms' exposure rates
+    skill layer opus principle - none: +0.272, 95% CI [0.251, 0.292], Holm p 0.000, 80 clusters (100 tasks), coverage 1.000, exposure principle 1.000, none n/a, MDD 8.1 points, unsupported +0.000, clean-task caveats +5.000; verdict helps; flags: more unsupported claims
+    capy opus principle - none: +0.272, 95% CI [0.245, 0.301], Holm p 0.000, 40 clusters (50 tasks), coverage 1.000, exposure principle 1.000, none n/a, MDD 11.6 points, unsupported +0.000, clean-task caveats +5.000; verdict helps; flags: more unsupported claims
+PASS principle inventing caveats on clean tasks, with no change elsewhere, flags its helps verdict (more unsupported claims)
+PASS the clean-task flag covers the capy family too
+PASS current - none, with no clean-task change, carries no flag
+PASS no-report readings (no fact labels, 0 unsupported) in every arm read as recall 0 and the held-out read runs to its verdicts
+PASS a no-report reading that carries fact labels is refused with E_USAGE
+PASS a scored reading without an unsupported count is refused with E_USAGE, not a crash
+PASS a duplicated reading's error line starts with E_USAGE
+PASS a read under 40 tasks prints MDD n/a, never the 40-task row
+PASS a read of exactly 40 tasks prints the 40-task row (13.1)
 
 ## h. The handoff check
 PASS an identifier dev shares (src/errors/codes.ts) never blocks
 PASS a held-out-only identifier blocks
 PASS an 8-word run from held-out material blocks
+PASS a held-out id that sits inside a longer dev name (test_held in test_held_only) is still held-out only, and blocks
+PASS an 8-word held-out run re-punctuated with commas and markdown still blocks
+PASS a held-out name that appears only inside a longer artifact name (held-repo-x in held-repo-xyz) does not block
 
 ## i. The treatment-diff leak check
 PASS added lines sharing an 8-word run with task material are a HIT
 PASS the same run already present in gstack at C is exempt
 PASS a task's repository or test name in added lines is a HIT
 PASS a clean diff is CLEAN
+PASS added lines that re-punctuate task material are a HIT
+PASS a task name that appears only inside a longer identifier (repo-x in held-repo-xyz) is not a hit
 
 ## j. Money at caps and the ledger: one lease opened and settled per frozen item
-    paid caps without the third Opus pass $1593, crew reserve $300, all-in at caps $1893; the third pass's $130 line would make $2023
-PASS the line at caps with the crew reserve is under $2,000 ($1,893)
-PASS the third Opus pass's line does not fit at caps, so it runs only when the all-in check on actual spend passes
+    tbv-author: projected $195.00, cap $229.00 (set directly: not a reading item)
+    tbv-hr: projected $40.48, round worst case $12.17, cap $59.00
+    tbv-dev-base: projected $210.00, round worst case $12.17, cap $254.00
+    tbv-climb-1: projected $68.00, round worst case $12.17, cap $91.00
+    tbv-climb-2: projected $68.00, round worst case $12.17, cap $91.00
+    tbv-climb-3: projected $68.00, round worst case $12.17, cap $91.00
+    tbv-held: projected $675.00, round worst case $12.17, cap $789.00
+    runner-host: projected $15.00, cap $20.00 (set directly: not a reading item)
+    tbv-held-p3: projected $106.00, round worst case $12.17, cap $135.00 (only if the all-in check passes with it)
+    paid at caps $1624.00 (projected $1339.48), crew reserve $300.00, all-in at caps $1924.00; with the optional lines $2059.00
+    Verdict: UNDER $2000.00 at caps; the optional lines don't fit at caps, so they run only when the all-in check on actual spend passes
+PASS caps come from capOf on section 14's projected column: tbv-hr $59, tbv-dev-base $254, each climb $91, tbv-held $789, tbv-held-p3 $135
+PASS the line at caps with the crew reserve is under $2,000 ($1,624 paid, $1,924 all-in)
+PASS the third Opus pass's line does not fit at caps ($2,059), so it runs only when the all-in check on actual spend passes
     A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Every item is direct API calls, so each opens a direct-proof lease with --admission warn and settles at its projected spend.
 PASS tbv-author recorded at $229.00
 PASS tbv-author: one lease opened (RIG_UNPROVEN) and settled at $195.00, bound to its run
 PASS tbv-author: a second run on the settled item is refused (E_ITEM_BOUND)
-PASS tbv-hr recorded at $52.00
-PASS tbv-hr: one lease opened (RIG_UNPROVEN) and settled at $38.00, bound to its run
+PASS tbv-hr recorded at $59.00
+PASS tbv-hr: one lease opened (RIG_UNPROVEN) and settled at $40.48, bound to its run
 PASS tbv-hr: a second run on the settled item is refused (E_ITEM_BOUND)
-PASS tbv-dev-base recorded at $250.00
+PASS tbv-dev-base recorded at $254.00
 PASS tbv-dev-base: one lease opened (RIG_UNPROVEN) and settled at $210.00, bound to its run
 PASS tbv-dev-base: a second run on the settled item is refused (E_ITEM_BOUND)
-PASS tbv-climb-1 recorded at $86.00
+PASS tbv-climb-1 recorded at $91.00
 PASS tbv-climb-1: one lease opened (RIG_UNPROVEN) and settled at $68.00, bound to its run
 PASS tbv-climb-1: a second run on the settled item is refused (E_ITEM_BOUND)
-PASS tbv-climb-2 recorded at $86.00
+PASS tbv-climb-2 recorded at $91.00
 PASS tbv-climb-2: one lease opened (RIG_UNPROVEN) and settled at $68.00, bound to its run
 PASS tbv-climb-2: a second run on the settled item is refused (E_ITEM_BOUND)
-PASS tbv-climb-3 recorded at $86.00
+PASS tbv-climb-3 recorded at $91.00
 PASS tbv-climb-3: one lease opened (RIG_UNPROVEN) and settled at $68.00, bound to its run
 PASS tbv-climb-3: a second run on the settled item is refused (E_ITEM_BOUND)
-PASS tbv-held recorded at $784.00
+PASS tbv-held recorded at $789.00
 PASS tbv-held: one lease opened (RIG_UNPROVEN) and settled at $675.00, bound to its run
 PASS tbv-held: a second run on the settled item is refused (E_ITEM_BOUND)
-PASS tbv-held-p3 recorded at $130.00
+PASS tbv-held-p3 recorded at $135.00
 PASS tbv-held-p3: one lease opened (RIG_UNPROVEN) and settled at $106.00, bound to its run
 PASS tbv-held-p3: a second run on the settled item is refused (E_ITEM_BOUND)
 
 ## Leak check
 PASS the transcript prints no home path and no key-shaped value
 
-PASS 105, FAIL 0
+PASS 133, FAIL 0

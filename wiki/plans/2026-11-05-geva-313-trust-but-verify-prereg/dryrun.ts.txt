@@ -54,9 +54,9 @@ function reading(task: any, family: string, arm: string, model: string, passNo: 
   return Object.assign(r, x);
 }
 type Rates = Record<string, number>;
-function held(rates: Rates, o: { stage?: string; models?: string[]; passes?: number; capy?: boolean; mutate?: (r: any) => void; clean?: number; devGap?: number } = {}) {
+function held(rates: Rates, o: { stage?: string; models?: string[]; passes?: number; capy?: boolean; mutate?: (r: any) => void; clean?: number; devGap?: number; nA?: number; nB?: number } = {}) {
   rid = 0;
-  const tasks = tasksOf({ clean: o.clean ?? 10 });
+  const tasks = tasksOf({ clean: o.clean ?? 10, nA: o.nA, nB: o.nB });
   const models = o.models ?? ["opus", "sol", "particle"];
   const rs: any[] = [];
   for (const m of models) for (const arm of ["none", "current", "principle"]) for (const t of tasks) for (let p = 1; p <= (o.passes ?? 2); p++) rs.push(reading(t, t.source === "A" ? "investigate" : "ship", arm, m, p, rates[arm + ":" + m] ?? rates[arm]!));
@@ -66,6 +66,8 @@ function held(rates: Rates, o: { stage?: string; models?: string[]; passes?: num
   return { stage: o.stage ?? "held", tasks, readings: rs, controls, plan: { models, passes: Object.fromEntries(models.map((m) => [m, o.passes ?? 2])), capyPasses: o.passes ?? 2, skillArms: ["none", "current", "principle"], ...(o.devGap === undefined ? {} : { devGap: { opusPrincipleMinusNone: o.devGap, devMdd: 13.1 } }) } };
 }
 const line = (o: string, re: RegExp) => o.split("\n").find((l) => re.test(l)) ?? "";
+const PRICES = { opus: { in: 4, out: 20, cacheWrite: 5 }, sol: { in: 2, out: 10, cacheWrite: 2.5 }, particle: { in: 0.1, out: 1 } };
+const refused = (r: ReturnType<typeof run>, what: string) => r.status === 2 && r.stderr.startsWith("E_USAGE") && r.stderr.includes(what);
 
 say("# Trust-but-verify eval: keyless dry run");
 const head = spawnSync("git", ["-C", scorer, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
@@ -107,7 +109,7 @@ await section("c. Round admission against a cap", () => {
   check("the same round is refused under a $64 cap (unknown charges count at their reservation)", rule("admit", { settled: 50, reserved: 5, unknown: 2, roundWorst: 7.7, cap: 64 }).trim() === "admit false");
 });
 
-function stage1(o: { recallFacts?: number; facts?: number; rate?: number; drop?: number; gaps?: number; stock?: number; oracle?: number; badJudge?: string; disagree?: boolean; harness?: boolean }) {
+function stage1(o: { recallFacts?: number; facts?: number; rate?: number; drop?: number; gaps?: number; stock?: number; oracle?: number; badJudge?: string; disagree?: boolean; harness?: boolean; mutate?: (rd: any) => void }) {
   rid = 0;
   const tasks = tasksOf({ nA: 10, nB: 10, facts: o.facts });
   const rs: any[] = [];
@@ -121,17 +123,19 @@ function stage1(o: { recallFacts?: number; facts?: number; rate?: number; drop?:
     rs.push(r);
   }
   for (const t of tasks.slice(0, 2)) for (let p = 1; p <= 2; p++) rs.push(reading(t, "investigate", "current", "opus", p, 0.5, { usd: 0.45 }));
-  for (const t of tasks.slice(0, 4)) { rs.push(reading(t, "investigate", "none", "sol", 1, 0.5, { usd: 0.2 })); rs.push(reading(t, "investigate", "none", "particle", 1, 0.5, { usd: 0.02 })); }
+  for (const t of tasks.slice(0, 4)) for (const [arm, model, usd] of [["lens", "opus", 0.4], ["none", "sol", 0.2], ["current", "sol", 0.2], ["none", "particle", 0.02], ["current", "particle", 0.02]] as const) rs.push(reading(t, "investigate", arm, model, 1, 0.5, { usd }));
   if (o.harness) rs[5].status = "harness";
   const ctl = tasks.flatMap((t) => ["sol", "opus"].flatMap((j) => [{ task: t.id, kind: "stock", judge: j, facts: [...Array(t.nfacts)].map((_, i) => ({ in: j === o.badJudge && i < Math.round((o.stock ?? 0) * t.nfacts), any: false })) }, { task: t.id, kind: "oracle", judge: j, facts: [...Array(t.nfacts)].map((_, i) => ({ in: j === o.badJudge ? i < Math.round((o.oracle ?? 1) * t.nfacts) : true, any: true })) }]));
-  return { stage: "hr", tasks, readings: rs, controls: ctl, plan: { models: ["opus"], passes: { opus: 3 }, skillArms: ["none"] } };
+  const rd = { stage: "hr", tasks, readings: rs, controls: ctl, plan: { models: ["opus"], passes: { opus: 3 }, skillArms: ["none"] } };
+  o.mutate?.(rd);
+  return rd;
 }
 
 await section("d. Stage 1: the headroom rule", () => {
   const o = rule("headroom", stage1({}));
-  show(o, /^(Stage 1|Agreement|controls|cost|current smoke|R0|Verdict)/);
+  show(o, /^(Stage 1|Agreement|controls|cost|exposure|R0|Verdict)/);
   check("plain Opus at about 0.5 reads HEADROOM", verdict(o).startsWith("HEADROOM"));
-  check("it prints measured cost and cache-read share for every model and arm path stage 1 ran (Opus none and current, Sol none, particle-1 none)", ["cost none:opus", "cost current:opus", "cost none:sol", "cost none:particle"].every((k) => o.includes(k)));
+  check("it prints measured cost and cache-read share for every model and arm path a later item runs (Opus none, current and lens; Sol and particle-1 none and current)", ["cost none:opus", "cost current:opus", "cost lens:opus", "cost none:sol", "cost current:sol", "cost none:particle", "cost current:particle"].every((k) => o.includes(k)));
   const edge = (facts: number, inF: number) => verdict(rule("headroom", stage1({ facts, recallFacts: inF })));
   check("R0 exactly 0.75 (15 of 20 facts) is HEADROOM, the top edge included", edge(20, 15).startsWith("HEADROOM"));
   check("R0 0.80 is CEILING", edge(20, 16).startsWith("CEILING"));
@@ -147,21 +151,39 @@ await section("d. Stage 1: the headroom rule", () => {
   const dis = rule("headroom", stage1({ disagree: true }));
   check("positive agreement under 0.70 on the double read is JUDGE FAIL, FIX-METHOD, with no brief revision bought", verdict(dis).startsWith("JUDGE FAIL") && verdict(dis).includes("no brief revision"));
   check("a harness failure stops stage 1 for a B1 fix", verdict(rule("headroom", stage1({ harness: true }))).startsWith("HARNESS FAILURE"));
+  const opusNone = (rd: any) => rd.readings.filter((r: any) => r.arm === "none" && r.model === "opus");
+  const masked = (relabel: boolean) => stage1({ mutate: (rd) => { const p3 = opusNone(rd).filter((r: any) => r.pass === 3); rd.readings = rd.readings.filter((r: any) => !p3.includes(r)); rd.readings.push(...opusNone(rd).filter((r: any) => r.pass === 1).map((r: any) => ({ ...r, id: r.id + "-copy", pass: relabel ? 4 : 1 }))); } });
+  check("20 missing Opus none readings hidden by 20 copies of kept readings are refused (E_USAGE duplicated reading), never read as HEADROOM", refused(run("headroom", masked(false)), "duplicated reading"));
+  check("the same copies relabelled as a fourth pass are refused (E_USAGE, a pass outside 1 to 3)", refused(run("headroom", masked(true)), "outside 1 to 3"));
+  const withClean = stage1({ facts: 20, recallFacts: 3, mutate: (rd) => { rd.tasks.push({ id: "k0", cluster: "k0", source: "B", stratum: "clean", nfacts: 0 }); for (let p = 1; p <= 3; p++) rd.readings.push(reading(rd.tasks.at(-1), "ship", "none", "opus", p, 0.5)); } });
+  check("an Opus none reading on a clean task never enters R0: R0 0.15 stays HEADROOM, not FLOOR", verdict(rule("headroom", withClean)).startsWith("HEADROOM"));
+  check("a stage 1 reading on a task the readings don't hold is refused with E_USAGE", refused(run("headroom", stage1({ mutate: (rd) => { rd.readings[0].task = "nope"; } })), "names a task the readings do not hold"));
+  check("a stage 1 reading whose label count differs from its key is refused with E_USAGE", refused(run("headroom", stage1({ mutate: (rd) => { rd.readings[0].facts.pop(); } })), "fact labels for a task with"));
 });
 
 await section("e. The projection check from measured costs", () => {
-  const prices = { opus: { in: 4, out: 20 }, sol: { in: 2, out: 10 }, particle: { in: 0.1, out: 1 } };
-  const it = (item: string, rs: any[], judgeN: number) => ({ item, readings: rs, judgeN, inputTokens: { opus: 100000, sol: 100000, particle: 100000 } });
-  const measured = { "none:opus": 0.4, "current:opus": 0.45, "none:sol": 0.2, "none:particle": 0.02, "lens:opus": 0.4, "current:sol": 0.22, "current:particle": 0.02 };
-  const o = rule("projection", { items: [it("tbv-dev-base", [{ model: "opus", arm: "none", n: 88 }, { model: "opus", arm: "current", n: 132 }, { model: "opus", arm: "lens", n: 88 }, { model: "sol", arm: "none", n: 88 }, { model: "sol", arm: "current", n: 88 }, { model: "particle", arm: "none", n: 88 }, { model: "particle", arm: "current", n: 88 }], 660), it("tbv-climb-1", [{ model: "opus", arm: "principle", n: 132 }], 132)], measured, judgePerReading: 0.07, prices });
+  const prices = PRICES;
+  const it = (item: string, rs: any[], judgeN: number, first = 120000) => ({ item, readings: rs, judgeN, inputTokens: { opus: first, sol: first, particle: first } });
+  const measured: Record<string, number> = {};
+  for (const l of rule("headroom", stage1({})).split("\n")) { const m = /^cost (\w+:\w+): \d+ readings, mean \$([\d.]+)/.exec(l); if (m) measured[m[1]!] = Number(m[2]); }
+  say("    measured, from stage 1's printed cost lines: " + Object.entries(measured).map(([k, v]) => k + " $" + v.toFixed(2)).join(", "));
+  const base = [{ model: "opus", arm: "none", n: 88 }, { model: "opus", arm: "current", n: 132 }, { model: "opus", arm: "lens", n: 88 }, { model: "sol", arm: "none", n: 88 }, { model: "sol", arm: "current", n: 88 }, { model: "particle", arm: "none", n: 88 }, { model: "particle", arm: "current", n: 88 }];
+  const pr = run("projection", { items: [it("tbv-dev-base", base, 660), it("tbv-climb-1", [{ model: "opus", arm: "principle", n: 132 }], 132)], measured, judgePerReading: 0.07, prices });
+  const o = pr.stdout;
   show(o, /./);
-  check("each cap is 1.15 times its projection plus one round (4 readings) at the worst case of its costliest model", /tbv-climb-1: projected \$68\.64, round worst case \$7\.68, cap \$87/.test(o));
+  check("the projection of tbv-dev-base from the costs stage 1 printed covers every path it runs (lens on Opus, current on Sol and particle-1 included)", pr.status === 0 && /^tbv-dev-base: projected/m.test(o));
+  check("each cap is 1.15 times its projection plus one round (4 readings) at the worst case of its costliest model: four sends at 130,000 tokens and up, input at the cache-write rate", /tbv-climb-1: projected \$68\.64, round worst case \$12\.17, cap \$92\.00/.test(o));
+  const big = run("projection", { items: [it("tbv-climb-1", [{ model: "opus", arm: "principle", n: 132 }], 132, 150000)], measured, judgePerReading: 0.07, prices });
+  check("a measured first send above 130,000 tokens raises the round worst case (150,000 gives $13.77)", /round worst case \$13\.77/.test(big.stdout));
   const r = run("projection", { items: [it("x", [{ model: "sol", arm: "principle", n: 10 }], 0)], measured: { "none:opus": 0.4 }, judgePerReading: 0.07, prices });
   check("a later item on a model and arm path stage 1 didn't measure is refused", r.status === 2 && r.stderr.includes("no measured cost for principle:sol"));
+  check("its error line starts with its reason code (E_USAGE), as AGENTS.md asks", refused(r, "no measured cost"));
+  const noScorer = spawnSync("bun", [join(HERE, "tbv-rule.ts"), "admit", join(OUT, "admit-none.json")], { encoding: "utf8", env: KEYLESS });
+  check("a missing GSTACK_EVALS_SCORER exits 2 with a line that starts with E_USAGE", noScorer.status === 2 && noScorer.stderr.startsWith("E_USAGE"));
 });
 
 await section("f. The all-in check before stage 3", () => {
-  const base = { crewSpent: 60, crewRest: 190, settled: 560, reserved: 0, unknown: 0, heldCap: 784, thirdPassCap: 130, capyCap: 190 };
+  const base = { crewSpent: 60, crewRest: 190, settled: 560, reserved: 0, unknown: 0, heldCap: 789, thirdPassCap: 135, capyCap: 190 };
   const v = (x: Partial<typeof base>) => verdict(rule("allin", { ...base, ...x }));
   check("room for everything runs the third Opus pass", v({}).startsWith("STAGE 3 WITH THE THIRD OPUS PASS"));
   check("no room for the third pass runs two passes (the third pass's line goes first)", v({ settled: 900 }).startsWith("STAGE 3, TWO PASSES"));
@@ -213,6 +235,28 @@ await section("g. Stage 3 and the dev read: families, verdicts, flags and refusa
   const orphan = held(R); (orphan.readings as any[])[0].task = "nope";
   check("a reading on a task the readings don't hold is refused", run("compare", orphan).status === 2);
   check("a harness failure prints and its lost readings count against coverage", /harness failures: 1/.test(rule("compare", held(R, { mutate: (r) => { if (r.id === "r7") r.status = "harness"; } }))));
+  check("with nothing amiss, no contrast on Opus carries a flag", !/^(skill layer|capy) opus [^\n]*flags:/m.test(o));
+  const curExp = rule("compare", held(R, { capy: true, mutate: (r) => { if (r.arm === "current" && r.model === "opus" && u("x", r.id) < 0.55) r.exposed = false; } }));
+  show(curExp, /^skill layer opus principle - current/);
+  check("current exposure under 0.80 makes principle - current untested (exposure), not helps", /skill layer opus principle - current: [^\n]*untested \(exposure/.test(curExp));
+  check("the same holds in the capy family", /capy opus principle - current: [^\n]*untested \(exposure/.test(curExp));
+  check("each contrast prints both arms' exposure rates", /skill layer opus principle - current: [^\n]*exposure principle 1\.000, current 0\.\d{3}/.test(curExp));
+  const caveats = rule("compare", held(R, { capy: true, mutate: (r) => { if (r.arm === "principle" && r.task.startsWith("k")) r.unsupported = 5; } }));
+  show(caveats, /^(skill layer|capy) opus principle - none/);
+  check("principle inventing caveats on clean tasks, with no change elsewhere, flags its helps verdict (more unsupported claims)", /skill layer opus principle - none: [^\n]*verdict helps; flags: more unsupported claims/.test(caveats));
+  check("the clean-task flag covers the capy family too", /capy opus principle - none: [^\n]*verdict helps; flags: more unsupported claims/.test(caveats));
+  check("current - none, with no clean-task change, carries no flag", !/skill layer opus current - none: [^\n]*flags:/.test(caveats));
+  const noReport = (r: any) => { if (r.task.startsWith("t") && u("nr", r.id) < 0.05) { r.status = "no-report"; r.facts = []; r.unsupported = 0; delete r.second; } };
+  const nr = run("compare", held(R, { capy: true, mutate: noReport }));
+  check("no-report readings (no fact labels, 0 unsupported) in every arm read as recall 0 and the held-out read runs to its verdicts", nr.status === 0 && /skill layer opus principle - none: [^\n]*verdict helps/.test(nr.stdout));
+  const padded = held(R, { mutate: (r) => { if (r.id === "r9") { r.status = "no-report"; r.unsupported = 0; } } });
+  check("a no-report reading that carries fact labels is refused with E_USAGE", refused(run("compare", padded), "no-report reading"));
+  const noUnsup = held(R, { mutate: (r) => { if (r.id === "r9") delete r.unsupported; } });
+  check("a scored reading without an unsupported count is refused with E_USAGE, not a crash", refused(run("compare", noUnsup), "unsupported"));
+  check("a duplicated reading's error line starts with E_USAGE", refused(run("compare", dup), "duplicated reading"));
+  const small = rule("compare", held(R, { nA: 15, nB: 15, capy: true }));
+  check("a read under 40 tasks prints MDD n/a, never the 40-task row", /skill layer opus principle - none: [^\n]*\(30 tasks\)[^\n]*MDD n\/a/.test(small) && /capy opus principle - none: [^\n]*\(15 tasks\)[^\n]*MDD n\/a/.test(small));
+  check("a read of exactly 40 tasks prints the 40-task row (13.1)", /skill layer opus principle - none: [^\n]*\(40 tasks\)[^\n]*MDD 13\.1 points/.test(rule("compare", held(R, { nA: 20, nB: 20 }))));
 });
 
 await section("h. The handoff check", () => {
@@ -220,6 +264,10 @@ await section("h. The handoff check", () => {
   check("an identifier dev shares (src/errors/codes.ts) never blocks", verdict(rule("handoff", { ...base, artifact: "dev report about src/errors/codes.ts" })) === "CLEAR");
   check("a held-out-only identifier blocks", verdict(rule("handoff", { ...base, artifact: "mentions test_held_only here" })) === "BLOCK");
   check("an 8-word run from held-out material blocks", verdict(rule("handoff", { ...base, artifact: "x beta gamma delta epsilon zeta eta theta iota y" })) === "BLOCK");
+  const words = { heldIds: ["test_held"], devText: "dev touches test_held_only", heldText: "the parser test failed after the config change was made" };
+  check("a held-out id that sits inside a longer dev name (test_held in test_held_only) is still held-out only, and blocks", verdict(rule("handoff", { ...words, artifact: "mentions test_held here" })) === "BLOCK");
+  check("an 8-word held-out run re-punctuated with commas and markdown still blocks", verdict(rule("handoff", { ...words, artifact: "The **parser test** failed, after `the config change` was made." })) === "BLOCK");
+  check("a held-out name that appears only inside a longer artifact name (held-repo-x in held-repo-xyz) does not block", verdict(rule("handoff", { ...base, artifact: "see held-repo-xyz" })) === "CLEAR");
 });
 
 await section("i. The treatment-diff leak check", () => {
@@ -228,15 +276,20 @@ await section("i. The treatment-diff leak check", () => {
   check("the same run already present in gstack at C is exempt", verdict(rule("leak", { addedLines: ["note: the parser test failed after the config change was made"], gstackAtC: "the parser test failed after the config change was made", material, names: [] })) === "CLEAN");
   check("a task's repository or test name in added lines is a HIT", verdict(rule("leak", { addedLines: ["see held-repo-x"], gstackAtC: "", material, names: ["held-repo-x"] })).startsWith("HIT"));
   check("a clean diff is CLEAN", verdict(rule("leak", { addedLines: ["lead with failures, skips and unverified claims"], gstackAtC: "", material, names: ["held-repo-x"] })) === "CLEAN");
+  check("added lines that re-punctuate task material are a HIT", verdict(rule("leak", { addedLines: ["Note: the parser test failed, after the config change was made."], gstackAtC: "unrelated text", material, names: [] })).startsWith("HIT"));
+  check("a task name that appears only inside a longer identifier (repo-x in held-repo-xyz) is not a hit", verdict(rule("leak", { addedLines: ["see held-repo-xyz"], gstackAtC: "", material, names: ["repo-x"] })) === "CLEAN");
 });
 
 await section("j. Money at caps and the ledger: one lease opened and settled per frozen item", async () => {
-  const ITEMS: [string, number, number][] = [["tbv-author", 229, 195], ["tbv-hr", 52, 38], ["tbv-dev-base", 250, 210], ["tbv-climb-1", 86, 68], ["tbv-climb-2", 86, 68], ["tbv-climb-3", 86, 68], ["tbv-held", 784, 675], ["tbv-held-p3", 130, 106]];
-  const HOST = 20, CREW = 300;
-  const paid = ITEMS.filter((i) => i[0] !== "tbv-held-p3").reduce((a, i) => a + i[1], 0) + HOST;
-  say("    paid caps without the third Opus pass $" + paid + ", crew reserve $" + CREW + ", all-in at caps $" + (paid + CREW) + "; the third pass's $130 line would make $" + (paid + CREW + 130));
-  check("the line at caps with the crew reserve is under $2,000 ($1,893)", paid + CREW === 1893 && paid + CREW <= 2000);
-  check("the third Opus pass's line does not fit at caps, so it runs only when the all-in check on actual spend passes", paid + CREW + 130 > 2000);
+  const all3 = ["opus", "sol", "particle"], opus = ["opus"];
+  const TABLE = [{ item: "tbv-author", projected: 195, cap: 229 }, { item: "tbv-hr", projected: 40.48, models: all3 }, { item: "tbv-dev-base", projected: 210, models: all3 }, { item: "tbv-climb-1", projected: 68, models: opus }, { item: "tbv-climb-2", projected: 68, models: opus }, { item: "tbv-climb-3", projected: 68, models: opus }, { item: "tbv-held", projected: 675, models: all3 }, { item: "runner-host", projected: 15, cap: 20 }, { item: "tbv-held-p3", projected: 106, models: opus, optional: true }];
+  const co = rule("caps", { items: TABLE, prices: PRICES, crewReserve: 300 });
+  show(co, /./);
+  check("caps come from capOf on section 14's projected column: tbv-hr $59, tbv-dev-base $254, each climb $91, tbv-held $789, tbv-held-p3 $135", ["tbv-hr: .*cap \\$59\\.00", "tbv-dev-base: .*cap \\$254\\.00", "tbv-climb-3: .*cap \\$91\\.00", "tbv-held: .*cap \\$789\\.00", "tbv-held-p3: .*cap \\$135\\.00"].every((p) => new RegExp(p).test(co)));
+  check("the line at caps with the crew reserve is under $2,000 ($1,624 paid, $1,924 all-in)", /paid at caps \$1624\.00 .*all-in at caps \$1924\.00/.test(co) && verdict(co).startsWith("UNDER"));
+  check("the third Opus pass's line does not fit at caps ($2,059), so it runs only when the all-in check on actual spend passes", /with the optional lines \$2059\.00/.test(co) && verdict(co).includes("don't fit at caps"));
+  const capOfItem = (item: string) => Number(new RegExp("^" + item + ": .*cap \\$([\\d.]+)", "m").exec(co)![1]);
+  const ITEMS: [string, number, number][] = TABLE.filter((t) => t.item.startsWith("tbv-")).map((t) => [t.item, capOfItem(t.item), t.projected]);
   const { ledgerCli } = await import(join(scorer, "src/runner/ledger/cli.ts"));
   const { openLease, settleLease, ledgerStatus } = await import(join(scorer, "src/runner/ledger/ledger.ts"));
   const { openLocalLedger } = await import(join(scorer, "src/runner/ledger/local.ts"));
