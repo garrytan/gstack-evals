@@ -21,7 +21,8 @@
 //   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, quoted or attached, which writes no text, and never a first line
 //   with a backslash outside single quotes, the rule segments() uses, since words() does not model bash escapes). A \n
 //   reads as a newline only where bash expands it: in printf's format and after echo -e (up to its \c); printf's
-//   arguments don't count, and a heredoc body counts only for cat, the one command read here that takes its stdin.
+//   arguments don't count. The command and its arguments are the shell words left after every redirection is cut, so
+//   a redirection may sit anywhere, and a heredoc body counts only for tee and a cat with no file operand.
 //   handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows can count the
 //   sessions that named it and still read unexposed.
 import { createHash } from "node:crypto";
@@ -103,7 +104,10 @@ function writeTargets(parts: string[]): string[] {
   const head = parts[0]!;
   const bare = head.replace(/'[^']*'|"(?:[^"\\]|\\.)*"|(?<!\S)#.*/g, (m) => (m[0] === "#" ? " ".repeat(m.length) : m[0] + "_".repeat(m.length - 2) + m[0]));
   const targets = [...bare.matchAll(/(?:^|[^\d&>])>>?/g)].flatMap((m) => /^\s*(["']?)([^\s"'<>|;&]+)\1/.exec(head.slice(m.index! + m[0].length))?.[2] ?? []);
-  if (parts.length === 1) return targets;
+  if (parts.length === 1) {
+    const doc = /^\s*tee(?:\s+-a)?\s+(["']?)([^\s"'<>|;&]+)\1\s+<<-?\s*(["']?)\w+\3\s*$/.exec(head);
+    return doc ? [...targets, doc[2]!] : targets;
+  }
   const tee = /^\s*tee(?:\s+-a)?\s+(["']?)([^\s"'<>|;&]+)\1\s*$/.exec(parts[1]!);
   return tee ? [...targets, tee[2]!] : [];
 }
@@ -136,20 +140,25 @@ function ceoReviewText(u: Use): string | null {
   if (!parts || !writeTargets(parts).some((t) => CEO_REVIEW.test(t))) return null;
   const [head, ...body] = u.input.command.split("\n");
   if (head!.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (m) => (m[0] === "'" ? "" : m)).includes("\\")) return "";
-  const pw = words(parts[0]!);
-  if (!pw) return "";
-  if (pw[0] === "printf") {
-    let i = 1;
-    for (; i < pw.length && pw[i] !== "--" && pw[i]!.startsWith("-"); i++) if (pw[i]!.startsWith("-v")) return "";
-    return expandEscapes(pw[pw[i] === "--" ? i + 1 : i] ?? "");
+  const line = parts[0]!;
+  const bare = line.replace(/'[^']*'|"(?:[^"\\]|\\.)*"|(?<!\S)#.*/g, (m) => (m[0] === "#" ? " ".repeat(m.length) : m[0] + "_".repeat(m.length - 2) + m[0]));
+  let argLine = "";
+  let at = 0;
+  for (const m of bare.matchAll(/(?:(?<!\S)[\d&]+)?[<>]+[-|]?\s*(?:&\d*-?|"[^"]*"|'[^']*'|[^\s"'<>|;&]+)/g)) (argLine += line.slice(at, m.index!) + " "), (at = m.index! + m[0].length);
+  const argv = words(argLine + line.slice(at));
+  if (!argv) return "";
+  const [cmd, ...args] = argv;
+  if (cmd === "printf") {
+    let i = 0;
+    for (; i < args.length && args[i] !== "--" && args[i]!.startsWith("-"); i++) if (args[i]!.startsWith("-v")) return "";
+    return expandEscapes(args[args[i] === "--" ? i + 1 : i] ?? "");
   }
-  if (pw[0] !== "echo") return pw[0] === "cat" ? body.join("\n") : "";
+  if (cmd === "tee" || (cmd === "cat" && args.every((a) => a === "-"))) return body.join("\n");
+  if (cmd !== "echo") return "";
   let escapes = false;
-  for (const w of pw.slice(1)) {
-    if (!/^-[neE]+$/.test(w)) break;
-    for (const c of w.slice(1)) if (c !== "n") escapes = c === "e";
-  }
-  const text = head!.replace(/^\s*echo(?:\s+-[neE]+)*\s+(["']?)/, "");
+  let i = 0;
+  for (; i < args.length && /^-[neE]+$/.test(args[i]!); i++) for (const c of args[i]!.slice(1)) if (c !== "n") escapes = c === "e";
+  const text = args.slice(i).join(" ");
   return escapes ? expandEscapes(/^(?:[^\\]|\\[\s\S])*?(?=\\c)/.exec(text)?.[0] ?? text) : text;
 }
 

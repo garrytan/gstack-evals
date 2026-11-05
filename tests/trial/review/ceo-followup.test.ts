@@ -16,6 +16,7 @@ import * as ceoCli from "../../../src/trial/review/ceo-cli.ts";
 import { autoplanCeoExposure, CEO_EXPOSURE_SHA256, handoffNamed } from "../../../src/trial/review/ceo-exposure.ts";
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, buildUnitTree, unitTaskId } from "../../../src/trial/review/unit.ts";
+import type { AgentSession } from "../../../src/trial/sandbox.ts";
 import type { AgentOutcome } from "../../../src/trial/trial.ts";
 import { harness, localSandbox } from "../../adapters/harness.ts";
 import { PANEL_REPO, planPanel } from "../../noloss/plan-panel.ts";
@@ -313,10 +314,12 @@ describe("escape expansion (#230 ruling): only printf's format and echo -e expan
     ];
     for (const c of real) expect([c, at(c)]).toEqual([c, true]);
   });
-  test("a heredoc body counts only for cat, which reads it; echo, printf and other commands ignore their stdin", () => {
+  test("a heredoc body counts for a bare cat and for tee, wherever the redirects sit; other commands read unwritten", () => {
     const doc = " <<'EOF'\n## Findings\n- High: no bound.\nEOF";
-    for (const c of ["echo 'x' > " + F + doc, "printf 'x' > " + F + doc, "true > " + F + doc]) expect([c, at(c)]).toEqual([c, false]);
-    for (const c of ["cat > " + F + doc, "cat >> " + F + doc, "cat" + doc.replace("\n", " > " + F + "\n"), "cat" + doc.replace("\n", " | tee " + F + "\n")]) expect([c, at(c)]).toEqual([c, true]);
+    const unwritten = ["echo 'x' > " + F + doc, "printf 'x' > " + F + doc, "true > " + F + doc, "sed 's/^## /# /' > " + F + doc, "sed '' > " + F + doc, "cat -n > " + F + doc, "cat notes.md > " + F + doc];
+    for (const c of unwritten) expect([c, at(c)]).toEqual([c, false]);
+    const written = ["cat > " + F + doc, "cat >> " + F + doc, "cat - > " + F + doc, "cat" + doc.replace("\n", " > " + F + "\n"), "cat" + doc.replace("\n", " | tee " + F + "\n"), "> " + F + " cat" + doc, ">" + F + " cat" + doc, "tee " + F + doc, "tee -a " + F + doc];
+    for (const c of written) expect([c, at(c)]).toEqual([c, true]);
   });
 });
 
@@ -364,7 +367,7 @@ function unitFixture(): PreparedUnit {
 }
 const unitsSeen: boolean[] = [];
 const BLOCK = FENCE + "ceo-outcome\n" + JSON.stringify({ top: [{ issue: "No opt-out for existing users.", evidence: "plan.md", fix: "Add a flag." }], forecast: 30 }) + "\n" + FENCE;
-async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, calls: number[], env: Record<string, string> = {}, reuse = new Map(), suite: ReviewRunInput["suite"] = { id: "ceo-followup", sha256: null }) {
+async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, calls: number[], env: Record<string, string> = {}, reuse = new Map(), suite: ReviewRunInput["suite"] = { id: "ceo-followup", sha256: null }, step: (pass: number) => string | null = () => null) {
   const h = harness(() => [{ type: "text", text: "unused" }]);
   const passOf = new Map<string, number>();
   const rig = {
@@ -383,9 +386,11 @@ async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, c
     recovery: null,
     driver: (o: any) => ({
       env: {},
-      run: async (): Promise<AgentOutcome> => {
+      run: async (session: AgentSession): Promise<AgentOutcome> => {
         const pass = passOf.get(o.proxy.slot)!;
         calls.push(pass);
+        const command = step(pass);
+        if (command) expect(session.exec(command, 10_000).exitCode).toBe(0);
         unitsSeen.push(existsSync(join(out, "units.json")));
         mkdirSync(o.out, { recursive: true });
         writeFileSync(join(o.out, "transcript.ndjson"), JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Review.\n\n" + BLOCK }] }, parent_tool_use_id: null }) + "\n");
@@ -484,6 +489,25 @@ describe("review finding 01M6P4PKCJ1CYR3TQ02HVJMWE8: --resume keeps the suite bi
     const calls: number[] = [];
     await ceoRun(out, unit, null, calls, {}, readReviewJournal(out), bound(unit.unit.id));
     expect(calls.sort()).toEqual([2, 3]);
+  }, 60_000);
+});
+
+describe("B2 ruling on #230: each session's ceo-review.md is copied into host/ before cleanup", () => {
+  // Value: protects=the smoke check compares findings_written with the ceo-review.md each session left on disk; fails_when=the copy is missing, differs by a byte, appears for a session that wrote none, or follows a symlink out of the work dir; why_new=the Captain's B2 ruling on #230 (2026-11-05); seam=runReviewUnits on a stub driver; no_claim=files written outside the work dir, which no copy reaches
+  test("a session that wrote the file leaves a byte-identical copy; one that wrote none, or only a symlink, leaves none", async () => {
+    const out = durable();
+    const unit = unitFixture();
+    const review = "# CEO-only review\n## Findings\n- High: no bound.\t\n";
+    const steps: Record<number, string> = {
+      1: 'd="$GSTACK_STATE_ROOT/projects/demo/autoplan-run-1" && mkdir -p "$d" && printf \'# CEO-only review\\n## Findings\\n- High: no bound.\\t\\n\' > "$d/ceo-review.md" && printf x > ceo-review.md',
+      3: "ln -s /etc/hostname ceo-review.md",
+    };
+    await ceoRun(out, unit, null, [], {}, new Map(), undefined, (p) => steps[p] ?? null);
+    const dir = (p: number) => join(out, "runs", OPUS, "none", unit.task, "p" + p);
+    expect(readFileSync(join(dir(1), "host", "ceo-review", ".gstack-home", "projects", "demo", "autoplan-run-1", "ceo-review.md"))).toEqual(Buffer.from(review));
+    expect(readFileSync(join(dir(1), "host", "ceo-review", "ceo-review.md"), "utf8")).toBe("x");
+    for (const p of [2, 3]) expect([p, existsSync(join(dir(p), "host", "ceo-review"))]).toEqual([p, false]);
+    for (const p of [1, 2, 3]) expect([p, existsSync(join(dir(p), "work", unit.task))]).toEqual([p, false]);
   }, 60_000);
 });
 
