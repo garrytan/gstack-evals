@@ -230,7 +230,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
   const sessionsFile = join(dir, "sessions.jsonl");
   const record = (line: Record<string, unknown>) => appendFileSync(sessionsFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
-  const lines: Array<{ at?: string; event?: string; item?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string }> = [];
+  const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string }> = [];
   for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
     try {
       const e = JSON.parse(line);
@@ -264,6 +264,12 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         const rec = await reconcileJournal(journal, o.local);
         for (const r of rec.refused) warn(r.code as ReasonCode, "recovering lease " + lease.lease_id + ": " + r.message);
       } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
+      const closed = new Set(lines.flatMap((e) => (e.event === "close" && e.id ? [e.id] : [])));
+      for (const e of lines) {
+        if (e.event !== "open" || e.lease_id !== lease.lease_id || !e.id || closed.has(e.id)) continue;
+        const m = o.local.meters(lease.lease_id).get(e.meter_id ?? "");
+        record({ event: "close", item, id: e.id, reason: "recovered", lease_id: lease.lease_id, meter_id: e.meter_id, spent_micros: m?.spent_micros ?? 0, unknown_micros: m?.unknown_micros ?? 0, unknown_calls: m?.unknown_calls ?? 0 });
+      }
       const stop = capped.get("") ?? capped.get(item);
       const close = settleLease(o.record, o.local, lease.lease_id, warn, stop ? stop.scope || "cap_stop" : undefined);
       log("STAGE_RECOVERED item=" + item + " lease=" + lease.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " unknown_calls=" + close.unknown_calls);

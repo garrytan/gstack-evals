@@ -911,4 +911,40 @@ describe("the outcome-skills session driver", () => {
     expect(readItem(w.record, "i-none").leases[0]!.close).toMatchObject({ spent_micros: 20_040, unknown_calls: 0 });
     expect(unknownFromRun(w.dir, ["i-none"])).toEqual({ calls: 1, micros: closed.json.unknown_micros });
   }, 60_000);
+
+  test("relaunch recovery writes a recovered close line for a session the killed driver left open, so unknownFromRun counts its unknown call and stops refusing (Capy review)", async () => {
+    const w = world({ "i-pe": 572 });
+    const at = (path: string) => JSON.stringify(join(import.meta.dir, "../..", path));
+    const child = join(w.root, "child.ts");
+    writeFileSync(child, [
+      "import { serveStages } from " + at("lanes/outcome-skills/driver/stage.ts") + ";",
+      "import { LocalLedger } from " + at("src/runner/ledger/local.ts") + ";",
+      "const fetch = () => new Promise<Response>(() => {});",
+      "const served = await serveStages({ record: " + JSON.stringify(w.record) + ", local: LocalLedger.open(" + JSON.stringify(join(w.root, "ledger.sqlite")) + '), run_id: "r1", envelope_host: "m1", machine: "m1", stages: [' + JSON.stringify(PE) + '], host: "127.0.0.1", dir: ' + JSON.stringify(w.dir) + ', fetch, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key" }, log: () => {} });',
+      'console.log("CONTROL " + served.control);',
+      "await new Promise(() => {});",
+    ].join("\n"));
+    const proc = Bun.spawn(["bun", child], { stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.getReader();
+    let out = "";
+    while (!out.includes("\n")) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      out += new TextDecoder().decode(value);
+    }
+    const control = out.match(/CONTROL (\S+)/)?.[1];
+    const a = await post(control + "/sessions", body("plan-eng-review:told", "a", 1));
+    expect(a.status).toBe(200);
+    void call(a.json).catch(() => {});
+    // gstack-timing-ok: lets the call reach the stub upstream and reserve before the kill; the assertions are on the ledger and the close line, never on elapsed time
+    await Bun.sleep(300);
+    proc.kill(9);
+    await proc.exited;
+    expect(() => unknownFromRun(w.dir, ["i-pe"])).toThrow(/open/);
+    const again = await w.serve([PE]);
+    expect(await again.stop()).toBe(0);
+    const recovered = readItem(w.record, "i-pe").leases[0]!.close!;
+    expect(recovered.unknown_calls).toBe(1);
+    expect(unknownFromRun(w.dir, ["i-pe"])).toEqual({ calls: 1, micros: recovered.unknown_micros });
+  });
 });
