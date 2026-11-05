@@ -1,0 +1,721 @@
+#!/usr/bin/env bun
+// ceo-rule.ts: the frozen rules of the CEO outcome eval, as three posts set them.
+//   2026-11-04-geva-285-ceo-outcome-prereg, the preregistration: every rule, number and cap the two amendments don't change.
+//   2026-11-05-geva-289-ceo-rule-guards-amendment: guards on the readings, and one rule change (an unjudged stock issue
+//     counts as a possible D).
+//   2026-11-05-geva-295-ceo-ladder-amendment: the 10x tier (G_R, strict10, rem and each unit's remedy fields), the
+//     CEILING fallback, stage 2's primary and Holm family read from the projection output the Captain recorded, each
+//     row's issues and fixes checked against its labels and word counts, and finite numbers only.
+// It reads files and prints; it calls no model and needs no key.
+//   bun ceo-rule.ts headroom <readings.json>     stage 1: leak drops, NO READ, STOCK FAIL, the band and the fallback, smoke admissions, agreement, ICC, the 10x tier
+//   bun ceo-rule.ts projection <projection.json> stage 1 to 2: the primary, per-item projection, derived caps and the frozen cut order
+//   bun ceo-rule.ts admission <admission.json>   round admission of fixed caps (stage 1's items)
+//   bun ceo-rule.ts allin <allin.json>           the all-in check before stage 2
+//   bun ceo-rule.ts compare <readings.json> <projection.txt> <sha256>
+//                                                stage 2: the primary families, verdicts and secondaries, against the
+//                                                projection output whose sha256 the Captain recorded with the caps
+// GSTACK_EVALS_SCORER names the scorer checkout whose src/runner/stats/paired.ts it uses.
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+type Label = "D" | "R1" | "R2" | "R3" | "none";
+type Rem = { sol: boolean | null; opus: boolean | null; sonnet: boolean | null };
+type Calls = { sol: Label | null; opus: Label | null; sonnet: Label | null; rem: Rem | null };
+type Model = "opus" | "sol" | "particle";
+type Arm = "none" | "autoplan-ceo" | "standalone" | "lens";
+type Kind = "scope" | "alternative" | "approach" | "not_build";
+type Unit = { id: string; kind: "changed" | "held"; strict: string | null; category: string; role: "maintainer" | "outside"; remedy: boolean; remedy_kind: Kind | null; decoy: "R1" | "R2" | "R3" | null; second_order: boolean };
+type Review = { id: string; unit: string; arm: Arm; model: Model; pass: number; smoke?: boolean; status: "scored" | "no-block" | "gap" | "incomplete"; exposed: boolean | null; labels: Calls[]; issues: string[]; words: number[]; fixes: string[]; fix_words: number[]; leak: { sol: boolean; opus: boolean }; forecast: number | null; usd: number; wall_s?: number };
+type Readings = { stage: 1 | 2; units: Unit[]; reviews: Review[]; stock: { unit: string; row: "A" | "B"; labels: Calls[] }[]; family?: Record<Model, Arm[]>; passes?: Record<Model, 1 | 2>; held_passes?: 1 | 2; lens?: boolean };
+type Form = "rem" | "norem";
+type Measure = "hit@3" | "G_R";
+
+const SEED = 20261104, DRAWS = 10_000, BOOT = 2_000;
+const BAND = { lo: 0.15, hi: 0.6 };
+const MODELS: Model[] = ["opus", "sol", "particle"];
+const ARMS: Arm[] = ["none", "autoplan-ceo", "standalone", "lens"];
+const GSTACK_ARMS: Arm[] = ["autoplan-ceo", "standalone"];
+const KINDS: Kind[] = ["scope", "alternative", "approach", "not_build"];
+const ONE_PASS_ROWS: [number, number][] = [[36, 0.3], [48, 0.26], [54, 0.24], [64, 0.22]];
+const MDD_ROWS: Record<1 | 2, [number, number][]> = { 2: [[36, 0.21], [48, 0.18], [54, 0.17], [64, 0.15]], 1: ONE_PASS_ROWS };
+// power-gr.txt's MDD025 rows at rho 0.5 and no rem flip, keyed "<regime>/<form>/<keyed share>/<passes>/<shift>".
+// A row reads "none<=X" when no lift the shift model can reach, up to X, has 80% power.
+const GR_ROWS: Record<string, [number, number | string][]> = {
+  "headroom/rem/1.00/2/all": [[36,0.14], [48,0.12], [54,0.11], [64,0.1]],
+  "headroom/rem/1.00/1/all": [[36,0.19], [48,0.17], [54,0.16], [64,0.14]],
+  "headroom/rem/1.00/2/hit": [[36,0.13], [48,0.11], [54,0.11], [64,0.1]],
+  "headroom/rem/1.00/1/hit": [[36,0.18], [48,0.15], [54,0.14], [64,0.13]],
+  "headroom/rem/0.75/2/all": [[36,0.14], [48,0.12], [54,0.11], [64,0.11]],
+  "headroom/rem/0.75/1/all": [[36,0.2], [48,0.16], [54,0.16], [64,0.15]],
+  "headroom/rem/0.75/2/hit": [[36,0.13], [48,0.12], [54,0.11], [64,0.1]],
+  "headroom/rem/0.75/1/hit": [[36,0.18], [48,0.16], [54,0.15], [64,0.13]],
+  "headroom/rem/0.50/2/all": [[36,0.15], [48,0.13], [54,0.12], [64,0.11]],
+  "headroom/rem/0.50/1/all": [[36,0.21], [48,0.18], [54,0.17], [64,0.15]],
+  "headroom/rem/0.50/2/hit": [[36,0.14], [48,0.12], [54,0.11], [64,0.11]],
+  "headroom/rem/0.50/1/hit": [[36,0.19], [48,0.17], [54,0.16], [64,0.14]],
+  "headroom/norem/-/2/all": [[36,0.16], [48,0.14], [54,0.13], [64,0.12]],
+  "headroom/norem/-/1/all": [[36,0.23], [48,0.19], [54,0.19], [64,0.16]],
+  "headroom/norem/-/2/hit": [[36,0.16], [48,0.14], [54,0.13], [64,0.12]],
+  "headroom/norem/-/1/hit": [[36,0.22], [48,0.19], [54,0.17], [64,0.16]],
+  "fallback/rem/1.00/2/all": [[36,0.11], [48,0.09], [54,0.09], [64,0.08]],
+  "fallback/rem/1.00/1/all": [[36,0.15], [48,0.13], [54,0.12], [64,0.11]],
+  "fallback/rem/1.00/2/hit": [[36,0.11], [48,0.09], [54,0.09], [64,0.08]],
+  "fallback/rem/1.00/1/hit": [[36,"none<=0.14"], [48,0.12], [54,0.12], [64,0.11]],
+  "fallback/rem/0.75/2/all": [[36,0.11], [48,0.1], [54,0.09], [64,0.09]],
+  "fallback/rem/0.75/1/all": [[36,0.15], [48,0.13], [54,0.13], [64,0.11]],
+  "fallback/rem/0.75/2/hit": [[36,0.11], [48,0.1], [54,0.09], [64,0.08]],
+  "fallback/rem/0.75/1/hit": [[36,0.15], [48,0.13], [54,0.12], [64,0.11]],
+  "fallback/rem/0.50/2/all": [[36,0.12], [48,0.1], [54,0.1], [64,0.09]],
+  "fallback/rem/0.50/1/all": [[36,0.16], [48,0.14], [54,0.13], [64,0.12]],
+  "fallback/rem/0.50/2/hit": [[36,0.12], [48,0.1], [54,0.1], [64,0.09]],
+  "fallback/rem/0.50/1/hit": [[36,0.16], [48,0.14], [54,0.13], [64,0.12]],
+  "fallback/norem/-/2/all": [[36,0.14], [48,0.12], [54,0.12], [64,0.1]],
+  "fallback/norem/-/1/all": [[36,0.19], [48,0.17], [54,0.16], [64,0.15]],
+  "fallback/norem/-/2/hit": [[36,0.14], [48,0.12], [54,0.11], [64,0.11]],
+  "fallback/norem/-/1/hit": [[36,0.19], [48,0.16], [54,0.15], [64,0.14]],
+};
+const S0 = 0.95, ANCHOR_V2 = 0.126;
+const PARALLEL = 3;
+const ALLOW: Record<Model, { plain: number; autoplan: number }> = { opus: { plain: 7.04, autoplan: 12 }, sol: { plain: 3.52, autoplan: 6 }, particle: { plain: 0.192, autoplan: 0.33 } };
+const allowanceOf = (m: Model, a: Arm) => (a === "autoplan-ceo" ? ALLOW[m].autoplan : ALLOW[m].plain);
+const GRID: Record<string, number> = { "0.25/0.3": 0.2, "0.25/0.5": 0.17, "0.40/0.3": 0.21, "0.40/0.5": 0.18, "0.55/0.3": 0.2, "0.55/0.5": 0.18 };
+const scorer = process.env.GSTACK_EVALS_SCORER;
+if (!scorer) throw new Error("E_USAGE GSTACK_EVALS_SCORER must name the scorer checkout");
+const { clusteredPairedDelta, holmAdjusted } = await import(join(scorer, "src/runner/stats/paired.ts"));
+
+const out: string[] = [];
+const say = (t: string) => out.push(t);
+const f3 = (x: number | null) => (x === null || Number.isNaN(x) ? "n/a" : x.toFixed(3));
+const usd = (x: number) => "$" + x.toFixed(2);
+const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+const fin = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length === 0 ? 0 : s.length % 2 ? s[(s.length - 1) / 2]! : (s[s.length / 2 - 1]! + s[s.length / 2]!) / 2;
+};
+// One word is a maximal run of characters outside JavaScript's \s class. B1's 40-word cut, the words field and this check
+// use this one rule.
+const wc = (s: string) => s.split(/\s+/).filter(Boolean).length;
+
+// The final label: D against not-D by two of three judges (Sol and Opus when they agree on it, else Sonnet), then among
+// non-D labels Sol and Opus when they agree, else Sonnet's when it is not D, else none. A missing call leaves the other two:
+// they decide D-ness when they agree on it; otherwise the issue is unjudged (null).
+function final(c: Calls): Label | null {
+  const votes = [c.sol, c.opus, c.sonnet];
+  const present = votes.filter((v) => v !== null) as Label[];
+  let isD: boolean;
+  if (c.sol !== null && c.opus !== null && (c.sol === "D") === (c.opus === "D")) isD = c.sol === "D";
+  else if (present.length === 3) isD = c.sonnet === "D";
+  else if (present.length === 2 && (present[0] === "D") === (present[1] === "D")) isD = present[0] === "D";
+  else return null;
+  if (isD) return "D";
+  const nonD = (v: Label | null) => (v !== null && v !== "D" ? v : null);
+  if (nonD(c.sol) && nonD(c.sol) === nonD(c.opus)) return c.sol;
+  return nonD(c.sonnet) ?? "none";
+}
+// The final rem, two of three as final() decides D: Sol and Opus when they agree, else Sonnet; with one call missing, the
+// other two when they agree; otherwise unjudged (null).
+function finalRem(r: Rem): boolean | null {
+  if (r.sol !== null && r.opus !== null && r.sol === r.opus) return r.sol;
+  const present = [r.sol, r.opus, r.sonnet].filter((v) => v !== null) as boolean[];
+  if (present.length === 3) return r.sonnet;
+  if (present.length === 2 && present[0] === present[1]) return present[0]!;
+  return null;
+}
+const top3 = (ls: Calls[]) => ls.slice(0, 3);
+const unjudged = (r: Review) => r.status === "scored" && top3(r.labels).some((c) => final(c) === null);
+const hit = (r: Review, judge?: "sol" | "opus") => (r.status === "scored" && top3(r.labels).some((c) => (judge ? c[judge] : final(c)) === "D") ? 1 : 0);
+const rankWeighted = (r: Review) => {
+  if (r.status !== "scored") return 0;
+  const i = top3(r.labels).findIndex((c) => final(c) === "D");
+  return i < 0 ? 0 : (3 - i) / 3;
+};
+const slotPrecision = (r: Review) => (r.status !== "scored" ? 0 : top3(r.labels).filter((c) => { const l = final(c); return l !== null && l !== "none"; }).length / 3);
+const crossJudge = (m: Model): "sol" | "opus" => (m === "sol" ? "opus" : "sol");
+const out_ = (r: Review) => r.status === "gap" || r.status === "incomplete" || unjudged(r);
+const sessionRan = (r: Review) => r.status !== "gap" && r.status !== "incomplete";
+
+// The 10x tier. rem counts only on a unit whose key has a remedy while rem is in G_R ("rem" form). G_R is kept in
+// twelfths so the band's edges compare exactly: 6 h3 + 3 h1 + 3 rem on a keyed unit, 8 h3 + 4 h1 otherwise.
+const keyed = (u: Unit, form: Form) => form === "rem" && u.remedy;
+const firstD = (r: Review) => (r.status === "scored" ? top3(r.labels).findIndex((c) => final(c) === "D") : -1);
+const h1 = (r: Review) => (firstD(r) === 0 ? 1 : 0);
+function rem(r: Review, u: Unit, form: Form): 0 | 1 | null {
+  if (!keyed(u, form)) return 0;
+  const i = firstD(r);
+  if (i < 0) return 0;
+  const v = finalRem(r.labels[i]!.rem!);
+  return v === null ? null : v ? 1 : 0;
+}
+const gr12 = (r: Review, u: Unit, form: Form, remAs: 0 | 1 = 0) => (keyed(u, form) ? 6 * hit(r) + 3 * h1(r) + 3 * (rem(r, u, form) ?? remAs) : 8 * hit(r) + 4 * h1(r));
+const strict10 = (r: Review, u: Unit, form: Form, remAs: 0 | 1 = 0) => (keyed(u, form) ? h1(r) * (rem(r, u, form) ?? remAs) : h1(r));
+const grOut = (r: Review, u: Unit, form: Form) => out_(r) || rem(r, u, form) === null;
+const decoyFirst = (r: Review, u: Unit) => (r.status === "scored" && r.labels.length > 0 && final(r.labels[0]!) === u.decoy ? 1 : 0);
+
+const PLAN = "E_USAGE readings must carry one row per planned session";
+const STOCK = "E_USAGE readings must carry stock rows A and B once on each changed unit";
+const STATUSES = ["scored", "no-block", "gap", "incomplete"];
+const LABELS = ["D", "R1", "R2", "R3", "none"];
+const callsOk = (ls: unknown) => Array.isArray(ls) && ls.every((c: any) => typeof c === "object" && c !== null && ["sol", "opus", "sonnet"].every((j) => c[j] === null || LABELS.includes(c[j])));
+const remOk = (v: any) => typeof v === "object" && v !== null && ["sol", "opus", "sonnet"].every((j) => v[j] === null || typeof v[j] === "boolean");
+// A judge call carries rem on a unit whose key has a remedy and null on any other unit.
+const remFault = (ls: Calls[], u: Unit) => ls.some((c) => (u.remedy ? !remOk(c.rem) : c.rem !== null));
+// The row contract: every row, incomplete ones included, carries these fields with these types.
+const rowFault = (r: Review) =>
+  typeof r.id !== "string" ? "id"
+  : !callsOk(r.labels) ? "labels"
+  : typeof r.leak?.sol !== "boolean" || typeof r.leak?.opus !== "boolean" ? "leak"
+  : !Array.isArray(r.words) || !r.words.every((w) => Number.isInteger(w) && w >= 0) ? "words"
+  : !Array.isArray(r.issues) || !r.issues.every((s) => typeof s === "string") ? "issues"
+  : r.issues.length !== r.words.length || r.issues.some((s, i) => wc(s) !== Math.min(40, r.words[i]!)) ? "issues against words"
+  : r.status !== "scored" && r.issues.length > 0 ? "issues on a row that isn't scored"
+  : r.smoke && r.labels.length > 0 ? "calls on a smoke row"
+  : r.status === "scored" && !r.smoke && r.labels.length !== Math.min(3, r.issues.length) ? "label count"
+  : !Array.isArray(r.fixes) || !r.fixes.every((s) => typeof s === "string") ? "fixes"
+  : !Array.isArray(r.fix_words) || !r.fix_words.every((w) => Number.isInteger(w) && w >= 0) ? "fix_words"
+  : r.fixes.length !== r.issues.length || r.fix_words.length !== r.issues.length || r.fixes.some((s, i) => wc(s) !== Math.min(40, r.fix_words[i]!)) ? "fixes against fix_words"
+  : !(r.exposed === null || typeof r.exposed === "boolean") ? "exposed"
+  : !(r.forecast === null || fin(r.forecast)) ? "forecast"
+  : !fin(r.usd) || r.usd < 0 ? "usd"
+  : !(r.wall_s === undefined || r.wall_s === null || (fin(r.wall_s) && r.wall_s >= 0)) ? "wall_s" : null;
+// The unit contract: the remedy fields, false, null, null and false on held units.
+const unitFault = (u: Unit) =>
+  typeof u.remedy !== "boolean" ? "remedy"
+  : !(u.remedy ? KINDS.includes(u.remedy_kind as Kind) : u.remedy_kind === null) ? "remedy_kind"
+  : !(u.decoy === null || ["R1", "R2", "R3"].includes(u.decoy)) ? "decoy"
+  : typeof u.second_order !== "boolean" ? "second_order"
+  : u.kind === "held" && (u.remedy || u.decoy !== null || u.second_order) ? "held unit's remedy fields" : null;
+const arrays = (rd: Readings) => { if (!Array.isArray(rd?.units) || !Array.isArray(rd.reviews) || !Array.isArray(rd.stock)) throw new Error("E_USAGE readings must carry units, reviews and stock as arrays"); };
+// Every guard runs before any rule reads a field. passesOf gives each unit's planned passes for a model; smoke is true for
+// stage 1, whose readings carry two smoke sessions per gstack arm and model, on the same two units for every cell.
+function checkPlan(rd: Readings, cells: [Arm, Model][], passesOf: (m: Model, u: Unit) => number, smoke: boolean) {
+  arrays(rd);
+  const dup = rd.units.find((u, i) => rd.units.findIndex((v) => v.id === u.id) !== i);
+  if (dup) throw new Error("E_USAGE readings must list each unit once; first duplicate: " + dup.id);
+  const odd = rd.units.find((u) => typeof u.id !== "string" || (u.kind !== "changed" && u.kind !== "held"));
+  if (odd) throw new Error("E_USAGE readings must give each unit a string id and kind changed or held; first: " + odd.id);
+  for (const u of rd.units) { const f = unitFault(u); if (f) throw new Error("E_USAGE readings unit breaks the unit contract on " + f + "; first: " + u.id); }
+  const units = new Map(rd.units.map((u) => [u.id, u])), planned = new Set(cells.map(([a, m]) => a + ":" + m)), seen = new Set<string>();
+  for (const r of rd.reviews) {
+    const at = (r.smoke ? "smoke " : "") + r.arm + " on " + r.model + ", unit " + r.unit + ", pass " + r.pass;
+    if (!STATUSES.includes(r.status)) throw new Error("E_USAGE readings row has a status outside scored, no-block, gap and incomplete; first: " + at + ", status " + JSON.stringify(r.status));
+    const fault = rowFault(r);
+    if (fault) throw new Error("E_USAGE readings row breaks the row contract on " + fault + "; first: " + at);
+    if (r.smoke) {
+      if (rd.stage !== 1 || !GSTACK_ARMS.includes(r.arm) || !MODELS.includes(r.model) || !units.has(r.unit) || r.pass !== 1) throw new Error(PLAN + "; first row outside the plan: " + at);
+      const k = "smoke:" + r.arm + ":" + r.model + ":" + r.unit;
+      if (seen.has(k)) throw new Error(PLAN + "; first duplicate: " + at);
+      seen.add(k);
+      continue;
+    }
+    if (!planned.has(r.arm + ":" + r.model) || !units.has(r.unit) || !Number.isInteger(r.pass) || r.pass < 1 || r.pass > passesOf(r.model, units.get(r.unit)!)) throw new Error(PLAN + "; first row outside the plan: " + at);
+    if (remFault(r.labels, units.get(r.unit)!)) throw new Error("E_USAGE readings row breaks the row contract on rem; first: " + at);
+    const k = r.arm + ":" + r.model + ":" + r.unit + ":" + r.pass;
+    if (seen.has(k)) throw new Error(PLAN + "; first duplicate: " + at);
+    seen.add(k);
+  }
+  for (const [arm, model] of cells) for (const u of rd.units) for (let p = 1; p <= passesOf(model, u); p++)
+    if (!seen.has(arm + ":" + model + ":" + u.id + ":" + p)) throw new Error(PLAN + "; first missing: " + arm + " on " + model + ", unit " + u.id + ", pass " + p);
+  if (smoke) {
+    const pair = [...new Set(rd.reviews.filter((r) => r.smoke).map((r) => r.unit))];
+    if (pair.length !== 2) throw new Error("E_USAGE stage 1 readings must carry the smoke on two units, the same two for every gstack arm and model; units seen: " + (pair.join(", ") || "none"));
+    for (const m of MODELS) for (const a of GSTACK_ARMS) for (const u of pair)
+      if (!seen.has("smoke:" + a + ":" + m + ":" + u)) throw new Error(PLAN + "; first missing: smoke " + a + " on " + m + ", unit " + u);
+  }
+  const stock = new Set<string>();
+  for (const s of rd.stock) {
+    const at = "row " + s.row + " on unit " + s.unit;
+    if (!callsOk(s.labels)) throw new Error("E_USAGE readings stock row breaks the row contract on labels; first: " + at);
+    if (s.labels.length !== 3) throw new Error("E_USAGE readings stock row breaks the row contract on label count; first: " + at);
+    if ((s.row !== "A" && s.row !== "B") || units.get(s.unit)?.kind !== "changed") throw new Error(STOCK + "; first row outside the plan: " + at);
+    if (remFault(s.labels, units.get(s.unit)!)) throw new Error("E_USAGE readings stock row breaks the row contract on rem; first: " + at);
+    if (stock.has(s.row + ":" + s.unit)) throw new Error(STOCK + "; first duplicate: " + at);
+    stock.add(s.row + ":" + s.unit);
+  }
+  for (const u of rd.units) if (u.kind === "changed") for (const row of ["A", "B"])
+    if (!stock.has(row + ":" + u.id)) throw new Error(STOCK + "; first missing: row " + row + " on unit " + u.id);
+}
+const checkStage1 = (rd: Readings) => checkPlan(rd, [["none", "opus"], ["none", "sol"], ["none", "particle"]], (m) => (m === "opus" ? 3 : 2), true);
+
+// review-units runs a round only when spent plus every session in it at its allowance fits under the item's cap
+// (src/trial/review/run.ts, the round loop). A round holds max(1, floor(parallel / arms)) unit-passes, each with every arm.
+function roundsAdmit(m: Model, arms: Arm[], up: number, spend: (a: Arm) => number, cap: number) {
+  const per = Math.max(1, Math.floor(PARALLEL / Math.max(1, arms.length)));
+  const worstPer = sum(arms.map((a) => allowanceOf(m, a))), spendPer = sum(arms.map(spend));
+  const rounds = Math.ceil(up / per), fullRound = Math.min(per, up) * worstPer;
+  let spent = 0;
+  for (let done = 0, r = 1; done < up; done += per, r++) {
+    const worst = Math.min(per, up - done) * worstPer;
+    if (spent + worst > cap + 1e-9) return { ok: false, round: r, rounds, spent, worst, fullRound };
+    spent += Math.min(per, up - done) * spendPer;
+  }
+  return { ok: true, round: 0, rounds, spent, worst: 0, fullRound };
+}
+
+function leakDrops(rd: Readings): Set<string> {
+  const flagged = new Map<string, number>();
+  for (const r of rd.reviews) if (!r.smoke && r.leak.sol && r.leak.opus) flagged.set(r.unit, (flagged.get(r.unit) ?? 0) + 1);
+  return new Set([...flagged].filter(([, n]) => n >= 2).map(([u]) => u));
+}
+
+// An unjudged stock issue (final label null) counts as a possible D (the guard amendment's one rule change). unjudged counts
+// the units that reach the count only through one; the note prints only when there is at least one.
+function stockHits(rd: Readings, ids: Set<string>) {
+  const any = (u: string, f: (l: Label | null) => boolean) => rd.stock.filter((s) => s.unit === u).some((s) => top3(s.labels).some((c) => f(final(c))));
+  const hits = [...ids].filter((u) => any(u, (l) => l === "D" || l === null));
+  const unjudged = hits.filter((u) => !any(u, (l) => l === "D")).length;
+  return { n: hits.length, note: unjudged ? "; " + unjudged + " of them only through an unjudged issue, counted as a possible D" : "" };
+}
+// The stock fix control: a keyed unit counts when any stock issue's final rem is yes or unjudged (a possible rem).
+function stockFix(rd: Readings, ids: Set<string>, units: Map<string, Unit>) {
+  const any = (u: string, f: (v: boolean | null) => boolean) => rd.stock.filter((s) => s.unit === u).some((s) => top3(s.labels).some((c) => f(finalRem(c.rem!))));
+  const keyedIds = [...ids].filter((u) => units.get(u)!.remedy);
+  const hits = keyedIds.filter((u) => any(u, (v) => v !== false));
+  const unjudged = hits.filter((u) => !any(u, (v) => v === true)).length;
+  return { n: hits.length, of: keyedIds.length, note: unjudged ? "; " + unjudged + " of them only through an unjudged rem, counted as a possible rem" : "" };
+}
+
+function agreement(rd: Readings, units: Set<string>) {
+  let both = 0, solOnly = 0, opusOnly = 0, neither = 0;
+  const cells = [...rd.reviews.filter((r) => !r.smoke && units.has(r.unit) && r.status === "scored").flatMap((r) => top3(r.labels)), ...rd.stock.filter((s) => units.has(s.unit)).flatMap((s) => top3(s.labels))];
+  for (const c of cells) {
+    if (c.sol === null || c.opus === null) continue;
+    const s = c.sol === "D", o = c.opus === "D";
+    if (s && o) both++; else if (s) solOnly++; else if (o) opusOnly++; else neither++;
+  }
+  const n = both + solOnly + opusOnly + neither;
+  const po = n ? (both + neither) / n : NaN;
+  const ps = n ? ((both + solOnly) / n) * ((both + opusOnly) / n) + ((neither + opusOnly) / n) * ((neither + solOnly) / n) : NaN;
+  const psa = 2 * both + solOnly + opusOnly ? (2 * both) / (2 * both + solOnly + opusOnly) : NaN;
+  return { n, both, solOnly, opusOnly, neither, raw: po, pabak: 2 * po - 1, kappa: ps === 1 ? NaN : (po - ps) / (1 - ps), psa };
+}
+const agreementLine = (ag: ReturnType<typeof agreement>) => "n " + ag.n + "; both D " + ag.both + ", Sol only " + ag.solOnly + ", Opus only " + ag.opusOnly + ", neither " + ag.neither + "; positive agreement on D " + f3(ag.psa) + ", raw " + f3(ag.raw) + ", PABAK " + f3(ag.pabak) + ", kappa " + f3(ag.kappa);
+// Positive agreement on rem, Sol against Opus, over every rem cell: every top-three call of every scored review and every
+// stock call on a keyed unit. The gate holds when 2 both / (2 both + Sol only + Opus only) is at least 0.70, compared in
+// integers, and both judges say yes on at least REM_MIN_BOTH cells. 5 is the fewest shared yes cells at which a record with
+// every yes call shared puts the one-sided 95% Clopper-Pearson lower bound on the shared share of yes calls (2 both out of
+// 2 both + Sol only + Opus only) at 0.70 or above: 0.05^(1/10) = 0.741, where 4 cells give 0.05^(1/8) = 0.688.
+const REM_MIN_BOTH = 5;
+function remCells(rd: Readings, ids: Set<string>, units: Map<string, Unit>) {
+  const of = (u: string) => ids.has(u) && units.get(u)!.remedy;
+  return [...rd.reviews.filter((r) => !r.smoke && r.status === "scored" && of(r.unit)).flatMap((r) => top3(r.labels).map((c) => ({ u: r.unit, rem: c.rem! }))), ...rd.stock.filter((s) => of(s.unit)).flatMap((s) => top3(s.labels).map((c) => ({ u: s.unit, rem: c.rem! })))];
+}
+function remAgreement(cells: { u: string; rem: Rem }[]) {
+  let both = 0, solOnly = 0, opusOnly = 0, n = 0;
+  for (const { rem: r } of cells) {
+    if (r.sol === null || r.opus === null) continue;
+    n++;
+    if (r.sol && r.opus) both++; else if (r.sol) solOnly++; else if (r.opus) opusOnly++;
+  }
+  const den = 2 * both + solOnly + opusOnly;
+  return { n, both, solOnly, opusOnly, psa: den ? (2 * both) / den : NaN, pass: both >= REM_MIN_BOTH && 20 * both >= 7 * den };
+}
+// A seeded cluster bootstrap over units: the 2.5th and 97.5th percentiles of stat on resampled units.
+function boot(ids: string[], stat: (sample: string[]) => number): [number, number] | null {
+  if (!ids.length) return null;
+  let s = SEED >>> 0;
+  const rand = () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const xs: number[] = [];
+  for (let d = 0; d < BOOT; d++) { const v = stat(ids.map(() => ids[Math.floor(rand() * ids.length)]!)); if (!Number.isNaN(v)) xs.push(v); }
+  if (!xs.length) return null;
+  xs.sort((a, b) => a - b);
+  return [xs[Math.floor(0.025 * (xs.length - 1))]!, xs[Math.ceil(0.975 * (xs.length - 1))]!];
+}
+const ci = (b: [number, number] | null) => (b ? "[" + f3(b[0]) + ", " + f3(b[1]) + "]" : "n/a");
+
+// One-way ANOVA ICC of hit@3 across units with k passes each.
+function icc(rs: Review[]) {
+  const by = new Map<string, number[]>();
+  for (const r of rs) by.set(r.unit, [...(by.get(r.unit) ?? []), hit(r)]);
+  const groups = [...by.values()].filter((g) => g.length >= 2);
+  if (groups.length < 2) return NaN;
+  const k = sum(groups.map((g) => g.length)) / groups.length;
+  const all = groups.flat(), grand = sum(all) / all.length;
+  const msb = sum(groups.map((g) => g.length * (sum(g) / g.length - grand) ** 2)) / (groups.length - 1);
+  const msw = sum(groups.map((g) => sum(g.map((x) => (x - sum(g) / g.length) ** 2)))) / (all.length - groups.length);
+  return msb + (k - 1) * msw === 0 ? NaN : (msb - msw) / (msb + (k - 1) * msw);
+}
+
+const mddFrom = (rows: [number, number][], n: number) => {
+  if (n < 36) return null;
+  if (n >= rows[rows.length - 1]![0]) return rows[rows.length - 1]![1];
+  const i = rows.findIndex(([k]) => k > n);
+  const [n0, m0] = rows[i - 1]!, [n1, m1] = rows[i]!;
+  return m0 + ((n - n0) / (n1 - n0)) * (m1 - m0);
+};
+const mddAt = (n: number, passes: 1 | 2 = 2) => mddFrom(MDD_ROWS[passes], n);
+// A G_R contrast's MDD: the rows of stage 1's regime and G_R's form, at the keyed share at or below the measured share
+// (0.50 when it is under 0.50), shift "all", with the shift "hit" MDD beside it.
+const shareRow = (form: Form, share: number) => (form === "norem" ? "-" : share >= 1 ? "1.00" : share >= 0.75 ? "0.75" : "0.50");
+// mddFrom for G_R's rows: a "none<=X" row at or below n stands for every n up to the next row.
+const grFrom = (rows: [number, number | string][], n: number): number | string | null => {
+  if (n < 36) return null;
+  const at = [...rows].reverse().find(([k]) => k <= n)!, next = rows.find(([k]) => k > n);
+  if (typeof at[1] === "string" || !next || typeof next[1] === "string") return at[1];
+  return at[1] + ((n - at[0]) / (next[0] - at[0])) * (next[1] - at[1]);
+};
+const mddText = (m: number | string) => (typeof m === "string" ? m + " (no reachable lift has 80% power)" : m.toFixed(2));
+function grMdd(regime: "headroom" | "fallback", form: Form, share: number, passes: 1 | 2, n: number) {
+  const k = regime + "/" + form + "/" + shareRow(form, share) + "/" + passes + "/";
+  return { all: grFrom(GR_ROWS[k + "all"]!, n), hit: grFrom(GR_ROWS[k + "hit"]!, n), row: shareRow(form, share), under: form === "rem" && share < 0.5 };
+}
+const grMddText = (g: ReturnType<typeof grMdd>) => (g.all === null ? "n/a, under 36 units" : mddText(g.all) + ", hit-only " + mddText(g.hit!) + (g.row === "-" ? "" : ", keyed row " + g.row + (g.under ? ", which understates it: keyed share under 0.50" : "")));
+
+// The stage 1 reading both headroom and projection use: the frozen band on hit@3, then the 10x tier and the fallback.
+function stage1Read(rd: Readings) {
+  const drops = leakDrops(rd);
+  const units = new Map(rd.units.map((u) => [u.id, u]));
+  const changed = rd.units.filter((u) => u.kind === "changed" && !drops.has(u.id));
+  const ids = new Set(changed.map((u) => u.id));
+  const planned = changed.length * 3;
+  const opus = rd.reviews.filter((r) => !r.smoke && r.model === "opus" && r.arm === "none" && ids.has(r.unit));
+  const outs = opus.filter(out_).length;
+  const read = opus.filter((r) => !out_(r));
+  const m = sum(read.map((r) => hit(r))), n = read.length;
+  const { n: stock, note: stockNote } = stockHits(rd, ids);
+  const kept = new Set(rd.units.filter((u) => !drops.has(u.id)).map((u) => u.id));
+  const cells = remCells(rd, kept, units);
+  const remAg = remAgreement(cells);
+  const fix = stockFix(rd, ids, units);
+  const form: Form = remAg.pass && fix.n <= 1 ? "rem" : "norem";
+  const formWhy = form === "rem" ? "rem in" : !remAg.pass ? "rem out: " + (!(2 * remAg.both + remAg.solOnly + remAg.opusOnly) ? "no rem cell either judge called yes" : remAg.both < REM_MIN_BOTH ? "both judges say yes on " + remAg.both + " rem cells, under " + REM_MIN_BOTH : "positive agreement on rem " + f3(remAg.psa) + " under 0.70") : "rem out: the stock fix scores rem on " + fix.n + " keyed units, more than 1";
+  const uOf = (r: Review) => units.get(r.unit)!;
+  const gRead = opus.filter((r) => !grOut(r, uOf(r), form));
+  const gOut = opus.length - gRead.length, nG = gRead.length;
+  const g12 = sum(gRead.map((r) => gr12(r, uOf(r), form))), st = sum(gRead.map((r) => strict10(r, uOf(r), form)));
+  const gInBand = nG > 0 && g12 >= 3 * nG && g12 <= 6 * nG, stOk = nG > 0 && 5 * st <= nG, outOk = 10 * gOut <= planned;
+  // Unjudged rem must not decide the reading. FALLBACK also needs the band with every unjudged rem scored yes, and a
+  // saturated 10x reading also needs saturation with every unjudged rem scored no.
+  const nY = read.length, unj = read.length - nG;
+  const g12Y = sum(read.map((r) => gr12(r, uOf(r), form, 1))), stY = sum(read.map((r) => strict10(r, uOf(r), form, 1)));
+  const g12N = sum(read.map((r) => gr12(r, uOf(r), form, 0))), stN = sum(read.map((r) => strict10(r, uOf(r), form, 0)));
+  const yesInBand = nY > 0 && g12Y >= 3 * nY && g12Y <= 6 * nY && 5 * stY <= nY;
+  const sat = (g: number, s_: number, k: number) => g > 6 * k || 5 * s_ > k;
+  const band = { lo: Math.ceil(BAND.lo * n - 1e-9), hi: Math.floor(BAND.hi * n + 1e-9) };
+  let kind: "NO READ" | "STOCK FAIL" | "CEILING" | "FALLBACK" | "FLOOR" | "HEADROOM";
+  if (changed.length < 12 || n === 0 || outs / planned > 0.1) kind = "NO READ";
+  else if (stock > 1) kind = "STOCK FAIL";
+  else if (m / n > BAND.hi) kind = gInBand && stOk && outOk && yesInBand ? "FALLBACK" : "CEILING";
+  else if (m / n < BAND.lo) kind = "FLOOR";
+  else kind = "HEADROOM";
+  const tenX = kind !== "CEILING" ? null : form === "rem" && outOk && sat(g12, st, nG) && sat(g12N, stN, nY) ? "saturated (G_R " + f3(g12 / (12 * nG)) + ", strict10 " + f3(st / nG) + ", rem in, " + gOut + " of " + planned + " planned readings out): a saturation stop on both tiers" : "FIX-METHOD (judge), never saturation: " + (form === "norem" ? formWhy : !outOk ? "reviews unjudged for G_R, gaps and incomplete " + gOut + " of " + planned + " planned readings, over 10%" : unj + " unjudged rem decide the reading (left out: G_R " + f3(g12 / (12 * nG)) + ", strict10 " + f3(st / nG) + "; scored yes: G_R " + f3(g12Y / (12 * nY)) + ", strict10 " + f3(stY / nY) + "; scored no: G_R " + f3(g12N / (12 * nY)) + ", strict10 " + f3(stN / nY) + ")");
+  return { drops, units, changed, ids, planned, opus, outs, read, m, n, band, stock, stockNote, cells, remAg, fix, form, formWhy, gRead, gOut, nG, g12, st, gInBand, stOk, outOk, kind, tenX };
+}
+
+const smokeRows = (rd: Readings, model: Model, arm: Arm) => rd.reviews.filter((r) => r.smoke && r.model === model && r.arm === arm);
+const smokeAdmits = (sm: Review[]) => sm.length === 2 && sm.every((r) => r.exposed === true && r.status === "scored" && (r.wall_s ?? Infinity) <= 1800);
+
+function headroom(rd: Readings) {
+  checkStage1(rd);
+  const s = stage1Read(rd);
+  const { m, n, band } = s;
+  say("Stage 1 headroom rule (GEVA-285, as amended)");
+  say("Leak drops: " + s.drops.size + " unit(s); changed calibration units left: " + s.changed.length);
+  const ag = agreement(rd, new Set(rd.units.filter((u) => !s.drops.has(u.id)).map((u) => u.id)));
+  const verdict = s.kind === "NO READ" ? "NO READ (" + (s.changed.length < 12 ? "fewer than 12 changed units (" + s.changed.length + ")" : "gaps, unjudged and incomplete " + s.outs + " of " + s.planned + " planned Opus none readings, over 10%") + "): stop, FIX-METHOD"
+    : s.kind === "STOCK FAIL" ? "STOCK FAIL (a stock row hit D on " + s.stock + " of " + s.changed.length + " changed units" + s.stockNote + "; at most 1 allowed): stop, FIX-METHOD on the judge brief"
+    : s.kind === "CEILING" ? "CEILING (" + m + " of " + n + " = " + f3(m / n) + " > 0.60): stop"
+    : s.kind === "FALLBACK" ? "FALLBACK (CEILING on hit@3, " + m + " of " + n + " = " + f3(m / n) + " > 0.60; G_R " + f3(s.g12 / (12 * s.nG)) + " from 0.25 to 0.50, strict10 " + f3(s.st / s.nG) + " at most 0.20, " + s.gOut + " of " + s.planned + " planned readings out): stage 2's primary is G_R, " + s.form + " form"
+    : s.kind === "FLOOR" ? "FLOOR (" + m + " of " + n + " = " + f3(m / n) + " < 0.15): stop, FIX-METHOD"
+    : "HEADROOM (" + m + " of " + n + " = " + f3(m / n) + "; band edges at this n: " + band.lo + " to " + band.hi + ")";
+  say("Opus none hit@3: " + m + " of " + n + " = " + f3(n ? m / n : NaN) + "; gaps, unjudged and incomplete dropped " + s.outs + "; band edges at n " + n + ": HEADROOM " + band.lo + " to " + band.hi);
+  say("Stock rows: hit D on " + s.stock + " of " + s.changed.length + " changed units (at most 1)" + s.stockNote);
+  const rho = icc(s.read), p0 = n ? m / n : NaN;
+  const gp = [0.25, 0.4, 0.55].reduce((a, b) => (Math.abs(b - p0) < Math.abs(a - p0) ? b : a)), gr = Number.isNaN(rho) || rho < 0.4 ? 0.3 : 0.5;
+  say("Measured ICC " + f3(rho) + " at p0 " + f3(p0) + "; nearest power.txt row (48 changed units, Holm's first step): p0 " + gp.toFixed(2) + ", ICC " + gr.toFixed(1) + ", MDD " + GRID[gp.toFixed(2) + "/" + gr.toFixed(1)]!.toFixed(2) + " (decides nothing)");
+  for (const model of ["sol", "particle"] as Model[]) {
+    const rs = rd.reviews.filter((r) => !r.smoke && r.model === model && r.arm === "none" && s.ids.has(r.unit) && !out_(r));
+    const gs = rs.filter((r) => !grOut(r, s.units.get(r.unit)!, s.form));
+    say("Descriptive, " + model + " none hit@3: " + sum(rs.map((r) => hit(r))) + " of " + rs.length + "; G_R " + f3(gs.length ? sum(gs.map((r) => gr12(r, s.units.get(r.unit)!, s.form))) / (12 * gs.length) : NaN) + " on " + gs.length);
+  }
+  say("Agreement, Sol vs Opus on D: " + agreementLine(ag) + (ag.psa < 0.7 ? "; positive agreement under 0.70: one brief revision before stage 2's judging" : ""));
+  const nG = s.nG, gR = nG ? s.g12 / (12 * nG) : NaN, sR = nG ? s.st / nG : NaN;
+  const bandLabel = !nG ? "n/a" : s.g12 < 3 * nG ? "G_R under 0.25" : !s.gInBand ? "G_R over 0.50" : !s.stOk ? "strict10 over 0.20" : "in band";
+  say("10x tier, Opus none: G_R " + f3(gR) + " (" + s.g12 + " twelfths over " + nG + " readings), strict10 " + f3(sR) + ", h1 " + f3(nG ? sum(s.gRead.map(h1)) / nG : NaN) + "; band G_R 0.25 to 0.50 and strict10 at most 0.20: " + bandLabel + "; reviews unjudged for G_R, gaps and incomplete " + s.gOut + " of " + s.planned + " planned");
+  const keyedIds = [...s.ids].filter((u) => s.units.get(u)!.remedy);
+  const remCI = boot([...new Set(s.cells.map((c) => c.u))], (smp) => { const by = new Map<string, number>(); for (const u of smp) by.set(u, (by.get(u) ?? 0) + 1); return remAgreement(s.cells.flatMap((c) => Array(by.get(c.u) ?? 0).fill(c))).psa; });
+  say("Remedy: keyed on " + keyedIds.length + " of " + s.changed.length + " changed units (share " + f3(s.changed.length ? keyedIds.length / s.changed.length : NaN) + "); rem agreement, Sol vs Opus, n " + s.remAg.n + ", both yes " + s.remAg.both + ", Sol only " + s.remAg.solOnly + ", Opus only " + s.remAg.opusOnly + ", positive agreement " + f3(s.remAg.psa) + " " + ci(remCI) + "; stock fix scores rem on " + s.fix.n + " of " + s.fix.of + " keyed units (at most 1)" + s.fix.note + "; G_R form " + s.form + " (" + s.formWhy + ")");
+  tenXLines(s.opus.filter((r) => !out_(r)), s.units, s.form, "Opus none");
+  const rateOf = (rs: Review[]) => (rs.length ? sum(rs.map((r) => hit(r))) / rs.length : NaN);
+  const kRead = s.read.filter((r) => s.units.get(r.unit)!.remedy), uRead = s.read.filter((r) => !s.units.get(r.unit)!.remedy);
+  say("Opus none hit@3 on keyed units " + f3(rateOf(kRead)) + " (" + kRead.length + "), on unkeyed units " + f3(rateOf(uRead)) + " (" + uRead.length + ")");
+  const byUnit = (rs: Review[], f: (r: Review) => number) => (smp: string[]) => { const xs = smp.flatMap((u) => rs.filter((r) => r.unit === u)); return xs.length ? sum(xs.map(f)) / xs.length : NaN; };
+  const uIds = [...s.ids];
+  const kHit = boot(uIds, (smp) => S0 / byUnit(s.read, (r) => hit(r))(smp));
+  const sRate = byUnit(s.gRead, (r) => strict10(r, s.units.get(r.unit)!, s.form))(uIds);
+  say("k on hit@3 = 0.95 / hit@3 = " + f3(n && m ? S0 / (m / n) : NaN) + " " + ci(kHit) + "; k on strict10 = " + (sRate > 0 ? f3(S0 / sRate) + " " + ci(boot(uIds, (smp) => S0 / byUnit(s.gRead, (r) => strict10(r, s.units.get(r.unit)!, s.form))(smp))) : "not estimable (strict10 is 0 on every reading)") + "; 0.95 is the ladder's pooled s0 (decides nothing)");
+  const share = s.changed.length ? keyedIds.length / s.changed.length : 0;
+  say("G_R MDD at 48 changed units, 2 passes, at this keyed share: " + grMddText(grMdd(s.kind === "FALLBACK" || s.kind === "CEILING" ? "fallback" : "headroom", s.form, share, 2, 48)) + " (power-gr.txt; decides nothing)");
+  const med = median(rd.reviews.filter((r) => !r.smoke && r.model === "opus" && r.arm === "none" && sessionRan(r)).map((r) => r.usd));
+  say("Budget anchor: Opus none median session " + usd(med) + ", the CEO anchor; both tiers read these sessions (ratio 1.00); seeded panel v2's median " + usd(ANCHOR_V2) + ", ratio " + f3(med / ANCHOR_V2) + ", from the move to real-outcome units (decides nothing)");
+  const admitted: string[] = [], untested: string[] = [];
+  for (const model of MODELS) for (const arm of GSTACK_ARMS) {
+    const sm = smokeRows(rd, model, arm);
+    const ok = smokeAdmits(sm);
+    (ok ? admitted : untested).push(arm + ":" + model);
+    say("Smoke " + arm + " on " + model + ": " + sm.filter((r) => r.exposed === true).length + " of " + sm.length + " exposed, " + sm.filter((r) => r.status === "scored").length + " with a block, longest " + Math.max(...sm.map((r) => r.wall_s ?? Infinity)) + " s, larger session " + usd(Math.max(...sm.map((r) => r.usd))) + " -> " + (ok ? "admitted" : "UNTESTED in stage 2"));
+  }
+  const blocked = untested.includes("autoplan-ceo:opus");
+  say("Verdict: " + verdict);
+  if (s.tenX) say("10x reading: " + s.tenX);
+  say(s.kind === "HEADROOM" || s.kind === "FALLBACK" ? (blocked ? "Stage 2: does not start; autoplan-ceo failed its smoke on Opus, FIX-METHOD on the harness, to the Captain" : "Stage 2: may start after the projection and all-in checks; untested arms: " + (untested.join(", ") || "none")) : "Stage 2: does not start");
+}
+
+// The 10x secondaries of one cell's changed-unit reviews (gaps, unjudged and incomplete already left out): G_R, strict10,
+// h1, the rem rate (hits on keyed units whose first D issue has rem) overall and by remedy kind, decoy-first over units
+// with a decoy, and hit@3 and G_R on second-order units.
+function tenXLines(rs: Review[], units: Map<string, Unit>, form: Form, label: string) {
+  const uOf = (r: Review) => units.get(r.unit)!;
+  const g = rs.filter((r) => !grOut(r, uOf(r), form));
+  const rate = (xs: Review[], f: (r: Review) => number) => (xs.length ? f3(sum(xs.map(f)) / xs.length) + " (" + xs.length + ")" : "n/a (0)");
+  const hitsK = g.filter((r) => keyed(uOf(r), form) && hit(r));
+  const kinds = KINDS.map((k) => k + " " + rate(hitsK.filter((r) => uOf(r).remedy_kind === k), (r) => rem(r, uOf(r), form) ?? 0)).join(", ");
+  const dec = rs.filter((r) => uOf(r).decoy !== null), so = rs.filter((r) => uOf(r).second_order), soG = g.filter((r) => uOf(r).second_order);
+  say(label + ": G_R " + rate(g, (r) => gr12(r, uOf(r), form) / 12) + ", strict10 " + rate(g, (r) => strict10(r, uOf(r), form)) + ", h1 " + rate(rs, h1) + "; rem rate " + rate(hitsK, (r) => rem(r, uOf(r), form) ?? 0) + ", by kind: " + kinds + "; decoy-first " + rate(dec, (r) => decoyFirst(r, uOf(r))) + "; second-order hit@3 " + rate(so, (r) => hit(r)) + ", G_R " + rate(soG, (r) => gr12(r, uOf(r), form) / 12));
+}
+
+// Items and their cells. Per-session spend: none from stage 1's median per model, a gstack cell from the larger of its two
+// smoke sessions, lens at 1.2 times Opus none's median. projected = unit-passes x per-session spend;
+// cap = ceil(1.25 x projected + one full round at allowance), so every round admits until spend passes 1.25 x projected.
+const ITEMS: [string, Model, Arm[]][] = [["ceo-o-cmp-opus-p", "opus", ["none", "standalone", "lens"]], ["ceo-o-cmp-opus-a", "opus", ["autoplan-ceo"]], ["ceo-o-cmp-sol-p", "sol", ["none", "standalone"]], ["ceo-o-cmp-sol-a", "sol", ["autoplan-ceo"]], ["ceo-o-cmp-particle-p", "particle", ["none", "standalone"]], ["ceo-o-cmp-particle-a", "particle", ["autoplan-ceo"]]];
+type Projection = { envelope: number; changed: number; held: number; stage1_judges: number; untested: string[]; stage1: Readings };
+function projection(p: Projection) {
+  checkStage1(p.stage1);
+  const smokeUntested = MODELS.flatMap((m) => GSTACK_ARMS.filter((a) => !smokeAdmits(smokeRows(p.stage1, m, a))).map((a) => a + ":" + m));
+  const listed = Array.isArray(p.untested) ? [...p.untested].sort().join(", ") : null;
+  if (listed !== [...smokeUntested].sort().join(", ")) throw new Error("E_USAGE the projection's untested list must name the cells stage 1's smoke leaves untested: " + (smokeUntested.join(", ") || "none") + "; got " + (listed === null ? "no list" : listed || "none"));
+  if (smokeUntested.includes("autoplan-ceo:opus")) throw new Error("E_USAGE autoplan-ceo failed its smoke on Opus; stage 2 does not start");
+  const s1 = p.stage1.reviews;
+  const per = (m: Model, a: Arm) => {
+    if (a === "lens") return 1.2 * median(s1.filter((r) => !r.smoke && r.model === "opus" && r.arm === "none" && sessionRan(r)).map((r) => r.usd));
+    if (a === "none") return median(s1.filter((r) => !r.smoke && r.model === m && r.arm === "none" && sessionRan(r)).map((r) => r.usd));
+    return Math.max(0, ...s1.filter((r) => r.smoke && r.model === m && r.arm === a).map((r) => r.usd));
+  };
+  const judges = p.stage1_judges * (64 / 20) * 3;
+  const judgeFloor = Math.max(70, Math.ceil(2 * judges));
+  type Step = { label: string; heldPasses: number; drop: string[]; onePass: Model[] };
+  const steps: Step[] = [
+    { label: "as planned", heldPasses: 2, drop: [], onePass: [] },
+    { label: "held units at 1 pass", heldPasses: 1, drop: [], onePass: [] },
+    { label: "standalone on particle-1 dropped", heldPasses: 1, drop: ["standalone:particle"], onePass: [] },
+    { label: "standalone on Sol dropped", heldPasses: 1, drop: ["standalone:particle", "standalone:sol"], onePass: [] },
+    { label: "lens dropped", heldPasses: 1, drop: ["standalone:particle", "standalone:sol", "lens:opus"], onePass: [] },
+    { label: "Sol and particle-1 cells at 1 pass", heldPasses: 1, drop: ["standalone:particle", "standalone:sol", "lens:opus"], onePass: ["sol", "particle"] },
+  ];
+  say("Stage 2 projection check (GEVA-285): envelope " + usd(p.envelope) + "; judges projected " + usd(judges) + " (stage 1's " + usd(p.stage1_judges) + " x 64/20 x 3), judge floor " + usd(judgeFloor));
+  const s = stage1Read(p.stage1);
+  say(s.kind === "HEADROOM" ? "Primary: hit@3 (stage 1 HEADROOM); G_R form " + s.form : s.kind === "FALLBACK" ? "Primary: G_R (stage 1 FALLBACK); G_R form " + s.form : "Primary: none (stage 1 " + s.kind + "); stage 2 does not start");
+  say("  per session: " + MODELS.flatMap((m) => (["none", "autoplan-ceo", "standalone", ...(m === "opus" ? ["lens"] : [])] as Arm[]).map((a) => a + ":" + m + " " + usd(per(m, a)))).join(", "));
+  for (const st of steps) {
+    const rows = ITEMS.map(([item, m, arms]) => {
+      const live = arms.filter((a) => !p.untested.includes(a + ":" + m) && !st.drop.includes(a + ":" + m));
+      const passes = st.onePass.includes(m) ? 1 : 2;
+      const up = p.changed * passes + p.held * Math.min(passes, st.heldPasses);
+      const projected = sum(live.map((a) => up * per(m, a)));
+      const full = live.length ? roundsAdmit(m, live, up, () => 0, Infinity).fullRound : 0;
+      const cap = live.length ? Math.ceil(1.25 * projected + full - 1e-6) : 0;
+      const admits = !live.length || roundsAdmit(m, live, up, (a) => 1.25 * per(m, a), cap).ok;
+      return { item, live, projected, cap, admits };
+    });
+    const total = sum(rows.map((r) => r.cap)) + judgeFloor;
+    say("  " + st.label + ": caps " + rows.map((r) => r.item + " " + usd(r.cap)).join(", ") + ", judges " + usd(judgeFloor) + "; total " + usd(total) + (total <= p.envelope + 1e-9 ? " -> fits" : " -> over"));
+    if (total <= p.envelope + 1e-9) {
+      say("  round admission: " + (rows.every((r) => r.admits) ? "every item's rounds admit at 1.25 times its projected spend" : "REFUSED on " + rows.filter((r) => !r.admits).map((r) => r.item).join(", ")));
+      say("Projection: PASS at '" + st.label + "'; record these caps; cells: " + rows.flatMap((r) => r.live.map((a) => a + ":" + r.item.split("-")[3])).join(", ") + "; held passes " + st.heldPasses + (st.onePass.length ? "; 1 pass on " + st.onePass.join(", ") : ""));
+      return;
+    }
+  }
+  say("Projection: STOP, over the envelope after every cut; to the Captain");
+}
+
+type Admission = { items: { item: string; model: Model; cap: number; up: number; arms: Arm[]; usd: Partial<Record<Arm, number>> }[] };
+function admission(a: Admission) {
+  say("Round admission at fixed caps (GEVA-285): a round runs only when spent plus every session in it at its allowance fits under the cap");
+  let bad = 0;
+  for (const it of a.items) {
+    const r = roundsAdmit(it.model, it.arms, it.up, (x) => it.usd[x] ?? 0, it.cap);
+    if (!r.ok) bad++;
+    say("  " + it.item + ": " + r.rounds + " round(s), a full round " + usd(r.fullRound) + " at allowance, cap " + usd(it.cap) + (r.ok ? ": every round admits (" + usd(r.spent) + " spent at the projection)" : ": REFUSED at round " + r.round + " (" + usd(r.spent) + " spent + " + usd(r.worst) + " > " + usd(it.cap) + ")"));
+  }
+  say(bad ? "Admission: FAIL on " + bad + " item(s)" : "Admission: PASS");
+}
+
+type AllIn = { crew_spent: number; crew_rest: number; stage1_settled: number; stage2_envelope: number };
+function allin(a: AllIn) {
+  const total = a.crew_spent + a.crew_rest + a.stage1_settled + a.stage2_envelope;
+  say("All-in check (GEVA-285): crew spent " + usd(a.crew_spent) + " + crew rest " + usd(a.crew_rest) + " + stage 1 settled " + usd(a.stage1_settled) + " + stage 2 envelope " + usd(a.stage2_envelope) + " = " + usd(total));
+  say(total <= 2000 + 1e-9 ? "All-in: PASS" : "All-in: OVER; stage 2 envelope drops to " + usd(Math.max(0, 2000 - a.crew_spent - a.crew_rest - a.stage1_settled)) + " and the projection runs again on it");
+}
+
+// The frozen plan: the projection's recorded output, bound by the sha256 the Captain recorded with the caps. It must hold
+// exactly one PASS line and one Primary line naming a primary, in the grammar projection prints.
+function frozenPlan(file: string | undefined, sha: string | undefined) {
+  if (!file || !sha) throw new Error("E_USAGE compare needs <readings.json> <projection.txt> <sha256>: the projection output and the sha256 the Captain recorded with the caps");
+  let raw: Buffer;
+  try { raw = readFileSync(file); } catch { throw new Error("E_USAGE compare can't read the projection output " + file); }
+  const got = createHash("sha256").update(raw).digest("hex");
+  if (got !== sha.toLowerCase()) throw new Error("E_USAGE the projection output's sha256 is " + got + ", not the recorded " + sha);
+  const lines = raw.toString("utf8").replace(/\r/g, "").split("\n");
+  if (lines.some((l) => l.startsWith("Projection: STOP"))) throw new Error("E_USAGE the projection output stopped over the envelope; stage 2 does not start");
+  const pass = lines.filter((l) => l.startsWith("Projection: PASS")), prim = lines.filter((l) => l.startsWith("Primary: "));
+  if (pass.length !== 1 || prim.length !== 1) throw new Error("E_USAGE the projection output must hold one PASS line and one Primary line; it holds " + pass.length + " and " + prim.length);
+  const pm = pass[0]!.match(/^Projection: PASS at '([^']+)'; record these caps; cells: ([a-z:, -]+); held passes ([12])(?:; 1 pass on ([a-z, ]+))?$/);
+  if (!pm) throw new Error("E_USAGE the projection output's PASS line doesn't parse");
+  const cells = pm[2]!.split(", ").map((c) => c.split(":") as [Arm, Model]);
+  if (cells.some((c) => c.length !== 2 || !ARMS.includes(c[0]) || !MODELS.includes(c[1]))) throw new Error("E_USAGE the projection output's PASS line names a cell outside the arms and models");
+  const one = (pm[4] ?? "").split(", ").filter(Boolean);
+  if (one.some((m) => !MODELS.includes(m as Model))) throw new Error("E_USAGE the projection output's PASS line names a model outside the plan");
+  const qm = prim[0]!.match(/^Primary: (hit@3|G_R) \(stage 1 (HEADROOM|FALLBACK)\); G_R form (rem|norem)$/);
+  if (!qm) throw new Error(/^Primary: none \(stage 1 [A-Z ]+\); stage 2 does not start$/.test(prim[0]!) ? "E_USAGE the projection output names no primary; stage 2 does not start" : "E_USAGE the projection output's Primary line doesn't parse");
+  if ((qm[1] === "hit@3") !== (qm[2] === "HEADROOM")) throw new Error("E_USAGE the projection output's Primary line pairs " + qm[1] + " with stage 1 " + qm[2]);
+  const family = Object.fromEntries(MODELS.map((m) => [m, cells.filter(([a, mm]) => mm === m && GSTACK_ARMS.includes(a)).map(([a]) => a)])) as Record<Model, Arm[]>;
+  const passes = Object.fromEntries(MODELS.map((m) => [m, one.includes(m) ? 1 : 2])) as Record<Model, 1 | 2>;
+  return { family, passes, held: Number(pm[3]) as 1 | 2, lens: cells.some(([a, m]) => a === "lens" && m === "opus"), primary: qm[1] as Measure, regime: qm[2] === "HEADROOM" ? ("headroom" as const) : ("fallback" as const), form: qm[3] as Form, sha: got };
+}
+
+function compare(rd: Readings, file?: string, sha?: string) {
+  arrays(rd);
+  if (!rd.family) throw new Error("E_USAGE stage 2 readings must carry family (the gstack arms that started stage 2 per model)");
+  const fam = rd.family;
+  const badFam = MODELS.find((m) => !Array.isArray(fam[m]) || !fam[m].every((a) => GSTACK_ARMS.includes(a)) || new Set(fam[m]).size !== fam[m].length);
+  if (badFam) throw new Error("E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: " + badFam);
+  const unlisted = rd.reviews.find((r) => !r.smoke && GSTACK_ARMS.includes(r.arm) && !fam[r.model]?.includes(r.arm));
+  if (unlisted) throw new Error("E_USAGE stage 2 family must include every gstack arm that has rows; first missing: " + unlisted.arm + " on " + unlisted.model);
+  const plan = rd.passes;
+  if (!plan || !MODELS.every((m) => plan[m] === 1 || plan[m] === 2)) throw new Error("E_USAGE stage 2 readings must carry passes (1 or 2 for every model, from the projection's PASS line)");
+  const held = rd.held_passes;
+  if (held !== 1 && held !== 2) throw new Error("E_USAGE stage 2 readings must carry held_passes (1 or 2, from the projection's PASS line)");
+  if (!(plan.opus === 2 && plan.sol === plan.particle && (plan.sol === 2 || held === 1))) throw new Error("E_USAGE stage 2 passes must be 2 on every model, or 2 on Opus with 1 on Sol and particle-1 and held_passes 1 (the projection's last cut); got opus " + plan.opus + ", sol " + plan.sol + ", particle " + plan.particle + ", held_passes " + held);
+  if (typeof rd.lens !== "boolean") throw new Error("E_USAGE stage 2 readings must carry lens (true when the projection's PASS line runs lens:opus)");
+  const fp = frozenPlan(file, sha);
+  const differ = (what: string, a: string, b: string) => { if (a !== b) throw new Error("E_USAGE stage 2 readings differ from the projection's PASS line on " + what + ": readings " + a + ", PASS line " + b); };
+  for (const m of MODELS) differ("the " + m + " family", [...fam[m]].sort().join(", ") || "empty", [...fp.family[m]].sort().join(", ") || "empty");
+  for (const m of MODELS) differ("passes on " + m, String(plan[m]), String(fp.passes[m]));
+  differ("held_passes", String(held), String(fp.held));
+  differ("lens", String(rd.lens), String(fp.lens));
+  checkPlan(rd, MODELS.flatMap((m) => [["none", m], ...fam[m].map((a) => [a, m]), ...(m === "opus" && rd.lens ? [["lens", m]] : [])] as [Arm, Model][]), (m, u) => (u.kind === "changed" ? plan[m] : Math.min(plan[m], held)), false);
+  const drops = leakDrops(rd);
+  const units = rd.units.filter((u) => !drops.has(u.id));
+  const unitMap = new Map(rd.units.map((u) => [u.id, u]));
+  const uOf = (r: Review) => unitMap.get(r.unit)!;
+  const changed = new Set(units.filter((u) => u.kind === "changed").map((u) => u.id));
+  const nChanged = changed.size;
+  const share = nChanged ? units.filter((u) => u.kind === "changed" && u.remedy).length / nChanged : 0;
+  const mdd = mddAt(nChanged);
+  say("Stage 2 comparison (GEVA-285, as amended)");
+  say("Frozen plan: the projection output's sha256 " + fp.sha + " matches the recorded value; primary " + fp.primary + " (stage 1 " + (fp.regime === "headroom" ? "HEADROOM" : "FALLBACK") + "); G_R form " + fp.form + "; family, passes, held passes and lens match its PASS line");
+  const { n: stock, note: stockNote } = stockHits(rd, changed);
+  const judgeSuspect = stock > 3;
+  const fix = stockFix(rd, changed, unitMap);
+  const form: Form = fp.form === "rem" && fix.n > 3 ? "norem" : fp.form;
+  const grM = (n: number, passes: 1 | 2) => grMdd(fp.regime, form, share, passes, n);
+  if (fp.primary === "hit@3") say("Leak drops: " + drops.size + "; changed units " + nChanged + ", held " + units.filter((u) => u.kind === "held").length + "; MDD at Holm's first step for this n " + (mdd === null ? "n/a (under 36 changed after leak drops: stop)" : mdd.toFixed(2)));
+  else say("Leak drops: " + drops.size + "; changed units " + nChanged + ", held " + units.filter((u) => u.kind === "held").length + "; G_R MDD at Holm's first step for this n " + (mdd === null ? "n/a (under 36 changed after leak drops: stop)" : grMddText(grM(nChanged, 2))) + "; keyed share " + f3(share));
+  if (mdd === null) { say("Verdict: STOP, under 36 changed units"); return; }
+  const ag = agreement(rd, new Set(units.map((u) => u.id)));
+  say("Stock rows: hit D on " + stock + " of " + nChanged + " changed units (at most 3)" + stockNote + (judgeSuspect ? ": STOCK FAIL, every contrast reads untested (judge)" : ""));
+  say("Stock fix: scores rem on " + fix.n + " of " + fix.of + " keyed changed units (at most 3)" + fix.note + (fp.form === "rem" && fix.n > 3 ? ": G_R contrasts read in the norem form, which the stock fix can't move" : "") + "; G_R form " + form);
+  say("Agreement, Sol vs Opus on D: " + agreementLine(ag));
+  const ra = remAgreement(remCells(rd, new Set(units.map((u) => u.id)), unitMap));
+  say("Agreement, Sol vs Opus on rem: n " + ra.n + ", both yes " + ra.both + ", Sol only " + ra.solOnly + ", Opus only " + ra.opusOnly + ", positive agreement " + f3(ra.psa) + " (decides nothing in stage 2)");
+  const live = rd.reviews.filter((r) => !r.smoke && !drops.has(r.unit));
+  const key = (r: Review) => r.unit + "#" + r.pass;
+  // A measure's score and its own drops: hit@3 drops gaps, unjudged and incomplete reviews; G_R also drops a review whose
+  // first D issue has an unjudged rem on a keyed unit. remAs scores that rem as 0 or 1 instead, for the bounds, which
+  // complete none's and the arm's unjudged rem in opposite directions.
+  const scoreOf = (ms: Measure, remAs?: 0 | 1) => (r: Review) => (ms === "hit@3" ? hit(r) : gr12(r, uOf(r), form, remAs ?? 0) / 12);
+  const outOf = (ms: Measure, remAs?: 0 | 1) => (r: Review) => (ms === "hit@3" || remAs !== undefined ? out_(r) : grOut(r, uOf(r), form));
+  const verdictOf = (p: number, d: number, untested: string | null, m: number | string | null) => (untested ? "untested (" + untested + "), p = 1 in Holm" : p <= 0.05 && d > 0 ? "helps" : p <= 0.05 && d < 0 ? "hurts" : "not distinguished (MDD " + (m === null ? "n/a, under 36 units" : mddText(m)) + ")");
+  for (const model of MODELS) {
+    const mine = live.filter((r) => r.model === model);
+    const passes = plan[model];
+    const none = new Map(mine.filter((r) => r.arm === "none" && changed.has(r.unit)).map((r) => [key(r), r]));
+    const contrasts = (ms: Measure, remNone?: 0 | 1, remArm?: 0 | 1) => {
+      const scN = scoreOf(ms, remNone), scA = scoreOf(ms, remArm), otN = outOf(ms, remNone), otA = outOf(ms, remArm);
+      const rows = fam[model].map((arm) => {
+        const armAll = mine.filter((r) => r.arm === arm);
+        const nonGap = armAll.filter((r) => sessionRan(r) && changed.has(r.unit));
+        const exposure = nonGap.length ? nonGap.filter((r) => r.exposed === true).length / nonGap.length : NaN;
+        const armMap = new Map(armAll.filter((r) => changed.has(r.unit)).map((r) => [key(r), r]));
+        const kept = [...none.keys()].filter((k) => armMap.has(k) && !otN(none.get(k)!) && !otA(armMap.get(k)!));
+        const coverage = none.size ? kept.length / none.size : 0;
+        const pairs = kept.map((k) => ({ id: k, cluster: k.split("#")[0]!, a: scN(none.get(k)!), b: scA(armMap.get(k)!) }));
+        const untested = judgeSuspect ? "judge: stock rows hit " + stock : coverage < 0.9 ? "coverage " + f3(coverage) + " under 0.90" : !(exposure >= 0.8) ? "exposure " + f3(exposure) + " under 0.80" : null;
+        const stats = pairs.length ? clusteredPairedDelta(pairs, { seed: SEED, draws: DRAWS }) : null;
+        const units_ = new Set(pairs.map((p) => p.cluster)).size;
+        return { arm, kept, stats, untested, exposure, coverage, mdd: ms === "hit@3" ? mddAt(units_, passes) : grM(units_, passes).all };
+      });
+      const adj = holmAdjusted(rows.map((r) => (r.untested || !r.stats ? 1 : r.stats.p_two_sided)));
+      return rows.map((r, i) => ({ ...r, p: adj[i]!, verdict: r.stats ? verdictOf(adj[i]!, r.stats.delta, r.untested, r.mdd) : "untested (" + r.untested + "), p = 1 in Holm" }));
+    };
+    const prim = fp.primary, sec: Measure = prim === "hit@3" ? "G_R" : "hit@3";
+    const noneKept = [...none.values()].filter((r) => !outOf(prim)(r));
+    const noneRate = noneKept.length ? sum(noneKept.map(scoreOf(prim))) / noneKept.length : NaN;
+    const ceiling = prim === "hit@3" ? noneRate > BAND.hi : noneKept.length > 0 && sum(noneKept.map((r) => gr12(r, uOf(r), form))) > 6 * noneKept.length;
+    say("Model " + model + ": none " + prim + " " + f3(noneRate) + " on " + noneKept.length + " unit-passes at " + passes + " pass" + (passes === 1 ? "" : "es") + "; Holm family " + (fam[model].join(", ") || "empty") + (ceiling ? "; CEILING flag on both contrasts" : ""));
+    const P = contrasts(prim), S = contrasts(sec);
+    const G = prim === "G_R" ? P : S, H = prim === "hit@3" ? P : S;
+    const remUnjudged = mine.some((r) => changed.has(r.unit) && !out_(r) && rem(r, uOf(r), form) === null);
+    const lo = remUnjudged ? contrasts("G_R", 1, 0) : null, hi = remUnjudged ? contrasts("G_R", 0, 1) : null;
+    const delta = (s: any) => (s.delta >= 0 ? "+" : "") + f3(s.delta);
+    P.forEach((r, i) => {
+      if (!r.stats) say("  " + r.arm + " - none: no usable pairs, coverage " + f3(r.coverage) + " -> untested (" + r.untested + "), p = 1 in Holm");
+      else say("  " + r.arm + " - none: " + f3(r.stats.mean_b) + " - " + f3(r.stats.mean_a) + " = " + delta(r.stats) + ", 95% CI " + (r.stats.ci95 ? "[" + f3(r.stats.ci95[0]) + ", " + f3(r.stats.ci95[1]) + "]" : "n/a") + ", p " + f3(r.stats.p_two_sided) + " (" + r.stats.p_method + "), Holm p " + f3(r.p) + ", exposure " + f3(r.exposure) + ", coverage " + f3(r.coverage) + " -> " + r.verdict + (ceiling ? " [CEILING]" : ""));
+      const cj = crossJudge(model), armMap = new Map(mine.filter((x) => x.arm === r.arm && changed.has(x.unit)).map((x) => [key(x), x]));
+      const hk = H[i]!.kept;
+      const sensPairs = hk.map((k) => ({ id: k, cluster: k.split("#")[0]!, a: hit(none.get(k)!, cj), b: hit(armMap.get(k)!, cj) }));
+      if (sensPairs.length) say("    cross-family judge (" + cj + ") alone: " + delta(clusteredPairedDelta(sensPairs, { seed: SEED, draws: DRAWS })) + " (decides nothing)");
+      const s2 = S[i]!;
+      say("    " + sec + " (secondary): " + (s2.stats ? delta(s2.stats) + ", 95% CI " + (s2.stats.ci95 ? "[" + f3(s2.stats.ci95[0]) + ", " + f3(s2.stats.ci95[1]) + "]" : "n/a") + ", Holm p " + f3(s2.p) + ", coverage " + f3(s2.coverage) + ", " + s2.verdict : "no usable pairs") + " (decides nothing)");
+      if (!lo || !hi) { say("    G_R bounds: no unjudged rem on " + model + "'s changed units"); return; }
+      const g = G[i]!, l = lo[i]!, h = hi[i]!, word = (v: string) => v.split(" (")[0];
+      const differs = word(l.verdict) !== word(g.verdict) || word(h.verdict) !== word(g.verdict);
+      say("    G_R bounds, unjudged rem against the arm (arm 0, none 1): " + (l.stats ? delta(l.stats) + ", " + word(l.verdict) : "no usable pairs") + "; for the arm (arm 1, none 0): " + (h.stats ? delta(h.stats) + ", " + word(h.verdict) : "no usable pairs") + (differs ? "; BOUNDS DIFFER from the G_R verdict (" + word(g.verdict) + ")" : ""));
+    });
+  }
+  say("Secondaries (decide nothing):");
+  const cells = [...new Set(live.map((r) => r.arm + ":" + r.model))].sort();
+  const rate = (rs: Review[]) => (rs.length ? f3(sum(rs.map((r) => hit(r))) / rs.length) : "n/a");
+  for (const c of cells) {
+    const [arm, model] = c.split(":") as [Arm, Model];
+    const all = live.filter((r) => r.arm === arm && r.model === model);
+    const began = all.filter((r) => r.status !== "incomplete");
+    const rs = all.filter((r) => !out_(r));
+    const ch = rs.filter((r) => changed.has(r.unit));
+    const fc = rs.filter((r) => r.forecast !== null);
+    const truth = (r: Review) => (changed.has(r.unit) ? 0 : 1);
+    const brier = fc.length ? sum(fc.map((r) => (r.forecast! / 100 - truth(r)) ** 2)) / fc.length : NaN;
+    const pos = fc.filter((r) => truth(r) === 1), neg = fc.filter((r) => truth(r) === 0);
+    let auc = NaN;
+    if (pos.length && neg.length) { let w = 0; for (const a of pos) for (const b of neg) w += a.forecast! > b.forecast! ? 1 : a.forecast! === b.forecast! ? 0.5 : 0; auc = w / (pos.length * neg.length); }
+    const hits = sum(ch.map((r) => hit(r))), cost = sum(all.map((r) => r.usd));
+    const words = all.flatMap((r) => r.words.slice(0, 3));
+    const strict = (from: string) => ch.filter((r) => { const u = units.find((x) => x.id === r.unit); return !!u?.strict && u.strict >= from; });
+    say("  " + c + ": hit@3 " + rate(ch) + ", rank-weighted " + f3(ch.length ? sum(ch.map(rankWeighted)) / ch.length : NaN) + ", slot precision " + f3(ch.length ? sum(ch.map(slotPrecision)) / ch.length : NaN) + ", Brier " + f3(brier) + ", AUC " + f3(auc) + ", per-protocol " + rate(ch.filter((r) => r.exposed !== false)) + ", strict from 2026-09-01 " + rate(strict("2026-09-01")) + " (" + strict("2026-09-01").length + "), from 2026-10-01 " + rate(strict("2026-10-01")) + " (" + strict("2026-10-01").length + "), maintainer " + rate(ch.filter((r) => units.find((u) => u.id === r.unit)?.role === "maintainer")) + ", outside " + rate(ch.filter((r) => units.find((u) => u.id === r.unit)?.role === "outside")) + ", no-block " + all.filter((r) => r.status === "no-block").length + "/" + began.length + ", gaps, unjudged or incomplete " + all.filter(out_).length + ", mean issue words " + (words.length ? (sum(words) / words.length).toFixed(1) : "n/a") + ", cost per review " + usd(began.length ? cost / began.length : 0) + ", per hit " + (hits ? usd(cost / hits) : "n/a"));
+    tenXLines(ch, unitMap, form, "    10x " + c);
+  }
+  const cats = [...new Set(units.filter((u) => u.kind === "changed").map((u) => u.category))].sort();
+  for (const cat of cats) {
+    const ids = new Set(units.filter((u) => u.category === cat).map((u) => u.id));
+    say("  category " + cat + ": " + cells.map((c) => { const [a, m] = c.split(":"); const rs = live.filter((r) => r.arm === a && r.model === m && ids.has(r.unit) && !out_(r)); return c + " " + sum(rs.map((r) => hit(r))) + "/" + rs.length; }).join(", "));
+  }
+  const opus = live.filter((r) => r.model === "opus" && changed.has(r.unit));
+  for (const [b, a] of [["lens", "none"], ["autoplan-ceo", "lens"]] as [Arm, Arm][]) {
+    const A = new Map(opus.filter((r) => r.arm === a && !out_(r)).map((r) => [key(r), r]));
+    const pairs = opus.filter((r) => r.arm === b && !out_(r) && A.has(key(r))).map((r) => ({ id: key(r), cluster: r.unit, a: hit(A.get(key(r))!), b: hit(r) }));
+    if (!pairs.length) { say("  opus " + b + " - " + a + ": not run"); continue; }
+    const s = clusteredPairedDelta(pairs, { seed: SEED, draws: DRAWS });
+    say("  opus " + b + " - " + a + ": " + (s.delta >= 0 ? "+" : "") + f3(s.delta) + ", 95% CI " + (s.ci95 ? "[" + f3(s.ci95[0]) + ", " + f3(s.ci95[1]) + "]" : "n/a"));
+  }
+}
+
+const [cmd, file, ...rest] = process.argv.slice(2);
+const data = JSON.parse(readFileSync(file ?? "", "utf8"));
+if (cmd === "headroom") headroom(data);
+else if (cmd === "projection") projection(data);
+else if (cmd === "admission") admission(data);
+else if (cmd === "allin") allin(data);
+else if (cmd === "compare") compare(data, rest[0], rest[1]);
+else throw new Error("E_USAGE ceo-rule.ts headroom|projection|admission|allin <file>, or compare <readings.json> <projection.txt> <sha256>");
+console.log(out.join("\n"));

@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Build the untold Lane B prompt for each F and TB2 task, byte for byte, keylessly.
+
+Instruction: Harbor's own Task loader (harbor @ f3a5a92, the Lane B pin) on the task directory, as the trial passes
+task.instruction to the agent. Prompt: quick/laneb/runner/agent/prompt_builder.build_prompt(wrapper, instruction,
+invoke=False, skill="") with the wrapper read by Path.read_text(), as laneb_agent.py does for an untold arm.
+Usage: build_prompts.py <gstack-evals checkout> <rebench export> <tb2 checkout> <tb2 tasks.json> <f-tasks> <tb2-tasks> <out>
+"""
+import hashlib, importlib.util, json, sys
+from pathlib import Path
+from harbor.models.task.task import Task
+
+co, rex, tb2, tb2json, ftasks, tb2tasks, out = map(Path, sys.argv[1:8])
+
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+
+pb = load("prompt_builder", co / "quick/laneb/runner/agent/prompt_builder.py")
+tree_digest = load("swerebench_r3a4", co / "quick/laneb/tasks/swerebench_r3a4.py").tree_digest
+wrapper = (co / "quick/laneb/runner/prompt-wrapper.md").read_text()
+pool = json.loads((co / "quick/laneb/tasks/swerebench-r3a4.json").read_text())
+want_f = {t["task_id"]: t["digest"] for t in pool["tasks"]}
+sel = json.loads(tb2json.read_text())
+want_t = {t["task_id"]: t["digest"] for t in sel["main"] + sel["reserves"] + sel.get("extension", [])}
+
+def ids(p): return [l.strip() for l in p.read_text().splitlines() if l.strip()]
+
+meta = []
+for inst, src, lst, want in (("f", rex, ftasks, want_f), ("tb2", tb2, tb2tasks, want_t)):
+    (out / inst).mkdir(parents=True, exist_ok=True)
+    for tid in ids(lst):
+        d = src / tid
+        got = "sha256:" + tree_digest(d)[0]
+        w = want[tid] if want[tid].startswith("sha256:") else "sha256:" + want[tid]
+        if got != w:
+            sys.exit(f"E_DIGEST {inst} {tid}: source digest {got} is not the pinned {w}")
+        instruction = Task(d).instruction
+        prompt = pb.build_prompt(wrapper, instruction, False, "")
+        b = prompt.encode("utf-8")
+        (out / inst / f"{tid}.txt").write_bytes(b)
+        raw = (d / "instruction.md").read_bytes()
+        meta.append([inst, tid, hashlib.sha256(b).hexdigest(), str(len(prompt)), str(len(prompt.encode("utf-16-le")) // 2),
+                     hashlib.sha256(raw).hexdigest(), "crlf" if b"\r" in raw else "lf", "same" if raw.decode("utf-8") == instruction else "differs"])
+(out / "prompts-meta.tsv").write_text("instrument\ttask\tprompt_sha256\tpy_chars\tjs_length\tinstruction_md_sha256\tnewlines\tharbor_vs_raw\n" + "".join("\t".join(r) + "\n" for r in meta))
+print(f"built {sum(1 for r in meta if r[0]=='f')} f and {sum(1 for r in meta if r[0]=='tb2')} tb2 prompts; wrapper sha256 {hashlib.sha256((co / 'quick/laneb/runner/prompt-wrapper.md').read_bytes()).hexdigest()}")

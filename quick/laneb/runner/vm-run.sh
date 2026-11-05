@@ -133,6 +133,10 @@ awk -F'\t' 'NR > 1 && $1 != "ok" { print $4 }' "$run/out/pulls.tsv" | while read
 done
 echo "pulls: $(wc -l < "$run/out/images.txt") images, $(awk -F'\t' 'NR > 1 { s += $3 } END { print s + 0 }' "$run/out/pulls.tsv") s waited at the rate limit"
 if [ -s "$run/out/pull-fails.txt" ]; then echo "an image did not pull (6 tries and up to 3 hours at the rate limit), infra: no paid trial started:" >&2; cat "$run/out/pull-fails.txt" >&2; exit 10; fi
+# L1 Amendment C: out/task-hooks.tsv logs, for each task, whether its pulled image or build context holds a Claude Code
+# UserPromptSubmit hook of its own (task-hooks.sh). It reads only the images pulled above and never stops the run.
+bash "$runner/task-hooks.sh" "$run" > "$run/out/task-hooks.tsv" 2> "$run/out/task-hooks.log" || true
+echo "task hooks: $(awk -F'\t' 'NR > 1 && $4 == "yes"' "$run/out/task-hooks.tsv" | wc -l) of $(awk 'NR > 1' "$run/out/task-hooks.tsv" | wc -l) tasks name a UserPromptSubmit hook, $(awk -F'\t' 'NR > 1 && $4 == "unknown"' "$run/out/task-hooks.tsv" | wc -l) unknown"
 if [ -f "$run/oracle.json" ]; then
   (cd "$run" && sg docker -c "harbor run -y -c '$run/oracle.json'") > "$run/out/oracle.log" 2>&1 || true
   # Every task in the oracle job needs a trial with reward 1; a task with no trial directory fails too.

@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admitG, authPaidFromLedger, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
+import { admitG, authPaidFromLedger, unknownFromRun, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
 import { m1Decide, meteredPricer, renderResizeMetered } from "../../src/runner/stats/g-resize.ts";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -29,7 +29,8 @@ const edit = (trials: SliceTrial[], hit: (t: SliceTrial, index: number) => boole
 };
 const input = (trials: SliceTrial[], o: Partial<AdmissionInput> = {}): AdmissionInput => ({
   arms: { none: NONE, told: { "plan-eng-review": PER, autoplan: AP } }, trials, planned_trials: 24,
-  exposure_sample: { "plan-eng-review": SAMPLE, autoplan: SAMPLE }, auth_paid_usd: 1.39, auth_extra_usd: 1.2, ...o,
+  exposure_sample: { "plan-eng-review": SAMPLE, autoplan: SAMPLE }, auth_paid_usd: 1.39, auth_extra_usd: 1.2,
+  unknown_calls: { none: { calls: 0, micros: 0 }, "plan-eng-review": { calls: 0, micros: 0 }, autoplan: { calls: 0, micros: 0 } }, ...o,
 });
 const noneSolved = (k: number) => {
   let i = 0;
@@ -162,6 +163,18 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
     expect(a.metered.told["plan-eng-review"].all_usd).toBeCloseTo((20 * 2.101 + 4 * 1.5) / 24, 12);
     expect(() => admitG(input(edit(slice(), (t, i) => t.arm === NONE && i === 0, { cost_usd: null })))).toThrow(/meter/);
   });
+
+  test("item 5's means are settled spend, and calls of unknown cost on each arm's leases print beside them, counted", () => {
+    const unknown = { none: { calls: 0, micros: 0 }, "plan-eng-review": { calls: 1, micros: 640_912 }, autoplan: { calls: 2, micros: 1_500_000 } };
+    const a = admitG(input(slice(), { unknown_calls: unknown }));
+    expect(a.metered.unknown_calls).toEqual(unknown);
+    for (const [key, want] of [["MULT", 0.955 / 0.191], ["M_PER", 2.101 / 0.955], ["M_AP", 4.775 / 0.955]] as const) expect(a.metered.inputs[key]).toBeCloseTo(want, 12);
+    expect(a.skills["plan-eng-review"].items[4]!.reading).toContain("calls of unknown cost, left out of the metered means: none 0 ($0.00 held), told 1 ($0.640912 held)");
+    expect(a.skills.autoplan.items[4]!.reading).toContain("told 2 ($1.50 held)");
+    expect(() => admitG(input(slice(), { unknown_calls: undefined as never }))).toThrow(/unknown cost/);
+    expect(() => admitG(input(slice(), { unknown_calls: { ...unknown, autoplan: { calls: -1, micros: 0 } } }))).toThrow(/unknown cost/);
+    expect(() => admitG(input(slice(), { unknown_calls: { ...unknown, none: { calls: 1, micros: 0.5 } } }))).toThrow(/unknown cost/);
+  });
 });
 
 describe("AUTH_PAID from the slice's U4 leases", () => {
@@ -190,5 +203,29 @@ describe("AUTH_PAID from the slice's U4 leases", () => {
     const rec = await record([5_000_000, 1_000_000], false);
     expect(() => authPaidFromLedger(rec, ["g-slice-author"], 12)).toThrow(/open/);
     expect(() => authPaidFromLedger(rec, ["g-nothing"], 12)).toThrow(/no lease/);
+  });
+});
+
+describe("calls of unknown cost from the run directory's close lines", () => {
+  const dirs: string[] = [];
+  afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
+  const run = (lines: object[]) => {
+    const dir = mkdtempSync(join(tmpdir(), "g-admission-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "sessions.jsonl"), lines.map((l) => JSON.stringify(l) + "\n").join(""));
+    return dir;
+  };
+  const open = (id: string, item: string) => ({ event: "open", id, item, lease_id: item + ".0001.000000" });
+  const close = (id: string, item: string, unknown_calls: number, unknown_micros: number) => ({ event: "close", id, item, spent_micros: 300_000, unknown_micros, unknown_calls });
+  test("sums the unknown calls and their reservations from each session's close on the arm's items, as counted at the close", () => {
+    const dir = run([open("s1", "g-adm-pe"), close("s1", "g-adm-pe", 1, 640_912), open("s2", "g-adm-pe"), close("s2", "g-adm-pe", 2, 1_281_824), open("s3", "g-adm-ap"), close("s3", "g-adm-ap", 5, 9_000_000)]);
+    expect(unknownFromRun(dir, ["g-adm-pe"])).toEqual({ calls: 3, micros: 1_922_736 });
+    expect(unknownFromRun(dir, ["g-adm-pe", "g-adm-ap"])).toEqual({ calls: 8, micros: 10_922_736 });
+  });
+  test("refuses a session with an open line and no close line, an item with no session, no items and a close line without its counts", () => {
+    expect(() => unknownFromRun(run([open("s1", "g-adm-pe"), close("s1", "g-adm-pe", 0, 0), open("s2", "g-adm-pe")]), ["g-adm-pe"])).toThrow(/s2.*open/);
+    expect(() => unknownFromRun(run([open("s1", "g-adm-pe"), close("s1", "g-adm-pe", 0, 0)]), ["g-nothing"])).toThrow(/no session/);
+    expect(() => unknownFromRun(run([]), [])).toThrow(/name the line items/);
+    expect(() => unknownFromRun(run([open("s1", "g-adm-pe"), { event: "close", id: "s1", item: "g-adm-pe", unknown_micros: 5 }]), ["g-adm-pe"])).toThrow(/whole/);
   });
 });
