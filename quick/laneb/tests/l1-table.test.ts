@@ -21,12 +21,12 @@ const COMPLETE = [
   { type: "ResultMessage", subtype: "success", result: "" },
 ];
 let k = 0;
-function trial(o: { arm?: string; reward?: number | null; exc?: string; result?: boolean; msgs?: unknown[]; evidence?: unknown; usage?: Record<string, number> } = {}) {
+function trial(o: { arm?: string; reward?: number | null; rewards?: Record<string, unknown>; exc?: string; result?: boolean; msgs?: unknown[]; evidence?: unknown; usage?: Record<string, number> } = {}) {
   const name = "BerriAI__litellm-16487__t" + ++k;
   const dir = join(root, "job", name);
   mkdirSync(join(dir, "evaluator"), { recursive: true });
   writeFileSync(join(dir, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm: o.arm ?? "before-t", upstream_model: "claude-opus-5-5", told_skill: "investigate" } }, task: { path: "tasks/BerriAI__litellm-16487" } }));
-  if (o.result !== false) writeFileSync(join(dir, "result.json"), JSON.stringify({ trial_name: name, verifier_result: o.reward === null ? null : { rewards: { reward: o.reward ?? 1 } }, exception_info: o.exc ? { exception_type: o.exc, exception_message: "m" } : null }));
+  if (o.result !== false) writeFileSync(join(dir, "result.json"), JSON.stringify({ trial_name: name, verifier_result: o.rewards ? { rewards: o.rewards } : o.reward === null ? null : { rewards: { reward: o.reward ?? 1 } }, exception_info: o.exc ? { exception_type: o.exc, exception_message: "m" } : null }));
   writeFileSync(join(dir, "evaluator", "sdk-messages.jsonl"), log(o.msgs ?? COMPLETE));
   writeFileSync(join(dir, "evaluator", "laneb-summary.json"), JSON.stringify({ session: { usage: o.usage ?? { input_tokens: 10, cache_read_input_tokens: 100, output_tokens: 5 } } }));
   if (o.evidence) writeFileSync(join(dir, "evaluator", "l1-evidence.json"), JSON.stringify(o.evidence));
@@ -62,6 +62,26 @@ describe("session outcomes (section 6)", () => {
     expect(sessionRow(c.dir, ctx({ [c.name]: { ok: 2 } }))!.outcome).toBe("infra");
     const d = trial({ reward: null, exc: "LedgerCapStop" });
     expect(sessionRow(d.dir, ctx())!.outcome).toBe("cap_stop");
+  });
+  test("a reward written as null, empty or not a number is infra after a model response, unless a stop makes it a graded fail", () => {
+    const a = trial({ rewards: { reward: null } });
+    expect(sessionRow(a.dir, ctx({ [a.name]: { ok: 2 } }))).toMatchObject({ outcome: "infra", reason: "no verifier reward", reward: null, pass: false });
+    const b = trial({ rewards: { reward: null }, exc: "VerifierTimeoutError" });
+    expect(sessionRow(b.dir, ctx({ [b.name]: { ok: 2 } }))).toMatchObject({ outcome: "infra", reason: "VerifierTimeoutError, no verifier reward" });
+    const c = trial({ rewards: { reward: null } });
+    expect(sessionRow(c.dir, ctx({ [c.name]: { ok: 2, budget: 1 } }))).toMatchObject({ outcome: "graded", pass: false, allowance_stop: true, reason: "allowance stop, graded fail" });
+    for (const rewards of [{ reward: "" }, {}, { reward: " " }, { reward: true }, { reward: [] }, { score: null }]) {
+      const t = trial({ rewards });
+      expect(sessionRow(t.dir, ctx({ [t.name]: { ok: 2 } }))).toMatchObject({ outcome: "infra", reward: null });
+    }
+  });
+  test("a numeric reward stays graded: 0 fails, 1 passes, and a numeric string reads as its number", () => {
+    const zero = trial({ rewards: { reward: 0 } });
+    expect(sessionRow(zero.dir, ctx({ [zero.name]: { ok: 2 } }))).toMatchObject({ outcome: "graded", pass: false, reward: 0 });
+    const one = trial({ rewards: { reward: 1 } });
+    expect(sessionRow(one.dir, ctx({ [one.name]: { ok: 2 } }))).toMatchObject({ outcome: "graded", pass: true, reward: 1 });
+    const str = trial({ rewards: { score: "1" } });
+    expect(sessionRow(str.dir, ctx({ [str.name]: { ok: 2 } }))).toMatchObject({ outcome: "graded", pass: true, reward: 1 });
   });
   test("with no proxy row the SDK log's model output is the response", () => {
     const t = trial();
