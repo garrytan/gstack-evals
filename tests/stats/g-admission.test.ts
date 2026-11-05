@@ -283,6 +283,45 @@ describe("t1 writes outside PLAN.md, from the phase-tagged records (report only,
       "Bash tee src/s.ts",
     ]);
   });
+
+  test("sed's and perl's options read as GNU sed and perl read them, and a wrapper flag takes the next word only when it takes a value", () => {
+    expect(t1WritesOutsidePlan([
+      bash("a", "sed -E -i 's/a/b/' PLAN.md"),
+      bash("b", "sed -i '' 's/a/b/' PLAN.md"),
+      bash("c", "sed -i .bak 's/a/b/' PLAN.md"),
+      bash("d", "sed -r -n -l 80 -i 's/a/b/' PLAN.md"),
+      bash("e", "perl -i -f -pe 's/a/b/' PLAN.md"),
+      bash("f", "echo x | sudo -E grep -rn tee src/"),
+      bash("g", "env -i grep -rn tee src/"),
+      bash("h", "sudo -n grep -l sed src/"),
+      bash("i", "sed -i.prev 's/a/b/' PLAN.md"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      bash("a", "sed -E -i 's/a/b/' src/a.ts"),
+      bash("b", "sed -i '' 's/a/b/' src/b.ts"),
+      bash("c", "sed --expression='s/a/b/' -i src/c.ts"),
+      bash("d", "sed -e's/a/b/' -i src/d.ts"),
+      bash("e", "perl -pi -e's/a/b/' src/e.ts"),
+      bash("f", "sed -ie 's/a/b/' src/f.ts"),
+      bash("g", "sed -e 's/a/b/' -i .env"),
+      bash("h", "echo x | sudo -n tee src/h.ts"),
+      bash("i", "sudo -g staff sed -i 's/a/b/' src/i.ts"),
+      bash("j", "env -u HOME timeout -s KILL 5 sed -i 's/a/b/' src/j.ts"),
+      bash("k", "xargs -d x -n 1 sed -i 's/a/b/' < list.txt"),
+    ])).toEqual([
+      "Bash edit: sed -E -i 's/a/b/' src/a.ts",
+      "Bash edit: sed -i '' 's/a/b/' src/b.ts",
+      "Bash edit: sed --expression='s/a/b/' -i src/c.ts",
+      "Bash edit: sed -e's/a/b/' -i src/d.ts",
+      "Bash edit: perl -pi -e's/a/b/' src/e.ts",
+      "Bash edit: sed -ie 's/a/b/' src/f.ts",
+      "Bash edit: sed -e 's/a/b/' -i .env",
+      "Bash tee src/h.ts",
+      "Bash edit: sudo -g staff sed -i 's/a/b/' src/i.ts",
+      "Bash edit: env -u HOME timeout -s KILL 5 sed -i 's/a/b/' src/j.ts",
+      "Bash edit: xargs -d x -n 1 sed -i 's/a/b/' < list.txt",
+    ]);
+  });
 });
 
 describe("AUTH_PAID from the slice's U4 leases", () => {
