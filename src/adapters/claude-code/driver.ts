@@ -92,6 +92,11 @@
 //   allowance, a crash) keeps its own termination. The outcome's session_end
 //   records the cause (clean: nothing held the session at its end; deadline; tasks_pending: it ended another way while
 //   work still held it), what was pending and the idle time waited, in whole ms rounded up so any held idle counts.
+// - followUp (the ceo-outcome lens) sends one more user message, at most once per session: at a success result with no
+//   simulator reply and nothing holding the session, when needed(the session's transcript.ndjson text so far, the same
+//   messages the transcript holds) is true. Never at any other result or termination, and never twice.
+// - session.json records the session's own clock (session_ms: from the first message to the end, less credited stalls
+//   and the persona's pauses, the clock the timeout runs on), the stall credit, the pauses and whether the follow-up went.
 import type { ChildProcess } from "node:child_process";
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -152,6 +157,8 @@ export interface ClaudeCodeOptions {
   freeform?: (persona: string, question: string) => Promise<PersonaAnswer>;
   /** The Agent SDK's query function; tests pass the real one or a stand-in. */
   query?: QueryFn;
+  /** One follow-up user message, at most once: at a success result with no simulator reply and nothing holding the session, when needed(the transcript.ndjson text so far) is true. */
+  followUp?: { text: string; needed: (transcript: string) => boolean };
   /** Plugin roots in the agent's HOME, loaded for the session as plugin directories. */
   plugins?: string[];
   /** The cell's cross-family voice through the Codex CLI: the provider of the slot's route and the model Codex runs. */
@@ -357,6 +364,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       let idleSince: number | null = null;
       let waited = 0;
       let overdue = false;
+      let followed = false;
       const running = (): string[] => [...level.values()].filter((t) => !landed.has(t.run)).map((t) => t.label);
       const holding = (): string[] => {
         const tasks = running();
@@ -375,6 +383,9 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const cap = timeoutMs / 10;
       let credited = 0;
       let full = false;
+      const started = performance.now();
+      let stoppedAt: number | null = null;
+      let pausedMs = 0;
       let deadline = performance.now() + timeoutMs;
       let last = performance.now();
       let settled = false;
@@ -428,6 +439,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
           a = await persona(text, question);
         } finally {
           if (--pauses === 0) {
+            pausedMs += performance.now() - paused;
             deadline += performance.now() - paused;
             last = performance.now();
             timer = setTimeout(expire, Math.max(0, deadline - performance.now()));
@@ -557,6 +569,10 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
               } else if (waitMs !== null && m.subtype === "success" && holding().length) {
                 idleSince = performance.now();
                 awaitingResult = true;
+              } else if (o.followUp && !followed && m.subtype === "success" && o.followUp.needed(messages.map((x) => JSON.stringify(x) + "\n").join(""))) {
+                followed = true;
+                inbox.push(userMessage(o.followUp.text));
+                awaitingResult = true;
               } else {
                 if (waitMs === null && holding().length) log("adapter: the session ended at its turn's result with background work still out (" + holding().join("; ") + "); this run sets no background wait, so nothing held it\n");
                 ended = true;
@@ -574,6 +590,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
           log("adapter: infra failure, not the arm's: the SDK stream ended with no result for the turn (CLI exit code " + exitCode + ", signal " + exitSignal + ")\n");
         }
       } catch (error) {
+        stoppedAt = performance.now();
         settled = true;
         clearTimeout(timer);
         if (!stop) {
@@ -583,6 +600,7 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
           log("adapter: " + (verdict === INFRA ? "infra failure, not the arm's: " : "") + String((error as Error)?.message ?? error) + "\n");
         }
       } finally {
+        stoppedAt ??= performance.now();
         settled = true;
         clearTimeout(timer);
         clearInterval(watch);
@@ -597,6 +615,13 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
       const use = skillUse(calls, o.skill, outputs);
       try {
         writeFileSync(join(o.out, "calls.json"), JSON.stringify({ calls, opened: use.opened, files_read: use.files, missing_question: missingQuestion }, null, 2) + "\n");
+      } catch (error) {
+        infra(error);
+      }
+      try {
+        const end = stoppedAt ?? performance.now();
+        const sessionMs = end - started - credited - pausedMs - (pauses > 0 ? end - paused : 0);
+        writeFileSync(join(o.out, "session.json"), JSON.stringify({ session_ms: Math.max(0, Math.round(sessionMs)), credited_stall_ms: Math.round(credited), paused_ms: Math.round(pausedMs), follow_up: followed }, null, 2) + "\n");
       } catch (error) {
         infra(error);
       }

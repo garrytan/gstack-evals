@@ -9,6 +9,12 @@
 // go out with an evidence sheet: each finding's evidence, masked and leak-checked as packets are, and the unit head's code
 // around the finding's line, read from a --source clone. The metering proxy retries a 429 or 5xx within JUDGE_RETRY, the
 // retry budget the GST-456 post freezes; a transport error, or a 429 or 5xx past that budget, stops the run.
+//
+// --ceo is the CEO outcome eval's judge step (prereg 2026-11-04-geva-285 section 8, as the ladder amendment's items 9 and
+// 10 and the stop-label amendment's readings change it): one judge per run over the packets gstack-evals ceo packets
+// wrote. The D read sends the brief's text above its rule with each D packet, the remedy read the text below it with each
+// remedy packet, both pinned by sha256. A reply that breaks section 8's failure rule gets one retry in a fresh request; a
+// second failure, or a run that stops first, leaves that packet missing with its cause in replies.json.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -112,6 +118,7 @@ interface Answer {
 }
 
 export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Record<string, string | undefined>; fetch?: (input: string, init: RequestInit) => Promise<Response>; sleep?: (ms: number) => Promise<void> } = {}): Promise<number> {
+  if (argv.includes("--ceo")) return ceoJudgeRunCmd(argv.filter((a) => a !== "--ceo"), io, o);
   const env = o.env ?? process.env;
   const flags = new Map<string, string[]>();
   for (let i = 0; i < argv.length; i++) {
@@ -406,5 +413,246 @@ export async function judgeRunCmd(argv: string[], io: NolossIo, o: { env?: Recor
   const next = ["gstack-evals", "noloss", "judge-join", "--suite", loadedSuite.path, "--key", keyPath, "--reply", join(out, "primary.json"), "--second", join(out, "second.json"), ...(written.has("third.json") ? ["--third", join(out, "third.json")] : []), ...(unjudged.length ? ["--unjudged", join(out, "unjudged.json")] : []), ...armDirs.flatMap((d) => ["--arm", d]), "--out", join(out, "joined")];
   io.out("judge-run: batch " + key.batch + ", " + requests + " requests; primary answered " + replies.get("primary")!.size + " packets, second " + replies.get("second")!.size + ", third " + replies.get("third")!.size + "; " + unjudged.length + " unjudged; files in " + out);
   io.out("next: " + next.map(q).join(" "));
+  return 0;
+}
+
+/** The CEO judge brief (the ladder amendment's judge-brief.md), its D read (the text above the rule, the prereg's brief byte for byte) and its remedy read (every byte below the rule line). */
+export const CEO_BRIEF_SHA256 = "d7b3dce1498e01e874f1dae024ac90e79e5ff5e3af12cc5ed37e2f8a48a14fb5";
+export const CEO_D_READ_SHA256 = "83d5d644b97aa87003ea38a8cb273b64590f1c50129430612af2432072852589";
+export const CEO_REM_READ_SHA256 = "75a90494a8a097cd5318b081b204bfd7b6b2fde8e11c147171b7cc1659c19923";
+/** Section 8's three judges. */
+export const CEO_JUDGES = ["openai/gpt-6.1-sol", "anthropic/claude-opus-5-5", "anthropic/claude-sonnet-5-5"] as const;
+const CEO_RULE = "\n\n---\n";
+const CEO_LABELS = ["D", "R1", "R2", "R3", "none"];
+const CEO_FLAGS: Record<string, "value" | "bool"> = { "--packets": "value", "--key": "value", "--brief": "value", "--judge": "value", "--item": "value", "--out": "value", "--concurrency": "value", "--ledger": "value", "--record": "value", "--policy": "value", "--dry-run": "bool" };
+const ceoUsage = (message: string, fix: string): never => {
+  throw new ScoreError("E_USAGE", message + "\nfix: " + fix);
+};
+
+/** The two reads' prompts, cut at the brief's rule: the D read through the newline that ends its last line, the remedy read everything after the rule line. */
+export function ceoBriefReads(brief: string): { D: string; rem: string } {
+  const fix = "pass --brief wiki/plans/2026-11-05-geva-295-ceo-ladder-amendment/judge-brief.md, the frozen brief";
+  if (sha256(brief) !== CEO_BRIEF_SHA256) ceoUsage("the judge brief has sha256 " + sha256(brief) + ", not the frozen " + CEO_BRIEF_SHA256, fix);
+  const at = brief.indexOf(CEO_RULE);
+  const D = brief.slice(0, at + 1);
+  const rem = brief.slice(at + CEO_RULE.length);
+  if (sha256(D) !== CEO_D_READ_SHA256) ceoUsage("the brief's D read has sha256 " + sha256(D) + ", not the prereg's " + CEO_D_READ_SHA256, fix);
+  if (sha256(rem) !== CEO_REM_READ_SHA256) ceoUsage("the brief's remedy read has sha256 " + sha256(rem) + ", not the pinned " + CEO_REM_READ_SHA256, fix);
+  return { D, rem };
+}
+
+export type CeoAnswer = { labels: string[]; leak: "yes" | "no" } | { rem: Array<"yes" | "no"> };
+/**
+ * A judge's answers for one packet, or why section 8's failure rule refuses the reply: no ceo-judge (D read) or
+ * ceo-judge-rem (remedy read) block, or more than one; a line that isn't a JSON object naming a review; a review the
+ * packet doesn't hold, or one answered twice; a list whose length differs from the review's issue count; a label or
+ * value outside the brief's; a review left unanswered. A refusal holds no block, so it fails the same way.
+ */
+export function ceoReplyAnswers(read: "D" | "rem", reviews: Array<{ review: string; issues: number }>, text: string): Record<string, CeoAnswer> | string {
+  const info = read === "D" ? "ceo-judge" : "ceo-judge-rem";
+  const blocks = [...text.matchAll(/^\x60\x60\x60([^\n\x60]*)\n([\s\S]*?)^\x60\x60\x60[ \t]*$/gm)].filter((m) => m[1]!.trim() === info);
+  if (blocks.length !== 1) return "the reply holds " + blocks.length + " " + info + " blocks, not one";
+  const got: Record<string, CeoAnswer> = {};
+  for (const line of blocks[0]![2]!.split("\n")) {
+    if (!line.trim()) continue;
+    let o: any;
+    try {
+      o = JSON.parse(line);
+    } catch {
+      return "a line of the " + info + " block is not JSON";
+    }
+    if (!o || typeof o !== "object" || typeof o.review !== "string") return "a line of the " + info + " block names no review";
+    const r = reviews.find((x) => x.review === o.review);
+    if (!r) return "the block answers review " + JSON.stringify(o.review) + ", which the packet doesn't hold";
+    if (Object.hasOwn(got, o.review)) return "the block answers review " + o.review + " twice";
+    const list = read === "D" ? o.labels : o.rem;
+    if (!Array.isArray(list) || list.length !== r.issues) return "review " + o.review + "'s " + (read === "D" ? "labels" : "rem") + " list has " + (Array.isArray(list) ? list.length : "no") + " entries, not " + r.issues;
+    if (read === "D") {
+      if (list.some((l: unknown) => !CEO_LABELS.includes(l as string))) return "review " + o.review + " has a label outside D, R1, R2, R3 and none";
+      if (o.leak !== "yes" && o.leak !== "no") return "review " + o.review + "'s leak is not yes or no";
+      got[o.review] = { labels: list, leak: o.leak };
+    } else {
+      if (list.some((v: unknown) => v !== "yes" && v !== "no")) return "review " + o.review + " has a rem value other than yes and no";
+      got[o.review] = { rem: list };
+    }
+  }
+  const left = reviews.filter((r) => !Object.hasOwn(got, r.review));
+  return left.length ? "the block leaves " + left.length + " of " + reviews.length + " reviews unanswered" : got;
+}
+
+/** noloss judge-run --ceo: one judge over every packet of a ceo packets key. */
+async function ceoJudgeRunCmd(argv: string[], io: NolossIo, o: { env?: Record<string, string | undefined>; fetch?: (input: string, init: RequestInit) => Promise<Response>; sleep?: (ms: number) => Promise<void> }): Promise<number> {
+  const env = o.env ?? process.env;
+  const flags = new Map<string, string>();
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    const kind = CEO_FLAGS[a] ?? ceoUsage("noloss judge-run --ceo does not take " + JSON.stringify(a), "use only --ceo, " + Object.keys(CEO_FLAGS).join(", "));
+    const v = kind === "bool" ? "true" : argv[++i];
+    if (v === undefined || v.startsWith("--")) ceoUsage(a + " needs a value", "pass " + a + " <value>");
+    if (flags.has(a)) ceoUsage(a + " is given twice", "pass " + a + " once");
+    flags.set(a, v!);
+  }
+  const one = (f: string) => flags.get(f) ?? ceoUsage("noloss judge-run --ceo needs " + f, "add " + f + " <value>");
+  const concurrency = Number(flags.get("--concurrency") ?? 4);
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) ceoUsage("--concurrency must be a positive integer", "pass --concurrency <n>, or drop it for 4");
+  const out = resolve(one("--out"));
+  if (insideRepo(out)) ceoUsage("--out " + out + " is inside the repo; judge replies are keyed to sealed packets and stay sealed", "give --out a new directory outside the repo, beside the packets");
+  const packetsDir = resolve(one("--packets"));
+  const keyPath = resolve(one("--key"));
+  if (inside(out, packetsDir)) ceoUsage("--out " + out + " is inside --packets " + packetsDir, "write the replies beside the packets, never among them");
+  if (inside(keyPath, packetsDir)) blind("--key " + keyPath + " is inside --packets " + packetsDir + "; the key maps opaque ids back to rows and must never travel with the packets\nfix: move the key beside --packets and pass it from there");
+  if (existsSync(out) && readdirSync(out).length) ceoUsage("--out " + out + " is not empty", "give each judge run a new directory; a stopped run doesn't resume");
+  const keyText = read(keyPath, "the packet key");
+  let key: { kind?: string; packets?: Array<{ file: string; unit: string; read: "D" | "rem"; sha256: string }> };
+  try {
+    key = JSON.parse(keyText);
+  } catch {
+    return ceoUsage("--key " + keyPath + " is not JSON", "pass the --key file gstack-evals ceo packets wrote");
+  }
+  if (key.kind !== "ceo-outcome" || !Array.isArray(key.packets) || !key.packets.length) ceoUsage("--key " + keyPath + " is not a ceo packets key", "pass the --key file gstack-evals ceo packets wrote");
+  const packets = key.packets!.map((p) => {
+    const text = read(join(packetsDir, p.file), "packet");
+    if (sha256(text) !== p.sha256) blind(join(packetsDir, p.file) + " has sha256 " + sha256(text) + ", not the key's " + p.sha256 + "; it changed since ceo packets wrote it\nfix: rebuild the packets and the key with gstack-evals ceo packets");
+    let reviews: Array<{ review: string; issues: number }> = [];
+    try {
+      reviews = (JSON.parse(text).reviews as Array<{ review: string; issues: unknown[] }>).map((r) => ({ review: r.review, issues: r.issues.length }));
+    } catch {
+      ceoUsage(join(packetsDir, p.file) + " is not a ceo packet", "rebuild the packets and the key with gstack-evals ceo packets");
+    }
+    return { ...p, text, reviews };
+  });
+  const briefPath = resolve(one("--brief"));
+  const brief = read(briefPath, "the judge brief");
+  const reads = ceoBriefReads(brief);
+  const judge = one("--judge");
+  if (!(CEO_JUDGES as readonly string[]).includes(judge)) ceoUsage("--judge " + judge + " is not one of section 8's judges", "pass --judge " + CEO_JUDGES.join(", --judge ") + ", one per run");
+  const provider = judge.slice(0, judge.indexOf("/")) as Provider;
+  const model = judge.slice(judge.indexOf("/") + 1);
+  const policy = loadPolicy(flags.get("--policy") ?? DEFAULT_POLICY);
+  if ("problem" in policy) throw new ScoreError("E_MODEL_POLICY", policy.problem);
+  const problem = modelProblem(policy, model, "judge", { smoke: false });
+  if (problem) throw new ScoreError("E_MODEL_POLICY", problem);
+  if (providerOf(policy, model) !== provider) throw new ScoreError("E_MODEL_POLICY", model + " runs on " + providerOf(policy, model) + " under the policy, not " + provider);
+  const prompt = (p: (typeof packets)[number]) => [p.read === "D" ? reads.D : reads.rem, "=== Packet: " + p.file + " ===", p.text].join("\n");
+  const request = (p: (typeof packets)[number]) => judgeRequest(provider, model, prompt(p), MAX_OUTPUT_TOKENS, provider === "openai" ? JUDGE_REASONING_EFFORT : undefined);
+  const item = one("--item");
+  const record = recordPath(flags.get("--record"), env).path;
+  const itemState = ledgerStep(() => readItem(record, item));
+
+  if (flags.has("--dry-run")) {
+    let all = 0;
+    for (const p of packets) {
+      const send = reservationMicros(priceRequest(provider, asProxied(provider, request(p)), MAX_OUTPUT_TOKENS));
+      const worst = send * JUDGE_RETRY.attempts * 2;
+      all += worst;
+      io.out(judge + "  " + p.file + " (" + (p.read === "D" ? "D read" : "remedy read") + ")  worst case " + usd(worst) + " (2 requests of " + JUDGE_RETRY.attempts + " sends at " + usd(send) + ")");
+    }
+    io.out("worst case: " + usd(all) + " for " + judge + " on " + packets.length + " packets, each asked again once. Nothing was sent or written.");
+    if (itemState.cap_micros === null) io.out("item " + item + ": no approval yet, so there is no cap to compare.");
+    else {
+      const left = itemState.cap_micros - itemState.committed_micros;
+      io.out("item " + item + ": cap " + usd(itemState.cap_micros) + ", " + usd(itemState.committed_micros) + " committed, " + usd(Math.max(left, 0)) + " left; the worst case " + (all <= left ? "fits" : "does not fit") + ". The cap stops the run wherever it falls.");
+    }
+    return 0;
+  }
+
+  if (!env[KEY_ENV[provider]]) throw new ScoreError("E_KEY_MISSING", "the judge needs " + KEY_ENV[provider] + ", which is not set");
+  mkdirSync(out, { recursive: true });
+  const written = new Map<string, string>();
+  const put = (name: string, text: string) => {
+    mkdirSync(dirname(join(out, name)), { recursive: true });
+    writeFileSync(join(out, name), text);
+    written.set(name, sha256(text));
+  };
+  const runId = "judge-ceo-" + randomBytes(6).toString("hex");
+  const journal = join(out, "journal.ndjson");
+  const warn = (code: ReasonCode, message: string) => io.err(code + ": noloss judge-run --ceo: " + message);
+  const local = ledgerStep(() => openLocalLedger(ledgerPath(flags.get("--ledger"), env)));
+  const results = new Map<string, { status: "answered"; answers: Record<string, CeoAnswer>; attempts: number } | { status: "missing"; cause: string }>();
+  let stop: ScoreError | null = null;
+  let crash: unknown = null;
+  let proxy: MeteringProxy | undefined;
+  let requests = 0;
+  let lease: { lease_id: string; reserved_micros: number };
+  try {
+    lease = ledgerStep(() => openLease(record, local, { item, run_id: runId, warn, requireAdmission: rigAdmission({ proof: "direct" }) }));
+  } catch (e) {
+    local.close();
+    throw e;
+  }
+  const ask = async (p: (typeof packets)[number]) => {
+    let reason = "";
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      if (stop) return;
+      const binding = proxy!.bind({ cell: { run_id: runId, arm: "ceo-" + p.read, task: p.file, model, trial: 1, attempt }, models: [provider + ":" + model], allowance_micros: lease.reserved_micros });
+      let res: Response;
+      let text: string;
+      try {
+        requests++;
+        res = await fetch("http://127.0.0.1:" + proxy!.port + "/" + binding.slot + "/" + provider + JUDGE_ROUTE[provider], { method: "POST", headers: { authorization: "Bearer " + binding.token, "content-type": "application/json" }, body: JSON.stringify(request(p)), timeout: false } as RequestInit);
+        text = await res.text();
+      } finally {
+        await proxy!.finalize(binding.meter_id);
+        proxy!.unbind(binding.slot);
+      }
+      let answer: string | null = null;
+      try {
+        answer = judgeAnswer(provider, JSON.parse(text));
+      } catch {
+        answer = null;
+      }
+      put(join("raw", basename(p.file, ".json") + "." + attempt + ".txt"), res.status === 200 && answer !== null ? answer : text);
+      if (res.status !== 200) {
+        const prob = (res.headers.get("content-type") ?? "").includes("application/problem+json") ? (JSON.parse(text) as { code?: string; detail?: string }) : null;
+        const code = prob?.code && Object.hasOwn(CODES, prob.code) ? (prob.code as ReasonCode) : "UPSTREAM";
+        stop ??= new ScoreError(code, "the judge (" + judge + ") on " + p.file + ": " + (prob?.detail ?? "the provider answered HTTP " + res.status) + "; the run stops, replies.json marks every packet it didn't answer missing with this cause, and the run doesn't resume");
+        return;
+      }
+      const got = answer === null ? "the provider's response is not JSON" : ceoReplyAnswers(p.read, p.reviews, answer);
+      if (typeof got !== "string") {
+        results.set(p.file, { status: "answered", answers: got, attempts: attempt });
+        return;
+      }
+      reason = got;
+      io.err("noloss judge-run --ceo: the reply for " + p.file + " was refused (attempt " + attempt + "): " + reason);
+    }
+    results.set(p.file, { status: "missing", cause: "refused twice: " + reason });
+  };
+  try {
+    proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "gse-judge-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: JUDGE_RETRY, env, fetch: o.fetch, sleep: o.sleep, maxOutputTokens: MAX_OUTPUT_TOKENS });
+    proxy.start();
+    const queue = [...packets];
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+        while (!stop && queue.length) {
+          try {
+            await ask(queue.shift()!);
+          } catch (e) {
+            if (!(e instanceof ScoreError)) crash ??= e;
+            stop ??= e instanceof ScoreError ? e : new ScoreError("E_INTERNAL", "noloss judge-run --ceo: " + (e as Error).message + "; the run stops and doesn't resume");
+          }
+        }
+      }),
+    );
+  } finally {
+    proxy?.stop();
+    try {
+      try {
+        const reconciled = await reconcileJournal(journal, local);
+        for (const r of reconciled.refused) warn(r.code as ReasonCode, "reconciling reservation " + (r.reservation_id ?? "(a lost reserve)") + " was refused: " + r.message);
+      } finally {
+        ledgerStep(() => settleLease(record, local, lease.lease_id, warn));
+      }
+    } finally {
+      local.close();
+    }
+  }
+  const halted = stop as ScoreError | null;
+  for (const p of packets) if (!results.has(p.file)) results.set(p.file, { status: "missing", cause: "no answer: the run stopped (" + (halted?.code ?? "E_INTERNAL") + ")" });
+  put("replies.json", JSON.stringify({ version: 1, kind: "ceo-judge", judge, brief_sha256: CEO_BRIEF_SHA256, key_sha256: sha256(keyText), run_id: runId, state: halted ? "stopped" : "finished", packets: packets.map((p) => ({ file: p.file, unit: p.unit, read: p.read, sha256: p.sha256, ...results.get(p.file)! })) }, null, 2) + "\n");
+  const missing = packets.filter((p) => results.get(p.file)!.status === "missing");
+  writeFileSync(join(out, "run.json"), JSON.stringify({ version: 1, run_id: runId, state: halted ? "stopped" : "finished", stop: halted?.code ?? null, kind: "ceo", judge, brief: { path: briefPath, sha256: CEO_BRIEF_SHA256 }, item, lease_id: lease.lease_id, requests, missing: missing.length, files: Object.fromEntries([...written].sort(([a], [b]) => (a < b ? -1 : 1))) }, null, 2) + "\n");
+  if (halted) throw crash ?? halted;
+  io.out("judge-run --ceo: " + judge + ", " + packets.length + " packets: " + (packets.length - missing.length) + " answered, " + missing.length + " missing (" + missing.filter((p) => p.read === "D").length + " D reads, " + missing.filter((p) => p.read === "rem").length + " remedy reads); " + requests + " requests; replies in " + join(out, "replies.json"));
   return 0;
 }
