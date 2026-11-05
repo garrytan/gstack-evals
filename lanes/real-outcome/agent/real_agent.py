@@ -69,6 +69,7 @@ FREEZE = (
     'do unset "$v"; done; exec claude "$@"'
 )
 TRIAL_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")
 # JavaScript's \s, so a registry turn's {statement} is trimmed exactly as registry.ts turnScript trims it.
 JS_SPACE = frozenset("\t\n\v\f\r \u00a0\u1680\u2028\u2029\u202f\u205f\u3000\ufeff" + "".join(map(chr, range(0x2000, 0x200B))))
 KEYLESS = "_real_agent_keyless"
@@ -125,6 +126,7 @@ class RealOptions(lb.LanebOptions):
     task_label: str = Field(default="", description="u4: the task the driver's open names.")
     trial_n: int = Field(default=0, description="u4: the trial number the driver's open names, from 1.")
     rerun: str = Field(default="", description="u4: the repair a gap rerun follows; empty for a first open.")
+    image_id: str = Field(default="", description="u4: the T-G manifest's image id for this task (sha256:<64 hex>); the trial container must run exactly it before any sandbox or session opens.")
 
 
 def _block(b) -> dict:
@@ -208,6 +210,25 @@ class RealAgent(lb.LanebAgent):
         if out.returncode != 0 or len(ips) != 1:
             raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP the container must sit on exactly one network; found {ips} ({out.stderr.strip()[-200:]})")
         return ips[0]
+
+    def _container_image(self, container: str) -> str:
+        import subprocess
+
+        out = subprocess.run(["docker", "inspect", "-f", "{{.Image}}", container], capture_output=True, text=True, timeout=lb.PROBE_TIMEOUT_S)
+        if out.returncode != 0:
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP docker inspect could not read the trial container's image ({out.stderr.strip()[-200:]}); nothing was opened")
+        return out.stdout.strip()
+
+    def _check_image(self, container: str, log) -> None:
+        """A U4 session runs only in the image the T-G manifest pins for its task (lanes/outcome-skills/images): the trial
+        container's image id must equal image_id before any sandbox or session opens, so both arms run the same image."""
+        want = self.options.image_id
+        if not IMAGE_ID.fullmatch(want or ""):
+            raise SandboxSetupError("E_REAL_SANDBOX_SETUP a U4 session names its task's image: set image_id to the T-G manifest's sha256:<64 hex> id (gstack-evals outcome images bind prints it); nothing was opened")
+        got = self._container_image(container)
+        if got != want:
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP the trial container runs image {got}, not the manifest's {want}; run the task from its bound run copy (gstack-evals outcome images bind); nothing was opened")
+        log({"event": "image", "image_id": got})
 
     def _open_sandbox(self, container: str, trial: str, task: dict, base_url: str, log) -> dict:
         evdir = self._evaluator_dir()
@@ -371,6 +392,8 @@ class RealAgent(lb.LanebAgent):
             raise SandboxSetupError("E_REAL_SANDBOX_SETUP the arms file is the outcome-skills registry, whose arms spend only through a U4 lease (G prereg section 10 item 4); run them with ledger u4 on the session driver")
         if self.options.ledger == "u4" and not (self.options.task_label and self.options.trial_n >= 1):
             raise SandboxSetupError("E_REAL_SANDBOX_SETUP a U4 session names its task and trial: set task_label and trial_n (from 1)")
+        if self.options.ledger == "u4":
+            await asyncio.to_thread(self._check_image, container, log)
         self.limits = arms["arms"][self.options.arm]["limits"]
         phases = phase_texts(task, arms, self.options.arm, instruction)
         self.registry = "families" in arms

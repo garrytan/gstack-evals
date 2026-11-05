@@ -1097,6 +1097,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_OUTCOME_IMAGE: {
+    exit: 2,
+    meaning: "T-G's image manifest or a trial's binding to it does not hold (lanes/outcome-skills/images/manifest.ts): the manifest is unreadable, has a row with no sha256 image id, digests or label of its own, or is not tg-images.v1 with home /root and work dir /testbed; or bind found a task dir whose task.json or environment digest differs from its row, an image the manifest pins that is missing or whose local tag resolves to another id, an out dir that exists, or a task.toml with no [environment] section or a docker_image of its own; or pin's out file exists.",
+    fix: "Bind the task dir the manifest was pinned from, on the host whose Docker holds the pinned images (the envelope host), into a new out dir. When an image is gone or moved, rebuild it with pin into a new manifest and record that manifest's digests before any session. Nothing was spent and no lease is open.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_REAL_SANDBOX_EGRESS: {
     exit: 2,
     meaning: "The trial container's IP-and-port egress allowlist could not be applied or did not verify: the nftables helper failed, the table read back differs from the one written, an allowed endpoint was unreachable, or a denied probe got through. The agent never started.",

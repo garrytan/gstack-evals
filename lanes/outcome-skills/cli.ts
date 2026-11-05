@@ -1,10 +1,13 @@
 // gstack-evals outcome: the outcome-skills lane's commands. serve runs the session driver (driver/stage.ts) for one
-// admission batch on the program's envelope host.
+// admission batch on the program's envelope host; images pins, checks, publishes and binds T-G's task images
+// (images/manifest.ts).
 import { CODES, docAnchor, type ReasonCode } from "../../src/errors/codes.ts";
 import { openLocalLedger } from "../../src/runner/ledger/local.ts";
 import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
 import { LedgerError } from "../../src/runner/ledger/record.ts";
 import { serveStages, type StageSpec } from "./driver/stage.ts";
+import { bind, check, pin, publicForm, readManifest } from "./images/manifest.ts";
+import { readFileSync } from "node:fs";
 
 export const HELP = `Usage: gstack-evals outcome serve --run <id> --envelope-host <machine id> --stage <item>=<arm> [--stage ...]
            --host <ip> --dir <run dir> [--planned 24] [--reruns 2] [--control-port <n>] [--ttl-hours 72]
@@ -13,7 +16,17 @@ export const HELP = `Usage: gstack-evals outcome serve --run <id> --envelope-hos
 Opens one U4 lease per stage at its line item's cap through O6's envelope, one metering proxy per lease on --host, and a
 control plane on 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. It prints control=<url> and one
 stage= line per stage, serves until POST /stop, SIGTERM or SIGINT, and settles every lease on every exit path.
-Provider keys come from its environment as the proxy reads them. Guide: wiki/plans/2026-11-04-geva-286-u4-session-driver.`;
+Provider keys come from its environment as the proxy reads them. Guide: wiki/plans/2026-11-04-geva-286-u4-session-driver.
+
+Usage: gstack-evals outcome images pin --out <manifest.json> --set <name> --commit <sha> <task dir>...
+       gstack-evals outcome images check <manifest.json>
+       gstack-evals outcome images public <manifest.json>
+       gstack-evals outcome images bind <manifest.json> --task <task dir> --label <label> --out <run copy>
+
+pin builds each task's image on this host and writes the manifest. check runs before any session or lease: every row's
+image present with its pinned id and clean by cleanRoomPreflight. public prints the committed form, digests only. bind
+writes a task's run copy whose image is the pinned one and prints image_id=, which real_agent's image_id takes.
+Guide: lanes/outcome-skills/driver/README.md, "Trial images".`;
 
 function lines(code: ReasonCode, message: string): string {
   return [message, "fix: " + CODES[code].fix, "docs: " + docAnchor(code)].map((l) => code + " " + l).join("\n");
@@ -25,6 +38,7 @@ export async function main(argv: string[]): Promise<number> {
     console.log(HELP);
     return sub === undefined ? 2 : 0;
   }
+  if (sub === "images") return await images(rest);
   if (sub !== "serve") {
     console.error(lines("E_USAGE", "unknown subcommand " + JSON.stringify(sub) + "; gstack-evals outcome --help lists them"));
     return 2;
@@ -101,4 +115,55 @@ export async function main(argv: string[]): Promise<number> {
   } finally {
     local?.close();
   }
+}
+
+async function images(argv: string[]): Promise<number> {
+  const [cmd, ...rest] = argv;
+  const flags = new Map<string, string>();
+  const pos: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i]!.startsWith("--")) {
+      if (rest[i + 1] === undefined) return usage(rest[i] + " needs a value");
+      flags.set(rest[i]!, rest[++i]!);
+    } else pos.push(rest[i]!);
+  }
+  try {
+    if (cmd === "pin") {
+      const [out, set, commit] = ["--out", "--set", "--commit"].map((k) => flags.get(k));
+      if (!out || !set || !commit || !pos.length) return usage("images pin needs --out, --set, --commit and at least one task dir");
+      const m = await pin(pos, out, set, commit);
+      console.log("TG_PIN rows=" + m.rows.length + " out=" + out);
+      return 0;
+    }
+    if (cmd === "check" && pos.length === 1) {
+      const m = readManifest(pos[0]!);
+      check(m, process.env.DOCKER ?? "docker", (r, n) => console.log("TG_IMAGE ok row=" + n + " image=" + r.image_id));
+      console.log("TG_IMAGES: ok rows=" + m.rows.length);
+      return 0;
+    }
+    if (cmd === "public" && pos.length === 1) {
+      console.log(JSON.stringify(publicForm(readManifest(pos[0]!), readFileSync(pos[0]!)), null, 1));
+      return 0;
+    }
+    if (cmd === "bind" && pos.length === 1) {
+      const [task, label, out] = ["--task", "--label", "--out"].map((k) => flags.get(k));
+      if (!task || !label || !out) return usage("images bind needs --task, --label and --out");
+      const b = bind(task, readManifest(pos[0]!), label, out, process.env.DOCKER ?? "docker");
+      console.log("TG_BIND out=" + b.out + " tag=" + b.tag + "\nimage_id=" + b.image_id);
+      return 0;
+    }
+    return usage("images takes pin, check <manifest>, public <manifest> or bind <manifest>; gstack-evals outcome --help lists them");
+  } catch (e) {
+    const m = /^(E_[A-Z_]+):? (.*)$/s.exec((e as Error).message);
+    if (m && m[1]! in CODES) {
+      console.error(lines(m[1] as ReasonCode, m[2]!));
+      return 2;
+    }
+    throw e;
+  }
+}
+
+function usage(message: string): number {
+  console.error(lines("E_USAGE", message));
+  return 2;
 }

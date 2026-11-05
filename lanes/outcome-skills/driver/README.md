@@ -24,6 +24,15 @@ A told stage counts as finished only when it ended completed or cap_stop. After 
 
 `spent_micros` is the session's settled spend at its close: its calls with a recorded cost. `unknown_micros` is the full reservation O6 still holds for its calls with no recorded cost at that moment, a call still in flight or priced only in the proxy journal included, and `unknown_calls` counts those calls. real_agent passes `spent_micros` on as the trial's cost_usd, so admission's metered means use settled spend and never price an unknown call. `unknownFromRun` reads the same answers from the run directory's `close` lines and counts each arm's calls of unknown cost for item 5 to print, even when the lease's close later settles them. It refuses a run while a session there has no close line, so every path that closes a lease the driver left open writes one for each session still open on it: the relaunch's recovery, `ledger settle --lease` and `ledger reconcile` (below). The cap path still counts every unknown call at its full reservation: the room check, the lease's close and the envelope.
 
+## Trial images
+
+Each G session runs in its task's image as T-G's manifest pins it (lanes/outcome-skills/images/manifest.ts), so both arms run the same image for each task.
+
+1. On the envelope host, `gstack-evals outcome images pin --out <manifest.json> --set T-G --commit <sha> <task dir>...` builds each sealed task's image with the lane's buildImage and writes one row per task: its label, kind, task.json and environment/ digests and the image id. The manifest stays sealed; `images public` prints the form a post may carry, digests and kind counts only.
+2. Before any lease opens, `gstack-evals outcome images check <manifest.json>` requires every row's image to be present with exactly its pinned id and runs cleanRoomPreflight on it by id, as /root with work dir /testbed. It stops at the first miss.
+3. For each task, `gstack-evals outcome images bind <manifest.json> --task <task dir> --label <label> --out <run copy>` writes the run copy Harbor gets: its environment is only `FROM` a local tag of the pinned image, and its task.toml names that tag as Harbor's prebuilt `docker_image`, so Harbor runs the pinned image without a build. It prints `image_id=`.
+4. real_agent takes that id as `image_id`. In U4 mode it refuses before any sandbox or session opens unless `image_id` is a sha256 id and the trial container runs exactly it (`docker inspect -f {{.Image}}`).
+
 ## Settling a lease the driver left open
 
 The driver exits 2 and prints E_LEASE_UNSETTLED with each lease id it could not settle, and a launch is refused with E_LEASE_UNSETTLED while one of its stage items holds an open lease. Settle such a lease with the ledger's own commands. No step below edits O6's record, the local ledger, sessions.jsonl or a proxy journal by hand.

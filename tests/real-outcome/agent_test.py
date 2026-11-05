@@ -274,8 +274,9 @@ def test_told_arm_turn_two_is_the_slash_command():
 
 def u4(case, answer=None, **opts):
     """Switches a Case to the outcome-skills driver's U4 mode; answer is what its control plane returns for an open."""
-    for k, v in {"ledger": "u4", "task_label": "t-1", "trial_n": 1, **opts}.items():
+    for k, v in {"ledger": "u4", "task_label": "t-1", "trial_n": 1, "image_id": IMAGE, **opts}.items():
         setattr(case.agent.options, k, v)
+    case.agent._container_image = lambda container: IMAGE
     slot = {"id": "s-1", "token": "real-session-token", "ledger": "u4", "item": "g-none", "lease_id": "g-none.0001.abcdef", "meter_id": "m_1", "base_url": "http://127.0.0.1:9/s_slot/anthropic"}
     plain = case.post
 
@@ -284,6 +285,9 @@ def u4(case, answer=None, **opts):
 
     case.post = post
     return case
+
+
+IMAGE = "sha256:" + "e" * 64
 
 
 def refused(case):
@@ -324,6 +328,14 @@ def test_u4_needs_a_task_and_a_trial_before_the_sandbox_opens():
     c = u4(Case("u4-no-trial", scenario="one"), trial_n=0)
     e = refused(c)
     check(isinstance(e, ra.SandboxSetupError) and "task_label and trial_n" in str(e), repr(e))
+    check(c.posts == [] and c.egress == [], (c.posts, c.egress))
+
+
+def test_u4_refuses_a_container_on_another_image_before_the_sandbox_opens():
+    c = u4(Case("u4-image", scenario="one"))
+    c.agent._container_image = lambda container: "sha256:" + "f" * 64
+    e = refused(c)
+    check(isinstance(e, ra.SandboxSetupError) and "not the manifest's" in str(e), repr(e))
     check(c.posts == [] and c.egress == [], (c.posts, c.egress))
 
 

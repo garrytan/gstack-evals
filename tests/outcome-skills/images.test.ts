@@ -1,0 +1,170 @@
+// T-G's image manifest and the trial-image binding (lanes/outcome-skills/images/manifest.ts, real_agent's image_id). The
+// keyless tier drives the manifest rules and bind against a stub docker, and runs image_test.py, which drives real_agent's
+// check with the Agent SDK stubbed. The Docker tier (GSTACK_EVALS_DOCKER=1) binds a task to a real image and runs it.
+import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { bind, check, publicForm, readManifest, tagFor, treeDigest, type ImageManifest } from "../../lanes/outcome-skills/images/manifest.ts";
+
+const roots: string[] = [];
+afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
+const fresh = () => {
+  const d = mkdtempSync(join(tmpdir(), "outcome-images-"));
+  roots.push(d);
+  return d;
+};
+const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex");
+const ID = "sha256:" + "a".repeat(64);
+const OTHER = "sha256:" + "b".repeat(64);
+const TOML = 'schema_version = "1.4"\n\n[metadata]\nlane = "real-outcome"\n\n[environment]\nnetwork_mode = "no-network"\nbuild_timeout_sec = 1800.0\nos = "linux"\n';
+
+function task(root: string, from = "FROM busybox:1.36\nCOPY f /testbed/f\n") {
+  const d = join(root, "task");
+  mkdirSync(join(d, "environment"), { recursive: true });
+  mkdirSync(join(d, "tests"), { recursive: true });
+  writeFileSync(join(d, "task.json"), JSON.stringify({ id: "rox", kind: "K3" }));
+  writeFileSync(join(d, "task.toml"), TOML);
+  writeFileSync(join(d, "instruction.md"), "Add it.\n");
+  writeFileSync(join(d, "environment", "Dockerfile"), from);
+  writeFileSync(join(d, "environment", "f"), "x\n");
+  writeFileSync(join(d, "tests", "t.py"), "def test(): pass\n");
+  return d;
+}
+function manifest(root: string, d: string, image = ID): { path: string; m: ImageManifest } {
+  const m: ImageManifest = { schema: "tg-images.v1", set: "T-G", gstack_evals: "test", home: "/root", workdir: "/testbed", rows: [{ label: "rox", kind: "K3", task_json_sha256: sha(readFileSync(join(d, "task.json"))), environment_sha256: treeDigest(join(d, "environment")), image_id: image }] };
+  const path = join(root, "manifest.json");
+  writeFileSync(path, JSON.stringify(m));
+  return { path, m };
+}
+/** A docker that answers tag with exit 0, image inspect with RESOLVES, and run with RUN_EXIT, logging each call. */
+function stubDocker(root: string, resolves: string, runExit = 0) {
+  const p = join(root, "docker");
+  const log = join(root, "docker.log");
+  writeFileSync(p, "#!/bin/sh\necho \"$*\" >> " + log + "\ncase \"$1\" in\n  tag) exit 0 ;;\n  image) echo " + resolves + " ;;\n  run) exit " + runExit + " ;;\nesac\n");
+  chmodSync(p, 0o755);
+  return { docker: p, calls: () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : []) };
+}
+const thrown = (fn: () => unknown) => {
+  try {
+    fn();
+    return null;
+  } catch (e) {
+    return (e as Error).message;
+  }
+};
+
+describe("the T-G image manifest (keyless)", () => {
+  test("readManifest refuses a wrong schema, a row with no sha256 image id, a missing digest and a repeated label", () => {
+    const root = fresh();
+    const { path, m } = manifest(root, task(root));
+    expect(readManifest(path).rows[0]!.image_id).toBe(ID);
+    const bad = (edit: (x: any) => void) => {
+      const x = structuredClone(m) as any;
+      edit(x);
+      writeFileSync(path, JSON.stringify(x));
+      return thrown(() => readManifest(path));
+    };
+    expect(bad((x) => (x.schema = "v0"))).toMatch(/^E_OUTCOME_IMAGE .*not a tg-images.v1 manifest/);
+    expect(bad((x) => (x.workdir = "/work"))).toMatch(/^E_OUTCOME_IMAGE /);
+    expect(bad((x) => (x.rows[0].image_id = "busybox:1.36"))).toMatch(/no sha256:<64 hex> image id/);
+    expect(bad((x) => (x.rows[0].environment_sha256 = ""))).toMatch(/needs its task.json and environment digests/);
+    expect(bad((x) => x.rows.push({ ...x.rows[0] }))).toMatch(/its own label/);
+  });
+
+  test("the public form carries digests and kind counts only, sorted, never a label", () => {
+    const root = fresh();
+    const { path, m } = manifest(root, task(root));
+    m.rows.push({ ...m.rows[0]!, label: "roa", kind: "K2", image_id: OTHER, environment_sha256: "0".repeat(64) });
+    writeFileSync(path, JSON.stringify(m));
+    const p = publicForm(readManifest(path), readFileSync(path));
+    expect(p).toEqual({ schema: "tg-images.public.v1", set: "T-G", manifest_sha256: sha(readFileSync(path)), gstack_evals: "test", rows: 2, kinds: { K3: 1, K2: 1 }, image_ids: [ID, OTHER], environment_sha256: ["0".repeat(64), m.rows[0]!.environment_sha256].sort() });
+    expect(JSON.stringify(p)).not.toContain("rox");
+  });
+
+  test("bind writes a run copy whose environment is only FROM the pinned image's tag and whose task.toml names that tag", () => {
+    const root = fresh();
+    const d = task(root);
+    const { m } = manifest(root, d);
+    const s = stubDocker(root, ID);
+    const out = join(root, "run");
+    expect(bind(d, m, "rox", out, s.docker)).toEqual({ image_id: ID, tag: tagFor(ID), out });
+    expect(s.calls()).toEqual(["tag " + ID + " " + tagFor(ID), "image inspect --format {{.Id}} " + tagFor(ID)]);
+    expect(readdirSync(join(out, "environment"))).toEqual(["Dockerfile"]);
+    expect(readFileSync(join(out, "environment", "Dockerfile"), "utf8")).toBe("FROM " + tagFor(ID) + "\n");
+    expect(readFileSync(join(out, "task.toml"), "utf8")).toBe(TOML.replace("[environment]\n", "[environment]\ndocker_image = \"" + tagFor(ID) + "\"\n"));
+    for (const f of ["task.json", "instruction.md", "tests/t.py"]) expect(readFileSync(join(out, f), "utf8")).toBe(readFileSync(join(d, f), "utf8"));
+  });
+
+  test("bind refuses a task dir that is not the pinned one, a tag that resolves to another id, an existing out dir and an unknown label", () => {
+    const root = fresh();
+    const d = task(root);
+    const { m } = manifest(root, d);
+    const out = join(root, "run");
+    expect(thrown(() => bind(d, m, "rox", out, stubDocker(root, OTHER).docker))).toMatch(/^E_OUTCOME_IMAGE the tag .* resolves to sha256:b+, not sha256:a+/);
+    expect(existsSync(out)).toBe(false);
+    expect(thrown(() => bind(d, m, "nope", out, stubDocker(root, ID).docker))).toMatch(/no row for label nope/);
+    writeFileSync(join(d, "environment", "f"), "y\n");
+    expect(thrown(() => bind(d, m, "rox", out, stubDocker(root, ID).docker))).toMatch(/environment has digest .*not the manifest row's/);
+    writeFileSync(join(d, "environment", "f"), "x\n");
+    writeFileSync(join(d, "task.json"), "{}");
+    expect(thrown(() => bind(d, m, "rox", out, stubDocker(root, ID).docker))).toMatch(/task.json has sha256 .*not the manifest row's/);
+    mkdirSync(out);
+    expect(thrown(() => bind(d, m, "rox", out, stubDocker(root, ID).docker))).toMatch(/exists; bind writes a new run copy/);
+  });
+
+  test("check refuses a row whose image id is not the pinned one, and passes a present, clean image", () => {
+    const root = fresh();
+    const { m } = manifest(root, task(root));
+    expect(thrown(() => check(m, stubDocker(root, OTHER).docker))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*not the pinned digest/);
+    const seen: number[] = [];
+    expect(thrown(() => check(m, stubDocker(fresh(), ID, 0).docker, (_r, n) => seen.push(n)))).toBeNull();
+    expect(seen).toEqual([1]);
+    expect(thrown(() => check(m, stubDocker(fresh(), ID, 3).docker))).toMatch(/^E_OUTCOME_CLEAN_ROOM /);
+  });
+
+  test("real_agent runs a U4 session only in the manifest's image, checked before any sandbox or session opens (image_test.py)", () => {
+    const r = spawnSync("python3", [join(import.meta.dir, "../real-outcome/image_test.py")], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }, encoding: "utf8", timeout: 120_000 });
+    const out = (r.stdout ?? "") + (r.stderr ?? "");
+    if (r.status !== 0) console.log(out);
+    expect(out).not.toContain("FAIL");
+    expect(out.match(/^PASS /gm)?.length).toBe(4);
+    expect(r.status).toBe(0);
+  });
+});
+
+describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("the T-G image manifest on real Docker (GSTACK_EVALS_DOCKER=1)", () => {
+  const docker = (...args: string[]) => spawnSync("docker", args, { encoding: "utf8", timeout: 300_000 });
+  const tags: string[] = [];
+  afterAll(() => {
+    if (tags.length) docker("rmi", "-f", ...tags);
+  });
+  const build = (root: string, name: string, extra = "") => {
+    mkdirSync(join(root, name));
+    writeFileSync(join(root, name, "Dockerfile"), "FROM busybox:1.36\nRUN mkdir -p /testbed /root" + extra + "\n");
+    const tag = "gstack-evals-images-test-" + name + ":" + process.pid;
+    tags.push(tag);
+    expect(docker("build", "-q", "-t", tag, join(root, name)).status).toBe(0);
+    return docker("image", "inspect", "-f", "{{.Id}}", tag).stdout.trim();
+  };
+
+  test("check passes a clean image and refuses one with /root/.gstack; a bound run copy's tag runs exactly the pinned id", () => {
+    const root = fresh();
+    expect(docker("pull", "-q", "busybox:1.36").status).toBe(0);
+    const clean = build(root, "clean");
+    const seeded = build(root, "seeded", " /root/.gstack");
+    const d = task(root);
+    const { m } = manifest(root, d, clean);
+    expect(thrown(() => check(m))).toBeNull();
+    expect(thrown(() => check({ ...m, rows: [{ ...m.rows[0]!, image_id: seeded }] }))).toMatch(/^E_OUTCOME_CLEAN_ROOM .*found \/root\/.gstack/);
+    const b = bind(d, m, "rox", join(root, "run"));
+    tags.push(b.tag);
+    const name = "gstack-evals-images-test-" + process.pid;
+    expect(docker("create", "--name", name, b.tag, "true").status).toBe(0);
+    const ran = docker("inspect", "-f", "{{.Image}}", name).stdout.trim();
+    docker("rm", "-f", name);
+    expect(ran).toBe(clean);
+  }, 600_000);
+});
