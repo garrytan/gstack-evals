@@ -18,6 +18,10 @@ tests/real-outcome/arms.test.ts). Per trial it:
   5. always: closes the sidecar trial first and copies its shipment record, journal and bundle out, so nothing after the
      session counts as shipped; then runs Lane B's teardown, snapshots the final tree and writes real-summary.json, with
      the termination cause, the persona's counts, the /ship steps that ran (ship_steps.py) and the skills invoked per turn.
+
+With ledger "u4" (GST-1381) the session opens on the outcome-skills driver (lanes/outcome-skills/driver), which answers
+with a U4 slot on its stage's lease; the session's base URL is that slot's, and an answer that is not a U4 slot is closed
+and refused before any model call. An arms file in the outcome-skills registry's shape runs only with ledger "u4".
 """
 
 import asyncio
@@ -29,6 +33,7 @@ import shutil
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -74,6 +79,10 @@ class RealOptions(lb.LanebOptions):
     probe_node: str = Field(default="/opt/laneb/bin/node", description="Node in the runtime layer, for the in-container egress probe.")
     system_prompt: Literal["claude-code-preset"] = Field(default="claude-code-preset", description="Fixed: every arm runs Claude Code's own system prompt; Lane B's sdk-default is refused.")
     session_kind: Literal[""] = Field(default="", description="Fixed: unset, since the frozen environment unsets every GSTACK_ variable for claude.")
+    ledger: Literal["laneb", "u4"] = Field(default="laneb", description="laneb: Lane B's control plane. u4: the outcome-skills driver, whose slots spend only through a U4 lease (G prereg section 10 item 4).")
+    task_label: str = Field(default="", description="u4: the task the driver's open names.")
+    trial_n: int = Field(default=0, description="u4: the trial number the driver's open names, from 1.")
+    rerun: str = Field(default="", description="u4: the repair a gap rerun follows; empty for a first open.")
 
 
 def _block(b) -> dict:
@@ -194,9 +203,12 @@ class RealAgent(lb.LanebAgent):
 
     def _open_session(self, trial: str, model: str, cap: float, log) -> dict:
         body = {"trial": trial, "model": self.options.upstream_model, "cap_usd": cap, "meta": {"arm": self.options.arm, "arm_tar_sha256": self._arm_info["tar_sha256"], "lane": "real-outcome"}, "open_key": uuid.uuid4().hex}
+        if self.options.ledger == "u4":
+            meta = {"arm": self.options.arm, "task": self.options.task_label, "trial_n": self.options.trial_n, **({"rerun": self.options.rerun} if self.options.rerun else {})}
+            body = {**body, "meta": meta, "ledger": "u4"}
         for attempt in range(1, lb.OPEN_ATTEMPTS + 1):
             try:
-                return lb.post_json(self.options.control_url + "/sessions", body)
+                session = lb.post_json(self.options.control_url + "/sessions", body)
             except lb.HttpStatusError as e:
                 if e.code == 409:
                     log({"event": "ledger_cap_stop", "message": str(e)[:300]})
@@ -206,9 +218,26 @@ class RealAgent(lb.LanebAgent):
             except Exception as e:
                 if attempt == lb.OPEN_ATTEMPTS:
                     raise lb.LanebInfraError(f"session open failed after {attempt} attempts: {type(e).__name__}: {e}") from None
+            else:
+                return self._u4_slot(session, log) if self.options.ledger == "u4" else session
             log({"event": "session_open_retry", "attempt": attempt})
             time.sleep(lb.OPEN_RETRY_S)
         raise lb.LanebInfraError("unreachable")
+
+    def _u4_slot(self, session: dict, log) -> dict:
+        """A U4 open's answer: a slot on a lease, at the proxy the egress table allows. Anything else is closed at once."""
+        want = urllib.parse.urlsplit(self._resolve_auth_env().get("ANTHROPIC_BASE_URL", ""))
+        got = urllib.parse.urlsplit(str(session.get("base_url", "")))
+        problems = [k for k, ok in (("ledger u4", session.get("ledger") == "u4"), ("lease_id", bool(session.get("lease_id"))), ("meter_id", bool(session.get("meter_id"))), ("base_url at " + want.netloc, (got.scheme, got.netloc) == (want.scheme, want.netloc) and bool(got.path.strip("/")))) if not ok]
+        if not problems:
+            log({"event": "u4_slot", "session": session["id"], "lease_id": session["lease_id"], "meter_id": session["meter_id"], "item": session.get("item")})
+            return session
+        if session.get("id"):
+            try:
+                lb.post_json(self.options.control_url + f"/sessions/{session['id']}/close", {"reason": "not_u4"})
+            except Exception as e:
+                log({"event": "close_failed", "session": session["id"], "message": str(e)[:300]})
+        raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP the session answer is not a U4 slot (missing {', '.join(problems)}); it was closed before any model call")
 
     async def _drive(self, client, queue: asyncio.Queue, user: ShipUser, phase: str, text: str, deadline: float, record) -> dict:
         """Sends one phase's opening turn and reads until the session is quiet: the last turn ended, every background task
@@ -284,6 +313,10 @@ class RealAgent(lb.LanebAgent):
         arms = json.loads(Path(self.options.arms_path).read_text())
         if self.options.arm not in arms["arms"]:
             raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP unknown arm {self.options.arm}")
+        if "families" in arms and self.options.ledger != "u4":
+            raise SandboxSetupError("E_REAL_SANDBOX_SETUP the arms file is the outcome-skills registry, whose arms spend only through a U4 lease (G prereg section 10 item 4); run them with ledger u4 on the session driver")
+        if self.options.ledger == "u4" and not (self.options.task_label and self.options.trial_n >= 1):
+            raise SandboxSetupError("E_REAL_SANDBOX_SETUP a U4 session names its task and trial: set task_label and trial_n (from 1)")
         self.limits = arms["arms"][self.options.arm]["limits"]
         phases = phase_texts(task, arms, self.options.arm, instruction)
         log({"event": "turns", "arm": self.options.arm, "kind": task["kind"], "phases": [p for p, _ in phases], "sha256": [hashlib.sha256(t.encode()).hexdigest() for _, t in phases], "limits": self.limits, "frozen_env": FROZEN_ENV})
@@ -315,7 +348,7 @@ class RealAgent(lb.LanebAgent):
         try:
             model = self._resolved_model_name() or self.options.upstream_model
             env = {
-                "ANTHROPIC_API_KEY": session["token"], "ANTHROPIC_BASE_URL": base_url, "ANTHROPIC_MODEL": model, **{k: model for k in lb.ALIAS_ENV},
+                "ANTHROPIC_API_KEY": session["token"], "ANTHROPIC_BASE_URL": session["base_url"] if self.options.ledger == "u4" else base_url, "ANTHROPIC_MODEL": model, **{k: model for k in lb.ALIAS_ENV},
                 "CLAUDE_CONFIG_DIR": "/root/.claude", "HOME": "/root", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
                 "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(self.options.max_output_tokens), "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1", "IS_SANDBOX": "1",
             }

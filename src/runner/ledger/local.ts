@@ -103,9 +103,23 @@ export class LocalLedger implements ReservationLedger {
   }
 
   /** Spend that counts against the lease: settled calls at their cost, the rest at their full reservation. */
-  private held(lease_id: string): number {
+  held(lease_id: string): number {
     const row = this.db.query("SELECT COALESCE(SUM(CASE WHEN state = 'settled' THEN spent_micros ELSE max_micros END), 0) AS held FROM reservations WHERE lease_id = ?").get(lease_id) as { held: number };
     return row.held;
+  }
+
+  /** Per meter id on the lease: what it holds, counted as held() counts the lease, and the token usage of its settled calls. */
+  meters(lease_id: string): Map<string, { held_micros: number; usage: TokenUsage }> {
+    const rows = this.db.query("SELECT cell, state, max_micros, spent_micros, usage FROM reservations WHERE lease_id = ?").all(lease_id) as Pick<Row, "cell" | "state" | "max_micros" | "spent_micros" | "usage">[];
+    const out = new Map<string, { held_micros: number; usage: TokenUsage }>();
+    for (const r of rows) {
+      const id = (JSON.parse(r.cell) as CellAttempt).meter_id;
+      let m = out.get(id);
+      if (!m) out.set(id, (m = { held_micros: 0, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }));
+      m.held_micros += r.state === "settled" ? (r.spent_micros ?? 0) : r.max_micros;
+      if (r.state === "settled" && r.usage) for (const [k, v] of Object.entries(JSON.parse(r.usage) as TokenUsage)) m.usage[k as keyof TokenUsage] += v;
+    }
+    return out;
   }
 
   async reserve(request: { idempotency_key: string; lease_id: string; cell: CellAttempt; max_micros: number }): Promise<LedgerReply> {

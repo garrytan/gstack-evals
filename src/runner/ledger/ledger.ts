@@ -11,7 +11,7 @@ import type { Lease } from "../../types.ts";
 import { admitLease, programSkills } from "./envelope.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { checkQuotes, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { capStopRefusal, checkQuotes, holderBound, isHolder, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type Holder, type ItemState, type LeaseFile, type Quote, type RecordFile, type StopFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_LEASE_TTL_MS = 7 * DEFAULT_LEASE_TTL_MS;
@@ -81,6 +81,8 @@ export function recordApproval(record: string, a: { action: "init" | "raise"; it
 function admit(record: string, state: ItemState, run_id: string): void {
   if (state.cap_micros === null) throw new LedgerError("E_LEDGER_MISSING", "no approved cap is on record for line item " + state.item + " in " + record + "; " + ESCALATE);
   if (state.run_id !== null && state.run_id !== run_id) throw new LedgerError("E_ITEM_BOUND", "line item " + state.item + " is bound to run " + state.run_id + ", so run " + run_id + " cannot spend from it");
+  const stop = capStopRefusal(state);
+  if (stop) throw stop;
   const open = state.open;
   if (open) {
     throw new LedgerError(
@@ -90,6 +92,15 @@ function admit(record: string, state: ItemState, run_id: string): void {
   }
 }
 
+/** A lease of the run, on any line item, that names a holder in another run directory than dir. */
+export function rivalHolder(record: string, run_id: string, dir: string): LeaseFile | null {
+  for (const item of listItems(record)) {
+    const rival = read(record, item).leases.find(({ lease }) => lease.run_id === run_id && lease.holder !== undefined && lease.holder.dir !== dir);
+    if (rival) return rival.lease;
+  }
+  return null;
+}
+
 const toLease = (f: LeaseFile, state: Lease["state"]): Lease => ({ lease_id: f.lease_id, line_item: f.item, run_id: f.run_id, machine_id: f.machine_id, reserved_micros: f.reserved_micros, expires_at: f.expires_at, state });
 
 export interface LeaseRequest {
@@ -97,6 +108,8 @@ export interface LeaseRequest {
   run_id: string;
   /** The holder: this machine by default, or the sealed workflow a lease is exported to. */
   machine_id?: string;
+  /** The driver launch that holds the lease; its run directory binds the run (holderBound). */
+  holder?: Holder;
   /** Defaults to everything the line item has left. */
   amount_micros?: number;
   ttl_ms?: number;
@@ -121,8 +134,11 @@ export type RequireAdmission = (record: string, lease: LeaseFile) => string | nu
  * lease's expiry, so a lease whose expiry passes before it is written is refused with E_ENVELOPE_LATE.
  */
 export function openLease(record: string, local: LocalLedger | null, req: LeaseRequest): Lease {
+  if (req.holder !== undefined && !isHolder(req.holder)) throw new LedgerError("E_USAGE", "a lease's holder names its run directory's absolute path and a launch nonce");
   const state = read(record, req.item);
   admit(record, state, req.run_id);
+  const rival = req.holder && rivalHolder(record, req.run_id, req.holder.dir);
+  if (rival) throw holderBound(rival, req.holder!);
   const cap = state.cap_micros!;
   const left = cap - state.committed_micros;
   const amount = req.amount_micros ?? left;
@@ -141,6 +157,7 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
     lease_id: req.item + "." + String(seq).padStart(4, "0") + "." + randomBytes(3).toString("hex"),
     run_id: req.run_id,
     machine_id: req.machine_id ?? machineId(),
+    ...(req.holder ? { holder: req.holder } : {}),
     reserved_micros: amount,
     expires_at: new Date(now.getTime() + ttl).toISOString(),
     created_at: now.toISOString(),
@@ -185,6 +202,17 @@ function findLease(record: string, lease_id: string): { state: ItemState; lease:
   return { state, ...entry };
 }
 
+/**
+ * Records a cap stop on a lease's item in the record, written and fsynced in the lease's slot before the caller answers
+ * the session it refuses. The first stop on a lease stands: a later call returns it unchanged.
+ */
+export function recordStop(record: string, lease_id: string, scope: string, at: Date = new Date()): StopFile {
+  const { lease } = findLease(record, lease_id);
+  const stop: StopFile = { schema: 1, kind: "stop", item: lease.item, seq: lease.seq, lease_id, run_id: lease.run_id, scope, at: at.toISOString() };
+  const result = write(record, stop);
+  return typeof result === "object" ? (result.conflict as StopFile) : stop;
+}
+
 /** The lease export for a sealed workflow that cannot reach the record: the open lease's file, passed as a dispatch input. */
 export function exportLease(record: string, lease_id: string): LeaseFile {
   const { lease, close } = findLease(record, lease_id);
@@ -201,14 +229,19 @@ function warnOverspent(lease: LeaseFile, close: CloseFile, warn?: (code: ReasonC
 /**
  * Closes a lease from this machine's local ledger into the record. Idempotent by lease id: a retry writes the same
  * bytes. With record null, for a workflow that cannot reach the record, it only returns the close as the settle artifact.
- * A close above the lease's amount is recorded as it is, with a LEASE_OVERSPENT warning.
+ * A close above the lease's amount is recorded as it is, with a LEASE_OVERSPENT warning. cap_stop, the scope of a cap
+ * stop the lease closed on, goes into the close, and so does the scope of a stop record on the lease, so no new lease on
+ * the item is admitted after it.
  */
-export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void): CloseFile {
+export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void, cap_stop?: string): CloseFile {
+  let scope = cap_stop;
   if (record !== null) {
-    const { close: prior } = findLease(record, lease_id);
+    const { state, close: prior } = findLease(record, lease_id);
     if (prior && !local.getLease(lease_id)) return prior;
+    scope ??= state.stops.find((s) => s.lease_id === lease_id)?.scope;
   }
-  const close = local.stageClose(lease_id);
+  const staged = local.stageClose(lease_id);
+  const close: CloseFile = scope ? { ...staged, cap_stop: scope } : staged;
   warnOverspent(local.getLease(lease_id)!.file, close, warn);
   if (record === null) return close;
   const result = write(record, close, "E_LEASE_UNSETTLED");

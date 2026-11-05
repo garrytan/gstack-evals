@@ -270,6 +270,69 @@ def test_told_arm_turn_two_is_the_slash_command():
     check(c.users() == [STATEMENT + "\n\n" + ARMS["build_suffix"], "/ship"], c.users())
 
 
+def u4(case, answer=None, **opts):
+    """Switches a Case to the outcome-skills driver's U4 mode; answer is what its control plane returns for an open."""
+    for k, v in {"ledger": "u4", "task_label": "t-1", "trial_n": 1, **opts}.items():
+        setattr(case.agent.options, k, v)
+    slot = {"id": "s-1", "token": "real-session-token", "ledger": "u4", "item": "g-none", "lease_id": "g-none.0001.abcdef", "meter_id": "m_1", "base_url": "http://127.0.0.1:9/s_slot/anthropic"}
+    plain = case.post
+
+    def post(url, body, timeout=30):
+        return {**plain(url, body, timeout), **(slot if answer is None else answer)} if url.endswith("/sessions") else plain(url, body, timeout)
+
+    case.post = post
+    return case
+
+
+def refused(case):
+    """Runs a Case that must raise before its session runs; returns the error."""
+    saved = dict(os.environ)
+    os.environ.update(case.env)
+    lb.post_json = case.post
+    egress.apply = lambda container, allow: case.egress.append(("apply", allow)) or {"event": "egress", "allow": allow}
+    egress.probe = lambda exec_fn, container, allow, node: case.egress.append(("probe", allow)) or {"event": "egress_probe"}
+    try:
+        asyncio.run(case.agent.run(STATEMENT, types.SimpleNamespace(session_id="trial-" + case.dir.name), types.SimpleNamespace()))
+    except Exception as e:
+        return e
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+    raise AssertionError("the run was not refused")
+
+
+def test_u4_session_runs_on_the_slot_the_driver_answers():
+    c = u4(Case("u4-slot", scenario="one")).run()
+    opened = [b for name, b in c.posts if name == "sessions"]
+    check(opened and opened[0]["ledger"] == "u4" and opened[0]["meta"] == {"arm": "none", "task": "t-1", "trial_n": 1}, opened)
+    start = [e for e in c.events if e["event"] == "start"]
+    check(start and start[0]["base_url"] == "http://127.0.0.1:9/s_slot/anthropic", start)
+    check(c.summary["termination"] == "completed", c.summary["phases"])
+
+
+def test_u4_refuses_an_answer_that_is_not_a_slot_and_closes_it():
+    c = u4(Case("u4-laneb", scenario="one"), answer={"ledger": None})
+    e = refused(c)
+    check(isinstance(e, ra.SandboxSetupError) and "not a U4 slot" in str(e), repr(e))
+    check([b for name, b in c.posts if name == "close"] == [{"reason": "not_u4"}], c.posts)
+    check(not c.log.exists() or '"event": "start"' not in c.log.read_text(), "claude started")
+
+
+def test_u4_needs_a_task_and_a_trial_before_the_sandbox_opens():
+    c = u4(Case("u4-no-trial", scenario="one"), trial_n=0)
+    e = refused(c)
+    check(isinstance(e, ra.SandboxSetupError) and "task_label and trial_n" in str(e), repr(e))
+    check(c.posts == [] and c.egress == [], (c.posts, c.egress))
+
+
+def test_registry_arms_run_only_on_u4():
+    c = Case("registry-laneb", scenario="one")
+    c.agent.options.arms_path = str(ROOT / "lanes/outcome-skills/arms/registry.json")
+    e = refused(c)
+    check(isinstance(e, ra.SandboxSetupError) and "outcome-skills registry" in str(e), repr(e))
+    check(c.posts == [] and c.egress == [], (c.posts, c.egress))
+
+
 def main():
     failed = 0
     for name, fn in list(globals().items()):

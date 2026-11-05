@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportLease, importSettlement, ledgerStatus, MAX_LEASE_TTL_MS, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { exportLease, importSettlement, ledgerStatus, MAX_LEASE_TTL_MS, openLease, reconcileLease, recordApproval, recordStop, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem, slotPath, writeOnce } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt, LedgerReply } from "../../src/types.ts";
@@ -423,3 +423,75 @@ describe("lease guards from the /ship review", () => {
   });
 });
 
+describe("lease holders (GST-1381)", () => {
+  const holderWorld = (items: string[]) => {
+    const dir = scratch();
+    const record = join(dir, "record");
+    for (const item of items) recordApproval(record, { action: "init", item, cap_micros: 10 * DOLLAR, quotes: [quote], admission: "warn" });
+    return { record, local: LocalLedger.open(join(dir, "machine-a.sqlite")) };
+  };
+
+  test("a lease written before holders still reads and settles, a lease with no holder keeps its old bytes, and a malformed holder is an unreadable record", () => {
+    const { record, local } = holderWorld(["old", "new", "bad"]);
+    const before = { schema: 1 as const, kind: "lease" as const, item: "old", seq: 1, lease_id: "old.0001.abcdef", run_id: "run-a", machine_id: "m-a", reserved_micros: 4 * DOLLAR, expires_at: "2099-01-01T00:00:00.000Z", created_at: "2026-11-01T00:00:00.000Z" };
+    expect(writeOnce(record, before)).toBe("written");
+    expect(readItem(record, "old").open).toEqual(before);
+    expect(ledgerStatus(record).find((s) => s.item === "old")?.open_lease?.lease_id).toBe(before.lease_id);
+    const plain = openLease(record, local, { item: "new", run_id: "run-a" });
+    expect(Object.keys(JSON.parse(readFileSync(slotPath(record, { kind: "lease", item: "new", seq: 1 }), "utf8")))).toEqual(Object.keys(before));
+    expect(settleLease(record, local, plain.lease_id).spent_micros).toBe(0);
+    writeOnce(record, { ...before, item: "bad", lease_id: "bad.0001.abcdef", holder: { dir: "runs/a", nonce: "" } });
+    expect(codeOf(() => readItem(record, "bad"))).toBe("E_LEDGER_RECORD");
+    local.close();
+  });
+
+  test("a run's leases that name a holder all name one run directory: another directory is refused with E_USAGE and writes nothing, and a lease with no holder binds nothing", () => {
+    const { record, local } = holderWorld(["a", "b", "c", "d", "e"]);
+    const A = { dir: "/runs/a", nonce: "n1" };
+    expect(openLease(record, local, { item: "a", run_id: "run-a", holder: A }).lease_id).toStartWith("a.0001.");
+    expect(readItem(record, "a").open?.holder).toEqual(A);
+    let refusal: LedgerError | null = null;
+    try {
+      openLease(record, local, { item: "b", run_id: "run-a", holder: { dir: "/runs/b", nonce: "n2" } });
+    } catch (e) {
+      refusal = e as LedgerError;
+    }
+    expect(refusal?.code).toBe("E_USAGE");
+    expect(refusal?.message).toContain("/runs/a");
+    expect(readItem(record, "b").leases).toHaveLength(0);
+    expect(openLease(record, local, { item: "b", run_id: "run-a" }).run_id).toBe("run-a");
+    expect(openLease(record, local, { item: "c", run_id: "run-a", holder: { dir: "/runs/a", nonce: "n3" } }).run_id).toBe("run-a");
+    expect(openLease(record, local, { item: "d", run_id: "run-b", holder: { dir: "/runs/b", nonce: "n4" } }).run_id).toBe("run-b");
+    expect(codeOf(() => openLease(record, local, { item: "e", run_id: "run-c", holder: { dir: "runs/c", nonce: "" } }))).toBe("E_USAGE");
+    expect(readItem(record, "e").leases).toHaveLength(0);
+    local.close();
+  });
+
+  test("a close that records a cap stop refuses every new lease on its item with CAP_STOP, and a close without one still reads", () => {
+    const { record, local } = holderWorld(["capped", "plain"]);
+    const first = openLease(record, local, { item: "capped", run_id: "run-a", amount_micros: 4 * DOLLAR });
+    expect(settleLease(record, local, first.lease_id, undefined, "told only").cap_stop).toBe("told only");
+    expect(readItem(record, "capped").leases[0]!.close?.cap_stop).toBe("told only");
+    expect(codeOf(() => openLease(record, local, { item: "capped", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+    expect(readItem(record, "capped").leases).toHaveLength(1);
+    const plain = openLease(record, local, { item: "plain", run_id: "run-a", amount_micros: 4 * DOLLAR });
+    expect(settleLease(record, local, plain.lease_id)).not.toHaveProperty("cap_stop");
+    expect(openLease(record, local, { item: "plain", run_id: "run-a", amount_micros: DOLLAR }).lease_id).toStartWith("plain.0002.");
+    local.close();
+  });
+
+  test("a stop record refuses every new lease on its item with CAP_STOP, even while its lease is open; a settle keeps it and copies it into the close, and nothing rewrites it", () => {
+    const { record, local } = holderWorld(["stopped"]);
+    const first = openLease(record, local, { item: "stopped", run_id: "run-a", amount_micros: 4 * DOLLAR });
+    const stop = recordStop(record, first.lease_id, "told only");
+    expect(stop).toMatchObject({ kind: "stop", item: "stopped", seq: 1, lease_id: first.lease_id, run_id: "run-a", scope: "told only" });
+    expect(recordStop(record, first.lease_id, "all: another scope")).toEqual(stop);
+    expect(readItem(record, "stopped").stops).toEqual([stop]);
+    expect(codeOf(() => openLease(record, local, { item: "stopped", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+    expect(settleLease(record, local, first.lease_id).cap_stop).toBe("told only");
+    expect(readItem(record, "stopped").stops).toEqual([stop]);
+    expect(codeOf(() => openLease(record, local, { item: "stopped", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+    expect(readItem(record, "stopped").leases).toHaveLength(1);
+    local.close();
+  });
+});

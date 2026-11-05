@@ -117,6 +117,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [NEGATIVE_UNVALIDATED](#negative_unvalidated) | warning | U5 |
 | [RIG_UNPROVEN](#rig_unproven) | warning | U4 |
 | [LEASE_OVERSPENT](#lease_overspent) | warning | U4 |
+| [JOURNAL_MISSING](#journal_missing) | warning | U4 |
+| [STAGE_RECOVERED](#stage_recovered) | warning | U4 |
+| [STAGE_SETTLED](#stage_settled) | warning | U4 |
 | [CLEANUP_INCOMPLETE](#cleanup_incomplete) | warning | U9 |
 | [E_STACK_SOURCE](#e_stack_source) | 2 | U10 |
 | [E_STACK_DIGEST](#e_stack_digest) | 2 | U10 |
@@ -1185,6 +1188,30 @@ Warning. Owner: U4.
 A lease closed holding more than it reserved, because a provider billed a call above its reservation. The close records the real spend, so the line item's committed total can pass its cap.
 
 Fix: Nothing to undo: the money is spent and recorded. Find the call whose spend passed its reservation in the local ledger and report it against the price table (U3). A new lease gets only what is left of the cap; the owner raises the cap if the run needs more.
+
+Warning. Owner: U4.
+
+### JOURNAL_MISSING
+
+The outcome-skills driver recovered an open lease from an earlier run on this machine and found no proxy journal for it, so nothing tells which of its calls were answered. The settle keeps every call still reserved at its full reservation.
+
+Fix: Nothing to undo: the lease closes charging every unanswered call in full, which can only overstate spend. Recovery runs only from the run directory that holds the lease, so a missing journal means the earlier driver stopped before its proxy started, or the journal was removed.
+
+Warning. Owner: U4.
+
+### STAGE_RECOVERED
+
+The outcome-skills driver found a stage lease that an earlier launch of the same run, from the same run directory, left open on this machine, reconciled its proxy journal and settled it before opening anything new.
+
+Fix: Nothing is required. Sessions the earlier driver was serving count as gaps whose named repair is the driver relaunch; the batch reruns them under its rerun rule.
+
+Warning. Owner: U4.
+
+### STAGE_SETTLED
+
+The outcome-skills driver closed one stage: it closed the stage's live sessions, stopped its proxy, reconciled the proxy journal and settled the stage lease. The line names how the stage ended (completed, cap_stop, lease_expired or failed) and, on a cap stop, which stages it ended.
+
+Fix: Nothing is required. A cap stop is an incomplete run and is never retried to change a verdict; a lease_expired stage resumes when the driver is launched again for the same run from the same run directory.
 
 Warning. Owner: U4.
 

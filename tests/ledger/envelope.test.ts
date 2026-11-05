@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ledgerCli } from "../../src/runner/ledger/cli.ts";
 import { admitLease, envelopeStatus, recordCrew, recordProgram } from "../../src/runner/ledger/envelope.ts";
-import { machineId, openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { machineId, openLease, recordApproval, recordStop, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { isRecordFile, LedgerError, readItem, type LeaseFile } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt } from "../../src/types.ts";
@@ -186,6 +186,49 @@ try { openLease(record, null, { item, run_id: "run-" + item, amount_micros: 1200
     );
     expect([inner, outer, checks]).toEqual(["ok", "ENVELOPE_PROGRAM_STOP", 1]);
     expect(envelopeStatus(w.record, "wave1").total).toMatchObject({ open_micros: 1_200 * D, pending_micros: 0, committed_micros: 9_200 * D });
+  });
+
+  test("of two launches binding one run from two directories at the same moment, the one that lost the entry slot is checked again and refused with E_USAGE", () => {
+    const w = world();
+    stage(w.record, "pe-a", [PE], 100 * D);
+    stage(w.record, "ap-a", [AP], 100 * D);
+    const now = new Date();
+    const file: LeaseFile = { ...leaseFile("pe-a", 100 * D, new Date(now.getTime() + 3_600_000), now), run_id: "run-g", holder: { dir: "/runs/b", nonce: "nb" } };
+    let inner = "";
+    let checks = 0;
+    const outer = codeOf(() =>
+      admitLease(w.record, readItem(w.record, "pe-a"), file, {
+        afterCheck: () => {
+          if (checks++ === 0) inner = codeOf(() => openLease(w.record, null, { item: "ap-a", run_id: "run-g", holder: { dir: "/runs/a", nonce: "na" }, requireAdmission: () => null }));
+        },
+      }),
+    );
+    expect([inner, outer, checks]).toEqual(["ok", "E_USAGE", 1]);
+    expect(envelopeStatus(w.record, "wave1").total).toMatchObject({ open_micros: 100 * D, pending_micros: 0 });
+  });
+
+  test("admitLease refuses a lease on an item whose record holds a stop record, with its lease still open, before any entry is claimed", () => {
+    const w = world();
+    stage(w.record, "pe-held", [PE], 100 * D);
+    const first = lease(w.record, w.local, "pe-held", 40 * D);
+    recordStop(w.record, first.lease_id, "plan-eng-review:told only");
+    const now = new Date();
+    const before = envelopeStatus(w.record, "wave1").total;
+    const file: LeaseFile = { ...leaseFile("pe-held", 10 * D, new Date(now.getTime() + 3_600_000), now), seq: 2, lease_id: "pe-held.0002.abcdef" };
+    expect(codeOf(() => admitLease(w.record, readItem(w.record, "pe-held"), file))).toBe("CAP_STOP");
+    expect(envelopeStatus(w.record, "wave1").total).toEqual(before);
+  });
+
+  test("admitLease refuses a lease on an item whose record holds a cap-stop close, before any entry is claimed", () => {
+    const w = world();
+    stage(w.record, "pe-stop", [PE], 100 * D);
+    const first = lease(w.record, w.local, "pe-stop", 40 * D);
+    settleLease(w.record, w.local, first.lease_id, undefined, "all: none's cap stop ends both skills incomplete");
+    const now = new Date();
+    const before = envelopeStatus(w.record, "wave1").total;
+    const file: LeaseFile = { ...leaseFile("pe-stop", 10 * D, new Date(now.getTime() + 3_600_000), now), seq: 2, lease_id: "pe-stop.0002.abcdef" };
+    expect(codeOf(() => admitLease(w.record, readItem(w.record, "pe-stop"), file))).toBe("CAP_STOP");
+    expect(envelopeStatus(w.record, "wave1").total).toEqual(before);
   });
 });
 
