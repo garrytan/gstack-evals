@@ -15,12 +15,14 @@ import { CEILING_GRID, EIGHT_GRID, grid, gridTable, interim, interimLines, MAIN_
 
 export const HELP = `Usage: gstack-evals real score <command> [options]
 
-  trial <evaluator dir> --task <task dir> --model <id> [--arm <name>] [--runs <n>] [--seed <n>] [--work <dir>]
-        [--out <trial-score.json>]
+  trial <evaluator dir> --task <task dir> --model <id> [--image-id <sha256:...>] [--arm <name>] [--runs <n>] [--seed <n>]
+        [--work <dir>] [--out <trial-score.json>]
       Score one trial: grade the shipped head from shipped.bundle, a held draft, the turn-1 tree and the final tree
       with the task's hidden tests in Docker, run the destructive and check-gaming detectors and the no-gstack exposure
       check, and write the evidence (default <evaluator dir>/trial-score.json). --runs sets verifier runs per tree
-      (default 1).
+      (default 1). Every tree is graded in the task's pinned image, --image-id (its image manifest row's id), which must
+      be on this host and be the image the trial logged; scoring never builds a task image. --task is the original task
+      dir, never a bound run copy.
   analyze --config <config.json> [--taxonomy <taxonomy.json>] [--out <analysis.json>] [--md <report.md>] <trial-score.json or dir>...
       Classify every trial and run the paired analysis: the primary in the fixed order with the interim boundary, the
       truncation guard, the cut rule, the secondaries and the ship-replay family (each its own Holm family) and the
@@ -43,9 +45,9 @@ export async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
   try {
     if (cmd === "trial") {
-      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { task: { type: "string" }, model: { type: "string" }, arm: { type: "string" }, runs: { type: "string", default: "1" }, seed: { type: "string", default: "1" }, work: { type: "string" }, out: { type: "string" } } });
+      const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { task: { type: "string" }, model: { type: "string" }, "image-id": { type: "string" }, arm: { type: "string" }, runs: { type: "string", default: "1" }, seed: { type: "string", default: "1" }, work: { type: "string" }, out: { type: "string" } } });
       if (positionals.length !== 1 || !values.task || !values.model) return fail("E_USAGE", "real score trial needs one evaluator dir, --task and --model");
-      const e = scoreTrial({ evaluatorDir: positionals[0], taskDir: values.task, model: values.model, arm: values.arm, runs: Number(values.runs), seed: Number(values.seed), work: values.work ?? mkdtempSync(join(tmpdir(), "real-score-")) });
+      const e = scoreTrial({ evaluatorDir: positionals[0], taskDir: values.task, model: values.model, imageId: values["image-id"], arm: values.arm, runs: Number(values.runs), seed: Number(values.seed), work: values.work ?? mkdtempSync(join(tmpdir(), "real-score-")) });
       const out = values.out ?? join(positionals[0], "trial-score.json");
       writeFileSync(out, JSON.stringify(e, null, 2) + "\n");
       console.log(out + ": " + e.trial + " " + e.arm + " shipment " + (e.shipment?.status ?? "none") + (e.infra_reason ? " (infra: " + e.infra_reason + ")" : ""));

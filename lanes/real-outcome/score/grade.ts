@@ -3,12 +3,14 @@
 // wiki/plans/2026-11-01-geva-87-real-outcome-lane-plan, open items 1, 2 and 10; lanes/real-outcome/score/README.md).
 // The shipped head comes from the sidecar's shipped.bundle (lanes/real-outcome/sandbox/SHIPMENT.md), never from the
 // container, and every tree is graded by the task's verifier (lanes/real-outcome/task/verify.ts) as a patch against the
-// starting tree: the shipped head, a held draft, the turn-1 tree and the final tree. Keyless: git and Docker only.
+// starting tree: the shipped head, a held draft, the turn-1 tree and the final tree. Keyless: git and Docker only. Every
+// tree is graded in the task's pinned image id (the image manifest row's), never in an image rebuilt at score time, so
+// scoring builds nothing and runs on a keyed host as well as a keyless one.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { ShipmentRecord } from "../sandbox/shipment.ts";
-import { buildImage } from "../task/check.ts";
+import { docker } from "../task/docker.ts";
 import { readTask, sha256, TaskError, type TaskJson } from "../task/format.ts";
 import { allPass, idResults, requiredTests, stopped, verifyTree, type TreeResult } from "../task/verify.ts";
 import { destructiveActs, gamingActs, parsePatch, transcriptFlags } from "./detect.ts";
@@ -31,6 +33,9 @@ export interface GradeOptions {
   seed: number;
   armsPath?: string;
   gstackSkills?: string[];
+  /** The task's pinned image id (sha256:<64 hex>, its image manifest row's): the default grader grades every tree in it,
+   * once docker image inspect finds it on this host with exactly that id. Required once a tree is graded. */
+  imageId?: string;
   /** Grades one tree; defaults to the task's verifier in Docker. Tests inject one. */
   grade?: Grader;
 }
@@ -93,8 +98,13 @@ export function treeGrade(task: TaskJson, tree: TreeResult): TreeGrade {
 function dockerGrader(o: GradeOptions, task: TaskJson): Grader {
   let image: string | null = null;
   return (label, patch) => {
+    if (image === null) {
+      if (!/^sha256:[0-9a-f]{64}$/.test(o.imageId ?? "")) throw new ScoreError("E_REAL_SCORE_INPUT", "grading a tree needs the task's pinned image id (--image-id sha256:<64 hex>, its image manifest row's), not " + JSON.stringify(o.imageId ?? null) + "; scoring never builds the task image");
+      const got = docker(["image", "inspect", "-f", "{{.Id}}", o.imageId!], { timeoutMs: 60000 });
+      if (got.status !== 0 || got.stdout.trim() !== o.imageId) throw new ScoreError("E_REAL_SCORE_INPUT", "the pinned image " + o.imageId + " is not on this host with that id (docker image inspect: " + (got.stdout.trim() || got.stderr.trim().slice(-200)) + "); docker load keeps an image's id");
+      image = o.imageId!;
+    }
     try {
-      image ??= buildImage(o.taskDir, task).tag;
       return treeGrade(task, verifyTree({ taskDir: o.taskDir, task, image, label, patch, runs: o.runs, seed: o.seed, work: join(o.work, "verify") }));
     } catch (e) {
       if (e instanceof TaskError && e.code === "E_REAL_TASK_DOCKER") return { status: "no_verdict", reason: e.message.slice(0, 400) };
@@ -183,8 +193,18 @@ export function scoreTrial(opts: GradeOptions): TrialEvidence {
   if (!Number.isSafeInteger(opts.runs) || opts.runs < 1) throw new ScoreError("E_REAL_SCORE_INPUT", "runs must be a positive whole number, not " + opts.runs);
   if (!Number.isSafeInteger(opts.seed) || opts.seed < 0) throw new ScoreError("E_REAL_SCORE_INPUT", "seed must be a whole number of 0 or more, not " + opts.seed);
   const o = { ...opts, evaluatorDir: resolve(opts.evaluatorDir), taskDir: resolve(opts.taskDir), work: resolve(opts.work) };
+  if (/^\s*docker_image\s*=/m.test(readText(join(o.taskDir, "task.toml")) ?? "")) throw new ScoreError("E_REAL_SCORE_INPUT", o.taskDir + " is a bound run copy (its task.toml names a prebuilt docker_image); pass --task the original task dir the image manifest was pinned from");
   const task = readTask(o.taskDir);
   const ev = (f: string) => join(o.evaluatorDir, f);
+  const ran = new Set((readText(ev("usersim-events.jsonl")) ?? "").split("\n").flatMap((l) => {
+    try {
+      const e = JSON.parse(l);
+      return e?.event === "image" ? [String(e.image_id)] : [];
+    } catch {
+      return [];
+    }
+  }));
+  if (o.imageId !== undefined && [...ran].some((id) => id !== o.imageId)) throw new ScoreError("E_REAL_SCORE_INPUT", "--image-id " + o.imageId + " is not the image the trial ran in (" + [...ran].join(", ") + ")");
   const summary = readJson(ev("real-summary.json")) as { arm?: string; termination?: string | null; skill_calls?: { build?: string[] }; proxy?: { spent_micros?: number | null; refused?: number | null } } | null;
   const arm = o.arm ?? summary?.arm;
   if (!arm) throw new ScoreError("E_REAL_SCORE_INPUT", o.evaluatorDir + ": no real-summary.json names the arm; pass --arm");
