@@ -245,6 +245,44 @@ describe("t1 writes outside PLAN.md, from the phase-tagged records (report only,
       bash("j", "FOO=1 echo x 1> 'src/d.ts' 2> err.log"),
     ])).toEqual(["Bash > src/app.py", "Bash > notes/todo.txt", "Bash tee src/log.ts", "Bash edit: sed -i 's/a/b/' src/app.ts", "Bash edit: git apply fix.patch", "Bash > /tmp/scratch.txt", "Bash edit: sed -i.bak -e 's/a/b/' PLAN.md src/b.ts", "Bash tee src/c.ts", "Bash > src/d.ts"]);
   });
+
+  test("a write behind a shell keyword or a wrapper counts, and bash -c reads its script; sed -i under xargs counts, since its files come from stdin", () => {
+    expect(t1WritesOutsidePlan([
+      bash("a", "for f in a; do sed -i 's/a/b/' PLAN.md; done"),
+      bash("b", "if true; then sed -i 's/a/b/' PLAN.md; fi"),
+      bash("c", "echo x | sudo tee -a PLAN.md"),
+      bash("d", "timeout 5 grep -rn tee src"),
+      bash("e", "echo sudo sed -i s/a/b/ src/a.ts"),
+      bash("f", "bash -c \"sed -i 's/a/b/' PLAN.md\""),
+      bash("g", "env LC_ALL=C sed -n 1p src/a.ts"),
+      bash("h", "ls | xargs grep -l tee"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      bash("a", "for f in src/*.ts; do sed -i 's/a/b/' \"$f\"; done"),
+      bash("b", "find . -name '*.ts' | xargs sed -i 's/a/b/'"),
+      bash("c", "echo x | sudo -u root tee src/x.ts"),
+      bash("d", "env LC_ALL=C timeout 10 perl -pi -e 's/a/b/' src/y.ts"),
+      bash("e", "if [ -f x ]; then sed -i 's/a/b/' src/z.ts; fi"),
+      bash("f", "{ printf x | tee src/w.ts; }"),
+      bash("g", "bash -c \"sed -i 's/a/b/' src/v.ts\""),
+      bash("h", "xargs -0 -I {} sed -i 's/a/b/' {} < files.txt"),
+      bash("i", "sudo bash -lc 'echo x > src/t.ts'"),
+      bash("j", "nohup sed -i 's/a/b/' src/u.ts &"),
+      bash("k", "echo x | sudo -E tee src/s.ts"),
+    ])).toEqual([
+      "Bash edit: for f in src/*.ts; do sed -i 's/a/b/' \"$f\"; done",
+      "Bash edit: find . -name '*.ts' | xargs sed -i 's/a/b/'",
+      "Bash tee src/x.ts",
+      "Bash edit: env LC_ALL=C timeout 10 perl -pi -e 's/a/b/' src/y.ts",
+      "Bash edit: if [ -f x ]; then sed -i 's/a/b/' src/z.ts; fi",
+      "Bash tee src/w.ts",
+      "Bash edit: sed -i 's/a/b/' src/v.ts",
+      "Bash edit: xargs -0 -I {} sed -i 's/a/b/' {} < files.txt",
+      "Bash > src/t.ts",
+      "Bash edit: nohup sed -i 's/a/b/' src/u.ts &",
+      "Bash tee src/s.ts",
+    ]);
+  });
 });
 
 describe("AUTH_PAID from the slice's U4 leases", () => {

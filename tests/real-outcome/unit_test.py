@@ -466,6 +466,9 @@ def test_told_turn_one_holds_a_recommended_implement_option():
     assert u.counts["t1"] == {"questions": 2, "recommended": 0, "fallback": 0, "hold": 2, "prose": 0, "prose_unanswered": 0}, u.counts
     events = [json.loads(line) for line in u.log_path.read_text().splitlines()]
     assert [(e["answer"], e["source"]) for e in events if e["event"] == "question"] == [(PLAN_HOLD, "hold")] * 2, events
+    u = told_user()
+    u.start("t1")
+    assert u.answer([q("Should I go ahead?", "Yes, proceed with the plan (Recommended)", "No")]) == {"Should I go ahead?": PLAN_HOLD}
 
 
 def test_told_turns_from_the_skill_turn_on_keep_todays_answers():
