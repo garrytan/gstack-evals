@@ -321,17 +321,19 @@ function compare(rd: Readings) {
 
 /** Text is compared as word tokens: lowercased runs of letters, digits and underscores, so punctuation and markdown never hide a match. */
 const toks = (t: string) => t.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
-/** Names (task ids, repositories, tests, paths) are compared as id tokens: lowercased runs of letters, digits, "_", "-", "." and "/", with a trailing "." trimmed. */
-const idToks = (t: string) => (t.toLowerCase().match(/[\p{L}\p{N}_.\-\/]+/gu) ?? []).map((w) => w.replace(/\.+$/, "")).filter(Boolean);
+/** Names (task ids, repositories, tests, paths) are compared as id tokens: lowercased runs of letters, digits, "_", "-", ".", "/", ":" and "@", with trailing "." and ":" trimmed. */
+const idToks = (t: string) => (t.toLowerCase().match(/[\p{L}\p{N}_.\-\/:@]+/gu) ?? []).map((w) => w.replace(/[.:]+$/, "")).filter(Boolean);
 const named = (name: string) => (/[\p{L}\p{N}]/u.test(name) ? name.toLowerCase() : fail("E_USAGE the name " + JSON.stringify(name) + " has no letter or digit"));
-/** Whether dev text holds a name as a whole run of id tokens, so test-held never counts as shared because dev holds test-held-only. */
-function shares(text: string) {
-  const ws = idToks(text), at = new Map<string, number[]>();
+/** Whether a text holds a name as a whole run of tokens under one tokenizer. */
+function runs(tok: (t: string) => string[], text: string) {
+  const ws = tok(text), at = new Map<string, number[]>();
   ws.forEach((w, i) => { const xs = at.get(w); if (xs) xs.push(i); else at.set(w, [i]); });
-  return (name: string) => { const run = idToks(named(name)); return (at.get(run[0]!) ?? []).some((i) => run.every((w, j) => ws[i + j] === w)); };
+  return (name: string) => { const run = tok(named(name)); return (at.get(run[0]!) ?? []).some((i) => run.every((w, j) => ws[i + j] === w)); };
 }
-/** Whether an artifact or a diff holds a name anywhere, inside a longer name included: this side fails closed. */
-const holds = (text: string) => { const t = text.toLowerCase(); return (name: string) => t.includes(named(name)); };
+/** Whether dev text holds a name whole, as a run of id tokens, so test-held never counts as shared because dev holds test-held-only. A name with a space inside never counts as shared. */
+const shares = (text: string) => { const has = runs(idToks, text); return (name: string) => !/\s/.test(name.trim()) && has(name); };
+/** Whether an artifact or a diff holds a name: anywhere as a lowercased substring, inside a longer name included, or as a run of its word tokens whatever the separators and surrounding whitespace. This side fails closed. */
+const holds = (text: string) => { const t = text.toLowerCase(), has = runs(toks, text); return (name: string) => t.includes(named(name)) || has(name); };
 function grams(text: string, n = 8) { const w = toks(text); const s = new Set<string>(); for (let i = 0; i + n <= w.length; i++) s.add(w.slice(i, i + n).join(" ")); return s; }
 
 function handoff(h: { artifact: string; heldIds: string[]; devText: string; heldText: string }) {

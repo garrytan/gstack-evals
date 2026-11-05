@@ -12,21 +12,21 @@ links:
   - 2026-11-04-geva-285-ceo-outcome-prereg
   - 2026-11-05-geva-284-r3c-calibrated
 attachments:
-  - 5b1a53e3c3d7068497f5be0ba9b6e2241cd08a9fe4f674e94ec7816d2548b7de  dryrun.ts.txt
-  - 7455cf99aa2d7f1aef1f83dd2d446c17355920c091b8e0ffd22af2cd0986eccc  dryrun.txt
+  - a5499f4bb6ce4cc47054a872dd56ed86cf3f89771fd6792d6b0c27df9bbd797d  dryrun.ts.txt
+  - aabd45e4e6b0b48524d68ebff2c8af24ea878af52e145da0fbc0f145f232a745  dryrun.txt
   - 0758e3d6a526da9c3e794ccb293b89968bfa04da0ffeb4fa3700db4c24ec0d87  judge-brief.md
   - e9e9dab127c598adbcc269bc6ed683e10e29836783839e6036f7bfc8837ccd65  key-brief.md
   - e2e99bd829c830feb77f371b0c639c89ec2fbfc8ea2c795dda16cdc7139bf278  lens.txt
   - 86e0751f1931ba59681b5d6dae6207e4aa879211455858a7e84ebbc1cd408b47  power.py
   - 2d5388efaf72b278477ae7f285ab86bae9724becec5a499e7d2ad6e4effad76b  power.txt
   - e04a8816842bf4ada37c1acfd1577599bbcc6c2cbea851546cc850c1d5cbb229  stock.txt
-  - e6d7e695e95da94d4368006bbb6c92de5a4f478c3a3ef85f48afe2d16828c75e  tbv-rule.ts.txt
+  - 3a4e21c226044e80f4fb9de9ae74fdbc4498247d4146abe149b0c3e582aa4310  tbv-rule.ts.txt
   - f8257cf34ea1c60dd56662f49c20d60f247849c3c8cced3ff1b44de64d54efe2  turns.txt
 ---
 
 # Preregistration: does gstack make an agent's report let the user catch what happened?
 
-Plan only: nothing in this post spends money. The scorer's keyless dry run (dryrun.txt) passes 139 checks with no failures at scorer commit f895ceb.
+Plan only: nothing in this post spends money. The scorer's keyless dry run (dryrun.txt) passes 145 checks with no failures at scorer commit f895ceb.
 
 ## Approval
 
@@ -232,10 +232,10 @@ Why 0.75: at 20 tasks the interval's half-width is about 0.08, so an R0 of 0.75 
 1. **Separation.** Lineage clusters sit whole in one split.
 2. **Sealing.** No held-out history, key, digest, request, reply, packet, judge reply or reading reaches the gstack Captain or any thread other than the run and judge pipelines, which use them only through the packaging script. Only held-out counts per source, stratum and category are published.
 3. **The raw source bundles.** Source A's raw run bundles are unsealed in a drive that only gstack-evals crew threads can read; no principle builder is given access. The results post discloses that, worded that way.
-4. **Handoff check.** Before any dev artifact goes to the gstack Captain, a script checks it against held-out material. It blocks on a held-out task id, repository name, test name or file path that no dev history also holds, and on a run of 8 or more words from a held-out history, key or digest that no dev history holds. Names dev and held-out share (this repo, common files, a SWE-rebench repository with tasks in both splits) never block. A name counts as shared only when a dev history holds it whole, compared as lowercased runs of letters, digits, underscores, hyphens, periods and slashes with a trailing period trimmed, so test-held is not shared because a dev history holds test-held-only. An artifact blocks when it holds a held-out-only name anywhere, inside a longer name included. 8-word runs are compared as word tokens (lowercased runs of letters, digits and underscores), so punctuation and markdown never hide a match. The dry run drives a shared name, a held-out-only name and a held-out run.
+4. **Handoff check.** Before any dev artifact goes to the gstack Captain, a script checks it against held-out material. It blocks on a held-out task id, repository name, test name or file path that no dev history also holds, and on a run of 8 or more words from a held-out history, key or digest that no dev history holds. Names dev and held-out share (this repo, common files, a SWE-rebench repository with tasks in both splits) never block when a dev history holds them whole. A name counts as shared only when a dev history holds it whole, compared as lowercased runs of letters, digits, underscores, hyphens, periods, slashes, colons and @ with trailing periods and colons trimmed, so test-held is not shared because a dev history holds test-held-only. A name with a space inside never counts as shared. A shared name that a dev history shows only inside a longer one (an absolute path, a diff header, a URL) counts as held-out only, so it can block (section 18). An artifact blocks when it holds a held-out-only name anywhere, inside a longer name included, or as a run of the name's word tokens whatever the separators. 8-word runs are compared as word tokens (lowercased runs of letters, digits and underscores), so punctuation and markdown never hide a match. The dry run drives a shared name, a held-out-only name and a held-out run.
 5. **Rounds.** At most 3 dev reads of principle candidates. A fourth needs a new post.
 6. **Principle pin post.** Before the held-out read, a post freezes P, C, the treatment diff, the splice sets at both, the skill-start stdout at both, the principle's exposure detector and the leak check. Nothing in gstack's arms changes after it.
-7. **Leak check.** The added lines of the treatment diff, less every n-gram already present anywhere in gstack at C, must share no run of 8 or more words (on the same word tokens as the handoff check) with any dev or held-out key, digest or history, and must name no task's repository, test or file anywhere, inside a longer name included. A hit goes to the Captain, and the pin post records the decision. The same scan runs over every history for the org rules' principle wording, so the none arm stays clean.
+7. **Leak check.** The added lines of the treatment diff, less every n-gram already present anywhere in gstack at C, must share no run of 8 or more words (on the same word tokens as the handoff check) with any dev or held-out key, digest or history, and must name no task's repository, test or file anywhere, inside a longer name included or as a run of the name's word tokens whatever the separators. A hit goes to the Captain, and the pin post records the decision. The same scan runs over every history for the org rules' principle wording, so the none arm stays clean.
 8. **One read.** Every arm and model runs and is judged together, analyzed once. The dev-to-held-out gap for principle on Opus prints beside the verdict; a gap over the dev split's MDD is flagged as likely overfitting.
 
 ### 12. Stage 3: the held-out read
@@ -338,7 +338,7 @@ Held-out histories, keys, digests, the split map, every request and reply, packe
 - **Source B's none arm is not gstack-free in its content.** Its histories keep the commit messages and review findings that crew agents wrote under gstack and the crew rules. Every arm sees the same text, and the results post states it.
 - **Planting is out.** Long lists with a late material item come only from real records; if B0 finds few, the list-handling read is thin, and the custody addendum says so.
 - **Another ceiling.** B0's free check or stage 1 finds it and stops.
-- **Over-blocking names.** The handoff check's artifact side and the leak check's name list match a held-out name anywhere, inside a longer name included, so a short or common name can block a clean artifact or diff. If one fires during a paid run, that item stops and the question goes to the Captain; the run has no override.
+- **Over-blocking names.** The handoff check's artifact side and the leak check's name list match a held-out name anywhere, inside a longer name included, and as a run of its word tokens, so a short or common name can block a clean artifact or diff. On the dev side a name counts as shared only when a dev history holds it whole, so a shared file that a dev history shows only inside an absolute path, a diff header or a URL, and any name with a space inside, count as held-out only and can block. If one fires during a paid run, that item stops and the question goes to the Captain; the run has no override.
 - **The first send's size.** The worst case assumes a first send of at most 130,000 tokens, and stage 1 doesn't measure it. A longer send makes a round's reserve short, so a round can meet a cap stop partway. Spend still never passes a cap, because the metering proxy reserves each send's own worst case before it goes.
 
 ### 19. Not in scope
@@ -347,7 +347,7 @@ Live work sessions (direction b), a gstack lift on what work gets done, interact
 
 ### 20. Files and the keyless dry run
 
-The prereg bundle carries: key-brief.md and judge-brief.md (frozen), stock.txt (the stock report), lens.txt, turns.txt (the three user turns and the follow-up), power.py and power.txt (seeded), tbv-rule.ts.txt (the word rule and cuts, end states, round admission, the headroom rule, the projection and all-in checks, the caps table, matched cluster statistics, verdicts, guards and flags, the handoff check and the leak check), and dryrun.ts.txt with dryrun.txt. The dry run drives every frozen rule on synthetic readings with no key in its environment: each headroom outcome (HEADROOM, CEILING, FLOOR, NO READ, JUDGE FAIL on each control and each judge, and the band edges), the headroom guards (copies hiding missing readings, in the same family or the other, a fourth pass, a clean task, an unknown task, a label mismatch), the word rule on tables, code and lists, the 250-word boundary and full-reply recall, the list-handling checks and clean-task scoring (a clean task never enters recall), every end state in precedence order including a harness failure stopping an item, cluster-mean pairing with unequal passes, an all-gap cluster, no-report rows and malformed rows, stage 3's verdicts (helps, hurts, not distinguished, untested on exposure of either arm, coverage and controls) with Holm families, the unsupported-claims flag (clean-task caveats included) and the CEILING flag, MDD n/a under 40 tasks, the dev-to-held-out gap flag, the handoff check and the leak check on a seeded hit, a clean diff, re-punctuated text, and dashed, dotted, slashed and snake_case names inside longer names, the projection check on stage 1's own printed costs (and its refusal of an unmeasured path) and the all-in check's third-pass, two-pass, capy-drop and stop branches, the money table from the caps command at caps under $2,000, error lines that start with their reason code, and one ledger lease opened and settled per frozen item on a temporary ledger, with a second run on a settled item refused.
+The prereg bundle carries: key-brief.md and judge-brief.md (frozen), stock.txt (the stock report), lens.txt, turns.txt (the three user turns and the follow-up), power.py and power.txt (seeded), tbv-rule.ts.txt (the word rule and cuts, end states, round admission, the headroom rule, the projection and all-in checks, the caps table, matched cluster statistics, verdicts, guards and flags, the handoff check and the leak check), and dryrun.ts.txt with dryrun.txt. The dry run drives every frozen rule on synthetic readings with no key in its environment: each headroom outcome (HEADROOM, CEILING, FLOOR, NO READ, JUDGE FAIL on each control and each judge, and the band edges), the headroom guards (copies hiding missing readings, in the same family or the other, a fourth pass, a clean task, an unknown task, a label mismatch), the word rule on tables, code and lists, the 250-word boundary and full-reply recall, the list-handling checks and clean-task scoring (a clean task never enters recall), every end state in precedence order including a harness failure stopping an item, cluster-mean pairing with unequal passes, an all-gap cluster, no-report rows and malformed rows, stage 3's verdicts (helps, hurts, not distinguished, untested on exposure of either arm, coverage and controls) with Holm families, the unsupported-claims flag (clean-task caveats included) and the CEILING flag, MDD n/a under 40 tasks, the dev-to-held-out gap flag, the handoff check and the leak check on a seeded hit, a clean diff, re-punctuated text, dashed, dotted, slashed and snake_case names inside longer names, names written with other separators or with trailing whitespace, and colon, @ and space-joined names on the dev side, the projection check on stage 1's own printed costs (and its refusal of an unmeasured path) and the all-in check's third-pass, two-pass, capy-drop and stop branches, the money table from the caps command at caps under $2,000, error lines that start with their reason code, and one ledger lease opened and settled per frozen item on a temporary ledger, with a second run on a settled item refused.
 | File | What it is |
 |---|---|
 | tbv-rule.ts.txt | the frozen rules, run by every stage |
@@ -429,7 +429,7 @@ Rerun the dry run from a directory holding the bundle's files, with the two scri
 | Informational: a read under 40 tasks borrowed the 40-task MDD | section 13, n/a under 40 |
 | Informational: error lines began with "error:", not their reason code | tbv-rule.ts |
 
-**/ship, review pass 2** (4 findings on the fix range: 3 blocking and 1 informational; one bounded fix under the Captain's ruling, read by one fix-check reader). Each fix to tbv-rule.ts has dry-run checks that failed on the pass 1 fix and pass after it:
+**/ship, review pass 2** (4 findings on the fix range: 3 blocking and 1 informational; one bounded fix under the Captain's ruling, read by one fix-check reader). Each of the first three fixes has dry-run checks that failed on the pass 1 fix and pass after it; the fourth only removes code, so it has none:
 
 | Finding | Where |
 |---|---|
@@ -437,3 +437,13 @@ Rerun the dry run from a directory holding the bundle's files, with the two scri
 | Blocking: copies relabelled to the other family could still hide missing Opus none readings | section 9, one Opus none reading per task and pass |
 | Blocking: the artifact side and the leak check's names missed a name inside a longer one, a regression from pass 1's whole-token match | section 11 items 4 and 7, the artifact side fails closed |
 | Informational: section 14 said the projection uses a measured first send that stage 1 never measures | section 14 and section 18, 130,000 tokens is the only first-send figure |
+
+**/ship, fix-check on the pass 2 fixes** (one reader under the Captain's grant: 3 blocking and 2 informational; one bounded fix under the Captain's ruling). A regression table holds every pass 1, pass 2 and fix-check case in both directions, and the fix must block or hit wherever either earlier fix did. Each of the three blocking fixes has dry-run checks that failed on the pass 2 fix and pass after it:
+
+| Finding | Where |
+|---|---|
+| Blocking: the artifact side and the leak check's names missed a held-out name written with other separators, a regression from pass 1's word-token match | section 11 items 4 and 7, a substring or a word-token run |
+| Blocking: a held-out name with a trailing space or CR never matched | section 11 items 4 and 7, word-token runs ignore whitespace |
+| Blocking: on the dev side a name joined by colons, @ or spaces still counted as shared inside a longer name | section 11 item 4, colons and @ as id characters, no sharing for a name with a space |
+| Informational: a shared file shown only inside a longer dev name blocks, against section 11's promise | section 11 item 4 and section 18 |
+| Informational: the pass 2 record claimed fail-first checks for a fix that only removes code | the pass 2 record |

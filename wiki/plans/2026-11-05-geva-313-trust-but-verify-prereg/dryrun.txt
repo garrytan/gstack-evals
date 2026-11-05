@@ -175,6 +175,11 @@ PASS a dotted held-out id inside a longer dev name (test.held in test.held.v2) i
 PASS a held-out path inside a longer dev path (a/b.ts in c/a/b.ts) is still held-out only, and blocks
 PASS a dev text naming the id itself, followed by a period or a comma, still shares it (never blocks)
 PASS an artifact naming a held-out-only id followed by a period or a comma blocks
+PASS a held-out name written with other separators (held repo x for held-repo-x, TestParser::test_config for TestParser.test_config) blocks: the artifact side also matches word-token runs
+PASS a held-out id with a trailing space or CR still blocks
+PASS a colon or @ name inside a longer dev name (tests/a.py::TestB in tests/a.py::TestB::test_c, user@host in user@host.example) is still held-out only, and blocks
+PASS a name with a space inside never counts as shared, so it blocks even when a dev history holds it inside a longer phrase
+PASS a dev text naming a colon or @ id itself, then a colon, still shares it, and so does a held id with a trailing CR (never blocks)
 
 ## i. The treatment-diff leak check
 PASS added lines sharing an 8-word run with task material are a HIT
@@ -183,6 +188,7 @@ PASS a task's repository or test name in added lines is a HIT
 PASS a clean diff is CLEAN
 PASS added lines that re-punctuate task material are a HIT
 PASS a task name inside a longer identifier (repo-x in held-repo-xyz) is a HIT: names fail closed
+PASS a task name written with other separators (held repo x, TestParser::test_config), or with a trailing space or CR, is a HIT
 
 ## j. Money at caps and the ledger: one lease opened and settled per frozen item
     tbv-author: projected $195.00, cap $229.00 (set directly: not a reading item)
@@ -228,4 +234,4 @@ PASS tbv-held-p3: a second run on the settled item is refused (E_ITEM_BOUND)
 ## Leak check
 PASS the transcript prints no home path and no key-shaped value
 
-PASS 139, FAIL 0
+PASS 145, FAIL 0
