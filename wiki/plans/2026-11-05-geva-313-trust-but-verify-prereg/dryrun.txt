@@ -180,6 +180,11 @@ PASS a held-out id with a trailing space or CR still blocks
 PASS a colon or @ name inside a longer dev name (tests/a.py::TestB in tests/a.py::TestB::test_c, user@host in user@host.example) is still held-out only, and blocks
 PASS a name with a space inside never counts as shared, so it blocks even when a dev history holds it inside a longer phrase
 PASS a dev text naming a colon or @ id itself, then a colon, still shares it, and so does a held id with a trailing CR (never blocks)
+PASS test_x[a] inside a longer dev name joined by other punctuation (test_x[a,b]) is still held-out only, and blocks
+PASS tests/a.py::test_f[x] inside a longer dev name joined by other punctuation (tests/a.py::test_f[x][y]) is still held-out only, and blocks
+PASS Bar#testX inside a longer dev name joined by other punctuation (Bar#testX(int)) is still held-out only, and blocks
+PASS pkg+extra inside a longer dev name joined by other punctuation (pkg+extra+more) is still held-out only, and blocks
+PASS a dev text holding a name whole after an opening bracket or a quote, or before a period that ends a sentence, still shares it (never blocks)
 
 ## i. The treatment-diff leak check
 PASS added lines sharing an 8-word run with task material are a HIT
@@ -234,4 +239,4 @@ PASS tbv-held-p3: a second run on the settled item is refused (E_ITEM_BOUND)
 ## Leak check
 PASS the transcript prints no home path and no key-shaped value
 
-PASS 145, FAIL 0
+PASS 150, FAIL 0

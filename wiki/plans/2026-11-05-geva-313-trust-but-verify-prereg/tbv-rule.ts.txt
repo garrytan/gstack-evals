@@ -321,8 +321,6 @@ function compare(rd: Readings) {
 
 /** Text is compared as word tokens: lowercased runs of letters, digits and underscores, so punctuation and markdown never hide a match. */
 const toks = (t: string) => t.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
-/** Names (task ids, repositories, tests, paths) are compared as id tokens: lowercased runs of letters, digits, "_", "-", ".", "/", ":" and "@", with trailing "." and ":" trimmed. */
-const idToks = (t: string) => (t.toLowerCase().match(/[\p{L}\p{N}_.\-\/:@]+/gu) ?? []).map((w) => w.replace(/[.:]+$/, "")).filter(Boolean);
 const named = (name: string) => (/[\p{L}\p{N}]/u.test(name) ? name.toLowerCase() : fail("E_USAGE the name " + JSON.stringify(name) + " has no letter or digit"));
 /** Whether a text holds a name as a whole run of tokens under one tokenizer. */
 function runs(tok: (t: string) => string[], text: string) {
@@ -330,8 +328,14 @@ function runs(tok: (t: string) => string[], text: string) {
   ws.forEach((w, i) => { const xs = at.get(w); if (xs) xs.push(i); else at.set(w, [i]); });
   return (name: string) => { const run = tok(named(name)); return (at.get(run[0]!) ?? []).some((i) => run.every((w, j) => ws[i + j] === w)); };
 }
-/** Whether dev text holds a name whole, as a run of id tokens, so test-held never counts as shared because dev holds test-held-only. A name with a space inside never counts as shared. */
-const shares = (text: string) => { const has = runs(idToks, text); return (name: string) => !/\s/.test(name.trim()) && has(name); };
+/** Whether dev text holds a name whole: the exact lowercased name, with whitespace, a quote, an opening bracket or the start of the text before it, and whitespace, a quote, a closing bracket or the end of the text after it, a trailing ".", ",", ";" or ":" allowed between. Any other joining character makes the name held-out only (test-held in test-held-only, test_x[a] in test_x[a,b], Bar#testX in Bar#testX(int)). A name with a space inside never counts as shared. */
+const shares = (text: string) => {
+  const t = text.toLowerCase();
+  return (name: string) => {
+    const n = named(name).trim();
+    return !/\s/.test(n) && new RegExp("(?:^|[\\s\"'`([{])" + n.replace(/[\\^$.*+?()[\]{}|\/]/g, "\\$&") + "[.,;:]*(?=$|[\\s\"'`)\\]}])").test(t);
+  };
+};
 /** Whether an artifact or a diff holds a name: anywhere as a lowercased substring, inside a longer name included, or as a run of its word tokens whatever the separators and surrounding whitespace. This side fails closed. */
 const holds = (text: string) => { const t = text.toLowerCase(), has = runs(toks, text); return (name: string) => t.includes(named(name)) || has(name); };
 function grams(text: string, n = 8) { const w = toks(text); const s = new Set<string>(); for (let i = 0; i + n <= w.length; i++) s.add(w.slice(i, i + n).join(" ")); return s; }
