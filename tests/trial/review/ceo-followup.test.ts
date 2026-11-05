@@ -5,7 +5,7 @@
 // Keyless: the runs use a stub driver and the rows use ceo-pipeline.ts's synthetic run dirs.
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { catalogsDigest, checkSuite, type Suite } from "../../../lanes/review-noloss/suite.ts";
@@ -17,7 +17,7 @@ import { autoplanCeoExposure, CEO_EXPOSURE_SHA256, handoffNamed } from "../../..
 import { readReviewJournal, runReviewUnits, type PreparedUnit, type ReviewRunInput } from "../../../src/trial/review/run.ts";
 import { buildUnitRepo, buildUnitTree, unitTaskId } from "../../../src/trial/review/unit.ts";
 import type { AgentSession } from "../../../src/trial/sandbox.ts";
-import type { AgentOutcome } from "../../../src/trial/trial.ts";
+import { copyNamed, type AgentOutcome } from "../../../src/trial/trial.ts";
 import { harness, localSandbox } from "../../adapters/harness.ts";
 import { PANEL_REPO, planPanel } from "../../noloss/plan-panel.ts";
 import { binding, ceo, FENCE, MODEL, pipeline, PROJECTION, runDir, SMOKE, STAGE1_NONE, STAGE2, tmp, U1, U2, U3, unitsDir } from "./ceo-pipeline.ts";
@@ -328,6 +328,37 @@ describe("escape expansion (#230 ruling): only printf's format and echo -e expan
   });
 });
 
+describe("the fail-closed rule set (#230 pass 1): a write reads written only when bash puts that text in the file", () => {
+  // Value: protects=findings_written reads true only when bash writes the Findings text into ceo-review.md; fails_when=a tee option other than -a, a later input redirect, a second stdout target, a head redirected away from a piped tee, or an unquoted heredoc that bash expands reads written; why_new=/ship pass 1 on #230 and the Captain's option B (2026-11-05); seam=autoplanCeoExposure; no_claim=simpleCommand's comment and quoted << forms, a named note
+  const F = AP + "/ceo-review.md";
+  const at = (c: string) => autoplanCeoExposure(nd(bash(CALL, LINE), bash(c, ""))).checks.findings_written;
+  test("each override reads unwritten, and the plain forms beside it still read written", () => {
+    const body = "\n## Findings\n- High: no bound.\nEOF";
+    const unwritten = [
+      "tee --help " + F + " <<'EOF'" + body,
+      "tee -p " + F + " <<'EOF'" + body,
+      "tee " + F + " <<'EOF' < notes.md" + body,
+      "cat <<'EOF' < notes.md > " + F + body,
+      "> " + F + " echo '## Findings' > /dev/null",
+      "printf '## Findings\\n' > " + F + " >> other.md",
+      "printf '## Findings\\n' >/dev/null | tee " + F,
+      "cat <<'EOF' >/dev/null | tee " + F + body,
+      "tee " + F + " <<EOF\nx\\\n## Findings\nEOF",
+      "cat > " + F + " <<EOF\nx \x60\n## Findings\n\x60\nEOF",
+      "cat > " + F + " <<EOF\nx $(\n## Findings\n)\nEOF",
+    ];
+    const written = [
+      "tee -a " + F + " <<EOF" + body,
+      "cat > " + F + " <<EOF" + body,
+      "printf '## Findings\\n' 2>/dev/null | tee " + F,
+      "cat > " + F + " 2>/dev/null <<'EOF'" + body,
+      "cat > " + F + " <<'EOF'\n$(x) \x60y\x60 \\\n## Findings\nEOF",
+    ];
+    for (const c of unwritten) expect([c, at(c)]).toEqual([c, false]);
+    for (const c of written) expect([c, at(c)]).toEqual([c, true]);
+  });
+});
+
 describe("rows diagnostics count the sessions that named the handoff and read unexposed", () => {
   // Value: protects=a false unexposed under the strict handoff rule shows up per cell; fails_when=such sessions read unexposed silently; why_new=the Captain's cut-line rule (2026-11-05); seam=ceo rows; no_claim=none beyond protects
   test("one autoplan-ceo smoke session that grepped the handoff counts once", async () => {
@@ -513,6 +544,32 @@ describe("B2 ruling on #230: each session's ceo-review.md is copied into host/ b
     expect(readFileSync(join(dir(1), "host", "ceo-review", "ceo-review.md"), "utf8")).toBe("x");
     for (const p of [2, 3]) expect([p, existsSync(join(dir(p), "host", "ceo-review"))]).toEqual([p, false]);
     for (const p of [1, 2, 3]) expect([p, existsSync(join(dir(p), "work", unit.task))]).toEqual([p, false]);
+  }, 60_000);
+});
+
+describe("pass 1 on #230: the copy walks past an unreadable entry, and the receipts sink holds it", () => {
+  // Value: protects=the on-disk copy backs up whatever the parser misses; fails_when=one unreadable directory drops the copies after it, or an ephemeral runner's sink lacks host/ceo-review; why_new=/ship pass 1 on #230 and the Captain's option B (2026-11-05); seam=runReviewUnits on a stub driver; no_claim=a file the agent made unreadable itself, which no copy reaches
+  test.skipIf(process.getuid?.() === 0)("every readable ceo-review.md is copied and each failure is returned", () => {
+    const root = mkdtempSync(join(tmpdir(), "copy-named-"));
+    const to = join(root, "out");
+    for (let i = 0; i < 8; i++) {
+      mkdirSync(join(root, "w", "a" + i), { recursive: true });
+      mkdirSync(join(root, "w", "g" + i), { recursive: true });
+      writeFileSync(join(root, "w", "g" + i, "ceo-review.md"), "x");
+      chmodSync(join(root, "w", "a" + i), 0);
+    }
+    const failures = copyNamed(join(root, "w"), "ceo-review.md", to);
+    for (let i = 0; i < 8; i++) expect([i, readFileSync(join(to, "g" + i, "ceo-review.md"), "utf8")]).toEqual([i, "x"]);
+    expect([failures.length, failures.every((f) => f.includes("EACCES"))]).toEqual([8, true]);
+    for (let i = 0; i < 8; i++) chmodSync(join(root, "w", "a" + i), 0o755);
+    rmSync(root, { recursive: true, force: true });
+  });
+  test("an ephemeral run's receipts sink holds each session's host/ceo-review copy", async () => {
+    const out = durable();
+    const sink = durable();
+    const unit = unitFixture();
+    await ceoRun(out, unit, null, [], { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink }, new Map(), undefined, (p) => (p === 1 ? "printf x > ceo-review.md" : null));
+    expect(readFileSync(join(sink, "runs", OPUS, "none", unit.task, "p1", "host", "ceo-review", "ceo-review.md"), "utf8")).toBe("x");
   }, 60_000);
 });
 

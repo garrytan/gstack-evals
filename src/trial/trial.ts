@@ -100,16 +100,27 @@ const PATH = "/usr/local/bin:/usr/bin:/bin";
 const DELTA_FILE = ".skill-eval-delta.json";
 const tail = (r: StepResult) => r.stderr.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
 
-/** Copies each regular file named name under root to the same relative path under to; symlinks are skipped, never followed. */
-function copyNamed(root: string, name: string, to: string, rel = ""): void {
-  for (const e of readdirSync(join(root, rel), { withFileTypes: true })) {
+/** Copies each regular file named name under root to the same relative path under to; symlinks are skipped, never followed.
+ * Returns one line for each directory it could not read and each file it could not copy, so one bad entry never drops the rest. */
+export function copyNamed(root: string, name: string, to: string, rel = ""): string[] {
+  let entries;
+  try {
+    entries = readdirSync(join(root, rel), { withFileTypes: true });
+  } catch (e) {
+    return [String(e)];
+  }
+  return entries.flatMap((e) => {
     const path = join(rel, e.name);
-    if (e.isDirectory()) copyNamed(root, name, to, path);
-    else if (e.isFile() && e.name === name) {
+    if (e.isDirectory()) return copyNamed(root, name, to, path);
+    if (!e.isFile() || e.name !== name) return [];
+    try {
       mkdirSync(join(to, rel), { recursive: true });
       copyFileSync(join(root, path), join(to, path));
+      return [];
+    } catch (err) {
+      return [String(err)];
     }
-  }
+  });
 }
 
 export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
@@ -136,11 +147,8 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   const finish = (delta: Delta | null): TrialRun => {
     record.wall_ms = Date.now() - started;
     if (spec.copyOut) {
-      try {
-        copyNamed(work, spec.copyOut.name, spec.copyOut.to);
-      } catch (e) {
-        logs.copy_out = String(e);
-      }
+      const failures = copyNamed(work, spec.copyOut.name, spec.copyOut.to);
+      if (failures.length) logs.copy_out = failures;
     }
     const leftovers = spec.keep ? [] : [work, baseline, grade, bare, fixtures].flatMap((tree) => removeTree(tree, spec.cleanup) ?? []);
     if (leftovers.length) logs.leftovers = leftovers;

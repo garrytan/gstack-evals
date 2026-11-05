@@ -22,7 +22,10 @@
 //   with a backslash outside single quotes, the rule segments() uses, since words() does not model bash escapes). A \n
 //   reads as a newline only where bash expands it: in printf's format and after echo -e (up to its \c); printf's
 //   arguments don't count. The command and its arguments are the shell words left after every redirection is cut, so
-//   a redirection may sit anywhere, and a heredoc body counts only for tee and a cat with no file operand.
+//   a redirection may sit anywhere. A heredoc body counts only for a tee with no option but -a and for a cat with no
+//   file operand, only when the command has no other input redirect, and under an unquoted delimiter only when the body
+//   holds no backslash, backtick or $(. A command with a second stdout redirect (2> is not one) writes nothing that
+//   counts, and a pipe into tee carries nothing when its head redirects stdout or the tee has an input redirect.
 //   handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows can count the
 //   sessions that named it and still read unexposed.
 import { createHash } from "node:crypto";
@@ -105,22 +108,30 @@ function writeTargets(parts: string[]): string[] {
   const bare = head.replace(/'[^']*'|"(?:[^"\\]|\\.)*"|(?<!\S)#.*/g, (m) => (m[0] === "#" ? " ".repeat(m.length) : m[0] + "_".repeat(m.length - 2) + m[0]));
   const targets = [...bare.matchAll(/(?:^|[^\d&>])>>?/g)].flatMap((m) => /^\s*(["']?)([^\s"'<>|;&]+)\1/.exec(head.slice(m.index! + m[0].length))?.[2] ?? []);
   const teeFiles = (part: string) => {
-    const argv = commandWords(part);
-    return argv?.[0] === "tee" ? argv.slice(1).filter((a) => !a.startsWith("-")) : [];
+    const { argv } = commandWords(part);
+    return argv?.[0] === "tee" && argv.slice(1).every((a) => !a.startsWith("-") || a === "-a") ? argv.slice(1).filter((a) => a !== "-a") : [];
   };
   if (parts.length === 1) return [...targets, ...teeFiles(head)];
-  const tee = parts[1]!.includes("<") ? [] : teeFiles(parts[1]!);
+  const tee = parts[1]!.includes("<") || stdoutRedirects(head) ? [] : teeFiles(parts[1]!);
   return tee.length ? [...targets, ...teeFiles(head), ...tee] : teeFiles(head);
 }
 
-/** A command line's shell words after every redirection outside quotes and comments is cut, or null on an open quote. */
-function commandWords(line: string): string[] | null {
+/** A command line's redirection operators outside quotes and comments, and its shell words once they are cut (null on an
+ * open quote). */
+function commandWords(line: string): { argv: string[] | null; redirects: string[] } {
   const bare = line.replace(/'[^']*'|"(?:[^"\\]|\\.)*"|(?<!\S)#.*/g, (m) => (m[0] === "#" ? " ".repeat(m.length) : m[0] + "_".repeat(m.length - 2) + m[0]));
+  const redirects: string[] = [];
   let kept = "";
   let at = 0;
-  for (const m of bare.matchAll(/(?:(?<!\S)[\d&]+)?[<>]+[-|]?\s*(?:&\d*-?|"[^"]*"|'[^']*'|[^\s"'<>|;&]+)/g)) (kept += line.slice(at, m.index!) + " "), (at = m.index! + m[0].length);
-  return words(kept + line.slice(at));
+  for (const m of bare.matchAll(/(?:(?<!\S)[\d&]+)?[<>]+[-|]?\s*(?:&\d*-?|"[^"]*"|'[^']*'|[^\s"'<>|;&]+)/g)) {
+    redirects.push(/^[\d&]*[<>]+[-|]?/.exec(m[0])![0]);
+    (kept += line.slice(at, m.index!) + " "), (at = m.index! + m[0].length);
+  }
+  return { argv: words(kept + line.slice(at)), redirects };
 }
+
+/** How many of a command's redirections send its stdout somewhere: >, >>, 1>, &> or a >& duplicate, never 2>. */
+const stdoutRedirects = (line: string): number => commandWords(line).redirects.filter((r) => /^(?:1|&)?>/.test(r)).length;
 
 const exposure = (detector: CeoExposure["detector"], checks: Record<string, boolean>): CeoExposure => ({ detector, exposed: Object.values(checks).every(Boolean), failed: Object.entries(checks).find(([, v]) => !v)?.[0] ?? null, checks });
 
@@ -150,15 +161,21 @@ function ceoReviewText(u: Use): string | null {
   if (!parts || !writeTargets(parts).some((t) => CEO_REVIEW.test(t))) return null;
   const [head, ...body] = u.input.command.split("\n");
   if (head!.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (m) => (m[0] === "'" ? "" : m)).includes("\\")) return "";
-  const argv = commandWords(parts[0]!);
-  if (!argv) return "";
+  const { argv, redirects } = commandWords(parts[0]!);
+  if (!argv || stdoutRedirects(parts[0]!) > 1) return "";
   const [cmd, ...args] = argv;
   if (cmd === "printf") {
     let i = 0;
     for (; i < args.length && args[i] !== "--" && args[i]!.startsWith("-"); i++) if (args[i]!.startsWith("-v")) return "";
     return expandEscapes(args[args[i] === "--" ? i + 1 : i] ?? "");
   }
-  if (cmd === "tee" || (cmd === "cat" && args.every((a) => a === "-"))) return body.join("\n");
+  if (cmd === "tee" || (cmd === "cat" && args.every((a) => a === "-"))) {
+    const inputs = redirects.filter((r) => /^0?</.test(r));
+    const doc = /(?<!<)<<(?!<)-?\s*(["']?)\w+\1/.exec(parts[0]!);
+    if (cmd === "tee" && args.some((a) => a.startsWith("-") && a !== "-a")) return "";
+    if (inputs.length !== 1 || !/^<<-?$/.test(inputs[0]!) || !doc) return "";
+    return !doc[1] && /\\|\x60|\$\(/.test(body.join("\n")) ? "" : body.join("\n");
+  }
   if (cmd !== "echo") return "";
   let escapes = false;
   let i = 0;

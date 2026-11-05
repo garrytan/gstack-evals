@@ -65,7 +65,7 @@
 //   any session, because session keys don't cover key.json. units.json is written before the first session, so a
 //   resume whose out dir holds cells, or a stops.json, but no units.json is refused too. And the receipts sink also gets every session's host/transcript.ndjson, which rows
 //   read. Before a session's work dir is removed, every ceo-review.md under it is copied into host/ceo-review/ at its
-//   relative path, so a smoke check can compare findings_written with the file on disk. The out dir must sit outside the repo.
+//   relative path, so a smoke check can compare findings_written with the file on disk; the sink gets host/ceo-review/ too. The out dir must sit outside the repo.
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
 //   (E_USAGE), as review-units refuses an in-repo --out. A sink holding a symlink on the way to, at or under a receipt's
@@ -335,7 +335,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const transcripts = o.plan?.lens !== CEO_LENS ? [] : o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => join(sessionDir(o.out, model, arm.name, unit.task, i + 1), "host", "transcript.ndjson")))));
+  const transcripts = o.plan?.lens !== CEO_LENS ? [] : o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => ["transcript.ndjson", "ceo-review"].map((f) => join(sessionDir(o.out, model, arm.name, unit.task, i + 1), "host", f))).flat())));
   const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
