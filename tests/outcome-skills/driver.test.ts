@@ -251,18 +251,64 @@ describe("the outcome-skills session driver", () => {
     expect(w.logs.some((l) => l.startsWith("STAGE_SETTLED item=i-none") && l.includes("ended=failed"))).toBe(true);
   });
 
-  test("relaunch recovers a lease whose ownership line is torn, or was never written after the open", async () => {
+  test("relaunch refuses a lease whose ownership line is torn, or was never written after the open, and settles nothing", async () => {
     const w = world({ "i-none": 229 });
     const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
     mkdirSync(w.dir, { recursive: true });
     appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-none", seq: 1, opening: true }) + "\n" + '{"lease_id":"i-none.00');
-    const served = await w.serve([NONE]);
-    expect(w.logs.some((l) => l.startsWith("STAGE_RECOVERED item=i-none lease=" + left.lease_id))).toBe(true);
-    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
-    await served.stop();
+    const err = await w.serve([NONE]).then(() => null, (e) => e as LedgerError);
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain("gstack-evals ledger settle --lease " + left.lease_id);
+    expect(readItem(w.record, "i-none").open?.lease_id).toBe(left.lease_id);
+    expect(readItem(w.record, "i-none").leases).toHaveLength(1);
   });
-  const capStopped = async (w: ReturnType<typeof world>, stages: StageSpec[], arm: string) => {
-    const served = await w.serve(stages);
+
+  const staleMarker = (w: ReturnType<typeof world>, item: string) => {
+    mkdirSync(w.dir, { recursive: true });
+    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item, seq: 1, opening: true }) + "\n");
+  };
+
+  test("a stale opening marker claims no lease another run directory opened, so a relaunch can't reopen its cap-stopped item", async () => {
+    const w = world({ "i-pe": 50 });
+    staleMarker(w, "i-pe");
+    await capStopped(w, [PE], "plan-eng-review:told", { dir: join(w.root, "runB") });
+    const before = readItem(w.record, "i-pe").leases;
+    const err = await w.serve([PE]).then(() => null, (e) => e as LedgerError);
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain(before[0]!.lease.lease_id);
+    expect(readItem(w.record, "i-pe").leases).toEqual(before);
+  });
+
+  test("a stale opening marker never settles a lease another run directory still serves", async () => {
+    const w = world({ "i-pe": 572 });
+    staleMarker(w, "i-pe");
+    const b = await w.serve([PE], { dir: join(w.root, "runB") });
+    const s = await post(b.control + "/sessions", body("plan-eng-review:told", "a", 1));
+    expect(s.status).toBe(200);
+    const lease = readItem(w.record, "i-pe").open?.lease_id;
+    const err = await w.serve([PE]).then(() => null, (e) => e as LedgerError);
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain("gstack-evals ledger settle --lease " + lease);
+    expect(readItem(w.record, "i-pe").open?.lease_id).toBe(lease);
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+    expect((await call(s.json)).status).toBe(200);
+    await post(b.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await b.stop()).toBe(0);
+  });
+
+  test("an opening marker whose slot holds no lease, or from another run, claims nothing and blocks nothing", async () => {
+    const w = world({ "i-none": 229, "i-tg": 60 });
+    const tg = openLease(w.record, w.local, { item: "i-tg", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
+    staleMarker(w, "i-none");
+    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r0", item: "i-tg", seq: 1, opening: true }) + "\n");
+    const served = await w.serve([NONE]);
+    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1]);
+    expect(readItem(w.record, "i-tg").open?.lease_id).toBe(tg.lease_id);
+    expect(await served.stop()).toBe(0);
+  });
+
+  const capStopped = async (w: ReturnType<typeof world>, stages: StageSpec[], arm: string, more: Partial<ServeOptions> = {}) => {
+    const served = await w.serve(stages, more);
     const open = (task: string) => post(served.control + "/sessions", body(arm, task, 1));
     const [a, b] = [await open("a"), await open("b")];
     expect([a.status, b.status]).toEqual([200, 200]);

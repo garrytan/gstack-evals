@@ -199,21 +199,29 @@ async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Se
 
   const leasesFile = join(o.dir, "leases.jsonl");
   const ours = new Set<string>();
-  const opening = new Set<string>();
+  const opening = new Map<string, { item: string; seq: number | undefined }>();
   for (const line of existsSync(leasesFile) ? readFileSync(leasesFile, "utf8").split("\n") : []) {
-    let e: { item?: string; seq?: number; lease_id?: string } | null;
+    let e: { run_id?: string; item?: string; seq?: number; lease_id?: string } | null;
     try {
       e = JSON.parse(line);
     } catch {
       continue;
     }
     if (e?.lease_id) ours.add(e.lease_id);
-    else if (e?.item) opening.add(e.item + "#" + e.seq);
+    else if (typeof e?.item === "string" && e.run_id === o.run_id) opening.set(e.item + "#" + e.seq, { item: e.item, seq: e.seq });
   }
+  const unproven: string[] = [];
+  for (const m of opening.values()) {
+    const s = readItem(o.record, m.item);
+    const l = s.leases.find((x) => x.lease.seq === m.seq && x.lease.run_id === o.run_id)?.lease;
+    if (!l || ours.has(l.lease_id)) continue;
+    unproven.push(l.lease_id + (s.open?.lease_id === l.lease_id ? " (still open; once no driver serves it, settle it by hand with gstack-evals ledger settle --lease " + l.lease_id + " on machine " + l.machine_id + ")" : " (settled)"));
+  }
+  if (unproven.length) fail("E_USAGE", "run directory " + o.dir + " holds an opening marker but no ownership line for these leases of run " + o.run_id + ": " + unproven.join("; ") + ". It can't prove it opened them: another run directory may have, or the open stopped before its line was written, so it never claims or settles them. Nothing was recovered, settled or opened; relaunch from the run directory whose leases.jsonl names each lease, so the run's cap stops and trial counts carry over");
   const failures: string[] = [];
   for (const item of ledgerStatus(o.record)) {
     const lease = item.open_lease;
-    if (!lease || !(ours.has(lease.lease_id) || opening.has(item.item + "#" + Number(lease.lease_id.split(".").at(-2)))) || lease.run_id !== o.run_id || lease.machine_id !== machine) continue;
+    if (!lease || !ours.has(lease.lease_id) || lease.run_id !== o.run_id || lease.machine_id !== machine) continue;
     try {
       const journal = join(o.dir, lease.lease_id + ".journal.ndjson");
       if (existsSync(journal)) {
@@ -245,7 +253,7 @@ async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Se
 
   const plans = o.stages.map((st) => {
     const s = readItem(o.record, st.item);
-    const unclaimed = s.leases.filter((l) => l.lease.run_id === o.run_id && !ours.has(l.lease.lease_id) && !opening.has(st.item + "#" + l.lease.seq)).map((l) => l.lease.lease_id);
+    const unclaimed = s.leases.filter((l) => l.lease.run_id === o.run_id && !ours.has(l.lease.lease_id)).map((l) => l.lease.lease_id);
     if (unclaimed.length) fail("E_USAGE", "line item " + st.item + " holds run " + o.run_id + "'s leases " + unclaimed.join(", ") + ", which this run directory (" + o.dir + ") did not open; relaunch with the run directory that opened them, so the run's cap stops and trial counts carry over; nothing was opened");
     const stop = capped.get("") ?? capped.get(st.item);
     if (stop) fail("CAP_STOP", (capped.has("") ? "the none stage cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends both skills incomplete" : "stage " + st.item + " cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends its skill incomplete") + "; a cap stop is not retried (plan section 6); nothing was opened");
