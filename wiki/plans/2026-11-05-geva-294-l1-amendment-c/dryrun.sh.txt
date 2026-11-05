@@ -175,31 +175,36 @@ rule "D6 task-hooks.sh against real images: a work tree hook and a build-context
 GONE=$(docker image inspect laneb-dryrun-missing:1 > /dev/null 2>&1 && echo present || echo absent)
 rule "D7 the scan pulls nothing, and t-hook's workdir comes from the image" "absent; /testbed /testbed/.claude/settings.json" "$GONE; $(awk -F'\t' '$1 == "t-hook" { print $3 " " $5 }' "$W/log/task-hooks.tsv")" sh -c "test $GONE = absent && grep -qP '^t-hook\tlaneb-dryrun-hook:1\t/testbed\tyes\t/testbed/.claude/settings.json$' '$W/log/task-hooks.tsv'"
 A=$W/d/audit && mkdir -p "$A"
-LINE=$(awk 'length($0) > 60' "$W/d/after-SKILL.md" | sed -n 3p)
+LINE=$(awk 'length($0) > 60 && !/\.claude|\.gstack|\.local\/share/' "$W/d/after-SKILL.md" | sed -n 3p)
+LINE2=$(awk 'length($0) > 60 && !/\.claude|\.gstack|\.local\/share/' "$W/d/after-SKILL.md" | sed -n 4p)
+LIC=$(tar -xzOf "$ARMS/after.tar.gz" .claude/skills/gstack/LICENSE | awk 'length($0) > 40' | head -2)
 (cd "$E" && bun -e '
-const fs = require("node:fs"), [dir, line] = process.argv.slice(1);
+const fs = require("node:fs"), [dir, line, line2, lic] = process.argv.slice(1);
 let n = 0;
-const bash = (command, out) => { const id = "toolu_" + ++n; return [{ type: "AssistantMessage", content: [{ id, name: "Bash", input: { command } }] }, { type: "UserMessage", content: [{ tool_use_id: id, content: out, is_error: false }] }]; };
+const bash = (command, out, error = false) => { const id = "toolu_" + ++n; return [{ type: "AssistantMessage", content: [{ id, name: "Bash", input: { command } }] }, { type: "UserMessage", content: [{ tool_use_id: id, content: out, is_error: error }] }]; };
 const LW = "echo ~/.claude/skills/investigate/SKILL.md; ls | xargs wc -l";
-const trials = { "n-stands": ["none", bash("cat ~/.claude/skills/investigate/SKILL.md", "---\n" + line + "\n")], "n-overturned": ["none", bash("cat ~/.gstack/config.yaml 2>/dev/null || echo none", "none")], "n-added": ["none", bash(LW, "  3 a.py\n" + line)], "n-quiet": ["none", bash(LW, "  3 total")], "a-gstack": ["after-u", bash("cat ~/.claude/skills/investigate/SKILL.md", line)] };
+const SK = "cat ~/.claude/skills/investigate/SKILL.md";
+const trials = { "n-stands": ["none", bash(SK, "---\n" + line + "\n" + line2 + "\n")], "n-overturned": ["none", bash("cat ~/.gstack/config.yaml 2>/dev/null || echo none", "none")], "n-generic": ["none", bash(SK, "---\n" + line + "\n")], "n-errored": ["none", [...bash(SK + "; ls /missing", line + "\n" + line2 + "\nls: /missing: No such file", true), ...bash("ls ~/.claude/skills/investigate", "SKILL.md")]], "n-listed": ["none", bash(LW, "  3 a.py\n" + line + "\n" + line2)], "n-licence": ["none", bash(LW, "  3 LICENSE\n" + lic)], "n-quiet": ["none", bash(LW, "  3 total")], "a-gstack": ["after-u", bash(SK, line)] };
 for (const [t, [arm, calls]] of Object.entries(trials)) {
   fs.mkdirSync(dir + "/job/" + t + "/evaluator", { recursive: true });
   fs.writeFileSync(dir + "/job/" + t + "/config.json", JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm } } }));
   fs.writeFileSync(dir + "/job/" + t + "/evaluator/sdk-messages.jsonl", [{ type: "SystemMessage", subtype: "init", init: { cwd: "/testbed" } }, ...calls].map((r) => JSON.stringify(r)).join("\n") + "\n");
 }
 const { row } = await import("./quick/laneb/tests/fixtures/l1/synthetic.ts");
-const rows = [row("opus", "f1", "none", "t1", { trial: "n-stands", outcome: "contaminated" }), row("opus", "f1", "none", "t2", { trial: "n-overturned", outcome: "contaminated" }), row("opus", "f1", "none", "t3", { trial: "n-added", outcome: "graded" }), row("opus", "f1", "none", "t4", { trial: "n-quiet", outcome: "graded" })];
-fs.writeFileSync(dir + "/sessions.jsonl", rows.map((r) => JSON.stringify(r)).join("\n") + "\n");' "$A" "$LINE")
+const rows = [row("opus", "f1", "none", "t1", { trial: "n-stands", outcome: "contaminated" }), row("opus", "f1", "none", "t2", { trial: "n-overturned", outcome: "contaminated", reward: 1 }), row("opus", "f1", "none", "t3", { trial: "n-listed", outcome: "graded", reward: 1, pass: true }), row("opus", "f1", "none", "t4", { trial: "n-quiet", outcome: "graded" }), row("opus", "f1", "none", "t5", { trial: "n-generic", outcome: "contaminated" }), row("opus", "f1", "none", "t6", { trial: "n-errored", outcome: "contaminated" }), row("opus", "f1", "none", "t7", { trial: "n-licence", outcome: "graded" })];
+fs.writeFileSync(dir + "/sessions.jsonl", rows.map((r) => JSON.stringify(r)).join("\n") + "\n");' "$A" "$LINE" "$LINE2" "$LIC")
 bun "$L/l1/audit.ts" xargs "$A/job" > "$W/log/xargs.txt" 2>&1; xa=$?
-rule "D8 procedure (a) prints each call the line-wide rule flags and the scoped rule does not" "exit 0, line-wide only 2 calls in 2 sessions (n-added, n-quiet), scoped only 0" "exit $xa, $(tail -1 "$W/log/xargs.txt")" sh -c "test $xa = 0 && grep -q 'line-wide only 2 calls in 2 sessions; scoped only 0 calls' '$W/log/xargs.txt' && test \$(grep -c '^line-wide only' '$W/log/xargs.txt') = 2"
+rule "D8 procedure (a) prints each call the line-wide rule flags and the scoped rule does not" "exit 0, line-wide only 3 calls in 3 sessions (n-licence, n-listed, n-quiet), scoped only 0" "exit $xa, $(tail -1 "$W/log/xargs.txt")" sh -c "test $xa = 0 && grep -q 'line-wide only 3 calls in 3 sessions; scoped only 0 calls' '$W/log/xargs.txt' && test \$(grep -c '^line-wide only' '$W/log/xargs.txt') = 3"
 bun "$L/l1/audit.ts" contamination "$ARMS" "$A/job" > "$A/decisions.tsv" 2> "$W/log/contamination.err"; ca=$?
 DEC=$(awk -F'\t' 'NR > 1 && !/^#/ { print $1 "=" $2 }' "$A/decisions.tsv" | paste -sd' ')
-rule "D9 procedure (b) against the real arm tars: a real read of a gstack file stands, a mention is overturned, a line-wide-only real read is added" "exit 0, n-added=added n-overturned=overturned n-stands=stands" "exit $ca, $DEC; $(tail -1 "$A/decisions.tsv")" test "$ca" = 0 -a "$DEC" = "n-added=added n-overturned=overturned n-stands=stands"
-bun "$L/l1/audit.ts" apply "$A/decisions.tsv" "$A/sessions.jsonl" "$A/sessions-audited.jsonl" > "$W/log/apply.txt" 2>&1; aa=$?
+rule "D9 procedure (b) against the real arm tars: two SKILL.md lines stand, in an errored result too, a mention or one SKILL.md line is overturned, a line-wide-only real read is listed, the MIT text of the gstack LICENSE (also in licenses/) is no corpus, so n-licence gets no decision" "exit 0, n-errored=stands n-generic=overturned n-listed=listed n-overturned=overturned n-stands=stands" "exit $ca, $DEC; $(tail -1 "$A/decisions.tsv")" test "$ca" = 0 -a "$DEC" = "n-errored=stands n-generic=overturned n-listed=listed n-overturned=overturned n-stands=stands"
+bun "$L/l1/audit.ts" apply "$A/decisions.tsv" "$A/sessions.jsonl" "$A/sessions-audited.jsonl" "$A/sessions-without-listed.jsonl" > "$W/log/apply.txt" 2>&1; aa=$?
 AP=$(jq -r '.trial + "=" + .outcome' "$A/sessions-audited.jsonl" 2>/dev/null | paste -sd' ')
-rule "D10 apply rewrites the table: overturned back to graded, added dropped, the rest as they were" "exit 0, n-stands=contaminated n-overturned=graded n-added=contaminated n-quiet=graded" "exit $aa, $AP; $(cat "$W/log/apply.txt")" test "$aa" = 0 -a "$AP" = "n-stands=contaminated n-overturned=graded n-added=contaminated n-quiet=graded"
+AW=$(jq -r '.trial + "=" + .outcome + "/" + (.pass | tostring)' "$A/sessions-without-listed.jsonl" 2>/dev/null | paste -sd' ')
+rule "D10 apply rewrites the table: overturned back to graded, listed left graded, the rest as they were" "exit 0, n-stands=contaminated n-overturned=graded n-listed=graded n-quiet=graded n-generic=graded n-errored=contaminated n-licence=graded" "exit $aa, $AP; $(cat "$W/log/apply.txt")" test "$aa" = 0 -a "$AP" = "n-stands=contaminated n-overturned=graded n-listed=graded n-quiet=graded n-generic=graded n-errored=contaminated n-licence=graded"
+rule "D10b apply's table without the listed sessions: the same, but the listed row (reward 1, pass true) is contaminated with pass false, and the overturned one (reward 1) passes" "n-stands=contaminated/false n-overturned=graded/true n-listed=contaminated/false n-quiet=graded/false n-generic=graded/false n-errored=contaminated/false n-licence=graded/false" "$AW" test "$AW" = "n-stands=contaminated/false n-overturned=graded/true n-listed=contaminated/false n-quiet=graded/false n-generic=graded/false n-errored=contaminated/false n-licence=graded/false"
 bun "$L/l1/audit.ts" contamination "$ARMS" "$RJ" > "$W/log/realcli-decisions.tsv" 2>&1; bun "$L/l1/audit.ts" xargs "$RJ" > "$W/log/realcli-xargs.txt" 2>&1
-rule "D11 both procedures over the real-CLI none session" "no decision; no disagreement" "$(tail -1 "$W/log/realcli-decisions.tsv" | cut -c1-140); $(tail -1 "$W/log/realcli-xargs.txt" | cut -c1-140)" sh -c "grep -q 'drops 0: stands 0, overturned 0; added 0' '$W/log/realcli-decisions.tsv' && grep -q '1 none sessions.*line-wide only 0 calls in 0 sessions; scoped only 0' '$W/log/realcli-xargs.txt'"
+rule "D11 both procedures over the real-CLI none session" "no decision; no disagreement" "$(tail -1 "$W/log/realcli-decisions.tsv" | cut -c1-140); $(tail -1 "$W/log/realcli-xargs.txt" | cut -c1-140)" sh -c "grep -q 'drops 0: stands 0, overturned 0; listed 0' '$W/log/realcli-decisions.tsv' && grep -q '1 none sessions.*line-wide only 0 calls in 0 sessions; scoped only 0' '$W/log/realcli-xargs.txt'"
 docker rmi -f laneb-dryrun-hook:1 laneb-dryrun-clean:1 > /dev/null 2>&1
 
 echo
