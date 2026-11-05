@@ -22,6 +22,12 @@ tests/real-outcome/arms.test.ts). Per trial it:
 With ledger "u4" (GST-1381) the session opens on the outcome-skills driver (lanes/outcome-skills/driver), which answers
 with a U4 slot on its stage's lease; the session's base URL is that slot's, and an answer that is not a U4 slot is closed
 and refused before any model call. An arms file in the outcome-skills registry's shape runs only with ledger "u4".
+
+A registry arm (family G) sends its turns t1, t2 and so on in place of build and ship, each after the previous is quiet,
+with no turn-1 snapshot; the persona and skill_calls count per turn. Every message record in sdk-messages.jsonl names
+the turn it arrived in (phase) and, wherever the frame Claude Code sent carries the key, its parent_tool_use_id (null for
+the session's own messages, the Agent call's id for a subagent's). G's exposure detectors read both, and refuse a record
+without them. A registry arm's turns must be t1 to tn.
 """
 
 import asyncio
@@ -40,6 +46,8 @@ from pathlib import Path
 from typing import Literal
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk._internal import client as sdk_query_client
+from claude_agent_sdk._internal import message_parser as sdk_parser
 from claude_agent_sdk.types import TERMINAL_TASK_STATUSES, HookMatcher, PermissionResultAllow
 from pydantic import Field
 
@@ -61,6 +69,40 @@ FREEZE = (
     'do unset "$v"; done; exec claude "$@"'
 )
 TRIAL_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+# JavaScript's \s, so a registry turn's {statement} is trimmed exactly as registry.ts turnScript trims it.
+JS_SPACE = frozenset("\t\n\v\f\r \u00a0\u1680\u2028\u2029\u202f\u205f\u3000\ufeff" + "".join(map(chr, range(0x2000, 0x200B))))
+KEYLESS = "_real_agent_keyless"
+
+
+def js_trim_end(s: str) -> str:
+    """String.prototype.trimEnd, in linear time: JavaScript's whitespace, which differs from str.rstrip on \\x1c-\\x1f
+    and \\x85."""
+    end = len(s)
+    while end and s[end - 1] in JS_SPACE:
+        end -= 1
+    return s[:end]
+
+
+def mark_keyless(parse):
+    """Wrap the SDK's parse_message. At 0.2.174 it reads a frame with no parent_tool_use_id key as None, which the
+    exposure detectors take for the session's own words. An assistant or user frame without the key is marked, so
+    message_record leaves the key out and the detectors refuse the transcript."""
+    if getattr(parse, KEYLESS, False):
+        return parse
+
+    def parse_message(data):
+        message = parse(data)
+        if message is not None and isinstance(data, dict) and data.get("type") in ("assistant", "user") and "parent_tool_use_id" not in data:
+            setattr(message, KEYLESS, True)
+        return message
+
+    setattr(parse_message, KEYLESS, True)
+    return parse_message
+
+
+sdk_parser.parse_message = mark_keyless(sdk_parser.parse_message)
+sdk_query_client.parse_message = mark_keyless(sdk_query_client.parse_message)
+STATEMENT = "{statement}"
 
 
 class SandboxSetupError(RuntimeError):
@@ -93,8 +135,8 @@ def _block(b) -> dict:
 
 def message_record(message, t: float) -> dict:
     record = {"type": type(message).__name__, "t": round(t, 2)}
-    for attr in ("subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason", "data"):
-        if hasattr(message, attr):
+    for attr in ("subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason", "data", "parent_tool_use_id"):
+        if hasattr(message, attr) and not (attr == "parent_tool_use_id" and getattr(message, KEYLESS, False)):
             record[attr] = getattr(message, attr)
     content = getattr(message, "content", None)
     if isinstance(content, list):
@@ -106,8 +148,20 @@ def message_record(message, t: float) -> dict:
 
 def phase_texts(task: dict, arms: dict, arm: str, instruction: str) -> list:
     """The user turns, in order: (phase, text). K4 has no build turn: the arm's replay turn carries the one-line
-    description beside its turn 2 (after it, except that a slash command leads so Claude Code loads the skill)."""
+    description beside its turn 2 (after it, except that a slash command leads so Claude Code loads the skill). An
+    outcome-skills registry arm sends its turns t1, t2 and so on as registry.ts turnScript writes them: {statement} in
+    turn 1 is the statement with trailing whitespace (JavaScript's) removed. G runs no K4 task and no empty statement."""
     spec = arms["arms"][arm]
+    if "families" in arms:
+        phases = [t["phase"] for t in spec["turns"]]
+        if not phases or phases != [f"t{i}" for i in range(1, len(phases) + 1)]:
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP arm {arm}: its registry turns are {phases}, not t1 to tn; fix: give the arm the turns lanes/outcome-skills/arms/registry.json writes")
+        if task["kind"] == "K4":
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP arm {arm} is a registry arm, and G's registry has no K4 replay turn; fix: run K4 tasks on a lane arm (lanes/real-outcome/arms/arms.json), or drop the task from G's task list")
+        statement = js_trim_end(instruction)
+        if not statement:
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP arm {arm}: the task statement is empty; fix: check the task's instruction file, which is blank after trimming")
+        return [(t["phase"], statement + t["text"][len(STATEMENT):] if t["text"].startswith(STATEMENT) else t["text"]) for t in spec["turns"]]
     if task["kind"] == "K4":
         return [("ship", spec["replay"].replace("{description}", task["replay"]["description"].strip()))]
     return [("build", instruction.rstrip() + "\n\n" + arms["build_suffix"]), ("ship", spec["turn2"])]
@@ -319,6 +373,9 @@ class RealAgent(lb.LanebAgent):
             raise SandboxSetupError("E_REAL_SANDBOX_SETUP a U4 session names its task and trial: set task_label and trial_n (from 1)")
         self.limits = arms["arms"][self.options.arm]["limits"]
         phases = phase_texts(task, arms, self.options.arm, instruction)
+        self.registry = "families" in arms
+        if self.registry:
+            user.per_turn([p for p, _ in phases])
         log({"event": "turns", "arm": self.options.arm, "kind": task["kind"], "phases": [p for p, _ in phases], "sha256": [hashlib.sha256(t.encode()).hexdigest() for _, t in phases], "limits": self.limits, "frozen_env": FROZEN_ENV})
         base_url = self._resolve_auth_env().get("ANTHROPIC_BASE_URL")
         if not base_url:
@@ -501,7 +558,7 @@ class RealAgent(lb.LanebAgent):
         real = {
             "trial": trial, "arm": self.options.arm, "kind": task["kind"], "termination": outcome["termination"], "phases": outcome["phases"],
             "limits": self.limits, "frozen_env": FROZEN_ENV, "sandbox": sandbox, "shipment": shipment, "turn1": outcome["turn1"], "final": final,
-            "persona": user.counts, "ship_steps": ship_phase["steps"], "skill_calls": {"build": ship_steps(by_phase.get("build", []))["skill_calls"], "ship": ship_phase["skill_calls"]},
+            "persona": user.counts, "ship_steps": ship_phase["steps"], "skill_calls": {p: ship_steps(by_phase.get(p, []))["skill_calls"] for p in (by_phase if self.registry else ("build", "ship"))},
             "tool_calls": steps["tool_calls"], "proxy": {k: (summary["session"] or {}).get(k) for k in ("spent_micros", "requests", "ok_responses", "refused")}, "errors": errors,
         }
         (self._evaluator_dir() / "real-summary.json").write_text(json.dumps(real, indent=2, default=str))

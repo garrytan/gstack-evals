@@ -33,6 +33,8 @@ CONTROL = os.environ["REAL_SIDECAR"]
 NODE = os.environ["REAL_NODE"]
 TMP = Path(tempfile.mkdtemp(prefix="real-agent-test-"))
 ARMS = json.loads((ROOT / "lanes/real-outcome/arms/arms.json").read_text())
+REGISTRY = json.loads((ROOT / "lanes/outcome-skills/arms/registry.json").read_text())
+KEEP = os.environ.get("REAL_KEEP")
 STATEMENT = "Add a mul function to src/app.js."
 GIT_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "GIT_AUTHOR_NAME": "fixture", "GIT_AUTHOR_EMAIL": "f@x.invalid", "GIT_COMMITTER_NAME": "fixture", "GIT_COMMITTER_EMAIL": "f@x.invalid"}
 # The frozen variables a task image might set; the agent must hide every one from claude.
@@ -46,7 +48,7 @@ def sh(cwd, cmd):
 
 
 class Case:
-    def __init__(self, name, arm="none", kind="K2", scenario="two_turn", wall=60, quiet=1, bg_wait=None):
+    def __init__(self, name, arm="none", kind="K2", scenario="two_turn", wall=60, quiet=1, bg_wait=None, registry=False):
         self.dir = TMP / name
         self.repo = self.dir / "testbed"
         self.bin = self.dir / "bin"
@@ -63,7 +65,7 @@ class Case:
             sh(self.repo, "git checkout -q -b change && echo 'export const sub = (a, b) => a - b;' >> src/app.js && git commit -qam 'Add sub'")
             task.update(start_ref="change", replay={"role": "replay", "branch": "change", "commit": sh(self.repo, "git rev-parse HEAD"), "description": "Adds a sub function beside add."})
         (self.dir / "task.json").write_text(json.dumps(task))
-        arms = json.loads(json.dumps(ARMS))
+        arms = json.loads(json.dumps(REGISTRY if registry else ARMS))
         for spec in arms["arms"].values():
             spec["limits"] = {**spec["limits"], "wall_limit_sec": wall, "quiet_sec": quiet, **({} if bg_wait is None else {"bg_wait_sec": bg_wait})}
         (self.dir / "arms.json").write_text(json.dumps(arms))
@@ -331,6 +333,68 @@ def test_registry_arms_run_only_on_u4():
     e = refused(c)
     check(isinstance(e, ra.SandboxSetupError) and "outcome-skills registry" in str(e), repr(e))
     check(c.posts == [] and c.egress == [], (c.posts, c.egress))
+
+
+def turn_texts(arm):
+    return [STATEMENT + t["text"][len("{statement}"):] if t["text"].startswith("{statement}") else t["text"] for t in REGISTRY["arms"][arm]["turns"]]
+
+
+def messages(case):
+    """The session's message records, as the exposure detectors read them, kept in REAL_KEEP when set."""
+    path = case.evdir / "sdk-messages.jsonl"
+    if KEEP:
+        shutil.copyfile(path, Path(KEEP) / (case.dir.name + ".jsonl"))
+    return [r for r in map(json.loads, path.read_text().splitlines()) if r["type"] in ("AssistantMessage", "UserMessage")]
+
+
+def test_g_told_arm_sends_registry_turns_t1_to_t3_and_records_phase_and_parent():
+    c = u4(Case("g-pe", arm="plan-eng-review:told", scenario="g_turns", registry=True)).run()
+    s = c.summary
+    check(c.users() == turn_texts("plan-eng-review:told"), c.users())
+    check(s["termination"] == "completed" and [(p["phase"], p["end"]) for p in s["phases"]] == [("t1", "quiet"), ("t2", "quiet"), ("t3", "quiet")], s["phases"])
+    turns = [e for e in map(json.loads, (c.evdir / "usersim-events.jsonl").read_text().splitlines()) if e["event"] == "turns"]
+    check(turns and turns[0]["phases"] == ["t1", "t2", "t3"], turns)
+    recs = messages(c)
+    check(recs and all(r.get("phase") in ("t1", "t2", "t3") and "parent_tool_use_id" in r for r in recs), "a message record lacks its turn or parent_tool_use_id")
+    agents = {r["phase"]: b["id"] for r in recs if r["parent_tool_use_id"] is None for b in r["content"] if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Agent"}
+    check(sorted(agents) == ["t1", "t2", "t3"], agents)
+    for phase, aid in agents.items():
+        check(any(r["phase"] == phase and r["parent_tool_use_id"] == aid for r in recs), (phase, "the subagent's message does not carry its Agent call's id"))
+    check(list(s["persona"]) == ["t1", "t2", "t3"] and list(s["skill_calls"]) == ["t1", "t2", "t3"], (s["persona"], s["skill_calls"]))
+
+
+def test_g_told_arm_records_a_subagent_doing_the_review_under_its_agent_call():
+    c = u4(Case("g-pe-subagent", arm="plan-eng-review:told", scenario="g_turns", registry=True))
+    c.env["STUB_G_FROM"] = "subagent"
+    c.run()
+    recs = messages(c)
+    reads = [r for r in recs if any(isinstance(b, dict) and b.get("name") == "Read" for b in r["content"])]
+    check(len(reads) == 1 and reads[0]["phase"] == "t2" and reads[0]["parent_tool_use_id"] not in (None, ""), reads)
+
+
+def test_g_subagent_frame_without_parent_tool_use_id_is_recorded_without_the_key():
+    c = u4(Case("g-keyless", arm="plan-eng-review:told", scenario="g_turns", registry=True))
+    c.env["STUB_G_KEYLESS"] = "1"
+    c.run()
+    recs = messages(c)
+    survey = [r for r in recs if any(isinstance(b, dict) and b.get("text") == "src/app.js holds add." for b in r["content"])]
+    check(len(survey) == 3 and all("parent_tool_use_id" not in r for r in survey), survey)
+    check(all("parent_tool_use_id" in r for r in recs if r not in survey), "a keyed frame lost its parent_tool_use_id")
+
+
+def test_g_autoplan_told_arm_records_the_replayed_review_in_turn_two():
+    c = u4(Case("g-ap", arm="autoplan:told", scenario="g_turns", registry=True)).run()
+    check(c.users() == turn_texts("autoplan:told"), c.users())
+    recs = messages(c)
+    published = [r["phase"] for r in recs if r["parent_tool_use_id"] is None for b in r["content"] if isinstance(b, dict) and b.get("type") == "tool_use" and str(b.get("input", {}).get("command", "")).startswith("true autoplan-published")]
+    check(published == ["t2", "t2"], published)
+
+
+def test_g_none_arm_sends_turn_one_only():
+    c = u4(Case("g-none", arm="none", scenario="g_turns", registry=True)).run()
+    check(c.users() == turn_texts("none"), c.users())
+    check(c.summary["termination"] == "completed" and [p["phase"] for p in c.summary["phases"]] == ["t1"], c.summary["phases"])
+    check({r["phase"] for r in messages(c)} == {"t1"}, "a none record outside t1")
 
 
 def main():

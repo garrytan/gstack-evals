@@ -28,6 +28,8 @@ const TARGET: Record<string, string> = {
   "z1-volume": "FAIL Z1 no leftovers",
   "z1-lease": "FAIL Z1 no leftovers",
   "z1-after-fail": "FAIL Z1 seed",
+  "u8-turns": "FAIL U8 ",
+  "u8-parent": "FAIL U8 ",
 };
 
 const run = (...args: string[]) => {
@@ -53,7 +55,7 @@ describe.skipIf(!HAS_SDK || !HAS_DOCKER || process.env.GSTACK_EVALS_DRYRUN !== "
     const r = run();
     if (r.code !== 0) console.log(r.out);
     expect(r.lines.filter((l) => l.startsWith("FAIL "))).toEqual([]);
-    for (const check of ["U1 ", "U2 ", "U3 ", "U4 ", "U5 ", "U6 ", "U7 ", "U1b ", "L7 ", "R1 ", "R2 ", "R3 ", "R4 ", "Z1 no leftovers"]) expect(r.lines.some((l) => l.startsWith("PASS " + check))).toBe(true);
+    for (const check of ["U1 ", "U2 ", "U3 ", "U4 ", "U5 ", "U6 ", "U7 ", "U8 ", "U1b ", "L7 ", "R1 ", "R2 ", "R3 ", "R4 ", "Z1 no leftovers"]) expect(r.lines.some((l) => l.startsWith("PASS " + check))).toBe(true);
     expect(r.lines.at(-1)).toBe("DRYRUN: ok");
     expect(r.code).toBe(0);
   }, 900_000);
