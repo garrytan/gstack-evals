@@ -131,6 +131,50 @@ describe("the T-G image manifest (keyless)", () => {
     expect(existsSync(out)).toBe(false);
   });
 
+  test("bind refuses a task dir path that is itself a symlink, and leaves the task it points at untouched", () => {
+    const root = fresh();
+    const d = task(root);
+    const { m } = manifest(root, d);
+    const link = join(root, "link");
+    symlinkSync(d, link);
+    const before = fileDigests(d);
+    expect(thrown(() => bind(link, m, "rox", join(root, "run"), stubDocker(root, ID).docker))).toMatch(/^E_OUTCOME_IMAGE .*link is a symlink/);
+    expect(existsSync(join(root, "run"))).toBe(false);
+    expect(fileDigests(d)).toEqual(before);
+    expect(thrown(() => bind(link + "/", m, "rox", join(root, "run"), stubDocker(root, ID).docker))).toMatch(/^E_OUTCOME_IMAGE .*link\/ is a symlink/);
+    expect(existsSync(join(root, "run"))).toBe(false);
+    expect(fileDigests(d)).toEqual(before);
+  });
+
+  test.each([
+    ["a parent dir that links into the task dir", (root: string, d: string) => (symlinkSync(d, join(root, "alias")), join(root, "alias", "run")), /lies inside the task dir/],
+    ["a dangling symlink into the task dir", (root: string, d: string) => (symlinkSync(join(d, "copy"), join(root, "run")), join(root, "run")), /run exists; bind writes a new run copy/],
+  ] as const)("bind refuses a run copy root at %s, before any write, and leaves the task untouched", (_what, place, why) => {
+    const root = fresh();
+    const d = task(root);
+    const { m } = manifest(root, d);
+    const before = fileDigests(d);
+    const out = place(root, d);
+    expect(thrown(() => bind(d, m, "rox", out, stubDocker(root, ID).docker))).toMatch(new RegExp("^E_OUTCOME_IMAGE .*" + why.source));
+    expect(readdirSync(d).sort()).toEqual(["environment", "instruction.md", "task.json", "task.toml", "tests"]);
+    expect(fileDigests(d)).toEqual(before);
+  });
+
+  test.each(["environment", "environment/Dockerfile", "task.toml"])("bind refuses a task whose %s is a symlink (cpSync keeps it a link in the copy) and never writes through it", (path) => {
+    const root = fresh();
+    const d = task(root);
+    const { m } = manifest(root, d);
+    const ext = join(root, "ext");
+    rmSync(ext, { recursive: true, force: true });
+    spawnSync("cp", ["-r", join(d, path), ext]);
+    rmSync(join(d, path), { recursive: true });
+    symlinkSync(ext, join(d, path));
+    const before = path === "environment" ? fileDigests(ext) : sha(readFileSync(ext));
+    expect(thrown(() => bind(d, m, "rox", join(root, "run"), stubDocker(root, ID).docker))).toMatch(new RegExp("^E_OUTCOME_IMAGE .*holds symlinks \\(" + path + "\\)"));
+    expect(existsSync(join(root, "run"))).toBe(false);
+    expect(path === "environment" ? fileDigests(ext) : sha(readFileSync(ext))).toEqual(before);
+  });
+
   test("the run copy holds its own bytes: no symlinks, and an edit to the task dir after bind does not reach it", () => {
     const root = fresh();
     const d = task(root);

@@ -8,8 +8,8 @@
 // committed form: digests only, sorted, with kind counts and the sealed manifest's sha256; labels stay sealed.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { fileDigests, readTask, walk } from "../../real-outcome/task/format.ts";
 import { cleanRoomPreflight } from "../arms/clean-room.ts";
 
@@ -106,13 +106,21 @@ export const tagFor = (imageId: string) => "gstack-evals-tg-" + imageId.slice(7,
 
 /** The task's run copy for Harbor, bound to its row's image. The checks read the copy itself, so the bytes Harbor gets are
  *  the bytes checked. Refuses a task dir that is not the pinned one (task.json, environment, any file against task.json's
- *  file digests, any symlink), an image that is missing or moved, and an out dir that exists; a refusal leaves no copy. */
+ *  file digests, any symlink), an image that is missing or moved, and an out dir that exists; a refusal leaves no copy.
+ *  Before any write it refuses a task dir path that is a symlink and an out path that is or lies in the task dir, and it
+ *  writes only once the copy is a real directory of its own, so no write reaches the task it copied. */
 export function bind(taskDir: string, m: ImageManifest, label: string, out: string, docker = "docker"): { image_id: string; tag: string; out: string } {
   const row = m.rows.find((r) => r.label === label) ?? fail("no row for label " + label + " in the manifest");
-  if (existsSync(out)) fail(out + " exists; bind writes a new run copy");
+  if (lstatSync(taskDir.replace(/\/+$/, ""), { throwIfNoEntry: false })?.isSymbolicLink()) fail(taskDir + " is a symlink; bind takes the task dir itself, so no write reaches the task it points at");
+  if (lstatSync(out, { throwIfNoEntry: false })) fail(out + " exists; bind writes a new run copy");
+  const src = realpathSync(taskDir);
+  const within = (p: string) => p === src || p.startsWith(src + sep);
+  const resolved = (p: string): string => (existsSync(p) ? realpathSync(p) : join(resolved(dirname(p)), basename(p)));
+  if (within(resolved(out))) fail(out + " lies inside the task dir " + src + "; a run copy is a directory of its own");
   const tag = tagFor(row.image_id);
   try {
     cpSync(taskDir, out, { recursive: true });
+    if (!lstatSync(out).isDirectory() || within(realpathSync(out))) fail(out + " is not a real directory apart from " + src + "; bind writes only to its own copy");
     const { links } = walk(out);
     if (links.length) fail(taskDir + " holds symlinks (" + links.join(", ") + "); a run copy takes only the task's own files");
     const raw = readFileSync(join(out, "task.json"));
