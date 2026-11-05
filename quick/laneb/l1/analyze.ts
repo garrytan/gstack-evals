@@ -361,10 +361,46 @@ export type Config = {
   power_txt?: string;
 };
 
-const taskList = (v: string[] | string | undefined, fallback: string | null): string[] => {
-  if (Array.isArray(v)) return v;
+const text = (v: unknown): v is string => typeof v === "string" && v !== "";
+const bool = (v: unknown) => typeof v === "boolean";
+const flag = (v: unknown) => v === null || typeof v === "boolean";
+const amount = (v: unknown) => v === null || (typeof v === "number" && Number.isFinite(v));
+const strings = (v: unknown) => Array.isArray(v) && v.every((s) => typeof s === "string");
+const oneOf = (xs: readonly string[]) => (v: unknown) => xs.includes(v as string);
+const INSTRUMENTS: readonly L1Instrument[] = ["pilot", "smoke", "f1", "tb2"];
+const OUTCOMES: readonly L1SessionRow["outcome"][] = ["graded", "infra", "cap_stop", "contaminated"];
+
+/** Every field the analysis reads, with the type it must hold. */
+const ROW_FIELDS: Record<string, [string, (v: unknown) => boolean]> = {
+  schema: ["l1-session/1", (v) => v === "l1-session/1"],
+  model: ["a non-empty string", text], task: ["a non-empty string", text], repo: ["a non-empty string", text], trial: ["a non-empty string", text], probes_sha256: ["a non-empty string", text],
+  instrument: ["one of " + INSTRUMENTS.join(", "), oneOf(INSTRUMENTS)], arm: ["one of " + F1_ARMS.join(", "), oneOf(F1_ARMS)], outcome: ["one of " + OUTCOMES.join(", "), oneOf(OUTCOMES)],
+  pass: ["a boolean", bool], allowance_stop: ["a boolean", bool], turn_cap: ["a boolean", bool], load_investigate: ["a boolean", bool], complete: ["a boolean", bool], background_at_result: ["a boolean", bool], contract_block: ["a boolean", bool],
+  route_hook: ["a boolean or null", flag], route_hook_transcript: ["a boolean or null", flag], contract_record: ["a boolean or null", flag], contract_check_met: ["a boolean or null", flag],
+  cost_usd: ["a number or null", amount], tokens: ["a number or null", amount],
+  gstack_loads: ["a list of strings", strings], repo_loads: ["a list of strings", strings], audit_hits: ["a list of strings", strings],
+};
+
+/** The table as the analysis may read it: each row holds every field above with its type, and each trial appears once. */
+export function checkRows(rows: unknown[]): L1SessionRow[] {
+  const seen = new Set<string>();
+  rows.forEach((r, i) => {
+    const o = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    for (const [k, [want, ok]] of Object.entries(ROW_FIELDS)) if (!ok(o[k])) throw new UsageError("E_USAGE l1 analyze: row " + (i + 1) + (text(o.trial) ? " (trial " + o.trial + ")" : "") + " needs " + k + " as " + want);
+    if (seen.has(o.trial as string)) throw new UsageError("E_USAGE l1 analyze: row " + (i + 1) + " repeats trial " + o.trial);
+    seen.add(o.trial as string);
+  });
+  return rows as L1SessionRow[];
+}
+
+/** A config task list: an array of task names or a path to a file of them (else the fallback file), each name once. */
+const taskList = (key: string, v: unknown, fallback: string | null): string[] => {
+  if (v !== undefined && !text(v) && !(Array.isArray(v) && v.every(text))) throw new UsageError("E_USAGE l1 analyze: the config's " + key + " must be a list of task names or a path to one");
   const path = typeof v === "string" ? v : fallback;
-  return path ? readFileSync(path, "utf8").split(/\s+/).filter(Boolean) : [];
+  const tasks = Array.isArray(v) ? (v as string[]) : path ? readFileSync(path, "utf8").split(/\s+/).filter(Boolean) : [];
+  const twice = tasks.find((t, i) => tasks.indexOf(t) !== i);
+  if (twice !== undefined) throw new UsageError("E_USAGE l1 analyze: the config's " + key + " lists " + twice + " twice");
+  return tasks;
 };
 
 /** The current probes.ts sha256, refusing a table with any row scored by another probes.ts. */
@@ -376,18 +412,49 @@ export function currentProbes(rows: L1SessionRow[]): string {
 }
 
 export function analyze(rows: L1SessionRow[], cfg: Config) {
+  checkRows(rows);
   if (!Array.isArray(cfg.models) || !cfg.models.length) throw new UsageError("E_USAGE l1 analyze: the config needs models, each {id, status: run | not_run}");
+  const modelIds = new Set<string>();
+  for (const m of cfg.models) {
+    if (!m || !text(m.id) || (m.status !== "run" && m.status !== "not_run") || modelIds.has(m.id)) throw new UsageError("E_USAGE l1 analyze: the config's models must each be {id, status: run | not_run}, each id once, not " + JSON.stringify(m));
+    modelIds.add(m.id);
+  }
   if (!Array.isArray(cfg.routed_stratum)) throw new UsageError("E_USAGE l1 analyze: the config needs routed_stratum, the F1 tasks Amendment C's routing table sends to /investigate (may be empty)");
   if (typeof cfg.construction_checks !== "boolean") throw new UsageError("E_USAGE l1 analyze: the config needs construction_checks, true only when U1's checks and Amendment C's dry run passed");
+  if (cfg.dropped_by_design !== undefined && typeof cfg.dropped_by_design !== "boolean") throw new UsageError("E_USAGE l1 analyze: the config's dropped_by_design must be a boolean when it is given");
   const power = readPowerTable(cfg.power_txt ?? POWER_TXT);
-  const f1Tasks = taskList(cfg.f1_tasks, join(BUNDLE, "f-tasks.txt"));
-  const pilotTasks = taskList(cfg.pilot_tasks, join(BUNDLE, "pilot-tasks.txt"));
-  const tb2Tasks = taskList(cfg.tb2_tasks, null);
+  const f1Tasks = taskList("f1_tasks", cfg.f1_tasks, join(BUNDLE, "f-tasks.txt"));
+  const pilotTasks = taskList("pilot_tasks", cfg.pilot_tasks, join(BUNDLE, "pilot-tasks.txt"));
+  const tb2Tasks = taskList("tb2_tasks", cfg.tb2_tasks, null);
+  if (cfg.tb2_fit_stratum !== undefined && !Array.isArray(cfg.tb2_fit_stratum)) throw new UsageError("E_USAGE l1 analyze: the config's tb2_fit_stratum must be a list of task names");
+  taskList("routed_stratum", cfg.routed_stratum, null);
+  taskList("tb2_fit_stratum", cfg.tb2_fit_stratum, null);
   if (cfg.models.some((m) => m.status === "run" && rows.some((r) => r.model === m.id && r.instrument === "tb2"))) {
     if (!tb2Tasks.length) throw new UsageError("E_USAGE l1 analyze: the table holds TB2 rows, so the config needs tb2_tasks, the TB2 twin's planned tasks");
     if (!Array.isArray(cfg.tb2_fit_stratum)) throw new UsageError("E_USAGE l1 analyze: the table holds TB2 rows, so the config needs tb2_fit_stratum, the TB2 fit stratum's tasks (may be empty)");
   }
   const tb2Reps = cfg.tb2_replicates ?? 2;
+  if (!Number.isInteger(tb2Reps) || tb2Reps < 1) throw new UsageError("E_USAGE l1 analyze: the config's tb2_replicates must be a positive integer");
+  // Every reader below sees only planned sessions, because any other row is refused here: each row is a session of a model
+  // the config names, on a planned task and arm of its instrument (smoke sessions run on pilot tasks), and no task and arm
+  // holds more graded sessions than the plan's replicates. An infra row stays beside the relaunch of a cell that never started.
+  const plans: Record<L1Instrument, { tasks: Set<string>; arms: readonly L1Arm[]; reps: number }> = {
+    pilot: { tasks: new Set(pilotTasks), arms: ["before-u", "before-t"], reps: 1 },
+    smoke: { tasks: new Set(pilotTasks), arms: ["after-u", "after-t", "off-u", "off-t"], reps: 1 },
+    f1: { tasks: new Set(f1Tasks), arms: F1_ARMS, reps: 1 },
+    tb2: { tasks: new Set(tb2Tasks), arms: TB2_ARMS, reps: tb2Reps },
+  };
+  const gradedPerCell = new Map<string, number>();
+  for (const r of rows) {
+    if (!modelIds.has(r.model)) throw new UsageError("E_USAGE l1 analyze: trial " + r.trial + " has model " + r.model + ", which the config does not name");
+    const p = plans[r.instrument];
+    const cell = "(" + r.instrument + ", " + r.arm + ", " + r.task + ")";
+    if (!p.tasks.has(r.task) || !p.arms.includes(r.arm)) throw new UsageError("E_USAGE l1 analyze: trial " + r.trial + " " + cell + " is not a planned session");
+    if (r.outcome !== "graded" && r.outcome !== "contaminated") continue;
+    const n = (gradedPerCell.get(r.model + " " + cell) ?? 0) + 1;
+    if (n > p.reps) throw new UsageError("E_USAGE l1 analyze: trial " + r.trial + " is graded session " + n + " on " + cell + ", past the plan's " + p.reps);
+    gradedPerCell.set(r.model + " " + cell, n);
+  }
   const labels: AuditLabel[] = Array.isArray(cfg.audit) ? cfg.audit : typeof cfg.audit === "string" ? readFileSync(cfg.audit, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)) : [];
   const routed = new Set(cfg.routed_stratum);
   const f1Plan: Planned = { tasks: f1Tasks, reps: 1 };
@@ -460,6 +527,7 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
       else s10[r.complete ? (r.contract_check_met ? "both" : "probe_only") : r.contract_check_met ? "contract_only" : "neither"]++;
     }
     const au = graded(rows, f1, "after-u");
+    const own = rows.filter((r) => r.model === id);
     const background = Object.fromEntries((["pilot", "smoke", "f1", "tb2"] as const).map((inst) => [inst, Object.fromEntries(F1_ARMS.map((arm) => {
       const g = graded(rows, { model: id, instrument: inst }, arm);
       return [arm, { sessions: g.length, background: g.filter((r) => r.background_at_result).length, over: share(g, (r) => r.background_at_result) > OVER }];
@@ -481,7 +549,7 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
         S7: { f1: skillCounts("f1"), tb2: skillCounts("tb2") },
         S8: { per_arm: costs, ratio_to_none: Object.fromEntries(F1_ARMS.map((arm) => [arm, { per_session: ratio(costs[arm]!.usd_per_session, costs.none!.usd_per_session), per_pass: ratio(costs[arm]!.usd_per_pass, costs.none!.usd_per_pass) }])), g3_after_t: ratio(costs["after-t"]!.usd_per_pass, costs.none!.usd_per_pass) },
         S10: s10,
-        S11: { route_hook_after_u: { n: au.length, fired: au.filter((r) => r.route_hook === true).length, unrecorded: au.filter((r) => r.route_hook === null).length, routed_n: au.filter((r) => routed.has(r.task)).length, routed_fired: au.filter((r) => routed.has(r.task) && r.route_hook === true).length }, contract_after_t: { n: at.length, block: at.filter((r) => r.contract_block).length, record: at.filter((r) => r.contract_record === true).length, unrecorded: at.filter((r) => r.contract_record === null).length } },
+        S11: { route_disagree: { recorded: own.filter((r) => r.route_hook !== null && r.route_hook_transcript !== null).length, disagree: own.filter((r) => r.route_hook !== null && r.route_hook_transcript !== null && r.route_hook !== r.route_hook_transcript).length }, route_hook_after_u: { n: au.length, fired: au.filter((r) => r.route_hook === true).length, unrecorded: au.filter((r) => r.route_hook === null).length, routed_n: au.filter((r) => routed.has(r.task)).length, routed_fired: au.filter((r) => routed.has(r.task) && r.route_hook === true).length }, contract_after_t: { n: at.length, block: at.filter((r) => r.contract_block).length, record: at.filter((r) => r.contract_record === true).length, unrecorded: at.filter((r) => r.contract_record === null).length } },
         S12: { tb2_b1: s12b1, tb2_b3: s12b3, gap_b1: gap(s12b1, primaries[0]!.contrast), gap_b3: gap(s12b3, primaries[1]!.contrast), fit_b1: contrast(rows, fit, "after-u", "before-u", "load", { tasks: cfg.tb2_fit_stratum ?? [], reps: tb2Reps }), tb2_coverage: coverage(rows, tb2, [...TB2_ARMS], tb2Plan) },
         S13: background,
       },
@@ -528,8 +596,7 @@ if (import.meta.main) {
   const [cmd, tablePath, cfgPath, outPath] = Bun.argv.slice(2);
   try {
     if ((cmd !== "report" && cmd !== "audit-sample") || !tablePath || !cfgPath) throw new UsageError("E_USAGE usage: bun quick/laneb/l1/analyze.ts report <sessions.jsonl> <config.json> [report.json] | audit-sample <sessions.jsonl> <model>");
-    const rows = readFileSync(tablePath, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as L1SessionRow);
-    if (rows.some((r) => r.schema !== "l1-session/1")) throw new UsageError("E_USAGE l1 analyze: every row must have schema l1-session/1");
+    const rows = checkRows(readFileSync(tablePath, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)));
     currentProbes(rows);
     if (cmd === "audit-sample") console.log(auditSample(rows, cfgPath).map((x) => JSON.stringify(x)).join("\n"));
     else {

@@ -73,7 +73,7 @@ for (const f of jobs) {
       }
     }
     const spent = 100_000 + n;
-    appendFileSync(join(out, "proxy-sessions.jsonl"), JSON.stringify({ id: sid, trial: trial + "__env", model: "claude-opus-5-5", cap_micros: 5_000_000, spent_micros: spent, ok_responses: 1, closed_at: new Date().toISOString(), meta: { arm } }) + "\n");
+    appendFileSync(join(out, "proxy-sessions.jsonl"), JSON.stringify({ id: sid, trial: trial + "__env", model: "claude-opus-5-5", cap_micros: 5_000_000, spent_micros: spent, ok_responses: 1, closed_at: new Date().toISOString(), route_mark_before_output: arm === "after-u", meta: { arm } }) + "\n");
     writeFileSync(join(dir, "result.json"), "{}");
     try { await post("/settle", { id: prefix + sid, usd_micros: spent }); } catch {}
   }

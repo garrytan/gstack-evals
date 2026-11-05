@@ -28,12 +28,21 @@ import json
 import re
 import shutil
 import tarfile
+from datetime import datetime
 from pathlib import Path
 
 from laneb_agent import PROBE_TIMEOUT_S, LanebAgent
 
-GSTACK_HOOK_STATE = 'cd /root/.gstack 2>/dev/null || exit 0; set --; for d in hooks skill-contracts; do [ -d "$d" ] && set -- "$@" "$d"; done; [ "$#" -gt 0 ] || exit 0; exec tar -cf - "$@"'
-CLAUDE_TRANSCRIPTS = 'cd /root/.claude/projects 2>/dev/null || exit 0; set --; for f in */*.jsonl */*/subagents/*.jsonl; do [ -f "$f" ] && set -- "$@" "$f"; done; [ "$#" -gt 0 ] || exit 0; exec tar -cf - -- "$@"'
+# Each copy measures its tar inside the container first and refuses one past the cap. It then sends the tar through head, so
+# a tree that a process the model left running grows between the two passes still sends at most the cap plus one byte: a
+# send cut off there, or one whose tar fails, is refused in the container (exit 3), and the agent refuses a reply past the
+# cap. A refused copy is a failed copy, and the fields it decides stay null.
+TREE_CAP_BYTES = 256 << 20
+_CAPPED_TAR = (f'c={TREE_CAP_BYTES}; n=$(tar -cf - -- "$@" | wc -c); [ "$n" -le "$c" ] || {{ echo "the tar is $n bytes, over the $c-byte cap" >&2; exit 3; }}; '
+               'exec 4>&1; s=$({ { tar -cf - -- "$@"; echo $? >&3; } | head -c $((c + 1)) >&4; } 3>&1); '
+               '[ "$s" = 0 ] || { echo "the tar grew past the $c-byte cap or failed (tar status $s)" >&2; exit 3; }')
+GSTACK_HOOK_STATE = 'cd /root/.gstack 2>/dev/null || exit 0; set --; for d in hooks skill-contracts; do [ -d "$d" ] && set -- "$@" "$d"; done; [ "$#" -gt 0 ] || exit 0; ' + _CAPPED_TAR
+CLAUDE_TRANSCRIPTS = 'cd /root/.claude/projects 2>/dev/null || exit 0; set --; for f in */*.jsonl */*/subagents/*.jsonl; do [ -f "$f" ] && set -- "$@" "$f"; done; [ "$#" -gt 0 ] || exit 0; ' + _CAPPED_TAR
 ROUTE_MARK = "gstack skill routing (UserPromptSubmit hook;"
 MET = {"met", "met_waived", "met_after_block"}
 UNMET = {"blocked", "miss"}
@@ -50,6 +59,16 @@ def _route_context(line: str) -> bool:
         return False
     content = att.get("content")
     return any(ROUTE_MARK in str(c) for c in (content if isinstance(content, list) else [content]))
+
+
+def _updated_at(run: dict) -> datetime | None:
+    """A run's updated_at as an aware time, or None when it is not an ISO 8601 string with a zone (no last run can be told)."""
+    v = run.get("updated_at")
+    try:
+        t = datetime.fromisoformat(v.replace("Z", "+00:00")) if isinstance(v, str) else None
+    except ValueError:
+        return None
+    return t if t is not None and t.tzinfo is not None else None
 
 
 def l1_evidence(transcripts: Path | None, hooks: Path | None) -> dict:
@@ -73,8 +92,11 @@ def l1_evidence(transcripts: Path | None, hooks: Path | None) -> dict:
     if not isinstance(runs, dict):
         return out
     out["contract_record"] = True
-    investigate = sorted((r for r in runs.values() if isinstance(r, dict) and INVESTIGATE.search(str(r.get("skill")))), key=lambda r: str(r.get("updated_at")))
-    outcome = investigate[-1].get("outcome") if investigate else None
+    investigate = [r for r in runs.values() if isinstance(r, dict) and INVESTIGATE.search(str(r.get("skill")))]
+    when = [_updated_at(r) for r in investigate]
+    if None in when:
+        return out
+    outcome = investigate[sorted(range(len(investigate)), key=lambda i: when[i])[-1]].get("outcome") if investigate else None
     out["contract_check_met"] = True if outcome in MET else False if outcome in UNMET else None
     return out
 
@@ -85,6 +107,8 @@ class LanebHooksAgent(LanebAgent):
         res = self._exec(container, script, timeout=PROBE_TIMEOUT_S)
         if res.returncode != 0:
             raise RuntimeError(f"{what} copy failed: {res.stderr[-300:]!r}")
+        if len(res.stdout) > TREE_CAP_BYTES:
+            raise RuntimeError(f"{what} copy failed: the tar is {len(res.stdout)} bytes, over the {TREE_CAP_BYTES}-byte cap")
         if not res.stdout:
             return []
         with tarfile.open(fileobj=io.BytesIO(res.stdout)) as tf:

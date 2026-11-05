@@ -7,9 +7,13 @@
 // (the proxy refused a request for the session's budget) or a turn-cap stop after a model response is a graded fail for pass
 // and adherence, reward or not (#169 7.5). A LedgerCapStop is a cap stop: the run is incomplete. Anything else is infra, a
 // coverage gap. A none session whose read audit hits an installed gstack path or a drive is contaminated: dropped, counted.
-// route_hook, contract_record and contract_check_met come from evaluator/l1-evidence.json, which laneb_hooks.LanebHooksAgent
-// writes for every L1 arm, and are null when the file is missing: the SDK log carries neither the route hook's line nor the
-// contract record (probes.ts).
+// route_hook comes from the proxy's session rows, outside the trial container: route_mark_before_output says the route hook's
+// line reached the proxy in a request sent before the session had been handed any model response (proxy.ts). It is true only
+// when every session of the trial that a request reached says true, and null when the trial has no proxy row or a row from a
+// proxy that does not record it. contract_record and contract_check_met come from evaluator/l1-evidence.json, which
+// laneb_hooks.LanebHooksAgent writes inside the container for every L1 arm, and are null when the file is missing: the SDK log
+// carries no contract record (probes.ts). That file's own route_hook, read from the transcript, is kept as
+// route_hook_transcript, a cross-check only.
 //
 // The probe L prefix for each pin is the first 200 characters of that pin's installed investigate/SKILL.md, checked against
 // the digests the preregistration's install-manifest.md froze; a mismatch refuses the table.
@@ -68,7 +72,8 @@ export function sessionRow(dir: string, ctx: TableContext): L1SessionRow | null 
   const responded = last ? (last.ok_responses ?? 0) > 0 : p.model_text;
   const exc = result?.exception_info?.exception_type ?? null;
   const rewards = result?.verifier_result?.rewards;
-  const v = rewards?.reward ?? Object.values(rewards ?? {})[0];
+  const keys = rewards && typeof rewards === "object" ? Object.keys(rewards) : [];
+  const v = keys.includes("reward") ? rewards.reward : keys.length === 1 ? rewards[keys[0]!] : undefined;
   const raw = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   const reward = result && Number.isFinite(raw) ? raw : null;
   const allowance = (last?.refused_budget ?? 0) > 0;
@@ -88,6 +93,9 @@ export function sessionRow(dir: string, ctx: TableContext): L1SessionRow | null 
   const usage = summary?.session?.usage;
   const evidence = readJson(join(dir, "evaluator", "l1-evidence.json")) ?? {};
   const flag = (v: unknown) => (typeof v === "boolean" ? v : null);
+  const marks = rows.map((r) => (r as { route_mark_before_output?: unknown }).route_mark_before_output);
+  const reached = marks.filter((m) => m !== null);
+  const routeHook = !reached.length || reached.some((m) => typeof m !== "boolean") ? null : reached.every((m) => m === true);
   return {
     schema: "l1-session/1",
     model: String(kwargs.upstream_model ?? "?"),
@@ -113,7 +121,8 @@ export function sessionRow(dir: string, ctx: TableContext): L1SessionRow | null 
     probe_i: { report: p.probe_i.report, fix_edited: p.probe_i.fix_edited, status: p.probe_i.status, check_after_edit: p.probe_i.check_after_edit, edits: p.probe_i.edits },
     background_at_result: p.background.at_result,
     contract_block: p.contract_block,
-    route_hook: flag(evidence.route_hook),
+    route_hook: routeHook,
+    route_hook_transcript: flag(evidence.route_hook),
     contract_record: flag(evidence.contract_record),
     contract_check_met: flag(evidence.contract_check_met),
     audit_hits: p.audit_hits,
