@@ -1,0 +1,604 @@
+// R3c (R3 amendment 6, wiki/plans/2026-11-05-geva-284-r3c-calibrated/): told /investigate at gstack 699a41cb with the
+// procedure line against none, on SWE-rebench pool tasks whose measured none rate is in a frozen band, Opus 5.5 only.
+// This attachment is the keyless part, frozen by the post: the candidate tiers and calibration plan from data in hand,
+// the forecast of what calibration can admit, and the admission rule that fixes the grid's size and MDD from measured
+// rates. R3c's build PR wires these rules into the paid run (items, parts, ledger, projection checks) unchanged. It also
+// holds ladder D1 (GEVA-292): the closing line every arm's prompt ends with, and the localization scorer that reads only
+// the closing block it asks for; forecast prints the ladder lines (k and the session-cost ratio) from data in hand.
+// Run it from a copy named r3c.ts, with PIN set to a git archive export of the gstack-evals commit the post names:
+//   PIN=<export> bun r3c.ts plan <in-hand dir> --model opus|sol [--write <dir>]
+//   PIN=<export> bun r3c.ts forecast <in-hand dir> --model opus|sol [--emit <file>]
+//   PIN=<export> bun r3c.ts admit <in-hand dir> --model opus|sol --calibration <trials.jsonl> --cap-usd <n> --settled-usd <n>
+//   PIN=<export> bun r3c.ts validate <in-hand dir> --model opus|sol --cap-usd <n> [--truth npmle|beta] [--runs <k>] [--first <i>]
+//   PIN=<export> bun r3c.ts calibrate <in-hand dir> --model opus --cap-usd <n> [--runs <k>] [--first <i>]
+//   PIN=<export> bun r3c.ts calread <calibrate output>
+//   PIN=<export> bun r3c.ts selftest
+// <in-hand dir> holds the five records named in INHAND, each checked by sha256 before it is read, and r3c-taskfit.tsv
+// (this post's attachment, also pinned). env R3C_SIMS (simulated grids per power point, default 2000, the frozen value;
+// validate may run with fewer for speed and says so), R3C_FORECAST_SIMS (default 2000). validate's --first skips that
+// many simulated calibrations while drawing them, so slices of one run print the same lines as the whole.
+// Exit codes: admit 0 GO, 5 STOP; selftest 0 when every check passes, 1 otherwise; 2 usage; 1 any error.
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+
+const PIN = process.env.PIN ?? "";
+if (!PIN) { console.error("E_USAGE set PIN to a git archive export of the commit the post names"); process.exit(2); }
+const { bootstrap, rng } = await import(PIN + "/quick/laneb/analysis/analyze.ts");
+const { loadR3a4Drops, loadRebenchPool, R3A4_POOL_FILE, R3A4_POOL_SHA256 } = await import(PIN + "/quick/laneb/runner/materialize.ts");
+
+export type Model = "opus" | "sol";
+export type Tier = "t1" | "t2" | "t3" | "t4";
+export type Counts = { s: number; n: number };
+
+export const R3C = {
+  band: [0.2, 0.8] as const,
+  minTrials: 4,
+  calTrials: { t1: 3, t2: 3, t3: 4, t4: 1 } as Record<Tier, number>,
+  t4Second: 4,
+  nMin: 10,
+  mddTarget: 10,
+  mddMax: 12.5,
+  nullMax: 0.05,
+  rMin: 3,
+  rMax: 24,
+  maxTasks: 40,
+  // target: the power the MDD claims. searchTarget: the simulated KEEP rate the search asks for under the fitted law.
+  // calibrate's 60 simulated calibrations gave 0.83; validate at 0.83 still put true power at the claimed MDD under the
+  // target, because choosing R on the same simulated curve adds optimism, so the level is 0.87 (section 6 of the post).
+  power: { target: 0.8, searchTarget: 0.87, stepPoints: 0.5, seed: 20261109, draws: 10000, bootSeed: 20261101 },
+  beta: { grid: 70, lo: 0.01, hi: 20 },
+  calibrateLifts: [8, 9, 10, 11, 12, 13, 14, 15],
+  npmle: { grid: 40, iters: 2000 },
+  forecastSeed: 20261108,
+  validateSeed: 20261111,
+  reserveUsd: 79.2,
+  // Ladder D1: the last line of every arm's prompt, after a blank line (after the procedure line in the told arm).
+  closingLine: "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first.",
+  // The ladder's 1x anchor: R3a's plain none rate on in-band SWE-bench Verified tasks (the R3a results post, 2026-11-03).
+  ladder: { verified: { opus: { s: 86, n: 91 }, sol: { s: 77, n: 91 } } as Record<Model, Counts> },
+  vmUsdPerHour: 0.6,
+  // R3b's measured cells (the R3b results post): told over none cost on the same model, and VM hours per trial by arm
+  // (amendment 5 section 8). The none cost itself comes from the calibration's own trials at admission.
+  cost: {
+    opus: { planNoneUsd: 0.43, toldOverNone: 0.685 / 0.43, vmHoursNone: 0.0306, vmHoursTold: 0.0537 },
+    sol: { planNoneUsd: 0.531, toldOverNone: 0.676 / 0.531, vmHoursNone: 0.0267, vmHoursTold: 0.0741 },
+  } as Record<Model, { planNoneUsd: number; toldOverNone: number; vmHoursNone: number; vmHoursTold: number }>,
+};
+
+// The records the plan reads, from the gstack-evals Captain's drive: R3a4's trials (handoffs/GEVA-248/record/trials.jsonl,
+// handoffs/GEVA-249/r3a4-sol/trials.jsonl), R3b's trials (handoffs/GEVA-275/trials.tsv, handoffs/GEVA-276/trials.tsv),
+// R3 amendment 4's drop list (handoffs/GEVA-248/r3a4-drop-list.json) and this post's task-fit table, each by sha256.
+export const INHAND: Record<string, string> = {
+  "opus-r3a4.jsonl": "d7c87e34cc5bdeffd79c08cb9fc2decc0ea4da832048b9e74ccaadfd81638880",
+  "sol-r3a4.jsonl": "6ecac9f836a8b9638d403dc0bb4c000c71470f8b3cb510bf3897901ccfff126d",
+  "opus-r3b.tsv": "2176856539f12ad8a255e68964960859bd6e4ae067a9970c86158e34193a88f8",
+  "sol-r3b.tsv": "dd8f041fa5687db05580e87854197505961a55a0533111fc03d759ce4e3c776b",
+  "r3a4-drop-list.json": "dd23d16ce1b32669e219c82d48c2b7bd0fa34289b6dda628445a0939cc36cc6f",
+  "r3c-taskfit.tsv": "b8298156309d020770ce94741531aa40a58f2d222faf0776a16acb4f4d20b54d",
+};
+// L1's fresh set and pilot (wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000), kept out of R3c.
+export const L1_FILES: Record<string, string> = {
+  "f-tasks.txt": "b14dd044e4dfba0b217bb267566753585fcffdc05b42dc93d95887d192d3f4ee",
+  "pilot-tasks.txt": "fa85bf9cc38a3455a6436f2ec29262ba457a71d7e91e46cc4aedbe4a69ff9381",
+};
+
+const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
+export const idsSha = (ids: string[]) => sha([...ids].sort().map((i) => i + "\n").join(""));
+const pinned = (path: string, want: string) => {
+  const raw = readFileSync(path);
+  if (sha(raw) !== want) throw new Error("E_PIN_MISMATCH " + path + ": sha256 " + sha(raw) + " is not the pinned " + want + "; fix: copy the record again from the drive path named beside INHAND (or L1_FILES' post folder) and rerun");
+  return raw.toString("utf8");
+};
+
+export type TrialRow = { part: string; task: string; arm: string; outcome: string; cost_usd?: number | null };
+const graded = (t: TrialRow) => t.outcome === "pass" || t.outcome === "fail";
+const tsv = (text: string): Record<string, string>[] => {
+  const [head, ...lines] = text.trim().split("\n");
+  const cols = head!.split("\t");
+  return lines.map((l) => { const v = l.split("\t"); return Object.fromEntries(cols.map((c, i) => [c, v[i] ?? ""])); });
+};
+const tsvRows = (text: string): TrialRow[] => tsv(text).map((o) => ({ part: o.part!, task: o.task!, arm: o.arm!, outcome: o.outcome!, cost_usd: Number(o.cost_usd) }));
+const jsonlRows = (text: string): TrialRow[] => text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+
+// None trials only: R3a4's screen trials, R3b's grid none trials and R3c's calibration trials. Told trials, R3a4's pilot
+// and R3b's re-check never choose a task.
+export function noneCounts(rows: TrialRow[]): Map<string, Counts> {
+  const m = new Map<string, Counts>();
+  for (const t of rows) {
+    if (t.arm !== "none" || !graded(t) || !/^(screen|grid|cal)-/.test(t.part)) continue;
+    const c = m.get(t.task) ?? { s: 0, n: 0 };
+    c.s += t.outcome === "pass" ? 1 : 0; c.n += 1; m.set(t.task, c);
+  }
+  return m;
+}
+export function screenPass(rows: TrialRow[]): Map<string, boolean> {
+  const m = new Map<string, boolean>();
+  for (const t of rows) if (t.arm === "none" && t.part.startsWith("screen-") && graded(t)) m.set(t.task, t.outcome === "pass");
+  return m;
+}
+
+export type InHand = { kept: string[]; none: Record<Model, Map<string, Counts>>; screen: Record<Model, Map<string, boolean>>; l1: Set<string>; dist: Map<string, number> };
+export function loadInHand(dir: string): InHand {
+  const text = Object.fromEntries(Object.entries(INHAND).map(([f, h]) => [f, pinned(join(dir, f), h)]));
+  const pool = (loadRebenchPool(join(PIN, "quick/laneb", R3A4_POOL_FILE), R3A4_POOL_SHA256) as { task_id: string }[]).map((t) => t.task_id);
+  const drops = new Set((loadR3a4Drops(join(dir, "r3a4-drop-list.json"), INHAND["r3a4-drop-list.json"]!, pool) as { task_id: string }[]).map((d) => d.task_id));
+  const rows = { opus: [...jsonlRows(text["opus-r3a4.jsonl"]!), ...tsvRows(text["opus-r3b.tsv"]!)], sol: [...jsonlRows(text["sol-r3a4.jsonl"]!), ...tsvRows(text["sol-r3b.tsv"]!)] };
+  const l1Dir = join(PIN, "wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000");
+  const l1 = new Set(Object.entries(L1_FILES).flatMap(([f, h]) => pinned(join(l1Dir, f), h).split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))));
+  const dist = new Map(tsv(text["r3c-taskfit.tsv"]!).map((o) => [o.task!, Number(o.dist)]));
+  return { kept: pool.filter((t) => !drops.has(t)), none: { opus: noneCounts(rows.opus), sol: noneCounts(rows.sol) }, screen: { opus: screenPass(rows.opus), sol: screenPass(rows.sol) }, l1, dist };
+}
+
+const other = (m: Model): Model => (m === "opus" ? "sol" : "opus");
+// The same upstream change under a moved owner (L1's rule): the owner dropped, the repository name and number kept.
+export const changeKey = (id: string) => { const i = id.indexOf("__"); return (i < 0 ? id : id.slice(i + 2)).replace(/_interface$/, ""); };
+
+// Frozen tiers over the kept pool. floor: this model has 4 or more none trials and passed none, and the other model
+// passed none of its none trials. t1: 4 or more none trials, not floor. t2: one screen trial, which failed, or which
+// passed while the other model's screen trial failed. t4: both models passed their screen trial. t3: kept tasks no
+// screen drew, less L1's 90 and any task that is the same change as a screen task (out).
+export function tiers(h: InHand, m: Model) {
+  const own = h.none[m], oth = h.none[other(m)], scr = h.screen[m], oscr = h.screen[other(m)];
+  const keys = new Set([...scr.keys()].map(changeKey));
+  const out: Record<Tier | "floor" | "out", string[]> = { t1: [], t2: [], t3: [], t4: [], floor: [], out: [] };
+  for (const t of h.kept) {
+    const c = own.get(t);
+    if (!scr.has(t)) { (h.l1.has(t) || keys.has(changeKey(t)) ? out.out : out.t3).push(t); continue; }
+    if (c!.n >= 4) { (c!.s === 0 && (oth.get(t)?.s ?? 0) === 0 ? out.floor : out.t1).push(t); continue; }
+    if (scr.get(t) && oscr.get(t)) out.t4.push(t); else out.t2.push(t);
+  }
+  for (const k of Object.keys(out) as (keyof typeof out)[]) out[k].sort();
+  return out;
+}
+
+// Calibration: fresh none trials per candidate, by tier (cal-1), then R3C.t4Second more for each t4 task whose cal-1
+// trial failed (cal-2). They choose tasks and size the grid; no grid contrast reads them.
+export function calibrationPlan(tr: ReturnType<typeof tiers>) {
+  const cal1 = (["t1", "t2", "t3", "t4"] as Tier[]).flatMap((k) => tr[k].map((task) => ({ task, tier: k, trials: R3C.calTrials[k] })));
+  return { cal1, cal1Trials: cal1.reduce((z, x) => z + x.trials, 0) };
+}
+export function cal2Tasks(tr: ReturnType<typeof tiers>, cal: TrialRow[]): string[] {
+  const failed = new Set(cal.filter((t) => /^cal-1/.test(t.part) && t.arm === "none" && t.outcome === "fail").map((t) => t.task));
+  return tr.t4.filter((t) => failed.has(t));
+}
+
+// Localization (report only, ladder D1) reads the session's final message (its ResultMessage result) and nothing else,
+// so a DEBUG REPORT never counts: the last line that, trimmed of non-alphanumeric characters at both ends, reads "root
+// cause files" in any case, then the non-empty lines after it up to the first blank line, at most three. Each entry
+// loses a list marker, backticks and asterisks, everything after its first token, trailing punctuation, a line reference
+// (:12 or :12:3) and a leading ./ or /testbed/. No block, or no entry, is a miss.
+export function closingBlock(finalText: string): string[] {
+  const lines = finalText.split("\n");
+  let at = -1;
+  lines.forEach((l, i) => { if (l.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "").toLowerCase() === "root cause files") at = i; });
+  if (at < 0) return [];
+  const out: string[] = [];
+  for (const l of lines.slice(at + 1)) {
+    if (!l.trim()) { if (out.length) break; continue; }
+    const tok = l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").replace(/[`*]/g, "").trim().split(/\s+/)[0] ?? "";
+    const p = tok.replace(/[,;.)]+$/, "").replace(/(?::\d+)+$/, "").replace(/^\.\//, "").replace(/^\/testbed\//, "");
+    if (p) out.push(p);
+    if (out.length === 3) break;
+  }
+  return out;
+}
+// A task's root-cause files: the files its oracle patch (the oracle gate's model.patch) changes, less test files (a path
+// segment test or tests, or a file named test_*.py or *_test.py). A task left with none is out of the measure, counted.
+export function goldFiles(patch: string): string[] {
+  const files = new Set<string>();
+  for (const x of patch.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)) files.add(x[2]!);
+  return [...files].filter((f) => !/(^|\/)tests?\//.test(f) && !/(^|\/)(test_[^/]*\.py|[^/]*_test\.py)$/.test(f)).sort();
+}
+export const locHit = (block: string[], gold: string[], k: number) => block.slice(0, k).some((f) => gold.includes(f));
+
+// Admission: every none trial of this model on the task (in hand and calibration), at least R3C.minTrials of them, and a
+// measured none rate inside the band, both ends included.
+export const admitted = (c: Counts | undefined) => !!c && c.n >= R3C.minTrials && c.s >= R3C.band[0] * c.n - 1e-9 && c.s <= R3C.band[1] * c.n + 1e-9;
+
+// The task model: a nonparametric maximum-likelihood mixing law for per-task none chances on the grid i / 40, fitted by
+// EM from a uniform start for a fixed number of iterations, so it is deterministic.
+export const GRID = Array.from({ length: R3C.npmle.grid + 1 }, (_, i) => i / R3C.npmle.grid);
+const lik = (p: number, c: Counts) => Math.pow(p, c.s) * Math.pow(1 - p, c.n - c.s);
+export function npmle(data: Counts[], iters = R3C.npmle.iters): number[] {
+  let g = GRID.map(() => 1 / GRID.length);
+  const L = data.map((c) => GRID.map((p) => lik(p, c)));
+  for (let it = 0; it < iters; it++) {
+    const acc = GRID.map(() => 0);
+    for (const row of L) { let z = 0; for (let j = 0; j < GRID.length; j++) z += g[j]! * row[j]!; for (let j = 0; j < GRID.length; j++) acc[j]! += (g[j]! * row[j]!) / z; }
+    g = acc.map((a) => a / data.length);
+  }
+  return g;
+}
+export function posterior(g: number[], c: Counts | undefined): number[] {
+  const w = GRID.map((p, j) => g[j]! * (c ? lik(p, c) : 1)), z = w.reduce((a, b) => a + b, 0);
+  return w.map((x) => x / z);
+}
+// Report-only second law (the reviewer's finding d3): the beta-binomial maximum-likelihood law, on a log grid of a and b
+// from R3C.beta.lo to R3C.beta.hi, put on GRID by the beta's mass in each grid point's cell.
+export function lgamma(x: number): number {
+  if (x < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lgamma(1 - x);
+  const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  x -= 1;
+  let a = c[0]!;
+  const t = x + 7.5;
+  for (let i = 1; i < 9; i++) a += c[i]! / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+function betacf(a: number, b: number, x: number): number {
+  const tiny = 1e-300;
+  let c = 1, d = 1 - ((a + b) * x) / (a + 1);
+  d = 1 / (Math.abs(d) < tiny ? tiny : d);
+  let h = d;
+  for (let m = 1; m <= 500; m++) {
+    for (const aa of [(m * (b - m) * x) / ((a - 1 + 2 * m) * (a + 2 * m)), (-(a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 1 + 2 * m))]) {
+      d = 1 + aa * d; d = 1 / (Math.abs(d) < tiny ? tiny : d);
+      c = 1 + aa / c; if (Math.abs(c) < tiny) c = tiny;
+      h *= d * c;
+    }
+    if (Math.abs(d * c - 1) < 1e-13) break;
+  }
+  return h;
+}
+export function betai(a: number, b: number, x: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const bt = Math.exp(lgamma(a + b) - lgamma(a) - lgamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+  return x < (a + 1) / (a + b + 2) ? (bt * betacf(a, b, x)) / a : 1 - (bt * betacf(b, a, 1 - x)) / b;
+}
+export const betaLaw = (a: number, b: number) => GRID.map((p) => betai(a, b, Math.min(1, p + 0.5 / R3C.npmle.grid)) - betai(a, b, Math.max(0, p - 0.5 / R3C.npmle.grid)));
+export function betaFit(data: Counts[]): { a: number; b: number } {
+  const steps = R3C.beta.grid, l0 = Math.log(R3C.beta.lo), l1 = Math.log(R3C.beta.hi);
+  const at = (i: number) => Math.exp(l0 + ((l1 - l0) * i) / steps);
+  let best = { a: 1, b: 1, ll: -Infinity };
+  for (let i = 0; i <= steps; i++) for (let j = 0; j <= steps; j++) {
+    const a = at(i), b = at(j), lb = lgamma(a) + lgamma(b) - lgamma(a + b);
+    let ll = 0;
+    for (const c of data) ll += lgamma(c.s + a) + lgamma(c.n - c.s + b) - lgamma(c.n + a + b) - lb;
+    if (ll > best.ll) best = { a, b, ll };
+  }
+  return { a: best.a, b: best.b };
+}
+const inBand = (p: number) => p >= R3C.band[0] - 1e-9 && p <= R3C.band[1] + 1e-9;
+export const bandMass = (w: number[]) => w.reduce((z, x, j) => z + (inBand(GRID[j]!) ? x : 0), 0);
+const draw = (w: number[], u: () => number) => { let r = u(), j = 0; for (; j < w.length - 1; j++) { r -= w[j]!; if (r <= 0) break; } return GRID[j]!; };
+
+// Forecast (the admission check from data in hand; it decides nothing): draw each candidate's none chance from its
+// posterior under the law fitted to this model's none trials, simulate calibration and admission, count what is kept.
+function candidatePosteriors(h: InHand, m: Model, law: "npmle" | "beta" = "npmle") {
+  const tr = tiers(h, m), own = h.none[m];
+  const g = law === "beta" ? (({ a, b }) => betaLaw(a, b))(betaFit([...own.values()])) : npmle([...own.values()]);
+  return { tr, g, cands: (["t1", "t2", "t3", "t4"] as Tier[]).flatMap((k) => tr[k].map((t) => ({ t, k, w: posterior(g, own.get(t)) }))) };
+}
+// One simulated calibration: each candidate's true none chance drawn from its posterior, then cal-1 and cal-2 as frozen.
+function simulateCalibration(h: InHand, m: Model, cands: { t: string; k: Tier; w: number[] }[], u: () => number) {
+  const own = h.none[m], rows: TrialRow[] = [], truth = new Map<string, number>();
+  let kept = 0, band = 0;
+  for (const c of cands) {
+    const p = draw(c.w, u), base = own.get(c.t) ?? { s: 0, n: 0 };
+    truth.set(c.t, p);
+    let k = 0, n = R3C.calTrials[c.k];
+    for (let i = 0; i < n; i++) { const pass = u() < p; k += +pass; rows.push({ part: "cal-1", task: c.t, arm: "none", outcome: pass ? "pass" : "fail", cost_usd: R3C.cost[m].planNoneUsd }); }
+    if (c.k === "t4" && k === 0) for (let i = 0; i < R3C.t4Second; i++) { const pass = u() < p; k += +pass; n++; rows.push({ part: "cal-2", task: c.t, arm: "none", outcome: pass ? "pass" : "fail", cost_usd: R3C.cost[m].planNoneUsd }); }
+    if (admitted({ s: base.s + k, n: base.n + n })) { kept++; band += +inBand(p); }
+  }
+  return { rows, truth, kept, band };
+}
+export const calSpendUsd = (m: Model, rows: TrialRow[]) => rows.reduce((z, r) => z + (r.cost_usd ?? 0), 0) + rows.length * R3C.vmUsdPerHour * R3C.cost[m].vmHoursNone;
+
+export function forecast(h: InHand, m: Model, sims: number) {
+  const { tr, g, cands } = candidatePosteriors(h, m);
+  const u = rng(R3C.forecastSeed);
+  const ns: number[] = [], trueBand: number[] = [], trials: number[] = [];
+  let last: TrialRow[] = [], rateSum = 0, rateN = 0;
+  for (let s = 0; s < sims; s++) {
+    const c = simulateCalibration(h, m, cands, u);
+    ns.push(c.kept); trueBand.push(c.band); trials.push(c.rows.length); last = c.rows;
+    for (const [t, k] of noneCounts(c.rows)) { const b = h.none[m].get(t) ?? { s: 0, n: 0 }; if (admitted({ s: b.s + k.s, n: b.n + k.n })) { rateSum += c.truth.get(t)!; rateN++; } }
+  }
+  const q = (xs: number[], f: number) => [...xs].sort((a, b) => a - b)[Math.floor(f * (xs.length - 1))]!;
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const exp = (k: Tier) => cands.filter((c) => c.k === k).reduce((z, c) => z + bandMass(c.w), 0);
+  return {
+    tiers: tr, lawBandMass: bandMass(g), expectedInBand: { t1: exp("t1"), t2: exp("t2"), t3: exp("t3"), t4: exp("t4") },
+    admittedMean: mean(ns), admittedP10: q(ns, 0.1), admittedP50: q(ns, 0.5), admittedP90: q(ns, 0.9), inBandShare: mean(trueBand) / Math.max(1e-9, mean(ns)),
+    pAtLeastNMin: ns.filter((x) => x >= R3C.nMin).length / sims, calTrialsMean: mean(trials), lastSim: last, admittedRate: rateSum / Math.max(1, rateN),
+  };
+}
+
+// Ladder (GEVA-292, report only): R3c is /investigate's 2x tier. k is a strict none rate over the forecast's mean true
+// none rate on admitted tasks (pooled over simulations), against R3b's grid (in hand) and against R3a's SWE-bench
+// Verified tasks. The session-cost ratio is the median cost of the in-hand graded none trials (R3a4's screen, R3b's grid)
+// on the candidates over the median of R3b's graded grid none trials.
+export function ladderLines(dir: string, m: Model, f: ReturnType<typeof forecast>): string[] {
+  const r3b = tsvRows(pinned(join(dir, m + "-r3b.tsv"), INHAND[m + "-r3b.tsv"]!)).filter((t) => /^grid-/.test(t.part) && t.arm === "none" && graded(t));
+  const a4 = jsonlRows(pinned(join(dir, m + "-r3a4.jsonl"), INHAND[m + "-r3a4.jsonl"]!));
+  const cand = new Set((["t1", "t2", "t3", "t4"] as Tier[]).flatMap((k) => f.tiers[k]));
+  const onCand = [...a4, ...r3b].filter((t) => t.arm === "none" && graded(t) && /^(screen|grid)-/.test(t.part) && cand.has(t.task));
+  const med = (xs: number[]) => { const v = [...xs].sort((a, b) => a - b), i = v.length >> 1; return v.length % 2 ? v[i]! : (v[i - 1]! + v[i]!) / 2; };
+  const s0 = r3b.filter((t) => t.outcome === "pass").length, v = R3C.ladder.verified[m];
+  const cb = med(onCand.map((t) => t.cost_usd ?? 0)), cr = med(r3b.map((t) => t.cost_usd ?? 0));
+  return [
+    "ladder: R3c is /investigate's 2x tier (GEVA-292); forecast mean true none rate of admitted tasks " + f.admittedRate.toFixed(3),
+    "k against R3b's grid none rate (" + s0 + " of " + r3b.length + ", " + (100 * s0 / r3b.length).toFixed(1) + "%): " + (s0 / r3b.length / f.admittedRate).toFixed(2) + "; k against R3a's SWE-bench Verified none rate (" + v.s + " of " + v.n + ", " + (100 * v.s / v.n).toFixed(1) + "%): " + (v.s / v.n / f.admittedRate).toFixed(2),
+    "session cost: median in-hand none trial on the candidates $" + cb.toFixed(3) + " (" + onCand.length + " trials) over R3b's grid none median $" + cr.toFixed(3) + " (" + r3b.length + " trials): " + (cb / cr).toFixed(2),
+  ];
+}
+
+// Power of the frozen KEEP rule on a grid of the admitted tasks: each task's none chance drawn from its posterior,
+// told = min(1, p + d), R replicates per arm, KEEP when the paired task-clustered 95% interval (10,000 draws, seed
+// 20261101, the bootstrap analyze()'s contrast runs) is above zero. split (report only): each task's lift is 2d or 0
+// with even odds, so the mean lift is d but it sits on half the tasks. The generator is re-seeded per call.
+export function keepRate(posts: number[][], R: number, d: number, sims: number, split = false) {
+  const u = rng(R3C.power.seed);
+  let keep = 0;
+  for (let s = 0; s < sims; s++) {
+    const none = new Map<string, number>(), told = new Map<string, number>(), tasks: string[] = [];
+    posts.forEach((w, i) => {
+      const p = draw(w, u), lift = split ? (u() < 0.5 ? 2 * d : 0) : d, q = Math.min(1, p + lift);
+      let kn = 0, kt = 0;
+      for (let r = 0; r < R; r++) { kn += +(u() < p); kt += +(u() < q); }
+      const k = "t" + String(i).padStart(3, "0");
+      none.set(k, kn / R); told.set(k, kt / R); tasks.push(k);
+    });
+    const avg = (map: Map<string, number>, smp: string[]) => smp.reduce((z, k) => z + map.get(k)!, 0) / smp.length;
+    if (bootstrap(tasks, (smp: string[]) => avg(told, smp) - avg(none, smp), { seed: R3C.power.bootSeed, b: R3C.power.draws }).lo > 0) keep++;
+  }
+  return keep / sims;
+}
+// The smallest lift on a 0.5-point grid up to 100 points with simulated KEEP in at least R3C.power.searchTarget of runs,
+// in points, or null. Searched by bisection, which assumes KEEP rises with the lift.
+export function mddPoints(posts: number[][], R: number, sims: number, split = false): number | null {
+  const at = (k: number) => keepRate(posts, R, (k * R3C.power.stepPoints) / 100, sims, split) >= R3C.power.searchTarget;
+  let lo = 1, hi = 100 / R3C.power.stepPoints;
+  if (!at(hi)) return null;
+  while (lo < hi) { const mid = Math.floor((lo + hi) / 2); if (at(mid)) hi = mid; else lo = mid + 1; }
+  return lo * R3C.power.stepPoints;
+}
+
+// One grid task-replicate (a none and a told trial with their VM), from the calibration's measured none cost.
+export const pairUsd = (m: Model, noneUsd: number) => noneUsd * (1 + R3C.cost[m].toldOverNone) + R3C.vmUsdPerHour * (R3C.cost[m].vmHoursNone + R3C.cost[m].vmHoursTold);
+
+// Admission inputs: the admitted list (more than R3C.maxTasks keeps far tasks first, then mid, then near, each by sha256
+// of the id) and each admitted task's posterior under the law refitted on every none trial of this model, in hand and
+// calibration, so the law is fitted across every candidate and the keep rule is part of what the posterior conditions
+// on; never a task's measured rate. Counts use graded calibration trials only (an infra or ungraded trial is not rerun
+// and does not count); the none cost per trial averages every calibration none trial with a cost, graded or not. The
+// money is the item's cap less settled spend (the item ledger's settled total when admit runs) less the reserve headroom.
+function admissionInputs(h: InHand, m: Model, cal: TrialRow[], o: { capUsd: number; settledUsd: number }) {
+  const tr = tiers(h, m), own = new Map(h.none[m]);
+  const calRows = cal.filter((t) => t.arm === "none" && /^cal-/.test(t.part)), calNone = calRows.filter(graded);
+  for (const t of calNone) { const c = own.get(t.task) ?? { s: 0, n: 0 }; own.set(t.task, { s: c.s + (t.outcome === "pass" ? 1 : 0), n: c.n + 1 }); }
+  const cands = new Set([...tr.t1, ...tr.t2, ...tr.t3, ...tr.t4]);
+  let list = [...cands].filter((t) => admitted(own.get(t))).sort();
+  const cut = list.length > R3C.maxTasks;
+  if (cut) list = [...list].sort((a, b) => (h.dist.get(b) ?? 0) - (h.dist.get(a) ?? 0) || (sha(a) < sha(b) ? -1 : 1)).slice(0, R3C.maxTasks).sort();
+  const g = npmle([...own.values()]);
+  const posts = list.map((t) => posterior(g, own.get(t)));
+  const costs = calRows.map((t) => t.cost_usd).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+  const noneUsd = costs.length ? costs.reduce((a, b) => a + b, 0) / costs.length : NaN;
+  const pair = pairUsd(m, noneUsd);
+  const money = o.capUsd - o.settledUsd - R3C.reserveUsd;
+  const rAfford = list.length && Number.isFinite(pair) ? Math.max(0, Math.min(R3C.rMax, Math.floor(money / (list.length * pair)))) : 0;
+  return { own, list, cut, g, posts, calNone: calNone.length, noneUsd, pair, rAfford };
+}
+// R: the smallest replicate count from R3C.rMin to the affordable maximum at which simulated KEEP at R3C.mddTarget points
+// reaches the level (R3C.power.searchTarget unless a caller names one), found by bisection, which assumes KEEP rises
+// with R; when the affordable maximum doesn't reach it, the affordable maximum itself.
+export function chooseR(posts: number[][], rAfford: number, sims: number, level = R3C.power.searchTarget): number {
+  const reaches = (R: number) => keepRate(posts, R, R3C.mddTarget / 100, sims) >= level;
+  let R = rAfford;
+  if (reaches(rAfford)) { let lo = R3C.rMin; while (lo < R) { const mid = Math.floor((lo + R) / 2); if (reaches(mid)) R = mid; else lo = mid + 1; } }
+  return R;
+}
+
+// Admission: the inputs above, R, that R's MDD and null size. GO needs at least R3C.nMin tasks, an affordable maximum of
+// at least R3C.rMin, an MDD of at most R3C.mddMax points and a null size of at most R3C.nullMax. The projection is
+// settled spend plus that R's grid at the calibration's measured none cost plus the reserve headroom. Report only: the
+// MDD when the lift sits on half the tasks, and the MDD and null size with posteriors under the beta-binomial law.
+export function admission(h: InHand, m: Model, cal: TrialRow[], o: { capUsd: number; settledUsd: number; sims: number }) {
+  const x = admissionInputs(h, m, cal, o);
+  const { list, posts, rAfford, pair } = x;
+  const far = list.filter((t) => h.dist.get(t) === 2).length;
+  const base = { model: m, n: list.length, cut: x.cut, far, listSha256: idsSha(list), list, calNone: x.calNone, noneUsd: x.noneUsd, pairUsd: pair, rAfford, bandMassRefit: bandMass(x.g), meanPosteriorRate: posts.length ? posts.reduce((z, w) => z + w.reduce((y, v, j) => y + v * GRID[j]!, 0), 0) / posts.length : NaN };
+  if (list.length < R3C.nMin) return { ...base, go: false, reason: "admitted " + list.length + " tasks, under " + R3C.nMin };
+  if (rAfford < R3C.rMin) return { ...base, go: false, reason: "the money left buys " + rAfford + " replicates, under " + R3C.rMin };
+  const R = chooseR(posts, rAfford, o.sims);
+  const mdd = mddPoints(posts, R, o.sims), nullSize = keepRate(posts, R, 0, o.sims), mddSplit = mddPoints(posts, R, o.sims, true);
+  const bf = betaFit([...x.own.values()]), gb = betaLaw(bf.a, bf.b), postsB = list.map((t) => posterior(gb, x.own.get(t)));
+  const beta = { a: bf.a, b: bf.b, bandMass: bandMass(gb), mdd: mddPoints(postsB, R, o.sims), nullSize: keepRate(postsB, R, 0, o.sims) };
+  const projection = o.settledUsd + list.length * R * pair + R3C.reserveUsd;
+  const more = { R, mdd, mddSplit, nullSize, projection, beta };
+  if (mdd === null || mdd > R3C.mddMax) return { ...base, ...more, go: false, reason: "the MDD at " + R + " replicates is " + mdd + " points, over " + R3C.mddMax };
+  if (nullSize > R3C.nullMax) return { ...base, ...more, go: false, reason: "null size " + (100 * nullSize).toFixed(1) + "% over " + 100 * R3C.nullMax + "%" };
+  return { ...base, ...more, go: true, reason: "ok" };
+}
+
+export function admissionLines(a: ReturnType<typeof admission>): string[] {
+  const x = a as any;
+  const lines = [
+    "r3c admission " + a.model + ": " + a.n + " tasks admitted (sha256 " + a.listSha256 + (a.cut ? ", cut to " + R3C.maxTasks : "") + "; " + a.far + " far) from " + a.calNone + " calibration none trials; refitted band mass " + (100 * a.bandMassRefit).toFixed(1) + "%, mean posterior none rate " + (Number.isFinite(a.meanPosteriorRate) ? a.meanPosteriorRate.toFixed(3) : "n/a"),
+    "money: none $" + (Number.isFinite(a.noneUsd) ? a.noneUsd.toFixed(3) : "n/a") + " a trial, $" + (Number.isFinite(a.pairUsd) ? a.pairUsd.toFixed(3) : "n/a") + " a task-replicate pair, " + a.rAfford + " replicates affordable",
+  ];
+  if (x.beta) lines.push("report only, beta-binomial law (a " + x.beta.a.toFixed(3) + ", b " + x.beta.b.toFixed(3) + ", band mass " + (100 * x.beta.bandMass).toFixed(1) + "%): MDD " + x.beta.mdd + " points, null size " + (100 * x.beta.nullSize).toFixed(1) + "% at " + x.R + " replicates");
+  if (a.go) lines.push("R3c grid for " + a.model + ": GO with " + a.n + " tasks x " + x.R + " replicates x {none, told}; MDD " + x.mdd + " points (" + x.mddSplit + " if the lift sits on half the tasks, report only); null size " + (100 * x.nullSize).toFixed(1) + "%; projection $" + x.projection.toFixed(2));
+  else lines.push("R3c grid for " + a.model + ": STOP, " + a.reason);
+  return lines;
+}
+
+// Validate (report only; it decides nothing): K simulated calibrations, each candidate's true chance drawn from its
+// posterior under the in-hand NPMLE law (truth "npmle") or the beta-binomial law (truth "beta"), each admitted at the
+// given cap; then the power the chosen grid really has at its claimed MDD on the simulated true chances.
+const oneHot = (p: number) => GRID.map((q) => (Math.abs(q - p) < 1e-9 ? 1 : 0));
+export function validate(h: InHand, m: Model, o: { capUsd: number; k: number; sims: number; first?: number; truth?: "npmle" | "beta" }) {
+  const { cands } = candidatePosteriors(h, m, o.truth ?? "npmle");
+  const u = rng(R3C.validateSeed);
+  const runs: { go: boolean; n: number; R?: number; mdd?: number | null; truePower?: number; spend?: number; reason: string }[] = [];
+  const first = o.first ?? 0;
+  for (let i = 0; i < first + o.k; i++) {
+    const c = simulateCalibration(h, m, cands, u), settled = calSpendUsd(m, c.rows);
+    if (i < first) continue;
+    const a = admission(h, m, c.rows, { capUsd: o.capUsd, settledUsd: settled, sims: o.sims }) as any;
+    if (a.R === undefined || a.mdd === null) { runs.push({ go: false, n: a.n, spend: settled, reason: a.reason }); continue; }
+    const truePower = keepRate(a.list.map((t: string) => oneHot(c.truth.get(t)!)), a.R, a.mdd / 100, o.sims);
+    runs.push({ go: a.go, n: a.n, R: a.R, mdd: a.mdd, truePower, spend: a.go ? a.projection - R3C.reserveUsd : settled, reason: a.reason });
+  }
+  return runs;
+}
+
+// Calibrate (how R3C.power.searchTarget was set): K simulated calibrations under the NPMLE truth, each with the admitted
+// list, R as chooseR picks it at the uncalibrated level R3C.power.target, and simulated KEEP at each lift in
+// R3C.calibrateLifts both under the fitted law (what the rule sees) and on the simulated true chances (what the grid
+// would get). calread turns the lines into the post's table.
+export function calibrate(h: InHand, m: Model, o: { capUsd: number; k: number; sims: number; first?: number }) {
+  const { cands } = candidatePosteriors(h, m);
+  const u = rng(R3C.validateSeed);
+  const runs: { run: number; n: number; R?: number; fitted?: number[]; truth?: number[] }[] = [];
+  const first = o.first ?? 0;
+  for (let i = 0; i < first + o.k; i++) {
+    const c = simulateCalibration(h, m, cands, u), settled = calSpendUsd(m, c.rows);
+    if (i < first) continue;
+    const x = admissionInputs(h, m, c.rows, { capUsd: o.capUsd, settledUsd: settled });
+    if (x.list.length < R3C.nMin || x.rAfford < R3C.rMin) { runs.push({ run: i + 1, n: x.list.length }); continue; }
+    const R = chooseR(x.posts, x.rAfford, o.sims, R3C.power.target), tp = x.list.map((t) => oneHot(c.truth.get(t)!));
+    runs.push({ run: i + 1, n: x.list.length, R, fitted: R3C.calibrateLifts.map((d) => keepRate(x.posts, R, d / 100, o.sims)), truth: R3C.calibrateLifts.map((d) => keepRate(tp, R, d / 100, o.sims)) });
+  }
+  return runs;
+}
+
+// Reads calibrate's lines: for each search level from 0.80 to 0.95, each run's claimed MDD (the smallest 0.5-point lift
+// at which the fitted curve, linearly interpolated between the measured lifts, reaches the level) and its true power
+// there (the truth curve interpolated the same way), over the runs whose claimed MDD is at most R3C.mddMax.
+export function calibrateTable(runs: { n: number; R?: number; fitted?: number[]; truth?: number[] }[]) {
+  const L = R3C.calibrateLifts, rows: { level: number; runs: number; meanMdd: number; meanTrue: number; se: number }[] = [];
+  const interp = (ys: number[], d: number) => { const i = Math.min(L.length - 2, Math.max(0, L.findIndex((x) => x >= d) - 1)); const t = (d - L[i]!) / (L[i + 1]! - L[i]!); return ys[i]! + t * (ys[i + 1]! - ys[i]!); };
+  for (let lv = 80; lv <= 95; lv++) {
+    const level = lv / 100, got: { mdd: number; tp: number }[] = [];
+    for (const r of runs) {
+      if (!r.fitted || !r.truth) continue;
+      let mdd: number | null = null;
+      for (let d = L[0]!; d <= L[L.length - 1]! + 1e-9; d += R3C.power.stepPoints) if (interp(r.fitted, d) >= level - 1e-12) { mdd = d; break; }
+      if (mdd === null || mdd > R3C.mddMax) continue;
+      got.push({ mdd, tp: interp(r.truth, mdd) });
+    }
+    const m = got.reduce((z, g) => z + g.tp, 0) / got.length, sd = Math.sqrt(got.reduce((z, g) => z + (g.tp - m) ** 2, 0) / Math.max(1, got.length - 1));
+    rows.push({ level, runs: got.length, meanMdd: got.reduce((z, g) => z + g.mdd, 0) / got.length, meanTrue: m, se: sd / Math.sqrt(got.length) });
+  }
+  return rows;
+}
+
+// selftest: drives each frozen rule both ways on synthetic inputs, with no file and no key.
+function selftest(): number {
+  let bad = 0;
+  const check = (name: string, ok: boolean) => { console.log((ok ? "PASS " : "FAIL ") + name); if (!ok) bad++; };
+  check("band admits 1 of 4 and 3 of 4", admitted({ s: 1, n: 4 }) && admitted({ s: 3, n: 4 }));
+  check("band refuses 0 of 4 and 4 of 4", !admitted({ s: 0, n: 4 }) && !admitted({ s: 4, n: 4 }));
+  check("band admits 2 of 7 and 5 of 7, refuses 1 of 7 and 6 of 7", admitted({ s: 2, n: 7 }) && admitted({ s: 5, n: 7 }) && !admitted({ s: 1, n: 7 }) && !admitted({ s: 6, n: 7 }));
+  check("band admits 1 of 5 (0.2) and 4 of 5 (0.8), both ends included", admitted({ s: 1, n: 5 }) && admitted({ s: 4, n: 5 }));
+  check("under 4 trials is never admitted (1 of 2, 1 of 3)", !admitted({ s: 1, n: 2 }) && !admitted({ s: 1, n: 3 }));
+  check("changeKey matches a moved owner", changeKey("a__x-1") === changeKey("b__x-1") && changeKey("a__x-1") !== changeKey("a__x-2"));
+  const none = (pairs: [string, number, number][]) => new Map(pairs.map(([t, s, n]) => [t, { s, n }]));
+  const h: InHand = {
+    kept: ["f1", "t1a", "t2a", "t2b", "t4a", "u1", "u2", "l1a", "mv__s-9"],
+    none: { opus: none([["f1", 0, 4], ["t1a", 1, 4], ["t2a", 1, 1], ["t2b", 0, 1], ["t4a", 1, 1], ["ow__s-9", 1, 1]]), sol: none([["f1", 0, 4], ["t1a", 0, 4], ["t2a", 0, 1], ["t2b", 1, 1], ["t4a", 1, 1], ["ow__s-9", 1, 1]]) },
+    screen: { opus: new Map([["f1", false], ["t1a", false], ["t2a", true], ["t2b", false], ["t4a", true], ["ow__s-9", true]]), sol: new Map([["f1", false], ["t1a", false], ["t2a", false], ["t2b", true], ["t4a", true], ["ow__s-9", true]]) },
+    l1: new Set(["l1a"]), dist: new Map([["t1a", 2]]),
+  };
+  const tr = tiers(h, "opus");
+  check("tiers: floor, t1, t2 (both kinds), t3, t4, out (L1 and moved owner)", JSON.stringify(tr) === JSON.stringify({ t1: ["t1a"], t2: ["t2a", "t2b"], t3: ["u1", "u2"], t4: ["t4a"], floor: ["f1"], out: ["l1a", "mv__s-9"] }));
+  const h2 = { ...h, none: { ...h.none, sol: none([["f1", 1, 4], ["t1a", 0, 4], ["t2a", 0, 1], ["t2b", 1, 1], ["t4a", 1, 1]]) } };
+  check("a task the other model solved once is t1, not floor", tiers(h2, "opus").t1.includes("f1"));
+  const cal = [{ part: "cal-1", task: "t4a", arm: "none", outcome: "fail" }, { part: "cal-1", task: "t2a", arm: "none", outcome: "fail" }];
+  check("cal-2 takes only t4 tasks whose cal-1 trial failed", JSON.stringify(cal2Tasks(tr, cal)) === JSON.stringify(["t4a"]) && cal2Tasks(tr, [{ part: "cal-1", task: "t4a", arm: "none", outcome: "pass" }]).length === 0);
+  check("cal-2 reads every cal-1 part (cal-1a, cal-1b, cal-1c)", JSON.stringify(cal2Tasks(tr, [{ part: "cal-1b", task: "t4a", arm: "none", outcome: "fail" }])) === JSON.stringify(["t4a"]));
+  check("lgamma(5) is ln 24 and betaLaw(1, 1) is uniform on the grid's cells", Math.abs(lgamma(5) - Math.log(24)) < 1e-10 && Math.abs(betaLaw(1, 1).reduce((a, b) => a + b, 0) - 1) < 1e-9 && Math.abs(betaLaw(1, 1)[20]! - 1 / R3C.npmle.grid) < 1e-9);
+  check("told and pilot trials never count as none", noneCounts([{ part: "grid-1", task: "x", arm: "gstack", outcome: "pass" }, { part: "pilot", task: "x", arm: "none", outcome: "pass" }, { part: "cal-1", task: "x", arm: "none", outcome: "infra" }]).size === 0);
+  const big = (k: number, s: number, n: number) => { const ids = Array.from({ length: k }, (_, i) => "m" + String(i).padStart(2, "0")); return { ids, h: { ...h, kept: ids, none: { opus: new Map(ids.map((t) => [t, { s: 0, n: 0 }])), sol: new Map() }, screen: { opus: new Map(), sol: new Map() }, l1: new Set<string>(), dist: new Map(ids.map((t, i) => [t, i % 2 ? 2 : 0])) } as InHand, cal: ids.flatMap((t) => Array.from({ length: n }, (_, j) => ({ part: "cal-1", task: t, arm: "none", outcome: j < s ? "pass" : "fail", cost_usd: 0.4 }))) }; };
+  const few = big(9, 2, 4);
+  check("STOP when under 10 tasks are admitted", !admission(few.h, "opus", few.cal, { capUsd: 1000, settledUsd: 0, sims: 50 }).go);
+  const ten = big(12, 2, 4);
+  check("STOP when the money buys under 3 replicates", (() => { const a = admission(ten.h, "opus", ten.cal, { capUsd: 100, settledUsd: 0, sims: 50 }); return !a.go && a.rAfford < R3C.rMin; })());
+  const fourteen = big(14, 2, 4), ok = admission(fourteen.h, "opus", fourteen.cal, { capUsd: 700, settledUsd: 100, sims: 200 }) as any;
+  check("GO with 14 tasks at 0.5: 10 points out of reach, so R is the affordable maximum (24) and its MDD is at most 12.5", ok.go && ok.R === R3C.rMax && ok.mdd > R3C.mddTarget && ok.mdd <= R3C.mddMax && ok.projection <= 700);
+  const forty = big(40, 2, 4);
+  const best = admission(forty.h, "opus", forty.cal, { capUsd: 2000, settledUsd: 100, sims: 200 }) as any;
+  check("GO with 40 tasks at 0.5 and money to spare: R is the smallest that reaches 10 points, under the affordable maximum", best.go && best.mdd <= R3C.mddTarget && best.R < best.rAfford && best.projection <= 2000);
+  const tight = admission(ten.h, "opus", ten.cal, { capUsd: 100 + R3C.reserveUsd + 12 * 4 * pairUsd("opus", 0.4) + 1, settledUsd: 100, sims: 200 }) as any;
+  check("STOP when the affordable R can't reach 12.5 points", !tight.go && tight.rAfford === 4);
+  const many = big(45, 2, 4);
+  const cutA = admission(many.h, "opus", many.cal, { capUsd: 100, settledUsd: 0, sims: 10 });
+  check("over 40 admitted keeps 40, far tasks first", cutA.n === 40 && cutA.cut && cutA.far === 22);
+  const gold = goldFiles(["diff --git a/src/pkg/core.py b/src/pkg/core.py", "--- a/src/pkg/core.py", "+++ b/src/pkg/core.py", "diff --git a/tests/test_core.py b/tests/test_core.py", "diff --git a/src/pkg/test_util.py b/src/pkg/test_util.py"].join("\n"));
+  check("goldFiles keeps the oracle patch's non-test files", JSON.stringify(gold) === JSON.stringify(["src/pkg/core.py"]));
+  check("closingBlock reads list markers, backticks, line references and /testbed/, at most three entries", JSON.stringify(closingBlock("done\n\n## ROOT CAUSE FILES:\n1. `/testbed/src/pkg/core.py:12`\n- ./src/pkg/util.py, the caller\n* **src/a.py**\n4. src/b.py")) === JSON.stringify(["src/pkg/core.py", "src/pkg/util.py", "src/a.py"]));
+  const noneFinal = "I fixed the off-by-one in the parser.\n\nROOT CAUSE FILES\nsrc/pkg/core.py\nsrc/pkg/util.py";
+  check("a none trial with a correct closing block and no DEBUG REPORT scores a hit", locHit(closingBlock(noneFinal), gold, 1));
+  const toldFinal = "DEBUG REPORT\nSymptom: wrong total\nRoot cause: src/pkg/core.py:40 drops the last item\nFix: src/pkg/core.py\nEvidence: 3 passed\nStatus: DONE\n\nROOT CAUSE FILES\n1. src/pkg/other.py\n2. src/pkg/util.py";
+  check("a told trial whose DEBUG REPORT is right but whose closing block is wrong scores no hit", !locHit(closingBlock(toldFinal), gold, 3));
+  check("a told trial with a right DEBUG REPORT and no closing block scores no hit", closingBlock(toldFinal.split("\n\nROOT")[0]!).length === 0);
+  check("the last closing block counts, and a fourth entry never does", !locHit(closingBlock("ROOT CAUSE FILES\nsrc/pkg/core.py\n\nROOT CAUSE FILES\nsrc/x.py\nsrc/y.py\nsrc/z.py\nsrc/pkg/core.py"), gold, 3));
+  check("the closing line is one text for every arm and names no skill", !/investigate|debug report|gstack|skill/i.test(R3C.closingLine) && R3C.closingLine.includes("ROOT CAUSE FILES"));
+  return bad ? 1 : 0;
+}
+
+function main(argv: string[]): number {
+  const [cmd, dir] = argv;
+  if (cmd === "selftest") return selftest();
+  if (cmd === "calread") {
+    if (!dir) { console.error("E_USAGE r3c.ts calread <calibrate output>"); return 2; }
+    const runs = readFileSync(dir, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+    console.log("r3c calread: " + runs.length + " simulated calibrations, " + runs.filter((r: any) => r.fitted).length + " with at least " + R3C.nMin + " tasks and " + R3C.rMin + " affordable replicates");
+    for (const r of calibrateTable(runs)) console.log("search level " + r.level.toFixed(2) + ": " + r.runs + " runs with MDD at most " + R3C.mddMax + ", mean MDD " + r.meanMdd.toFixed(2) + ", true power at it " + (100 * r.meanTrue).toFixed(1) + "% (SE " + (100 * r.se).toFixed(1) + ")");
+    return 0;
+  }
+  const flag = (k: string) => { const i = argv.indexOf(k); return i < 0 ? undefined : argv[i + 1]; };
+  const m = flag("--model") as Model;
+  if (!cmd || !dir || (m !== "opus" && m !== "sol")) { console.error("E_USAGE r3c.ts plan|forecast|admit|validate|calibrate <in-hand dir> --model opus|sol, or r3c.ts selftest"); return 2; }
+  const h = loadInHand(dir);
+  if (cmd === "plan") {
+    const tr = tiers(h, m), cp = calibrationPlan(tr);
+    console.log("r3c plan " + m + ": kept pool " + h.kept.length + "; tiers t1 " + tr.t1.length + ", t2 " + tr.t2.length + ", t3 " + tr.t3.length + ", t4 " + tr.t4.length + ", floor " + tr.floor.length + ", out " + tr.out.length);
+    console.log("calibration: cal-1 " + cp.cal1Trials + " none trials (t1 x" + R3C.calTrials.t1 + ", t2 x" + R3C.calTrials.t2 + ", t3 x" + R3C.calTrials.t3 + ", t4 x" + R3C.calTrials.t4 + "), then cal-2: " + R3C.t4Second + " more on each t4 task whose cal-1 trial failed");
+    for (const k of ["t1", "t2", "t3", "t4", "floor", "out"] as const) console.log("  " + k + " sha256 " + idsSha(tr[k]) + " (" + tr[k].length + "; far " + tr[k].filter((t) => h.dist.get(t) === 2).length + ")");
+    console.log("candidates sha256 (t1 to t4, sorted ids): " + idsSha([...tr.t1, ...tr.t2, ...tr.t3, ...tr.t4]));
+    const w = flag("--write");
+    if (w) { mkdirSync(w, { recursive: true }); for (const k of ["t1", "t2", "t3", "t4"] as Tier[]) writeFileSync(join(w, "r3c-" + m + "-" + k + ".txt"), tr[k].map((t) => t + "\n").join("")); }
+    return 0;
+  }
+  if (cmd === "forecast") {
+    const f = forecast(h, m, Number(process.env.R3C_FORECAST_SIMS ?? 2000));
+    const e = f.expectedInBand;
+    console.log("r3c forecast " + m + ": the fitted law puts " + (100 * f.lawBandMass).toFixed(1) + "% of tasks in the band; expected in-band candidates t1 " + e.t1.toFixed(1) + ", t2 " + e.t2.toFixed(1) + ", t3 " + e.t3.toFixed(1) + ", t4 " + e.t4.toFixed(1));
+    console.log("admitted: mean " + f.admittedMean.toFixed(1) + " (p10 " + f.admittedP10 + ", median " + f.admittedP50 + ", p90 " + f.admittedP90 + "), truly in band " + (100 * f.inBandShare).toFixed(0) + "%; P(at least " + R3C.nMin + ") " + (100 * f.pAtLeastNMin).toFixed(1) + "%; calibration trials mean " + f.calTrialsMean.toFixed(0));
+    for (const l of ladderLines(dir, m, f)) console.log(l);
+    const e2 = flag("--emit");
+    if (e2) writeFileSync(e2, f.lastSim.map((r) => JSON.stringify(r)).join("\n") + "\n");
+    return 0;
+  }
+  if (cmd === "admit") {
+    const calPath = flag("--calibration"), cap = Number(flag("--cap-usd")), settled = Number(flag("--settled-usd"));
+    if (!calPath || !Number.isFinite(cap) || !Number.isFinite(settled)) { console.error("E_USAGE admit needs --calibration, --cap-usd and --settled-usd"); return 2; }
+    const a = admission(h, m, jsonlRows(readFileSync(calPath, "utf8")), { capUsd: cap, settledUsd: settled, sims: Number(process.env.R3C_SIMS ?? 2000) });
+    for (const l of admissionLines(a)) console.log(l);
+    return a.go ? 0 : 5;
+  }
+  if (cmd === "validate" || cmd === "calibrate") {
+    const cap = Number(flag("--cap-usd")), k = Number(flag("--runs") ?? 20), first = Number(flag("--first") ?? 0), sims = Number(process.env.R3C_SIMS ?? 2000);
+    const truth = (flag("--truth") ?? "npmle") as "npmle" | "beta";
+    if (!Number.isFinite(cap) || (truth !== "npmle" && truth !== "beta")) { console.error("E_USAGE " + cmd + " needs --cap-usd, and --truth is npmle or beta"); return 2; }
+    if (cmd === "calibrate") { for (const r of calibrate(h, m, { capUsd: cap, k, first, sims })) console.log(JSON.stringify(r)); return 0; }
+    const runs = validate(h, m, { capUsd: cap, k, first, sims, truth });
+    runs.forEach((r, i) => console.log("run " + (first + i + 1) + ": " + (r.go ? "GO" : "STOP") + " n " + r.n + (r.R !== undefined ? " R " + r.R + " MDD " + r.mdd + " true power " + (100 * r.truePower!).toFixed(1) + "%" : "") + " spend $" + r.spend!.toFixed(2) + (r.go ? "" : " (" + r.reason + ")")));
+    const go = runs.filter((r) => r.go), mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+    const srt = (xs: number[]) => [...xs].sort((a, b) => a - b);
+    const mdds = srt(go.map((r) => r.mdd as number)), sp = srt(go.map((r) => r.spend!));
+    console.log("r3c validate " + m + " (truth " + truth + ") at cap $" + cap + ": GO in " + go.length + " of " + runs.length + "; MDD mean " + mean(mdds).toFixed(1) + " (min " + mdds[0] + ", max " + mdds[mdds.length - 1] + "); true power at the claimed MDD mean " + (100 * mean(go.map((r) => r.truePower!))).toFixed(1) + "% (target " + 100 * R3C.power.target + "%); spend before reserve mean $" + mean(sp).toFixed(2) + " (max $" + (sp[sp.length - 1] ?? NaN).toFixed(2) + ")");
+    return 0;
+  }
+  console.error("E_USAGE unknown command " + cmd);
+  return 2;
+}
+
+if (import.meta.main) {
+  try { process.exit(main(Bun.argv.slice(2))); } catch (e) { console.error((e as Error).message); process.exit(1); }
+}
