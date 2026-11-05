@@ -267,7 +267,7 @@ await section("d. Projection check: per-item caps and the cut order", () => {
     ["autoplan $8.00 on Opus -> stop", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 8.0] } }, /Projection: STOP, over the envelope after every cut/],
   ];
   for (const [label, s1, want] of steps) { const o = rule("projection", { ...base, stage1: stage1(s1) }, "proj-" + tagOf(label)); check(label + (want.test(o) ? "" : " [got: " + (o.split("\n").find((l) => l.startsWith("Projection")) ?? "") + "]"), want.test(o)); if (label.startsWith("autoplan smoke")) check("the per-session line projects autoplan-ceo on Opus at $3.60", /autoplan-ceo:opus \$3\.60/.test(o)); }
-  const un = rule("projection", { ...base, untested: ["standalone:particle"], stage1: stage1({ m: 20 }) }, "proj-untested");
+  const un = rule("projection", { ...base, untested: ["standalone:particle"], stage1: stage1({ m: 20, smokeFail: ["standalone:particle"] }) }, "proj-untested");
   check("an UNTESTED cell is left out of the projection and the cells to run", !/standalone:particle/.test(un.split("\n").find((l) => l.startsWith("Projection: PASS")) ?? "standalone:particle"));
 });
 
@@ -596,7 +596,7 @@ await section("f3. The ladder amendment: the 10x tier, the fallback, the frozen 
   const asPlanned = projText_({});
   const lensDropped = projText_({ noneUsd: { opus: 0.6 }, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.9], "standalone:sol": [1.0, 1.2] } });
   const lastCut = projText_({ smokeUsd: { "autoplan-ceo:opus": [3.0, 6.0] } });
-  const noStandaloneOpus = projText_({}, ["standalone:opus"]);
+  const noStandaloneOpus = projText_({ smokeFail: ["standalone:opus"] }, ["standalone:opus"]);
   const passLine = (t: string) => t.split("\n").find((l) => l.startsWith("Projection: PASS")) ?? "";
   say("    " + passLine(asPlanned));
   say("    " + passLine(lensDropped));
@@ -683,8 +683,19 @@ await section("f3. The ladder amendment: the 10x tier, the fallback, the frozen 
   reads("compare", "  in 28 of 48: G_R 0.50 or under, no flag", s2({ hits: { ...hitsAll, opus: { none: 28, "autoplan-ceo": 28, standalone: 28, lens: 28 } } }), [/^Model opus: none G_R 0\.4\d\d on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone$/], GRP());
   reads("compare", "the stage 2 stock fix scores rem on 3 of 36 keyed units: G_R stays in the rem form", s2({ stockRem: 3 }), [/^Stock fix: scores rem on 3 of 36 keyed changed units \(at most 3\); G_R form rem$/, /^  standalone - none: .*not distinguished \(MDD 0\.10\)$/], GRP());
   reads("compare", "  on 4: G_R contrasts read in the norem form, with its MDD", s2({ stockRem: 4 }), [/^Stock fix: scores rem on 4 of 36 keyed changed units \(at most 3\): G_R contrasts read in the norem form, which the stock fix can't move; G_R form norem$/, /^  standalone - none: .*not distinguished \(MDD 0\.12\)$/], GRP());
-  reads("compare", "4 autoplan-ceo hits on Opus with an unjudged rem: G_R coverage 0.958, still helps; the bounds agree", s2({ remNull: { "autoplan-ceo:opus": 4 } }), [/^  autoplan-ceo - none: .*coverage 0\.958 -> helps$/, /^    hit@3 \(secondary\): .*coverage 1\.000, helps/, /^    G_R bounds, unjudged rem scored 0: \+0\.\d{3}, helps; scored 1: \+0\.\d{3}, helps$/], GRP());
-  reads("compare", "  10 of them: G_R coverage 0.896 -> untested (coverage), hit@3 untouched, and the bounds differ from the G_R verdict", s2({ remNull: { "autoplan-ceo:opus": 10 } }), [/^  autoplan-ceo - none: .*coverage 0\.896 -> untested \(coverage 0\.896 under 0\.90\), p = 1 in Holm$/, /^    hit@3 \(secondary\): .*coverage 1\.000, helps/, /^    G_R bounds, unjudged rem scored 0: \+0\.\d{3}, helps; scored 1: \+0\.\d{3}, helps; BOUNDS DIFFER from the G_R verdict \(untested\)$/], GRP());
+  reads("compare", "4 autoplan-ceo hits on Opus with an unjudged rem: G_R coverage 0.958, still helps; the bounds agree", s2({ remNull: { "autoplan-ceo:opus": 4 } }), [/^  autoplan-ceo - none: .*coverage 0\.958 -> helps$/, /^    hit@3 \(secondary\): .*coverage 1\.000, helps/, /^    G_R bounds, unjudged rem against the arm \(arm 0, none 1\): \+0\.\d{3}, helps; for the arm \(arm 1, none 0\): \+0\.\d{3}, helps$/], GRP());
+  reads("compare", "  10 of them: G_R coverage 0.896 -> untested (coverage), hit@3 untouched, and the bounds differ from the G_R verdict", s2({ remNull: { "autoplan-ceo:opus": 10 } }), [/^  autoplan-ceo - none: .*coverage 0\.896 -> untested \(coverage 0\.896 under 0\.90\), p = 1 in Holm$/, /^    hit@3 \(secondary\): .*coverage 1\.000, helps/, /^    G_R bounds, unjudged rem against the arm \(arm 0, none 1\): \+0\.\d{3}, helps; for the arm \(arm 1, none 0\): \+0\.\d{3}, helps; BOUNDS DIFFER from the G_R verdict \(untested\)$/], GRP());
+  const bb = reads("compare", "4 hit unit-passes on Opus with an unjudged rem on both arms (none and autoplan-ceo, the same unit-passes)", s2({ remNull: { "none:opus": 4, "autoplan-ceo:opus": 4 } }), [/^  autoplan-ceo - none: .*coverage 0\.958 -> helps$/, /^    G_R bounds, unjudged rem against the arm \(arm 0, none 1\): [+-]0\.\d{3}, \w+; for the arm \(arm 1, none 0\): [+-]0\.\d{3}, \w+/], GRP());
+  const bl = bb.split("\n").find((l) => l.startsWith("    G_R bounds, unjudged rem against the arm")) ?? "";
+  const [blo, bhi] = [...bl.matchAll(/\): ([+-]0\.\d{3}),/g)].map((m) => Number(m[1]));
+  check("  the bound against the arm (" + blo + ") sits below the bound for it (" + bhi + "); scoring both arms' unjudged rem alike would make them equal", blo !== undefined && bhi !== undefined && blo < bhi);
+
+  say("  projection's untested list: the cells stage 1's smoke leaves untested, and no stage 2 when autoplan-ceo failed its smoke on Opus");
+  const UNT = "E_USAGE the projection's untested list must name the cells stage 1's smoke leaves untested: ";
+  refuse("projection", "a projection that lists autoplan-ceo on Opus untested when its smoke admitted it", projOf({}, ["autoplan-ceo:opus"]), UNT + "none; got autoplan-ceo:opus");
+  refuse("projection", "a projection with no untested cell when standalone failed its smoke on particle-1", projOf({ smokeFail: ["standalone:particle"] }), UNT + "standalone:particle; got none");
+  accept("projection", "the same projection with standalone:particle untested", projOf({ smokeFail: ["standalone:particle"] }, ["standalone:particle"]), [/^Projection: PASS at /]);
+  refuse("projection", "a projection whose stage 1 smoke failed autoplan-ceo on Opus, listed untested", projOf({ smokeFail: ["autoplan-ceo:opus"] }, ["autoplan-ceo:opus"]), "E_USAGE autoplan-ceo failed its smoke on Opus; stage 2 does not start");
 });
 
 await section("g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation", async () => {

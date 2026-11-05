@@ -5,15 +5,15 @@ PASS stock-list.txt sha256 9ecbc78e696836bd11c3e89df1cc1cb0b0e28940b92e7dd3a9684
 PASS unit-brief.md sha256 7200df2df9fd14a38c4766cd7e0043dda49624b8d4f23aeb8d1142bf8158ff5d
 PASS power.py sha256 a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499
 PASS power.txt sha256 ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f
-PASS power-gr.py sha256 e7e7fd4e8e3ffb82abdda5645b8828553ed25cfe4b506f4abb9ccf1f89f388f5
-PASS power-gr.txt sha256 a332aeb179d3f487a27f549a8ef7b649d70cbde6e4b908a3bb92d67f71c8a037
-PASS ceo-rule.ts sha256 3e016b293658f5c10478344465976ee619493b2b095cd09154d13f125417b980
+PASS power-gr.py sha256 f44454008661f2b86e0345abe4d2a9c964d4870e14c48af2d48fb55fe401855e
+PASS power-gr.txt sha256 c428f67bda8a2cf4e02f5b03bbc9ee61c66fae52bd023ed4e47b0a31959cd5b2
+PASS ceo-rule.ts sha256 fe44711e593e2788ccffd0dfb452c95964712d437fdf1b2cb27d02b522934fa3
 PASS the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast
 PASS the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative), each issue followed by its stock fix, and each row's fixes say don't build it, reuse an existing tool and cut it to a minimal version once each
 PASS the judge brief reads each issue's first 40 words and judges it on its first problem
 PASS the judge brief's D read, the text above its rule, is byte for byte the preregistration's brief (sha256 83d5d644...52589)
 PASS the remedy read below the rule answers rem per issue on its fix's first remedy, in a ceo-judge-rem block
-    scorer HEAD 08edd5c7aff7d6adc0ef9fb72f5ad1b9484c10f6 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
+    scorer HEAD 4bccf5a029b30a569b6ea0c96d955b9ad2f35d50 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
 
 ## b. Stage 1 headroom rule: every outcome
 PASS m 20 of 48 -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
@@ -353,8 +353,15 @@ PASS Opus none hit in 34 of 48 units: none's G_R above 0.50 -> CEILING flag on b
 PASS   in 28 of 48: G_R 0.50 or under, no flag -> exit 0: Model opus: none G_R 0.476 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
 PASS the stage 2 stock fix scores rem on 3 of 36 keyed units: G_R stays in the rem form -> exit 0: Stock fix: scores rem on 3 of 36 keyed changed units (at most 3); G_R form rem | standalone - none: 0.308 - 0.289 = +0.019, 95% CI [-0.014, 0.064], p 0.498 (monte-carlo-sign-flip), Holm p 0.498, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.10)
 PASS   on 4: G_R contrasts read in the norem form, with its MDD -> exit 0: Stock fix: scores rem on 4 of 36 keyed changed units (at most 3): G_R contrasts read in the norem form, which the stock fix can't move; G_R form norem | standalone - none: 0.292 - 0.274 = +0.017, 95% CI [-0.017, 0.063], p 0.612 (monte-carlo-sign-flip), Holm p 0.612, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.12)
-PASS 4 autoplan-ceo hits on Opus with an unjudged rem: G_R coverage 0.958, still helps; the bounds agree -> exit 0: autoplan-ceo - none: 0.572 - 0.264 = +0.309, 95% CI [0.194, 0.424], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 0.958 -> helps | hit@3 (secondary): +0.354, 95% CI [0.229, 0.500], Holm p 0.000, coverage 1.000, helps (decides nothing) | G_R bounds, unjudged rem scored 0: +0.283, helps; scored 1: +0.293, helps
-PASS   10 of them: G_R coverage 0.896 -> untested (coverage), hit@3 untouched, and the bounds differ from the G_R verdict -> exit 0: autoplan-ceo - none: 0.551 - 0.227 = +0.325, 95% CI [0.205, 0.444], p 0.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 0.896 -> untested (coverage 0.896 under 0.90), p = 1 in Holm | hit@3 (secondary): +0.354, 95% CI [0.229, 0.500], Holm p 0.000, coverage 1.000, helps (decides nothing) | G_R bounds, unjudged rem scored 0: +0.267, helps; scored 1: +0.293, helps; BOUNDS DIFFER from the G_R verdict (untested)
+PASS 4 autoplan-ceo hits on Opus with an unjudged rem: G_R coverage 0.958, still helps; the bounds agree -> exit 0: autoplan-ceo - none: 0.572 - 0.264 = +0.309, 95% CI [0.194, 0.424], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 0.958 -> helps | hit@3 (secondary): +0.354, 95% CI [0.229, 0.500], Holm p 0.000, coverage 1.000, helps (decides nothing) | G_R bounds, unjudged rem against the arm (arm 0, none 1): +0.283, helps; for the arm (arm 1, none 0): +0.293, helps
+PASS   10 of them: G_R coverage 0.896 -> untested (coverage), hit@3 untouched, and the bounds differ from the G_R verdict -> exit 0: autoplan-ceo - none: 0.551 - 0.227 = +0.325, 95% CI [0.205, 0.444], p 0.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 0.896 -> untested (coverage 0.896 under 0.90), p = 1 in Holm | hit@3 (secondary): +0.354, 95% CI [0.229, 0.500], Holm p 0.000, coverage 1.000, helps (decides nothing) | G_R bounds, unjudged rem against the arm (arm 0, none 1): +0.267, helps; for the arm (arm 1, none 0): +0.293, helps; BOUNDS DIFFER from the G_R verdict (untested)
+PASS 4 hit unit-passes on Opus with an unjudged rem on both arms (none and autoplan-ceo, the same unit-passes) -> exit 0: autoplan-ceo - none: 0.572 - 0.264 = +0.309, 95% CI [0.194, 0.424], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 0.958 -> helps | G_R bounds, unjudged rem against the arm (arm 0, none 1): +0.283, helps; for the arm (arm 1, none 0): +0.304, helps
+PASS   the bound against the arm (0.283) sits below the bound for it (0.304); scoring both arms' unjudged rem alike would make them equal
+  projection's untested list: the cells stage 1's smoke leaves untested, and no stage 2 when autoplan-ceo failed its smoke on Opus
+PASS refuse a projection that lists autoplan-ceo on Opus untested when its smoke admitted it -> exit 1: E_USAGE the projection's untested list must name the cells stage 1's smoke leaves untested: none; got autoplan-ceo:opus
+PASS refuse a projection with no untested cell when standalone failed its smoke on particle-1 -> exit 1: E_USAGE the projection's untested list must name the cells stage 1's smoke leaves untested: standalone:particle; got none
+PASS   accept twin: the same projection with standalone:particle untested -> exit 0: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, autoplan-ceo:particle; held passes 2
+PASS refuse a projection whose stage 1 smoke failed autoplan-ceo on Opus, listed untested -> exit 1: E_USAGE autoplan-ceo failed its smoke on Opus; stage 2 does not start
 
 ## g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation
 A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Run items (one per review-units invocation) open a trial-proof lease at their cap, judge items a direct-proof lease for what is left of their envelope, all with --admission warn. Each item settles at its projected spend. Stage 2's caps here are the planning caps; the real ones come from the projection check.
@@ -430,4 +437,4 @@ PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITE
 ## Leak check
 PASS the transcript prints no home path and no key name's value
 
-PASS 322, FAIL 0
+PASS 328, FAIL 0
