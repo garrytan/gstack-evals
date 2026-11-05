@@ -334,8 +334,12 @@ export interface L1SessionRow {
   background_at_result: boolean;
   /** The after pin's contract hook blocked once in the session (its block text reached the log). */
   contract_block: boolean;
-  /** From evaluator/l1-evidence.json; null when no harness unit recorded it. */
+  /** From the proxy's session rows: the route hook's line reached the proxy before the session's first model response; null
+   * when the trial has no proxy row that records it. */
   route_hook: boolean | null;
+  /** The transcript's reading of the route hook from evaluator/l1-evidence.json, written inside the container: a cross-check. */
+  route_hook_transcript: boolean | null;
+  /** From evaluator/l1-evidence.json; null when no harness unit recorded it. */
   contract_record: boolean | null;
   contract_check_met: boolean | null;
   /** The no-gstack read audit's hits (none arm). */

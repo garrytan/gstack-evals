@@ -5,7 +5,8 @@
 # VM's state) when UBI_RECOVERY_DIR is set, and recover restores the state of every bundle this machine lacks. Switches:
 # Like the real runner, recover prints RECOVER_EXISTS and exits 1 for a bundle whose VM this machine already has, and for a
 # bundle whose VM is gone (destroyed or never made: the API's 404) it drops the bundle and prints RECOVER_GONE.
-# FAIL_RECOVER=1 makes recover fail; FAIL_PULL=<vm> makes each pull from that VM fail; FAIL_PULL_MATCH=<text> makes each pull of a path containing it fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
+# FAIL_RECOVER=1 makes recover fail; FAIL_PULL=<vm> makes each pull from that VM fail; FAIL_PULL_ONCE=<vm> makes only the first pull
+# from that VM fail; SHORT_PULL=<vm> makes each pull from that VM exit 0 one file short; FAIL_PULL_MATCH=<text> makes each pull of a path containing it fail; SLOW_PULL=<sec> slows each pull from a part VM; UBI_FAKE_SSH_LIMIT=<sec> plays the
 # runner's idle watchdog, ending an ssh command and its process group after that long (a setsid -f child survives);
 # FAIL_SSH_MATCH=<text> makes an ssh command containing it exit 255, after running it when FAIL_SSH_RUN=1.
 # Like the real runner, down drops the VM's local state and its recovery bundles once the VM is gone.
@@ -39,10 +40,12 @@ case "$cmd" in
     dead "$1" && exit 1
     case $1 in vm-*) sleep "${SLOW_PULL:-0}" ;; esac
     [ "${FAIL_PULL:-}" != "$1" ] || exit 1
+    if [ "${FAIL_PULL_ONCE:-}" = "$1" ] && [ ! -e "$UBI_FAKE/.pull-failed-$1" ]; then touch "$UBI_FAKE/.pull-failed-$1"; exit 1; fi
     [ -z "${FAIL_PULL_MATCH:-}" ] || [[ "$2" != *"$FAIL_PULL_MATCH"* ]] || exit 1
     d=$(vmdir "$1"); mkdir -p "$3"; dest=$(cd "$3" && pwd)
     (cd "$d" && ls -d $2 >/dev/null 2>&1) || exit 0
-    (cd "$d" && cp -r $2 "$dest/") ;;
+    (cd "$d" && cp -r $2 "$dest/") || exit 1
+    if [ "${SHORT_PULL:-}" = "$1" ]; then find "$dest/$(basename "$2")" -type f | head -1 | xargs -r rm -f; fi ;;
   ssh)
     name=$1; shift
     dead "$name" && exit 255

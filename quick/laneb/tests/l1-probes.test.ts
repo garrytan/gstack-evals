@@ -278,6 +278,19 @@ describe("contract block, turn cap and the read audit", () => {
     expect(run([bash("sed 's|/root/.gstack/x|y|' README.md", "# app")], none).audit_hits).toEqual([]);
     expect(run([bash("sed '1r/testbed/notes.txt' README.md", "notes")], none).audit_hits).toEqual([]);
   });
+  test("$HOME glued to a sed word, gsed and busybox sed are read like sed; a sed address or a repo path holding root/.gstack is not a read of it", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    const hits = (cmd: string) => run([bash(cmd, "x: 1")], none).audit_hits.length;
+    expect(['sed "1r$HOME/.gstack/config.yaml" README.md', 'sed -n "2r${HOME}/.claude/skills/x/SKILL.md" README.md', "gsed '1r/root/.gstack/config.yaml' README.md", "busybox sed '1r/root/.gstack/config.yaml' README.md", "/bin/busybox cat /root/.gstack/config.yaml", "sed 's/a/b/w/root/.gstack/out' README.md"].map(hits)).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(["sed -n 1p src/root/.gstack/notes.txt", "sed '\\,/root/.gstack/x,d' README.md", 'cat "$HOMEDIR/x/root/.gstack/y"'].map(hits)).toEqual([0, 0, 0]);
+  });
+  test("sed -f glued to its file, command in front of a reader, find -exec or xargs over a gstack tree and ${HOME:-...} are reads; command -v, find without -exec and a bare echo are not", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    const hits = (cmd: string) => run([bash(cmd, "x: 1")], none).audit_hits.length;
+    expect(["sed -f/root/.gstack/config.yaml README.md", "sed -nf/root/.gstack/config.yaml README.md", "command cat /root/.gstack/config.yaml", "command -p cat /root/.gstack/config.yaml", "find /root/.gstack -name '*.md' -exec cat {} +", "find /root/.claude/skills -execdir cat {} ';'",
+      "echo /root/.gstack/config.yaml | xargs cat", "find /root/.gstack -type f -print0 | xargs -0 cat", "ls /root/.gstack | xargs cat", "sed -n p ${HOME:-/root}/.gstack/config.yaml", "cat ${HOME-/root}/.claude/skills/x/SKILL.md"].map(hits)).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    expect(["command -v cat", "find /root/.gstack -name '*.md'", "find / -name '*.md' -exec cat {} +", "find . -name '*.md' -exec cat {} +", "echo /root/.gstack/config.yaml", "sed -f script.sed README.md"].map(hits)).toEqual([0, 0, 0, 0, 0, 0]);
+  });
   test("a grep, rg, ag or ack option the table does not know, or a value it would misplace, scans the whole command", () => {
     const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
     for (const cmd of ["grep --exclude-from /root/.gstack/ignore name README.md", "rg --ignore-file /root/.gstack/ignore name .", "rg --pre /root/.gstack/bin/x name README.md", "ag -D name /root/.gstack/config.yaml", "ag -A name /root/.gstack/config.yaml",
