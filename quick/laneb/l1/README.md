@@ -50,7 +50,7 @@ bun quick/laneb/l1/ceiling.ts final --ledger ledger.jsonl --crew crew.json --pla
 ```text
 items     every plan item: settled + open reserved, or its cap while it is not done
 spent     items + every L1 thread's credits / 1000 + the Captain's booked credits / 1000
-holdback  max($400 - crew spend, unspent token stops of open and planned L1 threads x measured $ per token)
+holdback  max($700 - crew spend, unspent token stops of open and planned L1 threads x measured $ per token)
           + max(0, $40 - Captain spend)
           + max(0, $15 - run-work spend) for Sol and for particle-1 while each is pending
 total     spent + holdback; check refuses a launch when total passes $2,000 or any item, its own included, holds open reservations

@@ -69,11 +69,15 @@ if (import.meta.main) {
   const swebv = band.filter((t) => !drops.some((d) => d.task_id === t.task_id));
   const rebench = taskSet === "swerebench-r3a4" ? loadRebenchPool(join(root, R3A4_POOL_FILE), R3A4_POOL_SHA256) : [];
   const all: string[] = taskSet === "swebv-r3" ? swebv.map((t) => t.task_id) : taskSet === "swerebench-r3a4" ? rebench.map((t) => t.task_id) : JSON.parse(readFileSync(join(root, "tasks/final.json"), "utf8")).tasks;
+  // tb2 also admits, when TASKS names it, any task tasks/tasks.json holds a digest for: the reserves and quick look 3's
+  // extension, which the L1 TB2 twin draws on (L1 Amendment C).
+  const selection = taskSet === "tb2" ? JSON.parse(readFileSync(join(root, "tasks/tasks.json"), "utf8")) : null;
+  const known: string[] = selection ? [...all, ...[...selection.main, ...selection.reserves, ...(selection.extension ?? [])].map((t: any) => t.task_id)] : all;
   const final = process.env.TASKS ? process.env.TASKS.split(",") : all;
   for (const id of final) {
     const drop = drops.find((d) => d.task_id === id);
     if (drop) throw new Error(`E_USAGE task ${id} is on R3's drop list (${drop.reason}); it never runs`);
-    if (!all.includes(id)) throw new Error(`E_USAGE task ${id} is not in the ${taskSet} task set`);
+    if (!known.includes(id)) throw new Error(`E_USAGE task ${id} is not in the ${taskSet} task set`);
   }
   if (new Set(final).size !== final.length) throw new Error(`E_USAGE TASKS names a task twice`);
   if (existsSync(run)) throw new Error(`${run} exists; use a fresh run directory`);
@@ -87,8 +91,7 @@ if (import.meta.main) {
     const root = process.env.SWEBV ?? join(process.env.HOME ?? "", ".capy/work/ref/harbor-datasets");
     for (const id of final) tasks[id] = materializeSwebv(root, swebv.find((t) => t.task_id === id)!, join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
   } else {
-    const selection = JSON.parse(readFileSync(join(root, "tasks/tasks.json"), "utf8"));
-    const expected = new Map<string, string>([...selection.main, ...selection.reserves].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
+    const expected = new Map<string, string>([...selection.main, ...selection.reserves, ...(selection.extension ?? [])].map((t: any) => [t.task_id, t.digest.replace(/^sha256:/, "")]));
     for (const id of final) {
       const m = materializeTb2(join(tb2, id), join(run, "tasks", id), { runtimeStages, runtimeCopy, network });
       if (m.sourceDigest !== expected.get(id)) throw new Error(`${id}: source digest ${m.sourceDigest} differs from tasks.json ${expected.get(id)}`);

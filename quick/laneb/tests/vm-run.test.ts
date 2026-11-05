@@ -400,3 +400,50 @@ describe("vm-run.sh's image pulls before the oracle gate (R3 amendment 3, rule 3
     expect(r.code).toBe(8);
   }, 90_000);
 });
+
+describe("task-hooks.sh (L1 Amendment C): which task images register their own UserPromptSubmit hook", () => {
+  // Value: protects=the run-time count of task work trees whose .claude/settings*.json (or managed settings) register a UserPromptSubmit hook, #218's named route-evidence residual; fails_when=a hooked image reads no, a clean one reads yes, a failed scan reads anything but unknown, or vm-run.sh stops on a failed scan; why_new=GEVA-294; seam=runner/task-hooks.sh through sg docker; no_claim=a real image, which the dry run scans
+  function scan(images: Record<string, Record<string, string> | null>, dockerfiles: Record<string, string>, context: Record<string, Record<string, string>> = {}) {
+    const root = mkdtempSync(join(tmpdir(), "laneb-taskhooks-"));
+    const bin = join(root, "bin"), run = join(root, "run"), fs = join(root, "images");
+    mkdirSync(bin, { recursive: true });
+    for (const [img, files] of Object.entries(images)) for (const [p, body] of Object.entries(files ?? {})) { mkdirSync(join(fs, img, p, ".."), { recursive: true }); writeFileSync(join(fs, img, p), body); }
+    for (const [task, df] of Object.entries(dockerfiles)) { mkdirSync(join(run, "tasks", task, "environment"), { recursive: true }); writeFileSync(join(run, "tasks", task, "environment", "Dockerfile"), df); }
+    for (const [task, files] of Object.entries(context)) for (const [p, body] of Object.entries(files)) { mkdirSync(join(run, "tasks", task, "environment", p, ".."), { recursive: true }); writeFileSync(join(run, "tasks", task, "environment", p), body); }
+    const broken = Object.keys(images).filter((i) => images[i] === null).join(" ");
+    // The fake sg plays docker: image inspect prints /testbed, and run executes the mounted probe with the image's fake root as its second argument.
+    writeFileSync(join(bin, "sg"), `#!/usr/bin/env bash\nset -- $3\necho "$*" >> ${root}/sg.log\n[ "$2" = image ] && { echo /testbed; exit 0; }\nprobe=""; img=""; while [ $# -gt 2 ]; do case "$1" in -v) probe=\${2%%:*}; shift ;; /bin/sh) img=$prev ;; esac; prev=$1; shift; done\ncase " ${broken} " in *" $img "*) echo "Unable to find image" >&2; exit 125 ;; esac\nexec sh "$probe" "$2" "${fs}/$img"\n`);
+    chmodSync(join(bin, "sg"), 0o755);
+    const p = Bun.spawnSync(["bash", join(import.meta.dir, "../runner/task-hooks.sh"), run], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+    const rows = p.stdout.toString().trim().split("\n").map((l) => l.split("\t"));
+    return { code: p.exitCode, head: rows[0], rows: Object.fromEntries(rows.slice(1).map((r) => [r[0], r.slice(1)])), sg: readFileSync(join(root, "sg.log"), "utf8") };
+  }
+  const hook = JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: "echo hi" }] }] } });
+  const stop = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "true" }] }] } });
+  test("a work tree hook, a local settings hook, managed settings and a build-context file read yes; settings with no UserPromptSubmit read no; a failed scan reads unknown", () => {
+    const r = scan(
+      { "img-hook": { "testbed/.claude/settings.json": hook }, "img-local": { "src/app/.claude/settings.local.json": hook }, "img-clean": { "testbed/.claude/settings.json": stop }, "img-managed": { "etc/claude-code/managed-settings.json": hook }, "img-gone": null, "img-ctx": {} },
+      { a: "FROM laneb-claude AS x\nFROM img-hook\n", b: "FROM img-local\nWORKDIR /src\nWORKDIR app\n", c: "FROM img-clean\n", d: "FROM img-managed\n", e: "FROM img-gone\n", f: "FROM img-ctx\n" },
+      { f: { "repo/.claude/settings.json": hook } },
+    );
+    expect(r.code).toBe(0);
+    expect(r.head).toEqual(["task", "image", "workdir", "hook", "files"]);
+    expect(r.rows.a).toEqual(["img-hook", "/testbed", "yes", "/testbed/.claude/settings.json"]);
+    expect(r.rows.b).toEqual(["img-local", "/src/app", "yes", "/src/app/.claude/settings.local.json"]);
+    expect(r.rows.c).toEqual(["img-clean", "/testbed", "no", ""]);
+    expect(r.rows.d).toEqual(["img-managed", "/testbed", "yes", "/etc/claude-code/managed-settings.json"]);
+    expect(r.rows.e!.slice(0, 3)).toEqual(["img-gone", "/testbed", "unknown"]);
+    expect(r.rows.f).toEqual(["img-ctx", "/testbed", "yes", "context:repo/.claude/settings.json"]);
+    expect(r.sg).toContain("run --rm --pull never --network none");
+    expect(r.sg).not.toContain(" pull ");
+  });
+  test("vm-run.sh writes out/task-hooks.tsv after the pulls and before the oracle gate, and a scan that fails never stops the run", () => {
+    const s = setup({ a: "1" });
+    mkdirSync(join(s.run, "tasks", "a", "environment"), { recursive: true });
+    writeFileSync(join(s.run, "tasks", "a", "environment", "Dockerfile"), "FROM img-a\nWORKDIR /testbed\n");
+    const r = Bun.spawnSync(s.cmd, { env: s.env });
+    expect(readFileSync(join(s.run, "out", "task-hooks.tsv"), "utf8")).toBe("task\timage\tworkdir\thook\tfiles\na\timg-a\t/testbed\tunknown\tthe scan printed no result\n");
+    expect(r.stdout.toString()).toContain("oracle: every task passed on this host");
+    expect(s.sg().indexOf("run --rm --pull never")).toBeLessThan(s.sg().indexOf("harbor run -y -c"));
+  });
+});

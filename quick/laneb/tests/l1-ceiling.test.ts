@@ -38,29 +38,36 @@ const dollars = (m: number) => m / M;
 
 describe("the ceiling check before a launch", () => {
   test("refuses a Sol launch with the crew line already spent and every Opus item settled at its cap", () => {
-    const r = check(atCaps(), crew(400_000, 40_000), plan(), "pilot-sol");
+    const r = check(atCaps(), crew(700_000, 40_000), plan(), "pilot-sol");
     expect(r.ok).toBe(false);
     expect(dollars(r.tally.itemsTotal)).toBeCloseTo(940 + 830, 6);
-    expect(dollars(r.tally.crewSpent)).toBe(400);
+    expect(dollars(r.tally.crewSpent)).toBe(700);
     expect(dollars(r.tally.crewHold)).toBe(0);
     expect(dollars(r.tally.captainHold)).toBe(0);
     expect(dollars(r.tally.runWorkHold)).toBe(30);
-    expect(dollars(r.tally.total)).toBeCloseTo(940 + 830 + 400 + 40 + 30, 6);
+    expect(dollars(r.tally.total)).toBeCloseTo(940 + 830 + 700 + 40 + 30, 6);
     expect(r.why).toContain("passes $2000.00");
   });
-  test("refuses the same launch with the crew line past $400 even when the Opus items settled at their expected spend", () => {
+  test("refuses the same launch with the crew line past $700 even when the Opus items settled at their expected spend", () => {
     const r = check(atExpected(), crew(800_000, 40_000), plan(), "pilot-sol");
     expect(r.ok).toBe(false);
     expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 830 + 800 + 40 + 30, 6);
   });
-  test("passes a Sol launch when every item settled at its expected spend and the crew line at its plan", () => {
-    const r = check(atExpected(), crew(288_000, 36_000), plan(), "pilot-sol");
+  test("passes a Sol pilot launch when every item settled at its expected spend and the crew line holds its $700 remainder", () => {
+    const r = check(atExpected(), crew(288_000, 36_000), plan([solPlan[0]!]), "pilot-sol");
     expect(r.ok).toBe(true);
-    expect(dollars(r.tally.crewHold)).toBe(112);
+    expect(dollars(r.tally.crewHold)).toBe(412);
     expect(dollars(r.tally.captainHold)).toBe(4);
-    expect(dollars(r.tally.holdback)).toBe(112 + 4 + 30);
-    expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 830 + 288 + 36 + 146, 6);
+    expect(dollars(r.tally.holdback)).toBe(412 + 4 + 30);
+    expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 100 + 288 + 36 + 446, 6);
     expect(r.why).toContain("at or under $2000.00");
+  });
+  test("at the $700 crew line, Sol's planned path at its caps does not fit even when every Opus item settled at its expected spend", () => {
+    const r = check(atExpected(), crew(288_000, 36_000), plan(), "pilot-sol");
+    expect(r.ok).toBe(false);
+    expect(dollars(r.tally.crewHold)).toBe(412);
+    expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 830 + 700 + 40 + 30, 6);
+    expect(r.why).toContain("passes $2000.00");
   });
   test("an item still to run counts at its cap; a done item counts at what it settled and reserved", () => {
     const t = tally([...rows("pilot-opus", 80, [20], [6])], crew(0, 0), { items: opusPlan("planned"), leftover: { sol: "refused", particle: "refused" } });
@@ -73,17 +80,17 @@ describe("the ceiling check before a launch", () => {
       { code: "GEVA-2", line: "crew", credits: 50_000, tokens: 100 * M, token_stop: 300 * M, status: "open" },
       { code: "GEVA-3", line: "crew", credits: 0, tokens: 0, token_stop: 200 * M, status: "planned" },
     ];
-    const t = tally(atExpected(), crew(350_000, 0, open), plan());
-    expect(t.perToken).toBeCloseTo(400 * M / (900 * M), 9);
-    expect(dollars(t.stops)).toBeCloseTo((400 * M) * (400 / 900) / M, 5);
-    expect(dollars(t.crewHold)).toBeCloseTo(177.78, 2);
+    const t = tally(atExpected(), crew(650_000, 0, open), plan());
+    expect(t.perToken).toBeCloseTo(700 * M / (900 * M), 9);
+    expect(dollars(t.stops)).toBeCloseTo((400 * M) * (700 / 900) / M, 5);
+    expect(dollars(t.crewHold)).toBeCloseTo(311.11, 2);
     const small = tally(atExpected(), crew(100_000, 0, [{ ...open[0]!, credits: 10_000 }]), plan());
-    expect(dollars(small.crewHold)).toBe(290);
+    expect(dollars(small.crewHold)).toBe(590);
   });
   test("with no token reading yet, unspent stops are held at the planning rate of $0.45 per million", () => {
-    const t = tally([], { as_of: "x", captain_credits: 0, threads: [{ code: "GEVA-4", line: "crew", credits: 0, tokens: 0, token_stop: 1000 * M, status: "planned" }] }, { items: opusPlan("planned"), leftover: { sol: "pending", particle: "pending" } });
-    expect(dollars(t.stops)).toBe(450);
-    expect(dollars(t.crewHold)).toBe(450);
+    const t = tally([], { as_of: "x", captain_credits: 0, threads: [{ code: "GEVA-4", line: "crew", credits: 0, tokens: 0, token_stop: 2000 * M, status: "planned" }] }, { items: opusPlan("planned"), leftover: { sol: "pending", particle: "pending" } });
+    expect(dollars(t.stops)).toBe(900);
+    expect(dollars(t.crewHold)).toBe(900);
   });
   test("each leftover model's run-work remainder is held until that model is done or refused", () => {
     const sol: Crew["threads"] = [{ code: "GEVA-5", line: "sol", credits: 9_000, tokens: 20 * M, token_stop: 30 * M, status: "open" }];
@@ -94,15 +101,15 @@ describe("the ceiling check before a launch", () => {
   });
   test("a run-work thread's unspent token stop is held too, beside its line's remainder", () => {
     const sol: Crew["threads"] = [{ code: "GEVA-5", line: "sol", credits: 15_000, tokens: 20 * M, token_stop: 120 * M, status: "open" }];
-    const t = tally(atExpected(), crew(385_000, 0, sol), plan());
-    expect(t.perToken).toBeCloseTo(400 / 820, 9);
-    expect(dollars(t.stops)).toBeCloseTo(100 * (400 / 820), 5);
-    expect(dollars(t.crewHold)).toBeCloseTo(100 * (400 / 820), 5);
+    const t = tally(atExpected(), crew(685_000, 0, sol), plan());
+    expect(t.perToken).toBeCloseTo(700 / 820, 9);
+    expect(dollars(t.stops)).toBeCloseTo(100 * (700 / 820), 5);
+    expect(dollars(t.crewHold)).toBeCloseTo(100 * (700 / 820), 5);
     expect(dollars(t.runWorkHold)).toBe(15);
     expect(() => tally(atExpected(), crew(0, 0, [{ ...sol[0]!, token_stop: null }]), plan())).toThrow(/GEVA-5 has no token_stop/);
   });
   test("refuses a launch while another item holds open reservations, and an item not in the plan or already done", () => {
-    const r = check([...atExpected(), ...rows("pilot-sol", 100, [], [5])], crew(0, 0), plan(), "f1-sol");
+    const r = check([...atExpected(), ...rows("pilot-sol", 100, [], [5])], crew(0, 0), plan([solPlan[0]!, { item: "f1-sol", cap_usd: 300, status: "planned" }]), "f1-sol");
     expect(r.ok).toBe(false);
     expect(r.why).toContain("pilot-sol still holds open reservations");
     const second = check([...rows("pilot-opus", 80, [26.08]), ...rows("f1-opus", 680, [211.9], [40])], crew(0, 0), { items: [{ item: "pilot-opus", cap_usd: 80, status: "done" }, { item: "f1-opus", cap_usd: 680, status: "open" }], leftover: { sol: "pending", particle: "pending" } }, "f1-opus");
@@ -183,13 +190,13 @@ describe("the command line", () => {
     return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
   };
   test("REFUSE exits 1 and PASS exits 0", () => {
-    const refuse = run(["check", ...files(atCaps(), crew(400_000, 40_000), plan()), "--launch", "pilot-sol"]);
+    const refuse = run(["check", ...files(atCaps(), crew(700_000, 40_000), plan()), "--launch", "pilot-sol"]);
     expect(refuse.code).toBe(1);
-    expect(refuse.out).toStartWith("CEILING REFUSE pilot-sol: the sum $2240.00");
-    const pass = run(["check", ...files(atExpected(), crew(288_000, 36_000), plan()), "--launch", "pilot-sol"]);
+    expect(refuse.out).toStartWith("CEILING REFUSE pilot-sol: the sum $2540.00");
+    const pass = run(["check", ...files(atExpected(), crew(288_000, 36_000), plan([solPlan[0]!])), "--launch", "pilot-sol"]);
     expect(pass.code).toBe(0);
     expect(pass.out).toStartWith("CEILING PASS pilot-sol");
-    expect(pass.out).toContain("holdback $146.00");
+    expect(pass.out).toContain("holdback $446.00");
   });
   test("final prints the all-in figure and the post stop; bad input exits 2 with E_USAGE first", () => {
     const f = run(["final", ...files(atExpected(), crew(300_000, 30_000), plan([], { sol: "refused", particle: "refused" })), "--post", "GEVA-9"]);

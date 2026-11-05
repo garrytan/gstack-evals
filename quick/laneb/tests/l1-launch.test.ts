@@ -334,3 +334,23 @@ exit "$(cat "${root}/rc.$n" 2>/dev/null || echo 0)"
     expect(bad.harbor).toEqual([]);
   });
 });
+
+describe("the TB2 twin's tasks (L1 Amendment C)", () => {
+  // Value: protects=prepare-run accepts every task of the TB2 twin split Amendment C pins and checks each against a tasks.json digest; fails_when=a twin task from quick look 3's extension is refused as outside the tb2 set or has no digest; why_new=GEVA-294 (main's tasks.json lost the extension block); seam=runner/prepare-run.ts TASK_SET=tb2; no_claim=that the terminal-bench-2 checkout materializes, which needs the network
+  const parts = readFileSync(join(LANEB, "../../wiki/plans/2026-11-05-geva-294-l1-amendment-c/tb2-parts.txt"), "utf8");
+  const twin = parts.trim().split("\n").map((l) => l.split(" ")[1]!);
+  const prep = (tasks: string) => Bun.spawnSync([process.execPath, join(LANEB, "runner/prepare-run.ts"), join(mkdtempSync(join(tmpdir(), "l1-tb2-")), "run"), "j", "claude-opus-5-5", "none", "/nonexistent", "1", "1"], { env: { ...process.env, TASK_SET: "tb2", TASKS: tasks, TB2: "/nonexistent-tb2" } }).stderr.toString();
+  test("every twin task has one tasks.json digest, and the split is L1's two parts of 37", () => {
+    expect(itemParts("tb2-opus", { tb2Parts: parts }).map((p) => p.rects[0]!.tasks.length)).toEqual([19, 18]);
+    const sel = JSON.parse(readFileSync(join(LANEB, "tasks/tasks.json"), "utf8"));
+    const digests = new Map<string, string>([...sel.main, ...sel.reserves, ...(sel.extension ?? [])].map((t: any) => [t.task_id, t.digest]));
+    expect(twin.filter((t) => !/^sha256:[0-9a-f]{64}$/.test(digests.get(t) ?? ""))).toEqual([]);
+  });
+  test("prepare-run's tb2 set admits all 37 twin tasks and refuses an id in neither final.json nor the extension", () => {
+    const all = prep(twin.join(","));
+    expect(all).not.toContain("is not in the tb2 task set");
+    expect(all).toContain("/nonexistent-tb2/");
+    expect(prep("not-a-tb2-task")).toContain("E_USAGE task not-a-tb2-task is not in the tb2 task set");
+  });
+});
+
