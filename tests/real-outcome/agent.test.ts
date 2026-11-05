@@ -42,11 +42,12 @@ describe.skipIf(!HAS_SDK)("the two-turn agent on the real pinned Agent SDK, with
     const out = r.stdout + r.stderr;
     if (r.status !== 0) console.log(out);
     expect(out).not.toContain("FAIL");
-    expect(out.match(/^PASS /gm)?.length).toBe(20);
+    expect(out.match(/^PASS /gm)?.length).toBe(21);
     expect(r.status).toBe(0);
     const records = (name: string) => readTranscript(join(keep, name + ".jsonl")).records;
     const read = (name: string) => planEngReviewExposure(records(name));
     expect(read("g-pe")).toMatchObject({ exposed: true, failed: null });
+    expect(() => read("g-keyless")).toThrow("E_OUTCOME_TRANSCRIPT");
     expect(autoplanExposure(records("g-ap"))).toMatchObject({ exposed: true, failed: null, phases: ["ceo", "eng"], published: ["ceo", "eng"] });
     expect(read("g-pe-subagent")).toMatchObject({ exposed: false, failed: "review_sections_read", checks: { review_sections_read: false, scope_challenge: false, sections_in_order: false, test_plan_written: false } });
     rmSync(keep, { recursive: true, force: true });

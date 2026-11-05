@@ -6,6 +6,7 @@ agent itself on the real SDK. Run by agent-units.test.ts with python3.
 import json
 import sys
 import tempfile
+import time
 import traceback
 import types
 from pathlib import Path
@@ -33,6 +34,9 @@ except ImportError:
 
     module("claude_agent_sdk", ClaudeAgentOptions=lambda **k: k, ClaudeSDKClient=object, query=None)
     module("claude_agent_sdk.types", HookMatcher=lambda **k: k, PermissionResultAllow=lambda **k: k, TERMINAL_TASK_STATUSES=frozenset({"completed", "failed", "stopped", "killed"}))
+    sys.modules["claude_agent_sdk"]._internal = module("claude_agent_sdk._internal")
+    sys.modules["claude_agent_sdk._internal"].message_parser = module("claude_agent_sdk._internal.message_parser", parse_message=lambda data: None)
+    sys.modules["claude_agent_sdk._internal"].client = module("claude_agent_sdk._internal.client", parse_message=lambda data: None)
     for name in ("harbor", "harbor.agents", "harbor.agents.installed", "harbor.environments", "harbor.environments.docker", "harbor.models", "harbor.models.agent"):
         module(name)
     module("harbor.agents.installed.claude_code", ClaudeCode=StubClaudeCode, ClaudeCodeOptions=StubOptions)
@@ -295,6 +299,41 @@ def test_registry_arms_refuse_a_k4_task_and_an_empty_statement():
             assert str(e).startswith("E_REAL_SANDBOX_SETUP") and why in str(e), str(e)
             continue
         raise AssertionError(why + " was accepted")
+
+
+def test_registry_arms_refuse_turns_that_are_not_t1_to_tn():
+    for turns in ([], [{"phase": "build", "text": "{statement}"}], [{"phase": "t1", "text": "{statement}"}, {"phase": "t3", "text": "x"}]):
+        arms = {**REGISTRY, "arms": {"none": {**REGISTRY["arms"]["none"], "turns": turns}}}
+        try:
+            ra.phase_texts({"kind": "K3"}, arms, "none", "Add rate limits.")
+        except ra.SandboxSetupError as e:
+            assert str(e).startswith("E_REAL_SANDBOX_SETUP") and "not t1 to tn" in str(e) and "fix:" in str(e), str(e)
+            continue
+        raise AssertionError(f"turns {turns} were accepted")
+
+
+def test_statement_trim_is_linear_in_a_long_whitespace_run():
+    statement = "Add rate limits." + " " * 100_000 + "x" + " \u3000\t\n" * 1000
+    start = time.monotonic()
+    [(phase, text)] = ra.phase_texts({"kind": "K3"}, REGISTRY, "none", statement)
+    assert time.monotonic() - start < 2, time.monotonic() - start
+    assert phase == "t1" and text.startswith("Add rate limits." + " " * 100_000 + "x\n\n"), text[-120:]
+
+
+def test_message_records_leave_out_a_parent_tool_use_id_the_frame_did_not_carry():
+    class AssistantMessage:
+        def __init__(self):
+            self.content, self.model, self.parent_tool_use_id = [], "m", None
+
+    for name in ("claude_agent_sdk._internal.message_parser", "claude_agent_sdk._internal.client"):
+        assert getattr(sys.modules[name].parse_message, ra.KEYLESS, False), name + " still holds the SDK's own parse_message"
+    parse = ra.mark_keyless(lambda data: AssistantMessage())
+    keyless = ra.message_record(parse({"type": "assistant", "message": {}}), 1)
+    assert "parent_tool_use_id" not in keyless, keyless
+    keyed = ra.message_record(parse({"type": "user", "message": {}, "parent_tool_use_id": None}), 1)
+    assert "parent_tool_use_id" in keyed and keyed["parent_tool_use_id"] is None, keyed
+    assert "parent_tool_use_id" in ra.message_record(parse({"type": "stream_event"}), 1)
+    assert ra.mark_keyless(parse) is parse
 
 
 def test_message_records_keep_parent_tool_use_id_where_the_sdk_sets_it():

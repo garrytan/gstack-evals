@@ -372,6 +372,16 @@ def test_g_told_arm_records_a_subagent_doing_the_review_under_its_agent_call():
     check(len(reads) == 1 and reads[0]["phase"] == "t2" and reads[0]["parent_tool_use_id"] not in (None, ""), reads)
 
 
+def test_g_subagent_frame_without_parent_tool_use_id_is_recorded_without_the_key():
+    c = u4(Case("g-keyless", arm="plan-eng-review:told", scenario="g_turns", registry=True))
+    c.env["STUB_G_KEYLESS"] = "1"
+    c.run()
+    recs = messages(c)
+    survey = [r for r in recs if any(isinstance(b, dict) and b.get("text") == "src/app.js holds add." for b in r["content"])]
+    check(len(survey) == 3 and all("parent_tool_use_id" not in r for r in survey), survey)
+    check(all("parent_tool_use_id" in r for r in recs if r not in survey), "a keyed frame lost its parent_tool_use_id")
+
+
 def test_g_autoplan_told_arm_records_the_replayed_review_in_turn_two():
     c = u4(Case("g-ap", arm="autoplan:told", scenario="g_turns", registry=True)).run()
     check(c.users() == turn_texts("autoplan:told"), c.users())

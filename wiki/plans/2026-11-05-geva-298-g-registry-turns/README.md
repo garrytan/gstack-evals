@@ -110,3 +110,13 @@ None new: no new dependency, licence or data source. The change reuses the rig's
 - **Low, unlisted behavior changes.** Section 1 now names the two changes that reach the lane's sessions, and the pull request lists them.
 - **Informational, a redundant regex.** Dropped from real_agent.py.
 - **Informational, other start conditions.** Section 1 now points at the prereg's section 10 for the told arm's gstack install and the none arm's clean room.
+
+## As built
+
+The code follows the plan above, with these changes from the /ship review's one fix round.
+
+- **A frame without the key fails closed.** At the pinned SDK 0.2.174, parse_message reads an assistant or user frame that has no parent_tool_use_id key as None, and the detectors would count that as the session's own words. real_agent now wraps parse_message at the SDK's two call sites and leaves the key out of such a frame's record, so exposure.ts refuses the transcript. The pinned Claude Code writes the key on every path the review read, so no reading changes there. With this, big decision 2 and the first risk in section 7 hold at the pin.
+- **A registry arm's turns must be t1 to tn.** Any other list, an empty one included, is refused with E_REAL_SANDBOX_SETUP before the sandbox opens, so no registry turn can be named build and turn on the ship hold.
+- **The statement trim is linear.** A loop over JavaScript's whitespace replaces the trailing-space regex, which was quadratic on a long whitespace run. Parity with turnScript is unchanged.
+- **U8 counts a subagent message under any Agent call in its turn**, because autoplan's replayed t2 holds Agent calls of its own.
+- **Open notes.** The lane persona can approve code in t1, because it holds shipping only in a lane build turn. That is a G admission item for the Captain to rule on before any paid G stage. real_agent does not check the arms file against the registry; that check belongs in the stage driver. sdk-messages.jsonl is opened in append mode, which predates this change, so a Harbor retry in the same directory would mix two attempts' records.

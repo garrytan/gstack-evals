@@ -35,8 +35,11 @@ def uid():
     return f"u{n}"
 
 
-def assistant(*blocks, parent=None):
-    out({"type": "assistant", "message": {"id": uid(), "type": "message", "role": "assistant", "model": "stub", "content": list(blocks), "stop_reason": None, "usage": {"input_tokens": 1, "output_tokens": 1}}, "parent_tool_use_id": parent, "session_id": "s", "uuid": uid()})
+def assistant(*blocks, parent=None, keyless=False):
+    frame = {"type": "assistant", "message": {"id": uid(), "type": "message", "role": "assistant", "model": "stub", "content": list(blocks), "stop_reason": None, "usage": {"input_tokens": 1, "output_tokens": 1}}, "parent_tool_use_id": parent, "session_id": "s", "uuid": uid()}
+    if keyless:
+        del frame["parent_tool_use_id"]
+    out(frame)
 
 
 def text(t, parent=None):
@@ -233,7 +236,8 @@ elif SCENARIO == "max_turns":
 elif SCENARIO == "g_turns":
     # G's registry turns. Each turn the main session starts one Agent subagent, whose message carries the
     # Agent call's id as parent_tool_use_id, then reports. A /plan-eng-review turn also leaves the marks that skill's
-    # exposure detector reads: from the main session, or with STUB_G_FROM=subagent from inside the subagent. An /autoplan
+    # exposure detector reads: from the main session, or with STUB_G_FROM=subagent from inside the subagent. With
+    # STUB_G_KEYLESS set, the subagent's text frame carries no parent_tool_use_id key at all. An /autoplan
     # turn replays the main session's t2 messages of the frozen exposed fixture (tests/outcome-skills/fixtures).
     AUTOPLAN = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../outcome-skills/fixtures/autoplan-exposed.jsonl")
 
@@ -256,7 +260,7 @@ elif SCENARIO == "g_turns":
         inside = os.environ.get("STUB_G_FROM") == "subagent"
         aid = uid()
         assistant({"type": "tool_use", "id": aid, "name": "Agent", "input": {"description": "Survey", "prompt": "List the source files."}})
-        text("src/app.js holds add.", aid)
+        assistant({"type": "text", "text": "src/app.js holds add."}, parent=aid, keyless=bool(os.environ.get("STUB_G_KEYLESS")))
         if review and inside:
             plan_eng_review_marks(aid)
         out({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": aid, "content": "src/app.js holds add.", "is_error": False}]}, "parent_tool_use_id": None, "session_id": "s", "uuid": uid()})

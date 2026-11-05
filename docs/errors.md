@@ -893,9 +893,9 @@ Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing
 
 ### E_REAL_SANDBOX_SETUP
 
-The real-outcome ship sandbox could not start or could not open a trial: git (with http-backend) or jq is missing, the sidecar could not listen, the task's bundle does not hold the base commit, the base tree holds project-local Claude Code configuration (a .claude/ directory or .mcp.json, which would give the none arm a skill, plugin or MCP route), or the in-container prep failed. For an outcome-skills registry arm (family G) it also means the task is K4, which G's registry has no replay turn for, or the task statement is blank after trimming. No model was called for the trial.
+The real-outcome ship sandbox could not start or could not open a trial: git (with http-backend) or jq is missing, the sidecar could not listen, the task's bundle does not hold the base commit, the base tree holds project-local Claude Code configuration (a .claude/ directory or .mcp.json, which would give the none arm a skill, plugin or MCP route), or the in-container prep failed. For an outcome-skills registry arm (family G) it also means the task is K4, which G's registry has no replay turn for, the task statement is blank after trimming, or the arm's turns are not t1 to tn. No model was called for the trial.
 
-Fix: Read the message. Install git and jq on the sidecar's host, or fix the task directory (B2) so its image's base branch is at base_commit. A repository with project-local Claude Code configuration is not eligible for this lane; drop it at mining. For a registry arm, run K4 tasks on a lane arm (lanes/real-outcome/arms/arms.json) or drop them from G's task list, and give a blank task a statement in its instruction file.
+Fix: Read the message. Install git and jq on the sidecar's host, or fix the task directory (B2) so its image's base branch is at base_commit. A repository with project-local Claude Code configuration is not eligible for this lane; drop it at mining. For a registry arm, run K4 tasks on a lane arm (lanes/real-outcome/arms/arms.json) or drop them from G's task list, give a blank task a statement in its instruction file, and give each registry arm the turns lanes/outcome-skills/arms/registry.json writes.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
