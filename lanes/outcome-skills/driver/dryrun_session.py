@@ -4,7 +4,9 @@ real_agent runs on the real pinned claude-agent-sdk 0.2.174 and Harbor f3a5a92 w
 (tests/real-outcome/fixtures/stub_claude.py) and the stand-in docker (fake-docker.sh), as tests/real-outcome/agent_test.py
 runs it; the sandbox sidecar is a real one. The driver's control plane and its proxies are real: nothing replaces Lane
 B's post_json. Only the container lookups and the egress helper are replaced. Usage: python dryrun_session.py '<json>'.
-It prints one JSON line: the error real_agent raised (or null), the stub's log and real-summary.json.
+It prints one JSON line: the error real_agent raised (or null), the stub's log, real-summary.json, the turns event
+real_agent logged and its message records (sdk-messages.jsonl's AssistantMessage and UserMessage lines), which the
+exposure detectors read. drop_parent plants a recorder that loses parent_tool_use_id, for the dry run's u8-parent seed.
 """
 
 import asyncio
@@ -70,20 +72,26 @@ def main():
     agent._sidecar = lambda path, body, timeout=120: sidecar(path, {**body, "config_dir": str(d / "etc"), "bin_dir": str(bindir), "node": a["node"]} if path == "/trials" else body, timeout)
     egress.apply = lambda container, allow: {"event": "egress", "allow": allow}
     egress.probe = lambda exec_fn, container, allow, node: {"event": "egress_probe"}
+    if a.get("drop_parent"):
+        record = ra.message_record
+        ra.message_record = lambda message, t: {k: v for k, v in record(message, t).items() if k != "parent_tool_use_id"}
     os.environ.update(env)
     error = None
     try:
-        asyncio.run(agent.run("Add a mul function to src/app.js.", types.SimpleNamespace(session_id="dryrun-" + d.name), types.SimpleNamespace()))
+        asyncio.run(agent.run(a["statement"], types.SimpleNamespace(session_id="dryrun-" + d.name), types.SimpleNamespace()))
     except BaseException as e:
         error = {"type": type(e).__name__, "message": str(e)[:600]}
     evdir = d / "trial/evaluator"
     summary = evdir / "real-summary.json"
-    events = evdir / "usersim-events.jsonl"
+    events = [json.loads(line) for line in (evdir / "usersim-events.jsonl").read_text().splitlines()] if (evdir / "usersim-events.jsonl").exists() else []
+    messages = evdir / "sdk-messages.jsonl"
     print(json.dumps({
         "error": error,
         "stub": [json.loads(line) for line in stub_log.read_text().splitlines()] if stub_log.exists() else [],
         "summary": json.loads(summary.read_text()) if summary.exists() else None,
-        "events": [json.loads(line).get("event") for line in events.read_text().splitlines()] if events.exists() else [],
+        "events": [e.get("event") for e in events],
+        "turns": next((e for e in events if e.get("event") == "turns"), None),
+        "records": [r for r in map(json.loads, messages.read_text().splitlines()) if r["type"] in ("AssistantMessage", "UserMessage")] if messages.exists() else [],
     }))
 
 

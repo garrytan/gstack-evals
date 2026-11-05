@@ -6,6 +6,7 @@ agent itself on the real SDK. Run by agent-units.test.ts with python3.
 import json
 import sys
 import tempfile
+import time
 import traceback
 import types
 from pathlib import Path
@@ -33,6 +34,9 @@ except ImportError:
 
     module("claude_agent_sdk", ClaudeAgentOptions=lambda **k: k, ClaudeSDKClient=object, query=None)
     module("claude_agent_sdk.types", HookMatcher=lambda **k: k, PermissionResultAllow=lambda **k: k, TERMINAL_TASK_STATUSES=frozenset({"completed", "failed", "stopped", "killed"}))
+    sys.modules["claude_agent_sdk"]._internal = module("claude_agent_sdk._internal")
+    sys.modules["claude_agent_sdk._internal"].message_parser = module("claude_agent_sdk._internal.message_parser", parse_message=lambda data: None)
+    sys.modules["claude_agent_sdk._internal"].client = module("claude_agent_sdk._internal.client", parse_message=lambda data: None)
     for name in ("harbor", "harbor.agents", "harbor.agents.installed", "harbor.environments", "harbor.environments.docker", "harbor.models", "harbor.models.agent"):
         module(name)
     module("harbor.agents.installed.claude_code", ClaudeCode=StubClaudeCode, ClaudeCodeOptions=StubOptions)
@@ -51,6 +55,9 @@ from ship_user import ShipUser  # noqa: E402
 
 PERSONA = json.loads((ROOT / "lanes/real-outcome/agent/ship-persona.json").read_text())
 ARMS = json.loads((ROOT / "lanes/real-outcome/arms/arms.json").read_text())
+REGISTRY = json.loads((ROOT / "lanes/outcome-skills/arms/registry.json").read_text())
+PLAN_LINE = "Before you write code, draft your plan in PLAN.md. Don't write code yet."
+IMPLEMENT = "Now implement your plan, and make sure it works."
 
 
 def user():
@@ -273,6 +280,90 @@ def test_turn_texts():
     k4 = {"kind": "K4", "replay": {"description": " Adds retries to the client. "}}
     assert ra.phase_texts(k4, ARMS, "none", "ignored") == [("ship", "Adds retries to the client.\n\n" + ship[1])]
     assert ra.phase_texts(k4, ARMS, "gstack", "ignored") == [("ship", "/ship\n\nAdds retries to the client.")]
+
+
+def test_registry_arms_send_g_turns_t1_to_t3():
+    pe = ra.phase_texts({"kind": "K3"}, REGISTRY, "plan-eng-review:told", "Add rate limits.\n")
+    assert pe == [("t1", "Add rate limits.\n\n" + PLAN_LINE), ("t2", "/plan-eng-review PLAN.md"), ("t3", IMPLEMENT)], pe
+    ap = ra.phase_texts({"kind": "K2"}, REGISTRY, "autoplan:told", "Add rate limits.")
+    assert ap == [("t1", "Add rate limits.\n\n" + PLAN_LINE), ("t2", "/autoplan PLAN.md"), ("t3", IMPLEMENT)], ap
+    none = ra.phase_texts({"kind": "K3"}, REGISTRY, "none", "Add rate limits. \t\n")
+    assert none == [("t1", "Add rate limits.\n\nWork in this repository. Implement this, and make sure it works. Don't stop to ask.")], none
+
+
+def test_registry_arms_refuse_a_k4_task_and_an_empty_statement():
+    for task, statement, why in (({"kind": "K4", "replay": {"description": "Adds retries."}}, "x", "K4"), ({"kind": "K3"}, " \n\ufeff\u3000", "empty")):
+        try:
+            ra.phase_texts(task, REGISTRY, "none", statement)
+        except ra.SandboxSetupError as e:
+            assert str(e).startswith("E_REAL_SANDBOX_SETUP") and why in str(e), str(e)
+            continue
+        raise AssertionError(why + " was accepted")
+
+
+def test_registry_arms_refuse_turns_that_are_not_t1_to_tn():
+    for turns in ([], [{"phase": "build", "text": "{statement}"}], [{"phase": "t1", "text": "{statement}"}, {"phase": "t3", "text": "x"}]):
+        arms = {**REGISTRY, "arms": {"none": {**REGISTRY["arms"]["none"], "turns": turns}}}
+        try:
+            ra.phase_texts({"kind": "K3"}, arms, "none", "Add rate limits.")
+        except ra.SandboxSetupError as e:
+            assert str(e).startswith("E_REAL_SANDBOX_SETUP") and "not t1 to tn" in str(e) and "fix:" in str(e), str(e)
+            continue
+        raise AssertionError(f"turns {turns} were accepted")
+
+
+def test_statement_trim_is_linear_in_a_long_whitespace_run():
+    statement = "Add rate limits." + " " * 100_000 + "x" + " \u3000\t\n" * 1000
+    start = time.monotonic()
+    [(phase, text)] = ra.phase_texts({"kind": "K3"}, REGISTRY, "none", statement)
+    assert time.monotonic() - start < 2, time.monotonic() - start
+    assert phase == "t1" and text.startswith("Add rate limits." + " " * 100_000 + "x\n\n"), text[-120:]
+
+
+def test_message_records_leave_out_a_parent_tool_use_id_the_frame_did_not_carry():
+    class AssistantMessage:
+        def __init__(self):
+            self.content, self.model, self.parent_tool_use_id = [], "m", None
+
+    for name in ("claude_agent_sdk._internal.message_parser", "claude_agent_sdk._internal.client"):
+        assert getattr(sys.modules[name].parse_message, ra.KEYLESS, False), name + " still holds the SDK's own parse_message"
+    parse = ra.mark_keyless(lambda data: AssistantMessage())
+    keyless = ra.message_record(parse({"type": "assistant", "message": {}}), 1)
+    assert "parent_tool_use_id" not in keyless, keyless
+    keyed = ra.message_record(parse({"type": "user", "message": {}, "parent_tool_use_id": None}), 1)
+    assert "parent_tool_use_id" in keyed and keyed["parent_tool_use_id"] is None, keyed
+    assert "parent_tool_use_id" in ra.message_record(parse({"type": "stream_event"}), 1)
+    assert ra.mark_keyless(parse) is parse
+
+
+def test_message_records_keep_parent_tool_use_id_where_the_sdk_sets_it():
+    class AssistantMessage:
+        def __init__(self, parent):
+            self.content, self.model, self.parent_tool_use_id = [], "m", parent
+
+    class UserMessage:
+        def __init__(self, parent):
+            self.content, self.parent_tool_use_id = "hi", parent
+
+    class SystemMessage:
+        def __init__(self):
+            self.subtype, self.data = "init", {}
+
+    assert ra.message_record(AssistantMessage("toolu_9"), 1)["parent_tool_use_id"] == "toolu_9"
+    top = ra.message_record(UserMessage(None), 1)
+    assert "parent_tool_use_id" in top and top["parent_tool_use_id"] is None, top
+    assert "parent_tool_use_id" not in ra.message_record(SystemMessage(), 1)
+
+
+def test_registry_turns_count_per_turn_and_never_hold_shipping():
+    u = user()
+    u.per_turn(["t1", "t2", "t3"])
+    for phase in ("t1", "t2", "t3"):
+        u.start(phase)
+        a = u.answer([q("Ready to commit and open a PR?", "Commit now (Recommended)", "Wait"), q("Which name?", "foo", "bar")])
+        assert a == {"Ready to commit and open a PR?": "Commit now (Recommended)", "Which name?": PERSONA["fallback"]}, (phase, a)
+    assert list(u.counts) == ["t1", "t2", "t3"], u.counts
+    assert all(c == {"questions": 2, "recommended": 1, "fallback": 1, "hold": 0, "prose": 0, "prose_unanswered": 0} for c in u.counts.values()), u.counts
 
 
 def test_frozen_env_pattern():
