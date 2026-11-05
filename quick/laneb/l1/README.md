@@ -100,7 +100,7 @@ The probe fixtures `cli-skill-bg.jsonl` and `cli-kill-agent.jsonl` are sanitized
 
 ### Commands
 
-Set `LEDGER` (the item's ledger file, with its approval row at the item's cap), `ARMS` (the folder with `none`, `before`, `after` and `off` tars), `UBI_RUNNER`, `UBI_RUNNER_SHA256`, `UBI_OWNER`, `UBI_RECOVERY_DIR` (on Capy, a private drive folder) and the provider and Ubicloud keys. tb2-opus also needs `TB2_PARTS` and `TB2_PARTS_SHA256` (Amendment C's split and digest).
+Set `LEDGER` (the item's ledger file, with its approval row at the item's cap), `ARMS` (the folder with `none`, `before`, `after` and `off` tars), `UBI_RUNNER` (the vendored `quick/laneb/l1/ubi-runner.sh`), `UBI_RUNNER_SHA256` (`c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2`), `UBI_OWNER`, `UBI_RECOVERY_DIR` (on Capy, a private drive folder) and the provider and Ubicloud keys. tb2-opus also needs `TB2_PARTS` and `TB2_PARTS_SHA256` (Amendment C's split and digest).
 
 ```
 bun quick/laneb/l1/l1.ts prepare <work> --item pilot-opus|f1-opus|tb2-opus
