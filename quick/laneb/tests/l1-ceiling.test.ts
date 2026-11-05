@@ -125,6 +125,7 @@ describe("the ceiling check before a launch", () => {
       { ts: "t", item: "f1-opus", kind: "reserve", id: "f1-p2-s1", usd_micros: 5 * M },
       { ts: "t", item: "f1-opus", kind: "reserve", id: "f1-p2-s2", usd_micros: 5 * M },
     ];
+    // pregate-literal: CREW_LINE_USD=400 a settled session spend in this ledger fixture, not the crew line
     writeFileSync(ledger, [...rows("f1-opus", 680, [400, 255]), ...dead].map((r) => JSON.stringify(r)).join("\n") + "\n");
     const p: Plan = { items: [{ item: "pilot-opus", cap_usd: 80, status: "done" }, { item: "f1-opus", cap_usd: 680, status: "open" }, { item: "tb2-opus", cap_usd: 180, status: "planned" }], leftover: { sol: "refused", particle: "refused" } };
     const all = () => [...rows("pilot-opus", 80, [26.08]), ...readRows(ledger)];
