@@ -221,7 +221,11 @@ const isPlan = (path: string) => path.split("/").pop() === "PLAN.md";
  * read as the shell splits them, so an operator inside quotes is text and a quoted file name is a file; heredoc bodies
  * are skipped, and a /dev/ target does not count. A call whose result carries a tool_use_error never ran. A file named
  * PLAN.md never counts. A command behind a shell keyword (do, then, {) or a wrapper (sudo, env, timeout, xargs) counts,
- * bash -c and sh -c read their script the same way, and sed -i under xargs counts, since its files come from stdin.
+ * bash -c and sh -c read their script the same way, and sed -i under xargs counts, since its files come from stdin. A
+ * wrapper's flag takes the next word only when it takes a value (sudo -u, env -u, timeout -s, xargs -I and the like).
+ * sed's and perl's options read as GNU sed and perl read them: only -e and -f (sed's -l too, perl's -E) take a value,
+ * attached or next; -i's attached suffix ends its cluster; and sed's '' or .bak right after a bare -i, before any
+ * script, is a BSD-style suffix.
  */
 export function t1WritesOutsidePlan(records: Record<string, any>[]): string[] {
   const results = new Map<string, Record<string, any>>();
@@ -243,8 +247,19 @@ export function t1WritesOutsidePlan(records: Record<string, any>[]): string[] {
 }
 
 const KEYWORDS = new Set(["!", "{", "do", "then", "else", "elif", "if", "while", "until"]);
-const WRAPPERS = new Set(["sudo", "env", "xargs", "nohup", "exec", "command", "builtin", "time", "timeout", "nice", "stdbuf"]);
-const WRITERS = new Set(["sed", "perl", "tee", "git", "patch", "bash", "sh"]);
+const WRAPPERS = new Map<string, string[]>([
+  ["sudo", ["-u", "-g", "-C", "-D", "-h", "-p", "-R", "-r", "-t", "-T", "-U", "--user", "--group", "--close-from", "--chdir", "--host", "--prompt", "--chroot", "--role", "--type", "--command-timeout", "--other-user"]],
+  ["env", ["-u", "-C", "-S", "--unset", "--chdir", "--split-string"]],
+  ["xargs", ["-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "--arg-file", "--delimiter", "--eof", "--max-args", "--max-chars", "--max-lines", "--max-procs", "--process-slot-var"]],
+  ["nohup", []],
+  ["exec", ["-a"]],
+  ["command", []],
+  ["builtin", []],
+  ["time", ["-f", "-o", "--format", "--output"]],
+  ["timeout", ["-k", "-s", "--kill-after", "--signal"]],
+  ["nice", ["-n", "--adjustment"]],
+  ["stdbuf", ["-i", "-o", "-e", "--input", "--output", "--error"]],
+]);
 const base = (word?: string) => word?.split("/").pop() ?? "";
 
 function bashWrites(command: string): string[] {
@@ -266,9 +281,10 @@ function bashWrites(command: string): string[] {
     let at = words.findIndex((w) => !/^\w+=/.test(w) && !KEYWORDS.has(w));
     let xargs = false;
     while (at >= 0 && WRAPPERS.has(base(words[at]))) {
+      const valued = WRAPPERS.get(base(words[at]))!;
       xargs ||= base(words[at]) === "xargs";
       do at++;
-      while (at < words.length && (/^-|^\w+=|^\d/.test(words[at]!) || (words[at - 1]!.startsWith("-") && !WRAPPERS.has(base(words[at])) && !WRITERS.has(base(words[at])))));
+      while (at < words.length && (/^-|^\w+=|^\d/.test(words[at]!) || valued.includes(words[at - 1]!)));
     }
     const [cmd, ...args] = at < 0 ? [] : words.slice(at);
     const name = base(cmd);
@@ -279,12 +295,19 @@ function bashWrites(command: string): string[] {
     if ((name === "git" && args[0] === "apply") || name === "patch") found.push(edit);
     if ((name !== "sed" && name !== "perl") || !args.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith("--in-place"))) return;
     const files: string[] = [];
+    const takes = name === "sed" ? "efl" : "eE";
     let script = false;
     for (let j = 0; j < args.length; j++) {
       const a = args[j]!;
-      if (/^-[a-zA-Z]*[eEf]$|^--(?:expression|file)$/.test(a)) {
-        script = true;
-        j++;
+      if (name === "sed" && /^--(?:expression|file|line-length)(?:=|$)/.test(a)) {
+        script ||= !a.startsWith("--line-length");
+        if (!a.includes("=")) j++;
+      } else if (/^-[^-]/.test(a)) {
+        const k = [...a.slice(1)].findIndex((c) => c === "i" || takes.includes(c)) + 1;
+        if (k > 0 && a[k] !== "i") {
+          script ||= a[k] !== "l";
+          if (k === a.length - 1) j++;
+        } else if (name === "sed" && !script && a.endsWith("i") && /^(?:\.|$)/.test(args[j + 1] ?? "-")) j++;
       } else if (!a.startsWith("-")) {
         if (script) files.push(a);
         script = true;
