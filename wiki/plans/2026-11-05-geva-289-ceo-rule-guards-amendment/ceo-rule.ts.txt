@@ -78,7 +78,7 @@ const STATUSES = ["scored", "no-block", "gap", "incomplete"];
 const LABELS = ["D", "R1", "R2", "R3", "none"];
 const callsOk = (ls: unknown) => Array.isArray(ls) && ls.every((c: any) => typeof c === "object" && c !== null && ["sol", "opus", "sonnet"].every((j) => c[j] === null || LABELS.includes(c[j])));
 // The row contract: every row, incomplete ones included, carries these fields with these types.
-const rowFault = (r: Review) => (typeof r.id !== "string" ? "id" : !callsOk(r.labels) ? "labels" : typeof r.leak?.sol !== "boolean" || typeof r.leak?.opus !== "boolean" ? "leak" : !Array.isArray(r.words) || !r.words.every((w) => typeof w === "number") ? "words" : r.status === "scored" && r.labels.length !== Math.min(3, r.words.length) ? "label count" : !(r.exposed === null || typeof r.exposed === "boolean") ? "exposed" : !(r.forecast === null || typeof r.forecast === "number") ? "forecast" : typeof r.usd !== "number" ? "usd" : !(r.wall_s === undefined || r.wall_s === null || typeof r.wall_s === "number") ? "wall_s" : null);
+const rowFault = (r: Review) => (typeof r.id !== "string" ? "id" : !callsOk(r.labels) ? "labels" : typeof r.leak?.sol !== "boolean" || typeof r.leak?.opus !== "boolean" ? "leak" : !Array.isArray(r.words) || !r.words.every((w) => typeof w === "number") ? "words" : r.status === "scored" && !r.smoke && r.labels.length !== Math.min(3, r.words.length) ? "label count" : !(r.exposed === null || typeof r.exposed === "boolean") ? "exposed" : !(r.forecast === null || typeof r.forecast === "number") ? "forecast" : typeof r.usd !== "number" || r.usd < 0 ? "usd" : !(r.wall_s === undefined || r.wall_s === null || (typeof r.wall_s === "number" && r.wall_s >= 0)) ? "wall_s" : null);
 const arrays = (rd: Readings) => { if (!Array.isArray(rd?.units) || !Array.isArray(rd.reviews) || !Array.isArray(rd.stock)) throw new Error("E_USAGE readings must carry units, reviews and stock as arrays"); };
 // Every guard runs before any rule reads a field. passesOf gives each unit's planned passes for a model; smoke is true for
 // stage 1, whose readings carry two smoke sessions per gstack arm and model, on the same two units for every cell.
@@ -149,8 +149,13 @@ function leakDrops(rd: Readings): Set<string> {
   return new Set([...flagged].filter(([, n]) => n >= 2).map(([u]) => u));
 }
 
+// An unjudged stock issue (final label null) counts as a possible D (the amendment's one rule change). unjudged counts the
+// units that reach the count only through one; the note prints only when there is at least one.
 function stockHits(rd: Readings, ids: Set<string>) {
-  return [...ids].filter((u) => rd.stock.filter((s) => s.unit === u).some((s) => top3(s.labels).some((c) => final(c) === "D"))).length;
+  const any = (u: string, f: (l: Label | null) => boolean) => rd.stock.filter((s) => s.unit === u).some((s) => top3(s.labels).some((c) => f(final(c))));
+  const hits = [...ids].filter((u) => any(u, (l) => l === "D" || l === null));
+  const unjudged = hits.filter((u) => !any(u, (l) => l === "D")).length;
+  return { n: hits.length, note: unjudged ? "; " + unjudged + " of them only through an unjudged issue, counted as a possible D" : "" };
 }
 
 function agreement(rd: Readings, units: Set<string>) {
@@ -195,16 +200,16 @@ function headroom(rd: Readings) {
   const read = opus.filter((r) => !out_(r));
   const m = sum(read.map((r) => hit(r))), n = read.length;
   const lo = Math.ceil(BAND.lo * n - 1e-9), hi = Math.floor(BAND.hi * n + 1e-9);
-  const stock = stockHits(rd, ids);
+  const { n: stock, note: stockNote } = stockHits(rd, ids);
   const ag = agreement(rd, new Set(rd.units.filter((u) => !drops.has(u.id)).map((u) => u.id)));
   let verdict: string;
   if (changed.length < 12 || n === 0 || outs / planned > 0.1) verdict = "NO READ (" + (changed.length < 12 ? "fewer than 12 changed units (" + changed.length + ")" : "gaps, unjudged and incomplete " + outs + " of " + planned + " planned Opus none readings, over 10%") + "): stop, FIX-METHOD";
-  else if (stock > 1) verdict = "STOCK FAIL (a stock row hit D on " + stock + " of " + changed.length + " changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief";
+  else if (stock > 1) verdict = "STOCK FAIL (a stock row hit D on " + stock + " of " + changed.length + " changed units" + stockNote + "; at most 1 allowed): stop, FIX-METHOD on the judge brief";
   else if (m / n > BAND.hi) verdict = "CEILING (" + m + " of " + n + " = " + f3(m / n) + " > 0.60): stop";
   else if (m / n < BAND.lo) verdict = "FLOOR (" + m + " of " + n + " = " + f3(m / n) + " < 0.15): stop, FIX-METHOD";
   else verdict = "HEADROOM (" + m + " of " + n + " = " + f3(m / n) + "; band edges at this n: " + lo + " to " + hi + ")";
   say("Opus none hit@3: " + m + " of " + n + " = " + f3(n ? m / n : NaN) + "; gaps, unjudged and incomplete dropped " + outs + "; band edges at n " + n + ": HEADROOM " + lo + " to " + hi);
-  say("Stock rows: hit D on " + stock + " of " + changed.length + " changed units (at most 1)");
+  say("Stock rows: hit D on " + stock + " of " + changed.length + " changed units (at most 1)" + stockNote);
   const rho = icc(read), p0 = n ? m / n : NaN;
   const gp = [0.25, 0.4, 0.55].reduce((a, b) => (Math.abs(b - p0) < Math.abs(a - p0) ? b : a)), gr = Number.isNaN(rho) || rho < 0.4 ? 0.3 : 0.5;
   say("Measured ICC " + f3(rho) + " at p0 " + f3(p0) + "; nearest power.txt row (48 changed units, Holm's first step): p0 " + gp.toFixed(2) + ", ICC " + gr.toFixed(1) + ", MDD " + GRID[gp.toFixed(2) + "/" + gr.toFixed(1)]!.toFixed(2) + " (decides nothing)");
@@ -324,10 +329,10 @@ function compare(rd: Readings) {
   say("Stage 2 comparison (GEVA-285)");
   say("Leak drops: " + drops.size + "; changed units " + nChanged + ", held " + units.filter((u) => u.kind === "held").length + "; MDD at Holm's first step for this n " + (mdd === null ? "n/a (under 36 changed after leak drops: stop)" : mdd.toFixed(2)));
   if (mdd === null) { say("Verdict: STOP, under 36 changed units"); return; }
-  const stock = stockHits(rd, changed);
+  const { n: stock, note: stockNote } = stockHits(rd, changed);
   const judgeSuspect = stock > 3;
   const ag = agreement(rd, new Set(units.map((u) => u.id)));
-  say("Stock rows: hit D on " + stock + " of " + nChanged + " changed units (at most 3)" + (judgeSuspect ? ": STOCK FAIL, every contrast reads untested (judge)" : ""));
+  say("Stock rows: hit D on " + stock + " of " + nChanged + " changed units (at most 3)" + stockNote + (judgeSuspect ? ": STOCK FAIL, every contrast reads untested (judge)" : ""));
   say("Agreement, Sol vs Opus on D: " + agreementLine(ag));
   const live = rd.reviews.filter((r) => !r.smoke && !drops.has(r.unit));
   const key = (r: Review) => r.unit + "#" + r.pass;

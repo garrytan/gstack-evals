@@ -5,7 +5,7 @@ PASS stock-list.txt sha256 dd3a6d40cfbe4832f9a37da0a6c6cc86ce711054354097a475f96
 PASS unit-brief.md sha256 13ce9eaee6218e8359c32966f8efe82722dc605feb94b3253e42381ac9153253
 PASS power.py sha256 a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499
 PASS power.txt sha256 ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f
-PASS ceo-rule.ts sha256 c95335337f20cee4b82e57e5299e3184fc8d694436819eb6eb452a8e69b493ef
+PASS ceo-rule.ts sha256 f9416e2b075e6ad66a8dd4460587be44b909a192f40461f404dedf72c0b76f18
 PASS the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast
 PASS the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative)
 PASS the judge brief reads each issue's first 40 words and judges it on its first problem
@@ -237,6 +237,17 @@ PASS refuse every Opus none row with its D call dropped from labels -> exit 1: E
 PASS   accept twin: the same readings unedited -> exit 0: Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
 PASS refuse the autoplan-ceo Opus smoke rows with wall_s an empty string -> exit 1: E_USAGE readings row breaks the row contract on wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1
 PASS   accept twin: the same rows with wall_s 4000 -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 4000 s, larger session $3.00 -> UNTESTED in stage 2 | Stage 2: does not start; autoplan-ceo failed its smoke on Opus, FIX-METHOD on the harness, to the Captain
+  The scoped fix round: unjudged smoke rows, non-negative usd and wall_s, and unjudged stock issues
+PASS reads honest stage 1 readings: scored smoke rows unjudged, labels [] with three words -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> admitted | Stage 2: may start after the projection and all-in checks; untested arms: none
+PASS refuse the same readings with no words on the c0 autoplan-ceo Opus smoke row -> exit 1: E_USAGE readings row breaks the row contract on words; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS refuse a projection whose stage 1 readings carry the c0 autoplan-ceo Opus smoke row at usd -50 -> exit 1: E_USAGE readings row breaks the row contract on usd; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the same row at usd 0 -> exit 0: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, standalone:particle, autoplan-ceo:particle; held passes 2
+PASS refuse the c0 autoplan-ceo Opus smoke row with wall_s -1 -> exit 1: E_USAGE readings row breaks the row contract on wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: wall_s 0 on the c0 row and missing on the c1 row -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest Infinity s, larger session $3.00 -> UNTESTED in stage 2
+PASS reads stock rows A on c0 and c1 with the D call split (Sol D, Opus none, Sonnet missing), unjudged -> exit 0: Verdict: STOCK FAIL (a stock row hit D on 2 of 16 changed units; 2 of them only through an unjudged issue, counted as a possible D; at most 1 allowed): stop, FIX-METHOD on the judge brief
+PASS   accept twin: the same rows fully judged -> exit 0: Stock rows: hit D on 2 of 16 changed units (at most 1) | Verdict: STOCK FAIL (a stock row hit D on 2 of 16 changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief
+PASS reads stage 2 stock rows A on 4 changed units with an unjudged issue -> exit 0: Stock rows: hit D on 4 of 48 changed units (at most 3); 4 of them only through an unjudged issue, counted as a possible D: STOCK FAIL, every contrast reads untested (judge) | autoplan-ceo - none: 0.708 - 0.354 = +0.354, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 1.000 -> untested (judge: stock rows hit 4), p = 1 in Holm
+PASS reads the same on 3 changed units: the verdicts stand -> exit 0: Stock rows: hit D on 3 of 48 changed units (at most 3); 3 of them only through an unjudged issue, counted as a possible D | autoplan-ceo - none: 0.708 - 0.354 = +0.354, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 1.000 -> helps | standalone - none: 0.375 - 0.354 = +0.021, 95% CI [0.000, 0.063], p 1.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.18)
 
 ## g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation
 A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Run items (one per review-units invocation) open a trial-proof lease at their cap, judge items a direct-proof lease for what is left of their envelope, all with --admission warn. Each item settles at its projected spend. Stage 2's caps here are the planning caps; the real ones come from the projection check.
@@ -312,4 +323,4 @@ PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITE
 ## Leak check
 PASS the transcript prints no home path and no key name's value
 
-PASS 224, FAIL 0
+PASS 234, FAIL 0

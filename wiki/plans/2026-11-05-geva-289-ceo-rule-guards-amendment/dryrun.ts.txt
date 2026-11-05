@@ -445,6 +445,29 @@ await section("f2. Input guards added by the amendment (GST-1407): each refusal 
   const wallOf = (w: unknown) => (d: any) => { for (const r of d.reviews) if (r.smoke && r.arm === "autoplan-ceo" && r.model === "opus") r.wall_s = w; };
   refuse("headroom", "the autoplan-ceo Opus smoke rows with wall_s an empty string", edit(s1(), wallOf("")), CONTRACT + "wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1", SMOKE);
   accept("headroom", "the same rows with wall_s 4000", edit(s1(), wallOf(4000)), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 4000 s/, /^Stage 2: does not start; autoplan-ceo failed its smoke on Opus/]);
+
+  say("  The scoped fix round: unjudged smoke rows, non-negative usd and wall_s, and unjudged stock issues");
+  const reads = (cmd: string, label: string, data: unknown, wants: RegExp[], shows: RegExp) => {
+    const r = runRule(cmd, data, "guard-" + ++gi + "-" + tagOf(label));
+    const found = wants.map((w) => r.stdout.split("\n").find((l) => w.test(l)));
+    const ok = r.status === 0 && found.every((l) => l !== undefined);
+    check("reads " + label + " -> exit " + r.status + ": " + (ok ? found.map((l) => l!.trim()).join(" | ") : r.status === 0 ? "no match; read " + read(r.stdout, shows) : (r.stderr.split("\n").find((l) => l.startsWith("error: ")) ?? "").slice(7)), ok);
+  };
+  const unjudgedSmoke = (d: any) => { for (const r of d.reviews) if (r.smoke && r.status === "scored") r.labels = []; };
+  reads("headroom", "honest stage 1 readings: scored smoke rows unjudged, labels [] with three words", edit(s1(), unjudgedSmoke), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s/, MAY], SMOKE);
+  refuse("headroom", "the same readings with no words on the c0 autoplan-ceo Opus smoke row", edit(s1(), (d) => { unjudgedSmoke(d); delete smokeOf(d, "autoplan-ceo", "opus", "c0").words; }), CONTRACT + "words; first: smoke autoplan-ceo on opus, unit c0, pass 1", SMOKE);
+  refuse("projection", "a projection whose stage 1 readings carry the c0 autoplan-ceo Opus smoke row at usd -50", { ...proj, stage1: edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").usd = -50; }) }, CONTRACT + "usd; first: smoke autoplan-ceo on opus, unit c0, pass 1", /^Projection: /);
+  accept("projection", "the same row at usd 0", { ...proj, stage1: edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").usd = 0; }) }, [/^Projection: PASS at /]);
+  refuse("headroom", "the c0 autoplan-ceo Opus smoke row with wall_s -1", edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").wall_s = -1; }), CONTRACT + "wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1", SMOKE);
+  accept("headroom", "wall_s 0 on the c0 row and missing on the c1 row", edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").wall_s = 0; delete smokeOf(d, "autoplan-ceo", "opus", "c1").wall_s; }), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest Infinity s, .* -> UNTESTED in stage 2$/]);
+  const splitStockA = (units: string[]) => (d: any) => { for (const s of d.stock) if (s.row === "A" && units.includes(s.unit)) s.labels = s.labels.map((c: any) => (c.sol === "D" ? { sol: "D", opus: "none", sonnet: null } : c)); };
+  reads("headroom", "stock rows A on c0 and c1 with the D call split (Sol D, Opus none, Sonnet missing), unjudged", edit(s1({ stockA: 2 }), splitStockA(["c0", "c1"])), [/^Verdict: STOCK FAIL \(a stock row hit D on 2 of 16 changed units; 2 of them only through an unjudged issue, counted as a possible D; at most 1 allowed\)/], HR);
+  accept("headroom", "the same rows fully judged", s1({ stockA: 2 }), [/^Stock rows: hit D on 2 of 16 changed units \(at most 1\)$/, /^Verdict: STOCK FAIL \(a stock row hit D on 2 of 16 changed units; at most 1 allowed\)/]);
+  const unjudgedStock = (k: number) => (d: any) => { for (const s of d.stock.filter((s: any) => s.row === "A").slice(0, k)) s.labels[0] = { sol: "D", opus: "none", sonnet: null }; };
+  reads("compare", "stage 2 stock rows A on 4 changed units with an unjudged issue", edit(s2(), unjudgedStock(4)), [/^Stock rows: hit D on 4 of 48 changed units \(at most 3\); 4 of them only through an unjudged issue, counted as a possible D: STOCK FAIL, every contrast reads untested \(judge\)$/, /^  autoplan-ceo - none: .*-> untested \(judge: stock rows hit 4\), p = 1 in Holm$/], /^Stock rows: |^  autoplan-ceo - none: /);
+  const esc = (l: string) => new RegExp("^" + l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$");
+  const standing = runRule("compare", s2(), "guard-stock3-base").stdout.split("\n").filter((l) => /^  (autoplan-ceo|standalone) - none: /.test(l));
+  reads("compare", "the same on 3 changed units: the verdicts stand", edit(s2(), unjudgedStock(3)), [/^Stock rows: hit D on 3 of 48 changed units \(at most 3\); 3 of them only through an unjudged issue, counted as a possible D$/, ...standing.map(esc)], /^Stock rows: /);
 });
 
 await section("g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation", async () => {

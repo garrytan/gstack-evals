@@ -237,6 +237,17 @@ FAIL refuse every Opus none row with its D call dropped from labels -> exit 0: n
 PASS   accept twin: the same readings unedited -> exit 0: Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
 FAIL refuse the autoplan-ceo Opus smoke rows with wall_s an empty string -> exit 0: no refusal; read Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 0 s, larger session $3.00 -> admitted | Stage 2: may start after the projection and all-in checks; untested arms: none
 PASS   accept twin: the same rows with wall_s 4000 -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 4000 s, larger session $3.00 -> UNTESTED in stage 2 | Stage 2: does not start; autoplan-ceo failed its smoke on Opus, FIX-METHOD on the harness, to the Captain
+  The scoped fix round: unjudged smoke rows, non-negative usd and wall_s, and unjudged stock issues
+PASS reads honest stage 1 readings: scored smoke rows unjudged, labels [] with three words -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> admitted | Stage 2: may start after the projection and all-in checks; untested arms: none
+FAIL refuse the same readings with no words on the c0 autoplan-ceo Opus smoke row -> exit 0: no refusal; read Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> admitted | Stage 2: may start after the projection and all-in checks; untested arms: none
+FAIL refuse a projection whose stage 1 readings carry the c0 autoplan-ceo Opus smoke row at usd -50 -> exit 0: no refusal; read Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, standalone:particle, autoplan-ceo:particle; held passes 2
+PASS   accept twin: the same row at usd 0 -> exit 0: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, standalone:particle, autoplan-ceo:particle; held passes 2
+FAIL refuse the c0 autoplan-ceo Opus smoke row with wall_s -1 -> exit 0: no refusal; read Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> admitted | Stage 2: may start after the projection and all-in checks; untested arms: none
+PASS   accept twin: wall_s 0 on the c0 row and missing on the c1 row -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest Infinity s, larger session $3.00 -> UNTESTED in stage 2
+FAIL reads stock rows A on c0 and c1 with the D call split (Sol D, Opus none, Sonnet missing), unjudged -> exit 0: no match; read Verdict: HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28) | Stage 2: may start after the projection and all-in checks; untested arms: none
+PASS   accept twin: the same rows fully judged -> exit 0: Stock rows: hit D on 2 of 16 changed units (at most 1) | Verdict: STOCK FAIL (a stock row hit D on 2 of 16 changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief
+FAIL reads stage 2 stock rows A on 4 changed units with an unjudged issue -> exit 0: no match; read Stock rows: hit D on 0 of 48 changed units (at most 3) | autoplan-ceo - none: 0.708 - 0.354 = +0.354, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 1.000 -> helps
+FAIL reads the same on 3 changed units: the verdicts stand -> exit 0: no match; read Stock rows: hit D on 0 of 48 changed units (at most 3)
 
 ## g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation
 A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Run items (one per review-units invocation) open a trial-proof lease at their cap, judge items a direct-proof lease for what is left of their envelope, all with --admission warn. Each item settles at its projected spend. Stage 2's caps here are the planning caps; the real ones come from the projection check.
@@ -312,4 +323,4 @@ PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITE
 ## Leak check
 PASS the transcript prints no home path and no key name's value
 
-PASS 187, FAIL 37
+PASS 191, FAIL 43
