@@ -113,7 +113,7 @@ None new: no new dependency, licence or data source. The change reuses the rig's
 
 ## As built
 
-The code follows the plan above, with these changes from the /ship review's one fix round.
+The code follows the plan above, with these changes found while building it and in the /ship review's one fix round.
 
 - **A frame without the key fails closed.** At the pinned SDK 0.2.174, parse_message reads an assistant or user frame that has no parent_tool_use_id key as None, and the detectors would count that as the session's own words. real_agent now wraps parse_message at the SDK's two call sites and leaves the key out of such a frame's record, so exposure.ts refuses the transcript. The pinned Claude Code writes the key on every path the review read, so no reading changes there. With this, big decision 2 and the first risk in section 7 hold at the pin.
 - **A registry arm's turns must be t1 to tn.** Any other list, an empty one included, is refused with E_REAL_SANDBOX_SETUP before the sandbox opens, so no registry turn can be named build and turn on the ship hold.
