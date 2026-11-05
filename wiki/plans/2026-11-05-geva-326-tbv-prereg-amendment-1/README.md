@@ -45,7 +45,7 @@ Source A counts up to two sessions per task, as section 4 allows. The ceiling ch
 - **Task directories.** The drive holds the directories of 78 of the 200 source A tasks, and each matches its recorded digest. B1 rebuilds the other 120 from the pinned public export through the repo's materializer, and keeps a session only when the rebuilt directory matches its digest.
 - **Preamble delivery.** Told sessions read sections/preamble.md before their final report in 281 of 459: Opus 51 of 229 (0.22), Sol 230 of 230. The rate prints beside skill-layer verdicts as section 3 says.
 - **/review.** The review-lane bundles hold no session logs with R3 provenance, so /review does not join (section 1).
-- **Source B's weekly rate.** The repo is 8.3 days old, so the last four weeks hold 8.3 days. In them 52 merged pull requests sorted non-clean within the limit: 36 in the last 7 days (30 clusters) and 16 in the 1.3 days before, about 44 a week. At that pace 50 accrue in about 10 days, inside section 2's 21-day window. Only 10 of the 52 carry three or more extractor flags, and a task needs three facts after the audits, so fewer may qualify (section 2, rule 3).
+- **Source B's weekly rate.** The repo is 8.3 days old, so the last four weeks hold 8.3 days. In them 52 merged pull requests sorted non-clean within the limit: 36 in the last 7 days (30 clusters) and 16 in the 1.3 days before, about 44 a week. At that pace 50 accrue in about 8 days, inside section 2's 21-day window. Only 10 of the 52 carry three or more extractor flags, and a task needs three facts after the audits, so fewer may qualify (section 2, rule 3).
 
 ## 2. Held-out source B comes only from after P (item 7)
 
