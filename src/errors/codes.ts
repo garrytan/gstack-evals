@@ -902,6 +902,12 @@ export const CODES = {
     fix: "Repair the task's setup, prompt or check, or drop it, and commit a relock.",
     owner: "U6",
   },
+  JUDGE_REPLY_REFUSED: {
+    exit: null,
+    meaning: "A noloss judge-run --ceo reply broke the prereg's section 8 failure rule: no block, a line that is not JSON, a review the packet doesn't hold, a review answered twice, or a list of the wrong length. It gets one retry in a fresh request; a second refusal leaves the packet missing with the cause in replies.json.",
+    fix: "Nothing to do for one refusal. For a packet left missing, read its raw replies under raw/ in the judge run's --out.",
+    owner: "U13",
+  },
   REPLY_MISALIGNED: {
     exit: null,
     meaning: "A scripted reply matched a question ambiguously and got a non-approving answer, or after's question sequence differed from before's.",

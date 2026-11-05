@@ -1,0 +1,780 @@
+#!/usr/bin/env bun
+// dryrun.ts: keyless dry run of the CEO outcome eval's preregistration (GEVA-285), as amended by
+// 2026-11-05-geva-289-ceo-rule-guards-amendment, 2026-11-05-geva-295-ceo-ladder-amendment and
+// 2026-11-05-geva-300-ceo-stop-label-amendment (two stop labels in section f3, each with its own check). It drives every frozen rule
+// in ceo-rule.ts on synthetic readings, drives each input guard on its repro and on its accept twin (sections f2 and f3),
+// and opens and settles one ledger lease per frozen item on a temporary ledger.
+// Every unit, review, label and cost here is synthetic. No model is called and no key is in the environment.
+// Run from a directory holding the preregistration's bundle files with the guard amendment's files, the ladder
+// amendment's files and then the stop label amendment's files copied over them, and ceo-rule.ts.txt and dryrun.ts.txt
+// renamed to drop .txt:
+//   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun dryrun.ts <scorer checkout> <scratch dir>
+// It writes dryrun.txt beside itself.
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const [scorer, OUT] = process.argv.slice(2).map((p) => resolve(p)) as [string, string];
+const HERE = import.meta.dir;
+const HOME = process.env.HOME ?? "";
+const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) as Record<string, string>;
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
+const lines: string[] = [];
+let pass = 0, fail = 0;
+const scrub = (t: string) => t.replaceAll(OUT, "$OUT").replaceAll(scorer, "$SCORER").replaceAll(HERE, "$BUNDLE").replaceAll(HOME, "~");
+const say = (t: string) => lines.push(scrub(t));
+const check = (label: string, ok: boolean) => { ok ? pass++ : fail++; say((ok ? "PASS " : "FAIL ") + label); };
+const section = async (title: string, fn: () => Promise<void> | void) => {
+  say("\n## " + title);
+  try { await fn(); } catch (e) { check(title + ": ran to the end (threw " + (e instanceof Error ? e.message.split("\n")[0] : String(e)) + ")", false); }
+};
+// fill() adds the ladder amendment's row fields to any fixture row or call that lacks them, so the guard amendment's cases
+// read as before: a scored row's issues follow its words (each cut to 40 words), a row that isn't scored carries no issues
+// and no words, and a call on a keyed unit carries rem following its own D call (stock calls: no), null on any other unit.
+// Each row's fixes follow its issues the same way, with fix_words equal to its words.
+// A case that tests a missing field fills first, deletes the field and runs raw.
+const wordsOf = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Array(Math.min(40, n)).fill("word").join(" ") : "");
+const remOf = (c: any, stock: boolean) => Object.fromEntries(["sol", "opus", "sonnet"].map((j) => [j, c[j] === null || c[j] === undefined ? null : !stock && c[j] === "D"]));
+function fill(d: any): any {
+  if (d?.stage1) { fill(d.stage1); return d; }
+  if (!Array.isArray(d?.units)) return d;
+  const keyed = new Map(d.units.map((u: any) => [u.id, u.remedy === true]));
+  const calls = (ls: any, stock: boolean, unit: string) => { if (Array.isArray(ls)) for (const c of ls) if (c && typeof c === "object" && !("rem" in c)) c.rem = keyed.get(unit) ? remOf(c, stock) : null; };
+  for (const r of Array.isArray(d.reviews) ? d.reviews : []) {
+    if (!("issues" in r)) { if (r.status === "scored") r.issues = Array.isArray(r.words) ? r.words.map(wordsOf) : []; else { r.issues = []; if (Array.isArray(r.words)) r.words = []; } }
+    if (!("fixes" in r)) { r.fix_words = Array.isArray(r.words) ? [...r.words] : []; r.fixes = r.fix_words.map(wordsOf); }
+    calls(r.labels, false, r.unit);
+  }
+  for (const s of Array.isArray(d.stock) ? d.stock : []) calls(s.labels, true, s.unit);
+  return d;
+}
+// compare reads the projection output beside the readings. Unless a case gives its own, projText writes the PASS and
+// Primary lines the readings' own family, passes, held passes and lens imply, and runRule passes its sha256.
+function projText(d: any, primary = "hit@3 (stage 1 HEADROOM); G_R form rem") {
+  const fam = d?.family ?? {}, passes = d?.passes ?? {}, lens = d?.lens === true;
+  const cells = ["opus", "sol", "particle"].flatMap((m) => ["none:" + m, ...(Array.isArray(fam[m]) ? fam[m] : []).filter((a: string) => a !== "lens").map((a: string) => a + ":" + m), ...(m === "opus" && lens ? ["lens:opus"] : [])]);
+  const one = ["sol", "particle"].filter((m) => passes[m] === 1);
+  const label = one.length ? "Sol and particle-1 cells at 1 pass" : !lens ? "lens dropped" : d?.held_passes === 1 ? "held units at 1 pass" : "as planned";
+  return "Stage 2 projection check (synthetic)\nPrimary: " + primary + "\nProjection: PASS at '" + label + "'; record these caps; cells: " + cells.join(", ") + "; held passes " + (d?.held_passes === 1 ? 1 : 2) + (one.length ? "; 1 pass on " + one.join(", ") : "") + "\n";
+}
+type Opt = { raw?: boolean; proj?: string | null; sha?: string; primary?: string };
+const runRule = (cmd: string, data: unknown, tag: string, o: Opt = {}) => {
+  const f = join(OUT, tag + ".json");
+  const d = o.raw ? data : fill(structuredClone(data));
+  writeFileSync(f, JSON.stringify(d).replaceAll('"__1e999__"', "1e999"));
+  const args = [join(HERE, "ceo-rule.ts"), cmd, f];
+  if (cmd === "compare" && o.proj !== null) {
+    const text = o.proj ?? projText(d, o.primary);
+    writeFileSync(join(OUT, tag + ".projection.txt"), text);
+    args.push(join(OUT, tag + ".projection.txt"), o.sha ?? createHash("sha256").update(text).digest("hex"));
+  }
+  return spawnSync("bun", args, { encoding: "utf8", env: { ...KEYLESS, GSTACK_EVALS_SCORER: scorer }, maxBuffer: 1 << 26 });
+};
+const refusal = (cmd: string, data: unknown, tag: string) => {
+  const r = runRule(cmd, data, tag);
+  return { status: r.status, msg: (r.stderr.split("\n").find((l) => l.startsWith("error: ")) ?? "").slice(7) };
+};
+const rule = (cmd: string, data: unknown, tag: string) => {
+  const r = runRule(cmd, data, tag);
+  if (r.status !== 0) throw new Error("ceo-rule.ts " + cmd + " exited " + r.status + ": " + r.stderr.trim().split("\n").slice(-2).join(" "));
+  return r.stdout;
+};
+const PLAN = "E_USAGE readings must carry one row per planned session";
+const verdictOf = (o: string) => (o.split("\n").find((l) => l.startsWith("Verdict: ")) ?? "").slice(9);
+const show = (o: string, keep: RegExp) => { for (const l of o.split("\n").filter((l) => keep.test(l))) say("    " + l); };
+const tagOf = (s: string) => s.slice(0, 48).replace(/[^a-z0-9]+/gi, "-");
+
+type Label = "D" | "R1" | "R2" | "R3" | "none";
+const agree = (l: Label) => ({ sol: l, opus: l, sonnet: l });
+const missLabels = () => [agree("none"), agree("R1"), agree("none")];
+const hitLabels = (rank = 1) => [0, 1, 2].map((i) => agree(i === rank - 1 ? "D" : "none"));
+const PLANNED: Record<string, Record<string, number>> = { opus: { none: 0.25, "autoplan-ceo": 3, standalone: 0.7, lens: 0.3 }, sol: { none: 0.15, "autoplan-ceo": 1.8, standalone: 0.42 }, particle: { none: 0.06, "autoplan-ceo": 0.33, standalone: 0.15 } };
+const POSTED = ["2026-07-20", "2026-09-12", "2026-10-03", "2026-08-02"];
+const CATS = ["scope", "premise or demand", "user impact or migration", "direction or strategy fit"];
+let rid = 0;
+const review = (unit: string, arm: string, model: string, passNo: number, isHit: boolean, extra: Record<string, unknown> = {}) => ({ id: "r" + ++rid, unit, arm, model, pass: passNo, status: "scored", exposed: arm === "none" || arm === "lens" ? null : true, labels: isHit ? hitLabels(1 + (rid % 3)) : missLabels(), words: [28, 35, 41], leak: { sol: false, opus: false }, forecast: isHit ? 30 : 70, usd: PLANNED[model]![arm]!, ...extra });
+const KINDS = ["scope", "alternative", "approach", "not_build"];
+// Changed unit ci is keyed unless i % 4 is 3 (a fixture may choose), with a remedy kind, decoy R1 on even units and the
+// second-order flag on every fifth; held units carry false, null, null and false.
+const unitsOf = (nc: number, nh: number, keyed: (i: number) => boolean = (i) => i % 4 !== 3): any[] => [...Array(nc)].map((_, i) => ({ id: "c" + i, kind: "changed", strict: POSTED[i % 4], category: CATS[i % 4], role: i % 3 === 0 ? "maintainer" : "outside", remedy: keyed(i), remedy_kind: keyed(i) ? KINDS[Math.floor(i / 4) % 4] : null, decoy: i % 2 === 0 ? "R1" : null, second_order: i % 5 === 0 })).concat([...Array(nh)].map((_, i) => ({ id: "h" + i, kind: "held", strict: "2026-07-10", category: "held", role: "outside", remedy: false, remedy_kind: null, decoy: null, second_order: false })));
+const remAll = (b: boolean | null) => ({ sol: b, opus: b, sonnet: b });
+const stockOf = (units: any[], hitA: (i: number) => boolean, hitB: (i: number) => boolean): any[] => units.filter((u) => u.kind === "changed").flatMap((u, i) => [{ unit: u.id, row: "A", labels: hitA(i) ? hitLabels(2) : missLabels() }, { unit: u.id, row: "B", labels: hitB(i) ? hitLabels(3) : missLabels() }]);
+
+// Stage 1: 16 changed + 4 held calibration units; Opus none 3 passes, Sol and particle-1 none 2 passes; smoke: 2 sessions
+// per gstack arm per model on c0 and c1.
+// Opus none's hits are at rank 1 unless ranks is mixed or rank1 sets how many hits, in reading order, are at rank 1 (the
+// rest at rank 2). remYes gives rem yes to the first keyed hits and no to the rest; remNull makes the D call's rem
+// unjudged on the readings it names and remYesAt makes it yes there; solOnlyRem gives Sol alone a rem yes on that many cells of misses on keyed units;
+// stockRem and stockRemUnjudged set the first stock issue of row A's rem; splitRem turns the first miss on a keyed unit into
+// a split D at rank 1 with a split rem.
+type S1 = { ranks?: "mixed"; rank1?: number; keyed?: (i: number) => boolean; remYes?: number; remNull?: number[]; remYesAt?: number[]; solOnlyRem?: number; stockRem?: string[]; stockRemUnjudged?: string[]; splitRem?: boolean; m: number; incomplete?: number; stockA?: number; stockB?: number; stockSame?: boolean; leakUnits?: number; gaps?: number; smokeFail?: string[]; smokeSlow?: string[]; smokeNoBlock?: string[]; splitDecides?: boolean; judgeFail?: boolean; lowAgree?: boolean; smokeUsd?: Record<string, [number, number]>; noneUsd?: Record<string, number> };
+function stage1(o: S1) {
+  rid = 0;
+  const units = unitsOf(16, 4, o.keyed);
+  const isKeyed = (u: string) => units.find((x) => x.id === u)!.remedy;
+  const reviews: any[] = [], opusNone: any[] = [];
+  const usdNone = (m: string) => ({ usd: o.noneUsd?.[m] ?? PLANNED[m]!.none! });
+  let k = 0;
+  for (let p = 1; p <= 3; p++) for (let i = 0; i < 16; i++) { const r: any = review("c" + i, "none", "opus", p, k < o.m, usdNone("opus")); if (k < o.m && o.ranks !== "mixed") r.labels = hitLabels(o.rank1 === undefined || k < o.rank1 ? 1 : 2); opusNone.push(r); if (k >= 48 - (o.gaps ?? 0)) { r.status = "gap"; r.labels = []; } if (k >= 48 - (o.incomplete ?? 0)) { r.status = "incomplete"; r.labels = []; r.forecast = null; r.usd = 0; } reviews.push(r); k++; }
+  const misses = () => reviews.filter((r) => r.status === "scored" && r.labels[0]?.sol === "none" && r.labels[1]?.sol === "R1");
+  if (o.splitDecides) {
+    const [r0, r1, r2] = misses();
+    r0.labels = [{ sol: "D", opus: "none", sonnet: "D" }, agree("none"), agree("none")];
+    r1.labels = [{ sol: "D", opus: "none", sonnet: "none" }, agree("none"), agree("none")];
+    r2.labels = [{ sol: "R1", opus: "none", sonnet: "D" }, agree("none"), agree("none")];
+  }
+  if (o.judgeFail) {
+    const [r0, r1] = misses();
+    r0.labels = [{ sol: null, opus: "D", sonnet: "D" }, agree("none"), agree("none")];
+    r1.labels = [{ sol: null, opus: "D", sonnet: "none" }, agree("none"), agree("none")];
+  }
+  for (let i = 0; i < 4; i++) for (let p = 1; p <= 3; p++) reviews.push(review("h" + i, "none", "opus", p, false, usdNone("opus")));
+  for (const model of ["sol", "particle"]) for (let p = 1; p <= 2; p++) for (const u of units) reviews.push(review(u.id, "none", model, p, u.kind === "changed" && Number(u.id.slice(1)) % 2 === 0, usdNone(model)));
+  if (o.lowAgree) for (const r of reviews) if (r.status === "scored" && r.labels[0]?.sol === "none" && r.labels[1]?.sol === "R1") r.labels[0] = { sol: "D", opus: "none", sonnet: "none" };
+  if (o.remYes !== undefined) { let n = 0; for (const r of opusNone) if (r.status === "scored" && isKeyed(r.unit) && r.labels.some((c: any) => c.sol === "D")) for (const c of r.labels) c.rem = remAll(c.sol === "D" ? n++ < o.remYes : false); }
+  for (const k of o.remNull ?? []) opusNone[k].labels.find((c: any) => c.sol === "D").rem = { sol: true, opus: false, sonnet: null };
+  for (const k of o.remYesAt ?? []) opusNone[k].labels.find((c: any) => c.sol === "D").rem = remAll(true);
+  if (o.splitRem) { const r = opusNone.find((r) => r.status === "scored" && isKeyed(r.unit) && !r.labels.some((c: any) => c.sol === "D")); r.labels = [{ sol: "D", opus: "none", sonnet: "D", rem: { sol: true, opus: false, sonnet: true } }, agree("none"), agree("none")]; }
+  if (o.solOnlyRem) { let n = 0; for (const r of reviews) if (r.arm === "none" && r.status === "scored" && isKeyed(r.unit) && !r.labels.some((c: any) => c.sol === "D")) for (const c of r.labels) if (n < o.solOnlyRem) { c.rem = { sol: true, opus: false, sonnet: false }; n++; } }
+  for (let l = 0; l < (o.leakUnits ?? 0); l++) for (const r of reviews.filter((r) => r.unit === "c" + (15 - l)).slice(0, 2)) r.leak = { sol: true, opus: true };
+  for (const model of ["opus", "sol", "particle"]) for (const arm of ["autoplan-ceo", "standalone"]) ["c0", "c1"].forEach((u, i) => {
+    const key = arm + ":" + model;
+    const usd = (o.smokeUsd?.[key] ?? [0.85 * PLANNED[model]![arm]!, PLANNED[model]![arm]!])[i];
+    const nb = (o.smokeNoBlock ?? []).includes(key) && i === 1;
+    reviews.push(review(u, arm, model, 1, false, { smoke: true, exposed: !(o.smokeFail ?? []).includes(key), status: nb ? "no-block" : "scored", labels: [], wall_s: (o.smokeSlow ?? []).includes(key) && i === 0 ? 2400 : 900, usd }));
+  });
+  const stock = stockOf(units, (i) => i < (o.stockA ?? 0) || (!!o.stockSame && i === 0), (i) => (i >= 8 && i < 8 + (o.stockB ?? 0)) || (!!o.stockSame && i === 0));
+  for (const u of o.stockRem ?? []) stock.find((s) => s.unit === u && s.row === "A")!.labels[0]!.rem = remAll(true);
+  for (const u of o.stockRemUnjudged ?? []) stock.find((s) => s.unit === u && s.row === "A")!.labels[0]!.rem = { sol: true, opus: false, sonnet: null };
+  return { stage: 1, units, reviews, stock };
+}
+
+// Stage 2: changed + 16 held units, 2 passes (held units at min(passes, heldPasses)). hits[model][arm] is the number of
+// changed units hit in both passes. lens is true when the fixture runs lens on Opus, unless the case sets it.
+// remNull makes the D call's rem unjudged on the first pass of an arm's first hit units that are keyed; stockRem gives the
+// first stock issue of row A a rem yes on the first keyed changed units.
+type S2 = { remNull?: Record<string, number>; stockRem?: number; hits: Record<string, Record<string, number>>; passes?: Record<string, number>; heldPasses?: number; lens?: boolean; exposure?: Record<string, number>; gapUnits?: Record<string, number>; incomplete?: Record<string, number>; noBlock?: Record<string, number>; unjudged?: Record<string, number>; nullForecast?: Record<string, number>; changed?: number; skip?: string[]; family?: Record<string, string[]>; stockB?: number };
+function stage2(o: S2) {
+  rid = 0;
+  const nc = o.changed ?? 48;
+  const units = unitsOf(nc, 16);
+  const reviews: any[] = [];
+  for (const [model, arms] of Object.entries(o.hits)) for (const [arm, h] of Object.entries(arms)) {
+    const key = arm + ":" + model;
+    if ((o.skip ?? []).includes(key)) continue;
+    const exp = o.exposure?.[key] ?? 1;
+    let n = 0, nulls = o.remNull?.[key] ?? 0;
+    for (const u of units) for (let p = 1; p <= (u.kind === "changed" ? (o.passes?.[model] ?? 2) : Math.min(o.passes?.[model] ?? 2, o.heldPasses ?? 2)); p++) {
+      const idx = Number(u.id.slice(1)), ch = u.kind === "changed";
+      const r: any = review(u.id, arm, model, p, ch && idx < h, { forecast: ch ? 25 : 80 });
+      if (arm !== "none" && arm !== "lens") r.exposed = ch ? n++ < Math.round(exp * nc * 2) : true;
+      if (ch && idx >= nc - (o.gapUnits?.[key] ?? 0)) { r.status = "gap"; r.labels = []; r.forecast = null; }
+      if (ch && idx >= nc - (o.incomplete?.[key] ?? 0)) { r.status = "incomplete"; r.labels = []; r.forecast = null; r.usd = 0; r.exposed = null; }
+      if (ch && idx < (o.noBlock?.[key] ?? 0)) { r.status = "no-block"; r.labels = []; r.forecast = null; }
+      if (ch && p === 1 && idx >= h && idx < h + (o.unjudged?.[key] ?? 0)) r.labels[0] = { sol: null, opus: "D", sonnet: "none" };
+      if (ch && idx < (o.nullForecast?.[key] ?? 0)) r.forecast = null;
+      if (ch && p === 1 && idx < h && u.remedy && nulls > 0 && r.status === "scored") { nulls--; r.labels.find((c: any) => c.sol === "D").rem = { sol: true, opus: false, sonnet: null }; }
+      reviews.push(r);
+    }
+  }
+  const stock = stockOf(units, () => false, (i) => i < (o.stockB ?? 0));
+  for (const u of units.filter((u) => u.kind === "changed" && u.remedy).slice(0, o.stockRem ?? 0)) stock.find((s) => s.unit === u.id && s.row === "A")!.labels[0]!.rem = remAll(true);
+  return { stage: 2, units, reviews, stock, ...(o.family ? { family: o.family } : {}), passes: Object.fromEntries(["opus", "sol", "particle"].map((m) => [m, o.passes?.[m] ?? 2])), held_passes: o.heldPasses ?? 2, lens: o.lens ?? ("lens" in (o.hits.opus ?? {}) && !(o.skip ?? []).includes("lens:opus")) };
+}
+
+await section("a. Frozen files", () => {
+  for (const f of ["template.txt", "judge-brief.md", "stock-list.txt", "unit-brief.md", "power.py", "power.txt", "power-gr.py", "power-gr.txt", "ceo-rule.ts"]) {
+    const p = join(HERE, f);
+    check(f + (existsSync(p) ? " sha256 " + createHash("sha256").update(readFileSync(p)).digest("hex") : " is missing"), existsSync(p));
+  }
+  const t = readFileSync(join(HERE, "template.txt"), "utf8");
+  check("the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast", t.includes("info string is ceo-outcome") && t.includes("at most 3 objects") && t.includes("at most 40 words") && t.includes("from 0 to 100"));
+  const s = readFileSync(join(HERE, "stock-list.txt"), "utf8").trim().split("\n");
+  check("the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative), each issue followed by its stock fix, and each row's fixes say don't build it, reuse an existing tool and cut it to a minimal version once each", s.length === 12 && s.every((l, i) => (i % 2 === 0 ? /^[AB]: /.test(l) : /^[AB] fix: /.test(l)) && l[0] === s[i - (i % 2)]![0]) && ["A", "B"].every((row) => { const fx = s.filter((l) => l.startsWith(row + " fix: ")); return s.filter((l) => l.startsWith(row + ": ")).length === 3 && fx.length === 3 && [/^. fix: Don't build/, /^. fix: Reuse/, /^. fix: Cut it/].every((re) => fx.filter((l) => re.test(l)).length === 1); }));
+  const b = readFileSync(join(HERE, "judge-brief.md"), "utf8");
+  check("the judge brief reads each issue's first 40 words and judges it on its first problem", b.includes("first 40 words") && b.includes("the first problem it states"));
+  const cut = b.indexOf("\n\n---\n");
+  check("the judge brief's D read, the text above its rule, is byte for byte the preregistration's brief (sha256 83d5d644...52589)", cut > 0 && createHash("sha256").update(b.slice(0, cut + 1)).digest("hex") === "83d5d644b97aa87003ea38a8cb273b64590f1c50129430612af2432072852589");
+  check("the remedy read below the rule answers rem per issue on its fix's first remedy, in a ceo-judge-rem block", b.includes("## Remedy read") && b.includes("ceo-judge-rem") && b.includes("Only the first remedy a fix states counts"));
+  const head = spawnSync("git", ["-C", scorer, "rev-parse", "HEAD:src/runner"], { encoding: "utf8" }).stdout.trim();
+  say("    scorer src/runner tree " + head + " (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)");
+});
+
+await section("b. Stage 1 headroom rule: every outcome", () => {
+  const cases: [string, S1, RegExp][] = [
+    ["m 20 of 48", { m: 20 }, /^HEADROOM \(20 of 48 = 0\.417; band edges at this n: 8 to 28\)$/],
+    ["top edge, m 28 of 48", { m: 28 }, /^HEADROOM \(28 of 48/],
+    ["over the top edge, m 29 of 48", { m: 29 }, /^CEILING \(29 of 48 = 0\.604 > 0\.60\): stop$/],
+    ["bottom edge, m 8 of 48", { m: 8 }, /^HEADROOM \(8 of 48/],
+    ["under the bottom edge, m 7 of 48", { m: 7 }, /^FLOOR \(7 of 48 = 0\.146 < 0\.15\): stop, FIX-METHOD$/],
+    ["stock row A hits 1 unit", { m: 20, stockA: 1 }, /^HEADROOM/],
+    ["stock row A hits 2 units", { m: 20, stockA: 2 }, /^STOCK FAIL \(a stock row hit D on 2 of 16 changed units/],
+    ["stock row B (direction fit) hits 2 units", { m: 20, stockB: 2 }, /^STOCK FAIL \(a stock row hit D on 2 of 16 changed units/],
+    ["rows A and B both hit the same single unit", { m: 20, stockSame: true }, /^HEADROOM/],
+    ["one unit leak-dropped (it held 1 hit)", { m: 20, leakUnits: 1 }, /^HEADROOM \(19 of 45 = 0\.422; band edges at this n: 7 to 27\)$/],
+    ["five units leak-dropped", { m: 20, leakUnits: 5 }, /^NO READ \(fewer than 12 changed units \(11\)\)/],
+    ["5 gaps of 48 (10.4%)", { m: 20, gaps: 5 }, /^NO READ \(gaps, unjudged and incomplete 5 of 48 planned Opus none readings, over 10%\)/],
+    ["4 gaps of 48 (8.3%)", { m: 20, gaps: 4 }, /^HEADROOM \(20 of 44/],
+    ["Opus none's last 6 readings incomplete (its item's cap stopped it; 6 of 48 planned)", { m: 20, incomplete: 6 }, /^NO READ \(gaps, unjudged and incomplete 6 of 48 planned Opus none readings, over 10%\)/],
+    ["splits: Sol D/Opus none/Sonnet D is D; Sol D/Opus none/Sonnet none is not; Sol R1/Opus none/Sonnet D is not (20 + 1)", { m: 20, splitDecides: true }, /^HEADROOM \(21 of 48/],
+    ["judge failure: Sol missing, Opus and Sonnet D is D; Sol missing, Opus D, Sonnet none is unjudged and dropped (21 of 47)", { m: 20, judgeFail: true }, /^HEADROOM \(21 of 47 = 0\.447; band edges at this n: 8 to 28\)$/],
+  ];
+  for (const [label, opts, want] of cases) {
+    const v = verdictOf(rule("headroom", stage1(opts), "hr-" + tagOf(label)));
+    check(label + " -> " + v, want.test(v));
+  }
+  const s1Missing = stage1({ m: 20 });
+  s1Missing.reviews = s1Missing.reviews.filter((r: any) => !(r.arm === "none" && r.model === "opus" && r.unit === "c3" && r.pass === 2));
+  const r1 = refusal("headroom", s1Missing, "hr-missing-row");
+  check("an Opus none row missing from the readings (c3, pass 2) -> exit " + r1.status + ": " + r1.msg, r1.status === 1 && r1.msg === PLAN + "; first missing: none on opus, unit c3, pass 2");
+  const s1Dup = stage1({ m: 20 });
+  s1Dup.reviews.push({ ...s1Dup.reviews.find((r: any) => r.arm === "none" && r.model === "opus" && r.unit === "c4" && r.pass === 1), id: "dup" });
+  const r1d = refusal("headroom", s1Dup, "hr-duplicate-row");
+  check("a duplicated Opus none row in stage 1 (c4, pass 1) -> exit " + r1d.status + ": " + r1d.msg, r1d.status === 1 && r1d.msg === PLAN + "; first duplicate: none on opus, unit c4, pass 1");
+  const s1Smoke = stage1({ m: 20 });
+  s1Smoke.reviews.find((r: any) => r.smoke && r.arm === "autoplan-ceo" && r.model === "opus" && r.unit === "c0").pass = 2;
+  const r1s = refusal("headroom", s1Smoke, "hr-smoke-pass2");
+  check("a smoke row past its one planned pass -> exit " + r1s.status + ": " + r1s.msg, r1s.status === 1 && r1s.msg === PLAN + "; first row outside the plan: smoke autoplan-ceo on opus, unit c0, pass 2");
+  const ok = rule("headroom", stage1({ m: 20 }), "hr-agree-ok");
+  check("judges in full agreement -> positive agreement on D 1.000 and no brief revision", /positive agreement on D 1\.000/.test(ok) && !/under 0\.70/.test(ok));
+  const low = rule("headroom", stage1({ m: 20, lowAgree: true }), "hr-agree-low");
+  check("Sol alone says D on every missed review's first issue -> hits unchanged (20 of 48), positive agreement under 0.70 sets one brief revision", /^HEADROOM \(20 of 48/.test(verdictOf(low)) && /positive agreement on D 0\.[0-6][0-9]{2}.*one brief revision before stage 2's judging/.test(low));
+  show(low, /^(Opus none|Stock|Measured|Descriptive|Agreement)/);
+});
+
+await section("c. Stage 1 smoke admissions", () => {
+  const ok = rule("headroom", stage1({ m: 20 }), "smoke-ok");
+  check("all six smoke cells admitted -> stage 2 may start", /may start after the projection and all-in checks; untested arms: none/.test(ok));
+  const cases: [string, S1, RegExp][] = [
+    ["standalone not exposed on particle-1 -> that cell UNTESTED, stage 2 may start", { m: 20, smokeFail: ["standalone:particle"] }, /untested arms: standalone:particle$/m],
+    ["autoplan-ceo smoke session at 2400 s on Sol (over 1800 s) -> UNTESTED", { m: 20, smokeSlow: ["autoplan-ceo:sol"] }, /untested arms: autoplan-ceo:sol$/m],
+    ["standalone smoke session with no block on Opus -> UNTESTED", { m: 20, smokeNoBlock: ["standalone:opus"] }, /untested arms: standalone:opus$/m],
+    ["autoplan-ceo not exposed on Opus -> stage 2 does not start", { m: 20, smokeFail: ["autoplan-ceo:opus"] }, /Stage 2: does not start; autoplan-ceo failed its smoke on Opus/],
+    ["CEILING with clean smoke -> stage 2 does not start", { m: 30 }, /^Stage 2: does not start$/m],
+  ];
+  for (const [label, opts, want] of cases) check(label, want.test(rule("headroom", stage1(opts), "smoke-" + tagOf(label))));
+  show(rule("headroom", stage1({ m: 20, smokeSlow: ["autoplan-ceo:sol"] }), "smoke-show"), /^Smoke/);
+});
+
+await section("d. Projection check: per-item caps and the cut order", () => {
+  const base = { envelope: 1410, changed: 48, held: 16, stage1_judges: 4.7, untested: [] as string[] };
+  const fits = rule("projection", { ...base, stage1: stage1({ m: 20 }) }, "proj-plan");
+  check("planned per-session costs -> PASS as planned, each cap 1.25 times its item's projection plus one full round at allowance, total $1322.00 of $1410.00, every round admits", /Projection: PASS at 'as planned'/.test(fits) && /as planned: caps ceo-o-cmp-opus-p \$222\.00, ceo-o-cmp-opus-a \$516\.00, ceo-o-cmp-sol-p \$99\.00, ceo-o-cmp-sol-a \$306\.00, ceo-o-cmp-particle-p \$34\.00, ceo-o-cmp-particle-a \$54\.00, judges \$91\.00; total \$1322\.00 -> fits/.test(fits) && /round admission: every item's rounds admit at 1\.25 times its projected spend/.test(fits));
+  show(fits, /^(Stage 2 projection|  per session|  as planned|  round admission)/);
+  const steps: [string, S1, RegExp][] = [
+    ["autoplan smoke sessions $2.00 and $3.60 on Opus -> projected from $3.60, the larger -> held units at 1 pass", { m: 20, smokeUsd: { "autoplan-ceo:opus": [2.0, 3.6] } }, /PASS at 'held units at 1 pass'/],
+    ["autoplan $4.70 on Opus, standalone $0.19 on particle-1 -> standalone on particle-1 dropped", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.7], "standalone:particle": [0.15, 0.19] } }, /PASS at 'standalone on particle-1 dropped'/],
+    ["autoplan $4.60 on Opus, standalone $1.20 on Sol -> standalone on Sol dropped", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.6], "standalone:sol": [1.0, 1.2] } }, /PASS at 'standalone on Sol dropped'/],
+    ["autoplan $4.90 and none $0.60 on Opus, standalone $1.20 on Sol -> lens dropped", { m: 20, noneUsd: { opus: 0.6 }, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.9], "standalone:sol": [1.0, 1.2] } }, /PASS at 'lens dropped'/],
+    ["autoplan $6.00 on Opus -> Sol and particle-1 cells at 1 pass", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 6.0] } }, /PASS at 'Sol and particle-1 cells at 1 pass'.*1 pass on sol, particle/],
+    ["autoplan $8.00 on Opus -> stop", { m: 20, smokeUsd: { "autoplan-ceo:opus": [3.0, 8.0] } }, /Projection: STOP, over the envelope after every cut/],
+  ];
+  for (const [label, s1, want] of steps) { const o = rule("projection", { ...base, stage1: stage1(s1) }, "proj-" + tagOf(label)); check(label + (want.test(o) ? "" : " [got: " + (o.split("\n").find((l) => l.startsWith("Projection")) ?? "") + "]"), want.test(o)); if (label.startsWith("autoplan smoke")) check("the per-session line projects autoplan-ceo on Opus at $3.60", /autoplan-ceo:opus \$3\.60/.test(o)); }
+  const un = rule("projection", { ...base, untested: ["standalone:particle"], stage1: stage1({ m: 20, smokeFail: ["standalone:particle"] }) }, "proj-untested");
+  check("an UNTESTED cell is left out of the projection and the cells to run", !/standalone:particle/.test(un.split("\n").find((l) => l.startsWith("Projection: PASS")) ?? "standalone:particle"));
+});
+
+await section("d2. Round admission at stage 1's fixed caps", () => {
+  const items = (caps: Record<string, number>, k = 1) => [
+    { item: "ceo-o-hr-opus-none", model: "opus", cap: caps.on, up: 60, arms: ["none"], usd: { none: 0.25 * k } },
+    { item: "ceo-o-hr-sol-none", model: "sol", cap: caps.sn, up: 40, arms: ["none"], usd: { none: 0.15 * k } },
+    { item: "ceo-o-hr-particle-none", model: "particle", cap: caps.pn, up: 40, arms: ["none"], usd: { none: 0.06 * k } },
+    { item: "ceo-o-hr-smoke-opus-a", model: "opus", cap: caps.oa, up: 2, arms: ["autoplan-ceo"], usd: { "autoplan-ceo": 3 * k } },
+    { item: "ceo-o-hr-smoke-opus-p", model: "opus", cap: caps.op, up: 2, arms: ["standalone"], usd: { standalone: 0.7 * k } },
+    { item: "ceo-o-hr-smoke-sol-a", model: "sol", cap: caps.sa, up: 2, arms: ["autoplan-ceo"], usd: { "autoplan-ceo": 1.8 * k } },
+    { item: "ceo-o-hr-smoke-sol-p", model: "sol", cap: caps.sp, up: 2, arms: ["standalone"], usd: { standalone: 0.42 * k } },
+    { item: "ceo-o-hr-smoke-particle-a", model: "particle", cap: caps.pa, up: 2, arms: ["autoplan-ceo"], usd: { "autoplan-ceo": 0.33 * k } },
+    { item: "ceo-o-hr-smoke-particle-p", model: "particle", cap: caps.pp, up: 2, arms: ["standalone"], usd: { standalone: 0.15 * k } },
+  ];
+  const frozen = { on: 52, sn: 23, pn: 6, oa: 25, op: 15, sa: 13, sp: 8, pa: 1, pp: 1 };
+  const at1 = rule("admission", { items: items(frozen) }, "adm-frozen");
+  check("the frozen stage 1 caps admit every round at the projected spend", /^Admission: PASS$/m.test(at1));
+  show(at1, /^  /);
+  check("the frozen stage 1 caps still admit every round at twice the projected spend", /^Admission: PASS$/m.test(rule("admission", { items: items(frozen, 2) }, "adm-frozen-2x")));
+  const v1 = rule("admission", { items: items({ ...frozen, oa: 18, op: 4, sa: 8, sp: 2 }) }, "adm-v1");
+  check("v1's smoke caps ($18, $4, $8, $2) refuse their only round, as the PR review found", /^Admission: FAIL on 4 item\(s\)$/m.test(v1) && /ceo-o-hr-smoke-opus-a: .*REFUSED at round 1 \(\$0\.00 spent \+ \$24\.00 > \$18\.00\)/.test(v1));
+});
+
+await section("e. All-in check", () => {
+  check("$180 + $150 + $43 + $1,450 = $1,823 -> PASS", /All-in: PASS/.test(rule("allin", { crew_spent: 180, crew_rest: 150, stage1_settled: 43, stage2_envelope: 1450 }, "allin-ok")));
+  check("$300 + $250 + $60 + $1,450 = $2,060 -> stage 2 envelope drops to $1,390 and the projection runs again", /All-in: OVER; stage 2 envelope drops to \$1390\.00 and the projection runs again on it/.test(rule("allin", { crew_spent: 300, crew_rest: 250, stage1_settled: 60, stage2_envelope: 1450 }, "allin-over")));
+});
+
+await section("f. Stage 2 verdicts, Holm families, exposure, coverage, gaps, missing blocks and judge failures", () => {
+  const hits = { opus: { none: 17, "autoplan-ceo": 34, standalone: 18, lens: 20 }, sol: { none: 24, "autoplan-ceo": 6, standalone: 26 }, particle: { none: 10, "autoplan-ceo": 12, standalone: 11 } };
+  const family = { opus: ["autoplan-ceo", "standalone"], sol: ["autoplan-ceo", "standalone"], particle: ["autoplan-ceo"] };
+  const rest = { sol: { none: 24 }, particle: { none: 10 } };
+  const o = rule("compare", stage2({ hits, family, exposure: { "standalone:sol": 0.5 }, gapUnits: { "autoplan-ceo:particle": 6, "lens:opus": 6 }, noBlock: { "standalone:opus": 4 }, unjudged: { "autoplan-ceo:opus": 2 }, nullForecast: { "autoplan-ceo:opus": 10 }, skip: ["standalone:particle"] }), "cmp-main");
+  show(o, /^(Model|  [a-z-]+ - none|Leak|Stock|Agreement)/);
+  const block = (model: string) => { const ls = o.split("\n"); const i = ls.findIndex((l) => l.startsWith("Model " + model + ":")); const j = ls.findIndex((l, k) => k > i && !l.startsWith("  ")); return ls.slice(i, j < 0 ? undefined : j); };
+  const line = (model: string, arm: string) => block(model).find((l) => l.startsWith("  " + arm + " - none")) ?? "";
+  check("Opus autoplan-ceo, 2 unjudged reviews dropped from its own contrast and 10 null forecasts kept as hits: 68 of 94 against 34 of 94 = +0.362, coverage 0.979 -> helps", /0\.723 - 0\.362 = \+0\.362.*coverage 0\.979 -> helps/.test(line("opus", "autoplan-ceo")));
+  check("6 lens gap units on Opus leave the autoplan-ceo and standalone contrasts untouched", /coverage 1\.000/.test(line("opus", "standalone")));
+  check("Opus standalone with missing blocks on 4 hit units scored as misses (14 of 48) -> not distinguished, MDD 0.18", /0\.292 - 0\.354.*-> not distinguished \(MDD 0\.18\)/.test(line("opus", "standalone")));
+  check("Sol autoplan-ceo -0.375 -> hurts", /= -0\.375.*-> hurts/.test(line("sol", "autoplan-ceo")));
+  check("Sol standalone at exposure 0.500 -> untested (exposure), kept in Sol's Holm family at p = 1", /untested \(exposure 0\.500 under 0\.80\), p = 1 in Holm/.test(line("sol", "standalone")));
+  check("particle-1 family is autoplan-ceo alone (standalone never started stage 2) and that contrast, with 6 of 48 units in a gap (coverage 0.875), is untested (coverage)", /Holm family autoplan-ceo$/.test(block("particle")[0] ?? "") && /untested \(coverage 0\.875 under 0\.90\)/.test(line("particle", "autoplan-ceo")) && !line("particle", "standalone"));
+  const fam2 = { ...family, opus: ["autoplan-ceo", "standalone", "lens"] as string[] };
+  void fam2;
+  const holmOf = (out: string) => (out.split("\n").find((l) => l.startsWith("  autoplan-ceo - none")) ?? "").match(/Holm p ([0-9.]+)/)?.[1];
+  const d3a = rule("compare", stage2({ hits: { opus: { none: 17, "autoplan-ceo": 27, standalone: 17, lens: 17 }, ...rest }, family: { opus: ["autoplan-ceo", "standalone"], sol: [], particle: [] }, exposure: { "standalone:opus": 0.79 } }), "cmp-d3-079");
+  const d3b = rule("compare", stage2({ hits: { opus: { none: 17, "autoplan-ceo": 27, standalone: 17, lens: 17 }, ...rest }, family: { opus: ["autoplan-ceo", "standalone"], sol: [], particle: [] }, exposure: { "standalone:opus": 0.81 } }), "cmp-d3-081");
+  check("identical autoplan data reads the same Holm p (" + holmOf(d3a) + " and " + holmOf(d3b) + ") whether standalone reads untested at exposure 0.792 or is tested with no difference at 0.813", !!holmOf(d3a) && holmOf(d3a) === holmOf(d3b) && /untested \(exposure 0\.792/.test(d3a) && /standalone - none: .*exposure 0\.813.*-> not distinguished/.test(d3b));
+  const zero = rule("compare", stage2({ hits, family, gapUnits: { "autoplan-ceo:particle": 48 }, skip: ["standalone:particle"] }), "cmp-zero-pairs");
+  check("an arm whose every changed session is a gap -> no usable pairs, untested (coverage 0.000) at p = 1, and the rest of the report still prints", /autoplan-ceo - none: no usable pairs, coverage 0\.000 -> untested \(coverage 0\.000 under 0\.90\), p = 1 in Holm/.test(zero) && /0\.723 - 0\.354|-> helps/.test(zero) && /^  category /m.test(zero));
+  const one = rule("compare", stage2({ hits: { opus: hits.opus, sol: { none: 24, "autoplan-ceo": 26, standalone: 25 }, particle: { none: 10, "autoplan-ceo": 11 } }, family, passes: { sol: 1, particle: 1 }, heldPasses: 1 }), "cmp-one-pass");
+  check("Sol and particle-1 at 1 pass -> their contrasts read the one-pass MDD (0.26 at 48 units), Opus keeps 0.18", /Model sol: none hit@3 0\.500 on 48 unit-passes at 1 pass;/.test(one) && /Model sol:[\s\S]*autoplan-ceo - none: .*-> not distinguished \(MDD 0\.26\)/.test(one) && /Model opus:[\s\S]*standalone - none: .*-> not distinguished \(MDD 0\.18\)/.test(one));
+  show(one, /^Model sol|^  (autoplan-ceo|standalone) - none: 0\.5/);
+  const s3 = rule("compare", stage2({ hits, family, stockB: 3, skip: ["standalone:particle"] }), "cmp-stock3");
+  const s4 = rule("compare", stage2({ hits, family, stockB: 4, skip: ["standalone:particle"] }), "cmp-stock4");
+  check("stage 2 stock rows hit 3 of 48 -> verdicts stand; 4 of 48 -> STOCK FAIL, every contrast untested (judge)", !/STOCK FAIL/.test(s3) && /-> helps/.test(s3) && /STOCK FAIL, every contrast reads untested/.test(s4) && !/-> (helps|hurts)/.test(s4) && /untested \(judge: stock rows hit 4\)/.test(s4));
+  const famOpus = { opus: ["autoplan-ceo", "standalone"], sol: [], particle: [] };
+  const half = rule("compare", stage2({ hits: { opus: { none: 10, "autoplan-ceo": 20, standalone: 10, lens: 10 }, ...rest }, family: famOpus, incomplete: { "none:opus": 24, "standalone:opus": 24, "lens:opus": 24 } }), "cmp-p-half");
+  const halfLine = (arm: string) => half.split("\n").find((l) => l.startsWith("  " + arm + " - none")) ?? "";
+  check("the Opus -p item stops halfway (none, standalone and lens incomplete on the last 24 changed units, both passes) -> autoplan-ceo and standalone read untested (coverage 0.500 under 0.90)", /untested \(coverage 0\.500 under 0\.90\), p = 1 in Holm/.test(halfLine("autoplan-ceo")) && /untested \(coverage 0\.500 under 0\.90\), p = 1 in Holm/.test(halfLine("standalone")));
+  show(half, /^Model opus|^  (autoplan-ceo|standalone) - none/);
+  const s2Missing = stage2({ hits: { opus: hits.opus, ...rest }, family: famOpus });
+  s2Missing.reviews = s2Missing.reviews.filter((r: any) => !(r.arm === "standalone" && r.model === "opus" && r.unit === "c5" && r.pass === 2));
+  const r2 = refusal("compare", s2Missing, "cmp-missing-row");
+  check("a standalone row missing from stage 2's readings (c5, pass 2) -> exit " + r2.status + ": " + r2.msg, r2.status === 1 && r2.msg === PLAN + "; first missing: standalone on opus, unit c5, pass 2");
+  const r3 = refusal("compare", stage2({ hits: { opus: hits.opus } }), "cmp-no-family");
+  check("stage 2 readings with no family -> exit " + r3.status + ": " + r3.msg, r3.status === 1 && r3.msg === "E_USAGE stage 2 readings must carry family (the gstack arms that started stage 2 per model)");
+  const base2 = () => stage2({ hits: { opus: hits.opus, ...rest }, family: famOpus });
+  const ok2 = runRule("compare", base2(), "cmp-guards-ok");
+  check("a complete stage 2 readings file (one row per planned session, a valid family and passes) passes every guard -> exit " + ok2.status, ok2.status === 0 && /^Model particle:/m.test(ok2.stdout));
+  const refusals: [string, (d: any) => void, string][] = [
+    ["a duplicated row (autoplan-ceo on opus, c2, pass 1)", (d) => { d.reviews.push({ ...d.reviews.find((r: any) => r.arm === "autoplan-ceo" && r.model === "opus" && r.unit === "c2" && r.pass === 1), id: "dup" }); }, PLAN + "; first duplicate: autoplan-ceo on opus, unit c2, pass 1"],
+    ["a row past the planned passes (none on opus, c0, pass 3)", (d) => { d.reviews.push({ ...d.reviews.find((r: any) => r.arm === "none" && r.model === "opus" && r.unit === "c0" && r.pass === 1), id: "p3", pass: 3 }); }, PLAN + "; first row outside the plan: none on opus, unit c0, pass 3"],
+    ["a row on a unit the readings do not hold (x1)", (d) => { d.reviews.push({ ...d.reviews[0], id: "x", unit: "x1" }); }, PLAN + "; first row outside the plan: none on opus, unit x1, pass 1"],
+    ["every Opus pass-2 row missing while passes says 2", (d) => { d.reviews = d.reviews.filter((r: any) => !(r.model === "opus" && r.pass === 2)); }, PLAN + "; first missing: none on opus, unit c0, pass 2"],
+    ["a family arm with no rows (standalone on opus)", (d) => { d.reviews = d.reviews.filter((r: any) => !(r.arm === "standalone" && r.model === "opus")); }, PLAN + "; first missing: standalone on opus, unit c0, pass 1"],
+    ["a family that leaves out an arm with rows (opus lists autoplan-ceo alone)", (d) => { d.family = { ...d.family, opus: ["autoplan-ceo"] }; }, "E_USAGE stage 2 family must include every gstack arm that has rows; first missing: standalone on opus"],
+    ["a family that lists lens on opus", (d) => { d.family = { ...d.family, opus: ["autoplan-ceo", "standalone", "lens"] }; }, "E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus"],
+    ["a family with no particle key", (d) => { d.family = { opus: d.family.opus, sol: d.family.sol }; }, "E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: particle"],
+    ["readings with no passes", (d) => { delete d.passes; }, "E_USAGE stage 2 readings must carry passes (1 or 2 for every model, from the projection's PASS line)"],
+  ];
+  for (const [label, mutate, want] of refusals) { const d = base2(); mutate(d); const r = refusal("compare", d, "cmp-refuse-" + tagOf(label)); check(label + " -> exit " + r.status + ": " + r.msg, r.status === 1 && r.msg === want); }
+  const ce = rule("compare", stage2({ hits: { opus: { none: 30, "autoplan-ceo": 31, standalone: 30, lens: 30 }, ...rest }, family: famOpus }), "cmp-ceiling");
+  check("Opus none at 0.625 in stage 2 -> CEILING flag on both contrasts", /none hit@3 0\.625 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone; CEILING flag/.test(ce) && (ce.match(/\[CEILING\]/g) ?? []).length === 2);
+  for (const [n, want] of [[47, /for this n 0\.18$/m], [40, /for this n 0\.20$/m], [36, /for this n 0\.21$/m], [35, /Verdict: STOP, under 36 changed units/]] as [number, RegExp][]) {
+    const out = rule("compare", stage2({ hits: { opus: { none: 10, "autoplan-ceo": 20, standalone: 10, lens: 10 }, ...rest }, family: famOpus, changed: n }), "cmp-n" + n);
+    check(n + " changed units after leak drops -> " + (n < 36 ? "STOP" : "MDD read between power.txt's rows"), want.test(out));
+  }
+  const sec = o.split("\n").filter((l) => /^  (autoplan-ceo|lens|none|standalone):|^  category|^  opus (lens|autoplan)/.test(l));
+  for (const l of sec) say("    " + l);
+  check("secondaries print for every cell run (9), every category (4) and both Opus lens rows", sec.filter((l) => /^  [a-z-]+:(opus|sol|particle):/.test(l)).length === 9 && sec.filter((l) => l.startsWith("  category")).length === 4 && sec.filter((l) => l.startsWith("  opus ")).length === 2);
+  check("held units forecast 80 and changed 25 -> AUC 1.000 for none on Opus", /none:opus: .*AUC 1\.000/.test(o));
+  check("both strict strata print with their counts (48 and 24 unit-passes)", /none:opus: .*strict from 2026-09-01 [0-9.]+ \(48\), from 2026-10-01 [0-9.]+ \(24\)/.test(o));
+  check("no-block rate, gaps, unjudged or incomplete and mean issue words print per cell", /standalone:opus: .*no-block 8\/128, gaps, unjudged or incomplete 0, mean issue words 34\.7/.test(o) && /autoplan-ceo:opus: .*gaps, unjudged or incomplete 2,/.test(o) && /lens:opus: .*gaps, unjudged or incomplete 12,/.test(o));
+});
+
+await section("f2. Input guards added by the guard amendment: each refusal on its repro, then its accept twin", () => {
+  let gi = 0;
+  const read = (o: string, shows: RegExp) => o.split("\n").filter((l) => shows.test(l)).map((l) => l.trim()).join(" | ");
+  const refuse = (cmd: string, label: string, data: unknown, want: string, shows: RegExp) => {
+    const r = runRule(cmd, data, "guard-" + ++gi + "-" + tagOf(label));
+    const err = r.stderr.split("\n");
+    const msg = (err.find((l) => l.startsWith("error: ")) ?? "").slice(7) || (err.find((l) => /^[A-Za-z]*Error: /.test(l)) ?? "");
+    check("refuse " + label + " -> exit " + r.status + ": " + (msg || "no refusal; read " + read(r.stdout, shows)), r.status === 1 && msg === want);
+  };
+  const accept = (cmd: string, label: string, data: unknown, wants: RegExp[]) => {
+    const r = runRule(cmd, data, "guard-" + ++gi + "-" + tagOf(label));
+    const found = wants.map((w) => r.stdout.split("\n").find((l) => w.test(l)));
+    check("  accept twin: " + label + " -> exit " + r.status + (r.status === 0 ? ": " + found.map((l) => (l ?? "(missing)").trim()).join(" | ") : ""), r.status === 0 && found.every((l) => l !== undefined));
+  };
+  const s1 = (o: Partial<S1> = {}) => stage1({ m: 20, ...o }) as any;
+  const famOpus = { opus: ["autoplan-ceo", "standalone"], sol: [], particle: [] };
+  const hitsOpus = { none: 17, "autoplan-ceo": 34, standalone: 18, lens: 20 };
+  const s2 = (o: Partial<S2> = {}) => stage2({ hits: { opus: hitsOpus, sol: { none: 24 }, particle: { none: 10 } }, family: famOpus, ...o }) as any;
+  const edit = (d: any, f: (d: any) => void) => { f(d); return d; };
+  const smokeOf = (d: any, arm: string, model: string, unit: string) => d.reviews.find((r: any) => r.smoke && r.arm === arm && r.model === model && r.unit === unit);
+  const rowOf = (d: any, arm: string, model: string, unit: string, p: number) => d.reviews.find((r: any) => !r.smoke && r.arm === arm && r.model === model && r.unit === unit && r.pass === p);
+  const HR = /^Verdict: |^Stage 2: /, CMP = /^Leak drops: |^Model opus: |^  (autoplan-ceo|standalone) - none: /;
+  const MAY = /^Stage 2: may start after the projection and all-in checks; untested arms: none$/;
+  const NOREAD = /^Verdict: NO READ \(gaps, unjudged and incomplete 6 of 48 planned Opus none readings, over 10%\)/;
+  const OK2 = /^Model opus: none hit@3 0\.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone$/;
+  const STATUS = "E_USAGE readings row has a status outside scored, no-block, gap and incomplete; first: ";
+  const CONTRACT = "E_USAGE readings row breaks the row contract on ";
+  const DUPSMOKE = PLAN + "; first duplicate: smoke autoplan-ceo on opus, unit c0, pass 1";
+  const STOCK = "E_USAGE readings must carry stock rows A and B once on each changed unit";
+  const SHAPE = "E_USAGE stage 2 passes must be 2 on every model, or 2 on Opus with 1 on Sol and particle-1 and held_passes 1 (the projection's last cut); got ";
+
+  say("  Gap 1: a status outside scored, no-block, gap and incomplete");
+  const relabel30 = (status: string) => (d: any) => { let n = 0; for (const r of d.reviews) if (!r.smoke && r.arm === "none" && r.model === "opus" && r.unit.startsWith("c") && n < 30) { n++; r.status = status; r.labels = []; r.usd = 0; if (status === "incomplete") r.forecast = null; } };
+  refuse("compare", "30 Opus none rows on changed units with status capped", edit(s2(), relabel30("capped")), STATUS + "none on opus, unit c0, pass 1, status \"capped\"", CMP);
+  accept("compare", "the same 30 rows with status incomplete, which leave coverage", edit(s2(), relabel30("incomplete")), [/^Model opus: none hit@3 [0-9.]+ on 66 unit-passes/, /^  autoplan-ceo - none: .*untested \(coverage 0\.688 under 0\.90\)/]);
+  refuse("headroom", "stage 1, the 6 incomplete Opus none rows relabelled capped", edit(s1({ incomplete: 6 }), (d) => { for (const r of d.reviews) if (r.status === "incomplete") r.status = "capped"; }), STATUS + "none on opus, unit c10, pass 3, status \"capped\"", HR);
+  accept("headroom", "the same readings with status incomplete", s1({ incomplete: 6 }), [NOREAD]);
+  refuse("headroom", "a smoke row with status capped (autoplan-ceo on opus, c0)", edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").status = "capped"; }), STATUS + "smoke autoplan-ceo on opus, unit c0, pass 1, status \"capped\"", /^Smoke autoplan-ceo on opus: |^Stage 2: /);
+  accept("headroom", "the same readings unedited", s1(), [MAY]);
+
+  say("  Gap 2: unit records listed more than once (and a unit kind outside changed and held)");
+  const doubled = (d: any) => { d.units = [...d.units, ...d.units]; };
+  refuse("headroom", "stage 1 readings that list every unit twice", edit(s1({ incomplete: 6 }), doubled), "E_USAGE readings must list each unit once; first duplicate: c0", HR);
+  accept("headroom", "the same readings listing each unit once", s1({ incomplete: 6 }), [NOREAD]);
+  refuse("compare", "stage 2 readings that list every unit twice", edit(s2(), doubled), "E_USAGE readings must list each unit once; first duplicate: c0", /^Leak drops: /);
+  accept("compare", "the same readings listing each unit once", s2(), [/^Leak drops: 0; changed units 48, held 16;/]);
+  refuse("headroom", "unit c0 with kind Changed, which takes its stock hit out of the count", edit(s1({ stockA: 2 }), (d) => { d.units[0].kind = "Changed"; }), "E_USAGE readings must give each unit a string id and kind changed or held; first: c0", HR);
+  accept("headroom", "the same readings with kind changed", s1({ stockA: 2 }), [/^Verdict: STOCK FAIL \(a stock row hit D on 2 of 16 changed units/]);
+
+  say("  Gap 3: smoke rows, one per gstack arm, model and unit, on the same two units for every cell");
+  const failC1 = (d: any) => { smokeOf(d, "autoplan-ceo", "opus", "c1").exposed = false; };
+  const SMOKE = /^Smoke autoplan-ceo on opus: |^Stage 2: /;
+  refuse("headroom", "the c1 autoplan-ceo Opus smoke row deleted and the c0 row copied in its place", edit(s1(), (d) => { d.reviews = d.reviews.filter((r: any) => r !== smokeOf(d, "autoplan-ceo", "opus", "c1")); d.reviews.push({ ...smokeOf(d, "autoplan-ceo", "opus", "c0"), id: "dupsmoke" }); }), DUPSMOKE, SMOKE);
+  accept("headroom", "the same readings unedited", s1(), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block/, MAY]);
+  refuse("headroom", "the failed c1 autoplan-ceo Opus smoke row replaced by a copy of the c0 row under c1's id", edit(s1(), (d) => { failC1(d); const i = d.reviews.indexOf(smokeOf(d, "autoplan-ceo", "opus", "c1")); d.reviews[i] = { ...smokeOf(d, "autoplan-ceo", "opus", "c0"), id: d.reviews[i].id }; }), DUPSMOKE, SMOKE);
+  accept("headroom", "the failed c1 row as it ran", edit(s1(), failC1), [/^Smoke autoplan-ceo on opus: 1 of 2 exposed/, /^Stage 2: does not start; autoplan-ceo failed its smoke on Opus/]);
+  refuse("headroom", "the second autoplan-ceo Opus smoke row moved to c0", edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c1").unit = "c0"; }), DUPSMOKE, SMOKE);
+  accept("headroom", "the same readings unedited", s1(), [MAY]);
+  refuse("headroom", "a copy of the c0 autoplan-ceo smoke row on model haiku", edit(s1(), (d) => { d.reviews.push({ ...smokeOf(d, "autoplan-ceo", "opus", "c0"), id: "zz", model: "haiku" }); }), PLAN + "; first row outside the plan: smoke autoplan-ceo on haiku, unit c0, pass 1", SMOKE);
+  accept("headroom", "the same readings unedited", s1(), [MAY]);
+  refuse("headroom", "both standalone particle-1 smoke rows missing", edit(s1(), (d) => { d.reviews = d.reviews.filter((r: any) => !(r.smoke && r.arm === "standalone" && r.model === "particle")); }), PLAN + "; first missing: smoke standalone on particle, unit c0", /^Smoke standalone on particle: /);
+  accept("headroom", "the same readings unedited", s1(), [/^Smoke standalone on particle: 2 of 2 exposed, 2 with a block/]);
+  refuse("headroom", "the c1 autoplan-ceo Opus smoke row missing", edit(s1(), (d) => { d.reviews = d.reviews.filter((r: any) => r !== smokeOf(d, "autoplan-ceo", "opus", "c1")); }), PLAN + "; first missing: smoke autoplan-ceo on opus, unit c1", SMOKE);
+  accept("headroom", "the c1 row present and not exposed", edit(s1(), failC1), [/^Stage 2: does not start; autoplan-ceo failed its smoke on Opus/]);
+  refuse("headroom", "the c1 standalone Sol smoke row on c2, which is not a smoke unit", edit(s1(), (d) => { smokeOf(d, "standalone", "sol", "c1").unit = "c2"; }), "E_USAGE stage 1 readings must carry the smoke on two units, the same two for every gstack arm and model; units seen: c0, c1, c2", /^Smoke standalone on sol: /);
+  accept("headroom", "the same readings unedited", s1(), [/^Smoke standalone on sol: 2 of 2 exposed, 2 with a block/]);
+
+  say("  Gap 4: held-unit rows, checked against min(passes, held_passes)");
+  refuse("compare", "every row on a held unit missing", edit(s2(), (d) => { d.reviews = d.reviews.filter((r: any) => !r.unit.startsWith("h")); }), PLAN + "; first missing: none on opus, unit h0, pass 1", /^Leak drops: /);
+  accept("compare", "the same readings with their held rows", s2(), [/^  standalone:opus: .*AUC 1\.000/]);
+  refuse("compare", "every standalone Opus row on a held unit missing", edit(s2(), (d) => { d.reviews = d.reviews.filter((r: any) => !(r.arm === "standalone" && r.model === "opus" && r.unit.startsWith("h"))); }), PLAN + "; first missing: standalone on opus, unit h0, pass 1", /^Leak drops: /);
+  accept("compare", "the same readings with their held rows", s2(), [/^  standalone:opus: .*AUC 1\.000/]);
+  refuse("compare", "readings with no held_passes", edit(s2(), (d) => { delete d.held_passes; }), "E_USAGE stage 2 readings must carry held_passes (1 or 2, from the projection's PASS line)", CMP);
+  accept("compare", "the same readings with held_passes 2", s2(), [OK2]);
+  refuse("compare", "held_passes 1 with the held pass-2 rows kept", edit(s2(), (d) => { d.held_passes = 1; }), PLAN + "; first row outside the plan: none on opus, unit h0, pass 2", CMP);
+  accept("compare", "held_passes 1 with every held pass-2 row removed", s2({ heldPasses: 1 }), [OK2]);
+
+  say("  Gap 5: lens rows, checked against the lens flag");
+  const noLens = (d: any) => { d.reviews = d.reviews.filter((r: any) => r.arm !== "lens"); };
+  const LENS = /^  opus lens - none: /;
+  refuse("compare", "every lens row missing and no lens flag", edit(s2(), (d) => { noLens(d); delete d.lens; }), "E_USAGE stage 2 readings must carry lens (true when the projection's PASS line runs lens:opus)", LENS);
+  accept("compare", "the same readings with lens true and their lens rows", s2(), [/^  opus lens - none: \+0\.063/]);
+  refuse("compare", "every lens row missing with lens true", edit(s2(), noLens), PLAN + "; first missing: lens on opus, unit c0, pass 1", LENS);
+  accept("compare", "every lens row missing with lens false", s2({ skip: ["lens:opus"] }), [/^  opus lens - none: not run$/, /^  opus autoplan-ceo - lens: not run$/]);
+  refuse("compare", "lens rows kept with lens false", edit(s2(), (d) => { d.lens = false; }), PLAN + "; first row outside the plan: lens on opus, unit c0, pass 1", LENS);
+  accept("compare", "lens rows kept with lens true", s2(), [/^  opus lens - none: \+0\.063/]);
+
+  say("  Gap 6: the row field contract, incomplete rows included");
+  const bare = (d: any, extra: Record<string, unknown>) => { const r = rowOf(d, "none", "opus", "c0", 1); d.reviews[d.reviews.indexOf(r)] = { id: r.id, unit: r.unit, arm: r.arm, model: r.model, pass: r.pass, status: "incomplete", exposed: null, labels: [], forecast: null, usd: 0, ...extra }; };
+  const BARE_OK = [/^Model opus: none hit@3 0\.347 on 95 unit-passes/];
+  refuse("compare", "an incomplete row with no leak and no words (none on opus, c0, pass 1)", edit(s2(), (d) => bare(d, {})), CONTRACT + "leak; first: none on opus, unit c0, pass 1", CMP);
+  accept("compare", "the same row with leak false for both judges and words []", edit(s2(), (d) => bare(d, { leak: { sol: false, opus: false }, words: [] })), BARE_OK);
+  refuse("compare", "the same incomplete row with leak and no words", edit(s2(), (d) => bare(d, { leak: { sol: false, opus: false } })), CONTRACT + "words; first: none on opus, unit c0, pass 1", CMP);
+  accept("compare", "the same row with words []", edit(s2(), (d) => bare(d, { leak: { sol: false, opus: false }, words: [] })), BARE_OK);
+  refuse("headroom", "stage 1, the first incomplete Opus none row with no leak", edit(s1({ incomplete: 6 }), (d) => { delete d.reviews.find((r: any) => r.status === "incomplete").leak; }), CONTRACT + "leak; first: none on opus, unit c10, pass 3", HR);
+  accept("headroom", "the same readings with its leak", s1({ incomplete: 6 }), [NOREAD]);
+  refuse("compare", "a judge call outside D, R1, R2, R3, none and null (autoplan-ceo on opus, c47, pass 1, Sol says maybe)", edit(s2(), (d) => { rowOf(d, "autoplan-ceo", "opus", "c47", 1).labels[0] = { sol: "maybe", opus: "D", sonnet: "none" }; }), CONTRACT + "labels; first: autoplan-ceo on opus, unit c47, pass 1", /^  autoplan-ceo - none: /);
+  accept("compare", "the same call with Sol missing (null), an unjudged review that leaves coverage", edit(s2(), (d) => { rowOf(d, "autoplan-ceo", "opus", "c47", 1).labels[0] = { sol: null, opus: "D", sonnet: "none" }; }), [/^  autoplan-ceo - none: .*coverage 0\.990/]);
+
+  say("  Also: stock rows, the readings' arrays, and the projection's stage 1 readings");
+  refuse("headroom", "stock row A missing on c1, one of the two units it hit", edit(s1({ stockA: 2 }), (d) => { d.stock = d.stock.filter((s: any) => !(s.unit === "c1" && s.row === "A")); }), STOCK + "; first missing: row A on unit c1", HR);
+  accept("headroom", "the same readings with that row", s1({ stockA: 2 }), [/^Verdict: STOCK FAIL \(a stock row hit D on 2 of 16 changed units/]);
+  refuse("compare", "stock row B on c3 listed twice", edit(s2(), (d) => { d.stock.push({ ...d.stock.find((s: any) => s.unit === "c3" && s.row === "B") }); }), STOCK + "; first duplicate: row B on unit c3", /^Stock rows: /);
+  accept("compare", "the same readings with it once", s2(), [/^Stock rows: hit D on 0 of 48 changed units \(at most 3\)$/]);
+  refuse("headroom", "a stock row on held unit h0", edit(s1(), (d) => { d.stock.push({ unit: "h0", row: "A", labels: missLabels() }); }), STOCK + "; first row outside the plan: row A on unit h0", HR);
+  accept("headroom", "the same readings without it", s1(), [/^Verdict: HEADROOM \(20 of 48/]);
+  refuse("headroom", "a stock row whose first call has no Sonnet entry", edit(s1(), (d) => { d.stock[0].labels[0] = { sol: "D", opus: "D" }; }), "E_USAGE readings stock row breaks the row contract on labels; first: row A on unit c0", /^Stock rows: /);
+  accept("headroom", "the same call with Sonnet missing (null)", edit(s1(), (d) => { d.stock[0].labels[0] = { sol: "D", opus: "D", sonnet: null }; }), [/^Stock rows: hit D on 1 of 16 changed units \(at most 1\)$/]);
+  refuse("compare", "stage 2 readings with no stock array", edit(s2(), (d) => { delete d.stock; }), "E_USAGE readings must carry units, reviews and stock as arrays", CMP);
+  accept("compare", "the same readings with their stock rows", s2(), [OK2]);
+  const proj = { envelope: 1410, changed: 48, held: 16, stage1_judges: 4.7, untested: [] as string[] };
+  refuse("projection", "a projection whose stage 1 readings carry a second c0 autoplan-ceo Opus smoke row at $6.00", { ...proj, stage1: edit(s1(), (d) => { d.reviews.push({ ...smokeOf(d, "autoplan-ceo", "opus", "c0"), id: "zz", usd: 6 }); }) }, DUPSMOKE, /^Projection: /);
+  accept("projection", "the same projection on the readings as they are", { ...proj, stage1: s1() }, [/^Projection: PASS at 'as planned'/]);
+
+  say("  Fix-check note 4: passes take one of the projection's two shapes");
+  const hits1 = { opus: hitsOpus, sol: { none: 24, "autoplan-ceo": 26, standalone: 25 }, particle: { none: 10, "autoplan-ceo": 11 } };
+  const fam1 = { opus: ["autoplan-ceo", "standalone"], sol: ["autoplan-ceo", "standalone"], particle: ["autoplan-ceo"] };
+  const ONE = [/^Model sol: none hit@3 0\.500 on 48 unit-passes at 1 pass;/, /^  autoplan-ceo - none: 0\.542 .*\(MDD 0\.26\)/];
+  refuse("compare", "Opus at 1 pass with every Opus pass-2 row removed", edit(s2(), (d) => { d.passes.opus = 1; d.reviews = d.reviews.filter((r: any) => !(r.model === "opus" && r.pass === 2)); }), SHAPE + "opus 1, sol 2, particle 2, held_passes 2", CMP);
+  accept("compare", "every model at 2 passes", s2(), [OK2]);
+  refuse("compare", "Sol at 1 pass and particle-1 at 2, every Sol pass-2 row removed", edit(s2(), (d) => { d.passes.sol = 1; d.reviews = d.reviews.filter((r: any) => !(r.model === "sol" && r.pass === 2)); }), SHAPE + "opus 2, sol 1, particle 2, held_passes 2", /^Model (sol|particle): /);
+  accept("compare", "Sol and particle-1 at 1 pass with held_passes 1, the last cut", stage2({ hits: hits1, family: fam1, passes: { sol: 1, particle: 1 }, heldPasses: 1 }), ONE);
+  refuse("compare", "Sol and particle-1 at 1 pass with held_passes 2", stage2({ hits: hits1, family: fam1, passes: { sol: 1, particle: 1 } }), SHAPE + "opus 2, sol 1, particle 1, held_passes 2", /^Model sol: /);
+  accept("compare", "the same passes with held_passes 1", stage2({ hits: hits1, family: fam1, passes: { sol: 1, particle: 1 }, heldPasses: 1 }), ONE);
+
+  say("  Found in this post's /ship review: judge call counts and smoke wall time");
+  const NULLS = () => [0, 1, 2].map(() => ({ sol: null, opus: null, sonnet: null }));
+  const hitRows10 = (f: (r: any) => void) => (d: any) => { let n = 0; for (const r of d.reviews) if (!r.smoke && r.arm === "none" && r.model === "opus" && r.status === "scored" && r.labels.some((c: any) => c.sol === "D") && n < 10) { n++; f(r); } };
+  refuse("headroom", "stock rows A on c0 and c1, the two it hit, cut to one judge call each", edit(s1({ stockA: 2 }), (d) => { for (const s of d.stock) if (s.row === "A" && (s.unit === "c0" || s.unit === "c1")) s.labels = s.labels.slice(0, 1); }), "E_USAGE readings stock row breaks the row contract on label count; first: row A on unit c0", HR);
+  accept("headroom", "the same rows with all three calls", s1({ stockA: 2 }), [/^Verdict: STOCK FAIL \(a stock row hit D on 2 of 16 changed units/]);
+  refuse("headroom", "10 scored Opus none hit rows with labels [] and three issues each", edit(s1({ m: 29 }), hitRows10((r) => { r.labels = []; })), CONTRACT + "label count; first: none on opus, unit c0, pass 1", HR);
+  accept("headroom", "the same 10 rows with three missing (null) calls each, unjudged", edit(s1({ m: 29 }), hitRows10((r) => { r.labels = NULLS(); })), [/^Verdict: NO READ \(gaps, unjudged and incomplete 10 of 48 planned Opus none readings, over 10%\)/]);
+  const dropD = (d: any) => { for (const r of d.reviews) if (!r.smoke && r.arm === "none" && r.model === "opus" && r.status === "scored") r.labels = r.labels.filter((c: any) => c.sol !== "D"); };
+  const dropped = edit(s2(), dropD), firstDropped = dropped.reviews.find((r: any) => !r.smoke && r.arm === "none" && r.model === "opus" && r.status === "scored" && r.labels.length !== 3);
+  refuse("compare", "every Opus none row with its D call dropped from labels", dropped, CONTRACT + "label count; first: none on opus, unit " + firstDropped.unit + ", pass " + firstDropped.pass, CMP);
+  accept("compare", "the same readings unedited", s2(), [OK2]);
+  const wallOf = (w: unknown) => (d: any) => { for (const r of d.reviews) if (r.smoke && r.arm === "autoplan-ceo" && r.model === "opus") r.wall_s = w; };
+  refuse("headroom", "the autoplan-ceo Opus smoke rows with wall_s an empty string", edit(s1(), wallOf("")), CONTRACT + "wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1", SMOKE);
+  accept("headroom", "the same rows with wall_s 4000", edit(s1(), wallOf(4000)), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 4000 s/, /^Stage 2: does not start; autoplan-ceo failed its smoke on Opus/]);
+
+  say("  The scoped fix round: unjudged smoke rows, non-negative usd and wall_s, and unjudged stock issues");
+  const reads = (cmd: string, label: string, data: unknown, wants: RegExp[], shows: RegExp) => {
+    const r = runRule(cmd, data, "guard-" + ++gi + "-" + tagOf(label));
+    const found = wants.map((w) => r.stdout.split("\n").find((l) => w.test(l)));
+    const ok = r.status === 0 && found.every((l) => l !== undefined);
+    check("reads " + label + " -> exit " + r.status + ": " + (ok ? found.map((l) => l!.trim()).join(" | ") : r.status === 0 ? "no match; read " + read(r.stdout, shows) : (r.stderr.split("\n").find((l) => l.startsWith("error: ")) ?? "").slice(7)), ok);
+  };
+  const unjudgedSmoke = (d: any) => { for (const r of d.reviews) if (r.smoke && r.status === "scored") r.labels = []; };
+  reads("headroom", "honest stage 1 readings: scored smoke rows unjudged, labels [] with three words", edit(s1(), unjudgedSmoke), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s/, MAY], SMOKE);
+  refuse("headroom", "the same readings with no words on the c0 autoplan-ceo Opus smoke row", edit(s1(), (d) => { unjudgedSmoke(d); delete smokeOf(d, "autoplan-ceo", "opus", "c0").words; }), CONTRACT + "words; first: smoke autoplan-ceo on opus, unit c0, pass 1", SMOKE);
+  refuse("projection", "a projection whose stage 1 readings carry the c0 autoplan-ceo Opus smoke row at usd -50", { ...proj, stage1: edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").usd = -50; }) }, CONTRACT + "usd; first: smoke autoplan-ceo on opus, unit c0, pass 1", /^Projection: /);
+  accept("projection", "the same row at usd 0", { ...proj, stage1: edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").usd = 0; }) }, [/^Projection: PASS at /]);
+  refuse("headroom", "the c0 autoplan-ceo Opus smoke row with wall_s -1", edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").wall_s = -1; }), CONTRACT + "wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1", SMOKE);
+  accept("headroom", "wall_s 0 on the c0 row and missing on the c1 row", edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").wall_s = 0; delete smokeOf(d, "autoplan-ceo", "opus", "c1").wall_s; }), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest Infinity s, .* -> UNTESTED in stage 2$/]);
+  const splitStockA = (units: string[]) => (d: any) => { for (const s of d.stock) if (s.row === "A" && units.includes(s.unit)) s.labels = s.labels.map((c: any) => (c.sol === "D" ? { sol: "D", opus: "none", sonnet: null } : c)); };
+  reads("headroom", "stock rows A on c0 and c1 with the D call split (Sol D, Opus none, Sonnet missing), unjudged", edit(s1({ stockA: 2 }), splitStockA(["c0", "c1"])), [/^Verdict: STOCK FAIL \(a stock row hit D on 2 of 16 changed units; 2 of them only through an unjudged issue, counted as a possible D; at most 1 allowed\)/], HR);
+  accept("headroom", "the same rows fully judged", s1({ stockA: 2 }), [/^Stock rows: hit D on 2 of 16 changed units \(at most 1\)$/, /^Verdict: STOCK FAIL \(a stock row hit D on 2 of 16 changed units; at most 1 allowed\)/]);
+  const unjudgedStock = (k: number) => (d: any) => { for (const s of d.stock.filter((s: any) => s.row === "A").slice(0, k)) s.labels[0] = { sol: "D", opus: "none", sonnet: null }; };
+  reads("compare", "stage 2 stock rows A on 4 changed units with an unjudged issue", edit(s2(), unjudgedStock(4)), [/^Stock rows: hit D on 4 of 48 changed units \(at most 3\); 4 of them only through an unjudged issue, counted as a possible D: STOCK FAIL, every contrast reads untested \(judge\)$/, /^  autoplan-ceo - none: .*-> untested \(judge: stock rows hit 4\), p = 1 in Holm$/], /^Stock rows: |^  autoplan-ceo - none: /);
+  const esc = (l: string) => new RegExp("^" + l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$");
+  const standing = runRule("compare", s2(), "guard-stock3-base").stdout.split("\n").filter((l) => /^  (autoplan-ceo|standalone) - none: /.test(l));
+  reads("compare", "the same on 3 changed units: the verdicts stand", edit(s2(), unjudgedStock(3)), [/^Stock rows: hit D on 3 of 48 changed units \(at most 3\); 3 of them only through an unjudged issue, counted as a possible D$/, ...standing.map(esc)], /^Stock rows: /);
+});
+
+await section("f3. The ladder amendment: the 10x tier, the fallback, the frozen plan, the issue count and finite numbers; each refusal on its repro, then its accept twin", () => {
+  let gi = 0;
+  const T = (s: string) => "f3-" + ++gi + "-" + tagOf(s);
+  const firstErr = (r: any) => { const err = (r.stderr as string).split("\n"); return (err.find((l) => l.startsWith("error: ")) ?? "").slice(7) || (err.find((l) => /^[A-Za-z]*Error: /.test(l)) ?? ""); };
+  const refuse = (cmd: string, label: string, data: unknown, want: string, o: Opt = {}) => { const r = runRule(cmd, data, T(label), o); const msg = firstErr(r); check("refuse " + label + " -> exit " + r.status + ": " + (msg || "no refusal"), r.status === 1 && msg === want); };
+  const reads = (cmd: string, label: string, data: unknown, wants: RegExp[], o: Opt = {}) => {
+    const r = runRule(cmd, data, T(label), o);
+    const found = wants.map((w) => (r.stdout as string).split("\n").find((l) => w.test(l)));
+    const ok = r.status === 0 && found.every((l) => l !== undefined);
+    check(label + " -> exit " + r.status + ": " + (ok ? found.map((l) => l!.trim()).join(" | ") : r.status === 0 ? "missing " + wants.filter((_, i) => found[i] === undefined).map(String).join(", ") : firstErr(r)), ok);
+    return r.stdout as string;
+  };
+  const accept = (cmd: string, label: string, data: unknown, wants: RegExp[], o: Opt = {}) => reads(cmd, "  accept twin: " + label, data, wants, o);
+  const CONTRACT = "E_USAGE readings row breaks the row contract on ";
+  const UNIT = "E_USAGE readings unit breaks the unit contract on ";
+  const edit = (d: any, f: (d: any) => void) => { f(d); return d; };
+  const s1 = (o: Partial<S1> = {}) => stage1({ m: 20, ...o }) as any;
+  const smokeOf = (d: any, arm: string, model: string, unit: string) => d.reviews.find((r: any) => r.smoke && r.arm === arm && r.model === model && r.unit === unit);
+  const rowOf = (d: any, arm: string, model: string, unit: string, p: number) => d.reviews.find((r: any) => !r.smoke && r.arm === arm && r.model === model && r.unit === unit && r.pass === p);
+  const VERDICT = /^Verdict: /, TENX = /^10x tier, Opus none: /, READING = /^10x reading: /, REMEDY = /^Remedy: /;
+
+  say("  The 10x tier on HEADROOM readings, with every new stage 1 line");
+  const hr = reads("headroom", "m 20 of 48, every hit at rank 1 with rem yes on keyed units", s1(), [/^Verdict: HEADROOM \(20 of 48/, /^10x tier, Opus none: G_R 0\.417 \(240 twelfths over 48 readings\), strict10 0\.417, h1 0\.417; band G_R 0\.25 to 0\.50 and strict10 at most 0\.20: strict10 over 0\.20; reviews unjudged for G_R, gaps and incomplete 0 of 48 planned$/, /^Remedy: keyed on 12 of 16 changed units \(share 0\.750\); rem agreement, Sol vs Opus, n \d+, both yes 47, Sol only 0, Opus only 0, positive agreement 1\.000 .*; stock fix scores rem on 0 of 12 keyed units \(at most 1\); G_R form rem \(rem in\)$/, /^Opus none: G_R 0\.417 \(48\), strict10 0\.417 \(48\), h1 0\.417 \(48\); rem rate 1\.000 \(15\), by kind: scope .*, alternative .*, approach .*, not_build .*; decoy-first 0\.000 \(\d+\); second-order hit@3 .*, G_R .*$/, /^Opus none hit@3 on keyed units 0\.417 \(36\), on unkeyed units 0\.417 \(12\)$/, /^k on hit@3 = 0\.95 \/ hit@3 = 2\.280 \[[0-9.]+, [0-9.]+\]; k on strict10 = 2\.280 \[/, /^G_R MDD at 48 changed units, 2 passes, at this keyed share: 0\.12, hit-only 0\.12, keyed row 0\.75 \(power-gr\.txt; decides nothing\)$/, /^Budget anchor: Opus none median session \$0\.25, the CEO anchor; both tiers read these sessions \(ratio 1\.00\); seeded panel v2's median \$0\.13, ratio 1\.984, from the move to real-outcome units \(decides nothing\)$/, /^Descriptive, sol none hit@3: 16 of 32; G_R 0\.\d{3} on 32$/]);
+  void hr;
+  reads("headroom", "G_R's lower edge on HEADROOM readings: 18 hits of 48, all at rank 2, no unit keyed -> 144 twelfths, 0.250, in band; strict10 0 prints k as not estimable", s1({ m: 18, rank1: 0, keyed: () => false }), [/^Verdict: HEADROOM \(18 of 48/, /^10x tier, Opus none: G_R 0\.250 \(144 twelfths over 48 readings\), strict10 0\.000, h1 0\.000; .*: in band;/, /; k on strict10 = not estimable \(strict10 is 0 on every reading\);/, /G_R form norem \(rem out: no rem cell either judge called yes\)$/]);
+  reads("headroom", "  and 17 hits: 136 twelfths, 0.236, under the band (decides nothing on HEADROOM)", s1({ m: 17, rank1: 0, keyed: () => false }), [/^Verdict: HEADROOM \(17 of 48/, /^10x tier, Opus none: G_R 0\.236 \(136 twelfths over 48 readings\), .*: G_R under 0\.25;/]);
+  reads("headroom", "a split D call (Sol D, Opus none, Sonnet D) whose rem splits the same way on keyed unit c4: final D at rank 1 with final rem yes adds 12 twelfths", s1({ splitRem: true }), [/^Verdict: HEADROOM \(21 of 48/, /^10x tier, Opus none: G_R 0\.438 \(252 twelfths over 48 readings\)/]);
+
+  say("  The fallback on both sides of each condition (hit@3 34 of 48 = 0.708 unless stated)");
+  const FB = { m: 34, rank1: 10 };
+  reads("headroom", "G_R exactly 0.500 (288 twelfths of 576): units c0 to c3 keyed, no rem yes, 10 hits at rank 1 -> FALLBACK", s1({ ...FB, keyed: (i) => i < 4, remYes: 0 }), [/^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.500 from 0\.25 to 0\.50, strict10 0\.125 at most 0\.20, 0 of 48 planned readings out\): stage 2's primary is G_R, rem form$/, /^10x tier, Opus none: G_R 0\.500 \(288 twelfths over 48 readings\)/, /^Stage 2: may start after the projection and all-in checks; untested arms: none$/]);
+  reads("headroom", "  one rem yes more: 291 twelfths, 0.505 -> CEILING, the 10x tier saturated", s1({ ...FB, keyed: (i) => i < 4, remYes: 1 }), [/^Verdict: CEILING \(34 of 48 = 0\.708 > 0\.60\): stop$/, /^10x reading: saturated \(G_R 0\.505, strict10 0\.146, rem in, 0 of 48 planned readings out\): a saturation stop on both tiers$/, /^Stage 2: does not start$/]);
+  reads("headroom", "strict10 exactly 0.200: 28 hits of 45 (3 gaps), 9 at rank 1, no unit keyed -> FALLBACK in the norem form", s1({ m: 28, gaps: 3, rank1: 9, keyed: () => false }), [/^Verdict: FALLBACK \(CEILING on hit@3, 28 of 45 = 0\.622 > 0\.60; G_R 0\.481 from 0\.25 to 0\.50, strict10 0\.200 at most 0\.20, 3 of 48 planned readings out\): stage 2's primary is G_R, norem form$/]);
+  reads("headroom", "  10 at rank 1: strict10 0.222 -> CEILING; rem is out, so the 10x reading is FIX-METHOD (judge), never saturation", s1({ m: 28, gaps: 3, rank1: 10, keyed: () => false }), [/^Verdict: CEILING \(28 of 45 = 0\.622 > 0\.60\): stop$/, /^10x reading: FIX-METHOD \(judge\), never saturation: rem out: no rem cell either judge called yes$/]);
+  const K6 = { ...FB, keyed: (i: number) => i < 6, remYes: 3 };
+  reads("headroom", "units c0 to c5 keyed (share 0.375), rem yes on 3 keyed hits: 287 twelfths, 0.498 -> FALLBACK", s1(K6), [/^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.498 from 0\.25 to 0\.50, strict10 0\.146 at most 0\.20, 0 of 48 planned readings out\)/, /^Remedy: keyed on 6 of 16 changed units \(share 0\.375\)/]);
+  reads("headroom", "  keyed share 0.313 (c0 to c4): 292 twelfths, 0.507 -> CEILING, saturated", s1({ ...K6, keyed: (i) => i < 5 }), [/^Verdict: CEILING \(34 of 48/, /^10x reading: saturated \(G_R 0\.507, strict10 0\.167,/, /^Remedy: keyed on 5 of 16 changed units \(share 0\.313\)/]);
+  reads("headroom", "4 keyed hits with an unjudged rem (4 of 48 out, 10% or less): G_R on the other 44 is 263 twelfths, 0.498, in band, but 299 twelfths, 0.519 with the 4 rems scored yes -> CEILING, and the 10x reading is FIX-METHOD (judge)", s1({ ...K6, remNull: [16, 17, 18, 19] }), [/^10x reading: FIX-METHOD \(judge\), never saturation: 4 unjudged rem decide the reading \(left out: G_R 0\.498, strict10 0\.159; scored yes: G_R 0\.519, strict10 0\.146; scored no: G_R 0\.498, strict10 0\.146\)$/, /^Stage 2: does not start$/]);
+  {
+    const d = s1({ ...K6, remNull: [16, 17, 18, 19] });
+    const h = runRule("headroom", d, T("judge wait headroom")), p = runRule("projection", { envelope: 1410, changed: 48, held: 16, stage1_judges: 4.7, untested: [], stage1: d }, T("judge wait projection"));
+    const v = (h.stdout as string).split("\n").find((l) => l.startsWith("Verdict: ")) ?? "", q = (p.stdout as string).split("\n").find((l) => l.startsWith("Primary: ")) ?? "";
+    check("  the same readings, stop label amendment: headroom prints JUDGE WAIT, a CEILING that doesn't fall back, and projection's Primary line names stage 1 JUDGE WAIT -> exit " + h.status + " and " + p.status + ": " + v + " | " + q, h.status === 0 && p.status === 0 && v === "Verdict: JUDGE WAIT (a CEILING that doesn't fall back; CEILING on hit@3, 34 of 48 = 0.708 > 0.60; the fallback holds on judged rem and fails only with the 4 unjudged rem scored yes): stop, FIX-METHOD (judge)" && q === "Primary: none (stage 1 JUDGE WAIT); stage 2 does not start");
+  }
+  reads("headroom", "  the same 4 rems judged no (the readings above): 287 twelfths, 0.498 -> FALLBACK", s1(K6), [/^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.498 from 0\.25 to 0\.50, strict10 0\.146 at most 0\.20, 0 of 48 planned readings out\)/]);
+  reads("headroom", "  the same 4 rems judged yes: 299 twelfths, 0.519 -> CEILING, saturated", s1({ ...K6, remYesAt: [16, 17, 18, 19] }), [/^Verdict: CEILING \(34 of 48/, /^10x reading: saturated \(G_R 0\.519, /]);
+  const K8 = { ...FB, rank1: 9, keyed: (i: number) => i < 8, remYes: 8 };
+  reads("headroom", "units c0 to c7 keyed, rem yes on the 8 keyed hits at rank 1: G_R 0.500, strict10 0.188 -> FALLBACK", s1(K8), [/^Verdict: FALLBACK \(CEILING on hit@3, 34 of 48 = 0\.708 > 0\.60; G_R 0\.500 from 0\.25 to 0\.50, strict10 0\.188 at most 0\.20, 0 of 48 planned readings out\)/]);
+  reads("headroom", "  4 keyed hits at rank 2 with an unjudged rem: strict10 on the other 44 is 0.205, saturated, but 0.188 with the 4 rems scored no -> CEILING, and the 10x reading is FIX-METHOD (judge), never saturation", s1({ ...K8, remNull: [16, 17, 18, 19] }), [/^Verdict: CEILING \(34 of 48 = 0\.708 > 0\.60\): stop$/]);
+  reads("headroom", "  the same readings, stop label amendment: the 10x reason says the judged readings decide the CEILING and the 4 unjudged rem decide only whether the 10x reading is a saturation stop", s1({ ...K8, remNull: [16, 17, 18, 19] }), [/^10x reading: FIX-METHOD \(judge\), never saturation: the judged readings decide the CEILING \(left out: G_R 0\.500, strict10 0\.205, saturated\); the 4 unjudged rem decide only whether the 10x reading is a saturation stop \(scored yes: G_R 0\.521, strict10 0\.188; scored no: G_R 0\.500, strict10 0\.188\)$/]);
+  reads("headroom", "  5 of 48 out (over 10%): CEILING, and the 10x reading is FIX-METHOD (judge)", s1({ ...K6, remNull: [16, 17, 18, 19, 20] }), [/^Verdict: CEILING \(34 of 48/, /^10x reading: FIX-METHOD \(judge\), never saturation: reviews unjudged for G_R, gaps and incomplete 5 of 48 planned readings, over 10%$/]);
+  const both = (d: any) => { const f = fill(structuredClone(d)); const k = new Set(f.units.filter((u: any) => u.remedy).map((u: any) => u.id)); let n = 0; for (const r of f.reviews) if (!r.smoke && r.status === "scored" && k.has(r.unit)) for (const c of r.labels.slice(0, 3)) if (c.rem?.sol && c.rem?.opus) n++; for (const s of f.stock) if (k.has(s.unit)) for (const c of s.labels) if (c.rem?.sol && c.rem?.opus) n++; return n; };
+  const xIn = Math.floor((6 * both(s1())) / 7);
+  reads("headroom", "rem agreement just at or above 0.70: " + xIn + " Sol-only rem cells against " + both(s1()) + " both-yes cells -> rem stays in", s1({ solOnlyRem: xIn }), [new RegExp("^Remedy: .*Sol only " + xIn + ", Opus only 0, positive agreement 0\\.7\\d\\d .*G_R form rem \\(rem in\\)$")]);
+  reads("headroom", "units c0 and c1 keyed, rem no on Opus none's keyed hits: both judges say yes on 4 rem cells, all shared -> under the minimum of 5, rem leaves G_R", s1({ m: 20, keyed: (i: number) => i < 2, remYes: 0 }), [/^Remedy: .*G_R form norem \(rem out: both judges say yes on 4 rem cells, under 5\)$/]);
+  reads("headroom", "  rem yes on 1 keyed hit: 5 shared yes cells -> rem stays in", s1({ m: 20, keyed: (i: number) => i < 2, remYes: 1 }), [/^Remedy: .*G_R form rem \(rem in\)$/]);
+  reads("headroom", "  one Sol-only cell more: under 0.70 -> rem leaves G_R", s1({ solOnlyRem: xIn + 1 }), [new RegExp("^Remedy: .*Sol only " + (xIn + 1) + ", .*G_R form norem \\(rem out: positive agreement on rem 0\\.6\\d\\d under 0\\.70\\)$")]);
+  reads("headroom", "the stock fix scores rem on 1 keyed unit (c0) -> rem stays in", s1({ stockRem: ["c0"] }), [/^Remedy: .*stock fix scores rem on 1 of 12 keyed units \(at most 1\); G_R form rem \(rem in\)$/]);
+  reads("headroom", "  on 2 (c0 and c1) -> rem leaves G_R", s1({ stockRem: ["c0", "c1"] }), [/^Remedy: .*stock fix scores rem on 2 of 12 keyed units \(at most 1\); G_R form norem \(rem out: the stock fix scores rem on 2 keyed units, more than 1\)$/]);
+  reads("headroom", "  on 2, c1 only through an unjudged stock rem (Sol yes, Opus no, Sonnet missing) -> rem leaves G_R, with the note", s1({ stockRem: ["c0"], stockRemUnjudged: ["c1"] }), [/^Remedy: .*stock fix scores rem on 2 of 12 keyed units \(at most 1\); 1 of them only through an unjudged rem, counted as a possible rem; G_R form norem/]);
+  const big = both(s1({ m: 29 }));
+  reads("headroom", "CEILING at 29 of 48 with rem in and nothing out: the 10x tier saturated", s1({ m: 29 }), [/^Verdict: CEILING \(29 of 48 = 0\.604 > 0\.60\): stop$/, /^10x reading: saturated \(G_R 0\.604, strict10 0\.604, rem in, 0 of 48 planned readings out\): a saturation stop on both tiers$/]);
+  reads("headroom", "  the same with rem out by the agreement gate -> FIX-METHOD (judge)", s1({ m: 29, solOnlyRem: Math.floor((6 * big) / 7) + 1 }), [/^10x reading: FIX-METHOD \(judge\), never saturation: rem out: positive agreement on rem 0\.6\d\d under 0\.70$/]);
+  reads("headroom", "  the same with rem out by the stock fix -> FIX-METHOD (judge)", s1({ m: 29, stockRem: ["c0", "c1"] }), [/^10x reading: FIX-METHOD \(judge\), never saturation: rem out: the stock fix scores rem on 2 keyed units, more than 1$/]);
+  reads("headroom", "  the same with 5 keyed hits whose rem is unjudged -> FIX-METHOD (judge)", s1({ m: 29, remNull: [16, 17, 18, 20, 21] }), [/^10x reading: FIX-METHOD \(judge\), never saturation: reviews unjudged for G_R, gaps and incomplete 5 of 48 planned readings, over 10%$/]);
+
+  say("  projection's Primary line");
+  const projOf = (o: Partial<S1>, untested: string[] = []) => ({ envelope: 1410, changed: 48, held: 16, stage1_judges: 4.7, untested, stage1: stage1({ m: 20, ...o }) });
+  reads("projection", "on HEADROOM", projOf({}), [/^Primary: hit@3 \(stage 1 HEADROOM\); G_R form rem$/, /^Projection: PASS at 'as planned'/]);
+  reads("projection", "on FALLBACK with rem in", projOf(K6), [/^Primary: G_R \(stage 1 FALLBACK\); G_R form rem$/]);
+  reads("projection", "on FALLBACK in the norem form", projOf({ m: 28, gaps: 3, rank1: 9, keyed: () => false }), [/^Primary: G_R \(stage 1 FALLBACK\); G_R form norem$/]);
+  reads("projection", "on a CEILING that doesn't fall back", projOf({ m: 29 }), [/^Primary: none \(stage 1 CEILING\); stage 2 does not start$/]);
+
+  say("  The frozen plan: compare reads the projection output the Captain recorded, bound by its sha256");
+  const famAll = { opus: ["autoplan-ceo", "standalone"], sol: ["autoplan-ceo", "standalone"], particle: ["autoplan-ceo", "standalone"] };
+  const hitsAll = { opus: { none: 17, "autoplan-ceo": 34, standalone: 18, lens: 20 }, sol: { none: 24, "autoplan-ceo": 26, standalone: 25 }, particle: { none: 10, "autoplan-ceo": 12, standalone: 11 } };
+  const s2 = (o: Partial<S2> = {}) => stage2({ hits: hitsAll, family: famAll, ...o }) as any;
+  const projText_ = (o: Partial<S1>, untested: string[] = []) => rule("projection", projOf(o, untested), T("projection"));
+  const asPlanned = projText_({});
+  const lensDropped = projText_({ noneUsd: { opus: 0.6 }, smokeUsd: { "autoplan-ceo:opus": [3.0, 4.9], "standalone:sol": [1.0, 1.2] } });
+  const lastCut = projText_({ smokeUsd: { "autoplan-ceo:opus": [3.0, 6.0] } });
+  const noStandaloneOpus = projText_({ smokeFail: ["standalone:opus"] }, ["standalone:opus"]);
+  const passLine = (t: string) => t.split("\n").find((l) => l.startsWith("Projection: PASS")) ?? "";
+  say("    " + passLine(asPlanned));
+  say("    " + passLine(lensDropped));
+  say("    " + passLine(lastCut));
+  const famCut = { opus: ["autoplan-ceo", "standalone"], sol: ["autoplan-ceo"], particle: ["autoplan-ceo"] };
+  const cut = (o: Partial<S2> = {}) => s2({ family: famCut, skip: ["lens:opus", "standalone:sol", "standalone:particle"], heldPasses: 1, ...o });
+  const OKP = /^Frozen plan: the projection output's sha256 [0-9a-f]{64} matches the recorded value; primary hit@3 \(stage 1 HEADROOM\); G_R form rem; family, passes, held passes and lens match its PASS line$/;
+  const OPUS = /^  autoplan-ceo - none: 0\.708 - 0\.354 = \+0\.354/;
+  accept("compare", "readings at 'as planned' against projection's own PASS line", s2(), [OKP, OPUS], { proj: asPlanned });
+  accept("compare", "readings at 'lens dropped' against its PASS line", cut(), [OKP, /^Model sol: none hit@3 0\.500 on 96 unit-passes at 2 passes; Holm family autoplan-ceo$/], { proj: lensDropped });
+  accept("compare", "readings at the last cut against its PASS line", cut({ passes: { sol: 1, particle: 1 } }), [OKP, /^Model sol: none hit@3 0\.500 on 48 unit-passes at 1 pass; Holm family autoplan-ceo$/], { proj: lastCut });
+  const DIFF = "E_USAGE stage 2 readings differ from the projection's PASS line on ";
+  const dropSO = () => s2({ family: { ...famAll, opus: ["autoplan-ceo"] }, skip: ["standalone:opus"] });
+  refuse("compare", "readings that drop standalone on Opus with its rows and its family entry, against a PASS line that runs it", dropSO(), DIFF + "the opus family: readings autoplan-ceo, PASS line autoplan-ceo, standalone", { proj: asPlanned });
+  accept("compare", "the same readings against a PASS line where standalone was UNTESTED on Opus", dropSO(), [OKP, /^Model opus: none hit@3 0\.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo$/], { proj: noStandaloneOpus });
+  refuse("compare", "readings at the last cut's passes against the 'lens dropped' PASS line", cut({ passes: { sol: 1, particle: 1 } }), DIFF + "passes on sol: readings 1, PASS line 2", { proj: lensDropped });
+  refuse("compare", "readings with held_passes 1 against the 'as planned' PASS line", s2({ heldPasses: 1 }), DIFF + "held_passes: readings 1, PASS line 2", { proj: asPlanned });
+  refuse("compare", "readings with lens false and no lens rows against the 'as planned' PASS line", s2({ skip: ["lens:opus"] }), DIFF + "lens: readings false, PASS line true", { proj: asPlanned });
+  const NEEDS = "E_USAGE compare needs <readings.json> <projection.txt> <sha256>: the projection output and the sha256 the Captain recorded with the caps";
+  refuse("compare", "no projection output", s2(), NEEDS, { proj: null });
+  const shaOf = (t: string) => createHash("sha256").update(t).digest("hex");
+  refuse("compare", "a projection output whose sha256 isn't the recorded one", s2(), "E_USAGE the projection output's sha256 is " + shaOf(asPlanned) + ", not the recorded " + "0".repeat(64), { proj: asPlanned, sha: "0".repeat(64) });
+  const swap = (t: string, re: RegExp, by: string) => t.split("\n").map((l) => (re.test(l) ? by : l)).join("\n");
+  refuse("compare", "a projection output that stopped over the envelope", s2(), "E_USAGE the projection output stopped over the envelope; stage 2 does not start", { proj: swap(asPlanned, /^Projection: PASS/, "Projection: STOP, over the envelope after every cut; to the Captain") });
+  refuse("compare", "a projection output with two PASS lines", s2(), "E_USAGE the projection output must hold one PASS line and one Primary line; it holds 2 and 1", { proj: asPlanned + passLine(asPlanned) + "\n" });
+  refuse("compare", "a projection output with no Primary line", s2(), "E_USAGE the projection output must hold one PASS line and one Primary line; it holds 1 and 0", { proj: swap(asPlanned, /^Primary: /, "") });
+  refuse("compare", "a projection output whose Primary is none", s2(), "E_USAGE the projection output names no primary; stage 2 does not start", { proj: swap(asPlanned, /^Primary: /, "Primary: none (stage 1 CEILING); stage 2 does not start") });
+  refuse("compare", "a Primary line that pairs G_R with HEADROOM", s2(), "E_USAGE the projection output's Primary line pairs G_R with stage 1 HEADROOM", { proj: swap(asPlanned, /^Primary: /, "Primary: G_R (stage 1 HEADROOM); G_R form rem") });
+  refuse("compare", "a PASS line with no cells list", s2(), "E_USAGE the projection output's PASS line doesn't parse", { proj: swap(asPlanned, /^Projection: PASS/, "Projection: PASS at 'as planned'; record these caps; held passes 2") });
+  accept("compare", "the 'as planned' output with CRLF line ends, bound by the sha256 of those bytes", s2(), [OKP], { proj: asPlanned.replace(/\n/g, "\r\n") });
+
+  say("  The issue count: each row's issues and fixes against its labels and word counts");
+  const filled = (o: Partial<S2> = {}) => fill(s2(o));
+  const RUN = { proj: asPlanned }, RAW = { proj: asPlanned, raw: true };
+  const firstHit = (d: any) => rowOf(d, "none", "opus", "c0", 1);
+  refuse("compare", "an issue dropped from labels and words but kept in issues (none on opus, c0, pass 1; the guard amendment's open note)", edit(filled(), (d) => { const r = firstHit(d); const i = r.labels.findIndex((c: any) => c.sol === "D"); r.labels.splice(i, 1); r.words.splice(i, 1); }), CONTRACT + "issues against words; first: none on opus, unit c0, pass 1", RAW);
+  accept("compare", "the same row with all three issues", filled(), [OKP], RAW);
+  refuse("compare", "issue 1 at 30 words where words says 28", edit(filled(), (d) => { firstHit(d).issues[0] = Array(30).fill("word").join(" "); }), CONTRACT + "issues against words; first: none on opus, unit c0, pass 1", RAW);
+  refuse("compare", "issue 3 at 41 words, not cut to 40", edit(filled(), (d) => { firstHit(d).issues[2] = Array(41).fill("word").join(" "); }), CONTRACT + "issues against words; first: none on opus, unit c0, pass 1", RAW);
+  accept("compare", "issue 3 cut to its first 40 words, words 41", edit(filled(), (d) => { firstHit(d).issues[2] = Array(40).fill("word").join("\t"); }), [OKP], RAW);
+  refuse("compare", "fix 1 at 30 words where fix_words says 28", edit(filled(), (d) => { firstHit(d).fixes[0] = Array(30).fill("word").join(" "); }), CONTRACT + "fixes against fix_words; first: none on opus, unit c0, pass 1", RAW);
+  refuse("compare", "three issues and two fixes", edit(filled(), (d) => { firstHit(d).fixes.pop(); firstHit(d).fix_words.pop(); }), CONTRACT + "fixes against fix_words; first: none on opus, unit c0, pass 1", RAW);
+  refuse("compare", "a row with no fixes", edit(filled(), (d) => { delete firstHit(d).fixes; }), CONTRACT + "fixes; first: none on opus, unit c0, pass 1", RAW);
+  accept("compare", "fix 1 empty with fix_words 0 (the review gave no fix; the remedy packet shows 'no fix')", edit(filled(), (d) => { firstHit(d).fixes[0] = ""; firstHit(d).fix_words[0] = 0; }), [OKP], RAW);
+  const nb = (o: (r: any) => void) => edit(filled({ noBlock: { "standalone:opus": 4 } }), (d) => o(rowOf(d, "standalone", "opus", "c0", 1)));
+  refuse("compare", "a no-block row (standalone on opus, c0) carrying one issue", nb((r) => { r.issues = ["one two three"]; r.words = [3]; }), CONTRACT + "issues on a row that isn't scored; first: standalone on opus, unit c0, pass 1", RAW);
+  accept("compare", "the same row with no issues and no words", nb(() => {}), [OKP], RAW);
+  refuse("compare", "a scored row with no issues field", edit(filled(), (d) => { delete firstHit(d).issues; }), CONTRACT + "issues; first: none on opus, unit c0, pass 1", RAW);
+  refuse("headroom", "a smoke row carrying judge calls", edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").labels = [{ sol: "none", opus: "none", sonnet: "none" }]; }), CONTRACT + "calls on a smoke row; first: smoke autoplan-ceo on opus, unit c0, pass 1");
+  accept("headroom", "the same smoke row with no calls", s1(), [/^Smoke autoplan-ceo on opus: 2 of 2 exposed/]);
+
+  say("  The unit contract and rem on calls");
+  refuse("compare", "unit c0 with no remedy field", edit(s2(), (d) => { delete d.units[0].remedy; }), UNIT + "remedy; first: c0", RUN);
+  refuse("compare", "unit c0 with remedy_kind maybe", edit(s2(), (d) => { d.units[0].remedy_kind = "maybe"; }), UNIT + "remedy_kind; first: c0", RUN);
+  refuse("compare", "unit c3 (no remedy) with remedy_kind scope", edit(s2(), (d) => { d.units[3].remedy_kind = "scope"; }), UNIT + "remedy_kind; first: c3", RUN);
+  refuse("compare", "unit c0 with decoy D", edit(s2(), (d) => { d.units[0].decoy = "D"; }), UNIT + "decoy; first: c0", RUN);
+  accept("compare", "unit c0 with decoy R2", edit(s2(), (d) => { d.units[0].decoy = "R2"; }), [OKP], RUN);
+  refuse("compare", "unit c0 with remedy \"yes\", a string", edit(s2(), (d) => { d.units[0].remedy = "yes"; }), UNIT + "remedy; first: c0", RUN);
+  refuse("compare", "unit c2 with no decoy field", edit(s2(), (d) => { delete d.units[2].decoy; }), UNIT + "decoy; first: c2", RUN);
+  refuse("compare", "unit c5 with second_order \"true\", a string", edit(s2(), (d) => { d.units[5].second_order = "true"; }), UNIT + "second_order; first: c5", RUN);
+  refuse("compare", "unit c1 with no second_order field", edit(s2(), (d) => { delete d.units[1].second_order; }), UNIT + "second_order; first: c1", RUN);
+  refuse("compare", "held unit h0 with a remedy", edit(s2(), (d) => { const h = d.units.find((u: any) => u.id === "h0"); h.remedy = true; h.remedy_kind = "scope"; }), UNIT + "held unit's remedy fields; first: h0", RUN);
+  accept("compare", "the same readings unedited", s2(), [OKP], RUN);
+  refuse("compare", "a rem on a call of unit c3, which has no keyed remedy", edit(filled(), (d) => { rowOf(d, "none", "opus", "c3", 1).labels[0].rem = { sol: false, opus: false, sonnet: false }; }), CONTRACT + "rem; first: none on opus, unit c3, pass 1", RAW);
+  accept("compare", "the same call with rem null", filled(), [OKP], RAW);
+  refuse("compare", "a call on keyed unit c0 with no rem", edit(filled(), (d) => { delete firstHit(d).labels[1].rem; }), CONTRACT + "rem; first: none on opus, unit c0, pass 1", RAW);
+  refuse("compare", "a rem value of yes as a string", edit(filled(), (d) => { firstHit(d).labels[0].rem = { sol: "yes", opus: true, sonnet: null }; }), CONTRACT + "rem; first: none on opus, unit c0, pass 1", RAW);
+  refuse("compare", "a stock call on keyed unit c0 with no rem", edit(filled(), (d) => { delete d.stock.find((s: any) => s.unit === "c0" && s.row === "A").labels[0].rem; }), "E_USAGE readings stock row breaks the row contract on rem; first: row A on unit c0", RAW);
+
+  say("  Finite numbers: 1e999 parses to Infinity");
+  refuse("compare", "usd 1e999 on none on opus, c0, pass 1", edit(s2(), (d) => { rowOf(d, "none", "opus", "c0", 1).usd = "__1e999__"; }), CONTRACT + "usd; first: none on opus, unit c0, pass 1", RUN);
+  accept("compare", "usd 1000000", edit(s2(), (d) => { rowOf(d, "none", "opus", "c0", 1).usd = 1e6; }), [OKP], RUN);
+  refuse("compare", "forecast 1e999", edit(s2(), (d) => { rowOf(d, "none", "opus", "c0", 1).forecast = "__1e999__"; }), CONTRACT + "forecast; first: none on opus, unit c0, pass 1", RUN);
+  refuse("compare", "a words entry of 1e999", edit(s2(), (d) => { rowOf(d, "none", "opus", "c0", 1).words[0] = "__1e999__"; }), CONTRACT + "words; first: none on opus, unit c0, pass 1", RUN);
+  refuse("headroom", "smoke wall_s 1e999", edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").wall_s = "__1e999__"; }), CONTRACT + "wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1");
+  refuse("projection", "a projection whose c0 autoplan-ceo Opus smoke session cost 1e999 (the cut would drop the cell)", { ...projOf({}), stage1: edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").usd = "__1e999__"; }) }, CONTRACT + "usd; first: smoke autoplan-ceo on opus, unit c0, pass 1");
+  accept("projection", "the same session at $6.00", { ...projOf({}), stage1: edit(s1(), (d) => { smokeOf(d, "autoplan-ceo", "opus", "c0").usd = 6; }) }, [/^Projection: PASS at /]);
+
+  say("  compare with G_R as the primary (stage 1 FALLBACK)");
+  const GRP = (proj = asPlanned) => ({ proj: swap(proj, /^Primary: /, "Primary: G_R (stage 1 FALLBACK); G_R form rem") });
+  const gm = reads("compare", "the 'as planned' readings under G_R: autoplan-ceo helps, standalone not distinguished at the G_R MDD", s2(), [/^Frozen plan: .*primary G_R \(stage 1 FALLBACK\); G_R form rem;/, /G_R MDD at Holm's first step for this n 0\.10, hit-only 0\.10, keyed row 0\.75; keyed share 0\.750$/, /^Model opus: none G_R 0\.\d{3} on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone$/, /^  autoplan-ceo - none: .*-> helps$/, /^  standalone - none: .*-> not distinguished \(MDD 0\.10\)$/, /^    hit@3 \(secondary\): \+0\.354, .*\(decides nothing\)$/, /^    G_R bounds: no unjudged rem on opus's changed units$/], GRP());
+  const tenx = gm.split("\n").filter((l) => /^    10x [a-z-]+:(opus|sol|particle): G_R /.test(l));
+  check("a 10x line prints for each of the 10 cells run, with rem by kind, decoy-first and the second-order stratum", tenx.length === 10 && tenx.every((l) => /rem rate .*by kind: scope .*, alternative .*, approach .*, not_build .*; decoy-first .*; second-order hit@3 .*, G_R /.test(l)));
+  for (const l of tenx.slice(0, 2)) say("    " + l.trim());
+  reads("compare", "under hit@3, G_R prints as the secondary", s2(), [/^  autoplan-ceo - none: 0\.708 - 0\.354 = \+0\.354.*-> helps$/, /^    G_R \(secondary\): \+0\.\d{3}, .*\(decides nothing\)$/], RUN);
+  const hiNone = { ...hitsAll, opus: { none: 34, "autoplan-ceo": 34, standalone: 34, lens: 34 } };
+  reads("compare", "Opus none hit in 34 of 48 units: none's G_R above 0.50 -> CEILING flag on both G_R contrasts", s2({ hits: hiNone }), [/^Model opus: none G_R 0\.5\d\d on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone; CEILING flag on both contrasts$/], GRP());
+  reads("compare", "  in 28 of 48: G_R 0.50 or under, no flag", s2({ hits: { ...hitsAll, opus: { none: 28, "autoplan-ceo": 28, standalone: 28, lens: 28 } } }), [/^Model opus: none G_R 0\.4\d\d on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone$/], GRP());
+  reads("compare", "the stage 2 stock fix scores rem on 3 of 36 keyed units: G_R stays in the rem form", s2({ stockRem: 3 }), [/^Stock fix: scores rem on 3 of 36 keyed changed units \(at most 3\); G_R form rem$/, /^  standalone - none: .*not distinguished \(MDD 0\.10\)$/], GRP());
+  reads("compare", "  on 4: G_R contrasts read in the norem form, with its MDD", s2({ stockRem: 4 }), [/^Stock fix: scores rem on 4 of 36 keyed changed units \(at most 3\): G_R contrasts read in the norem form, which the stock fix can't move; G_R form norem$/, /^  standalone - none: .*not distinguished \(MDD 0\.12\)$/], GRP());
+  reads("compare", "4 autoplan-ceo hits on Opus with an unjudged rem: G_R coverage 0.958, still helps; the bounds agree", s2({ remNull: { "autoplan-ceo:opus": 4 } }), [/^  autoplan-ceo - none: .*coverage 0\.958 -> helps$/, /^    hit@3 \(secondary\): .*coverage 1\.000, helps/, /^    G_R bounds, unjudged rem against the arm \(arm 0, none 1\): \+0\.\d{3}, helps; for the arm \(arm 1, none 0\): \+0\.\d{3}, helps$/], GRP());
+  reads("compare", "  10 of them: G_R coverage 0.896 -> untested (coverage), hit@3 untouched, and the bounds differ from the G_R verdict", s2({ remNull: { "autoplan-ceo:opus": 10 } }), [/^  autoplan-ceo - none: .*coverage 0\.896 -> untested \(coverage 0\.896 under 0\.90\), p = 1 in Holm$/, /^    hit@3 \(secondary\): .*coverage 1\.000, helps/, /^    G_R bounds, unjudged rem against the arm \(arm 0, none 1\): \+0\.\d{3}, helps; for the arm \(arm 1, none 0\): \+0\.\d{3}, helps; BOUNDS DIFFER from the G_R verdict \(untested\)$/], GRP());
+  const bb = reads("compare", "4 hit unit-passes on Opus with an unjudged rem on both arms (none and autoplan-ceo, the same unit-passes)", s2({ remNull: { "none:opus": 4, "autoplan-ceo:opus": 4 } }), [/^  autoplan-ceo - none: .*coverage 0\.958 -> helps$/, /^    G_R bounds, unjudged rem against the arm \(arm 0, none 1\): [+-]0\.\d{3}, \w+; for the arm \(arm 1, none 0\): [+-]0\.\d{3}, \w+/], GRP());
+  const bl = bb.split("\n").find((l) => l.startsWith("    G_R bounds, unjudged rem against the arm")) ?? "";
+  const [blo, bhi] = [...bl.matchAll(/\): ([+-]0\.\d{3}),/g)].map((m) => Number(m[1]));
+  check("  the bound against the arm (" + blo + ") sits below the bound for it (" + bhi + "); scoring both arms' unjudged rem alike would make them equal", blo !== undefined && bhi !== undefined && blo < bhi);
+
+  say("  projection's untested list: the cells stage 1's smoke leaves untested, and no stage 2 when autoplan-ceo failed its smoke on Opus");
+  const UNT = "E_USAGE the projection's untested list must name the cells stage 1's smoke leaves untested: ";
+  refuse("projection", "a projection that lists autoplan-ceo on Opus untested when its smoke admitted it", projOf({}, ["autoplan-ceo:opus"]), UNT + "none; got autoplan-ceo:opus");
+  refuse("projection", "a projection with no untested cell when standalone failed its smoke on particle-1", projOf({ smokeFail: ["standalone:particle"] }), UNT + "standalone:particle; got none");
+  accept("projection", "the same projection with standalone:particle untested", projOf({ smokeFail: ["standalone:particle"] }, ["standalone:particle"]), [/^Projection: PASS at /]);
+  refuse("projection", "a projection whose stage 1 smoke failed autoplan-ceo on Opus, listed untested", projOf({ smokeFail: ["autoplan-ceo:opus"] }, ["autoplan-ceo:opus"]), "E_USAGE autoplan-ceo failed its smoke on Opus; stage 2 does not start");
+});
+
+await section("g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation", async () => {
+  const { ledgerCli } = await import(join(scorer, "src/runner/ledger/cli.ts"));
+  const { openLease, settleLease, ledgerStatus } = await import(join(scorer, "src/runner/ledger/ledger.ts"));
+  const { openLocalLedger } = await import(join(scorer, "src/runner/ledger/local.ts"));
+  const { ledgerPath } = await import(join(scorer, "src/runner/ledger/paths.ts"));
+  const { rigAdmission } = await import(join(scorer, "src/rig/admission.ts"));
+  const { newRunId } = await import(join(scorer, "src/skill-eval/cli/call.ts"));
+  const LD = join(OUT, "ledger");
+  mkdirSync(LD);
+  const REC = join(LD, "record");
+  writeFileSync(join(LD, "approvals-stub"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const LENV = { ...KEYLESS, GSTACK_EVALS_LEDGER_RECORD: REC, GSTACK_EVALS_LEDGER: join(LD, "local.sqlite"), GSTACK_EVALS_APPROVALS_BIN: join(LD, "approvals-stub") };
+  say("A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Run items (one per review-units invocation) open a trial-proof lease at their cap, judge items a direct-proof lease for what is left of their envelope, all with --admission warn. Each item settles at its projected spend. Stage 2's caps here are the planning caps; the real ones come from the projection check.");
+  const local = openLocalLedger(ledgerPath(undefined, LENV));
+  let calls = 0;
+  const warned: string[] = [];
+  const leaseFor = (item: string, run_id: string, proof: string, amount?: number) => openLease(REC, local, { item, run_id, ...(amount === undefined ? {} : { amount_micros: amount }), requireAdmission: rigAdmission({ proof }), warn: (code: string) => warned.push(code) });
+  const codeOf = (f: () => unknown) => { try { f(); return "opened"; } catch (e: any) { return e?.code ?? String(e).split(" ")[0]; } };
+  const M = (usdx: number) => Math.round(usdx * 1e6);
+  const OP = "claude-opus-5-5", SOL = "openai/gpt-6.1-sol", PA = "particle-ai/particle-1";
+  const STAGES: Array<{ name: string; envelope: number; floor: number; items: Array<[string, number | null, string, number, string]> }> = [
+    { name: "stage 1", envelope: M(160), floor: M(16), items: [["ceo-o-hr-opus-none", M(52), OP, M(15), "trial"], ["ceo-o-hr-sol-none", M(23), SOL, M(6), "trial"], ["ceo-o-hr-particle-none", M(6), PA, M(2.4), "trial"], ["ceo-o-hr-smoke-opus-a", M(25), OP, M(6), "trial"], ["ceo-o-hr-smoke-opus-p", M(15), OP, M(1.4), "trial"], ["ceo-o-hr-smoke-sol-a", M(13), SOL, M(3.6), "trial"], ["ceo-o-hr-smoke-sol-p", M(8), SOL, M(0.84), "trial"], ["ceo-o-hr-smoke-particle-a", M(1), PA, M(0.66), "trial"], ["ceo-o-hr-smoke-particle-p", M(1), PA, M(0.3), "trial"], ["ceo-o-hr-judge-sol", null, "gpt-6.1-sol", M(2), "direct"], ["ceo-o-hr-judge-opus", null, OP, M(2), "direct"], ["ceo-o-hr-judge-sonnet", null, "claude-sonnet-5-5", M(2), "direct"]] },
+    { name: "stage 2", envelope: M(1410), floor: M(116), items: [["ceo-o-cmp-opus-p", M(222), OP, M(160), "trial"], ["ceo-o-cmp-opus-a", M(516), OP, M(384), "trial"], ["ceo-o-cmp-sol-p", M(99), SOL, M(72.96), "trial"], ["ceo-o-cmp-sol-a", M(306), SOL, M(230.4), "trial"], ["ceo-o-cmp-particle-p", M(34), PA, M(26.88), "trial"], ["ceo-o-cmp-particle-a", M(54), PA, M(42.24), "trial"], ["ceo-o-cmp-judge-sol", null, "gpt-6.1-sol", M(19.2), "direct"], ["ceo-o-cmp-judge-opus", null, OP, M(19.2), "direct"], ["ceo-o-cmp-judge-sonnet", null, "claude-sonnet-5-5", M(19.2), "direct"]] },
+  ];
+  check("the six stage 1 smoke items (one per model and invocation) cap at $63.00 in all, each covering its one round at full allowance", STAGES[0]!.items.filter((i) => i[0].includes("smoke")).reduce((a, i) => a + i[1]!, 0) === M(63));
+  for (const st of STAGES) {
+    const runCaps = st.items.filter((i) => i[1] !== null).reduce((a, i) => a + i[1]!, 0);
+    check(st.name + ": run caps $" + (runCaps / 1e6).toFixed(2) + " leave the judges at least the $" + (st.floor / 1e6).toFixed(2) + " floor of the $" + (st.envelope / 1e6).toFixed(2) + " envelope", st.envelope - runCaps >= st.floor);
+    let settled = 0;
+    for (const [item, cap, model, micros, proof] of st.items) {
+      const capMicros = cap ?? Math.floor((st.envelope - settled) / 10_000) * 10_000;
+      const o: string[] = [], e: string[] = [];
+      const code = await ledgerCli(["init", "--item", item, "--cap", (capMicros / 1e6).toFixed(2), "--admission", "warn", "--words", "dry run only", "--by", "dryrun.ts", "--source", "GEVA-285 keyless dry run"], { out: (t: string) => o.push(t), err: (t: string) => e.push(t) }, LENV);
+      check(item + " recorded at $" + (capMicros / 1e6).toFixed(2) + (cap === null ? " ($" + (st.envelope / 1e6).toFixed(2) + " less $" + (settled / 1e6).toFixed(2) + " settled by every earlier " + st.name + " item, rounded down to the cent)" : ""), code === 0);
+      const runId = proof === "trial" ? newRunId("review-units") : "judge-" + randomBytes(6).toString("hex");
+      const lease = leaseFor(item, runId, proof, proof === "trial" ? capMicros : undefined);
+      calls++;
+      const rv = await local.reserve({ idempotency_key: "dry-" + calls, lease_id: lease.lease_id, cell: { run_id: runId, arm: "none", task: "synthetic", model, trial: 1, attempt: 1, meter_id: "dry-" + calls }, max_micros: micros });
+      await local.settle(rv.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 1000, output: 100, reasoning: 0, cache_read: 0, cache_write: 0 } });
+      settleLease(REC, local, lease.lease_id);
+      const s = ledgerStatus(REC, item)[0];
+      settled += s.committed_micros;
+      check(item + ": one lease opened (" + warned.at(-1) + ") and settled at $" + (s.committed_micros / 1e6).toFixed(2) + ", bound to its run", s.run_id === runId && s.committed_micros === micros && !s.open_lease && s.leases === 1);
+      const again = codeOf(() => leaseFor(item, proof === "trial" ? newRunId("review-units") : "judge-" + randomBytes(6).toString("hex"), proof));
+      check(item + ": a second run on the settled item refuses with " + again, again === "E_ITEM_BOUND");
+    }
+    say("    " + st.name + " settled in all: $" + (settled / 1e6).toFixed(2) + " of the $" + (st.envelope / 1e6).toFixed(2) + " envelope");
+  }
+});
+
+say("\n## Leak check");
+const all = lines.join("\n");
+check("the transcript prints no home path and no key name's value", !(HOME && all.includes(HOME)) && !/sk-[A-Za-z0-9]{10,}/.test(all));
+say("\nPASS " + pass + ", FAIL " + fail);
+writeFileSync(join(HERE, "dryrun.txt"), lines.join("\n").replace(/^\n/, "") + "\n");
+console.log(lines.join("\n"));
+process.exit(fail ? 1 : 0);

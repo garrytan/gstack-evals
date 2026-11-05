@@ -10,6 +10,11 @@
 // and its catalogs live under a sealed root, an absolute path outside this checkout given with --sealed-root. loadSuite
 // reads the stub, then <sealed root>/suites/<id>.json, checks both digests and the counts, and resolves the suite's
 // catalogs against the sealed root. Decrypting a panel into the sealed root happens outside the scorer.
+//
+// A ceo-outcome suite (kind ceo-outcome, wiki/plans/2026-11-04-geva-285-ceo-outcome-prereg as its amendments change it)
+// holds plan units with no blockers: each unit's answer key is key.json, beside its plan.md, in the unit's folder under
+// the suite's one catalog dir, the sealed units dir (<units dir>/<unit id with / as __>/). The suite's catalog digest
+// covers both files of every unit, so a stub pins the keys. ceoKeyProblems freezes key.json's field names (CEO_KEY_FIELDS).
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -64,7 +69,7 @@ export interface Suite {
   schema_version: 1;
   id: string;
   title: string;
-  kind: "noloss" | "catalog" | "plan";
+  kind: "noloss" | "catalog" | "plan" | "ceo-outcome";
   /** true: tuned on in public, so it ranks variants but cannot confirm a release on its own. */
   development_only: boolean;
   purpose: string;
@@ -132,6 +137,78 @@ const ID = /^[a-z0-9][a-z0-9-]*$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const LOCATIONS: Location[] = ["added", "context", "outside", "unknown"];
 const COUNTS: Counts[] = ["blocking", "detection", "over-blocking"];
+const KINDS: Suite["kind"][] = ["noloss", "catalog", "plan", "ceo-outcome"];
+
+/** A ceo-outcome unit's files in its folder under the units dir. */
+export const CEO_UNIT_FILES = ["key.json", "plan.md"] as const;
+/** A ceo-outcome unit's folder: <root>/<the suite's units dir>/<unit id with / written __>. */
+export const ceoUnitDir = (suite: Suite, unitId: string, root = catalogRoot(suite)): string => join(root, suite.catalogs[0]!, unitId.replaceAll("/", "__"));
+
+/**
+ * key.json's field names, frozen for B2's packaging script. kind, strict (the first posted date), category and role are
+ * the readings' unit fields (the guard amendment's readings contract and ceo-rule.ts's Unit); outcome, outcome_date, D,
+ * D2, match_notes, R1 to R3, remedy, remedy_notes (the remedy match notes), remedy_kind, decoy, second_order and pointers
+ * are unit-brief.md section 4's key (the ladder amendment, section 3 item 7). A blank field is null.
+ */
+export const CEO_KEY_FIELDS = ["kind", "outcome", "outcome_date", "strict", "category", "role", "D", "D2", "match_notes", "R1", "R2", "R3", "remedy", "remedy_notes", "remedy_kind", "decoy", "second_order", "pointers"] as const;
+/** unit-brief.md section 1 item 5's categories of a changed unit's decisive issue; a held unit's category is held. */
+export const CEO_CATEGORIES = ["premise or demand", "scope", "direction or strategy fit", "user impact or migration", "maintenance or cost burden", "sequencing or dependency", "ambition"] as const;
+export const CEO_REMEDY_KINDS = ["scope", "alternative", "approach", "not_build"] as const;
+const CEO_OUTCOMES = ["rejected", "reverted", "re-scoped", "held"];
+
+/** Shape problems of one key.json; an empty list means it can be used. Each problem names a field, never a value. */
+export function ceoKeyProblems(value: unknown): string[] {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return ["key.json is not a JSON object"];
+  const k = value as Record<string, unknown>;
+  const p: string[] = [];
+  const extra = Object.keys(k).filter((f) => !(CEO_KEY_FIELDS as readonly string[]).includes(f));
+  if (extra.length) p.push("unknown field" + (extra.length > 1 ? "s " : " ") + extra.join(", ") + "; key.json holds " + CEO_KEY_FIELDS.join(", "));
+  const missing = CEO_KEY_FIELDS.filter((f) => !(f in k));
+  if (missing.length) return [...p, "missing field" + (missing.length > 1 ? "s " : " ") + missing.join(", ")];
+  const text = (f: string) => typeof k[f] === "string" && (k[f] as string).trim() !== "";
+  const textOrNull = (f: string) => k[f] === null || text(f);
+  if (k.kind !== "changed" && k.kind !== "held") p.push("kind must be changed or held");
+  if (!CEO_OUTCOMES.includes(k.outcome as string)) p.push("outcome must be rejected, reverted, re-scoped or held");
+  else if ((k.outcome === "held") !== (k.kind === "held")) p.push("outcome and kind disagree: a held unit's outcome is held, a changed unit's is rejected, reverted or re-scoped");
+  for (const f of ["outcome_date", "strict"]) if (typeof k[f] !== "string" || !DATE.test(k[f] as string)) p.push(f + " must be a date, YYYY-MM-DD");
+  if (k.role !== "maintainer" && k.role !== "outside") p.push("role must be maintainer or outside");
+  if (!Array.isArray(k.pointers) || !k.pointers.length || k.pointers.some((x) => typeof x !== "string" || !x.trim())) p.push("pointers must list the record's links, at least one");
+  if (typeof k.second_order !== "boolean") p.push("second_order must be true or false");
+  if (k.kind === "held") {
+    if (k.category !== "held") p.push("a held unit's category is held");
+    const set = ["D", "D2", "match_notes", "R1", "R2", "R3", "remedy", "remedy_notes", "remedy_kind", "decoy"].filter((f) => k[f] !== null);
+    if (set.length) p.push("a held unit has no D, R or remedy, so " + set.join(", ") + " must be null");
+    if (k.second_order !== false) p.push("a held unit's second_order is false");
+    return p;
+  }
+  if (!(CEO_CATEGORIES as readonly unknown[]).includes(k.category)) p.push("category must be one of: " + CEO_CATEGORIES.join(", "));
+  for (const f of ["D", "match_notes"]) if (!text(f)) p.push(f + " must be text");
+  for (const f of ["D2", "R1", "R2", "R3", "remedy"]) if (!textOrNull(f)) p.push(f + " must be text or null");
+  if (k.remedy === null ? k.remedy_notes !== null : !text("remedy_notes")) p.push("remedy_notes must be text with a remedy and null without one");
+  if (k.remedy === null ? k.remedy_kind !== null : !(CEO_REMEDY_KINDS as readonly unknown[]).includes(k.remedy_kind)) p.push("remedy_kind must be " + CEO_REMEDY_KINDS.join(", ") + " with a remedy and null without one");
+  if (k.decoy !== null && !["R1", "R2", "R3"].includes(k.decoy as string)) p.push("decoy must be R1, R2, R3 or null");
+  else if (k.decoy !== null && k[k.decoy as string] === null) p.push("decoy names " + k.decoy + ", which is null");
+  return p;
+}
+
+/** Every ceo-outcome unit's key.json and plan.md under the units dir, checked; an empty list means the suite can be scored. */
+export function checkCeoUnits(suite: Suite, root = catalogRoot(suite)): string[] {
+  const p: string[] = [];
+  for (const u of suite.units) {
+    const dir = ceoUnitDir(suite, u.id, root);
+    for (const f of CEO_UNIT_FILES) if (!existsSync(join(dir, f))) p.push(u.id + ": no " + f + " in " + dir);
+    if (!existsSync(join(dir, "key.json"))) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileSync(join(dir, "key.json"), "utf8"));
+    } catch {
+      p.push(u.id + ": key.json is not JSON");
+      continue;
+    }
+    for (const q of ceoKeyProblems(parsed)) p.push(u.id + ": key.json: " + q);
+  }
+  return p;
+}
 
 export const unitId = (repo: string, pr: number, head: string): string => repo + "#" + pr + "@" + head.slice(0, 12);
 export const clusterId = (repo: string, pr: number): string => repo + "#" + pr;
@@ -164,9 +241,10 @@ export function suiteProblems(value: unknown): string[] {
   if (s.schema_version !== 1) p.push("schema_version must be 1");
   if (typeof s.id !== "string" || !ID.test(s.id)) p.push("id must match " + ID);
   for (const k of ["title", "purpose", "judging_rule"] as const) if (typeof s[k] !== "string" || !s[k]) p.push(k + " must be a non-empty string");
-  if (s.kind !== "noloss" && s.kind !== "catalog" && s.kind !== "plan") p.push("kind is noloss, catalog or plan");
+  if (!KINDS.includes(s.kind)) p.push("kind is noloss, catalog, plan or ceo-outcome");
   if (typeof s.development_only !== "boolean" || typeof s.sealed !== "boolean") p.push("development_only and sealed must be booleans");
   if (!Array.isArray(s.catalogs) || s.catalogs.length === 0 || s.catalogs.some((c) => typeof c !== "string" || isAbsolute(c))) p.push("catalogs must list repo-relative dirs");
+  else if (s.kind === "ceo-outcome" && s.catalogs.length !== 1) p.push("a ceo-outcome suite's catalogs list one dir, its units dir");
   if (!s.shelf_life || typeof s.shelf_life.rule !== "string" || (s.shelf_life.released !== null && !DATE.test(String(s.shelf_life.released)))) p.push("shelf_life needs a rule and released (YYYY-MM-DD or null)");
   if (!Array.isArray(s.sources) || !Array.isArray(s.prereg_freezes) || !Array.isArray(s.ineligible) || !Array.isArray(s.excluded) || !Array.isArray(s.frozen_bars)) p.push("sources, prereg_freezes, ineligible, excluded and frozen_bars must be arrays");
   if (!s.groups || typeof s.groups !== "object") p.push("groups must be an object");
@@ -183,6 +261,10 @@ export function suiteProblems(value: unknown): string[] {
     if (ids.has(u.id)) p.push(at + " repeats unit " + u.id);
     ids.add(u.id);
     if (u.group !== null && !(u.group in (s.groups ?? {}))) p.push(at + " group " + JSON.stringify(u.group) + " is not in groups");
+    if (s.kind === "ceo-outcome") {
+      if (!Array.isArray(u.blockers) || u.blockers.length) p.push(at + " is a ceo-outcome unit, so blockers must be []; its key is key.json in the units dir");
+      continue;
+    }
     if (!Array.isArray(u.blockers) || u.blockers.length === 0) {
       p.push(at + " needs at least one blocker");
       continue;
@@ -257,7 +339,7 @@ export function stubProblems(v: SuiteStub): string[] {
   if (v.schema_version !== 1) p.push("schema_version must be 1");
   if (typeof v.id !== "string" || !ID.test(v.id)) p.push("id must match " + ID);
   if (v.sealed !== true) p.push("a stub is for a sealed suite, so sealed must be true");
-  if (v.kind !== "noloss" && v.kind !== "catalog" && v.kind !== "plan") p.push("kind is noloss, catalog or plan");
+  if (!KINDS.includes(v.kind)) p.push("kind is noloss, catalog, plan or ceo-outcome");
   for (const k of ["title", "purpose", "custody"] as const) if (typeof v[k] !== "string" || !v[k]) p.push(k + " must be a non-empty string");
   if (typeof v.custody === "string" && !v.custody.startsWith(PROCEDURAL_CUSTODY)) p.push("custody must start \"" + PROCEDURAL_CUSTODY + "\": a key held apart is procedural custody, not plan v3.2 sealing");
   for (const k of ["sha256", "catalogs_sha256"] as const) if (!/^[0-9a-f]{64}$/.test(String(v[k]))) p.push(k + " must be a sha256");
@@ -278,6 +360,14 @@ export function stubCounts(suite: Suite): StubCounts {
 /** sha256 over every *.json case file in the suite's catalogs under root, by catalog dir and file name. */
 export function catalogsDigest(suite: Suite, root: string): string {
   const parts: string[] = [];
+  if (suite.kind === "ceo-outcome") {
+    for (const u of [...suite.units].sort((a, b) => (a.id < b.id ? -1 : 1))) for (const f of CEO_UNIT_FILES) {
+      const file = join(ceoUnitDir(suite, u.id, root), f);
+      if (!existsSync(file)) throw new SuiteError("unit " + u.id + " has no " + f + " under " + join(root, suite.catalogs[0]!));
+      parts.push(relative(root, file) + " " + sha256(readFileSync(file)));
+    }
+    return sha256(parts.join("\n"));
+  }
   for (const dir of [...suite.catalogs].sort()) {
     const abs = join(root, dir);
     if (!existsSync(abs)) throw new SuiteError("catalog " + dir + " is not under " + root);
@@ -354,6 +444,7 @@ export function suiteCases(suite: Suite, root = catalogRoot(suite)): { cases: Ma
  * unit and blocker. With a prereg copy, every recorded freeze digest must hold on its byte prefix.
  */
 export function checkSuite(suite: Suite, options: { repoRoot?: string; prereg?: Buffer } = {}): string[] {
+  if (suite.kind === "ceo-outcome") return checkCeoUnits(suite, options.repoRoot);
   const { cases, problems } = suiteCases(suite, options.repoRoot);
   const p = [...problems];
   for (const u of suite.units) {
@@ -399,7 +490,7 @@ export function sealedLeaks(suite: Suite, text: string): string[] {
  * (a loop) the result is null, which insideRepo counts as inside. Any other missing path is the realpath of its nearest
  * existing ancestor, then the rest of the path.
  */
-const realPath = (p: string, hops = 0): string | null => {
+export const realPath = (p: string, hops = 0): string | null => {
   try {
     return realpathSync(p);
   } catch {

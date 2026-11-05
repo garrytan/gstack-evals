@@ -24,6 +24,7 @@ import { ARM_ID, armId, readReviewJournal, runReviewUnits, sealedSinkProblem, ty
 import { GSTACK_AUTO, gstackAutoProblem, isPlanLens, PLAN_ASK, PLAN_LENSES, PLAN_PARSER_SHA256, PLAN_SEVERITY_MAP, planSkill, REC_USER_SHA256, TOLD_PLAN_SHA256, type PlanArm, type PlanLens } from "./plan.ts";
 import { planArmFor, planNoPrefixProblem, planPrefixProblem, planToldLine, prefixControlProblem } from "./plan-told.ts";
 import { loadReaderMap } from "./readers.ts";
+import { CEO_LENS, CEO_PARSER_SHA256, CEO_PLAN_ARM, CEO_SEVERITY_MAP, CEO_TEMPLATE_SHA256, ceoArmLine, FORCED_LINE, isCeoArm, type CeoArm } from "./ceo-outcome.ts";
 import { TOLD_COMMANDS, TOLD_PREFIX, TOLD_SHA256, toldArmOf, toldSkill } from "./told.ts";
 import { buildUnitRepo, buildUnitTree, DEFAULT_BRANCHES, DEFAULT_INSTALL, historyProblems, UnitError, unitTaskId, type UnitRepo } from "./unit.ts";
 
@@ -46,6 +47,9 @@ export const REVIEW_UNITS_HELP = [
   "--plan ceo runs plan units (a plan suite): arms none, lens, placebo, gstack=<repo>@<sha>, gstack-<suffix>=<repo>@<sha> (a second",
   "gstack arm, which needs a --told-prefix) and gstack-auto=<repo>@<sha>, each with its plan line and the frozen plan output",
   "block, the rec user, no second model, and no install or test step. --arm-models limits an arm to some of --models.",
+  "--plan ceo-outcome runs a ceo-outcome suite under the frozen ceo-outcome block (src/trial/review/ceo-outcome.ts): arms none,",
+  "lens, gstack-auto=<repo>@<sha> and gstack-forced=<repo>@<sha> (CEO v2's forced line, from the lens), one follow-up turn,",
+  "cap stops always on, gaps listed in arm.json rather than stopping the arm, stops.json for a cap stop, and an --out outside the repo.",
   "--sealed-root names the directory outside the repo that holds a sealed suite.",
   "",
   "--system-prompt sets an arm's system prompt: sdk-default (no system prompt option, the default) or claude-code-preset.",
@@ -141,9 +145,12 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   }
   const { suite } = loaded;
   const planFlag = one("--plan");
-  if (planFlag !== null && !isPlanLens(planFlag)) throw new Usage("--plan takes a lens: " + Object.keys(PLAN_LENSES).join(", "));
-  const lens: PlanLens | null = planFlag as PlanLens | null;
-  if ((suite.kind === "plan") !== (lens !== null)) throw new Usage(lens ? "--plan needs a plan suite, and suite " + suite.id + " is " + suite.kind : "suite " + suite.id + " is a plan suite; pass --plan <lens>");
+  if (planFlag !== null && !isPlanLens(planFlag) && planFlag !== CEO_LENS) throw new Usage("--plan takes a lens: " + [...Object.keys(PLAN_LENSES), CEO_LENS].join(", "));
+  const ceo = planFlag === CEO_LENS;
+  const lens: PlanLens | null = ceo ? "ceo" : (planFlag as PlanLens | null);
+  if (ceo && suite.kind !== "ceo-outcome") throw new Usage("--plan ceo-outcome needs a ceo-outcome suite, and suite " + suite.id + " is " + suite.kind + "\n  fix: pass a ceo-outcome suite with --suite, or another --plan for this one");
+  if (!ceo && suite.kind === "ceo-outcome") throw new Usage("suite " + suite.id + " is a ceo-outcome suite; pass --plan ceo-outcome\n  fix: rerun with --plan ceo-outcome");
+  if (!ceo && (suite.kind === "plan") !== (lens !== null)) throw new Usage(lens ? "--plan needs a plan suite, and suite " + suite.id + " is " + suite.kind : "suite " + suite.id + " is a plan suite; pass --plan <lens>");
   if (flags.has("--arm-models") && !lens) throw new Usage("--arm-models runs with --plan");
   const refs = flags.get("--units")!;
   const units: Unit[] = refs.length === 1 && refs[0] === "all" ? [...suite.units] : refs.map((ref) => {
@@ -207,6 +214,13 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const backgroundWaitS = Number(one("--background-wait") ?? BACKGROUND_WAIT_MS / 1000);
   if (!Number.isSafeInteger(backgroundWaitS) || backgroundWaitS < 1) throw new Usage("--background-wait must be whole seconds, at least 1");
   const arms: ReviewArm[] = specs.map((a) => {
+    if (ceo) {
+      const plan = planArmFor(a);
+      if (!isCeoArm(a.name) || plan !== CEO_PLAN_ARM[a.name]) throw new Usage("arm " + a.name + " (" + a.kind + "): --plan ceo-outcome runs arms none, lens, gstack-auto and gstack-forced (gstack-auto=<gstack repo>@<sha>, gstack-forced=<gstack repo>@<sha>)\n  fix: run only those four arms, by those names");
+      const prefix = prefixes.get(a.name);
+      if (prefix !== undefined && !(a.name === "gstack-forced" && prefix === FORCED_LINE)) throw new Usage("--told-prefix " + a.name + ": the ceo-outcome lens takes its line from the lens, and only gstack-forced's is CEO v2's forced line\n  fix: leave out --told-prefix");
+      return { name: a.name, told: plan, ...(systemPrompts.has(a.name) ? { systemPrompt: systemPrompts.get(a.name) as SystemPrompt } : {}), ...(prefix !== undefined ? { toldPrefix: prefix } : {}) };
+    }
     if (lens) {
       const plan = planArmFor(a);
       if (!plan) throw new Usage("arm " + a.name + " (" + a.kind + "): plan units run none, lens, placebo, gstack=<gstack repo>@<sha>, gstack-<suffix>=<gstack repo>@<sha> and gstack-auto=<gstack repo>@<sha>");
@@ -293,7 +307,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (!sources.has(repo)) throw new Usage("no --source for " + repo + "; name a full local clone as " + repo + "=<path>");
     if (!branches.has(repo) && !DEFAULT_BRANCHES[repo]) throw new Usage("no base branch is known for " + repo + "; pass --base-branch " + repo + "=<name>");
   }
-  let severityMap: Record<string, unknown> | undefined = lens ? Object.fromEntries(arms.map((a) => [a.name, PLAN_SEVERITY_MAP])) : undefined;
+  let severityMap: Record<string, unknown> | undefined = lens ? Object.fromEntries(arms.map((a) => [a.name, ceo ? CEO_SEVERITY_MAP : PLAN_SEVERITY_MAP])) : undefined;
   const severityFile = one("--severity-map");
   if (severityFile) {
     try {
@@ -303,6 +317,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
     }
   }
   const out = resolve(one("--out")!);
+  if (ceo && insideRepo(out)) throw new Usage("a ceo-outcome run holds review text, and --out " + out + " is inside the repo\n  fix: pass an --out outside the repo");
   const sealedCatalogs = !suite.sealed && readsSealedRoot(suite);
   if ((suite.sealed || sealedCatalogs) && insideRepo(out)) throw new Usage("suite " + suite.id + (suite.sealed ? " is sealed" : " reads catalogs under the sealed root") + ", and --out " + out + " is inside the repo; write sealed runs outside it");
   const sealedSink = sealedSinkProblem({ id: suite.id, sealed: suite.sealed, sealedCatalogs }, env);
@@ -325,10 +340,10 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (dry) {
     io.out("review-units dry run: nothing is built, written or spent");
     io.out("suite " + suite.id + " (sha256 " + loaded.sha256 + ")");
-    io.out(lens ? "plan lens " + lens + "; told plan template sha256 " + TOLD_PLAN_SHA256 + "; plan parser sha256 " + PLAN_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 : "told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
+    io.out(ceo ? "plan lens " + CEO_LENS + "; ceo-outcome template sha256 " + CEO_TEMPLATE_SHA256 + "; ceo parser sha256 " + CEO_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 + "; cap stops on; one follow-up turn" : lens ? "plan lens " + lens + "; told plan template sha256 " + TOLD_PLAN_SHA256 + "; plan parser sha256 " + PLAN_PARSER_SHA256 + "; rec user sha256 " + REC_USER_SHA256 : "told template sha256 " + TOLD_SHA256 + "; parser sha256 " + PARSER_SHA256);
     io.out("units (" + units.length + "):");
     for (const u of units) io.out("  " + u.id + "  task " + unitTaskId(u) + "  base branch " + (branches.get(u.repo) ?? DEFAULT_BRANCHES[u.repo]) + "  source " + sources.get(u.repo) + (lens ? "  plan unit: no install or test" : "  install " + JSON.stringify(installs.get(u.repo) ?? DEFAULT_INSTALL) + "  test " + JSON.stringify(tests.get(u.repo) ?? "bun test")));
-    io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(planToldLine(a.told as PlanArm, lens, a.toldPrefix)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
+    io.out("arms: " + arms.map((a) => a.name + (lens ? " (" + JSON.stringify(ceo ? ceoArmLine(a.name as CeoArm) : planToldLine(a.told as PlanArm, lens, a.toldPrefix)) + " on " + modelsOf(a.name).join(", ") + ")" : " (told " + a.told + ((a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) ? ", " + JSON.stringify(a.toldPrefix ?? TOLD_PREFIX[a.told as keyof typeof TOLD_PREFIX]) : "") + ")") + (a.systemPrompt ? " system prompt " + a.systemPrompt : "") + (renders.has(a.name) ? " render " + renders.get(a.name) : "")).join(", "));
     io.out("models: " + models.map((m) => m + " (" + providerOf(policy as LoadedPolicy, m) + ")").join(", ") + "; passes " + passes + "; sessions " + sessions);
     if (maxTurns !== MAX_TURNS || sessionKind) io.out("max turns " + maxTurns + "; session kind " + (sessionKind ?? "not set"));
     io.out("background wait " + backgroundWaitS + " s: a session idle with background work it started still out ends at that deadline as a missing cell, E_BACKGROUND_DEADLINE");
@@ -392,7 +407,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens: ceo ? CEO_LENS : lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");

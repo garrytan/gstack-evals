@@ -1,0 +1,452 @@
+## a. Frozen files
+PASS template.txt sha256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862
+PASS judge-brief.md sha256 d7b3dce1498e01e874f1dae024ac90e79e5ff5e3af12cc5ed37e2f8a48a14fb5
+PASS stock-list.txt sha256 9ecbc78e696836bd11c3e89df1cc1cb0b0e28940b92e7dd3a96846224e47fe3c
+PASS unit-brief.md sha256 7200df2df9fd14a38c4766cd7e0043dda49624b8d4f23aeb8d1142bf8158ff5d
+PASS power.py sha256 a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499
+PASS power.txt sha256 ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f
+PASS power-gr.py sha256 a75c25467e4ab54591ce810245aba737f3f2c97e77e1f2987e03d869ab04ba1e
+PASS power-gr.txt sha256 d0e28ffd59ee69e1fdb1f578bc29ca43489b7a6f245feb38f06f6ae85a8327f3
+PASS ceo-rule.ts sha256 c03ae79d689f65195d2757d520f2ef1941c3c9efb9fd870419dad82f5c436405
+PASS the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast
+PASS the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative), each issue followed by its stock fix, and each row's fixes say don't build it, reuse an existing tool and cut it to a minimal version once each
+PASS the judge brief reads each issue's first 40 words and judges it on its first problem
+PASS the judge brief's D read, the text above its rule, is byte for byte the preregistration's brief (sha256 83d5d644...52589)
+PASS the remedy read below the rule answers rem per issue on its fix's first remedy, in a ceo-judge-rem block
+    scorer src/runner tree d7b3e3ee74dd49815573c4ecef511ba1a669e3bc (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
+
+## b. Stage 1 headroom rule: every outcome
+PASS m 20 of 48 -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
+PASS top edge, m 28 of 48 -> HEADROOM (28 of 48 = 0.583; band edges at this n: 8 to 28)
+PASS over the top edge, m 29 of 48 -> CEILING (29 of 48 = 0.604 > 0.60): stop
+PASS bottom edge, m 8 of 48 -> HEADROOM (8 of 48 = 0.167; band edges at this n: 8 to 28)
+PASS under the bottom edge, m 7 of 48 -> FLOOR (7 of 48 = 0.146 < 0.15): stop, FIX-METHOD
+PASS stock row A hits 1 unit -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
+PASS stock row A hits 2 units -> STOCK FAIL (a stock row hit D on 2 of 16 changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief
+PASS stock row B (direction fit) hits 2 units -> STOCK FAIL (a stock row hit D on 2 of 16 changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief
+PASS rows A and B both hit the same single unit -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
+PASS one unit leak-dropped (it held 1 hit) -> HEADROOM (19 of 45 = 0.422; band edges at this n: 7 to 27)
+PASS five units leak-dropped -> NO READ (fewer than 12 changed units (11)): stop, FIX-METHOD
+PASS 5 gaps of 48 (10.4%) -> NO READ (gaps, unjudged and incomplete 5 of 48 planned Opus none readings, over 10%): stop, FIX-METHOD
+PASS 4 gaps of 48 (8.3%) -> HEADROOM (20 of 44 = 0.455; band edges at this n: 7 to 26)
+PASS Opus none's last 6 readings incomplete (its item's cap stopped it; 6 of 48 planned) -> NO READ (gaps, unjudged and incomplete 6 of 48 planned Opus none readings, over 10%): stop, FIX-METHOD
+PASS splits: Sol D/Opus none/Sonnet D is D; Sol D/Opus none/Sonnet none is not; Sol R1/Opus none/Sonnet D is not (20 + 1) -> HEADROOM (21 of 48 = 0.438; band edges at this n: 8 to 28)
+PASS judge failure: Sol missing, Opus and Sonnet D is D; Sol missing, Opus D, Sonnet none is unjudged and dropped (21 of 47) -> HEADROOM (21 of 47 = 0.447; band edges at this n: 8 to 28)
+PASS an Opus none row missing from the readings (c3, pass 2) -> exit 1: E_USAGE readings must carry one row per planned session; first missing: none on opus, unit c3, pass 2
+PASS a duplicated Opus none row in stage 1 (c4, pass 1) -> exit 1: E_USAGE readings must carry one row per planned session; first duplicate: none on opus, unit c4, pass 1
+PASS a smoke row past its one planned pass -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke autoplan-ceo on opus, unit c0, pass 2
+PASS judges in full agreement -> positive agreement on D 1.000 and no brief revision
+PASS Sol alone says D on every missed review's first issue -> hits unchanged (20 of 48), positive agreement under 0.70 sets one brief revision
+    Opus none hit@3: 20 of 48 = 0.417; gaps, unjudged and incomplete dropped 0; band edges at n 48: HEADROOM 8 to 28
+    Stock rows: hit D on 0 of 16 changed units (at most 1)
+    Measured ICC -0.364 at p0 0.417; nearest power.txt row (48 changed units, Holm's first step): p0 0.40, ICC 0.3, MDD 0.21 (decides nothing)
+    Descriptive, sol none hit@3: 16 of 32; G_R 0.422 on 32
+    Descriptive, particle none hit@3: 16 of 32; G_R 0.414 on 32
+    Agreement, Sol vs Opus on D: n 516; both D 52, Sol only 88, Opus only 0, neither 376; positive agreement on D 0.542, raw 0.829, PABAK 0.659, kappa 0.463; positive agreement under 0.70: one brief revision before stage 2's judging
+    Opus none: G_R 0.417 (48), strict10 0.417 (48), h1 0.417 (48); rem rate 1.000 (15), by kind: scope 1.000 (6), alternative 1.000 (3), approach 1.000 (3), not_build 1.000 (3); decoy-first 0.000 (24); second-order hit@3 0.417 (12), G_R 0.417 (12)
+    Opus none hit@3 on keyed units 0.417 (36), on unkeyed units 0.417 (12)
+
+## c. Stage 1 smoke admissions
+PASS all six smoke cells admitted -> stage 2 may start
+PASS standalone not exposed on particle-1 -> that cell UNTESTED, stage 2 may start
+PASS autoplan-ceo smoke session at 2400 s on Sol (over 1800 s) -> UNTESTED
+PASS standalone smoke session with no block on Opus -> UNTESTED
+PASS autoplan-ceo not exposed on Opus -> stage 2 does not start
+PASS CEILING with clean smoke -> stage 2 does not start
+    Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> admitted
+    Smoke standalone on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.70 -> admitted
+    Smoke autoplan-ceo on sol: 2 of 2 exposed, 2 with a block, longest 2400 s, larger session $1.80 -> UNTESTED in stage 2
+    Smoke standalone on sol: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.42 -> admitted
+    Smoke autoplan-ceo on particle: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.33 -> admitted
+    Smoke standalone on particle: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.15 -> admitted
+
+## d. Projection check: per-item caps and the cut order
+PASS planned per-session costs -> PASS as planned, each cap 1.25 times its item's projection plus one full round at allowance, total $1322.00 of $1410.00, every round admits
+    Stage 2 projection check (GEVA-285): envelope $1410.00; judges projected $45.12 (stage 1's $4.70 x 64/20 x 3), judge floor $91.00
+      per session: none:opus $0.25, autoplan-ceo:opus $3.00, standalone:opus $0.70, lens:opus $0.30, none:sol $0.15, autoplan-ceo:sol $1.80, standalone:sol $0.42, none:particle $0.06, autoplan-ceo:particle $0.33, standalone:particle $0.15
+      as planned: caps ceo-o-cmp-opus-p $222.00, ceo-o-cmp-opus-a $516.00, ceo-o-cmp-sol-p $99.00, ceo-o-cmp-sol-a $306.00, ceo-o-cmp-particle-p $34.00, ceo-o-cmp-particle-a $54.00, judges $91.00; total $1322.00 -> fits
+      round admission: every item's rounds admit at 1.25 times its projected spend
+PASS autoplan smoke sessions $2.00 and $3.60 on Opus -> projected from $3.60, the larger -> held units at 1 pass
+PASS the per-session line projects autoplan-ceo on Opus at $3.60
+PASS autoplan $4.70 on Opus, standalone $0.19 on particle-1 -> standalone on particle-1 dropped
+PASS autoplan $4.60 on Opus, standalone $1.20 on Sol -> standalone on Sol dropped
+PASS autoplan $4.90 and none $0.60 on Opus, standalone $1.20 on Sol -> lens dropped
+PASS autoplan $6.00 on Opus -> Sol and particle-1 cells at 1 pass
+PASS autoplan $8.00 on Opus -> stop
+PASS an UNTESTED cell is left out of the projection and the cells to run
+
+## d2. Round admission at stage 1's fixed caps
+PASS the frozen stage 1 caps admit every round at the projected spend
+      ceo-o-hr-opus-none: 20 round(s), a full round $21.12 at allowance, cap $52.00: every round admits ($15.00 spent at the projection)
+      ceo-o-hr-sol-none: 14 round(s), a full round $10.56 at allowance, cap $23.00: every round admits ($6.00 spent at the projection)
+      ceo-o-hr-particle-none: 14 round(s), a full round $0.58 at allowance, cap $6.00: every round admits ($2.40 spent at the projection)
+      ceo-o-hr-smoke-opus-a: 1 round(s), a full round $24.00 at allowance, cap $25.00: every round admits ($6.00 spent at the projection)
+      ceo-o-hr-smoke-opus-p: 1 round(s), a full round $14.08 at allowance, cap $15.00: every round admits ($1.40 spent at the projection)
+      ceo-o-hr-smoke-sol-a: 1 round(s), a full round $12.00 at allowance, cap $13.00: every round admits ($3.60 spent at the projection)
+      ceo-o-hr-smoke-sol-p: 1 round(s), a full round $7.04 at allowance, cap $8.00: every round admits ($0.84 spent at the projection)
+      ceo-o-hr-smoke-particle-a: 1 round(s), a full round $0.66 at allowance, cap $1.00: every round admits ($0.66 spent at the projection)
+      ceo-o-hr-smoke-particle-p: 1 round(s), a full round $0.38 at allowance, cap $1.00: every round admits ($0.30 spent at the projection)
+PASS the frozen stage 1 caps still admit every round at twice the projected spend
+PASS v1's smoke caps ($18, $4, $8, $2) refuse their only round, as the PR review found
+
+## e. All-in check
+PASS $180 + $150 + $43 + $1,450 = $1,823 -> PASS
+PASS $300 + $250 + $60 + $1,450 = $2,060 -> stage 2 envelope drops to $1,390 and the projection runs again
+
+## f. Stage 2 verdicts, Holm families, exposure, coverage, gaps, missing blocks and judge failures
+    Leak drops: 0; changed units 48, held 16; MDD at Holm's first step for this n 0.18
+    Stock rows: hit D on 0 of 48 changed units (at most 3)
+    Stock fix: scores rem on 0 of 36 keyed changed units (at most 3); G_R form rem
+    Agreement, Sol vs Opus on D: n 3646; both D 326, Sol only 0, Opus only 0, neither 3320; positive agreement on D 1.000, raw 1.000, PABAK 1.000, kappa 1.000
+    Agreement, Sol vs Opus on rem: n 2093, both yes 250, Sol only 0, Opus only 0, positive agreement 1.000 (decides nothing in stage 2)
+    Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+      autoplan-ceo - none: 0.723 - 0.362 = +0.362, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 0.979 -> helps
+      standalone - none: 0.292 - 0.354 = -0.063, 95% CI [-0.146, 0.021], p 0.377 (monte-carlo-sign-flip), Holm p 0.377, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.18)
+    Model sol: none hit@3 0.500 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+      autoplan-ceo - none: 0.125 - 0.500 = -0.375, 95% CI [-0.521, -0.250], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 1.000 -> hurts
+      standalone - none: 0.542 - 0.500 = +0.042, 95% CI [0.000, 0.104], p 0.498 (monte-carlo-sign-flip), Holm p 1.000, exposure 0.500, coverage 1.000 -> untested (exposure 0.500 under 0.80), p = 1 in Holm
+    Model particle: none hit@3 0.208 on 96 unit-passes at 2 passes; Holm family autoplan-ceo
+      autoplan-ceo - none: 0.286 - 0.238 = +0.048, 95% CI [0.000, 0.119], p 0.501 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 0.875 -> untested (coverage 0.875 under 0.90), p = 1 in Holm
+PASS Opus autoplan-ceo, 2 unjudged reviews dropped from its own contrast and 10 null forecasts kept as hits: 68 of 94 against 34 of 94 = +0.362, coverage 0.979 -> helps
+PASS 6 lens gap units on Opus leave the autoplan-ceo and standalone contrasts untouched
+PASS Opus standalone with missing blocks on 4 hit units scored as misses (14 of 48) -> not distinguished, MDD 0.18
+PASS Sol autoplan-ceo -0.375 -> hurts
+PASS Sol standalone at exposure 0.500 -> untested (exposure), kept in Sol's Holm family at p = 1
+PASS particle-1 family is autoplan-ceo alone (standalone never started stage 2) and that contrast, with 6 of 48 units in a gap (coverage 0.875), is untested (coverage)
+PASS identical autoplan data reads the same Holm p (0.003 and 0.003) whether standalone reads untested at exposure 0.792 or is tested with no difference at 0.813
+PASS an arm whose every changed session is a gap -> no usable pairs, untested (coverage 0.000) at p = 1, and the rest of the report still prints
+PASS Sol and particle-1 at 1 pass -> their contrasts read the one-pass MDD (0.26 at 48 units), Opus keeps 0.18
+    Model sol: none hit@3 0.500 on 48 unit-passes at 1 pass; Holm family autoplan-ceo, standalone
+      autoplan-ceo - none: 0.542 - 0.500 = +0.042, 95% CI [0.000, 0.104], p 0.498 (monte-carlo-sign-flip), Holm p 0.997, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.26)
+      standalone - none: 0.521 - 0.500 = +0.021, 95% CI [0.000, 0.063], p 1.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.26)
+PASS stage 2 stock rows hit 3 of 48 -> verdicts stand; 4 of 48 -> STOCK FAIL, every contrast untested (judge)
+PASS the Opus -p item stops halfway (none, standalone and lens incomplete on the last 24 changed units, both passes) -> autoplan-ceo and standalone read untested (coverage 0.500 under 0.90)
+    Model opus: none hit@3 0.417 on 48 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+      autoplan-ceo - none: 0.833 - 0.417 = +0.417, 95% CI [0.208, 0.625], p 0.002 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 0.500 -> untested (coverage 0.500 under 0.90), p = 1 in Holm
+      standalone - none: 0.417 - 0.417 = +0.000, 95% CI [0.000, 0.000], p 1.000 (degenerate), Holm p 1.000, exposure 1.000, coverage 0.500 -> untested (coverage 0.500 under 0.90), p = 1 in Holm
+PASS a standalone row missing from stage 2's readings (c5, pass 2) -> exit 1: E_USAGE readings must carry one row per planned session; first missing: standalone on opus, unit c5, pass 2
+PASS stage 2 readings with no family -> exit 1: E_USAGE stage 2 readings must carry family (the gstack arms that started stage 2 per model)
+PASS a complete stage 2 readings file (one row per planned session, a valid family and passes) passes every guard -> exit 0
+PASS a duplicated row (autoplan-ceo on opus, c2, pass 1) -> exit 1: E_USAGE readings must carry one row per planned session; first duplicate: autoplan-ceo on opus, unit c2, pass 1
+PASS a row past the planned passes (none on opus, c0, pass 3) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: none on opus, unit c0, pass 3
+PASS a row on a unit the readings do not hold (x1) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: none on opus, unit x1, pass 1
+PASS every Opus pass-2 row missing while passes says 2 -> exit 1: E_USAGE readings must carry one row per planned session; first missing: none on opus, unit c0, pass 2
+PASS a family arm with no rows (standalone on opus) -> exit 1: E_USAGE readings must carry one row per planned session; first missing: standalone on opus, unit c0, pass 1
+PASS a family that leaves out an arm with rows (opus lists autoplan-ceo alone) -> exit 1: E_USAGE stage 2 family must include every gstack arm that has rows; first missing: standalone on opus
+PASS a family that lists lens on opus -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+PASS a family with no particle key -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: particle
+PASS readings with no passes -> exit 1: E_USAGE stage 2 readings must carry passes (1 or 2 for every model, from the projection's PASS line)
+PASS Opus none at 0.625 in stage 2 -> CEILING flag on both contrasts
+PASS 47 changed units after leak drops -> MDD read between power.txt's rows
+PASS 40 changed units after leak drops -> MDD read between power.txt's rows
+PASS 36 changed units after leak drops -> MDD read between power.txt's rows
+PASS 35 changed units after leak drops -> STOP
+      autoplan-ceo:opus: hit@3 0.723, rank-weighted 0.486, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.723, strict from 2026-09-01 0.723 (47), from 2026-10-01 0.696 (23), maintainer 0.750, outside 0.710, no-block 0/128, gaps, unjudged or incomplete 2, mean issue words 34.7, cost per review $3.00, per hit $5.65
+      autoplan-ceo:particle: hit@3 0.286, rank-weighted 0.190, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.286, strict from 2026-09-01 0.286 (42), from 2026-10-01 0.300 (20), maintainer 0.286, outside 0.286, no-block 0/128, gaps, unjudged or incomplete 12, mean issue words 34.7, cost per review $0.33, per hit $1.76
+      autoplan-ceo:sol: hit@3 0.125, rank-weighted 0.083, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.125, strict from 2026-09-01 0.125 (48), from 2026-10-01 0.083 (24), maintainer 0.125, outside 0.125, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $1.80, per hit $19.20
+      lens:opus: hit@3 0.476, rank-weighted 0.317, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.476, strict from 2026-09-01 0.476 (42), from 2026-10-01 0.500 (20), maintainer 0.500, outside 0.464, no-block 0/128, gaps, unjudged or incomplete 12, mean issue words 34.7, cost per review $0.30, per hit $0.96
+      none:opus: hit@3 0.354, rank-weighted 0.236, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.354, strict from 2026-09-01 0.333 (48), from 2026-10-01 0.333 (24), maintainer 0.375, outside 0.344, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.25, per hit $0.94
+      none:particle: hit@3 0.208, rank-weighted 0.142, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.208, strict from 2026-09-01 0.208 (48), from 2026-10-01 0.167 (24), maintainer 0.250, outside 0.188, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.06, per hit $0.38
+      none:sol: hit@3 0.500, rank-weighted 0.333, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.500, strict from 2026-09-01 0.500 (48), from 2026-10-01 0.500 (24), maintainer 0.500, outside 0.500, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.15, per hit $0.40
+      standalone:opus: hit@3 0.292, rank-weighted 0.194, slot precision 0.306, Brier 0.057, AUC 1.000, per-protocol 0.292, strict from 2026-09-01 0.292 (48), from 2026-10-01 0.250 (24), maintainer 0.250, outside 0.313, no-block 8/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.70, per hit $3.20
+      standalone:sol: hit@3 0.542, rank-weighted 0.361, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 1.000, strict from 2026-09-01 0.542 (48), from 2026-10-01 0.500 (24), maintainer 0.563, outside 0.531, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.42, per hit $1.03
+      category direction or strategy fit: autoplan-ceo:opus 16/23, autoplan-ceo:particle 6/20, autoplan-ceo:sol 2/24, lens:opus 10/20, none:opus 8/24, none:particle 4/24, none:sol 12/24, standalone:opus 6/24, standalone:sol 12/24
+      category premise or demand: autoplan-ceo:opus 18/24, autoplan-ceo:particle 6/22, autoplan-ceo:sol 4/24, lens:opus 10/22, none:opus 8/24, none:particle 6/24, none:sol 12/24, standalone:opus 8/24, standalone:sol 14/24
+      category scope: autoplan-ceo:opus 18/24, autoplan-ceo:particle 6/22, autoplan-ceo:sol 4/24, lens:opus 10/22, none:opus 10/24, none:particle 6/24, none:sol 12/24, standalone:opus 8/24, standalone:sol 14/24
+      category user impact or migration: autoplan-ceo:opus 16/23, autoplan-ceo:particle 6/20, autoplan-ceo:sol 2/24, lens:opus 10/20, none:opus 8/24, none:particle 4/24, none:sol 12/24, standalone:opus 6/24, standalone:sol 12/24
+      opus lens - none: +0.071, 95% CI [0.000, 0.167]
+      opus autoplan-ceo - lens: +0.341, 95% CI [0.198, 0.488]
+PASS secondaries print for every cell run (9), every category (4) and both Opus lens rows
+PASS held units forecast 80 and changed 25 -> AUC 1.000 for none on Opus
+PASS both strict strata print with their counts (48 and 24 unit-passes)
+PASS no-block rate, gaps, unjudged or incomplete and mean issue words print per cell
+
+## f2. Input guards added by the guard amendment: each refusal on its repro, then its accept twin
+  Gap 1: a status outside scored, no-block, gap and incomplete
+PASS refuse 30 Opus none rows on changed units with status capped -> exit 1: E_USAGE readings row has a status outside scored, no-block, gap and incomplete; first: none on opus, unit c0, pass 1, status "capped"
+PASS   accept twin: the same 30 rows with status incomplete, which leave coverage -> exit 0: Model opus: none hit@3 0.061 on 66 unit-passes at 2 passes; Holm family autoplan-ceo, standalone | autoplan-ceo - none: 0.576 - 0.061 = +0.515, 95% CI [0.333, 0.697], p 0.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 0.688 -> untested (coverage 0.688 under 0.90), p = 1 in Holm
+PASS refuse stage 1, the 6 incomplete Opus none rows relabelled capped -> exit 1: E_USAGE readings row has a status outside scored, no-block, gap and incomplete; first: none on opus, unit c10, pass 3, status "capped"
+PASS   accept twin: the same readings with status incomplete -> exit 0: Verdict: NO READ (gaps, unjudged and incomplete 6 of 48 planned Opus none readings, over 10%): stop, FIX-METHOD
+PASS refuse a smoke row with status capped (autoplan-ceo on opus, c0) -> exit 1: E_USAGE readings row has a status outside scored, no-block, gap and incomplete; first: smoke autoplan-ceo on opus, unit c0, pass 1, status "capped"
+PASS   accept twin: the same readings unedited -> exit 0: Stage 2: may start after the projection and all-in checks; untested arms: none
+  Gap 2: unit records listed more than once (and a unit kind outside changed and held)
+PASS refuse stage 1 readings that list every unit twice -> exit 1: E_USAGE readings must list each unit once; first duplicate: c0
+PASS   accept twin: the same readings listing each unit once -> exit 0: Verdict: NO READ (gaps, unjudged and incomplete 6 of 48 planned Opus none readings, over 10%): stop, FIX-METHOD
+PASS refuse stage 2 readings that list every unit twice -> exit 1: E_USAGE readings must list each unit once; first duplicate: c0
+PASS   accept twin: the same readings listing each unit once -> exit 0: Leak drops: 0; changed units 48, held 16; MDD at Holm's first step for this n 0.18
+PASS refuse unit c0 with kind Changed, which takes its stock hit out of the count -> exit 1: E_USAGE readings must give each unit a string id and kind changed or held; first: c0
+PASS   accept twin: the same readings with kind changed -> exit 0: Verdict: STOCK FAIL (a stock row hit D on 2 of 16 changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief
+  Gap 3: smoke rows, one per gstack arm, model and unit, on the same two units for every cell
+PASS refuse the c1 autoplan-ceo Opus smoke row deleted and the c0 row copied in its place -> exit 1: E_USAGE readings must carry one row per planned session; first duplicate: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the same readings unedited -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> admitted | Stage 2: may start after the projection and all-in checks; untested arms: none
+PASS refuse the failed c1 autoplan-ceo Opus smoke row replaced by a copy of the c0 row under c1's id -> exit 1: E_USAGE readings must carry one row per planned session; first duplicate: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the failed c1 row as it ran -> exit 0: Smoke autoplan-ceo on opus: 1 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> UNTESTED in stage 2 | Stage 2: does not start; autoplan-ceo failed its smoke on Opus, FIX-METHOD on the harness, to the Captain
+PASS refuse the second autoplan-ceo Opus smoke row moved to c0 -> exit 1: E_USAGE readings must carry one row per planned session; first duplicate: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the same readings unedited -> exit 0: Stage 2: may start after the projection and all-in checks; untested arms: none
+PASS refuse a copy of the c0 autoplan-ceo smoke row on model haiku -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke autoplan-ceo on haiku, unit c0, pass 1
+PASS   accept twin: the same readings unedited -> exit 0: Stage 2: may start after the projection and all-in checks; untested arms: none
+PASS refuse both standalone particle-1 smoke rows missing -> exit 1: E_USAGE readings must carry one row per planned session; first missing: smoke standalone on particle, unit c0
+PASS   accept twin: the same readings unedited -> exit 0: Smoke standalone on particle: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.15 -> admitted
+PASS refuse the c1 autoplan-ceo Opus smoke row missing -> exit 1: E_USAGE readings must carry one row per planned session; first missing: smoke autoplan-ceo on opus, unit c1
+PASS   accept twin: the c1 row present and not exposed -> exit 0: Stage 2: does not start; autoplan-ceo failed its smoke on Opus, FIX-METHOD on the harness, to the Captain
+PASS refuse the c1 standalone Sol smoke row on c2, which is not a smoke unit -> exit 1: E_USAGE stage 1 readings must carry the smoke on two units, the same two for every gstack arm and model; units seen: c0, c1, c2
+PASS   accept twin: the same readings unedited -> exit 0: Smoke standalone on sol: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $0.42 -> admitted
+  Gap 4: held-unit rows, checked against min(passes, held_passes)
+PASS refuse every row on a held unit missing -> exit 1: E_USAGE readings must carry one row per planned session; first missing: none on opus, unit h0, pass 1
+PASS   accept twin: the same readings with their held rows -> exit 0: standalone:opus: hit@3 0.375, rank-weighted 0.250, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.375, strict from 2026-09-01 0.375 (48), from 2026-10-01 0.333 (24), maintainer 0.375, outside 0.375, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.70, per hit $2.49
+PASS refuse every standalone Opus row on a held unit missing -> exit 1: E_USAGE readings must carry one row per planned session; first missing: standalone on opus, unit h0, pass 1
+PASS   accept twin: the same readings with their held rows -> exit 0: standalone:opus: hit@3 0.375, rank-weighted 0.250, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.375, strict from 2026-09-01 0.375 (48), from 2026-10-01 0.333 (24), maintainer 0.375, outside 0.375, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.70, per hit $2.49
+PASS refuse readings with no held_passes -> exit 1: E_USAGE stage 2 readings must carry held_passes (1 or 2, from the projection's PASS line)
+PASS   accept twin: the same readings with held_passes 2 -> exit 0: Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+PASS refuse held_passes 1 with the held pass-2 rows kept -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: none on opus, unit h0, pass 2
+PASS   accept twin: held_passes 1 with every held pass-2 row removed -> exit 0: Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+  Gap 5: lens rows, checked against the lens flag
+PASS refuse every lens row missing and no lens flag -> exit 1: E_USAGE stage 2 readings must carry lens (true when the projection's PASS line runs lens:opus)
+PASS   accept twin: the same readings with lens true and their lens rows -> exit 0: opus lens - none: +0.063, 95% CI [0.000, 0.146]
+PASS refuse every lens row missing with lens true -> exit 1: E_USAGE readings must carry one row per planned session; first missing: lens on opus, unit c0, pass 1
+PASS   accept twin: every lens row missing with lens false -> exit 0: opus lens - none: not run | opus autoplan-ceo - lens: not run
+PASS refuse lens rows kept with lens false -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: lens on opus, unit c0, pass 1
+PASS   accept twin: lens rows kept with lens true -> exit 0: opus lens - none: +0.063, 95% CI [0.000, 0.146]
+  Gap 6: the row field contract, incomplete rows included
+PASS refuse an incomplete row with no leak and no words (none on opus, c0, pass 1) -> exit 1: E_USAGE readings row breaks the row contract on leak; first: none on opus, unit c0, pass 1
+PASS   accept twin: the same row with leak false for both judges and words [] -> exit 0: Model opus: none hit@3 0.347 on 95 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+PASS refuse the same incomplete row with leak and no words -> exit 1: E_USAGE readings row breaks the row contract on words; first: none on opus, unit c0, pass 1
+PASS   accept twin: the same row with words [] -> exit 0: Model opus: none hit@3 0.347 on 95 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+PASS refuse stage 1, the first incomplete Opus none row with no leak -> exit 1: E_USAGE readings row breaks the row contract on leak; first: none on opus, unit c10, pass 3
+PASS   accept twin: the same readings with its leak -> exit 0: Verdict: NO READ (gaps, unjudged and incomplete 6 of 48 planned Opus none readings, over 10%): stop, FIX-METHOD
+PASS refuse a judge call outside D, R1, R2, R3, none and null (autoplan-ceo on opus, c47, pass 1, Sol says maybe) -> exit 1: E_USAGE readings row breaks the row contract on labels; first: autoplan-ceo on opus, unit c47, pass 1
+PASS   accept twin: the same call with Sol missing (null), an unjudged review that leaves coverage -> exit 0: autoplan-ceo - none: 0.716 - 0.358 = +0.358, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 0.990 -> helps
+  Also: stock rows, the readings' arrays, and the projection's stage 1 readings
+PASS refuse stock row A missing on c1, one of the two units it hit -> exit 1: E_USAGE readings must carry stock rows A and B once on each changed unit; first missing: row A on unit c1
+PASS   accept twin: the same readings with that row -> exit 0: Verdict: STOCK FAIL (a stock row hit D on 2 of 16 changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief
+PASS refuse stock row B on c3 listed twice -> exit 1: E_USAGE readings must carry stock rows A and B once on each changed unit; first duplicate: row B on unit c3
+PASS   accept twin: the same readings with it once -> exit 0: Stock rows: hit D on 0 of 48 changed units (at most 3)
+PASS refuse a stock row on held unit h0 -> exit 1: E_USAGE readings must carry stock rows A and B once on each changed unit; first row outside the plan: row A on unit h0
+PASS   accept twin: the same readings without it -> exit 0: Verdict: HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
+PASS refuse a stock row whose first call has no Sonnet entry -> exit 1: E_USAGE readings stock row breaks the row contract on labels; first: row A on unit c0
+PASS   accept twin: the same call with Sonnet missing (null) -> exit 0: Stock rows: hit D on 1 of 16 changed units (at most 1)
+PASS refuse stage 2 readings with no stock array -> exit 1: E_USAGE readings must carry units, reviews and stock as arrays
+PASS   accept twin: the same readings with their stock rows -> exit 0: Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+PASS refuse a projection whose stage 1 readings carry a second c0 autoplan-ceo Opus smoke row at $6.00 -> exit 1: E_USAGE readings must carry one row per planned session; first duplicate: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the same projection on the readings as they are -> exit 0: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, standalone:particle, autoplan-ceo:particle; held passes 2
+  Fix-check note 4: passes take one of the projection's two shapes
+PASS refuse Opus at 1 pass with every Opus pass-2 row removed -> exit 1: E_USAGE stage 2 passes must be 2 on every model, or 2 on Opus with 1 on Sol and particle-1 and held_passes 1 (the projection's last cut); got opus 1, sol 2, particle 2, held_passes 2
+PASS   accept twin: every model at 2 passes -> exit 0: Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+PASS refuse Sol at 1 pass and particle-1 at 2, every Sol pass-2 row removed -> exit 1: E_USAGE stage 2 passes must be 2 on every model, or 2 on Opus with 1 on Sol and particle-1 and held_passes 1 (the projection's last cut); got opus 2, sol 1, particle 2, held_passes 2
+PASS   accept twin: Sol and particle-1 at 1 pass with held_passes 1, the last cut -> exit 0: Model sol: none hit@3 0.500 on 48 unit-passes at 1 pass; Holm family autoplan-ceo, standalone | autoplan-ceo - none: 0.542 - 0.500 = +0.042, 95% CI [0.000, 0.104], p 0.498 (monte-carlo-sign-flip), Holm p 0.997, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.26)
+PASS refuse Sol and particle-1 at 1 pass with held_passes 2 -> exit 1: E_USAGE stage 2 passes must be 2 on every model, or 2 on Opus with 1 on Sol and particle-1 and held_passes 1 (the projection's last cut); got opus 2, sol 1, particle 1, held_passes 2
+PASS   accept twin: the same passes with held_passes 1 -> exit 0: Model sol: none hit@3 0.500 on 48 unit-passes at 1 pass; Holm family autoplan-ceo, standalone | autoplan-ceo - none: 0.542 - 0.500 = +0.042, 95% CI [0.000, 0.104], p 0.498 (monte-carlo-sign-flip), Holm p 0.997, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.26)
+  Found in this post's /ship review: judge call counts and smoke wall time
+PASS refuse stock rows A on c0 and c1, the two it hit, cut to one judge call each -> exit 1: E_USAGE readings stock row breaks the row contract on label count; first: row A on unit c0
+PASS   accept twin: the same rows with all three calls -> exit 0: Verdict: STOCK FAIL (a stock row hit D on 2 of 16 changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief
+PASS refuse 10 scored Opus none hit rows with labels [] and three issues each -> exit 1: E_USAGE readings row breaks the row contract on label count; first: none on opus, unit c0, pass 1
+PASS   accept twin: the same 10 rows with three missing (null) calls each, unjudged -> exit 0: Verdict: NO READ (gaps, unjudged and incomplete 10 of 48 planned Opus none readings, over 10%): stop, FIX-METHOD
+PASS refuse every Opus none row with its D call dropped from labels -> exit 1: E_USAGE readings row breaks the row contract on label count; first: none on opus, unit c0, pass 1
+PASS   accept twin: the same readings unedited -> exit 0: Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+PASS refuse the autoplan-ceo Opus smoke rows with wall_s an empty string -> exit 1: E_USAGE readings row breaks the row contract on wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the same rows with wall_s 4000 -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 4000 s, larger session $3.00 -> UNTESTED in stage 2 | Stage 2: does not start; autoplan-ceo failed its smoke on Opus, FIX-METHOD on the harness, to the Captain
+  The scoped fix round: unjudged smoke rows, non-negative usd and wall_s, and unjudged stock issues
+PASS reads honest stage 1 readings: scored smoke rows unjudged, labels [] with three words -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> admitted | Stage 2: may start after the projection and all-in checks; untested arms: none
+PASS refuse the same readings with no words on the c0 autoplan-ceo Opus smoke row -> exit 1: E_USAGE readings row breaks the row contract on words; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS refuse a projection whose stage 1 readings carry the c0 autoplan-ceo Opus smoke row at usd -50 -> exit 1: E_USAGE readings row breaks the row contract on usd; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the same row at usd 0 -> exit 0: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, standalone:particle, autoplan-ceo:particle; held passes 2
+PASS refuse the c0 autoplan-ceo Opus smoke row with wall_s -1 -> exit 1: E_USAGE readings row breaks the row contract on wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: wall_s 0 on the c0 row and missing on the c1 row -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest Infinity s, larger session $3.00 -> UNTESTED in stage 2
+PASS reads stock rows A on c0 and c1 with the D call split (Sol D, Opus none, Sonnet missing), unjudged -> exit 0: Verdict: STOCK FAIL (a stock row hit D on 2 of 16 changed units; 2 of them only through an unjudged issue, counted as a possible D; at most 1 allowed): stop, FIX-METHOD on the judge brief
+PASS   accept twin: the same rows fully judged -> exit 0: Stock rows: hit D on 2 of 16 changed units (at most 1) | Verdict: STOCK FAIL (a stock row hit D on 2 of 16 changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief
+PASS reads stage 2 stock rows A on 4 changed units with an unjudged issue -> exit 0: Stock rows: hit D on 4 of 48 changed units (at most 3); 4 of them only through an unjudged issue, counted as a possible D: STOCK FAIL, every contrast reads untested (judge) | autoplan-ceo - none: 0.708 - 0.354 = +0.354, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 1.000 -> untested (judge: stock rows hit 4), p = 1 in Holm
+PASS reads the same on 3 changed units: the verdicts stand -> exit 0: Stock rows: hit D on 3 of 48 changed units (at most 3); 3 of them only through an unjudged issue, counted as a possible D | autoplan-ceo - none: 0.708 - 0.354 = +0.354, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 1.000 -> helps | standalone - none: 0.375 - 0.354 = +0.021, 95% CI [0.000, 0.063], p 1.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.18)
+
+## f3. The ladder amendment: the 10x tier, the fallback, the frozen plan, the issue count and finite numbers; each refusal on its repro, then its accept twin
+  The 10x tier on HEADROOM readings, with every new stage 1 line
+PASS m 20 of 48, every hit at rank 1 with rem yes on keyed units -> exit 0: Verdict: HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28) | 10x tier, Opus none: G_R 0.417 (240 twelfths over 48 readings), strict10 0.417, h1 0.417; band G_R 0.25 to 0.50 and strict10 at most 0.20: strict10 over 0.20; reviews unjudged for G_R, gaps and incomplete 0 of 48 planned | Remedy: keyed on 12 of 16 changed units (share 0.750); rem agreement, Sol vs Opus, n 324, both yes 47, Sol only 0, Opus only 0, positive agreement 1.000 [1.000, 1.000]; stock fix scores rem on 0 of 12 keyed units (at most 1); G_R form rem (rem in) | Opus none: G_R 0.417 (48), strict10 0.417 (48), h1 0.417 (48); rem rate 1.000 (15), by kind: scope 1.000 (6), alternative 1.000 (3), approach 1.000 (3), not_build 1.000 (3); decoy-first 0.000 (24); second-order hit@3 0.417 (12), G_R 0.417 (12) | Opus none hit@3 on keyed units 0.417 (36), on unkeyed units 0.417 (12) | k on hit@3 = 0.95 / hit@3 = 2.280 [1.900, 2.682]; k on strict10 = 2.280 [1.900, 2.682]; 0.95 is the ladder's pooled s0 (decides nothing) | G_R MDD at 48 changed units, 2 passes, at this keyed share: 0.12, hit-only 0.12, keyed row 0.75 (power-gr.txt; decides nothing) | Budget anchor: Opus none median session $0.25, the CEO anchor; both tiers read these sessions (ratio 1.00); seeded panel v2's median $0.13, ratio 1.984, from the move to real-outcome units (decides nothing) | Descriptive, sol none hit@3: 16 of 32; G_R 0.422 on 32
+PASS G_R's lower edge on HEADROOM readings: 18 hits of 48, all at rank 2, no unit keyed -> 144 twelfths, 0.250, in band; strict10 0 prints k as not estimable -> exit 0: Verdict: HEADROOM (18 of 48 = 0.375; band edges at this n: 8 to 28) | 10x tier, Opus none: G_R 0.250 (144 twelfths over 48 readings), strict10 0.000, h1 0.000; band G_R 0.25 to 0.50 and strict10 at most 0.20: in band; reviews unjudged for G_R, gaps and incomplete 0 of 48 planned | k on hit@3 = 0.95 / hit@3 = 2.533 [2.171, 2.850]; k on strict10 = not estimable (strict10 is 0 on every reading); 0.95 is the ladder's pooled s0 (decides nothing) | Remedy: keyed on 0 of 16 changed units (share 0.000); rem agreement, Sol vs Opus, n 0, both yes 0, Sol only 0, Opus only 0, positive agreement n/a n/a; stock fix scores rem on 0 of 0 keyed units (at most 1); G_R form norem (rem out: no rem cell either judge called yes)
+PASS   and 17 hits: 136 twelfths, 0.236, under the band (decides nothing on HEADROOM) -> exit 0: Verdict: HEADROOM (17 of 48 = 0.354; band edges at this n: 8 to 28) | 10x tier, Opus none: G_R 0.236 (136 twelfths over 48 readings), strict10 0.000, h1 0.000; band G_R 0.25 to 0.50 and strict10 at most 0.20: G_R under 0.25; reviews unjudged for G_R, gaps and incomplete 0 of 48 planned
+PASS a split D call (Sol D, Opus none, Sonnet D) whose rem splits the same way on keyed unit c4: final D at rank 1 with final rem yes adds 12 twelfths -> exit 0: Verdict: HEADROOM (21 of 48 = 0.438; band edges at this n: 8 to 28) | 10x tier, Opus none: G_R 0.438 (252 twelfths over 48 readings), strict10 0.438, h1 0.438; band G_R 0.25 to 0.50 and strict10 at most 0.20: strict10 over 0.20; reviews unjudged for G_R, gaps and incomplete 0 of 48 planned
+  The fallback on both sides of each condition (hit@3 34 of 48 = 0.708 unless stated)
+PASS G_R exactly 0.500 (288 twelfths of 576): units c0 to c3 keyed, no rem yes, 10 hits at rank 1 -> FALLBACK -> exit 0: Verdict: FALLBACK (CEILING on hit@3, 34 of 48 = 0.708 > 0.60; G_R 0.500 from 0.25 to 0.50, strict10 0.125 at most 0.20, 0 of 48 planned readings out): stage 2's primary is G_R, rem form | 10x tier, Opus none: G_R 0.500 (288 twelfths over 48 readings), strict10 0.125, h1 0.208; band G_R 0.25 to 0.50 and strict10 at most 0.20: in band; reviews unjudged for G_R, gaps and incomplete 0 of 48 planned | Stage 2: may start after the projection and all-in checks; untested arms: none
+PASS   one rem yes more: 291 twelfths, 0.505 -> CEILING, the 10x tier saturated -> exit 0: Verdict: CEILING (34 of 48 = 0.708 > 0.60): stop | 10x reading: saturated (G_R 0.505, strict10 0.146, rem in, 0 of 48 planned readings out): a saturation stop on both tiers | Stage 2: does not start
+PASS strict10 exactly 0.200: 28 hits of 45 (3 gaps), 9 at rank 1, no unit keyed -> FALLBACK in the norem form -> exit 0: Verdict: FALLBACK (CEILING on hit@3, 28 of 45 = 0.622 > 0.60; G_R 0.481 from 0.25 to 0.50, strict10 0.200 at most 0.20, 3 of 48 planned readings out): stage 2's primary is G_R, norem form
+PASS   10 at rank 1: strict10 0.222 -> CEILING; rem is out, so the 10x reading is FIX-METHOD (judge), never saturation -> exit 0: Verdict: CEILING (28 of 45 = 0.622 > 0.60): stop | 10x reading: FIX-METHOD (judge), never saturation: rem out: no rem cell either judge called yes
+PASS units c0 to c5 keyed (share 0.375), rem yes on 3 keyed hits: 287 twelfths, 0.498 -> FALLBACK -> exit 0: Verdict: FALLBACK (CEILING on hit@3, 34 of 48 = 0.708 > 0.60; G_R 0.498 from 0.25 to 0.50, strict10 0.146 at most 0.20, 0 of 48 planned readings out): stage 2's primary is G_R, rem form | Remedy: keyed on 6 of 16 changed units (share 0.375); rem agreement, Sol vs Opus, n 162, both yes 15, Sol only 0, Opus only 0, positive agreement 1.000 [1.000, 1.000]; stock fix scores rem on 0 of 6 keyed units (at most 1); G_R form rem (rem in)
+PASS   keyed share 0.313 (c0 to c4): 292 twelfths, 0.507 -> CEILING, saturated -> exit 0: Verdict: CEILING (34 of 48 = 0.708 > 0.60): stop | 10x reading: saturated (G_R 0.507, strict10 0.167, rem in, 0 of 48 planned readings out): a saturation stop on both tiers | Remedy: keyed on 5 of 16 changed units (share 0.313); rem agreement, Sol vs Opus, n 135, both yes 15, Sol only 0, Opus only 0, positive agreement 1.000 [1.000, 1.000]; stock fix scores rem on 0 of 5 keyed units (at most 1); G_R form rem (rem in)
+PASS 4 keyed hits with an unjudged rem (4 of 48 out, 10% or less): G_R on the other 44 is 263 twelfths, 0.498, in band, but 299 twelfths, 0.519 with the 4 rems scored yes -> CEILING, and the 10x reading is FIX-METHOD (judge) -> exit 0: 10x reading: FIX-METHOD (judge), never saturation: 4 unjudged rem decide the reading (left out: G_R 0.498, strict10 0.159; scored yes: G_R 0.519, strict10 0.146; scored no: G_R 0.498, strict10 0.146) | Stage 2: does not start
+FAIL   the same readings, stop label amendment: headroom prints JUDGE WAIT, a CEILING that doesn't fall back, and projection's Primary line names stage 1 JUDGE WAIT -> exit 0 and 0: Verdict: CEILING (34 of 48 = 0.708 > 0.60): stop | Primary: none (stage 1 CEILING); stage 2 does not start
+PASS   the same 4 rems judged no (the readings above): 287 twelfths, 0.498 -> FALLBACK -> exit 0: Verdict: FALLBACK (CEILING on hit@3, 34 of 48 = 0.708 > 0.60; G_R 0.498 from 0.25 to 0.50, strict10 0.146 at most 0.20, 0 of 48 planned readings out): stage 2's primary is G_R, rem form
+PASS   the same 4 rems judged yes: 299 twelfths, 0.519 -> CEILING, saturated -> exit 0: Verdict: CEILING (34 of 48 = 0.708 > 0.60): stop | 10x reading: saturated (G_R 0.519, strict10 0.146, rem in, 0 of 48 planned readings out): a saturation stop on both tiers
+PASS units c0 to c7 keyed, rem yes on the 8 keyed hits at rank 1: G_R 0.500, strict10 0.188 -> FALLBACK -> exit 0: Verdict: FALLBACK (CEILING on hit@3, 34 of 48 = 0.708 > 0.60; G_R 0.500 from 0.25 to 0.50, strict10 0.188 at most 0.20, 0 of 48 planned readings out): stage 2's primary is G_R, rem form
+PASS   4 keyed hits at rank 2 with an unjudged rem: strict10 on the other 44 is 0.205, saturated, but 0.188 with the 4 rems scored no -> CEILING, and the 10x reading is FIX-METHOD (judge), never saturation -> exit 0: Verdict: CEILING (34 of 48 = 0.708 > 0.60): stop
+FAIL   the same readings, stop label amendment: the 10x reason says the judged readings decide the CEILING and the 4 unjudged rem decide only whether the 10x reading is a saturation stop -> exit 0: missing /^10x reading: FIX-METHOD \(judge\), never saturation: the judged readings decide the CEILING \(left out: G_R 0\.500, strict10 0\.205, saturated\); the 4 unjudged rem decide only whether the 10x reading is a saturation stop \(scored yes: G_R 0\.521, strict10 0\.188; scored no: G_R 0\.500, strict10 0\.188\)$/
+PASS   5 of 48 out (over 10%): CEILING, and the 10x reading is FIX-METHOD (judge) -> exit 0: Verdict: CEILING (34 of 48 = 0.708 > 0.60): stop | 10x reading: FIX-METHOD (judge), never saturation: reviews unjudged for G_R, gaps and incomplete 5 of 48 planned readings, over 10%
+PASS rem agreement just at or above 0.70: 40 Sol-only rem cells against 47 both-yes cells -> rem stays in -> exit 0: Remedy: keyed on 12 of 16 changed units (share 0.750); rem agreement, Sol vs Opus, n 324, both yes 47, Sol only 40, Opus only 0, positive agreement 0.701 [0.624, 0.758]; stock fix scores rem on 0 of 12 keyed units (at most 1); G_R form rem (rem in)
+PASS units c0 and c1 keyed, rem no on Opus none's keyed hits: both judges say yes on 4 rem cells, all shared -> under the minimum of 5, rem leaves G_R -> exit 0: Remedy: keyed on 2 of 16 changed units (share 0.125); rem agreement, Sol vs Opus, n 54, both yes 4, Sol only 0, Opus only 0, positive agreement 1.000 [1.000, 1.000]; stock fix scores rem on 0 of 2 keyed units (at most 1); G_R form norem (rem out: both judges say yes on 4 rem cells, under 5)
+PASS   rem yes on 1 keyed hit: 5 shared yes cells -> rem stays in -> exit 0: Remedy: keyed on 2 of 16 changed units (share 0.125); rem agreement, Sol vs Opus, n 54, both yes 5, Sol only 0, Opus only 0, positive agreement 1.000 [1.000, 1.000]; stock fix scores rem on 0 of 2 keyed units (at most 1); G_R form rem (rem in)
+PASS   one Sol-only cell more: under 0.70 -> rem leaves G_R -> exit 0: Remedy: keyed on 12 of 16 changed units (share 0.750); rem agreement, Sol vs Opus, n 324, both yes 47, Sol only 41, Opus only 0, positive agreement 0.696 [0.613, 0.757]; stock fix scores rem on 0 of 12 keyed units (at most 1); G_R form norem (rem out: positive agreement on rem 0.696 under 0.70)
+PASS the stock fix scores rem on 1 keyed unit (c0) -> rem stays in -> exit 0: Remedy: keyed on 12 of 16 changed units (share 0.750); rem agreement, Sol vs Opus, n 324, both yes 48, Sol only 0, Opus only 0, positive agreement 1.000 [1.000, 1.000]; stock fix scores rem on 1 of 12 keyed units (at most 1); G_R form rem (rem in)
+PASS   on 2 (c0 and c1) -> rem leaves G_R -> exit 0: Remedy: keyed on 12 of 16 changed units (share 0.750); rem agreement, Sol vs Opus, n 324, both yes 49, Sol only 0, Opus only 0, positive agreement 1.000 [1.000, 1.000]; stock fix scores rem on 2 of 12 keyed units (at most 1); G_R form norem (rem out: the stock fix scores rem on 2 keyed units, more than 1)
+PASS   on 2, c1 only through an unjudged stock rem (Sol yes, Opus no, Sonnet missing) -> rem leaves G_R, with the note -> exit 0: Remedy: keyed on 12 of 16 changed units (share 0.750); rem agreement, Sol vs Opus, n 324, both yes 48, Sol only 1, Opus only 0, positive agreement 0.990 [0.962, 1.000]; stock fix scores rem on 2 of 12 keyed units (at most 1); 1 of them only through an unjudged rem, counted as a possible rem; G_R form norem (rem out: the stock fix scores rem on 2 keyed units, more than 1)
+PASS CEILING at 29 of 48 with rem in and nothing out: the 10x tier saturated -> exit 0: Verdict: CEILING (29 of 48 = 0.604 > 0.60): stop | 10x reading: saturated (G_R 0.604, strict10 0.604, rem in, 0 of 48 planned readings out): a saturation stop on both tiers
+PASS   the same with rem out by the agreement gate -> FIX-METHOD (judge) -> exit 0: 10x reading: FIX-METHOD (judge), never saturation: rem out: positive agreement on rem 0.697 under 0.70
+PASS   the same with rem out by the stock fix -> FIX-METHOD (judge) -> exit 0: 10x reading: FIX-METHOD (judge), never saturation: rem out: the stock fix scores rem on 2 keyed units, more than 1
+PASS   the same with 5 keyed hits whose rem is unjudged -> FIX-METHOD (judge) -> exit 0: 10x reading: FIX-METHOD (judge), never saturation: reviews unjudged for G_R, gaps and incomplete 5 of 48 planned readings, over 10%
+  projection's Primary line
+PASS on HEADROOM -> exit 0: Primary: hit@3 (stage 1 HEADROOM); G_R form rem | Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, standalone:particle, autoplan-ceo:particle; held passes 2
+PASS on FALLBACK with rem in -> exit 0: Primary: G_R (stage 1 FALLBACK); G_R form rem
+PASS on FALLBACK in the norem form -> exit 0: Primary: G_R (stage 1 FALLBACK); G_R form norem
+PASS on a CEILING that doesn't fall back -> exit 0: Primary: none (stage 1 CEILING); stage 2 does not start
+  The frozen plan: compare reads the projection output the Captain recorded, bound by its sha256
+    Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, standalone:particle, autoplan-ceo:particle; held passes 2
+    Projection: PASS at 'lens dropped'; record these caps; cells: none:opus, standalone:opus, autoplan-ceo:opus, none:sol, autoplan-ceo:sol, none:particle, autoplan-ceo:particle; held passes 1
+    Projection: PASS at 'Sol and particle-1 cells at 1 pass'; record these caps; cells: none:opus, standalone:opus, autoplan-ceo:opus, none:sol, autoplan-ceo:sol, none:particle, autoplan-ceo:particle; held passes 1; 1 pass on sol, particle
+PASS   accept twin: readings at 'as planned' against projection's own PASS line -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line | autoplan-ceo - none: 0.708 - 0.354 = +0.354, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 1.000 -> helps
+PASS   accept twin: readings at 'lens dropped' against its PASS line -> exit 0: Frozen plan: the projection output's sha256 5b27fd8b94f3d3c0386dece15b8b4e33dcb5c513f3ffc75979172343f365d172 matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line | Model sol: none hit@3 0.500 on 96 unit-passes at 2 passes; Holm family autoplan-ceo
+PASS   accept twin: readings at the last cut against its PASS line -> exit 0: Frozen plan: the projection output's sha256 66976e14536cf3a641becd9db7d87a1281aab291b00968a4aca46c80f25d63cd matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line | Model sol: none hit@3 0.500 on 48 unit-passes at 1 pass; Holm family autoplan-ceo
+PASS refuse readings that drop standalone on Opus with its rows and its family entry, against a PASS line that runs it -> exit 1: E_USAGE stage 2 readings differ from the projection's PASS line on the opus family: readings autoplan-ceo, PASS line autoplan-ceo, standalone
+PASS   accept twin: the same readings against a PASS line where standalone was UNTESTED on Opus -> exit 0: Frozen plan: the projection output's sha256 aaf216d73cd0cc0e85e33b549c0d0e5a0e15471f7d916f1b734daa5eab101fcd matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line | Model opus: none hit@3 0.354 on 96 unit-passes at 2 passes; Holm family autoplan-ceo
+PASS refuse readings at the last cut's passes against the 'lens dropped' PASS line -> exit 1: E_USAGE stage 2 readings differ from the projection's PASS line on passes on sol: readings 1, PASS line 2
+PASS refuse readings with held_passes 1 against the 'as planned' PASS line -> exit 1: E_USAGE stage 2 readings differ from the projection's PASS line on held_passes: readings 1, PASS line 2
+PASS refuse readings with lens false and no lens rows against the 'as planned' PASS line -> exit 1: E_USAGE stage 2 readings differ from the projection's PASS line on lens: readings false, PASS line true
+PASS refuse no projection output -> exit 1: E_USAGE compare needs <readings.json> <projection.txt> <sha256>: the projection output and the sha256 the Captain recorded with the caps
+PASS refuse a projection output whose sha256 isn't the recorded one -> exit 1: E_USAGE the projection output's sha256 is 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f, not the recorded 0000000000000000000000000000000000000000000000000000000000000000
+PASS refuse a projection output that stopped over the envelope -> exit 1: E_USAGE the projection output stopped over the envelope; stage 2 does not start
+PASS refuse a projection output with two PASS lines -> exit 1: E_USAGE the projection output must hold one PASS line and one Primary line; it holds 2 and 1
+PASS refuse a projection output with no Primary line -> exit 1: E_USAGE the projection output must hold one PASS line and one Primary line; it holds 1 and 0
+PASS refuse a projection output whose Primary is none -> exit 1: E_USAGE the projection output names no primary; stage 2 does not start
+PASS refuse a Primary line that pairs G_R with HEADROOM -> exit 1: E_USAGE the projection output's Primary line pairs G_R with stage 1 HEADROOM
+PASS refuse a PASS line with no cells list -> exit 1: E_USAGE the projection output's PASS line doesn't parse
+PASS   accept twin: the 'as planned' output with CRLF line ends, bound by the sha256 of those bytes -> exit 0: Frozen plan: the projection output's sha256 26febfc50ae30ee83a43f9ca555dc307bb7c272eb5b30f3354ee33ef5f05db40 matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+  The issue count: each row's issues and fixes against its labels and word counts
+PASS refuse an issue dropped from labels and words but kept in issues (none on opus, c0, pass 1; the guard amendment's open note) -> exit 1: E_USAGE readings row breaks the row contract on issues against words; first: none on opus, unit c0, pass 1
+PASS   accept twin: the same row with all three issues -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+PASS refuse issue 1 at 30 words where words says 28 -> exit 1: E_USAGE readings row breaks the row contract on issues against words; first: none on opus, unit c0, pass 1
+PASS refuse issue 3 at 41 words, not cut to 40 -> exit 1: E_USAGE readings row breaks the row contract on issues against words; first: none on opus, unit c0, pass 1
+PASS   accept twin: issue 3 cut to its first 40 words, words 41 -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+PASS refuse fix 1 at 30 words where fix_words says 28 -> exit 1: E_USAGE readings row breaks the row contract on fixes against fix_words; first: none on opus, unit c0, pass 1
+PASS refuse three issues and two fixes -> exit 1: E_USAGE readings row breaks the row contract on fixes against fix_words; first: none on opus, unit c0, pass 1
+PASS refuse a row with no fixes -> exit 1: E_USAGE readings row breaks the row contract on fixes; first: none on opus, unit c0, pass 1
+PASS   accept twin: fix 1 empty with fix_words 0 (the review gave no fix; the remedy packet shows 'no fix') -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+PASS refuse a no-block row (standalone on opus, c0) carrying one issue -> exit 1: E_USAGE readings row breaks the row contract on issues on a row that isn't scored; first: standalone on opus, unit c0, pass 1
+PASS   accept twin: the same row with no issues and no words -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+PASS refuse a scored row with no issues field -> exit 1: E_USAGE readings row breaks the row contract on issues; first: none on opus, unit c0, pass 1
+PASS refuse a smoke row carrying judge calls -> exit 1: E_USAGE readings row breaks the row contract on calls on a smoke row; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the same smoke row with no calls -> exit 0: Smoke autoplan-ceo on opus: 2 of 2 exposed, 2 with a block, longest 900 s, larger session $3.00 -> admitted
+  The unit contract and rem on calls
+PASS refuse unit c0 with no remedy field -> exit 1: E_USAGE readings unit breaks the unit contract on remedy; first: c0
+PASS refuse unit c0 with remedy_kind maybe -> exit 1: E_USAGE readings unit breaks the unit contract on remedy_kind; first: c0
+PASS refuse unit c3 (no remedy) with remedy_kind scope -> exit 1: E_USAGE readings unit breaks the unit contract on remedy_kind; first: c3
+PASS refuse unit c0 with decoy D -> exit 1: E_USAGE readings unit breaks the unit contract on decoy; first: c0
+PASS   accept twin: unit c0 with decoy R2 -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+PASS refuse unit c0 with remedy "yes", a string -> exit 1: E_USAGE readings unit breaks the unit contract on remedy; first: c0
+PASS refuse unit c2 with no decoy field -> exit 1: E_USAGE readings unit breaks the unit contract on decoy; first: c2
+PASS refuse unit c5 with second_order "true", a string -> exit 1: E_USAGE readings unit breaks the unit contract on second_order; first: c5
+PASS refuse unit c1 with no second_order field -> exit 1: E_USAGE readings unit breaks the unit contract on second_order; first: c1
+PASS refuse held unit h0 with a remedy -> exit 1: E_USAGE readings unit breaks the unit contract on held unit's remedy fields; first: h0
+PASS   accept twin: the same readings unedited -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+PASS refuse a rem on a call of unit c3, which has no keyed remedy -> exit 1: E_USAGE readings row breaks the row contract on rem; first: none on opus, unit c3, pass 1
+PASS   accept twin: the same call with rem null -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+PASS refuse a call on keyed unit c0 with no rem -> exit 1: E_USAGE readings row breaks the row contract on rem; first: none on opus, unit c0, pass 1
+PASS refuse a rem value of yes as a string -> exit 1: E_USAGE readings row breaks the row contract on rem; first: none on opus, unit c0, pass 1
+PASS refuse a stock call on keyed unit c0 with no rem -> exit 1: E_USAGE readings stock row breaks the row contract on rem; first: row A on unit c0
+  Finite numbers: 1e999 parses to Infinity
+PASS refuse usd 1e999 on none on opus, c0, pass 1 -> exit 1: E_USAGE readings row breaks the row contract on usd; first: none on opus, unit c0, pass 1
+PASS   accept twin: usd 1000000 -> exit 0: Frozen plan: the projection output's sha256 35b0d9765f109fc4bf028a180d6e50f5450490ed1d371c49984665a32d061b4f matches the recorded value; primary hit@3 (stage 1 HEADROOM); G_R form rem; family, passes, held passes and lens match its PASS line
+PASS refuse forecast 1e999 -> exit 1: E_USAGE readings row breaks the row contract on forecast; first: none on opus, unit c0, pass 1
+PASS refuse a words entry of 1e999 -> exit 1: E_USAGE readings row breaks the row contract on words; first: none on opus, unit c0, pass 1
+PASS refuse smoke wall_s 1e999 -> exit 1: E_USAGE readings row breaks the row contract on wall_s; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS refuse a projection whose c0 autoplan-ceo Opus smoke session cost 1e999 (the cut would drop the cell) -> exit 1: E_USAGE readings row breaks the row contract on usd; first: smoke autoplan-ceo on opus, unit c0, pass 1
+PASS   accept twin: the same session at $6.00 -> exit 0: Projection: PASS at 'Sol and particle-1 cells at 1 pass'; record these caps; cells: none:opus, standalone:opus, autoplan-ceo:opus, none:sol, autoplan-ceo:sol, none:particle, autoplan-ceo:particle; held passes 1; 1 pass on sol, particle
+  compare with G_R as the primary (stage 1 FALLBACK)
+PASS the 'as planned' readings under G_R: autoplan-ceo helps, standalone not distinguished at the G_R MDD -> exit 0: Frozen plan: the projection output's sha256 17b64737748f1fe71ffaaa2d8229d304cb793520eb76241eb7717fb1d14d5672 matches the recorded value; primary G_R (stage 1 FALLBACK); G_R form rem; family, passes, held passes and lens match its PASS line | Leak drops: 0; changed units 48, held 16; G_R MDD at Holm's first step for this n 0.10, hit-only 0.10, keyed row 0.75; keyed share 0.750 | Model opus: none G_R 0.289 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone | autoplan-ceo - none: 0.582 - 0.289 = +0.293, 95% CI [0.182, 0.405], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 1.000 -> helps | standalone - none: 0.308 - 0.289 = +0.019, 95% CI [-0.014, 0.064], p 0.498 (monte-carlo-sign-flip), Holm p 0.498, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.10) | hit@3 (secondary): +0.354, 95% CI [0.229, 0.500], Holm p 0.000, coverage 1.000, helps (decides nothing) | G_R bounds: no unjudged rem on opus's changed units
+PASS a 10x line prints for each of the 10 cells run, with rem by kind, decoy-first and the second-order stratum
+    10x autoplan-ceo:opus: G_R 0.582 (96), strict10 0.240 (96), h1 0.240 (96); rem rate 1.000 (52), by kind: scope 1.000 (16), alternative 1.000 (12), approach 1.000 (12), not_build 1.000 (12); decoy-first 0.000 (48); second-order hit@3 0.700 (20), G_R 0.583 (20)
+    10x autoplan-ceo:particle: G_R 0.205 (96), strict10 0.083 (96), h1 0.083 (96); rem rate 1.000 (18), by kind: scope 1.000 (6), alternative 1.000 (6), approach 1.000 (6), not_build n/a (0); decoy-first 0.000 (48); second-order hit@3 0.300 (20), G_R 0.250 (20)
+PASS under hit@3, G_R prints as the secondary -> exit 0: autoplan-ceo - none: 0.708 - 0.354 = +0.354, 95% CI [0.229, 0.500], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 1.000 -> helps | G_R (secondary): +0.293, 95% CI [0.182, 0.405], Holm p 0.000, coverage 1.000, helps (decides nothing)
+PASS Opus none hit in 34 of 48 units: none's G_R above 0.50 -> CEILING flag on both G_R contrasts -> exit 0: Model opus: none G_R 0.579 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone; CEILING flag on both contrasts
+PASS   in 28 of 48: G_R 0.50 or under, no flag -> exit 0: Model opus: none G_R 0.476 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+PASS the stage 2 stock fix scores rem on 3 of 36 keyed units: G_R stays in the rem form -> exit 0: Stock fix: scores rem on 3 of 36 keyed changed units (at most 3); G_R form rem | standalone - none: 0.308 - 0.289 = +0.019, 95% CI [-0.014, 0.064], p 0.498 (monte-carlo-sign-flip), Holm p 0.498, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.10)
+PASS   on 4: G_R contrasts read in the norem form, with its MDD -> exit 0: Stock fix: scores rem on 4 of 36 keyed changed units (at most 3): G_R contrasts read in the norem form, which the stock fix can't move; G_R form norem | standalone - none: 0.292 - 0.274 = +0.017, 95% CI [-0.017, 0.063], p 0.612 (monte-carlo-sign-flip), Holm p 0.612, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.12)
+PASS 4 autoplan-ceo hits on Opus with an unjudged rem: G_R coverage 0.958, still helps; the bounds agree -> exit 0: autoplan-ceo - none: 0.572 - 0.264 = +0.309, 95% CI [0.194, 0.424], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 0.958 -> helps | hit@3 (secondary): +0.354, 95% CI [0.229, 0.500], Holm p 0.000, coverage 1.000, helps (decides nothing) | G_R bounds, unjudged rem against the arm (arm 0, none 1): +0.283, helps; for the arm (arm 1, none 0): +0.293, helps
+PASS   10 of them: G_R coverage 0.896 -> untested (coverage), hit@3 untouched, and the bounds differ from the G_R verdict -> exit 0: autoplan-ceo - none: 0.551 - 0.227 = +0.325, 95% CI [0.205, 0.444], p 0.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 0.896 -> untested (coverage 0.896 under 0.90), p = 1 in Holm | hit@3 (secondary): +0.354, 95% CI [0.229, 0.500], Holm p 0.000, coverage 1.000, helps (decides nothing) | G_R bounds, unjudged rem against the arm (arm 0, none 1): +0.267, helps; for the arm (arm 1, none 0): +0.293, helps; BOUNDS DIFFER from the G_R verdict (untested)
+PASS 4 hit unit-passes on Opus with an unjudged rem on both arms (none and autoplan-ceo, the same unit-passes) -> exit 0: autoplan-ceo - none: 0.572 - 0.264 = +0.309, 95% CI [0.194, 0.424], p 0.000 (monte-carlo-sign-flip), Holm p 0.000, exposure 1.000, coverage 0.958 -> helps | G_R bounds, unjudged rem against the arm (arm 0, none 1): +0.283, helps; for the arm (arm 1, none 0): +0.304, helps
+PASS   the bound against the arm (0.283) sits below the bound for it (0.304); scoring both arms' unjudged rem alike would make them equal
+  projection's untested list: the cells stage 1's smoke leaves untested, and no stage 2 when autoplan-ceo failed its smoke on Opus
+PASS refuse a projection that lists autoplan-ceo on Opus untested when its smoke admitted it -> exit 1: E_USAGE the projection's untested list must name the cells stage 1's smoke leaves untested: none; got autoplan-ceo:opus
+PASS refuse a projection with no untested cell when standalone failed its smoke on particle-1 -> exit 1: E_USAGE the projection's untested list must name the cells stage 1's smoke leaves untested: standalone:particle; got none
+PASS   accept twin: the same projection with standalone:particle untested -> exit 0: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus, autoplan-ceo:opus, none:sol, standalone:sol, autoplan-ceo:sol, none:particle, autoplan-ceo:particle; held passes 2
+PASS refuse a projection whose stage 1 smoke failed autoplan-ceo on Opus, listed untested -> exit 1: E_USAGE autoplan-ceo failed its smoke on Opus; stage 2 does not start
+
+## g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation
+A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Run items (one per review-units invocation) open a trial-proof lease at their cap, judge items a direct-proof lease for what is left of their envelope, all with --admission warn. Each item settles at its projected spend. Stage 2's caps here are the planning caps; the real ones come from the projection check.
+PASS the six stage 1 smoke items (one per model and invocation) cap at $63.00 in all, each covering its one round at full allowance
+PASS stage 1: run caps $144.00 leave the judges at least the $16.00 floor of the $160.00 envelope
+PASS ceo-o-hr-opus-none recorded at $52.00
+PASS ceo-o-hr-opus-none: one lease opened (RIG_UNPROVEN) and settled at $15.00, bound to its run
+PASS ceo-o-hr-opus-none: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-sol-none recorded at $23.00
+PASS ceo-o-hr-sol-none: one lease opened (RIG_UNPROVEN) and settled at $6.00, bound to its run
+PASS ceo-o-hr-sol-none: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-particle-none recorded at $6.00
+PASS ceo-o-hr-particle-none: one lease opened (RIG_UNPROVEN) and settled at $2.40, bound to its run
+PASS ceo-o-hr-particle-none: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-opus-a recorded at $25.00
+PASS ceo-o-hr-smoke-opus-a: one lease opened (RIG_UNPROVEN) and settled at $6.00, bound to its run
+PASS ceo-o-hr-smoke-opus-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-opus-p recorded at $15.00
+PASS ceo-o-hr-smoke-opus-p: one lease opened (RIG_UNPROVEN) and settled at $1.40, bound to its run
+PASS ceo-o-hr-smoke-opus-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-sol-a recorded at $13.00
+PASS ceo-o-hr-smoke-sol-a: one lease opened (RIG_UNPROVEN) and settled at $3.60, bound to its run
+PASS ceo-o-hr-smoke-sol-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-sol-p recorded at $8.00
+PASS ceo-o-hr-smoke-sol-p: one lease opened (RIG_UNPROVEN) and settled at $0.84, bound to its run
+PASS ceo-o-hr-smoke-sol-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-particle-a recorded at $1.00
+PASS ceo-o-hr-smoke-particle-a: one lease opened (RIG_UNPROVEN) and settled at $0.66, bound to its run
+PASS ceo-o-hr-smoke-particle-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-particle-p recorded at $1.00
+PASS ceo-o-hr-smoke-particle-p: one lease opened (RIG_UNPROVEN) and settled at $0.30, bound to its run
+PASS ceo-o-hr-smoke-particle-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-judge-sol recorded at $123.80 ($160.00 less $36.20 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-sol: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
+PASS ceo-o-hr-judge-sol: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-judge-opus recorded at $121.80 ($160.00 less $38.20 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-opus: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
+PASS ceo-o-hr-judge-opus: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-judge-sonnet recorded at $119.80 ($160.00 less $40.20 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-sonnet: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
+PASS ceo-o-hr-judge-sonnet: a second run on the settled item refuses with E_ITEM_BOUND
+    stage 1 settled in all: $42.20 of the $160.00 envelope
+PASS stage 2: run caps $1231.00 leave the judges at least the $116.00 floor of the $1410.00 envelope
+PASS ceo-o-cmp-opus-p recorded at $222.00
+PASS ceo-o-cmp-opus-p: one lease opened (RIG_UNPROVEN) and settled at $160.00, bound to its run
+PASS ceo-o-cmp-opus-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-opus-a recorded at $516.00
+PASS ceo-o-cmp-opus-a: one lease opened (RIG_UNPROVEN) and settled at $384.00, bound to its run
+PASS ceo-o-cmp-opus-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-sol-p recorded at $99.00
+PASS ceo-o-cmp-sol-p: one lease opened (RIG_UNPROVEN) and settled at $72.96, bound to its run
+PASS ceo-o-cmp-sol-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-sol-a recorded at $306.00
+PASS ceo-o-cmp-sol-a: one lease opened (RIG_UNPROVEN) and settled at $230.40, bound to its run
+PASS ceo-o-cmp-sol-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-particle-p recorded at $34.00
+PASS ceo-o-cmp-particle-p: one lease opened (RIG_UNPROVEN) and settled at $26.88, bound to its run
+PASS ceo-o-cmp-particle-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-particle-a recorded at $54.00
+PASS ceo-o-cmp-particle-a: one lease opened (RIG_UNPROVEN) and settled at $42.24, bound to its run
+PASS ceo-o-cmp-particle-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-judge-sol recorded at $493.52 ($1410.00 less $916.48 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-sol: one lease opened (RIG_UNPROVEN) and settled at $19.20, bound to its run
+PASS ceo-o-cmp-judge-sol: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-judge-opus recorded at $474.32 ($1410.00 less $935.68 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-opus: one lease opened (RIG_UNPROVEN) and settled at $19.20, bound to its run
+PASS ceo-o-cmp-judge-opus: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-judge-sonnet recorded at $455.12 ($1410.00 less $954.88 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-sonnet: one lease opened (RIG_UNPROVEN) and settled at $19.20, bound to its run
+PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITEM_BOUND
+    stage 2 settled in all: $974.08 of the $1410.00 envelope
+
+## Leak check
+PASS the transcript prints no home path and no key name's value
+
+PASS 338, FAIL 2
