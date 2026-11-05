@@ -213,5 +213,8 @@ as its amendments change it), with `--sealed-root` when the suite is sealed. ceo
 - rows.json records `exposure_sha256` (ceo-exposure.ts's digest) beside `parser_sha256`, and packets and readings
   refuse rows from another one. Each row carries `model_id`, and rows read only the three model ids the
   preregistration names, by their exact policy keys.
-- The receipts sink also gets every session's `host/transcript.ndjson`, which rows read for exposure.
+- Before a session's work dir is removed, each ceo-review.md under it is copied into `host/ceo-review/` at its relative
+  path. Symlinks are skipped, and each copy failure is logged in trial.json under `logs.copy_out`.
+- The receipts sink also gets every session's `host/transcript.ndjson`, which rows read for exposure, and
+  `host/ceo-review/` beside it.
 - The out dir must sit outside the repo.

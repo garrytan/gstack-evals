@@ -1,0 +1,95 @@
+ANTHROPIC_API_KEY: unset
+OPENAI_API_KEY: unset
+OPENROUTER_API_KEY: unset
+UBICLOUD_API_KEY: unset
+UBICLOUD_API_TOKEN: unset
+commit 239d227df569640e68058de52ee79c98d5ae114d; bun 1.4.4; docker 29.9.2
+
+## Part 0: export
+bun install exit 0; 1882 files exported
+ok   P0 the export is outside any git work tree | expected: git rev-parse fails in the export | observed: fatal: not a git repository (or any of the parent directories): .git
+
+## Part A: the told arm and the none arm
+ok   A1 the six drive parts match SHA256SUMS.txt | expected: 6 OK | observed: 6 OK, exit 0
+ok   A2 the told arm's gz and tar sha256 match SHA256SUMS.txt, the manifest and r3b.ts TOLD_TAR_SHA256 | expected: e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975 | observed: gz 8f56fdff7d154f0f5037a2424dc1ddfc3c53c596277803e5b12bab9a09c13125, tar e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975 (code e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975)
+ok   A3 r3c.ts arm-check on the committed manifests | expected: exit 0, pass | observed: exit 0, arm-check: pass gstack 699a41cb6808e01240d02e82247693f9170d401a, told arm tar e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975, R3b's told arm, 
+ok   A4 arm-check on a manifest copy with the Stop entry removed | expected: exit 1, FAIL | observed: exit 1, arm-check: FAIL gstack.json's settings register no Stop hook running skill-contract-stop-hook; ./setup leaves it out when its switch resolves off
+ok   A5 the none arm rebuilt with arms/build.sh matches manifests/r3/none.json and r3b/none.json byte for byte | expected: identical, tar 8bab4833 | observed: build exit 0, 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e
+
+## Part B: the in-hand records and prepare against the real SWE-rebench export
+ok   B1 the six in-hand records match r3c-rules.ts INHAND by sha256 | expected: 6 of 6 | observed: 6 of 6
+ok   B2 the export holds the pool (swerebench_r3a4.py --check) and every task ships the parser r3c.ts pins | expected: exit 0; 860 bdedd1a6... | observed: exit 0, 860 tasks; parsers: 860 bdedd1a6f64c511cc1e2c8c4b9e9402d61e68d962dbebc78d9d86ec4ea3cd261
+ok   B3 prepare on a ledger approved at $700 | expected: refused, nothing prepared | observed: exit 1, $W/prep/at700.jsonl: r3c-opus's cap is $700, not amendment 6's $750
+ok   B4 prepare with one in-hand record changed by a byte | expected: exit 2, E_PIN_MISMATCH, nothing prepared | observed: exit 2, E_PIN_MISMATCH $W/inhand-bad/opus-r3b.tsv: sha256 899c06c13b62c358b2272f872cf4811cad5086abfba1d0f84265d3c077ef2bf6 is not
+ok   B5 prepare: cal-1a to cal-1c, each 146 trials in the job (a task once per trial), 146 in order.json, its oracle.json over its tasks | expected: cal-1a:146/146/n cal-1b:146/146/n cal-1c:146/146/n | observed: exit 0, cal-1a:146/146/108 cal-1b:146/146/103 cal-1c:146/146/103 
+ok   B6 plan.json names the item, the cap, the frozen candidates, both seeds, the closing line and the pinned parser | expected: r3c-opus $750 7a2b33c7 20261112 20261113 [146,146,146] closing a1d63518 parser bdedd1a6 | observed: {"item":"r3c-opus","cap_usd":750,"candidates_sha256":"7a2b33c7","cal1_seed":20261112,"grid_seed":20261113,"parts":[146,146,146],"closing":"a1d63518","parser":"bdedd1a6"}
+ok   B7 the cal-1 parts run the none arm alone, with the closing line | expected: [{none, r3c-root-cause-files}] | observed: [{"arm":"none","closing":"r3c-root-cause-files"}]
+
+## Part C: run, admit, grid, resume and analyze, scenario by scenario
+### the start rule
+tiers t1 16, t2 20, t3 55, t4 110
+at-750 fits start rule: projection $472.86 = settled $0.00 + 878 calibration trials (cal-1 and a worst-case cal-2) at $0.44836 + reserve headroom $79.20, fits r3c-opus's $750 cap
+at-450 refused start rule: projection $472.86 = settled $0.00 + 878 calibration trials (cal-1 and a worst-case cal-2) at $0.44836 + reserve headroom $79.20, passes r3c-opus's $450 cap; r3c-opus does not bind
+ok   C1 the start rule at $750: cal-1's 438 and a worst-case cal-2 of 440 (4 x 110 t4 tasks) at $0.44836, plus $79.20 | expected: 878 trials, fits | observed: fits start rule: projection $472.86 = settled $0.00 + 878 calibration trials (cal-1 and a worst-case cal-2) at $0.44836 + reserve headroom $79.20, fits r3c-opus's $750 cap
+ok   C2 the exported startRule at a $450 cap | expected: passes the cap, does not bind | observed: refused start rule: projection $472.86 = settled $0.00 + 878 calibration trials (cal-1 and a worst-case cal-2) at $0.44836 + reserve headroom $79.20, passes r3c-opus's $450 cap; r3c-opus does not bind
+ok   C3 run with cal-1b's oracle.json missing | expected: refused before the bind | observed: exit 1, cal-1b has no oracle.json, so its run-time oracle gate can't run; prepare it again with this build, bound: no
+ok   C4 run with UBI_TTL_HOURS under 12 | expected: exit 2, refused before the bind | observed: exit 2, E_USAGE set UBI_TTL_HOURS to 12 or more; a part runs for hours, and ubi-runner.sh reaps a VM past its TTL; r3c-opus is s
+### admission GO, the grid and the outcome, with the leases
+ok   D1 run binds and runs cal-1a to cal-1c, plans and runs cal-2 from the failed t4 tasks, then admission says GO and the grid is prepared | expected: run exit 0, grid.ready | observed: run exit 0; cal-2 {"tasks":53,"trials":212}; 650 calibration trials; admission GO: grid-1 to grid-3 prepared (4, 4, 3 replicates); send the admit lines to the Captain, then run r3c.ts grid; launched: cal-1a.launch-exit cal-1b.launch-exit cal-1c.launch-exit cal-2.launch-exit grid.ready 
+ok   D2 the projection before each later calibration part, cal-2 at its worst case until cal-1c settles | expected: 3 'starts' lines, the first two at the worst case | observed: 3 starts; before cal-1b: projection $298.70 (settled $36.50; 732 calibration trials, cal-2 at its worst case at $0.2500 none and $0.0000 VM a trial; reserve headroom $79.20) fits r3c-opus's $750 cap; cal-1b starts
+ok   D3 admit again from the pulled calibration, at the ledger's current cap | expected: exit 0, GO | observed: exit 0, R3c grid for opus: GO with 40 tasks x 11 replicates x {none, told}; MDD 10 points (11.5 if the lift sits on half the tasks, report only); null size 3.0%; projection $549.19
+ok   D4 grid runs every grid part, the projection before each from grid-1 on at the grid's own costs | expected: exit 0, every grid part launched | observed: exit 0; launched: cal-1a.launch-exit cal-1b.launch-exit cal-1c.launch-exit cal-2.launch-exit grid-1.launch-exit grid-2.launch-exit grid-3.launch-exit grid.ready 
+ok   D5 one lease per trial and VM block on the temporary ledger, opened and settled; open reserves 0 | expected: reserve rows = settle rows = trials + VM blocks | observed: [1537,1537] reserve/settle rows for 1530 trials; r3c-opus: settled $448.50 of $750, open reserves 0
+ok   D6 KEEP on the grid (n 40, R 11, parts [4,4,3]) | expected: exit 0, KEEP | observed: exit 0, R3c outcome for Opus 5.5: KEEP. The told /investigate at 699a41cb with the procedure line beats none by +27.3 points (95% CI +27.3 to +27.3) on 40 paired tasks.
+ok   D7 the report-only lines: localization from the main thread's block (told names the oracle's file), f2pShare, the oracle's per-test count | expected: lines present, told hit@1 100% | observed: localization (report only): a closing block in none 100.0% and told 100.0% of graded trials; hit@1 none 100.0%, told 100.0%; hit@3 none 100.0%, told 100.0% (440 and 440 trials scored; 0 tasks out of t
+report-only lines (go):
+  oracle per-test (report only): 487 oracle trials, 487 score f2pShare 1 and 0 score null
+  grid: none 240 of 440 graded trials passed (control rate 54.5%), told 360 of 440 (81.8%); 40 paired tasks of 40 admitted
+  exposure: 440 of 440 graded told grid trials exposed (100.0%; the gate needs 90%)
+  allowance stops: told 0 of 440 sessions (0.0%), none 0 of 440 (0.0%), infra included; the truncation bound is 5 points
+  primary: told minus none +27.3 points (95% CI +27.3 to +27.3) on 40 paired tasks
+  D1 sensitivity: 40 paired tasks solved by at least one graded grid trial in either arm, against ceil(3n/7) = 18 at n = 40; told minus none +27.3 points (95% CI +27.3 to +27.3) on them
+  frozen MDD (report only): 10 points at 40 tasks x 11 replicates (11.5 if the lift sits on half the tasks); beta-binomial law: MDD 10 points, null size 3.1%
+  MDD re-simulated at the grid's own none rates (report only): 9.5 points at 11 replicates on 40 tasks, 20 simulated grids a lift
+  task fit (report only): the grid's none arm puts 0 of 40 admitted tasks outside the band [0.2, 0.8] (0.0%)
+  far tasks (report only): told minus none +27.3 points (95% CI +27.3 to +27.3) on 40 paired far tasks
+  Stop hook (report only): ran in 440 of 440 graded told grid trials and held a stop back in 0; the route hook logged in 0
+  cost per success (report only): none $0.46, told $0.49
+  localization (report only): a closing block in none 100.0% and told 100.0% of graded trials; hit@1 none 100.0%, told 100.0%; hit@3 none 100.0%, told 100.0% (440 and 440 trials scored; 0 tasks out of the measure with no root-cause file)
+  localization lifts (report only): hit@1 +0.0 points (95% CI +0.0 to +0.0), hit@3 +0.0 points (95% CI +0.0 to +0.0), locRank +0.0 points (95% CI +0.0 to +0.0) (locRank none 1.000, told 1.000)
+  told localization by Stop hook (report only): held a stop back 0 trials, hit@1 NaN%, hit@3 NaN%; did not 440 trials, hit@1 100.0%, hit@3 100.0%
+  f2pShare (report only): none 0.687, told 0.875 (null, out of the measure: none 0, told 0); told minus none +18.8 points (95% CI +16.0 to +21.5)
+### admission STOP
+ok   E1 calibration at $0.70 a trial: the money left buys under 3 replicates, so admission says STOP and no grid is prepared | expected: run exit 5, admit.stop, no grid.json | observed: run exit 5; R3c grid for opus: STOP, the money left buys 2 replicates, under 3
+ok   E2 admit again | expected: exit 5 | observed: exit 5
+ok   E3 grid after STOP | expected: refused: no grid.ready | observed: exit 1, $W/s/stop/work has no grid.ready: admission has not said GO, so no grid runs
+ok   E4 analyze after STOP | expected: exit 6, the admission STOP line | observed: exit 6, R3c outcome for Opus 5.5: none (admission STOP: the money left buys 2 replicates, under 3). No grid ran; the admitted count, the measured rates and the MDD the money could buy are above.
+### the projection stop, raise and resume in calibration
+ok   F1 cal-1a at $1.20 a trial: the projection before cal-1b passes $750 and the run stops there | expected: exit 4, cal-1b.projection-stop | observed: run exit 4; before cal-1b: projection $1132.80 (settled $175.20; 732 calibration trials, cal-2 at its worst case at $1.2000 none and $0.0000 VM a trial; reserve headroom $79.20) passes r3c-opus's $750 cap; the run stops before cal-1b and the 
+ok   F2 analyze while stopped | expected: exit 4, FIX-METHOD (cost limits) | observed: exit 4, R3c outcome for Opus 5.5: none (incomplete: cal-1b was not launched: before cal-1b: projection $1132.80 (settled $175.20; 732 calibration trials, cal-2 at its worst case at $1.2000 none and $0.0000 VM
+ok   F3 resume with no recorded raise | expected: refused, cal-1b stays stopped | observed: exit 1, no cap raise is recorded on $W/s/proj/r3c-opus.jsonl for r3c-opus since the projection stop before cal-1b; it stays stopped
+ok   F4 resume after ledger.ts raise --approved-by <file> to $900, which the projection still passes | expected: refused, no cal-1b lease | observed: exit 1, the projection of $1132.80 still passes r3c-opus's raised $900 cap; cal-1b stays stopped
+ok   F5 resume after a raise to $1,300 the projection fits: calibration runs on to admission, at the raised cap | expected: accepted once; cap-raise-cal-1b.json names raise-2; admit at $1300 | observed: exit 0, before cal-1b: projection $1132.80 (settled $175.20; 732 calibration trials, cal-2 at its worst case at $1.2000 none and $0.0000 VM a trial; reserve headroom $79.20) fits r3c-opus's $1300 cap; cal-1b starts; --cap-usd 1300; launched: cal-1a.launch-exit cal-1b.launch-exit cal-1b.projection-stop.raised cal-1c.launch-exit cal-2.launch-exit grid.ready 
+ok   F6 a second resume after the stop was used | expected: refused: no projection stop | observed: exit 1, $W/s/proj/work has no projection stop; resume follows only a projection stop, and only once for each
+### an incomplete calibration part
+ok   G1 15 of cal-1b's 146 trials are infra: the run stops before admission | expected: run exit 4, no cal-1c launch, analyze exit 4 FIX-METHOD (harness limits) | observed: run exit 4; analyze exit 4, R3c outcome for Opus 5.5: none (incomplete: cal-1b: 15 of 146 trials are infra, over 10%). FIX-METHOD (harness limits). R3c is incomplete; the Captain gets the record.
+### the grid: an unreadable transcript, a grid projection stop, CUT-CANDIDATE
+ok   H1 one grid trial's log has no parent_tool_use_id: localization prints E_TRANSCRIPT_UNREADABLE instead of rates, and the verdict stands | expected: exit 0 KEEP, the error line, no rates line | observed: grid exit 0, analyze exit 0; E_TRANSCRIPT_UNREADABLE localization (report only): 1 graded grid trials have no readable main-thread text (<trial>), so no localization rates are printed; each is a recorded err
+ok   H2 told grid-1 trials at $1.50: the projection before grid-2 at the grid's own costs passes $750; the grid stops; analyze is incomplete for cost limits | expected: grid exit 4, grid-2.projection-stop, analyze exit 4 | observed: grid exit 4; before grid-2: projection $1011.70 (settled $442.50; 280 task-replicate pairs at $0.2500 none and $1.5000 told, VM $0.00; reserve headroom $79.20) passes r3c-opus's $750 cap; the run stops before grid; analyze exit 4
+ok   H2b told grid-1 trials at $6: the ledger refuses a session reserve inside grid-1 at $750; the part is incomplete for harness limits | expected: grid exit 4, no grid-2 launch, analyze exit 4 | observed: grid exit 4; grid-1: launch exited 130; the run stops here; analyze exit 4, R3c outcome for Opus 5.5: none (incomplete: grid-1: ledger refused a reserve for <trial>). FIX-METHOD (harness limits). R3c is incomplete; the Captain gets the record.
+ok   H3 told and none pass alike on the grid: CUT-CANDIDATE or FIX-METHOD (task fit) by D1's ceil(3n/7) | expected: exit 3 or 5 with the D1 line | observed: grid exit 0, analyze exit 3; R3c outcome for Opus 5.5: CUT-CANDIDATE. The told /investigate at 699a41cb with the procedure line minus none is at or below zero: +0.0 points (95% CI +0.0 to +0.0) on 40 paired tasks, and +0.0 points
+ok   H4 grid again on a grid that already ran | expected: refused | observed: exit 1, the grid has already started; after a projection stop, resume relaunches it
+### the projection stop, raise and resume in the grid
+ok   H5a told grid-1 trials at $1.50: the grid stops before grid-2 (as H2), on its own copy of the go run | expected: grid exit 4, grid-2.projection-stop | observed: grid exit 4; launched: cal-1a.launch-exit cal-1b.launch-exit cal-1c.launch-exit cal-2.launch-exit grid-1.launch-exit grid-2.projection-stop grid.ready 
+ok   H5b grid resume with no recorded raise | expected: refused, grid-2 stays stopped | observed: exit 1, no cap raise is recorded on $W/s/gresume/r3c-opus.jsonl for r3c-opus since the projection stop before grid-2; it stays stopped
+ok   H5c grid resume after a raise to $900, which the projection still passes | expected: refused, grid-2 stays stopped, no grid-2 lease | observed: exit 1, the projection of $1011.70 still passes r3c-opus's raised $900 cap; grid-2 stays stopped
+ok   H5d grid resume after a raise to $1,300 the projection fits: the grid runs on from grid-2 at the raised cap | expected: accepted once; cap-raise-grid-2.json names raise-2; every grid part launched | observed: exit 0, before grid-2: projection $1011.70 (settled $442.50; 280 task-replicate pairs at $0.2500 none and $1.5000 told, VM $0.00; reserve headroom $79.20) fits r3c-opus's $1300 cap; grid-2 starts; launched: cal-1a.launch-exit cal-1b.launch-exit cal-1c.launch-exit cal-2.launch-exit grid-1.launch-exit grid-2.launch-exit grid-2.projection-stop.raised grid-3.launch-exit grid.ready 
+ok   H5e a second grid resume after the stop was used | expected: refused: no projection stop | observed: exit 1, $W/s/gresume/work has no projection stop; resume follows only a projection stop, and only once for each
+ok   H5f analyze after the resumed grid: an outcome at the raised cap, every lease settled | expected: exit 0, 3 or 5 with an R3c outcome line; open reserves 0 | observed: exit 0, R3c outcome for Opus 5.5: KEEP. The told /investigate at 699a41cb with the procedure line beats none by +54.5 points (95% CI +54.5 to +54.5) on 40 paired tasks.; [1537,1537] reserve/settle rows
+
+## leftovers
+ports answering: none else; bound temporary ledgers: 9
+
+rules: 46, failed: 0
+DRYRUN: ok
+script_exit=0
