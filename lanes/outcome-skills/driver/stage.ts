@@ -4,6 +4,7 @@
 // openLease, and every exit path settles every lease it opened. Each lease names its holder, the run directory and the
 // launch's nonce, and a run binds to the directory of its first lease, so that directory's sessions.jsonl holds every cap
 // stop and trial count of the run.
+import { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -134,11 +135,8 @@ export function refusal(code: ReasonCode, status: number, detail: string, extra:
 const urlHost = (host: string) => (host.includes(":") ? "[" + host + "]" : host);
 const sorted = (v: unknown): unknown => (Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted((v as Record<string, unknown>)[k])])) : v);
 
-/**
- * One live driver per run directory, so recovery never settles a lease a live driver still meters, and one per run on the
- * envelope host, so two directories never bind one run at the same moment. A lock whose process is gone is taken over.
- */
-function takeLock(file: string, what: string): string {
+/** One live driver per run directory, so recovery never settles a lease a live driver still meters. A lock whose process is gone is taken over. */
+function takeLock(file: string): string {
   try {
     writeFileSync(file, String(process.pid), { flag: "wx" });
     return file;
@@ -155,7 +153,7 @@ function takeLock(file: string, what: string): string {
       alive = (e as NodeJS.ErrnoException).code === "EPERM";
     }
   }
-  if (alive) fail("E_USAGE", "driver process " + pid + " still serves " + what + " (" + file + "); stop it with POST /stop or SIGTERM before launching another, so its leases are not settled under it; nothing was recovered or opened");
+  if (alive) fail("E_USAGE", "driver process " + pid + " still serves this run directory (" + file + "); stop it with POST /stop or SIGTERM before launching another, so its leases are not settled under it; nothing was recovered or opened");
   writeFileSync(file, String(process.pid));
   return file;
 }
@@ -165,17 +163,35 @@ function takeLock(file: string, what: string): string {
  * on this machine, preflights every stage, opens one lease and one proxy per stage, then serves. A lease that names no
  * holder, such as the program's T-G or VM lease on the same run, is never touched.
  */
+/**
+ * One live driver per run on the envelope host, so two run directories never bind one run at the same moment: an
+ * exclusive SQLite lock in a file beside the record, which the operating system lets go when the process ends.
+ */
+function holdRunLock(record: string, run_id: string): Database {
+  const file = join(dirname(record), "." + basename(record) + ".run-" + createHash("sha256").update(run_id).digest("hex").slice(0, 16) + ".lock.db");
+  const db = new Database(file, { create: true });
+  try {
+    db.exec("PRAGMA busy_timeout = 0");
+    db.exec("BEGIN EXCLUSIVE");
+    return db;
+  } catch (error) {
+    db.close();
+    return fail("E_USAGE", "another driver still serves run " + run_id + " on this host (" + file + ": " + (error as Error).message + "); stop it with POST /stop or SIGTERM before launching another; nothing was recovered or opened");
+  }
+}
+
 export async function serveStages(o: ServeOptions): Promise<Served> {
-  const held = { locks: [] as string[] };
+  const held = { lock: null as string | null, run: null as Database | null };
   try {
     return await serve(o, held);
   } catch (error) {
-    for (const lock of held.locks) rmSync(lock, { force: true });
+    if (held.lock) rmSync(held.lock, { force: true });
+    held.run?.close();
     throw error;
   }
 }
 
-async function serve(o: ServeOptions, held: { locks: string[] }): Promise<Served> {
+async function serve(o: ServeOptions, held: { lock: string | null; run: Database | null }): Promise<Served> {
   const log = o.log ?? ((line: string) => console.error(line));
   const warn = (code: ReasonCode, message: string) => log(code + " " + message);
   const now = o.now ?? Date.now;
@@ -199,9 +215,9 @@ async function serve(o: ServeOptions, held: { locks: string[] }): Promise<Served
   if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(o.stages.map((s) => s.arm)).size !== o.stages.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
   mkdirSync(o.dir, { recursive: true });
   const dir = realpathSync(o.dir);
-  const ledger = realpathSync(o.record);
-  held.locks.push(takeLock(join(dirname(ledger), "." + basename(ledger) + ".run-" + createHash("sha256").update(o.run_id).digest("hex").slice(0, 16) + ".lock"), "run " + o.run_id));
-  held.locks.push(takeLock(join(dir, "driver.lock"), "this run directory"));
+  if (!existsSync(o.record)) fail("E_LEDGER_MISSING", "no approval record is at " + o.record + "; nothing was opened");
+  held.run = holdRunLock(realpathSync(o.record), o.run_id);
+  held.lock = takeLock(join(dir, "driver.lock"));
   const holder: Holder = { dir, nonce: randomBytes(8).toString("hex") };
   const rival = rivalHolder(o.record, o.run_id, dir);
   if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
@@ -474,7 +490,8 @@ async function serve(o: ServeOptions, held: { locks: string[] }): Promise<Served
       const open = ledgerStatus(o.record).filter((i) => stages.some((s) => s.item === i.item) && i.open_lease);
       if (open.length) log("E_LEASE_UNSETTLED outcome driver: still open: " + open.map((i) => i.open_lease!.lease_id).join(", ") + "; settle each with gstack-evals ledger settle --lease <id> on this machine");
       const code = open.length || stages.some((s) => s.ended === "failed") ? 2 : 0;
-      for (const lock of held.locks) rmSync(lock, { force: true });
+      if (held.lock) rmSync(held.lock, { force: true });
+      held.run?.close();
       resolveDone(code);
       return code;
     })();

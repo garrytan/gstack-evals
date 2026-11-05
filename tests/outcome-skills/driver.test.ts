@@ -1,6 +1,8 @@
 // The outcome-skills session driver (lanes/outcome-skills/driver/stage.ts), keyless: a temporary ledger record and local
 // ledger, a stub upstream behind the real metering proxy, and the driver's control plane over HTTP on 127.0.0.1.
+import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -414,5 +416,24 @@ describe("the outcome-skills session driver", () => {
     expect(readItem(w.record, "i-ap").leases).toHaveLength(0);
     expect(readItem(w.record, "i-pe").open?.holder?.dir).toBe(realpathSync(w.dir));
     expect(await first.stop()).toBe(0);
+  });
+
+  test("a launch is refused while another process holds the run's lock on this host, and serves once that lock is let go (Capy 01M6N9A46QRD6XG1V5FRJFXDNP)", async () => {
+    const w = world({ "i-none": 229 });
+    const other = new Database(join(w.root, ".record.run-" + createHash("sha256").update("r1").digest("hex").slice(0, 16) + ".lock.db"), { create: true });
+    other.exec("BEGIN EXCLUSIVE");
+    const err = await refused(w.serve([NONE]));
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain("run r1");
+    expect(readItem(w.record, "i-none").leases).toHaveLength(0);
+    other.close();
+    const served = await w.serve([NONE]);
+    expect(await served.stop()).toBe(0);
+    expect(readItem(w.record, "i-none").leases).toHaveLength(1);
+  });
+
+  test("a launch whose approval record is missing is refused with E_LEDGER_MISSING before it takes any lock (Capy 01M6N9A46QRD6XG1V5FRJFXDNQ)", async () => {
+    const w = world({});
+    expect(await codeOf(w.serve([NONE], { record: join(w.root, "absent", "record") }))).toBe("E_LEDGER_MISSING");
   });
 });
