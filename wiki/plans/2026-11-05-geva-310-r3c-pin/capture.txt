@@ -1,0 +1,44 @@
+harbor 0.25.0, bun 1.4.4, docker 29.9.2
+arm none: tar sha256 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e (manifest 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e)
+arm gstack: tar sha256 e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975 (manifest e93a3aa4e1e477d0046027b32defbd331c60a847404b67118373250c0c281975)
+fixture base image python:3.11-slim-bookworm, digest sha256:a83ba18aef0f865b1a4a611c2cf460fe446f2795673bbb9fe43be570439e3b39
+materialized demo__met: image python@sha256:a83ba18aef0f865b1a4a611c2cf460fe446f2795673bbb9fe43be570439e3b39, source digest 192f1752a02291ee95f27395ec38275addb3ecaed89ec2f27f003685ee0cefc0
+materialized demo__unmet: image python@sha256:a83ba18aef0f865b1a4a611c2cf460fe446f2795673bbb9fe43be570439e3b39, source digest d53b8086e31130b6b43fb1ea9657e9028cf163794eeba28276e1cd8e9c698d90
+materialized demo__nomain: image python@sha256:a83ba18aef0f865b1a4a611c2cf460fe446f2795673bbb9fe43be570439e3b39, source digest ddb8ff155c2bf9bb24fa6c7e725570f9c2f04111acae272a0af061f60a30d397
+arms: [{"name":"none","system_prompt":"claude-code-preset","closing_line":"r3c-root-cause-files"},{"name":"gstack","told":"investigate","procedure_line":"investigate-phases","system_prompt":"claude-code-preset","gstack_hooks":"copy","closing_line":"r3c-root-cause-files"}]
+wrote $W/run/job.json: 4 tasks x 2 agents x 1 attempts
+vm-run.sh exit 0 after 253 s
+--- trials
+demo__met gstack #1: reward 1, exception none, read {"closing":{"block":["calc.py"],"error":null},"assistant_records":6,"with_parent_field":6,"subagent_records":1,"subagent_wrong":true,"thinking_blocks":1,"thinking_wrong":true,"report":{"f2p":{"tests/test_calc.py::test_add":"PASSED"},"p2p":{"tests/test_calc.py::test_import":"PASSED"}},"hooks":{"files":3,"stop_hook_ran":true,"held_back":false,"outcome":"met","route_hook_ran":true,"routed":true,"contract_events":{"met":1,"unchanged":1},"route_events":{"no-route":1,"routed":1}},"closing_line":"r3c-root-cause-files"}
+demo__met none #2: reward 1, exception none, read {"closing":{"block":["calc.py"],"error":null},"assistant_records":6,"with_parent_field":6,"subagent_records":1,"subagent_wrong":true,"thinking_blocks":1,"thinking_wrong":true,"report":{"f2p":{"tests/test_calc.py::test_add":"PASSED"},"p2p":{"tests/test_calc.py::test_import":"PASSED"}},"hooks":{"files":0,"stop_hook_ran":false,"held_back":false,"outcome":null,"route_hook_ran":false,"routed":false,"contract_events":{},"route_events":{}},"closing_line":"r3c-root-cause-files"}
+demo__met none #3: reward 1, exception none, read {"closing":{"block":["calc.py"],"error":null},"assistant_records":6,"with_parent_field":6,"subagent_records":1,"subagent_wrong":true,"thinking_blocks":1,"thinking_wrong":true,"report":{"f2p":{"tests/test_calc.py::test_add":"PASSED"},"p2p":{"tests/test_calc.py::test_import":"PASSED"}},"hooks":{"files":0,"stop_hook_ran":false,"held_back":false,"outcome":null,"route_hook_ran":false,"routed":false,"contract_events":{},"route_events":{}},"closing_line":"r3c-root-cause-files"}
+demo__met gstack #4: reward 1, exception none, read {"closing":{"block":["calc.py"],"error":null},"assistant_records":6,"with_parent_field":6,"subagent_records":1,"subagent_wrong":true,"thinking_blocks":1,"thinking_wrong":true,"report":{"f2p":{"tests/test_calc.py::test_add":"PASSED"},"p2p":{"tests/test_calc.py::test_import":"PASSED"}},"hooks":{"files":3,"stop_hook_ran":true,"held_back":false,"outcome":"met","route_hook_ran":true,"routed":true,"contract_events":{"met":1,"unchanged":1},"route_events":{"no-route":1,"routed":1}},"closing_line":"r3c-root-cause-files"}
+demo__nomain gstack #5: reward 1, exception none, read {"closing":{"block":[],"error":null},"assistant_records":6,"with_parent_field":6,"subagent_records":1,"subagent_wrong":true,"thinking_blocks":1,"thinking_wrong":true,"report":{"f2p":{"tests/test_calc.py::test_add":"PASSED"},"p2p":{"tests/test_calc.py::test_import":"PASSED"}},"hooks":{"files":3,"stop_hook_ran":true,"held_back":false,"outcome":"met","route_hook_ran":true,"routed":true,"contract_events":{"met":1,"unchanged":1},"route_events":{"no-route":1,"routed":1}},"closing_line":"r3c-root-cause-files"}
+demo__nomain none #6: reward 1, exception none, read {"closing":{"block":[],"error":null},"assistant_records":6,"with_parent_field":6,"subagent_records":1,"subagent_wrong":true,"thinking_blocks":1,"thinking_wrong":true,"report":{"f2p":{"tests/test_calc.py::test_add":"PASSED"},"p2p":{"tests/test_calc.py::test_import":"PASSED"}},"hooks":{"files":0,"stop_hook_ran":false,"held_back":false,"outcome":null,"route_hook_ran":false,"routed":false,"contract_events":{},"route_events":{}},"closing_line":"r3c-root-cause-files"}
+demo__unmet gstack #7: reward 1, exception none, read {"closing":{"block":["calc.py"],"error":null},"assistant_records":7,"with_parent_field":7,"subagent_records":1,"subagent_wrong":true,"thinking_blocks":1,"thinking_wrong":true,"report":{"f2p":{"tests/test_calc.py::test_add":"PASSED"},"p2p":{"tests/test_calc.py::test_import":"PASSED"}},"hooks":{"files":3,"stop_hook_ran":true,"held_back":true,"outcome":"met_after_block","route_hook_ran":true,"routed":true,"contract_events":{"blocked":1,"met_after_block":1,"unchanged":1},"route_events":{"no-route":1,"routed":1}},"closing_line":"r3c-root-cause-files"}
+demo__unmet none #8: reward 1, exception none, read {"closing":{"block":["calc.py"],"error":null},"assistant_records":6,"with_parent_field":6,"subagent_records":1,"subagent_wrong":true,"thinking_blocks":1,"thinking_wrong":true,"report":{"f2p":{"tests/test_calc.py::test_add":"PASSED"},"p2p":{"tests/test_calc.py::test_import":"PASSED"}},"hooks":{"files":0,"stop_hook_ran":false,"held_back":false,"outcome":null,"route_hook_ran":false,"routed":false,"contract_events":{},"route_events":{}},"closing_line":"r3c-root-cause-files"}
+oracle demo__met: reward 1, model.patch present, report.json present
+oracle demo__nomain: reward 1, model.patch present, report.json present
+oracle demo__unmet: reward 1, model.patch present, report.json present
+--- stub replies:       8 ["Agent"]      25 ["text"]       8 ["thinking","Bash"]      41 null 
+--- leftovers: containers 0
+
+## assertions
+PASS vm-run.sh exits 0
+PASS Harbor applied order.json with demo__met listed twice (laneb order: applied 8 trials)
+PASS all eight trials (demo__met twice, demo__unmet and demo__nomain, in both arms) pass the fixture's FAIL_TO_PASS test
+PASS every trial's prompt log records the closing line r3c-root-cause-files
+PASS every assistant record carries the parent_tool_use_id field
+PASS readClosing reads calc.py from the main thread in every demo__met trial, with no error
+PASS readClosing reads calc.py from the main thread in both demo__unmet trials, with no error
+PASS demo__nomain, both arms: blocks only in a thinking block and a subagent message are not read (an empty block, no error)
+PASS two demo__nomain trials, one per arm
+PASS a thinking block naming wrong_thinking.py is in every log, and never read
+PASS a subagent message (parent_tool_use_id set) naming wrong_subagent.py is in every log, and never read
+PASS told demo__met: the Stop hook lets a DEBUG REPORT followed by the closing block stop (met, no block)
+PASS told demo__nomain: a DEBUG REPORT alone stops too (met, no block)
+PASS told demo__unmet: the Stop hook held the stop back, then met_after_block, and the block before its continuation is read
+PASS every none trial: no gstack hook state
+PASS Harbor keeps the parser's report.json in each trial's verifier/ directory
+PASS the oracle job keeps each task's model.patch (calc.py) under artifacts/logs/artifacts/, and report.json
+script_exit=0

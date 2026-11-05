@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+# R3c pin post dry run (GEVA-299; GEVA-305 added the H5 grid resume rows), keyless. Drives every rule of R3 amendment 6 (wiki/plans/2026-11-05-geva-284-r3c-calibrated)
+# with the Captain's five build rulings through r3c.ts's own subcommands, at the commit given, in the style of the R3b pin
+# post's dryrun.sh.txt.
+#   Part 0  git archive of the commit outside any git work tree; bun install --frozen-lockfile.
+#   Part A  the told arm: rebuilt from the project drive's six parts, every sha256 checked against SHA256SUMS.txt and the
+#           committed manifest; arm-check both ways; the none arm rebuilt with arms/build.sh (Docker, keyless) and compared
+#           with manifests/r3/none.json.
+#   Part B  the in-hand records (the Captain drive's five, by sha256, and the post's r3c-taskfit.tsv); prepare on a temporary
+#           ledger approved at $750, against the real SWE-rebench export, checked with tasks/swerebench_r3a4.py. prepare at a
+#           $700 ledger and with a changed record are refused.
+#   Part C  scenarios. Each copies the prepared work dir, approves a fresh temporary ledger at $750 and runs r3c.ts run (then
+#           admit, grid, resume and analyze) for real: launch.sh reserves and settles the VM blocks, starts the item's ledger
+#           service and runs the batch. The Ubicloud runner is a stub (the R3b dry run's) and ssh is a stub that plays
+#           vm-run.sh: it reserves and settles one $12 session lease per planned trial through the ledger service, as the
+#           proxy does, in the part's order, and writes each trial's files in the shape r3c.ts loadTrials reads. No VM starts
+#           and no model is called. The start-rule refusal at a lower cap goes through the exported startRule, since
+#           itemCheck fixes the cap at $750. The three grid scenarios in section H start from copies of the go run after
+#           its admission said GO (work dir, ledger and bound file), since each admission runs the frozen 2,000 simulated grids.
+# Every rule line reads "ok" or "FAIL" with its expected and observed outcome; the last line is DRYRUN: ok or DRYRUN: fail.
+# Usage: bash dryrun.sh <commit> [<work dir>]   env: G (the gstack-evals git checkout, default /workspace/gstack-evals),
+#   ARMPARTS (the told arm's parts), CAPT (the Captain drive's handoffs/), SWEREBENCH (the export; downloaded with the
+#   pinned Harbor into the work dir when unset), UBI_OWNER (default GEVA-305), R3C_MDD_SIMS (default 20, report-only).
+set -u
+COMMIT=${1:?usage: dryrun.sh <commit> [<work dir>]}
+G=${G:-/workspace/gstack-evals}
+SHORT=$(git -C "$G" rev-parse --short=7 "$COMMIT") || exit 2
+FULL=$(git -C "$G" rev-parse "$COMMIT")
+W=$(mkdir -p "${2:-$HOME/.capy/work/r3c-pin/run-$SHORT}" && cd "${2:-$HOME/.capy/work/r3c-pin/run-$SHORT}" && pwd)
+ARMPARTS=${ARMPARTS:-$HOME/.capy/drive/project-gstack-evals/laneb-arms/r3b-gstack-699a41cb}
+CAPT=${CAPT:-$HOME/.capy/drive/captain-gstack-evals/handoffs}
+UBI_OWNER=${UBI_OWNER:-GEVA-305}
+export R3C_MDD_SIMS=${R3C_MDD_SIMS:-20}
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN
+E=$W/export L=$W/export/quick/laneb I=$W/inhand
+mkdir -p "$W/log" "$W/bin/vm" "$W/scen" "$W/s" "$W/prep" "$W/arms" "$W/approvals" "$I"
+HIDE="s#$W#\$W#g; s#$ARMPARTS#\$ARMPARTS#g; s#$CAPT#\$CAPT#g; s#$HOME#~#g"
+fails=0 rules=0
+rule() { local label=$1 want=$2 got=$3; shift 3; rules=$((rules + 1)); if "$@" > /dev/null 2>&1; then echo "ok   $label | expected: $want | observed: $got" | sed "$HIDE"; else fails=$((fails + 1)); echo "FAIL $label | expected: $want | observed: $got" | sed "$HIDE"; fi; }
+first() { grep -E -m1 -- "$1" "$2" 2>/dev/null | cut -c1-400 || true; }
+has() { grep -E -q -- "$1" "$2"; }
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN; do echo "$k: $([ -n "${!k+x}" ] && echo set || echo unset)"; done
+echo "commit $FULL; bun $(bun --version); docker $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
+
+echo; echo "## Part 0: export"
+rm -rf "$E" && mkdir -p "$E" && git -C "$G" archive "$FULL" | tar -x -C "$E"
+(cd "$E" && bun install --frozen-lockfile > "$W/log/bun-install.txt" 2>&1); echo "bun install exit $?; $(find "$E" -path "$E/node_modules" -prune -o -type f -print | wc -l) files exported"
+rule "P0 the export is outside any git work tree" "git rev-parse fails in the export" "$(cd "$E" && git rev-parse --show-toplevel 2>&1 | head -1)" sh -c "cd '$E' && ! git rev-parse --show-toplevel"
+
+echo; echo "## Part A: the told arm and the none arm"
+A=$W/arms
+(cd "$ARMPARTS" && grep -v whole: SHA256SUMS.txt | sha256sum -c -) > "$W/log/parts.txt" 2>&1; pc=$?
+rule "A1 the six drive parts match SHA256SUMS.txt" "6 OK" "$(grep -c ': OK$' "$W/log/parts.txt") OK, exit $pc" test "$pc" = 0 -a "$(grep -c ': OK$' "$W/log/parts.txt")" = 6
+cat "$ARMPARTS"/gstack-e93a3aa4e1e4.tar.gz.part-0* > "$A/gstack.tar.gz"
+GZ=$(sha256sum "$A/gstack.tar.gz" | cut -c1-64); TAR=$(gzip -dc "$A/gstack.tar.gz" | sha256sum | cut -c1-64)
+M=$L/arms/manifests/r3b/gstack.json
+CODE_TAR=$(cd "$E" && bun -e 'const { TOLD_TAR_SHA256 } = await import("./quick/laneb/r3/r3b.ts"); console.log(TOLD_TAR_SHA256)')
+rule "A2 the told arm's gz and tar sha256 match SHA256SUMS.txt, the manifest and r3b.ts TOLD_TAR_SHA256" "$(jq -r .tar.sha256 "$M")" "gz $GZ, tar $TAR (code $CODE_TAR)" test "$GZ" = "$(jq -r .tar_gz_sha256 "$M")" -a "$TAR" = "$(jq -r .tar.sha256 "$M")" -a "$TAR" = "$CODE_TAR" -a "$GZ" = "$(sed -n 's/ *whole:gstack.tar.gz$//p' "$ARMPARTS/SHA256SUMS.txt")"
+(cd "$E" && bun quick/laneb/r3/r3c.ts arm-check) > "$W/log/arm-check.txt" 2>&1; c=$?
+rule "A3 r3c.ts arm-check on the committed manifests" "exit 0, pass" "exit $c, $(cut -c1-160 "$W/log/arm-check.txt")" test "$c" = 0
+mkdir -p "$W/arm-neg" && cp "$L"/arms/manifests/r3b/*.json "$W/arm-neg/" && jq '.settings.hooks |= map(select(.event != "Stop"))' "$M" > "$W/arm-neg/gstack.json"
+(cd "$E" && bun quick/laneb/r3/r3c.ts arm-check "$W/arm-neg") > "$W/log/arm-check-neg.txt" 2>&1; c=$?
+rule "A4 arm-check on a manifest copy with the Stop entry removed" "exit 1, FAIL" "exit $c, $(cut -c1-200 "$W/log/arm-check-neg.txt")" sh -c "test $c = 1 && grep -q 'FAIL' '$W/log/arm-check-neg.txt'"
+mkdir -p "$W/none-build/manifests"
+(cd "$L/arms" && ARMS=none MANIFESTS="$W/none-build/manifests" bash build.sh "$W/none-build/out") > "$W/log/none-build.txt" 2>&1; c=$?
+rule "A5 the none arm rebuilt with arms/build.sh matches manifests/r3/none.json and r3b/none.json byte for byte" "identical, tar 8bab4833" "build exit $c, $(jq -r .tar.sha256 "$W/none-build/manifests/none.json" 2>/dev/null)" sh -c "test $c = 0 && cmp '$W/none-build/manifests/none.json' '$L/arms/manifests/r3/none.json' && cmp '$W/none-build/manifests/none.json' '$L/arms/manifests/r3b/none.json'"
+cp "$W/none-build/out/none.tar.gz" "$A/none.tar.gz" 2>/dev/null; rm -rf "$W/none-build/out/gstack.tar" "$W/none-build/out/gstack-src" "$W/none-build/out/trees"
+
+echo; echo "## Part B: the in-hand records and prepare against the real SWE-rebench export"
+cp "$CAPT/GEVA-248/record/trials.jsonl" "$I/opus-r3a4.jsonl"; cp "$CAPT/GEVA-249/r3a4-sol/trials.jsonl" "$I/sol-r3a4.jsonl"
+cp "$CAPT/GEVA-275/trials.tsv" "$I/opus-r3b.tsv"; cp "$CAPT/GEVA-276/trials.tsv" "$I/sol-r3b.tsv"; cp "$CAPT/GEVA-248/r3a4-drop-list.json" "$I/r3a4-drop-list.json"
+cp "$E/wiki/plans/2026-11-05-geva-284-r3c-calibrated/r3c-taskfit.tsv" "$I/r3c-taskfit.tsv"
+inh=$(cd "$E" && bun -e 'const { INHAND } = await import("./quick/laneb/r3/r3c-rules.ts"); const { createHash } = await import("node:crypto"); const fs = await import("node:fs"); let ok = 0; for (const [f, h] of Object.entries(INHAND)) if (createHash("sha256").update(fs.readFileSync(process.argv[1] + "/" + f)).digest("hex") === h) ok++; console.log(ok + " of " + Object.keys(INHAND).length);' "$I")
+rule "B1 the six in-hand records match r3c-rules.ts INHAND by sha256" "6 of 6" "$inh" test "$inh" = "6 of 6"
+if [ -z "${SWEREBENCH:-}" ]; then
+  if [ ! -d "$W/ref/swe-rebench-leaderboard" ]; then
+    UV_TOOL_DIR="$W/uv-tools" UV_TOOL_BIN_DIR="$W/bin" uv tool install --quiet --force "harbor @ git+https://github.com/harbor-framework/harbor@f3a5a923f6d722472c9e797af836ae4425fb215f" > "$W/log/harbor-install.txt" 2>&1
+    "$W/bin/harbor" datasets download "swe-rebench/swe-rebench-leaderboard@sha256:ebe7444e313a0d8db94fa541139826eaebe2b0abcd4900c6f73e750494910dca" -o "$W/ref" > "$W/log/download.txt" 2>&1
+  fi
+  SWEREBENCH=$W/ref/swe-rebench-leaderboard
+fi
+HIDE="$HIDE; s#$SWEREBENCH#\$SWEREBENCH#g"
+(cd "$L/tasks" && python3 swerebench_r3a4.py --export "$SWEREBENCH") > "$W/log/pool-check.txt" 2>&1; c=$?
+PARSERS=$(sha256sum "$SWEREBENCH"/*/tests/parser.py | cut -c1-64 | sort | uniq -c | sed 's/^ *//')
+rule "B2 the export holds the pool (swerebench_r3a4.py --check) and every task ships the parser r3c.ts pins" "exit 0; 860 bdedd1a6..." "exit $c, $(ls "$SWEREBENCH" | wc -l) tasks; parsers: $PARSERS" sh -c "test $c = 0 && test '$PARSERS' = '860 bdedd1a6f64c511cc1e2c8c4b9e9402d61e68d962dbebc78d9d86ec4ea3cd261'"
+cat > "$W/bin/approve.ts" <<'EOF'
+const { Ledger } = await import(process.argv[2] + "/runner/ledger.ts");
+new Ledger(process.env.LEDGER!, "r3c-opus").approve(Number(process.argv[3]), { words: "dry run, temporary ledger, no spend", by: "dry run", source: "dry run" });
+EOF
+approve() { LEDGER=$1 bun "$W/bin/approve.ts" "$L" "$2"; }
+prep() { (cd "$E" && LEDGER=$1 INHAND=$3 ARMS="$A" SWEREBENCH="$SWEREBENCH" bun quick/laneb/r3/r3c.ts prepare "$2" --item r3c-opus); }
+P=$W/prep; rm -rf "$P"/*
+approve "$P/at700.jsonl" 700; prep "$P/at700.jsonl" "$P/work700" "$I" > "$W/log/prep-700.txt" 2>&1; c=$?
+rule "B3 prepare on a ledger approved at \$700" "refused, nothing prepared" "exit $c, $(first 'cap' "$W/log/prep-700.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && test ! -e '$P/work700/plan.json'"
+mkdir -p "$W/inhand-bad" && cp "$I"/* "$W/inhand-bad/" && echo >> "$W/inhand-bad/opus-r3b.tsv"
+approve "$P/r3c-opus.jsonl" 750; prep "$P/r3c-opus.jsonl" "$P/work-bad" "$W/inhand-bad" > "$W/log/prep-bad.txt" 2>&1; c=$?
+rule "B4 prepare with one in-hand record changed by a byte" "exit 2, E_PIN_MISMATCH, nothing prepared" "exit $c, $(cut -c1-160 "$W/log/prep-bad.txt")" sh -c "test $c = 2 && grep -q '^E_PIN_MISMATCH' '$W/log/prep-bad.txt' && test ! -e '$P/work-bad/plan.json'"
+prep "$P/r3c-opus.jsonl" "$P/work" "$I" > "$W/log/prep.txt" 2>&1; c=$?
+parts=$(cd "$P/work" && for d in cal-1a cal-1b cal-1c; do echo -n "$d:$(jq '.tasks | length' "$d/job.json")/$(jq 'length' "$d/order.json")/$(jq '[.tasks[].path] | unique | length' "$d/oracle.json") "; done)
+rule "B5 prepare: cal-1a to cal-1c, each 146 trials in the job (a task once per trial), 146 in order.json, its oracle.json over its tasks" "cal-1a:146/146/n cal-1b:146/146/n cal-1c:146/146/n" "exit $c, $parts" sh -c "test $c = 0 && echo '$parts' | grep -Eq '^cal-1a:146/146/[0-9]+ cal-1b:146/146/[0-9]+ cal-1c:146/146/[0-9]+ $'"
+plan=$(jq -c '{item, cap_usd, candidates_sha256: .candidates_sha256[0:8], cal1_seed, grid_seed, parts: [.cal1_parts[].trials], closing: .closing_line_sha256[0:8], parser: .parser_sha256[0:8]}' "$P/work/plan.json")
+cl=$(echo -n "$(cd "$E" && bun -e 'const { R3C } = await import("./quick/laneb/r3/r3c-rules.ts"); process.stdout.write(R3C.closingLine)')" | sha256sum | cut -c1-8)
+rule "B6 plan.json names the item, the cap, the frozen candidates, both seeds, the closing line and the pinned parser" "r3c-opus \$750 7a2b33c7 20261112 20261113 [146,146,146] closing $cl parser bdedd1a6" "$plan" sh -c "echo '$plan' | jq -e '.item == \"r3c-opus\" and .cap_usd == 750 and .candidates_sha256 == \"7a2b33c7\" and .cal1_seed == 20261112 and .grid_seed == 20261113 and .parts == [146,146,146] and .closing == \"$cl\" and .parser == \"bdedd1a6\"'"
+arms=$(jq -c '[.agents[] | {arm: .kwargs.arm, closing: .kwargs.closing_line}]' "$P/work/cal-1a/job.json")
+rule "B7 the cal-1 parts run the none arm alone, with the closing line" "[{none, r3c-root-cause-files}]" "$arms" test "$arms" = '[{"arm":"none","closing":"r3c-root-cause-files"}]'
+
+echo; echo "## Part C: run, admit, grid, resume and analyze, scenario by scenario"
+cat > "$W/bin/play-vm-run.ts" <<'EOF'
+// Plays vm-run.sh for launch.sh's batch ssh, adapted from the R3b pin post's dry run. The "VM" is $VM. It runs the part's
+// planned trials in the part's order (order.json for cal-1 and grid parts, Harbor's attempt-major order for cal-2), reserving
+// each session at the cells' $12 cap and settling it through the item's ledger service on LEDGER_PORT, as the proxy does,
+// writes each trial's files in the shape r3c.ts loadTrials reads (config.json, result.json, the agent's sdk-messages.jsonl
+// with parent_tool_use_id, the verifier's report.json, a told trial's hook log), one oracle trial a task (its model.patch
+// under artifacts/logs/artifacts/ and its report.json), and the order line in out/harbor.log. The scenario module named by
+// SCEN gives, per trial, pass, infra, spend, budget (allowance stop), shown (procedure visible), block (the closing block's
+// files, or null for none) and old (a log written before parent_tool_use_id was captured).
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const scen = (await import(process.env.SCEN!)).default;
+const m = /vm-run\.sh work\/run (\S+) (\S+)/.exec(process.argv.at(-1) ?? "");
+const prefix = m![1]!, part = prefix.replace(/^r3c-opus-/, "").slice(0, -1);
+const run = join(process.env.VM!, "work/run"), port = process.env.LEDGER_PORT!;
+appendFileSync(process.env.EVENTS!, "batch started: vm-run.sh work/run " + prefix + " " + m![2] + "\n");
+for (const d of ["out", "jobs"]) rmSync(join(run, d), { recursive: true, force: true });
+mkdirSync(join(run, "out"), { recursive: true });
+const job = JSON.parse(readFileSync(join(run, "job.json"), "utf8"));
+const name = (p: string) => String(p).split("/").filter(Boolean).at(-1)!;
+const tasks: string[] = job.tasks.map((t: any) => name(t.path));
+const arms: string[] = job.agents.map((a: any) => a.kwargs.arm);
+const hasOrder = existsSync(join(run, "order.json"));
+const plan: [string, string][] = hasOrder ? JSON.parse(readFileSync(join(run, "order.json"), "utf8")) : Array.from({ length: job.n_attempts }, () => tasks.flatMap((t) => arms.map((a) => [t, a] as [string, string]))).flat();
+if (hasOrder) writeFileSync(join(run, "out/harbor.log"), "laneb order: applied " + plan.length + " trials from " + join(run, "order.json") + "\n");
+const call = async (path: string, body: object) => (await fetch("http://127.0.0.1:" + port + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json() as any;
+const testsOf = (t: string) => JSON.parse(readFileSync(join(run, "tasks", t, "tests/config.json"), "utf8"));
+const report = (t: string, pass: boolean) => { const c = testsOf(t); return { fail_to_pass: Object.fromEntries(c.FAIL_TO_PASS.map((x: string, i: number) => [x, pass || i > 0 ? "PASSED" : "FAILED"])), pass_to_pass: Object.fromEntries(c.PASS_TO_PASS.map((x: string) => [x, "PASSED"])), resolved: pass }; };
+const gold = (t: string) => "src/" + t.replace(/[^A-Za-z0-9]/g, "_") + ".py";
+for (const t of [...new Set(tasks)]) {
+  const d = join(run, "jobs", job.job_name + "-oracle", t + "__oracle");
+  mkdirSync(join(d, "artifacts/logs/artifacts"), { recursive: true }); mkdirSync(join(d, "verifier"), { recursive: true });
+  writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: "/vm/run/tasks/" + t }, agent: { name: "oracle" } }));
+  writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: t + "__oracle", verifier_result: { rewards: { reward: 1 } }, exception_info: null }));
+  writeFileSync(join(d, "artifacts/logs/artifacts/model.patch"), "diff --git a/" + gold(t) + " b/" + gold(t) + "\n--- a/" + gold(t) + "\n+++ b/" + gold(t) + "\ndiff --git a/tests/test_fix.py b/tests/test_fix.py\n");
+  writeFileSync(join(d, "verifier/report.json"), JSON.stringify(report(t, true)));
+}
+const seen = new Map<string, number>();
+let rc = 0;
+for (const [k, [task, arm]] of plan.entries()) {
+  const j = seen.get(task + "/" + arm) ?? 0; seen.set(task + "/" + arm, j + 1);
+  const kw = job.agents.find((a: any) => a.kwargs.arm === arm).kwargs, told = arm === "gstack";
+  const t = { pass: false, infra: false, spend: 0.25, budget: false, shown: true, block: [gold(task)] as string[] | null, old: false, ...scen(part, task, j, arm, k) };
+  const trial = task.slice(0, 20) + "__" + arm + "__" + k, sid = "s-" + k, d = join(run, "jobs", job.job_name, trial);
+  const r = await call("/reserve", { id: prefix + sid, usd_micros: 12_000_000, meta: { trial: trial + "__env" } });
+  if (!r.ok) { writeFileSync(join(run, "out/proxy-status-end.json"), JSON.stringify({ cap_stop: "ledger refused a reserve for " + trial })); rc = 130; break; }
+  mkdirSync(join(d, "evaluator"), { recursive: true }); mkdirSync(join(d, "verifier"), { recursive: true });
+  writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: "/vm/run/tasks/" + task }, agent: { name: "laneb-claude-code", kwargs: { arm, upstream_model: kw.upstream_model, closing_line: kw.closing_line, ...(told ? { told_skill: kw.told_skill, procedure_line: kw.procedure_line } : {}) } } }));
+  writeFileSync(join(d, "result.json"), JSON.stringify({ trial_name: trial, verifier_result: t.infra ? null : { rewards: { reward: t.pass ? 1 : 0 } }, exception_info: null }));
+  if (!t.infra) writeFileSync(join(d, "verifier/report.json"), JSON.stringify(report(task, t.pass)));
+  const text = (told && t.shown ? "## Phase 1\nDEBUG REPORT\n\n" : "Fixed it.\n\n") + (t.block ? "ROOT CAUSE FILES\n" + t.block.join("\n") : "");
+  const recs = [{ type: "AssistantMessage", content: [{ thinking: "ROOT CAUSE FILES\nsrc/thinking.py", signature: "s" }, { text: "Looking." }], parent_tool_use_id: null },
+    { type: "AssistantMessage", content: [{ text: "ROOT CAUSE FILES\nsrc/subagent.py" }], parent_tool_use_id: "toolu_sub" }, { type: "AssistantMessage", content: [{ text }], parent_tool_use_id: null }];
+  writeFileSync(join(d, "evaluator/sdk-messages.jsonl"), recs.map((x) => { const y: any = { ...x }; if (t.old) delete y.parent_tool_use_id; return JSON.stringify(y); }).join("\n") + "\n");
+  if (told) { mkdirSync(join(d, "evaluator/gstack-hooks/hooks"), { recursive: true }); writeFileSync(join(d, "evaluator/gstack-hooks/hooks/skill-contract.log"), "2026-11-05T00:00:00Z session=" + sid + " event=" + (t.shown ? "met" : "blocked") + "\n"); }
+  const micros = Math.round(t.spend * 1e6);
+  appendFileSync(join(run, "out/proxy-sessions.jsonl"), JSON.stringify({ id: sid, trial: trial + "__env", model: kw.upstream_model, spent_micros: micros, ok_responses: t.infra ? 0 : 3, requests: 4, refused: t.budget ? 1 : 0, refused_budget: t.budget ? 1 : 0, opened_at: "2026-11-05T00:00:00Z", closed_at: "2026-11-05T01:00:00Z", cmd_expanded: told, cmd_names: told ? ["investigate"] : [] }) + "\n");
+  await call("/settle", { id: prefix + sid, usd_micros: micros });
+}
+if (rc === 0) writeFileSync(join(run, "out/proxy-status-end.json"), JSON.stringify({ cap_stop: null }));
+writeFileSync(join(run, "out/vm-run.exit"), rc + "\n");
+appendFileSync(process.env.EVENTS!, "batch ended " + rc + "\n");
+process.exit(rc);
+EOF
+printf '#!/usr/bin/env bash\nexec bun %s "$@"\n' "$W/bin/play-vm-run.ts" > "$W/bin/vm/ssh" && chmod +x "$W/bin/vm/ssh"
+cat > "$W/bin/launch-ubi" <<'EOF'
+#!/usr/bin/env bash
+# Stub ubi-runner, from the R3b pin post's dry run: the "VM" is the directory $VM, made fresh at each up; sync uses hard
+# links so the arm tars aren't copied; every call is logged to $EVENTS. No Ubicloud call.
+set -u
+cmd=$1; shift
+echo "$cmd $*" >> "$EVENTS"
+case "$cmd" in
+  up) rm -rf "$VM"; mkdir -p "$VM" "$STATE/vm-1"; echo "IP=127.0.0.1" > "$STATE/vm-1/env"; touch "$STATE/vm-1/key"; echo vm-1 ;;
+  sync) mkdir -p "$VM/$3"; cp -rl "$2/." "$VM/$3/" ;;
+  ssh) case "$2" in
+         *STOP*) touch "$VM/work/run/STOP" ;;
+         *vm-run.exit*) test -f "$VM/work/run/out/vm-run.exit" ;;
+         *"find out jobs"*) cd "$VM/work/run" && find out jobs -type f | wc -l ;;
+         *) timeout 5 cat > /dev/null || true ;;
+       esac ;;
+  pull) cp -r "$VM/$2" "$3/" ;;
+  down) ;;
+esac
+EOF
+chmod +x "$W/bin/launch-ubi"
+# Scenario modules: scen(part, task, j, arm, k) gives a trial's fields; j counts the task and arm's earlier trials in the part.
+# h is a stable 0/1 from the task id, so about half of the candidates lean each way.
+scen() { printf 'const h = (t: string) => [...t].reduce((a, c) => a + c.charCodeAt(0), 0) %% 2;\nexport default (part: string, task: string, j: number, arm: string, k: number) => (%s);\n' "$2" > "$W/scen/$1.ts"; }
+CAL='part.startsWith("cal") ? { pass: (j + h(task)) % 2 === 0 } : '
+KEEP='{ pass: arm === "gstack" ? j % 4 !== 3 : j % 2 === 0, spend: arm === "gstack" ? 0.4 : 0.25 }'
+scen go "$CAL$KEEP"
+scen stop "part.startsWith(\"cal\") ? { pass: (j + h(task)) % 2 === 0, spend: 0.7 } : $KEEP"
+scen proj-cal "part === \"cal-1a\" ? { pass: (j + h(task)) % 2 === 0, spend: 1.2 } : $CAL$KEEP"
+scen infra-cal "part === \"cal-1b\" ? { pass: true, infra: k < 15 } : $CAL$KEEP"
+scen unreadable "$CAL k === 5 && part === \"grid-1\" ? { pass: true, old: true } : $KEEP"
+scen proj-grid "$CAL part === \"grid-1\" ? { pass: arm === \"gstack\", spend: arm === \"gstack\" ? 1.5 : 0.25 } : $KEEP"
+scen cap-grid "$CAL part === \"grid-1\" ? { pass: arm === \"gstack\", spend: arm === \"gstack\" ? 6 : 0.25 } : $KEEP"
+scen cut "$CAL{ pass: j % 2 === 0, spend: 0.3 }"
+port=29915
+# setup <name>: a copy of the prepared work dir and a fresh ledger approved at $750.
+setup() { local x=$W/s/$1; rm -rf "$x"; mkdir -p "$x/state"; cp -a "$P/work" "$x/work"; approve "$x/r3c-opus.jsonl" 750; }
+# r3c <name> <cmd> <scenario>: r3c.ts with the stub runner and the stub ssh; output in log/<name>-<cmd>.txt.
+r3c() {
+  local x=$W/s/$1 cmd=$2 sc=$3; port=$((port + 1))
+  (cd "$E" && env PATH="$W/bin/vm:$PATH" SCEN="$W/scen/$sc.ts" UBICLOUD_API_KEY=dry-run-placeholder-not-a-key LEDGER="$x/r3c-opus.jsonl" INHAND="$I" ARMS="$A" SWEREBENCH="$SWEREBENCH" \
+    UBI_OWNER="$UBI_OWNER" UBI_RUNNER="$W/bin/launch-ubi" UBI_RUNNER_STATE="$x/state" STATE="$x/state" VM="$x/vm" EVENTS="$x/events.log" \
+    PULL_RETRY_SEC=0 UBI_TTL_HOURS="${TTL:-12}" VM_USD_PER_HOUR=0.6 VM_RESERVE_HOURS=4 LEDGER_PORT="$port" \
+    bun quick/laneb/r3/r3c.ts "$cmd" "$x/work" --item r3c-opus) < /dev/null > "$W/log/$1-$cmd.txt" 2>&1
+}
+an() { local c; r3c "$1" analyze x; c=$?; cp "$W/log/$1-analyze.txt" "$W/log/$1-analyze-$c.txt"; echo $c; }
+outcome() { first '^R3c outcome' "$W/log/$1-analyze.txt"; }
+launched() { ls "$W/s/$1/work" | grep -E 'launch-exit$|projection-stop|raised$|grid.ready|admit.stop' | tr '\n' ' '; }
+rows() { jq -s -c '[(map(select(.kind == "reserve")) | length), (map(select(.kind == "settle")) | length)]' "$W/s/$1/r3c-opus.jsonl"; }
+
+echo "### the start rule"
+(cd "$E" && INHAND="$I" bun -e '
+const { loadInHand, tiers } = await import("./quick/laneb/r3/r3c-rules.ts");
+const { startRule } = await import("./quick/laneb/r3/r3c.ts");
+const tr = tiers(loadInHand(process.env.INHAND), "opus");
+console.log("tiers t1 " + tr.t1.length + ", t2 " + tr.t2.length + ", t3 " + tr.t3.length + ", t4 " + tr.t4.length);
+for (const cap of [750, 450]) { const s = startRule(tr, cap); console.log("at-" + cap + " " + (s.ok ? "fits" : "refused") + " " + s.line); }') > "$W/log/start-rule.txt" 2>&1
+sed "$HIDE" "$W/log/start-rule.txt"
+rule "C1 the start rule at \$750: cal-1's 438 and a worst-case cal-2 of 440 (4 x 110 t4 tasks) at \$0.44836, plus \$79.20" "878 trials, fits" "$(first '^at-750' "$W/log/start-rule.txt" | cut -c8-)" has '^at-750 fits start rule: projection \$472\.86 = settled \$0\.00 \+ 878 calibration trials' "$W/log/start-rule.txt"
+rule "C2 the exported startRule at a \$450 cap" "passes the cap, does not bind" "$(first '^at-450' "$W/log/start-rule.txt" | cut -c8-)" has 'at-450 refused .*passes r3c-opus.s \$450 cap; r3c-opus does not bind' "$W/log/start-rule.txt"
+setup ref-oracle; rm -f "$W/s/ref-oracle/work/cal-1b/oracle.json"; r3c ref-oracle run go; c=$?
+rule "C3 run with cal-1b's oracle.json missing" "refused before the bind" "exit $c, $(first 'oracle.json' "$W/log/ref-oracle-run.txt" | sed 's/^E_INTERNAL //'), bound: $([ -e "$W/s/ref-oracle/r3c-opus.jsonl.bound" ] && echo yes || echo no)" sh -c "test $c != 0 && test ! -e '$W/s/ref-oracle/r3c-opus.jsonl.bound' && grep -q 'cal-1b has no oracle.json' '$W/log/ref-oracle-run.txt'"
+setup ref-ttl; TTL=6 r3c ref-ttl run go; c=$?
+rule "C4 run with UBI_TTL_HOURS under 12" "exit 2, refused before the bind" "exit $c, $(cut -c1-120 "$W/log/ref-ttl-run.txt")" sh -c "test $c = 2 && grep -q 'UBI_TTL_HOURS to 12 or more' '$W/log/ref-ttl-run.txt' && test ! -e '$W/s/ref-ttl/r3c-opus.jsonl.bound'"
+
+echo "### admission GO, the grid and the outcome, with the leases"
+setup go; r3c go run go; rc=$?
+cal=$(jq -s 'length' "$W/s/go/work/calibration.jsonl" 2>/dev/null); c2=$(jq -c '{tasks: (.tasks | length), trials}' "$W/s/go/work/cal2.json" 2>/dev/null)
+rule "D1 run binds and runs cal-1a to cal-1c, plans and runs cal-2 from the failed t4 tasks, then admission says GO and the grid is prepared" "run exit 0, grid.ready" "run exit $rc; cal-2 $c2; $cal calibration trials; $(first '^admission GO' "$W/log/go-run.txt" | cut -c1-200); launched: $(launched go)" sh -c "test $rc = 0 && test -e '$W/s/go/work/grid.ready' && test -e '$W/s/go/work/cal-2.launch-exit' && test ! -e '$W/s/go/work/grid-1.launch-exit' && grep -q '^start rule: projection \$472.86' '$W/log/go-run.txt'"
+rule "D2 the projection before each later calibration part, cal-2 at its worst case until cal-1c settles" "3 'starts' lines, the first two at the worst case" "$(grep -c 'starts$' "$W/log/go-run.txt") starts; $(first '^before cal-1b' "$W/log/go-run.txt" | cut -c1-220)" sh -c "test \$(grep -c 'starts\$' '$W/log/go-run.txt') = 3 && grep -q '^before cal-1b: .*cal-2 at its worst case' '$W/log/go-run.txt' && grep -q '^before cal-1c: .*cal-2 at its worst case' '$W/log/go-run.txt' && ! grep -q '^before cal-2: .*worst case' '$W/log/go-run.txt'"
+r3c go admit x; c=$?
+rule "D3 admit again from the pulled calibration, at the ledger's current cap" "exit 0, GO" "exit $c, $(tail -1 "$W/log/go-admit.txt" | cut -c1-200)" test "$c" = 0
+# The grid scenarios start from copies of this run after admission: the work dir, the ledger and its bound file.
+clone() { local x=$W/s/$2; rm -rf "$x"; mkdir -p "$x/state"; cp -a "$W/s/$1/work" "$x/work"; cp "$W/s/$1/r3c-opus.jsonl" "$x/r3c-opus.jsonl"; jq -c --arg w "$x/work" '.work = $w' "$W/s/$1/r3c-opus.jsonl.bound" > "$x/r3c-opus.jsonl.bound"; }
+for c in unreadable proj-grid cap-grid cut gresume; do clone go $c; done
+r3c go grid go; gc=$?
+rule "D4 grid runs every grid part, the projection before each from grid-1 on at the grid's own costs" "exit 0, every grid part launched" "exit $gc; launched: $(launched go)" sh -c "test $gc = 0 && test \$(ls '$W/s/go/work' | grep -c '^grid-[0-9]*.launch-exit\$') = \$(jq '.sizes | length' '$W/s/go/work/grid.json')"
+ac=$(an go)
+n=$(jq -r '"n " + (.n|tostring) + ", R " + (.R|tostring) + ", parts " + (.sizes|tostring)' "$W/s/go/work/grid.json")
+trials=$(cat "$W/s/go/work/trials.jsonl" | wc -l)
+rule "D5 one lease per trial and VM block on the temporary ledger, opened and settled; open reserves 0" "reserve rows = settle rows = trials + VM blocks" "$(rows go) reserve/settle rows for $trials trials; $(first '^r3c-opus: settled' "$W/log/go-analyze.txt")" sh -c "r=\$(jq -s -c '[(map(select(.kind == \"reserve\")) | length), (map(select(.kind == \"settle\")) | length)]' '$W/s/go/r3c-opus.jsonl'); v=\$(ls '$W/s/go/work' | grep -c 'launch-exit\$'); test \"\$r\" = \"[\$(( $trials + v )),\$(( $trials + v ))]\" && grep -q 'open reserves 0' '$W/log/go-analyze.txt'"
+rule "D6 KEEP on the grid ($n)" "exit 0, KEEP" "exit $ac, $(outcome go | cut -c1-160)" sh -c "test $ac = 0 && grep -q 'R3c outcome for Opus 5.5: KEEP' '$W/log/go-analyze.txt'"
+rule "D7 the report-only lines: localization from the main thread's block (told names the oracle's file), f2pShare, the oracle's per-test count" "lines present, told hit@1 100%" "$(first '^localization \(report' "$W/log/go-analyze.txt" | cut -c1-200)" sh -c "grep -q '^localization (report only): .*hit@1 none 100.0%, told 100.0%' '$W/log/go-analyze.txt' && grep -q '^f2pShare (report only)' '$W/log/go-analyze.txt' && grep -q '^oracle per-test (report only): .* score f2pShare 1 and 0 score null' '$W/log/go-analyze.txt'"
+echo "report-only lines (go):"; grep -E '^(grid|exposure|allowance|primary|D1 sens|frozen MDD|MDD re|task fit|far|Stop hook|cost per|localization|told local|f2pShare|oracle)' "$W/log/go-analyze.txt" | cut -c1-260 | sed 's/^/  /'
+
+echo "### admission STOP"
+setup stop; r3c stop run stop; rc=$?; ac=$(an stop)
+rule "E1 calibration at \$0.70 a trial: the money left buys under 3 replicates, so admission says STOP and no grid is prepared" "run exit 5, admit.stop, no grid.json" "run exit $rc; $(tail -1 "$W/log/stop-run.txt" | cut -c1-200)" sh -c "test $rc = 5 && test -e '$W/s/stop/work/admit.stop' && test ! -e '$W/s/stop/work/grid.json'"
+r3c stop admit x; c=$?
+rule "E2 admit again" "exit 5" "exit $c" test "$c" = 5
+r3c stop grid stop; c=$?
+rule "E3 grid after STOP" "refused: no grid.ready" "exit $c, $(first 'grid.ready' "$W/log/stop-grid.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && grep -q 'has no grid.ready' '$W/log/stop-grid.txt'"
+rule "E4 analyze after STOP" "exit 6, the admission STOP line" "exit $ac, $(outcome stop | cut -c1-200)" sh -c "test $ac = 6 && grep -q 'R3c outcome for Opus 5.5: none (admission STOP' '$W/log/stop-analyze.txt'"
+
+echo "### the projection stop, raise and resume in calibration"
+setup proj; r3c proj run proj-cal; rc=$?
+rule "F1 cal-1a at \$1.20 a trial: the projection before cal-1b passes \$750 and the run stops there" "exit 4, cal-1b.projection-stop" "run exit $rc; $(first '^before cal-1b' "$W/log/proj-run.txt" | cut -c1-230)" sh -c "test $rc = 4 && test -e '$W/s/proj/work/cal-1b.projection-stop' && test ! -e '$W/s/proj/work/cal-1b.launch-exit' && grep -q 'passes r3c-opus.s \$750 cap; the run stops before cal-1b' '$W/log/proj-run.txt'"
+ac=$(an proj)
+rule "F2 analyze while stopped" "exit 4, FIX-METHOD (cost limits)" "exit $ac, $(outcome proj | cut -c1-200)" sh -c "test $ac = 4 && grep -q 'cal-1b was not launched: before cal-1b: projection .*FIX-METHOD (cost limits)' '$W/log/proj-analyze.txt'"
+r3c proj resume proj-cal; c=$?; cp "$W/log/proj-resume.txt" "$W/log/proj-resume-none.txt"
+rule "F3 resume with no recorded raise" "refused, cal-1b stays stopped" "exit $c, $(first 'no cap raise' "$W/log/proj-resume.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && grep -q 'no cap raise is recorded' '$W/log/proj-resume.txt' && test -e '$W/s/proj/work/cal-1b.projection-stop'"
+printf 'Dry-run raise record (scratch, not the Captain drive). No real cap is raised by this file.\n' > "$W/approvals/dry-run-raise.md"
+(cd "$L" && bun runner/ledger.ts raise --path "$W/s/proj/r3c-opus.jsonl" --item r3c-opus --usd 900 --approved-by "$W/approvals/dry-run-raise.md") > "$W/log/raise-900.txt" 2>&1
+r3c proj resume proj-cal; c=$?; cp "$W/log/proj-resume.txt" "$W/log/proj-resume-900.txt"
+rule "F4 resume after ledger.ts raise --approved-by <file> to \$900, which the projection still passes" "refused, no cal-1b lease" "exit $c, $(first 'still passes' "$W/log/proj-resume.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && grep -q 'still passes r3c-opus.s raised \$900 cap; cal-1b stays stopped' '$W/log/proj-resume.txt' && ! grep -q 'r3c-opus-cal-1b/' '$W/s/proj/r3c-opus.jsonl'"
+(cd "$L" && bun runner/ledger.ts raise --path "$W/s/proj/r3c-opus.jsonl" --item r3c-opus --usd 1300 --approved-by "$W/approvals/dry-run-raise.md") > "$W/log/raise-1300.txt" 2>&1
+r3c proj resume proj-cal; c=$?; cp "$W/log/proj-resume.txt" "$W/log/proj-resume-1300.txt"
+rule "F5 resume after a raise to \$1,300 the projection fits: calibration runs on to admission, at the raised cap" "accepted once; cap-raise-cal-1b.json names raise-2; admit at \$1300" "exit $c, $(first 'cal-1b starts' "$W/log/proj-resume.txt"); $(first '^admit:' "$W/log/proj-resume.txt" | grep -o -- '--cap-usd [0-9.]*'); launched: $(launched proj)" sh -c "test -e '$W/s/proj/work/cal-1c.launch-exit' && jq -e '.raise.id == \"raise-2\" and .raise.usd_micros == 1300000000' '$W/s/proj/work/cap-raise-cal-1b.json' && grep -q -- '--cap-usd 1300' '$W/log/proj-resume.txt'"
+r3c proj resume proj-cal; c=$?; cp "$W/log/proj-resume.txt" "$W/log/proj-resume-again.txt"
+rule "F6 a second resume after the stop was used" "refused: no projection stop" "exit $c, $(first 'no projection stop' "$W/log/proj-resume.txt" | sed 's/^E_INTERNAL //' | cut -c1-160)" sh -c "test $c != 0 && grep -q 'has no projection stop' '$W/log/proj-resume.txt'"
+
+echo "### an incomplete calibration part"
+setup infra; r3c infra run infra-cal; rc=$?; ac=$(an infra)
+rule "G1 15 of cal-1b's 146 trials are infra: the run stops before admission" "run exit 4, no cal-1c launch, analyze exit 4 FIX-METHOD (harness limits)" "run exit $rc; analyze exit $ac, $(outcome infra | cut -c1-200)" sh -c "test $rc = 4 && test ! -e '$W/s/infra/work/cal-1c.launch-exit' && test $ac = 4 && grep -q 'cal-1b: 15 of 146 trials are infra, over 10%). FIX-METHOD (harness limits)' '$W/log/infra-analyze.txt'"
+
+echo "### the grid: an unreadable transcript, a grid projection stop, CUT-CANDIDATE"
+grid_case() { r3c "$1" grid "$1"; echo $?; } # on a copy of the go run after admission
+gc=$(grid_case unreadable); ac=$(an unreadable)
+rule "H1 one grid trial's log has no parent_tool_use_id: localization prints E_TRANSCRIPT_UNREADABLE instead of rates, and the verdict stands" "exit 0 KEEP, the error line, no rates line" "grid exit $gc, analyze exit $ac; $(first '^E_TRANSCRIPT_UNREADABLE' "$W/log/unreadable-analyze.txt" | cut -c1-200)" sh -c "test $ac = 0 && grep -q '^E_TRANSCRIPT_UNREADABLE localization (report only): 1 graded grid trials' '$W/log/unreadable-analyze.txt' && ! grep -q '^localization (report only)' '$W/log/unreadable-analyze.txt'"
+gc=$(grid_case proj-grid); ac=$(an proj-grid)
+rule "H2 told grid-1 trials at \$1.50: the projection before grid-2 at the grid's own costs passes \$750; the grid stops; analyze is incomplete for cost limits" "grid exit 4, grid-2.projection-stop, analyze exit 4" "grid exit $gc; $(first '^before grid-2' "$W/log/proj-grid-grid.txt" | cut -c1-200); analyze exit $ac" sh -c "test $gc = 4 && test -e '$W/s/proj-grid/work/grid-2.projection-stop' && test $ac = 4 && grep -q 'grid-2 was not launched: before grid-2: .*FIX-METHOD (cost limits)' '$W/log/proj-grid-analyze.txt'"
+gc=$(grid_case cap-grid); ac=$(an cap-grid)
+rule "H2b told grid-1 trials at \$6: the ledger refuses a session reserve inside grid-1 at \$750; the part is incomplete for harness limits" "grid exit 4, no grid-2 launch, analyze exit 4" "grid exit $gc; $(first 'launch exited' "$W/log/cap-grid-grid.txt"); analyze exit $ac, $(outcome cap-grid | cut -c1-200)" sh -c "test $gc = 4 && test ! -e '$W/s/cap-grid/work/grid-2.launch-exit' && test $ac = 4 && grep -q 'grid-1: ledger refused a reserve for .*FIX-METHOD (harness limits)' '$W/log/cap-grid-analyze.txt'"
+gc=$(grid_case cut); ac=$(an cut)
+rule "H3 told and none pass alike on the grid: CUT-CANDIDATE or FIX-METHOD (task fit) by D1's ceil(3n/7)" "exit 3 or 5 with the D1 line" "grid exit $gc, analyze exit $ac; $(outcome cut | cut -c1-200)" sh -c "(test $ac = 3 && grep -q 'CUT-CANDIDATE' '$W/log/cut-analyze.txt') || (test $ac = 5 && grep -q 'FIX-METHOD (task fit)' '$W/log/cut-analyze.txt')"
+r3c go grid go; c=$?
+rule "H4 grid again on a grid that already ran" "refused" "exit $c, $(first 'already started' "$W/log/go-grid.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && grep -q 'the grid has already started' '$W/log/go-grid.txt'"
+
+
+echo "### the projection stop, raise and resume in the grid"
+r3c gresume grid proj-grid; gc=$?
+rule "H5a told grid-1 trials at \$1.50: the grid stops before grid-2 (as H2), on its own copy of the go run" "grid exit 4, grid-2.projection-stop" "grid exit $gc; launched: $(launched gresume)" sh -c "test $gc = 4 && test -e '$W/s/gresume/work/grid-2.projection-stop' && test ! -e '$W/s/gresume/work/grid-2.launch-exit'"
+r3c gresume resume proj-grid; c=$?; cp "$W/log/gresume-resume.txt" "$W/log/gresume-resume-none.txt"
+rule "H5b grid resume with no recorded raise" "refused, grid-2 stays stopped" "exit $c, $(first 'no cap raise' "$W/log/gresume-resume.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && grep -q 'no cap raise is recorded' '$W/log/gresume-resume.txt' && test -e '$W/s/gresume/work/grid-2.projection-stop' && test ! -e '$W/s/gresume/work/grid-2.projection-stop.raised'"
+(cd "$L" && bun runner/ledger.ts raise --path "$W/s/gresume/r3c-opus.jsonl" --item r3c-opus --usd 900 --approved-by "$W/approvals/dry-run-raise.md") > "$W/log/graise-900.txt" 2>&1
+r3c gresume resume proj-grid; c=$?; cp "$W/log/gresume-resume.txt" "$W/log/gresume-resume-900.txt"
+rule "H5c grid resume after a raise to \$900, which the projection still passes" "refused, grid-2 stays stopped, no grid-2 lease" "exit $c, $(first 'still passes' "$W/log/gresume-resume.txt" | sed 's/^E_INTERNAL //')" sh -c "test $c != 0 && grep -q 'still passes r3c-opus.s raised \$900 cap; grid-2 stays stopped' '$W/log/gresume-resume.txt' && test -e '$W/s/gresume/work/grid-2.projection-stop' && ! grep -q 'r3c-opus-grid-2/' '$W/s/gresume/r3c-opus.jsonl'"
+(cd "$L" && bun runner/ledger.ts raise --path "$W/s/gresume/r3c-opus.jsonl" --item r3c-opus --usd 1300 --approved-by "$W/approvals/dry-run-raise.md") > "$W/log/graise-1300.txt" 2>&1
+r3c gresume resume proj-grid; c=$?; cp "$W/log/gresume-resume.txt" "$W/log/gresume-resume-1300.txt"
+rule "H5d grid resume after a raise to \$1,300 the projection fits: the grid runs on from grid-2 at the raised cap" "accepted once; cap-raise-grid-2.json names raise-2; every grid part launched" "exit $c, $(first '^before grid-2' "$W/log/gresume-resume.txt" | cut -c1-200); launched: $(launched gresume)" sh -c "test $c = 0 && test -e '$W/s/gresume/work/grid-2.launch-exit' && test -e '$W/s/gresume/work/grid-2.projection-stop.raised' && test ! -e '$W/s/gresume/work/grid-2.projection-stop' && jq -e '.raise.id == \"raise-2\" and .raise.usd_micros == 1300000000' '$W/s/gresume/work/cap-raise-grid-2.json' && test \$(ls '$W/s/gresume/work' | grep -c '^grid-[0-9]*.launch-exit\$') = \$(jq '.sizes | length' '$W/s/gresume/work/grid.json')"
+r3c gresume resume proj-grid; c=$?; cp "$W/log/gresume-resume.txt" "$W/log/gresume-resume-again.txt"
+rule "H5e a second grid resume after the stop was used" "refused: no projection stop" "exit $c, $(first 'no projection stop' "$W/log/gresume-resume.txt" | sed 's/^E_INTERNAL //' | cut -c1-160)" sh -c "test $c != 0 && grep -q 'has no projection stop' '$W/log/gresume-resume.txt'"
+ac=$(an gresume)
+rule "H5f analyze after the resumed grid: an outcome at the raised cap, every lease settled" "exit 0, 3 or 5 with an R3c outcome line; open reserves 0" "exit $ac, $(outcome gresume | cut -c1-160); $(rows gresume) reserve/settle rows" sh -c "case $ac in 0|3|5) ;; *) exit 1;; esac; grep -q '^R3c outcome for Opus 5.5' '$W/log/gresume-analyze.txt' && grep -q 'open reserves 0' '$W/log/gresume-analyze.txt'"
+echo; echo "## leftovers"
+echo "ports answering: $(for p in $(seq 29916 29990); do (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && echo -n "$p "; done)none else; bound temporary ledgers: $(ls "$W"/s/*/*.bound 2>/dev/null | wc -l)"
+echo; echo "rules: $rules, failed: $fails"
+if [ "$fails" = 0 ]; then echo "DRYRUN: ok"; else echo "DRYRUN: fail"; exit 1; fi
