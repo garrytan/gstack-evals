@@ -168,6 +168,7 @@ interface Found {
   task: string | null;
   entry: any | null;
   how: string | null;
+  spent?: { usd: number; wall_s: number | null };
 }
 function readRun(dir: string): Found[] {
   const run = resolve(dir);
@@ -198,7 +199,12 @@ function readRun(dir: string): Found[] {
     }
     return cellOf(e?.cell, e, null, "journal line " + (i + 1));
   });
-  for (const s of Array.isArray(stops?.stops) ? stops.stops : []) for (const c of Array.isArray(s?.cells) ? s.cells : []) found.push(cellOf(c, null, c.how === "unstarted" ? "unstarted" : "stopped", "a stops.json cell"));
+  for (const s of Array.isArray(stops?.stops) ? stops.stops : [])
+    for (const c of Array.isArray(s?.cells) ? s.cells : []) {
+      const f = cellOf(c, null, c.how === "unstarted" ? "unstarted" : "stopped", "a stops.json cell");
+      if (f.how === "stopped" && !(typeof c.usd === "number" && Number.isFinite(c.usd) && c.usd >= 0)) refuse("a stopped cell in " + join(run, "stops.json") + " has no settled spend (usd)", "restore stops.json from the run's sink copy");
+      found.push(f.how === "stopped" ? { ...f, spent: { usd: c.usd, wall_s: typeof c.wall_s === "number" && Number.isFinite(c.wall_s) ? c.wall_s : null } } : f);
+    }
   return found;
 }
 
@@ -234,7 +240,7 @@ const COUNTS = ["scored", "no-block", "gap", "incomplete"] as const;
 function sessionRow(id: string, p: { unit: string; arm: ScoreArm; model: Model3; pass: number; smoke: boolean }, f: Found | undefined, strict: boolean): Checked {
   const base: CeoRow = { id, ...p, status: "gap", exposed: null, forecast: null, usd: 0, wall_s: null, issues: [], words: [], fixes: [], fix_words: [], run: f?.run ?? null, termination: null, follow_up: false, over_three: false, zero_output: false };
   if (!f || !f.entry) {
-    const row: CeoRow = { ...base, status: f ? "incomplete" : "gap", termination: f ? "cap_stop" : null };
+    const row: CeoRow = { ...base, status: f ? "incomplete" : "gap", termination: f ? "cap_stop" : null, usd: f?.spent?.usd ?? 0, wall_s: f?.spent?.wall_s ?? null };
     return { row, checks: [["journaled", false]] };
   }
   const e = f.entry;

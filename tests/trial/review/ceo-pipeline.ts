@@ -109,7 +109,7 @@ export function runDir(root: string, name: string, sessions: Session[], edit: (e
   });
   writeFileSync(join(dir, "cells.ndjson"), lines.join("\n") + (lines.length ? "\n" : ""));
   const stopped = sessions.filter((s) => s.how === "stopped");
-  writeJson(join(dir, "stops.json"), { schema_version: 1, stops: stopped.length ? [{ code: "CAP_STOP", message: "cap", cells: stopped.map((s) => ({ model: MODEL[s.model], arm: s.arm, unit: s.unit, pass: s.pass, how: "stopped" })) }] : [] });
+  writeJson(join(dir, "stops.json"), { schema_version: 1, stops: stopped.length ? [{ code: "CAP_STOP", message: "cap", cells: stopped.map((s) => ({ model: MODEL[s.model], arm: s.arm, unit: s.unit, pass: s.pass, how: "stopped", usd: 1.75, wall_s: 600 })) }] : [] });
   writeJson(join(dir, "units.json"), { schema_version: 1, units: Object.entries(TASK).map(([id, task]) => ({ id, task })) });
   return dir;
 }

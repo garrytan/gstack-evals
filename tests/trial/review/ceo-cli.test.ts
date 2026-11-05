@@ -2,7 +2,7 @@
 // judge-run --ceo: the brief's two pinned reads, the judge request bodies (Sol at reasoning effort medium, the Anthropic
 // judges with no thinking field), section 8's failure rule with one retry, a duplicated review line, and a stopped run.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ceoBriefReads, ceoReplyAnswers, CEO_D_READ_SHA256, CEO_REM_READ_SHA256 } from "../../../lanes/review-noloss/judge-run.ts";
 import { BRIEF, ceo, dBlock, honest, JUDGES, judgeRun, ledger, pipeline, remBlock, ROOT, runDir, sessionDir, SMOKE, STAGE1_NONE, tmp, U1, U2, U3, unitsDir, upstream, type Sent } from "./ceo-pipeline.ts";
@@ -231,6 +231,33 @@ describe("noloss judge-run --ceo", () => {
 });
 
 describe("review fixes on #225", () => {
+  test("a cap-stopped session's incomplete row carries its settled usd and wall_s from stops.json; an unstarted cell stays at 0", async () => {
+    const d = fresh("rows-cap-spend");
+    const run = runDir(d, "run", [...SMOKE, ...STAGE1_NONE.map((s) => (s.model === "sol" && s.unit === U3 && s.pass === 2 ? { ...s, how: "stopped" as const } : s))]);
+    const stops = JSON.parse(readFileSync(join(run, "stops.json"), "utf8"));
+    const cell = stops.stops[0].cells.find((c: any) => c.model.includes("sol"));
+    cell.how = "unstarted";
+    delete cell.usd;
+    delete cell.wall_s;
+    writeFileSync(join(run, "stops.json"), JSON.stringify(stops));
+    const r = await ceo(["rows", "--stage", "1", "--units", join(d, "units"), "--run", run, "--out", join(d, "rows.json")]);
+    expect(r.code).toBe(0);
+    const rows = JSON.parse(readFileSync(join(d, "rows.json"), "utf8")).rows as any[];
+    expect(rows.find((x) => x.id === "none:particle:" + U3 + ":p2")).toMatchObject({ status: "incomplete", termination: "cap_stop", usd: 1.75, wall_s: 600 });
+    expect(rows.find((x) => x.id === "none:sol:" + U3 + ":p2")).toMatchObject({ status: "incomplete", usd: 0, wall_s: null });
+  });
+
+  test("rows refuses a stopped stops.json cell with no settled spend", async () => {
+    const d = fresh("rows-cap-nospend");
+    const run = runDir(d, "run", [...SMOKE, ...STAGE1_NONE]);
+    const stops = JSON.parse(readFileSync(join(run, "stops.json"), "utf8"));
+    delete stops.stops[0].cells[0].usd;
+    writeFileSync(join(run, "stops.json"), JSON.stringify(stops));
+    const r = await ceo(["rows", "--stage", "1", "--units", join(d, "units"), "--run", run, "--out", join(d, "rows.json")]);
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("has no settled spend (usd)");
+  });
+
   test("--checks fails transcript_readable for a none session whose transcript is gone, though its journal parse is a block", async () => {
     const d = fresh("checks-none-transcript");
     const run = runDir(d, "run", [...SMOKE, ...STAGE1_NONE]);

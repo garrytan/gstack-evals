@@ -440,7 +440,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   };
 
   const per = Math.max(1, Math.floor(o.parallel / Math.max(1, o.arms.length)));
-  const capCells: { cell: ReviewCell; how: "stopped" | "unstarted" }[] = [];
+  const capCells: { cell: ReviewCell; how: "stopped" | "unstarted"; usd?: number; wall_s?: number | null }[] = [];
   const unstarted = (from: number) => groups.slice(from).flat().filter((p) => !reused.has(reviewCellId(p.cell))).map((p) => ({ cell: p.cell, how: "unstarted" as const }));
   for (let i = 0; i < groups.length; i += per) {
     const fresh = groups.slice(i, i + per).flat().filter((p) => !reused.has(reviewCellId(p.cell)));
@@ -454,7 +454,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const done = await pool(fresh, o.parallel, session);
     if (done.some((e) => e.record.termination.kind === "cap_stop")) {
       stops.push({ code: "CAP_STOP", message: "the proxy stopped a session at the cap" });
-      capCells.push(...done.filter((e) => e.record.termination.kind === "cap_stop").map((e) => ({ cell: e.cell, how: "stopped" as const })), ...unstarted(i + per));
+      capCells.push(...done.filter((e) => e.record.termination.kind === "cap_stop").map((e) => ({ cell: e.cell, how: "stopped" as const, usd: (e.record.cost_micros ?? 0) / 1_000_000, wall_s: e.ceo_outcome?.wall_s ?? null })), ...unstarted(i + per));
       break;
     }
   }
@@ -564,7 +564,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     log(s.code + " " + s.message);
   }
   for (const line of ceoLogs) log(line);
-  if (ceo) writeFileSync(join(o.out, "stops.json"), JSON.stringify({ schema_version: 1, stops: stops.filter((s) => s.code === "CAP_STOP").map((s) => ({ ...s, cells: capCells.map((c) => ({ ...c.cell, how: c.how })) })) }, null, 2) + "\n");
+  if (ceo) writeFileSync(join(o.out, "stops.json"), JSON.stringify({ schema_version: 1, stops: stops.filter((s) => s.code === "CAP_STOP").map((s) => ({ ...s, cells: capCells.map((c) => ({ ...c.cell, how: c.how, ...(c.how === "stopped" ? { usd: c.usd, wall_s: c.wall_s } : {}) })) })) }, null, 2) + "\n");
   writeFileSync(join(o.out, "parses.tsv"), parseRows.join("\n") + "\n");
   if (plan) writeFileSync(join(o.out, "modes.tsv"), modeRows.join("\n") + "\n");
   writeFileSync(join(o.out, "refusals.tsv"), refusalsTsv(refusals));
