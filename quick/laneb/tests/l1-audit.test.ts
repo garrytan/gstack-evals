@@ -100,6 +100,15 @@ describe("apply: the decisions rewrite the session table", () => {
     expect(r.rows[0]!.reason).toBe("graded; read audit overturned (Amendment C): 1 flagged calls");
     expect(r.summary).toBe("apply: 1 rows back to graded, 1 rows now contaminated, 1 decisions left their row as it was");
   });
+  test("a rewritten row's pass is what table.ts sets for its new outcome: an overturned row with reward 1 and no stop passes, one with a stop still fails, and an added row fails", () => {
+    const r = applyDecisions([
+      row("opus", "f1", "none", "t1", { trial: "won", outcome: "contaminated", pass: false, reward: 1 }),
+      row("opus", "f1", "none", "t2", { trial: "turns", outcome: "contaminated", pass: false, reward: 1, turn_cap: true }),
+      row("opus", "f1", "none", "t3", { trial: "spent", outcome: "contaminated", pass: false, reward: 1, allowance_stop: true }),
+      row("opus", "f1", "none", "t4", { trial: "clean", outcome: "graded", pass: true, reward: 1 }),
+    ], ["won", "turns", "spent"].map((trial) => ({ trial, decision: "overturned" as const, evidence: "e" })).concat([{ trial: "clean", decision: "added" as const, evidence: "e" }]));
+    expect(r.rows.map((x) => x.trial + " " + x.outcome + " " + x.pass)).toEqual(["won graded true", "turns graded false", "spent graded false", "clean contaminated false"]);
+  });
   test("a decision for a trial with no row, or for a gstack arm's row, refuses", () => {
     expect(() => applyDecisions(rows(), [{ trial: "nope", decision: "added", evidence: "" }])).toThrow("matches 0 rows, not one none row");
     expect(() => applyDecisions(rows(), [{ trial: "gstack", decision: "overturned", evidence: "" }])).toThrow("matches 1 rows of arm after-u");

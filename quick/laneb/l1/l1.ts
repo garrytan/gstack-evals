@@ -37,6 +37,7 @@ export const L1 = {
   pilot: { file: BUNDLE + "/pilot-tasks.txt", sha256: "fa85bf9cc38a3455a6436f2ec29262ba457a71d7e91e46cc4aedbe4a69ff9381" },
   smoke: ["BerriAI__litellm-16275", "containers__ramalama-2487", "unit8co__darts-2985"],
   tb2Tasks: 37,
+  tb2PartsSha256: "57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125",
   // Part VMs: launch.sh's blocks at the prereg's rate (section 9), and the part TTL the prereg sets.
   vm: { usdPerHour: "0.60", reserveHours: "4", ttlHours: 16 },
   // The awake host: Ubicloud standard-2 (list $41.89 a month, about $0.057 an hour), reserved at $0.08 an hour for its
@@ -600,6 +601,7 @@ function prepare(work: string, item: string) {
   if (item === "tb2-opus") {
     const f = process.env.TB2_PARTS ?? "", want = process.env.TB2_PARTS_SHA256 ?? "";
     if (!f || !/^[0-9a-f]{64}$/.test(want)) usage("set TB2_PARTS to the twin's split file and TB2_PARTS_SHA256 to the digest Amendment C pins for it");
+    if (want !== L1.tb2PartsSha256) usage("TB2_PARTS_SHA256 is not the digest Amendment C pins for the twin's split, " + L1.tb2PartsSha256);
     tb2Parts = readFileSync(f, "utf8");
     if (sha256(tb2Parts) !== want) usage(f + " does not hash to TB2_PARTS_SHA256");
     inputs["tb2-parts"] = want;

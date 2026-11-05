@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
-import { cellKey, ITEMS, plannedCells, sha256, trialTasksFrom } from "../l1/l1.ts";
+import { cellKey, classify, EXIT4_LOSS, ITEMS, plannedCells, sha256, trialTasksFrom } from "../l1/l1.ts";
 
 // l1.ts end to end on a fake awake host. fixtures/l1/ubi plays ubi-runner: each VM is a directory under UBI_FAKE, and ssh
 // runs a command in it with HOME set to it, so the host runs the real host.sh, launch.sh and ledger service. fixtures/l1/ssh
@@ -32,7 +32,7 @@ function rig(item: string, o: { cap?: number; preReserve?: number } = {}): Rig {
   l.approve(o.cap ?? ITEMS[item]!.capUsd, { quotes: ["test approval"] });
   if (o.preReserve) l.reserve("host-9", toMicros(o.preReserve));
   const tb2 = join(root, "tb2-parts.txt");
-  writeFileSync(tb2, tb2Text());
+  writeFileSync(tb2, readFileSync(join(import.meta.dir, "../../../wiki/plans/2026-11-05-geva-294-l1-amendment-c/tb2-parts.txt")));
   const env: Record<string, string> = {
     PATH: FIX + ":" + process.env.PATH, HOME: process.env.HOME ?? root,
     UBI_FAKE: fake, UBI_RUNNER: join(FIX, "ubi"), UBI_RUNNER_SHA256: sha256(readFileSync(join(FIX, "ubi"))), UBI_RUNNER_STATE: state, UBI_RECOVERY_DIR: recovery, UBI_OWNER: "GEVA-268",
@@ -132,6 +132,10 @@ describe("l1.ts before any spend", () => {
     expect(l1(r, ["launch", r.work, "--part", "pilot"]).err).toContain("no host is up");
     const tb2 = rig("tb2-opus");
     expect(l1(tb2, ["prepare", tb2.work, "--item", "tb2-opus"], { TB2_PARTS_SHA256: "0".repeat(64) }).code).toBe(2);
+    const other = join(tb2.root, "other-split.txt");
+    writeFileSync(other, tb2Text());
+    const unpinned = l1(tb2, ["prepare", tb2.work, "--item", "tb2-opus"], { TB2_PARTS: other, TB2_PARTS_SHA256: sha256(readFileSync(other)) });
+    expect([unpinned.code, unpinned.err]).toEqual([2, expect.stringContaining("57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125")]);
     const ok = l1(tb2, ["prepare", tb2.work, "--item", "tb2-opus"]);
     expect([ok.code, plan(tb2).parts.map((p: any) => p.name), plan(tb2).host_ttl_hours]).toEqual([0, ["tb2-1", "tb2-2"], 78]);
     expect(ok.out).toContain("tb2-1 (190 sessions), tb2-2 (180 sessions)");
@@ -1003,4 +1007,32 @@ describe("recover's crash-and-rerun edges", () => {
     expect(readFileSync(join(r.work, "relaunch-evidence.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l))).toEqual([expect.objectContaining({ event: "vm_death", part: "pilot", vm: "vm-2", confirmed_by: expect.stringContaining("RECOVER_GONE") })]);
     expect(l1(r, ["host-up", r.work]).code).toBe(0);
   }, 300_000);
+});
+
+describe("classify: exit 4's second guard names the part's VM blocks exactly (the Captain's B1 ruling)", () => {
+  // Value: protects=exit 4 relaunching every cell only when the part has no session record; fails_when=a session reserve alone relaunches every cell, or an id that only starts like a VM block is skipped; why_new=GEVA-296; seam=l1.ts classify; no_claim=launch.sh's block ids, which the l1-host fake drives
+  const prefix = "run-1/f1-1/";
+  const exit4 = (...ids: string[]) => {
+    const root = mkdtempSync(join(tmpdir(), "l1-classify-"));
+    mkdirSync(join(root, "part", "pulled", "out"), { recursive: true });
+    writeFileSync(join(root, "part", "pulled", "out", "vm-run.exit"), "4\n");
+    const ledger = join(root, "f1-opus.jsonl");
+    const l = new Ledger(ledger, "f1-opus");
+    l.approve(680, { quotes: ["test approval"] });
+    for (const id of ids) l.reserve(prefix + id, toMicros(2.4));
+    return classify(join(root, "part"), 0, { ledger: { rows: readRows(ledger), since: "2026-01-01T00:00:00.000Z", sessionCapUsd: 5, prefix } });
+  };
+  const allCells = EXIT4_LOSS + ", and the item's ledger holds no session record for this part, so no trial started";
+  const lostEvidence = EXIT4_LOSS + ", but the item's ledger holds a session record for this part, so it is read as a part whose records were lost";
+  test("only <prefix>vm and <prefix>vm-2 on the ledger: every planned cell relaunches", () => {
+    const c = exit4("vm", "vm-2");
+    expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[allCells], [], []]);
+  });
+  test("a reserve-only session row under the part's prefix takes the lost-evidence path, not the every-cell relaunch", () => {
+    const c = exit4("vm", "trial-a/session-1");
+    expect([c.loss, c.cap_stop, c.unclassified]).toEqual([[lostEvidence], [], []]);
+  });
+  test("an id that only starts like a VM block counts as a session record", () => {
+    for (const id of ["vm-2x", "vmx"]) expect(exit4("vm", id).loss).toEqual([lostEvidence]);
+  });
 });

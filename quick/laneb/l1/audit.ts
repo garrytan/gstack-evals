@@ -19,7 +19,7 @@
 //   overturned  the merged rule drops the session and no flagged call is a real read: a mention, a failed read or an empty one;
 //   added       the merged rule keeps the session and a call only the line-wide rule flags is a real read: it is dropped too.
 // apply rewrites the session table from the decisions: an overturned contaminated row goes back to graded, and an added graded
-// row becomes contaminated. Other rows stay as they are.
+// row becomes contaminated, each with the pass table.ts sets for that outcome. Other rows stay as they are.
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -219,8 +219,8 @@ export function applyDecisions(rows: L1SessionRow[], decisions: Decision[]): { r
     const match = out.filter((r) => r.trial === d.trial);
     if (match.length !== 1 || match[0]!.arm !== "none") throw new UsageError("E_USAGE l1 audit apply: the decision for " + d.trial + " matches " + match.length + " rows" + (match.length === 1 ? " of arm " + match[0]!.arm : "") + ", not one none row");
     const r = match[0]!;
-    if (d.decision === "overturned" && r.outcome === "contaminated") { r.outcome = "graded"; r.reason = "graded; read audit overturned (Amendment C): " + d.evidence.slice(0, 200); back++; }
-    else if (d.decision === "added" && r.outcome === "graded") { r.outcome = "contaminated"; r.reason = "read audit (Amendment C, line-wide rule): " + d.evidence.slice(0, 200); dropped++; }
+    if (d.decision === "overturned" && r.outcome === "contaminated") { r.outcome = "graded"; r.pass = !r.allowance_stop && !r.turn_cap && r.reward !== null && r.reward >= 1; r.reason = "graded; read audit overturned (Amendment C): " + d.evidence.slice(0, 200); back++; }
+    else if (d.decision === "added" && r.outcome === "graded") { r.outcome = "contaminated"; r.pass = false; r.reason = "read audit (Amendment C, line-wide rule): " + d.evidence.slice(0, 200); dropped++; }
     else kept++;
   }
   return { rows: out, summary: "apply: " + back + " rows back to graded, " + dropped + " rows now contaminated, " + kept + " decisions left their row as it was" };
