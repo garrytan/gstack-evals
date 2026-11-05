@@ -19,6 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "tests/real-outcome/fixtures"
+STUB_IMAGE = "sha256:" + "d" * 64
 sys.path[:0] = [str(ROOT / "lanes/real-outcome/agent"), str(ROOT / "quick/laneb/runner/agent")]
 
 import claude_agent_sdk  # noqa: E402
@@ -53,12 +54,13 @@ def main():
     agent = ra.RealAgent(
         logs_dir=d / "trial/agent", model_name="anthropic/claude-opus-5-5", base_url=a["base_url"], task_json=str(d / "task.json"), arm=a["arm"], arm_tar="unused",
         upstream_model="claude-opus-5-5", arms_path=a["arms_path"], sidecar_url=a["sidecar"], control_url=a["control_url"], ledger=a["ledger"],
-        task_label=a.get("task", ""), trial_n=a.get("trial_n", 0), rerun=a.get("rerun", ""),
+        task_label=a.get("task", ""), trial_n=a.get("trial_n", 0), rerun=a.get("rerun", ""), image_id=a.get("image_id", STUB_IMAGE),
     )
     agent.logs_dir.mkdir(parents=True)
     agent._arm_info = {"event": "arm", "arm": a["arm"], "tar_sha256": "t", "skills_dirs": 0}
     agent._container_id = lambda environment: "cid"
     agent._container_ip = lambda container: "127.0.0.1"
+    agent._container_image = lambda container: a.get("container_image", STUB_IMAGE)
 
     def run_here(container, script, stdin=None, timeout=300):
         if script == lb.KILL_CLAUDE:
