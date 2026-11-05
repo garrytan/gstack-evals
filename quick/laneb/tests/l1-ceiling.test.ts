@@ -82,7 +82,7 @@ describe("the ceiling check before a launch", () => {
     ];
     const t = tally(atExpected(), crew(650_000, 0, open), plan());
     expect(t.perToken).toBeCloseTo(700 * M / (900 * M), 9);
-    expect(dollars(t.stops)).toBeCloseTo((400 * M) * (700 / 900) / M, 5);
+    expect(dollars(t.stops)).toBeCloseTo(((300 - 100 + 200) * M) * (700 / 900) / M, 5);
     expect(dollars(t.crewHold)).toBeCloseTo(311.11, 2);
     const small = tally(atExpected(), crew(100_000, 0, [{ ...open[0]!, credits: 10_000 }]), plan());
     expect(dollars(small.crewHold)).toBe(590);
