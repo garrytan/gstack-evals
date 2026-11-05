@@ -15,9 +15,9 @@ links:
   - garrytan/gstack-evals#210
   - GST-1361
 attachments:
-  - 49b3a2a2aa80ecb81bc8376a3b4b3b434bc53cd2766c7ba349a268ed8b8d408c  dryrun.sh.txt
-  - 16a0514afed1e6c6767de3a76a00eaee47e418f071de3535e40aa94dd821980d  dryrun.txt
-  - 5cec40ec813a9f5a9847112dd63ea35d64fe0b341ace44f1d29b992bb5caacc4  admission.sh.txt
+  - e877cc30e47b7315fa469f4223a43ba60a367e16c4ed7fe5476f0a6557d29a59  dryrun.sh.txt
+  - bc5a1320bfbdba7fe2d1d50630d987fe269f8730e7ddf1ba85c7538a367f12e3  dryrun.txt
+  - c226529c37ed85722719d77eec1d379f1fdf40c8439a374b6b9b33ff30b12ed9  admission.sh.txt
 ---
 
 # G O5 pin
@@ -49,7 +49,7 @@ The G prereg (section 10, item 6) and plan v3 (section 13, item 6) hold every pa
 
 ### 1. The pin
 
-- **Build commit:** 17253ec47e4cb13b1c9b0ce09615762d958b4cb1, the squash merge of garrytan/gstack-evals#210 (GST-1361, Part 1). G's run threads run lanes/outcome-skills, src/runner/stats and src/runner/ledger from this commit only.
+- **Build commit:** 17253ec47e4cb13b1c9b0ce09615762d958b4cb1, the squash merge of garrytan/gstack-evals#210 (GST-1361, Part 1). G's run threads run the whole gstack-evals tree from this commit only, including lanes/outcome-skills, src/runner/stats, src/runner/ledger, src/runner/proxy, src/cli.ts with bin/gstack-evals, and quick/laneb/arms/l1.ts.
 - **gstack:** 699a41cb6808e01240d02e82247693f9170d401a (v1.94.39.0), fetched by sha with `git fetch --depth 1 <repo> <sha>`. Its git archive has sha256 adfefb56eebb360f9cd4c3087a980ed510106e4b8096e4afcf0a3854d1a88bb4, the value in #202's after-pin manifest (quick/laneb/arms/manifests/l1/after.json).
 - **Told arm, lite render:** told-install.sh (`./setup --host claude --loadout lite` in a clean HOME) gives 204 render files with tree digest ed09c8c81574c6446a9579d255bd919470e4792bfc3ced4df42fd3fdc66dc8a7. That equals #193's after-pin lite tree digest, recorded in wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000/install-manifest.md (row "lite tree digest, normalized (setup render)", after-pin column) and carried into told.ts's TOLD_PIN and #202's after.json. The lite spec has sha256 c5df50f999eb649abc0cd48c40907fe29c5ba71e4534a5cc63ae6e3d26234f1d. The hooks are Stop gstack-timeline-stop (timeout 5), Stop gstack-skill-contract (10) and UserPromptSubmit gstack-skill-route (5), each at the sha256 TOLD_PIN pins.
 - **None arm:** no install. The arm runs in the C1 clean room, checked by cleanRoomPreflight (section 4).
@@ -82,7 +82,7 @@ This replaces the brief's "run without them, it is refused". The dry run shows b
 env -u AGENT_USER MULT=<m> M_PER=<m> M_AP=<m> AUTH_PAID=<m> [AUTH_EXTRA=<m>] bash admission.sh.txt <gstack-evals checkout at 17253ec>
 ```
 
-Its first five lines are MULT, M_PER, M_AP, AUTH_PAID and "AGENT_USER: unset" (or "set", never a value), printed before anything else runs. AUTH_EXTRA is optional: left unset, resize.py reads 1.2 without a refusal, and the sixth line says so ("AUTH_EXTRA: unset, resize.py reads 1.2", line R7a). It opens no lease. It refuses with exit 2 when AGENT_USER, YIELD_G or TOLD_SCALE is set, when any of the four values is missing, or when resize.py's sha256 is not the prereg's attachment line, and otherwise runs resize.py with exactly those values. Lines R7 to R11 drive it: R7 and R7a the run with all four values, R8 AGENT_USER set, R9 each of the four values missing, R10 YIELD_G and TOLD_SCALE set, and R11 a resize.py whose sha256 is not the attachment.
+Its first five lines are MULT, M_PER, M_AP, AUTH_PAID and "AGENT_USER: unset" (or "set", never a value), printed before anything else runs. AUTH_EXTRA is optional: left unset, resize.py reads 1.2 without a refusal, and the sixth line says so ("AUTH_EXTRA: unset, resize.py reads 1.2", line R7a). It opens no lease. It refuses with exit 2 when AGENT_USER, YIELD_G or TOLD_SCALE is set, when any of the four values is missing, or when resize.py's sha256 is not the prereg's attachment line, and otherwise runs resize.py with exactly those values, in Python's isolated mode (`python3 -I`), so no PYTHONPATH or stray module runs before resize.py's own pins. Lines R7 to R11 drive it: R7 and R7a the run with all four values, R8 AGENT_USER set, R9 each of the four values missing, R10 YIELD_G and TOLD_SCALE set, and R11 a resize.py whose sha256 is not the attachment.
 
 ### 3. G's amendment
 
@@ -100,16 +100,17 @@ GSTA-2 decided each rule. Each is recorded word for word, with its reason in one
 
 ### 4. The dry run
 
-dryrun.sh.txt ran at 17253ec47e4cb13b1c9b0ce09615762d958b4cb1 and printed dryrun.txt. It exports the commit with git archive outside any git work tree, runs with every key variable unset, and calls no model and starts no VM: the metering proxy's upstream is a stub that returns a fixed usage, and no Ubicloud runner is called. Each check prints one line, and the first miss prints DRYRUN: fail and exits 1. It ran 87 checks and ended DRYRUN: ok with exit 0.
+dryrun.sh.txt ran at 17253ec47e4cb13b1c9b0ce09615762d958b4cb1 and printed dryrun.txt. It exports the commit with git archive outside any git work tree, runs with every key variable unset, and calls no model and starts no VM: the metering proxy's upstream is a stub that returns a fixed usage, and no Ubicloud runner is called. Each check prints one line, and the first miss prints DRYRUN: fail and exits 1. It ran 88 checks and ended DRYRUN: ok with exit 0.
 
 - **Part A, the told arm.** The pin is fetched by sha, and its git archive matches #202's. told-install.sh installs it, checkToldHome passes, and the tree digest equals TOLD_PIN, #202's and #193's. A fresh `gstack-modules render --host claude --loadout lite` at the same path matches the installed render byte for byte, all 204 lock files and nothing extra (l1.ts liteMatch). O1's pin tests (told.test.ts, autoplan.test.ts) pass with OUTCOME_TOLD_HOME and OUTCOME_GSTACK_PIN set, none skipped.
 - **Part C, the clean room.** cleanRoomPreflight, by image id, passes a clean room, refuses another digest, refuses a seeded drive mount and a drive in the home (C1's scan), and refuses each path in section 3, rule 1, one line each (C4 to C28, plus C30 for "GStack" in mixed case and C31 for /etc/claude-code as a file). A settings.json and a command that do not name gstack pass.
-- **Part L, O6 and U4.** On a temporary ledger with a stub gstack-approvals (it writes its rows to a temporary file only), the program envelope is recorded at $10,000 and $2,000 a skill. Each stage of prereg section 9 is initialized at its cap and leased once through the envelope: T-G $60, admission none $229, told plan-eng-review $572, told autoplan $1,287 and VM $24. With all five open, the envelope holds $728.50 for plan-eng-review and $1,443.50 for autoplan (section 9's $729 and $1,444), and refuses a further $600 autoplan lease with ENVELOPE_SKILL_STOP. Every one of the five leases opens with --admission warn and prints RIG_UNPROVEN (line L2a). Each lease then spends and settles: T-G and VM through one stub reservation, and each admission arm through one metering-proxy slot bound at its registry.json session limit ($8, $20, $45). Every slot refused the call that could pass its limit, at 0.0% overshoot, inside section 9's 10%. After settlement nothing is open and settled spend equals what the stubs spent.
+- **Part L, O6 and U4.** On a temporary ledger with a stub gstack-approvals (it writes its rows to a temporary file only), the program envelope is recorded at $10,000 and $2,000 a skill. Each stage of prereg section 9 is initialized at its cap and leased once through the envelope: T-G $60, admission none $229, told plan-eng-review $572, told autoplan $1,287 and VM $24. With all five open, the envelope holds $728.50 for plan-eng-review and $1,443.50 for autoplan (section 9's $729 and $1,444), and refuses a further $600 autoplan lease with ENVELOPE_SKILL_STOP. Every one of the five leases opens with --admission warn and prints RIG_UNPROVEN (line L2a). Each lease then spends and settles: T-G and VM through one stub reservation, and each admission arm through one metering-proxy slot bound at its registry.json session limit ($8, $20, $45). Every slot refused the call that could pass its limit, at 0.0% overshoot, inside section 9's 10%. After settlement nothing is open, and the settled total equals the sum of what the five stubs themselves report spending (line L7).
 - **Part F, futility.** On made-up trials (60 tasks, half of 30, MDD 18.6 points), an estimate trending helps and one trending hurts both continue, a flat estimate stops, and a flat one leaning to none stops as a loss lead.
 - **Part R, metered inputs.** Section 2.
+- **Leftovers.** The last rule (Z1) requires no container named gstack-evals-* and no open lease on the temporary ledger, or the run ends DRYRUN: fail.
 - **Part D, O2's Docker suite.** `GSTACK_EVALS_DOCKER=1 bun test tests/outcome-skills/mutation-docker.test.ts tests/outcome-skills/clean-room.test.ts` at 17253ec gives 83 pass and 0 fail (57 and 26 tests, the two files #210's count covers), strong Python 8 of 10, Go 14 of 18, Rust 17 of 19 and TypeScript 17 of 19 killed, and weak 0 of 4 in every language, the same as #210's run at 1414d46.
 
-Run it as `bash dryrun.sh.txt 17253ec47e4cb13b1c9b0ce09615762d958b4cb1` from this folder, with Docker, bun, jq and Python 3. It takes about 15 minutes, most of it the Docker suite. The outcomes in Parts L and F come from stubs and made-up trials. They test the rules, not gstack.
+Run it as `bash dryrun.sh.txt 17253ec47e4cb13b1c9b0ce09615762d958b4cb1` from this folder, with Docker, bun, jq and Python 3. It takes about 15 minutes, most of it the Docker suite. An existing work dir is wiped only when it holds the .g-o5-dryrun marker the script writes; any other existing path is refused with exit 2. The outcomes in Parts L and F come from stubs and made-up trials. They test the rules, not gstack.
 
 ### 5. Limits
 
@@ -136,3 +137,5 @@ Prereg section 12 answers the question, and nothing in it changes. One addition:
 ## Review record
 
 /autoplan --kind feature (R65, gstack 1.95.5.0), run autoplan-r65-20261104220544: one Opus 5.5 reviewer at high reasoning read this post and dryrun.sh.txt at ea157e6. It raised two High findings (the arm images are not pinned; nothing ties admission sessions to a U4 lease), two Medium (RIG_UNPROVEN was not asserted; three admission.sh.txt refusals were not driven), two Low (the AUTH_EXTRA fallback; two clean-room cases not driven) and one Informational (tool image ids are local builds, which section 1 already says). On outside terms it found nothing beyond prereg section 12 and the busybox:1.36 stand-in. GSTA-2 answered the gate: "rec, A, C, decided by GSTA-2." This one revision applies d1a and d2a (section 1, open start conditions), adds the Medium and Low fixes as dry-run lines L2a, R7a, R10, R11, C30 and C31, and adds the five summary sections. The dry run was rerun once after the edit.
+
+/ship (gstack 1.95.5.0, full depth as its planner printed it) then read this post at 20e5d1c. In its fix round, GSTA-2 decided, the pin names the whole tree at 17253ec, admission.sh.txt runs resize.py under python3 -I, the dry run refuses an existing work dir without its marker, L7 compares the ledger with the stubs' own spend, and the leftovers line became rule Z1. Each new check was shown to fail on a seeded wrong amount, a seeded leaked container and a seeded open lease before the real run passed. The dry run was rerun at 17253ec after the round, and dryrun.txt is its output.

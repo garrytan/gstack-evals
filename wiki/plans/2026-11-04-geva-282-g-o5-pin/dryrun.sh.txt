@@ -13,16 +13,19 @@
 #   Part R  the metered inputs as GSTA-2 decided (A): resize.py in both directions, and admission.sh.txt.
 #   Part D  O2's Docker suite with the clean-room Docker tests (GSTACK_EVALS_DOCKER=1), as #210 counted it (57 + 26 tests),
 #           compared with #210's counts, and the tool images it built.
-# Each check prints one line; the first miss prints DRYRUN: fail and exits 1. The last line is DRYRUN: ok.
+# Each check prints one line; the first miss prints DRYRUN: fail and exits 1. The last rule (Z1) checks that no container
+# and no open lease is left. The last line is DRYRUN: ok.
 # Usage: bash dryrun.sh.txt <commit> [<work dir>]   env: G (the gstack-evals checkout, default /workspace/gstack-evals),
 #   GSTACK_REPO (default https://git.capy.ai/garrytan/gstack.git), CLEAN_ROOM_IMAGE (default busybox:1.36).
+#   An existing work dir is wiped only when it holds the .g-o5-dryrun marker this script writes; otherwise it refuses (exit 2).
 set -u -o pipefail
 COMMIT=${1:?usage: bash dryrun.sh.txt <commit> [<work dir>]}
 G=${G:-/workspace/gstack-evals}
 HERE=$(cd "$(dirname "$0")" && pwd)
 FULL=$(git -C "$G" rev-parse "$COMMIT^{commit}") || exit 2
 W=${2:-$HOME/.capy/work/g-o5-dryrun/run-${FULL:0:7}}
-rm -rf "$W" && mkdir -p "$W" && W=$(cd "$W" && pwd)
+if [ -e "$W" ] && [ ! -e "$W/.g-o5-dryrun" ]; then echo "E_USAGE dryrun: $W exists and holds no .g-o5-dryrun marker; pass a new work dir" >&2; exit 2; fi
+rm -rf "$W" && mkdir -p "$W" && touch "$W/.g-o5-dryrun" && W=$(cd "$W" && pwd)
 GSTACK_REPO=${GSTACK_REPO:-https://git.capy.ai/garrytan/gstack.git}
 IMAGE=${CLEAN_ROOM_IMAGE:-busybox:1.36}
 PIN=699a41cb6808e01240d02e82247693f9170d401a
@@ -197,7 +200,7 @@ LG lease --item g-probe-ap --run dryrun-probe --json > "$LD/probe.json" 2> "$LD/
 rule "L4 a further \$600 autoplan lease while autoplan holds \$1,443.50 is refused by the envelope" "refused, nothing leased" "exit $c, $(head -1 "$LD/probe.err" | cut -c1-200)" sh -c "test $c != 0 && grep -q '^ENVELOPE_SKILL_STOP' '$LD/probe.err' && test ! -s '$LD/probe.json'"
 cat > "$W/drv/spend.ts" <<'EOF'
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { line, usd } from "../drv/lib.ts";
 const E = process.env.E!, W = process.env.W!;
 const [item, leaseId, mode, arg] = process.argv.slice(2) as [string, string, string, string];
@@ -209,6 +212,7 @@ if (mode === "direct") {
   const micros = Math.round(Number(arg) * 1e6);
   const r: any = await local.reserve({ idempotency_key: "dryrun-" + item + "-1", lease_id: leaseId, cell: { run_id: "dryrun-" + item, arm: item, task: "stub", model: "stub", trial: 1, attempt: 1, meter_id: "dryrun-" + item }, max_micros: micros });
   const s: any = r.ok ? await local.settle(r.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 } }) : r;
+  writeFileSync(W + "/s/" + item + ".spent", String(micros) + "\n");
   line(r.ok && s.ok, "L5 " + item + ": one stub reservation reserved and settled on the lease", usd(micros) + " settled", r.ok ? (s.ok ? usd(s.reservation.spent_micros) + " settled" : s.code + " " + s.message) : r.code + " " + r.message);
 } else {
   const reg = JSON.parse(readFileSync(E + "/lanes/outcome-skills/arms/registry.json", "utf8"));
@@ -228,6 +232,7 @@ if (mode === "direct") {
   const m: any = await proxy.finalize(b.meter_id);
   proxy.unbind(b.slot);
   proxy.stop();
+  writeFileSync(W + "/s/" + item + ".spent", String(m.micros) + "\n");
   const over = Math.max(0, m.micros - limit) / limit;
   line(/E_ALLOWANCE/.test(refusal) && m.micros <= limit * 1.1 && m.unknown === 0 && sent === calls, "S " + arg + " session limit " + usd(limit) + " (registry.json) at a proxy slot on " + item + "'s lease, stub upstream", "the slot refuses before the limit; overshoot at most 10%", calls + " calls settled " + usd(m.micros) + ", then " + refusal + "; overshoot " + (100 * over).toFixed(1) + "%");
 }
@@ -242,7 +247,8 @@ for st in $STAGES; do
   rule "L6 $item: the lease settles into the record" "closed" "exit $c, spent $(jq -r '((.spent_micros // 0) + (.unknown_micros // 0)) / 1e6' "$LD/$item.settle.json" 2>/dev/null)" test "$c" = 0
 done
 LG status --program $PROG --json > "$LD/status-closed.json" 2>&1
-rule "L7 after settlement: nothing open on any line; settled spend is what the stubs spent" "open 0; settled = sum of L5 and S" "open $(jq -r '.total.open_micros' "$LD/status-closed.json"), settled $(jq -r '.total.settled_micros' "$LD/status-closed.json") micros" sh -c "test \"\$(jq -r .total.open_micros '$LD/status-closed.json')\" = 0 && test \"\$(jq -r .total.settled_micros '$LD/status-closed.json')\" = \"\$(cat '$LD'/g-*.settle.json | jq -s 'map(.spent_micros + (.unknown_micros // 0)) | add')\""
+SP=$(cat "$W"/s/*.spent 2>/dev/null | jq -s 'add // 0'); NS=$(ls "$W"/s/*.spent 2>/dev/null | wc -l)
+rule "L7 after settlement: nothing open on any line; settled spend is what the stubs reported spending" "open 0; settled = sum of the five stubs' own spend" "open $(jq -r '.total.open_micros' "$LD/status-closed.json"), settled $(jq -r '.total.settled_micros' "$LD/status-closed.json") micros, stubs $SP micros from $NS files" sh -c "test \"\$(jq -r .total.open_micros '$LD/status-closed.json')\" = 0 && test $NS = 5 && test \"\$(jq -r .total.settled_micros '$LD/status-closed.json')\" = '$SP'"
 
 echo; echo "## Part F: the futility look (plan v3 section 6), made-up trials"
 cat > "$W/drv/futility.ts" <<'EOF'
@@ -330,6 +336,7 @@ EOF
 drive tools bun "$W/drv/tools.ts"
 
 echo; echo "## leftovers"
-echo "containers named gstack-evals-*: $(docker ps -aq --filter name=gstack-evals- | wc -l); open leases: $(jq -r '.total.open_micros' "$LD/status-closed.json") micros"
+NC=$(docker ps -aq --filter name=gstack-evals- | wc -l); NL=$(LG status --json 2>/dev/null | jq '[.items[] | select(.open_lease != null)] | length')
+rule "Z1 no leftovers: no container named gstack-evals-* and no open lease on the temporary ledger" "0 containers, 0 open leases" "$NC containers, $([ -n "$NL" ] && echo "$NL" || echo unknown) open leases" test "$NC" = 0 -a "$NL" = 0
 echo; echo "rules: $rules, failed: 0"
 echo "DRYRUN: ok"

@@ -6,8 +6,8 @@
 # unset, never its value. They print before anything else runs, and this script opens no lease. It refuses with exit 2
 # when AGENT_USER is set (cost.py reads it, and it moves the wave-1 figure), when YIELD_G or TOLD_SCALE is set, when any
 # of the four values is missing (resize.py would take plan v3's house value for M_PER, M_AP or AUTH_PAID without a
-# word), or when resize.py is not the prereg's attachment. Otherwise it runs resize.py with exactly those values and
-# exits with its status.
+# word), or when resize.py is not the prereg's attachment. Otherwise it runs resize.py with exactly those values, in
+# Python's isolated mode (-I), and exits with its status.
 set -u
 ROOT=${1:?usage: MULT=.. M_PER=.. M_AP=.. AUTH_PAID=.. [AUTH_EXTRA=..] bash admission.sh.txt <gstack-evals checkout>}
 RD=$ROOT/wiki/plans/2026-11-04-geva-262-g-family-admission-prereg
@@ -22,4 +22,4 @@ want=1265268921e92667a85529bfe8eec8a5ecb20bc2f12b567a3c3ec3f44913ec34
 got=$(sha256sum "$RD/resize.py" 2>/dev/null | cut -c1-64)
 [ "$got" = "$want" ] || refuse "$RD/resize.py has sha256 ${got:-none}, not the prereg's attachment $want"
 cd "$RD" || refuse "cannot enter $RD"
-exec env -u AGENT_USER -u YIELD_G -u TOLD_SCALE -u AUTH_EXTRA MULT="$MULT" M_PER="$M_PER" M_AP="$M_AP" AUTH_PAID="$AUTH_PAID" ${AUTH_EXTRA:+AUTH_EXTRA="$AUTH_EXTRA"} python3 resize.py
+exec env -u AGENT_USER -u YIELD_G -u TOLD_SCALE -u AUTH_EXTRA MULT="$MULT" M_PER="$M_PER" M_AP="$M_AP" AUTH_PAID="$AUTH_PAID" ${AUTH_EXTRA:+AUTH_EXTRA="$AUTH_EXTRA"} python3 -I resize.py
