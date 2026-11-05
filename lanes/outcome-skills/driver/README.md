@@ -13,14 +13,14 @@ When a stage runs out of room, the driver drains it as cap_stop, then writes the
 If the stop can't be written, for example because the item's directory in the record is read-only, the driver appends a `stop` line for each stopped stage to the run directory's sessions.jsonl, answers 500 E_INTERNAL, stops every stage and exits 2. The stage was drained as cap_stop first, so every close of its lease still carries the stop as `cap_stop`:
 
 - the driver's own settle, when the record is writable again by then;
-- a later `gstack-evals ledger settle --lease`, because the local ledger keeps the stop with the close it staged;
+- a later `gstack-evals ledger settle --lease`, because the driver keeps the stop in its local ledger before it writes the stop record, and the local ledger puts it in every close it stages for the lease;
 - a relaunch's recovery, which reads the `stop` line.
 
 A told stage counts as finished only when it ended completed or cap_stop. After a told cap stop, none drains and settles as completed only once every told stage has finished. A told stage that ended lease_expired or failed may still owe trials on a relaunch, so none keeps serving.
 
 ## What a session's close answers
 
-`spent_micros` is the session's settled spend: its calls with a recorded cost. `unknown_micros` is the full reservation O6 still holds for its calls with no recorded cost, and `unknown` and `undrained` count those calls. real_agent passes `spent_micros` on as the trial's cost_usd, so admission's metered means use settled spend, and `unknownFromLedger` counts each arm's calls of unknown cost from its lease closes for item 5 to print. The cap path still counts every unknown call at its full reservation: the room check, the lease's close and the envelope.
+`spent_micros` is the session's settled spend at its close: its calls with a recorded cost. `unknown_micros` is the full reservation O6 still holds for its calls with no recorded cost at that moment, a call still in flight or priced only in the proxy journal included, and `unknown_calls` counts those calls. real_agent passes `spent_micros` on as the trial's cost_usd, so admission's metered means use settled spend and never price an unknown call. `unknownFromRun` reads the same answers from the run directory's `close` lines and counts each arm's calls of unknown cost for item 5 to print, even when the lease's close later settles them. The cap path still counts every unknown call at its full reservation: the room check, the lease's close and the envelope.
 
 ## Settling a lease the driver left open
 

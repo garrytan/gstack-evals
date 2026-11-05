@@ -78,6 +78,8 @@ export interface CloseAnswer {
   spent_micros: number;
   /** The full reservations O6 still holds for the session's calls with no recorded cost, unknown or undrained; spent_micros leaves them out. */
   unknown_micros: number;
+  /** How many of the session's calls had no recorded cost at the close: the calls unknown_micros holds for. */
+  unknown_calls: number;
   usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number };
   requests: number;
   ok_responses: number;
@@ -433,6 +435,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         meter_id: sess.meter_id,
         spent_micros: m?.spent_micros ?? 0,
         unknown_micros: m?.unknown_micros ?? 0,
+        unknown_calls: m?.unknown_calls ?? 0,
         usage: { input_tokens: u.input, output_tokens: u.output + u.reasoning, cache_read_input_tokens: u.cache_read, cache_creation_input_tokens: u.cache_write },
         requests: meter?.requests ?? 0,
         ok_responses: Object.entries(meter?.upstream.statuses ?? {}).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0),
@@ -470,7 +473,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         s.close = settleLease(o.record, o.local, s.lease_id, warn, s.ended === "cap_stop" ? s.scope || "cap_stop" : undefined);
         log("STAGE_SETTLED item=" + s.item + " arm=" + s.arm + " lease=" + s.lease_id + " spent=" + usd(s.close.spent_micros) + " unknown=" + usd(s.close.unknown_micros) + " sessions=" + s.finished + " ended=" + s.ended + (s.scope ? " scope=" + s.scope : ""));
       } catch (e) {
-        s.ended = "failed";
+        if (s.ended !== "cap_stop") s.ended = "failed";
         log("E_LEASE_UNSETTLED outcome driver: stage " + s.item + " lease " + s.lease_id + " did not settle: " + (e as Error).message + "; settle it with gstack-evals ledger settle --lease " + s.lease_id + " on this machine");
       }
       record({ event: "settled", item: s.item, lease_id: s.lease_id, ended: s.ended, scope: s.scope });
@@ -492,6 +495,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     const hit = s.kind === "none" ? stages : [s];
     for (const x of hit) drain(x, "cap_stop", scope);
     try {
+      for (const x of hit) o.local.stageStop(x.lease_id, scope);
       for (const x of hit) recordStop(o.record, x.lease_id, scope, new Date(now()));
     } catch (error) {
       for (const x of hit) record({ event: "stop", item: x.item, lease_id: x.lease_id, scope });

@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admitG, authPaidFromLedger, unknownFromLedger, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
+import { admitG, authPaidFromLedger, unknownFromRun, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
 import { m1Decide, meteredPricer, renderResizeMetered } from "../../src/runner/stats/g-resize.ts";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -206,31 +206,26 @@ describe("AUTH_PAID from the slice's U4 leases", () => {
   });
 });
 
-describe("calls of unknown cost from an arm's U4 leases", () => {
+describe("calls of unknown cost from the run directory's close lines", () => {
   const dirs: string[] = [];
   afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
-  const quote = { words: "Approved", by: "Captain", source: "approvals/test" };
-  const usage = { input: 10, output: 5, reasoning: 0, cache_read: 0, cache_write: 0 };
-  test("sums each close's unknown calls and the reservations held for them, and refuses an open lease or an item with no lease", async () => {
+  const run = (lines: object[]) => {
     const dir = mkdtempSync(join(tmpdir(), "g-admission-"));
     dirs.push(dir);
-    const rec = join(dir, "record"), local = LocalLedger.open(join(dir, "local.sqlite"));
-    recordApproval(rec, { action: "init", item: "g-adm-pe", cap_micros: 60_000_000, quotes: [quote], admission: "warn" });
-    const cell = { run_id: "adm", arm: "told", task: "t", model: "m", trial: 1, attempt: 1, meter_id: "m" };
-    const leases: string[] = [];
-    for (const i of [0, 1]) {
-      const l = openLease(rec, local, { item: "g-adm-pe", run_id: "adm", amount_micros: 20_000_000, requireAdmission: () => null });
-      leases.push(l.lease_id);
-      const spent = await local.reserve({ idempotency_key: "s" + i, lease_id: l.lease_id, cell, max_micros: 700_000 });
-      const lost = await local.reserve({ idempotency_key: "u" + i, lease_id: l.lease_id, cell, max_micros: 640_912 });
-      if (!spent.ok || !lost.ok) throw new Error("reserve refused");
-      await local.settle(spent.reservation.reservation_id, { kind: "spent", spent_micros: 300_000, usage });
-      await local.settle(lost.reservation.reservation_id, { kind: "unknown" });
-      if (i === 0) settleLease(rec, local, l.lease_id);
-    }
-    expect(() => unknownFromLedger(rec, ["g-adm-pe"])).toThrow(/open/);
-    expect(() => unknownFromLedger(rec, ["g-nothing"])).toThrow(/no lease/);
-    settleLease(rec, local, leases[1]!);
-    expect(unknownFromLedger(rec, ["g-adm-pe"])).toEqual({ calls: 2, micros: 1_281_824 });
+    writeFileSync(join(dir, "sessions.jsonl"), lines.map((l) => JSON.stringify(l) + "\n").join(""));
+    return dir;
+  };
+  const open = (id: string, item: string) => ({ event: "open", id, item, lease_id: item + ".0001.000000" });
+  const close = (id: string, item: string, unknown_calls: number, unknown_micros: number) => ({ event: "close", id, item, spent_micros: 300_000, unknown_micros, unknown_calls });
+  test("sums the unknown calls and their reservations from each session's close on the arm's items, as counted at the close", () => {
+    const dir = run([open("s1", "g-adm-pe"), close("s1", "g-adm-pe", 1, 640_912), open("s2", "g-adm-pe"), close("s2", "g-adm-pe", 2, 1_281_824), open("s3", "g-adm-ap"), close("s3", "g-adm-ap", 5, 9_000_000)]);
+    expect(unknownFromRun(dir, ["g-adm-pe"])).toEqual({ calls: 3, micros: 1_922_736 });
+    expect(unknownFromRun(dir, ["g-adm-pe", "g-adm-ap"])).toEqual({ calls: 8, micros: 10_922_736 });
+  });
+  test("refuses a session with an open line and no close line, an item with no session, no items and a close line without its counts", () => {
+    expect(() => unknownFromRun(run([open("s1", "g-adm-pe"), close("s1", "g-adm-pe", 0, 0), open("s2", "g-adm-pe")]), ["g-adm-pe"])).toThrow(/s2.*open/);
+    expect(() => unknownFromRun(run([open("s1", "g-adm-pe"), close("s1", "g-adm-pe", 0, 0)]), ["g-nothing"])).toThrow(/no session/);
+    expect(() => unknownFromRun(run([]), [])).toThrow(/name the line items/);
+    expect(() => unknownFromRun(run([open("s1", "g-adm-pe"), { event: "close", id: "s1", item: "g-adm-pe", unknown_micros: 5 }]), ["g-adm-pe"])).toThrow(/whole/);
   });
 });

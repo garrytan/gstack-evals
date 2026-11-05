@@ -560,4 +560,23 @@ describe("a cap stop reaches every close of its lease", () => {
     expect(settleLease(record, local, lease.lease_id).cap_stop).toBe("none only");
     expect(readItem(record, "lanea").leases[0]!.close?.cap_stop).toBe("none only");
   });
+
+  test("a stop written after a lease closed leaves the close as written, so a settle or import retry answers the same close (adversarial-native#3)", () => {
+    const dir = scratch();
+    const record = join(dir, "record");
+    for (const item of ["lanea", "laneb"]) recordApproval(record, { action: "init", item, cap_micros: 10_000_000, quotes: [quote], admission: "warn" });
+    const sealed = openLease(record, null, { item: "lanea", run_id: "s1", machine_id: "workflow:x", amount_micros: 3_000_000 });
+    const wf = LocalLedger.open(join(dir, "wf.sqlite"));
+    wf.addLease(exportLease(record, sealed.lease_id));
+    const artifact = JSON.parse(JSON.stringify(settleLease(null, wf, sealed.lease_id)));
+    const imported = importSettlement(record, artifact);
+    recordStop(record, sealed.lease_id, "all: none");
+    expect(importSettlement(record, artifact)).toEqual(imported);
+    const local = LocalLedger.open(join(dir, "m.sqlite"));
+    const lease = openLease(record, local, { item: "laneb", run_id: "r1", machine_id: "m", amount_micros: 3_000_000 });
+    const settled = settleLease(record, local, lease.lease_id);
+    recordStop(record, lease.lease_id, "all: none");
+    expect(settleLease(record, local, lease.lease_id)).toEqual(settled);
+    expect(local.getLease(lease.lease_id)!.close).toEqual(settled);
+  });
 });

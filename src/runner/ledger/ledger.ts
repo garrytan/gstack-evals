@@ -244,8 +244,9 @@ export function recordedStop(record: string, lease_id: string): string | undefin
  * bytes. With record null, for a workflow that cannot reach the record, it only returns the close as the settle artifact.
  * A close above the lease's amount is recorded as it is, with a LEASE_OVERSPENT warning. cap_stop, the scope of a cap
  * stop the lease closed on, goes into the close, and so does the scope of a stop record on the lease, so no new lease on
- * the item is admitted after it. The local ledger keeps the first stop it is given with the staged close, so a retry
- * writes it even when the record holds no stop record, as after a stop that could not be written.
+ * the item is admitted after it. The local ledger keeps the first stop it is given, by stageStop or with the staged
+ * close, so a retry writes it even when the record holds no stop record, as after a stop that could not be written. A
+ * stop written after the close is in the record leaves the close as written, so a retry answers it.
  */
 export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void, cap_stop?: string): CloseFile {
   let scope = cap_stop;
@@ -271,7 +272,8 @@ const keysOf = (o: object | null) => (o === null || typeof o !== "object" ? "" :
  * Copies a sealed workflow's settle artifact into the record. Idempotent: the same artifact again is present. The record
  * is write-once, so only the exact shape a local ledger stages is accepted, holding no more unknown charge than the lease
  * reserved. Spend above the lease, from a call billed above its reservation, is recorded with a LEASE_OVERSPENT warning.
- * The scope of a stop record on the lease goes into the close as cap_stop, or else the artifact's own cap_stop.
+ * The scope of a stop record on the lease goes into the close as cap_stop, or else the artifact's own cap_stop. A stop
+ * written after a close with no cap_stop was imported leaves that close as written, so the same artifact is present.
  */
 export function importSettlement(record: string, artifact: unknown, warn?: (code: ReasonCode, message: string) => void): CloseFile {
   if (!isRecordFile(artifact) || artifact.kind !== "close") throw new LedgerError("E_USAGE", "the settle artifact is not a lease close");
@@ -282,7 +284,7 @@ export function importSettlement(record: string, artifact: unknown, warn?: (code
   if (!shaped || settled.how !== "settled" || settled.item !== lease.item || settled.seq !== lease.seq || settled.unknown_micros > lease.reserved_micros) {
     throw new LedgerError("E_USAGE", "the settle artifact for " + settled.lease_id + " is not a settled close of the lease in the approval record " + record + " with at most its " + usd(lease.reserved_micros) + " held for unknown calls");
   }
-  const scope = stopOn(state, settled.lease_id) ?? cap_stop;
+  const scope = prior && !prior.cap_stop && !cap_stop ? undefined : stopOn(state, settled.lease_id) ?? cap_stop;
   const close: CloseFile = scope ? { ...settled, cap_stop: scope } : settled;
   if (prior && JSON.stringify(prior) !== JSON.stringify(close)) throw new LedgerError("E_SETTLE_CONFLICT", "lease " + close.lease_id + " is already " + closeText(prior) + "; the artifact says " + closeText(close));
   const result = write(record, close, "E_LEASE_UNSETTLED");

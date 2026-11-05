@@ -12,6 +12,7 @@ import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem } from "../../src/runner/ledger/record.ts";
 import { loadRegistry, type Registry } from "../../lanes/outcome-skills/arms/registry.ts";
 import { serveStages, type ServeOptions, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
+import { unknownFromRun } from "../../src/runner/stats/g-admission.ts";
 
 const D = 1_000_000;
 const quote = { words: "test words", by: "test", source: "driver.test.ts" };
@@ -793,4 +794,121 @@ describe("the outcome-skills session driver", () => {
     expect(close.unknown_micros).toBeGreaterThan(0);
     expect(closed.json).toMatchObject({ spent_micros: 20_040, unknown: 1, unknown_micros: close.unknown_micros });
   });
+
+  test("a driver killed with kill -9 while a session is in flight, after its stop record could not be written, still leaves the stop in the local ledger: ledger settle --lease closes with cap_stop and O6 refuses a new lease (outside-voice#1)", async () => {
+    const w = world({ "i-pe": 50 });
+    const at = (path: string) => JSON.stringify(join(import.meta.dir, "../..", path));
+    const child = join(w.root, "child.ts");
+    writeFileSync(child, [
+      "import { serveStages } from " + at("lanes/outcome-skills/driver/stage.ts") + ";",
+      "import { LocalLedger } from " + at("src/runner/ledger/local.ts") + ";",
+      "const fetch = () => new Promise<Response>(() => {});",
+      "const served = await serveStages({ record: " + JSON.stringify(w.record) + ", local: LocalLedger.open(" + JSON.stringify(join(w.root, "ledger.sqlite")) + '), run_id: "r1", envelope_host: "m1", machine: "m1", stages: [' + JSON.stringify(PE) + '], host: "127.0.0.1", dir: ' + JSON.stringify(w.dir) + ', fetch, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key" }, log: () => {} });',
+      'console.log("CONTROL " + served.control);',
+      "await new Promise(() => {});",
+    ].join("\n"));
+    const proc = Bun.spawn(["bun", child], { stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.getReader();
+    let out = "";
+    while (!out.includes("\n")) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      out += new TextDecoder().decode(value);
+    }
+    const control = out.match(/CONTROL (\S+)/)?.[1];
+    expect(control).toBeDefined();
+    const open = (task: string) => post(control + "/sessions", body("plan-eng-review:told", task, 1));
+    const a = await open("a");
+    expect((await open("b")).status).toBe(200);
+    void call(a.json).catch(() => {});
+    const items = join(w.record, "items", "i-pe");
+    chmodSync(items, 0o555);
+    try {
+      expect((await open("c")).status).toBe(500);
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    proc.kill(9);
+    await proc.exited;
+    const lease = readItem(w.record, "i-pe").open;
+    expect(readItem(w.record, "i-pe").stops).toHaveLength(0);
+    expect(settleLease(w.record, w.local, lease!.lease_id).cap_stop).toBe("plan-eng-review:told only");
+    expect(() => openLease(w.record, w.local, { item: "i-pe", run_id: "r1", machine_id: "m1", requireAdmission: () => null })).toThrow(/cap-stopped/);
+  });
+
+  test("a told cap stop whose settle fails keeps ended cap_stop: its stage answers 409 CAP_STOP, and none drains once the other told stage cap-stops (adversarial-native#2)", async () => {
+    const w = world({ "i-none": 229, "i-pe": 25, "i-ap": 50 });
+    const served = await w.serve([NONE, PE, AP]);
+    const pe = await post(served.control + "/sessions", body("plan-eng-review:told", "a", 1));
+    expect((await post(served.control + "/sessions", body("plan-eng-review:told", "a", 2))).status).toBe(409);
+    const items = join(w.record, "items", "i-pe");
+    chmodSync(items, 0o555);
+    try {
+      await post(served.control + "/sessions/" + pe.json.id + "/close", {});
+      // gstack-timing-ok: a bounded wait for the drained stage's settle to fail; the assertion is on the stage's state, never on elapsed time
+      for (let i = 0; i < 250 && !w.logs.some((l) => l.startsWith("E_LEASE_UNSETTLED outcome driver: stage i-pe")); i++) await Bun.sleep(20);
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    expect(await statusOf(served.control, "i-pe")).toMatchObject({ state: "stopped", ended: "cap_stop" });
+    expect((await post(served.control + "/sessions", body("plan-eng-review:told", "b", 1))).json.code).toBe("CAP_STOP");
+    const ap = await post(served.control + "/sessions", body("autoplan:told", "a", 1));
+    expect((await post(served.control + "/sessions", body("autoplan:told", "a", 2))).status).toBe(409);
+    await post(served.control + "/sessions/" + ap.json.id + "/close", {});
+    expect(await served.done).toBe(2);
+    expect(w.logs.find((l) => l.startsWith("STAGE_SETTLED item=i-none"))).toContain("ended=completed");
+  });
+
+  test("a none cap stop after a told lease settled lease_expired leaves that close as written, so a ledger settle retry answers the same close (adversarial-native#3)", async () => {
+    const w = world({ "i-none": 20, "i-ap": 1287 });
+    const served = await w.serve([NONE, AP], { ttl_ms: 3 * 3_600_000 });
+    expect((await post(served.control + "/sessions", body("autoplan:told", "a", 1))).status).toBe(503);
+    // gstack-timing-ok: a bounded wait for the drained stage to settle; the assertion is on the record, never on elapsed time
+    for (let i = 0; i < 250 && !readItem(w.record, "i-ap").leases[0]?.close; i++) await Bun.sleep(20);
+    const ap = readItem(w.record, "i-ap").leases[0]!;
+    const [a, b] = [await post(served.control + "/sessions", body("none", "a", 1)), await post(served.control + "/sessions", body("none", "a", 2))];
+    expect((await post(served.control + "/sessions", body("none", "a", 3))).status).toBe(409);
+    for (const s of [a, b]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.done).toBe(0);
+    expect(readItem(w.record, "i-ap").stops.map((s) => s.scope)).toEqual(["all: none's cap stop ends both skills incomplete"]);
+    expect(settleLease(w.record, w.local, ap.lease.lease_id)).toEqual(ap.close!);
+  });
+
+  test("a none cap stop whose stop records can't be written answers 500, writes a stop line for every stage, and a relaunch of a told stage is refused (specialist-batched#1)", async () => {
+    const w = world({ "i-none": 20, "i-pe": 572 });
+    const served = await w.serve([NONE, PE]);
+    for (const n of [1, 2]) expect((await post(served.control + "/sessions", body("none", "a", n))).status).toBe(200);
+    const items = join(w.record, "items", "i-pe");
+    chmodSync(items, 0o555);
+    try {
+      const c = await post(served.control + "/sessions", body("none", "a", 3));
+      expect([c.status, c.json.code]).toEqual([500, "E_INTERNAL"]);
+      expect(await served.done).toBe(2);
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    const lines = readFileSync(join(w.dir, "sessions.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { event: string; item?: string });
+    expect(lines.filter((e) => e.event === "stop").map((e) => e.item).sort()).toEqual(["i-none", "i-pe"]);
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).leases.map((l) => l.close?.cap_stop)).toEqual(["all: none's cap stop ends both skills incomplete"]);
+  });
+
+  test("a call still in flight at close counts as one unknown call at its reservation in the close answer, never in spent_micros (red-team#1)", async () => {
+    const w = world({ "i-none": 229 });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const served = await w.serve([NONE], { fetch: async (url: string, init: RequestInit) => (await gate, upstream(url, init)) });
+    const open = await post(served.control + "/sessions", body("none", "a", 1));
+    const inflight = call(open.json);
+    // gstack-timing-ok: lets the call reach the stub upstream before the close; the assertions are on the close answer, never on elapsed time
+    await Bun.sleep(200);
+    const closed = await post(served.control + "/sessions/" + open.json.id + "/close", { reason: "wall_limit" });
+    expect(closed.json).toMatchObject({ spent_micros: 0, unknown_calls: 1, undrained: 1 });
+    expect(closed.json.unknown_micros).toBeGreaterThan(0);
+    release();
+    expect((await inflight).status).toBe(200);
+    expect(await served.stop()).toBe(0);
+    expect(readItem(w.record, "i-none").leases[0]!.close).toMatchObject({ spent_micros: 20_040, unknown_calls: 0 });
+    expect(unknownFromRun(w.dir, ["i-none"])).toEqual({ calls: 1, micros: closed.json.unknown_micros });
+  }, 60_000);
 });

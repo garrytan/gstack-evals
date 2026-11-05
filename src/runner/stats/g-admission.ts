@@ -14,11 +14,15 @@
 //
 // Valid trials are the scored ones: gaps and contaminated trials stay out. The metered means are each arm's mean
 // session cost over its scored trials, arm stops included at their metered cost; told's are intention to treat, with
-// exposed and unexposed sessions printed apart. A session's cost is its settled spend: a call with no recorded cost is
-// left out of the means and counted from the arm's U4 lease closes (unknownFromLedger), beside the reservation O6 still
-// holds for it. AUTH_PAID comes from the slice's settled U4 leases (authPaidFromLedger).
+// exposed and unexposed sessions printed apart. A session's cost is its settled spend at the session's close, the figure
+// real_agent passes on as cost_usd: a call with no recorded cost at that close, one still in flight or priced only in
+// the proxy journal included, is left out of the means and never priced. It is counted from the same close, the run
+// directory's close lines (unknownFromRun), beside the reservation O6 held for it then. AUTH_PAID comes from the slice's
+// settled U4 leases (authPaidFromLedger).
 // The exposure sample is drawn as prereg section 5 says (Python's random.Random(20261105), with its replacement rule)
 // and passed in; admitG checks its shape.
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { usd } from "../ledger/money.ts";
 import { listItems, readItem, type CloseFile } from "../ledger/record.ts";
 import { shareAtLeast, shareAtMost, taskRepos, type OutcomeTrial } from "./outcome-decision.ts";
@@ -44,7 +48,7 @@ export interface AdmissionInput {
   auth_paid_usd: number;
   /** The slice's crew dollars per valid task over the second six valid tasks. */
   auth_extra_usd: number;
-  /** Per arm, the calls of unknown cost on its U4 leases (unknownFromLedger), which the metered means leave out. */
+  /** Per arm, the calls of unknown cost at its sessions' closes (unknownFromRun), which the metered means leave out. */
   unknown_calls: Record<"none" | GSkill, UnknownCalls>;
 }
 
@@ -109,7 +113,7 @@ export function admitG(input: AdmissionInput): Admission {
   for (const [name, v] of [["auth_paid_usd", input.auth_paid_usd], ["auth_extra_usd", input.auth_extra_usd]] as const) if (!(v > 0 && v < 1000)) throw new Error(name + " must be dollars per valid task, above 0 and under 1000, the range resize.py reads its metered inputs in");
   const unknown = input.unknown_calls;
   const count = (n: unknown) => Number.isSafeInteger(n) && (n as number) >= 0;
-  if (!(["none", ...G_SKILLS] as const).every((arm) => count(unknown?.[arm]?.calls) && count(unknown?.[arm]?.micros))) throw new Error("unknown_calls must give each arm's calls of unknown cost and the micro-dollars O6 holds for them, as whole numbers from 0 (unknownFromLedger); item 5 reports them beside the metered means");
+  if (!(["none", ...G_SKILLS] as const).every((arm) => count(unknown?.[arm]?.calls) && count(unknown?.[arm]?.micros))) throw new Error("unknown_calls must give each arm's calls of unknown cost and the micro-dollars O6 holds for them, as whole numbers from 0 (unknownFromRun); item 5 reports them beside the metered means");
   const of = (arm: string) => trials.filter((t) => t.arm === arm);
   const scored = (arm: string) => of(arm).filter((t) => t.status === "scored");
 
@@ -216,7 +220,23 @@ export function authPaidFromLedger(record: string, items: readonly string[], val
   return closesOf(record, items, "AUTH_PAID").reduce((n, c) => n + c.spent_micros + c.unknown_micros, 0) / 1_000_000 / validTasks;
 }
 
-/** An arm's calls of unknown cost: each close's unknown calls on the arm's stage line items, and the reservations O6 holds for them. Every lease must be closed. */
-export function unknownFromLedger(record: string, items: readonly string[]): UnknownCalls {
-  return closesOf(record, items, "calls of unknown cost").reduce((n, c) => ({ calls: n.calls + c.unknown_calls, micros: n.micros + c.unknown_micros }), { calls: 0, micros: 0 });
+/**
+ * An arm's calls of unknown cost, counted when each of its sessions closed: the unknown calls and the reservations O6
+ * held for them in the close lines of the run directory's sessions.jsonl on the arm's stage line items. Every session
+ * opened on those items must have a close line.
+ */
+export function unknownFromRun(dir: string, items: readonly string[]): UnknownCalls {
+  if (!items.length) throw new Error("name the line items admission reads calls of unknown cost from");
+  const file = join(dir, "sessions.jsonl");
+  const on = new Set(items);
+  const lines = (existsSync(file) ? readFileSync(file, "utf8") : "").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { event?: string; id?: string; item?: string; unknown_calls?: unknown; unknown_micros?: unknown });
+  const opens = lines.filter((e) => e.event === "open" && on.has(e.item ?? ""));
+  if (!opens.length) throw new Error("no session on line item " + items.join(", ") + " in " + file + ", so its calls of unknown cost can't be read");
+  const closes = new Map(lines.filter((e) => e.event === "close" && on.has(e.item ?? "")).map((e) => [e.id, e]));
+  const open = opens.find((e) => !closes.has(e.id));
+  if (open) throw new Error("session " + open.id + " on line item " + open.item + " is still open in " + file + ": it has no close line, so its calls of unknown cost can't be read");
+  return [...closes.values()].reduce((n, c) => {
+    if (!Number.isSafeInteger(c.unknown_calls) || (c.unknown_calls as number) < 0 || !Number.isSafeInteger(c.unknown_micros) || (c.unknown_micros as number) < 0) throw new Error("session " + c.id + "'s close line in " + file + " does not give its unknown_calls and unknown_micros as whole numbers from 0");
+    return { calls: n.calls + (c.unknown_calls as number), micros: n.micros + (c.unknown_micros as number) };
+  }, { calls: 0, micros: 0 });
 }
