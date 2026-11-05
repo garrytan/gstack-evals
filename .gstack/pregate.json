@@ -114,6 +114,7 @@
       "quick/laneb/tests/proxy-route.test.ts",
       "quick/laneb/tests/proxy-states.test.ts",
       "quick/laneb/tests/r3.test.ts",
+      "quick/laneb/tests/r3c.test.ts",
       "quick/laneb/tests/runner.test.ts",
       "quick/laneb/tests/stacks.test.ts",
       "quick/laneb/tests/vm-run.test.ts"
