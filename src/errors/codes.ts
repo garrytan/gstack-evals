@@ -1212,12 +1212,9 @@ export const CODES = {
     owner: "U20",
   },
   E_TRANSCRIPT_UNREADABLE: {
-    exit: 2,
+    exit: null,
     meaning: "R3c's localization reader (quick/laneb/r3/r3c.ts) found a graded trial whose sdk-messages.jsonl has no readable main-thread assistant text: no assistant text block, or assistant records written without the parent_tool_use_id field, so main-thread text can't be told from a subagent's. The trial's localization is a recorded error, never a miss, and the localization lines print no rates while any graded trial has one.",
     fix: "Read the trial's evaluator/sdk-messages.jsonl. A log from a build before parent_tool_use_id was logged can't be scored; nothing else changes. The primary outcome is unaffected, since localization decides nothing.",
-    side_effects: "None: analyze still prints the primary and every other line; only the localization rates are withheld.",
-    retry_safe: true,
-    resumable: false,
     owner: "U20",
   },
   ENVELOPE_OVER: {

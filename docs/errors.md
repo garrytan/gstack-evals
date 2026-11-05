@@ -150,7 +150,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_MUTATION_DOCKER](#e_mutation_docker) | 2 | U20 |
 | [E_MUTATION_INPUT](#e_mutation_input) | 2 | U20 |
 | [E_PIN_MISMATCH](#e_pin_mismatch) | 2 | U20 |
-| [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | 2 | U20 |
+| [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | warning | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -1053,14 +1053,6 @@ Fix: Copy the record again from the path the message names (the Captain-drive pa
 
 Exit 2. Side effects: None: refused before anything was prepared, bound or launched. Retry safe: yes. Resumable: no. Owner: U20.
 
-### E_TRANSCRIPT_UNREADABLE
-
-R3c's localization reader (quick/laneb/r3/r3c.ts) found a graded trial whose sdk-messages.jsonl has no readable main-thread assistant text: no assistant text block, or assistant records written without the parent_tool_use_id field, so main-thread text can't be told from a subagent's. The trial's localization is a recorded error, never a miss, and the localization lines print no rates while any graded trial has one.
-
-Fix: Read the trial's evaluator/sdk-messages.jsonl. A log from a build before parent_tool_use_id was logged can't be scored; nothing else changes. The primary outcome is unaffected, since localization decides nothing.
-
-Exit 2. Side effects: None: analyze still prints the primary and every other line; only the localization rates are withheld. Retry safe: yes. Resumable: no. Owner: U20.
-
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -1256,6 +1248,14 @@ A review no-loss comparison reached LOSS, so its reference caught more blockers,
 Fix: Report the LOSS with its false-alarm reading and no claim. Adjudicate any unadjudicated must-fix finding on the decoys; never widen the margin after the run.
 
 Warning. Owner: U13.
+
+### E_TRANSCRIPT_UNREADABLE
+
+R3c's localization reader (quick/laneb/r3/r3c.ts) found a graded trial whose sdk-messages.jsonl has no readable main-thread assistant text: no assistant text block, or assistant records written without the parent_tool_use_id field, so main-thread text can't be told from a subagent's. The trial's localization is a recorded error, never a miss, and the localization lines print no rates while any graded trial has one.
+
+Fix: Read the trial's evaluator/sdk-messages.jsonl. A log from a build before parent_tool_use_id was logged can't be scored; nothing else changes. The primary outcome is unaffected, since localization decides nothing.
+
+Warning. Owner: U20.
 
 ### ENVELOPE_OVER
 

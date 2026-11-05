@@ -6,7 +6,8 @@ import { armSpec, CLOSING_LINES, jobConfig } from "../runner/grid.ts";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
 import { itemCheck, OPUS } from "../r3/screen.ts";
 import { R3C, calibrationPlan, f2pShare, goldFiles, type tiers } from "../r3/r3c-rules.ts";
-import { cal1Split, calProjection, CLOSING, cliStream, d1Min, gridOrder, gridOutcome, gridProjection, gridSizes, ITEM, loadOracle, partStop, passStatus, planOf, R3C_NONE, R3C_TOLD, readClosing, RUN, startRule, testRecord, trialF2p, type R3cTrial } from "../r3/r3c.ts";
+import { cal1Split, calProjection, CLOSING, cliStream, d1Min, gridOrder, gridOutcome, gridProjection, gridSizes, ITEM, loadOracle, partStop, passStatus, perTrialJob, planOf, preparePart, R3C_NONE, R3C_TOLD, readClosing, RUN, startRule, testRecord, trialF2p, type R3cTrial } from "../r3/r3c.ts";
+import { loadRebenchPool, R3A4_POOL_FILE, R3A4_POOL_SHA256 } from "../runner/materialize.ts";
 
 const laneb = join(import.meta.dir, "..");
 const repo = join(laneb, "../..");
@@ -188,6 +189,53 @@ describe("the plan", () => {
     expect([...o].map((x) => x.join("/")).sort()).toEqual(["a/gstack", "a/gstack", "a/none", "a/none", "b/gstack", "b/gstack", "b/none", "b/none"]);
     const big = gridOrder(tasks12, 4);
     expect(big.slice(0, 4)).not.toEqual([[tasks12[0], "none"], [tasks12[0], "gstack"], [tasks12[0], "none"], [tasks12[0], "gstack"]]);
+  });
+
+  test("a one-replicate last grid part (R=5) keeps each task once in its job; only cal-1 parts list a task once per trial", () => {
+    const w = tmp("r3c-r5-");
+    writeFileSync(join(w, "grid.json"), JSON.stringify({ R: 5, list: ["b", "a"] }));
+    const g2 = planOf(w, tr, "grid-2")!;
+    expect([g2.attempts, g2.arms.length]).toEqual([1, 2]);
+    expect(perTrialJob(g2)).toBe(false);
+    expect(perTrialJob(planOf(w, tr, "grid-1")!)).toBe(false);
+    expect(perTrialJob(planOf(w, tr, "cal-1a")!)).toBe(true);
+  });
+});
+
+describe("a prepare that fails partway", () => {
+  const poolTask = loadRebenchPool(join(import.meta.dir, "..", R3A4_POOL_FILE), R3A4_POOL_SHA256)[0]!.task_id;
+  const failing = (ledgerRows: object[]) => {
+    const w = tmp("r3c-prep-"), ledger = join(w, "r3c-opus.jsonl");
+    writeFileSync(ledger, ledgerRows.map((r) => JSON.stringify(r) + "\n").join(""));
+    const saved = { ARMS: process.env.ARMS, SWEREBENCH: process.env.SWEREBENCH, LEDGER: process.env.LEDGER };
+    Object.assign(process.env, { ARMS: tmp("r3c-arms-"), SWEREBENCH: tmp("r3c-noexport-"), LEDGER: ledger });
+    const p = { name: "cal-2", tasks: [poolTask], attempts: R3C.t4Second, arms: [R3C_NONE], order: null, counts: new Map() };
+    let err = "";
+    try { preparePart(w, p); } catch (e) { err = String(e); } finally { for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    return { w, err };
+  };
+  const approval = { ts: "2026-11-05T00:00:00Z", item: RUN.item, kind: "approval", id: "approval", usd_micros: toMicros(RUN.capUsd) };
+
+  test("with no ledger row for the part, the half-built part directory is removed, so planCheck can report it unlaunched", () => {
+    const { w, err } = failing([approval]);
+    expect(err).toContain("prepare-run for cal-2 exited");
+    expect(existsSync(join(w, "cal-2"))).toBe(false);
+  });
+
+  test("with a ledger row for the part, the directory stays and the error is for the Captain", () => {
+    const { w, err } = failing([approval, { ts: "2026-11-05T00:01:00Z", item: RUN.item, kind: "reserve", id: RUN.item + "-cal-2/vm", usd_micros: 1 }]);
+    expect(existsSync(join(w, "cal-2"))).toBe(true);
+    expect(err).toContain("Captain");
+  });
+
+  test("a part directory that existed before the call is never removed", () => {
+    const w = tmp("r3c-prep-"), dir = join(w, "cal-2");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "marker"), "");
+    const saved = process.env.ARMS;
+    process.env.ARMS = tmp("r3c-arms-");
+    try { expect(() => preparePart(w, { name: "cal-2", tasks: [poolTask], attempts: R3C.t4Second, arms: [R3C_NONE], order: null, counts: new Map() })).toThrow(); } finally { if (saved === undefined) delete process.env.ARMS; else process.env.ARMS = saved; }
+    expect(existsSync(join(dir, "marker"))).toBe(true);
   });
 });
 

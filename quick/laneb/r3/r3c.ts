@@ -60,7 +60,7 @@
 // bind; grid and resume 0 when the parts ran to the end or to admit, 4 when a part or a projection stopped them (resume
 // after a calibration stop ends with run's codes); admit 0 GO, 5 STOP; analyze 0 KEEP, 3 CUT-CANDIDATE, 5 FIX-METHOD on a
 // complete grid, 6 admission STOP, 4 incomplete; arm-check 1 on a failed check; 2 usage; 1 any other error.
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { analyze as analyzeTrials, bootstrap, readSessionRows, rng, sessionsByTrial } from "../analysis/analyze.ts";
@@ -270,7 +270,7 @@ function partCheck(work: string, p: PartPlan) {
   if (!existsSync(join(dir, "oracle.json"))) throw new Error(p.name + " has no oracle.json, so its run-time oracle gate can't run; prepare it again with this build");
   const job = readJson(join(dir, "job.json")), oracle = readJson(join(dir, "oracle.json"));
   const names = (j: any) => j.tasks.map((t: any) => String(t.path).split("/").at(-1)).sort();
-  const want = p.order && p.attempts === 1 ? p.order.map(([t]) => t).sort() : p.tasks;
+  const want = p.order && perTrialJob(p) ? p.order.map(([t]) => t).sort() : p.tasks;
   if (JSON.stringify(names(job)) !== JSON.stringify(want) || job.n_attempts !== p.attempts) throw new Error(p.name + "/job.json's tasks or attempts are not the plan's");
   if (JSON.stringify([...new Set(names(oracle))]) !== JSON.stringify(p.tasks)) throw new Error(p.name + "/oracle.json's tasks are not the plan's");
   const agents: any[] = job.agents;
@@ -292,21 +292,32 @@ function planCheck(work: string, tr: ReturnType<typeof tiers>) {
   return plan;
 }
 
-function preparePart(work: string, p: PartPlan) {
+export const perTrialJob = (p: PartPlan) => RUN.cal1Parts.includes(p.name);
+// A prepare that fails partway removes the part directory it made, so planCheck sees the part as never launched and analyze
+// can write its incomplete record; a directory that existed before, or one the ledger holds a row for, is never removed.
+export function preparePart(work: string, p: PartPlan) {
   const arms = process.env.ARMS ?? "";
   if (!arms) throw new Error("E_USAGE set ARMS to the directory holding none.tar.gz and the told arm's gstack.tar.gz (the project drive's laneb-arms/r3b-gstack-699a41cb, joined)");
-  const pp = part(p.name), dir = join(work, p.name);
-  const env = { ...process.env, TASK_SET: "swerebench-r3a4", CELLS: RUN.cells, ARM_MANIFESTS: RUN.manifests, TASKS: p.tasks.join(","), ORACLE: "1" };
-  const rc = sh([process.execPath, join(LANEB, "runner/prepare-run.ts"), dir, pp.job, OPUS, pp.arm, arms, String(p.attempts), RUN.concurrent], env);
-  if (rc !== 0) throw new Error("prepare-run for " + p.name + " exited " + rc);
-  if (p.order && p.attempts === 1) {
-    const job = readJson(join(dir, "job.json")), base = String(job.tasks[0].path).replace(/\/[^/]+$/, "");
-    job.tasks = p.order.map(([t]) => ({ path: base + "/" + t }));
-    writeJson(join(dir, "job.json"), job);
+  const pp = part(p.name), dir = join(work, p.name), existed = existsSync(dir);
+  try {
+    const env = { ...process.env, TASK_SET: "swerebench-r3a4", CELLS: RUN.cells, ARM_MANIFESTS: RUN.manifests, TASKS: p.tasks.join(","), ORACLE: "1" };
+    const rc = sh([process.execPath, join(LANEB, "runner/prepare-run.ts"), dir, pp.job, OPUS, pp.arm, arms, String(p.attempts), RUN.concurrent], env);
+    if (rc !== 0) throw new Error("prepare-run for " + p.name + " exited " + rc);
+    if (p.order && perTrialJob(p)) {
+      const job = readJson(join(dir, "job.json")), base = String(job.tasks[0].path).replace(/\/[^/]+$/, "");
+      job.tasks = p.order.map(([t]) => ({ path: base + "/" + t }));
+      writeJson(join(dir, "job.json"), job);
+    }
+    if (p.order) writeFileSync(join(dir, "order.json"), JSON.stringify(p.order) + "\n");
+    writeFileSync(join(dir, "STOP_ON_CAP"), "");
+    partCheck(work, p);
+  } catch (e) {
+    if (existed || !existsSync(dir)) throw e;
+    const ledger = process.env.LEDGER ?? "", held = readRows(ledger).filter((r) => r.kind !== "approval" && JSON.stringify(r).includes(pp.prefix));
+    if (held.length) throw new Error(p.name + " failed to prepare (" + String((e as Error)?.message ?? e) + "), and " + ledger + " holds " + held.length + " row(s) for " + pp.prefix + ", so " + dir + " stays as it is for the Captain to decide; nothing removes a part with spend from the record");
+    rmSync(dir, { recursive: true, force: true });
+    throw e;
   }
-  if (p.order) writeFileSync(join(dir, "order.json"), JSON.stringify(p.order) + "\n");
-  writeFileSync(join(dir, "STOP_ON_CAP"), "");
-  partCheck(work, p);
 }
 
 function prepare(work: string) {
