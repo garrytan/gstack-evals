@@ -17,9 +17,9 @@ links:
   - GST-538
   - GST-1218
 attachments:
-  - 8dedbce4e76339a1dd4f9943fb7f086c590d6761a3733e789876ec819d176daa  ceo-rule.ts.txt
-  - 437fe2d581baee895d33b05295287f0bfd319d58c919abe84f0721c2f3140bdd  dryrun.ts.txt
-  - 24cdabf3ac32d3213a2b1fae0c995082bcec1de3a95fd0a93049b3a8fe41a26b  dryrun.txt
+  - b18c2a3f3b8cb85332fdd2636bf51cc60fd44486b01135cd32de124bdf5bce20  ceo-rule.ts.txt
+  - d1b7163164bf2cc1c03c780d4e8cb32bebc519e764500f2d0c3867bf4d293062  dryrun.ts.txt
+  - 683d4418ea00bdf47fde735c72b670dd46351891f7406b98333afea3c51b87b1  dryrun.txt
   - 83d5d644b97aa87003ea38a8cb273b64590f1c50129430612af2432072852589  judge-brief.md
   - a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499  power.py
   - ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f  power.txt
@@ -163,7 +163,7 @@ The template asks every arm to end with one `ceo-outcome` block: a JSON object w
 | Never started, for a harness or host failure | gap | dropped per contrast |
 | Never started because its ledger item reached its cap | incomplete run | recorded as incomplete in the readings; not scored and never rerun; coverage counts it as missing |
 
-no-block sessions are scored as misses and print per cell as a rate. A cap stop leaves an incomplete run, and the stage reads only what ran. Readings carry one row for every planned session, an incomplete one included.
+no-block sessions are scored as misses and print per cell as a rate. A cap stop leaves an incomplete run, and the stage reads only what ran. Readings carry exactly one row for every planned session, an incomplete one included, and no row outside the plan.
 
 ### 7. Exposure: did the CEO procedure run?
 
@@ -217,13 +217,13 @@ Sol and particle-1 rates print beside Opus's and decide nothing. The bar and its
 
 **Primary families.** For each model, the family is fixed when stage 2 starts: each gstack arm that starts stage 2 on that model, as a contrast with none on hit@3 over the changed units. An arm that reads untested afterwards stays in its family with p = 1, so one arm's exposure or coverage can't change the other arm's adjusted p. Reviews pair by unit and pass, with the unit as the cluster. src/runner/stats/paired.ts's clusteredPairedDelta gives the difference, a 95% cluster-bootstrap interval and a two-sided cluster sign-flip p (seed 20261104, 10,000 draws, exact enumeration where the unit count allows). Holm adjusts the p values within each model. Each model is its own family; the headline is Opus's autoplan-ceo contrast.
 
-**Pairs and coverage.** A contrast keeps a unit-pass only when both its arm and none have a scored or no-block review that is fully judged. A gap, an unjudged review or an incomplete session drops that unit-pass from the contrasts that hold that arm, not from every arm, so a lens gap never touches a primary contrast. Coverage is the share of none's planned unit-passes on changed units that a contrast keeps. Readings must carry every planned row and the stage 2 family, or ceo-rule.ts refuses with E_USAGE.
+**Pairs and coverage.** A contrast keeps a unit-pass only when both its arm and none have a scored or no-block review that is fully judged. A gap, an unjudged review or an incomplete session drops that unit-pass from the contrasts that hold that arm, not from every arm, so a lens gap never touches a primary contrast. Coverage is the share of none's planned unit-passes on changed units that a contrast keeps. Readings must carry exactly one row for every planned session and none outside the plan, the stage 2 family (all three models, gstack arms only, and every gstack arm that has rows) and each model's planned passes from the projection's PASS line; otherwise ceo-rule.ts refuses with E_USAGE.
 
 **Verdicts.** helps: Holm-adjusted p at most 0.05 and a positive difference; hurts: the same with a negative difference; not distinguished: anything else, printed with the difference, the interval and the MDD; untested: the gstack arm's exposure under 0.80, the contrast's coverage under 0.90, or a stage 2 STOCK FAIL. A model whose none arm reads above 0.60 in stage 2 carries a CEILING flag on its contrasts.
 
 **Stage 2 stock check.** The stock rows sit in every changed packet. If they hit D on more than 3 of the changed comparison units, every contrast reads untested (judge), since a brief that credits categories can't grade the comparison.
 
-**MDD and size after drops.** The MDD printed with each verdict is read between power.txt's rows for that contrast's own retained units and the passes its model ran: two-pass rows normally, one-pass rows for a model the last cut runs at 1 pass (48 units print 0.18 at 2 passes and 0.26 at 1). The header prints the two-pass MDD for the changed units left after leak drops. Under 36 changed units after leak drops, the comparison stops and reports; that is an analysis rule, beside section 14's authoring rule.
+**MDD and size after drops.** The MDD printed with each verdict is read between power.txt's rows for that contrast's own retained units and the passes its model was planned to run (the readings' passes, from the projection's PASS line): two-pass rows normally, one-pass rows for a model the last cut runs at 1 pass (48 units print 0.18 at 2 passes and 0.26 at 1). The header prints the two-pass MDD for the changed units left after leak drops. Under 36 changed units after leak drops, the comparison stops and reports; that is an analysis rule, beside section 14's authoring rule.
 
 **Secondaries, deciding nothing:** rank-weighted hit, slot precision, forecast Brier and AUC; lens minus none and autoplan-ceo minus lens on Opus; the cross-family sensitivity; both strict strata; rates by category and by maintainer or outside proposer for every cell; the per-protocol read; no-block, gap, unjudged and incomplete counts; mean issue length; cost per review and cost per hit for each cell.
 
@@ -353,7 +353,7 @@ The downstream build test (GST-1144's vague-intent program), plan-eng-review, pl
 | ceo-rule.ts.txt | the headroom rule, projection check, all-in check and stage 2 analysis, reading readings.json |
 | dryrun.ts.txt, dryrun.txt | the keyless dry run and its output |
 
-The dry run drives every frozen rule on synthetic readings, with no key in its environment: each headroom outcome (HEADROOM, CEILING, FLOOR, NO READ on gaps and on incomplete sessions, STOCK FAIL on either row, a leak drop and the band edges at n = 48), the final-label splits (an R against none split that Sonnet calls D stays not D), judge failures, the positive-agreement gate, the smoke admissions (exposure, a missing block and wall time), the projection check's per-item caps and their round admission, every step of its cut order and its stop, round admission at stage 1's fixed caps (and v1's smoke caps refused), the all-in check, stage 2's verdicts (helps, hurts, not distinguished, untested on exposure, coverage and the stock check) with fixed Holm families, per-contrast gap drops, an Opus item stopped halfway by its cap (coverage 0.500 on both contrasts), a contrast with no usable pairs, the E_USAGE refusals for a missing planned row and a missing stage 2 family, the MDD read between rows for each contrast's passes and the under-36 stop, the secondaries, and one ledger lease opened and settled per frozen item and invocation on a temporary ledger, with a second run on a settled item refused. Rerun it from a directory holding the bundle's files, with the two scripts renamed to drop .txt: `env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun dryrun.ts <scorer checkout> <scratch dir>`.
+The dry run drives every frozen rule on synthetic readings, with no key in its environment: each headroom outcome (HEADROOM, CEILING, FLOOR, NO READ on gaps and on incomplete sessions, STOCK FAIL on either row, a leak drop and the band edges at n = 48), the final-label splits (an R against none split that Sonnet calls D stays not D), judge failures, the positive-agreement gate, the smoke admissions (exposure, a missing block and wall time), the projection check's per-item caps and their round admission, every step of its cut order and its stop, round admission at stage 1's fixed caps (and v1's smoke caps refused), the all-in check, stage 2's verdicts (helps, hurts, not distinguished, untested on exposure, coverage and the stock check) with fixed Holm families, per-contrast gap drops, an Opus item stopped halfway by its cap (coverage 0.500 on both contrasts), a contrast with no usable pairs, the E_USAGE refusals for a missing, duplicated or out-of-plan row (stage 1's smoke included), a missing, malformed or short stage 2 family, a family arm with no rows and missing passes, one readings file that passes every guard, the MDD read between rows for each contrast's passes and the under-36 stop, the secondaries, and one ledger lease opened and settled per frozen item and invocation on a temporary ledger, with a second run on a settled item refused. Rerun it from a directory holding the bundle's files, with the two scripts renamed to drop .txt: `env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun dryrun.ts <scorer checkout> <scratch dir>`.
 
 ## Review record
 
@@ -410,6 +410,15 @@ Capy's review of PR #214 then found three issues, all fixed in this version:
 | Critical: stage 1's NO READ could not see sessions that never started | section 10 rule 2: gaps, unjudged reviews and incomplete sessions count against Opus none's planned readings; a dry-run case with 6 incomplete |
 | Informational: a stage 2 readings file with no family fell back to every gstack arm, which could enlarge a Holm family | section 11: ceo-rule.ts refuses stage 2 readings with no family; every dry-run fixture carries one |
 | Informational: stage 1's MDD line read power.txt's tau 0.0 column | ceo-rule.ts reads the tau 0.5 rows, matching section 12 |
+
+/ship pass 2 then found four more in the new guards, all fixed in this version:
+
+| Finding | v2 |
+|---|---|
+| Informational: a duplicated row was accepted, so a verdict could depend on row order | sections 6 and 11: ceo-rule.ts refuses a duplicated row and any row outside the planned passes or units; dry-run refusals in both stages |
+| Informational: the stage 2 family's contents were never checked | section 11: the family must name all three models, list only gstack arms and include every gstack arm that has rows; a dry-run refusal for each |
+| Informational: a family arm with no rows read "not run" instead of being refused | section 11: every family arm must carry its rows, and the "not run" branch is gone |
+| Informational: planned passes were inferred from the rows | section 11: readings carry each model's passes from the projection's PASS line, and the row guard and the MDD read it |
 
 ## Disclosures
 

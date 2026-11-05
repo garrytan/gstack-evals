@@ -16,7 +16,7 @@ type Model = "opus" | "sol" | "particle";
 type Arm = "none" | "autoplan-ceo" | "standalone" | "lens";
 type Unit = { id: string; kind: "changed" | "held"; strict: string | null; category: string; role: "maintainer" | "outside" };
 type Review = { id: string; unit: string; arm: Arm; model: Model; pass: number; smoke?: boolean; status: "scored" | "no-block" | "gap" | "incomplete"; exposed: boolean | null; labels: Calls[]; words: number[]; leak: { sol: boolean; opus: boolean }; forecast: number | null; usd: number; wall_s?: number };
-type Readings = { stage: 1 | 2; units: Unit[]; reviews: Review[]; stock: { unit: string; row: "A" | "B"; labels: Calls[] }[]; family?: Record<Model, Arm[]> };
+type Readings = { stage: 1 | 2; units: Unit[]; reviews: Review[]; stock: { unit: string; row: "A" | "B"; labels: Calls[] }[]; family?: Record<Model, Arm[]>; passes?: Record<Model, 1 | 2> };
 
 const SEED = 20261104, DRAWS = 10_000;
 const BAND = { lo: 0.15, hi: 0.6 };
@@ -71,9 +71,22 @@ const crossJudge = (m: Model): "sol" | "opus" => (m === "sol" ? "opus" : "sol");
 const out_ = (r: Review) => r.status === "gap" || r.status === "incomplete" || unjudged(r);
 const sessionRan = (r: Review) => r.status !== "gap" && r.status !== "incomplete";
 
-function requireRows(rows: Review[], arm: Arm, model: Model, units: string[], passes: number) {
-  for (const u of units) for (let p = 1; p <= passes; p++)
-    if (!rows.some((r) => !r.smoke && r.arm === arm && r.model === model && r.unit === u && r.pass === p)) throw new Error("E_USAGE readings must carry one row per planned session; first missing: " + arm + " on " + model + ", unit " + u + ", pass " + p);
+const PLAN = "E_USAGE readings must carry one row per planned session";
+function checkPlan(rd: Readings, cells: [Arm, Model][], passesOf: (m: Model) => number, everyUnit: boolean) {
+  const units = new Set(rd.units.map((u) => u.id)), planned = new Set(cells.map(([a, m]) => a + ":" + m)), seen = new Set<string>();
+  for (const r of rd.reviews) {
+    const at = (r.smoke ? "smoke " : "") + r.arm + " on " + r.model + ", unit " + r.unit + ", pass " + r.pass;
+    if (r.smoke) {
+      if (rd.stage !== 1 || !GSTACK_ARMS.includes(r.arm) || !units.has(r.unit) || r.pass !== 1) throw new Error(PLAN + "; first row outside the plan: " + at);
+      continue;
+    }
+    if (!planned.has(r.arm + ":" + r.model) || !units.has(r.unit) || !Number.isInteger(r.pass) || r.pass < 1 || r.pass > passesOf(r.model)) throw new Error(PLAN + "; first row outside the plan: " + at);
+    const k = r.arm + ":" + r.model + ":" + r.unit + ":" + r.pass;
+    if (seen.has(k)) throw new Error(PLAN + "; first duplicate: " + at);
+    seen.add(k);
+  }
+  for (const [arm, model] of cells) for (const u of rd.units) if (everyUnit || u.kind === "changed") for (let p = 1; p <= passesOf(model); p++)
+    if (!seen.has(arm + ":" + model + ":" + u.id + ":" + p)) throw new Error(PLAN + "; first missing: " + arm + " on " + model + ", unit " + u.id + ", pass " + p);
 }
 
 // review-units runs a round only when spent plus every session in it at its allowance fits under the item's cap
@@ -136,7 +149,7 @@ function headroom(rd: Readings) {
   const ids = new Set(changed.map((u) => u.id));
   say("Stage 1 headroom rule (GEVA-285)");
   say("Leak drops: " + drops.size + " unit(s); changed calibration units left: " + changed.length);
-  requireRows(rd.reviews, "none", "opus", changed.map((u) => u.id), 3);
+  checkPlan(rd, [["none", "opus"], ["none", "sol"], ["none", "particle"]], (m) => (m === "opus" ? 3 : 2), true);
   const planned = changed.length * 3;
   const opus = rd.reviews.filter((r) => !r.smoke && r.model === "opus" && r.arm === "none" && ids.has(r.unit));
   const outs = opus.filter(out_).length;
@@ -250,6 +263,15 @@ const mddAt = (n: number, passes: 1 | 2 = 2) => {
 
 function compare(rd: Readings) {
   if (!rd.family) throw new Error("E_USAGE stage 2 readings must carry family (the gstack arms that started stage 2 per model)");
+  const fam = rd.family;
+  const badFam = MODELS.find((m) => !Array.isArray(fam[m]) || !fam[m].every((a) => GSTACK_ARMS.includes(a)) || new Set(fam[m]).size !== fam[m].length);
+  if (badFam) throw new Error("E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: " + badFam);
+  const unlisted = rd.reviews.find((r) => !r.smoke && GSTACK_ARMS.includes(r.arm) && !fam[r.model]?.includes(r.arm));
+  if (unlisted) throw new Error("E_USAGE stage 2 family must include every gstack arm that has rows; first missing: " + unlisted.arm + " on " + unlisted.model);
+  const plan = rd.passes;
+  if (!plan || !MODELS.every((m) => plan[m] === 1 || plan[m] === 2)) throw new Error("E_USAGE stage 2 readings must carry passes (1 or 2 for every model, from the projection's PASS line)");
+  const hasLens = rd.reviews.some((r) => !r.smoke && r.arm === "lens");
+  checkPlan(rd, MODELS.flatMap((m) => [["none", m], ...fam[m].map((a) => [a, m]), ...(m === "opus" && hasLens ? [["lens", m]] : [])] as [Arm, Model][]), (m) => plan[m], false);
   const drops = leakDrops(rd);
   const units = rd.units.filter((u) => !drops.has(u.id));
   const changed = new Set(units.filter((u) => u.kind === "changed").map((u) => u.id));
@@ -265,20 +287,17 @@ function compare(rd: Readings) {
   say("Agreement, Sol vs Opus on D: " + agreementLine(ag));
   const live = rd.reviews.filter((r) => !r.smoke && !drops.has(r.unit));
   const key = (r: Review) => r.unit + "#" + r.pass;
-  const fam = rd.family;
   for (const model of MODELS) {
     const mine = live.filter((r) => r.model === model);
     const none = new Map(mine.filter((r) => r.arm === "none" && changed.has(r.unit)).map((r) => [key(r), r]));
     const noneKept = [...none.values()].filter((r) => !out_(r));
     const noneRate = noneKept.length ? sum(noneKept.map((r) => hit(r))) / noneKept.length : NaN;
     const ceiling = noneRate > BAND.hi;
-    const passes: 1 | 2 = Math.max(1, ...mine.filter((r) => r.arm === "none" && changed.has(r.unit)).map((r) => r.pass)) >= 2 ? 2 : 1;
-    for (const arm of new Set(mine.map((r) => r.arm))) requireRows(mine, arm, model, [...changed], passes);
+    const passes = plan[model];
     say("Model " + model + ": none hit@3 " + f3(noneRate) + " on " + noneKept.length + " unit-passes at " + passes + " pass" + (passes === 1 ? "" : "es") + "; Holm family " + (fam[model].join(", ") || "empty") + (ceiling ? "; CEILING flag on both contrasts" : ""));
     const rows: { arm: Arm; stats: any; untested: string | null; exposure: number; coverage: number; sens: any; mdd: number | null }[] = [];
     for (const arm of fam[model]) {
       const armAll = mine.filter((r) => r.arm === arm);
-      if (armAll.length === 0) { rows.push({ arm, stats: null, untested: "not run", exposure: NaN, coverage: 0, sens: null, mdd: null }); continue; }
       const nonGap = armAll.filter((r) => sessionRan(r) && changed.has(r.unit));
       const exposure = nonGap.length ? nonGap.filter((r) => r.exposed === true).length / nonGap.length : NaN;
       const armMap = new Map(armAll.filter((r) => changed.has(r.unit)).map((r) => [key(r), r]));
@@ -294,7 +313,7 @@ function compare(rd: Readings) {
     }
     const adj = holmAdjusted(rows.map((r) => (r.untested || !r.stats ? 1 : r.stats.p_two_sided)));
     rows.forEach((r, i) => {
-      if (!r.stats) { say("  " + r.arm + " - none: " + (r.untested === "not run" ? "not run" : "no usable pairs, coverage " + f3(r.coverage)) + " -> untested (" + r.untested + "), p = 1 in Holm"); return; }
+      if (!r.stats) { say("  " + r.arm + " - none: " + "no usable pairs, coverage " + f3(r.coverage) + " -> untested (" + r.untested + "), p = 1 in Holm"); return; }
       const s = r.stats, p = adj[i]!;
       const verdict = r.untested ? "untested (" + r.untested + "), p = 1 in Holm" : p <= 0.05 && s.delta > 0 ? "helps" : p <= 0.05 && s.delta < 0 ? "hurts" : "not distinguished (MDD " + (r.mdd === null ? "n/a, under 36 units" : r.mdd.toFixed(2)) + ")";
       say("  " + r.arm + " - none: " + f3(s.mean_b) + " - " + f3(s.mean_a) + " = " + (s.delta >= 0 ? "+" : "") + f3(s.delta) + ", 95% CI " + (s.ci95 ? "[" + f3(s.ci95[0]) + ", " + f3(s.ci95[1]) + "]" : "n/a") + ", p " + f3(s.p_two_sided) + " (" + s.p_method + "), Holm p " + f3(p) + ", exposure " + f3(r.exposure) + ", coverage " + f3(r.coverage) + " -> " + verdict + (ceiling ? " [CEILING]" : ""));

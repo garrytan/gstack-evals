@@ -5,11 +5,11 @@ PASS stock-list.txt sha256 dd3a6d40cfbe4832f9a37da0a6c6cc86ce711054354097a475f96
 PASS unit-brief.md sha256 13ce9eaee6218e8359c32966f8efe82722dc605feb94b3253e42381ac9153253
 PASS power.py sha256 a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499
 PASS power.txt sha256 ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f
-PASS ceo-rule.ts sha256 8dedbce4e76339a1dd4f9943fb7f086c590d6761a3733e789876ec819d176daa
+PASS ceo-rule.ts sha256 b18c2a3f3b8cb85332fdd2636bf51cc60fd44486b01135cd32de124bdf5bce20
 PASS the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast
 PASS the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative)
 PASS the judge brief reads each issue's first 40 words and judges it on its first problem
-    scorer HEAD a10b34c1bdc0f85ed0505dca2331c67f611fff17 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
+    scorer HEAD f9473ebe0850f9c6645106b6b10d47a03f686090 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
 
 ## b. Stage 1 headroom rule: every outcome
 PASS m 20 of 48 -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
@@ -29,6 +29,8 @@ PASS Opus none's last 6 readings incomplete (its item's cap stopped it; 6 of 48 
 PASS splits: Sol D/Opus none/Sonnet D is D; Sol D/Opus none/Sonnet none is not; Sol R1/Opus none/Sonnet D is not (20 + 1) -> HEADROOM (21 of 48 = 0.438; band edges at this n: 8 to 28)
 PASS judge failure: Sol missing, Opus and Sonnet D is D; Sol missing, Opus D, Sonnet none is unjudged and dropped (21 of 47) -> HEADROOM (21 of 47 = 0.447; band edges at this n: 8 to 28)
 PASS an Opus none row missing from the readings (c3, pass 2) -> exit 1: E_USAGE readings must carry one row per planned session; first missing: none on opus, unit c3, pass 2
+PASS a duplicated Opus none row in stage 1 (c4, pass 1) -> exit 1: E_USAGE readings must carry one row per planned session; first duplicate: none on opus, unit c4, pass 1
+PASS a smoke row past its one planned pass -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke autoplan-ceo on opus, unit c0, pass 2
 PASS judges in full agreement -> positive agreement on D 1.000 and no brief revision
 PASS Sol alone says D on every missed review's first issue -> hits unchanged (20 of 48), positive agreement under 0.70 sets one brief revision
     Opus none hit@3: 20 of 48 = 0.417; gaps, unjudged and incomplete dropped 0; band edges at n 48: HEADROOM 8 to 28
@@ -116,6 +118,16 @@ PASS the Opus -p item stops halfway (none, standalone and lens incomplete on the
       standalone - none: 0.417 - 0.417 = +0.000, 95% CI [0.000, 0.000], p 1.000 (degenerate), Holm p 1.000, exposure 1.000, coverage 0.500 -> untested (coverage 0.500 under 0.90), p = 1 in Holm
 PASS a standalone row missing from stage 2's readings (c5, pass 2) -> exit 1: E_USAGE readings must carry one row per planned session; first missing: standalone on opus, unit c5, pass 2
 PASS stage 2 readings with no family -> exit 1: E_USAGE stage 2 readings must carry family (the gstack arms that started stage 2 per model)
+PASS a complete stage 2 readings file (one row per planned session, a valid family and passes) passes every guard -> exit 0
+PASS a duplicated row (autoplan-ceo on opus, c2, pass 1) -> exit 1: E_USAGE readings must carry one row per planned session; first duplicate: autoplan-ceo on opus, unit c2, pass 1
+PASS a row past the planned passes (none on opus, c0, pass 3) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: none on opus, unit c0, pass 3
+PASS a row on a unit the readings do not hold (x1) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: none on opus, unit x1, pass 1
+PASS every Opus pass-2 row missing while passes says 2 -> exit 1: E_USAGE readings must carry one row per planned session; first missing: none on opus, unit c0, pass 2
+PASS a family arm with no rows (standalone on opus) -> exit 1: E_USAGE readings must carry one row per planned session; first missing: standalone on opus, unit c0, pass 1
+PASS a family that leaves out an arm with rows (opus lists autoplan-ceo alone) -> exit 1: E_USAGE stage 2 family must include every gstack arm that has rows; first missing: standalone on opus
+PASS a family that lists lens on opus -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+PASS a family with no particle key -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: particle
+PASS readings with no passes -> exit 1: E_USAGE stage 2 readings must carry passes (1 or 2 for every model, from the projection's PASS line)
 PASS Opus none at 0.625 in stage 2 -> CEILING flag on both contrasts
 PASS 47 changed units after leak drops -> MDD read between power.txt's rows
 PASS 40 changed units after leak drops -> MDD read between power.txt's rows
@@ -215,4 +227,4 @@ PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITE
 ## Leak check
 PASS the transcript prints no home path and no key name's value
 
-PASS 138, FAIL 0
+PASS 150, FAIL 0
