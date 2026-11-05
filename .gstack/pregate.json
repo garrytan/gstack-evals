@@ -106,6 +106,7 @@
       "quick/laneb/tests/placebo.test.ts",
       "quick/laneb/tests/proxy-accounting.test.ts",
       "quick/laneb/tests/proxy-paths.test.ts",
+      "quick/laneb/tests/proxy-route.test.ts",
       "quick/laneb/tests/proxy-states.test.ts",
       "quick/laneb/tests/r3.test.ts",
       "quick/laneb/tests/runner.test.ts",
