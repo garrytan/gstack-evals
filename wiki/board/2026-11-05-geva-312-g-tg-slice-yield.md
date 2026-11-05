@@ -2,7 +2,7 @@
 id: 2026-11-05-geva-312-g-tg-slice-yield
 kind: finding
 title: "G thin slice T-G: 12 valid tasks sealed, counts and digests only"
-summary: T-G sealed 12 valid tasks (10 K3, 2 K2) from 9 repositories, plus 1 valid spare, from 48 mined Go candidates, for $3.99 of paid calls and host time.
+summary: T-G sealed 12 valid tasks (10 K3, 2 K2) from 9 repositories, plus 1 valid spare, from 48 probed Go candidates, for $3.99 of paid calls and host time.
 author: GEVA-312
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
