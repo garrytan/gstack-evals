@@ -57,8 +57,14 @@
 //   last block. Each journal entry stores the one parse with the parser's sha256, section 6's end state, whether the
 //   follow-up went, wall_s (the driver's session clock) and usd (settled metered spend). The key's verifier covers
 //   ceo-outcome.ts, capped.ts and readers.ts, and the allowance joins it. A gap is listed in arm.json and logged as GAPS,
-//   never an E_COVERAGE_GAP stop. stops.json lists each unit-pass a CAP_STOP stopped or left unstarted. The out dir must
-//   sit outside the repo.
+//   never an E_COVERAGE_GAP stop. stops.json lists each unit-pass a CAP_STOP stopped or left unstarted. A resume never
+//   reruns a cell an earlier stops.json lists as stopped (a cap stop is never retried): it carries the cell, with its
+//   settled usd and wall_s, into the new stops.json under a CAP_STOP, and runs the unstarted cells. A stops.json that
+//   doesn't parse refuses the resume before any session. units.json records the suite binding (ceoSuiteBinding) that
+//   ceo rows check --units against, and a resume whose binding differs from the one units.json holds is refused before
+//   any session, because session keys don't cover key.json. units.json is written before the first session, so a
+//   resume whose out dir holds cells, or a stops.json, but no units.json is refused too. And the receipts sink also gets every session's host/transcript.ndjson, which rows
+//   read. The out dir must sit outside the repo.
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
 //   (E_USAGE), as review-units refuses an in-repo --out. A sink holding a symlink on the way to, at or under a receipt's
@@ -119,7 +125,8 @@ export interface ReviewArm {
 
 export interface ReviewRunInput {
   host: Host;
-  suite: { id: string; sha256: string | null; sealed?: boolean; sealedCatalogs?: boolean };
+  /** A ceo-outcome run also carries ceoSuiteBinding's catalogs_sha256, units_dir and unit_ids, which ceo rows check --units against. */
+  suite: { id: string; sha256: string | null; sealed?: boolean; sealedCatalogs?: boolean; catalogs_sha256?: string; units_dir?: string; unit_ids?: string[] };
   units: PreparedUnit[];
   arms: ReviewArm[];
   models: string[];
@@ -219,6 +226,39 @@ export const modelTag = (model: string): string => {
 export const armId = (arm: string, model: string): string => arm + "-" + modelTag(model);
 /** A unit id as a findings file name: / written __. */
 export const unitFile = (unitId: string): string => unitId.replaceAll("/", "__");
+/** One session's run dir under the out dir; its host/ holds transcript.ndjson and session.json. */
+export const sessionDir = (out: string, model: string, arm: string, task: string, pass: number): string => join(out, "runs", model.replaceAll("/", "_"), arm, task, "p" + pass);
+
+type StoppedCell = { cell: ReviewCell; how: "stopped"; usd: number; wall_s: number | null };
+/**
+ * The cells an earlier attempt's stops.json lists as stopped at the cap, by cell id; none when the out dir has no
+ * stops.json. A cap stop is never retried, so a resume carries these with their settled spend instead of rerunning them.
+ */
+export function readCeoStops(out: string): Map<string, StoppedCell> {
+  const file = join(out, "stops.json");
+  const stopped = new Map<string, StoppedCell>();
+  if (!existsSync(file)) return stopped;
+  const refuse = (why: string): never => {
+    throw new Error("E_USAGE: " + file + " " + why + ", so this resume cannot tell which cells a cap stop ended, and a cap stop is never retried\n  fix: restore stops.json from the run's receipts sink copy, or start a new run in a new --out");
+  };
+  let v: any;
+  try {
+    v = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return refuse("is not JSON");
+  }
+  if (!Array.isArray(v?.stops)) refuse("holds no stops list");
+  for (const s of v.stops) {
+    if (!Array.isArray(s?.cells)) refuse("has a stop with no cells list");
+    for (const c of s.cells) {
+      if (c?.how === "unstarted") continue;
+      if (c?.how !== "stopped" || typeof c.model !== "string" || typeof c.arm !== "string" || typeof c.unit !== "string" || !Number.isInteger(c.pass) || !(typeof c.usd === "number" && Number.isFinite(c.usd) && c.usd >= 0)) refuse("has a cell that is neither unstarted nor stopped with its settled spend");
+      const cell: ReviewCell = { model: c.model, arm: c.arm, unit: c.unit, pass: c.pass };
+      stopped.set(reviewCellId(cell), { cell, how: "stopped", usd: c.usd, wall_s: typeof c.wall_s === "number" && Number.isFinite(c.wall_s) ? c.wall_s : null });
+    }
+  }
+  return stopped;
+}
 
 /**
  * How a plan session scores: findings; a miss, scored as finding nothing with a diagnostic note (a malformed or missing
@@ -294,7 +334,8 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : [])];
+  const transcripts = o.plan?.lens !== CEO_LENS ? [] : o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => join(sessionDir(o.out, model, arm.name, unit.task, i + 1), "host", "transcript.ndjson")))));
+  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
   const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
@@ -303,6 +344,18 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const ceo = plan?.lens === CEO_LENS;
   const lens: PlanLens = "ceo";
   if (ceo && insideRepo(o.out)) throw new Error("E_USAGE: a ceo-outcome run holds review text, and its out dir " + o.out + " is inside the repo\n  fix: write the run to an --out outside the repo");
+  if (ceo && !existsSync(join(o.out, "units.json")) && ((o.reuse?.size ?? 0) > 0 || existsSync(join(o.out, "stops.json")) || (existsSync(join(o.out, "cells.ndjson")) && readFileSync(join(o.out, "cells.ndjson"), "utf8").trim() !== ""))) throw new Error("E_USAGE: " + o.out + " holds cells from an earlier attempt but no units.json, so this resume cannot check the suite binding (catalogs_sha256) those cells ran on\n  fix: restore units.json from the run's receipts sink copy, or start a new run in a new --out");
+  if (ceo && existsSync(join(o.out, "units.json"))) {
+    const file = join(o.out, "units.json");
+    let prior: Partial<ReviewRunInput["suite"]> | undefined;
+    try {
+      prior = JSON.parse(readFileSync(file, "utf8"))?.suite;
+    } catch {
+      throw new Error("E_USAGE: " + file + " is not JSON, so this resume cannot check the suite binding (catalogs_sha256) the run started with\n  fix: restore units.json from the run's receipts sink copy, or start a new run in a new --out");
+    }
+    const bindingOf = (s: Partial<ReviewRunInput["suite"]> | undefined) => JSON.stringify([s?.id ?? null, s?.sha256 ?? null, s?.catalogs_sha256 ?? null, s?.units_dir ?? null, s?.unit_ids ?? null]);
+    if (bindingOf(prior) !== bindingOf(o.suite)) throw new Error("E_USAGE: " + file + " binds suite " + (prior?.id ?? "none") + " (catalogs_sha256 " + (prior?.catalogs_sha256 ?? "none") + ", units dir " + (prior?.units_dir ?? "none") + "), and this resume gives suite " + o.suite.id + " (catalogs_sha256 " + (o.suite.catalogs_sha256 ?? "none") + ", units dir " + (o.suite.units_dir ?? "none") + "); its cached cells would be labelled with units they did not run on\n  fix: resume with the units dir and suite the run started with, or start a new run in a new --out");
+  }
   if (plan && o.host !== "claude") throw new Error("E_USAGE: plan units score from the Claude Code driver's model_output, which host " + o.host + " does not record; run plan units with host claude");
   const modelsOf = (arm: string): readonly string[] => o.armModels?.[arm] ?? o.models;
   const ids = new Set<string>();
@@ -371,13 +424,16 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     for (const s of stale) stops.push({ code: s.code, message: s.message });
     return result();
   }
-  const reused = new Set(entries.keys());
+  const carried = ceo ? [...readCeoStops(o.out)].filter(([id]) => !entries.has(id)).map(([, c]) => c) : [];
+  const settled = new Set([...entries.keys(), ...carried.map((c) => reviewCellId(c.cell))]);
 
+  const unitsJson = JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n";
   mkdirSync(o.out, { recursive: true });
+  if (ceo) writeFileSync(join(o.out, "units.json"), unitsJson);
   const empty = join(o.out, "fixtures");
   mkdirSync(empty, { recursive: true });
   const journal = join(o.out, "cells.ndjson");
-  let progress = newProgress(o.runId, planned.size - reused.size);
+  let progress = newProgress(o.runId, planned.size - settled.size);
   let wall = 0;
   let ran = 0;
 
@@ -389,7 +445,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const codex = o.host === "claude" ? codexOption(o.policy, settings) : null;
     const binding = await rig.bind({ cell: { run_id: o.runId, arm: arm.name, task: unit.task, model: cell.model, trial: cell.pass, attempt: 1 }, models: slotModels(o.policy, cell.model, codex ? settings : null), allowance_micros: allowance(cell.model) });
     const sandbox = rig.sandbox(arm.name, false, cell.model);
-    const dir = join(o.out, "runs", cell.model.replaceAll("/", "_"), arm.name, unit.task, "p" + cell.pass);
+    const dir = sessionDir(o.out, cell.model, arm.name, unit.task, cell.pass);
     rmSync(dir, { recursive: true, force: true });
     const home = sandbox.homePath(dir);
     const install = rig.arms[arm.name]!;
@@ -440,10 +496,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   };
 
   const per = Math.max(1, Math.floor(o.parallel / Math.max(1, o.arms.length)));
-  const capCells: { cell: ReviewCell; how: "stopped" | "unstarted"; usd?: number; wall_s?: number | null }[] = [];
-  const unstarted = (from: number) => groups.slice(from).flat().filter((p) => !reused.has(reviewCellId(p.cell))).map((p) => ({ cell: p.cell, how: "unstarted" as const }));
+  const capCells: { cell: ReviewCell; how: "stopped" | "unstarted"; usd?: number; wall_s?: number | null }[] = [...carried];
+  const unstarted = (from: number) => groups.slice(from).flat().filter((p) => !settled.has(reviewCellId(p.cell))).map((p) => ({ cell: p.cell, how: "unstarted" as const }));
   for (let i = 0; i < groups.length; i += per) {
-    const fresh = groups.slice(i, i + per).flat().filter((p) => !reused.has(reviewCellId(p.cell)));
+    const fresh = groups.slice(i, i + per).flat().filter((p) => !settled.has(reviewCellId(p.cell)));
     if (!fresh.length) continue;
     const worst = fresh.reduce((s, p) => s + allowance(p.cell.model), 0);
     if (o.cap !== null && spent + worst > o.cap) {
@@ -458,6 +514,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       break;
     }
   }
+  if (carried.length && !stops.some((s) => s.code === "CAP_STOP")) stops.push({ code: "CAP_STOP", message: carried.length + " cell" + (carried.length === 1 ? "" : "s") + " a cap stop ended before this resume, carried with " + (carried.length === 1 ? "its" : "their") + " settled spend and never retried" });
   for (const s of stops) log(s.code + " " + s.message);
 
   const parseRows = [["arm_id", "arm", "model", "unit", "pass", "outcome", "findings", "reason"].join("\t")];
@@ -568,7 +625,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   writeFileSync(join(o.out, "parses.tsv"), parseRows.join("\n") + "\n");
   if (plan) writeFileSync(join(o.out, "modes.tsv"), modeRows.join("\n") + "\n");
   writeFileSync(join(o.out, "refusals.tsv"), refusalsTsv(refusals));
-  writeFileSync(join(o.out, "units.json"), JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n");
+  writeFileSync(join(o.out, "units.json"), unitsJson);
 
   const copied = "sink" in sink && sink.sink ? copyToSink(o.out, receipts, sink.sink) : [];
   return result(armDirs, copied);

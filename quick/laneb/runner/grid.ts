@@ -30,10 +30,14 @@ export type BatchSpec = {
 // procedure_line names a fixed line a told prompt ends with, after a blank line (R3 amendment 4, plan section 6); it needs
 // told. PROCEDURE_LINES must equal prompt_builder.py's, byte for byte (a keyless test checks).
 export const PROCEDURE_LINES = { "investigate-phases": "Work through /investigate's phases in order, and finish with its DEBUG REPORT." };
+// closing_line names a fixed line any arm's prompt ends with, after a blank line and after a told arm's procedure line
+// (R3 amendment 6, section 7: R3c's ROOT CAUSE FILES block). CLOSING_LINES must equal prompt_builder.py's and
+// r3/r3c-rules.ts R3C.closingLine, byte for byte (a keyless test checks).
+export const CLOSING_LINES = { "r3c-root-cause-files": "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first." };
 // gstack_hooks=copy runs the arm on laneb_hooks.LanebHooksAgent, which copies the gstack hook state out after the session
 // (R3 amendment 5 section 9 item 2); it is not an agent kwarg.
-export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"], procedure_line: Object.keys(PROCEDURE_LINES), gstack_hooks: ["copy"] };
-export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string; gstack_hooks?: string; tar_name?: string };
+export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"], procedure_line: Object.keys(PROCEDURE_LINES), closing_line: Object.keys(CLOSING_LINES), gstack_hooks: ["copy"] };
+export type AgentOptions = { system_prompt?: string; session_kind?: string; told?: string; procedure_line?: string; closing_line?: string; gstack_hooks?: string; tar_name?: string };
 const SKILL_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 
 // One entry of prepare-run's arms list: <arm>[:<option>=<value>]..., for example
@@ -88,6 +92,7 @@ export function jobConfig(b: BatchSpec) {
         ...(a.session_kind ? { session_kind: a.session_kind } : {}),
         ...(a.told ? { told_skill: a.told } : {}),
         ...(a.procedure_line ? { procedure_line: a.procedure_line } : {}),
+        ...(a.closing_line ? { closing_line: a.closing_line } : {}),
         ...(b.repo_dir ? { repo_dir: b.repo_dir } : {}),
         ...(b.sdk_max_turns ? { sdk_max_turns: b.sdk_max_turns } : {}),
       },

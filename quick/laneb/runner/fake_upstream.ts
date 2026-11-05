@@ -8,7 +8,7 @@ const LOG = process.env.FAKE_UPSTREAM_LOG ?? "fake-upstream.jsonl";
 const PORT = Number(process.env.FAKE_UPSTREAM_PORT ?? 8799);
 const USAGE = { input_tokens: 1200, cache_creation_input_tokens: 300, cache_read_input_tokens: 5000, output_tokens: 150 };
 
-export type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: unknown };
+export type Block = { type: "text"; text: string } | { type: "thinking"; thinking: string } | { type: "tool_use"; id: string; name: string; input: unknown };
 
 export function toolResults(messages: any[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -42,6 +42,10 @@ export function sse(model: string, blocks: Block[]): string {
     if (b.type === "text") {
       ev.push(["content_block_start", { type: "content_block_start", index: i, content_block: { type: "text", text: "" } }]);
       ev.push(["content_block_delta", { type: "content_block_delta", index: i, delta: { type: "text_delta", text: b.text } }]);
+    } else if (b.type === "thinking") {
+      ev.push(["content_block_start", { type: "content_block_start", index: i, content_block: { type: "thinking", thinking: "", signature: "" } }]);
+      ev.push(["content_block_delta", { type: "content_block_delta", index: i, delta: { type: "thinking_delta", thinking: b.thinking } }]);
+      ev.push(["content_block_delta", { type: "content_block_delta", index: i, delta: { type: "signature_delta", signature: "fake-signature" } }]);
     } else {
       ev.push(["content_block_start", { type: "content_block_start", index: i, content_block: { type: "tool_use", id: b.id, name: b.name, input: {} } }]);
       ev.push(["content_block_delta", { type: "content_block_delta", index: i, delta: { type: "input_json_delta", partial_json: JSON.stringify(b.input) } }]);
@@ -68,7 +72,7 @@ export function startFakeUpstream(port = PORT, logPath = LOG, script: (body: any
         return Response.json({ input_tokens: 10 });
       }
       const blocks: Block[] = tools.includes("Bash") ? script(body) : [{ type: "text", text: "ok" }];
-      appendFileSync(logPath, JSON.stringify({ ...entry, reply: blocks.map((b) => (b.type === "tool_use" ? b.name : "text")) }) + "\n");
+      appendFileSync(logPath, JSON.stringify({ ...entry, reply: blocks.map((b) => (b.type === "tool_use" ? b.name : b.type)) }) + "\n");
       if (!body.stream) {
         return Response.json({ id: "msg_fake", type: "message", role: "assistant", model: body.model, content: blocks, stop_reason: blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn", usage: USAGE });
       }

@@ -15,7 +15,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { loadR3Drops, loadRebenchPool, loadSwebvTasks, materializeRebench, materializeSwebv, materializeTb2, R3_BAND_SHA256, R3_DROP_FILE, R3_DROP_SHA256, R3A4_POOL_FILE, R3A4_POOL_SHA256 } from "./materialize.ts";
-import { armSpec, jobConfig, PROCEDURE_LINES } from "./grid.ts";
+import { armSpec, CLOSING_LINES, jobConfig, PROCEDURE_LINES } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -125,7 +125,8 @@ if (import.meta.main) {
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
     arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "", told_skill: options.told ?? "",
       ...(options.gstack_hooks ? { gstack_hooks: options.gstack_hooks } : {}),
-      ...(options.procedure_line ? { procedure_line: options.procedure_line, procedure_line_sha256: createHash("sha256").update(PROCEDURE_LINES[options.procedure_line as keyof typeof PROCEDURE_LINES]).digest("hex") } : {}) })), tasks,
+      ...(options.procedure_line ? { procedure_line: options.procedure_line, procedure_line_sha256: createHash("sha256").update(PROCEDURE_LINES[options.procedure_line as keyof typeof PROCEDURE_LINES]).digest("hex") } : {}),
+      ...(options.closing_line ? { closing_line: options.closing_line, closing_line_sha256: createHash("sha256").update(CLOSING_LINES[options.closing_line as keyof typeof CLOSING_LINES]).digest("hex") } : {}) })), tasks,
   };
   writeFileSync(join(run, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
   console.log(`${run}: ${final.length} tasks x ${models.length} models x ${arms.length} arms x ${attempts} attempts, git ${manifest.git_head.slice(0, 7)}${manifest.git_dirty ? " (dirty)" : ""}`);

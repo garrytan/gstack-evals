@@ -11,6 +11,7 @@
 // the launch's own included, holds open reservations (items and the parts of one item launch one at a time). final gives the all-in figure before the results post and the largest token stop the post
 // thread can have so that figure, the holds still open and the stop at the measured rate stay at or under $2,000.
 import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { readRows, totals, type Row } from "../runner/ledger.ts";
 
 export const CEILING_USD = 2000;
@@ -32,7 +33,9 @@ const micros = (usd: number) => Math.round(usd * M);
 const amount = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
 const usd = (m: number) => (m / M).toFixed(2);
 
-export function tally(ledgerRows: Row[], crew: Crew, plan: Plan, exclude: string | null = null) {
+// voided: the ledgers of runs voided before any session ran (Amendment D's pilot-opus run 92231acce642809f). Their settled and
+// open reserved spend counts in the sum; they place no item and never count against an item's cap.
+export function tally(ledgerRows: Row[], crew: Crew, plan: Plan, exclude: string | null = null, voided: Row[][] = []) {
   if (!Array.isArray(plan?.items) || !plan.leftover) throw new UsageError("E_USAGE l1 ceiling: the plan needs items [{item, cap_usd, status}] and leftover {sol, particle}");
   if (!Array.isArray(crew?.threads) || typeof crew.captain_credits !== "number") throw new UsageError("E_USAGE l1 ceiling: the crew file needs threads [{code, line, credits, tokens, token_stop, status}] and captain_credits");
   if (!amount(crew.captain_credits)) throw new UsageError("E_USAGE l1 ceiling: captain_credits must be a number of at least 0");
@@ -69,12 +72,13 @@ export function tally(ledgerRows: Row[], crew: Crew, plan: Plan, exclude: string
   const captainHold = Math.max(0, micros(CAPTAIN_LINE_USD) - captainSpent);
   const runWorkHold = (plan.leftover.sol === "pending" ? Math.max(0, micros(RUN_WORK_LINE_USD) - solSpent) : 0) + (plan.leftover.particle === "pending" ? Math.max(0, micros(RUN_WORK_LINE_USD) - particleSpent) : 0);
   const itemsTotal = items.reduce((x, i) => x + i.counted, 0);
-  const spentTotal = itemsTotal + allCredits + captainSpent;
-  return { items, itemsTotal, crewSpent, solSpent, particleSpent, captainSpent, perToken, stops, crewHold, captainHold, runWorkHold, holdback: crewHold + captainHold + runWorkHold, spentTotal, total: spentTotal + crewHold + captainHold + runWorkHold };
+  const voidedSpent = voided.reduce((x, rows) => { const v = totals(rows); return x + v.settledMicros + v.openReservedMicros; }, 0);
+  const spentTotal = itemsTotal + voidedSpent + allCredits + captainSpent;
+  return { items, itemsTotal, voidedSpent, crewSpent, solSpent, particleSpent, captainSpent, perToken, stops, crewHold, captainHold, runWorkHold, holdback: crewHold + captainHold + runWorkHold, spentTotal, total: spentTotal + crewHold + captainHold + runWorkHold };
 }
 
-export function check(ledgerRows: Row[], crew: Crew, plan: Plan, launch: string) {
-  const t = tally(ledgerRows, crew, plan);
+export function check(ledgerRows: Row[], crew: Crew, plan: Plan, launch: string, voided: Row[][] = []) {
+  const t = tally(ledgerRows, crew, plan, null, voided);
   const item = t.items.find((i) => i.item === launch);
   if (!item || item.status === "done") throw new UsageError("E_USAGE l1 ceiling: " + launch + " is not a planned or open item of the plan");
   const busy = t.items.filter((i) => i.open_ids > 0).map((i) => i.item);
@@ -84,8 +88,8 @@ export function check(ledgerRows: Row[], crew: Crew, plan: Plan, launch: string)
   return { ok, launch, why, tally: t };
 }
 
-export function finalRead(ledgerRows: Row[], crew: Crew, plan: Plan, post: string) {
-  const t = tally(ledgerRows, crew, plan, post);
+export function finalRead(ledgerRows: Row[], crew: Crew, plan: Plan, post: string, voided: Row[][] = []) {
+  const t = tally(ledgerRows, crew, plan, post, voided);
   if (t.perToken === 0) throw new UsageError("E_USAGE l1 ceiling: the crew file holds tokens but no credits, so there is no measured rate to size the post thread's stop");
   const holds = t.captainHold + t.runWorkHold + t.stops;
   const room = micros(CEILING_USD) - t.spentTotal - holds;
@@ -99,6 +103,7 @@ export function render(r: ReturnType<typeof check>): string {
   return [
     "CEILING " + (r.ok ? "PASS" : "REFUSE") + " " + r.launch + ": " + r.why,
     ...lines,
+    ...(t.voidedSpent ? ["  voided runs: $" + usd(t.voidedSpent)] : []),
     "  crew $" + usd(t.crewSpent) + ", Sol run work $" + usd(t.solSpent) + ", particle-1 run work $" + usd(t.particleSpent) + ", Captain $" + usd(t.captainSpent),
     "  holdback $" + usd(t.holdback) + " = crew $" + usd(t.crewHold) + " (unspent stops $" + usd(t.stops) + " at $" + (t.perToken).toFixed(3) + " per million tokens) + Captain $" + usd(t.captainHold) + " + run work $" + usd(t.runWorkHold),
   ].join("\n");
@@ -109,22 +114,23 @@ if (import.meta.main) {
   const cmd = argv[0];
   const flag = (name: string) => argv.flatMap((a, i) => (a === name && argv[i + 1] ? [argv[i + 1]!] : []));
   try {
-    const ledgers = flag("--ledger"), crewPath = flag("--crew")[0], planPath = flag("--plan")[0];
-    if ((cmd !== "check" && cmd !== "final") || !ledgers.length || !crewPath || !planPath) throw new UsageError("E_USAGE usage: bun quick/laneb/l1/ceiling.ts check|final --ledger <ledger.jsonl> [--ledger ...] --crew <crew.json> --plan <plan.json> (--launch <item> | --post <thread>)");
-    for (const p of ledgers) if (!existsSync(p)) throw new UsageError("E_USAGE l1 ceiling: no ledger at " + p);
-    const rows = ledgers.flatMap((p) => readRows(p));
+    const ledgers = flag("--ledger"), voids = flag("--void-ledger"), crewPath = flag("--crew")[0], planPath = flag("--plan")[0];
+    if ((cmd !== "check" && cmd !== "final") || !ledgers.length || !crewPath || !planPath) throw new UsageError("E_USAGE usage: bun quick/laneb/l1/ceiling.ts check|final --ledger <ledger.jsonl> [--ledger ...] [--void-ledger <ledger.jsonl> ...] --crew <crew.json> --plan <plan.json> (--launch <item> | --post <thread>)");
+    for (const p of [...ledgers, ...voids]) if (!existsSync(p)) throw new UsageError("E_USAGE l1 ceiling: no ledger at " + p);
+    if (voids.some((p) => ledgers.some((q) => resolve(q) === resolve(p)))) throw new UsageError("E_USAGE l1 ceiling: a ledger can't be both an item's ledger and a voided run's");
+    const rows = ledgers.flatMap((p) => readRows(p)), voided = voids.map((p) => readRows(p));
     const crew = JSON.parse(readFileSync(crewPath, "utf8")) as Crew;
     const plan = JSON.parse(readFileSync(planPath, "utf8")) as Plan;
     if (cmd === "check") {
       const launch = flag("--launch")[0];
       if (!launch) throw new UsageError("E_USAGE l1 ceiling: check needs --launch <item>");
-      const r = check(rows, crew, plan, launch);
+      const r = check(rows, crew, plan, launch, voided);
       console.log(render(r));
       process.exit(r.ok ? 0 : 1);
     }
     const post = flag("--post")[0];
     if (!post) throw new UsageError("E_USAGE l1 ceiling: final needs --post <thread>");
-    const f = finalRead(rows, crew, plan, post);
+    const f = finalRead(rows, crew, plan, post, voided);
     console.log("FINAL all-in $" + usd(f.all_in) + ", holds $" + usd(f.holds) + ", room $" + usd(Math.max(0, f.room)) + ": the post thread " + post + " can have a token stop of at most " + f.max_post_token_stop + (f.open_items.length ? "; items not done, counted at their caps: " + f.open_items.join(", ") : ""));
   } catch (e) {
     console.error(e instanceof UsageError ? e.message : "E_USAGE l1 ceiling: " + String(e));

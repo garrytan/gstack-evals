@@ -31,6 +31,7 @@ gstack-evals noloss power --suite <id> --passes <n> --recall <share> --margin <p
 gstack-evals noloss judge-packet --suite <id> --arm <dir>... --seed <n> --out <dir> --key <file> [--adjudicate]
 gstack-evals noloss judge-join --suite <id> --key <file> --reply <file> [--second <file>] [--third <file>] [--unjudged <file>] --arm <dir>... --out <dir>
 gstack-evals noloss judge-run --suite <id> --packets <dir> --key <file> --arm <dir>... --brief <file> --primary <provider/model> --second <provider/model> --third <provider/model> --item <ledger item> --out <dir> [--source <owner/repo>=<clone>]... [--dry-run]
+gstack-evals noloss judge-run --ceo --packets <dir> --key <file> --brief <judge-brief.md> --judge <provider/model> --item <ledger item> --out <dir> [--concurrency <n>] [--ledger <path>] [--record <dir>] [--policy <file>] [--dry-run]
 gstack-evals noloss derive --suite <id|path> --comparisons <file> --id <id> --out <dir> [--root <dir>] [--drop <unit>]... [--drop-file <tsv>] [--drop-gaps] [--detection-only <unit>:<blocker>]... [--severity-map <file> | --impact <tsv> --key <file> --impact-judge <judge> | --first-k <k>]
 gstack-evals noloss flag-scan --suite <id|path> --run <review-units out>... --audit <contamination.tsv> [--out <flags.tsv>] [--home <dir>]
 gstack-evals noloss secondary --suite <id|path> --variant <id> --reference <id> --seed <n> [--root <dir>] [--draws <n>] [--permutations <n>] [--json]
@@ -204,3 +205,10 @@ packets go out with an evidence sheet built from each finding's masked evidence 
 clone, and the run writes unverifiable.tsv for the frozen sensitivity count. The proxy retries a 429 or 5xx within a budget of 3 sends in 900 s; past it, or on a
 transport error, the run stops. `--dry-run` prints each request's worst case at 3 sends and the item's cap beside the
 total, and spends nothing. A ledger item binds to one run, so the matching and adjudication batches need an item each.
+
+`judge-run --ceo` is the CEO outcome eval's judge read (src/trial/review/README.md, CEO outcome units): one judge per
+run over the packets `gstack-evals ceo packets` wrote. It sends the brief's text above its rule with each D packet and
+the text below it with each remedy packet, through the same proxy, lease and retry budget, and writes replies.json
+with every packet answered or missing with its cause. A reply that breaks the brief's failure rule gets one retry in a
+fresh request; a second failure marks that judge's calls for the packet missing. `gstack-evals ceo readings` joins the
+three judges' replies.json files. `--out` must sit outside the repo.

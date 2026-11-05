@@ -36,7 +36,7 @@ from harbor.agents.installed.claude_code import ClaudeCode, ClaudeCodeOptions
 from harbor.environments.base import BaseEnvironment
 from harbor.environments.docker.docker import _sanitize_docker_compose_project_name
 from harbor.models.agent.context import AgentContext
-from prompt_builder import PROCEDURE_LINES, build_prompt
+from prompt_builder import CLOSING_LINES, PROCEDURE_LINES, build_prompt
 from pydantic import Field
 from usersim import Simulator
 
@@ -180,6 +180,7 @@ class LanebOptions(ClaudeCodeOptions):
     session_kind: str = Field(default="", description="GSTACK_SESSION_KIND in the container: empty (unset) or unattended.")
     told_skill: str = Field(default="", description="Skill this arm is told: the prompt opens with '/<told_skill> ' so the CLI expands it and injects that SKILL.md body. Empty sends the wrapper unchanged.")
     procedure_line: str = Field(default="", description="A key of prompt_builder.PROCEDURE_LINES: a told prompt ends with that line after a blank line. Empty adds nothing.")
+    closing_line: str = Field(default="", description="A key of prompt_builder.CLOSING_LINES: any arm's prompt ends with that line after a blank line, after a told arm's procedure line. Empty adds nothing.")
 
 
 class LanebAgent(ClaudeCode):
@@ -274,8 +275,11 @@ class LanebAgent(ClaudeCode):
             raise ValueError(f"session_kind {self.options.session_kind!r} is not one of {list(SESSION_KINDS)}")
         if self.options.procedure_line and (self.options.procedure_line not in PROCEDURE_LINES or not self.options.told_skill):
             raise ValueError(f"procedure_line {self.options.procedure_line!r} is not one of {sorted(PROCEDURE_LINES)} on a told arm")
+        if self.options.closing_line and self.options.closing_line not in CLOSING_LINES:
+            raise ValueError(f"closing_line {self.options.closing_line!r} is not one of {sorted(CLOSING_LINES)}")
         agent_options = {"system_prompt": self.options.system_prompt, "session_kind": self.options.session_kind, **({"told_skill": self.options.told_skill} if self.options.told_skill else {}),
-                         **({"procedure_line": self.options.procedure_line} if self.options.procedure_line else {})}
+                         **({"procedure_line": self.options.procedure_line} if self.options.procedure_line else {}),
+                         **({"closing_line": self.options.closing_line} if self.options.closing_line else {})}
         evdir = self._evaluator_dir()
         evdir.mkdir(parents=True, exist_ok=True)
         persona = json.loads(Path(self.options.persona_path).read_text())
@@ -341,9 +345,11 @@ class LanebAgent(ClaudeCode):
             wrapper_text = Path(self.options.wrapper_path).read_text()
             told = self.options.told_skill
             line = self.options.procedure_line
-            prompt_text = build_prompt(wrapper_text, instruction, bool(told), told, procedure_line=line)
+            closing = self.options.closing_line
+            prompt_text = build_prompt(wrapper_text, instruction, bool(told), told, procedure_line=line, closing_line=closing)
             log({"event": "prompt", "wrapper_sha256": hashlib.sha256(wrapper_text.encode()).hexdigest(), "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(), "told_skill": told,
-                 **({"procedure_line": line, "procedure_line_sha256": hashlib.sha256(PROCEDURE_LINES[line].encode()).hexdigest()} if line else {})})
+                 **({"procedure_line": line, "procedure_line_sha256": hashlib.sha256(PROCEDURE_LINES[line].encode()).hexdigest()} if line else {}),
+                 **({"closing_line": closing, "closing_line_sha256": hashlib.sha256(CLOSING_LINES[closing].encode()).hexdigest()} if closing else {})})
 
             host_dir = Path(tempfile.mkdtemp(prefix="laneb-agent-"))
             wrapper = host_dir / "claude-in-container"
@@ -385,7 +391,7 @@ class LanebAgent(ClaudeCode):
                     data = getattr(message, "data", None)
                     if isinstance(data, dict) and data.get("subtype") == "init":
                         record["init"] = {k: data.get(k) for k in ("tools", "skills", "slash_commands", "model", "permissionMode", "cwd", "claude_code_version", "apiKeySource")} | agent_options
-                    for attr in ("content", "subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason"):
+                    for attr in ("content", "parent_tool_use_id", "subtype", "result", "usage", "total_cost_usd", "num_turns", "is_error", "stop_reason"):
                         if hasattr(message, attr):
                             record[attr] = getattr(message, attr)
                     if type(message).__name__ == "ResultMessage":
