@@ -138,6 +138,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OUTCOME_AUTOPLAN_CONFIG](#e_outcome_autoplan_config) | 2 | U20 |
 | [E_OUTCOME_TOLD_INSTALL](#e_outcome_told_install) | 2 | U20 |
 | [E_OUTCOME_CLEAN_ROOM](#e_outcome_clean_room) | 2 | U20 |
+| [E_OUTCOME_IMAGE](#e_outcome_image) | 2 | U20 |
 | [E_REAL_SANDBOX_EGRESS](#e_real_sandbox_egress) | 2 | U20 |
 | [E_REAL_SANDBOX_RECORD](#e_real_sandbox_record) | 2 | U20 |
 | [E_REAL_ARM_BUILD](#e_real_arm_build) | 2 | U10 |
@@ -940,6 +941,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 The none arm's clean-room preflight (lanes/outcome-skills/arms/clean-room.ts, running panel v3 C1's script) found a Capy drive or gstack in the arm's session. C1's scan: a .capy, .local/share/gstack or .claude/skills path in its home, a Capy drive mounted under any home directory or under /root (seen through other users' 0700 homes), a home or work-tree AGENTS.md or CLAUDE.md that names gstack, or a work tree's .claude/skills. O1's second scan: a .gstack in the home; a .claude/skills folder anywhere in a work tree outside .git; gstack named in a CLAUDE.md in a parent of a work dir, in the home's CLAUDE.md, in .claude/settings.json or .claude/settings.local.json in the home or a work dir (where hooks live), in an entry under .claude/commands, .claude/plugins, .claude/agents or .claude/rules in the home or a work dir, or in an entry under the home's .claude/projects/*/memory (Claude Code's auto memory); and, present at all, a CLAUDE.local.md or .mcp.json in the home or a work dir, a CLAUDE.local.md in a parent of a work dir, ~/.claude.json, ~/.claude/.claude.json (Claude Code's global config when CLAUDE_CONFIG_DIR is ~/.claude, as the arm sets it), or any entry under /etc/claude-code (Claude Code's managed settings). Or either scan could not finish in the image. Each hit is named. The preflight also refuses before any scan when the image's id (docker image inspect --format '{{.Id}}') does not equal the recorded image digest, or cannot be read.
 
 Fix: Remove the named path or mount from the none arm's session, or make the image present and able to run sh with no network, then rerun the same command. When the image's id is not the recorded digest, run the image the digest names (pull or load it by digest), or record the digest of the image you mean to run. The refusal comes before any lease.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_OUTCOME_IMAGE
+
+T-G's image manifest or a trial's binding to it does not hold (lanes/outcome-skills/images/manifest.ts): the manifest is unreadable, has a row with no sha256 image id, digests or label of its own, or is not tg-images.v1 with home /root and work dir /testbed; or bind found a task dir whose task.json or environment digest differs from its row, a file that differs from task.json's file digests (edited, added or deleted), a symlink, an image the manifest pins that is missing or whose local tag resolves to another id, an out dir that exists, or a task.toml with no [environment] section or a docker_image of its own; or pin's out file exists.
+
+Fix: Bind the task dir the manifest was pinned from, on the host whose Docker holds the pinned images (the envelope host), into a new out dir. When an image is gone or moved, rebuild it with pin into a new manifest and record that manifest's digests before any session. Nothing was spent and no lease is open.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
