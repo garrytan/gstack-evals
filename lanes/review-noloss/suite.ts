@@ -142,7 +142,9 @@ const KINDS: Suite["kind"][] = ["noloss", "catalog", "plan", "ceo-outcome"];
 /** A ceo-outcome unit's files in its folder under the units dir. */
 export const CEO_UNIT_FILES = ["key.json", "plan.md"] as const;
 /** A ceo-outcome unit's folder: <root>/<the suite's units dir>/<unit id with / written __>. */
-export const ceoUnitDir = (suite: Suite, unitId: string, root = catalogRoot(suite)): string => join(root, suite.catalogs[0]!, unitId.replaceAll("/", "__"));
+export const ceoUnitDir = (suite: Suite, unitId: string, root = catalogRoot(suite)): string => join(root, suite.catalogs[0]!, ceoUnitFolder(unitId));
+/** A unit id's folder name. It maps one way only: a repo name may hold __, so a folder name never maps back to its id. */
+export const ceoUnitFolder = (unitId: string): string => unitId.replaceAll("/", "__");
 
 /**
  * key.json's field names, frozen for B2's packaging script. kind, strict (the first posted date), category and role are
@@ -357,17 +359,33 @@ export function stubCounts(suite: Suite): StubCounts {
   return { units: suite.units.length, clusters: new Set(suite.units.map((u) => u.cluster)).size, blocking: blockerCount(suite, "blocking"), detection: blockerCount(suite, "detection"), over_blocking: blockerCount(suite, "over-blocking"), groups };
 }
 
+/**
+ * sha256 over both files of each unit in a ceo-outcome units dir, by unit id: one "<units dir name>/<folder>/<file>
+ * <sha256>" line each, so it equals catalogsDigest of the suite whose one catalog dir is named name.
+ */
+export function ceoUnitsDigest(dir: string, name: string, unitIds: readonly string[]): { sha256: string } | { missing: string } {
+  const parts: string[] = [];
+  for (const id of [...unitIds].sort((a, b) => (a < b ? -1 : 1))) for (const f of CEO_UNIT_FILES) {
+    const file = join(dir, ceoUnitFolder(id), f);
+    if (!existsSync(file)) return { missing: "unit " + id + " has no " + f + " under " + dir };
+    parts.push(join(name, ceoUnitFolder(id), f) + " " + sha256(readFileSync(file)));
+  }
+  return { sha256: sha256(parts.join("\n")) };
+}
+
+/** What a ceo-outcome run records to bind its readings to its units: the units dir's digest, its name and the suite's unit ids. */
+export function ceoSuiteBinding(suite: Suite, root = catalogRoot(suite)): { catalogs_sha256: string; units_dir: string; unit_ids: string[] } {
+  return { catalogs_sha256: catalogsDigest(suite, root), units_dir: suite.catalogs[0]!, unit_ids: suite.units.map((u) => u.id).sort((a, b) => (a < b ? -1 : 1)) };
+}
+
 /** sha256 over every *.json case file in the suite's catalogs under root, by catalog dir and file name. */
 export function catalogsDigest(suite: Suite, root: string): string {
-  const parts: string[] = [];
   if (suite.kind === "ceo-outcome") {
-    for (const u of [...suite.units].sort((a, b) => (a.id < b.id ? -1 : 1))) for (const f of CEO_UNIT_FILES) {
-      const file = join(ceoUnitDir(suite, u.id, root), f);
-      if (!existsSync(file)) throw new SuiteError("unit " + u.id + " has no " + f + " under " + join(root, suite.catalogs[0]!));
-      parts.push(relative(root, file) + " " + sha256(readFileSync(file)));
-    }
-    return sha256(parts.join("\n"));
+    const d = ceoUnitsDigest(join(root, suite.catalogs[0]!), suite.catalogs[0]!, suite.units.map((u) => u.id));
+    if ("missing" in d) throw new SuiteError(d.missing);
+    return d.sha256;
   }
+  const parts: string[] = [];
   for (const dir of [...suite.catalogs].sort()) {
     const abs = join(root, dir);
     if (!existsSync(abs)) throw new SuiteError("catalog " + dir + " is not under " + root);
@@ -441,11 +459,22 @@ export function suiteCases(suite: Suite, root = catalogRoot(suite)): { cases: Ma
 
 /**
  * suite --check: every blocker's case loads with a confirmed answer-key audit, and its range, file and line match the
- * unit and blocker. With a prereg copy, every recorded freeze digest must hold on its byte prefix.
+ * unit and blocker; a ceo-outcome suite checks each unit's key.json and plan.md instead. With a prereg copy, every
+ * recorded freeze digest must hold on its byte prefix, for every kind of suite.
  */
 export function checkSuite(suite: Suite, options: { repoRoot?: string; prereg?: Buffer } = {}): string[] {
-  if (suite.kind === "ceo-outcome") return checkCeoUnits(suite, options.repoRoot);
-  const { cases, problems } = suiteCases(suite, options.repoRoot);
+  const p = suite.kind === "ceo-outcome" ? checkCeoUnits(suite, options.repoRoot) : checkBlockers(suite, options.repoRoot);
+  if (options.prereg) {
+    for (const f of suite.prereg_freezes) {
+      const got = options.prereg.length < f.bytes ? null : sha256(options.prereg.subarray(0, f.bytes));
+      if (got !== f.sha256) p.push("prereg freeze " + f.round + ": the first " + f.bytes + " bytes hash to " + (got ?? "nothing (the file is shorter)") + ", not " + f.sha256);
+    }
+  }
+  return p;
+}
+
+function checkBlockers(suite: Suite, repoRoot?: string): string[] {
+  const { cases, problems } = suiteCases(suite, repoRoot);
   const p = [...problems];
   for (const u of suite.units) {
     for (const b of u.blockers) {
@@ -464,12 +493,6 @@ export function checkSuite(suite: Suite, options: { repoRoot?: string; prereg?: 
     }
   }
   if (suite.kind === "plan" && suite.judging_rule !== PLAN_JUDGING_RULE) p.push("a plan suite carries the plan judging rule (PLAN_JUDGING_RULE in lanes/review-noloss/suite.ts)");
-  if (options.prereg) {
-    for (const f of suite.prereg_freezes) {
-      const got = options.prereg.length < f.bytes ? null : sha256(options.prereg.subarray(0, f.bytes));
-      if (got !== f.sha256) p.push("prereg freeze " + f.round + ": the first " + f.bytes + " bytes hash to " + (got ?? "nothing (the file is shorter)") + ", not " + f.sha256);
-    }
-  }
   return p;
 }
 

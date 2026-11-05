@@ -7,15 +7,18 @@
 // parser and detector check per session. packets builds the blind D and remedy packets from the rows and the sealed
 // units dir, with stock rows A and B, and writes the key outside the packets. readings joins the rows, the key and the
 // three judges' reply files into the readings.json ceo-rule.ts reads. Every output path must sit outside the repo, no
-// command prints issue or fix text, and every refusal ends with a fix line.
+// command prints issue or fix text, and every refusal ends with a fix line. --units must hash to the suite binding the
+// runs' units.json records (GST-1437), and rows.json, the key and readings.json carry that binding on, so an edited
+// key.json or plan.md is refused at every step. rows.json also records exposure_sha256, and each row its model_id.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { ceoKeyProblems, insideRepo, realPath } from "../../../lanes/review-noloss/suite.ts";
+import { ceoKeyProblems, ceoUnitFolder, ceoUnitsDigest, insideRepo, realPath } from "../../../lanes/review-noloss/suite.ts";
 import { seededRandom } from "../../runner/stats/paired.ts";
 import type { Termination } from "../../types.ts";
-import { autoplanCeoExposure, standaloneExposure } from "./ceo-exposure.ts";
+import { autoplanCeoExposure, CEO_EXPOSURE_SHA256, handoffNamed, standaloneExposure } from "./ceo-exposure.ts";
 import { CEO_PARSER_SHA256, ceoRowFields, cut40, endState, isCeoArm, type CeoArm, type CeoParse } from "./ceo-outcome.ts";
+import { sessionDir } from "./run.ts";
 
 export interface Io {
   out: (text: string) => void;
@@ -49,7 +52,9 @@ const MODELS: Model3[] = ["opus", "sol", "particle"];
 const SCORE_ARMS: ScoreArm[] = ["none", "autoplan-ceo", "standalone", "lens"];
 const GSTACK: ScoreArm[] = ["autoplan-ceo", "standalone"];
 const SCORE_ARM: Record<CeoArm, ScoreArm> = { none: "none", lens: "lens", "gstack-auto": "autoplan-ceo", "gstack-forced": "standalone" };
-const model3 = (id: string): Model3 | null => (/opus/.test(id) ? "opus" : /sol/.test(id) ? "sol" : /particle/.test(id) ? "particle" : null);
+/** The prereg's three models under test, by the exact policy keys review-units runs them as (policy/models.json). */
+export const CEO_MODEL_IDS: Record<string, Model3> = { "claude-opus-5-5": "opus", "openai/gpt-6.1-sol": "sol", "particle-ai/particle-1": "particle" };
+const model3 = (id: string): Model3 | null => (Object.hasOwn(CEO_MODEL_IDS, id) ? CEO_MODEL_IDS[id]! : null);
 const inside = (child: string, dir: string) => child === dir || child.startsWith(dir + sep);
 
 /** An output path outside the repo, checked on the path and on its realpath, so a symlink into the repo is refused too. */
@@ -100,25 +105,38 @@ interface UnitInfo {
   key: KeyJson;
   kind: "changed" | "held";
 }
-function readUnits(dir: string): UnitInfo[] {
+/** The suite a ceo-outcome run's units.json names, with the binding review-units records (ceoSuiteBinding). */
+export interface SuiteBinding {
+  id: string;
+  sha256: string | null;
+  catalogs_sha256: string;
+  units_dir: string;
+  unit_ids: string[];
+}
+/**
+ * The bound suite's units, read from --units: the dir must hash to the binding's catalogs_sha256 (the suite stub's
+ * catalogs digest), so no key.json or plan.md can change after the runs. Each unit is read from its id's folder; a
+ * folder name never maps back to an id, since a repo name may hold __.
+ */
+export function readUnits(dir: string, bound: SuiteBinding): UnitInfo[] {
   const abs = resolve(dir);
-  const fix = "point --units at the sealed units dir: one folder per unit, holding the key.json and plan.md B2's packaging script wrote";
-  let names: string[] = [];
-  try {
-    names = readdirSync(abs, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
-  } catch {
-    refuse("cannot read --units " + abs, fix);
-  }
-  if (!names.length) refuse("--units " + abs + " holds no unit folder", fix);
-  return names.map((n) => {
-    const id = n.replaceAll("__", "/");
-    const key = readJson(join(abs, n, "key.json"), "unit " + id + "'s key.json", fix);
+  const fix = "point --units at the sealed units dir the runs were made on, and check it against the custody digests";
+  const d = ceoUnitsDigest(abs, bound.units_dir, bound.unit_ids);
+  if ("missing" in d) refuse("--units " + abs + " is not the runs' units dir: " + d.missing, fix);
+  const got = (d as { sha256: string }).sha256;
+  if (got !== bound.catalogs_sha256) refuse("--units " + abs + " hashes to catalogs_sha256 " + got + ", not the " + bound.catalogs_sha256 + " suite " + bound.id + "'s runs recorded; a key.json or plan.md changed after the runs, or this is another units dir", fix);
+  return bound.unit_ids.map((id) => {
+    const folder = join(abs, ceoUnitFolder(id));
+    const key = readJson(join(folder, "key.json"), "unit " + id + "'s key.json", fix);
     const problems = ceoKeyProblems(key);
     if (problems.length) refuse("unit " + id + "'s key.json breaks the key contract: " + problems.join("; "), "rewrite that key.json with B2's packaging script, then rerun");
-    if (!existsSync(join(abs, n, "plan.md"))) refuse("unit " + id + " has no plan.md in " + join(abs, n), fix);
-    return { id, dir: join(abs, n), key, kind: key.kind };
+    return { id, dir: folder, key, kind: key.kind };
   });
 }
+/** A units.json or rows.json suite record, or null when it carries no binding. */
+const bindingOf = (v: any): SuiteBinding | null =>
+  v && typeof v.id === "string" && (v.sha256 === null || typeof v.sha256 === "string") && typeof v.catalogs_sha256 === "string" && /^[0-9a-f]{64}$/.test(v.catalogs_sha256) && typeof v.units_dir === "string" && v.units_dir !== "" && Array.isArray(v.unit_ids) && v.unit_ids.length > 0 && v.unit_ids.every((u: unknown) => typeof u === "string") ? v : null;
+const sameSuite = (a: SuiteBinding, b: SuiteBinding) => JSON.stringify([a.id, a.sha256, a.catalogs_sha256, a.units_dir, a.unit_ids]) === JSON.stringify([b.id, b.sha256, b.catalogs_sha256, b.units_dir, b.unit_ids]);
 
 /** Stage 2's plan from the projection output's PASS line, in the grammar ceo-rule.ts's compare reads. */
 export interface PassPlan {
@@ -170,19 +188,20 @@ interface Found {
   how: string | null;
   spent?: { usd: number; wall_s: number | null };
 }
-function readRun(dir: string): Found[] {
+function readRun(dir: string): { found: Found[]; suite: SuiteBinding } {
   const run = resolve(dir);
   const fix = "pass the --out dir of a review-units --plan ceo-outcome run";
   if (!existsSync(join(run, "stops.json"))) refuse("--run " + run + " has no stops.json, so it is not a ceo-outcome run", fix);
   const stops = readJson(join(run, "stops.json"), "stops.json", fix);
   const units = readJson(join(run, "units.json"), "units.json", fix);
+  const suite = bindingOf(units?.suite) ?? refuse("--run " + run + "'s units.json names no suite binding (catalogs_sha256, units_dir and unit_ids), so --units can't be checked against the units it ran", "ceo rows read only runs review-units made from a checkout that records the binding; rerun those cells there");
   const tasks = new Map<string, string>((Array.isArray(units?.units) ? units.units : []).map((u: any) => [u.id, u.task]));
   const journal = join(run, "cells.ndjson");
   const lines = existsSync(journal) ? readFileSync(journal, "utf8").split("\n").filter((l) => l.trim()) : [];
   const cellOf = (cell: any, entry: any | null, how: string | null, where: string): Found => {
     const at = where + " of " + run;
     if (!cell || typeof cell.model !== "string" || typeof cell.arm !== "string" || !isCeoArm(cell.arm) || typeof cell.unit !== "string" || !Number.isInteger(cell.pass) || cell.pass < 1) refuse(at + " names no ceo-outcome cell (a model, an arm of none, lens, gstack-auto or gstack-forced, a unit and a pass)", fix);
-    const model = model3(cell.model) ?? refuse(at + " runs " + cell.model + ", which is not Opus, Sol or particle-1", "drop that run; ceo rows read only the prereg's three models");
+    const model = model3(cell.model) ?? refuse(at + " runs " + cell.model + ", which is none of the prereg's three model ids (" + Object.keys(CEO_MODEL_IDS).join(", ") + ")", "drop that run; ceo rows read only the prereg's three models, by their exact ids");
     if (entry) {
       const co = entry.ceo_outcome;
       if (!co || typeof co !== "object") refuse(at + " has no ceo_outcome record", fix);
@@ -205,7 +224,7 @@ function readRun(dir: string): Found[] {
       if (f.how === "stopped" && !(typeof c.usd === "number" && Number.isFinite(c.usd) && c.usd >= 0)) refuse("a stopped cell in " + join(run, "stops.json") + " has no settled spend (usd)", "restore stops.json from the run's sink copy");
       found.push(f.how === "stopped" ? { ...f, spent: { usd: c.usd, wall_s: typeof c.wall_s === "number" && Number.isFinite(c.wall_s) ? c.wall_s : null } } : f);
     }
-  return found;
+  return { found, suite };
 }
 
 export interface CeoRow {
@@ -213,6 +232,8 @@ export interface CeoRow {
   unit: string;
   arm: ScoreArm;
   model: Model3;
+  /** The exact model id the run ran, or null for a planned session no run holds. */
+  model_id: string | null;
   pass: number;
   smoke: boolean;
   status: "scored" | "no-block" | "gap" | "incomplete";
@@ -233,15 +254,17 @@ export interface CeoRow {
 interface Checked {
   row: CeoRow;
   checks: [string, boolean][];
+  /** An autoplan-ceo session with a successful Bash call naming gstack-ceo-mode-handoff. */
+  named: boolean;
 }
 const rowId = (smoke: boolean, arm: string, model: string, unit: string, pass: number) => (smoke ? "smoke:" : "") + arm + ":" + model + ":" + unit + ":p" + pass;
 const COUNTS = ["scored", "no-block", "gap", "incomplete"] as const;
 
 function sessionRow(id: string, p: { unit: string; arm: ScoreArm; model: Model3; pass: number; smoke: boolean }, f: Found | undefined, strict: boolean): Checked {
-  const base: CeoRow = { id, ...p, status: "gap", exposed: null, forecast: null, usd: 0, wall_s: null, issues: [], words: [], fixes: [], fix_words: [], run: f?.run ?? null, termination: null, follow_up: false, over_three: false, zero_output: false };
+  const base: CeoRow = { id, ...p, model_id: f?.model_id ?? null, status: "gap", exposed: null, forecast: null, usd: 0, wall_s: null, issues: [], words: [], fixes: [], fix_words: [], run: f?.run ?? null, termination: null, follow_up: false, over_three: false, zero_output: false };
   if (!f || !f.entry) {
     const row: CeoRow = { ...base, status: f ? "incomplete" : "gap", termination: f ? "cap_stop" : null, usd: f?.spent?.usd ?? 0, wall_s: f?.spent?.wall_s ?? null };
-    return { row, checks: [["journaled", false]] };
+    return { row, checks: [["journaled", false]], named: false };
   }
   const e = f.entry;
   const parse = e.parse as CeoParse;
@@ -258,7 +281,7 @@ function sessionRow(id: string, p: { unit: string; arm: ScoreArm; model: Model3;
   if (!Number.isFinite(co.usd) || co.usd < 0) refuse(id + " in " + f.run + " has no settled spend (ceo_outcome.usd)", "restore the journal from the run's sink copy");
   let text: string | null = null;
   try {
-    text = readFileSync(join(f.run, "runs", f.model_id.replaceAll("/", "_"), f.ceo_arm, f.task ?? "", "p" + f.pass, "host", "transcript.ndjson"), "utf8");
+    text = readFileSync(join(sessionDir(f.run, f.model_id, f.ceo_arm, f.task ?? "", f.pass), "host", "transcript.ndjson"), "utf8");
   } catch {
     text = null;
   }
@@ -280,11 +303,12 @@ function sessionRow(id: string, p: { unit: string; arm: ScoreArm; model: Model3;
     zero_output: e.record?.model_output === false,
   };
   const checks: [string, boolean][] = [["journaled", true], ["transcript_readable", text !== null && parse.kind !== "unreadable"], ["block", parse.kind === "block"], ["end_state_determinate", determinate], ["scored", status === "scored"], ...Object.entries(exposure?.checks ?? {})];
-  return { row, checks };
+  return { row, checks, named: p.arm === "autoplan-ceo" && text !== null && handoffNamed(text) };
 }
 
 interface RowsBuild {
   stage: 1 | 2;
+  suite: SuiteBinding;
   units: UnitInfo[];
   plan: PassPlan | null;
   runs: string[];
@@ -297,11 +321,17 @@ function buildRows(flags: Flags, strict: boolean): RowsBuild {
   const stage = Number(stageText) as 1 | 2;
   if (stage === 1 && flags.has("--projection")) refuse("stage 1 has fixed cells and takes no --projection", "drop --projection, or pass --stage 2");
   const plan = stage === 2 ? passPlan(resolve(need(flags, "--projection"))) : null;
-  const units = readUnits(need(flags, "--units"));
+  const unitsFlag = need(flags, "--units");
   const runs = (flags.get("--run") ?? []).map((r) => resolve(r));
   if (!runs.length) refuse("needs at least one --run", "add --run <review-units out dir> for each run of this stage");
   if (new Set(runs).size !== runs.length) refuse("a --run is given twice", "pass each run dir once");
-  const found = runs.flatMap(readRun);
+  const read = runs.map(readRun);
+  const suite = read[0]!.suite;
+  read.forEach((r, i) => {
+    if (!sameSuite(r.suite, suite)) refuse("--run " + runs[i] + " ran another suite (" + r.suite.id + ", catalogs_sha256 " + r.suite.catalogs_sha256 + ") than --run " + runs[0] + " (" + suite.id + ", catalogs_sha256 " + suite.catalogs_sha256 + ")", "pass only the runs of one suite and one units dir");
+  });
+  const units = readUnits(unitsFlag, suite);
+  const found = read.flatMap((r) => r.found);
   const unitIds = new Map(units.map((u) => [u.id, u]));
   const planned: Array<{ unit: string; arm: ScoreArm; model: Model3; pass: number; smoke: boolean }> = [];
   if (stage === 1) {
@@ -325,7 +355,7 @@ function buildRows(flags: Flags, strict: boolean): RowsBuild {
     byId.set(id, f);
   }
   const rows = planned.map((p) => sessionRow(rowId(p.smoke, p.arm, p.model, p.unit, p.pass), p, byId.get(rowId(p.smoke, p.arm, p.model, p.unit, p.pass)), strict));
-  return { stage, units, plan, runs, rows, held: new Set(byId.keys()) };
+  return { stage, suite, units, plan, runs, rows, held: new Set(byId.keys()) };
 }
 
 function rowsCmd(argv: string[], io: Io): number {
@@ -357,7 +387,12 @@ function rowsCmd(argv: string[], io: Io): number {
     const ws = rs.flatMap((r) => r.words);
     io.out("cell " + cell + ": " + rs.length + " planned; " + COUNTS.map((s) => n(s) + " " + s).join(", ") + "; " + rs.filter((r) => r.over_three).length + " with more than three issues, " + rs.filter((r) => r.zero_output).length + " zero-output, " + rs.filter((r) => r.follow_up).length + " follow-ups; mean issue words " + (ws.length ? (ws.reduce((x, y) => x + y, 0) / ws.length).toFixed(1) : "n/a"));
   }
-  writeOut(out!, { version: 1, kind: "ceo-rows", stage: b.stage, parser_sha256: CEO_PARSER_SHA256, runs: b.runs, units: b.units.map((u) => ({ id: u.id, kind: u.kind })), plan: b.plan, rows });
+  for (const cell of cells.keys()) {
+    if (!cell.replace(/^smoke /, "").startsWith("autoplan-ceo:")) continue;
+    const n = b.rows.filter((c) => (c.row.smoke ? "smoke " : "") + c.row.arm + ":" + c.row.model === cell && c.named && c.checks.some(([k, ok]) => k === "handoff_ceo_only" && !ok)).length;
+    io.out("handoff: " + cell + ": " + n + " session" + (n === 1 ? "" : "s") + " named gstack-ceo-mode-handoff and read unexposed on handoff_ceo_only");
+  }
+  writeOut(out!, { version: 2, kind: "ceo-rows", stage: b.stage, parser_sha256: CEO_PARSER_SHA256, exposure_sha256: CEO_EXPOSURE_SHA256, suite: b.suite, runs: b.runs, units: b.units.map((u) => ({ id: u.id, kind: u.kind })), plan: b.plan, rows });
   io.out("rows: " + rows.length + " rows (" + COUNTS.map((s) => rows.filter((r) => r.status === s).length + " " + s).join(", ") + ") written to " + out);
   return 0;
 }
@@ -365,6 +400,7 @@ function rowsCmd(argv: string[], io: Io): number {
 interface RowsFile {
   text: string;
   stage: 1 | 2;
+  suite: SuiteBinding;
   units: Array<{ id: string; kind: "changed" | "held" }>;
   plan: PassPlan | null;
   rows: CeoRow[];
@@ -384,8 +420,11 @@ function readRows(path: string): RowsFile {
     refuse("--rows " + abs + " is not JSON", "pass the rows.json ceo rows wrote");
   }
   if (v?.kind !== "ceo-rows" || !Array.isArray(v.rows) || !Array.isArray(v.units)) refuse("--rows " + abs + " is not a ceo rows file", "pass the rows.json ceo rows wrote");
+  if (v.version !== 2) refuse("--rows " + abs + " is ceo rows version " + v.version + ", not 2, so it carries no suite binding or exposure_sha256", "rebuild the rows with this checkout's ceo rows");
   if (v.parser_sha256 !== CEO_PARSER_SHA256) refuse("--rows " + abs + " came from ceo-outcome.ts " + v.parser_sha256 + ", not this checkout's", "run packets and readings from the checkout that wrote the rows");
-  return { text, stage: v.stage, units: v.units, plan: v.plan ?? null, rows: v.rows };
+  if (v.exposure_sha256 !== CEO_EXPOSURE_SHA256) refuse("--rows " + abs + " carries exposure_sha256 " + v.exposure_sha256 + ", not this checkout's ceo-exposure.ts " + CEO_EXPOSURE_SHA256, "run packets and readings from the checkout that wrote the rows");
+  const suite = bindingOf(v.suite) ?? refuse("--rows " + abs + " names no suite binding", "rebuild the rows with this checkout's ceo rows");
+  return { text, stage: v.stage, suite, units: v.units, plan: v.plan ?? null, rows: v.rows };
 }
 
 /** stock-list.txt's two rows, each three issues with their stock fixes, cut by the same 40-word rule. */
@@ -422,10 +461,12 @@ export interface KeyUnit {
 }
 /** The packet key: each opaque id's row or stock row, and each packet's sha256. It never travels with the packets. */
 export interface CeoKey {
-  version: 1;
+  version: 2;
   kind: "ceo-outcome";
   seed: number;
   rows_sha256: string;
+  /** The rows' suite binding's catalogs_sha256: the units dir the packets were built from. */
+  catalogs_sha256: string;
   stock_sha256: string;
   packets: Array<{ file: string; unit: string; read: "D" | "rem"; sha256: string }>;
   units: KeyUnit[];
@@ -441,10 +482,10 @@ function packetsCmd(argv: string[], io: Io): number {
   const seed = Number(seedText);
   if (!Number.isSafeInteger(seed) || seed < 0) refuse("--seed must be a whole number, not " + JSON.stringify(seedText), "pass --seed <n>, the seed recorded for this stage");
   const rows = readRows(need(flags, "--rows"));
-  const units = new Map(readUnits(need(flags, "--units")).map((u) => [u.id, u]));
+  const units = new Map(readUnits(need(flags, "--units"), rows.suite).map((u) => [u.id, u]));
   const stock = readStock();
   const rng = seededRandom(seed);
-  const key: CeoKey = { version: 1, kind: "ceo-outcome", seed, rows_sha256: sha256(rows.text), stock_sha256: STOCK_LIST_SHA256, packets: [], units: [] };
+  const key: CeoKey = { version: 2, kind: "ceo-outcome", seed, rows_sha256: sha256(rows.text), catalogs_sha256: rows.suite.catalogs_sha256, stock_sha256: STOCK_LIST_SHA256, packets: [], units: [] };
   const files: Array<[string, string]> = [];
   let reviews = 0;
   [...rows.units].sort((a, b) => (a.id < b.id ? -1 : 1)).forEach((ru, i) => {
@@ -523,8 +564,9 @@ function readingsCmd(argv: string[], io: Io): number {
   }
   const key = readJson(keyPath, "--key", "pass the key file ceo packets wrote") as CeoKey;
   if (key?.kind !== "ceo-outcome" || !Array.isArray(key.units)) refuse("--key " + keyPath + " is not a ceo packets key", "pass the key file ceo packets wrote");
+  if (key.version !== 2 || key.catalogs_sha256 !== rows.suite.catalogs_sha256) refuse("--key " + keyPath + " was not built from the rows' units (key catalogs_sha256 " + key.catalogs_sha256 + ", rows " + rows.suite.catalogs_sha256 + ")", "rerun ceo packets on these rows with this checkout, and judge the new packets");
   if (key.rows_sha256 !== sha256(rows.text)) refuse("the key was built from other rows (rows sha256 " + key.rows_sha256 + ")", "pass the rows the key was built from, or rerun ceo packets on these rows and judge the new packets");
-  const units = new Map(readUnits(need(flags, "--units")).map((u) => [u.id, u]));
+  const units = new Map(readUnits(need(flags, "--units"), rows.suite).map((u) => [u.id, u]));
   if (rows.stage === 2) {
     const proj = flags.get("--projection")?.[0] ?? refuse("stage 2 readings need --projection, to copy family, passes, held_passes and lens from its PASS line", "add --projection <the projection output the rows were built from>");
     if (passPlan(resolve(proj)).projection_sha256 !== rows.plan?.projection_sha256) refuse("--projection is not the projection output the rows were built from", "pass the same --projection ceo rows read");
@@ -602,7 +644,7 @@ function readingsCmd(argv: string[], io: Io): number {
   });
   const stock = key.units.flatMap((ku) => ku.stock.map((s) => ({ unit: ku.unit, row: s.row, labels: callsFor(ku, s.id, 3, keyed.get(ku.unit) === true) })));
   const plan = rows.stage === 2 ? { family: rows.plan!.family, passes: rows.plan!.passes, held_passes: rows.plan!.held_passes, lens: rows.plan!.lens } : {};
-  writeOut(out, { stage: rows.stage, units: unitRows, reviews, stock, ...plan });
+  writeOut(out, { stage: rows.stage, suite: rows.suite, exposure_sha256: CEO_EXPOSURE_SHA256, units: unitRows, reviews, stock, ...plan });
   io.out("readings: stage " + rows.stage + ", " + unitRows.length + " units, " + reviews.length + " rows (" + reviews.filter((r) => r.labels.length).length + " judged), " + stock.length + " stock rows; missing D calls: sol " + missing.sol + ", opus " + missing.opus + ", sonnet " + missing.sonnet + "; missing rem calls: sol " + remMissing.sol + ", opus " + remMissing.opus + ", sonnet " + remMissing.sonnet + "; written to " + out);
   return 0;
 }
