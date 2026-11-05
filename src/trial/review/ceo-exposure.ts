@@ -18,7 +18,8 @@
 //   printf of the line never passes. A call with a pipe or another segment also needs the line --ceo-only prints
 //   ("Auto-selected review mode → <MODE> (CEO-only run: Step 0E's rule)") in its own result. And a successful write of a
 //   file named ceo-review.md whose written text holds a line starting "## Findings": a Write, an Edit or MultiEdit (so a
-//   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, quoted or attached, which writes no text).
+//   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, quoted or attached, which writes no text, and never a first line
+//   with a backslash outside single quotes, the rule segments() uses, since words() does not model bash escapes).
 //   handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows can count the
 //   sessions that named it and still read unexposed.
 import { createHash } from "node:crypto";
@@ -128,13 +129,14 @@ function ceoReviewText(u: Use): string | null {
   if (u.name !== "Bash" || typeof u.input.command !== "string") return null;
   const parts = simpleCommand(u.input.command);
   if (!parts || !writeTargets(parts).some((t) => CEO_REVIEW.test(t))) return null;
+  const [head, ...body] = u.input.command.split("\n");
+  if (head!.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, (m) => (m[0] === "'" ? "" : m)).includes("\\")) return "";
   const pw = words(parts[0]!);
   if (!pw) return "";
   if (pw[0] === "printf") for (const w of pw.slice(1)) {
     if (w === "--" || !w.startsWith("-")) break;
     if (w.startsWith("-v")) return "";
   }
-  const [head, ...body] = u.input.command.split("\n");
   return [head!.replace(/\\n/g, "\n").replace(/^\s*(?:echo(?:\s+-[neE]+)*|printf)\s+(["']?)/, ""), ...body].join("\n");
 }
 

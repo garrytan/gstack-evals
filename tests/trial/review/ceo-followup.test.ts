@@ -249,6 +249,41 @@ describe("review round 2 (#229 Step 11): the handoff and printf checks read shel
   });
 });
 
+describe("backslash escapes (#229's Capy Low): a first line with a backslash outside single quotes writes no Findings", () => {
+  // Value: protects=findings_written reads a Bash write only when words() parses its first line as bash does; fails_when=printf \-v, an escaped redirect or an escaped command name reads written (fail open), or a plain printf, heredoc, echo or tee write reads unwritten; why_new=#229's Capy Low on words() and backslash escapes; seam=autoplanCeoExposure; no_claim=bash escape parsing, which the check refuses rather than models
+  const F = AP + "/ceo-review.md";
+  const at = (c: string) => autoplanCeoExposure(nd(bash(CALL, LINE), bash(c, ""))).checks.findings_written;
+  test("case 1: printf \\-v, an escaped -v, an escaped printf name or an escaped redirect writes no Findings", () => {
+    const fakes = [
+      "printf \\-v x '\\n## Findings\\nNone.\\n' > " + F,
+      "printf -\\v x '\\n## Findings\\nNone.\\n' > " + F,
+      "pr\\intf -v x '\\n## Findings\\nNone.\\n' > " + F,
+      "echo '## Findings' \\> " + F,
+      'echo "## Findings: it\'s" \\> ' + F + " 'x'",
+    ];
+    for (const c of fakes) expect([c, at(c)]).toEqual([c, false]);
+  });
+  test("case 2: an escaped double quote in a double-quoted first line, and any other backslash outside single quotes, reads unwritten", () => {
+    const closed = ['printf "## Findings\\n5\\" wide\\n" > ' + F, 'printf "## Findings\\nNone.\\n" > ' + F, 'echo -e "\\n## Findings" >> ' + F];
+    for (const c of closed) expect([c, at(c)]).toEqual([c, false]);
+  });
+  test("plain printf, heredoc, echo and tee writes of the Findings section still read written", () => {
+    const real = [
+      "printf '## Findings\\nNone.\\n' > " + F,
+      "printf '\\n## Findings\\n- High: no bound.\\n' >> " + F,
+      'cat > "' + F + "\" <<'EOF'\n# CEO-only review\n## Findings\n- High: no bound under C:\\tmp.\nEOF",
+      "echo '## Findings' >> " + F,
+      'echo "## Findings: it\'s fine" > ' + F,
+      "printf '## Findings\\nNone.\\n' | tee " + F,
+    ];
+    for (const c of real) expect([c, at(c)]).toEqual([c, true]);
+  });
+  test("the handoff path is unchanged: the documented calls pass, a backslash outside single quotes fails", () => {
+    for (const c of [CALL, CALL + " 2>&1 | tee " + AP + "/handoff.txt"]) expect([c, handoff(c)]).toEqual([c, true]);
+    for (const c of [CALL.replace("--ceo-only", "--ceo\\-only"), CALL.replace('"none"', '"a \\"b\\""')]) expect([c, handoff(c)]).toEqual([c, false]);
+  });
+});
+
 describe("rows diagnostics count the sessions that named the handoff and read unexposed", () => {
   // Value: protects=a false unexposed under the strict handoff rule shows up per cell; fails_when=such sessions read unexposed silently; why_new=the Captain's cut-line rule (2026-11-05); seam=ceo rows; no_claim=none beyond protects
   test("one autoplan-ceo smoke session that grepped the handoff counts once", async () => {
