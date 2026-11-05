@@ -227,6 +227,10 @@ describe("t1 writes outside PLAN.md, from the phase-tagged records (report only,
       bash("c", "python3 -c \"print(1 if 3 > 2 else 0)\""),
       bash("d", "grep -rn 'a > b' src/"),
       bash("e", "cat > src/app.py <<EOF\nprint(1)\nEOF", "t3"),
+      bash("f", "sed -i 's/a/b/' PLAN.md"),
+      bash("g", "perl -pi -e 's/a/b/' PLAN.md"),
+      bash("h", "grep 'a > \"b\"' src/app.ts"),
+      bash("i", "cat PLAN.md | tee /dev/stderr"),
     ])).toEqual([]);
     expect(t1WritesOutsidePlan([
       bash("a", "mkdir -p src && cat > src/app.py <<'EOF'\nprint(1)\nEOF"), result("t1", "a", "exit 1", true),
@@ -236,7 +240,10 @@ describe("t1 writes outside PLAN.md, from the phase-tagged records (report only,
       bash("e", "git apply fix.patch"),
       bash("f", "echo x > /tmp/scratch.txt"),
       bash("g", "echo x > PLAN.md"),
-    ])).toEqual(["Bash > src/app.py", "Bash > notes/todo.txt", "Bash tee src/log.ts", "Bash edit: sed -i 's/a/b/' src/app.ts", "Bash edit: git apply fix.patch", "Bash > /tmp/scratch.txt"]);
+      bash("h", "sed -i.bak -e 's/a/b/' PLAN.md src/b.ts"),
+      bash("i", "printf x | tee \"src/c.ts\""),
+      bash("j", "FOO=1 echo x 1> 'src/d.ts' 2> err.log"),
+    ])).toEqual(["Bash > src/app.py", "Bash > notes/todo.txt", "Bash tee src/log.ts", "Bash edit: sed -i 's/a/b/' src/app.ts", "Bash edit: git apply fix.patch", "Bash > /tmp/scratch.txt", "Bash edit: sed -i.bak -e 's/a/b/' PLAN.md src/b.ts", "Bash tee src/c.ts", "Bash > src/d.ts"]);
   });
 });
 

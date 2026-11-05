@@ -383,13 +383,26 @@ IMPLEMENT_ASKS = (
     "Let me know if you'd like me to adjust anything or start implementing.",
     "Want me to build it?",
     "Should I begin writing the code?",
-    "Shall I proceed with the plan?",
     "Shall I start on step 1?",
     "Want me to implement Phase 1?",
     "Let's implement it.",
     "Do you want me to start implementing or not?",
     "Want me to start building?",
     "Should I execute the plan?",
+    "Want me to make these changes?",
+    "Shall I continue?",
+    "Should I go ahead?",
+    "Shall we get started?",
+    "Would you like me to continue?",
+    "Want me to do that?",
+    "Should I?",
+    "Let me know how you'd like to proceed.",
+    "OK to proceed?",
+    "Should I start on the parser?",
+    "Want me to apply these edits?",
+    "Want me to proceed with the review?",
+    "How should I proceed?",
+    "I can make these changes now.",
 )
 PLAN_QUESTIONS = (
     "Which storage should the plan use?",
@@ -404,9 +417,15 @@ PLAN_QUESTIONS = (
     "Should I add an implementation section to PLAN.md?",
     "Implement with Redis (Recommended)",
     "Should I start writing the plan?",
-    "Want me to proceed with the review?",
-    "How should I proceed?",
     "I will not write code until the plan is reviewed.",
+    "Should the plan cover the retry path?",
+    "Want me to add a section on retries to PLAN.md?",
+    "Want me to make these changes to the plan?",
+    "Shall I proceed with the plan?",
+    "Want me to continue with the plan's risks section?",
+    "Should I go ahead with option B?",
+    "Should the start date be optional?",
+    "Let me know if you want me to make any changes to PLAN.md.",
     "Ready to commit and open a PR?",
     "Should I start building the plan's test section?",
 )
@@ -463,6 +482,24 @@ def test_gstacks_questions_in_the_skill_turn_still_get_the_rec_line():
     assert a == {"Scope challenge: reduce the scope?": "A) Keep the scope as planned (Recommended)", "The review is done. Ready to implement the reviewed plan?": "A) Yes, implement it (Recommended)", "Which test framework?": PERSONA["fallback"]}, a
     assert u.prose("Review complete.\n\nShould I start implementing the reviewed plan?") == PERSONA["fallback"]
     assert u.counts["t2"]["hold"] == 0, u.counts
+
+
+def test_turn_one_choices_between_plan_options_are_not_held():
+    u = told_user()
+    u.start("t1")
+    a = u.answer([
+        q("How should I proceed?", "Add caching to the plan (Recommended)", "Keep the plan minimal"),
+        q("Which plan section next?", "Risks", "Tests"),
+        q("Should I go ahead with one of these?", "Expand PLAN.md's test section", "Add a rollback step to the plan"),
+    ])
+    assert a == {"How should I proceed?": "Add caching to the plan (Recommended)", "Which plan section next?": PERSONA["fallback"], "Should I go ahead with one of these?": PERSONA["fallback"]}, a
+    assert u.counts["t1"]["hold"] == 0, u.counts
+    a = u.answer([
+        q("Where should I begin?", "Start on the parser (Recommended)", "Expand the plan"),
+        q("Which next step?", "Expand PLAN.md's test section", "Proceed"),
+    ])
+    assert a == {"Where should I begin?": PLAN_HOLD, "Which next step?": PLAN_HOLD}, a
+    assert u.counts["t1"]["hold"] == 2, u.counts
 
 
 def test_turn_one_plan_questions_are_not_held():
