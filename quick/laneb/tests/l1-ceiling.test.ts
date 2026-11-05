@@ -154,6 +154,17 @@ describe("the ceiling check before a launch", () => {
   });
 });
 
+describe("a voided run's ledger", () => {
+  test("adds its settled and open reserved spend to the sum and places no item", () => {
+    const base = check(atExpected(), crew(288_000, 36_000), plan([solPlan[0]!]), "pilot-sol");
+    const r = check(atExpected(), crew(288_000, 36_000), plan([solPlan[0]!]), "pilot-sol", [rows("pilot-opus", 80, [0.07], [0.5])]);
+    expect(dollars(r.tally.voidedSpent)).toBeCloseTo(0.57, 6);
+    expect(dollars(r.tally.total - base.tally.total)).toBeCloseTo(0.57, 6);
+    expect(r.tally.items.find((i) => i.item === "pilot-opus")!.counted).toBe(base.tally.items.find((i) => i.item === "pilot-opus")!.counted);
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe("the final read before the results post", () => {
   const post: Crew["threads"][number] = { code: "GEVA-9", line: "crew", credits: 0, tokens: 0, token_stop: null, status: "planned" };
   test("gives the all-in figure and the largest post token stop that keeps it with the open holds at or under $2,000", () => {
@@ -209,6 +220,20 @@ describe("the command line", () => {
     const missing = run(["check", ...files(atExpected(), crew(0, 0), plan())]);
     expect(missing.code).toBe(2);
     expect(missing.err).toStartWith("E_USAGE l1 ceiling: check needs --launch");
+  });
+  test("a voided run's ledger counts in the sum through --void-ledger, and never as an item's ledger too", () => {
+    const voided = rows("pilot-opus", 80, [0.07]);
+    const v = files(voided, crew(0, 0), plan());
+    const args = [...files(atExpected(), crew(288_000, 36_000), plan([solPlan[0]!])), "--void-ledger", v[1]!];
+    const r = run(["check", ...args, "--launch", "pilot-sol"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("voided runs: $0.07");
+    expect(r.out).toStartWith("CEILING PASS pilot-sol: the sum $1422.74");
+    const both = run(["check", ...args, "--ledger", v[1]!, "--launch", "pilot-sol"]);
+    expect(both.code).toBe(2);
+    expect(both.err).toStartWith("E_USAGE l1 ceiling: a ledger can't be both");
+    const f = run(["final", ...files(atExpected(), crew(300_000, 30_000), plan([], { sol: "refused", particle: "refused" })), "--void-ledger", v[1]!, "--post", "GEVA-9"]);
+    expect(f.out).toStartWith("FINAL all-in $882.74");
   });
   test("a malformed crew file or plan exits 2, never PASS", () => {
     const typo = { ...crew(288_000, 36_000), threads: [{ code: "GEVA-1", line: "crew", credit: 288_000, tokens: 800 * M, token_stop: 800 * M, status: "done" }] } as unknown as Crew;

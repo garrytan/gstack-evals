@@ -39,7 +39,8 @@ export const L1 = {
   tb2Tasks: 37,
   tb2PartsSha256: "57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125",
   // Part VMs: launch.sh's blocks at the prereg's rate (section 9), and the part TTL the prereg sets.
-  vm: { usdPerHour: "0.60", reserveHours: "4", ttlHours: 16 },
+  // storageGib: launch.sh's own default (600) is a size the pinned ubi-runner refuses; it allows 320 or 640.
+  vm: { usdPerHour: "0.60", reserveHours: "4", ttlHours: 16, storageGib: 640 },
   // The awake host: Ubicloud standard-2 (list $41.89 a month, about $0.057 an hour), reserved at $0.08 an hour for its
   // whole TTL before it starts. TTL = (parts + 1) x 18 h + 24 h: every part and one relaunch at the part TTL plus 2 h.
   host: { size: "standard-2", usdPerHour: 0.08, launchHours: 18, slackHours: 24, ledgerPort: "9911", root: "l1" },
@@ -567,6 +568,8 @@ function usableHost(work: string, missing: string) {
 }
 const recordHost = (work: string, row: Record<string, unknown>) => { mkdirSync(join(work, "host"), { recursive: true }); appendFileSync(hostsFile(work), JSON.stringify({ ...row, ts: new Date().toISOString() }) + "\n"); };
 const readPlan = (work: string): Plan => { if (!existsSync(join(work, "plan.json"))) usage(work + " has no plan.json; run prepare first"); return readJson(join(work, "plan.json")); };
+// The environment host.sh sources before it runs launch.sh, so these values reach launch.sh and its ubi-runner calls.
+export const hostEnvText = (item: string, capUsd: number, owner: string) => ["ITEM=" + item, "LEDGER=$HOME/" + H + "/ledger/" + item + ".jsonl", "LEDGER_PORT=" + (process.env.L1_HOST_LEDGER_PORT ?? L1.host.ledgerPort), "CAP_USD=" + capUsd, "VM_USD_PER_HOUR=" + L1.vm.usdPerHour, "VM_RESERVE_HOURS=" + L1.vm.reserveHours, "UBI_TTL_HOURS=" + L1.vm.ttlHours, "UBI_STORAGE=" + L1.vm.storageGib, "UBI_OWNER=" + owner].join("\n") + "\n";
 const mirrorPath = (work: string) => join(work, "host/ledger.jsonl");
 const ownerTag = (owner = process.env.UBI_OWNER ?? "") => owner.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
 const bundlePath = (vm: string) => join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag(), vm + ".bundle");
@@ -720,8 +723,7 @@ function hostUp(work: string) {
     if (!shaOut.includes(process.env.UBI_RUNNER_SHA256!)) throw new Error("the host's ubi-runner copy does not hash to UBI_RUNNER_SHA256");
     const secrets = ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "UBICLOUD_API_KEY"].map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
     must(ubi(["ssh", name, "umask 077; cat > ~/.l1-secrets"], { input: secrets }), "writing the host's secrets file");
-    const hostEnvText = ["ITEM=" + plan.item, "LEDGER=$HOME/" + H + "/ledger/" + plan.item + ".jsonl", "LEDGER_PORT=" + (process.env.L1_HOST_LEDGER_PORT ?? L1.host.ledgerPort), "CAP_USD=" + plan.cap_usd, "VM_USD_PER_HOUR=" + L1.vm.usdPerHour, "VM_RESERVE_HOURS=" + L1.vm.reserveHours, "UBI_TTL_HOURS=" + L1.vm.ttlHours, "UBI_OWNER=" + process.env.UBI_OWNER].join("\n") + "\n";
-    must(ubi(["ssh", name, "mkdir -p " + H + "/work " + H + "/recovery " + H + "/ubi-state && cat > " + H + "/host.env.in && sed \"s#\\$HOME#$HOME#\" " + H + "/host.env.in > " + H + "/host.env"], { input: hostEnvText }), "writing host.env");
+    must(ubi(["ssh", name, "mkdir -p " + H + "/work " + H + "/recovery " + H + "/ubi-state && cat > " + H + "/host.env.in && sed \"s#\\$HOME#$HOME#\" " + H + "/host.env.in > " + H + "/host.env"], { input: hostEnvText(plan.item, plan.cap_usd, process.env.UBI_OWNER ?? "") }), "writing host.env");
     const stage = mkdtempSync(join(tmpdir(), "l1-ledger-"));
     copyFileSync(ledger, join(stage, plan.item + ".jsonl"));
     if (bound) copyFileSync(ledger + ".bound", join(stage, plan.item + ".jsonl.bound"));
