@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LeaseFile } from "../../src/runner/ledger/record.ts";
 import { closeOpenSessions } from "../../src/runner/ledger/sessions.ts";
+import { unknownFromRun } from "../../src/runner/stats/g-admission.ts";
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -48,6 +49,14 @@ describe("closeOpenSessions", () => {
     expect(closeOpenSessions(lease(dir), "recovered", figures, at)).toBe(1);
     const tail = read(dir).split("\n").filter(Boolean).at(-1)!;
     expect(JSON.parse(tail)).toMatchObject({ event: "close", id: "ses_a", reason: "recovered" });
+  });
+
+  test("after a killed writer cut the last line short, unknownFromRun still reads the close lines written after it (red-team#1)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sessions-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "sessions.jsonl"), JSON.stringify({ run_id: "r1", event: "open", id: "ses_a", item: "i-pe", lease_id: "i-pe.0001.aaaaaa", meter_id: "m-a" }) + "\n" + '{"run_id":"r1","event":"clo');
+    expect(closeOpenSessions(lease(dir), "settled", figures, at)).toBe(1);
+    expect(unknownFromRun(dir, ["i-pe"])).toEqual({ calls: 1, micros: 7 });
   });
 
   test("with no figures it writes nothing, answering null while a session is open and 0 once none is", () => {

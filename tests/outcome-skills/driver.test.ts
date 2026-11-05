@@ -3,7 +3,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
@@ -1051,6 +1051,60 @@ describe("settle paths close the run's open sessions, a staged none stop refuses
     expect(closes).toHaveLength(1);
     expect(closes[0]).toMatchObject({ id: "ses_a", reason: "reconciled", lease_id: lease.lease_id, run_id: "r1", unknown_calls: 0, unknown_micros: 0 });
     expect(unknownFromRun(w.dir, ["i-pe"])).toEqual({ calls: 0, micros: 0 });
+  });
+
+  test("ledger settle --lease where this machine's local ledger does not hold the lease warns SESSIONS_OPEN and writes no close line (specialist-batched#1)", async () => {
+    const w = world({ "i-pe": 572 });
+    mkdirSync(w.dir, { recursive: true });
+    const holder = { dir: realpathSync(w.dir), nonce: "0123456789abcdef" };
+    const other = LocalLedger.open(join(w.root, "other.sqlite"));
+    const lease = openLease(w.record, other, { item: "i-pe", run_id: "r1", machine_id: "m1", holder, requireAdmission: () => null });
+    writeFileSync(join(w.dir, "sessions.jsonl"), [
+      { run_id: "r1", event: "launch", nonce: holder.nonce },
+      { run_id: "r1", event: "open", id: "ses_a", item: "i-pe", arm: "plan-eng-review:told", task: "a", trial_n: 1, lease_id: lease.lease_id, meter_id: "m-a" },
+    ].map((l) => JSON.stringify(l) + "\n").join(""));
+    settleLease(w.record, other, lease.lease_id, () => {});
+    const before = readFileSync(join(w.dir, "sessions.jsonl"), "utf8");
+    const r = await ledger(w, "settle", "--lease", lease.lease_id);
+    expect(r.code).toBe(0);
+    expect(r.err).toStartWith("SESSIONS_OPEN lease " + lease.lease_id + " is closed");
+    expect(r.err).toContain("this machine's local ledger does not hold the lease");
+    expect(readFileSync(join(w.dir, "sessions.jsonl"), "utf8")).toBe(before);
+  });
+
+  test("ledger settle --from on a driver lease with a session still open warns SESSIONS_OPEN naming ledger settle --lease, which then writes the close line (red-team#2)", async () => {
+    const w = world({ "i-pe": 572 });
+    mkdirSync(w.dir, { recursive: true });
+    const holder = { dir: realpathSync(w.dir), nonce: "0123456789abcdef" };
+    const lease = openLease(w.record, LocalLedger.open(join(w.root, "ledger.sqlite")), { item: "i-pe", run_id: "r1", machine_id: "m1", holder, requireAdmission: () => null });
+    writeFileSync(join(w.dir, "sessions.jsonl"), [
+      { run_id: "r1", event: "launch", nonce: holder.nonce },
+      { run_id: "r1", event: "open", id: "ses_a", item: "i-pe", arm: "plan-eng-review:told", task: "a", trial_n: 1, lease_id: lease.lease_id, meter_id: "m-a" },
+    ].map((l) => JSON.stringify(l) + "\n").join(""));
+    const artifact = join(w.root, "settle.json");
+    expect((await ledger(w, "settle", "--lease", lease.lease_id, "--artifact", artifact)).code).toBe(0);
+    const before = readFileSync(join(w.dir, "sessions.jsonl"), "utf8");
+    const imported = await ledger(w, "settle", "--from", artifact);
+    expect(imported.code).toBe(0);
+    expect(imported.err).toStartWith("SESSIONS_OPEN lease " + lease.lease_id + " is closed");
+    expect(imported.err).toContain("gstack-evals ledger settle --lease " + lease.lease_id);
+    expect(readFileSync(join(w.dir, "sessions.jsonl"), "utf8")).toBe(before);
+    const settled = await ledger(w, "settle", "--lease", lease.lease_id);
+    expect([settled.code, settled.err]).toEqual([0, ""]);
+    expect(sessionLines(w.dir).filter((e) => e.event === "close").map((e) => [e.id, e.reason])).toEqual([["ses_a", "settled"]]);
+    expect(unknownFromRun(w.dir, ["i-pe"])).toEqual({ calls: 0, micros: 0 });
+  });
+
+  test("a driver killed mid-line leaves sessions.jsonl cut short, and the relaunch writes its launch line on a fresh line, so a later relaunch still serves (red-team#1)", async () => {
+    const w = world({ "i-pe": 572 });
+    const { proc } = await spawnDriver(w, [PE]);
+    proc.kill(9);
+    await proc.exited;
+    appendFileSync(join(w.dir, "sessions.jsonl"), '{"run_id":"r1","event":"op');
+    const first = await w.serve([PE]);
+    expect(await first.stop()).toBe(0);
+    const second = await w.serve([PE]);
+    expect(await second.stop()).toBe(0);
   });
 
   test("a driver killed after it staged none's all-arms stop and before the stop records were written refuses a relaunch that names any stage, a told stage it never served included (item 2)", async () => {

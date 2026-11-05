@@ -192,6 +192,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       const close = held === null ? importSettlement(record, readJson(need("--from")), warn) : settleLease(artifact ? null : record, held, need("--lease"), warn, artifact ? recordedStop(record, need("--lease")) : undefined);
       if (artifact) writeNew("--artifact", artifact, JSON.stringify(close, null, 2) + "\n", "the lease is staged to close in this ledger; run the same settle again with another --artifact file");
       else if (held) closeSessions(record, close, held.getLease(close.lease_id) ? meterFigures(held, close.lease_id) : null, warn);
+      else closeSessions(record, close, null, warn, "gstack-evals ledger settle --lease " + close.lease_id);
       print(close, "SETTLED: " + close.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " (" + close.unknown_calls + " calls)" + (artifact ? " artifact=" + artifact : " record=" + record));
     } else if (cmd === "reconcile") {
       const source = need("--source");
@@ -230,15 +231,16 @@ function fail(message: string): never {
  * After a settle or reconcile, writes a close line for each session the lease's run directory still shows open on it,
  * with reason settled or reconciled, so unknownFromRun can read the run. A settle takes each session's figures from the
  * local ledger the close was staged in; a reconcile has no per-session spend, and its close holds no unknown call.
- * Warns SESSIONS_OPEN when the run directory or the lease's local ledger is not on this machine.
+ * Warns SESSIONS_OPEN when the run directory or the lease's local ledger is not on this machine, naming the command
+ * that writes the missing lines there (settle --from has no figures, so settle --lease writes them).
  */
-function closeSessions(record: string, close: CloseFile, figures: ((meter_id: string) => SessionClose) | null, warn: (code: ReasonCode, message: string) => void): void {
+function closeSessions(record: string, close: CloseFile, figures: ((meter_id: string) => SessionClose) | null, warn: (code: ReasonCode, message: string) => void, retry = "the same command again"): void {
   const { lease } = readItem(record, close.item).leases[close.seq - 1]!;
   if (!lease.holder) return;
   if (closeOpenSessions(lease, close.how, figures, new Date()) !== null) return;
   const file = join(lease.holder.dir, "sessions.jsonl");
   const away = !existsSync(file);
-  warn("SESSIONS_OPEN", "lease " + lease.lease_id + " is closed, but " + (away ? file + " is not on this machine" : "this machine's local ledger does not hold the lease") + ", so no session still open on it in " + file + " got a close line, and unknownFromRun refuses admission item 5 for run " + lease.run_id + " until each has one; run the same command again on the envelope host that holds the run directory" + (away ? "" : " and the lease's local ledger"));
+  warn("SESSIONS_OPEN", "lease " + lease.lease_id + " is closed, but " + (away ? file + " is not on this machine" : "this machine's local ledger does not hold the lease") + ", so no session still open on it in " + file + " got a close line, and unknownFromRun refuses admission item 5 for run " + lease.run_id + " until each has one; run " + retry + " on the envelope host that holds the run directory" + (away ? "" : " and the lease's local ledger"));
 }
 
 /** Writes a file the operator named without replacing another file: an existing file must be empty or already hold these bytes. */

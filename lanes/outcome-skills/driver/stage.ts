@@ -17,7 +17,7 @@ import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, recordStop, rival
 import type { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
 import { holderBound, LedgerError, listItems, readItem, type CloseFile, type Holder, type LeaseFile } from "../../../src/runner/ledger/record.ts";
-import { closeOpenSessions, meterFigures } from "../../../src/runner/ledger/sessions.ts";
+import { closeOpenSessions, cutShort, meterFigures } from "../../../src/runner/ledger/sessions.ts";
 import { isTrialNetworkHost, MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { loadRegistry, type Registry } from "../arms/registry.ts";
 
@@ -230,7 +230,12 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   const rival = rivalHolder(o.record, o.run_id, dir);
   if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
   const sessionsFile = join(dir, "sessions.jsonl");
-  const record = (line: Record<string, unknown>) => appendFileSync(sessionsFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
+  let ended = false;
+  const record = (line: Record<string, unknown>) => {
+    const fresh = !ended && existsSync(sessionsFile) && cutShort(sessionsFile) ? "\n" : "";
+    ended = true;
+    appendFileSync(sessionsFile, fresh + JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
+  };
   const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string }> = [];
   for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
     try {

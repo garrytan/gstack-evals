@@ -24,7 +24,7 @@ export const meterFigures = (local: LocalLedger, lease_id: string): ((meter_id: 
 };
 
 /** True when the file's last byte is not a newline, as after a writer killed in the middle of a line. */
-function cutShort(file: string): boolean {
+export function cutShort(file: string): boolean {
   const size = statSync(file).size;
   if (size === 0) return false;
   const fd = openSync(file, "r");
