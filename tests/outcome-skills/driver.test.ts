@@ -1129,6 +1129,43 @@ describe("settle paths close the run's open sessions, a staged none stop refuses
     expect(unknownFromRun(w.dir, ["i-pe"])).toEqual({ calls: 0, micros: 0 });
   });
 
+  test("a relaunch that finds a stop staged only in the local ledger on a lease the record already closed writes that stop to the record, then refuses, so a hand-opened lease is refused too (Step 11 adversarial#1)", async () => {
+    const w = world({ "i-pe": 572, "i-ap": 50 });
+    expect(await (await w.serve([PE])).stop()).toBe(0);
+    const pe = readItem(w.record, "i-pe").leases[0]!;
+    expect(pe.close).not.toBeNull();
+    const scope = "all: none's cap stop ends both skills incomplete";
+    w.local.stageStop(pe.lease.lease_id, scope);
+    expect(readItem(w.record, "i-pe").stops).toHaveLength(0);
+    expect(await codeOf(w.serve([AP]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-pe").stops.map((s) => [s.lease_id, s.scope])).toEqual([[pe.lease.lease_id, scope]]);
+    expect(readItem(w.record, "i-ap").leases).toHaveLength(0);
+    const other = LocalLedger.open(join(w.root, "other.sqlite"));
+    expect(() => openLease(w.record, other, { item: "i-pe", run_id: "r1", machine_id: "m2", requireAdmission: () => null })).toThrow(expect.objectContaining({ code: "CAP_STOP" }));
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+  });
+
+  test("a relaunch that finds a staged stop the record already holds refuses and writes no second stop (Step 11 adversarial#1)", async () => {
+    const w = world({ "i-pe": 572, "i-ap": 50 });
+    expect(await (await w.serve([PE])).stop()).toBe(0);
+    const lease_id = readItem(w.record, "i-pe").leases[0]!.lease.lease_id;
+    const scope = "all: none's cap stop ends both skills incomplete";
+    w.local.stageStop(lease_id, scope);
+    recordStop(w.record, lease_id, scope, new Date("2026-01-01T00:00:00Z"));
+    const before = JSON.stringify(readItem(w.record, "i-pe").stops);
+    expect(await codeOf(w.serve([AP]))).toBe("CAP_STOP");
+    expect(JSON.stringify(readItem(w.record, "i-pe").stops)).toBe(before);
+    expect(readItem(w.record, "i-pe").stops).toHaveLength(1);
+  });
+
+  test("a relaunch with no staged stop writes no stop and serves (Step 11 adversarial#1)", async () => {
+    const w = world({ "i-pe": 572, "i-ap": 50 });
+    expect(await (await w.serve([PE])).stop()).toBe(0);
+    const served = await w.serve([AP]);
+    expect(await served.stop()).toBe(0);
+    for (const item of ["i-pe", "i-ap"]) expect(readItem(w.record, item).stops).toHaveLength(0);
+  });
+
   test("a driver killed after it staged none's all-arms stop and before the stop records were written refuses a relaunch that names any stage, a told stage it never served included (item 2)", async () => {
     const w = world({ "i-none": 20, "i-pe": 572, "i-ap": 50 });
     const { proc, control } = await spawnDriver(w, [NONE, PE], [

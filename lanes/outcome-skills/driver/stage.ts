@@ -13,7 +13,7 @@ import { basename, dirname, join } from "node:path";
 import { docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { rigAdmission } from "../../../src/rig/admission.ts";
 import { envelopeStatus, split } from "../../../src/runner/ledger/envelope.ts";
-import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, recordStop, rivalHolder, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
+import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, recordedStop, recordStop, rivalHolder, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
 import type { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
 import { holderBound, LedgerError, listItems, readItem, type CloseFile, type Holder, type LeaseFile } from "../../../src/runner/ledger/record.ts";
@@ -257,9 +257,11 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     for (const { lease, close } of s.leases) if (close?.cap_stop && lease.run_id === o.run_id) noteStop(s.item, { at: close.closed_at, scope: close.cap_stop });
   }
   for (const s of states) {
-    for (const { lease } of s.leases) {
+    for (const { lease, close } of s.leases) {
       const scope = lease.run_id === o.run_id ? o.local.stagedStop(lease.lease_id) : undefined;
-      if (scope) noteStop(s.item, { at: "an unrecorded time (a stop staged in the local ledger " + o.local.path + ")", scope });
+      if (!scope) continue;
+      if (close && recordedStop(o.record, lease.lease_id) === undefined) recordStop(o.record, lease.lease_id, scope, new Date(now()));
+      noteStop(s.item, { at: "an unrecorded time (a stop staged in the local ledger " + o.local.path + ")", scope });
     }
   }
   for (const e of lines) if (e.item && (e.event === "stop" || (e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });

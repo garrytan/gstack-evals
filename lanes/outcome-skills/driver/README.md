@@ -16,7 +16,7 @@ If the stop can't be written, for example because the item's directory in the re
 - a later `gstack-evals ledger settle --lease`, because the driver keeps the stop in its local ledger before it writes the stop record, and the local ledger puts it in every close it stages for the lease;
 - a relaunch's recovery, which reads the `stop` line.
 
-If the driver is killed after its local ledger keeps the stop and before the stop record is written, a relaunch reads the stop from the local ledger, after O6's record and before sessions.jsonl. A none stop found there refuses the whole launch with CAP_STOP, whatever stages it names, a told stage the killed launch never served included. A told stop refuses its own stage.
+If the driver is killed after its local ledger keeps the stop and before the stop record is written, a relaunch reads the stop from the local ledger, after O6's record and before sessions.jsonl. A none stop found there refuses the whole launch with CAP_STOP, whatever stages it names, a told stage the killed launch never served included. A told stop refuses its own stage. When the stop sits on a lease O6's record already shows closed, the relaunch first writes it into the record as that lease's stop, so O6 then refuses a new lease on the item from any ledger.
 
 A told stage counts as finished only when it ended completed or cap_stop. After a told cap stop, none drains and settles as completed only once every told stage has finished. A told stage that ended lease_expired or failed may still owe trials on a relaunch, so none keeps serving.
 
