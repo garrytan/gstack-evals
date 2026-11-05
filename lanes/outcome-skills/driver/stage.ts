@@ -180,6 +180,7 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
   const plans = o.stages.map((st) => {
     const s = readItem(o.record, st.item);
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
+    if (s.program === null) return fail("E_USAGE", "line item " + st.item + " is in no program; a G stage is admitted by O6's envelope, so its item joins the program with --program at init; nothing was opened");
     if (s.run_id !== null && s.run_id !== o.run_id) fail("E_ITEM_BOUND", "line item " + st.item + " is bound to run " + s.run_id + ", so run " + o.run_id + " cannot spend from it; nothing was opened");
     if (s.open) fail("E_LEASE_UNSETTLED", "lease " + s.open.lease_id + " on line item " + st.item + " (machine " + s.open.machine_id + ", run " + s.open.run_id + ") is still open; settle it on that machine, then launch the driver again; nothing was opened");
     const left = s.cap_micros - s.committed_micros;
@@ -190,13 +191,12 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
       const why = (o.requireAdmission ?? rigAdmission())(o.record, file);
       if (why && s.admission === "required") fail("E_RIG_UNPROVEN", "line item " + st.item + " requires admission for slot " + seq + ": " + why + "; write it with gstack-evals rig admit for that slot, then launch the driver again; nothing was opened");
     }
-    return { st, s, left };
+    return { st, s, left, program: s.program };
   });
   const programs = new Map<string, { amount: number; skills: Map<string, number> }>();
-  for (const { s, left } of plans) {
-    if (s.program === null) continue;
-    const p = programs.get(s.program) ?? { amount: 0, skills: new Map<string, number>() };
-    programs.set(s.program, p);
+  for (const { s, left, program } of plans) {
+    const p = programs.get(program) ?? { amount: 0, skills: new Map<string, number>() };
+    programs.set(program, p);
     p.amount += left;
     for (const [skill, part] of split(left, s.skills)) p.skills.set(skill, (p.skills.get(skill) ?? 0) + part);
   }
@@ -403,6 +403,7 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
     if (seen >= 2) return refusal("E_USAGE", 422, "arm " + stage.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened " + seen + " times; a trial gets one rerun at most");
     if (seen === 1 && !meta.rerun) return refusal("E_USAGE", 422, "arm " + stage.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened; a second open is a rerun and names its repair in meta.rerun");
     if (stage.opens >= planned + reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened " + stage.opens + " sessions, its " + planned + " planned plus " + reruns + " reruns");
+    if (!meta.rerun && stage.opens - stage.reruns >= planned) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened its " + planned + " planned sessions; a further open is a rerun and names its repair in meta.rerun");
     if (meta.rerun && stage.reruns >= reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has used its " + reruns + " reruns");
     const t = now();
     const grace = o.deadline_grace_ms ?? DEADLINE_GRACE_MS;
@@ -444,45 +445,50 @@ export async function serveStages(o: ServeOptions): Promise<Served> {
     }),
   });
 
-  const control = Bun.serve({
-    hostname: "127.0.0.1",
-    port: o.control_port ?? 0,
-    fetch: async (req) => {
-      const path = new URL(req.url).pathname;
-      try {
-        if (req.method === "GET" && path === "/status") return Response.json(status());
-        if (req.method === "POST" && path === "/sessions") {
-          const ctx: Record<string, unknown> = {};
-          const res = await open(req, ctx);
-          if (!res.ok) {
-            const p = (await res.clone().json()) as Record<string, unknown>;
-            record({ event: "refuse", code: p.code, status: res.status, ...ctx, ...(p.item ? { item: p.item } : {}), ...(p.scope ? { scope: p.scope } : {}), detail: p.detail });
+  let control: ReturnType<typeof Bun.serve>;
+  try {
+    control = Bun.serve({
+      hostname: "127.0.0.1",
+      port: o.control_port ?? 0,
+      fetch: async (req) => {
+        const path = new URL(req.url).pathname;
+        try {
+          if (req.method === "GET" && path === "/status") return Response.json(status());
+          if (req.method === "POST" && path === "/sessions") {
+            const ctx: Record<string, unknown> = {};
+            const res = await open(req, ctx);
+            if (!res.ok) {
+              const p = (await res.clone().json()) as Record<string, unknown>;
+              record({ event: "refuse", code: p.code, status: res.status, ...ctx, ...(p.item ? { item: p.item } : {}), ...(p.scope ? { scope: p.scope } : {}), detail: p.detail });
+            }
+            return res;
           }
-          return res;
+          const m = path.match(/^\/sessions\/([A-Za-z0-9_-]+)\/close$/);
+          if (req.method === "POST" && m) {
+            const sess = sessions.get(m[1]!);
+            if (!sess) return refusal("E_USAGE", 404, "no session " + m[1]);
+            let reason = "agent_finished";
+            try {
+              const b = (await req.json()) as { reason?: unknown };
+              if (typeof b?.reason === "string" && b.reason) reason = b.reason;
+            } catch {}
+            return Response.json(await closeSession(sess, reason));
+          }
+          if (req.method === "POST" && path === "/stop") {
+            setTimeout(() => void stop(), 0);
+            return Response.json({ stopping: true });
+          }
+          return refusal("E_USAGE", 404, "no route " + req.method + " " + path + "; the driver serves POST /sessions, POST /sessions/<id>/close, GET /status and POST /stop");
+        } catch (e) {
+          log("E_INTERNAL outcome driver: " + req.method + " " + path + " failed: " + (e as Error).message + "; stopping every stage");
+          void stop("failed");
+          return refusal("E_INTERNAL", 500, "the driver failed and is stopping every stage");
         }
-        const m = path.match(/^\/sessions\/([A-Za-z0-9_-]+)\/close$/);
-        if (req.method === "POST" && m) {
-          const sess = sessions.get(m[1]!);
-          if (!sess) return refusal("E_USAGE", 404, "no session " + m[1]);
-          let reason = "agent_finished";
-          try {
-            const b = (await req.json()) as { reason?: unknown };
-            if (typeof b?.reason === "string" && b.reason) reason = b.reason;
-          } catch {}
-          return Response.json(await closeSession(sess, reason));
-        }
-        if (req.method === "POST" && path === "/stop") {
-          setTimeout(() => void stop(), 0);
-          return Response.json({ stopping: true });
-        }
-        return refusal("E_USAGE", 404, "no route " + req.method + " " + path + "; the driver serves POST /sessions, POST /sessions/<id>/close, GET /status and POST /stop");
-      } catch (e) {
-        log("E_INTERNAL outcome driver: " + req.method + " " + path + " failed: " + (e as Error).message + "; stopping every stage");
-        void stop("failed");
-        return refusal("E_INTERNAL", 500, "the driver failed and is stopping every stage");
-      }
-    },
-  });
+      },
+    });
+  } catch (error) {
+    return unwind(error);
+  }
 
   return {
     control: "http://127.0.0.1:" + control.port,

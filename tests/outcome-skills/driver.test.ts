@@ -65,11 +65,34 @@ describe("the outcome-skills session driver", () => {
     for (const item of ["i-pe", "i-none"]) expect(readItem(w.record, item).leases).toHaveLength(0);
   });
 
+  test("preflight refuses a stage whose line item is in no program, before any lease", async () => {
+    const w = world({ "i-pe": 572 });
+    recordApproval(w.record, { action: "init", item: "i-free", cap_micros: 229 * D, quotes: [quote], admission: "required" });
+    const err = await w.serve([PE, { item: "i-free", arm: "none" }]).then(() => null, (e) => e as LedgerError);
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain("--program");
+    for (const item of ["i-pe", "i-free"]) expect(readItem(w.record, item).leases).toHaveLength(0);
+  });
+
   test("a proxy that can't start unwinds every lease the batch opened, at $0", async () => {
     const w = world({ "i-none": 229, "i-pe": 572 });
     expect(await codeOf(w.serve([NONE, PE], { host: "0.0.0.0" }))).toContain("E_USAGE");
     expect(readItem(w.record, "i-none").leases.map((l) => l.close?.spent_micros)).toEqual([0]);
     expect(readItem(w.record, "i-pe").leases).toHaveLength(0);
+  });
+
+  test("a control port that can't bind unwinds every stage lease, at $0", async () => {
+    const w = world({ "i-none": 229, "i-pe": 572 });
+    const busy = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("busy") });
+    try {
+      expect(await codeOf(w.serve([NONE, PE], { control_port: busy.port }))).not.toBe("ok");
+    } finally {
+      busy.stop(true);
+    }
+    for (const item of ["i-none", "i-pe"]) {
+      expect(readItem(w.record, item).open ?? null).toBeNull();
+      expect(readItem(w.record, item).leases.map((l) => l.close?.spent_micros)).toEqual([0]);
+    }
   });
 
   test("one lease per stage at its cap; a session's slot meters its calls; stop settles every lease", async () => {
@@ -119,6 +142,23 @@ describe("the outcome-skills session driver", () => {
     expect((await open(body("none", "a", 1))).json.closed?.id).toBe(first.json.id);
     expect(readFileSync(join(w.dir, "sessions.jsonl"), "utf8").split("\n").filter((l) => l.includes('"event":"refuse"'))).toHaveLength(10);
     await served.stop();
+  });
+
+  test("first-time opens stop at the planned count, so the rerun slots serve only named reruns, across a relaunch", async () => {
+    const w = world({ "i-none": 229 });
+    const served = await w.serve([NONE], { planned: 2, reruns: 2 });
+    const open = (b: unknown) => post(served.control + "/sessions", b);
+    expect((await open(body("none", "a", 1))).status).toBe(200);
+    expect((await open(body("none", "b", 1))).status).toBe(200);
+    const third = await open(body("none", "c", 1));
+    expect(third.status).toBe(422);
+    expect(third.json.detail).toContain("2 planned");
+    expect((await open(body("none", "a", 1, { meta: { rerun: "sidecar restart" } }))).status).toBe(200);
+    await served.stop();
+    const again = await w.serve([NONE], { planned: 2, reruns: 2 });
+    expect((await post(again.control + "/sessions", body("none", "c", 1))).status).toBe(422);
+    expect((await post(again.control + "/sessions", body("none", "b", 1, { meta: { rerun: "proxy restart" } }))).status).toBe(200);
+    await again.stop();
   });
 
   test("room counts live slots' allowance; a none cap stop ends every stage, which settle as their live sessions close", async () => {
