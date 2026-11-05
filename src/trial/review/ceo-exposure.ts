@@ -109,8 +109,8 @@ function writeTargets(parts: string[]): string[] {
     return argv?.[0] === "tee" ? argv.slice(1).filter((a) => !a.startsWith("-")) : [];
   };
   if (parts.length === 1) return [...targets, ...teeFiles(head)];
-  const tee = teeFiles(parts[1]!);
-  return tee.length ? [...targets, ...tee] : teeFiles(head);
+  const tee = parts[1]!.includes("<") ? [] : teeFiles(parts[1]!);
+  return tee.length ? [...targets, ...teeFiles(head), ...tee] : teeFiles(head);
 }
 
 /** A command line's shell words after every redirection outside quotes and comments is cut, or null on an open quote. */

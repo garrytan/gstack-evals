@@ -320,7 +320,9 @@ describe("escape expansion (#230 ruling): only printf's format and echo -e expan
     const written = ["cat > " + F + doc, "cat >> " + F + doc, "cat - > " + F + doc, "cat" + doc.replace("\n", " > " + F + "\n"), "cat" + doc.replace("\n", " | tee " + F + "\n"), "> " + F + " cat" + doc, ">" + F + " cat" + doc, "tee " + F + doc, "tee -a " + F + doc];
     written.push(...[" 2>&1", " >/dev/null", " 2>/dev/null", " | cat"].map((tail) => "tee " + F + doc.replace("\n", tail + "\n")));
     written.push("printf '## Findings\\n' | tee " + F + " >/dev/null", "printf '## Findings\\n' | tee -a " + F + " 2>&1");
+    written.push("tee " + F + doc.replace("\n", " | tee /dev/null\n"));
     unwritten.push("tee notes.md" + doc, "printf '## Findings\\n' | tee notes.md >/dev/null");
+    unwritten.push("printf '## Findings\\n' | tee " + F + " <<'EOF'\n- Low: x\nEOF", "printf '## Findings\\n' | tee " + F + " < notes.md");
     for (const c of unwritten) expect([c, at(c)]).toEqual([c, false]);
     for (const c of written) expect([c, at(c)]).toEqual([c, true]);
   });
