@@ -217,15 +217,21 @@ const isPlan = (path: string) => path.split("/").pop() === "PLAN.md";
  * Report only (G ruling A on red-team #1): what a told session wrote outside PLAN.md in t1, read from the phase-tagged
  * records real_agent keeps, a subagent's included. An edit tool's call (Write, Edit, MultiEdit, NotebookEdit) counts by
  * its path unless its result is an error. A Bash call counts, whatever its exit, when it sends stdout into a file (>, >>,
- * 1>, &>), tees into one, edits a file in place (sed -i, perl -i) or applies a patch (git apply, patch). Its words are
- * read as the shell splits them, so an operator inside quotes is text and a quoted file name is a file; heredoc bodies
- * are skipped, and a /dev/ target does not count. A call whose result carries a tool_use_error never ran. A file named
- * PLAN.md never counts. A command behind a shell keyword (do, then, {) or a wrapper (sudo, env, timeout, xargs) counts,
- * bash -c and sh -c read their script the same way, and sed -i under xargs counts, since its files come from stdin. A
- * wrapper's flag takes the next word only when it takes a value (sudo -u, env -u, timeout -s, xargs -I and the like).
- * sed's and perl's options read as GNU sed and perl read them: only -e and -f (sed's -l too, perl's -E) take a value,
- * attached or next; -i's attached suffix ends its cluster; and sed's '' or .bak right after a bare -i, before any
- * script, is a BSD-style suffix.
+ * 1>, &>, >&), tees into one, edits a file in place (sed -i, perl -i) or applies a patch (git apply, git -C dir apply,
+ * patch). Its words are read as the shell splits them, so an operator inside quotes is text and a quoted file name is a
+ * file; heredoc bodies are skipped (<< and <<- with any delimiter, never <<<), comments are skipped, > inside [[ ]],
+ * (( )) and $(( )) is not a redirect, and a /dev/ target does not count. A call whose result opens with a
+ * tool_use_error never ran. A file named PLAN.md never counts. A command behind a shell keyword (do, then, {) or a
+ * wrapper (sudo, env, timeout, xargs) counts, bash -c and sh -c read their script the same way, and sed -i under xargs
+ * counts, since its files come from stdin. A wrapper's flag takes the next word only when it takes a value (sudo -u,
+ * env -u, timeout -s, xargs -I and the like). sed's and perl's options read as GNU sed and perl read them: sed's -e, -f
+ * and -l and perl's -e and -E take a value, attached or next; perl's -M, -m, -I, -x, -F, -C, -d and -D take the rest
+ * of their cluster (a bare -I the next word); -i's attached suffix ends its cluster; and sed's '' or .bak right after a
+ * bare -i, before any script, is a BSD-style suffix.
+ *
+ * The count is skewed both ways. It misses writes it does not read: cp, mv, rm, a stderr redirect (2>), find -exec, a
+ * script or interpreter fed by a heredoc, and any file a program opens itself. And it counts scratch files outside the
+ * repository, such as /tmp, as writes outside PLAN.md.
  */
 export function t1WritesOutsidePlan(records: Record<string, any>[]): string[] {
   const results = new Map<string, Record<string, any>>();
@@ -236,7 +242,8 @@ export function t1WritesOutsidePlan(records: Record<string, any>[]): string[] {
     for (const b of r.content) {
       if (b?.type !== "tool_use") continue;
       const res = results.get(b.id);
-      if (res && (typeof res.content === "string" ? res.content : JSON.stringify(res.content ?? "")).includes("<tool_use_error>")) continue;
+      const said = typeof res?.content === "string" ? res.content : Array.isArray(res?.content) ? String(res.content.find((x: any) => x?.type === "text")?.text ?? "") : "";
+      if (said.trimStart().startsWith("<tool_use_error>")) continue;
       const key = EDIT_PATHS.get(b.name);
       const path = key ? b.input?.[key] : undefined;
       if (typeof path === "string" && !isPlan(path) && res?.is_error !== true) found.push(b.name + " " + path);
@@ -260,19 +267,10 @@ const WRAPPERS = new Map<string, string[]>([
   ["nice", ["-n", "--adjustment"]],
   ["stdbuf", ["-i", "-o", "-e", "--input", "--output", "--error"]],
 ]);
+const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"];
 const base = (word?: string) => word?.split("/").pop() ?? "";
 
 function bashWrites(command: string): string[] {
-  const kept: string[] = [];
-  let heredoc: string | null = null;
-  for (const line of command.split("\n")) {
-    if (heredoc !== null) {
-      if (line.trim() === heredoc) heredoc = null;
-      continue;
-    }
-    kept.push(line);
-    heredoc = /<<-?\s*(["']?)(\w+)\1/.exec(line)?.[2] ?? null;
-  }
   const edit = "Bash edit: " + command.split("\n")[0]!.slice(0, 120);
   const keep = (path: string) => !isPlan(path) && !path.startsWith("/dev/");
   const found: string[] = [];
@@ -292,36 +290,55 @@ function bashWrites(command: string): string[] {
     const dashC = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
     if ((name === "bash" || name === "sh") && dashC >= 0 && args[dashC + 1] !== undefined) found.push(...bashWrites(args[dashC + 1]!));
     if (name === "tee") found.push(...args.filter((a) => !a.startsWith("-") && keep(a)).map((a) => "Bash tee " + a));
-    if ((name === "git" && args[0] === "apply") || name === "patch") found.push(edit);
-    if ((name !== "sed" && name !== "perl") || !args.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith("--in-place"))) return;
+    let sub = 0;
+    while (name === "git" && args[sub]?.startsWith("-")) sub += GIT_VALUES.includes(args[sub]!) ? 2 : 1;
+    if ((name === "git" && args[sub] === "apply") || name === "patch") found.push(edit);
+    if (name !== "sed" && name !== "perl") return;
     const files: string[] = [];
     const takes = name === "sed" ? "efl" : "eE";
     let script = false;
+    let inPlace = false;
     for (let j = 0; j < args.length; j++) {
       const a = args[j]!;
       if (name === "sed" && /^--(?:expression|file|line-length)(?:=|$)/.test(a)) {
         script ||= !a.startsWith("--line-length");
         if (!a.includes("=")) j++;
-      } else if (/^-[^-]/.test(a)) {
-        const k = [...a.slice(1)].findIndex((c) => c === "i" || takes.includes(c)) + 1;
-        if (k > 0 && a[k] !== "i") {
-          script ||= a[k] !== "l";
-          if (k === a.length - 1) j++;
-        } else if (name === "sed" && !script && a.endsWith("i") && /^(?:\.|$)/.test(args[j + 1] ?? "-")) j++;
+      } else if (name === "sed" && /^--in-place(?:=|$)/.test(a)) inPlace = true;
+      else if (/^-[^-]/.test(a)) {
+        for (let k = 1; k < a.length; k++) {
+          const c = a[k]!;
+          if (c === "i") {
+            inPlace = true;
+            if (name === "sed" && k === a.length - 1 && !script && /^(?:\.|$)/.test(args[j + 1] ?? "-")) j++;
+            break;
+          }
+          if (takes.includes(c)) {
+            script ||= c !== "l";
+            if (k === a.length - 1) j++;
+            break;
+          }
+          if (name === "perl" && "MmIxFCdD".includes(c)) {
+            if (c === "I" && k === a.length - 1) j++;
+            break;
+          }
+        }
       } else if (!a.startsWith("-")) {
         if (script) files.push(a);
         script = true;
       }
     }
-    if (xargs || files.some(keep)) found.push(edit);
+    if (inPlace && (xargs || files.some(keep))) found.push(edit);
   };
-  const tokens = shellTokens(kept.join("\n"));
+  const tokens = shellTokens(command);
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i]!;
     const next = tokens[i + 1];
-    if ("word" in t) words.push(t.word);
-    else if (/^(?:1?>>?|&>>?|>\|)$/.test(t.op) && next && "word" in next) {
-      if (keep(next.word)) found.push("Bash > " + next.word);
+    if ("word" in t && t.word === "[[" && words.every((w) => /^\w+=/.test(w) || KEYWORDS.has(w))) {
+      let u = tokens[++i];
+      while (u && !("word" in u && u.word === "]]")) u = tokens[++i];
+    } else if ("word" in t) words.push(t.word);
+    else if (/^(?:1?>>?|&>>?|>\||1?>&)$/.test(t.op) && next && "word" in next) {
+      if (keep(next.word) && !(t.op.endsWith("&") && /^(?:\d+|-)$/.test(next.word))) found.push("Bash > " + next.word);
       i++;
     } else if (/[<>]/.test(t.op)) {
       if (next && "word" in next) i++;
@@ -332,19 +349,35 @@ function bashWrites(command: string): string[] {
 }
 
 /** Shell words and operators. Quotes and backslashes are honoured, so an operator inside quotes stays in its word, and a
- * digit word glued to ">" is that redirect's file descriptor. A newline ends a command. */
+ * digit word glued to ">" is that redirect's file descriptor. A newline ends a command. An unquoted # that starts a word
+ * comments out the rest of its line; $(( )) and (( )) are one word; and after << or <<- (not <<<), the next word is a
+ * heredoc delimiter, whose body lines up to the delimiter's own line are skipped at the end of the line. */
 function shellTokens(shell: string): Array<{ word: string } | { op: string }> {
   const tokens: Array<{ word: string } | { op: string }> = [];
+  const heredocs: string[] = [];
+  let delimiter = false;
   let word = "";
   let open = false;
   const end = () => {
     if (open) tokens.push({ word });
+    if (open && delimiter) heredocs.push(word);
+    delimiter &&= !open;
     word = "";
     open = false;
   };
   for (let i = 0; i < shell.length; i++) {
     const c = shell[i]!;
-    if (c === "'") {
+    if (c === "#" && !open) {
+      while (i + 1 < shell.length && shell[i + 1] !== "\n") i++;
+    } else if ((c === "$" || (c === "(" && !open)) && shell.startsWith("((", c === "$" ? i + 1 : i)) {
+      let depth = 0;
+      let k = c === "$" ? i + 1 : i;
+      for (; k < shell.length; k++) if (shell[k] === "(") depth++;
+      else if (shell[k] === ")" && --depth === 0) break;
+      word += shell.slice(i, k + 1);
+      open = true;
+      i = k;
+    } else if (c === "'") {
       const close = shell.indexOf("'", i + 1);
       const stop = close < 0 ? shell.length : close;
       word += shell.slice(i + 1, stop);
@@ -358,7 +391,18 @@ function shellTokens(shell: string): Array<{ word: string } | { op: string }> {
       word += shell[++i] ?? "";
     } else if (/\s/.test(c)) {
       end();
-      if (c === "\n") tokens.push({ op: ";" });
+      if (c !== "\n") continue;
+      tokens.push({ op: ";" });
+      for (const stop of heredocs.splice(0)) {
+        let at = i + 1;
+        while (at < shell.length) {
+          const nl = shell.indexOf("\n", at);
+          const line = shell.slice(at, nl < 0 ? shell.length : nl);
+          at = nl < 0 ? shell.length : nl + 1;
+          if (line.trim() === stop) break;
+        }
+        i = at - 1;
+      }
     } else if ("|&;<>()".includes(c)) {
       let op = c;
       if (c === ">" && open && /^\d+$/.test(word)) {
@@ -367,6 +411,8 @@ function shellTokens(shell: string): Array<{ word: string } | { op: string }> {
       }
       end();
       while (op.length < 4 && i + 1 < shell.length && "|&<>".includes(shell[i + 1]!)) op += shell[++i];
+      if (op === "<<" && shell[i + 1] === "-") op += shell[++i];
+      delimiter = op === "<<" || op === "<<-";
       tokens.push({ op });
     } else {
       word += c;
