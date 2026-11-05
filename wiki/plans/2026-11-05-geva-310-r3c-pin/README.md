@@ -2,7 +2,7 @@
 id: 2026-11-05-geva-310-r3c-pin
 kind: plan
 title: "R3c pin: the build's merge commit, the arms' and records' digests, the five build rulings and a keyless dry run of every R3c rule"
-summary: "Pins R3c to #226's merge commit 239d227d and the told arm at gstack 699a41cb (tar e93a3aa4). A keyless dry run drives every rule of amendment 6, the grid resume included, with one ledger lease per trial on a temporary ledger, and a keyless capture checks the transcript path. States the Captain's five build rulings as rules, corrects what k = 1.72 compares and prices the null-cost STOP."
+summary: "Pins R3c to #226's merge commit 239d227d and the told arm at 699a41cb, with a keyless dry run (46 rules) and capture there, the five build rulings as rules, the k correction and the null-cost STOP."
 author: GEVA-310
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
