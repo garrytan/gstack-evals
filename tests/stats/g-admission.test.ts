@@ -215,6 +215,12 @@ describe("t1 writes outside PLAN.md, from the phase-tagged records (report only,
     expect(a.skills.autoplan.t1_outside_plan).toEqual({ wrote: 0, read: 0 });
   });
 
+  test("t1OutsidePlan reads nothing from a trial with no message record: null, never a clean false", () => {
+    expect(t1OutsidePlan([])).toBeNull();
+    expect(t1OutsidePlan([{ type: "ResultMessage", subtype: "success" }])).toBeNull();
+    expect(t1OutsidePlan([use("t1", "f", "Read", { file_path: "/testbed/PLAN.md" }), result("t1", "f", "ok")])).toBe(false);
+  });
+
   test("an edit tool's write outside PLAN.md in t1 counts, a subagent's included; PLAN.md, later turns, failed edits and reads don't", () => {
     expect(t1WritesOutsidePlan([
       use("t1", "a", "Write", { file_path: "/testbed/PLAN.md", content: "# Plan" }), result("t1", "a", "ok"),
