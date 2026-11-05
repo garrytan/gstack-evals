@@ -5,7 +5,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
-import { openLease, recordApproval } from "../../src/runner/ledger/ledger.ts";
+import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem } from "../../src/runner/ledger/record.ts";
 import { loadRegistry, type Registry } from "../../lanes/outcome-skills/arms/registry.ts";
@@ -258,9 +258,44 @@ describe("the outcome-skills session driver", () => {
     appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-none", seq: 1, opening: true }) + "\n" + '{"lease_id":"i-none.00');
     const err = await w.serve([NONE]).then(() => null, (e) => e as LedgerError);
     expect(err?.code).toBe("E_USAGE");
-    expect(err?.message).toContain("gstack-evals ledger settle --lease " + left.lease_id);
+    expect(err?.message).toContain(left.lease_id);
     expect(readItem(w.record, "i-none").open?.lease_id).toBe(left.lease_id);
     expect(readItem(w.record, "i-none").leases).toHaveLength(1);
+  });
+
+  test("a torn ownership line, appended by hand as the refusal gives it, lets the relaunch recover and settle the lease", async () => {
+    const w = world({ "i-none": 229 });
+    const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
+    mkdirSync(w.dir, { recursive: true });
+    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-none", seq: 1, opening: true }) + "\n" + '{"lease_id":"i-none.00');
+    const line = JSON.stringify({ run_id: "r1", item: "i-none", lease_id: left.lease_id });
+    const err = await w.serve([NONE]).then(() => null, (e) => e as LedgerError);
+    expect(err?.message).toContain(line);
+    appendFileSync(join(w.dir, "leases.jsonl"), "\n" + line + "\n");
+    const served = await w.serve([NONE]);
+    expect(w.logs.some((l) => l.startsWith("STAGE_RECOVERED item=i-none lease=" + left.lease_id))).toBe(true);
+    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
+    expect(await served.stop()).toBe(0);
+  });
+
+  test("a marker over a settled lease wedges no other item, and the item's own refusal clears once its ownership line is appended by hand", async () => {
+    const w = world({ "i-none": 229, "i-pe": 572 });
+    const torn = openLease(w.record, w.local, { item: "i-pe", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
+    mkdirSync(w.dir, { recursive: true });
+    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-pe", seq: 1, opening: true }) + "\n" + '{"lease_id":"i-pe.00');
+    settleLease(w.record, w.local, torn.lease_id);
+    const served = await w.serve([NONE]);
+    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1]);
+    expect(await served.stop()).toBe(0);
+    const line = JSON.stringify({ run_id: "r1", item: "i-pe", lease_id: torn.lease_id });
+    const err = await w.serve([PE]).then(() => null, (e) => e as LedgerError);
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain(line);
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+    appendFileSync(join(w.dir, "leases.jsonl"), "\n" + line + "\n");
+    const again = await w.serve([PE]);
+    expect(readItem(w.record, "i-pe").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
+    expect(await again.stop()).toBe(0);
   });
 
   const staleMarker = (w: ReturnType<typeof world>, item: string) => {
@@ -288,7 +323,7 @@ describe("the outcome-skills session driver", () => {
     const lease = readItem(w.record, "i-pe").open?.lease_id;
     const err = await w.serve([PE]).then(() => null, (e) => e as LedgerError);
     expect(err?.code).toBe("E_USAGE");
-    expect(err?.message).toContain("gstack-evals ledger settle --lease " + lease);
+    expect(err?.message).toContain(lease);
     expect(readItem(w.record, "i-pe").open?.lease_id).toBe(lease);
     expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
     expect((await call(s.json)).status).toBe(200);
