@@ -1,7 +1,8 @@
 // Keyless fixtures for gstack-evals ceo and noloss judge-run --ceo: a sealed units dir, review-units run dirs (the
 // journal, stops.json, units.json and each session's transcript.ndjson) and a stub judge that answers through the metering
 // proxy. Every review word here is synthetic and carries CANARY, so a test can show no command prints review text.
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { judgeRunCmd } from "../../../lanes/review-noloss/judge-run.ts";
@@ -15,7 +16,8 @@ export const CANARY = "CANARYq7Zp";
 export const FENCE = "\x60\x60\x60";
 export const BRIEF = join(ROOT, "wiki/plans/2026-11-05-geva-295-ceo-ladder-amendment/judge-brief.md");
 export const SCORER = join(ROOT, "wiki/plans/2026-11-05-geva-300-ceo-stop-label-amendment/ceo-rule.ts.txt");
-export const MODEL: Record<string, string> = { opus: "anthropic/claude-opus-5-5", sol: "openai/gpt-6.1-sol", particle: "openrouter/particle-ai/particle-1" };
+/** The prereg's three models under test, by the policy keys review-units runs them as. */
+export const MODEL: Record<string, string> = { opus: "claude-opus-5-5", sol: "openai/gpt-6.1-sol", particle: "particle-ai/particle-1" };
 export const JUDGES = { sol: "openai/gpt-6.1-sol", opus: "anthropic/claude-opus-5-5", sonnet: "anthropic/claude-sonnet-5-5" };
 export const U1 = "acme/widget#11";
 export const U2 = "acme/widget#12";
@@ -39,6 +41,15 @@ export function unitsDir(root: string): string {
     writeFileSync(join(dir, id.replaceAll("/", "__"), "plan.md"), "# Plan for " + id + "\n\nCache every request path.\n");
   }
   return dir;
+}
+
+/** The suite binding review-units writes into units.json: the suite, and the digest of unitsDir's files (the stub's catalogs digest). */
+export function binding() {
+  const dir = unitsDir(tmp("binding"));
+  const ids = [U1, U2, U3].sort();
+  const sha256 = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+  const parts = ids.flatMap((id) => ["key.json", "plan.md"].map((f) => join("units", id.replaceAll("/", "__"), f) + " " + sha256(readFileSync(join(dir, id.replaceAll("/", "__"), f)))));
+  return { id: "ceo-outcome-test", sha256: "5".repeat(64), sealed: true, sealedCatalogs: false, catalogs_sha256: createHash("sha256").update(parts.join("\n")).digest("hex"), units_dir: "units", unit_ids: ids };
 }
 
 const pad = (n: number) => Array.from({ length: n }, (_, i) => "w" + i).join(" ");
@@ -110,7 +121,7 @@ export function runDir(root: string, name: string, sessions: Session[], edit: (e
   writeFileSync(join(dir, "cells.ndjson"), lines.join("\n") + (lines.length ? "\n" : ""));
   const stopped = sessions.filter((s) => s.how === "stopped");
   writeJson(join(dir, "stops.json"), { schema_version: 1, stops: stopped.length ? [{ code: "CAP_STOP", message: "cap", cells: stopped.map((s) => ({ model: MODEL[s.model], arm: s.arm, unit: s.unit, pass: s.pass, how: "stopped", usd: 1.75, wall_s: 600 })) }] : [] });
-  writeJson(join(dir, "units.json"), { schema_version: 1, units: Object.entries(TASK).map(([id, task]) => ({ id, task })) });
+  writeJson(join(dir, "units.json"), { schema_version: 1, suite: binding(), units: Object.entries(TASK).map(([id, task]) => ({ id, task })) });
   return dir;
 }
 

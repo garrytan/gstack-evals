@@ -10,11 +10,17 @@
 // - standalone: a successful Read of a path ending plan-ceo-review/sections/review-sections.md, or a simple cat, head,
 //   sed -n or nl Bash read of it with a non-empty result; and at least one of the four modes in the main agent's own
 //   text, upper case, with a space or an underscore (HOLD SCOPE or HOLD_SCOPE).
-// - autoplan-ceo: a successful Bash call to gstack-ceo-mode-handoff whose own result holds the line --ceo-only prints
-//   ("Auto-selected review mode → <MODE> (CEO-only run: Step 0E's rule)"), or that is a simple command passing a mode
-//   and --ceo-only and no --auto; and a successful write of a file named ceo-review.md whose written text holds a line
-//   starting "## Findings": a Write, an Edit or MultiEdit (so a heading a later edit adds counts), or a simple Bash
-//   redirect, tee or heredoc.
+// - autoplan-ceo: a successful Bash call that runs gstack-ceo-mode-handoff itself (GST-1437 and the Captain's rule of
+//   2026-11-05): split at top-level ;, && and newlines, exactly one segment is the handoff call (a mode first, then
+//   --ceo-only, no --auto), with only 2>&1, >&2 or 2>/dev/null as redirections and at most one pipe into tee, head, tail
+//   or cat carrying only flags and file arguments; every other segment is cd <dir>, VAR=value or a word-only status
+//   echo such as echo "HANDOFF_EXIT: $?". ||, $(, backticks, a backslash or any other command fails it, so a grep or a
+//   printf of the line never passes. A call with a pipe or another segment also needs the line --ceo-only prints
+//   ("Auto-selected review mode → <MODE> (CEO-only run: Step 0E's rule)") in its own result. And a successful write of a
+//   file named ceo-review.md whose written text holds a line starting "## Findings": a Write, an Edit or MultiEdit (so a
+//   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, which writes no text).
+//   handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows can count the
+//   sessions that named it and still read unexposed.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -48,6 +54,12 @@ const HANDOFF = /gstack-ceo-mode-handoff/;
 const HANDOFF_LINE = new RegExp("^Auto-selected review mode \u2192 (?:" + MODES + ") \\(CEO-only run: Step 0E's rule\\)", "m");
 const HANDOFF_CALL = new RegExp("^\\s*(?:\\S*/)?gstack-ceo-mode-handoff[\"']?\\s+([\"']?)(?:" + MODES + ")\\1(?=\\s|$)");
 const CEO_REVIEW = /(?:^|\/)ceo-review\.md$/;
+const WORD = "(?:\"[^\"$`\\\\]*\"|'[^']*'|[^\\s\"'$`\\\\;&|<>()]+)";
+const CD = new RegExp("^cd(?:\\s+" + WORD + ")?$");
+const ASSIGN = new RegExp("^[A-Za-z_]\\w*=" + WORD + "?$");
+const STATUS_ECHO = /^echo\s+"[\w :=-]*\$\?[\w :=-]*"$/;
+const FILTER = new RegExp("^(?:tee|head|tail|cat)(?:\\s+" + WORD + ")*$");
+const REDIRECTS = /\s(?:2>&1|1?>&2|2>\s*\/dev\/null)(?=\s|$)/g;
 const FINDINGS = /^ {0,3}## Findings\b/m;
 
 const text = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (typeof b?.text === "string" ? b.text : JSON.stringify(b))).join("\n") : c == null ? "" : JSON.stringify(c));
@@ -116,21 +128,67 @@ function ceoReviewText(u: Use): string | null {
   if (u.name !== "Bash" || typeof u.input.command !== "string") return null;
   const parts = simpleCommand(u.input.command);
   if (!parts || !writeTargets(parts).some((t) => CEO_REVIEW.test(t))) return null;
+  if (/^\s*printf\s+(?:-\S+\s+)*-v\b/.test(parts[0]!)) return "";
   const [head, ...body] = u.input.command.split("\n");
   return [head!.replace(/\\n/g, "\n").replace(/^\s*(?:echo(?:\s+-[neE]+)*|printf)\s+(["']?)/, ""), ...body].join("\n");
+}
+
+/** A command split at its top-level ;, && and newlines, then each part at its top-level pipes; null when it holds ||, a
+ * lone &, $(, a backtick, a backslash outside single quotes, or an open quote. */
+function segments(command: string): string[][] | null {
+  const out: string[][] = [];
+  let seg: string[] = [];
+  let cur = "";
+  let quote: string | null = null;
+  const cut = (pipe: boolean) => {
+    seg.push(cur.trim());
+    cur = "";
+    if (!pipe) out.push(seg), (seg = []);
+  };
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i]!;
+    const next = command[i + 1];
+    if (quote) {
+      if (c === quote) quote = null;
+      else if (quote === '"' && (c === "\x60" || c === "\\" || (c === "$" && next === "("))) return null;
+      cur += c;
+    } else if (c === "'" || c === '"') (quote = c), (cur += c);
+    else if (c === "\x60" || c === "\\" || (c === "$" && next === "(")) return null;
+    else if (c === ";" || c === "\n") cut(false);
+    else if (c === "&" && next === "&") cut(false), i++;
+    else if (c === "|" && next === "|") return null;
+    else if (c === "|") cut(true);
+    else if (c === "&" && command[i - 1] !== ">" && next !== "1" && next !== "2") return null;
+    else cur += c;
+  }
+  if (quote) return null;
+  cut(false);
+  return out.map((s) => s.filter(Boolean)).filter((s) => s.length);
+}
+
+/** Whether a Bash call ran the handoff itself with --ceo-only (the rule in this file's header), given its own result. */
+function ranHandoff(command: string, result: string): boolean {
+  const segs = segments(command);
+  if (!segs) return false;
+  const calls = segs.filter((s) => HANDOFF.test(s.join("|")));
+  if (calls.length !== 1) return false;
+  const [call, ...pipe] = calls[0]!;
+  if (pipe.length > 1 || (pipe.length === 1 && !FILTER.test(pipe[0]!))) return false;
+  if (segs.some((s) => s !== calls[0] && !(s.length === 1 && (CD.test(s[0]!) || ASSIGN.test(s[0]!) || STATUS_ECHO.test(s[0]!))))) return false;
+  const bare = call!.replace(REDIRECTS, " ");
+  if (/[<>&]/.test(bare.replace(/'[^']*'|"[^"]*"/g, "''"))) return false;
+  if (!HANDOFF_CALL.test(bare) || !/\s--ceo-only(?=\s|$)/.test(bare) || /\s--auto(?=\s|$)/.test(bare)) return false;
+  return (segs.length === 1 && pipe.length === 0) || HANDOFF_LINE.test(result);
 }
 
 /** The autoplan arm (gstack-auto, /autoplan --ceo-only): the handoff run with --ceo-only, and ceo-review.md written with a Findings section. */
 export function autoplanCeoExposure(transcript: string): CeoExposure {
   const uses = ownUses(transcript).filter((u) => u.ok);
-  const handoff = (u: Use) => {
-    if (u.name !== "Bash" || typeof u.input.command !== "string" || !HANDOFF.test(u.input.command)) return false;
-    if (HANDOFF_LINE.test(u.result)) return true;
-    const parts = simpleCommand(u.input.command);
-    return parts?.length === 1 && HANDOFF_CALL.test(parts[0]!) && /\s--ceo-only(?=\s|$)/.test(parts[0]!) && !/\s--auto(?=\s|$)/.test(parts[0]!);
-  };
   return exposure("autoplan-ceo", {
-    handoff_ceo_only: uses.some(handoff),
+    handoff_ceo_only: uses.some((u) => u.name === "Bash" && typeof u.input.command === "string" && ranHandoff(u.input.command, u.result)),
     findings_written: uses.some((u) => FINDINGS.test(ceoReviewText(u) ?? "")),
   });
 }
+
+/** Whether any successful Bash call of the main agent's own named gstack-ceo-mode-handoff, run or not. */
+export const handoffNamed = (transcript: string): boolean => ownUses(transcript).some((u) => u.ok && u.name === "Bash" && typeof u.input.command === "string" && HANDOFF.test(u.input.command));

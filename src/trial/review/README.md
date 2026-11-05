@@ -89,7 +89,9 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   command (/plan-ceo-review) and add words after it, and the arm's line becomes that line, a space and "Review this plan
   for problems.". A prefix that holds that ask, starts or ends with whitespace, or has a control character (a CR, tab or
   BOM included) is refused, and the refusal names the character. A gstack-<suffix> arm needs a prefix (E_USAGE without
-  one). none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm named gstack when placebo
+  one). Under `--plan ceo-outcome` these plan-unit rules don't apply: only gstack-forced takes a prefix, it is optional,
+  and it must equal ceo-outcome.ts's FORCED_LINE byte for byte; any other prefix, or a prefix on any other arm, is
+  refused (E_USAGE). none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm named gstack when placebo
   runs, since placebo keeps the default gstack line. Either way arm.json's told block records the prefix and prefix_sha256,
   and an arm without one keeps today's prompt and block.
 - `--render <arm>=interactive|unattended`, repeatable, on a gstack stack arm. The install runs gstack's setup, renders
@@ -127,8 +129,9 @@ R48 follow-ups prereg, section 3.6, and GEVA-116's note on #119.
   parser_sha256 is capped.ts's (the read rule), and diagnostics names each session with its settled metered spend. In
   such a run the session key's verifier is the findings parser's sha256, capped.ts's and readers.ts's (whose
   readTranscript feeds the read rule), so a change to any of them refuses its cached cells, and the allowance joins the
-  key. A run without `--cap-stops`, whatever its `--max-turns` and `--allowance`, and every plan unit, keeps today's
-  records and keys: the turn cap ends a session as completed, and the allowance as a missing cell (E_ALLOWANCE).
+  key. A run without `--cap-stops`, whatever its `--max-turns` and `--allowance`, and every plan unit of `--plan ceo`,
+  keeps today's records and keys: the turn cap ends a session as completed, and the allowance as a missing cell
+  (E_ALLOWANCE). A `--plan ceo-outcome` run always runs cap stops, with or without the flag (see CEO outcome units).
 - The allowance binds worst-case committed spend, including the reservations of calls still in flight, so a session that
   runs calls in parallel can stop below its allowance.
 - **Reader rows.** With `--reader-map`, each code session's readers go to the journal and to cost.tsv as
@@ -182,3 +185,31 @@ B1 to B4), with `--sealed-root` when the suite is sealed. plan.ts holds what dif
   arm gets no verdict. progress.json counts each plan session the way arm.json scores it: findings as passed, a miss as
   failed, a gap as missing.
 - Each session's CEO review mode, from gstack's mode handoff line, goes to modes.tsv and arm.json `ceo_modes`.
+
+## CEO outcome units
+
+`--plan ceo-outcome` runs a ceo-outcome suite (the CEO outcome preregistration, wiki/plans/2026-11-04-geva-285-ceo-outcome-prereg,
+as its amendments change it), with `--sealed-root` when the suite is sealed. ceo-outcome.ts holds what differs from
+`--plan ceo`:
+
+- Arms: none, lens, gstack-auto (/autoplan --ceo-only) and gstack-forced (the standalone CEO review, behind CEO v2's
+  forced line), each with the lens's own prompt. Any other arm is refused, and so is any `--told-prefix` but
+  gstack-forced's FORCED_LINE.
+- Cap stops are always on. A session that ends with a success result and no parsable closing block gets the driver's
+  one follow-up turn (docs/adapters.md).
+- Each journal entry stores the one parse of its closing block with the parser's sha256, section 6's end state, whether
+  the follow-up went, `wall_s` (the driver's session clock) and `usd` (settled metered spend). The session key's
+  verifier covers ceo-outcome.ts, capped.ts and readers.ts, and the allowance joins it.
+- A gap is listed in arm.json and logged, never an E_COVERAGE_GAP stop. stops.json lists each unit-pass a CAP_STOP
+  stopped, with its settled `usd` and `wall_s`, or left unstarted. `--resume` never reruns a cell stops.json lists
+  as stopped, because a cap stop is never retried: it carries the cell, with its spend, into the new stops.json and
+  runs only the unstarted cells. A stops.json that doesn't parse refuses the resume before any session.
+- units.json records the suite binding: the units dir's digest (`catalogs_sha256`, the suite stub's catalogs digest),
+  its name and the suite's unit ids. `gstack-evals ceo rows`, `packets` and `readings` refuse a `--units` dir that
+  doesn't hash to it, so no key.json or plan.md can change after the runs. rows.json and readings.json carry the
+  binding, and so does the packet key as `catalogs_sha256`.
+- rows.json records `exposure_sha256` (ceo-exposure.ts's digest) beside `parser_sha256`, and packets and readings
+  refuse rows from another one. Each row carries `model_id`, and rows read only the three model ids the
+  preregistration names, by their exact policy keys.
+- The receipts sink also gets every session's `host/transcript.ndjson`, which rows read for exposure.
+- The out dir must sit outside the repo.
