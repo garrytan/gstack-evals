@@ -87,6 +87,7 @@ PASS positive agreement under 0.70 on the double read is JUDGE FAIL, FIX-METHOD,
 PASS a harness failure stops stage 1 for a B1 fix
 PASS 20 missing Opus none readings hidden by 20 copies of kept readings are refused (E_USAGE duplicated reading), never read as HEADROOM
 PASS the same copies relabelled as a fourth pass are refused (E_USAGE, a pass outside 1 to 3)
+PASS the same copies relabelled to the other family are refused too: one Opus none reading per task and pass
 PASS an Opus none reading on a clean task never enters R0: R0 0.15 stays HEADROOM, not FLOOR
 PASS a stage 1 reading on a task the readings don't hold is refused with E_USAGE
 PASS a stage 1 reading whose label count differs from its key is refused with E_USAGE
@@ -97,8 +98,7 @@ PASS a stage 1 reading whose label count differs from its key is refused with E_
     tbv-climb-1: projected $68.64, round worst case $12.17, cap $92.00
     caps in all: $352.00
 PASS the projection of tbv-dev-base from the costs stage 1 printed covers every path it runs (lens on Opus, current on Sol and particle-1 included)
-PASS each cap is 1.15 times its projection plus one round (4 readings) at the worst case of its costliest model: four sends at 130,000 tokens and up, input at the cache-write rate
-PASS a measured first send above 130,000 tokens raises the round worst case (150,000 gives $13.77)
+PASS each cap is 1.15 times its projection plus one round (4 readings) at the worst case of its costliest model: four sends from a 130,000-token first send, input at the cache-write rate
 PASS a later item on a model and arm path stage 1 didn't measure is refused
 PASS its error line starts with its reason code (E_USAGE), as AGENTS.md asks
 PASS a missing GSTACK_EVALS_SCORER exits 2 with a line that starts with E_USAGE
@@ -168,7 +168,13 @@ PASS a held-out-only identifier blocks
 PASS an 8-word run from held-out material blocks
 PASS a held-out id that sits inside a longer dev name (test_held in test_held_only) is still held-out only, and blocks
 PASS an 8-word held-out run re-punctuated with commas and markdown still blocks
-PASS a held-out name that appears only inside a longer artifact name (held-repo-x in held-repo-xyz) does not block
+PASS a held-out name inside a longer artifact name (held-repo-x in held-repo-xyz) blocks: the artifact side fails closed
+PASS a held-out id inside a longer snake_case artifact name (test_held_only in check_test_held_only_v2) blocks
+PASS a dashed held-out id inside a longer dev name (test-held in test-held-only) is still held-out only, and blocks
+PASS a dotted held-out id inside a longer dev name (test.held in test.held.v2) is still held-out only, and blocks
+PASS a held-out path inside a longer dev path (a/b.ts in c/a/b.ts) is still held-out only, and blocks
+PASS a dev text naming the id itself, followed by a period or a comma, still shares it (never blocks)
+PASS an artifact naming a held-out-only id followed by a period or a comma blocks
 
 ## i. The treatment-diff leak check
 PASS added lines sharing an 8-word run with task material are a HIT
@@ -176,7 +182,7 @@ PASS the same run already present in gstack at C is exempt
 PASS a task's repository or test name in added lines is a HIT
 PASS a clean diff is CLEAN
 PASS added lines that re-punctuate task material are a HIT
-PASS a task name that appears only inside a longer identifier (repo-x in held-repo-xyz) is not a hit
+PASS a task name inside a longer identifier (repo-x in held-repo-xyz) is a HIT: names fail closed
 
 ## j. Money at caps and the ledger: one lease opened and settled per frozen item
     tbv-author: projected $195.00, cap $229.00 (set directly: not a reading item)
@@ -222,4 +228,4 @@ PASS tbv-held-p3: a second run on the settled item is refused (E_ITEM_BOUND)
 ## Leak check
 PASS the transcript prints no home path and no key-shaped value
 
-PASS 133, FAIL 0
+PASS 139, FAIL 0

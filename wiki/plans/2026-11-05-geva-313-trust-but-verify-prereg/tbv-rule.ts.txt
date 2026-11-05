@@ -99,9 +99,9 @@ export function readingWorst(p: { inputTokens: number; price: Price }) {
   for (let k = 0; k < SENDS; k++) usd += ((p.inputTokens + k * (MAX_TOKENS + USER_TURN)) * Math.max(p.price.in, p.price.cacheWrite ?? 0) + MAX_TOKENS * p.price.out) / 1e6;
   return usd;
 }
-/** One round (4 readings) at the worst case of the costliest model, the first send at least WORST_INPUT tokens or the largest measured, if larger. */
-function roundWorst(models: Model[], prices: Record<string, Price>, inputTokens: Partial<Record<Model, number>> = {}) {
-  return ROUND * Math.max(...models.map((m) => readingWorst({ inputTokens: Math.max(WORST_INPUT, inputTokens[m] ?? 0), price: prices[m] ?? fail("E_USAGE no price for " + m) })));
+/** One round (4 readings) at the worst case of the costliest model, from a first send of WORST_INPUT tokens. */
+function roundWorst(models: Model[], prices: Record<string, Price>) {
+  return ROUND * Math.max(...models.map((m) => readingWorst({ inputTokens: WORST_INPUT, price: prices[m] ?? fail("E_USAGE no price for " + m) })));
 }
 /** Every item's cap: 1.15 times its projection plus one round at its worst case, rounded up to the dollar. The projection check and the caps command both use it. */
 export const capOf = (projected: number, round: number) => Math.ceil(Math.round((CAP_FACTOR * projected + round) * 1e6) / 1e6);
@@ -165,6 +165,8 @@ function headroom(rd: Readings) {
   const hr = rd.tasks.filter((t) => t.stratum !== "clean");
   const hrIds = new Set(hr.map((t) => t.id));
   const none = rd.readings.filter((r) => r.arm === "none" && r.model === "opus" && hrIds.has(r.task));
+  const slots = new Set<string>();
+  for (const r of none) { const k = r.task + "#" + r.pass; if (slots.has(k)) fail("E_USAGE duplicated reading " + k + ": one Opus none reading per task and pass, whatever its family"); slots.add(k); }
   const planned = hr.length * passes;
   const missing = none.filter((r) => !judged(r)).length + Math.max(0, planned - none.length);
   const readable = new Set(none.filter(judged).map((r) => r.task));
@@ -190,7 +192,7 @@ function headroom(rd: Readings) {
   say("Verdict: " + (r0 > BAND.hi ? "CEILING" : r0 < BAND.lo ? "FLOOR" : "HEADROOM") + " (band " + BAND.lo + " to " + BAND.hi + ")");
 }
 
-function projection(p: { items: { item: string; readings: { model: Model; arm: Arm; n: number }[]; judgeN: number; inputTokens?: Partial<Record<Model, number>> }[]; measured: Record<string, number>; judgePerReading: number; prices: Record<Model, Price> }) {
+function projection(p: { items: { item: string; readings: { model: Model; arm: Arm; n: number }[]; judgeN: number }[]; measured: Record<string, number>; judgePerReading: number; prices: Record<Model, Price> }) {
   let total = 0;
   for (const it of p.items) {
     let proj = it.judgeN * p.judgePerReading;
@@ -199,7 +201,7 @@ function projection(p: { items: { item: string; readings: { model: Model; arm: A
       if (m === undefined) fail("E_USAGE no measured cost for " + r.arm + ":" + r.model + " (stage 1 must measure every model and arm path a later item runs)");
       proj += r.n * m;
     }
-    const worst = roundWorst(it.readings.map((r) => r.model), p.prices, it.inputTokens);
+    const worst = roundWorst(it.readings.map((r) => r.model), p.prices);
     const cap = capOf(proj, worst);
     total += cap;
     say(it.item + ": projected " + usd(proj) + ", round worst case " + usd(worst) + ", cap " + usd(cap));
@@ -319,16 +321,21 @@ function compare(rd: Readings) {
 
 /** Text is compared as word tokens: lowercased runs of letters, digits and underscores, so punctuation and markdown never hide a match. */
 const toks = (t: string) => t.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
-/** Whether a text holds a name as a whole run of its tokens, never as part of a longer token. */
-function finder(text: string) {
-  const ws = toks(text), at = new Map<string, number[]>();
+/** Names (task ids, repositories, tests, paths) are compared as id tokens: lowercased runs of letters, digits, "_", "-", "." and "/", with a trailing "." trimmed. */
+const idToks = (t: string) => (t.toLowerCase().match(/[\p{L}\p{N}_.\-\/]+/gu) ?? []).map((w) => w.replace(/\.+$/, "")).filter(Boolean);
+const named = (name: string) => (/[\p{L}\p{N}]/u.test(name) ? name.toLowerCase() : fail("E_USAGE the name " + JSON.stringify(name) + " has no letter or digit"));
+/** Whether dev text holds a name as a whole run of id tokens, so test-held never counts as shared because dev holds test-held-only. */
+function shares(text: string) {
+  const ws = idToks(text), at = new Map<string, number[]>();
   ws.forEach((w, i) => { const xs = at.get(w); if (xs) xs.push(i); else at.set(w, [i]); });
-  return (name: string) => { const run = toks(name); if (!run.length) fail("E_USAGE the name " + JSON.stringify(name) + " has no letter or digit"); return (at.get(run[0]!) ?? []).some((i) => run.every((w, j) => ws[i + j] === w)); };
+  return (name: string) => { const run = idToks(named(name)); return (at.get(run[0]!) ?? []).some((i) => run.every((w, j) => ws[i + j] === w)); };
 }
+/** Whether an artifact or a diff holds a name anywhere, inside a longer name included: this side fails closed. */
+const holds = (text: string) => { const t = text.toLowerCase(); return (name: string) => t.includes(named(name)); };
 function grams(text: string, n = 8) { const w = toks(text); const s = new Set<string>(); for (let i = 0; i + n <= w.length; i++) s.add(w.slice(i, i + n).join(" ")); return s; }
 
 function handoff(h: { artifact: string; heldIds: string[]; devText: string; heldText: string }) {
-  const inDev = finder(h.devText), inArtifact = finder(h.artifact);
+  const inDev = shares(h.devText), inArtifact = holds(h.artifact);
   const unique = h.heldIds.filter((id) => !inDev(id));
   const idHits = unique.filter(inArtifact);
   const hg = grams(h.heldText), dg = grams(h.devText);
@@ -341,7 +348,7 @@ function leak(l: { addedLines: string[]; gstackAtC: string; material: string; na
   const added = l.addedLines.join("\n");
   const base = grams(l.gstackAtC), mat = grams(l.material);
   const hits = [...grams(added)].filter((g) => !base.has(g) && mat.has(g));
-  const nameHits = l.names.filter(finder(added));
+  const nameHits = l.names.filter(holds(added));
   say("leak: " + hits.length + " 8-word runs shared with task material (after removing runs already in gstack at C), " + nameHits.length + " task names");
   say("Verdict: " + (hits.length || nameHits.length ? "HIT (to the Captain)" : "CLEAN"));
 }

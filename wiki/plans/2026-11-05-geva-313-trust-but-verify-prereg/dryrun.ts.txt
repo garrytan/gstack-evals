@@ -155,6 +155,8 @@ await section("d. Stage 1: the headroom rule", () => {
   const masked = (relabel: boolean) => stage1({ mutate: (rd) => { const p3 = opusNone(rd).filter((r: any) => r.pass === 3); rd.readings = rd.readings.filter((r: any) => !p3.includes(r)); rd.readings.push(...opusNone(rd).filter((r: any) => r.pass === 1).map((r: any) => ({ ...r, id: r.id + "-copy", pass: relabel ? 4 : 1 }))); } });
   check("20 missing Opus none readings hidden by 20 copies of kept readings are refused (E_USAGE duplicated reading), never read as HEADROOM", refused(run("headroom", masked(false)), "duplicated reading"));
   check("the same copies relabelled as a fourth pass are refused (E_USAGE, a pass outside 1 to 3)", refused(run("headroom", masked(true)), "outside 1 to 3"));
+  const flipped = stage1({ mutate: (rd) => { const p3 = opusNone(rd).filter((r: any) => r.pass === 3); rd.readings = rd.readings.filter((r: any) => !p3.includes(r)); rd.readings.push(...opusNone(rd).filter((r: any) => r.pass === 1).map((r: any) => ({ ...r, id: r.id + "-f", family: r.family === "ship" ? "investigate" : "ship" }))); } });
+  check("the same copies relabelled to the other family are refused too: one Opus none reading per task and pass", refused(run("headroom", flipped), "one Opus none reading per task and pass"));
   const withClean = stage1({ facts: 20, recallFacts: 3, mutate: (rd) => { rd.tasks.push({ id: "k0", cluster: "k0", source: "B", stratum: "clean", nfacts: 0 }); for (let p = 1; p <= 3; p++) rd.readings.push(reading(rd.tasks.at(-1), "ship", "none", "opus", p, 0.5)); } });
   check("an Opus none reading on a clean task never enters R0: R0 0.15 stays HEADROOM, not FLOOR", verdict(rule("headroom", withClean)).startsWith("HEADROOM"));
   check("a stage 1 reading on a task the readings don't hold is refused with E_USAGE", refused(run("headroom", stage1({ mutate: (rd) => { rd.readings[0].task = "nope"; } })), "names a task the readings do not hold"));
@@ -163,7 +165,7 @@ await section("d. Stage 1: the headroom rule", () => {
 
 await section("e. The projection check from measured costs", () => {
   const prices = PRICES;
-  const it = (item: string, rs: any[], judgeN: number, first = 120000) => ({ item, readings: rs, judgeN, inputTokens: { opus: first, sol: first, particle: first } });
+  const it = (item: string, rs: any[], judgeN: number) => ({ item, readings: rs, judgeN });
   const measured: Record<string, number> = {};
   for (const l of rule("headroom", stage1({})).split("\n")) { const m = /^cost (\w+:\w+): \d+ readings, mean \$([\d.]+)/.exec(l); if (m) measured[m[1]!] = Number(m[2]); }
   say("    measured, from stage 1's printed cost lines: " + Object.entries(measured).map(([k, v]) => k + " $" + v.toFixed(2)).join(", "));
@@ -172,9 +174,7 @@ await section("e. The projection check from measured costs", () => {
   const o = pr.stdout;
   show(o, /./);
   check("the projection of tbv-dev-base from the costs stage 1 printed covers every path it runs (lens on Opus, current on Sol and particle-1 included)", pr.status === 0 && /^tbv-dev-base: projected/m.test(o));
-  check("each cap is 1.15 times its projection plus one round (4 readings) at the worst case of its costliest model: four sends at 130,000 tokens and up, input at the cache-write rate", /tbv-climb-1: projected \$68\.64, round worst case \$12\.17, cap \$92\.00/.test(o));
-  const big = run("projection", { items: [it("tbv-climb-1", [{ model: "opus", arm: "principle", n: 132 }], 132, 150000)], measured, judgePerReading: 0.07, prices });
-  check("a measured first send above 130,000 tokens raises the round worst case (150,000 gives $13.77)", /round worst case \$13\.77/.test(big.stdout));
+  check("each cap is 1.15 times its projection plus one round (4 readings) at the worst case of its costliest model: four sends from a 130,000-token first send, input at the cache-write rate", /tbv-climb-1: projected \$68\.64, round worst case \$12\.17, cap \$92\.00/.test(o));
   const r = run("projection", { items: [it("x", [{ model: "sol", arm: "principle", n: 10 }], 0)], measured: { "none:opus": 0.4 }, judgePerReading: 0.07, prices });
   check("a later item on a model and arm path stage 1 didn't measure is refused", r.status === 2 && r.stderr.includes("no measured cost for principle:sol"));
   check("its error line starts with its reason code (E_USAGE), as AGENTS.md asks", refused(r, "no measured cost"));
@@ -267,7 +267,13 @@ await section("h. The handoff check", () => {
   const words = { heldIds: ["test_held"], devText: "dev touches test_held_only", heldText: "the parser test failed after the config change was made" };
   check("a held-out id that sits inside a longer dev name (test_held in test_held_only) is still held-out only, and blocks", verdict(rule("handoff", { ...words, artifact: "mentions test_held here" })) === "BLOCK");
   check("an 8-word held-out run re-punctuated with commas and markdown still blocks", verdict(rule("handoff", { ...words, artifact: "The **parser test** failed, after `the config change` was made." })) === "BLOCK");
-  check("a held-out name that appears only inside a longer artifact name (held-repo-x in held-repo-xyz) does not block", verdict(rule("handoff", { ...base, artifact: "see held-repo-xyz" })) === "CLEAR");
+  check("a held-out name inside a longer artifact name (held-repo-x in held-repo-xyz) blocks: the artifact side fails closed", verdict(rule("handoff", { ...base, artifact: "see held-repo-xyz" })) === "BLOCK");
+  check("a held-out id inside a longer snake_case artifact name (test_held_only in check_test_held_only_v2) blocks", verdict(rule("handoff", { ...base, artifact: "renames check_test_held_only_v2" })) === "BLOCK");
+  check("a dashed held-out id inside a longer dev name (test-held in test-held-only) is still held-out only, and blocks", verdict(rule("handoff", { heldIds: ["test-held"], devText: "dev touches test-held-only", heldText: "x", artifact: "mentions test-held here" })) === "BLOCK");
+  check("a dotted held-out id inside a longer dev name (test.held in test.held.v2) is still held-out only, and blocks", verdict(rule("handoff", { heldIds: ["test.held"], devText: "dev touches test.held.v2", heldText: "x", artifact: "mentions test.held here" })) === "BLOCK");
+  check("a held-out path inside a longer dev path (a/b.ts in c/a/b.ts) is still held-out only, and blocks", verdict(rule("handoff", { heldIds: ["a/b.ts"], devText: "dev touches c/a/b.ts", heldText: "x", artifact: "mentions a/b.ts" })) === "BLOCK");
+  check("a dev text naming the id itself, followed by a period or a comma, still shares it (never blocks)", verdict(rule("handoff", { heldIds: ["test-held", "test.held"], devText: "dev touches test-held. then test.held, done", heldText: "x", artifact: "mentions test-held and test.held" })) === "CLEAR");
+  check("an artifact naming a held-out-only id followed by a period or a comma blocks", verdict(rule("handoff", { heldIds: ["test-held"], devText: "x", heldText: "x", artifact: "it touched test-held, then test-held." })) === "BLOCK");
 });
 
 await section("i. The treatment-diff leak check", () => {
@@ -277,7 +283,7 @@ await section("i. The treatment-diff leak check", () => {
   check("a task's repository or test name in added lines is a HIT", verdict(rule("leak", { addedLines: ["see held-repo-x"], gstackAtC: "", material, names: ["held-repo-x"] })).startsWith("HIT"));
   check("a clean diff is CLEAN", verdict(rule("leak", { addedLines: ["lead with failures, skips and unverified claims"], gstackAtC: "", material, names: ["held-repo-x"] })) === "CLEAN");
   check("added lines that re-punctuate task material are a HIT", verdict(rule("leak", { addedLines: ["Note: the parser test failed, after the config change was made."], gstackAtC: "unrelated text", material, names: [] })).startsWith("HIT"));
-  check("a task name that appears only inside a longer identifier (repo-x in held-repo-xyz) is not a hit", verdict(rule("leak", { addedLines: ["see held-repo-xyz"], gstackAtC: "", material, names: ["repo-x"] })) === "CLEAN");
+  check("a task name inside a longer identifier (repo-x in held-repo-xyz) is a HIT: names fail closed", verdict(rule("leak", { addedLines: ["see held-repo-xyz"], gstackAtC: "", material, names: ["repo-x"] })).startsWith("HIT"));
 });
 
 await section("j. Money at caps and the ledger: one lease opened and settled per frozen item", async () => {
