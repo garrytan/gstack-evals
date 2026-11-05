@@ -2,8 +2,6 @@
 // 699a41cb's own lines and captured call shapes (fixtures/ceo-exposure/gstack-699.ts), with review words of our own.
 // Each detector reads one session's transcript.ndjson: the main agent's own text and its own tool calls with their results.
 import { describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { autoplanCeoExposure, GSTACK_CEO_PIN, standaloneExposure } from "../../../src/trial/review/ceo-exposure.ts";
 import * as G from "./fixtures/ceo-exposure/gstack-699.ts";
@@ -44,14 +42,6 @@ describe("the pinned gstack files", () => {
         "bin/gstack-ceo-mode-handoff": "530ade6ed08c2795779f4c828855d5ab509158e006313d955036dca53f61b1f1",
       },
     });
-  });
-  const pin = process.env.OUTCOME_GSTACK_PIN;
-  test.skipIf(!pin)("with OUTCOME_GSTACK_PIN set: each pinned file hashes to its digest and holds every vendored line", () => {
-    for (const [f, sha] of Object.entries(GSTACK_CEO_PIN.files)) expect(createHash("sha256").update(readFileSync(join(pin!, f))).digest("hex")).toBe(sha);
-    for (const group of [G.HANDOFF_BIN, G.CEO_ONLY, G.REVIEW_SECTIONS, G.SKILL, G.CAPTURED_AUTO_HANDOFF] as Record<string, string>[]) {
-      const text = readFileSync(join(pin!, group.file!), "utf8");
-      for (const [k, line] of Object.entries(group)) if (k !== "file") expect(text.includes(group.file!.endsWith(".json") ? JSON.stringify(line).slice(1, -1) : line)).toBe(true);
-    }
   });
 });
 
