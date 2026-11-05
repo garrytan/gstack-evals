@@ -20,7 +20,8 @@
 //   file named ceo-review.md whose written text holds a line starting "## Findings": a Write, an Edit or MultiEdit (so a
 //   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, quoted or attached, which writes no text, and never a first line
 //   with a backslash outside single quotes, the rule segments() uses, since words() does not model bash escapes). A \n
-//   reads as a newline only where bash expands it: in printf's format and after echo -e; printf's arguments don't count.
+//   reads as a newline only where bash expands it: in printf's format and after echo -e (up to its \c); printf's
+//   arguments don't count, and a heredoc body counts only for cat, the one command read here that takes its stdin.
 //   handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows can count the
 //   sessions that named it and still read unexposed.
 import { createHash } from "node:crypto";
@@ -121,6 +122,9 @@ export function standaloneExposure(transcript: string): CeoExposure {
   });
 }
 
+/** printf's and echo -e's \\ and \n escapes, read left to right, so \\n stays a backslash and an n. */
+const expandEscapes = (t: string): string => t.replace(/\\([\\n])/g, (_, c: string) => (c === "n" ? "\n" : "\\"));
+
 /** The text a successful call wrote to a file named ceo-review.md, or null when it wrote no such file. */
 function ceoReviewText(u: Use): string | null {
   if (u.name === "Write" || u.name === "Edit" || u.name === "MultiEdit") {
@@ -137,15 +141,16 @@ function ceoReviewText(u: Use): string | null {
   if (pw[0] === "printf") {
     let i = 1;
     for (; i < pw.length && pw[i] !== "--" && pw[i]!.startsWith("-"); i++) if (pw[i]!.startsWith("-v")) return "";
-    return (pw[pw[i] === "--" ? i + 1 : i] ?? "").replace(/\\n/g, "\n");
+    return expandEscapes(pw[pw[i] === "--" ? i + 1 : i] ?? "");
   }
+  if (pw[0] !== "echo") return pw[0] === "cat" ? body.join("\n") : "";
   let escapes = false;
-  if (pw[0] === "echo") for (const w of pw.slice(1)) {
+  for (const w of pw.slice(1)) {
     if (!/^-[neE]+$/.test(w)) break;
     for (const c of w.slice(1)) if (c !== "n") escapes = c === "e";
   }
   const text = head!.replace(/^\s*echo(?:\s+-[neE]+)*\s+(["']?)/, "");
-  return [escapes ? text.replace(/\\n/g, "\n") : text, ...body].join("\n");
+  return escapes ? expandEscapes(/^(?:[^\\]|\\[\s\S])*?(?=\\c)/.exec(text)?.[0] ?? text) : text;
 }
 
 /** A command's shell words with their quotes removed, ending at an unquoted # that starts a word (a comment); null on an open quote. */
