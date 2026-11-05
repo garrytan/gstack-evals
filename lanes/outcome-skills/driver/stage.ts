@@ -1,0 +1,493 @@
+// The outcome-skills session driver (GST-1381, plan wiki/plans/2026-11-04-geva-286-u4-session-driver): one U4 lease per
+// stage at its line item's cap (G prereg section 9), one metering-proxy slot per session, and a control plane on
+// 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. Every lease is admitted by O6's envelope through
+// openLease, and every exit path settles every lease it opened.
+import { randomBytes } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
+import { rigAdmission } from "../../../src/rig/admission.ts";
+import { envelopeStatus, split } from "../../../src/runner/ledger/envelope.ts";
+import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
+import type { LocalLedger } from "../../../src/runner/ledger/local.ts";
+import { usd } from "../../../src/runner/ledger/money.ts";
+import { LedgerError, readItem, type CloseFile, type LeaseFile } from "../../../src/runner/ledger/record.ts";
+import { MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
+import { loadRegistry, type Registry } from "../arms/registry.ts";
+
+export const DEFAULT_TTL_MS = 72 * 3_600_000;
+export const DEADLINE_GRACE_MS = 120_000;
+export const DEFAULT_RETRY: RetryBudget = { attempts: 3, elapsed_ms: 300_000 };
+
+export interface StageSpec {
+  item: string;
+  arm: string;
+}
+
+export interface ServeOptions {
+  record: string;
+  local: LocalLedger;
+  run_id: string;
+  /** The program's envelope host; the driver refuses to run on any other machine. */
+  envelope_host: string;
+  stages: StageSpec[];
+  /** The trial-network address the proxies listen on: a loopback or private IP. */
+  host: string;
+  dir: string;
+  planned?: number;
+  reruns?: number;
+  control_port?: number;
+  ttl_ms?: number;
+  /** Added to an arm's wall limit for a slot's deadline; 120 s by default. */
+  deadline_grace_ms?: number;
+  retry?: RetryBudget;
+  registry?: Registry;
+  env?: Record<string, string | undefined>;
+  fetch?: (input: string, init: RequestInit) => Promise<Response>;
+  requireAdmission?: RequireAdmission;
+  machine?: string;
+  now?: () => number;
+  /** Receives every notice line, code first. */
+  log?: (line: string) => void;
+}
+
+export type Ended = "completed" | "cap_stop" | "lease_expired" | "failed";
+
+export interface OpenAnswer {
+  id: string;
+  token: string;
+  base_url: string;
+  ledger: "u4";
+  item: string;
+  lease_id: string;
+  meter_id: string;
+  allowance_micros: number;
+}
+
+export interface CloseAnswer {
+  id: string;
+  reason: string;
+  lease_id: string;
+  meter_id: string;
+  spent_micros: number;
+  usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number };
+  requests: number;
+  ok_responses: number;
+  refused: number;
+  unknown: number;
+  undrained: number;
+  unsettled: number;
+}
+
+interface Session {
+  id: string;
+  stage: Stage;
+  slot: string;
+  meter_id: string;
+  allowance: number;
+  answer: OpenAnswer;
+  timer: ReturnType<typeof setTimeout>;
+  closing: Promise<CloseAnswer> | null;
+  closed: CloseAnswer | null;
+}
+
+interface Stage {
+  item: string;
+  arm: string;
+  kind: "none" | "told";
+  lease_id: string;
+  reserved: number;
+  expires: number;
+  proxy: MeteringProxy;
+  journal: string;
+  state: "serving" | "draining" | "stopped";
+  ended: Ended | null;
+  scope: string | null;
+  live: Map<string, Session>;
+  opens: number;
+  reruns: number;
+  finished: number;
+  settling: Promise<void> | null;
+  close: CloseFile | null;
+}
+
+export interface Served {
+  control: string;
+  stages: Array<{ item: string; arm: string; lease_id: string; reserved_micros: number; proxy: string }>;
+  /** Resolves with the exit code once every stage is settled: 0, or 2 when a lease is still open. */
+  done: Promise<number>;
+  stop(ended?: Ended): Promise<number>;
+}
+
+const fail = (code: ReasonCode, message: string): never => {
+  throw new LedgerError(code, message);
+};
+
+/** A refusal as problem-details JSON, code first, like the metering proxy's. */
+export function refusal(code: ReasonCode, status: number, detail: string, extra: Record<string, unknown> = {}): Response {
+  const body = { type: "https://github.com/garrytan/gstack-evals/blob/main/" + docAnchor(code), title: code, status, code, detail: code + ": outcome driver: " + detail, ...extra };
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/problem+json" } });
+}
+
+const urlHost = (host: string) => (host.includes(":") ? "[" + host + "]" : host);
+const sorted = (v: unknown): unknown => (Array.isArray(v) ? v.map(sorted) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted((v as Record<string, unknown>)[k])])) : v);
+
+/**
+ * Recovers the open leases an earlier driver of this run left in this run directory (leases.jsonl) on this machine,
+ * preflights every stage, opens one lease and one proxy per stage, then serves. A lease the driver did not open, such as
+ * the program's T-G or VM lease on the same run, is never touched.
+ */
+export async function serveStages(o: ServeOptions): Promise<Served> {
+  const log = o.log ?? ((line: string) => console.error(line));
+  const warn = (code: ReasonCode, message: string) => log(code + " " + message);
+  const now = o.now ?? Date.now;
+  const machine = o.machine ?? machineId();
+  if (machine !== o.envelope_host) fail("E_USAGE", "this machine is " + machine + ", not the envelope host " + o.envelope_host + "; the driver writes envelope entries, which have one winner only on the envelope host's own disk, so run it there");
+  const reg = o.registry ?? loadRegistry();
+  const planned = o.planned ?? 24;
+  const reruns = o.reruns ?? 2;
+  const ttl = o.ttl_ms ?? DEFAULT_TTL_MS;
+  if (!Number.isSafeInteger(planned) || planned < 1 || !Number.isSafeInteger(reruns) || reruns < 0) fail("E_USAGE", "planned sessions must be at least 1 and reruns at least 0, as whole numbers");
+  if (!Number.isSafeInteger(ttl) || ttl <= 0 || ttl > MAX_LEASE_TTL_MS) fail("E_USAGE", "the lease time to live must be a whole number of milliseconds from 1 to " + MAX_LEASE_TTL_MS + " (7 days), not " + ttl);
+  if (!o.stages.length) fail("E_USAGE", "name at least one --stage <item>=<arm>");
+  for (const st of o.stages) if (!Object.hasOwn(reg.arms, st.arm)) fail("E_USAGE", "stage " + st.item + " names arm " + st.arm + ", which the registry does not hold; it holds " + Object.keys(reg.arms).join(", "));
+  if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(o.stages.map((s) => s.arm)).size !== o.stages.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
+  mkdirSync(o.dir, { recursive: true });
+  const sessionsFile = join(o.dir, "sessions.jsonl");
+  const record = (line: Record<string, unknown>) => appendFileSync(sessionsFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
+
+  const leasesFile = join(o.dir, "leases.jsonl");
+  const ours = new Set(existsSync(leasesFile) ? readFileSync(leasesFile, "utf8").split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { lease_id: string }).lease_id) : []);
+  const failures: string[] = [];
+  for (const item of ledgerStatus(o.record)) {
+    const lease = item.open_lease;
+    if (!lease || !ours.has(lease.lease_id) || lease.run_id !== o.run_id || lease.machine_id !== machine) continue;
+    try {
+      const journal = join(o.dir, lease.lease_id + ".journal.ndjson");
+      if (existsSync(journal)) {
+        const rec = await reconcileJournal(journal, o.local);
+        for (const r of rec.refused) warn(r.code as ReasonCode, "recovering lease " + lease.lease_id + ": " + r.message);
+      } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item.item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
+      const close = settleLease(o.record, o.local, lease.lease_id, warn);
+      log("STAGE_RECOVERED item=" + item.item + " lease=" + lease.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " unknown_calls=" + close.unknown_calls);
+    } catch (error) {
+      failures.push(lease.lease_id + " (" + (error as Error).message + ")");
+    }
+  }
+  if (failures.length) fail("E_LEASE_UNSETTLED", "recovery could not settle " + failures.join("; ") + "; nothing new was opened. Settle each with gstack-evals ledger settle --lease <id> on this machine, then launch the driver again");
+
+  const at = new Date(now());
+  const plans = o.stages.map((st) => {
+    const s = readItem(o.record, st.item);
+    if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
+    if (s.run_id !== null && s.run_id !== o.run_id) fail("E_ITEM_BOUND", "line item " + st.item + " is bound to run " + s.run_id + ", so run " + o.run_id + " cannot spend from it; nothing was opened");
+    if (s.open) fail("E_LEASE_UNSETTLED", "lease " + s.open.lease_id + " on line item " + st.item + " (machine " + s.open.machine_id + ", run " + s.open.run_id + ") is still open; settle it on that machine, then launch the driver again; nothing was opened");
+    const left = s.cap_micros - s.committed_micros;
+    if (left <= 0) fail("CAP_STOP", "line item " + st.item + " has nothing left of its " + usd(s.cap_micros) + " cap (" + usd(s.committed_micros) + " committed); nothing was opened");
+    if (s.admission) {
+      const seq = s.leases.length + 1;
+      const file: LeaseFile = { schema: 1, kind: "lease", item: st.item, seq, lease_id: st.item + "." + String(seq).padStart(4, "0") + ".000000", run_id: o.run_id, machine_id: machine, reserved_micros: left, expires_at: new Date(at.getTime() + ttl).toISOString(), created_at: at.toISOString() };
+      const why = (o.requireAdmission ?? rigAdmission())(o.record, file);
+      if (why && s.admission === "required") fail("E_RIG_UNPROVEN", "line item " + st.item + " requires admission for slot " + seq + ": " + why + "; write it with gstack-evals rig admit for that slot, then launch the driver again; nothing was opened");
+    }
+    return { st, s, left };
+  });
+  const programs = new Map<string, { amount: number; skills: Map<string, number> }>();
+  for (const { s, left } of plans) {
+    if (s.program === null) continue;
+    const p = programs.get(s.program) ?? { amount: 0, skills: new Map<string, number>() };
+    programs.set(s.program, p);
+    p.amount += left;
+    for (const [skill, part] of split(left, s.skills)) p.skills.set(skill, (p.skills.get(skill) ?? 0) + part);
+  }
+  for (const [program, p] of programs) {
+    const env = envelopeStatus(o.record, program, at);
+    if (env.total.committed_micros + p.amount > env.total.cap_micros) fail("ENVELOPE_PROGRAM_STOP", "program " + program + " holds " + usd(env.total.committed_micros) + " of its " + usd(env.total.cap_micros) + " envelope; this batch's stages reserve " + usd(p.amount) + " together, so none is opened");
+    for (const [skill, part] of p.skills) {
+      const l = env.skills[skill];
+      if (!l || l.committed_micros + part > l.cap_micros) fail("ENVELOPE_SKILL_STOP", "skill " + skill + " in program " + program + " holds " + usd(l?.committed_micros ?? 0) + " of its " + usd(l?.cap_micros ?? 0) + " ceiling; this batch's stages put " + usd(part) + " on it together, so none is opened");
+    }
+  }
+
+  const stages: Stage[] = [];
+  const opened: string[] = [];
+  const unwind = (error: unknown): never => {
+    for (const s of stages) {
+      try {
+        s.proxy.stop();
+      } catch {}
+    }
+    for (const lease_id of opened) {
+      try {
+        settleLease(o.record, o.local, lease_id, warn);
+      } catch (e) {
+        log("E_LEASE_UNSETTLED lease " + lease_id + " could not be settled after a failed open: " + (e as Error).message);
+      }
+    }
+    throw error;
+  };
+  for (const [i, { st }] of plans.entries()) {
+    try {
+      const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, ttl_ms: ttl, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
+      opened.push(lease.lease_id);
+      appendFileSync(leasesFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, item: st.item, lease_id: lease.lease_id }) + "\n");
+      const journal = join(o.dir, lease.lease_id + ".journal.ndjson");
+      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(o.dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch });
+      const stage: Stage = { item: st.item, arm: st.arm, kind: reg.arms[st.arm]!.kind, lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
+      stages.push(stage);
+      proxy.start();
+    } catch (error) {
+      unwind(error);
+    }
+  }
+
+  const triples = new Map<string, number>();
+  if (existsSync(sessionsFile)) {
+    for (const line of readFileSync(sessionsFile, "utf8").split("\n")) {
+      let e: { run_id?: string; event?: string; arm?: string; task?: string; trial_n?: number; rerun?: string };
+      try {
+        e = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const stage = stages.find((s) => s.arm === e.arm);
+      if (e.run_id !== o.run_id || e.event !== "open" || !stage) continue;
+      const key = e.arm + "|" + e.task + "|" + e.trial_n;
+      triples.set(key, (triples.get(key) ?? 0) + 1);
+      stage.opens++;
+      if (e.rerun) stage.reruns++;
+    }
+  }
+  const sessions = new Map<string, Session>();
+  const keys = new Map<string, { body: string; id: string }>();
+  let resolveDone!: (code: number) => void;
+  const done = new Promise<number>((r) => (resolveDone = r));
+  let finishing: Promise<number> | null = null;
+
+  const closeSession = (sess: Session, reason: string): Promise<CloseAnswer> => {
+    sess.closing ??= (async () => {
+      const s = sess.stage;
+      clearTimeout(sess.timer);
+      s.proxy.unbind(sess.slot);
+      let meter: Awaited<ReturnType<MeteringProxy["finalize"]>> | null = null;
+      try {
+        meter = await s.proxy.finalize(sess.meter_id);
+      } catch (e) {
+        log("E_INTERNAL outcome driver: finalizing session " + sess.id + " failed: " + (e as Error).message);
+      }
+      const m = o.local.meters(s.lease_id).get(sess.meter_id);
+      const u = m?.usage ?? { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
+      const answer: CloseAnswer = {
+        id: sess.id,
+        reason,
+        lease_id: s.lease_id,
+        meter_id: sess.meter_id,
+        spent_micros: m?.held_micros ?? 0,
+        usage: { input_tokens: u.input, output_tokens: u.output + u.reasoning, cache_read_input_tokens: u.cache_read, cache_creation_input_tokens: u.cache_write },
+        requests: meter?.requests ?? 0,
+        ok_responses: Object.entries(meter?.upstream.statuses ?? {}).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0),
+        refused: meter?.refused ?? 0,
+        unknown: meter?.unknown ?? 0,
+        undrained: meter?.undrained ?? 0,
+        unsettled: meter?.unsettled ?? 0,
+      };
+      sess.closed = answer;
+      s.live.delete(sess.id);
+      s.finished++;
+      record({ event: "close", item: s.item, ...answer });
+      if (s.state === "draining" && s.live.size === 0) void settleStage(s);
+      return answer;
+    })();
+    return sess.closing;
+  };
+
+  const settleStage = (s: Stage): Promise<void> => {
+    s.settling ??= (async () => {
+      const cut = s.live.size;
+      s.state = "stopped";
+      s.ended ??= cut ? "failed" : "completed";
+      for (const sess of [...s.live.values()]) {
+        try {
+          await closeSession(sess, "stage_stop");
+        } catch (e) {
+          log("E_INTERNAL outcome driver: closing session " + sess.id + " failed: " + (e as Error).message);
+        }
+      }
+      try {
+        s.proxy.stop();
+        const rec = await reconcileJournal(s.journal, o.local);
+        for (const r of rec.refused) warn(r.code as ReasonCode, "settling lease " + s.lease_id + ": " + r.message);
+        s.close = settleLease(o.record, o.local, s.lease_id, warn);
+        log("STAGE_SETTLED item=" + s.item + " arm=" + s.arm + " lease=" + s.lease_id + " spent=" + usd(s.close.spent_micros) + " unknown=" + usd(s.close.unknown_micros) + " sessions=" + s.finished + " ended=" + s.ended + (s.scope ? " scope=" + s.scope : ""));
+      } catch (e) {
+        s.ended = "failed";
+        log("E_LEASE_UNSETTLED outcome driver: stage " + s.item + " lease " + s.lease_id + " did not settle: " + (e as Error).message + "; settle it with gstack-evals ledger settle --lease " + s.lease_id + " on this machine");
+      }
+      if (stages.every((x) => x.state === "stopped")) void finish();
+    })();
+    return s.settling;
+  };
+
+  const drain = (s: Stage, ended: Ended, scope: string | null) => {
+    if (s.state !== "serving") return;
+    s.state = "draining";
+    s.ended = ended;
+    s.scope = scope;
+    if (s.live.size === 0) void settleStage(s);
+  };
+
+  const capStop = (s: Stage) => {
+    if (s.kind === "none") {
+      for (const x of stages) drain(x, "cap_stop", "all: none's cap stop ends both skills incomplete");
+      return;
+    }
+    drain(s, "cap_stop", s.arm + " only");
+    if (!stages.some((x) => x.kind === "told" && x.state === "serving")) for (const x of stages) if (x.kind === "none") drain(x, "completed", "no told stage left");
+  };
+
+  const finish = (): Promise<number> => {
+    finishing ??= (async () => {
+      await Promise.all(stages.map((s) => s.settling));
+      await control.stop();
+      const open = ledgerStatus(o.record).filter((i) => stages.some((s) => s.item === i.item) && i.open_lease);
+      if (open.length) log("E_LEASE_UNSETTLED outcome driver: still open: " + open.map((i) => i.open_lease!.lease_id).join(", ") + "; settle each with gstack-evals ledger settle --lease <id> on this machine");
+      const code = open.length ? 2 : 0;
+      resolveDone(code);
+      return code;
+    })();
+    return finishing;
+  };
+
+  const stop = async (ended?: Ended): Promise<number> => {
+    for (const s of stages) {
+      if (s.state === "stopped") continue;
+      if (ended && !s.ended) s.ended = ended;
+      void settleStage(s).catch((e) => log("E_INTERNAL outcome driver: " + (e as Error).message));
+    }
+    await Promise.all(stages.map((s) => s.settling));
+    return finish();
+  };
+
+  const open = async (req: Request, ctx: Record<string, unknown>): Promise<Response> => {
+    let b: Record<string, any>;
+    try {
+      b = (await req.json()) as Record<string, any>;
+    } catch {
+      return refusal("E_USAGE", 400, "the open body is not JSON");
+    }
+    if (!b || typeof b !== "object" || typeof b.open_key !== "string" || !b.open_key) return refusal("E_USAGE", 400, "an open needs an open_key string");
+    const body = JSON.stringify(sorted(b));
+    const prior = keys.get(b.open_key);
+    if (prior) {
+      const sess = sessions.get(prior.id)!;
+      if (prior.body !== body) return refusal("E_USAGE", 400, "open_key " + b.open_key + " opened session " + prior.id + " with another body; a retry sends the same body");
+      if (sess.closed) return refusal("E_USAGE", 400, "open_key " + b.open_key + " opened session " + prior.id + ", which is closed; a new session needs a new open_key", { closed: sess.closed });
+      return Response.json(sess.answer);
+    }
+    const meta = (b.meta ?? {}) as Record<string, any>;
+    Object.assign(ctx, { open_key: b.open_key, trial: b.trial, arm: meta.arm, task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}) });
+    if (b.ledger !== "u4") return refusal("E_USAGE", 400, "this driver serves only U4 opens (ledger \"u4\"), not " + JSON.stringify(b.ledger ?? null) + "; G sessions spend only through a U4 lease (G prereg section 10 item 4)");
+    const stage = stages.find((s) => s.arm === meta.arm);
+    if (!stage) return refusal("E_USAGE", 400, "arm " + JSON.stringify(meta.arm ?? null) + " is not in this batch; it serves " + stages.map((s) => s.arm).join(", "));
+    const limits = reg.arms[stage.arm]!.limits;
+    if (b.model !== reg.pins.model) return refusal("E_USAGE", 400, "model " + JSON.stringify(b.model ?? null) + " is not the registry's pinned " + reg.pins.model);
+    if (b.cap_usd !== limits.session_cap_usd) return refusal("E_USAGE", 400, "cap_usd " + JSON.stringify(b.cap_usd ?? null) + " is not arm " + stage.arm + "'s session_cap_usd of " + limits.session_cap_usd);
+    if (typeof b.trial !== "string" || !b.trial || typeof meta.task !== "string" || !meta.task || !Number.isSafeInteger(meta.trial_n) || meta.trial_n < 1) return refusal("E_USAGE", 400, "an open needs trial, meta.task and meta.trial_n (a whole number from 1)");
+    if (meta.rerun !== undefined && (typeof meta.rerun !== "string" || !meta.rerun)) return refusal("E_USAGE", 400, "meta.rerun, when given, names the repair the rerun follows");
+    if (stage.state !== "serving") {
+      if (stage.ended === "cap_stop") return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") is cap-stopped, scope " + stage.scope + "; do not retry: the stage ends incomplete", { item: stage.item, scope: stage.scope });
+      return refusal("E_LEASE_CLOSED", 503, "stage " + stage.item + " (" + stage.arm + ") is " + stage.state + " (" + (stage.ended ?? "stopping") + "); retry after the driver is launched again for run " + o.run_id, { item: stage.item });
+    }
+    const key = stage.arm + "|" + meta.task + "|" + meta.trial_n;
+    const seen = triples.get(key) ?? 0;
+    if (seen >= 2) return refusal("E_USAGE", 422, "arm " + stage.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened " + seen + " times; a trial gets one rerun at most");
+    if (seen === 1 && !meta.rerun) return refusal("E_USAGE", 422, "arm " + stage.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened; a second open is a rerun and names its repair in meta.rerun");
+    if (stage.opens >= planned + reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened " + stage.opens + " sessions, its " + planned + " planned plus " + reruns + " reruns");
+    if (meta.rerun && stage.reruns >= reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has used its " + reruns + " reruns");
+    const t = now();
+    const grace = o.deadline_grace_ms ?? DEADLINE_GRACE_MS;
+    const wall = limits.wall_limit_sec * 1000 + grace;
+    if (stage.expires < t + wall) {
+      drain(stage, "lease_expired", null);
+      return refusal("E_LEASE_CLOSED", 503, "stage " + stage.item + "'s lease " + stage.lease_id + " expires at " + new Date(stage.expires).toISOString() + ", before a session opened now could end (wall limit " + limits.wall_limit_sec + " s plus " + grace / 1000 + " s); the stage drains and settles, and a driver relaunch for run " + o.run_id + " reopens it on what the item has left", { item: stage.item });
+    }
+    const allowance = Math.round(limits.session_cap_usd * 1e6);
+    const meters = o.local.meters(stage.lease_id);
+    let pending = 0;
+    for (const s of stage.live.values()) pending += Math.max(0, s.allowance - (meters.get(s.meter_id)?.held_micros ?? 0));
+    const held = o.local.held(stage.lease_id);
+    const room = stage.reserved - held - pending;
+    if (room < allowance) {
+      capStop(stage);
+      return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") has " + usd(Math.max(room, 0)) + " of room on lease " + stage.lease_id + " (" + usd(stage.reserved) + " reserved, " + usd(held) + " held, " + usd(pending) + " still allowed to live sessions); a session needs " + usd(allowance) + ". Do not retry: the stage ends incomplete, scope " + stage.scope, { item: stage.item, scope: stage.scope, room_micros: room, allowance_micros: allowance });
+    }
+    const binding = stage.proxy.bind({ cell: { run_id: o.run_id, arm: stage.arm, task: meta.task, model: b.model, trial: meta.trial_n, attempt: seen + 1 }, models: ["anthropic:" + b.model], allowance_micros: allowance });
+    const id = "ses_" + randomBytes(9).toString("hex");
+    const answer: OpenAnswer = { id, token: binding.token, base_url: "http://" + urlHost(o.host) + ":" + stage.proxy.port + "/" + binding.slot + "/anthropic", ledger: "u4", item: stage.item, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance };
+    const sess: Session = { id, stage, slot: binding.slot, meter_id: binding.meter_id, allowance, answer, timer: setTimeout(() => void closeSession(sess, "deadline"), wall), closing: null, closed: null };
+    sess.timer.unref?.();
+    sessions.set(id, sess);
+    keys.set(b.open_key, { body, id });
+    stage.live.set(id, sess);
+    stage.opens++;
+    if (meta.rerun) stage.reruns++;
+    triples.set(key, seen + 1);
+    record({ event: "open", id, item: stage.item, arm: stage.arm, task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}), trial: b.trial, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance });
+    return Response.json(answer);
+  };
+
+  const status = () => ({
+    run_id: o.run_id,
+    stages: stages.map((s) => {
+      const held = s.state === "stopped" ? null : o.local.held(s.lease_id);
+      return { item: s.item, arm: s.arm, lease_id: s.lease_id, reserved_micros: s.reserved, held_micros: held, expires_at: new Date(s.expires).toISOString(), state: s.state, ended: s.ended, scope: s.scope, live: [...s.live.keys()], opens: s.opens, reruns: s.reruns, finished: s.finished };
+    }),
+  });
+
+  const control = Bun.serve({
+    hostname: "127.0.0.1",
+    port: o.control_port ?? 0,
+    fetch: async (req) => {
+      const path = new URL(req.url).pathname;
+      try {
+        if (req.method === "GET" && path === "/status") return Response.json(status());
+        if (req.method === "POST" && path === "/sessions") {
+          const ctx: Record<string, unknown> = {};
+          const res = await open(req, ctx);
+          if (!res.ok) {
+            const p = (await res.clone().json()) as Record<string, unknown>;
+            record({ event: "refuse", code: p.code, status: res.status, ...ctx, ...(p.item ? { item: p.item } : {}), ...(p.scope ? { scope: p.scope } : {}), detail: p.detail });
+          }
+          return res;
+        }
+        const m = path.match(/^\/sessions\/([A-Za-z0-9_-]+)\/close$/);
+        if (req.method === "POST" && m) {
+          const sess = sessions.get(m[1]!);
+          if (!sess) return refusal("E_USAGE", 404, "no session " + m[1]);
+          let reason = "agent_finished";
+          try {
+            const b = (await req.json()) as { reason?: unknown };
+            if (typeof b?.reason === "string" && b.reason) reason = b.reason;
+          } catch {}
+          return Response.json(await closeSession(sess, reason));
+        }
+        if (req.method === "POST" && path === "/stop") {
+          setTimeout(() => void stop(), 0);
+          return Response.json({ stopping: true });
+        }
+        return refusal("E_USAGE", 404, "no route " + req.method + " " + path + "; the driver serves POST /sessions, POST /sessions/<id>/close, GET /status and POST /stop");
+      } catch (e) {
+        log("E_INTERNAL outcome driver: " + req.method + " " + path + " failed: " + (e as Error).message + "; stopping every stage");
+        void stop("failed");
+        return refusal("E_INTERNAL", 500, "the driver failed and is stopping every stage");
+      }
+    },
+  });
+
+  return {
+    control: "http://127.0.0.1:" + control.port,
+    stages: stages.map((s) => ({ item: s.item, arm: s.arm, lease_id: s.lease_id, reserved_micros: s.reserved, proxy: urlHost(o.host) + ":" + s.proxy.port })),
+    done,
+    stop,
+  };
+}

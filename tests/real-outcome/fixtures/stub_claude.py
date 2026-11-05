@@ -185,6 +185,35 @@ elif SCENARIO == "ship_bg_silent":
 elif SCENARIO == "turn_never_ends":
     text("Working.")
     next_user()
+elif SCENARIO == "u4_calls":
+    # Model calls through ANTHROPIC_BASE_URL with ANTHROPIC_API_KEY, as Claude Code makes them: STUB_CALLS of them, or
+    # until one is refused. Every fifth asks for plain JSON, the rest stream. Each names STUB_LABEL and its number, so
+    # the dry run's stub upstream can match its answers to the ledger call by call.
+    import urllib.error
+    import urllib.request
+
+    calls = os.environ.get("STUB_CALLS", "3")
+    base = os.environ["ANTHROPIC_BASE_URL"].rstrip("/")
+    k = 0
+    while calls == "until_refused" or k < int(calls):
+        k += 1
+        stream = k % 5 != 0
+        body = {"model": os.environ["ANTHROPIC_MODEL"], "max_tokens": 32000, "stream": stream, "messages": [{"role": "user", "content": f"dryrun-call {os.environ['STUB_LABEL']} {k}"}]}
+        req = urllib.request.Request(base + "/v1/messages", data=json.dumps(body).encode(), headers={"content-type": "application/json", "x-api-key": os.environ["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01"}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as res:
+                raw = res.read().decode()
+                log("api", n=k, status=res.status, stream=stream, sse=raw.startswith("event:"))
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode(errors="replace")
+            try:
+                code = json.loads(raw).get("code")
+            except ValueError:
+                code = None
+            log("api", n=k, status=e.code, code=code)
+            break
+    text(f"Made {k} calls.")
+    result()
 elif SCENARIO == "max_turns":
     text("Working.")
     result("error_max_turns", True)

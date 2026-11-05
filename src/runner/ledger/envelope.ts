@@ -127,7 +127,7 @@ function claim(record: string, entry: Entry, mounts: Mount[] = readMounts()): "w
 }
 
 /** Splits an amount evenly across skills; the odd micro-dollars go to the first skills named, so the parts add up. */
-function split(amount: number, skills: string[]): [string, number][] {
+export function split(amount: number, skills: string[]): [string, number][] {
   const base = Math.floor(amount / skills.length);
   return skills.map((s, i) => [s, base + (i < amount - base * skills.length ? 1 : 0)]);
 }

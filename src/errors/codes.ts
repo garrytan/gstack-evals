@@ -932,6 +932,24 @@ export const CODES = {
     fix: "Nothing to undo: the money is spent and recorded. Find the call whose spend passed its reservation in the local ledger and report it against the price table (U3). A new lease gets only what is left of the cap; the owner raises the cap if the run needs more.",
     owner: "U4",
   },
+  JOURNAL_MISSING: {
+    exit: null,
+    meaning: "The outcome-skills driver recovered an open lease from an earlier run on this machine and found no proxy journal for it, so nothing tells which of its calls were answered. The settle keeps every call still reserved at its full reservation.",
+    fix: "Nothing to undo: the lease closes charging every unanswered call in full, which can only overstate spend. Check that the driver's --dir is the run directory the earlier driver used.",
+    owner: "U4",
+  },
+  STAGE_RECOVERED: {
+    exit: null,
+    meaning: "The outcome-skills driver found a stage lease that an earlier driver of the same run left open on this machine, reconciled its proxy journal and settled it before opening anything new.",
+    fix: "Nothing is required. Sessions the earlier driver was serving count as gaps whose named repair is the driver relaunch; the batch reruns them under its rerun rule.",
+    owner: "U4",
+  },
+  STAGE_SETTLED: {
+    exit: null,
+    meaning: "The outcome-skills driver closed one stage: it closed the stage's live sessions, stopped its proxy, reconciled the proxy journal and settled the stage lease. The line names how the stage ended (completed, cap_stop, lease_expired or failed) and, on a cap stop, which stages it ended.",
+    fix: "Nothing is required. A cap stop is an incomplete run and is never retried to change a verdict; a lease_expired stage resumes when the driver is launched again for the same run.",
+    owner: "U4",
+  },
   CLEANUP_INCOMPLETE: {
     exit: null,
     meaning: "A work dir that a preflight control or a trial used is still on disk, because removing it failed (often files a root step left). The message names the path and why. The result is unchanged.",

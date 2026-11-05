@@ -33,6 +33,7 @@ export const COMMANDS: Command[] = [
   { name: "review-units", summary: "Run review units as Lane A trials: unit repos from head-only fetches, the told prompt, the findings parser and cost.tsv.", module: "src/trial/review/cli.ts", owner: "U9, GST-381" },
   { name: "waste", summary: "Count wasted work in crew logs: re-runs, polls and waits in thread exports, review rounds past the cap in /ship receipts, per-PR replay data.", module: "src/waste/crewlog.ts", owner: "GST-1114" },
   { name: "real", summary: "Real-world outcome lane: mining, task format, ship sandbox, arms and scoring (plan 2026-11-01-geva-87).", module: "lanes/real-outcome/cli.ts", owner: "RO-B1 to RO-B7, GST-690" },
+  { name: "outcome", summary: "Outcome-skills lane: the session driver that serves an admission batch's stages on U4 leases.", module: "lanes/outcome-skills/cli.ts", owner: "GST-1381" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
   { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
   { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },
