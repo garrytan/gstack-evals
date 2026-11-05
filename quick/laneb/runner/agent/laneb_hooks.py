@@ -33,10 +33,14 @@ from pathlib import Path
 
 from laneb_agent import PROBE_TIMEOUT_S, LanebAgent
 
-# Each copy measures its tar inside the container first and refuses one past the cap, so the agent never buffers a tree that
-# size whole; a refused copy is a failed copy, and the fields it decides stay null.
+# Each copy measures its tar inside the container first and refuses one past the cap. It then sends the tar through head, so
+# a tree that a process the model left running grows between the two passes still sends at most the cap plus one byte: a
+# send cut off there, or one whose tar fails, is refused in the container (exit 3), and the agent refuses a reply past the
+# cap. A refused copy is a failed copy, and the fields it decides stay null.
 TREE_CAP_BYTES = 256 << 20
-_CAPPED_TAR = f'n=$(tar -cf - -- "$@" | wc -c); [ "$n" -le {TREE_CAP_BYTES} ] || {{ echo "the tar is $n bytes, over the {TREE_CAP_BYTES}-byte cap" >&2; exit 3; }}; exec tar -cf - -- "$@"'
+_CAPPED_TAR = (f'c={TREE_CAP_BYTES}; n=$(tar -cf - -- "$@" | wc -c); [ "$n" -le "$c" ] || {{ echo "the tar is $n bytes, over the $c-byte cap" >&2; exit 3; }}; '
+               'exec 4>&1; s=$({ { tar -cf - -- "$@"; echo $? >&3; } | head -c $((c + 1)) >&4; } 3>&1); '
+               '[ "$s" = 0 ] || { echo "the tar grew past the $c-byte cap or failed (tar status $s)" >&2; exit 3; }')
 GSTACK_HOOK_STATE = 'cd /root/.gstack 2>/dev/null || exit 0; set --; for d in hooks skill-contracts; do [ -d "$d" ] && set -- "$@" "$d"; done; [ "$#" -gt 0 ] || exit 0; ' + _CAPPED_TAR
 CLAUDE_TRANSCRIPTS = 'cd /root/.claude/projects 2>/dev/null || exit 0; set --; for f in */*.jsonl */*/subagents/*.jsonl; do [ -f "$f" ] && set -- "$@" "$f"; done; [ "$#" -gt 0 ] || exit 0; ' + _CAPPED_TAR
 ROUTE_MARK = "gstack skill routing (UserPromptSubmit hook;"

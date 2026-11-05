@@ -955,7 +955,7 @@ function recover(work: string) {
   // Every part whose VM may still run under the lost host: the running part, and each part launch.sh kept at exit 7 that no
   // salvage reached. Each one's VM is stopped, pulled and destroyed, and the part is classified again with the ledger check.
   const held = states.filter((s) => s === running || (s.launched && s.result?.launch_exit === 7 && !s.result.salvage));
-  const claimed = new Set([...hosts(work).map((r) => r.name), ...states.filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm), ...done.map((d) => d.vm)]);
+  const claimed = new Set([...hosts(work).map((r) => r.name), ...states.filter((s) => s.launched).map((s) => readJson(join(work, s.part.name + ".launch.json")).vm), ...done.filter((d) => d.part).map((d) => d.vm)]);
   const parts = held.map((s) => {
     const l = readJson(join(work, s.part.name + ".launch.json"));
     const entry = l.vm ? undefined : done.find((d) => d.part === s.part.name);

@@ -438,26 +438,35 @@ function withoutPattern(words: string[]): string[] {
   return kept.filter((w, i) => i !== k || !inert(cmd, w));
 }
 /** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies,
- * with a relative word resolved against the directory the line has cd'd to (the work tree at first). busybox in front of a
- * command is dropped, and gsed is read as sed. In a sed command a "/" right after r, R, w or W also starts a path, so a
- * filename glued to sed's file commands (1r/root/x, s/a/b/w/root/x) is found, while a sed address or a file operand that
- * only holds such a path in its middle is not a read of it. */
-function bashReadPaths(command: string, cwd: string | null): string[] {
-  const out: string[] = [];
-  for (const s of simpleCommands(command, cwd)) {
-    const all = s.words.length > 1 && base(s.words[0]!) === "busybox" ? s.words.slice(1) : s.words;
+ * with a relative word resolved against the directory the line has cd'd to (the work tree at first). busybox, and command
+ * other than command -v or -V, in front of a command are dropped, and gsed is read as sed. In a sed command a "/" right after
+ * r, R, w or W, or after a -f glued to sed's option letters (-f/root/x), also starts a path, so a filename glued to sed's file
+ * commands (1r/root/x, s/a/b/w/root/x) is found, while a sed address or a file operand that only holds such a path in its
+ * middle is not a read of it. The trees are the paths of a find that runs -exec, -execdir, -ok or -okdir, and every path on
+ * a line that pipes into xargs, where no command's words are a mention: each one reads whatever lies inside it. */
+function bashReadPaths(command: string, cwd: string | null): { paths: string[]; trees: string[] } {
+  const out: string[] = [], trees: string[] = [];
+  const simples = simpleCommands(command, cwd).map((s) => {
+    let all = s.words;
+    for (let b = base(all[0] ?? ""); all.length > 1 && (b === "busybox" || (b === "command" && !/^-[A-Za-z]*[vV]/.test(all[1]!))); b = base(all[0] ?? "")) all = all.slice(b === "command" && all[1] === "-p" ? 2 : 1);
+    return { s, all };
+  });
+  const xargs = simples.some(({ all }) => base(all[0] ?? "") === "xargs");
+  for (const { s, all } of simples) {
     const words = withoutPattern(all);
-    const mention = words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
+    const mention = !xargs && words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
+    const tree = xargs || (base(all[0] ?? "") === "find" && all.some((w) => /^-(exec|execdir|ok|okdir)$/.test(w)));
     const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(all[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
     const sed = SED.has(base(all[0] ?? ""));
     for (const t of texts)
       for (const w of t.split(PATH_SPLIT)) {
-        if (w.startsWith("/")) out.push(w);
-        else if (s.cwd && w && !w.startsWith("-") && w !== all[0]) out.push(posix.resolve(s.cwd, w));
-        if (sed) for (let i = w.indexOf("/", 1); i > 0; i = w.indexOf("/", i + 1)) if ("rRwW".includes(w[i - 1]!)) out.push(w.slice(i));
+        const p = w.startsWith("/") ? w : s.cwd && w && !w.startsWith("-") && w !== all[0] ? posix.resolve(s.cwd, w) : null;
+        if (p) out.push(p);
+        if (p && tree) trees.push(p);
+        if (sed) for (let i = w.indexOf("/", 1); i > 0; i = w.indexOf("/", i + 1)) if ("rRwW".includes(w[i - 1]!) || /^-[A-Za-z]*f$/.test(w.slice(0, i))) out.push(w.slice(i));
       }
   }
-  return out;
+  return { paths: out, trees };
 }
 
 export type ProbeI = { complete: boolean; report: boolean; fix_edited: boolean; status: boolean; check_after_edit: boolean; edits: number };
@@ -579,7 +588,7 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
   const roots = auditRoots(o.home);
   const below = (p: string) => DRIVE.test(p) || roots.some((r) => p.startsWith(r + "/") && p.length > r.length + 1);
   const above = (p: string) => roots.some((r) => r === p.replace(/\/+$/, "") || r.startsWith(p.replace(/\/+$/, "") + "/"));
-  const expand = (s: string) => s.replace(/(^|[\s='"])~(?=\/|$|[\s;&|)'"])/g, "$1" + o.home).replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, o.home);
+  const expand = (s: string) => s.replace(/(^|[\s='"])~(?=\/|$|[\s;&|)'"])/g, "$1" + o.home).replace(/\$\{HOME(?::?[-=?][^}]*)?\}|\$HOME(?![A-Za-z0-9_])/g, o.home);
   for (const c of calls) {
     const res = results.get(c.id);
     if (!res || res.error) continue;
@@ -601,8 +610,8 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
     if (c.name === "Read" || c.name === "Bash") {
       for (const m of target.matchAll(/(\S*\/\.claude\/skills\/([^/\s"']+)\/SKILL\.md)/g)) if (m[2] !== "gstack" && under(m[1]!.replace(/^['"]/, ""), o.gstackRoots)) gstackLoads.add(m[2]!);
     }
-    const paths = c.name === "Bash" ? bashReadPaths(target, root) : [target];
-    const hit = paths.find(below) ?? (paths.some(above) ? res.text.split(PATH_SPLIT).find((w) => w.startsWith("/") && below(w)) : undefined);
+    const { paths, trees } = c.name === "Bash" ? bashReadPaths(target, root) : { paths: [target], trees: [] as string[] };
+    const hit = paths.find(below) ?? trees.find((t) => below(posix.join(t, "f"))) ?? (paths.some(above) ? res.text.split(PATH_SPLIT).find((w) => w.startsWith("/") && below(w)) : undefined);
     if (hit && (c.name !== "Bash" || res.text.trim())) auditHits.push(c.name + " " + hit.slice(0, 200));
   }
   if (investigate) gstackLoads.add("investigate");
