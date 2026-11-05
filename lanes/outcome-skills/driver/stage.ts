@@ -74,7 +74,12 @@ export interface CloseAnswer {
   reason: string;
   lease_id: string;
   meter_id: string;
+  /** The session's settled spend: its calls with a recorded cost. */
   spent_micros: number;
+  /** The full reservations O6 still holds for the session's calls with no recorded cost, unknown or undrained; spent_micros leaves them out. */
+  unknown_micros: number;
+  /** How many of the session's calls had no recorded cost at the close: the calls unknown_micros holds for. */
+  unknown_calls: number;
   usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number };
   requests: number;
   ok_responses: number;
@@ -119,7 +124,7 @@ interface Stage {
 export interface Served {
   control: string;
   stages: Array<{ item: string; arm: string; lease_id: string; reserved_micros: number; proxy: string }>;
-  /** Resolves with the exit code once every stage is settled: 0, or 2 when a lease is still open or a stage ended failed. */
+  /** Resolves with the exit code once every stage is settled: 0, or 2 when the driver failed, a lease is still open or a stage ended failed. */
   done: Promise<number>;
   stop(ended?: Ended): Promise<number>;
 }
@@ -225,7 +230,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
   const sessionsFile = join(dir, "sessions.jsonl");
   const record = (line: Record<string, unknown>) => appendFileSync(sessionsFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
-  const lines: Array<{ at?: string; event?: string; item?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string }> = [];
+  const lines: Array<{ at?: string; event?: string; id?: string; item?: string; lease_id?: string; ended?: string; code?: string; scope?: string | null; nonce?: string; meter_id?: string }> = [];
   for (const line of existsSync(sessionsFile) ? readFileSync(sessionsFile, "utf8").split("\n") : []) {
     try {
       const e = JSON.parse(line);
@@ -247,7 +252,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     for (const stop of s.stops) if (stop.run_id === o.run_id) noteStop(s.item, { at: stop.at, scope: stop.scope });
     for (const { lease, close } of s.leases) if (close?.cap_stop && lease.run_id === o.run_id) noteStop(s.item, { at: close.closed_at, scope: close.cap_stop });
   }
-  for (const e of lines) if (e.item && ((e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });
+  for (const e of lines) if (e.item && (e.event === "stop" || (e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });
 
   const failures: string[] = [];
   for (const item of listItems(o.record)) {
@@ -259,6 +264,12 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         const rec = await reconcileJournal(journal, o.local);
         for (const r of rec.refused) warn(r.code as ReasonCode, "recovering lease " + lease.lease_id + ": " + r.message);
       } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
+      const closed = new Set(lines.flatMap((e) => (e.event === "close" && e.id ? [e.id] : [])));
+      for (const e of lines) {
+        if (e.event !== "open" || e.lease_id !== lease.lease_id || !e.id || closed.has(e.id)) continue;
+        const m = o.local.meters(lease.lease_id).get(e.meter_id ?? "");
+        record({ event: "close", item, id: e.id, reason: "recovered", lease_id: lease.lease_id, meter_id: e.meter_id, spent_micros: m?.spent_micros ?? 0, unknown_micros: m?.unknown_micros ?? 0, unknown_calls: m?.unknown_calls ?? 0 });
+      }
       const stop = capped.get("") ?? capped.get(item);
       const close = settleLease(o.record, o.local, lease.lease_id, warn, stop ? stop.scope || "cap_stop" : undefined);
       log("STAGE_RECOVERED item=" + item + " lease=" + lease.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " unknown_calls=" + close.unknown_calls);
@@ -408,6 +419,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   let resolveDone!: (code: number) => void;
   const done = new Promise<number>((r) => (resolveDone = r));
   let finishing: Promise<number> | null = null;
+  let failed = false;
 
   const closeSession = (sess: Session, reason: string): Promise<CloseAnswer> => {
     sess.closing ??= (async () => {
@@ -427,7 +439,9 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         reason,
         lease_id: s.lease_id,
         meter_id: sess.meter_id,
-        spent_micros: m?.held_micros ?? 0,
+        spent_micros: m?.spent_micros ?? 0,
+        unknown_micros: m?.unknown_micros ?? 0,
+        unknown_calls: m?.unknown_calls ?? 0,
         usage: { input_tokens: u.input, output_tokens: u.output + u.reasoning, cache_read_input_tokens: u.cache_read, cache_creation_input_tokens: u.cache_write },
         requests: meter?.requests ?? 0,
         ok_responses: Object.entries(meter?.upstream.statuses ?? {}).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0),
@@ -465,7 +479,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         s.close = settleLease(o.record, o.local, s.lease_id, warn, s.ended === "cap_stop" ? s.scope || "cap_stop" : undefined);
         log("STAGE_SETTLED item=" + s.item + " arm=" + s.arm + " lease=" + s.lease_id + " spent=" + usd(s.close.spent_micros) + " unknown=" + usd(s.close.unknown_micros) + " sessions=" + s.finished + " ended=" + s.ended + (s.scope ? " scope=" + s.scope : ""));
       } catch (e) {
-        s.ended = "failed";
+        failed = true;
+        if (s.ended !== "cap_stop") s.ended = "failed";
         log("E_LEASE_UNSETTLED outcome driver: stage " + s.item + " lease " + s.lease_id + " did not settle: " + (e as Error).message + "; settle it with gstack-evals ledger settle --lease " + s.lease_id + " on this machine");
       }
       record({ event: "settled", item: s.item, lease_id: s.lease_id, ended: s.ended, scope: s.scope });
@@ -483,15 +498,17 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   };
 
   const capStop = (s: Stage) => {
-    if (s.kind === "none") {
-      const scope = "all: none's cap stop ends both skills incomplete";
-      for (const x of stages) recordStop(o.record, x.lease_id, scope, new Date(now()));
-      for (const x of stages) drain(x, "cap_stop", scope);
-      return;
+    const scope = s.kind === "none" ? "all: none's cap stop ends both skills incomplete" : s.arm + " only";
+    const hit = s.kind === "none" ? stages : [s];
+    for (const x of hit) drain(x, "cap_stop", scope);
+    try {
+      for (const x of hit) o.local.stageStop(x.lease_id, scope);
+      for (const x of hit) recordStop(o.record, x.lease_id, scope, new Date(now()));
+    } catch (error) {
+      for (const x of hit) record({ event: "stop", item: x.item, lease_id: x.lease_id, scope });
+      throw error;
     }
-    recordStop(o.record, s.lease_id, s.arm + " only", new Date(now()));
-    drain(s, "cap_stop", s.arm + " only");
-    if (!stages.some((x) => x.kind === "told" && x.state === "serving")) for (const x of stages) if (x.kind === "none") drain(x, "completed", "no told stage left");
+    if (s.kind === "told" && stages.every((x) => x.kind !== "told" || x.ended === "completed" || x.ended === "cap_stop")) for (const x of stages) if (x.kind === "none") drain(x, "completed", "no told stage left");
   };
 
   const finish = (): Promise<number> => {
@@ -500,7 +517,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       await control.stop();
       const open = ledgerStatus(o.record).filter((i) => stages.some((s) => s.item === i.item) && i.open_lease);
       if (open.length) log("E_LEASE_UNSETTLED outcome driver: still open: " + open.map((i) => i.open_lease!.lease_id).join(", ") + "; settle each with gstack-evals ledger settle --lease <id> on this machine");
-      const code = open.length || stages.some((s) => s.ended === "failed") ? 2 : 0;
+      const code = failed || open.length || stages.some((s) => s.ended === "failed") ? 2 : 0;
       if (held.lock) rmSync(held.lock, { force: true });
       held.run?.close();
       resolveDone(code);
@@ -510,6 +527,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   };
 
   const stop = async (ended?: Ended): Promise<number> => {
+    if (ended === "failed") failed = true;
     for (const s of stages) {
       if (s.state === "stopped") continue;
       if (ended && !s.ended) s.ended = ended;

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { run } from "../../src/cli.ts";
 import { CODES } from "../../src/errors/codes.ts";
 import { ledgerCli } from "../../src/runner/ledger/cli.ts";
-import { machineId } from "../../src/runner/ledger/ledger.ts";
+import { machineId, recordStop } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { admitThisCheckout } from "../rig/helpers.ts";
@@ -131,6 +131,19 @@ describe("gstack-evals ledger lease, settle, reconcile and status", () => {
     expect(existsSync(workflow.env.GSTACK_EVALS_LEDGER_RECORD)).toBe(false);
     expect((await thread.cli("settle", "--from", artifact)).out).toStartWith("SETTLED: " + lease.lease_id + " spent=$0.00");
     expect((await thread.cli("status", "--json")).out).toContain('"committed_micros": 0');
+  });
+
+  test("settle --lease --artifact copies the stop the record holds on the lease, and settle --from writes it into the close", async () => {
+    const w = world();
+    await w.cli("init", "--cap", "50", "--item", "stage-run-1", "--admission", "warn", "--words", "Rec", "--by", "Approver", "--source", "gate 3");
+    const lease = JSON.parse((await w.cli("lease", "--item", "stage-run-1", "--run", "run-1", "--amount", "5", "--json")).out);
+    recordStop(w.env.GSTACK_EVALS_LEDGER_RECORD, lease.lease_id, "autoplan:told only");
+    const artifact = join(w.dir, "settle.json");
+    expect((await w.cli("settle", "--lease", lease.lease_id, "--artifact", artifact)).code).toBe(0);
+    expect(JSON.parse(readFileSync(artifact, "utf8")).cap_stop).toBe("autoplan:told only");
+    expect(readItem(w.env.GSTACK_EVALS_LEDGER_RECORD, "stage-run-1").open?.lease_id).toBe(lease.lease_id);
+    expect((await w.cli("settle", "--from", artifact)).code).toBe(0);
+    expect(readItem(w.env.GSTACK_EVALS_LEDGER_RECORD, "stage-run-1").leases[0]!.close?.cap_stop).toBe("autoplan:told only");
   });
 
   test("a sealed workflow that spent above its lease settles and imports at the real spend, with LEASE_OVERSPENT on stderr", async () => {
