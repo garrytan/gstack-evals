@@ -39,7 +39,7 @@ Amendment C adds pre-data procedures to the pins. None of them changes a primary
 
 ## The pins
 
-**Build commit.** The squash merge of this post's pull request. Run threads run quick/laneb from that commit only. The dry run ran at 2354a5fcfdcf3e2478a0f156d50fb963c4b238a5 on the PR branch. The merge carries the same quick/laneb tree, and a run thread checks it against the digests below.
+**Build commit.** The squash merge of this post's pull request. Run threads run quick/laneb from that commit only. The dry run ran at 2354a5fcfdcf3e2478a0f156d50fb963c4b238a5 on the PR branch. The merge carries the same quick/laneb code and tests; after the dry run only quick/laneb/README.md and quick/laneb/l1/README.md changed, in the docs audit. A run thread checks the code against the digests below.
 
 **Arms.** GEVA-294's Subagent 1 rebuilt all four keylessly with `quick/laneb/arms/build.sh l1` (exit 0, 455 s). Every digest matches the manifests committed in quick/laneb/arms/manifests/l1/, and the dry run checks them again (A1).
 
