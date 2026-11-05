@@ -601,4 +601,150 @@ describe("the outcome-skills session driver", () => {
     expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
     expect(await again.stop()).toBe(0);
   });
+
+  const statusOf = async (control: string, item: string) => ((await (await fetch(control + "/status")).json()) as { stages: Array<{ item: string; state: string; ended: string | null }> }).stages.find((s) => s.item === item);
+
+  test("after a told cap stop, none serves on while another told stage ended lease_expired and still owes trials", async () => {
+    const w = world({ "i-none": 229, "i-pe": 25, "i-ap": 1287 });
+    const served = await w.serve([NONE, PE, AP], { ttl_ms: 3 * 3_600_000 });
+    expect((await post(served.control + "/sessions", body("autoplan:told", "a", 1))).status).toBe(503);
+    const a = await post(served.control + "/sessions", body("plan-eng-review:told", "a", 1));
+    expect(a.status).toBe(200);
+    expect((await post(served.control + "/sessions", body("plan-eng-review:told", "a", 2))).status).toBe(409);
+    const n = await post(served.control + "/sessions", body("none", "a", 1));
+    expect(n.status).toBe(200);
+    expect(await statusOf(served.control, "i-none")).toMatchObject({ state: "serving", ended: null });
+    for (const s of [a, n]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.stop()).toBe(0);
+    expect(w.logs.find((l) => l.startsWith("STAGE_SETTLED item=i-ap"))).toContain("ended=lease_expired");
+  });
+
+  test("after a told cap stop, none serves on while another told stage ended failed", async () => {
+    const w = world({ "i-none": 229, "i-pe": 25, "i-ap": 1287 });
+    const served = await w.serve([NONE, PE, AP], { ttl_ms: 3 * 3_600_000 });
+    const items = join(w.record, "items", "i-ap");
+    chmodSync(items, 0o555);
+    try {
+      expect((await post(served.control + "/sessions", body("autoplan:told", "a", 1))).status).toBe(503);
+      // gstack-timing-ok: a bounded wait for the drained stage's settle to fail; the assertion is on the stage's state, never on elapsed time
+      for (let i = 0; i < 250 && (await statusOf(served.control, "i-ap"))?.ended !== "failed"; i++) await Bun.sleep(20);
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    expect(await statusOf(served.control, "i-ap")).toMatchObject({ state: "stopped", ended: "failed" });
+    const a = await post(served.control + "/sessions", body("plan-eng-review:told", "a", 1));
+    expect((await post(served.control + "/sessions", body("plan-eng-review:told", "a", 2))).status).toBe(409);
+    const n = await post(served.control + "/sessions", body("none", "a", 1));
+    expect(n.status).toBe(200);
+    for (const s of [a, n]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.stop()).toBe(2);
+  });
+
+  test("once every told stage has cap-stopped, none drains and settles as completed", async () => {
+    const w = world({ "i-none": 229, "i-pe": 25, "i-ap": 50 });
+    const served = await w.serve([NONE, PE, AP]);
+    const pe = await post(served.control + "/sessions", body("plan-eng-review:told", "a", 1));
+    expect((await post(served.control + "/sessions", body("plan-eng-review:told", "a", 2))).status).toBe(409);
+    const first = await post(served.control + "/sessions", body("none", "a", 1));
+    expect(first.status).toBe(200);
+    await post(served.control + "/sessions/" + first.json.id + "/close", {});
+    const ap = await post(served.control + "/sessions", body("autoplan:told", "a", 1));
+    expect((await post(served.control + "/sessions", body("autoplan:told", "a", 2))).status).toBe(409);
+    const n = await post(served.control + "/sessions", body("none", "b", 1));
+    expect([n.status, n.json.code]).toEqual([503, "E_LEASE_CLOSED"]);
+    for (const s of [pe, ap]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.done).toBe(0);
+    expect(w.logs.find((l) => l.startsWith("STAGE_SETTLED item=i-none"))).toContain("ended=completed");
+  });
+
+  test("a cap stop whose stop record can't be written answers 500, and a relaunch closes the lease with cap_stop and refuses with CAP_STOP", async () => {
+    const w = world({ "i-pe": 50 });
+    const served = await w.serve([PE]);
+    const open = (task: string) => post(served.control + "/sessions", body("plan-eng-review:told", task, 1));
+    const [a, b] = [await open("a"), await open("b")];
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const items = join(w.record, "items", "i-pe");
+    chmodSync(items, 0o555);
+    try {
+      const c = await open("c");
+      expect([c.status, c.json.code]).toEqual([500, "E_INTERNAL"]);
+      expect(await served.done).toBe(2);
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    expect(readItem(w.record, "i-pe").stops).toHaveLength(0);
+    expect(readItem(w.record, "i-pe").open?.lease_id).toBe(served.stages[0]!.lease_id);
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    const leases = readItem(w.record, "i-pe").leases;
+    expect(leases).toHaveLength(1);
+    expect(leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+  });
+
+  test("a cap stop whose stop record can't be written drains its stage with cap_stop, so its close carries the stop once the record is writable", async () => {
+    const w = world({ "i-pe": 50 });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let sent!: () => void;
+    const inflight = new Promise<void>((r) => (sent = r));
+    const held = async (url: string, init: RequestInit) => {
+      sent();
+      await gate;
+      return upstream(url, init);
+    };
+    const served = await w.serve([PE], { fetch: held });
+    const open = (task: string) => post(served.control + "/sessions", body("plan-eng-review:told", task, 1));
+    const [a, b] = [await open("a"), await open("b")];
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const pending = call(a.json);
+    await inflight;
+    const items = join(w.record, "items", "i-pe");
+    chmodSync(items, 0o555);
+    let c: Awaited<ReturnType<typeof open>>;
+    try {
+      c = await open("c");
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    expect([c.status, c.json.code]).toEqual([500, "E_INTERNAL"]);
+    release();
+    await pending;
+    expect(await served.done).toBe(2);
+    expect(readItem(w.record, "i-pe").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+  });
+
+  test("after a stop write and the stage's settle both fail, ledger settle on the lease still closes it with cap_stop", async () => {
+    const w = world({ "i-pe": 50 });
+    const served = await w.serve([PE]);
+    const open = (task: string) => post(served.control + "/sessions", body("plan-eng-review:told", task, 1));
+    expect([(await open("a")).status, (await open("b")).status]).toEqual([200, 200]);
+    const items = join(w.record, "items", "i-pe");
+    chmodSync(items, 0o555);
+    try {
+      expect((await open("c")).status).toBe(500);
+      expect(await served.done).toBe(2);
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    const lease = readItem(w.record, "i-pe").open;
+    expect(lease?.lease_id).toBe(served.stages[0]!.lease_id);
+    expect(settleLease(w.record, w.local, lease!.lease_id).cap_stop).toBe("plan-eng-review:told only");
+    expect(() => openLease(w.record, w.local, { item: "i-pe", run_id: "r1", machine_id: "m1", requireAdmission: () => null })).toThrow(/cap-stopped/);
+  });
+
+  test("a close answers its settled spend as spent_micros, and counts a call of unknown cost apart with the reservation O6 holds for it", async () => {
+    let calls = 0;
+    const unpriced = async (url: string, init: RequestInit) => (calls++ === 0 ? upstream(url, init) : Response.json({ id: "msg_2", type: "message", role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "ok" }], stop_reason: "end_turn" }));
+    const w = world({ "i-none": 229 });
+    const served = await w.serve([NONE], { fetch: unpriced });
+    const open = await post(served.control + "/sessions", body("none", "a", 1));
+    for (let i = 0; i < 2; i++) expect((await call(open.json)).status).toBe(200);
+    const closed = await post(served.control + "/sessions/" + open.json.id + "/close", {});
+    expect(await served.stop()).toBe(0);
+    const close = readItem(w.record, "i-none").leases[0]!.close!;
+    expect(close).toMatchObject({ spent_micros: 20_040, unknown_calls: 1 });
+    expect(close.unknown_micros).toBeGreaterThan(0);
+    expect(closed.json).toMatchObject({ spent_micros: 20_040, unknown: 1, unknown_micros: close.unknown_micros });
+  });
 });
