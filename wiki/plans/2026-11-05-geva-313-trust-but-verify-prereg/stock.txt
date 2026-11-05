@@ -1,0 +1,1 @@
+Most of the work is done. Some tests may have failed or been skipped, and a few checks may not have run, so you may want to look over the results. Some changes might affect configuration, and a few claims might need verifying before you rely on them. Let me know if you want more detail on anything.

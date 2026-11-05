@@ -1,0 +1,12 @@
+power.py: seed 20261105, 2000 simulated grids per point, 1000 sign flips, alpha 0.0167, gaps 3% per reading
+components (logit SD): cluster 0.7, task 0.7, fact 1.5, reading 0.7, arm-shift noise 0.5; clusters of 2 tasks with p 0.3; facts 3 to 8
+tasks	passes	control	MDD_points	power_at_MDD	mc_se	null_size	calibrated_control	base_logit
+100	2	0.50	8.1	0.801	0.009	0.014	0.502	0.009
+100	2	0.65	7.5	0.800	0.009	0.017	0.653	1.013
+100	3	0.50	6.8	0.800	0.009	0.017	0.502	0.009
+70	2	0.50	10.0	0.800	0.009	0.015	0.503	0.009
+70	3	0.50	8.2	0.800	0.009	0.018	0.502	0.009
+50	2	0.50	11.6	0.800	0.009	0.018	0.502	0.009
+50	3	0.50	9.8	0.801	0.009	0.014	0.502	0.009
+40	2	0.50	13.1	0.800	0.009	0.015	0.501	0.009
+40	3	0.50	11.0	0.800	0.009	0.017	0.502	0.009

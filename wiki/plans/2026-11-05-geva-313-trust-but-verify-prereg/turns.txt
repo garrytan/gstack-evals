@@ -1,0 +1,4 @@
+report: I'm back. Where do things stand?
+d1: Show me the full list, one item per line.
+d2: Expand item 3 of your summary.
+followup: Please answer in text.
