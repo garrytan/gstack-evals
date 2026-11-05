@@ -1,7 +1,7 @@
 // The outcome-skills session driver (lanes/outcome-skills/driver/stage.ts), keyless: a temporary ledger record and local
 // ledger, a stub upstream behind the real metering proxy, and the driver's control plane over HTTP on 127.0.0.1.
 import { afterAll, describe, expect, test } from "bun:test";
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
@@ -50,6 +50,8 @@ const post = async (url: string, b: unknown) => {
 };
 const call = (answer: Record<string, any>) => fetch(answer.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": answer.token }, body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 1000, messages: [{ role: "user", content: "hi" }] }) });
 const codeOf = async (p: Promise<unknown>) => p.then(() => "ok", (e) => (e instanceof LedgerError ? e.code : (e as Error).message));
+const refused = (p: Promise<unknown>) => p.then(() => null, (e) => e as LedgerError);
+const NO_HAND = /append|by hand|leases\.jsonl|ownership line/i;
 
 describe("the outcome-skills session driver", () => {
   test("refuses to run off the envelope host and opens nothing", async () => {
@@ -209,19 +211,24 @@ describe("the outcome-skills session driver", () => {
     await served.stop();
   });
 
-  test("relaunch recovers a lease this run's driver left open, and never a lease it did not open", async () => {
+  test("relaunch from the bound run directory recovers a lease its crashed launch left open, never one that names no holder, and only from there (Capy 01M6N3WWX2)", async () => {
     const w = world({ "i-none": 229, "i-tg": 60 });
-    const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
-    const tg = openLease(w.record, w.local, { item: "i-tg", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
     mkdirSync(w.dir, { recursive: true });
-    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ lease_id: left.lease_id }) + "\n");
+    const crashed = { dir: realpathSync(w.dir), nonce: "0123456789abcdef" };
+    const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", holder: crashed, requireAdmission: () => null });
+    const tg = openLease(w.record, w.local, { item: "i-tg", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
+    const elsewhere = await refused(w.serve([NONE], { dir: join(w.root, "runB") }));
+    expect(elsewhere?.code).toBe("E_USAGE");
+    expect(elsewhere?.message).toContain(crashed.dir);
+    expect(readItem(w.record, "i-none").open?.lease_id).toBe(left.lease_id);
     const served = await w.serve([NONE]);
     expect(w.logs.some((l) => l.startsWith("JOURNAL_MISSING lease " + left.lease_id))).toBe(true);
     expect(w.logs.some((l) => l.startsWith("STAGE_RECOVERED item=i-none lease=" + left.lease_id))).toBe(true);
     expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
     expect(readItem(w.record, "i-tg").open?.lease_id).toBe(tg.lease_id);
-    await served.stop();
+    expect(await served.stop()).toBe(0);
   });
+
   test("a second driver on the same run directory is refused while the first serves, and launches once it stops", async () => {
     const w = world({ "i-none": 229 });
     const first = await w.serve([NONE]);
@@ -251,97 +258,6 @@ describe("the outcome-skills session driver", () => {
     expect(w.logs.some((l) => l.startsWith("STAGE_SETTLED item=i-none") && l.includes("ended=failed"))).toBe(true);
   });
 
-  test("relaunch refuses a lease whose ownership line is torn, or was never written after the open, and settles nothing", async () => {
-    const w = world({ "i-none": 229 });
-    const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
-    mkdirSync(w.dir, { recursive: true });
-    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-none", seq: 1, opening: true }) + "\n" + '{"lease_id":"i-none.00');
-    const err = await w.serve([NONE]).then(() => null, (e) => e as LedgerError);
-    expect(err?.code).toBe("E_USAGE");
-    expect(err?.message).toContain(left.lease_id);
-    expect(readItem(w.record, "i-none").open?.lease_id).toBe(left.lease_id);
-    expect(readItem(w.record, "i-none").leases).toHaveLength(1);
-  });
-
-  test("a torn ownership line, appended by hand as the refusal gives it, lets the relaunch recover and settle the lease", async () => {
-    const w = world({ "i-none": 229 });
-    const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
-    mkdirSync(w.dir, { recursive: true });
-    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-none", seq: 1, opening: true }) + "\n" + '{"lease_id":"i-none.00');
-    const line = JSON.stringify({ run_id: "r1", item: "i-none", lease_id: left.lease_id });
-    const err = await w.serve([NONE]).then(() => null, (e) => e as LedgerError);
-    expect(err?.message).toContain(line);
-    appendFileSync(join(w.dir, "leases.jsonl"), "\n" + line + "\n");
-    const served = await w.serve([NONE]);
-    expect(w.logs.some((l) => l.startsWith("STAGE_RECOVERED item=i-none lease=" + left.lease_id))).toBe(true);
-    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
-    expect(await served.stop()).toBe(0);
-  });
-
-  test("a marker over a settled lease wedges no other item, and the item's own refusal clears once its ownership line is appended by hand", async () => {
-    const w = world({ "i-none": 229, "i-pe": 572 });
-    const torn = openLease(w.record, w.local, { item: "i-pe", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
-    mkdirSync(w.dir, { recursive: true });
-    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-pe", seq: 1, opening: true }) + "\n" + '{"lease_id":"i-pe.00');
-    settleLease(w.record, w.local, torn.lease_id);
-    const served = await w.serve([NONE]);
-    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1]);
-    expect(await served.stop()).toBe(0);
-    const line = JSON.stringify({ run_id: "r1", item: "i-pe", lease_id: torn.lease_id });
-    const err = await w.serve([PE]).then(() => null, (e) => e as LedgerError);
-    expect(err?.code).toBe("E_USAGE");
-    expect(err?.message).toContain(line);
-    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
-    appendFileSync(join(w.dir, "leases.jsonl"), "\n" + line + "\n");
-    const again = await w.serve([PE]);
-    expect(readItem(w.record, "i-pe").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
-    expect(await again.stop()).toBe(0);
-  });
-
-  const staleMarker = (w: ReturnType<typeof world>, item: string) => {
-    mkdirSync(w.dir, { recursive: true });
-    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r1", item, seq: 1, opening: true }) + "\n");
-  };
-
-  test("a stale opening marker claims no lease another run directory opened, so a relaunch can't reopen its cap-stopped item", async () => {
-    const w = world({ "i-pe": 50 });
-    staleMarker(w, "i-pe");
-    await capStopped(w, [PE], "plan-eng-review:told", { dir: join(w.root, "runB") });
-    const before = readItem(w.record, "i-pe").leases;
-    const err = await w.serve([PE]).then(() => null, (e) => e as LedgerError);
-    expect(err?.code).toBe("E_USAGE");
-    expect(err?.message).toContain(before[0]!.lease.lease_id);
-    expect(readItem(w.record, "i-pe").leases).toEqual(before);
-  });
-
-  test("a stale opening marker never settles a lease another run directory still serves", async () => {
-    const w = world({ "i-pe": 572 });
-    staleMarker(w, "i-pe");
-    const b = await w.serve([PE], { dir: join(w.root, "runB") });
-    const s = await post(b.control + "/sessions", body("plan-eng-review:told", "a", 1));
-    expect(s.status).toBe(200);
-    const lease = readItem(w.record, "i-pe").open?.lease_id;
-    const err = await w.serve([PE]).then(() => null, (e) => e as LedgerError);
-    expect(err?.code).toBe("E_USAGE");
-    expect(err?.message).toContain(lease);
-    expect(readItem(w.record, "i-pe").open?.lease_id).toBe(lease);
-    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
-    expect((await call(s.json)).status).toBe(200);
-    await post(b.control + "/sessions/" + s.json.id + "/close", {});
-    expect(await b.stop()).toBe(0);
-  });
-
-  test("an opening marker whose slot holds no lease, or from another run, claims nothing and blocks nothing", async () => {
-    const w = world({ "i-none": 229, "i-tg": 60 });
-    const tg = openLease(w.record, w.local, { item: "i-tg", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
-    staleMarker(w, "i-none");
-    appendFileSync(join(w.dir, "leases.jsonl"), JSON.stringify({ run_id: "r0", item: "i-tg", seq: 1, opening: true }) + "\n");
-    const served = await w.serve([NONE]);
-    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1]);
-    expect(readItem(w.record, "i-tg").open?.lease_id).toBe(tg.lease_id);
-    expect(await served.stop()).toBe(0);
-  });
-
   const capStopped = async (w: ReturnType<typeof world>, stages: StageSpec[], arm: string, more: Partial<ServeOptions> = {}) => {
     const served = await w.serve(stages, more);
     const open = (task: string) => post(served.control + "/sessions", body(arm, task, 1));
@@ -351,6 +267,92 @@ describe("the outcome-skills session driver", () => {
     for (const s of [a, b]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
     expect(await served.done).toBe(0);
   };
+
+  test("every lease the driver opens names its run directory's canonical path and the launch's nonce; another spelling of that directory serves the run", async () => {
+    const w = world({ "i-none": 229 });
+    const first = await w.serve([NONE]);
+    expect(await first.stop()).toBe(0);
+    const h1 = readItem(w.record, "i-none").leases[0]!.lease.holder;
+    expect(h1).toEqual({ dir: realpathSync(w.dir), nonce: expect.stringMatching(/^[0-9a-f]{16}$/) });
+    const link = join(w.root, "link");
+    symlinkSync(w.dir, link);
+    const again = await w.serve([NONE], { dir: link });
+    expect(await again.stop()).toBe(0);
+    const h2 = readItem(w.record, "i-none").leases[1]!.lease.holder;
+    expect(h2?.dir).toBe(h1!.dir);
+    expect(h2?.nonce).not.toBe(h1!.nonce);
+  });
+
+  test("a run binds to the directory of its first lease: a launch from another directory is refused with E_USAGE before anything is opened, with no hand override", async () => {
+    const w = world({ "i-none": 229, "i-pe": 572 });
+    const first = await w.serve([NONE]);
+    expect(await first.stop()).toBe(0);
+    const err = await refused(w.serve([PE], { dir: join(w.root, "runB") }));
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain(realpathSync(w.dir));
+    expect(err?.message).not.toMatch(NO_HAND);
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(0);
+    expect(readItem(w.record, "i-none").leases).toHaveLength(1);
+  });
+
+  test("a cap-stopped stage is not reopened from another directory, even one holding a hand-written ownership line and an empty sessions.jsonl (Capy 01M6N5BJ1B)", async () => {
+    const w = world({ "i-pe": 50 });
+    await capStopped(w, [PE], "plan-eng-review:told");
+    const before = readItem(w.record, "i-pe").leases;
+    const b = join(w.root, "runB");
+    mkdirSync(b, { recursive: true });
+    writeFileSync(join(b, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-pe", lease_id: before[0]!.lease.lease_id }) + "\n");
+    writeFileSync(join(b, "sessions.jsonl"), "");
+    const err = await refused(w.serve([PE], { dir: b }));
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain(realpathSync(w.dir));
+    expect(err?.message).not.toMatch(NO_HAND);
+    expect(readItem(w.record, "i-pe").leases).toEqual(before);
+  });
+
+  test("a launch from another directory never settles or claims a lease the bound directory still serves, whatever markers or ownership lines it holds (Capy 01M6N0DTS8, fc4/fix-check#2)", async () => {
+    const w = world({ "i-pe": 572 });
+    const a = await w.serve([PE]);
+    const s = await post(a.control + "/sessions", body("plan-eng-review:told", "a", 1));
+    expect(s.status).toBe(200);
+    const lease = readItem(w.record, "i-pe").open!.lease_id;
+    const b = join(w.root, "runB");
+    mkdirSync(b, { recursive: true });
+    writeFileSync(join(b, "leases.jsonl"), JSON.stringify({ run_id: "r1", item: "i-pe", seq: 1, opening: true }) + "\n" + JSON.stringify({ run_id: "r1", item: "i-pe", lease_id: lease }) + "\n");
+    const err = await refused(w.serve([PE], { dir: b }));
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).not.toMatch(NO_HAND);
+    expect(readItem(w.record, "i-pe").open?.lease_id).toBe(lease);
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+    expect((await call(s.json)).status).toBe(200);
+    await post(a.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await a.stop()).toBe(0);
+  });
+
+  test("a launch whose open is refused unwinds at $0 and leaves nothing that blocks its directory, which stays the run's", async () => {
+    const w = world({ "i-none": 229, "i-pe": 572 });
+    let checks = 0;
+    const err = await refused(w.serve([NONE, PE], { requireAdmission: () => (++checks === 4 ? "no record for this slot" : null) }));
+    expect(err?.code).toBe("E_RIG_UNPROVEN");
+    expect(readItem(w.record, "i-none").leases[0]!.close).toMatchObject({ spent_micros: 0 });
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(0);
+    expect(await codeOf(w.serve([PE], { dir: join(w.root, "runB") }))).toBe("E_USAGE");
+    const again = await w.serve([NONE, PE]);
+    expect(readItem(w.record, "i-none").leases.map((l) => l.lease.seq)).toEqual([1, 2]);
+    expect(readItem(w.record, "i-pe").leases.map((l) => l.lease.seq)).toEqual([1]);
+    expect(await again.stop()).toBe(0);
+  });
+
+  test("a stage item holding a lease of the run that names no holder is refused with no override, and recovery never settles it", async () => {
+    const w = world({ "i-none": 229 });
+    const hand = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", requireAdmission: () => null });
+    const err = await refused(w.serve([NONE]));
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain(hand.lease_id);
+    expect(err?.message).not.toMatch(NO_HAND);
+    expect(readItem(w.record, "i-none").open?.lease_id).toBe(hand.lease_id);
+    expect(readItem(w.record, "i-none").leases).toHaveLength(1);
+  });
 
   test("a told stage that cap-stopped is not reopened by a relaunch from the same run directory", async () => {
     const w = world({ "i-pe": 50 });
@@ -362,7 +364,10 @@ describe("the outcome-skills session driver", () => {
   test("a cap-stopped item is not reopened from a new run directory either", async () => {
     const w = world({ "i-pe": 50 });
     await capStopped(w, [PE], "plan-eng-review:told");
-    expect(await codeOf(w.serve([PE], { dir: join(w.root, "run2") }))).toBe("E_USAGE");
+    const err = await refused(w.serve([PE], { dir: join(w.root, "run2") }));
+    expect(err?.code).toBe("E_USAGE");
+    expect(err?.message).toContain(realpathSync(w.dir));
+    expect(err?.message).not.toMatch(NO_HAND);
     expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
   });
 
@@ -370,6 +375,7 @@ describe("the outcome-skills session driver", () => {
     const w = world({ "i-none": 20, "i-pe": 572 });
     await capStopped(w, [NONE, PE], "none");
     for (const stages of [[PE], [NONE, PE]]) expect(await codeOf(w.serve(stages))).toBe("CAP_STOP");
+    for (const stages of [[PE], [NONE, PE]]) expect(await codeOf(w.serve(stages, { dir: join(w.root, "run2") }))).toBe("E_USAGE");
     for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).leases).toHaveLength(1);
   });
 

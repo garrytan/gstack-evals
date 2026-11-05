@@ -935,19 +935,19 @@ export const CODES = {
   JOURNAL_MISSING: {
     exit: null,
     meaning: "The outcome-skills driver recovered an open lease from an earlier run on this machine and found no proxy journal for it, so nothing tells which of its calls were answered. The settle keeps every call still reserved at its full reservation.",
-    fix: "Nothing to undo: the lease closes charging every unanswered call in full, which can only overstate spend. Check that the driver's --dir is the run directory the earlier driver used.",
+    fix: "Nothing to undo: the lease closes charging every unanswered call in full, which can only overstate spend. Recovery runs only from the run directory that holds the lease, so a missing journal means the earlier driver stopped before its proxy started, or the journal was removed.",
     owner: "U4",
   },
   STAGE_RECOVERED: {
     exit: null,
-    meaning: "The outcome-skills driver found a stage lease that an earlier driver of the same run left open on this machine, reconciled its proxy journal and settled it before opening anything new.",
+    meaning: "The outcome-skills driver found a stage lease that an earlier launch of the same run, from the same run directory, left open on this machine, reconciled its proxy journal and settled it before opening anything new.",
     fix: "Nothing is required. Sessions the earlier driver was serving count as gaps whose named repair is the driver relaunch; the batch reruns them under its rerun rule.",
     owner: "U4",
   },
   STAGE_SETTLED: {
     exit: null,
     meaning: "The outcome-skills driver closed one stage: it closed the stage's live sessions, stopped its proxy, reconciled the proxy journal and settled the stage lease. The line names how the stage ended (completed, cap_stop, lease_expired or failed) and, on a cap stop, which stages it ended.",
-    fix: "Nothing is required. A cap stop is an incomplete run and is never retried to change a verdict; a lease_expired stage resumes when the driver is launched again for the same run.",
+    fix: "Nothing is required. A cap stop is an incomplete run and is never retried to change a verdict; a lease_expired stage resumes when the driver is launched again for the same run from the same run directory.",
     owner: "U4",
   },
   CLEANUP_INCOMPLETE: {

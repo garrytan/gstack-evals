@@ -1,17 +1,19 @@
 // The outcome-skills session driver (GST-1381, plan wiki/plans/2026-11-04-geva-286-u4-session-driver): one U4 lease per
 // stage at its line item's cap (G prereg section 9), one metering-proxy slot per session, and a control plane on
 // 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. Every lease is admitted by O6's envelope through
-// openLease, and every exit path settles every lease it opened.
+// openLease, and every exit path settles every lease it opened. Each lease names its holder, the run directory and the
+// launch's nonce, and a run binds to the directory of its first lease, so that directory's sessions.jsonl holds every cap
+// stop and trial count of the run.
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { rigAdmission } from "../../../src/rig/admission.ts";
 import { envelopeStatus, split } from "../../../src/runner/ledger/envelope.ts";
-import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
+import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, rivalHolder, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
 import type { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
-import { LedgerError, readItem, type CloseFile, type LeaseFile } from "../../../src/runner/ledger/record.ts";
+import { holderBound, LedgerError, listItems, readItem, type CloseFile, type Holder, type LeaseFile } from "../../../src/runner/ledger/record.ts";
 import { isTrialNetworkHost, MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { loadRegistry, type Registry } from "../arms/registry.ts";
 
@@ -156,9 +158,9 @@ function takeLock(file: string): string {
 }
 
 /**
- * Recovers the open leases an earlier driver of this run left in this run directory (leases.jsonl) on this machine,
- * preflights every stage, opens one lease and one proxy per stage, then serves. A lease the driver did not open, such as
- * the program's T-G or VM lease on the same run, is never touched.
+ * Refuses a run bound to another run directory, recovers the open leases an earlier launch from this run directory left
+ * on this machine, preflights every stage, opens one lease and one proxy per stage, then serves. A lease that names no
+ * holder, such as the program's T-G or VM lease on the same run, is never touched.
  */
 export async function serveStages(o: ServeOptions): Promise<Served> {
   const held = { lock: null as string | null };
@@ -193,44 +195,26 @@ async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Se
   for (const st of o.stages) if (!Object.hasOwn(reg.arms, st.arm)) fail("E_USAGE", "stage " + st.item + " names arm " + st.arm + ", which the registry does not hold; it holds " + Object.keys(reg.arms).join(", "));
   if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(o.stages.map((s) => s.arm)).size !== o.stages.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
   mkdirSync(o.dir, { recursive: true });
-  held.lock = takeLock(join(o.dir, "driver.lock"));
-  const sessionsFile = join(o.dir, "sessions.jsonl");
+  const dir = realpathSync(o.dir);
+  held.lock = takeLock(join(dir, "driver.lock"));
+  const holder: Holder = { dir, nonce: randomBytes(8).toString("hex") };
+  const rival = rivalHolder(o.record, o.run_id, dir);
+  if (rival) fail("E_USAGE", holderBound(rival, holder).message + "; nothing was recovered, settled or opened");
+  const sessionsFile = join(dir, "sessions.jsonl");
   const record = (line: Record<string, unknown>) => appendFileSync(sessionsFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, ...line }) + "\n");
 
-  const leasesFile = join(o.dir, "leases.jsonl");
-  const ours = new Set<string>();
-  const opening = new Map<string, { item: string; seq: number | undefined }>();
-  for (const line of existsSync(leasesFile) ? readFileSync(leasesFile, "utf8").split("\n") : []) {
-    let e: { run_id?: string; item?: string; seq?: number; lease_id?: string } | null;
-    try {
-      e = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (e?.lease_id) ours.add(e.lease_id);
-    else if (typeof e?.item === "string" && e.run_id === o.run_id) opening.set(e.item + "#" + e.seq, { item: e.item, seq: e.seq });
-  }
-  const byHand = (leases: LeaseFile[]) => "If this run directory opened them (the driver stopped before their ownership line was written, or the line is torn), append each ownership line to " + leasesFile + " by hand, starting it on a new line: " + leases.map((l) => JSON.stringify({ run_id: o.run_id, item: l.item, lease_id: l.lease_id })).join(" ") + ", then relaunch, and recovery settles any still open. Otherwise another run directory opened them: relaunch from the run directory whose leases.jsonl names them, so the run's cap stops and trial counts carry over";
-  const unproven: LeaseFile[] = [];
-  for (const m of opening.values()) {
-    const s = readItem(o.record, m.item);
-    const l = s.leases.find((x) => x.lease.seq === m.seq && x.lease.run_id === o.run_id)?.lease;
-    if (!l || ours.has(l.lease_id) || s.open?.lease_id !== l.lease_id) continue;
-    unproven.push(l);
-  }
-  if (unproven.length) fail("E_USAGE", "run directory " + o.dir + " holds an opening marker but no ownership line for run " + o.run_id + "'s open leases " + unproven.map((l) => l.lease_id).join(", ") + ", so it can't prove it opened them and never claims or settles them; nothing was recovered, settled or opened. " + byHand(unproven));
   const failures: string[] = [];
-  for (const item of ledgerStatus(o.record)) {
-    const lease = item.open_lease;
-    if (!lease || !ours.has(lease.lease_id) || lease.run_id !== o.run_id || lease.machine_id !== machine) continue;
+  for (const item of listItems(o.record)) {
+    const lease = readItem(o.record, item).open;
+    if (!lease || lease.run_id !== o.run_id || lease.holder?.dir !== dir || lease.machine_id !== machine) continue;
     try {
-      const journal = join(o.dir, lease.lease_id + ".journal.ndjson");
+      const journal = join(dir, lease.lease_id + ".journal.ndjson");
       if (existsSync(journal)) {
         const rec = await reconcileJournal(journal, o.local);
         for (const r of rec.refused) warn(r.code as ReasonCode, "recovering lease " + lease.lease_id + ": " + r.message);
-      } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item.item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
+      } else warn("JOURNAL_MISSING", "lease " + lease.lease_id + " on line item " + item + " has no proxy journal at " + journal + ", so its settle charges every unanswered call at its full reservation");
       const close = settleLease(o.record, o.local, lease.lease_id, warn);
-      log("STAGE_RECOVERED item=" + item.item + " lease=" + lease.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " unknown_calls=" + close.unknown_calls);
+      log("STAGE_RECOVERED item=" + item + " lease=" + lease.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " unknown_calls=" + close.unknown_calls);
     } catch (error) {
       failures.push(lease.lease_id + " (" + (error as Error).message + ")");
     }
@@ -254,8 +238,8 @@ async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Se
 
   const plans = o.stages.map((st) => {
     const s = readItem(o.record, st.item);
-    const unclaimed = s.leases.filter((l) => l.lease.run_id === o.run_id && !ours.has(l.lease.lease_id)).map((l) => l.lease);
-    if (unclaimed.length) fail("E_USAGE", "line item " + st.item + " holds run " + o.run_id + "'s leases " + unclaimed.map((l) => l.lease_id).join(", ") + ", for which this run directory (" + o.dir + ") holds no ownership line; nothing was opened. " + byHand(unclaimed));
+    const unheld = s.leases.filter((l) => l.lease.run_id === o.run_id && l.lease.holder?.dir !== dir).map((l) => l.lease);
+    if (unheld.length) fail("E_USAGE", "line item " + st.item + " holds run " + o.run_id + "'s leases " + unheld.map((l) => l.lease_id).join(", ") + ", which name no holder, so no run directory's sessions.jsonl counts their sessions and the driver can't serve the item for this run; nothing was opened");
     const stop = capped.get("") ?? capped.get(st.item);
     if (stop) fail("CAP_STOP", (capped.has("") ? "the none stage cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends both skills incomplete" : "stage " + st.item + " cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends its skill incomplete") + "; a cap stop is not retried (plan section 6); nothing was opened");
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
@@ -269,7 +253,7 @@ async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Se
     if (left <= 0) fail("CAP_STOP", "line item " + st.item + " has nothing left of its " + usd(s.cap_micros) + " cap (" + usd(s.committed_micros) + " committed); nothing was opened");
     if (s.admission) {
       const seq = s.leases.length + 1;
-      const file: LeaseFile = { schema: 1, kind: "lease", item: st.item, seq, lease_id: st.item + "." + String(seq).padStart(4, "0") + ".000000", run_id: o.run_id, machine_id: machine, reserved_micros: left, expires_at: new Date(at.getTime() + ttl).toISOString(), created_at: at.toISOString() };
+      const file: LeaseFile = { schema: 1, kind: "lease", item: st.item, seq, lease_id: st.item + "." + String(seq).padStart(4, "0") + ".000000", run_id: o.run_id, machine_id: machine, holder, reserved_micros: left, expires_at: new Date(at.getTime() + ttl).toISOString(), created_at: at.toISOString() };
       const why = (o.requireAdmission ?? rigAdmission())(o.record, file);
       if (why && s.admission === "required") fail("E_RIG_UNPROVEN", "line item " + st.item + " requires admission for slot " + seq + ": " + why + "; write it with gstack-evals rig admit for that slot, then launch the driver again; nothing was opened");
     }
@@ -356,12 +340,10 @@ async function serve(o: ServeOptions, held: { lock: string | null }): Promise<Se
   };
   for (const [i, { st }] of plans.entries()) {
     try {
-      appendFileSync(leasesFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, item: st.item, seq: plans[i]!.s.leases.length + 1, opening: true }) + "\n");
-      const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, ttl_ms: ttl, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
+      const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, holder, ttl_ms: ttl, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
       opened.push(lease.lease_id);
-      appendFileSync(leasesFile, JSON.stringify({ at: new Date(now()).toISOString(), run_id: o.run_id, item: st.item, lease_id: lease.lease_id }) + "\n");
-      const journal = join(o.dir, lease.lease_id + ".journal.ndjson");
-      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(o.dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch });
+      const journal = join(dir, lease.lease_id + ".journal.ndjson");
+      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch });
       const stage: Stage = { item: st.item, arm: st.arm, kind: reg.arms[st.arm]!.kind, lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
       stages.push(stage);
       proxy.start();

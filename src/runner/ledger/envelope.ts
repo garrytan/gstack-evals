@@ -11,7 +11,7 @@ import { join } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { isMicros, usd } from "./money.ts";
 import { readMounts, remoteMount, type Mount } from "./paths.ts";
-import { checkQuotes, claimSlot, isRecordFile, isSkillList, ITEM_NAME, LedgerError, listItems, readItem, type ItemState, type LeaseFile, type Quote } from "./record.ts";
+import { checkQuotes, claimSlot, holderBound, isRecordFile, isSkillList, ITEM_NAME, LedgerError, listItems, readItem, type ItemState, type LeaseFile, type Quote } from "./record.ts";
 
 /** Entry 1 of a program: the owner's ceilings, frozen. */
 export interface ProgramFile {
@@ -236,7 +236,9 @@ export function recordProgram(record: string, p: { program: string; cap_micros: 
 /**
  * Admits a lease on a program's line item in one atomic step: settled spend, every open reservation and this lease must
  * stay at or under the program's ceiling and each of the item's skills' ceilings, or it is refused with
- * ENVELOPE_PROGRAM_STOP or ENVELOPE_SKILL_STOP. afterCheck runs after a check passes and before its slot is claimed.
+ * ENVELOPE_PROGRAM_STOP or ENVELOPE_SKILL_STOP. A lease that names a holder is refused with E_USAGE when an entry
+ * admitted the run from another run directory, so of two launches binding one run at the same moment, one binds it.
+ * afterCheck runs after a check passes and before its slot is claimed.
  */
 export function admitLease(record: string, state: ItemState, lease: LeaseFile, o: { now?: Date; afterCheck?: () => void; mounts?: Mount[] } = {}): AdmitFile {
   const program = state.program;
@@ -244,6 +246,8 @@ export function admitLease(record: string, state: ItemState, lease: LeaseFile, o
   const now = o.now ?? new Date();
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const { entries, status, pending } = readEnvelope(record, program, now);
+    const bound = lease.holder && entries.find((e): e is AdmitFile => e.kind === "admit" && e.lease.run_id === lease.run_id && e.lease.holder !== undefined && e.lease.holder.dir !== lease.holder!.dir);
+    if (bound) throw holderBound(bound.lease, lease.holder!);
     const rival = pending.find((e) => e.lease.item === lease.item);
     if (rival) {
       throw new LedgerError("E_LEASE_UNSETTLED", "lease " + rival.lease.lease_id + " on line item " + lease.item + " was admitted at " + rival.recorded_at + " and its lease is not written yet; it is counted until it is written or until it expires at " + rival.lease.expires_at + ", so lease again after that");

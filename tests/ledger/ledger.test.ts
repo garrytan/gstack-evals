@@ -423,3 +423,47 @@ describe("lease guards from the /ship review", () => {
   });
 });
 
+describe("lease holders (GST-1381)", () => {
+  const holderWorld = (items: string[]) => {
+    const dir = scratch();
+    const record = join(dir, "record");
+    for (const item of items) recordApproval(record, { action: "init", item, cap_micros: 10 * DOLLAR, quotes: [quote], admission: "warn" });
+    return { record, local: LocalLedger.open(join(dir, "machine-a.sqlite")) };
+  };
+
+  test("a lease written before holders still reads and settles, a lease with no holder keeps its old bytes, and a malformed holder is an unreadable record", () => {
+    const { record, local } = holderWorld(["old", "new", "bad"]);
+    const before = { schema: 1 as const, kind: "lease" as const, item: "old", seq: 1, lease_id: "old.0001.abcdef", run_id: "run-a", machine_id: "m-a", reserved_micros: 4 * DOLLAR, expires_at: "2099-01-01T00:00:00.000Z", created_at: "2026-11-01T00:00:00.000Z" };
+    expect(writeOnce(record, before)).toBe("written");
+    expect(readItem(record, "old").open).toEqual(before);
+    expect(ledgerStatus(record).find((s) => s.item === "old")?.open_lease?.lease_id).toBe(before.lease_id);
+    const plain = openLease(record, local, { item: "new", run_id: "run-a" });
+    expect(Object.keys(JSON.parse(readFileSync(slotPath(record, { kind: "lease", item: "new", seq: 1 }), "utf8")))).toEqual(Object.keys(before));
+    expect(settleLease(record, local, plain.lease_id).spent_micros).toBe(0);
+    writeOnce(record, { ...before, item: "bad", lease_id: "bad.0001.abcdef", holder: { dir: "runs/a", nonce: "" } });
+    expect(codeOf(() => readItem(record, "bad"))).toBe("E_LEDGER_RECORD");
+    local.close();
+  });
+
+  test("a run's leases that name a holder all name one run directory: another directory is refused with E_USAGE and writes nothing, and a lease with no holder binds nothing", () => {
+    const { record, local } = holderWorld(["a", "b", "c", "d", "e"]);
+    const A = { dir: "/runs/a", nonce: "n1" };
+    expect(openLease(record, local, { item: "a", run_id: "run-a", holder: A }).lease_id).toStartWith("a.0001.");
+    expect(readItem(record, "a").open?.holder).toEqual(A);
+    let refusal: LedgerError | null = null;
+    try {
+      openLease(record, local, { item: "b", run_id: "run-a", holder: { dir: "/runs/b", nonce: "n2" } });
+    } catch (e) {
+      refusal = e as LedgerError;
+    }
+    expect(refusal?.code).toBe("E_USAGE");
+    expect(refusal?.message).toContain("/runs/a");
+    expect(readItem(record, "b").leases).toHaveLength(0);
+    expect(openLease(record, local, { item: "b", run_id: "run-a" }).run_id).toBe("run-a");
+    expect(openLease(record, local, { item: "c", run_id: "run-a", holder: { dir: "/runs/a", nonce: "n3" } }).run_id).toBe("run-a");
+    expect(openLease(record, local, { item: "d", run_id: "run-b", holder: { dir: "/runs/b", nonce: "n4" } }).run_id).toBe("run-b");
+    expect(codeOf(() => openLease(record, local, { item: "e", run_id: "run-c", holder: { dir: "runs/c", nonce: "" } }))).toBe("E_USAGE");
+    expect(readItem(record, "e").leases).toHaveLength(0);
+    local.close();
+  });
+});

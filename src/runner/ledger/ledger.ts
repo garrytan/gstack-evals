@@ -11,7 +11,7 @@ import type { Lease } from "../../types.ts";
 import { admitLease, programSkills } from "./envelope.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { checkQuotes, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { checkQuotes, holderBound, isHolder, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type Holder, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_LEASE_TTL_MS = 7 * DEFAULT_LEASE_TTL_MS;
@@ -90,6 +90,15 @@ function admit(record: string, state: ItemState, run_id: string): void {
   }
 }
 
+/** A lease of the run, on any line item, that names a holder in another run directory than dir. */
+export function rivalHolder(record: string, run_id: string, dir: string): LeaseFile | null {
+  for (const item of listItems(record)) {
+    const rival = read(record, item).leases.find(({ lease }) => lease.run_id === run_id && lease.holder !== undefined && lease.holder.dir !== dir);
+    if (rival) return rival.lease;
+  }
+  return null;
+}
+
 const toLease = (f: LeaseFile, state: Lease["state"]): Lease => ({ lease_id: f.lease_id, line_item: f.item, run_id: f.run_id, machine_id: f.machine_id, reserved_micros: f.reserved_micros, expires_at: f.expires_at, state });
 
 export interface LeaseRequest {
@@ -97,6 +106,8 @@ export interface LeaseRequest {
   run_id: string;
   /** The holder: this machine by default, or the sealed workflow a lease is exported to. */
   machine_id?: string;
+  /** The driver launch that holds the lease; its run directory binds the run (holderBound). */
+  holder?: Holder;
   /** Defaults to everything the line item has left. */
   amount_micros?: number;
   ttl_ms?: number;
@@ -121,8 +132,11 @@ export type RequireAdmission = (record: string, lease: LeaseFile) => string | nu
  * lease's expiry, so a lease whose expiry passes before it is written is refused with E_ENVELOPE_LATE.
  */
 export function openLease(record: string, local: LocalLedger | null, req: LeaseRequest): Lease {
+  if (req.holder !== undefined && !isHolder(req.holder)) throw new LedgerError("E_USAGE", "a lease's holder names its run directory's absolute path and a launch nonce");
   const state = read(record, req.item);
   admit(record, state, req.run_id);
+  const rival = req.holder && rivalHolder(record, req.run_id, req.holder.dir);
+  if (rival) throw holderBound(rival, req.holder!);
   const cap = state.cap_micros!;
   const left = cap - state.committed_micros;
   const amount = req.amount_micros ?? left;
@@ -141,6 +155,7 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
     lease_id: req.item + "." + String(seq).padStart(4, "0") + "." + randomBytes(3).toString("hex"),
     run_id: req.run_id,
     machine_id: req.machine_id ?? machineId(),
+    ...(req.holder ? { holder: req.holder } : {}),
     reserved_micros: amount,
     expires_at: new Date(now.getTime() + ttl).toISOString(),
     created_at: now.toISOString(),

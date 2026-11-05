@@ -187,6 +187,25 @@ try { openLease(record, null, { item, run_id: "run-" + item, amount_micros: 1200
     expect([inner, outer, checks]).toEqual(["ok", "ENVELOPE_PROGRAM_STOP", 1]);
     expect(envelopeStatus(w.record, "wave1").total).toMatchObject({ open_micros: 1_200 * D, pending_micros: 0, committed_micros: 9_200 * D });
   });
+
+  test("of two launches binding one run from two directories at the same moment, the one that lost the entry slot is checked again and refused with E_USAGE", () => {
+    const w = world();
+    stage(w.record, "pe-a", [PE], 100 * D);
+    stage(w.record, "ap-a", [AP], 100 * D);
+    const now = new Date();
+    const file: LeaseFile = { ...leaseFile("pe-a", 100 * D, new Date(now.getTime() + 3_600_000), now), run_id: "run-g", holder: { dir: "/runs/b", nonce: "nb" } };
+    let inner = "";
+    let checks = 0;
+    const outer = codeOf(() =>
+      admitLease(w.record, readItem(w.record, "pe-a"), file, {
+        afterCheck: () => {
+          if (checks++ === 0) inner = codeOf(() => openLease(w.record, null, { item: "ap-a", run_id: "run-g", holder: { dir: "/runs/a", nonce: "na" }, requireAdmission: () => null }));
+        },
+      }),
+    );
+    expect([inner, outer, checks]).toEqual(["ok", "E_USAGE", 1]);
+    expect(envelopeStatus(w.record, "wave1").total).toMatchObject({ open_micros: 100 * D, pending_micros: 0 });
+  });
 });
 
 describe("settling and crashes", () => {

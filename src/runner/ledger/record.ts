@@ -7,7 +7,7 @@
 // belongs to one run and a replacement worker waits for the previous lease to close.
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import type { TokenUsage } from "../../types.ts";
 import { isMicros } from "./money.ts";
@@ -51,11 +51,19 @@ export interface ApprovalFile extends Omit<Slot, "schema"> {
 
 export type Admission = "required" | "warn";
 
+/** The driver launch that holds a lease: its run directory's canonical path and a nonce minted for that launch (GST-1381). */
+export interface Holder {
+  dir: string;
+  nonce: string;
+}
+
 export interface LeaseFile extends Slot {
   kind: "lease";
   lease_id: string;
   run_id: string;
   machine_id: string;
+  /** Absent on a lease no driver holds, such as one opened by hand or written before holders. */
+  holder?: Holder;
   reserved_micros: number;
   expires_at: string;
   created_at: string;
@@ -181,6 +189,19 @@ function syncDir(dir: string): void {
   }
 }
 
+export const isHolder = (h: unknown): h is Holder => {
+  const x = h as Holder | null;
+  return typeof x === "object" && x !== null && Object.keys(x).length === 2 && typeof x.dir === "string" && isAbsolute(x.dir) && typeof x.nonce === "string" && x.nonce.length > 0;
+};
+
+/**
+ * Each run binds to the run directory of its first lease that names a holder, so one directory's sessions.jsonl holds
+ * every cap stop and trial count of the run. A lease for the run from another directory is refused with this error.
+ */
+export function holderBound(rival: LeaseFile, holder: Holder): LedgerError {
+  return new LedgerError("E_USAGE", "run " + rival.run_id + " is bound to run directory " + rival.holder!.dir + " by lease " + rival.lease_id + " on line item " + rival.item + ", so it is refused from " + holder.dir + ": one directory serves a run, so that its sessions.jsonl holds every cap stop and trial count of the run. Serve run " + rival.run_id + " from " + rival.holder!.dir);
+}
+
 /** The shape checks every record file passes, also applied to a lease export or settle artifact before it is used. */
 export function isRecordFile(f: unknown): f is RecordFile {
   const r = f as RecordFile | null;
@@ -189,7 +210,7 @@ export function isRecordFile(f: unknown): f is RecordFile {
     const member = r.program === undefined ? r.skills === undefined && r.schema === 1 : r.schema === 2 && r.action === "init" && ITEM_NAME.test(r.program) && isSkillList(r.skills);
     return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0 && (r.action === "init" ? r.admission === "required" || r.admission === "warn" : r.admission === undefined) && member;
   }
-  if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && isTime(r.expires_at);
+  if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && isTime(r.expires_at) && (r.holder === undefined || isHolder(r.holder));
   return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string";
 }
 
