@@ -60,7 +60,7 @@ One item, r3c-opus ($750, ledger port 9917). From the build commit, with LEDGER 
 
 1. `bun quick/laneb/r3/r3c.ts arm-check`
 2. `LEDGER=<ledger> INHAND=<dir> ARMS=<dir> SWEREBENCH=<export> bun quick/laneb/r3/r3c.ts prepare <work dir> --item r3c-opus`
-3. The same env plus UBI_RUNNER, UBI_OWNER (the run thread's code), UBI_TTL_HOURS=12 or more, UBICLOUD_API_KEY, VM_USD_PER_HOUR=0.6, VM_RESERVE_HOURS=4, LEDGER_PORT=9917 and the provider key: `bun quick/laneb/r3/r3c.ts run <work dir> --item r3c-opus`. It binds the item, runs cal-1a to cal-1c and cal-2, and runs admission. On GO it prepares the grid parts and stops (exit 0). On STOP it ends (exit 5).
+3. The same env plus UBI_RUNNER (a local copy of the Ubicloud runner with sha256 c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2, the file main vendors as quick/laneb/l1/ubi-runner.sh since #227; check its hash before this step and record it in the run record), UBI_OWNER (the run thread's code), UBI_TTL_HOURS=12 or more, UBICLOUD_API_KEY, VM_USD_PER_HOUR=0.6, VM_RESERVE_HOURS=4, LEDGER_PORT=9917 and the provider key: `bun quick/laneb/r3/r3c.ts run <work dir> --item r3c-opus`. It binds the item, runs cal-1a to cal-1c and cal-2, and runs admission. On GO it prepares the grid parts and stops (exit 0). On STOP it ends (exit 5).
 4. After the admit lines reach the Captain, with the same env: `bun quick/laneb/r3/r3c.ts grid <work dir> --item r3c-opus`.
 5. After a projection stop and a raise recorded with `ledger.ts raise --approved-by <file>`, with the same env: `bun quick/laneb/r3/r3c.ts resume <work dir> --item r3c-opus`. This works for a stop in calibration and a stop in the grid.
 6. `LEDGER=<ledger> INHAND=<dir> bun quick/laneb/r3/r3c.ts admit <work dir> --item r3c-opus` prints admission again and writes nothing; `analyze` with the same env gives the outcome.
@@ -93,6 +93,7 @@ A none calibration trial that never opened a session has a null cost. The frozen
 - The rule-of-three 95% upper bound on that rate is 3/410 = 0.73% a trial.
 - Admission prices every calibration none trial on the admitted tasks. In the dry run's GO shape that is 176 trials (40 admitted tasks, 650 calibration trials).
 - If trials fail to open a session independently at a fixed rate, the chance that at least one of the 176 has a null cost, so that admission STOPs early, is 0 at the observed rate, 16% at 0.1%, 36% at 0.25%, 59% at 0.5% and 72% at the 0.73% upper bound. These are calculations at assumed rates, not measured chances.
+- The dry run below does not drive this STOP. The selftest in quick/laneb/r3/r3c-rules.ts (`bun quick/laneb/r3/r3c-rules.ts selftest`, which passes at 239d227) drives it both ways: a null cost on an admitted task's calibration none trial, infra included, stops admission, and a null cost on a task that isn't admitted leaves the price alone.
 
 ## The binding proofs
 
@@ -103,16 +104,18 @@ Two keyless proofs bind this pin, and the run thread reruns neither:
 
 ## The dry run
 
-dryrun.sh.txt ran at 239d227df569640e68058de52ee79c98d5ae114d and printed dryrun.txt. It takes the commit as its argument, exports it with git archive outside any git work tree, and ends with DRYRUN: ok and exit 0 (a failed rule prints DRYRUN: fail and exits 1). No step calls a model or starts a VM: the model and Ubicloud keys are unset, r3c.ts gets a placeholder Ubicloud key that is not a real one, and the Ubicloud runner and ssh are stubs. It reads the real SWE-rebench export, the real in-hand records and the real told arm.
+dryrun.sh.txt ran at 239d227df569640e68058de52ee79c98d5ae114d and printed dryrun.txt. It takes the commit as its argument, exports it with git archive outside any git work tree, and ends with DRYRUN: ok and exit 0 (a failed rule prints DRYRUN: fail and exits 1). No step calls a model or starts a VM: the model and Ubicloud keys are unset, r3c.ts gets a placeholder Ubicloud key that is not a real one, and the Ubicloud runner and ssh are stubs. It reads the real SWE-rebench export, the real in-hand records and the real told arm. The told arm and the in-hand records sit on private drives, so a reader outside the project can check their digests above but cannot rerun the dry run as it stands.
 
 How it drives the rules. Each scenario copies a prepared work dir, approves a fresh temporary ledger at $750 and runs r3c.ts run, grid, resume, admit and analyze. The real launch.sh reserves and settles each VM block and starts the item's ledger service. The stub ssh plays vm-run.sh: it opens and settles one $12 session lease per planned trial through that service, as the proxy does, in the part's order.json order, and writes each trial's files with the scenario's outcome and cost. Grid scenarios clone the GO run after admission.
 
-dryrun.txt is the printed output with one change: two trial names in rules H1 and H2b are replaced by `<trial>`, because each holds a candidate task id. The unredacted output's sha256 is 7a79112f0c1fb9bcfdde5e830677f259e8004e2d5496014288ff6bac1cc72edd.
+dryrun.txt is the printed output with one change: two trial names in rules H1 and H2b are replaced by `<trial>`, because each holds a candidate task id. The unredacted output stays outside the repo, and this post gives no digest of it, because the hidden names are short enough to recover from a digest by search.
 
-### Two limits
+### Four limits
 
 1. **Trial files use the keyless tests' shape.** Harbor, the agent and the proxy never run in the dry run, so it shows that the rules read such files as frozen, not that a real trial writes them that way. The capture above covers that path.
 2. **The report-only MDD re-simulation ran at 20 simulated runs** (R3C_MDD_SIMS=20) instead of 2,000, to keep the run short. Those lines decide nothing. Admission always runs its frozen 2,000.
+3. **VM cost is $0 in the dry run.** The stub VMs live for seconds, so every VM block settles at $0, and every projection from measured costs reads $0.0000 VM a trial (VM $0.00 in the grid). The rows check the trial-spend term of those projections, not the VM-hours term. The start rule's VM term comes from R3b's measured hours, not from the dry run.
+4. **Four rows check less than their expected column says.** D3 checks admit's exit code but not the cap it ran at, F5 does not check the resume's exit code, H1 does not check grid's exit code, and H3 does not look for the D1 line. dryrun.txt prints each row's observed values.
 
 ### One line per rule
 
