@@ -714,6 +714,52 @@ describe("the outcome-skills session driver", () => {
     expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
   });
 
+  test("a driver killed while it drains after a failed stop write leaves the stop in sessions.jsonl, so the relaunch closes the lease with cap_stop and refuses with CAP_STOP", async () => {
+    const w = world({ "i-pe": 50 });
+    const at = (path: string) => JSON.stringify(join(import.meta.dir, "../..", path));
+    const child = join(w.root, "child.ts");
+    writeFileSync(child, [
+      "import { serveStages } from " + at("lanes/outcome-skills/driver/stage.ts") + ";",
+      "import { LocalLedger } from " + at("src/runner/ledger/local.ts") + ";",
+      'const fetch = () => (console.log("SENT"), new Promise<Response>(() => {}));',
+      "const served = await serveStages({ record: " + JSON.stringify(w.record) + ", local: LocalLedger.open(" + JSON.stringify(join(w.root, "ledger.sqlite")) + '), run_id: "r1", envelope_host: "m1", machine: "m1", stages: [' + JSON.stringify(PE) + '], host: "127.0.0.1", dir: ' + JSON.stringify(w.dir) + ', fetch, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key" }, log: () => {} });',
+      'console.log("CONTROL " + served.control);',
+      "await new Promise(() => {});",
+    ].join("\n"));
+    const proc = Bun.spawn(["bun", child], { stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.getReader();
+    let out = "";
+    const until = async (word: string) => {
+      while (!out.includes(word)) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        out += new TextDecoder().decode(value);
+      }
+    };
+    await until("\n");
+    const control = out.match(/CONTROL (\S+)/)?.[1];
+    expect(control).toBeDefined();
+    const open = (task: string) => post(control + "/sessions", body("plan-eng-review:told", task, 1));
+    const a = await open("a");
+    expect((await open("b")).status).toBe(200);
+    void call(a.json).catch(() => null);
+    await until("SENT");
+    const items = join(w.record, "items", "i-pe");
+    chmodSync(items, 0o555);
+    try {
+      expect((await open("c")).status).toBe(500);
+      proc.kill(9);
+      await proc.exited;
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    expect(readItem(w.record, "i-pe").stops).toHaveLength(0);
+    expect(readItem(w.record, "i-pe").open).not.toBeNull();
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+    expect(readItem(w.record, "i-pe").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+  });
+
   test("after a stop write and the stage's settle both fail, ledger settle on the lease still closes it with cap_stop", async () => {
     const w = world({ "i-pe": 50 });
     const served = await w.serve([PE]);

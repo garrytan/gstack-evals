@@ -193,9 +193,12 @@ export function openLease(record: string, local: LocalLedger | null, req: LeaseR
   return toLease(file, "open");
 }
 
+const itemOf = (lease_id: string) => lease_id.replace(/\.\d{4}\.[0-9a-f]{6}$/, "");
+const stopOn = (state: ItemState, lease_id: string) => state.stops.find((s) => s.lease_id === lease_id)?.scope;
+
 /** Finds a lease in the record by id: the id is <item>.<slot>.<suffix>. */
 function findLease(record: string, lease_id: string): { state: ItemState; lease: LeaseFile; close: CloseFile | null } {
-  const item = lease_id.replace(/\.\d{4}\.[0-9a-f]{6}$/, "");
+  const item = itemOf(lease_id);
   const state = ITEM_NAME.test(item) && item !== lease_id ? read(record, item) : null;
   const entry = state?.leases.find((l) => l.lease.lease_id === lease_id);
   if (!state || !entry) throw new LedgerError("E_LEASE_UNSETTLED", "no lease " + lease_id + " in the approval record " + record + "; check --ledger-record");
@@ -227,21 +230,31 @@ function warnOverspent(lease: LeaseFile, close: CloseFile, warn?: (code: ReasonC
 }
 
 /**
+ * The scope of the stop the record holds on a lease, or undefined when it holds none or does not hold the lease, as on
+ * a worker that cannot reach the envelope host's record.
+ */
+export function recordedStop(record: string, lease_id: string): string | undefined {
+  const item = itemOf(lease_id);
+  if (item === lease_id || !ITEM_NAME.test(item) || !listItems(record).includes(item)) return undefined;
+  return stopOn(read(record, item), lease_id);
+}
+
+/**
  * Closes a lease from this machine's local ledger into the record. Idempotent by lease id: a retry writes the same
  * bytes. With record null, for a workflow that cannot reach the record, it only returns the close as the settle artifact.
  * A close above the lease's amount is recorded as it is, with a LEASE_OVERSPENT warning. cap_stop, the scope of a cap
  * stop the lease closed on, goes into the close, and so does the scope of a stop record on the lease, so no new lease on
- * the item is admitted after it.
+ * the item is admitted after it. The local ledger keeps the first stop it is given with the staged close, so a retry
+ * writes it even when the record holds no stop record, as after a stop that could not be written.
  */
 export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void, cap_stop?: string): CloseFile {
   let scope = cap_stop;
   if (record !== null) {
     const { state, close: prior } = findLease(record, lease_id);
     if (prior && !local.getLease(lease_id)) return prior;
-    scope ??= state.stops.find((s) => s.lease_id === lease_id)?.scope;
+    scope ??= stopOn(state, lease_id);
   }
-  const staged = local.stageClose(lease_id);
-  const close: CloseFile = scope ? { ...staged, cap_stop: scope } : staged;
+  const close = local.stageClose(lease_id, scope);
   warnOverspent(local.getLease(lease_id)!.file, close, warn);
   if (record === null) return close;
   const result = write(record, close, "E_LEASE_UNSETTLED");
@@ -258,15 +271,19 @@ const keysOf = (o: object | null) => (o === null || typeof o !== "object" ? "" :
  * Copies a sealed workflow's settle artifact into the record. Idempotent: the same artifact again is present. The record
  * is write-once, so only the exact shape a local ledger stages is accepted, holding no more unknown charge than the lease
  * reserved. Spend above the lease, from a call billed above its reservation, is recorded with a LEASE_OVERSPENT warning.
+ * The scope of a stop record on the lease goes into the close as cap_stop, or else the artifact's own cap_stop.
  */
-export function importSettlement(record: string, close: unknown, warn?: (code: ReasonCode, message: string) => void): CloseFile {
-  if (!isRecordFile(close) || close.kind !== "close") throw new LedgerError("E_USAGE", "the settle artifact is not a lease close");
-  const { lease, close: prior } = findLease(record, close.lease_id);
-  const usage = close.usage as Record<string, unknown> | null;
-  const shaped = keysOf(close) === SETTLED_KEYS && isTime(close.closed_at) && keysOf(usage) === USAGE_KEYS && Object.values(usage!).every(isMicros);
-  if (!shaped || close.how !== "settled" || close.item !== lease.item || close.seq !== lease.seq || close.unknown_micros > lease.reserved_micros) {
-    throw new LedgerError("E_USAGE", "the settle artifact for " + close.lease_id + " is not a settled close of the lease in the approval record " + record + " with at most its " + usd(lease.reserved_micros) + " held for unknown calls");
+export function importSettlement(record: string, artifact: unknown, warn?: (code: ReasonCode, message: string) => void): CloseFile {
+  if (!isRecordFile(artifact) || artifact.kind !== "close") throw new LedgerError("E_USAGE", "the settle artifact is not a lease close");
+  const { state, lease, close: prior } = findLease(record, artifact.lease_id);
+  const { cap_stop, ...settled } = artifact;
+  const usage = settled.usage as Record<string, unknown> | null;
+  const shaped = keysOf(settled) === SETTLED_KEYS && isTime(settled.closed_at) && keysOf(usage) === USAGE_KEYS && Object.values(usage!).every(isMicros);
+  if (!shaped || settled.how !== "settled" || settled.item !== lease.item || settled.seq !== lease.seq || settled.unknown_micros > lease.reserved_micros) {
+    throw new LedgerError("E_USAGE", "the settle artifact for " + settled.lease_id + " is not a settled close of the lease in the approval record " + record + " with at most its " + usd(lease.reserved_micros) + " held for unknown calls");
   }
+  const scope = stopOn(state, settled.lease_id) ?? cap_stop;
+  const close: CloseFile = scope ? { ...settled, cap_stop: scope } : settled;
   if (prior && JSON.stringify(prior) !== JSON.stringify(close)) throw new LedgerError("E_SETTLE_CONFLICT", "lease " + close.lease_id + " is already " + closeText(prior) + "; the artifact says " + closeText(close));
   const result = write(record, close, "E_LEASE_UNSETTLED");
   if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + close.lease_id + " is already " + closeText(result.conflict as CloseFile) + "; the artifact says " + closeText(close));
@@ -277,7 +294,8 @@ export function importSettlement(record: string, close: unknown, warn?: (code: R
 /**
  * The owner's settlement of a lease whose machine or local ledger is gone: their figure, their words and the provider
  * usage export it came from, with its sha256. Until it is recorded the lease's whole amount stays committed. It waits
- * until the lease has expired, so a machine that comes back cannot spend beside a replacement worker.
+ * until the lease has expired, so a machine that comes back cannot spend beside a replacement worker. The scope of a stop
+ * record on the lease goes into the close as cap_stop.
  */
 export function reconcileLease(record: string, r: { lease_id: string; spent_micros: number; quotes: Quote[]; source: string; now?: Date }): CloseFile {
   checkQuotes(r.quotes);
@@ -288,9 +306,10 @@ export function reconcileLease(record: string, r: { lease_id: string; spent_micr
   } catch (error) {
     throw new LedgerError("E_USAGE", "--source must be the provider usage export file the owner settled from: " + (error as Error).message);
   }
-  const { lease, close: prior } = findLease(record, r.lease_id);
+  const { state, lease, close: prior } = findLease(record, r.lease_id);
   if (prior?.how === "reconciled" && prior.spent_micros === r.spent_micros && prior.source_sha256 === source_sha256 && sameQuotes(prior.quotes, r.quotes)) return prior;
   const now = r.now ?? new Date();
+  const scope = stopOn(state, r.lease_id);
   if (!prior && now < new Date(lease.expires_at)) {
     throw new LedgerError("E_LEASE_UNSETTLED", "lease " + r.lease_id + " can still admit calls on machine " + lease.machine_id + " until " + lease.expires_at + "; settle it there, or reconcile it after it expires");
   }
@@ -309,6 +328,7 @@ export function reconcileLease(record: string, r: { lease_id: string; spent_micr
     quotes: r.quotes,
     source: r.source,
     source_sha256,
+    ...(scope ? { cap_stop: scope } : {}),
   };
   const result = prior ? { conflict: prior } : write(record, close);
   if (typeof result === "object") throw new LedgerError("E_SETTLE_CONFLICT", "lease " + r.lease_id + " is already " + closeText(result.conflict as CloseFile) + "; this reconcile says " + closeText(close));

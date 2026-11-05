@@ -168,7 +168,7 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
     const unknown = { none: { calls: 0, micros: 0 }, "plan-eng-review": { calls: 1, micros: 640_912 }, autoplan: { calls: 2, micros: 1_500_000 } };
     const a = admitG(input(slice(), { unknown_calls: unknown }));
     expect(a.metered.unknown_calls).toEqual(unknown);
-    expect(a.metered.inputs).toMatchObject({ MULT: 0.955 / 0.191, M_PER: 2.101 / 0.955, M_AP: 4.775 / 0.955 });
+    for (const [key, want] of [["MULT", 0.955 / 0.191], ["M_PER", 2.101 / 0.955], ["M_AP", 4.775 / 0.955]] as const) expect(a.metered.inputs[key]).toBeCloseTo(want, 12);
     expect(a.skills["plan-eng-review"].items[4]!.reading).toContain("calls of unknown cost, left out of the metered means: none 0 ($0.00 held), told 1 ($0.640912 held)");
     expect(a.skills.autoplan.items[4]!.reading).toContain("told 2 ($1.50 held)");
     expect(() => admitG(input(slice(), { unknown_calls: undefined as never }))).toThrow(/unknown cost/);

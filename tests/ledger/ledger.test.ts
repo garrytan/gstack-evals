@@ -545,4 +545,19 @@ describe("a cap stop reaches every close of its lease", () => {
     expect(readItem(record, "lanea").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
     expect(codeOf(() => openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
   });
+
+  test("a stop given after the close was staged without one still goes into the close", async () => {
+    const { record, local } = setup();
+    const lease = openLease(record, local, { item: "lanea", run_id: "run-a", amount_micros: DOLLAR });
+    const items = join(record, "items", "lanea");
+    chmodSync(items, 0o555);
+    try {
+      expect(codeOf(() => settleLease(record, local, lease.lease_id))).toBe("E_LEASE_UNSETTLED");
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    recordStop(record, lease.lease_id, "none only");
+    expect(settleLease(record, local, lease.lease_id).cap_stop).toBe("none only");
+    expect(readItem(record, "lanea").leases[0]!.close?.cap_stop).toBe("none only");
+  });
 });

@@ -43,7 +43,7 @@ Build step O4 of the outcome-per-skill plan v3 (`wiki/plans/2026-11-03-geva-225-
 - `outcome-cost.ts`: `costGuard` is #169's G3. Told's metered dollars per solved trial over none's, a task-clustered bootstrap (10,000 draws, seed 20261102), and it holds when the upper bound is at most 1.5. `breakEvenGain` is plan v3 section 8's break-even column.
 - `outcome-r48.ts`: `r48` routes a skill's contrast, exposure, cost guard and futility look by plan v3 section 9, and `renderR48` prints the table.
 - `g-resize.ts`: resize.py, cost.py and survivor.py's alone(), ported with Python's float sum and round, so `renderResizeCases` prints resize.txt byte for byte and `renderResizeMetered` prints what resize.py prints at metered inputs. `m1Decide` applies M1's ladder and the Captain's pick C.
-- `g-admission.ts`: `admitG` reads admission items 1 to 5 on the slice (prereg section 6). `authPaidFromLedger` reads AUTH_PAID from the slice's settled U4 leases.
+- `g-admission.ts`: `admitG` reads admission items 1 to 5 on the slice (prereg section 6). Its metered means are settled spend. `authPaidFromLedger` reads AUTH_PAID from the slice's settled U4 leases, and `unknownFromLedger` counts an arm's calls of unknown cost from its lease closes, which item 5 prints beside the means.
 - `g-projection.ts`: `projectionCheck` re-sizes the live G skills between stages from O6's envelope and the metered means, and stops a skill as FIX-METHOD (price) before the stage spends.
 - `outcome-power.ts`: power.py's simulation re-run through `decideCells` and `futilityCells`, so the scorer as built shows power.txt's power, null size and futility behavior within Monte Carlo error.
 

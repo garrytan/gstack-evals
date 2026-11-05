@@ -4,7 +4,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { CODES, docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import { approvalsBin, mirrorApproval, mirrorEnvelope } from "./approvals.ts";
 import { envelopeStatus, recordCrew, recordProgram, type EnvelopeLine } from "./envelope.ts";
-import { exportLease, importSettlement, ledgerStatus, machineId, openLease, reconcileLease, recordApproval, settleLease } from "./ledger.ts";
+import { exportLease, importSettlement, ledgerStatus, machineId, openLease, reconcileLease, recordApproval, recordedStop, settleLease } from "./ledger.ts";
 import { openLocalLedger } from "./local.ts";
 import { parseUsd, usd } from "./money.ts";
 import { ledgerPath, recordPath } from "./paths.ts";
@@ -26,7 +26,9 @@ export const HELP = `Usage: gstack-evals ledger <command> [options]
   lease     --from <lease file>          In the sealed workflow: hold an exported lease in this machine's ledger.
   settle    --lease <id> [--artifact <file>]
             Close a lease into the approval record. In the sealed workflow, --artifact writes the settle artifact.
-  settle    --from <settle artifact>     Copy a sealed workflow's settle artifact into the approval record.
+            Either form copies a cap stop on the lease into the close, --artifact when it can read the record.
+  settle    --from <settle artifact>     Copy a sealed workflow's settle artifact into the approval record,
+            with the record's cap stop on the lease.
   reconcile --lease <id> --spent <usd> --words <text> --by <who> --source <provider usage export>
             The owner's settlement of a lease whose machine or local ledger is gone.
   status    [--item <name>]              Caps, committed spend, open leases and the approval words per line item.
@@ -182,7 +184,7 @@ export async function ledgerCli(argv: string[], io: LedgerIo, env: Record<string
       print({ ...lease, warnings }, "LEASE: " + lease.lease_id + " item=" + lease.line_item + " run=" + lease.run_id + " amount=" + usd(lease.reserved_micros) + " machine=" + lease.machine_id + " expires=" + lease.expires_at + (exportTo ? " export=" + exportTo : ""));
     } else if (cmd === "settle") {
       const artifact = one("--artifact");
-      const close = flags.has("--from") ? importSettlement(record, readJson(need("--from")), warn) : settleLease(artifact ? null : record, local(), need("--lease"), warn);
+      const close = flags.has("--from") ? importSettlement(record, readJson(need("--from")), warn) : settleLease(artifact ? null : record, local(), need("--lease"), warn, artifact ? recordedStop(record, need("--lease")) : undefined);
       if (artifact) writeNew("--artifact", artifact, JSON.stringify(close, null, 2) + "\n", "the lease is staged to close in this ledger; run the same settle again with another --artifact file");
       print(close, "SETTLED: " + close.lease_id + " spent=" + usd(close.spent_micros) + " unknown=" + usd(close.unknown_micros) + " (" + close.unknown_calls + " calls)" + (artifact ? " artifact=" + artifact : " record=" + record));
     } else if (cmd === "reconcile") {
