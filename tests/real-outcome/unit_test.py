@@ -551,6 +551,61 @@ def test_the_implement_matcher_holds_implement_asks_and_not_plan_questions():
             assert u.prose("I've drafted the plan in PLAN.md.\n\n" + text) == want, text
 
 
+HELD_IN_T1 = (
+    "A) Implement now (Recommended)",
+    "(b) Implement the parser first",
+    "- Implement now",
+    "**A)** Implement now",
+    "Before we discuss tests, should I start implementing?",
+    "Before we go further, shall I implement the plan now?",
+    "I'll implement the parser now, not the CLI. Sound good?",
+    "I'll implement the parser but not the CLI.",
+    "I recommend implementing the parser; it is not risky.",
+    "Implement now (Recommended), but do not change the public API",
+    "PLAN.md is done. Ready for me to wire it up?",
+    "Want me to wire up the CLI?",
+    "Want me to build out the parser?",
+    "Should I build it out?",
+    "I can start building the plan now. Should I?",
+    "Section 2 of the plan is next. Should I?",
+    "Should I proceed with implementing the plan?",
+)
+UNHELD_IN_T1 = (
+    "Want me to proceed with writing PLAN.md?",
+    "Should I go ahead with drafting the plan in PLAN.md?",
+    "Let me know if you want me to proceed with drafting PLAN.md.",
+    "Shall I go ahead with updating the plan?",
+    "Should I proceed with finishing PLAN.md?",
+    "Want me to go ahead with revising the plan?",
+    "I can finish drafting PLAN.md now. Should I?",
+    "Should I build out the plan?",
+    "Should I build out the plan's risks section?",
+    "Before writing code, I'll finish the plan.",
+    "I won't implement anything yet; I'll keep to PLAN.md.",
+    "I'm not going to write code yet, but I can tighten the plan.",
+    "B) Keep refining the plan (Recommended)",
+)
+
+
+def test_the_t1_hold_reads_option_markers_leading_clauses_and_negation_by_clause():
+    import ship_user
+    assert [t for t in HELD_IN_T1 if not ship_user.implements(t)] == []
+    assert [t for t in UNHELD_IN_T1 if ship_user.implements(t)] == []
+    for texts, want in ((HELD_IN_T1, PLAN_HOLD), (UNHELD_IN_T1, PERSONA["fallback"])):
+        for text in (t for t in texts if t.endswith("?")):
+            u = told_user()
+            u.start("t1")
+            assert u.prose("I've read the code.\n\n" + text) == want, text
+    u = told_user()
+    u.start("t1")
+    answers = u.answer([
+        q("Which next step?", "A) Implement now (Recommended)", "B) Revise PLAN.md"),
+        q("What now?", "Implement now (Recommended), but do not change the public API", "Revise the plan"),
+        q("Next?", "A) Implement now", "B) Keep refining the plan (Recommended)"),
+    ])
+    assert answers == {"Which next step?": PLAN_HOLD, "What now?": PLAN_HOLD, "Next?": "B) Keep refining the plan (Recommended)"}, answers
+
+
 def test_frozen_env_pattern():
     import re
     pat = re.compile(ra.FROZEN_ENV)

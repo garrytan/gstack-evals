@@ -322,6 +322,50 @@ describe("t1 writes outside PLAN.md, from the phase-tagged records (report only,
       "Bash edit: xargs -d x -n 1 sed -i 's/a/b/' < list.txt",
     ]);
   });
+
+  test("heredocs, comments, [[ ]], (( )) and $(( )) read as the shell reads them; perl's value switches, git -C and >& too", () => {
+    expect(t1WritesOutsidePlan([
+      bash("a", "ls src # results > notes"),
+      bash("b", "echo x # > src/app.ts"),
+      bash("c", "[[ $a > $b ]] && echo ok"),
+      bash("d", "(( n > 0 )) && echo ok"),
+      bash("e", "perl -Mstrict -ne 'print if /foo/' src/app.ts"),
+      bash("f", "perl -Ilib bin/check.pl data.txt; perl -I lib -pi fix.pl PLAN.md"),
+      bash("g", "echo x >&2; echo y 1>&2"),
+      bash("h", "cat > PLAN.md <<'END-PLAN'\n- step: run a > b\n- don't edit yet\nEND-PLAN"),
+      bash("i", "cat > PLAN.md <<-EOF\n\ta > b\n\tEOF"),
+      bash("j", "cat > PLAN.md <<\\EOF\na > b\nEOF"),
+      bash("k", "echo $(( 1 << 2 )) && cat <<< 'a > b'"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      bash("a", "cat <<< hi\nsed -i 's/a/b/' src/a.ts"),
+      bash("b", "echo $((1<<2))\necho x > src/b.ts"),
+      bash("c", "grep '<<EOF' README.md\nsed -i 's/a/b/' src/c.ts"),
+      bash("d", "cat > PLAN.md <<'END-PLAN'\nrun a > b\ndon't\nEND-PLAN\necho x > src/d.ts"),
+      bash("e", "grep x f # don't\nsed -i 's/a/b/' src/e.ts"),
+      bash("f", "git -C repo apply fix.patch"),
+      bash("g", "echo hi >& src/g.ts"),
+      bash("h", "if [[ -f x ]]; then echo x > src/h.ts; fi"),
+      bash("i", "perl -Mstrict -pi -e 's/a/b/' src/i.ts"),
+      bash("j", "cat <<EOF > src/j.ts\nx > y\nEOF\necho z >> src/k.ts"),
+      bash("l", "echo x > src/l.ts; grep -r tool_use_error logs"), result("t1", "l", "logs/a.txt: <tool_use_error>denied</tool_use_error>"),
+      bash("m", "cat > PLAN.md <<-EOF\n\ta > b\n\tEOF\necho x > src/m.ts"),
+    ])).toEqual([
+      "Bash edit: cat <<< hi",
+      "Bash > src/b.ts",
+      "Bash edit: grep '<<EOF' README.md",
+      "Bash > src/d.ts",
+      "Bash edit: grep x f # don't",
+      "Bash edit: git -C repo apply fix.patch",
+      "Bash > src/g.ts",
+      "Bash > src/h.ts",
+      "Bash edit: perl -Mstrict -pi -e 's/a/b/' src/i.ts",
+      "Bash > src/j.ts",
+      "Bash > src/k.ts",
+      "Bash > src/l.ts",
+      "Bash > src/m.ts",
+    ]);
+  });
 });
 
 describe("AUTH_PAID from the slice's U4 leases", () => {
