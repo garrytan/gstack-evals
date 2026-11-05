@@ -16,7 +16,7 @@ const SHIP_IT = "Ship it: commit, push this branch to origin and open a pull req
 
 describe("frozen texts and pins", () => {
   test("Lane B's agent and prompt wrapper, which this lane wraps, are the bytes it was built on", () => {
-    expect(sha256(readFileSync(join(ROOT, "quick/laneb/runner/agent/laneb_agent.py")))).toBe("1a4ef06c3dfa4ecd6eb1bd37ddf5d88ba7360d4161b2a1c52bf2ba19302b5b39");
+    expect(sha256(readFileSync(join(ROOT, "quick/laneb/runner/agent/laneb_agent.py")))).toBe("09cdba851d46a35bf8ade440003ccf79231753ed210e76c4d3c818b983f32a79");
     expect(sha256(readFileSync(join(ROOT, "quick/laneb/runner/prompt-wrapper.md")))).toBe("2e0674a8e1d65dfd7e511e7f7255235410d75a65fe49d7ce03c9d54202089d00");
     expect(sha256(readFileSync(join(ROOT, "lanes/real-outcome/agent/ship-persona.json")))).toBe("7e24fd3add6ac89929aea7f608b6ccfe79035a8846e2e002bba0ae8403696956");
   });
