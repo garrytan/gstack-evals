@@ -259,6 +259,19 @@ describe("the whole entry on synthetic tables", () => {
     expect(audits({ audit: [...joined, { probe: "I", model: "opus", trial: "f1/none/" + TASKS[0], probe_value: false, reader_value: false }] })).toEqual([true, false]);
     expect(run(rows, { audit: passingAudit() }).models[0]!.primaries[0]!.audit).toMatchObject({ rule: "unjoined", pass: false });
   }, SLOW);
+  test("labels outside the audit sample, or with a value that is not boolean, fail the audit join", () => {
+    const rows = table({ f1: { "before-u": { load: 1 }, "after-u": { load: 60 }, "off-u": { load: 1 }, "before-t": { complete: 2 }, "after-t": { complete: 50 }, "off-t": { complete: 40 } } });
+    const sampled = new Set(auditSample(rows, "opus").map((s) => s.trial));
+    const junk = (["L", "I"] as const).flatMap((probe) => Array.from({ length: 40 }, (_, i) => ({ probe, model: "opus", trial: `junk/${probe}/${i}` })));
+    expect(junk.some((l) => sampled.has(l.trial))).toBe(false);
+    const rep = run(rows, { audit: junk as any });
+    expect(rep.models[0]!.primaries.map((p) => [p.audit.rule, p.audit.pass])).toEqual([["unjoined", false], ["unjoined", false]]);
+    expect(verdicts(rep)).not.toContain("B1 KEEP KEEP");
+    const joined = passingAudit("opus", rows);
+    const { reader_value: _r, ...noReader } = joined[0]!;
+    const audits = run(rows, { audit: [noReader as any, ...joined.slice(1)] }).models[0]!.primaries.map((p) => p.audit.pass);
+    expect(audits).toEqual([false, true]);
+  }, SLOW);
   test("a config without routed_stratum or construction_checks is refused", () => {
     const { routed_stratum: _r, ...noRouted } = config();
     expect(() => analyze([row("opus", "f1", "none", TASKS[0]!)], noRouted as any)).toThrow(/routed_stratum/);

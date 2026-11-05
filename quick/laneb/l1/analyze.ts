@@ -264,7 +264,7 @@ export function tableAudit(rows: L1SessionRow[], labels: AuditLabel[], probe: "L
   const sample = new Map(auditSample(rows, model).filter((s) => s.probe === probe).map((s) => [s.trial, Boolean(value(byTrial.get(s.trial)!, metric))]));
   const ls = labels.filter((l) => l.probe === probe && l.model === model);
   const res = auditResult(ls, probe, model);
-  const joined = ls.length === sample.size && new Set(ls.map((l) => l.trial)).size === ls.length && ls.every((l) => sample.get(l.trial) === l.probe_value);
+  const joined = ls.length === sample.size && new Set(ls.map((l) => l.trial)).size === ls.length && ls.every((l) => sample.has(l.trial) && typeof l.probe_value === "boolean" && typeof l.reader_value === "boolean" && sample.get(l.trial) === l.probe_value);
   return joined || !ls.length ? { ...res, sample: sample.size } : { ...res, sample: sample.size, rule: "unjoined" as const, pass: false };
 }
 
