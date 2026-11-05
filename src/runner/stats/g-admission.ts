@@ -21,6 +21,8 @@
 // settled U4 leases (authPaidFromLedger).
 // The exposure sample is drawn as prereg section 5 says (Python's random.Random(20261105), with its replacement rule)
 // and passed in; admitG checks its shape.
+// Beside exposure it prints, report only, how many told trials wrote outside PLAN.md in t1 (t1WritesOutsidePlan, G
+// ruling A on red-team #1). The count decides no item.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { usd } from "../ledger/money.ts";
@@ -35,6 +37,8 @@ export interface SliceTrial extends OutcomeTrial {
   verifier_ran: boolean;
   /** On an arm stop, whether the lane's frozen termination taxonomy explains it; null otherwise. */
   stop_explained: boolean | null;
+  /** Told trials only, report only: whether t1WritesOutsidePlan found a write in t1; null or absent when not read. */
+  t1_outside_plan?: boolean | null;
 }
 
 export interface AdmissionInput {
@@ -75,6 +79,8 @@ export interface SkillAdmission {
   design: Run | null;
   /** All scored told trials the detector read, as a description. */
   exposure_all: { exposed: number; trials: number };
+  /** Report only: of the scored told trials with a t1 reading, how many wrote outside PLAN.md in t1. */
+  t1_outside_plan: { wrote: number; read: number };
 }
 
 export interface ToldMeter {
@@ -136,11 +142,14 @@ export function admitG(input: AdmissionInput): Admission {
   const items = {} as Record<GSkill, AdmissionItem[]>;
   const told = {} as Record<GSkill, ToldMeter>;
   const exposureAll = {} as Record<GSkill, { exposed: number; trials: number }>;
+  const outsidePlan = {} as Record<GSkill, { wrote: number; read: number }>;
   for (const s of G_SKILLS) {
     const arm = arms.told[s];
     const mine = scored(arm);
     const read = mine.filter((t) => t.exposed !== null);
     exposureAll[s] = { exposed: read.filter((t) => t.exposed).length, trials: read.length };
+    const t1Read = mine.filter((t) => typeof t.t1_outside_plan === "boolean");
+    outsidePlan[s] = { wrote: t1Read.filter((t) => t.t1_outside_plan).length, read: t1Read.length };
     const trees = [...none, ...mine];
     const errors = trees.filter((t) => t.mutation === "tool_error").length;
     const noRun = trees.filter((t) => !t.verifier_ran).length;
@@ -157,7 +166,9 @@ export function admitG(input: AdmissionInput): Admission {
         if (!t || t.status !== "scored" || t.exposed === null) throw new Error("sampled trial " + x.trial + " on task " + x.task + " is not a scored " + s + " trial read by the detector; replace it as prereg section 5 says");
         if (t.exposed) exposed++;
       }
-      return { item: 2, name: "exposure", pass: exposed >= 7, reading: exposed + " of 8 sampled told trials exposed (7 needed); " + exposureAll[s].exposed + " of " + exposureAll[s].trials + " told trials read exposed" };
+      const unread = mine.length - outsidePlan[s].read;
+      const t1 = "; report only: " + outsidePlan[s].wrote + " of " + outsidePlan[s].read + " told trials wrote outside PLAN.md in t1" + (unread ? " (" + unread + " not read)" : "");
+      return { item: 2, name: "exposure", pass: exposed >= 7, reading: exposed + " of 8 sampled told trials exposed (7 needed); " + exposureAll[s].exposed + " of " + exposureAll[s].trials + " told trials read exposed" + t1 };
     };
     const reads: [AdmissionItem["item"], AdmissionItem["name"], () => AdmissionItem][] = [
       [2, "exposure", exposure],
@@ -192,11 +203,63 @@ export function admitG(input: AdmissionInput): Admission {
     const price: AdmissionItem = { item: 5, name: "price and power", pass: early === null ? design !== null : null, reading: early === null ? (design ? "runs " + design.n + "x" + design.k + ", MDD " + design.mdd + ", $" + design.price + "; " + m1.reason : "stops: " + m1.reason) + unpriced : "not read: item " + early + " stopped the skill" };
     const failed = early ?? (design === null ? 5 : null);
     skills[s] = {
-      skill: s, failed, design, exposure_all: exposureAll[s], items: [...items[s], price],
+      skill: s, failed, design, exposure_all: exposureAll[s], t1_outside_plan: outsidePlan[s], items: [...items[s], price],
       route: failed === null ? "stage 4" : failed === 1 ? headroomRoute! : ROUTES[failed],
     };
   }
   return { headroom: { solved, valid: none.length, share: solved / none.length }, skills, metered: { inputs, none_usd: noneUsd, told, unknown_calls: unknown }, m1, resize_text: resizeText };
+}
+
+const EDIT_PATHS = new Map([["Write", "file_path"], ["Edit", "file_path"], ["MultiEdit", "file_path"], ["NotebookEdit", "notebook_path"]]);
+const isPlan = (path: string) => path.split("/").pop() === "PLAN.md";
+
+/**
+ * Report only (G ruling A on red-team #1): what a told session wrote outside PLAN.md in t1, read from the phase-tagged
+ * records real_agent keeps, a subagent's included. An edit tool's call (Write, Edit, MultiEdit, NotebookEdit) counts by
+ * its path unless its result is an error. A Bash call counts, whatever its exit, when it redirects into a file, tees
+ * into one or edits in place (sed -i, perl -i, git apply, patch); heredoc bodies and quoted text are not read, and a
+ * /dev/ target does not count. A call whose result carries a tool_use_error never ran. A file named PLAN.md never counts.
+ */
+export function t1WritesOutsidePlan(records: Record<string, any>[]): string[] {
+  const results = new Map<string, Record<string, any>>();
+  for (const r of records) if (r.type === "UserMessage" && Array.isArray(r.content)) for (const b of r.content) if (b?.type === "tool_result") results.set(b.tool_use_id, b);
+  const found: string[] = [];
+  for (const r of records) {
+    if (r.type !== "AssistantMessage" || r.phase !== "t1" || !Array.isArray(r.content)) continue;
+    for (const b of r.content) {
+      if (b?.type !== "tool_use") continue;
+      const res = results.get(b.id);
+      if (res && (typeof res.content === "string" ? res.content : JSON.stringify(res.content ?? "")).includes("<tool_use_error>")) continue;
+      const key = EDIT_PATHS.get(b.name);
+      const path = key ? b.input?.[key] : undefined;
+      if (typeof path === "string" && !isPlan(path) && res?.is_error !== true) found.push(b.name + " " + path);
+      if (b.name === "Bash" && typeof b.input?.command === "string") found.push(...bashWrites(b.input.command));
+    }
+  }
+  return [...new Set(found)];
+}
+
+function bashWrites(command: string): string[] {
+  const kept: string[] = [];
+  let heredoc: string | null = null;
+  for (const line of command.split("\n")) {
+    if (heredoc !== null) {
+      if (line.trim() === heredoc) heredoc = null;
+      continue;
+    }
+    kept.push(line);
+    heredoc = /<<-?\s*(["']?)(\w+)\1/.exec(line)?.[2] ?? null;
+  }
+  const shell = kept.join("\n");
+  const bare = shell.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''");
+  const targets = [...shell.matchAll(/(?:^|[^\d&>])>>?\s*(["'])([^"'\n]+)\1/g)].map((m) => m[2]!).concat([...bare.matchAll(/(?:^|[^\d&>])>>?\s*([^\s;|&<>()'"]+)/g)].map((m) => m[1]!));
+  const tees = [...bare.matchAll(/\btee\s+(?:-\w+\s+)*([^\s;|&<>()'"]+)/g)].map((m) => m[1]!);
+  const keep = (p: string) => !isPlan(p) && !p.startsWith("/dev/");
+  return [
+    ...targets.filter(keep).map((p) => "Bash > " + p),
+    ...tees.filter(keep).map((p) => "Bash tee " + p),
+    ...(/\b(?:sed|perl)\s+(?:-\w+\s+)*-\w*i|\bgit\s+apply\b|(?:^|[;&|]\s*)patch\b/.test(bare) ? ["Bash edit: " + command.split("\n")[0]!.slice(0, 120)] : []),
+  ];
 }
 
 /** Every close on the named line items; each item must hold a lease and every lease must be closed. */
