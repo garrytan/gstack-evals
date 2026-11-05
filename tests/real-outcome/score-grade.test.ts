@@ -94,6 +94,8 @@ const run = (ev: string, name: "k1" | "k4", extra: Partial<Parameters<typeof sco
   return scoreTrial({ evaluatorDir: ev, taskDir: tasks[name].dir, model: OPUS, work: join(ev, "..", "work-score"), runs: 1, seed: 1, grade: stand(name), ...extra });
 };
 const gold = (name: "k1" | "k4") => readFileSync(join(tasks[name].dir, "solution/gold.patch"), "utf8");
+/** Writes the image event a U4 session logs once its trial container runs the manifest's image (real_agent _check_image). */
+const ranIn = (ev: string, image_id: string) => writeFileSync(join(ev, "usersim-events.jsonl"), JSON.stringify({ event: "image", image_id, ts: 1 }) + "\n");
 
 describe("scoring one trial", () => {
   test("a K1 pull request carrying gold ships clean; its turn-1 and final trees are graded too", () => {
@@ -337,9 +339,13 @@ describe("gstack-evals real score", () => {
     writeFileSync(path, JSON.stringify(j, null, 2));
     const task = readTask(t.dir);
     const imageId = buildImage(t.dir, task).id;
-    const good = scoreTrial({ evaluatorDir: trial({ task: "k1", edit: "git apply ../gold.patch" }), taskDir: t.dir, model: OPUS, work: join(tmp.dir, "dk1"), runs: 1, seed: 1, imageId });
+    const goodEv = trial({ task: "k1", edit: "git apply ../gold.patch" });
+    ranIn(goodEv, imageId);
+    const good = scoreTrial({ evaluatorDir: goodEv, taskDir: t.dir, model: OPUS, work: join(tmp.dir, "dk1"), runs: 1, seed: 1, imageId });
     expect(good.trees.shipped).toMatchObject({ status: "graded", pass: true });
-    const bad = scoreTrial({ evaluatorDir: trial({ task: "k1", edit: "true" }), taskDir: t.dir, model: OPUS, work: join(tmp.dir, "dk2"), runs: 1, seed: 1, imageId });
+    const badEv = trial({ task: "k1", edit: "true" });
+    ranIn(badEv, imageId);
+    const bad = scoreTrial({ evaluatorDir: badEv, taskDir: t.dir, model: OPUS, work: join(tmp.dir, "dk2"), runs: 1, seed: 1, imageId });
     expect(bad.trees.shipped).toMatchObject({ status: "graded", pass: false });
     expect(classifyTrial(bad).category).toBe("shipped_defective");
     expect(task.tests.functional.length).toBeGreaterThan(0);
@@ -370,6 +376,7 @@ describe("grading in the task's pinned image, never a rebuilt one (a stand-in do
   test("every tree is graded in the pinned image id and nothing is built, on a host whose environment holds a provider key too", () => {
     const d = fake(PIN);
     const ev = trial({ task: "k1", edit: "git apply ../gold.patch", final: gold("k1") });
+    ranIn(ev, PIN);
     const r = cli([ev, "--task", upstream(), "--model", OPUS, "--work", join(ev, "..", "w-pin"), "--image-id", PIN], d, { ANTHROPIC_API_KEY: "stand-in-not-a-key" });
     if (r.status !== 0) console.log(r.stderr);
     expect(r.status).toBe(0);
@@ -381,7 +388,7 @@ describe("grading in the task's pinned image, never a rebuilt one (a stand-in do
     expect(e.trees.final).toMatchObject({ status: "no_verdict" });
   });
 
-  test("a tree to grade with no image id, an image not on this host, or one the trial didn't run in is refused before any tree runs", () => {
+  test("a tree to grade with no image id, a trial that logged no image, an image not on this host, or one the trial didn't run in is refused before any tree runs", () => {
     const ev = trial({ task: "k1", edit: "git apply ../gold.patch", final: gold("k1") });
     const args = [ev, "--task", tasks.k1.dir, "--model", OPUS, "--work", join(ev, "..", "w-refuse")];
     const none = fake(PIN);
@@ -389,12 +396,18 @@ describe("grading in the task's pinned image, never a rebuilt one (a stand-in do
     expect(r1.status).toBe(2);
     expect(r1.stderr).toMatch(/^E_REAL_SCORE_INPUT grading a tree needs the task's pinned image id/);
     expect(none.calls().filter((c) => c.startsWith("run ") || c.startsWith("build"))).toEqual([]);
+    const unlogged = fake(PIN);
+    const r0 = cli([...args, "--image-id", PIN], unlogged);
+    expect(r0.status).toBe(2);
+    expect(r0.stderr).toMatch(/^E_REAL_SCORE_INPUT the trial logged no image event/);
+    expect(unlogged.calls()).toEqual([]);
+    ranIn(ev, PIN);
     const moved = fake(MOVED);
     const r2 = cli([...args, "--image-id", PIN], moved);
     expect(r2.status).toBe(2);
     expect(r2.stderr).toMatch(/^E_REAL_SCORE_INPUT the pinned image sha256:c{64} is not on this host with that id/);
     expect(moved.calls().filter((c) => c.startsWith("run ") || c.startsWith("build"))).toEqual([]);
-    writeFileSync(join(ev, "usersim-events.jsonl"), JSON.stringify({ event: "image", image_id: MOVED, ts: 1 }) + "\n");
+    ranIn(ev, MOVED);
     const other = fake(PIN);
     const r3 = cli([...args, "--image-id", PIN], other);
     expect(r3.status).toBe(2);
@@ -419,6 +432,7 @@ describe("grading in the task's pinned image, never a rebuilt one (a stand-in do
     expect(r.status).toBe(2);
     expect(r.stderr).toMatch(/^E_REAL_SCORE_INPUT .*run-copy-\d+ is a bound run copy .*pass --task the original task dir/);
     expect(d.calls()).toEqual([]);
+    ranIn(ev, PIN);
     expect(cli([ev, "--task", tasks.k1.dir, "--model", OPUS, "--work", join(ev, "..", "w-orig"), "--image-id", PIN], fake(PIN)).status).toBe(0);
   });
 });
