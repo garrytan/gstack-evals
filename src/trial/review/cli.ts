@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { BACKGROUND_WAIT_MS, MAX_TURNS, SYSTEM_PROMPTS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { insideRepo, loadSuite, readsSealedRoot, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
+import { ceoSuiteBinding, insideRepo, loadSuite, readsSealedRoot, resolveUnit, type Unit } from "../../../lanes/review-noloss/suite.ts";
 import { ledgerPath, recordPath } from "../../runner/ledger/paths.ts";
 import { recipeHash, recipeInputs } from "../../rig/recipe.ts";
 import { stackKind } from "../../arms/stacks.ts";
@@ -358,6 +358,12 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const volatile = volatilePathProblem(out);
   if (volatile) throw new Error("E_RECEIPTS_VOLATILE " + volatile);
   if (existsSync(out) && !resume) throw new Usage(out + " exists; pass --resume to continue that run, or a new --out");
+  let bound: ReturnType<typeof ceoSuiteBinding> | null = null;
+  try {
+    bound = ceo ? ceoSuiteBinding(suite) : null;
+  } catch (e) {
+    throw new Usage((e as Error).message + "; a ceo-outcome run records its units dir's digest, so ceo rows can bind --units to it\n  fix: pass --sealed-root <dir>, the root whose units dir holds every unit's key.json and plan.md");
+  }
 
   const state = stateRoot(env);
   const docker = env.GSTACK_EVALS_DOCKER_BIN || "docker";
@@ -407,7 +413,7 @@ async function reviewUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap, ...(lens ? { voice: false } : {}) });
   let run: Awaited<ReturnType<typeof runReviewUnits>>;
   try {
-    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens: ceo ? CEO_LENS : lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
+    run = await runReviewUnits({ host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs, ...(bound ?? {}) }, units: prepared, arms, models, passes, parallel, timeoutS, cap, allowanceMicros: allowance, runId, out, date, policy: policy as LoadedPolicy, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), host_version: null, adapter_sha256: adapterSha256("claude"), isolation: "docker" }, journal: rig.recovery?.journal ?? null, reuse: resume ? readReviewJournal(out) : new Map(), repair: flags.has("--repair"), ...(severityMap ? { severityMap } : {}), ...(lens ? { plan: { lens: ceo ? CEO_LENS : lens } } : {}), ...(armModels.size ? { armModels: Object.fromEntries(armModels) } : {}), maxTurns, backgroundWaitS, ...(sessionKind ? { sessionKind: "unattended" as const } : {}), ...(readerMap && "map" in readerMap ? { readers: { map: readerMap.map, sha256: readerMap.sha256 } } : {}), ...(capStops ? { capStops: true } : {}), env }, rig, (line) => io.err(line));
   } finally {
     const closed = await rig.close();
     io.out("lease " + closed.lease_id + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls");
