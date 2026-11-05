@@ -223,13 +223,20 @@ export function authPaidFromLedger(record: string, items: readonly string[], val
 /**
  * An arm's calls of unknown cost, counted when each of its sessions closed: the unknown calls and the reservations O6
  * held for them in the close lines of the run directory's sessions.jsonl on the arm's stage line items. Every session
- * opened on those items must have a close line.
+ * opened on those items must have a close line. A line that does not parse, as a writer killed in the middle of a line
+ * leaves, is skipped, as the driver and the ledger's settle paths skip it.
  */
 export function unknownFromRun(dir: string, items: readonly string[]): UnknownCalls {
   if (!items.length) throw new Error("name the line items admission reads calls of unknown cost from");
   const file = join(dir, "sessions.jsonl");
   const on = new Set(items);
-  const lines = (existsSync(file) ? readFileSync(file, "utf8") : "").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as { event?: string; id?: string; item?: string; unknown_calls?: unknown; unknown_micros?: unknown });
+  const lines = (existsSync(file) ? readFileSync(file, "utf8") : "").split("\n").flatMap((l) => {
+    try {
+      return l.trim() ? [JSON.parse(l) as { event?: string; id?: string; item?: string; unknown_calls?: unknown; unknown_micros?: unknown }] : [];
+    } catch {
+      return [];
+    }
+  });
   const opens = lines.filter((e) => e.event === "open" && on.has(e.item ?? ""));
   if (!opens.length) throw new Error("no session on line item " + items.join(", ") + " in " + file + ", so its calls of unknown cost can't be read");
   const closes = new Map(lines.filter((e) => e.event === "close" && on.has(e.item ?? "")).map((e) => [e.id, e]));

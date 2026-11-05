@@ -944,6 +944,12 @@ export const CODES = {
     fix: "Nothing to undo: the lease closes charging every unanswered call in full, which can only overstate spend. Recovery runs only from the run directory that holds the lease, so a missing journal means the earlier driver stopped before its proxy started, or the journal was removed.",
     owner: "U4",
   },
+  SESSIONS_OPEN: {
+    exit: null,
+    meaning: "ledger settle or ledger reconcile closed a driver's lease, but could not write a close line for the sessions its run directory's sessions.jsonl still shows open on it: that file is not on this machine, a settle ran where the local ledger does not hold the lease, or settle --from imported the close, which carries no per-session figures. The close is in the record and nothing about the money changes, but unknownFromRun refuses admission item 5 for the run while a session has no close line.",
+    fix: "Run the same command again on the envelope host that holds the run directory and the lease's local ledger; after settle --from, run ledger settle --lease <lease> there instead. A retry answers the close already in the record and writes only the missing close lines. Never edit sessions.jsonl by hand.",
+    owner: "U4",
+  },
   STAGE_RECOVERED: {
     exit: null,
     meaning: "The outcome-skills driver found a stage lease that an earlier launch of the same run, from the same run directory, left open on this machine, reconciled its proxy journal and settled it before opening anything new.",

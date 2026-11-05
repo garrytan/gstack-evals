@@ -177,6 +177,11 @@ export class LocalLedger implements ReservationLedger {
     this.db.run("INSERT OR IGNORE INTO stops (lease_id, scope) VALUES (?, ?)", [lease_id, scope]);
   }
 
+  /** The scope of the cap stop this ledger holds for a lease, kept by stageStop or staged with its close, or undefined. */
+  stagedStop(lease_id: string): string | undefined {
+    return (this.db.query("SELECT scope FROM stops WHERE lease_id = ?").get(lease_id) as { scope: string } | null)?.scope ?? this.getLease(lease_id)?.close?.cap_stop;
+  }
+
   /**
    * Fixes the lease's close once and stores it, so every retry writes the same bytes to the record. Calls still
    * reserved become unknown: their charge is kept and a later settle of them is a conflict. A cap stop's scope, given
@@ -187,7 +192,7 @@ export class LocalLedger implements ReservationLedger {
     return this.tx(() => {
       const lease = this.getLease(lease_id);
       if (!lease) throw new LedgerError("E_LEASE_UNSETTLED", "no lease " + lease_id + " in the local ledger " + this.path + "; settle it on the machine whose local ledger holds it, or, if that machine or its local ledger is gone, the owner reconciles it after it expires");
-      cap_stop ??= (this.db.query("SELECT scope FROM stops WHERE lease_id = ?").get(lease_id) as { scope: string } | null)?.scope;
+      cap_stop ??= this.stagedStop(lease_id);
       if (lease.close) {
         if (lease.close.cap_stop || !cap_stop || lease.state !== "closing") return lease.close;
         const stopped: CloseFile = { ...lease.close, cap_stop };
