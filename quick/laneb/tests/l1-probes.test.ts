@@ -325,6 +325,14 @@ describe("contract block, turn cap and the read audit", () => {
     const hits = (cmd: string) => run([bash(cmd, "x: 1")], none).audit_hits.length;
     expect(["ls | xargs -n1 echo; echo /root/.gstack/x > /dev/null", "echo /root/.gstack/x | wc -l; ls | xargs -n1 echo"].map(hits)).toEqual([1, 1]);
   });
+  // Value: protects=clean none-arm sessions; fails_when=a hand-off command's word that is an ancestor of an audit root reads as a
+  // read on an xargs line; why_new=hand-off words tripped the above-root rule where main scores the line clean; seam=probes.ts
+  // bashReadPaths reads; no_claim=none
+  test("a hand-off word above an audit root does not read as a read of what lies below it", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    const hits = (cmd: string) => run([bash(cmd, "x: 1")], none).audit_hits.length;
+    expect(["ls / 2>/dev/null; git ls-files | xargs wc -l", "ls -a ~ | grep -c gstack; git ls-files | xargs wc -l", "git ls-files | xargs wc -l; cd .."].map(hits)).toEqual([0, 0, 0]);
+  });
   // Value: protects=the none arm's read audit; fails_when=a find -exec or an xargs reader over an ancestor of an audit root reads
   // clean, or one that runs echo, or is rooted outside every audit root, reads as a read; why_new=find ~ -name SKILL.md -exec
   // cat {} + read clean; seam=probes.ts findParts, bashReadPaths trees; no_claim=-maxdepth, -prune and name filters are not read

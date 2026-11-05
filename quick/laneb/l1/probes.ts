@@ -520,7 +520,8 @@ function findParts(all: string[]): { starts: string[]; execs: string[][] } {
  * holds an audit root, and a find's start paths (the work directory when it names none) count as its trees. On a line with an
  * xargs, a command that could hand a path to another pipeline feeds xargs too, wherever it sits on the line: one that pipes into
  * another command or writes through an output redirect, cd, pushd and export, which hand on a directory or a variable, a printf
- * with -v, and a command that only assigns variables. */
+ * with -v, and a command that only assigns variables. A handed path counts only for what lies inside it: it never reads below an
+ * audit root that it holds. */
 function bashReadPaths(command: string, cwd: string | null): { paths: string[]; trees: { path: string; reads: boolean }[] } {
   const out: string[] = [], trees: { path: string; reads: boolean }[] = [];
   const simples = simpleCommands(command, cwd).map((s) => ({ s, all: unwrap(s.words) }));
@@ -534,7 +535,7 @@ function bashReadPaths(command: string, cwd: string | null): { paths: string[]; 
     const mention = !fed && words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
     const find = base(all[0] ?? "") === "find" ? findParts(all) : null;
     const tree = fed || !!find?.execs.length;
-    const reads = xargs.get(s.pipeline) === true || (hands && [...xargs.values()].includes(true)) || !!find?.execs.some(reader);
+    const reads = xargs.get(s.pipeline) === true || !!find?.execs.some(reader);
     const texts = [...(mention ? [] : [...words, ...(fed ? s.assigns : []), ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(all[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
     const sed = SED.has(base(all[0] ?? ""));
     for (const t of texts)
