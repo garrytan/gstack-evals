@@ -59,6 +59,10 @@ export function readManifest(path: string): ImageManifest {
   } catch (e) {
     return fail("cannot read the manifest " + path + ": " + (e as Error).message);
   }
+  return valid(m, path);
+}
+
+function valid(m: ImageManifest, path: string): ImageManifest {
   if (m.schema !== "tg-images.v1" || !Array.isArray(m.rows) || !m.rows.length || m.home !== HOME || m.workdir !== WORKDIR) fail(path + " is not a tg-images.v1 manifest with rows, home " + HOME + " and work dir " + WORKDIR);
   const labels = new Set<string>();
   for (const r of m.rows) {
@@ -79,9 +83,9 @@ export async function pin(dirs: string[], out: string, set: string, commit: stri
     return { label: t.id, kind: t.kind, task_json_sha256: sha(readFileSync(join(d, "task.json"))), environment_sha256: treeDigest(join(d, "environment")), image_id: buildImage(d, t).id };
   });
   rows.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
-  const m: ImageManifest = { schema: "tg-images.v1", set, gstack_evals: commit, home: HOME, workdir: WORKDIR, rows };
+  const m = valid({ schema: "tg-images.v1", set, gstack_evals: commit, home: HOME, workdir: WORKDIR, rows }, out);
   writeFileSync(out, JSON.stringify(m, null, 1) + "\n");
-  return readManifest(out);
+  return m;
 }
 
 /** Before any session: every row's image present by its id and clean. Calls back once per row; throws at the first miss. */

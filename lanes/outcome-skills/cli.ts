@@ -6,6 +6,7 @@ import { openLocalLedger } from "../../src/runner/ledger/local.ts";
 import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
 import { LedgerError } from "../../src/runner/ledger/record.ts";
 import { serveStages, type StageSpec } from "./driver/stage.ts";
+import { TaskError } from "../real-outcome/task/format.ts";
 import { bind, check, pin, publicForm, readManifest } from "./images/manifest.ts";
 import { readFileSync } from "node:fs";
 
@@ -154,6 +155,10 @@ async function images(argv: string[]): Promise<number> {
     }
     return usage("images takes pin, check <manifest>, public <manifest> or bind <manifest>; gstack-evals outcome --help lists them");
   } catch (e) {
+    if (e instanceof TaskError) {
+      console.error(lines(e.code, e.message));
+      return 2;
+    }
     const m = /^(E_[A-Z_]+):? (.*)$/s.exec((e as Error).message);
     if (m && m[1]! in CODES) {
       console.error(lines(m[1] as ReasonCode, m[2]!));

@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bind, check, publicForm, readManifest, tagFor, treeDigest, type ImageManifest } from "../../lanes/outcome-skills/images/manifest.ts";
+import { bind, check, pin, publicForm, readManifest, tagFor, treeDigest, type ImageManifest } from "../../lanes/outcome-skills/images/manifest.ts";
 import { fileDigests, walk } from "../../lanes/real-outcome/task/format.ts";
 
 const roots: string[] = [];
@@ -154,6 +154,29 @@ describe("the T-G image manifest (keyless)", () => {
     expect(err.length).toBeGreaterThan(3);
     expect(err.some((l) => l.includes("fix: point the none arm"))).toBe(true);
     for (const l of err) expect(l).toMatch(/^E_OUTCOME_CLEAN_ROOM /);
+  });
+
+  test("pin refuses an existing out file before any build, and leaves no manifest when its rows fail the manifest rules", async () => {
+    const root = fresh();
+    const out = join(root, "m.json");
+    writeFileSync(out, "{}");
+    const refused = (p: Promise<unknown>) => p.then(() => null, (e) => (e as Error).message);
+    expect(await refused(pin([task(root)], out, "T-G", "c"))).toMatch(/^E_OUTCOME_IMAGE .*exists; pin writes a new manifest/);
+    const none = join(root, "none.json");
+    expect(await refused(pin([], none, "T-G", "c"))).toMatch(/^E_OUTCOME_IMAGE .*not a tg-images\.v1 manifest with rows/);
+    expect(existsSync(none)).toBe(false);
+  });
+
+  test("images pin refuses a malformed task dir under the task's own reason code, every stderr line led by it", () => {
+    const root = fresh();
+    mkdirSync(join(root, "bad"));
+    writeFileSync(join(root, "bad", "task.json"), "{}");
+    const p = Bun.spawnSync(["bun", join(import.meta.dir, "..", "..", "bin", "gstack-evals"), "outcome", "images", "pin", "--out", join(root, "m.json"), "--set", "T-G", "--commit", "c", join(root, "bad")], { stdout: "pipe", stderr: "pipe" });
+    const err = p.stderr.toString().trim().split("\n");
+    expect(p.exitCode).toBe(2);
+    expect(err[0]).toContain("schema is not");
+    for (const l of err) expect(l).toMatch(/^E_REAL_TASK_FORMAT /);
+    expect(existsSync(join(root, "m.json"))).toBe(false);
   });
 
   test("check refuses a row whose image id is not the pinned one, and passes a present, clean image", () => {
