@@ -5,11 +5,11 @@ PASS stock-list.txt sha256 dd3a6d40cfbe4832f9a37da0a6c6cc86ce711054354097a475f96
 PASS unit-brief.md sha256 13ce9eaee6218e8359c32966f8efe82722dc605feb94b3253e42381ac9153253
 PASS power.py sha256 a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499
 PASS power.txt sha256 ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f
-PASS ceo-rule.ts sha256 f338bd81e4388d9ca0bf3b2e623820d03c78967f2a99e908dd07446cb2d60a9b
+PASS ceo-rule.ts sha256 8dedbce4e76339a1dd4f9943fb7f086c590d6761a3733e789876ec819d176daa
 PASS the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast
 PASS the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative)
 PASS the judge brief reads each issue's first 40 words and judges it on its first problem
-    scorer HEAD 68298b412f15d8dbc649618cbdea69ec139875ab (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
+    scorer HEAD a10b34c1bdc0f85ed0505dca2331c67f611fff17 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
 
 ## b. Stage 1 headroom rule: every outcome
 PASS m 20 of 48 -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
@@ -23,15 +23,17 @@ PASS stock row B (direction fit) hits 2 units -> STOCK FAIL (a stock row hit D o
 PASS rows A and B both hit the same single unit -> HEADROOM (20 of 48 = 0.417; band edges at this n: 8 to 28)
 PASS one unit leak-dropped (it held 1 hit) -> HEADROOM (19 of 45 = 0.422; band edges at this n: 7 to 27)
 PASS five units leak-dropped -> NO READ (fewer than 12 changed units (11)): stop, FIX-METHOD
-PASS 5 gaps of 48 (10.4%) -> NO READ (gaps 5 of 48 Opus none readings, over 10%): stop, FIX-METHOD
+PASS 5 gaps of 48 (10.4%) -> NO READ (gaps, unjudged and incomplete 5 of 48 planned Opus none readings, over 10%): stop, FIX-METHOD
 PASS 4 gaps of 48 (8.3%) -> HEADROOM (20 of 44 = 0.455; band edges at this n: 7 to 26)
+PASS Opus none's last 6 readings incomplete (its item's cap stopped it; 6 of 48 planned) -> NO READ (gaps, unjudged and incomplete 6 of 48 planned Opus none readings, over 10%): stop, FIX-METHOD
 PASS splits: Sol D/Opus none/Sonnet D is D; Sol D/Opus none/Sonnet none is not; Sol R1/Opus none/Sonnet D is not (20 + 1) -> HEADROOM (21 of 48 = 0.438; band edges at this n: 8 to 28)
 PASS judge failure: Sol missing, Opus and Sonnet D is D; Sol missing, Opus D, Sonnet none is unjudged and dropped (21 of 47) -> HEADROOM (21 of 47 = 0.447; band edges at this n: 8 to 28)
+PASS an Opus none row missing from the readings (c3, pass 2) -> exit 1: E_USAGE readings must carry one row per planned session; first missing: none on opus, unit c3, pass 2
 PASS judges in full agreement -> positive agreement on D 1.000 and no brief revision
 PASS Sol alone says D on every missed review's first issue -> hits unchanged (20 of 48), positive agreement under 0.70 sets one brief revision
-    Opus none hit@3: 20 of 48 = 0.417; gaps and unjudged dropped 0; band edges at n 48: HEADROOM 8 to 28
+    Opus none hit@3: 20 of 48 = 0.417; gaps, unjudged and incomplete dropped 0; band edges at n 48: HEADROOM 8 to 28
     Stock rows: hit D on 0 of 16 changed units (at most 1)
-    Measured ICC -0.364 at p0 0.417; nearest power.txt row (48 changed units, Holm's first step): p0 0.40, ICC 0.3, MDD 0.20 (decides nothing)
+    Measured ICC -0.364 at p0 0.417; nearest power.txt row (48 changed units, Holm's first step): p0 0.40, ICC 0.3, MDD 0.21 (decides nothing)
     Descriptive, sol none hit@3: 16 of 32
     Descriptive, particle none hit@3: 16 of 32
     Agreement, Sol vs Opus on D: n 516; both D 52, Sol only 88, Opus only 0, neither 376; positive agreement on D 0.542, raw 0.829, PABAK 0.659, kappa 0.463; positive agreement under 0.70: one brief revision before stage 2's judging
@@ -108,20 +110,26 @@ PASS Sol and particle-1 at 1 pass -> their contrasts read the one-pass MDD (0.26
       autoplan-ceo - none: 0.542 - 0.500 = +0.042, 95% CI [0.000, 0.104], p 0.498 (monte-carlo-sign-flip), Holm p 0.997, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.26)
       standalone - none: 0.521 - 0.500 = +0.021, 95% CI [0.000, 0.063], p 1.000 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 1.000 -> not distinguished (MDD 0.26)
 PASS stage 2 stock rows hit 3 of 48 -> verdicts stand; 4 of 48 -> STOCK FAIL, every contrast untested (judge)
+PASS the Opus -p item stops halfway (none, standalone and lens incomplete on the last 24 changed units, both passes) -> autoplan-ceo and standalone read untested (coverage 0.500 under 0.90)
+    Model opus: none hit@3 0.417 on 48 unit-passes at 2 passes; Holm family autoplan-ceo, standalone
+      autoplan-ceo - none: 0.833 - 0.417 = +0.417, 95% CI [0.208, 0.625], p 0.002 (monte-carlo-sign-flip), Holm p 1.000, exposure 1.000, coverage 0.500 -> untested (coverage 0.500 under 0.90), p = 1 in Holm
+      standalone - none: 0.417 - 0.417 = +0.000, 95% CI [0.000, 0.000], p 1.000 (degenerate), Holm p 1.000, exposure 1.000, coverage 0.500 -> untested (coverage 0.500 under 0.90), p = 1 in Holm
+PASS a standalone row missing from stage 2's readings (c5, pass 2) -> exit 1: E_USAGE readings must carry one row per planned session; first missing: standalone on opus, unit c5, pass 2
+PASS stage 2 readings with no family -> exit 1: E_USAGE stage 2 readings must carry family (the gstack arms that started stage 2 per model)
 PASS Opus none at 0.625 in stage 2 -> CEILING flag on both contrasts
 PASS 47 changed units after leak drops -> MDD read between power.txt's rows
 PASS 40 changed units after leak drops -> MDD read between power.txt's rows
 PASS 36 changed units after leak drops -> MDD read between power.txt's rows
 PASS 35 changed units after leak drops -> STOP
-      autoplan-ceo:opus: hit@3 0.723, rank-weighted 0.486, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.723, strict from 2026-09-01 0.723 (47), from 2026-10-01 0.696 (23), maintainer 0.750, outside 0.710, no-block 0/128, gaps or unjudged 2, mean issue words 34.7, cost per review $3.00, per hit $5.65
-      autoplan-ceo:particle: hit@3 0.286, rank-weighted 0.190, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.286, strict from 2026-09-01 0.286 (42), from 2026-10-01 0.300 (20), maintainer 0.286, outside 0.286, no-block 0/128, gaps or unjudged 12, mean issue words 34.7, cost per review $0.33, per hit $1.76
-      autoplan-ceo:sol: hit@3 0.125, rank-weighted 0.083, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.125, strict from 2026-09-01 0.125 (48), from 2026-10-01 0.083 (24), maintainer 0.125, outside 0.125, no-block 0/128, gaps or unjudged 0, mean issue words 34.7, cost per review $1.80, per hit $19.20
-      lens:opus: hit@3 0.476, rank-weighted 0.317, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.476, strict from 2026-09-01 0.476 (42), from 2026-10-01 0.500 (20), maintainer 0.500, outside 0.464, no-block 0/128, gaps or unjudged 12, mean issue words 34.7, cost per review $0.30, per hit $0.96
-      none:opus: hit@3 0.354, rank-weighted 0.236, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.354, strict from 2026-09-01 0.333 (48), from 2026-10-01 0.333 (24), maintainer 0.375, outside 0.344, no-block 0/128, gaps or unjudged 0, mean issue words 34.7, cost per review $0.25, per hit $0.94
-      none:particle: hit@3 0.208, rank-weighted 0.142, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.208, strict from 2026-09-01 0.208 (48), from 2026-10-01 0.167 (24), maintainer 0.250, outside 0.188, no-block 0/128, gaps or unjudged 0, mean issue words 34.7, cost per review $0.06, per hit $0.38
-      none:sol: hit@3 0.500, rank-weighted 0.333, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.500, strict from 2026-09-01 0.500 (48), from 2026-10-01 0.500 (24), maintainer 0.500, outside 0.500, no-block 0/128, gaps or unjudged 0, mean issue words 34.7, cost per review $0.15, per hit $0.40
-      standalone:opus: hit@3 0.292, rank-weighted 0.194, slot precision 0.306, Brier 0.057, AUC 1.000, per-protocol 0.292, strict from 2026-09-01 0.292 (48), from 2026-10-01 0.250 (24), maintainer 0.250, outside 0.313, no-block 8/128, gaps or unjudged 0, mean issue words 34.7, cost per review $0.70, per hit $3.20
-      standalone:sol: hit@3 0.542, rank-weighted 0.361, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 1.000, strict from 2026-09-01 0.542 (48), from 2026-10-01 0.500 (24), maintainer 0.563, outside 0.531, no-block 0/128, gaps or unjudged 0, mean issue words 34.7, cost per review $0.42, per hit $1.03
+      autoplan-ceo:opus: hit@3 0.723, rank-weighted 0.486, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.723, strict from 2026-09-01 0.723 (47), from 2026-10-01 0.696 (23), maintainer 0.750, outside 0.710, no-block 0/128, gaps, unjudged or incomplete 2, mean issue words 34.7, cost per review $3.00, per hit $5.65
+      autoplan-ceo:particle: hit@3 0.286, rank-weighted 0.190, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.286, strict from 2026-09-01 0.286 (42), from 2026-10-01 0.300 (20), maintainer 0.286, outside 0.286, no-block 0/128, gaps, unjudged or incomplete 12, mean issue words 34.7, cost per review $0.33, per hit $1.76
+      autoplan-ceo:sol: hit@3 0.125, rank-weighted 0.083, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.125, strict from 2026-09-01 0.125 (48), from 2026-10-01 0.083 (24), maintainer 0.125, outside 0.125, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $1.80, per hit $19.20
+      lens:opus: hit@3 0.476, rank-weighted 0.317, slot precision 0.333, Brier 0.056, AUC 1.000, per-protocol 0.476, strict from 2026-09-01 0.476 (42), from 2026-10-01 0.500 (20), maintainer 0.500, outside 0.464, no-block 0/128, gaps, unjudged or incomplete 12, mean issue words 34.7, cost per review $0.30, per hit $0.96
+      none:opus: hit@3 0.354, rank-weighted 0.236, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.354, strict from 2026-09-01 0.333 (48), from 2026-10-01 0.333 (24), maintainer 0.375, outside 0.344, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.25, per hit $0.94
+      none:particle: hit@3 0.208, rank-weighted 0.142, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.208, strict from 2026-09-01 0.208 (48), from 2026-10-01 0.167 (24), maintainer 0.250, outside 0.188, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.06, per hit $0.38
+      none:sol: hit@3 0.500, rank-weighted 0.333, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 0.500, strict from 2026-09-01 0.500 (48), from 2026-10-01 0.500 (24), maintainer 0.500, outside 0.500, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.15, per hit $0.40
+      standalone:opus: hit@3 0.292, rank-weighted 0.194, slot precision 0.306, Brier 0.057, AUC 1.000, per-protocol 0.292, strict from 2026-09-01 0.292 (48), from 2026-10-01 0.250 (24), maintainer 0.250, outside 0.313, no-block 8/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.70, per hit $3.20
+      standalone:sol: hit@3 0.542, rank-weighted 0.361, slot precision 0.333, Brier 0.057, AUC 1.000, per-protocol 1.000, strict from 2026-09-01 0.542 (48), from 2026-10-01 0.500 (24), maintainer 0.563, outside 0.531, no-block 0/128, gaps, unjudged or incomplete 0, mean issue words 34.7, cost per review $0.42, per hit $1.03
       category direction or strategy fit: autoplan-ceo:opus 16/23, autoplan-ceo:particle 6/20, autoplan-ceo:sol 2/24, lens:opus 10/20, none:opus 8/24, none:particle 4/24, none:sol 12/24, standalone:opus 6/24, standalone:sol 12/24
       category premise or demand: autoplan-ceo:opus 18/24, autoplan-ceo:particle 6/22, autoplan-ceo:sol 4/24, lens:opus 10/22, none:opus 8/24, none:particle 6/24, none:sol 12/24, standalone:opus 8/24, standalone:sol 14/24
       category scope: autoplan-ceo:opus 18/24, autoplan-ceo:particle 6/22, autoplan-ceo:sol 4/24, lens:opus 10/22, none:opus 10/24, none:particle 6/24, none:sol 12/24, standalone:opus 8/24, standalone:sol 14/24
@@ -131,7 +139,7 @@ PASS 35 changed units after leak drops -> STOP
 PASS secondaries print for every cell run (9), every category (4) and both Opus lens rows
 PASS held units forecast 80 and changed 25 -> AUC 1.000 for none on Opus
 PASS both strict strata print with their counts (48 and 24 unit-passes)
-PASS no-block rate, gaps or unjudged and mean issue words print per cell
+PASS no-block rate, gaps, unjudged or incomplete and mean issue words print per cell
 
 ## g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation
 A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Run items (one per review-units invocation) open a trial-proof lease at their cap, judge items a direct-proof lease for what is left of their envelope, all with --admission warn. Each item settles at its projected spend. Stage 2's caps here are the planning caps; the real ones come from the projection check.
@@ -207,4 +215,4 @@ PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITE
 ## Leak check
 PASS the transcript prints no home path and no key name's value
 
-PASS 133, FAIL 0
+PASS 138, FAIL 0

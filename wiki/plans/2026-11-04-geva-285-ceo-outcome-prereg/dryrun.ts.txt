@@ -25,10 +25,17 @@ const section = async (title: string, fn: () => Promise<void> | void) => {
   say("\n## " + title);
   try { await fn(); } catch (e) { check(title + ": ran to the end (threw " + (e instanceof Error ? e.message.split("\n")[0] : String(e)) + ")", false); }
 };
-const rule = (cmd: string, data: unknown, tag: string) => {
+const runRule = (cmd: string, data: unknown, tag: string) => {
   const f = join(OUT, tag + ".json");
   writeFileSync(f, JSON.stringify(data));
-  const r = spawnSync("bun", [join(HERE, "ceo-rule.ts"), cmd, f], { encoding: "utf8", env: { ...KEYLESS, GSTACK_EVALS_SCORER: scorer }, maxBuffer: 1 << 26 });
+  return spawnSync("bun", [join(HERE, "ceo-rule.ts"), cmd, f], { encoding: "utf8", env: { ...KEYLESS, GSTACK_EVALS_SCORER: scorer }, maxBuffer: 1 << 26 });
+};
+const refusal = (cmd: string, data: unknown, tag: string) => {
+  const r = runRule(cmd, data, tag);
+  return { status: r.status, msg: (r.stderr.split("\n").find((l) => l.startsWith("error: ")) ?? "").slice(7) };
+};
+const rule = (cmd: string, data: unknown, tag: string) => {
+  const r = runRule(cmd, data, tag);
   if (r.status !== 0) throw new Error("ceo-rule.ts " + cmd + " exited " + r.status + ": " + r.stderr.trim().split("\n").slice(-2).join(" "));
   return r.stdout;
 };
@@ -50,14 +57,14 @@ const stockOf = (units: any[], hitA: (i: number) => boolean, hitB: (i: number) =
 
 // Stage 1: 16 changed + 4 held calibration units; Opus none 3 passes, Sol and particle-1 none 2 passes; smoke: 2 sessions
 // per gstack arm per model on c0 and c1.
-type S1 = { m: number; stockA?: number; stockB?: number; stockSame?: boolean; leakUnits?: number; gaps?: number; smokeFail?: string[]; smokeSlow?: string[]; smokeNoBlock?: string[]; splitDecides?: boolean; judgeFail?: boolean; lowAgree?: boolean; smokeUsd?: Record<string, [number, number]>; noneUsd?: Record<string, number> };
+type S1 = { m: number; incomplete?: number; stockA?: number; stockB?: number; stockSame?: boolean; leakUnits?: number; gaps?: number; smokeFail?: string[]; smokeSlow?: string[]; smokeNoBlock?: string[]; splitDecides?: boolean; judgeFail?: boolean; lowAgree?: boolean; smokeUsd?: Record<string, [number, number]>; noneUsd?: Record<string, number> };
 function stage1(o: S1) {
   rid = 0;
   const units = unitsOf(16, 4);
   const reviews: any[] = [];
   const usdNone = (m: string) => ({ usd: o.noneUsd?.[m] ?? PLANNED[m]!.none! });
   let k = 0;
-  for (let p = 1; p <= 3; p++) for (let i = 0; i < 16; i++) { const r = review("c" + i, "none", "opus", p, k < o.m, usdNone("opus")); if (k >= 48 - (o.gaps ?? 0)) { r.status = "gap"; r.labels = []; } reviews.push(r); k++; }
+  for (let p = 1; p <= 3; p++) for (let i = 0; i < 16; i++) { const r = review("c" + i, "none", "opus", p, k < o.m, usdNone("opus")); if (k >= 48 - (o.gaps ?? 0)) { r.status = "gap"; r.labels = []; } if (k >= 48 - (o.incomplete ?? 0)) { r.status = "incomplete"; r.labels = []; r.forecast = null; r.usd = 0; } reviews.push(r); k++; }
   const misses = () => reviews.filter((r) => r.status === "scored" && r.labels[0]?.sol === "none" && r.labels[1]?.sol === "R1");
   if (o.splitDecides) {
     const [r0, r1, r2] = misses();
@@ -85,7 +92,7 @@ function stage1(o: S1) {
 }
 
 // Stage 2: changed + 16 held units, 2 passes. hits[model][arm] is the number of changed units hit in both passes.
-type S2 = { hits: Record<string, Record<string, number>>; passes?: Record<string, number>; exposure?: Record<string, number>; gapUnits?: Record<string, number>; noBlock?: Record<string, number>; unjudged?: Record<string, number>; nullForecast?: Record<string, number>; changed?: number; skip?: string[]; family?: Record<string, string[]>; stockB?: number };
+type S2 = { hits: Record<string, Record<string, number>>; passes?: Record<string, number>; exposure?: Record<string, number>; gapUnits?: Record<string, number>; incomplete?: Record<string, number>; noBlock?: Record<string, number>; unjudged?: Record<string, number>; nullForecast?: Record<string, number>; changed?: number; skip?: string[]; family?: Record<string, string[]>; stockB?: number };
 function stage2(o: S2) {
   rid = 0;
   const nc = o.changed ?? 48;
@@ -101,6 +108,7 @@ function stage2(o: S2) {
       const r: any = review(u.id, arm, model, p, ch && idx < h, { forecast: ch ? 25 : 80 });
       if (arm !== "none" && arm !== "lens") r.exposed = ch ? n++ < Math.round(exp * nc * 2) : true;
       if (ch && idx >= nc - (o.gapUnits?.[key] ?? 0)) { r.status = "gap"; r.labels = []; r.forecast = null; }
+      if (ch && idx >= nc - (o.incomplete?.[key] ?? 0)) { r.status = "incomplete"; r.labels = []; r.forecast = null; r.usd = 0; r.exposed = null; }
       if (ch && idx < (o.noBlock?.[key] ?? 0)) { r.status = "no-block"; r.labels = []; r.forecast = null; }
       if (ch && p === 1 && idx >= h && idx < h + (o.unjudged?.[key] ?? 0)) r.labels[0] = { sol: null, opus: "D", sonnet: "none" };
       if (ch && idx < (o.nullForecast?.[key] ?? 0)) r.forecast = null;
@@ -138,8 +146,9 @@ await section("b. Stage 1 headroom rule: every outcome", () => {
     ["rows A and B both hit the same single unit", { m: 20, stockSame: true }, /^HEADROOM/],
     ["one unit leak-dropped (it held 1 hit)", { m: 20, leakUnits: 1 }, /^HEADROOM \(19 of 45 = 0\.422; band edges at this n: 7 to 27\)$/],
     ["five units leak-dropped", { m: 20, leakUnits: 5 }, /^NO READ \(fewer than 12 changed units \(11\)\)/],
-    ["5 gaps of 48 (10.4%)", { m: 20, gaps: 5 }, /^NO READ \(gaps 5 of 48/],
+    ["5 gaps of 48 (10.4%)", { m: 20, gaps: 5 }, /^NO READ \(gaps, unjudged and incomplete 5 of 48 planned Opus none readings, over 10%\)/],
     ["4 gaps of 48 (8.3%)", { m: 20, gaps: 4 }, /^HEADROOM \(20 of 44/],
+    ["Opus none's last 6 readings incomplete (its item's cap stopped it; 6 of 48 planned)", { m: 20, incomplete: 6 }, /^NO READ \(gaps, unjudged and incomplete 6 of 48 planned Opus none readings, over 10%\)/],
     ["splits: Sol D/Opus none/Sonnet D is D; Sol D/Opus none/Sonnet none is not; Sol R1/Opus none/Sonnet D is not (20 + 1)", { m: 20, splitDecides: true }, /^HEADROOM \(21 of 48/],
     ["judge failure: Sol missing, Opus and Sonnet D is D; Sol missing, Opus D, Sonnet none is unjudged and dropped (21 of 47)", { m: 20, judgeFail: true }, /^HEADROOM \(21 of 47 = 0\.447; band edges at this n: 8 to 28\)$/],
   ];
@@ -147,6 +156,10 @@ await section("b. Stage 1 headroom rule: every outcome", () => {
     const v = verdictOf(rule("headroom", stage1(opts), "hr-" + tagOf(label)));
     check(label + " -> " + v, want.test(v));
   }
+  const s1Missing = stage1({ m: 20 });
+  s1Missing.reviews = s1Missing.reviews.filter((r: any) => !(r.arm === "none" && r.model === "opus" && r.unit === "c3" && r.pass === 2));
+  const r1 = refusal("headroom", s1Missing, "hr-missing-row");
+  check("an Opus none row missing from the readings (c3, pass 2) -> exit " + r1.status + ": " + r1.msg, r1.status === 1 && r1.msg === "E_USAGE readings must carry one row per planned session; first missing: none on opus, unit c3, pass 2");
   const ok = rule("headroom", stage1({ m: 20 }), "hr-agree-ok");
   check("judges in full agreement -> positive agreement on D 1.000 and no brief revision", /positive agreement on D 1\.000/.test(ok) && !/under 0\.70/.test(ok));
   const low = rule("headroom", stage1({ m: 20, lowAgree: true }), "hr-agree-low");
@@ -239,10 +252,21 @@ await section("f. Stage 2 verdicts, Holm families, exposure, coverage, gaps, mis
   const s3 = rule("compare", stage2({ hits, family, stockB: 3 }), "cmp-stock3");
   const s4 = rule("compare", stage2({ hits, family, stockB: 4 }), "cmp-stock4");
   check("stage 2 stock rows hit 3 of 48 -> verdicts stand; 4 of 48 -> STOCK FAIL, every contrast untested (judge)", !/STOCK FAIL/.test(s3) && /-> helps/.test(s3) && /STOCK FAIL, every contrast reads untested/.test(s4) && !/-> (helps|hurts)/.test(s4) && /untested \(judge: stock rows hit 4\)/.test(s4));
-  const ce = rule("compare", stage2({ hits: { opus: { none: 30, "autoplan-ceo": 31, standalone: 30, lens: 30 } } }), "cmp-ceiling");
+  const famOpus = { opus: ["autoplan-ceo", "standalone"], sol: [], particle: [] };
+  const half = rule("compare", stage2({ hits: { opus: { none: 10, "autoplan-ceo": 20, standalone: 10, lens: 10 } }, family: famOpus, incomplete: { "none:opus": 24, "standalone:opus": 24, "lens:opus": 24 } }), "cmp-p-half");
+  const halfLine = (arm: string) => half.split("\n").find((l) => l.startsWith("  " + arm + " - none")) ?? "";
+  check("the Opus -p item stops halfway (none, standalone and lens incomplete on the last 24 changed units, both passes) -> autoplan-ceo and standalone read untested (coverage 0.500 under 0.90)", /untested \(coverage 0\.500 under 0\.90\), p = 1 in Holm/.test(halfLine("autoplan-ceo")) && /untested \(coverage 0\.500 under 0\.90\), p = 1 in Holm/.test(halfLine("standalone")));
+  show(half, /^Model opus|^  (autoplan-ceo|standalone) - none/);
+  const s2Missing = stage2({ hits: { opus: hits.opus }, family: famOpus });
+  s2Missing.reviews = s2Missing.reviews.filter((r: any) => !(r.arm === "standalone" && r.model === "opus" && r.unit === "c5" && r.pass === 2));
+  const r2 = refusal("compare", s2Missing, "cmp-missing-row");
+  check("a standalone row missing from stage 2's readings (c5, pass 2) -> exit " + r2.status + ": " + r2.msg, r2.status === 1 && r2.msg === "E_USAGE readings must carry one row per planned session; first missing: standalone on opus, unit c5, pass 2");
+  const r3 = refusal("compare", stage2({ hits: { opus: hits.opus } }), "cmp-no-family");
+  check("stage 2 readings with no family -> exit " + r3.status + ": " + r3.msg, r3.status === 1 && r3.msg === "E_USAGE stage 2 readings must carry family (the gstack arms that started stage 2 per model)");
+  const ce = rule("compare", stage2({ hits: { opus: { none: 30, "autoplan-ceo": 31, standalone: 30, lens: 30 } }, family: famOpus }), "cmp-ceiling");
   check("Opus none at 0.625 in stage 2 -> CEILING flag on both contrasts", /none hit@3 0\.625 on 96 unit-passes at 2 passes; Holm family autoplan-ceo, standalone; CEILING flag/.test(ce) && (ce.match(/\[CEILING\]/g) ?? []).length === 2);
   for (const [n, want] of [[47, /for this n 0\.18$/m], [40, /for this n 0\.20$/m], [36, /for this n 0\.21$/m], [35, /Verdict: STOP, under 36 changed units/]] as [number, RegExp][]) {
-    const out = rule("compare", stage2({ hits: { opus: { none: 10, "autoplan-ceo": 20, standalone: 10, lens: 10 } }, changed: n }), "cmp-n" + n);
+    const out = rule("compare", stage2({ hits: { opus: { none: 10, "autoplan-ceo": 20, standalone: 10, lens: 10 } }, family: famOpus, changed: n }), "cmp-n" + n);
     check(n + " changed units after leak drops -> " + (n < 36 ? "STOP" : "MDD read between power.txt's rows"), want.test(out));
   }
   const sec = o.split("\n").filter((l) => /^  (autoplan-ceo|lens|none|standalone):|^  category|^  opus (lens|autoplan)/.test(l));
@@ -250,7 +274,7 @@ await section("f. Stage 2 verdicts, Holm families, exposure, coverage, gaps, mis
   check("secondaries print for every cell run (9), every category (4) and both Opus lens rows", sec.filter((l) => /^  [a-z-]+:(opus|sol|particle):/.test(l)).length === 9 && sec.filter((l) => l.startsWith("  category")).length === 4 && sec.filter((l) => l.startsWith("  opus ")).length === 2);
   check("held units forecast 80 and changed 25 -> AUC 1.000 for none on Opus", /none:opus: .*AUC 1\.000/.test(o));
   check("both strict strata print with their counts (48 and 24 unit-passes)", /none:opus: .*strict from 2026-09-01 [0-9.]+ \(48\), from 2026-10-01 [0-9.]+ \(24\)/.test(o));
-  check("no-block rate, gaps or unjudged and mean issue words print per cell", /standalone:opus: .*no-block 8\/128, gaps or unjudged 0, mean issue words 34\.7/.test(o) && /autoplan-ceo:opus: .*gaps or unjudged 2,/.test(o) && /lens:opus: .*gaps or unjudged 12,/.test(o));
+  check("no-block rate, gaps, unjudged or incomplete and mean issue words print per cell", /standalone:opus: .*no-block 8\/128, gaps, unjudged or incomplete 0, mean issue words 34\.7/.test(o) && /autoplan-ceo:opus: .*gaps, unjudged or incomplete 2,/.test(o) && /lens:opus: .*gaps, unjudged or incomplete 12,/.test(o));
 });
 
 await section("g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation", async () => {

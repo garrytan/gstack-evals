@@ -15,7 +15,7 @@ type Calls = { sol: Label | null; opus: Label | null; sonnet: Label | null };
 type Model = "opus" | "sol" | "particle";
 type Arm = "none" | "autoplan-ceo" | "standalone" | "lens";
 type Unit = { id: string; kind: "changed" | "held"; strict: string | null; category: string; role: "maintainer" | "outside" };
-type Review = { id: string; unit: string; arm: Arm; model: Model; pass: number; smoke?: boolean; status: "scored" | "no-block" | "gap"; exposed: boolean | null; labels: Calls[]; words: number[]; leak: { sol: boolean; opus: boolean }; forecast: number | null; usd: number; wall_s?: number };
+type Review = { id: string; unit: string; arm: Arm; model: Model; pass: number; smoke?: boolean; status: "scored" | "no-block" | "gap" | "incomplete"; exposed: boolean | null; labels: Calls[]; words: number[]; leak: { sol: boolean; opus: boolean }; forecast: number | null; usd: number; wall_s?: number };
 type Readings = { stage: 1 | 2; units: Unit[]; reviews: Review[]; stock: { unit: string; row: "A" | "B"; labels: Calls[] }[]; family?: Record<Model, Arm[]> };
 
 const SEED = 20261104, DRAWS = 10_000;
@@ -27,7 +27,7 @@ const MDD_ROWS: Record<1 | 2, [number, number][]> = { 2: [[36, 0.21], [48, 0.18]
 const PARALLEL = 3;
 const ALLOW: Record<Model, { plain: number; autoplan: number }> = { opus: { plain: 7.04, autoplan: 12 }, sol: { plain: 3.52, autoplan: 6 }, particle: { plain: 0.192, autoplan: 0.33 } };
 const allowanceOf = (m: Model, a: Arm) => (a === "autoplan-ceo" ? ALLOW[m].autoplan : ALLOW[m].plain);
-const GRID: Record<string, number> = { "0.25/0.3": 0.19, "0.25/0.5": 0.16, "0.40/0.3": 0.2, "0.40/0.5": 0.18, "0.55/0.3": 0.2, "0.55/0.5": 0.18 };
+const GRID: Record<string, number> = { "0.25/0.3": 0.2, "0.25/0.5": 0.17, "0.40/0.3": 0.21, "0.40/0.5": 0.18, "0.55/0.3": 0.2, "0.55/0.5": 0.18 };
 const scorer = process.env.GSTACK_EVALS_SCORER;
 if (!scorer) throw new Error("E_USAGE GSTACK_EVALS_SCORER must name the scorer checkout");
 const { clusteredPairedDelta, holmAdjusted } = await import(join(scorer, "src/runner/stats/paired.ts"));
@@ -68,7 +68,13 @@ const rankWeighted = (r: Review) => {
 };
 const slotPrecision = (r: Review) => (r.status !== "scored" ? 0 : top3(r.labels).filter((c) => { const l = final(c); return l !== null && l !== "none"; }).length / 3);
 const crossJudge = (m: Model): "sol" | "opus" => (m === "sol" ? "opus" : "sol");
-const out_ = (r: Review) => r.status === "gap" || unjudged(r);
+const out_ = (r: Review) => r.status === "gap" || r.status === "incomplete" || unjudged(r);
+const sessionRan = (r: Review) => r.status !== "gap" && r.status !== "incomplete";
+
+function requireRows(rows: Review[], arm: Arm, model: Model, units: string[], passes: number) {
+  for (const u of units) for (let p = 1; p <= passes; p++)
+    if (!rows.some((r) => !r.smoke && r.arm === arm && r.model === model && r.unit === u && r.pass === p)) throw new Error("E_USAGE readings must carry one row per planned session; first missing: " + arm + " on " + model + ", unit " + u + ", pass " + p);
+}
 
 // review-units runs a round only when spent plus every session in it at its allowance fits under the item's cap
 // (src/trial/review/run.ts, the round loop). A round holds max(1, floor(parallel / arms)) unit-passes, each with every arm.
@@ -130,20 +136,22 @@ function headroom(rd: Readings) {
   const ids = new Set(changed.map((u) => u.id));
   say("Stage 1 headroom rule (GEVA-285)");
   say("Leak drops: " + drops.size + " unit(s); changed calibration units left: " + changed.length);
+  requireRows(rd.reviews, "none", "opus", changed.map((u) => u.id), 3);
+  const planned = changed.length * 3;
   const opus = rd.reviews.filter((r) => !r.smoke && r.model === "opus" && r.arm === "none" && ids.has(r.unit));
-  const gaps = opus.filter(out_).length;
+  const outs = opus.filter(out_).length;
   const read = opus.filter((r) => !out_(r));
   const m = sum(read.map((r) => hit(r))), n = read.length;
   const lo = Math.ceil(BAND.lo * n - 1e-9), hi = Math.floor(BAND.hi * n + 1e-9);
   const stock = stockHits(rd, ids);
   const ag = agreement(rd, new Set(rd.units.filter((u) => !drops.has(u.id)).map((u) => u.id)));
   let verdict: string;
-  if (changed.length < 12 || n === 0 || gaps / opus.length > 0.1) verdict = "NO READ (" + (changed.length < 12 ? "fewer than 12 changed units (" + changed.length + ")" : "gaps " + gaps + " of " + opus.length + " Opus none readings, over 10%") + "): stop, FIX-METHOD";
+  if (changed.length < 12 || n === 0 || outs / planned > 0.1) verdict = "NO READ (" + (changed.length < 12 ? "fewer than 12 changed units (" + changed.length + ")" : "gaps, unjudged and incomplete " + outs + " of " + planned + " planned Opus none readings, over 10%") + "): stop, FIX-METHOD";
   else if (stock > 1) verdict = "STOCK FAIL (a stock row hit D on " + stock + " of " + changed.length + " changed units; at most 1 allowed): stop, FIX-METHOD on the judge brief";
   else if (m / n > BAND.hi) verdict = "CEILING (" + m + " of " + n + " = " + f3(m / n) + " > 0.60): stop";
   else if (m / n < BAND.lo) verdict = "FLOOR (" + m + " of " + n + " = " + f3(m / n) + " < 0.15): stop, FIX-METHOD";
   else verdict = "HEADROOM (" + m + " of " + n + " = " + f3(m / n) + "; band edges at this n: " + lo + " to " + hi + ")";
-  say("Opus none hit@3: " + m + " of " + n + " = " + f3(n ? m / n : NaN) + "; gaps and unjudged dropped " + gaps + "; band edges at n " + n + ": HEADROOM " + lo + " to " + hi);
+  say("Opus none hit@3: " + m + " of " + n + " = " + f3(n ? m / n : NaN) + "; gaps, unjudged and incomplete dropped " + outs + "; band edges at n " + n + ": HEADROOM " + lo + " to " + hi);
   say("Stock rows: hit D on " + stock + " of " + changed.length + " changed units (at most 1)");
   const rho = icc(read), p0 = n ? m / n : NaN;
   const gp = [0.25, 0.4, 0.55].reduce((a, b) => (Math.abs(b - p0) < Math.abs(a - p0) ? b : a)), gr = Number.isNaN(rho) || rho < 0.4 ? 0.3 : 0.5;
@@ -173,8 +181,8 @@ type Projection = { envelope: number; changed: number; held: number; stage1_judg
 function projection(p: Projection) {
   const s1 = p.stage1.reviews;
   const per = (m: Model, a: Arm) => {
-    if (a === "lens") return 1.2 * median(s1.filter((r) => !r.smoke && r.model === "opus" && r.arm === "none" && r.status !== "gap").map((r) => r.usd));
-    if (a === "none") return median(s1.filter((r) => !r.smoke && r.model === m && r.arm === "none" && r.status !== "gap").map((r) => r.usd));
+    if (a === "lens") return 1.2 * median(s1.filter((r) => !r.smoke && r.model === "opus" && r.arm === "none" && sessionRan(r)).map((r) => r.usd));
+    if (a === "none") return median(s1.filter((r) => !r.smoke && r.model === m && r.arm === "none" && sessionRan(r)).map((r) => r.usd));
     return Math.max(0, ...s1.filter((r) => r.smoke && r.model === m && r.arm === a).map((r) => r.usd));
   };
   const judges = p.stage1_judges * (64 / 20) * 3;
@@ -241,6 +249,7 @@ const mddAt = (n: number, passes: 1 | 2 = 2) => {
 };
 
 function compare(rd: Readings) {
+  if (!rd.family) throw new Error("E_USAGE stage 2 readings must carry family (the gstack arms that started stage 2 per model)");
   const drops = leakDrops(rd);
   const units = rd.units.filter((u) => !drops.has(u.id));
   const changed = new Set(units.filter((u) => u.kind === "changed").map((u) => u.id));
@@ -256,7 +265,7 @@ function compare(rd: Readings) {
   say("Agreement, Sol vs Opus on D: " + agreementLine(ag));
   const live = rd.reviews.filter((r) => !r.smoke && !drops.has(r.unit));
   const key = (r: Review) => r.unit + "#" + r.pass;
-  const fam = rd.family ?? { opus: GSTACK_ARMS, sol: GSTACK_ARMS, particle: GSTACK_ARMS };
+  const fam = rd.family;
   for (const model of MODELS) {
     const mine = live.filter((r) => r.model === model);
     const none = new Map(mine.filter((r) => r.arm === "none" && changed.has(r.unit)).map((r) => [key(r), r]));
@@ -264,12 +273,13 @@ function compare(rd: Readings) {
     const noneRate = noneKept.length ? sum(noneKept.map((r) => hit(r))) / noneKept.length : NaN;
     const ceiling = noneRate > BAND.hi;
     const passes: 1 | 2 = Math.max(1, ...mine.filter((r) => r.arm === "none" && changed.has(r.unit)).map((r) => r.pass)) >= 2 ? 2 : 1;
+    for (const arm of new Set(mine.map((r) => r.arm))) requireRows(mine, arm, model, [...changed], passes);
     say("Model " + model + ": none hit@3 " + f3(noneRate) + " on " + noneKept.length + " unit-passes at " + passes + " pass" + (passes === 1 ? "" : "es") + "; Holm family " + (fam[model].join(", ") || "empty") + (ceiling ? "; CEILING flag on both contrasts" : ""));
     const rows: { arm: Arm; stats: any; untested: string | null; exposure: number; coverage: number; sens: any; mdd: number | null }[] = [];
     for (const arm of fam[model]) {
       const armAll = mine.filter((r) => r.arm === arm);
       if (armAll.length === 0) { rows.push({ arm, stats: null, untested: "not run", exposure: NaN, coverage: 0, sens: null, mdd: null }); continue; }
-      const nonGap = armAll.filter((r) => r.status !== "gap" && changed.has(r.unit));
+      const nonGap = armAll.filter((r) => sessionRan(r) && changed.has(r.unit));
       const exposure = nonGap.length ? nonGap.filter((r) => r.exposed === true).length / nonGap.length : NaN;
       const armMap = new Map(armAll.filter((r) => changed.has(r.unit)).map((r) => [key(r), r]));
       const kept = [...none.keys()].filter((k) => armMap.has(k) && !out_(none.get(k)!) && !out_(armMap.get(k)!));
@@ -297,6 +307,7 @@ function compare(rd: Readings) {
   for (const c of cells) {
     const [arm, model] = c.split(":") as [Arm, Model];
     const all = live.filter((r) => r.arm === arm && r.model === model);
+    const began = all.filter((r) => r.status !== "incomplete");
     const rs = all.filter((r) => !out_(r));
     const ch = rs.filter((r) => changed.has(r.unit));
     const fc = rs.filter((r) => r.forecast !== null);
@@ -308,7 +319,7 @@ function compare(rd: Readings) {
     const hits = sum(ch.map((r) => hit(r))), cost = sum(all.map((r) => r.usd));
     const words = all.flatMap((r) => r.words.slice(0, 3));
     const strict = (from: string) => ch.filter((r) => { const u = units.find((x) => x.id === r.unit); return !!u?.strict && u.strict >= from; });
-    say("  " + c + ": hit@3 " + rate(ch) + ", rank-weighted " + f3(ch.length ? sum(ch.map(rankWeighted)) / ch.length : NaN) + ", slot precision " + f3(ch.length ? sum(ch.map(slotPrecision)) / ch.length : NaN) + ", Brier " + f3(brier) + ", AUC " + f3(auc) + ", per-protocol " + rate(ch.filter((r) => r.exposed !== false)) + ", strict from 2026-09-01 " + rate(strict("2026-09-01")) + " (" + strict("2026-09-01").length + "), from 2026-10-01 " + rate(strict("2026-10-01")) + " (" + strict("2026-10-01").length + "), maintainer " + rate(ch.filter((r) => units.find((u) => u.id === r.unit)?.role === "maintainer")) + ", outside " + rate(ch.filter((r) => units.find((u) => u.id === r.unit)?.role === "outside")) + ", no-block " + all.filter((r) => r.status === "no-block").length + "/" + all.length + ", gaps or unjudged " + all.filter(out_).length + ", mean issue words " + (words.length ? (sum(words) / words.length).toFixed(1) : "n/a") + ", cost per review " + usd(all.length ? cost / all.length : 0) + ", per hit " + (hits ? usd(cost / hits) : "n/a"));
+    say("  " + c + ": hit@3 " + rate(ch) + ", rank-weighted " + f3(ch.length ? sum(ch.map(rankWeighted)) / ch.length : NaN) + ", slot precision " + f3(ch.length ? sum(ch.map(slotPrecision)) / ch.length : NaN) + ", Brier " + f3(brier) + ", AUC " + f3(auc) + ", per-protocol " + rate(ch.filter((r) => r.exposed !== false)) + ", strict from 2026-09-01 " + rate(strict("2026-09-01")) + " (" + strict("2026-09-01").length + "), from 2026-10-01 " + rate(strict("2026-10-01")) + " (" + strict("2026-10-01").length + "), maintainer " + rate(ch.filter((r) => units.find((u) => u.id === r.unit)?.role === "maintainer")) + ", outside " + rate(ch.filter((r) => units.find((u) => u.id === r.unit)?.role === "outside")) + ", no-block " + all.filter((r) => r.status === "no-block").length + "/" + began.length + ", gaps, unjudged or incomplete " + all.filter(out_).length + ", mean issue words " + (words.length ? (sum(words) / words.length).toFixed(1) : "n/a") + ", cost per review " + usd(began.length ? cost / began.length : 0) + ", per hit " + (hits ? usd(cost / hits) : "n/a"));
   }
   const cats = [...new Set(units.filter((u) => u.kind === "changed").map((u) => u.category))].sort();
   for (const cat of cats) {
