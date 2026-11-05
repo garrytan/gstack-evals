@@ -3,9 +3,9 @@
 // 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. Every lease is admitted by O6's envelope through
 // openLease, and every exit path settles every lease it opened. Each lease names its holder, the run directory and the
 // launch's nonce, and a run binds to the directory of its first lease, so that directory's sessions.jsonl holds the run's
-// trial counts. The ledger is the only trust root: a lease that closes on a cap stop records it in its close, after which
-// O6 admits no new lease on that item, and a launch whose sessions.jsonl does not name every launch and session meter the
-// ledger holds for the run is refused.
+// trial counts. The ledger is the only trust root: a cap stop is written into O6's record when it fires, before the 409
+// that reports it, after which O6 admits no new lease on that item, and a launch whose sessions.jsonl does not name every
+// launch and session meter the ledger holds for the run is refused.
 import { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +13,7 @@ import { basename, dirname, join } from "node:path";
 import { docAnchor, type ReasonCode } from "../../../src/errors/codes.ts";
 import { rigAdmission } from "../../../src/rig/admission.ts";
 import { envelopeStatus, split } from "../../../src/runner/ledger/envelope.ts";
-import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, rivalHolder, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
+import { ledgerStatus, machineId, MAX_LEASE_TTL_MS, openLease, recordStop, rivalHolder, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
 import type { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
 import { holderBound, LedgerError, listItems, readItem, type CloseFile, type Holder, type LeaseFile } from "../../../src/runner/ledger/record.ts";
@@ -234,7 +234,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   }
   const launches = new Set(lines.flatMap((e) => (e.event === "launch" && e.nonce ? [e.nonce] : [])));
   const meters = new Set(lines.flatMap((e) => (e.event === "open" && e.meter_id ? [e.meter_id] : [])));
-  const bound = listItems(o.record).flatMap((item) => readItem(o.record, item).leases.filter(({ lease }) => lease.run_id === o.run_id && lease.holder?.dir === dir));
+  const states = listItems(o.record).map((item) => readItem(o.record, item));
+  const bound = states.flatMap((s) => s.leases.filter(({ lease }) => lease.run_id === o.run_id && lease.holder?.dir === dir));
   const unaccounted = bound.flatMap(({ lease }) => (launches.has(lease.holder!.nonce) ? [...o.local.meters(lease.lease_id).keys()].filter((m) => !meters.has(m)).map((m) => lease.lease_id + " (session meter " + m + ")") : [lease.lease_id + " (launch " + lease.holder!.nonce + ")"]));
   if (unaccounted.length) fail("E_USAGE", sessionsFile + " does not account for run " + o.run_id + "'s ledger: it names no launch or session for " + unaccounted.join(", ") + ". The ledger is the run's record, so a sessions.jsonl that is missing, emptied or restored from an earlier point can't serve the run; nothing was recovered, settled or opened");
   const capped = new Map<string, { at: string; scope: string }>();
@@ -242,7 +243,10 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (!capped.has(item)) capped.set(item, stop);
     if (stop.scope.startsWith("all") && !capped.has("")) capped.set("", stop);
   };
-  for (const { close } of bound) if (close?.cap_stop) noteStop(close.item, { at: close.closed_at, scope: close.cap_stop });
+  for (const s of states) {
+    for (const stop of s.stops) if (stop.run_id === o.run_id) noteStop(s.item, { at: stop.at, scope: stop.scope });
+    for (const { lease, close } of s.leases) if (close?.cap_stop && lease.run_id === o.run_id) noteStop(s.item, { at: close.closed_at, scope: close.cap_stop });
+  }
   for (const e of lines) if (e.item && ((e.event === "settled" && e.ended === "cap_stop") || (e.event === "refuse" && e.code === "CAP_STOP"))) noteStop(e.item, { at: e.at ?? "an unrecorded time", scope: e.scope ?? "" });
 
   const failures: string[] = [];
@@ -480,9 +484,12 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
 
   const capStop = (s: Stage) => {
     if (s.kind === "none") {
-      for (const x of stages) drain(x, "cap_stop", "all: none's cap stop ends both skills incomplete");
+      const scope = "all: none's cap stop ends both skills incomplete";
+      for (const x of stages) recordStop(o.record, x.lease_id, scope, new Date(now()));
+      for (const x of stages) drain(x, "cap_stop", scope);
       return;
     }
+    recordStop(o.record, s.lease_id, s.arm + " only", new Date(now()));
     drain(s, "cap_stop", s.arm + " only");
     if (!stages.some((x) => x.kind === "told" && x.state === "serving")) for (const x of stages) if (x.kind === "none") drain(x, "completed", "no told stage left");
   };

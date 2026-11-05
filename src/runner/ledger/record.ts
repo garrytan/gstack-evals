@@ -88,10 +88,22 @@ export interface CloseFile extends Slot {
   source_sha256?: string;
 }
 
-export type RecordFile = ApprovalFile | LeaseFile | CloseFile;
+/**
+ * A cap stop, written into the item's record when the stop fires, before the driver answers any 409. It sits in its
+ * lease's slot, is never rewritten or removed, and from then on no new lease on the item is admitted.
+ */
+export interface StopFile extends Slot {
+  kind: "stop";
+  lease_id: string;
+  run_id: string;
+  scope: string;
+  at: string;
+}
+
+export type RecordFile = ApprovalFile | LeaseFile | CloseFile | StopFile;
 
 export const ITEM_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const FILE = /^(approval|lease|close)-(\d{4})\.json$/;
+const FILE = /^(approval|lease|close|stop)-(\d{4})\.json$/;
 const MAX_SLOT = 9999;
 const LINK_UNSUPPORTED = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV", "EMLINK"]);
 const DIR_SYNC_UNSUPPORTED = new Set(["EINVAL", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EBADF"]);
@@ -198,10 +210,10 @@ export const isHolder = (h: unknown): h is Holder => {
 
 /**
  * Each run binds to the run directory of its first lease that names a holder, so one directory's sessions.jsonl holds
- * every cap stop and trial count of the run. A lease for the run from another directory is refused with this error.
+ * every trial count of the run. A lease for the run from another directory is refused with this error.
  */
 export function holderBound(rival: LeaseFile, holder: Holder): LedgerError {
-  return new LedgerError("E_USAGE", "run " + rival.run_id + " is bound to run directory " + rival.holder!.dir + " by lease " + rival.lease_id + " on line item " + rival.item + ", so it is refused from " + holder.dir + ": one directory serves a run, so that its sessions.jsonl holds every cap stop and trial count of the run. Serve run " + rival.run_id + " from " + rival.holder!.dir);
+  return new LedgerError("E_USAGE", "run " + rival.run_id + " is bound to run directory " + rival.holder!.dir + " by lease " + rival.lease_id + " on line item " + rival.item + ", so it is refused from " + holder.dir + ": one directory serves a run, so that its sessions.jsonl holds every trial count of the run. Serve run " + rival.run_id + " from " + rival.holder!.dir);
 }
 
 /** The shape checks every record file passes, also applied to a lease export or settle artifact before it is used. */
@@ -213,6 +225,7 @@ export function isRecordFile(f: unknown): f is RecordFile {
     return isMicros(r.cap_micros) && Array.isArray(r.quotes) && r.quotes.length > 0 && (r.action === "init" ? r.admission === "required" || r.admission === "warn" : r.admission === undefined) && member;
   }
   if (r.kind === "lease") return isMicros(r.reserved_micros) && typeof r.lease_id === "string" && typeof r.run_id === "string" && isTime(r.expires_at) && (r.holder === undefined || isHolder(r.holder));
+  if (r.kind === "stop") return typeof r.lease_id === "string" && typeof r.run_id === "string" && typeof r.scope === "string" && r.scope.length > 0 && isTime(r.at);
   return r.kind === "close" && isMicros(r.spent_micros) && isMicros(r.unknown_micros) && isMicros(r.unknown_calls) && typeof r.lease_id === "string" && (r.cap_stop === undefined || (typeof r.cap_stop === "string" && r.cap_stop.length > 0));
 }
 
@@ -232,6 +245,8 @@ export interface ItemState {
   item: string;
   approvals: ApprovalFile[];
   leases: { lease: LeaseFile; close: CloseFile | null }[];
+  /** Cap stops recorded on the item's leases, in slot order. */
+  stops: StopFile[];
   /** The latest approved cap, or null when none is on record. */
   cap_micros: number | null;
   admission: Admission | null;
@@ -259,14 +274,16 @@ export function readItem(record: string, item: string): ItemState {
       if (f.seq !== i + 1) throw new LedgerError("E_LEDGER_RECORD", "the approval record for line item " + item + " in " + record + " is missing " + f.kind + " slot " + (i + 1));
     });
   }
-  for (const c of closes.values()) {
-    if (leaseFiles[c.seq - 1]?.lease_id !== c.lease_id) throw new LedgerError("E_LEDGER_RECORD", "the close in " + slotPath(record, c) + " names lease " + c.lease_id + ", which is not the lease in that slot");
+  const stops = files.filter((f): f is StopFile => f.kind === "stop");
+  for (const c of [...closes.values(), ...stops]) {
+    if (leaseFiles[c.seq - 1]?.lease_id !== c.lease_id) throw new LedgerError("E_LEDGER_RECORD", "the " + c.kind + " in " + slotPath(record, c) + " names lease " + c.lease_id + ", which is not the lease in that slot");
   }
   const leases = leaseFiles.map((lease) => ({ lease, close: closes.get(lease.seq) ?? null }));
   return {
     item,
     approvals,
     leases,
+    stops,
     cap_micros: approvals.at(-1)?.cap_micros ?? null,
     admission: approvals[0]?.admission ?? null,
     program: approvals[0]?.program ?? null,
@@ -277,10 +294,11 @@ export function readItem(record: string, item: string): ItemState {
   };
 }
 
-/** A cap stop is a ledger fact: once a close on the item records one, no new lease on it is admitted, because a cap stop is not retried. */
+/** A cap stop is a ledger fact: once a stop record or a close on the item records one, no new lease on it is admitted, because a cap stop is not retried. */
 export function capStopRefusal(state: ItemState): LedgerError | null {
-  const stop = state.leases.find((l) => l.close?.cap_stop)?.close;
-  return stop ? new LedgerError("CAP_STOP", "line item " + state.item + " cap-stopped in run " + state.run_id + " when lease " + stop.lease_id + " closed at " + stop.closed_at + " (scope " + stop.cap_stop + "); a cap stop is not retried, so no new lease is admitted on it") : null;
+  const close = state.leases.find((l) => l.close?.cap_stop)?.close;
+  const stop = state.stops[0] ?? (close ? { lease_id: close.lease_id, at: close.closed_at, scope: close.cap_stop! } : null);
+  return stop ? new LedgerError("CAP_STOP", "line item " + state.item + " cap-stopped in run " + state.run_id + " on lease " + stop.lease_id + " at " + stop.at + " (scope " + stop.scope + "); a cap stop is not retried, so no new lease is admitted on it") : null;
 }
 
 export function listItems(record: string): string[] {

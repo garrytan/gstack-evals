@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportLease, importSettlement, ledgerStatus, MAX_LEASE_TTL_MS, openLease, reconcileLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { exportLease, importSettlement, ledgerStatus, MAX_LEASE_TTL_MS, openLease, reconcileLease, recordApproval, recordStop, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem, slotPath, writeOnce } from "../../src/runner/ledger/record.ts";
 import type { CellAttempt, LedgerReply } from "../../src/types.ts";
@@ -477,6 +477,21 @@ describe("lease holders (GST-1381)", () => {
     const plain = openLease(record, local, { item: "plain", run_id: "run-a", amount_micros: 4 * DOLLAR });
     expect(settleLease(record, local, plain.lease_id)).not.toHaveProperty("cap_stop");
     expect(openLease(record, local, { item: "plain", run_id: "run-a", amount_micros: DOLLAR }).lease_id).toStartWith("plain.0002.");
+    local.close();
+  });
+
+  test("a stop record refuses every new lease on its item with CAP_STOP, even while its lease is open; a settle keeps it and copies it into the close, and nothing rewrites it", () => {
+    const { record, local } = holderWorld(["stopped"]);
+    const first = openLease(record, local, { item: "stopped", run_id: "run-a", amount_micros: 4 * DOLLAR });
+    const stop = recordStop(record, first.lease_id, "told only");
+    expect(stop).toMatchObject({ kind: "stop", item: "stopped", seq: 1, lease_id: first.lease_id, run_id: "run-a", scope: "told only" });
+    expect(recordStop(record, first.lease_id, "all: another scope")).toEqual(stop);
+    expect(readItem(record, "stopped").stops).toEqual([stop]);
+    expect(codeOf(() => openLease(record, local, { item: "stopped", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+    expect(settleLease(record, local, first.lease_id).cap_stop).toBe("told only");
+    expect(readItem(record, "stopped").stops).toEqual([stop]);
+    expect(codeOf(() => openLease(record, local, { item: "stopped", run_id: "run-a", amount_micros: DOLLAR }))).toBe("CAP_STOP");
+    expect(readItem(record, "stopped").leases).toHaveLength(1);
     local.close();
   });
 });

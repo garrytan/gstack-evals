@@ -11,7 +11,7 @@ import type { Lease } from "../../types.ts";
 import { admitLease, programSkills } from "./envelope.ts";
 import type { LocalLedger } from "./local.ts";
 import { isMicros, usd } from "./money.ts";
-import { capStopRefusal, checkQuotes, holderBound, isHolder, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type Holder, type ItemState, type LeaseFile, type Quote, type RecordFile } from "./record.ts";
+import { capStopRefusal, checkQuotes, holderBound, isHolder, isRecordFile, isSkillList, isTime, ITEM_NAME, LedgerError, listItems, readItem, writeOnce, type Admission, type ApprovalFile, type CloseFile, type Holder, type ItemState, type LeaseFile, type Quote, type RecordFile, type StopFile } from "./record.ts";
 
 export const DEFAULT_LEASE_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_LEASE_TTL_MS = 7 * DEFAULT_LEASE_TTL_MS;
@@ -202,6 +202,17 @@ function findLease(record: string, lease_id: string): { state: ItemState; lease:
   return { state, ...entry };
 }
 
+/**
+ * Records a cap stop on a lease's item in the record, written and fsynced in the lease's slot before the caller answers
+ * the session it refuses. The first stop on a lease stands: a later call returns it unchanged.
+ */
+export function recordStop(record: string, lease_id: string, scope: string, at: Date = new Date()): StopFile {
+  const { lease } = findLease(record, lease_id);
+  const stop: StopFile = { schema: 1, kind: "stop", item: lease.item, seq: lease.seq, lease_id, run_id: lease.run_id, scope, at: at.toISOString() };
+  const result = write(record, stop);
+  return typeof result === "object" ? (result.conflict as StopFile) : stop;
+}
+
 /** The lease export for a sealed workflow that cannot reach the record: the open lease's file, passed as a dispatch input. */
 export function exportLease(record: string, lease_id: string): LeaseFile {
   const { lease, close } = findLease(record, lease_id);
@@ -219,15 +230,18 @@ function warnOverspent(lease: LeaseFile, close: CloseFile, warn?: (code: ReasonC
  * Closes a lease from this machine's local ledger into the record. Idempotent by lease id: a retry writes the same
  * bytes. With record null, for a workflow that cannot reach the record, it only returns the close as the settle artifact.
  * A close above the lease's amount is recorded as it is, with a LEASE_OVERSPENT warning. cap_stop, the scope of a cap
- * stop the lease closed on, goes into the close, so no new lease on the item is admitted after it.
+ * stop the lease closed on, goes into the close, and so does the scope of a stop record on the lease, so no new lease on
+ * the item is admitted after it.
  */
 export function settleLease(record: string | null, local: LocalLedger, lease_id: string, warn?: (code: ReasonCode, message: string) => void, cap_stop?: string): CloseFile {
+  let scope = cap_stop;
   if (record !== null) {
-    const { close: prior } = findLease(record, lease_id);
+    const { state, close: prior } = findLease(record, lease_id);
     if (prior && !local.getLease(lease_id)) return prior;
+    scope ??= state.stops.find((s) => s.lease_id === lease_id)?.scope;
   }
   const staged = local.stageClose(lease_id);
-  const close: CloseFile = cap_stop ? { ...staged, cap_stop } : staged;
+  const close: CloseFile = scope ? { ...staged, cap_stop: scope } : staged;
   warnOverspent(local.getLease(lease_id)!.file, close, warn);
   if (record === null) return close;
   const result = write(record, close, "E_LEASE_UNSETTLED");

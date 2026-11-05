@@ -3,11 +3,11 @@
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
-import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
+import { openLease, recordApproval, recordStop, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { LedgerError, readItem } from "../../src/runner/ledger/record.ts";
 import { loadRegistry, type Registry } from "../../lanes/outcome-skills/arms/registry.ts";
@@ -395,6 +395,99 @@ describe("the outcome-skills session driver", () => {
     for (const stages of [[PE], [NONE, PE]]) expect(await codeOf(w.serve(stages))).toBe("CAP_STOP");
     for (const stages of [[PE], [NONE, PE]]) expect(await codeOf(w.serve(stages, { dir: join(w.root, "run2") }))).toBe("E_USAGE");
     for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).leases).toHaveLength(1);
+  });
+
+  test("a cap stop is in O6's record before the 409 answers, with the lease still open, and a direct lease on the item is refused", async () => {
+    const w = world({ "i-pe": 50 });
+    const served = await w.serve([PE]);
+    const open = (task: string) => post(served.control + "/sessions", body("plan-eng-review:told", task, 1));
+    const [a, b] = [await open("a"), await open("b")];
+    expect((await open("c")).status).toBe(409);
+    const state = readItem(w.record, "i-pe");
+    expect(state.open?.lease_id).toBe(served.stages[0]!.lease_id);
+    expect(state.stops).toMatchObject([{ lease_id: served.stages[0]!.lease_id, run_id: "r1", scope: "plan-eng-review:told only" }]);
+    expect(() => openLease(w.record, w.local, { item: "i-pe", run_id: "r1", machine_id: "m1", requireAdmission: () => null })).toThrow(/cap-stopped/);
+    for (const s of [a, b]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+    expect(await served.done).toBe(0);
+    expect(readItem(w.record, "i-pe").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+  });
+
+  test("a none cap stop writes a stop record on every stage's item", async () => {
+    const w = world({ "i-none": 20, "i-pe": 572 });
+    await capStopped(w, [NONE, PE], "none");
+    for (const item of ["i-none", "i-pe"]) expect(readItem(w.record, item).stops.map((s) => s.scope)).toEqual(["all: none's cap stop ends both skills incomplete"]);
+  });
+
+  test("a none cap stop on a lease still open on another machine refuses every stage of the run, from its stop record", async () => {
+    const w = world({ "i-none": 20, "i-pe": 572 });
+    mkdirSync(w.dir, { recursive: true });
+    const crashed = { dir: realpathSync(w.dir), nonce: "0123456789abcdef" };
+    writeFileSync(join(w.dir, "sessions.jsonl"), JSON.stringify({ run_id: "r1", event: "launch", nonce: crashed.nonce }) + "\n");
+    const left = openLease(w.record, w.local, { item: "i-none", run_id: "r1", machine_id: "m1", holder: crashed, requireAdmission: () => null });
+    recordStop(w.record, left.lease_id, "all: none's cap stop ends both skills incomplete");
+    expect(await codeOf(w.serve([PE], { machine: "m2", envelope_host: "m2" }))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(0);
+  });
+
+  test("a driver killed with kill -9 while a cap-stopped stage drains leaves the stop in O6's record, so a relaunch with sessions.jsonl restored to before the 409 is refused with CAP_STOP (fix-check#1)", async () => {
+    const w = world({ "i-pe": 50 });
+    const at = (path: string) => JSON.stringify(join(import.meta.dir, "../..", path));
+    const child = join(w.root, "child.ts");
+    writeFileSync(child, [
+      "import { serveStages } from " + at("lanes/outcome-skills/driver/stage.ts") + ";",
+      "import { LocalLedger } from " + at("src/runner/ledger/local.ts") + ";",
+      "const usage = " + JSON.stringify(usage) + ";",
+      'const fetch = async (_url: string, init: RequestInit) => Response.json({ id: "msg_1", type: "message", role: "assistant", model: JSON.parse(String(init.body)).model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage });',
+      "const served = await serveStages({ record: " + JSON.stringify(w.record) + ", local: LocalLedger.open(" + JSON.stringify(join(w.root, "ledger.sqlite")) + '), run_id: "r1", envelope_host: "m1", machine: "m1", stages: [' + JSON.stringify(PE) + '], host: "127.0.0.1", dir: ' + JSON.stringify(w.dir) + ', fetch, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key" }, log: () => {} });',
+      'console.log("CONTROL " + served.control);',
+      "await new Promise(() => {});",
+    ].join("\n"));
+    const proc = Bun.spawn(["bun", child], { stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.getReader();
+    let out = "";
+    while (!out.includes("\n")) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      out += new TextDecoder().decode(value);
+    }
+    const control = out.match(/CONTROL (\S+)/)?.[1];
+    expect(control).toBeDefined();
+    const open = (task: string) => post(control + "/sessions", body("plan-eng-review:told", task, 1));
+    const a = await open("a");
+    expect((await open("b")).status).toBe(200);
+    expect((await call(a.json)).status).toBe(200);
+    const file = join(w.dir, "sessions.jsonl");
+    const snapshot = readFileSync(file, "utf8");
+    expect((await open("c")).status).toBe(409);
+    proc.kill(9);
+    await proc.exited;
+    expect(readItem(w.record, "i-pe").open).not.toBeNull();
+    writeFileSync(file, snapshot);
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
+    expect(readItem(w.record, "i-pe").leases[0]!.close?.cap_stop).toBe("plan-eng-review:told only");
+  });
+
+  test("a cap-stopped stage whose settle fails still refuses, and ledger settle on its lease keeps the stop (fix-check#2, targeted#1)", async () => {
+    const w = world({ "i-pe": 50 });
+    const served = await w.serve([PE]);
+    const open = (task: string) => post(served.control + "/sessions", body("plan-eng-review:told", task, 1));
+    const [a, b] = [await open("a"), await open("b")];
+    expect((await open("c")).status).toBe(409);
+    const items = join(w.record, "items", "i-pe");
+    chmodSync(items, 0o555);
+    try {
+      for (const s of [a, b]) await post(served.control + "/sessions/" + s.json.id + "/close", {});
+      expect(await served.done).not.toBe(0);
+    } finally {
+      chmodSync(items, 0o755);
+    }
+    const lease = readItem(w.record, "i-pe").open;
+    expect(lease?.lease_id).toBe(served.stages[0]!.lease_id);
+    expect(() => openLease(w.record, w.local, { item: "i-pe", run_id: "r1", machine_id: "m1", requireAdmission: () => null })).toThrow(/cap-stopped/);
+    expect(settleLease(w.record, w.local, lease!.lease_id).cap_stop).toBe("plan-eng-review:told only");
+    expect(await codeOf(w.serve([PE]))).toBe("CAP_STOP");
+    expect(readItem(w.record, "i-pe").leases).toHaveLength(1);
   });
 
   test("a none cap stop is read from the ledger: with sessions.jsonl cut back to its launch and open lines, a relaunch of a told stage is refused before any lease", async () => {
