@@ -1,0 +1,53 @@
+power.py, seed 20261104, 1200 simulated runs a point, 800 sign flips a run; MDD at 80% power, two-sided
+columns: control p0, ICC rho, effect noise tau, changed units n, passes, MDD at alpha 0.05, MDD at alpha 0.025 (Holm step 1)
+p0 0.25  rho 0.3  tau 0.0  n 36  passes 2  MDD05 0.21  MDD025 0.23
+p0 0.25  rho 0.3  tau 0.5  n 36  passes 2  MDD05 0.21  MDD025 0.24
+p0 0.25  rho 0.5  tau 0.0  n 36  passes 2  MDD05 0.18  MDD025 0.20
+p0 0.25  rho 0.5  tau 0.5  n 36  passes 2  MDD05 0.18  MDD025 0.21
+p0 0.40  rho 0.3  tau 0.0  n 36  passes 2  MDD05 0.22  MDD025 0.24
+p0 0.40  rho 0.3  tau 0.5  n 36  passes 2  MDD05 0.22  MDD025 0.24
+p0 0.40  rho 0.5  tau 0.0  n 36  passes 2  MDD05 0.19  MDD025 0.21
+p0 0.40  rho 0.5  tau 0.5  n 36  passes 2  MDD05 0.19  MDD025 0.21
+p0 0.55  rho 0.3  tau 0.0  n 36  passes 2  MDD05 0.21  MDD025 0.23
+p0 0.55  rho 0.3  tau 0.5  n 36  passes 2  MDD05 0.22  MDD025 0.23
+p0 0.55  rho 0.5  tau 0.0  n 36  passes 2  MDD05 0.19  MDD025 0.20
+p0 0.55  rho 0.5  tau 0.5  n 36  passes 2  MDD05 0.19  MDD025 0.21
+p0 0.25  rho 0.3  tau 0.0  n 48  passes 2  MDD05 0.17  MDD025 0.19
+p0 0.25  rho 0.3  tau 0.5  n 48  passes 2  MDD05 0.18  MDD025 0.20
+p0 0.25  rho 0.5  tau 0.0  n 48  passes 2  MDD05 0.15  MDD025 0.16
+p0 0.25  rho 0.5  tau 0.5  n 48  passes 2  MDD05 0.16  MDD025 0.17
+p0 0.40  rho 0.3  tau 0.0  n 48  passes 2  MDD05 0.19  MDD025 0.20
+p0 0.40  rho 0.3  tau 0.5  n 48  passes 2  MDD05 0.19  MDD025 0.21
+p0 0.40  rho 0.5  tau 0.0  n 48  passes 2  MDD05 0.16  MDD025 0.18
+p0 0.40  rho 0.5  tau 0.5  n 48  passes 2  MDD05 0.16  MDD025 0.18
+p0 0.55  rho 0.3  tau 0.0  n 48  passes 2  MDD05 0.18  MDD025 0.20
+p0 0.55  rho 0.3  tau 0.5  n 48  passes 2  MDD05 0.18  MDD025 0.20
+p0 0.55  rho 0.5  tau 0.0  n 48  passes 2  MDD05 0.16  MDD025 0.18
+p0 0.55  rho 0.5  tau 0.5  n 48  passes 2  MDD05 0.16  MDD025 0.18
+p0 0.25  rho 0.3  tau 0.0  n 54  passes 2  MDD05 0.16  MDD025 0.18
+p0 0.25  rho 0.3  tau 0.5  n 54  passes 2  MDD05 0.17  MDD025 0.18
+p0 0.25  rho 0.5  tau 0.0  n 54  passes 2  MDD05 0.14  MDD025 0.16
+p0 0.25  rho 0.5  tau 0.5  n 54  passes 2  MDD05 0.15  MDD025 0.16
+p0 0.40  rho 0.3  tau 0.0  n 54  passes 2  MDD05 0.18  MDD025 0.19
+p0 0.40  rho 0.3  tau 0.5  n 54  passes 2  MDD05 0.18  MDD025 0.20
+p0 0.40  rho 0.5  tau 0.0  n 54  passes 2  MDD05 0.15  MDD025 0.17
+p0 0.40  rho 0.5  tau 0.5  n 54  passes 2  MDD05 0.15  MDD025 0.17
+p0 0.55  rho 0.3  tau 0.0  n 54  passes 2  MDD05 0.17  MDD025 0.19
+p0 0.55  rho 0.3  tau 0.5  n 54  passes 2  MDD05 0.18  MDD025 0.19
+p0 0.55  rho 0.5  tau 0.0  n 54  passes 2  MDD05 0.15  MDD025 0.16
+p0 0.55  rho 0.5  tau 0.5  n 54  passes 2  MDD05 0.15  MDD025 0.17
+p0 0.25  rho 0.3  tau 0.0  n 64  passes 2  MDD05 0.15  MDD025 0.16
+p0 0.25  rho 0.3  tau 0.5  n 64  passes 2  MDD05 0.15  MDD025 0.17
+p0 0.25  rho 0.5  tau 0.0  n 64  passes 2  MDD05 0.13  MDD025 0.14
+p0 0.25  rho 0.5  tau 0.5  n 64  passes 2  MDD05 0.13  MDD025 0.14
+p0 0.40  rho 0.3  tau 0.0  n 64  passes 2  MDD05 0.16  MDD025 0.18
+p0 0.40  rho 0.3  tau 0.5  n 64  passes 2  MDD05 0.16  MDD025 0.18
+p0 0.40  rho 0.5  tau 0.0  n 64  passes 2  MDD05 0.14  MDD025 0.15
+p0 0.40  rho 0.5  tau 0.5  n 64  passes 2  MDD05 0.14  MDD025 0.15
+p0 0.55  rho 0.3  tau 0.0  n 64  passes 2  MDD05 0.16  MDD025 0.17
+p0 0.55  rho 0.3  tau 0.5  n 64  passes 2  MDD05 0.16  MDD025 0.18
+p0 0.55  rho 0.5  tau 0.0  n 64  passes 2  MDD05 0.13  MDD025 0.15
+p0 0.55  rho 0.5  tau 0.5  n 64  passes 2  MDD05 0.14  MDD025 0.15
+bar check: n 48, design effect 2.0, effective n 24
+top edge 28 of 48 = 0.583: effective 14 of 24, Clopper-Pearson upper 95% bound 0.779, room to 1.0 0.221
+bottom edge 8 of 48 = 0.167: effective 4 of 24, Clopper-Pearson lower 95% bound 0.047
