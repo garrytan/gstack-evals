@@ -149,6 +149,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_ENVELOPE_LATE](#e_envelope_late) | 2 | U4 |
 | [E_MUTATION_DOCKER](#e_mutation_docker) | 2 | U20 |
 | [E_MUTATION_INPUT](#e_mutation_input) | 2 | U20 |
+| [E_PIN_MISMATCH](#e_pin_mismatch) | 2 | U20 |
+| [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | 2 | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -1042,6 +1044,22 @@ The mutation scorer was given a project image that is not on this host.
 Fix: Build or load the task's project image first, then score the tree again.
 
 Exit 2. Side effects: None: refused before any container ran. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_PIN_MISMATCH
+
+R3c (quick/laneb/r3) read a pinned record whose sha256 is not the one its preregistration freezes: an in-hand trial record, the task-fit table, an L1 task list, a task's verifier parser or the told arm's tar. Nothing that depends on it ran.
+
+Fix: Copy the record again from the path the message names (the Captain-drive path beside INHAND in r3/r3c-rules.ts, or the post folder) and rerun the same command. Never edit a pin to match a changed file.
+
+Exit 2. Side effects: None: refused before anything was prepared, bound or launched. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TRANSCRIPT_UNREADABLE
+
+R3c's localization reader (quick/laneb/r3/r3c.ts) found a graded trial whose sdk-messages.jsonl has no readable main-thread assistant text: no assistant text block, or assistant records written without the parent_tool_use_id field, so main-thread text can't be told from a subagent's. The trial's localization is a recorded error, never a miss, and the localization lines print no rates while any graded trial has one.
+
+Fix: Read the trial's evaluator/sdk-messages.jsonl. A log from a build before parent_tool_use_id was logged can't be scored; nothing else changes. The primary outcome is unaffected, since localization decides nothing.
+
+Exit 2. Side effects: None: analyze still prints the primary and every other line; only the localization rates are withheld. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 
