@@ -238,7 +238,9 @@ elif SCENARIO == "g_turns":
     # Agent call's id as parent_tool_use_id, then reports. A /plan-eng-review turn also leaves the marks that skill's
     # exposure detector reads: from the main session, or with STUB_G_FROM=subagent from inside the subagent. With
     # STUB_G_KEYLESS set, the subagent's text frame carries no parent_tool_use_id key at all. An /autoplan
-    # turn replays the main session's t2 messages of the frozen exposed fixture (tests/outcome-skills/fixtures).
+    # turn replays the main session's t2 messages of the frozen exposed fixture (tests/outcome-skills/fixtures). With
+    # STUB_G_ASK set, every turn also asks an AskUserQuestion with an implement option marked (Recommended) and ends on
+    # a closing ask to implement; the persona's reply to that ask gets a one-line answer.
     AUTOPLAN = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../outcome-skills/fixtures/autoplan-exposed.jsonl")
 
     def autoplan_replay():
@@ -256,6 +258,11 @@ elif SCENARIO == "g_turns":
         tool("Write", {"file_path": "/root/.gstack/projects/repo/main-eng-review-test-plan-20261105.md", "content": "# Test plan\n- mul(2, 3) is 6\n"}, "File created successfully", parent)
 
     def g_turn(t):
+        asks = bool(os.environ.get("STUB_G_ASK"))
+        if asks and t.startswith(("Not yet.", "Go with your recommendation.")):
+            text("Understood.")
+            result()
+            return
         review = t.startswith("/plan-eng-review")
         inside = os.environ.get("STUB_G_FROM") == "subagent"
         aid = uid()
@@ -268,7 +275,9 @@ elif SCENARIO == "g_turns":
             plan_eng_review_marks(None)
         if t.startswith("/autoplan"):
             autoplan_replay()
-        text("Done with this turn.")
+        if asks:
+            ask([{"question": "How would you like to proceed?", "header": "Next", "multiSelect": False, "options": [{"label": "Implement now (Recommended)", "description": "write the code"}, {"label": "Revise the plan", "description": "more planning"}]}])
+        text("Done with this turn.\n\nWant me to start implementing?" if asks else "Done with this turn.")
         result()
 
     if os.environ.get("STUB_CALLS"):

@@ -42,7 +42,7 @@ describe.skipIf(!HAS_SDK)("the two-turn agent on the real pinned Agent SDK, with
     const out = r.stdout + r.stderr;
     if (r.status !== 0) console.log(out);
     expect(out).not.toContain("FAIL");
-    expect(out.match(/^PASS /gm)?.length).toBe(21);
+    expect(out.match(/^PASS /gm)?.length).toBe(23);
     expect(r.status).toBe(0);
     const records = (name: string) => readTranscript(join(keep, name + ".jsonl")).records;
     const read = (name: string) => planEngReviewExposure(records(name));

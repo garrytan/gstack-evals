@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admitG, authPaidFromLedger, unknownFromRun, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
+import { admitG, authPaidFromLedger, t1WritesOutsidePlan, unknownFromRun, type AdmissionInput, type SliceTrial } from "../../src/runner/stats/g-admission.ts";
 import { m1Decide, meteredPricer, renderResizeMetered } from "../../src/runner/stats/g-resize.ts";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -174,6 +174,69 @@ describe("G admission, plan v3 section 6 and the prereg's section 6", () => {
     expect(() => admitG(input(slice(), { unknown_calls: undefined as never }))).toThrow(/unknown cost/);
     expect(() => admitG(input(slice(), { unknown_calls: { ...unknown, autoplan: { calls: -1, micros: 0 } } }))).toThrow(/unknown cost/);
     expect(() => admitG(input(slice(), { unknown_calls: { ...unknown, none: { calls: 1, micros: 0.5 } } }))).toThrow(/unknown cost/);
+  });
+
+  test("told trials that wrote outside PLAN.md in t1 print beside exposure, report only: no item, route or design moves", () => {
+    const read = edit(slice(), (t) => t.arm !== NONE, { t1_outside_plan: false });
+    const wrote = edit(read, (t, i) => t.arm === PER && i < 3, { t1_outside_plan: true });
+    const unread = edit(wrote, (t, i) => t.arm === AP && i < 2, { t1_outside_plan: null });
+    const base = admitG(input(slice()));
+    const a = admitG(input(unread));
+    expect(a.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 3, read: 24 });
+    expect(a.skills.autoplan.t1_outside_plan).toEqual({ wrote: 0, read: 22 });
+    expect(base.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 0, read: 0 });
+    expect(a.skills["plan-eng-review"].items[1]!.reading).toMatch(/^8 of 8 sampled told trials exposed .*; report only: 3 of 24 told trials wrote outside PLAN\.md in t1$/);
+    expect(a.skills.autoplan.items[1]!.reading).toMatch(/; report only: 0 of 22 told trials wrote outside PLAN\.md in t1 \(2 not read\)$/);
+    for (const s of ["plan-eng-review", "autoplan"] as const) {
+      expect(a.skills[s].items.map((x) => x.pass)).toEqual(base.skills[s].items.map((x) => x.pass));
+      expect([a.skills[s].failed, a.skills[s].route, a.skills[s].design]).toEqual([base.skills[s].failed, base.skills[s].route, base.skills[s].design]);
+    }
+    const stopped = admitG(input(edit(noneSolved(4), (t, i) => t.arm === PER && i < 3, { t1_outside_plan: true })));
+    expect(stopped.skills["plan-eng-review"].t1_outside_plan).toEqual({ wrote: 3, read: 3 });
+    expect(stopped.skills["plan-eng-review"].items[1]!.pass).toBeNull();
+  });
+});
+
+describe("t1 writes outside PLAN.md, from the phase-tagged records (report only, G ruling A on red-team #1)", () => {
+  const use = (phase: string, id: string, name: string, input: Record<string, unknown>, parent: string | null = null) => ({ type: "AssistantMessage", phase, parent_tool_use_id: parent, content: [{ type: "tool_use", id, name, input }] });
+  const result = (phase: string, id: string, content: string, is_error = false, parent: string | null = null) => ({ type: "UserMessage", phase, parent_tool_use_id: parent, content: [{ type: "tool_result", tool_use_id: id, content, is_error }] });
+  const bash = (id: string, command: string, phase = "t1") => use(phase, id, "Bash", { command });
+
+  test("an edit tool's write outside PLAN.md in t1 counts, a subagent's included; PLAN.md, later turns, failed edits and reads don't", () => {
+    expect(t1WritesOutsidePlan([
+      use("t1", "a", "Write", { file_path: "/testbed/PLAN.md", content: "# Plan" }), result("t1", "a", "ok"),
+      use("t1", "b", "Edit", { file_path: "/testbed/docs/PLAN.md", old_string: "a", new_string: "b" }), result("t1", "b", "ok"),
+      use("t1", "c", "Read", { file_path: "/testbed/src/app.ts" }), result("t1", "c", "..."),
+      use("t1", "d", "Edit", { file_path: "/testbed/src/app.ts", old_string: "x", new_string: "y" }), result("t1", "d", "String not found", true),
+      use("t1", "e", "Write", { file_path: "/testbed/src/new.ts", content: "x" }), result("t1", "e", "<tool_use_error>denied</tool_use_error>"),
+      use("t2", "f", "Write", { file_path: "/testbed/src/later.ts", content: "x" }), result("t2", "f", "ok"),
+      use("t3", "g", "Edit", { file_path: "/testbed/src/app.ts", old_string: "x", new_string: "y" }), result("t3", "g", "ok"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      use("t1", "a", "Write", { file_path: "/testbed/src/app.ts", content: "x" }), result("t1", "a", "ok"),
+      use("t1", "b", "MultiEdit", { file_path: "/testbed/src/b.ts", edits: [] }), result("t1", "b", "ok", false, "agent1"),
+      use("t1", "c", "NotebookEdit", { notebook_path: "/testbed/n.ipynb", new_source: "x" }),
+      use("t1", "d", "Edit", { file_path: "/testbed/PLAN.md.bak", old_string: "a", new_string: "b" }, "agent1"), result("t1", "d", "ok", false, "agent1"),
+    ])).toEqual(["Write /testbed/src/app.ts", "MultiEdit /testbed/src/b.ts", "NotebookEdit /testbed/n.ipynb", "Edit /testbed/PLAN.md.bak"]);
+  });
+
+  test("a Bash call counts when it redirects into a file, tees or edits in place, even when it exits non-zero; PLAN.md, /dev/null, heredoc bodies and quoted text don't", () => {
+    expect(t1WritesOutsidePlan([
+      bash("a", "cat > PLAN.md <<'EOF'\n# Plan\nif a > b: use x\nEOF"),
+      bash("b", "pytest -q 2>&1 | tail -5; ls > /dev/null"),
+      bash("c", "python3 -c \"print(1 if 3 > 2 else 0)\""),
+      bash("d", "grep -rn 'a > b' src/"),
+      bash("e", "cat > src/app.py <<EOF\nprint(1)\nEOF", "t3"),
+    ])).toEqual([]);
+    expect(t1WritesOutsidePlan([
+      bash("a", "mkdir -p src && cat > src/app.py <<'EOF'\nprint(1)\nEOF"), result("t1", "a", "exit 1", true),
+      bash("b", "echo x >> \"notes/todo.txt\""),
+      bash("c", "printf '%s' x | tee -a src/log.ts"),
+      bash("d", "sed -i 's/a/b/' src/app.ts"),
+      bash("e", "git apply fix.patch"),
+      bash("f", "echo x > /tmp/scratch.txt"),
+      bash("g", "echo x > PLAN.md"),
+    ])).toEqual(["Bash > src/app.py", "Bash > notes/todo.txt", "Bash tee src/log.ts", "Bash edit: sed -i 's/a/b/' src/app.ts", "Bash edit: git apply fix.patch", "Bash > /tmp/scratch.txt"]);
   });
 });
 
