@@ -314,6 +314,16 @@ describe("contract block, turn cap and the read audit", () => {
       "find ~ -name SKILL.md -print0 | xargs -0 cat", "find ~ -name '*.md' | xargs -n 1 -I {} cat {}", "find $HOME -name '*.md' | xargs command -p head"].map((c) => hits(c))).toEqual([1, 1, 1, 1, 1, 1, 1]);
     expect(["find /testbed -name '*.py' -exec cat {} +", "find ~ -maxdepth 1 -name '*.txt' -exec echo found {} \\;", "find ~ -name '*.txt' | xargs echo", "find ~ -name '*.txt' | xargs", "find ~ -name '*.txt' -exec printf '%s\\n' {} +"].map((c) => hits(c, "found"))).toEqual([0, 0, 0, 0, 0]);
   });
+  // Value: protects=the none arm's read audit; fails_when=a grouped xargs option word ending in a valued letter (-rn 1, -0rI {})
+  // leaves that letter's value as the command, so an xargs that runs echo over an ancestor of an audit root reads, or one that runs
+  // a reader hides behind a value word; why_new=xargsCommand skipped only a lone valued option; seam=probes.ts xargsCommand;
+  // no_claim=none
+  test("xargs reads its short option words letter by letter, so a valued letter's value is never taken for the command", () => {
+    const none = { gstackRoots: [], investigatePrefix: null, home: "/root" };
+    const hits = (cmd: string, out = "---") => run([bash(cmd, out)], none).audit_hits.length;
+    expect(["find ~ -maxdepth 1 -name '*.txt' | xargs -rn 1 echo", "find ~ -name '*.txt' | xargs -ri echo {}"].map((c) => hits(c, "found"))).toEqual([0, 0]);
+    expect(["find ~ -name SKILL.md | xargs -rn 1 cat", "find ~ -name SKILL.md -print0 | xargs -0rI {} cat {}", "find ~ -name SKILL.md | xargs -rI echo cat echo"].map((c) => hits(c))).toEqual([1, 1, 1]);
+  });
   // Value: protects=the none arm's read audit; fails_when=command -p -v, -pv or -p -V of a gstack path reads as a read, or command -p
   // in front of a reader reads as a mention; why_new=command -p -v dropped command and its -p and read the path; seam=probes.ts
   // unwrap; no_claim=none

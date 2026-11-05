@@ -471,10 +471,21 @@ function unwrap(words: string[]): string[] {
 }
 /** Whether the command a find -exec or an xargs runs reads what it is handed: anything but a command that never reads. */
 const reader = (words: string[]) => { const w = unwrap(words); return w.length > 0 && !NO_READ.has(base(w[0]!)); };
-/** The command an xargs runs: its words after xargs' options (GNU's valued options take the next word). No command is echo. */
+/** The command an xargs runs: its words after xargs' options. A short option word is read letter by letter, as GNU getopt does:
+ * a valued letter (a d E I L n P s) takes the rest of the word as its value, or the next word when nothing follows it; e, i and l
+ * take only a glued rest; any other letter is a flag. A valued long option takes the next word unless it holds "=". No command is
+ * echo. */
 function xargsCommand(all: string[]): string[] {
   let k = 1;
-  while (k < all.length && all[k]!.startsWith("-") && all[k] !== "--") k += /^-[adEILnPs]$|^--(arg-file|delimiter|max-args|max-procs|max-chars|process-slot-var)$/.test(all[k]!) ? 2 : 1;
+  while (k < all.length && all[k]!.startsWith("-") && all[k] !== "--") {
+    const w = all[k++]!;
+    if (w.startsWith("--")) {
+      if (/^--(arg-file|delimiter|max-args|max-procs|max-chars|process-slot-var)$/.test(w)) k++;
+      continue;
+    }
+    const at = [...w.slice(1)].findIndex((c) => "adEILnPseil".includes(c));
+    if (at >= 0 && "adEILnPs".includes(w[at + 1]!) && at + 2 === w.length) k++;
+  }
   return all.slice(all[k] === "--" ? k + 1 : k);
 }
 /** A find's start paths (its operands before the first expression word, or "." with none) and the commands its -exec,
