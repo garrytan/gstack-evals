@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { armSpec, CLOSING_LINES, jobConfig } from "../runner/grid.ts";
@@ -347,4 +347,30 @@ describe("the trial order in Harbor with repeated trials", () => {
       expect(r.err).toContain("does not name each of the job's 6 trials once");
     }
   });
+});
+
+describe("R3c's arms under the real pinned Agent SDK", () => {
+  // agent_r3_sdk_test.py drives each arm's job kwargs through LanebAgent.run under the real pinned Agent SDK, with only Harbor
+  // and docker stubbed: the prompt the CLI receives ends with the closing line, after the told arm's procedure line.
+  test("both R3c arms send their prompt with the closing line, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 and the preset", () => {
+    const here = import.meta.dir;
+    const pin = readFileSync(join(laneb, "runner/vm-bootstrap.sh"), "utf8").match(/^SDK_PIN=(\S+)$/m)![1];
+    const venv = join(tmpdir(), "laneb-claude-agent-sdk-" + pin);
+    const python = join(venv, "bin/python");
+    if (!existsSync(python) || Bun.spawnSync([python, "-c", 'import claude_agent_sdk as s; assert s.__version__ == "' + pin + '"']).exitCode !== 0) {
+      const install = Bun.spawnSync(["sh", "-c", 'python3 -m venv --clear "$1" && "$1/bin/pip" install -q "claude-agent-sdk==$2"', "sh", venv, pin]);
+      if (install.exitCode !== 0) console.log(install.stdout.toString() + install.stderr.toString());
+      expect(install.exitCode).toBe(0);
+    }
+    const job = jobConfig({ job_name: "r3c", tasks_dir: "/t", tasks: ["a"], models: [{ id: OPUS, max_budget_usd: 12 }], arms: [R3C_NONE, R3C_TOLD].map((a) => ({ ...armSpec(a), tar: "/x/" + armSpec(a).name + ".tar", sha256: "0".repeat(64) })), attempts: 1, n_concurrent: 1, agent_dir: "/a", runner_dir: "/r", base_url: "http://x:8787", repo_dir: "/testbed" } as any);
+    expect(job.agents.map((a: any) => a.kwargs.closing_line)).toEqual([CLOSING, CLOSING]);
+    const agents = join(tmp("r3c-agents-"), "agents.json");
+    writeFileSync(agents, JSON.stringify(job.agents.map((a: any) => a.kwargs)));
+    const r = Bun.spawnSync([python, join(here, "agent_r3_sdk_test.py")], { env: { ...process.env, PYTHONPATH: [join(laneb, "runner/agent"), here].join(":"), R3_AGENTS: agents } });
+    const out = r.stdout.toString() + r.stderr.toString();
+    if (r.exitCode !== 0) console.log(out);
+    expect(out).not.toContain("FAIL");
+    expect(out.match(/^pass arm /gm)).toHaveLength(2);
+    expect(r.exitCode).toBe(0);
+  }, 600_000);
 });

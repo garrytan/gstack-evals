@@ -14,13 +14,13 @@ import traceback
 from pathlib import Path
 
 import agent_sdk_test as base
-from prompt_builder import PROCEDURE_LINES
+from prompt_builder import CLOSING_LINES, PROCEDURE_LINES
 
 RECORD = '    elif m.get("type") == "user":\n'
 assert RECORD in base.FAKE_DOCKER
 base.FAKE_DOCKER = base.FAKE_DOCKER.replace(RECORD, RECORD + '        open(os.environ["FAKE_DOCKER_LOG"] + ".prompt", "a").write(json.dumps(m["message"]["content"]) + "\\n")\n')
 
-OPTIONS = ("arm", "upstream_model", "session_cap_usd", "repo_dir", "system_prompt", "session_kind", "told_skill", "procedure_line")
+OPTIONS = ("arm", "upstream_model", "session_cap_usd", "repo_dir", "system_prompt", "session_kind", "told_skill", "procedure_line", "closing_line")
 
 
 def check(tmp: Path, kwargs: dict):
@@ -28,7 +28,11 @@ def check(tmp: Path, kwargs: dict):
     prompts = [json.loads(line) for line in (tmp / "docker.jsonl.prompt").read_text().splitlines()]
     told = kwargs.get("told_skill", "")
     line = kwargs.get("procedure_line", "")
-    assert prompts == [("/" + told + " " if told else "") + "Task: do it" + ("\n\n" + PROCEDURE_LINES[line] + "\n" if line else "")], (kwargs["arm"], prompts)
+    closing = kwargs.get("closing_line", "")
+    want = ("/" + told + " " if told else "") + "Task: do it" + ("\n\n" + PROCEDURE_LINES[line] + "\n" if line else "")
+    if closing:
+        want += ("\n" if want.endswith("\n") else "\n\n") + CLOSING_LINES[closing] + "\n"
+    assert prompts == [want], (kwargs["arm"], prompts)
     assert (told == "investigate") == (kwargs["arm"] in ("gstack", "placebo")), kwargs
     assert call["env"]["CLAUDE_CODE_DISABLE_BUNDLED_SKILLS"] == "1", call["env"]
     assert "--system-prompt" not in call["argv"] and "--append-system-prompt" not in call["argv"], call["argv"]
