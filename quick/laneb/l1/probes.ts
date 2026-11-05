@@ -357,13 +357,14 @@ const DRIVE = /\/\.capy\/drive\//;
 const NO_READ = new Set(["echo", "printf", "cd", "pushd", "popd", "pwd", "mkdir", "touch", "test", "[", "[[", "export", "unset", "type", "which", "command", "hash", "true", "false", ":", "dirname", "basename", "realpath", "readlink", "sleep", "exit"]);
 const PATH_SPLIT = /[\s'"=;|&<>()`]+/;
 const GREP = new Set(["grep", "egrep", "fgrep", "rg", "ag", "ack"]);
+const SED = new Set(["sed", "gsed"]);
 const HERE_SKIP = new Set(["grep", "egrep", "fgrep", "rg"]);
 const SUBSTITUTES = /\$\(|\x60|<\(/;
 const SED_PLAIN = /^\s*s([^\\\n])(?:\\.|(?!\1)[^\\\n])*\1(?:\\.|(?!\1)[^\\\n])*\1[gpiImM0-9]*(?:\s*[;\n]\s*s([^\\\n])(?:\\.|(?!\2)[^\\\n])*\2(?:\\.|(?!\2)[^\\\n])*\2[gpiImM0-9]*)*\s*;?\s*$/;
 /** Whether a grep pattern or sed script names nothing the command reads: a literal with no substitution and, for sed, nothing
  * but s commands whose flags are among g, p, i, I, m, M and digits. */
 function inert(cmd: string, op: string): boolean {
-  return !SUBSTITUTES.test(op) && (cmd !== "sed" || SED_PLAIN.test(op));
+  return !SUBSTITUTES.test(op) && (!SED.has(cmd) || SED_PLAIN.test(op));
 }
 // The options of grep (egrep, fgrep), rg, ag and ack that the positional drop knows: short flags that take no value, short
 // options whose value follows (glued, or as the next word), long flags with no value, and long options that take one, given
@@ -413,7 +414,7 @@ function withoutPattern(words: string[]): string[] {
     const k = words.some((w) => /^(-[A-Za-z]*[ef]|--regexp|--file)/.test(w)) ? -1 : grepPattern(cmd, words);
     return k < 0 ? words : words.filter((w, i) => i !== k || !inert(cmd, w));
   }
-  const valued = cmd === "sed" ? /^-l$/ : null;
+  const valued = SED.has(cmd) ? /^-l$/ : null;
   if (!valued) return words;
   const kept: string[] = [];
   let given = false;
@@ -437,20 +438,23 @@ function withoutPattern(words: string[]): string[] {
   return kept.filter((w, i) => i !== k || !inert(cmd, w));
 }
 /** The paths a Bash line may read: the words of every simple command that can read, its input redirects and heredoc bodies,
- * with a relative word resolved against the directory the line has cd'd to (the work tree at first). In a sed command every
- * "/" also starts a path, so a filename glued to a command letter (1r/root/x) is found. */
+ * with a relative word resolved against the directory the line has cd'd to (the work tree at first). busybox in front of a
+ * command is dropped, and gsed is read as sed. In a sed command a "/" right after r, R, w or W also starts a path, so a
+ * filename glued to sed's file commands (1r/root/x, s/a/b/w/root/x) is found, while a sed address or a file operand that
+ * only holds such a path in its middle is not a read of it. */
 function bashReadPaths(command: string, cwd: string | null): string[] {
   const out: string[] = [];
   for (const s of simpleCommands(command, cwd)) {
-    const words = withoutPattern(s.words);
+    const all = s.words.length > 1 && base(s.words[0]!) === "busybox" ? s.words.slice(1) : s.words;
+    const words = withoutPattern(all);
     const mention = words.length > 0 && NO_READ.has(base(words[0]!)) && !words.some((w) => w.includes("$(") || w.includes("\x60"));
-    const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(s.words[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
-    const sed = base(s.words[0] ?? "") === "sed";
+    const texts = [...(mention ? [] : [...words, ...s.heredocs]), ...s.redirects.filter((r) => r.op.includes("<") && !(r.op === "<<<" && HERE_SKIP.has(base(all[0] ?? "")) && !SUBSTITUTES.test(r.target))).map((r) => r.target)];
+    const sed = SED.has(base(all[0] ?? ""));
     for (const t of texts)
       for (const w of t.split(PATH_SPLIT)) {
         if (w.startsWith("/")) out.push(w);
-        else if (s.cwd && w && !w.startsWith("-") && w !== s.words[0]) out.push(posix.resolve(s.cwd, w));
-        if (sed) for (let i = w.indexOf("/", 1); i > 0; i = w.indexOf("/", i + 1)) out.push(w.slice(i));
+        else if (s.cwd && w && !w.startsWith("-") && w !== all[0]) out.push(posix.resolve(s.cwd, w));
+        if (sed) for (let i = w.indexOf("/", 1); i > 0; i = w.indexOf("/", i + 1)) if ("rRwW".includes(w[i - 1]!)) out.push(w.slice(i));
       }
   }
   return out;
@@ -575,7 +579,7 @@ export function runProbes(recs: Rec[], o: ProbeOptions): Probes {
   const roots = auditRoots(o.home);
   const below = (p: string) => DRIVE.test(p) || roots.some((r) => p.startsWith(r + "/") && p.length > r.length + 1);
   const above = (p: string) => roots.some((r) => r === p.replace(/\/+$/, "") || r.startsWith(p.replace(/\/+$/, "") + "/"));
-  const expand = (s: string) => s.replace(/(^|[\s='"])(~|\$HOME|\$\{HOME\})(?=\/|$|[\s;&|)'"])/g, "$1" + o.home);
+  const expand = (s: string) => s.replace(/(^|[\s='"])~(?=\/|$|[\s;&|)'"])/g, "$1" + o.home).replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, o.home);
   for (const c of calls) {
     const res = results.get(c.id);
     if (!res || res.error) continue;

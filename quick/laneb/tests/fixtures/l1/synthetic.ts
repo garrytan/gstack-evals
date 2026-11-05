@@ -13,7 +13,7 @@ export function row(model: string, instrument: L1Instrument, arm: L1Arm, task: s
     outcome: "graded", pass: false, reward: 0, allowance_stop: false, turn_cap: false, reason: "graded", cost_usd: 0.5, tokens: 1000,
     load_investigate: false, gstack_loads: [], repo_loads: [], skill_unresolved: 0, complete: false,
     probe_i: { report: false, fix_edited: false, status: false, check_after_edit: false, edits: 1 },
-    background_at_result: false, contract_block: false, route_hook: true, contract_record: true, contract_check_met: null, audit_hits: [], probes_sha256: PROBES_SHA256, ...extra,
+    background_at_result: false, contract_block: false, route_hook: true, route_hook_transcript: true, contract_record: true, contract_check_met: null, audit_hits: [], probes_sha256: PROBES_SHA256, ...extra,
   };
 }
 

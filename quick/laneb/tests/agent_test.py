@@ -617,6 +617,18 @@ def test_the_contract_records_last_investigate_run_decides_met(tmp):
     assert l1(tmp)[0] == [False, None, None]
 
 
+def test_an_investigate_run_with_no_iso_updated_at_leaves_met_null(tmp):
+    # A run with no updated_at sorted as "None", after every ISO date, so it decided the outcome; a number sorted before.
+    rec_path = next((HOOK_FIX / "after-told" / "gstack" / "skill-contracts").glob("*.json"))
+    rec = json.loads(rec_path.read_text())
+    base = rec["runs"]["investigate@3"]
+    for odd in ({k: v for k, v in base.items() if k != "updated_at"}, {**base, "updated_at": 1762268260000}, {**base, "updated_at": None}):
+        runs = {"investigate@1": {**base, "outcome": "met", "updated_at": "2026-11-04T14:57:40.000Z"}, "investigate@2": {**odd, "outcome": "miss"}}
+        state = _hook_tar({"skill-contracts/" + rec_path.name: json.dumps({**rec, "runs": runs}).encode()})
+        run(evidence_agent(tmp, Fake(tmp), "after-told", gstack=state))
+        assert l1(tmp)[0] == [False, True, None], odd.get("updated_at")
+
+
 def test_a_missing_or_ambiguous_transcript_is_null_not_false(tmp):
     run(evidence_agent(tmp, Fake(tmp), "after-told", transcripts=b""))
     assert l1(tmp)[0] == [None, None, None]
@@ -679,6 +691,30 @@ def test_both_copy_scripts_run_under_the_real_sh_and_tar_on_a_leading_dash_proje
     assert got == [False, True, False]
     assert next((tmp / "trial" / "evaluator" / "claude-projects" / "-app").glob("*.jsonl")).stem == _transcript("after-told").stem
     assert (tmp / "trial" / "evaluator" / "gstack-hooks" / "hooks" / "skill-contract.log").exists()
+
+
+def test_a_copy_whose_tar_passes_the_cap_is_refused_inside_the_container(tmp):
+    # Both copy scripts measure their tar before they send it, so a tree past the cap is a failed copy (fields null), never a
+    # tar the agent buffers whole. The cap is lowered to 1 KiB here; the real scripts run under sh and tar.
+    roots = {"/root/.claude/projects": HOOK_FIX / "after-told" / "claude-projects", "/root/.gstack": HOOK_FIX / "after-told" / "gstack"}
+    fake = Fake(tmp)
+    a = hooks_agent(tmp, fake)
+    plain = a._exec
+
+    def exec_(container, script, stdin=None, timeout=300):
+        if script not in (lh.GSTACK_HOOK_STATE, lh.CLAUDE_TRANSCRIPTS):
+            return plain(container, script, stdin, timeout)
+        for path, real in roots.items():
+            script = script.replace(path, str(real))
+        return subprocess.run(["sh", "-c", script.replace(str(lh.TREE_CAP_BYTES), "1024")], capture_output=True, timeout=timeout)
+
+    a._exec = exec_
+    run(a)
+    got, summary = l1(tmp)
+    assert got == [None, None, None]
+    assert "over the 1024-byte cap" in summary["teardown_errors"]["transcripts"], summary["teardown_errors"]
+    assert "over the 1024-byte cap" in summary["teardown_errors"]["gstack_hooks"], summary["teardown_errors"]
+    assert str(lh.TREE_CAP_BYTES) in lh.CLAUDE_TRANSCRIPTS and str(lh.TREE_CAP_BYTES) in lh.GSTACK_HOOK_STATE
 
 
 if __name__ == "__main__":
