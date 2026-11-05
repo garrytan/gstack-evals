@@ -129,11 +129,12 @@ Rejected at a flat cost: bigger repositories (the panel v3 headroom check's 368 
 - Agreement gate: positive agreement on rem is computed over all stage 1 cells (Opus, Sol and particle-1 sessions), printed with its interval. Under 0.70, rem leaves the primary everywhere, the CEILING fallback included, and G_R becomes 0.67 h3 + 0.33 h1. This is the only rule for low rem agreement, and it is fixed in advance.
 - Why these weights: h3 keeps half the score, so the graded scale stays continuous with the 2x primary. G_R always lies between 0.5 h3 and h3, so it keeps room as long as h3 does. Plain Opus on 10x content (h3 about 0.45, and h1 and rem in about 0.45 and 0.40 of its hits) lands at 0.32 in the simulation, with a strict rate of 0.094. G_R's scale is compressed, so a G_R point is not a hit@3 point, and results never compare them.
 
-**4.2 Build-outcome lines** (G, X, U, /investigate, L1).
+**4.2 Build-outcome lines with hidden tests** (G, /investigate, L1).
 
 - Hidden-test share: the share of the change's own hidden tests (FAIL_TO_PASS) that pass, counted only when the base suite (PASS_TO_PASS) stays green, else 0. The lane's verifier contract (#102) already records per-test results.
-- One milestone per family: /investigate, localization read from the closing block every arm writes (4.3), rank-weighted 1, 2/3, 1/3; G, the hidden-constraint test passes (section 6.2), counted in the milestone only and left out of the share when it is also a FAIL_TO_PASS test, so it never counts twice; X, goals reached within the cap (6.3); U, scenarios finished within 1.5 times the gold step count (6.4).
+- One milestone per family: /investigate, localization read from the closing block every arm writes (4.3), rank-weighted 1, 2/3, 1/3; G, the hidden-constraint test passes (section 6.2). G's constraint test counts in the milestone only and is left out of the share when it is also a FAIL_TO_PASS test, so it never counts twice. A task enters the hidden-constraint stratum only when it has at least one other FAIL_TO_PASS test, so its share is always defined.
 - **Graded primary at 10x: G_B = 0.6 share + 0.4 milestone.** Binary solved prints beside it as the strict measure.
+- X and U have no hidden-test share, and G_B doesn't apply to them. Each family's 10x primary is its own per-goal or per-scenario partial credit (sections 6.3 and 6.4).
 - No 10x tier has a single pass or fail primary.
 
 **4.3 The closing-block rule (a ladder rule).** When a score reads an arm's written output, every arm ends with the same closing block, and the score reads only that block. A told arm's skill report (such as /investigate's DEBUG REPORT) never feeds a score, because the none arm never writes one, and reading it biases the score toward told. For /investigate the block is "Root cause: up to three files, ranked", and localization reads the rank of the gold patch's changed file in it. Each adopting prereg's dry run includes a case where the none arm names the right file. R3c is the first line to adopt the rule; the Captain carries it to R3c's owner (GEVA-284), and this plan edits none of R3c's files. Review-foresight lines already follow it through the CEO prereg's closing block.
@@ -220,7 +221,7 @@ The 400-word rule on a record's first version drops most of the rest (25 of 57 G
 | 2x | G's confirmatory panel, screened with the keep rule | solved | solved, as plan v3 freezes | 0.35 to 0.60 on fresh passes | none about $1.0, told plan-eng-review about $2.2, autoplan about $4.8 |
 | 10x | the hidden-constraint stratum: tasks whose real change handled a constraint the statement leaves out (compatibility, a migration, concurrency, an error path), each keyed to the hidden test that checks it | solved and constraint test passed | G_B | strict 0.05 to 0.20, G_B 0.25 to 0.50 | the same |
 
-Before T-G authoring, with no prereg change: tag each mined task for the hidden-constraint stratum and name its constraint test in the sealed key, noting when that test is also a FAIL_TO_PASS test. G's admission reads the unscreened pool against its frozen 0.20 to 0.80 band and stays as written; its none median becomes G's cost anchor. The keep rule, its simulation from G's admission data, and G_B belong in stage 4's prereg, which is not written; plan v3 keeps graded hidden-test share as a sensitivity until then.
+Before T-G authoring, with no prereg change: tag each mined task for the hidden-constraint stratum and name its constraint test in the sealed key, noting when that test is also a FAIL_TO_PASS test. A task enters the stratum only when it has at least one FAIL_TO_PASS test besides its constraint test; a task whose only functional test is the constraint test stays in the 2x pool. G's admission reads the unscreened pool against its frozen 0.20 to 0.80 band and stays as written; its none median becomes G's cost anchor. The keep rule, its simulation from G's admission data, and G_B belong in stage 4's prereg, which is not written; plan v3 keeps graded hidden-test share as a sensitivity until then.
 
 **R-eng, review foresight on real engineering outcomes (not funded).**
 
@@ -239,7 +240,7 @@ Before T-G authoring, with no prereg change: tag each mined task for the hidden-
 **B ladder, written into X's prereg from the start, at X's 20-turn cap.**
 
 - 2x: the two docs-only runs per tree take two different goals instead of one goal twice: one on the default path, one off it (an error case, a configuration edge, an upgrade from the old surface). Same measurement cost. Strict: both goals reached.
-- 10x: off-path goals kept by the keep rule on plain Opus's trees at admission, after the rule's simulation. Graded: each goal scores 1 when reached within 10 turns, 0.5 when reached within the 20-turn cap, else 0, and the tree's score is the mean over its two goals.
+- 10x: off-path goals kept by the keep rule on plain Opus's trees at admission, after the rule's simulation. Graded: each goal scores 1 when reached within 10 turns, 0.5 when reached within the 20-turn cap, else 0, and the tree's score is the mean over its two goals. This is X's 10x primary; G_B doesn't apply.
 - Cost anchor: X admission's unscreened none median.
 
 **R-dx (not funded).** Real post-cutoff developer-facing changes reversed or re-scoped for developer-experience reasons: a breaking-change backlash, a confusing name or default, migration pain, missing docs. Free counts, 2026-07-15 to 2026-10-31: 132 merged pull requests with "revert" and "breaking" in the title; and 16 closed issues labelled "breaking change" with 8 or more comments, created 2026-07-01 to 10-15. Swift Evolution API reviews returned for naming fit too. Unit: plan, context and the public surface only (README, docs, --help output, type files), the X family's docs-only container, so a session costs no more than the headroom check's dx stratum. It runs only if X leaves room under both plan-devex-review's $2,000 and wave 1's $10,000.
@@ -251,7 +252,7 @@ Before T-G authoring, with no prereg change: tag each mined task for the hidden-
 **B ladder, written into U's prereg, at U's 25-step cap.**
 
 - 2x: scenarios that start from an empty, error or first-run state. Strict: all three scenarios completed.
-- 10x: scenarios kept by the keep rule on plain Opus's built UIs, after the rule's simulation, three per task, so supply doesn't bind. Graded: a scenario scores 1 when completed within 1.5 times the gold UI's step count, 0.5 when completed within the 25-step cap, else 0; the tree's score is the mean over its three scenarios.
+- 10x: scenarios kept by the keep rule on plain Opus's built UIs, after the rule's simulation, three per task, so supply doesn't bind. Graded: a scenario scores 1 when completed within 1.5 times the gold UI's step count, 0.5 when completed within the 25-step cap, else 0; the tree's score is the mean over its three scenarios. This is U's 10x primary; G_B doesn't apply.
 - Cost anchor: U admission's unscreened none median.
 
 **R-design (not funded, thin supply).** Free counts, 2026-07-15 to 2026-10-31: 57 merged revert pull requests labelled ui and 8 labelled ux; 8 closed issues labelled ux and regression, created 2026-07-01 to 10-15. Text-only units (plan, context and a written description of each affected screen) keep sessions at the headroom check's cost. This pool likely can't fill a tier; a free screen decides before any spend, and it runs only if U leaves room under both caps.
@@ -269,3 +270,154 @@ Before T-G authoring, with no prereg change: tag each mined task for the hidden-
 **Flags before R3c's caps freeze** (carried to GEVA-284 by the Captain; this plan edits none of R3c's files). The closing-block rule (4.3): every arm ends with up to three ranked root-cause files, and localization reads only that block. Per-test verifier output in every trial. Two graded secondaries that need no extra session: FAIL_TO_PASS share under the PASS_TO_PASS gate, and localization rank from the closing block. A keep-rule simulation from R3a4's 200 tasks and R3b's six-trial grid. The cost anchor from R3c's admission on the unscreened pool. R3c's admission already gives every candidate three none trials, so with those fields recorded, the 10x keep rule reads from R3c's admission at no extra cost. If R3b's run records hold per-test output, re-reading R3b's 70 tasks per model for graded share is a free first look at the 10x band.
 
 **10x sources at a flat cost.** SWE-rebench tasks whose gold patch changes files the issue text never names, or spans two or more modules (computed free from the statement and the patch; same harness and session cost as R3b). HopLoc, a test-verified bug-localization set stratified by hop distance, mined from public repositories. DDBench: 60 confirmed historical bugs from 13 open-source distributed systems, each with a symptom report, debug context such as a goroutine dump, and a hidden oracle; its builds may cost more, so a two-session pilot measures before adoption. RCAEval: recorded microservice telemetry with a blind task view, scored on root-cause component and reason, so partial credit is built in. OpenRCA (335 failures, over 68 GB of telemetry) is too large for a flat cost.
+
+**Money.** The posted R3 runs paid about $809 (R3a $101.45, R3a4 $192.04, R3b $515.51) before crew, and R3c plans $750; the Captain's ledger decides what counts against the $2,000 from 2026-11-03 13:30Z. A 10x /investigate tier likely doesn't fit after R3c. The smallest budget that would power it, with selection read free from R3c's admission: 50 kept tasks, 3 replicates, none and told on Opus at R3b's per-trial costs ($0.43 and $0.69), about $170 in trials, about $6 of VMs and about $80 of crew, so about $260 on Opus alone and about $440 with Sol. Its binary MDD at 50 tasks is about 13 points (#112's formula); the graded score's would be smaller.
+
+#### 7.2 /review: a source change, not a ladder (R2 at the after pin: KEEP, +22.6 points)
+
+The plain arm sits at the floor on the primary: it flagged 3 of 84 bug-passes as blocking (3.6%), and 25.0% at any severity. A harder /review tier would push it further down, so /review gets no 2x or 10x tier. Its real limit is home field: 41 of 42 suite bugs came from gstack-family reviews. So the next /review step changes the source, with its own band, at R2's per-session cost ($0.73 none, $6.52 gstack-full):
+
+- Source: post-cutoff merged pull requests later reverted or regression-fixed for a defect, in repositories no stack reviewed, with diffs in the stacks-r1 size class; the fix is the ground truth, not any review. ReviewBench (GitHub, 2026-10-05: 219 public pull requests in 19 languages, scored on grounded and augmented precision and recall) is a candidate; its licence needs checking, and it is public, so later models will have seen it.
+- Band: plain Opus's blocking recall on the new source from 0.35 to 0.60, admitted on fresh units from that source.
+- Secondary: rank-weighted blocking recall with a precision penalty, where each blocking finding that blind adjudication rejects subtracts.
+- A re-score of R2's adjudicated findings is descriptive only, since its results are known; it admits nothing.
+
+#### 7.3 G, L1 and TB2
+
+- G: section 6.2.
+- L1 (GEVA-254): its primaries are behavior (discovery and adherence), which don't saturate the way pass rates do, and its outcome line O5 is descriptive. L1 adopts no tier. Optional and free: print O5's FAIL_TO_PASS share beside its pass rates.
+- TB2 (stacks round 1, Opus none 81.1%, $0.145 a trial): L1's TB2 twin is descriptive. A 20-task hard subset that public agents pass 0 to 40% is a later option in the same cost class.
+- Public coding sets weighed for later programs. SWE-Bench Pro V2 (642 public tasks in 11 repositories and a 51-task Hard subset; public scores near the ceiling, with Claude Opus 5 at 638 of 642, and a 272-task private split we can't run): rejected, because the public split is likely contaminated. FeatBench (feature implementation on fresh repositories with an automated refresh; best published success about 30%): a candidate for G's 10x tier if a pilot shows a flat session cost. SWE-EVO and Long-Horizon Terminal-Bench (46 tasks with partial credit, 53 to 71 hours per model per pass): rejected, because they break the flat cost.
+
+### 8. A cheap headroom check per tier (R61)
+
+Every tier gets one paid check on plain Opus before any comparison money, on the CEO prereg's stage 1 pattern.
+
+- **What runs.** Opus none on 16 to 20 calibration units, 3 passes; Sol none and particle-1 none, 2 passes each, descriptive; 2 smoke sessions per gstack arm per model, read for exposure; three judge reads where judges score.
+- **Admission.** 2x: Opus none's strict rate in [0.35, 0.60] on fresh passes (CEO keeps its frozen [0.15, 0.60] and labels the tier by its measured k below 0.35). 10x: Opus none's graded score in [0.25, 0.50], strict at most 0.20, and positive agreement of at least 0.70 on every judged part, computed over all stage 1 cells and printed with its interval. Both: the budget anchor, with its ratio printed (section 2); generic-answer controls, such as CEO's two stock rows and their stock fix, hit D or rem on at most 1 unit; the line's leak drops. The check prints k with its interval and its measure.
+- **Outcomes.** A tier in band admits its comparison. CEILING sends the line to its next tier. FLOOR is FIX-METHOD on task fit. "Cost changed" is FIX-METHOD on the units.
+- **Cost at today's per-session prices.**
+
+| Line and tier | The cheap check | Paid cost |
+|---|---|---|
+| CEO 2x and 10x | GEVA-285 stage 1, one check reads both tiers; runs only if supply clears 160 | $42.20 projected, $160 envelope; the 10x fields add at most about $3 of judging |
+| R-eng, R-dx, R-design | the same pattern on 20 pooled units | about $45 each, plus about $40 to $60 of authoring crew, paid by the skill's own line |
+| G 2x and 10x | G's admission; G_B read from the same trees | as frozen: none $25, told $52 and $116 expected |
+| X, U | each family's admission (plan v3: about $60 to $130 a skill) | as their preregs set |
+| /investigate 2x | R3c's admission, about 290 Opus none trials | about $125 |
+| /investigate 10x | R3c's admission with graded fields; R3b's records if they hold per-test output | $0 extra |
+| /review | fresh units from the outside source | priced in its own prereg |
+
+### 9. Arms
+
+- **Required on every tier:** none, clean by construction (no gstack, no skills folder, no drive mount), and told gstack in the line's own told form, on Opus 5.5 and GPT-6.1 Sol, with particle-1 where affordable (R54). A prereg that leaves Sol out says why: G leaves it out on price, and R3c runs Opus only by plan.
+- **Optional enforced arm:** the told arm plus a Stop hook that refuses to end the session until the line's own exposure detector passes, as /review's contract hook did; in R2, 42 of 66 gstack-full sessions ran the procedure only after that hook blocked. Every enforced session runs the full procedure, so it is priced at the told arm's 90th-percentile session, about 1.2 to 1.5 times the told mean.
+
+| Line | Told mean, Opus | Enforced, per session (estimate) | One enforced cell at the line's size |
+|---|---|---|---|
+| CEO standalone | $0.70 projected | about $0.95 | 128 sessions: about $120 on Opus, $70 on Sol, $25 on particle-1 |
+| CEO autoplan-ceo | $3.00 projected | about $4 | 128 sessions: about $510 on Opus |
+| R-eng (if run) | about $0.70 | about $0.95 | 128 sessions: about $120 on Opus |
+| G plan-eng-review | about $2.2 | about $3 | 192 sessions: about $580 on Opus |
+| R3c told /investigate | $0.69 | about $0.95 | 210 trials: about $200 on Opus |
+
+CEO's stage 2 envelope has about $63 of planning headroom before the crew re-projection in 6.1, so an enforced Opus standalone cell fits there only by replacing the lens arm (about $38) and standalone on particle-1 (about $19), and after the re-projection it likely doesn't fit. G's enforced cell doesn't fit beside G's design inside $2,000.
+
+Recommendation: keep it optional. Run it as the remedy when a told arm fails its exposure smoke, where today that arm reads UNTESTED, and on Opus only where a line's money leaves room after its primary design. Report told and enforced apart: told is what users get, and enforced is what the procedure does when it runs.
+
+### 10. Cost and power at each tier
+
+Cost per session equals the line's current design's on every tier, and admission checks it (section 2). So each line's money buys the same sessions at 2x and at 10x as its current design; what changes is the band and the measure, and so the MDD.
+
+| Line | Opus per session, none / told | Sessions per arm per model | MDD at 2x | At 10x (G_R or G_B) | Inside the line's $2,000? | Inside wave 1's $10,000? |
+|---|---|---|---|---|---|---|
+| CEO | $0.25 / $0.70, autoplan-ceo $3.00 (projected) | 128 (48 changed and 16 held units, 2 passes) | 18 points, hit@3 (frozen) | about 14 points on G_R under the all-parts model; power 0.36 under the hit-only model | yes: $1,347 of stage 2's $1,410 planning caps; the amendment's crew (about $60) and the crew re-projection (about $440 against $430) come out of stage 2, which shrinks to keep the CEO line at $2,000, never an overrun | not in wave 1; its own approved line |
+| R-eng, R-dx, R-design, if run | about $0.31 / $0.70 | 128 (64 units, 2 passes) | about 15 points, hit@3 | about 12 points on G_R, all-parts model | alone yes, about $550 to $650 each with 3 models and 2 arms; beside G, X or U no | only from room G, X or U leave; six skills at $2,000 is $12,000 against $10,000 |
+| G, plan-eng-review alone | about $1.0 / $2.2 | 192 (48 tasks, 4 trials) | 18.6 points, solved (G prereg, clustered) | smaller on G_B, measured at admission | yes, as frozen | yes, inside its skill's share |
+| R3c, /investigate | $0.43 / $0.69 | up to 210 (70 tasks, 3 replicates) | 10.9 to 14.5 points by kept count | not funded | R3c yes; 10x needs about $260 more on Opus | not in wave 1 |
+| /review | $0.73 / $6.52 | 66 (33 units, 2 passes) | 24.5 points (R2) | | next step only | not in wave 1 |
+
+MDDs are two-sided at alpha 0.025 (Holm's first step) with 80% power. Method for the new numbers: a Monte Carlo in the shape of the CEO prereg's power.py, with unit difficulty on the logit scale shared by both arms, a told shift with unit noise 0.5, paired unit means and a t test in place of the sign-flip test. For G_R, h3, h1 and rem share one unit ability (h3 at 0.45; h1 and rem at 0.45 and 0.40 of the hits), giving plain Opus G_R 0.32 and strict 0.094. At a shift of 0.8 on the logit scale, 48 units and 2 passes:
+
+| Shift model | G_R power | hit@3 power | strict power |
+|---|---|---|---|
+| gstack lifts finding, ranking and remedy alike | 0.73 | 0.40 | 0.58 |
+| gstack lifts finding only | 0.36 | 0.40 | |
+| alike, with 15% of rem labels flipped | 0.66 | | |
+| alike, at 36 units | 0.56 | | |
+| fallback regime (h3 0.70), alike | 0.79 | | |
+| fallback regime, finding only | 0.20 | | |
+
+A binary primary at the 2x band's centre (0.475) read 16.6 points at 48 units and 2 passes. The same simulation reads 16.9 at 0.40 where the frozen power.py reads 18, so these MDDs run about a point optimistic. They are planning numbers; each prereg freezes its own rows with power.py's method, under both shift models.
+
+The 10x tier is powered inside its line's money on CEO (same sessions, if supply clears the bar), on each R line alone, and on G (same sessions, graded at stage 4). It isn't on /investigate after R3c; section 7.1 gives the smallest budget that would power it.
+
+### 11. Which in-flight line adopts which tier, in what order
+
+| Order | Line | Adopts | What changes, before which freeze | Cost |
+|---|---|---|---|---|
+| 1 | CEO (GEVA-285) | 2x as frozen; 10x on the same units, if supply clears 160 | first the free counts (structured records done: 11 and 24; GEVA-291's widened screen running); then, only if the combined amended count clears 160, one amendment before B1 merges and B2 keys any unit; else FIX-METHOD on yield | counts free; amendment about $60 crew, judges at most about $30 over both stages, inside $2,000 |
+| 2 | G admission (GEVA-262) | 2x and 10x at stage 4 | no prereg change; at T-G mining, the hidden-constraint tag and its constraint test in the sealed key; stage 4's prereg adopts the keep rule (after its simulation) and G_B | authoring minutes |
+| 3 | R3c (/investigate) | 2x; 10x fields | before its caps freeze: the closing-block rule, per-test verifier output, two graded secondaries, the keep-rule simulation and the cost anchor; the Captain carries them to GEVA-284 | $0 sessions; a small scorer addition |
+| 4 | X and U preregs (not written) | 2x and 10x from the start | two goals per tree and harder scenario states at the families' own caps, graded primaries | none extra |
+| 5 | R-eng, R-dx, R-design | pooled; checks as fallbacks | seal pools at crew cost paid by each skill's own line, after its admission reads; headroom checks only as R61 attempts or fallbacks | crew only, from each skill's line |
+| 6 | /review | outside source | the next R2-line step uses a post-cutoff source from outside the stacks, with its own band | none now |
+| 7 | L1 | none | optional free O5 share | none |
+
+Flags before freezes:
+
+- CEO: B1 and B2 wait for the supply count, and then for the amendment if the count clears 160. Otherwise the line stops on yield before any build spend.
+- G: the hidden-constraint tag must be set when T-G is mined.
+- R3c: the closing block, per-test output and graded secondaries go in before its caps and pin.
+- R61: the ladder changes when a saturation null becomes a CUT-CANDIDATE (Big decision 9).
+
+### 12. Outside terms, licences and rights
+
+- **GitHub records.** GitHub's Acceptable Use Policies allow research use of public, non-personal information when the publications are open access. Repository licences don't cover issue or pull request text, so rewrites stay sealed and are never published, as the CEO prereg's section 16 sets out.
+- **Forum records** (Swift forums, discuss.python.org). Section 16 of the CEO prereg covers GitHub only. The amendment extends it: it records each site's terms of service and robots rules for automated JSON reads, gates mining on a recorded pass, reads at polite rates and keeps rewrites sealed.
+- **PEP texts** state that they are placed in the public domain or under CC0-1.0. PR comments and Discourse replies are not, so rewrites of them stay sealed.
+- **Go and Kubernetes:** golang/proposal's design documents are BSD-3-Clause and kubernetes/enhancements is Apache-2.0. Issue and comment text stays under GitHub's terms.
+- **SWE-rebench** is in use now, through R3c's 2x tier, under CC-BY-4.0. Every results post that uses it carries its attribution line.
+- **Other public sets named here** (ReviewBench, FeatBench, HopLoc, DDBench, RCAEval, OpenRCA): this plan adopts none. Each adopting prereg checks the licence, the data terms and the contamination date first. DDBench's 13 systems carry their own code licences, which must allow the repro builds.
+- **Model providers:** as the CEO prereg's section 16, with OpenRouter's data_collection deny and each route's data-use terms recorded at each pin.
+- **gstack** is our own project at public pinned commits.
+
+### 13. Risks and limits
+
+- Difficulty made by scoring can end up measuring judge noise. The rem and decoy labels get an agreement gate, and when they fail, the composite drops them by a rule fixed in advance.
+- A generic fix could match many remedies, since many keys say "don't build it". The stock fix and the first-remedy rule check that.
+- Strict scoring can punish a right answer worded differently; the judge brief's "names the specific thing" rule applies to rem as it does to D.
+- A keep rule can land its kept units outside the band on fresh passes, the inverse of R3b. Simulation from real per-task data and fresh-pass admission check that.
+- The CEILING fallback can run stage 2 at power 0.20 if gstack lifts only finding. Results say which shift the data fit.
+- Opus-selected units carry Opus's blind spots. Sol and particle-1 rows on them are labelled and never target a band.
+- A 10x tier on the same units as a 2x tier is a stricter measure, not independent evidence.
+- Supply binds CEO and design, and the free counts so far put CEO well short of its bar.
+- s0 of 0.95 rests on small panels; k prints with its interval and its measure.
+- A skill could learn the strict format (rank one issue first and name its fix). Every arm gets the same template, so the format gives gstack no edge.
+- No tier buys a gain smaller than its MDD: 15 to 21 points on a binary 2x primary, 12 to 14 on G_R's own scale under the favourable shift model.
+
+### 14. Not in scope
+
+Any paid call; any change to a merged preregistration (the CEO amendment would be a new post on the CEO line, and it is not written here); editing R3c's files, which GEVA-284 owns; the in-flight threads' work; Haiku or Sonnet as arms; parity claims.
+
+## Review record
+
+Lean /autoplan (feature kind, --no-ui --no-dx), run autoplan-20261105061537, one Opus 5.5 reviewer, one round: 19 findings, 0 Critical, 3 High, 11 Medium, 4 Low, 1 Informational. Gate 1 went to the Captain, who answered rec at gate_rev 1 (rec_hash dfeb38e40727): A1, B1, C1 and D1, plus all 15 Medium, Low and Info findings. Where each lands in v2:
+
+- A1 (count supply first): Big decision 4, section 6.1's supply table and bar, section 11 row 1.
+- B1 (anchor on the current design, state the doubling): Big decision 5, section 2's anchor table, section 6.1's cost note.
+- C1 (list every replaced frozen rule, recount): section 6.1's twelve replaced texts and the amended count.
+- D1 (one closing block for every arm): section 4.3, a ladder rule with R3c as first adopter; the Captain carries it to GEVA-284.
+- Power under both shift models (F4): Big decision 2, sections 6.1 and 10.
+- Keep rule not by construction (F5): section 5 item 5.
+- Stock fix and first-remedy rule (F6), blank-remedy units (F7), rem on every cell and one low-agreement rule (F15): section 4.1.
+- Crew re-projection (F8): section 6.1's cost note.
+- Turn and step caps kept (F10): sections 1, 6.3 and 6.4.
+- Wave 1's $10,000 and who pays R-line sealing (F11): sections 6.2 and 10.
+- First public version as the posted date (F12) and forum terms (F13): sections 6.1 and 12.
+- A cost anchor for every family (F14): section 2.
+- k with its measure (F16): section 2.
+- /review as a source change (F17): section 7.2.
+- SWE-rebench attribution now (F18) and DDBench code licences (F19): section 12.
+
+The PR review on #219 added two scoring fixes: X and U each have one 10x primary, their own partial credit, not G_B (sections 4.2, 6.3 and 6.4), and a G task enters the hidden-constraint stratum only with at least one other FAIL_TO_PASS test, so its share is always defined (sections 4.2 and 6.2).
