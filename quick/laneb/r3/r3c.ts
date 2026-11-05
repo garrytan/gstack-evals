@@ -60,7 +60,7 @@
 // bind; grid and resume 0 when the parts ran to the end or to admit, 4 when a part or a projection stopped them (resume
 // after a calibration stop ends with run's codes); admit 0 GO, 5 STOP; analyze 0 KEEP, 3 CUT-CANDIDATE, 5 FIX-METHOD on a
 // complete grid, 6 admission STOP, 4 incomplete; arm-check 1 on a failed check; 2 usage; 1 any other error.
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { analyze as analyzeTrials, bootstrap, readSessionRows, rng, sessionsByTrial } from "../analysis/analyze.ts";
@@ -192,6 +192,7 @@ export function taskTests(taskDir: string): { f2p: string[]; p2p: string[] } {
   return { f2p: c.FAIL_TO_PASS.map(String), p2p: c.PASS_TO_PASS.map(String) };
 }
 export const trialF2p = (rec: ReturnType<typeof testRecord>, t: { f2p: string[]; p2p: string[] }) => f2pShare(passStatus(rec), t.f2p, t.p2p);
+const taskF2p = (rec: ReturnType<typeof testRecord>, taskDir: string) => { try { return trialF2p(rec, taskTests(taskDir)); } catch { return null; } };
 
 export type R3cTrial = GridTrial & { part: string; closing: string[] | null; closing_error: string | null; tests: ReturnType<typeof testRecord>; f2p_share: number | null };
 const gstackSkills = () => new Set<string>(readJson(join(LANEB, RUN.manifests, "gstack.json")).skills.names);
@@ -201,16 +202,15 @@ const trialDirs = (jobsDir: string, oracle: boolean) => !existsSync(jobsDir) ? [
 export function loadTrials(partName: string, partDir: string): R3cTrial[] {
   const jobs = join(partDir, "pulled/jobs"), sessionsPath = join(partDir, "pulled/out/proxy-sessions.jsonl");
   const sessions = sessionsByTrial(existsSync(sessionsPath) && !unreadable(sessionsPath) ? readSessionRows([sessionsPath]) : []);
-  const proxy = readJson(join(partDir, "proxy.json")) as ProxyConfig, skills = gstackSkills(), tests = new Map<string, { f2p: string[]; p2p: string[] }>();
+  const proxy = readJson(join(partDir, "proxy.json")) as ProxyConfig, skills = gstackSkills();
   const out: R3cTrial[] = [];
   for (const d of trialDirs(jobs, false)) {
     const t = loadR3Trial(d, sessions, proxy);
     if (!t) continue;
     const msgs = join(d, "evaluator", "sdk-messages.jsonl");
     const lines = existsSync(msgs) ? readFileSync(msgs, "utf8").split("\n") : [];
-    if (!tests.has(t.task)) tests.set(t.task, taskTests(join(partDir, "tasks", t.task)));
     const rec = testRecord(d), c = readClosing(lines);
-    out.push({ ...t, phase_headings: phaseHeadings(agentText(lines)), hooks: hookState(d), ...repoSkills(lines, skills), part: partName, closing: c.block, closing_error: c.error, tests: rec, f2p_share: trialF2p(rec, tests.get(t.task)!) });
+    out.push({ ...t, phase_headings: phaseHeadings(agentText(lines)), hooks: hookState(d), ...repoSkills(lines, skills), part: partName, closing: c.block, closing_error: c.error, tests: rec, f2p_share: taskF2p(rec, join(partDir, "tasks", t.task)) });
   }
   return out;
 }
@@ -222,7 +222,7 @@ export function loadOracle(partDir: string) {
     let task: string;
     try { task = String(readJson(join(d, "config.json")).task.path).split("/").filter(Boolean).at(-1)!; } catch { continue; }
     const patchPath = join(d, "artifacts", "logs", "artifacts", "model.patch");
-    out.push({ task, patch: existsSync(patchPath) ? readFileSync(patchPath, "utf8") : null, f2p_share: trialF2p(testRecord(d), taskTests(join(partDir, "tasks", task))) });
+    out.push({ task, patch: existsSync(patchPath) ? readFileSync(patchPath, "utf8") : null, f2p_share: taskF2p(testRecord(d), join(partDir, "tasks", task)) });
   }
   return out;
 }
@@ -265,9 +265,10 @@ function parserCheck(dir: string, tasks: string[]) {
 }
 // A prepared part matches its plan: oracle.json over its tasks, job.json's tasks (once per trial for cal-1), attempts and
 // arms, the closing line on every arm, the told arm's procedure line, the order file, and the pinned parser.
-function partCheck(work: string, p: PartPlan) {
+export function partCheck(work: string, p: PartPlan) {
   const dir = join(work, p.name);
   if (!existsSync(join(dir, "oracle.json"))) throw new Error(p.name + " has no oracle.json, so its run-time oracle gate can't run; prepare it again with this build");
+  for (const t of p.tasks) taskTests(join(dir, "tasks", t));
   const job = readJson(join(dir, "job.json")), oracle = readJson(join(dir, "oracle.json"));
   const names = (j: any) => j.tasks.map((t: any) => String(t.path).split("/").at(-1)).sort();
   const want = p.order && perTrialJob(p) ? p.order.map(([t]) => t).sort() : p.tasks;
@@ -717,6 +718,23 @@ function analyze(work: string): number {
   return finish(out.verdict, out.exit);
 }
 
+// run, grid and resume hold <work>/.controller.lock while they run. A lock is never taken over, live or left by a dead
+// controller: the operator confirms no controller pid is alive and removes it (quick/laneb/README.md names the command).
+function oneController(work: string, cmd: string, fn: (work: string) => number): number {
+  if (!existsSync(work)) return fn(work);
+  const lock = join(work, ".controller.lock");
+  let fd: number;
+  try { fd = openSync(lock, "wx"); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    throw new Error(lock + " holds " + readFileSync(lock, "utf8").trim() + ", so " + cmd + " launched nothing: another controller may be running. Confirm no controller pid is alive (ps -p <pid>), then release it with: rm " + lock);
+  }
+  try {
+    writeFileSync(fd, JSON.stringify({ pid: process.pid, cmd }) + "\n");
+    closeSync(fd);
+    return fn(work);
+  } finally { rmSync(lock, { force: true }); }
+}
+
 if (import.meta.main) {
   const [cmd, arg, ...rest] = Bun.argv.slice(2);
   try {
@@ -732,7 +750,8 @@ if (import.meta.main) {
     if (!process.env.LEDGER) { console.error("E_USAGE set LEDGER to " + RUN.item + "'s jsonl ledger"); process.exit(2); }
     const work = resolve(arg);
     if (cmd === "prepare") { prepare(work); process.exit(0); }
-    process.exit({ run, grid, resume, admit: admitAgain, analyze }[cmd as "run"](work));
+    const fn = { run, grid, resume, admit: admitAgain, analyze }[cmd as "run"];
+    process.exit(cmd === "admit" || cmd === "analyze" ? fn(work) : oneController(work, cmd!, fn));
   } catch (e) {
     const msg = String((e as Error).message ?? e);
     const code = /^E_(USAGE|PIN_MISMATCH)/.test(msg) ? 2 : 1;

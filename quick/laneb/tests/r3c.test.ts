@@ -6,7 +6,7 @@ import { armSpec, CLOSING_LINES, jobConfig } from "../runner/grid.ts";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
 import { itemCheck, OPUS } from "../r3/screen.ts";
 import { R3C, calibrationPlan, f2pShare, goldFiles, type tiers } from "../r3/r3c-rules.ts";
-import { cal1Split, calProjection, CLOSING, cliStream, d1Min, gridOrder, gridOutcome, gridProjection, gridSizes, ITEM, loadOracle, partStop, passStatus, perTrialJob, planOf, preparePart, R3C_NONE, R3C_TOLD, readClosing, RUN, startRule, testRecord, trialF2p, type R3cTrial } from "../r3/r3c.ts";
+import { cal1Split, calProjection, CLOSING, cliStream, d1Min, gridOrder, gridOutcome, gridProjection, gridSizes, ITEM, loadOracle, loadTrials, partCheck, partStop, passStatus, perTrialJob, planOf, preparePart, R3C_NONE, R3C_TOLD, readClosing, RUN, startRule, testRecord, trialF2p, type R3cTrial } from "../r3/r3c.ts";
 import { loadRebenchPool, R3A4_POOL_FILE, R3A4_POOL_SHA256 } from "../runner/materialize.ts";
 
 const laneb = join(import.meta.dir, "..");
@@ -236,6 +236,65 @@ describe("a prepare that fails partway", () => {
     process.env.ARMS = tmp("r3c-arms-");
     try { expect(() => preparePart(w, { name: "cal-2", tasks: [poolTask], attempts: R3C.t4Second, arms: [R3C_NONE], order: null, counts: new Map() })).toThrow(); } finally { if (saved === undefined) delete process.env.ARMS; else process.env.ARMS = saved; }
     expect(existsSync(join(dir, "marker"))).toBe(true);
+  });
+});
+
+describe("one controller at a time", () => {
+  const grid = (w: string) => Bun.spawnSync([process.execPath, join(laneb, "r3/r3c.ts"), "grid", w, "--item", RUN.item], { env: { ...process.env, LEDGER: join(w, "r3c-opus.jsonl") } });
+  const refuses = (pid: number) => {
+    const w = tmp("r3c-lock-"), lock = join(w, ".controller.lock");
+    writeFileSync(lock, JSON.stringify({ pid, cmd: "grid" }) + "\n");
+    const r = grid(w);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr.toString()).toContain("rm " + lock);
+    expect(readFileSync(lock, "utf8")).toBe(JSON.stringify({ pid, cmd: "grid" }) + "\n");
+  };
+
+  test("a lock held by a live controller refuses grid and stays", () => refuses(process.pid));
+
+  test("a lock left by a dead controller refuses too and is never taken over", () => refuses(2147483646));
+
+  test("a controller removes its own lock when it ends", () => {
+    const w = tmp("r3c-lock-"), r = grid(w);
+    expect(r.stderr.toString()).toContain("is not bound to a run");
+    expect(existsSync(join(w, ".controller.lock"))).toBe(false);
+  });
+});
+
+describe("a task config without its test lists", () => {
+  const badTask = (part: string) => {
+    mkdirSync(join(part, "tasks/demo__met/tests"), { recursive: true });
+    writeFileSync(join(part, "tasks/demo__met/tests/config.json"), JSON.stringify({ FAIL_TO_PASS: "f" }));
+  };
+
+  test("partCheck refuses it before bind", () => {
+    const w = tmp("r3c-cfg-"), dir = join(w, "cal-2");
+    badTask(dir);
+    writeFileSync(join(dir, "oracle.json"), "{}");
+    expect(() => partCheck(w, { name: "cal-2", tasks: ["demo__met"], attempts: R3C.t4Second, arms: [R3C_NONE], order: null, counts: new Map() })).toThrow("has no FAIL_TO_PASS and PASS_TO_PASS lists");
+  });
+
+  test("the oracle's f2p share is null for it, not a throw", () => {
+    const part = tmp("r3c-part-"), d = join(part, "pulled/jobs/r3c-opus-cal-1a-oracle/demo__met__abc");
+    mkdirSync(join(d, "verifier"), { recursive: true });
+    writeFileSync(join(d, "config.json"), JSON.stringify({ task: { path: "/run/tasks/demo__met" } }));
+    writeFileSync(join(d, "verifier/report.json"), JSON.stringify({ fail_to_pass: { f: "PASSED" }, pass_to_pass: {} }));
+    badTask(part);
+    const o = loadOracle(part);
+    expect(o).toHaveLength(1);
+    expect(o[0]!.f2p_share).toBeNull();
+  });
+
+  test("a trial's f2p share is null for it, not a throw", () => {
+    const part = tmp("r3c-part-"), d = join(part, "pulled/jobs/r3c-opus-cal-2/demo__met__abc");
+    mkdirSync(join(d, "verifier"), { recursive: true });
+    writeFileSync(join(part, "proxy.json"), JSON.stringify({ models: {} }));
+    writeFileSync(join(d, "config.json"), JSON.stringify({ agent: { name: "laneb-claude-code", kwargs: { arm: R3C_NONE } }, task: { path: "/run/tasks/demo__met" } }));
+    writeFileSync(join(d, "verifier/report.json"), JSON.stringify({ fail_to_pass: { f: "PASSED" }, pass_to_pass: {} }));
+    badTask(part);
+    const t = loadTrials("cal-2", part);
+    expect(t).toHaveLength(1);
+    expect(t[0]!.f2p_share).toBeNull();
   });
 });
 
