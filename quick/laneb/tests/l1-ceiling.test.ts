@@ -92,6 +92,7 @@ describe("the ceiling check before a launch", () => {
     expect(dollars(small.crewHold)).toBe(590);
   });
   test("with no token reading yet, unspent stops are held at the planning rate of $0.45 per million", () => {
+    // pregate-literal: CEILING_USD=2000 a 2000M token stop in this crew fixture, not the ceiling
     const t = tally([], { as_of: "x", captain_credits: 0, threads: [{ code: "GEVA-4", line: "crew", credits: 0, tokens: 0, token_stop: 2000 * M, status: "planned" }] }, { items: opusPlan("planned"), leftover: { sol: "pending", particle: "pending" } });
     expect(dollars(t.stops)).toBe(900);
     expect(dollars(t.crewHold)).toBe(900);
