@@ -112,6 +112,18 @@ describe("held-out outputs (A16)", () => {
     expect(readFileSync(join(d, "sealed", "k.json.sealed"), "utf8")).toStartWith("STUB-SEALED\n");
     expect(unseal(UNSEAL, join(d, "sealed", "k.json.sealed"))).toBe('{"k":1}');
   });
+  test("at open, a sealed copy of a name the run will write is refused; with no names given, any sealed copy outside journal/ is", () => {
+    const d = tmp();
+    const a = { held: join(d, "sealed"), "seal-cmd": SEAL, out: "/dev/shm/tbv-out" };
+    mkdirSync(join(d, "sealed", "journal", "run-1"), { recursive: true });
+    writeFileSync(join(d, "sealed", "journal", "run-1", "x.json.sealed"), "");
+    expect(typeof heldOutputs(a, ["out"], MOUNTS)).toBe("function");
+    writeFileSync(join(d, "sealed", "other.json.sealed"), "");
+    expect(typeof heldOutputs(a, ["out"], MOUNTS, ["judges.ndjson"])).toBe("function");
+    expect(code(() => heldOutputs(a, ["out"], MOUNTS))).toBe("E_TBV_CUSTODY");
+    writeFileSync(join(d, "sealed", "judges.ndjson.sealed"), "");
+    expect(code(() => heldOutputs(a, ["out"], MOUNTS, ["judges.ndjson"]))).toBe("E_TBV_CUSTODY");
+  });
   test("an empty --held or --seal-cmd is refused, so unset variables cannot turn custody off", () => {
     expect(code(() => heldOutputs({ out: "/var/tbv-out", held: "", "seal-cmd": "" }, ["out"], MOUNTS))).toBe("E_TBV_CUSTODY");
     expect(code(() => heldOutputs({ out: "/var/tbv-out", "seal-cmd": "" }, ["out"], MOUNTS))).toBe("E_TBV_CUSTODY");

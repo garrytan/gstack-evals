@@ -217,7 +217,7 @@ export async function runJudges(o: { packets: string; entries: PacketKeyEntry[];
 /** tbv judge --packets DIR --key FILE --out DIR --item ID --run-id ID --record DIR --ledger FILE [--held SEALED_DIR --seal-cmd CMD] */
 export async function run(argv: string[], io: Io, deps: Deps = {}): Promise<number> {
   const a = parseFlags(argv.slice(1), ["packets", "key", "out", "item", "run-id", "record", "ledger"], ["held", "seal-cmd"]);
-  const seal = heldOutputs(a, ["out"]);
+  const seal = heldOutputs(a, ["out"], undefined, ["judges.ndjson"]);
   if (inside(a.packets!, a.key!)) fail("E_TBV_JUDGE", "the packet key " + a.key + " sits inside the packets directory " + a.packets);
   const entries = readPacketKey(a.key!);
   const brief = readBundle(BUNDLE.judgeBrief);

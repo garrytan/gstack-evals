@@ -182,8 +182,8 @@ export async function writeKeys(o: { histories: History[]; extracts: Extract[]; 
 /** tbv keys --histories DIR --extracts DIR --out DIR --item ID --run-id ID --record DIR --ledger FILE [--held SEALED_DIR --seal-cmd CMD] */
 export async function run(argv: string[], io: Io, deps: Deps = {}): Promise<number> {
   const a = parseFlags(argv.slice(1), ["histories", "extracts", "out", "item", "run-id", "record", "ledger"], ["held", "seal-cmd"]);
-  const seal = heldOutputs(a, ["out"]);
   const histories = readJsonDir<History>(a.histories!, "tbv-history.v1");
+  const seal = heldOutputs(a, ["out"], undefined, [...histories.map((h) => h.task + ".json"), "drops.json"]);
   const extracts = readJsonDir<Extract>(a.extracts!, "tbv-extract.v1");
   const byTask = new Map(extracts.map((x) => [x.task, x]));
   for (const h of histories) {

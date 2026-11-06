@@ -2,13 +2,14 @@
 // The judge run (prereg section 7, amendment item 9): the tbv-judge reply rules, one retry on a bad reply, transport
 // retries, JudgeRecords, and one run through the real proxy and ledger.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildPackets, writePackets } from "../../lanes/tbv/packet.ts";
 import { judgePrompt, parseJudgeReply, readBundle, run, runJudges } from "../../lanes/tbv/judge.ts";
 import { JUDGE_MAX_TOKENS } from "../../lanes/tbv/routes.ts";
 import { BUNDLE, type JudgeRecord, type Packet, type PacketKeyEntry } from "../../lanes/tbv/types.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
+import { readItem } from "../../src/runner/ledger/record.ts";
 import { capture, cleanup, FAKE_KEYS, fakeJudgeSend, fakeRun, judgeReply, KEY, promptOf, QUOTE, record, REPO, SEAL, sent, shm, tmp, unsealed, upstream } from "./s4-helpers.ts";
 
 afterAll(cleanup);
@@ -169,6 +170,80 @@ describe("runJudges over a fake item run", () => {
     expect(await run([...argv(join(shm("tbv-judge-held-"), "out")), "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).toBe(0);
     expect(await run(argv(join(s.dir, "out")), capture().io, deps)).toBe(0);
     expect(dirs).toEqual([join(sealed, "journal", "run-j4"), join(s.dir, "out")]);
+  });
+  test("A16: a --held that already holds judges.ndjson.sealed is refused at open, with no lease and no send; other sealed names and journal/ are not", async () => {
+    const s = setup();
+    const sealed = tmp("tbv-judge-sealed-");
+    writeFileSync(join(sealed, "judges.ndjson.sealed"), "STUB-SEALED\n");
+    let opened = 0;
+    const f = fakeRun(honest);
+    const deps = { open: async () => (opened++, f.run), judgeSend: fakeJudgeSend, worst: () => 1 };
+    const argv = () => ["judge", "--packets", s.packets, "--key", join(s.dir, "key.json"), "--out", join(shm("tbv-judge-held-"), "out"), "--item", "tbv-hr-judge", "--run-id", "run-j5", "--record", join(s.dir, "record"), "--ledger", join(s.dir, "ledger.sqlite"), "--held", sealed, "--seal-cmd", SEAL];
+    await expect(run(argv(), capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining("already holds") });
+    expect(opened).toBe(0);
+    expect(f.sends.length).toBe(0);
+    renameSync(join(sealed, "judges.ndjson.sealed"), join(sealed, "task-alpha.json.sealed"));
+    mkdirSync(join(sealed, "journal", "run-j5"), { recursive: true });
+    expect(await run(argv(), capture().io, deps)).toBe(0);
+    expect(opened).toBe(1);
+  });
+  describe("restart after a crash, through the real openItemRun", () => {
+    const argv = (s: ReturnType<typeof setup>, held: string, runId: string) => ["judge", "--packets", s.packets, "--key", join(s.dir, "key.json"), "--out", join(shm("tbv-judge-held-"), "out"), "--item", "tbv-hr-judge", "--run-id", runId, "--record", join(s.dir, "record"), "--ledger", join(s.dir, "ledger.sqlite"), "--held", held, "--seal-cmd", SEAL];
+    const journal = (dir: string) => readdirSync(dir).filter((n) => n.endsWith(".ndjson")).flatMap((n) => readFileSync(join(dir, n), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)));
+    const answer = (s: ReturnType<typeof setup>) => upstream((p) => judgeReply(JSON.parse(readFileSync(join(s.packets, s.entries.map((e) => e.packet).find((x) => p.includes(x))! + ".json"), "utf8")) as Packet));
+    /** The child: a held judge run on a stub upstream whose second send hangs, so the test can SIGKILL it there. */
+    const CHILD = [
+      `import { readFileSync, writeFileSync } from "node:fs";`,
+      `import { run } from ${JSON.stringify(join(REPO, "lanes", "tbv", "judge.ts"))};`,
+      `import { FAKE_KEYS, judgeReply, upstream } from ${JSON.stringify(join(import.meta.dir, "s4-helpers.ts"))};`,
+      `const c = JSON.parse(process.env.TBV_CHILD);`,
+      `const answer = upstream((p) => judgeReply(JSON.parse(readFileSync(c.packets + "/" + c.ids.find((x) => p.includes(x)) + ".json", "utf8"))));`,
+      `let n = 0;`,
+      `await run(c.argv, { out() {}, err() {} }, { env: FAKE_KEYS, fetch: async (url, init) => (++n === 2 ? (writeFileSync(c.marker, ""), new Promise(() => {})) : answer(url, init)) });`,
+    ].join("\n");
+    /** A held judge run killed in its second send: its lease open, that send's reservation held, one record sealed. Returns the held reservation. */
+    async function crash(s: ReturnType<typeof setup>, held: string, runId: string) {
+      recordApproval(join(s.dir, "record"), { action: "init", item: "tbv-hr-judge", cap_micros: 100_000_000, quotes: [QUOTE], admission: "warn" });
+      const marker = join(s.dir, "hung");
+      const child = Bun.spawn(["bun", "-e", CHILD], { stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "", HOME: s.dir, TBV_CHILD: JSON.stringify({ argv: argv(s, held, runId), packets: s.packets, ids: s.entries.map((e) => e.packet), marker }) } });
+      for (let i = 0; i < 300 && !existsSync(marker); i++) await Bun.sleep(50);
+      child.kill("SIGKILL");
+      await child.exited;
+      if (!existsSync(marker)) throw new Error("the judge child never hung: " + (await new Response(child.stderr).text()));
+      const lines = journal(join(held, "journal", runId));
+      const pending = lines.filter((l) => l.kind === "request" && !lines.some((o) => o.kind === "outcome" && o.reservation_id === l.reservation_id));
+      expect(pending.length).toBe(1);
+      expect(existsSync(join(held, "judges.ndjson.sealed"))).toBe(true);
+      expect(readItem(join(s.dir, "record"), "tbv-hr-judge").open?.run_id).toBe(runId);
+      return pending[0].max_micros as number;
+    }
+    test("the crash-restart procedure: move the sealed copies out, keep journal/, rerun with the same --held and run id; the dead journal is reconciled and its lease settled", async () => {
+      const s = setup();
+      const held = tmp("tbv-judge-sealed-");
+      await crash(s, held, "run-c2");
+      const aside = tmp("tbv-judge-aside-");
+      for (const n of readdirSync(held).filter((n) => n.endsWith(".sealed"))) renameSync(join(held, n), join(aside, n));
+      const before = readFileSync(join(aside, "judges.ndjson.sealed"), "utf8");
+      expect(await run(argv(s, held, "run-c2"), capture().io, { env: FAKE_KEYS, fetch: answer(s) })).toBe(0);
+      expect(readdirSync(join(held, "journal", "run-c2")).filter((n) => n.endsWith(".ndjson")).sort()).toEqual(["journal.dead-0.ndjson", "journal.ndjson"]);
+      const item = readItem(join(s.dir, "record"), "tbv-hr-judge");
+      expect(item.open).toBeNull();
+      expect(item.leases.length).toBe(2);
+      expect(item.leases[0]!.close!.unknown_calls).toBe(1);
+      expect(unsealed(join(held, "judges.ndjson.sealed")).trim().split("\n").length).toBe(6);
+      expect(readFileSync(join(aside, "judges.ndjson.sealed"), "utf8")).toBe(before);
+    }, 30_000);
+    test("a fresh --held after a crash finds no journal, but the dead lease is settled with the in-flight reservation still counted", async () => {
+      const s = setup();
+      const reserved = await crash(s, tmp("tbv-judge-sealed-"), "run-c3");
+      const fresh = tmp("tbv-judge-sealed-");
+      expect(await run(argv(s, fresh, "run-c3"), capture().io, { env: FAKE_KEYS, fetch: answer(s) })).toBe(0);
+      const item = readItem(join(s.dir, "record"), "tbv-hr-judge");
+      expect(item.open).toBeNull();
+      expect(item.leases.length).toBe(2);
+      expect(item.leases[0]!.close!.unknown_calls).toBe(1);
+      expect(item.leases[0]!.close!.unknown_micros).toBeGreaterThanOrEqual(reserved);
+    }, 30_000);
   });
   test("integration: the real openItemRun, judge routes, proxy and ledger with a stub upstream (needs drive.ts and routes.ts)", async () => {
     const s = setup();

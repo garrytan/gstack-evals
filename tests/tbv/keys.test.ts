@@ -223,6 +223,20 @@ describe("keys run", () => {
     expect(existsSync(join(dir, "out"))).toBe(false);
     expect(readdirSync(sealed).length).toBe(0);
   });
+  test("A16: a --held that already holds a key or drops.json this run writes is refused at open, with no lease and no send", async () => {
+    const dir = inputs();
+    let opened = 0;
+    const f = fakeRun(() => sent(keyReply()));
+    const deps = { open: async () => (opened++, f.run), keyWriterSend: fakeKeyWriterSend, judgeSend: fakeJudgeSend, worst: () => 1 };
+    for (const name of ["task-alpha.json.sealed", "drops.json.sealed"]) {
+      const sealed = tmp("tbv-keys-sealed-");
+      writeFileSync(join(sealed, name), "STUB-SEALED\n");
+      const onShm = argv(dir).map((a) => (a === join(dir, "out") ? join(shm("tbv-keys-held-"), "out") : a));
+      await expect(run([...onShm, "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining(name) });
+    }
+    expect(opened).toBe(0);
+    expect(f.sends.length).toBe(0);
+  });
   test("A16: with --held, --out on tmpfs and --seal-cmd, each key and the drops file get a sealed copy as they are written", async () => {
     const dir = inputs();
     const sealed = tmp("tbv-keys-sealed-");

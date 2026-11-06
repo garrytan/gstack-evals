@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The readings writer: driver records, the packet key and judge records into the readings file rule.ts reads.
 import { readFileSync, writeFileSync } from "node:fs";
+import { basename } from "node:path";
 import { heldOutputs } from "./custody.ts";
 import { fail } from "./errors.ts";
 import { parseFlags, readNdjson, readPacketKey, sha256 } from "./judge.ts";
@@ -131,7 +132,7 @@ const count = (v: string, what: string) => (/^[1-9]\d*$/.test(v) ? Number(v) : f
  * [--held SEALED_DIR --seal-cmd CMD] */
 export async function run(argv: string[], io: Io): Promise<number> {
   const a = parseFlags(argv.slice(1), ["records", "keys", "split", "packet-key", "judges", "out", "models", "passes", "skill-arms"], ["capy-passes", "principle-detector", "dev-gap", "held", "seal-cmd"]);
-  const seal = heldOutputs(a, ["out"]);
+  const seal = heldOutputs(a, ["out"], undefined, [basename(a.out!)]);
   const bytes = readFileSync(a.split!);
   let manifest: SplitManifest;
   try {
