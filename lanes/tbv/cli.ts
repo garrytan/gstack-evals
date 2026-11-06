@@ -13,6 +13,7 @@ export const SUBCOMMANDS: Record<string, { module: string; summary: string }> = 
   shape: { module: "shape.ts", summary: "capture the request shape from the pinned Claude Code against a stub provider" },
   splice: { module: "splice.ts", summary: "capture a family's splice set at a pin" },
   "assemble-a": { module: "history/source-a.ts", summary: "assemble source A histories from R3 run bundles" },
+  "rebuild-a": { module: "history/rebuild.ts", summary: "rebuild source A task directories outside the held tier from the pinned export, kept only at their recorded digest" },
   "mine-b": { module: "history/source-b.ts", summary: "fetch this repo's closed and merged pull requests" },
   "assemble-b": { module: "history/source-b.ts", summary: "assemble source B histories from mined pull requests" },
   extract: { module: "extract.ts", summary: "list fact candidates, lists and the stratum of a history" },

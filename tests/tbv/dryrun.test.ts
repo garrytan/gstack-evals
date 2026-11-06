@@ -21,6 +21,6 @@ test("the dry run at the head prints FAIL 0: PASS 150 in the frozen bundle's own
   expect(text).toContain("PASS all 150 frozen checks ran at the head");
   for (const label of Object.keys(ORDERED)) expect(text).toContain("ordered change: " + JSON.stringify(label));
   expect(text).not.toContain("(NOT LISTED)");
-  for (const part of ["3a.", "3b.", "3c.", "3d.", "3e.", "3f.", "3g.", "3h.", "3i.", "3j.", "3k.", "3l."]) expect(text).toContain("## " + part);
+  for (const part of ["3a.", "3b.", "3c.", "3d.", "3e.", "3f.", "3g.", "3h.", "3i.", "3j.", "3k.", "3l.", "3m."]) expect(text).toContain("## " + part);
   expect(text.trim().split("\n").at(-1)).toBe("PASS " + r.pass + ", FAIL 0");
 }, 900_000);

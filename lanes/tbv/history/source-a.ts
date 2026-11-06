@@ -189,7 +189,7 @@ export function taskDirDigest(dir: string): string {
   return treeDigestOf(files);
 }
 /** The rebuild tier's check: a task directory rebuilt from the pinned public export (the pinned Harbor's datasets download, then
- * quick/laneb/runner/materialize.ts) must have lock.json's digest. The rebuild itself needs that export and runs outside this lane. */
+ * quick/laneb/runner/materialize.ts) must have lock.json's digest. tbv rebuild-a (history/rebuild.ts) does the rebuild. */
 export function checkTaskDir(dir: string, digest: string): boolean {
   return existsSync(dir) && taskDirDigest(dir) === digest;
 }

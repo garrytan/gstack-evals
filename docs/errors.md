@@ -144,6 +144,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
 | [E_TBV_INPUT](#e_tbv_input) | 2 | U20 |
 | [E_TBV_HISTORY](#e_tbv_history) | 2 | U20 |
+| [E_TBV_REBUILD](#e_tbv_rebuild) | 2 | U20 |
+| [E_TBV_PROBE](#e_tbv_probe) | 2 | U20 |
 | [E_TBV_SHAPE](#e_tbv_shape) | 2 | U20 |
 | [E_TBV_REQUEST](#e_tbv_request) | 2 | U20 |
 | [E_TBV_RUN](#e_tbv_run) | 2 | U20 |
@@ -1003,6 +1005,22 @@ A history could not be assembled or was refused: it fails the provenance gate, h
 Fix: Read the drop reason. A provenance failure drops the session; a drive path means the source is not clean and must not be used.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TBV_REBUILD
+
+tbv rebuild-a refused before it rebuilt a task directory: a pin is missing or does not hold (a bundle with no pinned commit, a pinned commit the checkout lacks, a pinned file missing at its commit, a pool file not at its pinned sha256 or naming another dataset version or Harbor commit, an export task directory missing or not at the pool's content hash), the pinned materializer refused a pool task, or --out sits inside a git work tree.
+
+Fix: Clone the repo in full so its history holds the pinned commits, download the export again with the pinned Harbor at the pinned version, and give a new --out outside any git checkout, on the run host or in the crew-only Captain drive. Never change a pin to make a rebuild pass: a pin changes only in a new post.
+
+Exit 2. Side effects: None: nothing is spent. The new --out holds at most the pinned files under pins/. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TBV_PROBE
+
+tbv rebuild-a's probe failed: it rebuilt a held-tier task, whose directory R3 left in the drive, and got another digest than that directory's, or no held-tier session ran at a commit the rebuild tier needs, so nothing could check that commit's rebuild. No other task directory was rebuilt.
+
+Fix: Stop. The rebuild does not reproduce R3's task directories from the pinned inputs, so no rebuilt directory may enter the frame. Bring the probe line, the two digests and pins/ in the out directory to the Captain; a fix to the inputs or the method needs a new post.
+
+Exit 2. Side effects: None: nothing is spent. The --out holds pins/ and the probe's rebuilt directory, with the custody of source A's raw bundles. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_TBV_SHAPE
 
