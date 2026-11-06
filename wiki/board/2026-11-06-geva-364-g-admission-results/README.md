@@ -18,12 +18,10 @@ links:
   - src/runner/stats/g-admission.ts
   - lanes/real-outcome/score/grade.ts
 attachments:
-  - 7c931ef09368af50048ed785a213fec9e6ececff27e9d161b55e92ae33f171ba  admission.json
   - 95d2648a30b80fb3247b3997c7ab348e4e056d61c6f521d0b32de5f05b943fc8  admission.txt
   - d56eeb4a265aadb4c1e03b526fb7e74637cf683a0eb875bcd129a18dab699f4b  arm-counts.txt
   - 40a083d8c84a597d45c8bc3528373c6522992bd6ddf928b5c3ea9da480963506  gap-causes.txt
   - fa42e3e072d302763aedf0b580612df450328958472b4e2d89966279c26d2ad3  settle.txt
-  - a3ba2e9cfc5890f3d52afe31470ef9f8c5e0e07f64c59be038a1cdda1396ff61  inputs/g-harbor-job.sh.txt
   - d483e1e73aecc071443e1c6bba9bbccae3112d01675c3b45dc39640f22515437  inputs/g-admission-runner.ts.txt
 ---
 
@@ -39,7 +37,7 @@ Publication status: unpublished. This is the record of a preregistered admission
 | Prereg | [G prereg](../../plans/2026-11-04-geva-262-g-family-admission-prereg/README.md) under [plan v3](../../plans/2026-11-03-geva-225-outcome-per-skill-plan/README.md), pinned by the [O5 pin post](../../plans/2026-11-04-geva-282-g-o5-pin/README.md) and started under the [readiness post](../2026-11-06-geva-312-g-admission-readiness/README.md) |
 | Run commit | 20c4277. It differs from the readiness post's c52f510 only in the readiness post's own two files under wiki/; the admit records bind tree 23d5982ec6d8e953d030014f6e42553fc5d73525, and rig.yml run 42147917032 passed at 20c4277 |
 | Told arms | gstack 699a41cb, lite render (tree ed09c8c8), as the O5 pin post pins it |
-| Data | The run's exported results in the project drive, checked against their sha256 manifest. The attachments here are byte-identical copies. Transcripts and the sealed slice stay private. |
+| Data | The run's exported results in the project drive, checked against their sha256 manifest. The attachments here are byte-identical copies; the drive keeps the rest, including admission.json (Inputs, below). Transcripts and the sealed slice stay private. |
 | Reviewed by | The /ship review of this post, recorded in its pull request |
 | Reproduced by | Not yet |
 
@@ -58,9 +56,9 @@ The admission stages settled $690.03 of their $2,112 in caps. No rerun ran, and 
 - **Tasks.** T-G, the sealed thin slice: 12 valid tasks (10 K3 features, 2 K2 issue fixes) from 9 public repositories, multi-file, statements in our own words, hidden tests from each real change and the base suite ([T-G yield post](../2026-11-05-geva-312-g-tg-slice-yield.md)). Tasks appear here only as tg digests.
 - **Arms** (prereg section 4). none: bare, in the clean room, one turn asking for the implementation. told plan-eng-review and told autoplan: gstack at the pin, turn 1 asks for a plan in PLAN.md and no code, turn 2 runs the skill on PLAN.md, turn 3 asks for the implementation. Told autoplan runs its default full kind. Every told session runs under the lane's rec persona.
 - **Sessions.** 12 tasks x 2 trials x 3 arms = 72 sessions, interleaved in the prereg's frozen order, four at a time, on the program's envelope host. Session limits: none $8, 200 turns, 90 minutes; told plan-eng-review $20, 200 turns, 120 minutes; told autoplan $45, 400 turns, 240 minutes.
-- **Harness.** Harbor f3a5a92 with real_agent in U4 mode and claude-agent-sdk 0.2.174 (inputs/g-harbor-job.sh.txt). Each session spent through its own metered U4 slot on the stage's ledger lease. Hidden tests decide solved; the lane's verifier grades in the pinned image. No judge model.
-- **Scoring.** inputs/g-admission-runner.ts.txt scored each trial with the lane's scorer, the mutation scorer, the skill's exposure detector and the guarded t1 reading, then ran admitG and the prereg's resize.py. It takes each trial's task from the trial's own record (readiness gap 1) and applies the t1 guard (readiness gap 2). Its keyless test, g-admission-runner.test.ts, is not committed (next item).
-- **Inputs committed unchanged.** The job file and the runner under inputs/ carry the sha256s the Captain recorded before the first lease. Each name gets a .txt suffix so the repo's test run and type check don't pick them up; the bytes are unchanged. The runner's keyless test, g-admission-runner.test.ts (recorded sha256 1e8b8ff9b58720d83e64a73bb539c2d83998e5fdcd39b050278214ca8afe56b2), stays in the project drive, unedited. Its line 2 is a usage comment that names the run VM's working directory, which the repo's sealed guard refuses as a local path. That VM no longer exists (Custody and teardown, below).
+- **Harness.** Harbor f3a5a92 with real_agent in U4 mode and claude-agent-sdk 0.2.174, run by the G job file, g-harbor-job.sh (Inputs, below). Each session spent through its own metered U4 slot on the stage's ledger lease. Hidden tests decide solved; the lane's verifier grades in the pinned image. No judge model.
+- **Scoring.** inputs/g-admission-runner.ts.txt scored each trial with the lane's scorer, the mutation scorer, the skill's exposure detector and the guarded t1 reading, then ran admitG and the prereg's resize.py. It takes each trial's task from the trial's own record (readiness gap 1) and applies the t1 guard (readiness gap 2). Its keyless test, g-admission-runner.test.ts, stays in the drive (next item).
+- **Inputs.** The runner under inputs/ carries the sha256 the Captain recorded before the first lease; its name gets a .txt suffix so the repo's test run and type check don't pick it up, and its bytes are unchanged. Three run files stay in the project drive, unedited, cited by their recorded digests: the job file, g-harbor-job.sh (a3ba2e9cfc5890f3d52afe31470ef9f8c5e0e07f64c59be038a1cdda1396ff61); the runner's keyless test, g-admission-runner.test.ts (1e8b8ff9b58720d83e64a73bb539c2d83998e5fdcd39b050278214ca8afe56b2); and admission.json, the runner's machine-readable output with every row (7c931ef09368af50048ed785a213fec9e6ececff27e9d161b55e92ae33f171ba). The test file's line 2 is a usage comment that names the run VM's working directory, which the repo's sealed guard refuses as a local path; that VM no longer exists (Custody and teardown, below). If a public finding ever needs an outside recount, a data-only pull request will bring those three files into the repo.
 
 ## Verdict per skill
 
@@ -85,7 +83,7 @@ None of these decides anything.
 - **t1 writes outside PLAN.md.** Turn 1 asks for a plan in PLAN.md and no code. The model wrote other files in turn 1 in 5 of 18 plan-eng-review trials and 9 of 23 autoplan trials, with the t1 guard applied (a told trial with no t1 message record reads null).
 - **None read audit.** 0 of 24 none trials, scored or gap, were flagged.
 - **Told solved, descriptive.** plan-eng-review 17 of 18 scored trials; the unsolved one ended at the background-wait limit (bg_wait_expired, truncated). autoplan 21 of 23; one unsolved trial ended at the same limit and one completed unsolved. These carry no comparison with none.
-- **What items 3 and 4 would have read.** The verifier returned a run for 63 of 63 scored trees (22 none, 18 told plan-eng-review, 23 told autoplan) and for none of the 9 gaps (admission.json, field verifier_ran). So the half of item 3 that the headroom reading rests on held. The mutation scorer returned a tool error on 10 of 22 none trees, 11 of 18 told plan-eng-review trees and 13 of 23 told autoplan trees (admission.json, field mutation_status). Item 3 asks for 90% of the 48 trees in each skill's comparison; it would have read 19 of 48 for plan-eng-review and 22 of 48 for autoplan. The run record doesn't name the cause of the tool errors. Item 4 allows at most 1 gap per arm; the rows hold 2 for none, 6 for plan-eng-review and 1 for autoplan (The 9 gaps, below). Both truncated told trials were explained by the lane's termination taxonomy.
+- **What items 3 and 4 would have read.** The verifier returned a run for 63 of 63 scored trees (22 none, 18 told plan-eng-review, 23 told autoplan) and for none of the 9 gaps (the drive copy of admission.json, field verifier_ran). So the half of item 3 that the headroom reading rests on held. The mutation scorer returned a tool error on 10 of 22 none trees, 11 of 18 told plan-eng-review trees and 13 of 23 told autoplan trees (the drive copy of admission.json, field mutation_status). Item 3 asks for 90% of the 48 trees in each skill's comparison; it would have read 19 of 48 for plan-eng-review and 22 of 48 for autoplan. The run record doesn't name the cause of the tool errors. Item 4 allows at most 1 gap per arm; the rows hold 2 for none, 6 for plan-eng-review and 1 for autoplan (The 9 gaps, below). Both truncated told trials were explained by the lane's termination taxonomy.
 - **Capture counts.** A host-side capture logged every new outbound TCP SYN and UDP packet from trial containers. Over all 72 trials, at the batch's end and again at settle: 0 packets before a trial's egress table, 0 not allowed after it, and every trial's proxy and sidecar traffic mapped to that trial. The unmapped packets, 255 at the batch's end and 261 at settle, were DNS replies to the host itself. The 6 extra arrived after the batch, with no trial running, and were not inspected. No rerun ran, so there was no rerun trial to count.
 
 ## Metered inputs and the re-size
@@ -170,7 +168,7 @@ plan-devex-review is not covered here. Its outcome test is the X family.
 
 ## Spend
 
-Each stage settled through its own ledger lease on the envelope host (settle.txt). Every model-call stage closed with unknown $0.00 and all 24 sessions ended completed.
+Each stage settled through its own ledger lease on the envelope host (settle.txt). Every model-call stage settled 24 sessions with unknown $0.00 and ended completed.
 
 | Item | Charged to | Lease | What settled | Settled | Cap | Share of cap |
 |---|---|---|---|---|---|---|
@@ -221,7 +219,7 @@ It carries no task, repository or path identifiers. The tasks ran from local pat
 
 ## Replicate it
 
-A recount is keyless from admission.json, which holds every row. The run's own commands, as the run thread ran them on the envelope host, from a checkout at the run commit with the run env file sourced:
+A recount is keyless from the drive copy of admission.json, which holds every row. The run's own commands, as the run thread ran them on the envelope host, from a checkout at the run commit with the run env file sourced:
 
     G_RUN_ENV=<run env> bash g-harbor-job.sh prepare
     G_RUN_ENV=<run env> bash g-harbor-job.sh batch 4
@@ -234,7 +232,7 @@ admit runs the prereg's resize.py itself. The record leaves out the paid session
 
 T-G stays sealed: its 12 tasks and spare, their statements and hidden tests. Its image manifest's sha256 is 7b1ab47b539ee573ea353be777a7b6787e7168d94742b5e43477305e32f4ebe9 (readiness post). Transcripts stay private.
 
-The rest of the export stays in the project drive, under its manifest: launch.log 3907431ab7d224f4c80654a779a04e30bfdd56a40a1ad001a8e7e5ff505534f8, capcount-batch.txt 9342bfd0aef3c79b85531574786e49af297a6ee5a871e23a303c0f54207ffd12, capcount-final.txt dc41d57669b491b25b46a7461a06acb95795202e527e68a61099708d2815718e, rows.tsv d7f23256325ee9fa9e1c52eb8f8bc9f36116923d00afcb2a935d39d3ed3f0652 and rows-detail.tsv 68880351edebce8e7e0a97f8618b5b2bc6e7154a1fbb51d59e9e518b656c8dbc. The hours-lease finish script is 31d17868827417f90d57c89d30f72027a04b4c5dc7d4ea5b9519952246f08150, and the runner's keyless test is 1e8b8ff9b58720d83e64a73bb539c2d83998e5fdcd39b050278214ca8afe56b2.
+The rest of the export stays in the project drive, under its manifest: launch.log 3907431ab7d224f4c80654a779a04e30bfdd56a40a1ad001a8e7e5ff505534f8, capcount-batch.txt 9342bfd0aef3c79b85531574786e49af297a6ee5a871e23a303c0f54207ffd12, capcount-final.txt dc41d57669b491b25b46a7461a06acb95795202e527e68a61099708d2815718e, rows.tsv d7f23256325ee9fa9e1c52eb8f8bc9f36116923d00afcb2a935d39d3ed3f0652 and rows-detail.tsv 68880351edebce8e7e0a97f8618b5b2bc6e7154a1fbb51d59e9e518b656c8dbc. The hours-lease finish script is 31d17868827417f90d57c89d30f72027a04b4c5dc7d4ea5b9519952246f08150. The job file, the runner's keyless test and admission.json carry the digests under Inputs.
 
 ## Attribution
 
