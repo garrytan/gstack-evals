@@ -8,7 +8,8 @@
 //      model and packet kind, the all-in check before every paid item, the leak exemption, held-out source B accrual,
 //      items 1 to 7 and 16, the underscore and fix-check 3 forms (the regression table), each family's history limit,
 //      the skill-start check, the proxy's reservations beside the rule's worst cases, tbv-author's worst case per task,
-//      and the driver, judge and key items end to end on stub upstreams through the real proxy and ledger.
+//      the driver, judge and key items end to end on stub upstreams through the real proxy and ledger, and source A's
+//      rebuild tier (amendment 1 sections 1 and 5) on fixtures.
 //   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun lanes/tbv/dryrun.ts <scratch dir>
 // It calls no model and needs no key; it refuses to start when a key is set.
 import { spawnSync } from "node:child_process";
@@ -287,6 +288,16 @@ export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail:
     say("    drive, judge and keys tests: " + count(/^ (\d+) pass$/m) + " pass, " + count(/^ (\d+) fail$/m) + " fail");
     check("the driver's item runs (real sends, reservations and settlements on a temporary ledger) pass, release and the missing-record stop included", r.status === 0 && count(/^ (\d+) fail$/m) === 0 && o.includes("a send with no generation record (404) keeps its full reservation and stops the item"));
     check("the judge item and the key item run through the real openItemRun, routes, proxy and ledger", o.includes("(pass) runJudges over a fake item run > integration") && o.includes("(pass) keys run > integration"));
+  });
+
+  await section("3m. Source A's rebuild tier on fixtures: the probe, the digest gate, the counts, the refusals and the real pins (amendment 1 sections 1 and 5)", () => {
+    const r = spawnSync("bun", ["test", "tests/tbv/rebuild.test.ts"], { cwd: ROOT, encoding: "utf8", env: KEYLESS, maxBuffer: 1 << 26 });
+    const o = r.stdout + r.stderr;
+    const passed = (name: string) => o.includes("(pass) " + name);
+    say("    rebuild tests: " + (/^ (\d+) pass$/m.exec(o)?.[1] ?? "?") + " pass, " + (/^ (\d+) fail$/m.exec(o)?.[1] ?? "?") + " fail");
+    check("a probe that rebuilds a held-tier task away from its digest, or finds no held-tier session at a commit, refuses before any other rebuild", r.status === 0 && passed("a probe that rebuilds a held-tier task away from its digest refuses before any other rebuild") && passed("the probe needs a held-tier session at every commit the rebuild tier uses"));
+    check("a rebuilt task is kept only at its recorded digest and the rest drop with the reason, and stdout carries counts only", passed("the probe matches, then the digest gate keeps a rebuilt task only at its recorded digest and drops the rest with the reason") && passed("the counts output: pins, the probe, sessions by tier, tasks and sessions kept and dropped by reason; no task id"));
+    check("a missing pin or input refuses, and the real pins are the merged posts' and load from this checkout's history", passed("a missing pin refuses: an unpinned bundle, a commit the checkout lacks, a pinned file missing, a pool off its pins, an export off the pool") && passed("a missing or misplaced input refuses before anything is rebuilt") && passed("the real pins are the merged posts' pins, and the pinned code materializes with the allowlist network") && passed("the real pins load from this checkout's history: both commits hold the four files and the pool at its pins"));
   });
 
   say("\n## Leak check");
