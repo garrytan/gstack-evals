@@ -116,7 +116,7 @@ gstack-forced takes its line, FORCED_LINE and then the ask, from the lens, so it
 
 **The smoke gate.** Before any none item opens a lease:
 
-1. `bin/gstack-evals ceo rows --stage 1 --units $SR/units --run $RUNS/smoke-opus-a $RUNS/smoke-opus-p $RUNS/smoke-sol-a $RUNS/smoke-sol-p $RUNS/smoke-particle-a $RUNS/smoke-particle-p --checks` exits 0 (part 1 pin post, section 4).
+1. `bin/gstack-evals ceo rows --stage 1 --units $SR/units --run $RUNS/smoke-opus-a --run $RUNS/smoke-opus-p --run $RUNS/smoke-sol-a --run $RUNS/smoke-sol-p --run $RUNS/smoke-particle-a --run $RUNS/smoke-particle-p --checks` exits 0 (part 1 pin post, section 4).
 2. The smoke findings check of the part 1 pin post's section 4 finds no disagreement between `findings_written` and the on-disk ceo-review.md copies under each gstack-auto session's out dir, and no non-empty `logs.copy_out`. Any disagreement stops the run, and the case goes to the Captain (approvals, "Stage 1 item caps").
 
 **None items, after the smoke passes:**
@@ -130,8 +130,8 @@ gstack-forced takes its line, FORCED_LINE and then the ask, from the lens, so it
 **Rows, packets and the judges.** The rows read all nine runs. The judge items are recorded only after every run item has settled, because each judge cap is $160 less the settled spend of every earlier stage 1 item.
 
 ```
-bin/gstack-evals ceo rows --stage 1 --units $SR/units --run $RUNS/smoke-opus-a $RUNS/smoke-opus-p $RUNS/smoke-sol-a \
-  $RUNS/smoke-sol-p $RUNS/smoke-particle-a $RUNS/smoke-particle-p $RUNS/opus-none $RUNS/sol-none $RUNS/particle-none --out $J/rows.json
+bin/gstack-evals ceo rows --stage 1 --units $SR/units --run $RUNS/smoke-opus-a --run $RUNS/smoke-opus-p --run $RUNS/smoke-sol-a \
+  --run $RUNS/smoke-sol-p --run $RUNS/smoke-particle-a --run $RUNS/smoke-particle-p --run $RUNS/opus-none --run $RUNS/sol-none --run $RUNS/particle-none --out $J/rows.json
 bin/gstack-evals ceo packets --rows $J/rows.json --units $SR/units --seed 20261106 --out $J/packets --key $J/key.json
 bin/gstack-evals noloss judge-run --ceo --packets $J/packets --key $J/key.json \
   --brief wiki/plans/2026-11-05-geva-295-ceo-ladder-amendment/judge-brief.md --judge openai/gpt-6.1-sol \
