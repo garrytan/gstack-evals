@@ -537,7 +537,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
         await (slot as Slot).close();
       }
     }
-    const e = endState(attempts as Parameters<typeof endState>[0]) as { cls: string; why: string; drill?: Record<string, string> };
+    const e = endState(attempts);
     rec.cls = e.cls as ReadingRecord["cls"];
     rec.why = e.why;
     rec.drill = e.drill ?? {};

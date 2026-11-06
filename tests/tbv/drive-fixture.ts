@@ -93,7 +93,7 @@ export function stub(script: Script, records: (id: string) => Response = () => n
     const body = JSON.parse(String(init.body));
     const first = JSON.stringify(body.messages?.[0] ?? "");
     const last = JSON.stringify(body.messages?.at(-1) ?? "");
-    const m = /TASK (\S+) ARM (\S+)/.exec(first);
+    const m = /TASK (\S+) ARM ([a-z]+)/.exec(first);
     const turn = (/TURN (report|followup|d1|d2):/.exec(last)?.[1] ?? "report") as Turn;
     const key = [m?.[1], m?.[2], body.model, turn].join("|");
     const n = (counts.get(key) ?? 0) + 1;

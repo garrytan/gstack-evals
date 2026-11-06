@@ -24,6 +24,7 @@ interface Go {
   roundWorst?: number;
   validate?: (body: Record<string, unknown>, model: Model) => Validation;
   closer?: () => boolean;
+  splice?: boolean;
 }
 const plan = (o: Go): DrivePlan => ({
   item: ITEM,
@@ -33,7 +34,7 @@ const plan = (o: Go): DrivePlan => ({
   passes: { opus: o.passes ?? 1, sol: o.passes ?? 1, particle: o.passes ?? 1 },
   turns: TURNS,
   shape: (a) => shape(a),
-  splice: () => null,
+  splice: (family, arm) => (o.splice && arm !== "none" ? { schema: "tbv-splice.v1", family, pin: "pin0", opening: [], head: [], tail: [], closer: { kind: "preamble", paragraph: "Report what you verified." }, skillStart: null, files: [], sha256: "3".repeat(64) } : null),
   ...(o.roundWorst === undefined ? {} : { roundWorstMicros: Math.round(o.roundWorst * 1e6) }),
 });
 const journalOf = (out: string) =>
@@ -66,26 +67,28 @@ describe("end states, in the frozen precedence", () => {
   });
 
   test("the cap refusing D2 stops the item; the report stands and D2 drops", async () => {
-    const { res, by } = await go({ script: () => text(), tasks: ["t1", "t2"], cap: 0.093 });
+    const { res, by, item } = await go({ script: () => text(), cap: 0.093 });
     expect(by("t1").cls).toBe("scored");
+    expect(kinds(by("t1"))).toEqual(["report:text", "d1:text", "d2:budget"]);
     expect(by("t1").drill.d2).toContain("cap");
-    expect(by("t2").cls).toBe("cap");
+    expect(item.leases[0]!.close!.cap_stop).toBeDefined();
     expect(res.stop?.cls).toBe("cap");
   });
 
   test("a 4xx that is no refusal is a harness failure that stops the item before more readings", async () => {
-    const { res, by, s } = await go({ script: (c) => (c.task === "t1" ? status(400) : text()), tasks: ["t1", "t2"] });
+    const { res, by, s } = await go({ script: (c) => (c.task === "t1" ? status(400) : text()), tasks: ["t1", "t2", "t3", "t4", "t5"] });
     expect(by("t1").cls).toBe("harness");
+    expect(kinds(by("t1"))).toEqual(["report:4xx"]);
     expect(res.stop?.cls).toBe("harness");
-    expect(by("t2").cls).toBe("harness");
-    expect(s.calls.filter((c) => c.task === "t2").length).toBeLessThanOrEqual(3);
+    expect(by("t5").cls).toBe("harness");
+    expect(s.calls.some((c) => c.task === "t5")).toBe(false);
   });
 
   test("a validator failure that is not about size and a failed closer check are harness failures with no send", async () => {
     const v = await go({ script: () => text(), validate: () => ({ ok: false, size: false, problem: "roles do not alternate" }) });
     expect(v.by("t1").cls).toBe("harness");
     expect(v.s.calls.length).toBe(0);
-    const k = await go({ script: () => text(), closer: () => false, arms: ["current"] });
+    const k = await go({ script: () => text(), closer: () => false, arms: ["current"], splice: true });
     expect(k.by("t1", "current").cls).toBe("harness");
     expect(k.by("t1", "current").why).toContain("closer");
     expect(k.s.calls.length).toBe(0);
