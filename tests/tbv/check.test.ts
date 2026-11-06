@@ -172,6 +172,16 @@ test("check rules scans every history for the org rules' wording and refuses a w
   expect((await tbv("check", "rules", "--wording", file("too short to scan"), "--histories", dev)).err).toMatch(/^E_TBV_INPUT .*fewer than 8 words/m);
 });
 
+test("check rules refuses an empty histories directory (E_TBV_INPUT), as handoff and leak do; a filled one still scans", async () => {
+  const none = await tbv("check", "rules", "--wording", file(WORDING), "--histories", dir([]));
+  expect(none.code).toBe(2);
+  expect(none.err).toMatch(/^E_TBV_INPUT .*--histories .*holds no histories/m);
+  expect(none.out).not.toContain("Verdict: CLEAN");
+  const filled = await tbv("check", "rules", "--wording", file(WORDING), "--histories", dev);
+  expect(filled.code).toBe(0);
+  expect(filled.out).toContain("Verdict: CLEAN");
+});
+
 test("leak: an added line that starts with \"++ \" is an added line; the file header's +++ line is not", () => {
   const g = gstack({ "skills/a.md": "keep\n" }, { "skills/a.md": "keep\n++ leaked-name here\nplain added\n" });
   expect(addedLines(g.d, g.C, g.P)).toEqual(["++ leaked-name here", "plain added"]);

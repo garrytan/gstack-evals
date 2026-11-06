@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { heldOutputs } from "./custody.ts";
 import { fail } from "./errors.ts";
 import { ask, type Deps, fencedJson, isObj, isStrs, modelOf, openRun, parseFlags, readBundle, readJsonDir, REPO_ROOT, SENDS_PER_ASK, type Worst, worstOf } from "./judge.ts";
 import { judgeSend, keyWriterSend } from "./routes.ts";
@@ -119,7 +120,7 @@ export function settleKey(key: Key, audits: Audit[], clean: boolean): { key: Key
 }
 
 /** Writes and audits one key per history, each call on its own slot; kept keys go to out/<task>.json, drops to out/drops.json. */
-export async function writeKeys(o: { histories: History[]; extracts: Extract[]; out: string; keyBrief: string; auditBrief: string; run: ItemRun; keyWriterSend?: typeof keyWriterSend; judgeSend?: typeof judgeSend; worst?: Worst }) {
+export async function writeKeys(o: { histories: History[]; extracts: Extract[]; out: string; keyBrief: string; auditBrief: string; run: ItemRun; keyWriterSend?: typeof keyWriterSend; judgeSend?: typeof judgeSend; worst?: Worst; seal?: (file: string) => void }) {
   const writer = o.keyWriterSend ?? keyWriterSend;
   const auditor = o.judgeSend ?? judgeSend;
   const worst = o.worst ?? worstOf;
@@ -130,6 +131,7 @@ export async function writeKeys(o: { histories: History[]; extracts: Extract[]; 
   const drop = (task: string, reason: string) => {
     dropped.push({ task, reason });
     writeFileSync(join(o.out, "drops.json"), JSON.stringify(dropped, null, 2) + "\n");
+    o.seal?.(join(o.out, "drops.json"));
   };
   for (const h of o.histories) {
     const x = extracts.get(h.task) ?? fail("E_TBV_INPUT", "no extract for task " + h.task);
@@ -171,15 +173,17 @@ export async function writeKeys(o: { histories: History[]; extracts: Extract[]; 
       continue;
     }
     writeFileSync(join(o.out, h.task + ".json"), JSON.stringify(s.key, null, 2) + "\n");
+    o.seal?.(join(o.out, h.task + ".json"));
     kept.push(s.key);
   }
   return { kept, dropped };
 }
 
-/** tbv keys --histories DIR --extracts DIR --out DIR --item ID --run-id ID --record DIR --ledger FILE */
+/** tbv keys --histories DIR --extracts DIR --out DIR --item ID --run-id ID --record DIR --ledger FILE [--held SEALED_DIR --seal-cmd CMD] */
 export async function run(argv: string[], io: Io, deps: Deps = {}): Promise<number> {
-  const a = parseFlags(argv.slice(1), ["histories", "extracts", "out", "item", "run-id", "record", "ledger"]);
+  const a = parseFlags(argv.slice(1), ["histories", "extracts", "out", "item", "run-id", "record", "ledger"], ["held", "seal-cmd"]);
   const histories = readJsonDir<History>(a.histories!, "tbv-history.v1");
+  const seal = heldOutputs(a, ["out"], undefined, [...histories.map((h) => h.task + ".json"), "drops.json"]);
   const extracts = readJsonDir<Extract>(a.extracts!, "tbv-extract.v1");
   const byTask = new Map(extracts.map((x) => [x.task, x]));
   for (const h of histories) {
@@ -192,7 +196,7 @@ export async function run(argv: string[], io: Io, deps: Deps = {}): Promise<numb
   const runner = await openRun(a, deps);
   let r: Awaited<ReturnType<typeof writeKeys>>;
   try {
-    r = await writeKeys({ histories, extracts, out: a.out!, keyBrief, auditBrief, run: runner, keyWriterSend: deps.keyWriterSend, judgeSend: deps.judgeSend, worst: deps.worst });
+    r = await writeKeys({ histories, extracts, out: a.out!, keyBrief, auditBrief, run: runner, keyWriterSend: deps.keyWriterSend, judgeSend: deps.judgeSend, worst: deps.worst, seal });
   } finally {
     await runner.close();
   }

@@ -4,6 +4,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { heldOutputs } from "./custody.ts";
 import { fail, notBuilt } from "./errors.ts";
 import { inside, parseFlags, readBundle, readJson, readJsonDir, readNdjson, sha256 } from "./judge.ts";
 import * as rule from "./rule.ts";
@@ -82,9 +83,10 @@ export function readManifest(path: string): SplitManifest {
   return m;
 }
 
-/** tbv packets --records PATH --keys DIR --split FILE --out DIR --key FILE */
+/** tbv packets --records PATH --keys DIR --split FILE --out DIR --key FILE [--held SEALED_DIR --seal-cmd CMD] */
 export async function run(argv: string[], io: Io): Promise<number> {
-  const a = parseFlags(argv.slice(1), ["records", "keys", "split", "out", "key"]);
+  const a = parseFlags(argv.slice(1), ["records", "keys", "split", "out", "key"], ["held", "seal-cmd"]);
+  const seal = heldOutputs(a, ["out", "key"]);
   if (inside(a.out!, a.key!)) fail("E_TBV_JUDGE", "the packet key " + a.key + " sits inside the packets directory " + a.out);
   const manifest = readManifest(a.split!);
   const records = readRecords(a.records!);
@@ -92,6 +94,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   for (const r of records) if (!tasks.has(r.task)) fail("E_TBV_INPUT", "reading " + r.label + " names a task the split manifest does not hold");
   const built = buildPackets({ records, keys: readKeys(a.keys!), controlTaskIds: manifest.controlTaskIds, stock: readBundle(BUNDLE.stock) });
   writePackets(a.out!, a.key!, built);
+  if (seal) for (const f of [...built.packets.map((p) => join(a.out!, p.id + ".json")), a.key!]) seal(f);
   const n = (k: PacketKind) => built.entries.filter((e) => e.kind === k).length;
   io.out("packets: " + n("first") + " first, " + n("d2") + " d2, " + n("control") + " control");
   return 0;

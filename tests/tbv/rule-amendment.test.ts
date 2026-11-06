@@ -81,6 +81,18 @@ describe("item 11: the all-in check before every paid item", () => {
     expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 150 }).verdict).toStartWith("STAGE 3 WITHOUT THE CAPY FAMILY");
     expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 10 }).verdict).toStartWith("NO STAGE 3");
   });
+  test("before tbv-held, a negative thirdPassCap or capyCap, or a capyCap over the held cap, is refused", () => {
+    const held = (x: Record<string, unknown>) => allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 150, ...x });
+    for (const x of [{ thirdPassCap: -1 }, { capyCap: -1 }, { capyCap: 1700.01 }, { thirdPassCap: -2000, itemCap: 900 }]) {
+      const r = held(x);
+      expect(r.refused).toBe(true);
+      expect(r.err).toContain("thirdPassCap and capyCap");
+    }
+  });
+  test("other direction: zero caps and a capyCap equal to the held cap still run", () => {
+    expect(allin({ item: "tbv-held", itemCap: 900, thirdPassCap: 0, capyCap: 0 }).verdict).toBe("STAGE 3 WITH THE THIRD OPUS PASS ($1230.00)");
+    expect(allin({ item: "tbv-held", itemCap: 1700, thirdPassCap: 200, capyCap: 1700 }).verdict).toBe("STAGE 3 WITHOUT THE CAPY FAMILY ($330.00)");
+  });
 });
 
 const L = (names: string[], addedLines: string[], gstackAtC: string) => ({ addedLines, gstackAtC, material: "unrelated", names });

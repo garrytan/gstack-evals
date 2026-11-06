@@ -3,12 +3,12 @@
 // and judge records into the readings file rule.ts reads.
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildReadings, exposed, listShare, run } from "../../lanes/tbv/readings.ts";
 import { words as ruleWords } from "../../lanes/tbv/rule.ts";
 import type { JudgeRecord, PacketKeyEntry, ReadingsFile } from "../../lanes/tbv/types.ts";
-import { capture, cleanup, KEY, keyFor, MANIFEST, record, tmp, words } from "./s4-helpers.ts";
+import { capture, cleanup, KEY, keyFor, MANIFEST, record, SEAL, shm, tmp, unsealed, words } from "./s4-helpers.ts";
 
 afterAll(cleanup);
 
@@ -168,6 +168,20 @@ describe("readings run", () => {
     const rd2 = JSON.parse(readFileSync(join(dir, "r2.json"), "utf8")) as ReadingsFile;
     expect(rd2.plan.capyPasses).toBe(1);
     expect(rd2.plan.devGap).toEqual({ opusPrincipleMinusNone: 0.05, devMdd: 0.12 });
+  });
+  test("A16: with --held, a readings file on disk is refused (E_TBV_CUSTODY); on tmpfs it gets a sealed copy", async () => {
+    const { dir, argv } = files();
+    const at = argv.indexOf("--out") + 1;
+    const to = (out: string) => argv.map((a, i) => (i === at ? out : a));
+    const sealed = tmp("tbv-readings-sealed-");
+    await expect(run([...argv, "--held", sealed, "--seal-cmd", SEAL], capture().io)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining("--out must sit on tmpfs") });
+    expect(existsSync(join(dir, "readings.json"))).toBe(false);
+    const out = join(shm("tbv-readings-held-"), "readings.json");
+    await expect(run([...to(out), "--held", sealed], capture().io)).rejects.toMatchObject({ code: "E_TBV_CUSTODY" });
+    await expect(run([...to(out), "--seal-cmd", SEAL], capture().io)).rejects.toMatchObject({ code: "E_TBV_CUSTODY" });
+    expect(existsSync(out)).toBe(false);
+    expect(await run([...to(out), "--held", sealed, "--seal-cmd", SEAL], capture().io)).toBe(0);
+    expect(unsealed(join(sealed, "readings.json.sealed"))).toBe(readFileSync(out, "utf8"));
   });
   test("a principle reading needs --principle-detector; with one, its regexes decide", async () => {
     const { f, dir, argv } = files();
