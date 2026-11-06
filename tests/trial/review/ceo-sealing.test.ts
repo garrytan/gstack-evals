@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BRIEF, CANARY, ceo, JUDGES, judgeRun, ledger, pipeline, PROJECTION, ROOT, runDir, SCORER, SMOKE, STAGE1_NONE, STAGE2, tmp, unitsDir } from "./ceo-pipeline.ts";
+import { BRIEF, CANARY, ceo, JUDGES, judgeRun, ledger, pipeline, PROJECTION, ROOT, runDir, SCORER, SMOKE, STAGE1_NONE, STAGE2, STAGE2_SCORER, tmp, unitsDir } from "./ceo-pipeline.ts";
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -19,8 +19,8 @@ const fresh = (tag: string) => {
   return d;
 };
 const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) as Record<string, string>;
-const scorer = (dir: string, args: string[]) => {
-  copyFileSync(SCORER, join(dir, "ceo-rule.ts"));
+const scorer = (dir: string, args: string[], file = SCORER) => {
+  copyFileSync(file, join(dir, "ceo-rule.ts"));
   return spawnSync("bun", [join(dir, "ceo-rule.ts"), ...args], { encoding: "utf8", env: { ...KEYLESS, GSTACK_EVALS_SCORER: ROOT } });
 };
 const IN_REPO = join(ROOT, "ceo-sealing-test-never-written");
@@ -92,7 +92,7 @@ describe("no command prints review text, and the readings pass the frozen scorer
     expect(p.log.map((r) => r.code)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     for (const r of p.log) expect(r.out + r.err).not.toContain(CANARY);
     const sha = createHash("sha256").update(readFileSync(projection)).digest("hex");
-    const c = scorer(d, ["compare", p.readings, projection, sha]);
+    const c = scorer(d, ["compare", p.readings, projection, sha], STAGE2_SCORER);
     expect(c.stderr).toBe("");
     expect(c.status).toBe(0);
     expect(c.stdout).toContain("Stage 2 comparison");

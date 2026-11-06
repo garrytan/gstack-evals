@@ -10,24 +10,36 @@
 // - standalone: a successful Read of a path ending plan-ceo-review/sections/review-sections.md, or a simple cat, head,
 //   sed -n or nl Bash read of it with a non-empty result; and at least one of the four modes in the main agent's own
 //   text, upper case, with a space or an underscore (HOLD SCOPE or HOLD_SCOPE).
-// - autoplan-ceo: a successful Bash call that runs gstack-ceo-mode-handoff itself (GST-1437 and the Captain's rule of
-//   2026-11-05): split at top-level ;, && and newlines, exactly one segment is the handoff call (a mode first, then
-//   --ceo-only, no --auto, read from its shell words, so a comment or quoted text never counts), with only 2>&1, >&2 or 2>/dev/null as redirections and at most one pipe into tee, head, tail
-//   or cat carrying only flags and file arguments; every other segment is cd <dir>, VAR=value or a word-only status
-//   echo such as echo "HANDOFF_EXIT: $?". ||, $(, backticks, a backslash or any other command fails it, so a grep or a
-//   printf of the line never passes. A call with a pipe or another segment also needs the line --ceo-only prints
-//   ("Auto-selected review mode → <MODE> (CEO-only run: Step 0E's rule)") in its own result. And a successful write of a
-//   file named ceo-review.md whose written text holds a line starting "## Findings": a Write, an Edit or MultiEdit (so a
-//   heading a later edit adds counts), or a simple Bash redirect, tee or heredoc (never printf -v, quoted or attached, which writes no text, and never a first line
-//   with a backslash outside single quotes, the rule segments() uses, since words() does not model bash escapes). A \n
-//   reads as a newline only where bash expands it: in printf's format and after echo -e (up to its \c); printf's
-//   arguments don't count. The command and its arguments are the shell words left after every redirection is cut, so
-//   a redirection may sit anywhere. A heredoc body counts only for a tee with no option but -a and for a cat with no
-//   file operand, only when the command has no other input redirect, and under an unquoted delimiter only when the body
-//   holds no backslash, backtick or $(. A command with a second stdout redirect (2> is not one) writes nothing that
-//   counts, and a pipe into tee carries nothing when its head redirects stdout or the tee has an input redirect.
-//   handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows can count the
-//   sessions that named it and still read unexposed.
+// - autoplan-ceo (the stage 2 amendment, 2026-11-06-geva-345-ceo-stage-2-amendment, sections 3.1 and 3.2, with the
+//   Captain's three added checks): handoff_ceo_only holds for a successful Bash call whose result holds exactly one line
+//   of the form --ceo-only prints ("Auto-selected review mode \u2192 <MODE> (CEO-only run: Step 0E's rule). Approved
+//   decisions: <rows>.", one of the four modes as the handoff prints them), whose command does not contain that line's
+//   fixed prefix "Auto-selected review mode", and in which some simple command, at any depth ($(...), backticks, a
+//   subshell or a group), has gstack-ceo-mode-handoff as its command word (after any VAR=value words), a mode as its first
+//   argument, --ceo-only among its words, no --auto, and no redirection that sends its stdout to a file or /dev/null (2>,
+//   2>&1 and >&2 keep it in the result). Comments, quoted text and heredoc bodies are never a command, so a printf or an
+//   echo of the line, or the handoff named after a no-op such as `:`, never counts. Any compound form whose output
+//   reaches the result (cd, export, set -e, $(...), &&, ||, ; chains, a pipe to a filter) reads as run. Known gap, with no
+//   stage 2 consumer: a handoff that fails silently, its failure hidden by a later segment or a pipe, beside a segment
+//   that prints an escaped copy of the line still reads as run.
+//   findings_written reads the file, not the command: it holds when a ceo-review.md copy in the session's
+//   host/ceo-review/ holds a line FINDINGS matches, and reads false for a session whose copy-out logged a failure
+//   (logs.copy_out). The transcript parser below (findingsWrittenTranscript, #230's rule) still runs for the report-only
+//   disagreement count and decides nothing: a successful write of a file named ceo-review.md whose written text holds a
+//   line starting "## Findings": a Write, an Edit or MultiEdit, or a simple Bash redirect, tee or heredoc (never printf
+//   -v, quoted or attached, which writes no text, and never a first line with a backslash outside single quotes, since
+//   words() does not model bash escapes). A \n reads as a newline only where bash expands it: in printf's format and
+//   after echo -e (up to its \c); printf's arguments don't count. The command and its arguments are the shell words left
+//   after every redirection is cut, so a redirection may sit anywhere. A heredoc body counts only for a tee with no
+//   option but -a and for a cat with no file operand, only when the command has no other input redirect, and under an
+//   unquoted delimiter only when the body holds no backslash, backtick or $(. A command with a second stdout redirect (2>
+//   is not one) writes nothing that counts, and a pipe into tee carries nothing when its head redirects stdout or the tee
+//   has an input redirect. handoffNamed says whether any successful own Bash call named gstack-ceo-mode-handoff, so rows
+//   can count the sessions that named it and still read unexposed.
+// - enforced (the amendment's section 3.3 item 6): standalone's two checks, plus gate_armed (the session's
+//   `gstack-skill-gates report --session <id> --expect armed --json` exited 0, its JSON shows at least one fired
+//   ceo-review-gate run for that session, and the record copy did not fail) and gate_released (that report shows a
+//   released run and no exhausted one). Any other report exit, 1 included, or a missing report reads gate_armed false.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -49,7 +61,7 @@ export const GSTACK_CEO_PIN = {
   } as Record<string, string>,
 };
 
-export type CeoExposure = { detector: "standalone" | "autoplan-ceo"; exposed: boolean; failed: string | null; checks: Record<string, boolean> };
+export type CeoExposure = { detector: "standalone" | "autoplan-ceo" | "enforced"; exposed: boolean; failed: string | null; checks: Record<string, boolean> };
 type Rec = Record<string, any>;
 type Use = { name: string; input: Rec; ok: boolean; result: string };
 
@@ -58,15 +70,7 @@ const MODE = new RegExp("\\b(?:" + MODES + ")\\b");
 const REVIEW_SECTIONS = /(?:^|\/)plan-ceo-review\/sections\/review-sections\.md$/;
 const REVIEW_SECTIONS_BASH = /^(?!.*\s--(?:help|version)(?![\w-]))\s*(?:cat|head|nl|sed\s+-n\s+(["']?)[\d,$]*p\1)\s[^<>]*plan-ceo-review\/sections\/review-sections\.md(?![\w.])/;
 const HANDOFF = /gstack-ceo-mode-handoff/;
-const HANDOFF_LINE = new RegExp("^Auto-selected review mode \u2192 (?:" + MODES + ") \\(CEO-only run: Step 0E's rule\\)", "m");
-const HANDOFF_CALL = new RegExp("^\\s*(?:\\S*/)?gstack-ceo-mode-handoff[\"']?\\s+([\"']?)(?:" + MODES + ")\\1(?=\\s|$)");
 const CEO_REVIEW = /(?:^|\/)ceo-review\.md$/;
-const WORD = "(?:\"[^\"$`\\\\]*\"|'[^']*'|[^\\s\"'$`\\\\;&|<>()]+)";
-const CD = new RegExp("^cd(?:\\s+" + WORD + ")?$");
-const ASSIGN = new RegExp("^[A-Za-z_]\\w*=" + WORD + "?$");
-const STATUS_ECHO = /^echo\s+"[\w :=-]*\$\?[\w :=-]*"$/;
-const FILTER = new RegExp("^(?:tee|head|tail|cat)(?:\\s+" + WORD + ")*$");
-const REDIRECTS = /\s(?:2>&1|1?>&2|2>\s*\/dev\/null)(?=\s|$)/g;
 const FINDINGS = /^ {0,3}## Findings\b/m;
 
 const text = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (typeof b?.text === "string" ? b.text : JSON.stringify(b))).join("\n") : c == null ? "" : JSON.stringify(c));
@@ -204,61 +208,250 @@ function words(command: string): string[] | null {
   return out;
 }
 
-/** A command split at its top-level ;, && and newlines, then each part at its top-level pipes; null when it holds ||, a
- * lone &, $(, a backtick, a backslash outside single quotes, or an open quote. */
-function segments(command: string): string[][] | null {
-  const out: string[][] = [];
-  let seg: string[] = [];
-  let cur = "";
-  let quote: string | null = null;
-  const cut = (pipe: boolean) => {
-    seg.push(cur.trim());
-    cur = "";
-    if (!pipe) out.push(seg), (seg = []);
+/** One simple command: its shell words with quotes removed, and its redirections with their targets. */
+type Simple = { argv: string[]; redirects: { op: string; target: string }[] };
+const RESERVED = new Set(["!", "{", "}", "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "for", "case", "esac", "in", "time", "function"]);
+const SUB = "\u0000";
+
+/**
+ * Every simple command in a Bash command line, nested ones included ($(...), backticks, a subshell, a group), in a
+ * lexer that follows bash's quoting: single quotes, double quotes with their four escapes, a backslash outside quotes,
+ * comments from a # that starts a word, and heredoc bodies skipped to their delimiter. A substitution's text joins its
+ * word as an opaque mark, so no word built from one can match a mode or a command name. Null on an open quote or an
+ * unclosed substitution.
+ */
+export function simpleCommands(src: string): Simple[] | null {
+  const all: Simple[] = [];
+  let i = 0;
+  const heredocs: { delim: string; strip: boolean }[] = [];
+  const skipHeredocs = () => {
+    for (const h of heredocs.splice(0)) {
+      for (;;) {
+        if (i >= src.length) return;
+        const nl = src.indexOf("\n", i);
+        const line = src.slice(i, nl < 0 ? src.length : nl);
+        i = nl < 0 ? src.length : nl + 1;
+        if ((h.strip ? line.replace(/^\t+/, "") : line) === h.delim) break;
+      }
+    }
   };
-  for (let i = 0; i < command.length; i++) {
-    const c = command[i]!;
-    const next = command[i + 1];
-    if (quote) {
-      if (c === quote) quote = null;
-      else if (quote === '"' && (c === "\x60" || c === "\\" || (c === "$" && next === "("))) return null;
-      cur += c;
-    } else if (c === "'" || c === '"') (quote = c), (cur += c);
-    else if (c === "\x60" || c === "\\" || (c === "$" && next === "(")) return null;
-    else if (c === ";" || c === "\n") cut(false);
-    else if (c === "&" && next === "&") cut(false), i++;
-    else if (c === "|" && next === "|") return null;
-    else if (c === "|") cut(true);
-    else if (c === "&" && command[i - 1] !== ">" && next !== "1" && next !== "2") return null;
-    else cur += c;
-  }
-  if (quote) return null;
-  cut(false);
-  return out.map((s) => s.filter(Boolean)).filter((s) => s.length);
+  // Reads one nested list up to its closer (")" or "`"), or to the end when closer is null; false when unclosed.
+  const list = (closer: string | null): boolean => {
+    let cmd: Simple = { argv: [], redirects: [] };
+    let word: string | null = null;
+    let pendingOp: string | null = null;
+    const endWord = () => {
+      if (word === null) return;
+      if (pendingOp !== null) {
+        cmd.redirects.push({ op: pendingOp, target: word });
+        if (/^<<-?$/.test(pendingOp)) heredocs.push({ delim: word, strip: pendingOp === "<<-" });
+        pendingOp = null;
+      } else cmd.argv.push(word);
+      word = null;
+    };
+    const endCmd = () => {
+      endWord();
+      if (pendingOp !== null) cmd.redirects.push({ op: pendingOp, target: "" }), (pendingOp = null);
+      if (cmd.argv.length || cmd.redirects.length) all.push(cmd);
+      cmd = { argv: [], redirects: [] };
+    };
+    const nested = (close: string): boolean => {
+      const ok = list(close);
+      word = (word ?? "") + SUB;
+      return ok;
+    };
+    while (i < src.length) {
+      const c = src[i]!;
+      const next = src[i + 1];
+      if (closer === "`" && c === "`") return endCmd(), i++, true;
+      if (closer === ")" && c === ")") return endCmd(), i++, true;
+      if (c === "\\") {
+        if (next === "\n") i += 2;
+        else (word = (word ?? "") + (next ?? "")), (i += 2);
+        continue;
+      }
+      if (c === "'") {
+        const j = src.indexOf("'", i + 1);
+        if (j < 0) return false;
+        word = (word ?? "") + src.slice(i + 1, j);
+        i = j + 1;
+        continue;
+      }
+      if (c === '"') {
+        word ??= "";
+        i++;
+        for (;;) {
+          if (i >= src.length) return false;
+          const d = src[i]!;
+          if (d === '"') break;
+          if (d === "\\" && i + 1 < src.length && "\\\"$`\n".includes(src[i + 1]!)) {
+            if (src[i + 1] !== "\n") word += src[i + 1];
+            i += 2;
+          } else if (d === "$" && src[i + 1] === "(") {
+            i += 2;
+            if (!nested(")")) return false;
+          } else if (d === "`") {
+            i++;
+            if (!nested("`")) return false;
+          } else if (d === "$" && src[i + 1] === "{") {
+            const j = src.indexOf("}", i);
+            if (j < 0) return false;
+            word += SUB;
+            i = j + 1;
+          } else (word += d), i++;
+        }
+        i++;
+        continue;
+      }
+      if (c === "$" && next === "(" && src[i + 2] === "(") {
+        const j = src.indexOf("))", i);
+        if (j < 0) return false;
+        word = (word ?? "") + SUB;
+        i = j + 2;
+        continue;
+      }
+      if (c === "$" && next === "(") {
+        i += 2;
+        if (!nested(")")) return false;
+        continue;
+      }
+      if (c === "$" && next === "{") {
+        let j = i + 2;
+        for (let d = 1; j < src.length && d > 0; j++) d += src[j] === "{" ? 1 : src[j] === "}" ? -1 : 0;
+        if (src[j - 1] !== "}") return false;
+        word = (word ?? "") + SUB;
+        i = j;
+        continue;
+      }
+      if (c === "`") {
+        i++;
+        if (!nested("`")) return false;
+        continue;
+      }
+      if (c === "#" && word === null) {
+        while (i < src.length && src[i] !== "\n") i++;
+        continue;
+      }
+      if (c === "\n") {
+        endCmd();
+        i++;
+        skipHeredocs();
+        continue;
+      }
+      if (c === " " || c === "\t") {
+        endWord();
+        i++;
+        continue;
+      }
+      if (c === ";" || c === "&" || c === "|") {
+        if (c === "&" && next === ">") {
+          endWord();
+          const op = src.startsWith("&>>", i) ? "&>>" : "&>";
+          pendingOp = op;
+          i += op.length;
+          continue;
+        }
+        endCmd();
+        i += (c === "&" && next === "&") || (c === "|" && (next === "|" || next === "&")) || (c === ";" && next === ";") ? 2 : 1;
+        continue;
+      }
+      if (c === "(") {
+        endCmd();
+        i++;
+        if (!list(")")) return false;
+        continue;
+      }
+      if (c === ")") return false;
+      if (c === "<" || c === ">") {
+        const fd = word !== null && /^\d+$/.test(word) ? word : "";
+        if (fd) word = null;
+        else endWord();
+        const m = /^(?:<<<|<<-|<<|<>|<&|>>|>&|>\||<|>)/.exec(src.slice(i))!;
+        i += m[0].length;
+        let op = fd + m[0];
+        if (/&$/.test(m[0]) && /^[\d-]/.test(src[i] ?? "")) {
+          const t = /^\d*-?/.exec(src.slice(i))![0];
+          cmd.redirects.push({ op, target: "&" + t });
+          i += t.length;
+          continue;
+        }
+        while (src[i] === " " || src[i] === "\t") i++;
+        pendingOp = op;
+        continue;
+      }
+      word = (word ?? "") + c;
+      i++;
+    }
+    endCmd();
+    return closer === null;
+  };
+  return list(null) ? all : null;
+}
+
+const MODE_WORD = new RegExp("^(?:" + MODES + ")$");
+const HANDOFF_WORD = /(?:^|\/)gstack-ceo-mode-handoff$/;
+const HANDOFF_FULL = /^Auto-selected review mode \u2192 (?:HOLD SCOPE|SCOPE EXPANSION|SELECTIVE EXPANSION|SCOPE REDUCTION) \(CEO-only run: Step 0E's rule\)\. Approved decisions: .+\.$/;
+const HANDOFF_PREFIX = "Auto-selected review mode";
+/** A redirection that sends stdout away from the result: >, >>, 1>, >|, &> or >& to a file, /dev/null or a closed fd. */
+const stdoutAway = (r: { op: string; target: string }) => /^(?:1?>[>|]?|&>>?|1?>&)$/.test(r.op) && !/^&[12]$/.test(r.target);
+
+/** The handoff call itself in a simple command: its command word (after VAR=value words), a mode first, --ceo-only, no --auto, stdout kept. */
+function isHandoffCall(c: Simple): boolean {
+  let k = 0;
+  while (k < c.argv.length && (RESERVED.has(c.argv[k]!) || /^[A-Za-z_]\w*=/.test(c.argv[k]!))) k++;
+  const argv = c.argv.slice(k);
+  return argv.length > 1 && !argv[0]!.slice(argv[0]!.lastIndexOf("/") + 1).includes(SUB) && HANDOFF_WORD.test(argv[0]!) && MODE_WORD.test(argv[1]!) && argv.includes("--ceo-only") && !argv.includes("--auto") && !c.redirects.some(stdoutAway);
 }
 
 /** Whether a Bash call ran the handoff itself with --ceo-only (the rule in this file's header), given its own result. */
 function ranHandoff(command: string, result: string): boolean {
-  const segs = segments(command);
-  if (!segs) return false;
-  const calls = segs.filter((s) => HANDOFF.test(s.join("|")));
-  if (calls.length !== 1) return false;
-  const [call, ...pipe] = calls[0]!;
-  if (pipe.length > 1 || (pipe.length === 1 && !FILTER.test(pipe[0]!))) return false;
-  if (segs.some((s) => s !== calls[0] && !(s.length === 1 && (CD.test(s[0]!) || ASSIGN.test(s[0]!) || STATUS_ECHO.test(s[0]!))))) return false;
-  const bare = call!.replace(REDIRECTS, " ");
-  if (/[<>&]/.test(bare.replace(/'[^']*'|"[^"]*"/g, "''"))) return false;
-  const argv = words(bare);
-  if (!argv || !HANDOFF_CALL.test(bare) || !/(?:^|\/)gstack-ceo-mode-handoff$/.test(argv[0] ?? "") || !argv.includes("--ceo-only") || argv.includes("--auto")) return false;
-  return (segs.length === 1 && pipe.length === 0) || HANDOFF_LINE.test(result);
+  if (result.split(/\r?\n/).filter((l) => HANDOFF_FULL.test(l)).length !== 1) return false;
+  if (command.includes(HANDOFF_PREFIX)) return false;
+  const cmds = simpleCommands(command);
+  return !!cmds && cmds.some(isHandoffCall);
 }
 
-/** The autoplan arm (gstack-auto, /autoplan --ceo-only): the handoff run with --ceo-only, and ceo-review.md written with a Findings section. */
-export function autoplanCeoExposure(transcript: string): CeoExposure {
+/** #230's transcript reading of findings_written: report-only since the stage 2 amendment, for the disagreement count. */
+export const findingsWrittenTranscript = (transcript: string): boolean => ownUses(transcript).some((u) => u.ok && FINDINGS.test(ceoReviewText(u) ?? ""));
+
+/** What the harness left on disk for one session: the text of every ceo-review.md copy under host/ceo-review/, and whether the copy-out logged a failure. */
+export interface CeoDisk {
+  copies: string[];
+  copy_failed: boolean;
+}
+
+/** The autoplan arm (gstack-auto, /autoplan --ceo-only): the handoff run with --ceo-only, and a ceo-review.md copy on disk with a Findings section. */
+export function autoplanCeoExposure(transcript: string, disk: CeoDisk): CeoExposure {
   const uses = ownUses(transcript).filter((u) => u.ok);
   return exposure("autoplan-ceo", {
     handoff_ceo_only: uses.some((u) => u.name === "Bash" && typeof u.input.command === "string" && ranHandoff(u.input.command, u.result)),
-    findings_written: uses.some((u) => FINDINGS.test(ceoReviewText(u) ?? "")),
+    findings_written: !disk.copy_failed && disk.copies.some((t) => FINDINGS.test(t)),
+  });
+}
+
+/** One enforced session's gate report, as review-units stores it: the report's exit code and JSON (null when it never ran), and whether the record copy failed. */
+export interface GateReport {
+  session_id: string | null;
+  exit: number | null;
+  json: unknown;
+  copy_failed: boolean;
+}
+type GateRow = { session?: unknown; hook?: unknown; fired?: unknown; blocked?: unknown; released?: unknown; exhausted?: unknown };
+/** The report's ceo-review-gate rows for the session it was run for. */
+export function gateRows(gate: GateReport | null): GateRow[] {
+  const rows = (gate?.json as { rows?: unknown } | null)?.rows;
+  return Array.isArray(rows) ? rows.filter((r: GateRow) => r && r.hook === "ceo-review-gate" && r.session === gate!.session_id) : [];
+}
+
+/** The enforced arm (gstack-enforced): standalone's two checks, the gate armed with no error, and the gate released, not exhausted. */
+export function enforcedExposure(transcript: string, gate: GateReport | null): CeoExposure {
+  const base = standaloneExposure(transcript).checks;
+  const rows = gateRows(gate);
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return exposure("enforced", {
+    ...base,
+    gate_armed: !!gate && !gate.copy_failed && gate.exit === 0 && rows.some((r) => num(r.fired) > 0),
+    gate_released: rows.some((r) => num(r.released) > 0) && !rows.some((r) => num(r.exhausted) > 0),
   });
 }
 

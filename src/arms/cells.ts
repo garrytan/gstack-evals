@@ -9,7 +9,8 @@
 //   seats run on the session model; in a cheap cell every value is inherit-parent, list lengths kept, since a panel's
 //   length sets its fan-out. The shape is read from the installed tree, so no pstack text is stored in this repo.
 // - gstack: config keys for the trial's state root, appended after the seed (seedStateRoot's extra): agent_model host,
-//   so its readers run on the parent model, and codex_reviews enabled only in a voice cell.
+//   so its readers run on the parent model, and codex_reviews enabled only in a voice cell, plus any keys the run gives the
+//   arm (gstackConfig: the CEO stage 2 enforced arm's ceo_review_gate on), so the cell tree carries them.
 // - Codex: in a voice cell, an arm whose stack keeps a voice (gstack's outside voice, tstack's Sol reviewer) gets the
 //   Claude Code driver's codex option, which writes the session's ~/.codex/config.toml with no credential in it.
 import { createHash, randomBytes } from "node:crypto";
@@ -83,7 +84,7 @@ export function pstackModelsRule(setupSkill: string, cell: Cell): string | null 
  * content, so cells may share dir. The folder is written beside its final name and renamed into place, so a concurrent
  * build on the same dir never sees half a layer; a folder already there with other bytes is replaced the same way.
  */
-export function cellSettings(install: ArmInstall, cell: Cell, dir: string): CellSettings {
+export function cellSettings(install: ArmInstall, cell: Cell, dir: string, gstackConfig: Readonly<Record<string, string>> = {}): CellSettings {
   const kind = install.provenance.kind === "stack" ? stackKind(install.provenance.stack as StackRef) : null;
   let layer: Layer | null = null;
   if (kind?.plugin && install.plugins.length) {
@@ -117,7 +118,7 @@ export function cellSettings(install: ArmInstall, cell: Cell, dir: string): Cell
     }
     layer = { src: at, dest: "" };
   }
-  const gstack_config: Record<string, string> = install.gstack ? { agent_model: "host", codex_reviews: cell.voice ? "enabled" : "disabled" } : {};
+  const gstack_config: Record<string, string> = install.gstack ? { agent_model: "host", codex_reviews: cell.voice ? "enabled" : "disabled", ...gstackConfig } : {};
   const codex = cell.voice && (install.gstack || kind?.voice) ? { model: cell.voice } : null;
   const parts = [install.tree_sha256, layer ? PSTACK_RULE + " " + dirTreeSha256(layer.src) : "", JSON.stringify(gstack_config), JSON.stringify(codex)];
   return { cell, layer, gstack_config, codex, tree_sha256: createHash("sha256").update(parts.join("\n")).digest("hex") };

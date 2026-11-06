@@ -3,7 +3,7 @@
 // - setup and check: PATH, the trial HOME, LANG, TERM, GSTACK_STATE_ROOT and GSTACK_HOME, SKILL_EVAL_FIXTURES, and the
 //   task's declared fixture variables; the check also gets SKILL_EVAL_DELTA.
 // - agent: the same without SKILL_EVAL_FIXTURES (the agent never sees the tasks directory), plus the per-session bearer,
-//   the proxy base URL and the host's own settings (model purity, config dirs, session kind). The key and token names
+//   the proxy base URL and the host's own settings (model purity, config dirs, session kind, gstack's gate deadline). The key and token names
 //   there must carry a per-session bearer from the metering proxy, never a provider key.
 // - proxy: the provider keys and the management credential, and nothing a task declares. The provider key lives only here.
 // A credential-looking name that is not on its role's list is refused, and no setup, agent or check value may hold a
@@ -30,7 +30,7 @@ export const SESSION_ENV: readonly string[] = ["ANTHROPIC_BASE_URL", "ANTHROPIC_
 export const HOST_ENV: readonly string[] = [
   "ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
   "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "CLAUDE_CODE_MAX_RETRIES", "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "DISABLE_TELEMETRY",
-  "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "GSTACK_SESSION_KIND",
+  "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "GSTACK_SESSION_KIND", "GSTACK_SKILL_GATE_DEADLINE_MS",
 ];
 
 /** The proxy container's names: provider keys and the management credential. */

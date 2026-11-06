@@ -1185,3 +1185,44 @@ test("scrubbedCause walks nested causes and redacts every secret", () => {
   const e = new Error("outer", { cause: new Error("inner gse_abc", { cause: "deepest sk-1" }) });
   expect(scrubbedCause(e, ["gse_abc", "sk-1"])).toBe("outer: inner [redacted]: deepest [redacted]");
 });
+
+
+describe("the per-session meter record (the CEO stage 2 amendment, section 5 and notes F and K)", () => {
+  // Value: protects=projection's trip check and the smoke rerun's peak in-flight read come from what the proxy reserved and what the provider reported; fails_when=two calls in flight read as one, a settled call keeps counting as in flight, or the largest prompt, bytes per token or cache-write modes misread; why_new=stage 2 amendment section 5 (two calls in flight trip an allowance early) and carried notes F and K; seam=MeteringProxy.finalize; no_claim=the reservation arithmetic, which the pricing tests cover
+  test("two calls held in flight at once read as a peak of two, with both worst cases; usage sets the largest prompt and bytes per token", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>(r => (release = r));
+    let n = 0;
+    const t = setup(async () => {
+      const k = ++n;
+      if (k <= 2) await held;
+      return k === 1 ? ok({ input_tokens: 100, cache_read_input_tokens: 50, cache_creation_input_tokens: 25, output_tokens: 5 }) : ok({ input_tokens: 10, output_tokens: 5 });
+    });
+    const a = t.bind({ allowance_micros: 50_000_000 });
+    const plain = { model: "claude-opus-5-5", max_tokens: 1000, messages: [{ role: "user", content: "hi" }] };
+    const cached = { model: "claude-opus-5-5", max_tokens: 1000, system: [{ type: "text", text: "s", cache_control: { type: "ephemeral", ttl: "1h" } }], messages: [{ role: "user", content: "x".repeat(400) }] };
+    const first = t.call(a.slot, a.token, undefined, cached);
+    const second = t.call(a.slot, a.token, undefined, plain);
+    while (t.calls.length < 2) await Bun.sleep(5);
+    release();
+    expect([(await first).status, (await second).status]).toEqual([200, 200]);
+    expect((await t.call(a.slot, a.token, undefined, plain)).status).toBe(200);
+    const meter = await t.proxy.finalize(a.meter_id);
+    const reserves = t.journal().filter(e => e.kind === "reserve").map(e => e.max_micros as number);
+    expect(meter.peak_inflight_calls).toBe(2);
+    expect(meter.peak_inflight_micros).toBe(reserves[0]! + reserves[1]!);
+    expect(meter.largest_prompt).toBe(175);
+    const bytes = t.calls.map(c => Buffer.byteLength(JSON.stringify(c.body)));
+    expect(meter.bytes_per_token).toBeCloseTo(Math.max(bytes[0]! / 175, bytes[1]! / 10, bytes[2]! / 10), 9);
+    expect(meter.cache_write).toEqual(["1h", "none"]);
+  });
+  test("a meter whose calls reported no usage keeps null prompt figures, and a refused call reserves nothing", async () => {
+    const t = setup(() => new Response("upstream down", { status: 400 }));
+    const a = t.bind({ allowance_micros: 30_000 });
+    expect((await t.call(a.slot, a.token)).status).toBe(400);
+    await expectProblem(await t.call(a.slot, a.token, undefined, { model: "claude-opus-5-5", max_tokens: 1000, messages: [{ role: "user", content: "x".repeat(30_000) }] }), 402, "E_ALLOWANCE");
+    const meter = await t.proxy.finalize(a.meter_id);
+    expect([meter.peak_inflight_calls, meter.largest_prompt, meter.bytes_per_token, meter.cache_write]).toEqual([1, null, null, ["none"]]);
+  });
+});
+

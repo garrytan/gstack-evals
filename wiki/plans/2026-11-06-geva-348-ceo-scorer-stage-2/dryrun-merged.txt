@@ -1,0 +1,307 @@
+## a. Frozen files
+PASS template.txt sha256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862
+PASS judge-brief.md sha256 d7b3dce1498e01e874f1dae024ac90e79e5ff5e3af12cc5ed37e2f8a48a14fb5
+PASS stock-list.txt sha256 9ecbc78e696836bd11c3e89df1cc1cb0b0e28940b92e7dd3a96846224e47fe3c
+PASS unit-brief.md sha256 7200df2df9fd14a38c4766cd7e0043dda49624b8d4f23aeb8d1142bf8158ff5d
+PASS power.py sha256 a39ee813765e24ccf23f76527b780ecb609103a8d01661f6040c883f117b8499
+PASS power.txt sha256 ea7028c492ac58a6a2d3771554ff18696b16eb63a36fe0385ceab1db5b36027f
+PASS power-gr.py sha256 a75c25467e4ab54591ce810245aba737f3f2c97e77e1f2987e03d869ab04ba1e
+PASS power-gr.txt sha256 d0e28ffd59ee69e1fdb1f578bc29ca43489b7a6f245feb38f06f6ae85a8327f3
+PASS stage2-sizing.txt sha256 d9edc0e4a5f6f621a79621b06b81fe03571c0000dff7df5b48b00cce90e24c68
+PASS ceo-rule.ts sha256 2222e0cfa65f9f105d6645a70fc6a4bed67d9f0f75033d6e935cdebb7fcaf179
+PASS the template names the ceo-outcome fence, at most 3 ranked issues of at most 40 words, and a 0 to 100 forecast
+PASS the stock list holds two rows of three generic concerns (A: demand, migration, scope; B: direction fit, upkeep, an existing alternative), each issue followed by its stock fix, and each row's fixes say don't build it, reuse an existing tool and cut it to a minimal version once each
+PASS the judge brief reads each issue's first 40 words and judges it on its first problem
+PASS the judge brief's D read, the text above its rule, is byte for byte the preregistration's brief (sha256 83d5d644...52589)
+PASS the remedy read below the rule answers rem per issue on its fix's first remedy, in a ceo-judge-rem block
+    scorer src/runner tree 912b40ca121d2e3879cf5143b7e85d80c793dc63 (the pin post freezes the scorer pin; this dry run uses only src/runner/stats and src/runner/ledger)
+
+## b. Stage 1 headroom rule: every outcome
+FAIL b. Stage 1 headroom rule: every outcome: ran to the end (threw ceo-rule.ts headroom exited 1:  Bun v1.4.4 (Linux x64))
+
+## c. Rule 5 on the smoke: stage 1's smoke waits on the rerun, and the rerun admits, leaves untested or fails each cell
+FAIL c. Rule 5 on the smoke: stage 1's smoke waits on the rerun, and the rerun admits, leaves untested or fails each cell: ran to the end (threw ceo-rule.ts headroom exited 1:  Bun v1.4.4 (Linux x64))
+
+## d. Projection check: the six items, the trip check, the judges from the live cells and the cut order (the stage 2 amendment, sections 3.4, 3.5, 5 and 7.3)
+FAIL d. Projection check: the six items, the trip check, the judges from the live cells and the cut order (the stage 2 amendment, sections 3.4, 3.5, 5 and 7.3): ran to the end (threw ceo-rule.ts projection exited 1:  Bun v1.4.4 (Linux x64))
+
+## d2. Round admission at stage 1's fixed caps
+PASS the frozen stage 1 caps admit every round at the projected spend
+      ceo-o-hr-opus-none: 20 round(s), a full round $21.12 at allowance, cap $52.00: every round admits ($15.00 spent at the projection)
+      ceo-o-hr-sol-none: 14 round(s), a full round $10.56 at allowance, cap $23.00: every round admits ($6.00 spent at the projection)
+      ceo-o-hr-particle-none: 14 round(s), a full round $0.58 at allowance, cap $6.00: every round admits ($2.40 spent at the projection)
+      ceo-o-hr-smoke-opus-a: 1 round(s), a full round $24.00 at allowance, cap $25.00: every round admits ($6.00 spent at the projection)
+      ceo-o-hr-smoke-opus-p: 1 round(s), a full round $14.08 at allowance, cap $15.00: every round admits ($1.40 spent at the projection)
+      ceo-o-hr-smoke-sol-a: 1 round(s), a full round $12.00 at allowance, cap $13.00: every round admits ($3.60 spent at the projection)
+      ceo-o-hr-smoke-sol-p: 1 round(s), a full round $7.04 at allowance, cap $8.00: every round admits ($0.84 spent at the projection)
+      ceo-o-hr-smoke-particle-a: 1 round(s), a full round $0.66 at allowance, cap $1.00: every round admits ($0.66 spent at the projection)
+      ceo-o-hr-smoke-particle-p: 1 round(s), a full round $0.38 at allowance, cap $1.00: every round admits ($0.30 spent at the projection)
+PASS the frozen stage 1 caps still admit every round at twice the projected spend
+PASS v1's smoke caps ($18, $4, $8, $2) refuse their only round, as the PR review found
+
+## e. All-in check on the stage 2 amendment's table (section 7.2), the judges one shared line
+FAIL the table's lines, stage 1's runner host in runner_hosts: $1,992.07 -> PASS with $7.93 to spare
+FAIL crew spent $480.00 -> $2,002.46 -> REFUSED, the design shrinks by the cut order
+FAIL   accept twin: the reserve raised to $37.92 -> $1,999.99 -> PASS
+FAIL refuse no judges line -> exit 1: 
+FAIL refuse three judge caps in place of one shared line -> exit 1: 
+FAIL refuse run_caps with five items -> exit 1: 
+FAIL refuse run_caps naming autoplan-ceo's old item ceo-o-cmp-opus-a -> exit 1: 
+FAIL refuse a negative crew reserve -> exit 1: 
+FAIL refuse the frozen four fields -> exit 1: 
+FAIL refuse the frozen input shape with no lines object -> exit 0: 
+
+## f. Stage 2 verdicts, Holm families, exposure, coverage, gaps, missing blocks and judge failures
+FAIL f. Stage 2 verdicts, Holm families, exposure, coverage, gaps, missing blocks and judge failures: ran to the end (threw ceo-rule.ts compare exited 1:  Bun v1.4.4 (Linux x64))
+
+## f2. Input guards added by the guard amendment: each refusal on its repro, then its accept twin
+  Gap 1: a status outside scored, no-block, gap and incomplete
+FAIL refuse 30 Opus none rows on changed units with status capped -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same 30 rows with status incomplete, which leave coverage -> exit 1
+PASS refuse stage 1, the 6 incomplete Opus none rows relabelled capped -> exit 1: E_USAGE readings row has a status outside scored, no-block, gap and incomplete; first: none on opus, unit c10, pass 3, status "capped"
+FAIL   accept twin: the same readings with status incomplete -> exit 1
+PASS refuse a smoke row with status capped (enforced on opus, c0) -> exit 1: E_USAGE readings row has a status outside scored, no-block, gap and incomplete; first: smoke enforced on opus, unit c0, pass 1, status "capped"
+FAIL   accept twin: the same readings unedited -> exit 1
+  Gap 2: unit records listed more than once (and a unit kind outside changed and held)
+PASS refuse stage 1 readings that list every unit twice -> exit 1: E_USAGE readings must list each unit once; first duplicate: c0
+FAIL   accept twin: the same readings listing each unit once -> exit 1
+FAIL refuse stage 2 readings that list every unit twice -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same readings listing each unit once -> exit 1
+PASS refuse unit c0 with kind Changed, which takes its stock hit out of the count -> exit 1: E_USAGE readings must give each unit a string id and kind changed or held; first: c0
+FAIL   accept twin: the same readings with kind changed -> exit 1
+  Gap 3: smoke rows, one per gstack arm, model and unit, on the same two units for every cell
+FAIL refuse the c1 enforced Opus smoke row deleted and the c0 row copied in its place -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same readings unedited -> exit 1
+FAIL refuse the failed c1 enforced Opus smoke row replaced by a copy of the c0 row under c1's id -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the failed c1 row as it ran -> exit 1
+FAIL refuse the second enforced Opus smoke row moved to c0 -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same readings unedited -> exit 1
+FAIL refuse a copy of the c0 enforced smoke row on model haiku -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same readings unedited -> exit 1
+FAIL refuse both standalone particle-1 smoke rows missing -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same readings unedited -> exit 1
+FAIL refuse the c1 enforced Opus smoke row missing -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the c1 row present and not exposed -> exit 1
+FAIL refuse the c1 standalone Sol smoke row on c2, which is not a smoke unit -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same readings unedited -> exit 1
+  Gap 4: held-unit rows, checked against min(passes, held_passes)
+FAIL refuse every row on a held unit missing -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same readings with their held rows -> exit 1
+FAIL refuse every standalone Opus row on a held unit missing -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same readings with their held rows -> exit 1
+FAIL refuse readings with no held_passes -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same readings with held_passes 2 -> exit 1
+FAIL refuse held_passes 1 with the held pass-2 rows kept -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: held_passes 1 with every held pass-2 row removed -> exit 1
+  Gap 5: lens rows, checked against the lens flag
+FAIL refuse every lens row missing and no lens flag -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same readings with lens true and their lens rows -> exit 1
+FAIL refuse every lens row missing with lens true -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: every lens row missing with lens false -> exit 1
+FAIL refuse lens rows kept with lens false -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: lens rows kept with lens true -> exit 1
+  Gap 6: the row field contract, incomplete rows included
+FAIL refuse an incomplete row with no leak and no words (none on opus, c0, pass 1) -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same row with leak false for both judges and words [] -> exit 1
+FAIL refuse the same incomplete row with leak and no words -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same row with words [] -> exit 1
+PASS refuse stage 1, the first incomplete Opus none row with no leak -> exit 1: E_USAGE readings row breaks the row contract on leak; first: none on opus, unit c10, pass 3
+FAIL   accept twin: the same readings with its leak -> exit 1
+FAIL refuse a judge call outside D, R1, R2, R3, none and null (enforced on opus, c47, pass 1, Sol says maybe) -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same call with Sol missing (null), an unjudged review that leaves coverage -> exit 1
+  Also: stock rows, the readings' arrays, and the projection's stage 1 readings
+FAIL refuse stock row A missing on c1, one of the two units it hit -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same readings with that row -> exit 1
+FAIL refuse stock row B on c3 listed twice -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same readings with it once -> exit 1
+FAIL refuse a stock row on held unit h0 -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same readings without it -> exit 1
+FAIL refuse a stock row whose first call has no Sonnet entry -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same call with Sonnet missing (null) -> exit 1
+PASS refuse stage 2 readings with no stock array -> exit 1: E_USAGE readings must carry units, reviews and stock as arrays
+FAIL   accept twin: the same readings with their stock rows -> exit 1
+FAIL refuse a projection whose stage 1 readings carry a second c0 enforced Opus smoke row at $6.00 -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same projection on the readings as they are -> exit 1
+  Fix-check note 4: passes take one of the projection's two shapes
+FAIL refuse Opus at 1 pass with every Opus pass-2 row removed -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: every model at 2 passes -> exit 1
+FAIL refuse Sol at 1 pass and particle-1 at 2, every Sol pass-2 row removed -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: Sol and particle-1 at 1 pass with held_passes 1, the last cut -> exit 1
+FAIL refuse Sol and particle-1 at 1 pass with held_passes 2 -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same passes with held_passes 1 -> exit 1
+  Found in this post's /ship review: judge call counts and smoke wall time
+FAIL refuse stock rows A on c0 and c1, the two it hit, cut to one judge call each -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same rows with all three calls -> exit 1
+PASS refuse 10 scored Opus none hit rows with labels [] and three issues each -> exit 1: E_USAGE readings row breaks the row contract on label count; first: none on opus, unit c0, pass 1
+FAIL   accept twin: the same 10 rows with three missing (null) calls each, unjudged -> exit 1
+FAIL refuse every Opus none row with its D call dropped from labels -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same readings unedited -> exit 1
+PASS refuse the enforced Opus smoke rows with wall_s an empty string -> exit 1: E_USAGE readings row breaks the row contract on wall_s; first: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same rows with wall_s 4000 -> exit 1
+  The scoped fix round: unjudged smoke rows, non-negative usd and wall_s, and unjudged stock issues
+FAIL reads honest stage 1 readings: scored smoke rows unjudged, labels [] with three words -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+PASS refuse the same readings with no words on the c0 enforced Opus smoke row -> exit 1: E_USAGE readings row breaks the row contract on words; first: smoke enforced on opus, unit c0, pass 1
+PASS refuse a projection whose stage 1 readings carry the c0 enforced Opus smoke row at usd -50 -> exit 1: E_USAGE readings row breaks the row contract on usd; first: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same row at usd 0 -> exit 1
+PASS refuse the c0 enforced Opus smoke row with wall_s -1 -> exit 1: E_USAGE readings row breaks the row contract on wall_s; first: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: wall_s 0 on the c0 row and missing on the c1 row -> exit 1
+FAIL reads stock rows A on c0 and c1 with the D call split (Sol D, Opus none, Sonnet missing), unjudged -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   accept twin: the same rows fully judged -> exit 1
+FAIL reads stage 2 stock rows A on 4 changed units with an unjudged issue -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL reads the same on 3 changed units: the verdicts stand -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+
+## f3. The ladder amendment: the 10x tier, the fallback, the frozen plan, the issue count and finite numbers; each refusal on its repro, then its accept twin
+  The 10x tier on HEADROOM readings, with every new stage 1 line
+FAIL m 20 of 48, every hit at rank 1 with rem yes on keyed units -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL G_R's lower edge on HEADROOM readings: 18 hits of 48, all at rank 2, no unit keyed -> 144 twelfths, 0.250, in band; strict10 0 prints k as not estimable -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   and 17 hits: 136 twelfths, 0.236, under the band (decides nothing on HEADROOM) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL a split D call (Sol D, Opus none, Sonnet D) whose rem splits the same way on keyed unit c4: final D at rank 1 with final rem yes adds 12 twelfths -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+  The fallback on both sides of each condition (hit@3 34 of 48 = 0.708 unless stated)
+FAIL G_R exactly 0.500 (288 twelfths of 576): units c0 to c3 keyed, no rem yes, 10 hits at rank 1 -> FALLBACK -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   one rem yes more: 291 twelfths, 0.505 -> CEILING, the 10x tier saturated -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL strict10 exactly 0.200: 28 hits of 45 (3 gaps), 9 at rank 1, no unit keyed -> FALLBACK in the norem form -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   10 at rank 1: strict10 0.222 -> CEILING; rem is out, so the 10x reading is FIX-METHOD (judge), never saturation -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL units c0 to c5 keyed (share 0.375), rem yes on 3 keyed hits: 287 twelfths, 0.498 -> FALLBACK -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   keyed share 0.313 (c0 to c4): 292 twelfths, 0.507 -> CEILING, saturated -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL 4 keyed hits with an unjudged rem (4 of 48 out, 10% or less): G_R on the other 44 is 263 twelfths, 0.498, in band, but 299 twelfths, 0.519 with the 4 rems scored yes -> CEILING, and the 10x reading is FIX-METHOD (judge) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   the same readings, stop label amendment: headroom prints JUDGE WAIT, a CEILING that doesn't fall back, and projection's Primary line names stage 1 JUDGE WAIT -> exit 1 and 1:  | 
+FAIL   the same 4 rems judged no (the readings above): 287 twelfths, 0.498 -> FALLBACK -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   the same 4 rems judged yes: 299 twelfths, 0.519 -> CEILING, saturated -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL units c0 to c7 keyed, rem yes on the 8 keyed hits at rank 1: G_R 0.500, strict10 0.188 -> FALLBACK -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   4 keyed hits at rank 2 with an unjudged rem: strict10 on the other 44 is 0.205, saturated, but 0.188 with the 4 rems scored no -> CEILING, and the 10x reading is FIX-METHOD (judge), never saturation -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   the same readings, stop label amendment: the 10x reason says the judged readings decide the CEILING and the 4 unjudged rem decide only whether the 10x reading is a saturation stop -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   5 of 48 out (over 10%): CEILING, and the 10x reading is FIX-METHOD (judge) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL rem agreement just at or above 0.70: 40 Sol-only rem cells against 47 both-yes cells -> rem stays in -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL units c0 and c1 keyed, rem no on Opus none's keyed hits: both judges say yes on 4 rem cells, all shared -> under the minimum of 5, rem leaves G_R -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   rem yes on 1 keyed hit: 5 shared yes cells -> rem stays in -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   one Sol-only cell more: under 0.70 -> rem leaves G_R -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL the stock fix scores rem on 1 keyed unit (c0) -> rem stays in -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   on 2 (c0 and c1) -> rem leaves G_R -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   on 2, c1 only through an unjudged stock rem (Sol yes, Opus no, Sonnet missing) -> rem leaves G_R, with the note -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL CEILING at 29 of 48 with rem in and nothing out: the 10x tier saturated -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   the same with rem out by the agreement gate -> FIX-METHOD (judge) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   the same with rem out by the stock fix -> FIX-METHOD (judge) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL   the same with 5 keyed hits whose rem is unjudged -> FIX-METHOD (judge) -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+  projection's Primary line
+FAIL on HEADROOM -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL on FALLBACK with rem in -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL on FALLBACK in the norem form -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+FAIL on a CEILING that doesn't fall back -> exit 1: E_USAGE readings must carry one row per planned session; first row outside the plan: smoke enforced on opus, unit c0, pass 1
+  The frozen plan: compare reads the projection output the Captain recorded, bound by its sha256
+FAIL f3. The ladder amendment: the 10x tier, the fallback, the frozen plan, the issue count and finite numbers; each refusal on its repro, then its accept twin: ran to the end (threw ceo-rule.ts projection exited 1:  Bun v1.4.4 (Linux x64))
+
+## g. Ledger: every frozen item at its cap, one lease opened and settled per item and invocation
+A temporary approval record and local ledger under $OUT/ledger; the approvals mirror is a stub. Run items (one per review-units invocation) open a trial-proof lease at their cap, judge items a direct-proof lease for what is left of their envelope, all with --admission warn. Each item settles at its projected spend. The smoke rerun's caps are section 8's; stage 2's are the stage 2 amendment's planning caps (section 7.2), and the real ones come from the projection check.
+PASS the six stage 1 smoke items (one per model and invocation) cap at $63.00 in all, each covering its one round at full allowance
+PASS stage 1: run caps $144.00 leave the judges at least the $16.00 floor of the $160.00 envelope
+PASS ceo-o-hr-opus-none recorded at $52.00
+PASS ceo-o-hr-opus-none: one lease opened (RIG_UNPROVEN) and settled at $15.00, bound to its run
+PASS ceo-o-hr-opus-none: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-sol-none recorded at $23.00
+PASS ceo-o-hr-sol-none: one lease opened (RIG_UNPROVEN) and settled at $6.00, bound to its run
+PASS ceo-o-hr-sol-none: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-particle-none recorded at $6.00
+PASS ceo-o-hr-particle-none: one lease opened (RIG_UNPROVEN) and settled at $2.40, bound to its run
+PASS ceo-o-hr-particle-none: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-opus-a recorded at $25.00
+PASS ceo-o-hr-smoke-opus-a: one lease opened (RIG_UNPROVEN) and settled at $6.00, bound to its run
+PASS ceo-o-hr-smoke-opus-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-opus-p recorded at $15.00
+PASS ceo-o-hr-smoke-opus-p: one lease opened (RIG_UNPROVEN) and settled at $1.40, bound to its run
+PASS ceo-o-hr-smoke-opus-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-sol-a recorded at $13.00
+PASS ceo-o-hr-smoke-sol-a: one lease opened (RIG_UNPROVEN) and settled at $3.60, bound to its run
+PASS ceo-o-hr-smoke-sol-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-sol-p recorded at $8.00
+PASS ceo-o-hr-smoke-sol-p: one lease opened (RIG_UNPROVEN) and settled at $0.84, bound to its run
+PASS ceo-o-hr-smoke-sol-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-particle-a recorded at $1.00
+PASS ceo-o-hr-smoke-particle-a: one lease opened (RIG_UNPROVEN) and settled at $0.66, bound to its run
+PASS ceo-o-hr-smoke-particle-a: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-particle-p recorded at $1.00
+PASS ceo-o-hr-smoke-particle-p: one lease opened (RIG_UNPROVEN) and settled at $0.30, bound to its run
+PASS ceo-o-hr-smoke-particle-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-judge-sol recorded at $123.80 ($160.00 less $36.20 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-sol: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
+PASS ceo-o-hr-judge-sol: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-judge-opus recorded at $121.80 ($160.00 less $38.20 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-opus: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
+PASS ceo-o-hr-judge-opus: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-hr-judge-sonnet recorded at $119.80 ($160.00 less $40.20 settled by every earlier stage 1 item, rounded down to the cent)
+PASS ceo-o-hr-judge-sonnet: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
+PASS ceo-o-hr-judge-sonnet: a second run on the settled item refuses with E_ITEM_BOUND
+    stage 1 settled in all: $42.20 of the $160.00 envelope
+PASS smoke rerun: run caps $72.00 leave the judges at least the $0.00 floor of the $72.00 envelope
+PASS ceo-o-sm2-opus-e recorded at $15.00
+PASS ceo-o-sm2-opus-e: one lease opened (RIG_UNPROVEN) and settled at $2.00, bound to its run
+PASS ceo-o-sm2-opus-e: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-opus-p recorded at $15.00
+PASS ceo-o-sm2-opus-p: one lease opened (RIG_UNPROVEN) and settled at $1.54, bound to its run
+PASS ceo-o-sm2-opus-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-sol-e recorded at $20.00
+PASS ceo-o-sm2-sol-e: one lease opened (RIG_UNPROVEN) and settled at $3.00, bound to its run
+PASS ceo-o-sm2-sol-e: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-sol-p recorded at $20.00
+PASS ceo-o-sm2-sol-p: one lease opened (RIG_UNPROVEN) and settled at $2.40, bound to its run
+PASS ceo-o-sm2-sol-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-particle-e recorded at $1.00
+PASS ceo-o-sm2-particle-e: one lease opened (RIG_UNPROVEN) and settled at $0.20, bound to its run
+PASS ceo-o-sm2-particle-e: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-particle-p recorded at $1.00
+PASS ceo-o-sm2-particle-p: one lease opened (RIG_UNPROVEN) and settled at $0.14, bound to its run
+PASS ceo-o-sm2-particle-p: a second run on the settled item refuses with E_ITEM_BOUND
+    smoke rerun settled in all: $9.28 of the $72.00 envelope
+PASS stage 2: run caps $762.00 leave the judges at least the $70.00 floor of the $839.93 envelope
+PASS ceo-o-cmp-opus-p recorded at $199.00
+PASS ceo-o-cmp-opus-p: one lease opened (RIG_UNPROVEN) and settled at $141.71, bound to its run
+PASS ceo-o-cmp-opus-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-opus-e recorded at $203.00
+PASS ceo-o-cmp-opus-e: one lease opened (RIG_UNPROVEN) and settled at $145.00, bound to its run
+PASS ceo-o-cmp-opus-e: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-sol-p recorded at $152.00
+PASS ceo-o-cmp-sol-p: one lease opened (RIG_UNPROVEN) and settled at $105.43, bound to its run
+PASS ceo-o-cmp-sol-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-sol-e recorded at $186.00
+PASS ceo-o-cmp-sol-e: one lease opened (RIG_UNPROVEN) and settled at $124.50, bound to its run
+PASS ceo-o-cmp-sol-e: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-particle-p recorded at $10.00
+PASS ceo-o-cmp-particle-p: one lease opened (RIG_UNPROVEN) and settled at $6.43, bound to its run
+PASS ceo-o-cmp-particle-p: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-particle-e recorded at $12.00
+PASS ceo-o-cmp-particle-e: one lease opened (RIG_UNPROVEN) and settled at $8.30, bound to its run
+PASS ceo-o-cmp-particle-e: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-judge-sol recorded at $308.56 ($839.93 less $531.37 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-sol: one lease opened (RIG_UNPROVEN) and settled at $7.00, bound to its run
+PASS ceo-o-cmp-judge-sol: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-judge-opus recorded at $301.56 ($839.93 less $538.37 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-opus: one lease opened (RIG_UNPROVEN) and settled at $7.00, bound to its run
+PASS ceo-o-cmp-judge-opus: a second run on the settled item refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-judge-sonnet recorded at $294.56 ($839.93 less $545.37 settled by every earlier stage 2 item, rounded down to the cent)
+PASS ceo-o-cmp-judge-sonnet: one lease opened (RIG_UNPROVEN) and settled at $7.00, bound to its run
+PASS ceo-o-cmp-judge-sonnet: a second run on the settled item refuses with E_ITEM_BOUND
+    stage 2 settled in all: $552.37 of the $839.93 envelope
+
+## h. This post's compare guards and prints: the stage 2 family, the PASS line's units against the seeded order, the grid MDD, the secondaries and the row fields; each refusal on its repro, then its accept twin
+  Section 3.6: the stage 2 family against the PASS line, with enforced in the arm list
+FAIL refuse a stage 2 family that names autoplan-ceo on Opus (with its rows renamed to match) -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: sol
+FAIL   accept twin: the same readings with enforced -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse readings with an autoplan-ceo row on Sol while the family lists enforced and standalone -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse a PASS line that names autoplan-ceo:opus -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse a stage 2 family that leaves out enforced on Opus, whose PASS line runs it -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: sol
+FAIL refuse a stage 2 family that leaves out enforced on Sol, whose PASS line runs it -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL   accept twin: the same readings against a PASS line with enforced UNTESTED on Sol -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+  Section 3.5: the PASS line's units and the seeded order
+    Projection: PASS at 'Sol and particle-1 cells at 1 pass'; record these caps; cells: none:opus, enforced:opus, standalone:opus, lens:opus, none:sol, enforced:sol, standalone:sol, none:particle, enforced:particle, standalone:particle; held passes 1; 1 pass on sol, particle; units: changed 62 of 68, last c61; held 21 of 23, last h20
+FAIL readings on the first 62 of 68 changed and 21 of 23 held units of the seeded order, against the PASS line that names that cut -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse the same readings with unit c0 run as c62, a unit past the cut -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse the same readings with held unit h20 run as h22 -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse readings whose order holds 70 changed units against a PASS line that read 68 -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse readings whose order swaps c61 and c62, so the PASS line's last changed unit isn't the 62nd -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse stage 2 readings with no order -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL refuse a PASS line in the frozen grammar with no units part -> exit 1: E_USAGE stage 2 family must name all three models and list only gstack arms, each once; first bad entry: opus
+FAIL h. This post's compare guards and prints: the stage 2 family, the PASS line's units against the seeded order, the grid MDD, the secondaries and the row fields; each refusal on its repro, then its accept twin: ran to the end (threw ceo-rule.ts projection exited 1:  Bun v1.4.4 (Linux x64))
+
+## Leak check
+PASS the transcript prints no home path and no key name's value
+
+PASS 115, FAIL 136

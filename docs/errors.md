@@ -126,6 +126,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_STACK_SOURCE](#e_stack_source) | 2 | U10 |
 | [E_STACK_DIGEST](#e_stack_digest) | 2 | U10 |
 | [E_CELL_RULE](#e_cell_rule) | 2 | U10 |
+| [E_SESSION_SETTINGS](#e_session_settings) | 2 | U10 |
+| [E_SESSION_KIND_PIN](#e_session_kind_pin) | 2 | U20 |
 | [E_CODEX_CONFIG](#e_codex_config) | 2 | U10 |
 | [E_INFRA_FAILURE](#e_infra_failure) | 2 | U10 |
 | [E_BACKGROUND_DEADLINE](#e_background_deadline) | 2 | U10 |
@@ -871,6 +873,22 @@ A pstack arm's per-cell model rule could not be derived: the pinned tree's setup
 Fix: Check that the arm pins pstack's Claude Code tree (cursor/plugins at harness/pstack/claude-code) at a commit whose setup-pstack still shows the rule shape, and re-pin it in the preregistration if the shape moved. A new kind of value needs its own mapping in src/arms/cells.ts, with a test, before any cell uses it. Do not --resume.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_SESSION_SETTINGS
+
+The Claude Code adapter could not make the session's settings at session start: the command that prints them in the session's sandbox (for the hook-enforced CEO arm, the session's own gstack-skill-gates settings --ceo-review) failed, or its output did not hold what the arm needs (both ceo-review gate shims). Claude Code never started. The cell is missing, not an arm failure, and nothing was spent.
+
+Fix: Read the adapter's line in the session's host/cli-stderr.log, check that the arm's gstack tree is the pinned commit installed by its own setup and that bun runs in the arm image, then rerun the cell with --resume.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U10.
+
+### E_SESSION_KIND_PIN
+
+An arm that sets GSTACK_SESSION_KIND=unattended runs a gstack tree whose own bin/gstack-session-kind, run in the arm's session env before any session, did not print unattended, so the arm's sessions would not run as unattended. review-units refused the run before any session.
+
+Fix: Check that the arm's gstack tree's bin/gstack-session-kind honors GSTACK_SESSION_KIND=unattended and that the agent env allowlist keeps GSTACK_SESSION_KIND, then rerun.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_CODEX_CONFIG
 
