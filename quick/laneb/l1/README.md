@@ -93,7 +93,7 @@ The probe fixtures `cli-skill-bg.jsonl` and `cli-kill-agent.jsonl` are sanitized
 ### The awake host
 
 - Type: a dedicated Ubicloud `standard-2` VM made by the pinned `ubi-runner.sh` (`UBI_RUNNER`, checked against `UBI_RUNNER_SHA256` on the agent and again on the host). It is tagged with `UBI_OWNER`, the run thread's code, and has a recovery bundle in `UBI_RECOVERY_DIR`.
-- TTL: (parts + 1) x 18 h + 24 h. That is every part and one relaunch at the part VM TTL (16 h) plus 2 h, and a day of slack: 60 h for pilot-opus and pilot-sol, 78 h for tb2-opus, 114 h for f1-opus and f1-sol.
+- TTL: (parts + 1) x 18 h + 24 h. That is every part and one relaunch at the part VM TTL (16 h) plus 2 h, and a day of slack: 60 h for pilot-opus, pilot-sol and pilot-p1, 78 h for tb2-opus, 114 h for f1-opus, f1-sol, f1-sol-offu and f1-p1.
 - Hours on a ledger item: before the host starts, `host-up` reserves its whole TTL at $0.08 an hour on the item's own ledger as `host-<n>` ($4.80, $6.24 and $9.12). A refusal is a cap stop (exit 9, stderr `CAP_STOP`) and no host starts. `host-down` and `recover` settle it at the hours it was up. If `host-up` fails after the host starts and the host can't be destroyed, the host stays current with its reserve open: `attach` prints `NEXT: host-down (cleanup of a failed host-up is pending)`, `host-up`, `launch`, `relaunch` and `recover` refuse, and `host-down` retries the destroy and settles the hours on the agent's ledger, which never moved. The list price of `standard-2` is $41.89 a month, about $0.057 an hour.
 - The ledger: `host-up` moves the item's single ledger file, with its `.bound`, onto the host (`~/l1/ledger/<item>.jsonl`). While the host is up, the agent's copy is gone, a pointer (`<ledger>.host.json`) names the host, and the agent keeps an append-only mirror in `<work>/host/ledger.jsonl`. `host-down` brings the file home.
 - What runs there: `host.sh` (one per part, started with `setsid -f`) runs `launch.sh` with the ledger service and the tunnel. Keys sit in `~/.l1-secrets` (mode 0600), never in argv. `host-bootstrap.sh` installs Bun 1.4.4 checked by sha256 and the tools `ubi-runner` needs. The host runs no Docker and no trial.
@@ -101,10 +101,10 @@ The probe fixtures `cli-skill-bg.jsonl` and `cli-kill-agent.jsonl` are sanitized
 
 ### Commands
 
-Set `LEDGER` (the item's ledger file, with its approval row at the item's cap), `ARMS` (the folder with `none`, `before`, `after` and `off` tars), `UBI_RUNNER` (the vendored `quick/laneb/l1/ubi-runner.sh`), `UBI_RUNNER_SHA256` (`c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2`), `UBI_OWNER`, `UBI_RECOVERY_DIR` (on Capy, a private drive folder) and the provider and Ubicloud keys. tb2-opus also needs `TB2_PARTS` and `TB2_PARTS_SHA256` (Amendment C's split and digest). pilot-sol and f1-sol also need `ROUTE_LEDGER` (below).
+Set `LEDGER` (the item's ledger file, with its approval row at the item's cap), `ARMS` (the folder with `none`, `before`, `after` and `off` tars), `UBI_RUNNER` (the vendored `quick/laneb/l1/ubi-runner.sh`), `UBI_RUNNER_SHA256` (`c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2`), `UBI_OWNER`, `UBI_RECOVERY_DIR` (on Capy, a private drive folder) and the provider and Ubicloud keys. tb2-opus also needs `TB2_PARTS` and `TB2_PARTS_SHA256` (Amendment C's split and digest). pilot-sol, f1-sol, f1-sol-offu, pilot-p1 and f1-p1 also need `ROUTE_LEDGER` (below).
 
 ```
-bun quick/laneb/l1/l1.ts prepare <work> --item pilot-opus|f1-opus|tb2-opus|pilot-sol|f1-sol
+bun quick/laneb/l1/l1.ts prepare <work> --item pilot-opus|f1-opus|tb2-opus|pilot-sol|f1-sol|f1-sol-offu|pilot-p1|f1-p1
 bun quick/laneb/l1/l1.ts host-up <work>
 bun quick/laneb/l1/l1.ts launch <work> --part <part>
 bun quick/laneb/l1/l1.ts attach <work>             # on a timer; prints NEXT

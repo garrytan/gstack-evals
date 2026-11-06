@@ -1,0 +1,6 @@
+mdd.py over power.py's model: seed 20261103, 2000 simulations per row, 14 bisection steps, power 0.80; 80 tasks x 1;
+one-sided exact sign-flip for a gain at alpha 0.05. Points are percentage points.
+  before-u  9.5%  conc 2  MDD@0.05 one-sided  13.5  null size 0.022
+  before-u  9.5%  conc 6  MDD@0.05 one-sided  14.8  null size 0.026
+  before-u  5.0%  conc 2  MDD@0.05 one-sided  11.7  null size 0.010
+  before-u 20.0%  conc 2  MDD@0.05 one-sided  16.0  null size 0.033
