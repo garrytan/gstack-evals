@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "ceo-o-cal",
+  "title": "CEO outcome calibration slice",
+  "kind": "ceo-outcome",
+  "sealed": true,
+  "stub": true,
+  "purpose": "The CEO outcome eval's stage 1 calibration units: plan.md and key.json per unit, scored by the CEO outcome readings.",
+  "sha256": "a3677868258d3afbe03eb69fab6afa9878a689044882e4d4e2ec427766775b38",
+  "catalogs_sha256": "49fe256e8d3a8f2d0cfdd4d163bee369a9a1af75ed38e9c4029b051a843ff564",
+  "counts": {
+    "units": 20,
+    "clusters": 20,
+    "blocking": 0,
+    "detection": 0,
+    "over_blocking": 0,
+    "groups": {}
+  },
+  "custody": "procedural custody: an age-encrypted bundle in the Captain drive, key held apart in the project-user drive, decrypted only into /dev/shm"
+}
