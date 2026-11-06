@@ -6,7 +6,7 @@ What one real-outcome trial scored, and what a panel of trials shows. Plan: [202
 
 | Command | What it does |
 |---|---|
-| `gstack-evals real score trial <evaluator dir> --task <task dir> --model <id>` | Grades the trial's trees with the task's hidden tests, runs the detectors and the exposure check, and writes `trial-score.json` (`real-outcome/trial-score/v1`). `--runs` must be a positive whole number and `--seed` a whole number of 0 or more. |
+| `gstack-evals real score trial <evaluator dir> --task <task dir> --model <id> [--image-id <sha256:...>]` | Grades the trial's trees with the task's hidden tests, runs the detectors and the exposure check, and writes `trial-score.json` (`real-outcome/trial-score/v1`). `--runs` must be a positive whole number and `--seed` a whole number of 0 or more. Grading a tree needs `--image-id`, the task's pinned image id from its image manifest row; scoring never builds a task image. `--task` is the original task dir, never a bound run copy. |
 | `gstack-evals real score analyze --config <config.json> [--taxonomy <file>] <trial-score files or dirs>` | Classifies every trial and runs the paired analysis. Prints a report; `--out` writes the JSON. |
 | `gstack-evals real score power [--sims 5000] [--table main|eight|ceiling|interim|repo|all]` | The keyless power simulation behind power.md, with Monte Carlo error. |
 
@@ -15,6 +15,8 @@ What one real-outcome trial scored, and what a panel of trials shows. Plan: [202
 Everything comes from evaluator-owned files: the sidecar's `shipment.json` and `shipped.bundle` ([SHIPMENT.md](../sandbox/SHIPMENT.md)), the agent's `real-summary.json`, `turn1.patch`, `final.patch` and `sdk-messages.jsonl`, and the task directory ([SPEC.md](../task/SPEC.md)). The scorer checks the bundle against the record's sha256 and takes every head from the bundle, never from the container.
 
 Each tree is graded by the task's verifier as a patch against the starting tree (base for K1 to K3, the replay branch for K4): the shipped head, a held draft (sensitivity only), the turn-1 tree (build tasks) and the final tree. A K4 final tree, which the agent snapshots against base, is rebased onto the replay branch first. A tree passes only when every required test passes in every run.
+
+Every tree is graded in the task's pinned image (`--image-id`; see [Trial images](../../outcome-skills/driver/README.md#trial-images)), never in an image built at score time, so scoring runs on a keyed host as well as a keyless one. The scorer stops with E_REAL_SCORE_INPUT before it grades anything when that image is not on the host with exactly that id, when the trial's `usersim-events.jsonl` logged no image event (only a trial whose U4 session checked its image is graded), when the image it logged is another one, or when `--task` is a bound run copy (its task.toml names a prebuilt `docker_image`).
 
 ## Outcome categories
 

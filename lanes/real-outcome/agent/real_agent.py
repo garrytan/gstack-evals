@@ -128,6 +128,8 @@ class RealOptions(lb.LanebOptions):
     trial_n: int = Field(default=0, description="u4: the trial number the driver's open names, from 1.")
     rerun: str = Field(default="", description="u4: the repair a gap rerun follows; empty for a first open.")
     image_id: str = Field(default="", description="u4: the T-G manifest's image id for this task (sha256:<64 hex>); the trial container must run exactly it before any sandbox or session opens.")
+    manifest: str = Field(default="", description="u4: host path of the T-G image manifest (lanes/outcome-skills/images); its row for task_label must name image_id.")
+    manifest_sha256: str = Field(default="", description="u4: the manifest's sha256 as the readiness post records it (images public prints it); a manifest with other bytes is refused.")
 
 
 def _block(b) -> dict:
@@ -233,14 +235,31 @@ class RealAgent(lb.LanebAgent):
 
     def _check_image(self, container: str, log) -> None:
         """A U4 session runs only in the image the T-G manifest pins for its task (lanes/outcome-skills/images): the trial
-        container's image id must equal image_id before any sandbox or session opens, so both arms run the same image."""
+        container's image id must equal image_id, and image_id must be the one the manifest's row for task_label names, in the
+        manifest whose sha256 is manifest_sha256, before any sandbox or session opens, so both arms run the same image."""
         want = self.options.image_id
         if not IMAGE_ID.fullmatch(want or ""):
             raise SandboxSetupError("E_REAL_SANDBOX_SETUP a U4 session names its task's image: set image_id to the T-G manifest's sha256:<64 hex> id (gstack-evals outcome images bind prints it); nothing was opened")
+        row = self._manifest_row()
+        if row.get("image_id") != want:
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP image_id {want} is not {row.get('image_id')}, the image the manifest's row for task {self.options.task_label} pins; nothing was opened")
         got = self._container_image(container)
         if got != want:
             raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP the trial container runs image {got}, not the manifest's {want}; run the task from its bound run copy (gstack-evals outcome images bind); nothing was opened")
         log({"event": "image", "image_id": got})
+
+    def _manifest_row(self) -> dict:
+        """The T-G manifest's row for this session's task, read from the bytes whose sha256 is manifest_sha256."""
+        try:
+            raw = Path(self.options.manifest).read_bytes() if self.options.manifest else b""
+        except OSError as e:
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP cannot read the image manifest {self.options.manifest}: {e}; nothing was opened") from None
+        if not raw or hashlib.sha256(raw).hexdigest() != self.options.manifest_sha256:
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP a U4 session reads its image from the T-G manifest: set manifest to its path and manifest_sha256 to the sha256 the readiness post records (manifest {self.options.manifest!r} has {hashlib.sha256(raw).hexdigest() if raw else 'no bytes'}); nothing was opened")
+        try:
+            return next(r for r in json.loads(raw)["rows"] if r.get("label") == self.options.task_label)
+        except (ValueError, KeyError, TypeError, AttributeError, StopIteration):
+            raise SandboxSetupError(f"E_REAL_SANDBOX_SETUP the image manifest has no row for task {self.options.task_label}; nothing was opened") from None
 
     def _open_sandbox(self, container: str, trial: str, task: dict, base_url: str, log) -> dict:
         evdir = self._evaluator_dir()
