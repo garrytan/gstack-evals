@@ -140,10 +140,12 @@ bin/gstack-evals noloss judge-run --ceo --packets $J/packets --key $J/key.json \
    then --judge anthropic/claude-sonnet-5-5 --item ceo-o-hr-judge-sonnet --out $J/sonnet)
 bin/gstack-evals ceo readings --rows $J/rows.json --key $J/key.json --sol $J/sol --opus $J/opus --sonnet $J/sonnet \
   --units $SR/units --out $J/readings.json
-GSTACK_EVALS_SCORER=$PWD bun ceo-rule.ts headroom $J/readings.json
+cp wiki/plans/2026-11-05-geva-300-ceo-stop-label-amendment/ceo-rule.ts.txt $J/ceo-rule.ts
+echo "2222e0cfa65f9f105d6645a70fc6a4bed67d9f0f75033d6e935cdebb7fcaf179  $J/ceo-rule.ts" | sha256sum -c
+GSTACK_EVALS_SCORER=$PWD bun $J/ceo-rule.ts headroom $J/readings.json
 ```
 
-J is a directory on the host's disk beside RUNS. The packet seed, 20261106, is pinned here; no earlier post fixed one. The judges run one at a time, so each judge item's cap reads the settled spend before it. ceo-rule.ts is the stop-label amendment's ceo-rule.ts.txt (sha256 2222e0cf...), renamed. It reads the paired statistics from the scorer checkout that GSTACK_EVALS_SCORER names, here the 715c659 checkout the commands run from, and exits E_USAGE without it.
+J is a directory on the host's disk beside RUNS. The packet seed, 20261106, is pinned here; no earlier post fixed one. The judges run one at a time, so each judge item's cap reads the settled spend before it. ceo-rule.ts is the stop-label amendment's ceo-rule.ts.txt (sha256 2222e0cf...), copied into $J and checked by sha256 before it runs, so the checkout stays clean. It imports only Node built-ins and reads the paired statistics from the scorer checkout that GSTACK_EVALS_SCORER names, here the 715c659 checkout the commands run from. Without that variable it exits E_USAGE.
 
 ## 4. Session allowances: Sol's flag
 
