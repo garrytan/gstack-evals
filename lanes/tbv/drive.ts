@@ -386,13 +386,15 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
   const dropped = new Map<string, string>();
   const checked = new Set<string>();
   const routes = new Map<string, RouteState>();
-  const firsts = new Map<string, { done: Promise<void>; end: () => void }>();
+  const firsts = new Map<string, { done: Promise<void>; end: () => void; fail: (e: unknown) => void }>();
   const unknown: Array<{ idempotencyKey: string; responseId: string }> = [];
   const released = new Set<string>();
   const deferred = () => {
     let end = () => {};
-    const done = new Promise<void>((r) => (end = r));
-    return { done, end };
+    let fail = (_e: unknown) => {};
+    const done = new Promise<void>((r, j) => ((end = r), (fail = j)));
+    done.catch(() => {});
+    return { done, end, fail };
   };
 
   const base = (r: Reading, label: string): ReadingRecord => ({ schema: "tbv-reading.v1", label, item: plan.item, task: r.task, family: tasks.get(r.task)!.family, arm: r.arm, model: r.model, pass: r.pass, cls: "gap", why: "", drill: {}, texts: { report: null, d1: null, d2: null }, responseIds: [], maxTokens: [], sends: [], usd: 0, cacheRead: null });
@@ -587,7 +589,11 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
       round.map(async (r) => {
         const group = r.task + "|" + r.arm + "|" + r.model;
         if (r.pass > 1) await firsts.get(group)?.done;
-        return drive(r, r.pass === 1 ? firsts.get(group) : undefined);
+        const first = r.pass === 1 ? firsts.get(group) : undefined;
+        return drive(r, first).catch((e) => {
+          first?.fail(e);
+          throw e;
+        });
       }),
     );
     const failed = settled.find((x): x is PromiseRejectedResult => x.status === "rejected");

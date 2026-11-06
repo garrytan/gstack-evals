@@ -527,3 +527,18 @@ describe("drive --held custody", () => {
     expect(await refusal("/dev/shm/tbv-held-tasks-test")).not.toMatch(/^E_TBV_CUSTODY/);
   });
 });
+
+test("a failed start seal on a pass-1 reading ends the round: the item rejects with the seal error and the pass-2 reading never sends", async () => {
+  const L = ledgerDir(ITEM, 50);
+  const s = stub(() => text());
+  const c = clock();
+  const p: DrivePlan = { item: ITEM, tasks: [history("t1")], arms: ["none"], models: ["opus"], passes: { opus: 2, sol: 2, particle: 2 }, turns: TURNS, shape: (a) => shape(a), splice: () => null, roundWorstMicros: 1 };
+  const seal = "input=$(cat); case \"$input\" in *'\"pass\":1}'*) exit 1;; esac; printf %s \"$input\"";
+  const res = runItem({ item: ITEM, runId: "run-seal", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: p, plaintext: L.plain, sealCmd: seal, unsealCmd: null, devPlaintext: true, held: false, deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: () => {} }).then(
+    () => "resolved",
+    (e) => "rejected: " + String(e),
+  );
+  const outcome = await Promise.race([res, Bun.sleep(3000).then(() => "hung")]);
+  expect(outcome).toMatch(/^rejected: .*the seal command exited 1/);
+  expect(s.calls.length).toBe(0);
+}, 20_000);
