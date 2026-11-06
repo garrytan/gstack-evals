@@ -403,6 +403,12 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
     d.seal("reading-" + rec.label + ".json", JSON.stringify(rec) + "\n");
   };
   const label = () => randomBytes(16).toString("hex");
+  /** A reading's saved cost is what its sends hold on the ledger now, so a send released at $0 after the reading was sealed stops counting in it. */
+  const recost = (rec: ReadingRecord) => {
+    const usd = run.labelMicros(rec.label) / 1e6;
+    if (usd !== rec.usd) put({ ...rec, usd });
+  };
+  for (const r of d.done) recost(r);
 
   /** Amendment item 12: a report-turn request the validator refuses only for size drops the task from every arm and model. */
   const precheck = (task: string) => {
@@ -539,7 +545,6 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
         }
       }
     } finally {
-      first?.end();
       if (slot) {
         rec.usd = (await (slot as Slot).micros()) / 1e6;
         await (slot as Slot).close();
@@ -574,6 +579,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
       const fresh = unknown.filter((u) => !released.has(u.idempotencyKey));
       const rel = await run.release(fresh);
       for (const k of rel.released) released.add(k);
+      for (const rec of [...records.values()]) if (rec.sends.some((x) => x.idempotencyKey !== null && rel.released.includes(x.idempotencyKey))) recost(rec);
       if (rel.missing !== null) {
         setStop("harness", "E_TBV_RUN no OpenRouter generation record for the send whose stream named " + rel.missing + ": its reservation stands at full and nothing retries; check that the stream's message_start id is the generation id");
         break;

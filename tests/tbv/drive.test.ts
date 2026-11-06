@@ -3,9 +3,9 @@
 // approval record: real sends, reservations and settlements.
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { driveItem, openItemRun, readingOrder, run, runItem, smokeItem, spliceBy, type DrivePlan } from "../../lanes/tbv/drive.ts";
+import { driveItem, openItemRun, readingOrder, run, runItem, smokeItem, spliceBy, type DriveItemRun, type DrivePlan } from "../../lanes/tbv/drive.ts";
 import { buildRequest, validateRequest } from "../../lanes/tbv/request.ts";
 import type { Arm, BuildInput, Model, ReadingRecord, Validation } from "../../lanes/tbv/types.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
@@ -301,6 +301,45 @@ describe("reservation release before a headroom refusal", () => {
     expect(res.stop?.cls).toBe("cap");
     expect(res.records.find((r) => r.task === "t5")!.cls).toBe("cap");
   });
+
+  const zero = (id: string) => Response.json({ data: { id, total_cost: 0, tokens_prompt: 0, tokens_completion: 0 } });
+  const five = ["t1", "t2", "t3", "t4", "t5"];
+  const sealedReadings = (out: string) =>
+    readdirSync(join(out, "sealed"))
+      .filter((n) => n.startsWith("reading-"))
+      .map((n) => JSON.parse(readFileSync(join(out, "sealed", n), "utf8")) as ReadingRecord);
+  const heldMicros = (item: ReturnType<typeof readItem>) => item.leases.reduce((a, l) => a + l.close!.spent_micros + l.close!.unknown_micros, 0);
+  test("a release recomputes the saved cost of each reading it touched, in the records and in the sealed checkpoints a restart reads", async () => {
+    const { res, L, item } = await go({ script: noUsage, records: zero, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    for (const t of ["t1", "t2", "t3", "t4"]) expect(res.records.find((r) => r.task === t)!.usd).toBe(0);
+    expect(res.records.find((r) => r.task === "t5")!.usd).toBeGreaterThan(0);
+    expect(Math.round(res.records.reduce((a, r) => a + r.usd, 0) * 1e6)).toBe(heldMicros(item));
+    const sealed = sealedReadings(L.out);
+    expect(sealed.length).toBe(5);
+    for (const r of sealed) expect(r.usd).toBe(res.records.find((x) => x.label === r.label)!.usd);
+  });
+  test("other direction: with nothing released, every reading keeps the cost its sends hold, and the records still match the lease close", async () => {
+    const billed = (id: string) => Response.json({ data: { id, total_cost: 0.01 } });
+    const { res, L, item } = await go({ script: noUsage, records: billed, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    const scored = res.records.filter((r) => r.cls === "scored");
+    expect(scored.length).toBe(4);
+    expect(scored.every((r) => r.usd > 0)).toBe(true);
+    expect(Math.round(res.records.reduce((a, r) => a + r.usd, 0) * 1e6)).toBe(heldMicros(item));
+    for (const r of sealedReadings(L.out)) expect(r.usd).toBe(res.records.find((x) => x.label === r.label)!.usd);
+  });
+  test("a restart recomputes a sealed reading's cost that a release changed after the reading was sealed", async () => {
+    const first = await go({ script: noUsage, records: zero, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    const t1 = first.by("t1", "none", "sol");
+    expect(t1.usd).toBe(0);
+    const file = join(first.L.out, "sealed", "reading-" + t1.label + ".json");
+    writeFileSync(file, JSON.stringify({ ...t1, usd: 0.25 }) + "\n");
+    const s = stub(noUsage, zero);
+    const c = clock();
+    const res = await runItem({ item: ITEM, runId: "run-1", record: first.L.record, ledger: first.L.ledger, out: first.L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ script: noUsage, tasks: five, models: ["sol"], roundWorst: 1 }), plaintext: first.L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: () => {} });
+    expect(s.calls.length).toBe(0);
+    expect(res.records.find((r) => r.label === t1.label)!.usd).toBe(0);
+    expect((JSON.parse(readFileSync(file, "utf8")) as ReadingRecord).usd).toBe(0);
+  });
 });
 
 describe("the outage pause", () => {
@@ -542,3 +581,37 @@ test("a failed start seal on a pass-1 reading ends the round: the item rejects w
   expect(outcome).toMatch(/^rejected: .*the seal command exited 1/);
   expect(s.calls.length).toBe(0);
 }, 20_000);
+
+test("a pass-1 reading that throws after its report send spent rejects the pass-2 reading before its first send", async () => {
+  const L = ledgerDir(ITEM, 50);
+  const s = stub(() => text());
+  const c = clock();
+  const real = await openItemRun({ item: ITEM, runId: "run-throw", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now });
+  let thrown = false;
+  const broken: DriveItemRun = {
+    ...real,
+    slot(label, models, allowance) {
+      const slot = real.slot(label, models, allowance);
+      return {
+        ...slot,
+        async send(req) {
+          const res = await slot.send(req);
+          if (thrown) return res;
+          thrown = true;
+          throw new Error("the proxy's management socket closed while finalizing the meter");
+        },
+      };
+    },
+  };
+  const p: DrivePlan = { item: ITEM, tasks: [history("t1")], arms: ["none"], models: ["opus"], passes: { opus: 2, sol: 2, particle: 2 }, turns: TURNS, shape: (a) => shape(a), splice: () => null, roundWorstMicros: 1 };
+  const sealed: string[] = [];
+  const err = await driveItem(broken, p, { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true, seal: (n) => sealed.push(n) }).then(
+    () => null,
+    (e) => e,
+  );
+  await real.close();
+  expect(String(err)).toContain("the proxy's management socket closed while finalizing the meter");
+  expect(s.calls.map((x) => x.turn + " " + x.n)).toEqual(["report 1"]);
+  expect(sealed.filter((n) => n.startsWith("start-")).length).toBe(1);
+  expect(sealed.filter((n) => n.startsWith("reading-")).length).toBe(0);
+});
