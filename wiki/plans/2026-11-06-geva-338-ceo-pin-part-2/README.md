@@ -141,7 +141,7 @@ bin/gstack-evals noloss judge-run --ceo --packets $J/packets --key $J/key.json \
 bin/gstack-evals ceo readings --rows $J/rows.json --key $J/key.json --sol $J/sol --opus $J/opus --sonnet $J/sonnet \
   --units $SR/units --out $J/readings.json
 cp wiki/plans/2026-11-05-geva-300-ceo-stop-label-amendment/ceo-rule.ts.txt $J/ceo-rule.ts
-echo "2222e0cfa65f9f105d6645a70fc6a4bed67d9f0f75033d6e935cdebb7fcaf179  $J/ceo-rule.ts" | sha256sum -c
+echo "2222e0cfa65f9f105d6645a70fc6a4bed67d9f0f75033d6e935cdebb7fcaf179  $J/ceo-rule.ts" | sha256sum -c && \
 GSTACK_EVALS_SCORER=$PWD bun $J/ceo-rule.ts headroom $J/readings.json
 ```
 
