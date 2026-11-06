@@ -3,7 +3,7 @@ OPENAI_API_KEY: unset
 OPENROUTER_API_KEY: unset
 UBICLOUD_API_KEY: unset
 UBICLOUD_API_TOKEN: unset
-commit 9e5546f600afd113b1274284c1f1211659b045b5; bun 1.4.4; docker 29.9.2
+commit e5fccfa482cab7a3985096b42742453076a9c713; bun 1.4.4; docker 29.9.2
 
 ## Part 0: export
 bun install exit 0
@@ -15,10 +15,10 @@ ok   A1 the before arm's tar.gz and tar match manifests/l1/before.json | expecte
 ok   A1 the after arm's tar.gz and tar match manifests/l1/after.json | expected: 5c2fd75d1562fd7c575907a8b0fa8e6e6d335c93c53a0a8cbef42df7a51685e1 / 604cdb537ccf2e62cace277262c8ec75341dd4fb4714a3135ce82e3725c47cac | observed: 5c2fd75d1562fd7c575907a8b0fa8e6e6d335c93c53a0a8cbef42df7a51685e1 / 604cdb537ccf2e62cace277262c8ec75341dd4fb4714a3135ce82e3725c47cac
 ok   A1 the off arm's tar.gz and tar match manifests/l1/off.json | expected: 2e86902f090b33581b3e6b2b905f2545fbce77282c85f0f397abbe33745f1c2a / a44be22f05a5ed681fc437371cb5c2bf057165b4e2aad2813f354d9d3c95daa9 | observed: 2e86902f090b33581b3e6b2b905f2545fbce77282c85f0f397abbe33745f1c2a / a44be22f05a5ed681fc437371cb5c2bf057165b4e2aad2813f354d9d3c95daa9
 source digests:
-  aa8786e91c03b1453d289ab709d0f86cd7323c0432db1649e6f1adab0fde7e83  quick/laneb/l1/analyze.ts
+  85143498642f93779a6097032fdc5c22b286c027c40adc3164575e40b70b908d  quick/laneb/l1/analyze.ts
   528509b82427d63a38d6f86f4b322cedb48e41abd696cc8bd8b0831ff4f53c7c  quick/laneb/l1/audit.ts
   ed59def5d95d97eefed60a4e80bf55fef31323e538c2b553eaca48dbb1dbab97  quick/laneb/l1/ceiling.ts
-  b08874488ee8ddde4a1258f747bf73a7466eacc80552f95f549522e78fbcdd71  quick/laneb/l1/l1.ts
+  05c6c8628b008fa618e30298ee127ea7ffb2660eedccd9b9a4d3c0a41af99db8  quick/laneb/l1/l1.ts
   637e605fbb3af7ea7195c07169e606b1ee719d6e7a1969b78ee63529b6a19b5a  quick/laneb/l1/probes-8e6795a.ts
   47d55b3ea29af9617e889132c8ea7ba3f83660aa0623f29414b7b05659af6a38  quick/laneb/l1/probes.ts
   b91f698abaa988535f9f5dabf38c46c606e44d7a69a0471a748cfc5bd05217d3  quick/laneb/l1/table.ts
@@ -51,9 +51,9 @@ ok   B5 table.ts at this commit rebuilds the record's seven rows | expected: exi
 ## Part C: the keyless tests that drive each frozen rule
 ok   C0 tests/l1-probes.test.ts | expected: every test passes | observed: 48 pass, 0 fail, 0 skip
 ok   C0 tests/l1-table.test.ts | expected: every test passes | observed: 17 pass, 0 fail, 0 skip
-ok   C0 tests/l1-analyze.test.ts | expected: every test passes | observed: 38 pass, 0 fail, 0 skip
+ok   C0 tests/l1-analyze.test.ts | expected: every test passes | observed: 39 pass, 0 fail, 0 skip
 ok   C0 tests/l1-ceiling.test.ts | expected: every test passes | observed: 34 pass, 0 fail, 0 skip
-ok   C0 tests/l1-host.test.ts | expected: every test passes | observed: 52 pass, 0 fail, 0 skip
+ok   C0 tests/l1-host.test.ts | expected: every test passes | observed: 53 pass, 0 fail, 0 skip
 ok   C0 tests/l1-launch.test.ts | expected: every test passes | observed: 31 pass, 0 fail, 0 skip
 ok   C0 tests/l1-audit.test.ts | expected: every test passes | observed: 12 pass, 0 fail, 0 skip
 ok   C0 tests/vm-run.test.ts | expected: every test passes | observed: 25 pass, 0 fail, 0 skip
