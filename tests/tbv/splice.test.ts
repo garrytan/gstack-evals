@@ -104,13 +104,13 @@ describe("captureSplice", () => {
 describe("applySplice", () => {
   test("opening with the task's first message, then head, then the work; roles alternate", () => {
     const m = applySplice(history(WORK), caps.investigate!);
-    expect(m.map((x) => x.role)).toEqual(["user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant"]);
+    expect(m.map((x) => x.role)).toEqual(["user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant"]);
     const first = JSON.stringify(m[0]);
     expect(first).toContain("<command-args>The parser drops the last row of a quoted file. Fix it.</command-args>");
     expect(first).not.toContain(PLACEHOLDERS.firstUser);
     expect(JSON.stringify(m[1])).toContain("gstack-skill-start");
-    expect(JSON.stringify(m[6])).toContain("toolu_w1");
-    expect(JSON.stringify(m[7])).toContain("Fixed the off-by-one");
+    expect(JSON.stringify(m[7])).toContain("toolu_w1");
+    expect(JSON.stringify(m[9])).toContain("Fixed the off-by-one");
   });
 
   test("capy: the tail's Reads follow the work, joined onto the work's last assistant message, and end on a user message", () => {

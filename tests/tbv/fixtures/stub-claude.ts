@@ -17,7 +17,8 @@ const home = process.env.HOME ?? "";
 const cwd = process.cwd();
 const model = argv[argv.indexOf("--model") + 1] ?? "";
 const maxTurns = Number(argv[argv.indexOf("--max-turns") + 1] ?? "10");
-const start = { home: readdirSync(home).sort(), cwd: readdirSync(cwd).sort() };
+// bun makes ~/.bun before this script runs; the real CLI runs on node.
+const start = { home: readdirSync(home).filter((n) => n !== ".bun").sort(), cwd: readdirSync(cwd).sort() };
 const line = (await Bun.stdin.text()).split("\n").find(Boolean) ?? "{}";
 const prompt = String(JSON.parse(line).message?.content ?? "");
 const skillsDir = join(home, ".claude/skills");

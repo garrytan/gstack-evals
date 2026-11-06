@@ -162,7 +162,7 @@ describe("validateRequest", () => {
   });
   test("refuses more than 4 breakpoints and a 1h ttl", () => {
     const a = good();
-    for (const m of a.messages.slice(0, 4)) m.content[0]!.cache_control = { type: "ephemeral" };
+    for (const m of a.messages.slice(0, 5)) m.content[0]!.cache_control = { type: "ephemeral" };
     expect(problem(a)).toBe("problem");
     const b = good();
     b.messages[0]!.content[0]!.cache_control = { type: "ephemeral", ttl: "1h" };

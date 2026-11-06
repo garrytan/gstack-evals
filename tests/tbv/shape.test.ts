@@ -26,13 +26,13 @@ describe("stub provider", () => {
     const stub = startStubProvider([{ tool: { name: "Read", input: { file_path: "a.md" } } }, { text: "Done here." }]);
     try {
       const post = (body: object) => fetch(stub.url + "/v1/messages?beta=true", { method: "POST", body: JSON.stringify(body) });
-      const side = await (await post({ model: "m", messages: [], max_tokens: 1 })).json();
+      const side: any = await (await post({ model: "m", messages: [], max_tokens: 1 })).json();
       expect(side.content[0].text).toBeString();
       const sse = await (await post({ model: "m", messages: [], tools: [{ name: "Read" }], stream: true })).text();
       expect(sse).toContain("event: message_start");
       expect(sse).toContain('"partial_json":"{\\"file_path\\":\\"a.md\\"}"');
       expect(sse).toContain('"stop_reason":"tool_use"');
-      const plain = await (await post({ model: "m", messages: [], tools: [{ name: "Read" }] })).json();
+      const plain: any = await (await post({ model: "m", messages: [], tools: [{ name: "Read" }] })).json();
       expect(plain.content).toEqual([{ type: "text", text: "Done here." }]);
       expect(stub.requests.length).toBe(3);
       expect(stub.main().length).toBe(2);
