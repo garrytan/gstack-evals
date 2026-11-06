@@ -51,20 +51,20 @@ Each digest above was recomputed with sha256sum at the build commit and matches 
 
 The captures ran with no key in the environment (`env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u UBICLOUD_API_KEY`), Claude Code 2.1.312 against the lane's stub provider, and gstack at 641d622 in a clean checkout. shape.ts builds a fresh environment with a temporary HOME and CLAUDE_CONFIG_DIR and a placeholder key (shape.ts:144-158). No captured file holds a drive path or a key; the one crew-rules match is gstack's own factory.md text, which splice.ts allows by design (splice.ts:125). capture.txt lists every command and printed digest.
 
-| Capture | Set digest the lane prints | Reproduces |
+| Capture | Set digest the lane prints | Reproduces in the second capture |
 |---|---|---|
 | shape none (template) | dd1698d89a547e29038ae5cfac5c00c37f6a0b09ce4d768e2abb39af17c780c0 | yes |
-| shape lens (template) | 869d34f5d29161a2c7dbd3ed259de68af8a1072e255192b01489e6cfa76a8c41 | yes |
+| shape lens (template) | 869d34f5d29161a2c7dbd3ed259de68af8a1072e255192b01489e6cfa76a8c41 | not recaptured |
 | shape current at 641d622 (template) | ae34e5e8c9d822b85e57fb1da8bf5c77438ac2cb2723ed53a3a045636bf2dcbc | yes |
 | splice investigate at 641d622 | 84b8398cdf1ec63c38242e1ae4647f4226f8258901ed3b53d8a2ff38921b1b7e | no |
-| splice ship at 641d622 | 98dd0fae151d6a4fedc70210328b506897270e58e156b9d5e6e520f56f0a4861 | no |
+| splice ship at 641d622 | 98dd0fae151d6a4fedc70210328b506897270e58e156b9d5e6e520f56f0a4861 | not recaptured |
 | splice capy at 641d622 | 8477ada9977f608f4b8caaae7c2eb269dae7ca864b11f13ca1e7f13cbfb08b61 | yes |
 | skill-start stdout, investigate | 7e7943ef35eccd6966c965dd869a5f5e2e82cc5144bcce1f2ddd8dd470d69150 | no |
-| skill-start stdout, ship | 55dee40e27414315fe4028c1dd0a4f80b3e8d39c309f7facfa736fd8588b2b90 | no |
+| skill-start stdout, ship | 55dee40e27414315fe4028c1dd0a4f80b3e8d39c309f7facfa736fd8588b2b90 | not recaptured |
 
 The per-model shape digests (opus, sol, particle-1) and the spliced files' digests are in capture.txt: sections/preamble.md 3eeee274045c6af4a3a4a88895944a348e3f8613232f44e04875fd1318861705 in both skill families, and for capy factory.md a1e1422bf4d805d349c93521f6c268b16fad403765b27d511beba3e4709ffd43, report.md b960d1c7e5cac24f9d32fc5c1dfb27bb77acb8680c6c547168c979296bafc85e and READY.md fa346d1b53a6d4abd64e251883520accaa4919e0976ea9d51ceb34ae116bd393. The request builder sends max_tokens 4,000 on every turn (request.ts:10, :51); the 128,000 in the captured shape is Claude Code's own value and only enters the shape's digest.
 
-**Why two splices and both skill-start stdouts don't reproduce.** gstack-skill-start at 641d622 prints a per-run session id on its SESSION_ID line and on the unattended block's BEGIN line, and a per-run TEL_START time. A second capture differed on exactly those three lines (capture.txt). So a recapture can never stand in for these files. The run uses the captured files themselves, kept in the Captain drive at handoffs/GEVA-349/capture/, and checks each file's sha256 against capture.txt before the first lease of any item that reads them.
+**Why the investigate splice and its skill-start stdout don't reproduce.** The second capture (capture.txt) covered four of the eight: shape none, shape current, the investigate splice and the capy splice. Shape lens, the ship splice and the ship skill-start stdout were not recaptured. gstack-skill-start at 641d622 prints a per-run session id on its SESSION_ID line and on the unattended block's BEGIN line, and a per-run TEL_START time. capture.txt's diff of the investigate skill-start stdout masks the session ids as <ID> and shows TEL_START changing. The ship files carry the same per-run lines, so we expect them not to reproduce either. So a recapture can never stand in for these files. The run uses the captured files themselves, kept in the Captain drive at handoffs/GEVA-349/capture/, and checks each file's sha256 against capture.txt before the first lease of any item that reads them.
 
 **The unattended-session block.** gstack prints it for an unattended session, and the build keeps it as part of the treatment and refuses any other instruction block or a degraded start (splice.ts:47; dry run section 3j). Its body, the lines strictly between the BEGIN and END lines (`sed '1d;$d'`), reproduces across captures:
 
@@ -73,7 +73,7 @@ The per-model shape digests (opus, sol, particle-1) and the spliced files' diges
 | investigate | 0c5e391430485796ae4c6d756420141902ee6a765fd1eb416cc15679edbead49 | 1,312 |
 | ship | c0797386bc33c5321b97384f8203be9e3e61e6279e73a7e73aba7f1739651938 | 1,810 |
 
-**Overheads.** The measured overheads are investigate 35,940 tokens, ship 50,454 and capy 23,725, against extract.ts's 35,939, 50,454 and 23,725. The one-token difference comes from the session id's length. Every family's history limit is unchanged: investigate 90,000, ship 79,546 and capy 90,000.
+**Overheads.** The measured overheads, the current shape's 20,622 plus each family's splice estimate in capture.txt, are investigate 35,940 tokens, ship 50,455 and capy 23,725, against extract.ts's 35,939, 50,454 and 23,725. The one-token differences in investigate and ship come from the splice captures behind extract.ts's constant: its comment names earlier captures (investigate a7ebce38 at 15,317 and ship 000940ba at 29,832, extract.ts:172), and the pinned splices estimate at 15,318 and 29,833. Investigate's and capy's history limits stay at 90,000. Ship's limit in the build stays at 79,546, one token above the 79,545 the pinned capture gives, so a ship history at the limit makes a first send estimated at 130,001 tokens. The proxy reserves each send's own worst case (section 6), so no cap can pass.
 
 ## 4. Item commands
 
@@ -81,7 +81,7 @@ Every command runs from the build commit. Keyless steps run under `env -u` for e
 
 **One item, one run id.** The ledger binds an item to the run id of its first lease and refuses any other with E_ITEM_BOUND (src/runner/ledger/ledger.ts:83). A later lease under the same run id opens once the earlier one has settled, and a second lease can't open while one is unsettled (ledger.ts:88-90). So every call on an item uses that item's one `--run-id`, each call takes its own `--out`, and the calls run one at a time. drive names the ledger record `--ledger-record`, and keys and judge name it `--record` (drive.ts:758, keys.ts:184, judge.ts:219).
 
-**Before every paid item's first lease** (amendment 1, item 11): `bin/gstack-evals tbv allin allin-<item>.json` with the fields rule.ts:321 names (item, crewCredits, crewRest, settled, reserved, unknown, itemCap; tbv-held adds thirdPassCap and capyCap, rule.ts:327). It must print START. Anything else stops the item, and the question goes to the Captain.
+**Before every paid item's first lease** (amendment 1, item 11): `bin/gstack-evals tbv allin allin-<item>.json` with the fields rule.ts:321 names (item, crewCredits, crewRest, settled, reserved, unknown, itemCap; tbv-held adds thirdPassCap and capyCap, rule.ts:327). For every item but tbv-held it must print START. Anything else stops the item, and the question goes to the Captain. For tbv-held the check prints one of four verdicts (rule.ts:330-333), each one of section 14's branches: STAGE 3 WITH THE THIRD OPUS PASS admits tbv-held, and tbv-held-p3 may follow; STAGE 3, TWO PASSES admits tbv-held without tbv-held-p3; STAGE 3 WITHOUT THE CAPY FAMILY admits tbv-held without its capy call (step 2) and without tbv-held-p3, and the results post says the family dropped; NO STAGE 3 starts nothing, and the question goes to the Captain.
 
 **tbv-author (B2)**
 1. `bin/gstack-evals tbv keys --histories <dev histories> --extracts <dev extracts> --out <keys dir> --item tbv-author --run-id $RUN --record $REC --ledger $LEDGER`
@@ -92,31 +92,36 @@ Every command runs from the build commit. Keyless steps run under `env -u` for e
 2. Opus none: `bin/gstack-evals tbv drive --item tbv-hr --run-id $RUN --out <out>/none --plaintext <plaintext dir> --tasks <20 headroom tasks> --models opus --arms none --passes opus=3 $DRIVE`
 3. Opus current and lens: the same with `--out <out>/opus-paths --tasks <4 tasks> --models opus --arms current,lens --passes opus=1`
 4. Sol and particle-1: the same with `--out <out>/or-paths --tasks <4 tasks> --models sol,particle --arms none,current --passes sol=1,particle=1`
-5. `bin/gstack-evals tbv packets --records <out>/none records --keys <keys> --split <manifest.json> --out <packets dir> --key <packet key file>`
+5. `bin/gstack-evals tbv packets --records <records> --keys <keys> --split <manifest.json> --out <packets dir> --key <packet key file>`, where `<records>` is one directory holding only the reading-*.json files from `<out>/none/sealed/` (sealed/ also holds start-*.json, which stay out)
 6. `bin/gstack-evals tbv judge --packets <packets dir> --key <packet key file> --out <judge dir> --item tbv-hr --run-id $RUN --record $REC --ledger $LEDGER`
-7. `bin/gstack-evals tbv readings --records <records> --keys <keys> --split <manifest.json> --packet-key <packet key file> --judges <judge dir>/judges.ndjson --out readings.json --models opus,sol,particle --passes opus=3,sol=1,particle=1 --skill-arms current,lens`
+7. `bin/gstack-evals tbv readings --records <records> --keys <keys> --split <manifest.json> --packet-key <packet key file> --judges <judge dir>/judges.ndjson --out readings.json --models opus --passes opus=3 --skill-arms none`, on the same `<records>` (the stage 1 plan dryrun.ts:126 runs)
 8. `bin/gstack-evals tbv headroom readings.json --split <manifest.json>`, then `bin/gstack-evals tbv projection projection.json`, which sets the later caps from stage 1's measured costs.
+
+Stage 1's path readings (steps 3 and 4) are metered but never judged: prereg section 9 runs them as "full three-turn readings, metered but never judged". They have no packets, so they stay out of `<records>`, and readings refuses a scored reading with no first packet (readings.ts:58). projection.json's measured cost per arm and model is the mean usd of the drive's own non-harness reading records from all three stage 1 outputs (`<out>/none`, `<out>/opus-paths` and `<out>/or-paths`).
 
 **tbv-dev-base (stage 2)**
 1. `bin/gstack-evals tbv drive --item tbv-dev-base --run-id $RUN --out <out>/base --plaintext <plaintext dir> --tasks <44 dev tasks> --models opus,sol,particle --arms none,current --passes opus=2,sol=2,particle=2 $DRIVE`
 2. capy current on Opus: the same with `--out <out>/capy --tasks <22 source B dev tasks, capy family> --models opus --arms current --passes opus=2`
 3. lens on Opus: the same with `--out <out>/lens --tasks <44 dev tasks> --models opus --arms lens --passes opus=2`
-4. packets, then judge with `--item tbv-dev-base --run-id $RUN`, then readings with `--models opus,sol,particle --passes opus=2,sol=2,particle=2 --skill-arms current,lens --capy-passes 2`, as in tbv-hr; then `bin/gstack-evals tbv compare readings.json --split <manifest.json>`
+4. packets on one `<records>` directory holding only the reading-*.json files from steps 1 to 3's `sealed/` directories (every tbv-dev-base reading is judged), then judge with `--item tbv-dev-base --run-id $RUN`, then readings on the same `<records>` with `--models opus,sol,particle --passes opus=2,sol=2,particle=2 --skill-arms current,lens --capy-passes 2`, as in tbv-hr; then `bin/gstack-evals tbv compare readings.json --split <manifest.json>`
 
 **tbv-climb-1 to tbv-climb-3 (stage 2)**
-1. `bin/gstack-evals tbv drive --item tbv-climb-<n> --run-id $RUN --out <out> --plaintext <plaintext dir> --tasks <44 dev tasks and the 22 capy tasks> --models opus --arms principle --passes opus=2 $DRIVE`, with `$SHAPES` and `$SPLICES` holding the principle shape and splice sets captured at the round's candidate commit.
-2. packets; judge with `--item tbv-climb-<n> --run-id $RUN`; readings with `--models opus --passes opus=2 --skill-arms current,principle --capy-passes 2 --dev-gap <gap,mdd> --principle-detector <file>`; compare.
+1. Skill call: `bin/gstack-evals tbv drive --item tbv-climb-<n> --run-id $RUN --out <out>/skill --plaintext <plaintext dir> --tasks <44 dev tasks> --models opus --arms principle --passes opus=2 $DRIVE`, with `$SHAPES` and `$SPLICES` holding the principle shape and splice sets captured at the round's candidate commit.
+2. capy call: the same with `--out <out>/capy --tasks <22 capy tasks>`. The capy tasks share task ids with their ship histories, and drive keys a call's tasks by task id (drive.ts:377), so one call holding both families drives only one of them. That is why the two families take separate calls here, as in tbv-dev-base.
+3. packets on one `<records>` directory holding only the reading-*.json files from both calls' `sealed/`; judge with `--item tbv-climb-<n> --run-id $RUN`; readings on the same `<records>` with `--models opus --passes opus=2 --skill-arms current,principle --capy-passes 2 --dev-gap <gap,mdd> --principle-detector <file>`; compare.
 
 The candidate commits don't exist yet, so their shape and splice digests are recorded in each round's own run record, not here.
 
 **tbv-held (stage 3)**
 1. `bin/gstack-evals tbv drive --item tbv-held --run-id $RUN --out <out> --plaintext <dir on /dev/shm> --tasks <110 held tasks on /dev/shm> --models opus,sol,particle --arms none,current,principle --passes opus=2,sol=2,particle=2 $DRIVE --held --seal-cmd "$SEAL" --unseal-cmd "$UNSEAL"`, with the shapes and splices at C and P that P's pin post freezes.
-2. capy on Opus: the same with `--out <out>/capy --tasks <55 capy held tasks on /dev/shm> --models opus --arms current,principle`
-3. packets, judge (`--item tbv-held`) and readings, each with `--held $HELD --seal-cmd "$SEAL"` and every output on /dev/shm; then compare.
+2. capy on Opus: the same with `--out <out>/capy --tasks <55 capy held tasks on /dev/shm> --models opus --arms current,principle --passes opus=2`. It doesn't run under STAGE 3 WITHOUT THE CAPY FAMILY.
+3. packets, judge (`--item tbv-held`) and readings, each with `--held $HELD --seal-cmd "$SEAL"` and every plaintext output on /dev/shm; then compare. packets and readings read one `<records>` directory on /dev/shm: the reading-*.json records from steps 1 and 2's `sealed/`, unsealed with the run's `--unseal-cmd` (start-*.json stay out). The copy is removed after the step, and section 9's find check covers it.
 
 **tbv-held-p3: not settled at this build.** drive always runs passes 1 to N of the plan (drive.ts:343). Running only Opus's third pass on its own item would mean reusing tbv-held's `--out`, so that the sealed records of passes 1 and 2 are skipped, and no test drives that path. A keyless-tested command lands with P's pin post before stage 3. The third pass stays conditional on the all-in check against settled actuals (section 6). Nothing before stage 3 depends on it.
 
 **Held-out flags.** `--held`, `--seal-cmd` and `--unseal-cmd` appear only on tbv-author's held-out keys, tbv-held and tbv-held-p3. In drive `--held` is a switch; in keys, packets, judge and readings it names the sealed directory (custody.ts:46-58).
+
+**drive's --out is durable.** drive keeps its sealed records at `<out>/sealed` and its journal at `<out>/journal.ndjson` (drive.ts:647, :204), and a restart reads both. So on every drive call only `--plaintext` and `--tasks` go on /dev/shm, and `stat -f -c %T <out>` must name a disk filesystem, never tmpfs or ramfs, before the call (section 9, preflight 8).
 
 ## 5. The keyless dry run at the build commit
 
@@ -230,14 +235,20 @@ M="$R/.start"; touch "$M"
 bin/gstack-evals tbv assemble-a --trial <trial dir> --task-dir <task dir> --out "$R/histories/<task>.json" > "$R/assemble-a.out" 2> "$R/assemble-a.err"
 bin/gstack-evals tbv assemble-b --records <prs.json> --out-dir "$R/histories" > "$R/assemble-b.out" 2> "$R/assemble-b.err"
 bin/gstack-evals tbv extract --history "$R/histories/<task>.json" --out "$R/extracts/<task>.json" > "$R/extract-<task>.out" 2> "$R/extract-<task>.err"
-find "$R" -type f ! -name .start | while read -r f; do d="$HELD/b2-<step>/${f#"$R"/}.sealed"; mkdir -p "$(dirname "$d")"; sh -c "$SEAL" < "$f" > "$d"; done
-find / -xdev -type f -newer "$M" ! -path "$HELD/*" 2>/dev/null > "$R/find.out"
+find "$R" -type f ! -name .start | while read -r f; do d="$HELD/b2-<step>/${f#"$R"/}.sealed"; test ! -e "$d" || { echo "refusing to overwrite $d"; exit 1; }; mkdir -p "$(dirname "$d")"; sh -c "$SEAL" < "$f" > "$d.tmp"; mv "$d.tmp" "$d"; done
+: > "$R/find.out"
+findmnt -rn --real -o TARGET,FSTYPE | while read -r mnt fs; do
+  case "$fs" in tmpfs|devtmpfs|ramfs) continue ;; esac
+  rc=0
+  find "$mnt" -xdev -type f -newer "$M" ! -path "/dev/shm/*" ! -path "$HELD/*" ! -path "$HOME/.capy/git-shim.log" ! -path "$HOME/.gstack/ship-calls.jsonl" 2>/dev/null >> "$R/find.out" || rc=$?
+  [ "$rc" -le 1 ] || { echo "find failed on $mnt (exit $rc)"; exit 1; }
+done
 test ! -s "$R/find.out"
 ```
 
-The last find covers every disk filesystem on /, and /dev/shm is tmpfs, so `-xdev` leaves it out. Any path the find prints stops the step until the run thread logs it in CUSTODY.md and deletes it or shows it is not held-out-derived. Plaintext under `$R` is deleted when B2 has used it, and every start and every wake begins with the `test ! -e` check (section 16).
+The seal loop writes each sealed copy to a .tmp file and moves it into place, and it refuses to overwrite a sealed copy that already exists. The last check runs one `-xdev` find on each real mount findmnt lists, other than tmpfs, devtmpfs and ramfs. That covers the disk filesystems and the Captain drive's fuse mount, because a held-out file written there would sync off the machine. It skips /dev/shm and `$HELD`, and prunes only ~/.capy/git-shim.log and ~/.gstack/ship-calls.jsonl, by exact path. find exits 1 when it can't read a directory, so only an exit above 1 fails the check. Any path the find prints stops the step until the run thread logs it in CUSTODY.md and deletes it or shows it is not held-out-derived. Plaintext under `$R` is deleted when B2 has used it, and every start and every wake begins with the `test ! -e` check (section 16).
 
-**Preflights that bind the first lease.** The run brief records each output in the run record before the lease it binds opens.
+**Preflights that bind the first lease.** The run brief records each output in the run record before the lease it binds opens. Preflights 2, 1 and 3 run in that order before any held-out step, the extract and assemble steps above included, and `$HELD` is created only by preflight 2's `install -d -m 0700`.
 1. **Durable --held.** `stat -f -c %T "$HELD"` must name a disk filesystem, never tmpfs or ramfs. heldOutputs checks the plaintext outputs but not the sealed directory, and a --held on tmpfs would lose the sealed outputs and the journal under `$HELD/journal/<run id>` if the machine died.
 2. **--held at 0700.** `test ! -e "$HELD" && install -d -m 0700 "$HELD"`, then `stat -c %a "$HELD"` must print 700. Otherwise heldOutputs creates it at 0755, and its listing would show task and packet ids to other local users.
 3. **Seal round-trip** (before the first held lease). `printf 'tbv seal check\n' > /dev/shm/tbv-seal-check`, then `sh -c "$SEAL" < /dev/shm/tbv-seal-check > /dev/shm/tbv-seal-check.sealed` and `sh -c "$UNSEAL" < /dev/shm/tbv-seal-check.sealed | cmp - /dev/shm/tbv-seal-check` must pass with the exact `--seal-cmd` and `--unseal-cmd` the run will use, so a bad seal configuration stops at $0.
@@ -245,6 +256,7 @@ The last find covers every disk filesystem on /, and /dev/shm is tmpfs, so `-xde
 5. **One run per --held at a time.** Two runs on one sealed directory can race at the per-write guard's check and rename (custody.ts:70, :96). One open lease per item (section 4) keeps two runs of one item apart, and the brief starts a held run of another item only on its own fresh --held.
 6. **Gemini 4 Argon** (before tbv-author's first lease). The public listing (https://openrouter.ai/api/v1/models/google/gemini-4-argon/endpoints) must show at least one google-vertex endpoint at status 0 at or under the price row ($2 in, $10 out per million). If none does, tbv-author doesn't start.
 7. **Generation id** (after tbv-hr's step 4, before any later item on an OpenRouter route). Section 8's check: the first send's responseId from one Sol record and one particle-1 record must each have an OpenRouter generation record that names that id. If either doesn't, no later item starts on an OpenRouter route and the question goes to the Captain.
+8. **Durable --out** (before every drive call). `stat -f -c %T <out>` must name a disk filesystem, never tmpfs or ramfs (section 4).
 
 **A seal failure partway through a run.** If the seal command fails while a held drive run is going, the run closes and settles its lease, and drive handles the rerun with the same `--run-id` and `--out` as a crash under the shipped restart rule. The readings that were in flight have a sealed start record and no sealed reading record, so they become paid crash gaps and are never sent again (drive.ts:644). The other readings in that round run until the round ends (drive.ts:594), so the crash gaps can cover up to a round of 4 readings. Preflight 3 is what keeps a bad seal configuration from reaching that point. This discharges the open note #246 shipped with.
 
