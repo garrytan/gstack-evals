@@ -386,6 +386,50 @@ test("a held-out batch that cannot be written stops with a task-free message: a 
   expect(existsSync(join(w.shm, "held-2", "histories"))).toBe(false);
 });
 
+test("dev may draw a source B cluster's non-minimum members while the member that names the cluster stays undrawn", async () => {
+  const r = (n: number) => rank(SEED, "B", "pr-" + n);
+  let x = 20;
+  while (!(r(x) > r(x + 1) && r(x) > r(x + 2))) x++;
+  const prs = [...[1, 2, 3, 4].map((n) => shortPr(n)), shortPr(x), shortPr(x + 1, { baseRefName: "b/" + x }), shortPr(x + 2, { baseRefName: "b/" + (x + 1) })];
+  const w = world({ prs });
+  const p = io();
+  expect(await run(["split", "plan", ...w.pool, "--batch", join(w.disk, "dev-1")], p.io)).toBe(0);
+  expect(p.out.join("\n")).toContain('"cluster cap":2');
+  const b = histories(join(w.disk, "dev-1")).filter((h) => h.source === "B");
+  expect(b.map((h) => h.task).sort()).toEqual(["pr-1", "pr-2", "pr-3", "pr-4", "pr-" + (x + 1), "pr-" + (x + 2)].sort());
+  expect(b.filter((h) => Number(h.task.slice(3)) > x).map((h) => h.cluster)).toEqual(["pr-" + x, "pr-" + x]);
+});
+
+test("a source A history whose task id is not a plain file name refuses before anything is written", async () => {
+  const w = world({ a: [histA("a-l0__s0", "a-l0", "long")] });
+  writeFileSync(join(w.shm, "a", "escape.json"), JSON.stringify(histA("../../escape", "a-esc", "long")));
+  expect(await codeOf(() => run(["split", "plan", ...w.pool, "--batch", join(w.disk, "dev-1")], io().io))).toBe("E_TBV_INPUT");
+  expect(existsSync(join(w.disk, "dev-1"))).toBe(false);
+  expect(existsSync(join(w.disk, "escape.json"))).toBe(false);
+});
+
+test("held-b write refuses a source A history whose events no longer match its sha256", async () => {
+  const shm = shmDir(), disk = diskDir();
+  const good = histA("a-l0__s0", "a-l0", "long");
+  mkdirSync(join(shm, "a"));
+  writeFileSync(join(shm, "a", good.task + ".json"), JSON.stringify({ ...good, events: histA("a-l0__s0", "a-l0", "short").events }));
+  mkdirSync(join(shm, "b"));
+  mkdirSync(join(shm, "seed"));
+  writeFileSync(join(shm, "seed", "seed-b.hex"), SEED_HEX + "\n");
+  writeFileSync(join(disk, "prs.json"), JSON.stringify({ schema: "tbv-prs.v1", repo: "garrytan/gstack-evals", prs: [], skipped: [] }));
+  writeFileSync(join(disk, "dev-clusters.json"), JSON.stringify({ schema: "tbv-dev-clusters.v1", A: [], B: [] }));
+  writeFileSync(join(shm, "held-a.json"), JSON.stringify({ schema: "tbv-held-split.v1", source: "A", tasks: [taskRow(row("A", good.task, good.cluster, "long"), 3)], histories: { [good.task]: good.sha256 } }));
+  const pool = ["--mode", "held-b", "--b", join(shm, "b"), "--prs", join(disk, "prs.json"), "--seed-file", join(shm, "seed", "seed-b.hex"), "--p-merged-at", "2026-11-07T00:00:00Z", "--dev-clusters", join(disk, "dev-clusters.json")];
+  const p = io();
+  expect(await run(["split", "plan", ...pool, "--batch", join(shm, "batch")], p.io)).toBe(0);
+  const digest = /pool digest ([0-9a-f]{64})/.exec(p.out.join("\n"))![1]!;
+  const flags = [...pool, "--pool-digest", digest, "--held-a", join(shm, "held-a.json"), "--a", join(shm, "a"), "--held-out", join(shm, "held-out"), "--held", join(disk, "sealed"), "--seal-cmd", "base64"];
+  expect(await codeOf(() => run(["split", "write", ...flags], io().io))).toBe("E_TBV_INPUT");
+  expect(existsSync(join(shm, "held-out"))).toBe(false);
+  writeFileSync(join(shm, "a", good.task + ".json"), JSON.stringify(good));
+  expect(await run(["split", "write", ...flags], io().io)).toBe(0);
+});
+
 test("a planted held-out cluster in the dev outputs refuses before anything is written", async () => {
   const a = [...Array.from({ length: 20 }, (_, i) => histA("a-l" + i + "__s0", "a-l" + i, "long")), histA("a-planted__s0", "pr-3", "long")];
   const order = drawOrder(a.map((h) => row("A", h.task, h.cluster, "long")), SEED);

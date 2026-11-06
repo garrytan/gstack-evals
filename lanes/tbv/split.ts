@@ -6,10 +6,11 @@
 // cluster in the dev outputs.
 import { createHash, createHmac } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { heldOutputs, plaintextRoot } from "./custody.ts";
 import { fail, TbvError } from "./errors.ts";
 import { admitsSize, extract, OVERHEAD_641D622 } from "./extract.ts";
+import { historySha256 } from "./history/events.ts";
 import { clustersOf, devEligible, heldOutCluster, heldOutEligible, type LineageStub, type PrRecord } from "./history/source-b.ts";
 import type { ReasonCode } from "../../src/errors/codes.ts";
 import { parseFlags } from "./judge.ts";
@@ -148,7 +149,7 @@ export const taskRow = (r: PoolRow, nfacts: number): TaskRow => ({ id: r.task, c
 
 /** Refuses dev rows that name any id or cluster outside dev (held-out or undrawn), without naming it (ruling H1). */
 export function guardDev(rows: Array<{ id: string; cluster: string }>, forbidden: { ids: Set<string>; clusters: Set<string> }): void {
-  const hits = rows.filter((r) => [r.id, r.cluster].some((v) => forbidden.ids.has(v) || forbidden.clusters.has(v))).length;
+  const hits = rows.filter((r) => forbidden.ids.has(r.id) || forbidden.clusters.has(r.id) || forbidden.clusters.has(r.cluster)).length;
   if (hits) fail("E_TBV_CUSTODY", hits + " dev row(s) name a task id or cluster that is not dev's; nothing was written; bring this to the Captain");
 }
 
@@ -213,6 +214,7 @@ function readHistories(dir: string, source: Source, flag: string): History[] {
   return readdirSync(dir).filter((f) => f.endsWith(".json")).sort().map((f) => {
     const h = readJson(join(dir, f), "--" + flag) as History;
     if (h?.schema !== "tbv-history.v1" || h.source !== source) fail("E_TBV_INPUT", "a file in --" + flag + " is not a source " + source + " tbv-history.v1 history");
+    if (typeof h.task !== "string" || /^\.{0,2}$/.test(h.task) || h.task !== basename(h.task)) fail("E_TBV_INPUT", "a history in --" + flag + " has a task id that is not a plain file name");
     return h;
   });
 }
@@ -453,7 +455,7 @@ function write(a: Record<string, string>, mode: Mode, pool: Pool, w: Walked, io:
     const aHist = new Map(readHistories(a.a!, "A", "a").map((h) => [h.task, h]));
     const aRows = (heldA.tasks as TaskRow[]).map((t) => {
       const h = aHist.get(t.id);
-      if (!h || h.sha256 !== heldA.histories?.[t.id]) fail("E_TBV_INPUT", "a held-out source A task's history in --a is missing or is not the one the split map names");
+      if (!h || h.sha256 !== heldA.histories?.[t.id] || historySha256(h.events) !== h.sha256) fail("E_TBV_INPUT", "a held-out source A task's history in --a is missing or is not the one the split map names");
       return { source: "A" as const, task: t.id, cluster: t.cluster, stratum: t.stratum, tokens: 0, sha256: h!.sha256 };
     });
     const keptB = kept("held", "B");
