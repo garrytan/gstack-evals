@@ -375,7 +375,7 @@ function joinBase(own: Readings, split: { text: string; manifest: SplitManifest 
   const odd = own.readings.find((r) => r.arm !== "principle");
   if (odd) fail("E_USAGE with --base the climb's readings hold only principle rows; reading " + odd.id + " is " + odd.arm + ", which comes from --base");
   const b = base.rd as Partial<Readings>;
-  if (!b || typeof b !== "object" || !Array.isArray(b.readings) || !Array.isArray(b.tasks) || !b.plan) fail("E_USAGE the --base file " + base.file + " is not a readings file");
+  if (!b || typeof b !== "object" || !Array.isArray(b.readings) || !Array.isArray(b.tasks) || !b.plan || !Array.isArray(b.plan.models) || !b.plan.passes || typeof b.plan.passes !== "object") fail("E_USAGE the --base file " + base.file + " is not a readings file");
   if (b.stage !== "dev") fail("E_USAGE the --base readings are stage " + b.stage + "; a climb joins tbv-dev-base's dev readings");
   checkPlan(base.rd, split);
   const p = base.rd.readings.find((r) => r.arm === "principle");

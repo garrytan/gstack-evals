@@ -6,13 +6,16 @@
 // with the same mounts checks that nothing else is writable before each real one runs, so a stray write fails inside
 // the container instead of needing a scan afterwards.
 import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { closeSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { accessSync, closeSync, constants, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fail, TbvError } from "./errors.ts";
 import type { Io } from "./types.ts";
 
 export const IMAGE = "gstack-evals-tbv-empty:1";
+const EMPTY_LAYER = "sha256:" + createHash("sha256").update(Buffer.alloc(10240)).digest("hex");
+const LABEL = "gstack-evals.tbv-held=1";
 const REPO = resolve(import.meta.dir, "../..");
 const SELF = join(import.meta.dir, "held.ts");
 const BUN = "/opt/tbv/bun";
@@ -55,7 +58,7 @@ export function place(path: string, mounts: string, fs: Fs = REAL): { real: stri
   const unescape = (s: string) => s.replace(/\\([0-7]{3})/g, (_, o: string) => String.fromCharCode(parseInt(o, 8)));
   const table = mounts.split("\n").map((l) => l.split(" ")).filter((f) => f.length >= 3).map((f) => ({ at: unescape(f[1]!), type: f[2]! }));
   const under = (m: string) => m === "/" || real === m || real.startsWith(m + "/");
-  const m = table.filter((x) => under(x.at)).sort((a, b) => b.at.length - a.at.length)[0] ?? fail("E_TBV_CUSTODY", "no mount in the table holds " + real);
+  const m = table.filter((x) => under(x.at)).reverse().sort((a, b) => b.at.length - a.at.length)[0] ?? fail("E_TBV_CUSTODY", "no mount in the table holds " + real);
   return { real, exists: rest.length === 0, type: m.type, at: m.at };
 }
 
@@ -70,25 +73,40 @@ interface Bind {
 }
 const quiet: Io = { out: () => {}, err: () => {} };
 
-function ready(o: Docker) {
+/** Docker is up, no labelled container from a dead step still runs, and the tag holds the empty import (one empty layer,
+ * nothing set in its config); returns the image id every container then runs, so a later retag cannot swap it. */
+function ready(o: Docker): string {
   const exe = o.docker ?? "docker";
   const v = spawnSync(exe, ["version", "--format", "{{.Server.Version}}"], { encoding: "utf8" });
   if (v.error || v.status !== 0) fail("E_TBV_CUSTODY", "docker is not available (" + (v.error ? errno(v.error) : (v.stderr ?? "").trim().slice(0, 200)) + "), so the step cannot run confined; a held-out step never runs unconfined");
-  if (spawnSync(exe, ["image", "inspect", IMAGE], { encoding: "utf8" }).status === 0) return;
-  const imp = spawnSync(exe, ["import", "-", IMAGE], { input: Buffer.alloc(10240), encoding: "utf8" });
-  if (imp.status !== 0) fail("E_TBV_CUSTODY", "docker could not make the empty image " + IMAGE + ": " + (imp.stderr ?? "").trim().slice(0, 200));
+  const ps = spawnSync(exe, ["ps", "-q", "--filter", "label=" + LABEL], { encoding: "utf8" });
+  if (ps.status !== 0) fail("E_TBV_CUSTODY", "docker ps failed (" + (ps.stderr ?? "").trim().slice(0, 200) + "), so a held-out container left by a dead step cannot be ruled out");
+  const left = ps.stdout.trim().split(/\s+/).filter(Boolean);
+  if (left.length) fail("E_TBV_CUSTODY", "a held-out container from an earlier step is still running (" + left.join(", ") + "): its caller died before it ended. Stop it with docker kill " + left.join(" ") + ", log it in CUSTODY.md and delete its work dir by the leftover rule, then rerun");
+  const look = () => spawnSync(exe, ["image", "inspect", "--format", "{{json .}}", IMAGE], { encoding: "utf8" });
+  let ins = look();
+  if (ins.status !== 0) {
+    const imp = spawnSync(exe, ["import", "-", IMAGE], { input: Buffer.alloc(10240), encoding: "utf8" });
+    if (imp.status !== 0) fail("E_TBV_CUSTODY", "docker could not make the empty image " + IMAGE + ": " + (imp.stderr ?? "").trim().slice(0, 200));
+    ins = look();
+  }
+  let img: { Id?: string; Config?: Record<string, unknown> | null; RootFS?: { Layers?: string[] } } = {};
+  try { img = JSON.parse(ins.stdout); } catch { img = {}; }
+  const set = Object.entries(img.Config ?? {}).filter(([, v]) => v !== null && v !== false && v !== "" && !(typeof v === "object" && !Object.keys(v as object).length)).map(([k]) => k);
+  if (ins.status !== 0 || !img.Id || JSON.stringify(img.RootFS?.Layers) !== JSON.stringify([EMPTY_LAYER]) || set.length) fail("E_TBV_CUSTODY", "the image " + IMAGE + " is not the empty import (" + (set.length ? "its config sets " + set.join(", ") : "its layers are not the one empty tar") + "); held-out steps run only in the empty image, so remove it with docker image rm " + IMAGE + " and rerun");
+  return img.Id!;
 }
 
 /** One container: the host's system directories, the bun binary and this checkout read-only, then the binds given. */
-function container(o: Docker, binds: Bind[], workdir: string, cmd: string[]) {
+function container(o: Docker & { image: string }, binds: Bind[], workdir: string, cmd: string[]) {
   const mounts = [...SYSTEM.filter((p) => { try { return statSync(p).isDirectory(); } catch { return false; } }).map((p) => ({ src: p, dst: p, rw: false })), { src: process.execPath, dst: BUN, rw: false }, { src: REPO, dst: REPO, rw: false }, ...binds.map((b) => ({ ...b, dst: b.src }))];
   for (const m of mounts) if (/[,"\n]/.test(m.src)) fail("E_TBV_CUSTODY", "the path " + JSON.stringify(m.src) + " holds a comma, a quote or a newline, which docker's --mount cannot take");
-  const args = ["run", "--rm", "--network", "none", "--read-only", "--ipc", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "512", "--ulimit", "core=0", "--log-driver", "none", "--user", process.getuid!() + ":" + process.getgid!(), "--env", "HOME=/nonexistent", "--env", "PATH=/opt/tbv:/usr/local/bin:/usr/bin:/bin", "--env", "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0", "--workdir", workdir, ...mounts.flatMap((m) => ["--mount", "type=bind,src=" + m.src + ",dst=" + m.dst + (m.rw ? "" : ",readonly")]), IMAGE, ...cmd];
+  const args = ["run", "--rm", "--network", "none", "--read-only", "--ipc", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "512", "--ulimit", "core=0", "--log-driver", "none", "--label", LABEL, "--user", process.getuid!() + ":" + process.getgid!(), "--env", "HOME=/nonexistent", "--env", "PATH=/opt/tbv:/usr/local/bin:/usr/bin:/bin", "--env", "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0", "--workdir", workdir, ...mounts.flatMap((m) => ["--mount", "type=bind,src=" + m.src + ",dst=" + m.dst + (m.rw ? "" : ",readonly")]), o.image, ...cmd];
   return spawnSync(o.docker ?? "docker", args, { encoding: "utf8", maxBuffer: 1 << 24 });
 }
 
 /** The probe: the same mounts as the container it guards; anything writable but the allowed directory refuses. */
-function probe(o: Docker, binds: Bind[], allowed: string) {
+function probe(o: Docker & { image: string }, binds: Bind[], allowed: string) {
   const r = container(o, binds, allowed, [BUN, SELF, "--inner", "probe", allowed]);
   if (r.status !== 0 || r.stdout.trim()) fail("E_TBV_CUSTODY", "the confinement probe refused the container (exit " + r.status + "): " + (r.stdout + r.stderr).trim().split("\n").slice(0, 8).join("; ") + "; nothing ran");
 }
@@ -134,7 +152,7 @@ export function heldStep(o: HeldStep): number {
   const held = place(o.held, mounts);
   if (VOLATILE.has(held.type) || synced(held.type)) fail("E_TBV_CUSTODY", "--held " + o.held + " is on " + held.type + " (" + held.at + "); sealed copies go to a local disk directory (preflight 1)");
   const w = freshWork(o.work, mounts);
-  ready(o);
+  const d = { ...o, image: ready(o) };
   mkdirSync(o.held, { recursive: true, mode: 0o700 });
   try {
     mkdirSync(o.work, { mode: 0o700 });
@@ -146,16 +164,16 @@ export function heldStep(o: HeldStep): number {
   const reads = [...inputs, ...ro].map((p) => ({ src: p.real, rw: false }));
   const extra = (o.extraBinds ?? []).map((src) => ({ src, rw: true }));
   try {
-    probe(o, [...reads, ...extra, { src: work, rw: true }], work);
+    probe(d, [...reads, ...extra, { src: work, rw: true }], work);
   } catch (e) {
     rmSync(o.work, { recursive: true, force: true });
     throw e;
   }
-  const run = container(o, [...reads, ...extra, { src: work, rw: true }], work, ["/bin/sh", "-c", 'exec "$@" >"$0/' + STEP + '/stdout" 2>"$0/' + STEP + '/stderr"', work, ...o.cmd]);
+  const run = container(d, [...reads, ...extra, { src: work, rw: true }], work, ["/bin/sh", "-c", 'exec "$@" >"$0/' + STEP + '/stdout" 2>"$0/' + STEP + '/stderr"', work, ...o.cmd]);
   if (run.status !== 0) fail("E_TBV_STEP", "the confined command exited " + (run.status ?? errno(run.error)) + (run.stderr.trim() ? " (" + run.stderr.trim().slice(0, 300) + ")" : "") + "; nothing was sealed. Its outputs and streams stay under " + o.work + " on tmpfs; read them there, then delete the work dir by the leftover rule");
   const sealBinds = [...ro.map((p) => ({ src: p.real, rw: false })), ...extra, { src: work, rw: false }, { src: realpathSync(o.held), rw: true }];
-  probe(o, sealBinds, realpathSync(o.held));
-  const s = container(o, sealBinds, work, [BUN, SELF, "--inner", "seal", work, realpathSync(o.held), o.sealCmd]);
+  probe(d, sealBinds, realpathSync(o.held));
+  const s = container(d, sealBinds, work, [BUN, SELF, "--inner", "seal", work, realpathSync(o.held), o.sealCmd]);
   if (s.status !== 0) fail("E_TBV_CUSTODY", "the seal container refused (exit " + s.status + "): " + (s.stderr || s.stdout).trim().slice(0, 400) + "; the plaintext stays under " + o.work + " on tmpfs");
   io.out("held-step: probe ok, command exit 0, " + s.stdout.trim() + " files into " + o.held + "; plaintext stays under " + o.work + " until B2 has used it");
   return 0;
@@ -179,7 +197,7 @@ export function heldUnseal(o: HeldUnseal): number {
   const froms = existing(o.froms, "from", mounts);
   const ro = existing(o.ro, "ro", mounts);
   const w = freshWork(o.work, mounts);
-  ready(o);
+  const d = { ...o, image: ready(o) };
   try {
     mkdirSync(o.work, { mode: 0o700 });
   } catch (e) {
@@ -187,12 +205,12 @@ export function heldUnseal(o: HeldUnseal): number {
   }
   const binds = [...froms.map((p) => ({ src: p.real, rw: false })), ...ro.map((p) => ({ src: p.real, rw: false })), { src: w.real, rw: true }];
   try {
-    probe(o, binds, w.real);
+    probe(d, binds, w.real);
   } catch (e) {
     rmSync(o.work, { recursive: true, force: true });
     throw e;
   }
-  const r = container(o, binds, w.real, [BUN, SELF, "--inner", "unseal", w.real, o.prefix, o.unsealCmd, ...froms.map((f) => f.real)]);
+  const r = container(d, binds, w.real, [BUN, SELF, "--inner", "unseal", w.real, o.prefix, o.unsealCmd, ...froms.map((f) => f.real)]);
   if (r.status !== 0) fail("E_TBV_CUSTODY", "the unseal container refused (exit " + r.status + "): " + (r.stderr || r.stdout).trim().slice(0, 400) + "; delete " + o.work + " by the leftover rule before a rerun");
   io.out("held-unseal: probe ok, " + r.stdout.trim() + " records into " + o.work + "; delete it when the step that reads it is done");
   return 0;
@@ -229,7 +247,7 @@ export function sealOne(file: string, target: string, cmd: string): void {
   unlinkSync(tmp);
 }
 
-/** Inside the seal container: walk the whole work dir first (an unreadable directory, a symlink or a special file refuses
+/** Inside the seal container: walk the whole work dir first (an unreadable directory or file, a symlink or a special file refuses
  * before any seal), refuse if any target or .tmp exists, then seal each file to <held>/<path>.sealed. */
 function sealAll(work: string, held: string, cmd: string) {
   const files: string[] = [];
@@ -245,7 +263,10 @@ function sealAll(work: string, held: string, cmd: string) {
       let st: ReturnType<typeof lstatSync> | undefined;
       try { st = lstatSync(p); } catch (e) { fail("E_TBV_CUSTODY", "cannot stat " + p + " (" + errno(e) + "); nothing was sealed"); }
       if (st!.isDirectory()) walk(p, r);
-      else if (st!.isFile()) files.push(r);
+      else if (st!.isFile()) {
+        try { closeSync(openSync(p, "r")); } catch (e) { fail("E_TBV_CUSTODY", "cannot read " + p + " (" + errno(e) + "); nothing was sealed"); }
+        files.push(r);
+      }
       else fail("E_TBV_CUSTODY", p + " is a symlink or a special file; a step leaves only files and directories, so nothing was sealed");
     }
   };
@@ -260,8 +281,7 @@ function sealAll(work: string, held: string, cmd: string) {
     try {
       sealOne(join(work, r), join(held, r + SEALED), cmd);
     } catch (e) {
-      if (e instanceof TbvError) fail(e.code, e.message + " (" + n + " of " + files.length + " files were sealed before it)");
-      throw e;
+      fail(e instanceof TbvError ? e.code : "E_TBV_CUSTODY", (e instanceof TbvError ? e.message : "sealing " + r + " failed (" + errno(e) + ")") + " (" + n + " of " + files.length + " files were sealed before it)");
     }
     n++;
   }
@@ -282,7 +302,7 @@ function unsealAll(work: string, prefix: string, cmd: string, froms: string[]) {
       const p = join(d, name);
       if (!lstatSync(p).isFile()) fail("E_TBV_CUSTODY", p + " is not a regular file");
       const r = spawnSync("sh", ["-c", cmd], { input: readFileSync(p), maxBuffer: 1 << 30 });
-      if (r.error || r.status !== 0) fail("E_TBV_CUSTODY", "the unseal command " + (r.error ? errno(r.error) : "exited " + r.status) + " on " + p);
+      if (r.error || r.status !== 0 || !r.stdout?.length) fail("E_TBV_CUSTODY", "the unseal command " + (r.error ? errno(r.error) : r.status !== 0 ? "exited " + r.status : "wrote nothing") + " on " + p);
       try {
         writeFileSync(join(work, name.slice(0, -SEALED.length)), r.stdout, { flag: "wx", mode: 0o600 });
       } catch (e) {
@@ -298,7 +318,10 @@ function unsealAll(work: string, prefix: string, cmd: string, froms: string[]) {
 /** Inside the probe container: try to create a file at every mount point and at the usual scratch places; print each
  * place outside the allowed directory where that worked. Character devices (/dev/null over docker's masked /proc files)
  * take writes and keep nothing, and /dev/mqueue holds kernel message queues of the container's own IPC namespace, which
- * die with it, so both are skipped. */
+ * die with it, so both are skipped. Then any mount mountinfo lists rw, other than the allowed directory and docker's own
+ * /proc, /sys and /dev mounts, refuses; and a walk of everything the container sees (all but /proc, /sys, /dev/pts and
+ * /dev/mqueue) refuses any socket or FIFO, which a read-only bind still lets a command talk through, and any directory it
+ * can enter but not list. */
 function probeInside(allowed: string) {
   const unescape = (s: string) => s.replace(/\\([0-7]{3})/g, (_, o: string) => String.fromCharCode(parseInt(o, 8)));
   const table = readFileSync("/proc/self/mountinfo", "utf8").trim().split("\n").map((l) => l.split(" ")).map((f) => ({ at: unescape(f[4]!), type: f[f.indexOf("-") + 1]! }));
@@ -318,6 +341,31 @@ function probeInside(allowed: string) {
       bad.push("writable " + p);
     }
   }
+  const mine = (p: string) => p === allowed || p.startsWith(allowed + "/");
+  const kernel = (p: string) => p === "/proc" || p.startsWith("/proc/") || p === "/sys" || p.startsWith("/sys/") || p === "/dev" || p === "/dev/pts" || p === "/dev/mqueue";
+  for (const m of readFileSync("/proc/self/mountinfo", "utf8").trim().split("\n").map((l) => l.split(" "))) {
+    const at = unescape(m[4]!);
+    if (m[5]!.split(",").includes("rw") && !mine(at) && !kernel(at)) bad.push("rw mount " + at);
+  }
+  const skip = new Set(["/proc", "/sys", "/dev/pts", "/dev/mqueue"]);
+  const walk = (dir: string) => {
+    let entries: Dirent[] = [];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      try { accessSync(dir, constants.X_OK); } catch { return; }
+      bad.push("unlistable " + dir);
+      return;
+    }
+    for (const e of entries) {
+      const p = join(dir, e.name);
+      if (skip.has(p)) continue;
+      if (e.isSocket()) bad.push("socket " + p);
+      else if (e.isFIFO()) bad.push("fifo " + p);
+      else if (e.isDirectory()) walk(p);
+    }
+  };
+  walk("/");
   return bad.join("\n");
 }
 

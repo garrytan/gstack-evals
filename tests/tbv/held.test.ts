@@ -4,10 +4,11 @@
 // input on a synced drive is a burned-task event. The containers are real (docker); the seal command is a stub.
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { heldStep, heldUnseal, place, sealOne } from "../../lanes/tbv/held.ts";
+import { heldStep, heldUnseal, place, run, sealOne } from "../../lanes/tbv/held.ts";
 import { TbvError } from "../../lanes/tbv/errors.ts";
 import { historySha256 } from "../../lanes/tbv/history/events.ts";
 import { history } from "./drive-fixture.ts";
@@ -258,5 +259,81 @@ describe.skipIf(!DOCKER)("confined steps (docker)", () => {
     expect(code(() => heldUnseal({ work: join(shm(), "w"), froms: [s1], prefix: "packet-", unsealCmd: UNSEAL, ro: [], io: io().io }))).toMatch(/^E_TBV_CUSTODY .*packet-/);
     expect(code(() => heldUnseal({ work: join(shm(), "w"), froms: [s1], prefix: "reading-", unsealCmd: "exit 9", ro: [], io: io().io }))).toMatch(/^E_TBV_CUSTODY .*unseal command/);
     expect(code(() => heldUnseal({ work, froms: [s1], prefix: "reading-", unsealCmd: UNSEAL, ro: [], io: io().io }))).toMatch(/^E_TBV_CUSTODY .*leftover/);
+  }, T);
+});
+
+describe("review fixes: placement, docker checks and parsing (no container)", () => {
+  test("two mounts at one mount point: the later entry, the one the kernel shows, decides", () => {
+    const ok = { lstat: () => {}, realpath: (p: string) => p };
+    const stacked = "/dev/root / ext4 rw 0 0\ntmpfs /dev/shm tmpfs rw 0 0\ncapydrive /dev/shm fuse.capydrive rw 0 0\n";
+    expect(place("/dev/shm/x", stacked, ok)).toMatchObject({ type: "fuse.capydrive", at: "/dev/shm" });
+  });
+
+  const EMPTY = "sha256:" + createHash("sha256").update(Buffer.alloc(10240)).digest("hex");
+  const stub = (o: { ps?: string; image: unknown }) => {
+    const d = disk(), ran = join(d, "ran"), exe = join(d, "docker");
+    writeFileSync(exe, "#!/bin/sh\ncase \"$1\" in\n  version) echo 29.9.2 ;;\n  ps) printf '%s' '" + (o.ps ?? "") + "' ;;\n  image) printf '%s\\n' '" + JSON.stringify(o.image) + "' ;;\n  *) touch '" + ran + "' ;;\nesac\n", { mode: 0o755 });
+    return { exe, ran };
+  };
+  const step = (exe: string) => code(() => heldStep({ work: join(shm(), "w"), held: join(disk(), "sealed"), sealCmd: SEAL, inputs: [], ro: [], cmd: ["true"], docker: exe, io: io().io }));
+  test("an image under the tag that is not the empty import refuses before any container", () => {
+    const entry = stub({ image: { Id: "sha256:" + "1".repeat(64), Config: { Entrypoint: ["/bin/true"] }, RootFS: { Layers: [EMPTY] } } });
+    expect(step(entry.exe)).toMatch(/^E_TBV_CUSTODY .*not the empty import.*Entrypoint/);
+    expect(existsSync(entry.ran)).toBe(false);
+    const layers = stub({ image: { Id: "sha256:" + "2".repeat(64), Config: {}, RootFS: { Layers: ["sha256:" + "3".repeat(64)] } } });
+    expect(step(layers.exe)).toMatch(/^E_TBV_CUSTODY .*not the empty import.*layers/);
+    expect(existsSync(layers.ran)).toBe(false);
+  });
+
+  test("a labelled container still running from a dead step refuses held-step and held-unseal, naming docker kill and the leftover rule", () => {
+    const s = stub({ ps: "abc123def456", image: { Id: "sha256:" + "4".repeat(64), Config: {}, RootFS: { Layers: [EMPTY] } } });
+    expect(step(s.exe)).toMatch(/^E_TBV_CUSTODY .*still running.*docker kill abc123def456.*leftover rule/);
+    expect(code(() => heldUnseal({ work: join(shm(), "w"), froms: [disk()], prefix: "reading-", unsealCmd: "cat", ro: [], docker: s.exe, io: io().io }))).toMatch(/^E_TBV_CUSTODY .*still running.*docker kill abc123def456/);
+    expect(existsSync(s.ran)).toBe(false);
+  });
+
+  test("the command line refuses unknown and repeated flags, a missing flag or command, and a command on held-unseal", async () => {
+    const usage = async (argv: string[]) => { try { await run(argv, io().io); return "no error"; } catch (e) { return e instanceof TbvError ? e.code + " " + e.message : "thrown " + String(e); } };
+    expect(await usage(["held-step", "--bogus", "x"])).toMatch(/^E_USAGE unknown flag/);
+    expect(await usage(["held-step", "--work", "/dev/shm/a", "--work", "/dev/shm/b"])).toMatch(/^E_USAGE --work given twice/);
+    expect(await usage(["held-step", "--work", "/dev/shm/a", "--held", "/tmp/h"])).toMatch(/^E_USAGE held-step needs --seal-cmd/);
+    expect(await usage(["held-step", "--work", "/dev/shm/a", "--held", "/tmp/h", "--seal-cmd", "x", "--"])).toMatch(/^E_USAGE held-step needs a command after --/);
+    expect(await usage(["held-unseal", "--work", "/dev/shm/a", "--prefix", "r-", "--unseal-cmd", "x", "--from", "/tmp", "--", "true"])).toMatch(/^E_USAGE held-unseal takes no command/);
+  });
+});
+
+describe.skipIf(!DOCKER)("review fixes (docker)", () => {
+  test("an unreadable file the command leaves refuses the seal before any seal, and nothing is sealed", () => {
+    const work = join(shm(), "w"), held = join(disk(), "sealed");
+    const r = code(() => heldStep({ work, held, sealCmd: SEAL, inputs: [], ro: [], cmd: ["sh", "-c", 'echo a > "$0/a" && echo b > "$0/b" && chmod 000 "$0/b"', work], io: io().io }));
+    expect(r).toMatch(/^E_TBV_CUSTODY .*cannot read .*\/b/);
+    expect(sealedNames(held)).toEqual([]);
+  }, T);
+
+  test("a socket or a FIFO in a mounted tree refuses at the probe, and the command never runs", () => {
+    const sock = disk(), fifo = disk();
+    expect(spawnSync("python3", ["-c", "import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])", join(sock, "s.sock")]).status).toBe(0);
+    expect(spawnSync("mkfifo", [join(fifo, "f.fifo")]).status).toBe(0);
+    for (const [dir, kind] of [[sock, "socket"], [fifo, "fifo"]] as const) {
+      const work = join(shm(), "w");
+      const r = code(() => heldStep({ work, held: join(disk(), "sealed"), sealCmd: SEAL, inputs: [], ro: [dir], cmd: ["sh", "-c", 'touch "$0/ran"', work], io: io().io }));
+      expect(r).toMatch(new RegExp("^E_TBV_CUSTODY .*probe.*" + kind));
+      expect(existsSync(join(work, "ran"))).toBe(false);
+    }
+  }, T);
+
+  test("an extra rw mount the uid cannot write still fails the probe, from mountinfo", () => {
+    const extra = disk(), work = join(shm(), "w");
+    chmodSync(extra, 0o555);
+    const r = code(() => heldStep({ work, held: join(disk(), "sealed"), sealCmd: SEAL, inputs: [], ro: [], cmd: ["sh", "-c", 'touch "$0/ran"', work], io: io().io, extraBinds: [extra] }));
+    chmodSync(extra, 0o755);
+    expect(r).toMatch(/^E_TBV_CUSTODY .*probe.*rw mount/);
+    expect(existsSync(join(work, "ran"))).toBe(false);
+  }, T);
+
+  test("held-unseal refuses an unseal command that writes nothing", () => {
+    const from = disk();
+    writeFileSync(join(from, "reading-x.json.sealed"), "STUB-SEALED\nxx\n");
+    expect(code(() => heldUnseal({ work: join(shm(), "w"), froms: [from], prefix: "reading-", unsealCmd: "true", ro: [], io: io().io }))).toMatch(/^E_TBV_CUSTODY .*wrote nothing/);
   }, T);
 });

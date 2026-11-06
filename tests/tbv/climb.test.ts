@@ -123,6 +123,16 @@ describe("compare --base: the climb's join with tbv-dev-base", () => {
     expect(compare(climb(), SPLIT, "/nonexistent/base.json").err).toContain("cannot read");
   });
 
+  test("refusal twin: a --base whose plan has no models or no passes refuses as not a readings file", () => {
+    for (const drop of ["models", "passes"]) {
+      const b: Any = devBase();
+      delete b.plan[drop];
+      const r = compare(climb(), SPLIT, b);
+      expect(r.status).toBe(2);
+      expect(r.err).toContain("not a readings file");
+    }
+  });
+
   test("refusal twins: a climb row reusing the response id of a base row the join drops (Opus lens, Sol none)", () => {
     for (const dropped of [(r: Any) => r.arm === "lens" && r.model === "opus", (r: Any) => r.arm === "none" && r.model === "sol"]) {
       const c = climb(), b = devBase();
