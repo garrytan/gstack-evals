@@ -147,6 +147,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_TBV_RUN](#e_tbv_run) | 2 | U20 |
 | [E_TBV_JUDGE](#e_tbv_judge) | 2 | U20 |
 | [E_TBV_CUSTODY](#e_tbv_custody) | 2 | U20 |
+| [E_TBV_BURNED](#e_tbv_burned) | 2 | U20 |
+| [E_TBV_STEP](#e_tbv_step) | 2 | U20 |
 | [E_REAL_SANDBOX_EGRESS](#e_real_sandbox_egress) | 2 | U20 |
 | [E_REAL_SANDBOX_RECORD](#e_real_sandbox_record) | 2 | U20 |
 | [E_REAL_ARM_BUILD](#e_real_arm_build) | 2 | U10 |
@@ -1023,6 +1025,22 @@ A custody rule refused the run: held-out plaintext outside tmpfs, plaintext left
 Fix: Run held-out work only with its plaintext root on /dev/shm, a non-empty --held and a seal command; delete leftover plaintext as the log says before anything else. Give each held keys, judge, packet or readings run a fresh --held directory. To restart a crashed keys or judge run, follow lanes/tbv/README.md: move its sealed copies aside, keep journal/, and rerun with the same --held and run id. If a seal command failed during a held drive, keys or judge run, the run's close has already settled its lease: fix the seal command, then rerun drive with the same --run-id and --out and an --unseal-cmd, or keys or judge by those restart steps.
 
 Exit 2. Side effects: None when the run is refused at open, before any lease. A seal-command failure inside a held drive, keys or judge run, or a per-write refusal of an earlier run's sealed copy inside a held keys or judge run, can come after paid sends, which stay on the lease and its journal. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_TBV_BURNED
+
+A confined held-out step (tbv held-step) found a held-out-derived --input on a fuse mount, a Capy drive that syncs off the machine, keeps earlier versions and is readable by other crew threads. That is a burned-task event, not a cleanup.
+
+Fix: Stop B2. Log the path in CUSTODY.md and bring the affected tasks to the Captain, who rules on dropping them. Do not delete the file as a fix: the drive's retained versions and other threads' reads stay. Held-out-derived plaintext lives only under /dev/shm.
+
+Exit 2. Side effects: None: the step stops before any container runs, and nothing is deleted. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_TBV_STEP
+
+The command a confined held-out step (tbv held-step) ran exited non-zero inside its container, or docker could not start it. Nothing was sealed.
+
+Fix: Read the command's stdout and stderr under &lt;work>/.held-step/ on tmpfs, fix the cause, delete the work dir by the leftover rule (log it in CUSTODY.md), and rerun with the same --held.
+
+Exit 2. Side effects: Plaintext the command wrote stays in the work dir on tmpfs until the leftover rule deletes it. Nothing reached the sealed directory. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_REAL_SANDBOX_EGRESS
 

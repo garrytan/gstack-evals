@@ -11,7 +11,8 @@
 //   bun tbv-rule.ts projection <proj.json>      stage 1 to later stages: caps from measured costs
 //   bun tbv-rule.ts allin <allin.json>          the all-in check before every paid item; for tbv-held: third Opus pass, capy drop or stop
 //   bun tbv-rule.ts caps <caps.json>            the money table: each item's cap from capOf, and the sums at caps
-//   bun tbv-rule.ts compare <readings.json> --split <manifest.json>     dev or held-out: families, verdicts, flags and secondaries
+//   bun tbv-rule.ts compare <readings.json> --split <manifest.json> [--base <dev-base readings.json>]     dev or held-out: families,
+//                                               verdicts, flags and secondaries; a climb joins tbv-dev-base's none and current rows
 //   bun tbv-rule.ts handoff <handoff.json>      the dev handoff check against held-out material
 //   bun tbv-rule.ts leak <leak.json>            the treatment-diff leak check
 // Ported from the frozen bundle's tbv-rule.ts.txt; paired.ts is imported from this checkout.
@@ -362,20 +363,47 @@ function contrast(rd: Readings, tasks: Map<string, Task>, model: Model, fams: Fa
   const nTasks = new Set(ra.map((r) => r.task)).size;
   return { s, coverage, expB: exposure(b, famsB), expA: exposure(a, famsA), clusters: pairs.length, tasks: nTasks, passes, mA: mean([...ca.values()]), mB: mean([...cb.values()]) };
 }
-function compare(rd: Readings, split: { text: string; manifest: SplitManifest }) {
-  if (rd.stage === "hr") fail("E_USAGE compare reads dev or held readings");
-  checkPlan(rd, split);
+/** A climb's readings hold only principle rows, so compare --base pairs them with tbv-dev-base's none and current rows on
+ * the climb's models. Both files must come from the same split manifest with the same passes; dev-base holds no principle
+ * row and the climb nothing else. Without --base, dev readings with principle rows and no none rows refuse. */
+function joinBase(own: Readings, split: { text: string; manifest: SplitManifest }, base?: { rd: Readings; file: string; sha: string }): Readings {
+  if (!base) {
+    if (own.stage === "dev" && own.readings.some((r) => r.arm === "principle") && !own.readings.some((r) => r.arm === "none")) fail("E_USAGE these dev readings hold principle rows and no none rows, as a climb's do; pass --base <tbv-dev-base readings.json> so principle pairs with dev-base's none and current rows");
+    return own;
+  }
+  if (own.stage !== "dev") fail("E_USAGE --base joins a climb's dev readings with tbv-dev-base's; stage " + own.stage + " runs every arm in its own file");
+  const odd = own.readings.find((r) => r.arm !== "principle");
+  if (odd) fail("E_USAGE with --base the climb's readings hold only principle rows; reading " + odd.id + " is " + odd.arm + ", which comes from --base");
+  const b = base.rd as Partial<Readings>;
+  if (!b || typeof b !== "object" || !Array.isArray(b.readings) || !Array.isArray(b.tasks) || !b.plan) fail("E_USAGE the --base file " + base.file + " is not a readings file");
+  if (b.stage !== "dev") fail("E_USAGE the --base readings are stage " + b.stage + "; a climb joins tbv-dev-base's dev readings");
+  checkPlan(base.rd, split);
+  const p = base.rd.readings.find((r) => r.arm === "principle");
+  if (p) fail("E_USAGE the --base readings hold principle reading " + p.id + "; tbv-dev-base reads none, current and lens only");
+  for (const m of own.plan.models) {
+    if (!base.rd.plan.models.includes(m)) fail("E_USAGE the --base readings cover " + base.rd.plan.models.join(", ") + ", not the climb's model " + m);
+    if ((base.rd.plan.passes[m] ?? 2) !== (own.plan.passes[m] ?? 2)) fail("E_USAGE the --base readings ran " + (base.rd.plan.passes[m] ?? 2) + " passes on " + m + " and the climb " + (own.plan.passes[m] ?? 2) + "; contrasts pair the same passes");
+  }
+  if ((base.rd.plan.capyPasses ?? 2) !== (own.plan.capyPasses ?? 2)) fail("E_USAGE the --base readings ran " + (base.rd.plan.capyPasses ?? 2) + " capy passes and the climb " + (own.plan.capyPasses ?? 2));
+  const rows = base.rd.readings.filter((r) => own.plan.models.includes(r.model) && (r.arm === "none" || r.arm === "current"));
+  say("base: " + rows.length + " rows (none and current on " + own.plan.models.join(", ") + ") from " + base.file + " sha256 " + base.sha);
+  return { ...own, readings: [...own.readings, ...rows] };
+}
+function compare(own: Readings, split: { text: string; manifest: SplitManifest }, base?: { rd: Readings; file: string; sha: string }) {
+  if (own.stage === "hr") fail("E_USAGE compare reads dev or held readings");
+  checkPlan(own, split);
+  const rd = joinBase(own, split, base);
   const tasks = validate(rd, (r) => (r.family === "capy" ? rd.plan.capyPasses ?? 2 : rd.plan.passes[r.model] ?? 2));
   if (rd.stage === "held" && rd.plan.controlTaskIds.length !== HELD_CONTROLS) fail("E_USAGE stage 3's plan names " + rd.plan.controlTaskIds.length + " control tasks; it runs controls on " + HELD_CONTROLS);
-  const ag = agreement(rd.readings, tasks);
+  const ag = agreement(own.readings, tasks);
   say(rd.stage + " read: agreement " + ag.line);
   const judgeFail = ag.missing > 0 || !(ag.psa >= AGREE_MIN);
   const why = ag.missing ? ag.missing + " sampled double reads were never attempted" : "positive agreement " + f3(ag.psa) + " under " + AGREE_MIN;
   if (judgeFail && rd.stage === "dev") { say("Verdict: JUDGE FAIL (FIX-METHOD, judge: " + why + " at the dev read; the confirmatory run stops)"); return; }
   const ctl = rd.stage === "held" ? controlsCheck(rd.controls ?? [], rd.plan.controlTaskIds) : { ok: true, lines: [] as string[] };
   ctl.lines.forEach((l) => say(l));
-  stopCounts(rd);
-  const harness = rd.readings.filter((r) => r.status === "harness").length;
+  stopCounts(own);
+  const harness = own.readings.filter((r) => r.status === "harness").length;
   if (harness) say("harness failures: " + harness + " (their items stopped; the readings they lost count against coverage)");
   const families: [string, Model[], Family[]][] = [["skill layer", rd.plan.models, SKILL], ["capy", ["opus"], ["capy"]]];
   for (const [name, models, fams] of families) {
@@ -518,6 +546,12 @@ export function run(argv: string[], io: Io = { out: (t) => console.log(t), err: 
       if (manifest.schema !== "tbv-split.v1" || !Array.isArray(manifest.tasks) || !Array.isArray(manifest.controlTaskIds)) fail("E_USAGE " + f + " is not a tbv-split.v1 manifest");
       return { text, manifest };
     };
+    const base = () => {
+      const f = flag("--base");
+      if (f === undefined) return undefined;
+      const text = read(f);
+      return { rd: parse(text, f) as Readings, file: f, sha: createHash("sha256").update(text).digest("hex") };
+    };
     if (cmd === "words") for (const t of data.texts as string[]) { const b = boundary(t, CUT); say("words " + words(t) + ", cuts " + CUTS.map((n) => boundary(t, n)).join("/") + ", over " + CUT + " " + (words(t) > CUT) + ", before boundary " + words(t.slice(0, b))); }
     else if (cmd === "endstate") for (const a of data.cases as Attempt[][]) { const e = endState(a); say("endstate " + e.cls + ", sends " + e.sends + (e.why ? ", " + e.why : "") + (e.drill && Object.keys(e.drill).length ? ", drill " + JSON.stringify(e.drill) : "")); }
     else if (cmd === "admit") say("admit " + roundAdmits(data));
@@ -525,7 +559,7 @@ export function run(argv: string[], io: Io = { out: (t) => console.log(t), err: 
     else if (cmd === "projection") projection(data);
     else if (cmd === "allin") allin(data);
     else if (cmd === "caps") caps(data);
-    else if (cmd === "compare") compare(data, split());
+    else if (cmd === "compare") compare(data, split(), base());
     else if (cmd === "handoff") handoff(data);
     else if (cmd === "leak") leak(data);
     else fail("E_USAGE tbv-rule.ts words|endstate|admit|headroom|projection|allin|caps|compare|handoff|leak <file>");
