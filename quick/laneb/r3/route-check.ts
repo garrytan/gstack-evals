@@ -33,7 +33,9 @@
 //   bun quick/laneb/r3/route-check.ts [--model gpt-6.1-sol | --item r3a4-sol] [--rerun]
 // --item r3a4-sol runs R3 amendment 4's fresh route check on its own item, at cells.r3a4.json's allowance. --item r3b4-sol
 // runs R3 amendment 5's (section 5) on r3b4-sol, the same way, with its told session in the told arm at gstack 699a41cb
-// (ARM_MANIFESTS defaults to arms/manifests/r3b for it).
+// (ARM_MANIFESTS defaults to arms/manifests/r3b for it). --item l1-route-sol runs L1's (Amendment E) on its own item: the
+// smoke session on L1's none arm and the told one on L1's after arm (tar=after), at cells.l1.json's Sol cell with its turn
+// ceiling (ARM_MANIFESTS defaults to arms/manifests/l1, ARMS holds none and after).
 // Env: LEDGER (the item's jsonl ledger, approved at the item's cap), ARMS (a directory with none.tar and gstack.tar, or
 // .tar.gz, matching ARM_MANIFESTS, default arms/manifests/r3), the route's provider key (OPENROUTER_API_KEY for Sol; only
 // the proxy sees it), OUT (the work dir, default ~/.capy/work/r3-route-check/<item>), PROXY_CONFIG (default
@@ -52,8 +54,12 @@ import { readSessionRows, sessionsByTrial } from "../analysis/analyze.ts";
 import { armSpec, jobConfig } from "../runner/grid.ts";
 import { fromMicros, Ledger, readRows, reconcile, totals } from "../runner/ledger.ts";
 import { loadR3Trial } from "./exposure.ts";
-import { A4, itemCheck, portTaken, R3_ARMS, R3A, R3A4, readRoute, routeRecordPath, SOL, type R3aModel, type RouteVerdict } from "./screen.ts";
+import { A4, itemCheck, portTaken, R3_ARMS, R3A, R3A4, readRoute, routeRecordPath, SOL, type R3aModel, type RouteGate, type RouteVerdict } from "./screen.ts";
 import { R3B4 } from "./r3b.ts";
+import { L1_ROUTE } from "../l1/l1.ts";
+
+// An item the route check runs on: R3's models, or L1's l1-route-sol with its own cells file and the arm of each part.
+type RouteItem = RouteGate & Pick<R3aModel, "ledgerPort" | "a4" | "armManifests"> & { cells?: string; routeArms?: Record<(typeof PARTS)[number]["kind"], string> };
 
 const LANEB = resolve(import.meta.dir, "..");
 const RUNNER = join(LANEB, "runner");
@@ -176,10 +182,11 @@ async function main(argv: string[]): Promise<number> {
   const rerun = argv.includes("--rerun");
   const args = argv.filter((a) => a !== "--rerun");
   const modelId = args.length === 0 ? SOL : args.length === 2 && args[0] === "--model" ? args[1]! : "";
-  const m: R3aModel | undefined = args.length === 2 && args[0] === "--item" ? R3A4[args[1]!] ?? R3B4[args[1]!] : R3A[modelId];
+  const m: RouteItem | undefined = args.length === 2 && args[0] === "--item" ? R3A4[args[1]!] ?? R3B4[args[1]!] ?? (args[1] === L1_ROUTE.item ? L1_ROUTE : undefined) : R3A[modelId];
   const routeModels = Object.values(R3A).filter((x) => x.routePrefix !== null).map((x) => x.id);
-  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")} | --item r3a4-sol|r3b4-sol] [--rerun]`);
+  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")} | --item r3a4-sol|r3b4-sol|l1-route-sol] [--rerun]`);
   if (m.routePrefix === null) throw new Error(`E_USAGE ${m.id} has no route check in R3a (route-checked models: ${routeModels.join(", ")})`);
+  const leg = m.leg ?? "R3a";
   const prefix = m.routePrefix;
   const ledger = process.env.LEDGER;
   if (!ledger) throw new Error(`E_USAGE set LEDGER to ${m.item}'s jsonl ledger`);
@@ -191,7 +198,7 @@ async function main(argv: string[]): Promise<number> {
   if (!keyEnv) throw new Error(`${proxyPath} has no route for ${m.id}`);
   if (!process.env[keyEnv]) throw new Error(`E_USAGE set ${keyEnv}, the key for ${m.id}'s route (only the proxy sees it)`);
   if (!Bun.which("harbor")) throw new Error("E_USAGE harbor is not on PATH; no session ran");
-  const cellsFile = m.a4 ? A4.cells : "cells.r3.json";
+  const cellsFile = m.cells ?? (m.a4 ? A4.cells : "cells.r3.json");
   const cells = JSON.parse(readFileSync(join(LANEB, "config", cellsFile), "utf8"));
   const cell = cells.models.find((c: any) => c.id === m.id);
   if (!cell) throw new Error(`config/${cellsFile} has no cell for ${m.id}`);
@@ -203,7 +210,7 @@ async function main(argv: string[]): Promise<number> {
   const prior = readRoute(ledger) as RouteRecord | null;
   if (prior && (prior.model !== m.id || prior.item !== m.item)) throw new Error(`${recPath} is for ${prior.model} on ${prior.item}, not ${m.id} on ${m.item}`);
   if (prior?.verdict === "pass") { console.log(`route check: ${m.id} already passed on ${m.item} (${prior.reason}); nothing to run`); return 0; }
-  if (prior?.verdict === "drop") { console.log(`route check: ${m.id} dropped out of R3a: ${prior.reason}`); return 1; }
+  if (prior?.verdict === "drop") { console.log(`route check: ${m.id} dropped out of ${leg}: ${prior.reason}`); return 1; }
   const configSha = sha256(proxyPath);
   if (prior && prior.proxy_config_sha256 !== configSha) throw new Error(`E_USAGE PROXY_CONFIG ${proxyPath} has sha256 ${configSha}, but this record's sessions ran with ${prior.proxy_config_sha256}; no session ran`);
   const rec: RouteRecord = prior ?? { item: m.item, model: m.id, verdict: null, reason: null, incomplete: null, proxy_config_sha256: configSha, sessions: [] };
@@ -226,18 +233,21 @@ async function main(argv: string[]): Promise<number> {
   const out = resolve(process.env.OUT ?? join(process.env.HOME ?? "", ".capy/work/r3-route-check", m.item));
   mkdirSync(join(out, "arms"), { recursive: true });
   const manifests = resolve(process.env.ARM_MANIFESTS ?? join(LANEB, m.armManifests ?? "arms/manifests/r3"));
-  const arms = Object.fromEntries(PARTS.map(({ arm }) => {
-    const name = armSpec(arm).name;
-    const want = JSON.parse(readFileSync(join(manifests, name + ".json"), "utf8")).tar.sha256 as string;
-    let tar = join(armsDir, name + ".tar");
+  // An arm runs on its own tar, or on the one tar= names (L1's after-t runs after.tar), as prepare-run stages it.
+  const partArm = (kind: RouteSession["kind"]) => m.routeArms?.[kind] ?? PARTS.find((p) => p.kind === kind)!.arm;
+  const arms = Object.fromEntries(PARTS.map(({ kind }) => {
+    const { name, tar_name } = armSpec(partArm(kind));
+    const file = tar_name ?? name;
+    const want = JSON.parse(readFileSync(join(manifests, file + ".json"), "utf8")).tar.sha256 as string;
+    let tar = join(armsDir, file + ".tar");
     if (!existsSync(tar)) {
-      const gz = join(armsDir, name + ".tar.gz");
-      if (!existsSync(gz)) throw new Error(`E_USAGE ${armsDir} has no ${name}.tar or ${name}.tar.gz`);
-      tar = join(out, "arms", name + ".tar");
+      const gz = join(armsDir, file + ".tar.gz");
+      if (!existsSync(gz)) throw new Error(`E_USAGE ${armsDir} has no ${file}.tar or ${file}.tar.gz`);
+      tar = join(out, "arms", file + ".tar");
       if (Bun.spawnSync(["sh", "-c", 'gzip -dc "$1" > "$2"', "sh", gz, tar]).exitCode !== 0) throw new Error(`gunzip of ${gz} failed`);
     }
     const got = sha256(tar);
-    if (got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (${manifests}/${name}.json); no session ran`);
+    if (got !== want) throw new Error(`arm ${name}: tar sha256 ${got} is not the preregistered ${want} (${manifests}/${file}.json); no session ran`);
     return [name, { tar, sha256: want }];
   }));
   const task = join(out, "tasks", "smoke-task");
@@ -303,12 +313,11 @@ async function main(argv: string[]): Promise<number> {
       }
       const { kind, try: n } = step;
       const job = `route-${m.id}-${kind}-${n}-${Date.now()}`;
-      const part = PARTS.find((p) => p.kind === kind)!;
-      const spec = armSpec(part.arm);
+      const spec = armSpec(partArm(kind));
       const config = jobConfig({
         job_name: job, tasks_dir: join(out, "tasks"), tasks: ["smoke-task"], models: [cell], arms: [{ ...spec, ...arms[spec.name]! }], attempts: 1, n_concurrent: 1,
         agent_dir: join(RUNNER, "agent"), runner_dir: RUNNER, base_url: `http://${gw}:${dport}`, max_output_tokens: cells.max_output_tokens,
-        verifier_timeout_multiplier: cells.verifier_timeout_multiplier, repo_dir: "/testbed",
+        verifier_timeout_multiplier: cells.verifier_timeout_multiplier, repo_dir: "/testbed", ...(cells.sdk_max_turns ? { sdk_max_turns: cells.sdk_max_turns } : {}),
       });
       config.retry.max_retries = 0;
       if (cport !== "8788") for (const a of config.agents) Object.assign(a.kwargs, { control_url: control });
@@ -359,7 +368,7 @@ async function main(argv: string[]): Promise<number> {
   rec.reason = verdict.reason;
   save();
   if (verdict.verdict === "pass") { console.log(`route check: ${m.id} passed on ${m.item} (${verdict.reason})`); return 0; }
-  console.log(`route check: ${m.id} dropped out of R3a: ${verdict.reason}`);
+  console.log(`route check: ${m.id} dropped out of ${leg}: ${verdict.reason}`);
   return 1;
 }
 

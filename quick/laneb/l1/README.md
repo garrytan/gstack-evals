@@ -93,7 +93,7 @@ The probe fixtures `cli-skill-bg.jsonl` and `cli-kill-agent.jsonl` are sanitized
 ### The awake host
 
 - Type: a dedicated Ubicloud `standard-2` VM made by the pinned `ubi-runner.sh` (`UBI_RUNNER`, checked against `UBI_RUNNER_SHA256` on the agent and again on the host). It is tagged with `UBI_OWNER`, the run thread's code, and has a recovery bundle in `UBI_RECOVERY_DIR`.
-- TTL: (parts + 1) x 18 h + 24 h. That is every part and one relaunch at the part VM TTL (16 h) plus 2 h, and a day of slack: 60 h for pilot-opus, 78 h for tb2-opus, 114 h for f1-opus.
+- TTL: (parts + 1) x 18 h + 24 h. That is every part and one relaunch at the part VM TTL (16 h) plus 2 h, and a day of slack: 60 h for pilot-opus and pilot-sol, 78 h for tb2-opus, 114 h for f1-opus and f1-sol.
 - Hours on a ledger item: before the host starts, `host-up` reserves its whole TTL at $0.08 an hour on the item's own ledger as `host-<n>` ($4.80, $6.24 and $9.12). A refusal is a cap stop (exit 9, stderr `CAP_STOP`) and no host starts. `host-down` and `recover` settle it at the hours it was up. If `host-up` fails after the host starts and the host can't be destroyed, the host stays current with its reserve open: `attach` prints `NEXT: host-down (cleanup of a failed host-up is pending)`, `host-up`, `launch`, `relaunch` and `recover` refuse, and `host-down` retries the destroy and settles the hours on the agent's ledger, which never moved. The list price of `standard-2` is $41.89 a month, about $0.057 an hour.
 - The ledger: `host-up` moves the item's single ledger file, with its `.bound`, onto the host (`~/l1/ledger/<item>.jsonl`). While the host is up, the agent's copy is gone, a pointer (`<ledger>.host.json`) names the host, and the agent keeps an append-only mirror in `<work>/host/ledger.jsonl`. `host-down` brings the file home.
 - What runs there: `host.sh` (one per part, started with `setsid -f`) runs `launch.sh` with the ledger service and the tunnel. Keys sit in `~/.l1-secrets` (mode 0600), never in argv. `host-bootstrap.sh` installs Bun 1.4.4 checked by sha256 and the tools `ubi-runner` needs. The host runs no Docker and no trial.
@@ -101,10 +101,10 @@ The probe fixtures `cli-skill-bg.jsonl` and `cli-kill-agent.jsonl` are sanitized
 
 ### Commands
 
-Set `LEDGER` (the item's ledger file, with its approval row at the item's cap), `ARMS` (the folder with `none`, `before`, `after` and `off` tars), `UBI_RUNNER` (the vendored `quick/laneb/l1/ubi-runner.sh`), `UBI_RUNNER_SHA256` (`c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2`), `UBI_OWNER`, `UBI_RECOVERY_DIR` (on Capy, a private drive folder) and the provider and Ubicloud keys. tb2-opus also needs `TB2_PARTS` and `TB2_PARTS_SHA256` (Amendment C's split and digest).
+Set `LEDGER` (the item's ledger file, with its approval row at the item's cap), `ARMS` (the folder with `none`, `before`, `after` and `off` tars), `UBI_RUNNER` (the vendored `quick/laneb/l1/ubi-runner.sh`), `UBI_RUNNER_SHA256` (`c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2`), `UBI_OWNER`, `UBI_RECOVERY_DIR` (on Capy, a private drive folder) and the provider and Ubicloud keys. tb2-opus also needs `TB2_PARTS` and `TB2_PARTS_SHA256` (Amendment C's split and digest). pilot-sol and f1-sol also need `ROUTE_LEDGER` (below).
 
 ```
-bun quick/laneb/l1/l1.ts prepare <work> --item pilot-opus|f1-opus|tb2-opus
+bun quick/laneb/l1/l1.ts prepare <work> --item pilot-opus|f1-opus|tb2-opus|pilot-sol|f1-sol
 bun quick/laneb/l1/l1.ts host-up <work>
 bun quick/laneb/l1/l1.ts launch <work> --part <part>
 bun quick/laneb/l1/l1.ts attach <work>             # on a timer; prints NEXT
@@ -122,6 +122,16 @@ bun quick/laneb/l1/l1.ts host-down <work>
 - The item has ended once `recover` ended incomplete (`host/recover.json` has `complete: false`), a part ended at a cap stop, or a part ended in a way the prereg does not class (`unclassified` in its result). Amendment C classes vm-run.sh's exit 4 (the ledger service did not answer through the tunnel before any trial) as section 6's lost ledger service, so it is unclassified only when the item's ledger or the part's prefix was not read. A loss in the one relaunch that follows an exit 4 ends the item incomplete. Then `host-up`, `launch` and `relaunch` refuse (exit 3), and `attach` says the item ended incomplete and goes to the Captain. After a cap stop or an unclassified ending, `host-down` still runs.
 
 Exit codes: 0 ok, 2 usage, 3 refused, 4 the item stops incomplete, 5 the host is lost, 9 the ledger refused the host's reserve, 1 anything else. Stderr lines start with a registered code: `E_USAGE` for a bad call or a refusal, `CAP_STOP` for the host's refused reserve, `E_INTERNAL` for anything else.
+
+### Sol under the leftover rule (Amendment E)
+
+Section 9 runs GPT-6.1 Sol from money left after the Opus path settles: Sol's route check, then pilot-sol, then f1-sol, each launch only after a passing ceiling check. Every item names its model (`ITEMS[item].model`), so `plan.json` and prepare-run get `gpt-6.1-sol` for Sol's items and `claude-opus-5-5` for Opus's.
+
+- `cells.l1.json` holds Sol's cell beside Opus's: `anthropic/gpt-6.1-sol` through OpenRouter at the prereg's $5 session allowance and 100 turns.
+- **l1-route-sol** ($20, its own ledger, prefix `l1-route-sol/`, default ledger port 9918) is `L1_ROUTE` in `l1.ts`. `LEDGER=<l1-route-sol.jsonl> ARMS=<L1 arm dir> OPENROUTER_API_KEY=... bun quick/laneb/r3/route-check.ts --item l1-route-sol` runs R3's two sessions on the runner's smoke task: smoke on L1's none arm and told /investigate on L1's after arm (`after-t`, `tar=after`), both through `laneb_hooks.LanebHooksAgent` at Sol's cell, with `ARM_MANIFESTS` defaulting to `arms/manifests/l1`. A dropped model prints `dropped out of L1's Sol leg`.
+- **pilot-sol** ($100) has pilot-opus's shape and order: 32 sessions. **f1-sol** ($730) runs `f-parts.txt`'s four parts of 20 tasks on none, before-u, after-u, before-t and after-t: 400 sessions.
+- `prepare --item pilot-sol|f1-sol` refuses (exit 3) until `ROUTE_LEDGER` names l1-route-sol's ledger, approved at $20, with no open route reserve and a record that passed for `gpt-6.1-sol` on l1-route-sol with `config/proxy.json`, the file prepare-run copies into every part (`r3/screen.ts` `bindCheck`, as R3's screens check theirs). Without `ROUTE_LEDGER` it exits 2. Opus's items never read it.
+- The ceiling check needs no change: its plan lists `l1-route-sol`, `pilot-sol` and `f1-sol` as items, and `leftover.particle` is `refused`, since particle-1 is not run under the ceiling, so only Sol's run-work remainder is held.
 
 ### Amendment C's dry run
 

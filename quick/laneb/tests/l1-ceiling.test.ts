@@ -249,6 +249,42 @@ describe("the command line", () => {
   });
 });
 
+describe("the Sol leg's plan under the leftover rule (Amendment E)", () => {
+  // The Opus items as they settled (approvals: pilot $13.68, F1 $269.69, TB2 $69.90), then l1-route-sol, pilot-sol and f1-sol.
+  const settled = () => [...rows("pilot-opus", 80, [13.68]), ...rows("f1-opus", 680, [269.69]), ...rows("tb2-opus", 180, [69.9])];
+  const leg = (route: "planned" | "done" = "planned", particle: Plan["leftover"]["particle"] = "refused"): Plan => ({
+    items: [...opusPlan(), { item: "l1-route-sol", cap_usd: 20, status: route }, ...solPlan],
+    leftover: { sol: "pending", particle },
+  });
+  test("particle-1 refused holds no run-work line of its own: the same plan with particle-1 pending holds $15 more and is refused at the margin", () => {
+    const c = crew(731_730, 40_000);
+    const refused = check(settled(), c, leg(), "l1-route-sol");
+    const pending = check(settled(), c, leg("planned", "pending"), "l1-route-sol");
+    expect(dollars(refused.tally.runWorkHold)).toBe(15);
+    expect(dollars(pending.tally.runWorkHold)).toBe(30);
+    expect(dollars(refused.tally.total)).toBeCloseTo(353.27 + 20 + 100 + 730 + 731.73 + 40 + 15, 6);
+    expect([refused.ok, pending.ok]).toEqual([true, false]);
+    expect(pending.why).toContain("the sum $2005.00");
+  });
+  test("Sol's run work bills its own line: Sol credits shrink only Sol's remainder, and nothing is held once Sol is done", () => {
+    const sol: Crew["threads"] = [{ code: "GEVA-353", line: "sol", credits: 4_000, tokens: 12 * M, token_stop: 90 * M, status: "open" }];
+    const t = tally(settled(), crew(600_000, 40_000, sol), leg());
+    expect([dollars(t.solSpent), dollars(t.particleSpent), dollars(t.runWorkHold)]).toEqual([4, 0, 11]);
+    expect(dollars(tally(settled(), crew(600_000, 40_000, sol), { ...leg(), leftover: { sol: "done", particle: "refused" } }).runWorkHold)).toBe(0);
+  });
+  test("the route check is its own item: l1-route-sol counts at its $20 cap until done and at what it settled after, and a plan without it can't place its ledger", () => {
+    const route = rows("l1-route-sol", 20, [0.17, 0.09]);
+    const c = crew(600_000, 40_000);
+    const first = check([...settled(), ...rows("l1-route-sol", 20, [])], c, leg(), "l1-route-sol");
+    expect(dollars(first.tally.items.find((i) => i.item === "l1-route-sol")!.counted)).toBe(20);
+    const next = check([...settled(), ...route], c, leg("done"), "pilot-sol");
+    expect(dollars(next.tally.items.find((i) => i.item === "l1-route-sol")!.counted)).toBeCloseTo(0.26, 6);
+    expect(next.tally.total).toBeLessThan(first.tally.total);
+    expect(() => check([...settled(), ...route], c, plan(), "pilot-sol")).toThrow(/l1-route-sol is not in the plan/);
+    expect(() => check([...settled(), ...route], c, leg("done"), "l1-route-sol")).toThrow(/l1-route-sol is not a planned or open item/);
+  });
+});
+
 describe("malformed input is refused", () => {
   test("a missing or non-numeric credits, tokens, token_stop or captain_credits", () => {
     const bad = (t: Record<string, unknown>) => crew(288_000, 36_000, [{ code: "GEVA-7", line: "crew", credits: 1000, tokens: M, token_stop: 2 * M, status: "open", ...t } as Crew["threads"][number]]);

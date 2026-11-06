@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { appendRow, Ledger, readRows, toMicros, type Row } from "../runner/ledger.ts";
 import { armSpec, jobConfig } from "../runner/grid.ts";
 import { stageArms } from "../runner/prepare-run.ts";
-import { ARM_SPECS, blockShares, classify, extendsMirror, hostTtlHours, ITEMS, itemCheck, itemParts, L1, plannedCells, relaunchRects, restoreRows, seeded, sessionRefs, sha256, splitJobs, startedCells, trialTasksFrom } from "../l1/l1.ts";
+import { ARM_SPECS, blockShares, classify, extendsMirror, hostTtlHours, ITEMS, itemCheck, itemParts, L1, L1_ROUTE, plannedCells, relaunchRects, restoreRows, seeded, sessionRefs, sha256, splitJobs, startedCells, trialTasksFrom } from "../l1/l1.ts";
 
 // L1's launcher logic without a host (l1/l1.ts), the tar sharing in grid.ts and prepare-run.ts, and vm-run.sh's
 // multi-job loop. l1-host.test.ts drives the commands end to end on a fake host.
@@ -23,12 +23,39 @@ describe("L1's frozen inputs and plans", () => {
     expect(sha256(pilotText())).toBe(L1.pilot.sha256);
     const swe = JSON.parse(readFileSync(join(LANEB, "config/cells.l1.json"), "utf8"));
     const tb2 = JSON.parse(readFileSync(join(LANEB, "config/cells.l1-tb2.json"), "utf8"));
-    expect(swe.models).toEqual([{ id: "claude-opus-5-5", harbor_model: "anthropic/claude-opus-5-5", session_cap_usd: 5 }]);
+    expect(swe.models).toEqual([{ id: "claude-opus-5-5", harbor_model: "anthropic/claude-opus-5-5", session_cap_usd: 5 }, { id: "gpt-6.1-sol", harbor_model: "anthropic/gpt-6.1-sol", session_cap_usd: 5 }]);
+    expect(JSON.parse(readFileSync(join(LANEB, "config/proxy.json"), "utf8")).models["gpt-6.1-sol"]).toMatchObject({ route: "openrouter", upstream_model: "openai/gpt-6.1-sol" });
     expect(tb2.models).toEqual([{ id: "claude-opus-5-5", harbor_model: "anthropic/claude-opus-5-5", session_cap_usd: 2.5 }]);
     for (const c of [swe, tb2]) expect([c.sdk_max_turns, c.max_output_tokens, c.verifier_timeout_multiplier]).toEqual([100, 32000, 2]);
-    expect(Object.entries(ITEMS).map(([k, v]) => [k, v.capUsd, v.cells, v.allowanceUsd])).toEqual([
-      ["pilot-opus", 80, "cells.l1.json", 5], ["f1-opus", 680, "cells.l1.json", 5], ["tb2-opus", 180, "cells.l1-tb2.json", 2.5],
+    expect(Object.entries(ITEMS).map(([k, v]) => [k, v.capUsd, v.cells, v.allowanceUsd, v.model, v.route?.item ?? null])).toEqual([
+      ["pilot-opus", 80, "cells.l1.json", 5, "claude-opus-5-5", null], ["f1-opus", 680, "cells.l1.json", 5, "claude-opus-5-5", null], ["tb2-opus", 180, "cells.l1-tb2.json", 2.5, "claude-opus-5-5", null],
+      ["pilot-sol", 100, "cells.l1.json", 5, "gpt-6.1-sol", "l1-route-sol"], ["f1-sol", 730, "cells.l1.json", 5, "gpt-6.1-sol", "l1-route-sol"],
     ]);
+  });
+
+  test("l1-route-sol: Sol's route check on its own $20 item, smoke on L1's none arm and told /investigate on L1's after arm, at cells.l1.json's Sol cell", () => {
+    expect(L1_ROUTE).toMatchObject({ id: "gpt-6.1-sol", item: "l1-route-sol", capUsd: 20, routePrefix: "l1-route-sol/", ledgerPort: "9918", cells: "cells.l1.json", armManifests: "arms/manifests/l1" });
+    expect(L1_ROUTE.routeArms).toEqual({ smoke: ARM_SPECS.none, told: ARM_SPECS["after-t"] });
+    expect(armSpec(L1_ROUTE.routeArms.told)).toMatchObject({ name: "after-t", tar_name: "after", told: "investigate", system_prompt: "claude-code-preset", gstack_hooks: "copy" });
+    expect(armSpec(L1_ROUTE.routeArms.smoke)).toMatchObject({ name: "none", system_prompt: "claude-code-preset", gstack_hooks: "copy" });
+    expect(armSpec(L1_ROUTE.routeArms.smoke).told).toBeUndefined();
+    expect(Object.keys(ITEMS)).not.toContain("l1-route-sol");
+  });
+
+  test("pilot-sol has pilot-opus's shape and order; f1-sol runs f-parts.txt's four parts on none, before-u, after-u, before-t and after-t", () => {
+    const [p, ...rest] = itemParts("pilot-sol", { pilot: pilotText() });
+    expect(rest).toEqual([]);
+    expect([p!.name, p!.prefix]).toEqual(["pilot", "pilot-sol/pilot/"]);
+    expect(p!.rects).toEqual(itemParts("pilot-opus", { pilot: pilotText() })[0]!.rects);
+    expect([...plannedCells(p!).values()].reduce((a, b) => a + b, 0)).toBe(32);
+    const sol = itemParts("f1-sol", { fParts: fPartsText() }), opus = itemParts("f1-opus", { fParts: fPartsText() });
+    expect(sol.map((x) => [x.name, x.prefix])).toEqual([["f1-1", "f1-sol/f1-1/"], ["f1-2", "f1-sol/f1-2/"], ["f1-3", "f1-sol/f1-3/"], ["f1-4", "f1-sol/f1-4/"]]);
+    for (const [i, x] of sol.entries()) {
+      expect(x.rects.map((r) => [r.tasks.length, [...r.arms].sort().join(), r.attempts])).toEqual([[20, "after-t,after-u,before-t,before-u,none", 1]]);
+      expect([...x.rects[0]!.tasks].sort()).toEqual([...opus[i]!.rects[0]!.tasks].sort());
+    }
+    expect(sol.reduce((n, x) => n + [...plannedCells(x).values()].reduce((a, b) => a + b, 0), 0)).toBe(400);
+    expect(() => itemParts("f1-sol", { fParts: fPartsText().trim().split("\n").slice(1).join("\n") })).toThrow("parts 1 to 4 of 20");
   });
 
   test("pilot-opus: one part, the 10 pilot tasks on before-u and before-t, then the 3 smoke tasks on after-u, after-t, off-u and off-t", () => {
@@ -77,7 +104,7 @@ describe("L1's frozen inputs and plans", () => {
   test("the awake host's TTL covers every part and one relaunch at 18 h each plus a day, and its reserve fits in each item's cap beside six open sessions and a VM block", () => {
     expect([1, 2, 4].map(hostTtlHours)).toEqual([60, 78, 114]);
     expect(L1.host.launchHours).toBe(L1.vm.ttlHours + 2);
-    for (const [item, n] of [["pilot-opus", 1], ["tb2-opus", 2], ["f1-opus", 4]] as const) {
+    for (const [item, n] of [["pilot-opus", 1], ["tb2-opus", 2], ["f1-opus", 4], ["pilot-sol", 1], ["f1-sol", 4]] as const) {
       const def = ITEMS[item]!;
       expect(hostTtlHours(n) * L1.host.usdPerHour + L1.concurrent * def.allowanceUsd + Number(L1.vm.usdPerHour) * Number(L1.vm.reserveHours)).toBeLessThan(def.capUsd);
     }
