@@ -8,7 +8,7 @@ import { createHash, createHmac } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { heldOutputs, plaintextRoot } from "./custody.ts";
-import { fail } from "./errors.ts";
+import { fail, TbvError } from "./errors.ts";
 import { admitsSize, extract, OVERHEAD_641D622 } from "./extract.ts";
 import { clustersOf, devEligible, heldOutCluster, heldOutEligible, type LineageStub, type PrRecord } from "./history/source-b.ts";
 import type { ReasonCode } from "../../src/errors/codes.ts";
@@ -187,6 +187,14 @@ const onTmpfs = (dir: string, what: string) => {
     plaintextRoot(dir, { devPlaintext: false, held: true });
   } catch (e) {
     fail("E_TBV_CUSTODY", what + " must sit on tmpfs: " + (e as Error).message);
+  }
+};
+/** A held-out write keeps a refusal's code and drops its message, which can name a held-out file (ruling H1). */
+const heldWrite = (write: () => void) => {
+  try {
+    write();
+  } catch (e) {
+    fail(e instanceof TbvError ? e.code : "E_TBV_CUSTODY", "a held-out write stopped, and its message can name a held-out task, so split withholds it; check that --held is a fresh directory, that the held-out outputs sit on tmpfs with room, and that --seal-cmd runs");
   }
 };
 function readJson(path: string, what: string): any {
@@ -416,8 +424,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     writeBatch(a.batch!, w.batch, pool);
   } else {
     if (a.held === undefined) fail("E_TBV_CUSTODY", "the next batch is held-out: pass --held and --seal-cmd, with --batch on tmpfs");
-    const seal = heldOutputs(a, ["batch"], undefined, w.batch.flatMap((r) => [r.task + ".json", r.task + ".extract.json"]));
-    writeBatch(a.batch!, w.batch, pool, seal);
+    heldWrite(() => writeBatch(a.batch!, w.batch, pool, heldOutputs(a, ["batch"], undefined, w.batch.flatMap((r) => [r.task + ".json", r.task + ".extract.json"]))));
   }
   io.out("split batch " + w.phase + ": " + w.batch.length + " histories (A " + w.batch.filter((r) => r.source === "A").length + ", B " + w.batch.filter((r) => r.source === "B").length + ")");
   return 0;
@@ -452,17 +459,19 @@ function write(a: Record<string, string>, mode: Mode, pool: Pool, w: Walked, io:
     const keptB = kept("held", "B");
     const controls = [...aRows.filter((r) => r.stratum !== "clean").slice(0, CONTROLS_PER_SOURCE).map((r) => r.task), ...nonClean(keptB).slice(0, CONTROLS_PER_SOURCE).map((t) => t.row.task)];
     const files = [...aRows.map((r) => r.task + ".json"), ...keptB.flatMap((t) => [t.row.task + ".json", t.row.task + ".capy.json"])];
-    const seal = heldOutputs(a, ["held-out"], undefined, ["held.json", "held-b.json", "seed-b.hex", ...files])!;
     const manifest: SplitManifest = { schema: "tbv-split.v1", stage: "held", tasks: [...(heldA.tasks as TaskRow[]), ...rowsOf(keptB)], controlTaskIds: controls };
-    const put = (name: string, text: string) => {
-      writeFileSync(join(heldOut, name), text, { mode: 0o600 });
-      seal(join(heldOut, name));
-    };
-    mkdirSync(heldOut, { recursive: true, mode: 0o700 });
-    put("held.json", json(manifest));
-    put("held-b.json", json({ schema: "tbv-held-split.v1", source: "B", seedSha256: sha256(pool.seedHex), poolDigest: pool.digest, tasks: rowsOf(keptB), histories: Object.fromEntries(keptB.map((t) => [t.row.task, t.row.sha256])), ...tally("held", "B") }));
-    put("seed-b.hex", pool.seedHex + "\n");
-    writeTaskDirs(join(heldOut, "tasks"), [...aRows, ...keptB.map((t) => t.row)], new Map([...aHist, ...pool.histories]), seal);
+    heldWrite(() => {
+      const seal = heldOutputs(a, ["held-out"], undefined, ["held.json", "held-b.json", "seed-b.hex", ...files])!;
+      const put = (name: string, text: string) => {
+        writeFileSync(join(heldOut, name), text, { mode: 0o600 });
+        seal(join(heldOut, name));
+      };
+      mkdirSync(heldOut, { recursive: true, mode: 0o700 });
+      put("held.json", json(manifest));
+      put("held-b.json", json({ schema: "tbv-held-split.v1", source: "B", seedSha256: sha256(pool.seedHex), poolDigest: pool.digest, tasks: rowsOf(keptB), histories: Object.fromEntries(keptB.map((t) => [t.row.task, t.row.sha256])), ...tally("held", "B") }));
+      put("seed-b.hex", pool.seedHex + "\n");
+      writeTaskDirs(join(heldOut, "tasks"), [...aRows, ...keptB.map((t) => t.row)], new Map([...aHist, ...pool.histories]), seal);
+    });
     const nc = nonClean(keptB).length;
     io.out("split held B: non-clean kept " + nc + ", clean kept " + (keptB.length - nc) + " of " + HELD_CLEAN_B + "; " + JSON.stringify(tally("held", "B")));
     io.out("split held: non-clean kept " + (aRows.length + nc) + " (floor 70" + (aRows.length + nc < 70 ? ", below" : "") + "), controls " + controls.length + " of " + 2 * CONTROLS_PER_SOURCE);

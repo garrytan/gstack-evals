@@ -365,6 +365,27 @@ test("an extractor refusal on a source A candidate stops with a task-free messag
   expect(existsSync(join(w.disk, "dev-1"))).toBe(false);
 });
 
+test("a held-out batch that cannot be written stops with a task-free message: a rerun into a --held dir that holds its sealed copies", async () => {
+  const w = world();
+  const p = io();
+  expect(await run(["split", "plan", ...w.pool, "--batch", join(w.disk, "dev-1")], p.io)).toBe(0);
+  const digest = /pool digest ([0-9a-f]{64})/.exec(p.out.join("\n"))![1]!;
+  keysFor(join(w.disk, "dev-keys", "r1"), histories(join(w.disk, "dev-1")), () => false);
+  const held = [...w.pool, "--pool-digest", digest, "--dev-keys", join(w.disk, "dev-keys"), "--held", join(w.disk, "sealed"), "--seal-cmd", "base64"];
+  const n = io();
+  expect(await run(["split", "next", ...held, "--batch", join(w.shm, "held-1")], n.io)).toBe(0);
+  expect(n.out.join("\n")).toContain("split batch held");
+  let message = "";
+  try {
+    await run(["split", "next", ...held, "--batch", join(w.shm, "held-2")], io().io);
+  } catch (e) {
+    message = (e as { code?: string }).code + " " + (e as Error).message;
+  }
+  expect(message.startsWith("E_TBV_CUSTODY ")).toBe(true);
+  expect(noNames(message, w.names)).toEqual([]);
+  expect(existsSync(join(w.shm, "held-2", "histories"))).toBe(false);
+});
+
 test("a planted held-out cluster in the dev outputs refuses before anything is written", async () => {
   const a = [...Array.from({ length: 20 }, (_, i) => histA("a-l" + i + "__s0", "a-l" + i, "long")), histA("a-planted__s0", "pr-3", "long")];
   const order = drawOrder(a.map((h) => row("A", h.task, h.cluster, "long")), SEED);
