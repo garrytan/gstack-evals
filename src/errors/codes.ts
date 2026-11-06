@@ -1153,9 +1153,9 @@ export const CODES = {
   },
   E_TBV_REBUILD: {
     exit: 2,
-    meaning: "tbv rebuild-a refused before it rebuilt a task directory: a pin is missing or does not hold (a bundle with no pinned commit, a pinned commit the checkout lacks, a pinned file missing at its commit, a pool file not at its pinned sha256 or naming another dataset version or Harbor commit, an export task directory missing or not at the pool's content hash), the pinned materializer refused a pool task, or --out sits inside a git work tree.",
+    meaning: "tbv rebuild-a refused: a pin is missing or does not hold (a bundle with no pinned commit, a pinned commit the checkout lacks, a pinned file missing at its commit, a pool file not at its pinned sha256 or naming another dataset version or Harbor commit, an export task directory missing or not at the pool's content hash), the pinned materializer refused a pool task, or --out sits inside a git work tree. Every refusal but the materializer's comes before any task directory is rebuilt.",
     fix: "Clone the repo in full so its history holds the pinned commits, download the export again with the pinned Harbor at the pinned version, and give a new --out outside any git checkout, on the run host or in the crew-only Captain drive. Never change a pin to make a rebuild pass: a pin changes only in a new post.",
-    side_effects: "None: nothing is spent. The new --out holds at most the pinned files under pins/.",
+    side_effects: "None: nothing is spent. The new --out holds the pinned files under pins/. After a materializer refusal it also holds the probe's directories and the task directories rebuilt before it, with no rebuild.json, under the custody of source A's raw bundles.",
     retry_safe: true,
     resumable: false,
     owner: "U20",

@@ -165,7 +165,7 @@ test("the counts output: pins, the probe, sessions by tier, tasks and sessions k
   expect(c.out).toEqual([
     "rebuild-a: harbor " + PINS.harbor + ", " + PINS.dataset.name + " " + PINS.dataset.version + ", pool sha256 " + w.pins.pool + ", network " + PINS.network,
     "rebuild-a: commit " + w.commit + " for opus-r3a4, sol-r3a4",
-    "rebuild-a: probe " + w.commit.slice(0, 12) + " matched: a held-tier task rebuilt to its directory's digest " + w.allow[H],
+    "rebuild-a: probe " + w.commit.slice(0, 12) + " matched: a held-tier task rebuilt to its directory's digest",
     "rebuild-a: sessions 9 none-arm, 1 other-arm skipped, 1 dropped with no lock digest",
     "rebuild-a: held tier 2 sessions on 1 tasks, not rebuilt",
     "rebuild-a: rebuild tier 6 sessions on 4 tasks",
@@ -287,3 +287,35 @@ test("the real pins load from this checkout's history: both commits hold the fou
     for (const p of Object.values(PINNED_FILES)) expect(rec.pins.files[c][p]).toBe(sha(gitRaw(ROOT, "cat-file", "blob", c + ":" + p)));
   }
 });
+
+test("stdout prints no task directory digest, since a digest of a rebuilt public task names that task", async () => {
+  const w = world();
+  const c = capture();
+  await rebuildA(w.opts, c.io, w.pins);
+  const text = c.out.join("\n");
+  for (const d of [...Object.values(w.allow), ...Object.values(w.pub)]) expect(text).not.toContain(d.replace(/^sha256:/, ""));
+});
+
+test("an other-arm trial copied under pulled/ counts once", async () => {
+  const w = world();
+  trial(join(w.opts.bundles["opus-r3a4"]!, "pulled"), "pilot", K, "t1", w.allow[K]!, { arm: "gstack", told_skill: "investigate" });
+  const c = capture();
+  const rec = await rebuildA(w.opts, c.io, w.pins);
+  expect(rec.counts.other_arm).toBe(1);
+  expect(c.out).toContain("rebuild-a: sessions 9 none-arm, 1 other-arm skipped, 1 dropped with no lock digest");
+});
+
+test("a pool task the pinned materializer refuses stops with E_TBV_REBUILD, leaving the probe and earlier rebuilds in --out and no rebuild.json", async () => {
+  const w = world();
+  const toml = join(w.exp, S, "task.toml");
+  writeFileSync(toml, readFileSync(toml, "utf8").replace("[agent]\ntimeout_sec = 1800.0\n", ""));
+  const pool = { ...w.pool, tasks: w.pool.tasks.map((t) => (t.task_id === S ? { ...t, digest: taskDirDigest(join(w.exp, S)) } : t)) };
+  const { commit, poolSha } = commitPins(w.repo, pool);
+  const pins: Pins = { ...w.pins, pool: poolSha, bundles: { ...w.pins.bundles, "opus-r3a4": commit, "sol-r3a4": commit } };
+  const msg = await refusal(() => rebuildA(w.opts, capture().io, pins));
+  expect(msg).toStartWith("E_TBV_REBUILD the materializer at " + commit.slice(0, 12) + " refused a pool task: ");
+  expect(existsSync(join(w.opts.out, "rebuild.json"))).toBe(false);
+  expect(existsSync(join(w.opts.out, "probe", commit.slice(0, 12), H))).toBe(true);
+  expect(existsSync(join(w.opts.out, commit.slice(0, 12), K))).toBe(true);
+});
+

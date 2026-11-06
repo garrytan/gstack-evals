@@ -114,7 +114,7 @@ async function loadPinned(repo: string, commit: string, pins: Pins, dir: string)
 /** Every trial directory under a bundle: a directory whose result.json names a task and a <task>__<id> trial. */
 function trialsOf(bundle: string, root: string, commit: string): { none: Session[]; other: number } {
   const none: Session[] = [];
-  let other = 0;
+  const other = new Set<string>();
   const walk = (dir: string) => {
     const res = join(dir, "result.json");
     if (existsSync(res)) {
@@ -127,7 +127,7 @@ function trialsOf(bundle: string, root: string, commit: string): { none: Session
       if (r && typeof r.task_name === "string" && typeof r.trial_name === "string" && r.trial_name.includes("__")) {
         const kwargs = r.config?.agent?.kwargs ?? {};
         if (kwargs.arm !== "none" || kwargs.told_skill) {
-          other++;
+          other.add(r.trial_name);
           return;
         }
         let digest: unknown = null;
@@ -147,7 +147,7 @@ function trialsOf(bundle: string, root: string, commit: string): { none: Session
     if (was && was.recorded !== s.recorded) fail("E_TBV_INPUT", "trial " + s.trial + " appears twice in bundle " + bundle + " with different lock digests");
     if (!was) seen.set(s.trial, s);
   }
-  return { none: [...seen.values()], other };
+  return { none: [...seen.values()], other: other.size };
 }
 
 function insideWorkTree(path: string): boolean {
@@ -283,7 +283,7 @@ export async function rebuildA(o: RebuildOptions, io: Io, pins: Pins = PINS): Pr
 
   io.out("rebuild-a: harbor " + pins.harbor + ", " + pins.dataset.name + " " + pins.dataset.version + ", pool sha256 " + pins.pool + ", network " + pins.network);
   for (const c of commits) io.out("rebuild-a: commit " + c + " for " + names.filter((b) => pins.bundles[b] === c).join(", "));
-  for (const p of probes) io.out("rebuild-a: probe " + p.commit.slice(0, 12) + " matched: a held-tier task rebuilt to its directory's digest " + p.digest);
+  for (const p of probes) io.out("rebuild-a: probe " + p.commit.slice(0, 12) + " matched: a held-tier task rebuilt to its directory's digest");
   io.out("rebuild-a: sessions " + counts.none_arm + " none-arm, " + counts.other_arm + " other-arm skipped, " + counts.no_lock_digest + " dropped with no lock digest");
   io.out("rebuild-a: held tier " + counts.held_sessions + " sessions on " + counts.held_tasks + " tasks, not rebuilt");
   io.out("rebuild-a: rebuild tier " + counts.rebuild_sessions + " sessions on " + counts.rebuild_tasks + " tasks");
