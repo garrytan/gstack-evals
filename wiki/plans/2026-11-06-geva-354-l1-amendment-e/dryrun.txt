@@ -3,7 +3,7 @@ OPENAI_API_KEY: unset
 OPENROUTER_API_KEY: unset
 UBICLOUD_API_KEY: unset
 UBICLOUD_API_TOKEN: unset
-commit 85d6ccc53a27a70142b0b7499a28cb0f5961aabb; base 802c2e490dfddf7ef726e8bddc72a06441fefbee; bun 1.4.4; this script sha256 d1bae6e59291af5cf5fda0e3244b5bd262460a0a5cc8716076ab48308df2b672
+commit 27ffde0edc4b758d56c28f015067cd62f2dfa662; base 802c2e490dfddf7ef726e8bddc72a06441fefbee; bun 1.4.4; this script sha256 a25cab225c4d35fdce0e4d02f9cee7c5ca5c3d2b8a96270d44698cfefd0af418
 
 ## Part A: pins
 ok   A1 cells.l1-sol.json holds Sol's one cell at the prereg's $5 SWE-rebench allowance (section 3; price.py's ALLOW["swe"], which sizes the Sol and particle-1 caps) | expected: [{"id":"gpt-6.1-sol","harbor_model":"anthropic/gpt-6.1-sol","session_cap_usd":5}], ALLOW swe 5.00 | observed: [{"id":"gpt-6.1-sol","harbor_model":"anthropic/gpt-6.1-sol","session_cap_usd":5}], ALLOW swe 5.00 on 1 line
@@ -27,12 +27,12 @@ ok   A9 f1-sol-offu's cap from price.py's own formula (item(), unchanged) for 80
 ok   A10 the off-u contrast's MDD at Sol's Run D rate (9.5%), one-sided for a gain at 0.05, by power.py's model at 80 x 1 | expected: 13.5 points | observed:  before-u 9.5% conc 2 MDD@0.05 one-sided 13.5 null size 0.022
 
 ## Part B: the Opus items prepare byte for byte as at 802c2e4
-prepare pilot-opus at 802c2e4: exit 0; prepared $W/d/prep: pilot-opus, pilot (32 sessions); run 568d44e9b2035fc1, unbound
-prepare f1-opus at 802c2e4: exit 0; prepared $W/d/prep: f1-opus, f1-1 (140 sessions), f1-2 (140 sessions), f1-3 (140 sessions), f1-4 (140 sessions); run 693c9e475b39f2af, unbound
-prepare tb2-opus at 802c2e4: exit 0; prepared $W/d/prep: tb2-opus, tb2-1 (190 sessions), tb2-2 (180 sessions); run 966a70c8776ce72c, unbound
-prepare pilot-opus at 85d6ccc: exit 0; prepared $W/d/prep: pilot-opus, pilot (32 sessions); run 8e75fb12a16f1f7c, unbound
-prepare f1-opus at 85d6ccc: exit 0; prepared $W/d/prep: f1-opus, f1-1 (140 sessions), f1-2 (140 sessions), f1-3 (140 sessions), f1-4 (140 sessions); run 180efb6876af031e, unbound
-prepare tb2-opus at 85d6ccc: exit 0; prepared $W/d/prep: tb2-opus, tb2-1 (190 sessions), tb2-2 (180 sessions); run 583cf8ce84fb1fdc, unbound
+prepare pilot-opus at 802c2e4: exit 0; prepared $W/d/prep: pilot-opus, pilot (32 sessions); run 5be8383068d7a461, unbound
+prepare f1-opus at 802c2e4: exit 0; prepared $W/d/prep: f1-opus, f1-1 (140 sessions), f1-2 (140 sessions), f1-3 (140 sessions), f1-4 (140 sessions); run 55782d7ac5cb5592, unbound
+prepare tb2-opus at 802c2e4: exit 0; prepared $W/d/prep: tb2-opus, tb2-1 (190 sessions), tb2-2 (180 sessions); run 495733b1f87666a3, unbound
+prepare pilot-opus at 27ffde0: exit 0; prepared $W/d/prep: pilot-opus, pilot (32 sessions); run 0253f3caccd66853, unbound
+prepare f1-opus at 27ffde0: exit 0; prepared $W/d/prep: f1-opus, f1-1 (140 sessions), f1-2 (140 sessions), f1-3 (140 sessions), f1-4 (140 sessions); run 1762db9e29311d7e, unbound
+prepare tb2-opus at 27ffde0: exit 0; prepared $W/d/prep: tb2-opus, tb2-1 (190 sessions), tb2-2 (180 sessions); run 7ab03d61520488b5, unbound
 ok   B1 pilot-opus: every file prepare wrote at the commit is 802c2e4's byte for byte, but each part's manifest.json (it differs only in created_at) and plan.json (only in run_id and git_head) | expected: 0 differing files; 0 manifest lines apart from created_at; the same plan | observed: 0 lines over 89 files; 0 lines over 1 manifests; plan fc0b3b3ec490 vs fc0b3b3ec490, model claude-opus-5-5, 32 sessions
 ok   B2 pilot-opus: l1.ts calls prepare-run with the same arguments and environment | expected: the same calls | observed: 1 calls, model claude-opus-5-5 
 ok   B1 f1-opus: every file prepare wrote at the commit is 802c2e4's byte for byte, but each part's manifest.json (it differs only in created_at) and plan.json (only in run_id and git_head) | expected: 0 differing files; 0 manifest lines apart from created_at; the same plan | observed: 0 lines over 676 files; 0 lines over 4 manifests; plan 984c5923bc7e vs 984c5923bc7e, model claude-opus-5-5, 560 sessions
@@ -46,7 +46,7 @@ ok   C1 pilot-sol without ROUTE_LEDGER is refused before anything is written | e
 ok   C2 a route ledger with no record | expected: exit 3, has not passed its route check on l1-route-sol | observed: exit 3; E_USAGE refused: GPT-6.1 Sol has not passed its route check on l1-route-sol ($W/d/route/norecord.jsonl.route.json); run r3/route-check.ts first
 ok   C3 a dropped route check | expected: exit 3, dropped out of L1's Sol leg at its route check | observed: exit 3; E_USAGE refused: GPT-6.1 Sol dropped out of L1's Sol leg at its route check: the told session never opened investigate
 ok   C4 an incomplete route check | expected: exit 3, is incomplete (told try 1: infra); the Captain decides | observed: exit 3; E_USAGE refused: GPT-6.1 Sol's route check on l1-route-sol is incomplete (told try 1: infra); the Captain decides on a rerun
-ok   C5 a pass with another proxy config | expected: exit 3, route check passed with proxy config sha256 0000000000 | observed: exit 3; E_USAGE refused: GPT-6.1 Sol's route check passed with proxy config sha256 0000000000000000000000000000000000000000000000000000000000000000, but the screen's $W/export/quick/laneb/config/proxy.json is 4f5
+ok   C5 a pass with another proxy config | expected: exit 3, route check passed with proxy config sha256 0000000000 | observed: exit 3; E_USAGE refused: GPT-6.1 Sol's route check passed with proxy config sha256 0000000000000000000000000000000000000000000000000000000000000000, but the screen's $W/export/quick/laneb/config/proxy.json is 4f54
 ok   C6 a pass recorded for R3's item r3a4-sol | expected: exit 3, is for gpt-6.1-sol on r3a4-sol, not gpt-6.1-sol on l1-route-sol | observed: exit 3; E_USAGE refused: $W/d/route/other.jsonl.route.json is for gpt-6.1-sol on r3a4-sol, not gpt-6.1-sol on l1-route-sol
 ok   C7 a route ledger approved at $19 | expected: exit 3, cap is $19, not Amendment E's $20 | observed: exit 3; E_USAGE refused: $W/d/route/cap19.jsonl: l1-route-sol's cap is $19, not Amendment E's $20
 ok   C8 a route reserve still open | expected: exit 3, 1 route check reserves are still open on l1-route-sol | observed: exit 3; E_USAGE refused: $W/d/route/open.jsonl: 1 route check reserves are still open on l1-route-sol (l1-route-sol/told-1); reconcile them before the screen
@@ -59,15 +59,15 @@ ok   C14 pilot-p1 without ROUTE_LEDGER | expected: exit 2, set ROUTE_LEDGER to l
 ok   C15 pilot-p1 with Sol's passing route ledger | expected: exit 3, no approval row for item l1-route-p1 | observed: exit 3; E_USAGE refused: $W/d/route/pass.jsonl: no approval row for item l1-route-p1
 ok   C16 pilot-p1 with a Sol record on an l1-route-p1 ledger | expected: exit 3, is for gpt-6.1-sol on l1-route-p1, not particle-1 on l1-route-p1 | observed: exit 3; E_USAGE refused: $W/d/route/p1solrec.jsonl.route.json is for gpt-6.1-sol on l1-route-p1, not particle-1 on l1-route-p1
 ok   C17 no refusal wrote a work dir | expected: 0 dirs | observed: 0 dirs
-ok   C18 pilot-sol prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/pilot-sol: pilot-sol, pilot (32 sessions); run 7e343c5df5dcd00a, unbound
+ok   C18 pilot-sol prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/pilot-sol: pilot-sol, pilot (32 sessions); run 8f6f1e08fc29e148, unbound
 ok   C19 pilot-sol: plan.json names gpt-6.1-sol, 32 sessions, and every job file runs gpt-6.1-sol's harbor model only | expected: model gpt-6.1-sol; 32 sessions; every job file gpt-6.1-sol, 0 other | observed: ["pilot-sol","gpt-6.1-sol",100,"cells.l1-sol.json",60]; 32 sessions; 2 of 2 job files gpt-6.1-sol, 0 other
-ok   C18 f1-sol prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/f1-sol: f1-sol, f1-1 (100 sessions), f1-2 (100 sessions), f1-3 (100 sessions), f1-4 (100 sessions); run d9523d3080827e33, unbound
+ok   C18 f1-sol prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/f1-sol: f1-sol, f1-1 (100 sessions), f1-2 (100 sessions), f1-3 (100 sessions), f1-4 (100 sessions); run c01867879c71e346, unbound
 ok   C19 f1-sol: plan.json names gpt-6.1-sol, 400 sessions, and every job file runs gpt-6.1-sol's harbor model only | expected: model gpt-6.1-sol; 400 sessions; every job file gpt-6.1-sol, 0 other | observed: ["f1-sol","gpt-6.1-sol",730,"cells.l1-sol.json",114]; 400 sessions; 4 of 4 job files gpt-6.1-sol, 0 other
-ok   C18 f1-sol-offu prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/f1-sol-offu: f1-sol-offu, f1-1 (20 sessions), f1-2 (20 sessions), f1-3 (20 sessions), f1-4 (20 sessions); run fed9397f375de14a, unbound
+ok   C18 f1-sol-offu prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/f1-sol-offu: f1-sol-offu, f1-1 (20 sessions), f1-2 (20 sessions), f1-3 (20 sessions), f1-4 (20 sessions); run f10df2529b8783c3, unbound
 ok   C19 f1-sol-offu: plan.json names gpt-6.1-sol, 80 sessions, and every job file runs gpt-6.1-sol's harbor model only | expected: model gpt-6.1-sol; 80 sessions; every job file gpt-6.1-sol, 0 other | observed: ["f1-sol-offu","gpt-6.1-sol",200,"cells.l1-sol.json",114]; 80 sessions; 4 of 4 job files gpt-6.1-sol, 0 other
-ok   C18 pilot-p1 prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/pilot-p1: pilot-p1, pilot (32 sessions); run d4e18eeae51b69e4, unbound
+ok   C18 pilot-p1 prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/pilot-p1: pilot-p1, pilot (32 sessions); run 363312b737390223, unbound
 ok   C19 pilot-p1: plan.json names particle-1, 32 sessions, and every job file runs particle-1's harbor model only | expected: model particle-1; 32 sessions; every job file particle-1, 0 other | observed: ["pilot-p1","particle-1",120,"cells.l1-p1.json",60]; 32 sessions; 2 of 2 job files particle-1, 0 other
-ok   C18 f1-p1 prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/f1-p1: f1-p1, f1-1 (100 sessions), f1-2 (100 sessions), f1-3 (100 sessions), f1-4 (100 sessions); run 3f4bc3e041e81817, unbound
+ok   C18 f1-p1 prepares after a settled pass on its model's route item | expected: exit 0, prepared | observed: exit 0; prepared $W/d/sol/f1-p1: f1-p1, f1-1 (100 sessions), f1-2 (100 sessions), f1-3 (100 sessions), f1-4 (100 sessions); run 6b14c3fda7b04e0b, unbound
 ok   C19 f1-p1: plan.json names particle-1, 400 sessions, and every job file runs particle-1's harbor model only | expected: model particle-1; 400 sessions; every job file particle-1, 0 other | observed: ["f1-p1","particle-1",920,"cells.l1-p1.json",114]; 400 sessions; 4 of 4 job files particle-1, 0 other
 ok   C20 pilot-sol and pilot-p1 have pilot-opus's shape: the same parts, tasks, arms and attempts | expected: the same parts, three times | observed: a15ef3a8298c a15ef3a8298c a15ef3a8298c 
 ok   C21 f1-sol, f1-sol-offu and f1-p1 run f-parts.txt's 4 parts with F1 Opus's tasks part by part: the five arms, off-u alone, the five arms | expected: ["after-t,after-u,before-t,before-u,none"] ["off-u"] ["after-t,after-u,before-t,before-u,none"], the same tasks | observed: ["after-t,after-u,before-t,before-u,none"] ["off-u"] ["after-t,after-u,before-t,before-u,none"], tasks same,same,same,
@@ -105,7 +105,7 @@ ok   E7 once it settles ($0.42 here) and is marked done, pilot-sol's check passe
 ok   E8 f1-sol-offu is refused until f1-sol is done | expected: exit 1, runs only after f1-sol is done | observed: exit 1, CEILING REFUSE f1-sol-offu: f1-sol-offu runs only after f1-sol is done (Amendment E): mark f1-sol done once every part has finished and host-down has settled, then run this check again
 ok   E9 with Sol's items done at the route's $0.42 and price.py's expected $41.74 and $460.22, f1-sol-offu's check passes | expected: exit 0, CEILING PASS | observed: exit 0, sum $2919.91, margin $380.09
 ok   E10 while f1-sol-offu is in the plan, particle-1's route check waits for it | expected: exit 1, runs only after f1-sol-offu is done | observed: exit 1, CEILING REFUSE l1-route-p1: l1-route-p1 runs only after f1-sol-offu is done (Amendment E): mark f1-sol-offu done once every part has finished and host-down has settled, then run this check again
-ok   E10b once f1-sol-offu settles (price.py's expected $104.34) and is marked done, l1-route-p1's check passes | expected: exit 0, CEILING PASS | observed: exit 0, sum $2824.25, margin $475.75
+ok   E10b once f1-sol-offu settles (price.py's expected $104.34) and is marked done, l1-route-p1's check passes | expected: exit 0, CEILING PASS | observed: exit 0, sum $2919.91, margin $380.09
 ok   E11 on the pinned plan (no f1-sol-offu), particle-1's route check is refused while f1-sol is not done | expected: exit 1, runs only after f1-sol is done | observed: exit 1, CEILING REFUSE l1-route-p1: l1-route-p1 runs only after f1-sol is done (Amendment E): mark f1-sol done once every part has finished and host-down has settled, then run this check again
 ok   E11b on the pinned plan, once Sol's three items are done, l1-route-p1's check passes | expected: exit 0, CEILING PASS | observed: exit 0, sum $2719.91, margin $580.09
 ok   E11c with l1-route-p1 settled ($0.05 here) and done, pilot-p1's check passes | expected: exit 0, CEILING PASS | observed: exit 0, sum $2699.96, margin $600.04
@@ -114,13 +114,14 @@ ok   E12 a plan at the prereg's $2,000 line, or with no line, exits 2 | expected
 ok   E13 an Opus item no longer launches: tb2-opus is done | expected: exit 2, not a planned or open item | observed: exit 2, E_USAGE l1 ceiling: tb2-opus is not a planned or open item of the plan
 ok   E14 a Sol exit leaves particle-1 its route check: after a route drop at l1-route-sol (settled at $0.42 and done), Sol's unlaunched items leave the plan, leftover.sol is refused and l1-route-p1 runs after l1-route-sol; with no Sol item done, l1-route-p1 has no after; both checks pass | expected: exit 0, CEILING PASS; exit 0, CEILING PASS | observed: exit 0, sum $2206.70, margin $1093.30; exit 0, sum $2206.28, margin $1093.72
 ok   E15 f1-sol marked done counts at its $730 cap until its work dir shows every part finished and host-down settled (ceiling.ts --work): with no record, with f1-4's result missing, and with its host still up; with the full record, at its settled $460.22 | expected: 730.00 730.00 730.00 460.22 | observed: 730.00 730.00 730.00 460.22
+ok   E15b f1-sol-offu marked done counts at its $200 cap until its own work dir shows every part finished and host-down settled, then at its settled $104.34; f1-sol marked done stays at its $730 cap while a part that ended with a loss and no cap stop owes its relaunch, and counts at its settled $460.22 once that part's relaunch record exists | expected: f1-sol-offu 200.00 104.34; f1-sol 730.00 460.22 | observed: f1-sol-offu 200.00 104.34; f1-sol 730.00 460.22
 final read on the pinned plan: FINAL all-in $2944.60, holds $122.93, room $232.47: the post thread results-post can have a token stop of at most 663338413; items not done, counted at their caps: l1-route-sol, pilot-sol, f1-sol, l1-route-p1, pilot-p1, f1-p1
 
 ## Part F: the keyless checks at the commit
-ok   F1 bun test | expected: exit 0, 0 fail | observed: exit 0,  3267 pass  0 fail 
+ok   F1 bun test | expected: exit 0, 0 fail | observed: exit 0,  3269 pass  0 fail 
 ok   F2 bun run typecheck | expected: exit 0 | observed: exit 0, $ tsc --noEmit && tsc -p quick/replay/tsconfig.json
 ok   F2 bun run errors:check | expected: exit 0 | observed: exit 0, errors: ok, 149 codes, docs/errors.md is fresh
-ok   F2 bun run wiki:check | expected: exit 0 | observed: exit 0, wiki: ok, 154 posts; immutability checked against origin/HEAD (merge base 85d6ccc53a27)
+ok   F2 bun run wiki:check | expected: exit 0 | observed: exit 0, wiki: ok, 154 posts; immutability checked against origin/HEAD (merge base 27ffde0edc4b)
 
-rules: 97, failed: 0
+rules: 98, failed: 0
 DRYRUN: ok

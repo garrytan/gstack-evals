@@ -3,7 +3,7 @@ OPENAI_API_KEY: unset
 OPENROUTER_API_KEY: unset
 UBICLOUD_API_KEY: unset
 UBICLOUD_API_TOKEN: unset
-commit 85d6ccc53a27a70142b0b7499a28cb0f5961aabb; bun 1.4.4; docker 29.9.2
+commit 27ffde0edc4b758d56c28f015067cd62f2dfa662; bun 1.4.4; docker 29.9.2
 
 ## Part 0: export
 bun install exit 0
@@ -17,7 +17,7 @@ ok   A1 the off arm's tar.gz and tar match manifests/l1/off.json | expected: 2e8
 source digests:
   aa72797c1d54dd408420fb5b7cce99d85efd987c7997ac30d8a33ba99be056f8  quick/laneb/l1/analyze.ts
   528509b82427d63a38d6f86f4b322cedb48e41abd696cc8bd8b0831ff4f53c7c  quick/laneb/l1/audit.ts
-  8573f019ffabe022a95dd3a923cc3eaa0ae2db1d085b62e89f174c499ee59e5f  quick/laneb/l1/ceiling.ts
+  b790f2ee2ca346c7f03f5388d20290d917a63d6e9c9671c2d6e3f317326b2449  quick/laneb/l1/ceiling.ts
   3016b92d46a2424695ca7b6245368af089f6ef58b6bf1b1de297248a71d0af5f  quick/laneb/l1/l1.ts
   637e605fbb3af7ea7195c07169e606b1ee719d6e7a1969b78ee63529b6a19b5a  quick/laneb/l1/probes-8e6795a.ts
   47d55b3ea29af9617e889132c8ea7ba3f83660aa0623f29414b7b05659af6a38  quick/laneb/l1/probes.ts
@@ -52,7 +52,7 @@ ok   B5 table.ts at this commit rebuilds the record's seven rows | expected: exi
 ok   C0 tests/l1-probes.test.ts | expected: every test passes | observed: 48 pass, 0 fail, 0 skip
 ok   C0 tests/l1-table.test.ts | expected: every test passes | observed: 17 pass, 0 fail, 0 skip
 ok   C0 tests/l1-analyze.test.ts | expected: every test passes | observed: 39 pass, 0 fail, 0 skip
-ok   C0 tests/l1-ceiling.test.ts | expected: every test passes | observed: 36 pass, 0 fail, 0 skip
+ok   C0 tests/l1-ceiling.test.ts | expected: every test passes | observed: 38 pass, 0 fail, 0 skip
 ok   C0 tests/l1-host.test.ts | expected: every test passes | observed: 54 pass, 0 fail, 0 skip
 ok   C0 tests/l1-launch.test.ts | expected: every test passes | observed: 31 pass, 0 fail, 0 skip
 ok   C0 tests/l1-audit.test.ts | expected: every test passes | observed: 12 pass, 0 fail, 0 skip
