@@ -63,19 +63,31 @@
 //   doesn't parse refuses the resume before any session. units.json records the suite binding (ceoSuiteBinding) that
 //   ceo rows check --units against, and a resume whose binding differs from the one units.json holds is refused before
 //   any session, because session keys don't cover key.json. units.json is written before the first session, so a
-//   resume whose out dir holds cells, or a stops.json, but no units.json is refused too. And the receipts sink also gets every session's host/transcript.ndjson, which rows
-//   read. Before a session's work dir is removed, every ceo-review.md under it is copied into host/ceo-review/ at its
+//   resume whose out dir holds cells, or a stops.json, but no units.json is refused too. And the receipts sink also gets every session's host/transcript.ndjson and trial.json, which rows
+//   read, and an enforced session's host/skill-gates/ record, which its gate report reads. Before a session's work dir is removed, every ceo-review.md under it is copied into host/ceo-review/ at its
 //   relative path, so a smoke check can compare findings_written with the file on disk; the sink gets host/ceo-review/ too. The out dir must sit outside the repo.
+// - The CEO stage 2 amendment's gstack-enforced arm (ceo-arms.ts, skill-gates.ts) runs plan arm gstack with gstack-forced's
+//   prompt. Its sessions get the settings their own gstack-skill-gates settings --ceo-review prints in the session's
+//   sandbox, both ceo-review shims at a 30 s timeout, GSTACK_SKILL_GATE_DEADLINE_MS=20000, and skill-gates.ts's GATE_KEY in
+//   the session key and arm_provenance; trial.json's gate holds the gate record's report (skill-gates.ts gateRecord).
+// - Every ceo-outcome session, on every arm and model, runs with CLAUDE_CODE_DISABLE_1M_CONTEXT=1 (ceo-arms.ts CEO_CONTEXT_ENV,
+//   the Captain's ruling D1), so the CLI's window is 200,000 tokens everywhere; it is the session key's env_values part and
+//   rides arm_provenance.
+// - An arm may set its own session kind (sessionKind, the CLI's --arm-session-kind), keyed per arm, in place of the run's.
+//   Before any session, every plan arm that runs a gstack tree with a session kind set runs that tree's own
+//   bin/gstack-session-kind in the arm's session env, and the run is refused (E_SESSION_KIND_PIN) unless it prints the kind.
 // - Every arm a coverage gap stops, in either lane, is an E_COVERAGE_GAP stop that names its gaps, so review-units exits 2.
 // - A sealed suite, or an unsealed one that reads catalogs under the sealed root, refuses a receipts sink inside the repo
 //   (E_USAGE), as review-units refuses an in-repo --out. A sink holding a symlink on the way to, at or under a receipt's
 //   path, or a dangling one at or above the sink, is refused too. Both checks run before any session.
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
 import { insideRepo } from "../../../lanes/review-noloss/suite.ts";
 import { BACKGROUND_WAIT_MS, MAX_TURNS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
 import { hostDriver } from "../../adapters/host.ts";
+import type { Meter } from "../../runner/proxy/metering-proxy.ts";
 import type { ReasonCode } from "../../errors/codes.ts";
 import { allowanceMicros, SESSION_ALLOWANCE } from "../../skill-eval/cli/dry-run.ts";
 import { providerOf, type LoadedPolicy } from "../../skill-eval/cli/policy.ts";
@@ -88,7 +100,7 @@ import type { Retained } from "../image.ts";
 import { runTrial } from "../trial.ts";
 import { costTsv, meterCost, readJournalLines, refusalsTsv, type CellRefusals, type CostSession, type MeterCost } from "./cost.ts";
 import { CAPPED_PARSER_SHA256, mainAgentTexts } from "./capped.ts";
-import { CEO_END_STATES, CEO_LENS, CEO_PARSER_SHA256, CEO_PLAN_ARM, CEO_TEMPLATE_SHA256, ceoArmLine, ceoAutoProblem, ceoPrompt, ceoTranscriptParse, endState, FOLLOW_UP, FORCED_LINE, isCeoArm, needsFollowUp, renderCeoFindings, type CeoArm, type CeoEndState, type CeoParse } from "./ceo-outcome.ts";
+import { CEO_END_STATES, CEO_LENS, CEO_PARSER_SHA256, CEO_TEMPLATE_SHA256, ceoArmLine, ceoAutoProblem, ceoTranscriptParse, endState, FOLLOW_UP, needsFollowUp, renderCeoFindings, type CeoArm, type CeoEndState, type CeoParse } from "./ceo-outcome.ts";
 import { PARSER_SHA256, renderFindings, type ParseOutcome } from "./findings.ts";
 import { codeParse, hasFindingsBlock, HELD_PARSER_SHA256, mainAgentTurns, type ScoredTurn } from "./held.ts";
 import { ceoMode, CEO_MODES, GLOBAL_PREFERENCES, PROJECT_PREFERENCES, gstackAutoProblem, gstackDir, gstackVersion, neverAskPreferences, PLAN_PARSER_SHA256, parsePlanSession, planSkill, REC_USER, REC_USER_SHA256, recFreeform, renderPlanFindings, TOLD_PLAN_SHA256, type CeoMode, type PlanArm, type PlanLens, type PlanParse } from "./plan.ts";
@@ -96,6 +108,8 @@ import { planNoPrefixProblem, planPrefixProblem, planToldLine, planToldPrompt } 
 import { READERS_SHA256, readerUsage, readTranscript, type ReaderMap, type ReaderUsage } from "./readers.ts";
 import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from "./told.ts";
 import type { UnitRef } from "./unit.ts";
+import { CEO_CONTEXT_ENV, CEO_RUN_PLAN_ARM, ceoRunPrompt, forcedPrefixOk, isCeoRunArm, type CeoRunArm } from "./ceo-arms.ts";
+import { ENFORCED_ARM, GATE_DEADLINE_MS, GATE_KEY, GATE_SETTINGS_ARGS, gateRecord, gateSettings, sha256 } from "./skill-gates.ts";
 
 type Env = Record<string, string | undefined>;
 
@@ -122,6 +136,8 @@ export interface ReviewArm {
   systemPrompt?: SystemPrompt;
   /** The told prefix: in place of TOLD_PREFIX's on code units, in place of a gstack plan arm's command on plan units. */
   toldPrefix?: string;
+  /** GSTACK_SESSION_KIND=unattended for this arm's sessions, in place of the run's sessionKind; keyed per arm. */
+  sessionKind?: "unattended";
 }
 
 export interface ReviewRunInput {
@@ -198,6 +214,22 @@ export interface ReviewEntry {
   readers?: ReaderUsage[];
   /** Code units: the turn the session was scored from (held.ts). */
   scored_turn?: ScoredTurn;
+  /** ceo-outcome sessions: the proxy's record of the session's peak in-flight reservation, largest prompt, bytes per token and cache-write modes; null when the rig's meter keeps none. */
+  meter?: SessionMeter | null;
+}
+
+/** The stage 2 amendment's per-session meter record (its section 5 and carried notes F and K), as ceo rows and readings carry it. */
+export interface SessionMeter {
+  peak_inflight_usd: number;
+  peak_inflight_calls: number;
+  largest_prompt: number | null;
+  bytes_per_token: number | null;
+  cache_write: string[];
+}
+/** The SessionMeter a finalized meter holds, or null when it holds none (a rig whose meter predates the record). */
+export function sessionMeter(m: Partial<Meter>): SessionMeter | null {
+  if (typeof m.peak_inflight_micros !== "number" || typeof m.peak_inflight_calls !== "number" || !Array.isArray(m.cache_write)) return null;
+  return { peak_inflight_usd: m.peak_inflight_micros / 1_000_000, peak_inflight_calls: m.peak_inflight_calls, largest_prompt: m.largest_prompt ?? null, bytes_per_token: m.bytes_per_token ?? null, cache_write: [...m.cache_write] };
 }
 
 export interface ReviewRun {
@@ -335,7 +367,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const transcripts = o.plan?.lens !== CEO_LENS ? [] : o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => ["transcript.ndjson", "ceo-review"].map((f) => join(sessionDir(o.out, model, arm.name, unit.task, i + 1), "host", f))).flat())));
+  const transcripts = o.plan?.lens !== CEO_LENS ? [] : o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => {
+    const dir = sessionDir(o.out, model, arm.name, unit.task, i + 1);
+    return [join(dir, "trial.json"), ...["transcript.ndjson", "ceo-review", "skill-gates"].map((f) => join(dir, "host", f))];
+  }).flat())));
   const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
@@ -381,8 +416,8 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   if (plan && o.arms.some((a) => a.told === "placebo") && o.arms.some((a) => a.name === "gstack" && a.toldPrefix !== undefined)) throw new Error("E_USAGE: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
   for (const arm of plan ? o.arms : []) {
     if (ceo) {
-      if (!isCeoArm(arm.name) || CEO_PLAN_ARM[arm.name] !== arm.told) throw new Error("E_USAGE: arm " + arm.name + " (plan arm " + arm.told + "): the ceo-outcome lens runs arms none, lens, gstack-auto and gstack-forced, each as its own plan arm\n  fix: run only those four arms");
-      if (arm.toldPrefix !== undefined && !(arm.name === "gstack-forced" && arm.toldPrefix === FORCED_LINE)) throw new Error("E_USAGE: arm " + arm.name + ": --told-prefix: the ceo-outcome lens takes its line from the lens, and only gstack-forced's is CEO v2's forced line\n  fix: leave out --told-prefix");
+      if (!isCeoRunArm(arm.name) || CEO_RUN_PLAN_ARM[arm.name] !== arm.told) throw new Error("E_USAGE: arm " + arm.name + " (plan arm " + arm.told + "): the ceo-outcome lens runs arms none, lens, gstack-auto, gstack-forced and gstack-enforced, each as its own plan arm\n  fix: run only those five arms");
+      if (arm.toldPrefix !== undefined && !forcedPrefixOk(arm.name, arm.toldPrefix)) throw new Error("E_USAGE: arm " + arm.name + ": --told-prefix: the ceo-outcome lens takes its line from the lens, and only gstack-forced's and gstack-enforced's is CEO v2's forced line\n  fix: leave out --told-prefix");
       continue;
     }
     const refused = arm.toldPrefix === undefined ? null : planPrefixProblem(arm.told as PlanArm, plan!.lens as PlanLens, arm.toldPrefix);
@@ -394,6 +429,15 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const install = rig.arms[arm.name]!;
     if (arm.told !== "gstack" && arm.told !== "gstack-auto") continue;
     const dir = gstackDir(install);
+    const kind = arm.sessionKind ?? o.sessionKind;
+    if (kind) {
+      const model = modelsOf(arm.name)[0]!;
+      const provider = providerOf(o.policy, model);
+      const env = { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: o.out, LANG: "C.UTF-8", TERM: "dumb", ...(provider ? (rig.driver ?? hostDriver)({ host: o.host, model, provider, proxy: { baseUrl: rig.baseUrl, slot: "session-kind-check", token: "" }, interactive: true, skill: null, out: o.out, sessionKind: kind }).env : {}), CLAUDE_CODE_ENTRYPOINT: "sdk-ts" };
+      const r = dir ? spawnSync("bash", [join(dir, "bin", "gstack-session-kind")], { env, encoding: "utf8", timeout: 10_000 }) : null;
+      const printed = r?.stdout?.trim() ?? "";
+      if (printed !== kind) throw new Error("E_SESSION_KIND_PIN: arm " + arm.name + ": " + (dir ? "its gstack tree's bin/gstack-session-kind prints " + JSON.stringify(printed) + " (exit " + r!.status + ") in the arm's session env, not " + kind : "the arm has no gstack tree to run bin/gstack-session-kind from") + "\n  fix: run a gstack tree whose gstack-session-kind honors GSTACK_SESSION_KIND=" + kind);
+    }
     if (arm.told === "gstack-auto") {
       const problem = ceo ? ceoAutoProblem(gstackVersion(dir)) : gstackAutoProblem(gstackVersion(dir));
       if (problem) throw new Error("E_USAGE: arm " + arm.name + ": " + problem);
@@ -402,10 +446,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (text === null) throw new Error("E_USAGE: arm " + arm.name + "'s gstack tree has no question registry (scripts/question-registry.ts), so its questions cannot be set to auto-decide");
     prefs.set(arm.name, text);
   }
-  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: ceo ? ceoPrompt(arm.name as CeoArm) : plan ? planToldPrompt(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
+  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: ceo ? ceoRunPrompt(arm.name as CeoRunArm) : plan ? planToldPrompt(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
   const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(ceo ? { allowance_micros: allowance(model) } : capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(o.sessionKind ? { session_kind: o.sessionKind } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: ceo ? CEO_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(ceo ? { allowance_micros: allowance(model) } : capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(arm.sessionKind ?? o.sessionKind ? { session_kind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: ceo ? CEO_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: ceo ? envValuesHash(Object.keys(CEO_CONTEXT_ENV), CEO_CONTEXT_ENV) : envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
   for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
@@ -452,10 +496,12 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const install = rig.arms[arm.name]!;
     const plugins = (install.plugins ?? []).map((pl) => posix.join(home, pl));
     const name = plan ? planSkill(arm.told as PlanArm, ceo ? lens : (plan.lens as PlanLens)) : toldSkill(arm.told as ToldArm, arm.toldPrefix);
+    const enforced = ceo && arm.name === ENFORCED_ARM;
+    let printedSha: string | null = null;
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(capStops ? { capStops } : {}), ...(ceo ? { followUp: { text: FOLLOW_UP, needed: needsFollowUp } } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000 });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(arm.sessionKind ?? o.sessionKind ? { sessionKind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo ? { disable1mContext: true } : {}), ...(enforced ? { skillGateDeadlineMs: GATE_DEADLINE_MS, settings: { command: [posix.join(home, posix.dirname(install.gstack ?? ""), "gstack-skill-gates"), ...GATE_SETTINGS_ARGS].map((w) => "'" + w.replace(/'/g, "'\\''") + "'").join(" "), make: (printed: string) => ((printedSha = sha256(printed)), gateSettings(printed)) } } : {}), ...(capStops ? { capStops } : {}), ...(ceo ? { followUp: { text: FOLLOW_UP, needed: needsFollowUp } } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000 });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
-    const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}) };
+    const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}), ...(enforced ? { gate: (work: string) => gateRecord({ work, host: join(dir, "host"), gstack: gstackDir(install) ?? "", settingsSha256: printedSha }) } : {}) };
     const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...(ceo ? { copyOut: { name: "ceo-review.md", to: join(dir, "host", "ceo-review") } } : {}), ...state });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros;
@@ -486,7 +532,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       clock = {};
     }
     const ceoOutcome = ceoParse ? { parser_sha256: CEO_PARSER_SHA256, end_state: endState(trial.record.termination, ceoParse), follow_up: clock.follow_up === true, wall_s: typeof clock.session_ms === "number" ? clock.session_ms / 1000 : null, usd: meter.micros / 1_000_000 } : null;
-    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(code ? { scored_turn: code.scored_turn } : {}), ...(ceoOutcome ? { ceo_outcome: ceoOutcome } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
+    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(code ? { scored_turn: code.scored_turn } : {}), ...(ceoOutcome ? { ceo_outcome: ceoOutcome, meter: sessionMeter(meter) } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
     entries.set(reviewCellId(cell), entry);
     wall += trial.record.wall_ms ?? 0;
     ran++;
@@ -608,7 +654,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
       told: ceo ? { arm: arm.name, plan_arm: arm.told, lens: CEO_LENS, line: ceoArmLine(arm.name as CeoArm), template_sha256: CEO_TEMPLATE_SHA256, rec_user_sha256: REC_USER_SHA256 } : plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
       ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { ...(ceo ? {} : { completed_without_text: withoutText }), ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
-      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default" }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
+      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default", ...(ceo ? { context_env: CEO_CONTEXT_ENV } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}) }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
       ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
       ...(ceo ? { ceo_outcome: { end_states: states, follow_ups: followUps, follow_up_terminations: followEnds, over_three: overThree, zero_output: zeroOutput, gaps: ceoGaps, parser_sha256: CEO_PARSER_SHA256, template_sha256: CEO_TEMPLATE_SHA256 } } : {}),
     };

@@ -70,7 +70,9 @@
           "tests/rig/entry.test.ts",
           "tests/rig/pins.test.ts",
           "tests/rig/rig-probes.test.ts",
-          "tests/rig/tier.test.ts"
+          "tests/rig/tier.test.ts",
+          "tests/trial/review/ceo-enforced.test.ts",
+          "tests/trial/review/ceo-enforced-armed.test.ts"
         ]
       }
     ]
