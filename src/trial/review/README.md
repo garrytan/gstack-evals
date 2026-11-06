@@ -89,7 +89,7 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   command (/plan-ceo-review) and add words after it, and the arm's line becomes that line, a space and "Review this plan
   for problems.". A prefix that holds that ask, starts or ends with whitespace, or has a control character (a CR, tab or
   BOM included) is refused, and the refusal names the character. A gstack-<suffix> arm needs a prefix (E_USAGE without
-  one). Under `--plan ceo-outcome` these plan-unit rules don't apply: only gstack-forced takes a prefix, it is optional,
+  one). Under `--plan ceo-outcome` these plan-unit rules don't apply: only gstack-forced and gstack-enforced take a prefix, it is optional,
   and it must equal ceo-outcome.ts's FORCED_LINE byte for byte; any other prefix, or a prefix on any other arm, is
   refused (E_USAGE). none, lens, placebo and gstack-auto refuse a prefix (E_USAGE), and so does the arm named gstack when placebo
   runs, since placebo keeps the default gstack line. Either way arm.json's told block records the prefix and prefix_sha256,
@@ -101,6 +101,9 @@ Every default keeps a frozen preregistration's run as it was: same options, same
   their settings. On code units only an arm told /review takes one, since the install checks no other skill's start line.
 - `--max-turns <n>`: the most model turns a session may take, default 60 (the driver's MAX_TURNS).
 - `--session-kind unattended`: GSTACK_SESSION_KIND=unattended in every arm's agent env, none included. Off by default.
+- `--arm-session-kind <arm>=unattended`, repeatable: the same for one arm only, keyed per arm. It can't run beside
+  `--session-kind`. Before any session, a gstack arm that sets the kind runs its own tree's bin/gstack-session-kind in the
+  arm's session env, and the run is refused (E_SESSION_KIND_PIN) unless it prints the kind.
 
 - `--allowance <usd>`: each session's spend cap on its proxy slot. Left out, a session gets SESSION_ALLOWANCE (1.6M input
   and 32k output tokens) at its model's price, $7.04 on Opus 5.5. The proxy refuses a call whose worst case the slot's
@@ -109,7 +112,7 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 - `--reader-map <file>`, code units only: reader rows (below). Every gstack stack arm must run the map's gstack commit
   and be told /review, whose readers the map names.
 
-run.json records max_turns and session_kind, and allowance_usd and reader_map (its sha256 and gstack commit) when they
+run.json records max_turns and session_kind, and arm_session_kinds, allowance_usd and reader_map (its sha256 and gstack commit) when they
 are set. --resume with other values than run.json records is refused before anything runs, and run.json stays as it was
 (E_CACHE_STALE). A setting off its default also joins the session key, so a cell run under another value is never
 reused. The allowance is the exception: it joins the key only in a --cap-stops run (below), and otherwise only the
@@ -193,8 +196,13 @@ as its amendments change it), with `--sealed-root` when the suite is sealed. ceo
 `--plan ceo`:
 
 - Arms: none, lens, gstack-auto (/autoplan --ceo-only) and gstack-forced (the standalone CEO review, behind CEO v2's
-  forced line), each with the lens's own prompt. Any other arm is refused, and so is any `--told-prefix` but
-  gstack-forced's FORCED_LINE.
+  forced line), each with the lens's own prompt, plus the stage 2 amendment's gstack-enforced (ceo-arms.ts), which runs
+  plan arm gstack with gstack-forced's prompt. Any other arm is refused, and so is any `--told-prefix` but FORCED_LINE
+  on gstack-forced or gstack-enforced.
+- gstack-enforced runs a pinned gstack tree with its CEO review gate on (`ceo_review_gate: on`, skill-gates.ts). A
+  settings command run in the session sandbox sets up the gate, and trial.json records it. The merged stage 2 amendment
+  (wiki/plans/2026-11-06-geva-345-ceo-stage-2-amendment) and the scorer post
+  (wiki/plans/2026-11-06-geva-348-ceo-scorer-stage-2) give the details.
 - Cap stops are always on. A session that ends with a success result and no parsable closing block gets the driver's
   one follow-up turn (docs/adapters.md).
 - Each journal entry stores the one parse of its closing block with the parser's sha256, section 6's end state, whether
@@ -215,6 +223,9 @@ as its amendments change it), with `--sealed-root` when the suite is sealed. ceo
   preregistration names, by their exact policy keys.
 - Before a session's work dir is removed, each ceo-review.md under it is copied into `host/ceo-review/` at its relative
   path. Symlinks are skipped, and each copy failure is logged in trial.json under `logs.copy_out`.
-- The receipts sink also gets every session's `host/transcript.ndjson`, which rows read for exposure, and
-  `host/ceo-review/` beside it.
+- The receipts sink also gets every session's `host/transcript.ndjson`, which rows read for exposure, its trial.json and
+  `host/ceo-review/` beside it, and an enforced session's `host/skill-gates/`.
+- Every ceo-outcome session sets CLAUDE_CODE_DISABLE_1M_CONTEXT=1, so each model runs with a 200,000-token window.
+  `gstack-evals ceo rows` takes `--order <file>` at `--stage 2`, and `--smoke-round 1` or `2` at stage 1 to read stage
+  1's smoke or its rerun.
 - The out dir must sit outside the repo.
