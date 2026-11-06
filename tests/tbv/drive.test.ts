@@ -236,10 +236,29 @@ describe("reservation release before a headroom refusal", () => {
     expect(item.leases[0]!.close!.unknown_calls).toBe(3);
   });
 
-  test("a send with no generation record (404) keeps its reservation, so the round is refused", async () => {
-    const { res } = await go({ script: noUsage, tasks: ["t1", "t2", "t3", "t4", "t5"], models: ["sol"], cap: 1.3, roundWorst: 1 });
-    expect(res.records.find((r) => r.task === "t5")!.cls).toBe("cap");
+  test("a send with no generation record (404) keeps its full reservation and stops the item (E_TBV_RUN); no lookup or send retries", async () => {
+    const { res, s, item } = await go({ script: noUsage, tasks: ["t1", "t2", "t3", "t4", "t5"], models: ["sol"], cap: 1.3, roundWorst: 1 });
+    expect(res.stop?.cls).toBe("harness");
+    expect(res.stop?.why).toContain("E_TBV_RUN");
+    expect(res.stop?.why).toContain("no OpenRouter generation record");
+    expect(res.records.find((r) => r.task === "t5")!.cls).toBe("harness");
+    expect(s.gets.length).toBe(1);
+    expect(item.leases[0]!.close!.unknown_calls).toBeGreaterThanOrEqual(12);
+  });
+  test("a record for another generation id counts as no record: the item stops and nothing is released", async () => {
+    const other = () => Response.json({ data: { id: "gen-someone-else", total_cost: 0 } });
+    const { res, s, L } = await go({ script: noUsage, records: other, tasks: ["t1", "t2", "t3", "t4", "t5"], models: ["sol"], cap: 1.3, roundWorst: 1 });
+    expect(res.stop?.cls).toBe("harness");
+    expect(s.gets.length).toBe(1);
+    const db = new Database(L.ledger, { readonly: true });
+    expect((db.query("SELECT COUNT(*) AS n FROM releases").get() as { n: number }).n).toBe(0);
+    db.close();
+  });
+  test("other direction: a billed record keeps its reservation and the round is refused as a cap stop", async () => {
+    const billed = (id: string) => Response.json({ data: { id, total_cost: 0.01 } });
+    const { res } = await go({ script: noUsage, records: billed, tasks: ["t1", "t2", "t3", "t4", "t5"], models: ["sol"], cap: 1.3, roundWorst: 1 });
     expect(res.stop?.cls).toBe("cap");
+    expect(res.records.find((r) => r.task === "t5")!.cls).toBe("cap");
   });
 });
 
