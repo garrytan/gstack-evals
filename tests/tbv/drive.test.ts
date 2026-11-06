@@ -27,6 +27,7 @@ interface Go {
   closer?: () => boolean;
   splice?: boolean;
   real?: boolean;
+  onLog?: (text: string) => void;
 }
 const plan = (o: Go): DrivePlan => ({
   item: ITEM,
@@ -49,7 +50,10 @@ async function go(o: Go) {
   const s = stub(o.script, o.records);
   const c = clock();
   const logs: string[] = [];
-  const res = await runItem({ item: ITEM, runId: "run-1", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ roundWorst: 0.000001, ...o }), plaintext: L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: o.real ? { build: buildRequest, validate: validateRequest, closer: () => true } : { build: fakeBuild, validate: o.validate ?? (() => ({ ok: true })), closer: o.closer ?? (() => true) }, log: (t) => logs.push(t) });
+  const res = await runItem({ item: ITEM, runId: "run-1", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ roundWorst: 0.000001, ...o }), plaintext: L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: o.real ? { build: buildRequest, validate: validateRequest, closer: () => true } : { build: fakeBuild, validate: o.validate ?? (() => ({ ok: true })), closer: o.closer ?? (() => true) }, log: (t) => {
+      logs.push(t);
+      o.onLog?.(t);
+    } });
   const by = (task: string, arm: Arm = "none", model: Model = "opus", pass = 1) => res.records.find((r) => r.task === task && r.arm === arm && r.model === model && r.pass === pass)!;
   return { res, s, L, c, logs, by, journal: journalOf(L.out), item: readItem(L.record, ITEM) };
 }
@@ -330,12 +334,14 @@ describe("the outage pause", () => {
 
 describe("stops inside a round", () => {
   test("after one reading's 4xx, no other reading in the round makes a new send", async () => {
+    let stopped = () => {};
+    const stop = new Promise<void>((r) => (stopped = r));
     const script: Script = async (c) => {
       if (c.task === "t1") return status(400);
-      await Bun.sleep(50);
+      await stop;
       return text();
     };
-    const { res, s, by } = await go({ script, tasks: ["t1", "t2", "t3"] });
+    const { res, s, by } = await go({ script, tasks: ["t1", "t2", "t3"], onLog: (t) => t.includes("the item stops") && stopped() });
     expect(res.stop?.cls).toBe("harness");
     const at = s.calls.findIndex((c) => c.task === "t1");
     expect(s.calls.slice(at + 1).map((c) => c.task + ":" + c.turn)).toEqual(["t2:report", "t3:report"]);
@@ -347,17 +353,14 @@ describe("stops inside a round", () => {
     let release = () => {};
     const held = new Promise<void>((r) => (release = r));
     const script: Script = async (c) => {
-      if (c.task === "t2") {
-        if (c.n === 3) void Bun.sleep(100).then(release);
-        return status(503);
-      }
+      if (c.task === "t2") return status(503);
       if (c.turn === "report") {
         await held;
         return text();
       }
       return status(503);
     };
-    const { res, by, c } = await go({ script, tasks: ["wide1", "t2"], models: ["sol"] });
+    const { res, by, c } = await go({ script, tasks: ["wide1", "t2"], models: ["sol"], onLog: (t) => t.includes("times in a row") && release() });
     expect(by("wide1", "none", "sol").sends.filter((x) => x.turn === "d1").map((x) => x.kind)).toEqual(["allowance"]);
     expect(c.sleeps.filter((ms) => ms === 600_000).length).toBe(6);
     expect(res.stop?.cls).toBe("outage");
