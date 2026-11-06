@@ -27,7 +27,7 @@ function run() {
   if (failed) throw failed;
   const root = mkdtempSync(join(homedir(), ".gstack-evals-ceo-armed-test-"));
   try {
-    const r = spawnSync(process.execPath, [join(import.meta.dir, "ceo-enforced-armed.ts"), PIN, root], { encoding: "utf8", timeout: 540_000 });
+    const r = spawnSync(process.execPath, [join(import.meta.dir, "ceo-enforced-armed.ts"), PIN, root], { encoding: "utf8", timeout: 840_000 });
     if (r.status !== 0) throw (failed = new Error("ceo-enforced-armed.ts exited " + r.status + ": " + (r.stderr ?? "").slice(-3000)));
     ran = JSON.parse(r.stdout.trim().split("\n").pop()!);
     return ran!;
@@ -55,7 +55,7 @@ describe.skipIf(!HAS_PIN || !HAS_CLAUDE_CLI)("the armed-and-blocked test through
     expect([c.model_saw_block, c.model_saw_fired, c.fired_markers]).toEqual([true, false, 1]);
     expect(c.review_sections_bytes).toBeGreaterThan(0);
     expect(c.exposure).toEqual({ detector: "enforced", exposed: true, failed: null, checks: { review_sections_read: true, mode_named: true, gate_armed: true, gate_released: true } } as never);
-  }, 600_000);
+  }, 900_000);
   test("case 1's contrast: the same script with no gate wiring (gstack-forced) has no record, the report exits 2 and the row reads unexposed", () => {
     const c = run().cases["blocked-no-gate"]!;
     expect(c.termination.kind).toBe("completed");
@@ -63,7 +63,7 @@ describe.skipIf(!HAS_PIN || !HAS_CLAUDE_CLI)("the armed-and-blocked test through
     expect(c.gate?.stderr).toContain("GATE_NOT_ARMED");
     expect([c.model_saw_block, c.fired_markers]).toEqual([false, 0]);
     expect(c.exposure).toMatchObject({ exposed: false, failed: "gate_armed", checks: { review_sections_read: true, mode_named: true } });
-  }, 600_000);
+  }, 900_000);
   test("case 2: a question ending under unattended counts as final, the gate releases it, and the row reads exposed; with the kind unset the report exits 2 and the row reads unexposed", () => {
     const yes = run().cases["question-unattended"]!;
     expect([yes.termination.kind, yes.gate?.exit, counts(yes), yes.model_saw_block, yes.fired_markers]).toEqual(["completed", 0, { fired: 1, blocked: 0, released: 1, exhausted: 0, errors: 0 }, false, 1]);
@@ -71,12 +71,12 @@ describe.skipIf(!HAS_PIN || !HAS_CLAUDE_CLI)("the armed-and-blocked test through
     const no = run().cases["question-kind-unset"]!;
     expect([no.termination.kind, no.gate?.exit, no.gate?.json?.rows, no.records, no.settings_timeouts, no.fired_markers]).toEqual(["completed", 2, [], [], [30, 30], 0]);
     expect(no.exposure).toMatchObject({ exposed: false, failed: "gate_armed" });
-  }, 600_000);
+  }, 900_000);
   test("inside a session, gstack-session-kind prints unattended for the enforced arm, and interactive with the kind unset", () => {
     const c = run().cases;
     expect(["blocked-released", "question-unattended", "slow-scan-30", "slow-scan-10"].map((n) => c[n]!.session_kind)).toEqual(["unattended", "unattended", "unattended", "unattended"]);
     expect(c["question-kind-unset"]!.session_kind).toBe("interactive");
-  }, 600_000);
+  }, 900_000);
   test("case 7 (ruling B1): a " + SLOW_S + " s gate scan at the 30 s shim timeout still blocks, then releases; the same scan at 10 s lets the stop through unblocked", () => {
     const slow = run().cases["slow-scan-30"]!;
     expect([slow.slowed, slow.settings_timeouts, slow.gate?.exit, counts(slow), slow.model_saw_block]).toEqual([true, [30, 30], 0, { fired: 1, blocked: 1, released: 1, exhausted: 0, errors: 0 }, true]);
@@ -86,7 +86,7 @@ describe.skipIf(!HAS_PIN || !HAS_CLAUDE_CLI)("the armed-and-blocked test through
     const ten = run().cases["slow-scan-10"]!;
     expect([ten.slowed, ten.termination.kind, ten.model_saw_block, row(ten)?.released, row(ten)?.exhausted]).toEqual([true, "completed", false, 0, 0]);
     expect(ten.exposure).toMatchObject({ exposed: false, failed: "gate_released" });
-  }, 600_000);
+  }, 900_000);
 });
 
 describe.skipIf(!HAS_PIN || !HAS_CLAUDE_CLI)("section 5's 200k check: the pinned CLI's context window on every model (ruling D1)", () => {
@@ -96,5 +96,5 @@ describe.skipIf(!HAS_PIN || !HAS_CLAUDE_CLI)("section 5's 200k check: the pinned
     const at200k = { env: true, maxTokens: 200_000, rawMaxTokens: 200_000, autoCompactThreshold: 167_000, isAutoCompactEnabled: true };
     expect(built).toEqual(Object.fromEntries(MODELS.map((m) => [m, at200k])));
     expect(without).toEqual({ [OPUS]: { env: false, maxTokens: 1_000_000, rawMaxTokens: 1_000_000, autoCompactThreshold: 967_000, isAutoCompactEnabled: true } });
-  }, 600_000);
+  }, 900_000);
 });

@@ -121,7 +121,9 @@ if (import.meta.main) {
     const h = harness(script(c, posix.dirname(install.gstack!)));
     const sandbox = (): Sandbox => {
       const base = localSandbox((home) => copyLayers(install.layers, home));
-      return { ...base, agent: (task, o) => { const a = base.agent(task, o); return { ...a, spawn: (argv, extra = {}) => a.spawn(settingsArg(argv, seen, c.hookTimeoutS), { ...extra, ...(shimDir ? { PATH: shimDir + ":" + (process.env.PATH ?? "") } : {}) }) }; } };
+      // The trial image keeps bun on the session PATH (/usr/local/bin); here the running bun's own dir stands in for it, so the
+      // session's exec (gstack-skill-gates settings) finds bun on a host that keeps it elsewhere, as CI's runner does.
+      return { ...base, agent: (task, o) => { const a = base.agent(task, { ...o, env: { ...o.env, PATH: dirname(process.execPath) + ":" + (o.env.PATH ?? "") } }); return { ...a, spawn: (argv, extra = {}) => a.spawn(settingsArg(argv, seen, c.hookTimeoutS), { ...extra, ...(shimDir ? { PATH: shimDir + ":" + (process.env.PATH ?? "") } : {}) }) }; } };
     };
     const rig: HostRig = {
       baseUrl: h.baseUrl, network: null, imageDigest: null,
