@@ -1,0 +1,270 @@
+#!/usr/bin/env bash
+# GEVA-362: the CEO outcome eval's smoke pin dry run (the stage 2 amendment, 2026-11-06-geva-345, section 9 step 3).
+# Keyless: the model and Ubicloud keys are unset, nothing is spent and no VM starts. It exports the build commit with
+# git archive outside any work tree and drives, at that commit:
+#   P  the pins: the build commit and tree, the frozen files, the exposure digest and parser the rows bind, the forced
+#      line, the enforced arm's gate settings and the 200,000-token window, the OpenRouter routes and the price table;
+#   U  the part 2 pin post's public smoke unit, built by its merged mkunits.ts.txt;
+#   D  review-units --dry-run for the six smoke rerun items' commands on the public unit, with the fresh-sink preflight;
+#   T  the trip check on the six items' allowances and the in-flight threshold, at the stage 2 amendment's inputs;
+#   L  one ledger lease opened and settled per smoke item on a temporary ledger, and a second run refused;
+#   A  the pre-smoke all-in check on crew actuals as of writing, through the stage 2 scorer's allin;
+#   O  OpenRouter's public endpoints and data policy feeds, read keyless.
+# usage: bash dryrun.sh.txt <build commit> <gstack-evals clone>
+set -u
+[ $# = 2 ] || { echo "usage: bash dryrun.sh.txt <build commit> <gstack-evals clone>" >&2; exit 2; }
+C=$1; REPO=$2
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY GSTACK_EVALS_EPHEMERAL GSTACK_EVALS_RECEIPTS
+T=$(mktemp -d "$HOME/.ceo-smoke-pin-dry-XXXXXX")
+trap 'rm -rf "$T"' EXIT
+pass=0; fail=0
+say() { echo "$*" | sed "s#$T#\$T#g; s#$HOME#~#g" | tee -a "$T/out.txt"; }
+check() { if [ "$2" = 1 ]; then pass=$((pass + 1)); say "PASS $1"; else fail=$((fail + 1)); say "FAIL $1"; fi; }
+is() { [ "$1" = "$2" ] && echo 1 || echo 0; }
+h() { sha256sum "$1" | cut -d' ' -f1; }
+B=$T/build
+mkdir -p "$B" && git -C "$REPO" archive "$C" | tar -x -C "$B" && (cd "$B" && bun install --frozen-lockfile >/dev/null 2>&1)
+cd "$B"
+GE="bun bin/gstack-evals"
+W=wiki/plans
+SC=$W/2026-11-06-geva-348-ceo-scorer-stage-2
+P2=$W/2026-11-06-geva-338-ceo-pin-part-2
+
+say "## P. Pins"
+TREE=$(git -C "$REPO" rev-parse "$C^{tree}")
+check "build commit $C exports tree $TREE" "$(is "$TREE" 5ba405f13f82a6111e74a5851d9d7008b0e68e29)"
+pin() { check "$3 sha256 $(h "$1")" "$(is "$(h "$1")" "$2")"; }
+pin $SC/ceo-rule.ts.txt 31a56dd12b531f1cd1f26519921cc2731e7d7ea2b6e215e117d220c7b0c9573a "scorer ceo-rule.ts.txt (stage 2 scorer post)"
+pin $W/2026-11-06-geva-345-ceo-stage-2-amendment/stage2-sizing.txt d9edc0e4a5f6f621a79621b06b81fe03571c0000dff7df5b48b00cce90e24c68 "stage2-sizing.txt (stage 2 amendment), the grid compare reads"
+pin $W/2026-11-04-geva-285-ceo-outcome-prereg/template.txt b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862 "template.txt (prereg)"
+pin $W/2026-11-05-geva-295-ceo-ladder-amendment/judge-brief.md d7b3dce1498e01e874f1dae024ac90e79e5ff5e3af12cc5ed37e2f8a48a14fb5 "judge-brief.md (ladder amendment)"
+pin $W/2026-11-05-geva-295-ceo-ladder-amendment/stock-list.txt 9ecbc78e696836bd11c3e89df1cc1cb0b0e28940b92e7dd3a96846224e47fe3c "stock-list.txt (ladder amendment)"
+pin $P2/suite-stub.json f0ca2aa36c6d27b29295f729523b74b01d08a13deba1fd771294d9d1a0019fcc "suite-stub.json (part 2 pin post), the stub of the suite the smoke rerun runs"
+pin $P2/mkunits.ts.txt b4cc64e30721700e70e2b972efeee4e448dc02516dc13e9f89726e6afe8eee04 "mkunits.ts.txt (part 2 pin post), which builds the public unit in section U"
+cat > "$B/.pins.ts" <<'EOF'
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { CEO_EXPOSURE_SHA256 } from "./src/trial/review/ceo-exposure.ts";
+import { CEO_PARSER_SHA256, CEO_TEMPLATE_SHA256, FORCED_LINE } from "./src/trial/review/ceo-outcome.ts";
+import { ENFORCED_ARM, ENFORCED_GSTACK_SHA, GATE_CONFIG, GATE_KEY } from "./src/trial/review/skill-gates.ts";
+import { CEO_CONTEXT_ENV } from "./src/trial/review/ceo-arms.ts";
+import { OPENROUTER_MODELS, openRouterRouting, chatPrice } from "./src/runner/pricing/prices.ts";
+import { DEFAULT_MAX_OUTPUT_TOKENS } from "./src/runner/proxy/metering-proxy.ts";
+const sha = (t: string | Buffer) => createHash("sha256").update(t).digest("hex");
+const forcedFile = readFileSync("wiki/plans/2026-11-01-geva-115-planning-ceo-v2-admission-prereg/forced-line.txt", "utf8").replace(/\n$/, "");
+console.log(JSON.stringify({ exposure: CEO_EXPOSURE_SHA256, exposure_file: sha(readFileSync("src/trial/review/ceo-exposure.ts")), template: CEO_TEMPLATE_SHA256, parser: CEO_PARSER_SHA256, parser_file: sha(readFileSync("src/trial/review/ceo-outcome.ts")), forced_equal: forcedFile === FORCED_LINE, enforced: ENFORCED_ARM + "@" + ENFORCED_GSTACK_SHA, gate_config: JSON.stringify(GATE_CONFIG), gate_key: JSON.stringify(GATE_KEY), context_env: JSON.stringify(CEO_CONTEXT_ENV), max_out: DEFAULT_MAX_OUTPUT_TOKENS }));
+for (const m of ["openai/gpt-6.1-sol", "particle-ai/particle-1"]) { const r = openRouterRouting(OPENROUTER_MODELS[m]!); console.log("ROUTE " + m + " " + JSON.stringify(r) + " sha256 " + sha(JSON.stringify(r))); }
+for (const k of ["anthropic:claude-opus-5-5", "anthropic:claude-sonnet-5-5", "openai:gpt-6.1-sol", "openrouter:openai/gpt-6.1-sol", "openrouter:particle-ai/particle-1"]) { const p = chatPrice(k)!; console.log("PRICE " + k + " " + [p.input, p.output, p.cache_read ?? "-", p.cache_write ?? "-"].join("/") + (p.long ? " long " + [p.long.input, p.long.output, p.long.cache_read ?? "-", p.long.cache_write ?? "-"].join("/") + " above " + p.long.above_input_tokens : "")); }
+EOF
+P=$(bun "$B/.pins.ts")
+J=$(echo "$P" | head -1)
+jq_() { echo "$J" | python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
+check "exposure digest CEO_EXPOSURE_SHA256 $(jq_ exposure) equals ceo-exposure.ts's own sha256; it is no longer c0498fa065cb..., the digest the CEO pin post and part 2 pinned at 715c659" "$( [ "$(jq_ exposure)" = 006529475723657f1823d7be18997b865c43e4d9d89b93d0aa956ee2f4f1e5a2 ] && [ "$(jq_ exposure)" = "$(jq_ exposure_file)" ] && echo 1 || echo 0)"
+check "parser CEO_PARSER_SHA256 $(jq_ parser) equals ceo-outcome.ts's own sha256, as at 715c659; template CEO_TEMPLATE_SHA256 $(jq_ template)" "$( [ "$(jq_ parser)" = 8d1826c539a636d03a67d35073175c1dcaa34ee325d8f36226308a9aa7c851d8 ] && [ "$(jq_ parser)" = "$(jq_ parser_file)" ] && [ "$(jq_ template)" = b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862 ] && echo 1 || echo 0)"
+check "FORCED_LINE equals CEO v2's forced-line.txt (sha256 d4f56ad4...) byte for byte" "$( [ "$(jq_ forced_equal)" = True ] && [ "$(h wiki/plans/2026-11-01-geva-115-planning-ceo-v2-admission-prereg/forced-line.txt)" = d4f56ad49c82e6b8ca9a2ec05b24a641c45e9d158e11c9de65420008b66d4e43 ] && echo 1 || echo 0)"
+check "enforced arm $(jq_ enforced); gstack config $(jq_ gate_config); session key GATE_KEY $(jq_ gate_key) (deviation B1: 30 s on the two ceo-review shims, where gstack at the pin prints 10)" "$( [ "$(jq_ enforced)" = gstack-enforced@4743132ca027d487fb02bb5f8ce94f2816ff8e7c ] && [ "$(jq_ gate_config)" = '{"ceo_review_gate":"on"}' ] && [ "$(jq_ gate_key)" = '{"settings":"gstack-skill-gates settings --ceo-review","hook_timeout_s":30,"deadline_ms":20000}' ] && echo 1 || echo 0)"
+check "every ceo-outcome arm's context env is $(jq_ context_env) (deviation D1: a 200,000-token window)" "$(is "$(jq_ context_env)" '{"CLAUDE_CODE_DISABLE_1M_CONTEXT":"1"}')"
+echo "$P" | grep '^ROUTE' | while read -r line; do say "    $line"; done
+check "both OpenRouter routes are byte for byte the part 2 pin post's (sha256 a1d75751... and 3f811be6...): data_collection deny, one pinned provider, no fallback" "$( echo "$P" | grep -q 'sha256 a1d757518f019a46e77ccacdbdfc1c3f53d8aaf91fd15811a07c6f07505fac4b$' && echo "$P" | grep -q 'sha256 3f811be60bac42e0c29ab989f0c9522bb28d1f45e1da4d652f89b246afd991a0$' && echo 1 || echo 0)"
+echo "$P" | grep '^PRICE' | while read -r line; do say "    $line"; done
+check "the price table at the build commit equals the part 2 pin post's, in dollars per million tokens (input/output/cache read/cache write): Opus 4/20/0.2/5, Sonnet 2/10/0.2/2.5, Sol 2/10/0.1/2.5 and 4/15/0.2/5 past 272k prompt tokens on both routes, particle-1 0.1/1/0.003; the proxy reserves $(jq_ max_out) output tokens a call" "$( echo "$P" | grep -q 'PRICE anthropic:claude-opus-5-5 4/20/0.2/5$' && echo "$P" | grep -q 'PRICE anthropic:claude-sonnet-5-5 2/10/0.2/2.5$' && echo "$P" | grep -q 'PRICE openai:gpt-6.1-sol 2/10/0.1/2.5 long 4/15/0.2/5 above 272000' && echo "$P" | grep -q 'PRICE openrouter:openai/gpt-6.1-sol 2/10/0.1/2.5 long 4/15/0.2/5 above 272000' && echo "$P" | grep -q 'PRICE openrouter:particle-ai/particle-1 0.1/1/0.003/-$' && [ "$(jq_ max_out)" = 32768 ] && echo 1 || echo 0)"
+
+say ""
+say "## U. The public smoke unit"
+U=$T/pub
+mkdir -p "$U/in/smoke-1/context"
+cat > "$U/in/smoke-1/plan.md" <<'EOF'
+# Plan: add a hosted sync service to Driftnote
+
+## Summary
+Driftnote is a local-first, open-source note-taking app. Notes live as Markdown files in a folder the user picks, and people sync them today with whatever file sync they already use. This plan adds Driftnote Cloud: a sync service the project runs, with accounts, end-to-end encryption and a monthly fee after a free tier.
+
+## Why now
+Issues about sync conflicts are the most common bug reports this year. A sync service we control would let us fix conflicts at the source and fund the project.
+
+## What we build
+1. A sync server with accounts, devices and per-note version history.
+2. End-to-end encryption, with keys derived from the user's password.
+3. A billing page and a free tier of 1,000 notes.
+4. Sync settings in the desktop and mobile apps, on by default for new installs.
+
+## Rollout
+Ship the server and the client changes in the next minor release. Existing users see a one-time prompt to create an account.
+
+## Costs
+Hosting starts at about $400 a month. Two maintainers will run the service in their spare time.
+
+## Open questions
+- Should the free tier count notes or storage?
+- Do we keep folder sync working for people who decline an account?
+EOF
+cat > "$U/in/smoke-1/context/project.md" <<'EOF'
+# Driftnote
+
+Driftnote is an MIT-licensed note-taking app with desktop and mobile clients. Its README says it is local-first: notes are plain Markdown files in a folder the user owns, and the app never needs a network connection. Two maintainers and about forty outside contributors work on it. The roadmap lists better search, a plugin API and an accessibility pass. Recent issues include sync conflicts when two devices edit one note through third-party file sync, a request for tags, and a crash on large attachments.
+EOF
+cat > "$U/in/smoke-1/key.json" <<'EOF'
+{
+ "kind": "changed",
+ "outcome": "rejected",
+ "outcome_date": "2026-10-01",
+ "strict": "2026-09-01",
+ "category": "direction or strategy fit",
+ "role": "maintainer",
+ "D": "A hosted, account-based sync service contradicts the project's local-first promise that the app never needs a network or an account.",
+ "D2": null,
+ "match_notes": "Invented public smoke unit; never judged.",
+ "R1": "Two volunteer maintainers can't run a paid service with uptime and billing duties.",
+ "R2": null,
+ "R3": null,
+ "remedy": null,
+ "remedy_notes": null,
+ "remedy_kind": null,
+ "decoy": null,
+ "second_order": false,
+ "pointers": [
+  "invented"
+ ]
+}
+EOF
+echo smoke-1 > "$U/in/ids.txt"
+cp "$P2/mkunits.ts.txt" "$T/mkunits.ts"
+bun "$T/mkunits.ts" "$U/in" "$U/in/ids.txt" "$U/out" example/driftnote ceo-o-public-smoke 0 2026-11-06 > "$U/mk.txt"
+check "mkunits.ts builds 1 invented public unit (plan.md, context/project.md, key.json): $(head -1 "$U/mk.txt")" "$(grep -c '"units":1' "$U/mk.txt")"
+SR=$U/out/sealed; SUITE=$SR/suites/ceo-o-public-smoke.json; SRC=$U/out/source
+$GE noloss suite --check --suite "$SUITE" --sealed-root "$SR" > "$T/check.txt" 2>&1
+check "noloss suite --check passes the public suite (key.json fields and plan.md present)" "$(is $? 0)"
+
+say ""
+say "## D. review-units --dry-run, each smoke rerun item's command on the public smoke unit, with the fresh-sink preflight"
+say "Each command is the post's exact command with --suite, --sealed-root, --source and --out pointed at the public unit and --units all (the public suite holds one unit; the smoke names --units 1 2). Each runs with GSTACK_EVALS_EPHEMERAL=1 and GSTACK_EVALS_RECEIPTS naming the item's sink, as the post's commands do."
+GS=garrytan/gstack@699a41cb6808e01240d02e82247693f9170d401a
+GE4=garrytan/gstack@4743132ca027d487fb02bb5f8ce94f2816ff8e7c
+O=claude-opus-5-5; SO=openai/gpt-6.1-sol; PA=particle-ai/particle-1
+SINK=$T/sink
+COMMON="--suite $SUITE --sealed-root $SR --plan ceo-outcome --units all --parallel 3 --timeout 3600 --max-turns 150 --source example/driftnote=$SRC --base-branch example/driftnote=main"
+dry() {
+  local item=$1 cap=$2 arm=$3 spec=$4 allow=$5; shift 5
+  local before; before=$( [ ! -e "$SINK/$item" ] && echo 1 || echo 0)
+  local out; out=$(GSTACK_EVALS_EPHEMERAL=1 GSTACK_EVALS_RECEIPTS="$SINK/$item" $GE review-units $COMMON --arms "$arm=$spec" --system-prompt "$arm=claude-code-preset" --arm-session-kind "$arm=unattended" "$@" --passes 1 --item "$item" --spend-cap "$cap" --out "$T/runs/$item" --dry-run 2>&1); local c=$?
+  local after; after=$( [ ! -e "$SINK/$item" ] && echo 1 || echo 0)
+  local each; each=$(echo "$out" | sed -n 's/^worst case at the allowance: \$\([0-9.]*\);.*/\1/p')
+  local forced; forced=$(echo "$out" | grep -c "^arms: $arm (\"/plan-ceo-review Run this skill's full procedure before you answer: .*Review this plan for problems.\" on [^ ]*) system prompt claude-code-preset$")
+  local kind; kind=$(echo "$out" | grep -c "^arm session kinds: $arm unattended$")
+  local win; win=$(echo "$out" | grep -c "every arm's agent env sets CLAUDE_CODE_DISABLE_1M_CONTEXT=1")
+  local ok; ok=$(python3 -c "print(1 if $c == 0 and $before == 1 and $after == 1 and $forced == 1 and $kind == 1 and $win == 1 and abs($each - $allow) < 1e-9 and 2 * $each <= $cap + 1e-9 else 0)")
+  check "$item: sink absent before the launch ($before) and after it ($after); exit $c; arm $arm=$spec with the forced line and system prompt claude-code-preset ($forced); arm session kind $arm unattended ($kind); the 200,000-token window line ($win); allowance \$$each a session; one round of 2 at the allowance \$$(python3 -c "print(f'{2 * $each:.2f}')") fits the \$$cap cap" "$ok"
+  echo "$out" > "$T/dry-$item.txt"
+}
+dry ceo-o-sm2-opus-e 15 gstack-enforced $GE4 7.04 --models $O
+dry ceo-o-sm2-opus-p 15 gstack-forced $GS 7.04 --models $O
+dry ceo-o-sm2-sol-e 20 gstack-enforced $GE4 10 --models $SO --allowance 10
+dry ceo-o-sm2-sol-p 20 gstack-forced $GS 10 --models $SO --allowance 10
+dry ceo-o-sm2-particle-e 1 gstack-enforced $GE4 0.5 --models $PA --allowance 0.5
+dry ceo-o-sm2-particle-p 1 gstack-forced $GS 0.5 --models $PA --allowance 0.5
+bare=$($GE review-units $COMMON --arms gstack-enforced=$GE4 --system-prompt gstack-enforced=claude-code-preset --models $O --passes 1 --item ceo-o-sm2-opus-e --spend-cap 15 --out "$T/runs/bare" --dry-run 2>&1)
+check "without --arm-session-kind the same command lists no arm session kind and prints 'session kind not set', so the flag is what makes the gstack arm unattended" "$( echo "$bare" | grep -q '^arm session kinds:' && echo 0 || (echo "$bare" | grep -q 'session kind not set' && echo 1 || echo 0))"
+
+say ""
+say "## T. The trip check and the in-flight threshold, at the stage 2 amendment's inputs"
+say "One call's worst case as the proxy reserves it (prices.ts reservationMicros, the formula projection's trip check uses): request bytes as input tokens at the most bytes per token stage 1's smoke journals saw (Opus 2.83, Sol 5.67, particle-1 5.09), plus the request overhead and tool-use tokens, plus DEFAULT_MAX_OUTPUT_TOKENS of output. Committed spend is twice the largest planning session (section 5): Opus \$2.00, Sol \$3.00, particle-1 \$0.20."
+cat > "$B/.trip.ts" <<'EOF'
+import { chatPrice, reservationMicros, REQUEST_OVERHEAD_TOKENS, TOOL_USE_SYSTEM_TOKENS } from "./src/runner/pricing/prices.ts";
+import { DEFAULT_MAX_OUTPUT_TOKENS } from "./src/runner/proxy/metering-proxy.ts";
+type M = "opus" | "sol" | "particle";
+const ROUTE: Record<M, [string, string]> = { opus: ["anthropic", "claude-opus-5-5"], sol: ["openrouter", "openai/gpt-6.1-sol"], particle: ["openrouter", "particle-ai/particle-1"] };
+const BPT: Record<M, number> = { opus: 2.83, sol: 5.67, particle: 5.09 };
+const worst = (m: M, prompt: number, cache: "5m" | "1h") => { const [provider, model] = ROUTE[m]; const price = chatPrice(provider + ":" + model)!; return reservationMicros({ provider: provider as any, model, format: provider === "anthropic" ? "anthropic" : "openai", ...price, cacheWrite: cache, inputTokens: Math.ceil(BPT[m] * prompt) + REQUEST_OVERHEAD_TOKENS + TOOL_USE_SYSTEM_TOKENS, maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS }); };
+const trip = (m: M, allow: number, committed: number, cache: "5m" | "1h") => { const cap = Math.round(allow * 1e6), c = Math.round(committed * 1e6); const fits = (p: number) => c + worst(m, p, cache) <= cap; let lo = 0, hi = 100_000_000; if (!fits(0)) hi = 0; else while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (fits(mid)) lo = mid; else hi = mid; } return { at: Math.floor(hi / 1000), holds: fits(200_000) }; };
+const items: [string, M, number, number][] = [["ceo-o-sm2-opus-e", "opus", 7.04, 2], ["ceo-o-sm2-opus-p", "opus", 7.04, 2], ["ceo-o-sm2-sol-e", "sol", 10, 3], ["ceo-o-sm2-sol-p", "sol", 10, 3], ["ceo-o-sm2-particle-e", "particle", 0.5, 0.2], ["ceo-o-sm2-particle-p", "particle", 0.5, 0.2]];
+for (const cache of ["5m", "1h"] as const) for (const [item, m, allow, committed] of items) { const t = trip(m, allow, committed, cache); console.log("TRIP " + item + " " + cache + " " + (worst(m, 200_000, cache) / 1e6).toFixed(3) + " " + t.at + " " + (t.holds ? "holds" : "TRIPS")); }
+for (const cache of ["5m", "1h"] as const) for (const m of ["opus", "sol", "particle"] as M[]) console.log("HOLD " + m + " " + cache + " " + (worst(m, 200_000, cache) / 1e6).toFixed(3));
+console.log("STAGE1 " + trip("sol", 3.52, 0.6, "5m").at);
+EOF
+TR=$(bun "$B/.trip.ts")
+echo "$TR" | grep '^TRIP' | while read -r _ it cache w at hold; do say "    $it, cache write $cache: one call's worst case at 200,000 prompt tokens \$$w; trips at $at""k prompt tokens -> $hold"; done
+check "at 5-minute cache writes every smoke item's allowance holds one call at 200,000 prompt tokens on top of twice its planning session, as the scorer post's table reads: Opus \$3.491 tripping at 309k, Sol \$6.167 at 229k, particle-1 \$0.135 at 524k" "$( echo "$TR" | grep -c -E '^TRIP ceo-o-sm2-(opus-[ep] 5m 3\.491 309|sol-[ep] 5m 6\.167 229|particle-[ep] 5m 0\.135 524) holds$' | grep -q '^6$' && echo 1 || echo 0)"
+check "at 1-hour cache writes Opus's worst case at 200k reads \$5.19 (the scorer post's figure), so a measured 1-hour mode raises Opus's allowance under section 5's rule before caps are recorded" "$( echo "$TR" | grep -q '^HOLD opus 1h 5\.19[0-9]$' && echo 1 || echo 0)"
+check "stage 1's Sol flag (--allowance 3.52 with \$0.60 committed) trips at $(echo "$TR" | sed -n 's/^STAGE1 //p')k, the two stage 1 stops after calls at 86,350 and 86,391 prompt tokens" "$(is "$(echo "$TR" | sed -n 's/^STAGE1 //p')" 85)"
+echo "$TR" | grep '^HOLD' | while read -r _ m cache w; do say "    in-flight threshold, $m at cache write $cache: \$$w (one call's worst case at 200,000 prompt tokens)"; done
+
+say ""
+say "## L. Ledger: one lease opened and settled per smoke rerun item, on a temporary ledger"
+LD=$T/ledger; mkdir -p "$LD"; printf '#!/bin/sh\nexit 0\n' > "$LD/approvals-stub"; chmod +x "$LD/approvals-stub"
+export GSTACK_EVALS_LEDGER=$LD/local.sqlite GSTACK_EVALS_LEDGER_RECORD=$LD/record GSTACK_EVALS_APPROVALS_BIN=$LD/approvals-stub
+say "A temporary approval record and local ledger; the approvals mirror is a stub. Each item is recorded with ledger init at section 8's cap (--admission warn, as the earlier CEO runs), leased with ledger lease (a run item at --amount its cap, as review-units leases it), charged \$4.00 on Opus, \$6.00 on Sol and \$0.40 on particle-1 (two sessions at twice the largest planning session) through the local ledger's reserve and settle (the path the metering proxy uses), and closed with ledger settle."
+cat > "$B/.spend.ts" <<'EOF'
+import { openLocalLedger } from "./src/runner/ledger/local.ts";
+import { ledgerPath } from "./src/runner/ledger/paths.ts";
+const [lease, run, model, usd] = process.argv.slice(2) as [string, string, string, string];
+const local = openLocalLedger(ledgerPath(undefined, process.env));
+const micros = Math.round(Number(usd) * 1e6);
+const rv = await local.reserve({ idempotency_key: "dry-" + lease, lease_id: lease, cell: { run_id: run, arm: "gstack-enforced", task: "synthetic", model, trial: 1, attempt: 1, meter_id: "dry-" + lease }, max_micros: micros });
+await local.settle(rv.reservation.reservation_id, { kind: "spent", spent_micros: micros, usage: { input: 1000, output: 100, reasoning: 0, cache_read: 0, cache_write: 0 } });
+EOF
+WORDS="Smoke rerun item caps: dry run only, no cap is recorded by this script."
+SRCREF="the smoke pin post's dry run; dry run only"
+settled=0; caps=0
+item() {
+  local it=$1 cap=$2 model=$3 spend=$4
+  $GE ledger init --item "$it" --cap "$cap" --admission warn --words "$WORDS" --by GSTA-2 --source "$SRCREF" > "$T/l-$it-init.txt" 2>&1; local ci=$?
+  local run="dry-$it-$RANDOM"
+  local lo; lo=$($GE ledger lease --item "$it" --run "$run" --amount "$cap" --json 2>/dev/null); local cl=$?
+  local lid; lid=$(echo "$lo" | python3 -c "import json,sys; print(json.load(sys.stdin).get('lease_id',''))" 2>/dev/null)
+  bun "$B/.spend.ts" "$lid" "$run" "$model" "$spend" > /dev/null 2>&1; local cs=$?
+  $GE ledger settle --lease "$lid" > "$T/l-$it-settle.txt" 2>&1; local ct=$?
+  local st; st=$($GE ledger status --item "$it" --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); d=d[0] if isinstance(d,list) else d; d=d.get('items',[d])[0] if 'items' in d else d; print(d.get('committed_micros',-1), d.get('leases',-1), d.get('open_lease') is None or d.get('open_lease') is False, d.get('run_id',''))" 2>/dev/null)
+  local again; again=$($GE ledger lease --item "$it" --run "dry-$it-second" --amount "$cap" 2>&1 | grep -o 'E_[A-Z_]*' | head -1)
+  local committed; committed=$(echo "$st" | cut -d' ' -f1)
+  check "$it: init at \$$cap (exit $ci), lease (exit $cl), spend \$$spend (exit $cs), settle (exit $ct); status committed \$$(python3 -c "print(f'{$committed/1e6:.2f}')"), leases $(echo "$st" | cut -d' ' -f2), none open, bound to its run; a second run refuses with $again" "$( [ $ci = 0 ] && [ $cl = 0 ] && [ $cs = 0 ] && [ $ct = 0 ] && [ "$committed" = "$(python3 -c "print(round($spend*1e6))")" ] && [ "$(echo "$st" | cut -d' ' -f2)" = 1 ] && [ "$(echo "$st" | cut -d' ' -f3)" = True ] && [ "$(echo "$st" | cut -d' ' -f4)" = "$run" ] && [ "$again" = E_ITEM_BOUND ] && echo 1 || echo 0)"
+  settled=$(python3 -c "print(f'{$settled + $spend:.2f}')"); caps=$(python3 -c "print(f'{$caps + $cap:.2f}')")
+}
+item ceo-o-sm2-opus-e 15 $O 4
+item ceo-o-sm2-opus-p 15 $O 4
+item ceo-o-sm2-sol-e 20 $SO 6
+item ceo-o-sm2-sol-p 20 $SO 6
+item ceo-o-sm2-particle-e 1 $PA 0.4
+item ceo-o-sm2-particle-p 1 $PA 0.4
+check "the six caps sum to \$$caps, the all-in table's smoke rerun line; the items settled \$$settled in this dry run" "$(is "$caps" 72.00)"
+
+say ""
+say "## A. The pre-smoke all-in check on crew actuals as of writing (2026-11-06T18:11:19Z)"
+say "crew_spent is the 24 CEO crew threads' platform counters at about \$1 per 1,000 credits, this thread's at the reading; crew_rest is this thread's tokens left to its 75M stop and the four crew lines still to come, at the table's \$0.40 per million tokens. Every other line is the stage 2 amendment's table (section 7.2), with stage 1's runner host in runner_hosts as the scorer post carries it."
+cat > "$T/allin.json" <<'EOF'
+{ "lines": { "crew_spent": 603.86, "crew_rest": 150.5, "crew_reserve": 30, "stage1_settled": 17.6, "smoke_caps": 72, "authoring": 275.93, "runner_hosts": 12.93, "run_caps": { "ceo-o-cmp-opus-p": 199, "ceo-o-cmp-opus-e": 203, "ceo-o-cmp-sol-p": 152, "ceo-o-cmp-sol-e": 186, "ceo-o-cmp-particle-p": 10, "ceo-o-cmp-particle-e": 12 }, "judges": 70 } }
+EOF
+cp $SC/ceo-rule.ts.txt "$T/ceo-rule.ts"
+AL=$(GSTACK_EVALS_SCORER=$B bun "$T/ceo-rule.ts" allin "$T/allin.json" 2>&1); ac=$?
+echo "$AL" | while read -r line; do say "    $line"; done
+check "allin exits $ac and passes at \$1994.82: $(echo "$AL" | grep '^All-in:')" "$( [ $ac = 0 ] && echo "$AL" | grep -q '= \$1994.82$' && echo "$AL" | grep -q '^All-in: PASS' && echo 1 || echo 0)"
+
+say ""
+say "## O. OpenRouter's public feed, read keyless at $(date -u +%FT%TZ)"
+for m in openai/gpt-6.1-sol particle-ai/particle-1; do
+  curl -s "https://openrouter.ai/api/v1/models/$m/endpoints" > "$T/ep.json"
+  r=$(echo "$P" | grep "^ROUTE $m " | sed 's/^ROUTE [^ ]* \(.*\) sha256 .*/\1/')
+  n=$(python3 - "$T/ep.json" "$r" <<'EOF'
+import json, sys
+eps = json.load(open(sys.argv[1]))["data"]["endpoints"]
+route = json.loads(sys.argv[2])
+slug = {"OpenAI": "openai", "Particle AI": "particle-ai"}
+keep = [e for e in eps if slug.get(e["provider_name"]) in route["only"] and float(e["pricing"]["prompt"]) * 1e6 <= route["max_price"]["prompt"] + 1e-9 and float(e["pricing"]["completion"]) * 1e6 <= route["max_price"]["completion"] + 1e-9 and e["status"] == 0]
+print(str(len(keep)) + " of " + str(len(eps)) + " endpoints: " + ", ".join(e["tag"] for e in keep))
+EOF
+)
+  check "$m: $n serve inside the route's only and max_price" "$( [ "$(echo "$n" | cut -d' ' -f1)" -ge 1 ] 2>/dev/null && echo 1 || echo 0)"
+done
+curl -s https://openrouter.ai/api/frontend/v1/all-providers > "$T/prov.json"
+for p in openai particle-ai; do
+  row=$(python3 -c "import json; d=[x for x in json.load(open('$T/prov.json'))['data'] if x['slug']=='$p'][0]['dataPolicy']; print(json.dumps({k: d[k] for k in ('training','trainingOpenRouter','retainsPrompts','retentionDays','canPublish','safetyRetention') if k in d}))")
+  say "    OpenRouter data policy feed, $p: $row"
+  check "$p: OpenRouter's data policy feed (api/frontend/v1/all-providers, the source of its provider-logging page) records no training on prompts and no publishing, so data_collection deny keeps it" "$(echo "$row" | grep -c '"training": false, "trainingOpenRouter": false.*"canPublish": false')"
+done
+
+say ""
+say "## Leak check"
+check "the transcript holds no home path, no work dir path and no key-like string" "$( grep -qE "sk-[A-Za-z0-9_-]{12,}|$HOME|/home/" "$T/out.txt" && echo 0 || echo 1)"
+say ""
+say "PASS $pass, FAIL $fail"
+[ $fail = 0 ] && say "DRYRUN: ok" || say "DRYRUN: fail"
+[ $fail = 0 ]

@@ -1,0 +1,92 @@
+## P. Pins
+PASS build commit 2ef58339524591c50a3c4bdfd79b7ea2218ca5b8 exports tree 5ba405f13f82a6111e74a5851d9d7008b0e68e29
+PASS scorer ceo-rule.ts.txt (stage 2 scorer post) sha256 31a56dd12b531f1cd1f26519921cc2731e7d7ea2b6e215e117d220c7b0c9573a
+PASS stage2-sizing.txt (stage 2 amendment), the grid compare reads sha256 d9edc0e4a5f6f621a79621b06b81fe03571c0000dff7df5b48b00cce90e24c68
+PASS template.txt (prereg) sha256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862
+PASS judge-brief.md (ladder amendment) sha256 d7b3dce1498e01e874f1dae024ac90e79e5ff5e3af12cc5ed37e2f8a48a14fb5
+PASS stock-list.txt (ladder amendment) sha256 9ecbc78e696836bd11c3e89df1cc1cb0b0e28940b92e7dd3a96846224e47fe3c
+PASS suite-stub.json (part 2 pin post), the stub of the suite the smoke rerun runs sha256 f0ca2aa36c6d27b29295f729523b74b01d08a13deba1fd771294d9d1a0019fcc
+PASS mkunits.ts.txt (part 2 pin post), which builds the public unit in section U sha256 b4cc64e30721700e70e2b972efeee4e448dc02516dc13e9f89726e6afe8eee04
+PASS exposure digest CEO_EXPOSURE_SHA256 006529475723657f1823d7be18997b865c43e4d9d89b93d0aa956ee2f4f1e5a2 equals ceo-exposure.ts's own sha256; it is no longer c0498fa065cb..., the digest the CEO pin post and part 2 pinned at 715c659
+PASS parser CEO_PARSER_SHA256 8d1826c539a636d03a67d35073175c1dcaa34ee325d8f36226308a9aa7c851d8 equals ceo-outcome.ts's own sha256, as at 715c659; template CEO_TEMPLATE_SHA256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862
+PASS FORCED_LINE equals CEO v2's forced-line.txt (sha256 d4f56ad4...) byte for byte
+PASS enforced arm gstack-enforced@4743132ca027d487fb02bb5f8ce94f2816ff8e7c; gstack config {"ceo_review_gate":"on"}; session key GATE_KEY {"settings":"gstack-skill-gates settings --ceo-review","hook_timeout_s":30,"deadline_ms":20000} (deviation B1: 30 s on the two ceo-review shims, where gstack at the pin prints 10)
+PASS every ceo-outcome arm's context env is {"CLAUDE_CODE_DISABLE_1M_CONTEXT":"1"} (deviation D1: a 200,000-token window)
+    ROUTE openai/gpt-6.1-sol {"only":["openai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":15,"request":0,"image":0}} sha256 a1d757518f019a46e77ccacdbdfc1c3f53d8aaf91fd15811a07c6f07505fac4b
+    ROUTE particle-ai/particle-1 {"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}} sha256 3f811be60bac42e0c29ab989f0c9522bb28d1f45e1da4d652f89b246afd991a0
+PASS both OpenRouter routes are byte for byte the part 2 pin post's (sha256 a1d75751... and 3f811be6...): data_collection deny, one pinned provider, no fallback
+    PRICE anthropic:claude-opus-5-5 4/20/0.2/5
+    PRICE anthropic:claude-sonnet-5-5 2/10/0.2/2.5
+    PRICE openai:gpt-6.1-sol 2/10/0.1/2.5 long 4/15/0.2/5 above 272000
+    PRICE openrouter:openai/gpt-6.1-sol 2/10/0.1/2.5 long 4/15/0.2/5 above 272000
+    PRICE openrouter:particle-ai/particle-1 0.1/1/0.003/-
+PASS the price table at the build commit equals the part 2 pin post's, in dollars per million tokens (input/output/cache read/cache write): Opus 4/20/0.2/5, Sonnet 2/10/0.2/2.5, Sol 2/10/0.1/2.5 and 4/15/0.2/5 past 272k prompt tokens on both routes, particle-1 0.1/1/0.003; the proxy reserves 32768 output tokens a call
+
+## U. The public smoke unit
+PASS mkunits.ts builds 1 invented public unit (plan.md, context/project.md, key.json): {"units":1,"base_sha256":"9f72b20f5718d5e0c0868d60629eeba3521191f2891833ad6abc0be216adc214","suite_sha256":"85633075f208388211eee167f8eb411a959b4cb6361af4037156a88ba4cbe0a5"}
+PASS noloss suite --check passes the public suite (key.json fields and plan.md present)
+
+## D. review-units --dry-run, each smoke rerun item's command on the public smoke unit, with the fresh-sink preflight
+Each command is the post's exact command with --suite, --sealed-root, --source and --out pointed at the public unit and --units all (the public suite holds one unit; the smoke names --units 1 2). Each runs with GSTACK_EVALS_EPHEMERAL=1 and GSTACK_EVALS_RECEIPTS naming the item's sink, as the post's commands do.
+PASS ceo-o-sm2-opus-e: sink absent before the launch (1) and after it (1); exit 0; arm gstack-enforced=garrytan/gstack@4743132ca027d487fb02bb5f8ce94f2816ff8e7c with the forced line and system prompt claude-code-preset (1); arm session kind gstack-enforced unattended (1); the 200,000-token window line (1); allowance $7.04 a session; one round of 2 at the allowance $14.08 fits the $15 cap
+PASS ceo-o-sm2-opus-p: sink absent before the launch (1) and after it (1); exit 0; arm gstack-forced=garrytan/gstack@699a41cb6808e01240d02e82247693f9170d401a with the forced line and system prompt claude-code-preset (1); arm session kind gstack-forced unattended (1); the 200,000-token window line (1); allowance $7.04 a session; one round of 2 at the allowance $14.08 fits the $15 cap
+PASS ceo-o-sm2-sol-e: sink absent before the launch (1) and after it (1); exit 0; arm gstack-enforced=garrytan/gstack@4743132ca027d487fb02bb5f8ce94f2816ff8e7c with the forced line and system prompt claude-code-preset (1); arm session kind gstack-enforced unattended (1); the 200,000-token window line (1); allowance $10.00 a session; one round of 2 at the allowance $20.00 fits the $20 cap
+PASS ceo-o-sm2-sol-p: sink absent before the launch (1) and after it (1); exit 0; arm gstack-forced=garrytan/gstack@699a41cb6808e01240d02e82247693f9170d401a with the forced line and system prompt claude-code-preset (1); arm session kind gstack-forced unattended (1); the 200,000-token window line (1); allowance $10.00 a session; one round of 2 at the allowance $20.00 fits the $20 cap
+PASS ceo-o-sm2-particle-e: sink absent before the launch (1) and after it (1); exit 0; arm gstack-enforced=garrytan/gstack@4743132ca027d487fb02bb5f8ce94f2816ff8e7c with the forced line and system prompt claude-code-preset (1); arm session kind gstack-enforced unattended (1); the 200,000-token window line (1); allowance $0.50 a session; one round of 2 at the allowance $1.00 fits the $1 cap
+PASS ceo-o-sm2-particle-p: sink absent before the launch (1) and after it (1); exit 0; arm gstack-forced=garrytan/gstack@699a41cb6808e01240d02e82247693f9170d401a with the forced line and system prompt claude-code-preset (1); arm session kind gstack-forced unattended (1); the 200,000-token window line (1); allowance $0.50 a session; one round of 2 at the allowance $1.00 fits the $1 cap
+PASS without --arm-session-kind the same command lists no arm session kind and prints 'session kind not set', so the flag is what makes the gstack arm unattended
+
+## T. The trip check and the in-flight threshold, at the stage 2 amendment's inputs
+One call's worst case as the proxy reserves it (prices.ts reservationMicros, the formula projection's trip check uses): request bytes as input tokens at the most bytes per token stage 1's smoke journals saw (Opus 2.83, Sol 5.67, particle-1 5.09), plus the request overhead and tool-use tokens, plus DEFAULT_MAX_OUTPUT_TOKENS of output. Committed spend is twice the largest planning session (section 5): Opus $2.00, Sol $3.00, particle-1 $0.20.
+    ceo-o-sm2-opus-e, cache write 5m: one call's worst case at 200,000 prompt tokens $3.491; trips at 309k prompt tokens -> holds
+    ceo-o-sm2-opus-p, cache write 5m: one call's worst case at 200,000 prompt tokens $3.491; trips at 309k prompt tokens -> holds
+    ceo-o-sm2-sol-e, cache write 5m: one call's worst case at 200,000 prompt tokens $6.167; trips at 229k prompt tokens -> holds
+    ceo-o-sm2-sol-p, cache write 5m: one call's worst case at 200,000 prompt tokens $6.167; trips at 229k prompt tokens -> holds
+    ceo-o-sm2-particle-e, cache write 5m: one call's worst case at 200,000 prompt tokens $0.135; trips at 524k prompt tokens -> holds
+    ceo-o-sm2-particle-p, cache write 5m: one call's worst case at 200,000 prompt tokens $0.135; trips at 524k prompt tokens -> holds
+    ceo-o-sm2-opus-e, cache write 1h: one call's worst case at 200,000 prompt tokens $5.192; trips at 193k prompt tokens -> TRIPS
+    ceo-o-sm2-opus-p, cache write 1h: one call's worst case at 200,000 prompt tokens $5.192; trips at 193k prompt tokens -> TRIPS
+    ceo-o-sm2-sol-e, cache write 1h: one call's worst case at 200,000 prompt tokens $9.572; trips at 143k prompt tokens -> TRIPS
+    ceo-o-sm2-sol-p, cache write 1h: one call's worst case at 200,000 prompt tokens $9.572; trips at 143k prompt tokens -> TRIPS
+    ceo-o-sm2-particle-e, cache write 1h: one call's worst case at 200,000 prompt tokens $0.237; trips at 262k prompt tokens -> holds
+    ceo-o-sm2-particle-p, cache write 1h: one call's worst case at 200,000 prompt tokens $0.237; trips at 262k prompt tokens -> holds
+PASS at 5-minute cache writes every smoke item's allowance holds one call at 200,000 prompt tokens on top of twice its planning session, as the scorer post's table reads: Opus $3.491 tripping at 309k, Sol $6.167 at 229k, particle-1 $0.135 at 524k
+PASS at 1-hour cache writes Opus's worst case at 200k reads $5.19 (the scorer post's figure), so a measured 1-hour mode raises Opus's allowance under section 5's rule before caps are recorded
+PASS stage 1's Sol flag (--allowance 3.52 with $0.60 committed) trips at 85k, the two stage 1 stops after calls at 86,350 and 86,391 prompt tokens
+    in-flight threshold, opus at cache write 5m: $3.491 (one call's worst case at 200,000 prompt tokens)
+    in-flight threshold, sol at cache write 5m: $6.167 (one call's worst case at 200,000 prompt tokens)
+    in-flight threshold, particle at cache write 5m: $0.135 (one call's worst case at 200,000 prompt tokens)
+    in-flight threshold, opus at cache write 1h: $5.192 (one call's worst case at 200,000 prompt tokens)
+    in-flight threshold, sol at cache write 1h: $9.572 (one call's worst case at 200,000 prompt tokens)
+    in-flight threshold, particle at cache write 1h: $0.237 (one call's worst case at 200,000 prompt tokens)
+
+## L. Ledger: one lease opened and settled per smoke rerun item, on a temporary ledger
+A temporary approval record and local ledger; the approvals mirror is a stub. Each item is recorded with ledger init at section 8's cap (--admission warn, as the earlier CEO runs), leased with ledger lease (a run item at --amount its cap, as review-units leases it), charged $4.00 on Opus, $6.00 on Sol and $0.40 on particle-1 (two sessions at twice the largest planning session) through the local ledger's reserve and settle (the path the metering proxy uses), and closed with ledger settle.
+PASS ceo-o-sm2-opus-e: init at $15 (exit 0), lease (exit 0), spend $4 (exit 0), settle (exit 0); status committed $4.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-opus-p: init at $15 (exit 0), lease (exit 0), spend $4 (exit 0), settle (exit 0); status committed $4.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-sol-e: init at $20 (exit 0), lease (exit 0), spend $6 (exit 0), settle (exit 0); status committed $6.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-sol-p: init at $20 (exit 0), lease (exit 0), spend $6 (exit 0), settle (exit 0); status committed $6.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-particle-e: init at $1 (exit 0), lease (exit 0), spend $0.4 (exit 0), settle (exit 0); status committed $0.40, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-sm2-particle-p: init at $1 (exit 0), lease (exit 0), spend $0.4 (exit 0), settle (exit 0); status committed $0.40, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS the six caps sum to $72.00, the all-in table's smoke rerun line; the items settled $20.80 in this dry run
+
+## A. The pre-smoke all-in check on crew actuals as of writing (2026-11-06T18:11:19Z)
+crew_spent is the 24 CEO crew threads' platform counters at about $1 per 1,000 credits, this thread's at the reading; crew_rest is this thread's tokens left to its 75M stop and the four crew lines still to come, at the table's $0.40 per million tokens. Every other line is the stage 2 amendment's table (section 7.2), with stage 1's runner host in runner_hosts as the scorer post carries it.
+    All-in check (#214, on the stage 2 amendment's table): crew spent $603.86 + crew rest $150.50 + crew reserve $30.00 + stage 1 settled $17.60 + smoke rerun caps $72.00 + authoring and mining $275.93 + runner hosts $12.93 + stage 2 run caps $762.00 + stage 2 judges, one shared cap $70.00 = $1994.82
+    stage 2 run caps: ceo-o-cmp-opus-p $199.00, ceo-o-cmp-opus-e $203.00, ceo-o-cmp-sol-p $152.00, ceo-o-cmp-sol-e $186.00, ceo-o-cmp-particle-p $10.00, ceo-o-cmp-particle-e $12.00
+    All-in: PASS ($5.18 to spare)
+PASS allin exits 0 and passes at $1994.82: All-in: PASS ($5.18 to spare)
+
+## O. OpenRouter's public feed, read keyless at 2026-11-06T18:11:33Z
+PASS openai/gpt-6.1-sol: 2 of 9 endpoints: openai/flex, openai serve inside the route's only and max_price
+PASS particle-ai/particle-1: 1 of 1 endpoints: particle-ai/us serve inside the route's only and max_price
+    OpenRouter data policy feed, openai: {"training": false, "trainingOpenRouter": false, "retainsPrompts": true, "canPublish": false, "safetyRetention": false}
+PASS openai: OpenRouter's data policy feed (api/frontend/v1/all-providers, the source of its provider-logging page) records no training on prompts and no publishing, so data_collection deny keeps it
+    OpenRouter data policy feed, particle-ai: {"training": false, "trainingOpenRouter": false, "retainsPrompts": false, "canPublish": false, "safetyRetention": false}
+PASS particle-ai: OpenRouter's data policy feed (api/frontend/v1/all-providers, the source of its provider-logging page) records no training on prompts and no publishing, so data_collection deny keeps it
+
+## Leak check
+PASS the transcript holds no home path, no work dir path and no key-like string
+
+PASS 40, FAIL 0
+DRYRUN: ok
