@@ -19,6 +19,7 @@ export const SUBCOMMANDS: Record<string, { module: string; summary: string }> = 
   extract: { module: "extract.ts", summary: "list fact candidates, lists and the stratum of a history" },
   "held-step": { module: "held.ts", summary: "run a held-out step confined (only a tmpfs work dir writable, network off), then seal its files" },
   "held-unseal": { module: "held.ts", summary: "unseal held records into a tmpfs work dir, confined" },
+  split: { module: "split.ts", summary: "the seeded split: plan, next and write over the pool, with key refills; counts only" },
   keys: { module: "keys.ts", summary: "write and audit keys on tbv-author's lease" },
   drive: { module: "drive.ts", summary: "run an item's readings through the metering proxy on its lease" },
   packets: { module: "packet.ts", summary: "build blind judge packets and controls" },

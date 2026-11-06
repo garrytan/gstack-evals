@@ -196,8 +196,10 @@ export function fromGraphql(node: Record<string, any>): PrRecord | null {
   };
 }
 
-/** B0's source B query plus authoredDate and the totalCounts that tell a truncated record. */
-const QUERY = `query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){pullRequests(first:5,after:$cursor,states:[MERGED,CLOSED],orderBy:{field:CREATED_AT,direction:ASC}){
+/** B0's source B query plus authoredDate and the totalCounts that tell a truncated record, one pull request per page:
+ * at five a page, GitHub's resource limit nulled connections on a page with many check runs and answered with errors. */
+const QUERY = `query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){pullRequests(first:1,after:$cursor,states:[MERGED,CLOSED],orderBy:{field:CREATED_AT,direction:ASC}){
+ totalCount
  pageInfo{hasNextPage endCursor}
  nodes{number state title createdAt mergedAt closedAt baseRefName headRefName
   closingIssuesReferences(first:10){totalCount nodes{number}}
@@ -224,19 +226,30 @@ export async function run(argv: string[], io: Io): Promise<number> {
     const [owner, name] = (f["--repo"] ?? "garrytan/gstack-evals").split("/");
     const prs: PrRecord[] = [];
     const skipped: LineageStub[] = [];
+    const seen = new Set<number>();
+    let total: unknown = null;
     let cursor: string | null = null;
     do {
       const args: string[] = ["gh", "api", "graphql", "-f", "query=" + QUERY, "-f", "owner=" + owner, "-f", "name=" + name, ...(cursor ? ["-f", "cursor=" + cursor] : [])];
       const p: { exitCode: number; stdout: Buffer; stderr: Buffer } = Bun.spawnSync(args);
+      let body: any = null;
+      try {
+        body = JSON.parse(p.stdout.toString());
+      } catch {}
+      if (Array.isArray(body?.errors) && body.errors.length) fail("E_TBV_INPUT", "gh api graphql answered with " + body.errors.length + " errors (" + [...new Set(body.errors.map((e: any) => e?.type ?? e?.message))].join(", ") + "); mine-b keeps no partial page");
       if (p.exitCode !== 0) fail("E_TBV_INPUT", "gh api graphql failed: " + p.stderr.toString().slice(0, 300));
-      const page: any = JSON.parse(p.stdout.toString()).data.repository.pullRequests;
+      const page: any = body?.data?.repository?.pullRequests ?? fail("E_TBV_INPUT", "gh api graphql answered with no pullRequests page");
+      total = page.totalCount;
       for (const node of page.nodes) {
+        if (seen.has(node.number)) fail("E_TBV_INPUT", "pull request #" + node.number + " came back on two pages; rerun mine-b");
+        seen.add(node.number);
         const rec = fromGraphql(node);
         if (rec) prs.push(rec);
         else skipped.push(lineageOf(node));
       }
       cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
     } while (cursor);
+    if (seen.size !== total) fail("E_TBV_INPUT", "mined " + seen.size + " pull requests, but GitHub counts " + String(total) + "; rerun mine-b");
     mkdirSync(dirname(f["--out"]), { recursive: true });
     writeFileSync(f["--out"], JSON.stringify({ schema: "tbv-prs.v1", repo: owner + "/" + name, prs, skipped }) + "\n");
     io.out("mined " + prs.length + " pull requests, skipped " + skipped.length + " truncated records");
