@@ -27,7 +27,7 @@ attachments:
 
 # CEO outcome eval, stage 2 scorer: the replacement ceo-rule.ts and its keyless dry run
 
-This is the scorer post the stage 2 amendment (2026-11-06-geva-345-ceo-stage-2-amendment, Big decision 9 and section 3.5) asks the build PR to carry. It replaces ceo-rule.ts.txt and its dry run, as the stop-label amendment did. It implements the amendment's rules and adds none, apart from the one named deviation below, which belongs to the harness and not to the scorer. It spends nothing: every check here ran without keys, on invented data.
+This is the scorer post the stage 2 amendment (2026-11-06-geva-345-ceo-stage-2-amendment, Big decision 9 and section 3.5) asks the build PR to carry. It replaces ceo-rule.ts.txt and its dry run, as the stop-label amendment did. It implements the amendment's rules and adds none, apart from the two named deviations below, which belong to the harness and not to the scorer. It spends nothing: every check here ran without keys, on invented data.
 
 ## What this post replaces, and what stands
 
@@ -85,6 +85,10 @@ Every allowance still holds, and the 1-hour Opus worst case reads $5.19 against 
 ## Named deviation: the enforced arm's hook timeout
 
 The build passes gstack's printed settings JSON (gstack-skill-gates settings --ceo-review at 4743132) to the enforced arm with one change: a 30-second hook timeout on the two ceo-review shims, where gstack prints 10. The amendment's section 3.3, item 2 says nothing else in the arm's environment changes, so this post names it as a deviation. Item 3's frozen 20,000 ms gate deadline has no effect under a 10-second hook timeout, so the change is required for that item to hold. It is the only change to gstack's printed settings, and it rides the arm's provenance and session key. It touches no scorer rule.
+
+## Named deviation: a 200,000-token window on every arm
+
+Every ceo-outcome session, on every arm and every model, runs with CLAUDE_CODE_DISABLE_1M_CONTEXT=1 in its agent env. The pinned CLI (Claude Code 2.1.314, the Agent SDK's 0.3.314 binary) gives Opus 5.5 a 1,000,000-token window that compacts at 967,000. The amendment's section 5 holds one call at a 200,000-token prompt and calls 200,000 Claude Code's working context for these sessions, so an Opus session past about 310,000 prompt tokens would have ended as an allowance stop instead of compacting. With the line, the CLI's own getContextUsage() reads a 200,000-token window that compacts at 167,000 on Opus 5.5, GPT-6.1 Sol and particle-1; Sol and particle-1 read the same without it. Section 5's table and allowances stand. The line is the same on every arm, so none stays level with the gstack arms; it is the session key's env_values part and rides each arm's provenance. It touches no scorer rule. The results post names it as a limit: Claude Code's default for Opus 5.5 is the 1,000,000-token window, and this eval runs 200,000 on every arm.
 
 ## The dry run
 

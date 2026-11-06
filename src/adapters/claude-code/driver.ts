@@ -16,6 +16,8 @@
 //   the allowance as a missing cell (E_ALLOWANCE). Any other E_ALLOWANCE refusal (a route, model or price the slot does
 //   not allow) stays a missing cell either way.
 //   sessionKind unattended adds GSTACK_SESSION_KIND=unattended to the agent env; unset, the adapter sets no session kind.
+//   disable1mContext adds CLAUDE_CODE_DISABLE_1M_CONTEXT=1, so a model the CLI would give a 1,000,000-token window (Opus 5.5
+//   at Claude Code 2.1.314, compacting at 967,000) gets 200,000 and compacts at 167,000, as every other model does.
 //   skillGateDeadlineMs adds GSTACK_SKILL_GATE_DEADLINE_MS to the agent env. settings runs its command in the session's
 //   sandbox at session start, so paths it prints are the ones the session sees, and passes what make returns as the Agent
 //   SDK's settings option, written to settings.json; a command that fails, or printed text make refuses, is a missing
@@ -155,6 +157,8 @@ export interface ClaudeCodeOptions {
   sessionKind?: "unattended";
   /** GSTACK_SKILL_GATE_DEADLINE_MS for the agent env, the gstack gate hooks' own deadline; unset, the adapter sets none. */
   skillGateDeadlineMs?: number;
+  /** CLAUDE_CODE_DISABLE_1M_CONTEXT=1 for the agent env, so the CLI's window is 200,000 tokens on every model; unset, the CLI's own window. */
+  disable1mContext?: boolean;
   /** Settings printed at session start by command in the session's sandbox; make turns the printed text into the SDK's settings option, or says why it can't. */
   settings?: { command: string; make: (printed: string) => Record<string, unknown> | string };
   /** Record the turn cap and the slot's allowance as their own terminations (turn_cap, allowance_stop); unset, today's. */
@@ -178,7 +182,7 @@ type SdkMessage = Record<string, any>;
 type QueryFn = (args: { prompt: AsyncIterable<SdkMessage>; options: Record<string, unknown> }) => AsyncIterable<SdkMessage>;
 
 /** The agent env the adapter adds: proxy, bearer, model purity and host settings. Every name is on U9's agent allowlist. */
-export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind" | "skillGateDeadlineMs">): Record<string, string> {
+export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | "proxy" | "codex" | "sessionKind" | "skillGateDeadlineMs" | "disable1mContext">): Record<string, string> {
   return {
     ...(o.codex ? { OPENAI_API_KEY: o.proxy.token } : {}),
     ANTHROPIC_BASE_URL: o.proxy.baseUrl.replace(/\/+$/, "") + "/" + o.proxy.slot + "/" + o.provider,
@@ -197,6 +201,7 @@ export function claudeCodeEnv(o: Pick<ClaudeCodeOptions, "model" | "provider" | 
     DISABLE_TELEMETRY: "1",
     ...(o.sessionKind ? { GSTACK_SESSION_KIND: o.sessionKind } : {}),
     ...(o.skillGateDeadlineMs ? { GSTACK_SKILL_GATE_DEADLINE_MS: String(o.skillGateDeadlineMs) } : {}),
+    ...(o.disable1mContext ? { CLAUDE_CODE_DISABLE_1M_CONTEXT: "1" } : {}),
   };
 }
 

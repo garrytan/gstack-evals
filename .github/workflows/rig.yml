@@ -101,7 +101,24 @@ jobs:
           printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
       - name: Install (frozen lockfile)
         run: bun install --frozen-lockfile
+      - name: Fetch the enforced CEO arm's gstack at its pinned commit and check its tree
+        # tests/trial/review/ceo-enforced.test.ts and ceo-enforced-armed.test.ts run the CEO stage 2 enforced arm on this tree
+        # (src/trial/review/skill-gates.ts ENFORCED_GSTACK_SHA). This step runs nothing from the tree. The armed test installs it
+        # with its own keyless ./setup into a scratch HOME, as the keyless rig does. Without the tree both files skip, and the
+        # tier counts a skipped case as RED, so the tier never passes on them silently.
+        env:
+          ENFORCED_GSTACK_SHA: 4743132ca027d487fb02bb5f8ce94f2816ff8e7c # gstack v1.96.0.0
+          ENFORCED_GSTACK_TREE: 9340ccf599e3c6dbb550ca2cef5b24a5a36aefa3 # that commit's git tree id
+        run: |
+          git init -q "$RUNNER_TEMP/gstack-enforced"
+          git -C "$RUNNER_TEMP/gstack-enforced" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$ENFORCED_GSTACK_SHA"
+          git -C "$RUNNER_TEMP/gstack-enforced" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/gstack-enforced" rev-parse HEAD)" = "$ENFORCED_GSTACK_SHA"
+          test "$(git -C "$RUNNER_TEMP/gstack-enforced" rev-parse 'HEAD^{tree}')" = "$ENFORCED_GSTACK_TREE"
+          test -z "$(git -C "$RUNNER_TEMP/gstack-enforced" status --porcelain)"
       - name: Docker tier (stage m1b), keyless
+        env:
+          OUTCOME_GSTACK_ENFORCED_PIN: ${{ runner.temp }}/gstack-enforced
         run: bin/gstack-evals rig tier --out "$RUNNER_TEMP/rig-tier"
       - name: Keep the tier record and JUnit report
         if: always()

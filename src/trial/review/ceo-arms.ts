@@ -6,6 +6,10 @@ import { CEO_ARMS, CEO_PLAN_ARM, ceoPrompt, FORCED_LINE, type CeoArm } from "./c
 import type { PlanArm } from "./plan.ts";
 
 export type CeoRunArm = CeoArm | "gstack-enforced";
+/** Every ceo-outcome session's context window (the Captain's ruling D1): Claude Code 2.1.314 gives Opus 5.5 a 1,000,000-token
+ * window that compacts at 967,000, while section 5's trip rule holds a 200,000-token prompt; this env line gives every arm on
+ * every model 200,000, compacting at 167,000, as Sol and particle-1 already have. It is the session key's env_values part and rides arm_provenance. */
+export const CEO_CONTEXT_ENV = { CLAUDE_CODE_DISABLE_1M_CONTEXT: "1" } as const;
 export const CEO_RUN_ARMS: readonly CeoRunArm[] = [...CEO_ARMS, "gstack-enforced"];
 export const isCeoRunArm = (v: string): v is CeoRunArm => (CEO_RUN_ARMS as readonly string[]).includes(v);
 /** The plan arm each run arm runs as: its install, skill and cell. */

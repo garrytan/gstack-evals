@@ -5,11 +5,13 @@
 // real CLI is ceo-enforced-armed.test.ts.
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostDriver } from "../../../src/adapters/host.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
+import { canonical, envValuesHash } from "../../../src/trial/cache.ts";
 import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
 import { enforcedExposure } from "../../../src/trial/review/ceo-exposure.ts";
 import { runReviewUnits, type ReviewArm, type ReviewRunInput } from "../../../src/trial/review/run.ts";
@@ -181,14 +183,14 @@ async function kindsRun(kindScript: string, unattended = true) {
     stops = (await runReviewUnits(input, rig)).stops;
   } catch (e) {
     rmSync(kept, { recursive: true, force: true });
-    return { error: String(e), seen, keys: [] as { arm: string; task: string }[] };
+    return { error: String(e), seen, keys: [] as { arm: string; task: string; env_values: string }[] };
   } finally {
     h.proxy.stop();
   }
   const cells = existsSync(join(out, "cells.ndjson")) ? readFileSync(join(out, "cells.ndjson"), "utf8") : "";
   rmSync(kept, { recursive: true, force: true });
   if (!cells) return { error: "no cells: " + JSON.stringify(stops), seen, keys: [] };
-  const keys = cells.trim().split("\n").map((l) => JSON.parse(l)).map((e) => ({ arm: e.cell.arm as string, task: e.key.parts.task as string }));
+  const keys = cells.trim().split("\n").map((l) => JSON.parse(l)).map((e) => ({ arm: e.cell.arm as string, task: e.key.parts.task as string, env_values: e.key.parts.env_values as string }));
   return { error: null, seen, keys };
 }
 
@@ -205,6 +207,14 @@ describe("per-arm session kinds (ReviewArm.sessionKind)", () => {
     const [was, now] = [task(unset.keys), task(r.keys)];
     expect([now.none, now.lens]).toEqual([was.none, was.lens] as string[]);
     expect(now["gstack-forced"]).not.toBe(was["gstack-forced"]!);
+  }, 60_000);
+  test("every arm's agent env and session key carry CLAUDE_CODE_DISABLE_1M_CONTEXT=1, none and lens as much as the gstack arm (ruling D1)", async () => {
+    // Value: protects=ruling D1: every ceo-outcome session on every arm gets the 200,000-token window, in its env and its key, so no arm can drift from another; fails_when=an arm misses the env line, or its key's env_values part leaves it out; why_new=GEVA-351 D1; seam=runReviewUnits keyOf and the driver options, claudeCodeEnv; no_claim=what the CLI does with it (ceo-enforced-armed.test.ts reads that)
+    const r = await kindsRun('#!/usr/bin/env bash\ncase "${GSTACK_SESSION_KIND:-}" in unattended) echo unattended; exit 0;; esac\necho interactive\n');
+    expect(r.error).toBeNull();
+    expect(Object.fromEntries(r.seen.map((s) => [s.arm, s.env.CLAUDE_CODE_DISABLE_1M_CONTEXT ?? "unset"]))).toEqual({ none: "1", lens: "1", "gstack-forced": "1" });
+    const keyed = createHash("sha256").update(canonical(envValuesHash(["CLAUDE_CODE_DISABLE_1M_CONTEXT"], { CLAUDE_CODE_DISABLE_1M_CONTEXT: "1" }))).digest("hex");
+    expect(Object.fromEntries(r.keys.map((k) => [k.arm, k.env_values === keyed]))).toEqual({ none: true, lens: true, "gstack-forced": true });
   }, 60_000);
   test("a pin whose gstack-session-kind prints something else refuses the run before any session", async () => {
     const r = await kindsRun("#!/usr/bin/env bash\necho interactive\n");

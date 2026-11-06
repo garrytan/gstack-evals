@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseManifest } from "../../scripts/gate.ts";
+import { ENFORCED_GSTACK_SHA } from "../../src/trial/review/skill-gates.ts";
 
 // Workflow hygiene (U19), also run by the gate as its junit case: every workflow is pinned, read-only in every job and free of
 // secrets, installs Bun only by the checksummed download and fetches gstack at one commit, and ci.yml runs the gate's command
@@ -100,6 +101,19 @@ describe("workflow hygiene", () => {
     const shas = new Set(pins.map((p) => p.split(" ")[1]));
     expect(shas.size).toBe(1);
     expect([...shas][0]).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  test("fetches the enforced CEO arm's gstack only for rig.yml's tier, at skill-gates.ts's pin, checks its tree, and hands it to the tier step", () => {
+    const fetches = files.flatMap((f) => steps(f).flatMap((s, i) => (s.env?.ENFORCED_GSTACK_SHA ? [{ f, s, i }] : [])));
+    expect(fetches.map((x) => x.f)).toEqual(["rig.yml"]);
+    const { s, i } = fetches[0]!;
+    expect([s.env!.ENFORCED_GSTACK_SHA, s.env!.ENFORCED_GSTACK_TREE]).toEqual([ENFORCED_GSTACK_SHA, "9340ccf599e3c6dbb550ca2cef5b24a5a36aefa3"]);
+    expect(s.run).toContain('test "$(git -C "$RUNNER_TEMP/gstack-enforced" rev-parse HEAD)" = "$ENFORCED_GSTACK_SHA"');
+    expect(s.run).toContain('test "$(git -C "$RUNNER_TEMP/gstack-enforced" rev-parse \'HEAD^{tree}\')" = "$ENFORCED_GSTACK_TREE"');
+    expect(s.run).not.toMatch(/setup|install|\bbun\b|\.sh\b/);
+    const tier = steps("rig.yml").findIndex((x) => (x.run ?? "").includes("rig tier"));
+    expect(tier).toBeGreaterThan(i);
+    expect(steps("rig.yml")[tier]!.env).toEqual({ OUTCOME_GSTACK_ENFORCED_PIN: "${{ runner.temp }}/gstack-enforced" });
   });
 
   test("runs the gate's command cases in ci.yml", () => {
