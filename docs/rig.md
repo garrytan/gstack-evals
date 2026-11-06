@@ -118,4 +118,4 @@ The peak is about 11.6 GB when both places share a filesystem: 5.7 GB under the 
 
 - On GitHub: `.github/workflows/rig.yml` runs on pull requests and main pushes that touch a rig path, and on `workflow_dispatch`. Its token is read-only, it reads no secret and it posts no check of its own.
 - Before a push: a pregate guard in `.gstack/pregate.json` (`rig-docker-tier`) runs `GSTACK_EVALS_DOCKER=1 bun test tests/rig` when a change touches a rig path.
-- Locally: `GSTACK_EVALS_DOCKER=1 bun test tests/rig`, or the whole tier with `bin/gstack-evals rig tier --out <dir>`, on a machine with Docker. Docker tests skip without `GSTACK_EVALS_DOCKER=1`, and the tier counts a skipped case as RED.
+- Locally: `GSTACK_EVALS_DOCKER=1 bun test tests/rig`, or the whole tier with `bin/gstack-evals rig tier --out <dir>`, on a machine with Docker. Docker tests skip without `GSTACK_EVALS_DOCKER=1`, and the tier counts a skipped case as RED. Stage m1b also runs tests/trial/review/ceo-enforced.test.ts and ceo-enforced-armed.test.ts, which skip unless `OUTCOME_GSTACK_ENFORCED_PIN` names a clean gstack checkout at 4743132ca027, so a local tier without it is RED. rig.yml sets it in CI.

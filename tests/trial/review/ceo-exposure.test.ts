@@ -3,7 +3,7 @@
 // Each detector reads one session's transcript.ndjson: the main agent's own text and its own tool calls with their results.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { autoplanCeoExposure, GSTACK_CEO_PIN, standaloneExposure } from "../../../src/trial/review/ceo-exposure.ts";
+import { autoplanCeoExposure, findingsWrittenTranscript, GSTACK_CEO_PIN, standaloneExposure } from "../../../src/trial/review/ceo-exposure.ts";
 import * as G from "./fixtures/ceo-exposure/gstack-699.ts";
 
 type Msg = Record<string, unknown>;
@@ -29,6 +29,9 @@ const ceoOnlyCall = (mode: string) => G.CEO_ONLY.call.slice(1, -1).replace("<mod
 const AP = "/work/agent/.gstack/projects/demo/autoplan-run-1";
 const REVIEW = ["# CEO-only review: cache the profile reads", "Mode: HOLD SCOPE. Outside voice: disabled. Not approved.", "## User challenges (direction kept)", "None.", "## Scope added", "None.", "## Conservative choices", "None.", "## Findings", "- High, Section 2: the cache has no eviction bound. Fix: cap it at 1000 entries. Disposition: open.", "## Decision Audit Trail", "None."].join("\n");
 const NO_FINDINGS = REVIEW.split("## Findings")[0]!;
+/** The session's host/ceo-review/ copy holding the review: findings_written reads the file since the stage 2 amendment. */
+const DISK = { copies: [REVIEW], copy_failed: false };
+const NO_DISK = { copies: [], copy_failed: false };
 
 describe("the pinned gstack files", () => {
   test("ceo-exposure.ts pins the four files it was built from at 699a41cb", () => {
@@ -86,44 +89,44 @@ describe("autoplan-ceo: the handoff run with --ceo-only, and ceo-review.md writt
   const write = call("Write", { file_path: AP + "/ceo-review.md", content: REVIEW }, "File created successfully at: " + AP + "/ceo-review.md");
   test("ceo-only.md's own call, its printed line and a Write with ## Findings: exposed", () => {
     expect(CEO_ONLY_LINE).toBe("Auto-selected review mode \u2192 HOLD SCOPE (CEO-only run: Step 0E's rule). Approved decisions: none.");
-    expect(autoplanCeoExposure(nd(handoff, say(CEO_ONLY_LINE), write))).toEqual({ detector: "autoplan-ceo", exposed: true, failed: null, checks: { handoff_ceo_only: true, findings_written: true } });
+    expect(autoplanCeoExposure(nd(handoff, say(CEO_ONLY_LINE), write), DISK)).toEqual({ detector: "autoplan-ceo", exposed: true, failed: null, checks: { handoff_ceo_only: true, findings_written: true } });
   });
   test("HOLD_SCOPE with an underscore in the call counts", () => {
-    expect(autoplanCeoExposure(nd(call("Bash", { command: ceoOnlyCall("HOLD_SCOPE") }, CEO_ONLY_LINE), write)).exposed).toBe(true);
+    expect(autoplanCeoExposure(nd(call("Bash", { command: ceoOnlyCall("HOLD_SCOPE") }, CEO_ONLY_LINE), write), DISK).exposed).toBe(true);
   });
   test("a chained call counts when its own result holds the line --ceo-only prints, and not without it", () => {
     const chained = ceoOnlyCall("SELECTIVE_EXPANSION") + '; echo "HANDOFF_EXIT: $?"';
-    expect(autoplanCeoExposure(nd(call("Bash", { command: chained }, fill(G.HANDOFF_BIN.ceoOnly, "SELECTIVE EXPANSION") + "\nHANDOFF_EXIT: 0"), write)).exposed).toBe(true);
-    expect(autoplanCeoExposure(nd(call("Bash", { command: chained }, "HANDOFF_EXIT: 2"), write)).failed).toBe("handoff_ceo_only");
+    expect(autoplanCeoExposure(nd(call("Bash", { command: chained }, fill(G.HANDOFF_BIN.ceoOnly, "SELECTIVE EXPANSION") + "\nHANDOFF_EXIT: 0"), write), DISK).exposed).toBe(true);
+    expect(autoplanCeoExposure(nd(call("Bash", { command: chained }, "HANDOFF_EXIT: 2"), write), DISK).failed).toBe("handoff_ceo_only");
   });
   test("the captured --auto call and its line, an errored call, a subagent's call or the line only in its own text do not count", () => {
-    expect(autoplanCeoExposure(nd(call("Bash", { command: G.CAPTURED_AUTO_HANDOFF.command }, AUTO_LINE), write)).failed).toBe("handoff_ceo_only");
-    expect(autoplanCeoExposure(nd(call("Bash", { command: ceoOnlyCall("HOLD SCOPE") }, "gstack-ceo-mode-handoff: unknown mode: HOLD", { error: true }), write)).failed).toBe("handoff_ceo_only");
-    expect(autoplanCeoExposure(nd(call("Bash", { command: ceoOnlyCall("HOLD SCOPE") }, "<tool_use_error>Cancelled</tool_use_error>" + CEO_ONLY_LINE), write)).failed).toBe("handoff_ceo_only");
-    expect(autoplanCeoExposure(nd(call("Bash", { command: ceoOnlyCall("HOLD SCOPE") }, CEO_ONLY_LINE, { parent: "toolu_x" }), write)).failed).toBe("handoff_ceo_only");
-    expect(autoplanCeoExposure(nd(say(CEO_ONLY_LINE), write)).failed).toBe("handoff_ceo_only");
+    expect(autoplanCeoExposure(nd(call("Bash", { command: G.CAPTURED_AUTO_HANDOFF.command }, AUTO_LINE), write), DISK).failed).toBe("handoff_ceo_only");
+    expect(autoplanCeoExposure(nd(call("Bash", { command: ceoOnlyCall("HOLD SCOPE") }, "gstack-ceo-mode-handoff: unknown mode: HOLD", { error: true }), write), DISK).failed).toBe("handoff_ceo_only");
+    expect(autoplanCeoExposure(nd(call("Bash", { command: ceoOnlyCall("HOLD SCOPE") }, "<tool_use_error>Cancelled</tool_use_error>" + CEO_ONLY_LINE), write), DISK).failed).toBe("handoff_ceo_only");
+    expect(autoplanCeoExposure(nd(call("Bash", { command: ceoOnlyCall("HOLD SCOPE") }, CEO_ONLY_LINE, { parent: "toolu_x" }), write), DISK).failed).toBe("handoff_ceo_only");
+    expect(autoplanCeoExposure(nd(say(CEO_ONLY_LINE), write), DISK).failed).toBe("handoff_ceo_only");
   });
-  test("a ## Findings heading that a later Edit or MultiEdit adds to ceo-review.md counts", () => {
+  test("the transcript reading (report-only): a ## Findings heading that a later Edit or MultiEdit adds to ceo-review.md counts", () => {
     const first = call("Write", { file_path: AP + "/ceo-review.md", content: NO_FINDINGS }, "File created successfully");
-    expect(autoplanCeoExposure(nd(handoff, first)).failed).toBe("findings_written");
+    expect(findingsWrittenTranscript(nd(handoff, first))).toBe(false);
     const edit = call("Edit", { replace_all: false, file_path: AP + "/ceo-review.md", old_string: "None.\n", new_string: "None.\n## Findings\n- Medium, Section 1: one point of failure. Fix: add a fallback." }, "The file has been updated.");
-    expect(autoplanCeoExposure(nd(handoff, first, edit)).exposed).toBe(true);
+    expect(findingsWrittenTranscript(nd(handoff, first, edit))).toBe(true);
     const multi = call("MultiEdit", { file_path: AP + "/ceo-review.md", edits: [{ old_string: "a", new_string: "b" }, { old_string: "None.", new_string: "## Findings\nNone." }] }, "Applied 2 edits.");
-    expect(autoplanCeoExposure(nd(handoff, first, multi)).exposed).toBe(true);
+    expect(findingsWrittenTranscript(nd(handoff, first, multi))).toBe(true);
   });
-  test("a simple Bash heredoc or redirect into ceo-review.md counts; one into another file does not", () => {
-    expect(autoplanCeoExposure(nd(handoff, call("Bash", { command: 'cat > "' + AP + "/ceo-review.md\" <<'EOF'\n" + REVIEW + "\nEOF" }, ""))).exposed).toBe(true);
-    expect(autoplanCeoExposure(nd(handoff, call("Bash", { command: "printf '\\n## Findings\\nNone.\\n' >> " + AP + "/ceo-review.md" }, ""))).exposed).toBe(true);
-    expect(autoplanCeoExposure(nd(handoff, call("Bash", { command: "cat > " + AP + "/notes.md <<'EOF'\n" + REVIEW + "\nEOF" }, ""))).failed).toBe("findings_written");
+  test("the transcript reading (report-only): a simple Bash heredoc or redirect into ceo-review.md counts; one into another file does not", () => {
+    expect(findingsWrittenTranscript(nd(handoff, call("Bash", { command: 'cat > "' + AP + "/ceo-review.md\" <<'EOF'\n" + REVIEW + "\nEOF" }, "")))).toBe(true);
+    expect(findingsWrittenTranscript(nd(handoff, call("Bash", { command: "printf '\\n## Findings\\nNone.\\n' >> " + AP + "/ceo-review.md" }, "")))).toBe(true);
+    expect(findingsWrittenTranscript(nd(handoff, call("Bash", { command: "cat > " + AP + "/notes.md <<'EOF'\n" + REVIEW + "\nEOF" }, "")))).toBe(false);
   });
-  test("a write that errored, a subagent's write, another file's Findings or Findings only in its own text do not count", () => {
-    expect(autoplanCeoExposure(nd(handoff, call("Write", { file_path: AP + "/ceo-review.md", content: REVIEW }, "EACCES", { error: true }))).failed).toBe("findings_written");
-    expect(autoplanCeoExposure(nd(handoff, call("Write", { file_path: AP + "/ceo-review.md", content: REVIEW }, "ok", { parent: "toolu_x" }))).failed).toBe("findings_written");
-    expect(autoplanCeoExposure(nd(handoff, call("Write", { file_path: AP + "/ceo-plan.md", content: REVIEW }, "ok"))).failed).toBe("findings_written");
-    expect(autoplanCeoExposure(nd(handoff, call("Write", { file_path: AP + "/ceo-review.md", content: NO_FINDINGS + "\nSee ## Findings below." }, "ok"))).failed).toBe("findings_written");
-    expect(autoplanCeoExposure(nd(handoff, say(REVIEW))).failed).toBe("findings_written");
+  test("the transcript reading (report-only): a write that errored, a subagent's write, another file's Findings or Findings only in its own text do not count", () => {
+    expect(findingsWrittenTranscript(nd(handoff, call("Write", { file_path: AP + "/ceo-review.md", content: REVIEW }, "EACCES", { error: true })))).toBe(false);
+    expect(findingsWrittenTranscript(nd(handoff, call("Write", { file_path: AP + "/ceo-review.md", content: REVIEW }, "ok", { parent: "toolu_x" })))).toBe(false);
+    expect(findingsWrittenTranscript(nd(handoff, call("Write", { file_path: AP + "/ceo-plan.md", content: REVIEW }, "ok")))).toBe(false);
+    expect(findingsWrittenTranscript(nd(handoff, call("Write", { file_path: AP + "/ceo-review.md", content: NO_FINDINGS + "\nSee ## Findings below." }, "ok")))).toBe(false);
+    expect(findingsWrittenTranscript(nd(handoff, say(REVIEW)))).toBe(false);
   });
   test("the injected ceo-only.md body names the call and the heading, and counts for nothing", () => {
-    expect(autoplanCeoExposure(nd(skillBody([G.CEO_ONLY.call, G.CEO_ONLY.findings, G.CEO_ONLY.result].join("\n"))))).toEqual({ detector: "autoplan-ceo", exposed: false, failed: "handoff_ceo_only", checks: { handoff_ceo_only: false, findings_written: false } });
+    expect(autoplanCeoExposure(nd(skillBody([G.CEO_ONLY.call, G.CEO_ONLY.findings, G.CEO_ONLY.result].join("\n"))), NO_DISK)).toEqual({ detector: "autoplan-ceo", exposed: false, failed: "handoff_ceo_only", checks: { handoff_ceo_only: false, findings_written: false } });
   });
 });

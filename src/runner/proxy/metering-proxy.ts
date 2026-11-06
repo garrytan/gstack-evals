@@ -187,6 +187,16 @@ export interface Meter {
   upstream: { statuses: Record<string, number>; failed: number };
   /** Calls still in flight when finalize timed out. */
   undrained: number;
+  /** The most worst-case reservation, in micro-dollars, this meter's calls held in flight at once: each call holds its full worst case until it settles. */
+  peak_inflight_micros: number;
+  /** The most calls in flight at once. */
+  peak_inflight_calls: number;
+  /** The most prompt tokens one call's usage reported (input plus cache read plus cache write), or null when no call reported usage. */
+  largest_prompt: number | null;
+  /** The most request bytes per reported prompt token over the calls that reported usage, or null when none did. */
+  bytes_per_token: number | null;
+  /** The cache-write modes the priced requests asked for (priceRequest's cacheWrite), distinct, in the order none, 5m, 1h that the scorer's row contract reads. */
+  cache_write: string[];
 }
 
 interface Slot {
@@ -198,6 +208,9 @@ interface Slot {
   committedMicros: number;
   /** Paid calls started on this slot; with the attempt number it makes each reserve's idempotency key. */
   calls: number;
+  /** Worst-case micro-dollars and calls reserved and not yet settled. */
+  inflightMicros: number;
+  inflightCalls: number;
 }
 
 interface CallContext {
@@ -207,11 +220,13 @@ interface CallContext {
   model: string;
   source: string | null;
   secrets: string[];
+  /** The bytes of the request body sent upstream, once priced. */
+  bytes?: number;
 }
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest();
 const sameSecret = (expected: Buffer, presented: string | null) => presented !== null && timingSafeEqual(expected, hash(presented));
-const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0 });
+const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0, peak_inflight_micros: 0, peak_inflight_calls: 0, largest_prompt: null, bytes_per_token: null, cache_write: [] });
 
 const TRIAL_NETWORKS = new BlockList();
 for (const [net, bits] of [["127.0.0.0", 8], ["10.0.0.0", 8], ["172.16.0.0", 12], ["192.168.0.0", 16]] as const) TRIAL_NETWORKS.addSubnet(net, bits, "ipv4");
@@ -340,7 +355,7 @@ export class MeteringProxy {
   bind(request: BindRequest): Binding {
     if (!request.models?.length || !Number.isSafeInteger(request.allowance_micros) || request.allowance_micros <= 0) throw new Error("E_USAGE: metering proxy: bind needs a non-empty models list and a positive integer allowance_micros");
     const binding = { slot: `s_${randomBytes(9).toString("base64url")}`, token: `gse_${randomBytes(32).toString("base64url")}`, meter_id: `m_${randomBytes(12).toString("hex")}` };
-    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), allowanceMicros: request.allowance_micros, committedMicros: 0, calls: 0 });
+    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), allowanceMicros: request.allowance_micros, committedMicros: 0, inflightMicros: 0, inflightCalls: 0, calls: 0 });
     this.meters.set(binding.meter_id, newMeter(binding.meter_id));
     return binding;
   }
@@ -529,6 +544,8 @@ export class MeteringProxy {
     }
     const maxMicros = reservationMicros(price);
     const meter = this.meter(slot);
+    if (!meter.cache_write.includes(price.cacheWrite)) meter.cache_write = (["none", "5m", "1h"] as const).filter((m) => m === price.cacheWrite || meter.cache_write.includes(m));
+    ctx.bytes = Buffer.byteLength(outBody);
     const call = ++slot.calls;
     const sleep = o.sleep ?? Bun.sleep;
     const started = Date.now();
@@ -548,15 +565,23 @@ export class MeteringProxy {
       const reservation = { idempotency_key: idempotencyKey, lease_id: o.leaseId, cell: slot.cell, max_micros: maxMicros };
       this.journal({ kind: "reserve", ...reservation, provider, route, model: ctx.model, try: attempt, source: ctx.source });
       slot.committedMicros += maxMicros;
+      slot.inflightMicros += maxMicros;
+      slot.inflightCalls++;
+      meter.peak_inflight_micros = Math.max(meter.peak_inflight_micros, slot.inflightMicros);
+      meter.peak_inflight_calls = Math.max(meter.peak_inflight_calls, slot.inflightCalls);
       let held: LedgerReply;
       try {
         held = await o.ledger.reserve(reservation);
       } catch (e) {
         slot.committedMicros -= maxMicros;
+        slot.inflightMicros -= maxMicros;
+        slot.inflightCalls--;
         return this.refuse(ctx, "E_LEDGER_UNAVAILABLE", 503, `the ledger did not answer reservation ${idempotencyKey}, so nothing was sent; if the ledger recorded it, reconcileJournal releases it at $0: ${scrubbedCause(e, ctx.secrets)}`);
       }
       if (!held.ok) {
         slot.committedMicros -= maxMicros;
+        slot.inflightMicros -= maxMicros;
+        slot.inflightCalls--;
         return this.refuse(ctx, held.code, 402, held.message, { idempotency_key: idempotencyKey });
       }
       const rid = held.reservation.reservation_id;
@@ -659,6 +684,13 @@ export class MeteringProxy {
       console.error(`E_INTERNAL: metering proxy: the outcome of reservation ${rid} was not journaled: ${scrubbedCause(e, ctx.secrets)}`);
     }
     ctx.slot.committedMicros += micros - maxMicros;
+    ctx.slot.inflightMicros -= maxMicros;
+    ctx.slot.inflightCalls--;
+    const prompt = outcome.kind === "spent" ? outcome.usage.input + outcome.usage.cache_read + outcome.usage.cache_write : 0;
+    if (prompt > 0) {
+      meter.largest_prompt = Math.max(meter.largest_prompt ?? 0, prompt);
+      if (ctx.bytes) meter.bytes_per_token = Math.max(meter.bytes_per_token ?? 0, ctx.bytes / prompt);
+    }
     meter.micros += micros;
     if (outcome.kind === "unknown") meter.unknown++;
     const id = `${ctx.provider}:${ctx.model}`;

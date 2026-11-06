@@ -16,6 +16,8 @@ export const CANARY = "CANARYq7Zp";
 export const FENCE = "\x60\x60\x60";
 export const BRIEF = join(ROOT, "wiki/plans/2026-11-05-geva-295-ceo-ladder-amendment/judge-brief.md");
 export const SCORER = join(ROOT, "wiki/plans/2026-11-05-geva-300-ceo-stop-label-amendment/ceo-rule.ts.txt");
+/** The stage 2 amendment's scorer, which reads enforced, the rerun's smoke and the PASS line's units: clause. */
+export const STAGE2_SCORER = join(ROOT, "wiki/plans/2026-11-06-geva-348-ceo-scorer-stage-2/ceo-rule.ts.txt");
 /** The prereg's three models under test, by the policy keys review-units runs them as. */
 export const MODEL: Record<string, string> = { opus: "claude-opus-5-5", sol: "openai/gpt-6.1-sol", particle: "particle-ai/particle-1" };
 export const JUDGES = { sol: "openai/gpt-6.1-sol", opus: "anthropic/claude-opus-5-5", sonnet: "anthropic/claude-sonnet-5-5" };
@@ -75,7 +77,7 @@ const call = (name: string, input: Msg, result: string): Msg[] => {
 const TRANSCRIPT_BLOCK = FENCE + "ceo-outcome\n" + JSON.stringify({ top: [{ issue: "TRANSCRIPTONLY issue", evidence: "x", fix: "TRANSCRIPTONLY fix" }], forecast: 5 }) + "\n" + FENCE;
 export function transcript(arm: string, exposed = true): string {
   const parts: Msg[] = [];
-  if (arm === "gstack-forced") {
+  if (arm === "gstack-forced" || arm === "gstack-enforced") {
     parts.push(...call("Read", { file_path: "/work/agent/.claude/skills/gstack/plan-ceo-review/sections/review-sections.md" }, "     1\t# Review Sections\n"));
     if (exposed) parts.push(say("Step 0E: I pick HOLD SCOPE."));
   }
@@ -89,11 +91,17 @@ export function transcript(arm: string, exposed = true): string {
 
 export interface Session {
   model: "opus" | "sol" | "particle";
-  arm: "none" | "lens" | "gstack-auto" | "gstack-forced";
+  arm: "none" | "lens" | "gstack-auto" | "gstack-forced" | "gstack-enforced";
   unit: string;
   pass: number;
   how?: "scored" | "no-block" | "gap" | "stopped" | "unexposed";
   four?: boolean;
+  /** trial.json's logs.copy_out; empty when unset. */
+  copyOut?: string[];
+  /** An enforced session's gate report in trial.json; a released first-stop report when unset. */
+  gate?: { exit: number | null; blocked?: number; released?: number; exhausted?: number; fired?: number };
+  /** The journal entry's meter record; none when unset. */
+  meter?: Record<string, unknown>;
 }
 export const TASK: Record<string, string> = { [U1]: "u-11", [U2]: "u-12", [U3]: "u-13" };
 export const sessionDir = (run: string, s: Session) => join(run, "runs", MODEL[s.model]!.replaceAll("/", "_"), s.arm, TASK[s.unit]!, "p" + s.pass, "host");
@@ -104,7 +112,7 @@ export function entry(s: Session): Record<string, any> {
   const scored = how === "scored" || how === "unexposed";
   const termination = how === "gap" ? { kind: "infra" } : { kind: "completed" };
   const parse = scored ? { kind: "block", top: items(s.arm + " " + s.model + " " + s.unit + " p" + s.pass, s.four), forecast: 40, body_sha256: "0".repeat(64) } : { kind: "missing" };
-  return { cell: { model: MODEL[s.model], arm: s.arm, unit: s.unit, pass: s.pass }, key: { sha256: "0".repeat(64), parts: {} }, meter_id: "m", record: { termination, model_output: how !== "no-block", cost_micros: 2_500_000 }, parse, cost: null, ceo_mode: null, ceo_outcome: { parser_sha256: CEO_PARSER_SHA256, end_state: scored ? "scored" : how, follow_up: how === "no-block", wall_s: 900, usd: 2.5 } };
+  return { cell: { model: MODEL[s.model], arm: s.arm, unit: s.unit, pass: s.pass }, ...(s.meter ? { meter: s.meter } : {}), key: { sha256: "0".repeat(64), parts: {} }, meter_id: "m", record: { termination, model_output: how !== "no-block", cost_micros: 2_500_000 }, parse, cost: null, ceo_mode: null, ceo_outcome: { parser_sha256: CEO_PARSER_SHA256, end_state: scored ? "scored" : how, follow_up: how === "no-block", wall_s: 900, usd: 2.5 } };
 }
 
 /** A review-units out dir: cells.ndjson, stops.json (stopped sessions), units.json and every journaled session's transcript. */
@@ -116,6 +124,14 @@ export function runDir(root: string, name: string, sessions: Session[], edit: (e
     edit(e);
     mkdirSync(sessionDir(dir, s), { recursive: true });
     writeFileSync(join(sessionDir(dir, s), "transcript.ndjson"), transcript(s.arm, s.how !== "unexposed"));
+    const g = s.gate ?? { exit: 0 };
+    const sid = "sess-" + s.arm + "-" + s.model + "-" + TASK[s.unit] + "-p" + s.pass;
+    const gate = { session_id: sid, exit: g.exit, json: g.exit === null ? null : { rows: [{ session: sid, hook: "ceo-review-gate", runs: 1, fired: g.fired ?? 1, blocked: g.blocked ?? 0, released: g.released ?? 1, exhausted: g.exhausted ?? 0, observed: 0, errors: g.exit === 3 ? 1 : 0, error_codes: [] }] }, stderr: "", deadline_ms: 20000, hook_timeout_s: 30, settings_sha256: "0".repeat(64) };
+    writeJson(join(sessionDir(dir, s), "..", "trial.json"), { record: e.record, delta: null, logs: s.copyOut?.length ? { copy_out: s.copyOut } : {}, ...(s.arm === "gstack-enforced" ? { gate } : {}) });
+    if (s.arm === "gstack-auto" && s.how !== "unexposed") {
+      mkdirSync(join(sessionDir(dir, s), "ceo-review", ".gstack/projects/demo/autoplan-run-1"), { recursive: true });
+      writeFileSync(join(sessionDir(dir, s), "ceo-review", ".gstack/projects/demo/autoplan-run-1", "ceo-review.md"), "# CEO-only review\n## Findings\n- High: no bound.\n");
+    }
     return JSON.stringify(e);
   });
   writeFileSync(join(dir, "cells.ndjson"), lines.join("\n") + (lines.length ? "\n" : ""));
@@ -135,13 +151,17 @@ export const STAGE1_NONE: Session[] = (["opus", "sol", "particle"] as const).fla
   if (model === "particle" && unit === U3 && i === 1) s.how = "stopped";
   return s;
 })));
-/** Stage 2 under PROJECTION: none, gstack-auto, gstack-forced and lens on Opus, none on Sol and particle-1; 2 passes, 1 on the held unit. */
+/** The smoke rerun (the stage 2 amendment, section 8): enforced and standalone on every model, on U1 and U2, pass 1. */
+export const SMOKE2: Session[] = (["opus", "sol", "particle"] as const).flatMap((model) => (["gstack-enforced", "gstack-forced"] as const).flatMap((arm) => [U1, U2].map((unit) => ({ model, arm, unit, pass: 1 }))));
+/** Stage 2 under PROJECTION: none, gstack-enforced, gstack-forced and lens on Opus, none on Sol and particle-1; 2 passes, 1 on the held unit. */
 export const STAGE2: Session[] = [
-  ...(["none", "gstack-auto", "gstack-forced", "lens"] as const).map((arm) => ["opus", arm] as const),
+  ...(["none", "gstack-enforced", "gstack-forced", "lens"] as const).map((arm) => ["opus", arm] as const),
   ["sol", "none"] as const,
   ["particle", "none"] as const,
 ].flatMap(([model, arm]) => [U1, U2, U3].flatMap((unit) => Array.from({ length: unit === U3 ? 1 : 2 }, (_, i) => ({ model, arm, unit, pass: i + 1 }) as Session)));
-export const PROJECTION = "Projection: PASS at 'every cell'; record these caps; cells: none:opus, autoplan-ceo:opus, standalone:opus, lens:opus, none:sol, none:particle; held passes 1\nPrimary: hit@3 (stage 1 HEADROOM); G_R form rem\n";
+export const PROJECTION = "Projection: PASS at 'every cell'; record these caps; cells: none:opus, enforced:opus, standalone:opus, lens:opus, none:sol, none:particle; held passes 1; units: changed 2 of 2, last " + U2 + "; held 1 of 1, last " + U3 + "\nPrimary: hit@3 (stage 1 HEADROOM); G_R form rem\n";
+/** The comparison suite's seeded order for --order: U1 and U2 changed, U3 held. */
+export const ORDER = [{ id: U1, kind: "changed" }, { id: U2, kind: "changed" }, { id: U3, kind: "held" }];
 
 export interface Ran {
   code: number;
@@ -202,14 +222,17 @@ export async function judgeRun(argv: string[], fetch?: (url: string, init: Reque
 }
 
 /** The whole keyless pipeline for one stage: rows, packets, the three judges through judge-run --ceo, readings. */
-export async function pipeline(root: string, stage: 1 | 2, runs: string[], o: { reply?: Reply; projection?: string } = {}) {
+export async function pipeline(root: string, stage: 1 | 2, runs: string[], o: { reply?: Reply; projection?: string; smokeRound?: 1 | 2 } = {}) {
   const units = join(root, "units");
   const log: Ran[] = [];
   const step = (r: Ran) => (log.push(r), r);
   const proj = o.projection ? ["--projection", o.projection] : [];
+  const order = join(root, "order.json");
+  if (stage === 2) writeJson(order, ORDER);
+  const cut = stage === 2 ? ["--order", order] : o.smokeRound ? ["--smoke-round", String(o.smokeRound)] : [];
   const rows = join(root, "rows-" + stage + ".json");
-  step(await ceo(["rows", "--stage", String(stage), "--units", units, ...runs.flatMap((r) => ["--run", r]), ...proj, "--out", rows]));
-  step(await ceo(["rows", "--stage", String(stage), "--units", units, ...runs.flatMap((r) => ["--run", r]), ...proj, "--checks"]));
+  step(await ceo(["rows", "--stage", String(stage), "--units", units, ...runs.flatMap((r) => ["--run", r]), ...proj, ...cut, "--out", rows]));
+  step(await ceo(["rows", "--stage", String(stage), "--units", units, ...runs.flatMap((r) => ["--run", r]), ...proj, ...cut, "--checks"]));
   const packets = join(root, "packets-" + stage);
   const key = join(root, "key-" + stage + ".json");
   step(await ceo(["packets", "--rows", rows, "--units", units, "--seed", "7", "--out", packets, "--key", key]));

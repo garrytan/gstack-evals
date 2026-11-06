@@ -74,6 +74,9 @@ export interface TrialSpec {
   /** Before the trees are removed, every regular file under the work dir named name is copied to the same relative path
    * under to, byte for byte, such as a ceo-outcome session's ceo-review.md; a symlink is never followed. */
   copyOut?: { name: string; to: string };
+  /** Before the trees are removed, after copyOut: copies out a session's gate record from the work dir and returns trial.json's
+   * gate and any copy failures, which join logs.copy_out (an enforced ceo-outcome session; src/trial/review/skill-gates.ts). */
+  gate?: (work: string) => { copy_out: string[]; gate: unknown };
   /** How the trees are removed (src/trial/cleanup.ts): an image removes root-owned leftovers. */
   cleanup?: CleanupOptions;
   /** Keys appended to the gstack state root's config.yaml after the seed: a stack cell's gstack config (src/arms/cells.ts). */
@@ -150,9 +153,11 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
       const failures = copyNamed(work, spec.copyOut.name, spec.copyOut.to);
       if (failures.length) logs.copy_out = failures;
     }
+    const gate = spec.gate?.(work);
+    if (gate?.copy_out.length) logs.copy_out = [...((logs.copy_out as string[] | undefined) ?? []), ...gate.copy_out];
     const leftovers = spec.keep ? [] : [work, baseline, grade, bare, fixtures].flatMap((tree) => removeTree(tree, spec.cleanup) ?? []);
     if (leftovers.length) logs.leftovers = leftovers;
-    writeFileSync(join(spec.dir, "trial.json"), JSON.stringify({ record, delta, logs }, null, 2) + "\n");
+    writeFileSync(join(spec.dir, "trial.json"), JSON.stringify({ record, delta, logs, ...(gate ? { gate: gate.gate } : {}) }, null, 2) + "\n");
     return { record, delta, dir: spec.dir, leftovers };
   };
   const missing = (code: ReasonCode, why: string): TrialRun => {
