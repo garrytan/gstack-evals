@@ -207,6 +207,7 @@ describe("the command line", () => {
     return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
   };
   test("the plan file carries the line: a plan without ceiling_usd, or at $2,000, exits 2 before any sum", () => {
+    // pregate-literal: CEILING_USD=2000 the old line, a plan input this test expects ceiling.ts to refuse
     for (const [p, why] of [[{ ...plan() }, "has no ceiling_usd"], [{ ceiling_usd: 2000, ...plan() }, "the plan's line is $2000, but L1's line is $3300 (Amendment E)"]] as const) {
       const id = String(n++);
       writeFileSync(join(dir, id + ".jsonl"), atExpected().map((r) => JSON.stringify(r)).join("\n") + "\n");
@@ -367,6 +368,7 @@ describe("malformed input is refused", () => {
     expect(() => tally(atExpected(), crew(288_000, 36_000), plan(solPlan, { sol: "pending", particle: "skipped" } as unknown as Plan["leftover"]))).toThrow(/leftover.particle is "skipped"/);
   });
   test("check refuses tokens with no credits instead of holding open stops at zero", () => {
+    // pregate-literal: CEILING_USD=2000 a 2000M token stop in this crew fixture, not the ceiling
     const open: Crew["threads"][number] = { code: "GEVA-8", line: "sol", credits: 0, tokens: 0, token_stop: 2000 * M, status: "open" };
     expect(() => check(atExpected(), crew(0, 0, [open]), plan(), "pilot-sol")).toThrow(/no measured rate/);
   });
