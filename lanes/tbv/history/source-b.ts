@@ -2,7 +2,7 @@
 // Source B (prereg section 4, amendment section 2): this repo's pull requests, assembled from GitHub's record with no
 // writer, gstack blocks stripped; lineage clusters; the dev window and held-out accrual.
 import { notBuilt } from "../errors.ts";
-import type { AssembleResult } from "../types.ts";
+import type { AssembleResult, Io } from "../types.ts";
 
 /** One pull request as mine-b records it from GraphQL. */
 export interface PrRecord {
@@ -42,4 +42,11 @@ export function devEligible(pr: PrRecord, scorerPinMergedAt: string): boolean {
 /** Amendment section 2 rule 4: accrual closes at 50 qualifying non-clean tasks or 21 days after P's post, whichever is first. */
 export function accrualClosed(o: { qualifyingNonClean: number; pPostMergedAt: string; now: string }): { closed: boolean; why: string } {
   return notBuilt("accrualClosed");
+}
+
+export function fromGraphql(node: Record<string, any>): PrRecord | null {
+  return notBuilt("fromGraphql");
+}
+export async function run(argv: string[], io: Io): Promise<number> {
+  return notBuilt(argv[0] ?? "source-b");
 }
