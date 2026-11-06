@@ -65,7 +65,7 @@ describe("runJudges over a fake item run", () => {
   const setup = (seconds = false) => {
     const dir = tmp("tbv-judge-");
     const r = record();
-    const built = buildPackets({ records: [r], keys: { "task-alpha": KEY }, controlTaskIds: ["task-alpha"], stock: "Some stock text." });
+    const built = buildPackets({ records: [r], keys: { "task-alpha": KEY }, controlTaskIds: ["task-alpha"], stock: "Some stock text.", doubleRead: () => false });
     if (seconds) for (const e of built.entries) if (e.kind === "first") e.second = "opus";
     writePackets(join(dir, "packets"), join(dir, "key.json"), built);
     const entries = (JSON.parse(readFileSync(join(dir, "key.json"), "utf8")) as { entries: PacketKeyEntry[] }).entries;
@@ -77,7 +77,7 @@ describe("runJudges over a fake item run", () => {
     const s = setup(true);
     const f = fakeRun(honest);
     const recs = await runJudges({ packets: s.packets, entries: s.entries, out: join(s.dir, "out"), brief: BRIEF, run: f.run, judgeSend: fakeJudgeSend, worst: () => 1000 });
-    expect(recs.length).toBe(6);
+    expect(recs.length).toBe(7);
     expect(recs.every((r) => r.status === "judged" && r.responseIds.length === 1)).toBe(true);
     for (const x of f.sends) {
       const p = packetOf(promptOf(x.req));
@@ -90,7 +90,7 @@ describe("runJudges over a fake item run", () => {
     const lines = readFileSync(join(s.dir, "out", "judges.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as JudgeRecord);
     expect(lines).toEqual(recs);
   });
-  for (const [what, firstTry] of [["a malformed reply", () => sent("no block")], ["a reply cut off at max tokens", () => sent("```tbv-judge\n{", "max-tokens")], ["a refusal", () => sent("I can't help", "refusal")], ["a wrong label count", () => sent("```tbv-judge\n" + JSON.stringify({ facts: [], unsupported: [], traps: [], list: null, d1: null }) + "\n```")]] as const)
+  for (const [what, firstTry] of [["a malformed reply", () => sent("no block")], ["a reply cut off at max tokens", () => sent("```tbv-judge\n{", "max-tokens")], ["a refusal", () => sent("I can't help", "refusal")], ["a wrong label count", () => sent("```tbv-judge\n" + JSON.stringify({ facts: [{ id: "F9", in: true, any: true }], unsupported: [], traps: [], list: null, d1: null }) + "\n```")]] as const)
     test(what + " gets one retry in a fresh request; a second failure leaves it unjudged with the reason", async () => {
       const s = setup();
       const f = fakeRun((label, req, n) => (n === 1 ? firstTry() : honest(label, req)));

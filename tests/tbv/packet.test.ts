@@ -44,7 +44,7 @@ describe("buildPackets", () => {
     record({ cls: "no-report", texts: { report: null, d1: null, d2: null } }),
     record({ cls: "gap", responseIds: [] }),
   ];
-  const built = () => buildPackets({ records: recs, keys, controlTaskIds: ["task-alpha"], stock: STOCK });
+  const built = () => buildPackets({ records: recs, keys, controlTaskIds: ["task-alpha"], stock: STOCK, doubleRead: () => false });
   test("one first packet per scored reading, a D2 packet when D2 answered, two controls per control task", () => {
     const { packets, entries } = built();
     const kinds = entries.map((e) => e.kind + ":" + e.label);
@@ -101,12 +101,12 @@ describe("buildPackets", () => {
     for (const e of entries.filter((x) => x.kind === "first")) expect(e.second).toBe(doubleRead(e.label) ? otherJudge(e.primary) : null);
   });
   test("refuses a scored reading whose task has no key", () => {
-    expect(() => buildPackets({ records: [record({ task: "task-gamma" })], keys, controlTaskIds: [], stock: STOCK })).toThrow(expect.objectContaining({ code: "E_TBV_INPUT" }));
+    expect(() => buildPackets({ records: [record({ task: "task-gamma" })], keys, controlTaskIds: [], stock: STOCK, doubleRead: () => false })).toThrow(expect.objectContaining({ code: "E_TBV_INPUT" }));
   });
 });
 
 describe("writePackets and run", () => {
-  const one = () => buildPackets({ records: [record()], keys: { "task-alpha": KEY }, controlTaskIds: [], stock: "stock" });
+  const one = () => buildPackets({ records: [record()], keys: { "task-alpha": KEY }, controlTaskIds: [], stock: "stock", doubleRead: () => false });
   test("refuses a packet key inside the packets directory", () => {
     const dir = tmp("tbv-packets-");
     for (const key of [join(dir, "p", "key.json"), join(dir, "p", "sub", "key.json")]) expect(() => writePackets(join(dir, "p"), key, one())).toThrow(expect.objectContaining({ code: "E_TBV_JUDGE" }));

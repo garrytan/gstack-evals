@@ -125,15 +125,14 @@ describe("writeKeys over a fake item run", () => {
     if (req.body.model === "fake-writer") return sent(good(n));
     return sent(audit());
   };
-  test("one slot per task holds the writer and both auditors; the kept key lands in out with both audits", async () => {
+  test("each call gets its own slot (writer, then each auditor); the kept key lands in out with both audits", async () => {
     const out = tmp("tbv-keys-");
     const f = fakeRun(writerOrAudit(() => keyReply()));
     const r = await writeKeys({ histories: [HISTORY], extracts: [EXTRACT], out, keyBrief: "KEY BRIEF", auditBrief: AUDIT_BRIEF, run: f.run, keyWriterSend: fakeKeyWriterSend, judgeSend: fakeJudgeSend, worst: () => 1000 });
     expect(r.dropped).toEqual([]);
-    expect(f.slots.length).toBe(1);
-    expect(f.slots[0]!.allowance).toBe(18000);
-    expect(f.slots[0]!.models.sort()).toEqual(["anthropic:fake-opus", "anthropic:fake-sol", "openrouter:fake-writer"]);
-    expect(f.slots[0]!.label).not.toContain("task-alpha");
+    expect(f.slots.map((s) => s.allowance)).toEqual([6000, 6000, 6000]);
+    expect(f.slots.map((s) => s.models)).toEqual([["openrouter:fake-writer"], ["anthropic:fake-opus"], ["anthropic:fake-sol"]]);
+    expect(f.slots.every((s) => !s.label.includes("task-alpha"))).toBe(true);
     expect(f.sends.map((s) => s.req.body.model)).toEqual(["fake-writer", "fake-opus", "fake-sol"]);
     const k = JSON.parse(readFileSync(join(out, "task-alpha.json"), "utf8")) as Key;
     expect(k.audits.map((a) => a.auditor)).toEqual(["opus", "sol"]);
