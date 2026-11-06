@@ -4,7 +4,9 @@
 // statuses, maxTokens) and the amendment's new input shapes (allin per paid item, judge pricing per packet kind). It
 // never overrides a field the frozen input carries, except reading labels: a frozen reading that carries a second read
 // gets a label the seeded double-read draw picks, and a scored reading on a task with facts that carries none gets one
-// the draw passes over, since the head checks the sample against that draw. regress.ts and dryrun.ts use it.
+// the draw passes over, since the head checks the sample against that draw. A second read on a reading that is not
+// scored is dropped: the frozen rule reads second reads on scored readings only, and the head refuses one the draw did
+// not pick. regress.ts and dryrun.ts use it.
 import { createHash } from "node:crypto";
 import { CREDIT_USD, doubleRead } from "./rule.ts";
 import { JUDGE_OF, otherJudge, type Model, type SplitManifest } from "./types.ts";
@@ -21,6 +23,7 @@ function readings(rd: Any): Adapted {
     x.judge ??= JUDGE_OF[x.model as Model];
     x.maxTokens ??= [];
     x.responseIds ??= ["frozen-" + i];
+    if (x.second !== undefined && x.status !== "scored") delete x.second;
     if (x.second && typeof x.second === "object") x.second = { judge: otherJudge(x.judge), status: "judged", responseIds: ["frozen-" + i + "-second"], ...x.second };
     const want = x.second ? true : x.status === "scored" && (nfacts.get(x.task) ?? 0) > 0 ? false : null;
     if (want !== null && typeof x.id === "string" && doubleRead(x.id) !== want) { let k = 0; while (doubleRead(x.id + "~" + k) !== want) k++; x.id = x.id + "~" + k; }
