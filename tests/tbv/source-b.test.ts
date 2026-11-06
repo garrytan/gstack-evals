@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accrualClosed, assembleB, clustersOf, devEligible, fromGraphql, heldOutEligible, type PrRecord, run, stripGstack } from "../../lanes/tbv/history/source-b.ts";
+import { accrualClosed, assembleB, clustersOf, devEligible, fromGraphql, heldOutCluster, heldOutEligible, lineageOf, type LineageStub, type PrRecord, run, stripGstack } from "../../lanes/tbv/history/source-b.ts";
 import { codeOf } from "./history-events.test.ts";
 
 const RECEIPT = "```gstack-ship-receipt\n{\"head\": \"abc\"}\n```";
@@ -132,3 +132,32 @@ test("assemble-b writes one history per record, clustered over the whole file", 
   expect(h13.cluster).toBe("pr-12");
   expect(codeOf(() => {})).toBe("no refusal");
 });
+
+test("A7: a skipped pre-P record keeps its lineage keys, and a post-P PR sharing its branch or issue is refused held-out", () => {
+  const node = { number: 7, state: "MERGED", title: "Start the widget", createdAt: at(P, -3600), baseRefName: "main", headRefName: "widget/parser", closingIssuesReferences: { totalCount: 1, nodes: [{ number: 40 }] }, files: { totalCount: 101, nodes: [] } };
+  expect(fromGraphql(node)).toBeNull();
+  const stub = lineageOf(node);
+  expect(stub).toEqual({ number: 7, createdAt: at(P, -3600), title: "Start the widget", baseRefName: "main", headRefName: "widget/parser", closingIssues: [40] });
+  expect(lineageOf({ ...node, closingIssuesReferences: { totalCount: 11, nodes: [{ number: 40 }] } }).closingIssues).toBeNull();
+  const branch = pr();
+  const r = heldOutEligible(branch, heldOutCluster(branch, [branch], [stub]), P);
+  expect(r.ok).toBe(false);
+  expect(!r.ok && r.why).toContain("#7");
+  const issue = pr({ number: 13, headRefName: "other/branch", closingIssues: [40] });
+  expect(heldOutEligible(issue, heldOutCluster(issue, [issue], [stub]), P).ok).toBe(false);
+  const unrelated = pr({ number: 14, title: "Fix the docs", headRefName: "docs/fix" });
+  expect(heldOutEligible(unrelated, heldOutCluster(unrelated, [unrelated, branch, issue], [stub]), P)).toEqual({ ok: true });
+});
+
+test("A7: a skipped record whose lineage keys are missing or truncated fails closed for a post-P PR that could share them", () => {
+  const issue = pr({ number: 13, headRefName: "other/branch", closingIssues: [41] });
+  const plain = pr({ number: 14, title: "Fix the docs", headRefName: "docs/fix" });
+  const cut: LineageStub = { number: 8, createdAt: at(P, -60), title: "Old", baseRefName: "main", headRefName: "old/branch", closingIssues: null };
+  const r = heldOutEligible(issue, heldOutCluster(issue, [issue, plain], [cut]), P);
+  expect(r.ok).toBe(false);
+  expect(!r.ok && r.why).toContain("#8");
+  expect(heldOutEligible(plain, heldOutCluster(plain, [issue, plain], [cut]), P)).toEqual({ ok: true });
+  const blind: LineageStub = { number: 9, createdAt: null, title: null, baseRefName: null, headRefName: null, closingIssues: null };
+  expect(heldOutEligible(plain, heldOutCluster(plain, [issue, plain], [blind]), P).ok).toBe(false);
+});
+

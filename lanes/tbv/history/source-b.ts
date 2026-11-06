@@ -70,7 +70,7 @@ export function stripGstack(text: string): string {
 }
 
 /** Lineage clusters: same head branch, stacked bases, shared closing issue, shared code key. Returns pr number to cluster id. */
-export function clustersOf(prs: PrRecord[]): Map<number, string> {
+export function clustersOf(prs: Array<Pick<PrRecord, "number" | "title" | "baseRefName" | "headRefName" | "closingIssues">>): Map<number, string> {
   const parent = new Map(prs.map((p) => [p.number, p.number]));
   const find = (x: number): number => {
     while (parent.get(x) !== x) x = parent.get(x)!;
@@ -98,8 +98,29 @@ const time = (iso: string | null, what: string): number => {
   return t;
 };
 
+/** What mine-b keeps of a truncated record: the keys clustersOf reads and createdAt. A null is missing or truncated. */
+export interface LineageStub {
+  number: number;
+  createdAt: string | null;
+  title: string | null;
+  baseRefName: string | null;
+  headRefName: string | null;
+  closingIssues: number[] | null;
+}
+
+/** The records heldOutEligible checks for pr: its lineage cluster over the kept records and the skipped stubs, plus every stub whose missing or truncated keys could join that cluster. Stubs never become histories. */
+export function heldOutCluster(pr: PrRecord, prs: PrRecord[], skipped: LineageStub[]): Array<PrRecord | LineageStub> {
+  const records = prs.some((p) => p.number === pr.number) ? prs : [...prs, pr];
+  const keyed = skipped.flatMap((s) => (s.title === null || s.baseRefName === null || s.headRefName === null ? [] : [{ number: s.number, title: s.title, baseRefName: s.baseRefName, headRefName: s.headRefName, closingIssues: s.closingIssues ?? [] }]));
+  const clusters = clustersOf([...records, ...keyed]);
+  const mine = clusters.get(pr.number);
+  const members = records.filter((p) => clusters.get(p.number) === mine);
+  const issues = members.some((p) => p.closingIssues.length > 0);
+  return [...members, ...skipped.filter((s) => clusters.get(s.number) === mine || s.title === null || s.baseRefName === null || s.headRefName === null || (s.closingIssues === null && issues))];
+}
+
 /** Amendment section 2 rule 2 and 3's cluster exclusion: merged and opened after P's post, no commit authored or committed before it, and no cluster sibling opened before it. */
-export function heldOutEligible(pr: PrRecord, cluster: PrRecord[], pPostMergedAt: string): { ok: true } | { ok: false; why: string } {
+export function heldOutEligible(pr: PrRecord, cluster: Array<PrRecord | LineageStub>, pPostMergedAt: string): { ok: true } | { ok: false; why: string } {
   const p = time(pPostMergedAt, "P's post merge time");
   const no = (why: string) => ({ ok: false as const, why: "#" + pr.number + " " + why });
   if (pr.state !== "MERGED" || pr.mergedAt === null) return no("is not merged");
@@ -110,7 +131,9 @@ export function heldOutEligible(pr: PrRecord, cluster: PrRecord[], pPostMergedAt
     if (time(c.committedDate, "committedDate") < p) return no("has commit " + c.oid.slice(0, 7) + " with committer date " + c.committedDate + " before P's post");
   }
   for (const s of cluster) {
-    if (s.number !== pr.number && time(s.createdAt, "createdAt") <= p) return no("shares a lineage cluster with #" + s.number + ", opened at " + s.createdAt + ", not after P's post");
+    if (s.number === pr.number) continue;
+    if (s.createdAt === null || s.title === null || s.baseRefName === null || s.headRefName === null || s.closingIssues === null) return no("may share a lineage cluster with #" + s.number + ", a truncated record whose lineage keys are missing or truncated");
+    if (time(s.createdAt, "createdAt") <= p) return no("shares a lineage cluster with #" + s.number + ", opened at " + s.createdAt + ", not after P's post");
   }
   return { ok: true };
 }
@@ -133,6 +156,12 @@ export function accrualClosed(o: { qualifyingNonClean: number; pPostMergedAt: st
 
 const nodesOf = (c: any): any[] => c?.nodes ?? [];
 const truncated = (c: any): boolean => typeof c?.totalCount === "number" && c.totalCount > nodesOf(c).length;
+
+export function lineageOf(node: Record<string, any>): LineageStub {
+  const text = (v: unknown) => (typeof v === "string" ? v : null);
+  const issues = node.closingIssuesReferences;
+  return { number: node.number, createdAt: text(node.createdAt), title: text(node.title), baseRefName: text(node.baseRefName), headRefName: text(node.headRefName), closingIssues: Array.isArray(issues?.nodes) && !truncated(issues) ? nodesOf(issues).map((i) => i.number) : null };
+}
 
 export function fromGraphql(node: Record<string, any>): PrRecord | null {
   const commits = nodesOf(node.commits).map((n) => n.commit);
@@ -190,7 +219,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (!f["--out"]) fail("E_USAGE", "mine-b needs --out");
     const [owner, name] = (f["--repo"] ?? "garrytan/gstack-evals").split("/");
     const prs: PrRecord[] = [];
-    const skipped: number[] = [];
+    const skipped: LineageStub[] = [];
     let cursor: string | null = null;
     do {
       const args: string[] = ["gh", "api", "graphql", "-f", "query=" + QUERY, "-f", "owner=" + owner, "-f", "name=" + name, ...(cursor ? ["-f", "cursor=" + cursor] : [])];
@@ -200,7 +229,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
       for (const node of page.nodes) {
         const rec = fromGraphql(node);
         if (rec) prs.push(rec);
-        else skipped.push(node.number);
+        else skipped.push(lineageOf(node));
       }
       cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
     } while (cursor);
