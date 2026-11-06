@@ -51,8 +51,8 @@ export interface DriveItemRun extends ItemRun {
   startedLabels(): Set<string>;
   /** Spend held by a label's sends across the item's leases, counted as spend checks count it. */
   labelMicros(label: string): number;
-  /** Checks each send against its OpenRouter generation record and releases those it shows were not billed. Returns the released idempotency keys. */
-  release(sends: Array<{ idempotencyKey: string; responseId: string }>): Promise<string[]>;
+  /** Checks each send against its OpenRouter generation record and releases those it shows were not billed. Returns the released idempotency keys, and the first response id with no generation record for it (a non-200 lookup or a record for another id), where checking stops: that send keeps its full reservation and the item stops. */
+  release(sends: Array<{ idempotencyKey: string; responseId: string }>): Promise<{ released: string[]; missing: string | null }>;
   close(capStop?: string): Promise<{ settled: number; unknown: number }>;
 }
 export interface DrivePlan {
@@ -302,21 +302,25 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
       }, 0);
     },
     async release(sends) {
-      if (!sends.length) return [];
+      if (!sends.length) return { released: [], missing: null };
       const b = proxy.bind({ cell: { run_id: o.runId, arm: "tbv", task: "generation-records", model: "openrouter", trial: 1, attempt: 1 }, models: ["openrouter:generation"], allowance_micros: 1 });
       const released: string[] = [];
       try {
         for (const s of sends) {
-          if (!/^[A-Za-z0-9_-]+$/.test(s.responseId)) continue;
+          if (!/^[A-Za-z0-9_-]+$/.test(s.responseId)) return { released, missing: s.responseId };
           const res = await fetch(base + b.slot + "/openrouter/v1/generation?id=" + s.responseId, { headers: { authorization: "Bearer " + b.token } });
           const text = await res.text();
-          if (res.status !== 200) continue;
+          let id: unknown;
+          try {
+            id = (JSON.parse(text) as { data?: { id?: unknown } })?.data?.id;
+          } catch {}
+          if (res.status !== 200 || id !== s.responseId) return { released, missing: s.responseId };
           if (local.releaseUnbilled({ lease_id: leaseId, idempotency_key: s.idempotencyKey, journal, generation_id: s.responseId, record: text }).ok) released.push(s.idempotencyKey);
         }
       } finally {
         proxy.unbind(b.slot);
       }
-      return released;
+      return { released, missing: null };
     },
     async close(capStop) {
       if (closed) return closed;
@@ -560,7 +564,12 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
     let s = await run.spend();
     if (!roundAdmits({ ...s, roundWorst })) {
       const fresh = unknown.filter((u) => !released.has(u.idempotencyKey));
-      for (const k of await run.release(fresh)) released.add(k);
+      const rel = await run.release(fresh);
+      for (const k of rel.released) released.add(k);
+      if (rel.missing !== null) {
+        setStop("harness", "E_TBV_RUN no OpenRouter generation record for the send whose stream named " + rel.missing + ": its reservation stands at full and nothing retries; check that the stream's message_start id is the generation id");
+        break;
+      }
       s = await run.spend();
       if (!roundAdmits({ ...s, roundWorst })) {
         setStop("cap", "the item's cap refused the round: " + s.settled + " settled, " + s.reserved + " reserved and " + s.unknown + " unknown micros plus the round's worst case of " + roundWorst + " is over the cap of " + s.cap);
