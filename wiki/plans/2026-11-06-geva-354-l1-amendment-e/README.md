@@ -17,7 +17,7 @@ links:
 attachments:
   - dc6ced90647895762e8a0f4ac0fd094b7fc489eb29f29733543ce4b2170c5ede  amendment-c-dryrun.txt
   - ebfedd27905eaa7a797c2ecf5b09328196502c7cfd1bd54b21bcda8860b2b1f8  ceiling-plan.json
-  - d1bae6e59291af5cf5fda0e3244b5bd262460a0a5cc8716076ab48308df2b672  dryrun.sh.txt
+  - a25cab225c4d35fdce0e4d02f9cee7c5ca5c3d2b8a96270d44698cfefd0af418  dryrun.sh.txt
   - bb903cf98bc9cb0c3888b2ea5304604da11da6a1ff61adaecbc5c3438e66d31f  dryrun.txt
   - 1bb953df5ffe690ecde14ac1bc8351a89a15f62fabc16767825892986af51955  mdd.py.txt
   - bba38c4c4a427eaeb3ab30ddda47caebe8fa24515d8dc44c67839f8c3f053bef  mdd.txt
@@ -70,7 +70,7 @@ ROUTE_LEDGER=<l1-route-sol.jsonl> LEDGER=<pilot-sol.jsonl> ARMS=<L1 arm dir> bun
 
 particle-1's are the same with `--item l1-route-p1`, pilot-p1 and f1-p1, and l1-route-p1's ledger as ROUTE_LEDGER.
 
-**Code that changed since 802c2e4.** l1.ts adds the items, the model per item, the route gate, and a host-up check for the key of the item model's route in config/proxy.json (OPENROUTER_API_KEY for Sol and particle-1), which refuses before any host reserve. host-up writes that key alone to the host, so Sol's and particle-1's hosts and part VMs get no Anthropic key. ceiling.ts adds the $3,300 line, the plan's `ceiling_usd` check and the `after` order, and counts a done f1-sol or f1-p1 at its spend only when its work dir shows every part finished and host-down settled (`--work`), else at its cap. analyze.ts adds f1-sol-offu's contrast (below) and prints "not run under the $3,300 ceiling". It reports the contrast as not run, with no reason, only when the table holds no F1 off-u session; off-u sessions that ran with none graded read no outcome under the coverage rule. In R3's code, screen.ts's gate takes a RouteGate (an R3 model or an L1 route item) and names the leg a dropped model leaves ("L1's Sol leg", "L1's particle-1 leg"; R3a when unset), and route-check.ts accepts `--item l1-route-sol` and `--item l1-route-p1`, reads the item's own cells file, runs each part on its arm's tar, and passes the cells file's sdk_max_turns into the job. Only L1's cells files carry sdk_max_turns, so R3's own route checks run as before.
+**Code that changed since 802c2e4.** l1.ts adds the items, the model per item, the route gate, and a host-up check for the key of the item model's route in config/proxy.json (OPENROUTER_API_KEY for Sol and particle-1), which refuses before any host reserve. host-up writes that key alone to the host, so Sol's and particle-1's hosts and part VMs get no Anthropic key. ceiling.ts adds the $3,300 line, the plan's `ceiling_usd` check and the `after` order, and counts a done f1-sol, f1-sol-offu or f1-p1 at its spend only when its work dir shows every part finished, no relaunch owed and host-down settled (`--work`), else at its cap. analyze.ts adds f1-sol-offu's contrast (below) and prints "not run under the $3,300 ceiling". It reports the contrast as not run, with no reason, only when the table holds no F1 off-u session; off-u sessions that ran with none graded read no outcome under the coverage rule. In R3's code, screen.ts's gate takes a RouteGate (an R3 model or an L1 route item) and names the leg a dropped model leaves ("L1's Sol leg", "L1's particle-1 leg"; R3a when unset), and route-check.ts accepts `--item l1-route-sol` and `--item l1-route-p1`, reads the item's own cells file, runs each part on its arm's tar, and passes the cells file's sdk_max_turns into the job. Only L1's cells files carry sdk_max_turns, so R3's own route checks run as before.
 
 ## Caps
 
@@ -123,6 +123,8 @@ The ceiling check on the pinned plan, at the crew file as of 2026-11-06 17:00 UT
 
 At caps, everything fits under $3,300 with $232.47 to spare, and with f1-sol-offu with $32.47. That margin is thin. It moves as threads spend, and a re-cost that raises F1-Sol's or F1-p1's cap uses it first. The at-caps figure sizes the plan and binds nothing: each launch is decided by the check at that moment, which counts done items at their settled spend. With Sol's items settled at price.py's expected spend, for example, f1-sol-offu's check leaves $380.09 (E9).
 
+**Done marks.** The run thread marks an item done only after attach shows every part finished, no relaunch owed or prepared, and host-down settled.
+
 ## The pins
 
 The build is 85d6ccc53a27a70142b0b7499a28cb0f5961aabb, the commit both dry runs ran at. This post's last commit adds only dryrun.txt, amendment-c-dryrun.txt and the dry run's results to its folder.
@@ -133,7 +135,7 @@ The build is 85d6ccc53a27a70142b0b7499a28cb0f5961aabb, the commit both dry runs 
 | quick/laneb/config/cells.l1-sol.json | 9bc74ecc5ac41e493aeb77d51e3b86dc97dde6f38866b8eeb441c2bbb6041e35 |
 | quick/laneb/config/cells.l1-p1.json | 70e14e390223a46b30c675b4ed3ca161f7041b4257d035d8378a65ae15a10138 |
 | quick/laneb/l1/l1.ts | 3016b92d46a2424695ca7b6245368af089f6ef58b6bf1b1de297248a71d0af5f |
-| quick/laneb/l1/ceiling.ts | 8573f019ffabe022a95dd3a923cc3eaa0ae2db1d085b62e89f174c499ee59e5f |
+| quick/laneb/l1/ceiling.ts | b790f2ee2ca346c7f03f5388d20290d917a63d6e9c9671c2d6e3f317326b2449 |
 | quick/laneb/l1/analyze.ts | aa72797c1d54dd408420fb5b7cce99d85efd987c7997ac30d8a33ba99be056f8 |
 | quick/laneb/r3/route-check.ts | 0a30a9f70ee79f76d9bc19752d56f9ba307b92e35fc23dff850094dbb998a8a7 |
 | quick/laneb/r3/screen.ts | df57bd7a3fb6375cb7a1da9bd39bd381c1a76969d74df509edd1d723e4d0377a |
@@ -164,7 +166,7 @@ Under quick/laneb, only these files, the two READMEs and five test files changed
 
 - [amendment-c-dryrun.txt](amendment-c-dryrun.txt): Amendment C's dry run rerun at the build, sha256 dc6ced90647895762e8a0f4ac0fd094b7fc489eb29f29733543ce4b2170c5ede.
 - [ceiling-plan.json](ceiling-plan.json): the ceiling plan at the $3,300 line: Opus done, Sol then particle-1 planned at their caps, each after the one before, sha256 ebfedd27905eaa7a797c2ecf5b09328196502c7cfd1bd54b21bcda8860b2b1f8.
-- [dryrun.sh.txt](dryrun.sh.txt): the dry run, sha256 d1bae6e59291af5cf5fda0e3244b5bd262460a0a5cc8716076ab48308df2b672.
+- [dryrun.sh.txt](dryrun.sh.txt): the dry run, sha256 a25cab225c4d35fdce0e4d02f9cee7c5ca5c3d2b8a96270d44698cfefd0af418.
 - [dryrun.txt](dryrun.txt): its whole output at the build, sha256 bb903cf98bc9cb0c3888b2ea5304604da11da6a1ff61adaecbc5c3438e66d31f.
 - [mdd.py.txt](mdd.py.txt): the off-u contrast's MDD over the merged power.py's model, one-sided for a gain, sha256 1bb953df5ffe690ecde14ac1bc8351a89a15f62fabc16767825892986af51955.
 - [mdd.txt](mdd.txt): its output, sha256 bba38c4c4a427eaeb3ab30ddda47caebe8fa24515d8dc44c67839f8c3f053bef.

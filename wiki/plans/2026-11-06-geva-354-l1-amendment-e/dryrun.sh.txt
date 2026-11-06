@@ -315,6 +315,15 @@ SB="--ledger $RL --ledger $D/ceiling/pilot-sol.jsonl --ledger $D/ceiling/f1-sol.
 F1C() { printf %s "$1" | sed -n 's/^ *f1-sol done: .*counted \$\([0-9.]*\).*/\1/p'; }
 o1=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB); o2=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB --work "$(FWK no-f1-4 f1-4 '{"event":"down","n":1,"settled":true}')"); o3=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB --work "$(FWK host-up -)"); o4=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SL)
 rule "E15 f1-sol marked done counts at its \$730 cap until its work dir shows every part finished and host-down settled (ceiling.ts --work): with no record, with f1-4's result missing, and with its host still up; with the full record, at its settled \$460.22" "730.00 730.00 730.00 460.22" "$(F1C "$o1") $(F1C "$o2") $(F1C "$o3") $(F1C "$o4")" test "$(F1C "$o1") $(F1C "$o2") $(F1C "$o3") $(F1C "$o4")" = "730.00 730.00 730.00 460.22"
+# E15b drives round 4's two fixes both ways: f1-sol-offu has four parts too, so its done mark needs its own work dir's record;
+# and a part that ended with a loss and no cap stop owes its one relaunch, so f1-sol's record needs that part's relaunch record.
+OFC() { printf %s "$1" | sed -n 's/^ *f1-sol-offu done: .*counted \$\([0-9.]*\).*/\1/p'; }
+OL="--ledger $D/ceiling/f1-sol-offu.jsonl"
+OW=$D/ceiling/work-offu; rm -rf "$OW"; mkdir -p "$OW/host"; cp "$S/f1-sol-offu/plan.json" "$OW/"; for p in $(jq -r '.parts[].name' "$OW/plan.json"); do echo '{}' > "$OW/$p.result.json"; done; printf '%s\n' '{"event":"up","n":1}' '{"event":"down","n":1,"settled":true}' > "$OW/host/hosts.jsonl"
+LW=$(FWK loss - '{"event":"down","n":1,"settled":true}'); LP=$(jq -r '.parts[1].name' "$LW/plan.json"); echo '{"loss":["vm-run.sh exit 4 (dry run)"],"cap_stop":[]}' > "$LW/$LP.result.json"
+o1=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SL $OL); o2=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SL $OL --work "$OW"); o3=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SB $OL --work "$OW" --work "$LW")
+echo "{\"part\":\"$LP\",\"launched\":false}" > "$LW/$LP.relaunch.json"; o4=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SB $OL --work "$OW" --work "$LW")
+rule "E15b f1-sol-offu marked done counts at its \$200 cap until its own work dir shows every part finished and host-down settled, then at its settled \$104.34; f1-sol marked done stays at its \$730 cap while a part that ended with a loss and no cap stop owes its relaunch, and counts at its settled \$460.22 once that part's relaunch record exists" "f1-sol-offu 200.00 104.34; f1-sol 730.00 460.22" "f1-sol-offu $(OFC "$o1") $(OFC "$o2"); f1-sol $(F1C "$o3") $(F1C "$o4")" test "f1-sol-offu $(OFC "$o1") $(OFC "$o2"); f1-sol $(F1C "$o3") $(F1C "$o4")" = "f1-sol-offu 200.00 104.34; f1-sol 730.00 460.22"
 out=$(CK "$PLAN" final --post results-post); echo "final read on the pinned plan: $out" | sed "$HIDE"
 echo; echo "## Part F: the keyless checks at the commit"
 rm -rf "$E" "$W/wt"; git -C "$G" worktree prune; git -C "$G" worktree add -q --detach "$W/wt" "$FULL" && (cd "$W/wt" && bun install --frozen-lockfile > "$W/log/bun-install-wt.txt" 2>&1)

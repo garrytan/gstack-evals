@@ -11,10 +11,10 @@
 // the launch's own included, holds open reservations (items and the parts of one item launch one at a time), and a launch
 // whose plan item runs after another item that is not done yet. final gives the all-in figure before the results post and the largest token stop the post
 // thread can have so that figure, the holds still open and the stop at the measured rate stay at or under the line.
-// f1-sol and f1-p1 run four parts one after another, so a done mark set between parts would leave the parts still to run out
-// of the sum: each counts as done only with its run's finished-run record (--work <its work dir>: a result for every part and
-// every prepared relaunch, and every host the run brought up gone, the last by host-down with its hours settled), and until
-// then at the larger of its spend and its cap.
+// f1-sol, f1-sol-offu and f1-p1 run four parts one after another, so a done mark set between parts would leave the parts still
+// to run out of the sum: each counts as done only with its run's finished-run record (--work <its work dir>: a result for every
+// part and every prepared relaunch, a relaunch record for every part that ended with a loss and no cap stop, and every host the
+// run brought up gone, the last by host-down with its hours settled), and until then at the larger of its spend and its cap.
 // L1's line is $3,300 all-in: the prereg's $2,000, raised by the project owner so particle-1 can run after Sol (Amendment E).
 // The plan file carries it as ceiling_usd, and the command line refuses a plan at any other line.
 import { existsSync, readFileSync } from "node:fs";
@@ -27,7 +27,7 @@ export const CAPTAIN_LINE_USD = 40;
 export const RUN_WORK_LINE_USD = 15;
 /** Section 9's planning rate, used only until any L1 thread has a token reading. */
 export const PLANNING_USD_PER_MTOK = 0.45;
-export const RUN_RECORD_ITEMS = ["f1-sol", "f1-p1"];
+export const RUN_RECORD_ITEMS = ["f1-sol", "f1-sol-offu", "f1-p1"];
 const M = 1_000_000;
 
 export class UsageError extends Error {}
@@ -110,20 +110,28 @@ export function finalRead(ledgerRows: Row[], crew: Crew, plan: Plan, post: strin
   return { post, all_in: t.spentTotal, holds, room, max_post_token_stop: maxStop, open_items: t.items.filter((i) => i.status !== "done" || i.unproven).map((i) => i.item), tally: t };
 }
 
-// An f1-sol or f1-p1 work dir's finished-run record, from what l1.ts writes there: plan.json's parts, a <part>.result.json for
-// each part and each prepared relaunch (<part>-relaunch/l1-part.json), and host/hosts.jsonl, where every host that came up is
+// An f1-sol, f1-sol-offu or f1-p1 work dir's finished-run record, from what l1.ts writes there: plan.json's parts, a
+// <part>.result.json for each part and each prepared relaunch (<part>-relaunch/l1-part.json), a <part>.relaunch.json for each
+// planned part whose result holds a loss and no cap stop (the one relaunch it owes; a relaunch's own loss owes none), and
+// host/hosts.jsonl, where every host that came up is
 // gone (a host-down whose hours settled, a failed host-up confirmed down, or a host recover rebuilt) and the last row is a
 // host-down whose hours settled.
 export function finishedRun(work: string): { item: string; finished: boolean } {
   if (!existsSync(join(work, "plan.json"))) throw new UsageError("E_USAGE l1 ceiling: --work " + work + " has no plan.json");
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
-  if (!RUN_RECORD_ITEMS.includes(plan?.item) || !Array.isArray(plan.parts)) throw new UsageError("E_USAGE l1 ceiling: --work takes the work dir of f1-sol or f1-p1, not " + work);
+  if (!RUN_RECORD_ITEMS.includes(plan?.item) || !Array.isArray(plan.parts)) throw new UsageError("E_USAGE l1 ceiling: --work takes the work dir of f1-sol, f1-sol-offu or f1-p1, not " + work);
   const parts = plan.parts.flatMap((p: { name: string }) => [p.name, ...(existsSync(join(work, p.name + "-relaunch", "l1-part.json")) ? [p.name + "-relaunch"] : [])]);
+  const owed = plan.parts.some((p: { name: string }) => {
+    const r = join(work, p.name + ".result.json");
+    if (!existsSync(r)) return false;
+    const result = JSON.parse(readFileSync(r, "utf8"));
+    return result?.loss?.length > 0 && !result.cap_stop?.length && !existsSync(join(work, p.name + ".relaunch.json"));
+  });
   const hostsPath = join(work, "host/hosts.jsonl");
   const hosts = existsSync(hostsPath) ? readFileSync(hostsPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
   const gone = (n: unknown) => hosts.some((h) => h.n === n && (h.event === "lost" || (h.event === "down" && (h.settled === true || h.down_confirmed === true))));
   const ups = hosts.filter((h) => h.event === "up"), last = hosts.at(-1);
-  const finished = parts.every((p: string) => existsSync(join(work, p + ".result.json"))) && ups.length > 0 && ups.every((h) => gone(h.n)) && last?.event === "down" && last.settled === true;
+  const finished = parts.every((p: string) => existsSync(join(work, p + ".result.json"))) && !owed && ups.length > 0 && ups.every((h) => gone(h.n)) && last?.event === "down" && last.settled === true;
   return { item: plan.item, finished };
 }
 
@@ -145,7 +153,7 @@ if (import.meta.main) {
   const flag = (name: string) => argv.flatMap((a, i) => (a === name && argv[i + 1] ? [argv[i + 1]!] : []));
   try {
     const ledgers = flag("--ledger"), voids = flag("--void-ledger"), works = flag("--work"), crewPath = flag("--crew")[0], planPath = flag("--plan")[0];
-    if ((cmd !== "check" && cmd !== "final") || !ledgers.length || !crewPath || !planPath) throw new UsageError("E_USAGE usage: bun quick/laneb/l1/ceiling.ts check|final --ledger <ledger.jsonl> [--ledger ...] [--void-ledger <ledger.jsonl> ...] [--work <f1-sol or f1-p1 work dir> ...] --crew <crew.json> --plan <plan.json> (--launch <item> | --post <thread>)");
+    if ((cmd !== "check" && cmd !== "final") || !ledgers.length || !crewPath || !planPath) throw new UsageError("E_USAGE usage: bun quick/laneb/l1/ceiling.ts check|final --ledger <ledger.jsonl> [--ledger ...] [--void-ledger <ledger.jsonl> ...] [--work <f1-sol, f1-sol-offu or f1-p1 work dir> ...] --crew <crew.json> --plan <plan.json> (--launch <item> | --post <thread>)");
     for (const p of [...ledgers, ...voids]) if (!existsSync(p)) throw new UsageError("E_USAGE l1 ceiling: no ledger at " + p);
     if (voids.some((p) => ledgers.some((q) => resolve(q) === resolve(p)))) throw new UsageError("E_USAGE l1 ceiling: a ledger can't be both an item's ledger and a voided run's");
     const rows = ledgers.flatMap((p) => readRows(p)), voided = voids.map((p) => readRows(p));

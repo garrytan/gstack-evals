@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { check, finalRead, tally, UsageError, type Crew, type Plan } from "../l1/ceiling.ts";
+import { check, finalRead, finishedRun, tally, UsageError, type Crew, type Plan } from "../l1/ceiling.ts";
 import { readRows, type Row } from "../runner/ledger.ts";
 
 const M = 1_000_000;
@@ -294,9 +294,30 @@ describe("the command line", () => {
     expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "lost", n: 1 }] }))).toBe(atCap);
     expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "down", n: 1, down_confirmed: true }] }))).toBe(atCap);
     expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "down", n: 1, down_confirmed: true }, { event: "up", n: 2 }, { event: "down", n: 2, settled: true }] }))).toBe(atSpend);
-    expect(f1(work({ item: "pilot-sol" }))).toContain("E_USAGE l1 ceiling: --work takes the work dir of f1-sol or f1-p1");
+    expect(f1(work({ item: "pilot-sol" }))).toContain("E_USAGE l1 ceiling: --work takes the work dir of f1-sol, f1-sol-offu or f1-p1");
+    expect(finishedRun(work({ item: "f1-sol-offu" }))).toEqual({ item: "f1-sol-offu", finished: true });
     expect(f1(work(), work())).toBe("E_USAGE l1 ceiling: two --work dirs for f1-sol");
     expect(f1(mkdtempSync(join(tmpdir(), "l1-work-")))).toContain("has no plan.json");
+  });
+
+  test("--work: a part that ended with a loss owes its one relaunch, so f1-sol stays at its cap until that part's relaunch record exists; a cap stop and a relaunch's own loss owe none", () => {
+    const work = (o: { bodies: Record<string, unknown>; relaunched?: string[]; relaunch?: boolean }) => {
+      const w = mkdtempSync(join(tmpdir(), "l1-work-"));
+      mkdirSync(join(w, "host"));
+      writeFileSync(join(w, "plan.json"), JSON.stringify({ item: "f1-sol", parts: ["f1-1", "f1-2", "f1-3", "f1-4"].map((name) => ({ name })) }));
+      for (const p of ["f1-1", "f1-2", "f1-3", "f1-4", ...(o.relaunch ? ["f1-2-relaunch"] : [])]) writeFileSync(join(w, p + ".result.json"), JSON.stringify(o.bodies[p] ?? { loss: [], cap_stop: [] }));
+      if (o.relaunch) { mkdirSync(join(w, "f1-2-relaunch")); writeFileSync(join(w, "f1-2-relaunch/l1-part.json"), JSON.stringify({ name: "f1-2-relaunch", relaunch_of: "f1-2" })); }
+      for (const p of o.relaunched ?? []) writeFileSync(join(w, p + ".relaunch.json"), JSON.stringify({ part: p, launched: !!o.relaunch }));
+      writeFileSync(join(w, "host/hosts.jsonl"), [{ event: "up", n: 1 }, { event: "down", n: 1, settled: true }].map((r) => JSON.stringify(r)).join("\n") + "\n");
+      return w;
+    };
+    const lost = { loss: ["vm-run.sh exit 4 on f1-2-vm3"], cap_stop: [] };
+    expect(finishedRun(work({ bodies: { "f1-2": lost } })).finished).toBe(false);
+    expect(finishedRun(work({ bodies: { "f1-2": lost }, relaunched: ["f1-3"] })).finished).toBe(false);
+    expect(finishedRun(work({ bodies: { "f1-2": lost }, relaunched: ["f1-2"] })).finished).toBe(true);
+    expect(finishedRun(work({ bodies: { "f1-2": lost, "f1-2-relaunch": lost }, relaunched: ["f1-2"], relaunch: true })).finished).toBe(true);
+    expect(finishedRun(work({ bodies: { "f1-2": { loss: ["vm-run.sh exit 4 on f1-2-vm3"], cap_stop: ["f1-2-vm3/proxy-sessions.jsonl: session_cap"] } } })).finished).toBe(true);
+    expect(finishedRun(work({ bodies: {} })).finished).toBe(true);
   });
 });
 
@@ -394,6 +415,18 @@ describe("the Sol leg's plan under the leftover rule (Amendment E)", () => {
     expect([counted(proven)["f1-sol"], counted(proven)["f1-p1"]]).toEqual([120, 200]);
     expect(bare.total - proven.total).toBe((610 + 720) * M);
     expect(finalRead(spent, crew(600_000, 40_000), p, "GEVA-1").all_in).toBe(bare.spentTotal);
+  });
+});
+
+describe("f1-sol-offu's done mark (Amendment E)", () => {
+  test("marked done with no finished-run record, f1-sol-offu counts at its $200 cap, and with one at its spend, so l1-route-p1's check after it sees the parts still to run", () => {
+    const p: Plan = { items: [...opusPlan(), { item: "f1-sol", cap_usd: 730, status: "done" }, { item: "f1-sol-offu", cap_usd: 200, status: "done", after: "f1-sol" }, { item: "l1-route-p1", cap_usd: 20, status: "planned", after: "f1-sol-offu" }], leftover: { sol: "done", particle: "pending" } };
+    const spent = [...atExpected(), ...rows("f1-sol", 730, [460.22]), ...rows("f1-sol-offu", 200, [50])];
+    const offu = (finished: string[]) => dollars(tally(spent, crew(600_000, 40_000), p, null, [], finished).items.find((i) => i.item === "f1-sol-offu")!.counted);
+    expect(offu(["f1-sol"])).toBe(200);
+    expect(offu(["f1-sol", "f1-sol-offu"])).toBe(50);
+    const bare = check(spent, crew(600_000, 40_000), p, "l1-route-p1", [], ["f1-sol"]), proven = check(spent, crew(600_000, 40_000), p, "l1-route-p1", [], ["f1-sol", "f1-sol-offu"]);
+    expect(bare.tally.total - proven.tally.total).toBe(150 * M);
   });
 });
 
