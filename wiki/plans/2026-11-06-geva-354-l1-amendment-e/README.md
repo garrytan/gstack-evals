@@ -13,6 +13,7 @@ links:
   - 2026-11-05-geva-294-l1-amendment-c
   - 2026-11-05-geva-302-l1-amendment-d
   - 2026-11-02-geva-153-run-d-discovery-results
+  - 2026-11-06-geva-350-l1-overhaul-results
 attachments:
   - 273113fa1756e1e88b488cf73e9e6f9a96e0b5874535fe59907e1af1eae3c454  amendment-c-dryrun.txt
   - ebfedd27905eaa7a797c2ecf5b09328196502c7cfd1bd54b21bcda8860b2b1f8  ceiling-plan.json
@@ -33,6 +34,8 @@ Amendment E builds what section 9's leftover rule describes for GPT-6.1 Sol and 
 
 **Sol first, then particle-1.** Section 9 already orders them: once the Opus items settle, Sol runs its route check, its own pilot and F1-Sol, and particle-1 follows the same way. Amendment E builds both paths in that order: l1-route-sol, pilot-sol, f1-sol, the optional f1-sol-offu, then l1-route-p1, pilot-p1 and f1-p1. A plan item may now name `after`, the item that must be done before it launches, and the ceiling check refuses a launch whose `after` item is not done. The pinned [ceiling-plan.json](ceiling-plan.json) chains each item to the one before it, and l1-route-p1 to f1-sol.
 
+**particle-1 runs whether or not Sol finishes.** If Sol leaves at any point (a route drop at l1-route-sol, a ceiling refusal of pilot-sol or f1-sol, or f1-sol-offu refused or dropped), the run thread takes Sol's unlaunched items out of the plan, sets leftover.sol to refused, and points l1-route-p1's `after` at the last Sol item that is done. If no Sol item is done, l1-route-p1 has no `after` at all. The ceiling check then decides particle-1's launches as it decides any other (dry run E14).
+
 **One added rule, f1-sol-offu.** It is the only rule Amendment E adds beyond the leftover rule. Its section below gives the item, its contrast and its MDD.
 
 **No off-u item for particle-1.**
@@ -45,7 +48,7 @@ Amendment E builds what section 9's leftover rule describes for GPT-6.1 Sol and 
 | pilot-sol | gpt-6.1-sol | cells.l1-sol.json | $100 | 32 | 1 | l1-route-sol |
 | f1-sol | gpt-6.1-sol | cells.l1-sol.json | $730 | 400 | 4 | pilot-sol |
 | f1-sol-offu (optional) | gpt-6.1-sol | cells.l1-sol.json | $200 | 80 | 4 | f1-sol |
-| l1-route-p1 | particle-1 | cells.l1-p1.json | $20 | smoke and told, each retried once | - | f1-sol, or f1-sol-offu while it is in the plan |
+| l1-route-p1 | particle-1 | cells.l1-p1.json | $20 | smoke and told, each retried once | - | f1-sol, or f1-sol-offu while it is in the plan; after a Sol exit, the last Sol item done, or nothing |
 | pilot-p1 | particle-1 | cells.l1-p1.json | $120 | 32 | 1 | l1-route-p1 |
 | f1-p1 | particle-1 | cells.l1-p1.json | $920 | 400 | 4 | pilot-p1 |
 
@@ -67,7 +70,7 @@ ROUTE_LEDGER=<l1-route-sol.jsonl> LEDGER=<pilot-sol.jsonl> ARMS=<L1 arm dir> bun
 
 particle-1's are the same with `--item l1-route-p1`, pilot-p1 and f1-p1, and l1-route-p1's ledger as ROUTE_LEDGER.
 
-**Code that changed since 802c2e4.** l1.ts adds the items, the model per item and the route gate. ceiling.ts adds the $3,300 line, the plan's `ceiling_usd` check and the `after` order. analyze.ts adds f1-sol-offu's contrast (below) and prints "not run under the $3,300 ceiling". In R3's code, screen.ts's gate takes a RouteGate (an R3 model or an L1 route item) and names the leg a dropped model leaves ("L1's Sol leg", "L1's particle-1 leg"; R3a when unset), and route-check.ts accepts `--item l1-route-sol` and `--item l1-route-p1`, reads the item's own cells file, runs each part on its arm's tar, and passes the cells file's sdk_max_turns into the job. Only L1's cells files carry sdk_max_turns, so R3's own route checks run as before.
+**Code that changed since 802c2e4.** l1.ts adds the items, the model per item, the route gate, and a host-up check for the key of the item model's route in config/proxy.json (OPENROUTER_API_KEY for Sol and particle-1), which refuses before any host reserve. ceiling.ts adds the $3,300 line, the plan's `ceiling_usd` check and the `after` order. analyze.ts adds f1-sol-offu's contrast (below) and prints "not run under the $3,300 ceiling". It reports the contrast as not run only when no F1 off-u session ran; off-u sessions that ran with none graded read no outcome under the coverage rule. In R3's code, screen.ts's gate takes a RouteGate (an R3 model or an L1 route item) and names the leg a dropped model leaves ("L1's Sol leg", "L1's particle-1 leg"; R3a when unset), and route-check.ts accepts `--item l1-route-sol` and `--item l1-route-p1`, reads the item's own cells file, runs each part on its arm's tar, and passes the cells file's sdk_max_turns into the job. Only L1's cells files carry sdk_max_turns, so R3's own route checks run as before.
 
 ## Caps
 
@@ -92,11 +95,11 @@ f1-sol-offu's arithmetic: 1.5 x $104.34 + $30 + 3 x $2.40 = $193.71, which round
 
 **What it runs.** F1's 80 tasks once on off-u, on Sol, in f-parts.txt's four parts: 80 sessions at a $200 cap. off-u is the prereg's off arm untold: the after pin with skill routing and skill contracts off, hooks registered and silent (tar a44be22f05a5ed681fc437371cb5c2bf057165b4e2aad2813f354d9d3c95daa9, Amendment C's pin).
 
-**When.** Only after f1-sol is done, and only if the ceiling check passes with it. The run thread then adds it to the plan with `"after": "f1-sol"` and points l1-route-p1's `after` at it, so particle-1 waits for it. If its check refuses, the run thread takes it out of the plan, points l1-route-p1 back at f1-sol, and reports it as not run under the ceiling with the MDD below.
+**When.** Only after f1-sol is done, and only if the ceiling check passes with it. The run thread then adds it to the plan with `"after": "f1-sol"` and points l1-route-p1's `after` at it, so particle-1 waits for it. If its check refuses, Sol leaves under the rule above: the run thread takes it out of the plan, sets leftover.sol to refused, points l1-route-p1 back at f1-sol, and reports it as not run under the ceiling with the MDD below.
 
-**Why.** The after pin's description rewrite rests on Sol alone. In Run D, Sol opened a gstack skill in 7 of 74 untold TB2 trials with the shipped descriptions and in 10 of 37 with /investigate's rewritten one, while Opus 5.5 and particle-1 opened none in 481 trials ([Run D](../../board/2026-11-02-geva-153-run-d-discovery-results/README.md)). L1's B1 compares after-u (the rewrite plus routing) with before-u, and off-u takes the routing away, so off-u minus before-u reads the rewrite alone. A flat reading on Sol would leave the rewrite with no supporting reading on any model under test, the case R48 sends toward CUT-CANDIDATE after its Why-null cycle in the results post.
+**Why.** The after pin's description rewrite rests on Sol alone. In Run D, Sol opened a gstack skill in 7 of 74 untold TB2 trials with the shipped descriptions and in 10 of 37 with /investigate's rewritten one, while Opus 5.5 and particle-1 opened none in 481 trials ([Run D](../../board/2026-11-02-geva-153-run-d-discovery-results/README.md)). L1's B1 compares after-u (the after pin with its routing) with before-u. off-u is the after pin with skill routing and skill contracts off, so off-u minus before-u reads the after pin without its routing: the description rewrite together with /investigate's new body and contract, the other changed skill files and the registered, silent hooks. It does not read the rewrite alone. A flat reading on Sol would leave that whole set with no supporting reading on any model under test. The results post then runs R48's Why-null cycle, and the CUT-CANDIDATE it can reach is that set, not the description rewrite alone. Amendment E set this rule after L1's Opus F1 results and before any Sol session: in [the Opus results](../../board/2026-11-06-geva-350-l1-overhaul-results/README.md), off-u loaded /investigate in none of Opus's 80 F1 sessions.
 
-**The contrast.** off-u (f1-sol-offu) minus before-u (f1-sol) on B1's measure, the share of untold sessions that load /investigate under probe L, paired by task over F1's 80 tasks, one-sided for a gain at 0.05. It is Sol's only, sits outside B1 and B3's Holm family and changes no primary verdict. analyze.ts computes it under the coverage rule with its Monte Carlo sign-flip (100,000 draws, seed 20261102) taken one-sided, and prints its estimate, task interval and p.
+**The contrast.** off-u (f1-sol-offu) minus before-u (f1-sol) on B1's measure, the share of untold sessions that load /investigate under probe L, paired by task over F1's 80 tasks, one-sided for a gain at 0.05. It is Sol's only, sits outside B1 and B3's Holm family and changes no primary verdict. analyze.ts computes it under the coverage rule with its Monte Carlo sign-flip (100,000 draws, seed 20261102) taken one-sided, and prints its estimate, task interval and p. Its pairs span two launches: off-u runs in its own item after f1-sol, while before-u ran inside f1-sol's parts, days earlier. A change on the provider side between them (OpenRouter's routing or Sol's serving) enters the estimate, and the sign-flip p does not model it. L1's other contrasts compare arms that ran together in the same parts. Amendment E buys no before-u slice inside f1-sol-offu to measure that drift, because the plan's margin at caps with f1-sol-offu is $32.47.
 
 **Its MDD.** 13.5 points at Sol's Run D rate of 9.5%, by [mdd.py](mdd.py.txt): the merged power.py's model and exact sign-flip, one-sided for a gain at 0.05, 80 tasks x 1, 80% power, task rates spread as Beta with concentration 2 ([mdd.txt](mdd.txt)). The 9.5% counts any gstack skill opened on TB2 with the shipped descriptions (7 of 74, 95% CI 1.4% to 18.9%), while B1 counts /investigate loads on F tasks, so L1's before-u rate may differ. mdd.txt also gives 11.7 points at 5%, 16.0 at 20%, and 14.8 at 9.5% with concentration 6. If f1-sol-offu is refused, it is reported as not run under the ceiling, with MDD 13.5 points.
 
@@ -129,9 +132,9 @@ The build is 9e5546f600afd113b1274284c1f1211659b045b5, the commit both dry runs 
 | quick/laneb/config/cells.l1.json (unchanged since 802c2e4) | 80934de1f6ddcbc653130f1c709d471eba4ced7b0ea9a0c7d562c808385400fc |
 | quick/laneb/config/cells.l1-sol.json | 9bc74ecc5ac41e493aeb77d51e3b86dc97dde6f38866b8eeb441c2bbb6041e35 |
 | quick/laneb/config/cells.l1-p1.json | 70e14e390223a46b30c675b4ed3ca161f7041b4257d035d8378a65ae15a10138 |
-| quick/laneb/l1/l1.ts | b08874488ee8ddde4a1258f747bf73a7466eacc80552f95f549522e78fbcdd71 |
+| quick/laneb/l1/l1.ts | 05c6c8628b008fa618e30298ee127ea7ffb2660eedccd9b9a4d3c0a41af99db8 |
 | quick/laneb/l1/ceiling.ts | ed59def5d95d97eefed60a4e80bf55fef31323e538c2b553eaca48dbb1dbab97 |
-| quick/laneb/l1/analyze.ts | aa8786e91c03b1453d289ab709d0f86cd7323c0432db1649e6f1adab0fde7e83 |
+| quick/laneb/l1/analyze.ts | 85143498642f93779a6097032fdc5c22b286c027c40adc3164575e40b70b908d |
 | quick/laneb/r3/route-check.ts | 0a30a9f70ee79f76d9bc19752d56f9ba307b92e35fc23dff850094dbb998a8a7 |
 | quick/laneb/r3/screen.ts | df57bd7a3fb6375cb7a1da9bd39bd381c1a76969d74df509edd1d723e4d0377a |
 
@@ -145,7 +148,7 @@ Under quick/laneb, only these files, the two READMEs and five test files changed
 - **Part B** prepares the three Opus items with the real prepare-run at 802c2e4 and at the build, each from a git archive outside any work tree, and compares them file by file and call by call.
 - **Part C** drives every prepare refusal for the Sol and particle-1 items, then prepares all five with the real prepare-run and checks their models, sessions, shapes and task dirs against the Opus parts.
 - **Part D** drives route-check.ts on both route items up to where a session would start, with stub harbor and docker and a placeholder key: nothing reaches a model, a proxy or a VM.
-- **Part E** runs ceiling.ts at the $3,300 line on the pinned plan against L1's final Opus ledgers, and opens and settles route and item leases on temporary ledgers in the pinned order, f1-sol-offu and particle-1 included.
+- **Part E** runs ceiling.ts at the $3,300 line on the pinned plan against L1's final Opus ledgers, and opens and settles route and item leases on temporary ledgers in the pinned order, f1-sol-offu and particle-1 included, and through the plan edits a Sol exit makes.
 - **Part F** runs bun test, typecheck, errors:check and wiki:check at the build.
 
 **Result at the build, 9e5546f.** DRYRUN: ok, 95 rules, 0 failed ([dryrun.txt](dryrun.txt); its commit line carries dryrun.sh's own sha256). The lines a reader will look for:

@@ -9,7 +9,7 @@
 #   Part D  route-check.ts --item l1-route-sol and l1-route-p1 driven up to where a session would start, with stub harbor and
 #           docker on PATH and a placeholder key: nothing reaches a model, a proxy or a VM.
 #   Part E  ceiling.ts at L1's $3,300 line on the pinned ceiling-plan.json against L1's final Opus ledgers, with route and
-#           item leases opened and settled on temporary ledgers in the pinned order.
+#           item leases opened and settled on temporary ledgers in the pinned order, and the plan edits a Sol exit makes.
 #   Part F  the keyless checks in a work tree at the commit: bun test, typecheck, errors:check, wiki:check.
 # Every rule line reads "ok" or "FAIL" with its expected and observed outcome; the last line is DRYRUN: ok or DRYRUN: fail.
 # Usage: bash dryrun.sh <commit> [<work dir>]   env: G (the gstack-evals checkout, default /workspace/gstack-evals), ARMS
@@ -298,6 +298,14 @@ o1=$(CK "$D/p-2000.json" check --launch l1-route-sol); x1=$?; o2=$(CK "$D/p-none
 rule "E12 a plan at the prereg's \$2,000 line, or with no line, exits 2" "exit 2, exit 2" "exit $x1, $o1; exit $x2, $o2" test "$x1" = 2 -a "$x2" = 2
 out=$(CK "$PLAN" check --launch tb2-opus); x=$?
 rule "E13 an Opus item no longer launches: tb2-opus is done" "exit 2, not a planned or open item" "exit $x, $out" test "$x" = 2
+# A Sol exit at any point: particle-1 runs whether or not Sol finishes. The run thread takes Sol's unlaunched items out of the
+# plan, sets leftover.sol to refused and points l1-route-p1's after at the last Sol item done, or gives it none when no Sol
+# item is done.
+jq '.items |= map(select(.item != "pilot-sol" and .item != "f1-sol")) | .leftover.sol = "refused" | (.items[] | select(.item == "l1-route-p1") | .after) = "l1-route-sol"' "$D/p-e7.json" > "$D/p-e14.json"
+o1=$(CK "$D/p-e14.json" check --launch l1-route-p1 --ledger "$RL"); x1=$?
+jq '.items |= map(select(.item != "l1-route-sol" and .item != "pilot-sol" and .item != "f1-sol")) | .leftover.sol = "refused" | (.items[] | select(.item == "l1-route-p1")) |= del(.after)' "$PLAN" > "$D/p-e14b.json"
+o2=$(CK "$D/p-e14b.json" check --launch l1-route-p1); x2=$?
+rule "E14 a Sol exit leaves particle-1 its route check: after a route drop at l1-route-sol (settled at \$0.42 and done), Sol's unlaunched items leave the plan, leftover.sol is refused and l1-route-p1 runs after l1-route-sol; with no Sol item done, l1-route-p1 has no after; both checks pass" "exit 0, CEILING PASS; exit 0, CEILING PASS" "exit $x1, $(MARGIN "$o1"); exit $x2, $(MARGIN "$o2")" sh -c 'test "$1" = 0 && test "$3" = 0 && printf %s "$2" | grep -q "^CEILING PASS" && printf %s "$4" | grep -q "^CEILING PASS"' _ "$x1" "$(echo "$o1" | head -1)" "$x2" "$(echo "$o2" | head -1)"
 out=$(CK "$PLAN" final --post results-post); echo "final read on the pinned plan: $out" | sed "$HIDE"
 echo; echo "## Part F: the keyless checks at the commit"
 rm -rf "$E" "$W/wt"; git -C "$G" worktree prune; git -C "$G" worktree add -q --detach "$W/wt" "$FULL" && (cd "$W/wt" && bun install --frozen-lockfile > "$W/log/bun-install-wt.txt" 2>&1)

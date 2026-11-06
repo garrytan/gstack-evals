@@ -177,6 +177,19 @@ describe("the whole entry on synthetic tables", () => {
     expect(markdown(unrun)).toContain("Amendment E's off-u secondary: not run under the $3,300 ceiling; it would have had MDD 13.5 points at Sol's Run D rate of 9.5%");
     expect(run(table()).models[0]!.secondary.offu).toBeNull();
   }, SLOW);
+  test("Amendment E's off-u secondary: off-u sessions that ran with none graded (infra or cap stop) read no outcome under the coverage rule; only an omitted f1-sol-offu reads not run, whatever other instruments hold", () => {
+    const SOL = "gpt-6.1-sol";
+    const rep = (rows: L1SessionRow[]) => analyze(rows, config({ models: [{ id: SOL, status: "run" }], audit: passingAudit(SOL, rows) }));
+    const rows = table({ model: SOL, f1: { "before-u": { load: 5 }, "off-u": { load: 5 } } });
+    let i = 0;
+    const failed = rep(rows.map((r) => (r.instrument === "f1" && r.arm === "off-u" ? { ...r, outcome: (i++ % 2 ? "infra" : "cap_stop") as L1SessionRow["outcome"] } : r)));
+    const o = failed.models[0]!.secondary.offu!;
+    expect([o.a_n, o.coverage!.ok]).toEqual([0, false]);
+    expect(markdown(failed)).toContain("Amendment E's off-u secondary (off-u minus before-u, B1's load, one-sided for a gain at 0.05, outside Holm): no outcome under the coverage rule.");
+    expect(markdown(failed)).not.toContain("Amendment E's off-u secondary: not run");
+    const omitted = rep([...rows.filter((r) => !(r.instrument === "f1" && r.arm === "off-u")), row(SOL, "smoke", "off-u", PILOT[0]!, { trial: "smoke/off-u/extra" })]);
+    expect(markdown(omitted)).toContain("Amendment E's off-u secondary: not run under the $3,300 ceiling");
+  }, SLOW);
   test("a powered loss is CUT-CANDIDATE, and a clean null on a low before rate is CUT-CANDIDATE", () => {
     const rep = run(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 1 }, "before-t": { complete: 56 }, "after-t": { complete: 8 } } }));
     expect(verdicts(rep)).toEqual(["B1 NULL CUT-CANDIDATE", "B3 LOSS CUT-CANDIDATE"]);

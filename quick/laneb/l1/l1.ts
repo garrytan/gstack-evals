@@ -86,14 +86,14 @@ export const ITEMS: Record<string, ItemDef> = {
   "pilot-opus": { capUsd: 80, taskSet: "swerebench-r3a4", cells: "cells.l1.json", allowanceUsd: 5, model: OPUS },
   "f1-opus": { capUsd: 680, taskSet: "swerebench-r3a4", cells: "cells.l1.json", allowanceUsd: 5, model: OPUS },
   "tb2-opus": { capUsd: 180, taskSet: "tb2", cells: "cells.l1-tb2.json", allowanceUsd: 2.5, model: OPUS },
-  // Section 9's planning caps. Under price.py's floors the re-cost is never under $730, so f1-sol's cap, the lower of $730
-  // and the re-cost, is $730.
+  // Section 9's planning caps. f1-sol's cap is its re-cost, which price.py floors at $730; a re-cost above $730 needs the
+  // Captain's record and a pins change here before f1-sol launches.
   "pilot-sol": { capUsd: 100, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
   "f1-sol": { capUsd: 730, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
-  // Amendment E's one added rule: off-u alone on Sol (the description rewrite alone, against f1-sol's before-u), only after
+  // Amendment E's one added rule: off-u alone on Sol (the after pin with routing and contracts off, against f1-sol's before-u), only after
   // f1-sol is done and only when the ceiling check passes with it. Its cap is price.py's formula for 80 off-u sessions on Sol.
   "f1-sol-offu": { capUsd: 200, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
-  // Section 9's planning caps for particle-1, which runs after Sol; f1-p1's cap is the lower of $920 and its re-cost.
+  // Section 9's planning caps for particle-1, which runs after Sol; f1-p1's cap is its re-cost, floored at $920 the same way.
   "pilot-p1": { capUsd: 120, taskSet: "swerebench-r3a4", cells: "cells.l1-p1.json", allowanceUsd: 5, model: P1, route: L1_ROUTE_P1 },
   "f1-p1": { capUsd: 920, taskSet: "swerebench-r3a4", cells: "cells.l1-p1.json", allowanceUsd: 5, model: P1, route: L1_ROUTE_P1 },
 };
@@ -722,6 +722,10 @@ function hostUp(work: string) {
   if (!bound) itemCheck(rows, plan.item);
   if (!process.env.UBICLOUD_API_KEY && !process.env.UBICLOUD_API_TOKEN) usage("set UBICLOUD_API_KEY");
   if (!process.env.ANTHROPIC_API_KEY) usage("set ANTHROPIC_API_KEY; the host passes it to each part VM's metering proxy");
+  const proxy = readJson(join(LANEB, "config/proxy.json"));
+  const keyEnv: string | undefined = proxy.routes?.[proxy.models?.[plan.model]?.route]?.key_env;
+  if (!keyEnv) refuse("config/proxy.json has no route for " + plan.model);
+  if (!process.env[keyEnv!]) usage("set " + keyEnv + ", the key for " + plan.model + "'s route in config/proxy.json; the host passes it to each part VM's metering proxy");
   if (process.env.UBI_RECOVERY_KEY) refuse("UBI_RECOVERY_KEY is set, but the host seals part-VM recovery bundles with UBICLOUD_API_KEY, so recover could not open them; unset it");
   runner();
   const n = new Set(hosts(work).map((r) => r.n)).size + 1;

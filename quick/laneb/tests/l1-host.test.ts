@@ -201,6 +201,17 @@ describe("Sol's items before any spend (Amendment E)", () => {
     expect(l1(none, ["prepare", none.work, "--item", "l1-route-sol"]).err).toContain("unknown item l1-route-sol");
   }, 60_000);
 
+  test("host-up needs the key of the item model's route in config/proxy.json: a Sol item without OPENROUTER_API_KEY refuses before any host reserve, and starts its host with it", () => {
+    const r = rig("pilot-sol");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-sol"], { ROUTE_LEDGER: routeLedger(r) }).code).toBe(0);
+    const before = readFileSync(r.ledger, "utf8");
+    const no = l1(r, ["host-up", r.work], { OPENROUTER_API_KEY: "" });
+    expect([no.code, no.err]).toEqual([2, expect.stringContaining("set OPENROUTER_API_KEY, the key for gpt-6.1-sol's route")]);
+    expect(readFileSync(r.ledger, "utf8")).toBe(before);
+    expect(readdirSync(r.fake).filter((d) => d.startsWith("host-"))).toEqual([]);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+  }, 60_000);
+
   test("f1-sol prepares f-parts.txt's four parts of 100 sessions on the Sol model; the Opus items need no ROUTE_LEDGER and keep the Opus model", () => {
     const r = rig("f1-sol");
     const p = l1(r, ["prepare", r.work, "--item", "f1-sol"], { ROUTE_LEDGER: routeLedger(r) });
