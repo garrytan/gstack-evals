@@ -284,8 +284,8 @@ export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail:
     const r = spawnSync("bun", ["test", "tests/tbv/drive.test.ts", "tests/tbv/judge.test.ts", "tests/tbv/keys.test.ts"], { cwd: ROOT, encoding: "utf8", env: KEYLESS, maxBuffer: 1 << 26 });
     const o = r.stdout + r.stderr;
     const count = (re: RegExp) => Number(re.exec(o)?.[1] ?? NaN);
-    say("    drive, judge and keys tests: " + count(/(\d+) pass/) + " pass, " + count(/(\d+) fail/) + " fail");
-    check("the driver's item runs (real sends, reservations and settlements on a temporary ledger) pass, release and the missing-record stop included", r.status === 0 && count(/(\d+) fail/) === 0 && o.includes("a send with no generation record (404) keeps its full reservation and stops the item"));
+    say("    drive, judge and keys tests: " + count(/^ (\d+) pass$/m) + " pass, " + count(/^ (\d+) fail$/m) + " fail");
+    check("the driver's item runs (real sends, reservations and settlements on a temporary ledger) pass, release and the missing-record stop included", r.status === 0 && count(/^ (\d+) fail$/m) === 0 && o.includes("a send with no generation record (404) keeps its full reservation and stops the item"));
     check("the judge item and the key item run through the real openItemRun, routes, proxy and ledger", o.includes("(pass) runJudges over a fake item run > integration") && o.includes("(pass) keys run > integration"));
   });
 
