@@ -406,6 +406,20 @@ describe("the drive CLI's splice callback", () => {
 });
 
 describe("item run teardown", () => {
+  test("the plaintext root is deleted even when closing the run throws", async () => {
+    const L = ledgerDir(ITEM, 50);
+    const s = stub(() => {
+      rmSync(L.record, { recursive: true, force: true });
+      return text();
+    });
+    const c = clock();
+    const err = await runItem({ item: ITEM, runId: "run-1", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ script: () => text(), roundWorst: 0.000001 }), plaintext: L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: () => {} }).then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).not.toBeNull();
+    expect(existsSync(L.plain)).toBe(false);
+  });
   test("a reading that throws lets the round's other readings finish before the item run closes", async () => {
     let inflight = 0;
     const script: Script = async (c) => {

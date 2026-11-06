@@ -648,9 +648,12 @@ export async function runItem(o: RunItemOptions): Promise<DriveResult & { crashe
     }
     result = await driveItem(run, o.plan, { ...o.deps, seal: (n, t) => vault.put(n, t), log: o.log, done, ...(o.sleep ? { sleep: o.sleep } : {}), ...(o.now ? { now: o.now } : {}) });
   } finally {
-    await run.close(result?.stop?.cls === "cap" ? "item" : undefined);
-    for (const w of run.warnings) o.log("tbv drive: " + w);
-    rmSync(root, { recursive: true, force: true });
+    try {
+      await run.close(result?.stop?.cls === "cap" ? "item" : undefined);
+      for (const w of run.warnings) o.log("tbv drive: " + w);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
   return { ...result, crashed };
 }
