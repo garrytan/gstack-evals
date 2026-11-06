@@ -78,6 +78,7 @@ describe.skipIf(!HAS_PIN || !HAS_CLAUDE_CLI)("the armed-and-blocked test through
   test("case 7 (ruling B1): a " + SLOW_S + " s gate scan at the 30 s shim timeout still blocks, then releases; the same scan at 10 s lets the stop through unblocked", () => {
     const slow = run().cases["slow-scan-30"]!;
     expect([slow.slowed, slow.settings_timeouts, slow.gate?.exit, counts(slow), slow.model_saw_block]).toEqual([true, [30, 30], 0, { fired: 1, blocked: 1, released: 1, exhausted: 0, errors: 0 }, true]);
+    // gstack-timing-ok: a lower bound that proves the shim's slow scan ran inside the hook, so a slow machine cannot fail it
     expect(slow.wall_ms).toBeGreaterThanOrEqual(SLOW_S * 1000);
     expect(slow.exposure).toMatchObject({ exposed: true, failed: null });
     const ten = run().cases["slow-scan-10"]!;
