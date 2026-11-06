@@ -7,7 +7,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { catalogsDigest, checkSuite, type Suite } from "../../../lanes/review-noloss/suite.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
 import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
@@ -398,6 +398,7 @@ function unitFixture(): PreparedUnit {
   return { unit, task: unitTaskId(unit), base_branch: "main", merge_base: repo.merge_base, tree: tree.dir, tree_sha256: tree.tree_sha256, instructions: repo.instructions, check: null };
 }
 const unitsSeen: boolean[] = [];
+let hostFiles: Record<string, string> = {};
 const BLOCK = FENCE + "ceo-outcome\n" + JSON.stringify({ top: [{ issue: "No opt-out for existing users.", evidence: "plan.md", fix: "Add a flag." }], forecast: 30 }) + "\n" + FENCE;
 async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, calls: number[], env: Record<string, string> = {}, reuse = new Map(), suite: ReviewRunInput["suite"] = { id: "ceo-followup", sha256: null }, step: (pass: number) => string | null = () => null) {
   const h = harness(() => [{ type: "text", text: "unused" }]);
@@ -426,6 +427,10 @@ async function ceoRun(out: string, unit: PreparedUnit, capPass: number | null, c
         unitsSeen.push(existsSync(join(out, "units.json")));
         mkdirSync(o.out, { recursive: true });
         writeFileSync(join(o.out, "transcript.ndjson"), JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Review.\n\n" + BLOCK }] }, parent_tool_use_id: null }) + "\n");
+        for (const [rel, body] of Object.entries(hostFiles)) {
+          mkdirSync(dirname(join(o.out, rel)), { recursive: true });
+          writeFileSync(join(o.out, rel), body);
+        }
         return { turns: ["Review.\n\n" + BLOCK], termination: pass === capPass ? { kind: "cap_stop" } : { kind: "completed" }, model_output: true, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: 1, loaded_bytes: null };
       },
     }),
@@ -582,5 +587,27 @@ describe("item 4 (note 19): the receipts sink holds every session's transcript",
       expect(run.copied).toContain(join(sink, rel));
     }
     expect(existsSync(join(sink, "runs", OPUS, "none", unit.task, "p1", "home"))).toBe(false);
+  }, 60_000);
+});
+
+describe("pass 1 on #248: the receipts sink holds what ceo rows and the gate report read", () => {
+  // Value: protects=a run whose runner is lost keeps each ceo session's trial.json (logs.copy_out and the gate report, which ceo rows read) and its host/skill-gates record (which the gate report reruns on); fails_when=the sink copies only host/transcript.ndjson and host/ceo-review; why_new=/ship pass 1 red team on #248; seam=runReviewUnits with GSTACK_EVALS_EPHEMERAL=1; no_claim=ceo rows read the out dir, never the sink
+  test("each session's trial.json and host/skill-gates are copied under the sink", async () => {
+    const out = durable();
+    const sink = durable();
+    const unit = unitFixture();
+    hostFiles = { [join("skill-gates", "sid", "record.json")]: "{}\n" };
+    try {
+      const run = await ceoRun(out, unit, null, [], { GSTACK_EVALS_EPHEMERAL: "1", GSTACK_EVALS_RECEIPTS: sink });
+      for (const p of [1, 2, 3]) {
+        const dir = join("runs", OPUS, "none", unit.task, "p" + p);
+        for (const rel of [join(dir, "trial.json"), join(dir, "host", "skill-gates", "sid", "record.json")]) {
+          expect([rel, existsSync(join(sink, rel)) && readFileSync(join(sink, rel), "utf8")]).toEqual([rel, readFileSync(join(out, rel), "utf8")]);
+        }
+        expect(run.copied).toContain(join(sink, dir, "trial.json"));
+      }
+    } finally {
+      hostFiles = {};
+    }
   }, 60_000);
 });
