@@ -183,7 +183,7 @@ describe("end states, in the frozen precedence", () => {
 
   test("an allowance refusal on D1 drops only D1; D2 is still read", async () => {
     const { by, journal } = await go({ script: () => text(), tasks: ["wide1"] });
-    const r = by("wide1");
+    const r = by("wide1", "none", "sol");
     expect(r.cls).toBe("scored");
     expect(r.drill.d1).toContain("allowance");
     expect(r.drill.d2).toBe("ok");
@@ -304,6 +304,43 @@ describe("the outage pause", () => {
     expect(res.records.length).toBe(3);
     expect(res.records.every((r) => r.cls === "outage" || r.cls === "gap")).toBe(true);
     expect(res.records.find((r) => r.task === "t3")!.cls).toBe("outage");
+  });
+});
+
+describe("stops inside a round", () => {
+  test("after one reading's 4xx, no other reading in the round makes a new send", async () => {
+    const script: Script = async (c) => {
+      if (c.task === "t1") return status(400);
+      await Bun.sleep(50);
+      return text();
+    };
+    const { res, s, by } = await go({ script, tasks: ["t1", "t2", "t3"] });
+    expect(res.stop?.cls).toBe("harness");
+    const at = s.calls.findIndex((c) => c.task === "t1");
+    expect(s.calls.slice(at + 1).map((c) => c.task + ":" + c.turn)).toEqual(["t2:report", "t3:report"]);
+    expect(by("t2").cls).toBe("harness");
+    expect(by("t3").cls).toBe("harness");
+  });
+
+  test("an allowance refusal during an outage probe does not clear the outage state", async () => {
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    const script: Script = async (c) => {
+      if (c.task === "t2") {
+        if (c.n === 3) void Bun.sleep(100).then(release);
+        return status(503);
+      }
+      if (c.turn === "report") {
+        await held;
+        return text();
+      }
+      return status(503);
+    };
+    const { res, by, c } = await go({ script, tasks: ["wide1", "t2"], models: ["sol"] });
+    expect(by("wide1", "none", "sol").sends.filter((x) => x.turn === "d1").map((x) => x.kind)).toEqual(["allowance"]);
+    expect(c.sleeps.filter((ms) => ms === 600_000).length).toBe(6);
+    expect(res.stop?.cls).toBe("outage");
+    expect(by("wide1", "none", "sol").cls).toBe("outage");
   });
 });
 

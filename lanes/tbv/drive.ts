@@ -419,7 +419,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
 
   const enter = async (st: RouteState): Promise<"go" | "probe" | "stop"> => {
     for (;;) {
-      if (stop && stop.cls !== "harness") return "stop";
+      if (stop) return "stop";
       if (st.gate) await st.gate;
       else if (st.probe) await st.probe.done;
       else if (st.waits > 0) {
@@ -433,17 +433,17 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
       st.gate = null;
     });
   };
-  const leave = (st: RouteState, how: "go" | "probe", transport: boolean, route: string) => {
+  const leave = (st: RouteState, how: "go" | "probe", transport: boolean, route: string, reached: boolean) => {
     if (how === "probe") {
       const p = st.probe!;
       st.probe = null;
-      if (!transport) {
-        st.waits = 0;
-        st.fails = 0;
-      } else if (st.waits >= MAX_WAITS) setStop("outage", route + " failed after " + MAX_WAITS + " waits of " + PAUSE_MS / 60_000 + " minutes with no success");
-      else {
+      if (transport && st.waits >= MAX_WAITS) setStop("outage", route + " failed after " + MAX_WAITS + " waits of " + PAUSE_MS / 60_000 + " minutes with no success");
+      else if (transport) {
         st.waits++;
         pause(st);
+      } else if (reached) {
+        st.waits = 0;
+        st.fails = 0;
       }
       p.end();
       return;
@@ -466,6 +466,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
     const splice = plan.splice(h.family, r.arm);
     const attempts: Attempt[] = [];
     const prior: BuildInput["prior"] = [];
+    let halted = false;
     let slot: ReturnType<DriveItemRun["slot"]> | null = null;
     const turn = async (t: Turn) => {
       const built = d.build({ history: h, shape, splice, turns: plan.turns, arm: r.arm, model: r.model, turn: t, prior: [...prior] });
@@ -489,14 +490,15 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
       for (let attempt = 1; ; ) {
         const how = await enter(st);
         if (how === "stop") {
-          attempts.push({ kind: stop!.cls === "cap" ? "budget" : "outage", turn: t });
+          if (stop!.cls === "harness") halted = true;
+          else attempts.push({ kind: stop!.cls === "cap" ? "budget" : "outage", turn: t });
           return null;
         }
         const res = await slot.send(req);
         const transport = TRANSPORT.has(res.kind);
         rec.sends.push({ turn: t, attempt, kind: res.kind, status: res.status, responseId: res.responseId, idempotencyKey: res.idempotencyKey, micros: res.micros, usage: res.usage });
         if (res.micros === null && res.idempotencyKey && res.responseId && req.provider === "openrouter") unknown.push({ idempotencyKey: res.idempotencyKey, responseId: res.responseId });
-        leave(st, how, transport, route);
+        leave(st, how, transport, route, !res.problemCode || res.problemCode === "UPSTREAM");
         if (transport && how === "probe") {
           if (stop?.cls === "outage") {
             attempts.push({ kind: "outage", turn: t });
@@ -545,6 +547,10 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
     rec.cls = e.cls as ReadingRecord["cls"];
     rec.why = e.why;
     rec.drill = e.drill ?? {};
+    if (halted) {
+      rec.cls = "harness";
+      rec.why = "the item stopped (harness) before this reading's next send: " + stop!.why;
+    }
     const usage = rec.sends.flatMap((s) => (s.usage ? [s.usage] : []));
     const all = usage.reduce((a, u) => a + u.input + u.cache_read + u.cache_write, 0);
     rec.cacheRead = all ? usage.reduce((a, u) => a + u.cache_read, 0) / all : null;
