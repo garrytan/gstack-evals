@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Shared synthetic fixtures for the tbv keys, packets, judge and readings tests: invented neutral names, no session text.
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { messagesResponse, responsesResponse } from "../adapters/harness.ts";
@@ -15,6 +15,18 @@ export const tmp = (prefix: string) => {
 };
 export const cleanup = () => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+};
+/** A directory on tmpfs (/dev/shm) for the held-out (A16) tests, removed with the rest. */
+export const shm = (prefix: string) => {
+  const d = mkdtempSync(join("/dev/shm", prefix));
+  dirs.push(d);
+  return d;
+};
+/** A stub seal command (production uses age) and the plaintext a file it sealed holds. */
+export const SEAL = "printf 'STUB-SEALED\\n'; base64 -w0";
+export const unsealed = (file: string) => {
+  const [head, body] = readFileSync(file, "utf8").split("\n");
+  return head === "STUB-SEALED" ? Buffer.from(body ?? "", "base64").toString("utf8") : "not sealed: " + head;
 };
 
 export const SHA = "ab".repeat(32);

@@ -108,18 +108,22 @@ export interface LineageStub {
   closingIssues: number[] | null;
 }
 
-/** The records heldOutEligible checks for pr: its lineage cluster over the kept records and the skipped stubs, plus every stub whose missing or truncated keys could join that cluster. Stubs never become histories. */
+/** The records heldOutEligible checks for pr: every kept record and skipped stub that may share its lineage cluster. Known
+ * keys join as clustersOf joins them. A stub with a missing title or branch could join any record, so every record and
+ * stub is returned. A stub with truncated closing issues could close any issue, so when pr's cluster holds a closing issue
+ * or such a stub, every cluster that holds either joins it. Stubs never become histories. */
 export function heldOutCluster(pr: PrRecord, prs: PrRecord[], skipped: LineageStub[]): Array<PrRecord | LineageStub> {
   const records = prs.some((p) => p.number === pr.number) ? prs : [...prs, pr];
-  const keyed = skipped.flatMap((s) => (s.title === null || s.baseRefName === null || s.headRefName === null ? [] : [{ number: s.number, title: s.title, baseRefName: s.baseRefName, headRefName: s.headRefName, closingIssues: s.closingIssues ?? [] }]));
-  const clusters = clustersOf([...records, ...keyed]);
-  const mine = clusters.get(pr.number);
-  const members = records.filter((p) => clusters.get(p.number) === mine);
-  const issues = members.some((p) => p.closingIssues.length > 0);
-  return [...members, ...skipped.filter((s) => clusters.get(s.number) === mine || s.title === null || s.baseRefName === null || s.headRefName === null || (s.closingIssues === null && issues))];
+  const all = [...records, ...skipped];
+  if (skipped.some((s) => s.title === null || s.baseRefName === null || s.headRefName === null)) return all;
+  const clusters = clustersOf(all.map((p) => ({ number: p.number, title: p.title!, baseRefName: p.baseRefName!, headRefName: p.headRefName!, closingIssues: p.closingIssues ?? [] })));
+  const issueish = all.filter((p) => p.closingIssues === null || p.closingIssues.length > 0).map((p) => clusters.get(p.number));
+  const mine = new Set([clusters.get(pr.number)]);
+  if (skipped.some((s) => s.closingIssues === null) && issueish.some((c) => mine.has(c))) for (const c of issueish) mine.add(c);
+  return all.filter((p) => mine.has(clusters.get(p.number)));
 }
 
-/** Amendment section 2 rule 2 and 3's cluster exclusion: merged and opened after P's post, no commit authored or committed before it, and no cluster sibling opened before it. */
+/** Amendment section 2 rule 2 and 3's cluster exclusion: merged and opened after P's post, no commit authored or committed before it, and no cluster sibling opened before it. cluster is heldOutCluster's: it already follows every link a missing or truncated key could make, so a member is read by its creation time alone. */
 export function heldOutEligible(pr: PrRecord, cluster: Array<PrRecord | LineageStub>, pPostMergedAt: string): { ok: true } | { ok: false; why: string } {
   const p = time(pPostMergedAt, "P's post merge time");
   const no = (why: string) => ({ ok: false as const, why: "#" + pr.number + " " + why });
@@ -132,8 +136,8 @@ export function heldOutEligible(pr: PrRecord, cluster: Array<PrRecord | LineageS
   }
   for (const s of cluster) {
     if (s.number === pr.number) continue;
-    if (s.createdAt === null || s.title === null || s.baseRefName === null || s.headRefName === null || s.closingIssues === null) return no("may share a lineage cluster with #" + s.number + ", a truncated record whose lineage keys are missing or truncated");
-    if (time(s.createdAt, "createdAt") <= p) return no("shares a lineage cluster with #" + s.number + ", opened at " + s.createdAt + ", not after P's post");
+    if (s.createdAt === null) return no("may share a lineage cluster with #" + s.number + ", a truncated record with no creation time");
+    if (time(s.createdAt, "createdAt") <= p) return no("shares or may share a lineage cluster with #" + s.number + ", opened at " + s.createdAt + ", not after P's post");
   }
   return { ok: true };
 }

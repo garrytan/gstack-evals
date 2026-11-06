@@ -6,7 +6,8 @@
 //   bun lanes/tbv/regress.ts [--head <rule.ts>] [--out <table.md>]
 // --head names the rule to test (default: this checkout's lanes/tbv/rule.ts); the port commit's rule gives the baseline.
 // Base: GEVA-322's 41 matcher cases (H1 to H31, L1 to L10). Added before the first change: the underscore cases, fix-check
-// 3's forms and their other-direction partners, amendment item 15's exemption, and the input guards.
+// 3's forms and their other-direction partners, amendment item 15's exemption, and the input guards. Added with the
+// pre-paid fixes: the tbv-held all-in check's bounds on thirdPassCap and capyCap (#240's targeted ruling item 2).
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +20,7 @@ const Wd = { heldIds: ["test_held"], devText: "dev touches test_held_only", held
 const M = "the dev key says the parser test failed after the config change was made";
 const h = (heldIds: string[], devText: string, artifact: string) => ({ heldIds, devText, heldText: "x", artifact });
 const L = (names: string[], addedLines: string[], gstackAtC = "") => ({ addedLines, gstackAtC, material: M, names });
+const ALLIN = { crewSpent: 60, crewRest: 190, settled: 560, reserved: 0, unknown: 0, heldCap: 789, thirdPassCap: 135, capyCap: 190 };
 
 type Any = Record<string, any>;
 const task = (id: string, source: "A" | "B", stratum = "long", nfacts = 2) => ({ id, cluster: id, source, stratum, nfacts });
@@ -114,6 +116,10 @@ export const CASES: Case[] = [
   c("I4", "item 4: a planned task missing from the readings file is refused", "headroom", hr((rd) => (rd.plan.taskIds = ["t1", "t2", "t3"])), "REFUSED", "build fix"),
   c("I5", "item 5: a reading judged by its own model's family is refused", "headroom", hr((rd) => (rd.readings[0].judge = "opus")), "REFUSED", "build fix"),
   c("I6", "item 6: a copied reading (shared response id) under a new label is refused", "headroom", hr((rd) => { rd.readings[1].responseIds = ["same"]; rd.readings[2].responseIds = ["same"]; }), "REFUSED", "build fix"),
+  c("T2a", "targeted ruling 2: a negative thirdPassCap before stage 3 is refused", "allin", { ...ALLIN, thirdPassCap: -135 }, "REFUSED", "build fix"),
+  c("T2b", "targeted ruling 2: a negative capyCap before stage 3 is refused", "allin", { ...ALLIN, capyCap: -190 }, "REFUSED", "build fix"),
+  c("T2c", "targeted ruling 2: a capyCap over the held cap before stage 3 is refused", "allin", { ...ALLIN, capyCap: 790 }, "REFUSED", "build fix"),
+  c("T2d", "other direction: zero caps and a capyCap equal to the held cap still run stage 3", "allin", { ...ALLIN, thirdPassCap: 0, capyCap: 789 }, "STAGE"),
 ];
 
 const bad = (v: string) => v === "BLOCK" || v === "HIT" || v === "REFUSED";

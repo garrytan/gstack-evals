@@ -325,7 +325,7 @@ function allin(a: { item: string; crewCredits: number; crewRest: number; settled
   const base = crewSpent + a.crewRest + a.settled + a.reserved + a.unknown;
   say("all-in before " + a.item + ": crew spent " + usd(crewSpent) + " (" + a.crewCredits + " credits; " + usd(crewSpent) + " of the " + usd(CREW_RESERVE) + " crew reserve) + crew to come " + usd(a.crewRest) + " + settled " + usd(a.settled) + " + reserved " + usd(a.reserved) + " + unknown " + usd(a.unknown) + " = " + usd(base));
   if (a.item !== "tbv-held") { say("Verdict: " + (base + a.itemCap <= LINE_USD ? "START " + a.item + " (" + usd(base + a.itemCap) + ")" : "NO START (to the Captain; " + usd(base + a.itemCap) + " over " + usd(LINE_USD) + ")")); return; }
-  if (!(Number.isFinite(a.thirdPassCap) && Number.isFinite(a.capyCap))) fail("E_USAGE the all-in check before tbv-held needs thirdPassCap and capyCap");
+  if (!(Number.isFinite(a.thirdPassCap) && a.thirdPassCap! >= 0 && Number.isFinite(a.capyCap) && a.capyCap! >= 0 && a.capyCap! <= a.itemCap)) fail("E_USAGE the all-in check before tbv-held needs thirdPassCap and capyCap as numbers of at least 0, and capyCap no more than itemCap");
   const heldCap = a.itemCap, thirdPassCap = a.thirdPassCap!, capyCap = a.capyCap!;
   if (base + heldCap + thirdPassCap <= LINE_USD) { say("Verdict: STAGE 3 WITH THE THIRD OPUS PASS (" + usd(base + heldCap + thirdPassCap) + ")"); return; }
   if (base + heldCap <= LINE_USD) { say("Verdict: STAGE 3, TWO PASSES (" + usd(base + heldCap) + ")"); return; }

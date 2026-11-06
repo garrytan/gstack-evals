@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { priceRequest, reservationMicros } from "../../src/runner/pricing/prices.ts";
+import { heldOutputs } from "./custody.ts";
 import { openItemRun } from "./drive.ts";
 import { fail } from "./errors.ts";
 import { JUDGE_MAX_TOKENS, judgeSend, keyWriterSend } from "./routes.ts";
@@ -87,7 +88,7 @@ export interface Deps {
   fetch?: ItemRunOptions["fetch"];
 }
 export const openRun = (a: Record<string, string>, deps: Deps) =>
-  (deps.open ?? openItemRun)({ item: a.item!, runId: a["run-id"]!, record: a.record!, ledger: a.ledger!, out: a.out!, env: deps.env ?? process.env, fetch: deps.fetch });
+  (deps.open ?? openItemRun)({ item: a.item!, runId: a["run-id"]!, record: a.record!, ledger: a.ledger!, out: a.held ? join(a.held, "journal", a["run-id"]!) : a.out!, env: deps.env ?? process.env, fetch: deps.fetch });
 
 // ---------- Sends ----------
 
@@ -175,7 +176,7 @@ export function parseJudgeReply(text: string, packet: Packet): JudgeAnswer | str
 export const judgePrompt = (brief: string, packet: string) => brief + "\n" + packet;
 
 /** Judges every packet the key lists, primary then second, one slot each; appends each JudgeRecord to out/judges.ndjson. */
-export async function runJudges(o: { packets: string; entries: PacketKeyEntry[]; out: string; brief: string; run: ItemRun; judgeSend?: typeof judgeSend; worst?: Worst }): Promise<JudgeRecord[]> {
+export async function runJudges(o: { packets: string; entries: PacketKeyEntry[]; out: string; brief: string; run: ItemRun; judgeSend?: typeof judgeSend; worst?: Worst; seal?: (file: string) => void }): Promise<JudgeRecord[]> {
   const send = o.judgeSend ?? judgeSend;
   const worst = o.worst ?? worstOf;
   const file = join(o.out, "judges.ndjson");
@@ -204,6 +205,7 @@ export async function runJudges(o: { packets: string; entries: PacketKeyEntry[];
           ? { packet: e.packet, judge, role, status: "judged", answer: r.value, responseIds: r.responseIds, reason: "" }
           : { packet: e.packet, judge, role, status: "unjudged", answer: null, responseIds: r.responseIds, reason: r.reason };
         appendFileSync(file, JSON.stringify(rec) + "\n");
+        o.seal?.(file);
         records.push(rec);
       } finally {
         await slot.close();
@@ -212,16 +214,17 @@ export async function runJudges(o: { packets: string; entries: PacketKeyEntry[];
   return records;
 }
 
-/** tbv judge --packets DIR --key FILE --out DIR --item ID --run-id ID --record DIR --ledger FILE */
+/** tbv judge --packets DIR --key FILE --out DIR --item ID --run-id ID --record DIR --ledger FILE [--held SEALED_DIR --seal-cmd CMD] */
 export async function run(argv: string[], io: Io, deps: Deps = {}): Promise<number> {
-  const a = parseFlags(argv.slice(1), ["packets", "key", "out", "item", "run-id", "record", "ledger"]);
+  const a = parseFlags(argv.slice(1), ["packets", "key", "out", "item", "run-id", "record", "ledger"], ["held", "seal-cmd"]);
+  const seal = heldOutputs(a, ["out"], undefined, ["judges.ndjson"]);
   if (inside(a.packets!, a.key!)) fail("E_TBV_JUDGE", "the packet key " + a.key + " sits inside the packets directory " + a.packets);
   const entries = readPacketKey(a.key!);
   const brief = readBundle(BUNDLE.judgeBrief);
   const runner = await openRun(a, deps);
   let records: JudgeRecord[];
   try {
-    records = await runJudges({ packets: a.packets!, entries, out: a.out!, brief, run: runner, judgeSend: deps.judgeSend, worst: deps.worst });
+    records = await runJudges({ packets: a.packets!, entries, out: a.out!, brief, run: runner, judgeSend: deps.judgeSend, worst: deps.worst, seal });
   } finally {
     await runner.close();
   }

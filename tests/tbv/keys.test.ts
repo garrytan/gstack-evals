@@ -2,14 +2,14 @@
 // Keys (prereg section 4): the key writer's reply checked against key-brief.md, two auditors, drops, retries, and one
 // run through the real proxy and ledger.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { auditPrompt, keyPrompt, parseAudit, parseKey, run, settleKey, writeKeys } from "../../lanes/tbv/keys.ts";
 import { readBundle } from "../../lanes/tbv/judge.ts";
 import { words as ruleWords } from "../../lanes/tbv/rule.ts";
 import { BUNDLE, type Key } from "../../lanes/tbv/types.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
-import { capture, cleanup, EXTRACT, FAKE_KEYS, fakeJudgeSend, fakeKeyWriterSend, fakeRun, HISTORY, KEY, keyObject, keyReply, promptOf, QUOTE, REPO, sent, tmp, upstream, words } from "./s4-helpers.ts";
+import { capture, cleanup, EXTRACT, FAKE_KEYS, fakeJudgeSend, fakeKeyWriterSend, fakeRun, HISTORY, KEY, keyObject, keyReply, promptOf, QUOTE, REPO, SEAL, sent, shm, tmp, unsealed, upstream, words } from "./s4-helpers.ts";
 
 afterAll(cleanup);
 const AUDIT_PATH = join(REPO, "lanes/tbv/briefs/audit-brief.md");
@@ -209,6 +209,47 @@ describe("keys run", () => {
     const f = fakeRun(() => sent(keyReply()));
     await expect(run(argv(dir), capture().io, { open: async () => f.run, keyWriterSend: fakeKeyWriterSend, judgeSend: fakeJudgeSend, worst: () => 1 })).rejects.toMatchObject({ code: "E_TBV_INPUT" });
     expect(f.sends.length).toBe(0);
+  });
+  test("A16: with --held, an --out on disk is refused before any lease (E_TBV_CUSTODY), and so are --held without --seal-cmd and --seal-cmd without --held", async () => {
+    const dir = inputs();
+    let opened = 0;
+    const deps = { open: async () => (opened++, fakeRun(() => sent(keyReply())).run), keyWriterSend: fakeKeyWriterSend, judgeSend: fakeJudgeSend, worst: () => 1 };
+    const sealed = tmp("tbv-keys-sealed-");
+    await expect(run([...argv(dir), "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining("--out must sit on tmpfs") });
+    const onShm = argv(dir).map((a) => (a === join(dir, "out") ? join(shm("tbv-keys-held-"), "out") : a));
+    await expect(run([...onShm, "--held", sealed], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY" });
+    await expect(run([...onShm, "--seal-cmd", SEAL], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY" });
+    expect(opened).toBe(0);
+    expect(existsSync(join(dir, "out"))).toBe(false);
+    expect(readdirSync(sealed).length).toBe(0);
+  });
+  test("A16: a --held that already holds a key or drops.json this run writes is refused at open, with no lease and no send", async () => {
+    const dir = inputs();
+    let opened = 0;
+    const f = fakeRun(() => sent(keyReply()));
+    const deps = { open: async () => (opened++, f.run), keyWriterSend: fakeKeyWriterSend, judgeSend: fakeJudgeSend, worst: () => 1 };
+    for (const name of ["task-alpha.json.sealed", "drops.json.sealed"]) {
+      const sealed = tmp("tbv-keys-sealed-");
+      writeFileSync(join(sealed, name), "STUB-SEALED\n");
+      const onShm = argv(dir).map((a) => (a === join(dir, "out") ? join(shm("tbv-keys-held-"), "out") : a));
+      await expect(run([...onShm, "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining(name) });
+    }
+    expect(opened).toBe(0);
+    expect(f.sends.length).toBe(0);
+  });
+  test("A16: with --held, --out on tmpfs and --seal-cmd, each key and the drops file get a sealed copy as they are written", async () => {
+    const dir = inputs();
+    const sealed = tmp("tbv-keys-sealed-");
+    const out = join(shm("tbv-keys-held-"), "out");
+    const onShm = argv(dir).map((a) => (a === join(dir, "out") ? out : a));
+    const ok = fakeRun((label, req) => (req.body.model === "fake-writer" ? sent(keyReply()) : sent(audit())));
+    expect(await run([...onShm, "--held", sealed, "--seal-cmd", SEAL], capture().io, { open: async () => ok.run, keyWriterSend: fakeKeyWriterSend, judgeSend: fakeJudgeSend, worst: () => 1 })).toBe(0);
+    expect(unsealed(join(sealed, "task-alpha.json.sealed"))).toBe(readFileSync(join(out, "task-alpha.json"), "utf8"));
+    const sealed2 = tmp("tbv-keys-sealed-");
+    const out2 = join(shm("tbv-keys-held-"), "out");
+    const bad = fakeRun(() => sent("not a key"));
+    expect(await run([...argv(dir).map((a) => (a === join(dir, "out") ? out2 : a)), "--held", sealed2, "--seal-cmd", SEAL], capture().io, { open: async () => bad.run, keyWriterSend: fakeKeyWriterSend, judgeSend: fakeJudgeSend, worst: () => 1 })).toBe(0);
+    expect(unsealed(join(sealed2, "drops.json.sealed"))).toBe(readFileSync(join(out2, "drops.json"), "utf8"));
   });
   test("integration: the real openItemRun, routes, proxy and ledger with a stub upstream (needs drive.ts and routes.ts)", async () => {
     const dir = inputs();

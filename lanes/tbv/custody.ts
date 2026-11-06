@@ -41,6 +41,38 @@ export function plaintextRoot(dir: string, o: { devPlaintext: boolean; held: boo
   return at;
 }
 
+/** Held-out mode for keys, packets, judge and readings (A16): with --held <sealed dir>, every named output must sit on tmpfs,
+ * the check drive --held makes on --tasks, and the returned function seals an output file through --seal-cmd into the
+ * sealed directory. A sealed copy an earlier run left of a name this run writes is refused here, before any lease or send;
+ * without names (packet ids are random), any sealed copy is. journal/ is never looked in. Without --held it returns
+ * undefined, and --seal-cmd alone is refused. */
+export function heldOutputs(a: Record<string, string | undefined>, outputs: string[], mounts?: string, names?: string[]): ((file: string) => void) | undefined {
+  const cmd = a["seal-cmd"];
+  if (a.held === undefined) {
+    if (cmd !== undefined) fail("E_TBV_CUSTODY", "--seal-cmd seals held-out outputs and needs --held <sealed dir>");
+    return undefined;
+  }
+  if (!a.held) fail("E_TBV_CUSTODY", "--held needs a sealed directory");
+  if (!cmd) fail("E_TBV_CUSTODY", "held-out outputs are sealed as they are written; pass --seal-cmd");
+  for (const o of outputs) {
+    try {
+      plaintextRoot(a[o]!, { devPlaintext: false, held: true, mounts });
+    } catch (e) {
+      fail("E_TBV_CUSTODY", "with --held, --" + o + " must sit on tmpfs: " + (e as Error).message);
+    }
+  }
+  const sealed = a.held;
+  const earlier = (existsSync(sealed) ? readdirSync(sealed) : []).filter((n) => n.endsWith(SEALED) && (!names || names.includes(n.slice(0, -SEALED.length))));
+  if (earlier.length) fail("E_TBV_CUSTODY", "the sealed directory " + sealed + " already holds " + earlier.join(", ") + " from an earlier run; give each held run a fresh --held directory, or to restart a crashed run move its sealed copies out first (lanes/tbv/README.md)");
+  const mine = new Set<string>();
+  return (file) => {
+    const to = join(sealed, basename(file) + SEALED);
+    if (!mine.has(to) && existsSync(to)) fail("E_TBV_CUSTODY", "the sealed directory already holds " + to + " from an earlier run; give each held run a fresh --held directory");
+    mine.add(to);
+    seal(cmd!, readFileSync(file, "utf8"), to);
+  };
+}
+
 /** The leftover check (test ! -e): a dead run's plaintext root is deleted and the deletion logged. True when one was found. */
 export function leftover(dir: string, log: (text: string) => void): boolean {
   if (!existsSync(dir)) return false;
