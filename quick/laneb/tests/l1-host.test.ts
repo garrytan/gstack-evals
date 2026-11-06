@@ -212,6 +212,22 @@ describe("Sol's items before any spend (Amendment E)", () => {
     expect(l1(r, ["host-up", r.work]).code).toBe(0);
   }, 60_000);
 
+  test("host-up requires and ships only the key of the item model's route: a Sol host starts with no ANTHROPIC_API_KEY, and its secrets file and part VM hold no Anthropic key; an Opus host gets the Anthropic key alone", async () => {
+    const r = rig("pilot-sol");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-sol"], { ROUTE_LEDGER: routeLedger(r) }).code).toBe(0);
+    const sol = { ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "test-openrouter-key" };
+    const up = l1(r, ["host-up", r.work], sol);
+    expect([up.code, up.err]).toEqual([0, ""]);
+    expect(readFileSync(join(r.fake, "host-1/.l1-secrets"), "utf8")).toBe("OPENROUTER_API_KEY=test-openrouter-key\nUBICLOUD_API_KEY=test-not-a-key\n");
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { ...sol, PAUSE_VM: "vm-2", PAUSE_AT: "1" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/paused")));
+    expect(readFileSync(join(r.fake, "vm-2/.laneb-keys"), "utf8")).toBe("ANTHROPIC_API_KEY=\nOPENROUTER_API_KEY=test-openrouter-key\n");
+    const o = rig("pilot-opus");
+    expect(l1(o, ["prepare", o.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(o, ["host-up", o.work], { OPENROUTER_API_KEY: "" }).code).toBe(0);
+    expect(readFileSync(join(o.fake, "host-1/.l1-secrets"), "utf8")).toBe("ANTHROPIC_API_KEY=test-not-a-key\nUBICLOUD_API_KEY=test-not-a-key\n");
+  }, 60_000);
+
   test("f1-sol prepares f-parts.txt's four parts of 100 sessions on the Sol model; the Opus items need no ROUTE_LEDGER and keep the Opus model", () => {
     const r = rig("f1-sol");
     const p = l1(r, ["prepare", r.work, "--item", "f1-sol"], { ROUTE_LEDGER: routeLedger(r) });

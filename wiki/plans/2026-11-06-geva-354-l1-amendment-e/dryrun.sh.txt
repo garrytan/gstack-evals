@@ -265,7 +265,12 @@ out=$(CK "$D/p-e7.json" check --launch pilot-sol --ledger "$RL"); x=$?
 RLINE=$(echo "$out" | grep 'l1-route-sol done' | sed 's/^ *//')
 rule "E7 once it settles (\$0.42 here) and is marked done, pilot-sol's check passes and counts the route at its settled spend" "exit 0, CEILING PASS; l1-route-sol counted \$0.42" "exit $x, $(MARGIN "$out"); $RLINE" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "counted .0.42$"' _ "$x" "$RLINE"
 for ic in pilot-sol:41.74 f1-sol:460.22; do i=${ic%%:*}; approve "$D/ceiling/$i.jsonl" "$i" "$(jq -r --arg i "$i" '.items[] | select(.item == $i) | .cap_usd' "$PLAN")"; LG reserve --path "$D/ceiling/$i.jsonl" --item "$i" --id "$i/s1" --usd 5 > /dev/null; LG settle --path "$D/ceiling/$i.jsonl" --item "$i" --id "$i/s1" --usd "${ic##*:}" > /dev/null; done
-SL="--ledger $RL --ledger $D/ceiling/pilot-sol.jsonl --ledger $D/ceiling/f1-sol.jsonl"
+# f1-sol's finished-run record, in the shape l1.ts writes it in f1-sol's work dir: its prepared plan.json (Part C), a result for
+# each of its four parts, and its one host up, then down with its hours settled. ceiling.ts counts f1-sol as done at its
+# spend only with it (--work); E15 drives it both ways.
+FWK() { local w=$D/ceiling/work-$1; rm -rf "$w"; mkdir -p "$w/host"; cp "$S/f1-sol/plan.json" "$w/"; for p in $(jq -r '.parts[].name' "$w/plan.json"); do [ "$p" = "$2" ] || echo '{}' > "$w/$p.result.json"; done; printf '%s\n' '{"event":"up","n":1}' ${3:-} > "$w/host/hosts.jsonl"; echo "$w"; }
+FW=$(FWK full - '{"event":"down","n":1,"settled":true}')
+SL="--ledger $RL --ledger $D/ceiling/pilot-sol.jsonl --ledger $D/ceiling/f1-sol.jsonl --work $FW"
 SET "$(cat "$D/plan-offu.json")" l1-route-sol=done pilot-sol=done f1-sol=open > "$D/p-e8.json"
 out=$(CK "$D/p-e8.json" check --launch f1-sol-offu $SL); x=$?
 rule "E8 f1-sol-offu is refused until f1-sol is done" "exit 1, runs only after f1-sol is done" "exit $x, $(echo "$out" | head -1)" sh -c 'test "$1" = 1 && printf %s "$2" | grep -q "f1-sol-offu runs only after f1-sol is done"' _ "$x" "$(echo "$out" | head -1)"
@@ -306,6 +311,10 @@ o1=$(CK "$D/p-e14.json" check --launch l1-route-p1 --ledger "$RL"); x1=$?
 jq '.items |= map(select(.item != "l1-route-sol" and .item != "pilot-sol" and .item != "f1-sol")) | .leftover.sol = "refused" | (.items[] | select(.item == "l1-route-p1")) |= del(.after)' "$PLAN" > "$D/p-e14b.json"
 o2=$(CK "$D/p-e14b.json" check --launch l1-route-p1); x2=$?
 rule "E14 a Sol exit leaves particle-1 its route check: after a route drop at l1-route-sol (settled at \$0.42 and done), Sol's unlaunched items leave the plan, leftover.sol is refused and l1-route-p1 runs after l1-route-sol; with no Sol item done, l1-route-p1 has no after; both checks pass" "exit 0, CEILING PASS; exit 0, CEILING PASS" "exit $x1, $(MARGIN "$o1"); exit $x2, $(MARGIN "$o2")" sh -c 'test "$1" = 0 && test "$3" = 0 && printf %s "$2" | grep -q "^CEILING PASS" && printf %s "$4" | grep -q "^CEILING PASS"' _ "$x1" "$(echo "$o1" | head -1)" "$x2" "$(echo "$o2" | head -1)"
+SB="--ledger $RL --ledger $D/ceiling/pilot-sol.jsonl --ledger $D/ceiling/f1-sol.jsonl"
+F1C() { printf %s "$1" | sed -n 's/^ *f1-sol done: .*counted \$\([0-9.]*\).*/\1/p'; }
+o1=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB); o2=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB --work "$(FWK no-f1-4 f1-4 '{"event":"down","n":1,"settled":true}')"); o3=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB --work "$(FWK host-up -)"); o4=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SL)
+rule "E15 f1-sol marked done counts at its \$730 cap until its work dir shows every part finished and host-down settled (ceiling.ts --work): with no record, with f1-4's result missing, and with its host still up; with the full record, at its settled \$460.22" "730.00 730.00 730.00 460.22" "$(F1C "$o1") $(F1C "$o2") $(F1C "$o3") $(F1C "$o4")" test "$(F1C "$o1") $(F1C "$o2") $(F1C "$o3") $(F1C "$o4")" = "730.00 730.00 730.00 460.22"
 out=$(CK "$PLAN" final --post results-post); echo "final read on the pinned plan: $out" | sed "$HIDE"
 echo; echo "## Part F: the keyless checks at the commit"
 rm -rf "$E" "$W/wt"; git -C "$G" worktree prune; git -C "$G" worktree add -q --detach "$W/wt" "$FULL" && (cd "$W/wt" && bun install --frozen-lockfile > "$W/log/bun-install-wt.txt" 2>&1)

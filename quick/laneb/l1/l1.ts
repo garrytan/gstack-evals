@@ -721,7 +721,6 @@ function hostUp(work: string) {
   if (bound && bound.run_id !== plan.run_id) refuse(plan.item + " is bound to run " + bound.run_id + ", not " + plan.run_id);
   if (!bound) itemCheck(rows, plan.item);
   if (!process.env.UBICLOUD_API_KEY && !process.env.UBICLOUD_API_TOKEN) usage("set UBICLOUD_API_KEY");
-  if (!process.env.ANTHROPIC_API_KEY) usage("set ANTHROPIC_API_KEY; the host passes it to each part VM's metering proxy");
   const proxy = readJson(join(LANEB, "config/proxy.json"));
   const keyEnv: string | undefined = proxy.routes?.[proxy.models?.[plan.model]?.route]?.key_env;
   if (!keyEnv) refuse("config/proxy.json has no route for " + plan.model);
@@ -755,7 +754,7 @@ function hostUp(work: string) {
     rmSync(bin, { recursive: true, force: true });
     const shaOut = must(remoteL1(name, "bash " + H + "/laneb/l1/host-bootstrap.sh >&2 && chmod +x " + H + "/bin/ubi-runner.sh && sha256sum " + H + "/bin/ubi-runner.sh"), "bootstrapping the host");
     if (!shaOut.includes(process.env.UBI_RUNNER_SHA256!)) throw new Error("the host's ubi-runner copy does not hash to UBI_RUNNER_SHA256");
-    const secrets = ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "UBICLOUD_API_KEY"].map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
+    const secrets = [keyEnv!, "UBICLOUD_API_KEY"].map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
     must(ubi(["ssh", name, "umask 077; cat > ~/.l1-secrets"], { input: secrets }), "writing the host's secrets file");
     must(ubi(["ssh", name, "mkdir -p " + H + "/work " + H + "/recovery " + H + "/ubi-state && cat > " + H + "/host.env.in && sed \"s#\\$HOME#$HOME#\" " + H + "/host.env.in > " + H + "/host.env"], { input: hostEnvText(plan.item, plan.cap_usd, process.env.UBI_OWNER ?? "") }), "writing host.env");
     const stage = mkdtempSync(join(tmpdir(), "l1-ledger-"));
