@@ -47,17 +47,17 @@ bun quick/laneb/l1/audit.ts apply decisions.tsv sessions.jsonl out.jsonl [out-wi
 - **table-config.json**: `jobs` (`{dir, instrument, part}`, instrument one of pilot, smoke, f1, tb2), `sessions` (the runs' `proxy-sessions.jsonl` paths), `prefixes` (`{before, after}`, each pin's installed `investigate/SKILL.md`) and an optional `home`.
 - **analysis-config.json**: `models` (`{id, status: run | not_run}`), `routed_stratum` (Amendment C's routed F1 tasks), `construction_checks` (true only when U1's checks and Amendment C's dry run passed), `audit` (the reader's labels, or a path to them) and, optionally, the task lists, `tb2_fit_stratum` and `dropped_by_design`. Once the table holds TB2 rows for a model that ran, `tb2_tasks` (non-empty) and `tb2_fit_stratum` (may be empty) are required, and `analyze.ts` refuses with `E_USAGE` without them. It also refuses an unknown model status or a model listed twice, a task list or stratum that is not a list (or path) naming each task once, a `dropped_by_design` that is not a boolean and a `tb2_replicates` that is not a positive integer.
 - **crew.json**: `as_of`, `captain_credits` (the Captain's booked L1 turns) and `threads` (`{code, line: crew | sol | particle, credits, tokens, token_stop, status: open | planned | done}`), read from each L1 thread's Capy counter. The repo never calls a Capy API.
-- **plan.json**: `items` (`{item, cap_usd, status: planned | open | done}`, each cap equal to the ledger's) and `leftover` (`{sol, particle}`, each pending, done or refused).
+- **plan.json**: `ceiling_usd` (3300; a plan without it or at any other line exits 2), `items` (`{item, cap_usd, status: planned | open | done}`, each cap equal to the ledger's, with an optional `after` naming another plan item that must be done before this one launches) and `leftover` (`{sol, particle}`, each pending, done or refused).
 
 ## The ceiling sum
 
 ```text
-items     every plan item: settled + open reserved, or its cap while it is not done
+items     every plan item: settled + open reserved, or its cap while it is not done, or while it is a done f1-sol, f1-sol-offu or f1-p1 with no finished-run record from --work
 spent     items + voided runs' settled and open reserved spend + every L1 thread's credits / 1000 + the Captain's booked credits / 1000
 holdback  max($700 - crew spend, unspent token stops of open and planned L1 threads x measured $ per token)
           + max(0, $40 - Captain spend)
           + max(0, $15 - run-work spend) for Sol and for particle-1 while each is pending
-total     spent + holdback; check refuses a launch when total passes $3,300 or any item, its own included, holds open reservations
+total     spent + holdback; check refuses a launch when total passes $3,300, when any item, its own included, holds open reservations, or when its after item is not done
 ```
 
 The measured rate is all L1 thread credits over all L1 thread tokens, or $0.45 per million before any reading. The final read leaves the post thread out of the holdback and prints the largest token stop it can have, so the all-in figure, the Captain and run-work remainders, the other open threads' stops and the post's stop at the measured rate stay at or under $3,300.
