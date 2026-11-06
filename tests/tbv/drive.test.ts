@@ -3,11 +3,11 @@
 // approval record: real sends, reservations and settlements.
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { driveItem, openItemRun, readingOrder, runItem, smokeItem, spliceBy, type DrivePlan } from "../../lanes/tbv/drive.ts";
 import { buildRequest, validateRequest } from "../../lanes/tbv/request.ts";
-import type { Arm, Model, ReadingRecord, Validation } from "../../lanes/tbv/types.ts";
+import type { Arm, BuildInput, Model, ReadingRecord, Validation } from "../../lanes/tbv/types.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { cleanup, clock, fakeBuild, history, KEYS, ledgerDir, shape, sse, status, stub, text, TURNS, type Script } from "./drive-fixture.ts";
 
@@ -402,5 +402,35 @@ describe("the drive CLI's splice callback", () => {
     expect(refusal(() => splice("investigate", "principle"))).toMatch(/^E_TBV_INPUT .*investigate.*pinP/);
     expect(refusal(() => splice("ship", "principle"))).toMatch(/^E_TBV_INPUT .*pinP/);
     expect(refusal(() => spliceBy([set("investigate", "pinC"), set("investigate", "pinC")], pins, "splices/"))).toMatch(/^E_TBV_INPUT .*investigate.*pinC/);
+  });
+});
+
+describe("item run teardown", () => {
+  test("a reading that throws lets the round's other readings finish before the item run closes", async () => {
+    let inflight = 0;
+    const script: Script = async (c) => {
+      inflight++;
+      if (c.task === "t2") await Bun.sleep(100);
+      inflight--;
+      return text();
+    };
+    const L = ledgerDir(ITEM, 50);
+    const s = stub(script);
+    const c = clock();
+    const build = (i: BuildInput) => {
+      if (i.history.task === "t1" && i.turn === "d1") throw new Error("boom in t1's d1 build");
+      return fakeBuild(i);
+    };
+    let at = -1;
+    const err = await runItem({ item: ITEM, runId: "run-1", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ script, tasks: ["t1", "t2"], roundWorst: 0.000001 }), plaintext: L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: { build, validate: () => ({ ok: true }), closer: () => true }, log: () => {} }).then(
+      () => null,
+      (e) => {
+        at = inflight;
+        return e;
+      },
+    );
+    expect(String(err)).toContain("boom in t1's d1 build");
+    expect(at).toBe(0);
+    expect(s.calls.filter((x) => x.task === "t2").map((x) => x.turn)).toEqual(["report", "d1", "d2"]);
   });
 });

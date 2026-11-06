@@ -577,13 +577,15 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
       }
     }
     for (const r of round) if (r.pass === 1) firsts.set(r.task + "|" + r.arm + "|" + r.model, deferred());
-    await Promise.all(
+    const settled = await Promise.allSettled(
       round.map(async (r) => {
         const group = r.task + "|" + r.arm + "|" + r.model;
         if (r.pass > 1) await firsts.get(group)?.done;
         return drive(r, r.pass === 1 ? firsts.get(group) : undefined);
       }),
     );
+    const failed = settled.find((x): x is PromiseRejectedResult => x.status === "rejected");
+    if (failed) throw failed.reason;
   }
   for (const r of readingOrder(plan)) {
     const prev = records.get(keyOf(r));
