@@ -1012,15 +1012,15 @@ tbv rebuild-a refused: a pin is missing or does not hold (a bundle with no pinne
 
 Fix: Clone the repo in full so its history holds the pinned commits, download the export again with the pinned Harbor at the pinned version, and give a new --out outside any git checkout, on the run host or in the crew-only Captain drive. Never change a pin to make a rebuild pass: a pin changes only in a new post.
 
-Exit 2. Side effects: None: nothing is spent. The new --out holds the pinned files under pins/. After a materializer refusal it also holds the probe's directories and the task directories rebuilt before it, with no rebuild.json, under the custody of source A's raw bundles. Retry safe: yes. Resumable: no. Owner: U20.
+Exit 2. Side effects: None: nothing is spent. The new --out holds the pinned files under pins/. After an export or materializer refusal it also holds refusal.txt, which names the tasks the message leaves out, and after a materializer refusal the probe's directories and the task directories rebuilt before it, with no rebuild.json. All of it carries the custody of source A's raw bundles. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_TBV_PROBE
 
 tbv rebuild-a's probe failed: it rebuilt a held-tier task, whose directory R3 left in the drive, and got another digest than that directory's, or no held-tier session ran at a commit the rebuild tier needs, so nothing could check that commit's rebuild. No other task directory was rebuilt.
 
-Fix: Stop. The rebuild does not reproduce R3's task directories from the pinned inputs, so no rebuilt directory may enter the frame. Bring the probe line, the two digests and pins/ in the out directory to the Captain; a fix to the inputs or the method needs a new post.
+Fix: Stop. The rebuild does not reproduce R3's task directories from the pinned inputs, so no rebuilt directory may enter the frame. Bring the refusal line to the Captain. The two digests are in refusal.txt in the out directory, which keeps source A custody with pins/ and the probe's directory; a fix to the inputs or the method needs a new post.
 
-Exit 2. Side effects: None: nothing is spent. The --out holds pins/ and the probe's rebuilt directory, with the custody of source A's raw bundles. Retry safe: yes. Resumable: no. Owner: U20.
+Exit 2. Side effects: None: nothing is spent. The --out holds pins/, the probe's rebuilt directory and refusal.txt, with the custody of source A's raw bundles. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_TBV_SHAPE
 

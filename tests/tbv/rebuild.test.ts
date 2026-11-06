@@ -181,8 +181,9 @@ test("a probe that rebuilds a held-tier task away from its digest refuses before
   const w = world({ heldNetwork: "public" });
   const msg = await refusal(() => rebuildA(w.opts, capture().io, w.pins));
   expect(msg).toStartWith("E_TBV_PROBE ");
-  expect(msg).toContain(w.pub[H]!);
-  expect(msg).toContain(w.allow[H]!);
+  expect(msg).not.toContain(w.pub[H]!.replace(/^sha256:/, ""));
+  expect(msg).not.toContain(w.allow[H]!.replace(/^sha256:/, ""));
+  expect(readFileSync(join(w.opts.out, "refusal.txt"), "utf8")).toContain(w.allow[H]! + ", not its directory's " + w.pub[H]!);
   expect(existsSync(join(w.opts.out, w.commit.slice(0, 12)))).toBe(false);
   expect(existsSync(join(w.opts.out, "rebuild.json"))).toBe(false);
 });
@@ -313,9 +314,60 @@ test("a pool task the pinned materializer refuses stops with E_TBV_REBUILD, leav
   const { commit, poolSha } = commitPins(w.repo, pool);
   const pins: Pins = { ...w.pins, pool: poolSha, bundles: { ...w.pins.bundles, "opus-r3a4": commit, "sol-r3a4": commit } };
   const msg = await refusal(() => rebuildA(w.opts, capture().io, pins));
-  expect(msg).toStartWith("E_TBV_REBUILD the materializer at " + commit.slice(0, 12) + " refused a pool task: ");
+  expect(msg).toStartWith("E_TBV_REBUILD the materializer at " + commit.slice(0, 12) + " refused a pool task");
+  expect(msg).not.toContain(S);
+  expect(readFileSync(join(w.opts.out, "refusal.txt"), "utf8")).toContain(S + ": task.toml has no [agent] or [verifier] timeout_sec");
   expect(existsSync(join(w.opts.out, "rebuild.json"))).toBe(false);
   expect(existsSync(join(w.opts.out, "probe", commit.slice(0, 12), H))).toBe(true);
   expect(existsSync(join(w.opts.out, commit.slice(0, 12), K))).toBe(true);
+});
+
+
+test("refusals print no task id: an export off the pool, a result.json that is not JSON, a trial twice with two lock digests", async () => {
+  const exp = world();
+  rmSync(join(exp.exp, S), { recursive: true });
+  const m1 = await refusal(() => rebuildA(exp.opts, capture().io, exp.pins));
+  expect(m1).toStartWith("E_TBV_REBUILD ");
+  expect(m1).not.toContain(S);
+  expect(readFileSync(join(exp.opts.out, "refusal.txt"), "utf8")).toContain(S);
+  const bad = world();
+  writeFileSync(join(bad.opts.bundles["sol-r3a4"]!, "jobs", "screen-a", K + "__b1", "result.json"), "{not json");
+  const m2 = await refusal(() => rebuildA(bad.opts, capture().io, bad.pins));
+  expect(m2).toStartWith("E_TBV_INPUT ");
+  expect(m2).not.toContain(K);
+  const twice = world();
+  writeFileSync(join(twice.opts.bundles["opus-r3a4"]!, "pulled", "jobs", "screen-a", H + "__a1", "lock.json"), JSON.stringify({ task: { digest: twice.pub[H] } }));
+  const m3 = await refusal(() => rebuildA(twice.opts, capture().io, twice.pins));
+  expect(m3).toStartWith("E_TBV_INPUT ");
+  expect(m3).not.toContain(H);
+});
+
+const REAL_GIT = Bun.which("git")!;
+async function withFakeGit(vars: Record<string, string>, fn: () => Promise<string>): Promise<string> {
+  const bin = mkdtempSync(join(tmpdir(), "tbv-fake-git-"));
+  writeFileSync(join(bin, "git"), '#!/bin/sh\ncase "$*" in *is-inside-work-tree*)\n  [ -n "$TBV_FAKE_GIT_MKDIR" ] && mkdir -p "$TBV_FAKE_GIT_MKDIR"\n  [ -n "$TBV_FAKE_GIT_DUBIOUS" ] && { echo "fatal: detected dubious ownership in repository" >&2; exit 128; } ;;\nesac\nexec ' + REAL_GIT + ' "$@"\n', { mode: 0o755 });
+  const saved = { ...process.env };
+  Object.assign(process.env, vars, { PATH: bin + ":" + process.env.PATH });
+  try {
+    return await fn();
+  } finally {
+    for (const k of Object.keys(vars)) delete process.env[k];
+    process.env.PATH = saved.PATH;
+  }
+}
+
+test("the work-tree guard fails closed: an --out under .git, and a git that cannot answer, refuse with E_TBV_REBUILD", async () => {
+  const w = world();
+  expect(await refusal(() => rebuildA({ ...w.opts, out: join(w.repo, ".git", "out") }, capture().io, w.pins))).toStartWith("E_TBV_REBUILD ");
+  const d = world();
+  expect(await withFakeGit({ TBV_FAKE_GIT_DUBIOUS: "1" }, () => refusal(() => rebuildA(d.opts, capture().io, d.pins)))).toStartWith("E_TBV_REBUILD ");
+  expect(existsSync(d.opts.out)).toBe(false);
+});
+
+test("--out is claimed exclusively: a directory made between the existence check and the claim refuses with E_TBV_INPUT", async () => {
+  const w = world();
+  const msg = await withFakeGit({ TBV_FAKE_GIT_MKDIR: w.opts.out }, () => refusal(() => rebuildA(w.opts, capture().io, w.pins)));
+  expect(msg).toStartWith("E_TBV_INPUT ");
+  expect(existsSync(join(w.opts.out, "rebuild.json"))).toBe(false);
 });
 

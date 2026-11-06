@@ -122,7 +122,7 @@ function trialsOf(bundle: string, root: string, commit: string): { none: Session
       try {
         r = JSON.parse(readFileSync(res, "utf8"));
       } catch {
-        return fail("E_TBV_INPUT", res + " is not JSON");
+        return fail("E_TBV_INPUT", "a result.json in bundle " + bundle + " is not JSON");
       }
       if (r && typeof r.task_name === "string" && typeof r.trial_name === "string" && r.trial_name.includes("__")) {
         const kwargs = r.config?.agent?.kwargs ?? {};
@@ -144,7 +144,7 @@ function trialsOf(bundle: string, root: string, commit: string): { none: Session
   const seen = new Map<string, Session>();
   for (const s of none) {
     const was = seen.get(s.trial);
-    if (was && was.recorded !== s.recorded) fail("E_TBV_INPUT", "trial " + s.trial + " appears twice in bundle " + bundle + " with different lock digests");
+    if (was && was.recorded !== s.recorded) fail("E_TBV_INPUT", "a trial appears twice in bundle " + bundle + " with different lock digests");
     if (!was) seen.set(s.trial, s);
   }
   return { none: [...seen.values()], other: other.size };
@@ -153,20 +153,31 @@ function trialsOf(bundle: string, root: string, commit: string): { none: Session
 function insideWorkTree(path: string): boolean {
   let p = resolve(path);
   while (!existsSync(p)) p = dirname(p);
-  const r = Bun.spawnSync(["git", "-C", p, "rev-parse", "--is-inside-work-tree"]);
-  return r.exitCode === 0 && r.stdout.toString().trim() === "true";
+  const r = Bun.spawnSync(["git", "-C", p, "rev-parse", "--is-inside-work-tree", "--is-inside-git-dir"], { env: process.env });
+  if (r.exitCode === 128 && r.stderr.toString().includes("not a git repository")) return false;
+  return r.exitCode !== 0 || r.stdout.toString().includes("true");
 }
 
 export async function rebuildA(o: RebuildOptions, io: Io, pins: Pins = PINS): Promise<RebuildRecord> {
   for (const [flag, p] of [["--export", o.export], ...o.heldTier.map((h) => ["--held-tier", h]), ...Object.values(o.bundles).map((b) => ["--bundle", b])] as [string, string][])
     if (!isDir(p)) fail("E_TBV_INPUT", flag + " " + p + " is not a directory");
   if (existsSync(o.out)) fail("E_TBV_INPUT", "--out " + o.out + " exists; give a new directory");
-  if (insideWorkTree(o.out)) fail("E_TBV_REBUILD", "--out " + o.out + " is inside a git work tree; rebuilt task directories carry source A's raw-bundle custody and never enter a checkout");
+  if (insideWorkTree(o.out)) fail("E_TBV_REBUILD", "--out " + o.out + " is inside a git checkout, or git could not rule that out; rebuilt task directories carry source A's raw-bundle custody and never enter a checkout");
   const names = Object.keys(o.bundles).sort(byBytes);
   for (const b of names) if (!pins.bundles[b]) fail("E_TBV_REBUILD", "bundle " + b + " has no pinned commit; the pinned bundles are " + Object.keys(pins.bundles).join(", "));
   const commits = [...new Set(names.map((b) => pins.bundles[b]!))].sort(byBytes);
 
-  mkdirSync(o.out, { recursive: true });
+  mkdirSync(dirname(resolve(o.out)), { recursive: true });
+  try {
+    mkdirSync(o.out);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") fail("E_TBV_INPUT", "--out " + o.out + " exists; give a new directory");
+    throw e;
+  }
+  const refuse = (code: Parameters<typeof fail>[0], short: string, detail: string) => {
+    writeFileSync(join(o.out, "refusal.txt"), detail + "\n");
+    return fail(code, short + "; the details name tasks, so they are only in " + join(o.out, "refusal.txt"));
+  };
   const pinned = new Map<string, Pinned>();
   for (const c of commits) pinned.set(c, await loadPinned(o.repo, c, pins, join(o.out, "pins", c.slice(0, 12))));
 
@@ -215,14 +226,14 @@ export async function rebuildA(o: RebuildOptions, io: Io, pins: Pins = PINS): Pr
     else if ("sha256:" + pinned.get(c)!.m.treeDigest(d) !== task.digest) off.push(t);
   }
   if (missing.length || off.length)
-    fail("E_TBV_REBUILD", "the export at " + o.export + " is not the pinned " + pins.dataset.name + " " + pins.dataset.version + ": " + missing.length + " task directories missing, " + off.length + " not at the pool's content hash (first: " + [...missing, ...off][0] + "); download it again with Harbor " + pins.harbor);
+    refuse("E_TBV_REBUILD", "the export at " + o.export + " is not the pinned " + pins.dataset.name + " " + pins.dataset.version + ": " + missing.length + " task directories missing, " + off.length + " not at the pool's content hash; download it again with Harbor " + pins.harbor, "missing: " + missing.join(", ") + "\nnot at the pool's content hash: " + off.join(", "));
 
   const materialize = (c: string, t: string, dest: string) => {
     const p = pinned.get(c)!;
     try {
       p.m.materializeRebench(o.export, p.pool.get(t)!, dest, { runtimeStages: p.stages, runtimeCopy: p.copy, network: pins.network });
     } catch (e) {
-      fail("E_TBV_REBUILD", "the materializer at " + c.slice(0, 12) + " refused a pool task: " + (e instanceof Error ? e.message : String(e)));
+      refuse("E_TBV_REBUILD", "the materializer at " + c.slice(0, 12) + " refused a pool task", e instanceof Error ? e.message : String(e));
     }
     return taskDirDigest(dest);
   };
@@ -230,7 +241,8 @@ export async function rebuildA(o: RebuildOptions, io: Io, pins: Pins = PINS): Pr
   const probes: Probe[] = [];
   for (const p of picks) {
     const rebuilt = materialize(p.commit, p.task, join(o.out, "probe", p.commit.slice(0, 12), p.task));
-    if (rebuilt !== p.digest) fail("E_TBV_PROBE", "the probe at " + p.commit.slice(0, 12) + " rebuilt a held-tier task to " + rebuilt + ", not its directory's " + p.digest + "; the rebuild does not reproduce R3's directories, and nothing else was rebuilt");
+    if (rebuilt !== p.digest)
+      refuse("E_TBV_PROBE", "the probe at " + p.commit.slice(0, 12) + " rebuilt a held-tier task to another digest than its directory's; the rebuild does not reproduce R3's directories, and nothing else was rebuilt", "probe " + p.commit.slice(0, 12) + " " + p.task + ": rebuilt " + rebuilt + ", not its directory's " + p.digest);
     probes.push({ commit: p.commit, task: p.task, digest: p.digest, rebuilt, match: true });
   }
 
