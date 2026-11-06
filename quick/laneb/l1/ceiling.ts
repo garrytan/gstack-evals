@@ -7,14 +7,17 @@
 // booked L1 turns; and a holdback. The holdback is the larger of the crew line's unspent remainder ($700 less crew spend, never
 // below zero) and the sum over open and planned L1 threads (crew and run-work lines alike) of each one's unspent token stop at
 // the measured L1 dollars per token so far, plus the Captain line's unspent remainder ($40) and each leftover model's run-work
-// remainder ($15) while that model is pending. check refuses a launch whose sum passes $2,000, and a launch while any item,
-// the launch's own included, holds open reservations (items and the parts of one item launch one at a time). final gives the all-in figure before the results post and the largest token stop the post
-// thread can have so that figure, the holds still open and the stop at the measured rate stay at or under $2,000.
+// remainder ($15) while that model is pending. check refuses a launch whose sum passes L1's line, a launch while any item,
+// the launch's own included, holds open reservations (items and the parts of one item launch one at a time), and a launch
+// whose plan item runs after another item that is not done yet. final gives the all-in figure before the results post and the largest token stop the post
+// thread can have so that figure, the holds still open and the stop at the measured rate stay at or under the line.
+// L1's line is $3,300 all-in: the prereg's $2,000, raised by the project owner so particle-1 can run after Sol (Amendment E).
+// The plan file carries it as ceiling_usd, and the command line refuses a plan at any other line.
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { readRows, totals, type Row } from "../runner/ledger.ts";
 
-export const CEILING_USD = 2000;
+export const CEILING_USD = 3300;
 export const CREW_LINE_USD = 700;
 export const CAPTAIN_LINE_USD = 40;
 export const RUN_WORK_LINE_USD = 15;
@@ -26,8 +29,9 @@ export class UsageError extends Error {}
 
 export type CrewThread = { code: string; line: "crew" | "sol" | "particle"; credits: number; tokens: number; token_stop: number | null; status: "open" | "planned" | "done" };
 export type Crew = { as_of: string; threads: CrewThread[]; captain_credits: number };
-export type PlanItem = { item: string; cap_usd: number; status: "planned" | "open" | "done" };
-export type Plan = { items: PlanItem[]; leftover: { sol: "pending" | "done" | "refused"; particle: "pending" | "done" | "refused" } };
+// after: the plan item that must be done before this one launches (Amendment E's order: Sol's items, then particle-1's).
+export type PlanItem = { item: string; cap_usd: number; status: "planned" | "open" | "done"; after?: string };
+export type Plan = { ceiling_usd?: number; items: PlanItem[]; leftover: { sol: "pending" | "done" | "refused"; particle: "pending" | "done" | "refused" } };
 
 const micros = (usd: number) => Math.round(usd * M);
 const amount = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
@@ -45,6 +49,7 @@ export function tally(ledgerRows: Row[], crew: Crew, plan: Plan, exclude: string
     if (!amount(t.credits) || !amount(t.tokens)) throw new UsageError("E_USAGE l1 ceiling: thread " + t.code + " needs credits and tokens, each a number of at least 0");
   }
   for (const p of plan.items) if (typeof p?.item !== "string" || !amount(p.cap_usd) || !["planned", "open", "done"].includes(p.status)) throw new UsageError("E_USAGE l1 ceiling: plan item " + JSON.stringify(p?.item) + " needs cap_usd, a number of at least 0, and status planned, open or done");
+  for (const p of plan.items) if (p.after !== undefined && (typeof p.after !== "string" || p.after === p.item || !plan.items.some((q) => q.item === p.after))) throw new UsageError("E_USAGE l1 ceiling: plan item " + p.item + " runs after " + p.after + ", which is not another item of the plan");
   for (const k of ["sol", "particle"] as const) if (!["pending", "done", "refused"].includes(plan.leftover[k])) throw new UsageError("E_USAGE l1 ceiling: leftover." + k + " is " + JSON.stringify(plan.leftover[k]) + ", not pending, done or refused");
   const byItem = new Map<string, Row[]>();
   for (const r of ledgerRows) byItem.set(r.item, [...(byItem.get(r.item) ?? []), r]);
@@ -83,8 +88,9 @@ export function check(ledgerRows: Row[], crew: Crew, plan: Plan, launch: string,
   if (!item || item.status === "done") throw new UsageError("E_USAGE l1 ceiling: " + launch + " is not a planned or open item of the plan");
   const busy = t.items.filter((i) => i.open_ids > 0).map((i) => i.item);
   const over = t.total > micros(CEILING_USD);
-  const ok = !over && !busy.length;
-  const why = over ? "the sum $" + usd(t.total) + " with " + launch + "'s cap passes $" + usd(micros(CEILING_USD)) : busy.length ? busy.join(", ") + " still holds open reservations: items launch one at a time; after a part's VM is confirmed gone, settle each of its open reserves at its full reserved amount (bun quick/laneb/runner/ledger.ts settle --detail <the dead VM>), then run this check for its one relaunch" : "the sum $" + usd(t.total) + " with " + launch + "'s cap is at or under $" + usd(micros(CEILING_USD));
+  const early = item.after !== undefined && t.items.find((i) => i.item === item.after)!.status !== "done" ? item.after : null;
+  const ok = !over && !busy.length && !early;
+  const why = early ? launch + " runs only after " + early + " is done (Amendment E): mark " + early + " done once it has settled, then run this check again" : over ? "the sum $" + usd(t.total) + " with " + launch + "'s cap passes $" + usd(micros(CEILING_USD)) : busy.length ? busy.join(", ") + " still holds open reservations: items launch one at a time; after a part's VM is confirmed gone, settle each of its open reserves at its full reserved amount (bun quick/laneb/runner/ledger.ts settle --detail <the dead VM>), then run this check for its one relaunch" : "the sum $" + usd(t.total) + " with " + launch + "'s cap is at or under $" + usd(micros(CEILING_USD));
   return { ok, launch, why, tally: t };
 }
 
@@ -121,6 +127,8 @@ if (import.meta.main) {
     const rows = ledgers.flatMap((p) => readRows(p)), voided = voids.map((p) => readRows(p));
     const crew = JSON.parse(readFileSync(crewPath, "utf8")) as Crew;
     const plan = JSON.parse(readFileSync(planPath, "utf8")) as Plan;
+    if (plan?.ceiling_usd === undefined) throw new UsageError("E_USAGE l1 ceiling: the plan has no ceiling_usd; L1's line is $" + CEILING_USD + " (Amendment E)");
+    if (plan.ceiling_usd !== CEILING_USD) throw new UsageError("E_USAGE l1 ceiling: the plan's line is $" + plan.ceiling_usd + ", but L1's line is $" + CEILING_USD + " (Amendment E)");
     if (cmd === "check") {
       const launch = flag("--launch")[0];
       if (!launch) throw new UsageError("E_USAGE l1 ceiling: check needs --launch <item>");

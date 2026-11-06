@@ -13,7 +13,7 @@ import { priceFor, costMicros, startProxy, type ProxyConfig } from "../runner/pr
 import { loadR3Jobs, type R3Trial } from "../r3/exposure.ts";
 import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, portTaken, R3A, routePassed, routeRecordPath, screenIds, SOL, vmBlock } from "../r3/screen.ts";
 import { judge, next, toolResults, type RouteRecord } from "../r3/route-check.ts";
-import { L1_ROUTE } from "../l1/l1.ts";
+import { L1_ROUTE, L1_ROUTE_P1 } from "../l1/l1.ts";
 
 const here = import.meta.dir;
 const laneb = join(here, "..");
@@ -792,6 +792,27 @@ describe("route-check.ts", () => {
     expect(rows.every((x) => x.id.startsWith("l1-route-sol/"))).toBe(true);
     expect(rows.filter((x) => x.kind === "reserve").every((x) => x.usd_micros === 5_000_000)).toBe(true);
     expect(() => bindCheck(r.ledger, L1_ROUTE, [join(r.dir, "proxy.json")])).not.toThrow();
+  }, 60_000);
+
+  test("l1-route-p1 is particle-1's own route check: its $20 ledger, the same two sessions at cells.l1-p1.json's cell, writing only under l1-route-p1/", async () => {
+    const p1Rig = (cap = 20) => {
+      const r = rig(join(tmp("l1-route-p1-"), "l1-route-p1.jsonl"));
+      approve(r.ledger, "l1-route-p1", cap);
+      writeFileSync(join(r.dir, "arms", "after.tar"), "after arm");
+      writeFileSync(join(r.dir, "manifests", "after.json"), JSON.stringify({ tar: { sha256: sha("after arm") } }));
+      return r;
+    };
+    expect((await routeCheck(p1Rig(25), {}, ["--item", "l1-route-p1"])).out).toContain("l1-route-p1's cap is $25, not Amendment E's $20");
+    const r = p1Rig();
+    const { code, out, calls, rec } = await routeCheck(r, {}, ["--item", "l1-route-p1"]);
+    expect([code, out]).toEqual([0, expect.stringContaining("route check: particle-1 passed on l1-route-p1")]);
+    expect(calls.map((c) => [c.kind, c.model_name, c.kwargs.arm, c.kwargs.told_skill ?? null, c.kwargs.session_cap_usd, c.kwargs.sdk_max_turns])).toEqual([
+      ["smoke", "anthropic/particle-1", "none", null, 5, 100],
+      ["told", "anthropic/particle-1", "after-t", "investigate", 5, 100],
+    ]);
+    expect(rec).toMatchObject({ item: "l1-route-p1", model: "particle-1", verdict: "pass" });
+    expect(readRows(r.ledger).filter((x) => x.kind !== "approval").every((x) => x.id.startsWith("l1-route-p1/"))).toBe(true);
+    expect(() => bindCheck(r.ledger, L1_ROUTE_P1, [join(r.dir, "proxy.json")])).not.toThrow();
   }, 60_000);
 
   test("l1-route-sol refuses another cap, the after arm off its manifest and a told part that fails twice says L1's Sol leg", async () => {

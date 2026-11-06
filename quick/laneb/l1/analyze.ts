@@ -317,7 +317,7 @@ const fix = (reading: Reading, kind: Kind, why: string): Decision => ({ reading,
 
 export function decide(d: DecideIn): Decision {
   const part = PART[d.member];
-  if (d.notRun) return { reading: "NOT_RUN", verdict: "NONE", kind: null, why: "not run under the $2,000 ceiling" };
+  if (d.notRun) return { reading: "NOT_RUN", verdict: "NONE", kind: null, why: "not run under the $3,300 ceiling" };
   if (d.admission === "not_admitted") return fix("NOT_ADMITTED", "saturation", "the pilot did not admit it: a descriptive line, with no ceiling-raise attempt");
   if (d.admission !== "admitted") return { reading: "NO_ADMISSION", verdict: "NONE", kind: null, why: "the pilot is " + (d.admission === "incomplete" ? "incomplete" : "missing") + ": no admission; the Captain decides (#169 8.3)" };
   if (!d.coverageOk || d.est === null || d.lo === null || d.hi === null) return fix("NO_OUTCOME", "harness limit", "no outcome under the coverage rule (#169 7.5)");
@@ -573,7 +573,7 @@ export function markdown(rep: Report): string {
   const out: string[] = ["L1 analysis. power.txt " + rep.power_sha256.slice(0, 12) + ", probes.ts " + rep.probes_sha256.slice(0, 12) + ". Sessions " + rep.sessions.total + ": infra " + rep.sessions.infra + ", cap stops " + rep.sessions.cap_stops + ", contaminated none " + rep.sessions.contaminated.length + "."];
   const head = "| Endpoint | Arm A | Arm B | Paired tasks | Difference, points | Task 95% CI | Repository 95% CI | p, primaries only |\n|---|---|---|---|---|---|---|---|";
   for (const m of rep.models) {
-    out.push("", "## " + m.model + (m.status === "not_run" ? " (not run under the $2,000 ceiling)" : ""), "");
+    out.push("", "## " + m.model + (m.status === "not_run" ? " (not run under the $3,300 ceiling)" : ""), "");
     for (const p of m.primaries) {
       const a = p.admission;
       out.push("**" + p.member + "** admission: " + a.status + (a.c === null ? "" : " (before " + a.x + "/" + a.n + ", Wilson upper " + pct(a.u) + ", MDD@Holm2 " + pts(a.mdd) + ")") + ". Verdict: **" + p.decision.verdict + (p.decision.kind ? " (" + p.decision.kind + ")" : "") + "**, reading " + p.decision.reading + ": " + p.decision.why + ". Holm p " + p.holm_p.toFixed(4) + "; before rate " + pct(p.before_rate.rate) + " [" + pct(p.before_rate.ci.lo) + ", " + pct(p.before_rate.ci.hi) + "]; MDD@Holm2 there " + pts(p.mdd) + "; coverage " + (p.coverage.ok ? "ok" : "failed") + "; audit " + p.audit.rule + " " + (p.audit.pass ? "passed" : "failed") + "; exposure " + pct(p.exposure.rate) + " of " + p.exposure.n + (p.not_run_mdd === null ? "" : "; it would have had MDD@Holm2 " + pts(p.not_run_mdd) + " at the planning rate"));

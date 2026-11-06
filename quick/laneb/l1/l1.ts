@@ -1,13 +1,15 @@
 // L1's launcher (wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000, sections 3, 6, 9 and 10, build unit U1).
-// One item per run (pilot-opus, f1-opus, tb2-opus; pilot-sol and f1-sol under section 9's leftover rule, Amendment E). Each
+// One item per run (pilot-opus, f1-opus, tb2-opus; under section 9's leftover rule, Amendment E: pilot-sol, f1-sol, the
+// optional f1-sol-offu, then pilot-p1 and f1-p1). Each
 // item's parts run one after another as detached launches of one
 // bound run, each part's controller (runner/launch.sh with its ledger service and tunnel) on an awake host: a dedicated
 // Ubicloud standard-2 VM that this launcher names, pins and reserves on the item's own ledger. The item's single ledger
 // file and its .bound live on that host while the run is up. The waiting agent attaches on a timer.
 //
 // Agent side (run in this order; see l1/README.md):
-//   bun quick/laneb/l1/l1.ts prepare <work> --item <item>    prepare-run per part, plan.json (no host, no spend); a Sol item
-//                                                            only after Sol's route check passed on l1-route-sol (ROUTE_LEDGER)
+//   bun quick/laneb/l1/l1.ts prepare <work> --item <item>    prepare-run per part, plan.json (no host, no spend); a Sol or
+//                                                            particle-1 item only after its model's route check passed on
+//                                                            l1-route-sol or l1-route-p1 (ROUTE_LEDGER)
 //   bun quick/laneb/l1/l1.ts host-up <work>                  reserve the host's hours, start and bootstrap it, move the ledger onto it
 //   bun quick/laneb/l1/l1.ts launch <work> --part <part>     bind the run on the first launch, start the part's controller detached
 //   bun quick/laneb/l1/l1.ts attach <work>                   one look: mirror the ledger, pull finished parts, print NEXT
@@ -74,6 +76,9 @@ export const L1_ROUTE = {
   id: SOL, label: "GPT-6.1 Sol", item: "l1-route-sol", capUsd: 20, capFrom: "Amendment E's", routePrefix: "l1-route-sol/", ledgerPort: "9918",
   armManifests: L1.armManifests, cells: "cells.l1-sol.json", routeArms: { smoke: ARM_SPECS.none!, told: ARM_SPECS["after-t"]! }, leg: "L1's Sol leg",
 };
+// particle-1's, the same way on its own item, at cells.l1-p1.json's cell.
+const P1 = "particle-1";
+export const L1_ROUTE_P1 = { ...L1_ROUTE, id: P1, label: "particle-1", item: "l1-route-p1", routePrefix: "l1-route-p1/", ledgerPort: "9919", cells: "cells.l1-p1.json", leg: "L1's particle-1 leg" };
 
 // route: the route check a model's items need passed before they prepare.
 export type ItemDef = { capUsd: number; taskSet: "swerebench-r3a4" | "tb2"; cells: string; allowanceUsd: number; model: string; route?: RouteGate };
@@ -85,6 +90,12 @@ export const ITEMS: Record<string, ItemDef> = {
   // and the re-cost, is $730.
   "pilot-sol": { capUsd: 100, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
   "f1-sol": { capUsd: 730, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  // Amendment E's one added rule: off-u alone on Sol (the description rewrite alone, against f1-sol's before-u), only after
+  // f1-sol is done and only when the ceiling check passes with it. Its cap is price.py's formula for 80 off-u sessions on Sol.
+  "f1-sol-offu": { capUsd: 200, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  // Section 9's planning caps for particle-1, which runs after Sol; f1-p1's cap is the lower of $920 and its re-cost.
+  "pilot-p1": { capUsd: 120, taskSet: "swerebench-r3a4", cells: "cells.l1-p1.json", allowanceUsd: 5, model: P1, route: L1_ROUTE_P1 },
+  "f1-p1": { capUsd: 920, taskSet: "swerebench-r3a4", cells: "cells.l1-p1.json", allowanceUsd: 5, model: P1, route: L1_ROUTE_P1 },
 };
 
 export type Rect = { tasks: string[]; arms: string[]; attempts: number };
@@ -133,16 +144,16 @@ export const hostTtlHours = (parts: number) => (parts + 1) * L1.host.launchHours
 // Each item's parts, from the frozen inputs.
 export function itemParts(item: string, input: { fParts?: string; pilot?: string; tb2Parts?: string }): PartPlan[] {
   const part = (name: string, rects: Rect[]): PartPlan => ({ name, prefix: prefixOf(item, name), rects: seeded(rects) });
-  if (item === "pilot-opus" || item === "pilot-sol") {
+  if (item === "pilot-opus" || item === "pilot-sol" || item === "pilot-p1") {
     const pilot = (input.pilot ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
     if (pilot.length !== 10 || new Set(pilot).size !== 10) usage("the pilot list must hold 10 distinct tasks");
     if (!L1.smoke.every((t) => pilot.includes(t))) usage("every smoke task must be a pilot task");
     return [part("pilot", [{ tasks: pilot, arms: ["before-u", "before-t"], attempts: 1 }, { tasks: [...L1.smoke], arms: ["after-u", "after-t", "off-u", "off-t"], attempts: 1 }])];
   }
-  if (item === "f1-opus" || item === "f1-sol") {
+  if (item === "f1-opus" || item === "f1-sol" || item === "f1-sol-offu" || item === "f1-p1") {
     const parts = readParts(input.fParts ?? "");
     if ([...parts.keys()].join() !== "1,2,3,4" || [...parts.values()].some((t) => t.length !== 20)) usage("F1 needs parts 1 to 4 of 20 tasks each");
-    return [...parts].map(([k, tasks]) => part("f1-" + k, [{ tasks, arms: item === "f1-sol" ? FIVE : SEVEN, attempts: 1 }]));
+    return [...parts].map(([k, tasks]) => part("f1-" + k, [{ tasks, arms: item === "f1-opus" ? SEVEN : item === "f1-sol-offu" ? ["off-u"] : FIVE, attempts: 1 }]));
   }
   if (item === "tb2-opus") {
     const parts = readParts(input.tb2Parts ?? "");

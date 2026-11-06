@@ -57,10 +57,10 @@ spent     items + voided runs' settled and open reserved spend + every L1 thread
 holdback  max($700 - crew spend, unspent token stops of open and planned L1 threads x measured $ per token)
           + max(0, $40 - Captain spend)
           + max(0, $15 - run-work spend) for Sol and for particle-1 while each is pending
-total     spent + holdback; check refuses a launch when total passes $2,000 or any item, its own included, holds open reservations
+total     spent + holdback; check refuses a launch when total passes $3,300 or any item, its own included, holds open reservations
 ```
 
-The measured rate is all L1 thread credits over all L1 thread tokens, or $0.45 per million before any reading. The final read leaves the post thread out of the holdback and prints the largest token stop it can have, so the all-in figure, the Captain and run-work remainders, the other open threads' stops and the post's stop at the measured rate stay at or under $2,000.
+The measured rate is all L1 thread credits over all L1 thread tokens, or $0.45 per million before any reading. The final read leaves the post thread out of the holdback and prints the largest token stop it can have, so the all-in figure, the Captain and run-work remainders, the other open threads' stops and the post's stop at the measured rate stay at or under $3,300.
 
 A part whose VM dies leaves open reserves that never settle: the proxy's sessions file died with the VM, so `ledger.ts reconcile` leaves them open, and the check refuses every launch. Once ubi-runner shows the VM gone, the operator settles each of that part's open reserves at its full reserved amount with `bun quick/laneb/runner/ledger.ts settle --path <ledger> --item <item> --id <id> --usd <reserved amount> --detail <the dead VM>`, then runs the check for the part's one relaunch. Settling at full charges the cap what the open reserve did, so no cap moves, and the measured cost of those sessions is reported as an upper bound. The L1 launcher (U1) enforces the one relaunch.
 
@@ -123,15 +123,17 @@ bun quick/laneb/l1/l1.ts host-down <work>
 
 Exit codes: 0 ok, 2 usage, 3 refused, 4 the item stops incomplete, 5 the host is lost, 9 the ledger refused the host's reserve, 1 anything else. Stderr lines start with a registered code: `E_USAGE` for a bad call or a refusal, `CAP_STOP` for the host's refused reserve, `E_INTERNAL` for anything else.
 
-### Sol under the leftover rule (Amendment E)
+### Sol and particle-1 under the leftover rule (Amendment E)
 
-Section 9 runs GPT-6.1 Sol from money left after the Opus path settles: Sol's route check, then pilot-sol, then f1-sol, each launch only after a passing ceiling check. Every item names its model (`ITEMS[item].model`), so `plan.json` and prepare-run get `gpt-6.1-sol` for Sol's items and `claude-opus-5-5` for Opus's.
+Section 9 runs GPT-6.1 Sol and then particle-1 from money left after the Opus path settles, under L1's line of $3,300 all-in (the prereg's $2,000, raised by the project owner so particle-1 can run). The order is l1-route-sol, pilot-sol, f1-sol, the optional f1-sol-offu, then l1-route-p1, pilot-p1 and f1-p1, each launch only after a passing ceiling check. Every item names its model (`ITEMS[item].model`), so `plan.json` and prepare-run get `gpt-6.1-sol`, `particle-1` or `claude-opus-5-5`.
 
 - `cells.l1-sol.json` holds Sol's cell: `anthropic/gpt-6.1-sol` through OpenRouter at the prereg's $5 session allowance and 100 turns. `cells.l1.json`, which Opus's items read, is unchanged.
 - **l1-route-sol** ($20, its own ledger, prefix `l1-route-sol/`, default ledger port 9918) is `L1_ROUTE` in `l1.ts`. `LEDGER=<l1-route-sol.jsonl> ARMS=<L1 arm dir> OPENROUTER_API_KEY=... bun quick/laneb/r3/route-check.ts --item l1-route-sol` runs R3's two sessions on the runner's smoke task: smoke on L1's none arm and told /investigate on L1's after arm (`after-t`, `tar=after`), both through `laneb_hooks.LanebHooksAgent` at Sol's cell, with `ARM_MANIFESTS` defaulting to `arms/manifests/l1`. A dropped model prints `dropped out of L1's Sol leg`.
 - **pilot-sol** ($100) has pilot-opus's shape and order: 32 sessions. **f1-sol** ($730) runs `f-parts.txt`'s four parts of 20 tasks on none, before-u, after-u, before-t and after-t: 400 sessions.
-- `prepare --item pilot-sol|f1-sol` refuses (exit 3) until `ROUTE_LEDGER` names l1-route-sol's ledger, approved at $20, with no open route reserve and a record that passed for `gpt-6.1-sol` on l1-route-sol with `config/proxy.json`, the file prepare-run copies into every part (`r3/screen.ts` `bindCheck`, as R3's screens check theirs). Without `ROUTE_LEDGER` it exits 2. Opus's items never read it.
-- The ceiling check needs no change: its plan lists `l1-route-sol`, `pilot-sol` and `f1-sol` as items, and `leftover.particle` is `refused`, since particle-1 is not run under the ceiling, so only Sol's run-work remainder is held.
+- **f1-sol-offu** ($200, optional) runs F1's 80 tasks once on off-u alone, in the same four parts: 80 sessions. The run thread adds it to the ceiling plan only after f1-sol is done, with `"after": "f1-sol"`, and runs it only if its check passes.
+- **particle-1**: `cells.l1-p1.json` holds its cell (`anthropic/particle-1` through OpenRouter at $5 and 100 turns). **l1-route-p1** ($20, prefix `l1-route-p1/`, default ledger port 9919) is `L1_ROUTE_P1`, run with `route-check.ts --item l1-route-p1` the same way. **pilot-p1** ($120) and **f1-p1** ($920) have pilot-sol's and f1-sol's shapes. There is no off-u item for particle-1.
+- `prepare --item pilot-sol|f1-sol|f1-sol-offu` refuses (exit 3) until `ROUTE_LEDGER` names l1-route-sol's ledger, approved at $20, with no open route reserve and a record that passed for `gpt-6.1-sol` on l1-route-sol with `config/proxy.json`, the file prepare-run copies into every part (`r3/screen.ts` `bindCheck`, as R3's screens check theirs). Without `ROUTE_LEDGER` it exits 2. `pilot-p1` and `f1-p1` need the same on l1-route-p1 for `particle-1`. Opus's items never read it.
+- The ceiling check holds L1 at $3,300, and the plan file must carry `"ceiling_usd": 3300` (any other line exits 2). A plan item may name `after`, the item that must be done before it launches; the Sol leg's plan chains each item to the one before it, and l1-route-p1 to f1-sol.
 
 ### Amendment C's dry run
 

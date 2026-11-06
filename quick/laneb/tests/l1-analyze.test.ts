@@ -157,7 +157,7 @@ describe("the whole entry on synthetic tables", () => {
     expect(opus.secondary.S6[0]!.est).toBeCloseTo(59 / 80, 6);
     expect(verdicts(rep, "sol")).toEqual(["B1 NOT_RUN NONE", "B3 NOT_RUN NONE"]);
     expect(rep.models[1]!.primaries[0]!.not_run_mdd).toBeCloseTo(0.129, 6);
-    expect(markdown(rep)).toContain("not run under the $2,000 ceiling");
+    expect(markdown(rep)).toContain("not run under the $3,300 ceiling");
   }, SLOW);
   test("a powered loss is CUT-CANDIDATE, and a clean null on a low before rate is CUT-CANDIDATE", () => {
     const rep = run(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 1 }, "before-t": { complete: 56 }, "after-t": { complete: 8 } } }));
