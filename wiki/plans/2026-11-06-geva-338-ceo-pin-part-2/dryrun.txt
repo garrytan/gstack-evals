@@ -1,0 +1,71 @@
+## P. Pins
+PASS build commit 715c6594851c558edcd64f97e6627ef55a7cbbec exports tree a969577910cd906c47b66878dfc70a6d1028c397
+PASS scorer ceo-rule.ts.txt (stop-label amendment) sha256 2222e0cfa65f9f105d6645a70fc6a4bed67d9f0f75033d6e935cdebb7fcaf179
+PASS template.txt (prereg) sha256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862
+PASS judge-brief.md (ladder amendment) sha256 d7b3dce1498e01e874f1dae024ac90e79e5ff5e3af12cc5ed37e2f8a48a14fb5
+PASS stock-list.txt (ladder amendment) sha256 9ecbc78e696836bd11c3e89df1cc1cb0b0e28940b92e7dd3a96846224e47fe3c
+PASS exposure digest CEO_EXPOSURE_SHA256 c0498fa065cb3c50f44cd93d78417577e706a4b0ddd3c491c9ffcb0b7718dd19 equals ceo-exposure.ts's own sha256
+PASS the template the harness pins is template.txt (CEO_TEMPLATE_SHA256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862); parser sha256 8d1826c539a636d03a67d35073175c1dcaa34ee325d8f36226308a9aa7c851d8
+PASS FORCED_LINE equals CEO v2's forced-line.txt (sha256 d4f56ad4...) byte for byte
+    ROUTE openai/gpt-6.1-sol {"only":["openai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":15,"request":0,"image":0}} sha256 a1d757518f019a46e77ccacdbdfc1c3f53d8aaf91fd15811a07c6f07505fac4b
+    ROUTE particle-ai/particle-1 {"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}} sha256 3f811be60bac42e0c29ab989f0c9522bb28d1f45e1da4d652f89b246afd991a0
+PASS both OpenRouter routes send data_collection deny with one pinned provider and no fallback
+    PRICE anthropic:claude-opus-5-5 4/20/0.2/5
+    PRICE anthropic:claude-sonnet-5-5 2/10/0.2/2.5
+    PRICE openai:gpt-6.1-sol 2/10/0.1/2.5 long 4/15/0.2/5 above 272000
+    PRICE openrouter:openai/gpt-6.1-sol 2/10/0.1/2.5 long 4/15/0.2/5 above 272000
+    PRICE openrouter:particle-ai/particle-1 0.1/1/0.003/-
+PASS the scorer's price table at the pin equals section 13's, in dollars per million tokens (input/output/cache read/cache write): Opus 4/20/0.2/5, Sonnet 2/10/0.2/2.5, Sol 2/10/0.1/2.5 and 4/15/0.2/5 past 272k prompt tokens on both routes, particle-1 0.1/1/0.003
+    ALLOW claude-opus-5-5 default 7.040 base 7.040
+    ALLOW openai/gpt-6.1-sol default 6.880 base 3.520
+    ALLOW particle-ai/particle-1 default 0.192 base 0.192
+PASS default session allowance: Opus $7.040 and particle-1 $0.192 at base rates; Sol $6.880, because dry-run.ts:76 prices a 1.6M-token allowance at Sol's long-prompt rates, against the prereg's $3.52 at base rates, so Sol's none and standalone items pass --allowance 3.52
+
+## U. The public smoke unit
+PASS mkunits.ts builds 1 invented public unit (plan.md, context/project.md, key.json): {"units":1,"base_sha256":"d9301e8b9c9d0e82b933133fd8aff1b1e6329377cb51914ff7cfa353b13af082","suite_sha256":"e06243e6473930f29e1aab2751221769d0c929235e8a4bf955fa515d82b6dadd"}
+PASS noloss suite --check passes the public suite (key.json fields and plan.md present)
+
+## D. review-units --dry-run, every stage 1 run item's command on the public smoke unit
+Each command is the post's exact command with --suite, --sealed-root, --source and --out pointed at the public unit and --units all (the public suite holds one unit; the run names --units 1 2 for the smoke and --units all for none).
+PASS ceo-o-hr-smoke-opus-a: exit 0; arms: gstack-auto ("/autoplan --ceo-only Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset; allowance $12.0000 a session; one round of 2 at the allowance $24.00 fits the $25 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS ceo-o-hr-smoke-opus-p: exit 0; arms: gstack-forced ("/plan-ceo-review Run this skill's full procedure before you answer: complete Step 0 (Nuclear Scope Challenge + Mode Selection) and state the mode you choose, then Read sections/review-sections.md and write its Review Sections 1 to 10 in order, plus Section 11 or its skip note, before your findings. Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset; allowance $7.0400 a session; one round of 2 at the allowance $14.08 fits the $15 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS ceo-o-hr-smoke-sol-a: exit 0; arms: gstack-auto ("/autoplan --ceo-only Review this plan for problems." on openai/gpt-6.1-sol) system prompt claude-code-preset; allowance $6.0000 a session; one round of 2 at the allowance $12.00 fits the $13 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS ceo-o-hr-smoke-sol-p: exit 0; arms: gstack-forced ("/plan-ceo-review Run this skill's full procedure before you answer: complete Step 0 (Nuclear Scope Challenge + Mode Selection) and state the mode you choose, then Read sections/review-sections.md and write its Review Sections 1 to 10 in order, plus Section 11 or its skip note, before your findings. Review this plan for problems." on openai/gpt-6.1-sol) system prompt claude-code-preset; allowance $3.5200 a session; one round of 2 at the allowance $7.04 fits the $8 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS ceo-o-hr-smoke-particle-a: exit 0; arms: gstack-auto ("/autoplan --ceo-only Review this plan for problems." on particle-ai/particle-1) system prompt claude-code-preset; allowance $0.3300 a session; one round of 2 at the allowance $0.66 fits the $1 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS ceo-o-hr-smoke-particle-p: exit 0; arms: gstack-forced ("/plan-ceo-review Run this skill's full procedure before you answer: complete Step 0 (Nuclear Scope Challenge + Mode Selection) and state the mode you choose, then Read sections/review-sections.md and write its Review Sections 1 to 10 in order, plus Section 11 or its skip note, before your findings. Review this plan for problems." on particle-ai/particle-1) system prompt claude-code-preset; allowance $0.1900 a session; one round of 2 at the allowance $0.38 fits the $1 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS ceo-o-hr-opus-none: exit 0; arms: none ("Review this plan for problems." on claude-opus-5-5) system prompt claude-code-preset; allowance $7.0400 a session; one round of 3 at the allowance $21.12 fits the $52 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS ceo-o-hr-sol-none: exit 0; arms: none ("Review this plan for problems." on openai/gpt-6.1-sol) system prompt claude-code-preset; allowance $3.5200 a session; one round of 3 at the allowance $10.56 fits the $23 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS ceo-o-hr-particle-none: exit 0; arms: none ("Review this plan for problems." on particle-ai/particle-1) system prompt claude-code-preset; allowance $0.1900 a session; one round of 3 at the allowance $0.57 fits the $6 cap; 1 cap-stop and follow-up line; worst case same without --system-prompt
+PASS the forced arm's line is FORCED_LINE then the ask, and the autoplan arm's is /autoplan --ceo-only then the ask
+PASS without --allowance 3.52, one Sol session plans at $6.88, so ceo-o-hr-smoke-sol-p's round of 2 ($13.76) would never fit its $8 cap
+
+## L. Ledger: one lease opened and settled per stage 1 item, on a temporary ledger
+A temporary approval record and local ledger; the approvals mirror is a stub. Each item is recorded with ledger init at its cap (--admission warn, as the earlier CEO runs), leased with ledger lease (a run item at --amount its cap, as review-units leases it), charged its section 13 projection through the local ledger's reserve and settle (the path the metering proxy uses), and closed with ledger settle. Each judge item's cap is $160 less the settled spend of every earlier stage 1 item, read from ledger status.
+PASS ceo-o-hr-smoke-opus-a: init at $25 (exit 0), lease (exit 0), spend $6 (exit 0), settle (exit 0); status committed $6.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-opus-p: init at $15 (exit 0), lease (exit 0), spend $1.4 (exit 0), settle (exit 0); status committed $1.40, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-sol-a: init at $13 (exit 0), lease (exit 0), spend $3.6 (exit 0), settle (exit 0); status committed $3.60, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-sol-p: init at $8 (exit 0), lease (exit 0), spend $0.84 (exit 0), settle (exit 0); status committed $0.84, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-particle-a: init at $1 (exit 0), lease (exit 0), spend $0.66 (exit 0), settle (exit 0); status committed $0.66, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-smoke-particle-p: init at $1 (exit 0), lease (exit 0), spend $0.3 (exit 0), settle (exit 0); status committed $0.30, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-opus-none: init at $52 (exit 0), lease (exit 0), spend $15 (exit 0), settle (exit 0); status committed $15.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-sol-none: init at $23 (exit 0), lease (exit 0), spend $6 (exit 0), settle (exit 0); status committed $6.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-particle-none: init at $6 (exit 0), lease (exit 0), spend $2.4 (exit 0), settle (exit 0); status committed $2.40, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+    run items settled in all: $36.20 of their $144.00 caps
+PASS ceo-o-hr-judge-sol: init at $123.80 (exit 0), lease (exit 0), spend $2 (exit 0), settle (exit 0); status committed $2.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-judge-opus: init at $121.80 (exit 0), lease (exit 0), spend $2 (exit 0), settle (exit 0); status committed $2.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-hr-judge-sonnet: init at $119.80 (exit 0), lease (exit 0), spend $2 (exit 0), settle (exit 0); status committed $2.00, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+    stage 1 settled in all: $42.20 of the $160.00 envelope
+
+## O. OpenRouter's public feed, read keyless at 2026-11-06T04:26:38Z
+PASS openai/gpt-6.1-sol: 2 of 9 endpoints: openai/flex, openai serve inside the route's only and max_price
+PASS particle-ai/particle-1: 1 of 1 endpoints: particle-ai/us serve inside the route's only and max_price
+    OpenRouter data policy feed, openai: {"training": false, "trainingOpenRouter": false, "retainsPrompts": true, "canPublish": false, "safetyRetention": false}
+PASS openai: OpenRouter's data policy feed (api/frontend/v1/all-providers, the source of its provider-logging page) records no training on prompts and no publishing, so data_collection deny keeps it
+    OpenRouter data policy feed, particle-ai: {"training": false, "trainingOpenRouter": false, "retainsPrompts": false, "canPublish": false, "safetyRetention": false}
+PASS particle-ai: OpenRouter's data policy feed (api/frontend/v1/all-providers, the source of its provider-logging page) records no training on prompts and no publishing, so data_collection deny keeps it
+
+## Leak check
+PASS the transcript holds no home path, no work dir path and no key-like string
+
+PASS 41, FAIL 0
+DRYRUN: ok
