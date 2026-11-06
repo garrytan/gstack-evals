@@ -72,7 +72,7 @@ bin/gstack-evals tbv compare readings.json --split <manifest.json> --base <tbv-d
 where `<tbv-dev-base readings.json>` is the readings file tbv-dev-base's step 4 wrote. The run record pins its sha256 before the climb's first lease, and compare's `base:` line must print the same sha256.
 
 - **No dev-base record is judged again.** The climb's packets and judge calls cover only its own 132 readings, and compare reads dev-base's judged rows from dev-base's readings file. So each climb's packet count in tbv-hr's projection stays as it was.
-- **What compare joins.** dev-base's none and current rows on the climb's models (Opus), capy current included; its lens, Sol and particle-1 rows stay out. Agreement, stop counts and harness counts read the climb's own rows only, so dev-base's 660 rows cannot hide a disagreement in the climb's own double reads. Contrasts, clean-task lines and secondaries read both. A climb's own agreement under 0.70 prints JUDGE FAIL, as compare does for any dev readings file.
+- **What compare joins.** dev-base's none and current rows on the climb's models (Opus), capy current included; its lens, Sol and particle-1 rows stay out. Agreement, stop counts and harness counts read the climb's own rows only, so dev-base's 660 rows cannot hide a disagreement in the climb's own double reads. Contrasts, clean-task lines and secondaries read both. A climb's own agreement under 0.70 prints JUDGE FAIL and stops the confirmatory run at FIX-METHOD (judge), as compare does for any dev readings file.
 - **What refuses** (E_USAGE): `--base` outside stage dev; a climb file holding any row but principle; a base file that is not a dev readings file from the same split manifest, holds a principle row, lacks a climb model, or ran other passes or capy passes; a response id in both files. Without `--base`, dev readings with principle rows and no none rows refuse, where compare printed "no contrasts" before.
 
 ## 4. Corrections to the scorer pin post
@@ -101,4 +101,4 @@ tests/tbv/held.test.ts runs real containers: planted writes from the command to 
 
 - No paid or metered call ran.
 - tbv-held-p3's command is still not settled (pin post section 4).
-- Whether a climb's JUDGE FAIL stops the confirmatory run, as the prereg says of the dev read, is the Captain's call if it fires; compare prints it the same way at both.
+- No case-by-case call on a climb's JUDGE FAIL. A climb is a dev-stage read, so the prereg's frozen failure path for the dev read covers it: a climb's own agreement under 0.70 stops the confirmatory run at FIX-METHOD (judge), as it does at tbv-dev-base, and compare prints the same stop at both.
