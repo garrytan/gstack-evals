@@ -342,10 +342,9 @@ test("refusals print no task id: an export off the pool, a result.json that is n
   expect(m3).not.toContain(H);
 });
 
-const REAL_GIT = Bun.which("git")!;
 async function withFakeGit(vars: Record<string, string>, fn: () => Promise<string>): Promise<string> {
   const bin = mkdtempSync(join(tmpdir(), "tbv-fake-git-"));
-  writeFileSync(join(bin, "git"), '#!/bin/sh\ncase "$*" in *is-inside-work-tree*)\n  [ -n "$TBV_FAKE_GIT_MKDIR" ] && mkdir -p "$TBV_FAKE_GIT_MKDIR"\n  [ -n "$TBV_FAKE_GIT_DUBIOUS" ] && { echo "fatal: detected dubious ownership in repository" >&2; exit 128; } ;;\nesac\nexec ' + REAL_GIT + ' "$@"\n', { mode: 0o755 });
+  writeFileSync(join(bin, "git"), '#!/bin/sh\ncase "$*" in *is-inside-work-tree*)\n  [ -n "$TBV_FAKE_GIT_MKDIR" ] && mkdir -p "$TBV_FAKE_GIT_MKDIR"\n  [ -n "$TBV_FAKE_GIT_DUBIOUS" ] && { echo "fatal: detected dubious ownership in repository" >&2; exit 128; } ;;\nesac\np=; set -f; IFS=:\nfor d in $PATH; do [ "$d" = "' + bin + '" ] || p=${p:+$p:}$d; done\nunset IFS; PATH=$p; export PATH\nexec git "$@"\n', { mode: 0o755 });
   const saved = { ...process.env };
   Object.assign(process.env, vars, { PATH: bin + ":" + process.env.PATH });
   try {
@@ -371,3 +370,32 @@ test("--out is claimed exclusively: a directory made between the existence check
   expect(existsSync(join(w.opts.out, "rebuild.json"))).toBe(false);
 });
 
+test("the fake git drops its own directory from PATH, so a git shim that searches PATH reaches a real git", async () => {
+  const shim = mkdtempSync(join(tmpdir(), "tbv-git-shim-"));
+  const mark = join(shim, "ran");
+  writeFileSync(join(shim, "git"), '#!/bin/sh\n: > "$TBV_SHIM_MARK"\nn=$((${TBV_SHIM_HOPS:-0} + 1)); export TBV_SHIM_HOPS=$n\n[ "$n" -gt 8 ] && { echo "git shim: loop" >&2; exit 97; }\np=; set -f; IFS=:\nfor d in $PATH; do [ "$d" = "' + shim + '" ] || p=${p:+$p:}$d; done\nunset IFS; PATH=$p; export PATH\nexec git "$@"\n', { mode: 0o755 });
+  const w = world();
+  const path = process.env.PATH;
+  process.env.PATH = shim + ":" + path;
+  try {
+    const msg = await withFakeGit({ TBV_FAKE_GIT_MKDIR: w.opts.out, TBV_SHIM_MARK: mark }, () => refusal(() => rebuildA(w.opts, capture().io, w.pins)));
+    expect(msg).toStartWith("E_TBV_INPUT ");
+    expect(existsSync(mark)).toBe(true);
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
+test("a relative --out resolves against the working directory, so the pinned materializer loads", async () => {
+  const w = world();
+  const cwd = process.cwd();
+  process.chdir(mkdtempSync(join(tmpdir(), "tbv-rebuild-cwd-")));
+  try {
+    const rec = await rebuildA({ ...w.opts, out: "out" }, capture().io, w.pins);
+    const out = join(process.cwd(), "out");
+    expect(rec.tasks.find((t) => t.task === K)).toMatchObject({ status: "kept", dir: join(out, w.commit.slice(0, 12), K) });
+    expect(existsSync(join(out, "rebuild.json"))).toBe(true);
+  } finally {
+    process.chdir(cwd);
+  }
+});

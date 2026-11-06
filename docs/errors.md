@@ -1018,9 +1018,9 @@ Exit 2. Side effects: None: nothing is spent. The new --out holds the pinned fil
 
 tbv rebuild-a's probe failed: it rebuilt a held-tier task, whose directory R3 left in the drive, and got another digest than that directory's, or no held-tier session ran at a commit the rebuild tier needs, so nothing could check that commit's rebuild. No other task directory was rebuilt.
 
-Fix: Stop. The rebuild does not reproduce R3's task directories from the pinned inputs, so no rebuilt directory may enter the frame. Bring the refusal line to the Captain. The two digests are in refusal.txt in the out directory, which keeps source A custody with pins/ and the probe's directory; a fix to the inputs or the method needs a new post.
+Fix: Stop. No rebuilt directory may enter the frame: either the rebuild does not reproduce R3's task directories from the pinned inputs, or a commit has no held-tier session to check it. Bring the refusal line to the Captain. After a digest mismatch the two digests are in refusal.txt in the out directory, which keeps source A custody with pins/ and the probe's directory; a commit with no held-tier session writes no refusal.txt. A fix to the inputs or the method needs a new post.
 
-Exit 2. Side effects: None: nothing is spent. The --out holds pins/, the probe's rebuilt directory and refusal.txt, with the custody of source A's raw bundles. Retry safe: yes. Resumable: no. Owner: U20.
+Exit 2. Side effects: None: nothing is spent. The --out holds pins/ with the custody of source A's raw bundles; after a digest mismatch it also holds the probe's rebuilt directory and refusal.txt. Retry safe: yes. Resumable: no. Owner: U20.
 
 ### E_TBV_SHAPE
 

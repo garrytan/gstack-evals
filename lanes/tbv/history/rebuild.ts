@@ -106,7 +106,7 @@ async function loadPinned(repo: string, commit: string, pins: Pins, dir: string)
   const ds = doc.dataset ?? {};
   if (ds.name !== pins.dataset.name || ds.version !== pins.dataset.version || ds.harbor_commit !== pins.harbor)
     fail("E_TBV_REBUILD", "the pool at " + commit + " names " + ds.name + " " + ds.version + " from Harbor " + ds.harbor_commit + ", not the pinned " + pins.dataset.name + " " + pins.dataset.version + " from Harbor " + pins.harbor);
-  const m = (await import(join(dir, "materialize.ts"))) as Partial<Materializer>;
+  const m = (await import(resolve(dir, "materialize.ts"))) as Partial<Materializer>;
   if (typeof m.materializeRebench !== "function" || typeof m.treeDigest !== "function") return fail("E_TBV_REBUILD", PINNED_FILES.materialize + " at " + commit + " exports no materializeRebench or treeDigest");
   return { commit, files, pool: new Map((doc.tasks ?? []).map((t) => [t.task_id, t])), stages: blobs.stages!.toString("utf8"), copy: blobs.copy!.toString("utf8"), m: m as Materializer };
 }
@@ -159,6 +159,7 @@ function insideWorkTree(path: string): boolean {
 }
 
 export async function rebuildA(o: RebuildOptions, io: Io, pins: Pins = PINS): Promise<RebuildRecord> {
+  o = { ...o, out: resolve(o.out) };
   for (const [flag, p] of [["--export", o.export], ...o.heldTier.map((h) => ["--held-tier", h]), ...Object.values(o.bundles).map((b) => ["--bundle", b])] as [string, string][])
     if (!isDir(p)) fail("E_TBV_INPUT", flag + " " + p + " is not a directory");
   if (existsSync(o.out)) fail("E_TBV_INPUT", "--out " + o.out + " exists; give a new directory");

@@ -19,7 +19,7 @@ links:
 
 # Trust-but-verify rebuild pins addendum
 
-[Amendment 1](../2026-11-05-geva-326-tbv-prereg-amendment-1/README.md) section 1 says B1 rebuilds the source A task directories the drive does not hold from the pinned public export through the repo's materializer, and keeps a session only when the rebuilt directory matches its digest. Its section 5 lists that rebuild among B1's build items, which the keyless dry run drives. The build had only the digest check. This post pins the build that adds the rebuild as `tbv rebuild-a`. It adds no rule. It changes no cap, arm, model, judge, threshold, MDD row, split count or custody rule, and nothing in it spends money.
+[Amendment 1](2026-11-05-geva-326-tbv-prereg-amendment-1/README.md) section 1 says B1 rebuilds the source A task directories the drive does not hold from the pinned public export through the repo's materializer, and keeps a session only when the rebuilt directory matches its digest. Its section 5 lists that rebuild among B1's build items, which the keyless dry run drives. The build had only the digest check. This post pins the build that adds the rebuild as `tbv rebuild-a`. It adds no rule. It changes no cap, arm, model, judge, threshold, MDD row, split count or custody rule, and nothing in it spends money.
 
 ## 1. The build
 
@@ -30,7 +30,7 @@ links:
   - lanes/tbv/dryrun.ts: a part 3m that runs tests/tbv/rebuild.test.ts and prints three checks. Parts 1, 2 and 3a to 3l are unchanged.
   - lanes/tbv/history/source-a.ts: one comment line, no code.
   - lanes/tbv/README.md, two new reason codes (E_TBV_REBUILD, E_TBV_PROBE), docs/errors.md and the tests.
-- **What stands.** shape.ts, splice.ts, request.ts, drive.ts, keys.ts, judge.ts, packet.ts, readings.ts, extract.ts, held.ts and rule.ts are byte-identical to a0f61d44. So the [scorer pin post](../2026-11-06-geva-349-tbv-scorer-pin/README.md)'s captures, digests, overheads and caps output, and the pins addendum's confined steps, stand.
+- **What stands.** shape.ts, splice.ts, request.ts, drive.ts, keys.ts, judge.ts, packet.ts, readings.ts, extract.ts, held.ts and rule.ts are byte-identical to a0f61d44. So the [scorer pin post](2026-11-06-geva-349-tbv-scorer-pin/README.md)'s captures, digests, overheads and caps output, and the pins addendum's confined steps, stand.
 - **The run brief's check.** `git diff --stat a0f61d44 <build> -- lanes/tbv` lists only cli.ts, dryrun.ts, README.md, history/rebuild.ts and history/source-a.ts, plus the files the split PR's addendum lists if that PR merged first.
 
 ## 2. The rebuild's pins
@@ -39,11 +39,11 @@ Each pin comes from a merged post. rebuild-a holds them in history/rebuild.ts an
 
 | Pin | Value | Source |
 |---|---|---|
-| Harbor | f3a5a923f6d722472c9e797af836ae4425fb215f | [R3 amendment 4](../2026-11-03-geva-247-r3-amendment-4/README.md) section 4; the pool file's dataset record |
+| Harbor | f3a5a923f6d722472c9e797af836ae4425fb215f | [R3 amendment 4](2026-11-03-geva-247-r3-amendment-4/README.md) section 4; the pool file's dataset record |
 | Dataset | swe-rebench/swe-rebench-leaderboard at version sha256:ebe7444e313a0d8db94fa541139826eaebe2b0abcd4900c6f73e750494910dca | R3 amendment 4 section 4 |
 | Pool file | quick/laneb/tasks/swerebench-r3a4.json at sha256 7d2b2735cd50836364cc2c1fba9a2dd07a5ce42e9ea0f9c4b8d699b9e81ea1af, each task with its Hub content hash | R3 amendment 4 section 5 |
-| Bundles opus-r3a4 and sol-r3a4 | 616de34fb1c90763f897d1fdb7f1764ff7bcaee3 | R3 amendment 4 section 2; [the R3a4 admission results](../../board/2026-11-04-geva-263-r3a4-admission-results.md) |
-| Bundles opus-r3b and sol-r3b | dbcb5b49e4d41b6a6d176d35e406a4399704c3a7 | [the R3b pin post](../2026-11-04-geva-273-r3b-pin/README.md); [the R3b results](../../board/2026-11-04-geva-283-r3b-results.md) |
+| Bundles opus-r3a4 and sol-r3a4 | 616de34fb1c90763f897d1fdb7f1764ff7bcaee3 | R3 amendment 4 section 2; [the R3a4 admission results](../board/2026-11-04-geva-263-r3a4-admission-results.md) |
+| Bundles opus-r3b and sol-r3b | dbcb5b49e4d41b6a6d176d35e406a4399704c3a7 | [the R3b pin post](2026-11-04-geva-273-r3b-pin/README.md); [the R3b results](../board/2026-11-04-geva-283-r3b-results.md) |
 | Network | allowlist | prepare-run.ts's NETWORK default at both commits |
 
 No post names the network mode the R3 parts ran with. The pinned prepare-run.ts defaults to allowlist, and the probe checks it: a held-tier directory that R3 materialized another way would not match.
@@ -65,7 +65,7 @@ assemble-a's provenance gate checks each kept directory's digest again, so rebui
 
 A rebuilt directory is a source A task directory, the same kind of file the raw bundles hold for the held tier, and after the draw any of them may belong to a held-out task. So rebuilt directories, the probe's directory and rebuild.json carry the custody of source A's raw bundles:
 
-- They live on the run host or in the crew-only Captain drive, as [the prereg](../2026-11-05-geva-313-trust-but-verify-prereg/README.md) section 11 item 3 keeps the raw bundles. No principle builder reads them, and no artifact for the gstack Captain carries one.
+- They live on the run host or in the crew-only Captain drive, as [the prereg](2026-11-05-geva-313-trust-but-verify-prereg/README.md) section 11 item 3 keeps the raw bundles. No principle builder reads them, and no artifact for the gstack Captain carries one.
 - The repo gets their counts and sha256s only (section 16), never a task id.
 - A held-out step takes them as `--ro`, as it takes the held tier's directories (pins addendum section 2). They are not held-out-derived plaintext, so they need no tmpfs and no seal.
 - rebuild-a refuses an `--out` inside a git work tree.
@@ -74,7 +74,7 @@ A rebuilt directory is a source A task directory, the same kind of file the raw 
 
 - **This build and the split build.** The sibling PR that adds `tbv split` and mine-b paging carries its own pins addendum. Whichever of the two merges second pins the build B2 uses.
 - **Preflight 6** (scorer pin post section 9) before tbv-author's first lease.
-- **The rebuild before the first assemble step.** B2 downloads the export with the pinned Harbor, installed the way [R3 amendment 3c](../2026-11-03-geva-221-r3-amendment-3c/README.md) installs it, then runs:
+- **The rebuild before the first assemble step.** B2 downloads the export with the pinned Harbor, installed the way [R3 amendment 3c](2026-11-03-geva-221-r3-amendment-3c/README.md) installs it, then runs:
 
 ```
 harbor datasets download swe-rebench/swe-rebench-leaderboard -o <export>
