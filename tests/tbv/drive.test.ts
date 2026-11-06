@@ -414,7 +414,7 @@ describe("restart under the same run id", () => {
     const s = stub(() => text());
     const logs: string[] = [];
     const { childPlan, sealCmd, unsealCmd } = await import("./drive-child.ts");
-    const res = await runItem({ item: ITEM, runId: "run-crash", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, plan: childPlan(), plaintext: L.plain, sealCmd: sealCmd(L.root), unsealCmd: unsealCmd(L.root), devPlaintext: false, held: false, mounts: "tmpfs " + L.plain + " tmpfs rw 0 0\n", deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: (t) => logs.push(t) });
+    const res = await runItem({ item: ITEM, runId: "run-crash", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, plan: childPlan(), plaintext: L.plain, sealCmd: sealCmd(L.root), unsealCmd: unsealCmd(L.root), devPlaintext: false, held: false, mounts: "tmpfs " + L.root + " tmpfs rw 0 0\n", deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: (t) => logs.push(t) });
     expect(logs.some((l) => l.includes("leftover") && l.includes(L.plain))).toBe(true);
     const crashed = res.records.find((r) => r.task === "t2" && r.arm === "current")!;
     expect(crashed.cls).toBe("gap");

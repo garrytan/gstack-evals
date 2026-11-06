@@ -20,5 +20,5 @@ if (import.meta.main) {
     }
     return text();
   });
-  await runItem({ item, runId: "run-crash", record: join(root, "record"), ledger: join(root, "ledger.sqlite"), out: join(root, "out"), env: KEYS, fetch: s.fetch, plan: { ...childPlan(), item }, plaintext: join(root, "plain"), sealCmd: sealCmd(root), unsealCmd: unsealCmd(root), devPlaintext: false, held: false, mounts: "tmpfs " + join(root, "plain") + " tmpfs rw 0 0\n", deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: (t) => console.error(t) });
+  await runItem({ item, runId: "run-crash", record: join(root, "record"), ledger: join(root, "ledger.sqlite"), out: join(root, "out"), env: KEYS, fetch: s.fetch, plan: { ...childPlan(), item }, plaintext: join(root, "plain"), sealCmd: sealCmd(root), unsealCmd: unsealCmd(root), devPlaintext: false, held: false, mounts: "tmpfs " + root + " tmpfs rw 0 0\n", deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: (t) => console.error(t) });
 }
