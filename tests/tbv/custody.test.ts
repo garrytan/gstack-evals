@@ -27,6 +27,12 @@ describe("plaintext root", () => {
     expect(code(() => plaintextRoot("/dev/shmx/run", { devPlaintext: false, held: false, mounts: MOUNTS }))).toBe("E_TBV_CUSTODY");
   });
 
+  test("a root that is the tmpfs mount point itself is refused; a directory under it is not", () => {
+    expect(code(() => plaintextRoot("/dev/shm", { devPlaintext: false, held: true, mounts: MOUNTS }))).toBe("E_TBV_CUSTODY");
+    expect(code(() => plaintextRoot("/dev/shm/", { devPlaintext: false, held: false, mounts: MOUNTS }))).toBe("E_TBV_CUSTODY");
+    expect(plaintextRoot("/dev/shm/tbv-run", { devPlaintext: false, held: true, mounts: MOUNTS })).toBe("/dev/shm/tbv-run");
+  });
+
   test("--dev-plaintext allows a disk root for dev data, and is refused for held-out input or with an unseal command", () => {
     expect(plaintextRoot("/var/tbv-run", { devPlaintext: true, held: false, mounts: MOUNTS })).toBe("/var/tbv-run");
     expect(code(() => plaintextRoot("/var/tbv-run", { devPlaintext: true, held: true, mounts: MOUNTS }))).toBe("E_TBV_CUSTODY");

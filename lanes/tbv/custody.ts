@@ -37,6 +37,7 @@ export function plaintextRoot(dir: string, o: { devPlaintext: boolean; held: boo
   const under = (m: string) => real === m || real.startsWith(m.endsWith("/") ? m : m + "/");
   const mount = mounts.filter((m) => under(m.at)).sort((a, b) => b.at.length - a.at.length)[0];
   if (mount?.type !== "tmpfs") fail("E_TBV_CUSTODY", "the plaintext root " + at + " is on " + (mount ? mount.type + " (" + mount.at + ")" : "no listed mount") + ", not tmpfs; put it under /dev/shm, or pass --dev-plaintext for dev data only");
+  if (real === mount!.at || real + "/" === mount!.at) fail("E_TBV_CUSTODY", "the plaintext root " + at + " is the tmpfs mount point itself; use a directory under it, since the leftover check deletes the whole root");
   return at;
 }
 
