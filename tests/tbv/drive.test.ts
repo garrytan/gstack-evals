@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { driveItem, openItemRun, readingOrder, runItem, smokeItem, type DrivePlan } from "../../lanes/tbv/drive.ts";
+import { driveItem, openItemRun, readingOrder, runItem, smokeItem, spliceBy, type DrivePlan } from "../../lanes/tbv/drive.ts";
 import type { Arm, Model, ReadingRecord, Validation } from "../../lanes/tbv/types.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { cleanup, clock, fakeBuild, history, KEYS, ledgerDir, shape, sse, status, stub, text, TURNS, type Script } from "./drive-fixture.ts";
@@ -356,4 +356,30 @@ describe("restart under the same run id", () => {
     const plainSealed = readdirSync(join(L.out, "sealed")).map((n) => readFileSync(join(L.out, "sealed", n), "utf8"));
     expect(plainSealed.every((t) => t.startsWith("STUB-SEALED"))).toBe(true);
   }, 30_000);
+});
+
+describe("the drive CLI's splice callback", () => {
+  const set = (family: "investigate" | "ship", pin: string) => ({ schema: "tbv-splice.v1" as const, family, pin, opening: [], head: [], tail: [], closer: { kind: "preamble" as const, paragraph: "p" }, skillStart: null, files: [], sha256: pin.padEnd(64, "0") });
+  const pins = (arm: Arm) => (arm === "current" ? "pinC" : arm === "principle" ? "pinP" : null);
+  test("with C and P captures for one family, each gstack arm gets the splice at its own shape's pin", () => {
+    const splice = spliceBy([set("investigate", "pinC"), set("investigate", "pinP"), set("ship", "pinC")], pins, "splices/");
+    expect(splice("investigate", "current")!.pin).toBe("pinC");
+    expect(splice("investigate", "principle")!.pin).toBe("pinP");
+    expect(splice("ship", "current")!.pin).toBe("pinC");
+    expect(splice("investigate", "none")).toBeNull();
+  });
+  test("no splice at the arm's pin, or two files with one family and pin, is E_TBV_INPUT", () => {
+    const refusal = (f: () => unknown) => {
+      try {
+        f();
+      } catch (e) {
+        return (e as { code?: string }).code + " " + (e as Error).message;
+      }
+      return "no error";
+    };
+    const splice = spliceBy([set("investigate", "pinC"), set("ship", "pinC")], pins, "splices/");
+    expect(refusal(() => splice("investigate", "principle"))).toMatch(/^E_TBV_INPUT .*investigate.*pinP/);
+    expect(refusal(() => splice("ship", "principle"))).toMatch(/^E_TBV_INPUT .*pinP/);
+    expect(refusal(() => spliceBy([set("investigate", "pinC"), set("investigate", "pinC")], pins, "splices/"))).toMatch(/^E_TBV_INPUT .*investigate.*pinC/);
+  });
 });

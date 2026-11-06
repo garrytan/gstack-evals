@@ -653,6 +653,20 @@ export async function runItem(o: RunItemOptions): Promise<DriveResult & { crashe
   return { ...result, crashed };
 }
 
+/** The CLI's splice callback: a gstack arm takes its family's splice set at its own shape's pin; one set per family and pin. */
+export function spliceBy(sets: SpliceSet[], pinOf: (arm: Arm) => string | null, where: string): DrivePlan["splice"] {
+  const byKey = new Map<string, SpliceSet>();
+  for (const s of sets) {
+    if (byKey.has(s.family + " " + s.pin)) fail("E_TBV_INPUT", "two splice sets in " + where + " have the " + s.family + " family and pin " + s.pin);
+    byKey.set(s.family + " " + s.pin, s);
+  }
+  return (family, arm) => {
+    if (arm === "none") return null;
+    const pin = pinOf(arm);
+    return byKey.get(family + " " + pin) ?? fail("E_TBV_INPUT", "no splice set for the " + family + " family at the " + arm + " arm's pin " + pin + " in " + where);
+  };
+}
+
 const TURN_KEYS: Turn[] = ["report", "d1", "d2", "followup"];
 /** turns.txt at its frozen sha256: one "name: text" line per turn. */
 function readTurns(path: string): Turns {
@@ -695,7 +709,6 @@ export async function run(argv: string[], io: Io): Promise<number> {
     passes[m as Model] = Number(n);
   }
   const shapes = new Map(dir<Shape>(need("--shapes")).map((s) => [s.arm, s]));
-  const splices = new Map(dir<SpliceSet>(need("--splices")).map((s) => [s.family, s]));
   const fields = { cwd: need("--cwd"), date: need("--date") };
   const plan: DrivePlan = {
     item: need("--item"),
@@ -705,7 +718,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     passes,
     turns: readTurns(need("--turns")),
     shape: (arm, model) => fillShape(shapes.get(arm) ?? fail("E_TBV_INPUT", "no shape for the " + arm + " arm in " + flags.get("--shapes")), model, fields),
-    splice: (family, arm) => (arm === "none" ? null : (splices.get(family) ?? fail("E_TBV_INPUT", "no splice set for the " + family + " family in " + flags.get("--splices")))),
+    splice: spliceBy(dir<SpliceSet>(need("--splices")), (arm) => (shapes.get(arm) ?? fail("E_TBV_INPUT", "no shape for the " + arm + " arm in " + flags.get("--shapes"))).pin, need("--splices")),
   };
   const sealCmd = flags.get("--seal-cmd") ?? null;
   const unsealCmd = flags.get("--unseal-cmd") ?? null;
