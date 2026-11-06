@@ -719,6 +719,13 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (!models.includes(m as Model) || !/^[1-9]$/.test(n ?? "")) fail("E_TBV_INPUT", "--passes takes model=n for each model, not " + p);
     passes[m as Model] = Number(n);
   }
+  if (flags.has("--held")) {
+    try {
+      plaintextRoot(need("--tasks"), { devPlaintext: false, held: true });
+    } catch (e) {
+      fail("E_TBV_CUSTODY", "with --held, --tasks must sit on tmpfs: " + (e as Error).message);
+    }
+  }
   const shapes = new Map(dir<Shape>(need("--shapes")).map((s) => [s.arm, s]));
   const fields = { cwd: need("--cwd"), date: need("--date") };
   const plan: DrivePlan = {

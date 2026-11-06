@@ -5,11 +5,11 @@ import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { driveItem, openItemRun, readingOrder, runItem, smokeItem, spliceBy, type DrivePlan } from "../../lanes/tbv/drive.ts";
+import { driveItem, openItemRun, readingOrder, run, runItem, smokeItem, spliceBy, type DrivePlan } from "../../lanes/tbv/drive.ts";
 import { buildRequest, validateRequest } from "../../lanes/tbv/request.ts";
 import type { Arm, BuildInput, Model, ReadingRecord, Validation } from "../../lanes/tbv/types.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
-import { cleanup, clock, fakeBuild, history, KEYS, ledgerDir, shape, sse, status, stub, text, TURNS, type Script } from "./drive-fixture.ts";
+import { cleanup, clock, fakeBuild, history, KEYS, ledgerDir, shape, sse, status, stub, text, tmp, TURNS, type Script } from "./drive-fixture.ts";
 
 afterAll(cleanup);
 const ITEM = "tbv-test";
@@ -504,5 +504,23 @@ describe("item run teardown", () => {
     expect(String(err)).toContain("boom in t1's d1 build");
     expect(at).toBe(0);
     expect(s.calls.filter((x) => x.task === "t2").map((x) => x.turn)).toEqual(["report", "d1", "d2"]);
+  });
+});
+
+describe("drive --held custody", () => {
+  const refusal = async (tasks: string) => {
+    const argv = ["drive", "--models", "opus", "--arms", "none", "--passes", "opus=1", "--held", "--seal-cmd", "cat", "--tasks", tasks];
+    try {
+      await run(argv, { out: () => {}, err: () => {} });
+    } catch (e) {
+      return (e as { code?: string }).code + " " + (e as Error).message;
+    }
+    return "no error";
+  };
+  test("with --held, --tasks on a disk directory is refused (E_TBV_CUSTODY)", async () => {
+    expect(await refusal(tmp("tbv-held-tasks-"))).toMatch(/^E_TBV_CUSTODY .*--tasks/);
+  });
+  test("with --held, --tasks under /dev/shm passes the custody check", async () => {
+    expect(await refusal("/dev/shm/tbv-held-tasks-test")).not.toMatch(/^E_TBV_CUSTODY/);
   });
 });
