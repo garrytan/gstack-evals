@@ -68,7 +68,7 @@ export function repoNames(task: string): string[] {
 /** The identifiers a task carries: its id, its repository (source A), its changed files, every name the extractor gives a candidate or a list item, and the key's list names. Only names with a letter or digit count. */
 export function namesOf(h: History, k?: Key): string[] {
   const x = extract(h);
-  const all = [h.task, ...(h.source === "A" ? repoNames(h.task) : []), ...h.side.files, ...x.candidates.flatMap((c) => [c.name, ...c.names]), ...x.lists.flat().map((i) => i.name), ...(k?.list ?? []).map((i) => i.name)];
+  const all = [h.task, ...(h.source === "A" ? [h.cluster, ...repoNames(h.cluster)] : []), ...h.side.files, ...x.candidates.flatMap((c) => [c.name, ...c.names]), ...x.lists.flat().map((i) => i.name), ...(k?.list ?? []).map((i) => i.name)];
   return all.map((n) => n.trim()).filter((n) => /[\p{L}\p{N}]/u.test(n));
 }
 const unique = (xs: string[]) => [...new Set(xs)];

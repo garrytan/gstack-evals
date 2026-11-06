@@ -58,7 +58,8 @@ export function assembleA(trial: TrialFiles): AssembleResult {
   if (sha(trial.wrapper.text) !== trial.wrapper.sha256) fail("E_TBV_INPUT", "the wrapper text does not match its sha256 " + trial.wrapper.sha256);
   const result = jsonFile(trial.files, "result.json");
   if (!result || typeof result.task_name !== "string") return fail("E_TBV_INPUT", "the trial has no result.json with a task_name");
-  const task: string = result.task_name;
+  if (typeof result.trial_name !== "string" || !result.trial_name.includes("__")) return fail("E_TBV_INPUT", "the trial's result.json has no trial_name (<task>__<trial id>) to tell its session from another of the same task");
+  const task: string = result.task_name + "__" + result.trial_name.split("__").at(-1);
   const kwargs: Rec = result.config?.agent?.kwargs ?? {};
   const drop = (reason: string, detail: string): AssembleResult => ({ ok: false, drop: reason, detail: task + ": " + detail });
 
@@ -96,7 +97,7 @@ export function assembleA(trial: TrialFiles): AssembleResult {
     schema: "tbv-history.v1",
     source: "A",
     task,
-    cluster: task,
+    cluster: result.task_name,
     family: "investigate",
     events,
     sha256: historySha256(events),

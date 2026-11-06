@@ -196,3 +196,8 @@ test("handoff and leak refuse an empty held-out, --held-b or dev directory (E_TB
   expect(noHeld.code).toBe(2);
   expect((await tbv("check", "leak", "--gstack", g.d, "--c", g.C, "--p", g.P, "--wording", file(WORDING), "--dev", dev, "--held", held)).code).toBe(0);
 });
+
+test("namesOf: a source A history whose task id carries a trial suffix still names its task and repository from the cluster", () => {
+  const h = { ...hist("A", "owner__widget-12__t1", ["ok"]), cluster: "owner__widget-12" };
+  expect(namesOf(h)).toEqual(expect.arrayContaining(["owner__widget-12__t1", "owner__widget-12", "owner/widget", "widget", "owner"]));
+});

@@ -59,7 +59,7 @@ test("a kept session: rebuilt first message, thinking dropped, is_error kept, to
   expect(h.events[5]).toMatchObject({ tool_use_id: "toolu_2", content: "edited", is_error: false });
   expect(JSON.stringify(h.events)).not.toContain("Plan the fix.");
   expect(JSON.stringify(h.events)).not.toContain("returns an empty list now");
-  expect(h).toMatchObject({ schema: "tbv-history.v1", source: "A", task: "demo__parser-1", cluster: "demo__parser-1", family: "investigate", side: { files: ["src/parse.py"], resolved: true } });
+  expect(h).toMatchObject({ schema: "tbv-history.v1", source: "A", task: "demo__parser-1__a1", cluster: "demo__parser-1", family: "investigate", side: { files: ["src/parse.py"], resolved: true } });
   expect(h.sha256).toMatch(/^[0-9a-f]{64}$/);
 });
 
@@ -191,3 +191,23 @@ test("the rebuild agrees with the real Lane B agent under the real pinned Agent 
     { n: 4, kind: "tool-result", tool_use_id: "toolu_1", content: "tests/test_parse.py::test_empty FAILED", is_error: true },
   ]);
 }, 300_000);
+
+test("two sessions of one task get distinct task ids from their trial names and share the task's cluster; no trial name is refused", () => {
+  const withName = (name: unknown) => {
+    const t = trial(BASE);
+    t.files.set("result.json", JSON.stringify({ ...JSON.parse(t.files.get("result.json")!), trial_name: name }));
+    return t;
+  };
+  const a = assembleA(withName("demo__parser-1__a1"));
+  const b = assembleA(withName("demo__parser-1__b2"));
+  if (!a.ok || !b.ok) throw new Error("both sessions should be kept");
+  expect([a.history.task, b.history.task]).toEqual(["demo__parser-1__a1", "demo__parser-1__b2"]);
+  expect([a.history.cluster, b.history.cluster]).toEqual(["demo__parser-1", "demo__parser-1"]);
+  let code = "no error";
+  try {
+    assembleA(withName(undefined));
+  } catch (e) {
+    code = (e as { code?: string }).code ?? String(e);
+  }
+  expect(code).toBe("E_TBV_INPUT");
+});
