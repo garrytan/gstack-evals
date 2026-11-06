@@ -10,6 +10,7 @@ exposure detectors read. drop_parent plants a recorder that loses parent_tool_us
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import subprocess
@@ -51,10 +52,13 @@ def main():
     os.symlink(FIXTURES / "stub_claude.py", bindir / "claude")
     stub_log = d / "stub.jsonl"
     env = {**GIT_ENV, "PATH": str(bindir) + ":" + os.environ["PATH"], "STUB_LOG": str(stub_log), "STUB_SCENARIO": a.get("scenario", "u4_calls"), "STUB_CALLS": str(a.get("calls", 3)), "STUB_LABEL": a.get("label", "none")}
+    manifest = d / "tg-images.json"
+    manifest.write_text(json.dumps({"schema": "tg-images.v1", "rows": [{"label": a.get("task", ""), "image_id": a.get("image_id", STUB_IMAGE)}]}))
     agent = ra.RealAgent(
         logs_dir=d / "trial/agent", model_name="anthropic/claude-opus-5-5", base_url=a["base_url"], task_json=str(d / "task.json"), arm=a["arm"], arm_tar="unused",
         upstream_model="claude-opus-5-5", arms_path=a["arms_path"], sidecar_url=a["sidecar"], control_url=a["control_url"], ledger=a["ledger"],
         task_label=a.get("task", ""), trial_n=a.get("trial_n", 0), rerun=a.get("rerun", ""), image_id=a.get("image_id", STUB_IMAGE),
+        manifest=str(manifest), manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
     )
     agent.logs_dir.mkdir(parents=True)
     agent._arm_info = {"event": "arm", "arm": a["arm"], "tar_sha256": "t", "skills_dirs": 0}

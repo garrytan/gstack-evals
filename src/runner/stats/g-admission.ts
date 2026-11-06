@@ -22,7 +22,8 @@
 // The exposure sample is drawn as prereg section 5 says (Python's random.Random(20261105), with its replacement rule)
 // and passed in; admitG checks its shape.
 // Beside exposure it prints, report only, how many told trials wrote outside PLAN.md in t1 (t1WritesOutsidePlan, G
-// ruling A on red-team #1). The count decides no item.
+// ruling A on red-team #1), from each told trial's t1_outside_plan, which t1OutsidePlan reads from the trial's own
+// phase-tagged records. The count decides no item.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { usd } from "../ledger/money.ts";
@@ -208,6 +209,15 @@ export function admitG(input: AdmissionInput): Admission {
     };
   }
   return { headroom: { solved, valid: none.length, share: solved / none.length }, skills, metered: { inputs, none_usd: noneUsd, told, unknown_calls: unknown }, m1, resize_text: resizeText };
+}
+
+/** Report only: one told trial's t1_outside_plan from its own phase-tagged records (sdk-messages.jsonl): true when
+ * t1WritesOutsidePlan finds a write outside PLAN.md in t1, false when it finds none, and null, not read, when the records
+ * hold no message record, or one has no phase, since its turn is unknown. */
+export function t1OutsidePlan(records: Record<string, any>[]): boolean | null {
+  const messages = records.filter((r) => r.type === "AssistantMessage" || r.type === "UserMessage");
+  if (messages.length === 0 || messages.some((r) => typeof r.phase !== "string")) return null;
+  return t1WritesOutsidePlan(records).length > 0;
 }
 
 const EDIT_PATHS = new Map([["Write", "file_path"], ["Edit", "file_path"], ["MultiEdit", "file_path"], ["NotebookEdit", "notebook_path"]]);

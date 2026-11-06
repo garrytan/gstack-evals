@@ -4,6 +4,7 @@ stubbed as unit_test.py stubs them. Run by tests/outcome-skills/images.test.ts w
 """
 
 import asyncio
+import hashlib
 import json
 import sys
 import tempfile
@@ -23,13 +24,16 @@ class Reached(Exception):
     pass
 
 
-def agent(image_id=IMAGE, container_image=IMAGE, ledger="u4"):
+def agent(image_id=IMAGE, container_image=IMAGE, ledger="u4", row=("t-1", IMAGE), recorded=None, manifest=True):
     d = Path(tempfile.mkdtemp(prefix="image-test-"))
+    m = d / "tg-images.json"
+    m.write_text(json.dumps({"schema": "tg-images.v1", "rows": [{"label": row[0], "image_id": row[1]}]}))
     (d / "task.json").write_text(json.dumps({"repo_dir": "/testbed", "base_branch": "main", "base_commit": "0" * 40, "kind": "K3", "start_ref": "main"}))
     a = ra.RealAgent.__new__(ra.RealAgent)
     a.options = types.SimpleNamespace(
         persona_path=str(u.ROOT / "lanes/real-outcome/agent/ship-persona.json"), task_json=str(d / "task.json"), arms_path=str(u.ROOT / "lanes/outcome-skills/arms/registry.json"),
         arm="none", ledger=ledger, task_label="t-1", trial_n=1, rerun="", image_id=image_id,
+        manifest=str(m) if manifest else "", manifest_sha256=recorded or hashlib.sha256(m.read_bytes()).hexdigest(),
     )
     a._arm_info = {"event": "arm", "arm": "none"}
     a._evaluator_dir = lambda: d / "evaluator"
@@ -94,6 +98,34 @@ def test_an_unreadable_container_image_refuses():
     e = run(a)
     assert isinstance(e, ra.SandboxSetupError) and "could not read" in str(e), repr(e)
     assert a.opened == []
+
+
+def test_an_image_id_that_is_not_the_tasks_manifest_row_refuses_before_docker_is_asked():
+    a = agent(image_id=OTHER, container_image=OTHER)
+    e = run(a)
+    assert isinstance(e, ra.SandboxSetupError) and "image_id " + OTHER + " is not " + IMAGE + ", the image the manifest's row for task t-1 pins" in str(e), repr(e)
+    assert a.inspected == [] and a.opened == []
+
+
+def test_a_manifest_with_no_row_for_the_task_refuses():
+    a = agent(row=("t-2", IMAGE))
+    e = run(a)
+    assert isinstance(e, ra.SandboxSetupError) and "has no row for task t-1" in str(e), repr(e)
+    assert a.inspected == [] and a.opened == []
+
+
+def test_a_manifest_whose_bytes_are_not_the_recorded_sha256_refuses():
+    a = agent(recorded="0" * 64)
+    e = run(a)
+    assert isinstance(e, ra.SandboxSetupError) and "set manifest to its path and manifest_sha256" in str(e), repr(e)
+    assert a.inspected == [] and a.opened == []
+
+
+def test_a_session_with_no_manifest_refuses():
+    a = agent(manifest=False)
+    e = run(a)
+    assert isinstance(e, ra.SandboxSetupError) and "reads its image from the T-G manifest" in str(e), repr(e)
+    assert a.inspected == [] and a.opened == []
 
 
 def main():

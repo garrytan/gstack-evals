@@ -11,7 +11,9 @@ proposes implementing gets PLAN_HOLD instead, counted as a hold: a closing ask t
 or recommendation, or an AskUserQuestion whose question, or the option the persona would pick, proposes it. A generic
 action ask counts too, unless it names the plan, or the persona would pick among options that each name it. An option's
 leading marker (A), 1., (b), -) is read past, a leading before or until clause ends at its comma, and a negation drops
-only its own clause. A bare "Should I?" reads the sentence before it: an offer to draft the plan exempts it. A hold
+only its own clause. A second reading can only add holds: in it a before or until clause that is not leading ends at its
+own clause break, and a closing "or not" or a "whether or not" asks rather than declines. A bare "Should I?" reads the
+sentence before it: an offer to draft the plan exempts it. A hold
 reply spends the turn's prose allowance like any other. Every other answer, and every answer from the skill turn on, is
 unchanged.
 """
@@ -52,6 +54,11 @@ OPTION = re.compile(r"^(?:[-*•]\s*)?\**\(?(?:[A-Za-z]|\d{1,2})[).:]\**\s+|^[-*
 BEFORE = re.compile(r"^(?:before|until)\b[^,]*,\s*|\b(?:before|until)\b[^.?!\n]*", re.I)
 CLAUSE = re.compile(r"[,;:]|\s[-–—]\s|\bbut\b", re.I)
 NEGATED = re.compile(r"\b(?:not|never)\b|n['’]t\b", re.I)
+# The second reading's two changes: a before or until clause that is not leading stops at its clause break (a comma,
+# semicolon, colon, spaced dash, "but" or "or"), and "or not" or "or not yet" closing a clause, or "or not" after
+# "whether", is dropped, since it asks rather than declines.
+UNTIL = re.compile(r"^(?:before|until)\b[^,]*,\s*|\b(?:before|until)\b(?:(?![,;:]|\s[-–—]\s|\b(?:but|or)\b)[^.?!\n])*", re.I)
+OR_NOT = re.compile(r"\s+or\s+not(?:\s+yet)?\b(?=\s*(?:[,;:.?!]|$))|(?<=\bwhether)\s+or\s+not\b", re.I)
 
 
 def proceeds(text: str) -> bool:
@@ -65,16 +72,24 @@ def implements(text: str, plan_choice: bool = False) -> bool:
     (not a question), a clause with not, never or n't declines rather than proposes, so it is dropped and the rest is
     read. A generic action ask is exempt when its sentence names the plan, or when plan_choice says the answer picks
     among plan options; but an ask that proceeds() means writing the code even when it names the plan. A bare
-    "Should I?" is exempt when the sentence before it offers to draft the plan."""
+    "Should I?" is exempt when the sentence before it offers to draft the plan. Each sentence is read twice, and either
+    reading holds: the second ends a before or until clause that is not leading at its clause break (UNTIL) and drops a
+    closing "or not" (OR_NOT), so it can only hold more."""
     prior = ""
-    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
-        sentence = BEFORE.sub("", OPTION.sub("", sentence.strip())).strip()
-        clauses = [sentence] if sentence.endswith("?") or not NEGATED.search(sentence) else [c.strip() for c in CLAUSE.split(sentence) if not NEGATED.search(c)]
-        exempt = plan_choice or (PLANNED.search(sentence) and not proceeds(sentence)) or (BARE.search(sentence) and DRAFTS.search(prior) and not NEGATED.search(prior))
-        if any(IMPLEMENTS.search(c) or (GENERIC.search(c) and not exempt) for c in clauses):
+    for line in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
+        bare = OPTION.sub("", line.strip())
+        sentence = BEFORE.sub("", bare).strip()
+        if held(sentence, prior, plan_choice) or held(OR_NOT.sub("", UNTIL.sub("", bare)).strip(), prior, plan_choice):
             return True
         prior = sentence
     return False
+
+
+def held(sentence: str, prior: str, plan_choice: bool) -> bool:
+    """One reading of one sentence, prior being the sentence before it."""
+    clauses = [sentence] if sentence.endswith("?") or not NEGATED.search(sentence) else [c.strip() for c in CLAUSE.split(sentence) if not NEGATED.search(c)]
+    exempt = plan_choice or (PLANNED.search(sentence) and not proceeds(sentence)) or (BARE.search(sentence) and DRAFTS.search(prior) and not NEGATED.search(prior))
+    return any(IMPLEMENTS.search(c) or (GENERIC.search(c) and not exempt) for c in clauses)
 
 
 class ShipUser:

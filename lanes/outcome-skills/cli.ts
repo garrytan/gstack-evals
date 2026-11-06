@@ -20,13 +20,16 @@ stage= line per stage, serves until POST /stop, SIGTERM or SIGINT, and settles e
 Provider keys come from its environment as the proxy reads them. Guide: wiki/plans/2026-11-04-geva-286-u4-session-driver.
 
 Usage: gstack-evals outcome images pin --out <manifest.json> --set <name> --commit <sha> <task dir>...
-       gstack-evals outcome images check <manifest.json>
+       gstack-evals outcome images check <manifest.json> --sha256 <hex>
        gstack-evals outcome images public <manifest.json>
        gstack-evals outcome images bind <manifest.json> --task <task dir> --label <label> --out <run copy>
 
-pin builds each task's image on this host and writes the manifest. check runs before any session or lease: every row's
+pin builds each task's image with quick/laneb's runtime layer on top, on a keyless build host, checks there that gold
+passes every required test and the empty change fails one, and writes the manifest.
+check runs before any session or lease, on the manifest whose sha256 the readiness post records (--sha256): every row's
 image present with its pinned id and clean by cleanRoomPreflight. public prints the committed form, digests only. bind
-writes a task's run copy whose image is the pinned one and prints image_id=, which real_agent's image_id takes.
+writes a task's run copy whose image is the pinned one and prints image_id=, which real_agent's image_id takes beside the
+manifest and its sha256.
 Guide: lanes/outcome-skills/driver/README.md, "Trial images".`;
 
 function lines(code: ReasonCode, message: string): string {
@@ -137,7 +140,9 @@ async function images(argv: string[]): Promise<number> {
       return 0;
     }
     if (cmd === "check" && pos.length === 1) {
-      const m = readManifest(pos[0]!);
+      const want = flags.get("--sha256");
+      if (!want || !/^[0-9a-f]{64}$/.test(want)) return usage("images check needs --sha256 <64 hex>, the manifest's sha256 the readiness post records (images public prints it)");
+      const m = readManifest(pos[0]!, want);
       check(m, process.env.DOCKER ?? "docker", (r, n) => console.log("TG_IMAGE ok row=" + n + " image=" + r.image_id));
       console.log("TG_IMAGES: ok rows=" + m.rows.length);
       return 0;
@@ -153,7 +158,7 @@ async function images(argv: string[]): Promise<number> {
       console.log("TG_BIND out=" + b.out + " tag=" + b.tag + "\nimage_id=" + b.image_id);
       return 0;
     }
-    return usage("images takes pin, check <manifest>, public <manifest> or bind <manifest>; gstack-evals outcome --help lists them");
+    return usage("images takes pin, check <manifest> --sha256 <hex>, public <manifest> or bind <manifest>; gstack-evals outcome --help lists them");
   } catch (e) {
     if (e instanceof TaskError) {
       console.error(lines(e.code, e.message));
