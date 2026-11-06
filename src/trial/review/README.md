@@ -102,8 +102,9 @@ Every default keeps a frozen preregistration's run as it was: same options, same
 - `--max-turns <n>`: the most model turns a session may take, default 60 (the driver's MAX_TURNS).
 - `--session-kind unattended`: GSTACK_SESSION_KIND=unattended in every arm's agent env, none included. Off by default.
 - `--arm-session-kind <arm>=unattended`, repeatable: the same for one arm only, keyed per arm. It can't run beside
-  `--session-kind`. Before any session, a gstack arm that sets the kind runs its own tree's bin/gstack-session-kind in the
-  arm's session env, and the run is refused (E_SESSION_KIND_PIN) unless it prints the kind.
+  `--session-kind`. On plan units only, and under either flag, a gstack arm whose kind is set runs its own tree's
+  bin/gstack-session-kind in the arm's session env before any session, and the run is refused (E_SESSION_KIND_PIN) unless
+  it prints the kind.
 
 - `--allowance <usd>`: each session's spend cap on its proxy slot. Left out, a session gets SESSION_ALLOWANCE (1.6M input
   and 32k output tokens) at its model's price, $7.04 on Opus 5.5. The proxy refuses a call whose worst case the slot's

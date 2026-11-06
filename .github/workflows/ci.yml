@@ -24,8 +24,8 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    # 25, not 10: on 2026-11-02 (10:49 to 12:52 UTC) green runs took 7.9 to 10.7 minutes, and five runs, main's push at 73042c5 among them, hit the 10-minute limit.
-    timeout-minutes: 25
+    # 45, not 25: on 2026-11-06 (08:55 to 19:10 UTC) green runs took 16.8 to 24.8 minutes, main's push at 2ef5833 took 24.2, and three attempts were cancelled at the 25-minute limit.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
