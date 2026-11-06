@@ -2,9 +2,9 @@
 // The canonical history (prereg section 3): sha256 over sorted-key JSON, rendering to alternating messages, and the
 // drive-path refusal every assembler runs.
 import { expect, test } from "bun:test";
-import { TbvError } from "../../lanes/tbv/errors.ts";
 import { historySha256, refuseOutsideRules, renderHistory } from "../../lanes/tbv/history/events.ts";
 import type { History, HistoryEvent } from "../../lanes/tbv/types.ts";
+import { codeOf } from "./history-helpers.ts";
 
 const events: HistoryEvent[] = [
   { n: 1, kind: "user-text", text: "Fix the parser, café edition." },
@@ -15,15 +15,6 @@ const events: HistoryEvent[] = [
   { n: 6, kind: "tool-result", tool_use_id: "toolu_2", content: "x = 1", is_error: false },
 ];
 const hist = (ev: HistoryEvent[]): History => ({ schema: "tbv-history.v1", source: "A", task: "demo", cluster: "demo", family: "investigate", events: ev, sha256: "", side: { files: [], resolved: null, patch: null } });
-export const codeOf = (fn: () => unknown): string => {
-  try {
-    fn();
-  } catch (e) {
-    if (e instanceof TbvError) return e.code;
-    throw e;
-  }
-  return "no refusal";
-};
 
 test("historySha256 is sha256 of Python's sort_keys compact JSON, so key order never changes it", () => {
   const py = Bun.spawnSync(["python3", "-c", "import json,hashlib,sys; print(hashlib.sha256(json.dumps(json.load(sys.stdin), sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest())"], { stdin: Buffer.from(JSON.stringify(events)) });

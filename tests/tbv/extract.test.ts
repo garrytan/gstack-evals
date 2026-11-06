@@ -6,8 +6,7 @@ import { admitsSize, extract, run } from "../../lanes/tbv/extract.ts";
 import { historySha256 } from "../../lanes/tbv/history/events.ts";
 import { assembleB } from "../../lanes/tbv/history/source-b.ts";
 import type { History, HistoryEvent } from "../../lanes/tbv/types.ts";
-import { codeOf } from "./history-events.test.ts";
-import { pr } from "./source-b.test.ts";
+import { codeOf, pr } from "./history-helpers.ts";
 
 type Step = [cmd: string, out: string, isError?: boolean, name?: string];
 function histA(steps: Step[], side: Partial<History["side"]> = {}): History {

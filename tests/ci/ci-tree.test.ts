@@ -68,6 +68,16 @@ describe("the bun test lane's inventory", () => {
     expect(listed).toContain("tests/cli.test.ts");
     for (const f of listed) expect(f).toMatch(/[._](test|spec)\.[cm]?[jt]sx?$/i);
   });
+
+  test("holds no test file that another test file imports, since bun then reports its cases under the importer and tree.json misses it", () => {
+    const imports = lines(sh(root, testInventory)).flatMap((f) =>
+      [...readFileSync(join(root, f), "utf8").matchAll(/(?:\bfrom|\bimport\s*\(?)\s*["']([^"']+)["']/g)]
+        .map((m) => m[1]!)
+        .filter((s) => s.startsWith(".") && /[._](test|spec)\.[cm]?[jt]sx?$/i.test(s))
+        .map((s) => f + " imports " + s),
+    );
+    expect(imports).toEqual([]);
+  });
 });
 
 describe("treeRecord", () => {

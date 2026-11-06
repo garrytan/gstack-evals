@@ -6,24 +6,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { accrualClosed, assembleB, clustersOf, devEligible, fromGraphql, heldOutCluster, heldOutEligible, lineageOf, type LineageStub, type PrRecord, run, stripGstack } from "../../lanes/tbv/history/source-b.ts";
-import { codeOf } from "./history-events.test.ts";
+import { codeOf, pr, READY, RECEIPT } from "./history-helpers.ts";
 
-const RECEIPT = "```gstack-ship-receipt\n{\"head\": \"abc\"}\n```";
-const READY = "READY #12 abc123 STAMP_VERSION=unstamped\npr: #12\nci: green";
-export const pr = (o: Partial<PrRecord> = {}): PrRecord => ({
-  number: 12, state: "MERGED", title: "Add the widget parser", createdAt: "2026-11-10T13:00:00Z", mergedAt: "2026-11-10T15:00:00Z", closedAt: "2026-11-10T15:00:00Z",
-  baseRefName: "main", headRefName: "widget/parser", closingIssues: [], files: [{ path: "src/widget.ts", additions: 10, deletions: 2 }, { path: ".github/workflows/ci.yml", additions: 1, deletions: 0 }],
-  commits: [
-    { oid: "1".repeat(40), message: "widget: parse\n\n" + RECEIPT + "\nbody kept", authoredDate: "2026-11-10T13:05:00Z", committedDate: "2026-11-10T13:05:00Z", checks: [{ name: "test", conclusion: "FAILURE", status: "COMPLETED", title: "2 failed", summary: "fail one\n<!-- gstack:ship -->\nREADY_EXIT=0\nfail two", text: null }] },
-    { oid: "2".repeat(40), message: "widget: fix", authoredDate: "2026-11-10T14:00:00Z", committedDate: "2026-11-10T14:00:00Z", checks: [{ name: "test", conclusion: "SUCCESS", status: "COMPLETED", title: null, summary: null, text: null }] },
-  ],
-  reviewThreads: [
-    { isResolved: false, comments: [{ author: "capy-ai", body: "The parser drops trailing commas.\n```\n" + READY + "\n```\nkept tail" }, { author: "garrytan", body: "Agent reply: fixed in 222" }] },
-    { isResolved: true, comments: [{ author: "someone", body: "Not a Capy thread" }] },
-  ],
-  reviews: [],
-  ...o,
-});
 const P = "2026-11-10T12:00:00Z";
 const at = (iso: string, s: number) => new Date(Date.parse(iso) + s * 1000).toISOString().replace(".000Z", "Z");
 

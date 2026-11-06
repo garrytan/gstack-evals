@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { treeDigest } from "../../quick/laneb/runner/materialize.ts";
 import { assembleA, buildFirstMessage, checkTaskDir, parseSession, run, taskDirDigest, treeDigestOf, type TrialFiles } from "../../lanes/tbv/history/source-a.ts";
-import { codeOf } from "./history-events.test.ts";
+import { codeOf } from "./history-helpers.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const WRAPPER = readFileSync(join(ROOT, "quick/laneb/runner/prompt-wrapper.md"), "utf8");
