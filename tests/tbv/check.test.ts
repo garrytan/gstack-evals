@@ -176,3 +176,23 @@ test("leak: an added line that starts with \"++ \" is an added line; the file he
   const g = gstack({ "skills/a.md": "keep\n" }, { "skills/a.md": "keep\n++ leaked-name here\nplain added\n" });
   expect(addedLines(g.d, g.C, g.P)).toEqual(["++ leaked-name here", "plain added"]);
 });
+
+test("handoff and leak refuse an empty held-out, --held-b or dev directory (E_TBV_INPUT); a filled one still runs", async () => {
+  const a = file("Nothing held here.");
+  const none = await tbv("check", "handoff", "--artifact", a, "--dev", dev, "--held", dir([]));
+  expect(none.code).toBe(2);
+  expect(none.err).toMatch(/^E_TBV_INPUT .*no held-out histories/m);
+  const noB = await tbv("check", "handoff", "--artifact", a, "--dev", dev, "--held", held, "--held-b", dir([]));
+  expect(noB.code).toBe(2);
+  expect(noB.err).toMatch(/^E_TBV_INPUT .*--held-b/m);
+  const filled = await tbv("check", "handoff", "--artifact", a, "--dev", dev, "--held", held);
+  expect(filled.code).toBe(0);
+  expect(filled.out).toContain("1 held-out histories");
+  const g = gstack(AT_C, { "skills/b.md": "Keep the report short.\n" });
+  const noDev = await tbv("check", "leak", "--gstack", g.d, "--c", g.C, "--p", g.P, "--wording", file(WORDING), "--dev", dir([]), "--held", held);
+  expect(noDev.code).toBe(2);
+  expect(noDev.err).toMatch(/^E_TBV_INPUT .*no dev histories/m);
+  const noHeld = await tbv("check", "leak", "--gstack", g.d, "--c", g.C, "--p", g.P, "--wording", file(WORDING), "--dev", dev, "--held", dir([]));
+  expect(noHeld.code).toBe(2);
+  expect((await tbv("check", "leak", "--gstack", g.d, "--c", g.C, "--p", g.P, "--wording", file(WORDING), "--dev", dev, "--held", held)).code).toBe(0);
+});

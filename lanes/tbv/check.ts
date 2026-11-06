@@ -81,7 +81,10 @@ function extraNames(path: string | undefined): string[] {
 
 /** The held-out side of both checks: source A from --held, source B from --held-b, and their keys. */
 function heldSide(a: Record<string, string>) {
-  const histories = [...readHistories(a.held!, "A"), ...(a["held-b"] ? readHistories(a["held-b"], "B") : [])];
+  const heldA = readHistories(a.held!, "A"), heldB = a["held-b"] ? readHistories(a["held-b"], "B") : [];
+  if (!heldA.length) fail("E_TBV_INPUT", "--held " + a.held + " holds no held-out histories; a check over none would read clear");
+  if (a["held-b"] && !heldB.length) fail("E_TBV_INPUT", "--held-b " + a["held-b"] + " holds no held-out histories; a check over none would read clear");
+  const histories = [...heldA, ...heldB];
   const keys = [...(a["held-keys"] ? readKeys(a["held-keys"]) : []), ...(a["held-b-keys"] ? readKeys(a["held-b-keys"]) : [])];
   return { histories, keys, mode: a["held-b"] ? "held-out source A and B" : "held-out source A only" };
 }
@@ -170,6 +173,7 @@ export function leakCheck(argv: string[], io: Io): number {
   const a = parseFlags(argv, ["gstack", "c", "p", "wording", "dev", "held"], ["dev-keys", "held-keys", "held-b", "held-b-keys", "names"]);
   const c = commit(a.gstack!, a.c!, "--c"), p = commit(a.gstack!, a.p!, "--p");
   const dev = readHistories(a.dev!), devKeys = a["dev-keys"] ? readKeys(a["dev-keys"]) : [];
+  if (!dev.length) fail("E_TBV_INPUT", "--dev " + a.dev + " holds no dev histories; a leak check over none would read clean");
   const held = heldSide(a);
   const histories = [...dev, ...held.histories], keys = [...devKeys, ...held.keys];
   const names = unique([...namesFor(dev, devKeys), ...namesFor(held.histories, held.keys), ...extraNames(a.names)]);
