@@ -101,6 +101,13 @@ jobs:
           printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
       - name: Install (frozen lockfile)
         run: bun install --frozen-lockfile
+      - name: Free disk for the enforced arm's install
+        # ceo-enforced-armed.test.ts installs gstack 4743132 with its own ./setup (about 1.3 GB) and copies it into one session
+        # home at a time, beside the Docker images the tier builds. The runner ships SDKs the tier never uses; this drops them.
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h /
       - name: Fetch the enforced CEO arm's gstack at its pinned commit and check its tree
         # tests/trial/review/ceo-enforced.test.ts and ceo-enforced-armed.test.ts run the CEO stage 2 enforced arm on this tree
         # (src/trial/review/skill-gates.ts ENFORCED_GSTACK_SHA). This step runs nothing from the tree. The armed test installs it

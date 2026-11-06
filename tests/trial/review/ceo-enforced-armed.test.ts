@@ -21,12 +21,14 @@ type Row = { fired: number; blocked: number; released: number; exhausted: number
 type Case = { termination: { kind: string }; gate: { exit: number | null; json: { rows: Row[] } | null; stderr: string; deadline_ms?: number; hook_timeout_s?: number } | null; copy_out: string[]; exposure: { exposed: boolean; failed: string | null; checks: Record<string, boolean> } | null; records: { hooks: Record<string, { runs: Record<string, { blocked: number; released_at?: string; file?: string }> }> }[]; settings_timeouts: number[] | null; slowed: boolean | null; session_kind: string | null; review_sections_bytes: number; model_saw_block: boolean; model_saw_fired: boolean; fired_markers: number; wall_ms: number };
 type Reading = { env: boolean; maxTokens: number; rawMaxTokens: number; autoCompactThreshold: number; isAutoCompactEnabled: boolean };
 let ran: { cases: Record<string, Case>; context: { built: Record<string, Reading>; without: Record<string, Reading> } } | null = null;
+let failed: Error | null = null;
 function run() {
   if (ran) return ran;
+  if (failed) throw failed;
   const root = mkdtempSync(join(homedir(), ".gstack-evals-ceo-armed-test-"));
   try {
     const r = spawnSync(process.execPath, [join(import.meta.dir, "ceo-enforced-armed.ts"), PIN, root], { encoding: "utf8", timeout: 540_000 });
-    if (r.status !== 0) throw new Error("ceo-enforced-armed.ts exited " + r.status + ": " + (r.stderr ?? "").slice(-3000));
+    if (r.status !== 0) throw (failed = new Error("ceo-enforced-armed.ts exited " + r.status + ": " + (r.stderr ?? "").slice(-3000)));
     ran = JSON.parse(r.stdout.trim().split("\n").pop()!);
     return ran!;
   } finally {

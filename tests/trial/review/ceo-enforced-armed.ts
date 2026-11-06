@@ -9,8 +9,8 @@
 // CLAUDE_CODE_DISABLE_1M_CONTEXT=1, the Captain's ruling D1) and once on Opus with that option taken off.
 // Usage: bun ceo-enforced-armed.ts <gstack 4743132 checkout> <scratch dir>. Prints one JSON object: cases, then context.
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, posix } from "node:path";
 import { hostDriver } from "../../../src/adapters/host.ts";
 import { copyLayers, installArms, localInstaller, type ArmInstall } from "../../../src/arms/install.ts";
 import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
@@ -102,7 +102,9 @@ if (import.meta.main) {
   const [pin, root] = process.argv.slice(2) as [string, string];
   const scratch = (name: string) => mkdtempSync(join(root, name));
   const policy = loadPolicy(DEFAULT_POLICY) as LoadedPolicy;
-  const installs = installArms({ host: "claude", arms: (["gstack-enforced", "gstack-forced"] as const).map((name) => ({ name, kind: "stack" as const, stack: { repo: "gstack", sha: ENFORCED_GSTACK_SHA }, install: {} })), skill: null, skills: { "gstack-enforced": "plan-ceo-review", "gstack-forced": "plan-ceo-review" }, base: null, sources: [pin], runner: localInstaller(scratch("runner-")), state: scratch("state-") });
+  const runnerDir = scratch("runner-");
+  const installs = installArms({ host: "claude", arms: (["gstack-enforced", "gstack-forced"] as const).map((name) => ({ name, kind: "stack" as const, stack: { repo: "gstack", sha: ENFORCED_GSTACK_SHA }, install: {} })), skill: null, skills: { "gstack-enforced": "plan-ceo-review", "gstack-forced": "plan-ceo-review" }, base: null, sources: [pin], runner: localInstaller(runnerDir), state: scratch("state-") });
+  rmSync(runnerDir, { recursive: true, force: true });
   const byName: Record<string, ArmInstall> = Object.fromEntries(installs.map((i) => [i.name, i]));
   const cells = armCells(installs, [OPUS], policy, scratch("cells-"), { voice: false, gstackConfig: { "gstack-enforced": GATE_CONFIG } });
   const panel = planPanel(scratch("panel-"), { seeded: 1 });
@@ -160,6 +162,7 @@ if (import.meta.main) {
       main_requests: h.upstream.filter((r) => (r.body.tools ?? []).length).length,
       fired_markers: (transcript.match(/GSTACK_GATE ceo-review-gate fired/g) ?? []).length,
     };
+    rmSync(dirname(out), { recursive: true, force: true });
   }
   const { query: sdkQuery } = (await import("@anthropic-ai/claude-agent-sdk")) as unknown as { query: (args: unknown) => AsyncIterable<Record<string, any>> & { getContextUsage(o: { detail: "summary" }): Promise<Record<string, any>> } };
   const context = async (models: readonly string[], strip: boolean): Promise<Record<string, unknown>> => {
