@@ -156,7 +156,7 @@ function planUnit() {
 }
 let shared: ReturnType<typeof planUnit> | null = null;
 
-async function kindsRun(kindScript: string, unattended = true) {
+async function kindsRun(kindScript: string, unattended = true, all = false) {
   shared ??= planUnit();
   const { unit, repo, tree } = shared;
   const h = harness(() => [{ type: "text", text: "unused" }]);
@@ -166,7 +166,7 @@ async function kindsRun(kindScript: string, unattended = true) {
   const rig: HostRig = {
     baseUrl: h.baseUrl, network: null, imageDigest: null,
     bind: async (request) => h.proxy.bind(request), finalize: (m) => h.proxy.finalize(m),
-    arms: { none: bare("none"), lens: bare("lens"), "gstack-forced": gstack },
+    arms: { none: bare("none"), lens: bare("lens"), "gstack-forced": gstack, ...(all ? { "gstack-auto": gstack, "gstack-enforced": gstack } : {}) },
     sandbox: () => localSandbox(() => {}), judgeSandbox: () => localSandbox(() => {}),
     egress: () => ({ open: false, detail: "test rig" }), close: async () => ({ committed: 0, unknown: 0, lease_id: null }), recovery: null,
     driver: (o) => {
@@ -174,7 +174,7 @@ async function kindsRun(kindScript: string, unattended = true) {
       return { env: d.env, run: async () => { seen.push({ arm: o.out.split("/").slice(-4)[0]!, env: d.env ?? {} }); return { turns: [], termination: { kind: "completed" }, model_output: false, text_output: false, opened: null, files_read: [], asked: [], usage: null, cost_micros: null, agent_turns: null, loaded_bytes: null }; } };
     },
   };
-  const arms: ReviewArm[] = [{ name: "none", told: "none" }, { name: "lens", told: "lens" }, { name: "gstack-forced", told: "gstack", ...(unattended ? { sessionKind: "unattended" as const } : {}) }];
+  const arms: ReviewArm[] = [{ name: "none", told: "none" }, { name: "lens", told: "lens" }, { name: "gstack-forced", told: "gstack", ...(unattended ? { sessionKind: "unattended" as const } : {}) }, ...(all ? [{ name: "gstack-auto", told: "gstack-auto" as const }, { name: "gstack-enforced", told: "gstack" as const, sessionKind: "unattended" as const }] : [])];
   const kept = mkdtempSync(join(homedir(), ".gstack-evals-ceo-enforced-test-"));
   const out = join(kept, "out");
   const input: ReviewRunInput = { host: "claude", suite: { id: "ceo-outcome-test", sha256: null }, units: [{ unit, task: unitTaskId(unit), base_branch: "main", merge_base: repo.merge_base, tree: tree.dir, tree_sha256: tree.tree_sha256, instructions: repo.instructions, check: null }], arms, models: ["claude-opus-5-5"], passes: 1, parallel: 3, timeoutS: 60, cap: 50_000_000, runId: "kinds", out, date: "2026-11-06", policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, keyBase: { image_digest: null, recipe: "test", host_version: null, adapter_sha256: "test", isolation: "process" }, journal: null, plan: { lens: "ceo-outcome" }, env: {} };
@@ -208,13 +208,13 @@ describe("per-arm session kinds (ReviewArm.sessionKind)", () => {
     expect([now.none, now.lens]).toEqual([was.none, was.lens] as string[]);
     expect(now["gstack-forced"]).not.toBe(was["gstack-forced"]!);
   }, 60_000);
-  test("every arm's agent env and session key carry CLAUDE_CODE_DISABLE_1M_CONTEXT=1, none and lens as much as the gstack arm (ruling D1)", async () => {
+  test("every arm's agent env and session key carry CLAUDE_CODE_DISABLE_1M_CONTEXT=1, none and lens as much as the three gstack arms (ruling D1)", async () => {
     // Value: protects=ruling D1: every ceo-outcome session on every arm gets the 200,000-token window, in its env and its key, so no arm can drift from another; fails_when=an arm misses the env line, or its key's env_values part leaves it out; why_new=GEVA-351 D1; seam=runReviewUnits keyOf and the driver options, claudeCodeEnv; no_claim=what the CLI does with it (ceo-enforced-armed.test.ts reads that)
-    const r = await kindsRun('#!/usr/bin/env bash\ncase "${GSTACK_SESSION_KIND:-}" in unattended) echo unattended; exit 0;; esac\necho interactive\n');
+    const r = await kindsRun('#!/usr/bin/env bash\ncase "${GSTACK_SESSION_KIND:-}" in unattended) echo unattended; exit 0;; esac\necho interactive\n', true, true);
     expect(r.error).toBeNull();
-    expect(Object.fromEntries(r.seen.map((s) => [s.arm, s.env.CLAUDE_CODE_DISABLE_1M_CONTEXT ?? "unset"]))).toEqual({ none: "1", lens: "1", "gstack-forced": "1" });
+    expect(Object.fromEntries(r.seen.map((s) => [s.arm, s.env.CLAUDE_CODE_DISABLE_1M_CONTEXT ?? "unset"]))).toEqual({ none: "1", lens: "1", "gstack-auto": "1", "gstack-forced": "1", "gstack-enforced": "1" });
     const keyed = createHash("sha256").update(canonical(envValuesHash(["CLAUDE_CODE_DISABLE_1M_CONTEXT"], { CLAUDE_CODE_DISABLE_1M_CONTEXT: "1" }))).digest("hex");
-    expect(Object.fromEntries(r.keys.map((k) => [k.arm, k.env_values === keyed]))).toEqual({ none: true, lens: true, "gstack-forced": true });
+    expect(Object.fromEntries(r.keys.map((k) => [k.arm, k.env_values === keyed]))).toEqual({ none: true, lens: true, "gstack-auto": true, "gstack-forced": true, "gstack-enforced": true });
   }, 60_000);
   test("a pin whose gstack-session-kind prints something else refuses the run before any session", async () => {
     const r = await kindsRun("#!/usr/bin/env bash\necho interactive\n");
