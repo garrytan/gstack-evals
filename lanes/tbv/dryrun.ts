@@ -210,7 +210,7 @@ export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail:
   });
 
   await section("3g. Build fixes, items 1 to 7 and 16", () => {
-    const flipped = hr(stage1((rs) => { const c = { ...of(rs, "t0"), id: "copy-f", pass: 3, family: "ship", responseIds: ["msg_copy"] }; delete c.second; rs.splice(rs.indexOf(of(rs, "t0", "none", 3)), 1, c); }));
+    const flipped = hr(stage1((rs) => { const c: Any = { ...of(rs, "t0"), id: "copy-f", pass: 3, family: "ship", responseIds: ["msg_copy"] }; delete c.second; rs.splice(rs.indexOf(of(rs, "t0", "none", 3)), 1, c); }));
     check("item 1: a copy relabelled to the other family is refused (E_USAGE, family must match its task)", flipped.refused && flipped.err.includes("has family ship, but its task t0 is family investigate"));
     const exp = cmp(dev((rs) => { for (const t of ["t16", "t17", "t18"]) { of(rs, t, "current").exposed = false; gap(of(rs, t, "none")); } gap(of(rs, "t19", "current")); gap(of(rs, "t19", "none")); }));
     check("item 2: exposure counts every reading with report text, not only matched rows (current 16/19 = 0.842)", line(exp.out, /current - none:/).includes("exposure current 0.842"));
