@@ -56,6 +56,13 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // on OpenRouter, so OpenRouter serves the standard tier, and max_price, at the long rates of $4 and $15, still leaves out
   // openai/fast ($4 and $20) and openai/ultrafast ($12 and $60).
   "openai/gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5, long: { above_input_tokens: 272_000, input: 4, output: 15, cache_read: 0.2, cache_write: 5 }, providers: ["openai"] },
+  // Gemini 4 Argon, the tbv key writer (prereg 2026-11-05-geva-313). OpenRouter's models API (https://openrouter.ai/api/v1/models),
+  // read 2026-11-05T23:51:01Z: $2 input, $10 output, $0.10 cache read and $0.1875 cache write, with no long-prompt rates listed.
+  // Its endpoints API (https://openrouter.ai/api/v1/models/google/gemini-4-argon/endpoints), read at the same time, lists Google
+  // Vertex (google-vertex/global) at those prices. Pinned to google-vertex, Google's Cloud endpoint, rather than Google AI
+  // Studio. The endpoints API lists no data policy, so data_collection deny is what keeps out an endpoint that may train on or
+  // keep prompts; max_price at $2 and $10 leaves out the dearer google-vertex/us and priority endpoints.
+  "google/gemini-4-argon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"] },
 };
 
 /** List prices, USD per 1M tokens, as harness-evals checked them on 2026-10-02 to 2026-10-08. */

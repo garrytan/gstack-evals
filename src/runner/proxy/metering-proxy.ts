@@ -20,7 +20,7 @@
 // - OpenAI chat streams get stream_options.include_usage forced on; Anthropic Messages and OpenAI Responses streams are
 //   metered from their own final usage events.
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
-// - Free routes (model listings, Anthropic token counts) are forwarded unreserved, and every request, free, paid or
+// - Free routes (model listings, Anthropic token counts, an OpenRouter generation record by id) are forwarded unreserved, and every request, free, paid or
 //   refused, is journaled with its source address.
 // - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
 //   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
@@ -46,7 +46,7 @@ export const UPSTREAM: Record<Provider, string> = { anthropic: "https://api.anth
  * Routes the proxy serves. A free route costs nothing at the provider, so it is forwarded without a reservation. An estimate
  * route is answered by the proxy itself and sent nowhere.
  */
-const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true; estimate?: true }>> = {
+const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; query?: RegExp; free?: true; estimate?: true }>> = {
   anthropic: [
     { method: "POST", path: /^\/v1\/messages$/ },
     { method: "POST", path: /^\/v1\/messages\/count_tokens$/, free: true },
@@ -63,6 +63,8 @@ const ROUTES: Record<Provider, Array<{ method: string; path: RegExp; free?: true
     { method: "POST", path: /^\/v1\/chat\/completions$/ },
     { method: "POST", path: /^\/v1\/responses$/ },
     { method: "GET", path: /^\/v1\/models$/, free: true },
+    // A generation record, read by id only: the tbv driver checks an unsettled send's cost before releasing it.
+    { method: "GET", path: /^\/v1\/generation$/, query: /^\?id=[A-Za-z0-9_-]+$/, free: true },
   ],
 };
 const KEY_ENV: Record<Provider, string> = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", openrouter: "OPENROUTER_API_KEY" };
@@ -448,7 +450,7 @@ export class MeteringProxy {
   private async forward(req: Request, ctx: CallContext, beginStream: () => () => void): Promise<Response> {
     const o = this.options;
     const { provider, route, slot } = ctx;
-    const allowed = ROUTES[provider].find(r => r.method === req.method && r.path.test(route));
+    const allowed = ROUTES[provider].find(r => r.method === req.method && r.path.test(route) && (!r.query || r.query.test(new URL(req.url).search)));
     if (!allowed) return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${route} is not allowlisted`);
     const key = (o.env ?? process.env)[KEY_ENV[provider]];
     if (!key) return this.refuse(ctx, "E_KEY_MISSING", 503, `${KEY_ENV[provider]} is not set in the proxy's environment`);
