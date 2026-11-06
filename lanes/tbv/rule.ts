@@ -385,6 +385,8 @@ function joinBase(own: Readings, split: { text: string; manifest: SplitManifest 
     if ((base.rd.plan.passes[m] ?? 2) !== (own.plan.passes[m] ?? 2)) fail("E_USAGE the --base readings ran " + (base.rd.plan.passes[m] ?? 2) + " passes on " + m + " and the climb " + (own.plan.passes[m] ?? 2) + "; contrasts pair the same passes");
   }
   if ((base.rd.plan.capyPasses ?? 2) !== (own.plan.capyPasses ?? 2)) fail("E_USAGE the --base readings ran " + (base.rd.plan.capyPasses ?? 2) + " capy passes and the climb " + (own.plan.capyPasses ?? 2));
+  const baseIds = new Set(base.rd.readings.flatMap((r) => (Array.isArray(r.responseIds) ? r.responseIds : [])));
+  for (const r of own.readings) for (const id of Array.isArray(r.responseIds) ? r.responseIds : []) if (baseIds.has(id)) fail("E_USAGE reading " + r.id + " shares response id " + id + " with a --base reading: a copied reading");
   const rows = base.rd.readings.filter((r) => own.plan.models.includes(r.model) && (r.arm === "none" || r.arm === "current"));
   say("base: " + rows.length + " rows (none and current on " + own.plan.models.join(", ") + ") from " + base.file + " sha256 " + base.sha);
   return { ...own, readings: [...own.readings, ...rows] };

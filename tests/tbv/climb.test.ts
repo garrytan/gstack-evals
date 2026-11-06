@@ -122,4 +122,14 @@ describe("compare --base: the climb's join with tbv-dev-base", () => {
     expect(compare(climb(), SPLIT, "not json").err).toContain("JSON");
     expect(compare(climb(), SPLIT, "/nonexistent/base.json").err).toContain("cannot read");
   });
+
+  test("refusal twins: a climb row reusing the response id of a base row the join drops (Opus lens, Sol none)", () => {
+    for (const dropped of [(r: Any) => r.arm === "lens" && r.model === "opus", (r: Any) => r.arm === "none" && r.model === "sol"]) {
+      const c = climb(), b = devBase();
+      c.readings[0].responseIds = [...b.readings.find(dropped)!.responseIds];
+      const r = compare(c, SPLIT, b);
+      expect(r.status).toBe(2);
+      expect(r.err).toContain("with a --base reading");
+    }
+  });
 });
