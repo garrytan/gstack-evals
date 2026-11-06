@@ -46,10 +46,11 @@ export function plaintextRoot(dir: string, o: { devPlaintext: boolean; held: boo
  * sealed directory. Without --held it returns undefined, and --seal-cmd alone is refused. */
 export function heldOutputs(a: Record<string, string | undefined>, outputs: string[], mounts?: string): ((file: string) => void) | undefined {
   const cmd = a["seal-cmd"];
-  if (!a.held) {
-    if (cmd) fail("E_TBV_CUSTODY", "--seal-cmd seals held-out outputs and needs --held <sealed dir>");
+  if (a.held === undefined) {
+    if (cmd !== undefined) fail("E_TBV_CUSTODY", "--seal-cmd seals held-out outputs and needs --held <sealed dir>");
     return undefined;
   }
+  if (!a.held) fail("E_TBV_CUSTODY", "--held needs a sealed directory");
   if (!cmd) fail("E_TBV_CUSTODY", "held-out outputs are sealed as they are written; pass --seal-cmd");
   for (const o of outputs) {
     try {
@@ -59,7 +60,13 @@ export function heldOutputs(a: Record<string, string | undefined>, outputs: stri
     }
   }
   const sealed = a.held;
-  return (file) => seal(cmd!, readFileSync(file, "utf8"), join(sealed, basename(file) + SEALED));
+  const mine = new Set<string>();
+  return (file) => {
+    const to = join(sealed, basename(file) + SEALED);
+    if (!mine.has(to) && existsSync(to)) fail("E_TBV_CUSTODY", "the sealed directory already holds " + to + " from an earlier run; give each held run a fresh --held directory");
+    mine.add(to);
+    seal(cmd!, readFileSync(file, "utf8"), to);
+  };
 }
 
 /** The leftover check (test ! -e): a dead run's plaintext root is deleted and the deletion logged. True when one was found. */

@@ -88,7 +88,7 @@ export interface Deps {
   fetch?: ItemRunOptions["fetch"];
 }
 export const openRun = (a: Record<string, string>, deps: Deps) =>
-  (deps.open ?? openItemRun)({ item: a.item!, runId: a["run-id"]!, record: a.record!, ledger: a.ledger!, out: a.out!, env: deps.env ?? process.env, fetch: deps.fetch });
+  (deps.open ?? openItemRun)({ item: a.item!, runId: a["run-id"]!, record: a.record!, ledger: a.ledger!, out: a.held ? join(a.held, "journal", a["run-id"]!) : a.out!, env: deps.env ?? process.env, fetch: deps.fetch });
 
 // ---------- Sends ----------
 

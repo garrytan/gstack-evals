@@ -112,4 +112,23 @@ describe("held-out outputs (A16)", () => {
     expect(readFileSync(join(d, "sealed", "k.json.sealed"), "utf8")).toStartWith("STUB-SEALED\n");
     expect(unseal(UNSEAL, join(d, "sealed", "k.json.sealed"))).toBe('{"k":1}');
   });
+  test("an empty --held or --seal-cmd is refused, so unset variables cannot turn custody off", () => {
+    expect(code(() => heldOutputs({ out: "/var/tbv-out", held: "", "seal-cmd": "" }, ["out"], MOUNTS))).toBe("E_TBV_CUSTODY");
+    expect(code(() => heldOutputs({ out: "/var/tbv-out", "seal-cmd": "" }, ["out"], MOUNTS))).toBe("E_TBV_CUSTODY");
+    expect(code(() => heldOutputs({ out: "/dev/shm/tbv-out", held: "", "seal-cmd": SEAL }, ["out"], MOUNTS))).toBe("E_TBV_CUSTODY");
+  });
+  test("a run re-seals its own file, but a sealed copy an earlier run left is refused and kept", () => {
+    const d = tmp();
+    mkdirSync(join(d, "out"));
+    writeFileSync(join(d, "out", "k.json"), '{"k":1}');
+    const a = { held: join(d, "sealed"), "seal-cmd": SEAL, out: "/dev/shm/tbv-out" };
+    const first = heldOutputs(a, ["out"], MOUNTS)!;
+    first(join(d, "out", "k.json"));
+    writeFileSync(join(d, "out", "k.json"), '{"k":2}');
+    first(join(d, "out", "k.json"));
+    expect(unseal(UNSEAL, join(d, "sealed", "k.json.sealed"))).toBe('{"k":2}');
+    writeFileSync(join(d, "out", "k.json"), '{"k":3}');
+    expect(code(() => heldOutputs(a, ["out"], MOUNTS)!(join(d, "out", "k.json")))).toBe("E_TBV_CUSTODY");
+    expect(unseal(UNSEAL, join(d, "sealed", "k.json.sealed"))).toBe('{"k":2}');
+  });
 });

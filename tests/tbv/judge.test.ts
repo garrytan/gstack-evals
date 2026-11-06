@@ -149,11 +149,26 @@ describe("runJudges over a fake item run", () => {
     const once = fakeRun((label, req) => (++calls > 1 ? sent(null, "budget", null) : honest(label, req)));
     await expect(run([...argv(out), "--held", sealed, "--seal-cmd", SEAL], capture().io, { ...deps, open: async () => once.run })).rejects.toMatchObject({ code: "E_TBV_RUN" });
     expect(unsealed(join(sealed, "judges.ndjson.sealed"))).toBe(readFileSync(join(out, "judges.ndjson"), "utf8"));
+    const before = unsealed(join(sealed, "judges.ndjson.sealed"));
     const out2 = join(shm("tbv-judge-held-"), "out");
-    expect(await run([...argv(out2), "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).toBe(0);
-    const text = readFileSync(join(out2, "judges.ndjson"), "utf8");
+    await expect(run([...argv(out2), "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining("already holds") });
+    expect(unsealed(join(sealed, "judges.ndjson.sealed"))).toBe(before);
+    const sealed2 = tmp("tbv-judge-sealed-");
+    const out3 = join(shm("tbv-judge-held-"), "out");
+    expect(await run([...argv(out3), "--held", sealed2, "--seal-cmd", SEAL], capture().io, deps)).toBe(0);
+    const text = readFileSync(join(out3, "judges.ndjson"), "utf8");
     expect(text.trim().split("\n").length).toBe(6);
-    expect(unsealed(join(sealed, "judges.ndjson.sealed"))).toBe(text);
+    expect(unsealed(join(sealed2, "judges.ndjson.sealed"))).toBe(text);
+  });
+  test("A16: with --held, the run's metering journal goes under <held>/journal/<run id>, off tmpfs; without it, under --out", async () => {
+    const s = setup();
+    const dirs: string[] = [];
+    const deps = { open: async (o: { out: string }) => (dirs.push(o.out), fakeRun(honest).run), judgeSend: fakeJudgeSend, worst: () => 1 };
+    const argv = (out: string) => ["judge", "--packets", s.packets, "--key", join(s.dir, "key.json"), "--out", out, "--item", "tbv-hr-judge", "--run-id", "run-j4", "--record", join(s.dir, "record"), "--ledger", join(s.dir, "ledger.sqlite")];
+    const sealed = tmp("tbv-judge-sealed-");
+    expect(await run([...argv(join(shm("tbv-judge-held-"), "out")), "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).toBe(0);
+    expect(await run(argv(join(s.dir, "out")), capture().io, deps)).toBe(0);
+    expect(dirs).toEqual([join(sealed, "journal", "run-j4"), join(s.dir, "out")]);
   });
   test("integration: the real openItemRun, judge routes, proxy and ledger with a stub upstream (needs drive.ts and routes.ts)", async () => {
     const s = setup();
