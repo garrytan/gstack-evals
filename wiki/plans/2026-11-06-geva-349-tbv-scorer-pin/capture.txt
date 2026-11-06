@@ -1,0 +1,71 @@
+# tbv scorer pin: captures at gstack 641d62291c510954d30d967b2c6fc0c785a6d37f with Claude Code 2.1.312, keyless, lane code at 55a212568d4aeb1282edd39eb74da70ae76d7e15
+
+## Capture run (the lane's printed lines)
+start 2026-11-06T11:59:55Z gstack 641d62291c510954d30d967b2c6fc0c785a6d37f claude 2.1.312 (Claude Code)
++ gstack-evals tbv shape --arm none --claude <work>/cc/node_modules/.bin/claude --out <work>/capture
+shape none none template dd1698d89a547e29038ae5cfac5c00c37f6a0b09ce4d768e2abb39af17c780c0 chars 55562 est 18521 max_tokens 128000
+shape none none opus ee7286f2541fb4a5abd905b8d34ed9d27729ec81ff92e0841e3c2c806beb328d
+shape none none sol a78045591d4413a97882e7906b7ec2b6c4c274460d8849ee7e445b3a06e0046d
+shape none none particle 08ded2d0f7e94cb5fe3a7768965386c034e264ed74711996ad9897fb90ccc594
+exit 0
++ gstack-evals tbv shape --arm lens --claude <work>/cc/node_modules/.bin/claude --out <work>/capture
+shape lens none template 869d34f5d29161a2c7dbd3ed259de68af8a1072e255192b01489e6cfa76a8c41 chars 55562 est 18521 max_tokens 128000
+shape lens none opus 0770cecdac4021d40b94f3215e10edd307437adfe041ebe5ac17790ce5962864
+shape lens none sol 0826dbe6ec3773e3f423a4e30bc02213282f6dbdf9813da920613be033d0dafe
+shape lens none particle 4b5100cb8d8c445138d60ee13d38f3d15792bb37cc27d345d5b035072770dc48
+exit 0
++ gstack-evals tbv shape --arm current --pin 641d62291c510954d30d967b2c6fc0c785a6d37f --gstack <work>/gstack-641d622 --claude <work>/cc/node_modules/.bin/claude --out <work>/capture
+shape current 641d62291c510954d30d967b2c6fc0c785a6d37f template ae34e5e8c9d822b85e57fb1da8bf5c77438ac2cb2723ed53a3a045636bf2dcbc chars 61865 est 20622 max_tokens 128000
+shape current 641d62291c510954d30d967b2c6fc0c785a6d37f opus f9258550ce0ecaa29f21a285442dd89eb4f5477b8d38cb7a9ff5bbc4c2cb7b5e
+shape current 641d62291c510954d30d967b2c6fc0c785a6d37f sol 9e4e7495dbd7d6018bbf68116ac19b80d0440f35b953df263c5c6280aeafc1ec
+shape current 641d62291c510954d30d967b2c6fc0c785a6d37f particle 6e0abd2f12008f32a5a7c5e27ab41ed3ef85512034922869bc3f56f59d6c1d54
+exit 0
++ gstack-evals tbv splice --family investigate --pin 641d62291c510954d30d967b2c6fc0c785a6d37f --gstack <work>/gstack-641d622 --claude <work>/cc/node_modules/.bin/claude --out <work>/capture
+splice investigate 641d62291c510954d30d967b2c6fc0c785a6d37f 84b8398cdf1ec63c38242e1ae4647f4226f8258901ed3b53d8a2ff38921b1b7e chars 45953 est 15318
+file investigate/sections/preamble.md 3eeee274045c6af4a3a4a88895944a348e3f8613232f44e04875fd1318861705
+skill start clean 7e7943ef35eccd6966c965dd869a5f5e2e82cc5144bcce1f2ddd8dd470d69150 instruction blocks: unattended-session
+exit 0
++ gstack-evals tbv splice --family ship --pin 641d62291c510954d30d967b2c6fc0c785a6d37f --gstack <work>/gstack-641d622 --claude <work>/cc/node_modules/.bin/claude --out <work>/capture
+splice ship 641d62291c510954d30d967b2c6fc0c785a6d37f 98dd0fae151d6a4fedc70210328b506897270e58e156b9d5e6e520f56f0a4861 chars 89497 est 29833
+file ship/sections/preamble.md 3eeee274045c6af4a3a4a88895944a348e3f8613232f44e04875fd1318861705
+skill start clean 55dee40e27414315fe4028c1dd0a4f80b3e8d39c309f7facfa736fd8588b2b90 instruction blocks: unattended-session
+exit 0
++ gstack-evals tbv splice --family capy --pin 641d62291c510954d30d967b2c6fc0c785a6d37f --gstack <work>/gstack-641d622 --claude <work>/cc/node_modules/.bin/claude --out <work>/capture
+splice capy 641d62291c510954d30d967b2c6fc0c785a6d37f 8477ada9977f608f4b8caaae7c2eb269dae7ca864b11f13ca1e7f13cbfb08b61 chars 9308 est 3103
+file capy/skill/gstack/factory.md a1e1422bf4d805d349c93521f6c268b16fad403765b27d511beba3e4709ffd43
+file captain/templates/report.md b960d1c7e5cac24f9d32fc5c1dfb27bb77acb8680c6c547168c979296bafc85e
+file captain/templates/READY.md fa346d1b53a6d4abd64e251883520accaa4919e0976ea9d51ceb34ae116bd393
+skill start none (capy)
+exit 0
+end 2026-11-06T12:00:40Z
+
+## Second capture of the investigate splice and two shapes
+splice investigate 641d62291c510954d30d967b2c6fc0c785a6d37f 39e5106c45dd0d62e4c4adf0179e536399ac82f58905254bbb884578e200e809 chars 45953 est 15318
+file investigate/sections/preamble.md 3eeee274045c6af4a3a4a88895944a348e3f8613232f44e04875fd1318861705
+skill start clean bdfa05309f7759971645fb27a2491e902ae282c738ba420f3f09a1fbf84f53b2 instruction blocks: unattended-session
+shape none none template dd1698d89a547e29038ae5cfac5c00c37f6a0b09ce4d768e2abb39af17c780c0 chars 55562 est 18521 max_tokens 128000
+shape current 641d62291c510954d30d967b2c6fc0c785a6d37f template ae34e5e8c9d822b85e57fb1da8bf5c77438ac2cb2723ed53a3a045636bf2dcbc chars 61865 est 20622 max_tokens 128000
+splice capy 641d62291c510954d30d967b2c6fc0c785a6d37f 8477ada9977f608f4b8caaae7c2eb269dae7ca864b11f13ca1e7f13cbfb08b61 chars 9308 est 3103
+
+## Files kept in the Captain drive at handoffs/GEVA-349/capture/ (sha256sum)
+919957a5e91790d90121f97d5523e36f63092a8047ff32eee47845dd4ed0301b  capture.log
+220da64d7c474fab9051fbd28baf2a4dcd64995262b87209a4058824d685a5d9  instruction-block-investigate.txt
+7c0f0ea5eea7faea91b95ad1bb9e00e8edebeba87fdb18787dbd06ef883975e7  instruction-block-ship.txt
+d7a7c08db480b8addc5bf1a43ba55f1bf5dc330815abcd4e5ba1bc556d097ce5  shape-current-641d62291c510954d30d967b2c6fc0c785a6d37f.json
+d789cdcd902ab6aea701ac0a995567326869220af1f67a79f55e99b9436f8cc7  shape-lens-none.json
+e512472db6c55e54a885be1b994edfea65ad7b31c143a2306de9828d10ab0d00  shape-none-none.json
+7e7943ef35eccd6966c965dd869a5f5e2e82cc5144bcce1f2ddd8dd470d69150  skill-start-stdout-investigate.txt
+55dee40e27414315fe4028c1dd0a4f80b3e8d39c309f7facfa736fd8588b2b90  skill-start-stdout-ship.txt
+8f4ace0def2fbe80d6485a62a6380ebaa504979a36d575360daf20df81446dcc  splice-capy-641d62291c510954d30d967b2c6fc0c785a6d37f.json
+aacc6664b5ba9b4c6c1c3639ff14a0c15511267fcef58b1564f52d99c83acaf5  splice-investigate-641d62291c510954d30d967b2c6fc0c785a6d37f.json
+4f4226bb59af1811b0f6f017bc249b56534d03605bb69c4c21e9d210be743c7c  splice-ship-641d62291c510954d30d967b2c6fc0c785a6d37f.json
+
+## Unattended-session block body (sed '1d;$d' | sha256sum)
+0c5e391430485796ae4c6d756420141902ee6a765fd1eb416cc15679edbead49  investigate
+c0797386bc33c5321b97384f8203be9e3e61e6279e73a7e73aba7f1739651938  ship
+
+## What a recapture changes (skill-start stdout, investigate; per-run values masked as <ID>)
+18c18
+< TEL_START: 1793966416
+---
+> TEL_START: 1793966560
