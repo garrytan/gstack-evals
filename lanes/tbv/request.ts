@@ -42,7 +42,7 @@ export function buildRequest(input: BuildInput): BuiltRequest {
   const after: Message[] = [];
   for (const p of prior) {
     after.push(ask(p.turn));
-    const content = p.reply.content.filter((b) => b.type !== "text" || b.text !== "").map(strip);
+    const content = p.reply.content.filter((b) => b.type !== "tool_use" && (b.type !== "text" || b.text !== "")).map(strip);
     if (content.length) after.push({ role: "assistant", content });
   }
   after.push(ask(turn));

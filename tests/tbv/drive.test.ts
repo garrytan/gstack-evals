@@ -138,6 +138,27 @@ describe("end states, in the frozen precedence", () => {
     expect(JSON.stringify(s.calls[1]!.body.messages.at(-1))).toContain(TURNS.followup);
   });
 
+  test("real builder: a tool-only report reaches the follow-up with its tool calls dropped; text there is scored, an empty follow-up is no-report", async () => {
+    let n = 0;
+    const scored = await go({ real: true, script: () => (++n === 1 ? sse({ text: "Checking.", tool: true, stop: "tool_use" }) : text()) });
+    expect(scored.res.stop).toBeNull();
+    expect(scored.by("t1").cls).toBe("scored");
+    expect(kinds(scored.by("t1"))).toEqual(["report:text", "d1:text", "d2:text"]);
+    let m = 0;
+    const toolOnly = await go({ real: true, script: () => (++m === 1 ? sse({ tool: true, stop: "tool_use" }) : text()) });
+    expect(toolOnly.res.stop).toBeNull();
+    expect(kinds(toolOnly.by("t1"))).toEqual(["report:tool-only", "followup:text", "d1:text", "d2:text"]);
+    expect(toolOnly.by("t1").cls).toBe("scored");
+    const followup = toolOnly.s.calls[1]!.body;
+    expect(JSON.stringify(followup)).not.toContain("tool_use");
+    expect(JSON.stringify(followup.messages.at(-1))).toContain(TURNS.followup);
+    let k = 0;
+    const empty = await go({ real: true, script: () => (++k === 1 ? sse({ tool: true, stop: "tool_use" }) : sse({})) });
+    expect(empty.res.stop).toBeNull();
+    expect(kinds(empty.by("t1"))).toEqual(["report:tool-only", "followup:empty"]);
+    expect(empty.by("t1").cls).toBe("no-report");
+  });
+
   test("an empty report and an empty follow-up are no-report", async () => {
     const { by } = await go({ script: () => sse({}) });
     expect(by("t1").cls).toBe("no-report");
