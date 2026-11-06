@@ -440,7 +440,7 @@ const shares = (text: string) => {
   return (name: string) => {
     const n = named(name).trim(), e = n.replace(/[\\^$.*+?()[\]{}|\/]/g, "\\$&");
     const before = "(?:^|[" + OPEN + "|>]|(?:^|[" + OPEN + "])--[a-z0-9-]+=)", emphasis = "(?:^|[" + OPEN + "|>])\\*+";
-    return !/\s/.test(n) && new RegExp("(?:" + before + e + "|" + emphasis + e + "\\*+)[.,;:]*(?=$|[" + CLOSE + "|<])").test(t);
+    return !/\s/.test(n) && t.includes(n) && new RegExp("(?:" + before + e + "|" + emphasis + e + "\\*+)[.,;:]*(?=$|[" + CLOSE + "|<])").test(t);
   };
 };
 /** Letter-and-digit tokens: underscores split too, so held_repo_x, held-repo-x and held repo x read the same. */
