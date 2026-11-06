@@ -1020,9 +1020,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 A custody rule refused the run: held-out plaintext outside tmpfs, plaintext left by a dead run, a sealed checkpoint that will not unseal, --dev-plaintext with held-out input, --seal-cmd without --held, an empty --held, --held without --seal-cmd, a sealed directory that already holds an earlier run's sealed copy, or a seal command that failed.
 
-Fix: Run held-out work only with its plaintext root on /dev/shm, a non-empty --held and a seal command; delete leftover plaintext as the log says before anything else. Give each held run a fresh --held directory. To restart a crashed keys or judge run, follow lanes/tbv/README.md: move its sealed copies aside, keep journal/, and rerun with the same --held and run id. If a seal command failed during a held keys or judge run, settle the journal by those restart steps before any retry.
+Fix: Run held-out work only with its plaintext root on /dev/shm, a non-empty --held and a seal command; delete leftover plaintext as the log says before anything else. Give each held run a fresh --held directory. To restart a crashed keys or judge run, follow lanes/tbv/README.md: move its sealed copies aside, keep journal/, and rerun with the same --held and run id. If a seal command failed during a held drive, keys or judge run, the run's close has already settled its lease: fix the seal command, then rerun drive with the same --run-id and --out, or keys or judge by those restart steps.
 
-Exit 2. Side effects: None when the run is refused at open, before any lease. A seal-command failure inside a held keys or judge run can come after paid sends, which stay on the lease and its journal. Retry safe: no. Resumable: no. Owner: U20.
+Exit 2. Side effects: None when the run is refused at open, before any lease. A seal-command failure inside a held drive, keys or judge run can come after paid sends, which stay on the lease and its journal. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_REAL_SANDBOX_EGRESS
 

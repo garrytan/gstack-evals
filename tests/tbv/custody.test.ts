@@ -143,4 +143,18 @@ describe("held-out outputs (A16)", () => {
     expect(code(() => heldOutputs(a, ["out"], MOUNTS)!(join(d, "out", "k.json")))).toBe("E_TBV_CUSTODY");
     expect(unseal(UNSEAL, join(d, "sealed", "k.json.sealed"))).toBe('{"k":2}');
   });
+  test("each write refuses a sealed copy that appeared after open, so two runs opened on one --held cannot clobber each other", () => {
+    const d = tmp();
+    mkdirSync(join(d, "out"));
+    writeFileSync(join(d, "out", "k.json"), '{"k":1}');
+    const a = { held: join(d, "sealed"), "seal-cmd": SEAL, out: "/dev/shm/tbv-out" };
+    const first = heldOutputs(a, ["out"], MOUNTS, ["k.json"])!;
+    const second = heldOutputs(a, ["out"], MOUNTS, ["k.json"])!;
+    first(join(d, "out", "k.json"));
+    writeFileSync(join(d, "out", "k.json"), '{"k":2}');
+    expect(code(() => second(join(d, "out", "k.json")))).toBe("E_TBV_CUSTODY");
+    expect(unseal(UNSEAL, join(d, "sealed", "k.json.sealed"))).toBe('{"k":1}');
+    first(join(d, "out", "k.json"));
+    expect(unseal(UNSEAL, join(d, "sealed", "k.json.sealed"))).toBe('{"k":2}');
+  });
 });
