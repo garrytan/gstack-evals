@@ -528,7 +528,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
         if (d1?.reply && textual(d1.kind)) {
           rec.texts.d1 = d1.reply.text;
           prior.push({ turn: "d1", reply: d1.reply });
-        }
+        } else prior.push({ turn: "d1", reply: { text: "", content: [], stopReason: null } });
         if (!ended()) {
           const d2 = await turn("d2");
           if (d2?.reply && textual(d2.kind)) rec.texts.d2 = d2.reply.text;

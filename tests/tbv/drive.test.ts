@@ -6,6 +6,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { driveItem, openItemRun, readingOrder, runItem, smokeItem, spliceBy, type DrivePlan } from "../../lanes/tbv/drive.ts";
+import { buildRequest, validateRequest } from "../../lanes/tbv/request.ts";
 import type { Arm, Model, ReadingRecord, Validation } from "../../lanes/tbv/types.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { cleanup, clock, fakeBuild, history, KEYS, ledgerDir, shape, sse, status, stub, text, TURNS, type Script } from "./drive-fixture.ts";
@@ -25,6 +26,7 @@ interface Go {
   validate?: (body: Record<string, unknown>, model: Model) => Validation;
   closer?: () => boolean;
   splice?: boolean;
+  real?: boolean;
 }
 const plan = (o: Go): DrivePlan => ({
   item: ITEM,
@@ -47,7 +49,7 @@ async function go(o: Go) {
   const s = stub(o.script, o.records);
   const c = clock();
   const logs: string[] = [];
-  const res = await runItem({ item: ITEM, runId: "run-1", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ roundWorst: 0.000001, ...o }), plaintext: L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: { build: fakeBuild, validate: o.validate ?? (() => ({ ok: true })), closer: o.closer ?? (() => true) }, log: (t) => logs.push(t) });
+  const res = await runItem({ item: ITEM, runId: "run-1", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ roundWorst: 0.000001, ...o }), plaintext: L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: o.real ? { build: buildRequest, validate: validateRequest, closer: () => true } : { build: fakeBuild, validate: o.validate ?? (() => ({ ok: true })), closer: o.closer ?? (() => true) }, log: (t) => logs.push(t) });
   const by = (task: string, arm: Arm = "none", model: Model = "opus", pass = 1) => res.records.find((r) => r.task === task && r.arm === arm && r.model === model && r.pass === pass)!;
   return { res, s, L, c, logs, by, journal: journalOf(L.out), item: readItem(L.record, ITEM) };
 }
@@ -163,6 +165,20 @@ describe("end states, in the frozen precedence", () => {
     expect(r.maxTokens).toEqual(["followup", "d1", "d2"]);
     expect(r.drill).toEqual({ d1: "ok", d2: "ok" });
     expect(r.texts.d1).toBe("cut d1");
+  });
+
+  test("real builder: D1 failing after two retries is a drill-down gap; D2 is still sent on [report, d1] and read", async () => {
+    let n = 0;
+    const { by, s } = await go({ real: true, script: () => (++n === 1 || n === 5 ? text() : status(500)) });
+    const r = by("t1");
+    expect(r.cls).toBe("scored");
+    expect(kinds(r)).toEqual(["report:text", "d1:5xx", "d1:5xx", "d1:5xx", "d2:text"]);
+    expect(r.drill).toEqual({ d1: "drill-down gap", d2: "ok" });
+    expect(r.texts.d2).toContain("test_widget_parse");
+    const last = s.calls.at(-1)!.body.messages;
+    expect(validateRequest(s.calls.at(-1)!.body, "opus")).toEqual({ ok: true });
+    expect(JSON.stringify(last.at(-1))).toContain(TURNS.d1);
+    expect(JSON.stringify(last.at(-1))).toContain(TURNS.d2);
   });
 
   test("an allowance refusal on D1 drops only D1; D2 is still read", async () => {
