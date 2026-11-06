@@ -333,6 +333,9 @@ test("refusals: a seed that is not 64 hex characters, a seed or source A off tmp
   expect(await run(["split", "plan", ...w.pool, "--batch", join(w.disk, "dev-1")], p.io)).toBe(0);
   const digest = /pool digest ([0-9a-f]{64})/.exec(p.out.join("\n"))![1]!;
   const swap = (flag: string, value: string) => w.pool.map((v, i) => (w.pool[i - 1] === flag ? value : v));
+  writeFileSync(join(w.shm, "seed", "other.hex"), "a7".repeat(32));
+  expect(await codeOf(() => run(["split", "next", ...swap("--seed-file", join(w.shm, "seed", "other.hex")), "--pool-digest", digest, "--batch", join(w.disk, "x0")], io().io))).toBe("E_TBV_INPUT");
+  expect(existsSync(join(w.disk, "x0"))).toBe(false);
   writeFileSync(join(w.shm, "seed", "short.hex"), "abc\n");
   expect(await codeOf(() => run(["split", "plan", ...swap("--seed-file", join(w.shm, "seed", "short.hex")), "--batch", join(w.disk, "x1")], io().io))).toBe("E_TBV_INPUT");
   writeFileSync(join(w.disk, "seed.hex"), SEED_HEX);
@@ -346,6 +349,20 @@ test("refusals: a seed that is not 64 hex characters, a seed or source A off tmp
   keysFor(join(w.disk, "keys", "r2"), [untaken], () => false);
   expect(await codeOf(() => run(["split", "next", ...w.pool, "--pool-digest", digest, "--dev-keys", join(w.disk, "keys"), "--batch", join(w.disk, "x5")], io().io))).toBe("E_TBV_INPUT");
   expect(existsSync(join(w.disk, "x5"))).toBe(false);
+});
+
+test("an extractor refusal on a source A candidate stops with a task-free message", async () => {
+  const bad = { ...histA("a-stale__s0", "a-stale", "long"), sha256: "f".repeat(64) };
+  const w = world({ a: [histA("a-l0__s0", "a-l0", "long"), bad] });
+  let message = "";
+  try {
+    await run(["split", "plan", ...w.pool, "--batch", join(w.disk, "dev-1")], io().io);
+  } catch (e) {
+    message = (e as { code?: string }).code + " " + (e as Error).message;
+  }
+  expect(message.startsWith("E_TBV_HISTORY ")).toBe(true);
+  expect(message).not.toContain("a-stale");
+  expect(existsSync(join(w.disk, "dev-1"))).toBe(false);
 });
 
 test("a planted held-out cluster in the dev outputs refuses before anything is written", async () => {

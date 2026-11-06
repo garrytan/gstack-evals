@@ -11,6 +11,7 @@ import { heldOutputs, plaintextRoot } from "./custody.ts";
 import { fail } from "./errors.ts";
 import { admitsSize, extract, OVERHEAD_641D622 } from "./extract.ts";
 import { clustersOf, devEligible, heldOutCluster, heldOutEligible, type LineageStub, type PrRecord } from "./history/source-b.ts";
+import type { ReasonCode } from "../../src/errors/codes.ts";
 import { parseFlags } from "./judge.ts";
 import type { Extract, History, Io, Source, SplitManifest, Stratum, TaskRow } from "./types.ts";
 
@@ -236,7 +237,12 @@ function loadPool(a: Record<string, string>, mode: Mode): Pool {
   const histories = new Map<string, History>();
   const extracts = new Map<string, Extract>();
   const add = (h: History, cluster: string, overhead: number) => {
-    const x = extract(h);
+    let x: Extract;
+    try {
+      x = extract(h);
+    } catch (e) {
+      return fail((e as { code?: ReasonCode }).code ?? "E_TBV_INPUT", "the extractor refused a source " + h.source + " history; its message names the task, so split withholds it");
+    }
     if (x.stratum === "none") return drop("stratum none");
     if (!admitsSize(x.tokens, overhead)) return drop("size");
     if (h.source === "A" && x.stratum === "clean") return drop("source A clean");
@@ -271,7 +277,7 @@ function loadPool(a: Record<string, string>, mode: Mode): Pool {
   }
   const prsSha = sha256(prsText);
   const sorted = [...eligible].sort((x, y) => cmp(x.source + "\0" + x.task, y.source + "\0" + y.task));
-  const digest = sha256(JSON.stringify({ schema: "tbv-pool.v1", mode, prs: prsSha, rows: sorted.map((r) => [r.source, r.task, r.cluster, r.stratum, r.tokens, r.sha256]) }));
+  const digest = sha256(JSON.stringify({ schema: "tbv-pool.v1", mode, seed: sha256(seedHex), prs: prsSha, rows: sorted.map((r) => [r.source, r.task, r.cluster, r.stratum, r.tokens, r.sha256]) }));
   const cap = capClusters(eligible, seed);
   if (cap.dropped) drops["cluster cap"] = cap.dropped;
   return { seedHex, seed, digest, prsSha, eligible, rows: cap.rows, byTask: new Map(cap.rows.map((r) => [r.task, r])), drops, truncated: skipped.length, histories, extracts };
@@ -310,7 +316,7 @@ function readOutcomes(parent: string | undefined, pool: Pool, flag: string, held
 
 function replay(a: Record<string, string>, mode: Mode, checkDigest: boolean): { pool: Pool; w: Walked } {
   const pool = loadPool(a, mode);
-  if (checkDigest && a["pool-digest"] !== pool.digest) fail("E_TBV_INPUT", "the pool's digest is not --pool-digest; a history, the prs file, the seed's pool or the mode changed since plan");
+  if (checkDigest && a["pool-digest"] !== pool.digest) fail("E_TBV_INPUT", "the pool's digest is not --pool-digest; a history, the prs file, the seed or the mode changed since plan");
   if (mode === "held-b" && a["dev-keys"] !== undefined) fail("E_TBV_INPUT", "held-out source B reads --held-keys only");
   const dev = readOutcomes(a["dev-keys"], pool, "dev-keys", false);
   const held = readOutcomes(a["held-keys"], pool, "held-keys", true);
