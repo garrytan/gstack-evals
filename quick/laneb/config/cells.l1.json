@@ -1,14 +1,9 @@
 {
-  "note": "Cells for L1's SWE-rebench items (prereg 2026-11-03-geva-254-l1-overhaul-prereg-2000, section 3): pilot-opus and f1-opus on Opus 5.5, and pilot-sol, f1-sol and Sol's route check l1-route-sol on GPT-6.1 Sol through OpenRouter under section 9's leftover rule (Amendment E). Every session has the prereg's $5 allowance, reserved in the item's ledger before the session and enforced by the metering proxy, and 100 turns (the agent's sdk_max_turns). particle-1 is not run under the ceiling, so it has no cell here.",
+  "note": "Cells for L1's SWE-rebench items, pilot-opus and f1-opus (prereg 2026-11-03-geva-254-l1-overhaul-prereg-2000, section 3): Opus 5.5 at a $5 session allowance, reserved in the item's ledger before each session and enforced by the metering proxy, and 100 turns (the agent's sdk_max_turns). Sol and particle-1 run only under section 9's leftover rule, through a later amendment, so they have no cell here.",
   "models": [
     {
       "id": "claude-opus-5-5",
       "harbor_model": "anthropic/claude-opus-5-5",
-      "session_cap_usd": 5
-    },
-    {
-      "id": "gpt-6.1-sol",
-      "harbor_model": "anthropic/gpt-6.1-sol",
       "session_cap_usd": 5
     }
   ],

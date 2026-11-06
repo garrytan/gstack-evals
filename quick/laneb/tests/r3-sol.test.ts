@@ -765,7 +765,7 @@ describe("route-check.ts", () => {
   }, 60_000);
 
   // L1 Amendment E: l1-route-sol, its own $20 ledger, L1's none arm and its after arm (tar=after) told /investigate, at
-  // cells.l1.json's Sol cell ($5, 100 turns).
+  // cells.l1-sol.json's Sol cell ($5, 100 turns).
   const l1Rig = (cap = 20) => {
     const r = rig(join(tmp("l1-route-"), "l1-route-sol.jsonl"));
     approve(r.ledger, "l1-route-sol", cap);
@@ -774,7 +774,7 @@ describe("route-check.ts", () => {
     return r;
   };
 
-  test("both parts pass on l1-route-sol: L1's none arm and its after arm told /investigate at cells.l1.json's Sol cell, writing only to l1-route-sol's ledger", async () => {
+  test("both parts pass on l1-route-sol: L1's none arm and its after arm told /investigate at cells.l1-sol.json's Sol cell, writing only to l1-route-sol's ledger", async () => {
     const r = l1Rig();
     const { code, out, calls, rec } = await routeCheck(r, {}, ["--item", "l1-route-sol"]);
     expect(out).toContain("route check: gpt-6.1-sol passed on l1-route-sol (smoke passed on try 1, told passed on try 1)");

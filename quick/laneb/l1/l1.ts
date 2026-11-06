@@ -69,10 +69,10 @@ const FIVE = ["none", "before-u", "after-u", "before-t", "after-t"];
 
 // Sol's route check on its own item (Amendment E; prereg section 4: R3's route check first). r3/route-check.ts --item
 // l1-route-sol runs R3's smoke session on L1's none arm and its told /investigate session on L1's after arm, at
-// cells.l1.json's Sol cell, and writes only to l1-route-sol's ledger, so pilot-sol's ledger holds nothing before its run.
+// cells.l1-sol.json's Sol cell, and writes only to l1-route-sol's ledger, so pilot-sol's ledger holds nothing before its run.
 export const L1_ROUTE = {
   id: SOL, label: "GPT-6.1 Sol", item: "l1-route-sol", capUsd: 20, capFrom: "Amendment E's", routePrefix: "l1-route-sol/", ledgerPort: "9918",
-  armManifests: L1.armManifests, cells: "cells.l1.json", routeArms: { smoke: ARM_SPECS.none!, told: ARM_SPECS["after-t"]! }, leg: "L1's Sol leg",
+  armManifests: L1.armManifests, cells: "cells.l1-sol.json", routeArms: { smoke: ARM_SPECS.none!, told: ARM_SPECS["after-t"]! }, leg: "L1's Sol leg",
 };
 
 // route: the route check a model's items need passed before they prepare.
@@ -83,8 +83,8 @@ export const ITEMS: Record<string, ItemDef> = {
   "tb2-opus": { capUsd: 180, taskSet: "tb2", cells: "cells.l1-tb2.json", allowanceUsd: 2.5, model: OPUS },
   // Section 9's planning caps. Under price.py's floors the re-cost is never under $730, so f1-sol's cap, the lower of $730
   // and the re-cost, is $730.
-  "pilot-sol": { capUsd: 100, taskSet: "swerebench-r3a4", cells: "cells.l1.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
-  "f1-sol": { capUsd: 730, taskSet: "swerebench-r3a4", cells: "cells.l1.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  "pilot-sol": { capUsd: 100, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  "f1-sol": { capUsd: 730, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
 };
 
 export type Rect = { tasks: string[]; arms: string[]; attempts: number };

@@ -18,23 +18,26 @@ const tb2Text = (n = 37) => Array.from({ length: n }, (_, i) => (i < 19 ? "1" : 
 const row = (r: Partial<Row> & { kind: Row["kind"]; id: string }): Row => ({ ts: "t", item: "pilot-opus", usd_micros: 0, ...r }) as Row;
 
 describe("L1's frozen inputs and plans", () => {
-  test("the frozen inputs hash to the prereg's digests, and the cells files carry section 9's session allowances and the 100-turn ceiling", () => {
+  test("the frozen inputs hash to the prereg's digests, and the cells files carry section 9's session allowances and the 100-turn ceiling; cells.l1.json is 802c2e4's byte for byte and Sol's cell has its own file", () => {
     expect(sha256(fPartsText())).toBe(L1.fParts.sha256);
     expect(sha256(pilotText())).toBe(L1.pilot.sha256);
     const swe = JSON.parse(readFileSync(join(LANEB, "config/cells.l1.json"), "utf8"));
+    const sol = JSON.parse(readFileSync(join(LANEB, "config/cells.l1-sol.json"), "utf8"));
+    expect(sha256(readFileSync(join(LANEB, "config/cells.l1.json"), "utf8"))).toBe("80934de1f6ddcbc653130f1c709d471eba4ced7b0ea9a0c7d562c808385400fc");
     const tb2 = JSON.parse(readFileSync(join(LANEB, "config/cells.l1-tb2.json"), "utf8"));
-    expect(swe.models).toEqual([{ id: "claude-opus-5-5", harbor_model: "anthropic/claude-opus-5-5", session_cap_usd: 5 }, { id: "gpt-6.1-sol", harbor_model: "anthropic/gpt-6.1-sol", session_cap_usd: 5 }]);
+    expect(swe.models).toEqual([{ id: "claude-opus-5-5", harbor_model: "anthropic/claude-opus-5-5", session_cap_usd: 5 }]);
+    expect(sol.models).toEqual([{ id: "gpt-6.1-sol", harbor_model: "anthropic/gpt-6.1-sol", session_cap_usd: 5 }]);
     expect(JSON.parse(readFileSync(join(LANEB, "config/proxy.json"), "utf8")).models["gpt-6.1-sol"]).toMatchObject({ route: "openrouter", upstream_model: "openai/gpt-6.1-sol" });
     expect(tb2.models).toEqual([{ id: "claude-opus-5-5", harbor_model: "anthropic/claude-opus-5-5", session_cap_usd: 2.5 }]);
-    for (const c of [swe, tb2]) expect([c.sdk_max_turns, c.max_output_tokens, c.verifier_timeout_multiplier]).toEqual([100, 32000, 2]);
+    for (const c of [swe, sol, tb2]) expect([c.sdk_max_turns, c.max_output_tokens, c.verifier_timeout_multiplier]).toEqual([100, 32000, 2]);
     expect(Object.entries(ITEMS).map(([k, v]) => [k, v.capUsd, v.cells, v.allowanceUsd, v.model, v.route?.item ?? null])).toEqual([
       ["pilot-opus", 80, "cells.l1.json", 5, "claude-opus-5-5", null], ["f1-opus", 680, "cells.l1.json", 5, "claude-opus-5-5", null], ["tb2-opus", 180, "cells.l1-tb2.json", 2.5, "claude-opus-5-5", null],
-      ["pilot-sol", 100, "cells.l1.json", 5, "gpt-6.1-sol", "l1-route-sol"], ["f1-sol", 730, "cells.l1.json", 5, "gpt-6.1-sol", "l1-route-sol"],
+      ["pilot-sol", 100, "cells.l1-sol.json", 5, "gpt-6.1-sol", "l1-route-sol"], ["f1-sol", 730, "cells.l1-sol.json", 5, "gpt-6.1-sol", "l1-route-sol"],
     ]);
   });
 
-  test("l1-route-sol: Sol's route check on its own $20 item, smoke on L1's none arm and told /investigate on L1's after arm, at cells.l1.json's Sol cell", () => {
-    expect(L1_ROUTE).toMatchObject({ id: "gpt-6.1-sol", item: "l1-route-sol", capUsd: 20, routePrefix: "l1-route-sol/", ledgerPort: "9918", cells: "cells.l1.json", armManifests: "arms/manifests/l1" });
+  test("l1-route-sol: Sol's route check on its own $20 item, smoke on L1's none arm and told /investigate on L1's after arm, at cells.l1-sol.json's Sol cell", () => {
+    expect(L1_ROUTE).toMatchObject({ id: "gpt-6.1-sol", item: "l1-route-sol", capUsd: 20, routePrefix: "l1-route-sol/", ledgerPort: "9918", cells: "cells.l1-sol.json", armManifests: "arms/manifests/l1" });
     expect(L1_ROUTE.routeArms).toEqual({ smoke: ARM_SPECS.none, told: ARM_SPECS["after-t"] });
     expect(armSpec(L1_ROUTE.routeArms.told)).toMatchObject({ name: "after-t", tar_name: "after", told: "investigate", system_prompt: "claude-code-preset", gstack_hooks: "copy" });
     expect(armSpec(L1_ROUTE.routeArms.smoke)).toMatchObject({ name: "none", system_prompt: "claude-code-preset", gstack_hooks: "copy" });

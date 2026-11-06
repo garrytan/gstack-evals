@@ -34,7 +34,7 @@
 // --item r3a4-sol runs R3 amendment 4's fresh route check on its own item, at cells.r3a4.json's allowance. --item r3b4-sol
 // runs R3 amendment 5's (section 5) on r3b4-sol, the same way, with its told session in the told arm at gstack 699a41cb
 // (ARM_MANIFESTS defaults to arms/manifests/r3b for it). --item l1-route-sol runs L1's (Amendment E) on its own item: the
-// smoke session on L1's none arm and the told one on L1's after arm (tar=after), at cells.l1.json's Sol cell with its turn
+// smoke session on L1's none arm and the told one on L1's after arm (tar=after), at cells.l1-sol.json's Sol cell with its turn
 // ceiling (ARM_MANIFESTS defaults to arms/manifests/l1, ARMS holds none and after).
 // Env: LEDGER (the item's jsonl ledger, approved at the item's cap), ARMS (a directory with none.tar and gstack.tar, or
 // .tar.gz, matching ARM_MANIFESTS, default arms/manifests/r3), the route's provider key (OPENROUTER_API_KEY for Sol; only

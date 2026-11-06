@@ -195,7 +195,7 @@ describe("Sol's items before any spend (Amendment E)", () => {
     expect(L1_ROUTE.item).toBe("l1-route-sol");
     const ok = l1(none, ["prepare", none.work, "--item", "pilot-sol"], { ROUTE_LEDGER: routeLedger(none) });
     expect([ok.code, ok.out]).toEqual([0, expect.stringContaining("pilot (32 sessions)")]);
-    expect([plan(none).item, plan(none).model, plan(none).cap_usd, plan(none).cells, plan(none).host_ttl_hours]).toEqual(["pilot-sol", "gpt-6.1-sol", 100, "cells.l1.json", 60]);
+    expect([plan(none).item, plan(none).model, plan(none).cap_usd, plan(none).cells, plan(none).host_ttl_hours]).toEqual(["pilot-sol", "gpt-6.1-sol", 100, "cells.l1-sol.json", 60]);
     expect(job(none, "pilot").model).toBe("gpt-6.1-sol");
     expect(l1(none, ["prepare", none.work, "--item", "l1-route-sol"]).err).toContain("unknown item l1-route-sol");
   }, 60_000);
