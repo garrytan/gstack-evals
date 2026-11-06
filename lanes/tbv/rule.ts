@@ -458,9 +458,12 @@ function context(text: string, name: string) {
   }
   return at < 0 ? "" : JSON.stringify(text.slice(Math.max(0, at - 30), at + len + 30));
 }
-function grams(text: string, n = 8) { const w = toks(text); const s = new Set<string>(); for (let i = 0; i + n <= w.length; i++) s.add(w.slice(i, i + n).join(" ")); return s; }
+export function grams(text: string, n = 8) { const w = toks(text); const s = new Set<string>(); for (let i = 0; i + n <= w.length; i++) s.add(w.slice(i, i + n).join(" ")); return s; }
 
-function handoff(h: { artifact: string; heldIds: string[]; devText: string; heldText: string }) {
+export type HandoffInput = { artifact: string; heldIds: string[]; devText: string; heldText: string };
+export type LeakInput = { addedLines: string[]; gstackAtC: string; material: string; names: string[] };
+
+function handoff(h: HandoffInput) {
   const inDev = shares(h.devText), inArtifact = holds(h.artifact);
   const unique = h.heldIds.filter((id) => !inDev(id));
   const idHits = unique.filter(inArtifact);
@@ -472,7 +475,7 @@ function handoff(h: { artifact: string; heldIds: string[]; devText: string; held
   say("Verdict: " + (idHits.length || gHits.length ? "BLOCK" : "CLEAR"));
 }
 
-function leak(l: { addedLines: string[]; gstackAtC: string; material: string; names: string[] }) {
+function leak(l: LeakInput) {
   const added = l.addedLines.join("\n");
   const base = grams(l.gstackAtC), mat = grams(l.material);
   const hits = [...grams(added)].filter((g) => !base.has(g) && mat.has(g));
@@ -483,6 +486,21 @@ function leak(l: { addedLines: string[]; gstackAtC: string; material: string; na
   for (const n of nameHits) say("  name " + JSON.stringify(n.trim()) + " at " + context(added, n));
   for (const g of hits.slice(0, 5)) say("  8-word run " + JSON.stringify(g));
   say("Verdict: " + (hits.length || nameHits.length ? "HIT (to the Captain)" : "CLEAN"));
+}
+
+/** The handoff or the leak check on inputs already in memory, printed and returned as run() does: check.ts gathers real inputs and passes them here, so held-out text never goes to a file. */
+export function check(c: { cmd: "handoff"; data: HandoffInput } | { cmd: "leak"; data: LeakInput }, io: Io): number {
+  out.length = 0;
+  try {
+    if (c.cmd === "handoff") handoff(c.data);
+    else leak(c.data);
+  } catch (e) {
+    if (!(e instanceof RuleError)) throw e;
+    io.err(e.message);
+    return 2;
+  }
+  io.out(out.join("\n"));
+  return 0;
 }
 
 /** One scorer command. headroom and compare take --split <manifest.json>, the split manifest whose sha256 the readings file's plan records. A refusal prints its E_ line and returns 2. */
