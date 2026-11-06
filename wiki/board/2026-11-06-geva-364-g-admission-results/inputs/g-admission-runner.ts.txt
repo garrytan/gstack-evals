@@ -1,0 +1,203 @@
+// g-admission-runner.ts (GEVA-336): G admission's computation, as the Captain ruled on 2026-11-05 (approvals
+// 2026-11-04-g-admission-caps.md, "Admission run rulings"; readiness post, known gaps 1 and 2). It imports admitG,
+// t1OutsidePlan, unknownFromRun and authPaidFromLedger from the run commit's src/runner/stats/g-admission.ts (c52f510,
+// unchanged at 20c4277) and adds no rule of its own beyond the two the ruling names:
+//   1. each trial's --task comes from that trial's own record: the task_json real_agent ran with, in the Harbor trial's
+//      config.json, whose folder must be named for the trial's task_label and whose task.json must hash to the sealed
+//      manifest's row for that label, the row that pins the trial's image_id;
+//   2. the t1 guard: a told trial's t1_outside_plan is null unless at least one t1 message record exists (t1Guarded).
+//
+//   bun g-admission-runner.ts rows <run env> [<shard> <shards>]  score each trial Harbor ran under JOBS, once each:
+//       the lane's scorer (scoreTrial, with the outcome-skills registry as its arms file, since the real score trial
+//       CLI reads only the lane's arms.json), the mutation scorer on the final tree (scoreTree), the skill's exposure
+//       detector and the guarded t1 reading; writes <job>/row.json
+//   bun g-admission-runner.ts admit <run env>                    reads every row.json, draws the exposure sample, runs
+//       admitG and the prereg's resize.py, prints the verdict and writes admission.json beside the rows
+//
+// Run it from the checkout of the run commit, with the G env file sourced (admit reads AUTH_PAID from g-tg's leases).
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
+
+const GE = process.cwd();
+const { admitG, t1OutsidePlan, unknownFromRun, authPaidFromLedger } = await import(GE + "/src/runner/stats/g-admission.ts");
+const { scoreTrial } = await import(GE + "/lanes/real-outcome/score/grade.ts");
+const { terminationOf, DEFAULT_TAXONOMY, NOT_APPLIED } = await import(GE + "/lanes/real-outcome/score/outcome.ts");
+const { detectExposure, readTranscript } = await import(GE + "/lanes/outcome-skills/arms/exposure.ts");
+const { scoreTree } = await import(GE + "/lanes/outcome-skills/mutation/run.ts");
+const { recordPath } = await import(GE + "/src/runner/ledger/paths.ts");
+
+const REGISTRY = join(GE, "lanes/outcome-skills/arms/registry.json");
+const PREREG = join(GE, "wiki/plans/2026-11-04-geva-262-g-family-admission-prereg");
+const RESIZE_SHA = "1265268921e92667a85529bfe8eec8a5ecb20bc2f12b567a3c3ec3f44913ec34";
+const MODEL = "claude-opus-5-5";
+const ARMS = { none: "none", told: { "plan-eng-review": "plan-eng-review:told", autoplan: "autoplan:told" } };
+const SKILL: Record<string, string> = { "plan-eng-review:told": "plan-eng-review", "autoplan:told": "autoplan" };
+const ITEM: Record<string, string> = { none: "g-none", "plan-eng-review:told": "g-pe", "autoplan:told": "g-ap" };
+// AUTH_EXTRA: the T-G yield post records that the slice's crew dollars per valid task over the second six could not be
+// measured (its tasks were built in parallel batches), so the input is resize.py's own value when AUTH_EXTRA is absent.
+const AUTH_EXTRA_UNMEASURED = 1.2;
+const PLANNED = 24;
+const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
+const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
+
+/** The t1 guard (readiness post gap 2): t1OutsidePlan reads a told trial only when at least one t1 message record exists;
+ * otherwise, as after a lost t1 turn, the trial has no t1 reading (null), where t1OutsidePlan alone would say false. */
+export function t1Guarded(records: Record<string, any>[]): boolean | null {
+  return records.some((r) => (r.type === "AssistantMessage" || r.type === "UserMessage") && r.phase === "t1") ? t1OutsidePlan(records) : null;
+}
+
+function runEnv(file: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const m = /^([A-Z_]+)=(.*)$/.exec(line.trim());
+    if (m) env[m[1]!] = m[2]!;
+  }
+  for (const k of ["JOBS", "TASKS", "MANIFEST", "RUN_DIR"]) if (!env[k]) throw new Error("E_USAGE the run env file sets no " + k);
+  return env;
+}
+
+/** Each job folder Harbor wrote (g-<arm>-<label>-t<n>[-rerun]) and its one trial folder. */
+function trials(jobs: string): Array<{ job: string; dir: string; trial: string | null }> {
+  return readdirSync(jobs, { withFileTypes: true }).filter((e) => e.isDirectory() && /^g-(none|pe|ap)-tg[0-9a-f]+-t[12](-rerun)?$/.test(e.name)).map((e) => {
+    const dir = join(jobs, e.name);
+    const inner = readdirSync(dir, { withFileTypes: true }).filter((x) => x.isDirectory() && x.name.includes("__")).map((x) => join(dir, x.name));
+    if (inner.length > 1) throw new Error(dir + " holds " + inner.length + " trial folders; a job runs one trial");
+    return { job: e.name, dir, trial: inner[0] ?? null };
+  }).sort((a, b) => (a.job < b.job ? -1 : 1));
+}
+
+/** The trial's own record: what real_agent ran with, checked against the sealed manifest (gap 1). */
+export function ownRecord(trialDir: string, manifest: { rows: Array<{ label: string; image_id: string; task_json_sha256: string }> }) {
+  const kw = readJson(join(trialDir, "config.json")).agent?.kwargs ?? {};
+  const label = String(kw.task_label ?? ""), taskDir = dirname(String(kw.task_json ?? ""));
+  const row = manifest.rows.find((r) => r.label === label);
+  if (!row || basename(taskDir) !== label) throw new Error(trialDir + ": its task_json " + kw.task_json + " is not in a folder named for its task_label " + label);
+  if (sha(readFileSync(join(taskDir, "task.json"))) !== row.task_json_sha256) throw new Error(trialDir + ": " + taskDir + "/task.json does not hash to the manifest row for " + label);
+  if (kw.image_id !== row.image_id) throw new Error(trialDir + ": image_id " + kw.image_id + " is not the manifest's " + row.image_id + " for " + label);
+  return { arm: String(kw.arm), label, n: Number(kw.trial_n), rerun: kw.rerun ? String(kw.rerun) : null, taskDir, image: String(kw.image_id) };
+}
+
+function rows(env: Record<string, string>, shard = 0, shards = 1) {
+  const manifest = readJson(env.MANIFEST!);
+  const work = env.SCORE_WORK ?? mkdtempSync(join(tmpdir(), "g-score-"));
+  trials(env.JOBS!).forEach((t, i) => {
+    if (i % shards !== shard || existsSync(join(t.dir, "row.json"))) return;
+    const m = /^g-(none|pe|ap)-(tg[0-9a-f]+)-t([12])(-rerun)?$/.exec(t.job)!;
+    const base = { job: t.job, arm: { none: "none", pe: "plan-eng-review:told", ap: "autoplan:told" }[m[1] as "none"], task: m[2]!, trial: Number(m[3]), rerun: m[4] ? "named in config.json" : null };
+    const gap = (reason: string, extra: object = {}) => writeFileSync(join(t.dir, "row.json"), JSON.stringify({ ...base, repo: null, status: "gap", reason, solved: false, truncated: false, cost_usd: null, exposed: null, mutation: null, verifier_ran: false, stop_explained: null, t1_outside_plan: null, ...extra }, null, 1) + "\n");
+    if (!t.trial) return gap("Harbor wrote no trial folder");
+    const own = ownRecord(t.trial, manifest);
+    if (own.arm !== base.arm || own.label !== base.task || own.n !== base.trial || !!own.rerun !== !!base.rerun) throw new Error(t.trial + ": its record (" + own.arm + " " + own.label + " t" + own.n + ") is not its job " + t.job);
+    const evdir = join(t.trial, "evaluator");
+    if (!existsSync(join(evdir, "real-summary.json"))) return gap("no real-summary.json: " + (existsSync(join(t.trial, "exception.txt")) ? readFileSync(join(t.trial, "exception.txt"), "utf8").trim().split("\n").pop()!.slice(0, 300) : "no exception recorded"), { rerun: own.rerun });
+    const scorePath = join(evdir, "trial-score.json");
+    const ev = existsSync(scorePath) ? readJson(scorePath) : scoreTrial({ evaluatorDir: evdir, taskDir: own.taskDir, model: MODEL, imageId: own.image, arm: own.arm, armsPath: REGISTRY, runs: 1, seed: 1, work: mkdtempSync(join(work, t.job + "-")) });
+    if (!existsSync(scorePath)) writeFileSync(scorePath, JSON.stringify(ev, null, 2) + "\n");
+    const termination = terminationOf(ev);
+    const cls = DEFAULT_TAXONOMY.classes[termination];
+    if (!cls) throw new Error(t.job + ": termination " + termination + " is not in the lane's taxonomy " + DEFAULT_TAXONOMY.version);
+    const final = ev.trees?.final ?? null;
+    const reason = cls === "infra" ? "termination " + termination : ev.infra_reason ? ev.infra_reason : !final ? "the final tree was not graded" : final.status === "not_applied" ? final.reason : final.status === "graded" && !final.applied ? NOT_APPLIED : null;
+    const truncated = cls === "truncated";
+    const common = { rerun: own.rerun, repo: ev.repo, termination, term_class: cls, cost_usd: ev.cost_usd ?? null, none_read_audit: ev.bare ? { contaminated: !!ev.exposure?.contaminated, evidence: (ev.exposure?.evidence ?? []).length } : null };
+    if (reason) return gap(reason, common);
+    let exposed: boolean | null = null, exposure_error: string | null = null, t1: boolean | null = null;
+    if (SKILL[own.arm]) {
+      const records = readTranscript(join(evdir, "sdk-messages.jsonl")).records;
+      try { exposed = detectExposure(SKILL[own.arm]!, records).exposed; } catch (e) { exposure_error = String((e as Error).message).slice(0, 300); }
+      t1 = t1Guarded(records);
+    }
+    const mutPath = join(evdir, "mutation.json");
+    const task = readJson(join(own.taskDir, "task.json"));
+    const lang = task.runner?.kind;
+    if (!["rust", "typescript", "python", "go"].includes(lang)) throw new Error(t.job + ": task.json's runner.kind " + JSON.stringify(lang) + " is not a language the mutation scorer pins");
+    const project = "g336-mutation-project:" + own.label;
+    if (!existsSync(mutPath) && (spawnSync("docker", ["tag", own.image, project]).status !== 0 || spawnSync("docker", ["image", "inspect", "-f", "{{.Id}}", project], { encoding: "utf8" }).stdout.trim() !== own.image)) throw new Error(t.job + ": could not tag the pinned image " + own.image + " as " + project + " for the mutation scorer's FROM");
+    const mut = existsSync(mutPath) ? readJson(mutPath) : scoreTree({ lang, image: project, patch: existsSync(join(evdir, "final.patch")) ? readFileSync(join(evdir, "final.patch"), "utf8") : "", work: join(work, "mut"), label: t.job, repoDir: task.repo_dir });
+    if (!existsSync(mutPath)) writeFileSync(mutPath, JSON.stringify(mut, null, 1) + "\n");
+    const mutation = mut.status === "tool-error" ? "tool_error" : mut.status === "no-tests" ? "no_tests" : "scored";
+    writeFileSync(join(t.dir, "row.json"), JSON.stringify({ ...base, ...common, status: "scored", reason: null, solved: !truncated && final.status === "graded" && final.applied && final.pass, truncated, verifier_ran: final.status === "graded", stop_explained: truncated ? true : null, exposed, exposure_error, t1_outside_plan: t1, mutation, mutation_status: mut.status }, null, 1) + "\n");
+  });
+}
+
+function py(code: string, args: string[]): string {
+  const r = spawnSync("python3", ["-I", "-c", code, ...args], { encoding: "utf8" });
+  if (r.status !== 0) throw new Error("python3 failed: " + r.stderr.slice(0, 400));
+  return r.stdout;
+}
+
+/** Prereg section 5: random.Random(20261105).sample(labels, 8); the i-th drawn task (i from 1) takes trial
+ * random.Random(20261105 + i).randrange(2) + 1. A picked trial still a gap after its rerun (or never run) is replaced by
+ * the same task's other trial; if both are gaps, by the first task in random.Random(20261106).sample(labels, 12) not
+ * already drawn, at its first trial that is not a gap. */
+export function exposureSample(labels: string[], isScored: (task: string, trial: number) => boolean) {
+  const draw = JSON.parse(py("import json, random, sys\nl = sorted(sys.argv[1:])\ns = random.Random(20261105).sample(l, 8)\nprint(json.dumps({'s': [[t, random.Random(20261105 + i).randrange(2) + 1] for i, t in enumerate(s, 1)], 'r': random.Random(20261106).sample(l, 12)}))", labels)) as { s: Array<[string, number]>; r: string[] };
+  const drawn = new Set(draw.s.map(([t]) => t));
+  return draw.s.map(([task, trial]) => {
+    if (isScored(task, trial)) return { task, trial };
+    if (isScored(task, 3 - trial)) return { task, trial: 3 - trial };
+    for (const r of draw.r) {
+      if (drawn.has(r)) continue;
+      const k = [1, 2].find((n) => isScored(r, n));
+      if (k) { drawn.add(r); return { task: r, trial: k }; }
+    }
+    throw new Error("no replacement for sampled task " + task);
+  });
+}
+
+function admit(env: Record<string, string>) {
+  const all = trials(env.JOBS!).map((t) => ({ ...readJson(join(t.dir, "row.json")) }));
+  const key = (r: any) => r.arm + " " + r.task + " " + r.trial;
+  const firsts = new Map(all.filter((r) => !r.rerun).map((r) => [key(r), r]));
+  const chosen = new Map(firsts);
+  for (const r of all.filter((x) => x.rerun)) {
+    if (firsts.get(key(r))?.status !== "gap") throw new Error(r.job + " reruns a trial that was not a gap");
+    chosen.set(key(r), r);
+  }
+  const rowsIn = [...chosen.values()];
+  const labels = readFileSync(env.LABELS!, "utf8").split("\n").filter(Boolean).sort();
+  const repoOf = new Map(rowsIn.filter((r) => r.repo).map((r) => [r.task, r.repo]));
+  const trialsIn = rowsIn.map((r) => ({ task: r.task, repo: r.repo ?? repoOf.get(r.task) ?? readJson(join(env.TASKS!, r.task, "task.json")).repo, arm: r.arm, trial: r.trial, status: r.status, solved: r.solved, truncated: r.truncated, cost_usd: r.cost_usd, exposed: r.exposed, mutation: r.mutation, verifier_ran: r.verifier_ran, stop_explained: r.stop_explained, t1_outside_plan: r.t1_outside_plan }));
+  const scored = (arm: string) => (task: string, trial: number) => rowsIn.some((r) => r.arm === arm && r.task === task && r.trial === trial && r.status === "scored");
+  const exposure_sample = { "plan-eng-review": exposureSample(labels, scored(ARMS.told["plan-eng-review"])), autoplan: exposureSample(labels, scored(ARMS.told.autoplan)) };
+  const record = recordPath(undefined).path;
+  const auth_paid_usd = authPaidFromLedger(record, ["g-tg"], 12);
+  const unknown_calls = { none: unknownFromRun(env.RUN_DIR!, [ITEM.none!]), "plan-eng-review": unknownFromRun(env.RUN_DIR!, [ITEM["plan-eng-review:told"]!]), autoplan: unknownFromRun(env.RUN_DIR!, [ITEM["autoplan:told"]!]) };
+  const a = admitG({ arms: ARMS, trials: trialsIn, planned_trials: PLANNED, exposure_sample, auth_paid_usd, auth_extra_usd: AUTH_EXTRA_UNMEASURED, unknown_calls });
+  const out: string[] = [];
+  out.push("ADMISSION G (plan-eng-review, autoplan), wave 1, Opus 5.5; " + rowsIn.length + " trials read (" + all.filter((r) => r.rerun).length + " reruns)");
+  out.push("headroom: none solved " + a.headroom.solved + " of " + a.headroom.valid + " valid (" + (100 * a.headroom.share).toFixed(1) + "%)");
+  for (const s of ["plan-eng-review", "autoplan"] as const) {
+    const k = a.skills[s];
+    out.push("", s + ": route " + k.route + (k.failed ? " (item " + k.failed + ")" : ""));
+    for (const it of k.items) out.push("  item " + it.item + " " + it.name + ": " + (it.pass === null ? "not read" : it.pass ? "pass" : "FAIL") + "; " + it.reading);
+    out.push("  report only: exposure of all scored told trials " + k.exposure_all.exposed + " of " + k.exposure_all.trials + "; t1 writes outside PLAN.md " + k.t1_outside_plan.wrote + " of " + k.t1_outside_plan.read + " read (t1 guard applied: no t1 message record reads null)");
+    out.push("  exposure sample: " + exposure_sample[s].map((x) => x.task + "/t" + x.trial).join(" "));
+  }
+  const nr = rowsIn.filter((r) => r.none_read_audit);
+  out.push("", "none arm read audit (descriptive, prereg section 4): " + nr.filter((r) => r.none_read_audit.contaminated).length + " of " + nr.length + " scored or gap none trials flagged");
+  out.push("metered: " + JSON.stringify(a.metered.inputs) + "; none mean $" + a.metered.none_usd.toFixed(4) + "; told " + JSON.stringify(a.metered.told));
+  out.push("unknown calls: " + JSON.stringify(a.metered.unknown_calls) + "; AUTH_PAID from g-tg's settled leases over 12 valid tasks; AUTH_EXTRA " + AUTH_EXTRA_UNMEASURED + " (unmeasured, resize.py's value when absent)");
+  out.push("M1: " + JSON.stringify(a.m1).slice(0, 2000), "", "g-resize.ts at the metered inputs:", a.resize_text);
+  const rp = join(PREREG, "resize.py");
+  if (sha(readFileSync(rp)) !== RESIZE_SHA) throw new Error(rp + " is not the prereg's resize.py " + RESIZE_SHA);
+  const inEnv: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin", MULT: String(a.metered.inputs.MULT), M_PER: String(a.metered.inputs.M_PER), M_AP: String(a.metered.inputs.M_AP), AUTH_PAID: String(a.metered.inputs.AUTH_PAID), AUTH_EXTRA: String(AUTH_EXTRA_UNMEASURED) };
+  const r = spawnSync("python3", ["-I", rp], { env: inEnv, encoding: "utf8", cwd: PREREG });
+  out.push("", "resize.py (python3 -I, sha256 " + RESIZE_SHA.slice(0, 12) + ", env " + ["MULT", "M_PER", "M_AP", "AUTH_PAID", "AUTH_EXTRA"].map((k) => k + "=" + inEnv[k]).join(" ") + ", AGENT_USER unset) exit " + r.status + ":", r.stdout.trimEnd(), r.stderr.trim());
+  writeFileSync(join(env.JOBS!, "admission.json"), JSON.stringify({ admission: a, exposure_sample, rows: rowsIn }, null, 1) + "\n");
+  console.log(out.join("\n"));
+}
+
+if (import.meta.main) {
+  const [cmd, file, ...rest] = process.argv.slice(2);
+  if (!file || (cmd !== "rows" && cmd !== "admit")) {
+    console.error("E_USAGE bun g-admission-runner.ts rows <run env> [<shard> <shards>] | admit <run env>");
+    process.exit(2);
+  }
+  const env = runEnv(file);
+  if (cmd === "rows") rows(env, Number(rest[0] ?? 0), Number(rest[1] ?? 1));
+  else admit(env);
+}
