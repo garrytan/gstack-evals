@@ -139,6 +139,14 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OUTCOME_TOLD_INSTALL](#e_outcome_told_install) | 2 | U20 |
 | [E_OUTCOME_CLEAN_ROOM](#e_outcome_clean_room) | 2 | U20 |
 | [E_OUTCOME_IMAGE](#e_outcome_image) | 2 | U20 |
+| [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
+| [E_TBV_INPUT](#e_tbv_input) | 2 | U20 |
+| [E_TBV_HISTORY](#e_tbv_history) | 2 | U20 |
+| [E_TBV_SHAPE](#e_tbv_shape) | 2 | U20 |
+| [E_TBV_REQUEST](#e_tbv_request) | 2 | U20 |
+| [E_TBV_RUN](#e_tbv_run) | 2 | U20 |
+| [E_TBV_JUDGE](#e_tbv_judge) | 2 | U20 |
+| [E_TBV_CUSTODY](#e_tbv_custody) | 2 | U20 |
 | [E_REAL_SANDBOX_EGRESS](#e_real_sandbox_egress) | 2 | U20 |
 | [E_REAL_SANDBOX_RECORD](#e_real_sandbox_record) | 2 | U20 |
 | [E_REAL_ARM_BUILD](#e_real_arm_build) | 2 | U10 |
@@ -949,6 +957,70 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 T-G's image manifest or a trial's binding to it does not hold (lanes/outcome-skills/images/manifest.ts): the manifest is unreadable, has a row with no sha256 image id, digests or label of its own, or is not tg-images.v1 with home /root and work dir /testbed; or check found a manifest whose sha256 is not the --sha256 recorded for it; or bind found no manifest row for --label, a task dir path that is a symlink, an out path inside the task dir, a task dir whose task.json or environment digest (file bytes and executable bits) differs from its row, a task.json that is not JSON, a file that differs from task.json's file digests (edited, added or deleted), a symlink, a docker tag that failed, an image the manifest pins that is missing or whose local tag resolves to another id, an out dir that exists, or a task.toml with no [environment] section or a docker_image of its own; or pin's out file exists, before its builds or when its exclusive create finds one written meanwhile, quick/laneb's runtime layer did not build on a task image, or in that final image gold fails a required test (the message names it), gold's run stopped, or the empty change passes every required test.
 
 Fix: Pin on a keyless build host and move the images with docker save and docker load, which keep each id. Check with the sha256 the readiness post records for the manifest. Bind the task dir the manifest was pinned from, on the host whose Docker holds the pinned images (the envelope host), into a new out dir. When an image is gone or moved, rebuild it with pin into a new manifest and record that manifest's digests before any session. When pin finds gold failing or the empty change passing in the final image, the runtime layer changes a hidden test's result: repair the task with check and pin again. Nothing was spent and no lease is open.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TBV_NOT_BUILT
+
+A trust-but-verify command or function is declared but not built yet (lanes/tbv). Nothing ran.
+
+Fix: Use a build of gstack-evals that has it, or build the unit that owns it.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TBV_INPUT
+
+A trust-but-verify input does not hold: a file is missing, malformed or not at its frozen sha256, a split manifest does not match, or a flag combination is refused.
+
+Fix: Fix the named input and run the command again into a new out directory. Never edit a frozen file to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TBV_HISTORY
+
+A history could not be assembled or was refused: it fails the provenance gate, holds a drive path or a crew rules file, or its record is unreadable. A dropped session is counted by reason, never repaired.
+
+Fix: Read the drop reason. A provenance failure drops the session; a drive path means the source is not clean and must not be used.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TBV_SHAPE
+
+The request-shape or splice capture failed: the pinned Claude Code did not run or answer the stub provider, the version is wrong, the skill start took a degraded path, or the captured text holds a drive path, a crew rules file or the org rules' wording.
+
+Fix: Check the Claude Code version (2.1.312), the gstack checkout at the pin and the empty home. Never commit captured text; commit only its sha256.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TBV_REQUEST
+
+A request failed the structural validator or the closer byte check: an unpaired tool_use or tool_result, a thinking block, roles that do not alternate, a last message that is not the user's, too many cache breakpoints, a one-hour cache ttl, or a closer that does not match its pin. A size-only refusal drops the task instead.
+
+Fix: This is a harness failure: the item stops and nothing is scored. Fix the builder or the splice under a new post before the stage runs again.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_TBV_RUN
+
+A trust-but-verify item run stopped: a harness failure, an outage stop, a lease or ledger refusal, or a restart that could not reconcile the dead run's journal.
+
+Fix: Read the item's run record. A cap or outage stop is incomplete and is never retried to change a verdict; it goes to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_TBV_JUDGE
+
+A trust-but-verify judge or key run refused its input: the brief is not at its frozen sha256, a packet changed since it was written, the packet key sits inside the packets directory, or a reply file does not match its batch.
+
+Fix: Rebuild the packets into a new directory and run the judges again into a new out directory.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_TBV_CUSTODY
+
+A custody rule refused the run: held-out plaintext outside tmpfs, plaintext left by a dead run, a sealed checkpoint that will not unseal, or --dev-plaintext with held-out input.
+
+Fix: Run held-out work only with its plaintext root on /dev/shm and a seal command; delete leftover plaintext as the log says before anything else.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
