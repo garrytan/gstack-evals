@@ -6,16 +6,23 @@
 //      the ordered changes listed in ORDERED, each of which part 3 drives at the head;
 //   3. the amendment's and the build's own rules: the new end states, size drops against coverage, judge pricing by
 //      model and packet kind, the all-in check before every paid item, the leak exemption, held-out source B accrual,
-//      items 1 to 7 and 16, the underscore and fix-check 3 forms (the regression table), and one ledger lease per item.
+//      items 1 to 7 and 16, the underscore and fix-check 3 forms (the regression table), each family's history limit,
+//      the skill-start check, the proxy's reservations beside the rule's worst cases, tbv-author's worst case per task,
+//      and the driver, judge and key items end to end on stub upstreams through the real proxy and ledger.
 //   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY bun lanes/tbv/dryrun.ts <scratch dir>
 // It calls no model and needs no key; it refuses to start when a key is set.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { admitsSize, historyLimit, OVERHEAD_641D622 } from "./extract.ts";
 import { accrualClosed, devEligible, heldOutEligible, type PrRecord } from "./history/source-b.ts";
+import { worstOf } from "./judge.ts";
+import { AUDIT_MAX_TOKENS, KEY_MAX_TOKENS } from "./keys.ts";
 import { table } from "./regress.ts";
-import { capOf, doubleRead, endState, PAID_ITEMS, readingWorst, run as rule, type Attempt } from "./rule.ts";
+import { armSend, auditorSend, keyWriterSend } from "./routes.ts";
+import { capOf, doubleRead, endState, MAX_TOKENS, PAID_ITEMS, readingWorst, run as rule, type Attempt } from "./rule.ts";
+import { skillStartProblem } from "./splice.ts";
 import { PREREG_DIR, type Io } from "./types.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
@@ -27,6 +34,8 @@ export const ORDERED: Record<string, string> = {
 };
 
 type Any = Record<string, any>;
+/** The scorer's planning prices per million tokens (prereg section 14), as rule.ts's readingWorst takes them. */
+const PRICES = { opus: { in: 4, out: 20, cacheWrite: 5 }, sol: { in: 2, out: 10, cacheWrite: 2.5 }, particle: { in: 0.1, out: 1 } } as const;
 export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail: number }> {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
@@ -164,7 +173,7 @@ export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail:
   });
 
   await section("3c. Judge pricing by judge model and packet kind (item 14)", () => {
-    const prices = { opus: { in: 4, out: 20, cacheWrite: 5 }, sol: { in: 2, out: 10, cacheWrite: 2.5 }, particle: { in: 0.1, out: 1 } };
+    const prices = PRICES;
     const judgeMeasured = { "sol:first": 0.04, "sol:d2": 0.01, "sol:control": 0.03, "opus:first": 0.08, "opus:control": 0.06 };
     const item = { item: "tbv-dev-base", readings: [{ model: "opus", arm: "none", n: 10 }], packets: [{ judge: "sol", kind: "first", n: 10 }, { judge: "sol", kind: "d2", n: 10 }, { judge: "opus", kind: "first", n: 2 }, { judge: "opus", kind: "d2", n: 2 }] };
     const r = head("projection", { items: [item], measured: { "none:opus": 0.4 }, judgeMeasured, prices });
@@ -238,6 +247,46 @@ export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail:
     writeFileSync(join(out, "regression-table.md"), t.text + "\n");
     say("    " + (t.text.split("\n").at(-1) ?? ""));
     check("the regression table reads SUPERSET_AND_EXPECTED ok over every case", t.failing === 0 && /SUPERSET_AND_EXPECTED: ok/.test(t.text));
+  });
+
+  await section("3i. Each family's history limit at 641d622 (amendment item 12)", () => {
+    for (const [fam, o] of Object.entries(OVERHEAD_641D622)) say("    " + fam + ": overhead " + o + " tokens, history limit " + historyLimit(o) + " tokens");
+    check("ship's overhead over 40,000 lowers its history limit to 79,546, and a ship history admits at the limit and not one token over", historyLimit(OVERHEAD_641D622.ship) === 79_546 && admitsSize(79_546, OVERHEAD_641D622.ship) && !admitsSize(79_547, OVERHEAD_641D622.ship));
+    check("investigate and capy overheads are under 40,000, so their limit stays at 90,000", historyLimit(OVERHEAD_641D622.investigate) === 90_000 && historyLimit(OVERHEAD_641D622.capy) === 90_000 && admitsSize(90_000, OVERHEAD_641D622.investigate) && !admitsSize(90_001, OVERHEAD_641D622.capy));
+  });
+
+  await section("3j. Skill start at 641d622: gstack's own unattended block is kept, any other block or a degraded path is refused", () => {
+    const start = "SKILL_START_PROTO: 1\nGSTACK_INSTRUCTION_BEGIN: unattended-session\nend at the first pending item\nGSTACK_INSTRUCTION_END: unattended-session\n";
+    check("the unattended-session block gstack prints for an unattended session is part of the treatment and passes", skillStartProblem(start) === null);
+    check("any other instruction block is refused", (skillStartProblem(start + "GSTACK_INSTRUCTION_BEGIN: crew-rules\n") ?? "").includes("crew-rules"));
+    check("advice to run ./setup or /gstack-upgrade is a degraded path and is refused", skillStartProblem("SKILL_START_PROTO: 1\nrun ./setup first\n") !== null && skillStartProblem("SKILL_START_PROTO: 1\nUPGRADE_AVAILABLE 1.97\n") !== null);
+    check("a stdout with no SKILL_START_PROTO: 1 line is degraded and refused", skillStartProblem("hello\n") !== null);
+  });
+
+  await section("3k. Worst cases the proxy reserves beside the rule's (FROZEN finding 1), and tbv-author's worst case per task", () => {
+    const text = "x".repeat(3 * 130_000);
+    for (const m of ["opus", "sol", "particle"] as const) {
+      const req = armSend(m, { max_tokens: MAX_TOKENS, messages: [{ role: "user", content: [{ type: "text", text }] }] });
+      const proxy = worstOf(req, MAX_TOKENS) / 1e6;
+      const p = PRICES[m], rule1 = (130_000 * Math.max(p.in, p.cacheWrite ?? 0) + MAX_TOKENS * p.out) / 1e6;
+      say("    " + m + ": a 130,000-token first send (390,000 characters) reserves $" + proxy.toFixed(2) + " at the proxy; the rule's readingWorst prices that send at $" + rule1.toFixed(2) + " and the whole reading at $" + readingWorst({ inputTokens: 130_000, price: p }).toFixed(2));
+      check(m + ": the proxy's reservation for that send is at least the rule's price for it (admission stays the frozen roundAdmits on the rule's figures)", proxy >= rule1 - 1e-9);
+    }
+    const prompt = "x".repeat(3 * 130_000);
+    const writer = worstOf(keyWriterSend(prompt, KEY_MAX_TOKENS), KEY_MAX_TOKENS) / 1e6;
+    const audits = (["opus", "sol"] as const).map((j) => worstOf(auditorSend(j, prompt, AUDIT_MAX_TOKENS), AUDIT_MAX_TOKENS) / 1e6);
+    const perTask = 2 * (writer + audits[0]! + audits[1]!);
+    say("    tbv-author per task at a 130,000-token prompt: key writer $" + writer.toFixed(2) + " at " + KEY_MAX_TOKENS + " output tokens, auditors opus $" + audits[0]!.toFixed(2) + " and sol $" + audits[1]!.toFixed(2) + " at " + AUDIT_MAX_TOKENS + "; with one fresh retry each, $" + perTask.toFixed(2) + " a task");
+    check("tbv-author's worst case prices the key writer at 16,000 output tokens and each auditor at 8,000 (each above the same request at half its maximum)", KEY_MAX_TOKENS === 16_000 && AUDIT_MAX_TOKENS === 8_000 && writer > worstOf(keyWriterSend(prompt, 8_000), 8_000) / 1e6 && (["opus", "sol"] as const).every((j, i) => audits[i]! > worstOf(auditorSend(j, prompt, 4_000), 4_000) / 1e6));
+  });
+
+  await section("3l. One driver item, one judge item and one key item end to end on stub upstreams through the real proxy and ledger", () => {
+    const r = spawnSync("bun", ["test", "tests/tbv/drive.test.ts", "tests/tbv/judge.test.ts", "tests/tbv/keys.test.ts"], { cwd: ROOT, encoding: "utf8", env: KEYLESS, maxBuffer: 1 << 26 });
+    const o = r.stdout + r.stderr;
+    const count = (re: RegExp) => Number(re.exec(o)?.[1] ?? NaN);
+    say("    drive, judge and keys tests: " + count(/(\d+) pass/) + " pass, " + count(/(\d+) fail/) + " fail");
+    check("the driver's item runs (real sends, reservations and settlements on a temporary ledger) pass, release and the missing-record stop included", r.status === 0 && count(/(\d+) fail/) === 0 && o.includes("a send with no generation record (404) keeps its full reservation and stops the item"));
+    check("the judge item and the key item run through the real openItemRun, routes, proxy and ledger", o.includes("(pass) runJudges over a fake item run > integration") && o.includes("(pass) keys run > integration"));
   });
 
   say("\n## Leak check");
