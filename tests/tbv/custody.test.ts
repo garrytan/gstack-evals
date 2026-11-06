@@ -143,7 +143,7 @@ describe("held-out outputs (A16)", () => {
     expect(code(() => heldOutputs(a, ["out"], MOUNTS)!(join(d, "out", "k.json")))).toBe("E_TBV_CUSTODY");
     expect(unseal(UNSEAL, join(d, "sealed", "k.json.sealed"))).toBe('{"k":2}');
   });
-  test("each write refuses a sealed copy that appeared after open, so two runs opened on one --held cannot clobber each other", () => {
+  test("a write refuses a sealed copy that already exists when the write starts, even after the open-time check passed", () => {
     const d = tmp();
     mkdirSync(join(d, "out"));
     writeFileSync(join(d, "out", "k.json"), '{"k":1}');
