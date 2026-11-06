@@ -1,0 +1,52 @@
+SETTLE_START 2026-11-06T18:00:41.349Z
+CAPCOUNT_DONE 2026-11-06T18:00:42.174Z CAPCOUNT trials=72 before_table=0 after_table_not_allowed=0 unmapped=261 trials_without_table=0
+CAPTURE_TERM 2026-11-06T18:00:42.180Z rc=0
+CAPTURE_ALIVE no
+DRIVER_TERM 2026-11-06T18:00:45.188Z rc=0
+DRIVER_EXIT_SEEN 2026-11-06T18:00:46.199Z alive=no
+SIDECAR_TERM 2026-11-06T18:00:46.207Z rc=0
+SIDECAR_ALIVE no
+SETTLE_END
+STAGE_SETTLED item=g-none arm=none lease=g-none.0001.71e654 spent=$28.844138 unknown=$0.00 sessions=24 ended=completed
+STAGE_SETTLED item=g-pe arm=plan-eng-review:told lease=g-pe.0001.119680 spent=$200.244453 unknown=$0.00 sessions=24 ended=completed
+STAGE_SETTLED item=g-ap arm=autoplan:told lease=g-ap.0001.a5483c spent=$455.225669 unknown=$0.00 sessions=24 ended=completed
+{
+ "lease_id": "g-vm.0001.e9156d",
+ "item": "g-vm",
+ "host_hours": 19.063,
+ "rate": 0.3,
+ "spent_micros": 5718900,
+ "closed_at": "2026-11-06T18:02:51.854Z",
+ "close": {
+  "schema": 1,
+  "kind": "close",
+  "item": "g-vm",
+  "seq": 1,
+  "lease_id": "g-vm.0001.e9156d",
+  "how": "settled",
+  "spent_micros": 5718900,
+  "unknown_micros": 0,
+  "unknown_calls": 0,
+  "usage": {
+   "input": 0,
+   "output": 0,
+   "reasoning": 0,
+   "cache_read": 0,
+   "cache_write": 0
+  },
+  "closed_at": "2026-11-06T18:02:51.850Z"
+ },
+ "repair": "idempotency key = meter id (template's bare task key collided with g-tg)"
+}
+22 | try {
+23 |   const lease = openLease(record, local, { item: ITEM, run_id: RUN, ttl_ms: 3600_000, warn, requireAdmission: rigAdmission() });
+24 |   const micros = Math.round(HOURS * RATE * 1e6);
+25 |   const cell = { run_id: RUN, arm: "host", task: TASK, model: "ubicloud-standard-8", trial: 1, attempt: 1, meter_id: ITEM + "-" + TASK };
+26 |   const r = await local.reserve({ idempotency_key: TASK, lease_id: lease.lease_id, cell, max_micros: micros });
+27 |   if (!r.ok) throw new Error(r.code + " " + r.message);
+                            ^
+error: E_RESERVE_CONFLICT idempotency key host-t999 holds $21.60 on lease g-tg.0001.38ab0e for {"arm":"host","attempt":1,"meter_id":"tg-host-t999","model":"ubicloud-standard-8","run_id":"tg-slice","task":"host-t999","trial":1}; this reserve asked for $5.7189 on lease g-vm.0001.e9156d for {"arm":"host","attempt":1,"meter_id":"g-vm-host-t999","model":"ubicloud-standard-8","run_id":"g-admission-wave1-host","task":"host-t999","trial":1}
+      at hours-lease.ts:27:24
+
+Bun v1.4.4 (Linux x64)
+DELETED 2026-11-06T18:03:49Z test_ne=passed
