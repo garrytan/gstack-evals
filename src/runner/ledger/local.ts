@@ -234,15 +234,15 @@ export class LocalLedger implements ReservationLedger {
    * Releases at $0 one send of an open lease that the provider's own record shows was not billed (tbv amendment 1 item 13).
    * The send is found by its idempotency key in the proxy's journal, and it must have a final outcome with no usage there:
    * unknown, or a 5xx charged at its reservation. A reserved row (a send in flight) is never released. record is the
-   * provider's generation record as returned, which must name generation_id and a total_cost of 0; its sha256 is kept in
+   * provider's generation record as returned, which must name generation_id, a total_cost of 0 and token counts of 0; its sha256 is kept in
    * releases with the row's prior outcome, so a later settle of that outcome (reconcileJournal) is accepted as already done.
    */
   releaseUnbilled(r: { lease_id: string; idempotency_key: string; journal: string; generation_id: string; record: string }): LedgerReply {
-    let data: { id?: unknown; total_cost?: unknown } | undefined;
+    let data: { id?: unknown; total_cost?: unknown; tokens_prompt?: unknown; tokens_completion?: unknown } | undefined;
     try {
       data = (JSON.parse(r.record) as { data?: typeof data })?.data;
     } catch {}
-    if (data?.id !== r.generation_id || data?.total_cost !== 0) return refuse("E_USAGE", "the generation record for " + r.idempotency_key + " does not show " + r.generation_id + " at a total_cost of 0, so its reservation is kept");
+    if (data?.id !== r.generation_id || data?.total_cost !== 0 || data?.tokens_prompt !== 0 || data?.tokens_completion !== 0) return refuse("E_USAGE", "the generation record for " + r.idempotency_key + " does not show " + r.generation_id + " at a total_cost of 0 with 0 prompt and completion tokens, so its reservation is kept");
     let rid: string | undefined;
     let outcome: { status: number | null; outcome: CallOutcome } | undefined;
     let text: string;

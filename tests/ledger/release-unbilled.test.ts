@@ -42,7 +42,7 @@ function setup() {
     }
     return rid;
   };
-  const record = (id: string, cost: number) => JSON.stringify({ data: { id, total_cost: cost } });
+  const record = (id: string, cost: number, tokens: Record<string, unknown> = { tokens_prompt: 0, tokens_completion: 0 }) => JSON.stringify({ data: { id, total_cost: cost, ...tokens } });
   const release = (key: string, id: string, rec: string) => ledger.releaseUnbilled({ lease_id: LEASE, idempotency_key: key, journal, generation_id: id, record: rec });
   const row = (rid: string) => new Database(path, { readonly: true }).query("SELECT state, spent_micros FROM reservations WHERE reservation_id = ?").get(rid) as { state: string; spent_micros: number | null };
   return { dir, path, ledger, journal, send, record, release, row };
@@ -94,6 +94,17 @@ describe("releaseUnbilled", () => {
     ] as const) expect(t.release(key, id, rec).ok).toBe(false);
     expect(t.row(billed)).toEqual({ state: "settled", spent_micros: 6_000 });
     expect(t.row(unknown)).toEqual({ state: "unknown", spent_micros: null });
+  });
+
+  test("a total_cost of 0 with nonzero or missing token counts keeps its reservation; zero token counts release it", async () => {
+    const t = setup();
+    const rid = await t.send("m1:1:1", { kind: "unknown" });
+    expect(t.release("m1:1:1", "gen-a", t.record("gen-a", 0, { tokens_prompt: 900, tokens_completion: 0 })).ok).toBe(false);
+    expect(t.release("m1:1:1", "gen-a", t.record("gen-a", 0, { tokens_prompt: 0, tokens_completion: 120 })).ok).toBe(false);
+    expect(t.release("m1:1:1", "gen-a", t.record("gen-a", 0, {})).ok).toBe(false);
+    expect(t.row(rid)).toEqual({ state: "unknown", spent_micros: null });
+    expect(t.release("m1:1:1", "gen-a", t.record("gen-a", 0)).ok).toBe(true);
+    expect(t.row(rid)).toEqual({ state: "settled", spent_micros: 0 });
   });
 
   test("a closed lease releases nothing", async () => {
