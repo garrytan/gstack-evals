@@ -125,6 +125,7 @@ Keep the local ledger at its default under `~/.capy/work/gstack-evals/`. A recor
 
 - `reserve({ idempotency_key, lease_id, cell, max_micros })` holds the call's real maximum. The same key with the same request returns the first reservation. With a different request it is refused with E_RESERVE_CONFLICT.
 - `settle(reservation_id, outcome)` records the cost, or `unknown`, which keeps the full charge. The same outcome again returns the same reservation. A different one is refused with E_SETTLE_CONFLICT.
+- `releaseUnbilled({ lease_id, idempotency_key, journal, generation_id, record })` settles one send on an open lease at $0 when the provider's own record shows it was not billed. The OpenRouter generation record must name `generation_id` with a `total_cost` of 0 and 0 prompt and completion tokens, and the proxy journal must show the send ended with no usage: `unknown`, or a 5xx charged at its reservation. A send still in flight is never released. The record's sha256 and the prior outcome are kept, so a later settle of that prior outcome returns the released reservation. The tbv driver calls it ([lanes/tbv/README.md](../lanes/tbv/README.md)).
 
 `openLease` takes `requireAdmission`, the seam U20 fills, and a `warn` callback for RIG_UNPROVEN.
 
