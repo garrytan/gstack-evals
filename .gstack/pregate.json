@@ -12,6 +12,19 @@
     }
   ],
   "dependencies": {
+    "lanes/tbv/adapt.ts": [
+      "tests/tbv/dryrun.test.ts",
+      "tests/tbv/regression.test.ts"
+    ],
+    "tests/tbv/drive-child.ts": [
+      "tests/tbv/drive.test.ts"
+    ],
+    "tests/tbv/fixtures/sdk_trial.py": [
+      "tests/tbv/source-a.test.ts"
+    ],
+    "tests/tbv/fixtures/stub-claude.ts": [
+      "tests/tbv/shape.test.ts"
+    ],
     "bin/gstack-evals": [
       "tests/cli.test.ts",
       "tests/outcome-skills/cli.test.ts"
