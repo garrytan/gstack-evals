@@ -1,0 +1,108 @@
+# tbv scorer pin: the cap formula's output
+
+## Input (caps.json, section 14's projected column)
+{
+ "items": [
+  {
+   "item": "tbv-author",
+   "projected": 195,
+   "cap": 229
+  },
+  {
+   "item": "tbv-hr",
+   "projected": 40.48,
+   "models": [
+    "opus",
+    "sol",
+    "particle"
+   ]
+  },
+  {
+   "item": "tbv-dev-base",
+   "projected": 210,
+   "models": [
+    "opus",
+    "sol",
+    "particle"
+   ]
+  },
+  {
+   "item": "tbv-climb-1",
+   "projected": 68,
+   "models": [
+    "opus"
+   ]
+  },
+  {
+   "item": "tbv-climb-2",
+   "projected": 68,
+   "models": [
+    "opus"
+   ]
+  },
+  {
+   "item": "tbv-climb-3",
+   "projected": 68,
+   "models": [
+    "opus"
+   ]
+  },
+  {
+   "item": "tbv-held",
+   "projected": 675,
+   "models": [
+    "opus",
+    "sol",
+    "particle"
+   ]
+  },
+  {
+   "item": "runner-host",
+   "projected": 15,
+   "cap": 20
+  },
+  {
+   "item": "tbv-held-p3",
+   "projected": 106,
+   "models": [
+    "opus"
+   ],
+   "optional": true
+  }
+ ],
+ "prices": {
+  "opus": {
+   "in": 4,
+   "out": 20,
+   "cacheWrite": 5
+  },
+  "sol": {
+   "in": 2,
+   "out": 10,
+   "cacheWrite": 2.5
+  },
+  "particle": {
+   "in": 0.1,
+   "out": 1
+  }
+ },
+ "crewReserve": 300
+}
+## bin/gstack-evals tbv caps caps.json
+tbv-author: projected $195.00, cap $229.00 (set directly: not a reading item)
+tbv-hr: projected $40.48, round worst case $12.17, cap $59.00
+tbv-dev-base: projected $210.00, round worst case $12.17, cap $254.00
+tbv-climb-1: projected $68.00, round worst case $12.17, cap $91.00
+tbv-climb-2: projected $68.00, round worst case $12.17, cap $91.00
+tbv-climb-3: projected $68.00, round worst case $12.17, cap $91.00
+tbv-held: projected $675.00, round worst case $12.17, cap $789.00
+runner-host: projected $15.00, cap $20.00 (set directly: not a reading item)
+tbv-held-p3: projected $106.00, round worst case $12.17, cap $135.00 (only if the all-in check passes with it)
+paid at caps $1624.00 (projected $1339.48), crew reserve $300.00, all-in at caps $1924.00; with the optional lines $2059.00
+Verdict: UNDER $2000.00 at caps; the optional lines don't fit at caps, so they run only when the all-in check on actual spend passes
+exit 0
+
+## Per-reading worst cases (rule.ts readingWorst)
+opus readingWorst $3.0430 round(4) $12.1720
+sol readingWorst $1.5215 round(4) $6.0860
+particle readingWorst $0.0705 round(4) $0.2818

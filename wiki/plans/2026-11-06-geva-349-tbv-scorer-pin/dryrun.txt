@@ -1,0 +1,118 @@
+# env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u UBICLOUD_API_KEY bin/gstack-evals tbv dryrun <scratch dir>
+# run at cecb516ccf5ffb73e6862fb158b01c7b6bd5896b on 2026-11-06 with every key unset; 33 s; the last line is the exit code
+tbv dry run at the head: cecb516ccf5ffb73e6862fb158b01c7b6bd5896b
+
+## 1. The frozen bundle's own dry run, this checkout as the scorer
+    PASS 150, FAIL 0
+PASS the frozen dry run exits 0 and prints PASS 150, FAIL 0
+PASS its transcript matches the frozen dryrun.txt line for line, apart from the scorer HEAD line
+
+## 2. The 150 frozen checks against the head rule, through adapt.ts
+    PASS 149, FAIL 1
+    ordered change: "the same copies relabelled to the other family are refused too: one Opus none reading per task and pass" (item 1 refuses the copy first, with E_USAGE (a reading's family must match its task); part 3 item 1)
+PASS all 150 frozen checks ran at the head
+PASS every frozen check passes at the head except the listed ordered changes (1 of 1 listed)
+PASS the ledger section ran at the head: one lease opened and settled per frozen item, and a second run refused
+
+## 3a. End states the amendment adds (items 12, 13 and 17)
+    max_tokens on the report, D1 and D2: scored, sends 3, drill {"d1":"ok","d2":"ok"}
+PASS a max_tokens reply with text on the report turn scores with one send and no follow-up; D1 and D2 are read as returned
+    an empty report, then max_tokens on the follow-up: scored, sends 2
+PASS an empty report takes the one follow-up, and a follow-up that stops at max_tokens scores
+    an empty report and an empty follow-up: no-report, sends 2
+PASS a max_tokens reply with no text is sent as empty: report and follow-up empty is no-report
+    three truncated streams: gap, sends 3
+PASS a stream with no final message is still a transport failure: two retries, then a gap
+    a size-only validator refusal: size-drop, sends 0
+PASS a size-only refusal is a size drop with no send (item 12)
+PASS any other validator failure is still a harness failure that stops the item
+    two 5xx, then the driver's outage stop: outage, sends 2
+PASS an outage stop is class outage, incomplete and never retried (item 13)
+
+## 3b. Size drops and max_tokens replies against coverage (items 12 and 17)
+    Stage 1 headroom: 20 tasks, Opus none planned 60, judged 57, missing or unjudged 3
+    size drops: 1 tasks; outage stops: 0 readings; max_tokens replies: none:opus:d1 1, none:opus:report 1
+PASS the base stage 1 file reads HEADROOM
+PASS a size-dropped task's 3 readings count as missing
+PASS the size drop and each max_tokens reply print per arm, model and turn
+
+## 3c. Judge pricing by judge model and packet kind (item 14)
+    tbv-dev-base: projected $4.68, round worst case $12.17, cap $18.00
+PASS each packet takes its judge model and kind's measured cost, the double read at the other judge's, and opus:d2 (unmetered) the costliest metered d2 path: projected $4.68
+PASS a packet kind stage 1 never metered is refused
+
+## 3d. The all-in check before every paid item, on the crew's actual credits (item 11)
+PASS tbv-author: starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050
+PASS tbv-hr: starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050
+PASS tbv-dev-base: starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050
+PASS tbv-climb-1: starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050
+PASS tbv-climb-2: starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050
+PASS tbv-climb-3: starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050
+PASS tbv-held-p3: starts at $750 all-in with the crew term printed against the $300 reserve, and does not start at $2,050
+PASS an item that is not a paid item is refused
+
+## 3e. The leak check's exemption for names gstack holds at C (item 15)
+    leak: 0 8-word runs shared with task material (after removing runs already in gstack at C), 0 task names (1 exempt: gstack at C holds them whole)
+PASS a name gstack at C holds whole is exempt, and the diff reads CLEAN
+PASS a held name gstack at C does not hold still hits
+PASS gstack at C holding only a longer name exempts nothing
+
+## 3f. Held-out source B accrual (amendment section 2)
+PASS a pull request opened and merged after P with every commit after P qualifies
+PASS one opened one second before P, or at P, is excluded
+PASS a rebased commit with an old author date and a new committer date is excluded
+PASS a pull request whose lineage cluster holds one opened before P is excluded
+PASS accrual stays open at 49 qualifiers on day 20 and closes at the 50th
+PASS accrual closes at day 21 (and so at day 22), not one second before
+PASS dev source B is merged strictly before the scorer pin post
+
+## 3g. Build fixes, items 1 to 7 and 16
+PASS item 1: a copy relabelled to the other family is refused (E_USAGE, family must match its task)
+PASS item 2: exposure counts every reading with report text, not only matched rows (current 16/19 = 0.842)
+PASS item 3: a sampled double read never attempted reads JUDGE FAIL
+    Agreement: double-read sample 20 readings (second read never attempted 0, unjudged 1); double-read facts 76; both 38, first only 0, second only 0, neither 38; positive agreement 1.000, raw 1.000, kappa 1.000
+PASS item 3 as ruled: a second read attempted and unjudged leaves the sample, prints as a count, and keeps the verdict
+PASS item 4: a task dropped from the readings and the plan but held by the split manifest is refused
+PASS item 5: a reading judged by the wrong judge is refused
+PASS item 5: a second read by the same judge is refused
+PASS item 6: a copy given another pass number is refused by its shared response id
+PASS item 7: list handling reads long-stratum tasks only (a short task's list answer moves nothing)
+PASS item 16: review-family readings enter the skill layer and print per family
+
+## 3h. The underscore gap and fix-check 3's forms (the regression table)
+    SUPERSET_AND_EXPECTED: ok (81 cases; the head blocks, hits or refuses wherever the frozen rule does, except rows marked ordered change, and matches the expected column)
+PASS the regression table reads SUPERSET_AND_EXPECTED ok over every case
+
+## 3i. Each family's history limit at 641d622 (amendment item 12)
+    investigate: overhead 35939 tokens, history limit 90000 tokens
+    ship: overhead 50454 tokens, history limit 79546 tokens
+    capy: overhead 23725 tokens, history limit 90000 tokens
+PASS ship's overhead over 40,000 lowers its history limit to 79,546, and a ship history admits at the limit and not one token over
+PASS investigate and capy overheads are under 40,000, so their limit stays at 90,000
+
+## 3j. Skill start at 641d622: gstack's own unattended block is kept, any other block or a degraded path is refused
+PASS the unattended-session block gstack prints for an unattended session is part of the treatment and passes
+PASS any other instruction block is refused
+PASS advice to run ./setup or /gstack-upgrade is a degraded path and is refused
+PASS a stdout with no SKILL_START_PROTO: 1 line is degraded and refused
+
+## 3k. Worst cases the proxy reserves beside the rule's (FROZEN finding 1), and tbv-author's worst case per task
+    opus: a 130,000-token first send (390,000 characters) reserves $1.64 at the proxy; the rule's readingWorst prices that send at $0.73 and the whole reading at $3.04
+PASS opus: the proxy's reservation for that send is at least the rule's price for it (admission stays the frozen roundAdmits on the rule's figures)
+    sol: a 130,000-token first send (390,000 characters) reserves $1.62 at the proxy; the rule's readingWorst prices that send at $0.36 and the whole reading at $1.52
+PASS sol: the proxy's reservation for that send is at least the rule's price for it (admission stays the frozen roundAdmits on the rule's figures)
+    particle: a 130,000-token first send (390,000 characters) reserves $0.04 at the proxy; the rule's readingWorst prices that send at $0.02 and the whole reading at $0.07
+PASS particle: the proxy's reservation for that send is at least the rule's price for it (admission stays the frozen roundAdmits on the rule's figures)
+    tbv-author per task at a 130,000-token prompt: key writer $0.94 at 16000 output tokens, auditors opus $1.72 and sol $2.07 at 8000; with one fresh retry each, $9.46 a task
+PASS tbv-author's worst case prices the key writer at 16,000 output tokens and each auditor at 8,000 (each above the same request at half its maximum)
+
+## 3l. One driver item, one judge item and one key item end to end on stub upstreams through the real proxy and ledger
+    drive, judge and keys tests: 120 pass, 0 fail
+PASS the driver's item runs (real sends, reservations and settlements on a temporary ledger) pass, release and the missing-record stop included
+PASS the judge item and the key item run through the real openItemRun, routes, proxy and ledger
+
+## Leak check
+PASS no part prints a key-shaped value
+
+PASS 59, FAIL 0
+exit 0
