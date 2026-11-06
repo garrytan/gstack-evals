@@ -81,12 +81,13 @@ describe("audits and drops", () => {
   test("a fact either auditor rejects drops; the rest keep their ids", () => {
     const r = settleKey(KEY, [{ auditor: "opus", rejected: [], missing: [], responseIds: ["a"] }, { auditor: "sol", rejected: [], missing: [], responseIds: ["b"] }], false);
     expect(r.drop).toBeNull();
-    expect(r.key.audits).toEqual([{ auditor: "opus", rejected: [], responseIds: ["a"] }, { auditor: "sol", rejected: [], responseIds: ["b"] }]);
+    expect(r.key.audits).toEqual([{ auditor: "opus", rejected: [], missing: [], responseIds: ["a"] }, { auditor: "sol", rejected: [], missing: [], responseIds: ["b"] }]);
     const four = { ...KEY, facts: [...KEY.facts, { ...KEY.facts[0]!, id: "F4" }] };
     const s = settleKey(four, [{ auditor: "opus", rejected: ["F2"], missing: [], responseIds: [] }, { auditor: "sol", rejected: [], missing: ["x"], responseIds: [] }], false);
     expect(s.drop).toBeNull();
     expect(s.key.facts.map((f) => f.id)).toEqual(["F1", "F3", "F4"]);
     expect(s.key.dropped).toEqual(["F2"]);
+    expect(s.key.audits.map((a) => a.missing)).toEqual([[], ["x"]]);
   });
   test("under 3 facts left drops the task", () => {
     const r = settleKey(KEY, [{ auditor: "opus", rejected: ["F1"], missing: [], responseIds: [] }, { auditor: "sol", rejected: ["F3"], missing: [], responseIds: [] }], false);

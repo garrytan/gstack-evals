@@ -260,8 +260,8 @@ export interface Key {
   traps: KeyTrap[];
   list: Array<{ name: string; state: string }> | null;
   digest: string;
-  /** Fact ids each auditor rejected, and the ids dropped for it. */
-  audits: Array<{ auditor: Judge; rejected: string[]; responseIds: string[] }>;
+  /** Fact ids each auditor rejected, what each found material and missing from the digest, and the ids dropped for it. */
+  audits: Array<{ auditor: Judge; rejected: string[]; missing: string[]; responseIds: string[] }>;
   dropped: string[];
 }
 

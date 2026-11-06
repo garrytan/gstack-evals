@@ -111,7 +111,7 @@ export function settleKey(key: Key, audits: Audit[], clean: boolean): { key: Key
   const out: Key = {
     ...key,
     facts: key.facts.filter((f) => !rejected.has(f.id)),
-    audits: audits.map((a) => ({ auditor: a.auditor, rejected: a.rejected, responseIds: a.responseIds })),
+    audits: audits.map((a) => ({ auditor: a.auditor, rejected: a.rejected, missing: a.missing, responseIds: a.responseIds })),
     dropped: key.facts.filter((f) => rejected.has(f.id)).map((f) => f.id),
   };
   if (clean) return { key: out, drop: audits.some((a) => a.missing.length) ? "an auditor found something material missing from a clean task's key" : null };
