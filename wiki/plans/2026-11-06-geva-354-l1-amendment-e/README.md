@@ -17,7 +17,7 @@ links:
 attachments:
   - 273113fa1756e1e88b488cf73e9e6f9a96e0b5874535fe59907e1af1eae3c454  amendment-c-dryrun.txt
   - ebfedd27905eaa7a797c2ecf5b09328196502c7cfd1bd54b21bcda8860b2b1f8  ceiling-plan.json
-  - 700c9ce29b5798b433fe653312e41e9eff8fa6e1ab9d9d8aa338179efae2b4dc  dryrun.sh.txt
+  - 2e82441e5cf5ea0f59bdaa2e0e36b6e2c04926d421b68c6166156a3db41d4380  dryrun.sh.txt
   - c4e09b1f2330f6ab11021e78b90d3dcf085c2255135bef2f39c832466a26a208  dryrun.txt
   - 1bb953df5ffe690ecde14ac1bc8351a89a15f62fabc16767825892986af51955  mdd.py.txt
   - bba38c4c4a427eaeb3ab30ddda47caebe8fa24515d8dc44c67839f8c3f053bef  mdd.txt
@@ -164,7 +164,7 @@ Under quick/laneb, only these files, the two READMEs and five test files changed
 
 - [amendment-c-dryrun.txt](amendment-c-dryrun.txt): Amendment C's dry run rerun at the build, sha256 273113fa1756e1e88b488cf73e9e6f9a96e0b5874535fe59907e1af1eae3c454.
 - [ceiling-plan.json](ceiling-plan.json): the ceiling plan at the $3,300 line: Opus done, Sol then particle-1 planned at their caps, each after the one before, sha256 ebfedd27905eaa7a797c2ecf5b09328196502c7cfd1bd54b21bcda8860b2b1f8.
-- [dryrun.sh.txt](dryrun.sh.txt): the dry run, sha256 700c9ce29b5798b433fe653312e41e9eff8fa6e1ab9d9d8aa338179efae2b4dc.
+- [dryrun.sh.txt](dryrun.sh.txt): the dry run, sha256 2e82441e5cf5ea0f59bdaa2e0e36b6e2c04926d421b68c6166156a3db41d4380.
 - [dryrun.txt](dryrun.txt): its whole output at the build, sha256 c4e09b1f2330f6ab11021e78b90d3dcf085c2255135bef2f39c832466a26a208.
 - [mdd.py.txt](mdd.py.txt): the off-u contrast's MDD over the merged power.py's model, one-sided for a gain, sha256 1bb953df5ffe690ecde14ac1bc8351a89a15f62fabc16767825892986af51955.
 - [mdd.txt](mdd.txt): its output, sha256 bba38c4c4a427eaeb3ab30ddda47caebe8fa24515d8dc44c67839f8c3f053bef.
