@@ -124,6 +124,8 @@ function existing(paths: string[], flag: string, mounts: string) {
   return paths.map((p) => {
     const at = place(p, mounts);
     if (!at.exists) fail("E_TBV_CUSTODY", "--" + flag + " " + p + " does not exist");
+    const st = (() => { try { return statSync(at.real); } catch (e) { return fail("E_TBV_CUSTODY", "--" + flag + " " + p + " cannot be read (" + errno(e) + ")"); } })();
+    if (!st.isFile() && !st.isDirectory()) fail("E_TBV_CUSTODY", "--" + flag + " " + p + " is not a regular file or a directory; a socket, FIFO or device lets a confined command talk to the host through a read-only bind, so nothing ran");
     return { path: resolve(p), ...at };
   });
 }
@@ -137,6 +139,8 @@ export interface HeldStep extends Docker {
   cmd: string[];
   /** Test hook: extra writable binds, which the probe must refuse. */
   extraBinds?: string[];
+  /** Test hook: extra read-only binds that skip the host checks, so the probe's own socket and FIFO refusal is tested. */
+  roBinds?: string[];
 }
 
 /** held-step: checks, then probe, command, probe and seal containers. Returns 0, or throws a TbvError. */
@@ -162,7 +166,7 @@ export function heldStep(o: HeldStep): number {
   mkdirSync(join(o.work, STEP), { mode: 0o700 });
   const work = w.real;
   const reads = [...inputs, ...ro].map((p) => ({ src: p.real, rw: false }));
-  const extra = (o.extraBinds ?? []).map((src) => ({ src, rw: true }));
+  const extra = [...(o.extraBinds ?? []).map((src) => ({ src, rw: true })), ...(o.roBinds ?? []).map((src) => ({ src, rw: false }))];
   try {
     probe(d, [...reads, ...extra, { src: work, rw: true }], work);
   } catch (e) {
@@ -321,7 +325,8 @@ function unsealAll(work: string, prefix: string, cmd: string, froms: string[]) {
  * die with it, so both are skipped. Then any mount mountinfo lists rw, other than the allowed directory and docker's own
  * /proc, /sys and /dev mounts, refuses; and a walk of everything the container sees (all but /proc, /sys, /dev/pts and
  * /dev/mqueue) refuses any socket or FIFO, which a read-only bind still lets a command talk through, and any directory it
- * can enter but not list. */
+ * can enter but not list. A socket or FIFO bound as a mount point itself shows as docker's placeholder file to readdir, so
+ * each mount point outside the kernel set is also stat'ed. */
 function probeInside(allowed: string) {
   const unescape = (s: string) => s.replace(/\\([0-7]{3})/g, (_, o: string) => String.fromCharCode(parseInt(o, 8)));
   const table = readFileSync("/proc/self/mountinfo", "utf8").trim().split("\n").map((l) => l.split(" ")).map((f) => ({ at: unescape(f[4]!), type: f[f.indexOf("-") + 1]! }));
@@ -345,7 +350,12 @@ function probeInside(allowed: string) {
   const kernel = (p: string) => p === "/proc" || p.startsWith("/proc/") || p === "/sys" || p.startsWith("/sys/") || p === "/dev" || p === "/dev/pts" || p === "/dev/mqueue";
   for (const m of readFileSync("/proc/self/mountinfo", "utf8").trim().split("\n").map((l) => l.split(" "))) {
     const at = unescape(m[4]!);
-    if (m[5]!.split(",").includes("rw") && !mine(at) && !kernel(at)) bad.push("rw mount " + at);
+    if (mine(at) || kernel(at)) continue;
+    if (m[5]!.split(",").includes("rw")) bad.push("rw mount " + at);
+    let st: ReturnType<typeof statSync>;
+    try { st = statSync(at); } catch { continue; }
+    if (st.isSocket()) bad.push("socket " + at);
+    else if (st.isFIFO()) bad.push("fifo " + at);
   }
   const skip = new Set(["/proc", "/sys", "/dev/pts", "/dev/mqueue"]);
   const walk = (dir: string) => {

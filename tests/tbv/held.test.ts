@@ -300,6 +300,18 @@ describe("review fixes: placement, docker checks and parsing (no container)", ()
     expect(existsSync(work)).toBe(true);
   });
 
+  test("an --input, --ro or --from that is a socket or a FIFO refuses before any container starts", () => {
+    const d = shm(), fifo = join(d, "f.fifo"), sock = join(d, "s.sock");
+    expect(spawnSync("mkfifo", [fifo]).status).toBe(0);
+    expect(spawnSync("python3", ["-c", "import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])", sock]).status).toBe(0);
+    const typed = (inputs: string[], ro: string[]) => code(() => heldStep({ work: join(shm(), "w"), held: join(disk(), "sealed"), sealCmd: SEAL, inputs, ro, cmd: ["true"], docker: "/nonexistent/docker", io: io().io }));
+    for (const p of [fifo, sock]) {
+      expect(typed([p], [])).toMatch(/^E_TBV_CUSTODY --input .* is not a regular file or a directory/);
+      expect(typed([], [p])).toMatch(/^E_TBV_CUSTODY --ro .* is not a regular file or a directory/);
+      expect(code(() => heldUnseal({ work: join(shm(), "w"), froms: [p], prefix: "reading-", unsealCmd: "cat", ro: [], docker: "/nonexistent/docker", io: io().io }))).toMatch(/^E_TBV_CUSTODY --from .* is not a regular file or a directory/);
+    }
+  });
+
   test("the command line refuses unknown and repeated flags, a missing flag or command, and a command on held-unseal", async () => {
     const usage = async (argv: string[]) => { try { await run(argv, io().io); return "no error"; } catch (e) { return e instanceof TbvError ? e.code + " " + e.message : "thrown " + String(e); } };
     expect(await usage(["held-step", "--bogus", "x"])).toMatch(/^E_USAGE unknown flag/);
@@ -326,6 +338,22 @@ describe.skipIf(!DOCKER)("review fixes (docker)", () => {
       const work = join(shm(), "w");
       const r = code(() => heldStep({ work, held: join(disk(), "sealed"), sealCmd: SEAL, inputs: [], ro: [dir], cmd: ["sh", "-c", 'touch "$0/ran"', work], io: io().io }));
       expect(r).toMatch(new RegExp("^E_TBV_CUSTODY .*probe.*" + kind));
+      expect(existsSync(join(work, "ran"))).toBe(false);
+    }
+  }, T);
+
+  test("a socket or a FIFO bound as the path itself refuses before the command runs: on the host as --input or --ro, and at the probe for a bind past the host checks", () => {
+    const d = shm(), fifo = join(d, "f.fifo"), sock = join(d, "s.sock");
+    expect(spawnSync("mkfifo", [fifo]).status).toBe(0);
+    expect(spawnSync("python3", ["-c", "import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])", sock]).status).toBe(0);
+    for (const [p, kind] of [[fifo, "fifo"], [sock, "socket"]] as const) {
+      for (const [inputs, ro] of [[[p], []], [[], [p]]] as [string[], string[]][]) {
+        const work = join(shm(), "w");
+        expect(code(() => heldStep({ work, held: join(disk(), "sealed"), sealCmd: SEAL, inputs, ro, cmd: ["sh", "-c", 'touch "$0/ran"', work], io: io().io }))).toMatch(/^E_TBV_CUSTODY --(input|ro) .* is not a regular file or a directory/);
+        expect(existsSync(join(work, "ran"))).toBe(false);
+      }
+      const work = join(shm(), "w");
+      expect(code(() => heldStep({ work, held: join(disk(), "sealed"), sealCmd: SEAL, inputs: [], ro: [], cmd: ["sh", "-c", 'touch "$0/ran"', work], io: io().io, roBinds: [p] }))).toMatch(new RegExp("^E_TBV_CUSTODY .*probe.*" + kind + " " + p));
       expect(existsSync(join(work, "ran"))).toBe(false);
     }
   }, T);
