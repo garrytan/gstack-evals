@@ -195,7 +195,7 @@ export interface Meter {
   largest_prompt: number | null;
   /** The most request bytes per reported prompt token over the calls that reported usage, or null when none did. */
   bytes_per_token: number | null;
-  /** The cache-write modes the priced requests asked for (priceRequest's cacheWrite: none, 5m or 1h), sorted and distinct. */
+  /** The cache-write modes the priced requests asked for (priceRequest's cacheWrite), distinct, in the order none, 5m, 1h that the scorer's row contract reads. */
   cache_write: string[];
 }
 
@@ -544,7 +544,7 @@ export class MeteringProxy {
     }
     const maxMicros = reservationMicros(price);
     const meter = this.meter(slot);
-    if (!meter.cache_write.includes(price.cacheWrite)) meter.cache_write = [...meter.cache_write, price.cacheWrite].sort();
+    if (!meter.cache_write.includes(price.cacheWrite)) meter.cache_write = (["none", "5m", "1h"] as const).filter((m) => m === price.cacheWrite || meter.cache_write.includes(m));
     ctx.bytes = Buffer.byteLength(outBody);
     const call = ++slot.calls;
     const sleep = o.sleep ?? Bun.sleep;

@@ -178,6 +178,11 @@ describe("section 3.5 and carried note G: the MDD from stage2-sizing.txt's grid"
 });
 
 describe("carried notes F, I and the secondaries", () => {
+  test("the meter's cache-write modes in the proxy's order (none, 5m, 1h) pass the row contract, and any other order breaks it on meter", () => {
+    const ok = run("projection", proj({ meter: { "standalone:opus": { cache_write: ["none", "5m"] } } }));
+    expect([ok.err, line(ok.out, "Projection: ")?.startsWith("Projection: PASS")]).toEqual(["", true]);
+    expect(run("projection", proj({ meter: { "standalone:opus": { cache_write: ["5m", "none"] } } })).err).toStartWith("E_USAGE readings row breaks the row contract on meter;");
+  });
   test("F and I: projection prints each smoke session's peak in-flight reservation and each smoke item's E_ALLOWANCE stops", () => {
     const r = run("projection", proj({ stop: ["enforced:sol"], meter: { "standalone:opus": { peak_inflight_usd: 3.61, peak_inflight_calls: 2 } } }));
     expect(line(r.out, "  smoke ceo-o-sm2-opus-p: ")).toBe("  smoke ceo-o-sm2-opus-p: peak in-flight reservation $3.61 (2 calls) on c0, $3.61 (2 calls) on c1; largest prompt 60000 on c0, 60001 on c1; E_ALLOWANCE stops 0 of 2 (decides nothing)");

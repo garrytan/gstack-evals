@@ -1214,7 +1214,7 @@ describe("the per-session meter record (the CEO stage 2 amendment, section 5 and
     expect(meter.largest_prompt).toBe(175);
     const bytes = t.calls.map(c => Buffer.byteLength(JSON.stringify(c.body)));
     expect(meter.bytes_per_token).toBeCloseTo(Math.max(bytes[0]! / 175, bytes[1]! / 10, bytes[2]! / 10), 9);
-    expect(meter.cache_write).toEqual(["1h", "none"]);
+    expect(meter.cache_write).toEqual(["none", "1h"]);
   });
   test("a meter whose calls reported no usage keeps null prompt figures, and a refused call reserves nothing", async () => {
     const t = setup(() => new Response("upstream down", { status: 400 }));
