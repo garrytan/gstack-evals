@@ -224,6 +224,10 @@ export class LocalLedger implements ReservationLedger {
     });
   }
 
+  releaseUnbilled(r: { lease_id: string; idempotency_key: string; journal: string; generation_id: string; record: string }): LedgerReply {
+    return refuse("E_INTERNAL", "releaseUnbilled is not built yet");
+  }
+
   markClosed(lease_id: string, how: CloseFile["how"]): void {
     this.db.run("UPDATE leases SET state = ? WHERE lease_id = ?", [how, lease_id]);
   }
