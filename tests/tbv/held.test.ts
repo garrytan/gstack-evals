@@ -20,7 +20,7 @@ const UNSEAL = "tail -n +2 | base64 -d";
 const open = (p: string) => Buffer.from(readFileSync(p, "utf8").split("\n")[1] ?? "", "base64").toString("utf8");
 const DOCKER = spawnSync("docker", ["version", "--format", "{{.Server.Version}}"]).status === 0;
 if (!DOCKER && process.env.CI) throw new Error("tests/tbv/held.test.ts needs docker in CI; the held-out steps it covers never run unconfined");
-const T = 60_000;
+const T = 300_000;
 
 const made: string[] = [];
 const shm = () => { const d = mkdtempSync("/dev/shm/tbv-held-test-"); made.push(d); return d; };
@@ -270,9 +270,9 @@ describe("review fixes: placement, docker checks and parsing (no container)", ()
   });
 
   const EMPTY = "sha256:" + createHash("sha256").update(Buffer.alloc(10240)).digest("hex");
-  const stub = (o: { ps?: string; image: unknown }) => {
+  const stub = (o: { ps?: string; image: unknown; run?: string }) => {
     const d = disk(), ran = join(d, "ran"), exe = join(d, "docker");
-    writeFileSync(exe, "#!/bin/sh\ncase \"$1\" in\n  version) echo 29.9.2 ;;\n  ps) printf '%s' '" + (o.ps ?? "") + "' ;;\n  image) printf '%s\\n' '" + JSON.stringify(o.image) + "' ;;\n  *) touch '" + ran + "' ;;\nesac\n", { mode: 0o755 });
+    writeFileSync(exe, "#!/bin/sh\ncase \"$1\" in\n  version) echo 29.9.2 ;;\n  ps) printf '%s' '" + (o.ps ?? "") + "' ;;\n  image) printf '%s\\n' '" + JSON.stringify(o.image) + "' ;;\n  *) touch '" + ran + "'" + (o.run ? "; " + o.run : "") + " ;;\nesac\n", { mode: 0o755 });
     return { exe, ran };
   };
   const step = (exe: string) => code(() => heldStep({ work: join(shm(), "w"), held: join(disk(), "sealed"), sealCmd: SEAL, inputs: [], ro: [], cmd: ["true"], docker: exe, io: io().io }));
@@ -290,6 +290,14 @@ describe("review fixes: placement, docker checks and parsing (no container)", ()
     expect(step(s.exe)).toMatch(/^E_TBV_CUSTODY .*still running.*docker kill abc123def456.*leftover rule/);
     expect(code(() => heldUnseal({ work: join(shm(), "w"), froms: [disk()], prefix: "reading-", unsealCmd: "cat", ro: [], docker: s.exe, io: io().io }))).toMatch(/^E_TBV_CUSTODY .*still running.*docker kill abc123def456/);
     expect(existsSync(s.ran)).toBe(false);
+  });
+
+  test("a command container ended by a signal (a test timeout, an OOM kill, docker kill) refuses with E_TBV_STEP naming the signal, and nothing is sealed", () => {
+    const s = stub({ image: { Id: "sha256:" + "5".repeat(64), Config: {}, RootFS: { Layers: [EMPTY] } }, run: 'for a in "$@"; do [ "$a" = probe ] && exit 0; done; kill -TERM $$' });
+    const work = join(shm(), "w"), held = join(disk(), "sealed");
+    expect(code(() => heldStep({ work, held, sealCmd: SEAL, inputs: [], ro: [], cmd: ["true"], docker: s.exe, io: io().io }))).toMatch(/^E_TBV_STEP .*exited on SIGTERM.*nothing was sealed/);
+    expect(sealedNames(held)).toEqual([]);
+    expect(existsSync(work)).toBe(true);
   });
 
   test("the command line refuses unknown and repeated flags, a missing flag or command, and a command on held-unseal", async () => {

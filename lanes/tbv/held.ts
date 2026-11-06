@@ -25,7 +25,7 @@ const SYSTEM = ["/usr", "/bin", "/sbin", "/lib", "/lib64"];
 const VOLATILE = new Set(["tmpfs", "ramfs", "devtmpfs"]);
 /** The Capy drives are fuse mounts that sync off the machine and keep earlier versions; any fuse mount is treated as one. */
 const synced = (type: string) => /^fuse(\.|$)/.test(type);
-const errno = (e: unknown) => (e as NodeJS.ErrnoException).code ?? String(e);
+const errno = (e: unknown) => (e as NodeJS.ErrnoException | undefined)?.code ?? String(e);
 
 export interface Fs {
   lstat: (p: string) => unknown;
@@ -170,7 +170,7 @@ export function heldStep(o: HeldStep): number {
     throw e;
   }
   const run = container(d, [...reads, ...extra, { src: work, rw: true }], work, ["/bin/sh", "-c", 'exec "$@" >"$0/' + STEP + '/stdout" 2>"$0/' + STEP + '/stderr"', work, ...o.cmd]);
-  if (run.status !== 0) fail("E_TBV_STEP", "the confined command exited " + (run.status ?? errno(run.error)) + (run.stderr.trim() ? " (" + run.stderr.trim().slice(0, 300) + ")" : "") + "; nothing was sealed. Its outputs and streams stay under " + o.work + " on tmpfs; read them there, then delete the work dir by the leftover rule");
+  if (run.status !== 0) fail("E_TBV_STEP", "the confined command exited " + (run.status ?? (run.signal ? "on " + run.signal : errno(run.error))) + (run.stderr.trim() ? " (" + run.stderr.trim().slice(0, 300) + ")" : "") + "; nothing was sealed. Its outputs and streams stay under " + o.work + " on tmpfs; read them there, then delete the work dir by the leftover rule");
   const sealBinds = [...ro.map((p) => ({ src: p.real, rw: false })), ...extra, { src: work, rw: false }, { src: realpathSync(o.held), rw: true }];
   probe(d, sealBinds, realpathSync(o.held));
   const s = container(d, sealBinds, work, [BUN, SELF, "--inner", "seal", work, realpathSync(o.held), o.sealCmd]);
