@@ -183,7 +183,7 @@ describe("end states, in the frozen precedence", () => {
 
   test("an allowance refusal on D1 drops only D1; D2 is still read", async () => {
     const { by, journal } = await go({ script: () => text(), tasks: ["wide1"] });
-    const r = by("wide1", "none", "sol");
+    const r = by("wide1");
     expect(r.cls).toBe("scored");
     expect(r.drill.d1).toContain("allowance");
     expect(r.drill.d2).toBe("ok");
