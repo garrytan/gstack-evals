@@ -661,7 +661,7 @@ export function spliceBy(sets: SpliceSet[], pinOf: (arm: Arm) => string | null, 
     byKey.set(s.family + " " + s.pin, s);
   }
   return (family, arm) => {
-    if (arm === "none") return null;
+    if (arm === "none" || arm === "lens") return null;
     const pin = pinOf(arm);
     return byKey.get(family + " " + pin) ?? fail("E_TBV_INPUT", "no splice set for the " + family + " family at the " + arm + " arm's pin " + pin + " in " + where);
   };

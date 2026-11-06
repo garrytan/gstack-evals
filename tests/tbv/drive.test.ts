@@ -368,6 +368,11 @@ describe("the drive CLI's splice callback", () => {
     expect(splice("ship", "current")!.pin).toBe("pinC");
     expect(splice("investigate", "none")).toBeNull();
   });
+  test("the lens arm, like none, takes no splice set", () => {
+    const splice = spliceBy([set("investigate", "pinC")], pins, "splices/");
+    expect(splice("investigate", "lens")).toBeNull();
+    expect(splice("ship", "lens")).toBeNull();
+  });
   test("no splice at the arm's pin, or two files with one family and pin, is E_TBV_INPUT", () => {
     const refusal = (f: () => unknown) => {
       try {
