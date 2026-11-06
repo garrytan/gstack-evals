@@ -2,8 +2,8 @@
 // and settle is one BEGIN IMMEDIATE transaction, so processes that share the file serialize on SQLite's lock. It is
 // refused on a network or FUSE mount (E_LEDGER_PATH), where that lock does not hold.
 import { Database } from "bun:sqlite";
-import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger, TokenUsage } from "../../types.ts";
@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS reservations (
   cell TEXT NOT NULL, max_micros INTEGER NOT NULL, state TEXT NOT NULL, spent_micros INTEGER, usage TEXT, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS reservations_lease ON reservations (lease_id, state);
 CREATE TABLE IF NOT EXISTS stops (lease_id TEXT PRIMARY KEY, scope TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS releases (
+  reservation_id TEXT PRIMARY KEY REFERENCES reservations (reservation_id), idempotency_key TEXT NOT NULL, lease_id TEXT NOT NULL,
+  generation_id TEXT NOT NULL, record_sha256 TEXT NOT NULL, prior_state TEXT NOT NULL, prior_spent_micros INTEGER, prior_usage TEXT,
+  released_at TEXT NOT NULL);
 `;
 
 interface Row {
@@ -165,6 +169,8 @@ export class LocalLedger implements ReservationLedger {
       if (!row) return refuse("E_INTERNAL", "no reservation " + reservation_id + " in the local ledger " + this.path);
       if (row.state !== "reserved") {
         if (row.state === next.state && row.spent_micros === next.spent_micros && row.usage === next.usage) return { ok: true, reservation: toReservation(row) };
+        const released = this.db.query("SELECT prior_state, prior_spent_micros, prior_usage FROM releases WHERE reservation_id = ?").get(reservation_id) as { prior_state: string; prior_spent_micros: number | null; prior_usage: string | null } | null;
+        if (released && released.prior_state === next.state && released.prior_spent_micros === next.spent_micros && released.prior_usage === next.usage) return { ok: true, reservation: toReservation(row) };
         return refuse("E_SETTLE_CONFLICT", "reservation " + reservation_id + " was settled as " + outcomeText(row) + (row.usage ? " " + row.usage : "") + "; this settle says " + outcomeText(next) + (next.usage ? " " + next.usage : ""));
       }
       this.db.run("UPDATE reservations SET state = ?, spent_micros = ?, usage = ? WHERE reservation_id = ?", [next.state, next.spent_micros, next.usage, reservation_id]);
@@ -221,6 +227,59 @@ export class LocalLedger implements ReservationLedger {
       };
       this.db.run("UPDATE leases SET state = 'closing', close = ? WHERE lease_id = ?", [JSON.stringify(close), lease_id]);
       return close;
+    });
+  }
+
+  /**
+   * Releases at $0 one send of an open lease that the provider's own record shows was not billed (tbv amendment 1 item 13).
+   * The send is found by its idempotency key in the proxy's journal, and it must have a final outcome with no usage there:
+   * unknown, or a 5xx charged at its reservation. A reserved row (a send in flight) is never released. record is the
+   * provider's generation record as returned, which must name generation_id, a total_cost of 0 and token counts of 0; its sha256 is kept in
+   * releases with the row's prior outcome, so a later settle of that outcome (reconcileJournal) is accepted as already done.
+   */
+  releaseUnbilled(r: { lease_id: string; idempotency_key: string; journal: string; generation_id: string; record: string }): LedgerReply {
+    let data: { id?: unknown; total_cost?: unknown; tokens_prompt?: unknown; tokens_completion?: unknown } | undefined;
+    try {
+      data = (JSON.parse(r.record) as { data?: typeof data })?.data;
+    } catch {}
+    if (data?.id !== r.generation_id || data?.total_cost !== 0 || data?.tokens_prompt !== 0 || data?.tokens_completion !== 0) return refuse("E_USAGE", "the generation record for " + r.idempotency_key + " does not show " + r.generation_id + " at a total_cost of 0 with 0 prompt and completion tokens, so its reservation is kept");
+    let rid: string | undefined;
+    let outcome: { status: number | null; outcome: CallOutcome } | undefined;
+    let text: string;
+    try {
+      text = readFileSync(r.journal, "utf8");
+    } catch (error) {
+      return refuse("E_USAGE", "the journal " + r.journal + " cannot be read: " + (error as Error).message);
+    }
+    for (const line of text.split("\n")) {
+      let e: { kind?: string; idempotency_key?: string; lease_id?: string; reservation_id?: string; status?: number | null; outcome?: CallOutcome };
+      try {
+        e = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (e.kind === "request" && e.idempotency_key === r.idempotency_key && e.lease_id === r.lease_id) rid = e.reservation_id;
+      if (e.kind === "outcome" && rid !== undefined && e.reservation_id === rid && e.outcome) outcome = { status: e.status ?? null, outcome: e.outcome };
+    }
+    if (!rid) return refuse("E_USAGE", "the journal " + r.journal + " sent nothing under " + r.idempotency_key + " on lease " + r.lease_id);
+    if (!outcome) return refuse("E_SETTLE_CONFLICT", "reservation " + rid + " has no outcome in the journal: the send may still be in flight, so it is not released");
+    const o = outcome.outcome;
+    const noUsage = o.kind === "unknown" || ((outcome.status ?? 0) >= 500 && USAGE_KEYS.every((k) => o.usage?.[k] === 0));
+    if (!noUsage) return refuse("E_SETTLE_CONFLICT", "reservation " + rid + " has an outcome with usage in the journal, so it is not released");
+    const sha = createHash("sha256").update(r.record).digest("hex");
+    return this.tx(() => {
+      const lease = this.getLease(r.lease_id);
+      if (!lease || lease.state !== "open") return refuse("E_LEASE_CLOSED", "lease " + r.lease_id + " is " + (lease?.state ?? "missing") + ", so nothing on it is released");
+      const row = this.db.query("SELECT * FROM reservations WHERE reservation_id = ?").get(rid) as Row | null;
+      if (!row || row.idempotency_key !== r.idempotency_key || row.lease_id !== r.lease_id) return refuse("E_INTERNAL", "no reservation " + rid + " under " + r.idempotency_key + " on lease " + r.lease_id + " in the local ledger " + this.path);
+      const prior = this.db.query("SELECT generation_id, record_sha256 FROM releases WHERE reservation_id = ?").get(rid) as { generation_id: string; record_sha256: string } | null;
+      if (prior) return prior.generation_id === r.generation_id && prior.record_sha256 === sha ? { ok: true, reservation: toReservation(row) } : refuse("E_SETTLE_CONFLICT", "reservation " + rid + " was released on generation " + prior.generation_id);
+      const matches = o.kind === "unknown" ? row.state === "unknown" : row.state === "settled" && row.spent_micros === row.max_micros;
+      if (!matches) return refuse("E_SETTLE_CONFLICT", "reservation " + rid + " is " + outcomeText(row) + ", not the no-usage outcome its journal records, so it is not released");
+      const zero = flat(Object.fromEntries(USAGE_KEYS.map((k) => [k, 0])));
+      this.db.run("INSERT INTO releases (reservation_id, idempotency_key, lease_id, generation_id, record_sha256, prior_state, prior_spent_micros, prior_usage, released_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [rid, r.idempotency_key, r.lease_id, r.generation_id, sha, row.state, row.spent_micros, row.usage, this.now().toISOString()]);
+      this.db.run("UPDATE reservations SET state = 'settled', spent_micros = 0, usage = ? WHERE reservation_id = ?", [zero, rid]);
+      return { ok: true, reservation: toReservation({ ...row, state: "settled", spent_micros: 0, usage: zero }) };
     });
   }
 
