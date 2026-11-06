@@ -125,6 +125,10 @@ At caps, everything fits under $3,300 with $232.47 to spare, and with f1-sol-off
 
 **Done marks.** The run thread marks an item done only after attach shows every part finished, no relaunch owed or prepared, and host-down settled.
 
+**Items that stop early.** An F1 item that stops before its last part (a cap stop, an unclassified end, a loss after the relaunch, or a failed recover) leaves its later parts with no result, so ceiling.ts counts it at its full cap for good. If that count would refuse a later launch, the run thread brings the item's settled spend to the Captain and edits no record.
+
+**Work dirs.** The run thread passes --work only for the work dir of the run bound on that item's ledger, and checks before each ceiling check that plan.json's run_id matches the ledger's bound run_id. A work dir from an earlier or voided run never proves an item done.
+
 ## The pins
 
 The build is 27ffde0edc4b758d56c28f015067cd62f2dfa662, the commit both dry runs ran at. This post's last commit adds only dryrun.txt, amendment-c-dryrun.txt and the dry run's results to its folder.
