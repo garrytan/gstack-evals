@@ -41,7 +41,7 @@ Publication status: unpublished. This is the record of a preregistered run. Done
 
 ## What we found
 
-gstack's overhaul changed what Opus 5.5 does when nobody names a skill. On 80 fresh SWE-rebench bug-fix tasks, untold Opus opened /investigate in 17 of 80 sessions with the after pin and in 0 of 80 with the before pin: **B1 is +21.3 points (95% CI +12.5 to +30.0, Holm p 0.0001), a KEEP** for the route hook and the description rewrite. Probe L passed its blind audit (37 of 37, kappa 1.00), but one of the seven readers read only 3 of its 18 probe L packets in full and searched the rest for the calls probe L reads, so part of that audit is a mechanical recheck (Limits). All 17 opens came on the 19 tasks the route hook sends to /investigate (17 of 19). With routing and contracts switched off together at the same pin, Opus opened it 0 times, so the gain needs routing or contracts on; this run can't credit the route hook alone. With no gstack, 0 of 80.
+gstack's overhaul changed what Opus 5.5 does when nobody names a skill. On 80 fresh SWE-rebench bug-fix tasks, untold Opus opened /investigate in 17 of 80 sessions with the after pin and in 0 of 80 with the before pin: **B1 is +21.3 points (95% CI +12.5 to +30.0, Holm p 0.0001), a KEEP**. The prereg's KEEP wording names the after pin's untold parts, the route hook and the description rewrite, as a package; it is not a measured split. Probe L passed its blind audit (37 of 37, kappa 1.00), but one of the seven readers read only 3 of its 18 probe L packets in full and searched the rest for the calls probe L reads, so part of that audit is a mechanical recheck (Limits). All 17 opens came on the 19 tasks the route hook sends to /investigate (17 of 19). With routing and contracts switched off together at the same pin, keeping the rewritten descriptions, Opus opened it 0 times. So the gain needs routing or contracts on, the description rewrite alone produced no opens, and this run can't credit the route hook alone. With no gstack, 0 of 80.
 
 Told adherence shows no change we could verify. A complete /investigate record, scored by probe I, appeared in 24 of 80 told sessions with the after pin and 16 of 80 with the before pin: **B3 is +10.0 points (95% CI +0.0 to +20.0, Holm p 0.1152), a null, FIX-METHOD (method)**, because probe I failed its blind audit. It is also unpowered: at the before arm's 20.0% the MDD is 20.3 points, past the 20-point margin.
 
@@ -119,7 +119,7 @@ Every session of every arm was graded: infra 0, cap stops 0, contaminated none s
 | off-u | 51 (63.7%) (51/80 = 63.75%) | 0 | 0 | 0 | 0 | not run | | |
 | before-t | 52 (65.0%) | told | 16 (20.0%) | 0 | 0 | 64 (86.5%) | told | 0 |
 | after-t | 56 (70.0%) | told | 24 (30.0%) | 0 | 80 | 63 (85.1%) | told | 0 |
-| off-t | 53 (66.3%) | told | 23 (28.7%) | 0 | 0 | not run | | |
+| off-t | 53 (66.3%) | told | 23 (28.7%) (23/80 = 28.75%) | 0 | 0 | not run | | |
 
 Probe L is read on untold sessions. A told session gets /investigate from its slash command, so B3 reads probe I instead.
 
@@ -134,7 +134,7 @@ Probe L is read on untold sessions. A told session gets /investigate from its sl
 | S5 pass | before-t 65.0% | none 65.0% | +0.0 | -6.3 to +7.5 |
 | S5 pass | before-u 68.8% | none 65.0% | +3.8 | -1.3 to +8.8 |
 | S6 load | after-u 21.3% | off-u 0.0% | +21.3 | +12.5 to +30.0 |
-| S6 complete | after-t 30.0% | off-t 28.7% | +1.3 | -10.0 to +12.5 |
+| S6 complete | after-t 30.0% | off-t 28.7% (23/80 = 28.75%) | +1.3 | -10.0 to +12.5 |
 | S6 pass | after-t 70.0% | off-t 66.3% | +3.8 | -1.3 to +8.8 |
 | S6 pass | after-u 66.3% | off-u 63.7% (51/80 = 63.75%) | +2.5 | +0.0 to +6.3 |
 | S12 TB2 B1 (tunable) | after-u 2.7% (74) | before-u 0.0% (74) | +2.7 | +0.0 to +8.1 |
@@ -193,7 +193,7 @@ None changes a primary, a cap, an arm, a draw or a scoring rule.
 3. **Approval rows that name 38aaa9e.** The f1-opus and tb2-opus ledgers' approval rows name build 38aaa9e, because they were written before Amendment D merged. The pilot-opus-d row names 802c2e4. The voided pilot-opus row also names 38aaa9e, and that run did use it. Every counted session ran on 802c2e4 under the Captain's ruling that the build doesn't change mid-run. The rows stay unedited, since a ledger is never edited. An earlier ruling text named the tb2-opus and pilot-opus-d rows; the ledgers show f1-opus and tb2-opus.
 4. **Sessions over $2.50.** Two f1-3 sessions, both on vyperlang__vyper-4801, settled at $2.699593 and $2.974401 against a $5.00 reserve. The $2.50 stop rule was stated for pilot sessions only, so nothing stopped and nothing was retried. The pilot's costliest session was $0.805733 and TB2's $1.329216. No settle in any ledger is over its reserve.
 5. **The TB2 fit stratum's names came by reference.** #169 states the 5-task stratum but names no task. Its Run D row (line 94) takes Run D's task list unchanged from #125, and #125 line 46 names the five. The Captain took them from there before any TB2 score was read.
-6. **This post comes before the Sol leg.** Section 9 runs Sol under the leftover rule once every planned item has settled. This post reports the Opus legs before Sol runs, which reorders the prereg's sequence. Sol reports in its own post, and no number here depends on it.
+6. **This post comes before the Sol leg.** Section 9 runs Sol under the leftover rule once every planned item has settled. This post reports the Opus legs before Sol runs, which reorders the prereg's sequence. Sol reports in its own post, and no number here depends on it. So the Cost section's final ceiling read is final for the Opus legs only; Sol's spend comes after it.
 
 ## Cost
 
@@ -234,7 +234,7 @@ after-t's cost per pass on F1 is 1.27 times none's, the ratio #169's G3 named (d
 
 ## GPT-6.1 Sol and particle-1
 
-Not run as of this post. Sol runs next under section 9's leftover rule, each launch behind a passing ceiling check, and reports in its own post. particle-1 is not run under the ceiling. At F1's design its behavior MDDs are the same as Opus's rows: 12.3 to 15.0 points at a 1% to 5% before rate.
+Not run as of this post. The Captain has decided that Sol runs next under section 9's leftover rule, each launch behind a passing ceiling check, and reports in its own post. particle-1 is not run under the ceiling. At F1's design its behavior MDDs are the same as Opus's rows: 12.3 to 15.0 points at a 1% to 5% before rate.
 
 ## Limits and threats
 
@@ -242,7 +242,7 @@ Not run as of this post. Sol runs next under section 9's leftover rule, each lau
 - **A fresh public draw, not a sealed set.** F's 80 tasks were public before the after pin froze. The defense is the prereg's search: the after pin's tree and its commit range hold no reference to the pool. The verdicts bind these two pins only. Opus may have seen these repositories in training, which applies to every arm alike.
 - **Probe I failed its audit.** B3, the gate reading and S6's complete line all rest on it, and it misses records. Its misses fell in all three told arms, so the direction of any bias in B3 is unknown.
 - **The blind audit's limits.** The packets hid labels, not everything: the after pin's skill body reads differently from the before pin's, and the model's own words sometimes name the route. Seven readers labeled the sample: four started together, two stopped at a shared token stop with 9 packets left, and three fresh readers labeled those. One reader read 3 of its 18 probe L packets in full and most of a fourth, and searched the rest for Skill calls, SKILL.md reads and the skill's base-directory line, which are the calls probe L reads. The packet renderer's sha256 is d7006af481547215b0d9ad9d7c2aa24d393497d149277e6ec76f23f6be478083; the packets themselves hold transcripts and stay private.
-- **Route hook trust.** A true route_hook proves the route line reached the proxy as hook context in the first request. It can't tell the route hook from a task's own prompt hook; one F1 task carries one, and its sessions read not fired.
+- **Route hook trust.** A true route_hook proves the route line reached the proxy as hook context in the first request. It can't tell the route hook from a task's own prompt hook; one F1 task carries one. The proxy read its route hook as not fired in every arm; the transcript reads it as fired in after-u.
 - **Ceilings on TB2.** none passes 85.1% of TB2 sessions, and every arm passed all 10 fit-stratum sessions. TB2's pass rates can't show a gain.
 - **Pass rate is unpowered by design.** O5 and every pass-rate secondary have MDDs near 19 points.
 
