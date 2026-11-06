@@ -35,7 +35,7 @@ export const ORDERED: Record<string, string> = {
 
 type Any = Record<string, any>;
 /** The scorer's planning prices per million tokens (prereg section 14), as rule.ts's readingWorst takes them. */
-const PRICES = { opus: { in: 4, out: 20, cacheWrite: 5 }, sol: { in: 2, out: 10, cacheWrite: 2.5 }, particle: { in: 0.1, out: 1 } } as const;
+const PRICES: Record<"opus" | "sol" | "particle", { in: number; out: number; cacheWrite?: number }> = { opus: { in: 4, out: 20, cacheWrite: 5 }, sol: { in: 2, out: 10, cacheWrite: 2.5 }, particle: { in: 0.1, out: 1 } };
 export async function dryrun(out: string, io: Io): Promise<{ pass: number; fail: number }> {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
