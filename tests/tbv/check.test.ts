@@ -171,3 +171,8 @@ test("check rules scans every history for the org rules' wording and refuses a w
   expect((await tbv("check", "rules", "--wording", file(WORDING), "--histories", dev)).code).toBe(0);
   expect((await tbv("check", "rules", "--wording", file("too short to scan"), "--histories", dev)).err).toMatch(/^E_TBV_INPUT .*fewer than 8 words/m);
 });
+
+test("leak: an added line that starts with \"++ \" is an added line; the file header's +++ line is not", () => {
+  const g = gstack({ "skills/a.md": "keep\n" }, { "skills/a.md": "keep\n++ leaked-name here\nplain added\n" });
+  expect(addedLines(g.d, g.C, g.P)).toEqual(["++ leaked-name here", "plain added"]);
+});

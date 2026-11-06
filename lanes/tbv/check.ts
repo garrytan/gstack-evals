@@ -111,7 +111,14 @@ export function handoffCheck(argv: string[], io: Io): number {
 /** The added lines of git diff C..P, without their leading "+". */
 export function addedLines(checkout: string, c: string, p: string): string[] {
   const diff = git(checkout, ["diff", "--no-color", "--no-ext-diff", "--no-renames", "--unified=0", c, p]);
-  return diff.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++ ")).map((l) => l.slice(1));
+  const added: string[] = [];
+  let header = false;
+  for (const l of diff.split("\n")) {
+    if (l.startsWith("diff --git ")) header = true;
+    else if (l.startsWith("@@")) header = false;
+    else if (!header && l.startsWith("+")) added.push(l.slice(1));
+  }
+  return added;
 }
 /** Every text file in gstack's tree at C, joined (binary blobs, which hold a NUL byte, are left out). */
 export function treeText(checkout: string, c: string): string {
