@@ -170,9 +170,13 @@ export function extract(history: History): Extract {
   return { schema: "tbv-extract.v1", task: history.task, history_sha256: history.sha256, candidates, lists, longest, stratum, tokens: Math.ceil(historyChars(history.events) / 3) };
 }
 
+/** Each family's measured overhead at 641d622, characters / 3: the current arm's captured system prompt and tools (20,622) plus the family's splice set (investigate a7ebce38, 15,317; ship 000940ba, 29,832; capy 8477ada9, 3,103), from the keyless capture against Claude Code 2.1.312. The scorer pin post freezes them beside the captured digests. */
+export const OVERHEAD_641D622 = { investigate: 35_939, ship: 50_454, capy: 23_725 } as const;
+/** Amendment item 12: a family's history limit is 130,000 tokens less the larger of 40,000 and its measured overhead, so a larger overhead lowers the limit instead of growing the first send. */
+export const historyLimit = (overheadTokens: number): number => 130_000 - Math.max(40_000, overheadTokens);
 /** Amendment item 12: history plus the family's overhead (the larger of 40,000 and the captured overhead, characters / 3) is at most 130,000 tokens. */
 export function admitsSize(historyTokens: number, overheadTokens: number): boolean {
-  return historyTokens + Math.max(40_000, overheadTokens) <= 130_000;
+  return historyTokens <= historyLimit(overheadTokens);
 }
 
 /** extract --history FILE [--out FILE] */
