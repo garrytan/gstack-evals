@@ -2,14 +2,14 @@
 // The judge run (prereg section 7, amendment item 9): the tbv-judge reply rules, one retry on a bad reply, transport
 // retries, JudgeRecords, and one run through the real proxy and ledger.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildPackets, writePackets } from "../../lanes/tbv/packet.ts";
 import { judgePrompt, parseJudgeReply, readBundle, run, runJudges } from "../../lanes/tbv/judge.ts";
 import { JUDGE_MAX_TOKENS } from "../../lanes/tbv/routes.ts";
 import { BUNDLE, type JudgeRecord, type Packet, type PacketKeyEntry } from "../../lanes/tbv/types.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
-import { capture, cleanup, FAKE_KEYS, fakeJudgeSend, fakeRun, judgeReply, KEY, promptOf, QUOTE, record, REPO, sent, tmp, upstream } from "./s4-helpers.ts";
+import { capture, cleanup, FAKE_KEYS, fakeJudgeSend, fakeRun, judgeReply, KEY, promptOf, QUOTE, record, REPO, SEAL, sent, shm, tmp, unsealed, upstream } from "./s4-helpers.ts";
 
 afterAll(cleanup);
 const BRIEF = readFileSync(join(REPO, BUNDLE.judgeBrief.path), "utf8");
@@ -132,6 +132,28 @@ describe("runJudges over a fake item run", () => {
     writeFileSync(join(s.packets, "key.json"), readFileSync(join(s.dir, "key.json")));
     const argv = ["judge", "--packets", s.packets, "--key", join(s.packets, "key.json"), "--out", join(s.dir, "out"), "--item", "tbv-hr-judge", "--run-id", "run-j1", "--record", join(s.dir, "record"), "--ledger", join(s.dir, "ledger.sqlite")];
     await expect(run(argv, capture().io, { open: async () => fakeRun(honest).run, judgeSend: fakeJudgeSend, worst: () => 1 })).rejects.toMatchObject({ code: "E_TBV_JUDGE" });
+  });
+  test("A16: with --held, an --out on disk is refused before any lease (E_TBV_CUSTODY); on tmpfs, judges.ndjson gets a sealed copy after every record", async () => {
+    const s = setup();
+    const argv = (out: string) => ["judge", "--packets", s.packets, "--key", join(s.dir, "key.json"), "--out", out, "--item", "tbv-hr-judge", "--run-id", "run-j3", "--record", join(s.dir, "record"), "--ledger", join(s.dir, "ledger.sqlite")];
+    const sealed = tmp("tbv-judge-sealed-");
+    let opened = 0;
+    const deps = { open: async () => (opened++, fakeRun(honest).run), judgeSend: fakeJudgeSend, worst: () => 1 };
+    await expect(run([...argv(join(s.dir, "out")), "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining("--out must sit on tmpfs") });
+    const out = join(shm("tbv-judge-held-"), "out");
+    await expect(run([...argv(out), "--held", sealed], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY" });
+    await expect(run([...argv(out), "--seal-cmd", SEAL], capture().io, deps)).rejects.toMatchObject({ code: "E_TBV_CUSTODY" });
+    expect(opened).toBe(0);
+    expect(existsSync(join(s.dir, "out"))).toBe(false);
+    let calls = 0;
+    const once = fakeRun((label, req) => (++calls > 1 ? sent(null, "budget", null) : honest(label, req)));
+    await expect(run([...argv(out), "--held", sealed, "--seal-cmd", SEAL], capture().io, { ...deps, open: async () => once.run })).rejects.toMatchObject({ code: "E_TBV_RUN" });
+    expect(unsealed(join(sealed, "judges.ndjson.sealed"))).toBe(readFileSync(join(out, "judges.ndjson"), "utf8"));
+    const out2 = join(shm("tbv-judge-held-"), "out");
+    expect(await run([...argv(out2), "--held", sealed, "--seal-cmd", SEAL], capture().io, deps)).toBe(0);
+    const text = readFileSync(join(out2, "judges.ndjson"), "utf8");
+    expect(text.trim().split("\n").length).toBe(6);
+    expect(unsealed(join(sealed, "judges.ndjson.sealed"))).toBe(text);
   });
   test("integration: the real openItemRun, judge routes, proxy and ledger with a stub upstream (needs drive.ts and routes.ts)", async () => {
     const s = setup();

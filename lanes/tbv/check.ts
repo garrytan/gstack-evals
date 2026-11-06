@@ -191,7 +191,9 @@ export function run(argv: string[], io: Io): number {
   if (mode === "leak") return leakCheck(rest, io);
   if (mode === "rules") {
     const a = parseFlags(rest, ["wording", "histories"]);
-    return rulesScan(readHistories(a.histories!), wordingOf(a.wording!), io);
+    const histories = readHistories(a.histories!);
+    if (!histories.length) fail("E_TBV_INPUT", "--histories " + a.histories + " holds no histories; a scan over none would read clean");
+    return rulesScan(histories, wordingOf(a.wording!), io);
   }
   return fail("E_TBV_INPUT", "tbv check takes handoff, leak or rules");
 }

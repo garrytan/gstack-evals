@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The readings writer: driver records, the packet key and judge records into the readings file rule.ts reads.
 import { readFileSync, writeFileSync } from "node:fs";
+import { heldOutputs } from "./custody.ts";
 import { fail } from "./errors.ts";
 import { parseFlags, readNdjson, readPacketKey, sha256 } from "./judge.ts";
 import { readKeys, readRecords } from "./packet.ts";
@@ -126,9 +127,11 @@ const oneOf = <T extends string>(v: string, all: T[], what: string): T => (all.i
 const count = (v: string, what: string) => (/^[1-9]\d*$/.test(v) ? Number(v) : fail("E_TBV_INPUT", what + " must be a positive integer"));
 
 /** tbv readings --records PATH --keys DIR --split FILE --packet-key FILE --judges FILE --out FILE --models a,b --passes m=n,...
- * --skill-arms a,b [--capy-passes N] [--principle-detector FILE (one regex per line, # comments)] [--dev-gap GAP,MDD] */
+ * --skill-arms a,b [--capy-passes N] [--principle-detector FILE (one regex per line, # comments)] [--dev-gap GAP,MDD]
+ * [--held SEALED_DIR --seal-cmd CMD] */
 export async function run(argv: string[], io: Io): Promise<number> {
-  const a = parseFlags(argv.slice(1), ["records", "keys", "split", "packet-key", "judges", "out", "models", "passes", "skill-arms"], ["capy-passes", "principle-detector", "dev-gap"]);
+  const a = parseFlags(argv.slice(1), ["records", "keys", "split", "packet-key", "judges", "out", "models", "passes", "skill-arms"], ["capy-passes", "principle-detector", "dev-gap", "held", "seal-cmd"]);
+  const seal = heldOutputs(a, ["out"]);
   const bytes = readFileSync(a.split!);
   let manifest: SplitManifest;
   try {
@@ -171,6 +174,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     principle,
   });
   writeFileSync(a.out!, JSON.stringify(rd, null, 2) + "\n");
+  seal?.(a.out!);
   io.out("readings: " + rd.readings.length + " rows, " + (rd.controls?.length ?? 0) + " control rows");
   return 0;
 }

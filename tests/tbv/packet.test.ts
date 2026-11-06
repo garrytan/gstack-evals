@@ -3,12 +3,12 @@
 // key kept apart from the packets.
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BOUNDARY, buildPackets, oracleReport, run, withBoundary, writePackets } from "../../lanes/tbv/packet.ts";
 import * as rule from "../../lanes/tbv/rule.ts";
 import { BUNDLE, JUDGE_OF, otherJudge, type Packet, type PacketKeyEntry } from "../../lanes/tbv/types.ts";
-import { capture, cleanup, KEY, keyFor, MANIFEST, record, REPO, tmp, words } from "./s4-helpers.ts";
+import { capture, cleanup, KEY, keyFor, MANIFEST, record, REPO, SEAL, shm, tmp, unsealed, words } from "./s4-helpers.ts";
 
 afterAll(cleanup);
 const STOCK = readFileSync(join(REPO, BUNDLE.stock.path), "utf8");
@@ -132,5 +132,27 @@ describe("writePackets and run", () => {
     expect(await run(argv, c.io)).toBe(0);
     expect(readdirSync(join(dir, "packets")).length).toBe(4);
     await expect(run([...argv.slice(0, -1), join(dir, "packets2", "k.json")].map((a) => (a === join(dir, "packets") ? join(dir, "packets2") : a)), c.io)).rejects.toMatchObject({ code: "E_TBV_JUDGE" });
+  });
+  test("A16: with --held, the packets and the packet key must sit on tmpfs (E_TBV_CUSTODY otherwise), and each gets a sealed copy", async () => {
+    const dir = tmp("tbv-packets-held-");
+    mkdirSync(join(dir, "keys"));
+    writeFileSync(join(dir, "keys", "task-alpha.json"), JSON.stringify(KEY));
+    writeFileSync(join(dir, "records.ndjson"), JSON.stringify(record()) + "\n");
+    writeFileSync(join(dir, "split.json"), JSON.stringify(MANIFEST));
+    const base = ["packets", "--records", join(dir, "records.ndjson"), "--keys", join(dir, "keys"), "--split", join(dir, "split.json")];
+    const sealed = tmp("tbv-packets-sealed-");
+    const s = shm("tbv-packets-held-");
+    const c = capture();
+    await expect(run([...base, "--out", join(dir, "packets"), "--key", join(s, "packet-key.json"), "--held", sealed, "--seal-cmd", SEAL], c.io)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining("--out must sit on tmpfs") });
+    await expect(run([...base, "--out", join(s, "packets"), "--key", join(dir, "packet-key.json"), "--held", sealed, "--seal-cmd", SEAL], c.io)).rejects.toMatchObject({ code: "E_TBV_CUSTODY", message: expect.stringContaining("--key must sit on tmpfs") });
+    await expect(run([...base, "--out", join(s, "packets"), "--key", join(s, "packet-key.json"), "--held", sealed], c.io)).rejects.toMatchObject({ code: "E_TBV_CUSTODY" });
+    await expect(run([...base, "--out", join(s, "packets"), "--key", join(s, "packet-key.json"), "--seal-cmd", SEAL], c.io)).rejects.toMatchObject({ code: "E_TBV_CUSTODY" });
+    expect(existsSync(join(dir, "packets")) || existsSync(join(s, "packets")) || existsSync(join(dir, "packet-key.json"))).toBe(false);
+    expect(await run([...base, "--out", join(s, "packets"), "--key", join(s, "packet-key.json"), "--held", sealed, "--seal-cmd", SEAL], c.io)).toBe(0);
+    const files = readdirSync(join(s, "packets"));
+    expect(files.length).toBe(4);
+    expect(readdirSync(sealed).sort()).toEqual([...files, "packet-key.json"].map((f) => f + ".sealed").sort());
+    for (const f of files) expect(unsealed(join(sealed, f + ".sealed"))).toBe(readFileSync(join(s, "packets", f), "utf8"));
+    expect(unsealed(join(sealed, "packet-key.json.sealed"))).toBe(readFileSync(join(s, "packet-key.json"), "utf8"));
   });
 });

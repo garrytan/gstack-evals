@@ -145,3 +145,45 @@ test("A7: a skipped record whose lineage keys are missing or truncated fails clo
   expect(heldOutEligible(plain, heldOutCluster(plain, [issue, plain], [blind]), P).ok).toBe(false);
 });
 
+const stub = (o: Partial<LineageStub> & { number: number }): LineageStub => ({ createdAt: at(P, 60), title: "Stub " + o.number, baseRefName: "main", headRefName: "stub/" + o.number, closingIssues: [], ...o });
+
+test("A7 note 1: a truncated-issue stub that could close an issue a keyed stub in the cluster closes is pulled in, so a pre-P one refuses", () => {
+  const x = pr({ number: 20, title: "Tidy the widget", headRefName: "shared/branch" });
+  const s1 = stub({ number: 21, headRefName: "shared/branch", closingIssues: [40] });
+  const s2 = stub({ number: 22, createdAt: at(P, -3600), closingIssues: null });
+  const r = heldOutEligible(x, heldOutCluster(x, [x], [s1, s2]), P);
+  expect(r.ok).toBe(false);
+  expect(!r.ok && r.why).toContain("#22");
+  const quiet = stub({ number: 21, headRefName: "shared/branch" });
+  expect(heldOutEligible(x, heldOutCluster(x, [x], [quiet, s2]), P)).toEqual({ ok: true });
+});
+
+test("A7 note 2: a stub opened after P with missing or truncated keys no longer refuses by itself; its creation time is read first", () => {
+  const x = pr({ number: 20, title: "Tidy the widget", headRefName: "shared/branch", closingIssues: [40] });
+  const late = stub({ number: 23, closingIssues: null });
+  expect(heldOutEligible(x, heldOutCluster(x, [x], [late]), P)).toEqual({ ok: true });
+  const onBranch = stub({ number: 24, headRefName: "shared/branch", closingIssues: null });
+  expect(heldOutEligible(x, heldOutCluster(x, [x], [onBranch]), P)).toEqual({ ok: true });
+  const blind = stub({ number: 25, title: null, baseRefName: null, headRefName: null, closingIssues: null });
+  const y = pr({ number: 26, title: "Other work", headRefName: "other/work" });
+  expect(heldOutEligible(x, heldOutCluster(x, [x, y], [blind]), P)).toEqual({ ok: true });
+});
+
+test("A7 note 2, other direction: a post-P stub whose missing keys could join a pre-P record still refuses, and so does an unknown creation time", () => {
+  const x = pr({ number: 20, title: "Tidy the widget", headRefName: "shared/branch" });
+  const old = pr({ number: 30, title: "Old work", headRefName: "old/work", closingIssues: [50], createdAt: at(P, -86400), mergedAt: at(P, -80000) });
+  const bridge = stub({ number: 24, headRefName: "shared/branch", closingIssues: null });
+  const r = heldOutEligible(x, heldOutCluster(x, [x, old], [bridge]), P);
+  expect(r.ok).toBe(false);
+  expect(!r.ok && r.why).toContain("#30");
+  const blind = stub({ number: 25, title: null, baseRefName: null, headRefName: null, closingIssues: null });
+  expect(heldOutEligible(x, heldOutCluster(x, [x, old], [blind]), P).ok).toBe(false);
+  const undated = stub({ number: 27, headRefName: "shared/branch", createdAt: null });
+  const u = heldOutEligible(x, heldOutCluster(x, [x], [undated]), P);
+  expect(u.ok).toBe(false);
+  expect(!u.ok && u.why).toContain("#27");
+  const early = stub({ number: 28, headRefName: "shared/branch", createdAt: at(P, -1), closingIssues: null });
+  const e = heldOutEligible(x, heldOutCluster(x, [x], [early]), P);
+  expect(!e.ok && e.why).toContain("opened at " + at(P, -1));
+});
+

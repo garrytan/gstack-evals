@@ -41,6 +41,27 @@ export function plaintextRoot(dir: string, o: { devPlaintext: boolean; held: boo
   return at;
 }
 
+/** Held-out mode for keys, packets, judge and readings (A16): with --held <sealed dir>, every named output must sit on tmpfs,
+ * the check drive --held makes on --tasks, and the returned function seals an output file through --seal-cmd into the
+ * sealed directory. Without --held it returns undefined, and --seal-cmd alone is refused. */
+export function heldOutputs(a: Record<string, string | undefined>, outputs: string[], mounts?: string): ((file: string) => void) | undefined {
+  const cmd = a["seal-cmd"];
+  if (!a.held) {
+    if (cmd) fail("E_TBV_CUSTODY", "--seal-cmd seals held-out outputs and needs --held <sealed dir>");
+    return undefined;
+  }
+  if (!cmd) fail("E_TBV_CUSTODY", "held-out outputs are sealed as they are written; pass --seal-cmd");
+  for (const o of outputs) {
+    try {
+      plaintextRoot(a[o]!, { devPlaintext: false, held: true, mounts });
+    } catch (e) {
+      fail("E_TBV_CUSTODY", "with --held, --" + o + " must sit on tmpfs: " + (e as Error).message);
+    }
+  }
+  const sealed = a.held;
+  return (file) => seal(cmd!, readFileSync(file, "utf8"), join(sealed, basename(file) + SEALED));
+}
+
 /** The leftover check (test ! -e): a dead run's plaintext root is deleted and the deletion logged. True when one was found. */
 export function leftover(dir: string, log: (text: string) => void): boolean {
   if (!existsSync(dir)) return false;
