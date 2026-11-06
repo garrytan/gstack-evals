@@ -82,7 +82,31 @@ describe("buildReadings", () => {
       words: ruleWords(f.r1.texts.report!), usd: 0.5, cacheRead: 0.4, responseIds: ["resp-a"], maxTokens: [],
       list: { named: true, order: false, rest: false, offer: true }, d1: 2 / 3,
       second: { judge: "opus", status: "judged", facts: [{ in: false, any: false }, { in: false, any: false }, { in: false, any: true }], responseIds: ["j2"] },
+      traps: [], d2: { status: "judged", unsupported: ["c"] },
     });
+  });
+  test("A8: D2 judgments, D1 states and trap labels reach the readings file; flipping the D2 judgment changes it; no D2 still builds", () => {
+    const { f, rd } = build();
+    const row = rd.readings.find((r) => r.id === f.r1.label)!;
+    expect(row.d2).toEqual({ status: "judged", unsupported: ["c"] });
+    expect(row.traps).toEqual([]);
+    const flipped = f.judges.map((j) => (j.packet === "p1d" ? { ...j, status: "unjudged" as const, answer: null } : j));
+    const rf = buildReadings({ manifest: MANIFEST, manifestSha256: "m".repeat(64), records: [f.r1, f.r2, f.r3], entries: f.entries, judges: flipped, keys: f.keys, flags: { ...flags, models: [...flags.models], skillArms: [...flags.skillArms] }, principle: null });
+    expect(rf.readings.find((r) => r.id === f.r1.label)!.d2).toEqual({ status: "unjudged", unsupported: [] });
+    expect(JSON.stringify(rf)).not.toBe(JSON.stringify(rd));
+    const g = build({ judges: f.judges.filter((j) => j.packet !== "p1d") });
+    const gone = g.rd.readings.find((r) => r.id === g.f.r1.label)!;
+    expect(gone.d2).toEqual({ status: "unjudged", unsupported: [] });
+    const states = [{ name: "test_widget_ok", state: "PASSED" }];
+    const told = f.judges.map((j) => (j.packet === "p1" && j.role === "primary" ? { ...j, answer: { ...j.answer!, d1: states, traps: ["T1"] } } : j));
+    const h = build({ judges: told });
+    const tr = h.rd.readings.find((r) => r.id === h.f.r1.label)!;
+    expect(tr.d1States).toEqual(states);
+    expect(tr.traps).toEqual(["T1"]);
+    const none = rd.readings.find((r) => r.id === f.r2.label)!;
+    expect(none.d2).toBeUndefined();
+    expect(none.d1States).toBeUndefined();
+    expect(none.traps).toBeUndefined();
   });
   test("a reading whose primary judge failed is unjudged; a short task gets its share before the boundary and no list answers", () => {
     const { f, rd } = build();

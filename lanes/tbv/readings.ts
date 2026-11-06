@@ -42,6 +42,7 @@ export function buildReadings(o: { manifest: SplitManifest; manifestSha256: stri
   const tasks = new Map(o.manifest.tasks.map((t) => [t.id, t]));
   const judged = new Map(o.judges.map((j) => [j.packet + ":" + j.role, j]));
   const firstOf = new Map(o.entries.filter((e) => e.kind === "first").map((e) => [e.label, e]));
+  const d2Of = new Map(o.entries.filter((e) => e.kind === "d2").map((e) => [e.label, e]));
   const readings = o.records.map((r): ReadingRow => {
     const t = tasks.get(r.task) ?? fail("E_TBV_INPUT", "reading " + r.label + " names a task the split manifest does not hold");
     const key = o.keys[r.task] ?? fail("E_TBV_INPUT", "no key for task " + r.task);
@@ -83,6 +84,13 @@ export function buildReadings(o: { manifest: SplitManifest; manifestSha256: stri
     if (t.stratum === "short" && names.length) row.shortShare = listShare(report.slice(0, boundary(report, CUT)), names);
     if (names.length) row.d1 = r.texts.d1 === null ? null : listShare(r.texts.d1, names);
     if (second) row.second = second;
+    if (answer?.d1) row.d1States = answer.d1;
+    if (answer) row.traps = answer.traps;
+    const d2 = d2Of.get(r.label);
+    if (d2) {
+      const j = judged.get(d2.packet + ":primary");
+      row.d2 = j?.status === "judged" && j.answer ? { status: "judged", unsupported: j.answer.unsupported } : { status: "unjudged", unsupported: [] };
+    }
     return row;
   });
   const controls: ControlRow[] = [];

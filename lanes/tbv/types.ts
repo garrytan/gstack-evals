@@ -335,6 +335,12 @@ export interface ReadingRow {
   shortShare?: number;
   d1?: number | null;
   second?: { judge: Judge; status: "judged" | "unjudged"; facts: FactLabel[]; responseIds: string[] };
+  /** The D2 packet's primary read; unjudged with no claims when it has no judge record or failed. Absent when the reading has no D2 packet. */
+  d2?: { status: "judged" | "unjudged"; unsupported: string[] };
+  /** The D1 states the first packet's primary judge returned. */
+  d1States?: Array<{ name: string; state: string }>;
+  /** The trap labels the first packet's primary judge returned. */
+  traps?: string[];
 }
 export interface TaskRow {
   id: string;
