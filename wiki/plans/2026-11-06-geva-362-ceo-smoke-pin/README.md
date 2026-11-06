@@ -93,7 +93,7 @@ Before anything after the smoke spends, all three of these hold (the amendment, 
      --run $RUNS/sm2-sol-e --run $RUNS/sm2-sol-p --run $RUNS/sm2-particle-e --run $RUNS/sm2-particle-p --checks
    ```
 
-   It replays all 12 sessions: each is journaled, has a readable transcript and a parsable last block, holds the end state #214's section 6 gives, is scored, and passes every check of its arm's exposure detector (standalone's two, enforced's four).
+   It prints a `session` line for both sessions of each of the six items and ends its checks with `checks: 12 sessions, 12 pass, 0 fail` (ceo-cli.ts:490). The command checks only the sessions it finds in the runs (ceo-cli.ts:482), so exit 0 alone doesn't show that none is missing, and a count under 12 fails the gate. Each of the 12 sessions is journaled, has a readable transcript and a parsable last block, holds the end state #214's section 6 gives, is scored, and passes every check of its arm's exposure detector (standalone's two, enforced's four).
 2. Its output prints no `copy_out:` line, and each of the three `gate:` lines, one per enforced cell, reads `report exits 0 on 2`. A report that exits 2 (GATE_NOT_ARMED) or 3 (GATE_ERRORED) on any session fails the gate. In stage 2 such a session keeps its class and reads unexposed (Big decision 4), but the smoke admits no exception.
 3. The smoke findings check of the CEO pin post's section 4 runs as frozen. No session in these items carries findings_written, so it has nothing to compare.
 
