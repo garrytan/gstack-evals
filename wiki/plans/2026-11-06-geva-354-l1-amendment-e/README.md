@@ -15,10 +15,10 @@ links:
   - 2026-11-02-geva-153-run-d-discovery-results
   - 2026-11-06-geva-350-l1-overhaul-results
 attachments:
-  - 23e2aaeeb7a0f34776aca89c3a94457ec96ed54cf880feefe4a688310abe8315  amendment-c-dryrun.txt
+  - dc6ced90647895762e8a0f4ac0fd094b7fc489eb29f29733543ce4b2170c5ede  amendment-c-dryrun.txt
   - ebfedd27905eaa7a797c2ecf5b09328196502c7cfd1bd54b21bcda8860b2b1f8  ceiling-plan.json
   - d1bae6e59291af5cf5fda0e3244b5bd262460a0a5cc8716076ab48308df2b672  dryrun.sh.txt
-  - e2bc3ad37e026f4ecea71e3d7e96bdc6db41e64621b4d07ab2c611ba48535571  dryrun.txt
+  - bb903cf98bc9cb0c3888b2ea5304604da11da6a1ff61adaecbc5c3438e66d31f  dryrun.txt
   - 1bb953df5ffe690ecde14ac1bc8351a89a15f62fabc16767825892986af51955  mdd.py.txt
   - bba38c4c4a427eaeb3ab30ddda47caebe8fa24515d8dc44c67839f8c3f053bef  mdd.txt
   - 48676dd025b28662dfcaa66b9a8cd697907a8804a4369fd95e54979a6986b32d  whatif-crew.json
@@ -125,7 +125,7 @@ At caps, everything fits under $3,300 with $232.47 to spare, and with f1-sol-off
 
 ## The pins
 
-The build is e5fccfa482cab7a3985096b42742453076a9c713, the commit both dry runs ran at. This post's last commit adds only dryrun.txt, amendment-c-dryrun.txt and the dry run's results to its folder.
+The build is 85d6ccc53a27a70142b0b7499a28cb0f5961aabb, the commit both dry runs ran at. This post's last commit adds only dryrun.txt, amendment-c-dryrun.txt and the dry run's results to its folder.
 
 | File | sha256 at the build |
 |---|---|
@@ -151,21 +151,21 @@ Under quick/laneb, only these files, the two READMEs and five test files changed
 - **Part E** runs ceiling.ts at the $3,300 line on the pinned plan against L1's final Opus ledgers, and opens and settles route and item leases on temporary ledgers in the pinned order, f1-sol-offu and particle-1 included, and through the plan edits a Sol exit makes.
 - **Part F** runs bun test, typecheck, errors:check and wiki:check at the build.
 
-**Result at the build, e5fccfa.** DRYRUN: ok, 96 rules, 0 failed ([dryrun.txt](dryrun.txt); its commit line carries dryrun.sh's own sha256). The lines a reader will look for:
+**Result at the build, 85d6ccc.** DRYRUN: ok, 97 rules, 0 failed ([dryrun.txt](dryrun.txt); its commit line carries dryrun.sh's own sha256). The lines a reader will look for:
 
 - The Opus items prepare byte for byte as at 802c2e4: 0 differing files over 89 (pilot-opus), 676 (f1-opus) and 257 (tb2-opus), manifests equal apart from created_at, plans equal apart from run_id and git_head, and the same prepare-run calls (B1, B2). They never ask for ROUTE_LEDGER (B3).
 - Every refusal reads as expected (C1 to C17, D1 to D13). The five new items prepare with their own model in every job file, and their 2,080 task files are the Opus parts' byte for byte (C18 to C22).
-- At caps the ceiling check passes at $3,067.53, and at $3,267.53 with f1-sol-offu. $300 more crew spend refuses at $3,392.49 (E2 to E4). The order holds at every step, f1-sol-offu and particle-1 included (E5 to E11d), and a plan at $2,000 or with no line exits 2 (E12). After a Sol exit at any point, particle-1's route check passes: after a route drop, l1-route-p1 runs after l1-route-sol, and with no Sol item done it has no after (E14).
-- bun test gives 3,264 pass and 0 fail, and typecheck, errors:check and wiki:check pass (F1, F2).
+- At caps the ceiling check passes at $3,067.53, and at $3,267.53 with f1-sol-offu. $300 more crew spend refuses at $3,392.49 (E2 to E4). The order holds at every step, f1-sol-offu and particle-1 included (E5 to E11d), and a plan at $2,000 or with no line exits 2 (E12). After a Sol exit at any point, particle-1's route check passes: after a route drop, l1-route-p1 runs after l1-route-sol, and with no Sol item done it has no after (E14). A done f1-sol counts at its $730 cap until its work dir shows every part finished and host-down settled, and at its settled $460.22 with that record (E15).
+- bun test gives 3,267 pass and 0 fail, and typecheck, errors:check and wiki:check pass (F1, F2).
 
 **Amendment C's dry run at the build** ([amendment-c-dryrun.txt](amendment-c-dryrun.txt)): 61 of 64 rules ok, A8's price.txt pin included. Its three ceiling rules, D1 to D3, fail as intended: they write plans for the $2,000 line with no ceiling_usd, and ceiling.ts now exits 2 on such a plan. Those rules tested the $2,000 line, which Amendment E's line replaces, and E1 to E13 drive the ceiling at $3,300 instead.
 
 ## Attachments
 
-- [amendment-c-dryrun.txt](amendment-c-dryrun.txt): Amendment C's dry run rerun at the build, sha256 23e2aaeeb7a0f34776aca89c3a94457ec96ed54cf880feefe4a688310abe8315.
+- [amendment-c-dryrun.txt](amendment-c-dryrun.txt): Amendment C's dry run rerun at the build, sha256 dc6ced90647895762e8a0f4ac0fd094b7fc489eb29f29733543ce4b2170c5ede.
 - [ceiling-plan.json](ceiling-plan.json): the ceiling plan at the $3,300 line: Opus done, Sol then particle-1 planned at their caps, each after the one before, sha256 ebfedd27905eaa7a797c2ecf5b09328196502c7cfd1bd54b21bcda8860b2b1f8.
 - [dryrun.sh.txt](dryrun.sh.txt): the dry run, sha256 d1bae6e59291af5cf5fda0e3244b5bd262460a0a5cc8716076ab48308df2b672.
-- [dryrun.txt](dryrun.txt): its whole output at the build, sha256 e2bc3ad37e026f4ecea71e3d7e96bdc6db41e64621b4d07ab2c611ba48535571.
+- [dryrun.txt](dryrun.txt): its whole output at the build, sha256 bb903cf98bc9cb0c3888b2ea5304604da11da6a1ff61adaecbc5c3438e66d31f.
 - [mdd.py.txt](mdd.py.txt): the off-u contrast's MDD over the merged power.py's model, one-sided for a gain, sha256 1bb953df5ffe690ecde14ac1bc8351a89a15f62fabc16767825892986af51955.
 - [mdd.txt](mdd.txt): its output, sha256 bba38c4c4a427eaeb3ab30ddda47caebe8fa24515d8dc44c67839f8c3f053bef.
 - [whatif-crew.json](whatif-crew.json): the crew file the money section reads, as of 2026-11-06 17:00 UTC, sha256 48676dd025b28662dfcaa66b9a8cd697907a8804a4369fd95e54979a6986b32d.
