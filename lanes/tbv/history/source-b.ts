@@ -197,17 +197,63 @@ export function fromGraphql(node: Record<string, any>): PrRecord | null {
 }
 
 /** B0's source B query plus authoredDate and the totalCounts that tell a truncated record, one pull request per page:
- * at five a page, GitHub's resource limit nulled connections on a page with many check runs and answered with errors. */
+ * at five a page, GitHub's resource limit nulled connections on a page with many check runs and answered with errors.
+ * Files and each commit's check suites carry pageInfo, so wholeNode can page the rest; asking for 50 suites a commit up
+ * front would cost about 52 rate-limit points a page against 12. */
 const QUERY = `query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){pullRequests(first:1,after:$cursor,states:[MERGED,CLOSED],orderBy:{field:CREATED_AT,direction:ASC}){
  totalCount
  pageInfo{hasNextPage endCursor}
  nodes{number state title createdAt mergedAt closedAt baseRefName headRefName
   closingIssuesReferences(first:10){totalCount nodes{number}}
-  files(first:100){totalCount nodes{path additions deletions}}
-  commits(first:100){totalCount nodes{commit{oid message authoredDate committedDate checkSuites(first:10){totalCount nodes{checkRuns(first:20){totalCount nodes{name conclusion status title summary text}}}}}}}
+  files(first:100){totalCount pageInfo{hasNextPage endCursor} nodes{path additions deletions}}
+  commits(first:100){totalCount nodes{commit{oid message authoredDate committedDate checkSuites(first:10){totalCount pageInfo{hasNextPage endCursor} nodes{checkRuns(first:20){totalCount nodes{name conclusion status title summary text}}}}}}}
   reviewThreads(first:100){totalCount nodes{isResolved comments(first:20){totalCount nodes{author{login} body}}}}
   reviews(first:60){totalCount nodes{author{login} body}}
  }}}}`;
+
+const FILES_QUERY = `query($owner:String!,$name:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){files(first:100,after:$cursor){totalCount pageInfo{hasNextPage endCursor} nodes{path additions deletions}}}}}`;
+const SUITES_QUERY = `query($owner:String!,$name:String!,$oid:GitObjectID!,$cursor:String){repository(owner:$owner,name:$name){object(oid:$oid){... on Commit{checkSuites(first:100,after:$cursor){totalCount pageInfo{hasNextPage endCursor} nodes{checkRuns(first:20){totalCount nodes{name conclusion status title summary text}}}}}}}}`;
+
+/** One gh api graphql call. A reply that carries an errors array fails closed even when gh exits 0 and data came back, since
+ * GitHub's resource limit nulls connections and still returns the page, so mine-b keeps no partial page. */
+function graphql(vars: string[]): any {
+  const p: { exitCode: number; stdout: Buffer; stderr: Buffer } = Bun.spawnSync(["gh", "api", "graphql", ...vars]);
+  let body: any = null;
+  try {
+    body = JSON.parse(p.stdout.toString());
+  } catch {}
+  if (Array.isArray(body?.errors) && body.errors.length) fail("E_TBV_INPUT", "gh api graphql answered with " + body.errors.length + " errors (" + [...new Set(body.errors.map((e: any) => e?.type ?? e?.message))].join(", ") + "); mine-b keeps no partial page");
+  if (p.exitCode !== 0) fail("E_TBV_INPUT", "gh api graphql failed: " + p.stderr.toString().slice(0, 300));
+  return body?.data;
+}
+
+/** A connection's pages past its first, so a record whose files or check suites hold more than one page comes through
+ * whole. A connection with no next page comes back as it is. Every page must keep the first page's totalCount, return
+ * nodes and move the cursor, and paging may not return more nodes than totalCount at any page, or mine-b fails closed. Paging that
+ * ends short of totalCount leaves the connection truncated, and fromGraphql flags the record. */
+function pageRest(what: string, conn: Record<string, any> | null | undefined, next: (cursor: string) => any): Record<string, any> | null | undefined {
+  if (!conn?.pageInfo?.hasNextPage) return conn;
+  const nodes = [...nodesOf(conn)];
+  let info = conn.pageInfo;
+  while (info?.hasNextPage) {
+    const page: any = next(info.endCursor) ?? fail("E_TBV_INPUT", "gh api graphql answered with no page of " + what);
+    if (page.totalCount !== conn.totalCount) fail("E_TBV_INPUT", what + " counted " + conn.totalCount + ", then " + page.totalCount + " on a later page; rerun mine-b");
+    if (!nodesOf(page).length || page.pageInfo?.endCursor === info.endCursor) fail("E_TBV_INPUT", what + " did not page past cursor " + info.endCursor + "; rerun mine-b");
+    nodes.push(...nodesOf(page));
+    if (nodes.length > conn.totalCount) fail("E_TBV_INPUT", what + " paged " + nodes.length + " nodes, more than its totalCount " + conn.totalCount + "; rerun mine-b");
+    info = page.pageInfo;
+  }
+  return { totalCount: conn.totalCount, nodes };
+}
+
+/** node with its files and every commit's check suites paged in full: one more query per 100 files past the first 100, and
+ * per commit with more than 10 check suites. */
+function wholeNode(owner: string, name: string, node: Record<string, any>): Record<string, any> {
+  const gql = (query: string, vars: string[]) => graphql(["-f", "query=" + query, "-f", "owner=" + owner, "-f", "name=" + name, ...vars]);
+  const files = pageRest("pull request #" + node.number + "'s files", node.files, (cursor) => gql(FILES_QUERY, ["-F", "number=" + node.number, "-f", "cursor=" + cursor])?.repository?.pullRequest?.files);
+  const commits = nodesOf(node.commits).map((n) => ({ ...n, commit: { ...n.commit, checkSuites: pageRest("commit " + n.commit.oid + "'s check suites", n.commit.checkSuites, (cursor) => gql(SUITES_QUERY, ["-f", "oid=" + n.commit.oid, "-f", "cursor=" + cursor])?.repository?.object?.checkSuites) } }));
+  return { ...node, files, commits: node.commits && { ...node.commits, nodes: commits } };
+}
 
 function flags(argv: string[], names: string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -230,20 +276,12 @@ export async function run(argv: string[], io: Io): Promise<number> {
     let total: unknown = null;
     let cursor: string | null = null;
     do {
-      const args: string[] = ["gh", "api", "graphql", "-f", "query=" + QUERY, "-f", "owner=" + owner, "-f", "name=" + name, ...(cursor ? ["-f", "cursor=" + cursor] : [])];
-      const p: { exitCode: number; stdout: Buffer; stderr: Buffer } = Bun.spawnSync(args);
-      let body: any = null;
-      try {
-        body = JSON.parse(p.stdout.toString());
-      } catch {}
-      if (Array.isArray(body?.errors) && body.errors.length) fail("E_TBV_INPUT", "gh api graphql answered with " + body.errors.length + " errors (" + [...new Set(body.errors.map((e: any) => e?.type ?? e?.message))].join(", ") + "); mine-b keeps no partial page");
-      if (p.exitCode !== 0) fail("E_TBV_INPUT", "gh api graphql failed: " + p.stderr.toString().slice(0, 300));
-      const page: any = body?.data?.repository?.pullRequests ?? fail("E_TBV_INPUT", "gh api graphql answered with no pullRequests page");
+      const page: any = graphql(["-f", "query=" + QUERY, "-f", "owner=" + owner, "-f", "name=" + name, ...(cursor ? ["-f", "cursor=" + cursor] : [])])?.repository?.pullRequests ?? fail("E_TBV_INPUT", "gh api graphql answered with no pullRequests page");
       total = page.totalCount;
       for (const node of page.nodes) {
         if (seen.has(node.number)) fail("E_TBV_INPUT", "pull request #" + node.number + " came back on two pages; rerun mine-b");
         seen.add(node.number);
-        const rec = fromGraphql(node);
+        const rec = fromGraphql(wholeNode(owner, name, node));
         if (rec) prs.push(rec);
         else skipped.push(lineageOf(node));
       }
