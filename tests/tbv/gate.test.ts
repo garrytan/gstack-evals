@@ -2,7 +2,7 @@
 // The keyless render gate (GEVA-392 addendum): every history's report request for every model and arm, built and checked
 // as the drive builds and checks it before a send, printing counts and structure only.
 import { afterAll, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "../../lanes/tbv/cli.ts";
@@ -51,10 +51,10 @@ function setup(name: string, tasks: Record<string, unknown>, shapes = ["none", "
   for (const f of ["investigate", "ship"] as const) put(join(dir, "splices", "splice-" + f + ".json"), splice(f));
   return dir;
 }
-const argv = (dir: string) => ["render-gate", "--tasks", join(dir, "tasks"), "--shapes", join(dir, "shapes"), "--splices", join(dir, "splices"), "--turns", TURNS, "--cwd", "/app", "--date", "2026-11-05"];
-async function gate(dir: string) {
+const argv = (dir: string, turns = TURNS) => ["render-gate", "--tasks", join(dir, "tasks"), "--shapes", join(dir, "shapes"), "--splices", join(dir, "splices"), "--turns", turns, "--cwd", "/app", "--date", "2026-11-05"];
+async function gate(dir: string, turns = TURNS) {
   const out: string[] = [], err: string[] = [];
-  const code = await main(argv(dir), { out: (t) => out.push(t), err: (t) => err.push(t) });
+  const code = await main(argv(dir, turns), { out: (t) => out.push(t), err: (t) => err.push(t) });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 const quiet = (text: string) => expect(text).not.toMatch(/task-secret|toolu_|secret body|secret checks|a\.py|Find the bug/);
@@ -118,6 +118,23 @@ test("the gate fails closed on an empty input, a file that is not a history, or 
     expect(r.err).toContain(why);
     expect(r.out).toBe("");
     await expect(run(argv(dir), { out: () => {}, err: () => {} })).rejects.toMatchObject({ code: "E_TBV_INPUT" });
+  }
+});
+
+test("a --turns file that is missing or changed fails with a reason code and names the flag, not the path", async () => {
+  const dir = setup("turns", { "investigate/plain.json": PLAIN });
+  const changed = join(root, "turns-secret-changed.txt");
+  writeFileSync(changed, readFileSync(TURNS, "utf8") + "extra: line\n");
+  for (const [turns, why] of [
+    [join(root, "turns-secret-gone.txt"), "--turns cannot be read"],
+    [changed, "--turns is not turns.txt at its frozen sha256"],
+  ] as const) {
+    const r = await gate(dir, turns);
+    expect(r.code).toBe(2);
+    expect(r.err.split("\n")[0]).toStartWith("E_TBV_INPUT gstack-evals tbv render-gate: ");
+    expect(r.err).toContain(why);
+    expect(r.err).not.toContain("secret");
+    expect(r.out).toBe("");
   }
 });
 

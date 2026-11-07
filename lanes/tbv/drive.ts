@@ -656,6 +656,10 @@ export async function runItem(o: RunItemOptions): Promise<DriveResult & { crashe
   const kept = [...vault.all()];
   const done = kept.filter(([n]) => n.startsWith("reading-")).map(([, t]) => JSON.parse(t) as ReadingRecord);
   const starts = kept.filter(([n]) => n.startsWith("start-")).map(([, t]) => JSON.parse(t) as Reading & { label: string });
+  if (done.some((r) => ARM_MODELS[r.model].provider === "openrouter" && r.sends.some((x) => !("idFrom" in x)))) {
+    rmSync(root, { recursive: true, force: true });
+    fail("E_TBV_INPUT", "a sealed OpenRouter reading under --out predates the generation-id fix, so its sends name msg_ ids; drive it again under a fresh --run-id and --out");
+  }
   const run = await openItemRun(o);
   let result: DriveResult | null = null;
   const crashed: string[] = [];
@@ -701,11 +705,16 @@ export function spliceBy(sets: SpliceSet[], pinOf: (arm: Arm) => string | null, 
 const TURN_KEYS: Turn[] = ["report", "d1", "d2", "followup"];
 /** turns.txt at its frozen sha256: one "name: text" line per turn. */
 export function readTurns(path: string): Turns {
-  const text = readFileSync(path, "utf8");
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return fail("E_TBV_INPUT", "--turns cannot be read");
+  }
   const sha = new Bun.CryptoHasher("sha256").update(text).digest("hex");
-  if (sha !== BUNDLE.turns.sha256) fail("E_TBV_INPUT", path + " is not turns.txt at its frozen sha256 " + BUNDLE.turns.sha256);
+  if (sha !== BUNDLE.turns.sha256) fail("E_TBV_INPUT", "--turns is not turns.txt at its frozen sha256 " + BUNDLE.turns.sha256);
   const map = Object.fromEntries(text.split("\n").filter(Boolean).map((l) => [l.slice(0, l.indexOf(":")), l.slice(l.indexOf(":") + 1).trim()]));
-  for (const k of TURN_KEYS) if (!map[k]) fail("E_TBV_INPUT", path + " has no " + k + " turn");
+  for (const k of TURN_KEYS) if (!map[k]) fail("E_TBV_INPUT", "--turns has no " + k + " turn");
   return map as unknown as Turns;
 }
 

@@ -307,6 +307,31 @@ describe("OpenRouter sends name the generation id from the X-Generation-Id heade
     expect(s.gets.length).toBe(0);
     expect(releases(L.ledger)).toBe(0);
   });
+  test("a Sol stream that ends without its final message keeps its full hold even with a gen- id: nothing looks it up, and a refused round is a cap stop", async () => {
+    const { res, s, L } = await go({ script: (c) => (c.n === 1 ? sse({ text: "partial", usage: false, final: false }) : sse({ text: "a report" })), records: zero, tasks: five, models: ["sol"], cap: 1.3, roundWorst: 1 });
+    const cut = res.records.flatMap((r) => r.sends).filter((x) => x.attempt === 1);
+    expect(cut.length).toBeGreaterThan(0);
+    expect(cut.every((x) => ["truncated", "no-final"].includes(x.kind) && x.idFrom === "x-generation-id" && x.micros === null)).toBe(true);
+    expect(res.stop?.cls).toBe("cap");
+    expect(s.gets.length).toBe(0);
+    expect(releases(L.ledger)).toBe(0);
+  });
+  test("a restart refuses a sealed OpenRouter reading from before the fix, with no send, and deletes the plaintext", async () => {
+    const first = await go({ script: () => text(), tasks: ["t1"], models: ["sol"] });
+    const t1 = first.by("t1", "none", "sol");
+    const file = join(first.L.out, "sealed", "reading-" + t1.label + ".json");
+    writeFileSync(file, JSON.stringify({ ...t1, sends: t1.sends.map(({ idFrom: _f, messageId: _m, ...x }) => ({ ...x, responseId: "msg_legacy" })) }) + "\n");
+    const s = stub(() => text());
+    const c = clock();
+    const err = await runItem({ item: ITEM, runId: "run-1", record: first.L.record, ledger: first.L.ledger, out: first.L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now, plan: plan({ script: () => text(), tasks: ["t1", "t2"], models: ["sol"], roundWorst: 0.000001 }), plaintext: first.L.plain, sealCmd: null, unsealCmd: null, devPlaintext: true, held: false, deps: { build: fakeBuild, validate: () => ({ ok: true }), closer: () => true }, log: () => {} }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toMatchObject({ code: "E_TBV_INPUT" });
+    expect(String((err as Error).message)).toContain("predates the generation-id fix");
+    expect(s.calls.length).toBe(0);
+    expect(existsSync(first.L.plain)).toBe(false);
+  });
   test("an Anthropic send is unchanged: its response id is the stream's message id, and the header is not read", async () => {
     const { res, s } = await go({ script: () => text(), tasks: ["t1", "t2"], models: ["opus"] });
     const sends = res.records.flatMap((r) => r.sends);
