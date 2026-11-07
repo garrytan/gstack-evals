@@ -1,0 +1,24 @@
+rc tgff24032962 exposure_sha=f0882eaf2d5fe19ef682ec0f0c88e9a1239870a04544cf6adbf6d34e4e167694 detector_exposed=true detector_failed=none phases=ceo,dx,eng
+call tgff24032962 phase=ceo at=108 before_publish=true sole=true shape1=false shape3=false piped=false result=json shape=BUN DQ_SNAP METHODOLOGY PHASE DQ_ABS_SKILLMD DQ_ABS_MD
+ph tgff24032962 phase=ceo credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+call tgff24032962 phase=dx at=741 before_publish=true sole=true shape1=false shape3=false piped=true result=path shape=BUN DQ_SNAP METHODOLOGY PHASE DQ_ABS_SKILLMD DQ_ABS_MD PIPE BUN FLAG SQ_WORD
+ph tgff24032962 phase=dx credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+call tgff24032962 phase=eng at=921 before_publish=true sole=true shape1=false shape3=false piped=true result=path shape=BUN DQ_SNAP METHODOLOGY PHASE DQ_ABS_SKILLMD DQ_ABS_MD PIPE BUN FLAG SQ_WORD
+ph tgff24032962 phase=eng credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+rcsum tgff24032962 credits=12 open_credits=0 review_skills_loaded_detector=true rc_matches_detector=true overcredit_reclassify=false
+rc tg8d524982ac exposure_sha=f0882eaf2d5fe19ef682ec0f0c88e9a1239870a04544cf6adbf6d34e4e167694 detector_exposed=false detector_failed=findings_in_order phases=ceo,dx,eng
+call tg8d524982ac phase=ceo at=101 before_publish=true sole=true shape1=false shape3=false piped=false result=json shape=BUN DQ_SNAP METHODOLOGY PHASE DQ_ABS_SKILLMD DQ_ABS_MD
+ph tg8d524982ac phase=ceo credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+call tg8d524982ac phase=dx at=602 before_publish=true sole=true shape1=false shape3=false piped=true result=path shape=BUN DQ_SNAP METHODOLOGY PHASE DQ_ABS_SKILLMD DQ_ABS_MD PIPE PY DASHC SQ_WORD
+ph tg8d524982ac phase=dx credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+call tg8d524982ac phase=eng at=797 before_publish=true sole=true shape1=false shape3=false piped=true result=path shape=BUN DQ_SNAP METHODOLOGY PHASE DQ_ABS_SKILLMD DQ_ABS_MD PIPE PY DASHC SQ_WORD
+ph tg8d524982ac phase=eng credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+rcsum tg8d524982ac credits=12 open_credits=0 review_skills_loaded_detector=true rc_matches_detector=true overcredit_reclassify=false
+rc tg5b38fec201 exposure_sha=f0882eaf2d5fe19ef682ec0f0c88e9a1239870a04544cf6adbf6d34e4e167694 detector_exposed=false detector_failed=findings_in_order phases=ceo,dx,eng
+call tg5b38fec201 phase=ceo at=138 before_publish=true sole=true shape1=false shape3=false piped=false result=json shape=BUN SNAP METHODOLOGY PHASE ABS_SKILLMD ABS_MD
+ph tg5b38fec201 phase=ceo credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+call tg5b38fec201 phase=dx at=778 before_publish=true sole=true shape1=false shape3=false piped=false result=json shape=BUN SNAP METHODOLOGY PHASE ABS_SKILLMD ABS_MD
+ph tg5b38fec201 phase=dx credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+call tg5b38fec201 phase=eng at=1052 before_publish=true sole=true shape1=false shape3=false piped=true result=path shape=BUN SNAP METHODOLOGY PHASE ABS_SKILLMD ABS_MD PIPE BUN FLAG SQ_WORD
+ph tg5b38fec201 phase=eng credits=4 open_credits=0 loaded_detector=true loaded_checked=true rests_on_open=false
+rcsum tg5b38fec201 credits=12 open_credits=0 review_skills_loaded_detector=true rc_matches_detector=true overcredit_reclassify=false
