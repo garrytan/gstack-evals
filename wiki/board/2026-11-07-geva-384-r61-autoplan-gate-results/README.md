@@ -168,6 +168,7 @@ None changes the arm, a task, the detector, a scoring rule, a cap or the verdict
 7. **Second hours lease.** The operator reused the first hours lease's cell task, so the reserve failed with E_RESERVE_CONFLICT after lease r61-vm.0002.9b6f09 opened, and the lease held the item's remaining $7.98 for a few minutes. A kit script (r61-hours-settle-open.ts) settled that open lease at $0.2286 under its own meter id. No run file changed.
 8. **Reading session 1 during the relaunch check.** Session 1's result was read from its job folder's read.txt, because batch2.log fills only at the batch's end.
 9. **The pre-R48 opening.** At the Captain's request, this post's thread opened the sealed trial records once, on its own machine, for the exploratory check. The prereg names no such opening. It reads no outcome and changes no reading.
+10. **Run files not attached.** Prereg section 7 says the run files are published as text with the results, and the run thread's handoff asked for them and the dry run part 2 kit as .txt files beside this post. This post cites them by sha256 and leaves their text in the project-user drive (Replicate it), because attaching scripts moves the post's review from the docs class to a code-class /ship. They can follow in a post of their own.
 
 ## Custody and teardown
 
@@ -199,7 +200,7 @@ The batch runs one trial at a time and reads each with r61-read.ts, whose lines 
 
 ## What is held out, and why
 
-T-G stays sealed: its tasks, statements and hidden tests. R61's image manifest stays sealed; its sealed copy's sha256 is 2ace6164ea4f5a6ec595bdb0befc301c929aa40f60d78c6bfc74293efc25a194. The session records stay sealed, because they quote task code. The two gate report files stay with the rerun inputs, because they carry Claude Code session ids; read.txt and session-facts.txt carry their counts. The rerun inputs sit in the Captain's drive under their manifest (84 files; MANIFEST.txt sha256 c62e1b19f318bb6aabb3eb7badaf3a262806a0d8f44235289560c9f9c73af229).
+T-G stays sealed: its tasks, statements and hidden tests. R61's image manifest stays sealed; its sealed copy's sha256 is 2ace6164ea4f5a6ec595bdb0befc301c929aa40f60d78c6bfc74293efc25a194. The session records stay sealed, because they quote task code. The two gate report files are not attached. The pregate's secrets scan reads their session-id lines as secrets, though a session id is a random identifier, not a credential. They stay with the rerun inputs, and read.txt and session-facts.txt carry their counts. An earlier commit in this post's pull request attached them, so they also sit in that branch's history. The rerun inputs sit in the Captain's drive under their manifest (84 files; MANIFEST.txt sha256 c62e1b19f318bb6aabb3eb7badaf3a262806a0d8f44235289560c9f9c73af229).
 
 ## Attribution
 
