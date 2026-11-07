@@ -1,11 +1,15 @@
 // L1's launcher (wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000, sections 3, 6, 9 and 10, build unit U1).
-// One item per run (pilot-opus, f1-opus, tb2-opus). Each item's parts run one after another as detached launches of one
+// One item per run (pilot-opus, f1-opus, tb2-opus; under section 9's leftover rule, Amendment E: pilot-sol, f1-sol, the
+// optional f1-sol-offu, then pilot-p1 and f1-p1). Each
+// item's parts run one after another as detached launches of one
 // bound run, each part's controller (runner/launch.sh with its ledger service and tunnel) on an awake host: a dedicated
 // Ubicloud standard-2 VM that this launcher names, pins and reserves on the item's own ledger. The item's single ledger
 // file and its .bound live on that host while the run is up. The waiting agent attaches on a timer.
 //
 // Agent side (run in this order; see l1/README.md):
-//   bun quick/laneb/l1/l1.ts prepare <work> --item <item>    prepare-run per part, plan.json (no host, no spend)
+//   bun quick/laneb/l1/l1.ts prepare <work> --item <item>    prepare-run per part, plan.json (no host, no spend); a Sol or
+//                                                            particle-1 item only after its model's route check passed on
+//                                                            l1-route-sol or l1-route-p1 (ROUTE_LEDGER)
 //   bun quick/laneb/l1/l1.ts host-up <work>                  reserve the host's hours, start and bootstrap it, move the ledger onto it
 //   bun quick/laneb/l1/l1.ts launch <work> --part <part>     bind the run on the first launch, start the part's controller detached
 //   bun quick/laneb/l1/l1.ts attach <work>                   one look: mirror the ledger, pull finished parts, print NEXT
@@ -25,12 +29,12 @@ import { basename, join, resolve } from "node:path";
 import { rng } from "../analysis/analyze.ts";
 import { appendRow, fromMicros, Ledger, readRows, reconcile, toMicros, totals, type Row } from "../runner/ledger.ts";
 import { ROUTE_MARK } from "../runner/proxy.ts";
+import { bindCheck, OPUS, SOL, type RouteGate } from "../r3/screen.ts";
 
 const LANEB = resolve(import.meta.dir, "..");
 const REPO = resolve(LANEB, "../..");
 export const BUNDLE = "wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000";
 export const L1 = {
-  model: "claude-opus-5-5",
   seed: 20261102,
   concurrent: 6,
   fParts: { file: BUNDLE + "/f-parts.txt", sha256: "507e4a070b8c2ad6f4e4aec99a626e0f3e06b91b9ad5219e5de08249d73eb98b" },
@@ -65,11 +69,33 @@ export const ARM_SPECS: Record<string, string> = {
 const SEVEN = ["none", "before-u", "after-u", "before-t", "after-t", "off-u", "off-t"];
 const FIVE = ["none", "before-u", "after-u", "before-t", "after-t"];
 
-export type ItemDef = { capUsd: number; taskSet: "swerebench-r3a4" | "tb2"; cells: string; allowanceUsd: number };
+// Sol's route check on its own item (Amendment E; prereg section 4: R3's route check first). r3/route-check.ts --item
+// l1-route-sol runs R3's smoke session on L1's none arm and its told /investigate session on L1's after arm, at
+// cells.l1-sol.json's Sol cell, and writes only to l1-route-sol's ledger, so pilot-sol's ledger holds nothing before its run.
+export const L1_ROUTE = {
+  id: SOL, label: "GPT-6.1 Sol", item: "l1-route-sol", capUsd: 20, capFrom: "Amendment E's", routePrefix: "l1-route-sol/", ledgerPort: "9918",
+  armManifests: L1.armManifests, cells: "cells.l1-sol.json", routeArms: { smoke: ARM_SPECS.none!, told: ARM_SPECS["after-t"]! }, leg: "L1's Sol leg",
+};
+// particle-1's, the same way on its own item, at cells.l1-p1.json's cell.
+const P1 = "particle-1";
+export const L1_ROUTE_P1 = { ...L1_ROUTE, id: P1, label: "particle-1", item: "l1-route-p1", routePrefix: "l1-route-p1/", ledgerPort: "9919", cells: "cells.l1-p1.json", leg: "L1's particle-1 leg" };
+
+// route: the route check a model's items need passed before they prepare.
+export type ItemDef = { capUsd: number; taskSet: "swerebench-r3a4" | "tb2"; cells: string; allowanceUsd: number; model: string; route?: RouteGate };
 export const ITEMS: Record<string, ItemDef> = {
-  "pilot-opus": { capUsd: 80, taskSet: "swerebench-r3a4", cells: "cells.l1.json", allowanceUsd: 5 },
-  "f1-opus": { capUsd: 680, taskSet: "swerebench-r3a4", cells: "cells.l1.json", allowanceUsd: 5 },
-  "tb2-opus": { capUsd: 180, taskSet: "tb2", cells: "cells.l1-tb2.json", allowanceUsd: 2.5 },
+  "pilot-opus": { capUsd: 80, taskSet: "swerebench-r3a4", cells: "cells.l1.json", allowanceUsd: 5, model: OPUS },
+  "f1-opus": { capUsd: 680, taskSet: "swerebench-r3a4", cells: "cells.l1.json", allowanceUsd: 5, model: OPUS },
+  "tb2-opus": { capUsd: 180, taskSet: "tb2", cells: "cells.l1-tb2.json", allowanceUsd: 2.5, model: OPUS },
+  // Section 9's planning caps. f1-sol's cap is its re-cost, which price.py floors at $730; a re-cost above $730 needs the
+  // Captain's record and a pins change here before f1-sol launches.
+  "pilot-sol": { capUsd: 100, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  "f1-sol": { capUsd: 730, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  // Amendment E's one added rule: off-u alone on Sol (the after pin with routing and contracts off, against f1-sol's before-u), only after
+  // f1-sol is done and only when the ceiling check passes with it. Its cap is price.py's formula for 80 off-u sessions on Sol.
+  "f1-sol-offu": { capUsd: 200, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  // Section 9's planning caps for particle-1, which runs after Sol; f1-p1's cap is its re-cost, floored at $920 the same way.
+  "pilot-p1": { capUsd: 120, taskSet: "swerebench-r3a4", cells: "cells.l1-p1.json", allowanceUsd: 5, model: P1, route: L1_ROUTE_P1 },
+  "f1-p1": { capUsd: 920, taskSet: "swerebench-r3a4", cells: "cells.l1-p1.json", allowanceUsd: 5, model: P1, route: L1_ROUTE_P1 },
 };
 
 export type Rect = { tasks: string[]; arms: string[]; attempts: number };
@@ -118,16 +144,16 @@ export const hostTtlHours = (parts: number) => (parts + 1) * L1.host.launchHours
 // Each item's parts, from the frozen inputs.
 export function itemParts(item: string, input: { fParts?: string; pilot?: string; tb2Parts?: string }): PartPlan[] {
   const part = (name: string, rects: Rect[]): PartPlan => ({ name, prefix: prefixOf(item, name), rects: seeded(rects) });
-  if (item === "pilot-opus") {
+  if (item === "pilot-opus" || item === "pilot-sol" || item === "pilot-p1") {
     const pilot = (input.pilot ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
     if (pilot.length !== 10 || new Set(pilot).size !== 10) usage("the pilot list must hold 10 distinct tasks");
     if (!L1.smoke.every((t) => pilot.includes(t))) usage("every smoke task must be a pilot task");
     return [part("pilot", [{ tasks: pilot, arms: ["before-u", "before-t"], attempts: 1 }, { tasks: [...L1.smoke], arms: ["after-u", "after-t", "off-u", "off-t"], attempts: 1 }])];
   }
-  if (item === "f1-opus") {
+  if (item === "f1-opus" || item === "f1-sol" || item === "f1-sol-offu" || item === "f1-p1") {
     const parts = readParts(input.fParts ?? "");
     if ([...parts.keys()].join() !== "1,2,3,4" || [...parts.values()].some((t) => t.length !== 20)) usage("F1 needs parts 1 to 4 of 20 tasks each");
-    return [...parts].map(([k, tasks]) => part("f1-" + k, [{ tasks, arms: SEVEN, attempts: 1 }]));
+    return [...parts].map(([k, tasks]) => part("f1-" + k, [{ tasks, arms: item === "f1-opus" ? SEVEN : item === "f1-sol-offu" ? ["off-u"] : FIVE, attempts: 1 }]));
   }
   if (item === "tb2-opus") {
     const parts = readParts(input.tb2Parts ?? "");
@@ -597,6 +623,10 @@ function prepare(work: string, item: string) {
   const ledger = ledgerEnv();
   if (existsSync(pointerPath(ledger)) || existsSync(ledger + ".bound")) refuse(ledger + " is on a host or bound to a run already");
   itemCheck(readRows(ledger), item);
+  if (def.route) {
+    const route = process.env.ROUTE_LEDGER || usage("set ROUTE_LEDGER to " + def.route.item + "'s ledger; " + item + " prepares only after its route check passed there");
+    try { bindCheck(resolve(route), def.route, [join(LANEB, "config/proxy.json")]); } catch (e) { refuse((e as Error).message); }
+  }
   const arms = process.env.ARMS ?? usage("set ARMS to the directory holding the none, before, after and off arm tars");
   const inputs: Record<string, string> = {};
   const frozen = (f: { file: string; sha256: string }) => { const text = readFileSync(join(REPO, f.file), "utf8"); if (sha256(text) !== f.sha256) usage(f.file + " does not hash to the prereg's " + f.sha256); inputs[basename(f.file)] = f.sha256; return text; };
@@ -609,12 +639,12 @@ function prepare(work: string, item: string) {
     if (sha256(tb2Parts) !== want) usage(f + " does not hash to TB2_PARTS_SHA256");
     inputs["tb2-parts"] = want;
   }
-  const parts = itemParts(item, { fParts: item === "f1-opus" ? frozen(L1.fParts) : undefined, pilot: item === "pilot-opus" ? frozen(L1.pilot) : undefined, tb2Parts });
+  const parts = itemParts(item, { fParts: item.startsWith("f1-") ? frozen(L1.fParts) : undefined, pilot: item.startsWith("pilot-") ? frozen(L1.pilot) : undefined, tb2Parts });
   mkdirSync(work, { recursive: true });
   for (const p of parts) preparePart(work, p, def, arms);
   for (const tar of ["none", "before", "after", "off"]) { const m = join(LANEB, L1.armManifests, tar + ".json"); if (existsSync(m)) inputs["arm:" + tar] = sha256File(m); }
   const git = (args: string[]) => Bun.spawnSync(["git", "-C", REPO, ...args]).stdout.toString().trim();
-  const plan: Plan = { item, run_id: randomBytes(8).toString("hex"), cap_usd: def.capUsd, model: L1.model, task_set: def.taskSet, cells: def.cells, seed: L1.seed, concurrent: L1.concurrent, parts, inputs, git_head: git(["rev-parse", "HEAD"]), host_ttl_hours: hostTtlHours(parts.length) };
+  const plan: Plan = { item, run_id: randomBytes(8).toString("hex"), cap_usd: def.capUsd, model: def.model, task_set: def.taskSet, cells: def.cells, seed: L1.seed, concurrent: L1.concurrent, parts, inputs, git_head: git(["rev-parse", "HEAD"]), host_ttl_hours: hostTtlHours(parts.length) };
   writeJson(join(work, "plan.json"), plan);
   console.log("prepared " + work + ": " + item + ", " + parts.map((p) => p.name + " (" + [...plannedCells(p).values()].reduce((a, b) => a + b, 0) + " sessions)").join(", ") + "; run " + plan.run_id + ", unbound");
 }
@@ -625,7 +655,7 @@ function preparePart(work: string, p: PartPlan, def: ItemDef, arms: string) {
   const labels = [...new Set(p.rects.flatMap((x) => x.arms))];
   const env = { ...process.env, TASK_SET: def.taskSet, CELLS: def.cells, ARM_MANIFESTS: L1.armManifests, TASKS: tasks.join(",") };
   const attempts = String(Math.max(...p.rects.map((x) => x.attempts)));
-  const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), L1.model, labels.map((a) => ARM_SPECS[a]!).join(","), arms, attempts, String(L1.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
+  const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), def.model, labels.map((a) => ARM_SPECS[a]!).join(","), arms, attempts, String(L1.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) throw new Error("prepare-run for " + p.name + " exited " + r.exitCode);
   // The proxy can't tell the route hook's line from a copy in the task prompt (runner/proxy.ts routeMark), so a task whose
   // instruction holds it never runs. The work tree's CLAUDE.md and the rest of the context Claude Code loads by itself sit in
@@ -691,7 +721,10 @@ function hostUp(work: string) {
   if (bound && bound.run_id !== plan.run_id) refuse(plan.item + " is bound to run " + bound.run_id + ", not " + plan.run_id);
   if (!bound) itemCheck(rows, plan.item);
   if (!process.env.UBICLOUD_API_KEY && !process.env.UBICLOUD_API_TOKEN) usage("set UBICLOUD_API_KEY");
-  if (!process.env.ANTHROPIC_API_KEY) usage("set ANTHROPIC_API_KEY; the host passes it to each part VM's metering proxy");
+  const proxy = readJson(join(LANEB, "config/proxy.json"));
+  const keyEnv: string | undefined = proxy.routes?.[proxy.models?.[plan.model]?.route]?.key_env;
+  if (!keyEnv) refuse("config/proxy.json has no route for " + plan.model);
+  if (!process.env[keyEnv!]) usage("set " + keyEnv + ", the key for " + plan.model + "'s route in config/proxy.json; the host passes it to each part VM's metering proxy");
   if (process.env.UBI_RECOVERY_KEY) refuse("UBI_RECOVERY_KEY is set, but the host seals part-VM recovery bundles with UBICLOUD_API_KEY, so recover could not open them; unset it");
   runner();
   const n = new Set(hosts(work).map((r) => r.n)).size + 1;
@@ -721,7 +754,7 @@ function hostUp(work: string) {
     rmSync(bin, { recursive: true, force: true });
     const shaOut = must(remoteL1(name, "bash " + H + "/laneb/l1/host-bootstrap.sh >&2 && chmod +x " + H + "/bin/ubi-runner.sh && sha256sum " + H + "/bin/ubi-runner.sh"), "bootstrapping the host");
     if (!shaOut.includes(process.env.UBI_RUNNER_SHA256!)) throw new Error("the host's ubi-runner copy does not hash to UBI_RUNNER_SHA256");
-    const secrets = ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "UBICLOUD_API_KEY"].map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
+    const secrets = [keyEnv!, "UBICLOUD_API_KEY"].map((k) => k + "=" + (process.env[k] ?? (k === "UBICLOUD_API_KEY" ? process.env.UBICLOUD_API_TOKEN ?? "" : ""))).join("\n") + "\n";
     must(ubi(["ssh", name, "umask 077; cat > ~/.l1-secrets"], { input: secrets }), "writing the host's secrets file");
     must(ubi(["ssh", name, "mkdir -p " + H + "/work " + H + "/recovery " + H + "/ubi-state && cat > " + H + "/host.env.in && sed \"s#\\$HOME#$HOME#\" " + H + "/host.env.in > " + H + "/host.env"], { input: hostEnvText(plan.item, plan.cap_usd, process.env.UBI_OWNER ?? "") }), "writing host.env");
     const stage = mkdtempSync(join(tmpdir(), "l1-ledger-"));

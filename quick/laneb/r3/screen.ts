@@ -77,6 +77,9 @@ export type R3aModel = {
   // The arm manifest directory under quick/laneb its route check reads, when not arms/manifests/r3 (R3b's items).
   armManifests?: string;
 };
+// What the route check's gate reads of an item: R3's models, and L1's l1-route-sol (L1 Amendment E). leg names the line a
+// dropped model leaves (R3a when unset).
+export type RouteGate = Pick<R3aModel, "id" | "label" | "item" | "capUsd" | "capFrom" | "routePrefix"> & { leg?: string };
 export const R3A: Record<string, R3aModel> = {
   [OPUS]: {
     id: OPUS, label: "Opus 5.5", item: "r3a-screen", capUsd: 150, capFrom: "the prereg's", routePrefix: null, ledgerPort: "9911",
@@ -213,11 +216,11 @@ export function readRoute(ledgerPath: string): RouteVerdict | null {
 // A model with a route check runs its screen only once its record, beside its own ledger, says it passed on its item. A
 // pass covers only the proxy config it ran with: each of the screen's proxy configs must hash to the record's
 // proxy_config_sha256. Without proxyConfigs it checks the verdict only; bindCheck always passes them.
-export function routePassed(ledgerPath: string, m: R3aModel, proxyConfigs?: string[]) {
+export function routePassed(ledgerPath: string, m: RouteGate, proxyConfigs?: string[]) {
   if (m.routePrefix === null) return;
   const route = readRoute(ledgerPath);
   if (route && (route.model !== m.id || route.item !== m.item)) throw new Error(`${routeRecordPath(ledgerPath)} is for ${route.model} on ${route.item}, not ${m.id} on ${m.item}`);
-  if (route?.verdict === "drop") throw new Error(`${m.label} dropped out of R3a at its route check: ${route.reason}`);
+  if (route?.verdict === "drop") throw new Error(`${m.label} dropped out of ${m.leg ?? "R3a"} at its route check: ${route.reason}`);
   if (route?.incomplete) throw new Error(`${m.label}'s route check on ${m.item} is incomplete (${route.incomplete}); the Captain decides on a rerun`);
   if (route?.verdict !== "pass") throw new Error(`${m.label} has not passed its route check on ${m.item} (${routeRecordPath(ledgerPath)}); run r3/route-check.ts first`);
   if (!proxyConfigs) return;
@@ -230,7 +233,7 @@ export function routePassed(ledgerPath: string, m: R3aModel, proxyConfigs?: stri
 }
 
 // The item's ledger holds its approval row at the model's cap, and no reserve or settle rows but its route check's.
-export function itemCheck(ledgerPath: string, m: R3aModel) {
+export function itemCheck(ledgerPath: string, m: RouteGate) {
   const rows = readRows(ledgerPath);
   const approval = rows.find((r) => r.kind === "approval");
   if (!approval || approval.item !== m.item) throw new Error(`${ledgerPath}: no approval row for item ${m.item}`);
@@ -243,7 +246,7 @@ export function itemCheck(ledgerPath: string, m: R3aModel) {
 }
 
 // proxyConfigs are the proxy configs the screen runs with, which a model's route check must have passed with.
-export function bindCheck(ledgerPath: string, m: R3aModel = R3A[OPUS]!, proxyConfigs: string[] = []) {
+export function bindCheck(ledgerPath: string, m: RouteGate = R3A[OPUS]!, proxyConfigs: string[] = []) {
   const rows = itemCheck(ledgerPath, m);
   const route = m.routePrefix;
   if (route === null) return;

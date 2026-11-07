@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { admit, analyze, auditResult, auditSample, coverage, decide, holm, interp, markdown, readPowerTable, signFlipP, wilsonUpper, POWER_TXT, TB2_ARMS, type Config, type DecideIn } from "../l1/analyze.ts";
 import type { L1SessionRow } from "../../../src/types.ts";
-import { config, passingAudit, PILOT, row, table, TASKS } from "./fixtures/l1/synthetic.ts";
+import { config, passingAudit, PILOT, row, table, TASKS, type Counts } from "./fixtures/l1/synthetic.ts";
 
 const power = readPowerTable();
 const SLOW = 60_000;
@@ -157,7 +157,40 @@ describe("the whole entry on synthetic tables", () => {
     expect(opus.secondary.S6[0]!.est).toBeCloseTo(59 / 80, 6);
     expect(verdicts(rep, "sol")).toEqual(["B1 NOT_RUN NONE", "B3 NOT_RUN NONE"]);
     expect(rep.models[1]!.primaries[0]!.not_run_mdd).toBeCloseTo(0.129, 6);
-    expect(markdown(rep)).toContain("not run under the $2,000 ceiling");
+    expect(markdown(rep)).toContain("not run under the $3,300 ceiling");
+  }, SLOW);
+  test("Amendment E's off-u secondary on Sol: off-u minus before-u on B1's load, one-sided for a gain, outside Holm; not run without off-u sessions; no other model has it", () => {
+    const sol = (f1: Counts, keep = (_: L1SessionRow) => true) => {
+      const rows = table({ model: "gpt-6.1-sol", f1 }).filter(keep);
+      return analyze(rows, config({ models: [{ id: "gpt-6.1-sol", status: "run" }], audit: passingAudit("gpt-6.1-sol", rows) }));
+    };
+    const gain = sol({ "before-u": { load: 5 }, "after-u": { load: 5 }, "off-u": { load: 30 } });
+    const c = gain.models[0]!.secondary.offu!;
+    expect([c.a, c.b, c.metric, c.tasks, c.coverage!.ok]).toEqual(["off-u", "before-u", "load", 80, true]);
+    expect(c.est).toBeCloseTo(25 / 80, 6);
+    expect(c.p!).toBeLessThan(0.001);
+    expect(gain.models[0]!.primaries[0]!.holm_p).toBe(1);
+    expect(markdown(gain)).toContain("Amendment E's off-u secondary (off-u minus before-u, B1's load, one-sided for a gain at 0.05, outside Holm): +31.3 points");
+    expect(sol({ "before-u": { load: 30 }, "off-u": { load: 5 } }).models[0]!.secondary.offu!.p!).toBeGreaterThan(0.99);
+    const unrun = sol({ "before-u": { load: 5 } }, (r) => r.arm !== "off-u");
+    expect(unrun.models[0]!.secondary.offu!.a_n).toBe(0);
+    expect(markdown(unrun)).toContain("Amendment E's off-u secondary: not run (the table holds no F1 off-u session on Sol); it would have had MDD 13.5 points at Sol's Run D rate of 9.5%");
+    expect(markdown(unrun)).not.toContain("off-u secondary: not run under the $3,300 ceiling");
+    expect(run(table()).models[0]!.secondary.offu).toBeNull();
+  }, SLOW);
+  test("Amendment E's off-u secondary: off-u sessions that ran with none graded (infra or cap stop) read no outcome under the coverage rule; only an omitted f1-sol-offu reads not run, with no reason claimed, whatever other instruments hold", () => {
+    const SOL = "gpt-6.1-sol";
+    const rep = (rows: L1SessionRow[]) => analyze(rows, config({ models: [{ id: SOL, status: "run" }], audit: passingAudit(SOL, rows) }));
+    const rows = table({ model: SOL, f1: { "before-u": { load: 5 }, "off-u": { load: 5 } } });
+    let i = 0;
+    const failed = rep(rows.map((r) => (r.instrument === "f1" && r.arm === "off-u" ? { ...r, outcome: (i++ % 2 ? "infra" : "cap_stop") as L1SessionRow["outcome"] } : r)));
+    const o = failed.models[0]!.secondary.offu!;
+    expect([o.a_n, o.coverage!.ok]).toEqual([0, false]);
+    expect(markdown(failed)).toContain("Amendment E's off-u secondary (off-u minus before-u, B1's load, one-sided for a gain at 0.05, outside Holm): no outcome under the coverage rule.");
+    expect(markdown(failed)).not.toContain("Amendment E's off-u secondary: not run");
+    const omitted = rep([...rows.filter((r) => !(r.instrument === "f1" && r.arm === "off-u")), row(SOL, "smoke", "off-u", PILOT[0]!, { trial: "smoke/off-u/extra" })]);
+    expect(markdown(omitted)).toContain("Amendment E's off-u secondary: not run (the table holds no F1 off-u session on Sol)");
+    expect(markdown(omitted)).not.toContain("off-u secondary: not run under the $3,300 ceiling");
   }, SLOW);
   test("a powered loss is CUT-CANDIDATE, and a clean null on a low before rate is CUT-CANDIDATE", () => {
     const rep = run(table({ f1: { "before-u": { load: 1 }, "after-u": { load: 1 }, "before-t": { complete: 56 }, "after-t": { complete: 8 } } }));

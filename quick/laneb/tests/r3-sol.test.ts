@@ -13,6 +13,7 @@ import { priceFor, costMicros, startProxy, type ProxyConfig } from "../runner/pr
 import { loadR3Jobs, type R3Trial } from "../r3/exposure.ts";
 import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, portTaken, R3A, routePassed, routeRecordPath, screenIds, SOL, vmBlock } from "../r3/screen.ts";
 import { judge, next, toolResults, type RouteRecord } from "../r3/route-check.ts";
+import { L1_ROUTE, L1_ROUTE_P1 } from "../l1/l1.ts";
 
 const here = import.meta.dir;
 const laneb = join(here, "..");
@@ -761,6 +762,73 @@ describe("route-check.ts", () => {
     expect((await routeCheck(cap)).out).toContain("r3a-sol's cap is $150, not the R3 amendment's $140");
     for (const x of [r, cap]) expect(existsSync(join(x.dir, "calls.jsonl"))).toBe(false);
     expect(readRows(r.ledger).filter((x) => x.kind !== "approval")).toEqual([]);
+  }, 60_000);
+
+  // L1 Amendment E: l1-route-sol, its own $20 ledger, L1's none arm and its after arm (tar=after) told /investigate, at
+  // cells.l1-sol.json's Sol cell ($5, 100 turns).
+  const l1Rig = (cap = 20) => {
+    const r = rig(join(tmp("l1-route-"), "l1-route-sol.jsonl"));
+    approve(r.ledger, "l1-route-sol", cap);
+    writeFileSync(join(r.dir, "arms", "after.tar"), "after arm");
+    writeFileSync(join(r.dir, "manifests", "after.json"), JSON.stringify({ tar: { sha256: sha("after arm") } }));
+    return r;
+  };
+
+  test("both parts pass on l1-route-sol: L1's none arm and its after arm told /investigate at cells.l1-sol.json's Sol cell, writing only to l1-route-sol's ledger", async () => {
+    const r = l1Rig();
+    const { code, out, calls, rec } = await routeCheck(r, {}, ["--item", "l1-route-sol"]);
+    expect(out).toContain("route check: gpt-6.1-sol passed on l1-route-sol (smoke passed on try 1, told passed on try 1)");
+    expect(code).toBe(0);
+    expect(calls.map((c) => [c.kind, c.model_name, c.kwargs.upstream_model, c.kwargs.arm, c.kwargs.told_skill ?? null, c.kwargs.system_prompt, c.kwargs.session_cap_usd, c.kwargs.sdk_max_turns, c.kwargs.arm_sha256, c.kwargs.tar_name ?? null])).toEqual([
+      ["smoke", "anthropic/gpt-6.1-sol", SOL, "none", null, "claude-code-preset", 5, 100, sha("none arm"), null],
+      ["told", "anthropic/gpt-6.1-sol", SOL, "after-t", "investigate", "claude-code-preset", 5, 100, sha("after arm"), null],
+    ]);
+    const jobs = readdirSync(join(r.dir, "out")).filter((f) => /^route-gpt-6\.1-sol-(smoke|told)-1-\d+\.json$/.test(f)).sort();
+    expect(jobs.map((f) => JSON.parse(readFileSync(join(r.dir, "out", f), "utf8")).agents[0].import_path)).toEqual(["laneb_hooks:LanebHooksAgent", "laneb_hooks:LanebHooksAgent"]);
+    for (const c of calls) expect(c.keys).toEqual(["placeholder-not-a-key", null, null, null, null]);
+    expect(rec).toMatchObject({ item: "l1-route-sol", model: SOL, verdict: "pass", incomplete: null, open_route_reserves: [] });
+    const rows = readRows(r.ledger).filter((x) => x.kind !== "approval");
+    expect(rows.map((x) => x.kind)).toEqual(["reserve", "settle", "reserve", "settle"]);
+    expect(rows.every((x) => x.id.startsWith("l1-route-sol/"))).toBe(true);
+    expect(rows.filter((x) => x.kind === "reserve").every((x) => x.usd_micros === 5_000_000)).toBe(true);
+    expect(() => bindCheck(r.ledger, L1_ROUTE, [join(r.dir, "proxy.json")])).not.toThrow();
+  }, 60_000);
+
+  test("l1-route-p1 is particle-1's own route check: its $20 ledger, the same two sessions at cells.l1-p1.json's cell, writing only under l1-route-p1/", async () => {
+    const p1Rig = (cap = 20) => {
+      const r = rig(join(tmp("l1-route-p1-"), "l1-route-p1.jsonl"));
+      approve(r.ledger, "l1-route-p1", cap);
+      writeFileSync(join(r.dir, "arms", "after.tar"), "after arm");
+      writeFileSync(join(r.dir, "manifests", "after.json"), JSON.stringify({ tar: { sha256: sha("after arm") } }));
+      return r;
+    };
+    expect((await routeCheck(p1Rig(25), {}, ["--item", "l1-route-p1"])).out).toContain("l1-route-p1's cap is $25, not Amendment E's $20");
+    const r = p1Rig();
+    const { code, out, calls, rec } = await routeCheck(r, {}, ["--item", "l1-route-p1"]);
+    expect([code, out]).toEqual([0, expect.stringContaining("route check: particle-1 passed on l1-route-p1")]);
+    expect(calls.map((c) => [c.kind, c.model_name, c.kwargs.arm, c.kwargs.told_skill ?? null, c.kwargs.session_cap_usd, c.kwargs.sdk_max_turns])).toEqual([
+      ["smoke", "anthropic/particle-1", "none", null, 5, 100],
+      ["told", "anthropic/particle-1", "after-t", "investigate", 5, 100],
+    ]);
+    expect(rec).toMatchObject({ item: "l1-route-p1", model: "particle-1", verdict: "pass" });
+    expect(readRows(r.ledger).filter((x) => x.kind !== "approval").every((x) => x.id.startsWith("l1-route-p1/"))).toBe(true);
+    expect(() => bindCheck(r.ledger, L1_ROUTE_P1, [join(r.dir, "proxy.json")])).not.toThrow();
+  }, 60_000);
+
+  test("l1-route-sol refuses another cap, the after arm off its manifest and a told part that fails twice says L1's Sol leg", async () => {
+    const cap = l1Rig(25);
+    expect((await routeCheck(cap, {}, ["--item", "l1-route-sol"])).out).toContain("l1-route-sol's cap is $25, not Amendment E's $20");
+    const off = l1Rig();
+    writeFileSync(join(off.dir, "arms", "after.tar"), "other bytes");
+    const o = await routeCheck(off, {}, ["--item", "l1-route-sol"]);
+    expect([o.code, o.out]).toEqual([1, expect.stringContaining("arm after-t: tar sha256 " + sha("other bytes") + " is not the preregistered " + sha("after arm"))]);
+    expect(o.out).toContain("after.json");
+    for (const x of [cap, off]) expect(existsSync(join(x.dir, "calls.jsonl"))).toBe(false);
+    const drop = l1Rig();
+    const d = await routeCheck(drop, { STUB_PLAN: "told1=noexpand,told2=noexpand" }, ["--item", "l1-route-sol"]);
+    expect(d.code).toBe(1);
+    expect(d.out).toContain("route check: gpt-6.1-sol dropped out of L1's Sol leg: the told part failed twice");
+    expect(() => bindCheck(drop.ledger, L1_ROUTE, [join(drop.dir, "proxy.json")])).toThrow("GPT-6.1 Sol dropped out of L1's Sol leg at its route check");
   }, 60_000);
 });
 

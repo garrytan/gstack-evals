@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+# L1 Amendment E dry run, keyless. Drives every rule Amendment E adds at the commit given, and shows the Opus items prepare
+# byte for byte as at 802c2e4 (Amendment D's build), in the style of Amendment C's dryrun.sh.txt.
+#   Part A  pins: Sol's and particle-1's cells files, cells.l1.json unchanged, the files L1 loads that changed since 802c2e4,
+#           price.txt, price.py's f1-sol and f1-p1 at 3 and at 4 parts, f1-sol-offu's cap and its contrast's MDD.
+#   Part B  the Opus items (pilot-opus, f1-opus, tb2-opus): l1.ts prepare with the real prepare-run in a git archive of
+#           802c2e4 and of the commit, each outside any git work tree, compared file for file with the prepare-run calls.
+#   Part C  the Sol and particle-1 items: every prepare refusal, then each item prepared with the real prepare-run.
+#   Part D  route-check.ts --item l1-route-sol and l1-route-p1 driven up to where a session would start, with stub harbor and
+#           docker on PATH and a placeholder key: nothing reaches a model, a proxy or a VM.
+#   Part E  ceiling.ts at L1's $3,300 line on the pinned ceiling-plan.json against L1's final Opus ledgers, with route and
+#           item leases opened and settled on temporary ledgers in the pinned order, and the plan edits a Sol exit makes.
+#   Part F  the keyless checks in a work tree at the commit: bun test, typecheck, errors:check, wiki:check.
+# Every rule line reads "ok" or "FAIL" with its expected and observed outcome; the last line is DRYRUN: ok or DRYRUN: fail.
+# Usage: bash dryrun.sh <commit> [<work dir>]   env: G (the gstack-evals checkout, default /workspace/gstack-evals), ARMS
+#   (quick/laneb/arms/build.sh l1's output at 802c2e4), SWEREBENCH (the SWE-rebench leaderboard export), TB2
+#   (terminal-bench-2 at 69671fba), OPUS (a folder with L1's final ledgers pilot-opus-d.jsonl, f1-opus.jsonl, tb2-opus.jsonl
+#   and the voided pilot-opus.jsonl). The plan and the crew file are the post's ceiling-plan.json and whatif-crew.json.
+set -u
+COMMIT=${1:?usage: dryrun.sh <commit> [<work dir>]}
+G=${G:-/workspace/gstack-evals}
+FULL=$(git -C "$G" rev-parse "$COMMIT") || exit 2
+BASE=$(git -C "$G" rev-parse 802c2e4) || exit 2
+SHORT=${FULL:0:7} BSHORT=${BASE:0:7}
+WD=${2:-$HOME/.capy/work/l1-amendment-e/dryrun-$SHORT}; mkdir -p "$WD"; W=$(cd "$WD" && pwd)
+ARMS=${ARMS:-$HOME/.capy/work/l1/arms}
+export SWEREBENCH=${SWEREBENCH:-$HOME/.capy/work/ref/swe-rebench-leaderboard} TB2=${TB2:-$HOME/.capy/work/ref/terminal-bench-2}
+OPUS=${OPUS:-$HOME/.capy/work/l1/ledgers}
+unset ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN
+E=$W/export L=$W/export/quick/laneb D=$W/d
+PR=wiki/plans/2026-11-03-geva-254-l1-overhaul-prereg-2000 AC=wiki/plans/2026-11-05-geva-294-l1-amendment-c AE=wiki/plans/2026-11-06-geva-354-l1-amendment-e
+rm -rf "$W/log" "$D" && mkdir -p "$W/log" "$D"
+HIDE="s#$W#\$W#g; s#$ARMS#\$ARMS#g; s#$OPUS#\$OPUS#g; s#$HOME#~#g"
+fails=0 rules=0
+# rule <label> <expected> <observed> <test command...>
+rule() { local label=$1 want=$2 got=$3; shift 3; rules=$((rules + 1)); if "$@" > /dev/null 2>&1; then echo "ok   $label | expected: $want | observed: $got" | sed "$HIDE"; else fails=$((fails + 1)); echo "FAIL $label | expected: $want | observed: $got" | sed "$HIDE"; fi; }
+sha() { sha256sum "$1" | cut -c1-64; }
+at() { git -C "$G" show "$1:$2"; }
+sessions() { jq '[.parts[].rects[] | (.tasks | length) * (.arms | length) * .attempts] | add' "$1"; }
+# approve <ledger> <item> <cap usd>: a temporary ledger's approval row, in the shape approve.ts writes
+approve() { mkdir -p "$(dirname "$1")"; printf '{"words":"dry run only, no cap recorded","by":"dry-run","ts":"2026-11-06T00:00:00.000Z","item":"%s","kind":"approval","id":"approval","usd_micros":%s}\n' "$2" "$(($3 * 1000000))" > "$1"; }
+LG() { bun "$L/runner/ledger.ts" "$@"; }
+# keep <prepared dir> <dest>: the sha256 of every file but plan.json, then plan.json, each part's manifest.json and the job
+# files; the prepared dir itself goes, since one f1 item holds several GB of task copies
+keep() { mkdir -p "$2/kept" && (cd "$1" && find . -type f ! -path ./plan.json -print0 | sort -z | xargs -0 sha256sum) > "$2/files.sha256" && cp "$1/plan.json" "$2/" && (cd "$1" && find . \( -name manifest.json -o -name 'job*.json' \) -exec cp --parents {} "$2/kept/" \;); rm -rf "$1"; }
+for k in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY UBICLOUD_API_KEY UBICLOUD_API_TOKEN; do echo "$k: $([ -n "${!k+x}" ] && echo set || echo unset)"; done
+echo "commit $FULL; base $BASE; bun $(bun --version); this script sha256 $(sha "$0")"
+at "$FULL" "$AE/ceiling-plan.json" > "$D/ceiling-plan.json" && at "$FULL" "$AE/whatif-crew.json" > "$D/whatif-crew.json" && at "$FULL" "$AE/mdd.py.txt" > "$D/mdd.py" || exit 2
+PLAN=$D/ceiling-plan.json CREW=$D/whatif-crew.json
+
+echo; echo "## Part A: pins"
+CELL() { at "$FULL" "quick/laneb/config/$1" | jq -c '.models'; }
+ALW=$(at "$FULL" "$PR/price.py" | grep -c '^ALLOW = {"swe": 5.00, ')
+rule "A1 cells.l1-sol.json holds Sol's one cell at the prereg's \$5 SWE-rebench allowance (section 3; price.py's ALLOW[\"swe\"], which sizes the Sol and particle-1 caps)" '[{"id":"gpt-6.1-sol","harbor_model":"anthropic/gpt-6.1-sol","session_cap_usd":5}], ALLOW swe 5.00' "$(CELL cells.l1-sol.json), ALLOW swe 5.00 on $ALW line" test "$(CELL cells.l1-sol.json)" = '[{"id":"gpt-6.1-sol","harbor_model":"anthropic/gpt-6.1-sol","session_cap_usd":5}]' -a "$ALW" = 1
+rule "A1b cells.l1-p1.json holds particle-1's one cell at the same \$5 allowance" '[{"id":"particle-1","harbor_model":"anthropic/particle-1","session_cap_usd":5}]' "$(CELL cells.l1-p1.json)" test "$(CELL cells.l1-p1.json)" = '[{"id":"particle-1","harbor_model":"anthropic/particle-1","session_cap_usd":5}]'
+HM() { at "$FULL" quick/laneb/config/cells.r3a4.json | jq -r --arg m "$1" '.models[] | select(.id == $m) | .harbor_model'; }
+UP() { at "$FULL" quick/laneb/config/proxy.json | jq -r --arg m "$1" '.models[$m] | .route + " " + .upstream_model'; }
+rule "A2 both harbor models are the ones R3's cells run, on OpenRouter routes (config/proxy.json)" "anthropic/gpt-6.1-sol openrouter openai/gpt-6.1-sol; anthropic/particle-1 openrouter particle-ai/particle-1" "$(HM gpt-6.1-sol) $(UP gpt-6.1-sol); $(HM particle-1) $(UP particle-1)" test "$(HM gpt-6.1-sol) $(UP gpt-6.1-sol); $(HM particle-1) $(UP particle-1)" = "anthropic/gpt-6.1-sol openrouter openai/gpt-6.1-sol; anthropic/particle-1 openrouter particle-ai/particle-1"
+KN() { at "$FULL" "quick/laneb/config/$1" | jq -c '[.max_output_tokens, .verifier_timeout_multiplier, .sdk_max_turns]'; }
+CS=$(at "$FULL" quick/laneb/config/cells.l1.json | sha256sum | cut -c1-64) CB=$(at "$BASE" quick/laneb/config/cells.l1.json | sha256sum | cut -c1-64)
+rule "A3 cells.l1.json, which Opus's items read, is 802c2e4's byte for byte, and both new cells files have its max_output_tokens, verifier multiplier and 100 turns" "$CB; [32000,2,100] in all three" "$CS; $(KN cells.l1.json) $(KN cells.l1-sol.json) $(KN cells.l1-p1.json)" test "$CS" = "$CB" -a "$(KN cells.l1.json)$(KN cells.l1-sol.json)$(KN cells.l1-p1.json)" = '[32000,2,100][32000,2,100][32000,2,100]'
+CH=$(git -C "$G" diff --name-only "$BASE" "$FULL" -- quick/laneb | tr '\n' ' ')
+WANT="quick/laneb/README.md quick/laneb/config/cells.l1-p1.json quick/laneb/config/cells.l1-sol.json quick/laneb/l1/README.md quick/laneb/l1/analyze.ts quick/laneb/l1/ceiling.ts quick/laneb/l1/l1.ts quick/laneb/r3/route-check.ts quick/laneb/r3/screen.ts quick/laneb/tests/l1-analyze.test.ts quick/laneb/tests/l1-ceiling.test.ts quick/laneb/tests/l1-host.test.ts quick/laneb/tests/l1-launch.test.ts quick/laneb/tests/r3-sol.test.ts "
+rule "A4 under quick/laneb only Amendment E's files changed since 802c2e4" "$WANT" "$CH" test "$CH" = "$WANT"
+OUTSIDE=$(git -C "$G" diff --name-only "$BASE" "$FULL" -- package.json bun.lock tsconfig.json "$PR" "$AC" wiki/plans/2026-11-05-geva-302-l1-amendment-d.md | wc -l)
+rule "A5 nothing else L1 reads changed since 802c2e4: package.json, bun.lock, tsconfig.json, the prereg's folder, Amendment C's folder, Amendment D's post" "0 files" "$OUTSIDE files" test "$OUTSIDE" = 0
+cat > "$D/closure.ts" <<'TS'
+// Prints the repo-relative path of every .ts file reachable from the entry points through relative imports that load at
+// run time: "import type" lines are left out, since Bun erases them.
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
+const root = resolve(process.argv[2]!);
+const seen = new Set<string>();
+const walk = (f: string) => {
+  if (seen.has(f)) return;
+  seen.add(f);
+  for (const m of readFileSync(f, "utf8").matchAll(/(?:^|\n)\s*(import|export)\s+(type\s+)?[^;]*?from\s*"(\.{1,2}\/[^"]+)"|import\(\s*"(\.{1,2}\/[^"]+)"\s*\)/g)) {
+    if (m[2]) continue;
+    const p = resolve(dirname(f), m[3] ?? m[4]!);
+    const c = [p, p + ".ts", p + "/index.ts"].find((x) => existsSync(x) && x.endsWith(".ts"));
+    if (c) walk(c);
+  }
+};
+for (const e of process.argv.slice(3)) walk(resolve(root, e));
+console.log([...seen].map((f) => relative(root, f)).sort().join("\n"));
+TS
+rm -rf "$D/at" && mkdir -p "$D/at" && git -C "$G" archive "$FULL" quick/laneb src | tar -x -C "$D/at"
+CL=$(cd "$D/at" && bun "$D/closure.ts" . quick/laneb/l1/*.ts quick/laneb/r3/route-check.ts quick/laneb/runner/prepare-run.ts quick/laneb/runner/ledger.ts)
+NCL=$(echo "$CL" | wc -l) NOUT=$(echo "$CL" | grep -vc '^quick/laneb/')
+TY=$(grep -rhoE 'import type [^;]*from "(\.\./)+src/[^"]+"' "$D/at/quick/laneb/l1" "$D/at/quick/laneb/r3" "$D/at/quick/laneb/runner" --include=*.ts | grep -oE 'src/[^"]+' | sort -u | tr '\n' ' ')
+TC=$(git -C "$G" diff --name-only "$BASE" "$FULL" -- $TY | wc -l)
+CC=$(echo "$CL" | grep -Fx -f <(git -C "$G" diff --name-only "$BASE" "$FULL") | tr '\n' ' ')
+rule "A5b every file L1's code loads at run time (the relative-import closure of l1/*.ts, r3/route-check.ts, runner/prepare-run.ts and runner/ledger.ts) lies under quick/laneb, so A4 lists each one that changed; the src files they import only as types are unchanged" "0 outside quick/laneb; type-only $TY unchanged" "$NCL files, $NOUT outside quick/laneb, changed: $CC; type-only imports changed: $TC" test "$NOUT" = 0 -a "$NCL" -gt 10 -a "$TC" = 0 -a -n "$TY"
+rm -rf "$D/at"
+mkdir -p "$D/price" && at "$FULL" "$PR/price.py" > "$D/price/price.py" && at "$FULL" "$PR/price.txt" > "$D/price/price.txt" && at "$FULL" "$PR/power.py" > "$D/power.py"
+(cd "$D/price" && python3 price.py > out3.txt); rule "A6 price.py reprints price.txt byte for byte" "the same bytes, $(sha "$D/price/price.txt")" "$(sha "$D/price/out3.txt")" cmp -s "$D/price/out3.txt" "$D/price/price.txt"
+sed 's/item("f1-sol", 80, FIVE, "swe", parts=3, model_id="sol")/item("f1-sol", 80, FIVE, "swe", parts=4, model_id="sol")/; s/item("f1-p1", 80, FIVE, "swe", parts=3, model_id="particle-1")/item("f1-p1", 80, FIVE, "swe", parts=4, model_id="particle-1")/; s/x = item("f1-" + m, 80, FIVE, "swe", parts=3, model_id=m)/x = item("f1-" + m, 80, FIVE, "swe", parts=4, model_id=m)/' "$D/price/price.py" > "$D/price/price4.py"
+ND=$(diff "$D/price/price.py" "$D/price/price4.py" | grep -c '^<')
+(cd "$D/price" && python3 price4.py > out4.txt)
+for mc in f1-sol:730 f1-p1:920 pilot-sol:100 pilot-p1:120; do
+  i=${mc%%:*} c=${mc##*:}; C3=$(grep "^  $i " "$D/price/out3.txt" | tr -s ' ') C4=$(grep "^  $i " "$D/price/out4.txt" | tr -s ' ')
+  rule "A7 $i's planning cap is \$$c at f-parts.txt's 4 parts as at price.py's 3 (a copy with only the F1 part counts changed, $ND lines)" "cap $c at both" "3 parts:$C3; 4 parts:$C4" sh -c 'printf %s "$1" | grep -q "cap *$3$" && printf %s "$2" | grep -q "cap *$3$" && test "$4" = 3' _ "$C3" "$C4" "$c" "$ND"
+done
+for r in sol:low:0.1:0.1:730 sol:edge:0.5:1.2063:730 sol:high:0.6:1.5:730 particle-1:low:0.1:0.1:920 particle-1:high:1.2:3.0:920; do
+  IFS=: read m n a b c <<< "$r"; printf '{"model":"%s","rates":{"none":%s,"before-u":%s,"after-u":%s,"before-t":%s,"after-t":%s}}\n' $m $a $b $b $b $b > "$D/price/$m-$n.json"
+  R3=$(cd "$D/price" && python3 price.py --measured $m-$n.json | grep '^RECOST' | tr '\n' ' ') R4=$(cd "$D/price" && python3 price4.py --measured $m-$n.json | grep '^RECOST' | tr '\n' ' ')
+  K3=$(echo "$R3" | sed -n 's/.*f1-[a-z0-9-]* cap \([0-9]*\).*/\1/p') K4=$(echo "$R4" | sed -n 's/.*f1-[a-z0-9-]* cap \([0-9]*\).*/\1/p')
+  rule "A8 $m's re-cost after its pilot at $n rates (none \$$a, gstack arms \$$b a session): price.py's floors keep its F1 cap at or above the \$$c planning cap, and pricing F1 at f-parts.txt's 4 parts instead of price.py's 3 would add \$0 or \$10" "3 parts at or above $c; 4 parts the same or 10 more" "3 parts: cap $K3; 4 parts: cap $K4" sh -c 'test -n "$1" -a -n "$2" && test "$1" -ge "$3" && d=$(($2 - $1)) && { test $d = 0 || test $d = 10; }' _ "$K3" "$K4" "$c"
+done
+OFFU=$(cd "$D/price" && python3 -c '
+import contextlib, io, runpy, sys
+sys.argv = ["price.py"]
+with contextlib.redirect_stdout(io.StringIO()): g = runpy.run_path("price.py")
+for parts in (3, 4):
+    x = g["item"]("f1-sol-offu", 80, ["off-u"], "swe", parts=parts, model_id="sol")
+    print("%d parts: %d sessions, expected $%.2f, cap %d;" % (parts, x["sessions"], x["expected"], x["cap"]), end=" ")')
+rule "A9 f1-sol-offu's cap from price.py's own formula (item(), unchanged) for 80 off-u sessions on Sol" "cap 200 at 3 and at 4 parts" "$OFFU" sh -c 'test "$(printf %s "$1" | grep -o "cap 200;" | wc -l)" = 2' _ "$OFFU"
+MDD=$(python3 "$D/mdd.py" "$D/power.py" | grep 'before-u  9.5%  conc 2' | tr -s ' ')
+rule "A10 the off-u contrast's MDD at Sol's Run D rate (9.5%), one-sided for a gain at 0.05, by power.py's model at 80 x 1" "13.5 points" "$MDD" sh -c 'printf %s "$1" | grep -q "MDD@0.05 one-sided 13.5 "' _ "$MDD"
+echo; echo "## Part B: the Opus items prepare byte for byte as at 802c2e4"
+cat > "$D/shim.ts" <<'TS'
+// Records the call l1.ts makes, then runs the real prepare-run with it.
+import { appendFileSync } from "node:fs";
+appendFileSync(process.env.CALLS!, JSON.stringify({ argv: Bun.argv.slice(2), env: ["TASK_SET", "CELLS", "ARM_MANIFESTS", "TASKS"].map((k) => k + "=" + process.env[k]) }) + "\n");
+process.exit(Bun.spawnSync([process.execPath, process.env.REAL_PREPARE_RUN!, ...Bun.argv.slice(2)], { stdout: "inherit", stderr: "inherit" }).exitCode ?? 1);
+TS
+CAPS="pilot-opus:80 f1-opus:680 tb2-opus:180"
+for c in "$BASE" "$FULL"; do
+  s=${c:0:7}
+  rm -rf "$E" && mkdir -p "$E" && git -C "$G" archive "$c" | tar -x -C "$E" && (cd "$E" && bun install --frozen-lockfile > "$W/log/bun-install-$s.txt" 2>&1)
+  for ic in $CAPS; do
+    i=${ic%%:*}; rm -rf "$D/prep"; approve "$D/led-$s/$i.jsonl" "$i" "${ic##*:}"
+    (cd "$E" && CALLS="$D/calls-$s-$i.jsonl" REAL_PREPARE_RUN="$L/runner/prepare-run.ts" L1_PREPARE_RUN="$D/shim.ts" LEDGER="$D/led-$s/$i.jsonl" ARMS="$ARMS" TB2_PARTS="$E/$AC/tb2-parts.txt" TB2_PARTS_SHA256=57569b23dae012c2f5b65662bca93104efa0b871bcab1071305bc7f1a72df125 bun "$L/l1/l1.ts" prepare "$D/prep" --item "$i") > "$W/log/prepare-$s-$i.txt" 2>&1
+    echo "prepare $i at $s: exit $?; $(tail -1 "$W/log/prepare-$s-$i.txt" | sed "$HIDE")"
+    keep "$D/prep" "$D/opus-$s/$i"
+  done
+done
+for ic in $CAPS; do
+  i=${ic%%:*} a=$D/opus-$BSHORT/${ic%%:*} b=$D/opus-$SHORT/${ic%%:*}
+  P1=$(jq -S -c 'del(.run_id, .git_head)' "$a/plan.json" 2>/dev/null) P2=$(jq -S -c 'del(.run_id, .git_head)' "$b/plan.json" 2>/dev/null)
+  DF=$(diff <(grep -v '/manifest\.json$' "$a/files.sha256") <(grep -v '/manifest\.json$' "$b/files.sha256") | wc -l) NF=$(wc -l < "$b/files.sha256")
+  MD=0 NM=0; for m in $(cd "$b/kept" && find . -name manifest.json); do NM=$((NM + 1)); MD=$((MD + $(diff <(jq -S 'del(.created_at)' "$a/kept/$m") <(jq -S 'del(.created_at)' "$b/kept/$m") | wc -l))); done
+  rule "B1 $i: every file prepare wrote at the commit is 802c2e4's byte for byte, but each part's manifest.json (it differs only in created_at) and plan.json (only in run_id and git_head)" "0 differing files; 0 manifest lines apart from created_at; the same plan" "$DF lines over $NF files; $MD lines over $NM manifests; plan $(echo "$P2" | sha256sum | cut -c1-12) vs $(echo "$P1" | sha256sum | cut -c1-12), model $(echo "$P2" | jq -r .model), $(sessions "$b/plan.json") sessions" test "$DF" = 0 -a "$MD" = 0 -a "$NM" -gt 0 -a -n "$P1" -a "$P1" = "$P2" -a "$NF" -gt 1
+  rule "B2 $i: l1.ts calls prepare-run with the same arguments and environment" "the same calls" "$(wc -l < "$D/calls-$SHORT-$i.jsonl") calls, model $(jq -r '.argv[2]' "$D/calls-$SHORT-$i.jsonl" | sort -u | tr '\n' ' ')" cmp -s "$D/calls-$BSHORT-$i.jsonl" "$D/calls-$SHORT-$i.jsonl"
+done
+NR=$(grep -c ROUTE_LEDGER "$W/log/prepare-$SHORT-pilot-opus.txt")
+rule "B3 the Opus prepares ran with no ROUTE_LEDGER set and never asked for one" "0 mentions" "$NR mentions" test "$NR" = 0
+
+
+echo; echo "## Part C: the Sol and particle-1 items"
+PSHA=$(sha "$L/config/proxy.json")
+# route <name> <cap usd> <record json, or none> [item]: a temporary route ledger and its route record
+route() { local item=${4:-l1-route-sol}; approve "$D/route/$1.jsonl" "$item" "$2"; [ "$3" = none ] || echo "$3" > "$D/route/$1.jsonl.route.json"; echo "$D/route/$1.jsonl"; }
+rec() { printf '{"item":"%s","model":"%s","verdict":%s,"reason":%s,"incomplete":%s,"proxy_config_sha256":"%s","sessions":[]}' "$1" "$2" "$3" "$4" "$5" "${6:-$PSHA}"; }
+pass=$(rec l1-route-sol gpt-6.1-sol '"pass"' '"dry run"' null)
+R_NONE=$(route norecord 20 none)
+R_DROP=$(route drop 20 "$(rec l1-route-sol gpt-6.1-sol '"drop"' '"the told session never opened investigate"' null)")
+R_INC=$(route incomplete 20 "$(rec l1-route-sol gpt-6.1-sol null null '"told try 1: infra"')")
+R_PROXY=$(route proxy 20 "$(rec l1-route-sol gpt-6.1-sol '"pass"' '"dry run"' null 0000000000000000000000000000000000000000000000000000000000000000)")
+R_OTHER=$(route other 20 "$(rec r3a4-sol gpt-6.1-sol '"pass"' '"dry run"' null)")
+R_CAP=$(route cap19 19 "$pass")
+R_OPEN=$(route open 20 "$pass"); LG reserve --path "$R_OPEN" --item l1-route-sol --id l1-route-sol/told-1 --usd 5 > /dev/null
+R_PASS=$(route pass 20 "$pass"); LG reserve --path "$R_PASS" --item l1-route-sol --id l1-route-sol/smoke-1 --usd 5 > /dev/null; LG settle --path "$R_PASS" --item l1-route-sol --id l1-route-sol/smoke-1 --usd 0.42 > /dev/null
+R_P1SOL=$(route p1solrec 20 "$(rec l1-route-p1 gpt-6.1-sol '"pass"' '"dry run"' null)" l1-route-p1)
+R_P1=$(route p1pass 20 "$(rec l1-route-p1 particle-1 '"pass"' '"dry run"' null)" l1-route-p1); LG reserve --path "$R_P1" --item l1-route-p1 --id l1-route-p1/smoke-1 --usd 5 > /dev/null; LG settle --path "$R_P1" --item l1-route-p1 --id l1-route-p1/smoke-1 --usd 0.05 > /dev/null
+for ic in pilot-sol:100 f1-sol:730 f1-sol-offu:200 pilot-p1:120 f1-p1:920; do approve "$D/sol/${ic%%:*}.jsonl" "${ic%%:*}" "${ic##*:}"; done
+approve "$D/sol/pilot80.jsonl" pilot-sol 80; approve "$D/sol/f1-680.jsonl" f1-sol 680; approve "$D/sol/l1-route-sol.jsonl" l1-route-sol 20
+approve "$D/sol/used.jsonl" pilot-sol 100; LG reserve --path "$D/sol/used.jsonl" --item pilot-sol --id pilot/s1 --usd 5 > /dev/null
+# prep <case> <item> <item ledger> [ROUTE_LEDGER]: prints "exit N; the first E_ or prepared line"
+prep() { rm -rf "$D/sol/$1"; (cd "$E" && env ${4:+ROUTE_LEDGER=$4} LEDGER="$3" ARMS="$ARMS" bun "$L/l1/l1.ts" prepare "$D/sol/$1" --item "$2") > "$W/log/sol-$1.txt" 2>&1; echo "exit $?; $(grep -m1 'E_\|prepared' "$W/log/sol-$1.txt" | cut -c1-230)"; }
+c() { local label=$1 code=$2 text=$3 out; shift 3; out=$(prep "$@"); rule "$label" "exit $code, $text" "$out" sh -c 'case "$1" in "exit $2; "*"$3"*) exit 0;; esac; exit 1' _ "$out" "$code" "$text"; }
+c "C1 pilot-sol without ROUTE_LEDGER is refused before anything is written" 2 "set ROUTE_LEDGER to l1-route-sol's ledger" noroute pilot-sol "$D/sol/pilot-sol.jsonl"
+c "C2 a route ledger with no record" 3 "has not passed its route check on l1-route-sol" norecord pilot-sol "$D/sol/pilot-sol.jsonl" "$R_NONE"
+c "C3 a dropped route check" 3 "dropped out of L1's Sol leg at its route check" drop pilot-sol "$D/sol/pilot-sol.jsonl" "$R_DROP"
+c "C4 an incomplete route check" 3 "is incomplete (told try 1: infra); the Captain decides" incomplete pilot-sol "$D/sol/pilot-sol.jsonl" "$R_INC"
+c "C5 a pass with another proxy config" 3 "route check passed with proxy config sha256 0000000000" proxy pilot-sol "$D/sol/pilot-sol.jsonl" "$R_PROXY"
+c "C6 a pass recorded for R3's item r3a4-sol" 3 "is for gpt-6.1-sol on r3a4-sol, not gpt-6.1-sol on l1-route-sol" other pilot-sol "$D/sol/pilot-sol.jsonl" "$R_OTHER"
+c "C7 a route ledger approved at \$19" 3 "cap is \$19, not Amendment E's \$20" cap19 pilot-sol "$D/sol/pilot-sol.jsonl" "$R_CAP"
+c "C8 a route reserve still open" 3 "1 route check reserves are still open on l1-route-sol" open pilot-sol "$D/sol/pilot-sol.jsonl" "$R_OPEN"
+c "C9 pilot-sol's ledger at \$80" 3 "pilot-sol's cap on the ledger is \$80, not the \$100" cap80 pilot-sol "$D/sol/pilot80.jsonl" "$R_PASS"
+c "C10 f1-sol's ledger at \$680" 3 "f1-sol's cap on the ledger is \$680, not the \$730" cap680 f1-sol "$D/sol/f1-680.jsonl" "$R_PASS"
+c "C11 a pilot-sol ledger that already holds a reserve" 3 "already holds 1 reserve or settle rows" used pilot-sol "$D/sol/used.jsonl" "$R_PASS"
+c "C12 f1-sol-offu without ROUTE_LEDGER" 2 "set ROUTE_LEDGER to l1-route-sol's ledger" offunoroute f1-sol-offu "$D/sol/f1-sol-offu.jsonl"
+c "C13 l1-route-sol is not a prepare item: it runs through route-check.ts" 2 "unknown item l1-route-sol" routeprep l1-route-sol "$D/sol/l1-route-sol.jsonl"
+c "C14 pilot-p1 without ROUTE_LEDGER" 2 "set ROUTE_LEDGER to l1-route-p1's ledger" p1noroute pilot-p1 "$D/sol/pilot-p1.jsonl"
+c "C15 pilot-p1 with Sol's passing route ledger" 3 "no approval row for item l1-route-p1" p1sol pilot-p1 "$D/sol/pilot-p1.jsonl" "$R_PASS"
+c "C16 pilot-p1 with a Sol record on an l1-route-p1 ledger" 3 "is for gpt-6.1-sol on l1-route-p1, not particle-1 on l1-route-p1" p1solrec pilot-p1 "$D/sol/pilot-p1.jsonl" "$R_P1SOL"
+NW=$(ls "$D/sol" | grep -vc '\.jsonl')
+rule "C17 no refusal wrote a work dir" "0 dirs" "$NW dirs" test "$NW" = 0
+O=$D/opus-$SHORT S=$D/solk
+for x in pilot-sol:R_PASS:gpt-6.1-sol:32 f1-sol:R_PASS:gpt-6.1-sol:400 f1-sol-offu:R_PASS:gpt-6.1-sol:80 pilot-p1:R_P1:particle-1:32 f1-p1:R_P1:particle-1:400; do
+  IFS=: read i rv m n <<< "$x"
+  c "C18 $i prepares after a settled pass on its model's route item" 0 "prepared" "$i" "$i" "$D/sol/$i.jsonl" "${!rv}"
+  keep "$D/sol/$i" "$S/$i"; P=$S/$i/plan.json
+  NS=$(grep -rl "anthropic/$m\"" "$S/$i/kept" --include='job*.json' | wc -l) NJ=$(find "$S/$i/kept" -name 'job*.json' | wc -l) NO=$(grep -rlE 'claude-opus|anthropic/(gpt-6.1-sol|particle-1)' "$S/$i/kept" --include='job*.json' | xargs -r grep -L "anthropic/$m\"" | wc -l)
+  rule "C19 $i: plan.json names $m, $n sessions, and every job file runs $m's harbor model only" "model $m; $n sessions; every job file $m, 0 other" "$(jq -c '[.item, .model, .cap_usd, .cells, .host_ttl_hours]' "$P"); $(sessions "$P") sessions; $NS of $NJ job files $m, $NO other" test "$(jq -r .model "$P")" = "$m" -a "$(sessions "$P")" = "$n" -a "$NS" = "$NJ" -a "$NJ" -gt 0 -a "$NO" = 0
+done
+SH() { jq -c '[.parts[] | {name, rects: [.rects[] | {tasks, arms, attempts}]}]' "$1"; }
+rule "C20 pilot-sol and pilot-p1 have pilot-opus's shape: the same parts, tasks, arms and attempts" "the same parts, three times" "$(for i in pilot-opus pilot-sol pilot-p1; do f=$S/$i/plan.json; [ $i = pilot-opus ] && f=$O/$i/plan.json; SH "$f" | sha256sum | cut -c1-12; done | tr '\n' ' ')" sh -c 'test "$1" = "$2" -a "$1" = "$3"' _ "$(SH "$O/pilot-opus/plan.json")" "$(SH "$S/pilot-sol/plan.json")" "$(SH "$S/pilot-p1/plan.json")"
+FP() { jq -c '[.parts[] | {name, tasks: ([.rects[].tasks[]] | unique)}]' "$1"; }
+ARMS5() { jq -c '[.parts[] | [.rects[].arms[]] | unique | join(",")] | unique' "$1"; }
+rule "C21 f1-sol, f1-sol-offu and f1-p1 run f-parts.txt's 4 parts with F1 Opus's tasks part by part: the five arms, off-u alone, the five arms" '["after-t,after-u,before-t,before-u,none"] ["off-u"] ["after-t,after-u,before-t,before-u,none"], the same tasks' "$(ARMS5 "$S/f1-sol/plan.json") $(ARMS5 "$S/f1-sol-offu/plan.json") $(ARMS5 "$S/f1-p1/plan.json"), tasks $(for i in f1-sol f1-sol-offu f1-p1; do [ "$(FP "$S/$i/plan.json")" = "$(FP "$O/f1-opus/plan.json")" ] && echo -n same, || echo -n differ,; done)" sh -c 'test "$1" = "[\"after-t,after-u,before-t,before-u,none\"] [\"off-u\"] [\"after-t,after-u,before-t,before-u,none\"]" -a "$2" = "$3" -a "$2" = "$4" -a "$2" = "$5"' _ "$(ARMS5 "$S/f1-sol/plan.json") $(ARMS5 "$S/f1-sol-offu/plan.json") $(ARMS5 "$S/f1-p1/plan.json")" "$(FP "$O/f1-opus/plan.json")" "$(FP "$S/f1-sol/plan.json")" "$(FP "$S/f1-sol-offu/plan.json")" "$(FP "$S/f1-p1/plan.json")"
+TD=0; for p in pilot-opus:pilot-sol pilot-opus:pilot-p1 f1-opus:f1-sol f1-opus:f1-p1; do TD=$((TD + $(diff <(grep '/tasks/' "$O/${p%%:*}/files.sha256") <(grep '/tasks/' "$S/${p##*:}/files.sha256") | wc -l))); done
+TO=$(diff <(grep '/tasks/' "$O/f1-opus/files.sha256") <(grep '/tasks/' "$S/f1-sol-offu/files.sha256") | wc -l)
+NT=$(cat "$S"/*/files.sha256 | grep -c '/tasks/')
+rule "C22 every Sol and particle-1 part's task dirs are the Opus part's byte for byte" "0 differing lines" "$TD + $TO lines over $NT task files" test "$TD" = 0 -a "$TO" = 0 -a "$NT" -gt 0
+
+echo; echo "## Part D: route-check.ts on l1-route-sol and l1-route-p1, up to the first session"
+mkdir -p "$D/stub" "$D/arms-none" "$D/arms-both"; printf '#!/bin/sh\nexit 1\n' > "$D/stub/harbor"; printf '#!/bin/sh\nexit 0\n' > "$D/stub/docker"; chmod +x "$D/stub/harbor" "$D/stub/docker"
+cp "$ARMS/none.tar.gz" "$D/arms-none/"; cp "$ARMS/none.tar.gz" "$ARMS/after.tar.gz" "$D/arms-both/"
+# rc <item> <case> [VAR=value ...]: route-check.ts --item <item> with stub harbor and docker first on PATH
+rc() { local it=$1 n=$2; shift 2; (cd "$E" && env PATH="$D/stub:$PATH" OUT="$D/rc-$n" "$@" bun "$L/r3/route-check.ts" --item "$it") > "$W/log/rc-$n.txt" 2>&1; echo "exit $?; $(grep -m1 'E_\|route check' "$W/log/rc-$n.txt" | cut -c1-230)"; }
+d() { local label=$1 code=$2 text=$3 out; shift 3; out=$(rc "$@"); rule "$label" "exit $code, $text" "$out" sh -c 'case "$1" in "exit $2; "*"$3"*) exit 0;; esac; exit 1' _ "$out" "$code" "$text"; }
+K=OPENROUTER_API_KEY=dry-run-placeholder-not-a-key
+d "D1 no LEDGER" 2 "set LEDGER to l1-route-sol's jsonl ledger" l1-route-sol noledger ARMS="$D/arms-both"
+d "D2 no key: Sol's route is OpenRouter's (config/proxy.json)" 2 "set OPENROUTER_API_KEY, the key for gpt-6.1-sol's route" l1-route-sol nokey LEDGER="$(route d2 20 none)" ARMS="$D/arms-both"
+d "D3 an l1-route-sol ledger approved at \$19" 1 "cap is \$19, not Amendment E's \$20" l1-route-sol cap19 LEDGER="$(route d3 19 none)" ARMS="$D/arms-both" $K
+d "D4 a recorded pass runs nothing" 0 "already passed on l1-route-sol" l1-route-sol passed LEDGER="$(route d4 20 "$pass")" ARMS="$D/arms-both" $K
+d "D5 a recorded drop runs nothing" 1 "dropped out of L1's Sol leg" l1-route-sol dropped LEDGER="$(route d5 20 "$(cat "$R_DROP.route.json")")" ARMS="$D/arms-both" $K
+d "D6 the told session needs L1's after tar: an arms dir with only none's is refused" 2 "has no after.tar or after.tar.gz" l1-route-sol noafter LEDGER="$(route d6 20 none)" ARMS="$D/arms-none" $K
+R7=$(route d7 20 none)
+d "D7 with none's and after's tars it stages both against arms/manifests/l1 and stops at the stub docker, before any service or session" 1 "docker gave no bridge gateway" l1-route-sol staged LEDGER="$R7" ARMS="$D/arms-both" $K
+ST=$(cd "$D/rc-staged/arms" 2>/dev/null && for f in *.tar; do echo "$f=$( [ "$(sha "$f")" = "$(jq -r .tar.sha256 "$L/arms/manifests/l1/${f%.tar}.json")" ] && echo manifest || echo other)"; done | tr '\n' ' ')
+rule "D8 the two tars staged are L1's none and after, each at its arms/manifests/l1 digest" "after.tar=manifest none.tar=manifest " "$ST" test "$ST" = "after.tar=manifest none.tar=manifest "
+RW=$(jq -s -c '[.[].kind]' "$R7"); rule "D9 the ledger holds its approval row only, and no route record was written" '["approval"], no record' "$RW, record $([ -e "$R7.route.json" ] && echo present || echo absent)" test "$RW" = '["approval"]' -a ! -e "$R7.route.json"
+d "D10 particle-1's route is OpenRouter's too" 2 "set OPENROUTER_API_KEY, the key for particle-1's route" l1-route-p1 p1nokey LEDGER="$(route d10 20 none l1-route-p1)" ARMS="$D/arms-both"
+d "D11 an l1-route-p1 ledger approved at \$19" 1 "l1-route-p1's cap is \$19, not Amendment E's \$20" l1-route-p1 p1cap19 LEDGER="$(route d11 19 none l1-route-p1)" ARMS="$D/arms-both" $K
+d "D12 Sol's l1-route-sol ledger is not particle-1's" 1 "no approval row for item l1-route-p1" l1-route-p1 p1solledger LEDGER="$(route d12 20 none)" ARMS="$D/arms-both" $K
+R13=$(route d13 20 none l1-route-p1)
+d "D13 l1-route-p1 stages the same two tars and stops at the stub docker" 1 "docker gave no bridge gateway" l1-route-p1 p1staged LEDGER="$R13" ARMS="$D/arms-both" $K
+PORTS=$(grep -rhoE 'ledgerPort: "[0-9]+"' "$L/l1" "$L/r3" | sort | uniq -c | tr -s ' ' | tr '\n' ';')
+N18=$(grep -rhoE 'ledgerPort: "991[89]"' "$L/l1" "$L/r3" | sort | uniq -c | tr -s ' ' | tr '\n' ';')
+rule "D14 the route items' ledger services default to ports 9918 (Sol) and 9919 (particle-1), which no other L1 or R3 item uses (9917 is r3c-opus's)" " 1 ledgerPort: \"9918\"; 1 ledgerPort: \"9919\";" "$N18 (every default: $PORTS)" test "$N18" = ' 1 ledgerPort: "9918"; 1 ledgerPort: "9919";'
+rm -rf "$D"/rc-* "$D"/arms-*
+
+echo; echo "## Part E: the ceiling check at L1's \$3,300 line on the pinned plan"
+for f in pilot-opus-d:43bc1a54bf2ea7864090a31b455bd0626c2b460252b73e30240886222304123f f1-opus:956506c3c728713a1d74cb6b19a8d211014a5a094bf527d83c9dd58799f36069 tb2-opus:a063b137c9742c7c144d4aabee90055c246f48f44461516324b771c1a191aa25 pilot-opus:f435f32aab27145118b2d3562f93a0b09c0f145ae09c12d7850eeafd4c756692; do
+  n=${f%%:*} w=${f##*:}; rule "E0 $n.jsonl is L1's final ledger" "$w" "$(sha "$OPUS/$n.jsonl")" test "$(sha "$OPUS/$n.jsonl")" = "$w"
+done
+PS=$(jq -c '[.ceiling_usd, [.items[] | .item + " " + (.cap_usd | tostring) + " " + .status + (if .after then " after " + .after else "" end)], .leftover]' "$PLAN")
+PW='[3300,["pilot-opus 80 done","f1-opus 680 done","tb2-opus 180 done","l1-route-sol 20 planned","pilot-sol 100 planned after l1-route-sol","f1-sol 730 planned after pilot-sol","l1-route-p1 20 planned after f1-sol","pilot-p1 120 planned after l1-route-p1","f1-p1 920 planned after pilot-p1"],{"sol":"pending","particle":"pending"}]'
+rule "E1 ceiling-plan.json: the line at \$3,300, Opus done, Sol then particle-1 planned at their caps, each after the one before" "$PW" "$PS" test "$PS" = "$PW"
+echo "crew file whatif-crew.json, sha256 $(sha "$CREW"), as of $(jq -r .as_of "$CREW"): $(jq -r '[.threads[] | select(.status != "done") | .code + " " + .line + " stop " + ((.token_stop / 1000000) | tostring) + "M"] | join(", ")' "$CREW")"
+CK() { local plan=$1; shift; (cd "$E" && bun "$L/l1/ceiling.ts" "$@" --ledger "$OPUS/pilot-opus-d.jsonl" --ledger "$OPUS/f1-opus.jsonl" --ledger "$OPUS/tb2-opus.jsonl" --void-ledger "$OPUS/pilot-opus.jsonl" --crew "$CREW" --plan "$plan") 2>&1; }
+MARGIN() { printf %s "$1" | head -1 | sed -n 's/.*the sum \$\([0-9.]*\).*/\1/p' | awk '{printf "sum $%.2f, margin $%.2f", $1, 3300 - $1}'; }
+out=$(CK "$PLAN" check --launch l1-route-sol); x=$?; echo "$out" > "$W/log/ceiling-route-sol.txt"
+rule "E2 at caps, every Sol and particle-1 item counted: l1-route-sol's launch check passes" "exit 0, CEILING PASS" "exit $x, $(MARGIN "$out"); $(echo "$out" | tail -1 | sed 's/^ *//')" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "^CEILING PASS"' _ "$x" "$(echo "$out" | head -1)"
+# The run thread adds f1-sol-offu only after f1-sol is done, and points l1-route-p1's after at it, so particle-1 waits for it
+jq '.items += [{"item":"f1-sol-offu","cap_usd":200,"status":"planned","after":"f1-sol"}] | (.items[] | select(.item == "l1-route-p1") | .after) = "f1-sol-offu"' "$PLAN" > "$D/plan-offu.json"
+out=$(CK "$D/plan-offu.json" check --launch l1-route-sol); x=$?
+rule "E3 at caps with the optional f1-sol-offu counted at \$200 as well" "exit 0, CEILING PASS" "exit $x, $(MARGIN "$out")" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "^CEILING PASS"' _ "$x" "$(echo "$out" | head -1)"
+jq '.threads += [{"code":"what-if","line":"crew","credits":300000,"tokens":0,"token_stop":null,"status":"done"}]' "$CREW" > "$D/crew-over.json"
+out=$( (cd "$E" && bun "$L/l1/ceiling.ts" check --ledger "$OPUS/pilot-opus-d.jsonl" --ledger "$OPUS/f1-opus.jsonl" --ledger "$OPUS/tb2-opus.jsonl" --void-ledger "$OPUS/pilot-opus.jsonl" --crew "$D/crew-over.json" --plan "$PLAN" --launch l1-route-sol) 2>&1); x=$?
+rule "E4 a launch whose sum would pass \$3,300 is refused (\$300 more crew spend)" "exit 1, CEILING REFUSE ... passes \$3300.00" "exit $x, $(echo "$out" | head -1)" sh -c 'test "$1" = 1 && printf %s "$2" | grep -q "^CEILING REFUSE.*passes \$3300.00"' _ "$x" "$(echo "$out" | head -1)"
+out=$(CK "$PLAN" check --launch pilot-sol); x=$?
+rule "E5 the order: pilot-sol is refused until l1-route-sol is done" "exit 1, runs only after l1-route-sol is done" "exit $x, $(echo "$out" | head -1)" sh -c 'test "$1" = 1 && printf %s "$2" | grep -q "pilot-sol runs only after l1-route-sol is done"' _ "$x" "$(echo "$out" | head -1)"
+SET() { local p=$1; shift; for i in "$@"; do p=$(echo "$p" | jq --arg i "${i%%=*}" --arg s "${i##*=}" '(.items[] | select(.item == $i) | .status) = $s'); done; echo "$p"; }
+RL=$D/ceiling/l1-route-sol.jsonl; approve "$RL" l1-route-sol 20; LG reserve --path "$RL" --item l1-route-sol --id l1-route-sol/smoke-1 --usd 5 > /dev/null
+SET "$(cat "$PLAN")" l1-route-sol=open > "$D/p-e6.json"
+out=$(CK "$D/p-e6.json" check --launch l1-route-sol --ledger "$RL"); x=$?
+rule "E6 while the route check's lease is open, no launch passes, its own included" "exit 1, l1-route-sol still holds open reservations" "exit $x, $(echo "$out" | head -1 | cut -c1-160)" sh -c 'test "$1" = 1 && printf %s "$2" | grep -q "l1-route-sol still holds open reservations"' _ "$x" "$(echo "$out" | head -1)"
+LG settle --path "$RL" --item l1-route-sol --id l1-route-sol/smoke-1 --usd 0.42 > /dev/null
+SET "$(cat "$PLAN")" l1-route-sol=done > "$D/p-e7.json"
+out=$(CK "$D/p-e7.json" check --launch pilot-sol --ledger "$RL"); x=$?
+RLINE=$(echo "$out" | grep 'l1-route-sol done' | sed 's/^ *//')
+rule "E7 once it settles (\$0.42 here) and is marked done, pilot-sol's check passes and counts the route at its settled spend" "exit 0, CEILING PASS; l1-route-sol counted \$0.42" "exit $x, $(MARGIN "$out"); $RLINE" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "counted .0.42$"' _ "$x" "$RLINE"
+for ic in pilot-sol:41.74 f1-sol:460.22; do i=${ic%%:*}; approve "$D/ceiling/$i.jsonl" "$i" "$(jq -r --arg i "$i" '.items[] | select(.item == $i) | .cap_usd' "$PLAN")"; LG reserve --path "$D/ceiling/$i.jsonl" --item "$i" --id "$i/s1" --usd 5 > /dev/null; LG settle --path "$D/ceiling/$i.jsonl" --item "$i" --id "$i/s1" --usd "${ic##*:}" > /dev/null; done
+# f1-sol's finished-run record, in the shape l1.ts writes it in f1-sol's work dir: its prepared plan.json (Part C), a result for
+# each of its four parts, and its one host up, then down with its hours settled. ceiling.ts counts f1-sol as done at its
+# spend only with it (--work); E15 drives it both ways.
+FWK() { local w=$D/ceiling/work-$1; rm -rf "$w"; mkdir -p "$w/host"; cp "$S/f1-sol/plan.json" "$w/"; for p in $(jq -r '.parts[].name' "$w/plan.json"); do [ "$p" = "$2" ] || echo '{}' > "$w/$p.result.json"; done; printf '%s\n' '{"event":"up","n":1}' ${3:-} > "$w/host/hosts.jsonl"; echo "$w"; }
+FW=$(FWK full - '{"event":"down","n":1,"settled":true}')
+SL="--ledger $RL --ledger $D/ceiling/pilot-sol.jsonl --ledger $D/ceiling/f1-sol.jsonl --work $FW"
+SET "$(cat "$D/plan-offu.json")" l1-route-sol=done pilot-sol=done f1-sol=open > "$D/p-e8.json"
+out=$(CK "$D/p-e8.json" check --launch f1-sol-offu $SL); x=$?
+rule "E8 f1-sol-offu is refused until f1-sol is done" "exit 1, runs only after f1-sol is done" "exit $x, $(echo "$out" | head -1)" sh -c 'test "$1" = 1 && printf %s "$2" | grep -q "f1-sol-offu runs only after f1-sol is done"' _ "$x" "$(echo "$out" | head -1)"
+SET "$(cat "$D/plan-offu.json")" l1-route-sol=done pilot-sol=done f1-sol=done > "$D/p-e9.json"
+out=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SL); x=$?
+rule "E9 with Sol's items done at the route's \$0.42 and price.py's expected \$41.74 and \$460.22, f1-sol-offu's check passes" "exit 0, CEILING PASS" "exit $x, $(MARGIN "$out")" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "^CEILING PASS"' _ "$x" "$(echo "$out" | head -1)"
+out=$(CK "$D/p-e9.json" check --launch l1-route-p1 $SL); x=$?
+rule "E10 while f1-sol-offu is in the plan, particle-1's route check waits for it" "exit 1, runs only after f1-sol-offu is done" "exit $x, $(echo "$out" | head -1)" sh -c 'test "$1" = 1 && printf %s "$2" | grep -q "l1-route-p1 runs only after f1-sol-offu is done"' _ "$x" "$(echo "$out" | head -1)"
+approve "$D/ceiling/f1-sol-offu.jsonl" f1-sol-offu 200; LG reserve --path "$D/ceiling/f1-sol-offu.jsonl" --item f1-sol-offu --id f1-sol-offu/s1 --usd 5 > /dev/null; LG settle --path "$D/ceiling/f1-sol-offu.jsonl" --item f1-sol-offu --id f1-sol-offu/s1 --usd 104.34 > /dev/null
+SET "$(cat "$D/plan-offu.json")" l1-route-sol=done pilot-sol=done f1-sol=done f1-sol-offu=done > "$D/p-e10b.json"
+out=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SL --ledger "$D/ceiling/f1-sol-offu.jsonl"); x=$?
+rule "E10b once f1-sol-offu settles (price.py's expected \$104.34) and is marked done, l1-route-p1's check passes" "exit 0, CEILING PASS" "exit $x, $(MARGIN "$out")" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "^CEILING PASS"' _ "$x" "$(echo "$out" | head -1)"
+SET "$(cat "$PLAN")" l1-route-sol=done pilot-sol=done > "$D/p-e11.json"
+out=$(CK "$D/p-e11.json" check --launch l1-route-p1 --ledger "$RL" --ledger "$D/ceiling/pilot-sol.jsonl"); x=$?
+rule "E11 on the pinned plan (no f1-sol-offu), particle-1's route check is refused while f1-sol is not done" "exit 1, runs only after f1-sol is done" "exit $x, $(echo "$out" | head -1)" sh -c 'test "$1" = 1 && printf %s "$2" | grep -q "l1-route-p1 runs only after f1-sol is done"' _ "$x" "$(echo "$out" | head -1)"
+P1L="--ledger $D/ceiling/l1-route-p1.jsonl"
+SET "$(cat "$PLAN")" l1-route-sol=done pilot-sol=done f1-sol=done > "$D/p-e11b.json"
+out=$(CK "$D/p-e11b.json" check --launch l1-route-p1 $SL); x=$?
+rule "E11b on the pinned plan, once Sol's three items are done, l1-route-p1's check passes" "exit 0, CEILING PASS" "exit $x, $(MARGIN "$out")" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "^CEILING PASS"' _ "$x" "$(echo "$out" | head -1)"
+approve "$D/ceiling/l1-route-p1.jsonl" l1-route-p1 20; LG reserve --path "$D/ceiling/l1-route-p1.jsonl" --item l1-route-p1 --id l1-route-p1/smoke-1 --usd 5 > /dev/null; LG settle --path "$D/ceiling/l1-route-p1.jsonl" --item l1-route-p1 --id l1-route-p1/smoke-1 --usd 0.05 > /dev/null
+SET "$(cat "$PLAN")" l1-route-sol=done pilot-sol=done f1-sol=done l1-route-p1=done > "$D/p-e11c.json"
+out=$(CK "$D/p-e11c.json" check --launch pilot-p1 $SL $P1L); x=$?
+rule "E11c with l1-route-p1 settled (\$0.05 here) and done, pilot-p1's check passes" "exit 0, CEILING PASS" "exit $x, $(MARGIN "$out")" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "^CEILING PASS"' _ "$x" "$(echo "$out" | head -1)"
+approve "$D/ceiling/pilot-p1.jsonl" pilot-p1 120; LG reserve --path "$D/ceiling/pilot-p1.jsonl" --item pilot-p1 --id pilot-p1/s1 --usd 5 > /dev/null; LG settle --path "$D/ceiling/pilot-p1.jsonl" --item pilot-p1 --id pilot-p1/s1 --usd 51.91 > /dev/null
+SET "$(cat "$PLAN")" l1-route-sol=done pilot-sol=done f1-sol=done l1-route-p1=done pilot-p1=done > "$D/p-e11d.json"
+out=$(CK "$D/p-e11d.json" check --launch f1-p1 $SL $P1L --ledger "$D/ceiling/pilot-p1.jsonl"); x=$?
+rule "E11d with pilot-p1 settled at price.py's expected \$51.91 and done, f1-p1's check passes at its \$920 cap" "exit 0, CEILING PASS" "exit $x, $(MARGIN "$out")" sh -c 'test "$1" = 0 && printf %s "$2" | grep -q "^CEILING PASS"' _ "$x" "$(echo "$out" | head -1)"
+jq '.ceiling_usd = 2000' "$PLAN" > "$D/p-2000.json"; jq 'del(.ceiling_usd)' "$PLAN" > "$D/p-none.json"
+o1=$(CK "$D/p-2000.json" check --launch l1-route-sol); x1=$?; o2=$(CK "$D/p-none.json" check --launch l1-route-sol); x2=$?
+rule "E12 a plan at the prereg's \$2,000 line, or with no line, exits 2" "exit 2, exit 2" "exit $x1, $o1; exit $x2, $o2" test "$x1" = 2 -a "$x2" = 2
+out=$(CK "$PLAN" check --launch tb2-opus); x=$?
+rule "E13 an Opus item no longer launches: tb2-opus is done" "exit 2, not a planned or open item" "exit $x, $out" test "$x" = 2
+# A Sol exit at any point: particle-1 runs whether or not Sol finishes. The run thread takes Sol's unlaunched items out of the
+# plan, sets leftover.sol to refused and points l1-route-p1's after at the last Sol item done, or gives it none when no Sol
+# item is done.
+jq '.items |= map(select(.item != "pilot-sol" and .item != "f1-sol")) | .leftover.sol = "refused" | (.items[] | select(.item == "l1-route-p1") | .after) = "l1-route-sol"' "$D/p-e7.json" > "$D/p-e14.json"
+o1=$(CK "$D/p-e14.json" check --launch l1-route-p1 --ledger "$RL"); x1=$?
+jq '.items |= map(select(.item != "l1-route-sol" and .item != "pilot-sol" and .item != "f1-sol")) | .leftover.sol = "refused" | (.items[] | select(.item == "l1-route-p1")) |= del(.after)' "$PLAN" > "$D/p-e14b.json"
+o2=$(CK "$D/p-e14b.json" check --launch l1-route-p1); x2=$?
+rule "E14 a Sol exit leaves particle-1 its route check: after a route drop at l1-route-sol (settled at \$0.42 and done), Sol's unlaunched items leave the plan, leftover.sol is refused and l1-route-p1 runs after l1-route-sol; with no Sol item done, l1-route-p1 has no after; both checks pass" "exit 0, CEILING PASS; exit 0, CEILING PASS" "exit $x1, $(MARGIN "$o1"); exit $x2, $(MARGIN "$o2")" sh -c 'test "$1" = 0 && test "$3" = 0 && printf %s "$2" | grep -q "^CEILING PASS" && printf %s "$4" | grep -q "^CEILING PASS"' _ "$x1" "$(echo "$o1" | head -1)" "$x2" "$(echo "$o2" | head -1)"
+SB="--ledger $RL --ledger $D/ceiling/pilot-sol.jsonl --ledger $D/ceiling/f1-sol.jsonl"
+F1C() { printf %s "$1" | sed -n 's/^ *f1-sol done: .*counted \$\([0-9.]*\).*/\1/p'; }
+o1=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB); o2=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB --work "$(FWK no-f1-4 f1-4 '{"event":"down","n":1,"settled":true}')"); o3=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SB --work "$(FWK host-up -)"); o4=$(CK "$D/p-e9.json" check --launch f1-sol-offu $SL)
+rule "E15 f1-sol marked done counts at its \$730 cap until its work dir shows every part finished and host-down settled (ceiling.ts --work): with no record, with f1-4's result missing, and with its host still up; with the full record, at its settled \$460.22" "730.00 730.00 730.00 460.22" "$(F1C "$o1") $(F1C "$o2") $(F1C "$o3") $(F1C "$o4")" test "$(F1C "$o1") $(F1C "$o2") $(F1C "$o3") $(F1C "$o4")" = "730.00 730.00 730.00 460.22"
+# E15b drives round 4's two fixes both ways: f1-sol-offu has four parts too, so its done mark needs its own work dir's record;
+# and a part that ended with a loss and no cap stop owes its one relaunch, so f1-sol's record needs that part's relaunch record.
+OFC() { printf %s "$1" | sed -n 's/^ *f1-sol-offu done: .*counted \$\([0-9.]*\).*/\1/p'; }
+OL="--ledger $D/ceiling/f1-sol-offu.jsonl"
+OW=$D/ceiling/work-offu; rm -rf "$OW"; mkdir -p "$OW/host"; cp "$S/f1-sol-offu/plan.json" "$OW/"; for p in $(jq -r '.parts[].name' "$OW/plan.json"); do echo '{}' > "$OW/$p.result.json"; done; printf '%s\n' '{"event":"up","n":1}' '{"event":"down","n":1,"settled":true}' > "$OW/host/hosts.jsonl"
+LW=$(FWK loss - '{"event":"down","n":1,"settled":true}'); LP=$(jq -r '.parts[1].name' "$LW/plan.json"); echo '{"loss":["vm-run.sh exit 4 (dry run)"],"cap_stop":[]}' > "$LW/$LP.result.json"
+o1=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SL $OL); o2=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SL $OL --work "$OW"); o3=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SB $OL --work "$OW" --work "$LW")
+echo "{\"part\":\"$LP\",\"launched\":false}" > "$LW/$LP.relaunch.json"; o4=$(CK "$D/p-e10b.json" check --launch l1-route-p1 $SB $OL --work "$OW" --work "$LW")
+rule "E15b f1-sol-offu marked done counts at its \$200 cap until its own work dir shows every part finished and host-down settled, then at its settled \$104.34; f1-sol marked done stays at its \$730 cap while a part that ended with a loss and no cap stop owes its relaunch, and counts at its settled \$460.22 once that part's relaunch record exists" "f1-sol-offu 200.00 104.34; f1-sol 730.00 460.22" "f1-sol-offu $(OFC "$o1") $(OFC "$o2"); f1-sol $(F1C "$o3") $(F1C "$o4")" test "f1-sol-offu $(OFC "$o1") $(OFC "$o2"); f1-sol $(F1C "$o3") $(F1C "$o4")" = "f1-sol-offu 200.00 104.34; f1-sol 730.00 460.22"
+out=$(CK "$PLAN" final --post results-post); echo "final read on the pinned plan: $out" | sed "$HIDE"
+echo; echo "## Part F: the keyless checks at the commit"
+rm -rf "$E" "$W/wt"; git -C "$G" worktree prune; git -C "$G" worktree add -q --detach "$W/wt" "$FULL" && (cd "$W/wt" && bun install --frozen-lockfile > "$W/log/bun-install-wt.txt" 2>&1)
+(cd "$W/wt" && bun test > "$W/log/bun-test.txt" 2>&1); bt=$?
+rule "F1 bun test" "exit 0, 0 fail" "exit $bt, $(grep -E '^ *[0-9]+ (pass|fail)$' "$W/log/bun-test.txt" | tr -s ' ' | tr '\n' ' ')" test $bt = 0
+for s in typecheck errors:check wiki:check; do (cd "$W/wt" && bun run $s > "$W/log/$s.txt" 2>&1); x=$?; rule "F2 bun run $s" "exit 0" "exit $x, $(tail -1 "$W/log/$s.txt" | cut -c1-120)" test $x = 0; done
+git -C "$G" worktree remove --force "$W/wt"
+
+echo; echo "rules: $rules, failed: $fails"
+[ "$fails" = 0 ] && echo "DRYRUN: ok" || echo "DRYRUN: fail"

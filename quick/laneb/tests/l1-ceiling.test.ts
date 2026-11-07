@@ -1,10 +1,10 @@
 // Keyless tests of the L1 ceiling check and final read (quick/laneb/l1/ceiling.ts, the L1 preregistration's section 9), on
 // synthetic ledger rows, crew files and plans, through the functions and through the command line.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { check, finalRead, tally, UsageError, type Crew, type Plan } from "../l1/ceiling.ts";
+import { check, finalRead, finishedRun, tally, UsageError, type Crew, type Plan } from "../l1/ceiling.ts";
 import { readRows, type Row } from "../runner/ledger.ts";
 
 const M = 1_000_000;
@@ -26,6 +26,10 @@ const solPlan = [
   { item: "pilot-sol", cap_usd: 100, status: "planned" as const },
   { item: "f1-sol", cap_usd: 730, status: "planned" as const },
 ];
+const p1Plan = [
+  { item: "pilot-p1", cap_usd: 120, status: "planned" as const },
+  { item: "f1-p1", cap_usd: 920, status: "planned" as const },
+];
 const plan = (extra: Plan["items"] = solPlan, leftover: Plan["leftover"] = { sol: "pending", particle: "pending" }): Plan => ({ items: [...opusPlan(), ...extra], leftover });
 const crew = (crewCredits: number, captain: number, more: Crew["threads"] = []): Crew => ({
   as_of: "2026-11-08T00:00:00Z",
@@ -37,21 +41,21 @@ const atExpected = () => [...rows("pilot-opus", 80, [26.08]), ...rows("f1-opus",
 const dollars = (m: number) => m / M;
 
 describe("the ceiling check before a launch", () => {
-  test("refuses a Sol launch with the crew line already spent and every Opus item settled at its cap", () => {
-    const r = check(atCaps(), crew(700_000, 40_000), plan(), "pilot-sol");
+  test("refuses a Sol launch past the $3,300 line: the crew line spent, every Opus item settled at its cap, Sol's and particle-1's items planned at theirs", () => {
+    const r = check(atCaps(), crew(700_000, 40_000), plan([...solPlan, ...p1Plan]), "pilot-sol");
     expect(r.ok).toBe(false);
-    expect(dollars(r.tally.itemsTotal)).toBeCloseTo(940 + 830, 6);
+    expect(dollars(r.tally.itemsTotal)).toBeCloseTo(940 + 830 + 1040, 6);
     expect(dollars(r.tally.crewSpent)).toBe(700);
     expect(dollars(r.tally.crewHold)).toBe(0);
     expect(dollars(r.tally.captainHold)).toBe(0);
     expect(dollars(r.tally.runWorkHold)).toBe(30);
-    expect(dollars(r.tally.total)).toBeCloseTo(940 + 830 + 700 + 40 + 30, 6);
-    expect(r.why).toContain("passes $2000.00");
+    expect(dollars(r.tally.total)).toBeCloseTo(940 + 830 + 1040 + 700 + 40 + 30, 6);
+    expect(r.why).toContain("passes $3300.00");
   });
   test("refuses the same launch with the crew line past $700 even when the Opus items settled at their expected spend", () => {
-    const r = check(atExpected(), crew(800_000, 40_000), plan(), "pilot-sol");
+    const r = check(atExpected(), crew(810_000, 40_000), plan([...solPlan, ...p1Plan]), "pilot-sol");
     expect(r.ok).toBe(false);
-    expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 830 + 800 + 40 + 30, 6);
+    expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 830 + 1040 + 810 + 40 + 30, 6);
   });
   test("passes a Sol pilot launch when every item settled at its expected spend and the crew line holds its $700 remainder", () => {
     const r = check(atExpected(), crew(288_000, 36_000), plan([solPlan[0]!]), "pilot-sol");
@@ -60,14 +64,14 @@ describe("the ceiling check before a launch", () => {
     expect(dollars(r.tally.captainHold)).toBe(4);
     expect(dollars(r.tally.holdback)).toBe(412 + 4 + 30);
     expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 100 + 288 + 36 + 446, 6);
-    expect(r.why).toContain("at or under $2000.00");
+    expect(r.why).toContain("at or under $3300.00");
   });
-  test("at the $700 crew line, Sol's planned path at its caps does not fit even when every Opus item settled at its expected spend", () => {
-    const r = check(atExpected(), crew(288_000, 36_000), plan(), "pilot-sol");
-    expect(r.ok).toBe(false);
+  test("at the $700 crew line, Sol's and particle-1's planned paths at their caps fit under the $3,300 line when every Opus item settled at its expected spend", () => {
+    const r = check(atExpected(), crew(288_000, 36_000), plan([...solPlan, ...p1Plan]), "pilot-sol");
+    expect(r.ok).toBe(true);
     expect(dollars(r.tally.crewHold)).toBe(412);
-    expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 830 + 700 + 40 + 30, 6);
-    expect(r.why).toContain("passes $2000.00");
+    expect(dollars(r.tally.total)).toBeCloseTo(552.67 + 830 + 1040 + 700 + 40 + 30, 6);
+    expect(r.why).toContain("at or under $3300.00");
   });
   test("an item still to run counts at its cap; a done item counts at what it settled and reserved", () => {
     const t = tally([...rows("pilot-opus", 80, [20], [6])], crew(0, 0), { items: opusPlan("planned"), leftover: { sol: "refused", particle: "refused" } });
@@ -88,6 +92,7 @@ describe("the ceiling check before a launch", () => {
     expect(dollars(small.crewHold)).toBe(590);
   });
   test("with no token reading yet, unspent stops are held at the planning rate of $0.45 per million", () => {
+    // pregate-literal: CEILING_USD=2000 a 2000M token stop in this crew fixture, not the ceiling
     const t = tally([], { as_of: "x", captain_credits: 0, threads: [{ code: "GEVA-4", line: "crew", credits: 0, tokens: 0, token_stop: 2000 * M, status: "planned" }] }, { items: opusPlan("planned"), leftover: { sol: "pending", particle: "pending" } });
     expect(dollars(t.stops)).toBe(900);
     expect(dollars(t.crewHold)).toBe(900);
@@ -167,12 +172,12 @@ describe("a voided run's ledger", () => {
 
 describe("the final read before the results post", () => {
   const post: Crew["threads"][number] = { code: "GEVA-9", line: "crew", credits: 0, tokens: 0, token_stop: null, status: "planned" };
-  test("gives the all-in figure and the largest post token stop that keeps it with the open holds at or under $2,000", () => {
+  test("gives the all-in figure and the largest post token stop that keeps it with the open holds at or under $3,300", () => {
     const f = finalRead(atExpected(), crew(300_000, 30_000, [post]), plan([], { sol: "refused", particle: "refused" }), "GEVA-9");
     expect(dollars(f.all_in)).toBeCloseTo(552.67 + 300 + 30, 6);
     expect(dollars(f.holds)).toBe(10);
     expect(f.tally.perToken).toBeCloseTo(300_000_000 / (800 * M), 9);
-    expect(f.max_post_token_stop).toBe(Math.floor((2000 - 552.67 - 300 - 30 - 10) * M / (300 / 800)));
+    expect(f.max_post_token_stop).toBe(Math.floor((3300 - 552.67 - 300 - 30 - 10) * M / (300 / 800)));
     expect(f.open_items).toEqual([]);
   });
   test("items not done count at their caps and other open threads' stops stay held", () => {
@@ -184,7 +189,7 @@ describe("the final read before the results post", () => {
     expect(f.max_post_token_stop).toBe(Math.floor(f.room / f.tally.perToken));
   });
   test("no room left gives a stop of 0", () => {
-    expect(finalRead(atCaps(), crew(1_100_000, 40_000, [post]), plan(), "GEVA-9").max_post_token_stop).toBe(0);
+    expect(finalRead(atCaps(), crew(2_400_000, 40_000, [post]), plan(), "GEVA-9").max_post_token_stop).toBe(0);
   });
 });
 
@@ -194,17 +199,28 @@ describe("the command line", () => {
     const id = String(n++);
     writeFileSync(join(dir, id + ".jsonl"), ledger.map((r) => JSON.stringify(r)).join("\n") + "\n");
     writeFileSync(join(dir, id + "-crew.json"), JSON.stringify(c));
-    writeFileSync(join(dir, id + "-plan.json"), JSON.stringify(p));
+    writeFileSync(join(dir, id + "-plan.json"), JSON.stringify({ ceiling_usd: 3300, ...p }));
     return ["--ledger", join(dir, id + ".jsonl"), "--crew", join(dir, id + "-crew.json"), "--plan", join(dir, id + "-plan.json")];
   };
   const run = (args: string[]) => {
     const p = Bun.spawnSync(["bun", join(import.meta.dir, "../l1/ceiling.ts"), ...args]);
     return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
   };
+  test("the plan file carries the line: a plan without ceiling_usd, or at $2,000, exits 2 before any sum", () => {
+    // pregate-literal: CEILING_USD=2000 the old line, a plan input this test expects ceiling.ts to refuse
+    for (const [p, why] of [[{ ...plan() }, "has no ceiling_usd"], [{ ceiling_usd: 2000, ...plan() }, "the plan's line is $2000, but L1's line is $3300 (Amendment E)"]] as const) {
+      const id = String(n++);
+      writeFileSync(join(dir, id + ".jsonl"), atExpected().map((r) => JSON.stringify(r)).join("\n") + "\n");
+      writeFileSync(join(dir, id + "-crew.json"), JSON.stringify(crew(0, 0)));
+      writeFileSync(join(dir, id + "-plan.json"), JSON.stringify(p));
+      const r = run(["check", "--ledger", join(dir, id + ".jsonl"), "--crew", join(dir, id + "-crew.json"), "--plan", join(dir, id + "-plan.json"), "--launch", "pilot-sol"]);
+      expect([r.code, r.out, r.err]).toEqual([2, "", expect.stringContaining(why)]);
+    }
+  });
   test("REFUSE exits 1 and PASS exits 0", () => {
-    const refuse = run(["check", ...files(atCaps(), crew(700_000, 40_000), plan()), "--launch", "pilot-sol"]);
+    const refuse = run(["check", ...files(atCaps(), crew(700_000, 40_000), plan([...solPlan, ...p1Plan])), "--launch", "pilot-sol"]);
     expect(refuse.code).toBe(1);
-    expect(refuse.out).toStartWith("CEILING REFUSE pilot-sol: the sum $2540.00");
+    expect(refuse.out).toStartWith("CEILING REFUSE pilot-sol: the sum $3580.00");
     const pass = run(["check", ...files(atExpected(), crew(288_000, 36_000), plan([solPlan[0]!])), "--launch", "pilot-sol"]);
     expect(pass.code).toBe(0);
     expect(pass.out).toStartWith("CEILING PASS pilot-sol");
@@ -247,6 +263,171 @@ describe("the command line", () => {
     expect(gone.code).toBe(2);
     expect(gone.err).toStartWith("E_USAGE l1 ceiling: no ledger at");
   });
+  test("--work: f1-sol counts as done at its spend only once its work dir shows a result for every part and prepared relaunch and every host gone, the last by host-down with its hours settled; else at its cap", () => {
+    const work = (o: { results?: string[]; relaunch?: boolean; hosts?: Record<string, unknown>[]; item?: string } = {}) => {
+      const w = mkdtempSync(join(tmpdir(), "l1-work-"));
+      mkdirSync(join(w, "host"));
+      writeFileSync(join(w, "plan.json"), JSON.stringify({ item: o.item ?? "f1-sol", parts: ["f1-1", "f1-2", "f1-3", "f1-4"].map((name) => ({ name })) }));
+      for (const p of o.results ?? ["f1-1", "f1-2", "f1-3", "f1-4"]) writeFileSync(join(w, p + ".result.json"), "{}");
+      if (o.relaunch) { mkdirSync(join(w, "f1-2-relaunch")); writeFileSync(join(w, "f1-2-relaunch/l1-part.json"), JSON.stringify({ name: "f1-2-relaunch" })); }
+      writeFileSync(join(w, "host/hosts.jsonl"), (o.hosts ?? [{ event: "up", n: 1 }, { event: "down", n: 1, settled: true }]).map((r) => JSON.stringify(r)).join("\n") + "\n");
+      return w;
+    };
+    const p: Plan = { items: [...opusPlan(), { item: "pilot-sol", cap_usd: 100, status: "done" }, { item: "f1-sol", cap_usd: 730, status: "done" }, { item: "l1-route-p1", cap_usd: 20, status: "planned", after: "f1-sol" }], leftover: { sol: "done", particle: "pending" } };
+    const args = files([...atExpected(), ...rows("pilot-sol", 100, [41.74]), ...rows("f1-sol", 730, [120])], crew(600_000, 40_000), p);
+    const f1 = (...w: string[]) => {
+      const r = run(["check", ...args, "--launch", "l1-route-p1", ...w.flatMap((d) => ["--work", d])]);
+      return r.code === 2 ? r.err.trim() : r.code + " " + /^ {2}f1-sol done: .*$/m.exec(r.out)?.[0].trim();
+    };
+    const atCap = "0 f1-sol done: settled $120.00, reserved $0.00, cap $730.00, counted $730.00 (done with no finished-run record from --work, so at its cap)";
+    const atSpend = "0 f1-sol done: settled $120.00, reserved $0.00, cap $730.00, counted $120.00";
+    expect(f1()).toBe(atCap);
+    expect(f1(work())).toBe(atSpend);
+    expect(f1(work({ results: ["f1-1", "f1-2", "f1-3"] }))).toBe(atCap);
+    expect(f1(work({ relaunch: true }))).toBe(atCap);
+    expect(f1(work({ relaunch: true, results: ["f1-1", "f1-2", "f1-2-relaunch", "f1-3", "f1-4"] }))).toBe(atSpend);
+    expect(f1(work({ hosts: [{ event: "up", n: 1 }] }))).toBe(atCap);
+    expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "down", n: 1, settled: false }] }))).toBe(atCap);
+    expect(f1(work({ hosts: [] }))).toBe(atCap);
+    expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "lost", n: 1 }, { event: "up", n: 2 }, { event: "down", n: 2, settled: true }] }))).toBe(atSpend);
+    expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "down", n: 1, settled: true }, { event: "up", n: 2 }] }))).toBe(atCap);
+    expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "lost", n: 1 }] }))).toBe(atCap);
+    expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "down", n: 1, down_confirmed: true }] }))).toBe(atCap);
+    expect(f1(work({ hosts: [{ event: "up", n: 1 }, { event: "down", n: 1, down_confirmed: true }, { event: "up", n: 2 }, { event: "down", n: 2, settled: true }] }))).toBe(atSpend);
+    expect(f1(work({ item: "pilot-sol" }))).toContain("E_USAGE l1 ceiling: --work takes the work dir of f1-sol, f1-sol-offu or f1-p1");
+    expect(finishedRun(work({ item: "f1-sol-offu" }))).toEqual({ item: "f1-sol-offu", finished: true });
+    expect(f1(work(), work())).toBe("E_USAGE l1 ceiling: two --work dirs for f1-sol");
+    expect(f1(mkdtempSync(join(tmpdir(), "l1-work-")))).toContain("has no plan.json");
+  });
+
+  test("--work: a part that ended with a loss owes its one relaunch, so f1-sol stays at its cap until that part's relaunch record exists; a cap stop and a relaunch's own loss owe none", () => {
+    const work = (o: { bodies: Record<string, unknown>; relaunched?: string[]; relaunch?: boolean }) => {
+      const w = mkdtempSync(join(tmpdir(), "l1-work-"));
+      mkdirSync(join(w, "host"));
+      writeFileSync(join(w, "plan.json"), JSON.stringify({ item: "f1-sol", parts: ["f1-1", "f1-2", "f1-3", "f1-4"].map((name) => ({ name })) }));
+      for (const p of ["f1-1", "f1-2", "f1-3", "f1-4", ...(o.relaunch ? ["f1-2-relaunch"] : [])]) writeFileSync(join(w, p + ".result.json"), JSON.stringify(o.bodies[p] ?? { loss: [], cap_stop: [] }));
+      if (o.relaunch) { mkdirSync(join(w, "f1-2-relaunch")); writeFileSync(join(w, "f1-2-relaunch/l1-part.json"), JSON.stringify({ name: "f1-2-relaunch", relaunch_of: "f1-2" })); }
+      for (const p of o.relaunched ?? []) writeFileSync(join(w, p + ".relaunch.json"), JSON.stringify({ part: p, launched: !!o.relaunch }));
+      writeFileSync(join(w, "host/hosts.jsonl"), [{ event: "up", n: 1 }, { event: "down", n: 1, settled: true }].map((r) => JSON.stringify(r)).join("\n") + "\n");
+      return w;
+    };
+    const lost = { loss: ["vm-run.sh exit 4 on f1-2-vm3"], cap_stop: [] };
+    expect(finishedRun(work({ bodies: { "f1-2": lost } })).finished).toBe(false);
+    expect(finishedRun(work({ bodies: { "f1-2": lost }, relaunched: ["f1-3"] })).finished).toBe(false);
+    expect(finishedRun(work({ bodies: { "f1-2": lost }, relaunched: ["f1-2"] })).finished).toBe(true);
+    expect(finishedRun(work({ bodies: { "f1-2": lost, "f1-2-relaunch": lost }, relaunched: ["f1-2"], relaunch: true })).finished).toBe(true);
+    expect(finishedRun(work({ bodies: { "f1-2": { loss: ["vm-run.sh exit 4 on f1-2-vm3"], cap_stop: ["f1-2-vm3/proxy-sessions.jsonl: session_cap"] } } })).finished).toBe(true);
+    expect(finishedRun(work({ bodies: {} })).finished).toBe(true);
+  });
+});
+
+describe("the Sol leg's plan under the leftover rule (Amendment E)", () => {
+  // The Opus items as they settled (approvals: pilot $13.68, F1 $269.69, TB2 $69.90), then l1-route-sol, pilot-sol and f1-sol.
+  const settled = () => [...rows("pilot-opus", 80, [13.68]), ...rows("f1-opus", 680, [269.69]), ...rows("tb2-opus", 180, [69.9])];
+  const leg = (route: "planned" | "done" = "planned", particle: Plan["leftover"]["particle"] = "refused"): Plan => ({
+    items: [...opusPlan(), { item: "l1-route-sol", cap_usd: 20, status: route }, ...solPlan],
+    leftover: { sol: "pending", particle },
+  });
+  test("particle-1 refused holds no run-work line of its own: the same plan with particle-1 pending holds $15 more and is refused at the margin", () => {
+    const c = crew(2_031_730, 40_000);
+    const refused = check(settled(), c, leg(), "l1-route-sol");
+    const pending = check(settled(), c, leg("planned", "pending"), "l1-route-sol");
+    expect(dollars(refused.tally.runWorkHold)).toBe(15);
+    expect(dollars(pending.tally.runWorkHold)).toBe(30);
+    expect(dollars(refused.tally.total)).toBeCloseTo(353.27 + 20 + 100 + 730 + 2031.73 + 40 + 15, 6);
+    expect([refused.ok, pending.ok]).toEqual([true, false]);
+    expect(pending.why).toContain("the sum $3305.00");
+  });
+  test("Sol's run work bills its own line: Sol credits shrink only Sol's remainder, and nothing is held once Sol is done", () => {
+    const sol: Crew["threads"] = [{ code: "GEVA-353", line: "sol", credits: 4_000, tokens: 12 * M, token_stop: 90 * M, status: "open" }];
+    const t = tally(settled(), crew(600_000, 40_000, sol), leg());
+    expect([dollars(t.solSpent), dollars(t.particleSpent), dollars(t.runWorkHold)]).toEqual([4, 0, 11]);
+    expect(dollars(tally(settled(), crew(600_000, 40_000, sol), { ...leg(), leftover: { sol: "done", particle: "refused" } }).runWorkHold)).toBe(0);
+  });
+  test("the route check is its own item: l1-route-sol counts at its $20 cap until done and at what it settled after, and a plan without it can't place its ledger", () => {
+    const route = rows("l1-route-sol", 20, [0.17, 0.09]);
+    const c = crew(600_000, 40_000);
+    const first = check([...settled(), ...rows("l1-route-sol", 20, [])], c, leg(), "l1-route-sol");
+    expect(dollars(first.tally.items.find((i) => i.item === "l1-route-sol")!.counted)).toBe(20);
+    const next = check([...settled(), ...route], c, leg("done"), "pilot-sol");
+    expect(dollars(next.tally.items.find((i) => i.item === "l1-route-sol")!.counted)).toBeCloseTo(0.26, 6);
+    expect(next.tally.total).toBeLessThan(first.tally.total);
+    expect(() => check([...settled(), ...route], c, plan(), "pilot-sol")).toThrow(/l1-route-sol is not in the plan/);
+    expect(() => check([...settled(), ...route], c, leg("done"), "l1-route-sol")).toThrow(/l1-route-sol is not a planned or open item/);
+  });
+
+  // f1-sol-offu, Amendment E's one added rule: off-u on Sol at its $200 cap, only after f1-sol is done and only when the sum
+  // with it fits. The run thread adds it to the plan once f1-sol has settled.
+  const offu = (f1: "planned" | "done" = "done", f1Cap = 730): Plan => ({
+    items: [...opusPlan(), { item: "l1-route-sol", cap_usd: 20, status: "done" }, { item: "pilot-sol", cap_usd: 100, status: "done" }, { item: "f1-sol", cap_usd: f1Cap, status: f1 }, { item: "f1-sol-offu", cap_usd: 200, status: "planned", after: "f1-sol" }],
+    leftover: { sol: "pending", particle: "refused" },
+  });
+  const solRan = () => [...settled(), ...rows("l1-route-sol", 20, [0.26]), ...rows("pilot-sol", 100, [41.74]), ...rows("f1-sol", 730, [460.22])];
+  test("f1-sol-offu's check passes when the sum with its $200 cap is at $3,300 and is refused a cent above it", () => {
+    const at = check(solRan(), crew(2_189_510, 40_000), offu(), "f1-sol-offu", [], ["f1-sol"]);
+    expect(dollars(at.tally.total)).toBeCloseTo(353.27 + 0.26 + 41.74 + 460.22 + 200 + 2189.51 + 40 + 15, 6);
+    expect([at.ok, at.why]).toEqual([true, "the sum $3300.00 with f1-sol-offu's cap is at or under $3300.00"]);
+    const over = check(solRan(), crew(2_189_520, 40_000), offu(), "f1-sol-offu", [], ["f1-sol"]);
+    expect([over.ok, over.why]).toEqual([false, "the sum $3300.01 with f1-sol-offu's cap passes $3300.00"]);
+  });
+  test("f1-sol-offu is refused until f1-sol is done, even when the sum fits; another item's check is unaffected by its after", () => {
+    const ran = [...settled(), ...rows("l1-route-sol", 20, [0.26]), ...rows("pilot-sol", 100, [41.74])];
+    const early = check(ran, crew(600_000, 40_000), offu("planned", 100), "f1-sol-offu");
+    expect(early.tally.total).toBeLessThan(3300 * M);
+    expect([early.ok, early.why]).toEqual([false, "f1-sol-offu runs only after f1-sol is done (Amendment E): mark f1-sol done once every part has finished and host-down has settled, then run this check again"]);
+    expect(check(ran, crew(600_000, 40_000), offu("planned", 100), "f1-sol").ok).toBe(true);
+    expect(() => check(ran, crew(600_000, 40_000), { ...offu("planned", 100), items: offu("planned", 100).items.map((i) => (i.item === "f1-sol-offu" ? { ...i, after: "f2-sol" } : i)) }, "f1-sol")).toThrow("E_USAGE l1 ceiling: plan item f1-sol-offu runs after f2-sol, which is not another item of the plan");
+  });
+  test("at the $3,300 line, Sol's route, pilot and F1 and particle-1's route, pilot and F1 fit at their caps beside the settled Opus items, and a cent over refuses", () => {
+    const all: Plan = { ...leg(), items: [...leg().items, { item: "l1-route-p1", cap_usd: 20, status: "planned" }, ...p1Plan], leftover: { sol: "pending", particle: "pending" } };
+    const fits = check(settled(), crew(966_730, 40_000), all, "l1-route-sol");
+    expect(dollars(fits.tally.itemsTotal)).toBeCloseTo(353.27 + 20 + 100 + 730 + 20 + 120 + 920, 6);
+    expect(dollars(fits.tally.runWorkHold)).toBe(30);
+    expect([fits.ok, fits.why]).toEqual([true, "the sum $3300.00 with l1-route-sol's cap is at or under $3300.00"]);
+    const over = check(settled(), crew(966_740, 40_000), all, "l1-route-sol");
+    expect([over.ok, over.why]).toEqual([false, "the sum $3300.01 with l1-route-sol's cap passes $3300.00"]);
+  });
+  test("the pinned order: each Sol and particle-1 item launches only after the one before it is done, and particle-1 only after f1-sol", () => {
+    const chain = (done: string[]): Plan => ({
+      items: [...opusPlan(), ...[["l1-route-sol", 20, null], ["pilot-sol", 100, "l1-route-sol"], ["f1-sol", 730, "pilot-sol"], ["l1-route-p1", 20, "f1-sol"], ["pilot-p1", 120, "l1-route-p1"], ["f1-p1", 920, "pilot-p1"]].map(([item, cap, after]) => ({ item: item as string, cap_usd: cap as number, status: done.includes(item as string) ? ("done" as const) : ("planned" as const), ...(after ? { after: after as string } : {}) }))],
+      leftover: { sol: "pending", particle: "pending" },
+    });
+    const ran = (items: string[]) => [...settled(), ...items.flatMap((i) => rows(i, { "l1-route-sol": 20, "pilot-sol": 100, "f1-sol": 730, "l1-route-p1": 20, "pilot-p1": 120 }[i]!, [1]))];
+    const c = crew(600_000, 40_000);
+    expect(check(ran([]), c, chain([]), "l1-route-sol").ok).toBe(true);
+    expect(check(ran([]), c, chain([]), "pilot-sol").why).toBe("pilot-sol runs only after l1-route-sol is done (Amendment E): mark l1-route-sol done once every part has finished and host-down has settled, then run this check again");
+    expect(check(ran(["l1-route-sol"]), c, chain(["l1-route-sol"]), "pilot-sol").ok).toBe(true);
+    expect(check(ran(["l1-route-sol", "pilot-sol"]), c, chain(["l1-route-sol", "pilot-sol"]), "l1-route-p1").why).toContain("l1-route-p1 runs only after f1-sol is done");
+    const sol = ["l1-route-sol", "pilot-sol", "f1-sol"];
+    expect(check(ran(sol), c, chain(sol), "l1-route-p1").ok).toBe(true);
+    expect(check(ran(sol), c, chain(sol), "f1-p1").why).toContain("f1-p1 runs only after pilot-p1 is done");
+  });
+  // f1-sol and f1-p1 run four parts one after another, so a done mark set between parts would leave the parts still to run
+  // out of the sum. Each counts as done only with its run's finished-run record; until then it counts at its cap.
+  test("marked done with no finished-run record, f1-sol and f1-p1 count at their caps, and with one at their spend; the one-part items count at their spend either way", () => {
+    const all = ["l1-route-sol", "pilot-sol", "f1-sol", "l1-route-p1", "pilot-p1", "f1-p1"];
+    const p: Plan = { items: [...opusPlan(), ...([["l1-route-sol", 20], ["pilot-sol", 100], ["f1-sol", 730], ["l1-route-p1", 20], ["pilot-p1", 120], ["f1-p1", 920]] as const).map(([item, cap_usd]) => ({ item, cap_usd, status: "done" as const }))], leftover: { sol: "done", particle: "done" } };
+    const spent = [...settled(), ...rows("l1-route-sol", 20, [0.26]), ...rows("pilot-sol", 100, [41.74]), ...rows("f1-sol", 730, [120]), ...rows("l1-route-p1", 20, [0.05]), ...rows("pilot-p1", 120, [51.91]), ...rows("f1-p1", 920, [200])];
+    const counted = (t: ReturnType<typeof tally>) => Object.fromEntries(t.items.filter((i) => all.includes(i.item)).map((i) => [i.item, dollars(i.counted)]));
+    const bare = tally(spent, crew(600_000, 40_000), p);
+    expect(counted(bare)).toEqual({ "l1-route-sol": 0.26, "pilot-sol": 41.74, "f1-sol": 730, "l1-route-p1": 0.05, "pilot-p1": 51.91, "f1-p1": 920 });
+    const proven = tally(spent, crew(600_000, 40_000), p, null, [], ["f1-sol", "f1-p1"]);
+    expect([counted(proven)["f1-sol"], counted(proven)["f1-p1"]]).toEqual([120, 200]);
+    expect(bare.total - proven.total).toBe((610 + 720) * M);
+    expect(finalRead(spent, crew(600_000, 40_000), p, "GEVA-1").all_in).toBe(bare.spentTotal);
+  });
+});
+
+describe("f1-sol-offu's done mark (Amendment E)", () => {
+  test("marked done with no finished-run record, f1-sol-offu counts at its $200 cap, and with one at its spend, so l1-route-p1's check after it sees the parts still to run", () => {
+    const p: Plan = { items: [...opusPlan(), { item: "f1-sol", cap_usd: 730, status: "done" }, { item: "f1-sol-offu", cap_usd: 200, status: "done", after: "f1-sol" }, { item: "l1-route-p1", cap_usd: 20, status: "planned", after: "f1-sol-offu" }], leftover: { sol: "done", particle: "pending" } };
+    const spent = [...atExpected(), ...rows("f1-sol", 730, [460.22]), ...rows("f1-sol-offu", 200, [50])];
+    const offu = (finished: string[]) => dollars(tally(spent, crew(600_000, 40_000), p, null, [], finished).items.find((i) => i.item === "f1-sol-offu")!.counted);
+    expect(offu(["f1-sol"])).toBe(200);
+    expect(offu(["f1-sol", "f1-sol-offu"])).toBe(50);
+    const bare = check(spent, crew(600_000, 40_000), p, "l1-route-p1", [], ["f1-sol"]), proven = check(spent, crew(600_000, 40_000), p, "l1-route-p1", [], ["f1-sol", "f1-sol-offu"]);
+    expect(bare.tally.total - proven.tally.total).toBe(150 * M);
+  });
 });
 
 describe("malformed input is refused", () => {
@@ -269,6 +450,7 @@ describe("malformed input is refused", () => {
     expect(() => tally(atExpected(), crew(288_000, 36_000), plan(solPlan, { sol: "pending", particle: "skipped" } as unknown as Plan["leftover"]))).toThrow(/leftover.particle is "skipped"/);
   });
   test("check refuses tokens with no credits instead of holding open stops at zero", () => {
+    // pregate-literal: CEILING_USD=2000 a 2000M token stop in this crew fixture, not the ceiling
     const open: Crew["threads"][number] = { code: "GEVA-8", line: "sol", credits: 0, tokens: 0, token_stop: 2000 * M, status: "open" };
     expect(() => check(atExpected(), crew(0, 0, [open]), plan(), "pilot-sol")).toThrow(/no measured rate/);
   });

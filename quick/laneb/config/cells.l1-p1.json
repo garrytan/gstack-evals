@@ -1,0 +1,13 @@
+{
+  "note": "Cells for L1's particle-1 items under section 9's leftover rule (prereg 2026-11-03-geva-254-l1-overhaul-prereg-2000, sections 3 and 9; Amendment E): pilot-p1, f1-p1 and particle-1's route check l1-route-p1, on particle-ai/particle-1 through OpenRouter inside Claude Code as R3's particle items run it, at the prereg's $5 SWE-rebench session allowance (price.py's ALLOW[\"swe\"], which sizes pilot-p1's $120 and f1-p1's $920), reserved in the item's ledger before each session and enforced by the metering proxy, and 100 turns (the agent's sdk_max_turns). Opus's items keep cells.l1.json and Sol's cells.l1-sol.json.",
+  "models": [
+    {
+      "id": "particle-1",
+      "harbor_model": "anthropic/particle-1",
+      "session_cap_usd": 5
+    }
+  ],
+  "max_output_tokens": 32000,
+  "verifier_timeout_multiplier": 2,
+  "sdk_max_turns": 100
+}

@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../runner/ledger.ts";
-import { cellKey, classify, EXIT4_LOSS, ITEMS, plannedCells, sha256, trialTasksFrom } from "../l1/l1.ts";
+import { cellKey, classify, EXIT4_LOSS, ITEMS, L1_ROUTE, plannedCells, sha256, trialTasksFrom } from "../l1/l1.ts";
 
 // l1.ts end to end on a fake awake host. fixtures/l1/ubi plays ubi-runner: each VM is a directory under UBI_FAKE, and ssh
 // runs a command in it with HOME set to it, so the host runs the real host.sh, launch.sh and ledger service. fixtures/l1/ssh
@@ -159,6 +159,120 @@ describe("l1.ts before any spend", () => {
     expect(events(r)).not.toContain(" up ");
     expect(existsSync(r.ledger + ".host.json")).toBe(false);
     expect(readRows(r.ledger).some((x) => x.id === "host-1")).toBe(false);
+  }, 60_000);
+});
+
+describe("Sol's items before any spend (Amendment E)", () => {
+  // l1-route-sol's own ledger beside the item's, approved at $20, with one settled route session, and its route record.
+  function routeLedger(r: Rig, o: { verdict?: "pass" | "drop" | null; incomplete?: string; configSha?: string; cap?: number; open?: boolean; record?: boolean; item?: string; model?: string } = {}) {
+    const item = o.item ?? "l1-route-sol";
+    const path = join(r.root, "ledgers", item + ".jsonl");
+    const l = new Ledger(path, item);
+    l.approve(o.cap ?? 20, { quotes: ["test approval"] });
+    l.reserve(item + "/s1", toMicros(5));
+    if (!o.open) l.settle(item + "/s1", toMicros(0.2));
+    if (o.record !== false) writeFileSync(path + ".route.json", JSON.stringify({ item, model: o.model ?? "gpt-6.1-sol", verdict: o.verdict === undefined ? "pass" : o.verdict, reason: "smoke passed on try 1, told passed on try 1", incomplete: o.incomplete ?? null, proxy_config_sha256: o.configSha ?? sha256(readFileSync(join(LANEB, "config/proxy.json"))), sessions: [] }));
+    return path;
+  }
+  const job = (r: Rig, part: string) => JSON.parse(readFileSync(join(r.work, part, "job.json"), "utf8"));
+
+  test("pilot-sol prepares only after Sol's route check passed on l1-route-sol with config/proxy.json and settled; then prepare-run gets the Sol model", () => {
+    const cases: [string, Record<string, string>, number, string][] = [];
+    const none = rig("pilot-sol");
+    cases.push(["no ROUTE_LEDGER", {}, 2, "set ROUTE_LEDGER to l1-route-sol's ledger"]);
+    const at = (o: Parameters<typeof routeLedger>[1]) => ({ ROUTE_LEDGER: routeLedger(rig("pilot-sol"), o) });
+    cases.push(["no record", at({ record: false }), 3, "GPT-6.1 Sol has not passed its route check on l1-route-sol"]);
+    cases.push(["a drop", at({ verdict: "drop" }), 3, "GPT-6.1 Sol dropped out of L1's Sol leg at its route check"]);
+    cases.push(["an incomplete check", at({ verdict: null, incomplete: "told try 1: interrupted by SIGTERM" }), 3, "GPT-6.1 Sol's route check on l1-route-sol is incomplete"]);
+    cases.push(["another proxy config", at({ configSha: "0".repeat(64) }), 3, "GPT-6.1 Sol's route check passed with proxy config sha256 " + "0".repeat(64)]);
+    cases.push(["an open route reserve", at({ open: true }), 3, "route check reserves are still open on l1-route-sol"]);
+    cases.push(["another route cap", at({ cap: 25 }), 3, "l1-route-sol's cap is $25, not Amendment E's $20"]);
+    for (const [label, env, code, want] of cases) {
+      const r = rig("pilot-sol");
+      const p = l1(r, ["prepare", r.work, "--item", "pilot-sol"], env);
+      expect([label, p.code, p.err]).toEqual([label, code, expect.stringContaining(want)]);
+      expect(existsSync(join(r.work, "plan.json"))).toBe(false);
+    }
+    expect(L1_ROUTE.item).toBe("l1-route-sol");
+    const ok = l1(none, ["prepare", none.work, "--item", "pilot-sol"], { ROUTE_LEDGER: routeLedger(none) });
+    expect([ok.code, ok.out]).toEqual([0, expect.stringContaining("pilot (32 sessions)")]);
+    expect([plan(none).item, plan(none).model, plan(none).cap_usd, plan(none).cells, plan(none).host_ttl_hours]).toEqual(["pilot-sol", "gpt-6.1-sol", 100, "cells.l1-sol.json", 60]);
+    expect(job(none, "pilot").model).toBe("gpt-6.1-sol");
+    expect(l1(none, ["prepare", none.work, "--item", "l1-route-sol"]).err).toContain("unknown item l1-route-sol");
+  }, 60_000);
+
+  test("host-up needs the key of the item model's route in config/proxy.json: a Sol item without OPENROUTER_API_KEY refuses before any host reserve, and starts its host with it", () => {
+    const r = rig("pilot-sol");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-sol"], { ROUTE_LEDGER: routeLedger(r) }).code).toBe(0);
+    const before = readFileSync(r.ledger, "utf8");
+    const no = l1(r, ["host-up", r.work], { OPENROUTER_API_KEY: "" });
+    expect([no.code, no.err]).toEqual([2, expect.stringContaining("set OPENROUTER_API_KEY, the key for gpt-6.1-sol's route")]);
+    expect(readFileSync(r.ledger, "utf8")).toBe(before);
+    expect(readdirSync(r.fake).filter((d) => d.startsWith("host-"))).toEqual([]);
+    expect(l1(r, ["host-up", r.work]).code).toBe(0);
+  }, 60_000);
+
+  test("host-up requires and ships only the key of the item model's route: a Sol host starts with no ANTHROPIC_API_KEY, and its secrets file and part VM hold no Anthropic key; an Opus host gets the Anthropic key alone", async () => {
+    const r = rig("pilot-sol");
+    expect(l1(r, ["prepare", r.work, "--item", "pilot-sol"], { ROUTE_LEDGER: routeLedger(r) }).code).toBe(0);
+    const sol = { ANTHROPIC_API_KEY: "", OPENROUTER_API_KEY: "test-openrouter-key" };
+    const up = l1(r, ["host-up", r.work], sol);
+    expect([up.code, up.err]).toEqual([0, ""]);
+    expect(readFileSync(join(r.fake, "host-1/.l1-secrets"), "utf8")).toBe("OPENROUTER_API_KEY=test-openrouter-key\nUBICLOUD_API_KEY=test-not-a-key\n");
+    expect(l1(r, ["launch", r.work, "--part", "pilot"], { ...sol, PAUSE_VM: "vm-2", PAUSE_AT: "1" }).code).toBe(0);
+    await until(() => existsSync(join(r.fake, "vm-2/paused")));
+    expect(readFileSync(join(r.fake, "vm-2/.laneb-keys"), "utf8")).toBe("ANTHROPIC_API_KEY=\nOPENROUTER_API_KEY=test-openrouter-key\n");
+    const o = rig("pilot-opus");
+    expect(l1(o, ["prepare", o.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect(l1(o, ["host-up", o.work], { OPENROUTER_API_KEY: "" }).code).toBe(0);
+    expect(readFileSync(join(o.fake, "host-1/.l1-secrets"), "utf8")).toBe("ANTHROPIC_API_KEY=test-not-a-key\nUBICLOUD_API_KEY=test-not-a-key\n");
+  }, 60_000);
+
+  test("f1-sol prepares f-parts.txt's four parts of 100 sessions on the Sol model; the Opus items need no ROUTE_LEDGER and keep the Opus model", () => {
+    const r = rig("f1-sol");
+    const p = l1(r, ["prepare", r.work, "--item", "f1-sol"], { ROUTE_LEDGER: routeLedger(r) });
+    expect([p.code, p.out]).toEqual([0, expect.stringContaining("f1-1 (100 sessions), f1-2 (100 sessions), f1-3 (100 sessions), f1-4 (100 sessions)")]);
+    expect([plan(r).model, plan(r).cap_usd, plan(r).host_ttl_hours]).toEqual(["gpt-6.1-sol", 730, 114]);
+    for (const part of ["f1-1", "f1-2", "f1-3", "f1-4"]) expect([job(r, part).model, job(r, part).agents.map((a: any) => a.kwargs.arm).sort().join()]).toEqual(["gpt-6.1-sol", "after-t,after-u,before-t,before-u,none"]);
+    const opus = rig("pilot-opus");
+    expect(l1(opus, ["prepare", opus.work, "--item", "pilot-opus"]).code).toBe(0);
+    expect([plan(opus).model, job(opus, "pilot").model]).toEqual(["claude-opus-5-5", "claude-opus-5-5"]);
+    expect(Object.keys(plan(opus))).toEqual(["item", "run_id", "cap_usd", "model", "task_set", "cells", "seed", "concurrent", "parts", "inputs", "git_head", "host_ttl_hours"]);
+  }, 60_000);
+
+  test("f1-sol-offu prepares four parts of 20 off-u sessions on the Sol model at its $200 cap, behind the same route check", () => {
+    const none = rig("f1-sol-offu");
+    expect(l1(none, ["prepare", none.work, "--item", "f1-sol-offu"]).code).toBe(2);
+    const r = rig("f1-sol-offu");
+    const p = l1(r, ["prepare", r.work, "--item", "f1-sol-offu"], { ROUTE_LEDGER: routeLedger(r) });
+    expect([p.code, p.out]).toEqual([0, expect.stringContaining("f1-1 (20 sessions), f1-2 (20 sessions), f1-3 (20 sessions), f1-4 (20 sessions)")]);
+    expect([plan(r).model, plan(r).cap_usd, plan(r).cells, plan(r).host_ttl_hours]).toEqual(["gpt-6.1-sol", 200, "cells.l1-sol.json", 114]);
+    for (const part of ["f1-1", "f1-2", "f1-3", "f1-4"]) expect([job(r, part).model, job(r, part).agents.map((a: any) => a.kwargs.arm).join()]).toEqual(["gpt-6.1-sol", "off-u"]);
+  }, 60_000);
+
+  test("pilot-p1 and f1-p1 prepare only after particle-1's own route check passed on l1-route-p1; Sol's pass does not open them", () => {
+    const p1 = { item: "l1-route-p1", model: "particle-1" };
+    const none = rig("pilot-p1");
+    const n = l1(none, ["prepare", none.work, "--item", "pilot-p1"]);
+    expect([n.code, n.err]).toEqual([2, expect.stringContaining("set ROUTE_LEDGER to l1-route-p1's ledger")]);
+    const sol = rig("pilot-p1");
+    const s = l1(sol, ["prepare", sol.work, "--item", "pilot-p1"], { ROUTE_LEDGER: routeLedger(sol) });
+    expect([s.code, s.err]).toEqual([3, expect.stringContaining("no approval row for item l1-route-p1")]);
+    const solRec = rig("pilot-p1");
+    const sr = l1(solRec, ["prepare", solRec.work, "--item", "pilot-p1"], { ROUTE_LEDGER: routeLedger(solRec, { item: "l1-route-p1" }) });
+    expect([sr.code, sr.err]).toEqual([3, expect.stringContaining("is for gpt-6.1-sol on l1-route-p1, not particle-1 on l1-route-p1")]);
+    const drop = rig("pilot-p1");
+    const d = l1(drop, ["prepare", drop.work, "--item", "pilot-p1"], { ROUTE_LEDGER: routeLedger(drop, { ...p1, verdict: "drop" }) });
+    expect([d.code, d.err]).toEqual([3, expect.stringContaining("particle-1 dropped out of L1's particle-1 leg at its route check")]);
+    const ok = rig("pilot-p1");
+    const p = l1(ok, ["prepare", ok.work, "--item", "pilot-p1"], { ROUTE_LEDGER: routeLedger(ok, p1) });
+    expect([p.code, p.out]).toEqual([0, expect.stringContaining("pilot (32 sessions)")]);
+    expect([plan(ok).model, plan(ok).cap_usd, plan(ok).cells, job(ok, "pilot").model]).toEqual(["particle-1", 120, "cells.l1-p1.json", "particle-1"]);
+    const f1 = rig("f1-p1");
+    const f = l1(f1, ["prepare", f1.work, "--item", "f1-p1"], { ROUTE_LEDGER: routeLedger(f1, p1) });
+    expect([f.code, f.out]).toEqual([0, expect.stringContaining("f1-1 (100 sessions), f1-2 (100 sessions), f1-3 (100 sessions), f1-4 (100 sessions)")]);
+    expect([plan(f1).model, plan(f1).cap_usd, plan(f1).host_ttl_hours]).toEqual(["particle-1", 920, 114]);
+    for (const part of ["f1-1", "f1-2", "f1-3", "f1-4"]) expect([job(f1, part).model, job(f1, part).agents.map((a: any) => a.kwargs.arm).sort().join()]).toEqual(["particle-1", "after-t,after-u,before-t,before-u,none"]);
   }, 60_000);
 });
 

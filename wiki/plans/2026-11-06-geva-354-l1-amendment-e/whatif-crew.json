@@ -1,0 +1,135 @@
+{
+  "as_of": "2026-11-06T17:00:00Z",
+  "captain_credits": 0,
+  "note": "captain_credits 0: no booked Captain L1 turns are recorded in the drive; the $40 Captain line is held back in full",
+  "threads": [
+    {
+      "code": "GEVA-254",
+      "line": "crew",
+      "credits": 20639.125622,
+      "tokens": 66779752,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-258",
+      "line": "crew",
+      "credits": 34972.874955,
+      "tokens": 74123784,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-268",
+      "line": "crew",
+      "credits": 64809.243425,
+      "tokens": 170036213,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-269",
+      "line": "crew",
+      "credits": 73538.155426,
+      "tokens": 211362614,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-274",
+      "line": "crew",
+      "credits": 73359.947021,
+      "tokens": 156849074,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-278",
+      "line": "crew",
+      "credits": 40389.989902,
+      "tokens": 108367207,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-279",
+      "line": "crew",
+      "credits": 61974.938794,
+      "tokens": 174033652,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-287",
+      "line": "crew",
+      "credits": 44497.391666,
+      "tokens": 149197012,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-290",
+      "line": "crew",
+      "credits": 34957.66909,
+      "tokens": 123664560,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-294",
+      "line": "crew",
+      "credits": 26855.210958,
+      "tokens": 101555446,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-296",
+      "line": "crew",
+      "credits": 62646.536541,
+      "tokens": 159469858,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-302",
+      "line": "crew",
+      "credits": 75532.44869,
+      "tokens": 210223438,
+      "token_stop": null,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-302-S1",
+      "line": "crew",
+      "credits": 0,
+      "tokens": 0,
+      "token_stop": 0,
+      "status": "done"
+    },
+    {
+      "code": "GEVA-350",
+      "line": "crew",
+      "credits": 38987.982954,
+      "tokens": 141882564,
+      "token_stop": 165000000,
+      "status": "open"
+    },
+    {
+      "code": "GEVA-353",
+      "line": "sol",
+      "credits": 3751.626466,
+      "tokens": 11533269,
+      "token_stop": 90000000,
+      "status": "open"
+    },
+    {
+      "code": "GEVA-354",
+      "line": "crew",
+      "credits": 24345.389021,
+      "tokens": 84847217,
+      "token_stop": 145000000,
+      "status": "open"
+    }
+  ]
+}

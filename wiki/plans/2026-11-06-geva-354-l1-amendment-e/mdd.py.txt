@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+# mdd.py: the MDD of Amendment E's one secondary contrast, f1-sol-offu's off-u minus f1-sol's before-u on B1's measure (share
+# of untold sessions that load /investigate under probe L), Sol, F1's 80 tasks x 1, paired by task. Keyless. It runs the
+# merged prereg's power.py model and test unchanged (its functions, executed from the file, with its seed), but takes the
+# exact sign-flip test one-sided for a gain: the p-value is P(S >= s) under the null and only s > 0 rejects.
+# Usage: python3 mdd.py <power.py>
+import sys
+src = open(sys.argv[1]).read()
+g = {"__name__": "power"}
+exec(src[: src.index("rng = random.Random(SEED)")], g)
+null_dist, world, POWER, STEPS, SIMS, SEED = g["null_dist"], g["world"], g["POWER"], g["STEPS"], g["SIMS"], g["SEED"]
+import random
+
+def p_gain(counts, s):
+    return sum(pr for v, pr in null_dist(counts).items() if v >= s)
+
+def rejection(w, reps, delta, alpha):
+    rej = 0
+    for tasks in w:
+        counts = [0] * reps
+        s = 0
+        for p, x, uy in tasks:
+            q = min(1.0, p + delta)
+            d = sum(u < q for u in uy) - x
+            if d:
+                counts[abs(d) - 1] += 1
+                s += d
+        if s > 0 and p_gain(tuple(counts), s) <= alpha:
+            rej += 1
+    return rej / len(w)
+
+def mdd(w, reps, alpha):
+    if rejection(w, reps, 1.0, alpha) < POWER:
+        return None
+    lo, hi = 0.0, 1.0
+    for _ in range(STEPS):
+        mid = (lo + hi) / 2
+        if rejection(w, reps, mid, alpha) >= POWER:
+            hi = mid
+        else:
+            lo = mid
+    n = sum(len(t) for t in w)
+    return sum(min(1.0, p + hi) - p for t in w for p, _, _ in t) / n
+
+rng = random.Random(SEED)
+print(f"mdd.py over power.py's model: seed {SEED}, {SIMS} simulations per row, {STEPS} bisection steps, power {POWER:.2f}; 80 tasks x 1;")
+print("one-sided exact sign-flip for a gain at alpha 0.05. Points are percentage points.")
+for control, conc in [(0.095, 2), (0.095, 6), (0.05, 2), (0.20, 2)]:
+    w = world(rng, 80, 1, control, conc)
+    m = mdd(w, 1, 0.05)
+    print(f"  before-u {100*control:4.1f}%  conc {conc}  MDD@0.05 one-sided {'n/r' if m is None else f'{100*m:5.1f}'}  null size {rejection(w, 1, 0.0, 0.05):.3f}")

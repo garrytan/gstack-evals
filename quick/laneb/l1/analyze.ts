@@ -57,6 +57,8 @@ export const POWER_TXT = join(BUNDLE, "power.txt");
 export const POWER_SHA256 = "45585faa827b9b780e1782f66319989cc18fb04e3a9e35f54c806a56eb0c4f9e";
 export const PROBES_TS = join(import.meta.dir, "probes.ts");
 export const F1_ARMS: readonly L1Arm[] = ["none", "before-u", "after-u", "before-t", "after-t", "off-u", "off-t"];
+const L1_SOL = "gpt-6.1-sol";
+const OFFU_MDD = "13.5";
 export const TB2_ARMS: readonly L1Arm[] = ["none", "before-u", "after-u", "before-t", "after-t"];
 
 export class UsageError extends Error {}
@@ -136,6 +138,20 @@ export function bootstrap(values: number[], groups: number[][]): { lo: number; h
   return { lo: quantile(reps, 0.025), hi: quantile(reps, 0.975) };
 }
 
+/** One-sided Monte Carlo sign-flip p for a gain (Amendment E's off-u secondary): the share of draws whose sum reaches the observed sum. */
+export function signFlipGainP(diffs: number[]): number | null {
+  if (!diffs.length) return null;
+  const obs = diffs.reduce((a, b) => a + b, 0);
+  const r = rng(SEED);
+  let k = 0;
+  for (let d = 0; d < DRAWS; d++) {
+    let s = 0;
+    for (const x of diffs) s += r() < 0.5 ? -x : x;
+    if (s >= obs - 1e-12) k++;
+  }
+  return (k + 1) / (DRAWS + 1);
+}
+
 /** Two-sided Monte Carlo sign-flip p on per-cluster differences. */
 export function signFlipP(diffs: number[]): number | null {
   if (!diffs.length) return null;
@@ -192,7 +208,7 @@ export type Coverage = ReturnType<typeof coverage>;
 export type Contrast = { a: L1Arm; b: L1Arm; metric: Metric; a_rate: number; b_rate: number; a_n: number; b_n: number; tasks: number; est: number; task_ci: { lo: number; hi: number }; repo_ci: { lo: number; hi: number }; p: number | null; coverage: Coverage | null };
 
 /** A paired contrast; with the planned sessions it also carries #169 7.5's coverage, and an endpoint whose coverage fails has no outcome. */
-export function contrast(rows: L1SessionRow[], s: Scope, a: L1Arm, b: L1Arm, metric: Metric, planned: Planned | null = null): Contrast {
+export function contrast(rows: L1SessionRow[], s: Scope, a: L1Arm, b: L1Arm, metric: Metric, planned: Planned | null = null, gain = false): Contrast {
   const A = cell(rows, s, a, metric), B = cell(rows, s, b, metric);
   const tasks = [...A.keys()].filter((t) => B.has(t)).sort();
   const diffs = tasks.map((t) => A.get(t)!.v - B.get(t)!.v);
@@ -203,7 +219,7 @@ export function contrast(rows: L1SessionRow[], s: Scope, a: L1Arm, b: L1Arm, met
     tasks: tasks.length, est: mean(diffs),
     task_ci: bootstrap(diffs, tasks.map((_, i) => [i])),
     repo_ci: bootstrap(diffs, groupsBy(tasks.map((t) => A.get(t)!.repo))),
-    p: signFlipP(diffs),
+    p: gain ? signFlipGainP(diffs) : signFlipP(diffs),
     coverage: planned ? coverage(rows, s, [a, b], planned) : null,
   };
 }
@@ -317,7 +333,7 @@ const fix = (reading: Reading, kind: Kind, why: string): Decision => ({ reading,
 
 export function decide(d: DecideIn): Decision {
   const part = PART[d.member];
-  if (d.notRun) return { reading: "NOT_RUN", verdict: "NONE", kind: null, why: "not run under the $2,000 ceiling" };
+  if (d.notRun) return { reading: "NOT_RUN", verdict: "NONE", kind: null, why: "not run under the $3,300 ceiling" };
   if (d.admission === "not_admitted") return fix("NOT_ADMITTED", "saturation", "the pilot did not admit it: a descriptive line, with no ceiling-raise attempt");
   if (d.admission !== "admitted") return { reading: "NO_ADMISSION", verdict: "NONE", kind: null, why: "the pilot is " + (d.admission === "incomplete" ? "incomplete" : "missing") + ": no admission; the Captain decides (#169 8.3)" };
   if (!d.coverageOk || d.est === null || d.lo === null || d.hi === null) return fix("NO_OUTCOME", "harness limit", "no outcome under the coverage rule (#169 7.5)");
@@ -547,6 +563,7 @@ export function analyze(rows: L1SessionRow[], cfg: Config) {
         S5: [pass("before-t", "none"), pass("before-u", "none")],
         S6: [contrast(rows, f1, "after-u", "off-u", "load", f1Plan), contrast(rows, f1, "after-t", "off-t", "complete", f1Plan), pass("after-t", "off-t"), pass("after-u", "off-u")],
         S7: { f1: skillCounts("f1"), tb2: skillCounts("tb2") },
+        offu: id === L1_SOL ? { ...contrast(rows, f1, "off-u", "before-u", "load", f1Plan, true), ran: rows.filter((r) => r.model === id && r.instrument === "f1" && r.arm === "off-u").length } : null,
         S8: { per_arm: costs, ratio_to_none: Object.fromEntries(F1_ARMS.map((arm) => [arm, { per_session: ratio(costs[arm]!.usd_per_session, costs.none!.usd_per_session), per_pass: ratio(costs[arm]!.usd_per_pass, costs.none!.usd_per_pass) }])), g3_after_t: ratio(costs["after-t"]!.usd_per_pass, costs.none!.usd_per_pass) },
         S10: s10,
         S11: { route_disagree: { recorded: own.filter((r) => r.route_hook !== null && r.route_hook_transcript !== null).length, disagree: own.filter((r) => r.route_hook !== null && r.route_hook_transcript !== null && r.route_hook !== r.route_hook_transcript).length }, route_hook_after_u: { n: au.length, fired: au.filter((r) => r.route_hook === true).length, unrecorded: au.filter((r) => r.route_hook === null).length, routed_n: au.filter((r) => routed.has(r.task)).length, routed_fired: au.filter((r) => routed.has(r.task) && r.route_hook === true).length }, contract_after_t: { n: at.length, block: at.filter((r) => r.contract_block).length, record: at.filter((r) => r.contract_record === true).length, unrecorded: at.filter((r) => r.contract_record === null).length } },
@@ -573,7 +590,7 @@ export function markdown(rep: Report): string {
   const out: string[] = ["L1 analysis. power.txt " + rep.power_sha256.slice(0, 12) + ", probes.ts " + rep.probes_sha256.slice(0, 12) + ". Sessions " + rep.sessions.total + ": infra " + rep.sessions.infra + ", cap stops " + rep.sessions.cap_stops + ", contaminated none " + rep.sessions.contaminated.length + "."];
   const head = "| Endpoint | Arm A | Arm B | Paired tasks | Difference, points | Task 95% CI | Repository 95% CI | p, primaries only |\n|---|---|---|---|---|---|---|---|";
   for (const m of rep.models) {
-    out.push("", "## " + m.model + (m.status === "not_run" ? " (not run under the $2,000 ceiling)" : ""), "");
+    out.push("", "## " + m.model + (m.status === "not_run" ? " (not run under the $3,300 ceiling)" : ""), "");
     for (const p of m.primaries) {
       const a = p.admission;
       out.push("**" + p.member + "** admission: " + a.status + (a.c === null ? "" : " (before " + a.x + "/" + a.n + ", Wilson upper " + pct(a.u) + ", MDD@Holm2 " + pts(a.mdd) + ")") + ". Verdict: **" + p.decision.verdict + (p.decision.kind ? " (" + p.decision.kind + ")" : "") + "**, reading " + p.decision.reading + ": " + p.decision.why + ". Holm p " + p.holm_p.toFixed(4) + "; before rate " + pct(p.before_rate.rate) + " [" + pct(p.before_rate.ci.lo) + ", " + pct(p.before_rate.ci.hi) + "]; MDD@Holm2 there " + pts(p.mdd) + "; coverage " + (p.coverage.ok ? "ok" : "failed") + "; audit " + p.audit.rule + " " + (p.audit.pass ? "passed" : "failed") + "; exposure " + pct(p.exposure.rate) + " of " + p.exposure.n + (p.not_run_mdd === null ? "" : "; it would have had MDD@Holm2 " + pts(p.not_run_mdd) + " at the planning rate"));
@@ -584,6 +601,8 @@ export function markdown(rep: Report): string {
     out.push(line("O5 (descriptive)", m.o5.contrast));
     for (const [k, cs] of Object.entries({ S1: m.secondary.S1, S3: m.secondary.S3, S5: m.secondary.S5, S6: m.secondary.S6 })) for (const c of cs) out.push(line(k + " " + c.metric, c));
     out.push(line("S12 TB2 B1", m.secondary.S12.tb2_b1), line("S12 TB2 B3", m.secondary.S12.tb2_b3), line("S12 TB2 fit B1", m.secondary.S12.fit_b1));
+    const o = m.secondary.offu;
+    if (o) out.push("", "Amendment E's off-u secondary" + (o.ran === 0 ? ": not run (the table holds no F1 off-u session on Sol); it would have had MDD " + OFFU_MDD + " points at Sol's Run D rate of 9.5% (Amendment E's mdd.txt)." : " (off-u minus before-u, B1's load, one-sided for a gain at 0.05, outside Holm): " + (o.coverage!.ok ? pts(o.est) + " points " + ci(o.task_ci) + ", one-sided p " + o.p!.toFixed(4) + "; off-u " + pct(o.a_rate) + " (" + o.a_n + "), before-u " + pct(o.b_rate) + " (" + o.b_n + ")." : "no outcome under the coverage rule.")));
     out.push("", "Gate reading (probe I complete in F1 after-t, bar 50%): " + m.gate.complete + "/" + m.gate.n + " = " + pct(m.gate.rate) + ", " + (m.gate.met ? "met" : "not met") + "; probes.ts sha256 " + m.gate.probes_sha256 + ". It is B3's exposure line.");
     out.push("O5: " + (m.o5.outcome ? pts(m.o5.contrast.est) + " points " + ci(m.o5.contrast.task_ci) : "no outcome under the coverage rule") + ", before-t " + pct(m.o5.before_t_rate) + ", power.txt MDD@0.05 there " + pts(m.o5.mdd) + ". Unpowered: no verdict.");
     out.push("S13 background at result: " + JSON.stringify(m.secondary.S13));
