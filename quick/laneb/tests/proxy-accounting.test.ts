@@ -223,6 +223,7 @@ describe("per-model byte bound on estimate routes (L1 Amendment F)", () => {
   let lastBody = "";
   let reportInput = 100;
   let failCount = false;
+  let mode: "full" | "cut" | "hang" = "full";
   const enc = new TextEncoder();
   const ev = (type: string, data: unknown) => enc.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   let upstream: ReturnType<typeof Bun.serve>;
@@ -246,8 +247,11 @@ describe("per-model byte bound on estimate routes (L1 Amendment F)", () => {
         const stream = new ReadableStream<Uint8Array>({
           start(ctrl) {
             ctrl.enqueue(ev("message_start", { type: "message_start", message: { usage: { input_tokens: reportInput, output_tokens: 1 } } }));
-            ctrl.enqueue(ev("message_delta", { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 50 } }));
-            ctrl.enqueue(ev("message_stop", { type: "message_stop" }));
+            if (mode === "hang") return;
+            if (mode === "full") {
+              ctrl.enqueue(ev("message_delta", { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 50 } }));
+              ctrl.enqueue(ev("message_stop", { type: "message_stop" }));
+            }
             ctrl.close();
           },
         });
@@ -335,5 +339,29 @@ describe("per-model byte bound on estimate routes (L1 Amendment F)", () => {
     expect(closed.spent_micros).toBe(e.cost_micros);
     const settle = readRows(join(fdir, "ledger.jsonl")).find((r) => r.kind === "settle" && r.id === s.id) as any;
     expect(settle).toMatchObject({ usd_micros: e.cost_micros, reserved_micros: 50_000, over_reserve: true });
+  }, 30_000);
+
+  test("a cut-off stream, or a request still in flight at close, is charged at least the input its stream reported, even above its bound", async () => {
+    const above = worstCaseMicros(20_000, 1000, maxPrice({ price_per_mtok: tightPrice }), false);
+    reportInput = 20_000;
+    mode = "cut";
+    const a = await open("tight", 1);
+    const ra = await send(a.token);
+    expect(ra.status).toBe(200);
+    await ra.text();
+    const ca = await close(a.id);
+    const ea = entry(a.id);
+    expect([ea.complete, ea.input_tokens_bound < 20_000, ea.worst_micros < above, ea.cost_micros, ca.spent_micros]).toEqual([false, true, true, above, above]);
+    mode = "hang";
+    const b = await open("tight", 1);
+    const rb = await send(b.token);
+    const reader = rb.body!.getReader();
+    await reader.read();
+    const cb = await close(b.id);
+    const charged = readFileSync(join(fdir, "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((x) => x.event === "charged_at_worst" && x.session === b.id);
+    expect([charged.worst_micros, cb.spent_micros]).toEqual([above, above]);
+    await reader.cancel().catch(() => {});
+    mode = "full";
+    reportInput = 100;
   }, 30_000);
 });

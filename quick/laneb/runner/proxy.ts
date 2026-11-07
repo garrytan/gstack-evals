@@ -529,9 +529,11 @@ export function startProxy(opts: ProxyOptions) {
       s.pending.set(rid, { worst, abort });
       const started = Date.now();
       // complete=false charges the worst case: a stream cut off before its final usage, a body that failed mid-read,
-      // a 200 without usage, or a request that failed after it may have reached the provider.
+      // a 200 without usage, or a request that failed after it may have reached the provider. Its input side is raised to
+      // any input the response already reported, so a request whose real count passed its bound is never charged below it.
+      const failWorst = (u: Usage) => Math.max(worst, worstCaseMicros(u.input_tokens + u.cache_creation_input_tokens + u.cache_creation_1h_input_tokens + u.cache_read_input_tokens, body.max_tokens, maxPrice(model), asksLongTtl(outBody)));
       const account = (usage: Usage, providerCost: number | null, status: number, stream: boolean, stopReason: string | null, complete: boolean, extra: Record<string, unknown> = {}) => {
-        const micros = complete ? costMicros(usage, priceFor(usage, model)) : worst;
+        const micros = complete ? costMicros(usage, priceFor(usage, model)) : failWorst(usage);
         const entry = { session: s.id, trial: s.trial, model: s.model, request: rid, requested_model: requested, upstream_model: model.upstream_model, status, stream, complete, usage, cost_micros: micros, worst_micros: worst, input_tokens_bound: inputTokens, counted, body_bytes: outBody.length, max_tokens: body.max_tokens, provider_cost_usd: providerCost, stop_reason: stopReason, ms: Date.now() - started, ...routeEvidence, ...extra };
         if (!s.pending.delete(rid)) { log({ event: "late_usage", ...entry }); return; }
         if (status === 200 && !extra.sse_error && !extra.error) s.okResponses++;
@@ -588,7 +590,11 @@ export function startProxy(opts: ProxyOptions) {
       const reader = upstream.body.getReader();
       const read = async () => {
         const r = await reader.read();
-        if (r.value) parser.feed(decoder.decode(r.value, { stream: true }));
+        if (r.value) {
+          parser.feed(decoder.decode(r.value, { stream: true }));
+          const p = s.pending.get(rid);
+          if (p) p.worst = failWorst(parser.usage);
+        }
         return r;
       };
       // If the client goes away mid-stream, keep reading so the final usage still arrives; close aborts it if it runs long.
