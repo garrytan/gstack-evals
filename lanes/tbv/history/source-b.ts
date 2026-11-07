@@ -229,7 +229,7 @@ function graphql(vars: string[]): any {
 
 /** A connection's pages past its first, so a record whose files or check suites hold more than one page comes through
  * whole. A connection with no next page comes back as it is. Every page must keep the first page's totalCount, return
- * nodes and move the cursor, and paging may not return more nodes than totalCount, or mine-b fails closed. Paging that
+ * nodes and move the cursor, and paging may not return more nodes than totalCount at any page, or mine-b fails closed. Paging that
  * ends short of totalCount leaves the connection truncated, and fromGraphql flags the record. */
 function pageRest(what: string, conn: Record<string, any> | null | undefined, next: (cursor: string) => any): Record<string, any> | null | undefined {
   if (!conn?.pageInfo?.hasNextPage) return conn;
@@ -240,9 +240,9 @@ function pageRest(what: string, conn: Record<string, any> | null | undefined, ne
     if (page.totalCount !== conn.totalCount) fail("E_TBV_INPUT", what + " counted " + conn.totalCount + ", then " + page.totalCount + " on a later page; rerun mine-b");
     if (!nodesOf(page).length || page.pageInfo?.endCursor === info.endCursor) fail("E_TBV_INPUT", what + " did not page past cursor " + info.endCursor + "; rerun mine-b");
     nodes.push(...nodesOf(page));
+    if (nodes.length > conn.totalCount) fail("E_TBV_INPUT", what + " paged " + nodes.length + " nodes, more than its totalCount " + conn.totalCount + "; rerun mine-b");
     info = page.pageInfo;
   }
-  if (nodes.length > conn.totalCount) fail("E_TBV_INPUT", what + " paged " + nodes.length + " nodes, more than its totalCount " + conn.totalCount + "; rerun mine-b");
   return { totalCount: conn.totalCount, nodes };
 }
 

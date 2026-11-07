@@ -217,3 +217,10 @@ test("files or check suite paging that returns more nodes than totalCount fails 
   expect(suites.calls().length).toBe(2);
   expect(existsSync(suites.out)).toBe(false);
 });
+
+test("files paging whose cursor cycles fails closed at the page that passes totalCount and writes nothing", () => {
+  const g = fakeGh({ ...WIDE_PAGES, f100: { rc: 0, body: filesPage(233, 100, 200, true, "f200") }, f200: { rc: 0, body: filesPage(233, 200, 300, true, "f100") } });
+  expect(g.mine().code).toBe("E_TBV_INPUT");
+  expect(g.calls().length).toBe(3);
+  expect(existsSync(g.out)).toBe(false);
+});

@@ -46,7 +46,7 @@ The fixed mine-b ran once against this repo on 2026-11-07, from 03:23:37Z to 04:
 - All 255 pull requests that B2's first run saw are kept, none truncated, and so are the 3 closed since. All 237 in dev source B's frame are kept.
 - A separate totalCount read of the same 255 matches every kept record's count of files, commits, check runs per commit, reviews and review threads. The largest record holds all 233 of its files.
 - It made 258 pull request queries, 946 check suite queries and 2 files queries. GitHub's dryRun prices a pull request query at 12 points and each extra query at 1, about 4,044 points in all, and the quota readings moved by about 1,100 over the run. A pull request query that asks for 50 check suites up front prices at 52.
-- The GraphQL quota is the GitHub App installation's 7,700 points an hour, shared by every thread that uses it. An earlier attempt at 50 suites up front stopped with RATE_LIMITED after about 5 minutes and wrote nothing. So B2's mine-b reads `gh api rate_limit` before and after, paces its calls, and waits for a reset rather than run the quota down.
+- The GraphQL quota is the GitHub App installation's 7,700 points an hour, shared by every thread that uses it. An earlier attempt at 50 suites up front stopped with RATE_LIMITED after about 5 minutes and wrote nothing. mine-b itself does not read the quota or pace its calls, so B2 runs it under such a wrapper too: the wrapper reads `gh api rate_limit` before and after, paces the calls, and waits for a reset rather than run the quota down.
 
 ## 4. Runbook correction: rebuild-a's --export
 
@@ -66,7 +66,7 @@ tests/tbv/mine-b.test.ts's stand-in gh now cuts the check suites and files it re
 - A commit with 17 check suites pages the 7 past the first 10 and is kept whole, and one with 125 pages across two more queries.
 - A pull request with 233 files pages its files in full (queries at the files cursors after 100 and 200) and is kept.
 - Check suite paging or files paging that ends short of totalCount, and a suite with 21 check runs, are still flagged truncated.
-- A files or check suite page with an errors array (at exit 0 and exit 1), no page, a changed totalCount, no nodes or a cursor that does not move fails closed and writes nothing, and so does paging that returns more nodes than totalCount.
+- A files or check suite page with an errors array (at exit 0 and exit 1), no page, a changed totalCount, no nodes or a cursor that does not move fails closed and writes nothing, and so does paging that returns more nodes than totalCount. That check runs after every page, so a files cursor that cycles stops at the page that passes totalCount.
 
 Run against 787e0e3's source-b.ts, the new tests for paging in full and for the fail-closed pages failed, and the two short-paging tests passed, since 787e0e3 already flagged those records.
 
