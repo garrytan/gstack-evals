@@ -598,6 +598,38 @@ describe("autoplan exposure, GEVA-387: a methodology file read after the phase's
   test("every load credited but a phase published without its report reads unexposed on findings_in_order", () => {
     expect(autoplanExposure(dropText(r61(), /^\*\*Phase 2\.5 complete/m))).toMatchObject({ exposed: false, failed: "findings_in_order", checks: { review_skills_loaded: true }, published: ["ceo", "eng"] });
   });
+
+  const SKILL = "/root/.claude/skills/gstack/plan-design-review/SKILL.md";
+  const bashLoads = (file: string, command: string) => (file === DX ? loads(bashRead(pipe(both(), "m3"), "r3", command)) : loads(bashRead(dropCall(both(), "m2"), "r2", command)));
+
+  test("a Bash read whose file sits in a comment or carries a suffix does not load the phase", () => {
+    for (const file of [SKILL, DX]) {
+      for (const command of ["cat README.md # " + file, "cat README.md #" + file, "cat " + file + "-old", "cat " + file + "~", "cat " + file + ".bak", 'cat "' + file + '-old"', "cat '" + file + "'x"]) expect([command, bashLoads(file, command)]).toEqual([command, false]);
+    }
+  });
+
+  test("a Bash read of a quoted file, or with a comment after the file, still loads the phase", () => {
+    for (const file of [SKILL, DX]) {
+      for (const command of ['cat "' + file + '"', "cat '" + file + "'", "cat " + file + " # the review", "sed -n '1,600p' \"" + file + "\" 2>/dev/null"]) expect([command, bashLoads(file, command)]).toEqual([command, true]);
+    }
+  });
+
+  const wrapped = (before: string, after: string) => {
+    const rs = pipe(both(), "m3", after, "");
+    useOf(rs, "m3").input.command = before + useOf(rs, "m3").input.command;
+    useOf(rs, "r3").input.file_path = DX;
+    return rs;
+  };
+
+  test("a methodology command that is not the only command, follows a pipe or a comment, or has another line does not open the phase's methodology file", () => {
+    const cases: [string, string][] = [["false && ", " || true"], ["", "; true"], ["", " || true"], ["", " &"], ["true | ", ""], ["", " | head -5 | python3 -m json.tool"], ["echo $(", ")"], ["echo `", "`"], ["! ", ""], ["true # ", ""], ["", "\ntrue"], ["", " | python3 - <<'PY'\nimport sys"]];
+    for (const [before, after] of cases) expect([before, after, loads(wrapped(before, after))]).toEqual([before, after, false]);
+  });
+
+  test("a methodology command piped once into a quoted script, redirected, continued on a new line or fed a heredoc that closes opens the phase's methodology file", () => {
+    const multiline = " | python3 -c 'import json, sys\nd = json.load(sys.stdin)\nprint(d[\"methodologyPath\"])'";
+    for (const after of [PIPED, multiline, " > /work/repo/.gstack/tmp/autoplan/dx.json 2>&1", " \\\n  " + PIPED, " | python3 - <<'PY'\nimport sys\nPY", PIPED + " # read the path"]) expect([after, loads(wrapped("", after))]).toEqual([after, true]);
+  });
 });
 
 describe("transcripts and the detector table", () => {
