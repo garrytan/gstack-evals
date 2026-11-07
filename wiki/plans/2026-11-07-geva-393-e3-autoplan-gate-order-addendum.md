@@ -102,8 +102,8 @@ The reports-and-publishes pass also counts what came before and after each refus
 At settle, each not-exposed session gets one class from its own lines:
 
 - **Report step:** config, scope and review_skills_loaded true; findings_in_order false; no arm stop and no reclassification by the refusal or over-credit rule; and the gate ran as built, which means it fired, logged no error and logged no skipped marker.
-- **Load step:** config and scope true, review_skills_loaded false, no arm stop. This is E2 section 9's CUT-CANDIDATE trigger, unchanged.
-- **Harness or gate code:** anything else. That covers config or scope false; a transcript the detector refuses; an arm stop (a refusal at the proxy, the turn ceiling or the wall limit); a reclassification by the over-credit rule; a gate that didn't fire, logged an error or skipped a check; and a second gap.
+- **Load step:** config and scope true, review_skills_loaded false, no arm stop, and none of the conditions listed under Harness or gate code. This is E2 section 9's CUT-CANDIDATE trigger, unchanged.
+- **Harness or gate code:** any session that meets one of these, whatever its other checks read: config or scope false; a transcript the detector refuses; an arm stop (a refusal at the proxy, the turn ceiling or the wall limit); a reclassification by the over-credit rule; a gate that didn't fire, logged an error or skipped a check; and a second gap.
 
 A gate that exhausts its budget or hits its ceiling has run as built. A session that then publishes out of order is a report-step miss, because the gate did what it was built to do and the reports still didn't come.
 
@@ -124,7 +124,7 @@ The early stop ends a failing check at its second not-exposed session, so a FAIL
 | ap-e3, model calls: 4 sessions and at most 1 gap rerun | autoplan | $343 | $60 to $100 |
 | e3-vm, run host hours (Ubicloud standard-8 at the Captain's $0.30 reserve rate) | autoplan | $9 (30 hours) | about $1.50 to $2 |
 
-**Expected spend.** E2's three sessions cost $17.19, $13.73 and $28.13, a mean of $19.68. Refusals and blocks under the new gate each cost at least one more model call, so E3's sessions may run longer. Four sessions should come to about $80 to $100, and an early stop after 3 to about $60 to $75. The spare has no cost reading. E2's host ran 4.6 hours and cost $1.39.
+**Expected spend.** E2's three sessions cost $17.19, $13.73 and $28.13, a mean of $19.68. Refusals and blocks under the new gate each cost at least one more model call, so E3's sessions may run longer. Four sessions should come to about $80 to $100, an early stop after 3 to about $60 to $75, and an early FAIL stop after 2 to about $40. The spare has no cost reading. E2's host ran 4.6 hours and cost $1.39.
 
 **Why every session can open.** As in E2: the stage driver opens a session only when its lease has room for the arm's whole $45 allowance (lanes/outcome-skills/driver/stage.ts). At most 5 sessions open, the 4 planned and the one gap rerun, so the check can spend at most $225, and every session can open under $343.
 
