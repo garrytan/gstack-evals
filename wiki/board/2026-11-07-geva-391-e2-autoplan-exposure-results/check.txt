@@ -1,0 +1,4 @@
+CHECKED e2-ap-tgff24032962-t1 exposed line_exposed=true t2_end=quiet proxy_refused=0 refusal_rule=clear overcredit_rule=clear
+CHECKED e2-ap-tg8d524982ac-t1 not_exposed line_exposed=false t2_end=quiet proxy_refused=0 refusal_rule=clear overcredit_rule=clear
+CHECKED e2-ap-tg5b38fec201-t1 not_exposed line_exposed=false t2_end=quiet proxy_refused=0 refusal_rule=clear overcredit_rule=clear
+TALLY exposed 1 not_exposed 2 gaps 0 of 4, decision settled fail
