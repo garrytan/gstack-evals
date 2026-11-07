@@ -10,11 +10,13 @@ date: 2026-11-07
 status: open
 links:
   - 2026-11-04-geva-285-ceo-outcome-prereg
+  - 2026-11-05-geva-295-ceo-ladder-amendment
   - 2026-11-06-geva-338-ceo-pin-part-2
   - 2026-11-06-geva-345-ceo-stage-2-amendment
   - 2026-11-06-geva-348-ceo-scorer-stage-2
   - 2026-11-06-geva-362-ceo-smoke-pin
   - garrytan/gstack-evals#214
+  - garrytan/gstack-evals#248
 attachments:
   - 51182833e58c87adf492a7d4a46d396c5b03758065c307e9569debbda5db8e59  check-cset.ts.txt
   - 06063de74538cae7dd2b789e064a711fda52a4695cf224fe42cfbc773af62b98  dryrun-opus.ts.txt
@@ -31,7 +33,7 @@ attachments:
 
 # CEO outcome eval, stage 2 pin
 
-This is the stage 2 pin post that the stage 2 amendment's order calls for (2026-11-06-geva-345-ceo-stage-2-amendment, section 9, step 7). It pins the comparison suite, freezes every stage 2 command, records projection's output and its sha256, runs the all-in check on crew actuals, and reports a keyless dry run. It adds no rule beyond the amendment, the scorer post and the Captain's rulings on this line. It names three operator deviations in section 6.
+This is the stage 2 pin post that the stage 2 amendment's order calls for (2026-11-06-geva-345-ceo-stage-2-amendment, section 9, step 7). It pins the comparison suite, freezes every stage 2 command, records projection's output and its sha256, runs the all-in check on crew actuals, and reports a keyless dry run. It adds no rule beyond the amendment, the scorer post and the Captain's rulings on this line. It names three operator deviations in section 9.
 
 Nothing here spends. No model was called and no VM started to write it. Like every post on this eval, it holds counts, categories and sha256s only (#214, section 15).
 
@@ -57,13 +59,13 @@ mkunits-cmp.ts.txt built the suite from it. It is part 2's mkunits.ts.txt with a
 | suite-stub.json (this post), from `noloss suite --stub` | 2e5cdb41c78916ef746aa14b60fb80a117266e4182639578b4cb0004786d88d3 |
 | slots.txt (this post), per slot: unit, plan.md, key.json and context/project.md sha256 | bc60dda15585d61ee620fc96e1623404ba5dfa34abb6fb356d80dab0f145048f |
 
-`noloss suite --check` passes the sealed suite. The source repo holds one init commit and 114 plan commits by a neutral author. Its commit dates are fixed, but git sets the committer date at build time, so a rebuild gives new unit ids. **So the run thread restores the sealed build, never rebuilds it:** stage2-suite.tar.gz.age in the Captain's handoffs (ciphertext 6e91f9786dfe3504899e7334cf40a35ecddd7795697f249bcb40e75eb8c5a20d, plaintext tar.gz 74b2204a80b61064f00534b535240e4b9d19375b092276ff587a9fea1184b8b7), restored into /dev/shm on the host and checked against the suite, catalogs and order digests above before any launch.
+`noloss suite --check` passes the sealed suite. The source repo holds one init commit and 114 plan commits by a neutral author. Its author dates are fixed, but git sets the committer date at build time, so a rebuild gives new unit ids. **So the run thread restores the sealed build, never rebuilds it:** stage2-suite.tar.gz.age in the Captain's handoffs (ciphertext 6e91f9786dfe3504899e7334cf40a35ecddd7795697f249bcb40e75eb8c5a20d, plaintext tar.gz 74b2204a80b61064f00534b535240e4b9d19375b092276ff587a9fea1184b8b7), restored into /dev/shm on the host and checked against the suite, catalogs and order digests above before any launch.
 
 ## 3. Projection and the caps
 
 ### 3.1 Projection's input (deviation D-merge)
 
-projection reads stage 1's readings with the smoke rerun's rows (smoke_round 2). At 2ef58339, `ceo readings` refuses to rebuild stage 1's judged readings with the rerun's rows, because the judges' replies are bound to a key over the 715c659 rows (ceo-cli.ts:684 and :704). Re-judging stage 1 would change data that is already judged. So, by the Captain's ruling, a pinned merge script built projection's stage 1 input: merge.ts.txt.
+projection reads stage 1's readings with the smoke rerun's rows (smoke_round 2). At 2ef58339, `ceo readings` refuses to rebuild stage 1's judged readings with the rerun's rows, because the judges' replies are bound to a key over the rows built at 715c659, stage 1's build commit (ceo-cli.ts:684 and :704). Re-judging stage 1 would change data that is already judged. So, by the Captain's ruling, a pinned merge script built projection's stage 1 input: merge.ts.txt.
 
 It takes stage 1's judged readings and the smoke rerun's rows, keeps the suite, exposure digest, units, the 140 none rows and the 32 stock rows unchanged, drops stage 1's 12 round 1 smoke rows, adds the rerun's 12 smoke rows mapped as `ceo readings` maps a smoke row at 2ef58339 (ceo-cli.ts:733-760: no packet, so empty labels and false leak flags), and sets smoke_round 2. stage 1's none rows predate the termination and meter fields, so each gets null for both, which the row contract accepts. It then rereads its output, checks every part against the inputs and exits 1 with E_MERGE on any difference.
 
@@ -101,7 +103,7 @@ Each cap is ceil(1.25 x projected + one full round at allowance), and every item
 
 ## 4. The all-in check on crew actuals
 
-Read at 2026-11-07T01:42:52.868Z. Crew spent is the 26 CEO crew threads before authoring (636,461 credits) plus this thread at the reading (9,163 credits), at about $1 per 1,000 credits. Crew rest prices this thread's 36.42M tokens left to its 80M stop, the stage 2 run thread (80M) and the results post (100M) at $0.40 per million. Authoring and mining is the five authoring threads' whole counters (392,652 credits); it made no paid call. The smoke line is the rerun's settled spend.
+Read at 2026-11-07T01:42:52.868Z. Crew spent is the 26 CEO crew threads before authoring (636,461 credits) plus this thread at the reading (9,163 credits), at about $1 per 1,000 credits. Crew rest prices this thread's 36.42M tokens left to its 80M stop, the stage 2 run thread (80M) and the results post (100M) at $0.40 per million. Authoring and mining is the five authoring threads' whole counters (392,652 credits); it made no paid call. The smoke line is the rerun's settled spend; allin's frozen label calls it "smoke rerun caps".
 
 | Line | Dollars |
 |---|---|
@@ -128,11 +130,11 @@ From the amendment's power model (stage2-sizing.py's logit and rank models, pair
 | GPT-6.1 Sol | 1 | 0.11 | 0.12 |
 | particle-1 | 1 | 0.11 | 0.12 |
 
-Both effect models agree. compare's frozen grid reads 0.09 for Opus (its 80-unit row at 2 passes) and 0.13 for Sol and particle-1 (1 pass). The prior stands as #214 stated it: a true gain of 0 to 10 points on Opus, so "not distinguished" stays the likeliest reading.
+Both effect models agree. compare's frozen grid (ceo-rule.ts.txt:63-65: the logit model at alpha 0.025), which compare reads for each contrast, reads 0.09 for Opus (its 80-unit row at 2 passes) and 0.13 for Sol and particle-1 (1 pass). mdd-84 is this post's reading at exactly 84 units. The prior stands as #214 stated it: a true gain of 0 to 10 points on Opus, so "not distinguished" stays the likeliest reading.
 
 ## 6. Every stage 2 command
 
-Every command runs from a clean checkout of 2ef58339 on the runner host. Names: SR is the restored suite's sealed root and SRC its source repo (section 2), ORD its order.json; STUB is this post's suite-stub.json; PROJ is this post's projection.txt, checked by sha256 before any launch; LED and REC are the host's ledger file and approval record; RUNS and SINK are directories on the host's disk, outside the repo; GS and GE are the two gstack pins.
+Every command runs from a clean checkout of 2ef58339 on the runner host. Names: SR is the restored suite's sealed root and SRC its source repo (section 2), ORD its order.json; STUB is this post's suite-stub.json; PROJ is this post's projection.txt, checked by sha256 before any launch; LED and REC are the host's ledger file and approval record; RUNS and SINK are directories on the host's disk, outside the repo; GS and GE are the two gstack pins; LEFT is what an Opus item's ledger has left after launch 1 settles (step 3 under the table).
 
 ```
 C="--suite $STUB --sealed-root $SR --plan ceo-outcome --parallel 3 --timeout 3600 --max-turns 150 \
@@ -159,10 +161,10 @@ Before launch, the run thread checks that CH holds 84 ids ending ceo-o/cmp#114@6
 | particle-p | `bin/gstack-evals review-units $C $S --models particle-ai/particle-1 --allowance 0.5 --units $CH $HE --passes 1 --item ceo-o-cmp-particle-p --spend-cap 12 --out $RUNS/cmp-particle-p` |
 | particle-e | `bin/gstack-evals review-units $C $E --models particle-ai/particle-1 --allowance 0.5 --units $CH $HE --passes 1 --item ceo-o-cmp-particle-e --spend-cap 23 --out $RUNS/cmp-particle-e` |
 
-**Opus's two launches (deviation D-launch).** review-units takes one --passes per run (run.ts:455), and Opus runs 2 passes on changed units and 1 on held. So each Opus item runs two launches on its one ledger item and one run id. By the Captain's ruling:
+**Opus's two launches (deviation D-launch).** review-units takes one --passes per invocation (run.ts:455), and Opus runs 2 passes on changed units and 1 on held. So each Opus item runs two launches on its one ledger item and one run id. By the Captain's ruling:
 
 1. Changed runs first. Launch 2 runs only when launch 1 exits 0, its stops.json lists no cap stop and `ledger status` shows no cap-stop close. If launch 1 ends on a cap stop, the item is done incomplete, launch 2 doesn't run, and that model's held cells are reported untested. Never retry. The ledger refuses a lease on a cap-stopped item anyway (CAP_STOP).
-2. Launch 2 runs in its own new out dir, seeded with a copy of launch 1's run.json, so it takes launch 1's run id (cli.ts:422) and the ledger item stays bound to one run. It repeats launch 1's flags exactly: a resume with another --max-turns, --session-kind, --allowance or --arm-session-kind is refused with E_CACHE_STALE (cli.ts:337-350). Opus takes the default allowance in both launches; adding --allowance 7.04 to launch 2 is refused.
+2. Launch 2 runs in its own new out dir, seeded with a copy of launch 1's run.json, so it takes launch 1's run id (cli.ts:422) and the ledger item stays bound to one run. It repeats launch 1's flags exactly: a resume with another --max-turns, --session-kind, --allowance or --arm-session-kind is refused with E_CACHE_STALE (cli.ts:337-350). Opus takes the default allowance in both launches, which is $7.04 a session on Opus 5.5 (src/trial/review/README.md:109); adding --allowance 7.04 to launch 2 is refused.
 3. LEFT is what `bin/gstack-evals ledger status --item <item>` reports left, read after launch 1 settles, written to the run's trail. A lease above it is refused with CAP_STOP.
 4. After each Opus item's launches, `ceo rows --stage 2 --units $SR/units --order $ORD --projection $PROJ --run <launch 1 dir> [--run <launch 2 dir>] --checks` runs, and its output goes into the sealed run bundle.
 
@@ -188,19 +190,19 @@ echo "31a56dd12b531f1cd1f26519921cc2731e7d7ea2b6e215e117d220c7b0c9573a  $J/ceo-r
 GSTACK_EVALS_SCORER=$PWD bun $J/ceo-rule.ts compare $J/readings.json $PROJ 01fd5e8dc4b4b56c3b317afce0f4d9f92727097149fa877394d96669ceff9f57
 ```
 
-The judge items are recorded one at a time after every run item settles: judge-sol at $70.00, judge-opus at $70.00 less what judge-sol settled, judge-sonnet at $70.00 less both.
+The judge items are recorded one at a time after every run item settles: judge-sol at $70.00, judge-opus at $70.00 less what judge-sol settled, judge-sonnet at $70.00 less both. projection.txt also caps each judge item at the envelope less stage 2's settled spend. With the run caps at $663 inside the $809.53 envelope, that bound never falls below what is left of the $70.00 line, so the shared line is the one that binds.
 
 ## 7. The dry run
 
-dryrun.sh.txt ran at 2ef58339 and printed dryrun.txt: 56 rows, 56 passed, `DRYRUN: ok`. Run it as `bash dryrun.sh.txt <build commit> <gstack-evals clone> <this post's dir>`. It unsets the model and Ubicloud keys, so nothing is spent and no VM starts.
+dryrun.sh.txt ran at 2ef58339 and printed dryrun.txt: 56 rows, 56 passed, `DRYRUN: ok`. Run it as `bash dryrun.sh.txt <build commit> <gstack-evals clone> <this post's dir>`. It unsets the model and Ubicloud keys, so nothing is spent and no VM starts. Where dryrun.txt says "section 2" for the launch commands and unit lists, it means this post's section 6.
 
 1. **Pins (P).** The build tree, the frozen files, this post's suite stub, mkunits-cmp.ts.txt, projection.txt and dryrun-opus.ts.txt, the exposure digest and parser, FORCED_LINE, the enforced pin and gate settings, the context env, both routes and the price table; and projection.txt's PASS line, caps, envelope and six holding trip checks.
 2. **Public units (U).** Five invented units built by mkunits-cmp.ts.txt, 3 changed and 2 held, passed by `noloss suite --check`, and section 6's unit-list commands run on their order.
 3. **The Opus two-launch sequence (R).** ceo-o-cmp-opus-p's launch 1 (3 changed units, 2 passes, 18 sessions) and launch 2 (the 1 held unit the cut keeps, 1 pass, 3 sessions) through runReviewUnits with the real Claude Code driver and the real pinned Agent SDK against the stub CLI (dryrun-opus.ts.txt). Launch 2 starts in a new dir seeded with launch 1's run.json and takes its run id; its journal holds only its own sessions. `ceo rows --stage 2 --checks` over both dirs plans and finds 21 sessions, 7 a cell (2 passes on changed units, 1 on held), every one journaled, with a readable transcript at its task path and end state scored: no gap. The only failing checks are standalone's exposure checks, because the stub makes no Skill call. A dir passed twice, or a held session found in two dirs, is refused.
-4. **Every launch command (D).** review-units --dry-run of all eight launches on the public units, each with its sink absent before and after, its session count, the arm session kind, the 200,000-token window, and a round at the allowance inside the cap. Launch 2 with launch 1's flags resumes; with another --max-turns, an explicit Opus --allowance or no --arm-session-kind it is refused with E_CACHE_STALE.
+4. **Every launch command (D).** review-units --dry-run of all eight launches on the public units, each with its sink absent before and after, its session count, the arm session kind, the 200,000-token window, and a round at the allowance inside the cap. Launch 2 with launch 1's flags resumes; with another --max-turns it is refused with E_CACHE_STALE, and with an explicit Opus --allowance or no --arm-session-kind it is refused (dryrun.txt prints the code only for the first; cli.ts:337-350 raises E_CACHE_STALE for all three).
 5. **Ledger (L).** One temporary-ledger item per run and judge item. Each Opus item takes two leases on its one run: launch 1 at its cap, then launch 2 at what is left; a lease a cent above it is refused with CAP_STOP; committed spend is the sum of both; another run is refused with E_ITEM_BOUND. The six run caps sum to $663. The three judges are recorded at the shared line less what earlier judges settled.
 6. **All-in (A).** Section 4's lines through the scorer's allin.
-7. **Section 16 (O).** No new provider, route or dataset. OpenRouter's public feeds, read keyless: both routes still serve inside their pins, and neither provider's data policy records training or publishing.
+7. **#214's section 16 (O).** No new provider, route or dataset. OpenRouter's public feeds, read keyless: both routes still serve inside their pins, and neither provider's data policy records training or publishing.
 
 **Limits.**
 
