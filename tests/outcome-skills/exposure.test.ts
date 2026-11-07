@@ -630,6 +630,56 @@ describe("autoplan exposure, GEVA-387: a methodology file read after the phase's
     const multiline = " | python3 -c 'import json, sys\nd = json.load(sys.stdin)\nprint(d[\"methodologyPath\"])'";
     for (const after of [PIPED, multiline, " > /work/repo/.gstack/tmp/autoplan/dx.json 2>&1", " \\\n  " + PIPED, " | python3 - <<'PY'\nimport sys\nPY", PIPED + " # read the path"]) expect([after, loads(wrapped("", after))]).toEqual([after, true]);
   });
+
+  const SQ_PIPED = " | python3 -u -c 'import json,sys; d=json.load(sys.stdin); print(d[\"methodologyPath\"])'";
+  const asRan = () => {
+    const rs = r61();
+    for (const id of ["m1", "m3", "m4"]) {
+      const u = useOf(rs, id);
+      u.input.command = "cd /work/repo; " + u.input.command.replace(PIPED, "").replace(/"/g, "") + (id === "m1" ? "" : SQ_PIPED);
+    }
+    return rs;
+  };
+
+  test("GEVA-390: one leading cd to a plain path, joined by ; or &&, ahead of the sole methodology call opens the phase's methodology file", () => {
+    const cases: [string, string][] = [["cd /work/repo; ", ""], ["cd /work/repo && ", ""], ["cd /work/repo;", PIPED], ["cd ~/repo && ", " > /work/repo/.gstack/tmp/autoplan/dx.json 2>&1"], ["cd .gstack/tmp ; ", SQ_PIPED]];
+    for (const [before, after] of cases) expect([before, after, loads(wrapped(before, after))]).toEqual([before, after, true]);
+  });
+
+  test("GEVA-390: a session shaped like R61 session 2 as it ran (each methodology call after cd <dir>; with unquoted paths, DX and Eng piped to python3) reads exposed", () => {
+    expect(autoplanExposure(asRan())).toMatchObject({ exposed: true, failed: null, phases: ["ceo", "dx", "eng"], published: ["ceo", "dx", "eng"] });
+  });
+
+  test("GEVA-390: two cds, a cd and another command, a cd to a substituted, quoted or variable path, a cd joined another way, or anything after the call does not open the methodology file", () => {
+    const cases: [string, string][] = [
+      ["cd /work; cd /work/repo; ", ""], ["cd /work && cd repo && ", ""], ["cd /work/repo; true; ", ""], ["cd /work/repo && echo ok && ", ""], ["cd /work/repo; echo ok | ", ""], ["true; cd /work/repo; ", ""],
+      ["cd $(git rev-parse --show-toplevel); ", ""], ["cd `pwd`; ", ""], ['cd "$(pwd)"; ', ""], ['cd "/work/repo"; ', ""], ["cd $REPO; ", ""], ["cd /work/repo$X; ", ""],
+      ["cd /work/repo || ", ""], ["cd /work/repo & ", ""], ["cd /work/repo | ", ""], ["cd /work/repo\n", ""], ["# cd /work/repo; ", ""], ["cd /work/repo; ! ", ""],
+      ["cd /work/repo; ", "; true"], ["cd /work/repo && ", " && echo done"], ["cd /work/repo; ", " | head -5 | python3 -m json.tool"], ["cd /work/repo; ", " || true"], ["cd /work/repo; ", " &"],
+    ];
+    for (const [before, after] of cases) expect([before, after, loads(wrapped(before, after))]).toEqual([before, after, false]);
+  });
+
+  test("GEVA-390: a cd ahead of an open over-credit shape credits nothing the bare shape does not: a snapshot name inside another command and a SKILL.md path given to a command that doesn't read it stay uncredited, and a failed snapshot piped on reads as it does bare", () => {
+    const named = (rs: Rec[]) => {
+      useOf(rs, "r3").input.file_path = DX;
+      return rs;
+    };
+    const inner = (before: string) => {
+      const rs = pipe(both(), "m3", "", "");
+      useOf(rs, "m3").input.command = before + "true gstack-autoplan-snapshot methodology dx";
+      return named(rs);
+    };
+    for (const before of ["cd /work/repo; ", "cd /work/repo && "]) expect([before, loads(inner(before))]).toEqual([before, false]);
+    const SKILL = "/root/.claude/skills/gstack/plan-design-review/SKILL.md";
+    for (const before of ["cd /work/repo; ", "cd /work/repo && "]) expect([before, loads(bashRead(dropCall(both(), "m2"), "r2", before + "nl -s " + SKILL + " README.md"))]).toEqual([before, false]);
+    const failedPipe = (before: string) => {
+      const rs = pipe(both(), "m3", " | cat", "error: methodology snapshot failed\n");
+      useOf(rs, "m3").input.command = before + useOf(rs, "m3").input.command;
+      return named(rs);
+    };
+    expect(["cd /work/repo; ", "cd /work/repo && "].map((b) => loads(failedPipe(b)))).toEqual([loads(failedPipe("")), loads(failedPipe(""))]);
+  });
 });
 
 describe("transcripts and the detector table", () => {
