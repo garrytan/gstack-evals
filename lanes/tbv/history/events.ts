@@ -22,23 +22,68 @@ export function historySha256(events: HistoryEvent[]): string {
   return createHash("sha256").update(canonical(events)).digest("hex");
 }
 
-/** Messages with roles alternating, starting with the user: consecutive blocks of one role join one message. */
+/** Messages with roles alternating, starting with the user, one assistant message per API response (rebuildTurns). */
 export function renderHistory(history: History): Message[] {
+  return rebuildTurns(history).messages;
+}
+
+/**
+ * The API turns of a history (GEVA-392 addendum). An assistant block joins the response before it while any of that
+ * response's calls has no result yet, since the API starts no response before every call has its result; Claude Code
+ * starts a call while its response still streams, so a result can be logged before the response's last call. The
+ * response's results follow in the next user message: in logged order when all of them came after its last block, as
+ * joining blocks by role gave, else in tool_use order (a rebuilt response). Text and order within a role are kept, and
+ * no event is added or dropped. A history whose turns cannot be rebuilt refuses with E_TBV_HISTORY, naming only the
+ * event number and the reason.
+ */
+export function rebuildTurns(history: History): { messages: Message[]; rebuilt: number } {
   const first = history.events[0];
   if (!first || first.kind !== "user-text") fail("E_TBV_HISTORY", "history " + history.task + " does not open with the user's first message");
   const out: Message[] = [];
-  for (const e of history.events) {
-    let role: Message["role"];
-    let block: Block;
-    if (e.kind === "user-text") [role, block] = ["user", { type: "text", text: e.text }];
-    else if (e.kind === "assistant-text") [role, block] = ["assistant", { type: "text", text: e.text }];
-    else if (e.kind === "tool-use") [role, block] = ["assistant", { type: "tool_use", id: e.id, name: e.name, input: e.input }];
-    else [role, block] = ["user", { type: "tool_result", tool_use_id: e.tool_use_id, content: e.content, ...(e.is_error ? { is_error: true } : {}) }];
+  const push = (role: Message["role"], blocks: Block[]) => {
     const last = out[out.length - 1];
-    if (last && last.role === role) last.content.push(block);
-    else out.push({ role, content: [block] });
+    if (last && last.role === role) last.content.push(...blocks);
+    else if (blocks.length) out.push({ role, content: blocks });
+  };
+  const refuse = (n: number, why: string): never => fail("E_TBV_HISTORY", "the turns cannot be rebuilt at event " + n + ": " + why);
+  const waiting = (k: number) => k + " of the response's calls " + (k === 1 ? "has" : "have") + " no result";
+  type Response = { blocks: Block[]; calls: string[]; open: Set<string>; results: Map<string, Block>; answered: boolean; rebuilt: boolean };
+  let r: Response | null = null;
+  let rebuilt = 0;
+  const seen = new Set<string>();
+  const close = () => {
+    if (!r) return;
+    push("assistant", r.blocks);
+    push("user", r.rebuilt ? r.calls.map((id) => r!.results.get(id)!) : [...r.results.values()]);
+    if (r.rebuilt) rebuilt++;
+    r = null;
+  };
+  for (const e of history.events) {
+    if (e.kind === "user-text") {
+      if (r?.open.size) refuse(e.n, "the user's text comes while " + waiting(r.open.size) + ", so its place among the turns is ambiguous");
+      close();
+      push("user", [{ type: "text", text: e.text }]);
+    } else if (e.kind === "tool-result") {
+      if (!r?.open.delete(e.tool_use_id)) return refuse(e.n, "the result answers no call of its response that still has no result");
+      r.results.set(e.tool_use_id, { type: "tool_result", tool_use_id: e.tool_use_id, content: e.content, ...(e.is_error ? { is_error: true } : {}) });
+      r.answered = true;
+    } else {
+      if (r?.answered && !r.open.size) close();
+      r ??= { blocks: [], calls: [], open: new Set(), results: new Map(), answered: false, rebuilt: false };
+      if (r.answered) r.rebuilt = true;
+      if (e.kind === "assistant-text") r.blocks.push({ type: "text", text: e.text });
+      else {
+        if (seen.has(e.id)) refuse(e.n, "the call repeats an earlier call's id");
+        seen.add(e.id);
+        r.calls.push(e.id);
+        r.open.add(e.id);
+        r.blocks.push({ type: "tool_use", id: e.id, name: e.name, input: e.input });
+      }
+    }
   }
-  return out;
+  if (r?.open.size) refuse(history.events[history.events.length - 1]!.n, waiting(r.open.size));
+  close();
+  return { messages: out, rebuilt };
 }
 
 const OUTSIDE_RULES: Array<[RegExp, string]> = [

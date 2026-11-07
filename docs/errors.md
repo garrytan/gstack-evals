@@ -1000,9 +1000,9 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_TBV_HISTORY
 
-A history could not be assembled or was refused: it fails the provenance gate, holds a drive path or a crew rules file, or its record is unreadable. A dropped session is counted by reason, never repaired.
+A history could not be assembled or was refused: it fails the provenance gate, holds a drive path or a crew rules file, or its record is unreadable. At render, a history whose API turns cannot be rebuilt refuses too: a call with no result, a result that answers no call still waiting for one, a repeated call id, or user text while a call waits. A dropped session is counted by reason, never repaired.
 
-Fix: Read the drop reason. A provenance failure drops the session; a drive path means the source is not clean and must not be used.
+Fix: Read the drop reason. A provenance failure drops the session; a drive path means the source is not clean and must not be used. A render refusal names the event and the reason; tbv render-gate finds it before any lease, and it goes to the Captain.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

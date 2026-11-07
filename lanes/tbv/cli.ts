@@ -22,6 +22,7 @@ export const SUBCOMMANDS: Record<string, { module: string; summary: string }> = 
   split: { module: "split.ts", summary: "the seeded split: plan, next and write over the pool, with key refills; counts only" },
   keys: { module: "keys.ts", summary: "write and audit keys on tbv-author's lease" },
   drive: { module: "drive.ts", summary: "run an item's readings through the metering proxy on its lease" },
+  "render-gate": { module: "gate.ts", summary: "build every history's report request for every model and arm and validate it; keyless, counts only" },
   packets: { module: "packet.ts", summary: "build blind judge packets and controls" },
   judge: { module: "judge.ts", summary: "run the judges over a packet batch" },
   readings: { module: "readings.ts", summary: "join records and judge replies into the readings file" },

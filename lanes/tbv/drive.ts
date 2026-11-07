@@ -692,7 +692,7 @@ export function spliceBy(sets: SpliceSet[], pinOf: (arm: Arm) => string | null, 
 
 const TURN_KEYS: Turn[] = ["report", "d1", "d2", "followup"];
 /** turns.txt at its frozen sha256: one "name: text" line per turn. */
-function readTurns(path: string): Turns {
+export function readTurns(path: string): Turns {
   const text = readFileSync(path, "utf8");
   const sha = new Bun.CryptoHasher("sha256").update(text).digest("hex");
   if (sha !== BUNDLE.turns.sha256) fail("E_TBV_INPUT", path + " is not turns.txt at its frozen sha256 " + BUNDLE.turns.sha256);

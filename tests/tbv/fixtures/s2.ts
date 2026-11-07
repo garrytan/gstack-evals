@@ -77,7 +77,7 @@ export function makeGstack(root: string): { dir: string; pin: string; forbiddenP
   return { dir, pin, forbiddenPin, degradedPin };
 }
 
-/** Joins consecutive blocks of one role, starting with the user (what history/events.ts renderHistory does). */
+/** Joins consecutive blocks of one role, starting with the user (history/events.ts's render before the GEVA-392 turn rebuild). */
 export function localRender(h: History): Message[] {
   const out: Message[] = [];
   for (const e of h.events) {
