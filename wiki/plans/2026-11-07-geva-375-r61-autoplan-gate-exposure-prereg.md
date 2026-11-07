@@ -37,7 +37,7 @@ R61 gives a saturated or unexposed null one attempt to fix the method before any
 
 ## 1. Arm
 
-G's told autoplan arm as it ran ([G prereg](../2026-11-04-geva-262-g-family-admission-prereg/README.md) sections 2, 4 and 5, with the [registry turns](../2026-11-05-geva-298-g-registry-turns/README.md) and the [readiness post](../board/2026-11-06-geva-312-g-admission-readiness/README.md)'s ruling A), with one change: the gstack pin.
+G's told autoplan arm as it ran ([G prereg](2026-11-04-geva-262-g-family-admission-prereg/README.md) sections 2, 4 and 5, with the [registry turns](2026-11-05-geva-298-g-registry-turns/README.md) and the [readiness post](../board/2026-11-06-geva-312-g-admission-readiness/README.md)'s ruling A), with one change: the gstack pin.
 
 - **gstack:** ca5dbfc7e0016e3a1511161dc8c094399a2e350b (1.97.0.0), on main, fetched by sha. It holds the gate and not the later /plan-eng-review cut, so autoplan's Eng phase is as in G.
 - **Opt-in, as gstack's docs/skill-gates.md says:** `./setup --host claude --loadout lite --autoplan-gate`, run in a clean HOME that the session sees as /root. The flag saves `autoplan_gate: on` to the install's config and registers the gate's Stop shim in ~/.claude/settings.json, which every session loads (real_agent sets setting_sources to user and project). The environment switch would not reach the hook: real_agent unsets every GSTACK_ variable for claude and its children.
