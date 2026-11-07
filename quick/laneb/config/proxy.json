@@ -87,6 +87,7 @@
     "gpt-6.1-sol": {
       "route": "openrouter",
       "upstream_model": "openai/gpt-6.1-sol",
+      "bound_bytes_per_token": 3,
       "price_per_mtok": {
         "input": 2,
         "output": 10,

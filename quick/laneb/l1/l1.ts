@@ -9,7 +9,7 @@
 // Agent side (run in this order; see l1/README.md):
 //   bun quick/laneb/l1/l1.ts prepare <work> --item <item>    prepare-run per part, plan.json (no host, no spend); a Sol or
 //                                                            particle-1 item only after its model's route check passed on
-//                                                            l1-route-sol or l1-route-p1 (ROUTE_LEDGER)
+//                                                            l1-route-sol, l1-route-sol-f or l1-route-p1 (ROUTE_LEDGER)
 //   bun quick/laneb/l1/l1.ts host-up <work>                  reserve the host's hours, start and bootstrap it, move the ledger onto it
 //   bun quick/laneb/l1/l1.ts launch <work> --part <part>     bind the run on the first launch, start the part's controller detached
 //   bun quick/laneb/l1/l1.ts attach <work>                   one look: mirror the ledger, pull finished parts, print NEXT
@@ -79,6 +79,9 @@ export const L1_ROUTE = {
 // particle-1's, the same way on its own item, at cells.l1-p1.json's cell.
 const P1 = "particle-1";
 export const L1_ROUTE_P1 = { ...L1_ROUTE, id: P1, label: "particle-1", item: "l1-route-p1", routePrefix: "l1-route-p1/", ledgerPort: "9919", cells: "cells.l1-p1.json", leg: "L1's particle-1 leg" };
+// Sol's route check again (Amendment F), on its own $20 item, under the config/proxy.json that bounds Sol at 3 bytes per
+// token. pilot-sol ran after l1-route-sol; f1-sol and f1-sol-offu prepare only after l1-route-sol-f passed.
+export const L1_ROUTE_SOL_F = { ...L1_ROUTE, item: "l1-route-sol-f", capFrom: "Amendment F's", routePrefix: "l1-route-sol-f/", ledgerPort: "9920" };
 
 // route: the route check a model's items need passed before they prepare.
 export type ItemDef = { capUsd: number; taskSet: "swerebench-r3a4" | "tb2"; cells: string; allowanceUsd: number; model: string; route?: RouteGate };
@@ -89,10 +92,10 @@ export const ITEMS: Record<string, ItemDef> = {
   // Section 9's planning caps. f1-sol's cap is its re-cost, which price.py floors at $730; a re-cost above $730 needs the
   // Captain's record and a pins change here before f1-sol launches.
   "pilot-sol": { capUsd: 100, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
-  "f1-sol": { capUsd: 730, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  "f1-sol": { capUsd: 730, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE_SOL_F },
   // Amendment E's one added rule: off-u alone on Sol (the after pin with routing and contracts off, against f1-sol's before-u), only after
   // f1-sol is done and only when the ceiling check passes with it. Its cap is price.py's formula for 80 off-u sessions on Sol.
-  "f1-sol-offu": { capUsd: 200, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE },
+  "f1-sol-offu": { capUsd: 200, taskSet: "swerebench-r3a4", cells: "cells.l1-sol.json", allowanceUsd: 5, model: SOL, route: L1_ROUTE_SOL_F },
   // Section 9's planning caps for particle-1, which runs after Sol; f1-p1's cap is its re-cost, floored at $920 the same way.
   "pilot-p1": { capUsd: 120, taskSet: "swerebench-r3a4", cells: "cells.l1-p1.json", allowanceUsd: 5, model: P1, route: L1_ROUTE_P1 },
   "f1-p1": { capUsd: 920, taskSet: "swerebench-r3a4", cells: "cells.l1-p1.json", allowanceUsd: 5, model: P1, route: L1_ROUTE_P1 },

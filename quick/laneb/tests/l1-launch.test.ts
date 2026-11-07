@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { appendRow, Ledger, readRows, toMicros, type Row } from "../runner/ledger.ts";
 import { armSpec, jobConfig } from "../runner/grid.ts";
 import { stageArms } from "../runner/prepare-run.ts";
-import { ARM_SPECS, blockShares, classify, extendsMirror, hostTtlHours, ITEMS, itemCheck, itemParts, L1, L1_ROUTE, L1_ROUTE_P1, plannedCells, relaunchRects, restoreRows, seeded, sessionRefs, sha256, splitJobs, startedCells, trialTasksFrom } from "../l1/l1.ts";
+import { ARM_SPECS, blockShares, classify, extendsMirror, hostTtlHours, ITEMS, itemCheck, itemParts, L1, L1_ROUTE, L1_ROUTE_P1, L1_ROUTE_SOL_F, plannedCells, relaunchRects, restoreRows, seeded, sessionRefs, sha256, splitJobs, startedCells, trialTasksFrom } from "../l1/l1.ts";
 
 // L1's launcher logic without a host (l1/l1.ts), the tar sharing in grid.ts and prepare-run.ts, and vm-run.sh's
 // multi-job loop. l1-host.test.ts drives the commands end to end on a fake host.
@@ -35,8 +35,8 @@ describe("L1's frozen inputs and plans", () => {
     for (const c of [swe, sol, p1, tb2]) expect([c.sdk_max_turns, c.max_output_tokens, c.verifier_timeout_multiplier]).toEqual([100, 32000, 2]);
     expect(Object.entries(ITEMS).map(([k, v]) => [k, v.capUsd, v.cells, v.allowanceUsd, v.model, v.route?.item ?? null])).toEqual([
       ["pilot-opus", 80, "cells.l1.json", 5, "claude-opus-5-5", null], ["f1-opus", 680, "cells.l1.json", 5, "claude-opus-5-5", null], ["tb2-opus", 180, "cells.l1-tb2.json", 2.5, "claude-opus-5-5", null],
-      ["pilot-sol", 100, "cells.l1-sol.json", 5, "gpt-6.1-sol", "l1-route-sol"], ["f1-sol", 730, "cells.l1-sol.json", 5, "gpt-6.1-sol", "l1-route-sol"],
-      ["f1-sol-offu", 200, "cells.l1-sol.json", 5, "gpt-6.1-sol", "l1-route-sol"],
+      ["pilot-sol", 100, "cells.l1-sol.json", 5, "gpt-6.1-sol", "l1-route-sol"], ["f1-sol", 730, "cells.l1-sol.json", 5, "gpt-6.1-sol", "l1-route-sol-f"],
+      ["f1-sol-offu", 200, "cells.l1-sol.json", 5, "gpt-6.1-sol", "l1-route-sol-f"],
       ["pilot-p1", 120, "cells.l1-p1.json", 5, "particle-1", "l1-route-p1"], ["f1-p1", 920, "cells.l1-p1.json", 5, "particle-1", "l1-route-p1"],
     ]);
   });
@@ -51,6 +51,12 @@ describe("L1's frozen inputs and plans", () => {
     expect(armSpec(L1_ROUTE.routeArms.smoke)).toMatchObject({ name: "none", system_prompt: "claude-code-preset", gstack_hooks: "copy" });
     expect(armSpec(L1_ROUTE.routeArms.smoke).told).toBeUndefined();
     expect(Object.keys(ITEMS)).not.toContain("l1-route-sol");
+    // Amendment F: Sol's route check again on its own $20 item, under the proxy.json that bounds Sol at 3 bytes per token.
+    // pilot-sol ran under l1-route-sol; f1-sol and f1-sol-offu prepare only after l1-route-sol-f passed.
+    expect(L1_ROUTE_SOL_F).toMatchObject({ id: "gpt-6.1-sol", label: "GPT-6.1 Sol", item: "l1-route-sol-f", capUsd: 20, capFrom: "Amendment F's", routePrefix: "l1-route-sol-f/", ledgerPort: "9920", cells: "cells.l1-sol.json", armManifests: "arms/manifests/l1", leg: "L1's Sol leg" });
+    expect(L1_ROUTE_SOL_F.routeArms).toEqual(L1_ROUTE.routeArms);
+    expect([ITEMS["pilot-sol"]!.route, ITEMS["f1-sol"]!.route, ITEMS["f1-sol-offu"]!.route]).toEqual([L1_ROUTE, L1_ROUTE_SOL_F, L1_ROUTE_SOL_F]);
+    expect(Object.keys(ITEMS)).not.toContain("l1-route-sol-f");
   });
 
   test("pilot-sol has pilot-opus's shape and order; f1-sol runs f-parts.txt's four parts on none, before-u, after-u, before-t and after-t", () => {
@@ -78,7 +84,7 @@ describe("L1's frozen inputs and plans", () => {
     }
     expect(offu.reduce((n, x) => n + [...plannedCells(x).values()].reduce((a, b) => a + b, 0), 0)).toBe(80);
     expect(ARM_SPECS["off-u"]).toBe("off-u:tar=off:system_prompt=claude-code-preset:gstack_hooks=copy");
-    expect(ITEMS["f1-sol-offu"]!.route).toBe(L1_ROUTE);
+    expect(ITEMS["f1-sol-offu"]!.route).toBe(L1_ROUTE_SOL_F);
   });
 
   test("pilot-p1 and f1-p1 have pilot-sol's and f1-sol's shapes: 32 sessions, then f-parts.txt's four parts on the five arms, 400 sessions; no off-u item for particle-1", () => {

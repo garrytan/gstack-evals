@@ -13,7 +13,7 @@ import { priceFor, costMicros, startProxy, type ProxyConfig } from "../runner/pr
 import { loadR3Jobs, type R3Trial } from "../r3/exposure.ts";
 import { admission, bandIds, bindCheck, coverage, OPUS, pilotTasks, portTaken, R3A, routePassed, routeRecordPath, screenIds, SOL, vmBlock } from "../r3/screen.ts";
 import { judge, next, toolResults, type RouteRecord } from "../r3/route-check.ts";
-import { L1_ROUTE, L1_ROUTE_P1 } from "../l1/l1.ts";
+import { L1_ROUTE, L1_ROUTE_P1, L1_ROUTE_SOL_F } from "../l1/l1.ts";
 
 const here = import.meta.dir;
 const laneb = join(here, "..");
@@ -67,9 +67,11 @@ const RUN_D_ROW = { route: "openrouter", upstream_model: "openai/gpt-6.1-sol", p
 describe("Sol's route row and cell", () => {
   test("the row sends what Run D's sends, and meters at OpenRouter's list price with the long-prompt row", () => {
     const row = proxyConfig.models[SOL]!;
-    const { price_per_mtok: _p, long_prompt, ...sends } = row;
+    const { price_per_mtok: _p, long_prompt, bound_bytes_per_token, ...sends } = row;
     const { price_per_mtok: _q, ...runD } = RUN_D_ROW;
     expect(sends).toEqual(runD);
+    // L1 Amendment F: the reserve's byte bound, one token per 3 bytes; the proxy never sends it.
+    expect(bound_bytes_per_token).toBe(3);
     expect(row.price_per_mtok).toEqual({ input: 2, output: 10, cache_write_5m: 2.5, cache_write_1h: 2.5, cache_read: 0.1 });
     expect(long_prompt).toEqual({ over_tokens: 272000, price_per_mtok: { input: 4, output: 15, cache_write_5m: 5, cache_write_1h: 5, cache_read: 0.2 } });
     const u = (input: number) => ({ input_tokens: input, output_tokens: 1000, cache_creation_input_tokens: 0, cache_creation_1h_input_tokens: 0, cache_read_input_tokens: 0 });
@@ -813,6 +815,33 @@ describe("route-check.ts", () => {
     expect(rec).toMatchObject({ item: "l1-route-p1", model: "particle-1", verdict: "pass" });
     expect(readRows(r.ledger).filter((x) => x.kind !== "approval").every((x) => x.id.startsWith("l1-route-p1/"))).toBe(true);
     expect(() => bindCheck(r.ledger, L1_ROUTE_P1, [join(r.dir, "proxy.json")])).not.toThrow();
+  }, 60_000);
+
+  // L1 Amendment F: l1-route-sol-f, Sol's route check again on its own $20 ledger. Its pass opens f1-sol's gate, and
+  // l1-route-sol's does not.
+  test("l1-route-sol-f runs the same two sessions on its own $20 item, writes only under l1-route-sol-f/, and only its pass binds f1-sol's route", async () => {
+    const fRig = (cap = 20) => {
+      const r = rig(join(tmp("l1-route-sol-f-"), "l1-route-sol-f.jsonl"));
+      approve(r.ledger, "l1-route-sol-f", cap);
+      writeFileSync(join(r.dir, "arms", "after.tar"), "after arm");
+      writeFileSync(join(r.dir, "manifests", "after.json"), JSON.stringify({ tar: { sha256: sha("after arm") } }));
+      return r;
+    };
+    expect((await routeCheck(fRig(25), {}, ["--item", "l1-route-sol-f"])).out).toContain("l1-route-sol-f's cap is $25, not Amendment F's $20");
+    const r = fRig();
+    const { code, out, calls, rec } = await routeCheck(r, {}, ["--item", "l1-route-sol-f"]);
+    expect([code, out]).toEqual([0, expect.stringContaining("route check: gpt-6.1-sol passed on l1-route-sol-f (smoke passed on try 1, told passed on try 1)")]);
+    expect(calls.map((c) => [c.kind, c.model_name, c.kwargs.arm, c.kwargs.told_skill ?? null, c.kwargs.session_cap_usd, c.kwargs.sdk_max_turns])).toEqual([
+      ["smoke", "anthropic/gpt-6.1-sol", "none", null, 5, 100],
+      ["told", "anthropic/gpt-6.1-sol", "after-t", "investigate", 5, 100],
+    ]);
+    expect(rec).toMatchObject({ item: "l1-route-sol-f", model: SOL, verdict: "pass", incomplete: null, open_route_reserves: [] });
+    expect(readRows(r.ledger).filter((x) => x.kind !== "approval").every((x) => x.id.startsWith("l1-route-sol-f/"))).toBe(true);
+    expect(() => bindCheck(r.ledger, L1_ROUTE_SOL_F, [join(r.dir, "proxy.json")])).not.toThrow();
+    const old = l1Rig();
+    expect((await routeCheck(old, {}, ["--item", "l1-route-sol"])).code).toBe(0);
+    expect(() => bindCheck(old.ledger, L1_ROUTE, [join(old.dir, "proxy.json")])).not.toThrow();
+    expect(() => bindCheck(old.ledger, L1_ROUTE_SOL_F, [join(old.dir, "proxy.json")])).toThrow();
   }, 60_000);
 
   test("l1-route-sol refuses another cap, the after arm off its manifest and a told part that fails twice says L1's Sol leg", async () => {

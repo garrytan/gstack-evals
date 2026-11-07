@@ -6,7 +6,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 
 export type Price = { input: number; output: number; cache_write_5m: number; cache_write_1h: number; cache_read: number };
-export type ModelCfg = { route: string; upstream_model: string; price_per_mtok: Price; long_prompt?: { over_tokens: number; price_per_mtok: Price }; body_overrides?: Record<string, unknown>; strip_fields?: string[] };
+export type ModelCfg = { route: string; upstream_model: string; price_per_mtok: Price; long_prompt?: { over_tokens: number; price_per_mtok: Price }; body_overrides?: Record<string, unknown>; strip_fields?: string[]; bound_bytes_per_token?: number };
 export type RouteCfg = { base_url: string; key_env: string; auth: "x-api-key" | "bearer"; count_tokens: "forward" | "estimate" };
 export type ProxyConfig = { routes: Record<string, RouteCfg>; models: Record<string, ModelCfg> };
 
@@ -62,7 +62,10 @@ export const asksLongTtl = (body: string) => /"ttl":"(?!5m")/.test(body);
 // UTF-8 byte: a byte-level tokenizer never emits more tokens than bytes, and Opus 5.5 counts random base64 at 1.05 bytes
 // per token. The slack covers tokens the provider adds around tools and system text. Image and document blocks are billed
 // by pixels and pages, not bytes, so an Anthropic route never sends them on the byte bound (hasMedia); on OpenRouter
-// that gap stays open and the settle's over_reserve flag shows any session it pushed past its reserve.
+// that gap stays open and the settle's over_reserve flag shows any session it pushed past its reserve. On an estimate route
+// a model may set bound_bytes_per_token to count one token per that many bytes (L1 Amendment F: gpt-6.1-sol at 3, under the
+// 3.35 bytes per token of pilot-sol's tightest request). A request tighter than its bound is still billed in full, and the
+// same over_reserve flag shows any session it pushed past its reserve.
 // Route evidence: the after pin's UserPromptSubmit route hook prints this line as added context (arms/l1.ts and
 // runner/agent/laneb_hooks.py hold the same string). Claude Code 2.1.312, run keyless under the pinned Agent SDK through this
 // proxy to a fake upstream, puts a UserPromptSubmit hook's added context in the first request's role "system" message, after
@@ -93,7 +96,7 @@ export function routeMark(body: any): RouteMark {
 export const COUNT_SLACK_TOKENS = 64;
 export const BYTE_SLACK_TOKENS = 1024;
 export const COUNT_FIELDS = ["model", "messages", "system", "tools", "tool_choice", "thinking"];
-export const byteBoundTokens = (body: string) => Buffer.byteLength(body) + BYTE_SLACK_TOKENS;
+export const byteBoundTokens = (body: string, bytesPerToken = 1) => Math.ceil(Buffer.byteLength(body) / bytesPerToken) + BYTE_SLACK_TOKENS;
 
 // Refuse provider-side tools (web search, web fetch, code execution): they run outside any sandbox.
 export function serverTools(body: any): string[] {
@@ -479,7 +482,7 @@ export function startProxy(opts: ProxyOptions) {
         return new Response(res.body, { status: res.status, headers: responseHeaders(res, { "content-type": res.headers.get("content-type") ?? "application/json" }) });
       }
 
-      let inputTokens = byteBoundTokens(outBody);
+      let inputTokens = byteBoundTokens(outBody, route.count_tokens === "estimate" ? model.bound_bytes_per_token ?? 1 : 1);
       let counted = false;
       if (route.count_tokens === "forward") {
         try {
