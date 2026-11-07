@@ -1,0 +1,2 @@
+STAGE_SETTLED item=ap-r61 arm=autoplan:told lease=ap-r61.0001.6fd211 spent=$30.364065 unknown=$0.00 sessions=1 ended=completed
+STAGE_SETTLED item=ap-r61 arm=autoplan:told lease=ap-r61.0002.5e8cfe spent=$13.524139 unknown=$0.00 sessions=1 ended=completed

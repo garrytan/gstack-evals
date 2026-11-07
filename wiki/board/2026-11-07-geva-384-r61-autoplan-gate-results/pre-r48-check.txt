@@ -1,0 +1,151 @@
+# R61 pre-R48 check: exploratory, not preregistered, written after the verdict. Counts only.
+# Opened 2026-11-07T08:02:24Z by the results-post thread (GEVA-384) under the custody log in the Captain's drive.
+# Read: the two sessions' evaluator/sdk-messages.jsonl, extracted from the sealed trial-records export; nothing else.
+# Four count scripts ran with bun at main 5a01538 over the frozen lanes/outcome-skills/arms/exposure.ts
+# (sha256 074336a6f7d31c8669fc69e214c847c6251c9a550dfa4ca1d56c1d068258a0fd). They printed only fixed labels,
+# integers, booleans, gstack command names and line counts. The scripts are not published; these are the lines they printed.
+# s1 = r61-ap-tg0b7b079452-t1, s2 = r61-ap-tged20545f89-t1. "parent=null" is the session's own record,
+# "parent=set" a subagent's, "absent" a record type that carries no parent_tool_use_id field.
+
+## 1. The frozen detector, rerun on the records
+s1 records=2522 torn=false detector exposed=false config=true scope=true review_skills_loaded=false findings_in_order=false phases=ceo,dx,eng published=eng,ceo,eng,dx
+s2 records=1230 torn=false detector exposed=false config=true scope=true review_skills_loaded=false findings_in_order=true phases=ceo,dx,eng published=ceo,dx,eng
+
+## 2. The detector's load rule, by phase (an ok Read in the session's own t2 records, before the phase's first publish,
+##    of the installed plan-*-review/SKILL.md or of a methodology path parsed from the snapshot command's JSON result)
+s1 detector-rule ceo published=true main-t2-loaded-before-publish=true
+s1 detector-rule dx published=true main-t2-loaded-before-publish=false
+s1 detector-rule eng published=true main-t2-loaded-before-publish=false
+s2 detector-rule ceo published=true main-t2-loaded-before-publish=true
+s2 detector-rule dx published=true main-t2-loaded-before-publish=false
+s2 detector-rule eng published=true main-t2-loaded-before-publish=false
+
+## 3. The methodology command per phase (gstack-autoplan-snapshot methodology <phase> <installed SKILL.md> <restore path>)
+s1 ceo methodology-call before-first-publish=true piped-to=none json-readRanges=4 json-lines=2224 result-lines=1
+s1 dx methodology-call before-first-publish=true piped-to=python3 json-readRanges=-1 json-lines=-1 result-lines=2
+s1 eng methodology-call before-first-publish=true piped-to=python3 json-readRanges=-1 json-lines=-1 result-lines=2
+s2 ceo methodology-call before-first-publish=true piped-to=none json-readRanges=4 json-lines=2224 result-lines=1
+s2 dx methodology-call before-first-publish=true piped-to=python3 json-readRanges=-1 json-lines=-1 result-lines=1
+s2 eng methodology-call before-first-publish=true piped-to=python3 json-readRanges=-1 json-lines=-1 result-lines=1
+
+## 4. Reads of each phase's methodology file (autoplan-<phase>-methodology-*/methodology.md), session's own t2 records
+##    ranges as pre|post first publish : ok|err : offset+limit = lines returned
+s1 ceo methodology.md reads=4 distinct-files=1 ok-before-first-publish=4 max-line-returned=2224 ranges(offset+limit=lines-returned): pre:ok:1+600=600 pre:ok:601+600=600 pre:ok:1201+600=600 pre:ok:1801+424=424
+s1 dx methodology.md reads=4 distinct-files=1 ok-before-first-publish=4 max-line-returned=1871 ranges(offset+limit=lines-returned): pre:ok:1+600=600 pre:ok:601+600=600 pre:ok:1201+600=600 pre:ok:1801+71=71
+s1 eng methodology.md reads=4 distinct-files=1 ok-before-first-publish=4 max-line-returned=2110 ranges(offset+limit=lines-returned): pre:ok:1+600=600 pre:ok:601+600=600 pre:ok:1201+600=600 pre:ok:1801+310=310
+s2 ceo methodology.md reads=4 distinct-files=1 ok-before-first-publish=4 max-line-returned=2224 ranges(offset+limit=lines-returned): pre:ok:1+600=600 pre:ok:601+600=600 pre:ok:1201+600=600 pre:ok:1801+424=424
+s2 dx methodology.md reads=4 distinct-files=1 ok-before-first-publish=4 max-line-returned=1871 ranges(offset+limit=lines-returned): pre:ok:1+600=600 pre:ok:601+600=600 pre:ok:1201+600=600 pre:ok:1801+71=71
+s2 eng methodology.md reads=4 distinct-files=1 ok-before-first-publish=4 max-line-returned=2110 ranges(offset+limit=lines-returned): pre:ok:1+600=600 pre:ok:601+600=600 pre:ok:1201+600=600 pre:ok:1801+310=310
+
+## 5. Records by type, turn and author
+s1 type AssistantMessage phase=t1 parent=null n=25
+s1 type AssistantMessage phase=t2 parent=null n=385
+s1 type AssistantMessage phase=t2 parent=set n=118
+s1 type AssistantMessage phase=t3 parent=null n=143
+s1 type ResultMessage phase=t1 parent=absent n=2
+s1 type ResultMessage phase=t2 parent=absent n=1
+s1 type ResultMessage phase=t3 parent=absent n=1
+s1 type SystemMessage phase=t1 parent=absent n=39
+s1 type SystemMessage phase=t2 parent=absent n=941
+s1 type SystemMessage phase=t3 parent=absent n=298
+s1 type TaskNotificationMessage phase=t2 parent=absent n=7
+s1 type TaskNotificationMessage phase=t3 parent=absent n=7
+s1 type TaskProgressMessage phase=t2 parent=absent n=118
+s1 type TaskStartedMessage phase=t2 parent=absent n=7
+s1 type TaskStartedMessage phase=t3 parent=absent n=7
+s1 type TaskUpdatedMessage phase=t2 parent=absent n=6
+s1 type UserMessage phase=t1 parent=null n=11
+s1 type UserMessage phase=t2 parent=null n=210
+s1 type UserMessage phase=t2 parent=set n=124
+s1 type UserMessage phase=t3 parent=null n=72
+s2 type AssistantMessage phase=t1 parent=null n=7
+s2 type AssistantMessage phase=t2 parent=null n=245
+s2 type AssistantMessage phase=t2 parent=set n=35
+s2 type AssistantMessage phase=t3 parent=null n=30
+s2 type ResultMessage phase=t1 parent=absent n=1
+s2 type ResultMessage phase=t2 parent=absent n=1
+s2 type ResultMessage phase=t3 parent=absent n=1
+s2 type SystemMessage phase=t1 parent=absent n=1
+s2 type SystemMessage phase=t2 parent=absent n=616
+s2 type SystemMessage phase=t3 parent=absent n=39
+s2 type TaskNotificationMessage phase=t2 parent=absent n=6
+s2 type TaskNotificationMessage phase=t3 parent=absent n=5
+s2 type TaskProgressMessage phase=t2 parent=absent n=35
+s2 type TaskStartedMessage phase=t2 parent=absent n=6
+s2 type TaskStartedMessage phase=t3 parent=absent n=5
+s2 type TaskUpdatedMessage phase=t2 parent=absent n=6
+s2 type UserMessage phase=t1 parent=null n=4
+s2 type UserMessage phase=t2 parent=null n=134
+s2 type UserMessage phase=t2 parent=set n=41
+s2 type UserMessage phase=t3 parent=null n=12
+
+## 6. Tool calls by name, turn and author (no Skill tool call in either session)
+s1 tool Agent phase=t2 parent=null n=6
+s1 tool AskUserQuestion phase=t2 parent=null n=1
+s1 tool Bash phase=t1 parent=null n=10
+s1 tool Bash phase=t2 parent=null n=95
+s1 tool Bash phase=t2 parent=set n=115
+s1 tool Bash phase=t3 parent=null n=37
+s1 tool Edit phase=t2 parent=null n=62
+s1 tool Edit phase=t3 parent=null n=28
+s1 tool Read phase=t2 parent=null n=38
+s1 tool Read phase=t2 parent=set n=3
+s1 tool Read phase=t3 parent=null n=7
+s1 tool Write phase=t1 parent=null n=1
+s1 tool Write phase=t2 parent=null n=6
+s2 tool Agent phase=t2 parent=null n=6
+s2 tool AskUserQuestion phase=t2 parent=null n=1
+s2 tool Bash phase=t1 parent=null n=3
+s2 tool Bash phase=t2 parent=null n=78
+s2 tool Bash phase=t2 parent=set n=30
+s2 tool Bash phase=t3 parent=null n=8
+s2 tool Edit phase=t2 parent=null n=7
+s2 tool Edit phase=t3 parent=null n=1
+s2 tool Read phase=t2 parent=null n=35
+s2 tool Read phase=t2 parent=set n=5
+s2 tool Read phase=t3 parent=null n=3
+s2 tool Write phase=t1 parent=null n=1
+s2 tool Write phase=t2 parent=null n=4
+
+## 7. Subagents (each Agent call in t2, with what its own records hold)
+s1 agent after-0-publishes type=general-purpose model=unset background=false prompt-bytes=2945 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=20 child-reads=0 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s1 agent after-0-publishes type=general-purpose model=unset background=false prompt-bytes=3668 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=32 child-reads=0 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s1 agent after-0-publishes type=general-purpose model=unset background=false prompt-bytes=3913 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=31 child-reads=0 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s1 agent after-0-publishes type=general-purpose model=unset background=false prompt-bytes=902 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=7 child-reads=1 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s1 agent after-1-publishes type=general-purpose model=unset background=false prompt-bytes=899 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=6 child-reads=1 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s1 agent after-2-publishes type=general-purpose model=unset background=false prompt-bytes=902 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=22 child-reads=1 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s2 agent after-0-publishes type=general-purpose model=unset background=false prompt-bytes=1313 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=5 child-reads=0 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s2 agent after-0-publishes type=general-purpose model=unset background=false prompt-bytes=1574 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=8 child-reads=2 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s2 agent after-0-publishes type=general-purpose model=unset background=false prompt-bytes=1574 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=7 child-reads=0 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s2 agent after-0-publishes type=general-purpose model=unset background=false prompt-bytes=902 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=3 child-reads=1 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s2 agent after-2-publishes type=general-purpose model=unset background=false prompt-bytes=899 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=5 child-reads=1 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+s2 agent after-3-publishes type=general-purpose model=unset background=false prompt-bytes=902 prompt-names-methodology-dir=none prompt-names-review-skill=none child-tool-calls=7 child-reads=1 child-reads-of-methodology.md=0 child-reads-of-review-SKILL.md=0
+
+## 8. Publish no-ops (true autoplan-published <phase>) in t2, in order, with the session's own text since the previous no-op
+##    exact = the detector's **Phase N complete.** line; loose = any line with "Phase N" and "complete"
+s1 gate-block-messages-in-t2=2
+s1 noop 1 ceo exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s1 noop 2 dx exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s1 noop 3 eng exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s1 noop 4 eng exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s1 noop 5 eng exact-report-line=true loose-phase-complete-line=true gate-blocks-before=0
+s1 noop 6 ceo exact-report-line=true loose-phase-complete-line=true gate-blocks-before=1
+s1 noop 7 dx exact-report-line=false loose-phase-complete-line=false gate-blocks-before=1
+s1 noop 8 eng exact-report-line=true loose-phase-complete-line=true gate-blocks-before=1
+s1 noop 9 dx exact-report-line=true loose-phase-complete-line=true gate-blocks-before=2
+s2 gate-block-messages-in-t2=3
+s2 noop 1 ceo exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s2 noop 2 ceo exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s2 noop 3 dx exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s2 noop 4 eng exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s2 noop 5 eng exact-report-line=false loose-phase-complete-line=false gate-blocks-before=0
+s2 noop 6 ceo exact-report-line=true loose-phase-complete-line=true gate-blocks-before=1
+s2 noop 7 dx exact-report-line=false loose-phase-complete-line=false gate-blocks-before=1
+s2 noop 8 eng exact-report-line=false loose-phase-complete-line=false gate-blocks-before=1
+s2 noop 9 dx exact-report-line=true loose-phase-complete-line=true gate-blocks-before=2
+s2 noop 10 eng exact-report-line=false loose-phase-complete-line=false gate-blocks-before=2
+s2 noop 11 eng exact-report-line=true loose-phase-complete-line=true gate-blocks-before=3
+
+## 9. Widened reading (exploratory): also credit an ok Read of the phase's own methodology file before its first publish
+s1 exploratory widened-detector review_skills_loaded=true exposed=false (frozen: review_skills_loaded=false exposed=false)
+s2 exploratory widened-detector review_skills_loaded=true exposed=true (frozen: review_skills_loaded=false exposed=false)

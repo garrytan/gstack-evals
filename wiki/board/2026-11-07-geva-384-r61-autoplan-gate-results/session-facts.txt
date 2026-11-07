@@ -1,0 +1,23 @@
+# R61 per-session facts (GEVA-382). Counts only, from r61-read (read.txt), real-summary.json and usersim-events.jsonl
+# via results2/facts-reader.py (raw output: results2/session-facts-raw.txt), the gate reports and the driver's STAGE_SETTLED lines.
+# Sessions 3 (tgff24032962) and 4 (tg0a031169b2) never opened: the verdict settled fail after session 2 (2 not exposed).
+
+session 1 r61-ap-tg0b7b079452-t1 (lease ap-r61.0001.6fd211), 06:06:32Z to 07:06:06Z, exit 0
+  reading: NOT EXPOSED. checks: config true, scope true, review_skills_loaded false, findings_in_order false (r61-read names review_skills_loaded as the failed check)
+  phases applicable ceo,dx,eng; published eng,ceo,eng,dx
+  gate: report exit 0, fired 1, blocked 2 (missing ceo,dx), released 1, exhausted 0, errors 0, skipped none
+  t2 end: quiet (t1 quiet, t3 quiet); termination completed; no exception.txt
+  persona t2: questions 1 (recommended 1, fallback 0, hold 0), prose 0 (unanswered 0)
+  /autoplan loads in t2: 1
+  metered cost: $30.364065 (proxy spent_micros 30364065, requests 320, ok 320, refused 0); tool calls 409
+
+session 2 r61-ap-tged20545f89-t1 (lease ap-r61.0002.5e8cfe), 07:19:14Z to 07:47:46Z, exit 0
+  reading: NOT EXPOSED. checks: config true, scope true, review_skills_loaded false, findings_in_order true
+  phases applicable ceo,dx,eng; published ceo,dx,eng
+  gate: report exit 0, fired 1, blocked 3 (missing ceo,dx,eng), released 1, exhausted 0, errors 0, skipped none
+  t2 end: quiet (t1 quiet, t3 quiet); termination completed; no exception.txt
+  persona t2: questions 1 (recommended 1, fallback 0, hold 0), prose 0 (unanswered 0)
+  /autoplan loads in t2: 1
+  metered cost: $13.524139 (proxy spent_micros 13524139, requests 168, ok 168, refused 0); tool calls 182
+
+verdict: exposed 0 of 2 read, verdict fail under 3 of 4 (early stop at 2 not exposed). No gap; the one gap rerun is unused.
