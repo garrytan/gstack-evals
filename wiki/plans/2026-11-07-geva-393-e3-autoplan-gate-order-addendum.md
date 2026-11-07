@@ -101,8 +101,8 @@ The reports-and-publishes pass also counts what came before and after each refus
 
 At settle, each not-exposed session gets one class from its own lines. The first rule that fits gives the class:
 
-1. **Harness or gate code** when any of these holds: config or scope false; a transcript the detector refuses; an arm stop (any refusal at the proxy, a reclassification by the refusal rule included, the turn ceiling or the wall limit); a reclassification by the over-credit rule; or a second gap.
-2. **Load step** when review_skills_loaded is false. This is E2 section 9's CUT-CANDIDATE trigger, unchanged. The gate's own record doesn't move a session out of it, because the gate acts only on reports and publishes.
+1. **Harness or gate code** when any of these holds: config or scope false; a transcript the detector refuses; an arm stop (any refusal at the proxy, a reclassification by the refusal rule included, the turn ceiling or the wall limit); or a second gap.
+2. **Load step** when review_skills_loaded is false, or when the over-credit rule reclassified the session, because then its load isn't evidenced. This is E2 section 9's CUT-CANDIDATE trigger. The gate's own record doesn't move a session out of it, because the gate acts only on reports and publishes.
 3. **Report step** when findings_in_order is false and the gate ran as built, which means it fired, logged no error and logged no skipped marker.
 4. **Harness or gate code** in every other case.
 
@@ -201,7 +201,7 @@ The same as E2's. gstack is MIT. Harbor is Apache-2.0, run with its telemetry of
 - **Two of four tasks are replay sources** (section 2), and the spare runs without the cost filter, so its cost is unknown.
 - **The pin moves more than the gate.** E3 can't separate the gate change from the pin's other changes (section 1), as R61 and E2 couldn't for theirs.
 - **Claude Code version.** gstack tested the gate on 2.1.318, and the arm runs 2.1.312 (section 1).
-- **The gate fails open.** Its publish shim and hook exit 0 on any failure. A publish whose call the hook can't find in the transcript within 2 seconds runs with a `skipped reason=unsettled` marker, and the Stop check still applies. Section 5 classes such a session as harness or gate code, never as a report-step miss.
+- **The gate fails open.** Its publish shim and hook exit 0 on any failure. A publish whose call the hook can't find in the transcript within 2 seconds runs with a `skipped reason=unsettled` marker, and the Stop check still applies. Section 5 never classes such a session as a report-step miss: it is a load-step miss when review_skills_loaded is false, and harness or gate code otherwise.
 - **The gate stops refusing after it releases or exhausts.** A run past its budget can then publish out of order. findings_in_order reads that as not exposed, and section 5 classes it as a report-step miss.
 - **The detector's known undercounts stay** (E2 prereg section 11 and the amendment's limits). They can only lower the exposed count.
 - **A pass shows the procedure ran where the detector can see it.** It says nothing about outcomes.
