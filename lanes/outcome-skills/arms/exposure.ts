@@ -114,7 +114,9 @@ function uncommented(command: string): string {
 
 /** Whether a methodology call whose snapshot invocation starts at offset at ran by itself: one command with no &&, ||, ;,
  * &, !, $( or backtick outside quotes and before any comment, piped at most once with the invocation before the pipe, or
- * redirected to a file. A line continuation joins lines; any other line must sit inside quotes or in a heredoc that closes. */
+ * redirected to a file. One leading cd to a plain path (an unquoted word of letters, digits, _ . - / and ~), joined by ;
+ * or &&, may come first when the invocation follows it directly, alone or after bun (GEVA-390). A line continuation joins
+ * lines; any other line must sit inside quotes or in a heredoc that closes. */
 function soleCall(command: string, at: number): boolean {
   const joined = command.replace(/\\\n/g, "  ");
   const nl = unquoted(joined).indexOf("\n");
@@ -123,9 +125,11 @@ function soleCall(command: string, at: number): boolean {
   const bare = unquoted(code);
   if (at >= code.length || [...code.matchAll(/<</g)].some((m) => !bare.startsWith("<<", m.index))) return false;
   if (!heredocCloses(code, nl < 0 ? [] : joined.slice(nl + 1).split("\n"))) return false;
-  const ops = bare.replace(/\d*>&\d*-?|&>>?/g, (m) => " ".repeat(m.length));
+  const cd = /^\s*cd\s+[\w./~-]+\s*(?:;|&&)/.exec(code)?.[0].length ?? 0;
+  if (cd && (at < cd || !/^\s*(?:bun\s+)?["']?(?:[\w.~-]*\/)*$/.test(code.slice(cd, at)))) return false;
+  const ops = bare.replace(/\d*>&\d*-?|&>>?/g, (m) => " ".repeat(m.length)).slice(cd);
   if (/&|;|`|\$\(|\|\|/.test(ops) || /^\s*!/.test(ops)) return false;
-  const pipes = [...ops.matchAll(/\|/g)].map((m) => m.index!);
+  const pipes = [...ops.matchAll(/\|/g)].map((m) => m.index! + cd);
   return pipes.length === 0 || (pipes.length === 1 && at < pipes[0]!);
 }
 
@@ -194,8 +198,9 @@ const BASH_READ = (file: string) => new RegExp("^(?!.*\\s--(?:help|version)(?![\
  * A phase loaded when, before its first publish, the session read its installed plan-<x>-review/SKILL.md, the
  * methodologyPath a methodology command for it returned as JSON, or a file named autoplan-<phase>-methodology-<suffix>/
  * methodology.md after an ok methodology command for that phase that ran by itself, piped at most once or redirected to a
- * file (GEVA-387). A read is an ok Read, or for SKILL.md and the named file a Bash read: one simple cat, head, tail, nl or
- * sed -n command, never --help or --version, whose result is not empty, naming the file whole, outside any comment. */
+ * file (GEVA-387), after at most one leading cd to a plain path (GEVA-390). A read is an ok Read, or for SKILL.md and the
+ * named file a Bash read: one simple cat, head, tail, nl or sed -n command, never --help or --version, whose result is not
+ * empty, naming the file whole, outside any comment. */
 export function autoplanExposure(records: Rec[]): ExposureRead {
   const { uses, lines, bash } = own(records, turnOf("autoplan"));
   const kinds = bash.filter((u) => /gstack-skill-start\b[^\n]*--skill\s+["']?autoplan(?![\w-])/.test(u.input.command)).map((u) => (u.ok ? /^SESSION_KIND: (\S+)/m.exec(u.result!)?.[1] : undefined));
