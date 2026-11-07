@@ -64,7 +64,7 @@ function setup(upstream: Upstream, overrides: Partial<ProxyOptions> = {}) {
   const dir = mkdtempSync(join(tmpdir(), "u3-proxy-"));
   dirs.push(dir);
   const ledger = (overrides.ledger as FakeLedger | undefined) ?? new FakeLedger();
-  const calls: Array<{ url: string; headers: Headers; body: any }> = [];
+  const calls: Array<{ url: string; headers: Headers; body: any; raw: string }> = [];
   const sleeps: number[] = [];
   const proxy = new MeteringProxy({
     ledger,
@@ -77,7 +77,7 @@ function setup(upstream: Upstream, overrides: Partial<ProxyOptions> = {}) {
     env: { ANTHROPIC_API_KEY: KEY, OPENAI_API_KEY: OPENAI_KEY, OPENROUTER_API_KEY: OPENROUTER_KEY },
     sleep: async ms => void sleeps.push(ms),
     fetch: async (url, init) => {
-      calls.push({ url, headers: new Headers(init.headers), body: init.body ? JSON.parse(String(init.body)) : undefined });
+      calls.push({ url, headers: new Headers(init.headers), body: init.body ? JSON.parse(String(init.body)) : undefined, raw: init.body ? String(init.body) : "" });
       return upstream(url, init);
     },
     ...overrides,
@@ -719,6 +719,195 @@ describe("OpenRouter route", () => {
     expect(res.status).toBe(200);
     expect(t.calls[0]!.body.provider).toEqual({ only: ["openai"], allow_fallbacks: false, data_collection: "deny", max_price: { prompt: 4, completion: 15, request: 0, image: 0 } });
     expect(t.ledger.settles[0]![1]).toMatchObject({ kind: "spent", spent_micros: 280_000 * 4 + 10 * 15 });
+  });
+
+  const SOL = "openai/gpt-6.1-sol";
+  const ARGON = "google/gemini-4-argon";
+  /** The routing bytes main sent at 5a01538 for every OpenRouter row that lists no image price. */
+  const MAIN_ROUTING: Record<string, string> = {
+    [PARTICLE]: '{"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}}',
+    [DEEPSEEK]: '{"only":["inference-net"],"allow_fallbacks":false,"quantizations":["fp8"],"data_collection":"deny","max_price":{"prompt":0.08,"completion":0.55,"request":0,"image":0}}',
+    [SOL]: '{"only":["openai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":15,"request":0,"image":0}}',
+  };
+  /** main's openRouterRouting at 5a01538, copied so a row with no image price can be held to it byte for byte. */
+  const mainRouting = (price: (typeof CHAT_PRICES)[string]) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), ...(price.quantizations ? { quantizations: price.quantizations } : {}), data_collection: "deny" as const, max_price: { prompt: Math.max(price.input, price.long?.input ?? 0), completion: Math.max(price.output, price.long?.output ?? 0), request: 0, image: 0 } });
+
+  // Value: protects=an Argon send reaches google-vertex/global, whose listed image price is $0.000002; fails_when=max_price.image stays 0, below every Argon endpoint's image price, and OpenRouter answers 404 "No endpoints found that satisfy the max price for this request" (failed_routing_step "Filter by Max Price"), as both tbv keys sends and the 2026-11-07 probe did; why_new=tbv keys round 1 stopped on that 404 twice; seam=the Argon row, openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live endpoint list after the cited read
+  test("Argon's routing carries max_price.image at the image price its pinned endpoint lists, in the proxy's outgoing body too", async () => {
+    const argon = '{"only":["google-vertex"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":2,"completion":10,"request":0,"image":0.000002}}';
+    expect(JSON.stringify(openRouterRouting(CHAT_PRICES[`openrouter:${ARGON}`]!))).toBe(argon);
+    const t = setup(() => ok({ prompt_tokens: 32, completion_tokens: 1, cost: 0.00007326 }));
+    const a = t.bind({ models: [`openrouter:${ARGON}`] });
+    expect((await t.call(a.slot, a.token, PATH, { model: ARGON, messages: [{ role: "user", content: "Hello" }], max_tokens: 1 })).status).toBe(200);
+    expect(t.calls.map(c => c.raw)).toEqual([`{"model":"${ARGON}","messages":[{"role":"user","content":"Hello"}],"max_tokens":1,"provider":${argon}}`]);
+  });
+
+  // Value: protects=every OpenRouter model but Argon routes exactly as before the image price fix; fails_when=the fix changes max_price, its key order or any other routing byte for a row that lists no image price; why_new=the Argon fix touches the routing every OpenRouter call shares; seam=openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live filtering
+  test("every OpenRouter row but Argon lists no image price and sends main's routing bytes, Sol, particle-1 and DeepSeek included", async () => {
+    const rows = Object.entries(CHAT_PRICES).filter(([id]) => id.startsWith("openrouter:")).map(([id, row]) => [id.slice("openrouter:".length), row] as const);
+    const others = rows.filter(([id]) => id !== ARGON);
+    expect(others.map(([id]) => id).sort()).toEqual(Object.keys(MAIN_ROUTING).sort());
+    for (const [id, row] of others) {
+      expect(row.image).toBeUndefined();
+      expect(JSON.stringify(openRouterRouting(row))).toBe(MAIN_ROUTING[id]!);
+    }
+    const shapes = [{ input: 1, output: 2 }, { input: 1, output: 2, providers: ["p"] }, { input: 1, output: 2, quantizations: ["fp8"] }, { input: 1, output: 2, long: { above_input_tokens: 10, input: 3, output: 4 }, providers: ["p", "q"], quantizations: ["bf16"] }];
+    for (const row of shapes) expect(JSON.stringify(openRouterRouting(row))).toBe(JSON.stringify(mainRouting(row)));
+    const t = setup(() => ok({ prompt_tokens: 10, completion_tokens: 1 }));
+    const a = t.bind({ models: Object.keys(MAIN_ROUTING).map(id => `openrouter:${id}`) });
+    for (const model of Object.keys(MAIN_ROUTING)) expect((await t.call(a.slot, a.token, PATH, { model, messages: [{ role: "user", content: "hi" }], max_tokens: 1 })).status).toBe(200);
+    expect((await t.call(a.slot, a.token, "/openrouter/v1/messages", { model: SOL, max_tokens: 1, messages: [{ role: "user", content: "hi" }] })).status).toBe(200);
+    expect(t.calls.map(c => c.raw)).toEqual([
+      ...Object.keys(MAIN_ROUTING).map(model => `{"model":"${model}","messages":[{"role":"user","content":"hi"}],"max_tokens":1,"provider":${MAIN_ROUTING[model]}}`),
+      `{"model":"${SOL}","max_tokens":1,"messages":[{"role":"user","content":"hi"}],"provider":${MAIN_ROUTING[SOL]}}`,
+    ]);
+  });
+});
+
+describe("upstream error bodies in the journal", () => {
+  const PARTICLE = "particle-ai/particle-1";
+  const DEEPSEEK = "deepseek/deepseek-v4.1-flash-1017";
+  const PATH = "/openrouter/v1/chat/completions";
+  const models = [`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`];
+  const chat = (content = "hi", model = PARTICLE) => ({ model, messages: [{ role: "user", content }] });
+  const outcomes = (t: ReturnType<typeof setup>) => t.journal().filter(l => l.kind === "outcome");
+  const withheld = (s: string) => `[withheld: it repeats the request's text, ${Buffer.byteLength(s)} bytes]`;
+  const bytes = (s: string) => Buffer.byteLength(s);
+
+  // Value: protects=a refused send says why in the journal; fails_when=the journal keeps only the status, as on tbv keys round 1, where two 404s left no reason; why_new=tbv keys round 1 (the max_price.image 404); seam=the paid path's outcome line; no_claim=the provider's error wording
+  test("today's 404 body journals its code, failed routing step and the message's byte length, and the answer is passed on unchanged", async () => {
+    const message = "No endpoints found that satisfy the max price for this request";
+    const noEndpoints = { error: { message, code: 404, metadata: { routing_funnel: [{ step: "Initial Endpoints", endpoint_count: 6 }, { step: "Filter by Regional Surcharge", endpoint_count: 5 }, { step: "Filter by Tier Endpoint Rows", endpoint_count: 2, reason: "Excluded tier endpoint rows the request did not opt into" }], failed_routing_step: "Filter by Max Price" } } };
+    const t = setup(() => Response.json(noEndpoints, { status: 404 }));
+    const a = t.bind({ models });
+    const res = await t.call(a.slot, a.token, PATH, chat());
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual(noEndpoints);
+    expect(outcomes(t)).toEqual([expect.objectContaining({ status: 404, upstream_body: JSON.stringify({ error: { code: 404, message_bytes: bytes(message), metadata: { failed_routing_step: "Filter by Max Price" } } }) })]);
+  });
+
+  test("each 5xx attempt journals its own fields, and a 2xx answer journals none", async () => {
+    let n = 0;
+    const t = setup(() => (++n < 3 ? Response.json({ error: { code: 502, type: `upstream_error_${n}`, message: "provider returned error" } }, { status: 502 }) : ok({ prompt_tokens: 10, completion_tokens: 5 })));
+    const a = t.bind({ models });
+    expect((await t.call(a.slot, a.token, PATH, chat())).status).toBe(200);
+    const lines = outcomes(t);
+    expect(lines.map(l => [l.status, l.upstream_body])).toEqual([[502, '{"error":{"code":502,"type":"upstream_error_1","message_bytes":23}}'], [502, '{"error":{"code":502,"type":"upstream_error_2","message_bytes":23}}'], [200, undefined]]);
+    expect("upstream_body" in lines[2]!).toBe(false);
+  });
+
+  test("a body that is not a JSON object keeps only its size", async () => {
+    const page = "<html><body>502 Bad Gateway</body></html>";
+    const t = setup(() => (t.calls.length === 1 ? new Response(page, { status: 400 }) : new Response('"a bare string"', { status: 400 })));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    await t.call(a.slot, a.token, PATH, chat());
+    expect(outcomes(t).map(l => l.upstream_body)).toEqual([`[not a JSON object, ${page.length} bytes]`, "[not a JSON object, 15 bytes]"]);
+  });
+
+  test("a JSON array body keeps only its size", async () => {
+    const list = '[{"error":{"message":"x"}}]';
+    const t = setup(() => new Response(list, { status: 400 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    expect(outcomes(t).map(l => l.upstream_body)).toEqual([`[not a JSON object, ${list.length} bytes]`]);
+  });
+
+  test("the proxy's key is redacted, fields off the allow-list are dropped, and each kept string is cut to 512 characters", async () => {
+    const t = setup(() => Response.json({ error: { type: `bad key ${OPENROUTER_KEY} ${"x".repeat(1_000)}`, message: `bad key ${OPENROUTER_KEY}`, detail: "y".repeat(10_000) }, user_id: "u-1" }, { status: 400 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    const kept = JSON.parse(outcomes(t)[0]!.upstream_body as string);
+    expect(kept).toEqual({ error: { type: `bad key [redacted] ${"x".repeat(512 - 19)}`, message_bytes: bytes(`bad key ${OPENROUTER_KEY}`) } });
+    expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(OPENROUTER_KEY);
+  });
+
+  test("the 4,096-byte bound never splits a multibyte character", async () => {
+    const wide = "€".repeat(600);
+    const t = setup(() => Response.json({ error: { type: wide, message: wide, metadata: { failed_routing_step: wide, provider_name: wide } } }, { status: 400 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    const kept = outcomes(t)[0]!.upstream_body as string;
+    expect(Buffer.byteLength(kept)).toBeLessThanOrEqual(4096);
+    expect(Buffer.byteLength(kept)).toBeGreaterThan(4090);
+    expect(kept).not.toContain("\uFFFD");
+    expect(kept).toEndWith("€");
+  });
+
+  // Value: protects=no prompt text reaches the journal through an error field that quotes the request; fails_when=a kept field that repeats part of a prompt is journaled as sent; why_new=journaling upstream error bodies; seam=the outcome and free lines; no_claim=an echo shorter than 24 characters
+  test("a kept field that repeats 24 or more characters of the request's text is withheld, escaped or not, and one that names the model is kept", async () => {
+    const prompt = 'The task asks why the parser drops "trailing" commas\nafter a nested array in strict mode.';
+    const types = [`Invalid content: '${prompt.slice(4, 40)}...'`, `Invalid content: ${JSON.stringify(prompt.slice(20, 70))}`, `No endpoints found for ${DEEPSEEK}.`];
+    const t = setup(() => Response.json({ error: { code: 400, type: types[t.calls.length - 1] } }, { status: 400 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat(prompt));
+    await t.call(a.slot, a.token, PATH, chat(prompt));
+    await t.call(a.slot, a.token, PATH, chat(prompt, DEEPSEEK));
+    expect(outcomes(t).map(l => JSON.parse(l.upstream_body as string).error.type)).toEqual([withheld(types[0]!), withheld(types[1]!), types[2]]);
+    const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+    expect(journal).not.toContain(prompt.slice(4, 40));
+    expect(journal).not.toContain("trailing");
+  });
+
+  const code = "x_zebra = 7\n".repeat(8);
+  const cjk = "请解释斑马量子算法为什么在严格模式下会丢弃嵌套数组之后的尾随逗号并给出修复方案谢谢你的帮助";
+  const goCode = "q_go<1&&q_go>0\n".repeat(6);
+  const sealed = "SEALED_ANSWER_TOKEN_42 is the value the held-out check expects to see returned";
+  const asciiEscaped = (s: string) => s.replace(/[\u0080-\uffff]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+  const goEscaped = (s: string) => s.replace(/[<>&]/g, c => "\\u00" + c.charCodeAt(0).toString(16));
+  const leaks = ["x_zebra", "斑马", asciiEscaped("斑马").slice(1, 6), "q_go", "SEALED_ANSWER"];
+  const rawCases: [string, string, string][] = [
+    ["a code prompt with newlines", code, JSON.stringify({ error: { input: code } })],
+    ["a CJK prompt escaped as \\uXXXX", cjk, asciiEscaped(JSON.stringify({ error: { input: cjk } }))],
+    ["a raw cut off mid-string (invalid JSON)", code, JSON.stringify({ error: { input: code } }).slice(0, -12)],
+  ];
+  // Value: protects=no prompt text reaches the journal through a provider error passed on as a string; fails_when=metadata.raw is journaled, where a quoted prompt is escaped twice and slips past the echo check; why_new=the third review round on the journal check; seam=the paid path's outcome line; no_claim=what OpenRouter puts in raw
+  for (const [name, prompt, raw] of rawCases) {
+    test(`metadata.raw is dropped for its byte length, so ${name} quoted inside it never reaches the journal`, async () => {
+      const t = setup(() => Response.json({ error: { code: 400, message: "Provider returned error", metadata: { provider_name: "SomeHost", raw } } }, { status: 400 }));
+      const a = t.bind({ models });
+      await t.call(a.slot, a.token, PATH, chat(prompt));
+      const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+      for (const leak of leaks) expect(journal).not.toContain(leak);
+      expect(outcomes(t).map(l => l.upstream_body)).toEqual([JSON.stringify({ error: { code: 400, message_bytes: bytes("Provider returned error"), metadata: { provider_name: "SomeHost", raw_bytes: bytes(raw) } } })]);
+    });
+  }
+
+  const messageCases: [string, string, string][] = [
+    ["a CJK prompt escaped as \\uXXXX", cjk, "Provider returned error: " + asciiEscaped(JSON.stringify({ input: cjk }))],
+    ["a code prompt escaped twice", code, JSON.stringify(JSON.stringify({ input: code }))],
+    ["a prompt Go escapes as \\u003c", goCode, "upstream said: " + goEscaped(JSON.stringify({ input: goCode }))],
+    ["an echo the 512-character cut would split", sealed, "d".repeat(490) + " quoted: " + sealed],
+  ];
+  // Value: protects=no prompt text reaches the journal through error.message; fails_when=error.message is journaled, where an escaped or cut echo slips past the echo check; why_new=the fourth review round on the journal's kept fields; seam=the paid path's outcome line; no_claim=how a provider escapes its message
+  for (const [name, prompt, message] of messageCases) {
+    test(`error.message is dropped for its byte length, so ${name} quoted inside it never reaches the journal`, async () => {
+      const t = setup(() => Response.json({ error: { code: 400, message } }, { status: 400 }));
+      const a = t.bind({ models });
+      await t.call(a.slot, a.token, PATH, chat(prompt));
+      const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+      for (const leak of leaks) expect(journal).not.toContain(leak);
+      expect(outcomes(t).map(l => l.upstream_body)).toEqual([JSON.stringify({ error: { code: 400, message_bytes: bytes(message) } })]);
+    });
+  }
+
+  test("a free route's non-2xx answer journals its error fields too", async () => {
+    const missing = { error: { message: "Generation not found", code: 404 } };
+    const t = setup(() => Response.json(missing, { status: 404 }));
+    const a = t.bind({ models });
+    const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/openrouter/v1/generation?id=gen-1`, { headers: { authorization: `Bearer ${a.token}` } });
+    expect(res.status).toBe(404);
+    expect(t.journal().filter(l => l.kind === "free")).toEqual([expect.objectContaining({ status: 404, upstream_body: '{"error":{"code":404,"message_bytes":20}}' })]);
+  });
+
+  // Value: protects=a diagnostic field never stops a paid call from settling; fails_when=an error body the proxy cannot measure throws before settle, leaving no outcome line and the ledger hold open; why_new=journaling upstream error bodies; seam=the paid path's settle; no_claim=bodies a provider would really send
+  test("an error body too deep to measure still settles its call, with a size note", async () => {
+    const deep = '{"error":{"metadata":{"raw":' + '{"a":'.repeat(50_000) + "1" + "}".repeat(50_000) + "}}}";
+    const t = setup(() => new Response(deep, { status: 400, headers: { "content-type": "application/json" } }));
+    const a = t.bind({ models });
+    const res = await t.call(a.slot, a.token, PATH, chat());
+    expect(res.status).toBe(400);
+    expect(outcomes(t)).toEqual([expect.objectContaining({ status: 400, upstream_body: `[unreadable, ${deep.length} bytes]` })]);
   });
 });
 

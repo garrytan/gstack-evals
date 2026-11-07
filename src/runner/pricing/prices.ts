@@ -32,6 +32,8 @@ export interface ChatPrice extends TokenPrices {
   providers?: string[];
   /** OpenRouter only: the quantizations OpenRouter may route the model to. */
   quantizations?: string[];
+  /** OpenRouter only: the image price the pinned endpoint lists on OpenRouter's endpoints API, in its units, sent as max_price.image. OpenRouter's max-price filter drops an endpoint whose listed image price is above max_price.image, so a row whose endpoint lists one carries it; a row without one sends 0. */
+  image?: number;
 }
 
 /**
@@ -61,8 +63,12 @@ export const OPENROUTER_MODELS: Record<string, ChatPrice> = {
   // Its endpoints API (https://openrouter.ai/api/v1/models/google/gemini-4-argon/endpoints), read at the same time, lists Google
   // Vertex (google-vertex/global) at those prices. Pinned to google-vertex, Google's Cloud endpoint, rather than Google AI
   // Studio. The endpoints API lists no data policy, so data_collection deny is what keeps out an endpoint that may train on or
-  // keep prompts; max_price at $2 and $10 leaves out the dearer google-vertex/us and priority endpoints.
-  "google/gemini-4-argon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"] },
+  // keep prompts; max_price at $2 and $10 leaves out the dearer google-vertex/us and priority endpoints. Every Argon endpoint also
+  // lists an image price; google-vertex/global's is 0.000002 (endpoints API, read 2026-11-07T07:27Z). With max_price.image at 0,
+  // OpenRouter answered 404 "No endpoints found that satisfy the max price for this request" (failed_routing_step "Filter by
+  // Max Price"); at 0.000002 the same request reached Google (probe of 2026-11-07, two calls at max_tokens 1). So the row
+  // carries that image price. The tbv key writer sends text only.
+  "google/gemini-4-argon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0.1875, providers: ["google-vertex"], image: 0.000002 },
 };
 
 /** List prices, USD per 1M tokens, as harness-evals checked them on 2026-10-02 to 2026-10-08. */
@@ -78,8 +84,8 @@ export const CHAT_PRICES: Record<string, ChatPrice> = {
   ...Object.fromEntries(Object.entries(OPENROUTER_MODELS).map(([id, price]) => [`openrouter:${id}`, price])),
 };
 
-/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers and quantizations, if any, no provider that may train on or keep the data (data_collection deny), and its prices as the most OpenRouter may route to, at the long-prompt rates where those are higher (a prompt past the row's threshold is billed at them), with no per-request or per-image charge. */
-export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), ...(price.quantizations ? { quantizations: price.quantizations } : {}), data_collection: "deny" as const, max_price: { prompt: Math.max(price.input, price.long?.input ?? 0), completion: Math.max(price.output, price.long?.output ?? 0), request: 0, image: 0 } });
+/** The provider object the proxy sends with every OpenRouter call: the row's pinned providers and quantizations, if any, no provider that may train on or keep the data (data_collection deny), and its prices as the most OpenRouter may route to, at the long-prompt rates where those are higher (a prompt past the row's threshold is billed at them), with no per-request charge and no per-image charge above the row's listed image price (0 for a row that lists none). */
+export const openRouterRouting = (price: ChatPrice) => ({ ...(price.providers ? { only: price.providers, allow_fallbacks: false } : {}), ...(price.quantizations ? { quantizations: price.quantizations } : {}), data_collection: "deny" as const, max_price: { prompt: Math.max(price.input, price.long?.input ?? 0), completion: Math.max(price.output, price.long?.output ?? 0), request: 0, image: price.image ?? 0 } });
 
 /** A file part: OpenRouter fetches a URL in it, and parses a PDF it cannot pass to the model with a paid OCR engine. */
 const filePart = (value: unknown): boolean =>

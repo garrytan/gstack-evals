@@ -17,6 +17,10 @@
 // - The proxy is the single retry owner: 429 and 5xx answers are retried within a finite attempt count and elapsed-time
 //   budget, a 429 pauses every call to that provider (the limiter), and a lost send is never retried.
 // - Refusals are problem-details JSON (RFC 9457) carrying a reason code from src/errors/codes.ts.
+// - A non-2xx answer's allow-listed error fields are journaled with its call (upstreamBody): code, type, the failed
+//   routing step and provider name, each cut to 512 characters with keys redacted and replaced by its size when it
+//   repeats the request's text, plus only the byte lengths of error.message and metadata.raw, within 4,096 bytes. No
+//   free-text field of the answer is journaled.
 // - OpenAI chat streams get stream_options.include_usage forced on; Anthropic Messages and OpenAI Responses streams are
 //   metered from their own final usage events.
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
@@ -143,7 +147,7 @@ export interface ProxyOptions {
   /** The evaluator-side unix socket for bind, unbind and finalize. */
   managementSocket: string;
   managementToken: string;
-  /** Append-only ndjson journal of call requests and outcomes. It never holds a body, a bearer or a key. */
+  /** Append-only ndjson journal of call requests and outcomes. It holds no request body, bearer or key, and of an answer only a non-2xx answer's allow-listed error fields (upstreamBody). */
   journal: string;
   retry: RetryBudget;
   /** Where provider keys come from (defaults to process.env). */
@@ -251,6 +255,66 @@ export function scrubbedCause(error: unknown, secrets: readonly string[]): strin
   const parts: string[] = [];
   for (let e: unknown = error, depth = 0; e && depth < 8; e = (e as { cause?: unknown }).cause, depth++) parts.push(e instanceof Error ? e.message : String(e));
   return secrets.reduce((text, s) => (s ? text.split(s).join("[redacted]") : text), parts.join(": ")).slice(0, 500);
+}
+
+/** The bytes of a non-2xx answer's error fields the journal keeps. */
+export const UPSTREAM_BODY_BYTES = 4096;
+
+/** The characters of each error string the journal keeps. */
+const UPSTREAM_FIELD_CHARS = 512;
+
+/** A run this long shared with one of the request's own strings marks an answer that repeats the request. */
+const ECHO_CHARS = 24;
+
+/**
+ * What the journal keeps of a non-2xx answer: a fixed allow-list of its error fields (error.code, error.type,
+ * error.metadata.failed_routing_step and error.metadata.provider_name), plus only the byte lengths of error.message and
+ * error.metadata.raw, so no free-text field is journaled. Each kept string has every secret redacted and is cut to UPSTREAM_FIELD_CHARS
+ * characters; one that repeats ECHO_CHARS characters of any string in the request other than its model id (a prompt quoted
+ * back) is replaced by a note of its size. The whole is cut to UPSTREAM_BODY_BYTES bytes at a whole character. An answer
+ * that is not a JSON object (an array included), or that cannot be measured, is kept only as a note of its size.
+ */
+export function upstreamBody(text: string, request: unknown, secrets: readonly string[]): string {
+  const bytes = Buffer.byteLength(text);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {}
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return `[not a JSON object, ${bytes} bytes]`;
+  try {
+    const record = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+    const model = (request as { model?: unknown } | null | undefined)?.model;
+    const requestTexts = decodedStrings(request).filter(s => s !== model).flatMap(s => [s, JSON.stringify(s).slice(1, -1)]);
+    const field = (v: unknown): unknown => {
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (typeof v !== "string") return undefined;
+      const cut = secrets.reduce((t, s) => (s ? t.split(s).join("[redacted]") : t), v).slice(0, UPSTREAM_FIELD_CHARS);
+      const runs = new Set<string>();
+      for (let i = 0; i + ECHO_CHARS <= cut.length; i++) runs.add(cut.slice(i, i + ECHO_CHARS));
+      for (const s of requestTexts) for (let i = 0; i + ECHO_CHARS <= s.length; i++) if (runs.has(s.slice(i, i + ECHO_CHARS))) return `[withheld: it repeats the request's text, ${Buffer.byteLength(v)} bytes]`;
+      return cut;
+    };
+    const size = (v: unknown) => (v === undefined ? undefined : Buffer.byteLength(typeof v === "string" ? v : JSON.stringify(v)));
+    const error = record((parsed as Record<string, unknown>).error);
+    const metadata = record(error.metadata);
+    const kept = {
+      code: field(error.code),
+      type: field(error.type),
+      message_bytes: size(error.message),
+      metadata: {
+        failed_routing_step: field(metadata.failed_routing_step),
+        provider_name: field(metadata.provider_name),
+        raw_bytes: size(metadata.raw),
+      },
+    };
+    if (Object.values(kept.metadata).every(v => v === undefined)) delete (kept as { metadata?: unknown }).metadata;
+    const json = Buffer.from(JSON.stringify({ error: kept }));
+    let end = Math.min(json.length, UPSTREAM_BODY_BYTES);
+    if (end < json.length) while (end > 0 && (json[end]! & 0xc0) === 0x80) end--;
+    return json.subarray(0, end).toString("utf8");
+  } catch {
+    return `[unreadable, ${bytes} bytes]`;
+  }
 }
 
 /** Every string a parsed JSON value holds, keys included, decoded from its escapes, so the tripwire sees what the provider will read. */
@@ -495,7 +559,7 @@ export class MeteringProxy {
         this.journal({ ...free, status: null, reason });
         return problem("UPSTREAM", 502, reason);
       }
-      this.journal({ ...free, status: res.status });
+      this.journal({ ...free, status: res.status, ...(res.ok ? {} : { upstream_body: upstreamBody(text, parsed, ctx.secrets) }) });
       return new Response(text, { status: res.status, headers: strip(res) });
     };
 
@@ -657,7 +721,7 @@ export class MeteringProxy {
       else if (res.status >= 400 && res.status < 500) outcome = { kind: "spent", spent_micros: 0, usage: NO_TOKENS };
       else if (res.status >= 500) outcome = { kind: "spent", spent_micros: maxMicros, usage: NO_TOKENS };
       else outcome = { kind: "unknown" };
-      await this.settle(ctx, rid, maxMicros, outcome, res.status, res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined);
+      await this.settle(ctx, rid, maxMicros, outcome, res.status, res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined, res.ok ? undefined : upstreamBody(text, body, ctx.secrets));
       if (res.status === 401 || res.status === 403) return problem("E_KEY_REJECTED", 502, `${provider} answered ${res.status} to the proxy's key`);
       if (!retryable) return new Response(text, { status: res.status, headers: strip(res) });
       const delay = retryDelayMs(res, attempt);
@@ -673,12 +737,12 @@ export class MeteringProxy {
    * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
    * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
    */
-  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string): Promise<void> {
+  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstream?: string): Promise<void> {
     const meter = this.meter(ctx.slot);
     const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;
     let journaled = true;
     try {
-      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(reason ? { reason } : {}) });
+      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}) });
     } catch (e) {
       journaled = false;
       console.error(`E_INTERNAL: metering proxy: the outcome of reservation ${rid} was not journaled: ${scrubbedCause(e, ctx.secrets)}`);
