@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "../../lanes/tbv/cli.ts";
+import { run } from "../../lanes/tbv/gate.ts";
 import { PLACEHOLDERS, type Family, type History, type HistoryEvent, type SpliceSet } from "../../lanes/tbv/types.ts";
 import { shape } from "./fixtures/s2.ts";
 
@@ -50,9 +51,10 @@ function setup(name: string, tasks: Record<string, unknown>, shapes = ["none", "
   for (const f of ["investigate", "ship"] as const) put(join(dir, "splices", "splice-" + f + ".json"), splice(f));
   return dir;
 }
+const argv = (dir: string) => ["render-gate", "--tasks", join(dir, "tasks"), "--shapes", join(dir, "shapes"), "--splices", join(dir, "splices"), "--turns", TURNS, "--cwd", "/app", "--date", "2026-11-05"];
 async function gate(dir: string) {
   const out: string[] = [], err: string[] = [];
-  const code = await main(["render-gate", "--tasks", join(dir, "tasks"), "--shapes", join(dir, "shapes"), "--splices", join(dir, "splices"), "--turns", TURNS, "--cwd", "/app", "--date", "2026-11-05"], { out: (t) => out.push(t), err: (t) => err.push(t) });
+  const code = await main(argv(dir), { out: (t) => out.push(t), err: (t) => err.push(t) });
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 const quiet = (text: string) => expect(text).not.toMatch(/task-secret|toolu_|secret body|secret checks|a\.py|Find the bug/);
@@ -103,5 +105,6 @@ test("the gate fails closed on an empty input, a file that is not a history, or 
     expect(r.err.split("\n")[0]).toStartWith("E_TBV_INPUT gstack-evals tbv render-gate: ");
     expect(r.err).toContain(why);
     expect(r.out).toBe("");
+    await expect(run(argv(dir), { out: () => {}, err: () => {} })).rejects.toMatchObject({ code: "E_TBV_INPUT" });
   }
 });
