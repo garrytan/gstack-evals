@@ -210,7 +210,7 @@ Each gstack skill's evaluation gets at most $2,000 all-in, counted from 13:30Z o
 
 As in the earlier tallies, GEVA-247 (amendment 4, started before the ceiling), the difficulty ladder's thread and the Captain's own model use are not on the line.
 
-At caps, amendment 6 and the Captain's caps record put the line at $1,895.03, with $104.97 unallocated. The actual all-in is about $234 lower, mostly because r3c-opus settled $209.59 under its cap and its host $18.00 under. The R3c crew row came in under its $166.92, and GEVA-284 came in $2.70 over its $75.96. What is left is not a reserve: only a raise the Captain records can draw on it, and the caps record names the hook-enforced arm's round as its first claim.
+At caps, amendment 6 and the Captain's caps record put the line at $1,895.03, with $104.97 unallocated. The actual all-in is about $234 lower, mostly because r3c-opus settled $209.59 under its cap and its host $18.00 under. The caps record holds GEVA-284 on its own $75.96 row, and it came in $2.70 over. The caps record's crew row of $166.92 covers the rest of R3c's crew (the build, its /ship, the pin post, the run and this post), which comes to about $158 with this thread at its stop. What is left is not a reserve: only a raise the Captain records can draw on it, and the caps record names the hook-enforced arm's round as its first claim.
 
 ## Next round: options, not a prereg
 
