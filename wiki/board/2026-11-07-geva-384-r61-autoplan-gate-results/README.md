@@ -168,7 +168,7 @@ None changes the arm, a task, the detector, a scoring rule, a cap or the verdict
 7. **Second hours lease.** The operator reused the first hours lease's cell task, so the reserve failed with E_RESERVE_CONFLICT after lease r61-vm.0002.9b6f09 opened, and the lease held the item's remaining $7.98 for a few minutes. A kit script (r61-hours-settle-open.ts) settled that open lease at $0.2286 under its own meter id. No run file changed.
 8. **Reading session 1 during the relaunch check.** Session 1's result was read from its job folder's read.txt, because batch2.log fills only at the batch's end.
 9. **The pre-R48 opening.** At the Captain's request, this post's thread opened the sealed trial records once, on its own machine, for the exploratory check. The prereg names no such opening. It reads no outcome and changes no reading.
-10. **Run files not attached.** Prereg section 7 says the run files are published as text with the results, and the run thread's handoff asked for them and the dry run part 2 kit as .txt files beside this post. This post cites them by sha256 and leaves their text in the project-user drive (Replicate it), because attaching scripts moves the post's review from the docs class to a code-class /ship. They can follow in a post of their own.
+10. **Run files not attached.** Prereg section 7 says the run files are published as text with the results, and the run thread's handoff asked for them and the dry run part 2 kit as .txt files beside this post. Prereg section 7 cites them by sha256, and this post leaves their text in the project-user drive (Replicate it), because attaching scripts moves the post's review from the docs class to a code-class /ship. They can follow in a post of their own.
 
 ## Custody and teardown
 
