@@ -20,8 +20,8 @@ links:
 attachments:
   - 51182833e58c87adf492a7d4a46d396c5b03758065c307e9569debbda5db8e59  check-cset.ts.txt
   - 06063de74538cae7dd2b789e064a711fda52a4695cf224fe42cfbc773af62b98  dryrun-opus.ts.txt
-  - 4b9b3f5472b6616f9b385c17c2901f18cdbdc3f45260505f5e19cf4acac6f472  dryrun.sh.txt
-  - 9b3102cca006b0fea9704ca2ee3845c5dfbad60c356dd3cb5e1c44c60697077f  dryrun.txt
+  - c933f4ad9d534ba03136fec7d6769485fa3afb9d0fd2d59d0df81ac114d44b4a  dryrun.sh.txt
+  - 9e165f34f3d176ee645907a45ef5989f81148dddff810afa80664b3fe0b030e8  dryrun.txt
   - d8c806fdb8297c22c80f1942edd3eb11d170c8cd7aaa3dda718e69d7fa284a96  mdd-84.py.txt
   - a5c3d94980e7d786f6c38b2bfde4840ba06a971adf1e4da970b00af5b1aa4dd6  mdd-84.txt
   - c325612ad40e1830ebcd97d3b6014daa329b3c45fc1f37eb77404619cf6d7acc  merge.ts.txt
@@ -65,9 +65,9 @@ mkunits-cmp.ts.txt built the suite from it. It is part 2's mkunits.ts.txt with a
 
 ### 3.1 Projection's input (deviation D-merge)
 
-projection reads stage 1's readings with the smoke rerun's rows (smoke_round 2). At 2ef58339, `ceo readings` refuses to rebuild stage 1's judged readings with the rerun's rows, because the judges' replies are bound to a key over the rows built at 715c659, stage 1's build commit (ceo-cli.ts:684 and :704). Re-judging stage 1 would change data that is already judged. So, by the Captain's ruling, a pinned merge script built projection's stage 1 input: merge.ts.txt.
+projection reads stage 1's readings with the smoke rerun's rows (smoke_round 2). At 2ef58339, `ceo readings` refuses to rebuild stage 1's judged readings with the rerun's rows, because the judges' replies are bound to a key over the rows built at 715c659, stage 1's build commit (ceo-cli.ts:686 and :700). Re-judging stage 1 would change data that is already judged. So, by the Captain's ruling, a pinned merge script built projection's stage 1 input: merge.ts.txt.
 
-It takes stage 1's judged readings and the smoke rerun's rows, keeps the suite, exposure digest, units, the 140 none rows and the 32 stock rows unchanged, drops stage 1's 12 round 1 smoke rows, adds the rerun's 12 smoke rows mapped as `ceo readings` maps a smoke row at 2ef58339 (ceo-cli.ts:733-760: no packet, so empty labels and false leak flags), and sets smoke_round 2. stage 1's none rows predate the termination and meter fields, so each gets null for both, which the row contract accepts. It then rereads its output, checks every part against the inputs and exits 1 with E_MERGE on any difference.
+It takes stage 1's judged readings and the smoke rerun's rows, keeps the suite, exposure digest, units, the 140 none rows and the 32 stock rows unchanged, drops stage 1's 12 round 1 smoke rows, adds the rerun's 12 smoke rows mapped as `ceo readings` maps a smoke row at 2ef58339 (ceo-cli.ts:743-763: no packet, so empty labels and false leak flags), and sets smoke_round 2. stage 1's none rows predate the termination and meter fields, so each gets null for both, which the row contract accepts. It then rereads its output, checks every part against the inputs and exits 1 with E_MERGE on any difference.
 
 - **Verify:** on its output (sha256 cf4f5dd837a152eeb11fe1bd9f5fb160ff4308cfc2db45127527096aef5f2fcc): OK, 20 units, 152 rows (140 none, 12 smoke), 32 stock.
 - **Tamper test:** on three tampered copies in /dev/shm (one none row's spend moved by $0.01; one smoke row dropped; one smoke row's leak flag set), verify exited 1 with E_MERGE each time, naming the row.
@@ -150,12 +150,12 @@ HE=$(python3 -c 'import json,sys; print(" ".join([u["id"] for u in json.load(ope
 
 Before launch, the run thread checks that CH holds 84 ids ending ceo-o/cmp#114@620cf5959749 and HE holds 28 ending ceo-o/cmp#81@6dac6616ce04, the PASS line's last units. The lists stay on the host: they name which slots are held.
 
-| Launch | Command (each prefixed with GSTACK_EVALS_EPHEMERAL=1 GSTACK_EVALS_RECEIPTS=$SINK/<launch>) |
+| Launch | Command (each review-units call prefixed with GSTACK_EVALS_EPHEMERAL=1 GSTACK_EVALS_RECEIPTS=$SINK/<launch>, written out in the launch 2 rows) |
 |---|---|
 | opus-p, launch 1 | `bin/gstack-evals review-units $C $P --models claude-opus-5-5 --units $CH --passes 2 --item ceo-o-cmp-opus-p --spend-cap 179 --out $RUNS/cmp-opus-p-1` |
 | opus-e, launch 1 | `bin/gstack-evals review-units $C $E --models claude-opus-5-5 --units $CH --passes 2 --item ceo-o-cmp-opus-e --spend-cap 187 --out $RUNS/cmp-opus-e-1` |
-| opus-p, launch 2 | `mkdir $RUNS/cmp-opus-p-2 && cp $RUNS/cmp-opus-p-1/run.json $RUNS/cmp-opus-p-2/ && bin/gstack-evals review-units $C $P --models claude-opus-5-5 --units $HE --passes 1 --item ceo-o-cmp-opus-p --spend-cap $LEFT --out $RUNS/cmp-opus-p-2 --resume` |
-| opus-e, launch 2 | `mkdir $RUNS/cmp-opus-e-2 && cp $RUNS/cmp-opus-e-1/run.json $RUNS/cmp-opus-e-2/ && bin/gstack-evals review-units $C $E --models claude-opus-5-5 --units $HE --passes 1 --item ceo-o-cmp-opus-e --spend-cap $LEFT --out $RUNS/cmp-opus-e-2 --resume` |
+| opus-p, launch 2 | `mkdir $RUNS/cmp-opus-p-2 && cp $RUNS/cmp-opus-p-1/run.json $RUNS/cmp-opus-p-2/ && GSTACK_EVALS_EPHEMERAL=1 GSTACK_EVALS_RECEIPTS=$SINK/<launch> bin/gstack-evals review-units $C $P --models claude-opus-5-5 --units $HE --passes 1 --item ceo-o-cmp-opus-p --spend-cap $LEFT --out $RUNS/cmp-opus-p-2 --resume` |
+| opus-e, launch 2 | `mkdir $RUNS/cmp-opus-e-2 && cp $RUNS/cmp-opus-e-1/run.json $RUNS/cmp-opus-e-2/ && GSTACK_EVALS_EPHEMERAL=1 GSTACK_EVALS_RECEIPTS=$SINK/<launch> bin/gstack-evals review-units $C $E --models claude-opus-5-5 --units $HE --passes 1 --item ceo-o-cmp-opus-e --spend-cap $LEFT --out $RUNS/cmp-opus-e-2 --resume` |
 | sol-p | `bin/gstack-evals review-units $C $S --models openai/gpt-6.1-sol --allowance 10 --units $CH $HE --passes 1 --item ceo-o-cmp-sol-p --spend-cap 126 --out $RUNS/cmp-sol-p` |
 | sol-e | `bin/gstack-evals review-units $C $E --models openai/gpt-6.1-sol --allowance 10 --units $CH $HE --passes 1 --item ceo-o-cmp-sol-e --spend-cap 136 --out $RUNS/cmp-sol-e` |
 | particle-p | `bin/gstack-evals review-units $C $S --models particle-ai/particle-1 --allowance 0.5 --units $CH $HE --passes 1 --item ceo-o-cmp-particle-p --spend-cap 12 --out $RUNS/cmp-particle-p` |
@@ -163,7 +163,7 @@ Before launch, the run thread checks that CH holds 84 ids ending ceo-o/cmp#114@6
 
 **Opus's two launches (deviation D-launch).** review-units takes one --passes per invocation (run.ts:455), and Opus runs 2 passes on changed units and 1 on held. So each Opus item runs two launches on its one ledger item and one run id. By the Captain's ruling:
 
-1. Changed runs first. Launch 2 runs only when launch 1 exits 0, its stops.json lists no cap stop and `ledger status` shows no cap-stop close. If launch 1 ends on a cap stop, the item is done incomplete, launch 2 doesn't run, and that model's held cells are reported untested. Never retry. The ledger refuses a lease on a cap-stopped item anyway (CAP_STOP).
+1. Changed runs first. Launch 2 runs only when launch 1 exits 0, its stops.json lists no cap stop and `ledger status` shows no cap-stop close. If launch 1 ends on a cap stop, the item is done incomplete, launch 2 doesn't run, and that model's held cells are reported untested. Never retry. The ledger refuses a lease on a cap-stopped item anyway (CAP_STOP). If launch 1 exits non-zero without a cap stop, launch 2 doesn't start, and the run thread takes it to the Captain; this rule decides no outcome.
 2. Launch 2 runs in its own new out dir, seeded with a copy of launch 1's run.json, so it takes launch 1's run id (cli.ts:422) and the ledger item stays bound to one run. It repeats launch 1's flags exactly: a resume with another --max-turns, --session-kind, --allowance or --arm-session-kind is refused with E_CACHE_STALE (cli.ts:337-350). Opus takes the default allowance in both launches, which is $7.04 a session on Opus 5.5 (src/trial/review/README.md:109); adding --allowance 7.04 to launch 2 is refused.
 3. LEFT is what `bin/gstack-evals ledger status --item <item>` reports left, read after launch 1 settles, written to the run's trail. A lease above it is refused with CAP_STOP.
 4. After each Opus item's launches, `ceo rows --stage 2 --units $SR/units --order $ORD --projection $PROJ --run <launch 1 dir> [--run <launch 2 dir>] --checks` runs, and its output goes into the sealed run bundle.

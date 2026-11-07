@@ -27,7 +27,7 @@ PASS projection.txt holds one PASS line, at 'as planned' with every cell, held p
 PASS projection.txt's caps: opus-p $179, opus-e $187, sol-p $126, sol-e $136, particle-p $12, particle-e $23 and the judges' shared line $70, total $733 inside the $809.53 envelope; every trip check holds
 
 ## U. Five invented public units
-PASS mkunits-cmp.ts builds 5 invented public units, 3 changed and 2 held: {"units":5,"changed":3,"held":2,"base_sha256":"3cd258390c9376d8dbcafde06635998dafeaf915ec9c782b62b32fb5c5cbfa04","suite_sha256":"2fbb192ea50b48393ac3b08df8eda86d67d796a7f8eed962f9afc858389881db","order_sha256":"6889863ae76416835aa305403385ec6c30441ccd0a98305e77fd1c9b1409ac5b"}
+PASS mkunits-cmp.ts builds 5 invented public units, 3 changed and 2 held: {"units":5,"changed":3,"held":2,"base_sha256":"879ca3c0170f695bc1c0f8f43c03fe4c1a374b47ba02e9fbbc915c31486142cb","suite_sha256":"3df87a55dbc667ff31ef248e7d52f60a88d8a5da38fcdd1ad43d2eecb7f3ea5f","order_sha256":"956f098cd507bda3fb7b3d0633ae148e213e632bf43f44201661422fb3625f2a"}
 PASS noloss suite --check passes the public suite (key.json fields and plan.md present)
 PASS section 2's unit lists, run on the public order: changed 3 (the first 3 changed in seeded order), held 1 (the first held, one for every three changed); the second held unit goes unrun, as 2 of stage 2's 30 do
 
@@ -37,8 +37,8 @@ ceo-o-cmp-opus-p (none, lens and standalone) runs launch 1 (changed units, 2 pas
     item ceo-o-cmp-opus-p launch 2 out_fresh_before True run_id review-units-dry-ceo-o-cmp-opus-p prior_run_id review-units-dry-ceo-o-cmp-opus-p units 1 passes 1 sessions 3 stops 0 usd 0 spend_cap 179
 PASS the run loop exits 0; launch 1 ran 18 sessions (3 changed units, 2 passes, none, lens and standalone) and launch 2 ran 3 (1 held unit, 1 pass)
 PASS each launch 2 started in a dir that did not exist, took launch 1's run id from the seeded run.json, and its journal holds only its own sessions, so no unit or spend is counted twice: $0 and $0
-    public PASS line, in projection's grammar with opus-p's cells only: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus; held passes 1; 1 pass on sol, particle; units: changed 3 of 3, last example/driftnote#4@eb7016449bf9; held 1 of 2, last example/driftnote#3@6bca96a3c5f0
-    checks: 21 sessions, 14 pass, 7 fail: standalone:opus:example/driftnote#1@7efa7d8b597b:p1 (review_sections_read), standalone:opus:example/driftnote#1@7efa7d8b597b:p2 (review_sections_read), standalone
+    public PASS line, in projection's grammar with opus-p's cells only: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus; held passes 1; 1 pass on sol, particle; units: changed 3 of 3, last example/driftnote#4@d56e2d743bdb; held 1 of 2, last example/driftnote#3@7747097fe9ad
+    checks: 21 sessions, 14 pass, 7 fail: standalone:opus:example/driftnote#1@fe9696464b9b:p1 (review_sections_read), standalone:opus:example/driftnote#1@fe9696464b9b:p2 (review_sections_read), standalone
 PASS ceo rows --stage 2 --checks over both launches' dirs plans and finds 21 sessions (none, lens and standalone on Opus: 3 changed units at 2 passes and 1 held unit at 1, 7 a cell), every one journaled with a readable transcript at its task path and end state scored, so no gap: 21 session lines, 21 scored, 21 with a readable transcript
     exit 1: the stub makes no Skill call, so the standalone sessions fail their exposure checks; no other check fails
 PASS the only failing checks are standalone's exposure checks, on stub sessions that load no skill; each standalone session's transcript reads at its task path
@@ -82,7 +82,7 @@ crew_spent is the 26 CEO crew threads' platform counters before authoring plus t
     stage 2 run caps: ceo-o-cmp-opus-p $179.00, ceo-o-cmp-opus-e $187.00, ceo-o-cmp-sol-p $126.00, ceo-o-cmp-sol-e $136.00, ceo-o-cmp-particle-p $12.00, ceo-o-cmp-particle-e $23.00
     All-in: PASS ($76.53 to spare)
 PASS allin exits 0 and passes at $1923.47: All-in: PASS ($76.53 to spare)
-## O. OpenRouter's public feed, read keyless at 2026-11-07T01:57:48Z
+## O. OpenRouter's public feed, read keyless at 2026-11-07T03:02:14Z
 PASS openai/gpt-6.1-sol: 2 of 9 endpoints: openai/flex, openai serve inside the route's only and max_price
 PASS particle-ai/particle-1: 1 of 1 endpoints: particle-ai/us serve inside the route's only and max_price
     OpenRouter data policy feed, openai: {"training": false, "trainingOpenRouter": false, "retainsPrompts": true, "canPublish": false, "safetyRetention": false}

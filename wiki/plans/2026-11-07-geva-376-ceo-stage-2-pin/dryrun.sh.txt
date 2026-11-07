@@ -160,7 +160,7 @@ say "## R. The Opus two-launch sequence, end to end on the public units"
 say "ceo-o-cmp-opus-p (none, lens and standalone) runs launch 1 (changed units, 2 passes) and then launch 2 (the held unit, 1 pass) in a second out dir seeded with a copy of launch 1's run.json, through runReviewUnits with the real Claude Code driver and the real pinned Agent SDK against the stub CLI (dryrun-opus.ts.txt). Launch 2's spend cap is what the item has left after launch 1. Every stub session writes one ceo-outcome block, and the stub CLI calls no model, so every session settles \$0 (section L drives the ledger). ceo-o-cmp-opus-e's launches take the same flags and the same run.json seeding (section D); its sessions need gstack 4743132's installed gate, which #248's armed test drives through the pinned CLI, so the stub doesn't run them."
 RUNS=$T/runs; mkdir -p "$RUNS"
 cp "$POST/dryrun-opus.ts.txt" "$B/tests/trial/review/geva376-opus-dry.ts"
-RJ=$(bun "$B/tests/trial/review/geva376-opus-dry.ts" "$SUITE" "$SR" "$SRC" "$ORD" 3 1 "$RUNS" "$(mktemp -d "$T/r-XXXXXX")" 2>"$T/r-err.txt" | tail -1); rc=$?
+RJ=$(set -o pipefail; bun "$B/tests/trial/review/geva376-opus-dry.ts" "$SUITE" "$SR" "$SRC" "$ORD" 3 1 "$RUNS" "$(mktemp -d "$T/r-XXXXXX")" 2>"$T/r-err.txt" | tail -1); rc=$?
 rj() { echo "$RJ" | python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 for n in 0 1; do say "    $(rj "' '.join(f'{k} {v}' for k, v in d['launches'][$n].items())")"; done
 check "the run loop exits $rc; launch 1 ran 18 sessions (3 changed units, 2 passes, none, lens and standalone) and launch 2 ran 3 (1 held unit, 1 pass)" "$( [ $rc = 0 ] && [ "$(rj "[x['sessions'] for x in d['launches']]")" = "[18, 3]" ] && echo 1 || echo 0)"
