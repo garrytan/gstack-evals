@@ -17,10 +17,10 @@
 // - The proxy is the single retry owner: 429 and 5xx answers are retried within a finite attempt count and elapsed-time
 //   budget, a 429 pauses every call to that provider (the limiter), and a lost send is never retried.
 // - Refusals are problem-details JSON (RFC 9457) carrying a reason code from src/errors/codes.ts.
-// - A non-2xx answer's allow-listed error fields are journaled with its call (upstreamBody): code, type, message, the
-//   failed routing step and provider name, each cut to 512 characters with keys redacted and replaced by its size when it
-//   repeats the request's text, plus only the byte length of metadata.raw, within 4,096 bytes. Model output that a kept
-//   message quotes is not in the request, so it can be kept.
+// - A non-2xx answer's allow-listed error fields are journaled with its call (upstreamBody): code, type, the failed
+//   routing step and provider name, each cut to 512 characters with keys redacted and replaced by its size when it
+//   repeats the request's text, plus only the byte lengths of error.message and metadata.raw, within 4,096 bytes. No
+//   free-text field of the answer is journaled.
 // - OpenAI chat streams get stream_options.include_usage forced on; Anthropic Messages and OpenAI Responses streams are
 //   metered from their own final usage events.
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
@@ -268,8 +268,8 @@ const ECHO_CHARS = 24;
 
 /**
  * What the journal keeps of a non-2xx answer: a fixed allow-list of its error fields (error.code, error.type,
- * error.message, error.metadata.failed_routing_step and error.metadata.provider_name), plus the byte length of
- * error.metadata.raw, and nothing else. Each kept string has every secret redacted and is cut to UPSTREAM_FIELD_CHARS
+ * error.metadata.failed_routing_step and error.metadata.provider_name), plus only the byte lengths of error.message and
+ * error.metadata.raw, so no free-text field is journaled. Each kept string has every secret redacted and is cut to UPSTREAM_FIELD_CHARS
  * characters; one that repeats ECHO_CHARS characters of any string in the request other than its model id (a prompt quoted
  * back) is replaced by a note of its size. The whole is cut to UPSTREAM_BODY_BYTES bytes at a whole character. An answer
  * that is not a JSON object (an array included), or that cannot be measured, is kept only as a note of its size.
@@ -294,16 +294,17 @@ export function upstreamBody(text: string, request: unknown, secrets: readonly s
       for (const s of requestTexts) for (let i = 0; i + ECHO_CHARS <= s.length; i++) if (runs.has(s.slice(i, i + ECHO_CHARS))) return `[withheld: it repeats the request's text, ${Buffer.byteLength(v)} bytes]`;
       return cut;
     };
+    const size = (v: unknown) => (v === undefined ? undefined : Buffer.byteLength(typeof v === "string" ? v : JSON.stringify(v)));
     const error = record((parsed as Record<string, unknown>).error);
     const metadata = record(error.metadata);
     const kept = {
       code: field(error.code),
       type: field(error.type),
-      message: field(error.message),
+      message_bytes: size(error.message),
       metadata: {
         failed_routing_step: field(metadata.failed_routing_step),
         provider_name: field(metadata.provider_name),
-        raw_bytes: metadata.raw === undefined ? undefined : Buffer.byteLength(typeof metadata.raw === "string" ? metadata.raw : JSON.stringify(metadata.raw)),
+        raw_bytes: size(metadata.raw),
       },
     };
     if (Object.values(kept.metadata).every(v => v === undefined)) delete (kept as { metadata?: unknown }).metadata;
