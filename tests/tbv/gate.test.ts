@@ -74,6 +74,18 @@ test("every report request of every history, model and arm passes, late parallel
   expect(again.out.match(/requests sha256 \S+/)![0]).toBe(r.out.match(/requests sha256 \S+/)![0]);
 });
 
+test("a request at or over its model's window counts as a size drop, not a refusal, and the gate still passes", async () => {
+  const BIG = hist("task-secret-big", "investigate", [{ n: 1, kind: "user-text", text: "x".repeat(3_030_000) }]);
+  const r = await gate(setup("size", { "investigate/big.json": BIG }));
+  expect(r.err).toBe("");
+  expect(r.code).toBe(0);
+  expect(r.out).toMatch(/^investigate opus: 3 requests: 0 valid, 3 size drops, 0 refused; largest estimate \d+ tokens$/m);
+  expect(r.out).toMatch(/^investigate sol: 3 requests: 3 valid, 0 size drops, 0 refused; largest estimate \d+ tokens$/m);
+  expect(r.out).not.toMatch(/^refused:/m);
+  expect(r.out.split("\n").at(-1)).toBe("Verdict: PASS (6 of 9 valid, 3 size drops)");
+  quiet(r.out);
+});
+
 test("a history whose turns cannot be rebuilt, or whose request the validator refuses, fails the gate by position and reason with no id", async () => {
   const r = await gate(setup("fail", { "investigate/a-missing.json": MISSING, "investigate/b-clash.json": CLASH, "investigate/plain.json": PLAIN }));
   expect(r.code).toBe(1);

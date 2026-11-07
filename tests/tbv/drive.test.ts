@@ -615,3 +615,35 @@ test("a pass-1 reading that throws after its report send spent rejects the pass-
   expect(sealed.filter((n) => n.startsWith("start-")).length).toBe(1);
   expect(sealed.filter((n) => n.startsWith("reading-")).length).toBe(0);
 });
+
+describe("histories whose turns cannot be rebuilt", () => {
+  test("an item with a history whose turns cannot be rebuilt refuses with E_TBV_HISTORY before any send, even when its task comes after the first round", async () => {
+    const L = ledgerDir(ITEM, 50);
+    const s = stub(() => text());
+    const c = clock();
+    const p = plan({ script: () => text(), tasks: ["t1", "t2", "t3", "t4", "t5"], roundWorst: 0.000001 });
+    p.tasks[4]!.events = [{ n: 1, kind: "user-text", text: "Fix the parser in the widget repo." }, { n: 2, kind: "tool-use", id: "toolu_open", name: "Read", input: { file_path: "a.py" } }];
+    const run = await openItemRun({ item: ITEM, runId: "run-unbuilt", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch, sleep: c.sleep, now: c.now });
+    try {
+      await expect(driveItem(run, p, { build: buildRequest, validate: validateRequest, closer: () => true })).rejects.toMatchObject({ code: "E_TBV_HISTORY" });
+    } finally {
+      await run.close();
+    }
+    expect(s.calls.length).toBe(0);
+  });
+
+  test("the shape smoke refuses with E_TBV_HISTORY before any send when a history's turns cannot be rebuilt", async () => {
+    const L = ledgerDir(ITEM, 50);
+    const s = stub(() => sse({ text: "ok" }));
+    const p = plan({ script: () => text(), tasks: ["t1", "s1"] });
+    p.tasks[1]!.events = [{ n: 1, kind: "user-text", text: "Get pull request #9 ready to merge." }, { n: 2, kind: "tool-use", id: "toolu_open", name: "Bash", input: { command: "gh pr checks 9" } }];
+    const run = await openItemRun({ item: ITEM, runId: "smoke-unbuilt", record: L.record, ledger: L.ledger, out: L.out, env: KEYS, fetch: s.fetch });
+    try {
+      await expect(smokeItem(run, p, { build: buildRequest, validate: validateRequest, closer: () => true })).rejects.toMatchObject({ code: "E_TBV_HISTORY" });
+    } finally {
+      await run.close();
+    }
+    expect(s.calls.length).toBe(0);
+  });
+});
+
