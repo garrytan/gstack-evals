@@ -40,7 +40,7 @@ This post pins the build that fixes it and corrects one runbook line. It adds no
 
 ## 3. The live check
 
-The fixed mine-b ran once against this repo on 2026-11-07, from 03:23:37Z to 04:14:30Z, through gh on a Capy machine, with source-b.ts at sha256 6a0234a870858384b0f21f28a41deda77a27a77493195e826641f204c551c72e. A wrapper outside the repo paced it at one GitHub call every 2 to 3 seconds, and it would have waited for the quota's reset if fewer than 2,500 GraphQL points remained. It never had to wait.
+The fixed mine-b ran once against this repo on 2026-11-07, from 03:23:37Z to 04:14:30Z, through gh on a Capy machine, with source-b.ts at sha256 6a0234a870858384b0f21f28a41deda77a27a77493195e826641f204c551c72e. A wrapper outside the repo paced it at one GitHub call every 2 to 3 seconds, and it would have waited for the quota's reset if fewer than 2,500 GraphQL points remained. It never had to wait. After this run, the review fix changed source-b.ts to sha256 b6f02186fb818cda995d57669a1f3c7c176a93e1cb1645b91e819e3761916277. It checks the node count against totalCount after every page instead of once after paging. This run's outcome is unchanged, because it exited 0, so no connection ever paged past its totalCount.
 
 - It printed "mined 258 pull requests, skipped 0 truncated records" and exited 0. The prs.json it wrote has sha256 7cf822d2397af8644e9170b0e80f0fc73478ffb494e3b4bef133d19dced26ccd.
 - All 255 pull requests that B2's first run saw are kept, none truncated, and so are the 3 closed since. All 237 in dev source B's frame are kept.
