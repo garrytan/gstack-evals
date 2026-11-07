@@ -179,6 +179,10 @@ export interface SendResult {
   status: number | null;
   reply: Reply | null;
   responseId: string | null;
+  /** The reply's own id (an Anthropic msg_ id, or the body's id), kept beside responseId. Set by the report driver. */
+  messageId?: string | null;
+  /** Where responseId came from: OpenRouter's X-Generation-Id header, the reply body, or null when an OpenRouter answer carried no gen- id. */
+  idFrom?: "x-generation-id" | "body" | null;
   /** meter:call:attempt, the proxy's idempotency key for this send. */
   idempotencyKey: string | null;
   problemCode: string | null;
@@ -230,7 +234,7 @@ export interface ReadingRecord {
   texts: { report: string | null; d1: string | null; d2: string | null };
   responseIds: string[];
   maxTokens: Turn[];
-  sends: Array<{ turn: Turn; attempt: number; kind: AttemptKind; status: number | null; responseId: string | null; idempotencyKey: string | null; micros: number | null; usage: TokenUsage | null }>;
+  sends: Array<{ turn: Turn; attempt: number; kind: AttemptKind; status: number | null; responseId: string | null; messageId?: string | null; idFrom?: "x-generation-id" | "body" | null; idempotencyKey: string | null; micros: number | null; usage: TokenUsage | null }>;
   usd: number;
   cacheRead: number | null;
 }

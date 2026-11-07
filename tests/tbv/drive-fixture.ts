@@ -67,15 +67,19 @@ export interface Call {
 export type Script = (c: Call) => Response | Promise<Response>;
 
 let seq = 0;
-export function sse(o: { text?: string; tool?: boolean; stop?: string; id?: string; usage?: boolean; final?: boolean; input?: number; cacheRead?: number; output?: number }): Response {
-  const events: Array<Record<string, unknown>> = [{ type: "message_start", message: { id: o.id ?? "gen-" + ++seq, type: "message", role: "assistant", content: [], usage: { input_tokens: o.input ?? 900, cache_read_input_tokens: o.cacheRead ?? 0, cache_creation_input_tokens: 0, output_tokens: 1 } } }];
+/** A Messages stream as OpenRouter's Anthropic route sends it: the stream's message id is a msg_ id, and the generation id
+ * comes in the X-Generation-Id header (gen: null leaves the header out). */
+export function sse(o: { text?: string; tool?: boolean; stop?: string; id?: string; gen?: string | null; usage?: boolean; final?: boolean; input?: number; cacheRead?: number; output?: number }): Response {
+  const n = ++seq;
+  const events: Array<Record<string, unknown>> = [{ type: "message_start", message: { id: o.id ?? "msg_" + n, type: "message", role: "assistant", content: [], usage: { input_tokens: o.input ?? 900, cache_read_input_tokens: o.cacheRead ?? 0, cache_creation_input_tokens: 0, output_tokens: 1 } } }];
   if (o.text) events.push({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }, { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: o.text } }, { type: "content_block_stop", index: 0 });
   if (o.tool) events.push({ type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "toolu_1", name: "Bash", input: {} } }, { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: '{"command":"ls"}' } }, { type: "content_block_stop", index: 1 });
   if (o.final !== false) {
     events.push({ type: "message_delta", delta: { stop_reason: o.stop ?? "end_turn" }, ...(o.usage === false ? {} : { usage: { output_tokens: o.output ?? 120 } }) });
     events.push({ type: "message_stop" });
   }
-  return new Response(events.map((e) => "event: " + e.type + "\ndata: " + JSON.stringify(e) + "\n\n").join(""), { headers: { "content-type": "text/event-stream" } });
+  const gen = o.gen === undefined ? "gen-" + n : o.gen;
+  return new Response(events.map((e) => "event: " + e.type + "\ndata: " + JSON.stringify(e) + "\n\n").join(""), { headers: { "content-type": "text/event-stream", ...(gen === null ? {} : { "x-generation-id": gen }) } });
 }
 export const text = (t = "Two tests fail in test_widget_parse; the fix is not verified.") => sse({ text: t });
 export const status = (code: number, body: unknown = { type: "error", error: { type: "api_error", message: "stub" } }) => Response.json(body, { status: code });

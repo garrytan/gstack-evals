@@ -98,6 +98,8 @@ export interface RunItemOptions extends ItemRunOptions {
 type Reading = { task: string; arm: Arm; model: Model; pass: number };
 type Attempt = { kind: AttemptKind; turn: Turn };
 const keyOf = (r: Reading) => [r.task, r.arm, r.model, r.pass].join("|");
+/** An OpenRouter generation id, the only id its generation endpoint accepts. OpenRouter sends it in the X-Generation-Id header on every route; on the Messages route the stream's own id is a msg_ id. */
+const GEN_ID = /^gen-[0-9A-Za-z-]+$/;
 
 const ledgerStep = <T>(f: () => T): T => {
   try {
@@ -238,10 +240,11 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
       return {
         label,
         async send(req) {
-          let status = 0, problemCode: string | null = null, detail = "", body = "", broke = false;
+          let status = 0, problemCode: string | null = null, detail = "", body = "", broke = false, gen: string | null = null;
           try {
             const res = await fetch(base + b.slot + "/" + req.provider + req.route, { method: "POST", headers: { authorization: "Bearer " + b.token, "content-type": "application/json" }, body: JSON.stringify(req.body), timeout: false } as RequestInit);
             status = res.status;
+            gen = res.headers.get("x-generation-id");
             try {
               body = await res.text();
             } catch {
@@ -268,7 +271,9 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
           const rid = key ? now.find((l) => l.kind === "request" && l.idempotency_key === key)?.reservation_id : undefined;
           const outcome = rid ? now.filter((l) => l.kind === "outcome" && l.reservation_id === rid).at(-1)?.outcome : undefined;
           const spent = outcome?.kind === "spent";
-          return { kind, status: status || null, reply: parsed && parsed.final ? parsed.reply : null, responseId: parsed?.id ?? null, idempotencyKey: key, problemCode, usage: spent ? (outcome.usage as TokenUsage) : null, micros: spent ? (outcome.spent_micros as number) : null };
+          const messageId = parsed?.id ?? null;
+          const ids = req.provider === "openrouter" ? (GEN_ID.test(gen ?? "") ? { responseId: gen, idFrom: "x-generation-id" as const } : { responseId: null, idFrom: null }) : { responseId: messageId, idFrom: messageId === null ? null : ("body" as const) };
+          return { kind, status: status || null, reply: parsed && parsed.final ? parsed.reply : null, ...ids, messageId, idempotencyKey: key, problemCode, usage: spent ? (outcome.usage as TokenUsage) : null, micros: spent ? (outcome.spent_micros as number) : null };
         },
         async micros() {
           return local.meters(leaseId).get(b.meter_id)?.held_micros ?? 0;
@@ -308,7 +313,7 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
       const released: string[] = [];
       try {
         for (const s of sends) {
-          if (!/^[A-Za-z0-9_-]+$/.test(s.responseId)) return { released, missing: s.responseId };
+          if (!GEN_ID.test(s.responseId)) return { released, missing: s.responseId || "(no generation id)" };
           const res = await fetch(base + b.slot + "/openrouter/v1/generation?id=" + s.responseId, { headers: { authorization: "Bearer " + b.token } });
           const text = await res.text();
           let id: unknown;
@@ -505,8 +510,8 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
         }
         const res = await slot.send(req);
         const transport = TRANSPORT.has(res.kind);
-        rec.sends.push({ turn: t, attempt, kind: res.kind, status: res.status, responseId: res.responseId, idempotencyKey: res.idempotencyKey, micros: res.micros, usage: res.usage });
-        if (res.micros === null && res.idempotencyKey && res.responseId && req.provider === "openrouter") unknown.push({ idempotencyKey: res.idempotencyKey, responseId: res.responseId });
+        rec.sends.push({ turn: t, attempt, kind: res.kind, status: res.status, responseId: res.responseId, messageId: res.messageId ?? null, idFrom: res.idFrom ?? null, idempotencyKey: res.idempotencyKey, micros: res.micros, usage: res.usage });
+        if (res.micros === null && res.idempotencyKey && req.provider === "openrouter" && res.status === 200 && !transport) unknown.push({ idempotencyKey: res.idempotencyKey, responseId: res.responseId ?? "" });
         leave(st, how, transport, route, !res.problemCode || res.problemCode === "UPSTREAM");
         if (transport && how === "probe") {
           if (stop?.cls === "outage") {
@@ -583,7 +588,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
       for (const k of rel.released) released.add(k);
       for (const rec of [...records.values()]) if (rec.sends.some((x) => x.idempotencyKey !== null && rel.released.includes(x.idempotencyKey))) recost(rec);
       if (rel.missing !== null) {
-        setStop("harness", "E_TBV_RUN no OpenRouter generation record for the send whose stream named " + rel.missing + ": its reservation stands at full and nothing retries; check that the stream's message_start id is the generation id");
+        setStop("harness", "E_TBV_RUN no OpenRouter generation record for the send whose generation id is " + rel.missing + ": its reservation stands at full and nothing retries; check the send's X-Generation-Id header");
         break;
       }
       s = await run.spend();

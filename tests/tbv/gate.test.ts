@@ -2,7 +2,7 @@
 // The keyless render gate (GEVA-392 addendum): every history's report request for every model and arm, built and checked
 // as the drive builds and checks it before a send, printing counts and structure only.
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "../../lanes/tbv/cli.ts";
@@ -118,5 +118,32 @@ test("the gate fails closed on an empty input, a file that is not a history, or 
     expect(r.err).toContain(why);
     expect(r.out).toBe("");
     await expect(run(argv(dir), { out: () => {}, err: () => {} })).rejects.toMatchObject({ code: "E_TBV_INPUT" });
+  }
+});
+
+test("a broken link or an unreadable entry under --tasks fails with a reason code and names no path", async () => {
+  const broken = setup("broken", { "investigate/plain.json": PLAIN });
+  symlinkSync(join(broken, "tasks", "investigate", "task-secret-gone.json"), join(broken, "tasks", "investigate", "task-secret-link.json"));
+  const dirs: string[] = [broken];
+  const locked = join(root, "locked", "tasks", "task-secret-locked");
+  if (process.getuid?.() !== 0) {
+    setup("locked", { "investigate/plain.json": PLAIN });
+    mkdirSync(locked);
+    chmodSync(locked, 0);
+    dirs.push(join(root, "locked"));
+  }
+  try {
+    for (const dir of dirs) {
+      const r = await gate(dir);
+      expect(r.code).toBe(2);
+      expect(r.err.split("\n")[0]).toStartWith("E_TBV_INPUT gstack-evals tbv render-gate: ");
+      expect(r.err).toContain("an entry under --tasks is a broken link or cannot be read");
+      expect(r.err).not.toContain(root);
+      expect(r.err).not.toMatch(/task-secret/);
+      expect(r.out).toBe("");
+      await expect(run(argv(dir), { out: () => {}, err: () => {} })).rejects.toMatchObject({ code: "E_TBV_INPUT" });
+    }
+  } finally {
+    if (dirs.length > 1) chmodSync(locked, 0o700);
   }
 });
