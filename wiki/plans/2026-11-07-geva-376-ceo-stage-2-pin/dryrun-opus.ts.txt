@@ -1,0 +1,96 @@
+// The stage 2 pin post's keyless Opus run (section R of dryrun.sh.txt), run as its own process for the reason
+// tests/trial/review/ceo-outcome-sdk.ts gives. It drives ceo-o-cmp-opus-p's two launches through the harness's own
+// runReviewUnits, the real Claude Code driver and the real pinned Agent SDK against the stub CLI, on the public units
+// that section U builds: launch 1 at passes 2 on the changed units in its own out dir, then launch 2 at passes 1 on the
+// held units the cut keeps, in a second out dir seeded with a copy of launch 1's run.json. Both launches take the run id
+// and the out dir layout the way review-units does at the build commit (src/trial/review/cli.ts:417-423): the run id is
+// the seeded run.json's, the journal reuse is the new dir's own (empty), and fixtures/tasks.json and run.json are written
+// before the run. Every stub session writes one ceo-outcome block. The stub CLI calls no model, so every session settles
+// $0, and section L shows the ledger side. The enforced arm isn't run here: its sessions need gstack 4743132's installed
+// gate, which #248's armed test drives. Prints one JSON object of counts, ids and dollars.
+// Usage: bun geva376-opus-dry.ts <suite json> <sealed root> <source clone> <order.json> <changed n> <held n> <runs dir> <scratch>
+import { spawn } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { BACKGROUND_WAIT_MS } from "../../../src/adapters/claude-code/driver.ts";
+import { ceoSuiteBinding, loadSuite, readsSealedRoot } from "../../../lanes/review-noloss/suite.ts";
+import { DEFAULT_POLICY, loadPolicy, type LoadedPolicy } from "../../../src/skill-eval/cli/policy.ts";
+import type { HostRig } from "../../../src/skill-eval/cli/run-host.ts";
+import { removeTree } from "../../../src/trial/cleanup.ts";
+import type { Sandbox } from "../../../src/trial/sandbox.ts";
+import { CEO_RUN_PLAN_ARM } from "../../../src/trial/review/ceo-arms.ts";
+import { CEO_LENS } from "../../../src/trial/review/ceo-outcome.ts";
+import { readReviewJournal, runReviewUnits, type ReviewArm, type ReviewRunInput } from "../../../src/trial/review/run.ts";
+import { buildUnitRepo, buildUnitTree, unitTaskId } from "../../../src/trial/review/unit.ts";
+import { harness, localSandbox } from "../../adapters/harness.ts";
+
+const [suitePath, sealedRoot, source, orderFile, nChanged, nHeld, runs, root] = process.argv.slice(2) as [string, string, string, string, string, string, string, string];
+const OPUS = "claude-opus-5-5";
+const BLOCK = "\x60\x60\x60ceo-outcome\n" + JSON.stringify({ top: [{ issue: "The plan ships an account-based service that the project's local-first promise rules out.", evidence: "plan.md, What we build", fix: "Keep folder sync as the default and make the service opt-in." }], forecast: 40 }) + "\n\x60\x60\x60";
+const loaded = loadSuite(suitePath, { sealedRoot });
+const suite = loaded.suite;
+const order = JSON.parse(readFileSync(orderFile, "utf8")) as { id: string; kind: "changed" | "held" }[];
+const changed = order.filter((u) => u.kind === "changed").slice(0, Number(nChanged)).map((u) => u.id);
+const held = order.filter((u) => u.kind === "held").slice(0, Number(nHeld)).map((u) => u.id);
+const scratch = (name: string) => mkdtempSync(join(root, name));
+const prepared = new Map(suite.units.map((u) => {
+  const repo = buildUnitRepo({ unit: u, source, dest: join(scratch("unit-"), "repo"), baseBranch: "main" });
+  const tree = buildUnitTree({ repo, task: unitTaskId(u), dest: join(scratch("tree-"), "tree"), image: "unused", test: null, install: null, scratch: scratch("build-"), run: () => { throw new Error("a plan unit runs no container"); } });
+  return [u.id, { unit: u, task: unitTaskId(u), base_branch: "main", merge_base: repo.merge_base, tree: tree.dir, tree_sha256: tree.tree_sha256, instructions: repo.instructions, check: null }];
+}));
+const home = scratch("gstack-");
+const gdir = join(home, ".claude", "skills", "gstack");
+mkdirSync(join(gdir, "bin"), { recursive: true });
+mkdirSync(join(gdir, "scripts"), { recursive: true });
+writeFileSync(join(gdir, "VERSION"), "1.96.0.0\n");
+writeFileSync(join(gdir, "scripts", "question-registry.ts"), "  'plan-ceo-review-mode': { id: 'plan-ceo-review-mode' },\n");
+const stub = join(import.meta.dir, "..", "..", "adapters", "fixtures", "stub-cli.cjs");
+const records = scratch("records-");
+const sandbox = (arm: string): Sandbox => {
+  const base = localSandbox(() => {});
+  return { ...base, agent: (task, o) => ({ ...base.agent(task, o), spawn: (argv: string[], env: Record<string, string> = {}) => (argv[0] === "true" ? spawn("true", [], { stdio: ["pipe", "pipe", "pipe"] }) : spawn(process.execPath, [stub, ...argv.slice(1)], { cwd: o.work, env: { ...env, PATH: process.env.PATH ?? "", STUB_MODE: "content", STUB_CONTENT: JSON.stringify([{ type: "text", text: "Review done.\n\n" + BLOCK }]), STUB_RECORD: join(records, arm + ".ndjson") }, stdio: ["pipe", "pipe", "pipe"] })) }) };
+};
+const h = harness(() => [{ type: "text", text: "unused" }]);
+const gstack = { tree_sha256: "gstack-tree", skill: null, gstack: ".claude/skills/gstack/bin/gstack-skill-start", plugins: [], layers: [{ src: home, dest: "" }] };
+const bare = (name: string) => ({ tree_sha256: name + "-tree", skill: null, gstack: null, plugins: [] });
+const rig: HostRig = {
+  baseUrl: h.baseUrl, network: null, imageDigest: null,
+  bind: async (request) => h.proxy.bind(request), finalize: (m) => h.proxy.finalize(m),
+  arms: { none: bare("none"), lens: bare("lens"), "gstack-forced": gstack },
+  sandbox: (arm) => sandbox(arm), judgeSandbox: () => localSandbox(() => {}),
+  egress: () => ({ open: false, detail: "dry run rig" }), close: async () => ({ committed: 0, unknown: 0, lease_id: null }), recovery: null,
+};
+const policy = loadPolicy(DEFAULT_POLICY) as LoadedPolicy;
+const bound = ceoSuiteBinding(suite);
+const ITEMS: [string, string[], string, number][] = [["ceo-o-cmp-opus-p", ["none", "lens", "gstack-forced"], "gstack-forced", 179]];
+const launch = async (item: string, armNames: string[], kindArm: string, cap: number, n: 1 | 2, unitIds: string[], passes: number, capUsd: number) => {
+  const out = join(runs, item.replace("ceo-o-", "") + "-" + n);
+  const runFile = join(out, "run.json");
+  const fresh = !existsSync(out);
+  if (n === 2) { mkdirSync(out, { recursive: true }); copyFileSync(join(runs, item.replace("ceo-o-", "") + "-1", "run.json"), runFile); }
+  const prior = n === 2 && existsSync(runFile) ? (JSON.parse(readFileSync(runFile, "utf8")) as { run_id: string }) : null;
+  mkdirSync(join(out, "fixtures"), { recursive: true });
+  writeFileSync(join(out, "fixtures", "tasks.json"), "[]\n");
+  const runId = prior?.run_id ?? "review-units-dry-" + item;
+  writeFileSync(runFile, JSON.stringify({ run_id: runId, max_turns: 150, session_kind: null, arm_session_kinds: { [kindArm]: "unattended" }, background_wait_s: BACKGROUND_WAIT_MS / 1000 }, null, 2) + "\n");
+  const arms: ReviewArm[] = armNames.map((a) => ({ name: a, told: CEO_RUN_PLAN_ARM[a as keyof typeof CEO_RUN_PLAN_ARM], systemPrompt: "claude-code-preset" }) as ReviewArm);
+  const input: ReviewRunInput = { host: "claude", suite: { id: suite.id, sha256: loaded.sha256, sealed: suite.sealed, sealedCatalogs: !suite.sealed && readsSealedRoot(suite), ...bound }, units: unitIds.map((id) => prepared.get(id)!), arms, models: [OPUS], passes, parallel: 3, timeoutS: 3600, cap: Math.round(capUsd * 1e6), maxTurns: 150, runId, out, date: "2026-11-07", policy, keyBase: { image_digest: null, recipe: "dry", host_version: null, adapter_sha256: "dry", isolation: "process" }, journal: null, reuse: readReviewJournal(out), plan: { lens: CEO_LENS }, env: {} } as ReviewRunInput;
+  const run = await runReviewUnits(input, rig);
+  const journal = readReviewJournal(out);
+  const entries = [...journal.values()] as any[];
+  const usd = entries.reduce((s, e) => s + (e.ceo_outcome?.usd ?? 0), 0);
+  return { item, launch: n, out_fresh_before: fresh, run_id: runId, prior_run_id: prior?.run_id ?? null, units: unitIds.length, passes, sessions: entries.length, stops: run.stops.length, usd: Number(usd.toFixed(6)) };
+};
+const report: any[] = [];
+try {
+  for (const [item, arms, kindArm, cap] of ITEMS) {
+    const l1 = await launch(item, arms, kindArm, cap, 1, changed, 2, cap);
+    const left = cap - l1.usd;
+    const l2 = await launch(item, arms, kindArm, cap, 2, held, 1, Math.floor(left * 100) / 100);
+    report.push(l1, { ...l2, spend_cap: Math.floor(left * 100) / 100 });
+  }
+  console.log(JSON.stringify({ changed: changed.length, held: held.length, launches: report }));
+} finally {
+  h.proxy.stop();
+  removeTree(h.dir);
+}
