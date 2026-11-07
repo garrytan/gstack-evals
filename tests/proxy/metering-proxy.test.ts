@@ -771,16 +771,17 @@ describe("upstream error bodies in the journal", () => {
   const models = [`openrouter:${PARTICLE}`, `openrouter:${DEEPSEEK}`];
   const chat = (content = "hi", model = PARTICLE) => ({ model, messages: [{ role: "user", content }] });
   const outcomes = (t: ReturnType<typeof setup>) => t.journal().filter(l => l.kind === "outcome");
+  const withheld = (s: string) => `[withheld: it repeats the request's text, ${Buffer.byteLength(s)} bytes]`;
 
   // Value: protects=a refused send says why in the journal; fails_when=the journal keeps only the status, as on tbv keys round 1, where two 404s left no reason; why_new=tbv keys round 1 (the max_price.image 404); seam=the paid path's outcome line; no_claim=the provider's error wording
-  test("a 4xx answer's error JSON is journaled on its outcome line, and the answer is passed on unchanged", async () => {
-    const noEndpoints = { error: { message: "No endpoints found that satisfy the max price for this request", code: 404, metadata: { routing_funnel: [{ step: "Initial Endpoints", endpoint_count: 6 }, { step: "Filter by Tier Endpoint Rows", endpoint_count: 2, reason: "Excluded tier endpoint rows the request did not opt into" }], failed_routing_step: "Filter by Max Price" } } };
+  test("today's 404 body journals its code, message and failed routing step, and the answer is passed on unchanged", async () => {
+    const noEndpoints = { error: { message: "No endpoints found that satisfy the max price for this request", code: 404, metadata: { routing_funnel: [{ step: "Initial Endpoints", endpoint_count: 6 }, { step: "Filter by Regional Surcharge", endpoint_count: 5 }, { step: "Filter by Tier Endpoint Rows", endpoint_count: 2, reason: "Excluded tier endpoint rows the request did not opt into" }], failed_routing_step: "Filter by Max Price" } } };
     const t = setup(() => Response.json(noEndpoints, { status: 404 }));
     const a = t.bind({ models });
     const res = await t.call(a.slot, a.token, PATH, chat());
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual(noEndpoints);
-    expect(outcomes(t)).toEqual([expect.objectContaining({ status: 404, upstream_body: JSON.stringify(noEndpoints) })]);
+    expect(outcomes(t)).toEqual([expect.objectContaining({ status: 404, upstream_body: '{"error":{"code":404,"message":"No endpoints found that satisfy the max price for this request","metadata":{"failed_routing_step":"Filter by Max Price"}}}' })]);
   });
 
   test("each 5xx attempt journals its own body, and a 2xx answer journals none", async () => {
@@ -802,44 +803,6 @@ describe("upstream error bodies in the journal", () => {
     expect(outcomes(t).map(l => l.upstream_body)).toEqual([`[not a JSON object, ${page.length} bytes]`, "[not a JSON object, 15 bytes]"]);
   });
 
-  test("the proxy's key is redacted, and only the first 4,096 bytes are kept", async () => {
-    const t = setup(() => Response.json({ error: { message: `bad key ${OPENROUTER_KEY}`, detail: "x".repeat(10_000) } }, { status: 400 }));
-    const a = t.bind({ models });
-    await t.call(a.slot, a.token, PATH, chat());
-    const kept = outcomes(t)[0]!.upstream_body as string;
-    expect(kept).toStartWith('{"error":{"message":"bad key [redacted]","detail":"xxx');
-    expect(Buffer.byteLength(kept)).toBe(4096);
-    expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(OPENROUTER_KEY);
-  });
-
-  // Value: protects=no prompt text reaches the journal through an error that quotes the request; fails_when=an error body that repeats part of a prompt is journaled as sent; why_new=journaling upstream error bodies; seam=the outcome and free lines; no_claim=an echo shorter than 24 characters
-  test("a body that repeats 24 or more characters of the request's text is withheld, escaped or not, and a body that names the model is kept", async () => {
-    const prompt = 'The task asks why the parser drops "trailing" commas\nafter a nested array in strict mode.';
-    const bodies = [
-      { error: { code: 400, message: `Invalid content: '${prompt.slice(4, 40)}...'` } },
-      { error: { code: 400, message: `Invalid content: ${prompt.slice(20, 70)}` } },
-      { error: { code: 404, message: `No endpoints found for ${DEEPSEEK}.` } },
-    ];
-    const t = setup(() => Response.json(bodies[t.calls.length - 1], { status: bodies[t.calls.length - 1]!.error.code }));
-    const a = t.bind({ models });
-    await t.call(a.slot, a.token, PATH, chat(prompt));
-    await t.call(a.slot, a.token, PATH, chat(prompt));
-    await t.call(a.slot, a.token, PATH, chat(prompt, DEEPSEEK));
-    expect(outcomes(t).map(l => l.upstream_body)).toEqual([0, 1].map(i => `[withheld: it repeats the request's text, ${Buffer.byteLength(JSON.stringify(bodies[i]))} bytes]`).concat(JSON.stringify(bodies[2])));
-    const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
-    expect(journal).not.toContain(prompt.slice(4, 40));
-    expect(journal).not.toContain("trailing");
-  });
-
-  test("a free route's non-2xx answer journals its error JSON too", async () => {
-    const missing = { error: { message: "Generation not found", code: 404 } };
-    const t = setup(() => Response.json(missing, { status: 404 }));
-    const a = t.bind({ models });
-    const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/openrouter/v1/generation?id=gen-1`, { headers: { authorization: `Bearer ${a.token}` } });
-    expect(res.status).toBe(404);
-    expect(t.journal().filter(l => l.kind === "free")).toEqual([expect.objectContaining({ status: 404, upstream_body: JSON.stringify(missing) })]);
-  });
-
   test("a JSON array body keeps only its size", async () => {
     const list = '[{"error":{"message":"x"}}]';
     const t = setup(() => new Response(list, { status: 400 }));
@@ -848,19 +811,76 @@ describe("upstream error bodies in the journal", () => {
     expect(outcomes(t).map(l => l.upstream_body)).toEqual([`[not a JSON object, ${list.length} bytes]`]);
   });
 
-  test("the 4,096-byte cut never splits a multibyte character", async () => {
-    const t = setup(() => Response.json({ e: "a".repeat(4085) + "€€€" }, { status: 400 }));
+  test("the proxy's key is redacted, fields off the allow-list are dropped, and each kept string is cut to 512 characters", async () => {
+    const t = setup(() => Response.json({ error: { message: `bad key ${OPENROUTER_KEY} ${"x".repeat(1_000)}`, type: "invalid_request_error", detail: "y".repeat(10_000) }, user_id: "u-1" }, { status: 400 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    const kept = JSON.parse(outcomes(t)[0]!.upstream_body as string);
+    expect(kept).toEqual({ error: { type: "invalid_request_error", message: `bad key [redacted] ${"x".repeat(512 - 19)}` } });
+    expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(OPENROUTER_KEY);
+  });
+
+  test("the 4,096-byte bound never splits a multibyte character", async () => {
+    const wide = "€".repeat(600);
+    const t = setup(() => Response.json({ error: { type: wide, message: wide, metadata: { failed_routing_step: wide, provider_name: wide } } }, { status: 400 }));
     const a = t.bind({ models });
     await t.call(a.slot, a.token, PATH, chat());
     const kept = outcomes(t)[0]!.upstream_body as string;
     expect(Buffer.byteLength(kept)).toBeLessThanOrEqual(4096);
+    expect(Buffer.byteLength(kept)).toBeGreaterThan(4090);
     expect(kept).not.toContain("\uFFFD");
-    expect(kept).toEndWith("a€");
+    expect(kept).toEndWith("€");
   });
 
-  // Value: protects=a diagnostic field never stops a paid call from settling; fails_when=an error body the proxy cannot serialize again throws before settle, leaving no outcome line and the ledger hold open; why_new=journaling upstream error bodies; seam=the paid path's settle; no_claim=bodies a provider would really send
-  test("an error body too deep to serialize again still settles its call, with a size note", async () => {
-    const deep = '{"a":'.repeat(50_000) + "1" + "}".repeat(50_000);
+  // Value: protects=no prompt text reaches the journal through an error that quotes the request; fails_when=an error message that repeats part of a prompt is journaled as sent; why_new=journaling upstream error bodies; seam=the outcome and free lines; no_claim=an echo shorter than 24 characters
+  test("a message that repeats 24 or more characters of the request's text is withheld, escaped or not, and a message that names the model is kept", async () => {
+    const prompt = 'The task asks why the parser drops "trailing" commas\nafter a nested array in strict mode.';
+    const messages = [`Invalid content: '${prompt.slice(4, 40)}...'`, `Invalid content: ${JSON.stringify(prompt.slice(20, 70))}`, `No endpoints found for ${DEEPSEEK}.`];
+    const t = setup(() => Response.json({ error: { code: 400, message: messages[t.calls.length - 1] } }, { status: 400 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat(prompt));
+    await t.call(a.slot, a.token, PATH, chat(prompt));
+    await t.call(a.slot, a.token, PATH, chat(prompt, DEEPSEEK));
+    expect(outcomes(t).map(l => JSON.parse(l.upstream_body as string).error.message)).toEqual([withheld(messages[0]!), withheld(messages[1]!), messages[2]]);
+    const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+    expect(journal).not.toContain(prompt.slice(4, 40));
+    expect(journal).not.toContain("trailing");
+  });
+
+  const code = "x_zebra = 7\n".repeat(8);
+  const cjk = "请解释斑马量子算法为什么在严格模式下会丢弃嵌套数组之后的尾随逗号并给出修复方案谢谢你的帮助";
+  const asciiEscaped = (s: string) => s.replace(/[\u0080-\uffff]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+  const rawCases: [string, string, string][] = [
+    ["a code prompt with newlines", code, JSON.stringify({ error: { input: code } })],
+    ["a CJK prompt escaped as \\uXXXX", cjk, asciiEscaped(JSON.stringify({ error: { input: cjk } }))],
+    ["a raw cut off mid-string (invalid JSON)", code, JSON.stringify({ error: { input: code } }).slice(0, -12)],
+  ];
+  // Value: protects=no prompt text reaches the journal through a provider error passed on as a string; fails_when=metadata.raw is journaled, where a quoted prompt is escaped twice and slips past the echo check; why_new=the third review round on the journal check; seam=the paid path's outcome line; no_claim=what OpenRouter puts in raw
+  for (const [name, prompt, raw] of rawCases) {
+    test(`metadata.raw is dropped for its byte length, so ${name} quoted inside it never reaches the journal`, async () => {
+      const t = setup(() => Response.json({ error: { code: 400, message: "Provider returned error", metadata: { provider_name: "SomeHost", raw } } }, { status: 400 }));
+      const a = t.bind({ models });
+      await t.call(a.slot, a.token, PATH, chat(prompt));
+      const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+      expect(journal).not.toContain("x_zebra");
+      expect(journal).not.toContain("斑马");
+      expect(journal).not.toContain(asciiEscaped("斑马").slice(1, 6));
+      expect(outcomes(t).map(l => l.upstream_body)).toEqual([JSON.stringify({ error: { code: 400, message: "Provider returned error", metadata: { provider_name: "SomeHost", raw_bytes: Buffer.byteLength(raw) } } })]);
+    });
+  }
+
+  test("a free route's non-2xx answer journals its error fields too", async () => {
+    const missing = { error: { message: "Generation not found", code: 404 } };
+    const t = setup(() => Response.json(missing, { status: 404 }));
+    const a = t.bind({ models });
+    const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}/openrouter/v1/generation?id=gen-1`, { headers: { authorization: `Bearer ${a.token}` } });
+    expect(res.status).toBe(404);
+    expect(t.journal().filter(l => l.kind === "free")).toEqual([expect.objectContaining({ status: 404, upstream_body: '{"error":{"code":404,"message":"Generation not found"}}' })]);
+  });
+
+  // Value: protects=a diagnostic field never stops a paid call from settling; fails_when=an error body the proxy cannot measure throws before settle, leaving no outcome line and the ledger hold open; why_new=journaling upstream error bodies; seam=the paid path's settle; no_claim=bodies a provider would really send
+  test("an error body too deep to measure still settles its call, with a size note", async () => {
+    const deep = '{"error":{"metadata":{"raw":' + '{"a":'.repeat(50_000) + "1" + "}".repeat(50_000) + "}}}";
     const t = setup(() => new Response(deep, { status: 400, headers: { "content-type": "application/json" } }));
     const a = t.bind({ models });
     const res = await t.call(a.slot, a.token, PATH, chat());

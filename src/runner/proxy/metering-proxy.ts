@@ -17,9 +17,10 @@
 // - The proxy is the single retry owner: 429 and 5xx answers are retried within a finite attempt count and elapsed-time
 //   budget, a 429 pauses every call to that provider (the limiter), and a lost send is never retried.
 // - Refusals are problem-details JSON (RFC 9457) carrying a reason code from src/errors/codes.ts.
-// - A non-2xx answer's error JSON is journaled with its call (upstreamBody): keys redacted, its first 4,096 bytes, and
-//   withheld when it is not a JSON object or repeats the request's text, so the journal holds no prompt it sent. Model output
-//   that an error quotes is not in the request, so it can be kept.
+// - A non-2xx answer's allow-listed error fields are journaled with its call (upstreamBody): code, type, message, the
+//   failed routing step and provider name, each cut to 512 characters with keys redacted and replaced by its size when it
+//   repeats the request's text, plus only the byte length of metadata.raw, within 4,096 bytes. Model output that a kept
+//   message quotes is not in the request, so it can be kept.
 // - OpenAI chat streams get stream_options.include_usage forced on; Anthropic Messages and OpenAI Responses streams are
 //   metered from their own final usage events.
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
@@ -146,7 +147,7 @@ export interface ProxyOptions {
   /** The evaluator-side unix socket for bind, unbind and finalize. */
   managementSocket: string;
   managementToken: string;
-  /** Append-only ndjson journal of call requests and outcomes. It holds no request body, bearer or key, and of an answer only a non-2xx answer's error JSON (upstreamBody). */
+  /** Append-only ndjson journal of call requests and outcomes. It holds no request body, bearer or key, and of an answer only a non-2xx answer's allow-listed error fields (upstreamBody). */
   journal: string;
   retry: RetryBudget;
   /** Where provider keys come from (defaults to process.env). */
@@ -256,17 +257,22 @@ export function scrubbedCause(error: unknown, secrets: readonly string[]): strin
   return secrets.reduce((text, s) => (s ? text.split(s).join("[redacted]") : text), parts.join(": ")).slice(0, 500);
 }
 
-/** The bytes of a non-2xx answer's error JSON the journal keeps. */
+/** The bytes of a non-2xx answer's error fields the journal keeps. */
 export const UPSTREAM_BODY_BYTES = 4096;
+
+/** The characters of each error string the journal keeps. */
+const UPSTREAM_FIELD_CHARS = 512;
 
 /** A run this long shared with one of the request's own strings marks an answer that repeats the request. */
 const ECHO_CHARS = 24;
 
 /**
- * What the journal keeps of a non-2xx answer: its error JSON, compact, every secret redacted, cut to its first
- * UPSTREAM_BODY_BYTES bytes at a whole character. An answer that is not a JSON object (an array included), that cannot be
- * serialized again, or whose kept text repeats ECHO_CHARS characters of any string in the request other than its model id
- * (a prompt quoted back), is kept only as a note of its size.
+ * What the journal keeps of a non-2xx answer: a fixed allow-list of its error fields (error.code, error.type,
+ * error.message, error.metadata.failed_routing_step and error.metadata.provider_name), plus the byte length of
+ * error.metadata.raw, and nothing else. Each kept string has every secret redacted and is cut to UPSTREAM_FIELD_CHARS
+ * characters; one that repeats ECHO_CHARS characters of any string in the request other than its model id (a prompt quoted
+ * back) is replaced by a note of its size. The whole is cut to UPSTREAM_BODY_BYTES bytes at a whole character. An answer
+ * that is not a JSON object (an array included), or that cannot be measured, is kept only as a note of its size.
  */
 export function upstreamBody(text: string, request: unknown, secrets: readonly string[]): string {
   const bytes = Buffer.byteLength(text);
@@ -276,19 +282,35 @@ export function upstreamBody(text: string, request: unknown, secrets: readonly s
   } catch {}
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return `[not a JSON object, ${bytes} bytes]`;
   try {
-    const redacted = Buffer.from(secrets.reduce((t, s) => (s ? t.split(s).join("[redacted]") : t), JSON.stringify(parsed)));
-    let end = Math.min(redacted.length, UPSTREAM_BODY_BYTES);
-    if (end < redacted.length) while (end > 0 && (redacted[end]! & 0xc0) === 0x80) end--;
-    const kept = redacted.subarray(0, end).toString("utf8");
-    const runs = new Set<string>();
-    for (let i = 0; i + ECHO_CHARS <= kept.length; i++) runs.add(kept.slice(i, i + ECHO_CHARS));
+    const record = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
     const model = (request as { model?: unknown } | null | undefined)?.model;
-    for (const s of decodedStrings(request)) {
-      if (s === model) continue;
-      const escaped = JSON.stringify(s).slice(1, -1);
-      for (let i = 0; i + ECHO_CHARS <= escaped.length; i++) if (runs.has(escaped.slice(i, i + ECHO_CHARS))) return `[withheld: it repeats the request's text, ${bytes} bytes]`;
-    }
-    return kept;
+    const requestTexts = decodedStrings(request).filter(s => s !== model).flatMap(s => [s, JSON.stringify(s).slice(1, -1)]);
+    const field = (v: unknown): unknown => {
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (typeof v !== "string") return undefined;
+      const cut = secrets.reduce((t, s) => (s ? t.split(s).join("[redacted]") : t), v).slice(0, UPSTREAM_FIELD_CHARS);
+      const runs = new Set<string>();
+      for (let i = 0; i + ECHO_CHARS <= cut.length; i++) runs.add(cut.slice(i, i + ECHO_CHARS));
+      for (const s of requestTexts) for (let i = 0; i + ECHO_CHARS <= s.length; i++) if (runs.has(s.slice(i, i + ECHO_CHARS))) return `[withheld: it repeats the request's text, ${Buffer.byteLength(v)} bytes]`;
+      return cut;
+    };
+    const error = record((parsed as Record<string, unknown>).error);
+    const metadata = record(error.metadata);
+    const kept = {
+      code: field(error.code),
+      type: field(error.type),
+      message: field(error.message),
+      metadata: {
+        failed_routing_step: field(metadata.failed_routing_step),
+        provider_name: field(metadata.provider_name),
+        raw_bytes: metadata.raw === undefined ? undefined : Buffer.byteLength(typeof metadata.raw === "string" ? metadata.raw : JSON.stringify(metadata.raw)),
+      },
+    };
+    if (Object.values(kept.metadata).every(v => v === undefined)) delete (kept as { metadata?: unknown }).metadata;
+    const json = Buffer.from(JSON.stringify({ error: kept }));
+    let end = Math.min(json.length, UPSTREAM_BODY_BYTES);
+    if (end < json.length) while (end > 0 && (json[end]! & 0xc0) === 0x80) end--;
+    return json.subarray(0, end).toString("utf8");
   } catch {
     return `[unreadable, ${bytes} bytes]`;
   }
