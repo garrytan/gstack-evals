@@ -182,7 +182,7 @@ bin/gstack-evals noloss judge-run --ceo --packets $J/packets --key $J/key.json \
   (then --judge anthropic/claude-opus-5-5 --item ceo-o-cmp-judge-opus --out $J/opus,
    then --judge anthropic/claude-sonnet-5-5 --item ceo-o-cmp-judge-sonnet --out $J/sonnet)
 bin/gstack-evals ceo readings --rows $J/rows.json --key $J/key.json --sol $J/sol --opus $J/opus --sonnet $J/sonnet \
-  --units $SR/units --out $J/readings.json
+  --units $SR/units --projection $PROJ --out $J/readings.json
 cp wiki/plans/2026-11-06-geva-348-ceo-scorer-stage-2/ceo-rule.ts.txt $J/ceo-rule.ts
 echo "31a56dd12b531f1cd1f26519921cc2731e7d7ea2b6e215e117d220c7b0c9573a  $J/ceo-rule.ts" | sha256sum -c && \
 GSTACK_EVALS_SCORER=$PWD bun $J/ceo-rule.ts compare $J/readings.json $PROJ 01fd5e8dc4b4b56c3b317afce0f4d9f92727097149fa877394d96669ceff9f57
