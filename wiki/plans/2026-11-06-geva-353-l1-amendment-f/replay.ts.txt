@@ -1,0 +1,48 @@
+// L1 Amendment F dry run: a keyless replay of pilot-sol's proxy journal under the shipped config/proxy.json.
+// Run from the repo root: cp wiki/plans/2026-11-06-geva-353-l1-amendment-f/replay.ts.txt /tmp/replay.ts && bun /tmp/replay.ts
+// It reads quick/laneb/tests/fixtures/l1/sol-pilot-requests.jsonl (counts only, written from pilot-sol's
+// proxy-requests.jsonl) and prices every reservation with runner/proxy.ts's own byteBoundTokens, worstCaseMicros and
+// maxPrice, first at one token per byte (what ran) and then at the shipped bound_bytes_per_token.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const root = process.cwd();
+const { byteBoundTokens, worstCaseMicros, maxPrice } = await import(join(root, "quick/laneb/runner/proxy.ts"));
+const config = JSON.parse(readFileSync(join(root, "quick/laneb/config/proxy.json"), "utf8"));
+const sol = config.models["gpt-6.1-sol"];
+const shipped: number = sol.bound_bytes_per_token ?? 1;
+const CAP = 5_000_000;
+const rows = readFileSync(join(root, "quick/laneb/tests/fixtures/l1/sol-pilot-requests.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+const reqs = rows.filter((r) => r.kind === "request");
+const refused = rows.filter((r) => r.kind === "refused");
+const sessions = [...new Set(rows.map((r) => r.s))];
+// Sol's 1-hour and 5-minute cache writes cost the same, so the request's ttl does not change its worst case.
+const worst = (r: any, k: number) => worstCaseMicros(byteBoundTokens("a".repeat(r.bytes), k), r.max_tokens, maxPrice(sol), true);
+const inflight = (s: number, t: number, k: number, self?: any) => reqs.filter((q) => q.s === s && q !== self && q.t0 <= t && t < q.t1).reduce((x, q) => x + worst(q, k), 0);
+const spentAt = (s: number, t: number) => reqs.filter((q) => q.s === s && q.t1 <= t).reduce((x, q) => x + q.cost_micros, 0);
+const usd = (m: number) => "$" + (m / 1e6).toFixed(2);
+
+console.log("pilot-sol journal: " + sessions.length + " sessions, " + reqs.length + " requests sent, " + refused.length + " refused for the session cap");
+console.log("shipped bound for gpt-6.1-sol: one token per " + shipped + " bytes, plus 1024");
+const w1 = reqs.filter((r) => worst(r, 1) !== r.worst_micros).length + refused.filter((r) => worst(r, 1) !== r.worst_micros).length;
+const i1 = refused.filter((r) => inflight(r.s, r.t, 1) !== r.inflight_micros).length;
+console.log("check at one token per byte: worst cases re-priced " + (rows.length - w1) + " of " + rows.length + " exactly; in-flight sums rebuilt " + (refused.length - i1) + " of " + refused.length + " exactly");
+
+for (const k of [1, shipped]) {
+  const needs = refused.map((r) => r.spent_micros + inflight(r.s, r.t, k) + worst(r, k));
+  const still = needs.filter((n) => n > CAP).length;
+  const sent = reqs.map((r) => spentAt(r.s, r.t0) + inflight(r.s, r.t0, k, r) + worst(r, k));
+  const newRef = sent.filter((n) => n > CAP).length;
+  console.log("");
+  console.log("at one token per " + k + " byte" + (k === 1 ? "" : "s") + ":");
+  console.log("  the " + refused.length + " refused requests: " + still + " refused, " + (refused.length - still) + " pass; largest need " + usd(Math.max(...needs)) + " of " + usd(CAP));
+  console.log("  the " + reqs.length + " sent requests: " + newRef + " refused; largest need " + usd(Math.max(...sent)) + " of " + usd(CAP));
+  const per = new Map<number, number>();
+  for (let i = 0; i < refused.length; i++) if (needs[i]! > CAP) per.set(refused[i].s, (per.get(refused[i].s) ?? 0) + 1);
+  console.log("  sessions with a refusal: " + per.size + (per.size ? " (" + [...per.entries()].map(([s, n]) => "session " + s + " " + refused.find((r) => r.s === s).arm + ": " + n).join(", ") + ")" : ""));
+}
+const ratios = reqs.map((r) => r.bytes / r.real);
+console.log("");
+console.log("bytes per real prompt token over the " + reqs.length + " sent requests: min " + Math.min(...ratios).toFixed(2) + ", median " + ratios.sort((a, b) => a - b)[Math.floor(ratios.length / 2)]!.toFixed(2));
+console.log("requests whose real count passes the shipped bound: " + reqs.filter((r) => byteBoundTokens("a".repeat(r.bytes), shipped) <= r.real).length);
+console.log("Not replayed: what the 46 requests would have cost and started had they been sent. The journal holds no response for them.");

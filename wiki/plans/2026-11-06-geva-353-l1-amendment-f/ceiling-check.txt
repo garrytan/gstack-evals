@@ -1,0 +1,14 @@
+CEILING PASS l1-route-sol-f: the sum $3054.35 with l1-route-sol-f's cap is at or under $3300.00
+  pilot-opus done: settled $13.68, reserved $0.00, cap $80.00, counted $13.68
+  f1-opus done: settled $269.69, reserved $0.00, cap $680.00, counted $269.69
+  tb2-opus done: settled $69.90, reserved $0.00, cap $180.00, counted $69.90
+  l1-route-sol done: settled $0.15, reserved $0.00, cap $20.00, counted $0.15
+  pilot-sol done: settled $17.53, reserved $0.00, cap $100.00, counted $17.53
+  l1-route-sol-f planned: settled $0.00, reserved $0.00, cap $20.00, counted $20.00
+  f1-sol planned: settled $0.00, reserved $0.00, cap $730.00, counted $730.00
+  l1-route-p1 planned: settled $0.00, reserved $0.00, cap $20.00, counted $20.00
+  pilot-p1 planned: settled $0.00, reserved $0.00, cap $120.00, counted $120.00
+  f1-p1 planned: settled $0.00, reserved $0.00, cap $920.00, counted $920.00
+  voided runs: $0.07
+  crew $753.26, Sol run work $17.19, particle-1 run work $0.00, Captain $0.00
+  holdback $102.89 = crew $47.89 (unspent stops $47.89 at $0.346 per million tokens) + Captain $40.00 + run work $15.00
