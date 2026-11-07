@@ -43,7 +43,8 @@ Converting Opus's real tokens at Sol's median 5.35 bytes per token alone gives a
 
 - runner/proxy.ts reads an optional per-model `bound_bytes_per_token` for estimate routes, defaulting to 1. The byte bound becomes ceil(bytes / that value) plus 1,024. Anthropic routes count with count_tokens and fall back to one token per byte when counting fails; they never read the field.
 - config/proxy.json sets `bound_bytes_per_token` to 3 for gpt-6.1-sol and for no other model. Opus, particle-1, DeepSeek and every other model reserve exactly as before.
-- Why 3: over pilot-sol's 1,014 sent requests, the tightest ran 3.35 bytes per real prompt token, so a bound at 3 stays above the real count on every one. A request that comes in tighter is still billed in full at its metered usage, and the ledger's settle row flags `over_reserve` when it pushes a session past its $5 reserve. The allowance, the session reserve and every item cap stay as they were.
+- Why 3: over pilot-sol's 1,014 sent requests, the tightest ran 3.35 bytes per real prompt token, so a bound at 3 stays above the real count on every one. A request that comes in tighter is still billed in full at its metered usage, and the ledger's settle row flags `over_reserve` when it pushes a session past its $5 reserve.
+- A request the proxy can't meter (a stream cut off before its final usage, or a request still in flight when its session closes) is charged its worst case, as before. With a bound that can now sit below the real count, that worst case's input side is raised to any input the response already reported, so such a request is never charged below what it reported. Where the bound holds, as it always does at one token per byte, the charge is the same as before. The allowance, the session reserve and every item cap stay as they were.
 - One side effect: the session row's `first_req_prompt_tokens` records the first request's token bound, so for Sol it now records the tighter bound. L1's table.ts and analyze.ts don't read it. Lane B's older analysis/manip.ts does, for R3's lines.
 
 The tests were written before the change, in tests/proxy-accounting.test.ts:
@@ -51,6 +52,7 @@ The tests were written before the change, in tests/proxy-accounting.test.ts:
 1. Through the proxy against a stub upstream, every shipped model except gpt-6.1-sol reserves exactly as before: anthropic routes at the count plus 64, and at one token per byte plus 1,024 when the count fails; openrouter routes (particle-1 and DeepSeek) at one token per byte plus 1,024. gpt-6.1-sol reserves ceil(bytes / 3) plus 1,024.
 2. Sol's bound at 3 stays above the real prompt count on all 1,014 pilot-sol requests, read from tests/fixtures/l1/sol-pilot-requests.jsonl. The fixture holds counts only (byte length, real tokens, cost, worst case, timing offsets and arm per request, and the 46 refusals), written from pilot-sol's proxy-requests.jsonl (sha256 b48adf251156265e3f9ddc56dd9b928f91956ad0b67873940b09be1670d317f8).
 3. A request whose real count passes its bound still settles in full, and the ledger's settle row carries `over_reserve: true`.
+4. A stream cut off after reporting input above its bound, and a request still in flight at close after reporting it, are each charged the worst case at the reported input, not at the bound. Capy's review of this pull request found that gap.
 
 ## l1-route-sol-f
 
@@ -80,11 +82,11 @@ The replay can't show what the 46 requests would have cost or started had they b
 
 ## Pins
 
-The build is b6e2bd596be785832121aefd2b2a8e3997914676 on capy/geva-353-l1-amendment-f. The run uses this pull request's merge commit, where these files must match:
+The build is e9ae96dc5141956c53c364cc7de482e60f6f694d on capy/geva-353-l1-amendment-f. The run uses this pull request's merge commit, where these files must match:
 
 | File | sha256 |
 |---|---|
-| quick/laneb/runner/proxy.ts | 85674eaed5c2a330c44766db4ff42b8262df441e1fb2118c0bcafbb04e68e3c0 |
+| quick/laneb/runner/proxy.ts | 92f4aa07d7b57a8db69ff5248c99982c3082adb4067fc3a65178cfb128a0510f |
 | quick/laneb/config/proxy.json | 078942d92a41ed19a8dcdc1f849efdeb3103befc46ec4a1dab3becc8d292dfde |
 | quick/laneb/l1/l1.ts | 8761c2ecb494cf08622b68e74e7856f924cb4a3ff9a318948fa5b824c3c108f9 |
 | quick/laneb/r3/route-check.ts | 54ccb8b4f5c5f0259c74d20d3776b5d754799a692b0380966dc3bd6af4dd0298 |
