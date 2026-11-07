@@ -156,8 +156,14 @@ const PHASE_NUMBER: Record<string, string> = { ceo: "1", design: "2", dx: "2.5",
 const PHASE_SKILL: Record<string, string> = { ceo: "plan-ceo-review", design: "plan-design-review", dx: "plan-devex-review", eng: "plan-eng-review" };
 const snapshot = (command: string) => new RegExp("gstack-autoplan-snapshot(?:\\.ts)?[\"']?\\s+" + command + "(?:\\s|$)");
 const PUBLISHED = /^true autoplan-published (ceo|design|dx|eng)$/;
+const BASH_READ = (file: string) => new RegExp("^(?!.*\\s--(?:help|version)(?![\\w-]))\\s*(?:cat|head|tail|nl|sed\\s+-n\\s+([\"']?)[\\d,$]*p\\1)\\s[^<>]*(?<![^\\s\"'/])" + file + "(?![\\w.])");
 
-/** autoplan: the run matches the configuration O1 froze, and every phase its scope chose loaded its review skill and published its report in order, Eng last. */
+/** autoplan: the run matches the configuration O1 froze, and every phase its scope chose loaded its review skill and published its report in order, Eng last.
+ * A phase loaded when, before its first publish, the session read its installed plan-<x>-review/SKILL.md, the
+ * methodologyPath a methodology command for it returned as JSON, or a file named autoplan-<phase>-methodology-<suffix>/
+ * methodology.md after an ok methodology command for that phase, whatever the command's output was piped or redirected
+ * to (GEVA-387). A read is an ok Read, or for SKILL.md and the named file a Bash read: one simple cat, head, tail, nl or
+ * sed -n command, never --help or --version, whose result is not empty. */
 export function autoplanExposure(records: Rec[]): ExposureRead {
   const { uses, lines, bash } = own(records, turnOf("autoplan"));
   const kinds = bash.filter((u) => /gstack-skill-start\b[^\n]*--skill\s+["']?autoplan(?![\w-])/.test(u.input.command)).map((u) => (u.ok ? /^SESSION_KIND: (\S+)/m.exec(u.result!)?.[1] : undefined));
@@ -185,15 +191,27 @@ export function autoplanExposure(records: Rec[]): ExposureRead {
     if (lines.some((l) => l.at > from && l.at <= u.at && report.test(l.line)) && published.at(-1) !== phase) published.push(phase);
   });
   const paths = new Map<string, Set<string>>();
+  const ran = new Map<string, number>();
   for (const u of bash) {
     const m = u.ok ? /gstack-autoplan-snapshot(?:\.ts)?["']?\s+methodology\s+(ceo|design|dx|eng)(?:\s|$)/.exec(u.input.command) : null;
+    if (m && !ran.has(m[1]!)) ran.set(m[1]!, u.at);
     const j = m ? json(u.result) : null;
     if (m && j?.phase === m[1] && typeof j.methodologyPath === "string") paths.set(m[1]!, (paths.get(m[1]!) ?? new Set()).add(j.methodologyPath));
   }
   const loaded = (phase: string) => {
     const by = pubs.find((u) => PUBLISHED.exec(u.input.command.trim())![1] === phase)?.at ?? Infinity;
+    const after = ran.get(phase) ?? Infinity;
     const direct = new RegExp("(?:^|/)" + PHASE_SKILL[phase] + "/SKILL\\.md$");
-    return uses.some((u) => u.ok && u.name === "Read" && u.at < by && typeof u.input.file_path === "string" && (paths.get(phase)?.has(u.input.file_path) || direct.test(u.input.file_path)));
+    const named = new RegExp("(?:^|/)autoplan-" + phase + "-methodology-[^/]+/methodology\\.md$");
+    const directBash = BASH_READ(PHASE_SKILL[phase] + "/SKILL\\.md");
+    const namedBash = BASH_READ("autoplan-" + phase + "-methodology-[^/\\s\"'<>]+/methodology\\.md");
+    return uses.some((u) => {
+      if (!u.ok || u.at >= by) return false;
+      if (u.name === "Read" && typeof u.input.file_path === "string") return paths.get(phase)?.has(u.input.file_path) || direct.test(u.input.file_path) || (u.at > after && named.test(u.input.file_path));
+      if (u.name !== "Bash" || typeof u.input.command !== "string" || !u.result!.trim()) return false;
+      const parts = simpleCommand(u.input.command);
+      return parts?.length === 1 && (directBash.test(parts[0]!) || (u.at > after && namedBash.test(parts[0]!)));
+    });
   };
   return {
     skill: "autoplan",

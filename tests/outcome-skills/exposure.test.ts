@@ -456,6 +456,150 @@ describe("autoplan exposure: the frozen configuration, then every phase its scop
   });
 });
 
+describe("autoplan exposure, GEVA-387: a methodology file read after the phase's methodology command, whatever its output fed, loads the phase", () => {
+  const both = () => load("autoplan-exposed-design-dx.jsonl");
+  const DX = "/work/repo/.gstack/tmp/autoplan/autoplan-dx-methodology-Ab3/methodology.md";
+  const PIPED = " | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['methodologyPath'])\"";
+  const pipe = (rs: Rec[], id: string, tail = PIPED, out?: string) => {
+    const res = resultOf(rs, id);
+    useOf(rs, id).input.command += tail;
+    res.content = out ?? JSON.parse(res.content).methodologyPath + "\n";
+    return rs;
+  };
+  const call = (id: string, name: string, input: Rec, content: string): Rec[] => [
+    { type: "AssistantMessage", t: 0, phase: "t2", parent_tool_use_id: null, content: [{ type: "tool_use", id, name, input }] },
+    { type: "UserMessage", t: 0, phase: "t2", parent_tool_use_id: null, content: [{ type: "tool_result", tool_use_id: id, content, is_error: false }] },
+  ];
+  const bashRead = (rs: Rec[], id: string, command: string, content = "     1\t# Review") => {
+    Object.assign(useOf(rs, id), { name: "Bash", input: { command } });
+    resultOf(rs, id).content = content;
+    return rs;
+  };
+  const move = (rs: Rec[], id: string, after: string) => {
+    const moved = callRecords(rs, id);
+    const rest = rs.filter((r) => !moved.includes(r));
+    rest.splice(rest.indexOf(withResult(rest, after)) + 1, 0, ...moved);
+    return rest;
+  };
+  const loads = (rs: Rec[]) => autoplanExposure(rs).checks.review_skills_loaded;
+  const r61 = () => {
+    const rs = both();
+    const s2 = resultOf(rs, "s2");
+    const init = JSON.parse(s2.content);
+    s2.content = JSON.stringify({ ...init, scope: { ...init.scope, uiRequired: false } });
+    const from = rs.indexOf(withUse(rs, "d2")), to = rs.indexOf(withResult(rs, "p2"));
+    rs.splice(from, to - from + 1);
+    return pipe(pipe(rs, "m3"), "m4");
+  };
+
+  test("a methodology command piped into python3, then ranged Reads of the phase's own methodology.md before its publish, loads the phase", () => {
+    const rs = pipe(both(), "m3");
+    useOf(rs, "r3").input = { file_path: DX, offset: 1, limit: 600 };
+    rs.splice(rs.indexOf(withResult(rs, "r3")) + 1, 0, ...call("r3b", "Read", { file_path: DX, offset: 601, limit: 600 }, "   601\t## Review Sections"));
+    expect(autoplanExposure(rs)).toMatchObject({ exposed: true, failed: null, phases: ["ceo", "design", "dx", "eng"] });
+  });
+
+  test("the same with the methodology command redirected to a file", () => {
+    for (const tail of [" > /work/repo/.gstack/tmp/autoplan/dx-manifest.json", " >/dev/null 2>&1"]) expect([tail, autoplanExposure(pipe(both(), "m3", tail, "")).exposed]).toEqual([tail, true]);
+  });
+
+  test("a Bash read of the methodology file after the command, as one simple cat, head, tail, nl or sed -n that returned text, loads the phase", () => {
+    for (const command of ["sed -n '1,600p' " + DX, 'cat "' + DX + '"', "head -n 2000 " + DX, "tail -n +601 " + DX + " 2>/dev/null", "nl -ba " + DX]) expect([command, autoplanExposure(bashRead(pipe(both(), "m3"), "r3", command)).exposed]).toEqual([command, true]);
+  });
+
+  test("a Bash cat of the installed review SKILL.md loads the phase, with or without a methodology command", () => {
+    const command = "cat /root/.claude/skills/gstack/plan-design-review/SKILL.md";
+    expect(autoplanExposure(bashRead(both(), "r2", command)).exposed).toBe(true);
+    expect(autoplanExposure(dropCall(bashRead(both(), "r2", command), "m2")).exposed).toBe(true);
+  });
+
+  test("a session shaped like R61 session 2 (CEO by the manifest, DX and Eng by a piped command and a Read, reports in order) reads exposed", () => {
+    expect(autoplanExposure(r61())).toMatchObject({ exposed: true, failed: null, phases: ["ceo", "dx", "eng"], published: ["ceo", "dx", "eng"] });
+  });
+
+  test("a methodology file read only after the phase's first publish does not load it", () => {
+    expect(loads(move(pipe(both(), "m3"), "r3", "p3"))).toBe(false);
+    expect(loads(move(bashRead(pipe(both(), "m3"), "r3", "cat " + DX), "r3", "p3"))).toBe(false);
+  });
+
+  test("another phase's methodology file does not load the phase, even after the phase's own command ran", () => {
+    const eng = pipe(both(), "m3");
+    useOf(eng, "r3").input.file_path = "/work/repo/.gstack/tmp/autoplan/autoplan-eng-methodology-Ab4/methodology.md";
+    expect(failed(autoplanExposure(eng))).toEqual([false, "review_skills_loaded"]);
+    const dx = pipe(both(), "m2");
+    useOf(dx, "r2").input.file_path = "/work/repo/.gstack/tmp/autoplan/autoplan-dx-methodology-Zz9/methodology.md";
+    expect(failed(autoplanExposure(dx))).toEqual([false, "review_skills_loaded"]);
+    expect(loads(bashRead(pipe(both(), "m2"), "r2", "cat /work/repo/.gstack/tmp/autoplan/autoplan-dx-methodology-Zz9/methodology.md"))).toBe(false);
+  });
+
+  test("a methodology file read with no ok methodology command for the phase before it does not load the phase", () => {
+    expect(loads(dropCall(pipe(both(), "m3"), "m3"))).toBe(false);
+    expect(loads(move(pipe(both(), "m3"), "m3", "r3"))).toBe(false);
+    expect(loads(bashRead(dropCall(pipe(both(), "m3"), "m3"), "r3", "cat " + DX))).toBe(false);
+    for (const result of [{ is_error: true, content: "error: no such phase" }, { is_error: false, content: "<tool_use_error>denied by hook</tool_use_error>" }]) {
+      const rs = pipe(both(), "m3");
+      Object.assign(resultOf(rs, "m3"), result);
+      expect([result, loads(rs)]).toEqual([result, false]);
+    }
+  });
+
+  test("a subagent's Read, or one in turn 1 or turn 3, does not load the phase", () => {
+    const sub = pipe(both(), "m3");
+    for (const r of callRecords(sub, "r3")) r.parent_tool_use_id = "toolu_native";
+    expect(loads(sub)).toBe(false);
+    for (const phase of ["t1", "t3"]) {
+      const rs = pipe(both(), "m3");
+      for (const r of callRecords(rs, "r3")) r.phase = phase;
+      expect([phase, loads(rs)]).toEqual([phase, false]);
+    }
+  });
+
+  test("a failed Read, and a Bash read that errors or returns nothing, do not load the phase", () => {
+    for (const result of [{ is_error: true, content: "<tool_use_error>File does not exist.</tool_use_error>" }, { is_error: false, content: "<tool_use_error>denied by hook</tool_use_error>" }]) {
+      const rs = pipe(both(), "m3");
+      Object.assign(resultOf(rs, "r3"), result);
+      expect([result, loads(rs)]).toEqual([result, false]);
+    }
+    for (const result of [{ is_error: true, content: "cat: " + DX + ": No such file or directory" }, { is_error: false, content: "" }, { is_error: false, content: "\n  \n" }]) {
+      const rs = bashRead(pipe(both(), "m3"), "r3", "cat " + DX);
+      Object.assign(resultOf(rs, "r3"), result);
+      expect([result, loads(rs)]).toEqual([result, false]);
+    }
+  });
+
+  test("compound Bash reads and commands that are not reads do not load the phase", () => {
+    const SKILL = "/root/.claude/skills/gstack/plan-design-review/SKILL.md";
+    const commands = (f: string) => ["cd /work/repo && cat " + f, "cat " + f + "; echo", "echo $(cat " + f + ")", "cat " + f + " | head -5", "true\ncat " + f, "cat --help " + f, "head --version " + f, "wc -l " + f, "ls " + f, "grep -n Review " + f, "awk '{print}' " + f];
+    for (const command of commands(DX)) expect([command, loads(bashRead(pipe(both(), "m3"), "r3", command))]).toEqual([command, false]);
+    for (const command of commands(SKILL)) expect([command, loads(bashRead(dropCall(both(), "m2"), "r2", command))]).toEqual([command, false]);
+  });
+
+  test("a methodology.md outside an autoplan-<phase>-methodology-<suffix> folder does not load the phase", () => {
+    const D = "/work/repo/.gstack/tmp/autoplan/";
+    for (const path of [D + "methodology.md", D + "autoplan-dx-methodology.md", D + "xautoplan-dx-methodology-Ab3/methodology.md", D + "autoplan-dx-methodology-/methodology.md", D + "autoplan-dx-methodology-Ab3/old/methodology.md", D + "autoplan-dx-methodology-Ab3/methodology.md.bak", D + "autoplan-dx-Ab3/methodology.md"]) {
+      const rs = pipe(both(), "m3");
+      useOf(rs, "r3").input.file_path = path;
+      expect([path, loads(rs), loads(bashRead(pipe(both(), "m3"), "r3", "cat " + path))]).toEqual([path, false, false]);
+    }
+  });
+
+  test("a session shaped like R61 session 1 (every load credited, reports eng, ceo, eng, dx) reads unexposed on findings_in_order", () => {
+    const rs = r61();
+    const block = (d: string, g: string) => rs.slice(rs.indexOf(withUse(rs, d)), rs.indexOf(withResult(rs, g)) + 1);
+    const report = (n: string, p: string) => [textRecord(rs, new RegExp("^\\*\\*Phase " + n + " complete")), ...callRecords(rs, p)];
+    const again = structuredClone(report("3", "p4"));
+    const [use, res] = [useOf(again, "p4"), resultOf(again, "p4")];
+    use.id = res.tool_use_id = "p5";
+    const start = rs.indexOf(withUse(rs, "d1")), end = rs.indexOf(withResult(rs, "p4"));
+    rs.splice(start, end - start + 1, ...block("d1", "g1"), ...block("d3", "g3"), ...block("d4", "g4"), ...report("3", "p4"), ...report("1", "p1"), ...again, ...report("2\\.5", "p3"));
+    expect(autoplanExposure(rs)).toMatchObject({ exposed: false, failed: "findings_in_order", checks: { review_skills_loaded: true }, phases: ["ceo", "dx", "eng"], published: ["eng", "ceo", "eng", "dx"] });
+  });
+
+  test("every load credited but a phase published without its report reads unexposed on findings_in_order", () => {
+    expect(autoplanExposure(dropText(r61(), /^\*\*Phase 2\.5 complete/m))).toMatchObject({ exposed: false, failed: "findings_in_order", checks: { review_skills_loaded: true }, published: ["ceo", "eng"] });
+  });
+});
+
 describe("transcripts and the detector table", () => {
   test("a torn last line is dropped and counted; a bad line before the end is refused", () => {
     const { records, torn } = readTranscript(join(FIX, "plan-eng-review-exposed.jsonl"));
