@@ -1,0 +1,97 @@
+## P. Pins
+PASS build commit 2ef58339524591c50a3c4bdfd79b7ea2218ca5b8 exports tree 5ba405f13f82a6111e74a5851d9d7008b0e68e29
+PASS scorer ceo-rule.ts.txt (stage 2 scorer post) sha256 31a56dd12b531f1cd1f26519921cc2731e7d7ea2b6e215e117d220c7b0c9573a
+PASS stage2-sizing.txt (stage 2 amendment), the grid compare reads sha256 d9edc0e4a5f6f621a79621b06b81fe03571c0000dff7df5b48b00cce90e24c68
+PASS template.txt (prereg) sha256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862
+PASS judge-brief.md (ladder amendment) sha256 d7b3dce1498e01e874f1dae024ac90e79e5ff5e3af12cc5ed37e2f8a48a14fb5
+PASS stock-list.txt (ladder amendment) sha256 9ecbc78e696836bd11c3e89df1cc1cb0b0e28940b92e7dd3a96846224e47fe3c
+PASS suite-stub.json (this post), the stub of the comparison suite every stage 2 command passes sha256 2e5cdb41c78916ef746aa14b60fb80a117266e4182639578b4cb0004786d88d3
+PASS mkunits-cmp.ts.txt (this post), which built the comparison suite and builds the public units in section U sha256 0d63f66178a509f5386639e4eb17d60ba3cf40f6feac7fe8aec77ad8e049d01e
+PASS projection.txt (this post), the projection output the stage 2 runs read with --projection sha256 01fd5e8dc4b4b56c3b317afce0f4d9f92727097149fa877394d96669ceff9f57
+PASS dryrun-opus.ts.txt (this post), section R's run loop sha256 06063de74538cae7dd2b789e064a711fda52a4695cf224fe42cfbc773af62b98
+PASS exposure digest CEO_EXPOSURE_SHA256 006529475723657f1823d7be18997b865c43e4d9d89b93d0aa956ee2f4f1e5a2 equals ceo-exposure.ts's own sha256; it is no longer c0498fa065cb..., the digest the CEO pin post and part 2 pinned at 715c659
+PASS parser CEO_PARSER_SHA256 8d1826c539a636d03a67d35073175c1dcaa34ee325d8f36226308a9aa7c851d8 equals ceo-outcome.ts's own sha256, as at 715c659; template CEO_TEMPLATE_SHA256 b7c4c11020eff83695534cb32f10f019824b8775d92a1b1237ce72aeea05d862
+PASS FORCED_LINE equals CEO v2's forced-line.txt (sha256 d4f56ad4...) byte for byte
+PASS enforced arm gstack-enforced@4743132ca027d487fb02bb5f8ce94f2816ff8e7c; gstack config {"ceo_review_gate":"on"}; session key GATE_KEY {"settings":"gstack-skill-gates settings --ceo-review","hook_timeout_s":30,"deadline_ms":20000} (deviation B1: 30 s on the two ceo-review shims, where gstack at the pin prints 10)
+PASS every ceo-outcome arm's context env is {"CLAUDE_CODE_DISABLE_1M_CONTEXT":"1"} (deviation D1: a 200,000-token window)
+    ROUTE openai/gpt-6.1-sol {"only":["openai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":4,"completion":15,"request":0,"image":0}} sha256 a1d757518f019a46e77ccacdbdfc1c3f53d8aaf91fd15811a07c6f07505fac4b
+    ROUTE particle-ai/particle-1 {"only":["particle-ai"],"allow_fallbacks":false,"data_collection":"deny","max_price":{"prompt":0.1,"completion":1,"request":0,"image":0}} sha256 3f811be60bac42e0c29ab989f0c9522bb28d1f45e1da4d652f89b246afd991a0
+PASS both OpenRouter routes are byte for byte the part 2 pin post's (sha256 a1d75751... and 3f811be6...): data_collection deny, one pinned provider, no fallback
+    PRICE anthropic:claude-opus-5-5 4/20/0.2/5
+    PRICE anthropic:claude-sonnet-5-5 2/10/0.2/2.5
+    PRICE openai:gpt-6.1-sol 2/10/0.1/2.5 long 4/15/0.2/5 above 272000
+    PRICE openrouter:openai/gpt-6.1-sol 2/10/0.1/2.5 long 4/15/0.2/5 above 272000
+    PRICE openrouter:particle-ai/particle-1 0.1/1/0.003/-
+PASS the price table at the build commit equals the part 2 pin post's, in dollars per million tokens (input/output/cache read/cache write): Opus 4/20/0.2/5, Sonnet 2/10/0.2/2.5, Sol 2/10/0.1/2.5 and 4/15/0.2/5 past 272k prompt tokens on both routes, particle-1 0.1/1/0.003; the proxy reserves 32768 output tokens a call
+PASS projection.txt holds one PASS line, at 'as planned' with every cell, held passes 1, 1 pass on Sol and particle-1, changed 84 of 84 and held 28 of 30
+PASS projection.txt's caps: opus-p $179, opus-e $187, sol-p $126, sol-e $136, particle-p $12, particle-e $23 and the judges' shared line $70, total $733 inside the $809.53 envelope; every trip check holds
+
+## U. Five invented public units
+PASS mkunits-cmp.ts builds 5 invented public units, 3 changed and 2 held: {"units":5,"changed":3,"held":2,"base_sha256":"3cd258390c9376d8dbcafde06635998dafeaf915ec9c782b62b32fb5c5cbfa04","suite_sha256":"2fbb192ea50b48393ac3b08df8eda86d67d796a7f8eed962f9afc858389881db","order_sha256":"6889863ae76416835aa305403385ec6c30441ccd0a98305e77fd1c9b1409ac5b"}
+PASS noloss suite --check passes the public suite (key.json fields and plan.md present)
+PASS section 2's unit lists, run on the public order: changed 3 (the first 3 changed in seeded order), held 1 (the first held, one for every three changed); the second held unit goes unrun, as 2 of stage 2's 30 do
+
+## R. The Opus two-launch sequence, end to end on the public units
+ceo-o-cmp-opus-p (none, lens and standalone) runs launch 1 (changed units, 2 passes) and then launch 2 (the held unit, 1 pass) in a second out dir seeded with a copy of launch 1's run.json, through runReviewUnits with the real Claude Code driver and the real pinned Agent SDK against the stub CLI (dryrun-opus.ts.txt). Launch 2's spend cap is what the item has left after launch 1. Every stub session writes one ceo-outcome block, and the stub CLI calls no model, so every session settles $0 (section L drives the ledger). ceo-o-cmp-opus-e's launches take the same flags and the same run.json seeding (section D); its sessions need gstack 4743132's installed gate, which #248's armed test drives through the pinned CLI, so the stub doesn't run them.
+    item ceo-o-cmp-opus-p launch 1 out_fresh_before True run_id review-units-dry-ceo-o-cmp-opus-p prior_run_id None units 3 passes 2 sessions 18 stops 0 usd 0
+    item ceo-o-cmp-opus-p launch 2 out_fresh_before True run_id review-units-dry-ceo-o-cmp-opus-p prior_run_id review-units-dry-ceo-o-cmp-opus-p units 1 passes 1 sessions 3 stops 0 usd 0 spend_cap 179
+PASS the run loop exits 0; launch 1 ran 18 sessions (3 changed units, 2 passes, none, lens and standalone) and launch 2 ran 3 (1 held unit, 1 pass)
+PASS each launch 2 started in a dir that did not exist, took launch 1's run id from the seeded run.json, and its journal holds only its own sessions, so no unit or spend is counted twice: $0 and $0
+    public PASS line, in projection's grammar with opus-p's cells only: Projection: PASS at 'as planned'; record these caps; cells: none:opus, standalone:opus, lens:opus; held passes 1; 1 pass on sol, particle; units: changed 3 of 3, last example/driftnote#4@eb7016449bf9; held 1 of 2, last example/driftnote#3@6bca96a3c5f0
+    checks: 21 sessions, 14 pass, 7 fail: standalone:opus:example/driftnote#1@7efa7d8b597b:p1 (review_sections_read), standalone:opus:example/driftnote#1@7efa7d8b597b:p2 (review_sections_read), standalone
+PASS ceo rows --stage 2 --checks over both launches' dirs plans and finds 21 sessions (none, lens and standalone on Opus: 3 changed units at 2 passes and 1 held unit at 1, 7 a cell), every one journaled with a readable transcript at its task path and end state scored, so no gap: 21 session lines, 21 scored, 21 with a readable transcript
+    exit 1: the stub makes no Skill call, so the standalone sessions fail their exposure checks; no other check fails
+PASS the only failing checks are standalone's exposure checks, on stub sessions that load no skill; each standalone session's transcript reads at its task path
+PASS a dir passed twice is refused (exit 2)
+PASS a held session found in two dirs is refused as in two places (exit 2), so a launch 2 copied or rerun can't count twice
+
+## D. review-units --dry-run, every stage 2 launch command on the public units, with the fresh-sink check
+Each command is section 2's with --suite, --sealed-root, --source and --out pointed at the public units, the public unit lists in place of section 2's, and the ledger flags dropped. Each runs with GSTACK_EVALS_EPHEMERAL=1 and GSTACK_EVALS_RECEIPTS naming its launch's sink.
+PASS ceo-o-cmp-opus-p-1: sink absent before (1) and after (1); exit 0; 3 units at --passes 2, 18 sessions; the gstack arm unattended (1); the 200,000-token window (1); worst case $126.72 at $7.04 a session; a round of 3 at the allowance fits the $179 cap
+PASS ceo-o-cmp-opus-e-1: sink absent before (1) and after (1); exit 0; 3 units at --passes 2, 6 sessions; the gstack arm unattended (1); the 200,000-token window (1); worst case $42.24 at $7.04 a session; a round of 1 at the allowance fits the $187 cap
+Launch 2's spend caps here are sample figures; section 2 sets each from the ledger after launch 1 settles.
+PASS ceo-o-cmp-opus-p-2: sink absent before (1) and after (1); exit 0; 1 units at --passes 1, 3 sessions; the gstack arm unattended (1); the 200,000-token window (1); worst case $21.12 at $7.04 a session; a round of 3 at the allowance fits the $160.00 cap
+PASS ceo-o-cmp-opus-e-2: sink absent before (1) and after (1); exit 0; 1 units at --passes 1, 1 sessions; the gstack arm unattended (1); the 200,000-token window (1); worst case $7.04 at $7.04 a session; a round of 1 at the allowance fits the $170.00 cap
+PASS ceo-o-cmp-sol-p: sink absent before (1) and after (1); exit 0; 4 units at --passes 1, 8 sessions; the gstack arm unattended (1); the 200,000-token window (1); worst case $80.00 at $10 a session; a round of 2 at the allowance fits the $126 cap
+PASS ceo-o-cmp-sol-e: sink absent before (1) and after (1); exit 0; 4 units at --passes 1, 4 sessions; the gstack arm unattended (1); the 200,000-token window (1); worst case $40.00 at $10 a session; a round of 1 at the allowance fits the $136 cap
+PASS ceo-o-cmp-particle-p: sink absent before (1) and after (1); exit 0; 4 units at --passes 1, 8 sessions; the gstack arm unattended (1); the 200,000-token window (1); worst case $4.00 at $0.5 a session; a round of 2 at the allowance fits the $12 cap
+PASS ceo-o-cmp-particle-e: sink absent before (1) and after (1); exit 0; 4 units at --passes 1, 4 sessions; the gstack arm unattended (1); the 200,000-token window (1); worst case $2.00 at $0.5 a session; a round of 1 at the allowance fits the $23 cap
+Launch 2 resumes launch 1's run, so it must repeat launch 1's --max-turns, --session-kind, --allowance and --arm-session-kind (src/trial/review/cli.ts:337-350). Section R's opus-p launch 2 dir holds the seeded run.json.
+PASS launch 2 with launch 1's flags resumes (dry run exit 0), and with --max-turns 100 it is refused with E_CACHE_STALE
+PASS launch 2 with --allowance 7.04 on Opus, where launch 1 took the default, is refused
+PASS launch 2 without --arm-session-kind is refused
+
+## L. Ledger: one temporary-ledger item per stage 2 run and judge item
+A temporary approval record and local ledger; the approvals mirror is a stub. Each item is recorded with ledger init at its cap (--admission warn), leased with ledger lease as review-units leases it (--amount its --spend-cap), charged its projected spend at projection.txt's per-session figures through the local ledger's reserve and settle (the path the metering proxy uses), and closed with ledger settle. Each Opus item takes two leases on one run: launch 1 at its cap, then launch 2 at what the item has left.
+PASS ceo-o-cmp-opus-p: init at $179 (exit 0); launch 1's lease at $179, spend $107.71, settled (exit 0), leaving $71.29; launch 2's lease on the same run at $71.30 refused with CAP_STOP, at $71.29 opened, spend $17.95, settled (exit 0); committed $125.66, leases 2, none open, bound to its one run; another run refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-opus-e: init at $187 (exit 0); launch 1's lease at $187, spend $113.35, settled (exit 0), leaving $73.65; launch 2's lease on the same run at $73.66 refused with CAP_STOP, at $73.65 opened, spend $18.89, settled (exit 0); committed $132.24, leases 2, none open, bound to its one run; another run refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-sol-p: init at $126 (exit 0), one lease, spend $84.66 (exit 0), settle (exit 0); committed $84.66, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-sol-e: init at $136 (exit 0), one lease, spend $84.74 (exit 0), settle (exit 0); committed $84.74, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-particle-p: init at $12 (exit 0), one lease, spend $8.30 (exit 0), settle (exit 0); committed $8.30, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS ceo-o-cmp-particle-e: init at $23 (exit 0), one lease, spend $16.61 (exit 0), settle (exit 0); committed $16.61, leases 1, none open, bound to its run; a second run refuses with E_ITEM_BOUND
+PASS the six run caps sum to $663.00, projection's run caps
+The judges share one $70.00 cap (the smoke pin post's section 4.5): they run one at a time, and each is recorded at $70.00 less what the earlier judge items settled. Each is charged $9.25, a third of projection's $27.75.
+PASS ceo-o-cmp-judge-sol: init at $70.00 (exit 0), one lease at what it has left, spend $9.25, settled (exit 0); leases 1, none open
+PASS ceo-o-cmp-judge-opus: init at $60.75 (exit 0), one lease at what it has left, spend $9.25, settled (exit 0); leases 1, none open
+PASS ceo-o-cmp-judge-sonnet: init at $51.50 (exit 0), one lease at what it has left, spend $9.25, settled (exit 0); leases 1, none open
+PASS the three judge caps never pass the shared $70.00 line: after three judges $42.25 is left of it
+
+## A. The all-in check on crew actuals at the reading (2026-11-07T01:42:52.868Z)
+crew_spent is the 26 CEO crew threads' platform counters before authoring plus this thread's at the reading, at about $1 per 1,000 credits; crew_rest is this thread's tokens left to its 80M stop and the run thread and results post still to come, at the table's $0.40 per million tokens; authoring is the five authoring threads' counters. The smoke line is the rerun's settled spend, and the run caps and judges are projection.txt's.
+    All-in check (#214, on the stage 2 amendment's table): crew spent $645.62 + crew rest $86.57 + crew reserve $30.00 + stage 1 settled $17.60 + smoke rerun caps $5.10 + authoring and mining $392.65 + runner hosts $12.93 + stage 2 run caps $663.00 + stage 2 judges, one shared cap $70.00 = $1923.47
+    stage 2 run caps: ceo-o-cmp-opus-p $179.00, ceo-o-cmp-opus-e $187.00, ceo-o-cmp-sol-p $126.00, ceo-o-cmp-sol-e $136.00, ceo-o-cmp-particle-p $12.00, ceo-o-cmp-particle-e $23.00
+    All-in: PASS ($76.53 to spare)
+PASS allin exits 0 and passes at $1923.47: All-in: PASS ($76.53 to spare)
+## O. OpenRouter's public feed, read keyless at 2026-11-07T01:57:48Z
+PASS openai/gpt-6.1-sol: 2 of 9 endpoints: openai/flex, openai serve inside the route's only and max_price
+PASS particle-ai/particle-1: 1 of 1 endpoints: particle-ai/us serve inside the route's only and max_price
+    OpenRouter data policy feed, openai: {"training": false, "trainingOpenRouter": false, "retainsPrompts": true, "canPublish": false, "safetyRetention": false}
+PASS openai: OpenRouter's data policy feed (api/frontend/v1/all-providers, the source of its provider-logging page) records no training on prompts and no publishing, so data_collection deny keeps it
+    OpenRouter data policy feed, particle-ai: {"training": false, "trainingOpenRouter": false, "retainsPrompts": false, "canPublish": false, "safetyRetention": false}
+PASS particle-ai: OpenRouter's data policy feed (api/frontend/v1/all-providers, the source of its provider-logging page) records no training on prompts and no publishing, so data_collection deny keeps it
+
+## Leak check
+PASS the transcript holds no home path, no work dir path and no key-like string
+
+PASS 56, FAIL 0
+DRYRUN: ok

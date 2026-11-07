@@ -1,0 +1,12 @@
+# Stage 2 MDD at 84 changed units, from the stage 2 amendment's power model (stage2-sizing.py), as the custody
+# addendum's check ran it at 84 and 90. Usage: python3 mdd-84.py <path to stage2-sizing.py>
+import sys
+import numpy as np
+src = open(sys.argv[1]).read()
+exec(src[src.index("SIMS, FLIPS"):src.index("rng = np.random.default_rng(SEED)")])
+SEED = 20261106
+rng = np.random.default_rng(SEED)
+n = 84
+for who, p0, ps in (("Opus", 0.50, 2), ("Sol", 0.344, 1), ("particle-1", 0.344, 1)):
+    r = [mdd(power_logit, p0, 0.843, n, ps, al, rng) for al in (0.05, 0.025)] + [mdd(power_rank, p0, 0.843, n, ps, al, rng) for al in (0.05, 0.025)]
+    print("n %d %-10s passes %d ICC 0.843 logit a0.05 %s a0.025 %s rank a0.05 %s a0.025 %s" % (n, who, ps, *r), flush=True)
