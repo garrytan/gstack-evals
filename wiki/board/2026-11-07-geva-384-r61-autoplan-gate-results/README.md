@@ -14,8 +14,6 @@ links:
   - 2026-11-06-geva-364-g-admission-results
   - lanes/outcome-skills/arms/exposure.ts
 attachments:
-  - f15e31c02587526f9976427aab0c5058da7333c5afbf40c37ba2d717aa7cbda1  skill-gates-report-s1.txt
-  - 9307d1bee52321fd4a48687af024f5e4d69c405202e82a16ed98038ae1a86c17  skill-gates-report-s2.txt
   - 02b81684da4288c8d26620fea87db98e8ac982f6ec50207126ba04f6dba350f6  pre-r48-check.txt
   - 5d81f54ebd30ccec86dbfc4f2791f7cfc8f154e5b8958f4d49819d472b33791e  read.txt
   - 0b80c4e439c41f6c4673d1cb688036c7ebfda76300e9d8605fbcfa862fdfe43f  session-facts.txt
@@ -34,7 +32,7 @@ Publication status: unpublished. This is the record of a preregistered exposure 
 | Prereg | [R61 prereg](../../plans/2026-11-07-geva-375-r61-autoplan-gate-exposure-prereg.md), merged as 2b596ec6 |
 | Run commit | 2b596ec64cbe691b3e51eb5ee7fdca589902077d, the prereg's merge. rig.yml run 42343856227 passed there (Deviations, item 4). |
 | Told arm | gstack ca5dbfc7e0016e3a1511161dc8c094399a2e350b (1.97.0.0), lite loadout with `--autoplan-gate` |
-| Data | The run's exported results in the Captain's drive, checked against their sha256 manifest. read.txt, session-facts.txt, settle.txt and the two skill-gates reports (JSON, saved as .txt) are byte-identical copies. pre-r48-check.txt holds the lines this post's own check printed. The session records and T-G stay sealed. |
+| Data | The run's exported results in the Captain's drive, checked against their sha256 manifest. read.txt, session-facts.txt and settle.txt are byte-identical copies. pre-r48-check.txt holds the lines this post's own check printed. The session records and T-G stay sealed. |
 | Reviewed by | The /ship review of this post, recorded in its pull request |
 | Reproduced by | Not yet |
 
@@ -81,7 +79,7 @@ The gate counts a publish from "Phase N ... complete" wording and also needs the
 | Applicable phases | ceo, dx, eng | ceo, dx, eng |
 | Published, as the detector counts them | eng, ceo, eng, dx | ceo, dx, eng |
 
-**The gate's own reading** (report-only: `gstack-skill-gates report --expect armed`, in skill-gates-report-s1.txt and skill-gates-report-s2.txt). It decides nothing.
+**The gate's own reading** (report-only: `gstack-skill-gates report --expect armed`, as read.txt and session-facts.txt record it). It decides nothing.
 
 | | Session 1 | Session 2 |
 |---|---|---|
@@ -201,7 +199,7 @@ The batch runs one trial at a time and reads each with r61-read.ts, whose lines 
 
 ## What is held out, and why
 
-T-G stays sealed: its tasks, statements and hidden tests. R61's image manifest stays sealed; its sealed copy's sha256 is 2ace6164ea4f5a6ec595bdb0befc301c929aa40f60d78c6bfc74293efc25a194. The session records stay sealed, because they quote task code. The rerun inputs sit in the Captain's drive under their manifest (84 files; MANIFEST.txt sha256 c62e1b19f318bb6aabb3eb7badaf3a262806a0d8f44235289560c9f9c73af229).
+T-G stays sealed: its tasks, statements and hidden tests. R61's image manifest stays sealed; its sealed copy's sha256 is 2ace6164ea4f5a6ec595bdb0befc301c929aa40f60d78c6bfc74293efc25a194. The session records stay sealed, because they quote task code. The two gate report files stay with the rerun inputs, because they carry Claude Code session ids; read.txt and session-facts.txt carry their counts. The rerun inputs sit in the Captain's drive under their manifest (84 files; MANIFEST.txt sha256 c62e1b19f318bb6aabb3eb7badaf3a262806a0d8f44235289560c9f9c73af229).
 
 ## Attribution
 
