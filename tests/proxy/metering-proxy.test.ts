@@ -839,6 +839,34 @@ describe("upstream error bodies in the journal", () => {
     expect(res.status).toBe(404);
     expect(t.journal().filter(l => l.kind === "free")).toEqual([expect.objectContaining({ status: 404, upstream_body: JSON.stringify(missing) })]);
   });
+
+  test("a JSON array body keeps only its size", async () => {
+    const list = '[{"error":{"message":"x"}}]';
+    const t = setup(() => new Response(list, { status: 400 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    expect(outcomes(t).map(l => l.upstream_body)).toEqual([`[not a JSON object, ${list.length} bytes]`]);
+  });
+
+  test("the 4,096-byte cut never splits a multibyte character", async () => {
+    const t = setup(() => Response.json({ e: "a".repeat(4085) + "€€€" }, { status: 400 }));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    const kept = outcomes(t)[0]!.upstream_body as string;
+    expect(Buffer.byteLength(kept)).toBeLessThanOrEqual(4096);
+    expect(kept).not.toContain("\uFFFD");
+    expect(kept).toEndWith("a€");
+  });
+
+  // Value: protects=a diagnostic field never stops a paid call from settling; fails_when=an error body the proxy cannot serialize again throws before settle, leaving no outcome line and the ledger hold open; why_new=journaling upstream error bodies; seam=the paid path's settle; no_claim=bodies a provider would really send
+  test("an error body too deep to serialize again still settles its call, with a size note", async () => {
+    const deep = '{"a":'.repeat(50_000) + "1" + "}".repeat(50_000);
+    const t = setup(() => new Response(deep, { status: 400, headers: { "content-type": "application/json" } }));
+    const a = t.bind({ models });
+    const res = await t.call(a.slot, a.token, PATH, chat());
+    expect(res.status).toBe(400);
+    expect(outcomes(t)).toEqual([expect.objectContaining({ status: 400, upstream_body: `[unreadable, ${deep.length} bytes]` })]);
+  });
 });
 
 describe("retries", () => {

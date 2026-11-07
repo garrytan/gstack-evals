@@ -18,7 +18,8 @@
 //   budget, a 429 pauses every call to that provider (the limiter), and a lost send is never retried.
 // - Refusals are problem-details JSON (RFC 9457) carrying a reason code from src/errors/codes.ts.
 // - A non-2xx answer's error JSON is journaled with its call (upstreamBody): keys redacted, its first 4,096 bytes, and
-//   withheld when it is not a JSON object or repeats the request's text, so the journal never holds a prompt or a reply.
+//   withheld when it is not a JSON object or repeats the request's text, so the journal holds no prompt it sent. Model output
+//   that an error quotes is not in the request, so it can be kept.
 // - OpenAI chat streams get stream_options.include_usage forced on; Anthropic Messages and OpenAI Responses streams are
 //   metered from their own final usage events.
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
@@ -263,8 +264,9 @@ const ECHO_CHARS = 24;
 
 /**
  * What the journal keeps of a non-2xx answer: its error JSON, compact, every secret redacted, cut to its first
- * UPSTREAM_BODY_BYTES bytes. An answer that is not a JSON object, or whose kept text repeats ECHO_CHARS characters of any
- * string in the request other than its model id (a prompt quoted back), is kept only as a note of its size.
+ * UPSTREAM_BODY_BYTES bytes at a whole character. An answer that is not a JSON object (an array included), that cannot be
+ * serialized again, or whose kept text repeats ECHO_CHARS characters of any string in the request other than its model id
+ * (a prompt quoted back), is kept only as a note of its size.
  */
 export function upstreamBody(text: string, request: unknown, secrets: readonly string[]): string {
   const bytes = Buffer.byteLength(text);
@@ -272,18 +274,24 @@ export function upstreamBody(text: string, request: unknown, secrets: readonly s
   try {
     parsed = JSON.parse(text);
   } catch {}
-  if (!parsed || typeof parsed !== "object") return `[not a JSON object, ${bytes} bytes]`;
-  const redacted = secrets.reduce((t, s) => (s ? t.split(s).join("[redacted]") : t), JSON.stringify(parsed));
-  const kept = Buffer.from(redacted).subarray(0, UPSTREAM_BODY_BYTES).toString("utf8");
-  const runs = new Set<string>();
-  for (let i = 0; i + ECHO_CHARS <= kept.length; i++) runs.add(kept.slice(i, i + ECHO_CHARS));
-  const model = (request as { model?: unknown } | null | undefined)?.model;
-  for (const s of decodedStrings(request)) {
-    if (s === model) continue;
-    const escaped = JSON.stringify(s).slice(1, -1);
-    for (let i = 0; i + ECHO_CHARS <= escaped.length; i++) if (runs.has(escaped.slice(i, i + ECHO_CHARS))) return `[withheld: it repeats the request's text, ${bytes} bytes]`;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return `[not a JSON object, ${bytes} bytes]`;
+  try {
+    const redacted = Buffer.from(secrets.reduce((t, s) => (s ? t.split(s).join("[redacted]") : t), JSON.stringify(parsed)));
+    let end = Math.min(redacted.length, UPSTREAM_BODY_BYTES);
+    if (end < redacted.length) while (end > 0 && (redacted[end]! & 0xc0) === 0x80) end--;
+    const kept = redacted.subarray(0, end).toString("utf8");
+    const runs = new Set<string>();
+    for (let i = 0; i + ECHO_CHARS <= kept.length; i++) runs.add(kept.slice(i, i + ECHO_CHARS));
+    const model = (request as { model?: unknown } | null | undefined)?.model;
+    for (const s of decodedStrings(request)) {
+      if (s === model) continue;
+      const escaped = JSON.stringify(s).slice(1, -1);
+      for (let i = 0; i + ECHO_CHARS <= escaped.length; i++) if (runs.has(escaped.slice(i, i + ECHO_CHARS))) return `[withheld: it repeats the request's text, ${bytes} bytes]`;
+    }
+    return kept;
+  } catch {
+    return `[unreadable, ${bytes} bytes]`;
   }
-  return kept;
 }
 
 /** Every string a parsed JSON value holds, keys included, decoded from its escapes, so the tripwire sees what the provider will read. */
