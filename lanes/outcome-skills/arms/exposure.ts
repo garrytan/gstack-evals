@@ -85,16 +85,48 @@ const TEST_PLAN_BASH = /^(?:\$\{?PROJECT_DIR\}?|.*\/projects\/[^/]+)\/[^/]+-eng-
  * one pipe; the caller decides what the pipe may feed. Returns the command line split at its pipe, or null. */
 function simpleCommand(command: string): string[] | null {
   const [head, ...rest] = command.split("\n");
-  const heredocs = [...head!.matchAll(/(?<!<)<<(?!<)(-?)\s*(["']?)(\w+)\2/g)];
-  if (heredocs.length > 1) return null;
-  const doc = heredocs[0];
-  const end = doc ? rest.findIndex((l) => (doc[1] ? l.replace(/^\t+/, "") : l) === doc[3]) : -1;
-  if (doc ? end < 0 || rest.slice(end + 1).some((l) => l.trim()) : rest.some((l) => l.trim())) return null;
+  if (!heredocCloses(head!, rest)) return null;
   const bare = head!.replace(/'[^']*'/g, (m) => "'" + "_".repeat(m.length - 2) + "'").replace(/\d*>&\d*-?|&>>?/g, (m) => " ".repeat(m.length));
   if (/&|;|`|\$\(|\|\|/.test(bare) || /^\s*!/.test(bare) || /(?:^|\|)\s*(?:if|case|for|while|until)\b/.test(bare)) return null;
   const pipes = [...bare.matchAll(/\|/g)].map((m) => m.index!);
   if (pipes.length > 1) return null;
   return pipes.length ? [head!.slice(0, pipes[0]), head!.slice(pipes[0]! + 1)] : [head!];
+}
+
+/** Whether the lines after a command's first are blank, or the body of the one heredoc the first line opens, closed by its
+ * delimiter with nothing but blank lines after. */
+function heredocCloses(head: string, rest: string[]): boolean {
+  const heredocs = [...head.matchAll(/(?<!<)<<(?!<)(-?)\s*(["']?)(\w+)\2/g)];
+  if (heredocs.length > 1) return false;
+  const doc = heredocs[0];
+  const end = doc ? rest.findIndex((l) => (doc[1] ? l.replace(/^\t+/, "") : l) === doc[3]) : -1;
+  return doc ? end >= 0 && !rest.slice(end + 1).some((l) => l.trim()) : !rest.some((l) => l.trim());
+}
+
+/** The command with each single- or double-quoted string blanked to underscores, quotes included, so offsets still match. */
+const unquoted = (command: string) => command.replace(/'[^']*'|"(?:[^"\\]|\\[^])*"/g, (m) => "_".repeat(m.length));
+
+/** The command up to its shell comment: a # at the start or after whitespace, outside quotes. */
+function uncommented(command: string): string {
+  const at = unquoted(command).search(/(?<!\S)#/);
+  return at < 0 ? command : command.slice(0, at);
+}
+
+/** Whether a methodology call whose snapshot invocation starts at offset at ran by itself: one command with no &&, ||, ;,
+ * &, !, $( or backtick outside quotes and before any comment, piped at most once with the invocation before the pipe, or
+ * redirected to a file. A line continuation joins lines; any other line must sit inside quotes or in a heredoc that closes. */
+function soleCall(command: string, at: number): boolean {
+  const joined = command.replace(/\\\n/g, "  ");
+  const nl = unquoted(joined).indexOf("\n");
+  const head = nl < 0 ? joined : joined.slice(0, nl);
+  const code = uncommented(head);
+  const bare = unquoted(code);
+  if (at >= code.length || [...code.matchAll(/<</g)].some((m) => !bare.startsWith("<<", m.index))) return false;
+  if (!heredocCloses(code, nl < 0 ? [] : joined.slice(nl + 1).split("\n"))) return false;
+  const ops = bare.replace(/\d*>&\d*-?|&>>?/g, (m) => " ".repeat(m.length));
+  if (/&|;|`|\$\(|\|\|/.test(ops) || /^\s*!/.test(ops)) return false;
+  const pipes = [...ops.matchAll(/\|/g)].map((m) => m.index!);
+  return pipes.length === 0 || (pipes.length === 1 && at < pipes[0]!);
 }
 
 /** The files a simple command writes: each > or >> target outside quotes and before a comment (never a numbered or & redirect
@@ -156,8 +188,14 @@ const PHASE_NUMBER: Record<string, string> = { ceo: "1", design: "2", dx: "2.5",
 const PHASE_SKILL: Record<string, string> = { ceo: "plan-ceo-review", design: "plan-design-review", dx: "plan-devex-review", eng: "plan-eng-review" };
 const snapshot = (command: string) => new RegExp("gstack-autoplan-snapshot(?:\\.ts)?[\"']?\\s+" + command + "(?:\\s|$)");
 const PUBLISHED = /^true autoplan-published (ceo|design|dx|eng)$/;
+const BASH_READ = (file: string) => new RegExp("^(?!.*\\s--(?:help|version)(?![\\w-]))\\s*(?:cat|head|tail|nl|sed\\s+-n\\s+([\"']?)[\\d,$]*p\\1)\\s[^<>]*(?<![^\\s\"'/])" + file + "[\"']?(?:\\s|$)");
 
-/** autoplan: the run matches the configuration O1 froze, and every phase its scope chose loaded its review skill and published its report in order, Eng last. */
+/** autoplan: the run matches the configuration O1 froze, and every phase its scope chose loaded its review skill and published its report in order, Eng last.
+ * A phase loaded when, before its first publish, the session read its installed plan-<x>-review/SKILL.md, the
+ * methodologyPath a methodology command for it returned as JSON, or a file named autoplan-<phase>-methodology-<suffix>/
+ * methodology.md after an ok methodology command for that phase that ran by itself, piped at most once or redirected to a
+ * file (GEVA-387). A read is an ok Read, or for SKILL.md and the named file a Bash read: one simple cat, head, tail, nl or
+ * sed -n command, never --help or --version, whose result is not empty, naming the file whole, outside any comment. */
 export function autoplanExposure(records: Rec[]): ExposureRead {
   const { uses, lines, bash } = own(records, turnOf("autoplan"));
   const kinds = bash.filter((u) => /gstack-skill-start\b[^\n]*--skill\s+["']?autoplan(?![\w-])/.test(u.input.command)).map((u) => (u.ok ? /^SESSION_KIND: (\S+)/m.exec(u.result!)?.[1] : undefined));
@@ -185,15 +223,28 @@ export function autoplanExposure(records: Rec[]): ExposureRead {
     if (lines.some((l) => l.at > from && l.at <= u.at && report.test(l.line)) && published.at(-1) !== phase) published.push(phase);
   });
   const paths = new Map<string, Set<string>>();
+  const ran = new Map<string, number>();
   for (const u of bash) {
     const m = u.ok ? /gstack-autoplan-snapshot(?:\.ts)?["']?\s+methodology\s+(ceo|design|dx|eng)(?:\s|$)/.exec(u.input.command) : null;
+    if (m && !ran.has(m[1]!) && soleCall(u.input.command, m.index)) ran.set(m[1]!, u.at);
     const j = m ? json(u.result) : null;
     if (m && j?.phase === m[1] && typeof j.methodologyPath === "string") paths.set(m[1]!, (paths.get(m[1]!) ?? new Set()).add(j.methodologyPath));
   }
   const loaded = (phase: string) => {
     const by = pubs.find((u) => PUBLISHED.exec(u.input.command.trim())![1] === phase)?.at ?? Infinity;
+    const after = ran.get(phase) ?? Infinity;
     const direct = new RegExp("(?:^|/)" + PHASE_SKILL[phase] + "/SKILL\\.md$");
-    return uses.some((u) => u.ok && u.name === "Read" && u.at < by && typeof u.input.file_path === "string" && (paths.get(phase)?.has(u.input.file_path) || direct.test(u.input.file_path)));
+    const named = new RegExp("(?:^|/)autoplan-" + phase + "-methodology-[^/]+/methodology\\.md$");
+    const directBash = BASH_READ(PHASE_SKILL[phase] + "/SKILL\\.md");
+    const namedBash = BASH_READ("autoplan-" + phase + "-methodology-[^/\\s\"'<>]+/methodology\\.md");
+    return uses.some((u) => {
+      if (!u.ok || u.at >= by) return false;
+      if (u.name === "Read" && typeof u.input.file_path === "string") return paths.get(phase)?.has(u.input.file_path) || direct.test(u.input.file_path) || (u.at > after && named.test(u.input.file_path));
+      if (u.name !== "Bash" || typeof u.input.command !== "string" || !u.result!.trim()) return false;
+      const parts = simpleCommand(u.input.command);
+      const line = parts?.length === 1 ? uncommented(parts[0]!) : null;
+      return line !== null && (directBash.test(line) || (u.at > after && namedBash.test(line)));
+    });
   };
   return {
     skill: "autoplan",
