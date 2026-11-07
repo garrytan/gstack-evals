@@ -1144,8 +1144,8 @@ export const CODES = {
   },
   E_TBV_HISTORY: {
     exit: 2,
-    meaning: "A history could not be assembled or was refused: it fails the provenance gate, holds a drive path or a crew rules file, or its record is unreadable. A dropped session is counted by reason, never repaired.",
-    fix: "Read the drop reason. A provenance failure drops the session; a drive path means the source is not clean and must not be used.",
+    meaning: "A history could not be assembled or was refused: it fails the provenance gate, holds a drive path or a crew rules file, or its record is unreadable. At render, a history whose API turns cannot be rebuilt refuses too: a call with no result, a result that answers no call still waiting for one, a repeated call id, or user text while a call waits. A dropped session is counted by reason, never repaired.",
+    fix: "Read the drop reason. A provenance failure drops the session; a drive path means the source is not clean and must not be used. A render refusal names the event and the reason; tbv render-gate finds it before any lease, and it goes to the Captain.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,

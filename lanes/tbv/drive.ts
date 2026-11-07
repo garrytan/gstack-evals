@@ -18,6 +18,7 @@ import { rigAdmission } from "../../src/rig/admission.ts";
 import type { TokenUsage } from "../../src/types.ts";
 import { leftover, openVault, plaintextRoot } from "./custody.ts";
 import { fail, TbvError } from "./errors.ts";
+import { renderHistory } from "./history/events.ts";
 import { buildRequest, MAX_TOKENS, validateRequest } from "./request.ts";
 import { armSend, JUDGE_MAX_TOKENS, routeKey } from "./routes.ts";
 import { endState, readingWorst, RETRIES, ROUND, roundAdmits, SENDS, WORST_INPUT } from "./rule.ts";
@@ -564,6 +565,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
     put(rec);
   };
 
+  for (const h of plan.tasks) renderHistory(h);
   const order = readingOrder(plan).filter((r) => !records.has(keyOf(r)));
   for (let i = 0; i < order.length && !stop; ) {
     const round: Reading[] = [];
@@ -616,6 +618,7 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
 /** Stage 1's shape smoke: one report-turn send per model, arm, family and source shape, with each route's reported prompt tokens beside the characters / 3 estimate. */
 export async function smokeItem(run: DriveItemRun, plan: DrivePlan, given: Partial<DriveDeps> = {}): Promise<string[]> {
   const d = { ...DEFAULTS(), ...given };
+  for (const h of plan.tasks) renderHistory(h);
   const shapes = new Map<string, History>();
   for (const h of plan.tasks) if (!shapes.has(h.family + " " + h.source)) shapes.set(h.family + " " + h.source, h);
   const out: string[] = [];
@@ -692,7 +695,7 @@ export function spliceBy(sets: SpliceSet[], pinOf: (arm: Arm) => string | null, 
 
 const TURN_KEYS: Turn[] = ["report", "d1", "d2", "followup"];
 /** turns.txt at its frozen sha256: one "name: text" line per turn. */
-function readTurns(path: string): Turns {
+export function readTurns(path: string): Turns {
   const text = readFileSync(path, "utf8");
   const sha = new Bun.CryptoHasher("sha256").update(text).digest("hex");
   if (sha !== BUNDLE.turns.sha256) fail("E_TBV_INPUT", path + " is not turns.txt at its frozen sha256 " + BUNDLE.turns.sha256);
