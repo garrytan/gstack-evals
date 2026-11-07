@@ -1,0 +1,4 @@
+frozen: s1 records=2522 torn=false exposed=false failed=review_skills_loaded config=true scope=true review_skills_loaded=false findings_in_order=false phases=ceo,dx,eng published=eng,ceo,eng,dx
+frozen: s2 records=1230 torn=false exposed=false failed=review_skills_loaded config=true scope=true review_skills_loaded=false findings_in_order=true phases=ceo,dx,eng published=ceo,dx,eng
+fixed: s1 records=2522 torn=false exposed=false failed=findings_in_order config=true scope=true review_skills_loaded=true findings_in_order=false phases=ceo,dx,eng published=eng,ceo,eng,dx
+fixed: s2 records=1230 torn=false exposed=false failed=review_skills_loaded config=true scope=true review_skills_loaded=false findings_in_order=true phases=ceo,dx,eng published=ceo,dx,eng

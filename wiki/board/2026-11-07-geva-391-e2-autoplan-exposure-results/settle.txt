@@ -1,0 +1,6 @@
+STAGE_SETTLED item=ap-e2 arm=autoplan:told lease=ap-e2.0001.974eb9 spent=$59.051152 unknown=$0.00 sessions=3 ended=completed
+E2_RUN_SETTLED: verdict fail; checked exposed 1 not_exposed 2 gaps 0 of 4; early stop after session 3 (tg5b38fec201); session 4 not run; gap rerun unused; 2026-11-07T17:25:21Z
+ITEM: ap-e2 cap=$343.00 admission=required committed=$59.051152 left=$283.948848 run=e2 leases=1 open=-
+ITEM: e2-vm cap=$9.00 admission=warn committed=$1.3935 left=$7.6065 run=e2 leases=1 open=-
+ENVELOPE: program=wave1 cap=$10000.00 committed=$1494.485829 settled=$1494.485829 open=$0.00 pending=$0.00 left=$8505.514171
+SKILL: autoplan cap=$2000.00 committed=$927.5232 settled=$927.5232 open=$0.00 pending=$0.00 left=$1072.4768
