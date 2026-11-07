@@ -1,0 +1,60 @@
+// GEVA-376: builds the stage 1 input that ceo-rule.ts projection reads (stage 1 readings with smoke_round 2) without
+// re-judging, by the Captain's ruling A of 2026-11-07. At build 2ef58339 ceo readings refuses a key that wasn't built from
+// the same rows, so no CLI path joins stage 1's judged readings to the smoke rerun's rows. This script takes stage 1's
+// judged readings (GEVA-340's J, written by ceo readings at 715c659) and the smoke rerun's rows (GEVA-368's smoke2-rows,
+// written by ceo rows --stage 1 --smoke-round 2 at 2ef58339). It keeps J's suite, exposure_sha256, units, none rows and
+// stock as they are, drops J's 12 round 1 smoke rows, adds the rerun's 12 smoke rows mapped as ceo readings maps a smoke
+// row at 2ef58339 (ceo-cli.ts:733 to 760: a smoke row enters no packet, so its labels are empty and its leak flags false),
+// and sets smoke_round 2. J's none rows predate the termination and meter fields; each gets termination null and meter
+// null, which the row contract accepts and which projection reads on no none row. It then rereads what it wrote and
+// checks every part against the inputs, and exits 1 with E_MERGE on any difference. It prints counts, dollar sums and
+// digests only, never review text.
+//   bun merge.ts build <J readings.json> <rerun rows.json> <out readings.json>
+//   bun merge.ts verify <J readings.json> <rerun rows.json> <merged readings.json>
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+const [mode, jFile, rFile, outFile] = process.argv.slice(2) as [string, string, string, string];
+if ((mode !== "build" && mode !== "verify") || !outFile) throw new Error("E_USAGE merge.ts build|verify <J readings.json> <rerun rows.json> <readings.json>");
+const fail = (m: string): never => { console.error("E_MERGE " + m); process.exit(1); };
+const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
+const s = (v: unknown) => JSON.stringify(v);
+const J = JSON.parse(readFileSync(jFile, "utf8")), R = JSON.parse(readFileSync(rFile, "utf8"));
+const MODELS = ["opus", "sol", "particle"], PASSES: Record<string, number> = { opus: 3, sol: 2, particle: 2 };
+if (s(Object.keys(J)) !== s(["stage", "suite", "exposure_sha256", "units", "reviews", "stock"]) || J.stage !== 1) fail("J is not stage 1 readings of stage 1's own smoke");
+if (R.kind !== "ceo-rows" || R.stage !== 1 || R.smoke_round !== 2) fail("the rerun file is not ceo rows of stage 1 with smoke_round 2");
+if (s(J.suite) !== s(R.suite)) fail("J and the rerun rows bind different suites");
+if (s(J.units.map((u: any) => u.id).sort()) !== s(R.units.map((u: any) => u.id).sort())) fail("J and the rerun rows hold different units");
+const none = J.reviews.filter((r: any) => !r.smoke), old = J.reviews.filter((r: any) => r.smoke), rerun = R.rows.filter((r: any) => r.smoke);
+const smokeUnits = (rs: any[]) => s([...new Set(rs.map((r) => r.unit))].sort());
+if (J.units.length !== 20) fail("J holds " + J.units.length + " units, not 20");
+for (const m of MODELS) if (none.filter((r: any) => r.model === m && r.arm === "none").length !== 20 * PASSES[m]!) fail("J holds the wrong count of none rows on " + m);
+if (none.length !== 140 || none.some((r: any) => r.arm !== "none")) fail("J holds " + none.length + " non-smoke rows, not 140 none rows");
+if (old.length !== 12 || old.some((r: any) => r.arm !== "autoplan-ceo" && r.arm !== "standalone")) fail("J holds " + old.length + " smoke rows, not stage 1's 12");
+if (rerun.length !== 12 || rerun.some((r: any) => (r.arm !== "enforced" && r.arm !== "standalone") || r.pass !== 1)) fail("the rerun rows hold " + rerun.length + " smoke rows, not the rerun's 12 at pass 1");
+for (const m of MODELS) for (const a of ["enforced", "standalone"]) if (rerun.filter((r: any) => r.model === m && r.arm === a).length !== 2) fail("the rerun rows lack two sessions of " + a + " on " + m);
+if (smokeUnits(old) !== smokeUnits(rerun) || JSON.parse(smokeUnits(rerun)).length !== 2) fail("the rerun's smoke units are not stage 1's two smoke units");
+const mapSmoke = (r: any) => ({ id: r.id, unit: r.unit, arm: r.arm, model: r.model, pass: r.pass, smoke: r.smoke, status: r.status, exposed: r.exposed, labels: [], issues: r.issues, words: r.words, fixes: r.fixes, fix_words: r.fix_words, leak: { sol: false, opus: false }, forecast: r.forecast, usd: r.usd, wall_s: r.wall_s, termination: r.termination, meter: r.meter ?? null });
+const fillNone = (r: any) => { if ("termination" in r || "meter" in r) fail("J's none row " + r.id + " already carries termination or meter"); return { ...r, termination: null, meter: null }; };
+if (mode === "build") {
+  const merged = { stage: 1, smoke_round: 2, suite: J.suite, exposure_sha256: J.exposure_sha256, units: J.units, reviews: [...none.map(fillNone), ...rerun.map(mapSmoke)], stock: J.stock };
+  writeFileSync(outFile, JSON.stringify(merged, null, 2) + "\n");
+}
+const raw = readFileSync(outFile), M = JSON.parse(raw.toString("utf8"));
+if (s(Object.keys(M)) !== s(["stage", "smoke_round", "suite", "exposure_sha256", "units", "reviews", "stock"]) || M.stage !== 1 || M.smoke_round !== 2) fail("the merged file's top level is not stage 1 with smoke_round 2 and J's fields");
+if (s(M.suite) !== s(J.suite) || M.exposure_sha256 !== J.exposure_sha256) fail("the merged suite or exposure_sha256 differs from J's");
+if (s(M.units) !== s(J.units)) fail("the merged units differ from J's");
+if (s(M.stock) !== s(J.stock) || M.stock.length !== J.stock.length) fail("the merged stock rows differ from J's");
+if (!Array.isArray(M.reviews) || M.reviews.length !== 152) fail("the merged file holds " + (M.reviews?.length ?? 0) + " rows, not 152");
+const mNone = M.reviews.filter((r: any) => !r.smoke), mSmoke = M.reviews.filter((r: any) => r.smoke);
+if (mNone.length !== 140 || mSmoke.length !== 12) fail("the merged file holds " + mNone.length + " none rows and " + mSmoke.length + " smoke rows, not 140 and 12");
+mNone.forEach((r: any, i: number) => {
+  const { termination, meter, ...rest } = r;
+  if (termination !== null || meter !== null || s(rest) !== s(none[i]) || s(r) !== s(fillNone(none[i]))) fail("merged none row " + (i + 1) + " (" + r.id + ") differs from J's");
+});
+mSmoke.forEach((r: any, i: number) => { if (s(r) !== s(mapSmoke(rerun[i]))) fail("merged smoke row " + (i + 1) + " (" + r.id + ") differs from the rerun row as ceo readings maps it"); });
+const median = (xs: number[]) => { const v = [...xs].sort((a, b) => a - b); return v.length % 2 ? v[(v.length - 1) / 2]! : (v[v.length / 2 - 1]! + v[v.length / 2]!) / 2; };
+const usd = (x: number) => x.toFixed(6);
+console.log("merge " + mode + ": OK; inputs J " + sha(readFileSync(jFile)) + ", rerun rows " + sha(readFileSync(rFile)) + "; output " + sha(raw));
+console.log("  units " + M.units.length + "; rows " + M.reviews.length + " (none " + mNone.length + ", smoke " + mSmoke.length + "); stock " + M.stock.length + "; J's round 1 smoke rows dropped " + old.length);
+for (const m of MODELS) { const xs = mNone.filter((r: any) => r.model === m && (r.status !== "gap" && r.status !== "incomplete")).map((r: any) => r.usd); console.log("  none on " + m + ": " + xs.length + " sessions, usd sum " + usd(xs.reduce((a: number, b: number) => a + b, 0)) + ", median " + usd(median(xs))); }
+for (const m of MODELS) for (const a of ["standalone", "enforced"]) { const xs = mSmoke.filter((r: any) => r.model === m && r.arm === a); console.log("  smoke " + a + " on " + m + ": usd " + xs.map((r: any) => usd(r.usd)).join(", ") + "; status " + xs.map((r: any) => r.status).join(", ") + "; exposed " + xs.map((r: any) => r.exposed).join(", ")); }

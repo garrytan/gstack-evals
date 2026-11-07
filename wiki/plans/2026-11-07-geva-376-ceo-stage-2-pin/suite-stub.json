@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "ceo-o-cmp",
+  "title": "CEO outcome comparison set",
+  "kind": "ceo-outcome",
+  "sealed": true,
+  "stub": true,
+  "purpose": "The CEO outcome eval's stage 2 comparison units: plan.md and key.json per unit, scored by the CEO outcome readings.",
+  "sha256": "b6eb9a8a48ca5a70b5c07ada1a85d7ff3d29cf2349b7095802196115020bdfd6",
+  "catalogs_sha256": "7c8063faef937c1cd014aa368c98e3b1451c124b49499f9b8302f26a19e74fd1",
+  "counts": {
+    "units": 114,
+    "clusters": 114,
+    "blocking": 0,
+    "detection": 0,
+    "over_blocking": 0,
+    "groups": {}
+  },
+  "custody": "procedural custody: an age-encrypted bundle in the Captain drive, key held apart in the project-user drive, decrypted only into /dev/shm"
+}

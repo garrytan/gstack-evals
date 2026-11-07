@@ -1,0 +1,3 @@
+n 84 Opus       passes 2 ICC 0.843 logit a0.05 0.08 a0.025 0.09 rank a0.05 0.08 a0.025 0.09
+n 84 Sol        passes 1 ICC 0.843 logit a0.05 0.11 a0.025 0.12 rank a0.05 0.11 a0.025 0.12
+n 84 particle-1 passes 1 ICC 0.843 logit a0.05 0.11 a0.025 0.12 rank a0.05 0.11 a0.025 0.12
