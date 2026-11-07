@@ -21,7 +21,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { costMicros, emptyUsage, mergeUsage, startProxy, worstCaseMicros, COUNT_SLACK_TOKENS, type ProxyConfig } from "../runner/proxy.ts";
+import { Ledger, readRows } from "../runner/ledger.ts";
+import { asksLongTtl, byteBoundTokens, costMicros, emptyUsage, maxPrice, mergeUsage, startProxy, worstCaseMicros, BYTE_SLACK_TOKENS, COUNT_SLACK_TOKENS, type ProxyConfig } from "../runner/proxy.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "laneb-acct-"));
 const price = { input: 5, output: 25, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5 };
@@ -203,4 +204,164 @@ describe("proxy accounting against a stub upstream", () => {
     expect(again.status).toBe(409);
     expect(((await again.json()) as any).error).toContain("budget stop latched");
   });
+});
+
+// L1 Amendment F: a per-model byte bound on estimate routes. Written before the change.
+// Value: protects=every shipped model but gpt-6.1-sol reserves exactly as before (anthropic routes count plus slack, and
+//   their failed count falls back to one token per byte; openrouter routes one token per byte), and gpt-6.1-sol reserves
+//   ceil(bytes / 3) plus slack; fails_when=the field leaks to another model or route, or the default moves;
+//   why_new=no test reads the shipped config/proxy.json; seam=none; no_claim=provider tokenizers (stub upstream)
+// Value: protects=Sol's bound at 3 bytes per token stays above the real prompt count on every pilot-sol request;
+//   fails_when=the shipped bound is loosened past the pilot's tightest request (3.35 bytes per token);
+//   why_new=new field; seam=none; no_claim=sessions beyond pilot-sol's 1,014 requests
+// Value: protects=a request tighter than its bound still settles, with the ledger's over_reserve flag, not silently;
+//   fails_when=an under-bounded request is dropped from spend or settles under its reserve; why_new=no test drives a
+//   request past its bound; seam=none; no_claim=how often Sol's real count passes the bound in F1
+describe("per-model byte bound on estimate routes (L1 Amendment F)", () => {
+  const shipped = JSON.parse(readFileSync(join(import.meta.dir, "..", "config", "proxy.json"), "utf8")) as ProxyConfig;
+  const fdir = mkdtempSync(join(tmpdir(), "laneb-bound-"));
+  let lastBody = "";
+  let reportInput = 100;
+  let failCount = false;
+  let mode: "full" | "cut" | "hang" = "full";
+  const enc = new TextEncoder();
+  const ev = (type: string, data: unknown) => enc.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+  let upstream: ReturnType<typeof Bun.serve>;
+  let ledgerServer: ReturnType<typeof Bun.serve>;
+  let proxy: ReturnType<typeof startProxy>;
+  const ledger = new Ledger(join(fdir, "ledger.jsonl"), "amendment-f");
+  const tightPrice = { input: 5, output: 25, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5 };
+
+  beforeAll(() => {
+    ledger.approve(100, { quotes: ["test"] });
+    upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const text = await req.text();
+        if (new URL(req.url).pathname.endsWith("/count_tokens")) {
+          if (failCount) return Response.json({ type: "error", error: { type: "api_error", message: "count down" } }, { status: 500 });
+          return Response.json({ input_tokens: 10 });
+        }
+        lastBody = text;
+        const stream = new ReadableStream<Uint8Array>({
+          start(ctrl) {
+            ctrl.enqueue(ev("message_start", { type: "message_start", message: { usage: { input_tokens: reportInput, output_tokens: 1 } } }));
+            if (mode === "hang") return;
+            if (mode === "full") {
+              ctrl.enqueue(ev("message_delta", { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 50 } }));
+              ctrl.enqueue(ev("message_stop", { type: "message_stop" }));
+            }
+            ctrl.close();
+          },
+        });
+        return new Response(stream, { headers: { "content-type": "text/event-stream" } });
+      },
+    });
+    ledgerServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const b = (await req.json()) as any;
+        const out = new URL(req.url).pathname === "/reserve" ? ledger.reserve(b.id, b.usd_micros, b.meta) : ledger.settle(b.id, b.usd_micros, b.meta);
+        return Response.json(out, { status: out.ok ? 200 : 409 });
+      },
+    });
+    const base_url = `http://127.0.0.1:${upstream.port}`;
+    const routes = Object.fromEntries(Object.entries(shipped.routes).map(([k, r]) => [k, { ...r, base_url }]));
+    const models = { ...shipped.models, tight: { route: "openrouter", upstream_model: "tight", price_per_mtok: tightPrice, bound_bytes_per_token: 3 } };
+    const env = Object.fromEntries(Object.values(shipped.routes).map((r) => [r.key_env, "fake"]));
+    proxy = startProxy({ config: { routes, models } as ProxyConfig, dataHost: "127.0.0.1", dataPort: 0, controlPort: 0, logPath: join(fdir, "log.jsonl"), sessionsPath: join(fdir, "sessions.jsonl"), ledgerUrl: `http://127.0.0.1:${ledgerServer.port}`, env, closeWaitMs: 200, settleRetryMs: 10 });
+  });
+  afterAll(async () => {
+    await proxy.stop();
+    upstream.stop(true);
+    ledgerServer.stop(true);
+    rmSync(fdir, { recursive: true, force: true });
+  });
+
+  const control = () => `http://127.0.0.1:${proxy.control.port}`;
+  const open = async (model: string, cap: number) => (await (await fetch(control() + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t-" + model, model, cap_usd: cap }) })).json()) as any;
+  const send = (token: string) =>
+    fetch(`http://127.0.0.1:${proxy.data.port}/v1/messages`, { method: "POST", headers: { "x-api-key": token, "content-type": "application/json" }, body: JSON.stringify({ model: "x", max_tokens: 1000, stream: true, messages: [{ role: "user", content: "fix the failing test in src/\u00e9t\u00e9.py ".repeat(40) }] }) });
+  const close = async (id: string) => (await (await fetch(control() + `/sessions/${id}/close`, { method: "POST", body: "{}" })).json()) as any;
+  const entry = (id: string) => readFileSync(join(fdir, "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((e) => e.event === "request" && e.session === id).at(-1);
+  const run = async (model: string, cap = 5) => {
+    const s = await open(model, cap);
+    const res = await send(s.token);
+    expect(res.status).toBe(200);
+    await res.text();
+    const closed = await close(s.id);
+    return { s, closed, e: entry(s.id), bytes: Buffer.byteLength(lastBody) };
+  };
+
+  test("at the default every other shipped model reserves as it did before; gpt-6.1-sol reserves ceil(bytes / 3) plus slack", async () => {
+    expect(BYTE_SLACK_TOKENS).toBe(1024);
+    const others = Object.keys(shipped.models).filter((m) => m !== "gpt-6.1-sol");
+    expect(others).toEqual(expect.arrayContaining(["claude-opus-5-5", "claude-haiku-5-5", "particle-1", "deepseek-v4.1-flash-1017"]));
+    expect(Object.entries(shipped.models).filter(([, m]) => m.bound_bytes_per_token !== undefined).map(([k, m]) => [k, m.bound_bytes_per_token])).toEqual([["gpt-6.1-sol", 3]]);
+    for (const m of others) {
+      const cfg = shipped.models[m]!;
+      const forward = shipped.routes[cfg.route]!.count_tokens === "forward";
+      for (const fail of forward ? [false, true] : [false]) {
+        failCount = fail;
+        const { e, bytes } = await run(m);
+        const bound = forward && !fail ? 10 + COUNT_SLACK_TOKENS : bytes + 1024;
+        expect([m, fail, e.counted, e.input_tokens_bound, e.worst_micros]).toEqual([m, fail, forward && !fail, bound, worstCaseMicros(bound, 1000, maxPrice(cfg), asksLongTtl(lastBody))]);
+      }
+    }
+    failCount = false;
+    const sol = shipped.models["gpt-6.1-sol"]!;
+    expect(shipped.routes[sol.route]!.count_tokens).toBe("estimate");
+    const { e, bytes } = await run("gpt-6.1-sol");
+    expect(bytes).toBeGreaterThan(lastBody.length);
+    expect([e.counted, e.input_tokens_bound, e.worst_micros]).toEqual([false, Math.ceil(bytes / 3) + 1024, worstCaseMicros(Math.ceil(bytes / 3) + 1024, 1000, maxPrice(sol), asksLongTtl(lastBody))]);
+  }, 30_000);
+
+  test("Sol's bound at 3 bytes per token stays above the real prompt count on all 1,014 pilot-sol requests", () => {
+    const bpt = shipped.models["gpt-6.1-sol"]!.bound_bytes_per_token!;
+    expect(bpt).toBe(3);
+    const rows = readFileSync(join(import.meta.dir, "fixtures", "l1", "sol-pilot-requests.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.kind === "request");
+    expect(rows.length).toBe(1014);
+    expect(rows.filter((r) => byteBoundTokens("a".repeat(r.bytes), bpt) <= r.real)).toEqual([]);
+    expect(rows.every((r) => byteBoundTokens("a".repeat(r.bytes)) === r.bytes + BYTE_SLACK_TOKENS)).toBe(true);
+  });
+
+  test("a request whose real count passes its bound still settles in full, and the ledger flags over_reserve", async () => {
+    reportInput = 20_000;
+    const { s, closed, e, bytes } = await run("tight", 0.05);
+    reportInput = 100;
+    expect(e.input_tokens_bound).toBe(Math.ceil(bytes / 3) + 1024);
+    expect(e.input_tokens_bound).toBeLessThan(20_000);
+    expect(e.worst_micros).toBeLessThan(50_000);
+    expect(e.cost_micros).toBe(costMicros({ ...emptyUsage(), input_tokens: 20_000, output_tokens: 50 }, tightPrice));
+    expect(e.cost_micros).toBeGreaterThan(e.worst_micros);
+    expect(closed.spent_micros).toBe(e.cost_micros);
+    const settle = readRows(join(fdir, "ledger.jsonl")).find((r) => r.kind === "settle" && r.id === s.id) as any;
+    expect(settle).toMatchObject({ usd_micros: e.cost_micros, reserved_micros: 50_000, over_reserve: true });
+  }, 30_000);
+
+  test("a cut-off stream, or a request still in flight at close, is charged at least the input its stream reported, even above its bound", async () => {
+    const above = worstCaseMicros(20_000, 1000, maxPrice({ price_per_mtok: tightPrice }), false);
+    reportInput = 20_000;
+    mode = "cut";
+    const a = await open("tight", 1);
+    const ra = await send(a.token);
+    expect(ra.status).toBe(200);
+    await ra.text();
+    const ca = await close(a.id);
+    const ea = entry(a.id);
+    expect([ea.complete, ea.input_tokens_bound < 20_000, ea.worst_micros < above, ea.cost_micros, ca.spent_micros]).toEqual([false, true, true, above, above]);
+    mode = "hang";
+    const b = await open("tight", 1);
+    const rb = await send(b.token);
+    const reader = rb.body!.getReader();
+    await reader.read();
+    const cb = await close(b.id);
+    const charged = readFileSync(join(fdir, "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((x) => x.event === "charged_at_worst" && x.session === b.id);
+    expect([charged.worst_micros, cb.spent_micros]).toEqual([above, above]);
+    await reader.cancel().catch(() => {});
+    mode = "full";
+    reportInput = 100;
+  }, 30_000);
 });

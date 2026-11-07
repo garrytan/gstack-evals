@@ -36,7 +36,8 @@
 // (ARM_MANIFESTS defaults to arms/manifests/r3b for it). --item l1-route-sol runs L1's (Amendment E) on its own item: the
 // smoke session on L1's none arm and the told one on L1's after arm (tar=after), at cells.l1-sol.json's Sol cell with its turn
 // ceiling (ARM_MANIFESTS defaults to arms/manifests/l1, ARMS holds none and after); --item l1-route-p1 runs particle-1's
-// the same way on its own item, at cells.l1-p1.json's cell.
+// the same way on its own item, at cells.l1-p1.json's cell, and --item l1-route-sol-f runs Sol's again on its own item
+// (Amendment F).
 // Env: LEDGER (the item's jsonl ledger, approved at the item's cap), ARMS (a directory with none.tar and gstack.tar, or
 // .tar.gz, matching ARM_MANIFESTS, default arms/manifests/r3), the route's provider key (OPENROUTER_API_KEY for Sol; only
 // the proxy sees it), OUT (the work dir, default ~/.capy/work/r3-route-check/<item>), PROXY_CONFIG (default
@@ -57,7 +58,7 @@ import { fromMicros, Ledger, readRows, reconcile, totals } from "../runner/ledge
 import { loadR3Trial } from "./exposure.ts";
 import { A4, itemCheck, portTaken, R3_ARMS, R3A, R3A4, readRoute, routeRecordPath, SOL, type R3aModel, type RouteGate, type RouteVerdict } from "./screen.ts";
 import { R3B4 } from "./r3b.ts";
-import { L1_ROUTE, L1_ROUTE_P1 } from "../l1/l1.ts";
+import { L1_ROUTE, L1_ROUTE_P1, L1_ROUTE_SOL_F } from "../l1/l1.ts";
 
 // An item the route check runs on: R3's models, or L1's l1-route-sol with its own cells file and the arm of each part.
 type RouteItem = RouteGate & Pick<R3aModel, "ledgerPort" | "a4" | "armManifests"> & { cells?: string; routeArms?: Record<(typeof PARTS)[number]["kind"], string> };
@@ -183,9 +184,9 @@ async function main(argv: string[]): Promise<number> {
   const rerun = argv.includes("--rerun");
   const args = argv.filter((a) => a !== "--rerun");
   const modelId = args.length === 0 ? SOL : args.length === 2 && args[0] === "--model" ? args[1]! : "";
-  const m: RouteItem | undefined = args.length === 2 && args[0] === "--item" ? R3A4[args[1]!] ?? R3B4[args[1]!] ?? [L1_ROUTE, L1_ROUTE_P1].find((r) => r.item === args[1]) : R3A[modelId];
+  const m: RouteItem | undefined = args.length === 2 && args[0] === "--item" ? R3A4[args[1]!] ?? R3B4[args[1]!] ?? [L1_ROUTE, L1_ROUTE_P1, L1_ROUTE_SOL_F].find((r) => r.item === args[1]) : R3A[modelId];
   const routeModels = Object.values(R3A).filter((x) => x.routePrefix !== null).map((x) => x.id);
-  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")} | --item r3a4-sol|r3b4-sol|l1-route-sol|l1-route-p1] [--rerun]`);
+  if (!m) throw new Error(`E_USAGE usage: bun quick/laneb/r3/route-check.ts [--model ${routeModels.join("|")} | --item r3a4-sol|r3b4-sol|l1-route-sol|l1-route-sol-f|l1-route-p1] [--rerun]`);
   if (m.routePrefix === null) throw new Error(`E_USAGE ${m.id} has no route check in R3a (route-checked models: ${routeModels.join(", ")})`);
   const leg = m.leg ?? "R3a";
   const prefix = m.routePrefix;

@@ -229,8 +229,12 @@ describe("Sol's items before any spend (Amendment E)", () => {
   }, 60_000);
 
   test("f1-sol prepares f-parts.txt's four parts of 100 sessions on the Sol model; the Opus items need no ROUTE_LEDGER and keep the Opus model", () => {
+    // Amendment F: f1-sol prepares on l1-route-sol-f's pass, not on l1-route-sol's, which pilot-sol ran after.
+    const old = rig("f1-sol");
+    const o = l1(old, ["prepare", old.work, "--item", "f1-sol"], { ROUTE_LEDGER: routeLedger(old) });
+    expect([o.code, o.err]).toEqual([3, expect.stringContaining("l1-route-sol-f")]);
     const r = rig("f1-sol");
-    const p = l1(r, ["prepare", r.work, "--item", "f1-sol"], { ROUTE_LEDGER: routeLedger(r) });
+    const p = l1(r, ["prepare", r.work, "--item", "f1-sol"], { ROUTE_LEDGER: routeLedger(r, { item: "l1-route-sol-f" }) });
     expect([p.code, p.out]).toEqual([0, expect.stringContaining("f1-1 (100 sessions), f1-2 (100 sessions), f1-3 (100 sessions), f1-4 (100 sessions)")]);
     expect([plan(r).model, plan(r).cap_usd, plan(r).host_ttl_hours]).toEqual(["gpt-6.1-sol", 730, 114]);
     for (const part of ["f1-1", "f1-2", "f1-3", "f1-4"]) expect([job(r, part).model, job(r, part).agents.map((a: any) => a.kwargs.arm).sort().join()]).toEqual(["gpt-6.1-sol", "after-t,after-u,before-t,before-u,none"]);
@@ -243,8 +247,10 @@ describe("Sol's items before any spend (Amendment E)", () => {
   test("f1-sol-offu prepares four parts of 20 off-u sessions on the Sol model at its $200 cap, behind the same route check", () => {
     const none = rig("f1-sol-offu");
     expect(l1(none, ["prepare", none.work, "--item", "f1-sol-offu"]).code).toBe(2);
+    const old = rig("f1-sol-offu");
+    expect(l1(old, ["prepare", old.work, "--item", "f1-sol-offu"], { ROUTE_LEDGER: routeLedger(old) }).code).toBe(3);
     const r = rig("f1-sol-offu");
-    const p = l1(r, ["prepare", r.work, "--item", "f1-sol-offu"], { ROUTE_LEDGER: routeLedger(r) });
+    const p = l1(r, ["prepare", r.work, "--item", "f1-sol-offu"], { ROUTE_LEDGER: routeLedger(r, { item: "l1-route-sol-f" }) });
     expect([p.code, p.out]).toEqual([0, expect.stringContaining("f1-1 (20 sessions), f1-2 (20 sessions), f1-3 (20 sessions), f1-4 (20 sessions)")]);
     expect([plan(r).model, plan(r).cap_usd, plan(r).cells, plan(r).host_ttl_hours]).toEqual(["gpt-6.1-sol", 200, "cells.l1-sol.json", 114]);
     for (const part of ["f1-1", "f1-2", "f1-3", "f1-4"]) expect([job(r, part).model, job(r, part).agents.map((a: any) => a.kwargs.arm).join()]).toEqual(["gpt-6.1-sol", "off-u"]);

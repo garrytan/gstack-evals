@@ -1,0 +1,17 @@
+pilot-sol journal: 32 sessions, 1014 requests sent, 46 refused for the session cap
+shipped bound for gpt-6.1-sol: one token per 3 bytes, plus 1024
+check at one token per byte: worst cases re-priced 1060 of 1060 exactly; in-flight sums rebuilt 46 of 46 exactly
+
+at one token per 1 byte:
+  the 46 refused requests: 46 refused, 0 pass; largest need $5.82 of $5.00
+  the 1014 sent requests: 0 refused; largest need $5.00 of $5.00
+  sessions with a refusal: 4 (session 18 before-t: 6, session 19 before-u: 16, session 29 after-u: 12, session 30 after-t: 12)
+
+at one token per 3 bytes:
+  the 46 refused requests: 0 refused, 46 pass; largest need $3.20 of $5.00
+  the 1014 sent requests: 0 refused; largest need $2.81 of $5.00
+  sessions with a refusal: 0
+
+bytes per real prompt token over the 1014 sent requests: min 3.35, median 5.35
+requests whose real count passes the shipped bound: 0
+Not replayed: what the 46 requests would have cost and started had they been sent. The journal holds no response for them.

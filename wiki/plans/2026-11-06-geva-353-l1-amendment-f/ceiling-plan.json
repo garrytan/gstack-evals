@@ -1,0 +1,65 @@
+{
+  "ceiling_usd": 3300,
+  "items": [
+    {
+      "item": "pilot-opus",
+      "cap_usd": 80,
+      "status": "done"
+    },
+    {
+      "item": "f1-opus",
+      "cap_usd": 680,
+      "status": "done"
+    },
+    {
+      "item": "tb2-opus",
+      "cap_usd": 180,
+      "status": "done"
+    },
+    {
+      "item": "l1-route-sol",
+      "cap_usd": 20,
+      "status": "done"
+    },
+    {
+      "item": "pilot-sol",
+      "cap_usd": 100,
+      "status": "done",
+      "after": "l1-route-sol"
+    },
+    {
+      "item": "l1-route-sol-f",
+      "cap_usd": 20,
+      "status": "planned",
+      "after": "pilot-sol"
+    },
+    {
+      "item": "f1-sol",
+      "cap_usd": 730,
+      "status": "planned",
+      "after": "l1-route-sol-f"
+    },
+    {
+      "item": "l1-route-p1",
+      "cap_usd": 20,
+      "status": "planned",
+      "after": "f1-sol"
+    },
+    {
+      "item": "pilot-p1",
+      "cap_usd": 120,
+      "status": "planned",
+      "after": "l1-route-p1"
+    },
+    {
+      "item": "f1-p1",
+      "cap_usd": 920,
+      "status": "planned",
+      "after": "pilot-p1"
+    }
+  ],
+  "leftover": {
+    "sol": "pending",
+    "particle": "pending"
+  }
+}
