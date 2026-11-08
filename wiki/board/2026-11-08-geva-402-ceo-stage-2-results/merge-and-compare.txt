@@ -1,0 +1,17 @@
+# merge.ts and compare on the sealed stage 2 readings, 2026-11-08 (GEVA-402's machine, /dev/shm, keyless). Counts and digests only.
+# Unit ids are masked as <unit> in the compare outputs beside this file.
+merge.ts ba666ec29b92427ccf0604dde97f3558b364f66a8541f3884686b2bb33bffb09; fixed ceo-rule.ts 417fc4e1e31af9854dde2abe12dcaa420f5ea51fc08eee4027b4acf70ef5e04b; frozen copy 31a56dd12b531f1cd1f26519921cc2731e7d7ea2b6e215e117d220c7b0c9573a
+merge build exit 0
+merge verify exit 0
+merge build: OK; inputs stage 2 c34ea86f386fa67b63abdddee4986e1b20df1993ec7eac295c9ec786172168ce, completion 9821bc11220f1b08b97ae9d9050c388026311d5a19e5bd1102bb620c1639053e; outputs joined file a0c5f5d7d0bae701a10f920b2ef48b2668ba57cba06188b272454bcbba345954, completion view e7ae57fb14809cf12c59e6db28fe816bb7b941861fc2824b9c68d4aafbbab4c6
+  completion: 75 scored rows on stage 2's 75 incomplete sessions, usd sum 20.831767; 1381 gap rows left out
+  held scored rows per Opus cell (28 units each): stopped part none 3, standalone 3, lens 3; joined none 28, standalone 28, lens 28; completion view none 25, standalone 25, lens 25
+tampered (usd): verify exit 1, E_MERGE the joined file's row 101 differs from its source row
+tampered (drop): verify exit 1, E_MERGE the joined file holds 1455 rows, not 1456
+tampered (stock): verify exit 1, E_MERGE the completion view differs from stage 2 on stock
+compare frozen (the frozen scorer copy from stage2-j): exit 0, 79 lines, stderr 0 bytes, sha256 62b6d068c2019cd47860f14e0d6774c8b058cef9cd2cd4db6ebd0dcaf13921f2
+compare stopped (this post's ceo-rule.ts.txt): exit 0, 79 lines, stderr 0 bytes, sha256 75a489918c24696b4baf9741980e0310da30735032ea09d42ff33c1c48741827
+compare joined (this post's ceo-rule.ts.txt): exit 0, 79 lines, stderr 0 bytes, sha256 e418b7520b570a4ef6e88483b6a456969c669b23ee445ce951596b3a9d00306b
+compare completion (this post's ceo-rule.ts.txt): exit 0, 79 lines, stderr 0 bytes, sha256 b3feca6a5f2ef3f5960aaa7aa77c39bf5b20a6833f1859f487190e509e869d05
+frozen rerun differs from the run's compare log in 1 lines
+frozen rerun: the one differing line is the run log's leading sha256 check line (ceo-rule.ts: OK); every compare line matches
