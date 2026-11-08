@@ -258,7 +258,7 @@ Section 6.5's exposure rule comes first. Every CUT-CANDIDATE goes to the Captain
 | h1-none | 126 none sessions and at most 6 gap reruns | $190 to $320 | $660 | 132 sessions at a mean of $4.50 plus 4 allowances in flight ($64). Past that mean, the stage can't open its last sessions and H1 ends INCOMPLETE (rule 1) |
 | h1-told | 2 told smoke sessions, no rerun | $50 to $80 | $180 | 2 sessions at the $90 allowance, the true worst case |
 | crew | three threads: this one (GEVA-397, stop 170M), the mining thread (stop 100M) and the run thread, which also writes the results post (stop 150M) | about $130 | $190 | the three token stops at $0.45 per million |
-| **H1 all-in** | | **about $430 to $580** | **$1,155** | |
+| **H1 all-in** | | **about $400 to $590** | **$1,155** | |
 
 On the envelope, autoplan's ledger line reads $1,007.33 settled of $2,000 with nothing open, and H1's four ledger caps sum to $965, so all of them fit at once ($1,972.33).
 
@@ -279,8 +279,8 @@ The cap formulas are frozen here and computed from H1's readings for the ask. At
 | Part | Expected | At caps |
 |---|---|---|
 | autoplan's line before this post, with E3's results post (about $30 allowed for its thread) | about $1,377 | about $1,377 |
-| H1 all-in | about $430 to $580 | $1,155 |
-| **Line after H1** | **about $1,810 to $1,960** | **about $2,530** |
+| H1 all-in | about $400 to $590 | $1,155 |
+| **Line after H1** | **about $1,780 to $1,970** | **about $2,530** |
 
 Both stay under the Captain's $3,000. C1 sits on top only with new money.
 
