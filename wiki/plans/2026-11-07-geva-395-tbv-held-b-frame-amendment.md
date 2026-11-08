@@ -94,7 +94,7 @@ Every sampled gstack history in the pool sorted "other", with no long-list and n
 
 Garry, through the Captain (GEVA-2, 2026-11-07): the $2,000 line is a guideline, and the eval should not cut corners to stay under it. So tbv-held-p3, Opus's third skill-layer pass on the held-out tasks, runs. That takes Opus's MDD from 8.1 to 6.8 points.
 
-This is a deviation from prereg sections 6 and 14, decided before any outcome data. Stage 1 read only Opus none, and no tbv-dev-base, climb or held-out reading exists yet.
+This is a deviation from prereg sections 6 and 14, decided before any outcome data. The third pass was decided at 2026-11-07T23:43Z, before tbv-dev-base's first send. The capy family and the stop were decided at 2026-11-08T01:04Z, while tbv-dev-base's readings were still being driven, unjudged and unread. No climb or held-out reading exists.
 
 - **What changes.** The prereg ran the third pass only when the all-in check fit under $2,000 with it, and before tbv-held it dropped the capy family, or stopped, when the line did not fit. None of those verdicts binds against $2,000 any more (the Captain, GEVA-2, 2026-11-07: dropping the capy family's held read to stay under the line is the corner Garry said not to cut). The all-in check still runs before every lease, and its output is reported.
 - **The new stop.** If the line's projected all-in passes $3,000, the run stops before that lease and the question goes to the Captain, who takes it to Garry.
