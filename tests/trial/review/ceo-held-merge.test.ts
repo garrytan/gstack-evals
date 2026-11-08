@@ -145,4 +145,35 @@ describe("tampered inputs and outputs", () => {
     Object.assign(S.reviews.find((r: any) => r.model === "sol")!, empty, { status: "incomplete", usd: 0, termination: "cap_stop" });
     expect(merge("build", files(S)).err).toBe("E_MERGE stage 2's incomplete rows are not 75 rows inside Opus's none, standalone and lens held cells");
   });
+  test("build refuses a duplicated id in either file", () => {
+    const C = readings("completion");
+    C.reviews[1].id = C.reviews[0].id;
+    expect(merge("build", files(undefined, C)).err).toBe("E_MERGE the two files don't hold the same count of distinct rows");
+    const S = readings("stage2");
+    S.reviews[1].id = S.reviews[0].id;
+    expect(merge("build", files(S)).err).toBe("E_MERGE the two files don't hold the same count of distinct rows");
+  });
+  test("build refuses a completion row whose id matches stage 2's but whose session differs", () => {
+    for (const field of ["unit", "arm", "model", "pass", "smoke"]) {
+      const C = readings("completion");
+      const i = C.reviews.findIndex(late);
+      const r = C.reviews[i];
+      if (field === "unit") r.unit = id("held", 27) === r.unit ? id("held", 26) : id("held", 27);
+      if (field === "arm") r.arm = r.arm === "none" ? "lens" : "none";
+      if (field === "model") r.model = "sol";
+      if (field === "pass") r.pass = 2;
+      if (field === "smoke") r.smoke = true;
+      expect(merge("build", files(undefined, C)).err).toBe("E_MERGE the completion holds no row for stage 2's row " + (i + 1) + " as stage 2 plans it");
+    }
+  });
+  test("build refuses Opus held cells that don't hold 84 rows, and a stopped part that isn't 9 scored rows", () => {
+    const S = readings("stage2"), C = readings("completion");
+    const i = S.reviews.findIndex((r: any) => inCell(r) && !late(r));
+    S.reviews.splice(i, 1);
+    C.reviews.splice(i, 1);
+    expect(merge("build", files(S, C)).err).toBe("E_MERGE stage 2 holds 83 rows in Opus's none, standalone and lens held cells, not 84");
+    const T = readings("stage2");
+    T.reviews.find((r: any) => inCell(r) && !late(r))!.status = "gap";
+    expect(merge("build", files(T)).err).toBe("E_MERGE the stopped part's rows in those cells are not 9 scored rows");
+  });
 });
