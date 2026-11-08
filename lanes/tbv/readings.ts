@@ -127,7 +127,24 @@ const ARMS: Arm[] = ["none", "current", "principle", "lens"];
 const oneOf = <T extends string>(v: string, all: T[], what: string): T => (all.includes(v as T) ? (v as T) : fail("E_TBV_INPUT", what + " " + JSON.stringify(v) + " is not one of " + all.join(", ")));
 const count = (v: string, what: string) => (/^[1-9]\d*$/.test(v) ? Number(v) : fail("E_TBV_INPUT", what + " must be a positive integer"));
 
-/** tbv readings --records PATH --keys DIR --split FILE --packet-key FILE --judges FILE --out FILE --models a,b --passes m=n,...
+/** Several packet keys and judge files, comma-separated, read as one (tbv-held and tbv-held-p3 judge their own batches). A
+ * packet, a judge record or a reading's packet of one kind in two of them refuses, so no batch is joined twice. */
+export function joinBatches(keys: PacketKeyEntry[][], judges: JudgeRecord[][]): { entries: PacketKeyEntry[]; judges: JudgeRecord[] } {
+  const once = (what: string, ids: string[][]) => {
+    const seen = new Set<string>();
+    for (const batch of ids) {
+      const mine = new Set(batch);
+      for (const id of mine) if (seen.has(id)) fail("E_TBV_INPUT", what + " " + id + " is in two of the files given; give each batch once");
+      for (const id of mine) seen.add(id);
+    }
+  };
+  once("packet", keys.map((es) => es.map((e) => e.packet)));
+  once("the packet of kind and label", keys.map((es) => es.map((e) => e.kind + " " + e.label)));
+  once("the judge record for packet and role", judges.map((js) => js.map((j) => j.packet + " " + j.role)));
+  return { entries: keys.flat(), judges: judges.flat() };
+}
+
+/** tbv readings --records PATH --keys DIR --split FILE --packet-key FILE[,FILE] --judges FILE[,FILE] --out FILE --models a,b --passes m=n,...
  * --skill-arms a,b [--capy-passes N] [--principle-detector FILE (one regex per line, # comments)] [--dev-gap GAP,MDD]
  * [--held SEALED_DIR --seal-cmd CMD] */
 export async function run(argv: string[], io: Io): Promise<number> {
@@ -158,12 +175,13 @@ export async function run(argv: string[], io: Io): Promise<number> {
       })
     : null;
   if (principle && !principle.length) fail("E_TBV_INPUT", "the principle detector holds no regex");
+  const batches = joinBatches(a["packet-key"]!.split(",").map(readPacketKey), a.judges!.split(",").map((f) => readNdjson<JudgeRecord>(f)));
   const rd = buildReadings({
     manifest,
     manifestSha256: sha256(bytes),
     records: readRecords(a.records!),
-    entries: readPacketKey(a["packet-key"]!),
-    judges: readNdjson<JudgeRecord>(a.judges!),
+    entries: batches.entries,
+    judges: batches.judges,
     keys: readKeys(a.keys!),
     flags: {
       models: a.models!.split(",").map((m) => oneOf(m, MODELS, "--models")),

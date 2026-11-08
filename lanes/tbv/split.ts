@@ -11,7 +11,7 @@ import { heldOutputs, plaintextRoot } from "./custody.ts";
 import { fail, TbvError } from "./errors.ts";
 import { admitsSize, extract, OVERHEAD_641D622 } from "./extract.ts";
 import { historySha256 } from "./history/events.ts";
-import { clustersOf, devEligible, heldOutCluster, heldOutEligible, type LineageStub, type PrRecord } from "./history/source-b.ts";
+import { clustersOf, CREW_AUTHOR, devEligible, type HeldBRules, heldOutCluster, heldOutEligible, ID_PREFIX, idPrefix, type LineageStub, type PrRecord } from "./history/source-b.ts";
 import type { ReasonCode } from "../../src/errors/codes.ts";
 import { parseFlags } from "./judge.ts";
 import type { Extract, History, Io, Source, SplitManifest, Stratum, TaskRow } from "./types.ts";
@@ -29,6 +29,8 @@ export const HELD_CLEAN_B = 10;
 export const PER_CLUSTER = 2;
 /** Held-out source B takes every qualifying non-clean task at this many or fewer (amendment 1 section 2 rule 5). */
 export const TAKE_ALL_AT = 50;
+/** Accrual closes 21 days after P's record at the latest (amendment 1 section 2 rule 4). */
+export const ACCRUAL_DAYS = 21;
 const HR_PER_SOURCE = 10;
 const CONTROLS_PER_SOURCE = 10;
 
@@ -156,23 +158,34 @@ export function guardDev(rows: Array<{ id: string; cluster: string }>, forbidden
 /** Lineage clusters over the mined records and the truncated stubs, as heldOutCluster joins them (ruling J): a stub that
  * shares a key joins its cluster, and a stub with truncated closing issues joins every cluster that holds an issue. A
  * stub with no title or branch could join any cluster, so it refuses. */
-export function lineageClusters(prs: PrRecord[], skipped: LineageStub[]): Map<number, string> {
+export function lineageClusters(prs: PrRecord[], skipped: LineageStub[], prefix = "pr-"): Map<number, string> {
   if (skipped.some((s) => s.title === null || s.baseRefName === null || s.headRefName === null)) fail("E_TBV_INPUT", "a truncated record has no title or branch, so its lineage could join any cluster; bring this to the Captain");
   const all = [...prs, ...skipped];
-  const c = clustersOf(all.map((p) => ({ number: p.number, title: p.title!, baseRefName: p.baseRefName!, headRefName: p.headRefName!, closingIssues: p.closingIssues ?? [] })));
+  const c = clustersOf(all.map((p) => ({ number: p.number, title: p.title!, baseRefName: p.baseRefName!, headRefName: p.headRefName!, closingIssues: p.closingIssues ?? [] })), prefix);
   if (!skipped.some((s) => s.closingIssues === null)) return c;
   const open = new Set(all.filter((p) => p.closingIssues === null || p.closingIssues.length > 0).map((p) => c.get(p.number)!));
-  const to = "pr-" + Math.min(...[...open].map((id) => Number(id.slice(3))));
+  const to = prefix + Math.min(...[...open].map((id) => Number(id.slice(prefix.length))));
   return new Map([...c].map(([n, id]) => [n, open.has(id) ? to : id]));
 }
 
 // ---------- the command ----------
 
+/** One --prs file: a repository's mined records. lineage holds a window's stubs for every pull request outside it. */
+interface PrsFile {
+  repo: string;
+  prefix: string;
+  sha: string;
+  prs: PrRecord[];
+  skipped: LineageStub[];
+  lineage: LineageStub[];
+  window: { mergedAfter: string; mergedBefore: string | null } | null;
+}
 interface Pool {
   seedHex: string;
   seed: Buffer;
   digest: string;
   prsSha: string;
+  files: PrsFile[];
   eligible: PoolRow[];
   rows: PoolRow[];
   byTask: Map<string, PoolRow>;
@@ -227,18 +240,79 @@ function readSeed(file: string): string {
   return hex;
 }
 
+const timeOf = (iso: unknown, what: string): number => {
+  const t = typeof iso === "string" ? Date.parse(iso) : Number.NaN;
+  return Number.isNaN(t) ? fail("E_TBV_INPUT", what + " is not a time") : t;
+};
+
+/** --prs: one record file in b2 mode; in held-b mode one per repository, comma-separated (amendment 2: this repo and gstack). */
+function readPrsFiles(a: Record<string, string>, mode: Mode): PrsFile[] {
+  const paths = need(a, "prs").split(",");
+  if (mode === "b2" && paths.length !== 1) fail("E_TBV_INPUT", "--mode b2 reads one --prs file");
+  const files = paths.map((path): PrsFile => {
+    if (!existsSync(path)) fail("E_TBV_INPUT", "a --prs file is missing");
+    const text = readFileSync(path, "utf8");
+    const file = readJson(path, "--prs");
+    if (file?.schema !== "tbv-prs.v1" || !Array.isArray(file.prs)) fail("E_TBV_INPUT", "a --prs file is not a tbv-prs.v1 record file");
+    const w = file.window;
+    if (w !== undefined && !(typeof w?.mergedAfter === "string" && (w.mergedBefore === null || typeof w.mergedBefore === "string"))) fail("E_TBV_INPUT", "a --prs file's window is not mergedAfter and mergedBefore");
+    return { repo: file.repo ?? "garrytan/gstack-evals", prefix: idPrefix(file.repo), sha: sha256(text), prs: file.prs, skipped: file.skipped ?? [], lineage: file.lineage ?? [], window: w ?? null };
+  });
+  if (new Set(files.map((x) => x.prefix)).size !== files.length) fail("E_TBV_INPUT", "two --prs files hold one repository's records");
+  return files;
+}
+
+/** Amendment 2's rules for each --prs file: accrual's close (--closes-at, at most 21 days after P, by default exactly 21),
+ * the crew author, and the principle build's pull requests (--principle-prs, task ids) and C-to-P files (--principle-files,
+ * the P and C record's treatment-files.tsv), both required when gstack's records are in the pool. A window that starts
+ * after P or ends before the close would leave pull requests unmined, so it refuses. */
+function heldBRules(a: Record<string, string>, pAt: string, files: PrsFile[]): (f: PrsFile) => HeldBRules {
+  const p = timeOf(pAt, "--p-merged-at");
+  const limit = p + ACCRUAL_DAYS * 86_400_000;
+  const closesAt = a["closes-at"] ?? new Date(limit).toISOString().replace(".000Z", "Z");
+  const close = timeOf(closesAt, "--closes-at");
+  if (!(close > p && close <= limit)) fail("E_TBV_INPUT", "--closes-at must be after P's record and no more than " + ACCRUAL_DAYS + " days after it");
+  for (const f of files) {
+    if (!f.window) continue;
+    if (timeOf(f.window.mergedAfter, f.repo + "'s window start") > p) fail("E_TBV_INPUT", f.repo + "'s records start after P's record, so pull requests merged between them were never mined");
+    if (f.window.mergedBefore !== null && timeOf(f.window.mergedBefore, f.repo + "'s window end") < close) fail("E_TBV_INPUT", f.repo + "'s records end before accrual closes, so pull requests merged between them were never mined");
+  }
+  const gstack = ID_PREFIX["garrytan/gstack"]!;
+  const required = files.some((f) => f.prefix === gstack);
+  let principleFiles = new Set<string>();
+  if (a["principle-files"] !== undefined || required) {
+    let text = "";
+    try {
+      text = readFileSync(need(a, "principle-files"), "utf8");
+    } catch (e) {
+      if (e instanceof TbvError) throw e;
+      fail("E_TBV_INPUT", "cannot read --principle-files");
+    }
+    const rows = text.split("\n").filter((l) => l.trim());
+    if (!/^path\t/.test(rows[0] ?? "")) fail("E_TBV_INPUT", "--principle-files is not the P and C record's treatment-files.tsv, whose first column is path");
+    principleFiles = new Set(rows.slice(1).map((l) => l.split("\t")[0]!));
+    if (!principleFiles.size) fail("E_TBV_INPUT", "--principle-files lists no file");
+  }
+  let principlePrs: string[] = [];
+  if (a["principle-prs"] !== undefined || required) {
+    const ids = readJson(need(a, "principle-prs"), "--principle-prs");
+    if (!Array.isArray(ids) || !ids.every((x) => typeof x === "string" && /^(?:gstack-)?pr-\d+$/.test(x))) fail("E_TBV_INPUT", "--principle-prs must be a JSON array of task ids such as gstack-pr-123 (an empty array when the principle build has none)");
+    principlePrs = ids;
+  }
+  return (f) => ({
+    author: CREW_AUTHOR,
+    closesAt,
+    principleFiles: f.prefix === gstack ? principleFiles : new Set(),
+    principlePrs: new Set(principlePrs.filter((id) => id.startsWith(f.prefix) && /^\d+$/.test(id.slice(f.prefix.length))).map((id) => Number(id.slice(f.prefix.length)))),
+  });
+}
+
 function loadPool(a: Record<string, string>, mode: Mode): Pool {
   const seedHex = readSeed(need(a, "seed-file"));
   const seed = Buffer.from(seedHex, "hex");
-  const prsPath = need(a, "prs");
-  if (!existsSync(prsPath)) fail("E_TBV_INPUT", "--prs is missing");
-  const prsText = readFileSync(prsPath, "utf8");
-  const file = readJson(prsPath, "--prs");
-  if (file?.schema !== "tbv-prs.v1" || !Array.isArray(file.prs)) fail("E_TBV_INPUT", "--prs is not a tbv-prs.v1 record file");
-  const prs = file.prs as PrRecord[];
-  const skipped = (file.skipped ?? []) as LineageStub[];
-  const clusters = lineageClusters(prs, skipped);
-  const byNumber = new Map(prs.map((p) => [p.number, p]));
+  const files = readPrsFiles(a, mode);
+  const byTask = new Map(files.flatMap((f) => f.prs.map((p) => [f.prefix + p.number, { f, pr: p }] as const)));
+  const clusters = new Map(files.map((f) => [f.prefix, lineageClusters(f.prs, [...f.skipped, ...f.lineage], f.prefix)]));
   const drops: Record<string, number> = {};
   const drop = (why: string) => {
     drops[why] = (drops[why] ?? 0) + 1;
@@ -266,6 +340,7 @@ function loadPool(a: Record<string, string>, mode: Mode): Pool {
     for (const h of readHistories(a.a!, "A", "a")) add(h, h.cluster, OVERHEAD_641D622.investigate);
   }
   const pAt = mode === "held-b" ? need(a, "p-merged-at") : "";
+  const rulesFor = mode === "held-b" ? heldBRules(a, pAt, files) : null;
   let devClusters = new Set<string>();
   if (mode === "held-b") {
     onTmpfs(need(a, "b"), "--b (held-out source B histories)");
@@ -274,23 +349,26 @@ function loadPool(a: Record<string, string>, mode: Mode): Pool {
     devClusters = new Set(dc.B as string[]);
   }
   for (const h of readHistories(need(a, "b"), "B", "b")) {
-    const n = /^pr-(\d+)$/.exec(h.task);
-    const pr = (n ? byNumber.get(Number(n[1])) : undefined) ?? fail("E_TBV_INPUT", "a source B history has no record in --prs");
-    const ok = mode === "b2" ? devEligible(pr, SCORER_PIN_MERGED_AT) : heldOutEligible(pr, heldOutCluster(pr, prs, skipped), pAt).ok;
-    if (!ok) {
-      drop(mode === "b2" ? "outside the dev window" : "not held-out eligible");
+    const { f, pr } = byTask.get(h.task) ?? fail("E_TBV_INPUT", "a source B history has no record in --prs");
+    if (mode === "b2" && !devEligible(pr, SCORER_PIN_MERGED_AT)) {
+      drop("outside the dev window");
       continue;
     }
-    const cluster = clusters.get(pr.number)!;
+    const held = rulesFor ? heldOutEligible(pr, heldOutCluster(pr, f.prs, [...f.skipped, ...f.lineage]), pAt, rulesFor(f)) : null;
+    if (held && !held.ok) {
+      drop("not held-out eligible: " + held.reason);
+      continue;
+    }
+    const cluster = clusters.get(f.prefix)!.get(pr.number)!;
     if (devClusters.has(cluster)) fail("E_TBV_CUSTODY", "a held-out source B task's cluster is in --dev-clusters; bring this to the Captain");
     add(h, cluster, OVERHEAD_641D622.ship);
   }
-  const prsSha = sha256(prsText);
+  const prsSha = files.length === 1 ? files[0]!.sha : sha256(files.map((x) => x.repo + "\0" + x.sha).join("\n"));
   const sorted = [...eligible].sort((x, y) => cmp(x.source + "\0" + x.task, y.source + "\0" + y.task));
   const digest = sha256(JSON.stringify({ schema: "tbv-pool.v1", mode, seed: sha256(seedHex), prs: prsSha, rows: sorted.map((r) => [r.source, r.task, r.cluster, r.stratum, r.tokens, r.sha256]) }));
   const cap = capClusters(eligible, seed);
   if (cap.dropped) drops["cluster cap"] = cap.dropped;
-  return { seedHex, seed, digest, prsSha, eligible, rows: cap.rows, byTask: new Map(cap.rows.map((r) => [r.task, r])), drops, truncated: skipped.length, histories, extracts };
+  return { seedHex, seed, digest, prsSha, files, eligible, rows: cap.rows, byTask: new Map(cap.rows.map((r) => [r.task, r])), drops, truncated: files.reduce((n, x) => n + x.skipped.length, 0), histories, extracts };
 }
 
 /** The keys outputs under parent, one keys --out directory per round: <task>.json kept, drops.json dropped. */
@@ -388,7 +466,8 @@ function report(io: Io, w: Walked) {
   }
 }
 
-const FLAGS = ["mode", "seed-file", "a", "b", "prs", "p-merged-at", "dev-clusters", "pool-digest", "dev-keys", "held-keys", "batch", "dev-out", "held-out", "held-a", "held", "seal-cmd"];
+const FLAGS = ["mode", "seed-file", "a", "b", "prs", "p-merged-at", "dev-clusters", "closes-at", "principle-files", "principle-prs", "pool-digest", "dev-keys", "held-keys", "batch", "dev-out", "held-out", "held-a", "held", "seal-cmd"];
+const HELD_B_ONLY = ["p-merged-at", "dev-clusters", "closes-at", "principle-files", "principle-prs"];
 const REQUIRED: Record<string, string[]> = {
   plan: ["seed-file", "b", "prs", "batch"],
   next: ["seed-file", "b", "prs", "pool-digest", "batch"],
@@ -403,15 +482,17 @@ export async function run(argv: string[], io: Io): Promise<number> {
   const a = parseFlags(argv.slice(2), REQUIRED[sub]!, FLAGS.filter((f) => !REQUIRED[sub]!.includes(f) && !NOT[sub]!.includes(f)));
   const mode = (a.mode ?? "b2") as Mode;
   if (mode !== "b2" && mode !== "held-b") fail("E_TBV_INPUT", "--mode is b2 or held-b");
-  if (mode === "b2" && (a["p-merged-at"] !== undefined || a["dev-clusters"] !== undefined)) fail("E_TBV_INPUT", "--p-merged-at and --dev-clusters belong to --mode held-b");
+  if (mode === "b2" && HELD_B_ONLY.some((k) => a[k] !== undefined)) fail("E_TBV_INPUT", HELD_B_ONLY.map((k) => "--" + k).join(", ") + " belong to --mode held-b");
   const { pool, w } = replay(a, mode, sub !== "plan");
   if (sub === "plan") {
     io.out("split mode " + mode);
     io.out("split seed sha256 " + sha256(pool.seedHex));
     io.out("split pool digest " + pool.digest);
-    io.out("split prs.json sha256 " + pool.prsSha);
+    if (pool.files.length === 1) io.out("split prs.json sha256 " + pool.prsSha);
+    else for (const x of pool.files) io.out("split prs sha256 " + x.repo + " " + x.sha);
     const n = (s: Source, st: Stratum) => pool.rows.filter((r) => r.source === s && r.stratum === st).length;
     io.out("split pool: A long " + n("A", "long") + " short " + n("A", "short") + " other " + n("A", "other") + "; B long " + n("B", "long") + " short " + n("B", "short") + " other " + n("B", "other") + " clean " + n("B", "clean") + "; dropped " + JSON.stringify(pool.drops) + "; truncated records " + pool.truncated);
+    if (mode === "held-b") for (const x of pool.files) io.out("split pool B " + x.repo + ": " + (["long", "short", "other", "clean"] as const).map((st) => st + " " + pool.rows.filter((r) => r.source === "B" && r.stratum === st && r.task.startsWith(x.prefix)).length).join(" "));
   }
   report(io, w);
   if (sub === "write") return write(a, mode, pool, w, io);
@@ -476,6 +557,10 @@ function write(a: Record<string, string>, mode: Mode, pool: Pool, w: Walked, io:
     });
     const nc = nonClean(keptB).length;
     io.out("split held B: non-clean kept " + nc + ", clean kept " + (keptB.length - nc) + " of " + HELD_CLEAN_B + "; " + JSON.stringify(tally("held", "B")));
+    for (const x of pool.files) {
+      const mine = keptB.filter((t) => t.row.task.startsWith(x.prefix));
+      io.out("split held B " + x.repo + ": non-clean kept " + nonClean(mine).length + ", clean kept " + (mine.length - nonClean(mine).length));
+    }
     io.out("split held: non-clean kept " + (aRows.length + nc) + " (floor 70" + (aRows.length + nc < 70 ? ", below" : "") + "), controls " + controls.length + " of " + 2 * CONTROLS_PER_SOURCE);
     return 0;
   }

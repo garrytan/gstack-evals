@@ -83,16 +83,19 @@ export function readManifest(path: string): SplitManifest {
   return m;
 }
 
-/** tbv packets --records PATH --keys DIR --split FILE --out DIR --key FILE [--held SEALED_DIR --seal-cmd CMD] */
+/** tbv packets --records PATH --keys DIR --split FILE --out DIR --key FILE [--controls split|none] [--held SEALED_DIR --seal-cmd CMD]
+ * --controls none builds no control packets: tbv-held-p3's batch, whose controls tbv-held's batch already holds. */
 export async function run(argv: string[], io: Io): Promise<number> {
-  const a = parseFlags(argv.slice(1), ["records", "keys", "split", "out", "key"], ["held", "seal-cmd"]);
+  const a = parseFlags(argv.slice(1), ["records", "keys", "split", "out", "key"], ["controls", "held", "seal-cmd"]);
+  const controls = a.controls ?? "split";
+  if (controls !== "split" && controls !== "none") fail("E_TBV_INPUT", "--controls takes split or none, not " + JSON.stringify(controls));
   const seal = heldOutputs(a, ["out", "key"]);
   if (inside(a.out!, a.key!)) fail("E_TBV_JUDGE", "the packet key " + a.key + " sits inside the packets directory " + a.out);
   const manifest = readManifest(a.split!);
   const records = readRecords(a.records!);
   const tasks = new Set(manifest.tasks.map((t) => t.id));
   for (const r of records) if (!tasks.has(r.task)) fail("E_TBV_INPUT", "reading " + r.label + " names a task the split manifest does not hold");
-  const built = buildPackets({ records, keys: readKeys(a.keys!), controlTaskIds: manifest.controlTaskIds, stock: readBundle(BUNDLE.stock) });
+  const built = buildPackets({ records, keys: readKeys(a.keys!), controlTaskIds: controls === "none" ? [] : manifest.controlTaskIds, stock: readBundle(BUNDLE.stock) });
   writePackets(a.out!, a.key!, built);
   if (seal) for (const f of [...built.packets.map((p) => join(a.out!, p.id + ".json")), a.key!]) seal(f);
   const n = (k: PacketKind) => built.entries.filter((e) => e.kind === k).length;

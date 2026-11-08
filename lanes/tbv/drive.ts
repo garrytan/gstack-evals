@@ -62,6 +62,8 @@ export interface DrivePlan {
   arms: Arm[];
   models: Model[];
   passes: Partial<Record<Model, number>>;
+  /** The first pass to run (default 1): passes firstPass to N, so tbv-held-p3 runs Opus's third pass on its own item. */
+  firstPass?: number;
   turns: Turns;
   shape: (arm: Arm, model: Model) => Shape;
   splice: (family: Family, arm: Arm) => SpliceSet | null;
@@ -345,10 +347,10 @@ export async function openItemRun(o: ItemRunOptions): Promise<DriveItemRun> {
   return run;
 }
 
-/** The frozen order: task, arm, model, then passes, so pass 1's report turn writes the cache before the rest. */
+/** The frozen order: task, arm, model, then passes, so the first pass's report turn writes the cache before the rest. */
 export function readingOrder(plan: DrivePlan): Reading[] {
   const out: Reading[] = [];
-  for (const h of plan.tasks) for (const arm of plan.arms) for (const model of plan.models) for (let pass = 1; pass <= (plan.passes[model] ?? 0); pass++) out.push({ task: h.task, arm, model, pass });
+  for (const h of plan.tasks) for (const arm of plan.arms) for (const model of plan.models) for (let pass = plan.firstPass ?? 1; pass <= (plan.passes[model] ?? 0); pass++) out.push({ task: h.task, arm, model, pass });
   return out;
 }
 
@@ -597,12 +599,13 @@ export async function driveItem(run: DriveItemRun, plan: DrivePlan, given: Parti
         break;
       }
     }
-    for (const r of round) if (r.pass === 1) firsts.set(r.task + "|" + r.arm + "|" + r.model, deferred());
+    const firstPass = plan.firstPass ?? 1;
+    for (const r of round) if (r.pass === firstPass) firsts.set(r.task + "|" + r.arm + "|" + r.model, deferred());
     const settled = await Promise.allSettled(
       round.map(async (r) => {
         const group = r.task + "|" + r.arm + "|" + r.model;
-        if (r.pass > 1) await firsts.get(group)?.done;
-        const first = r.pass === 1 ? firsts.get(group) : undefined;
+        if (r.pass > firstPass) await firsts.get(group)?.done;
+        const first = r.pass === firstPass ? firsts.get(group) : undefined;
         return drive(r, first).catch((e) => {
           first?.fail(e);
           throw e;
@@ -718,7 +721,7 @@ export function readTurns(path: string): Turns {
   return map as unknown as Turns;
 }
 
-const USAGE = "gstack-evals tbv drive --item <item> --run-id <id> --out <dir> --plaintext <dir> --tasks <dir> --shapes <dir> --splices <dir> --turns <turns.txt> --models opus,sol --arms none,current --passes opus=3,sol=2 --cwd <path> --date <yyyy-mm-dd> [--ledger <file>] [--ledger-record <dir>] [--seal-cmd <cmd> --unseal-cmd <cmd>] [--held] [--dev-plaintext] [--smoke]";
+const USAGE = "gstack-evals tbv drive --item <item> --run-id <id> --out <dir> --plaintext <dir> --tasks <dir> --shapes <dir> --splices <dir> --turns <turns.txt> --models opus,sol --arms none,current --passes opus=3,sol=2 [--first-pass <n>] --cwd <path> --date <yyyy-mm-dd> [--ledger <file>] [--ledger-record <dir>] [--seal-cmd <cmd> --unseal-cmd <cmd>] [--held] [--dev-plaintext] [--smoke]";
 
 /** gstack-evals tbv drive: argv[0] is "drive". Inputs are JSON files: one History per task, one Shape per arm, one SpliceSet per family. */
 export async function run(argv: string[], io: Io): Promise<number> {
@@ -748,6 +751,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
     if (!models.includes(m as Model) || !/^[1-9]$/.test(n ?? "")) fail("E_TBV_INPUT", "--passes takes model=n for each model, not " + p);
     passes[m as Model] = Number(n);
   }
+  const fp = flags.get("--first-pass");
+  if (fp !== undefined && !(/^[1-9]$/.test(fp) && models.every((m) => Number(fp) <= passes[m]!))) fail("E_TBV_INPUT", "--first-pass takes a pass from 1 to the fewest passes --passes gives a model, not " + JSON.stringify(fp));
   if (flags.has("--held")) {
     try {
       plaintextRoot(need("--tasks"), { devPlaintext: false, held: true });
@@ -763,6 +768,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     arms,
     models,
     passes,
+    ...(fp === undefined ? {} : { firstPass: Number(fp) }),
     turns: readTurns(need("--turns")),
     shape: (arm, model) => fillShape(shapes.get(arm) ?? fail("E_TBV_INPUT", "no shape for the " + arm + " arm in " + flags.get("--shapes")), model, fields),
     splice: spliceBy(dir<SpliceSet>(need("--splices")), (arm) => (shapes.get(arm) ?? fail("E_TBV_INPUT", "no shape for the " + arm + " arm in " + flags.get("--shapes"))).pin, need("--splices")),
