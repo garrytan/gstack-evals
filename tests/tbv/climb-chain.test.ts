@@ -1,18 +1,20 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // A climb end to end on the real commands, keyless: a climb's own reading records go through packets, stub judge
-// records and readings, and compare --base then joins a tbv-dev-base readings file built the same way. It checks the
-// climb's packet count against the projection's climb row, the principle detector readings needs, and the projection's
-// refusal when an arm and model has no measured cost (the empty-mean case). Synthetic records only.
+// replies that the real judge parser reads, and readings, and compare --base then joins a tbv-dev-base readings file
+// built the same way. It checks the climb's packet count against the projection's climb row, the principle detector
+// readings needs, and the projection's refusal when an arm and model is left out of its measured costs. Synthetic
+// records only.
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseJudgeReply } from "../../lanes/tbv/judge.ts";
 import { run as packets } from "../../lanes/tbv/packet.ts";
 import { run as readings } from "../../lanes/tbv/readings.ts";
-import type { JudgeRecord, PacketKeyEntry, ReadingRecord, ReadingsFile } from "../../lanes/tbv/types.ts";
+import type { JudgeRecord, Packet, PacketKeyEntry, ReadingRecord, ReadingsFile } from "../../lanes/tbv/types.ts";
 import { line, picked, rule, RULE } from "./rule-helpers.ts";
-import { capture, cleanup, KEY, keyFor, record, tmp, words } from "./s4-helpers.ts";
+import { capture, cleanup, judgeReply, KEY, keyFor, record, tmp, words } from "./s4-helpers.ts";
 
 afterAll(cleanup);
 
@@ -40,16 +42,17 @@ const devBaseRecords = () => [
   ...B.flatMap((t) => [1, 2].map((p) => rec("tbv-dev-base", t, "capy", "current", "opus", p))),
 ];
 const RATE: Record<string, number> = { none: 1, lens: 1, current: 1, principle: 2 };
-const answer = (label: string) => {
-  const arm = label.split(".")[3]!;
-  return { facts: KEY.facts.map((f, i) => ({ id: f.id, in: i < RATE[arm]!, any: i < RATE[arm]! })), unsupported: [], traps: [], list: { named: true, order: true, rest: false, offer: false }, d1: null };
-};
-const judgeRecords = (entries: PacketKeyEntry[]): JudgeRecord[] =>
-  entries.flatMap((e) => {
-    const a = e.kind === "d2" ? { facts: [], unsupported: [], traps: [], list: null, d1: null } : answer(e.label);
-    const one = (judge: string, role: "primary" | "second") => ({ packet: e.packet, judge, role, status: "judged", answer: a, responseIds: ["j-" + ++resp], reason: "" }) as JudgeRecord;
+const packetOf = (dir: string, id: string) => JSON.parse(readFileSync(join(dir, "packets", id + ".json"), "utf8")) as Packet;
+/** Each packet's stub reply goes through the real judge parser, so this stage accepts only answers the real judge accepts. */
+function judgeRecords(dir: string, entries: PacketKeyEntry[]): JudgeRecord[] {
+  return entries.flatMap((e) => {
+    const packet = packetOf(dir, e.packet), k = RATE[e.label.split(".")[3]!]!;
+    const answer = parseJudgeReply(judgeReply(packet, { facts: packet.facts.map((f, i) => ({ id: f.id, in: i < k, any: i < k })) }), packet);
+    if (typeof answer === "string") throw new Error("the judge parser refused a stub reply: " + answer);
+    const one = (judge: string, role: "primary" | "second") => ({ packet: e.packet, judge, role, status: "judged", answer, responseIds: ["j-" + ++resp], reason: "" }) as JudgeRecord;
     return [one(e.primary, "primary"), ...(e.second ? [one(e.second, "second")] : [])];
   });
+}
 
 const CLIMB_FLAGS = ["--models", "opus", "--passes", "opus=2", "--skill-arms", "principle", "--capy-passes", "2"];
 const BASE_FLAGS = ["--models", "opus,sol", "--passes", "opus=2,sol=2", "--skill-arms", "current,lens", "--capy-passes", "2"];
@@ -64,7 +67,7 @@ async function chain(recs: ReadingRecord[], flags: string[], detector = true) {
   const p = capture();
   expect(await packets(["packets", "--records", join(dir, "records"), "--keys", join(dir, "keys"), "--split", join(dir, "split.json"), "--out", join(dir, "packets"), "--key", join(dir, "packet-key.json")], p.io)).toBe(0);
   const entries = (JSON.parse(readFileSync(join(dir, "packet-key.json"), "utf8")) as { entries: PacketKeyEntry[] }).entries;
-  writeFileSync(join(dir, "judges.ndjson"), judgeRecords(entries).map((j) => JSON.stringify(j)).join("\n") + "\n");
+  writeFileSync(join(dir, "judges.ndjson"), judgeRecords(dir, entries).map((j) => JSON.stringify(j)).join("\n") + "\n");
   const argv = ["readings", "--records", join(dir, "records"), "--keys", join(dir, "keys"), "--split", join(dir, "split.json"), "--packet-key", join(dir, "packet-key.json"), "--judges", join(dir, "judges.ndjson"), "--out", join(dir, "readings.json"), ...flags, ...(detector ? ["--principle-detector", join(dir, "detector.txt")] : [])];
   return { dir, packetLine: p.out.join("\n"), entries, read: () => readings(argv, capture().io), file: join(dir, "readings.json"), split: join(dir, "split.json") };
 }
@@ -90,7 +93,10 @@ describe("a climb end to end: packets, judges, readings and compare --base", () 
     expect(c.entries.every((e) => e.primary === "sol")).toBe(true);
     const doubles = c.entries.filter((e) => e.second !== null);
     expect(doubles.every((e) => e.kind === "first" && e.second === "opus")).toBe(true);
-    expect(doubles.length).toBe(recs.filter((r) => picked(r.label)).length);
+    expect(doubles.map((e) => e.label).sort()).toEqual(recs.filter((r) => picked(r.label)).map((r) => r.label).sort());
+    const first = packetOf(c.dir, c.entries.find((e) => e.kind === "first")!.packet);
+    expect(first.d1).not.toBeNull();
+    expect(parseJudgeReply(judgeReply(first, { d1: null }), first)).toBe("d1 must list each item's name and state");
     const r = rule("projection", { items: [climbRow(doubles.length)], measured: MEASURED, judgeMeasured: JUDGE_MEASURED, prices: PRICES });
     expect(r.status).toBe(0);
     expect(line(r.out, /^tbv-climb-1: projected /)).not.toBe("");
@@ -98,7 +104,7 @@ describe("a climb end to end: packets, judges, readings and compare --base", () 
 
   test("readings refuses the climb's principle rows without the round's detector, and with it writes 120 principle rows on the climb's plan", async () => {
     const bare = await chain(climbRecords(), CLIMB_FLAGS, false);
-    await expect(bare.read()).rejects.toMatchObject({ code: "E_TBV_INPUT" });
+    await expect(bare.read()).rejects.toMatchObject({ code: "E_TBV_INPUT", message: expect.stringContaining("(--principle-detector)") });
     const c = await chain(climbRecords(), CLIMB_FLAGS);
     expect(await c.read()).toBe(0);
     const rd = JSON.parse(readFileSync(c.file, "utf8")) as ReadingsFile;
@@ -143,7 +149,7 @@ describe("the projection's climb row and the empty-mean case", () => {
     expect(r.status).toBe(0);
     expect(line(r.out, /^tbv-climb-1: /)).toStartWith("tbv-climb-1: projected $55.66");
   });
-  test("an arm and model with no scored or no-report record has no measured cost, so the projection refuses rather than pricing it at zero", () => {
+  test("an arm and model left out of the measured costs, as projection.json leaves out one with no scored or no-report record, makes the projection refuse rather than price it at zero", () => {
     const { "current:opus": _gone, ...empty } = MEASURED;
     const r = rule("projection", { items: [climbRow(24)], measured: empty, judgeMeasured: JUDGE_MEASURED, prices: PRICES });
     expect(r.refused).toBe(true);
