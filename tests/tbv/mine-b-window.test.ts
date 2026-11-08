@@ -8,7 +8,7 @@ import { afterAll, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lineageOf } from "../../lanes/tbv/history/source-b.ts";
+import { fromGraphql, lineageOf } from "../../lanes/tbv/history/source-b.ts";
 
 const SOURCE_B = join(import.meta.dir, "../../lanes/tbv/history/source-b.ts");
 const P = "2026-11-08T10:28:37Z";
@@ -131,6 +131,35 @@ test("with no --merged-before the window stays open at the top, and a pull reque
   expect(file.prs.map((p: { number: number }) => p.number)).toEqual([3, 4]);
   expect(file.skipped.map((s: { number: number }) => s.number)).toEqual([5]);
   expect(file.lineage.map((s: { number: number }) => s.number)).toEqual([1, 2, 6]);
+});
+
+test("a record with a connection missing, null, or without both nodes and totalCount is skipped as truncated, never kept with an empty list", () => {
+  const commit = (checkSuites: unknown) => ({ totalCount: 1, nodes: [{ commit: { oid: "5".repeat(40), message: "change 5", authoredDate: at(120), committedDate: at(120), checkSuites } }] });
+  const without = (key: string) => {
+    const node: Record<string, unknown> = full(5);
+    delete node[key];
+    return node;
+  };
+  const variants: Array<[string, Record<string, unknown>]> = [
+    ["files null", full(5, { files: null })],
+    ["files absent", without("files")],
+    ["files with no totalCount", full(5, { files: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } })],
+    ["files with no nodes", full(5, { files: { totalCount: 0, pageInfo: { hasNextPage: false, endCursor: null } } })],
+    ["closing issues absent", without("closingIssuesReferences")],
+    ["commits null", full(5, { commits: null })],
+    ["review threads absent", without("reviewThreads")],
+    ["reviews null", full(5, { reviews: null })],
+    ["check suites null", full(5, { commits: commit(null) })],
+    ["check runs null", full(5, { commits: commit({ totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ id: "S5", checkRuns: null }] }) })],
+    ["comments null", full(5, { reviewThreads: { totalCount: 1, nodes: [{ isResolved: false, comments: null }] } })],
+  ];
+  for (const [what, node] of variants) expect([what, fromGraphql(node)]).toEqual([what, null]);
+  expect(fromGraphql(full(5))?.files.map((f) => f.path)).toEqual(["src/a.ts"]);
+  const g = fakeGh({ ...WINDOW, "pr:3": { data: { repository: { pullRequest: full(3, { files: null }) } } } });
+  expect(g.mine(["--repo", "garrytan/gstack", "--merged-after", P, "--merged-before", at(86400)]).rc).toBe(0);
+  const file = read(g.out);
+  expect(file.prs.map((p: { number: number }) => p.number)).toEqual([5]);
+  expect(file.skipped.map((s: { number: number }) => s.number)).toEqual([3]);
 });
 
 test("the window fails closed: a stub count short of totalCount, a stub on two pages, an errors array, a pull request the query cannot find", () => {

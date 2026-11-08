@@ -2,7 +2,7 @@
 // Source B (prereg section 4, amendment 1 section 2, amendment 2): this repo's and, for held-out, gstack's pull requests,
 // assembled from GitHub's record with no writer, gstack blocks stripped; lineage clusters; the dev window and held-out
 // accrual.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { wordingRuns } from "../check.ts";
 import { fail, TbvError } from "../errors.ts";
@@ -189,6 +189,9 @@ export function accrualClosed(o: { qualifyingNonClean: number; pPostMergedAt: st
 
 const nodesOf = (c: any): any[] => c?.nodes ?? [];
 const truncated = (c: any): boolean => typeof c?.totalCount === "number" && c.totalCount > nodesOf(c).length;
+/** A connection that came back whole: its nodes and its totalCount, with no more counted than returned. A missing or null
+ * connection is not whole, since GitHub's resource limit nulls connections and still returns the page. */
+const complete = (c: any): boolean => Array.isArray(c?.nodes) && typeof c.totalCount === "number" && c.totalCount <= c.nodes.length;
 
 export function lineageOf(node: Record<string, any>): LineageStub {
   const text = (v: unknown) => (typeof v === "string" ? v : null);
@@ -201,7 +204,7 @@ export function fromGraphql(node: Record<string, any>): PrRecord | null {
   const suites = commits.flatMap((c) => nodesOf(c.checkSuites));
   const threads = nodesOf(node.reviewThreads);
   const conns = [node.closingIssuesReferences, node.files, node.commits, node.reviewThreads, node.reviews, ...commits.map((c) => c.checkSuites), ...suites.map((s) => s.checkRuns), ...threads.map((t) => t.comments)];
-  if (conns.some(truncated)) return null;
+  if (!conns.every(complete)) return null;
   return {
     number: node.number,
     state: node.state,
@@ -392,6 +395,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
   }
   const prs = file.prs as PrRecord[];
   const clusters = clustersOf(prs, prefix);
+  const earlier = existsSync(f["--out-dir"]) ? readdirSync(f["--out-dir"]).filter((n) => n.endsWith(".json")).length : 0;
+  if (earlier) fail("E_TBV_INPUT", "the out dir already holds " + earlier + " histories; assemble-b writes into an out dir with none, so no earlier history can stand beside this run's drops");
   mkdirSync(f["--out-dir"], { recursive: true });
   const drops: Record<string, number> = {};
   const drop = (why: string) => (drops[why] = (drops[why] ?? 0) + 1);

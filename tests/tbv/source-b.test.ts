@@ -94,10 +94,10 @@ test("accrual closes at the 50th qualifier or 21 days after P, whichever is firs
 test("fromGraphql maps a GraphQL node to a PrRecord with both commit dates, and skips a truncated record", () => {
   const node = {
     number: 5, state: "MERGED", title: "t", createdAt: "c", mergedAt: "m", closedAt: "x", baseRefName: "main", headRefName: "h",
-    closingIssuesReferences: { nodes: [{ number: 3 }] }, files: { totalCount: 1, nodes: [{ path: "a.ts", additions: 1, deletions: 0 }] },
-    commits: { totalCount: 1, nodes: [{ commit: { oid: "o", message: "msg", authoredDate: "ad", committedDate: "cd", checkSuites: { nodes: [{ checkRuns: { nodes: [{ name: "n", conclusion: null, status: "IN_PROGRESS", title: null, summary: null, text: null }] } }] } } }] },
-    reviewThreads: { totalCount: 1, nodes: [{ isResolved: true, comments: { nodes: [{ author: null, body: "b" }] } }] },
-    reviews: { nodes: [{ author: { login: "capy-ai" }, body: "r" }] },
+    closingIssuesReferences: { totalCount: 1, nodes: [{ number: 3 }] }, files: { totalCount: 1, nodes: [{ path: "a.ts", additions: 1, deletions: 0 }] },
+    commits: { totalCount: 1, nodes: [{ commit: { oid: "o", message: "msg", authoredDate: "ad", committedDate: "cd", checkSuites: { totalCount: 1, nodes: [{ checkRuns: { totalCount: 1, nodes: [{ name: "n", conclusion: null, status: "IN_PROGRESS", title: null, summary: null, text: null }] } }] } } }] },
+    reviewThreads: { totalCount: 1, nodes: [{ isResolved: true, comments: { totalCount: 1, nodes: [{ author: null, body: "b" }] } }] },
+    reviews: { totalCount: 1, nodes: [{ author: { login: "capy-ai" }, body: "r" }] },
   };
   expect(fromGraphql(node)).toEqual({
     number: 5, state: "MERGED", title: "t", createdAt: "c", mergedAt: "m", closedAt: "x", baseRefName: "main", headRefName: "h", closingIssues: [3], files: [{ path: "a.ts", additions: 1, deletions: 0 }],

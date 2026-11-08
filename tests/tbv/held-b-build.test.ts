@@ -4,7 +4,7 @@
 // assemble-b drops a history the outside-rules check or the org rules' wording refuses instead of stopping, and split
 // pools both repositories' records with per-repository counts. Synthetic records only; no key and no network.
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assembleB, clustersOf, heldOutEligible, type HeldBRules, idPrefix, type PrRecord, run as sourceB } from "../../lanes/tbv/history/source-b.ts";
@@ -45,6 +45,14 @@ const acode = async (f: () => unknown) => {
     return "ok";
   } catch (e) {
     return (e as { code?: string }).code ?? String(e);
+  }
+};
+const refusal = async (f: () => unknown) => {
+  try {
+    await f();
+    return { code: "ok", message: "" };
+  } catch (e) {
+    return { code: (e as { code?: string }).code ?? String(e), message: String((e as Error).message) };
   }
 };
 
@@ -112,6 +120,22 @@ test("a window's records need --wording; with it, a history sharing an 8-word ru
   expect(p.out.join("\n")).toContain('"rules wording":1');
 });
 
+test("assemble-b refuses an out dir that already holds a history, so a rerun's drop cannot leave an earlier history beside it; held-step's work dir, holding only .held-step, is taken", async () => {
+  const d = disk();
+  const said = pr({ number: 13, headRefName: "b/13", commits: [{ ...pr().commits[1]!, message: "notes: " + WORDING.toLowerCase() + " (from a rules file)" }] });
+  writeFileSync(join(d, "prs.json"), JSON.stringify({ schema: "tbv-prs.v1", prs: [said] }));
+  writeFileSync(join(d, "wording.txt"), WORDING + "\n");
+  expect(await sourceB(["assemble-b", "--records", join(d, "prs.json"), "--out-dir", join(d, "h")], io().io)).toBe(0);
+  expect(readdirSync(join(d, "h"))).toEqual(["pr-13.json"]);
+  const r = await refusal(() => sourceB(["assemble-b", "--records", join(d, "prs.json"), "--out-dir", join(d, "h"), "--wording", join(d, "wording.txt")], io().io));
+  expect([r.code, r.message.includes("pr-13")]).toEqual(["E_TBV_INPUT", false]);
+  mkdirSync(join(d, "w", ".held-step"), { recursive: true });
+  const p = io();
+  expect(await sourceB(["assemble-b", "--records", join(d, "prs.json"), "--out-dir", join(d, "w"), "--wording", join(d, "wording.txt")], p.io)).toBe(0);
+  expect(readdirSync(join(d, "w"))).toEqual([".held-step"]);
+  expect(p.out.join("\n")).toContain('"rules wording":1');
+});
+
 // ---------- split over both repositories ----------
 
 const ROWS = "path\thunks\tclass\tin a splice set\n" + PRINCIPLE_FILE + "\t3\tsource\tyes\nbin/gstack-config\t1\tsource\tno\n";
@@ -142,8 +166,14 @@ function world(o: { evalsWindow?: unknown; gstackWindow?: unknown; gstackRepo?: 
   const argv = (over: Record<string, string | null> = {}) => Object.entries({ ...flags, ...over }).flatMap(([k, v]) => (v === null ? [] : [k, v]));
   return { s, d, argv };
 }
+/** Each repository's records assembled into a fresh out dir, as each held-step gets one, then pooled into --b. */
 async function assembled(w: ReturnType<typeof world>) {
-  for (const f of ["evals.json", "gstack.json"]) expect(await sourceB(["assemble-b", "--records", join(w.d, f), "--out-dir", join(w.s, "b"), "--wording", join(w.d, "wording.txt")], io().io)).toBe(0);
+  mkdirSync(join(w.s, "b"));
+  for (const f of ["evals.json", "gstack.json"]) {
+    const out = join(w.s, "b-" + f);
+    expect(await sourceB(["assemble-b", "--records", join(w.d, f), "--out-dir", out, "--wording", join(w.d, "wording.txt")], io().io)).toBe(0);
+    for (const n of readdirSync(out)) copyFileSync(join(out, n), join(w.s, "b", n));
+  }
   return w;
 }
 
@@ -186,6 +216,29 @@ test("split refuses held-out source B inputs that would let an ineligible or unm
   }
   const ok = await assembled(world({ gstackWindow: { mergedAfter: at(-DAY), mergedBefore: at(3 * DAY) } }));
   expect(await split(["split", "plan", ...ok.argv()], io().io)).toBe(0);
+});
+
+test("split refuses a windowed --prs file with no lineage list, and a lineage or skipped stub missing any of its six keys, before anything is written and naming no pull request", async () => {
+  const changes: Array<(g: Record<string, any>) => void> = [
+    (g) => delete g.lineage,
+    (g) => (g.lineage = null),
+    (g) => delete g.lineage[0].title,
+    (g) => delete g.lineage[0].headRefName,
+    (g) => delete g.lineage[0].createdAt,
+    (g) => delete g.lineage[0].closingIssues,
+    (g) => (g.lineage[0].title = 7),
+    (g) => (g.skipped = [{ number: 91, createdAt: at(DAY), title: "Change 91", baseRefName: "main", headRefName: "b/91" }]),
+    (g) => (g.skipped = null),
+  ];
+  for (const change of changes) {
+    const w = await assembled(world());
+    const g = JSON.parse(readFileSync(join(w.d, "gstack.json"), "utf8"));
+    change(g);
+    writeFileSync(join(w.d, "gstack.json"), JSON.stringify(g));
+    const r = await refusal(() => split(["split", "plan", ...w.argv()], io().io));
+    expect([String(change), r.code, /gstack-pr-|#\d|\b9[01]\b/.test(r.message)]).toEqual([String(change), "E_TBV_INPUT", false]);
+    expect(existsSync(join(w.s, "batch"))).toBe(false);
+  }
 });
 
 test("b2 mode keeps one --prs file and takes none of held-out source B's flags", async () => {

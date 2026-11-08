@@ -245,7 +245,13 @@ const timeOf = (iso: unknown, what: string): number => {
   return Number.isNaN(t) ? fail("E_TBV_INPUT", what + " is not a time") : t;
 };
 
-/** --prs: one record file in b2 mode; in held-b mode one per repository, comma-separated (amendment 2: this repo and gstack). */
+const STUB_TEXT = ["createdAt", "title", "baseRefName", "headRefName"] as const;
+/** A skipped or lineage stub with all six keys. The cluster rule reads a missing key as no link, so held-out source B
+ * refuses a stub without one rather than let a pull request out of its cluster. */
+const stubWhole = (s: any): boolean => typeof s === "object" && s !== null && Number.isInteger(s.number) && STUB_TEXT.every((k) => k in s && (s[k] === null || typeof s[k] === "string")) && "closingIssues" in s && (s.closingIssues === null || Array.isArray(s.closingIssues));
+
+/** --prs: one record file in b2 mode; in held-b mode one per repository, comma-separated (amendment 2: this repo and gstack).
+ * In held-b mode a file carries its skipped list, a window's file its lineage list, and every stub in them all six keys. */
 function readPrsFiles(a: Record<string, string>, mode: Mode): PrsFile[] {
   const paths = need(a, "prs").split(",");
   if (mode === "b2" && paths.length !== 1) fail("E_TBV_INPUT", "--mode b2 reads one --prs file");
@@ -256,6 +262,11 @@ function readPrsFiles(a: Record<string, string>, mode: Mode): PrsFile[] {
     if (file?.schema !== "tbv-prs.v1" || !Array.isArray(file.prs)) fail("E_TBV_INPUT", "a --prs file is not a tbv-prs.v1 record file");
     const w = file.window;
     if (w !== undefined && !(typeof w?.mergedAfter === "string" && (w.mergedBefore === null || typeof w.mergedBefore === "string"))) fail("E_TBV_INPUT", "a --prs file's window is not mergedAfter and mergedBefore");
+    if (mode === "held-b") {
+      const lineage = file.lineage === undefined && w === undefined ? [] : file.lineage;
+      if (!Array.isArray(file.skipped) || !Array.isArray(lineage)) fail("E_TBV_INPUT", "a --prs file has no skipped list, or a window's file no lineage list; rerun mine-b");
+      if (![...file.skipped, ...lineage].every(stubWhole)) fail("E_TBV_INPUT", "a --prs file holds a skipped or lineage stub without all six keys (number, createdAt, title, baseRefName, headRefName, closingIssues); rerun mine-b");
+    }
     return { repo: file.repo ?? "garrytan/gstack-evals", prefix: idPrefix(file.repo), sha: sha256(text), prs: file.prs, skipped: file.skipped ?? [], lineage: file.lineage ?? [], window: w ?? null };
   });
   if (new Set(files.map((x) => x.prefix)).size !== files.length) fail("E_TBV_INPUT", "two --prs files hold one repository's records");

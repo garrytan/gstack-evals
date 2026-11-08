@@ -173,4 +173,18 @@ describe("the p3 chain", () => {
     await expect(w.read(["held", "p3"], ["held", "p3", "p3"])).rejects.toMatchObject({ code: "E_TBV_INPUT" });
     await expect(packets(["packets", "--records", join(w.dir, "p3-records"), "--keys", join(w.dir, "keys"), "--split", join(w.dir, "split.json"), "--out", join(w.dir, "x-packets"), "--key", join(w.dir, "x-key.json"), "--controls", "some"], capture().io)).rejects.toMatchObject({ code: "E_TBV_INPUT" });
   });
+
+  test("a refusal for a batch given twice prints counts only: no task, packet or label, even when both batches carry the controls", async () => {
+    const refused = async (w: Awaited<ReturnType<typeof world>>, keys: string[], js: string[]) => {
+      const e = await w.read(keys, js).then(() => null, (x: { code?: string; message?: string }) => x);
+      return { code: e?.code, message: String(e?.message) };
+    };
+    const both = await world();
+    const ids = [...(await both.batch("held")).entries, ...(await both.batch("p3")).entries].map((e) => e.packet);
+    const once = await world();
+    ids.push(...[...(await once.batch("held")).entries, ...(await once.batch("p3", ["--controls", "none"])).entries].map((e) => e.packet));
+    const got = [await refused(both, ["held", "p3"], ["held", "p3"]), await refused(once, ["held", "p3", "p3"], ["held", "p3"]), await refused(once, ["held", "p3"], ["held", "p3", "p3"])];
+    expect(got.map((g) => g.code)).toEqual(["E_TBV_INPUT", "E_TBV_INPUT", "E_TBV_INPUT"]);
+    for (const g of got) expect([g.message, /held-[ab]\d|stock:|tbv-held/.test(g.message) || ids.some((id) => g.message.includes(id))]).toEqual([g.message, false]);
+  });
 });

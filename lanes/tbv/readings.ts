@@ -128,19 +128,22 @@ const oneOf = <T extends string>(v: string, all: T[], what: string): T => (all.i
 const count = (v: string, what: string) => (/^[1-9]\d*$/.test(v) ? Number(v) : fail("E_TBV_INPUT", what + " must be a positive integer"));
 
 /** Several packet keys and judge files, comma-separated, read as one (tbv-held and tbv-held-p3 judge their own batches). A
- * packet, a judge record or a reading's packet of one kind in two of them refuses, so no batch is joined twice. */
+ * packet, a judge record or a reading's packet of one kind in two of them refuses, so no batch is joined twice. The
+ * refusal prints counts only, since a label carries a held-out task id. */
 export function joinBatches(keys: PacketKeyEntry[][], judges: JudgeRecord[][]): { entries: PacketKeyEntry[]; judges: JudgeRecord[] } {
   const once = (what: string, ids: string[][]) => {
     const seen = new Set<string>();
+    let twice = 0;
     for (const batch of ids) {
       const mine = new Set(batch);
-      for (const id of mine) if (seen.has(id)) fail("E_TBV_INPUT", what + " " + id + " is in two of the files given; give each batch once");
+      for (const id of mine) if (seen.has(id)) twice++;
       for (const id of mine) seen.add(id);
     }
+    if (twice) fail("E_TBV_INPUT", twice + " " + what + " in two of the files given; give each batch once");
   };
-  once("packet", keys.map((es) => es.map((e) => e.packet)));
-  once("the packet of kind and label", keys.map((es) => es.map((e) => e.kind + " " + e.label)));
-  once("the judge record for packet and role", judges.map((js) => js.map((j) => j.packet + " " + j.role)));
+  once("packets are", keys.map((es) => es.map((e) => e.packet)));
+  once("packets of one kind and label are", keys.map((es) => es.map((e) => e.kind + " " + e.label)));
+  once("judge records of one packet and role are", judges.map((js) => js.map((j) => j.packet + " " + j.role)));
   return { entries: keys.flat(), judges: judges.flat() };
 }
 
