@@ -27,6 +27,11 @@ def call(s, ub):
     # CEILING when s > 0.65 or the upper bound is at least 0.80; FLOOR when s < 0.20; HEADROOM otherwise.
     return np.where((s > 0.65) | (ub >= 0.80), "C", np.where(s < 0.20, "F", "H"))
 
+def call_exact(solved, nk, ub):
+    # The same call on a panel's integer solved count over n * k trials, compared with 0.65 and 0.20 in exact
+    # rational arithmetic as section 5.3 freezes it, so a panel that lands on a band end is classed the same way.
+    return np.where((100 * solved > 65 * nk) | (ub >= 0.80), "C", np.where(100 * solved < 20 * nk, "F", "H"))
+
 def part_a():
     print("Part A. H1's headroom call: P(HEADROOM) / P(CEILING) / P(FLOOR), and the wrong-call rate, by design, on a 42-task panel drawn from the pool.")
     print("The right call is the one the panel's own true mean none rate gives on the same thresholds (above 0.65 CEILING, below 0.20 FLOOR).")
@@ -41,10 +46,11 @@ def part_a():
             truth = call(p.mean(axis=1), np.zeros(SIMS_A))
             cells = []
             for n, k in designs:
-                x = (rng.random((SIMS_A, n, k)) < p[:, :n, None]).sum(axis=2) / k
+                y = (rng.random((SIMS_A, n, k)) < p[:, :n, None]).sum(axis=2)
+                x = y / k
                 s = x.mean(axis=1)
                 ub = s + TQ[n - 1] * x.std(axis=1, ddof=1) / math.sqrt(n)
-                c = call(s, ub)
+                c = call_exact(y.sum(axis=1), n * k, ub)
                 cells.append("%.3f / %.3f / %.3f, %.3f" % ((c == "H").mean(), (c == "C").mean(), (c == "F").mean(), (c != truth).mean()))
             print("  %.2f | %s" % (m, " | ".join(cells)))
             sys.stdout.flush()
@@ -56,9 +62,10 @@ def part_a():
                 r2 = np.random.default_rng(SEED + int(m * 1000) + int(conc * 10))
                 p = r2.beta(m * conc, (1 - m) * conc, size=(SIMS_A, 42))
                 truth = call(p.mean(axis=1), np.zeros(SIMS_A))
-                x = (r2.random((SIMS_A, n, k)) < p[:, :n, None]).sum(axis=2) / k
+                y = (r2.random((SIMS_A, n, k)) < p[:, :n, None]).sum(axis=2)
+                x = y / k
                 s = x.mean(axis=1)
-                c = call(s, s + TQ[n - 1] * x.std(axis=1, ddof=1) / math.sqrt(n))
+                c = call_exact(y.sum(axis=1), n * k, s + TQ[n - 1] * x.std(axis=1, ddof=1) / math.sqrt(n))
                 wrong.append((c != truth).mean())
         print("  %dx%d: %.3f" % (n, k, float(np.mean(wrong))))
 

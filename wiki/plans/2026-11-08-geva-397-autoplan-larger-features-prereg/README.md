@@ -24,8 +24,8 @@ links:
   - src/runner/stats/paired.ts
 source: "Written by GEVA-397 from the Captain's brief of 2026-11-07 and the next-round autoplan plan (sections 3 and 4) in the Captain's drive."
 attachments:
-  - fac2dc393ed395d2af25fade235c0a98c3fbff974ad8a27f33ad9a2076087343  oc.py
-  - 9277c8c498f653f616a681a990e5903a235fc4c8144902b563aa34c242c34e16  oc.txt
+  - 1179fb27e4e137af7b7f71833b62ca0b698750c98feccd431e493f5654a4f0f0  oc.py
+  - 0783c886930de9a61588fe2097f9dda1fd9f9b2a7bfdb4bf20321e09c938c17f  oc.txt
 ---
 
 # Preregistration: autoplan on larger Go features, a headroom check first
@@ -173,12 +173,12 @@ The images are pinned as T-G's were (outcome images pin), and each must show gol
 
 | Pool | True pool mean | 42 x 3: HEADROOM, wrong call | 40 x 3 | 20 x 3 |
 |---|---|---|---|---|
-| U-shaped | 0.30 | 0.959, 0.032 | 0.961, 0.033 | 0.890, 0.105 |
+| U-shaped | 0.30 | 0.959, 0.032 | 0.967, 0.028 | 0.905, 0.092 |
 | U-shaped | 0.50 | 0.991, 0.007 | 0.992, 0.007 | 0.890, 0.109 |
 | U-shaped | 0.55 | 0.939, 0.047 | 0.946, 0.041 | 0.739, 0.243 |
 | U-shaped | 0.60 | 0.773, 0.124 | 0.803, 0.123 | 0.539, 0.348 |
-| moderate | 0.55 | 0.969, 0.031 | 0.974, 0.025 | 0.879, 0.120 |
-| moderate | 0.60 | 0.813, 0.163 | 0.846, 0.139 | 0.708, 0.274 |
+| moderate | 0.55 | 0.969, 0.031 | 0.974, 0.025 | 0.880, 0.120 |
+| moderate | 0.60 | 0.813, 0.163 | 0.846, 0.139 | 0.709, 0.274 |
 
 Pooled over true means from 0.55 to 0.75 on both pool shapes, the wrong-call rate is 10.6% at 42 x 3, 11.3% at 40 x 3 and 21.3% at 20 x 3. So 20 x 3 does not give the same call with the same confidence, and 42 x 3 matches 40 x 3 while covering every C1 task. Part of that match is a lattice effect: with 3 trials a task, 0.20 and 0.65 are values s can take at 40 and at 20 tasks but not at 42, so the strict thresholds fall slightly differently. The 20 x 3 conclusion doesn't depend on it. The extra 6 sessions cost about $10 to $15.
 
@@ -362,3 +362,5 @@ Lean /autoplan run autoplan-20261108021210 (gstack 1.98.0.0, --kind feature), 20
 - **F7, Medium:** the difficulty ladder rules out longer tasks and keeps G's caps. H is plan v3 section 9's raise, not a ladder tier; the Captain ruled on the precedence and the project owner answered it as line C (section 1, section 5.5 and Big decision 3).
 - **F8 to F14, Low:** the full kind named in Limits; t frozen at 40, 41 and 42 tasks with exact band comparisons; the lattice note in 5.4; INCOMPLETE and owed gap reruns; section 1's missing changes; E2's price corrected to $5.1k and E3's figures cited to its merged results post; the crew's three token stops named.
 - **F15, Informational:** no outside-terms blocker. Section 11 adds the images' module dependencies and OpenAI's abuse-monitoring retention.
+
+The pull request's code review then found that oc.py's part A compared float means with the band ends, so a simulated panel landing exactly on 0.20 or 0.65 at 40 or 20 tasks could be misclassed. oc.py now compares integer solved counts with the band ends, as section 5.3 does. The random draws are unchanged, the 42-task cells and the pooled wrong-call rates (10.6%, 11.3%, 21.3%) don't move, and the cells that moved are updated in section 5.4's table.
