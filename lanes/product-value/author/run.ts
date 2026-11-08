@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import type { Io } from "../cli.ts";
 import { openMeter, pool, sha256, type Meter, type ModelKey } from "../meter.ts";
 import type { Key, KeyItem, UnitMeta } from "../types.ts";
-import { graphql, restMaybe } from "./gh.ts";
+import { graphql } from "./gh.ts";
 import { SEED, WINDOW_DAYS, order } from "./mine.ts";
 import * as P from "./prompts.ts";
 
@@ -96,6 +96,11 @@ export async function ask(ctx: { log: Ctx["log"] }, m: Meter, uid: string, label
 }
 
 const EDITS = "userContentEdits(first:100){ totalCount nodes { editedAt diff } }";
+const RL = " rateLimit{cost remaining resetAt} }";
+const CMP_Q = "query($o:String!,$n:String!,$tag:String!,$sha:String!){ repository(owner:$o,name:$n){ ref(qualifiedName:$tag){ compare(headRef:$sha){ status } } }" + RL;
+const BEFORE_Q = "query($o:String!,$n:String!,$until:GitTimestamp!){ repository(owner:$o,name:$n){ defaultBranchRef{ target{ ... on Commit { history(first:1,until:$until){ nodes{ oid } } } } } }" + RL;
+const TREE_Q = "query($o:String!,$n:String!,$expr:String!){ repository(owner:$o,name:$n){ object(expression:$expr){ ... on Tree { entries{ name type } } } }" + RL;
+const BLOB_Q = "query($o:String!,$n:String!,$expr:String!){ repository(owner:$o,name:$n){ object(expression:$expr){ ... on Blob { text } } }" + RL;
 const PR_Q = "query($o:String!,$n:String!,$num:Int!){ repository(owner:$o,name:$n){ description repositoryTopics(first:20){nodes{topic{name}}} issueOrPullRequest(number:$num){ __typename" +
   " ... on PullRequest { title body createdAt mergedAt author{login} authorAssociation mergeCommit{oid} " + EDITS + " closingIssuesReferences(first:5){ nodes { number title body createdAt author{login} authorAssociation " + EDITS + " } } }" +
   " ... on Issue { title body createdAt author{login} authorAssociation " + EDITS + " } } } rateLimit{cost remaining resetAt} }";
@@ -185,12 +190,13 @@ function collect(dir: string, rec: any): string | null {
     mergeSha = pr.repository?.issueOrPullRequest?.mergeCommit?.oid ?? null;
   }
   if (mergeSha) {
-    const cmp = restMaybe<any>("repos/" + rec.repo + "/compare/" + mergeSha + "..." + encodeURIComponent(rec.release_tag));
-    if (cmp && !["ahead", "identical"].includes(cmp.status)) return "the release does not contain the merge commit (" + cmp.status + ")";
+    const status: string | undefined = graphql<any>(CMP_Q, { o, n, tag: "refs/tags/" + rec.release_tag, sha: mergeSha }).repository?.ref?.compare?.status;
+    if (status && !["BEHIND", "IDENTICAL"].includes(status)) return "the release does not contain the merge commit (" + status + ")";
   }
-  const commits = restMaybe<any[]>("repos/" + rec.repo + "/commits?until=" + encodeURIComponent(x.createdAt) + "&per_page=1") ?? [];
-  const readme = commits[0] ? restMaybe<any>("repos/" + rec.repo + "/readme?ref=" + commits[0].sha) : null;
-  const readmeText = readme?.content ? Buffer.from(readme.content, "base64").toString("utf8") : "";
+  const before: string | null = graphql<any>(BEFORE_Q, { o, n, until: x.createdAt }).repository?.defaultBranchRef?.target?.history?.nodes?.[0]?.oid ?? null;
+  const entry = before ? (graphql<any>(TREE_Q, { o, n, expr: before + ":" }).repository?.object?.entries ?? []).find((e: any) => e.type === "blob" && /^readme(\.(md|markdown|rst|txt|adoc))?$/i.test(e.name)) : null;
+  const readmeText: string = entry ? graphql<any>(BLOB_Q, { o, n, expr: before + ":" + entry.name }).repository?.object?.text ?? "" : "";
+  const commits = before ? [{ sha: before }] : [];
   const titles = windowTitles(rec.repo, rec.release_at, addDays(rec.release_at, WINDOW_DAYS));
   if (!titles.length) return "empty window";
   put(join(dir, "raw/record.json"), { repo: rec.repo, number: rec.number, kind: rec.kind, title: x.title, first_body: fv.text, first_at: fv.at, created_at: x.createdAt, merged_at: x.mergedAt ?? rec.merged_at, author: x.author?.login ?? null, assoc: x.authorAssociation, requests, release_tag: rec.release_tag, release_at: rec.release_at, description: d.repository.description ?? "", topics: (d.repository.repositoryTopics?.nodes ?? []).map((t: any) => t.topic.name), readme_commit: commits[0]?.sha ?? null });
