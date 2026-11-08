@@ -15,6 +15,7 @@ export const SUBCOMMANDS: Record<string, { module: string; summary: string }> = 
   mine: { module: "author/mine.ts", summary: "free GitHub mining: the public frame, candidate records in seeded order, release and window checks (no model call)" },
   author: { module: "author/run.ts", summary: "author public units under custody on an authoring item: keys, inputs, rewrites, audits" },
   transpose: { module: "author/transpose.ts", summary: "author transposed units under custody: summaries, the in-custody check, T1, T2, the Astra check and the recognition probe" },
+  sets: { module: "author/sets.ts", summary: "draw the 24-unit calibration slice: 16 audited public units in seeded order, quotas first, fill-ins and the twin list" },
   classify: { module: "author/classify.ts", summary: "the frozen project-type rule: two classifiers and a third on disagreement" },
   generic: { module: "author/generic.ts", summary: "the generic screen: Astra and Opus label each key item against stock rows 1 and 2" },
   parse: { module: "parse.ts", summary: "the plan-changes parser, the one lenient parse and the normalizer, over a reply file" },
