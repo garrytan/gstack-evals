@@ -3,10 +3,12 @@
 // authoring line item. Every step is a separate call that sees only what its role may see:
 //   collect (free)   the record's first version, the requests that led to it, the README at plan time, the release
 //                    check and the titles of everything created in the 42-day window
+//   screen           a fix, chore or refactor is not a plan; the selector picks the window records that touch the
+//                    feature and the unit drops when it picks none (the picks reach only the key writer)
 //   inputs           a name map, plan.md (the frozen PR-as-plan rewrite, or the first version with names replaced),
 //                    context/project.md and brief.md, written from material dated before the plan only
 //   input audit      blind to the key: names, dates, design in the brief, additions to the plan; one fix round
-//   key              picks the window records that touch the feature, reads them in full, writes U, E and R items,
+//   key              reads the picked records in full and every window title, writes U, E and R items,
 //                    the mentioned flags and the 3 plan commitments
 //   key audit        support, window, kind rules, mentioned flags, wording; one fix round
 // A unit that fails an audit twice drops. Writers of inputs never see the window, the key or the key writer's notes.
@@ -259,17 +261,27 @@ async function inputAudit(ctx: Ctx, uid: string, dir: string): Promise<string | 
 const titleLine = (t: any) => "#" + t.number + " | " + t.kind + " | " + t.date + " | " + t.assoc + " | " + (t.labels.join(",") || "-") + " | " + t.comments + " comments | " + t.title;
 const recordText = (x: any) => "#" + x.number + " (" + x.kind + ", " + String(x.date).slice(0, 10) + ", " + x.assoc + (x.merged_at ? ", merged " + x.merged_at.slice(0, 10) : "") + (x.closes?.length ? ", closes #" + x.closes.join(" #") : "") + ") " + x.title + "\n" + x.body + x.comments.map((c: any) => "\n  > [" + c.assoc + " @" + c.author + ", " + String(c.date).slice(0, 10) + "] " + c.body.replace(/\n/g, "\n    ")).join("");
 
+/** Before any input is written: the record must be a plan (section 4 excludes fixes and chores), and the window must hold at least one record the selector says touches the feature. The selector's picks reach only the key writer. */
+async function screen(ctx: Ctx, uid: string, dir: string): Promise<string | null> {
+  const r = readJson(join(dir, "raw/record.json"));
+  const s = await ask(ctx, ctx.author, uid, "screen", "opus", P.SCREEN + fence("Record", r.title + "\n\n" + cut(r.first_body, 2500)), 1500, "low", true);
+  put(join(dir, "screen.json"), s);
+  if (s?.plan === false) return "not a plan for a user-facing change";
+  const titles = readJson(join(dir, "raw/window.json"));
+  const planFirst = fence("The plan as first written", r.title + "\n\n" + r.first_body);
+  const sel = await ask(ctx, ctx.author, uid, "select", "opus", P.SELECT.replace("RELEASE", r.release_at.slice(0, 10)) + planFirst + fence("Records created in the 42 days after the release", titles.map(titleLine).join("\n")), 4000, "medium", true);
+  const want = new Set((sel?.pick ?? []).map(Number));
+  const picks = titles.filter((t: any) => want.has(t.number)).slice(0, 60);
+  if (!picks.length) return "no record in the window touches the feature";
+  put(join(dir, "raw/picked.json"), fetchRecords(r.repo, picks.map((t: any) => ({ number: t.number, kind: t.kind === "discussion" ? "discussion" : "issue" }))));
+  return null;
+}
+
 async function keyStep(ctx: Ctx, uid: string, dir: string): Promise<string | null> {
   const r = readJson(join(dir, "raw/record.json"));
   const titles = readJson(join(dir, "raw/window.json"));
   const names = readJson(join(dir, "namemap.json"));
   const planFirst = fence("The plan as first written", r.title + "\n\n" + r.first_body);
-  if (!existsSync(join(dir, "raw/picked.json"))) {
-    const sel = await ask(ctx, ctx.author, uid, "select", "opus", P.SELECT.replace("RELEASE", r.release_at.slice(0, 10)) + planFirst + fence("Records created in the 42 days after the release", titles.map(titleLine).join("\n")), 4000, "medium", true);
-    const want = new Set((sel?.pick ?? []).map(Number));
-    const picks = titles.filter((t: any) => want.has(t.number)).slice(0, 60);
-    put(join(dir, "raw/picked.json"), fetchRecords(r.repo, picks.map((t: any) => ({ number: t.number, kind: t.kind === "discussion" ? "discussion" : "issue" }))));
-  }
   const picked = readJson(join(dir, "raw/picked.json"));
   const inputsText = INPUT_FILES.map((f) => fence("Input file " + f, readFileSync(join(dir, "unit", f), "utf8"))).join("");
   const material = planFirst + fence("Release", r.release_tag + " on " + r.release_at.slice(0, 10)) + fence("Titles of everything created in the 42 days", titles.map(titleLine).join("\n")) + fence("Records that touch the feature, in full", picked.map(recordText).join("\n\n")) + inputsText + fence("Name replacements (use the replacement names)", names.map((x: any) => x.original + " -> " + x.replacement).join("\n"));
@@ -353,6 +365,12 @@ export async function run(argv: string[], io: Io): Promise<number> {
         if (state.status !== "open") return done(state.status, state.status === "dropped" ? undefined : undefined);
         if (state.stage === "collect") {
           const why = collect(dir, rec);
+          if (why) return done("dropped", why);
+          state.stage = "screen";
+          save();
+        }
+        if (state.stage === "screen") {
+          const why = await screen(ctx, uid, dir);
           if (why) return done("dropped", why);
           state.stage = "inputs";
           save();
