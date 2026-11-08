@@ -119,6 +119,30 @@ async function assessMulti(work: string, item: string, ids: string[], io: Io): P
   return 0;
 }
 
+/** Section 4's twin check: a public calibration unit becomes a source history. Its plan.md and context are the plan and
+ * the product before it, its key items are the aftermath events (kind and outside users kept), and its name map gives the
+ * names the traceability check looks for. Free: no model call. */
+function twin(work: string, units: string | undefined, ids: string[], io: Io): number {
+  if (!units || !ids.length) throw new AuthorError("E_USAGE", "pv transpose twin --work <tx dir> --units <public units dir> --ids <uid,...> --item <item>");
+  for (const uid of ids) {
+    const dir = join(units, uid);
+    const key: Key = readJson(join(dir, "unit/key.json"));
+    const meta: UnitMeta = readJson(join(dir, "unit/unit.json"));
+    const names = (readJson(join(dir, "namemap.json")) as Array<{ original: string; replacement: string }>).flatMap((x) => [x.original, x.replacement]).filter((n) => n.length >= 3 && !/^the /i.test(n));
+    put(join(work, "assess", "twin:" + uid + ".json"), {
+      usable: true,
+      plan: readFileSync(join(dir, "unit/plan.md"), "utf8"),
+      before: readFileSync(join(dir, "unit/context/project.md"), "utf8"),
+      plan_date: meta.plan_date,
+      events: key.items.map((i) => ({ kind: i.kind, excerpt: i.statement, date: null, users: i.outside_users })),
+      names,
+      type: meta.type,
+    });
+    io.out("twin:" + uid + "@" + meta.type + " " + key.items.length + " events");
+  }
+  return 0;
+}
+
 const nameHit = (text: string, names: string[]) => names.filter((n) => n && n.length >= 3).some((n) => text.toLowerCase().includes(n.toLowerCase()));
 
 async function authorOne(ctx: { log: any; author: Meter; checks: Meter }, work: string, id: string, type: ProjectType, set: UnitMeta["set"], summaryPrompt: string): Promise<string | null> {
@@ -126,7 +150,7 @@ async function authorOne(ctx: { log: any; author: Meter; checks: Meter }, work: 
   if (!a?.usable) return "source not usable";
   const uid = "pv-t" + sha256("20261108\n" + id + "\n" + type).slice(0, 9);
   const dir = join(work, "units", uid);
-  const events = (a.events ?? []).slice(0, 10).map((e: any, i: number) => ({ n: i + 1, kind: e.kind, excerpt: String(e.excerpt ?? ""), date: e.date ?? null }));
+  const events = (a.events ?? []).slice(0, 10).map((e: any, i: number) => ({ n: i + 1, kind: e.kind, excerpt: String(e.excerpt ?? ""), date: e.date ?? null, users: Number(e.users) || 0 }));
   if (!events.some((e: any) => e.kind === "U" || e.kind === "E")) return "no U or E event";
   const names: string[] = (a.names ?? []).map(String);
   put(join(dir, "source.json"), { id, type, events: events.length });
@@ -205,11 +229,12 @@ async function authorOne(ctx: { log: any; author: Meter; checks: Meter }, work: 
   }
   const keyItems: KeyItem[] = items
     .filter((x: any) => verdict.get(Number(x.event))?.follows !== false)
-    .map((x: any) => ({ id: "k" + x.event, kind: events[x.event - 1].kind, statement: x.statement, evidence: ["event " + x.event], outside_users: 0, mentioned: x.mentioned === true || verdict.get(Number(x.event))?.named === true, generic: false, foreseeable: "maybe" }));
+    .map((x: any) => ({ id: "k" + x.event, kind: events[x.event - 1].kind, statement: x.statement, evidence: ["event " + x.event], outside_users: events[x.event - 1].users, mentioned: x.mentioned === true || verdict.get(Number(x.event))?.named === true, generic: false, foreseeable: "maybe" }));
   const key: Key = { unit: uid, items: keyItems, primary: rankPrimary(uid, keyItems), commitments: [] };
   put(join(dir, "unit/key.json"), key);
   if (!key.primary.length) return "no primary item";
-  const meta: UnitMeta = { id: uid, set, source: "transposed", source_kind: "transposed", inspiration: id.startsWith("public:") ? "public" : "capy", type, plan_date: id.startsWith("public:") ? (a.plan_date ?? new Date().toISOString()) : new Date().toISOString(), rank: 0 };
+  const pub = id.startsWith("public:") || id.startsWith("twin:");
+  const meta: UnitMeta = { id: uid, set, source: "transposed", source_kind: "transposed", inspiration: pub ? "public" : "capy", type, plan_date: pub ? (a.plan_date ?? new Date().toISOString()) : new Date().toISOString(), rank: 0, ...(id.startsWith("twin:") ? { twin_of: id.slice(5) } : {}) };
   put(join(dir, "unit/unit.json"), meta);
   return null;
 }
@@ -223,6 +248,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (sub === "scan") return scan(work, item, io);
   if (sub === "assess") return assess(work, item, ids, io);
   if (sub === "assess-multi") return assessMulti(work, item, ids, io);
+  if (sub === "twin") return twin(work, flag(rest, "--units"), ids, io);
   if (sub !== "author") throw new AuthorError("E_USAGE", "pv transpose scan|assess|author");
   const promptFile = flag(rest, "--summary-prompt");
   if (!promptFile) throw new AuthorError("E_USAGE", "pv transpose author needs --summary-prompt <sealed prompt file on tmpfs>");
