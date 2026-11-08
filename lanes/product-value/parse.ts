@@ -146,6 +146,9 @@ export function normalizeChanges(changes: readonly unknown[]): { list: string[];
   return { list: items.map((i) => i.text), words: items.reduce((s, i) => s + words(i.text), 0), items: items.length, cut: items.filter((i) => i.cut).length };
 }
 
+/** The scoring side's entry point (io.ts loadNormalize): stock rows, oracle lists and arm lists normalize the same way. */
+export const normalize = (strings: string[]): string[] => normalizeChanges(strings).list;
+
 /** The list as judges read it: "1." to "5." plain lines. */
 export const renderList = (list: readonly string[]): string => list.map((t, i) => i + 1 + ". " + t).join("\n");
 
