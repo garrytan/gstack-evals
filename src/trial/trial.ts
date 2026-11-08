@@ -77,6 +77,9 @@ export interface TrialSpec {
   /** Before the trees are removed, after copyOut: copies out a session's gate record from the work dir and returns trial.json's
    * gate and any copy failures, which join logs.copy_out (an enforced ceo-outcome session; src/trial/review/skill-gates.ts). */
   gate?: (work: string) => { copy_out: string[]; gate: unknown };
+  /** Before the trees are removed, after copyOut: the directory <work dir>/from is copied to to, regular files and
+   * directories only, symlinks skipped, such as a product-value session's gstack state root. Failures join logs.copy_out. */
+  copyDir?: { from: string; to: string };
   /** How the trees are removed (src/trial/cleanup.ts): an image removes root-owned leftovers. */
   cleanup?: CleanupOptions;
   /** Keys appended to the gstack state root's config.yaml after the seed: a stack cell's gstack config (src/arms/cells.ts). */
@@ -126,6 +129,29 @@ export function copyNamed(root: string, name: string, to: string, rel = ""): str
   });
 }
 
+/** Copies the tree at from to to, regular files and directories only; a symlink is skipped, never followed, and a missing from copies nothing. Returns one line per entry it could not copy. */
+export function copyDir(from: string, to: string, rel = ""): string[] {
+  if (!rel && !lstatSync(from, { throwIfNoEntry: false })?.isDirectory()) return [];
+  let entries;
+  try {
+    mkdirSync(join(to, rel), { recursive: true });
+    entries = readdirSync(join(from, rel), { withFileTypes: true });
+  } catch (e) {
+    return [String(e)];
+  }
+  return entries.flatMap((e) => {
+    const path = join(rel, e.name);
+    if (e.isDirectory()) return copyDir(from, to, path);
+    if (!e.isFile()) return [];
+    try {
+      copyFileSync(join(from, path), join(to, path));
+      return [];
+    } catch (err) {
+      return [String(err)];
+    }
+  });
+}
+
 export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
   const started = Date.now();
   const { task, sandbox } = spec;
@@ -152,6 +178,10 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRun> {
     if (spec.copyOut) {
       const failures = copyNamed(work, spec.copyOut.name, spec.copyOut.to);
       if (failures.length) logs.copy_out = failures;
+    }
+    if (spec.copyDir) {
+      const failures = copyDir(join(work, spec.copyDir.from), spec.copyDir.to).map((f) => spec.copyDir!.from + ": " + f);
+      if (failures.length) logs.copy_out = [...((logs.copy_out as string[] | undefined) ?? []), ...failures];
     }
     const gate = spec.gate?.(work);
     if (gate?.copy_out.length) logs.copy_out = [...((logs.copy_out as string[] | undefined) ?? []), ...gate.copy_out];

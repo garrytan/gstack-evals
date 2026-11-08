@@ -230,3 +230,8 @@ as its amendments change it), with `--sealed-root` when the suite is sealed. ceo
   `gstack-evals ceo rows` takes `--order <file>` at `--stage 2`, and `--smoke-round 1` or `2` at stage 1 to read stage
   1's smoke or its rerun.
 - The out dir must sit outside the repo.
+
+## Product-value units
+
+review-units --plan product-value --family plan|brief runs prereg 2026-11-08-geva-403's review sessions (product-value.ts, pv-cli.ts). Each arm's first line and the closing template are frozen in product-value.ts and tested against the post. Every arm runs with the claude-code-preset system prompt, 150 turns, a 3600 s timeout, one session at a time, a 200,000-token window and web tools denied. The gstack arm runs the 23f9d07 pin unattended; plan-ceo-review-gate adds gstack's opt-in gate for smoke rule 3. --pv-fallback-sentence adds smoke rule 2's sentence on the plan family only. The dry run asserts both families' mounts and prints each arm's prompt sha256. Each session's journal entry holds one parse with the parser's sha256, its end state, every attempt and its spend; arm.json's product_value counts them. lanes/product-value/README.md lists the build-time choices.
+
