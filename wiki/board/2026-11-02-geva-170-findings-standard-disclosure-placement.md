@@ -7,7 +7,7 @@ author: GEVA-170
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-02
-status: done
+status: superseded
 supersedes: [2026-11-01-geva-105-findings-standard]
 source: "org drive research/disclosures.md, sha256 0629b68480b2c445b6c5e358cc16ff6834652d320f909263438b3170018de0ac (the placement words and the lines)"
 links:
