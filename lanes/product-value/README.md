@@ -12,3 +12,74 @@ sealed outside the repo; the repo gets counts and digests only.
 - meter.ts: the metered client. Every direct model call goes through one lease of one ledger line item and an
   in-process metering proxy, with a reply cache keyed by model and request digest.
 - cli.ts: `gstack-evals pv <command>`, one module per subcommand.
+## Scoring side (GEVA-406, branch pv-score-side)
+
+Every command below is keyless except pv judge and pv generic, which spend only through meter.ts on the item they
+name. Every output path must sit outside the repository, and every command that takes several input or output paths
+refuses two that resolve to the same real file or directory (the four-paths guard owed from #273's merge script).
+
+- prompts/: the judge brief (brief.md), the judge check's audit prompt (audit.md), the pairwise prompt (pairwise.md) and
+  the arm-guess probe (probe.md), each pinned by sha256 in judge.ts. The brief and the audit prompt carry section 7's
+  anticipation rule and specific-match rule verbatim and three generic match and no-match examples written for this
+  post, from no unit.
+- pv oracle (oracle.ts): one oracle list per calibration unit, made by a script from its primary items.
+- pv packets (packets.ts): label packets with the three stock rows and, in stage 1, the oracle list; a shuffled-key
+  packet beside each; judge-check packets; stage 2 gold packets and the plain rendering; pairwise and probe packets. The
+  map from random ids to units, arms, passes and items is written to --map, outside the packets directory.
+- pv judge (judge.ts): runs a map's packets on one judge item. It writes labels.ndjson, pairwise.ndjson, probe.ndjson
+  and calls.ndjson; every record names the judge model and the version the provider reported.
+- pv generic (author/generic.ts): section 3's generic screen with the same brief, packets and judge client.
+- pv score (score.ts): A per review and every secondary, stock credits, cell and split summaries, the length-adjusted
+  difference, the pairwise rates and the probe tally.
+- pv readings (rules.ts): stage 1 (twin check, path, admission, STOCK FAIL, judge check, smoke rules, CEILING flags,
+  leak exposure, MDD) and stage 2 (contrasts, verdicts, the reading rule, the gold re-check, the interim stop).
+- pv dryrun (dryrun.ts): drives every frozen rule of item 4 on both sides of its edge, runs the twin simulations and
+  opens and settles one ledger lease per stage 1 item on a temporary ledger. The run side's own checks plug in through
+  run-checks.ts (export runSideChecks()); until that module exists the dry run prints one FAIL line for them and exits 1.
+- cutoffs.json: each model's stated training cutoff with its provider source, read 2026-11-08. Particle publishes none.
+
+### Build-time choices
+
+The preregistration names these rules without their mechanics. Each choice below is the simplest one that serves its
+words, and the tests drive each in both directions.
+
+1. Oracle list: one change per primary item in rank order, "Plan for this need before launch: " plus the item's
+   statement. A unit with six primary items keeps five changes, so its sixth item is left out.
+2. Label packets hold every key item (U, E, R, generic and mentioned), so the secondaries read the same labels, and in
+   the brief family the plan's three commitments as items. One packet per (unit, model); a particle-1 packet goes to both
+   panel judges.
+3. Shuffled keys: a separate packet per label packet holds the same lists and the stock rows (their labels unused)
+   against another unit's items. Each project type with two or more units becomes one seeded cycle; lone units cycle
+   together; a single lone unit joins a random cycle.
+4. The judge check labels every stage 1 list: check packets mirror stage 1's label packets, so a stock row or oracle
+   list is one list per (unit, model). "At least 40 distinct lists" counts lists over both classes together.
+5. Oracle half cap: the oracle cells used are at most the non-oracle anticipated gold cells, a seeded subset when the cap
+   binds. Stage 2 gold: per production judge, 20 anticipated cells (oracle never above real) and not-anticipated cells to
+   40, seeded; one gold packet per source check packet with the drawn lists, all three stock rows and the unit's items.
+   The plain rendering is a seeded 40 of the family's gold cells, with the answers in a separate file.
+6. Resend: the second send appends a fixed note, so it never reads the meter's cache of the first answer, and its
+   answer replaces the first whole. The same holds for a Gemini retry.
+7. Panel: Gemini reads the whole packet and its vote counts only on split cells. A panel cell missing an Astra or Opus
+   vote stays unlabelled.
+8. Versions: judge.ts reads the provider's model string from each upstream reply and keeps it beside the meter's cache,
+   so a cached call reports the same version.
+9. Secondaries: each takes its own maximum matching over its own item set. Precision is the matching over all key items
+   divided by the list's changes; the multi-item share counts changes named for two or more primary items.
+10. Pairwise: ties are left out of both win rates; the length-controlled rate is a logistic fit on the word-count
+    difference (per 10 words) read at zero, with a unit bootstrap interval. The probe shows Astra one list per packet, 30
+    seeded stage 2 lists per family across the three models.
+11. Admission reads instrument failures first (NO READ, then STOCK FAIL), then the band. The parse rate is blocks over
+    completed none replies of all three models on the admitted units.
+12. A twin pair without 3 scored passes on each side drops from the twin check and is named.
+13. Smoke rule 1 counts a missing session as no parsable block. The interim stop reads the first 32 completed Opus skill
+    sessions in rows-file order; a session with no exposure reading counts as not exposed.
+14. A contrast reads untested on coverage when either arm's coverage is under 0.90. Exposure is exposed skill sessions
+    over skill sessions with an exposure reading.
+15. Inspiration split: Capy-inspired transposed units against every other unit. The sign rule's point estimate on each
+    side is the mean paired difference.
+16. CUT-CANDIDATE is never returned on a primary that reads untested, leak included.
+17. Leak: a month-stated cutoff covers the whole month; a unit is leak-exposed when the cutoff's last day falls after its
+    plan date.
+18. MDD: the power.txt rows at the largest tabled unit count at or below the actual one (48 below that), the larger MDD
+    over ICC and control rate, at alpha 0.025.
+19. The twin simulations use power.py's unit model at control 0.35 with 1 or 2 items a unit, at ICC 0.5 and 0.843.
