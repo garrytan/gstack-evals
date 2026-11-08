@@ -1,0 +1,30 @@
+# Calls, dollars and tokens per item, arm and model, summed from the final ledger copy (ceo-o-cmp.sqlite, 13 items) over settled reservations.
+# The 9 calls in state unknown carry no usage or spent amount here; the ledger booked them at item level (opus-p's $14.19 gap).
+states {'settled': 14938, 'unknown': 9}
+item | arm | model | calls | usd | input | cache_read | cache_write | output | reasoning | no_usage
+ceo-o-cmp-judge-opus | ceo-D | claude-opus-5-5 | 112 | 7.232404 | 832966 | 0 | 0 | 195027 | 0 | 0
+ceo-o-cmp-judge-opus | ceo-rem | claude-opus-5-5 | 84 | 5.8623 | 943585 | 0 | 0 | 104398 | 0 | 0
+ceo-o-cmp-judge-sol | ceo-D | gpt-6.1-sol | 112 | 1.901289 | 336 | 0 | 525494 | 36345 | 22340 | 0
+ceo-o-cmp-judge-sol | ceo-rem | gpt-6.1-sol | 84 | 1.775038 | 252 | 0 | 589998 | 23182 | 6770 | 0
+ceo-o-cmp-judge-sonnet | ceo-D | claude-sonnet-5-5 | 112 | 3.207612 | 832966 | 0 | 0 | 154168 | 0 | 0
+ceo-o-cmp-judge-sonnet | ceo-rem | claude-sonnet-5-5 | 85 | 2.866532 | 953371 | 0 | 0 | 95979 | 0 | 0
+ceo-o-cmp-opus-e | gstack-enforced | claude-opus-5-5 | 1544 | 140.463287 | 3090 | 100120294 | 14771879 | 2328345 | 0 | 0
+ceo-o-cmp-opus-p | gstack-forced | claude-opus-5-5 | 1007 | 103.025425 | 2002 | 56966453 | 11503660 | 1705273 | 0 | 7
+ceo-o-cmp-opus-p | lens | claude-opus-5-5 | 522 | 20.75456 | 1048 | 11579840 | 1797723 | 472275 | 0 | 1
+ceo-o-cmp-opus-p | none | claude-opus-5-5 | 528 | 20.662276 | 1060 | 11755797 | 1805012 | 464078 | 0 | 1
+ceo-o-cmp-opus-p-held | gstack-forced | claude-opus-5-5 | 137 | 14.517129 | 274 | 7558336 | 1669192 | 232918 | 0 | 0
+ceo-o-cmp-opus-p-held | lens | claude-opus-5-5 | 77 | 3.171448 | 156 | 1705780 | 284686 | 70310 | 0 | 0
+ceo-o-cmp-opus-p-held | none | claude-opus-5-5 | 77 | 3.14319 | 154 | 1706042 | 283257 | 69252 | 0 | 0
+ceo-o-cmp-opus-p-held-judge-opus | ceo-D | claude-opus-5-5 | 112 | 2.523892 | 511888 | 0 | 0 | 23817 | 0 | 0
+ceo-o-cmp-opus-p-held-judge-opus | ceo-rem | claude-opus-5-5 | 84 | 1.816536 | 367874 | 0 | 0 | 17252 | 0 | 0
+ceo-o-cmp-opus-p-held-judge-sol | ceo-D | gpt-6.1-sol | 112 | 0.901048 | 336 | 0 | 329778 | 6730 | 860 | 0
+ceo-o-cmp-opus-p-held-judge-sol | ceo-rem | gpt-6.1-sol | 84 | 0.632517 | 252 | 0 | 235818 | 3789 | 456 | 0
+ceo-o-cmp-opus-p-held-judge-sonnet | ceo-D | claude-sonnet-5-5 | 112 | 1.240046 | 511888 | 0 | 0 | 21627 | 0 | 0
+ceo-o-cmp-opus-p-held-judge-sonnet | ceo-rem | claude-sonnet-5-5 | 84 | 0.818288 | 367874 | 0 | 0 | 8254 | 0 | 0
+ceo-o-cmp-particle-e | gstack-enforced | particle-ai/particle-1 | 2025 | 7.262876 | 37982459 | 93680640 | 0 | 3182581 | 0 | 0
+ceo-o-cmp-particle-p | gstack-forced | particle-ai/particle-1 | 1729 | 6.954064 | 36354729 | 69971200 | 0 | 3048756 | 0 | 0
+ceo-o-cmp-particle-p | none | particle-ai/particle-1 | 404 | 0.910936 | 2573227 | 4858624 | 0 | 638836 | 0 | 0
+ceo-o-cmp-sol-e | gstack-enforced | openai/gpt-6.1-sol | 2696 | 72.400567 | 8088 | 175505424 | 10801391 | 2782918 | 0 | 0
+ceo-o-cmp-sol-p | gstack-forced | openai/gpt-6.1-sol | 2668 | 73.149257 | 87039 | 172328130 | 10935227 | 2840314 | 0 | 0
+ceo-o-cmp-sol-p | none | openai/gpt-6.1-sol | 356 | 8.334901 | 1068 | 3190803 | 2036423 | 292249 | 0 | 0
+total 505.527418 {'calls': 14947, 'input': 82337982, 'cache_read': 710927363, 'cache_write': 57569538, 'output': 18818673, 'reasoning': 30426, 'no_usage': 9}
