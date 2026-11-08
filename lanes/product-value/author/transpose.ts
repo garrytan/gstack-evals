@@ -9,7 +9,8 @@
 //   pv transpose assess-multi --work <dir> --item pv-auth-inspiration --ids   the same for a long owner-seat
 //                                                                       conversation that can hold several histories
 //   pv transpose author  --work <dir> --item <authoring item> --ids <src:type,...>   summaries (the sealed summary
-//                         prompt), the in-custody Opus check, T1, T2, the Astra check (pv-auth-checks, summaries only),
+//                         prompt; a rejected summary is rewritten once with the check's notes), the in-custody Opus
+//                         check, T1, a copy sweep of T1's files against the source, T2, the Astra check (pv-auth-checks, summaries only),
 //                         the traceability check, the recognition probe (pv-auth-checks), both audits, the unit files
 // Sources are the owner's own Capy threads (fetched into <work>/src by the parent with Capy's thread tools) or public
 // records; raw source text never leaves custody, and every call that sees it is an Anthropic call. The work dir must
@@ -30,6 +31,8 @@ const SCAN = "Below are the titles of a product owner's working threads with an 
 const ASSESS = "Below is the transcript of one working thread between a product owner and an AI coding agent. Decide whether it holds a usable source history: a plan or design for a product change, written before the change was built, followed by real aftermath events. Aftermath events are what happened after the first version reached its users: a need, use, environment or misunderstanding the owner or users raised (kind U), a capability added afterwards that extends the feature (kind E), or how the change actually reached users when that differs from the plan, such as what the first version left out or how it was gated (kind R). Bug fixes with no new need behind them, chores and internal refactors are not events.\n\nIf it is usable, copy the plan verbatim as it was first written (only the plan, at most 1,500 words), describe the product as it stood before the plan from material dated before it (at most 400 words), and list every aftermath event in order (at most 10), each with its kind, a verbatim excerpt of at most 120 words and its date. Also list the names that identify the product or project (product, project, company and repository names, domains), and the product's type: consumer, server (server-side data or enterprise), mobile or other (developer tools and the rest).\n\nOutput one fenced json block holding {\"usable\": true | false, \"why\": \"...\", \"plan\": \"...\", \"before\": \"...\", \"events\": [{\"kind\": \"U\" | \"E\" | \"R\", \"excerpt\": \"...\", \"date\": \"...\"}], \"names\": [\"...\"], \"type\": \"consumer\" | \"server\" | \"mobile\" | \"other\"} and nothing else.";
 
 const ASSESS_MULTI = "Below is a long conversation between a product owner (OWNER) and the coding agent that runs the product's crew (AGENT), over days or weeks. Find every usable source history in it. A usable history is a plan or design for one product change, written or relayed before the change was built (the owner's brief, an approved plan, or a plan the agent relayed for approval), followed by real aftermath events after that change reached its users, who here include the owner using the product. Aftermath events are: a need, use, environment or misunderstanding the owner or users raised about the shipped change (kind U); a capability added afterwards that extends it (kind E); or how the change actually reached users when that differs from the plan, such as what the first version left out or how it was gated (kind R). Bug fixes with no new need behind them, chores, process and crew management, and internal refactors are not events.\n\nReturn up to 6 histories, the richest first, each about a different change. For each, copy the plan verbatim as first written or relayed (only the plan, at most 1,500 words), describe the product as it stood before the plan from material dated before it (at most 400 words), and list every aftermath event in order (at most 10), each with its kind, a verbatim excerpt of at most 120 words and its date. Also list the names that identify the product or project (product, project, company and repository names, domains, people), and the product's type: consumer, server (server-side data or enterprise), mobile or other (developer tools and the rest).\n\nOutput one fenced json block holding {\"histories\": [{\"why\": \"...\", \"plan\": \"...\", \"plan_date\": \"...\", \"before\": \"...\", \"events\": [{\"kind\": \"U\" | \"E\" | \"R\", \"excerpt\": \"...\", \"date\": \"...\"}], \"names\": [\"...\"], \"type\": \"consumer\" | \"server\" | \"mobile\" | \"other\"}]} and nothing else. Return {\"histories\": []} when there is none.";
+
+const SWEEP = "Below are a source plan, the source product before it, and three files written from them for a new, invented product. Edit the three files so that: no sentence copies or closely mirrors a sentence of the source, in wording or in sentence structure; no name or number from the source remains; and brief.md holds no part of the plan's design (no solution, approach, feature list, interface, setting, flag, rollout or scope decision). Change nothing else: keep every decision, commitment and omission of plan.md, and keep each file's length.";
 
 const CHECK = "Compare each summary below with its raw event. A summary passes when it says what happened faithfully, adds nothing, keeps the event's kind, and holds no name of a person, product, project, company, domain, repository or file, no secret or credential, no identifying number and no personal data.\n\nOutput one fenced json block holding {\"checks\": [{\"event\": <n>, \"verdict\": \"pass\" | \"reject\", \"note\": \"...\"}]} and nothing else.";
 
@@ -129,8 +132,9 @@ async function authorOne(ctx: { log: any; author: Meter; checks: Meter }, work: 
   put(join(dir, "source.json"), { id, type, events: events.length });
   const raw = events.map((e: any) => "Event " + e.n + " (kind " + e.kind + (e.date ? ", " + e.date : "") + "): " + e.excerpt).join("\n\n");
   let summaries: any[] = [];
+  let rejected = "";
   for (let round = 1; round <= 2; round++) {
-    const s = await ask(ctx, ctx.author, uid, "summary-" + round, "opus", summaryPrompt + fence("Events", raw), 6000, "medium", true);
+    const s = await ask(ctx, ctx.author, uid, "summary-" + round, "opus", summaryPrompt + fence("Events", raw) + (rejected ? fence("A checker rejected some earlier summaries; write every summary again and fix these", rejected) : ""), 6000, "medium", true);
     summaries = (s?.summaries ?? []).filter((x: any) => Number.isInteger(x?.event) && typeof x.summary === "string");
     if (summaries.length !== events.length) {
       if (round === 2) return "summaries do not cover every event";
@@ -140,12 +144,14 @@ async function authorOne(ctx: { log: any; author: Meter; checks: Meter }, work: 
     put(join(dir, "check-" + round + ".json"), c);
     if ((c?.checks ?? []).length === events.length && c.checks.every((x: any) => x.verdict === "pass")) break;
     if (round === 2) return "the in-custody check rejected the summaries twice";
+    rejected = (c?.checks ?? []).filter((x: any) => x.verdict !== "pass").map((x: any) => "Event " + x.event + ": " + x.note).join("\n") || "(the check did not cover every event)";
   }
   summaries = summaries.map((x) => ({ ...x, kind: events[x.event - 1]?.kind }));
   put(join(dir, "summaries.json"), summaries);
   const t1 = labelled(await ask(ctx, ctx.author, uid, "t1", "opus", P.T1.replace("TYPE", P.TYPE_WORDS[type]!) + fence("Source plan", a.plan) + fence("The source product before the plan", a.before) + "\n\n" + P.T1_FORMAT, 12000, "medium", false));
   if (!t1["plan.md"] || !t1["brief.md"] || !t1["context/project.md"]) return "T1 did not return three files";
-  for (const f of INPUTS) put(join(dir, "unit", f), t1[f]!);
+  const swept = labelled(await ask(ctx, ctx.author, uid, "sweep", "opus", SWEEP + fence("Source plan", a.plan) + fence("The source product before the plan", a.before) + INPUTS.map((f) => fence("File " + f, t1[f]!)).join("") + "\n\n" + P.T1_FORMAT, 12000, "medium", false));
+  for (const f of INPUTS) put(join(dir, "unit", f), (swept["plan.md"] && swept["brief.md"] && swept["context/project.md"] ? swept : t1)[f]!);
   const inputsText = () => INPUTS.map((f) => fence("Input file " + f, readFileSync(join(dir, "unit", f), "utf8"))).join("");
   for (let round = 1; round <= 2; round++) {
     const au = await ask(ctx, ctx.author, uid, "audit-in-" + round, "opus", AUDIT_IN + fence("Source plan", a.plan) + fence("The source product before the plan", a.before) + inputsText(), 8000, "high", true);
