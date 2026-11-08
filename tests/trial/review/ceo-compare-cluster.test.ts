@@ -20,7 +20,9 @@ afterAll(() => rmSync(DIR, { recursive: true, force: true }));
 
 // The fixed copy with the frozen cluster key put back, to show the count check refuses it.
 const fixed = readFileSync(FIXED, "utf8");
-const SCORERS = { frozen: readFileSync(FROZEN, "utf8"), fixed, reverted: fixed.replaceAll("cluster: none.get(k)!.unit", 'cluster: k.split("#")[0]!') };
+// shuffled clusters pairs by their place in the contrast, 48 clusters for 48 units but the wrong partition: on Opus, unit
+// c00's pass 1 pair shares a cluster with c24's.
+const SCORERS = { frozen: readFileSync(FROZEN, "utf8"), fixed, reverted: fixed.replaceAll("cluster: none.get(k)!.unit", 'cluster: k.split("#")[0]!'), shuffled: fixed.replace("cluster: none.get(k)!.unit", 'cluster: "g" + (kept.indexOf(k) % 48)') };
 for (const [name, src] of Object.entries(SCORERS)) writeFileSync(join(DIR, name + ".ts"), src);
 
 const KEYLESS = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC|OPENAI|OPENROUTER)_API_KEY$/.test(k))) as Record<string, string>;
@@ -91,6 +93,12 @@ describe("unit ids that hold '#', as stage 2's do", () => {
     const r = compare("reverted", hashed.d, hashed.proj);
     expect(r.status).not.toBe(0);
     expect(r.err).toBe("E_USAGE compare: a contrast's 96 pairs fall in 1 cluster for 48 units; each pair must cluster on its unit");
+  });
+  test("the check also refuses a wrong partition with as many clusters as units", () => {
+    expect(SCORERS.shuffled).not.toBe(SCORERS.fixed);
+    const r = compare("shuffled", hashed.d, hashed.proj);
+    expect(r.status).not.toBe(0);
+    expect(r.err).toBe("E_USAGE compare: pair 1 of a contrast's 96 pairs isn't clustered on its unit; each pair must cluster on its unit");
   });
 });
 

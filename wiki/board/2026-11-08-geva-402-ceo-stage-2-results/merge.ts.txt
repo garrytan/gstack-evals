@@ -21,8 +21,10 @@ if ((mode !== "build" && mode !== "verify") || !vFile) throw new Error("E_USAGE 
 const fail = (m: string): never => { console.error("E_MERGE " + m); process.exit(1); };
 const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 const s = (v: unknown) => JSON.stringify(v);
-const S = JSON.parse(readFileSync(sFile, "utf8")), C = JSON.parse(readFileSync(cFile, "utf8"));
+const parse = (text: string, name: string) => JSON.parse(text, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? fail("a number in the " + name + " is not finite") : v));
+const S = parse(readFileSync(sFile, "utf8"), "stage 2 file"), C = parse(readFileSync(cFile, "utf8"), "completion file");
 const TOP = ["stage", "order", "suite", "exposure_sha256", "units", "reviews", "stock", "family", "passes", "held_passes", "lens"];
+for (const [name, f] of [["stage 2 file", S], ["completion file", C]] as const) if (!Array.isArray(f?.units) || !Array.isArray(f.reviews) || !Array.isArray(f.stock)) fail("the " + name + "'s units, reviews or stock are not arrays");
 if (s(Object.keys(S)) !== s(TOP) || S.stage !== 2) fail("the stage 2 file is not stage 2 readings");
 if (s(Object.keys(C)) !== s(TOP) || C.stage !== 2) fail("the completion file is not stage 2 readings");
 for (const k of TOP) if (k !== "reviews" && k !== "stock" && s(S[k]) !== s(C[k])) fail("the two files differ on " + k);
@@ -50,11 +52,12 @@ if (mode === "build") {
 }
 const digests: string[] = [];
 for (const [name, file] of [["joined file", jFile], ["completion view", vFile]] as const) {
-  const raw = readFileSync(file), M = JSON.parse(raw.toString("utf8"));
+  const raw = readFileSync(file), M = parse(raw.toString("utf8"), name);
   if (s(Object.keys(M)) !== s(TOP)) fail("the " + name + "'s top level differs from stage 2's");
+  if (!Array.isArray(M.reviews)) fail("the " + name + "'s reviews are not an array");
   for (const k of TOP) if (k !== "reviews" && s(M[k]) !== s(S[k])) fail("the " + name + " differs from stage 2 on " + k);
   const want = pick(VIEWS[name]);
-  if (!Array.isArray(M.reviews) || M.reviews.length !== want.length) fail("the " + name + " holds " + (M.reviews?.length ?? 0) + " rows, not " + want.length);
+  if (M.reviews.length !== want.length) fail("the " + name + " holds " + M.reviews.length + " rows, not " + want.length);
   M.reviews.forEach((r: any, i: number) => { if (s(r) !== s(want[i])) fail("the " + name + "'s row " + (i + 1) + " differs from its source row"); });
   digests.push(name + " " + sha(raw));
 }

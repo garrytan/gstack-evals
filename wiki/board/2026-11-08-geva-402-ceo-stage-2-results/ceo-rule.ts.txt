@@ -21,7 +21,8 @@
 //     the descriptive prints of peak in-flight reservations and E_ALLOWANCE stops. Printed headers name #214, not a code.
 //   2026-11-08-geva-402-ceo-stage-2-results, this copy: compare clusters each pair on its review's unit, as the prereg's
 //     section 11 says (stage 2's unit ids hold "#", so cutting the review key at its first "#" put every pair in one
-//     cluster), and refuses a contrast whose cluster count differs from its unit count. Nothing else changes.
+//     cluster), and refuses a contrast whose cluster count differs from its unit count or whose pairs don't each
+//     cluster on their own unit. Nothing else changes.
 // It reads files and prints; it calls no model and needs no key.
 //   bun ceo-rule.ts headroom <readings.json>     stage 1: leak drops, NO READ, STOCK FAIL, the band and the fallback, smoke admissions, agreement, ICC, the 10x tier
 //   bun ceo-rule.ts projection <projection.json> stage 1 to 2: the primary, per-item projection, derived caps and the frozen cut order
@@ -759,10 +760,12 @@ function compare(rd: Readings, file?: string, sha?: string) {
   say("Agreement, Sol vs Opus on rem: n " + ra.n + ", both yes " + ra.both + ", Sol only " + ra.solOnly + ", Opus only " + ra.opusOnly + ", positive agreement " + f3(ra.psa) + " (decides nothing in stage 2)");
   const live = rd.reviews.filter((r) => !r.smoke && !drops.has(r.unit));
   const key = (r: Review) => r.unit + "#" + r.pass;
-  // A contrast's pairs, each keyed unit + "#" + pass, must fall in one cluster per unit; the unit is the key up to its last "#".
+  // A contrast's pairs, each keyed unit + "#" + pass, must each cluster on its unit, the key up to its last "#".
   const clustered = (pairs: { id: string; cluster: string; a: number; b: number }[]) => {
-    const g = new Set(pairs.map((p) => p.cluster)).size, u = new Set(pairs.map((p) => p.id.slice(0, p.id.lastIndexOf("#")))).size;
+    const unitOf = (p: { id: string }) => p.id.slice(0, p.id.lastIndexOf("#"));
+    const g = new Set(pairs.map((p) => p.cluster)).size, u = new Set(pairs.map(unitOf)).size, off = pairs.findIndex((p) => p.cluster !== unitOf(p));
     if (g !== u) throw new Error("E_USAGE compare: a contrast's " + pairs.length + " pairs fall in " + g + " cluster" + (g === 1 ? "" : "s") + " for " + u + " units; each pair must cluster on its unit");
+    if (off >= 0) throw new Error("E_USAGE compare: pair " + (off + 1) + " of a contrast's " + pairs.length + " pairs isn't clustered on its unit; each pair must cluster on its unit");
     return clusteredPairedDelta(pairs, { seed: SEED, draws: DRAWS });
   };
   // A measure's score and its own drops: hit@3 drops gaps, unjudged and incomplete reviews; G_R also drops a review whose

@@ -119,6 +119,17 @@ describe("tampered inputs and outputs", () => {
     writeFileSync(f.v, JSON.stringify(V));
     expect(merge("verify", f).err).toBe("E_MERGE the completion view differs from stage 2 on stock");
   });
+  test("verify refuses a number JSON can't hold, and an output whose reviews aren't an array, without printing what it holds", () => {
+    const f = files();
+    expect(merge("build", f).status).toBe(0);
+    const raw = readFileSync(f.j, "utf8");
+    writeFileSync(f.j, raw.replace('"meter": null', '"meter": 1e400'));
+    expect(merge("verify", f).err).toBe("E_MERGE a number in the joined file is not finite");
+    writeFileSync(f.j, JSON.stringify({ ...JSON.parse(raw), reviews: { length: "SYNTHETIC_MARKER" } }));
+    const r = merge("verify", f);
+    expect(r.err).toBe("E_MERGE the joined file's reviews are not an array");
+    expect(r.out + r.err).not.toContain("SYNTHETIC_MARKER");
+  });
   test("build refuses a completion with a scored row outside stage 2's incomplete sessions", () => {
     for (const pick of [(r: any) => r.model === "sol" && r.unit.includes("#h"), (r: any) => inCell(r) && !late(r)]) {
       const C = readings("completion");
