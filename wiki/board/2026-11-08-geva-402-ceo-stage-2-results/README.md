@@ -47,7 +47,7 @@ Publication status: unpublished. This is the record of the preregistered stage 2
 | Scorer | The fixed copy [ceo-rule.ts.txt](ceo-rule.ts.txt) (sha256 417fc4e1...), run with GSTACK_EVALS_SCORER at a checkout of 2ef58339 |
 | Data | Sealed run bundles in the gstack-evals Captain's drive (handoffs/GEVA-381/rerun-inputs/sealed/, and handoffs/GEVA-402/sealed/stage2-joined.tar.gz.age for the joined readings). They hold unit text and model reviews, so they stay private. This post publishes counts, digests and aggregate lines only. |
 | Reviewed by | The fix and the merge: one GPT-6.1 Sol reader, verdict clean with three Low findings, all fixed with tests. The post: the /ship review recorded in its pull request. |
-| Reproduced by | Not yet. The frozen scorer rerun on the sealed readings matches the run's own compare log line for line. |
+| Reproduced by | Not yet. The frozen scorer rerun on the sealed readings matches every compare line of the run's own log; the one line that differs is the log's leading sha256 check line. |
 
 ## What we found
 
@@ -85,7 +85,7 @@ The arm-to-arm secondaries clustered on the review's unit already, so their prin
 
 ### The primaries
 
-hit@3, arm minus none, from the fixed compare ([compare-joined.txt](compare-joined.txt); the stopped-part and completion views print the same primary lines). MDD is compare's grid read at 84 units and its control rate 0.50, alpha 0.025.
+hit@3, arm minus none, from the fixed compare ([compare-joined.txt](compare-joined.txt); the stopped-part and completion views print the same primary lines). MDD is compare's grid read at its 80-unit row, the row compare reads for 84 units, and its control rate 0.50, alpha 0.025.
 
 | Model | Arm | none | arm | Difference | 95% CI | p | Holm p | Exposure | Coverage | MDD | Verdict | As first printed |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -188,7 +188,7 @@ Tokens, summed over 14,938 settled calls in the ledger ([ledger-calls.txt](ledge
 
 Price table in force at build 2ef58339, committed 2026-11-06 (src/runner/pricing/prices.ts, list prices per million tokens): Opus 5.5 $4 input, $20 output, $0.20 cache read, $5 cache write; GPT-6.1 Sol $2, $10, $0.10, $2.50 (above 272k input tokens $4, $15, $0.20, $5); particle-1 $0.10, $1, $0.003 cache read; Sonnet 5.5 $2, $10, $0.20, $2.50. Runner hosts at the standard-8 list rate of $0.00416 a minute: $7.60 for the stage 2 host (30.45 h) and $0.31 for the completion host (about 74 minutes). Crew model use at about $1 per 1,000 credits.
 
-**The line's all-in on actuals** at 2026-11-08T12:23Z: crew $716.49 (the 29 earlier CEO crew threads at $709.02, read from their counters at 12:21Z, plus this thread's $7.47), stage 1 $17.60, the smoke rerun $5.10, authoring and mining $392.65, runner hosts $8.84 (stage 1 $0.93, stage 2 $7.91), stage 2 model spend $490.95 and the completion $28.76: **$1,660.39 of the $2,000 line**. This thread's /ship review comes after this reading and is in its completion report. The run thread's figure of $1,727.97 also carried the unspent crew rest and reserve lines ($79.84).
+**The line's all-in on actuals** at 2026-11-08T12:23Z: crew $716.49 (the 29 earlier CEO crew threads at $709.02, read from their counters at 12:21Z, plus this thread's $7.47), stage 1 $17.60, the smoke rerun $5.10, authoring and mining $392.65, runner hosts $8.84 (stage 1 $0.93, stage 2 $7.60, completion host $0.31), stage 2 model spend $490.95 and the completion $28.76: **$1,660.39 of the $2,000 line**. This thread's /ship review comes after this reading and is in its completion report. The run thread's figure of $1,727.97 also carried the unspent crew rest and reserve lines ($79.84).
 
 ## Why null? (R48)
 
@@ -216,7 +216,7 @@ This eval was plan-ceo-review's one ceiling raise (R61): two earlier seeded-flaw
 
 ## Run disclosures
 
-- **The frozen print.** The comparison first printed every primary as degenerate, for the reason above. This post's numbers come from the fixed scorer on the same sealed readings; the frozen copy, rerun on them, matches the run's compare log line for line.
+- **The frozen print.** The comparison first printed every primary as degenerate, for the reason above. This post's numbers come from the fixed scorer on the same sealed readings; the frozen copy, rerun on them, matches every compare line of the run's compare log; the one line that differs is the log's leading sha256 check line.
 - **Opus's held completion is a deviation.** It ran about 26 hours after the stopped launch, from the same build, pins and flags (--parallel 3, --timeout 3600, --max-turns 150, gstack-forced unattended), with its own ledger item, run id, out dir, sink, packets and judges. Its held D packets held 3 reviews each, against about 13 per held packet in stage 2, so the judges saw less context. Its judges also labelled the stock rows again; the joined file keeps stage 2's stock labels. Model drift between the two runs is possible. Opus's primaries read changed units only and don't move.
 - **Why opus-p stopped.** The cap-stop rule admits a round only when 3 parallel sessions at the $7.04 Opus allowance ($21.12) fit under what is left. Launch 2 started with $23.04, ran 9 held sessions for $2.67, and with $20.37 left the rule refused the next round.
 - **A $14.19 ledger gap.** opus-p's first lease printed $141.77 settled with 9 calls of unknown cost, and the ledger booked $155.96 for it. The rows' per-session dollars for opus-p's three cells sum to the ledger's $158.630591 exactly, so the ledger figure stands. The gap is most likely the ledger's charge for the 9 calls the proxy couldn't price. It was not traced further.
@@ -243,7 +243,7 @@ This eval was plan-ceo-review's one ceiling raise (R61): two earlier seeded-flaw
 
 ## Replicate it
 
-1. **Reanalysis (keyless; needs the sealed bundles, so another Captain's crew with custody can run it, outsiders can't yet).** Check out 2ef58339 as the scorer checkout. Open stage2-j and stage2-opus-ph from handoffs/GEVA-381/rerun-inputs/sealed/ as the custody record says. Then run `bun merge.ts build <stage2-j readings.json> <completion readings.json> joined.json view.json` and `GSTACK_EVALS_SCORER=<that checkout> bun ceo-rule.ts compare <readings> projection.txt 01fd5e8dc4b4b56c3b317afce0f4d9f92727097149fa877394d96669ceff9f57` on each of stage2-j's readings, joined.json and view.json, with projection.txt from the stage 2 pin post. Run the frozen scorer copy from stage2-j the same way on stage2-j's readings for compare-frozen.txt. Masking unit ids as <unit> gives the four compare files beside this post byte for byte; their unmasked sha256s are in [merge-and-compare.txt](merge-and-compare.txt).
+1. **Reanalysis (keyless; needs the sealed bundles, so another Captain's crew with custody can run it, outsiders can't yet).** Check out 2ef58339 as the scorer checkout. Open stage2-j and stage2-opus-ph from handoffs/GEVA-381/rerun-inputs/sealed/ as the custody record says. Then run `bun merge.ts build <stage2-j readings.json> <completion readings.json> joined.json view.json` and `GSTACK_EVALS_SCORER=<that checkout> bun ceo-rule.ts compare <readings> projection.txt 01fd5e8dc4b4b56c3b317afce0f4d9f92727097149fa877394d96669ceff9f57` on each of stage2-j's readings, joined.json and view.json, with projection.txt from the stage 2 pin post. merge.ts doesn't check that its four paths differ, so pass it four distinct paths: an output that names an input overwrites that input and still prints OK. Run the frozen scorer copy from stage2-j the same way on stage2-j's readings for compare-frozen.txt. Masking unit ids as <unit> gives the four compare files beside this post byte for byte; their unmasked sha256s are in [merge-and-compare.txt](merge-and-compare.txt).
 2. **Rerun a cell (paid).** The pin post freezes every item's command. This record leaves out host setup and the paid launches themselves; the run thread's scripts as uploaded are in handoffs/GEVA-381/rerun-inputs/runner/.
 
 ## What is held out, and why
