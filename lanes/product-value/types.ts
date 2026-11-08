@@ -81,6 +81,8 @@ export interface Row {
   mode?: string | null;
   proposals?: number;
   pending?: number;
+  /** Smoke rule 2: whether a block change carries one of the session's 0F proposals; null without a block or a read. */
+  expansion_in_block?: boolean | null;
   spend_micros: number | null;
   session: string;
 }

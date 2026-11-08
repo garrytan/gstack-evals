@@ -273,7 +273,7 @@ export function smokeRules(family: Family, s: { opus: readonly SmokeSession[]; s
 }
 
 /** Run-side hook: the expansion flag the run records per smoke session (section 5); null until the run side writes it. */
-export const expansionInBlock = (r: Row): boolean | null => (r as Row & { expansion_in_block?: boolean }).expansion_in_block ?? null;
+export const expansionInBlock = (r: Row): boolean | null => r.expansion_in_block ?? null;
 export const smokeSession = (r: Row): SmokeSession => ({ model: r.model, parsed: r.end === "block", exposed: r.exposed, expansion_in_block: expansionInBlock(r) });
 
 /** Section 11's interim stop: the first 32 completed Opus skill sessions of stage 2, in run order, exposed under 0.70. */

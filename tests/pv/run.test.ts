@@ -17,6 +17,7 @@ import { PV_ARMS, PV_FALLBACK_SENTENCE, PV_GATE_ARM, PV_TEMPLATE, PV_TEMPLATE_SH
 import { READERS_SHA256 } from "../../src/trial/review/readers.ts";
 import { PV_PARSER_SHA256 } from "../../lanes/product-value/parse.ts";
 import { run as rows } from "../../lanes/product-value/rows.ts";
+import { smokeSession } from "../../lanes/product-value/rules.ts";
 import type { Row } from "../../lanes/product-value/types.ts";
 import { OPUS, UNIT } from "./pv-sdk.ts";
 
@@ -113,7 +114,8 @@ describe("the product-value run loop, through the pinned Agent SDK and the stub 
     expect(by("none", 1)).toEqual({ unit: UNIT, family: "plan", arm: "none", model: "opus", pass: 1, end: "block", list: ["Ship the importer before the sync engine", "Add a rollback plan for the nightly job"], words: 15, items: 2, cut: 0, exposed: null, spend_micros: 0, session: session("none", 1) });
     expect([by("none", 2).end, by("none", 2).list, by("lens", 2).end, by("lens", 2).list, by("lens", 2).exposed]).toEqual(["contaminated", null, "missing", null, null]);
     expect(by("lens", 1)).toMatchObject({ end: "no-block", list: null, words: 0, items: 0 });
-    expect(by("skill", 1)).toMatchObject({ end: "block", exposed: false, mode: null, proposals: 0, pending: 0 });
+    expect(by("skill", 1)).toMatchObject({ end: "block", exposed: false, mode: null, proposals: 0, pending: 0, expansion_in_block: false });
+    expect(smokeSession(by("skill", 1)).expansion_in_block).toBe(false);
     expect(by("skill", 2).list).toEqual(["Cut the admin console", "Keep CSV export"]);
     expect("mode" in by("none", 1)).toBe(false);
   });

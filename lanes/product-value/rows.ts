@@ -61,7 +61,7 @@ export function runRows(run: string, pv: PvUnits): Row[] {
             items: block?.items ?? 0,
             cut: block?.cut ?? 0,
             exposed: read ? read.exposed : null,
-            ...(spec.skill === "plan-ceo-review" ? { mode: ceo?.mode ?? null, proposals: ceo?.proposals.length ?? 0, pending: ceo?.pending ?? 0 } : {}),
+            ...(spec.skill === "plan-ceo-review" ? { mode: ceo?.mode ?? null, proposals: ceo?.proposals.length ?? 0, pending: ceo?.pending ?? 0, expansion_in_block: ceo?.expansion_in_block ?? null } : {}),
             spend_micros: e?.pv ? Math.round(e.pv.usd * 1_000_000) : null,
             session: dir,
           });
