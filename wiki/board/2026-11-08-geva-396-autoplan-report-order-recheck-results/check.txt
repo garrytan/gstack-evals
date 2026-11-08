@@ -1,0 +1,8 @@
+CHECKED e3-ap-tg5dce6b3f8b-t1 exposed line_exposed=true t2_end=quiet proxy_refused=0 refusal_rule=clear overcredit_rule=clear
+TALLY exposed 1 not_exposed 0 gaps 0 of 4, decision next session
+CHECKED e3-ap-tg6b9daf7138-t1 not_exposed line_exposed=false t2_end=quiet proxy_refused=0 refusal_rule=clear overcredit_rule=clear
+TALLY exposed 1 not_exposed 1 gaps 0 of 4, decision next session
+CHECKED e3-ap-tgff24032962-t1 exposed line_exposed=true t2_end=quiet proxy_refused=0 refusal_rule=clear overcredit_rule=clear
+TALLY exposed 2 not_exposed 1 gaps 0 of 4, decision next session
+CHECKED e3-ap-tg8d524982ac-t1 exposed line_exposed=true t2_end=quiet proxy_refused=0 refusal_rule=clear overcredit_rule=clear
+TALLY exposed 3 not_exposed 1 gaps 0 of 4, decision settled pass
