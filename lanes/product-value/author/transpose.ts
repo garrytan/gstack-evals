@@ -181,9 +181,21 @@ async function authorOne(ctx: { log: any; author: Meter; checks: Meter }, work: 
   put(join(dir, "astra-check.json"), astra);
   const verdict = new Map<number, any>((astra?.items ?? []).map((x: any) => [Number(x.event), x]));
   if (verdict.size !== events.length) return "the Astra check did not cover every item";
-  const trace = await ask(ctx, ctx.author, uid, "trace", "opus", TRACE + fence("Source plan", a.plan) + fence("Source product before", a.before) + fence("Source events", raw) + fence("Source names", names.join(", ")) + inputsText() + fence("Key items", items.map((x: any) => "Event " + x.event + ": " + x.statement).join("\n")), 6000, "high", true);
-  put(join(dir, "trace.json"), trace);
-  if ((trace?.leaks ?? []).length || nameHit(INPUTS.map((f) => readFileSync(join(dir, "unit", f), "utf8")).join("\n"), names)) return "the traceability check found source material in the unit";
+  const traceIt = (round: number) => ask(ctx, ctx.author, uid, "trace-" + round, "opus", TRACE + fence("Source plan", a.plan) + fence("Source product before", a.before) + fence("Source events", raw) + fence("Source names", names.join(", ")) + inputsText() + fence("Key items", items.map((x: any) => "Event " + x.event + ": " + x.statement).join("\n")), 6000, "high", true);
+  const leaked = (t: any) => (t?.leaks ?? []).length > 0 || nameHit(INPUTS.map((f) => readFileSync(join(dir, "unit", f), "utf8")).join("\n"), names);
+  let trace = await traceIt(1);
+  put(join(dir, "trace-1.json"), trace);
+  if (leaked(trace)) {
+    const quotes = [...(trace?.leaks ?? []).map(String), ...names.filter((n) => n.length >= 3)];
+    for (const f of INPUTS) {
+      const text = readFileSync(join(dir, "unit", f), "utf8");
+      const hit = quotes.filter((q) => q && text.toLowerCase().includes(q.toLowerCase()));
+      if (hit.length) put(join(dir, "unit", f), (await ask(ctx, ctx.author, uid, "fix-leak-" + f.replace(/\W/g, ""), "opus", P.FIX + fence("Problems", hit.map((q) => "- " + q + ": copied from the source; replace it with wording of the new product's own").join("\n")) + fence("File " + f, text), 8000, "medium", false)).trim() + "\n");
+    }
+    trace = await traceIt(2);
+    put(join(dir, "trace-2.json"), trace);
+    if (leaked(trace)) return "the traceability check found source material in the unit twice";
+  }
   if ((trace?.items ?? []).some((x: any) => x.maps === false)) return "a key item does not map to its event";
   const probeText = PROBE + inputsText();
   for (const model of ["astra", "opus", "sol", "particle"] as const) {
