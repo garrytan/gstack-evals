@@ -222,13 +222,13 @@ particle-1's B1 is a KEEP and needs no cycle. Sol's B3 reads a gain but carries 
 - **Power and saturation.** The pilot's before-t 6 of 10 (Wilson upper 83.2%) left B3 unadmitted, and F1's before-t ran at 42.5%, where the MDD@Holm2 is 21.3 points, past the 20-point margin. This is the step analyze names first, and it prints FIX-METHOD (saturation).
 - **Task fit.** F's bug fixes fit the record. particle-1 writes a DEBUG REPORT in most told sessions under either pin (54 and 62 of 80); it falls short on Fix naming an edited file (22 and 37).
 - **Without the skill.** No none session wrote a complete record (0 of 80). The no-gstack arm passed 75.0%, the highest of any particle-1 arm, and after-t passed 71.3%.
-- **Verdict: FIX-METHOD (method).** The method and power steps both fail, so the reading can't support a cut of the after pin's told changes on particle-1. The fix is the probe's Fix item (the Opus post traced the same item to writes by inline scripts) and a fresh audit, and a B3 that could carry a verdict on particle-1 needs more than 80 x 1 at a 42.5% control.
+- **Verdict: FIX-METHOD (saturation).** The method and power steps both fail, so the reading can't support a cut of the after pin's told changes on particle-1. The fix is the probe's Fix item (the Opus post traced the same item to writes by inline scripts) and a fresh audit, and a B3 that could carry a verdict on particle-1 needs more than 80 x 1 at a 42.5% control.
 
 **O5, told pass rate, on Sol (+0.0 points, 95% CI -5.0 to +5.0) and particle-1 (+1.3, 95% CI -7.5 to +10.0).** The prereg gives O5 no verdict. R48's cycle, for steering:
 
 - **Exposure.** Told after sessions had the contract hook in 80 of 80 on Sol and 77 of 80 on particle-1.
 - **Task fit.** none passes 61.3% on Sol and 75.0% on particle-1, so F has room above both controls.
-- **Power.** The MDDs are 19.3 and 17.6 points. At 80 x 3 the prereg's figures give 10.6 to 11.7 points at a 65% control, still above anything seen here.
+- **Power.** The MDDs are 19.3 and 17.6 points. At 80 x 3 the prereg's figures give 10.6 to 11.7 points at a 60% to 70% control, still above anything seen here.
 - **Without the skill.** after-t minus none is +1.3 on Sol and -3.8 on particle-1 (S1), both inside intervals that cross zero.
 - **R48 label: FIX-METHOD (power)** on both. No powered reading exists, so nothing here supports a cut.
 
