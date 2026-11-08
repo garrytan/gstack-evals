@@ -2,7 +2,7 @@
 id: 2026-11-07-geva-395-tbv-held-b-frame-amendment
 kind: plan
 title: "Trust-but-verify amendment 2: held-out source B adds gstack's crew pull requests after P"
-summary: "Our repo alone yields about 8 held-out PRs in 21 days, short of 20, so held-out source B adds gstack's crew PRs merged after P (sizing read: about 178). The third Opus held-out pass is in the plan."
+summary: "Our repo alone yields about 8 held-out PRs in 21 days, short of 20, so held-out source B adds gstack's crew PRs merged after P (sizing read: about 178). $2,000 becomes a guideline; $3,000 stops."
 author: GEVA-395
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -90,14 +90,15 @@ Every sampled gstack history in the pool sorted "other", with no long-list and n
 - **P7, the OpenRouter generation id.** On OpenRouter's Anthropic Messages route the stream's message id is a msg_ id, which the generation endpoint rejects. OpenRouter sends the gen- id in the X-Generation-Id response header on every route. The driver now records that header's gen- id as an OpenRouter send's response id, with the msg_ id beside it and the source named. An OpenRouter answer with no gen- id records none, and a release it needs stops the item: the driver never falls back to the msg_ id. Anthropic sends are unchanged.
 - **The render gate's walk.** A broken link or unreadable entry under --tasks, --shapes or --splices now fails with E_TBV_INPUT and no path.
 
-## 7. The third Opus held-out pass is in the plan (deviation)
+## 7. The $2,000 line is a guideline: the third Opus pass and the capy family stay in (deviation)
 
 Garry, through the Captain (GEVA-2, 2026-11-07): the $2,000 line is a guideline, and the eval should not cut corners to stay under it. So tbv-held-p3, Opus's third skill-layer pass on the held-out tasks, runs. That takes Opus's MDD from 8.1 to 6.8 points.
 
 This is a deviation from prereg sections 6 and 14, decided before any outcome data. Stage 1 read only Opus none, and no tbv-dev-base, climb or held-out reading exists yet.
 
-- **What changes.** The prereg ran the third pass only when the all-in check fit under $2,000 with it. That condition is dropped: the all-in check still runs before every lease and its output is reported, but its verdict no longer stops tbv-held-p3.
-- **What stays.** Every item keeps its own cap, ledger lease and cap stop, and a cap stop is never retried. tbv-held keeps its capy-drop cap rule (its recorded cap minus capyCap). tbv-held-p3's cap is recorded in the approvals line before its lease. Its command is still not settled at this build (the scorer pin post) and lands keyless-tested with P's pin post before stage 3.
+- **What changes.** The prereg ran the third pass only when the all-in check fit under $2,000 with it, and before tbv-held it dropped the capy family, or stopped, when the line did not fit. None of those verdicts binds against $2,000 any more (the Captain, GEVA-2, 2026-11-07: dropping the capy family's held read to stay under the line is the corner Garry said not to cut). The all-in check still runs before every lease, and its output is reported.
+- **The new stop.** If the line's projected all-in passes $3,000, the run stops before that lease and the question goes to the Captain, who takes it to Garry.
+- **What stays.** Every item keeps its own cap, ledger lease and cap stop, and a cap stop is never retried. If the capy family drops for any other reason, tbv-held's ledger cap is still its recorded cap minus capyCap. tbv-held-p3's cap is recorded in the approvals line before its lease. Its command is still not settled at this build (the scorer pin post) and lands keyless-tested with P's pin post before stage 3.
 - **Held-out source B.** The Captain's same message asks for option 3 (more held-out source A) as well only if the sizing read is marginal, central under about 25. Section 3's central is about 178, so it is not.
 
 **The line's projected all-in**, from the stage 2 handoff's figures:
