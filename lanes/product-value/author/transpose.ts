@@ -6,6 +6,8 @@
 //   pv transpose assess  --work <dir> --item pv-auth-inspiration --ids  read each fetched source in custody: is it a
 //                                                                       usable history, and if so its plan, the product
 //                                                                       before it and its aftermath events
+//   pv transpose assess-multi --work <dir> --item pv-auth-inspiration --ids   the same for a long owner-seat
+//                                                                       conversation that can hold several histories
 //   pv transpose author  --work <dir> --item <authoring item> --ids <src:type,...>   summaries (the sealed summary
 //                         prompt), the in-custody Opus check, T1, T2, the Astra check (pv-auth-checks, summaries only),
 //                         the traceability check, the recognition probe (pv-auth-checks), both audits, the unit files
@@ -26,6 +28,8 @@ export const SUMMARY_PROMPT_SHA256 = "920a0623b02b7885e9c35255677b636bacc2c78261
 const SCAN = "Below are the titles of a product owner's working threads with an AI coding agent, one per line as code | project | title. We need source histories for a research unit: a thread where a plan or design for a product change was written and then followed by what actually happened (the owner's or users' feedback after the first version, bug reports that reveal new needs, corrections, follow-on features, or a staged rollout). Prefer threads about building or changing a product people use (an app, a site, a service, a tool's user-facing feature) over threads about evaluations, merges, reviews, infrastructure chores or reports. Pick up to 40 threads, most promising first.\n\nOutput one fenced json block holding {\"pick\": [\"<code>\"]} and nothing else.";
 
 const ASSESS = "Below is the transcript of one working thread between a product owner and an AI coding agent. Decide whether it holds a usable source history: a plan or design for a product change, written before the change was built, followed by real aftermath events. Aftermath events are what happened after the first version reached its users: a need, use, environment or misunderstanding the owner or users raised (kind U), a capability added afterwards that extends the feature (kind E), or how the change actually reached users when that differs from the plan, such as what the first version left out or how it was gated (kind R). Bug fixes with no new need behind them, chores and internal refactors are not events.\n\nIf it is usable, copy the plan verbatim as it was first written (only the plan, at most 1,500 words), describe the product as it stood before the plan from material dated before it (at most 400 words), and list every aftermath event in order (at most 10), each with its kind, a verbatim excerpt of at most 120 words and its date. Also list the names that identify the product or project (product, project, company and repository names, domains), and the product's type: consumer, server (server-side data or enterprise), mobile or other (developer tools and the rest).\n\nOutput one fenced json block holding {\"usable\": true | false, \"why\": \"...\", \"plan\": \"...\", \"before\": \"...\", \"events\": [{\"kind\": \"U\" | \"E\" | \"R\", \"excerpt\": \"...\", \"date\": \"...\"}], \"names\": [\"...\"], \"type\": \"consumer\" | \"server\" | \"mobile\" | \"other\"} and nothing else.";
+
+const ASSESS_MULTI = "Below is a long conversation between a product owner (OWNER) and the coding agent that runs the product's crew (AGENT), over days or weeks. Find every usable source history in it. A usable history is a plan or design for one product change, written or relayed before the change was built (the owner's brief, an approved plan, or a plan the agent relayed for approval), followed by real aftermath events after that change reached its users, who here include the owner using the product. Aftermath events are: a need, use, environment or misunderstanding the owner or users raised about the shipped change (kind U); a capability added afterwards that extends it (kind E); or how the change actually reached users when that differs from the plan, such as what the first version left out or how it was gated (kind R). Bug fixes with no new need behind them, chores, process and crew management, and internal refactors are not events.\n\nReturn up to 6 histories, the richest first, each about a different change. For each, copy the plan verbatim as first written or relayed (only the plan, at most 1,500 words), describe the product as it stood before the plan from material dated before it (at most 400 words), and list every aftermath event in order (at most 10), each with its kind, a verbatim excerpt of at most 120 words and its date. Also list the names that identify the product or project (product, project, company and repository names, domains, people), and the product's type: consumer, server (server-side data or enterprise), mobile or other (developer tools and the rest).\n\nOutput one fenced json block holding {\"histories\": [{\"why\": \"...\", \"plan\": \"...\", \"plan_date\": \"...\", \"before\": \"...\", \"events\": [{\"kind\": \"U\" | \"E\" | \"R\", \"excerpt\": \"...\", \"date\": \"...\"}], \"names\": [\"...\"], \"type\": \"consumer\" | \"server\" | \"mobile\" | \"other\"}]} and nothing else. Return {\"histories\": []} when there is none.";
 
 const CHECK = "Compare each summary below with its raw event. A summary passes when it says what happened faithfully, adds nothing, keeps the event's kind, and holds no name of a person, product, project, company, domain, repository or file, no secret or credential, no identifying number and no personal data.\n\nOutput one fenced json block holding {\"checks\": [{\"event\": <n>, \"verdict\": \"pass\" | \"reject\", \"note\": \"...\"}]} and nothing else.";
 
@@ -85,6 +89,29 @@ async function assess(work: string, item: string, ids: string[], io: Io): Promis
       io.out(id + " " + (a ? (a.usable ? "usable, " + (a.events ?? []).length + " events, type " + a.type : "not usable") : "not assessed"));
     }
     io.out("pv transpose assess: " + usable + " usable; spent " + (c.spent_micros / 1e6).toFixed(4) + " USD on " + item);
+  }
+  return 0;
+}
+
+/** A long owner-seat conversation can hold several histories; each becomes assess/<src>~h<n>.json, read by author like a single-thread one. */
+async function assessMulti(work: string, item: string, ids: string[], io: Io): Promise<number> {
+  const logs: any[] = [];
+  const log = (uid: string, stage: string, data: Record<string, unknown>) => logs.push({ uid, stage, ...data });
+  const m = await openMeter({ item, runId: item, out: join(process.env.HOME!, ".capy/work/pv/journals", item), cacheDir: join(work, "cache"), maxOutputTokens: 32000 });
+  const found: Record<string, number> = {};
+  try {
+    await pool(2, ids.map((id) => async () => {
+      const done = join(work, "assess", id + ".multi.json");
+      if (!existsSync(done)) put(done, await ask({ log }, m, id, "assess-multi", "opus", ASSESS_MULTI + fence("Conversation", src(work, id)), 30000, "medium", true));
+      const hs = (readJson(done)?.histories ?? []).filter((h: any) => typeof h?.plan === "string" && Array.isArray(h.events) && h.events.length);
+      hs.forEach((h: any, i: number) => put(join(work, "assess", id + "~h" + (i + 1) + ".json"), { usable: true, ...h }));
+      found[id] = hs.length;
+    }));
+  } finally {
+    const c = await m.close();
+    put(join(work, "assess-log-" + Date.now() + ".json"), logs);
+    for (const id of ids) io.out(id + " " + (id in found ? found[id] + " histories" : "not assessed"));
+    io.out("pv transpose assess-multi: spent " + (c.spent_micros / 1e6).toFixed(4) + " USD on " + item);
   }
   return 0;
 }
@@ -177,6 +204,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   const ids = (flag(rest, "--ids") ?? "").split(",").filter(Boolean);
   if (sub === "scan") return scan(work, item, io);
   if (sub === "assess") return assess(work, item, ids, io);
+  if (sub === "assess-multi") return assessMulti(work, item, ids, io);
   if (sub !== "author") throw new AuthorError("E_USAGE", "pv transpose scan|assess|author");
   const promptFile = flag(rest, "--summary-prompt");
   if (!promptFile) throw new AuthorError("E_USAGE", "pv transpose author needs --summary-prompt <sealed prompt file on tmpfs>");
