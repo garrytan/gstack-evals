@@ -231,7 +231,7 @@ E2's results post sized the comparison with plan v3's power script (the same gri
 
 Expected paid assumes $24 to $29 per told session on harder tasks plus $1.50 per none session. For comparison, E3's told sessions averaged $19.56 on T-G. At 24 pairs or fewer the power script finds no MDD up to 40 points.
 
-**autoplan's line can't power the test.** About $649 is left on the $2,000 line. Spent on pairs alone, with no headroom check, that buys fewer than 30, and even 30 pairs has an MDD of 43.2 points. A 20-point test needs 42 x 4, about $4,280 to $5,120 expected, which is past the line. So the next step is a funding question: the Captain puts it to the project owner. Until he answers, the headroom check stays unrun and its money unspent, and any comparison run inside the line would be descriptive only.
+**autoplan's line can't power the comparison.** About $649 is left on the $2,000 line. Spent on pairs alone, that buys fewer than 30, and even 30 pairs has an MDD of 43.2 points. A 20-point test needs 42 x 4, about $4,280 to $5,120 expected, which is past the line, so the comparison is a funding question for the project owner, which the Captain puts to him. The next step, under its own preregistration, is to find harder tasks and run the headroom check inside the line, so that the question reaches the owner with the no-gstack arm's measured rate on those tasks. Any comparison run inside the line would be descriptive only.
 
 ## Deviations
 
