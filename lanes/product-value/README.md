@@ -108,3 +108,10 @@ The prereg leaves these mechanics open. Each one is tested in both directions un
 10. **office-hours.** A design doc is a non-empty regular file at projects/<slug>/*-design-*.md in the session's copied state root (host/gstack-state, symlinks skipped). premises_overlap needs at least 3 shared three-word sequences between its Premises section and brief.md. The best doc decides.
 11. **Rows.** Exposure is read only for a skill session that ended block or no-block; other rows carry exposed null. A planned session with no journal entry is a missing row with spend null. The opt-in gate arm (plan-ceo-review-gate, smoke rule 3) reads as the skill arm. Rows refuse mixed families or fallback settings and a session planned twice.
 
+
+## Authoring build-time choices (GEVA-406)
+
+- Public records pass a cheap screen before any input is written: a record that is mainly a fix, refactor, chore, docs, tests, CI or a dependency bump is not a plan (section 4), and a record whose 42-day window holds nothing the selector ties to the feature drops.
+- When the release mining linked to a record doesn't contain its merge commit, collect tries the next releases published by 2026-10-09 and keeps the first that does; if that release's window is still open, the record waits for wave B.
+- A key audit item verdict of drop removes that item. The audit counts as failed only when an item needs a fix, an item went unreviewed or the auditor names a missing item; a unit that fails twice drops.
+- Transposed units: a summary the in-custody check rejects is rewritten once with the check's notes; T1's files get one copy sweep against the source before the input audit; a traceability leak gets one repair round, and a second leak drops the unit.

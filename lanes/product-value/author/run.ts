@@ -20,7 +20,7 @@ import type { Io } from "../cli.ts";
 import { openMeter, pool, sha256, type Meter, type ModelKey } from "../meter.ts";
 import type { Key, KeyItem, UnitMeta } from "../types.ts";
 import { graphql } from "./gh.ts";
-import { SEED, WINDOW_DAYS, order } from "./mine.ts";
+import { FRAME, SEED, WINDOW_DAYS, order } from "./mine.ts";
 import * as P from "./prompts.ts";
 
 export const words = (s: string) => (s.match(/\S+/g) ?? []).length;
@@ -102,6 +102,7 @@ const RL = " rateLimit{cost remaining resetAt} }";
 const CMP_Q = "query($o:String!,$n:String!,$tag:String!,$sha:String!){ repository(owner:$o,name:$n){ ref(qualifiedName:$tag){ compare(headRef:$sha){ status } } }" + RL;
 const BEFORE_Q = "query($o:String!,$n:String!,$until:GitTimestamp!){ repository(owner:$o,name:$n){ defaultBranchRef{ target{ ... on Commit { history(first:1,until:$until){ nodes{ oid } } } } } }" + RL;
 const TREE_Q = "query($o:String!,$n:String!,$expr:String!){ repository(owner:$o,name:$n){ object(expression:$expr){ ... on Tree { entries{ name type } } } }" + RL;
+const REL_Q = "query($o:String!,$n:String!){ repository(owner:$o,name:$n){ releases(first:30,orderBy:{field:CREATED_AT,direction:DESC}){ nodes{ tagName publishedAt isDraft isPrerelease } } }" + RL;
 const BLOB_Q = "query($o:String!,$n:String!,$expr:String!){ repository(owner:$o,name:$n){ object(expression:$expr){ ... on Blob { text } } }" + RL;
 const PR_Q = "query($o:String!,$n:String!,$num:Int!){ repository(owner:$o,name:$n){ description repositoryTopics(first:20){nodes{topic{name}}} issueOrPullRequest(number:$num){ __typename" +
   " ... on PullRequest { title body createdAt mergedAt author{login} authorAssociation mergeCommit{oid} " + EDITS + " closingIssuesReferences(first:5){ nodes { number title body createdAt author{login} authorAssociation " + EDITS + " } } }" +
@@ -192,8 +193,17 @@ function collect(dir: string, rec: any): string | null {
     mergeSha = pr.repository?.issueOrPullRequest?.mergeCommit?.oid ?? null;
   }
   if (mergeSha) {
-    const status: string | undefined = graphql<any>(CMP_Q, { o, n, tag: "refs/tags/" + rec.release_tag, sha: mergeSha }).repository?.ref?.compare?.status;
-    if (status && !["BEHIND", "IDENTICAL"].includes(status)) return "the release does not contain the merge commit (" + status + ")";
+    const contains = (tag: string) => ["BEHIND", "IDENTICAL"].includes(graphql<any>(CMP_Q, { o, n, tag: "refs/tags/" + tag, sha: mergeSha }).repository?.ref?.compare?.status ?? "");
+    if (!contains(rec.release_tag)) {
+      const later = (graphql<any>(REL_Q, { o, n }).repository?.releases?.nodes ?? [])
+        .filter((x: any) => !x.isDraft && x.publishedAt && x.publishedAt > rec.release_at && x.publishedAt <= FRAME.shippedBy + "T23:59:59Z")
+        .sort((a: any, b: any) => (a.publishedAt < b.publishedAt ? -1 : 1))
+        .slice(0, 4);
+      const rel = later.find((x: any) => contains(x.tagName));
+      if (!rel) return "no release by " + FRAME.shippedBy + " contains the merge commit";
+      if (rel.publishedAt > FRAME.closedBy + "T23:59:59Z") return "the first release containing the merge commit has a window still open (wave B)";
+      rec = { ...rec, release_tag: rel.tagName, release_at: rel.publishedAt, release_prerelease: rel.isPrerelease };
+    }
   }
   const before: string | null = graphql<any>(BEFORE_Q, { o, n, until: x.createdAt }).repository?.defaultBranchRef?.target?.history?.nodes?.[0]?.oid ?? null;
   const entry = before ? (graphql<any>(TREE_Q, { o, n, expr: before + ":" }).repository?.object?.entries ?? []).find((e: any) => e.type === "blob" && /^readme(\.(md|markdown|rst|txt|adoc))?$/i.test(e.name)) : null;
@@ -290,7 +300,14 @@ async function keyStep(ctx: Ctx, uid: string, dir: string): Promise<string | nul
     put(join(dir, "key-draft-" + round + ".json"), key);
     const a = await ask(ctx, ctx.author, uid, "audit-key-" + round, "opus", P.KEY_AUDIT.replace("RELEASE", r.release_at.slice(0, 10)) + material + fence("The key", JSON.stringify(key, null, 2)), 12000, "high", true);
     put(join(dir, "audit-key-" + round + ".json"), a);
-    if (a?.verdict === "pass") break;
+    const verdicts: any[] = Array.isArray(a?.items) ? a.items : [];
+    const fixNeeded = verdicts.length !== (key?.items ?? []).length || verdicts.some((v) => v?.verdict !== "keep" && v?.verdict !== "drop") || (a?.missing ?? []).length > 0;
+    if (a?.verdict === "pass" || !fixNeeded) {
+      const dropped = new Set(verdicts.filter((v) => v?.verdict === "drop").map((v) => Number(v.index)));
+      key = { ...key, items: (key?.items ?? []).filter((_: unknown, i: number) => !dropped.has(i)) };
+      put(join(dir, "key-final.json"), key);
+      break;
+    }
     if (round === 2) return "key audit failed twice";
     key = await ask(ctx, ctx.author, uid, "key-2", "opus", P.KEY.replace("RELEASE", r.release_at.slice(0, 10)) + material + fence("Your earlier key", JSON.stringify(key, null, 2)) + fence("Auditor's notes", JSON.stringify(a, null, 2)) + "\n\n" + P.KEY_FIX, 16000, "high", true);
   }
