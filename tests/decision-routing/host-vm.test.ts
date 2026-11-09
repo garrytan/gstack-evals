@@ -60,7 +60,7 @@ describe("vm.sh", () => {
     const r = rig();
     const res = r.run(["up"]);
     expect(res.code).toBe(0);
-    expect(r.log()).toEqual(["list --mine", "up -s standard-16 -S 600", "ssh vm-1 bash -s", "list --mine"]);
+    expect(r.log()).toEqual(["list --mine", "up -s standard-16 -S 640", "ssh vm-1 bash -s", "list --mine"]);
     expect(r.inputs()).toEqual([readFileSync(join(HOST, "post-boot.sh"), "utf8")]);
     expect(res.out).toContain("vm: vm-1");
   });

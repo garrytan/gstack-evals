@@ -4,7 +4,7 @@
 # runner's sha256 first and needs UBI_OWNER (the thread code) and UBI_TTL_HOURS (covering the longest batch), since the
 # runner's up reaps expired VMs and its default TTL is short.
 #
-# usage: vm.sh <runner path> <runner sha256> up [size] [storage gib]   list --mine, create, post-boot hygiene, list --mine
+# usage: vm.sh <runner path> <runner sha256> up [size] [storage gib: 320 or 640, default 640]   list --mine, create, post-boot hygiene, list --mine
 #        vm.sh <runner path> <runner sha256> hygiene <name>            run post-boot.sh again on a VM
 #        vm.sh <runner path> <runner sha256> keys <name>               write the provider keys to ~/.dr-keys (mode 600)
 #        vm.sh <runner path> <runner sha256> down <name>               destroy the VM and check list --mine is empty
@@ -39,7 +39,7 @@ case $cmd in
   up)
     echo "vms before (owner $UBI_OWNER):"
     mine
-    name=$("$runner" up -s "${1:-standard-16}" -S "${2:-600}")
+    name=$("$runner" up -s "${1:-standard-16}" -S "${2:-640}")
     echo "vm: $name"
     "$runner" ssh "$name" 'bash -s' < "$here/post-boot.sh"
     echo "vms after (owner $UBI_OWNER):"
