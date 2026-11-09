@@ -35,7 +35,7 @@ describe("leak scan", () => {
     } catch (e) {
       msg = (e as Error).message;
     }
-    expect(msg).toMatch(/^E_SM_LEAKED fixture: 1 fix line\(s\) found: .*cache\/copy\.bin needle sha256 [0-9a-f]{64}$/);
+    expect(msg).toMatch(/^E_SM_LEAKED fixture: 1 fix line\(s\) found: .*cache\/copy\.bin needle sha256 [0-9a-f]{64} \(not_cache\)$/);
     expect(msg).not.toContain("reset_counter_and_report");
     writeFileSync(join(dir, "cache/indented.txt"), "  return reset_counter_and_report(state);\n");
     expect(scan(w, ["    return reset_counter_and_report(state);"], dir).hits.length).toBe(1);

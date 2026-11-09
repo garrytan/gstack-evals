@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fixtureRepo, gitOut } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
 import { importsOf, prepareBase, prepareFollowOn, preflight, stripPlan } from "../../lanes/outcome-skills/statemachines/history.ts";
@@ -38,7 +38,9 @@ describe("history and strip", () => {
     expect(() => preflight({ kind: "host", dir }, 1, "fixture")).toThrow(/^E_SM_HISTORY .*count=3/);
     expect(() => prepareBase({ kind: "host", dir }, "f".repeat(40), "/r", "fixture")).toThrow(/^E_SM_HISTORY .*not base_commit/);
     writeFileSync(join(dir, "src/lib.rs"), "changed\n");
-    expect(() => prepareBase({ kind: "host", dir }, head, "/r", "fixture")).toThrow(/^E_SM_HISTORY .*differ/);
+    const restored = prepareBase({ kind: "host", dir }, head, "/r", "fixture");
+    expect(restored.restored).toEqual(["src/lib.rs"]);
+    expect(readFileSync(join(dir, "src/lib.rs"), "utf8")).toBe("x\n");
     const plan = stripPlan("HEAD abc\nDIRTY 0\n", "/r");
     expect(plan).toEqual({ head: "abc", dirty: 0, remove: [] });
   });

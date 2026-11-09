@@ -9,15 +9,19 @@ import { docker } from "../../lanes/real-outcome/task/docker.ts";
 const on = process.env.GSTACK_EVALS_DOCKER === "1";
 
 describe("oracle keep rule (keyless)", () => {
-  const P = "PASSED", F = "FAILED";
+  const P = "pass", F = "fail";
   test("keeps a stable unit: fail-to-pass fails on every base run and passes on every fixed run", () => {
     const base: Record<string, string>[] = [{ a: F, s: P, x: P }, { a: F, s: P, x: F }, { s: P, x: P }];
     const fixed = [{ a: P, s: P, x: P }, { a: P, s: P, x: P }, { a: P, s: P, x: P }];
     expect(judge(["a"], base, fixed)).toMatchObject({ kept: true, stable: ["s"] });
   });
+  test("counts only the dataset's own pass word as a pass", () => {
+    expect(judge(["a"], [{ a: F, s: P }, { a: F, s: P }, { a: F, s: P }], [{ a: "PASSED", s: P }, { a: "PASSED", s: P }, { a: "PASSED", s: P }])).toMatchObject({ kept: false, failing: ["a"] });
+    expect(judge(["a"], [{ a: F, s: "ok" }, { a: F, s: "ok" }, { a: F, s: "ok" }], [{ a: P, s: "ok" }, { a: P, s: "ok" }, { a: P, s: "ok" }])).toMatchObject({ kept: false, reason: "no stable test" });
+  });
   test("drops a flaky unit, one with no stable test, and one with a run that did not parse", () => {
     expect(judge(["a"], [{ a: F, s: P }, { a: P, s: P }, { a: F, s: P }], [{ a: P, s: P }, { a: P, s: P }, { a: P, s: P }])).toMatchObject({ kept: false, failing: ["a"] });
-    expect(judge(["a"], [{ a: F }, { a: F }, { a: F }], [{ a: P }, { a: P }, { a: "SKIPPED" }])).toMatchObject({ kept: false });
+    expect(judge(["a"], [{ a: F }, { a: F }, { a: F }], [{ a: P }, { a: P }, { a: "skip" }])).toMatchObject({ kept: false });
     expect(judge(["a"], [{ a: F, s: F }, { a: F, s: P }, { a: F, s: P }], [{ a: P, s: P }, { a: P, s: P }, { a: P, s: P }])).toMatchObject({ kept: false, reason: "no stable test" });
     expect(judge(["a"], [null, { a: F }, { a: F }], [{ a: P }, { a: P }, { a: P }])).toMatchObject({ kept: false });
   });

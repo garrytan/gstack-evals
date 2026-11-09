@@ -8,12 +8,13 @@ import { draw, fill, readPrereg, type Draw, type DrawUnit } from "./draw.ts";
 import { oracleUnit, Pacer } from "./oracle.ts";
 import { sample } from "./sample.ts";
 import { screen } from "./screen.ts";
-import { fetchMultiLang, manifestSize, pinCandidates, readRows, type Candidate } from "./source.ts";
+import { fetchMultiLang, manifestSize, pinCandidates, readRows, splitCandidates, type Candidate } from "./source.ts";
 import { readUnit, writeUnit } from "./unit.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
   source fetch --cache <dir>                         download the pinned MultiLang parquet files and check their sha256
   source pin --cache <dir> --out <candidates.json>   every row to a candidate, images pinned by linux/amd64 digest
+  source split <candidates.json> --cache <dir> --out <file>   the in-source test split (base files from GitHub raw)
   screen <candidates.json> --out <file>              keyless eligibility, each drop with E_SM_INELIGIBLE and its rule
   convert <candidates.json> --cache <dir> --id <id> --out <unit dir>
   draw <units.json> --prereg <prereg.json> --out <file>   seeded orders; units.json is [{id, repo, month, stratum}]
@@ -65,10 +66,18 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (sub === "source") {
       const [what, ...r] = rest;
+      if (what === "split") {
+        const { pos, f } = flags(r, ["--cache", "--out"]);
+        const c = await splitCandidates(need(f, "--cache"), loadCands(pos[0] ?? need(f, "<candidates>")));
+        writeNew(need(f, "--out"), { schema: "sm-candidates.v1", rows: c.length, candidates: c });
+        const sp = c.filter((x) => x.split);
+        console.log("split=" + sp.length + " in_source=" + sp.filter((x) => x.split && "test_hunks" in x.split && x.split.test_hunks > 0).length + " mixed=" + sp.filter((x) => x.split && "mixed" in x.split && x.split.mixed > 0).length + " errors=" + sp.filter((x) => x.split && "error" in x.split).length);
+        return 0;
+      }
       const { f } = flags(r, ["--cache", "--out"]);
       await fetchMultiLang(need(f, "--cache"));
       if (what === "fetch") return 0;
-      if (what !== "pin") throw new Error("E_USAGE sm source takes fetch or pin");
+      if (what !== "pin") throw new Error("E_USAGE sm source takes fetch, pin or split");
       const c = await pinCandidates(need(f, "--cache"));
       writeNew(need(f, "--out"), { schema: "sm-candidates.v1", rows: c.length, candidates: c });
       console.log("candidates=" + c.length + " pinned=" + c.filter((x) => x.image_digest).length);
@@ -78,7 +87,7 @@ export async function main(argv: string[]): Promise<number> {
       const { pos, f } = flags(rest, ["--out"]);
       const s = screen(loadCands(pos[0] ?? need(f, "<candidates>")));
       writeNew(need(f, "--out"), s);
-      console.log("eligible=" + s.eligible.length + " " + Object.entries(s.by_rule).map(([k, v]) => k + "=" + v).join(" "));
+      console.log("eligible=" + s.eligible.length + " " + Object.entries(s.by_rule).map(([k, v]) => k + "=" + v).join(" ") + " mixed_by_lang=" + JSON.stringify(s.mixed_by_lang));
       return 0;
     }
     if (sub === "convert") {

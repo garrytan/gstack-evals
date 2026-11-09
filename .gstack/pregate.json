@@ -167,7 +167,8 @@
       "tests/outcome-skills/sm-unit.test.ts",
       "tests/outcome-skills/sm-arms.test.ts",
       "tests/outcome-skills/sm-session.test.ts",
-      "tests/outcome-skills/sm-claude.test.ts"
+      "tests/outcome-skills/sm-claude.test.ts",
+      "tests/outcome-skills/sm-prep.test.ts"
     ],
     "tests/outcome-skills/fixtures/sm/**": [
       "tests/outcome-skills/sm-draw.test.ts"

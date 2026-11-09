@@ -26,7 +26,10 @@ export interface SmUnit {
   fix: { files: string[]; all_files: string[]; added_lines_30: number; sha256: string }; test_patch: { files: string[]; sha256: string };
   tests: { f2p: string[]; p2p: string[] };
   scope: { dir: string; files: number; lines: number; widened: number } | null; file_scope: string[];
-  strip: { removed: string[] } | null; labels: null | Record<string, unknown>;
+  strip: { removed: string[]; restored?: string[] } | null; labels: null | Record<string, unknown>;
+  /** Set at prep (fixsplit.ts): fix-source.patch holds the fix's non-test hunks, fix-tests.patch the hunks wholly inside
+   *  in-source test modules (applied only with test.patch); in_source_tests is true when that file is not empty. */
+  split?: { in_source_tests: boolean; test_hunks: number; source_files: string[] };
   oracle: null | { runs: OracleRun[]; stable: string[]; stable_sha256: string; f2p_ok: boolean; max_wall_ms: number; verdict: string; smoke: { claude_version: string; egress_probe: string; verdict: string } | null; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } | null; history: string | null };
   files: Record<string, string>;
 }
@@ -91,7 +94,7 @@ export function readUnit(dir: string): SmUnit {
     return smFail("E_SM_UNIT", dir + "/unit.json is not readable: " + (e as Error).message);
   }
   if (u.schema !== "sm-unit.v1") smFail("E_SM_UNIT", dir + " is not an sm-unit.v1 dir");
-  for (const p of PAYLOAD) {
+  for (const p of [...PAYLOAD, ...Object.keys(u.files ?? {}).filter((k) => !PAYLOAD.includes(k))]) {
     const got = existsSync(join(dir, p)) ? sha(readFileSync(join(dir, p))) : "missing";
     if (got !== u.files[p]) smFail("E_SM_UNIT", dir + "/" + p + " is " + got + ", not unit.json's " + u.files[p]);
   }
@@ -100,4 +103,10 @@ export function readUnit(dir: string): SmUnit {
 }
 
 /** Rewrites unit.json after prep fills a field; the payload digests stay as written. */
+/** Writes a prep-made unit file (fix-source.patch, fix-tests.patch) and records its digest in unit.json's files. */
+export function addUnitFile(dir: string, u: SmUnit, name: string, body: string): void {
+  writeFileSync(join(dir, name), body);
+  u.files[name] = sha(body);
+}
+
 export const saveUnit = (dir: string, u: SmUnit): void => writeFileSync(join(dir, "unit.json"), JSON.stringify(u, null, 1) + "\n");

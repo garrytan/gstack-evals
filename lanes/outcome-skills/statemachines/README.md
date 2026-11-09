@@ -74,10 +74,12 @@ with no network, on the unit's tree volume.
 Per unit in draw order: pull by digest under the pacing, the runtime layer (images/manifest.ts withRuntime), the smoke,
 prep, then base 1, fixed 1, base 2, fixed 2, base 3, fixed 3, each on a fresh copy of the tree volume. Base is the tree
 plus test.patch; fixed adds fix.patch. Each run is the unit's rebuild, test and print commands in one container, as
-published, then the dataset parser in its sandbox over the print output. Only the parser's PASSED counts as a pass.
+published, then the dataset parser in its sandbox over the print output. Only the parser's "pass" counts as a pass: that is the dataset's
+status word (1,076 of the 1,077 pinned parsers write pass, fail and skip; the last lowercases its own). P1 compared with
+"PASSED", so every sampled base run read as all failing; the container itself ran the tests fine.
 
 - Keep: every fail-to-pass test does not pass in all three base runs and passes in all three fixed runs, else
-  E_SM_ORACLE_UNSTABLE. Stable set: every id the parser reports PASSED in all six runs; an empty one is
+  E_SM_ORACLE_UNSTABLE. Stable set: every id the parser reports "pass" in all six runs; an empty one is
   E_SM_ORACLE_UNSTABLE ("no stable test").
 - 15 minutes: a run whose wall time reaches 900 s is stopped and the unit drops (E_SM_SLOW_TEST).
 - Smoke (E_SM_SMOKE): the runtime layer builds, claude --version prints 2.1.312, node runs a probe and no denied target
@@ -160,3 +162,32 @@ the transcript; the dry run also reads request bodies. The init record's memory_
 Session plan (session.ts): per unit and model, the first-stage cells shuffled by order_seed plus the part number, then the
 nine follow-ons shuffled the same way, each after its tree's first stage. End kinds and the one-retry rule follow section
 6; a second upstream or infra end is E_SM_UPSTREAM_GAP or E_SM_INFRA_GAP.
+
+## Prep readings added after the first sample (fixsplit.ts, langs.ts, leak.ts, history.ts)
+
+- Pass word. The dataset's parsers write pass, fail and skip, so testrun.ts counts only "pass". With it, graphql-go-727
+  passes 799 of 799 pass-to-pass tests on the base tree and both fail-to-pass tests after the fix, in hardened mode with no
+  network. The container needed no change; the dataset's commands need no network at test time on the units sampled.
+- The repository at the base commit (section 4) is read as the base commit's tree. When the image's tree has tracked
+  files that differ from it, restore.sh checks them out again from the base commit before the history rewrite, and
+  unit.json's strip.restored names them. A file that still differs refuses (E_SM_HISTORY). On less.js-4349 the one such
+  file is a built bundle the image holds with CRLF line endings where the commit holds LF; its content is otherwise the same.
+- The rewrite and the follow-on commit run git with gc.auto=0, so git's automatic gc can't collide with the explicit one.
+- Tests inside the fix patch (sections 3 and 7). TEST_MODULES in langs.ts is the frozen detector: Rust's #[cfg(test)]
+  inline modules, found on the code with comments, strings and char literals blanked, from the attribute (widened over
+  directly preceding attribute lines) to the module's closing brace. An out-of-line mod (mod tests;) and a #[cfg(test)]
+  item that is not a mod are not ranges. The other languages have no detector, since their tests live in test files.
+- fixsplit.ts places each hunk of the fix patch by its changed lines: removed lines against the base file's ranges, added
+  lines against the fixed file's. Wholly inside goes to fix-tests.patch, wholly outside stays in fix-source.patch, and
+  anything else drops the unit with E_SM_MIXED_TEST_HUNK. A hunk is the fix patch's hunk as published; it is not
+  re-split. The 1 to 6 file rule counts source files with a hunk left in fix-source.patch. fix.patch stays the published
+  patch (the leak scan's needles come from it). The oracle's fixed runs apply test.patch, fix-source.patch, then
+  fix-tests.patch; base runs never see fix-tests.patch. unit.json's split.in_source_tests records whether a unit scores
+  through in-source tests.
+- The screen uses sm source split's fields: base files come from GitHub's raw host at the base commit. A file the split
+  can't match (3 Rust rows, the patch does not fit the fetched file) drops at the screen as split_base_file, fail closed.
+  At prep the split runs again on the prepared tree.
+- Leak hits keep the literal rule (any hit drops) and are reported by kind: own_package when a dependency cache file
+  belongs to a package the repository publishes (its repository name, github.com/<repo>, or a name owned.sh reads from the
+  tree's Cargo.toml, package.json, go.mod, pom.xml or .csproj files), other_package for any other cache (cargo registry,
+  cargo git, the Rust standard library source, Go module cache, node_modules, Maven, Gradle, NuGet), and not_cache.

@@ -10,7 +10,7 @@ find . -mindepth 2 -name .git -prune -exec rm -rf {} +
 rm -rf .git
 git init -q
 git symbolic-ref HEAD refs/heads/main
-xargs -0 -r -n 2000 git add -f -- < "$k"
-GIT_COMMITTER_DATE="2000-01-01T00:00:00Z" git -c user.name=base -c user.email=base@localhost -c commit.gpgsign=false commit -q --no-verify --allow-empty --date "2000-01-01T00:00:00Z" -m base
+xargs -0 -r -n 2000 git -c gc.auto=0 add -f -- < "$k"
+GIT_COMMITTER_DATE="2000-01-01T00:00:00Z" git -c user.name=base -c user.email=base@localhost -c commit.gpgsign=false -c gc.auto=0 commit -q --no-verify --allow-empty --date "2000-01-01T00:00:00Z" -m base
 git reflog expire --expire=now --all; rm -rf .git/logs; git gc -q --prune=now
 rm -f "$t" "$k"

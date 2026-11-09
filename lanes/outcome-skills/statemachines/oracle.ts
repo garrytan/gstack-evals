@@ -10,10 +10,12 @@ import { createHash } from "node:crypto";
 import { docker, dockerRun } from "../../real-outcome/task/docker.ts";
 import { withRuntime } from "../images/manifest.ts";
 import { prepareBase, type Where } from "./history.ts";
-import { leakCheck, needles, scan } from "./leak.ts";
+import { classifyHits, leakCheck, needles, ownNames, scan, type LeakHit, type HitKind } from "./leak.ts";
+import { needsBase, splitFix } from "./fixsplit.ts";
+import { runBash } from "./history.ts";
 import { scope } from "./scope.ts";
 import { applyPatches, copyVolume, dropVolume, LIMIT_MS, passed, runName, runParser, runTests, type Mode } from "./testrun.ts";
-import { readUnit, saveUnit, smFail, type OracleRun, type SmUnit } from "./unit.ts";
+import { addUnitFile, readUnit, saveUnit, smFail, type OracleRun, type SmUnit } from "./unit.ts";
 import { join } from "node:path";
 
 export const CLAUDE_VERSION = "2.1.312";
@@ -90,7 +92,7 @@ export const treeVolume = (id: string) => "sm-tree-" + id.toLowerCase().replace(
 
 /** Copies the image's repo_dir into the unit's tree volume, then strips and rewrites history there, then scope and leak. */
 /** With record, a leak hit is returned, not thrown (the sample measures units the scan would drop). */
-export function prepare(u: SmUnit, runtimeId: string, fixPatch: string, record = false): { volume: string; removed: string[]; preflight: string; scope: SmUnit["scope"]; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } } {
+export function prepare(u: SmUnit, runtimeId: string, fixPatch: string, record = false, dir?: string): { volume: string; removed: string[]; restored: string[]; preflight: string; scope: SmUnit["scope"]; leak: { needles: number; hits: LeakHit[]; kinds?: Record<HitKind, number> } } {
   const p = docker(["run", "--rm", "--network", "none", "--entrypoint", "sh", u.image.image_id!, "-c", 'w=$(pwd); echo "WD $w"; for d in "$w" /testbed /testbed/repo; do if [ -d "$d/.git" ]; then echo "REPO $d"; break; fi; done'], { timeoutMs: 120_000 });
   u.work_dir = (p.stdout.match(/^WD (\S+)$/m) ?? [])[1] ?? "";
   u.repo_dir = (p.stdout.match(/^REPO (\S+)$/m) ?? [])[1] ?? "";
@@ -103,10 +105,32 @@ export function prepare(u: SmUnit, runtimeId: string, fixPatch: string, record =
   const where: Where = { kind: "docker", image: runtimeId, volume, repoDir: u.repo_dir, name: runName("prep") };
   const h = prepareBase(where, u.base_commit, u.repo_dir, u.id);
   const testFiles = u.test_patch.files;
-  const sc = scope({ ...where, name: runName("scope") }, u.lang, u.fix.files, testFiles);
+  if (dir) splitUnit(dir, u, where);
+  const sc = scope({ ...where, name: runName("scope") }, u.lang, u.split?.source_files ?? u.fix.files, testFiles);
   const lw = { ...where, name: runName("leak") };
-  const leak = record ? scan(lw, needles(lw, fixPatch), "/") : leakCheck(lw, fixPatch, u.id, "/");
-  return { volume, removed: h.removed, preflight: h.preflight, scope: sc, leak: { needles: leak.needles, hits: leak.hits } };
+  const own = ownNames(lw, u.repo);
+  const leak = record ? classifyHits(scan(lw, needles(lw, fixPatch), "/"), own) : leakCheck(lw, fixPatch, u.id, "/", own);
+  return { volume, removed: h.removed, restored: h.restored, preflight: h.preflight, scope: sc, leak: { needles: leak.needles, hits: leak.hits, kinds: leak.kinds } };
+}
+
+/** Splits fix.patch on the prepared base tree (fixsplit.ts) into fix-source.patch and fix-tests.patch. A mixed hunk drops
+ *  the unit (E_SM_MIXED_TEST_HUNK); a non-test source file count outside 1 to 6 drops it (E_SM_INELIGIBLE). */
+export function splitUnit(dir: string, u: SmUnit, where: Where): void {
+  const patch = rf(join(dir, "fix.patch"), "utf8");
+  const tf = new Set(u.test_patch.files);
+  const texts: Record<string, string> = {};
+  const paths = needsBase(u.lang, patch, tf);
+  if (paths.length) {
+    const r = runBash(where.kind === "docker" ? { ...where, name: runName("base-files") } : where, 'cd "$1" && while IFS= read -r -d "" p; do printf "%s\\0" "$p"; git show "HEAD:$p" | base64 -w0; printf "\\0"; done < "$2/paths"', { paths: paths.map((p) => p + "\0").join("") });
+    const parts = r.stdout.split("\0");
+    for (let i = 0; i + 1 < parts.length; i += 2) texts[parts[i]!] = Buffer.from(parts[i + 1]!, "base64").toString("utf8");
+  }
+  const s = splitFix(u.lang, patch, tf, (p) => texts[p] ?? smFail("E_SM_UNIT", u.id + ": no base text for " + p), u.id);
+  if (s.mixed.length) smFail("E_SM_MIXED_TEST_HUNK", u.id + " (" + u.lang + "): " + s.mixed.map((m) => m.path + " hunk " + m.hunk).join(", ") + " is partly inside and partly outside a test module");
+  if (s.source_files.length < 1 || s.source_files.length > 6) smFail("E_SM_INELIGIBLE", u.id + ": fix_source_files_1_to_6 after the in-source test split: " + s.source_files.length);
+  addUnitFile(dir, u, "fix-source.patch", s.fix);
+  addUnitFile(dir, u, "fix-tests.patch", s.tests);
+  u.split = { in_source_tests: s.tests !== "", test_hunks: s.test_hunks, source_files: s.source_files };
 }
 
 export interface RunResult { run: OracleRun; parsed: Record<string, string> | null }
@@ -117,7 +141,12 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
   copyVolume(image, volume, copy, mode);
   try {
     const patches: [string, string][] = [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
-    if (tree === "fixed") patches.push(["fix.patch", rf(join(dir, "fix.patch"), "utf8")]);
+    if (tree === "fixed") {
+      const split = existsSync(join(dir, "fix-source.patch"));
+      patches.push(["fix-source.patch", rf(join(dir, split ? "fix-source.patch" : "fix.patch"), "utf8")]);
+      const t = split ? rf(join(dir, "fix-tests.patch"), "utf8") : "";
+      if (t) patches.push(["fix-tests.patch", t]);
+    }
     const bad = applyPatches(image, copy, u.repo_dir, patches, mode);
     if (bad) return { run: { tree, n, wall_ms: 0, exit: -1, parsed_sha256: null, stopped: false }, parsed: null };
     const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n });
@@ -152,8 +181,8 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
     u.image.image_id = await pull(u.image.ref, pacer);
     const s = smoke(u.image.image_id, u.id);
     u.image.runtime_id = s.runtime_id;
-    const p = prepare(u, s.runtime_id, rf(join(dir, "fix.patch"), "utf8"));
-    u.strip = { removed: p.removed };
+    const p = prepare(u, s.runtime_id, rf(join(dir, "fix.patch"), "utf8"), false, dir);
+    u.strip = { removed: p.removed, restored: p.restored };
     u.scope = p.scope;
     u.oracle = { runs: [], stable: [], stable_sha256: "", f2p_ok: false, max_wall_ms: 0, verdict: "running", smoke: { claude_version: s.claude_version, egress_probe: s.egress_probe, verdict: s.verdict }, leak: p.leak, history: p.preflight };
     const base: (Record<string, string> | null)[] = [], fixed: (Record<string, string> | null)[] = [];

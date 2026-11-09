@@ -7,7 +7,8 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { classify, DATASET_LANG, featFirst800, type Lang } from "./langs.ts";
+import { classify, DATASET_LANG, featFirst800, TEST_MODULES, type Lang } from "./langs.ts";
+import { needsBase, splitFix } from "./fixsplit.ts";
 import { smFail } from "./unit.ts";
 
 export const MULTILANG = {
@@ -40,6 +41,9 @@ export interface Candidate {
   lang: Lang; docker_image: string; image_digest: string | null; image_error?: string; base_commit: string; f2p: number; p2p: number;
   fix_files: number; fix_source_files: number; test_files: number; tests_share_fix_file: boolean; feature_screen: boolean;
   issue_sha256: string; row_sha256: string;
+  /** The in-source test split (sm source split), for languages with a test-module detector: non-test source files, mixed
+   *  hunks and test hunks. fix_source_files is then the split's count. */
+  split?: { source_files: number; mixed: number; test_hunks: number } | { error: string };
 }
 
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
@@ -157,3 +161,37 @@ export async function pinCandidates(cache: string, fetchFn: typeof fetch = fetch
 }
 
 export const imageRef = (c: { docker_image: string; image_digest: string | null }): string => splitImage(c.docker_image).repo.replace(/^library\//, "") + "@" + c.image_digest;
+
+/** The in-source test split for every candidate whose language has a detector and whose fix changes one of its source
+ *  files. Base files come keylessly from GitHub's raw host at the base commit, cached under cache/base-files by sha256 of
+ *  repo, commit and path. A file that can't be read records an error and the screen drops the candidate. */
+export async function splitCandidates(cache: string, cands: Candidate[], fetchFn: typeof fetch = fetch): Promise<Candidate[]> {
+  const rows = new Map(readRows(cache).map((r) => [r.row.instance_id, r.row]));
+  mkdirSync(join(cache, "base-files"), { recursive: true });
+  const out: Candidate[] = [];
+  for (const c of cands) {
+    const row = rows.get(c.id);
+    const tf = new Set(patchFiles(row?.test_patch ?? ""));
+    if (!row || !TEST_MODULES[c.lang]) {
+      out.push(c);
+      continue;
+    }
+    const texts: Record<string, string> = {};
+    try {
+      for (const p of needsBase(c.lang, row.patch, tf)) {
+        const f = join(cache, "base-files", sha(c.repo + "\n" + c.base_commit + "\n" + p));
+        if (!existsSync(f)) {
+          const res = await fetchFn("https://raw.githubusercontent.com/" + c.repo + "/" + c.base_commit + "/" + p.split("/").map(encodeURIComponent).join("/"));
+          if (!res.ok) throw new Error("raw " + p + " answered " + res.status);
+          writeFileSync(f, Buffer.from(await res.arrayBuffer()));
+        }
+        texts[p] = readFileSync(f, "utf8");
+      }
+      const sp = splitFix(c.lang, row.patch, tf, (p) => texts[p]!, c.id);
+      out.push({ ...c, fix_source_files: sp.source_files.length, split: { source_files: sp.source_files.length, mixed: sp.mixed.length, test_hunks: sp.test_hunks } });
+    } catch (e) {
+      out.push({ ...c, split: { error: (e as Error).message.slice(0, 300) } });
+    }
+  }
+  return out;
+}

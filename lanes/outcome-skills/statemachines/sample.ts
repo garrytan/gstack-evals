@@ -6,7 +6,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { smoke, prepare, pull, type Pacer } from "./oracle.ts";
 import { manifestSize, type Candidate, type MlRow } from "./source.ts";
-import { applyPatches, copyVolume, dropVolume, passed, runParser, runTests, type Mode } from "./testrun.ts";
+import { applyPatches, copyVolume, dropVolume, PASS, passed, runParser, runTests, type Mode } from "./testrun.ts";
 import { readUnit, saveUnit, writeUnit } from "./unit.ts";
 
 export async function sample(o: { candidates: Candidate[]; cache: string; units: string; ids: string[]; pacer: Pacer; out: string; row: (id: string) => MlRow }): Promise<void> {
@@ -35,10 +35,10 @@ export async function sample(o: { candidates: Candidate[]; cache: string; units:
         saveUnit(dir, u);
         continue;
       }
-      const p = prepare(u, u.image.runtime_id!, readFileSync(join(dir, "fix.patch"), "utf8"), true);
-      u.strip = { removed: p.removed };
+      const p = prepare(u, u.image.runtime_id!, readFileSync(join(dir, "fix.patch"), "utf8"), true, dir);
+      u.strip = { removed: p.removed, restored: p.restored };
       u.scope = p.scope;
-      Object.assign(rec, { repo_dir: u.repo_dir, work_dir: u.work_dir, history: p.preflight, strip_removed: p.removed.length, scope: p.scope, leak_needles: p.leak.needles, leak_hits: p.leak.hits.length, leak_hit_dirs: [...new Set(p.leak.hits.map((h) => h.path.split("/").slice(0, 4).join("/")))] });
+      Object.assign(rec, { repo_dir: u.repo_dir, work_dir: u.work_dir, history: p.preflight, strip_removed: p.removed.length, scope: p.scope, leak_needles: p.leak.needles, leak_hits: p.leak.hits.length, leak_kinds: p.leak.kinds, restored: p.restored.length, in_source_tests: u.split?.in_source_tests ?? false, leak_hit_dirs: [...new Set(p.leak.hits.map((h) => h.path.split("/").slice(0, 4).join("/")))] });
       saveUnit(dir, u);
       for (const mode of ["root", "hardened"] as Mode[]) {
         const copy = p.volume + "-sample-" + mode;
@@ -55,7 +55,7 @@ export async function sample(o: { candidates: Candidate[]; cache: string; units:
             try {
               const parsed = runParser(readFileSync(join(dir, "parser.py"), "utf8"), t.log, id);
               const st = Object.values(parsed);
-              Object.assign(r, { parsed: st.length, passed: st.filter((v) => v === "PASSED").length, statuses: [...new Set(st)], f2p_failing: u.tests.f2p.filter((x) => !passed(parsed, x)).length, f2p: u.tests.f2p.length, p2p_passing: u.tests.p2p.filter((x) => passed(parsed, x)).length, p2p: u.tests.p2p.length });
+              Object.assign(r, { parsed: st.length, passed: st.filter((v) => v === PASS).length, statuses: [...new Set(st)], f2p_failing: u.tests.f2p.filter((x) => !passed(parsed, x)).length, f2p: u.tests.f2p.length, p2p_passing: u.tests.p2p.filter((x) => passed(parsed, x)).length, p2p: u.tests.p2p.length });
             } catch (e) {
               r.parser = (e as Error).message.slice(0, 300);
               r.tail = t.stderr_tail.slice(-600);

@@ -172,6 +172,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_UNIT](#e_sm_unit) | 2 | U20 |
 | [E_SM_SOURCE](#e_sm_source) | 2 | U20 |
 | [E_SM_INELIGIBLE](#e_sm_ineligible) | 1 | U20 |
+| [E_SM_MIXED_TEST_HUNK](#e_sm_mixed_test_hunk) | 1 | U20 |
 | [E_SM_LEAKED](#e_sm_leaked) | 1 | U20 |
 | [E_SM_HISTORY](#e_sm_history) | 1 | U20 |
 | [E_SM_ORACLE_UNSTABLE](#e_sm_oracle_unstable) | 1 | U20 |
@@ -265,6 +266,14 @@ Exit 1. Side effects: None: noloss score reads ingested arms and writes nothing.
 A candidate failed the keyless eligibility screen (post section 3); the record names the rule: image_digest (no linux/amd64 digest), fail_to_pass or pass_to_pass (no test), fix_source_files_1_to_6, or feature_request_screen (the frozen keyword screen on the issue's first 800 code points).
 
 Fix: Nothing to fix: the unit is not drawn. The drop counts by rule go in the results.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_MIXED_TEST_HUNK
+
+A state machines unit's fix patch has a hunk that the frozen in-source test-module detector (Rust #[cfg(test)] modules) places partly inside and partly outside a test module, so it is neither the fix's tests nor the fix (preregistration sections 3 and 7). The record names each such file and hunk.
+
+Fix: Nothing to fix: the unit drops. These drops are counted per language in the results; the detector is not changed for them.
 
 Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 

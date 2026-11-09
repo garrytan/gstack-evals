@@ -1397,6 +1397,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_SM_MIXED_TEST_HUNK: {
+    exit: 1,
+    meaning: "A state machines unit's fix patch has a hunk that the frozen in-source test-module detector (Rust #[cfg(test)] modules) places partly inside and partly outside a test module, so it is neither the fix's tests nor the fix (preregistration sections 3 and 7). The record names each such file and hunk.",
+    fix: "Nothing to fix: the unit drops. These drops are counted per language in the results; the detector is not changed for them.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   E_SM_LEAKED: {
     exit: 1,
     meaning: "The leak scan (post section 4) found a line of 30 characters or more that the fix adds, and that no base file holds, somewhere in the unit's container filesystem, or the scan did not finish. The record names each path and the needle's sha256, never the line. The unit drops before any model call.",

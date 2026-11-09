@@ -79,5 +79,7 @@ export function runParser(src: string, log: string, label: string): Record<strin
   return JSON.parse(line!.slice(10));
 }
 
-/** Only the parser's PASSED counts as a pass; every other status (FAILED, SKIPPED, ERROR, anything else) does not. */
-export const passed = (res: Record<string, string>, id: string): boolean => res[id] === "PASSED";
+/** The dataset's status for a passing test: 1,076 of the 1,077 pinned parsers write "pass", "fail" and "skip", and the
+ *  last lowercases its own (pass|fail|skip). Only "pass" counts as a pass; every other status, or none, does not. */
+export const PASS = "pass";
+export const passed = (res: Record<string, string>, id: string): boolean => res[id] === PASS;

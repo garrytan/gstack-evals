@@ -81,6 +81,8 @@ export const FOLLOWON_SCRIPT = sh("followon.sh");
 
 export const PREFLIGHT_SCRIPT = sh("preflight.sh");
 
+export const RESTORE_SCRIPT = sh("restore.sh");
+
 /** Section 4's preflight: one commit on a base tree, two on a follow-on tree, every commit reachable from HEAD, refs only
  *  main, no remote, stash, reflog or loose object. Returns the PREFLIGHT line; refuses with E_SM_HISTORY. */
 export function preflight(where: Where, want: 1 | 2, label: string): string {
@@ -92,18 +94,30 @@ export function preflight(where: Where, want: 1 | 2, label: string): string {
   return line;
 }
 
-/** Strip, one-commit history and preflight on a base tree. Refuses (E_SM_HISTORY) when the tree is not at base_commit or
- *  its tracked files differ from it. Returns the removed paths and the preflight line. */
-export function prepareBase(where: Where, base: string, repoDir: string, label: string): { removed: string[]; preflight: string } {
-  const l = runBash(where, LIST_SCRIPT);
-  if (l.status !== 0) smFail("E_SM_HISTORY", label + ": the tree listing failed: " + l.stderr.slice(-300));
-  const plan = stripPlan(l.stdout, repoDir);
+/** Strip, one-commit history and preflight on a base tree. Refuses (E_SM_HISTORY) when the tree is not at base_commit.
+ *  Tracked files the image changed go back to the base commit's checkout first (section 4 gives the repository at the base
+ *  commit), and are returned as restored; one that still differs refuses. Returns removed and restored paths and the
+ *  preflight line. */
+export function prepareBase(where: Where, base: string, repoDir: string, label: string): { removed: string[]; restored: string[]; preflight: string } {
+  const list = () => {
+    const l = runBash(where, LIST_SCRIPT);
+    if (l.status !== 0) smFail("E_SM_HISTORY", label + ": the tree listing failed: " + l.stderr.slice(-300));
+    return stripPlan(l.stdout, repoDir);
+  };
+  let plan = list();
   if (plan.head !== base) smFail("E_SM_HISTORY", label + ": the image's tree is at " + plan.head + ", not base_commit " + base);
-  if (plan.dirty) smFail("E_SM_HISTORY", label + ": " + plan.dirty + " tracked file(s) differ from base_commit in the image's tree");
+  let restored: string[] = [];
+  if (plan.dirty) {
+    const s = runBash(where, RESTORE_SCRIPT);
+    if (s.status !== 0) smFail("E_SM_HISTORY", label + ": restoring tracked files to base_commit failed: " + s.stderr.slice(-300));
+    restored = s.stdout.split("\n").filter((x) => x.startsWith("RESTORED\t")).map((x) => b64(x.slice(9))).sort();
+    plan = list();
+  }
+  if (plan.dirty) smFail("E_SM_HISTORY", label + ": " + plan.dirty + " tracked file(s) still differ from base_commit after the restore");
   const w = runBash(where, REWRITE_SCRIPT, { remove: plan.remove.map((p) => p + "\0").join("") });
   if (w.status !== 0) smFail("E_SM_HISTORY", label + ": the history rewrite failed: " + w.stderr.slice(-300));
   const removed = w.stdout.split("\n").filter((x) => x.startsWith("REMOVED\t")).map((x) => b64(x.slice(8))).sort();
-  return { removed, preflight: preflight(where, 1, label) };
+  return { removed, restored, preflight: preflight(where, 1, label) };
 }
 
 /** A follow-on tree: commit two on top of a prepared base, then the preflight for two commits. */
