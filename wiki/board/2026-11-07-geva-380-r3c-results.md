@@ -67,12 +67,12 @@ It mostly didn't. One reason fits the report-only localization lines. Every arm 
 
 ## Result
 
-analyze's lines, exactly as printed, with two changes: the admit line's path on the controller host is written as `<work dir>`, and three lines of dollar amounts, the cost per success line and the GO line's closing dollar projection are in Agent notes instead. It exited 5, its code for an outcome other than KEEP or CUT-CANDIDATE. The frozen lines are the grid counts, exposure, allowance stops, the primary, D1 and the outcome. Every line marked "report only" decides nothing. The admit lines near the top were frozen at admission, before any grid trial.
+analyze's lines, exactly as printed, with three changes: the admit line's path on the controller host is written as `<work dir>`, its cap and settled amounts are written as `<cap>` and `<settled>`, and three lines of dollar amounts, the cost per success line and the GO line's closing dollar projection are in Agent notes instead. It exited 5, its code for an outcome other than KEEP or CUT-CANDIDATE. The frozen lines are the grid counts, exposure, allowance stops, the primary, D1 and the outcome. Every line marked "report only" decides nothing. The admit lines near the top were frozen at admission, before any grid trial.
 
 ```text
 oracle per-test (report only): 405 oracle trials, 405 score f2pShare 1 and 0 score null
 calibration: 442 none trials, 442 graded, 308 passed
-admit: bun quick/laneb/r3/r3c-rules.ts admit <INHAND> --model opus --calibration <work dir>/calibration.jsonl --cap-usd 750 --settled-usd 159.813435
+admit: bun quick/laneb/r3/r3c-rules.ts admit <INHAND> --model opus --calibration <work dir>/calibration.jsonl --cap-usd <cap> --settled-usd <settled>
 r3c admission opus: 18 tasks admitted (sha256 e5727033c05e649b04da006a1973c8025976e334579c8ef2f9c52bed32b0ef23; 4 far) from 442 calibration none trials; refitted band mass 12.4%, mean posterior none rate 0.512
 report only, beta-binomial law (a 0.088, b 0.051, band mass 8.5%): MDD 10 points, null size 4.5% at 20 replicates
 R3c grid for opus: GO with 18 tasks x 20 replicates x {none, told}; MDD 10 points (16 if the lift sits on half the tasks, report only); null size 4.1%
@@ -288,6 +288,10 @@ Told costs more. A told trial cost $0.62 against $0.41 for none, and a pass cost
 - **Cost per success.** none $0.86, told $1.24.
 
 - **Cost.** Told costs 1.52 times as much per trial ($0.620 against $0.408 in model spend) and about 43% more per success ($1.24 against $0.86).
+
+The admit line as printed, with its amounts:
+
+admit: bun quick/laneb/r3/r3c-rules.ts admit <INHAND> --model opus --calibration <work dir>/calibration.jsonl --cap-usd 750 --settled-usd 159.813435
 
 </details>
 
