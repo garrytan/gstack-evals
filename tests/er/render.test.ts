@@ -35,7 +35,7 @@ afterAll(() => {
   roots.forEach((r) => removeTree(r));
 });
 const atPin = (path: string) => readFileSync(join(PIN, path), "utf8");
-const render = (plan: string, gstack = PIN) => renderEngPhase({ gstack, plan, out: join(scratch(), "out") });
+const render = (plan: string, gstack = PIN) => (HAVE ? renderEngPhase({ gstack, plan, out: join(scratch(), "out") }) : ({ files: [], text: "" } as unknown as ReturnType<typeof renderEngPhase>));
 const bodies = (r: ReturnType<typeof render>) => Object.fromEntries(r.files.map((f) => [f.name, readFileSync(f.host, "utf8")]));
 
 const PLAIN = "Add a five-minute cache in front of the parcel lookup in src/lookup.ts.\n\nInvalidate an entry when a parcel's status changes.\n";

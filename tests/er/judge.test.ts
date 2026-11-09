@@ -29,3 +29,13 @@ describe("reading a judge's answer (section 7)", () => {
     expect(panelLabel([y([1], "code"), n, n]).anticipated).toBe(false);
   });
 });
+
+describe("Gemini's effort", () => {
+  test("the judge check's maximum reaches Gemini as high, and every other judge and effort passes through", async () => {
+    const { effortFor } = await import("../../lanes/eng-review/judge.ts");
+    expect(effortFor("gemini", "max")).toBe("high");
+    expect(effortFor("gemini", "medium")).toBe("medium");
+    expect(effortFor("astra", "max")).toBe("max");
+    expect(effortFor("opus", "max")).toBe("max");
+  });
+});

@@ -41,6 +41,8 @@ export function loadPrompt(name: PromptName): string {
 }
 
 export const EFFORT = { production: "medium", check: "max" } as const;
+/** Gemini 4 Argon lists low, medium and high, so the judge check's maximum effort reaches it as high. */
+export const effortFor = (judge: JudgeKey, effort: string): string => (judge === "gemini" && effort === "max" ? "high" : effort);
 const MAX_TOKENS: Record<PromptName, number> = { brief: 16_000, audit: 32_000, pairwise: 4_000, armguess: 2_000, recognition: 4_000 };
 
 export interface Reply {
@@ -115,6 +117,7 @@ export interface CallLog {
 }
 
 async function labelOnce(p: PacketFile, judge: JudgeKey, effort: string, call: Caller, logs: CallLog[], prompt: PromptName, only?: readonly string[]): Promise<{ parsed: Parsed; reply: Reply }> {
+  effort = effortFor(judge, effort);
   const base = loadPrompt(prompt).replace("{{PACKET}}", renderPacket(p));
   let reply: Reply = { text: null, model_id: "", version: null, problem: null };
   let parsed: Parsed = { cells: new Map(), missing: [] };
@@ -168,7 +171,7 @@ export async function labelPacket(p: PacketFile, meta: PacketMeta, effort: strin
     gemini = await labelOnce(p, "gemini", effort, call, logs, p.prompt, split);
     for (const k of split) {
       const [l, i] = k.split("|") as [string, string];
-      out.push(record(p, "gemini", gemini.reply, effort, l, i, gemini.parsed.cells.get(k)));
+      out.push(record(p, "gemini", gemini.reply, effortFor("gemini", effort), l, i, gemini.parsed.cells.get(k)));
     }
   }
   if (check) return out;
@@ -202,6 +205,7 @@ export interface GuessRecord {
 }
 
 async function askOnce<T>(p: PacketFile, judge: JudgeKey, effort: string, call: Caller, logs: CallLog[], read: (obj: any) => T | null): Promise<{ value: T | null; reply: Reply }> {
+  effort = effortFor(judge, effort);
   const base = loadPrompt(p.prompt).replace("{{PACKET}}", renderPacket(p));
   let out: { value: T | null; reply: Reply } = { value: null, reply: { text: null, model_id: "", version: null, problem: null } };
   for (let attempt = 1; attempt <= 2; attempt++) {
