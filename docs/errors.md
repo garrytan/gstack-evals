@@ -181,6 +181,20 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PV_LEAK_EXPOSED](#e_pv_leak_exposed) | warning | U20 |
 | [E_PV_PROVIDER_DRIFT](#e_pv_provider_drift) | 2 | U20 |
 | [E_PV_SUPPLY_SHORT](#e_pv_supply_short) | 2 | U20 |
+| [E_ER_NO_BLOCK](#e_er_no_block) | warning | U20 |
+| [E_ER_ARM_STOP](#e_er_arm_stop) | warning | U20 |
+| [E_ER_INFRA_MISSING](#e_er_infra_missing) | warning | U20 |
+| [E_ER_WEB_CONTAMINATED](#e_er_web_contaminated) | warning | U20 |
+| [E_ER_LABEL_MISSING](#e_er_label_missing) | warning | U20 |
+| [E_ER_JUDGE_KAPPA](#e_er_judge_kappa) | 2 | U20 |
+| [E_ER_STOCK_FAIL](#e_er_stock_fail) | 2 | U20 |
+| [E_ER_NO_READ](#e_er_no_read) | 2 | U20 |
+| [E_ER_EXPOSURE_FALLBACK](#e_er_exposure_fallback) | warning | U20 |
+| [E_ER_EXPOSURE_STOP](#e_er_exposure_stop) | 2 | U20 |
+| [E_ER_LEAK_EXPOSED](#e_er_leak_exposed) | warning | U20 |
+| [E_ER_PROVIDER_DRIFT](#e_er_provider_drift) | 2 | U20 |
+| [E_ER_SUPPLY_SHORT](#e_er_supply_short) | 2 | U20 |
+| [E_ER_BUILD_INSTRUMENT](#e_er_build_instrument) | warning | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -1218,6 +1232,54 @@ Fix: Stop authoring, report the counts per type and source, and wait for the Cap
 
 Exit 2. Side effects: None beyond the authoring spend already settled. Retry safe: no. Resumable: no. Owner: U20.
 
+### E_ER_JUDGE_KAPPA
+
+Plan-eng-review intentions eval (section 7): a production judge's Cohen's kappa on its gold cells is under 0.6, or it is short of 40 gold cells of a class or 40 distinct lists. That model's contrasts read untested (judge); on Opus lists in stage 1 it ends the eval as E_ER_NO_READ does.
+
+Fix: Stop that model's judge items for the Captain, settle the open lease at its recorded spend and release the rest. Never retry a judge check to change its verdict.
+
+Exit 2. Side effects: The lease settles at the spend recorded so far; partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ER_STOCK_FAIL
+
+Plan-eng-review intentions eval (section 8): a stock row was credited with a primary item on more than 2 of the 16 calibration units (stage 1) or more than 7 of the 56 comparison units (stage 2) on a model's lists. That model's contrasts read untested (stock); on Opus lists in stage 1 it ends the eval.
+
+Fix: Stop for the Captain, settle the open lease at its recorded spend and release the rest. Nothing is retried.
+
+Exit 2. Side effects: The lease settles at the spend recorded so far; partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ER_NO_READ
+
+Plan-eng-review intentions eval (section 10): stage 1 admission reads NO READ. The Opus judge (Astra) failed the judge check (kappa under 0.6) or fell short of gold cells, or fewer than 95% of Opus none replies parse. The eval ends as R48 FIX-METHOD on the instrument; a low A is never read as FLOOR here.
+
+Fix: Stop for the Captain and report the judge check's numbers and the parse rate. No stage 2 item is leased. Nothing is retried.
+
+Exit 2. Side effects: Open leases settle at their recorded spend; partial outputs stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ER_EXPOSURE_STOP
+
+Plan-eng-review intentions eval (section 11): after the first 24 Opus sessions of a skill arm in stage 2, the arm's exposure is under 0.70. The arm stops, its cells read untested and its remaining cap is released.
+
+Fix: Stop that arm for the Captain, settle its lease at the recorded spend and release the rest. The arm enters Holm with p = 1. Nothing is retried.
+
+Exit 2. Side effects: The arm's sessions so far stay sealed as an incomplete run. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ER_PROVIDER_DRIFT
+
+Plan-eng-review intentions eval (section 16, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.
+
+Fix: Stop leasing the model's items, keep the journal line that shows the provider, and send the question to the Captain. Never retry on another provider.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_ER_SUPPLY_SHORT
+
+Plan-eng-review intentions eval (section 16, rule 9): a named project type has fewer than 6 eligible units from the frame and transposition can't fill it to 10, or the pooled count of passing comparison units is under 48. Authoring stops and the question goes to the Captain.
+
+Fix: Stop authoring, report the counts per type, with and without copyleft, and wait for the Captain's ruling before any more authoring spend.
+
+Exit 2. Side effects: None beyond the authoring spend already settled. Retry safe: no. Resumable: no. Owner: U20.
+
 ## Exit 3: calibration failed (INCOMPLETE)
 
 ### CALIBRATION_SKILL
@@ -1523,5 +1585,69 @@ Warning. Owner: U20.
 Product-value eval (section 11): a model's stated training cutoff falls after a unit's plan date, so that unit's cells are descriptive and out of the model's primaries. When more than a quarter of a model's units are leak-exposed, the model's primaries read untested (leak).
 
 Fix: Nothing to rerun. Check the cutoff the build recorded from the provider's published documentation and the unit's plan date, and report the count per model.
+
+Warning. Owner: U20.
+
+### E_ER_NO_BLOCK
+
+Plan-eng-review intentions eval (prereg 2026-11-08-geva-405, section 6): a completed reply holds no eng-plan block that the strict parse or the one frozen lenient parse can read. The review scores 0 on every block score and counts as no-block in its cell; it is not missing.
+
+Fix: Nothing to rerun: no-block is the arm's own outcome. The no-block rate prints per cell, and smoke rule 1 reads it for the skill arms.
+
+Warning. Owner: U20.
+
+### E_ER_ARM_STOP
+
+Plan-eng-review intentions eval (section 6, gate answer C1): a session stopped itself (context overflow, the 90-minute harness timeout, the 200-turn limit or the $10 allowance) and its one retry under the same named reason stopped too. The session scores 0 on every block score as no-block; a sensitivity read treats it as missing.
+
+Fix: Nothing to rerun: the stop is the arm's own outcome. The arm-stop rate prints per cell beside the missing-instead-of-0 sensitivity read.
+
+Warning. Owner: U20.
+
+### E_ER_INFRA_MISSING
+
+Plan-eng-review intentions eval (section 6): a session ended on a failure outside the agent (a provider or API error, or a crash of the harness or container) and its one retry under the same named reason failed too. The session is missing: it counts against coverage and never scores 0.
+
+Fix: Nothing to rerun: the retry was the one allowed. Report the session as missing; coverage under 0.90 makes the contrast untested.
+
+Warning. Owner: U20.
+
+### E_ER_WEB_CONTAMINATED
+
+Plan-eng-review intentions eval (section 5): a review session got a successful WebSearch or WebFetch result, a subagent's or a server-side one included, although both tools are denied. The session is excluded as missing, counted against coverage and reported per arm.
+
+Fix: Check that the arm's settings deny WebSearch and WebFetch. Nothing reruns the session; it stays missing.
+
+Warning. Owner: U20.
+
+### E_ER_LABEL_MISSING
+
+Plan-eng-review intentions eval (section 7): a judge left a (list, key item) cell missing or unparsable after its one whole-packet resend, or a Gemini tie-break failed after its one retry. The cell stays unlabelled and counts against coverage, never as not anticipated.
+
+Fix: Nothing to rerun: the resend was the one allowed. The count of unlabelled cells prints per judge and model.
+
+Warning. Owner: U20.
+
+### E_ER_EXPOSURE_FALLBACK
+
+Plan-eng-review intentions eval (section 10, smoke rule 2): a skill arm was exposed in fewer than 5 of its 6 Opus smoke sessions, so it reruns its smoke with the harness Stop hook, which blocks a stop at most twice while the arm's detector shows no procedure. If that smoke passes, the arm runs with an enforced procedure, named that way in every headline.
+
+Fix: Lease the fallback re-smoke reserve the Captain recorded and run the arm's 6 Opus smoke sessions with the Stop hook on. If that smoke fails too, the arm reads FIX-METHOD on the instrument.
+
+Warning. Owner: U20.
+
+### E_ER_LEAK_EXPOSED
+
+Plan-eng-review intentions eval (section 11): a unit's earliest exposure falls before a model's stated training cutoff, so that unit is descriptive and out of the model's primaries. When more than a quarter of a model's units are leak-exposed, its primaries read untested (leak).
+
+Fix: Nothing to rerun. Check the cutoff the build recorded from the provider's documentation and the unit's earliest exposure, and report the count per model.
+
+Warning. Owner: U20.
+
+### E_ER_BUILD_INSTRUMENT
+
+Plan-eng-review intentions eval (section 12): stage 3's build instrument could not read a build. A unit's test suite does not run in its container at base and at the merge, an aftermath hidden test is not red on the real merged tree and green on the real fixed tree as required, or the mutation tool scores fewer than 90% of trees without a tool error. The unit leaves the build set, or the mutation kill rate goes unreported.
+
+Fix: Nothing to rerun for the build; report the count. A unit that leaves the build set is replaced in seeded order only before any stage 3 build runs.
 
 Warning. Owner: U20.
