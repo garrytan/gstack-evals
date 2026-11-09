@@ -100,18 +100,21 @@ const commands = (toks: Tok[]): Tok[][] => {
 const KEYWORDS = new Set(["do", "then", "else", "elif", "if", "while", "until", "time"]);
 const QUIET = new Set(["printf", "echo", "sort", "true", "false", ":", "test", "[", "]", "[[", "]]", "exit", "set", "shopt", "done", "fi", "esac", "cd"]);
 
-/** The redirection targets and tee files in the unit's rebuild and test commands. */
-function written(cmds: string[]): Set<string> {
-  const out = new Set<string>();
+/** The redirection targets and tee files in the given commands, as written. */
+function targets(cmds: string[]): Tok[] {
+  const out: Tok[] = [];
   for (const cmd of cmds) {
     const toks = lex(cmd);
     toks.forEach((t, i) => {
-      if (t.op === ">" && toks[i + 1] && !toks[i + 1]!.op) out.add(posix.basename(toks[i + 1]!.v));
+      if (t.op === ">" && toks[i + 1] && !toks[i + 1]!.op) out.push(toks[i + 1]!);
     });
-    for (const c of commands(toks)) if (c[0]?.v === "tee") for (const a of c.slice(1)) if (!a.v.startsWith("-")) out.add(posix.basename(a.v));
+    for (const c of commands(toks)) if (c[0]?.v === "tee") for (const a of c.slice(1)) if (!a.op && a.v && !a.v.startsWith("-")) out.push(a);
   }
   return out;
 }
+
+/** The file names the unit's rebuild and test commands write by redirection or tee. */
+const written = (cmds: string[]): Set<string> => new Set(targets(cmds).map((t) => posix.basename(t.v)));
 
 export function printReading(c: { rebuild: string[]; test: string[]; print: string[] }): PrintReading {
   const paths: ReportPath[] = [];
@@ -193,6 +196,32 @@ export function printReading(c: { rebuild: string[]; test: string[]; print: stri
   const w = written([...c.rebuild, ...c.test]);
   const log = paths.length > 0 && paths.every((p) => p.glob && !/[*?[]/.test(p.glob) && w.has(posix.basename(p.glob)));
   return { kind: log ? "log" : "report", paths };
+}
+
+/** A report directory: dir relative to cwd (the print command's cd, as in ReportPath). */
+export interface ReportDir { cwd: string; dir: string }
+const globRe = (g: string) => new RegExp("^" + g.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[!/g, "[^").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]") + "$");
+
+/** The parent directory of each report path the print command reads that the unit's test commands write into by
+ *  redirection or tee, for the run to create when it is missing (prep's git clean removes an untracked one). Only a
+ *  relative path whose directory has no glob and no .. step counts; a glob file name gives its parent. A path the test
+ *  commands do not name, a directory they mkdir themselves, an absolute path and a file at the top of its cwd give none. */
+export function reportDirs(c: { rebuild: string[]; test: string[]; print: string[] }): ReportDir[] {
+  const named = targets(c.test).filter((t) => !t.var && !t.qglob).map((t) => posix.normalize(t.v));
+  const made = c.test.flatMap((t) => commands(lex(t)).filter((x) => x[0]?.v === "mkdir").flatMap((x) => x.slice(1).filter((a) => !a.op && a.v && !a.v.startsWith("-")).map((a) => posix.normalize(a.v))));
+  const out: ReportDir[] = [];
+  for (const p of printReading(c).paths) {
+    if (p.glob === undefined) continue;
+    const g = posix.normalize(p.glob);
+    const dir = posix.dirname(g);
+    if (g.startsWith("/") || dir === "." || /[*?[]/.test(dir) || g.split("/").includes("..")) continue;
+    const name = globRe(posix.basename(g));
+    const rel = (t: string) => (p.cwd.startsWith("/") && t.startsWith(p.cwd + "/") ? t.slice(p.cwd.length + 1) : t);
+    const hit = named.some((t) => posix.dirname(rel(t)) === dir && name.test(posix.basename(rel(t))));
+    if (made.some((m) => rel(m) === dir || rel(m).startsWith(dir + "/"))) continue;
+    if (hit && !out.some((o) => o.cwd === p.cwd && o.dir === dir)) out.push({ cwd: p.cwd, dir });
+  }
+  return out;
 }
 
 const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
