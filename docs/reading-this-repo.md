@@ -40,7 +40,7 @@ Posts, commits and pull requests carry codes such as GEVA-105, GSTA-36, GST-1105
 
 Older posts were written for the crew, not for outside readers. They carry internal planning notes, review receipts, approvals and cost notes, and we keep them as records. Newer finding files lead with what a builder needs and put that internal detail in a collapsed Agent notes section near the end.
 
-On 2026-11-09 the crew edited the repo's text for public readers. The edits changed wording only, never a number or a verdict. Older commits and pull request pages keep the text from before that cleanup.
+On 2026-11-09 the crew edited the repo's text for public readers. The edits changed wording and never a verdict. Cost figures in findings moved into the Agent notes section. No post lost a number, with one allowed case: one plan's counts of the owner's own messages were generalized for privacy, and no finding rests on them. Older commits and pull request pages keep the text from before that cleanup.
 
 ## Clone URLs and pull request numbers
 
