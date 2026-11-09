@@ -7,7 +7,7 @@ Please report security problems privately, not in public issues, pull requests o
 **Preferred:** use GitHub private vulnerability reporting for this repo:
 <https://github.com/garrytan/gstack-evals/security/advisories/new>
 
-**If that link does not work:** open an issue with the "Request a private security contact" form. Put no technical details, file names or proof of concept in it. A maintainer will reply with a private channel.
+**If that link does not work:** use the "Request a private security contact" issue form to ask for a private channel. That issue only asks for contact and is not the report, so put no technical details, file names or proof of concept in it. A maintainer will reply with a private channel, and the report goes there.
 
 Include what you can: the commit, the file or workflow, steps to reproduce and the impact you saw.
 
