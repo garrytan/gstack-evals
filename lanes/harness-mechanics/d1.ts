@@ -20,6 +20,7 @@ import { gstackAtPin, imageRef, pool } from "./screen.ts";
 
 export const D1_TASK = "tobymao__sqlglot-6413";
 export const D1 = { pass: 2, maxTasks: 4, maxSelected: 300 };
+export const EDIT_LINE = "# hm d1 probe edit";
 export const EDIT_RULE = "the first tracked top-level package module (not a test, doc, script or private file) that a tracked test_<name>.py names and whose pregate selection is 1 to " + D1.maxSelected + " test files";
 // Every tracked top-level package module (the filters above) that a tracked test_<name>.py names, in git ls-files order.
 const CANDIDATES = "for f in $(git ls-files '*.py' | grep -E '^[A-Za-z0-9_]+/[a-z][A-Za-z0-9_]*[.]py$' | grep -v -E '^(tests?|docs?|scripts?|examples?|benchmarks?)/|test'); do git ls-files | grep -q \"test_$(basename \"$f\" .py)[.]py$\" && echo \"$f\"; done";
@@ -58,23 +59,27 @@ export function d1Order(calibration: string[], repoOf: (t: string) => string | u
   return order;
 }
 
-export function stepD1Checks(out: string): StepResult {
+type Problem = { problem: string };
+
+// The per-task rig d1-checks and hm fit share: Docker, the pin's loop and trust, the task setup, gstack's own selection
+// probe, the arm tars, and the steps that build, start, check and clean a task's containers, logging every exec.
+export function d1Rig(gstackDir?: string) {
   const docker = process.env.HM_DOCKER ?? "docker";
   const last = (s: string) => (s.trim().split("\n").at(-1) ?? "").slice(0, 200);
   const dk = (args: string[], timeoutSec = 600) => { const p = Bun.spawnSync([docker, ...args], { stdout: "pipe", stderr: "pipe", timeout: timeoutSec * 1000 }); return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }; };
-  if (dk(["info"], 60).code !== 0) return { pass: false, detail: "needs Docker; docker is missing or not running" };
-  const gstack = gstackAtPin(), loop = verifyLoop(gstack), trust = checksTrust(), s = taskSetup();
+  if (dk(["info"], 60).code !== 0) return { problem: "needs Docker; docker is missing or not running" } as Problem;
+  const gstack = gstackDir ?? gstackAtPin(), loop = verifyLoop(gstack), trust = checksTrust(), s = taskSetup();
   // How many test files gstack's own pregate selection picks for the change, through the arm's installed lib/checks.ts.
   const lanesFrom = /import \{[^}]*\bselectLanes\b[^}]*\} from '(\.[^']+)'/.exec(readFileSync(join(gstack, "lib/checks.ts"), "utf8"))?.[1];
   if (!lanesFrom) throw new Error("E_HM_INPUT the pin's lib/checks.ts imports no selectLanes");
   const G = "/root/.claude/skills/gstack/lib/";
-  const selected = "bun --no-env-file --config=/dev/null -e 'import { load } from \"" + G + "checks\"; import { selectLanes } from \"" + join(G, lanesFrom) + "\"; const l = load(process.cwd(), undefined, 60000); console.log(\"HM_SELECTED \" + (\"refused\" in l ? -1 : selectLanes(l.ctx).localTests.length));'";
+  const probe = (expr: string) => "bun --no-env-file --config=/dev/null -e 'import { load } from \"" + G + "checks\"; import { selectLanes } from \"" + join(G, lanesFrom) + "\"; const l = load(process.cwd(), undefined, 60000); console.log(" + expr + ");'";
+  const selected = probe("\"HM_SELECTED \" + (\"refused\" in l ? -1 : selectLanes(l.ctx).localTests.length)");
   const lanebPath = /^ENV PATH=.*$/m.exec(readFileSync(join(REPO, "quick/laneb/runner/runtime-copy.Dockerfile"), "utf8"))?.[0];
   if (!lanebPath) throw new Error("E_HM_INPUT runtime-copy.Dockerfile holds no ENV PATH line");
   const arms = process.env.ARMS ?? join(process.env.HOME ?? "", ".capy/work/hm/arms");
-  for (const t of ["prose", "none"]) if (!existsSync(join(arms, t + ".tar"))) return { pass: false, detail: "no " + t + ".tar under " + arms + "; set ARMS to the built arm tars" };
-  const p = pool(), order = d1Order(bundleLists().calibration, (t) => p.get(t)?.repo);
-  const log: string[] = [], lines: string[] = [], passed: string[] = [];
+  for (const t of ["prose", "none"]) if (!existsSync(join(arms, t + ".tar"))) return { problem: "no " + t + ".tar under " + arms + "; set ARMS to the built arm tars" } as Problem;
+  const log: string[] = [];
   let containers: string[] = [], images: string[] = [];
   const exec = (c: string, script: string, timeoutSec = 600) => {
     const r = dk(["exec", "-e", "HOME=/root", "-w", SCREEN.workdir, c, "sh", "-c", script], timeoutSec);
@@ -103,24 +108,38 @@ export function stepD1Checks(out: string): StepResult {
   };
   const pytest = (c: string) => exec(c, "command -v pytest").out.trim();
   const clean = () => { for (const c of containers) dk(["rm", "-f", c]); for (const im of images.reverse()) dk(["rmi", "-f", im]); containers = []; images = []; };
+  // A task's image and prose container from its pinned image, the origin and env pytest checks, and the edit rule's pick.
+  const prepare = (t: string, ref: string, tag: string) => {
+    const c = tag + "-prose";
+    const pull = dk(["pull", "-q", ref], 3600);
+    if (pull.code !== 0) throw new Error(t + ": pull failed: " + last(pull.err));
+    images.push(ref);
+    build(tag, ["FROM " + ref, "WORKDIR " + SCREEN.workdir, lanebPath, s.text].join("\n"));
+    start(c, tag, "prose");
+    origin(c);
+    const py = pytest(c), inEnv = py.startsWith(s.envDir + "/");
+    // The edit, before any test runs: each candidate gets the one-line edit and its selection count, the first in range
+    // keeps it, and the others are restored.
+    const search = inEnv ? exec(c, CANDIDATES + ' | while read -r f; do echo "' + EDIT_LINE + '" >> "$f"; n=$(' + selected + ' | sed -n "s/^HM_SELECTED //p"); echo "HM_CANDIDATE $f ${n:--1}"; [ "${n:--1}" -ge 1 ] && [ "${n:--1}" -le ' + D1.maxSelected + ' ] && break; git checkout -q -- "$f"; done', 1800) : null;
+    return { c, py, inEnv, pick: editPick(search ? search.out : "") };
+  };
+  return { last, log, loop, trust, s, probe, exec, start, origin, pytest, clean, prepare };
+}
+export type Rig = Exclude<ReturnType<typeof d1Rig>, Problem>;
+
+export function stepD1Checks(out: string): StepResult {
+  const r = d1Rig();
+  if ("problem" in r) return { pass: false, detail: r.problem };
+  const { last, log, loop, trust, s, exec, start, origin, pytest, clean } = r;
+  const p = pool(), order = d1Order(bundleLists().calibration, (t) => p.get(t)?.repo);
+  const lines: string[] = [], passed: string[] = [];
   let fail = "", tried = 0;
   try {
     for (const t of order) {
       if (passed.length >= D1.pass || tried >= D1.maxTasks) break;
       tried++;
       try {
-        const ref = imageRef(p.get(t)!), tag = "hm-d1-" + tried, c = tag + "-prose";
-        const pull = dk(["pull", "-q", ref], 3600);
-        if (pull.code !== 0) throw new Error(t + ": pull failed: " + last(pull.err));
-        images.push(ref);
-        build(tag, ["FROM " + ref, "WORKDIR " + SCREEN.workdir, lanebPath, s.text].join("\n"));
-        start(c, tag, "prose");
-        origin(c);
-        const py = pytest(c), inEnv = py.startsWith(s.envDir + "/");
-        // The edit, before any test runs: each candidate gets the one-line edit and its selection count, the first in range
-        // keeps it, and the others are restored.
-        const search = inEnv ? exec(c, CANDIDATES + ' | while read -r f; do echo "# hm d1 probe edit" >> "$f"; n=$(' + selected + ' | sed -n "s/^HM_SELECTED //p"); echo "HM_CANDIDATE $f ${n:--1}"; [ "${n:--1}" -ge 1 ] && [ "${n:--1}" -le ' + D1.maxSelected + ' ] && break; git checkout -q -- "$f"; done', 1800) : null;
-        const pick = editPick(search ? search.out : ""), f = pick.edit?.file ?? "";
+        const tag = "hm-d1-" + tried, { c, py, inEnv, pick } = r.prepare(t, imageRef(p.get(t)!), tag), f = pick.edit?.file ?? "";
         if (pick.first && pick.first.selected > D1.maxSelected) lines.push("d1-checks fit " + t + ": first module " + pick.first.file + " selects " + pick.first.selected + ", over " + D1.maxSelected);
         if (!inEnv) lines.push("d1-checks fit " + t + ": pytest " + (py || "missing") + ", not under " + s.envDir);
         else if (!f) lines.push("d1-checks fit " + t + ": " + (pick.first ? "no module that a test_<name>.py names selects 1 to " + D1.maxSelected + " test files" : "no tracked module that a test_<name>.py names"));

@@ -1160,6 +1160,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_HM_FIT: {
+    exit: 2,
+    meaning: "The harness mechanics task-fit probe (lanes/harness-mechanics/fit.ts, hm fit) could not start: Docker is missing or not running, or the arm tars it extracts are missing. A task that fails to pull or build is a row in fit.jsonl, not this error.",
+    fix: "Start Docker, or set ARMS to the directory holding prose.tar and none.tar, and run hm fit again with the same --out; it resumes from fit.jsonl. The probe spends nothing and changes no list.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   E_HM_REPLAY: {
     exit: 2,
     meaning: "The harness mechanics Stage 2 replay (lanes/harness-mechanics/replay.ts) refused or stopped: its items are off the preregistered counts or their digest, the start rule's record is missing, a stratified draw ran short, a client answered without a metered cost, or the next batch of calls would pass the replay's lease (a cap stop).",

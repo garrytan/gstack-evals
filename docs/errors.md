@@ -145,6 +145,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_HM_NOT_BUILT](#e_hm_not_built) | 2 | U20 |
 | [E_HM_LAUNCH](#e_hm_launch) | 2 | U20 |
 | [E_HM_SCREEN](#e_hm_screen) | 2 | U20 |
+| [E_HM_FIT](#e_hm_fit) | 2 | U20 |
 | [E_HM_REPLAY](#e_hm_replay) | 2 | U20 |
 | [E_HM_PIN](#e_hm_pin) | 2 | U20 |
 | [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
@@ -1040,6 +1041,14 @@ The harness mechanics task-fit screen could not decide (lanes/harness-mechanics/
 Fix: D1's origin step should make this impossible, so a hit means task-setup.Dockerfile's origin RUN or PATH did not reach the screen's container. Look at the docker run command in lanes/harness-mechanics/screen.ts dockerDetect, which runs that RUN and PATH before detect. Nothing was replaced.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_FIT
+
+The harness mechanics task-fit probe (lanes/harness-mechanics/fit.ts, hm fit) could not start: Docker is missing or not running, or the arm tars it extracts are missing. A task that fails to pull or build is a row in fit.jsonl, not this error.
+
+Fix: Start Docker, or set ARMS to the directory holding prose.tar and none.tar, and run hm fit again with the same --out; it resumes from fit.jsonl. The probe spends nothing and changes no list.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_HM_REPLAY
 
