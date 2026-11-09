@@ -2,9 +2,9 @@
 
 ## Reporting a problem
 
-Please report security problems privately, not in public issues, pull requests or discussions.
+Please report security problems privately, not in public issues, pull requests or discussions. Never put a secret, key or token, or any part of a held-out task, in an issue, pull request or discussion, not even to report it.
 
-**Preferred:** use GitHub private vulnerability reporting:
+**Preferred:** use GitHub private vulnerability reporting for this repo:
 <https://github.com/garrytan/gstack-evals/security/advisories/new>
 
 **If that link does not work:** open an issue with the "Request a private security contact" form. Put no technical details, file names or proof of concept in it. A maintainer will reply with a private channel.
@@ -26,6 +26,8 @@ Problems in gstack itself go to [gstack's security policy](https://github.com/ga
 
 ## What happens next
 
-We confirm the report, fix it on `main`, and credit you unless you ask us not to. A leaked secret is removed where we can remove it and reported to its owner. A leaked held-out item is retired and recorded as burned by its digest.
+We triage each report when it arrives. A report outside this scope gets a short note saying where it belongs, and one we can't confirm yet gets a note asking for what we need.
+
+When we confirm the report, we fix it on `main` and credit you unless you ask us not to. A leaked secret is removed where we can remove it and reported to its owner. A leaked held-out item is retired and recorded as burned by its digest.
 
 Fixes land on `main` only; there are no release branches.
