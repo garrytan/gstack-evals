@@ -79,11 +79,16 @@ status word (1,076 of the 1,077 pinned parsers write pass, fail and skip; the la
 "PASSED", so every sampled base run read as all failing; the container itself ran the tests fine.
 
 - Fail-to-pass set (judge, read through unit.ts oracleF2p by score.ts and followon.ts): the dataset ids that fail in
-  all three base runs, fix-tests.patch applied. A dataset id that passes in any base run leaves the set; unit.json's
-  oracle record keeps the set (f2p), the removed count, ids and reason (f2p_removed) and the verdict reason. Reading
-  (open point): an id that passes in some base runs and fails in others is removed, not unstable, because it does not
-  fail on base in every run; the other choice is to drop the unit as unstable. hidden.ts and sample.ts still read the
-  dataset list: both run before the oracle.
+  all three base runs, fix-tests.patch applied. A dataset id that passes in every base run leaves the set (f2p_removed);
+  one that passes in some base runs and fails in others leaves it as flaky on base (f2p_flaky, Captain ruling 2 of
+  2026-11-09), never a reason for E_SM_ORACLE_UNSTABLE. unit.json's oracle record keeps the set (f2p), each removal's
+  count, ids and reason and the verdict reason. hidden.ts and sample.ts still read the dataset list: both run before the
+  oracle.
+- Run record: each run keeps its rebuild and test commands' exit statuses (runs[].exits). A Rust unit's record also keeps
+  the cargo target reading (oracle.targets, targetReading): the targets each run reached (cargo's "Running <path>" and
+  "Doc-tests <crate>" lines), the fixed runs' targets no base run reached (not_on_base), whether a base run printed
+  cargo's fail-fast stop line (fail_fast_stop), and cargo_stopped_early, true when not_on_base is not empty. It changes no
+  command and no verdict.
 - Keep: every id left in the set passes in all three fixed runs, else E_SM_ORACLE_UNSTABLE; an empty set is
   E_SM_ORACLE_UNSTABLE ("no fail-to-pass test"). sm oracle prints drops per code and reason. Stable set: every id the parser reports "pass" in all six runs; an empty one is
   E_SM_ORACLE_UNSTABLE ("no stable test").

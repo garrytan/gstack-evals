@@ -15,7 +15,7 @@ import { needsBase, splitFix } from "./fixsplit.ts";
 import { runBash } from "./history.ts";
 import { scope } from "./scope.ts";
 import { applyPatches, copyVolume, dropVolume, LIMIT_MS, passed, runName, runParser, runTests, type Mode } from "./testrun.ts";
-import { addUnitFile, readUnit, saveUnit, smFail, type OracleRun, type SmUnit } from "./unit.ts";
+import { addUnitFile, readUnit, saveUnit, smFail, type OracleRun, type SmUnit, type TargetReading } from "./unit.ts";
 import { join } from "node:path";
 
 export const CLAUDE_VERSION = "2.1.312";
@@ -139,7 +139,26 @@ export function splitUnit(dir: string, u: SmUnit, where: Where): void {
   u.split = { in_source_tests: s.tests !== "", test_hunks: s.test_hunks, source_files: s.source_files };
 }
 
-export interface RunResult { run: OracleRun; parsed: Record<string, string> | null }
+/** log: the run's stderr and print output, read for cargo's targets. */
+export interface RunResult { run: OracleRun; parsed: Record<string, string> | null; log: string }
+
+/** cargo's test targets in one run log: its "Running <path>" lines (a target's hash written as *, so builds compare) and
+ *  "Doc-tests <crate>" lines, and whether cargo printed its fail-fast stop line. */
+export function cargoTargets(log: string): { targets: string[]; stop: boolean } {
+  const text = log.replace(/\x1b\[[0-9;]*m/g, "");
+  const t = new Set<string>();
+  for (const m of text.matchAll(/^[ \t]*(Running|Doc-tests) ([^`\s].*?)[ \t]*$/gm)) t.add(m[1] + " " + m[2]!.replace(/-[0-9a-f]{16}\b/g, "-*"));
+  return { targets: [...t].sort(), stop: /error: test failed, to rerun pass/.test(text) };
+}
+
+/** The base-run target reading for a cargo unit: cargo_stopped_early is true when a target the fixed runs reached appears in
+ *  no base run. */
+export function targetReading(base: string[], fixed: string[]): TargetReading {
+  const b = base.map(cargoTargets), f = fixed.map(cargoTargets);
+  const reached = new Set(b.flatMap((x) => x.targets));
+  const not_on_base = [...new Set(f.flatMap((x) => x.targets))].filter((t) => !reached.has(t)).sort();
+  return { base: b.map((x) => x.targets), fixed: f.map((x) => x.targets), not_on_base, fail_fast_stop: b.some((x) => x.stop), cargo_stopped_early: not_on_base.length > 0 };
+}
 
 /** The patches a base run applies over a tree, in order: test.patch, then fix-tests.patch (the fix's in-source test hunks,
  *  section 7 step 3) when the fix was split and the file is not empty. The oracle's base runs (the stable set) and the
@@ -165,27 +184,31 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
       if (t) patches.push(["fix-tests.patch", t]);
     }
     const bad = applyPatches(image, copy, u.repo_dir, patches, mode);
-    if (bad) return { run: { tree, n, wall_ms: 0, exit: -1, parsed_sha256: null, stopped: false }, parsed: null };
+    if (bad) return { run: { tree, n, wall_ms: 0, exit: -1, parsed_sha256: null, stopped: false, exits: [] }, parsed: null, log: "" };
     const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n });
-    if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true }, parsed: null };
+    const log = t.log === t.stderr ? t.stderr : t.stderr + "\n" + t.log;
+    if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true, exits: t.exits }, parsed: null, log };
     const parsed = runParser(rf(join(dir, "parser.py"), "utf8"), t.log, u.id + "-" + tree + n);
-    return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false }, parsed };
+    return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false, exits: t.exits }, parsed, log };
   } finally {
     dropVolume(copy);
   }
 }
 
-/** The keep rule over six parsed runs (three base, three fixed). A dataset fail-to-pass id that passes on any base run
- *  is not fail-to-pass: it leaves the unit's set (removed). The unit's set is the rest; one of them that does not pass on
- *  every fixed run makes the unit unstable. */
-export function judge(f2p: string[], base: (Record<string, string> | null)[], fixed: (Record<string, string> | null)[]): { kept: boolean; stable: string[]; failing: string[]; f2p: string[]; removed: string[]; reason: string } {
+/** The keep rule over six parsed runs (three base, three fixed). A dataset fail-to-pass id that passes on every base run
+ *  is not fail-to-pass: it leaves the unit's set (removed). One that passes on some base runs and fails on others leaves it
+ *  as flaky on base (flaky), never a reason for instability. The unit's set is the ids that fail on every base run; one of
+ *  them that does not pass on every fixed run makes the unit unstable. */
+export function judge(f2p: string[], base: (Record<string, string> | null)[], fixed: (Record<string, string> | null)[]): { kept: boolean; stable: string[]; failing: string[]; f2p: string[]; removed: string[]; flaky: string[]; reason: string } {
   const all = [...base, ...fixed];
-  if (all.some((r) => r === null)) return { kept: false, stable: [], failing: [], f2p: [], removed: [], reason: "a run did not produce a parsed log" };
-  const removed = f2p.filter((id) => base.some((r) => passed(r!, id)));
-  const kept = f2p.filter((id) => !removed.includes(id));
+  if (all.some((r) => r === null)) return { kept: false, stable: [], failing: [], f2p: [], removed: [], flaky: [], reason: "a run did not produce a parsed log" };
+  const passes = (id: string) => base.filter((r) => passed(r!, id)).length;
+  const removed = f2p.filter((id) => passes(id) === base.length);
+  const flaky = f2p.filter((id) => passes(id) > 0 && passes(id) < base.length);
+  const kept = f2p.filter((id) => passes(id) === 0);
   const failing = kept.filter((id) => fixed.some((r) => !passed(r!, id)));
   const stable = Object.keys(all[0]!).filter((id) => all.every((r) => passed(r!, id))).sort();
-  const out = { stable, failing, f2p: kept, removed };
+  const out = { stable, failing, f2p: kept, removed, flaky };
   if (failing.length) return { kept: false, ...out, reason: "fail-to-pass tests failing on base but not passing on every fixed run" };
   if (!kept.length) return { kept: false, ...out, reason: "no fail-to-pass test" };
   if (!stable.length) return { kept: false, ...out, reason: "no stable test" };
@@ -209,6 +232,7 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
     u.scope = p.scope;
     u.oracle = { runs: [], stable: [], stable_sha256: "", f2p_ok: false, max_wall_ms: 0, verdict: "running", smoke: { claude_version: s.claude_version, egress_probe: s.egress_probe, verdict: s.verdict }, leak: p.leak, history: p.preflight };
     const base: (Record<string, string> | null)[] = [], fixed: (Record<string, string> | null)[] = [];
+    const logs = { base: [] as string[], fixed: [] as string[] };
     for (let n = 1; n <= (opts.runs ?? 3); n++) {
       for (const tree of ["base", "fixed"] as const) {
         const r = oneRun(dir, u, p.volume, s.runtime_id, tree, n, opts.mode ?? "hardened", opts.limitMs);
@@ -219,17 +243,20 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
           return done("E_SM_SLOW_TEST", tree + " run " + n + " passed " + (opts.limitMs ?? LIMIT_MS) + " ms (wall " + r.run.wall_ms + " ms)");
         }
         (tree === "base" ? base : fixed).push(r.parsed);
+        logs[tree].push(r.log);
       }
     }
     const j = judge(u.tests.f2p, base, fixed);
     u.oracle.stable = j.stable;
     u.oracle.stable_sha256 = sha(j.stable.join("\n"));
     u.oracle.f2p = j.f2p;
-    u.oracle.f2p_removed = { count: j.removed.length, ids: j.removed, reason: "passes on a base run with the fix's tests applied" };
+    u.oracle.f2p_removed = { count: j.removed.length, ids: j.removed, reason: "passes on every base run with the fix's tests applied" };
+    u.oracle.f2p_flaky = { count: j.flaky.length, ids: j.flaky, reason: "passes on some base runs with the fix's tests applied and fails on others" };
+    if (u.lang === "rust") u.oracle.targets = targetReading(logs.base, logs.fixed);
     u.oracle.reason = j.reason;
     u.oracle.f2p_ok = !j.failing.length && base.every(Boolean) && fixed.every(Boolean);
     u.oracle.verdict = j.kept ? "kept" : "E_SM_ORACLE_UNSTABLE";
-    return done(u.oracle.verdict, j.reason + (j.failing.length ? ": " + j.failing.slice(0, 20).join(", ") : "") + "; fail-to-pass kept " + j.f2p.length + " removed " + j.removed.length + "; stable " + j.stable.length);
+    return done(u.oracle.verdict, j.reason + (j.failing.length ? ": " + j.failing.slice(0, 20).join(", ") : "") + "; fail-to-pass kept " + j.f2p.length + " removed " + j.removed.length + " flaky " + j.flaky.length + "; stable " + j.stable.length + (u.oracle.targets ? "; cargo stopped early " + u.oracle.targets.cargo_stopped_early : ""));
   } catch (e) {
     const code = codeOf(e);
     if (u.oracle) u.oracle.verdict = code;

@@ -2,7 +2,7 @@
 // Docker tests for the state machines oracle (GSTACK_EVALS_DOCKER=1): the parser sandbox fails closed on network, the
 // 15-minute rule stops a slow run (a test-only limit), and the keep rule keeps a stable unit and drops a flaky one.
 import { describe, expect, test } from "bun:test";
-import { judge } from "../../lanes/outcome-skills/statemachines/oracle.ts";
+import { cargoTargets, judge, targetReading } from "../../lanes/outcome-skills/statemachines/oracle.ts";
 import { oracleF2p, type SmUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
 import { PY_IMAGE, runParser, runTests } from "../../lanes/outcome-skills/statemachines/testrun.ts";
 import { docker } from "../../lanes/real-outcome/task/docker.ts";
@@ -25,8 +25,18 @@ describe("oracle keep rule (keyless)", () => {
     const base = [{ n: P, m: P, s: P }, { n: P, m: P, s: P }, { n: P, m: P, s: P }];
     expect(judge(["n", "m"], base, base)).toMatchObject({ kept: false, f2p: [], removed: ["n", "m"], failing: [], reason: "no fail-to-pass test" });
   });
-  test("an id that passes on some base runs is not fail-to-pass: it is removed, not unstable", () => {
-    expect(judge(["a"], [{ a: F, s: P }, { a: P, s: P }, { a: F, s: P }], [{ a: P, s: P }, { a: P, s: P }, { a: P, s: P }])).toMatchObject({ kept: false, failing: [], removed: ["a"], reason: "no fail-to-pass test" });
+  test("an id that passes on some base runs is flaky on base: it leaves the set, not unstable", () => {
+    expect(judge(["a"], [{ a: F, s: P }, { a: P, s: P }, { a: F, s: P }], [{ a: P, s: P }, { a: P, s: P }, { a: P, s: P }])).toMatchObject({ kept: false, failing: [], removed: [], flaky: ["a"], reason: "no fail-to-pass test" });
+  });
+  test("flaky ids on base are counted beside the ids that pass on every base run, and the unit stays", () => {
+    const fixed = [0, 1, 2].map(() => ({ a: P, n: P, f: P, g: P, s: P }));
+    const base = [{ a: F, n: P, f: P, g: F, s: P }, { a: F, n: P, f: F, g: F, s: P }, { a: F, n: P, f: P, g: P, s: P }];
+    expect(judge(["a", "n", "f", "g"], base, fixed)).toMatchObject({ kept: true, f2p: ["a"], removed: ["n"], flaky: ["f", "g"], failing: [], reason: "kept" });
+  });
+  test("a flaky id that also fails a fixed run is flaky, not a reason for instability", () => {
+    const base = [{ a: F, f: P, s: P }, { a: F, f: F, s: P }, { a: F, f: F, s: P }];
+    const fixed = [{ a: P, f: P, s: P }, { a: P, f: F, s: P }, { a: P, f: P, s: P }];
+    expect(judge(["a", "f"], base, fixed)).toMatchObject({ kept: true, f2p: ["a"], flaky: ["f"], failing: [], reason: "kept" });
   });
   test("the oracle's corrected set is the one place consumers read fail-to-pass from", () => {
     const u = { id: "x", tests: { f2p: ["a", "n"], p2p: ["s"] }, oracle: { f2p: ["a"] } } as unknown as SmUnit;
@@ -64,4 +74,26 @@ describe.skipIf(!on)("oracle in Docker", () => {
       docker(["volume", "rm", "-f", vol]);
     }
   }, 120_000);
+});
+
+describe("cargo target reading (keyless)", () => {
+  const lib = "     Running unittests src/lib.rs (target/debug/deps/zorp-0a1b2c3d4e5f6789)";
+  const wib = "     Running tests/wibble.rs (target/debug/deps/wibble-1111222233334444)";
+  const doc = "   Doc-tests zorp";
+  const stop = "error: test failed, to rerun pass `-p zorp --lib`";
+  const log = (...lines: string[]) => ["   Compiling zorp v0.1.0 (/testbed/zorp)", "     Running `rustc --crate-name build_script_build`", ...lines.flatMap((l) => [l, "", "running 1 test", "test tests::t ... ok"])].join("\n");
+  test("reads Running and Doc-tests lines, with target hashes and colours left out", () => {
+    expect(cargoTargets(log(lib, "\x1b[1m\x1b[32m     Running\x1b[0m tests/wibble.rs (target/debug/deps/wibble-ffffeeeeddddcccc)", doc))).toEqual({ targets: ["Doc-tests zorp", "Running tests/wibble.rs (target/debug/deps/wibble-*)", "Running unittests src/lib.rs (target/debug/deps/zorp-*)"], stop: false });
+    expect(cargoTargets(log(lib) + "\n" + stop).stop).toBe(true);
+  });
+  test("cargo stopped early when a target the fixed runs reached appears in no base run", () => {
+    const base = [0, 1, 2].map(() => log(lib) + "\n" + stop), fixed = [0, 1, 2].map(() => log(lib, wib, doc));
+    expect(targetReading(base, fixed)).toEqual({ base: base.map(() => ["Running unittests src/lib.rs (target/debug/deps/zorp-*)"]), fixed: fixed.map(() => ["Doc-tests zorp", "Running tests/wibble.rs (target/debug/deps/wibble-*)", "Running unittests src/lib.rs (target/debug/deps/zorp-*)"]), not_on_base: ["Doc-tests zorp", "Running tests/wibble.rs (target/debug/deps/wibble-*)"], fail_fast_stop: true, cargo_stopped_early: true });
+  });
+  test("a target reached on one base run counts as reached; the same targets everywhere is no early stop", () => {
+    const fixed = [log(lib, doc)];
+    expect(targetReading([log(lib) + "\n" + stop, log(lib, doc)], fixed)).toMatchObject({ not_on_base: [], fail_fast_stop: true, cargo_stopped_early: false });
+    expect(targetReading([log(lib, doc)], fixed)).toMatchObject({ not_on_base: [], fail_fast_stop: false, cargo_stopped_early: false });
+    expect(targetReading(["no cargo here"], ["nor here"])).toEqual({ base: [[]], fixed: [[]], not_on_base: [], fail_fast_stop: false, cargo_stopped_early: false });
+  });
 });

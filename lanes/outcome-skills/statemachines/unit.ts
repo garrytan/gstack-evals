@@ -14,7 +14,11 @@ export const smFail = (code: ReasonCode, message: string): never => {
 };
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
 
-export interface OracleRun { tree: "base" | "fixed"; n: number; wall_ms: number; exit: number; parsed_sha256: string | null; stopped: boolean }
+/** exits: each rebuild and test command's exit status, in order. */
+export interface OracleRun { tree: "base" | "fixed"; n: number; wall_ms: number; exit: number; parsed_sha256: string | null; stopped: boolean; exits?: number[] }
+/** A cargo unit's base-run target reading (oracle.ts targetReading): the targets each run reached, the fixed runs' targets
+ *  no base run reached, and whether a base run printed cargo's fail-fast stop line. */
+export interface TargetReading { base: string[][]; fixed: string[][]; not_on_base: string[]; fail_fast_stop: boolean; cargo_stopped_early: boolean }
 export interface SmUnit {
   schema: "sm-unit.v1"; id: string; source: "live-multilang" | "rebench-r3a4"; revision: string; repo: string; pull_number: string;
   created_at: string; month: string; lang: Lang; base_commit: string;
@@ -30,7 +34,7 @@ export interface SmUnit {
   /** Set at prep (fixsplit.ts): fix-source.patch holds the fix's non-test hunks, fix-tests.patch the hunks wholly inside
    *  in-source test modules (applied only with test.patch); in_source_tests is true when that file is not empty. */
   split?: { in_source_tests: boolean; test_hunks: number; source_files: string[] };
-  oracle: null | { runs: OracleRun[]; stable: string[]; stable_sha256: string; f2p?: string[]; f2p_removed?: { count: number; ids: string[]; reason: string }; reason?: string; f2p_ok: boolean; max_wall_ms: number; verdict: string; smoke: { claude_version: string; egress_probe: string; verdict: string } | null; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } | null; history: string | null };
+  oracle: null | { runs: OracleRun[]; stable: string[]; stable_sha256: string; f2p?: string[]; f2p_removed?: { count: number; ids: string[]; reason: string }; f2p_flaky?: { count: number; ids: string[]; reason: string }; targets?: TargetReading; reason?: string; f2p_ok: boolean; max_wall_ms: number; verdict: string; smoke: { claude_version: string; egress_probe: string; verdict: string } | null; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } | null; history: string | null };
   files: Record<string, string>;
 }
 
