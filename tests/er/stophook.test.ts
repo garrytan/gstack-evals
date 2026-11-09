@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ErEvidence } from "../../lanes/eng-review/exposure.ts";
 import { ER_STOP_MESSAGE, erStopHook } from "../../lanes/eng-review/stophook.ts";
-import { ARTIFACT, nd, review, say, tree } from "./fixtures.ts";
+import { ARTIFACT, nd, review, say, tree } from "./transcripts.ts";
 
 describe("erStopHook", () => {
   const root = tree(ARTIFACT);

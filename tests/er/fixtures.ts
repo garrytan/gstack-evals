@@ -1,61 +1,27 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Synthetic fixtures for the er exposure and Stop hook tests: invented transcripts, state roots and plan-coverage
-// folders in the pinned skills' formats, from no unit.
+// Synthetic fixtures for the eng-review score-side tests, written for these tests from no unit.
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ENG_VOICE_OPENING, PLAN_COVERAGE_HEADERS } from "../../lanes/eng-review/exposure.ts";
+import type { Io } from "../../lanes/eng-review/cli.ts";
+import type { Key, UnitMeta } from "../../lanes/eng-review/types.ts";
 
+export { item, keyOf, meta, row, rv, unitsOf, fakeAnswer } from "../../lanes/eng-review/dryrun.ts";
 export const tmp = () => mkdtempSync(join(tmpdir(), "er-test-"));
-export const tick = "\u0060\u0060\u0060";
-export const assistant = (content: unknown[], parent: string | null = null) => JSON.stringify({ type: "assistant", parent_tool_use_id: parent, message: { content } });
-export const user = (content: unknown[], parent: string | null = null) => JSON.stringify({ type: "user", parent_tool_use_id: parent, message: { content } });
-export const say = (t: string, parent: string | null = null) => assistant([{ type: "text", text: t }], parent);
-let n = 0;
-export const call = (name: string, input: Record<string, unknown>, result: string | null, isError = false) => {
-  const id = "toolu_" + ++n;
-  const use = assistant([{ type: "tool_use", id, name, input }]);
-  return result === null ? [use] : [use, user([{ type: "tool_result", tool_use_id: id, content: result, ...(isError ? { is_error: true } : {}) }])];
-};
-export const nd = (...lines: (string | string[])[]) => lines.flat().join("\n") + "\n";
+export const ENV = { ANTHROPIC_API_KEY: "test", OPENAI_API_KEY: "test", OPENROUTER_API_KEY: "test" };
 
-export const diagram = (paths: number) => [tick, "CODE PATHS", "[+] src/shelf/loan.ts", ...["\u2605\u2605\u2605 TESTED happy path", "[GAP] overdue fee", "[GAP] [\u2192E2E] double return", "[\u2605 TESTED] smoke"].slice(0, paths).map((l) => "  \u251c\u2500\u2500 " + l), "COVERAGE: 1/4 paths tested", tick].join("\n");
-export const SCOPE = "## Step 0: Scope Challenge\n1. The loan helper already exists in src/shelf/loan.ts.";
-export const section = (n: number, body = "No issues found after reading src/shelf.") => "## Section " + n + ": " + ["Architecture", "Code Quality", "Tests", "Performance"][n - 1] + "\n" + body;
-export const review = (order = [1, 2, 3, 4], paths = 3) => [SCOPE, ...order.map((i) => section(i, i === 3 ? diagram(paths) : undefined))].join("\n\n");
-export const CONSENSUS = ["ENG DUAL VOICES \u2014 CONSENSUS TABLE:", "  Dimension  Claude  Codex  Consensus", "  1. Architecture sound?  yes  N/A  N/A", "  2. Test coverage sufficient?  no  N/A  N/A", "  3. Perf risks + budget/bench named?  yes  N/A  N/A", "  4. Security threats covered?  yes  N/A  N/A", "  5. Error paths handled?  no  N/A  N/A", "  6. Deployment risk manageable?  yes  N/A  N/A"].join("\n");
-export const FAILURES = "## Failure modes registry\n- overdue fee: no test, silent. **critical gap**";
-
-/** An eng voice Agent dispatch: sync (result), async with a later task_notification, or async with none. */
-export function voice(how: "sync" | "async-done" | "async-open" | "refused") {
-  const id = "toolu_v" + ++n;
-  const use = assistant([{ type: "tool_use", id, name: "Agent", input: { prompt: ENG_VOICE_OPENING + "\nRead file: \"/work/autoplan/snap/native.md\"" } }]);
-  const result = (content: string, err = false) => user([{ type: "tool_result", tool_use_id: id, content, ...(err ? { is_error: true } : {}) }]);
-  if (how === "refused") return [use, result("<tool_use_error>denied</tool_use_error>", true)];
-  if (how === "sync") return [use, say("INPUT: eng abc", id), result("INPUT: eng abc. Two findings.")];
-  const launched = [use, JSON.stringify({ type: "system", subtype: "task_started", tool_use_id: id }), result("Async agent launched successfully.")];
-  return how === "async-open" ? launched : [...launched, JSON.stringify({ type: "system", subtype: "task_notification", tool_use_id: id, status: "completed" })];
+export function capture(): { io: Io; out: string[]; err: string[] } {
+  const out: string[] = [], err: string[] = [];
+  return { io: { out: (t) => out.push(t), err: (t) => err.push(t) }, out, err };
 }
 
-export function tree(files: Record<string, string>): string {
-  const d = tmp();
-  for (const [f, c] of Object.entries(files)) {
-    mkdirSync(join(d, f, ".."), { recursive: true });
-    writeFileSync(join(d, f), c);
+export function writeUnits(dir: string, specs: Array<{ meta: UnitMeta; key: Key }>): void {
+  for (const s of specs) {
+    const u = join(dir, s.meta.id);
+    mkdirSync(join(u, "repo", "src"), { recursive: true });
+    writeFileSync(join(u, "unit.json"), JSON.stringify(s.meta));
+    writeFileSync(join(u, "key.json"), JSON.stringify(s.key));
+    writeFileSync(join(u, "plan.md"), "The team will make the importer read rows from a file for " + s.meta.id + ".");
+    writeFileSync(join(u, "repo", "src", "import.ts"), "export function readRows(path: string) {\n  return [];\n}\nexport const parseDate = (s: string) => s;\n");
   }
-  return d;
 }
-export const ARTIFACT = { "projects/shelf/tester-main-eng-review-test-plan-20261108-101500.md": "# Test Plan\nGenerated by /plan-eng-review on 2026-11-08\n" };
-
-export function coverageFiles(over: { status?: string; paths?: number; rated?: number; tests?: number; coverageLine?: boolean } = {}): Record<string, string> {
-  const p = over.paths ?? 3, r = over.rated ?? 3, t = over.tests ?? 1;
-  const pathRows = Array.from({ length: p }, (_, i) => "| P" + (i + 1) + " | code | NEW | src/shelf/loan.ts | branch " + (i + 1) + " |");
-  const covRows = Array.from({ length: r }, (_, i) => "| P" + (i + 1) + " | none | GAP | none |");
-  const tests = Array.from({ length: t }, (_, i) => "### T" + (i + 1) + ": overdue fee\n- Covers: P1\n- Kind: unit\n- Catches: a fee rounding change\n").join("\n");
-  return {
-    "path-map.md": PLAN_COVERAGE_HEADERS["path-map.md"] + "\n# Path map\nPlan: plan.md\nStatus: " + (over.status ?? "complete") + "\n\n## Paths\n| ID | Kind | Tag | Where | Description |\n|---|---|---|---|---|\n" + pathRows.join("\n") + "\n",
-    "coverage-map.md": PLAN_COVERAGE_HEADERS["coverage-map.md"] + "\n# Coverage map\n\n## Coverage\n| ID | Test | Rating | Lane |\n|---|---|---|---|\n" + covRows.join("\n") + "\n\n" + (over.coverageLine === false ? "" : "COVERAGE: 0/" + r + " | code 0/" + r + " | flows 0/0 | GAPS: " + r + "\n"),
-    "test-plan.md": PLAN_COVERAGE_HEADERS["test-plan.md"] + "\n# Test plan\n\n## Tests\n" + tests + "\n## Decisions\n- Test framework: took bun test because the repo uses it\n",
-  };
-}
-export const PLAN_COVERAGE_REPLY = "PLAN_COVERAGE: paths=3 gaps=3 tests=1 out=/work/repo/.gstack/plan-coverage";

@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { erDecisions, erExposure, run, sessionEvidence, testPlanArtifacts, type ErEvidence } from "../../lanes/eng-review/exposure.ts";
-import { ARTIFACT, call, CONSENSUS, coverageFiles, FAILURES, nd, PLAN_COVERAGE_REPLY, review, say, tick, tree, user, voice } from "./fixtures.ts";
+import { ARTIFACT, call, CONSENSUS, coverageFiles, FAILURES, nd, PLAN_COVERAGE_REPLY, review, say, tick, tree, user, voice } from "./transcripts.ts";
 
 const ev = (transcript: string, over: Partial<ErEvidence> = {}): ErEvidence => ({ transcript, stateRoot: null, coverage: null, opening: null, ...over });
 const failed = (e: { checks: { name: string; pass: boolean }[] }) => e.checks.filter((c) => !c.pass && c.name !== "load").map((c) => c.name);
