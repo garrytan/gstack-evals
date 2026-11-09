@@ -153,14 +153,36 @@ Readings this build chose
   /usr/local/bin/claude in the session container, never the SDK's bundled 2.1.310, and pf-summary.json records its
   claude --version from inside the container.
 
-Dry run. `gstack-evals outcome pf dryrun [--out dir] [--python <python with claude_agent_sdk 0.2.174>]` builds the volumes,
-opens and settles one lease per frozen item on a temporary ledger, runs six stub sessions through pf_turns.py in
-containers from a fixture unit's image, scores them with the Docker executor and prints one PASS or FAIL line per
-fixture. The fixture unit comes from #290's fixtures helper (lang go, shell-sourceable product code). pf_agent.py
-(pf_agent:PfAgent, a RealAgent subclass) runs the same core under Harbor with one driver slot per turn (meta.phase task or
-wrapup, cap_usd from that turn's allowance, meta.rerun on the wrap-up rerun). Not yet done: run.ts (session image, Harbor
-run copy, pf-session.v1 record), the dry run through Harbor, pf_agent and serveStages, keyless pf_agent tests on the
-real SDK, and the dry run on real MultiLang units.
+Harbor runner. run.ts runs one session the real way. buildSessionImage (statemachines/image.ts) makes the session image
+from the unit's prepared tree volume. runCopy writes a Harbor run copy that names that image as the task's docker_image, a
+compose overlay that mounts the tools volume read-only at /opt/pf-tools for every arm, the pstack volume at /opt/pf-pstack
+for P and the blind probe and the pinned Claude Code read-only at /usr/local/bin/claude, and pf-config.json (both turn
+texts, both turns' limits, the frozen no-answer reply, the plugin dir and Claude Code's env). Harbor runs
+pf_agent:PfAgent (a RealAgent subclass) with verification off, every provider key unset, a placeholder ANTHROPIC_API_KEY
+and HARBOR_TELEMETRY 0, so the session's only credential is each driver slot's token. PfAgent checks the container's
+image against the manifest, allows egress to the metering proxy only, copies sh/ in and runs pf_turns' core with one
+driver slot per turn (meta.phase task or wrapup, cap_usd from that turn's allowance, meta.rerun on the wrap-up rerun).
+pfRecord turns pf-summary.json into pf-session.v1. A task turn that ends upstream or infra retries the whole session once
+from a fresh container, and attempt 2's task open names meta.rerun task_upstream_or_infra. A tree or home refusal before
+any open is gap E_PF_ARM and takes no retry (retriesSession).
+
+Dry run. `gstack-evals outcome pf dryrun [--out dir] [--python <python with claude_agent_sdk 0.2.174>]` builds the volumes
+and a fixture unit from #290's fixtures helper (lang go, shell-sourceable product code), and opens one lease per frozen
+item on a temporary ledger. The driver (serveStages) serves those items in two batches, since a batch never serves one arm
+and model on two stages: pf-opus, pf-sol, pf-particle and pf-blind first, then pf-admit. Each stage's metering proxy
+stands in front of a stub upstream that answers as Anthropic's API. Seven sessions run through runPfSession, so each one
+goes through Harbor, PfAgent and the driver's slots in a container from the fixture's session image: probe (the skill
+names and a background task), A (19 manifest entries), B (26 entries and the scoring ceiling), C (a wrap-up limit), blind,
+D (on pf-admit, a wrap-up upstream end and its rerun) and hostile (a tree holding CLAUDE.md, refused before any slot).
+The tree volumes are copied from the fixture repo and owned by root, and git in them trusts only /d. A, B, C and D are
+scored with the Docker executor. It prints one PASS or FAIL line per fixture, and the driver settles every lease.
+
+Tests. pf-run.test.ts covers runCopy and pfRecord. pf-agent.test.ts runs pf_agent_sdk_test.py, which drives PfAgent on the
+real pinned SDK and Harbor with a stub Claude Code, a stand-in docker and a stub control plane; it skips without a Python
+holding both (REAL_OUTCOME_PYTHON). pf-driver.test.ts covers the PF stage branch, the slot deadline and the wrap-up hold's
+grace.
+
+Not yet done: the dry run on real MultiLang units.
 
 ### Driver
 
