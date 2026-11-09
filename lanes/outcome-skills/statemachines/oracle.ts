@@ -175,15 +175,21 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
   }
 }
 
-/** The keep rule over six parsed runs (three base, three fixed). */
-export function judge(f2p: string[], base: (Record<string, string> | null)[], fixed: (Record<string, string> | null)[]): { kept: boolean; stable: string[]; failing: string[]; reason: string } {
+/** The keep rule over six parsed runs (three base, three fixed). A dataset fail-to-pass id that passes on any base run
+ *  is not fail-to-pass: it leaves the unit's set (removed). The unit's set is the rest; one of them that does not pass on
+ *  every fixed run makes the unit unstable. */
+export function judge(f2p: string[], base: (Record<string, string> | null)[], fixed: (Record<string, string> | null)[]): { kept: boolean; stable: string[]; failing: string[]; f2p: string[]; removed: string[]; reason: string } {
   const all = [...base, ...fixed];
-  if (all.some((r) => r === null)) return { kept: false, stable: [], failing: [], reason: "a run did not produce a parsed log" };
-  const failing = f2p.filter((id) => base.some((r) => passed(r!, id)) || fixed.some((r) => !passed(r!, id)));
+  if (all.some((r) => r === null)) return { kept: false, stable: [], failing: [], f2p: [], removed: [], reason: "a run did not produce a parsed log" };
+  const removed = f2p.filter((id) => base.some((r) => passed(r!, id)));
+  const kept = f2p.filter((id) => !removed.includes(id));
+  const failing = kept.filter((id) => fixed.some((r) => !passed(r!, id)));
   const stable = Object.keys(all[0]!).filter((id) => all.every((r) => passed(r!, id))).sort();
-  if (failing.length) return { kept: false, stable, failing, reason: "fail-to-pass tests not failing on base and passing on fixed in all runs" };
-  if (!stable.length) return { kept: false, stable, failing, reason: "no stable test" };
-  return { kept: true, stable, failing, reason: "kept" };
+  const out = { stable, failing, f2p: kept, removed };
+  if (failing.length) return { kept: false, ...out, reason: "fail-to-pass tests failing on base but not passing on every fixed run" };
+  if (!kept.length) return { kept: false, ...out, reason: "no fail-to-pass test" };
+  if (!stable.length) return { kept: false, ...out, reason: "no stable test" };
+  return { kept: true, ...out, reason: "kept" };
 }
 
 /** The whole oracle on one unit dir. Writes unit.json's oracle, image, strip and scope fields and returns the verdict. */
@@ -218,9 +224,12 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
     const j = judge(u.tests.f2p, base, fixed);
     u.oracle.stable = j.stable;
     u.oracle.stable_sha256 = sha(j.stable.join("\n"));
+    u.oracle.f2p = j.f2p;
+    u.oracle.f2p_removed = { count: j.removed.length, ids: j.removed, reason: "passes on a base run with the fix's tests applied" };
+    u.oracle.reason = j.reason;
     u.oracle.f2p_ok = !j.failing.length && base.every(Boolean) && fixed.every(Boolean);
     u.oracle.verdict = j.kept ? "kept" : "E_SM_ORACLE_UNSTABLE";
-    return done(u.oracle.verdict, j.reason + (j.failing.length ? ": " + j.failing.slice(0, 20).join(", ") : ""));
+    return done(u.oracle.verdict, j.reason + (j.failing.length ? ": " + j.failing.slice(0, 20).join(", ") : "") + "; fail-to-pass kept " + j.f2p.length + " removed " + j.removed.length + "; stable " + j.stable.length);
   } catch (e) {
     const code = codeOf(e);
     if (u.oracle) u.oracle.verdict = code;

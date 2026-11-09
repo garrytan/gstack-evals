@@ -30,7 +30,7 @@ export interface SmUnit {
   /** Set at prep (fixsplit.ts): fix-source.patch holds the fix's non-test hunks, fix-tests.patch the hunks wholly inside
    *  in-source test modules (applied only with test.patch); in_source_tests is true when that file is not empty. */
   split?: { in_source_tests: boolean; test_hunks: number; source_files: string[] };
-  oracle: null | { runs: OracleRun[]; stable: string[]; stable_sha256: string; f2p_ok: boolean; max_wall_ms: number; verdict: string; smoke: { claude_version: string; egress_probe: string; verdict: string } | null; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } | null; history: string | null };
+  oracle: null | { runs: OracleRun[]; stable: string[]; stable_sha256: string; f2p?: string[]; f2p_removed?: { count: number; ids: string[]; reason: string }; reason?: string; f2p_ok: boolean; max_wall_ms: number; verdict: string; smoke: { claude_version: string; egress_probe: string; verdict: string } | null; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } | null; history: string | null };
   files: Record<string, string>;
 }
 
@@ -100,6 +100,11 @@ export function readUnit(dir: string): SmUnit {
   }
   if (!u.tests.f2p.length || !u.tests.p2p.length || !/^[0-9a-f]{40}$/.test(u.base_commit) || !/@sha256:[0-9a-f]{64}$/.test(u.image.ref)) smFail("E_SM_UNIT", dir + ": unit.json fails its field checks");
   return u;
+}
+
+/** The fail-to-pass set every scorer reads: the oracle's, which drops dataset ids that pass on base with the fix's tests applied. */
+export function oracleF2p(u: SmUnit): string[] {
+  return u.oracle?.f2p ?? smFail("E_SM_UNIT", u.id + ": unit.json has no oracle fail-to-pass set; run the oracle again");
 }
 
 /** Rewrites unit.json after prep fills a field; the payload digests stay as written. */

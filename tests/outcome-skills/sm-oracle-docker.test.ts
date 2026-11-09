@@ -3,6 +3,7 @@
 // 15-minute rule stops a slow run (a test-only limit), and the keep rule keeps a stable unit and drops a flaky one.
 import { describe, expect, test } from "bun:test";
 import { judge } from "../../lanes/outcome-skills/statemachines/oracle.ts";
+import { oracleF2p, type SmUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
 import { PY_IMAGE, runParser, runTests } from "../../lanes/outcome-skills/statemachines/testrun.ts";
 import { docker } from "../../lanes/real-outcome/task/docker.ts";
 
@@ -13,14 +14,31 @@ describe("oracle keep rule (keyless)", () => {
   test("keeps a stable unit: fail-to-pass fails on every base run and passes on every fixed run", () => {
     const base: Record<string, string>[] = [{ a: F, s: P, x: P }, { a: F, s: P, x: F }, { s: P, x: P }];
     const fixed = [{ a: P, s: P, x: P }, { a: P, s: P, x: P }, { a: P, s: P, x: P }];
-    expect(judge(["a"], base, fixed)).toMatchObject({ kept: true, stable: ["s"] });
+    expect(judge(["a"], base, fixed)).toMatchObject({ kept: true, stable: ["s"], f2p: ["a"], removed: [] });
+  });
+  test("drops from fail-to-pass a dataset id that passes on base and keeps the unit on its real failing id", () => {
+    const base = [{ a: F, n: P, s: P }, { a: F, n: P, s: P }, { a: F, n: P, s: P }];
+    const fixed = [{ a: P, n: P, s: P }, { a: P, n: P, s: P }, { a: P, n: P, s: P }];
+    expect(judge(["a", "n"], base, fixed)).toMatchObject({ kept: true, f2p: ["a"], removed: ["n"], stable: ["n", "s"], reason: "kept" });
+  });
+  test("drops a unit whose every dataset fail-to-pass id passes on base, with its own reason", () => {
+    const base = [{ n: P, m: P, s: P }, { n: P, m: P, s: P }, { n: P, m: P, s: P }];
+    expect(judge(["n", "m"], base, base)).toMatchObject({ kept: false, f2p: [], removed: ["n", "m"], failing: [], reason: "no fail-to-pass test" });
+  });
+  test("an id that passes on some base runs is not fail-to-pass: it is removed, not unstable", () => {
+    expect(judge(["a"], [{ a: F, s: P }, { a: P, s: P }, { a: F, s: P }], [{ a: P, s: P }, { a: P, s: P }, { a: P, s: P }])).toMatchObject({ kept: false, failing: [], removed: ["a"], reason: "no fail-to-pass test" });
+  });
+  test("the oracle's corrected set is the one place consumers read fail-to-pass from", () => {
+    const u = { id: "x", tests: { f2p: ["a", "n"], p2p: ["s"] }, oracle: { f2p: ["a"] } } as unknown as SmUnit;
+    expect(oracleF2p(u)).toEqual(["a"]);
+    expect(() => oracleF2p({ ...u, oracle: { stable: [] } } as unknown as SmUnit)).toThrow(/^E_SM_UNIT/);
   });
   test("counts only the dataset's own pass word as a pass", () => {
     expect(judge(["a"], [{ a: F, s: P }, { a: F, s: P }, { a: F, s: P }], [{ a: "PASSED", s: P }, { a: "PASSED", s: P }, { a: "PASSED", s: P }])).toMatchObject({ kept: false, failing: ["a"] });
     expect(judge(["a"], [{ a: F, s: "ok" }, { a: F, s: "ok" }, { a: F, s: "ok" }], [{ a: P, s: "ok" }, { a: P, s: "ok" }, { a: P, s: "ok" }])).toMatchObject({ kept: false, reason: "no stable test" });
   });
   test("drops a flaky unit, one with no stable test, and one with a run that did not parse", () => {
-    expect(judge(["a"], [{ a: F, s: P }, { a: P, s: P }, { a: F, s: P }], [{ a: P, s: P }, { a: P, s: P }, { a: P, s: P }])).toMatchObject({ kept: false, failing: ["a"] });
+    expect(judge(["a"], [{ a: F, s: P }, { a: F, s: P }, { a: F, s: P }], [{ a: P, s: P }, { a: F, s: P }, { a: P, s: P }])).toMatchObject({ kept: false, failing: ["a"] });
     expect(judge(["a"], [{ a: F }, { a: F }, { a: F }], [{ a: P }, { a: P }, { a: "skip" }])).toMatchObject({ kept: false });
     expect(judge(["a"], [{ a: F, s: F }, { a: F, s: P }, { a: F, s: P }], [{ a: P, s: P }, { a: P, s: P }, { a: P, s: P }])).toMatchObject({ kept: false, reason: "no stable test" });
     expect(judge(["a"], [null, { a: F }, { a: F }], [{ a: P }, { a: P }, { a: P }])).toMatchObject({ kept: false });

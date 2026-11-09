@@ -117,7 +117,7 @@ export function scoreUnit(o: {
     commands: o.commands, parser_sha256: sha(FIXTURE_PARSER), fix: { files: [], all_files: [], added_lines_30: 0, sha256: "" }, test_patch: { files: Object.keys(o.tests), sha256: sha(testPatch) },
     tests: { f2p: o.f2p, p2p: o.stable }, scope: null, file_scope: [], strip: null, labels: null,
     ...(o.fixTests ? { split: { in_source_tests: true, test_hunks: 1, source_files: [] } } : {}),
-    oracle: { runs: [], stable: o.stable, stable_sha256: "", f2p_ok: true, max_wall_ms: 0, verdict: "kept", smoke: null, leak: null, history: null },
+    oracle: { runs: [], stable: o.stable, stable_sha256: "", f2p: o.f2p, f2p_ok: true, max_wall_ms: 0, verdict: "kept", smoke: null, leak: null, history: null },
     files: Object.fromEntries(Object.entries(body).map(([p, b]) => [p, sha(b)])),
   };
   writeFileSync(join(dir, "unit.json"), JSON.stringify(u, null, 1) + "\n");

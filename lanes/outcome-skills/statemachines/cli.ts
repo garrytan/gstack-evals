@@ -258,6 +258,7 @@ export async function main(argv: string[]): Promise<number> {
       const units = need(f, "--units"), cands = loadCands(need(f, "--candidates"));
       const pacer = new Pacer(need(f, "--pull-log"), Number(f.get("--pulls-per-hour") ?? 60));
       mkdirSync(units, { recursive: true });
+      const drops: Record<string, number> = {};
       const res = await fill(d, async (id) => {
         const dir = join(units, id);
         const c = cands.find((x) => x.id === id)!;
@@ -265,10 +266,12 @@ export async function main(argv: string[]): Promise<number> {
         const prior = readUnit(dir).oracle?.verdict;
         const v = prior && prior !== "running" ? { id, verdict: prior, detail: "recorded" } : await oracleUnit(dir, pacer);
         console.log("ORACLE " + id + " " + v.verdict + " " + v.detail.replace(/\n/g, " ").slice(0, 300));
+        const why = v.verdict === "E_SM_ORACLE_UNSTABLE" ? v.verdict + ": " + (readUnit(dir).oracle?.reason ?? "not recorded") : v.verdict;
+        if (v.verdict !== "kept") drops[why] = (drops[why] ?? 0) + 1;
         return v.verdict === "kept";
       }, { retry: f.has("--retry") });
       writeFileSync(join(units, "fill.json"), JSON.stringify(res, null, 1) + "\n");
-      console.log("admission=" + res.admission.length + " state=" + res.state.length + " other=" + res.other.length + " reserve=" + res.reserve.length + " retry=" + res.retry.length);
+      console.log("admission=" + res.admission.length + " state=" + res.state.length + " other=" + res.other.length + " reserve=" + res.reserve.length + " retry=" + res.retry.length + " drops=" + JSON.stringify(drops));
       return 0;
     }
     if (sub === "size") {

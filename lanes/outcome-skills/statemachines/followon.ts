@@ -16,7 +16,7 @@ import { basePatches, treeVolume } from "./oracle.ts";
 import { extractChange, fixTestHunks, mergeTests, readings, scoringRun, testHunks, type Exclusion, type Outcome, type OutcomeRecord, type Readings, type RunSummary, type RunView } from "./score.ts";
 import type { SessionRecord } from "./session.ts";
 import { applyPatches, copyVolume, dropVolume, passed, runName, type Mode } from "./testrun.ts";
-import { readUnit, smFail, type SmUnit } from "./unit.ts";
+import { oracleF2p, readUnit, smFail, type SmUnit } from "./unit.ts";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 export type Tree = "S0" | "A1" | "S2";
@@ -252,7 +252,7 @@ export function scoreFollowon(i: FollowonInput): FollowonRecord {
     const merge = mergeTests(u, image, vol, hunks);
     if (merge.merge === "conflict") return { applied: true, merge, vol };
     const run = scoringRun(i.unitDir, u, image, vol, 1, mode, "follow-" + label, i.limitMs);
-    return { applied: true, merge, vol, run, sc: followScores(u.tests.f2p, i.start.ids, u.oracle!.stable, run.view) };
+    return { applied: true, merge, vol, run, sc: followScores(oracleF2p(u), i.start.ids, u.oracle!.stable, run.view) };
   };
   try {
     const head = startTree(u, image, i.volume ?? treeVolume(u.id), i.tree, i.treePatch, st).head;

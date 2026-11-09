@@ -78,8 +78,14 @@ published, then the dataset parser in its sandbox over the print output. Only th
 status word (1,076 of the 1,077 pinned parsers write pass, fail and skip; the last lowercases its own). P1 compared with
 "PASSED", so every sampled base run read as all failing; the container itself ran the tests fine.
 
-- Keep: every fail-to-pass test does not pass in all three base runs and passes in all three fixed runs, else
-  E_SM_ORACLE_UNSTABLE. Stable set: every id the parser reports "pass" in all six runs; an empty one is
+- Fail-to-pass set (judge, read through unit.ts oracleF2p by score.ts and followon.ts): the dataset ids that fail in
+  all three base runs, fix-tests.patch applied. A dataset id that passes in any base run leaves the set; unit.json's
+  oracle record keeps the set (f2p), the removed count, ids and reason (f2p_removed) and the verdict reason. Reading
+  (open point): an id that passes in some base runs and fails in others is removed, not unstable, because it does not
+  fail on base in every run; the other choice is to drop the unit as unstable. hidden.ts and sample.ts still read the
+  dataset list: both run before the oracle.
+- Keep: every id left in the set passes in all three fixed runs, else E_SM_ORACLE_UNSTABLE; an empty set is
+  E_SM_ORACLE_UNSTABLE ("no fail-to-pass test"). sm oracle prints drops per code and reason. Stable set: every id the parser reports "pass" in all six runs; an empty one is
   E_SM_ORACLE_UNSTABLE ("no stable test").
 - 15 minutes: a run whose wall time reaches 900 s is stopped and the unit drops (E_SM_SLOW_TEST).
 - Smoke (E_SM_SMOKE): the runtime layer builds, claude --version prints 2.1.312, node runs a probe and no denied target

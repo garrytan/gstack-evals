@@ -14,7 +14,7 @@ import { runBash } from "./history.ts";
 import { isProtected, isTestPath, SKIP_MARKERS, SOURCE_EXT, TEST_MODULES, type Lang } from "./langs.ts";
 import { oneRun, treeVolume } from "./oracle.ts";
 import { applyPatches, copyVolume, dropVolume, passed, runName, runParser, runTests, type Mode } from "./testrun.ts";
-import { addUnitFile, readUnit, saveUnit, smFail, type SmUnit } from "./unit.ts";
+import { addUnitFile, oracleF2p, readUnit, saveUnit, smFail, type SmUnit } from "./unit.ts";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -368,7 +368,7 @@ export function scoreFirst(i: ScoreInput): OutcomeRecord {
         views.push(r.view);
         res.runs.push(r.summary);
         known ??= knownIds(i.unitDir, u, volume, mode, i.limitMs);
-        v = decide(u.tests.f2p, u.oracle!.stable, known, views);
+        v = decide(oracleF2p(u), u.oracle!.stable, known, views);
       } while (v.wants_more);
       return { ...res, fixed: v.fixed, broke: v.broke, broke_by: v.broke_by, absent: v.absent, rerun_2of3: v.rerun_2of3, reruns: v.reruns, new_tests: v.new_tests, outcome: v.outcome };
     } finally {
