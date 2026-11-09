@@ -53,7 +53,7 @@ The owner asked the crew to evaluate gstack's plan-mode skills from what they ar
 2. **The lean default is the headline.** Gate pick O1: autoplan as people run it on Capy, the lean feature kind (one engineering reviewer whose prompt carries short CEO, design and DX checklists). Full-kind runs (every phase, both voices, from before the lean default) and in-session told runs read as their own descriptive strata. Why: usage decides value, and the forms differ by design.
 3. **GATE-2 uses a measured panel.** A cross-family panel (GPT-6 Astra and Claude Opus 5.5, with Gemini 4 Argon deciding a split) reads the whole merged plan and labels every lean accepted change, plus a 40-change full-kind sample. A gold pool gives the R78 judge check and the panel's error rates, and the landed share is corrected for them. Why: a change can land in other words, which a mechanical match misses, and the panel is the only part that costs money.
 4. **Bars come from the claims, and the frame is what it is.** MET needs the interval's lower bound at or above the bar (0.90 for landed changes, 0.80 for outputs present and for one-pass runs, zero confirmed violations for the gate's owner rule). The frame can't grow, so a true rate near a bar often reads UNCLEAR, and the post says so (section 11). Why: the alternative, lowering bars to fit the sample, would grade the promise on a curve.
-5. **Verdict precedence is fixed before review** (section 7): NO READ, then NOT MET BY DESIGN, then NOT MET, then MET, then UNCLEAR, read on the lean records only, except GATE-1's integrity check, which counts a self-approval on any readable record (section 5.4).
+5. **Verdict precedence is fixed before review** (section 7): NO READ, then NOT MET BY DESIGN, then NOT MET, then MET, then UNCLEAR, read on the lean records only, except GATE-1's integrity check, which counts a self-approval on any readable record and reads NOT MET on one before any NO READ (section 5.4).
 6. **Custody.** The records are private and some told sessions are sealed. Only counts and digests are committed; no model sees a told session; panel packets carry only a merged public plan and a scrubbed change text, with no names, thread codes, dates or versions.
 
 ## Implementation plan
@@ -261,13 +261,13 @@ The 0.80 bars match the program's exposure bar. The 0.90 bar for landed changes 
 
 **Precedence, settled before review.** For each intention, the first rule that applies wins:
 
-1. **NO READ:** its instrument failed: a stage 1 readability gate for that check, the gold supply or the judge check (GATE-2), or more than 20% of its lean units missing (section 8).
+1. **NO READ:** its instrument failed: a stage 1 readability gate for that check, the gold supply or the judge check (GATE-2), or more than 20% of its lean units missing (section 8). A confirmed GATE-1 violation is the one exception: it reads NOT MET before NO READ.
 2. **NOT MET BY DESIGN:** the pinned code and every lean record show the lean form can't meet it.
 3. **NOT MET:** the lean reading fails its bar.
 4. **MET:** the lean reading passes its bar.
 5. **UNCLEAR:** neither, reported as "no measurable shortfall and no confirmed pass", with the interval and section 11's precision.
 
-Full-kind, lean descriptive and told readings never change a lean verdict, except GATE-1's integrity check, which counts a self-approval on any readable record (section 5.4); when one points the other way, the post prints both and names the difference. Unreadable records leave the integrity check and never make it NO READ. Without a passing judge check GATE-2 can't read NOT MET or MET, because the panel's error would be unmeasured; it reads NO READ, and the mechanical hit share prints as a descriptive figure.
+Full-kind, lean descriptive and told readings never change a lean verdict, except GATE-1's integrity check, which counts a self-approval on any readable record (section 5.4); when one points the other way, the post prints both and names the difference. A confirmed GATE-1 violation on a readable record reads NOT MET even when a stratum fails its readability gate; unreadable records never count as violations or as clean, so with no confirmed violation a failed gate still reads NO READ. Without a passing judge check GATE-2 can't read NOT MET or MET, because the panel's error would be unmeasured; it reads NO READ, and the mechanical hit share prints as a descriptive figure.
 
 **What follows each verdict (R48).** A NOT MET or NOT MET BY DESIGN is a defect report: it goes to the Captain and through it to GStack Minder with the counts and the code lines behind it. An UNCLEAR or NO READ gets one Why-unclear note in the results post (power, missing records or instrument) and ends in FIX-METHOD for this eval's method or no further action. No reading here is a KEEP or a CUT-CANDIDATE for autoplan (section 2).
 
@@ -292,7 +292,7 @@ Full-kind, lean descriptive and told readings never change a lean verdict, excep
 | Call outcome unknown after a crash | reconciled from the ledger and journal first; never resent while its outcome is unknown; label missing if none can be recovered |
 | Sealed told record fails its digest or decryption | told stratum missing for that session; logged in CUSTODY.md |
 
-**Missing-rate rule.** A check reads NO READ when more than 20% of its lean units are missing: runs for X-1 and X-2, answered gate revisions for GATE-1's attribution, eligible primary units for GATE-2. Missing never counts as met or as failed in any estimate; the post prints every missing count.
+**Missing-rate rule.** A check reads NO READ when more than 20% of its lean units are missing: runs for X-1 and X-2, answered gate revisions for GATE-1's attribution, eligible primary units for GATE-2. A confirmed GATE-1 violation still reads NOT MET (section 7). Missing never counts as met or as failed in any estimate; the post prints every missing count.
 
 ### 9. How each gate pick applies here
 
@@ -311,7 +311,7 @@ Full-kind, lean descriptive and told readings never change a lean verdict, excep
 
 ### 10. Stages
 
-**Stage 1 (free).** Check the snapshot's digests and id list, parse every record, find built texts, run the mechanical diff, X-1, X-2, X-3 and GATE-1 on every stratum, open the 9 sealed told records under custody for their mechanical readings, build and scan every packet, count gold candidates and fix the seeded draws. Gates, each tied to its check: at least 90% of records in each stratum parse (else every check on that stratum reads NO READ); GATE-2 needs at least 10 eligible lean runs, at least 40 eligible lean units, no more than 20% of them missing, and the gold supply in section 6 (else GATE-2 reads NO READ and no panel money is spent). Then the free part of the smoke (the parser).
+**Stage 1 (free).** Check the snapshot's digests and id list, parse every record, find built texts, run the mechanical diff, X-1, X-2, X-3 and GATE-1 on every stratum, open the 9 sealed told records under custody for their mechanical readings, build and scan every packet, count gold candidates and fix the seeded draws. Gates, each tied to its check: at least 90% of records in each stratum parse (else every check on that stratum reads NO READ, except a confirmed GATE-1 violation, which reads NOT MET); GATE-2 needs at least 10 eligible lean runs, at least 40 eligible lean units, no more than 20% of them missing, and the gold supply in section 6 (else GATE-2 reads NO READ and no panel money is spent). Then the free part of the smoke (the parser).
 
 **Stage 2 (paid, about $140).** Only after stage 1's gates pass and the Captain records the cap: the paid smoke (20 calls), then a re-projection from the smoke's measured cost per call and the serialized size of every remaining request, plus every reservation still unresolved on the ledger; if that projection plus 12 worst cases passes the cap, stop for the Captain. Then the gold pool at maximum effort, the judge check at medium effort, and production.
 
