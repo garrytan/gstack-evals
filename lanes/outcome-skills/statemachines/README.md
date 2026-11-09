@@ -98,6 +98,13 @@ status word (1,076 of the 1,077 pinned parsers write pass, fail and skip; the la
 - Container modes: hardened (uid 10001, read-only root, tmpfs /tmp, no capabilities, no new privileges, no network, 4
   CPUs, 12 GB, 8192 pids) and root (root, writable container filesystem, no network). See the sample below for which one
   the oracle can use.
+- Hardened home: the images keep their build tools' caches in root's home (Maven's repository, NuGet packages, the pnpm
+  store), which uid 10001 cannot read, so with no network those builds failed hardened and passed as root. Each hardened
+  run now gets a fresh copy of the image's home, owned by uid 10001 and mounted at the same path with HOME set to it, and
+  a read-only copy of the image's /etc/passwd whose line for uid 10001 names that home, because Java reads its home from
+  passwd and not from HOME. Both are discarded after the run like the tree copy. The uid, the read-only root, tmpfs /tmp,
+  no capabilities, no new privileges, no network and the CPU, memory and pid caps are unchanged, and so are the test
+  commands.
 
 ## Frozen per-language lists (frozen at this commit, langs.ts)
 

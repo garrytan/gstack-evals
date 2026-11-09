@@ -3,7 +3,10 @@
 // dataset's log parser in its sandbox. Every run gets a fresh copy volume that is discarded after it. Two container modes:
 // hardened (verify.ts's rules: uid 10001, read-only root, tmpfs /tmp, no capabilities, no new privileges, no network, CPU,
 // memory and pid caps) and root (root, writable container filesystem, no network), which the sample uses to tell a
-// hardening failure from a test failure. The parser is untrusted dataset code: it runs in the pinned python image with
+// hardening failure from a test failure. A hardened run also gets a fresh copy of the image's own home directory, owned by
+// uid 10001 and mounted at the same path with HOME pointing at it, and a read-only copy of the image's /etc/passwd with a
+// line naming that home for uid 10001 (Java takes its home from the passwd entry, not HOME), so the build tools find the
+// caches the image ships (Maven, NuGet, pnpm) and can write their state. Both are discarded after the run. The parser is untrusted dataset code: it runs in the pinned python image with
 // no network, no mount, a read-only root, uid 10001 and no capabilities, reading its input from stdin.
 import { docker, dockerRun } from "../../real-outcome/task/docker.ts";
 import { RUN_UID } from "../../real-outcome/task/verify.ts";
@@ -49,13 +52,37 @@ export function runScript(c: { rebuild: string[]; test: string[]; print: string[
 /** exits: each rebuild and test command's exit status, in order (the SM_EXIT lines the run script writes). */
 export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr: string; stderr_tail: string; exits: number[] }
 
+/** A fresh volume holding a copy of the image's home directory (root's HOME in the image) under home/, owned by uid
+ *  10001, and passwd: the image's /etc/passwd with uid 10001's line naming that home. Returns the home path. */
+export function homeVolume(image: string, dst: string): string {
+  const uid = RUN_UID.split(":")[0]!;
+  const c = docker(["volume", "create", dst], { timeoutMs: 60_000 });
+  if (c.status !== 0) smFail("E_SM_HISTORY", "docker volume create " + dst + " failed: " + c.stderr.slice(-200));
+  const r = dockerRun(runName("home"), ["--rm", "--network", "none", "--user", "0:0", "-v", dst + ":/sm", "--entrypoint", "sh", image, "-c", 'h="${HOME:-/root}"; mkdir /sm/home && if [ -d "$h" ]; then cp -a "$h"/. /sm/home/; fi && chown -R ' + RUN_UID + ' /sm/home && { grep -v "^[^:]*:[^:]*:' + uid + ':" /etc/passwd; echo "sm:x:' + uid + ':' + uid + '::$h:/bin/sh"; } > /sm/passwd && chmod 644 /sm/passwd && printf "SM_HOME %s\\n" "$h"'], { timeoutMs: 1_800_000 });
+  const path = r.stdout.match(/^SM_HOME (\/\S*)$/m)?.[1];
+  if (r.status !== 0 || !path || path === "/") smFail("E_SM_HISTORY", "copying the image's home to " + dst + " failed: " + r.stderr.slice(-200));
+  return path!;
+}
+
+/** The test container's docker run arguments. The home copy applies to hardened mode only. */
+export function runArgs(o: { image: string; volume: string; repoDir: string; workDir?: string; mode: Mode; name: string; home?: { volume: string; path: string } }): string[] {
+  const hard = o.mode === "hardened"
+    ? ["--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=4g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", ...(o.home ? ["--mount", "type=volume,src=" + o.home.volume + ",dst=" + o.home.path + ",volume-subpath=home", "--mount", "type=volume,src=" + o.home.volume + ",dst=/etc/passwd,volume-subpath=passwd,readonly", "-e", "HOME=" + o.home.path] : ["-e", "HOME=/tmp"])]
+    : ["--user", "0:0", "--security-opt", "no-new-privileges"];
+  return ["--rm", "-i", "--network", "none", ...hard, "--cpus", LIMITS.cpus, "--memory", LIMITS.memory, "--pids-limit", LIMITS.pids, "-v", o.volume + ":" + o.repoDir, "-w", o.workDir || o.repoDir, "--entrypoint", "bash", o.image, "-s"];
+}
+
 export function runTests(o: { image: string; volume: string; repoDir: string; workDir?: string; commands: { rebuild: string[]; test: string[]; print: string[] }; mode: Mode; limitMs?: number; label: string }): TestRun {
   const limit = o.limitMs ?? LIMIT_MS;
   const name = runName(o.label);
-  const hard = o.mode === "hardened"
-    ? ["--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=4g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "HOME=/tmp"]
-    : ["--user", "0:0", "--security-opt", "no-new-privileges"];
-  const r = dockerRun(name, ["--rm", "-i", "--network", "none", ...hard, "--cpus", LIMITS.cpus, "--memory", LIMITS.memory, "--pids-limit", LIMITS.pids, "-v", o.volume + ":" + o.repoDir, "-w", o.workDir || o.repoDir, "--entrypoint", "bash", o.image, "-s"], { timeoutMs: limit, input: runScript(o.commands) });
+  const homeVol = o.mode === "hardened" ? name + "-home" : null;
+  let r;
+  try {
+    const home = homeVol ? { volume: homeVol, path: homeVolume(o.image, homeVol) } : undefined;
+    r = dockerRun(name, runArgs({ ...o, name, home }), { timeoutMs: limit, input: runScript(o.commands) });
+  } finally {
+    if (homeVol) dropVolume(homeVol);
+  }
   const stopped = r.timed_out || r.error !== undefined || r.wall_ms >= limit;
   const i = r.stdout.indexOf(PRINT_MARK);
   const print = i < 0 ? "" : r.stdout.slice(i + PRINT_MARK.length + 1);
