@@ -1,8 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // One HmSessionRow (src/types.ts) per Lane B trial dir, from config.json, result.json, the SDK log and the metering proxy's
 // session rows, through L1's readers (analysis/analyze.ts, l1/probes.ts). Score fields come from score.ts.
-// Outcome: a trial is graded when it has a verifier reward and a model response reached the agent; an allowance or
-// turn-cap stop after a response is a graded fail; LedgerCapStop is a cap stop; anything else is infra. A no-gstack
+// Outcome: a trial is graded when it has a verifier reward and a model response reached the agent. Section 13 ships the
+// diff at session end whatever stopped the session, so an allowance stop, a turn-cap stop or a model error after a
+// response scores by the verifier's reward on that diff. No verifier reward is a verifier infrastructure error (rerun
+// once, then missing); LedgerCapStop is a cap stop; anything else is infra. A no-gstack
 // session whose read audit hits a gstack path or a drive is contaminated.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -38,19 +40,18 @@ export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<str
   const raw = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   const reward = result && Number.isFinite(raw) ? raw : null;
   const allowance = (last?.refused_budget ?? 0) > 0;
-  const stopped = allowance || p.turn_cap;
   let outcome: HmSessionRow["outcome"] = "infra";
   let reason: string;
   if (exc === "LedgerCapStop") { outcome = "cap_stop"; reason = "ledger cap stop"; }
   else if (!result) reason = "no result.json";
   else if (!responded) reason = "no model response reached the agent" + (exc ? " (" + exc + ")" : "");
-  else if (reward === null && !stopped) reason = exc ? exc + ", no verifier reward" : "no verifier reward";
-  else { outcome = "graded"; reason = allowance ? "allowance stop, graded fail" : p.turn_cap ? "turn cap, graded fail" : exc ? exc + ", graded" : "graded"; }
+  else if (reward === null) reason = "no verifier reward, verifier infrastructure error" + (allowance ? " (allowance stop)" : p.turn_cap ? " (turn cap)" : exc ? " (" + exc + ")" : "");
+  else { outcome = "graded"; reason = allowance ? "allowance stop, graded on the shipped diff" : p.turn_cap ? "turn cap, graded on the shipped diff" : exc ? exc + ", graded on the shipped diff" : "graded"; }
   if (outcome === "graded" && !gstack && p.audit_hits.length) { outcome = "contaminated"; reason = "read audit: " + p.audit_hits[0]; }
   const usage = readJson(join(dir, "evaluator", "laneb-summary.json"))?.session?.usage;
   const evidence = readJson(join(dir, "evaluator", "l1-evidence.json")) ?? {};
   const flag = (x: unknown) => (typeof x === "boolean" ? x : null);
-  const pass = outcome === "graded" && !stopped && reward !== null && reward >= 1;
+  const pass = outcome === "graded" && reward !== null && reward >= 1;
   const cc = join(dir, "evaluator", "claude-projects");
   const main = existsSync(cc) ? readdirSync(cc).flatMap((p) => (statSync(join(cc, p)).isDirectory() ? readdirSync(join(cc, p)).filter((f) => f.endsWith(".jsonl")).map((f) => join(cc, p, f)) : [])) : [];
   const stem = main.length === 1 ? basename(main[0]!, ".jsonl") : null;

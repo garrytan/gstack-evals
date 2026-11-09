@@ -90,11 +90,11 @@ describe("reserve mechanics", () => {
 
 describe("infrastructure rerun", () => {
   const row = (o: any) => ({ task: "t", arm: "none", outcome: "graded", reason: "graded", ...o });
-  test("no successful response reruns once; allowance, turn-limit and after-response errors and cap stops never rerun", () => {
+  test("no successful response or no verifier reward reruns once; allowance, turn-limit and after-response errors and cap stops never rerun", () => {
     expect(needsRerun(row({ outcome: "infra", reason: "no model response reached the agent (X)" }))).toBe(true);
     expect(needsRerun(row({ outcome: "infra", reason: "no result.json" }))).toBe(true);
     for (const r of ["allowance stop, graded fail", "turn cap, graded fail", "NonZeroAgentExitCodeError, graded"]) expect(needsRerun(row({ reason: r }))).toBe(false);
-    expect(needsRerun(row({ outcome: "infra", reason: "NonZeroAgentExitCodeError, no verifier reward" }))).toBe(false);
+    expect(needsRerun(row({ outcome: "infra", reason: "no verifier reward, verifier infrastructure error (NonZeroAgentExitCodeError)" }))).toBe(true);
     expect(needsRerun(row({ outcome: "cap_stop", reason: "ledger cap stop" }))).toBe(false);
   });
   test("attempt 2 runs once per owed cell; its failure is missing; a stray attempt 2 is refused", () => {

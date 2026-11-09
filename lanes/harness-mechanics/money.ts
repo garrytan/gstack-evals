@@ -149,8 +149,9 @@ export function runSessions(ledger: Ledger, prefix: string, costsUsd: number[], 
 }
 
 // Section 13: a session that ends with no successful response reruns once as attempt 2, and a second failure is missing.
-// Allowance stops, turn-limit stops and model errors after a response never rerun, and a cap stop never reruns.
-const NO_RESPONSE = /^(no result\.json|no model response reached the agent)/;
+// Allowance stops, turn-limit stops and model errors after a response never rerun, and a cap stop never reruns. A session
+// with no verifier reward is a verifier infrastructure error and reruns once.
+const NO_RESPONSE = /^(no result\.json|no model response reached the agent|no verifier reward)/;
 export const needsRerun = (r: Pick<HmSessionRow, "outcome" | "reason">) => r.outcome === "infra" && NO_RESPONSE.test(r.reason);
 export function infraRerun(first: HmSessionRow[], second: HmSessionRow[] = []) {
   const key = (r: HmSessionRow) => r.task + "\t" + r.arm, rerun = first.filter(needsRerun), again = new Map(second.map((r) => [key(r), r]));
@@ -254,10 +255,10 @@ export function stepLedger(out: string): StepResult {
   const none = row(trial("tb__1", "none", null), sess(0, 0, 0)), lost = row(trial("tb__2", "plain-2", null, false), []);
   const after = row(trial("tb__3", "verify-hook", null), sess(4, 0, toMicros(1)));
   const r1 = infraRerun([allow, cap, none, lost, after]);
-  if (r1.rerun.length !== 2 || after.outcome !== "infra" || needsRerun(after) || needsRerun(cap)) return { pass: false, detail: "rerun picked " + r1.rerun.join(", ") };
-  const again = row(trial("tb__1b", "none", 1), sess(3, 0, toMicros(1))), again2 = row(trial("tb__2b", "plain-2", null), sess(0, 0, 0));
-  const r2 = infraRerun([allow, cap, none, lost, after], [{ ...again, task: none.task }, { ...again2, task: lost.task }]);
+  if (r1.rerun.length !== 3 || after.outcome !== "infra" || !needsRerun(after) || needsRerun(cap)) return { pass: false, detail: "rerun picked " + r1.rerun.join(", ") };
+  const again = row(trial("tb__1b", "none", 1), sess(3, 0, toMicros(1))), again2 = row(trial("tb__2b", "plain-2", null), sess(0, 0, 0)), again3 = row(trial("tb__3b", "verify-hook", 0), sess(4, 0, toMicros(1)));
+  const r2 = infraRerun([allow, cap, none, lost, after], [{ ...again, task: none.task }, { ...again2, task: lost.task }, { ...again3, task: after.task }]);
   if (r2.missing.length !== 1 || r2.missing[0] !== lost.task + "\tplain-2" || r2.pending.length) return { pass: false, detail: "attempt 2 left missing " + r2.missing.join(", ") };
   writeFileSync(join(out, "6-ledger.txt"), ["allowance stop: " + allow.reason, "cap stop: " + c.capStop + "; " + c.notRun + " sessions never ran", "rerun: " + r1.rerun.join(", ") + "; missing after attempt 2: " + r2.missing.join(", ")].join("\n").replaceAll("\t", " ") + "\n");
-  return { pass: true, detail: "an allowance stop scores graded and never reruns; a cap stop stops the item incomplete (" + c.notRun + " sessions never ran) and never reruns; two sessions with no response rerun as attempt 2 and one second failure is missing; a model error after a response does not rerun" };
+  return { pass: true, detail: "an allowance stop scores graded and never reruns; a cap stop stops the item incomplete (" + c.notRun + " sessions never ran) and never reruns; two sessions with no response and one with no verifier reward rerun as attempt 2, and one second failure is missing" };
 }
