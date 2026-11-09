@@ -1038,7 +1038,7 @@ describe("settle paths close the run's open sessions, a staged none stop refuses
     await Bun.sleep(1_100);
     const usageFile = join(w.root, "usage.csv");
     writeFileSync(usageFile, "date,cost\n");
-    const reconcile = () => ledger(w, "reconcile", "--lease", lease.lease_id, "--spent", "3.10", "--words", "settle it at the export", "--by", "Approver", "--source", usageFile);
+    const reconcile = () => ledger(w, "reconcile", "--lease", lease.lease_id, "--spent", "3.10", "--words", "approve settling at the export", "--by", "Approver", "--source", usageFile);
     renameSync(w.dir, w.dir + ".away");
     const away = await reconcile();
     expect(away.code).toBe(0);
