@@ -44,6 +44,8 @@ export async function main(argv: string[]): Promise<number> {
   const dirs = roots.flatMap(trialDirs);
   const sessions: SessionOutcome[] = dirs.map((d) => readTrial(d, ctx));
   const tasks: string[] = JSON.parse(readFileSync(planned, "utf8")).tasks;
+  const offPlan = [...new Set(sessions.map((s) => s.task).filter((t) => !tasks.includes(t)))].sort();
+  if (offPlan.length) { console.error("E_USAGE " + offPlan.length + " task(s) under --trials are not in " + planned + ", so the score would pair them: " + offPlan.join(", ") + "; pass only the planned tasks' trial directories"); return 2; }
   const adm = JSON.parse(readFileSync(admission, "utf8"));
   const admitted = (c: string) => adm.contrasts?.[c]?.admitted === true;
   const lines: string[] = ["prices dated " + ctx.prices.date + "; " + sessions.length + " sessions, " + sessions.filter((s) => s.status === "missing").length + " missing"];
