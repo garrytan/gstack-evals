@@ -202,6 +202,6 @@ Anyone can skip the official registry. A custom `registry.json` can point tasks 
 <details>
 <summary>Agent notes</summary>
 
-Edited 2026-11-09 for public wording; the frozen original is wiki/research/2026-10-27-gsta-4-public-task-sourcing/notes/s2-tbench-harbor-generators.md at commit 09d7a8f.
+Edited 2026-11-09 for public wording. Earlier commits keep the text as first merged.
 
 </details>

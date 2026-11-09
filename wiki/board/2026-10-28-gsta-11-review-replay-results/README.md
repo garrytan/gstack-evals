@@ -29,14 +29,14 @@ Recall is the share of trials in which a shown finding names the defect, average
 
 ## All 24 cases
 
-| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
-|---|---|---|---|---|---|---|---|---|
-| Opus 5.5 | plain | 39% | [14%, 67%] | 28% | 28% | [8%, 50%] | 39%, 28% (36) | $0.21 |
-| Opus 5.5 | gstack | 44% | [19%, 72%] | 11% | 33% | [11%, 58%] | 44%, 33% (36) | $1.09 |
-| Haiku 5.5 | plain | 33% | [11%, 58%] | 19% | 17% | [0%, 36%] | 33%, 17% (36) | $0.010 |
-| Haiku 5.5 | gstack | 36% | [11%, 61%] | 19% | 33% | [14%, 56%] | 36%, 33% (36) | $0.040 |
-| DeepSeek V4.1 Flash | plain | 17% | [0%, 42%] | 14% | 22% | [6%, 42%] | 50%, 50% (8) | $0.15 |
-| DeepSeek V4.1 Flash | gstack | 32% | [10%, 57%] | 17% | 17% | [3%, 36%] | 38%, 15% (15) | $0.25 |
+| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) |
+|---|---|---|---|---|---|---|---|
+| Opus 5.5 | plain | 39% | [14%, 67%] | 28% | 28% | [8%, 50%] | 39%, 28% (36) |
+| Opus 5.5 | gstack | 44% | [19%, 72%] | 11% | 33% | [11%, 58%] | 44%, 33% (36) |
+| Haiku 5.5 | plain | 33% | [11%, 58%] | 19% | 17% | [0%, 36%] | 33%, 17% (36) |
+| Haiku 5.5 | gstack | 36% | [11%, 61%] | 19% | 33% | [14%, 56%] | 36%, 33% (36) |
+| DeepSeek V4.1 Flash | plain | 17% | [0%, 42%] | 14% | 22% | [6%, 42%] | 50%, 50% (8) |
+| DeepSeek V4.1 Flash | gstack | 32% | [10%, 57%] | 17% | 17% | [3%, 36%] | 38%, 15% (15) |
 
 DeepSeek used all 32,000 output tokens and returned no text in 44 of 72 plain units (44 calls) and 28 of 72 gstack units (61 calls). The answered-only column drops every unit with such a call. Opus and Haiku had none. These counts cover the units the scorer loads: one more empty cut-off, the Red Team call in DeepSeek gstack d10 trial 3, sits in a unit that is incomplete because its core call failed. Incomplete units: DeepSeek plain 3, DeepSeek gstack 6, all others 0.
 
@@ -52,14 +52,14 @@ Counting findings below confidence 5 (ungated), Opus with gstack reaches 50% rec
 
 **Escaped defects** (6 bugs that shipped and were fixed by a later PR; 6 decoys). Three of the six PRs carry a passing gstack review receipt; the other three carry none, so for them "escaped" means the bug shipped without a passing gstack review receipt.
 
-| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
-|---|---|---|---|---|---|---|---|---|
-| Opus 5.5 | plain | 67% | [33%, 100%] | 56% | 6% | [0%, 17%] | 67%, 6% (18) | $0.11 |
-| Opus 5.5 | gstack | 78% | [44%, 100%] | 22% | 28% | [0%, 61%] | 78%, 28% (18) | $0.56 |
-| Haiku 5.5 | plain | 56% | [17%, 89%] | 39% | 6% | [0%, 17%] | 56%, 6% (18) | $0.005 |
-| Haiku 5.5 | gstack | 56% | [17%, 89%] | 33% | 28% | [6%, 61%] | 56%, 28% (18) | $0.023 |
-| DeepSeek V4.1 Flash | plain | 33% | [0%, 67%] | 28% | 11% | [0%, 33%] | 67%, 33% (7) | $0.06 |
-| DeepSeek V4.1 Flash | gstack | 56% | [17%, 89%] | 33% | 17% | [6%, 28%] | 60%, 11% (9) | $0.14 |
+| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) |
+|---|---|---|---|---|---|---|---|
+| Opus 5.5 | plain | 67% | [33%, 100%] | 56% | 6% | [0%, 17%] | 67%, 6% (18) |
+| Opus 5.5 | gstack | 78% | [44%, 100%] | 22% | 28% | [0%, 61%] | 78%, 28% (18) |
+| Haiku 5.5 | plain | 56% | [17%, 89%] | 39% | 6% | [0%, 17%] | 56%, 6% (18) |
+| Haiku 5.5 | gstack | 56% | [17%, 89%] | 33% | 28% | [6%, 61%] | 56%, 28% (18) |
+| DeepSeek V4.1 Flash | plain | 33% | [0%, 67%] | 28% | 11% | [0%, 33%] | 67%, 33% (7) |
+| DeepSeek V4.1 Flash | gstack | 56% | [17%, 89%] | 33% | 17% | [6%, 28%] | 60%, 11% (9) |
 
 DeepSeek cut-offs here: plain 20 of 36 units, gstack 16 of 36 units (33 calls).
 
@@ -67,14 +67,14 @@ On escaped defects, gstack's prompts add 11 pts of recall on Opus [0, 33] while 
 
 **Review-caught defects** (6 bugs gstack's review caught live; 6 decoys):
 
-| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
-|---|---|---|---|---|---|---|---|---|
-| Opus 5.5 | plain | 11% | [0%, 33%] | 0% | 50% | [17%, 83%] | 11%, 50% (18) | $0.84 |
-| Opus 5.5 | gstack | 11% | [0%, 33%] | 0% | 39% | [6%, 72%] | 11%, 39% (18) | $4.77 |
-| Haiku 5.5 | plain | 11% | [0%, 33%] | 0% | 28% | [0%, 61%] | 11%, 28% (18) | $0.035 |
-| Haiku 5.5 | gstack | 17% | [0%, 50%] | 6% | 39% | [11%, 72%] | 17%, 39% (18) | $0.097 |
-| DeepSeek V4.1 Flash | plain | 0% | [0%, 0%] | 0% | 33% | [6%, 67%] | 0%, 58% (1) | - |
-| DeepSeek V4.1 Flash | gstack | 8% | [0%, 25%] | 0% | 17% | [0%, 50%] | 0%, 17% (6) | $1.13 |
+| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) |
+|---|---|---|---|---|---|---|---|
+| Opus 5.5 | plain | 11% | [0%, 33%] | 0% | 50% | [17%, 83%] | 11%, 50% (18) |
+| Opus 5.5 | gstack | 11% | [0%, 33%] | 0% | 39% | [6%, 72%] | 11%, 39% (18) |
+| Haiku 5.5 | plain | 11% | [0%, 33%] | 0% | 28% | [0%, 61%] | 11%, 28% (18) |
+| Haiku 5.5 | gstack | 17% | [0%, 50%] | 6% | 39% | [11%, 72%] | 17%, 39% (18) |
+| DeepSeek V4.1 Flash | plain | 0% | [0%, 0%] | 0% | 33% | [6%, 67%] | 0%, 58% (1) |
+| DeepSeek V4.1 Flash | gstack | 8% | [0%, 25%] | 0% | 17% | [0%, 50%] | 0%, 17% (6) |
 
 DeepSeek cut-offs here: plain 24 of 36 units, gstack 12 of 36 units (28 calls), plus the d10 trial 3 Red Team call in an incomplete unit.
 
@@ -91,7 +91,7 @@ Recall difference, paired by case:
 | DeepSeek + gstack vs Opus plain | -7 [-26, 6] | -11 [-50, 17] | -3 [-8, 0] |
 | DeepSeek + gstack vs Opus + gstack | -13 [-31, 0] | -22 [-56, 0] | -3 [-8, 0] |
 
-Neither cheap model with gstack matched Opus, and this run makes no parity claim: it had no preregistered margin, and the intervals run from 8 to 67 points wide. Haiku with gstack costs $0.04 per catch against $0.21 for Opus plain, with 3 points less recall and more false alarms (33% against 28%).
+Neither cheap model with gstack matched Opus, and this run makes no parity claim: it had no preregistered margin, and the intervals run from 8 to 67 points wide. Haiku with gstack costs much less per catch than Opus plain, with 3 points less recall and more false alarms (33% against 28%).
 
 ## Per case
 
@@ -133,7 +133,7 @@ Three cases decide most of the escaped recall: every Opus and Haiku trial caught
 
 ## Exploratory: Opus at effort high
 
-The preregistered exploratory cell ran because the grid and its judging stayed under its preregistered bar. Opus at effort `high` ran the gstack arm on the 6 escaped defects, 1 trial each. It caught d13, d14, d11, d12 and d15 and missed d04: 5 of 6 (83%), against 4 of 6 (67%) for Opus at `medium` in trial 1 on the same cases. That is +17 pts [0, 50], one case better and none worse. Its recall at CRITICAL was 50% against 33%. It cost $5.05 against $4.31 for those 6 units, with 17,800 output tokens per unit against 11,600. The judge saw the Opus-high findings in batches of their own, while the medium cell's findings were judged in batches mixed with other cells. This cell enters no other table above.
+The preregistered exploratory cell ran because the grid and its judging stayed under its preregistered bar. Opus at effort `high` ran the gstack arm on the 6 escaped defects, 1 trial each. It caught d13, d14, d11, d12 and d15 and missed d04: 5 of 6 (83%), against 4 of 6 (67%) for Opus at `medium` in trial 1 on the same cases. That is +17 pts [0, 50], one case better and none worse. Its recall at CRITICAL was 50% against 33%. It cost more than the medium cell for those 6 units, with 17,800 output tokens per unit against 11,600. The judge saw the Opus-high findings in batches of their own, while the medium cell's findings were judged in batches mixed with other cells. This cell enters no other table above.
 
 ## Cost
 
@@ -181,5 +181,46 @@ The preregistered exploratory cell ran because the grid and its judging left $43
 **Cost**
 
 Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5.43, gstack $31.05), DeepSeek $5.36, Haiku $1.18. The judge cost $0.39, and the Opus-high cell $5.05. The total is $48.46. DeepSeek's figure includes $0.81 settled at the worst case for 17 calls: 16 cut off by the harness restarts ($0.76) and one whose reply carried no cost (the core call in DeepSeek gstack y11 trial 2, which OpenRouter returned without `usage.cost`). The seven DeepSeek replies that ended in a provider error settled at $0, so DeepSeek spend is slightly understated. Per 72 units, gstack's prompts cost 5.7 times the plain prompt on Opus, 4.0 times on Haiku and 2.9 times on DeepSeek.
+
+**All 24 cases**
+
+| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
+|---|---|---|---|---|---|---|---|---|
+| Opus 5.5 | plain | 39% | [14%, 67%] | 28% | 28% | [8%, 50%] | 39%, 28% (36) | $0.21 |
+| Opus 5.5 | gstack | 44% | [19%, 72%] | 11% | 33% | [11%, 58%] | 44%, 33% (36) | $1.09 |
+| Haiku 5.5 | plain | 33% | [11%, 58%] | 19% | 17% | [0%, 36%] | 33%, 17% (36) | $0.010 |
+| Haiku 5.5 | gstack | 36% | [11%, 61%] | 19% | 33% | [14%, 56%] | 36%, 33% (36) | $0.040 |
+| DeepSeek V4.1 Flash | plain | 17% | [0%, 42%] | 14% | 22% | [6%, 42%] | 50%, 50% (8) | $0.15 |
+| DeepSeek V4.1 Flash | gstack | 32% | [10%, 57%] | 17% | 17% | [3%, 36%] | 38%, 15% (15) | $0.25 |
+
+**Escaped defects**
+
+| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
+|---|---|---|---|---|---|---|---|---|
+| Opus 5.5 | plain | 67% | [33%, 100%] | 56% | 6% | [0%, 17%] | 67%, 6% (18) | $0.11 |
+| Opus 5.5 | gstack | 78% | [44%, 100%] | 22% | 28% | [0%, 61%] | 78%, 28% (18) | $0.56 |
+| Haiku 5.5 | plain | 56% | [17%, 89%] | 39% | 6% | [0%, 17%] | 56%, 6% (18) | $0.005 |
+| Haiku 5.5 | gstack | 56% | [17%, 89%] | 33% | 28% | [6%, 61%] | 56%, 28% (18) | $0.023 |
+| DeepSeek V4.1 Flash | plain | 33% | [0%, 67%] | 28% | 11% | [0%, 33%] | 67%, 33% (7) | $0.06 |
+| DeepSeek V4.1 Flash | gstack | 56% | [17%, 89%] | 33% | 17% | [6%, 28%] | 60%, 11% (9) | $0.14 |
+
+**Review-caught defects**
+
+| model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
+|---|---|---|---|---|---|---|---|---|
+| Opus 5.5 | plain | 11% | [0%, 33%] | 0% | 50% | [17%, 83%] | 11%, 50% (18) | $0.84 |
+| Opus 5.5 | gstack | 11% | [0%, 33%] | 0% | 39% | [6%, 72%] | 11%, 39% (18) | $4.77 |
+| Haiku 5.5 | plain | 11% | [0%, 33%] | 0% | 28% | [0%, 61%] | 11%, 28% (18) | $0.035 |
+| Haiku 5.5 | gstack | 17% | [0%, 50%] | 6% | 39% | [11%, 72%] | 17%, 39% (18) | $0.097 |
+| DeepSeek V4.1 Flash | plain | 0% | [0%, 0%] | 0% | 33% | [6%, 67%] | 0%, 58% (1) | - |
+| DeepSeek V4.1 Flash | gstack | 8% | [0%, 25%] | 0% | 17% | [0%, 50%] | 0%, 17% (6) | $1.13 |
+
+**Cheap models against Opus**
+
+Haiku with gstack costs $0.04 per catch against $0.21 for Opus plain, with 3 points less recall and more false alarms (33% against 28%).
+
+**Exploratory: Opus at effort high**
+
+It cost $5.05 against $4.31 for those 6 units, with 17,800 output tokens per unit against 11,600.
 
 </details>

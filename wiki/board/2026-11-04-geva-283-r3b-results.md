@@ -63,7 +63,7 @@ This section is an explanation, not a result. R3a4 screened 200 SWE-rebench task
 
 ## Result
 
-analyze's lines as printed, with the cost clauses of the two re-check lines moved to Agent notes. It exited 5 for both models, its code for an outcome other than KEEP or CUT-CANDIDATE.
+analyze's printed output, with each model's settle line, the cost clauses of its re-check line and its cost per success line moved to Agent notes. It exited 5 for both models, its code for an outcome other than KEEP or CUT-CANDIDATE.
 
 Opus 5.5:
 
@@ -77,7 +77,6 @@ D1 sensitivity: 15 paired tasks solved by at least one graded grid trial in eith
 repository-clustered interval (report only): -5.1 to +5.2 points over 56 repositories
 stricter indicator (report only): told trials by distinct Phase 1-5 headings, 0 to 5: 210, 0, 0, 0, 0, 0; mean 0.00
 Stop hook (report only): ran in 209 of 210 graded told grid trials and held a stop back in 35; outcomes met 174, met_after_block 15, miss 20, none 1; the route hook logged in 210
-cost per success (report only): none $5.64, told $8.99
 task-repo skills (report only): none 9 sessions with them in the init list and 0 Skill calls to non-gstack skills there; told 9 and 0
 cross-model overlap (report only): 62 of Opus 5.5's 71 admitted tasks are also unsolved by GPT-6.1 Sol (81 admitted), against about 28.8 if the two failed independently on the 200 screen tasks
 MDD (amendment 5 section 6): 12.5 points at 70 tasks; re-simulated at the grid's none rate 7.6% and the sensitivity set's 15 tasks (report only): 19 points, 2000 runs a lift
@@ -96,7 +95,6 @@ D1 sensitivity: 8 paired tasks solved by at least one graded grid trial in eithe
 repository-clustered interval (report only): -1.4 to +3.3 points over 58 repositories
 stricter indicator (report only): told trials by distinct Phase 1-5 headings, 0 to 5: 210, 0, 0, 0, 0, 0; mean 0.00
 Stop hook (report only): ran in 210 of 210 graded told grid trials and held a stop back in 160; outcomes met 50, met_after_block 156, miss 4; the route hook logged in 210
-cost per success (report only): none $15.92, told $15.77
 task-repo skills (report only): none 15 sessions with them in the init list and 19 Skill calls to non-gstack skills there; told 15 and 7
 cross-model overlap (report only): 62 of Opus 5.5's 71 admitted tasks are also unsolved by GPT-6.1 Sol (81 admitted), against about 28.8 if the two failed independently on the 200 screen tasks
 MDD (amendment 5 section 6): 12.5 points at 70 tasks; re-simulated at the grid's none rate 3.3% and the sensitivity set's 8 tasks (report only): 23 points, 2000 runs a lift
@@ -146,7 +144,7 @@ So the R48 verdict on both models is FIX-METHOD, in the frozen rule's words: tas
 These decide nothing.
 
 - **Stop hook on Opus.** The contract Stop hook ran in 209 of 210 told grid trials and held a stop back in 35. Outcomes: met 174, met after a block 15, miss 20, and none 1 (the timeout). So in 20 trials Opus stopped with the contract still unmet after the hook pushed back. Sol is the contrast: its hook ran in 210 and held back 160 (met 50, met after a block 156, miss 4). Sol tried to stop with the contract unmet far more often (160 of 210 against 35 of 209) and nearly always met it after the push.
-- **Cost per success.** Opus: none $5.64, told $8.99. Sol: none $15.92, told $15.77. A told trial cost more than a none trial on both models: $0.685 against $0.430 on Opus, about 1.6 times, and $0.676 against $0.531 on Sol, about 1.3 times.
+- **Cost per success.** A told trial cost more than a none trial on both models: about 1.6 times on Opus and about 1.3 times on Sol. Per success, told cost more than none on Opus and slightly less on Sol. The figures are in Agent notes.
 - **Cross-model overlap.** 62 of Opus's 71 admitted tasks are also unsolved by Sol in its screen (81 admitted), against about 28.8 if the two models failed independently on the 200 screen tasks. Both models fail the same tasks, which fits a floor set by the tasks rather than by either model.
 - **timeline-stop-hook left no lines.** The told arm registers a third Stop hook, timeline-stop-hook, and the pin post's first Captain decision asks for its lines to be reported. There are none to report. quick/laneb/runner/agent/laneb_hooks.py copies only the container's hooks/ and skill-contracts/ directories out, and no file from that hook appeared in the 220 Opus told hook directories or anywhere in Sol's pulled trees. A run that wants its lines has to copy its output too.
 
@@ -190,7 +188,7 @@ Does it fit? At caps with 70 kept tasks on both models, it fits, and capping the
 
 ## Replicate it
 
-The commands that ran are in the run records: GEVA-275's scripts/ (prep, upload, host prepare, precheck, launch, status, watcher, bundle) and GEVA-276's run/ (route check, launch scripts, status). The outcome step is r3b.ts's analyze, run as `LEDGER=<item ledger> bun quick/laneb/r3/r3b.ts analyze <work dir> --item <item>` from a git archive export of dbcb5b49, and the lines it printed are quoted above. The Opus run's rerun inputs (the export, its work tree and its ledger, with a RERUN.md) are in handoffs/GEVA-275/rerun-inputs/, and a rerun from them printed the same lines on 2026-11-04. This record leaves out the trial records and transcripts, which stay in the Captain's drive, so an outsider can't rerun analyze on them.
+The commands that ran are in the run records: GEVA-275's scripts/ (prep, upload, host prepare, precheck, launch, status, watcher, bundle) and GEVA-276's run/ (route check, launch scripts, status). The outcome step is r3b.ts's analyze, run as `LEDGER=<item ledger> bun quick/laneb/r3/r3b.ts analyze <work dir> --item <item>` from a git archive export of dbcb5b49, and the lines it printed are above, with the settle lines and cost figures moved to Agent notes. The Opus run's rerun inputs (the export, its work tree and its ledger, with a RERUN.md) are in handoffs/GEVA-275/rerun-inputs/, and a rerun from them printed the same lines on 2026-11-04. This record leaves out the trial records and transcripts, which stay in the Captain's drive, so an outsider can't rerun analyze on them.
 
 ## What is held out
 
@@ -280,6 +278,12 @@ At caps with 70 kept tasks on both models, R3c comes to about $942 plus $141, or
 A fresh replication is a paid run: about $247 for Opus and about $268 for Sol at these runs' costs.
 
 From the summary: Paid $515.51.
+
+cost per success (report only): none $5.64, told $8.99
+
+cost per success (report only): none $15.92, told $15.77
+
+- **Cost per success.** Opus: none $5.64, told $8.99. Sol: none $15.92, told $15.77. A told trial cost more than a none trial on both models: $0.685 against $0.430 on Opus, about 1.6 times, and $0.676 against $0.531 on Sol, about 1.3 times.
 
 </details>
 
