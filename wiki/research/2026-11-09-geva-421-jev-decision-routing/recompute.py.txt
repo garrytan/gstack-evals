@@ -208,8 +208,8 @@ def score_point(doc):
     if any("production" in it for it in items):
         g = {}
         for i in common:
-            key = "production" if by_id[i]["production"] else "removed"
-            d = g.setdefault(key, {"n": 0})
+            group = "production" if by_id[i]["production"] else "removed"
+            d = g.setdefault(group, {"n": 0})
             d["n"] += 1
             for a in avail:
                 d[a] = d.get(a, 0) + correct(by_id[i][a], truth[i], options)

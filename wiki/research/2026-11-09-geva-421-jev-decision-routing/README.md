@@ -24,7 +24,7 @@ attachments:
   - 5b9cbaf7c933b891842d3696075f0a2c774de019c791db1c2fd465fe8a22c571  private-game-counts.json
   - cec92704b4e9577fc12596f7be40f97d8032103a2e50d30f0866b64398906246  raw-files-digests.json
   - 98483a4028bb57289de3393e95da4ca48aeb5cfc2282baaf09873d31b15d9d50  recompute-output.json
-  - e2657b8ff10c84781e3d0a881347f4621fc0ac4a2c989994fa4568c5aef208df  recompute.py.txt
+  - e3abdbe2d7b7cb601de7827d4a468f06bf0bcc922110c6a53d4af003a31a8be6  recompute.py.txt
   - f011768cd9315d39a913f1d413f9d9e56bce9ab03fb86b5aaa0c5c8e3a06378f  score.py.txt
   - 0d7f46446b7e5929fd5332cde4c3026a3bcc36eb4e34d043b21a7e8168d7266f  scores-as-run.json
   - 91f3b41dcbda6cc40dfca1000b926c3f3b79925c245a6c6a075ff6ee6184fe7e  stats.py.txt
@@ -199,7 +199,7 @@ mine.json should match recompute-output.json. For the six gstack and gbrain poin
 - scores-as-run.json, recompute-output.json and private-game-counts.json: scorer output, recompute output, and the private game's counts and digests.
 - score.py.txt, stats.py.txt and recompute.py.txt: the scorer that ran, its statistics (unchanged apart from its first line), and the recompute.
 
-The raw Jev requests and responses and the model-arm output rows (18 files) are not published here, to keep this pull request small enough to review. raw-files-digests.json pins each of them by sha256 and size. The Harness Evals rerun and the separate recompute both ran on the full set, raw rows included, Every scored result above recomputes from the attachments that remain. The few figures that need the raw rows, the first-try latencies and the replies that hit the 2,048-token cap, were checked on the full set. The prompts for today's model and particle-1 come from the repos at the pinned commits. Paid calls are not repeatable from this bundle: it holds their per-item results.
+The raw Jev requests and responses and the model-arm output rows (18 files) are not published here, to keep this pull request small enough to review. raw-files-digests.json pins each of them by sha256 and size. A few strings in the pinned request files differ from the requests as sent: the AWS documentation example key that a gstack diff quotes in jev-request-gstack-rubric-judges.json reads AKIA-DOCS-EXAMPLE-REMOVED, two private project names in gstack's fixture text read [name removed], and in fixture text, a home folder that leads into a longer path reads ~/ (or %USERPROFILE% for Windows paths). The Harness Evals rerun and the separate recompute both ran on the full set, raw rows included. Every scored result above recomputes from the attachments that remain. The few figures that need the raw rows, the first-try latencies and the replies that hit the 2,048-token cap, were checked on the full set. The prompts for today's model and particle-1 come from the repos at the pinned commits. Paid calls are not repeatable from this bundle: it holds their per-item results.
 
 ## What is held out, and why
 
@@ -225,6 +225,8 @@ Publication status: published in this post. The claim check below must pass befo
 | Cross-lab read of every number and sentence against the attachments (GPT-6.1 Sol) | Every number in the Result tables matched. It asked for 19 edits to wording, labels and attribution, then 3 more on its rechecks. All are made in this version, and its final read of the text was clean |
 | Independent recompute of every headline number from the raw files (a separate Opus 5.5 agent with its own scorer) | Every number it checked matched, across the three Result tables and most body figures, except three medians on even counts, where it averaged the two middle values (see Latency) |
 | Harness Evals recompute (independent crew, clean machine) | Every number reproduced: the shipped recompute's output byte for byte, 520 of 520 values against its own scorer, all 31 attachment digests and all 1,139 public items, on the full bundle before its 18 raw files were taken out (raw-files-digests.json pins them). It found the three median differences and four wording issues ("measurably" in the takeaway, the two cut-off dream-triage replies, the unreadable label and the 7 of 8 count), all fixed in this version. Not independently checked: the truth labels against the pinned repos, particle-1's per-call prices, and the private items, of which it checked counts only |
+
+We renamed one variable in recompute.py.txt after the Harness Evals rerun, and its output is still byte-identical to recompute-output.json, which is attached with its digest.
 
 ## Changelog
 
