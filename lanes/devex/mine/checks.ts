@@ -102,6 +102,15 @@ export async function checks(): Promise<DryCheck[]> {
     const steady = paceAt(() => 4900, 10, 400), low = paceAt(() => 1999, 1, 1), atShare = paceAt(() => 2000, 1, 1);
     const busy = paceAt((r, used) => 4900 - used - (r > 1 ? 310 : 0), 1, 1), calm = paceAt((r, used) => 4900 - used - (r > 1 ? 290 : 0), 1, 1);
     out.push(T("the miner's draw resumes: segments ended by --max-minutes (one mid-listing, exit 3) or stopped mid-call give byte-identical draws.json, screen.jsonl and read/ to one run; GraphQL stays under --pace and drops to half while the quota is under 40% or others use over 3,000 points an hour, not at 40% or 3,000", wholeCode === 0 && last === 0 && segments > 5 && stops > 3 && midListing && said.some((l) => l.startsWith("dx mine draw: more remains")) && MORE_REMAINS === 3 && outputs(cut!) === outputs(whole!) && steady.perHour <= 3000 && steady.pace === 3000 && low.pace === 1500 && atShare.pace === 3000 && busy.pace === 1500 && calm.pace === 3000, JSON.stringify({ segments, stops, steady: Math.round(steady.perHour) })));
+    const conc: Array<{ code: number; out: string; peak: number; missing: number; vanished: number; said: boolean }> = [];
+    for (const c of [1, 3]) {
+      const d = join(segDir, "c" + c), f = fixtureGitHub({ gone: ["fixture-owner/beta"], vanish: ["fixture-owner/alpha"] }), lines: string[] = [];
+      mkdirSync(d);
+      writeFileSync(join(d, "repos.json"), JSON.stringify({ repos: fixtureGitHub().repos }));
+      const code = await mine(["draw", "--out", d, "--draws", "70", "--repos", "all", "--concurrency", String(c)], { out: (t) => void lines.push(t), err: () => {} }, { exec: f.exec, execAsync: f.execAsync, now: f.now, sleep: f.sleep, diff: () => null });
+      conc.push({ code, out: outputs(d), peak: f.peak(), missing: readFileSync(join(d, "listing.jsonl"), "utf8").split("\n").filter((l) => l.includes('"missing":true')).length, vanished: JSON.parse(readFileSync(join(d, "draws.json"), "utf8")).drops["repo-missing"] ?? 0, said: lines.some((l) => l.includes('"repos_missing":2')) });
+    }
+    out.push(T("the miner's reads in flight: --concurrency 1 and 3 (3 queries in flight at its peak) give byte-identical draws.json, screen.jsonl and read/; a frame repository GitHub no longer returns is listed once as missing, one that vanishes after the listing drops its units as repo-missing, both count in repos_missing, and the draw finishes", conc.every((x) => x.code === 0 && x.missing === 1 && x.vanished > 0 && x.said) && conc[0]!.out === conc[1]!.out && conc[0]!.peak === 1 && conc[1]!.peak === 3, JSON.stringify({ peaks: conc.map((x) => x.peak), repo_missing: conc.map((x) => x.vanished) })));
   } finally {
     rmSync(segDir, { recursive: true, force: true });
   }

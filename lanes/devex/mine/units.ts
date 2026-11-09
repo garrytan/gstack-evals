@@ -191,7 +191,7 @@ export interface DrawPlan {
 }
 
 export type Step =
-  | { drop: "excluded" | "dates" | "title-label" | "size" | "plan-words" | "not-released" | "classifier-failed" | "other-side" | "neither" | "cap" | string }
+  | { drop: "excluded" | "dates" | "title-label" | "size" | "plan-words" | "not-released" | "classifier-failed" | "other-side" | "neither" | "cap" | "repo-missing" | string }
   | { keep: Drawn };
 
 /** One candidate's facts and the reads that cost a call, made lazily so a dropped unit spends nothing more. */

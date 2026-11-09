@@ -8,19 +8,33 @@
 // git (git.ts). Every call goes through the shared client (lanes/aftermath/gh.ts) bound here to a 2,500-point floor,
 // one call a second and no retry, with GitHub's hosts as the only egress. Reads that can share a query do, as aliased
 // parts (batch): several repositories' listings, several units' facts, several tags' ancestry, a window's three
-// searches. Each part's result is what its own query returns, and a batch GitHub cannot answer halves.
+// searches. Each part's result is what its own query returns, and a batch GitHub cannot answer halves. The draw's
+// GraphQL goes through the same client awaited (ahead.ts), so several queries can be in flight. A repository GitHub
+// no longer returns lists as missing, with nothing to draw; one that stops answering after it was listed comes back
+// as RepoGone from the read that found it (a null for that unit from the facts and files reads).
 import { openGitHub, type GhExec, type GitHub } from "../../aftermath/gh.ts";
+import { openGraphqlAsync, type AsyncGraphql, type GhExecAsync } from "./ahead.ts";
 import { searchTopic } from "../../aftermath/draw.ts";
 import { DEV_TOPICS, licenceTier, repoInFrame, stratum, UI_TOPICS, type ChangedFile } from "./frame.ts";
 import type { ReleaseCandidate, TextHistory, UnitFacts } from "./units.ts";
 import { isBot, type WindowItem } from "./window.ts";
 
 export const FLOOR = 2500;
+
+/** GitHub no longer returns a repository that was listed: the draw drops the unit it was reading and asks that repository nothing more. */
+export class RepoGone extends Error {
+  readonly code = "E_MINE_SOURCE";
+  constructor(readonly repo: string) {
+    super(repo + " is no longer returned by GitHub");
+  }
+}
 export const PACE_MS = 1000;
 export const SEARCH_PACE_MS = 2200;
 
 export const openDxGitHub = (exec?: GhExec, sleep?: (ms: number) => void, now?: () => number): GitHub =>
   openGitHub({ floor: FLOOR, tries: 3, backoffMs: (n) => n * 5000, paceMs: PACE_MS, code: "E_MINE_SOURCE", exec, sleep, now });
+export const openDxGraphqlAsync = (exec: GhExecAsync, sleep: (ms: number) => Promise<void>, now: () => number): AsyncGraphql =>
+  openGraphqlAsync({ floor: FLOOR, tries: 3, backoffMs: (n) => n * 5000, paceMs: PACE_MS, code: "E_MINE_SOURCE", exec, sleep, now });
 
 const RL = " rateLimit { cost remaining resetAt }";
 const EDITS = " lastEditedAt userContentEdits(last: 100) { nodes { editedAt createdAt deletedAt diff } }";
@@ -164,6 +178,8 @@ export interface Listing {
   releases: ReleaseCandidate[];
   tags: Array<{ tag: string; date: string }>;
   prs: ListedPr[];
+  /** GitHub no longer returns the repository: listed once with nothing to draw, never asked again. */
+  missing?: true;
 }
 
 export const LIST_BATCH = 5;
@@ -174,6 +190,7 @@ export function listRepos(gh: GitHub, repos: readonly FrameRepo[]): Listing[] {
   const { nodes, extra } = searchMany(gh, jobs, LIST_BATCH, repos.map((r) => ({ vars: repoVars(r.repo), field: REL_FIELD })));
   return repos.map((repo, i) => {
     const r = extra[i];
+    if (!r) return { repo: repo.repo, releases: [], tags: [], prs: [], missing: true };
     const prs: ListedPr[] = [];
     for (const n of nodes[i]!) {
       if (!n?.number) continue;
@@ -190,14 +207,16 @@ export function listRepos(gh: GitHub, repos: readonly FrameRepo[]): Listing[] {
 
 const FILES_Q = "query($owner: String!, $name: String!, $n: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $n) { files(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { path additions } } } }" + RL + " }";
 
-/** Every changed file, paged through GraphQL when the listing's first 100 were not all (up to 3,000). */
-export function allFiles(gh: GitHub, repo: string, pr: ListedPr): ChangedFile[] {
+/** Every changed file, paged through GraphQL when the listing's first 100 were not all (up to 3,000); null when GitHub no longer returns the repository. */
+export function allFiles(gh: GitHub, repo: string, pr: ListedPr): ChangedFile[] | null {
   if (pr.files_total <= pr.files.length) return pr.files;
   const [owner, name] = repo.split("/");
   const out: ChangedFile[] = [];
   let after: string | null = null;
   for (let page = 1; page <= 30; page++) {
-    const f: any = gh.graphql<any>(FILES_Q, { owner, name, n: pr.number, after }).repository.pullRequest.files;
+    const r: any = gh.graphql<any>(FILES_Q, { owner, name, n: pr.number, after }).repository;
+    if (r === null) return null;
+    const f: any = r.pullRequest.files;
     out.push(...(f.nodes ?? []).map((x: any) => ({ path: x.path, additions: x.additions })));
     if (!f.pageInfo.hasNextPage) break;
     after = f.pageInfo.endCursor;
@@ -212,11 +231,14 @@ const UNIT_FIELD = "repository(owner: $owner, name: $name) { pullRequest(number:
 
 export const UNIT_BATCH = 5;
 
-/** Units' facts and the window references GitHub's timeline records for each and its closing issues, up to UNIT_BATCH units a query. */
-export function unitFactsMany(gh: GitHub, units: ReadonlyArray<{ repo: FrameRepo; pr: ListedPr; files: ChangedFile[] }>): Array<{ facts: UnitFacts; timeline_refs: Array<{ kind: "issue" | "pr"; number: number }> }> {
-  const res = batch(gh, units.map((u): Part => ({ vars: { ...repoVars(u.repo.repo), n: ["Int!", u.pr.number] }, field: UNIT_FIELD })));
-  return units.map(({ repo, pr, files }, i) => {
-    const d = res[i].pullRequest;
+/** Units' facts and the window references GitHub's timeline records for each and its closing issues, up to UNIT_BATCH units a query; null for a unit whose files came back null or whose repository GitHub no longer returns. */
+export function unitFactsMany(gh: GitHub, units: ReadonlyArray<{ repo: FrameRepo; pr: ListedPr; files: ChangedFile[] | null }>): Array<{ facts: UnitFacts; timeline_refs: Array<{ kind: "issue" | "pr"; number: number }> } | null> {
+  const live = units.filter((u) => u.files);
+  const res = batch(gh, live.map((u): Part => ({ vars: { ...repoVars(u.repo.repo), n: ["Int!", u.pr.number] }, field: UNIT_FIELD })));
+  return units.map((u) => {
+    const { repo, pr, files } = u, r = files ? res[live.indexOf(u)] : null;
+    if (!files || r === null) return null;
+    const d = r.pullRequest;
     const refs: Array<{ kind: "issue" | "pr"; number: number }> = [];
     const take = (t: any) => {
       for (const e of t?.nodes ?? []) if (e?.source?.number && !e.isCrossRepository) refs.push({ kind: e.source.__typename === "PullRequest" ? "pr" : "issue", number: e.source.number });
@@ -249,7 +271,9 @@ export const COMPARE_BATCH = 4;
 
 /** Git ancestry through GraphQL's ref compare, which takes the merge commit's oid as its head, for several tags a query: a tag's commit contains the merge when the merge is behind the tag or identical to it. */
 export function tagsContain(gh: GitHub, repo: string, mergeSha: string, tags: readonly string[]): boolean[] {
-  return batch(gh, tags.map((tag): Part => ({ vars: { ...repoVars(repo), ref: ["String!", "refs/tags/" + tag], head: ["String!", mergeSha] }, field: COMPARE_FIELD }))).map((r) => {
+  const res = batch(gh, tags.map((tag): Part => ({ vars: { ...repoVars(repo), ref: ["String!", "refs/tags/" + tag], head: ["String!", mergeSha] }, field: COMPARE_FIELD })));
+  if (res.some((r) => r === null)) throw new RepoGone(repo);
+  return res.map((r) => {
     const s = r?.ref?.compare?.status;
     return s === "BEHIND" || s === "IDENTICAL";
   });
@@ -304,6 +328,7 @@ export function baseTree(gh: GitHub, repo: string, sha: string): { tree: Array<{
       size = Math.ceil(batch.length / 2);
       continue;
     }
+    if (r === null) throw new RepoGone(repo);
     batch.forEach((b, i) => {
       const entries = r?.["t" + i]?.entries;
       if (!Array.isArray(entries)) throw Object.assign(new Error("GraphQL returned no tree for " + (b.prefix || sha)), { code: "E_MINE_SOURCE" });
@@ -312,6 +337,7 @@ export function baseTree(gh: GitHub, repo: string, sha: string): { tree: Array<{
     });
   }
   const d = gh.graphql<any>(LIC_Q, { owner, name }).repository;
+  if (d === null) throw new RepoGone(repo);
   const base = licenceFiles(root ?? []);
   const licence = base && base === licenceFiles(d?.defaultBranchRef?.target?.tree?.entries ?? []) ? d?.licenseInfo?.spdxId ?? null : null;
   return { tree, truncated: unlisted || tree.length > TREE_MAX, licence };
@@ -321,15 +347,16 @@ const WIN_ISSUE_FIELD = "search(query: $q, type: ISSUE, first: 50, after: $after
 const WIN_DISC_FIELD = "search(query: $q, type: DISCUSSION, first: 50, after: $after) { issueCount: discussionCount pageInfo { hasNextPage endCursor } nodes { ... on Discussion { number title body createdAt authorAssociation author { login __typename } } } }";
 const iso = (s: string) => new Date(Date.parse(s)).toISOString().replace(/\.\d+Z$/, "Z");
 
-/** The window's issues and discussions created and pull requests merged, bots out, author association kept; the three searches share queries. */
+/** The window's issues and discussions created and pull requests merged, bots out, author association kept; the three searches share queries, and a check that GitHub still returns the repository rides the first. */
 export function readWindow(gh: GitHub, repo: string, win: { from: string; to: string }): WindowItem[] {
   const from = iso(win.from), to = iso(win.to);
   const kinds = ["issue", "pr", "discussion"] as const;
-  const { nodes } = searchMany(gh, [
+  const { nodes, extra } = searchMany(gh, [
     { query: (a, b) => "repo:" + repo + " is:issue created:" + a + ".." + b, from, to, field: WIN_ISSUE_FIELD },
     { query: (a, b) => "repo:" + repo + " is:pr is:merged merged:" + a + ".." + b, from, to, field: WIN_ISSUE_FIELD },
     { query: (a, b) => "repo:" + repo + " created:" + a + ".." + b, from, to, field: WIN_DISC_FIELD },
-  ], kinds.length);
+  ], kinds.length, [{ vars: repoVars(repo), field: "repository(owner: $owner, name: $name) { id }" }]);
+  if (extra[0] === null) throw new RepoGone(repo);
   const out: WindowItem[] = [];
   kinds.forEach((kind, i) => {
     for (const n of nodes[i]!) {

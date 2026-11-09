@@ -80,7 +80,7 @@ export interface GitHub {
   calls(): number;
 }
 
-const TRANSIENT = /502|503|504|timeout|ECONNRESET|secondary rate limit|abuse/i;
+export const TRANSIENT = /502|503|504|timeout|ECONNRESET|secondary rate limit|abuse/i;
 
 export function openGitHub(o: GitHubOptions): GitHub {
   const exec = o.exec ?? ghCli;

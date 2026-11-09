@@ -47,6 +47,7 @@ const one = (q, v) => {
   if (q.includes("compare(headRef")) return res({ ref: v.ref === "refs/tags/v1.0.0" && v.head === a.A ? { compare: { status: "BEHIND" } } : null });
   if (q.includes("object(expression:")) return res({ t0: { entries: [{ name: "LICENSE", type: "blob", size: 1000, oid: "c".repeat(40), object: {} }, { name: "src", type: "tree", size: 0, oid: "d".repeat(40), object: { entries: [{ name: "cli", type: "tree", size: 0, oid: "e".repeat(40), object: { entries: [{ name: "deep", type: "tree", size: 0, oid: "f".repeat(40) }] } }] } }] } });
   if (q.includes("object(oid:")) return res({ t0: { entries: [{ name: "export.ts", type: "blob", size: 500, oid: "1".repeat(40), object: {} }, { name: ".claude-notes.md", type: "blob", size: 5, oid: "2".repeat(40), object: {} }] } });
+  if (q.includes(") { id }")) return res({ id: "R_1" });
   if (q.includes("licenseInfo")) return res({ licenseInfo: { spdxId: "MIT" }, defaultBranchRef: { target: { tree: { entries: [{ name: "LICENSE", type: "blob", oid: "c".repeat(40) }] } } } });
   process.stderr.write("the fake has no answer for this query\\n");
   process.exit(1);
