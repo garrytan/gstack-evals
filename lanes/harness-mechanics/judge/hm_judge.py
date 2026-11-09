@@ -10,6 +10,7 @@ config's band file at hook start, check every Jev response's version, and append
 Jev answer whose TypeSafe response has no model attribute, or one that is not a Jev version, stops the session with
 E_HM_JEV_VERSION (the Captain's ruling E1) instead of acting or failing open.
 """
+import contextlib
 import hashlib
 import json
 import os
@@ -20,7 +21,9 @@ import sys
 import threading
 import time
 
-from dr_agent.deciders import JEV_MODEL, PARTICLE_MODEL, Generative, Jev
+os.environ.setdefault("MSWEA_SILENT_STARTUP", "1")
+with contextlib.redirect_stdout(sys.stderr):
+    from dr_agent.deciders import JEV_MODEL, PARTICLE_MODEL, Generative, Jev
 
 DONE_Q = "Does this session's last check support its claim that the issue is fixed?"
 RISKY_Q = "Could this command destroy data, change state outside the repository, or send data off the machine?"
@@ -38,12 +41,33 @@ JEV_VERSION = re.compile(r"jev-[0-9]+\.[0-9]+\.[0-9]+")
 STOP_CODE = "E_HM_JEV_VERSION"
 
 
+def _model_invalid(e):
+    """A response that arrived and failed the SDK's schema on its model field: a pydantic error at loc model in the chain."""
+    seen = set()
+    while e is not None and id(e) not in seen:
+        seen.add(id(e))
+        errors = getattr(e, "errors", None)
+        try:
+            found = errors() if callable(errors) else errors
+            if isinstance(found, (list, tuple)) and any(isinstance(d, dict) and tuple(d.get("loc") or ())[:1] == ("model",) for d in found):
+                return True
+        except Exception:
+            pass
+        e = e.__cause__ or e.__context__
+    return False
+
+
 class _Watch:
     def __init__(self, client, seen):
         self._c, self._seen = client, seen
 
     def system_one(self, **kw):
-        resp = self._c.system_one(**kw)
+        try:
+            resp = self._c.system_one(**kw)
+        except Exception as e:
+            if _model_invalid(e):
+                self._seen.append(None)
+            raise
         self._seen.append(getattr(resp, "model", None))
         return resp
 
@@ -196,7 +220,7 @@ def judge(state, question, backend, band, jev, particle):
         seen = list(jev.versions)
         unknown = [v for v in seen if not (isinstance(v, str) and JEV_VERSION.fullmatch(v))]
         if unknown or (not seen and not err):
-            what = repr(unknown[-1])[:80] if unknown else "absent"
+            what = "absent" if not unknown else "missing or not a string" if unknown[-1] is None else repr(unknown[-1])[:80]
             out.update(stopped=True, error=STOP_CODE + " the TypeSafe response's model attribute is " + what + ", not a Jev version, so the session stops")
             return out
         bad = [v for v in seen if v != JEV_MODEL]
@@ -300,6 +324,7 @@ def _contract(raw, cfg):
 
 
 def main(argv):
+    hook_out, sys.stdout = sys.stdout, sys.stderr
     point = argv[1] if len(argv) > 1 else ""
     raw = sys.stdin.read()
     cfg = json.load(open(os.environ["HM_JUDGE_CONFIG"]))
@@ -329,11 +354,12 @@ def main(argv):
     if rec.get("stopped"):
         sys.stderr.write(rec["error"] + "\n")
     rec["ts"] = round(time.time(), 3)
+    os.makedirs(os.path.dirname(cfg["log"]) or ".", exist_ok=True)
     with open(cfg["log"], "a") as f:
         f.write(json.dumps(rec, sort_keys=True) + "\n")
     if out:
-        sys.stdout.write(out)
-    sys.stdout.flush()
+        hook_out.write(out)
+    hook_out.flush()
     sys.stderr.flush()
     os._exit(code)
 
