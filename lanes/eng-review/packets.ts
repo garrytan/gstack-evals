@@ -14,10 +14,10 @@
 // - Label packets hold every key item (primary, mentioned and generic) and the own-test items, so every secondary reads the
 //   same labels. A B item's statement carries "Files and functions: " and its blamed sites.
 // - The shuffled-key packet holds the same lists and stock rows against the deranged unit's primary items only.
-// - The derangement runs over every keyed unit under --units with at least one primary item, in levels: units of one
-//   repository form one seeded cycle; the rest group by type and language, then by type, then all together; a group of two
-//   or more is one cycle and its singles fall to the next level. A last lone unit joins a cycle of its own type when one
-//   exists, else any cycle, by swapping with a seeded host.
+// - The derangement runs over every keyed unit under --units with at least one primary item, in levels: the same
+//   repository, then the same type and language, then the same type, then all. At each level a group of two or more
+//   unplaced units forms one seeded cycle; a lone unit joins an existing cycle whose units share its group at that level,
+//   by swapping with a seeded host, and otherwise falls to the next level.
 // - Stage 2 gold: per production judge, 20 anticipated and 20 not-anticipated gold cells over B, T and C items, each class
 //   drawn round-robin over (arm or anchor, item kind) strata in sorted order, seeded within each stratum. Gold packets
 //   number one per 8 of that model's unit-pass label packets (rounded up); the drawn cells group by their check packet
@@ -251,35 +251,34 @@ const empty = (inp: BuildInput, kind: MapKind): Built => ({ packets: [], map: { 
 export function derangeUnits(units: ReadonlyArray<{ id: string; repo: string; type: string; language: string }>, rng: () => number): Map<string, string> | null {
   if (units.length < 2) return null;
   const out = new Map<string, string>();
-  const cycleOf = new Map<string, string[]>();
-  const by = new Map(units.map((u) => [u.id, u]));
-  const cycle = (members: string[]) => {
-    const order = shuffle([...members].sort(), rng);
-    order.forEach((id, i) => {
-      out.set(id, order[(i + 1) % order.length]!);
-      cycleOf.set(id, order);
-    });
-  };
   const levels: Array<(u: (typeof units)[number]) => string> = [(u) => "r:" + u.repo, (u) => "tl:" + u.type + "/" + u.language, (u) => "t:" + u.type, () => "all"];
   let left = [...units].sort((a, b) => (a.id < b.id ? -1 : 1));
+  const placed: Array<(typeof units)[number]> = [];
   for (const level of levels) {
-    const groups = new Map<string, string[]>();
-    for (const u of left) groups.set(level(u), [...(groups.get(level(u)) ?? []), u.id]);
-    const singles: string[] = [];
+    const groups = new Map<string, Array<(typeof units)[number]>>();
+    for (const u of left) groups.set(level(u), [...(groups.get(level(u)) ?? []), u]);
+    const singles: Array<(typeof units)[number]> = [];
     for (const [, members] of [...groups].sort(([a], [b]) => (a < b ? -1 : 1))) {
-      if (members.length >= 2) cycle(members);
-      else singles.push(members[0]!);
+      if (members.length < 2) {
+        singles.push(members[0]!);
+        continue;
+      }
+      const order = shuffle(members, rng);
+      order.forEach((u, i) => out.set(u.id, order[(i + 1) % order.length]!.id));
+      placed.push(...members);
     }
-    left = left.filter((u) => singles.includes(u.id));
-  }
-  if (left.length === 1) {
-    const lone = left[0]!;
-    const hosts = [...out.keys()].sort();
-    const same = hosts.filter((h) => by.get(h)!.type === lone.type);
-    const pool = same.length ? same : hosts;
-    const host = pool[Math.floor(rng() * pool.length)]!;
-    out.set(lone.id, out.get(host)!);
-    out.set(host, lone.id);
+    left = [];
+    for (const s of singles) {
+      const hosts = placed.filter((p) => level(p) === level(s)).map((p) => p.id).sort();
+      if (!hosts.length) {
+        left.push(s);
+        continue;
+      }
+      const host = hosts[Math.floor(rng() * hosts.length)]!;
+      out.set(s.id, out.get(host)!);
+      out.set(host, s.id);
+      placed.push(s);
+    }
   }
   return out;
 }
