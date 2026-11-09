@@ -48,7 +48,7 @@ from minisweagent.models import get_model
 from minisweagent.models.litellm_model import LitellmModel
 
 HERE = Path(__file__).resolve().parent
-TOKEN = "gse_stub_session_token_0123456789"
+STUB_BEARER = "gse_stub_session_token_0123456789"
 SWEBENCH = Path(minisweagent.__file__).parent / "config/benchmarks/swebench.yaml"
 SUBMIT = "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
 AGENT = HERE.parents[1] / "lanes/decision-routing/agent"
@@ -80,7 +80,7 @@ class StubCase(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         port_file = Path(cls.tmp.name) / "port"
         cls.server = subprocess.Popen(
-            [sys.executable, "-I", str(HERE / "stubs/stub_proxy.py"), "--token", TOKEN, "--port-file", str(port_file)],
+            [sys.executable, "-I", str(HERE / "stubs/stub_proxy.py"), "--token", STUB_BEARER, "--port-file", str(port_file)],
             stdout=subprocess.DEVNULL,
         )
         for _ in range(100):
@@ -119,7 +119,7 @@ class StubCase(unittest.TestCase):
 
     def model(self, name: str, base: str, **extra) -> LitellmModel:
         model_config = dict(self.config["model"])
-        model_config["model_kwargs"] = {**model_config.get("model_kwargs", {}), "api_base": self.url + base, "api_key": TOKEN}
+        model_config["model_kwargs"] = {**model_config.get("model_kwargs", {}), "api_base": self.url + base, "api_key": STUB_BEARER}
         model_config.pop("model_name", None)
         model_config.update(extra)
         return get_model(name, model_config)
@@ -144,7 +144,7 @@ class CacheAfterDeciderAction(StubCase):
             def step(self):
                 if self.n_calls == 1 and not self.decided:
                     self.decided = True
-                    client = typesafe_sdk.TypeSafeClient(api_key=TOKEN, base_url=url + "/typesafe", model="jev-1.13.0")
+                    client = typesafe_sdk.TypeSafeClient(api_key=STUB_BEARER, base_url=url + "/typesafe", model="jev-1.13.0")
                     answer = client.system_one(
                         "the state",
                         {"next_step": {"type": "choice", "criteria": {"run_tests": "run the tests", "submit": "submit"}}},
@@ -242,7 +242,7 @@ class AllowanceStop(StubCase):
         model = self.model("openai/gpt-6.1-sol", "/openai/v1", cost_tracking="ignore_errors")
         with self.assertRaises(litellm.exceptions.APIError) as caught:
             litellm.completion(
-                model="openai/gpt-6.1-sol", messages=[{"role": "user", "content": "q"}], api_base=self.url + "/openai/v1", api_key=TOKEN
+                model="openai/gpt-6.1-sol", messages=[{"role": "user", "content": "q"}], api_base=self.url + "/openai/v1", api_key=STUB_BEARER
             )
         self.assertNotIsInstance(caught.exception, litellm.exceptions.PermissionDeniedError)
         self.assert_one_refusal("openai", caught.exception)
@@ -257,21 +257,21 @@ class AllowanceStop(StubCase):
 
     def test_openai_sdk_on_the_openrouter_route(self) -> None:
         self.script("openrouter", {"kind": "stop"})
-        client = openai.OpenAI(api_key=TOKEN, base_url=self.url + "/openrouter/v1")
+        client = openai.OpenAI(api_key=STUB_BEARER, base_url=self.url + "/openrouter/v1")
         with self.assertRaises(openai.PermissionDeniedError) as caught:
             client.chat.completions.create(model="particle-ai/particle-1", messages=[{"role": "user", "content": "q"}], max_tokens=8000)
         self.assert_one_refusal("openrouter", caught.exception)
 
     def test_typesafe_sdk(self) -> None:
         self.script("typesafe", {"kind": "stop"})
-        client = typesafe_sdk.TypeSafeClient(api_key=TOKEN, base_url=self.url + "/typesafe", model="jev-1.13.0")
+        client = typesafe_sdk.TypeSafeClient(api_key=STUB_BEARER, base_url=self.url + "/typesafe", model="jev-1.13.0")
         with self.assertRaises(typesafe_sdk.TypeSafePermissionDeniedError) as caught:
             client.system_one("state", {"safe": {"type": "noul", "instructions": "Is it safe?"}})
         self.assert_one_refusal("typesafe", caught.exception)
 
     def test_typesafe_body_encoding_follows_zstd_availability(self) -> None:
         self.script("typesafe", {"kind": "answers", "answers": {"next_step": {"type": "choice", "choice": "submit", "confidence": 0.9, "probabilities": {"run_tests": 0.1, "submit": 0.9}}}})
-        client = typesafe_sdk.TypeSafeClient(api_key=TOKEN, base_url=self.url + "/typesafe", model="jev-1.13.0")
+        client = typesafe_sdk.TypeSafeClient(api_key=STUB_BEARER, base_url=self.url + "/typesafe", model="jev-1.13.0")
         client.system_one("state", {"next_step": {"type": "choice", "criteria": {"run_tests": "run the tests", "submit": "submit"}}})
         [hit] = self.hits("typesafe")
         print(f"\ntypesafe-sdk request encoding: {hit['encoding'] or 'identity'}", file=sys.stderr)
@@ -281,10 +281,10 @@ class AllowanceStop(StubCase):
     def test_a_500_is_retried_so_the_counter_sees_retries(self) -> None:
         self.script("openrouter", {"kind": "status", "status": 500})
         self.script("typesafe", {"kind": "status", "status": 500})
-        client = openai.OpenAI(api_key=TOKEN, base_url=self.url + "/openrouter/v1", max_retries=1)
+        client = openai.OpenAI(api_key=STUB_BEARER, base_url=self.url + "/openrouter/v1", max_retries=1)
         client.chat.completions.create(model="particle-ai/particle-1", messages=[{"role": "user", "content": "q"}])
         self.assertEqual([h["status"] for h in self.hits("openrouter")], [500, 200])
-        ts = typesafe_sdk.TypeSafeClient(api_key=TOKEN, base_url=self.url + "/typesafe", model="jev-1.13.0")
+        ts = typesafe_sdk.TypeSafeClient(api_key=STUB_BEARER, base_url=self.url + "/typesafe", model="jev-1.13.0")
         ts.system_one("state", {"safe": {"type": "noul", "instructions": "Is it safe?"}})
         self.assertEqual([h["status"] for h in self.hits("typesafe")], [500, 200])
 
@@ -306,7 +306,7 @@ class RulingTwoEnvironment(unittest.TestCase):
 class ActionCounter(StubCase):
     def dr_model(self):
         mcfg = dict(self.config["model"])
-        mcfg["model_kwargs"] = {**mcfg["model_kwargs"], "api_base": self.url + "/anthropic", "api_key": TOKEN}
+        mcfg["model_kwargs"] = {**mcfg["model_kwargs"], "api_base": self.url + "/anthropic", "api_key": STUB_BEARER}
         mcfg.update(model_name="anthropic/claude-opus-5-5", set_cache_control="default_end", cost_tracking="ignore_errors")
         return model_class()(**mcfg)
 
@@ -348,7 +348,7 @@ class SessionStops(StubCase):
         config = {"cell": cell, "model": model, "task_file": str(tmp / "task.md"), "pin_file": str(tmp / "pin.json"), "questions_file": str(QUESTIONS),
                   "log_dir": str(tmp / "logs"), "cwd": str(repo)}
         (tmp / "session.json").write_text(json.dumps(config))
-        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(tmp), "DR_PROXY_URL": self.url, "DR_PROXY_TOKEN": TOKEN, "DR_SESSION": f"s-{cell}-{model}",
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(tmp), "DR_PROXY_URL": self.url, "DR_PROXY_TOKEN": STUB_BEARER, "DR_SESSION": f"s-{cell}-{model}",
                "MSWEA_COST_TRACKING": "ignore_errors", "LITELLM_LOCAL_MODEL_COST_MAP": "True"}
         boot = f"import sys; sys.path.insert(0, {str(AGENT)!r}); from dr_agent.session import main; sys.exit(main())"
         out = subprocess.run([sys.executable, "-I", "-c", boot, "--config", str(tmp / "session.json")], env=env, capture_output=True, text=True, timeout=120)

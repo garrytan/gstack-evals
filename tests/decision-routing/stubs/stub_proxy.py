@@ -293,13 +293,13 @@ class Handler(BaseHTTPRequestHandler):
         provider = ROUTES.get(self.path.split("?")[0])
         if provider is None:
             return self.send(404, {"detail": f"no stub route POST {self.path}"})
-        auth = self.headers.get("authorization") or ""
-        key = auth[7:] if auth.lower().startswith("bearer ") else self.headers.get("x-api-key")
+        header = self.headers.get("authorization") or ""
+        presented = header[7:] if header.lower().startswith("bearer ") else self.headers.get("x-api-key")
         with stub.lock:
-            hit = {"provider": provider, "path": self.path, "model": body.get("model"), "auth_ok": key == stub.token, "encoding": self.headers.get("content-encoding"),
+            hit = {"provider": provider, "path": self.path, "model": body.get("model"), "auth_ok": presented == stub.token, "encoding": self.headers.get("content-encoding"),
                    "max_tokens": body.get("max_tokens"), "max_completion_tokens": body.get("max_completion_tokens")}
             stub.hits.append(hit)
-            if key != stub.token:
+            if presented != stub.token:
                 hit["status"] = 401
                 return self.send(401, {"type": "error", "error": {"type": "authentication_error", "message": "stub: wrong bearer"}})
             if body.get("stream"):

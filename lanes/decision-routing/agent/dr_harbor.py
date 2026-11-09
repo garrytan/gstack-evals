@@ -240,9 +240,9 @@ class DecisionRoutingAgent(MiniSweAgent):
         proxy_base = os.environ.get("DR_PROXY_BASE")
         if not proxy_base:
             raise DrManagementError("DR_PROXY_BASE must be set in the Harbor process")
-        session = self.logs_dir.parent.name
+        session_name = self.logs_dir.parent.name
         await self.exec_as_root(environment, command=f"mkdir -p {RUN_DIR} {DR_LOG_DIR} {EnvironmentPaths.artifacts_dir}")
-        await self._upload_json(environment, self.session_config(session), RUN_DIR / "session.json")
+        await self._upload_json(environment, self.session_config(session_name), RUN_DIR / "session.json")
         with tempfile.TemporaryDirectory() as tmp:
             task = Path(tmp) / "task.md"
             task.write_text(instruction)
@@ -265,7 +265,7 @@ class DecisionRoutingAgent(MiniSweAgent):
             "DR_PROXY_URL": f"{proxy_base.rstrip('/')}/{binding['slot']}",
             "DR_CELL": self._cell,
             "DR_MODEL": self._model,
-            "DR_SESSION": session,
+            "DR_SESSION": session_name,
             "MSWEA_COST_TRACKING": "ignore_errors",
             "LITELLM_LOCAL_MODEL_COST_MAP": "True",
         }
@@ -302,7 +302,7 @@ class DecisionRoutingAgent(MiniSweAgent):
             if cell_attempt["attempt"] == 1:
                 await self._keep_attempt(environment, summary, binding["meter_id"])
             raise DrInfraError(
-                f"infra_error: session {session} got no successful model response "
+                f"infra_error: session {session_name} got no successful model response "
                 f"(exit_status {summary.get('exit_status')}, session exit code {exit_code})"
             )
 
