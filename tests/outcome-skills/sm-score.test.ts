@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fixtureRepo, patchOf } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
-import { decide, extractChange, readings, settleAdapted, testHunks, type ReadingResult, type RunView } from "../../lanes/outcome-skills/statemachines/score.ts";
+import { buildFailed, decide, extractChange, readings, settleAdapted, testHunks, type ReadingResult, type RunView } from "../../lanes/outcome-skills/statemachines/score.ts";
 
 const P = "pass", F = "fail";
 const RUST = ["pub fn bump(x: i32) -> i32 {", "    x + 2", "}", "#[cfg(test)]", "mod tests {", "    use super::*;", "    #[test]", "    fn keeps_sign() {", "        assert!(bump(-5) < 0);", "    }", "}", ""].join("\n");
@@ -119,6 +119,15 @@ describe("outcome rules (steps 5 to 7)", () => {
     const v = decide(["a", "b", "c"], ["s", "t", "u", "b"], known, [run({ a: F, b: P, s: "skip", t: F })]);
     expect(v).toMatchObject({ outcome: "no_fix_broke", wants_more: true });
     expect(v.broke_by).toEqual({ stable_missing: ["u"], stable_failed: ["s", "t"], new_test_failed: [], build_failed: false });
+  });
+  test("a failed rebuild is a build failure only where the rebuild rule applies; a stale or missing report is one everywhere", () => {
+    const t = (exits: number[], built_nothing: "no_fresh_report" | null = null) => ({ stopped: false, exits, built_nothing });
+    expect(buildFailed(t([1, 0]), 1, true, {})).toBe(true);
+    expect(buildFailed(t([1, 0]), 1, false, {})).toBe(false);
+    expect(buildFailed(t([0, 0]), 1, true, {})).toBe(false);
+    expect(buildFailed(t([1, 0], "no_fresh_report"), 1, false, {})).toBe(true);
+    expect(buildFailed(t([]), 1, false, {})).toBe(true);
+    expect(buildFailed(t([0, 0]), 1, true, null)).toBe(true);
   });
   test("a build failure misses every test", () => {
     const v = decide(["a", "b", "c"], ["s", "t", "u"], known, [run({ a: P, b: P, c: P, s: P, t: P, u: P }, true)]);

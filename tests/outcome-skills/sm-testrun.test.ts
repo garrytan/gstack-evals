@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The state machines test run's container arguments (keyless) and, with GSTACK_EVALS_DOCKER=1, a hardened run that reads
 // the image's own root-owned home, finds that home through its passwd entry and writes under HOME, while the privilege
-// flags stay as they were.
+// flags stay as they were; the stale report rule and the rebuild rule on a small built fixture.
 import { describe, expect, test } from "bun:test";
-import { PY_IMAGE, runArgs, runTests } from "../../lanes/outcome-skills/statemachines/testrun.ts";
+import { buildFailed } from "../../lanes/outcome-skills/statemachines/score.ts";
+import { parseRun, PY_IMAGE, runArgs, runTests } from "../../lanes/outcome-skills/statemachines/testrun.ts";
 import { docker } from "../../lanes/real-outcome/task/docker.ts";
 
 const on = process.env.GSTACK_EVALS_DOCKER === "1";
@@ -42,6 +43,48 @@ describe.skipIf(!on)("hardened home (docker)", () => {
       expect(t.log).toBe("t1 PASSED\n");
       const left = docker(["volume", "ls", "-q", "--filter", "name=sm-homeprobe-" + process.pid]).stdout.trim();
       expect(left).toBe("");
+    } finally {
+      docker(["volume", "rm", "-f", vol]);
+    }
+  }, 180_000);
+});
+
+describe.skipIf(!on)("stale reports and the rebuild rule (docker)", () => {
+  const commands = { rebuild: ["sh build.sh"], test: ["mkdir -p out && sh bin/t > out/report.txt"], print: ["cat out/report.txt"] };
+  const parse = (_s: string, log: string) => Object.fromEntries(log.trim().split(/\n/).filter(Boolean).map((l) => l.split(" ") as [string, string]));
+  const BUILD = "mkdir -p bin && cp t.sh bin/t";
+  function fixture(build: string): string {
+    const vol = "sm-test-rule-" + process.pid + "-" + Math.random().toString(36).slice(2, 8);
+    docker(["volume", "create", vol]);
+    const src = 'set -e; cd /w; echo "$1" > build.sh; echo "echo t1 pass" > t.sh; mkdir -p out; echo "t1 pass" > out/report.txt; touch -d 2020-01-01 out/report.txt';
+    const r = docker(["run", "--rm", "--network", "none", "-v", vol + ":/w", "--entrypoint", "sh", PY_IMAGE, "-c", src, "sh", build]);
+    if (r.status !== 0) throw new Error("fixture: " + r.stderr);
+    return vol;
+  }
+  test("a stale report with a failed rebuild parses nothing; a fresh run parses as before", () => {
+    const stale = fixture("exit 1"), fresh = fixture(BUILD);
+    try {
+      const a = runTests({ image: PY_IMAGE, volume: stale, repoDir: "/w", mode: "root", label: "stale", commands: { ...commands, test: ["test -x bin/t"] } });
+      expect(a.reports).toMatchObject({ refused: 1, fresh: 0 });
+      expect(a.built_nothing).toBe("rebuild_failed");
+      expect(parseRun(a, "", "stale", parse)).toEqual({});
+      const b = runTests({ image: PY_IMAGE, volume: fresh, repoDir: "/w", mode: "root", label: "fresh", commands });
+      expect(b.exits).toEqual([0, 0]);
+      expect(b.built_nothing).toBeNull();
+      expect(parseRun(b, "", "fresh", parse)).toEqual({ t1: "pass" });
+    } finally {
+      docker(["volume", "rm", "-f", stale, fresh]);
+    }
+  }, 180_000);
+  test("where the rule applies, a change that breaks the rebuild of a unit built from source is a build failure", () => {
+    const vol = fixture(BUILD + " && exit 2");
+    try {
+      const t = runTests({ image: PY_IMAGE, volume: vol, repoDir: "/w", mode: "root", label: "broke", commands, rule: "applies" });
+      expect(t.exits).toEqual([2, 0]);
+      expect(t.built_nothing).toBe("rebuild_failed");
+      expect(buildFailed(t, 1, true, parseRun(t, "", "broke", parse))).toBe(true);
+      const e = runTests({ image: PY_IMAGE, volume: vol, repoDir: "/w", mode: "root", label: "exempt", commands, rule: "exempt" });
+      expect(buildFailed(e, 1, false, parseRun(e, "", "exempt", parse))).toBe(false);
     } finally {
       docker(["volume", "rm", "-f", vol]);
     }

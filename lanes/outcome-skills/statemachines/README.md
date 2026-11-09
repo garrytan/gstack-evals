@@ -462,4 +462,11 @@ model or unit (E_SM_PACKET).
   command, sed, awk, perl, bash -lc, ls, a find -exec of sh).
 - The oracle records the reading on the unit (reports) and each run's stale_deleted, stale_refused and built_nothing. A
   scoring run that built nothing is a build failure.
+- Rebuild rule (c): the oracle runs every tree with the rule off, then sets oracle.rebuild_rule from the fixed runs:
+  applies when the rebuild exits 0 on every fixed run (fixed_rebuild_exits records each), and then a base run whose
+  rebuild failed parses nothing. Scoring refuses a unit without the flag. An exempt unit keeps the freshness check and the
+  fail-to-pass rule. Stale binary guard, as read here: each fixed run whose rebuild failed passes every kept fail-to-pass
+  id and wrote a report newer than its start mark, and no kept id passes on any base run. A print command read as having
+  no report paths shows no fresh output, so an exempt unit with one drops. A unit that fails the guard drops as
+  E_SM_ORACLE_UNSTABLE with a reason starting "stale binary guard".
 

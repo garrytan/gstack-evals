@@ -2,8 +2,8 @@
 // Docker tests for the state machines oracle (GSTACK_EVALS_DOCKER=1): the parser sandbox fails closed on network, the
 // 15-minute rule stops a slow run (a test-only limit), and the keep rule keeps a stable unit and drops a flaky one.
 import { describe, expect, test } from "bun:test";
-import { cargoTargets, judge, targetReading } from "../../lanes/outcome-skills/statemachines/oracle.ts";
-import { oracleF2p, type SmUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
+import { cargoTargets, judge, rebuildFlag, staleBinaryGuard, targetReading } from "../../lanes/outcome-skills/statemachines/oracle.ts";
+import { oracleF2p, type OracleRun, type SmUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
 import { PY_IMAGE, runParser, runTests } from "../../lanes/outcome-skills/statemachines/testrun.ts";
 import { docker } from "../../lanes/real-outcome/task/docker.ts";
 
@@ -74,6 +74,32 @@ describe.skipIf(!on)("oracle in Docker", () => {
       docker(["volume", "rm", "-f", vol]);
     }
   }, 120_000);
+});
+
+describe("rebuild rule flag and the stale binary guard (keyless)", () => {
+  const P = "pass", F = "fail";
+  const fx = (n: number, exits: number[], fresh: number | null = 1): OracleRun => ({ tree: "fixed", n, wall_ms: 1, exit: 0, parsed_sha256: null, stopped: false, exits, stale_fresh: fresh });
+  test("the rule applies when the rebuild exits 0 on every fixed run, and each fixed run's rebuild exits are recorded", () => {
+    expect(rebuildFlag([fx(1, [0, 1]), fx(2, [0, 0]), fx(3, [0, 1])], 1)).toEqual({ applies: true, fixed_rebuild_exits: [[0], [0], [0]] });
+  });
+  test("a unit whose rebuild fails on any fixed run, or leaves no rebuild exit, is exempt", () => {
+    expect(rebuildFlag([fx(1, [0, 0]), fx(2, [1, 0]), fx(3, [0, 0])], 1)).toEqual({ applies: false, fixed_rebuild_exits: [[0], [1], [0]] });
+    expect(rebuildFlag([fx(1, [])], 1).applies).toBe(false);
+  });
+  test("an exempt unit passes the guard when its fixed runs pass the fail-to-pass set while the rebuild fails and wrote fresh reports", () => {
+    const fixed = [1, 2, 3].map((n) => ({ run: fx(n, [1, 0]), parsed: { a: P, s: P } }));
+    expect(staleBinaryGuard(fixed, [{ a: F, s: P }, { a: F, s: P }, { a: F, s: P }], ["a"], 1)).toBeNull();
+  });
+  test("an exempt unit fails the guard when a fixed run with a failed rebuild wrote no fresh test output", () => {
+    const fixed = [{ run: fx(1, [1, 0], 0), parsed: { a: P } }, { run: fx(2, [1, 0], null), parsed: { a: P } }];
+    expect(staleBinaryGuard(fixed.slice(0, 1), [{ a: F }], ["a"], 1)).toMatch(/^stale binary guard/);
+    expect(staleBinaryGuard(fixed.slice(1), [{ a: F }], ["a"], 1)).toMatch(/^stale binary guard/);
+  });
+  test("an exempt unit fails the guard when a fail-to-pass id passes on a base run or fails on a fixed run whose rebuild failed", () => {
+    const ok = { run: fx(1, [1, 0]), parsed: { a: P } };
+    expect(staleBinaryGuard([ok], [{ a: P }], ["a"], 1)).toMatch(/^stale binary guard/);
+    expect(staleBinaryGuard([{ run: fx(1, [1, 0]), parsed: { a: F } }], [{ a: F }], ["a"], 1)).toMatch(/^stale binary guard/);
+  });
 });
 
 describe("cargo target reading (keyless)", () => {

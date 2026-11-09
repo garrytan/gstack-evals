@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { printReading } from "../../lanes/outcome-skills/statemachines/reports.ts";
-import { parseRun, runScript, settleRun, type TestRun } from "../../lanes/outcome-skills/statemachines/testrun.ts";
+import { parseRun, runScript, settleRun, type RebuildRule, type TestRun } from "../../lanes/outcome-skills/statemachines/testrun.ts";
 
 describe("report paths read from the print command", () => {
   test("a cat of a glob is a report path under the command's cd", () => {
@@ -64,11 +64,11 @@ function tree(): string {
   return d;
 }
 
-function run(d: string, commands: { rebuild: string[]; test: string[]; print: string[] }): TestRun {
+function run(d: string, commands: { rebuild: string[]; test: string[]; print: string[] }, rule: RebuildRule = "applies"): TestRun {
   const tmp = mkdtempSync(join(tmpdir(), "sm-reports-tmp-"));
   dirs.push(tmp);
   const r = spawnSync("bash", ["-s"], { cwd: d, input: runScript(commands, d), encoding: "utf8", env: { PATH: process.env.PATH!, TMPDIR: tmp, HOME: tmp } });
-  return settleRun({ stdout: r.stdout, stderr: r.stderr, status: r.status ?? -1, wall_ms: 1, timed_out: false }, commands, 60_000);
+  return settleRun({ stdout: r.stdout, stderr: r.stderr, status: r.status ?? -1, wall_ms: 1, timed_out: false }, commands, 60_000, rule);
 }
 
 const PRINT = ["cat target/reports/*.xml"];
@@ -104,6 +104,15 @@ describe("the stale report rule on a run", () => {
     const t = run(d, { rebuild: ["exit 1"], test: ["mkdir -p target/reports && echo 'new PASSED' > target/reports/TEST-new.xml"], print: PRINT });
     expect(t.exits).toEqual([1, 0]);
     expect(t.built_nothing).toBe("rebuild_failed");
+  });
+  test("a unit exempt from the rebuild rule parses a fresh run whose rebuild failed, and still parses nothing from a stale report", () => {
+    const d = tree();
+    const t = run(d, { rebuild: ["exit 1"], test: ["mkdir -p target/reports && echo 'new PASSED' > target/reports/TEST-new.xml"], print: PRINT }, "exempt");
+    expect(t.exits).toEqual([1, 0]);
+    expect(t.built_nothing).toBeNull();
+    expect(parseRun(t, "src", "x", (_s, log) => ({ got: log.trim() }))).toEqual({ got: "new PASSED" });
+    const old = run(tree(), { rebuild: ["exit 1"], test: ["exit 3"], print: PRINT }, "exempt");
+    expect(old.built_nothing).toBe("no_fresh_report");
   });
   test("a test command's non-zero exit never means the run built nothing", () => {
     for (const rebuild of [[], ["true"]]) {

@@ -14,7 +14,7 @@ import { classifyHits, leakCheck, needles, ownNames, scan, type LeakHit, type Hi
 import { needsBase, splitFix } from "./fixsplit.ts";
 import { runBash } from "./history.ts";
 import { scope } from "./scope.ts";
-import { applyPatches, copyVolume, dropVolume, LIMIT_MS, parseRun, passed, runName, runTests, type Mode } from "./testrun.ts";
+import { applyPatches, copyVolume, dropVolume, LIMIT_MS, parseRun, passed, runName, runTests, type Mode, type RebuildRule } from "./testrun.ts";
 import { printReading } from "./reports.ts";
 import { addUnitFile, readUnit, saveUnit, smFail, type OracleRun, type SmUnit, type TargetReading } from "./unit.ts";
 import { join } from "node:path";
@@ -193,9 +193,10 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
     }
     const bad = applyPatches(image, copy, u.repo_dir, patches, mode);
     if (bad) return { run: { tree, n, wall_ms: 0, exit: -1, parsed_sha256: null, stopped: false, exits: [] }, parsed: null, log: "" };
-    const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n });
+    const rule: RebuildRule = u.oracle?.rebuild_rule?.applies ? "applies" : "exempt";
+    const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n, rule });
     const log = t.log === t.stderr ? t.stderr : t.stderr + "\n" + t.log;
-    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing };
+    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing, stale_fresh: t.reports ? t.reports.fresh : null };
     if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true, exits: t.exits, ...stale }, parsed: null, log };
     const parsed = parseRun(t, rf(join(dir, "parser.py"), "utf8"), u.id + "-" + tree + n);
     return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false, exits: t.exits, ...stale }, parsed, log };
@@ -222,6 +223,28 @@ export function judge(f2p: string[], base: (Record<string, string> | null)[], fi
   if (!kept.length) return { kept: false, ...out, reason: "no fail-to-pass test" };
   if (!stable.length) return { kept: false, ...out, reason: "no stable test" };
   return { kept: true, ...out, reason: "kept" };
+}
+
+/** Rule (c)'s flag: the rebuild rule applies only where the rebuild exits 0 on every fixed oracle run. */
+export function rebuildFlag(fixed: OracleRun[], rebuildCommands: number): { applies: boolean; fixed_rebuild_exits: number[][] } {
+  const fixed_rebuild_exits = fixed.map((r) => (r.exits ?? []).slice(0, rebuildCommands));
+  return { applies: fixed_rebuild_exits.every((x) => x.length === rebuildCommands && x.every((e) => e === 0)), fixed_rebuild_exits };
+}
+
+/** The stale binary guard for a unit exempt from the rebuild rule. Each fixed run whose rebuild failed must pass every kept
+ *  fail-to-pass id and must have written fresh test output (a report newer than its start mark), and no kept id may pass
+ *  on any base run. Returns why the guard fails, or null. */
+export function staleBinaryGuard(fixed: { run: OracleRun; parsed: Record<string, string> }[], base: Record<string, string>[], f2p: string[], rebuildCommands: number): string | null {
+  const onBase = f2p.filter((id) => base.some((r) => passed(r, id)));
+  if (onBase.length) return "stale binary guard: fail-to-pass passes on a base run: " + onBase.slice(0, 20).join(", ");
+  for (const f of fixed) {
+    const exits = (f.run.exits ?? []).slice(0, rebuildCommands);
+    if (exits.length === rebuildCommands && exits.every((e) => e === 0)) continue;
+    if (!f.run.stale_fresh) return "stale binary guard: fixed run " + f.run.n + " failed its rebuild and wrote no fresh test output";
+    const missed = f2p.filter((id) => !passed(f.parsed, id));
+    if (missed.length) return "stale binary guard: fixed run " + f.run.n + " failed its rebuild and does not pass " + missed.slice(0, 20).join(", ");
+  }
+  return null;
 }
 
 /** The whole oracle on one unit dir. Writes unit.json's oracle, image, strip and scope fields and returns the verdict. */
@@ -256,6 +279,15 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
         logs[tree].push(r.log);
       }
     }
+    const nb = u.commands.rebuild.length;
+    u.oracle.rebuild_rule = rebuildFlag(u.oracle.runs.filter((r) => r.tree === "fixed"), nb);
+    if (u.oracle.rebuild_rule.applies)
+      u.oracle.runs.filter((r) => r.tree === "base").forEach((r, k) => {
+        if (!(r.exits ?? []).slice(0, nb).some((e) => e !== 0)) return;
+        r.built_nothing = "rebuild_failed";
+        r.parsed_sha256 = sha(JSON.stringify({}));
+        base[k] = {};
+      });
     const j = judge(u.tests.f2p, base, fixed);
     u.oracle.stable = j.stable;
     u.oracle.stable_sha256 = sha(j.stable.join("\n"));
@@ -265,8 +297,10 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
     if (u.lang === "rust") u.oracle.targets = targetReading(logs.base, logs.fixed);
     u.oracle.reason = j.reason;
     u.oracle.f2p_ok = !j.failing.length && base.every(Boolean) && fixed.every(Boolean);
-    u.oracle.verdict = j.kept ? "kept" : "E_SM_ORACLE_UNSTABLE";
-    return done(u.oracle.verdict, j.reason + (j.failing.length ? ": " + j.failing.slice(0, 20).join(", ") : "") + "; fail-to-pass kept " + j.f2p.length + " removed " + j.removed.length + " flaky " + j.flaky.length + "; stable " + j.stable.length + (u.oracle.targets ? "; cargo stopped early " + u.oracle.targets.cargo_stopped_early : ""));
+    const guard = j.kept && !u.oracle.rebuild_rule.applies ? staleBinaryGuard(u.oracle.runs.filter((r) => r.tree === "fixed").map((run, i) => ({ run, parsed: fixed[i]! })), base as Record<string, string>[], j.f2p, nb) : null;
+    if (guard) u.oracle.reason = guard;
+    u.oracle.verdict = j.kept && !guard ? "kept" : "E_SM_ORACLE_UNSTABLE";
+    return done(u.oracle.verdict, (guard ?? j.reason) + "; rebuild rule " + (u.oracle.rebuild_rule.applies ? "applies" : "exempt") + " (fixed rebuild exits " + u.oracle.rebuild_rule.fixed_rebuild_exits.map((x) => x.join(",")).join(" ") + ");" + (j.failing.length ? ": " + j.failing.slice(0, 20).join(", ") : "") + "; fail-to-pass kept " + j.f2p.length + " removed " + j.removed.length + " flaky " + j.flaky.length + "; stable " + j.stable.length + (u.oracle.targets ? "; cargo stopped early " + u.oracle.targets.cargo_stopped_early : ""));
   } catch (e) {
     const code = codeOf(e);
     if (u.oracle) u.oracle.verdict = code;

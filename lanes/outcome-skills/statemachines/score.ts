@@ -284,15 +284,22 @@ export function mergeTests(u: SmUnit, image: string, volume: string, hunks: stri
   return { merge: "clean", three_way: m.stdout.split("\n").filter((l) => l.startsWith("SM_3WAY ")).length, conflict: [] };
 }
 
+/** A scoring run's build failure: a stopped run, no parsed log, a run that built nothing, a missing rebuild exit, or, where
+ *  the unit's rebuild rule applies, a rebuild command that exits non-zero. */
+export function buildFailed(t: { stopped: boolean; exits: number[]; built_nothing: string | null }, rebuildCommands: number, applies: boolean, parsed: Record<string, string> | null): boolean {
+  return t.stopped || !parsed || t.built_nothing !== null || t.exits.length < rebuildCommands || (applies && t.exits.slice(0, rebuildCommands).some((x) => x !== 0));
+}
+
 /** One scoring run on a fresh copy of volume: the unit's rebuild, test and print commands, then the dataset's parser. A
- *  build failure is a rebuild command that exits non-zero, a stopped run or a log the parser gives nothing for. */
+ *  build failure is buildFailed's. A unit whose oracle record has no rebuild rule flag refuses. */
 export function scoringRun(dir: string, u: SmUnit, image: string, volume: string, n: number, mode: Mode, label: string, limitMs?: number): { view: RunView; summary: RunSummary; log: string } {
+  const applies = (u.oracle?.rebuild_rule ?? smFail("E_SM_UNIT", u.id + " has no rebuild rule flag on its oracle record; rerun its oracle")).applies;
   const run = volume + "-r" + n;
   copyVolume(image, volume, run, mode);
   try {
-    const t = runTests({ image, volume: run, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, ...(limitMs ? { limitMs } : {}), label: u.id + "-" + label + n });
+    const t = runTests({ image, volume: run, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, ...(limitMs ? { limitMs } : {}), label: u.id + "-" + label + n, rule: applies ? "applies" : "exempt" });
     const parsed = t.stopped ? null : parseRun(t, readFileSync(join(dir, "parser.py"), "utf8"), u.id + "-" + label + n);
-    const build_failed = t.stopped || !parsed || t.built_nothing !== null || t.exits.length < u.commands.rebuild.length || t.exits.slice(0, u.commands.rebuild.length).some((x) => x !== 0);
+    const build_failed = buildFailed(t, u.commands.rebuild.length, applies, parsed);
     return { view: { parsed, build_failed }, summary: { n, wall_ms: t.wall_ms, exits: t.exits, stopped: t.stopped, build_failed, parsed_sha256: parsed ? sha(JSON.stringify(parsed)) : null, stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing }, log: t.log === t.stderr ? t.log : t.stderr + "\n" + t.log };
   } finally {
     dropVolume(run);
@@ -340,6 +347,7 @@ export function settleAdapted(strict: ReadingResult, o: { scored: boolean; same:
 export function scoreFirst(i: ScoreInput): OutcomeRecord {
   const u = readUnit(i.unitDir);
   if (!u.oracle?.stable.length) smFail("E_SM_UNIT", u.id + " has no oracle stable set");
+  if (!u.oracle?.rebuild_rule) smFail("E_SM_UNIT", u.id + " has no rebuild rule flag on its oracle record; rerun its oracle");
   const mode = i.mode ?? "hardened";
   const image = u.image.runtime_id ?? smFail("E_SM_UNIT", u.id + " has no runtime image");
   const volume = i.volume ?? treeVolume(u.id);

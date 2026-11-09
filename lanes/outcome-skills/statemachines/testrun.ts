@@ -78,15 +78,19 @@ export function runScript(c: { rebuild: string[]; test: string[]; print: string[
  *  tree), and after the tests the files refused as not written by this run (moved aside), the ones that could not be moved
  *  aside, and the fresh ones. null when the print command reads no report path (reports.ts). */
 export interface Reports { deleted: number; kept: number; refused: number; unhidden: number; fresh: number }
-/** Why a run built nothing: a separate rebuild step exited non-zero, no report the run wrote is left for the print command,
- *  or a stale report could not be moved aside. A test command's own exit is never one. */
+/** Why a run built nothing: a separate rebuild step exited non-zero (only where the unit's rebuild rule applies), no report
+ *  the run wrote is left for the print command, or a stale report could not be moved aside. A test command's own exit is
+ *  never one. */
 export type BuiltNothing = "rebuild_failed" | "no_fresh_report" | "stale_unhidden";
+/** The unit's rebuild rule (unit.ts OracleRecord rebuild_rule): "applies" where the rebuild exits 0 on every fixed oracle
+ *  run, so a rebuild that exits non-zero means the run built nothing; "exempt" otherwise. */
+export type RebuildRule = "applies" | "exempt";
 
 /** exits: each rebuild and test command's exit status, in order (the SM_EXIT lines the run script writes). */
 export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr: string; stderr_tail: string; exits: number[]; reports: Reports | null; built_nothing: BuiltNothing | null }
 
 /** A finished run script's result read into a TestRun, with the stale report counts and the built-nothing reason. */
-export function settleRun(r: { stdout: string; stderr: string; status: number; wall_ms: number; timed_out?: boolean; error?: unknown }, commands: { rebuild: string[] }, limit: number): TestRun {
+export function settleRun(r: { stdout: string; stderr: string; status: number; wall_ms: number; timed_out?: boolean; error?: unknown }, commands: { rebuild: string[] }, limit: number, rule: RebuildRule = "applies"): TestRun {
   const stopped = !!r.timed_out || r.error !== undefined || r.wall_ms >= limit;
   const i = r.stdout.indexOf(PRINT_MARK);
   const print = i < 0 ? "" : r.stdout.slice(i + PRINT_MARK.length + 1);
@@ -94,7 +98,7 @@ export function settleRun(r: { stdout: string; stderr: string; status: number; w
   const m = r.stderr.match(/^SM_REPORTS deleted=(\d+) kept=(\d+) refused=(\d+) unhidden=(\d+) fresh=(\d+)$/m);
   const reports = m ? { deleted: +m[1]!, kept: +m[2]!, refused: +m[3]!, unhidden: +m[4]!, fresh: +m[5]! } : null;
   const n = commands.rebuild.length;
-  const built_nothing: BuiltNothing | null = n && exits.slice(0, n).some((x) => x !== 0) ? "rebuild_failed" : reports?.unhidden ? "stale_unhidden" : reports && !reports.fresh ? "no_fresh_report" : null;
+  const built_nothing: BuiltNothing | null = rule === "applies" && n && exits.slice(0, n).some((x) => x !== 0) ? "rebuild_failed" : reports?.unhidden ? "stale_unhidden" : reports && !reports.fresh ? "no_fresh_report" : null;
   return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr: r.stderr, stderr_tail: r.stderr.slice(-2000), exits, reports, built_nothing };
 }
 
@@ -123,7 +127,7 @@ export function runArgs(o: { image: string; volume: string; repoDir: string; wor
   return ["--rm", "-i", "--network", "none", ...hard, "--cpus", LIMITS.cpus, "--memory", LIMITS.memory, "--pids-limit", LIMITS.pids, "-v", o.volume + ":" + o.repoDir, "-w", o.workDir || o.repoDir, "--entrypoint", "bash", o.image, "-s"];
 }
 
-export function runTests(o: { image: string; volume: string; repoDir: string; workDir?: string; commands: { rebuild: string[]; test: string[]; print: string[] }; mode: Mode; limitMs?: number; label: string }): TestRun {
+export function runTests(o: { image: string; volume: string; repoDir: string; workDir?: string; commands: { rebuild: string[]; test: string[]; print: string[] }; mode: Mode; limitMs?: number; label: string; rule?: RebuildRule }): TestRun {
   const limit = o.limitMs ?? LIMIT_MS;
   const name = runName(o.label);
   const homeVol = o.mode === "hardened" ? name + "-home" : null;
@@ -134,7 +138,7 @@ export function runTests(o: { image: string; volume: string; repoDir: string; wo
   } finally {
     if (homeVol) dropVolume(homeVol);
   }
-  return settleRun(r, o.commands, limit);
+  return settleRun(r, o.commands, limit, o.rule);
 }
 
 const RUNNER = [
