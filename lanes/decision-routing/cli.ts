@@ -14,6 +14,8 @@ export const SUBCOMMANDS = [
   { name: "pin", summary: "Write the pin file and its sha256 from the tuned bands, questions.json and the frozen rules.", module: "tune/pin-cli.ts", owner: "B6" },
   { name: "labels", summary: "Grounded labels: the constructed safety set, per-trial labels in label containers, the join for the tuner.", module: "labels/cli.ts", owner: "B7" },
   { name: "dry-run", summary: "The keyless dry run that drives every frozen rule.", module: "dryrun.ts", owner: "B8" },
+  { name: "answer", summary: "Answer logged states with the deciders on the runner host: one lease, one decider-only slot per session, the leak scan on.", module: "host/answer.ts", owner: "B3 host" },
+  { name: "plans", summary: "Write each stage's batch plan from the frozen draw lists.", module: "host/plans.ts", owner: "B3 host" },
   { name: "run", summary: "Run a batch on the runner host: leases, proxies, Harbor jobs and stop files.", module: "host/controller.ts", owner: "B3 host" },
 ] as const;
 
