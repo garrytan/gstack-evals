@@ -51,13 +51,15 @@ export type ModelKey = keyof typeof MODELS;
 // The six run arms as Lane B arm specs (grid.ts armSpec). bo2 has no session: none plus plain-2 plus one picker call.
 // The judge backend is not an agent option yet; the judgment hooks' build adds it.
 const TAIL = ":system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=" + CLOSING.key;
+// D1: every arm whose tar holds gstack runs gstack-checks trust before the session; none and plain-2 never do.
+const TRUST = ":checks_trust=true";
 export const ARMS: Record<HmArm, { spec: string; tar: string; backend?: "jev" | "p1" }> = {
   none: { spec: "none" + TAIL, tar: "none" },
   "plain-2": { spec: "plain-2:tar=none" + TAIL, tar: "none" },
-  "verify-prose": { spec: "verify-prose:tar=prose:told=verify" + TAIL, tar: "prose" },
-  "verify-hook": { spec: "verify-hook:tar=hook:told=verify" + TAIL, tar: "hook" },
-  "judge-jev": { spec: "judge-jev:tar=judge:told=verify" + TAIL, tar: "judge", backend: "jev" },
-  "judge-p1": { spec: "judge-p1:tar=judge:told=verify" + TAIL, tar: "judge", backend: "p1" },
+  "verify-prose": { spec: "verify-prose:tar=prose:told=verify" + TRUST + TAIL, tar: "prose" },
+  "verify-hook": { spec: "verify-hook:tar=hook:told=verify" + TRUST + TAIL, tar: "hook" },
+  "judge-jev": { spec: "judge-jev:tar=judge:told=verify" + TRUST + TAIL, tar: "judge", backend: "jev" },
+  "judge-p1": { spec: "judge-p1:tar=judge:told=verify" + TRUST + TAIL, tar: "judge", backend: "p1" },
 };
 export const FOUR: HmArm[] = ["none", "plain-2", "verify-prose", "verify-hook"];
 export const JUDGE: HmArm[] = ["judge-jev", "judge-p1"];
@@ -202,3 +204,16 @@ export const VM_HOURS_PER_SESSION = 0.05;
 export const SCREEN = { workdir: "/testbed", perRepo: 4, dropScored: 180, detectTimeoutSec: 300, pullWaitSec: 900, vmSize: "standard-16", vmHours: 12 } as const;
 export const UBI_RUNNER = { file: "quick/laneb/l1/ubi-runner.sh", sha256: "c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2" } as const;
 
+
+// D1 (pre-data harness amendment): the lines every arm's task image gets after Lane B's runtime copy, through L1's profile
+// and prepare-run.ts (TASK_SETUP), and that the task-fit screen and the d1-checks dry-run step apply. One file, read at
+// this sha256: its one ENV PATH line and its one RUN line (the origin).
+export const TASK_SETUP = { file: join(REPO, "lanes/harness-mechanics/task-setup.Dockerfile"), sha256: "ae28bde63e6348e944a39c9d41334c070cf794262c43aa9000a60d32a88e9bef" };
+export function taskSetup(): { text: string; path: string; envDir: string; run: string } {
+  const text = readFileSync(TASK_SETUP.file, "utf8");
+  if (sha256(text) !== TASK_SETUP.sha256) throw new Error("E_HM_PIN " + TASK_SETUP.file + " has sha256 " + sha256(text) + ", not the pinned " + TASK_SETUP.sha256);
+  const lines = text.split("\n"), env = lines.filter((l) => l.startsWith("ENV PATH=")), run = lines.filter((l) => l.startsWith("RUN "));
+  if (env.length !== 1 || run.length !== 1) throw new Error("E_HM_PIN " + TASK_SETUP.file + " must hold one ENV PATH line and one RUN line");
+  const path = env[0]!.slice("ENV PATH=".length);
+  return { text, path, envDir: path.split(":")[0]!, run: run[0]!.slice("RUN ".length) };
+}

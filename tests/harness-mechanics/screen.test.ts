@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bundleLists, REPO, sha256, UBI_RUNNER, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
+import { bundleLists, REPO, sha256, taskSetup, UBI_RUNNER, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
 import { classifyDetect, dockerDetect, imageRef, pool, screen, screenLists, screenVm, sortedDigest, type Detect } from "../../lanes/harness-mechanics/screen.ts";
 
 const l = bundleLists(), p = pool(), repo = (t: string) => p.get(t)!.repo;
@@ -80,7 +80,8 @@ describe("docker", () => {
     expect(logs).toEqual(["SCREEN wait Docker Hub's pull limit for " + imageRef(t[2])]);
     const calls = readFileSync(join(dir, "calls"), "utf8");
     expect(calls).toContain("run --rm --network none --entrypoint  -v /opt/none:/opt/hm-gstack:ro");
-    expect(calls).toContain("-w /testbed " + imageRef(t[0]) + " /opt/hm-bun --no-env-file --config=/dev/null /opt/hm-gstack/bin/gstack-checks detect");
+    expect(calls).toContain("-w /testbed " + imageRef(t[0]) + " sh -c " + taskSetup().run + " && export PATH=" + taskSetup().path + " && ");
+    expect(calls).toContain(" >&2 && exec /opt/hm-bun --no-env-file --config=/dev/null /opt/hm-gstack/bin/gstack-checks detect");
     expect(imageRef(t[0])).toMatch(/^swerebench\/[^:@]+@sha256:[0-9a-f]{64}$/);
   });
 });

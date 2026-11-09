@@ -6,16 +6,17 @@
 // short. Writes screened.txt (the lines plans.ts reads) with its sha256, and prints every replacement, a short split's count
 // and the digests of the judge subset, the judge pilot and drop step 3's first 180 recomputed from the screened lists.
 // A detect that exits 3 for want of a pregate context (no origin/<base> ref in the container) is neither: the screen
-// writes no lists and stops with E_HM_SCREEN, since every task would read the same.
+// writes no lists and stops with E_HM_SCREEN, since every task would read the same. Each task's detect result is appended
+// to <out>/detect.jsonl as it lands, and a rerun with the same --out reuses the rows made under the same task-setup sha256.
 //   bun lanes/harness-mechanics/cli.ts screen --out <dir>           here, with Docker (HM_GSTACK: the pin's checkout)
 //   bun lanes/harness-mechanics/cli.ts screen-vm start|finish <work>  the same on one Ubicloud VM, leased on the vms ledger
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { itemTotals } from "./money.ts";
-import { bundleLists, CAPS_USD, HM, REPO, SCREEN, sha256, UBI_RUNNER, type Lists } from "./pins.ts";
+import { bundleLists, CAPS_USD, HM, REPO, SCREEN, sha256, TASK_SETUP, taskSetup, UBI_RUNNER, type Lists } from "./pins.ts";
 
-export type Detect = { status: "check" | "none" | "broken" | "no-context"; detail: string };
+export type Detect = { status: "check" | "none" | "broken" | "no-context"; detail: string; env?: boolean };
 type Task = { task_id: string; repo: string; image: string; image_digest: string };
 export function pool(): Map<string, Task> {
   const d = JSON.parse(readFileSync(join(REPO, "quick/laneb/tasks/swerebench-r3a4.json"), "utf8"));
@@ -33,7 +34,9 @@ export function classifyDetect(code: number | null, out: string, err: string): D
 }
 
 // One task: pull by digest (a refusal for Docker Hub's limit waits out the window and spends no retry), run detect from the
-// workdir with the pin's checkout and this Bun mounted read-only and no network, then remove the image.
+// workdir with the pin's checkout and this Bun mounted read-only and no network, then remove the image. Detect runs after
+// D1's two lines from task-setup.Dockerfile (the origin RUN, then the PATH), so the screen sees what every arm sees, and
+// env records whether the task's conda env directory exists (descriptive; it changes no replacement rule).
 export function dockerDetect(ref: string, o: { docker: string; gstack: string; log: (l: string) => void }): Detect {
   const sh = (args: string[], timeout?: number) => { const p = Bun.spawnSync([o.docker, ...args], { stdout: "pipe", stderr: "pipe", timeout }); return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }; };
   for (;;) {
@@ -43,9 +46,12 @@ export function dockerDetect(ref: string, o: { docker: string; gstack: string; l
     o.log("SCREEN wait Docker Hub's pull limit for " + ref);
     Bun.sleepSync(Number(process.env.HM_PULL_WAIT_SEC ?? SCREEN.pullWaitSec) * 1000);
   }
-  const r = sh(["run", "--rm", "--network", "none", "--entrypoint", "", "-v", o.gstack + ":/opt/hm-gstack:ro", "-v", process.execPath + ":/opt/hm-bun:ro", "-w", SCREEN.workdir, ref, "/opt/hm-bun", "--no-env-file", "--config=/dev/null", "/opt/hm-gstack/bin/gstack-checks", "detect"], SCREEN.detectTimeoutSec * 1000);
+  const s = taskSetup();
+  const script = s.run + " && export PATH=" + s.path + " && { [ -d " + s.envDir + " ] && echo HM_ENV yes || echo HM_ENV no; } >&2 && exec /opt/hm-bun --no-env-file --config=/dev/null /opt/hm-gstack/bin/gstack-checks detect";
+  const r = sh(["run", "--rm", "--network", "none", "--entrypoint", "", "-v", o.gstack + ":/opt/hm-gstack:ro", "-v", process.execPath + ":/opt/hm-bun:ro", "-w", SCREEN.workdir, ref, "sh", "-c", script], SCREEN.detectTimeoutSec * 1000);
   sh(["rmi", ref]);
-  return classifyDetect(r.code, r.out, r.err);
+  const env = /^HM_ENV (yes|no)$/m.exec(r.err);
+  return { ...classifyDetect(r.code, r.out, r.err.replace(/^HM_ENV (yes|no)\n/m, "")), ...(env ? { env: env[1] === "yes" } : {}) };
 }
 
 export type Replacement = { split: "scored" | "calibration"; position: number; replaced: string; why: string; by: string | null };
@@ -70,8 +76,17 @@ export function screenLists(l: Lists, repoOf: (t: string) => string, detect: (t:
 
 export function screen(outDir: string, detect: (t: string) => Detect, l: Lists = bundleLists()) {
   const p = pool(), repoOf = (t: string) => p.get(t)?.repo ?? (() => { throw new Error("E_HM_INPUT " + t + " is not in swerebench-r3a4.json"); })();
-  const r = screenLists(l, repoOf, detect);
   mkdirSync(outDir, { recursive: true });
+  const cacheFile = join(outDir, "detect.jsonl");
+  const rows = existsSync(cacheFile) ? readFileSync(cacheFile, "utf8").split("\n").filter(Boolean).flatMap((x) => { try { return [JSON.parse(x)]; } catch { return []; } }) : [];
+  const cached = new Map<string, Detect>(rows.filter((x) => x.setup === TASK_SETUP.sha256).map(({ task_id, setup: _setup, ...d }) => [task_id, d as Detect]));
+  const r = screenLists(l, repoOf, (t) => {
+    const hit = cached.get(t);
+    if (hit) return hit;
+    const d = detect(t);
+    appendFileSync(cacheFile, JSON.stringify({ task_id: t, setup: TASK_SETUP.sha256, ...d }) + "\n");
+    return d;
+  });
   writeFileSync(join(outDir, "detect.json"), JSON.stringify(Object.fromEntries(r.seen), null, 2) + "\n");
   if (r.blind.length) throw new Error("E_HM_SCREEN detect found no pregate context in " + r.blind.length + " tasks (first " + r.blind[0] + ": " + r.seen.get(r.blind[0]!)!.detail + "); no lists written");
   const text = [...r.scored.map((x) => "scored " + x), ...r.calibration.map((x) => "calibration " + x)].join("\n") + "\n";

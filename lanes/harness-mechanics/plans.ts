@@ -3,7 +3,7 @@
 // (quick/laneb/l1/l1.ts). Each part is one launch; a task's arms run in one part, in the seeded order L1's seeded() gives.
 import { plannedCells, prefixOf, seeded, type ItemDef, type PartPlan, type Profile, type Rect } from "../../quick/laneb/l1/l1.ts";
 import type { HmArm } from "../../src/types.ts";
-import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, TARS, type ModelKey } from "./pins.ts";
+import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, TARS, TASK_SETUP, type ModelKey } from "./pins.ts";
 
 const item = (m: ModelKey, capUsd: number): ItemDef => ({ capUsd, taskSet: "swerebench-r3a4", cells: MODELS[m].cells, allowanceUsd: MODELS[m].allowanceUsd, model: MODELS[m].id });
 // stage3-pilot is one item with one part per model: one ledger item binds one run, and a part runs one model's cells. Its
@@ -50,6 +50,7 @@ export const HM_PROFILE: Profile = {
   ledgerPort: HM.ledgerPort,
   seed: HM.seed,
   concurrent: HM.concurrent,
+  taskSetup: TASK_SETUP,
   parts: (name, _frozen, inputs) => {
     const b = loadBundle();
     for (const [f, d] of b.digests) inputs[f] = d;

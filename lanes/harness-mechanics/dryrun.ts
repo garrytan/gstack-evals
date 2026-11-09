@@ -12,6 +12,7 @@ import { itemPlan, ITEMS } from "./plans.ts";
 import { stepPatterns, stepScorer } from "./score.ts";
 import { stepAmendment, stepAnalysis, stepVerdictTables } from "./synth.ts";
 import { stepLeases, stepLedger, stepReserve } from "./money.ts";
+import { stepD1Checks } from "./d1.ts";
 
 export type StepResult = { pass: boolean; detail: string };
 export type Step = { name: string; units: number[]; run?: (out: string) => StepResult };
@@ -50,6 +51,7 @@ export const STEPS: Step[] = [
   { name: "h1-amendment", units: [4], run: stepAmendment },
   { name: "leases-per-item", units: [6], run: stepLeases },
   { name: "reserve-mechanics", units: [6], run: stepReserve },
+  { name: "d1-checks", units: [5, 6], run: stepD1Checks },
 ];
 
 export function dryrun(out: string, steps: Step[] = STEPS): { lines: string[]; pass: boolean } {

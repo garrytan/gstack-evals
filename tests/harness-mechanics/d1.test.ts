@@ -1,0 +1,149 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// D1 (pre-data harness amendment), keylessly and both ways: the lane file's origin RUN and PATH, prepare-run's TASK_SETUP,
+// the hm profile, checks_trust on gstack-tar arms only, laneb_hooks.py's CHECKS_TRUST, the screen's resume cache and the
+// d1-checks step's parsers. The live check is dry-run step d1-checks.
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { armSpec, jobConfig } from "../../quick/laneb/runner/grid.ts";
+import { taskSetupLines } from "../../quick/laneb/runner/prepare-run.ts";
+import { ARM_SPECS as L1_ARMS, L1_PROFILE } from "../../quick/laneb/l1/l1.ts";
+import { ARMS, bundleLists, REPO, sha256, TASK_SETUP, taskSetup } from "../../lanes/harness-mechanics/pins.ts";
+import { HM_PROFILE } from "../../lanes/harness-mechanics/plans.ts";
+import { screen, type Detect } from "../../lanes/harness-mechanics/screen.ts";
+import { checksTrust, loopResult, verifyLoop } from "../../lanes/harness-mechanics/d1.ts";
+
+const tmp = () => mkdtempSync(join(tmpdir(), "hm-d1-"));
+const kwargs = (spec: string) => {
+  const { name, tar_name, ...options } = armSpec(spec);
+  const b: any = { models: [{ id: "claude-opus-5-5", harbor_model: "anthropic/claude-opus-5-5", session_cap_usd: 5 }], arms: [{ name, tar: "/t/" + (tar_name ?? name) + ".tar", sha256: "x", ...options }], tasks_dir: "/k", tasks: ["t1"], attempts: 1, n_concurrent: 1, job_name: "j", agent_dir: "/a", runner_dir: "/r", base_url: "http://g:8787", max_output_tokens: 32000 };
+  return (jobConfig(b) as any).agents[0].kwargs;
+};
+const git = (dir: string, ...args: string[]) => Bun.spawnSync(["git", "-C", dir, ...args], { stdout: "pipe", stderr: "pipe" });
+// A detached task tree with one commit and no remote, the way SWE-rebench ships /testbed.
+const detachedTree = () => {
+  const d = tmp(), w = join(d, "testbed");
+  Bun.spawnSync(["git", "init", "-q", w]);
+  writeFileSync(join(w, "a.py"), "x = 1\n");
+  git(w, "add", "a.py");
+  git(w, "-c", "user.name=hm", "-c", "user.email=hm@example.invalid", "commit", "-q", "-m", "base");
+  git(w, "checkout", "-q", "--detach");
+  return { d, w };
+};
+const runSetup = (w: string, origin: string) => Bun.spawnSync(["sh", "-c", taskSetup().run], { cwd: w, env: { ...process.env, HM_ORIGIN: origin }, stdout: "pipe", stderr: "pipe" });
+
+describe("the lane file", () => {
+  test("is at its pinned sha256 and holds one PATH line with the task env first and one RUN", () => {
+    const s = taskSetup();
+    expect(sha256(readFileSync(TASK_SETUP.file))).toBe(TASK_SETUP.sha256);
+    expect(s.envDir).toBe("/opt/miniconda3/envs/testbed/bin");
+    expect(s.path).toBe("/opt/miniconda3/envs/testbed/bin:$PATH");
+    expect(s.text.split("\n").filter((l) => /^[A-Z]+ /.test(l)).map((l) => l.split(" ")[0])).toEqual(["ENV", "RUN"]);
+  });
+  test("the RUN gives a detached tree an origin whose main and HEAD are the base commit, and leaves the tree clean", () => {
+    const { d, w } = detachedTree(), origin = join(d, "origin.git");
+    const r = runSetup(w, origin);
+    expect([r.exitCode, r.stderr.toString()]).toEqual([0, ""]);
+    const [main, head] = git(w, "rev-parse", "origin/main", "HEAD").stdout.toString().trim().split("\n");
+    expect(main).toBe(head!);
+    expect(git(w, "symbolic-ref", "refs/remotes/origin/HEAD").stdout.toString().trim()).toBe("refs/remotes/origin/main");
+    expect(git(w, "status", "--porcelain").stdout.toString()).toBe("");
+    expect(existsSync(join(w, "origin.git"))).toBe(false);
+  });
+  test("the RUN refuses a tree that has an origin remote already", () => {
+    const { d, w } = detachedTree(), origin = join(d, "origin.git");
+    git(w, "remote", "add", "origin", "/elsewhere.git");
+    const r = runSetup(w, origin);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr.toString()).toContain("D1 origin refused");
+    expect(existsSync(origin)).toBe(false);
+  });
+});
+
+describe("prepare-run TASK_SETUP", () => {
+  test("unset adds nothing, so every Dockerfile stays byte-identical", () => {
+    expect(taskSetupLines({})).toBe("");
+  });
+  test("set at the right sha256 appends the file after the runtime copy", () => {
+    expect(taskSetupLines({ TASK_SETUP: TASK_SETUP.file, TASK_SETUP_SHA256: TASK_SETUP.sha256 })).toBe("\n" + readFileSync(TASK_SETUP.file, "utf8"));
+  });
+  test("a wrong sha256, or one variable without the other, is refused", () => {
+    expect(() => taskSetupLines({ TASK_SETUP: TASK_SETUP.file, TASK_SETUP_SHA256: "0".repeat(64) })).toThrow(/^E_USAGE TASK_SETUP .* has sha256/);
+    expect(() => taskSetupLines({ TASK_SETUP: TASK_SETUP.file })).toThrow(/E_USAGE set TASK_SETUP and TASK_SETUP_SHA256 together/);
+    expect(() => taskSetupLines({ TASK_SETUP_SHA256: TASK_SETUP.sha256 })).toThrow(/E_USAGE/);
+  });
+  test("the hm profile names the lane file and L1's profile names none", () => {
+    expect(HM_PROFILE.taskSetup).toEqual(TASK_SETUP);
+    expect(L1_PROFILE.taskSetup).toBeUndefined();
+    expect(readFileSync(join(REPO, "quick/laneb/l1/l1.ts"), "utf8")).toContain("...(P.taskSetup ? { TASK_SETUP: P.taskSetup.file, TASK_SETUP_SHA256: P.taskSetup.sha256 } : {})");
+  });
+});
+
+describe("checks_trust", () => {
+  test("every arm whose tar holds gstack sets it, and none and plain-2 never do", () => {
+    for (const a of Object.values(ARMS)) expect([a.spec, kwargs(a.spec).checks_trust]).toEqual([a.spec, a.tar === "none" ? undefined : true]);
+    expect(Object.values(ARMS).filter((a) => a.tar === "none").length).toBe(2);
+  });
+  test("L1's arm specs set no checks_trust, and it takes only true", () => {
+    for (const s of Object.values(L1_ARMS)) expect(Object.hasOwn(kwargs(s), "checks_trust")).toBe(false);
+    expect(() => armSpec("none:checks_trust=false")).toThrow(/E_USAGE/);
+  });
+  test("laneb_hooks.py runs CHECKS_TRUST after the strip and the arm extract, only when the option is on", () => {
+    const py = readFileSync(join(REPO, "quick/laneb/runner/agent/laneb_hooks.py"), "utf8");
+    expect(checksTrust()).toBe("/root/.claude/skills/gstack/bin/gstack-checks trust");
+    expect(py).toContain('    checks_trust: bool = Field(default=False,');
+    const body = py.split("    def _inject_arm(self, container: str) -> dict:\n")[1]!.split("\n\n")[0]!;
+    const at = (s: string) => body.indexOf(s);
+    expect(at("self._strip_snapshot(container)")).toBeGreaterThan(-1);
+    expect(at("self._strip_snapshot(container)")).toBeLessThan(at("super()._inject_arm(container)"));
+    expect(at("super()._inject_arm(container)")).toBeLessThan(at("if self.options.checks_trust:"));
+    expect(at("if self.options.checks_trust:")).toBeLessThan(at("self._checks_trust(container)"));
+    expect(py).toMatch(/"docker", "exec", "-i", "-e", "HOME=\/root", \*workdir, container, "sh", "-c", CHECKS_TRUST\]/);
+    expect(py).toContain('raise LanebInfraError(f"gstack-checks trust exited {res.returncode}');
+  });
+});
+
+describe("screen resume cache", () => {
+  const all = bundleLists();
+  const l = { ...all, scored: all.scored.slice(0, 3), calibration: all.calibration.slice(0, 2), spare: all.spare.slice(0, 3) };
+  const fake = (calls: string[]) => (t: string): Detect => { calls.push(t); return t === l.scored[1] ? { status: "none", detail: "CHECKS: none" } : { status: "check", detail: "CHECK test", env: true }; };
+  test("a rerun with the same --out reuses every detect row and writes the same lists", () => {
+    const out = tmp(), first: string[] = [], again: string[] = [];
+    const a = screen(out, fake(first), l);
+    const rows = readFileSync(join(out, "detect.jsonl"), "utf8").trim().split("\n").map((x) => JSON.parse(x));
+    expect(rows.map((r) => r.task_id)).toEqual(first);
+    expect(rows.every((r) => r.setup === TASK_SETUP.sha256)).toBe(true);
+    expect(rows.find((r) => r.task_id === l.scored[0])!.env).toBe(true);
+    const b = screen(out, fake(again), l);
+    expect(again).toEqual([]);
+    expect(b.sha256).toBe(a.sha256);
+  });
+  test("rows made under another task-setup sha256 are not reused", () => {
+    const out = tmp(), first: string[] = [], again: string[] = [];
+    screen(out, fake(first), l);
+    const f = join(out, "detect.jsonl");
+    writeFileSync(f, readFileSync(f, "utf8").replaceAll(TASK_SETUP.sha256, "0".repeat(64)));
+    screen(out, fake(again), l);
+    expect(again).toEqual(first);
+  });
+});
+
+describe("d1-checks parsers", () => {
+  test("the loop command is the bash block under ## 2. Loop, and a SKILL.md without it is refused", () => {
+    const d = tmp();
+    Bun.spawnSync(["mkdir", "-p", join(d, "verify")]);
+    writeFileSync(join(d, "verify/SKILL.md"), "## 1. Detect\n\n\x60\x60\x60bash\nC=x; \"$C\" detect\n\x60\x60\x60\n\n## 2. Loop: run, fix, run\n\n\x60\x60\x60bash\nC=\"$HOME/.claude/skills/gstack/bin/gstack-checks\"; \"$C\" run\n\x60\x60\x60\n");
+    expect(verifyLoop(d)).toBe('C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run');
+    writeFileSync(join(d, "verify/SKILL.md"), "## 1. Detect\n\n\x60\x60\x60bash\nC=x; \"$C\" detect\n\x60\x60\x60\n");
+    expect(() => verifyLoop(d)).toThrow(/E_HM_INPUT/);
+    expect(verifyLoop(join(REPO, "lanes/harness-mechanics/vendor/gstack"))).toBe('C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run');
+  });
+  test("a selected count above zero and a CHECK tests line count; a refusal does not", () => {
+    expect(loopResult("HM_SELECTED 42\nCHECK tests PASS 31.2s\n")).toEqual({ selected: 42, check: "PASS" });
+    expect(loopResult("HM_SELECTED 1\nCHECK tests FAIL 3.0s\n")).toEqual({ selected: 1, check: "FAIL" });
+    expect(loopResult("HM_SELECTED 0\nCHECK tests PASS 1.0s\n")).toEqual({ selected: 0, check: "PASS" });
+    expect(loopResult("gstack-checks: these commands are not trusted for /testbed; nothing was run (CHECKS_CONSENT_REQUIRED)\n")).toEqual({ selected: 0, check: null });
+    expect(loopResult("CHECK lint PASS 1.0s\n")).toEqual({ selected: 0, check: null });
+  });
+});
