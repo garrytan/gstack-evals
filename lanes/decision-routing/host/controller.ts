@@ -230,7 +230,7 @@ interface ItemRun {
 }
 
 /** Initialises a temporary record with the items the plan uses, from the items file, for a dry run. */
-function tempRecord(dir: string, itemsFile: string, used: Set<string>): { record: string; local: LocalLedger } {
+export function tempRecord(dir: string, itemsFile: string, used: Set<string>): { record: string; local: LocalLedger } {
   const record = join(dir, "record");
   const items = (JSON.parse(readFileSync(itemsFile, "utf8")) as { items: Array<{ item: string; cap_micros: number }> }).items;
   for (const item of used) {
@@ -244,6 +244,17 @@ function tempRecord(dir: string, itemsFile: string, used: Set<string>): { record
 /** What a new lease must leave room for: CONCURRENCY sessions in flight, each at its worst case, the per-session allowance. */
 export function reserveMicros(): number {
   return CONCURRENCY * (JSON.parse(readFileSync(join(LANE, "config", "cells.json"), "utf8")) as { limits: { allowance_micros: number } }).limits.allowance_micros;
+}
+
+/** The pre-lease reserve check: every item's cap must hold what is committed on it plus reserveMicros(), else DR_RESERVE_STOP. */
+export function checkReserve(record: string, items: readonly string[]): void {
+  const reserve = reserveMicros();
+  for (const item of items) {
+    const state = readItem(record, item);
+    if (state.cap_micros !== null && state.cap_micros - state.committed_micros < reserve) {
+      throw new ControllerError("DR_RESERVE_STOP", "line item " + item + " has " + usd(Math.max(state.cap_micros - state.committed_micros, 0)) + " left of its " + usd(state.cap_micros) + " cap (" + usd(state.committed_micros) + " committed), under the " + usd(reserve) + " reserve for " + CONCURRENCY + " sessions in flight; nothing was leased or launched, and the projection comes to the Captain");
+    }
+  }
 }
 
 export async function runBatch(o: BatchOptions): Promise<BatchResult> {
@@ -303,13 +314,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
       const open = readItem(record, item).open;
       if (open && open.run_id === o.runId && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
     }
-    const reserve = reserveMicros();
-    for (const item of itemNames) {
-      const state = readItem(record, item);
-      if (state.cap_micros !== null && state.cap_micros - state.committed_micros < reserve) {
-        throw new ControllerError("DR_RESERVE_STOP", "line item " + item + " has " + usd(Math.max(state.cap_micros - state.committed_micros, 0)) + " left of its " + usd(state.cap_micros) + " cap (" + usd(state.committed_micros) + " committed), under the " + usd(reserve) + " reserve for " + CONCURRENCY + " sessions in flight; nothing was leased or launched, and the projection comes to the Captain");
-      }
-    }
+    checkReserve(record, itemNames);
     for (const item of itemNames) {
       const journal = join(out, "journals", item + ".ndjson");
       const lease = openLease(record, local, { item, run_id: o.runId, warn, ...(o.temp ? { requireAdmission: () => null } : {}) });
