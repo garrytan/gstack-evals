@@ -137,6 +137,13 @@ Why this one first: it removes the finish line from the turn that should run the
 - Provenance. Because of that race, the retained manifest and one Sol smoke item's arm record carry a hash of the retained tar taken while losing writers were still writing (de9a1cf5...). The finished file hashes to c8b3055b..., which the three later records carry, and it extracts to the tree hash its name gives. No score reads this field.
 - The plan judges first stopped at their row check, because the opt-in gate smoke and the sentence rerun each hold a gstack session on the same unit and pass. The chain ran again without the gate smoke, which only the exposure detector reads and which was never to be judged.
 - One ledger record carries a wrong source in a field that decides nothing. The Agent notes give the record and its appended correction.
+- Known stage 2 defects. Stage 1 never ran this code, so no number here reads it, and the next build fixes each one test-first before any stage 2 run. Paired contrasts weight a unit by its surviving passes instead of once per unit. The interim exposure stop does not reach the verdicts. An intent-to-treat primary can never pass the specificity requirement. The stage 2 gold re-check has no minimum, so a judge can pass with most gold cells unlabelled. Pairwise packets read only the top level of a unit's context folder, which may differ from what the agent saw. Stage 2 readings skip a model with no primary reviews without saying why.
+- Transposed keys carry no commitments, so the brief family's commitment items are empty for all 7 twins. The judge check builds its packets without commitment items, so its gold, its counts and its kappa leave them out, and this stage reports no commitment reading.
+- Authoring checks for an open outcome window only when it replaces the first release, so a record whose first release already holds the merge could be keyed before its 42 days end. Every calibration public unit came from a release on or before 2026-09-27, so each window had closed before authoring began.
+- A failed classification is cached as if it were a label, and the draw counts the cached file as one. Every audited calibration unit carries a classifier label, and each twin's matches its original, so this did not fire.
+- Mining runs one GitHub search per week of each 42-day window and stops at 10 pages of 100, so a week with more than 1,000 records would lose the rest with no log line. A check of the 19 audited public units found the busiest week at no more than 242 records, so this cap cut nothing.
+- Mining also keeps a GraphQL reply that carries both data and errors, and the discussion fetch stops after 2,000 discussions, newest first. Neither writes a log line, and the record can't show whether either dropped anything (the most discussions kept in any window was 10). If either did, the keys hold fewer items. That lowers the anticipated rates and the gold counts, toward the floor this stage reported.
+- The name replacer passes each replacement to String.replace as a pattern, so a replacement holding `$&`, `` $` `` or `$'` would put the original name back into a unit. None did: no $ appears in any of the 576 replacements the 19 audited public units used, and the twins use no replacements.
 - What did not run: stage 2's comparison and its unit draw, the projection rerun, the authoring of further comparison units (stopped after one batch had started), and the owner's taste check. The taste check is skipped because stage 2's pairwise judges won't run, so the owner's picks would have nothing to check.
 
 ## Setup
@@ -162,7 +169,21 @@ bun test tests/pv tests/trial/image.test.ts
 bin/gstack-evals pv dryrun --twin-pairs 7
 ```
 
-The dry run prints the 7-pair simulation above (69 PASS, 0 FAIL). The stage 1 readings came from `bin/gstack-evals pv readings --stage 1` and the build's smoke rules, run over the sealed run data. This record leaves out the host launch scripts and the sealed units, keys and labels, so the paid readings can't be re-run from the repo alone.
+The dry run prints the 7-pair simulation above (69 PASS, 0 FAIL). The stage 1 readings came from `bin/gstack-evals pv readings --stage 1` and the build's smoke rules, run over the sealed run data. `pv readings` does not pass the fallback smokes to the smoke rules, and the gate smoke's rows carry the skill arm's id, so the two fallback smokes were read by calling the build's smokeRules directly with their rerun and gate sessions. This record leaves out the host launch scripts and the sealed units, keys and labels, so the paid readings can't be re-run from the repo alone.
+
+Before you rerun this build, know its gaps. None of them fired in this run, and the next build closes them:
+
+- `pv rows --out` doesn't refuse a path that names one of its inputs, so write rows to a new file.
+- `pv score` doesn't refuse a session repeated across `--rows` files, so pass each rows file once.
+- Scoring joins labels to rows by session id and reads the current key, so never repair a session or edit a key after labelling.
+- `pv author`, `pv transpose` and `pv classify` don't check that `--work` sits on tmpfs. Keep it under /dev/shm.
+- Run ids are fixed per ledger item, a second meter opens outside the first one's cleanup, and the reply cache writes one fixed temp path. Run one authoring command per item at a time, and close any lease a refusal leaves open.
+- A retried session's arm record carries only the last attempt's cost. Read costs from the ledger, as this post does.
+- A launch that dies mid-session keeps attempt 1's outcome only in memory, so keep the one-retry rule by hand. In this run the only failed launches died before any session started.
+- `--resume` doesn't compare `--arms` or `--models`, so resume with the same flags. This run resumed nothing.
+- A smoke session with no block hides the expansion fallback from smoke rule 2. Every smoke here parsed 6 of 6.
+- The copied gstack state has no size cap, so watch the host's disk.
+- Usage errors that span lines carry the reason code on the first line only.
 
 ## What is held out, and why
 
@@ -175,7 +196,7 @@ Publication status: unpublished. Before any public use: a claim check by a revie
 | Field | Value |
 |---|---|
 | Grade | Stage 1 gate readings, descriptive. No confirmatory primary ran. |
-| repo_commit | Every paid call ran on build fad7a4ca. This change lands that build on main with the retain temp-file fix. |
+| repo_commit | Every paid call ran on build fad7a4ca. After it, this change adds the taste packet render, the retain temp-file fix, a renamed loader variable and lane tests for two files. None of them changes how scored code behaves. |
 | prereg | [2026-11-08-geva-403-product-value-prereg](../plans/2026-11-08-geva-403-product-value-prereg/README.md) (#275) |
 | data | Sealed host bundle, sha256 fcc98da42b1418a97441b1b48b6046079ab5ff1201bd1bf1f0e0d8acc7c788e9 (held out) |
 | reviewed_by | pending |
