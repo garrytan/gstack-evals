@@ -27,13 +27,13 @@ const namesSecret = (t: string) => /secrets\.|\bsecrets:\s*inherit\b|\bgithub\.t
 // The Install Bun step's longest run in seconds, when every download stalls until its --max-time: each try of the release
 // loop and the waits between them, then curl's own tries at the npm package with its default backoff of 1, 2, 4 and so on
 // seconds. It cannot see a Retry-After header, which curl waits out in full between its tries. A step this cannot bound, such
-// as a curl with no --max-time, a retry flag it does not model or a third download, comes back as NaN, which no time limit
-// passes.
+// as a curl with no --max-time, a retry flag it does not model or a third download (any other curl or wget in the step), comes
+// back as NaN, which no time limit passes.
 function installWorstCase(run: string) {
   const curls = [...run.matchAll(/^ *curl (.*)$/gm)].map((m) => m[1]!);
   const loop = /^ *for delay in ((?:\d+ )+)end; do\n *curl (.*)$/m.exec(run);
   const npm = curls.find((c) => c.includes("https://registry.npmjs.org/"));
-  if (curls.length !== 2 || !loop || !npm || npm === loop[2]) return NaN;
+  if (curls.length !== 2 || run.match(/\b(curl|wget)\b/g)?.length !== 2 || !loop || !npm || npm === loop[2]) return NaN;
   const seconds = (curl: string) => {
     const retries = Number(/--retry (\d+)/.exec(curl)?.[1] ?? 0);
     return /--retry-/.test(curl) ? NaN : (retries + 1) * Number(/--max-time (\d+)/.exec(curl)?.[1]) + 2 ** retries - 1;
@@ -42,15 +42,16 @@ function installWorstCase(run: string) {
   return (waits.length + 1) * seconds(loop[2]!) + waits.reduce((a, b) => a + b, 0) + seconds(npm);
 }
 
-// Jobs that install Bun with a time limit, their own or the step's, that is missing or does not pass that step's worst case.
+// Jobs that install Bun whose own time limit is missing or leaves under two minutes past that step's worst case for the rest of
+// the job, or whose step time limit, when set, does not pass the worst case.
 const shortLimits = (w: Workflow) =>
   Object.entries(w.jobs).flatMap(([name, job]) =>
     job.steps
       .filter((s) => s.env?.BUN_SHA256)
       .flatMap((s) => {
         const worst = installWorstCase(s.run ?? "");
-        const limits = [job["timeout-minutes"], s["timeout-minutes"] ?? Infinity];
-        return limits.every((m) => typeof m === "number" && m * 60 > worst) ? [] : [name];
+        const limits: [unknown, number][] = [[job["timeout-minutes"], worst + 120], [s["timeout-minutes"] ?? Infinity, worst]];
+        return limits.every(([m, need]) => typeof m === "number" && m * 60 > need) ? [] : [name];
       }),
   );
 
@@ -154,6 +155,9 @@ describe("workflow hygiene", () => {
       run.replace("--retry 3 --connect-timeout 10 --max-time 60 ", "--retry 3 --connect-timeout 10 "),
       run.replace("--retry 3 ", "--retry 3 --retry-delay 5 "),
       run + "curl -fsSL --max-time 30 -o x https://example.com/x\n",
+      run + "true && curl -fsSL --max-time 30 -o x https://example.com/x\n",
+      run + 'x="$(curl -fsSL --max-time 30 https://example.com/x)"\n',
+      run + "wget -q -T 30 -O x https://example.com/x\n",
     ];
     for (const c of changed) expect([c !== run, installWorstCase(c)]).toEqual([true, NaN]);
   });
@@ -166,10 +170,11 @@ describe("workflow hygiene", () => {
     for (const f of files) expect([f, shortLimits(workflows[f]!)]).toEqual([f, []]);
   });
 
-  test("fails a copy of sealed.yml with a 5-minute time limit and passes it with 10", () => {
+  test("fails a copy of sealed.yml with a 5- or 9-minute time limit and passes it with 10", () => {
     const copy = (minutes: number) =>
       Bun.YAML.parse(text["sealed.yml"]!.replace(/^    timeout-minutes: \d+$/m, "    timeout-minutes: " + minutes)) as Workflow;
     expect([copy(5).jobs.sealed!["timeout-minutes"], shortLimits(copy(5))]).toEqual([5, ["sealed"]]);
+    expect([copy(9).jobs.sealed!["timeout-minutes"], shortLimits(copy(9))]).toEqual([9, ["sealed"]]);
     expect([copy(10).jobs.sealed!["timeout-minutes"], shortLimits(copy(10))]).toEqual([10, []]);
   });
 
