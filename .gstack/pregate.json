@@ -81,6 +81,15 @@
     "tests/stats/fixtures/**": [
       "tests/stats/outcome-decision.test.ts"
     ],
+    "tests/harness-mechanics/fixtures/scorer/**": [
+      "tests/harness-mechanics/score.test.ts"
+    ],
+    "tests/harness-mechanics/fixtures/arms/**": [
+      "tests/harness-mechanics/sessions.test.ts"
+    ],
+    "lanes/harness-mechanics/judge/**": [
+      "tests/harness-mechanics/hooks.test.ts"
+    ],
     "src/errors/codes.ts": [
       "tests/errors.test.ts"
     ],
