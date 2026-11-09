@@ -117,6 +117,7 @@
       "tests/lanea-shakedown-tasks.test.ts"
     ],
     "quick/laneb/**": [
+      "tests/outcome-skills/sm-rebench.test.ts",
       "quick/laneb/tests/agent.test.ts",
       "quick/laneb/tests/analysis-load.test.ts",
       "quick/laneb/tests/analysis.test.ts",
@@ -174,7 +175,13 @@
       "tests/outcome-skills/sm-claude.test.ts",
       "tests/outcome-skills/sm-prep.test.ts",
       "tests/outcome-skills/sm-driver.test.ts",
-      "tests/outcome-skills/sm-hidden.test.ts"
+      "tests/outcome-skills/sm-hidden.test.ts",
+      "tests/outcome-skills/sm-items.test.ts",
+      "tests/outcome-skills/sm-analysis.test.ts",
+      "tests/outcome-skills/sm-admission.test.ts",
+      "tests/outcome-skills/sm-packets.test.ts",
+      "tests/outcome-skills/sm-secondary.test.ts",
+      "tests/outcome-skills/sm-rebench.test.ts"
     ],
     "tests/outcome-skills/fixtures/sm/**": [
       "tests/outcome-skills/sm-draw.test.ts"
@@ -183,7 +190,8 @@
       "tests/outcome-skills/sm-source.test.ts"
     ],
     "wiki/plans/2026-11-09-geva-409-state-machines-prompt-prereg/**": [
-      "tests/outcome-skills/sm-arms.test.ts"
+      "tests/outcome-skills/sm-arms.test.ts",
+      "tests/outcome-skills/sm-analysis.test.ts"
     ],
     "tests/real-outcome/unit_test.py": [
       "tests/outcome-skills/sm-session.test.ts"

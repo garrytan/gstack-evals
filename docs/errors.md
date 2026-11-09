@@ -181,6 +181,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_PULL](#e_sm_pull) | 1 | U20 |
 | [E_SM_PARSER](#e_sm_parser) | 1 | U20 |
 | [E_SM_SEED](#e_sm_seed) | 2 | U20 |
+| [E_SM_CELL_INCOMPLETE](#e_sm_cell_incomplete) | 1 | U20 |
+| [E_SM_ANALYSIS](#e_sm_analysis) | 2 | U20 |
 | [E_SM_ARM](#e_sm_arm) | 2 | U20 |
 | [E_SM_STRIP](#e_sm_strip) | 2 | U20 |
 | [E_SM_UPSTREAM_GAP](#e_sm_upstream_gap) | 2 | U20 |
@@ -332,6 +334,14 @@ Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 The dataset's log parser, run in its sandbox (pinned python image, no network, no mount but its input, uid 10001), crashed, timed out or printed no dict of test id to status. On the oracle this is infrastructure; in scoring it is a gap.
 
 Fix: Read the parser's stderr in the message. Never edit a dataset parser; a unit whose parser fails drops.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_CELL_INCOMPLETE
+
+A state machines analysis cell (one model and one arm, or one model and one follow-on tree) has gaps on more than 10% of its units, so every contrast that uses it gets no verdict (post section 6). The analysis still writes every number, the gap worst case included, and then exits 1.
+
+Fix: Nothing to fix in the analysis: report the cell as incomplete. Gaps are never rerun to change a verdict; a harness fault goes to the Captain.
 
 Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
@@ -1312,6 +1322,14 @@ The state machines draw found no seed: the preregistration's JSON (prereg.json i
 Fix: Add the seeds through the preregistration's own pull request. The draw never runs on a seed chosen anywhere else.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_ANALYSIS
+
+The state machines analysis, admission readings or packet reader refused its input: the analysis input is not sm-analysis-input.v1, a record lacks its model, a row repeats or names an unknown unit, model, arm or tree, a number is outside its frozen form, or a judge or labeller answer file does not parse.
+
+Fix: Rebuild the input from the scorer's records with gstack-evals outcome sm analyse, or fix the answer file the message names. Frozen numbers (draws 10000, replicates 3, the bootstrap seed) come from the preregistration only.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_SM_ARM
 
