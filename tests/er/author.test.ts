@@ -59,14 +59,16 @@ describe("audit rules", () => {
     expect(mechanical(mat(), { items: [{ ...ok, candidate: "T1", kind: "T" }], own: [] })).toEqual([]);
     expect(mechanical(mat(), { items: [{ ...ok, candidate: "C1", kind: "C" }], own: [] })).toEqual(["item 0: outside the window"]);
   });
-  test("a pass, a drop, a fix, a missing candidate, an unreviewed item and an input problem", () => {
+  test("a pass, a drop, a fix, a missing candidate one or both auditors name, an unreviewed item and an input problem", () => {
     const d = { items: [{ candidate: "B1", kind: "B", statement: "s", file: "a", mentioned: false }, { candidate: "T1", kind: "T", statement: "s", file: "a", mentioned: false }], own: [] };
     const pass = { input: { verdict: "pass", problems: [] }, key: { verdict: "pass", items: [{ index: 0, verdict: "keep" }, { index: 1, verdict: "keep" }], missing: [] } };
     expect(readAudit(d, [pass, pass], []).failed).toBe(false);
     const dropped = readAudit(d, [pass, { ...pass, key: { verdict: "fail", items: [{ index: 0, verdict: "keep" }, { index: 1, verdict: "drop" }], missing: [] } }], []);
     expect([dropped.failed, [...dropped.drops]]).toEqual([false, [1]]);
     expect(readAudit(d, [pass, { ...pass, key: { items: [{ index: 0, verdict: "fix", note: "n" }, { index: 1, verdict: "keep" }] } }], []).failed).toBe(true);
-    expect(readAudit(d, [pass, { ...pass, key: { ...pass.key, missing: ["C1"] } }], []).failed).toBe(true);
+    expect(readAudit(d, [pass, { ...pass, key: { ...pass.key, missing: ["C1"] } }], []).failed).toBe(false);
+    expect(readAudit(d, [{ ...pass, key: { ...pass.key, missing: ["C1: a"] } }, { ...pass, key: { ...pass.key, missing: ["C1: b", "C2: c"] } }], []).key).toEqual(["missing C1: a | C1: b"]);
+    expect(readAudit(d, [{ ...pass, key: { ...pass.key, missing: ["C2: a"] } }, { ...pass, key: { ...pass.key, missing: ["C1: b"] } }], []).failed).toBe(false);
     expect(readAudit(d, [pass, { ...pass, key: { items: [{ index: 0, verdict: "keep" }] } }], []).key).toEqual(["item 1: unreviewed"]);
     expect(readAudit(d, [pass, { ...pass, input: { verdict: "fail", problems: [{ quote: "q", fix: "f" }] } }], []).input).toEqual(["q: f"]);
     expect(readAudit(d, [pass, pass], ["item 0: statement over 30 words"]).failed).toBe(true);
@@ -82,7 +84,7 @@ describe("audit rules", () => {
     expect(readAudit(d, [dropOne, { ...pass, key: { items: [{ index: 1, verdict: "keep" }] } }], []).key).toEqual(["item 0: unreviewed"]);
     expect(readAudit(d, [dropOne, pass], ["item 1: statement over 30 words"]).failed).toBe(false);
     expect(readAudit(d, [dropOne, pass], ["item 0: statement over 30 words"]).key).toEqual(["item 0: statement over 30 words"]);
-    expect(readAudit(d, [dropOne, { ...pass, key: { ...pass.key, missing: ["C1"] } }], []).key).toEqual(["missing C1"]);
+    expect(readAudit(d, [{ ...dropOne, key: { ...dropOne.key, missing: ["C1"] } }, { ...pass, key: { ...pass.key, missing: ["C1"] } }], []).key).toEqual(["missing C1 | C1"]);
   });
   test("an item's kind is set from its candidate's, and an unknown candidate stays a mechanical problem", () => {
     const m = mat({ candidates: [...mat().candidates, { ...mat().candidates[0]!, id: "R1", kind: "R" }] });

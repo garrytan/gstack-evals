@@ -171,8 +171,8 @@ tests/er drives each in both directions.
     <unit@example.invalid>" at the base's committer date, no remote.
 12. Audits: each auditor runs an input audit on plan.md (with the key's statements, for the signpost check), a key
     audit and the foreseeable rating. A statement over 30 words, an item dated outside its window, an unknown candidate,
-    a fix verdict, a missing candidate or an unreviewed item fails the round; an item either auditor drops is removed
-    first, so a fix verdict, an unreviewed mark or a mechanical problem on a dropped item doesn't count. Before each
+    a fix verdict, a missing candidate both auditors name or an unreviewed item fails the round; an item either auditor
+    drops is removed first, so a fix verdict, an unreviewed mark or a mechanical problem on a dropped item doesn't count. Before each
     audit, an item's kind is set from its candidate's (B or R as B, T, C), and the key audit is told so. The input audit
     holds plan.md to the frozen rewrite: it keeps the description's decisions, and a wish only the request states may be
     kept or left out. One fix round, then a second failure drops the unit. The input audit reads plan.md only; repo/ is
@@ -206,3 +206,5 @@ Build-time fixes after authoring pilot 1, made before pilot 2 (none changes froz
 - F4, item kinds (choice 12): each item's kind is set from its candidate's before the audit, as section 3 takes B
   candidates only from SZZ and reverts, and the key audit is told the kind is fixed. KEY_AUDIT's pinned digest moved;
   the key writer's prompt is unchanged.
+- F5, missing candidates (choice 12): a candidate one auditor says is missing fails the round only when the other
+  auditor names it too, the mirror of the rule that an item stays only when both keep it.

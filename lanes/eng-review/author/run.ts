@@ -26,7 +26,8 @@
 //   base commit's committer date.
 // - An item statement over 30 words, an item dated outside its window or an item whose candidate is unknown counts as
 //   an audit problem. Items either auditor drops are removed first, so a fix verdict, an unreviewed mark or a mechanical
-//   problem on a dropped item doesn't count; on any other item they fail the round, and so does a missing candidate.
+//   problem on a dropped item doesn't count; on any other item they fail the round. A missing candidate fails it only
+//   when both auditors name it, as an item stays only when both keep it.
 // - Before each audit, an item's kind is set from its candidate's (B or R as B, T, C).
 // - A candidate's diff is a merge commit's diff against its first parent, its pull request's net change.
 // - Primary order: B (defect revert, then a fix linked to an issue opened by someone outside the maintainer team, then
@@ -263,8 +264,9 @@ export function readAudit(d: Draft, replies: Array<{ input: any; key: any }>, me
     const seen = new Set(v.map((x) => Number(x?.index)));
     for (let i = 0; i < d.items.length; i++) if (!seen.has(i) && !drops.has(i)) key.push("item " + i + ": unreviewed");
     for (const x of v) if (x?.verdict !== "drop" && x?.verdict !== "keep" && !drops.has(Number(x?.index))) key.push("item " + x?.index + ": " + String(x?.note ?? "fix"));
-    for (const miss of Array.isArray(r.key?.missing) ? r.key.missing : []) key.push("missing " + String(miss));
   }
+  const named = replies.map((r) => new Map<string, string>((Array.isArray(r.key?.missing) ? r.key.missing : []).map((x: unknown) => [String(x).split(":")[0]!.trim(), String(x)])));
+  for (const [id] of named[0] ?? []) if (named.every((n) => n.has(id))) key.push("missing " + named.map((n) => n.get(id)).join(" | "));
   return { failed: input.length > 0 || key.length > 0, drops, input, key };
 }
 
