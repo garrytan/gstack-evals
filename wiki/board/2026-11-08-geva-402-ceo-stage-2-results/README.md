@@ -7,7 +7,7 @@ author: GEVA-402
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-08
-status: done
+status: superseded
 links:
   - 2026-11-04-geva-285-ceo-outcome-prereg
   - 2026-11-05-geva-289-ceo-rule-guards-amendment
