@@ -14,12 +14,6 @@ links:
   - https://github.com/garrytan/gbrain/tree/15e3ab8c
   - https://openrouter.ai/particle-ai/particle-1
 attachments:
-  - 17d3d7b0f33203c9c9664b0f20d4e912653cbbf207d5ac4bcda56dc88bcb4dfd  arm-outputs-gbrain-dream-triage.json
-  - 07bc3e835e9ec0c4715f1975a9a47118f35b35528b14a692f3b1ae3e4ef88160  arm-outputs-gbrain-edge-contradictions.json
-  - 0cc0d0c2c9208af21b22f301a8565e76bdd3ccc16cd1e78c14719139f816ab68  arm-outputs-gbrain-grade-takes.json
-  - a7606551bf07e1377e800f96dca9490fe44e89db65a56eb568674961e86cd067  arm-outputs-gstack-pty-state.json
-  - 59035fe813fcd0dbc18a9b1f9dcfd6e1a0b4f60497467e47aa7dbc7ae0a61379  arm-outputs-gstack-rec-substance.json
-  - 3c173e9dc2bd4aeef2604ce32b35263599d8497e01c434e48239aa4caa3d66d0  arm-outputs-gstack-rubric-judges.json
   - 4eb43214f4d6c68ce3074e4ef664a565685ae7c3de942b20866dd1c644f82b9d  calibration-all.png
   - 7abbf23bedb0c806a3cba80a9238fa3fa9a4f08af3bf6252d9d41f8736dcb40f  items-gbrain-dream-triage.json
   - 43bf4a136db25757c8b7aa5a76ec94b3e72e82cdcb5505d173fc29796aac56e6  items-gbrain-edge-contradictions.json
@@ -27,19 +21,8 @@ attachments:
   - 8c3930d19bead1589cbed7e6c6141928d3bd7515d04bb00f8dd6b3c413d873b9  items-gstack-pty-state.json
   - 8bc1801a640140042a1a856512217105de55c3271a2a1bd86f9fc47f6e948e73  items-gstack-rec-substance.json
   - 3400c2805a10702e4352bb1b81c3da2b9dfce5ca3cbbb35e06eb63f08906108b  items-gstack-rubric-judges.json
-  - dcd4e084b2c48b70425df1a1db2a360634e043439663e6ae3218e0cfbaae74af  jev-request-gbrain-dream-triage.json
-  - 78c2cee8e30e80e0d80f611bd8be30dc50b03d593fe8c9107376edac5cbb745c  jev-request-gbrain-edge-contradictions.json
-  - e413cef744bfa2ef3a390478136a26bb1e11796aa95e735ffa39643d5a0d2c89  jev-request-gbrain-grade-takes.json
-  - fc92210d1fb6a10281237bfc67643296b5ebc83e43502a8894b5e615de400757  jev-request-gstack-pty-state.json
-  - 60c7b014937680285ad2b6235892aee9794f9e23306b516e53f9230edcc980c2  jev-request-gstack-rec-substance.json
-  - 2d95f80d308de65cb2fa98b6803ff09ac786da906321af63ee521d0fec40cb7b  jev-request-gstack-rubric-judges.json
-  - f99d4daef0613de5fddc278e448ef79212e1a0029531ec6ca38596af2df10b14  jev-response-gbrain-dream-triage.json
-  - 74c720381d69f0f91f17668611469a2b4f2e6b6e589c0bcc14a4f95f2e1f8b6e  jev-response-gbrain-edge-contradictions.json
-  - 717e5ad5c56baecb4b52dd2aa38b370f36a4504cfa957d6aef7d545c536ac66e  jev-response-gbrain-grade-takes.json
-  - 9e003def8f9bf2a1c0c4456ae398bd75b1ab5fa9c7da947c2ebee4a03bf66a82  jev-response-gstack-pty-state.json
-  - 40997be57d848b3673d0dc7e07b4931df44863653d98c5ffb9615ee484fe7141  jev-response-gstack-rec-substance.json
-  - bbcc3cdb1e97ce8ab23280d71b623cbdd188fd86123adba7141654364d7bc2d2  jev-response-gstack-rubric-judges.json
   - 5b9cbaf7c933b891842d3696075f0a2c774de019c791db1c2fd465fe8a22c571  private-game-counts.json
+  - cec92704b4e9577fc12596f7be40f97d8032103a2e50d30f0866b64398906246  raw-files-digests.json
   - 98483a4028bb57289de3393e95da4ca48aeb5cfc2282baaf09873d31b15d9d50  recompute-output.json
   - e2657b8ff10c84781e3d0a881347f4621fc0ac4a2c989994fa4568c5aef208df  recompute.py.txt
   - f011768cd9315d39a913f1d413f9d9e56bce9ab03fb86b5aaa0c5c8e3a06378f  score.py.txt
@@ -167,7 +150,7 @@ The take-grading and relationship numbers above give particle-1 a second try at 
 - **Labels.** Four points rest on two frontier models agreeing, with disagreements dropped (4 recommendation items, 3 of them disagreements and 1 with an unreadable Opus 5.5 label, 8 relationship items, and 3 and 4 on the private game's two points, counting items where the labels disagreed with how the item was built). 24 of the 39 held terminal-state screens are ones gstack's own detectors already classify. In production the model judge sees only screens the detectors could not classify, so these items are likely easier.
 - **Synthetic items.** The relationship items and both private-game points use synthetic items. The private game's are stand-ins written fresh for invented games, so they say little about the real game.
 - **Cost basis.** Today's model was replayed through its direct API at list prices. In production gstack's terminal-state judge runs through claude -p, which adds Claude Code's system prompt (we estimate about 16,000 tokens a call), so its real cost today is higher and the ratio understates the saving. The rubric judges' cost and latency today come from gstack's logged calibration runs: one logged call for the arm judge, which makes one call per decision; one of the two orders the arm-pair judge runs; and the sum over the three-sample panel for the four workflow judges. That panel runs its samples at the same time, so the summed latency overstates how long today's workflow judges take.
-- **Latency.** Jev was called from one machine and the other arms from another, all over the public internet, so treat the latency figures as rough. Medians come from the scorer's percentile function (stats.py.txt), which takes one of the two middle values when the count is even. Averaging the two middle values instead changes three printed figures: particle-1's median on the recommendation judge is 2.35 s, the cascade's on take grading 74 ms, and particle-1's lowest median (finding category) 0.71 s. recompute-output.json gives the averaged medians as arms.<arm>.lat_median_averaged and the retry counts as retried_all_splits; private-game-counts.json gives them as extra_views.latency_median_averaged_held.<arm> and extra_views.retried_all_splits. Where particle-1 got a second try at a larger token cap (26 rows on take grading, 8 on relationship contradictions and 9 on the line rule check, dev and held together), the item files keep the second try's latency alone, while the cost counts both tries. Adding the first try's time, which arm-outputs keeps for the public points, changes none of the medians above; we checked the line rule check on its private rows, which the bundle does not carry. The p90 values in the output files, which this post does not print, also use the second try alone, and with both tries they run up to 3% higher.
+- **Latency.** Jev was called from one machine and the other arms from another, all over the public internet, so treat the latency figures as rough. Medians come from the scorer's percentile function (stats.py.txt), which takes one of the two middle values when the count is even. Averaging the two middle values instead changes three printed figures: particle-1's median on the recommendation judge is 2.35 s, the cascade's on take grading 74 ms, and particle-1's lowest median (finding category) 0.71 s. recompute-output.json gives the averaged medians as arms.<arm>.lat_median_averaged and the retry counts as retried_all_splits; private-game-counts.json gives them as extra_views.latency_median_averaged_held.<arm> and extra_views.retried_all_splits. Where particle-1 got a second try at a larger token cap (26 rows on take grading, 8 on relationship contradictions and 9 on the line rule check, dev and held together), the item files keep the second try's latency alone, while the cost counts both tries. Adding the first try's time changes none of the medians above. The first tries sit in the arm-output rows, which this bundle pins by digest but does not publish; the cross-lab read checked this on the public points' rows, and we checked the line rule check's. The p90 values in the output files, which this post does not print, also use the second try alone, and with both tries they run up to 3% higher.
 - **Replay, not production.** The terminal-state judge was called through the API instead of claude -p, the recommendation judge as one call instead of a 3-sample panel, without the JSON schema gstack sends, and the arm-pair judge in one order where gstack runs both and calls a tie unless they agree.
 - **One run per item.** No repeats, and temperature as in production.
 - **Threshold rule.** tau was the lowest escalation rate that matched today's model's dev accuracy, or the highest dev accuracy where none did (finding category). The candidates were 0, every distinct derived confidence on the dev split, and one value above 1 that escalates every item. On 3 points tau came out at 0, so the cascade was Jev alone.
@@ -212,12 +195,11 @@ Every file named below is attached to this post. The recompute needs Python 3 an
 mine.json should match recompute-output.json. For the six gstack and gbrain points, recompute.py also reproduces scores-as-run.json, the output of the scorer that ran (score.py.txt), with each cost turned into a share of today's model.
 
 - items-<point>.json: one line per item, with its split, truth, and each arm's answer, confidence, cost share and latency (for a retried row, the cost of both tries and the latency of the second), plus the two labellers' answers where they exist.
-- arm-outputs-<point>.json: every row each model arm wrote, retries and errors included, with the tail of each raw reply.
-- jev-request-<point>.json and jev-response-<point>.json: the Jev requests as sent and the raw responses as returned.
+- raw-files-digests.json: the sha256 and size of each raw file that is not published here (see below).
 - scores-as-run.json, recompute-output.json and private-game-counts.json: scorer output, recompute output, and the private game's counts and digests.
 - score.py.txt, stats.py.txt and recompute.py.txt: the scorer that ran, its statistics (unchanged apart from its first line), and the recompute.
 
-A few strings differ from what was sent. jev-request-gstack-rubric-judges.json quotes AWS's documented example access key inside a gstack diff, and this repo's secret scan blocks key-shaped strings, so it reads AKIA-DOCS-EXAMPLE-REMOVED here. Two private project names that appear in gstack's own fixture text read [name removed], one in jev-request-gstack-rec-substance.json and one in jev-request-gstack-rubric-judges.json. Home-folder paths inside fixture text, such as the project folders in gbrain's synthetic transcripts, read ~/ (or %USERPROFILE% for Windows paths), because this repo's publication check blocks local home paths. The prompts for today's model and particle-1 come from the repos at the pinned commits. Paid calls are not repeatable from this bundle: it holds what they returned.
+The raw Jev requests and responses and the model-arm output rows (18 files) are not published here, to keep this pull request small enough to review. raw-files-digests.json pins each of them by sha256 and size. The Harness Evals rerun and the separate recompute both ran on the full set, raw rows included, and every number above recomputes from the attachments that remain. The prompts for today's model and particle-1 come from the repos at the pinned commits. Paid calls are not repeatable from this bundle: it holds their per-item results.
 
 ## What is held out, and why
 
@@ -242,7 +224,7 @@ Publication status: published in this post. The claim check below must pass befo
 |---|---|
 | Cross-lab read of every number and sentence against the attachments (GPT-6.1 Sol) | Every number in the Result tables matched. It asked for 19 edits to wording, labels and attribution, then 3 more on its rechecks. All are made in this version, and its final read of the text was clean |
 | Independent recompute of every headline number from the raw files (a separate Opus 5.5 agent with its own scorer) | Every number it checked matched, across the three Result tables and most body figures, except three medians on even counts, where it averaged the two middle values (see Latency) |
-| Harness Evals recompute (independent crew, clean machine) | Every number reproduced: the shipped recompute's output byte for byte, 520 of 520 values against its own scorer, all 31 attachment digests and all 1,139 public items. It found the three median differences and four wording issues ("measurably" in the takeaway, the two cut-off dream-triage replies, the unreadable label and the 7 of 8 count), all fixed in this version. Not independently checked: the truth labels against the pinned repos, particle-1's per-call prices, and the private items, of which it checked counts only |
+| Harness Evals recompute (independent crew, clean machine) | Every number reproduced: the shipped recompute's output byte for byte, 520 of 520 values against its own scorer, all 31 attachment digests and all 1,139 public items, on the full bundle before its 18 raw files were taken out (raw-files-digests.json pins them). It found the three median differences and four wording issues ("measurably" in the takeaway, the two cut-off dream-triage replies, the unreadable label and the 7 of 8 count), all fixed in this version. Not independently checked: the truth labels against the pinned repos, particle-1's per-call prices, and the private items, of which it checked counts only |
 
 ## Changelog
 
