@@ -33,7 +33,7 @@ Reconciliation (each outside finding against the native result):
 | autoplan-20261031221500-ceo-outside-5 Null component comparisons are converted into unsupported production policies | - | new | not raised by the native voice |
 | - | autoplan-20261031221500-ceo-native-3 The gstack block tells the arm to take the recommended option by default, so GR and GN against NR and NN mostly measure that one line | native_only | not raised by the outside voice |
 | - | autoplan-20261031221500-ceo-native-4 P6 tests the record judge against always-rec, which the plan's own dry run prices above letting Garry answer everything | native_only | not raised by the outside voice |
-| - | autoplan-20261031221500-ceo-native-5 Independent rewrites of TRUT-1 and FOUN-1 items and record entries break the precedent links the record arms retrieve, on 42% of the census | native_only | not raised by the outside voice |
+| - | autoplan-20261031221500-ceo-native-5 Independent rewrites of P1 and P2 items and record entries break the precedent links the record arms retrieve, on 42% of the census | native_only | not raised by the outside voice |
 | - | autoplan-20261031221500-ceo-native-6 A blanket 'rec' to a many-letter gate becomes many D items, so D accuracy leans toward the biggest gates and toward delegation rather than agreement | native_only | not raised by the outside voice |
 | - | autoplan-20261031221500-ceo-native-7 Excluding duplicate asks discards the only measure of Garry's agreement with himself, which is the real ceiling | native_only | not raised by the outside voice |
 | - | autoplan-20261031221500-ceo-native-8 The price of a wrong two-way decision decides whether auto-deciding pays at all, and the sensitivity grid does not vary it | native_only | not raised by the outside voice |
@@ -101,3 +101,10 @@ Plan changed after the ceo cap (revise v1, round 1 of 1): +69 -28 lines unreview
 Plan changed after the eng cap (revise v1, round 1 of 1): +69 -28 lines unreviewed; accepted
 
 Gate: gate_rev 2, 14 decisions (0 pending); answered "uc3a uc4a p1a" answered by agent:GSTA-2. Findings: 50. Tasks: 18.
+
+<details>
+<summary>Agent notes</summary>
+
+Edited 2026-11-09 for public wording (GST-1060); the frozen original is wiki/plans/2026-10-31-geva-85-taste-replay-plan/review-record.md at commit 09d7a8f.
+
+</details>

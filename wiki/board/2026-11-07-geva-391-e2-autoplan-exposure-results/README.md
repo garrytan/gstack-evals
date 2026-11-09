@@ -224,7 +224,7 @@ The next-round plan sized the comparison with plan v3's power script (the same g
 
 Expected paid assumes $24 to $29 per told session on harder tasks plus $1.50 per none session. At 24 pairs or fewer the power script finds no MDD up to 40 points.
 
-**autoplan's $2,000 line can't power an outcome test.** Less than $800 is left. Spent entirely on pairs, with no headroom check, it buys fewer than 30 once harder tasks are mined, and even 30 pairs has an MDD of 43.2 points. A 20-point test needs 42 x 4, about $4.3k to $5.1k expected, past the line. Any comparison run inside the line would be descriptive.
+**autoplan's $2,000 line is too small to give an outcome test enough power.** Less than $800 is left. Spent entirely on pairs, with no headroom check, it buys fewer than 30 once harder tasks are mined, and even 30 pairs has an MDD of 43.2 points. A 20-point test needs 42 x 4, about $4.3k to $5.1k expected, past the line. Any comparison run inside the line would be descriptive.
 
 ## Deviations
 
