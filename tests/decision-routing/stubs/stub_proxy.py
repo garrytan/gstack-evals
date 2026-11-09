@@ -296,7 +296,8 @@ class Handler(BaseHTTPRequestHandler):
         auth = self.headers.get("authorization") or ""
         key = auth[7:] if auth.lower().startswith("bearer ") else self.headers.get("x-api-key")
         with stub.lock:
-            hit = {"provider": provider, "path": self.path, "model": body.get("model"), "auth_ok": key == stub.token, "encoding": self.headers.get("content-encoding")}
+            hit = {"provider": provider, "path": self.path, "model": body.get("model"), "auth_ok": key == stub.token, "encoding": self.headers.get("content-encoding"),
+                   "max_tokens": body.get("max_tokens"), "max_completion_tokens": body.get("max_completion_tokens")}
             stub.hits.append(hit)
             if key != stub.token:
                 hit["status"] = 401

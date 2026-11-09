@@ -9,8 +9,12 @@ Harbor's installed MiniSweAgent and replaces install and run:
 - run binds a metering-proxy slot over the evaluator-side management socket (DR_MGMT_SOCKET, DR_MGMT_TOKEN in Harbor's
   own env; the session's proxy URL is DR_PROXY_BASE/<slot>), runs dr_agent.session under env -i with only DR_* values and the slot's bearer, then unbinds and finalizes
   the slot, writes the meter to /logs/agent/dr/meter.json, exports the patch to /logs/artifacts/model.patch, and raises
-  DrInfraError when the session got no successful model response and did not end with allowance_stop. Harbor reruns a
-  trial once on DrInfraError when the job lists it in retry.include_exceptions.
+  DrInfraError when the session failed on infrastructure (prereg line 206): exit_status infra_error, which session.classify
+  gives only to provider and transport exceptions, or no successful model response at all. An allowance stop or custody
+  hit never counts. Harbor reruns the trial once, from scratch, on DrInfraError (retry.include_exceptions) and deletes the
+  trial dir first, so run copies the first attempt's agent logs to <job>/dr-infra-attempts/<trial>/ with attempt.json.
+  That copy has no result.json and is never scored; its booked spend stays on the item's lease. The rerun binds as
+  attempt 2, and a rerun that fails the same way ends missing.
 
 The bearer reaches the container only through the exec's env and is never written to a file, a command line or a log.
 """
@@ -21,6 +25,7 @@ import http.client
 import json
 import os
 import shlex
+import shutil
 import socket
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -44,6 +49,7 @@ MANAGEMENT_HEADER = "x-gstack-evals-management"
 MANAGEMENT_TIMEOUT_SEC = 120
 WALL_GRACE_SEC = 300
 CLEAN_STOPS = ("allowance_stop", "custody_hit")
+INFRA_ATTEMPTS = "dr-infra-attempts"
 EXPORT_PATCH = (
     f"mkdir -p {EnvironmentPaths.artifacts_dir} && cd /testbed && git add -A && "
     f"git -c core.fileMode=false diff --cached --binary HEAD > {PATCH_PATH}"
@@ -51,7 +57,7 @@ EXPORT_PATCH = (
 
 
 class DrInfraError(RuntimeError):
-    """The session never got a model response and did not stop on its allowance; Harbor may rerun the trial once."""
+    """The session failed on infrastructure (a provider or transport error, or no model response); Harbor reruns it once."""
 
 
 class DrRuntimeError(RuntimeError):
@@ -109,9 +115,15 @@ def successful_responses(meter: dict[str, Any]) -> int:
 
 
 def infra_failure(summary: dict[str, Any], meter: dict[str, Any]) -> bool:
-    """True when Harbor should rerun the trial: no successful model response and no clean proxy stop. An allowance stop
-    and a custody hit end the session cleanly and are never rerun."""
-    return summary.get("exit_status") not in CLEAN_STOPS and successful_responses(meter) == 0
+    """True when Harbor should rerun the trial: a provider or transport error (exit_status infra_error), or no successful
+    model response. An allowance stop and a custody hit end the session cleanly, and a model-caused exit (agent_error from
+    format errors, step_stop, wall_stop, submitted) after a response is the model's outcome; none of them is rerun."""
+    status = summary.get("exit_status")
+    return status not in CLEAN_STOPS and (status == "infra_error" or successful_responses(meter) == 0)
+
+
+def attempt_dir(trial_dir: Path) -> Path:
+    return trial_dir.parent / INFRA_ATTEMPTS / trial_dir.name
 
 
 class DecisionRoutingAgent(MiniSweAgent):
@@ -220,7 +232,7 @@ class DecisionRoutingAgent(MiniSweAgent):
         await environment.upload_file(self._pin_file, str(RUN_DIR / "pin.json"))
         path = (await self.exec_as_root(environment, command='printf %s "$PATH"')).stdout or "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-        cell_attempt = {"run_id": self._item, "arm": self._cell, "task": self.logs_dir.parent.parent.name, "model": self._model, "trial": 1, "attempt": 1}
+        cell_attempt = {"run_id": self._item, "arm": self._cell, "task": self.logs_dir.parent.parent.name, "model": self._model, "trial": 1, "attempt": 2 if attempt_dir(self.logs_dir.parent).exists() else 1}
         binding = await asyncio.to_thread(
             manage, "/bind", {
                 "cell": cell_attempt,
@@ -269,10 +281,26 @@ class DecisionRoutingAgent(MiniSweAgent):
 
         summary = await self._read_json(environment, DR_LOG_DIR / "dr-summary.json") or {}
         if infra_failure(summary, self._meter):
+            if cell_attempt["attempt"] == 1:
+                await self._keep_attempt(environment, summary, binding["meter_id"])
             raise DrInfraError(
                 f"infra_error: session {session} got no successful model response "
                 f"(exit_status {summary.get('exit_status')}, session exit code {exit_code})"
             )
+
+    async def _keep_attempt(self, environment: BaseEnvironment, summary: dict[str, Any], meter_id: str) -> None:
+        target = attempt_dir(self.logs_dir.parent)
+        target.mkdir(parents=True)
+        if environment.is_path_mounted(EnvironmentPaths.agent_dir, self.logs_dir):
+            shutil.copytree(self.logs_dir, target / "agent")
+        else:
+            await environment.download_dir(str(EnvironmentPaths.agent_dir), target / "agent")
+        record = {
+            "trial": target.name, "attempt": 1, "cell": self._cell, "model": self._model,
+            "exit_status": summary.get("exit_status"), "successful_responses": successful_responses(self._meter or {}),
+            "meter_id": meter_id, "micros": (self._meter or {}).get("micros", 0),
+        }
+        (target / "attempt.json").write_text(json.dumps(record, indent=2) + "\n")
 
     @override
     def populate_context_post_run(self, context: AgentContext) -> None:

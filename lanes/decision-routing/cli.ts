@@ -9,6 +9,7 @@ import { CODES, docAnchor } from "../../src/errors/codes.ts";
 export const SUBCOMMANDS = [
   { name: "score", summary: "Score trial directories: Primary A and B with their verdicts, P against N, stops and S10 acting rates.", module: "score/cli.ts", owner: "B5" },
   { name: "admit", summary: "Admission: room, transfer, the cut's ceiling (S3) and per-contrast discordance from calibration and pilot.", module: "score/admit-cli.ts", owner: "B5" },
+  { name: "pilot", summary: "Pilot rules: the re-cost from pilot means, the drop order, particle-1's max_tokens rule and the pilot session stop.", module: "score/pilot.ts", owner: "B5" },
   { name: "tune", summary: "Tune acting bands from labelled calibration decisions and print the question-rewrite plan.", module: "tune/cli.ts", owner: "B6" },
   { name: "pin", summary: "Write the pin file and its sha256 from the tuned bands, questions.json and the frozen rules.", module: "tune/pin-cli.ts", owner: "B6" },
   { name: "labels", summary: "Grounded labels: the constructed safety set, per-trial labels in label containers, the join for the tuner.", module: "labels/cli.ts", owner: "B7" },

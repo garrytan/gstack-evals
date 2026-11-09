@@ -92,6 +92,8 @@ export function routable(provider: string, model: string): boolean {
 const DROPPED_HEADERS = ["host", "content-length", "accept-encoding", "connection", "authorization", "x-api-key", "api-key", "openai-organization", "openai-project", "cookie", "proxy-authorization"];
 const MANAGEMENT_HEADER = "x-gstack-evals-management";
 export const DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
+/** Under allowanceCode DR_ALLOWANCE_STOP, an upstream 5xx that reports no usage settles at $0, journaled with this reason. */
+export const NO_USAGE_5XX_REASON = "a 5xx without usage settles at $0 under DR_ALLOWANCE_STOP; shadow_micros is the reservation it would have charged";
 /** How long finalize waits for in-flight calls by default, and the most the management socket lets a caller ask for. */
 export const FINALIZE_TIMEOUT_MS = 30_000;
 export const FINALIZE_MAX_MS = 120_000;
@@ -758,11 +760,13 @@ export class MeteringProxy {
       const cost = usageCost(price, reported);
       const retryable = res.status === 429 || res.status >= 500;
       let outcome: CallOutcome;
+      const freeFiveXx = res.status >= 500 && !cost && o.allowanceCode === "DR_ALLOWANCE_STOP";
       if (cost) outcome = { kind: "spent", spent_micros: cost.micros, usage: cost.usage };
       else if (res.status >= 400 && res.status < 500) outcome = { kind: "spent", spent_micros: 0, usage: NO_TOKENS };
-      else if (res.status >= 500) outcome = { kind: "spent", spent_micros: maxMicros, usage: NO_TOKENS };
+      else if (res.status >= 500) outcome = { kind: "spent", spent_micros: freeFiveXx ? 0 : maxMicros, usage: NO_TOKENS };
       else outcome = { kind: "unknown" };
-      await this.settle(ctx, rid, maxMicros, outcome, res.status, res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined, res.ok ? undefined : upstreamBody(text, body, ctx.secrets));
+      const reason = freeFiveXx ? NO_USAGE_5XX_REASON : res.status >= 500 && !cost ? "a 5xx without usage is charged at its reservation" : undefined;
+      await this.settle(ctx, rid, maxMicros, outcome, res.status, reason, res.ok ? undefined : upstreamBody(text, body, ctx.secrets), freeFiveXx ? { no_usage_5xx: true, shadow_micros: maxMicros } : undefined);
       if (res.status === 401 || res.status === 403) return problem("E_KEY_REJECTED", 502, `${provider} answered ${res.status} to the proxy's key`);
       if (!retryable) return new Response(text, { status: res.status, headers: strip(res) });
       const delay = retryDelayMs(res, attempt);
@@ -778,12 +782,12 @@ export class MeteringProxy {
    * Journal the outcome first, so a lost ledger acknowledgement is repaired by reconcileJournal, then settle and meter.
    * A journal write that fails is reported on stderr and counted as unsettled; the call is still metered and settled.
    */
-  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstream?: string): Promise<void> {
+  private async settle(ctx: CallContext, rid: string, maxMicros: number, outcome: CallOutcome, status: number | null, reason?: string, upstream?: string, mark?: { no_usage_5xx: true; shadow_micros: number }): Promise<void> {
     const meter = this.meter(ctx.slot);
     const micros = outcome.kind === "spent" ? outcome.spent_micros : maxMicros;
     let journaled = true;
     try {
-      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, latency_ms: ctx.sentAt === undefined ? null : Date.now() - ctx.sentAt, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}) });
+      this.journal({ kind: "outcome", reservation_id: rid, meter_id: ctx.slot.cell.meter_id, status, outcome, latency_ms: ctx.sentAt === undefined ? null : Date.now() - ctx.sentAt, ...(reason ? { reason } : {}), ...(upstream !== undefined ? { upstream_body: upstream } : {}), ...mark });
     } catch (e) {
       journaled = false;
       console.error(`E_INTERNAL: metering proxy: the outcome of reservation ${rid} was not journaled: ${scrubbedCause(e, ctx.secrets)}`);

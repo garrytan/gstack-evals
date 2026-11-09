@@ -28,7 +28,7 @@ import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { MeteringProxy, UPSTREAM, type Meter } from "../../src/runner/proxy/metering-proxy.ts";
 import { anthropicText, anthropicToolUse, anthropicUsage, errorReply, FakeUpstreams, openaiJson, openaiToolCalls, openrouterJson, SUBMIT_COMMAND, typesafeAnswers, type FakeProvider, type FakeReply, type FakeUsage } from "./fake/upstreams.ts";
-import { fakeFetch, HARBOR_RETRY, PILOT_SESSION_STOP_MICROS, runBatch, type BatchOptions } from "./host/controller.ts";
+import { fakeFetch, HARBOR_RETRY, MAX_OUTPUT_TOKENS, PILOT_SESSION_STOP_MICROS, RETRY, runBatch, type BatchOptions } from "./host/controller.ts";
 import { joinLabels, labelTrial, main as labelsMain, type LabelRow } from "./labels/cli.ts";
 import type { DockerRunner } from "./labels/container.ts";
 import { pilotSessionStops, particleNoAnswers, plan, printRecost, recost, FULL_SCOPE, PLANNING_RATE, type ItemsFile } from "./score/pilot.ts";
@@ -120,7 +120,7 @@ function writeRepoTemplate(dir: string) {
   w("pkg/__init__.py", "");
   w("pkg/calc.py", "def add(a, b):\n    return a - b\n");
   for (let i = 1; i <= 3; i++) w("pkg/m0" + i + ".py", "VALUE = " + i + "\n");
-  for (let i = 1; i <= 6; i++) w("pkg/g" + i + ".py", "# next: pkg/g" + (i + 1) + ".py\n");
+  for (let i = 1; i <= 6; i++) w("pkg/g" + i + ".py", '# File "pkg/g' + (i + 1) + '.py", line 1, in next\n');
   for (let i = 1; i <= 12; i++) w("pkg/s" + String(i).padStart(2, "0") + ".py", "STEP = " + i + "\n");
   w("tests/test_calc.py", "from pkg.calc import add\n\ndef test_add():\n    assert add(1, 2) == 3\n");
   for (let i = 0; i < 500; i++) w("data/f" + String(i).padStart(3, "0") + ".txt", "needle " + i + "\n");
@@ -225,12 +225,9 @@ const parse = (s: unknown): any => {
   }
 };
 
-function noulType(state: any): string {
-  if (Array.isArray(state?.options)) return "done";
-  if (String(state?.command ?? "").includes("COMPLETE_TASK_AND_SUBMIT")) return "done";
-  if (state && "exit_code" in state) return "tests_passed";
-  return "safe";
-}
+/** A generative yes/no question's type, read from its instructions in questions.json (safe and done share a state shape). */
+const NOUL_TYPES = new Map(Object.entries(JSON.parse(readFileSync(QUESTIONS, "utf8")) as Record<string, any>).flatMap(([name, q]) => (q?.type === "noul" ? [[q.instructions as string, name]] : [])));
+const noulType = (question: unknown): string => NOUL_TYPES.get(String(question)) ?? "unknown";
 
 const DEFAULT = (a: Ask): Exclude<Answer, undefined | "fail"> => (a.type === "next_step" ? { pick: "other", conf: 0.5 } : a.type === "relevant" ? { drop: [] } : a.type === "relevant_hit" ? { p: 0.99 } : { p: 0.5 });
 
@@ -270,7 +267,7 @@ function replyFor(provider: FakeProvider, body: any, spec: Spec, st: Record<stri
   const user = provider === "anthropic" ? body?.messages?.[0]?.content : body?.messages?.find((m: any) => m.role === "user")?.content;
   const payload = parse(user) ?? {};
   const options = Object.keys(payload.options ?? {});
-  const type = payload.hits ? "relevant" : options.length === 2 && options.includes("yes") && options.includes("no") ? noulType(payload.state) : "next_step";
+  const type = payload.hits ? "relevant" : options.length === 2 && options.includes("yes") && options.includes("no") ? noulType(payload.question) : "next_step";
   const ask: Ask = { type, state: payload.state ?? {}, options, hits: payload.hits ?? [] };
   const a = (kind === "particle" ? spec.particle : spec.frontier)?.(ask, st) ?? DEFAULT(ask);
   let obj: unknown;
@@ -328,7 +325,7 @@ export async function runSession(ctx: Ctx, spec: Spec): Promise<Session> {
   };
   const item = itemOf(spec);
   const journal = join(ctx.out, "journals", spec.name + ".ndjson");
-  const proxy = new MeteringProxy({ ledger: ctx.ledger, leaseId: ctx.leases.get(item)!, host: "127.0.0.1", managementSocket: join(ctx.scratch, spec.name.slice(0, 40) + ".sock"), managementToken: randomBytes(16).toString("hex"), journal, retry: { attempts: 3, elapsed_ms: 30_000 }, env: FAKE_KEYS, fetch: route, maxOutputTokens: 32_000, allowanceCode: "DR_ALLOWANCE_STOP", sleep: async () => {} } as any);
+  const proxy = new MeteringProxy({ ledger: ctx.ledger, leaseId: ctx.leases.get(item)!, host: "127.0.0.1", managementSocket: join(ctx.scratch, spec.name.slice(0, 40) + ".sock"), managementToken: randomBytes(16).toString("hex"), journal, retry: { attempts: RETRY.attempts, elapsed_ms: 30_000 }, env: FAKE_KEYS, fetch: route, maxOutputTokens: MAX_OUTPUT_TOKENS, allowanceCode: "DR_ALLOWANCE_STOP", sleep: async () => {} } as any);
   proxy.start();
   const base = "http://127.0.0.1:" + proxy.port;
   const cell = { run_id: "dryrun", arm: spec.cell, task, model: spec.model, trial: 1, attempt: 1 };
@@ -453,7 +450,8 @@ function specs(): Spec[] {
   const rounds = (n: number) => Array.from({ length: 12 }, (_, r) => [...Array.from({ length: n }, (_, j) => "echo r" + r + "-" + j), "ls pkg/s" + String(r + 1).padStart(2, "0") + ".py"]);
   out.push({ name: "step-stop-P-opus", group: "aux", cell: "P", model: "opus", main: rounds(10), particle: (a) => (a.type === "next_step" && a.options.includes("show_0") ? { pick: "show_0", conf: 0.95 } : a.type === "next_step" ? { pick: "other", conf: 0.5 } : a.type === "relevant" ? { drop: [] } : { p: 0.5 }) });
   out.push({ name: "step-stop-N-sol", group: "aux", cell: "N", model: "sol", main: rounds(10) });
-  out.push({ name: "call-backstop-N-opus", group: "aux", cell: "N", model: "opus", main: [], after: { text: "Thinking, with no tool call." } });
+  out.push({ name: "call-backstop-N-opus", group: "aux", cell: "N", model: "opus", main: Array.from({ length: 34 }, (_, i): MainReply[] => [{ text: "Thinking, with no tool call." }, { text: "Still thinking." }, ["echo step-" + i]]).flat() });
+  out.push({ name: "format-errors-N-opus", group: "aux", cell: "N", model: "opus", main: [], after: { text: "Thinking, with no tool call." } });
   out.push({ name: "wall-stop-N-sol", group: "aux", cell: "N", model: "sol", main: [], after: ["sleep 2"], cfg: { wall_s: 4 } });
   out.push({ name: "wall-stop-R-opus", group: "aux", cell: "R", model: "opus", main: [], after: ["sleep 2"], cfg: { wall_s: 4 } });
   out.push({ name: "allowance-main-N-opus", group: "aux", cell: "N", model: "opus", allowance: 1_500_000, main: [{ commands: ["echo big"], usage: { input: 350_000 } }], after: ["echo again"] });
@@ -636,7 +634,13 @@ function legSessions(r: Report, all: Session[]) {
   r.add("step_stop at 100 executed actions, decider actions counted (P opus)", p.summary?.exit_status === "step_stop" && p.summary.executed_actions === 100 && p.summary.decider_actions === 8, JSON.stringify({ exit: p.summary?.exit_status, actions: p.summary?.executed_actions, decider: p.summary?.decider_actions }));
   r.add("step_stop at 100 executed actions, actions past the 100th in one reply not run (N sol)", n.summary?.exit_status === "step_stop" && n.summary.executed_actions === 100 && n.summary.main_calls === 10, JSON.stringify({ exit: n.summary?.exit_status, actions: n.summary?.executed_actions, calls: n.summary?.main_calls }));
   const cb = by("call-backstop-N-opus");
-  r.add("call_backstop at 100 main-model calls, reported apart from step_stop", cb.summary?.exit_status === "call_backstop" && cb.summary.main_calls === 100 && cb.summary.backstop_hit === true, JSON.stringify({ exit: cb.summary?.exit_status, calls: cb.summary?.main_calls }));
+  r.add("call_backstop at 100 main-model calls, reported apart from step_stop", cb.summary?.exit_status === "call_backstop" && cb.summary.main_calls === 100 && cb.summary.executed_actions === 33 && cb.summary.backstop_hit === true, JSON.stringify({ exit: cb.summary?.exit_status, calls: cb.summary?.main_calls, actions: cb.summary?.executed_actions }));
+  const fe = by("format-errors-N-opus");
+  r.add("three replies in a row with no tool call end the session as agent_error (mini's RepeatedFormatError at the pin), graded", fe.summary?.exit_status === "agent_error" && fe.summary.main_calls === 3 && existsSync(join(fe.trial, "verifier", "reward.txt")), JSON.stringify({ exit: fe.summary?.exit_status, calls: fe.summary?.main_calls }));
+  const capField: Record<string, string> = { anthropic: "max_tokens", openai: "max_completion_tokens", openrouter: "max_tokens" };
+  const mains = all.flatMap((s) => s.requests.filter((q) => q.kind === "main").map((q) => ({ name: s.spec.name, asked: q.body?.[capField[q.provider]!] })));
+  const offCap = mains.filter((m) => m.asked !== MAX_OUTPUT_TOKENS);
+  r.add("every main-model call in every cell asks for " + MAX_OUTPUT_TOKENS + " output tokens and passes the proxy's cap", mains.length > 0 && offCap.length === 0, mains.length + " main-model requests" + (offCap.length ? "; off the cap: " + offCap.slice(0, 4).map((m) => m.name + "=" + m.asked).join(", ") : ""));
   for (const name of ["wall-stop-N-sol", "wall-stop-R-opus"]) {
     const s = by(name);
     r.add("wall_stop with a short wall (" + name + ")", s.summary?.exit_status === "wall_stop", JSON.stringify({ exit: s.summary?.exit_status, ms: s.summary?.session_ms }));
@@ -654,6 +658,14 @@ function legSessions(r: Report, all: Session[]) {
   const inf = by("infra-N-sol");
   const ok2xx = Object.entries(inf.meter?.upstream?.statuses ?? {}).filter(([k]) => k.startsWith("2")).reduce((a, [, v]) => a + (v as number), 0);
   r.add("infrastructure: no model response marks the session for Harbor's one rerun (DrInfraError, max_retries 1) and the scorer counts it missing", inf.summary?.exit_status === "infra_error" && inf.summary.main_responses === 0 && ok2xx === 0 && HARBOR_RETRY.max_retries === 1 && HARBOR_RETRY.include_exceptions.includes("DrInfraError"), JSON.stringify({ exit: inf.summary?.exit_status, responses: inf.summary?.main_responses, statuses: inf.meter?.upstream?.statuses }));
+  const LITELLM_OPENAI_SENDS = 3, MINI_ATTEMPTS = { leg: Number(by("infra-N-sol").spec.env?.MSWEA_MODEL_RETRY_STOP_AFTER_ATTEMPT), default: 10 };
+  const infOut = readJsonl(inf.journal).filter((l) => l.kind === "outcome");
+  const infMax = new Map(readJsonl(inf.journal).filter((l) => l.kind === "request").map((l) => [l.reservation_id, l.max_micros as number]));
+  const legBound = RETRY.attempts * LITELLM_OPENAI_SENDS * MINI_ATTEMPTS.leg;
+  const worstCalls = RETRY.attempts * LITELLM_OPENAI_SENDS * MINI_ATTEMPTS.default * (HARBOR_RETRY.max_retries + 1);
+  const shadow = Math.max(0, ...infOut.map((l) => l.shadow_micros ?? 0));
+  const freeOk = infOut.length > 0 && infOut.every((l) => l.status >= 500 && l.no_usage_5xx === true && l.outcome?.spent_micros === 0 && l.shadow_micros === infMax.get(l.reservation_id));
+  r.add("5xx without usage: an all-500 session books $0, journals each attempt's shadow reservation, and ends infra_error within " + legBound + " attempts (proxy " + RETRY.attempts + " x litellm " + LITELLM_OPENAI_SENDS + " x mini " + MINI_ATTEMPTS.leg + ")", inf.summary?.exit_status === "infra_error" && (inf.meter?.micros ?? -1) === 0 && freeOk && infOut.length <= legBound, JSON.stringify({ exit: inf.summary?.exit_status, micros: inf.meter?.micros, zero_settles: infOut.length, bound: legBound, worst_case_per_session: { calls: worstCalls, shadow_usd_at_this_reservation: (worstCalls * shadow) / 1e6, formula: "proxy attempts x litellm sends x mini default attempts x Harbor runs" } }));
   const stopNoCode = all.filter((s) => STOP_CODES[s.summary?.exit_status] && !s.stderr.split("\n").some((l) => l.startsWith(STOP_CODES[s.summary.exit_status]!)));
   r.add("every session stop prints its code first on stderr (DR_STEP_STOP, DR_WALL_STOP, DR_ALLOWANCE_STOP)", stopNoCode.length === 0, stopNoCode.length ? "no code line in " + stopNoCode.map((s) => s.spec.name).join(", ") : "");
 
@@ -787,7 +799,7 @@ async function legScorer(r: Report, ctx: Ctx, all: Session[]) {
   const outcomes = (text.match(/^(verdict: |NO OUTCOME: )/gm) ?? []).length;
   r.add("scorer end to end: Primary A and Primary B print for both models, each with a verdict or NO OUTCOME", sc.exitCode === 0 && blocks("Primary A, R against N") === 2 && blocks("Primary B, R against P") === 2 && outcomes >= 4, "exit " + sc.exitCode + ", " + outcomes + " verdict lines (score.txt)");
   r.guard("pilot re-cost on the dry-run pilot sessions (pilot CLI)", () => {
-    const p = Bun.spawnSync([process.execPath, "-e", "import { main } from '" + join(LANE, "score", "pilot.ts") + "'; process.exit(await main(process.argv.slice(1)));", "--trials", join(out, "trials", "pilot"), "--trials", join(out, "trials", "other"), ...jflags, "--prices", prices], { cwd: REPO, stdout: "pipe", stderr: "pipe" });
+    const p = cli(["pilot", "--trials", join(out, "trials", "pilot"), "--trials", join(out, "trials", "other"), ...jflags, "--prices", prices]);
     const t = p.stdout.toString();
     writeFileSync(join(out, "pilot.txt"), t + p.stderr.toString());
     return p.exitCode === 0 && /all-in at caps/.test(t) && /max_tokens 8000/.test(t) ? true : "exit " + p.exitCode + " " + p.stderr.toString().slice(0, 200);

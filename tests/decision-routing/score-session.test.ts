@@ -3,7 +3,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { callUsd, coverage, pairOnTasks, readJournal, readTrial, taskRepo, type PriceTable } from "../../lanes/decision-routing/score/session.ts";
+import { trialDirs } from "../../lanes/decision-routing/score/cli.ts";
+import { callUsd, coverage, infraAttempts, pairOnTasks, readJournal, readTrial, rerunRows, taskRepo, type PriceTable } from "../../lanes/decision-routing/score/session.ts";
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
@@ -113,5 +114,36 @@ describe("coverage and pairing", () => {
     const a = [s("t0", "graded"), s("t1", "graded"), s("t2", "missing")];
     const b = [s("t0", "graded"), s("t1", "missing"), s("t2", "graded")];
     expect(pairOnTasks(a, b).map((p) => p.task)).toEqual(["t0"]);
+  });
+});
+
+
+describe("infrastructure reruns, prereg line 206", () => {
+  const kept = (job: string, name: string, model = "opus", cell = "R") => {
+    const dir = join(job, "dr-infra-attempts", name);
+    mkdirSync(join(dir, "agent", "dr"), { recursive: true });
+    writeFileSync(join(dir, "agent", "dr", "dr-summary.json"), JSON.stringify({ v: 1, session: name, cell, model, exit_status: "infra_error", session_ms: 1000 }));
+    writeFileSync(join(dir, "attempt.json"), JSON.stringify({ trial: name, attempt: 1, cell, model, exit_status: "infra_error", successful_responses: 4, meter_id: "m-first", micros: 1500000 }));
+  };
+  test("a rerun after a mid-session provider error is scored once and the kept first attempt never is", () => {
+    const job = join(tmp(), "job");
+    const ctx = { calls: readJournal([journal(tmp())]), prices };
+    kept(job, "t1__a");
+    trial(job, "t1__a", { exit: "submitted", reward: "1" });
+    const dirs = trialDirs(job);
+    expect(dirs).toEqual([join(job, "t1__a")]);
+    const sessions = dirs.map((d) => readTrial(d, ctx));
+    expect(sessions.map((s) => [s.status, s.success])).toEqual([["graded", 1]]);
+    expect(rerunRows(infraAttempts(job), sessions)).toEqual([{ model: "opus", cell: "R", reruns: 1, rerun_graded: 1, rerun_missing: 0, missing: 0 }]);
+  });
+  test("a second infrastructure failure is missing, and it counts as a rerun and a missing session in its cell", () => {
+    const job = join(tmp(), "job");
+    const ctx = { calls: readJournal([journal(tmp())]), prices };
+    kept(job, "t2__b");
+    trial(job, "t2__b", { exit: "infra_error", reward: "0", exception: "DrInfraError" });
+    trial(job, "t3__c", { exit: "step_stop", reward: "0" });
+    const sessions = trialDirs(job).map((d) => readTrial(d, ctx));
+    expect(sessions.map((s) => s.status)).toEqual(["missing", "graded"]);
+    expect(rerunRows(infraAttempts(job), sessions)).toEqual([{ model: "opus", cell: "R", reruns: 1, rerun_graded: 0, rerun_missing: 1, missing: 1 }]);
   });
 });

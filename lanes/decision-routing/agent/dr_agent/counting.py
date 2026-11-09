@@ -48,6 +48,16 @@ def stop_status(exc, _depth=0):
     return stop_status(exc.__cause__, _depth + 1) or stop_status(exc.__context__, _depth + 1)
 
 
+def as_stop(exc):
+    """An AllowanceStop whose message carries the stop code exc carries, so stop_status reads the same status from it
+    (a custody hit stays a custody hit); None when exc carries no stop code."""
+    status = stop_status(exc)
+    if status is None:
+        return None
+    code = next(c for c, s in STOP_CODES.items() if s == status)
+    return AllowanceStop(str(exc) if code in str(exc) else f"{code}: {exc}")
+
+
 class CountingEnv:
     """Wraps mini's environment: counts every executed action and tells an optional observer about it."""
 

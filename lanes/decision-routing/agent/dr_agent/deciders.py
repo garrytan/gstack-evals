@@ -10,7 +10,7 @@ client on first use.
 import json
 import time
 
-from dr_agent.counting import AllowanceStop, is_allowance_stop
+from dr_agent.counting import as_stop
 from dr_agent.state import canonical, sha256
 
 JEV_MODEL = "jev-1.13.0"
@@ -112,8 +112,9 @@ class Jev:
                 err = None
                 break
             except Exception as e:
-                if is_allowance_stop(e):
-                    raise AllowanceStop(str(e)) from e
+                stop = as_stop(e)
+                if stop is not None:
+                    raise stop from e
                 err = _err(e)
         latency = int((time.time() - t) * 1000)
         first = True
@@ -200,8 +201,9 @@ class Generative:
             try:
                 r = self.call(SYSTEM, user, schema)
             except Exception as e:
-                if is_allowance_stop(e):
-                    raise AllowanceStop(str(e)) from e
+                stop = as_stop(e)
+                if stop is not None:
+                    raise stop from e
                 rec["error"] = _err(e)
                 continue
             for k, v in (r.get("usage") or {}).items():

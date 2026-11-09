@@ -7,8 +7,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chatPrice, priceRequest, PriceError, REQUEST_OVERHEAD_TOKENS, reservationMicros, usageCost } from "../../src/runner/pricing/prices.ts";
-import { MeteringProxy, problem, routable, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
+import { MeteringProxy, NO_USAGE_5XX_REASON, problem, routable, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
+import { MAX_OUTPUT_TOKENS } from "../../lanes/decision-routing/host/controller.ts";
 
 const KEYS = { ANTHROPIC_API_KEY: "sk-ant-dr-0123456789", OPENAI_API_KEY: "sk-openai-dr-0123456789", OPENROUTER_API_KEY: "sk-or-dr-0123456789", TYPESAFE_API_KEY: "ts-dr-key-0123456789" };
 const cell: Omit<CellAttempt, "meter_id"> = { run_id: "dr", arm: "R", task: "t1", model: "opus", trial: 1, attempt: 1 };
@@ -225,5 +226,112 @@ describe("particle-1 pin", () => {
     expect(sent.provider).toMatchObject({ only: ["particle-ai"], allow_fallbacks: false, data_collection: "deny" });
     expect(sent.provider.order).toBeUndefined();
     expect(sent.max_tokens).toBe(8000);
+  });
+});
+
+describe("main-model output cap: every main-model call asks for 32000 tokens", () => {
+  const solOk = () => Response.json({ id: "chat", usage: { prompt_tokens: 100, completion_tokens: 20 } });
+  const sol = (maxTokens: number) => ({ model: "gpt-6.1-sol", max_completion_tokens: maxTokens, messages: [{ role: "user", content: "hi" }] });
+  const models = ["anthropic:claude-opus-5-5", "openai:gpt-6.1-sol"];
+
+  test("the controller's cap is 32000", () => {
+    expect(MAX_OUTPUT_TOKENS).toBe(32_000);
+  });
+
+  test("a 32000 request passes on both models, sent as asked, and its reservation fits the $5 allowance", async () => {
+    for (const [path, body, field, upstream] of [["/anthropic/v1/messages", opus(32_000), "max_tokens", anthropicOk], ["/openai/v1/chat/completions", sol(32_000), "max_completion_tokens", solOk]] as const) {
+      const t = setup(upstream, { allowanceCode: "DR_ALLOWANCE_STOP", maxOutputTokens: MAX_OUTPUT_TOKENS });
+      const b = t.bind({ models });
+      const res = await t.post(b.slot, b.token, path, body);
+      expect(res.status).toBe(200);
+      expect(t.calls).toHaveLength(1);
+      expect(JSON.parse(t.calls[0]!.raw)[field]).toBe(32_000);
+      const reserve = t.journal().find(l => l.kind === "request");
+      expect(reserve.max_micros).toBeLessThan(5_000_000);
+    }
+  });
+
+  test("a 128000 request, litellm's default for claude-opus-5-5, is still refused and nothing is forwarded", async () => {
+    for (const [path, body] of [["/anthropic/v1/messages", opus(128_000)], ["/openai/v1/chat/completions", sol(128_000)]] as const) {
+      const t = setup(anthropicOk, { allowanceCode: "DR_ALLOWANCE_STOP", maxOutputTokens: MAX_OUTPUT_TOKENS });
+      const b = t.bind({ models });
+      const res = await t.post(b.slot, b.token, path, body);
+      expect(res.status).toBe(400);
+      const detail = ((await res.json()) as any).detail as string;
+      expect(detail).toStartWith("E_ALLOWANCE: ");
+      expect(detail).toContain("asks for 128000 output tokens, above this cell's cap of 32000");
+      expect(t.calls).toHaveLength(0);
+      expect(t.ledger.reservations.size).toBe(0);
+    }
+  });
+});
+
+
+describe("a 5xx without usage (prereg section 10): $0 under DR_ALLOWANCE_STOP, unchanged on every other proxy", () => {
+  const failing = (status: number, usage?: unknown) => () => new Response(JSON.stringify({ type: "error", error: { type: "api_error", message: "overloaded" }, ...(usage ? { usage } : {}) }), { status, headers: { "content-type": "application/json" } });
+  const lines = (t: ReturnType<typeof setup>) => {
+    const j = t.journal();
+    const max = new Map(j.filter(l => l.kind === "request").map(l => [l.reservation_id, l.max_micros]));
+    return j.filter(l => l.kind === "outcome").map(l => ({ ...l, max: max.get(l.reservation_id) }));
+  };
+
+  test("flag on: each 5xx attempt with no usage settles at $0 on its own line, marked, with the reservation it would have charged", async () => {
+    const t = setup(failing(500), { allowanceCode: "DR_ALLOWANCE_STOP", maxOutputTokens: MAX_OUTPUT_TOKENS });
+    const b = t.bind();
+    expect((await t.post(b.slot, b.token, "/anthropic/v1/messages", opus(32_000))).status).toBe(502);
+    expect(t.calls).toHaveLength(3);
+    const o = lines(t);
+    expect(o).toHaveLength(3);
+    for (const l of o) {
+      expect([l.status, l.outcome.kind, l.outcome.spent_micros, l.no_usage_5xx, l.reason]).toEqual([500, "spent", 0, true, NO_USAGE_5XX_REASON]);
+      expect(l.shadow_micros).toBe(l.max);
+      expect(l.max).toBeGreaterThan(0);
+    }
+    expect([...t.ledger.reservations.values()].map(r => [r.state, r.spent_micros])).toEqual([["settled", 0], ["settled", 0], ["settled", 0]]);
+  });
+
+  test("flag on: a 5xx that carries usage is charged by its usage, unmarked", async () => {
+    const t = setup(failing(503, { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 3000, cache_creation_input_tokens: 50 }), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const b = t.bind();
+    await t.post(b.slot, b.token, "/anthropic/v1/messages", opus());
+    for (const l of lines(t)) {
+      expect(l.outcome.spent_micros).toBe(OPUS_SPEND);
+      expect("no_usage_5xx" in l || "shadow_micros" in l || "reason" in l).toBe(false);
+    }
+  });
+
+  test("flag on: a stream that ends without usage keeps the full-reservation path", async () => {
+    const t = setup(() => new Response("event: message_start\ndata: {\"type\":\"message_start\"}\n\n", { status: 200, headers: { "content-type": "text/event-stream" } }), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const b = t.bind();
+    const res = await t.post(b.slot, b.token, "/anthropic/v1/messages", { ...opus(), stream: true });
+    await res.text();
+    await Bun.sleep(50);
+    const [l] = lines(t);
+    expect([l.outcome.kind, l.reason, "no_usage_5xx" in l]).toEqual(["unknown", "the stream ended without usage", false]);
+    expect([...t.ledger.reservations.values()][0]!.state).toBe("unknown");
+  });
+
+  test("flag off: a 5xx without usage is still charged at its reservation, with the same outcome line as before", async () => {
+    const t = setup(failing(500));
+    const b = t.bind();
+    await t.post(b.slot, b.token, "/anthropic/v1/messages", opus());
+    const o = lines(t);
+    expect(o).toHaveLength(3);
+    for (const l of o) {
+      expect(Object.keys(l).filter(k => k !== "max")).toEqual(["at", "kind", "reservation_id", "meter_id", "status", "outcome", "latency_ms", "reason", "upstream_body"]);
+      expect([l.outcome.kind, l.outcome.spent_micros, l.reason]).toEqual(["spent", l.max, "a 5xx without usage is charged at its reservation"]);
+    }
+    expect([...t.ledger.reservations.values()].every(r => r.spent_micros === r.max_micros)).toBe(true);
+  });
+
+  test("a 4xx stays $0 and unmarked under both settings", async () => {
+    for (const overrides of [{}, { allowanceCode: "DR_ALLOWANCE_STOP" as const }]) {
+      const t = setup(failing(400), overrides);
+      const b = t.bind();
+      expect((await t.post(b.slot, b.token, "/anthropic/v1/messages", opus())).status).toBe(400);
+      const o = lines(t);
+      expect(o).toHaveLength(1);
+      expect([o[0]!.outcome.spent_micros, "no_usage_5xx" in o[0]!, "reason" in o[0]!]).toEqual([0, false, false]);
+    }
   });
 });

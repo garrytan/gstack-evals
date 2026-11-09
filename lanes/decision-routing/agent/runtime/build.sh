@@ -9,7 +9,8 @@
 #   docker run --rm -v "$(command -v uv)":/usr/local/bin/uv:ro -v "$PWD":/repo:ro -v "$OUT":/out \
 #     debian:bookworm-slim bash /repo/lanes/decision-routing/agent/runtime/build.sh /out
 # The tarball is reproducible for one uv version and one tar and gzip: names sorted, mtime 0, owner and group 0, no
-# gzip timestamp, bytecode compiled in checked-hash mode. It prints "sha256 <hex>  <tarball>" last.
+# gzip timestamp, bytecode compiled in checked-hash mode with a fixed hash seed (PYTHONHASHSEED=0, so a frozenset
+# constant marshals in one order). It prints "sha256 <hex>  <tarball>" last.
 # Usage: build.sh <out-dir> [prefix]
 set -euo pipefail
 umask 022
@@ -31,21 +32,22 @@ if [[ -e $PREFIX ]] && [[ -n $(ls -A "$PREFIX") ]]; then fail "$PREFIX is not em
 mkdir -p "$PREFIX" "$OUT"
 OUT=$(cd "$OUT" && pwd)
 
-export UV_NO_CONFIG=1 UV_PYTHON_INSTALL_DIR=$PREFIX/python UV_LINK_MODE=copy SOURCE_DATE_EPOCH=0 PYTHONDONTWRITEBYTECODE=1
+export UV_NO_CONFIG=1 UV_PYTHON_INSTALL_DIR=$PREFIX/python UV_LINK_MODE=copy SOURCE_DATE_EPOCH=0 PYTHONDONTWRITEBYTECODE=1 PYTHONHASHSEED=0
 uv python install --no-bin "$PYTHON_VERSION"
 PY=$(echo "$PREFIX"/python/cpython-"$PYTHON_VERSION"-linux-*/bin/python3.12)
 [[ -x $PY ]] || fail "uv did not install CPython $PYTHON_VERSION under $PREFIX/python"
 rm -rf "$PREFIX"/python/.lock "$PREFIX"/python/.cache "$PREFIX"/python/.temp
-"$PY" -I -m compileall -f -q -j0 --invalidation-mode checked-hash "$(dirname "$PY")/../lib/python3.12" >/dev/null \
+"$PY" -I -m compileall -f -q -j1 --invalidation-mode checked-hash "$(dirname "$PY")/../lib/python3.12" >/dev/null \
   || fail "could not compile the standard library"
 
 uv venv --python "$PY" "$PREFIX/venv"
-uv pip install --python "$PREFIX/venv/bin/python" --require-hashes --no-deps --compile-bytecode -r "$HERE/requirements.lock"
+uv pip install --python "$PREFIX/venv/bin/python" --require-hashes --no-deps -r "$HERE/requirements.lock"
 
 mkdir -p "$PREFIX/src"
 tar -C "$AGENT_SRC/.." --exclude=__pycache__ --exclude='*.pyc' -cf - dr_agent | tar -C "$PREFIX/src" -xf -
 SITE=$("$PREFIX/venv/bin/python" -I -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
 echo "$PREFIX/src" > "$SITE/_dr_src.pth"
+"$PY" -I -m compileall -f -q -j1 --invalidation-mode checked-hash "$SITE" >/dev/null || fail "could not compile the venv's packages"
 "$PREFIX/venv/bin/python" -I -B -c 'import minisweagent, litellm, anthropic, openai, typesafe_sdk, dr_agent' \
   || fail "the built venv cannot import its packages"
 

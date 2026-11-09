@@ -20,6 +20,7 @@ class DecisionLog:
         os.makedirs(os.path.join(log_dir, "states"), exist_ok=True)
         os.makedirs(os.path.join(log_dir, "snapshots"), exist_ok=True)
         self.path = os.path.join(log_dir, "decisions.jsonl")
+        open(self.path, "a").close()
         self.seq = 0
         self.by_type = {}
         self.state_over_limit = 0

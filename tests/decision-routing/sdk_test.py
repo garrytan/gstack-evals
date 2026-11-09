@@ -373,6 +373,19 @@ class SessionStops(StubCase):
     def test_allowance_stop_ends_the_session_after_one_request_per_route(self) -> None:
         self.stops("stop", "allowance_stop", [("N", "opus", "anthropic"), ("N", "sol", "openai"), ("W", "particle", "openrouter"), ("P", "opus", "openrouter"), ("J", "opus", "typesafe")])
 
+    def test_every_main_model_call_asks_for_32000_output_tokens(self) -> None:
+        for model, provider, field in (("opus", "anthropic", "max_tokens"), ("sol", "openai", "max_completion_tokens")):
+            with self.subTest(model=model):
+                self.control("/_stub/reset", {})
+                self.script(provider, bash("ls"), bash(SUBMIT))
+                summary = self.session("N", model)
+                self.assertEqual(summary["exit_status"], "submitted", summary)
+                self.assertEqual([h[field] for h in self.hits(provider)], [32000, 32000])
+
+    def test_litellm_default_for_opus_is_128000(self) -> None:
+        self.anthropic().query([{"role": "user", "content": "hi"}])
+        self.assertEqual([h["max_tokens"] for h in self.hits("anthropic")], [128000])
+
     def test_custody_hit_ends_the_session_as_custody_hit(self) -> None:
         self.stops("custody", "custody_hit", [("N", "opus", "anthropic"), ("N", "sol", "openai"), ("J", "opus", "typesafe")])
 

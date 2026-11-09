@@ -1,13 +1,14 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals decision-routing score: per creative model, Primary A (R against N), Primary B (R against P) and P against
-// N in Primary A's form with no verdict; stops per cell and kind; S10 acting rates.
+// N in Primary A's form with no verdict; stops per cell and kind; reruns and missing per cell (prereg line 206); 5xx calls
+// settled at $0 with their shadow reservations; sessions that hit the image's base env; S10 acting rates.
 //   score --trials <dir>... --journal <file>... --prices <prices.json> --planned <planned.json> --admission <admission.json> [--labels <labels.jsonl>...] [--json <out>]
 // planned.json: {"tasks": [task ids]}. admission.json: written by admit; contrasts["R-N"] and ["R-P"] carry admitted.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { actingRates } from "./acting.ts";
 import { primaryA, primaryB, printA, printB } from "./primary.ts";
-import { loadPrices, readJournal, readTrial, type SessionOutcome } from "./session.ts";
+import { infraAttempts, loadPrices, readJournal, readTrial, rerunRows, type SessionOutcome } from "./session.ts";
 
 const flag = (argv: string[], name: string): string | undefined => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
 const flags = (argv: string[], name: string): string[] => argv.flatMap((a, i) => (a === name && argv[i + 1] !== undefined ? [argv[i + 1]!] : []));
@@ -52,6 +53,37 @@ export async function main(argv: string[]): Promise<number> {
   const stops = new Map<string, number>();
   for (const s of sessions) { const k = s.model + " " + s.cell + " " + (s.status === "missing" ? "missing: " + s.reason : s.exit_status); stops.set(k, (stops.get(k) ?? 0) + 1); }
   lines.push("", "stops and outcomes per cell:", ...[...stops.entries()].sort().map(([k, v]) => "  " + k + ": " + v));
+  const attempts = roots.flatMap(infraAttempts);
+  const reruns = rerunRows(attempts, sessions);
+  report.reruns = reruns;
+  lines.push("", "reruns and missing per cell (prereg line 206; a kept first attempt is never scored):", ...reruns.map((r) => "  " + r.model + " " + r.cell + ": reruns " + r.reruns + " (rerun graded " + r.rerun_graded + ", rerun missing " + r.rerun_missing + "), missing " + r.missing));
+  const read = (p: string) => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null);
+  const owner = new Map<string, string>();
+  const baseEnv = new Map<string, { sessions: number; hit: number }>();
+  for (const d of dirs) {
+    const s = read(join(d, "agent", "dr", "dr-summary.json"));
+    if (!s) continue;
+    const k = s.model + " " + s.cell, m = read(join(d, "agent", "dr", "meter.json"))?.meter_id, t = join(d, "agent", "dr", "trajectory.json");
+    if (typeof m === "string") owner.set(m, k);
+    if (!existsSync(t)) continue;
+    const b = baseEnv.get(k) ?? { sessions: 0, hit: 0 };
+    b.sessions++;
+    if (/No module named|conda activate testbed/.test(readFileSync(t, "utf8"))) b.hit++;
+    baseEnv.set(k, b);
+  }
+  for (const a of attempts) if (a.meter_id) owner.set(a.meter_id, a.model + " " + a.cell);
+  const free = new Map<string, { count: number; shadow_micros: number }>();
+  for (const l of journals.flatMap(jsonl)) {
+    if (l.kind !== "outcome" || l.no_usage_5xx !== true) continue;
+    const k = owner.get(l.meter_id) ?? "no session", f = free.get(k) ?? { count: 0, shadow_micros: 0 };
+    f.count++;
+    f.shadow_micros += l.shadow_micros ?? 0;
+    free.set(k, f);
+  }
+  report.no_usage_5xx = Object.fromEntries(free);
+  report.base_env = Object.fromEntries(baseEnv);
+  lines.push("", "5xx calls without usage settled at $0 (shadow: the reservations they would have charged):", ...(free.size ? [...free.entries()].sort().map(([k, f]) => "  " + k + ": " + f.count + ", shadow $" + (f.shadow_micros / 1e6).toFixed(2)) : ["  none"]));
+  lines.push("", "sessions that hit the image's base env (No module named, or the agent ran conda activate testbed):", ...[...baseEnv.entries()].sort().map(([k, b]) => "  " + k + ": " + b.hit + " of " + b.sessions));
   const labels = new Map<string, unknown>(flags(argv, "--labels").flatMap(jsonl).map((l: any) => [l.decision_id, l.label]));
   const decisions = dirs.flatMap((d) => jsonl(join(d, "agent", "dr", "decisions.jsonl")));
   const summaries = dirs.flatMap((d) => { const p = join(d, "agent", "dr", "dr-summary.json"); return existsSync(p) ? [JSON.parse(readFileSync(p, "utf8"))] : []; });

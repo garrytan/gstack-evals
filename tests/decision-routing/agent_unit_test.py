@@ -520,6 +520,30 @@ def test_allowance_detection():
     check(not counting.is_allowance_stop(Exception("E_ALLOWANCE")), "other lanes' code")
 
 
+def test_a_decider_custody_hit_stays_a_custody_hit():
+    class Refused(Exception):
+        def __init__(self, code):
+            super().__init__("Error code: 403")
+            self.body = {"type": "about:blank", "title": code, "status": 403, "code": code, "detail": code + ": metering proxy: refused"}
+
+    def raising(code):
+        def call(*args):
+            raise Refused(code)
+        return call
+
+    for code, status in (("DR_CUSTODY_HIT", "custody_hit"), ("DR_ALLOWANCE_STOP", "allowance_stop")):
+        adapters = [deciders.Jev("http://proxy/typesafe", "tok", call=raising(code)),
+                    deciders.Generative("openai", "http://proxy/openrouter/v1", "tok", deciders.PARTICLE_MODEL, 8000, call=raising(code))]
+        for a in adapters:
+            raised = None
+            try:
+                a.ask(base_state(), {"done": Q.noul("done")}) if isinstance(a, deciders.Jev) else a.ask_noul(base_state(), Q.noul("done"))
+            except counting.AllowanceStop as e:
+                raised = e
+            check(raised is not None and str(raised).startswith(code), f"{a} {code}: {raised!r}")
+            check(counting.stop_status(raised) == status, f"{a} {code}: read as {counting.stop_status(raised)}")
+
+
 def test_allowance_decider_stops_session_without_retry():
     d = repo({"a.py": "x\n"})
     j, js = jev(lambda n, s: Exception(ALLOW))
@@ -782,6 +806,18 @@ def test_log_record_fields():
             check(hashlib.sha256(f.read()).hexdigest() == r["state_sha256"], "state sha mismatch")
 
 
+def test_every_main_model_call_asks_for_32000_output_tokens():
+    from dr_agent import session
+
+    check(session.MAIN_MAX_TOKENS == 32000, session.MAIN_MAX_TOKENS)
+    for cell in ("N", "R", "P", "F", "J", "W"):
+        for model in ("opus", "sol"):
+            ms = session.model_settings(cell, model, "http://proxy", "tok")
+            check(ms["model_kwargs"]["max_tokens"] == 32000, (cell, model, ms))
+    check(session.model_settings("N", "opus", "http://proxy", "tok")["model_name"] == "anthropic/claude-opus-5-5", "opus")
+    check(session.model_settings("W", "opus", "http://proxy", "tok")["model_name"] == "openrouter/particle-ai/particle-1", "W")
+
+
 # ---------- real tier: litellm, the SDKs and a session against a local fake proxy ----------
 
 class Fake(http.server.BaseHTTPRequestHandler):
@@ -933,6 +969,7 @@ def test_real_session_routed_end_to_end():
         results = [c["tool_use_id"] for m in last if m["role"] == "user" and isinstance(m["content"], list) for c in m["content"] if c.get("type") == "tool_result"]
         check(len(uses) == 2 and uses == results, (uses, results))
         check("cache_control" in json.dumps(mains[-1]), "set_cache_control is not on for Anthropic")
+        check([b["max_tokens"] for b in mains] == [32000] * len(mains), [b.get("max_tokens") for b in mains])
     finally:
         server.shutdown()
 

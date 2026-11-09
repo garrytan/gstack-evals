@@ -4,8 +4,8 @@
 // session's own clock (first model call to end) from dr-summary.json. Stops (step, wall, allowance) are graded; an
 // allowance stop is never a gap. Infrastructure, a Harbor exception, a session that never entered and a session with no
 // reward are missing: coverage gaps, never fails.
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { basename, join } from "node:path";
 
 export interface Usage { input: number; output: number; reasoning: number; cache_read: number; cache_write: number }
 export interface Call { reservation_id: string; provider: string; model: string; status: number | null; usage: Usage; latency_ms: number | null }
@@ -129,4 +129,38 @@ export function pairOnTasks(a: readonly SessionOutcome[], b: readonly SessionOut
   };
   const left = index(a), right = index(b);
   return [...left.keys()].filter((t) => right.has(t)).sort().map((task) => ({ task, repo: left.get(task)!.repo, a: left.get(task)!, b: right.get(task)! }));
+}
+
+export interface InfraAttempt { trial: string; cell: string; model: string; exit_status: string | null; meter_id: string | null; micros: number }
+
+/** Prereg line 206: the first attempts dr_harbor kept under <job>/dr-infra-attempts/<trial>/attempt.json before Harbor's
+ *  one rerun, at most three levels under root. They are never scored; their booked spend stays on the item's lease. */
+export function infraAttempts(root: string): InfraAttempt[] {
+  const out: InfraAttempt[] = [];
+  const walk = (dir: string, depth: number) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (!e.isDirectory()) continue;
+      const sub = join(dir, e.name);
+      if (e.name === "dr-infra-attempts") { for (const t of readdirSync(sub)) { const f = join(sub, t, "attempt.json"); if (existsSync(f)) out.push(JSON.parse(readFileSync(f, "utf8"))); } }
+      else if (depth < 3) walk(sub, depth + 1);
+    }
+  };
+  walk(root, 0);
+  return out.sort((x, y) => x.trial.localeCompare(y.trial));
+}
+
+export interface RerunRow { model: string; cell: string; reruns: number; rerun_graded: number; rerun_missing: number; missing: number }
+
+/** Reruns and missing sessions per creative model and cell. A rerun's outcome is the trial that replaced the kept attempt. */
+export function rerunRows(attempts: readonly InfraAttempt[], sessions: readonly SessionOutcome[]): RerunRow[] {
+  const rows = new Map<string, RerunRow>();
+  const row = (model: string, cell: string) => { const k = model + " " + cell; if (!rows.has(k)) rows.set(k, { model, cell, reruns: 0, rerun_graded: 0, rerun_missing: 0, missing: 0 }); return rows.get(k)!; };
+  for (const s of sessions) { const r = row(s.model ?? "?", s.cell); if (s.status === "missing") r.missing++; }
+  for (const a of attempts) {
+    const r = row(a.model, a.cell);
+    r.reruns++;
+    const final = sessions.find((s) => basename(s.dir) === a.trial);
+    if (final?.status === "graded") r.rerun_graded++; else r.rerun_missing++;
+  }
+  return [...rows.values()].sort((x, y) => (x.model + x.cell).localeCompare(y.model + y.cell));
 }

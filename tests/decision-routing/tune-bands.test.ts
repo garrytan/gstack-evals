@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { actingEdge, blockEdge, dropEdge, ece, wilsonLower } from "../../lanes/decision-routing/tune/bands.ts";
 import { rewritePlan, tune, type LabelledDecision } from "../../lanes/decision-routing/tune/tune.ts";
 import { buildPin, validatePin, writePin } from "../../lanes/decision-routing/tune/pin.ts";
+import { SAFETY_PATTERNS } from "../../lanes/decision-routing/labels/safety.ts";
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
@@ -100,5 +101,15 @@ describe("pin writer", () => {
     expect(() => validatePin({ ...pin, jev: { ...pin.jev, done: { edge: 0.9 } } })).toThrow(/done/);
     expect(() => validatePin({ ...pin, particle_max_tokens: 4000 })).toThrow();
     expect(() => validatePin({ ...pin, questions_sha256: "x" })).toThrow();
+  });
+
+  test("carries the safety rule's exact patterns and refuses a pin whose patterns differ from the rule's", () => {
+    const pin = buildPin(tune(Array.from({ length: 120 }, () => dec({}))), { questions_sha256: "a".repeat(64), mapping_sha256: "b".repeat(64), safety_rule_sha256: "c".repeat(64), particle_max_tokens: 8000 });
+    expect(pin.safety_patterns).toEqual(SAFETY_PATTERNS);
+    expect(pin.safety_patterns.git_history).toEqual(["push", "rebase", "filter-branch", "filter-repo"]);
+    expect(new RegExp(pin.safety_patterns.package_managers).test("pip")).toBe(true);
+    expect(() => validatePin({ ...pin, safety_patterns: { ...pin.safety_patterns, net_tools: ["curl"] } })).toThrow(/safety_patterns/);
+    const { safety_patterns: _, ...without } = pin;
+    expect(() => validatePin(without)).toThrow(/safety_patterns/);
   });
 });

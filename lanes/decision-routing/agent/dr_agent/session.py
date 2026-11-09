@@ -8,7 +8,9 @@ id from DR_SESSION; every DR_ variable is removed from the process env before mi
 runs never see the token.
 
 Every cell takes the agent, model and environment sections of mini's own swebench.yaml from the installed package and
-sets only the model, the limits and the cwd. The environment section runs in a LocalEnvironment with its docker-only
+sets only the model, its max_tokens, the limits and the cwd. Every main-model call asks for MAIN_MAX_TOKENS (32000), on
+every model and in every cell: litellm's own default for claude-opus-5-5 is 128000, above the proxy's 32000 output cap,
+which refuses it. On the openai route litellm sends the same setting as max_completion_tokens. The environment section runs in a LocalEnvironment with its docker-only
 keys dropped and the rest kept alike in every cell (cwd, timeout, env, and the interpreter, which LocalEnvironment
 lacks, so each command runs as <interpreter> <command>). Writes decisions.jsonl, states/, snapshots/,
 trajectory.json and dr-summary.json under log_dir.
@@ -27,16 +29,19 @@ EXIT_MAP = {"Submitted": "submitted", "step_stop": "step_stop", "call_backstop":
             "custody_hit": "custody_hit"}
 DOCKER_ONLY = ("environment_class", "image", "executable", "run_args", "forward_env", "container_timeout", "pull_timeout")
 INFRA_MODULES = ("litellm", "openai", "anthropic", "httpx", "httpcore", "typesafe_sdk")
+MAIN_MAX_TOKENS = 32000
+STOP_LINE_CODES = {"step_stop": "DR_STEP_STOP", "wall_stop": "DR_WALL_STOP", "allowance_stop": "DR_ALLOWANCE_STOP", "custody_hit": "DR_CUSTODY_HIT"}
 
 
 def model_settings(cell, model, proxy, token):
     """model_name, api_base and the few settings this build sets on top of swebench.yaml's model section."""
     if cell == "W":
-        return {"model_name": "openrouter/particle-ai/particle-1", "model_kwargs": {"api_base": proxy + "/openrouter/v1", "api_key": token, "max_tokens": 32000}}
+        return {"model_name": "openrouter/particle-ai/particle-1", "model_kwargs": {"api_base": proxy + "/openrouter/v1", "api_key": token, "max_tokens": MAIN_MAX_TOKENS}}
     if model == "opus":
-        return {"model_name": "anthropic/claude-opus-5-5", "model_kwargs": {"api_base": proxy + "/anthropic", "api_key": token}, "set_cache_control": "default_end"}
+        return {"model_name": "anthropic/claude-opus-5-5", "model_kwargs": {"api_base": proxy + "/anthropic", "api_key": token, "max_tokens": MAIN_MAX_TOKENS},
+                "set_cache_control": "default_end"}
     if model == "sol":
-        return {"model_name": "openai/gpt-6.1-sol", "model_kwargs": {"api_base": proxy + "/openai/v1", "api_key": token}}
+        return {"model_name": "openai/gpt-6.1-sol", "model_kwargs": {"api_base": proxy + "/openai/v1", "api_key": token, "max_tokens": MAIN_MAX_TOKENS}}
     raise ValueError(f"unknown model {model!r}")
 
 
@@ -48,7 +53,7 @@ def model_class():
     """
     from minisweagent.models.litellm_model import LitellmModel
 
-    from dr_agent.counting import STOP_CODES, AllowanceStop, stop_status
+    from dr_agent.counting import AllowanceStop, as_stop
 
     class DrLitellmModel(LitellmModel):
         abort_exceptions = [*LitellmModel.abort_exceptions, AllowanceStop]
@@ -57,11 +62,10 @@ def model_class():
             try:
                 return super()._query(messages, **kwargs)
             except Exception as e:
-                status = stop_status(e)
-                if status is None:
+                stop = as_stop(e)
+                if stop is None:
                     raise
-                code = next(c for c, s in STOP_CODES.items() if s == status)
-                raise AllowanceStop(str(e) if code in str(e) else f"{code}: {e}") from e
+                raise stop from e
 
     return DrLitellmModel
 
@@ -184,6 +188,9 @@ def main(argv=None):
     with open(os.path.join(log_dir, "dr-summary.json"), "w") as f:
         json.dump(summary, f, indent=2)
     agent.save(Path(log_dir) / "trajectory.json")
+    if status in STOP_LINE_CODES:
+        print(f"{STOP_LINE_CODES[status]}: session {session_id} ({cell}, {model_key}) ended as {status} after {agent.executed_actions} "
+              f"executed actions and {agent.n_calls} main-model calls; the verifier grades the patch in {cwd} as it stands.", file=sys.stderr)
     print(f"dr_agent.session {session_id} {cell} {status} actions={agent.executed_actions} calls={agent.n_calls}")
     return 0
 
