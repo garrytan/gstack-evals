@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
-import { approvedCaps, run, simulateTwins, STAGE1_ITEMS } from "../../lanes/product-value/dryrun.ts";
+import { approvedCaps, run, RUN_SIDE_HOOK, simulateTwins, STAGE1_ITEMS } from "../../lanes/product-value/dryrun.ts";
+import { runSideChecks } from "../../lanes/product-value/run-checks.ts";
 import { SEED } from "../../lanes/product-value/stats.ts";
 import { capture } from "./fixtures.ts";
 
@@ -37,6 +38,11 @@ describe("pv dryrun (section 17 item 4)", () => {
     expect(c.out.some((l) => l.startsWith("PASS admission reads all 23 calibration units"))).toBe(true);
     for (const bad of ["1", "9", "7.5", "x"]) await expect(run(["--twin-pairs", bad], capture().io)).rejects.toThrow(/--twin-pairs takes/);
   }, 60_000);
+
+  test("the run-side hook dryrun loads is run-checks.ts, and it exports runSideChecks", () => {
+    expect(RUN_SIDE_HOOK).toBe("run-checks.ts");
+    expect(typeof runSideChecks).toBe("function");
+  });
 
   test("an unknown argument is a usage error", async () => {
     await expect(run(["--fast"], capture().io)).rejects.toThrow(/unknown argument/);

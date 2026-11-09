@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { refuseAliases } from "../../lanes/product-value/io.ts";
 import { admission, ceilingFlag, cutoffEnd, designMdd, interimStop, ittSwitch, judgeScore, leakReading, loadCutoffs, parsePower, readingRule, run, signsMatch, stockReading, twinCheck, twinDecide, untestedReasons, verdict, type CheckCell, type ReadingInput } from "../../lanes/product-value/rules.ts";
 import { SEED } from "../../lanes/product-value/stats.ts";
+import cutoffsFile from "../../lanes/product-value/cutoffs.json";
 import { capture, meta, row, tmp } from "./fixtures.ts";
 
 describe("the twin check (section 4)", () => {
@@ -90,6 +91,11 @@ describe("verdicts and the reading rule (section 11)", () => {
 });
 
 describe("leaks, the MDD and the interim stop", () => {
+  test("loadCutoffs reads by default the cutoffs.json committed beside rules.ts", () => {
+    const c = loadCutoffs();
+    for (const m of ["opus", "sol", "particle"] as const) expect(c.models[m].cutoff).toBe(cutoffsFile.models[m].cutoff);
+  });
+
   test("cutoffs.json records each model's stated cutoff with its provider source", () => {
     const c = loadCutoffs();
     expect(c.models.opus.cutoff).toBe("2026-06");
