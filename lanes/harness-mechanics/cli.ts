@@ -109,7 +109,7 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     const m = (e as Error).message;
     console.error(m.startsWith("E_") ? m : "E_INTERNAL " + m);
-    return m.startsWith("E_HM_LAUNCH") ? 3 : m.startsWith("E_") ? 2 : 1;
+    return m.startsWith("E_") ? 2 : 1;
   }
 }
 

@@ -137,14 +137,14 @@ describe("launch guard", () => {
     expect(g.why[0]).toStartWith("C1: stage1-opus's projection");
     expect(launchGuard("stage1-opus", { "stage1-opus": readRows(p) }, crew(0), parts, ["s1-1"]).ok).toBe(true);
   });
-  test("hm launch runs the guard first: a refusal exits 3 with E_HM_LAUNCH and starts nothing; a pass reaches L1", () => {
+  test("hm launch runs the guard first: a refusal exits 2 with E_HM_LAUNCH and starts nothing; a pass reaches L1", () => {
     const { d } = approved(), work = tmp();
     writeFileSync(join(work, "plan.json"), JSON.stringify({ item: "stage1-opus", parts: itemPlan("stage1-opus", lists).parts }));
     const c = join(tmp(), "crew.json");
     writeFileSync(c, JSON.stringify(crew(600_000)));
     const env = { HM_LEDGERS: d, HM_CREW: c, LEDGER: join(d, "stage1-opus.jsonl") };
     const bad = run(["launch", work, "--part", "s1-1"], env);
-    expect(bad.exitCode).toBe(3);
+    expect(bad.exitCode).toBe(2);
     expect(bad.stderr.toString()).toStartWith("E_HM_LAUNCH stage1-opus: the line: all-in $3080.00");
     writeFileSync(c, JSON.stringify(crew(100_000)));
     const ok = run(["launch", work, "--part", "s1-1"], env);

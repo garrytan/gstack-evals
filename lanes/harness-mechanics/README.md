@@ -111,7 +111,7 @@ Commands:
 
 - hm approve --ledger <item>.jsonl --item <item> --usd <cap> --approved-by <who>, and hm done --ledger <jsonl> --item <item>
   once every launch of the item has settled.
-- hm guard <work> prints the guard. host-up, launch and relaunch run it first and exit 3 with E_HM_LAUNCH when the line or
+- hm guard <work> prints the guard. host-up, launch and relaunch run it first and exit 2 with E_HM_LAUNCH when the line or
   the item's C1 projection does not fit. Inputs: LEDGER (or the host mirror in <work>/host/ledger.jsonl), HM_LEDGERS (a
   folder of <item>.jsonl for the other items) and HM_CREW (the crew file: as_of and threads [{code, credits}], from each
   thread's counter).

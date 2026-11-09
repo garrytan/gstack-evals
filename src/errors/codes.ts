@@ -1143,7 +1143,7 @@ export const CODES = {
     owner: "U20",
   },
   E_HM_LAUNCH: {
-    exit: 3,
+    exit: 2,
     meaning: "A harness mechanics launch was refused before it started (lanes/harness-mechanics/money.ts launchGuard): the 3,000 line all-in (each item's settled and open spend, an item not done at its cap, and the crew file's credits) would pass, the item's C1 projection (its model spend so far, its parts still to run at section 22's planning rates and its parallel allowances, plus its host and part-VM reserves at L1's rates) would pass its cap, or the item is marked done. The message says what doesn't fit.",
     fix: "Take the line to the Captain before launching. The Captain can move room from the vms item to the stage item, leaving the total unchanged; then record the raise on the item's ledger and run the launch again.",
     side_effects: NO_SPEND,
@@ -1152,7 +1152,7 @@ export const CODES = {
     owner: "U20",
   },
   E_HM_SCREEN: {
-    exit: 1,
+    exit: 2,
     meaning: "The harness mechanics task-fit screen could not decide (lanes/harness-mechanics/screen.ts): gstack-checks detect exited 3 for want of a pregate context (no origin/<base> ref in the task's container), so every task would read the same and no screened lists were written.",
     fix: "Take it to the lead: the screen needs a decision on how detect gets a base ref in a pristine container before it can run. Nothing was replaced.",
     side_effects: NO_SPEND,
