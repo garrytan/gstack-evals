@@ -169,6 +169,17 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PIN_MISMATCH](#e_pin_mismatch) | 2 | U20 |
 | [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | warning | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
+| [E_SM_UNIT](#e_sm_unit) | 2 | U20 |
+| [E_SM_SOURCE](#e_sm_source) | 2 | U20 |
+| [E_SM_INELIGIBLE](#e_sm_ineligible) | 1 | U20 |
+| [E_SM_LEAKED](#e_sm_leaked) | 1 | U20 |
+| [E_SM_HISTORY](#e_sm_history) | 1 | U20 |
+| [E_SM_ORACLE_UNSTABLE](#e_sm_oracle_unstable) | 1 | U20 |
+| [E_SM_SLOW_TEST](#e_sm_slow_test) | 1 | U20 |
+| [E_SM_SMOKE](#e_sm_smoke) | 1 | U20 |
+| [E_SM_PULL](#e_sm_pull) | 1 | U20 |
+| [E_SM_PARSER](#e_sm_parser) | 1 | U20 |
+| [E_SM_SEED](#e_sm_seed) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -243,6 +254,70 @@ A review no-loss comparison found the variant worse than the reference: the non-
 Fix: Read the comparison's losses: the blockers the reference found and the variant missed. Restore what the variant dropped and score a new arm; never rerun the same arm to change a verdict.
 
 Exit 1. Side effects: None: noloss score reads ingested arms and writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_SM_INELIGIBLE
+
+A candidate failed the keyless eligibility screen (post section 3); the record names the rule: image_digest (no linux/amd64 digest), fail_to_pass or pass_to_pass (no test), fix_source_files_1_to_6, or feature_request_screen (the frozen keyword screen on the issue's first 800 code points).
+
+Fix: Nothing to fix: the unit is not drawn. The drop counts by rule go in the results.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_LEAKED
+
+The leak scan (post section 4) found a line of 30 characters or more that the fix adds, and that no base file holds, somewhere in the unit's container filesystem, or the scan did not finish. The record names each path and the needle's sha256, never the line. The unit drops before any model call.
+
+Fix: Nothing to fix: the unit drops as leaked. A scan that did not finish fails closed; rerun prep only to recover an infrastructure failure.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_HISTORY
+
+The commit-count preflight or the history rewrite refused (post section 4): the image's tree was not at base_commit or its tracked files differed, the rewrite failed, or the tree does not hold exactly one commit on a base tree (two on a follow-on tree) on main alone with no remote, stash, reflog or loose object.
+
+Fix: The unit or tree drops before any model call. Read the PREFLIGHT line in the message.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_ORACLE_UNSTABLE
+
+The oracle preflight (post section 3) dropped the unit: a fail-to-pass test passed in a base run or did not pass in a fixed run across the three base and three fixed runs, or no test passed in all six runs (no stable test). The record lists the failing ids.
+
+Fix: Nothing to fix: the unit drops and the next unit in draw order is tried.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_SLOW_TEST
+
+A unit's test command took over 15 minutes: one oracle run of the rebuild, test and print commands passed 900 seconds of wall time and was stopped. The record gives the wall ms.
+
+Fix: Nothing to fix: the unit drops (post section 3).
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_SMOKE
+
+The runtime smoke failed in the unit's image: the runtime layer did not build, claude --version did not print the pinned 2.1.312, node did not run, or the egress probe opened a denied target.
+
+Fix: Nothing to fix for a unit: it drops. If every image fails, the runtime layer is broken; fix it before the oracle continues.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_PULL
+
+The unit's image could not be pulled by digest after the pacing rules: a refusal that was not Docker Hub's rate limit, twice. A rate-limit refusal waits for the window and is not counted.
+
+Fix: Check the registry and the network, then rerun the oracle; it resumes at the unit.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_PARSER
+
+The dataset's log parser, run in its sandbox (pinned python image, no network, no mount but its input, uid 10001), crashed, timed out or printed no dict of test id to status. On the oracle this is infrastructure; in scoring it is a gap.
+
+Fix: Read the parser's stderr in the message. Never edit a dataset parser; a unit whose parser fails drops.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 2: no verdict (INCOMPLETE)
 
@@ -1189,6 +1264,30 @@ R3c (quick/laneb/r3) read a pinned record whose sha256 is not the one its prereg
 Fix: Copy the record again from the path the message names (the Captain-drive path beside INHAND in r3/r3c-rules.ts, or the post folder) and rerun the same command. Never edit a pin to match a changed file.
 
 Exit 2. Side effects: None: refused before anything was prepared, bound or launched. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_SM_UNIT
+
+A state machines unit (sm-unit.v1, lanes/outcome-skills/statemachines/unit.ts) is refused: a dataset row with an empty or unparseable FAIL_TO_PASS or PASS_TO_PASS list, a base commit that is not 40 hex, an image with no pinned digest, a patch that is not a git diff, a parser with no parser(), no test command, or a unit dir whose files differ from unit.json's digests.
+
+Fix: Convert the unit again from the pinned cache with gstack-evals outcome sm convert. Never hand-edit a unit dir.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_SOURCE
+
+The state machines family's source does not match its pins: a SWE-bench-Live MultiLang parquet file whose sha256 is not the one source.ts pins for revision eb09c2e5, a download that failed, a parquet read that failed, or a preregistration JSON that pins another revision.
+
+Fix: Run gstack-evals outcome sm source fetch again on a clean cache dir. A changed file at the pinned revision is a new source and needs a new preregistration.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_SEED
+
+The state machines draw found no seed: the preregistration's JSON (prereg.json in the post bundle) is missing, is not sm-prereg.v1, or lacks an unsigned 32-bit integer draw_seed, bootstrap_seed or order_seed.
+
+Fix: Add the seeds through the preregistration's own pull request. The draw never runs on a seed chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

@@ -33,7 +33,8 @@ export interface ImageRow {
   image_id: string;
 }
 export interface ImageManifest {
-  schema: "tg-images.v1";
+  /** v2 (the state machines family) carries its own work dir; v1 rows keep WORKDIR. */
+  schema: "tg-images.v1" | "tg-images.v2";
   set: string;
   gstack_evals: string;
   home: string;
@@ -77,7 +78,8 @@ export function readManifest(path: string, sha256?: string): ImageManifest {
 }
 
 function valid(m: ImageManifest, path: string): ImageManifest {
-  if (m.schema !== "tg-images.v1" || !Array.isArray(m.rows) || !m.rows.length || m.home !== HOME || m.workdir !== WORKDIR) fail(path + " is not a tg-images.v1 manifest with rows, home " + HOME + " and work dir " + WORKDIR);
+  const v2 = m.schema === "tg-images.v2" && typeof m.workdir === "string" && /^\/[^\0]*[^/]$/.test(m.workdir) && !m.workdir.split("/").includes("..");
+  if (!(m.schema === "tg-images.v1" && m.workdir === WORKDIR || v2) || !Array.isArray(m.rows) || !m.rows.length || m.home !== HOME) fail(path + " is not a tg-images.v1 manifest with rows, home " + HOME + " and work dir " + WORKDIR + ", or a tg-images.v2 one with rows, home " + HOME + " and an absolute work dir of its own");
   const labels = new Set<string>();
   for (const r of m.rows) {
     if (!r.label || labels.has(r.label)) fail(path + ": every row needs its own label");
@@ -92,7 +94,7 @@ function valid(m: ImageManifest, path: string): ImageManifest {
  *  prebuilt image (claude, node and bun under /usr/local/bin and /opt/laneb/bin, at the end of PATH). It builds FROM a tag
  *  named for baseId, the id buildImage built, so a build that moves the task's shared tag meanwhile cannot change the base.
  *  Returns the final image's id. */
-function withRuntime(baseId: string): string {
+export function withRuntime(baseId: string): string {
   if (!ID.test(baseId)) fail("the task image's id is " + JSON.stringify(baseId) + ", not a sha256:<64 hex> id; the runtime layer needs the image buildImage built");
   const base = "gstack-evals-tg-base:" + baseId.slice(7);
   const t = dockerCli(["tag", baseId, base], { timeoutMs: 60000 });

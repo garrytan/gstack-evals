@@ -1,0 +1,183 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// The oracle preflight (post section 3), per unit in seeded draw order: pull by digest under the pull pacing, the runtime
+// layer and its smoke, the stripped one-commit tree, the scope, the leak scan, then three base and three fixed runs of the
+// unit's own commands (base = base plus test.patch, since the fail-to-pass tests live in it; fixed = base plus test.patch
+// plus fix.patch). A unit stays only when every fail-to-pass test fails in all three base runs and passes in all three
+// fixed runs; its stable set is every id the parser reports passed in all six runs. A run over 900 s drops it.
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+const rf = readFileSync;
+import { createHash } from "node:crypto";
+import { docker, dockerRun } from "../../real-outcome/task/docker.ts";
+import { withRuntime } from "../images/manifest.ts";
+import { prepareBase, type Where } from "./history.ts";
+import { leakCheck, needles, scan } from "./leak.ts";
+import { scope } from "./scope.ts";
+import { applyPatches, copyVolume, dropVolume, LIMIT_MS, passed, runName, runParser, runTests, type Mode } from "./testrun.ts";
+import { readUnit, saveUnit, smFail, type OracleRun, type SmUnit } from "./unit.ts";
+import { join } from "node:path";
+
+export const CLAUDE_VERSION = "2.1.312";
+const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** A token bucket of perHour counted registry GETs per rolling hour, kept in a log file shared by every process on the host. */
+export class Pacer {
+  constructor(readonly log: string, readonly perHour = 60, readonly now: () => number = Date.now, readonly wait: (ms: number) => Promise<void> = sleep) {}
+  times(): number[] {
+    return existsSync(this.log) ? readFileSync(this.log, "utf8").split("\n").filter(Boolean).map(Number) : [];
+  }
+  async take(): Promise<void> {
+    for (;;) {
+      const t = this.now();
+      const recent = this.times().filter((x) => x > t - 3_600_000).sort((a, b) => a - b);
+      if (recent.length < this.perHour) {
+        appendFileSync(this.log, t + "\n");
+        return;
+      }
+      await this.wait(recent[0]! + 3_600_000 - t + 1000);
+    }
+  }
+  /** A rate-limit refusal: wait out the window from the oldest counted pull. It is not a retry. */
+  async windowWait(): Promise<void> {
+    const recent = this.times().filter((x) => x > this.now() - 3_600_000).sort((a, b) => a - b);
+    await this.wait(recent.length ? recent[0]! + 3_600_000 - this.now() + 1000 : 600_000);
+  }
+}
+
+export const RATE_LIMITED = /toomanyrequests|rate limit|429/i;
+
+/** docker pull by digest. A rate-limit refusal waits for the window and does not spend the one retry. */
+export async function pull(ref: string, pacer: Pacer, dockerFn = docker): Promise<string> {
+  const have = dockerFn(["image", "inspect", "--format", "{{.Id}}", ref], { timeoutMs: 30_000 });
+  if (have.status === 0) return have.stdout.trim();
+  let failures = 0;
+  for (;;) {
+    await pacer.take();
+    const r = dockerFn(["pull", "-q", ref], { timeoutMs: 3_600_000 });
+    if (r.status === 0) return dockerFn(["image", "inspect", "--format", "{{.Id}}", ref], { timeoutMs: 30_000 }).stdout.trim();
+    if (RATE_LIMITED.test(r.stderr)) {
+      await pacer.windowWait();
+      continue;
+    }
+    if (++failures > 1) smFail("E_SM_PULL", ref + " did not pull twice: " + r.stderr.trim().slice(-300));
+  }
+}
+
+const PROBE = "const n=require('net');const t=[['1.1.1.1',443],['8.8.8.8',53],['93.184.216.34',80]];const o={};let k=t.length;for(const [h,p] of t){const s=n.connect({host:h,port:p});const d=(v)=>{if(o[h+':'+p])return;o[h+':'+p]=v;s.destroy();if(--k===0)console.log(JSON.stringify(o));};s.setTimeout(3000,()=>d('timeout'));s.on('connect',()=>d('open'));s.on('error',(e)=>d(e.code||'error'));}";
+
+/** The runtime smoke: the runtime layer builds on the image, claude --version prints the pinned version, node runs and the
+ *  egress probe opens no denied target (in P1's prep container no target is allowed; the proxy route is checked in the
+ *  session's own preflight). */
+export function smoke(imageId: string, label: string): { runtime_id: string; claude_version: string; egress_probe: string; verdict: string } {
+  let runtime_id: string;
+  try {
+    runtime_id = withRuntime(imageId);
+  } catch (e) {
+    return smFail("E_SM_SMOKE", label + ": the runtime layer did not build: " + (e as Error).message.slice(-400));
+  }
+  const r = dockerRun(runName("smoke"), ["--rm", "--network", "none", "--entrypoint", "sh", runtime_id, "-c", 'export PATH="$PATH:/opt/laneb/bin:/usr/local/bin"; claude --version; node -e "$0"', PROBE], { timeoutMs: 120_000 });
+  const version = (r.stdout.match(/(\d+\.\d+\.\d+)/) ?? [])[1] ?? "";
+  const probe = r.stdout.split("\n").reverse().find((l) => l.startsWith("{")) ?? "";
+  let opened = true;
+  try {
+    opened = Object.values(JSON.parse(probe) as Record<string, string>).some((v) => v === "open");
+  } catch {}
+  if (version !== CLAUDE_VERSION || opened) smFail("E_SM_SMOKE", label + ": claude --version printed " + JSON.stringify(version) + " (want " + CLAUDE_VERSION + "), probe " + (probe || "none") + ": " + r.stderr.slice(-300));
+  return { runtime_id, claude_version: version, egress_probe: probe, verdict: "ok" };
+}
+
+export const treeVolume = (id: string) => "sm-tree-" + id.toLowerCase().replace(/[^a-z0-9_.-]/g, "-");
+
+/** Copies the image's repo_dir into the unit's tree volume, then strips and rewrites history there, then scope and leak. */
+/** With record, a leak hit is returned, not thrown (the sample measures units the scan would drop). */
+export function prepare(u: SmUnit, runtimeId: string, fixPatch: string, record = false): { volume: string; removed: string[]; preflight: string; scope: SmUnit["scope"]; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } } {
+  const p = docker(["run", "--rm", "--network", "none", "--entrypoint", "sh", u.image.image_id!, "-c", 'w=$(pwd); echo "WD $w"; for d in "$w" /testbed /testbed/repo; do if [ -d "$d/.git" ]; then echo "REPO $d"; break; fi; done'], { timeoutMs: 120_000 });
+  u.work_dir = (p.stdout.match(/^WD (\S+)$/m) ?? [])[1] ?? "";
+  u.repo_dir = (p.stdout.match(/^REPO (\S+)$/m) ?? [])[1] ?? "";
+  if (!u.repo_dir) smFail("E_SM_HISTORY", u.id + ": no git repository at the image's work dir, /testbed or /testbed/repo");
+  const volume = treeVolume(u.id);
+  dropVolume(volume);
+  docker(["volume", "create", volume], { timeoutMs: 60_000 });
+  const c = dockerRun(runName("seed"), ["--rm", "--network", "none", "--user", "0:0", "-v", volume + ":/sm-tree", "--entrypoint", "sh", u.image.image_id!, "-c", "cp -a " + u.repo_dir + "/. /sm-tree/"], { timeoutMs: 1_800_000 });
+  if (c.status !== 0) smFail("E_SM_HISTORY", u.id + ": copying " + u.repo_dir + " out of the image failed: " + c.stderr.slice(-300));
+  const where: Where = { kind: "docker", image: runtimeId, volume, repoDir: u.repo_dir, name: runName("prep") };
+  const h = prepareBase(where, u.base_commit, u.repo_dir, u.id);
+  const testFiles = u.test_patch.files;
+  const sc = scope({ ...where, name: runName("scope") }, u.lang, u.fix.files, testFiles);
+  const lw = { ...where, name: runName("leak") };
+  const leak = record ? scan(lw, needles(lw, fixPatch), "/") : leakCheck(lw, fixPatch, u.id, "/");
+  return { volume, removed: h.removed, preflight: h.preflight, scope: sc, leak: { needles: leak.needles, hits: leak.hits } };
+}
+
+export interface RunResult { run: OracleRun; parsed: Record<string, string> | null }
+
+/** One oracle run on a fresh copy of the tree volume. */
+export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tree: "base" | "fixed", n: number, mode: Mode, limitMs = LIMIT_MS): RunResult {
+  const copy = volume + "-" + tree + n + "-" + process.pid;
+  copyVolume(image, volume, copy, mode);
+  try {
+    const patches: [string, string][] = [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
+    if (tree === "fixed") patches.push(["fix.patch", rf(join(dir, "fix.patch"), "utf8")]);
+    const bad = applyPatches(image, copy, u.repo_dir, patches, mode);
+    if (bad) return { run: { tree, n, wall_ms: 0, exit: -1, parsed_sha256: null, stopped: false }, parsed: null };
+    const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n });
+    if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true }, parsed: null };
+    const parsed = runParser(rf(join(dir, "parser.py"), "utf8"), t.log, u.id + "-" + tree + n);
+    return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false }, parsed };
+  } finally {
+    dropVolume(copy);
+  }
+}
+
+/** The keep rule over six parsed runs (three base, three fixed). */
+export function judge(f2p: string[], base: (Record<string, string> | null)[], fixed: (Record<string, string> | null)[]): { kept: boolean; stable: string[]; failing: string[]; reason: string } {
+  const all = [...base, ...fixed];
+  if (all.some((r) => r === null)) return { kept: false, stable: [], failing: [], reason: "a run did not produce a parsed log" };
+  const failing = f2p.filter((id) => base.some((r) => passed(r!, id)) || fixed.some((r) => !passed(r!, id)));
+  const stable = Object.keys(all[0]!).filter((id) => all.every((r) => passed(r!, id))).sort();
+  if (failing.length) return { kept: false, stable, failing, reason: "fail-to-pass tests not failing on base and passing on fixed in all runs" };
+  if (!stable.length) return { kept: false, stable, failing, reason: "no stable test" };
+  return { kept: true, stable, failing, reason: "kept" };
+}
+
+/** The whole oracle on one unit dir. Writes unit.json's oracle, image, strip and scope fields and returns the verdict. */
+export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode; limitMs?: number; runs?: number } = {}): Promise<{ id: string; verdict: string; detail: string }> {
+  const u = readUnit(dir);
+  const done = (verdict: string, detail: string) => {
+    saveUnit(dir, u);
+    return { id: u.id, verdict, detail };
+  };
+  const codeOf = (e: unknown) => ((e as Error).message.match(/^(E_[A-Z_]+)/) ?? [])[1] ?? "E_SM_ORACLE_UNSTABLE";
+  try {
+    u.image.image_id = await pull(u.image.ref, pacer);
+    const s = smoke(u.image.image_id, u.id);
+    u.image.runtime_id = s.runtime_id;
+    const p = prepare(u, s.runtime_id, rf(join(dir, "fix.patch"), "utf8"));
+    u.strip = { removed: p.removed };
+    u.scope = p.scope;
+    u.oracle = { runs: [], stable: [], stable_sha256: "", f2p_ok: false, max_wall_ms: 0, verdict: "running", smoke: { claude_version: s.claude_version, egress_probe: s.egress_probe, verdict: s.verdict }, leak: p.leak, history: p.preflight };
+    const base: (Record<string, string> | null)[] = [], fixed: (Record<string, string> | null)[] = [];
+    for (let n = 1; n <= (opts.runs ?? 3); n++) {
+      for (const tree of ["base", "fixed"] as const) {
+        const r = oneRun(dir, u, p.volume, s.runtime_id, tree, n, opts.mode ?? "hardened", opts.limitMs);
+        u.oracle.runs.push(r.run);
+        u.oracle.max_wall_ms = Math.max(u.oracle.max_wall_ms, r.run.wall_ms);
+        if (r.run.stopped) {
+          u.oracle.verdict = "E_SM_SLOW_TEST";
+          return done("E_SM_SLOW_TEST", tree + " run " + n + " passed " + (opts.limitMs ?? LIMIT_MS) + " ms (wall " + r.run.wall_ms + " ms)");
+        }
+        (tree === "base" ? base : fixed).push(r.parsed);
+      }
+    }
+    const j = judge(u.tests.f2p, base, fixed);
+    u.oracle.stable = j.stable;
+    u.oracle.stable_sha256 = sha(j.stable.join("\n"));
+    u.oracle.f2p_ok = !j.failing.length && base.every(Boolean) && fixed.every(Boolean);
+    u.oracle.verdict = j.kept ? "kept" : "E_SM_ORACLE_UNSTABLE";
+    return done(u.oracle.verdict, j.reason + (j.failing.length ? ": " + j.failing.slice(0, 20).join(", ") : ""));
+  } catch (e) {
+    const code = codeOf(e);
+    if (u.oracle) u.oracle.verdict = code;
+    return done(code, (e as Error).message.slice(0, 600));
+  }
+}
