@@ -23,6 +23,8 @@ We open gstack-evals so builders can read and reproduce our findings about wheth
 
 On 2026-11-08 the owner amended org rule R79 on openness. Private stays the default. A repo, dataset or tool opens only with a clear reason tied to the crews' goals, such as helping people who build agents or letting others reproduce a finding we publish, and that reason is stated when it opens. On 2026-11-09 the owner asked for this repo to be cleaned up for public readers and opened in place. This post states the reason, as the rule asks. The rule's full text is in the org drive at software-factory/rules.md, and this post paraphrases it.
 
+The owner's statements in this section are paraphrases, not his exact words, because this repo does not quote the owner.
+
 ## The reason
 
 This repo exists to find out whether gstack's skills help, on which models, and at what cost. Its findings are useful to anyone who builds with coding agents: which skills help, on which models, and which ones a frontier model no longer needs. A finding is worth more when a reader can check it. So the plans, the harness, the scorers and the results are open, and a reader can see what we fixed in advance, what ran and how we scored it.

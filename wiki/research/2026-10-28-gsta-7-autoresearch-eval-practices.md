@@ -215,7 +215,7 @@ Details, base rates and the full catalog are in notes/reward-hacking.md.
 
 ## 7. Gap table against gstack-evals plan v3 and v3.1
 
-What the plan says comes from handoffs/GSTA-3/plan.md (v3, bound at snapshot 495eb74e), the pending v3.1 sealed-sources amendment and the gate_rev 2 render. d1 to d7 are gate_rev 2 items, which Garry has not yet answered; "rec" accepts all of them. The factory \`compare\` loop is a v1.1 item (plan.md, "The factory loop"), so most changes below cost nothing in v1 and should land in the v1.1 factory preregistration. "Has" means the plan already does it; "Partly" means it does part of it; "Misses" means we found nothing in the plan. Costs are rough: Free is wording, Low is a day or less of build, Medium is a few days or real model spend.
+What the plan says comes from handoffs/GSTA-3/plan.md (v3, bound at snapshot 495eb74e), the pending v3.1 sealed-sources amendment and the gate_rev 2 render. d1 to d7 are gate_rev 2 items, which Garry has not yet answered; taking the recommendation accepts all of them. The factory \`compare\` loop is a v1.1 item (plan.md, "The factory loop"), so most changes below cost nothing in v1 and should land in the v1.1 factory preregistration. "Has" means the plan already does it; "Partly" means it does part of it; "Misses" means we found nothing in the plan. Costs are rough: Free is wording, Low is a day or less of build, Medium is a few days or real model spend.
 
 | # | Practice (where it comes from) | Plan v3/v3.1 today | Status | Proposed change | Cost |
 |---|---|---|---|---|---|

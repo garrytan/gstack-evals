@@ -251,6 +251,8 @@ Every row runs 2 passes unless it says 1. The stated MDD is 18 points: a gain of
 
 ### 13. Money
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 The whole CEO eval is held to $2,000 all-in. That counts this design thread's model use and any successor's, every crew thread on the CEO line at about $1 per 1,000 credits (R42), runner VMs, the judges, the lens arm and the headroom check. Paid calls go through the ledger, one item per review-units invocation or judge read, each with a cap the Captain records in approvals/ before it opens a lease. Stage 2's envelope is sized net of the crew line and stage 1: $2,000 less $430 less $160 is $1,410.
 
 | Item | Stage | What runs | Sessions | Projected | Cap |

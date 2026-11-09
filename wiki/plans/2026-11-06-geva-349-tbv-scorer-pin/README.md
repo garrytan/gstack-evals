@@ -163,6 +163,8 @@ The frozen bundle's ledger section, run inside part 1, is the lease check that s
 
 ## 6. Worst cases and caps
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 **Per reading** (rule.ts readingWorst): four sends, the first at 130,000 tokens, each input token at the higher of the input and cache-write rates, and 4,000 output tokens on every send. That gives Opus $3.0430, Sol $1.5215 and particle-1 $0.0705. A round of 4 readings at Opus's worst case is $12.172.
 
 **What the proxy reserves** (dry run section 3k). The proxy reserves each send's own worst case before the send goes. For a 130,000-token first send it reserves $1.64 on Opus, $1.62 on Sol and $0.04 on particle-1. The rule prices that send at $0.73, $0.36 and $0.02. Round admission uses the rule's figures (roundAdmits), so spend still never passes a cap.

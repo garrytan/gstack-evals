@@ -96,6 +96,8 @@ jobs:
         run: |
           bun run typecheck
           echo 'bun run typecheck' >> "$RUNNER_TEMP/checks-passed.txt"
+      - name: Install age (the autoplan audit dry run's custody clause)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends age
       - name: Tests
         if: steps.scope.outputs.docs_only != 'true'
         run: bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"

@@ -257,6 +257,8 @@ Two regimes: HEADROOM (hit@3 0.45, h1 given a hit 0.45, rem given a hit 0.40, so
 
 ### 10. Cost
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 - **Anchor.** CEO's cost anchor is GEVA-285 stage 1's median Opus none session. Moving from seeded panels ($0.126 median) to real-outcome units ($0.25 projected for none) roughly doubled CEO's cost per session. GEVA-285 made that change inside its approved $2,000 line; this amendment adds no session cost on top of it. Both tiers read the same sessions.
 - **Judges.** The remedy read is a second read of each keyed unit, with up to three 40-word fixes per review. At planning rates it adds about $6 in stage 1 (about $12 in all, inside stage 1's $160 envelope, whose run caps sum to $144) and about $60 in stage 2. These are planning guesses: with reasoning-model judges the cost is unmeasured, and the projection scales stage 2's judge floor from stage 1's measured judge spend, so it prices the remedy read.
 - **Authoring.** Keys add three fields, about 5% more key-writer tokens. The wider pool means the miner's classifier reads more candidates per passing unit: about 900 candidate reads to reach 64 changed units at the mid yield, mostly cheap reads before any writer runs.

@@ -52,19 +52,19 @@ Every invoked cell loaded the body on every session, pilot and grid alike. The i
 
 Preregistered `analyze.ts` at 09f69e99 (see Deviations for the pin note). Timeouts are graded as the session stands; no paid trial lacked a reward.
 
-| Model | Arm | Trials | Pass rate [95% CI] | Cost | Cost per success | Budget stops | Timeouts |
-|---|---|---|---|---|---|---|---|
-| Opus 5.5 | none | 60 | 72% [53%, 88%] | $10.90 | $0.25 | 0 | 3 |
-| Opus 5.5 | gstack | 60 | 65% [47%, 82%] | $18.81 | $0.48 | 0 | 2 |
-| Opus 5.5 | placebo | 60 | 70% [50%, 88%] | $18.78 | $0.45 | 0 | 0 |
-| Haiku 5.5 | none | 60 | 47% [30%, 63%] | $1.22 | $0.04 | 0 | 3 |
-| Haiku 5.5 | gstack | 60 | 43% [25%, 62%] | $0.95 | $0.04 | 0 | 2 |
-| Haiku 5.5 | placebo | 60 | 63% [48%, 78%] | $1.14 | $0.03 | 0 | 2 |
-| DeepSeek V4.1 Flash | none | 60 | 53% [33%, 72%] | $5.19 | $0.16 | 1 | 9 |
-| DeepSeek V4.1 Flash | gstack | 60 | 60% [43%, 75%] | $5.45 | $0.15 | 2 | 3 |
-| DeepSeek V4.1 Flash | placebo | 60 | 67% [53%, 80%] | $5.62 | $0.14 | 2 | 4 |
+| Model | Arm | Trials | Pass rate [95% CI] | Cost per success | Budget stops | Timeouts |
+|---|---|---|---|---|---|---|
+| Opus 5.5 | none | 60 | 72% [53%, 88%] | $0.25 | 0 | 3 |
+| Opus 5.5 | gstack | 60 | 65% [47%, 82%] | $0.48 | 0 | 2 |
+| Opus 5.5 | placebo | 60 | 70% [50%, 88%] | $0.45 | 0 | 0 |
+| Haiku 5.5 | none | 60 | 47% [30%, 63%] | $0.04 | 0 | 3 |
+| Haiku 5.5 | gstack | 60 | 43% [25%, 62%] | $0.04 | 0 | 2 |
+| Haiku 5.5 | placebo | 60 | 63% [48%, 78%] | $0.03 | 0 | 2 |
+| DeepSeek V4.1 Flash | none | 60 | 53% [33%, 72%] | $0.16 | 1 | 9 |
+| DeepSeek V4.1 Flash | gstack | 60 | 60% [43%, 75%] | $0.15 | 2 | 3 |
+| DeepSeek V4.1 Flash | placebo | 60 | 67% [53%, 80%] | $0.14 | 2 | 4 |
 
-The gstack arm costs about 70% more than no skills on Opus ($18.81 vs $10.90) for a lower pass rate, so its cost per success is nearly double ($0.48 vs $0.25). The extra cost is the injected body, read from cache after the first turn; on the cheap models the absolute cost is small either way.
+The gstack arm costs about 70% more than no skills on Opus for a lower pass rate, so its cost per success is nearly double ($0.48 vs $0.25). The extra cost is the injected body, read from cache after the first turn; on the cheap models the absolute cost is small either way.
 
 ## Arm contrasts
 
@@ -149,10 +149,6 @@ All from the $0 proxy session rows, 60 trials per cell. Agent timeouts is the sh
 
 The body arms add tokens without changing the request count. On the Claude models requests per trial barely move (Opus about 7, Haiku about 10) while median tokens per trial jump roughly 90k on Opus and 130k on Haiku in the body arms, the injected body read mostly from cache after turn 1. That extra load nearly doubles Opus cost per success ($0.25 none to $0.45 to $0.48 in the body arms) with no accuracy gain, while Haiku stays near $0.03 to $0.04 because the model is cheap. DeepSeek is the outlier: about 30 requests and over a million tokens per trial, and its agent-timeout share falls from 15% with no skills to 5 to 7% in the body arms, so for the slow cheap model the longer body coincides with more trials finishing, the same body-length effect the contrasts show. Nothing in the mechanism separates gstack's content from the placebo's: the arms differ in which prose fills the body, not in how the agent runs.
 
-## Cost
-
-Total spend was $73.22 against the $120 cap, with no cap stop: $5.18 pilot, $22.03 replicate 1, $46.01 replicates 2 and 3. Per cell the grid cost about $19 for Opus gstack and placebo, $11 for Opus none, $5 to $6 for each DeepSeek cell, and about $1 for each Haiku cell. The ledger is closed. Three reserves totaling $11 (one Opus none, one Opus gstack, one Haiku none) were opened for sessions that a retry superseded; no session row references them, so with zero requests and no session they were settled at $0 each and the $11 released, the same rule quick look 1 used for its infra-outage orphans. Final settled spend is $73.22 with no open reserve. Across Lane B the two quick looks total $48.02 plus $73.22, $121.24 against the $190 Lane B envelope.
-
 ## Integrity
 
 [audit.py](../../../quick/laneb/analysis/audit.py) ran on both grid jobs. Clean on the runner defects it checks: no duplicate rerun sessions, no sessions without a trial directory, no trials without a session, no settle failures, no missing summaries, no bad `max_tokens`, no no-reward trials, and no successful response with absent usage. Upstream provider errors numbered 19 across 540 trials and were retried per the run rules; agent timeouts (per-cell counts in the Mechanism table) are graded as the session stands.
@@ -163,7 +159,7 @@ One known gap remains in the audit: its outer fetch test matches only `requests.
 
 ## Pilot
 
-The pilot ran before the grid as its own job: Opus and Haiku, gstack and placebo, 5 tasks, 1 attempt, 20 trials, $5.18. Its only role was the body-load gate, which it passed at 100% on both models. Pilot trials are reported here and never pooled into the grid.
+The pilot ran before the grid as its own job: Opus and Haiku, gstack and placebo, 5 tasks, 1 attempt, 20 trials. Its only role was the body-load gate, which it passed at 100% on both models. Pilot trials are reported here and never pooled into the grid.
 
 ## Side by side with quick look 1
 
@@ -183,19 +179,51 @@ On these 20 TB2 tasks, gstack's `/investigate` body, delivered into context on e
 
 ## Deviations
 
-- Cap raised from $90 to $120 by the Captain after the pilot and before any grid trial, within Lane B's approved $190, because the prereg's own projection put three replicates at up to $90. The run finished at $73.22, under both figures.
-- Analysis pin: the preregistration pins `analyze.ts` at 09f69e99, which reads cost from trusted session rows and runs a no-reward sensitivity. The branch carries a refactored `analyze.ts` (111829df) that drops the session-row cost source, and 09f69e99 is not an ancestor of the run commit because the quick-look-1 merge squashed its lineage. The preregistered 09f69e99 version was used. Pass rates and every contrast are identical under both; only DeepSeek none cost differs ($5.19 trusted-session vs $4.75), and the trusted-session figure is authoritative.
+- Analysis pin: the preregistration pins `analyze.ts` at 09f69e99, which reads cost from trusted session rows and runs a no-reward sensitivity. The branch carries a refactored `analyze.ts` (111829df) that drops the session-row cost source, and 09f69e99 is not an ancestor of the run commit because the quick-look-1 merge squashed its lineage. The preregistered 09f69e99 version was used. Pass rates and every contrast are identical under both; only DeepSeek none's cost differs, and the trusted-session figure is authoritative.
 - Pin texts in the preregistration name pre-fix or off-lineage commits for `audit.py`, `manip.ts` and `placebo-behavior.ts` (the quick-look-1 review fixes changed them), and for `analyze.ts` as above. The run and manifest use the runner at 443d582c and the analysis as described here. Rather than rewrite the preregistered text, a dated Pin record was added to the preregistration naming the commits actually used (runner 443d582c, `analyze.ts` 09f69e99, and `audit.py`, `manip.ts` and `placebo-behavior.ts` at 443d582c); this post records the same.
-- Three orphaned reserves ($11) from retry-superseded sessions were settled at $0 and the ledger item closed, as in Cost above.
 
 ## Sensitivities
 
 - No-reward policy: no paid trial lacked a verifier reward, so the drop-versus-score-0 sensitivity is empty and changes nothing.
-- As-pinned analysis: running the branch's `analyze.ts` (111829df) instead of the preregistered 09f69e99 leaves every pass rate and contrast identical, moving only DeepSeek none cost by $0.44.
+- As-pinned analysis: running the branch's `analyze.ts` (111829df) instead of the preregistered 09f69e99 leaves every pass rate and contrast identical, moving only DeepSeek none's cost.
 - Refusal and cap drops: Opus and Haiku had no budget stops; DeepSeek had one to two per arm and dropping them does not move the rounded rates. No Opus safeguard refusals occurred in this run's arms.
 
 ## Pinned code and artifacts
 
 - Runner at 443d582c (tag `laneb-quick-2-runner`) on gsta-12/laneb-prereg2 (PR #24): quick-look-1's runner (tag `laneb-quick-1-runner`, ba7a648a) plus the invocation line, the invoke and skill-map agent options, the committed skill map (sha256 `ef6d78da...`, every value `investigate`), and two non-agent-facing proxy additions (the body-load probe and the max_tokens guard). The run manifest records the commit, the skill-map sha256, the per-arm invoke flags (none false, gstack and placebo true), the wrapper sha256 `2e0674a8...`, and each arm tarball sha256. Option C landed this record and analysis on main; the exact runner stays reachable through the tag, not on main.
 - Analysis: `analyze.ts` at 09f69e99 (preregistered), `manip.ts`, `placebo-behavior.ts` and `audit.py` at 443d582c (the quick-look-1 review-fixed versions, `audit.py` with the Python-fetch detection fix). Config, bootstrap seed and subsets as preregistered.
+
+<details>
+<summary>Agent notes</summary>
+
+| Model | Arm | Trials | Pass rate [95% CI] | Cost | Cost per success | Budget stops | Timeouts |
+|---|---|---|---|---|---|---|---|
+| Opus 5.5 | none | 60 | 72% [53%, 88%] | $10.90 | $0.25 | 0 | 3 |
+| Opus 5.5 | gstack | 60 | 65% [47%, 82%] | $18.81 | $0.48 | 0 | 2 |
+| Opus 5.5 | placebo | 60 | 70% [50%, 88%] | $18.78 | $0.45 | 0 | 0 |
+| Haiku 5.5 | none | 60 | 47% [30%, 63%] | $1.22 | $0.04 | 0 | 3 |
+| Haiku 5.5 | gstack | 60 | 43% [25%, 62%] | $0.95 | $0.04 | 0 | 2 |
+| Haiku 5.5 | placebo | 60 | 63% [48%, 78%] | $1.14 | $0.03 | 0 | 2 |
+| DeepSeek V4.1 Flash | none | 60 | 53% [33%, 72%] | $5.19 | $0.16 | 1 | 9 |
+| DeepSeek V4.1 Flash | gstack | 60 | 60% [43%, 75%] | $5.45 | $0.15 | 2 | 3 |
+| DeepSeek V4.1 Flash | placebo | 60 | 67% [53%, 80%] | $5.62 | $0.14 | 2 | 4 |
+
+The gstack arm costs about 70% more than no skills on Opus ($18.81 vs $10.90) for a lower pass rate, so its cost per success is nearly double ($0.48 vs $0.25).
+
+**Cost**
+
+Total spend was $73.22 against the $120 cap, with no cap stop: $5.18 pilot, $22.03 replicate 1, $46.01 replicates 2 and 3. Per cell the grid cost about $19 for Opus gstack and placebo, $11 for Opus none, $5 to $6 for each DeepSeek cell, and about $1 for each Haiku cell. The ledger is closed. Three reserves totaling $11 (one Opus none, one Opus gstack, one Haiku none) were opened for sessions that a retry superseded; no session row references them, so with zero requests and no session they were settled at $0 each and the $11 released, the same rule quick look 1 used for its infra-outage orphans. Final settled spend is $73.22 with no open reserve. Across Lane B the two quick looks total $48.02 plus $73.22, $121.24 against the $190 Lane B envelope.
+
+The pilot ran before the grid as its own job: Opus and Haiku, gstack and placebo, 5 tasks, 1 attempt, 20 trials, $5.18.
+
+- Cap raised from $90 to $120 by the Captain after the pilot and before any grid trial, within Lane B's approved $190, because the prereg's own projection put three replicates at up to $90. The run finished at $73.22, under both figures.
+
+Pass rates and every contrast are identical under both; only DeepSeek none cost differs ($5.19 trusted-session vs $4.75), and the trusted-session figure is authoritative.
+
+- Three orphaned reserves ($11) from retry-superseded sessions were settled at $0 and the ledger item closed, as in Cost above.
+
+- As-pinned analysis: running the branch's `analyze.ts` (111829df) instead of the preregistered 09f69e99 leaves every pass rate and contrast identical, moving only DeepSeek none cost by $0.44.
+
 - Spend ledger line item `laneb-quick-2`, cap $120, settled $73.22, closed with $11 released, in the Captain drive.
+
+</details>

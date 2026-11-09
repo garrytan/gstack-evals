@@ -250,6 +250,8 @@ Section 6.5's exposure rule comes first. Every CUT-CANDIDATE goes to the Captain
 
 ### 7. Money
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 **7.1 Where the line stands.** autoplan's line is $1,347.54 all-in on actuals, plus E3's results thread, which read $3.36 when that post was written: about $1,351 of $2,000 (E3's results post). The final figure is read from that thread's counter when this post merges. The Captain's bound for this stage: a projected line past $3,000 before C1 comes to the Captain first. Crew dollars come from thread counters at $1 per 1,000 credits; reservations below use $0.45 per million tokens at each thread's hard stop. The $2,000 is autoplan's all-in line: paid calls, judges, VMs and crew model use. The ledger holds a line of the same size for its own items, which section 7.2's fit check reads. The project owner treats eval lines as guidelines (the Captain's brief of 2026-11-07), and the Captain accepted the line at about $2,530 all-in at caps on 2026-11-08 (GST-1864). The Captain's caps entry in approvals/ records it when this post merges.
 
 **7.2 H1's items.** Each is one ledger lease on the wave 1 envelope.

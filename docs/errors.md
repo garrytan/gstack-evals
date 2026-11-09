@@ -167,6 +167,15 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_MUTATION_DOCKER](#e_mutation_docker) | 2 | U20 |
 | [E_MUTATION_INPUT](#e_mutation_input) | 2 | U20 |
 | [E_PIN_MISMATCH](#e_pin_mismatch) | 2 | U20 |
+| [E_AR_FRAME_DRIFT](#e_ar_frame_drift) | 2 | U20 |
+| [E_AR_UNREADABLE](#e_ar_unreadable) | warning | U20 |
+| [E_AR_SUPPLY_SHORT](#e_ar_supply_short) | 2 | U20 |
+| [E_AR_SMOKE_FAIL](#e_ar_smoke_fail) | 2 | U20 |
+| [E_AR_PACKET_LEAK](#e_ar_packet_leak) | 2 | U20 |
+| [E_AR_LABEL_MISSING](#e_ar_label_missing) | warning | U20 |
+| [E_AR_JUDGE_KAPPA](#e_ar_judge_kappa) | 2 | U20 |
+| [E_AR_PROVIDER_DRIFT](#e_ar_provider_drift) | 2 | U20 |
+| [E_AR_CUSTODY](#e_ar_custody) | 2 | U20 |
 | [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | warning | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
 | [DR_ALLOWANCE_STOP](#dr_allowance_stop) | 2 | U6 |
@@ -1216,6 +1225,62 @@ Fix: Copy the record again from the path the message names (the Captain-drive pa
 
 Exit 2. Side effects: None: refused before anything was prepared, bound or launched. Retry safe: yes. Resumable: no. Owner: U20.
 
+### E_AR_FRAME_DRIFT
+
+The autoplan record audit (lanes/autoplan-audit) found its frozen inputs changed: the frame snapshot's manifest digests, a per-file digest, the run id list, a missing or extra file, the pinned gstack Pre-Gate table or a frozen matched path differs from what the preregistration froze. The run stops before any reading.
+
+Fix: Restore the frozen snapshot (or the pinned gstack clone) and rerun. Never edit the frozen digests to fit; a changed frame is a new preregistration.
+
+Exit 2. Side effects: Partial: the run's sink keeps what was written before the stop, marked incomplete; the open lease is settled at the spend recorded so far. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_SUPPLY_SHORT
+
+The autoplan audit's gold supply is short: fewer than 80 HIT units or 40 ablatable ones in stage 1, too few eligible lean runs or units for GATE-2, or a gold class still under 40 after its one top-up. GATE-2's panel part stops; the free readings stand.
+
+Fix: Report it to the Captain. GATE-2 reads NO READ; its mechanical hit share prints. Do not lower the bar or redraw to fill the pool.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_SMOKE_FAIL
+
+The autoplan audit's smoke failed: a record parser on one gstack minor version, or a panel judge and effort pair whose label does not parse, whose quote fails the check or whose reply stops at its output limit.
+
+Fix: One repair is allowed (parser, prompt format or output limit) before any gold or production call. A second failure drops that instrument and its check reads NO READ.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_PACKET_LEAK
+
+The autoplan audit's outbound check refused a packet, a reply cache file or an aggregate export: it holds a replaced token class, a 6-word run of owner words, a secret pattern, an email address, a withheld task id or a part with no allowed source. Nothing was sent; the run stops.
+
+Fix: Find the source of the leak with the run's private log, fix the scrub or the source, and start a new run with a new sink. Never relax the scan.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_JUDGE_KAPPA
+
+The autoplan audit's judge check failed: GPT-6 Astra's or Claude Opus 5.5's Cohen's kappa against gold is below 0.6, or Gemini 4 Argon's is (under the Captain's pre-data ruling a failed Argon check makes GATE-2 read NO READ). GATE-2's panel part stops.
+
+Fix: Report it to the Captain. GATE-2 reads NO READ and its mechanical hit share prints. Never re-judge to pass the check.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_PROVIDER_DRIFT
+
+An autoplan audit call to Gemini 4 Argon through OpenRouter was served by a provider other than its pin (Google Vertex), or named none. Argon's calls stop; split units with no Argon vote are missing.
+
+Fix: Report it to the Captain with the provider OpenRouter named. Do not move the pin during the run.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_AR_CUSTODY
+
+The autoplan audit's told-session custody failed: a told record's digest differs, decryption failed, the identity or a decrypted file is still on disk after its removal, or the sink is not on /dev/shm. The run stops.
+
+Fix: Delete any leftover decrypted file (test ! -e after), log the incident in CUSTODY.md and report it to the Captain before anything else.
+
+Exit 2. Side effects: Partial: CUSTODY.md holds every opening and the incident; no told content left the machine. Retry safe: yes. Resumable: no. Owner: U20.
+
 ### DR_ALLOWANCE_STOP
 
 Decision routing: the metering proxy refused a session's next model or decider call because the session's $5 allowance could not hold its worst case. The proxy answers HTTP 403 with DR_ALLOWANCE_STOP in the body and journals the refusal; the session wrapper ends the session as allowance_stop, never as an infrastructure error, so Harbor does not rerun it.
@@ -1523,6 +1588,22 @@ A review no-loss comparison reached LOSS, so its reference caught more blockers,
 Fix: Report the LOSS with its false-alarm reading and no claim. Adjudicate any unadjudicated must-fix finding on the decoys; never widen the margin after the run.
 
 Warning. Owner: U13.
+
+### E_AR_UNREADABLE
+
+A record file in the autoplan audit's frame (run.json, decisions.jsonl, findings.jsonl, gate.json, a bound result or another file a check reads) is missing or does not parse. The units that need it are counted missing; the run goes on.
+
+Fix: Nothing to fix in the run: the count prints beside each reading, and a stratum under 90% readable reads NO READ.
+
+Warning. Owner: U20.
+
+### E_AR_LABEL_MISSING
+
+A panel reply in the autoplan audit gave no usable label: it did not parse after the lenient parse, its evidence quote is not in the packet's built text, the call failed after its one retry or its outcome is unknown. The label is counted missing and never re-asked.
+
+Fix: Nothing to fix in the run: missing labels print, and GATE-2 reads on its missing bounds.
+
+Warning. Owner: U20.
 
 ### E_TRANSCRIPT_UNREADABLE
 

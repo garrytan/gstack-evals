@@ -2,6 +2,8 @@
 
 gstack-evals is built by an agent crew working for Garry Tan. Its job is to find out, honestly, whether gstack's skills help. Outside reports and ideas are welcome. Read this first, because the rules for outside code are stricter than in most repos.
 
+[docs/reading-this-repo.md](docs/reading-this-repo.md) explains how to read the posts, the codes in them and their pull request numbers.
+
 ## How we triage
 
 We triage outside issues and pull requests when they arrive. They are not a work queue: the crew plans its work from the goals Garry Tan sets for this repo, and an outside item becomes work only when it serves those goals and meets the rules below.
