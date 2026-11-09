@@ -13,7 +13,7 @@ import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { dxArmEnv } from "../../../src/trial/review/devex.ts";
 import { runDxSessions, type DxTree } from "../../../lanes/devex/run/session.ts";
 import type { BatchSession } from "../../../lanes/devex/run/batch.ts";
-import type { DxRow } from "../../../lanes/devex/run/rows.ts";
+import { smokeSession, type DxRow } from "../../../lanes/devex/run/rows.ts";
 import type { ModelId } from "../../../lanes/devex/types.ts";
 
 const root = mkdtempSync(join(tmpdir(), "dx-loop-test-"));
@@ -25,6 +25,7 @@ const INSTALL = [{ type: "assistant", message: { content: [{ type: "tool_use", i
 
 interface Script {
   end?: "infra" | "cap" | "install";
+  occupyNext?: boolean;
   wait?: Promise<unknown>;
   meter?: { undrained?: number; by_model?: Record<string, { micros: number; requests: number }> };
 }
@@ -87,6 +88,7 @@ async function go(name: string, sessions: BatchSession[], scripts: Scripts, o: {
       run: async () => {
         const sc = scripts[at(opt.out)] ?? {};
         await sc.wait;
+        if (sc.occupyNext) mkdirSync(join(opt.out, "..", "..", "attempt-2"), { recursive: true });
         if (sc.end === "install") {
           mkdirSync(opt.out, { recursive: true });
           writeFileSync(join(opt.out, "transcript.ndjson"), INSTALL);
@@ -176,6 +178,15 @@ describe("runDxSessions: stops, retries and releases", () => {
     expect(r.rows.get("nope")!.code).toBe("E_USAGE");
     expect(r.rows.get("u3")!.code).toBe("E_USAGE");
     expect(r.settled.released).toEqual(["nope:opus:none:1", "u3:opus:none:1"]);
+  });
+
+  test("a launch that throws after an attempt ran keeps that attempt's spend, and the row reads launched for rule 4's median", async () => {
+    const r = await go("throws-late", [S("u1"), S("u2")], { "u1#1": { occupyNext: true } });
+    expect(String((r.live.error as Error).message)).toMatch(/^E_USAGE: the session sink .*attempt-2 exists before its launch/);
+    expect(r.binds).toEqual(["u1#1"]);
+    expect(r.rows.get("u1")).toMatchObject({ launched: true, spend_micros: 1_000, end: "missing", code: "E_USAGE" });
+    expect(smokeSession(r.rows.get("u1")!).launched).toBe(true);
+    expect(r.rows.get("u2")).toMatchObject({ launched: false, spend_micros: 0, code: "E_USAGE" });
   });
 });
 

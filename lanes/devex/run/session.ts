@@ -28,7 +28,7 @@
 //   batch halts for the Captain. A bind failure is the attempt's infra outcome. No retry starts once a halt or a stop on
 //   the session's model or arm has applied, and an infra attempt under such a stop takes the stop's code. A cap stop
 //   halts the batch. A launch that throws halts it too; the sessions in flight end, and settle gives every unfinished
-//   session its row.
+//   session its row, launched and at the spend of its attempts when one ran.
 // - Each session ends in one row (dxRow) in rows.ndjson: exposure from exposure.ts sessionExposure, dx_lens, the session
 //   kind the pin's own bin/gstack-session-kind reports in the session's env with autoplan's lean mode (dxSessionKind),
 //   answer counts and the repair. A session whose meter shows another model is missing under E_DX_PROVIDER_DRIFT, and
@@ -194,6 +194,7 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
   const leaseModels = [...new Set(o.sessions.map((s) => s.model))];
   const rows: DxRow[] = [];
   const released = new Map<string, string>();
+  const spent = new Map<string, number>();
   const stops: Array<{ code: string; model?: ModelId; arm?: ArmId }> = [];
   const stopOf = (s: BatchSession): string | null => stops.find((x) => (!x.model && !x.arm) || x.model === s.model || x.arm === s.arm)?.code ?? null;
   const haltFor = (code: string, why: string) => {
@@ -337,6 +338,7 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
       last = await attempt(s, inputs.length + 1, next.reason);
       inputs.push(last.input);
       reads.push(last.read);
+      spent.set(s.id, inputs.reduce((n, i) => n + (i.spend_micros ?? 0), 0));
       if (last.read.state === "cap") haltFor("CAP_STOP", s.id + " met the item's cap; the run is incomplete, and nothing is retried to change a verdict");
       if (last.drift.length || last.unreconciled) break;
     }
@@ -392,7 +394,8 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
       const s = batch.state.get(id)!.session;
       const code = stopOf(s) ?? "E_USAGE";
       released.set(id, code);
-      const row = releasedRow(s, code, repairName(repairOf(s.arm, o.repairs, o.doubled)));
+      const unrun = releasedRow(s, code, repairName(repairOf(s.arm, o.repairs, o.doubled)));
+      const row = spent.has(id) ? { ...unrun, launched: true, spend_micros: spent.get(id)! } : unrun;
       rows.push(row);
       line(files.rows, row);
     }
