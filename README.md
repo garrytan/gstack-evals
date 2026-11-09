@@ -38,7 +38,7 @@ Every number in this table passed two checks: a model from another lab checked t
 
 ## Plan reviews
 
-- **Plain Opus already finds the seeded plan flaws and solves the admission tasks.** With no gstack, Opus 5.5 found eng 15 of 16 and dx 20 of 20 planted-flaw readings, and solved 22 valid trials on 11 of 12 G admission tasks. So build harder tasks, or tasks that test what the planning skills are meant to do, before reading any lift for plan-eng-review, plan-devex-review or autoplan.
+- **Plain Opus already solves the admission tasks.** With no gstack, Opus 5.5 solved 22 valid trials on 11 of 12 G admission tasks. So build harder tasks, or tasks that test what the planning skills are meant to do, before reading any lift for plan-eng-review or autoplan. The seeded-flaw panel's eng and dx readings wait in the pending list below: their rerun matched, and their cross-lab read is not yet in a public post.
 - **plan-ceo-review showed no measurable gain on what we scored.** Under the preregistered Holm test it showed no measurable difference on Opus 5.5 (+0.0 points [-6.0, +6.0]), GPT-6.1 Sol or particle-1. On particle-1 the standalone skill scored lower: its unadjusted interval, -17.9 to -1.2 points, sits below zero, but it misses the preregistered Holm rule (sign-flip p 0.057, Holm p 0.114). The verdict is FIX-METHOD on task fit, because hit@3 never scored whether a review makes a plan better.
 
 ## Measured, independent check pending
