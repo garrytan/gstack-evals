@@ -1,11 +1,11 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Section 13.4: the request journal. Every panel request is a row keyed by its request digest, written (and synced)
 // before it is sent, then moved to one terminal state: label (received and valid), invalid (judged but unusable),
-// unknown (outcome lost to a crash) or retried (failed again after its one J1 retry). A failed call with no settled
-// reply gets one retry; the retry count is in the rows, so it survives relaunches. A relaunch reconciles before any
-// call: a pending row whose reply reached the cache becomes label, any other pending row becomes unknown and is never
-// resent (its reservation stays on the ledger until the proxy journal is reconciled). The reply cache serves only
-// requests whose row is terminal with a label.
+// unknown (outcome lost to a crash, or a send the proxy settled as unknown) or retried (failed again after its one J1
+// retry). A failed call with no settled reply gets one retry; the retry count is in the rows, so it survives
+// relaunches. A relaunch reconciles before any call: a pending row whose reply reached the cache becomes label, any
+// other pending row becomes unknown and is never resent (its reservation stays on the ledger until the proxy journal is
+// reconciled). The reply cache serves only requests whose row is terminal with a label.
 import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CallRequest, CallResult, ModelKey } from "./meter.ts";
@@ -146,6 +146,10 @@ export async function ask(j: Journal, call: (req: CallRequest) => Promise<CallRe
       throw e;
     }
     j.hit("after-settle", req.label);
+    if (res.text === null && res.status !== 200 && res.unknown) {
+      j.set(digest, "unknown", { ...meta, retries });
+      return { digest, text: null, label: null, missing: "unknown", cached: false, result: res };
+    }
     if (res.text === null && res.status !== 200) {
       j.set(digest, "failed", { ...meta, retries });
       continue;

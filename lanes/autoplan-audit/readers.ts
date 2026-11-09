@@ -8,7 +8,7 @@ import { blocks, present, tables } from "./detect.ts";
 import type { Matrix } from "./matrix.ts";
 import type { Decision, Phase, RunRecord } from "./records.ts";
 import { answered } from "./records.ts";
-import { accepted, unitsOf, wordCount, type Unit } from "./units.ts";
+import { accepted, carriedFrom, unitsOf, wordCount, type Unit } from "./units.ts";
 
 /** CEO and Eng always; Design and DX when the record's scope says so and the plan is not docs-only. */
 export function applicable(r: RunRecord): Phase[] {
@@ -308,11 +308,13 @@ export interface Gate1Run {
 }
 
 /** The revisions an unchanged carry reaches back to: same options and recommendation, each answered. */
-function carriedRevs(row: Decision, byId: Map<string, Decision>): number[] {
+function carriedRevs(row: Decision, byId: Map<string, Decision>, from: (d: Decision) => string | undefined): number[] {
   const revs = [row.gate_rev];
+  const seen = new Set([row.id]);
   let cur = row;
-  while (cur.carried_from && byId.has(cur.carried_from)) {
-    const prev = byId.get(cur.carried_from)!;
+  while (from(cur) && byId.has(from(cur)!) && !seen.has(from(cur)!)) {
+    const prev = byId.get(from(cur)!)!;
+    seen.add(prev.id);
     if (JSON.stringify(prev.options) !== JSON.stringify(cur.options) || prev.recommended !== cur.recommended || !prev.answered_at) break;
     revs.push(prev.gate_rev);
     cur = prev;
@@ -343,18 +345,19 @@ export function gate1(r: RunRecord, docs: readonly ApprovalDoc[]): Gate1Run {
     return { rev, attribution: attr.get(rev)!, changed: owner ? rows.some(changedRow) || (r.run.gate?.gate_rev === rev && overrides > 0) : null, items: owner ? rows.length : 0, changedItems: owner ? rows.filter(changedRow).length : 0 };
   });
   const byId = new Map(r.decisions!.map((d) => [d.id, d]));
+  const from = carriedFrom(r);
   const units = unitsOf(r) ?? [];
   let ucItems = 0, ucKept = 0, ucViolations = 0, ucMissing = 0, autoRec = 0, reversed = 0;
   for (const u of units) {
     const latest = [...u.rows].sort((a, b) => b.gate_rev - a.gate_rev)[0]!;
-    const prev = latest.carried_from ? byId.get(latest.carried_from) : undefined;
+    const prev = from(latest) ? byId.get(from(latest)!) : undefined;
     const changedOpen = !latest.answered_at && prev !== undefined && (JSON.stringify(prev.options) !== JSON.stringify(latest.options) || prev.recommended !== latest.recommended);
     if (u.userChallenge && changedOpen) {
       ucItems++;
       ucMissing++;
     } else if (u.userChallenge && u.last) {
       ucItems++;
-      const revsBack = carriedRevs(u.last, byId);
+      const revsBack = carriedRevs(u.last, byId, from);
       const a = revsBack.map((rev) => attr.get(rev) ?? "missing");
       const standingRow = u.last.owner_mode === "standing" || (/standing rule/i.test(String(u.last.answer_words ?? "")) || namesWrittenRule(String(u.last.answer_words ?? "")));
       if (a.some((x) => x !== "missing") || standingRow) ucKept++;

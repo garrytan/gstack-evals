@@ -59,6 +59,8 @@ export interface CallResult {
   problem: string | null;
   served_by: string | null;
   truncated: boolean;
+  /** The proxy settled this call's reservation as unknown: the request may have reached the provider, so it is never resent. */
+  unknown: boolean;
 }
 
 export function requestBody(m: { provider: Provider; id: string }, prompt: string, maxTokens: number, effort: string | null | undefined): Record<string, unknown> {
@@ -146,18 +148,20 @@ export async function openMeter(o: MeterOptions): Promise<Meter> {
         await p.finalize(b.meter_id);
         p.unbind(b.slot);
       }
-      const micros = local.meters(leaseId).get(b.meter_id)?.spent_micros ?? null;
+      const settled = local.meters(leaseId).get(b.meter_id);
+      const micros = settled?.spent_micros ?? null;
+      const unknown = (settled?.unknown_micros ?? 0) > 0;
       let parsed: any = null;
       try {
         parsed = JSON.parse(text);
       } catch {}
       if (status !== 200) {
         const problem = typeof parsed?.code === "string" ? parsed.code + ": " + (parsed.detail ?? "") : "HTTP " + status;
-        return { text: null, status, micros, cached: false, problem, served_by: null, truncated: false };
+        return { text: null, status, micros, cached: false, problem, served_by: null, truncated: false, unknown };
       }
       const servedBy = m.provider === "openrouter" ? (typeof parsed?.provider === "string" ? parsed.provider : null) : m.provider;
       if (m.served_by && (servedBy === null || !m.served_by.test(servedBy))) throw new MeterError("E_AR_PROVIDER_DRIFT", m.id + " was served by " + (servedBy ?? "an unnamed provider") + ", not its pinned provider; stop this model's items and ask the Captain");
-      return { text: parsed ? judgeAnswer(m.provider, parsed) : null, status, micros, cached: false, problem: parsed ? null : "the reply is not JSON", served_by: servedBy, truncated: parsed ? truncated(m.provider, parsed) : false };
+      return { text: parsed ? judgeAnswer(m.provider, parsed) : null, status, micros, cached: false, problem: parsed ? null : "the reply is not JSON", served_by: servedBy, truncated: parsed ? truncated(m.provider, parsed) : false, unknown };
     },
     async close() {
       if (closed) throw new MeterError("E_USAGE", "the meter is already closed");

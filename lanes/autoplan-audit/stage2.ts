@@ -6,6 +6,7 @@
 // E_AR_SUPPLY_SHORT and E_AR_JUDGE_KAPPA stop the panel part, E_AR_PACKET_LEAK the run; each settles the lease first.
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { recordPath } from "../../src/runner/ledger/paths.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { builtText, gitAt, type Frozen } from "./built.ts";
 import { ablate } from "./diff.ts";
@@ -114,6 +115,45 @@ function goldItems(pp: Prepared, d: GoldDraw): GoldItem[] {
 /** The production units: every lean unit with a built text (census) and the full-kind sample. */
 export const productionUnits = (pp: Prepared) => [...pp.rows.filter((r) => (r.stratum === "lean-primary" || r.stratum === "lean-desc") && pp.packets.has(r.id)).map((r) => r.id), ...pp.draws.full.filter((u) => pp.packets.has(u))];
 
+const PHASES: Phase2[] = ["smoke", "project", "gold", "check", "production"];
+
+/** Refuses a phase unless every earlier phase's saved result in the sink passed, so a failed or skipped gate stops every phase after it. */
+export function admitPhase(sink: string, phase: Phase2): void {
+  const saved = <T>(name: string): T | null => (existsSync(join(sink, name)) ? readJson<T>(join(sink, name)) : null);
+  const before = PHASES.slice(0, PHASES.indexOf(phase));
+  if (before.includes("smoke") && saved<{ pass?: boolean }>("smoke.json")?.pass !== true) fail("E_AR_SMOKE_FAIL", "the saved paid smoke is missing or did not pass; no later phase runs");
+  if (before.includes("project") && saved<{ stop?: boolean }>("projection.json")?.stop !== false) fail("E_CAP_TOO_LOW", "the saved re-projection is missing or stopped at the panel cap; no paid phase after it runs");
+  const c = saved<{ counts?: { landed: number; not: number } }>("gold.json")?.counts;
+  if (before.includes("gold") && !(c && c.landed >= GOLD_PER_CLASS && c.not >= GOLD_PER_CLASS)) fail("E_AR_SUPPLY_SHORT", "the saved gold is missing or short of " + GOLD_PER_CLASS + " items in a class; GATE-2 reads NO READ");
+  const p = saved<CheckResult>("check.json")?.pass;
+  if (before.includes("check") && !(p?.astra && p.opus && p.argon)) fail("E_AR_JUDGE_KAPPA", "the saved judge check is missing or a judge failed it; GATE-2 reads NO READ");
+}
+
+/** The cap the meter's approval record holds for the item, and what the item's other leases spent or left unknown. */
+export function budgetFor(o: Pick<Stage2Options, "record" | "env" | "item">, leaseId: string): { cap_micros: number; prior_micros: number } {
+  const state = readItem(recordPath(o.record, o.env ?? process.env).path, o.item);
+  const prior = state.leases.filter((l) => l.lease.lease_id !== leaseId).reduce((sum, { lease, close }) => sum + (close ? close.spent_micros + close.unknown_micros : lease.reserved_micros), 0);
+  return { cap_micros: state.cap_micros ?? 0, prior_micros: prior };
+}
+
+export function writeGold(sink: string, counts: { landed: number; not: number }, gold: ReadonlyMap<string, boolean>, items: readonly GoldItem[]): void {
+  writeJson(join(sink, "gold.json"), { counts, gold: [...gold], items: items.map((it) => it.id) });
+}
+
+/** The gold labels and every gold item the gold phase sent, top-ups included, rebuilt from this run's packets. */
+export function savedGold(pp: Pick<Prepared, "packets" | "ablated">, sink: string): { gold: Map<string, boolean>; items: GoldItem[] } {
+  const saved = readJson<{ gold: Array<[string, boolean]>; items?: string[] }>(join(sink, "gold.json"));
+  if (!Array.isArray(saved.items)) fail("E_AR_FRAME_DRIFT", "the saved gold lists no gold items; rerun the gold phase");
+  const kinds: Record<string, GoldItem["kind"]> = { hit: "hit", abl: "ablated", miss: "miss" };
+  const items = saved.items!.map((id) => {
+    const kind = kinds[id.slice(0, id.indexOf(":"))];
+    const packet = (kind === "ablated" ? pp.ablated : pp.packets).get(id.slice(id.indexOf(":") + 1));
+    if (!kind || !packet) fail("E_AR_FRAME_DRIFT", "a saved gold item no longer rebuilds from the frozen paths");
+    return { id, kind: kind!, packet: packet! };
+  });
+  return { gold: new Map(saved.gold), items };
+}
+
 /** Amendment A1: no packet is sent while any stage 1 refusal stands, so smoke, project and stage2 refuse to start. */
 export function blockOnRefusals(s: Pick<Stage1Out, "gate2">): void {
   if (s.gate2.refused) fail("E_AR_PACKET_LEAK", "stage 1 refused " + s.gate2.refused + " packets in " + s.gate2.refusedRuns + " runs; no packet is sent while a refusal stands");
@@ -140,17 +180,19 @@ export async function stage2(o: Stage2Options): Promise<Record<string, unknown>>
     const items = goldItems(pp, pp.draws.gold);
     const prod = productionUnits(pp);
     if (o.phases.includes("project")) {
+      admitPhase(o.sink, "project");
       const s = readJson<{ rows: SmokeRow[] }>(join(o.sink, "smoke.json"));
       const remaining = [...items.flatMap((it) => [["astra", "max"], ["opus", "max"], ["astra", "medium"], ["opus", "medium"], ["argon", "medium"]].map(([judge, effort]) => ({ judge, effort, body: it.packet.body }))), ...prod.flatMap((u) => ["astra", "opus", "argon"].map((judge) => ({ judge, effort: "medium", body: pp.packets.get(u)!.body })))] as Parameters<typeof reproject>[0]["remaining"];
-      const cap = o.record ? readItem(o.record, o.item).cap_micros ?? 0 : 0;
-      const p = reproject({ smoke: s.rows, remaining, unresolved_micros: meter.unknown(), spent_micros: meter.spent(), cap_micros: cap });
+      const budget = budgetFor(o, meter.leaseId);
+      const p = reproject({ smoke: s.rows, remaining, unresolved_micros: meter.unknown(), spent_micros: budget.prior_micros + meter.spent(), cap_micros: budget.cap_micros });
       writeJson(join(o.sink, "projection.json"), p);
       out.projection = p;
       if (p.stop) fail("E_CAP_TOO_LOW", "the re-projection with 12 worst cases passes the panel cap; stop for the Captain");
     }
     let gold = new Map<string, boolean>();
-    const all = [...items];
+    let all = [...items];
     if (o.phases.includes("gold")) {
+      admitPhase(o.sink, "gold");
       gold = await goldPass(j, meter.call, st, items);
       let c = goldCounts(gold);
       for (const [short, kind] of [[c.landed < GOLD_PER_CLASS, "hit"], [c.not < GOLD_PER_CLASS, "ablated"]] as const) {
@@ -160,18 +202,20 @@ export async function stage2(o: Stage2Options): Promise<Record<string, unknown>>
         for (const [k, v] of await goldPass(j, meter.call, st, extra)) gold.set(k, v);
       }
       c = goldCounts(gold);
-      writeJson(join(o.sink, "gold.json"), { counts: c, gold: [...gold] });
+      writeGold(o.sink, c, gold, all);
       out.gold = c;
       if (c.landed < GOLD_PER_CLASS || c.not < GOLD_PER_CLASS) fail("E_AR_SUPPLY_SHORT", "gold is short after the top-up (" + c.landed + " LANDED, " + c.not + " NOT_LANDED); GATE-2 reads NO READ");
-    } else if (existsSync(join(o.sink, "gold.json"))) gold = new Map(readJson<{ gold: Array<[string, boolean]> }>(join(o.sink, "gold.json")).gold);
+    } else if (existsSync(join(o.sink, "gold.json"))) ({ gold, items: all } = savedGold(pp, o.sink));
     let check: CheckResult | null = null;
     if (o.phases.includes("check")) {
+      admitPhase(o.sink, "check");
       check = await checkPass(j, meter.call, st, all, gold);
       writeJson(join(o.sink, "check.json"), check);
       out.check = check;
       if (!check.pass.astra || !check.pass.opus || !check.pass.argon) fail("E_AR_JUDGE_KAPPA", "a judge's kappa against gold is below 0.6; GATE-2 reads NO READ");
     } else if (existsSync(join(o.sink, "check.json"))) check = readJson<CheckResult>(join(o.sink, "check.json"));
     if (o.phases.includes("production")) {
+      admitPhase(o.sink, "production");
       const labels = await production(j, meter.call, st, prod.map((u) => ({ id: u, packet: pp.packets.get(u)! })), check?.pass.argon ?? false);
       writeJson(join(o.sink, "labels.json"), [...labels]);
       out.production = { units: labels.size, missing: [...labels.values()].filter((c) => c.binary === null).length, argon: [...labels.values()].filter((c) => c.argonUsed).length };

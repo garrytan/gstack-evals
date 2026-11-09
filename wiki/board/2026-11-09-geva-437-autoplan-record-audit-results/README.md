@@ -241,6 +241,7 @@ We checked 40 of our own autoplan runs against autoplan's own promises, using on
 ## Changelog
 
 - 2026-11-09: first version.
+- 2026-11-09: review fixes after the run. GATE-1's walk back through carried answers now also follows the gate file's carry links, as unit grouping already did; a recheck with the fix on the same frame gave the same lean and full-kind counts. The panel code, which never ran, gained four guards: an unknown send outcome is never resent, each paid phase needs the saved gates before it, the re-projection counts earlier leases against the cap, and the gold item list survives a phase boundary. Every number in this post is from the run at the lane commit.
 
 ## Agent notes
 
