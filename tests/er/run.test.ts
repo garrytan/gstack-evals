@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { erMain } from "../../src/trial/review/er-cli.ts";
 import { buildErTree, clonePinProblems, ER_COMMON, ER_FORCED, ER_LENS_LINE, ER_TEMPLATE, erAdmits, erOrder, erPrompt, erUnitProblems } from "../../src/trial/review/eng-review.ts";
 
 const git = (dir: string, ...args: string[]) => spawnSync("git", ["-c", "user.name=Test Writer", "-c", "user.email=test@example.invalid", "-C", dir, ...args], { encoding: "utf8" });
@@ -96,5 +97,41 @@ describe("eng-review gstack pins", () => {
     const empty = mkdtempSync(join(tmpdir(), "er-clone-"));
     git(empty, "init", "-q");
     expect(clonePinProblems(empty).length).toBe(5);
+  });
+});
+
+describe("review-units --plan eng-review", () => {
+  const io = () => {
+    const o = { out: [] as string[], err: [] as string[] };
+    return { o, io: { out: (t: string) => o.out.push(t), err: (t: string) => o.err.push(t) } };
+  };
+  test("refuses a frozen setting, an --enforce arm the run lacks and a units dir inside the repo", async () => {
+    const root = mkdtempSync(join(tmpdir(), "er-cli-"));
+    unit(root, "u1");
+    const base = ["--plan", "eng-review", "--units-dir", root, "--units", "u1", "--models", "claude-opus-5-5", "--out", join(root, "out")];
+    const a = io();
+    expect(await erMain([...base, "--arms", "none", "--allowance", "4"], a.io, {})).toBe(2);
+    expect(a.o.err.join("\n")).toMatch(/unknown argument "--allowance"/);
+    const b = io();
+    expect(await erMain([...base, "--arms", "none", "precut", "--enforce", "candidate"], b.io, {})).toBe(2);
+    expect(b.o.err.join("\n")).toMatch(/--enforce "candidate" names no skill arm/);
+    const c = io();
+    expect(await erMain(["--plan", "eng-review", "--units-dir", import.meta.dir, "--units", "all", "--arms", "none", "--models", "claude-opus-5-5", "--out", join(root, "out")], c.io, {})).toBe(2);
+    expect(c.o.err.join("\n")).toMatch(/inside the repo/);
+  });
+  test.skipIf(!existsSync(CLONE))("a dry run renders each opening, asserts the mounts, prints each prompt's sha256 and the admission rule", async () => {
+    const root = mkdtempSync(join(tmpdir(), "er-cli-"));
+    unit(root, "u1");
+    const x = io();
+    const code = await erMain(["--plan", "eng-review", "--units-dir", root, "--units", "u1", "--arms", "none", "lens", "precut", "engphase", "candidate", "--models", "claude-opus-5-5", "openai/gpt-6.1-sol", "particle-ai/particle-1", "--out", join(root, "out"), "--gstack", CLONE, "--parallel", "2", "--dry-run"], x.io, {});
+    const text = x.o.out.join("\n");
+    expect(x.o.err).toEqual([]);
+    expect(code).toBe(0);
+    expect(text).toMatch(/eng phase opening sha256 [0-9a-f]{64}/);
+    expect(text).toMatch(/mounts: ok/);
+    expect(text).toContain("admission: an attempt starts only when the settled spend plus the $10 allowance of every attempt in flight");
+    expect(text).toMatch(/model openai\/gpt-6\.1-sol via openrouter .*"only":\["openai"\],"allow_fallbacks":false/);
+    expect(text).toMatch(/order: seed 20261108, 15 sessions/);
+    expect(existsSync(join(root, "out"))).toBe(false);
   });
 });
