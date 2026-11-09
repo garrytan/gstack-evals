@@ -21,12 +21,12 @@ Money is integer micro-dollars (1 USD is 1,000,000 micros) in every file and tab
 
 When a command stops with E_LEDGER_MISSING, a human approves a cap and records it with their exact words. On Capy, a crew thread asks its Captain through a needs-you report, and the Captain records the reply.
 
-Before you run it, replace each angle-bracket value with the approver's own words and name, because the ledger records whatever you pass.
+Before you run it, replace each angle-bracket value with the approver's own words, name and source, because the ledger records whatever you pass.
 
 ```
 gstack-evals ledger init --cap 130 --item lanea-quick --admission required \
-  --words "<exact words>" --source "gate 1 of plan v3.2, approving the first cap" \
-  --words "<more exact words>" --source "2026-10-28 message moving the quick looks up" \
+  --words "<exact words>" --source "<where the words were given>" \
+  --words "<more exact words>" --source "<where the more words were given>" \
   --by "<approver>"
 ```
 

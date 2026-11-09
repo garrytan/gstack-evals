@@ -305,9 +305,9 @@ Prices are the pinned table (src/runner/pricing/prices.ts at 176fdc7 and 715f837
 
 Crew model use sits outside the ledger. At the last crew reading it was $115.52 including this thread, which puts the run at about $709 of #194's $2,000 all-in with the earlier threads' $89.06.
 
-The operator's launch wrapper misparsed a value it reads before launching and stopped there: no out dir, no lease, $0.
+Smoke, attempt 1: the operator's launch wrapper misparsed a value it reads before launching and stopped there: no out dir, no lease, $0.
 
-It exited 2 with empty stderr, never leased and spent $0.
+None-rr grid, attempt 1: the first launch exited 2 with empty stderr, never leased and spent $0.
 
 Per blocking find, it cost $19.56 against $16.15, because it found about 7 times as many.
 

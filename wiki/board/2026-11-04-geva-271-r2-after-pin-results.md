@@ -301,9 +301,9 @@ Crew model use sits outside the ledger. At the last crew reading it was $115.52 
 
 From the summary: $504.78.
 
-The operator's launch wrapper misparsed a value it reads before launching and stopped there: no out dir, no lease, $0.
+Smoke, attempt 1: the operator's launch wrapper misparsed a value it reads before launching and stopped there: no out dir, no lease, $0.
 
-It exited 2 with empty stderr, never leased and spent $0.
+None-rr grid, attempt 1: the first launch exited 2 with empty stderr, never leased and spent $0.
 
 Per blocking find, it cost $19.56 against $16.15, because it found about 7 times as many.
 

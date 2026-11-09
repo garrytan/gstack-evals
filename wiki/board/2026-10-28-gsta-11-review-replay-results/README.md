@@ -182,6 +182,8 @@ The preregistered exploratory cell ran because the grid and its judging left $43
 
 Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5.43, gstack $31.05), DeepSeek $5.36, Haiku $1.18. The judge cost $0.39, and the Opus-high cell $5.05. The total is $48.46. DeepSeek's figure includes $0.81 settled at the worst case for 17 calls: 16 cut off by the harness restarts ($0.76) and one whose reply carried no cost (the core call in DeepSeek gstack y11 trial 2, which OpenRouter returned without `usage.cost`). The seven DeepSeek replies that ended in a provider error settled at $0, so DeepSeek spend is slightly understated. Per 72 units, gstack's prompts cost 5.7 times the plain prompt on Opus, 4.0 times on Haiku and 2.9 times on DeepSeek.
 
+**All 24 cases**
+
 | model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
 |---|---|---|---|---|---|---|---|---|
 | Opus 5.5 | plain | 39% | [14%, 67%] | 28% | 28% | [8%, 50%] | 39%, 28% (36) | $0.21 |
@@ -190,6 +192,8 @@ Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5
 | Haiku 5.5 | gstack | 36% | [11%, 61%] | 19% | 33% | [14%, 56%] | 36%, 33% (36) | $0.040 |
 | DeepSeek V4.1 Flash | plain | 17% | [0%, 42%] | 14% | 22% | [6%, 42%] | 50%, 50% (8) | $0.15 |
 | DeepSeek V4.1 Flash | gstack | 32% | [10%, 57%] | 17% | 17% | [3%, 36%] | 38%, 15% (15) | $0.25 |
+
+**Escaped defects**
 
 | model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
 |---|---|---|---|---|---|---|---|---|
@@ -200,6 +204,8 @@ Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5
 | DeepSeek V4.1 Flash | plain | 33% | [0%, 67%] | 28% | 11% | [0%, 33%] | 67%, 33% (7) | $0.06 |
 | DeepSeek V4.1 Flash | gstack | 56% | [17%, 89%] | 33% | 17% | [6%, 28%] | 60%, 11% (9) | $0.14 |
 
+**Review-caught defects**
+
 | model | arm | recall | 95% CI | recall at CRITICAL | false alarms | 95% CI | answered only: recall, false alarms (defect units) | cost per catch |
 |---|---|---|---|---|---|---|---|---|
 | Opus 5.5 | plain | 11% | [0%, 33%] | 0% | 50% | [17%, 83%] | 11%, 50% (18) | $0.84 |
@@ -209,7 +215,11 @@ Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5
 | DeepSeek V4.1 Flash | plain | 0% | [0%, 0%] | 0% | 33% | [6%, 67%] | 0%, 58% (1) | - |
 | DeepSeek V4.1 Flash | gstack | 8% | [0%, 25%] | 0% | 17% | [0%, 50%] | 0%, 17% (6) | $1.13 |
 
+**Cheap models against Opus**
+
 Haiku with gstack costs $0.04 per catch against $0.21 for Opus plain, with 3 points less recall and more false alarms (33% against 28%).
+
+**Exploratory: Opus at effort high**
 
 It cost $5.05 against $4.31 for those 6 units, with 17,800 output tokens per unit against 11,600.
 

@@ -155,7 +155,7 @@ Paid model calls: $0. The scan used 1.9M host tokens (1,347 Capy credits, about 
 
 From the summary: A $0 rough scan found 4 waste calls in 14,036 and none in any no-gstack cell.
 
-Paid calls: $0. |
+From the Grade row: Paid calls: $0.
 
 - Next, at $0 in paid calls: a reader for crew session logs, in its own PR, and a counts-only in-the-wild baseline of crew ship pipelines, as its own post.
 
