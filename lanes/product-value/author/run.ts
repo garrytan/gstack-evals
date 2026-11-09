@@ -57,19 +57,19 @@ export function lastJson(text: string | null): any {
 }
 
 /** Fenced blocks by label (T1's three files). */
-/** Files from fences labelled with a file name (plan.md, context/project.md). A file runs to the next file label, so code
+/** Files from backtick or tilde fences labelled with a file name (plan.md, context/project.md). A file runs to the next file label, so code
  * fences inside it stay; its own closing fence is the last bare fence line before that label, and a last file left
  * unclosed keeps everything after its label. */
 export function labelled(text: string | null): Record<string, string> {
   const out: Record<string, string> = {};
   const lines = (text ?? "").split("\n");
   const starts = lines.flatMap((l, i) => {
-    const m = /^\u0060{3,}([A-Za-z0-9_-]+(?:[./][A-Za-z0-9_-]+)+)\s*$/.exec(l);
-    return m ? [{ i, name: m[1]! }] : [];
+    const m = /^(\u0060{3,}|~{3,})([A-Za-z0-9_-]+(?:[./][A-Za-z0-9_-]+)+)\s*$/.exec(l);
+    return m ? [{ i, name: m[2]!, mark: m[1]![0]! }] : [];
   });
   starts.forEach((s, k) => {
     const body = lines.slice(s.i + 1, k + 1 < starts.length ? starts[k + 1]!.i : lines.length);
-    const close = body.map((l) => /^\u0060{3,}\s*$/.test(l)).lastIndexOf(true);
+    const close = body.map((l) => l.length >= 3 && l.trimEnd() === s.mark.repeat(l.trimEnd().length)).lastIndexOf(true);
     out[s.name] = body.slice(0, close >= 0 ? close : body.length).join("\n").trim() + "\n";
   });
   return out;
