@@ -176,6 +176,7 @@
       "tests/decision-routing/score-acting.test.ts",
       "tests/decision-routing/score-admission.test.ts",
       "tests/decision-routing/score-cli.test.ts",
+      "tests/decision-routing/score-offplan.test.ts",
       "tests/decision-routing/score-session.test.ts",
       "tests/decision-routing/score-verdicts.test.ts",
       "tests/decision-routing/tune-bands.test.ts"
