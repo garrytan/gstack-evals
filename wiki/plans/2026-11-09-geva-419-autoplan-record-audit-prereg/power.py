@@ -8,6 +8,7 @@
 #      inside a run-level bootstrap, widened for few runs (unclipped draws scaled about the unclipped point estimate
 #      by sqrt(G/(G-1)) x t(0.975, G-1)/1.96 for G runs, then clipped to [0, 1]); the panel's errors are simulated;
 #   B. the lean (every unit with a built text) minus full (40 sampled units) difference on the same rate (descriptive; MDD);
+#      one panel measures both strata, so each bootstrap draw uses the same sensitivity and specificity for both;
 #   C. the share of required outputs present per run (AP-X-2), lean and full, and their MDD;
 #   D. the one-pass reading per run (AP-X-1), a Wilson interval on k of n;
 #   E. the gate's zero-violation reading (AP-GATE-1): the exact upper bound when no violation is seen;
@@ -54,10 +55,12 @@ def gold(sens, spec):
 def corrected(o, se, sp):
     return (o + sp - 1) / np.maximum(se + sp - 1, 1e-6)
 
-def census(runs, gk, boot=BOOT):
+def calib(gk, boot=BOOT):
+    return rng.beta(gk[0] + 0.5, GOLD_PER_CLASS - gk[0] + 0.5, boot), rng.beta(gk[1] + 0.5, GOLD_PER_CLASS - gk[1] + 0.5, boot)
+
+def census(runs, gk, draws=None, boot=BOOT):
     k = np.array([r.sum() for r in runs]); n = np.array([len(r) for r in runs])
-    se = rng.beta(gk[0] + 0.5, GOLD_PER_CLASS - gk[0] + 0.5, boot)
-    sp = rng.beta(gk[1] + 0.5, GOLD_PER_CLASS - gk[1] + 0.5, boot)
+    se, sp = draws if draws is not None else calib(gk, boot)
     i = rng.integers(0, len(n), (boot, len(n)))
     o = k[i].sum(1) / np.maximum(n[i].sum(1), 1)
     point = corrected(k.sum() / max(n.sum(), 1), gk[0] / GOLD_PER_CLASS, gk[1] / GOLD_PER_CLASS)
@@ -95,8 +98,9 @@ for rho, se, sp in ((0.05, 0.95, 0.95), (0.30, 0.95, 0.95), (0.30, 0.90, 0.85)):
         ex = 0
         for _ in range(SIMS // 2):
             gk = gold(se, sp)
-            _, bl = census(labelled(LEAN_ALL, 0.95, rho, se, sp), gk)
-            _, bf = census(sample_full(labelled(FULL_RUNS, 0.95 - d, rho, se, sp)), gk)
+            cd = calib(gk)
+            _, bl = census(labelled(LEAN_ALL, 0.95, rho, se, sp), gk, cd)
+            _, bf = census(sample_full(labelled(FULL_RUNS, 0.95 - d, rho, se, sp)), gk, cd)
             ex += np.percentile(bl - bf, 2.5) > 0
         if ex / (SIMS // 2) >= 0.80: mdd = d; break
     print(f"rho {rho:.2f}  sens {se:.2f}  spec {sp:.2f}  MDD {mdd if mdd is not None else '>0.60'}")

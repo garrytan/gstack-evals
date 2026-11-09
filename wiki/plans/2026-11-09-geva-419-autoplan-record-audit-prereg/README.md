@@ -19,8 +19,8 @@ links:
   - 2026-11-07-geva-393-e3-autoplan-gate-order-addendum
   - garrytan/gstack-evals#277
 attachments:
-  - e76a386bb27e6bd1f96cacd516878bd83d474ce6a8b3e5eb253e821c7de50136  power.py
-  - e7232b6ef976d54b2b0593ba18e6176f2b3b9e7da8bc7920d5580c71f74d7ba5  power.txt
+  - d0f30f9324bd29a39e751fbccb7a9bba98e10c8fd43d4c3a68e75930d4009bc5  power.py
+  - d0c3fda6eccdbbb91f978d625e30b4b74ec2eb3f9ac7ed4bd95ea65231acbeef  power.txt
 ---
 
 # Preregistration: does autoplan do what it promises, judged from the records it already left?
@@ -321,7 +321,7 @@ power.py (attached, seeded, no key) simulates each reading at the frame's real s
 
 - **GATE-2, lean primary (43 changes in 10 runs, census, 40 gold a class).** The interval's half-width is about 0.12 to 0.16 near the bar. At a true share of 0.90, NOT MET comes out in at most 1.1% of simulated audits and MET in 5% to 9%; measured coverage of the interval is 0.91 to 0.96 for true shares from 0.75 to 0.95 and 0.99 at 1.00. A true share of 0.75 reads NOT MET in 10% to 23% of audits, 0.80 in 5% to 12%. A true share of 0.95 reads MET in 12% to 23%, and 1.00 in 22% to 53%; the rest read UNCLEAR. So the audit rarely misfires at the bar in either direction, but it can confirm neither a gate that loses one change in five nor one that loses none with much reliability. Its likely outcome is UNCLEAR with a stated interval.
 - **GATE-2, lean (57 changes) minus full (40 sampled) (descriptive).** The MDD is 0.44 to above 0.60: only a very large gap between the forms would show.
-- **X-2, lean (22 runs).** Half-width 0.03 to 0.12. A true share of 0.70 reads NOT MET in 44% to 80% of audits and 0.50 in all; 0.90 reads MET in 70% to 94%.
+- **X-2, lean (22 runs).** Half-width 0.03 to 0.12. A true share of 0.70 reads NOT MET in 44% to 81% of audits and 0.50 in all; 0.90 reads MET in 70% to 93%.
 - **X-2, lean minus full (descriptive).** MDD 0.18 to 0.28.
 - **X-1, lean (22 runs).** MET needs 22 of 22 (Wilson); 13 or fewer reads NOT MET. A true rate of 0.95 reads MET in about a third of audits.
 - **GATE-1 integrity.** With no violation in 22 lean gates, the exact one-sided 95% upper bound on the violation rate is 0.127.
