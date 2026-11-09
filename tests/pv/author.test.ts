@@ -72,6 +72,12 @@ describe("text helpers", () => {
     const l = labelled(t);
     expect([l["plan.md"]?.trim(), l["brief.md"]?.trim(), l["context/project.md"]?.trim()]).toEqual(["P", "B", "C"]);
   });
+  test("labelled keeps code fences inside a file and reads an unclosed last file", () => {
+    const t = "```plan.md\nP\n```bash\nrun it\n```\nmore\n```\n\n```brief.md\nB\n```\n```context/project.md\nC\nstill C";
+    const l = labelled(t);
+    expect([l["plan.md"]?.trim(), l["brief.md"]?.trim(), l["context/project.md"]?.trim()]).toEqual(["P\n```bash\nrun it\n```\nmore", "B", "C\nstill C"]);
+    expect(Object.keys(l)).toEqual(["plan.md", "brief.md", "context/project.md"]);
+  });
   test("applyNames replaces whole names, longest first", () => {
     expect(applyNames("Acme and AcmeDB use acme.io", [{ original: "Acme", replacement: "Northwind" }, { original: "AcmeDB", replacement: "the store" }, { original: "acme.io", replacement: "example.org" }])).toBe("Northwind and the store use example.org");
   });
