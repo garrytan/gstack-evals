@@ -1178,6 +1178,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_HM_JEV_VERSION: {
+    exit: 2,
+    meaning: "A harness mechanics judgment hook (lanes/harness-mechanics/judge/hm_judge.py) stopped its session: a TypeSafe response carried no model attribute, or one that is not a Jev version, so the pinned-version check could not run (the Captain's ruling E1).",
+    fix: "Stop the judge arms (judge.ts jevChanges counts the line). Read the real model field of a TypeSafe response, which Stage 2's smoke checks first, and take it to the Captain before any judge session runs again.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_HM_PICKER: {
     exit: 2,
     meaning: "The harness mechanics bo2 picker (lanes/harness-mechanics/picker.ts, hm pick) refused or stopped: its config names an unknown item or model, a picker call failed at the metering proxy, or a reserve on the item's ledger was refused.",

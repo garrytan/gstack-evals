@@ -6,11 +6,14 @@ section 8's exact rules run, then the typed yes or no question. "hm_judge.py bas
 read-only and test list, then check-careful.sh at the pin, then the risky question. Both call dr_agent.deciders unchanged
 through the metering proxy with the session's own token (HM_JUDGE_PROXY, HM_JUDGE_TOKEN), fail open past 2 s for Jev and
 30 s for particle-1 (each limit covers the decider's whole answer, its own retry included), read the acting band from the
-config's band file at hook start, check every Jev response's version, and append one JSON line per decision to the log.
+config's band file at hook start, check every Jev response's version, and append one JSON line per decision to the log. A
+Jev answer whose TypeSafe response has no model attribute, or one that is not a Jev version, stops the session with
+E_HM_JEV_VERSION (the Captain's ruling E1) instead of acting or failing open.
 """
 import hashlib
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -31,6 +34,8 @@ GIT_READ = {"status", "diff", "log", "show"}
 PROVIDER = {"order": ["Particle"], "allow_fallbacks": False}
 SEPARATORS = {";", ";;", "&&", "||", "|", "|&", "&", "(", ")"}
 NESTED = ("$(", "`", "<(", ">(")
+JEV_VERSION = re.compile(r"jev-[0-9]+\.[0-9]+\.[0-9]+")
+STOP_CODE = "E_HM_JEV_VERSION"
 
 
 class _Watch:
@@ -99,8 +104,25 @@ def _redirects_out(words):
     return any(">" in w and set(w) <= set("&>|0123456789") for w in words)
 
 
+def _writes_file(words):
+    """Output redirection to a file other than /dev/null: >, >>, >|, &>, <> or >& with a file target (the Captain's
+    ruling C1, a deviation from section 8's frozen list). A redirection that only duplicates or closes a descriptor is not
+    one; one with no target is."""
+    for i, w in enumerate(words):
+        if ">" not in w or not set(w) <= set("&>|<0123456789"):
+            continue
+        target = words[i + 1] if i + 1 < len(words) else ""
+        if w.endswith("&") and (target.isdigit() or target == "-"):
+            continue
+        if target != "/dev/null":
+            return True
+    return False
+
+
 def on_list(words):
     w0, rest = os.path.basename(words[0]), words[1:]
+    if _writes_file(words):
+        return False
     if w0 in ("awk", "echo"):
         return not _redirects_out(words)
     if w0 in PLAIN or w0 in ("pytest", "tox"):
@@ -159,7 +181,7 @@ def _calls(rec):
 def judge(state, question, backend, band, jev, particle):
     """One judgment call: Jev outside the band acts; inside it particle-1 answers, shown Jev's guess. judge-p1 asks particle-1 only."""
     out = {"backend": backend, "p_jev": None, "escalated": False, "answer": None, "fail_open": False, "error": None,
-           "latency_ms": 0, "calls": 0, "jev_version": None}
+           "latency_ms": 0, "calls": 0, "jev_version": None, "stopped": False}
 
     def add(rec, ms):
         n = _calls(rec)
@@ -171,7 +193,12 @@ def judge(state, question, backend, band, jev, particle):
         jev.versions.clear()
         rec, err, ms = timed(lambda: jev.ask(state, {"q": {"type": "noul", "instructions": question}})["q"], LIMIT_S["jev"])
         add(rec, ms)
-        seen = [v for v in list(jev.versions) if v is not None]
+        seen = list(jev.versions)
+        unknown = [v for v in seen if not (isinstance(v, str) and JEV_VERSION.fullmatch(v))]
+        if unknown or (not seen and not err):
+            what = repr(unknown[-1])[:80] if unknown else "absent"
+            out.update(stopped=True, error=STOP_CODE + " the TypeSafe response's model attribute is " + what + ", not a Jev version, so the session stops")
+            return out
         bad = [v for v in seen if v != JEV_MODEL]
         if seen:
             out["jev_version"] = (bad or seen)[-1]
@@ -202,7 +229,8 @@ def digest(state, question):
 
 def line(point, rule, **kw):
     rec = {"point": point, "rule": rule, "backend": None, "p_jev": None, "escalated": False, "answer": None, "acted": False,
-           "latency_ms": 0, "calls": 0, "req_digest": None, "journal_id": None, "fail_open": False, "error": None, "jev_version": None}
+           "latency_ms": 0, "calls": 0, "req_digest": None, "journal_id": None, "fail_open": False, "error": None, "jev_version": None,
+           "stopped": False}
     rec.update(kw)
     return rec
 
@@ -220,6 +248,8 @@ def done(facts, cfg, band, jev, particle):
     state = {"final_message": (facts.get("final_text") or "")[-2000:], "last_check_command": check["cmd"] if check else None,
              "last_check_output": (check.get("output") or "")[-4000:] if check else None, "edited_files": facts.get("edited_files") or []}
     j = judge(state, DONE_Q, cfg["backend"], band, jev, particle)
+    if j["stopped"]:
+        return {"continue": False, "stopReason": j["error"]}, line("done", None, req_digest=digest(state, DONE_Q), **j)
     acted = j["answer"] == "no" and not j["fail_open"]
     if acted:
         os.makedirs(cfg["state_dir"], exist_ok=True)
@@ -251,6 +281,8 @@ def risky(payload, cfg, band, jev, particle):
     cwd = payload.get("cwd") or os.getcwd()
     state = {"command": command, "working_directory": cwd, "repository_root": _repo_root(cwd)}
     j = judge(state, RISKY_Q, cfg["backend"], band, jev, particle)
+    if j["stopped"]:
+        return {"continue": False, "stopReason": j["error"], **_deny(j["error"])}, line("risky", None, req_digest=digest(state, RISKY_Q), **j)
     acted = j["answer"] == "yes" and not j["fail_open"]
     return (_deny(RISKY_DENY) if acted else None), line("risky", None, acted=acted, req_digest=digest(state, RISKY_Q), **j)
 
@@ -294,6 +326,8 @@ def main(argv):
     except Exception as e:
         out, code = None, 0
         rec = line("done" if point == "stop" else "risky", "hook_error", fail_open=True, error=f"{type(e).__name__}: {str(e)[:200]}")
+    if rec.get("stopped"):
+        sys.stderr.write(rec["error"] + "\n")
     rec["ts"] = round(time.time(), 3)
     with open(cfg["log"], "a") as f:
         f.write(json.dumps(rec, sort_keys=True) + "\n")

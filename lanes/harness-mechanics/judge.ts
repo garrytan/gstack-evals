@@ -21,7 +21,7 @@ export function doneFacts(transcript: string): DoneFacts {
 
 export type HookLine = {
   point: "done" | "risky"; rule: string | null; backend: "jev" | "p1" | null; p_jev: number | null; escalated: boolean; answer: string | null; acted: boolean;
-  latency_ms: number; calls: number | null; req_digest: string | null; journal_id: string[] | null; fail_open: boolean; error: string | null; jev_version: string | null;
+  latency_ms: number; calls: number | null; req_digest: string | null; journal_id: string[] | null; fail_open: boolean; error: string | null; jev_version: string | null; stopped?: boolean;
 };
 export type HookSession = { arm: string; model: string; task: string; trial: string; log: string | null; journal: string; meter_id: string };
 
@@ -63,8 +63,8 @@ export function withJournalIds(lines: HookLine[], requests: string[]): HookLine[
   });
 }
 
-/** Lines whose Jev response carried a version other than the pin: any one stops the judge arms. */
-export const jevChanges = (lines: HookLine[]) => lines.filter((l) => l.jev_version !== null && l.jev_version !== JEV_MODEL);
+/** Lines whose Jev response carried a version other than the pin, or none the hook could read (E1, a stopped session): any one stops the judge arms. */
+export const jevChanges = (lines: HookLine[]) => lines.filter((l) => l.stopped === true || (l.jev_version !== null && l.jev_version !== JEV_MODEL));
 
 /** The judge columns, and the hook spend added to cost_usd, on each judge row that has a hook session for its arm, model, task and trial; other rows unchanged. */
 export function judgeColumns(rows: HmRowIn[], sessions: HookSession[]): HmRowIn[] {
