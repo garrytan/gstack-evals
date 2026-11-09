@@ -1,0 +1,10 @@
+kept 346 f06321599465c9be76dcb847a92ee41490be51c28ae3a4db8171b5fcdfd9c1d8
+twins dropped 1 pytest-dev__pyfakefs-1286
+pool 345 repositories 190
+scored.txt 280 sorted sha256 8959bfef3190594aca46600f4d63756f790b8e6588a40739df8267e72f49219f repositories 185
+calibration.txt 40 sorted sha256 254ea2d93b3c29110354a57ac798e94390d45ee940ba2d7cbbc7a96cd47b1078 repositories 17
+spare.txt 16 sorted sha256 6eae47ccc6b9ea826443df5837ec530f67facfdda1ad831f5f6a8502e3a4e02e repositories 10
+subset.txt 100 sorted sha256 68d3105f89caa77dc5b796312c1b3c8ceecc75351503cb6e97393558283a5ce3 repositories 79
+pilot.txt 20 sorted sha256 0310a1a7cd1df8028f05374d16e1a260043d82aa9f4952b3d61927d4f71ddeb5 repositories 8
+pilot small (first 12) tobymao__sqlglot-6067 tobymao__sqlglot-6413 BerriAI__litellm-16864 tobymao__sqlglot-6314 tobymao__sqlglot-7457 astropy__astropy-18958 BerriAI__litellm-16997 schemathesis__schemathesis-3195 sympy__sympy-28454 astropy__astropy-18752 BerriAI__litellm-15753 schemathesis__schemathesis-3291
+stranded 9 BerriAI__litellm-16315 BerriAI__litellm-16943 tobymao__sqlglot-6174 tobymao__sqlglot-6374 tobymao__sqlglot-6383 tobymao__sqlglot-6409 tobymao__sqlglot-6632 tobymao__sqlglot-6991 tobymao__sqlglot-7479
