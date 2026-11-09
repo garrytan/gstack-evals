@@ -199,7 +199,7 @@ mine.json should match recompute-output.json. For the six gstack and gbrain poin
 - scores-as-run.json, recompute-output.json and private-game-counts.json: scorer output, recompute output, and the private game's counts and digests.
 - score.py.txt, stats.py.txt and recompute.py.txt: the scorer that ran, its statistics (unchanged apart from its first line), and the recompute.
 
-The raw Jev requests and responses and the model-arm output rows (18 files) are not published here, to keep this pull request small enough to review. raw-files-digests.json pins each of them by sha256 and size. The Harness Evals rerun and the separate recompute both ran on the full set, raw rows included, and every number above recomputes from the attachments that remain. The prompts for today's model and particle-1 come from the repos at the pinned commits. Paid calls are not repeatable from this bundle: it holds their per-item results.
+The raw Jev requests and responses and the model-arm output rows (18 files) are not published here, to keep this pull request small enough to review. raw-files-digests.json pins each of them by sha256 and size. The Harness Evals rerun and the separate recompute both ran on the full set, raw rows included, Every scored result above recomputes from the attachments that remain. The few figures that need the raw rows, the first-try latencies and the replies that hit the 2,048-token cap, were checked on the full set. The prompts for today's model and particle-1 come from the repos at the pinned commits. Paid calls are not repeatable from this bundle: it holds their per-item results.
 
 ## What is held out, and why
 
