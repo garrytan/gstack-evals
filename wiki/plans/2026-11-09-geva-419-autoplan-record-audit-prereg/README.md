@@ -211,7 +211,7 @@ Then, per answered gate revision:
 - **Changed recommendations (descriptive).** Among owner-attributed revisions, the share whose reply named any option other than the recommendation (a reply other than rec, a non-empty overrides list, or any item at that revision with status overridden or chosen different from recommended); and the same share at item level.
 - **Reversals (descriptive).** Among auto items answered with their recommendation, the share a later revision of the same run answered differently; plus the panel's REVERSED labels from GATE-2. Reopen counts per run print here (AP-GATE-6).
 
-The verdict rests on the integrity check and direction kept (section 7). RECORDED OWNER, CORROBORATED, DELEGATED and MISSING PROVENANCE counts all print: owner_reply is recorded provenance, not independent proof that the owner wrote those words. The descriptive shares carry a plain limit: in this crew the relay protocol offers the owner "take every recommendation" as the one-word default, so a low changed share measures how often the owner overrode under that default, not whether they read the gate.
+The verdict rests on the integrity check (every readable record) and on direction kept in lean records; full-kind and told direction kept print as descriptive. RECORDED OWNER, CORROBORATED, DELEGATED and MISSING PROVENANCE counts all print: owner_reply is recorded provenance, not independent proof that the owner wrote those words. The descriptive shares carry a plain limit: in this crew the relay protocol offers the owner "take every recommendation" as the one-word default, so a low changed share measures how often the owner overrode under that default, not whether they read the gate.
 
 #### 5.5 GATE-2: accepted changes land (AP-GATE-2)
 
@@ -254,7 +254,7 @@ The verdict rests on the integrity check and direction kept (section 7). RECORDE
 | AP-X-1 | share of answered lean runs whose completion part is met, Wilson 95% | MET when the lower bound is at least 0.80; NOT MET when the upper bound is below 0.80 |
 | AP-X-2 | mean per-run share of required outputs present (lenient), run bootstrap 95% | same, 0.80 |
 | AP-X-3 | outside voice disabled in every lean record, by code and record | NOT MET BY DESIGN; otherwise the share ran and cross-family against 0.80 |
-| AP-GATE-1 | confirmed violations: agent self-approvals on any readable record, and user-challenge items answered by an agent with no owner words and no standing rule | MET at zero confirmed violations; NOT MET at one or more |
+| AP-GATE-1 | confirmed violations: agent self-approvals on any readable record, and user-challenge items in lean records answered by an agent with no owner words and no standing rule | MET at zero confirmed violations; NOT MET at one or more |
 | AP-GATE-2 | corrected landed share on the primary lean estimand (census), run bootstrap 95% with Jeffreys draws | MET when the lower bound is at least 0.90; NOT MET when the upper bound is below 0.90 |
 
 The 0.80 bars match the program's exposure bar. The 0.90 bar for landed changes says a gate that loses one accepted change in ten is not keeping its promise.
