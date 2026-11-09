@@ -23,7 +23,7 @@ GEVA-292, issue GST-1422, Captain GEVA-2. Plan only: nothing here spends money. 
 
 ## ELI5
 
-Our tests of gstack's planning skills got too easy. Plain Opus 5.5, with no gstack, finds almost every planted flaw, so those tests can't show whether a skill helps. The project owner asked for tests 2 times and 10 times harder, with no increase in cost. This plan turns "harder" into a number: at the same cost per session as the line's current design, plain Opus passes about half as many units at 2x and about a tenth as many at 10x, on the tier's strict score. The difficulty comes from what the task asks and how strictly we score it, never from longer sessions or tighter turn caps. Very hard tests usually hit a floor, where every arm scores near zero and nothing can be measured, so every 10x tier gets a partial-credit score that keeps plain Opus near the middle of the scale. The CEO review goes first, but real plans with known outcomes are scarce. A free count of formal decision records (Go proposals, Rust RFCs, Kubernetes KEPs, PEPs, Swift Evolution) found 11 usable records under today's rules and 24 under the rules the CEO amendment would bring, against a bar of 160. So the amendment waits on one more free count, and if supply still misses the bar, the CEO line stops on yield. Engineering, devex and design get their harder tiers inside their own funded tests, and /investigate, /review and the coding lines get short notes.
+Our tests of gstack's planning skills got too easy. Plain Opus 5.5, with no gstack, finds almost every planted flaw, so those tests can't show whether a skill helps. The project owner wants two harder versions of each test, one at 2x and one at 10x, and neither may cost more than today. This plan turns "harder" into a number: at the same cost per session as the line's current design, plain Opus passes about half as many units at 2x and about a tenth as many at 10x, on the tier's strict score. The difficulty comes from what the task asks and how strictly we score it, never from longer sessions or tighter turn caps. Very hard tests usually hit a floor, where every arm scores near zero and nothing can be measured, so every 10x tier gets a partial-credit score that keeps plain Opus near the middle of the scale. The CEO review goes first, but real plans with known outcomes are scarce. A free count of formal decision records (Go proposals, Rust RFCs, Kubernetes KEPs, PEPs, Swift Evolution) found 11 usable records under today's rules and 24 under the rules the CEO amendment would bring, against a bar of 160. So the amendment waits on one more free count, and if supply still misses the bar, the CEO line stops on yield. Engineering, devex and design get their harder tiers inside their own funded tests, and /investigate, /review and the coding lines get short notes.
 
 ## Before → after
 
@@ -33,11 +33,11 @@ After: one definition of a 2x and a 10x tier, anchored on plain Opus's strict pa
 
 ## Why it matters
 
-gstack-evals exists to steer gstack's research. A test at the ceiling says nothing about a skill, and neither does a test at the floor. The planning skills are the ones the project owner relies on most, and they are the ones whose tests saturated. A measurable ladder lets each line climb until plain Opus has room both above and below it, so a null can say "no lift at this difficulty" instead of "the test couldn't see".
+gstack-evals exists to steer gstack's research. A test at the ceiling says nothing about a skill, and neither does a test at the floor. The project owner uses the planning skills more than any others, and their tests are the ones that saturated. A measurable ladder lets each line climb until plain Opus has room both above and below it, so a null can say "no lift at this difficulty" instead of "the test couldn't see".
 
 ## What caused this work
 
-- 2026-11-05: the project owner asked for 2x and 10x harder evals on every line, then narrowed it the same day: CEO and the saturated planning reviews first, and 10x harder with no increase in cost, so difficulty must come from task content and scoring (GST-1422).
+- 2026-11-05: the project owner first wanted a 2x and a 10x harder tier for each eval line. Later that day he narrowed the request: the CEO review and the other saturated planning reviews go first, and the 10x tier must cost no more than today, so the extra difficulty has to come from what the task asks and how it is scored (GST-1422).
 - The panel v3 headroom check (#191) ended the seeded-flaw line: plain Opus at eng 15 of 16 and dx 20 of 20, with 46 of 52 matches from sessions that never opened the planted file.
 - R3b (2026-11-04-geva-283-r3b-results) kept tasks each model failed once, and most turned out never solvable: none rates 7.6% and 3.3%.
 - GEVA-291's B0, the CEO outcome eval's free yield screen, failed its bar on 2026-11-05: 62 changed candidates against 160.
@@ -406,7 +406,7 @@ Any paid call; any change to a merged preregistration (the CEO amendment would b
 
 ## Review record
 
-Lean /autoplan (feature kind, --no-ui --no-dx), run autoplan-20261105061537, one Opus 5.5 reviewer, one round: 19 findings, 0 Critical, 3 High, 11 Medium, 4 Low, 1 Informational. Gate 1 went to the Captain, who answered rec at gate_rev 1 (rec_hash dfeb38e40727): A1, B1, C1 and D1, plus all 15 other Medium, Low and Info findings. The gate carried four findings as decisions: A1 is F9, a Medium finding on ordering, and B1, C1 and D1 are the three High findings, F1 to F3. Where each lands in v2:
+Lean /autoplan (feature kind, --no-ui --no-dx), run autoplan-20261105061537, one Opus 5.5 reviewer, one round: 19 findings, 0 Critical, 3 High, 11 Medium, 4 Low, 1 Informational. Gate 1 went to the Captain, whose answer at gate_rev 1 (rec_hash dfeb38e40727) took the recommendation on A1, B1, C1 and D1 and on each of the 15 remaining Medium, Low and Info findings. The gate carried four findings as decisions: A1 is F9, a Medium finding on ordering, and B1, C1 and D1 are the three High findings, F1 to F3. Where each lands in v2:
 
 - A1 (count supply first): Big decision 4, section 6.1's supply table and bar, section 11 row 1.
 - B1 (anchor on the current design, state the doubling): Big decision 5, section 2's anchor table, section 6.1's cost note.

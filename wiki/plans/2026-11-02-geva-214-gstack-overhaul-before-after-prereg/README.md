@@ -25,7 +25,7 @@ attachments:
 
 # Preregistration: gstack's overhaul measured before and after, on frozen public instruments and a sealed held-out set, with no gstack beside both
 
-GEVA-214, issue GST-1089 under GST-1088, Captain GEVA-2. Plan only: no paid call, no task authored and no build happen here. Garry approved the L1 direction (overhaul gstack, measure it before and after, then write it up) on 2026-11-02. Reviewed under org R65: one strong reviewer (Opus 5.5) read the plan with power.py and price.py in two phases, CEO then eng, and one revision applied the gate-1 answer and every reviewer finding.
+GEVA-214, issue GST-1089 under GST-1088, Captain GEVA-2. Plan only: no paid call, no task authored and no build happen here. On 2026-11-02 Garry approved the L1 direction: gstack gets its overhaul, we measure it before and after the change, and the results get written up. Reviewed under org R65: one strong reviewer (Opus 5.5) read the plan with power.py and price.py in two phases, CEO then eng, and one revision applied the gate-1 answer and every reviewer finding.
 
 ## Approval
 

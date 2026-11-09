@@ -433,7 +433,7 @@ No sentence quotes or paraphrases any unit, item or finding. Headroom candidates
 
 ## Review record
 
-The plan went through gstack's /autoplan in its lean form (R65): one anthropic/claude-opus-5-5 reviewer read the plan and the draft together and raised 22 findings (1 critical, 5 high, 11 medium, 4 low, 1 informational). The Captain answered the gate rec, taking every recommendation, with every medium and low fix folded into the approved plan (rev d83b55dff1a1). The critical finding (judge-packet refuses trees over 512 KiB) set the 480 KiB unit cap; the highs added hr-rule.ts, the stratum-level stop and gap rules, the smoke item, the code-behavior judging rule in brief v3.1 and the second operating-characteristic table. This post's own /ship review is recorded in its pull request.
+The plan went through gstack's /autoplan in its lean form (R65): one anthropic/claude-opus-5-5 reviewer read the plan and the draft together and raised 22 findings (1 critical, 5 high, 11 medium, 4 low, 1 informational). At the gate the Captain accepted every recommendation, and the approved plan (rev d83b55dff1a1) includes every medium and low fix. The critical finding (judge-packet refuses trees over 512 KiB) set the 480 KiB unit cap; the highs added hr-rule.ts, the stratum-level stop and gap rules, the smoke item, the code-behavior judging rule in brief v3.1 and the second operating-characteristic table. This post's own /ship review is recorded in its pull request.
 
 ## Dry run
 
