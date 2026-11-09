@@ -97,6 +97,7 @@ Replaces [the G admission post](2026-11-06-geva-364-g-admission-results/README.m
 9. P:145: "On these tasks there is no solve-rate room for any skill to show a gain." -> "None solved all 22 valid trials. Its 95% interval, 84.6% to 100% with trials treated as independent, leaves about 15 points of room at its lower end, and no skill effect was estimated."
 10. P:156: "A told autoplan session cost 19.7 times a none session, about four times plan v3's house multiple." -> "A scored told autoplan session cost 19.7 times a scored none session (15.8 counting the gap sessions), 3.2 to 3.9 times plan v3's house multiple of 5.0."
 11. P:158: "unattended autoplan costs about 20 times a none session" -> "unattended autoplan costs 16 to 20 times a none session"
+12. P:148: "The CUT-CANDIDATE rests on the last two checks" -> "The CUT-CANDIDATE this post first gave rested on the last two checks; it was narrowed on 2026-11-08 to FIX-METHOD on task fit and exposure." The post's later rewording for public readers repeats this phrase in its Agent notes, and the same fix applies there.
 
 ### Rerun
 
