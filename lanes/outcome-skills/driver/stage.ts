@@ -432,7 +432,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       }
       const stage = stages.find((s) => s.arms.includes(e.arm!) && s.model === e.model);
       if (e.run_id !== o.run_id || e.event !== "open" || !stage) continue;
-      const key = e.arm + "|" + e.task + "|" + e.trial_n;
+      const key = e.arm + "|" + (stage.model ?? "") + "|" + e.task + "|" + e.trial_n;
       triples.set(key, (triples.get(key) ?? 0) + 1);
       stage.opens++;
       if (e.rerun) stage.reruns++;
@@ -591,7 +591,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       if (stage.ended === "cap_stop") return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") is cap-stopped, scope " + stage.scope + "; do not retry: the stage ends incomplete", { item: stage.item, scope: stage.scope });
       return refusal("E_LEASE_CLOSED", 503, "stage " + stage.item + " (" + stage.arm + ") is " + stage.state + " (" + (stage.ended ?? "stopping") + "); retry after the driver is launched again for run " + o.run_id, { item: stage.item });
     }
-    const key = meta.arm + "|" + meta.task + "|" + meta.trial_n;
+    const key = meta.arm + "|" + (stage.model ?? "") + "|" + meta.task + "|" + meta.trial_n;
     const seen = triples.get(key) ?? 0;
     if (seen >= 2) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened " + seen + " times; a trial gets one rerun at most");
     if (seen === 1 && !meta.rerun) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened; a second open is a rerun and names its repair in meta.rerun");

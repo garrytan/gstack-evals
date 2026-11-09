@@ -131,3 +131,37 @@ test("Sol and particle-1 sessions reach a stub OpenRouter with the provider pinn
   expect(await served.stop()).toBe(0);
   local.close?.();
 });
+
+test("the one-open-per-trial key carries the model: the same arm, task and trial opens once on each model, and a second open on the same model still needs a rerun, across a relaunch", async () => {
+  const root = mkdtempSync(join(tmpdir(), "sm-driver-test-"));
+  roots.push(root);
+  const record = join(root, "record");
+  recordProgram(record, { program: "w", cap_micros: 1_000 * D, skill_cap_micros: 1_000 * D, skills: ["sm"], credit_rate_micros: D, quotes: [quote] });
+  for (const item of ["sm-opus", "sm-particle"]) recordApproval(record, { action: "init", item, cap_micros: 100 * D, quotes: [quote], admission: "required", program: "w", skills: ["sm"] });
+  const local = LocalLedger.open(join(root, "ledger.sqlite"));
+  const reg = loadRegistry();
+  const serve = () => serveStages({ record, local, run_id: "r1", envelope_host: "m1", machine: "m1", stages: [OPUS, PARTICLE], host: "127.0.0.1", dir: join(root, "run"), fetch: async () => Response.json({}), requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key", OPENROUTER_API_KEY: "upstream-key" }, log: () => {} });
+  let served = await serve();
+  const opened: string[] = [];
+  const open = async (model: string, key: string, rerun?: string) => {
+    const res = await fetch(served.control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t-" + key, model, cap_usd: smLimits(reg, "sm:A0", model).session_cap_usd, meta: { arm: "sm:A0", task: "u1/A0", trial_n: 1, ...(rerun ? { rerun } : {}) }, open_key: key, ledger: "u4" }) });
+    const json = (await res.json()) as Record<string, any>;
+    if (res.status === 200) opened.push(json.id);
+    return res.status;
+  };
+  const closeAll = async () => {
+    for (const id of opened.splice(0)) expect((await fetch(served.control + "/sessions/" + id + "/close", { method: "POST", body: JSON.stringify({ reason: "agent_finished" }) })).status).toBe(200);
+  };
+  expect(await open("claude-opus-5-5", "k1")).toBe(200);
+  expect(await open("particle-ai/particle-1", "k2")).toBe(200);
+  expect(await open("claude-opus-5-5", "k3")).toBe(422);
+  await closeAll();
+  expect(await served.stop()).toBe(0);
+  served = await serve();
+  expect(await open("claude-opus-5-5", "k4")).toBe(422);
+  expect(await open("particle-ai/particle-1", "k5")).toBe(422);
+  expect(await open("particle-ai/particle-1", "k6", "sidecar restart")).toBe(200);
+  await closeAll();
+  expect(await served.stop()).toBe(0);
+  local.close?.();
+});
