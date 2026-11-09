@@ -17,7 +17,7 @@ const scratch = () => {
   dirs.push(d);
   return d;
 };
-const quote = { words: "Rec", by: "Garry Tan", source: "gate 1" };
+const quote = { words: "(paraphrase) took the recommendation", by: "Garry Tan", source: "gate 1" };
 
 function codeOf(fn: () => unknown): string {
   try {

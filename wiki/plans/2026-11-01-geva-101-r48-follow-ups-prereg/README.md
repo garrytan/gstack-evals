@@ -236,6 +236,8 @@ Keyless tests that prove it: one task materializes offline from a fixture with t
 
 ## 5. Ledger items, caps and start rules
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 | Item | Cap | Ledger | Start rule |
 |---|---|---|---|
 | r1-judge-match | $25 | gstack-evals ledger, admission warn | at merge, once the Captain records it with Garry's words (B1: R1 $40) |

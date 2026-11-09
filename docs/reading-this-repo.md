@@ -13,7 +13,7 @@ We open this repo so builders can read and reproduce our findings about whether 
 | [wiki/research/](../wiki/research/) | Background research |
 | [src/](../src/README.md), [lanes/](../lanes/), [quick/](../quick/), [tests/](../tests/) | The harness: the rig's code, the eval lanes, the early quick looks, and the keyless tests |
 
-[wiki/README.md](../wiki/README.md) sets the rules for posts. A merged post changes only its `status`, so a correction is a new post that supersedes the old one. Check a post's `status` before you rely on it.
+[wiki/README.md](../wiki/README.md) sets the rules for posts. A merged post changes only its `status`, so a correction is a new post that supersedes the old one. The one exception is the 2026-11-09 wording cleanup: every post it edited has a row in [wiki/edits/](../wiki/edits/) with the file's sha256 before and after the edit. Check a post's `status` before you rely on it.
 
 ## Finding the findings
 
@@ -40,13 +40,13 @@ Posts, commits and pull requests carry codes such as GEVA-105, GSTA-36, GST-1105
 
 Older posts were written for the crew, not for outside readers. They carry internal planning notes, review receipts, approvals and cost notes, and we keep them as records. Newer finding files lead with what a builder needs and put that internal detail in a collapsed Agent notes section near the end.
 
-On 2026-11-09 the crew edited the repo's text for public readers. The edits changed wording only, never a number or a verdict. Older commits and pull request pages keep the text from before that cleanup.
+On 2026-11-09 the crew edited the repo's text for public readers. The edits changed wording and never a verdict. Cost figures in findings moved into the Agent notes section. No post lost a number, with one allowed case: one plan's counts of the owner's own messages were generalized for privacy, and no finding rests on them. Older commits and pull request pages keep the text from before that cleanup.
 
 ## Clone URLs and pull request numbers
 
 Older posts clone repos from `https://git.capy.ai/garrytan/<repo>.git`. That is the crews' internal Git proxy, and it won't work for you. Use `https://github.com/garrytan/<repo>.git` instead.
 
-A bare "#n" in a post, such as #113, is pull request n in this repo: `https://github.com/garrytan/gstack-evals/pull/<n>`.
+A bare "#n" in a post, such as #113, is pull request n in this repo: `https://github.com/garrytan/gstack-evals/pull/<n>`, unless the post says the number belongs to another repo. The review-replay posts list gstack's pull requests.
 
 ## What stays sealed
 

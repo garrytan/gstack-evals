@@ -2,7 +2,7 @@
 id: 2026-11-08-geva-402-ceo-stage-2-results
 kind: finding
 title: "plan-ceo-review on 84 real plans: no gain on Opus 5.5, GPT-6.1 Sol or particle-1 (Opus enforced +0.0 points, 95% CI -6.0 to +6.0), a CUT-CANDIDATE on all three; the frozen comparison printed every primary degenerate from a clustering bug, fixed here"
-summary: "Stage 2, 84 changed and 28 held real plans: hit@3 gains Opus +0.000 and +0.000, Sol +0.000 and +0.036, particle-1 -0.095 and -0.012, none distinguished. R48 CUT-CANDIDATE on all three. $519.72 paid."
+summary: "Stage 2, 84 changed and 28 held real plans: hit@3 gains Opus +0.000 and +0.000, Sol +0.000 and +0.036, particle-1 -0.095 and -0.012, none distinguished. R48 CUT-CANDIDATE on all three."
 author: GEVA-402
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -152,7 +152,7 @@ Sol against Opus on D, stage 2 as run: n 4577, both D 270, Sol only 29, Opus onl
 
 ### Opus's held cell, three ways
 
-Held units feed the forecast secondaries: Brier and AUC score each review's forecast with held units as truth 1 and changed units as truth 0. Opus's p item (run id review-units-20261107T041347Z-8a76) cap-stopped in its held launch after 9 sessions on 3 of 28 held units. The completion item (run id review-units-20261108T105250Z-2447) ran exactly the 75 unstarted sessions from the same build. [merge.ts.txt](merge.ts.txt) builds a joined readings file and a completion-only view from the two runs, checks every row against its source, and refuses tampered copies ([merge-and-compare.txt](merge-and-compare.txt); tests in [tests/trial/review/ceo-held-merge.test.ts](../../../tests/trial/review/ceo-held-merge.test.ts)). The joined file takes the completion's 75 scored rows and none of its 1381 gap rows. The completion view takes all 84 held-cell rows from the completion, so the stopped part's 9 sessions read there as gap rows, which is why the completion view's Opus none, standalone and lens cells each show 3 more gaps than the joined view does. merge.ts's header comment ("its gap rows never enter") and its "1381 gap rows left out" count describe the joined file only. The completion's scored rows sum to $20.831767, the ledger's settled spend for its item to the micro-dollar.
+Held units feed the forecast secondaries: Brier and AUC score each review's forecast with held units as truth 1 and changed units as truth 0. Opus's p item (run id review-units-20261107T041347Z-8a76) cap-stopped in its held launch after 9 sessions on 3 of 28 held units. The completion item (run id review-units-20261108T105250Z-2447) ran exactly the 75 unstarted sessions from the same build. [merge.ts.txt](merge.ts.txt) builds a joined readings file and a completion-only view from the two runs, checks every row against its source, and refuses tampered copies ([merge-and-compare.txt](merge-and-compare.txt); tests in [tests/trial/review/ceo-held-merge.test.ts](../../../tests/trial/review/ceo-held-merge.test.ts)). The joined file takes the completion's 75 scored rows and none of its 1381 gap rows. The completion view takes all 84 held-cell rows from the completion, so the stopped part's 9 sessions read there as gap rows, which is why the completion view's Opus none, standalone and lens cells each show 3 more gaps than the joined view does. merge.ts's header comment ("its gap rows never enter") and its "1381 gap rows left out" count describe the joined file only.
 
 | Cell | Stopped part only (8a76, 3 held units) | Completion only (2447, 25 held units) | Joined (28 held units) |
 |---|---|---|---|
@@ -164,31 +164,6 @@ Held units feed the forecast secondaries: Brier and AUC score each review's fore
 The stopped part's figures rest on 3 positives per cell and are not comparable with enforced. On the full held set the four Opus arms forecast alike, and neither gstack arm forecasts better than none. Sol and particle-1 ran every held session, so their lines don't move: Brier and AUC none:sol 0.256 and 0.627, standalone:sol 0.232 and 0.598, enforced:sol 0.234 and 0.605; none:particle 0.172 and 0.668, standalone:particle 0.189 and 0.589, enforced:particle 0.199 and 0.578. Every other compare line is identical across the three views, apart from the agreement counts and these three Opus cells.
 
 Every per-cell secondary (rank-weighted, slot precision, per-protocol, the strict date strata, maintainer and outside proposals, the 10x tier, category counts, cost per review and per hit, E_ALLOWANCE stops) is in the three fixed compare outputs beside this post, with unit ids masked.
-
-## Cost
-
-Settled against each item's cap in the ledger (ceo-o-cmp.sqlite, final copy with 13 items):
-
-| Item | Cap | Settled |
-|---|---|---|
-| ceo-o-cmp-opus-p (none, standalone, lens on Opus; 2 launches, the second cap-stopped) | $179.00 | $158.630591 |
-| ceo-o-cmp-opus-e (enforced on Opus; 2 launches) | $187.00 | $140.463287 |
-| ceo-o-cmp-sol-p (none, standalone on Sol) | $126.00 | $81.484158 |
-| ceo-o-cmp-sol-e | $136.00 | $72.400567 |
-| ceo-o-cmp-particle-p | $12.00 | $7.865000 |
-| ceo-o-cmp-particle-e | $23.00 | $7.262876 |
-| ceo-o-cmp-judge-sol, -opus, -sonnet (one $70 line) | $70.00 | $22.845175 |
-| ceo-o-cmp-opus-p-held (the completion) | $51.00 | $20.831767 |
-| its three judges (one $10 line) | $10.00 | $7.932327 |
-| **Model spend** | | **$519.72** |
-
-Measured cost per session: Opus none $0.127, standalone $0.674, lens $0.127, enforced $0.717 (the completion: none $0.126, standalone $0.581, lens $0.127); Sol none $0.074, standalone $0.653, enforced $0.646; particle-1 none $0.008, standalone $0.062, enforced $0.065.
-
-Tokens, summed over 14,938 settled calls in the ledger ([ledger-calls.txt](ledger-calls.txt) breaks them out by item, arm and model): 82.3M input, 710.9M cache read, 57.6M cache write, 18.8M output. The 9 calls whose cost the proxy couldn't read carry no usage there.
-
-Price table in force at build 2ef58339, committed 2026-11-06 (src/runner/pricing/prices.ts, list prices per million tokens): Opus 5.5 $4 input, $20 output, $0.20 cache read, $5 cache write; GPT-6.1 Sol $2, $10, $0.10, $2.50 (above 272k input tokens $4, $15, $0.20, $5); particle-1 $0.10, $1, $0.003 cache read; Sonnet 5.5 $2, $10, $0.20, $2.50. Runner hosts at the standard-8 list rate of $0.00416 a minute: $7.60 for the stage 2 host (30.45 h) and $0.31 for the completion host (about 74 minutes). Crew model use at about $1 per 1,000 credits.
-
-**The line's all-in on actuals** at 2026-11-08T12:23Z: crew $716.49 (the 29 earlier CEO crew threads at $709.02, read from their counters at 12:21Z, plus this thread's $7.47), stage 1 $17.60, the smoke rerun $5.10, authoring and mining $392.65, runner hosts $8.84 (stage 1 $0.93, stage 2 $7.60, completion host $0.31), stage 2 model spend $490.95 and the completion $28.76: **$1,660.39 of the $2,000 line**. This thread's /ship review comes after this reading and is in its completion report. The run thread's figure of $1,727.97 also carried the unspent crew rest and reserve lines ($79.84).
 
 ## Why null? (R48)
 
@@ -218,12 +193,12 @@ This eval was plan-ceo-review's one ceiling raise (R61): two earlier seeded-flaw
 
 - **The frozen print.** The comparison first printed every primary as degenerate, for the reason above. This post's numbers come from the fixed scorer on the same sealed readings; the frozen copy, rerun on them, matches every compare line of the run's compare log; the one line that differs is the log's leading sha256 check line.
 - **Opus's held completion is a deviation.** It ran about 26 hours after the stopped launch, from the same build, pins and flags (--parallel 3, --timeout 3600, --max-turns 150, gstack-forced unattended), with its own ledger item, run id, out dir, sink, packets and judges. Its held D packets held 3 reviews each, against about 13 per held packet in stage 2, so the judges saw less context. Its judges also labelled the stock rows again; the joined file keeps stage 2's stock labels. Model drift between the two runs is possible. Opus's primaries read changed units only and don't move.
-- **Why opus-p stopped.** The cap-stop rule admits a round only when 3 parallel sessions at the $7.04 Opus allowance ($21.12) fit under what is left. Launch 2 started with $23.04, ran 9 held sessions for $2.67, and with $20.37 left the rule refused the next round.
-- **A $14.19 ledger gap.** opus-p's first lease printed $141.77 settled with 9 calls of unknown cost, and the ledger booked $155.96 for it. The rows' per-session dollars for opus-p's three cells sum to the ledger's $158.630591 exactly, so the ledger figure stands. The gap is most likely the ledger's charge for the 9 calls the proxy couldn't price. It was not traced further.
-- **A second driver lane.** At 2026-11-07T16:26Z, Sol's pace (64 of 224 sessions in 4 hours) would have run the sequential plan past the host's time limit and its $12 line. The run thread, not the Captain, then ran particle-1's two items in a second driver lane beside Sol's. Each lane had its own proxy and trial network, installs ran under a file lock, and the ledger used immediate transactions with a busy timeout. The driver script was unchanged, and the trail log records it.
+- **Why opus-p stopped.** The cap-stop rule admits a round only when 3 parallel sessions at the Opus allowance fit under what is left. Launch 2 ran 9 held sessions, and with what was then left the rule refused the next round. The amounts are in Agent notes.
+- **A $14.19 ledger gap.** The gap is most likely the ledger's charge for the 9 calls the proxy couldn't price. It was not traced further.
+- **A second driver lane.** At 2026-11-07T16:26Z, Sol's pace (64 of 224 sessions in 4 hours) would have run the sequential plan past the host's time limit and its dollar line (the amount is in Agent notes). The run thread, not the Captain, then ran particle-1's two items in a second driver lane beside Sol's. Each lane had its own proxy and trial network, installs ran under a file lock, and the ledger used immediate transactions with a busy timeout. The driver script was unchanged, and the trail log records it.
 - **RIG_UNPROVEN.** Each of the six stage 2 judge items logged one RIG_UNPROVEN warning, because no item had a rig admission record and the pin opens items with admission set to warn. The run items logged no codes.
 - **Sonnet.** Two refused replies left one remedy packet unanswered, so 47 rem calls are missing. rem decides nothing in stage 2.
-- **The all-in tool** takes only the six stage 2 run items, so the completion's cap rode on opus-p's row in the check before its lease ($1,764.29, a pass).
+- **The all-in tool** takes only the six stage 2 run items, so the completion's cap rode on opus-p's row in the check before its lease (a pass; the figure is in Agent notes).
 - **Host boots.** Both hosts' boot script exited 2 at its doctor step after every check line passed. The completion host's first boot hit a transient Bun download failure and was rerun.
 - **Sol's route.** Sol ran through OpenRouter pinned to OpenAI's provider with fallbacks off and data collection denied, forwarded on an OpenAI key, so OpenAI's API terms apply; OpenAI keeps API traffic up to 30 days for abuse monitoring and doesn't train on it. Every one of sol-p's 3,024 and sol-e's 2,696 generation ids was served by OpenAI on the default tier.
 - **Named build deviations.** Every arm on every model ran with a 200,000-token context window (Claude Code's default for Opus 5.5 is 1,000,000), a limit on what any arm could read. The CEO review shims got a 30-second hook timeout so the frozen 20-second deadline governs. Opus's items ran as two launches under one run id (changed units at 2 passes, then held units at 1). Stage 1's projection input was built by a pinned merge rather than by re-judging.
@@ -253,6 +228,48 @@ All 112 units that ran, the 2 unrun held units and the 6 reserve units are seale
 ## Changelog
 
 - 2026-11-08: first version, with the fixed comparison and the joined held cell.
+
+<details>
+<summary>Agent notes</summary>
+
+The completion's scored rows sum to $20.831767, the ledger's settled spend for its item to the micro-dollar.
+
+**Cost**
+
+Settled against each item's cap in the ledger (ceo-o-cmp.sqlite, final copy with 13 items):
+
+| Item | Cap | Settled |
+|---|---|---|
+| ceo-o-cmp-opus-p (none, standalone, lens on Opus; 2 launches, the second cap-stopped) | $179.00 | $158.630591 |
+| ceo-o-cmp-opus-e (enforced on Opus; 2 launches) | $187.00 | $140.463287 |
+| ceo-o-cmp-sol-p (none, standalone on Sol) | $126.00 | $81.484158 |
+| ceo-o-cmp-sol-e | $136.00 | $72.400567 |
+| ceo-o-cmp-particle-p | $12.00 | $7.865000 |
+| ceo-o-cmp-particle-e | $23.00 | $7.262876 |
+| ceo-o-cmp-judge-sol, -opus, -sonnet (one $70 line) | $70.00 | $22.845175 |
+| ceo-o-cmp-opus-p-held (the completion) | $51.00 | $20.831767 |
+| its three judges (one $10 line) | $10.00 | $7.932327 |
+| **Model spend** | | **$519.72** |
+
+Measured cost per session: Opus none $0.127, standalone $0.674, lens $0.127, enforced $0.717 (the completion: none $0.126, standalone $0.581, lens $0.127); Sol none $0.074, standalone $0.653, enforced $0.646; particle-1 none $0.008, standalone $0.062, enforced $0.065.
+
+Tokens, summed over 14,938 settled calls in the ledger ([ledger-calls.txt](ledger-calls.txt) breaks them out by item, arm and model): 82.3M input, 710.9M cache read, 57.6M cache write, 18.8M output. The 9 calls whose cost the proxy couldn't read carry no usage there.
+
+Price table in force at build 2ef58339, committed 2026-11-06 (src/runner/pricing/prices.ts, list prices per million tokens): Opus 5.5 $4 input, $20 output, $0.20 cache read, $5 cache write; GPT-6.1 Sol $2, $10, $0.10, $2.50 (above 272k input tokens $4, $15, $0.20, $5); particle-1 $0.10, $1, $0.003 cache read; Sonnet 5.5 $2, $10, $0.20, $2.50. Runner hosts at the standard-8 list rate of $0.00416 a minute: $7.60 for the stage 2 host (30.45 h) and $0.31 for the completion host (about 74 minutes). Crew model use at about $1 per 1,000 credits.
+
+**The line's all-in on actuals** at 2026-11-08T12:23Z: crew $716.49 (the 29 earlier CEO crew threads at $709.02, read from their counters at 12:21Z, plus this thread's $7.47), stage 1 $17.60, the smoke rerun $5.10, authoring and mining $392.65, runner hosts $8.84 (stage 1 $0.93, stage 2 $7.60, completion host $0.31), stage 2 model spend $490.95 and the completion $28.76: **$1,660.39 of the $2,000 line**. This thread's /ship review comes after this reading and is in its completion report. The run thread's figure of $1,727.97 also carried the unspent crew rest and reserve lines ($79.84).
+
+**Why opus-p stopped.** The cap-stop rule admits a round only when 3 parallel sessions at the $7.04 Opus allowance ($21.12) fit under what is left. Launch 2 started with $23.04, ran 9 held sessions for $2.67, and with $20.37 left the rule refused the next round.
+
+**A $14.19 ledger gap.** opus-p's first lease printed $141.77 settled with 9 calls of unknown cost, and the ledger booked $155.96 for it. The rows' per-session dollars for opus-p's three cells sum to the ledger's $158.630591 exactly, so the ledger figure stands.
+
+**A second driver lane.** At 2026-11-07T16:26Z, Sol's pace (64 of 224 sessions in 4 hours) would have run the sequential plan past the host's time limit and its $12 line.
+
+**The all-in tool** takes only the six stage 2 run items, so the completion's cap rode on opus-p's row in the check before its lease ($1,764.29, a pass).
+
+From the summary: $519.72 paid.
+
+</details>
 
 ## Disclosures
 

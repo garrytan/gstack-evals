@@ -2,7 +2,7 @@
 id: 2026-11-03-geva-232-panel-v3-e0-results
 kind: finding
 title: "Panel v3 E0: plain Opus 5.5 found 137 of 138 candidate readings, so all twelve candidate kinds read DROP-CEILING and no stratum is built"
-summary: "E0 READ. Opus 5.5 none matched 137 of 138 candidate readings and every anchor; all 12 kinds DROP-CEILING, all 4 strata NOT BUILT. Saturated null, R48 FIX-METHOD. $25.08 of $62.86."
+summary: "E0 READ. Opus 5.5 none matched 137 of 138 candidate readings and every anchor; all 12 kinds DROP-CEILING, all 4 strata NOT BUILT. Saturated null, R48 FIX-METHOD."
 author: GEVA-232
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -33,7 +33,7 @@ Publication status: unpublished. Done: the run, both readings parts, this file a
 
 Plain Opus 5.5, given the scorer's one-turn plan prompt and no gstack, found the seeded flaw in 137 of 138 candidate readings on the 24-unit panel v3 calibration slice, and in all 48 anchor readings. Every one of the twelve candidate kinds landed at 11 of 12 or better, far above the KEEP band's ceiling of 0.6. So all twelve kinds read DROP-CEILING, no kind is kept, and all four strata read NOT BUILT.
 
-E0 itself reads READ. All 48 Opus sessions scored, with no stop, gap or cap, and judging completed in all three reads. This is the third planning panel that plain Opus has saturated, after CEO panels v1 and v2. E0 spent $25.08 of its $62.86 cap.
+E0 itself reads READ. All 48 Opus sessions scored, with no stop, gap or cap, and judging completed in all three reads. This is the third planning panel that plain Opus has saturated, after CEO panels v1 and v2.
 
 ## How it works
 
@@ -79,8 +79,6 @@ Kappa eng 0.271 (n 84): kappa under 0.6: E1 must revise brief v3 before this str
 Kappa dx 0.000 (n 92): kappa under 0.6: E1 must revise brief v3 before this stratum's judging
 Kappa design 0.000 (n 85): kappa under 0.6: E1 must revise brief v3 before this stratum's judging
 particle-1 (descriptive): C-OM 11/12, C-Q 11/12, C-U2 8/10, E-CD 10/12, E-OM 8/10, E-Q 9/12, G-A11Y 9/10, G-OM 10/12, G-X 10/12, X-CD 11/12, X-OM 11/12, X-Q 11/12; anchors 0.875; missing block 6/48; stops 0; gaps 0; cap 0
-Cost claude-opus-5-5: median $0.230, mean $0.236, 90% upper $0.242; turns median 4, mean 4.1, 90% upper 4.3
-Cost particle-ai/particle-1: median $0.018, mean $0.019, 90% upper $0.020; turns median 11, mean 12.5, 90% upper 13.5
 Read audit claude-opus-5-5: 0 sessions flagged, 0 calls
 Read audit particle-ai/particle-1: 0 sessions flagged, 0 calls
 ```
@@ -107,30 +105,8 @@ Pooled over all twelve kinds, Opus matched 137 of 138 readings (0.993, Clopper-P
 - **particle-1 unjudged cells: 0.** No frozen script prints this count, so it was computed by hand from the three primary replies. Each read's primary reply lists all 24 packets of the batch, and every one of the 93 packet and blocker pairs carries an answer. A particle-1 cell can be unjudged only when its packet has no primary answer, so the count is 0 in all three reads, and particle-1's recall is not a lower bound on that account.
 - **Per-session cost and turns** (bootstrap 90% upper bound of the mean, seed 1, 10,000 draws):
 
-| Model | Median | Mean | 90% upper | Turns median | Turns mean | Turns 90% upper |
-|---|---|---|---|---|---|---|
-| claude-opus-5-5 | $0.230 | $0.236 | $0.242 | 4 | 4.1 | 4.3 |
-| particle-ai/particle-1 | $0.018 | $0.019 | $0.020 | 11 | 12.5 | 13.5 |
-
 - **Kappa** (Cohen's, Sol read against Opus read, any-severity match, both models' cells with a parsed block): pooled 0.385 (n 350); ceo 0.739 (n 89), eng 0.271 (n 84), dx 0.000 (n 92), design 0.000 (n 85). Eng, dx and design are flagged under 0.6: E1 must revise brief v3 before judging any of them.
 - **Read audit:** 0 flagged sessions and 0 flagged calls in either run.
-
-## Cost
-
-| Item | Calls | Input | Output | Reasoning | Cache read | Cache write | Spent | Projected | Cap |
-|---|---|---|---|---|---|---|---|---|---|
-| e0-opus-none | 48 sessions | 350 | 284,441 | 0 | 4,234,281 | 958,286 | $11.33 | $15.84 | $43.30 |
-| e0-particle-none | 48 sessions | 2,059,822 | 677,430 | 0 | 3,951,360 | 0 | $0.90 | $3.96 | $6.12 |
-| e0-judge-sol | 47 requests | 843,051 | 30,957 | 8,036 | 0 | 559,901 | $5.01 | | $50.63 |
-| e0-judge-opus | 48 requests | 1,093,473 | 38,154 | 7,259 | 420,506 | 0 | $4.73 | | $45.62 |
-| e0-judge-sonnet | 48 requests | 1,099,688 | 28,524 | 5,813 | 415,356 | 0 | $3.11 | | $40.89 |
-| **E0** | | | | | | | **$25.08** | **$42.48** | **$62.86** |
-
-Token counts and spend are the metering proxy's, as each lease settled in the ledger (0 unknown calls). The three judge reads together were projected at $22.68 and cost $12.85. Each judge cap is the prereg's envelope: $62.86 less the settled spend of every earlier E0 item, rounded down to the cent ($62.86 - $12.223983 = $50.636017, so $50.63; then $45.624822, so $45.62; then $40.891511, so $40.89).
-
-Prices are the scorer's table at b7b6aec (src/runner/pricing/prices.ts), in dollars per million tokens: Opus 5.5 input 4, output 20, cache read 0.20, cache write 5; Sonnet 5.5 input 2, output 10, cache read 0.20, cache write 2.50; GPT-6.1 Sol input 2, output 10, cache read 0.10, cache write 2.50, with higher rates above 272k input tokens; particle-1 input 0.10, output 1, cache read 0.003 (OpenRouter's models API, read 2026-10-30). Cache reads and writes are billed at their own rates as each provider reports them.
-
-A plain Opus session cost $0.236 on average, under the plan's $0.33 projection, and a particle-1 session cost $0.019 against $0.083. These are one-turn sessions; E1's two-turn protocol will cost more.
 
 ## Why null? (R48)
 
@@ -184,6 +160,41 @@ The run bundle holds the run root, its transcripts, the judge replies and the re
 ## Changelog
 
 - 2026-11-03: first version.
+
+<details>
+<summary>Agent notes</summary>
+
+E0 spent $25.08 of its $62.86 cap.
+
+Cost claude-opus-5-5: median $0.230, mean $0.236, 90% upper $0.242; turns median 4, mean 4.1, 90% upper 4.3
+
+Cost particle-ai/particle-1: median $0.018, mean $0.019, 90% upper $0.020; turns median 11, mean 12.5, 90% upper 13.5
+
+| Model | Median | Mean | 90% upper | Turns median | Turns mean | Turns 90% upper |
+|---|---|---|---|---|---|---|
+| claude-opus-5-5 | $0.230 | $0.236 | $0.242 | 4 | 4.1 | 4.3 |
+| particle-ai/particle-1 | $0.018 | $0.019 | $0.020 | 11 | 12.5 | 13.5 |
+
+**Cost**
+
+| Item | Calls | Input | Output | Reasoning | Cache read | Cache write | Spent | Projected | Cap |
+|---|---|---|---|---|---|---|---|---|---|
+| e0-opus-none | 48 sessions | 350 | 284,441 | 0 | 4,234,281 | 958,286 | $11.33 | $15.84 | $43.30 |
+| e0-particle-none | 48 sessions | 2,059,822 | 677,430 | 0 | 3,951,360 | 0 | $0.90 | $3.96 | $6.12 |
+| e0-judge-sol | 47 requests | 843,051 | 30,957 | 8,036 | 0 | 559,901 | $5.01 | | $50.63 |
+| e0-judge-opus | 48 requests | 1,093,473 | 38,154 | 7,259 | 420,506 | 0 | $4.73 | | $45.62 |
+| e0-judge-sonnet | 48 requests | 1,099,688 | 28,524 | 5,813 | 415,356 | 0 | $3.11 | | $40.89 |
+| **E0** | | | | | | | **$25.08** | **$42.48** | **$62.86** |
+
+Token counts and spend are the metering proxy's, as each lease settled in the ledger (0 unknown calls). The three judge reads together were projected at $22.68 and cost $12.85. Each judge cap is the prereg's envelope: $62.86 less the settled spend of every earlier E0 item, rounded down to the cent ($62.86 - $12.223983 = $50.636017, so $50.63; then $45.624822, so $45.62; then $40.891511, so $40.89).
+
+Prices are the scorer's table at b7b6aec (src/runner/pricing/prices.ts), in dollars per million tokens: Opus 5.5 input 4, output 20, cache read 0.20, cache write 5; Sonnet 5.5 input 2, output 10, cache read 0.20, cache write 2.50; GPT-6.1 Sol input 2, output 10, cache read 0.10, cache write 2.50, with higher rates above 272k input tokens; particle-1 input 0.10, output 1, cache read 0.003 (OpenRouter's models API, read 2026-10-30). Cache reads and writes are billed at their own rates as each provider reports them.
+
+A plain Opus session cost $0.236 on average, under the plan's $0.33 projection, and a particle-1 session cost $0.019 against $0.083. These are one-turn sessions; E1's two-turn protocol will cost more.
+
+From the summary: $25.08 of $62.86.
+
+</details>
 
 ## Disclosures
 

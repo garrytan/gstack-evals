@@ -197,6 +197,8 @@ Behavior rows at a before rate of 20% to 50%, and at 90% (80% power is not reach
 
 ### 9. Spend: the $2,000 all-in ceiling
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 Every L1 dollar from 2026-11-03 13:30Z counts: paid model calls, VMs, and crew model use (each thread's Capy credits / 1000), this thread and the Captain's L1 turns included. price.py and price.txt (attached) give:
 
 | Line | Expected | Cap |

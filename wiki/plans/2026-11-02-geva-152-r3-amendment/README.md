@@ -91,6 +91,8 @@ So R3a is incomplete when: a cap refusal (a session reserve, the proxy's batch c
 
 ## 5. particle-1's price (Captain ruling C1 on #121)
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 OpenRouter's endpoints API for particle-ai/particle-1, read 2026-11-02T02:43:08Z (as_of), lists one endpoint, Particle AI (provider particle-ai, particle-ai/particle-1-20261027): $0.05 a million input tokens, $0.50 output and $0.003 cache read, with no cache-write price and implicit caching. The response is attached (openrouter-particle-1.json, its sha256 in the front matter).
 
 The proxy's row stays at $0.25 in, $1 out and $0.03 cache read (C1). So the proxy meters particle-1 at 5 times OpenRouter's input price, 2 times its output price and 10 times its cache-read price, and the ledger settles and the $1 allowance bind on that metered cost, an upper bound on what OpenRouter charges.
@@ -169,6 +171,8 @@ The Sol build is one PR to gstack-evals from main. It touches code that spends m
 Sol starts only after the Sol build PR merges and a pin-only amendment binds it. That amendment pins the build's merge commit and the digests of its route row, cell, screen and route-check files, re-reads Sol's OpenRouter price with an as_of date, and reruns this post's dry run at that pin with Sol's rules driven: the route-check verdicts, Sol's screen and admission on fixture trials, and r3a-caps.ts at $140. The Captain records r3a-sol's $140 when it merges. Then the route check runs first, then Sol's screen, then its pilot.
 
 ## 7. R3a's caps against its own rules
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 R2's frozen caps couldn't admit its own session allowance, because review-units starts a round only when spend so far plus every new session's allowance fits, and its dry run used a stub cap. R3a has no round rule. Three rules can refuse a start, and each is checked per session or per block:
 

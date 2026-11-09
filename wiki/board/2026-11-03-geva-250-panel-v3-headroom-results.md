@@ -2,7 +2,7 @@
 id: 2026-11-03-geva-250-panel-v3-headroom-results
 kind: finding
 title: "Panel v3 headroom check: on large code bases plain Opus 5.5 still found the planted flaws (eng 15 of 16, dx 20 of 20), so no stratum has headroom and the seeded-flaw E-line ends"
-summary: "No headroom. Plain Opus 5.5: eng CEILING 15/16, dx CEILING 20/20; ceo, design NO READ on item count. R48: eng, dx CUT-CANDIDATE; ceo, design FIX-METHOD. $41.26 of $294.96."
+summary: "No headroom. Plain Opus 5.5: eng CEILING 15/16, dx CEILING 20/20; ceo, design NO READ on item count. R48: eng, dx CUT-CANDIDATE; ceo, design FIX-METHOD."
 author: GEVA-250
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -41,7 +41,7 @@ It didn't raise the ceiling. Plain Opus 5.5, with no gstack and the scorer's one
 
 The run itself was clean. All 32 Opus sessions scored, with 0 stops and 0 GAPs. The anchors matched 32 of 32. Judging finished with 0 packets unjudged, and the Sol and Opus judges agreed on 0.963 of cells pooled.
 
-So panel v3's E-line ends. Under R48 and R61 the gstack-evals Captain (GSTA-2) made eng and dx a CUT-CANDIDATE for plan-eng-review and plan-devex-review as seeded-flaw panels measure them, and ceo and design FIX-METHOD. The run spent $41.26 of its $294.96 cap.
+So panel v3's E-line ends. Under R48 and R61 the gstack-evals Captain (GSTA-2) made eng and dx a CUT-CANDIDATE for plan-eng-review and plan-devex-review as seeded-flaw panels measure them, and ceo and design FIX-METHOD.
 
 ## How it works
 
@@ -143,8 +143,6 @@ Re-audit: DEAD in the primary read none; in the sensitivity read none; the re-au
 Judging: complete; unanswered blockers in primary replies sol 0, opus 0, sonnet 0; matching kappa sol/opus over both arms' cells with a parsed block, pooled 0.780 (n 162), ceo 0.719 (n 36), eng 1.000 (n 45), dx -0.028 (n 49), design 0.890 (n 32)
 Kappa dx -0.028 (n 49): kappa under 0.6: E1 must revise brief v3 before this stratum's judging
 particle-1 (descriptive): C-RC 6/12, E-RC 11/16, G-RC 6/8, X-RC 15/20; anchors 0.875; missing block 4/32; stops 0; gaps 0; cap 0
-Cost claude-opus-5-5: median $0.302, mean $0.313, 90% upper $0.333; turns median 8, mean 8.9, 90% upper 9.6
-Cost particle-ai/particle-1: median $0.066, mean $0.066, 90% upper $0.072; turns median 29.5, mean 30.4, 90% upper 32.8
 Read audit claude-opus-5-5: 0 sessions flagged, 0 calls
 Read audit particle-ai/particle-1: 0 sessions flagged, 0 calls
 ```
@@ -155,36 +153,6 @@ Read audit particle-ai/particle-1: 0 sessions flagged, 0 calls
 - **Sensitivity read** (the 4 flagged blockers left out): eng drops to 2 items at 8 of 8, so eng's one miss sits on a flagged unit's item. The other strata are unchanged.
 - **Judging coverage:** the three reads left 0 packets unjudged and 0 blockers unanswered in their primary replies.
 - **Read audit:** 0 flagged sessions and 0 flagged calls in either run. The none arm ran with no gstack and no drive in its environment by construction (prereg, "Clean room by construction"), and this check confirms it.
-
-## Cost
-
-| Item | Calls | Input | Output | Reasoning | Cache read | Cache write | Spent | Projected | Cap |
-|---|---|---|---|---|---|---|---|---|---|
-| hr-smoke-opus | 2 sessions | 16 | 15,312 | 0 | 165,688 | 72,152 | $0.700205 | $3.40 | $14.08 |
-| hr-opus-none | 32 sessions | 518 | 204,197 | 0 | 9,432,106 | 808,208 | $10.013572 | $54.40 | $225.28 |
-| hr-particle-none | 32 sessions | 12,383,374 | 769,763 | 0 | 12,528,640 | 0 | $2.097376 | $4.48 | $19.20 |
-| hr-judge-sol | 17 requests | 2,224,393 | 12,700 | 2,945 | 0 | 1,212,682 | $10.661669 | | $282.14 |
-| hr-judge-opus | 17 requests | 2,703,945 | 13,263 | 2,887 | 907,701 | 0 | $9.652475 | | $271.48 |
-| hr-judge-sonnet | 18 requests | 2,927,901 | 15,483 | 2,649 | 907,701 | 0 | $8.135549 | | $261.83 |
-| **Headroom check** | | | | | | | **$41.260846** | **$88.28** | **$294.96** |
-
-Token counts and spend are the metering proxy's, as each lease settled in the ledger, with 0 unknown calls. Each item opened one lease. The judge caps are envelopes, so the caps don't sum to the total. $253.699154 of the total was left unspent. The three reads were projected at $26.00 in the prereg and cost $28.449693.
-
-**Step 3b.** Before the first judge call the custodian measured the 8 packets at 492,129 to 568,650 bytes (4,341,725 in all) and priced 9 requests a packet at 3 bytes a token and 10,000 output tokens a request, with no packet over Sol's 272,000-token long rate. The projection was $44.33. What was left of $294.96 after the three run items settled was $294.96 - ($0.700205 + $10.013572 + $2.097376) = $282.148847, so the reads started.
-
-**The envelope rule.** Each judge cap is $294.96 less the settled spend of every earlier item, rounded down to the cent:
-
-- hr-judge-sol: $294.96 - $12.811153 = $282.148847, cap $282.14.
-- hr-judge-opus: $294.96 - $23.472822 = $271.487178, cap $271.48.
-- hr-judge-sonnet: $294.96 - $33.125297 = $261.834703, cap $261.83.
-
-Each judge row was written with the run items' approval words, its item and computed cap swapped in, followed by "(the envelope rule)". Each judge-run call printed RIG_UNPROVEN, the expected warning under admission warn, since the prereg required no rig admission.
-
-**Per session.** An Opus session cost a mean of $0.313 (median $0.302, 90% upper bound $0.333) at a median of 8 turns. The prereg projected $1.70, assuming about 25 turns at a context near 100k tokens, so the large units cost under a fifth of the projection and about 1.3 times E0's $0.236. A particle-1 session cost a mean of $0.066 at a median of 29.5 turns, against $0.14 projected.
-
-**Prices** are the scorer's table at b7b6aec (src/runner/pricing/prices.ts), in dollars per million tokens: Opus 5.5 input 4, output 20, cache read 0.20, cache write 5; Sonnet 5.5 input 2, output 10, cache read 0.20, cache write 2.50; GPT-6.1 Sol input 2, output 10, cache read 0.10, cache write 2.50, and above 272k prompt tokens input 4, output 15, cache read 0.20, cache write 5 for the whole request; particle-1 input 0.10, output 1, cache read 0.003 (OpenRouter's models API, read 2026-10-30). Spend need not equal tokens times these rates: a request past Sol's threshold is billed at the long rates as a whole, and an OpenRouter call settles at the larger of its token price and what OpenRouter billed (usageCost at the pin).
-
-**Thread tokens.** The run thread, GEVA-246, ended at 194.7M tokens on its counter, against a hard stop the Captain raised from 100M to 210M during the run, and about 49,400 credits of model use (about $49 at $1 per 1,000 credits). Authoring and audit took about 150M of that: authors 24.8M, 33.8M, 25.0M and 38.9M, auditors 6.7M, 7.4M, 4.5M and 6.7M, and the candidate-list builder 2.4M. The prereg had priced the whole custodian thread at about 70M, with 40M for authoring. The prereg's threads and this post's thread are not counted here, and neither are machine costs.
 
 ## Why null? (R48)
 
@@ -268,6 +236,49 @@ The slice holds the units, their keys and traces. The run bundle holds the run r
 ## Changelog
 
 - 2026-11-03: first version (GEVA-250).
+
+<details>
+<summary>Agent notes</summary>
+
+The run spent $41.26 of its $294.96 cap.
+
+Cost claude-opus-5-5: median $0.302, mean $0.313, 90% upper $0.333; turns median 8, mean 8.9, 90% upper 9.6
+
+Cost particle-ai/particle-1: median $0.066, mean $0.066, 90% upper $0.072; turns median 29.5, mean 30.4, 90% upper 32.8
+
+**Cost**
+
+| Item | Calls | Input | Output | Reasoning | Cache read | Cache write | Spent | Projected | Cap |
+|---|---|---|---|---|---|---|---|---|---|
+| hr-smoke-opus | 2 sessions | 16 | 15,312 | 0 | 165,688 | 72,152 | $0.700205 | $3.40 | $14.08 |
+| hr-opus-none | 32 sessions | 518 | 204,197 | 0 | 9,432,106 | 808,208 | $10.013572 | $54.40 | $225.28 |
+| hr-particle-none | 32 sessions | 12,383,374 | 769,763 | 0 | 12,528,640 | 0 | $2.097376 | $4.48 | $19.20 |
+| hr-judge-sol | 17 requests | 2,224,393 | 12,700 | 2,945 | 0 | 1,212,682 | $10.661669 | | $282.14 |
+| hr-judge-opus | 17 requests | 2,703,945 | 13,263 | 2,887 | 907,701 | 0 | $9.652475 | | $271.48 |
+| hr-judge-sonnet | 18 requests | 2,927,901 | 15,483 | 2,649 | 907,701 | 0 | $8.135549 | | $261.83 |
+| **Headroom check** | | | | | | | **$41.260846** | **$88.28** | **$294.96** |
+
+Token counts and spend are the metering proxy's, as each lease settled in the ledger, with 0 unknown calls. Each item opened one lease. The judge caps are envelopes, so the caps don't sum to the total. $253.699154 of the total was left unspent. The three reads were projected at $26.00 in the prereg and cost $28.449693.
+
+**Step 3b.** Before the first judge call the custodian measured the 8 packets at 492,129 to 568,650 bytes (4,341,725 in all) and priced 9 requests a packet at 3 bytes a token and 10,000 output tokens a request, with no packet over Sol's 272,000-token long rate. The projection was $44.33. What was left of $294.96 after the three run items settled was $294.96 - ($0.700205 + $10.013572 + $2.097376) = $282.148847, so the reads started.
+
+**The envelope rule.** Each judge cap is $294.96 less the settled spend of every earlier item, rounded down to the cent:
+
+- hr-judge-sol: $294.96 - $12.811153 = $282.148847, cap $282.14.
+- hr-judge-opus: $294.96 - $23.472822 = $271.487178, cap $271.48.
+- hr-judge-sonnet: $294.96 - $33.125297 = $261.834703, cap $261.83.
+
+Each judge row was written with the run items' approval words, its item and computed cap swapped in, followed by "(the envelope rule)". Each judge-run call printed RIG_UNPROVEN, the expected warning under admission warn, since the prereg required no rig admission.
+
+**Per session.** An Opus session cost a mean of $0.313 (median $0.302, 90% upper bound $0.333) at a median of 8 turns. The prereg projected $1.70, assuming about 25 turns at a context near 100k tokens, so the large units cost under a fifth of the projection and about 1.3 times E0's $0.236. A particle-1 session cost a mean of $0.066 at a median of 29.5 turns, against $0.14 projected.
+
+**Prices** are the scorer's table at b7b6aec (src/runner/pricing/prices.ts), in dollars per million tokens: Opus 5.5 input 4, output 20, cache read 0.20, cache write 5; Sonnet 5.5 input 2, output 10, cache read 0.20, cache write 2.50; GPT-6.1 Sol input 2, output 10, cache read 0.10, cache write 2.50, and above 272k prompt tokens input 4, output 15, cache read 0.20, cache write 5 for the whole request; particle-1 input 0.10, output 1, cache read 0.003 (OpenRouter's models API, read 2026-10-30). Spend need not equal tokens times these rates: a request past Sol's threshold is billed at the long rates as a whole, and an OpenRouter call settles at the larger of its token price and what OpenRouter billed (usageCost at the pin).
+
+**Thread tokens.** The run thread, GEVA-246, ended at 194.7M tokens on its counter, against a hard stop the Captain raised from 100M to 210M during the run, and about 49,400 credits of model use (about $49 at $1 per 1,000 credits). Authoring and audit took about 150M of that: authors 24.8M, 33.8M, 25.0M and 38.9M, auditors 6.7M, 7.4M, 4.5M and 6.7M, and the candidate-list builder 2.4M. The prereg had priced the whole custodian thread at about 70M, with 40M for authoring. The prereg's threads and this post's thread are not counted here, and neither are machine costs.
+
+From the summary: $41.26 of $294.96.
+
+</details>
 
 ## Disclosures
 

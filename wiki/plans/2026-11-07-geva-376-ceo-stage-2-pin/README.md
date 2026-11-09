@@ -63,6 +63,8 @@ mkunits-cmp.ts.txt built the suite from it. It is part 2's mkunits.ts.txt with a
 
 ## 3. Projection and the caps
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 ### 3.1 Projection's input (deviation D-merge)
 
 projection reads stage 1's readings with the smoke rerun's rows (smoke_round 2). At 2ef58339, `ceo readings` refuses to rebuild stage 1's judged readings with the rerun's rows, because the judges' replies are bound to a key over the rows built at 715c659, stage 1's build commit (ceo-cli.ts:686 and :700). Re-judging stage 1 would change data that is already judged. So, by the Captain's ruling, a pinned merge script built projection's stage 1 input: merge.ts.txt.
