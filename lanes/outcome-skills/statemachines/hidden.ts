@@ -92,13 +92,20 @@ export function staticCounts(cands: Candidate[], cmds: (id: string) => string[])
   return { all_eligible: both(e), rust_eligible: both(e.filter((c) => c.lang === "rust")), in_source: both(inSourceUnits(cands)) };
 }
 
+/** A failure's drop record with its code and reason. A full disk is no property of the unit: it throws E_SM_INFRA_GAP, so
+ *  the count stops unrecorded and a rerun resumes at that unit. */
+export function dropOf(rec: HiddenRecord, e: unknown): HiddenRecord {
+  const m = (e as Error).message;
+  if (/No space left on device/.test(m)) throw new Error("E_SM_INFRA_GAP " + rec.id + ": the disk filled (free disk and rerun; it resumes here): " + m.slice(-200));
+  return { ...rec, drop: { code: (m.match(/^(E_[A-Z_]+)/) ?? [])[1] ?? "E_SM_INFRA_GAP", reason: m.slice(0, 400) } };
+}
+
 /** One unit: convert (if needed), pull (paced), prepare its tree in its own volume, the two runs, then the volume and, when
  *  this call pulled it, the image are removed. Every failure is a drop with its reason, never a hidden count. */
 export async function hiddenUnit(o: { cand: Candidate; row: () => MlRow; units: string; pacer: Pacer; mode?: Mode; limitMs?: number }): Promise<HiddenRecord> {
   const c = o.cand, dir = join(o.units, c.id);
   const nff = noFailFast(o.row().test_cmds);
   const rec: HiddenRecord = { schema: "sm-hidden.v1", id: c.id, month: c.month, in_window: inWindow(c), hidden_doctests: 0, hidden_other: 0, hidden: { doctest: [], other: [] }, no_fail_fast: nff.no_fail_fast, how: nff.how, runs: null, drop: null };
-  const drop = (e: unknown) => ({ ...rec, drop: { code: ((e as Error).message.match(/^(E_[A-Z_]+)/) ?? [])[1] ?? "E_SM_INFRA_GAP", reason: (e as Error).message.slice(0, 400) } });
   let pulled: string | null = null;
   const volume = "sm-hidden-" + c.id.toLowerCase().replace(/[^a-z0-9_.-]/g, "-");
   try {
@@ -122,7 +129,7 @@ export async function hiddenUnit(o: { cand: Candidate; row: () => MlRow; units: 
     rec.hidden = hiddenIds(a.parsed!, b.parsed!);
     return { ...rec, hidden_doctests: rec.hidden.doctest.length, hidden_other: rec.hidden.other.length };
   } catch (e) {
-    return drop(e);
+    return dropOf(rec, e);
   } finally {
     dropVolume(volume);
     if (pulled) docker(["image", "rm", pulled], { timeoutMs: 300_000 });

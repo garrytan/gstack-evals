@@ -2,7 +2,7 @@
 // Keyless tests for the hidden-test count (hidden.ts): Rust doctest ids, the ids an early stop hides, the static
 // no-fail-fast reading of a frozen test command, and the summary counts.
 import { describe, expect, test } from "bun:test";
-import { hiddenIds, isDoctest, noFailFast, summarize, type HiddenRecord } from "../../lanes/outcome-skills/statemachines/hidden.ts";
+import { dropOf, hiddenIds, isDoctest, noFailFast, summarize, type HiddenRecord } from "../../lanes/outcome-skills/statemachines/hidden.ts";
 
 describe("doctest ids", () => {
   test("libtest's doctest forms are doctests", () => {
@@ -54,5 +54,15 @@ describe("summary", () => {
     const s = summarize([rec("a", true, 11, 0), rec("b", true, 0, 3, true), rec("c", false, 2, 1), rec("d", true, 0, 0, true), rec("e", true, 0, 0, false, "slow")]);
     expect(s.overall).toEqual({ units: 5, measured: 4, dropped: 1, with_hidden_doctests: 2, with_hidden_other: 2, with_any_hidden: 3, hidden_doctest_ids: 13, hidden_other_ids: 4, no_fail_fast: 2 });
     expect(s.window).toEqual({ units: 4, measured: 3, dropped: 1, with_hidden_doctests: 1, with_hidden_other: 1, with_any_hidden: 2, hidden_doctest_ids: 11, hidden_other_ids: 3, no_fail_fast: 2 });
+  });
+});
+
+describe("a failure's record", () => {
+  const rec = { schema: "sm-hidden.v1", id: "u", month: "2026-04", in_window: true, hidden_doctests: 0, hidden_other: 0, hidden: { doctest: [], other: [] }, no_fail_fast: false, how: null, runs: null, drop: null } as HiddenRecord;
+  test("a coded failure is a drop with its code and reason", () => {
+    expect(dropOf(rec, new Error("E_SM_HISTORY u: the history rewrite failed: x")).drop).toEqual({ code: "E_SM_HISTORY", reason: "E_SM_HISTORY u: the history rewrite failed: x" });
+  });
+  test("a full disk stops the count for a rerun to resume and records no drop", () => {
+    expect(() => dropOf(rec, new Error("E_SM_HISTORY u: copying /testbed out of the image failed: cp: error writing 'x': No space left on device"))).toThrow(/^E_SM_INFRA_GAP u: /);
   });
 });

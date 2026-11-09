@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fixtureRepo, gitOut } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
@@ -55,5 +56,23 @@ describe("history and strip", () => {
     gitOut(join(dir, "sub"), "init", "-q");
     expect(prepareBase({ kind: "host", dir }, head, "/r", "fixture").preflight).toContain("count=1");
     expect(existsSync(join(dir, "sub/.git"))).toBe(false);
+  });
+});
+
+const MNT_IMAGE = process.env.SM_SCORE_GO_IMAGE ?? "";
+describe.skipIf(!(process.env.GSTACK_EVALS_DOCKER === "1" && MNT_IMAGE))("history in Docker (SM_SCORE_GO_IMAGE)", () => {
+  test("a VOLUME the image declares inside the tree stays put and the history still becomes one commit", () => {
+    const tag = "sm-history-mnt:test", vol = "sm-history-mnt-test";
+    const d = (args: string[], input?: string) => spawnSync("docker", args, { encoding: "utf8", input });
+    try {
+      expect(d(["build", "-q", "-t", tag, "-"], "FROM " + MNT_IMAGE + "\nVOLUME /w/mnt_tmp\n").status).toBe(0);
+      d(["volume", "create", vol]);
+      const s = d(["run", "--rm", "--network", "none", "--user", "0:0", "-v", vol + ":/w", "--entrypoint", "bash", tag, "-c", "cd /w && git init -q && echo a > a.txt && git add a.txt && git -c user.name=a -c user.email=a@localhost commit -q -m one && git rev-parse HEAD"]);
+      const r = prepareBase({ kind: "docker", image: tag, volume: vol, repoDir: "/w", name: "sm-history-mnt" }, s.stdout.trim(), "/w", "mnt");
+      expect(r.preflight).toContain("count=1");
+    } finally {
+      d(["volume", "rm", "-f", vol]);
+      d(["image", "rm", "-f", tag]);
+    }
   });
 });
