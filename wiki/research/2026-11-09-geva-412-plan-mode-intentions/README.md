@@ -2,7 +2,7 @@
 id: 2026-11-09-geva-412-plan-mode-intentions
 kind: research
 title: "What gstack's plan-mode skills are meant to do, and which of those aims our evals actually score"
-summary: "An intentions inventory of six plan-mode skills at a pinned gstack, mapped to every eval run or planned. Of 48 main intentions, 1 is scored, 14 partly, 33 untested."
+summary: "An intentions inventory of six plan-mode skills at a pinned gstack, mapped to every eval run or planned. Of 48 main intentions, 1 is scored, 18 partly, 29 untested."
 author: GEVA-412
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -28,7 +28,7 @@ attachments:
   - 5c2558ce06802f1fff1c544b753823b0fda28706e75abf82cc76a2576e251f74  inventory-plan-ceo-review.md
   - 3365df8ef04c70c258b7b42728e89a76391ce60ee6842abd89f3784a1705f587  inventory-plan-design-review.md
   - 94d722ca10851438a243aaa3fea3de3af3703647501cad02a6a0876f66e70e71  inventory-plan-devex-review.md
-  - 80c190013db2931d9b49c34c69fab987e91803f56229a0606fc72668170f8a8f  inventory-plan-eng-review.md
+  - b8655f57af8b18bd00b7d0b8f860739c080d45a06d75e7f077f7640687ab97b4  inventory-plan-eng-review.md
   - 4129878bac00cfd0dd1a4203292a1b3f470b073f097e6a5cc4918741c5515e97  inventory-plan-tune-eval-plan-preamble.md
 ---
 
@@ -36,7 +36,7 @@ attachments:
 
 ## Takeaways
 
-- We learned that most of what gstack's plan-mode skills set out to do has never been scored. Across six skills we found 48 main intentions. One is scored, by an eval that hasn't run yet; 14 are partly scored; 33 are untested. You should read the nulls so far as "we tested a different job", not "the skill doesn't help".
+- We learned that most of what gstack's plan-mode skills set out to do has never been scored. Across six skills we found 48 main intentions. One is scored, by an eval that hasn't run yet; 18 are partly scored, most of them by evals still being planned; 29 are untested. You should read the nulls so far as "we tested a different job", not "the skill doesn't help".
 - We learned that the past tests mostly asked one question: does the review name a flaw, planted or real? The skills mainly aim to change what gets built and what users meet: every state of a screen, a developer's first success, the first thing a founder sells, how the product fails in real life. You should grade a plan review against what happened after launch, the way the product-value and engineering-intentions preregistrations start to.
 - We learned that on Capy's default autoplan run, the CEO, design and DX reviews reach the model as checklists of 28 to 37 lines inside one engineering reviewer, not as the full skills. You should test the form people actually run beside the full skill.
 
@@ -46,7 +46,7 @@ We read every plan-mode skill in full at gstack main b6155921a564ba9ec2470fd2cb3
 
 For each skill we wrote down every stated and implied intention with file:line citations, marked it main or secondary with a reason, said what "met" looks like to someone who did not watch the session, and said where it shows: in the plan (PLAN), in what gets built (BUILD), or after launch (AFTER). Each inventory ends with the places where the steps and the intention disagree.
 
-Then we mapped every main intention to every eval gstack-evals has run or planned for these skills: the experiment registry, the wiki's plans and results on main, and the open plan-eng-review intentions preregistration (#276). A score covers an intention only if it can see the intention's "met" evidence.
+Then we mapped every main intention to every eval gstack-evals has run or planned for these skills: the experiment registry, the wiki's plans and results on main (including the approved outcome-per-skill plan, whose X and U families are not yet preregistered), and the open plan-eng-review intentions preregistration (#276). A score covers an intention only if it can see the intention's "met" evidence.
 
 ## Two skills are out of scope
 
@@ -81,7 +81,7 @@ Status: **scored** means a score sees the intention's "met" evidence; **partly**
 | ID | Intention | Status | What scores it |
 |---|---|---|---|
 | DES-1 | The plan itself holds the missing design decisions | untested | |
-| DES-2 | Hierarchy, one obvious next step, wayfinding, the journey across screens | untested | |
+| DES-2 | Hierarchy, one obvious next step, wayfinding, the journey across screens | partly (planned) | The outcome-per-skill plan's family U: an agent user completing frozen tasks in the built UI (steps, errors, dead ends), with blind judges second. Approved, not preregistered. |
 | DES-3 | Loading, empty, error, success and partial states specified as what the user sees | untested | |
 | DES-4 | A specific, intentional look, not generic AI output | untested | |
 | DES-5 | Responsive behaviour per viewport and accessibility in the plan | untested | |
@@ -89,21 +89,21 @@ Status: **scored** means a score sees the intention's "met" evidence; **partly**
 | DES-7 | Approved mockups settle the visual direction | untested | |
 | DES-8 | The user decides every design change | untested | |
 
-The only eval that touched this skill was panel v3's design stratum, which planted flaws in UI plans, ran no skill arm, and read NO READ on broken items. No score has ever looked at a built UI or at what users met after launch.
+The only eval that ran on this skill was panel v3's design stratum, which planted flaws in UI plans, ran no skill arm, and read NO READ on broken items. The outcome-per-skill plan's family U would look at the built UI, but only at task completion; no score keys states, accessibility, responsive layout, the design system or what users met after launch, and that plan defers U's comparison until a cheaper agent user passes calibration, since a U null at its planned power could not move a design skill to a cut.
 
 ### plan-devex-review (7 main)
 
 | ID | Intention | Status | What scores it |
 |---|---|---|---|
 | DX-1 | Name one concrete target developer and judge everything through their eyes | untested | |
-| DX-2 | Set a benchmarked time-to-first-success target and shape getting started to meet it | untested | |
-| DX-3 | Pick the first visible success and deliver it first | untested | |
-| DX-4 | Trace the journey from discovery to upgrade and fix each friction point in the plan | untested | |
-| DX-5 | Every error path meets the agent-ready error contract | untested | |
+| DX-2 | Set a benchmarked time-to-first-success target and shape getting started to meet it | partly (planned) | The outcome-per-skill plan's family X: a fresh agent reaching a first success from the built feature's docs alone, with time and failed commands. Approved, not preregistered. |
+| DX-3 | Pick the first visible success and deliver it first | partly (planned) | Family X's docs-only first success, on one frozen goal per task. |
+| DX-4 | Trace the journey from discovery to upgrade and fix each friction point in the plan | partly (planned) | Family X covers install to first success; nothing covers real usage, debugging or upgrade. |
+| DX-5 | Every error path meets the agent-ready error contract | untested | Family X counts failed commands on the way, not whether an error tells the developer how to recover. |
 | DX-6 | Score the eight DX dimensions honestly from evidence | untested | |
 | DX-7 | Turn findings into user-approved plan changes | untested | |
 
-Panel v3's DX stratum planted flaws in developer-facing plans and found plain Opus at the ceiling, with no skill arm. That is the only DX data.
+Panel v3's DX stratum planted flaws in developer-facing plans and found plain Opus at the ceiling, with no skill arm. That is the only DX data. The approved family X would grade the built feature's docs-only first success, which covers part of three intentions, and nothing after launch.
 
 ### office-hours (9 main plus one implied)
 
@@ -155,7 +155,7 @@ Its six main intentions (plan mode respected, decision briefs, the user keeps co
 
 ## Where a past verdict missed a main intention
 
-- **plan-devex-review.** Panel v3's DX stratum produced a CUT-CANDIDATE "as seeded-flaw panels measure it". It rested on plain Opus finding planted flaws, with no skill arm, and saw none of DX-1 to DX-7. Under the plan-mode rule this reads **FIX-METHOD on task fit**, not CUT-CANDIDATE.
+- **plan-devex-review.** Panel v3's DX stratum produced a CUT-CANDIDATE "as seeded-flaw panels measure it". It rested on plain Opus finding planted flaws, with no skill arm, and saw none of DX-1 to DX-7. Under the plan-mode rule this reads **FIX-METHOD on task fit**, not CUT-CANDIDATE. The outcome-per-skill plan already holds that cut until family X reads; family X alone would still leave DX-1, DX-5, DX-6 and DX-7 untested.
 - **plan-eng-review.** Its CUT-CANDIDATE rested on planted flaws and on G admission, where the told review ran in 0 of 18 sessions. It has already been narrowed to FIX-METHOD on task fit and exposure; this inventory agrees, and adds that #276 scores ENG-2 and parts of ENG-3 and ENG-8 but not ENG-1, ENG-4, ENG-5, ENG-6 or ENG-7.
 - **plan-ceo-review.** The CEO outcome eval's hit@3 null has already been narrowed to FIX-METHOD on task fit. This inventory agrees: hit@3 sees part of CEO-1 and none of CEO-2 to CEO-6.
 - **plan-design-review, office-hours and autoplan** carry no CUT-CANDIDATE today. Their nulls (panel v3 design: NO READ; Lane A: no loss shown; G admission and the exposure line: FIX-METHOD) all missed most main intentions.
