@@ -104,7 +104,7 @@ export function repo(steps: Array<Record<string, string>>): { dir: string; commi
       writeFileSync(join(dir, p), t);
     }
     git(dir, "add", "-A");
-    git(dir, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "fixture step");
+    git(dir, "-c", "commit.gpgsign=false", "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "-m", "fixture step");
     commits.push(git(dir, "rev-parse", "HEAD"));
   }
   return { dir, commits };

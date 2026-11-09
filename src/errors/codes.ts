@@ -1407,7 +1407,7 @@ export const CODES = {
     owner: "U20",
   },
   E_AR_JUDGE_KAPPA: {
-    exit: 3,
+    exit: 2,
     meaning: "The autoplan audit's judge check failed: GPT-6 Astra's or Claude Opus 5.5's Cohen's kappa against gold is below 0.6, or Gemini 4 Argon's is (under the Captain's pre-data ruling a failed Argon check makes GATE-2 read NO READ). GATE-2's panel part stops.",
     fix: "Report it to the Captain. GATE-2 reads NO READ and its mechanical hit share prints. Never re-judge to pass the check.",
     side_effects: PARTIAL,

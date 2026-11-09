@@ -173,7 +173,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_AR_SMOKE_FAIL](#e_ar_smoke_fail) | 2 | U20 |
 | [E_AR_PACKET_LEAK](#e_ar_packet_leak) | 2 | U20 |
 | [E_AR_LABEL_MISSING](#e_ar_label_missing) | warning | U20 |
-| [E_AR_JUDGE_KAPPA](#e_ar_judge_kappa) | 3 | U20 |
+| [E_AR_JUDGE_KAPPA](#e_ar_judge_kappa) | 2 | U20 |
 | [E_AR_PROVIDER_DRIFT](#e_ar_provider_drift) | 2 | U20 |
 | [E_AR_CUSTODY](#e_ar_custody) | 2 | U20 |
 | [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | warning | U20 |
@@ -1243,6 +1243,14 @@ Fix: Find the source of the leak with the run's private log, fix the scrub or th
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
 
+### E_AR_JUDGE_KAPPA
+
+The autoplan audit's judge check failed: GPT-6 Astra's or Claude Opus 5.5's Cohen's kappa against gold is below 0.6, or Gemini 4 Argon's is (under the Captain's pre-data ruling a failed Argon check makes GATE-2 read NO READ). GATE-2's panel part stops.
+
+Fix: Report it to the Captain. GATE-2 reads NO READ and its mechanical hit share prints. Never re-judge to pass the check.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
+
 ### E_AR_PROVIDER_DRIFT
 
 An autoplan audit call to Gemini 4 Argon through OpenRouter was served by a provider other than its pin (Google Vertex), or named none. Argon's calls stop; split units with no Argon vote are missing.
@@ -1324,14 +1332,6 @@ An egress probe to a non-model host succeeded, so the trial network is not locke
 Fix: Fix the trial network so its only exit is the proxy, and run no trials until this passes.
 
 Exit 3. Side effects: Calibration sessions are charged; no task cell ran. Retry safe: yes. Resumable: no. Owner: U10.
-
-### E_AR_JUDGE_KAPPA
-
-The autoplan audit's judge check failed: GPT-6 Astra's or Claude Opus 5.5's Cohen's kappa against gold is below 0.6, or Gemini 4 Argon's is (under the Captain's pre-data ruling a failed Argon check makes GATE-2 read NO READ). GATE-2's panel part stops.
-
-Fix: Report it to the Captain. GATE-2 reads NO READ and its mechanical hit share prints. Never re-judge to pass the check.
-
-Exit 3. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Warnings: attach to any verdict, never change the exit code
 

@@ -189,14 +189,14 @@ None changes a bar, a seed or a verdict rule. Each is a post-data fact or a ruli
 
 - **Question.** Does autoplan do what its own records say it promises? Five intentions from gstack's inventory at the pin: one pass with the owner speaking once (X-1), required outputs at full depth (X-2), two model families per phase (X-3), a gate where the owner decides (GATE-1), and accepted changes that land in the built plan (GATE-2). Four main intentions (whether each phase's review is good) and all 29 secondaries stay untested here, so no reading can be a KEEP or a CUT-CANDIDATE.
 - **Frame.** 40 run records found on 2026-11-09 (24 lean, 16 full kind), made with gstack 1.91.284.0 to 1.98.0.0 between 2026-10-28 and 2026-11-09, frozen in one private snapshot with digest lists. The records were made by Opus 5.5 (every native reviewer and parent), with GPT-6.1 Sol or GPT-6 Astra as outside voices in some full-kind runs. None is a model under test.
-- **Code.** gstack at the pin b6155921a564ba9ec2470fd2cb3894c05e2c2d13 for every phase rule and required-output list, from a full clone with history. The audit lane at gstack-evals commit 6953f2306358d892aeadfc5d3fcdf6224dbba920, with built texts read at main 89371749e99a2f3e18fd000f32cb2fea2c32cc6d.
+- **Code.** gstack at the pin b6155921a564ba9ec2470fd2cb3894c05e2c2d13 for every phase rule and required-output list, from a full clone with history. The audit lane at gstack-evals commit 6953f2306358d892aeadfc5d3fcdf6224dbba920, with built texts read at main 89371749e99a2f3e18fd000f32cb2fea2c32cc6d. That commit made the official stage 1 run. The six corrected GATE-1 figures come from the recount with the case-sensitive revision marker (see Recount before merge).
 - **Readers.** Parsers and counters over JSON and Markdown records; nothing in a record was executed. The seeded draws (seed 20261110) fixed the gold pool and a 40-unit full-kind sample before any panel call.
 - **Panel.** GPT-6 Astra and Opus 5.5 with Gemini 4 Argon on splits, preregistered and never called, because GATE-2 stopped at supply.
 - **Dates.** Stage 1 ran once, on 2026-11-09 from 07:43:39Z to 07:43:49Z. The told opening ran at 07:48:03Z the same day.
 
 ## Replicate it
 
-These are the lane commands that ran, as the run record lists them, from a gstack-evals checkout at the lane commit after `bun install --frozen-lockfile`. Angle-bracket names stand for machine-local paths.
+These are the lane commands that ran, as the run record lists them. Run them from a gstack-evals checkout of the lane code as merged with this post, after `bun install --frozen-lockfile`. Stage 1 run at 6953f2306358d892aeadfc5d3fcdf6224dbba920 gives the pre-correction figures listed under Recount before merge. Angle-bracket names stand for machine-local paths.
 
 ```
 bun lanes/autoplan-audit/cli.ts frame --frame <frame>
@@ -218,7 +218,7 @@ Publication status: unpublished.
 |---|---|
 | Grade | Observational audit, preregistered. No arms, no model under test, one team's records. Four readings free; the paid panel part did not run. |
 | Prereg | The frozen preregistration of 2026-11-09, first in this post's links, merged in #283 as 74a2cc20 |
-| Repo commit | 6953f2306358d892aeadfc5d3fcdf6224dbba920 (lane), built texts at 89371749e99a2f3e18fd000f32cb2fea2c32cc6d |
+| Repo commit | 6953f2306358d892aeadfc5d3fcdf6224dbba920 (lane, the official stage 1 run), built texts at 89371749e99a2f3e18fd000f32cb2fea2c32cc6d; the six corrected GATE-1 figures come from the recount with the case-sensitive revision marker |
 | gstack | b6155921a564ba9ec2470fd2cb3894c05e2c2d13 for code; the records span 1.91.284.0 to 1.98.0.0 |
 | Data | Private snapshot and sealed told records, digests above |
 | Reviewed by | The /ship review of this post, recorded in its pull request |
