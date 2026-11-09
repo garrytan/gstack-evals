@@ -1,0 +1,50 @@
+# Frozen match regex for verify-hook's contract item check-after-edit (kind check_after_last_edit).
+# gstack (lib/skill-contract.ts at 350d4196) tests it with flag i against each Bash command after the last edit,
+# after replacing every quoted string with "" (double-quoted with escapes, or single-quoted). It replaces gstack's
+# built-in classifier, so it has to count /verify's own gstack-checks run forms as well as the test runners and the
+# repro forms the scorer counts. In the case lines, a backslash n stands for a newline inside the command.
+REGEX (?:^|[;&|(\n]\s*)(?:(?:env|time|nice|command|exec)\s+|(?:uv|poetry|pipenv|pdm|hatch)\s+run\s+|timeout\s+\S+\s+|\w+=\S*\s+)*(?:(?:""|\$\{?C\}?|\S*gstack-checks)\s+run\b|(?:\S*/)?(?:py\.test|pytest|tox|nox)\b(?![^;&|\n]*\s--?(?:version|help|collect-only|co)\b)|(?:\S*/)?python3?(?:\.\d+)?\s+(?:-m\s+(?:pytest|unittest)\b(?![^;&|\n]*\s--?(?:version|help)\b)|(?!-)(?![^\s;&|]*setup\.py)[^\s;&|]+\.py\b)|bash\s+(?!-)[^\s;&|]+\.sh\b|make\s+(?:test|check)\b|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|(?:go|cargo)\s+test\b)
+COUNT C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run
+COUNT C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run --allow-repo-commands
+COUNT C="$HOME/x/gstack-checks"; "$C" run --only unit
+COUNT cd /testbed && C="$HOME/.claude/skills/gstack/bin/gstack-checks" && "$C" run
+COUNT ~/.claude/skills/gstack/bin/gstack-checks run
+COUNT cd /testbed && pytest -x tests/test_a.py
+COUNT python -m pytest tests/ -q
+COUNT python3 -m unittest discover
+COUNT timeout 120 pytest -k "foo and bar"
+COUNT tox -e py311
+COUNT nox -s tests
+COUNT python reproduce_issue.py
+COUNT python3 /tmp/repro.py
+COUNT bash run_tests.sh
+COUNT make test
+COUNT cd repo; py.test
+COUNT npm test
+COUNT go test ./...
+COUNT pytest tests/test_x.py::test_y -vv 2>&1 | tail -20
+COUNT cd /testbed\npytest -q
+COUNT uv run pytest -q
+COUNT PYTHONPATH=src python -m pytest tests
+COUNT .venv/bin/pytest -x
+NO pytest --version
+NO python -m pytest --help
+NO pytest --collect-only -q
+NO pip install -e .
+NO python -m pip install -e .
+NO pip install -e ".[test]"
+NO python -m pip install pytest
+NO python setup.py develop
+NO python -c "import foo; print(foo.x)"
+NO uv run python -c "print(1)"
+NO bash -c "pytest"
+NO cat tests/test_a.py
+NO grep -rn pytest setup.cfg
+NO sed -n 1,20p tox.ini
+NO ls tests
+NO git diff
+NO git log --oneline | head
+NO echo test
+NO "$C" detect
+NO C="$HOME/x/gstack-checks"; "$C" status
+NO cd /testbed\npytest --version
