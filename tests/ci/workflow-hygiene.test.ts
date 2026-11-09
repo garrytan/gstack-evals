@@ -5,12 +5,12 @@ import { parseManifest } from "../../scripts/gate.ts";
 import { ENFORCED_GSTACK_SHA } from "../../src/trial/review/skill-gates.ts";
 
 // Workflow hygiene (U19), also run by the gate as its junit case: every workflow is pinned, read-only in every job and free of
-// secrets, installs Bun only by the checksummed download and fetches gstack at one commit, and ci.yml runs the gate's command
-// cases, so CI and `bun run gate` check the same things. The sealed case is left out of ci.yml because sealed.yml runs it on
-// every pull request and every push to main. No job may write: train-gate.yml, whose publish job posted a check, is removed
-// until a train dispatches the base's workflow instead of the head's (GST-254).
-type Step = { uses?: string; run?: string; env?: Record<string, string>; with?: Record<string, unknown> };
-type Job = { permissions?: unknown; steps: Step[] };
+// secrets, installs Bun only by the checksummed download in jobs whose time limit covers that step's worst case, fetches gstack
+// at one commit, and ci.yml runs the gate's command cases, so CI and `bun run gate` check the same things. The sealed case is left
+// out of ci.yml because sealed.yml runs it on every pull request and every push to main. No job may write: train-gate.yml,
+// whose publish job posted a check, is removed until a train dispatches the base's workflow instead of the head's (GST-254).
+type Step = { uses?: string; run?: string; env?: Record<string, string>; with?: Record<string, unknown>; "timeout-minutes"?: unknown };
+type Job = { permissions?: unknown; "timeout-minutes"?: unknown; steps: Step[] };
 type Workflow = { on?: unknown; permissions?: unknown; jobs: Record<string, Job> };
 const root = join(import.meta.dir, "..", "..");
 const dir = join(root, ".github", "workflows");
@@ -23,6 +23,36 @@ const jobs = (f: string) => Object.entries(workflows[f]!.jobs);
 const steps = (f: string) => jobs(f).flatMap(([, j]) => j.steps ?? []);
 const READ = { contents: "read" };
 const namesSecret = (t: string) => /secrets\.|\bsecrets:\s*inherit\b|\bgithub\.token\b/.test(t);
+
+// The Install Bun step's longest run in seconds, when every download stalls until its --max-time: each try of the release
+// loop and the waits between them, then curl's own tries at the npm package with its default backoff of 1, 2, 4 and so on
+// seconds. It cannot see a Retry-After header, which curl waits out in full between its tries. A step this cannot bound, such
+// as a curl with no --max-time, a retry flag it does not model or a third download, comes back as NaN, which no time limit
+// passes.
+function installWorstCase(run: string) {
+  const curls = [...run.matchAll(/^ *curl (.*)$/gm)].map((m) => m[1]!);
+  const loop = /^ *for delay in ((?:\d+ )+)end; do\n *curl (.*)$/m.exec(run);
+  const npm = curls.find((c) => c.includes("https://registry.npmjs.org/"));
+  if (curls.length !== 2 || !loop || !npm || npm === loop[2]) return NaN;
+  const seconds = (curl: string) => {
+    const retries = Number(/--retry (\d+)/.exec(curl)?.[1] ?? 0);
+    return /--retry-/.test(curl) ? NaN : (retries + 1) * Number(/--max-time (\d+)/.exec(curl)?.[1]) + 2 ** retries - 1;
+  };
+  const waits = loop[1]!.trim().split(" ").map(Number);
+  return (waits.length + 1) * seconds(loop[2]!) + waits.reduce((a, b) => a + b, 0) + seconds(npm);
+}
+
+// Jobs that install Bun with a time limit, their own or the step's, that is missing or does not pass that step's worst case.
+const shortLimits = (w: Workflow) =>
+  Object.entries(w.jobs).flatMap(([name, job]) =>
+    job.steps
+      .filter((s) => s.env?.BUN_SHA256)
+      .flatMap((s) => {
+        const worst = installWorstCase(s.run ?? "");
+        const limits = [job["timeout-minutes"], s["timeout-minutes"] ?? Infinity];
+        return limits.every((m) => typeof m === "number" && m * 60 > worst) ? [] : [name];
+      }),
+  );
 
 describe("workflow hygiene", () => {
   test("reads the workflows the gate relies on", () => {
@@ -111,6 +141,36 @@ describe("workflow hygiene", () => {
     expect(version).toBeGreaterThan(run.indexOf("fi\n"));
     expect(version).toBeLessThan(run.indexOf('>> "$GITHUB_PATH"'));
     expect(run.match(/>> "\$GITHUB_PATH"/g)).toHaveLength(1);
+  });
+
+  test("reads the Install Bun step's worst case as four 30-second tries, three waits, then four 60-second tries and curl's backoff", () => {
+    const run = steps("sealed.yml").find((s) => s.env?.BUN_SHA256)!.run!;
+    expect(installWorstCase(run)).toBe(4 * 30 + (15 + 30 + 60) + 4 * 60 + (1 + 2 + 4));
+  });
+
+  test("cannot bound a step with a download that has no --max-time, a retry flag it does not model or a third download", () => {
+    const run = steps("sealed.yml").find((s) => s.env?.BUN_SHA256)!.run!;
+    const changed = [
+      run.replace("--retry 3 --connect-timeout 10 --max-time 60 ", "--retry 3 --connect-timeout 10 "),
+      run.replace("--retry 3 ", "--retry 3 --retry-delay 5 "),
+      run + "curl -fsSL --max-time 30 -o x https://example.com/x\n",
+    ];
+    for (const c of changed) expect([c !== run, installWorstCase(c)]).toEqual([true, NaN]);
+  });
+
+  test("gives every job that installs Bun a time limit above that step's worst case", () => {
+    const installing = files.flatMap((f) =>
+      jobs(f).flatMap(([name, job]) => (job.steps.some((s) => s.env?.BUN_SHA256) ? [f + "/" + name] : [])),
+    );
+    expect(installing).toEqual(["ci.yml/checks", "rig.yml/tier", "sealed.yml/sealed"]);
+    for (const f of files) expect([f, shortLimits(workflows[f]!)]).toEqual([f, []]);
+  });
+
+  test("fails a copy of sealed.yml with a 5-minute time limit and passes it with 10", () => {
+    const copy = (minutes: number) =>
+      Bun.YAML.parse(text["sealed.yml"]!.replace(/^    timeout-minutes: \d+$/m, "    timeout-minutes: " + minutes)) as Workflow;
+    expect([copy(5).jobs.sealed!["timeout-minutes"], shortLimits(copy(5))]).toEqual([5, ["sealed"]]);
+    expect([copy(10).jobs.sealed!["timeout-minutes"], shortLimits(copy(10))]).toEqual([10, []]);
   });
 
   test("fetches gstack at one pinned commit", () => {
