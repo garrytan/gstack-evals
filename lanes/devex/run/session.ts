@@ -14,7 +14,9 @@
 //   driver's env before the session), the rec persona (DX_REC_USER, dxFreeform logging to host/persona.ndjson, and
 //   DX_FOLLOW_UP once), memoryLog on, plan-tune state pinned empty in the gstack arms (dxPlanTuneState) and the gstack
 //   state root copied to host/gstack-state. The driver denies WebSearch and WebFetch (DISALLOWED_TOOLS). none and lens
-//   refuse an install that holds gstack or a skill.
+//   refuse an install that holds gstack or a skill. The harness seeds a gstack state root (.gstack-home) into every work
+//   dir and names it in GSTACK_STATE_ROOT and GSTACK_HOME; for none and lens the session's sandbox removes that folder and
+//   both names before the agent starts, so those arms see /work/plan.md and /work/repo only and no gstack state.
 // - The repair the arm runs under: the Stop hook (stophook.ts makeStopHook, host/stop-hook.ndjson) for
 //   plan-devex-review, gstack's stop gate settings at the pin (devex.ts dxAutoplanGateSettings) for autoplan, or the
 //   doubled limits for every arm. Its name goes on every row.
@@ -30,7 +32,7 @@
 //   stop scopes the arm and leaves the lease open (stopArm); both are routed by leases.ts stopAction, from the drift
 //   check or from a control file line the Captain writes ({"code", "model" or "arm", "why"}), read before each start.
 //   Two INSTALL: fail sessions in one cell pause that cell for the Captain, and the lease then stays open.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { BACKGROUND_WAIT_MS } from "../../../src/adapters/claude-code/driver.ts";
 import { hostDriver, type HostDriverOptions } from "../../../src/adapters/host.ts";
@@ -43,6 +45,7 @@ import { DX_ARMS, DX_LENS, DX_PROMPT_SHA256, DX_SYSTEM_PROMPT, dxArmEnv, dxAutop
 import { reviewSandbox } from "../../../src/trial/review/run.ts";
 import { GATE_DEADLINE_MS } from "../../../src/trial/review/skill-gates.ts";
 import { STATE_ROOT_DIR } from "../../../src/trial/state-root.ts";
+import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { runTrial } from "../../../src/trial/trial.ts";
 import type { Termination } from "../../../src/types.ts";
 import { SMOKE, stopAction } from "../leases.ts";
@@ -228,7 +231,13 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
     if (!install) throw new Error("E_USAGE: the rig has no arm " + s.arm);
     if (!spec.gstack && (install.gstack || install.skill || (install.plugins ?? []).length)) throw new Error("E_USAGE: arm " + s.arm + " runs no gstack install, no skills folder and no drive mount, and its install holds one");
     const binding = await o.rig.bind({ cell: { run_id: o.runId, arm: s.arm, task: tree.task, model: ms, trial: s.pass, attempt: n }, models: slotModels(o.policy, ms, null), allowance_micros: limits.usd * 1_000_000 });
-    const sandbox = reviewSandbox(o.rig.sandbox(s.arm, false, ms), DX_LENS);
+    const base = reviewSandbox(o.rig.sandbox(s.arm, false, ms), DX_LENS);
+    const sandbox: Sandbox = spec.gstack ? base : Object.assign(Object.create(base) as Sandbox, {
+      agent: (task: string, a: Parameters<Sandbox["agent"]>[1]) => {
+        rmSync(join(a.work, STATE_ROOT_DIR), { recursive: true, force: true });
+        return base.agent(task, { ...a, env: Object.fromEntries(Object.entries(a.env).filter(([k]) => k !== "GSTACK_STATE_ROOT" && k !== "GSTACK_HOME")) });
+      },
+    });
     const home = sandbox.homePath(dir);
     const skill = spec.skill && install.skill ? { name: spec.skill, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
     if (spec.gstack && !skill) throw new Error("E_USAGE: arm " + s.arm + "'s install holds no " + spec.skill + " skill");
