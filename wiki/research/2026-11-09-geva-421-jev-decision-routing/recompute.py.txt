@@ -1,0 +1,250 @@
+"""Recompute the Jev decision-routing numbers from the per-item files.
+
+Usage: python3 recompute.py [dir]
+Reads every items-*.json file in dir (default: the folder this script is in) and prints one JSON object
+with a key per decision point.
+
+The scoring follows score.py, the script that produced the published numbers, step by step: the same
+truth rule, the same paired held set, the same tau tuning on dev and the same statistics (stats.py,
+imported unchanged). The sensitivity, frontier-reference and auto-apply blocks are extra views of the
+same files. Costs are in multiples of today's model's mean cost per decision on the held split.
+The frontier reference scores Opus 5.5's own labels against GPT-6 Astra's labels, beside particle-1 on the same items.
+Needs only the Python standard library.
+"""
+import json, math, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stats
+
+ARMS = ("current", "particle", "jev", "esc")
+
+
+def correct(row, truth, options):
+    if row is None:
+        return None
+    lab = row.get("label")
+    if lab is None or (lab not in options and lab != truth):
+        return 0
+    return int(lab == truth)
+
+
+def no_answer(row, options):
+    lab = row.get("label")
+    return int(lab is None or lab not in options)
+
+
+def primary_truth(items):
+    truth, excluded = {}, {"no_label": 0, "labels_disagree": 0, "disagree_with_construction": 0}
+    for it in items:
+        src = it.get("truth_source")
+        lo, la = it.get("label_opus"), it.get("label_astra")
+        has_labels = it.get("_point_has_labels")
+        if src == "consensus-pending" or (src == "constructed" and has_labels):
+            if not lo or not la:
+                excluded["no_label"] += 1
+                continue
+            if lo["label"] != la["label"]:
+                excluded["labels_disagree"] += 1
+                continue
+            if src == "constructed" and lo["label"] != it["truth"]:
+                excluded["disagree_with_construction"] += 1
+                continue
+            truth[it["id"]] = it["truth"] if src == "constructed" else lo["label"]
+        elif it.get("truth") is not None:
+            truth[it["id"]] = it["truth"]
+    return truth, excluded
+
+
+def judge_truth(items, judge, options):
+    """Second-judge sensitivity: one judge's label stands in for the two-judge agreement."""
+    truth = {}
+    for it in items:
+        src = it.get("truth_source")
+        lab = (it.get("label_" + judge) or {}).get("label")
+        if src == "consensus-pending":
+            if lab in options:
+                truth[it["id"]] = lab
+        elif src == "constructed" and it.get("_point_has_labels"):
+            if lab is not None and lab == it["truth"]:
+                truth[it["id"]] = it["truth"]
+        elif it.get("truth") is not None:
+            truth[it["id"]] = it["truth"]
+    return truth
+
+
+def cascade(items_by_id, ids, tau, truth, options):
+    c, cost, lat, n_esc = [], [], [], 0
+    for i in ids:
+        it = items_by_id[i]
+        j, e = it["jev"], it["esc"]
+        if j["conf"] < tau:
+            n_esc += 1
+            c.append(correct(e, truth[i], options))
+            cost.append((j.get("cost_x") or 0) + (e.get("cost_x") or 0))
+            if j.get("latency_ms") is not None and e.get("latency_ms") is not None:
+                lat.append(j["latency_ms"] + e["latency_ms"])
+        else:
+            c.append(correct(j, truth[i], options))
+            cost.append(j.get("cost_x") or 0)
+            if j.get("latency_ms") is not None:
+                lat.append(j["latency_ms"])
+    return c, cost, lat, n_esc
+
+
+def summarize(c, cost=None, lat=None):
+    k, n = sum(c), len(c)
+    row = {"acc": k / n if n else None, "k": k, "n": n, "ci": list(stats.wilson(k, n))}
+    if cost is not None:
+        row["cost_x"] = sum(cost) / len(cost) if cost else None
+    if lat is not None:
+        row["lat_p50"] = stats.pct(lat, 0.5)
+        row["lat_p90"] = stats.pct(lat, 0.9)
+    return row
+
+
+def kappa(pairs):
+    n = len(pairs)
+    if not n:
+        return None
+    po = sum(1 for a, b in pairs if a == b) / n
+    labels = set(a for a, _ in pairs) | set(b for _, b in pairs)
+    pe = sum((sum(1 for a, _ in pairs if a == l) / n) * (sum(1 for _, b in pairs if b == l) / n) for l in labels)
+    return {"n": n, "agree": po, "kappa": (po - pe) / (1 - pe) if pe < 1 else None}
+
+
+def score_point(doc):
+    options = doc["options"]
+    items = doc["items"]
+    has_labels = any(it.get("label_opus") or it.get("label_astra") for it in items)
+    for it in items:
+        it["_point_has_labels"] = has_labels
+    by_id = {it["id"]: it for it in items}
+    truth, excluded = primary_truth(items)
+    split = {it["id"]: it["split"] for it in items}
+    dev = [i for i in truth if split[i] == "dev"]
+    held = [i for i in truth if split[i] == "held"]
+    avail = [a for a in ARMS if any(it.get(a) for it in items)]
+    common = [i for i in held if all(by_id[i].get(a) for a in avail)]
+    res = {"point": doc["point"], "items": len(items), "scored": len(truth), "excluded": excluded,
+           "n_dev": len(dev), "n_held": len(held), "n_held_paired": len(common)}
+    rows, cs = {}, {}
+    for a in avail:
+        c = [correct(by_id[i][a], truth[i], options) for i in common]
+        cost = [by_id[i][a].get("cost_x") or 0 for i in common]
+        lat = [by_id[i][a]["latency_ms"] for i in common if by_id[i][a].get("latency_ms") is not None]
+        rows[a] = summarize(c, cost, lat)
+        rows[a]["no_answer"] = sum(no_answer(by_id[i][a], options) for i in common)
+        cs[a] = c
+    dev_c = [i for i in dev if by_id[i].get("jev") and by_id[i].get("esc") and by_id[i].get("current")]
+    target = sum(correct(by_id[i]["current"], truth[i], options) for i in dev_c) / len(dev_c)
+    conf = [by_id[i]["jev"]["conf"] for i in dev_c]
+    cj = [correct(by_id[i]["jev"], truth[i], options) for i in dev_c]
+    ce = [correct(by_id[i]["esc"], truth[i], options) for i in dev_c]
+    tune = stats.tune_threshold(conf, cj, ce, target)
+    tune.update({"target_dev_acc": target, "n_dev": len(dev_c)})
+    best = stats.tune_threshold(conf, cj, ce, 2.0)
+    res["tune"], res["tune_max_dev_acc"] = tune, best
+    c2, cost2, _, e2 = cascade(by_id, common, best["tau"], truth, options)
+    rows["cascade_maxacc"] = summarize(c2, cost2)
+    rows["cascade_maxacc"]["esc_rate"] = e2 / len(c2)
+    cs["cascade_maxacc"] = c2
+    c, cost, lat, e = cascade(by_id, common, tune["tau"], truth, options)
+    rows["cascade"] = summarize(c, cost, lat)
+    rows["cascade"]["esc_rate"] = e / len(c)
+    cs["cascade"] = c
+    cal, ece = stats.calibration([by_id[i]["jev"]["conf"] for i in common], cs["jev"])
+    res["calibration_held"] = {"rows": cal, "ece": ece}
+    for a in rows:
+        if a != "current":
+            rows[a]["vs_current"] = stats.paired_diff(cs["current"], cs[a])
+    res["arms"] = rows
+    res["particle_vs_cascade"] = stats.paired_diff(cs["cascade"], cs["particle"])
+
+    if has_labels:
+        pairs = [(it["label_opus"]["label"], it["label_astra"]["label"]) for it in items
+                 if it.get("label_opus") and it.get("label_astra")]
+        res["judge_agreement"] = kappa(pairs)
+        sens = {}
+        for judge, other in (("opus", "astra"), ("astra", "opus")):
+            t = judge_truth(items, judge, options)
+            ids = [i for i in t if split[i] == "held" and all(by_id[i].get(a) for a in avail)]
+            v = {"n_held": len(ids)}
+            sc = {a: [correct(by_id[i][a], t[i], options) for i in ids] for a in avail}
+            sc["cascade"] = cascade(by_id, ids, tune["tau"], t, options)[0]
+            for a, cc in sc.items():
+                v[a] = summarize(cc)
+                if a != "current":
+                    v[a]["vs_current"] = stats.paired_diff(sc["current"], cc)
+            if other == "opus":
+                ref = [i for i in ids if by_id[i].get("label_opus")]
+                fr = [correct(by_id[i]["label_opus"], t[i], options) for i in ref]
+                pr = [correct(by_id[i]["particle"], t[i], options) for i in ref]
+                v["frontier_reference"] = {"model": "Opus 5.5's own labels", "n": len(ref), "frontier": summarize(fr),
+                                           "particle": summarize(pr), "particle_minus_frontier": stats.paired_diff(fr, pr)}
+            sens["truth_from_" + judge] = v
+        res["second_judge"] = sens
+
+    if any((it.get(a) or {}).get("retried") for it in items for a in ("particle", "esc")):
+        first = {}
+        for a in ("particle", "esc"):
+            first[a] = [0 if by_id[i][a].get("retried") else correct(by_id[i][a], truth[i], options) for i in common]
+        fc = []
+        for i, c_first in zip(common, first["esc"]):
+            fc.append(c_first if by_id[i]["jev"]["conf"] < tune["tau"] else correct(by_id[i]["jev"], truth[i], options))
+        first["cascade"] = fc
+        res["at_shipped_token_cap"] = {
+            "note": "replies cut off at the shipped token cap were retried once at 4,000 tokens; here those items count as wrong",
+            "retried_held": {a: sum(1 for i in common if by_id[i][a].get("retried")) for a in ("particle", "esc")},
+            **{a: dict(summarize(c), vs_current=stats.paired_diff(cs["current"], c)) for a, c in first.items()}}
+
+    if any((it.get("current") or {}).get("applied") is not None for it in items):
+        aa = {}
+        for a in ("current", "particle", "jev"):
+            app = [i for i in common if by_id[i][a].get("applied")]
+            aa[a] = {"applied": len(app), "wrong": sum(1 for i in app if not correct(by_id[i][a], truth[i], options))}
+        res["auto_apply_held"] = aa
+
+    if any("production" in it for it in items):
+        g = {}
+        for i in common:
+            key = "production" if by_id[i]["production"] else "removed"
+            d = g.setdefault(key, {"n": 0})
+            d["n"] += 1
+            for a in avail:
+                d[a] = d.get(a, 0) + correct(by_id[i][a], truth[i], options)
+            d["cascade"] = d.get("cascade", 0) + cascade(by_id, [i], tune["tau"], truth, options)[0][0]
+        res["by_config_group_held"] = g
+
+    models = sorted({by_id[i]["current"].get("model") for i in common})
+    if len(models) > 1:
+        bm = {}
+        for m in models:
+            ids = [i for i in common if by_id[i]["current"].get("model") == m]
+            cur = [correct(by_id[i]["current"], truth[i], options) for i in ids]
+            par = [correct(by_id[i]["particle"], truth[i], options) for i in ids]
+            bm[m] = {"n": len(ids), "current": sum(cur), "particle": sum(par), "particle_vs_current": stats.paired_diff(cur, par)}
+        res["by_current_model_held"] = bm
+
+    if any((it.get("jev") or {}).get("p_pass") is not None for it in items):
+        bands = [(0.0, 0.5), (0.5, 0.77), (0.77, 0.9), (0.9, 1.0001)]
+        out = []
+        for lo, hi in bands:
+            ids = [i for i in common if lo <= by_id[i]["jev"]["p_pass"] < hi]
+            out.append({"p_pass_from": lo, "p_pass_to": min(hi, 1.0), "n": len(ids),
+                        "truth_pass": sum(1 for i in ids if truth[i] == "pass")})
+        res["jev_p_pass_bands_held"] = out
+    return res
+
+
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    d = sys.argv[1] if len(sys.argv) > 1 else here
+    out = {}
+    for name in sorted(os.listdir(d)):
+        if name.startswith("items-") and name.endswith(".json"):
+            doc = json.load(open(os.path.join(d, name)))
+            out[doc["point"]] = score_point(doc)
+    print(json.dumps(out, indent=1))
+
+
+if __name__ == "__main__":
+    main()
