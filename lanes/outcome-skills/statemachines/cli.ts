@@ -19,7 +19,7 @@ import { computeStart, firstInfo, scoreFollowon, treeCounts, treeScores, TREES, 
 import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
 import { planPart, type PlannedSession, type SessionRecord } from "./session.ts";
 import { LANGS, type Lang } from "./langs.ts";
-import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
+import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, LABELLERS, labelledQueue, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
 import { foundIt, laterFix, whatChanged } from "./secondary.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
@@ -70,6 +70,8 @@ export const HELP = `gstack-evals outcome sm <command>
   packets read label|judge --answer <file> [--packet <packet.json>]
                                                      reads one reply strictly; a malformed one exits 1 (E_SM_JUDGE_ANSWER)
   packets labelled --spec <spec.json> --out-dir <dir>  the R78 labelled set from [{unit, lang, tree, file, files}] in draw order
+  packets queue --labelled <dir> --real <ids.txt> --out-dir <dir>  each judge's labelled queue (queue-<judge>.json), its seed
+                                                     minted once and reused on a rerun; ids are the labelled packets and the real ones
   packets r78 --real <rows.json> --labelled <rows.json> --out <file>  the R78 check (a Astra, b Opus); labelled rows add kind, axis
   packets r78-price                                   the sm-judges calls priced at the per-call bound, against the item cap
   secondary --unit <dir> --patch <arm.patch> [--outcome <outcome.json>] [--tree <base dir>] [--clone <dir>] --out <file>
@@ -382,6 +384,18 @@ export async function main(argv: string[]): Promise<number> {
           writeNew(join(out, it.packet.packet + ".key.json"), it.key);
         }
         console.log("labelled items=" + set.items.length + " bad=" + set.items.filter((x) => x.key.kind === "bad").length + " neutral=" + set.items.filter((x) => x.key.kind === "neutral").length + " skipped=" + (set.skipped.join(",") || "none"));
+        return 0;
+      }
+      if (what === "queue") {
+        const { f } = flags(r, ["--labelled", "--real", "--out-dir"]);
+        const lab = need(f, "--labelled");
+        const out = need(f, "--out-dir");
+        const ids = [...readdirSync(lab).filter((n) => n.endsWith(".key.json")).map((n) => readJson<{ packet: string }>(join(lab, n)).packet), ...readFileSync(need(f, "--real"), "utf8").split("\n").filter(Boolean)];
+        mkdirSync(out, { recursive: true });
+        for (const judge of Object.keys(LABELLERS)) {
+          const q = labelledQueue(join(out, "queue-" + judge + ".json"), ids);
+          console.log("queue judge=" + judge + " items=" + q.order.length + " seed=" + q.seed);
+        }
         return 0;
       }
       if (what === "r78") {

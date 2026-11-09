@@ -2,9 +2,10 @@
 // The paid sender's order for the labelled items (keyless): one seed minted from random bytes when a judge's queue file is
 // first built, recorded in it and reused on every rebuild, and the plants, stock and real items shuffled together by it.
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { main } from "../../lanes/outcome-skills/statemachines/cli.ts";
 import { labelledQueue, mintSeed, seededShuffle } from "../../lanes/outcome-skills/statemachines/packets.ts";
 
 const ids = [...Array.from({ length: 24 }, (_, i) => "plant-" + i), ...Array.from({ length: 24 }, (_, i) => "stock-" + i), ...Array.from({ length: 60 }, (_, i) => "real-" + i)];
@@ -44,5 +45,29 @@ describe("the labelled queue order", () => {
     const again = labelledQueue(f, [...ids].reverse());
     expect(again.seed).toBe(first.seed);
     expect(again.order).toEqual(first.order);
+  });
+  test("sm packets queue writes one queue file per judge from the labelled packets and the real ids, and a rerun keeps each seed", async () => {
+    const d = mkdtempSync(join(tmpdir(), "sm-queue-"));
+    dirs.push(d);
+    const lab = join(d, "labelled");
+    mkdirSync(lab);
+    for (const id of ["p-bad-1", "p-neutral-1"]) {
+      writeFileSync(join(lab, id + ".json"), JSON.stringify({ packet: id }));
+      writeFileSync(join(lab, id + ".key.json"), JSON.stringify({ schema: "sm-r78-key.v1", packet: id }));
+    }
+    writeFileSync(join(d, "real.txt"), "r-2\nr-1\n");
+    const out = join(d, "queues");
+    const args = ["packets", "queue", "--labelled", lab, "--real", join(d, "real.txt"), "--out-dir", out];
+    expect(await main(args)).toBe(0);
+    const read = (j: string) => JSON.parse(readFileSync(join(out, "queue-" + j + ".json"), "utf8"));
+    const first = { astra: read("astra"), opus: read("opus") };
+    for (const q of Object.values(first)) {
+      expect(q.schema).toBe("sm-labelled-queue.v1");
+      expect([...q.order].sort()).toEqual(["p-bad-1", "p-neutral-1", "r-1", "r-2"]);
+    }
+    expect(first.astra.seed).not.toBe(first.opus.seed);
+    expect(await main(args)).toBe(0);
+    expect(read("astra")).toEqual(first.astra);
+    expect(read("opus")).toEqual(first.opus);
   });
 });
