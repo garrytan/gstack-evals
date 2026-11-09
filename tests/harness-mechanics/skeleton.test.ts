@@ -170,7 +170,7 @@ describe("cli", () => {
     for (const n of ["1-arm-tars", "2-verify-hook"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toBe(true);
     expect(lines.some((l) => l.startsWith("DRYRUN 7-leak-scan-env PASS ") && l.includes("canary body 403 DR_CUSTODY_HIT"))).toBe(true);
     for (const n of ["1-arm-tars", "2-verify-hook"]) expect(lines.find((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toMatch(/Docker/);
-    expect(lines.some((l) => l.startsWith("DRYRUN 5-judgment-hooks FAIL not built (unit "))).toBe(true);
+    expect(lines.find((l) => l.startsWith("DRYRUN 5-judgment-hooks FAIL "))).toMatch(/container did not start/);
     for (const n of ["6-ledger", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " PASS "))).toBe(true);
     for (const n of ["3-matcher-probes", "stop-hook-loadline", "matcher-72", "probes-189"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL E_HM_PIN set HM_GSTACK"))).toBe(true);
     expect(lines[0]).toStartWith("DRYRUN skeleton PASS");
