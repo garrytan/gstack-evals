@@ -14,6 +14,7 @@ import { stepAmendment, stepAnalysis, stepVerdictTables } from "./synth.ts";
 import { stepLeases, stepLedger, stepReserve } from "./money.ts";
 import { stepD1Checks } from "./d1.ts";
 import { stepReplay } from "./replay-fake.ts";
+import { stepJudgeHooks } from "./judge-dryrun.ts";
 
 export type StepResult = { pass: boolean; detail: string };
 export type Step = { name: string; units: number[]; run?: (out: string) => StepResult };
@@ -40,7 +41,7 @@ export const STEPS: Step[] = [
   { name: "2-verify-hook", units: [5], run: stepVerifyHook },
   { name: "3-matcher-probes", units: [2], run: stepPin },
   { name: "4-scorer", units: [3], run: stepScorer },
-  { name: "5-judgment-hooks", units: [7] },
+  { name: "5-judgment-hooks", units: [7], run: stepJudgeHooks },
   { name: "6-ledger", units: [6], run: stepLedger },
   { name: "7-leak-scan-env", units: [5, 7], run: stepEnv },
   { name: "8-analysis", units: [4], run: stepAnalysis },
