@@ -19,6 +19,7 @@ export const PARTS: readonly Part[] = [
   { name: "mine", path: join(import.meta.dir, "mine", "checks.ts") },
   { name: "author", path: join(import.meta.dir, "author", "checks.ts") },
   { name: "run", path: join(import.meta.dir, "run", "checks.ts") },
+  { name: "session", path: join(import.meta.dir, "run", "session-checks.ts") },
   { name: "score", path: join(import.meta.dir, "score", "checks.ts") },
   { name: "stage3", path: join(import.meta.dir, "stage3", "checks.ts") },
   { name: "leases", path: join(import.meta.dir, "leases.ts") },

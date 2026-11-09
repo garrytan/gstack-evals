@@ -314,7 +314,7 @@ function strip(): DryCheck {
 }
 
 /** A stand-in of the pin's documented bin/gstack-session-kind and leanMode, used only when no pinned checkout is named. */
-function standInPin(dir: string): void {
+export function standInPin(dir: string): void {
   mkdirSync(join(dir, "bin"), { recursive: true });
   mkdirSync(join(dir, "lib"), { recursive: true });
   writeFileSync(join(dir, "bin", "gstack-session-kind"), '#!/usr/bin/env bash\ncase "${GSTACK_SESSION_KIND:-}" in spawned|unattended) echo "$GSTACK_SESSION_KIND"; exit 0;; esac\nif [ -n "${CI:-}" ]; then echo headless; exit 0; fi\necho interactive\n');
