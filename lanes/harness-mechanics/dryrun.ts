@@ -11,6 +11,7 @@ import { stepMatcher72, stepPin, stepProbes189, stepStopHook } from "./match.ts"
 import { itemPlan, ITEMS } from "./plans.ts";
 import { stepPatterns, stepScorer } from "./score.ts";
 import { stepAmendment, stepAnalysis, stepVerdictTables } from "./synth.ts";
+import { stepLeases, stepLedger, stepReserve } from "./money.ts";
 
 export type StepResult = { pass: boolean; detail: string };
 export type Step = { name: string; units: number[]; run?: (out: string) => StepResult };
@@ -38,7 +39,7 @@ export const STEPS: Step[] = [
   { name: "3-matcher-probes", units: [2], run: stepPin },
   { name: "4-scorer", units: [3], run: stepScorer },
   { name: "5-judgment-hooks", units: [7] },
-  { name: "6-ledger", units: [6] },
+  { name: "6-ledger", units: [6], run: stepLedger },
   { name: "7-leak-scan-env", units: [5, 7], run: stepEnv },
   { name: "8-analysis", units: [4], run: stepAnalysis },
   { name: "stop-hook-loadline", units: [2], run: stepStopHook },
@@ -47,8 +48,8 @@ export const STEPS: Step[] = [
   { name: "patterns-per-arm", units: [3], run: stepPatterns },
   { name: "verdict-tables", units: [4], run: stepVerdictTables },
   { name: "h1-amendment", units: [4], run: stepAmendment },
-  { name: "leases-per-item", units: [6] },
-  { name: "reserve-mechanics", units: [6] },
+  { name: "leases-per-item", units: [6], run: stepLeases },
+  { name: "reserve-mechanics", units: [6], run: stepReserve },
 ];
 
 export function dryrun(out: string, steps: Step[] = STEPS): { lines: string[]; pass: boolean } {

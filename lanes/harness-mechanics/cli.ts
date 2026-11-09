@@ -2,7 +2,7 @@
 // bun lanes/harness-mechanics/cli.ts <command>: the harness mechanics eval (lanes/harness-mechanics/README.md).
 // prepare, host-up, launch, attach, relaunch, recover and host-down run on L1's host and part machinery under this lane's
 // profile (plans.ts HM_PROFILE), with L1's exit codes.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { l1Main } from "../../quick/laneb/l1/l1.ts";
 import { admission, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
@@ -11,12 +11,32 @@ import { harborEnvRecord } from "./arms.ts";
 import { CLOSING, REPO } from "./pins.ts";
 import { HM_PROFILE } from "./plans.ts";
 import { patternsCommand } from "./score.ts";
+import { approve, isItem, launchGuard, markDone, type HmCrew, type Item } from "./money.ts";
+import { readRows } from "../../quick/laneb/runner/ledger.ts";
+import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--out <dir>] | report <table.jsonl> <config.json> <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--out <dir>] | report <table.jsonl> <config.json> <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
+
+// The launch guard's inputs: the work dir's plan and finished parts, the item's own ledger (LEDGER, or the host mirror
+// l1.ts keeps while the ledger is on the host), every other item's ledger as HM_LEDGERS/<item>.jsonl, and HM_CREW.
+function guard(work: string) {
+  const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+  const dir = process.env.HM_LEDGERS ?? "", crewPath = process.env.HM_CREW ?? "", own = process.env.LEDGER ?? "";
+  if (!dir || !crewPath || !existsSync(crewPath)) throw new Error("E_USAGE hm launch guard: set HM_LEDGERS to the folder of item ledgers (<item>.jsonl) and HM_CREW to the crew file");
+  const ledgers: Partial<Record<Item, any[]>> = {};
+  for (const f of Object.keys(HM_PROFILE.items).concat(["stage2-replay", "vms"])) if (isItem(f) && existsSync(join(dir, f + ".jsonl"))) ledgers[f] = readRows(join(dir, f + ".jsonl"));
+  const mirror = join(work, "host/ledger.jsonl");
+  ledgers[plan.item as Item] = own && existsSync(own) ? readRows(own) : existsSync(mirror) ? readRows(mirror) : ledgers[plan.item as Item] ?? [];
+  const finished = plan.parts.map((p: any) => p.name).filter((n: string) => existsSync(join(work, n + ".result.json")));
+  const g = launchGuard(plan.item, ledgers, JSON.parse(readFileSync(crewPath, "utf8")) as HmCrew, plan.parts, finished);
+  for (const l of g.lines) console.log(l);
+  if (!g.ok) throw new Error("E_HM_LAUNCH " + plan.item + ": " + g.why.join("; ") + "; take it to the Captain before launching");
+}
+const GUARDED = ["host-up", "launch", "relaunch"];
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "recover", "host-down"];
 
 export async function main(argv: string[]): Promise<number> {
@@ -28,7 +48,21 @@ export async function main(argv: string[]): Promise<number> {
       for (const l of r.lines) console.log(l);
       return r.pass ? 0 : 1;
     }
+    if (cmd === "approve" || cmd === "done") {
+      const ledger = opt("ledger"), item = opt("item") ?? "";
+      if (!ledger) throw new Error(USAGE);
+      if (cmd === "done") { if (!isItem(item)) throw new Error(USAGE); markDone(resolve(ledger), item); console.log(item + " marked done on " + ledger); return 0; }
+      const usd = opt("usd") ?? "";
+      if (!/^\d+(\.\d+)?$/.test(usd)) throw new Error(USAGE);
+      approve(resolve(ledger), item, Number(usd), opt("approved-by") ?? "");
+      console.log("approved " + item + " at $" + usd + " on " + ledger);
+      return 0;
+    }
+    if (cmd === "guard") { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); return 0; }
+    if (cmd === "screen") { const out = opt("out"); if (!out) throw new Error(USAGE); for (const l of screenCommand(resolve(out), () => {}).lines) console.log(l); return 0; }
+    if (cmd === "screen-vm") { if (!rest[0] || !rest[1]) throw new Error(USAGE); return screenVm(rest[0], resolve(rest[1])); }
     if (cmd && LAUNCHER.includes(cmd)) {
+      if (GUARDED.includes(cmd)) { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); }
       l1Main(argv, HM_PROFILE);
       if (cmd === "prepare") {
         const work = resolve(rest[0]!), plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
@@ -75,7 +109,7 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     const m = (e as Error).message;
     console.error(m.startsWith("E_") ? m : "E_INTERNAL " + m);
-    return m.startsWith("E_") ? 2 : 1;
+    return m.startsWith("E_HM_LAUNCH") ? 3 : m.startsWith("E_") ? 2 : 1;
   }
 }
 

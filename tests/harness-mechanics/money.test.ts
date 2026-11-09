@@ -1,0 +1,155 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// Section 22's money, keyless: item approvals at their caps, reserve mechanics through the real ledger against every
+// item's cap, the line and the C1 guard before each launch (wired into hm launch), section 13's infrastructure rerun, and
+// dry-run steps 6-ledger, leases-per-item and reserve-mechanics.
+import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { itemCheck, plannedCells } from "../../quick/laneb/l1/l1.ts";
+import { Ledger, readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
+import { approve, c1Guard, infraRerun, launchGuard, lineCheck, markDone, needsRerun, runSessions, stepLeases, stepLedger, stepReserve, type Item } from "../../lanes/harness-mechanics/money.ts";
+import { bundleLists, CAPS_USD, MODELS, REPO } from "../../lanes/harness-mechanics/pins.ts";
+import { itemPlan, ITEMS } from "../../lanes/harness-mechanics/plans.ts";
+
+const tmp = () => mkdtempSync(join(tmpdir(), "hm-money-"));
+const items = Object.keys(CAPS_USD) as Item[];
+const lists = bundleLists();
+const crew = (credits: number) => ({ as_of: "2026-11-09", threads: [{ code: "t1", credits }] });
+const CLI = join(REPO, "lanes/harness-mechanics/cli.ts");
+const run = (args: string[], env: Record<string, string> = {}) => Bun.spawnSync([process.execPath, CLI, ...args], { env: { ...process.env, ...env }, cwd: REPO, stdout: "pipe", stderr: "pipe" });
+
+describe("approvals", () => {
+  test("each item's ledger takes its approval row at its recorded cap, and the row passes L1's item check", () => {
+    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-sol": 180, "stage1-p1": 70, "stage2-replay": 90, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
+    const d = tmp();
+    for (const i of items) {
+      const p = join(d, i + ".jsonl");
+      approve(p, i, CAPS_USD[i], "the Captain");
+      const rows = readRows(p);
+      expect(rows.map((r) => [r.kind, r.item, r.usd_micros])).toEqual([["approval", i, toMicros(CAPS_USD[i])]]);
+      expect(() => itemCheck(rows, i, CAPS_USD[i])).not.toThrow();
+      expect(() => approve(p, i, CAPS_USD[i], "the Captain")).toThrow("E_USAGE refused");
+    }
+  });
+  test("any other amount, an unknown item or no approver is refused and writes nothing", () => {
+    const d = tmp();
+    for (const i of items) for (const usd of [CAPS_USD[i] + 1, CAPS_USD[i] - 0.01, 0]) {
+      expect(() => approve(join(d, i + ".jsonl"), i, usd, "the Captain")).toThrow("E_USAGE refused: " + i + "'s recorded cap is $" + CAPS_USD[i]);
+      expect(readRows(join(d, i + ".jsonl"))).toEqual([]);
+    }
+    expect(() => approve(join(d, "x.jsonl"), "crew", 400, "the Captain")).toThrow("E_USAGE hm approve: unknown item crew");
+    expect(() => approve(join(d, "y.jsonl"), "vms", 160, " ")).toThrow("--approved-by");
+  });
+  test("hm approve writes the row at the cap and refuses another amount", () => {
+    const d = tmp();
+    const ok = run(["approve", "--ledger", join(d, "a.jsonl"), "--item", "stage4-sol", "--usd", "800", "--approved-by", "the Captain"]);
+    expect(ok.exitCode).toBe(0);
+    expect(readRows(join(d, "a.jsonl"))[0]).toMatchObject({ kind: "approval", item: "stage4-sol", usd_micros: 800_000_000, approved_by: "the Captain" });
+    const bad = run(["approve", "--ledger", join(d, "b.jsonl"), "--item", "stage4-sol", "--usd", "810", "--approved-by", "the Captain"]);
+    expect(bad.exitCode).toBe(2);
+    expect(bad.stderr.toString()).toStartWith("E_USAGE refused: stage4-sol's recorded cap is $800");
+  });
+});
+
+describe("reserve mechanics", () => {
+  test("against every session item's cap: at the allowance the item stops exactly when settled plus open plus one allowance would pass", () => {
+    for (const i of Object.keys(ITEMS) as Item[]) {
+      const p = join(tmp(), i + ".jsonl"), a = ITEMS[i]!.allowanceUsd;
+      approve(p, i, CAPS_USD[i], "t");
+      const r = runSessions(new Ledger(p, i), i + "/p/", Array(400).fill(a), a);
+      expect(r.capStop).toContain("passes the cap");
+      expect(r.maxCommitted).toBeLessThanOrEqual(toMicros(CAPS_USD[i]));
+      expect(r.status.openIds).toEqual([]);
+      expect(r.started).toBe(Math.floor(CAPS_USD[i] / a));
+      expect(r.status.settledMicros).toBe(toMicros(r.started * a));
+      expect(r.notRun).toBe(400 - r.started);
+    }
+  });
+  test("sessions settle at their metered cost, six allowances held open, and an item at its planning rates completes", () => {
+    const p = join(tmp(), "s.jsonl");
+    approve(p, "stage1-p1", 70, "t");
+    const l = new Ledger(p, "stage1-p1");
+    const r = runSessions(l, "stage1-p1/s1-1/", [0.2, 2.5, 0.1, 0.3, 0.2, 0.2, 0.2], 2);
+    expect(r.allowanceStops).toBe(1);
+    expect(r.status.settledMicros).toBe(toMicros(0.2 + 2 + 0.1 + 0.3 + 0.2 + 0.2 + 0.2));
+    expect(r.maxCommitted).toBe(toMicros(6 * 2 + 0.2));
+    const s1 = readRows(p).filter((x) => x.kind === "reserve").map((x) => x.usd_micros);
+    expect(new Set(s1)).toEqual(new Set([toMicros(2)]));
+  });
+  test("dry-run steps 6-ledger, leases-per-item and reserve-mechanics pass and print the reserve check per item", () => {
+    const out = tmp();
+    for (const s of [stepLedger, stepLeases, stepReserve]) expect(s(out)).toMatchObject({ pass: true });
+    const txt = readFileSync(join(out, "reserve-mechanics.txt"), "utf8");
+    expect(txt).toContain("RESERVE stage1-opus: cap $150, reserve per launch $30.00 (6 x $5), room for settled spend $120.00");
+    expect(txt).toContain("RESERVE stage4-p1: cap $280, reserve per launch $12.00 (6 x $2), room for settled spend $268.00");
+    expect(txt).not.toContain("BAD");
+    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(9);
+  });
+});
+
+describe("infrastructure rerun", () => {
+  const row = (o: any) => ({ task: "t", arm: "none", outcome: "graded", reason: "graded", ...o });
+  test("no successful response reruns once; allowance, turn-limit and after-response errors and cap stops never rerun", () => {
+    expect(needsRerun(row({ outcome: "infra", reason: "no model response reached the agent (X)" }))).toBe(true);
+    expect(needsRerun(row({ outcome: "infra", reason: "no result.json" }))).toBe(true);
+    for (const r of ["allowance stop, graded fail", "turn cap, graded fail", "NonZeroAgentExitCodeError, graded"]) expect(needsRerun(row({ reason: r }))).toBe(false);
+    expect(needsRerun(row({ outcome: "infra", reason: "NonZeroAgentExitCodeError, no verifier reward" }))).toBe(false);
+    expect(needsRerun(row({ outcome: "cap_stop", reason: "ledger cap stop" }))).toBe(false);
+  });
+  test("attempt 2 runs once per owed cell; its failure is missing; a stray attempt 2 is refused", () => {
+    const a = row({ task: "a", outcome: "infra", reason: "no result.json" }), b = row({ task: "b", outcome: "infra", reason: "no result.json" });
+    const r = infraRerun([a, b, row({ task: "c" })], [row({ task: "a" }), row({ task: "b", outcome: "infra", reason: "no result.json" })]);
+    expect(r.rerun).toEqual(["a\tnone", "b\tnone"]);
+    expect(r.missing).toEqual(["b\tnone"]);
+    expect(r.rects.map((x) => x.attempts)).toEqual([1]);
+    expect(() => infraRerun([a], [row({ task: "c" })])).toThrow("E_USAGE hm rerun");
+  });
+});
+
+describe("launch guard", () => {
+  const approved = () => { const d = tmp(); const out: Partial<Record<Item, any[]>> = {}; for (const i of items) { approve(join(d, i + ".jsonl"), i, CAPS_USD[i], "t"); out[i] = readRows(join(d, i + ".jsonl")); } return { d, out }; };
+  test("the line: items not done at their caps plus the crew, inside 3,000 and past it", () => {
+    const { out } = approved();
+    expect(lineCheck(out, crew(400_000)).total).toBe(toMicros(2880));
+    expect(lineCheck(out, crew(520_000)).fits).toBe(true);
+    expect(lineCheck(out, crew(520_010)).fits).toBe(false);
+    const p = join(tmp(), "d.jsonl");
+    approve(p, "stage1-p1", 70, "t");
+    const l = new Ledger(p, "stage1-p1");
+    l.reserve("x", toMicros(10)); l.settle("x", toMicros(9));
+    markDone(p, "stage1-p1");
+    expect(lineCheck({ ...out, "stage1-p1": readRows(p) }, crew(0)).total).toBe(toMicros(2480 - 70 + 9));
+  });
+  test("C1: every session item fits fresh, and VM rows that would push the projection past the cap refuse", () => {
+    for (const i of Object.keys(ITEMS) as Item[]) expect(c1Guard(i, [], itemPlan(i, lists).parts, []).fits).toBe(true);
+    const parts = itemPlan("stage1-opus", lists).parts, fresh = c1Guard("stage1-opus", [], parts, []);
+    expect(fresh.parallel).toBe(toMicros(30));
+    expect(fresh.host).toBe(toMicros(78 * 0.08));
+    const p = join(tmp(), "c.jsonl");
+    approve(p, "stage1-opus", 150, "t");
+    const l = new Ledger(p, "stage1-opus");
+    l.reserve("stage1-opus/s1-1/a", toMicros(20)); l.settle("stage1-opus/s1-1/a", toMicros(20));
+    expect(c1Guard("stage1-opus", readRows(p), parts, []).fits).toBe(true);
+    l.reserve("stage1-opus/s1-1/vm", toMicros(30)); l.settle("stage1-opus/s1-1/vm", toMicros(30));
+    const g = launchGuard("stage1-opus", { "stage1-opus": readRows(p) }, crew(0), parts, []);
+    expect(g.ok).toBe(false);
+    expect(g.why[0]).toStartWith("C1: stage1-opus's projection");
+    expect(launchGuard("stage1-opus", { "stage1-opus": readRows(p) }, crew(0), parts, ["s1-1"]).ok).toBe(true);
+  });
+  test("hm launch runs the guard first: a refusal exits 3 with E_HM_LAUNCH and starts nothing; a pass reaches L1", () => {
+    const { d } = approved(), work = tmp();
+    writeFileSync(join(work, "plan.json"), JSON.stringify({ item: "stage1-opus", parts: itemPlan("stage1-opus", lists).parts }));
+    const c = join(tmp(), "crew.json");
+    writeFileSync(c, JSON.stringify(crew(600_000)));
+    const env = { HM_LEDGERS: d, HM_CREW: c, LEDGER: join(d, "stage1-opus.jsonl") };
+    const bad = run(["launch", work, "--part", "s1-1"], env);
+    expect(bad.exitCode).toBe(3);
+    expect(bad.stderr.toString()).toStartWith("E_HM_LAUNCH stage1-opus: the line: all-in $3080.00");
+    writeFileSync(c, JSON.stringify(crew(100_000)));
+    const ok = run(["launch", work, "--part", "s1-1"], env);
+    expect(ok.stdout.toString()).toStartWith("HM_LAUNCH PASS stage1-opus");
+    expect(ok.stderr.toString()).not.toContain("E_HM_LAUNCH");
+    expect(run(["launch", work, "--part", "s1-1"], { HM_CREW: c }).stderr.toString()).toStartWith("E_USAGE hm launch guard");
+  });
+});

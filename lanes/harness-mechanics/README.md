@@ -99,3 +99,24 @@ Readings taken where the plan leaves a choice (the most literal one each time):
 ## Tests
 
 bun test tests/harness-mechanics/ runs keylessly.
+
+## Ledger, launch guard and task-fit screen (unit 6)
+
+- money.ts: each item's approval row at its recorded cap (any other amount is refused), the done mark, the line and C1 guard
+  that runs before host-up, launch and relaunch, section 13's infrastructure rerun, and dry-run steps 6-ledger,
+  leases-per-item and reserve-mechanics.
+- screen.ts: the task-fit screen and its VM shape.
+
+Commands:
+
+- hm approve --ledger <item>.jsonl --item <item> --usd <cap> --approved-by <who>, and hm done --ledger <jsonl> --item <item>
+  once every launch of the item has settled.
+- hm guard <work> prints the guard. host-up, launch and relaunch run it first and exit 3 with E_HM_LAUNCH when the line or
+  the item's C1 projection does not fit. Inputs: LEDGER (or the host mirror in <work>/host/ledger.jsonl), HM_LEDGERS (a
+  folder of <item>.jsonl for the other items) and HM_CREW (the crew file: as_of and threads [{code, credits}], from each
+  thread's counter).
+- hm screen --out <dir> (HM_GSTACK at the pin, Docker) writes screened.txt, detect.json and screen.txt. hm screen-vm start
+  <work> leases the screen VM on the vms ledger (LEDGER), starts one VM under the pinned ubi-runner.sh (UBI_RUNNER,
+  UBI_OWNER) and runs the screen there detached; hm screen-vm finish <work> pulls the results, destroys the VM and settles
+  the lease. Then set HM_SCREENED and HM_SCREENED_SHA256 to screened.txt and its digest.
+

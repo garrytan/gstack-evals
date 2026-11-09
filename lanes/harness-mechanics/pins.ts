@@ -185,3 +185,20 @@ export const VERIFY_PATCH = {
   item: { id: "check-after-edit", kind: "check_after_last_edit", fix: "run a full check after your last edit before you stop, and show its result" },
 } as const;
 
+
+// Section 22's planning rates per session (L1's Claude Code runs on this pool) and a picker call's, and the VM hours a
+// session takes. The launch guard projects an item's model spend and VM share from them.
+export const RATES_USD = {
+  none: { opus: 0.4, sol: 0.52, p1: 0.18 },
+  told: { opus: 0.55, sol: 0.67, p1: 0.21 },
+  judge: { opus: 0.57, sol: 0.68, p1: 0.21 },
+  picker: 0.06,
+} as const;
+export const VM_HOURS_PER_SESSION = 0.05;
+
+// The task-fit screen (section 3): gstack-checks detect at gstackPin in each task's pristine container, from the task's
+// workdir; at most perRepo tasks of one repository in a split; drop step 3 keeps the first dropScored scored tasks. On a
+// VM it runs on one standard-16 under the pinned ubi-runner.sh (L1's copy), leased on the vms ledger for vmHours.
+export const SCREEN = { workdir: "/testbed", perRepo: 4, dropScored: 180, detectTimeoutSec: 300, pullWaitSec: 900, vmSize: "standard-16", vmHours: 12 } as const;
+export const UBI_RUNNER = { file: "quick/laneb/l1/ubi-runner.sh", sha256: "c040c5b5d040fcdeec5cf0b545601dd1c55124a9e7cd55e56e0dcb4b80d097b2" } as const;
+

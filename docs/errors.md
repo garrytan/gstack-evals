@@ -143,6 +143,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OUTCOME_IMAGE](#e_outcome_image) | 2 | U20 |
 | [E_HM_INPUT](#e_hm_input) | 2 | U20 |
 | [E_HM_NOT_BUILT](#e_hm_not_built) | 2 | U20 |
+| [E_HM_LAUNCH](#e_hm_launch) | 3 | U20 |
+| [E_HM_SCREEN](#e_hm_screen) | 1 | U20 |
 | [E_HM_PIN](#e_hm_pin) | 2 | U20 |
 | [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
 | [E_TBV_INPUT](#e_tbv_input) | 2 | U20 |
@@ -267,6 +269,14 @@ A review no-loss comparison found the variant worse than the reference: the non-
 Fix: Read the comparison's losses: the blockers the reference found and the variant missed. Restore what the variant dropped and score a new arm; never rerun the same arm to change a verdict.
 
 Exit 1. Side effects: None: noloss score reads ingested arms and writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
+
+### E_HM_SCREEN
+
+The harness mechanics task-fit screen could not decide (lanes/harness-mechanics/screen.ts): gstack-checks detect exited 3 for want of a pregate context (no origin/&lt;base> ref in the task's container), so every task would read the same and no screened lists were written.
+
+Fix: Take it to the lead: the screen needs a decision on how detect gets a base ref in a pristine container before it can run. Nothing was replaced.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 2: no verdict (INCOMPLETE)
 
@@ -1359,6 +1369,14 @@ An egress probe to a non-model host succeeded, so the trial network is not locke
 Fix: Fix the trial network so its only exit is the proxy, and run no trials until this passes.
 
 Exit 3. Side effects: Calibration sessions are charged; no task cell ran. Retry safe: yes. Resumable: no. Owner: U10.
+
+### E_HM_LAUNCH
+
+A harness mechanics launch was refused before it started (lanes/harness-mechanics/money.ts launchGuard): the 3,000 line all-in (each item's settled and open spend, an item not done at its cap, and the crew file's credits) would pass, the item's C1 projection (its model spend so far, its parts still to run at section 22's planning rates and its parallel allowances, plus its host and part-VM reserves at L1's rates) would pass its cap, or the item is marked done. The message says what doesn't fit.
+
+Fix: Take the line to the Captain before launching. The Captain can move room from the vms item to the stage item, leaving the total unchanged; then record the raise on the item's ledger and run the launch again.
+
+Exit 3. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Warnings: attach to any verdict, never change the exit code
 
