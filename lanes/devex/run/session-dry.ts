@@ -89,6 +89,8 @@ const MODEL_OF = (m: string) => (Object.entries(MODEL_STRINGS).find(([, s]) => m
 const flat = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (typeof b?.text === "string" ? b.text : typeof b?.content === "string" ? b.content : "")).join("\n") : "");
 
 interface Seen {
+  /** <work>/.gstack-home exists when the agent starts. */
+  rootAtStart: boolean;
   workTop: string[];
   planHead: string;
   root: string | null;
@@ -192,7 +194,7 @@ async function main(): Promise<DryCheck[]> {
             mkdirSync(o.env.HOME!, { recursive: true });
             install(arm)(o.env.HOME!);
             const skills = existsSync(join(o.env.HOME!, ".claude", "skills")) ? readdirSync(join(o.env.HOME!, ".claude", "skills")).sort() : [];
-            seen.set(o.work, { workTop: readdirSync(o.work).sort(), planHead: existsSync(join(o.work, "plan.md")) ? readFileSync(join(o.work, "plan.md"), "utf8").split("\n")[0]! : "", root: atRoot, homeSkills: skills, state: walk(join(o.work, STATE_ROOT_DIR)).sort(), gstackEnv: Object.keys(o.env).filter((k) => k.startsWith("GSTACK_")).sort() });
+            seen.set(o.work, { rootAtStart: existsSync(join(o.work, STATE_ROOT_DIR)), workTop: readdirSync(o.work).sort(), planHead: existsSync(join(o.work, "plan.md")) ? readFileSync(join(o.work, "plan.md"), "utf8").split("\n")[0]! : "", root: atRoot, homeSkills: skills, state: walk(join(o.work, STATE_ROOT_DIR)).sort(), gstackEnv: Object.keys(o.env).filter((k) => k.startsWith("GSTACK_")).sort() });
             return {
               exec: (command, timeoutMs) => {
                 const r = spawnSync("sh", ["-c", command], { cwd: o.work, env: o.env, timeout: timeoutMs, encoding: "utf8" });
@@ -285,6 +287,10 @@ async function main(): Promise<DryCheck[]> {
       [(["lens", "plan-devex-review", "autoplan"] as ArmId[]).every((a) => smokeSessions.some((x) => x.session.endsWith(":" + a + ":1") && x.prompt_sha256 === DX_PROMPT_SHA256[a])), "each arm ran dxPrompt(arm) byte for byte"],
       [armOpts("lens").every((o) => o.sessionKind === undefined && o.skill === null) && armOpts("plan-devex-review").every((o) => o.sessionKind === "unattended") && armOpts("autoplan").every((o) => o.sessionKind === "interactive") && smokeOpts.every((o) => o.disable1mContext === true && o.systemPrompt === "claude-code-preset" && o.maxTurns === 200 && o.capStops === true && o.memoryLog === true), "GSTACK_SESSION_KIND unattended for plan-devex-review, interactive for autoplan and unset for lens; the 1M context off, the preset system prompt, 200 turns and cap stops in every arm"],
       [pdr?.session_kind === "unattended" && pdr.lean === null && ap?.session_kind === "interactive" && ap.lean === true && row(sRows, "c09:opus:lens:1")?.session_kind === null, "the rows record unattended for plan-devex-review and interactive with lean mode for autoplan, from the pin's own script in the session's env"],
+      [(["none", "lens", "plan-devex-review", "autoplan"] as const).every((a) => {
+        const of = [...seen].filter(([w]) => w.includes("/" + a + "/"));
+        return of.length > 0 && of.every(([, v]) => v.rootAtStart === (a === "plan-devex-review" || a === "autoplan"));
+      }), "<work>/" + STATE_ROOT_DIR + " does not exist when the agent starts in any none session (the s1-none batch) or lens session (the s1-smoke batch), and exists in every plan-devex-review and autoplan session as that arm's own gstack state"],
       [works.length > 0 && works.every(([, v]) => v.root === "/work" && v.workTop.join(",") === (v.homeSkills.length ? STATE_ROOT_DIR + ",plan.md,repo" : "plan.md,repo") && v.state.every((f) => /^\.[a-z-]+$|^config\.yaml$|^global-question-preferences\.json$/.test(f))) && workOf("autoplan").length > 0 && workOf("autoplan").every(([, v]) => v.planHead === "## Implementation plan" && v.state.includes("global-question-preferences.json")) && workOf("lens").every(([, v]) => v.planHead.startsWith("# Plan") && v.homeSkills.length === 0 && !v.state.includes("global-question-preferences.json")), "every session's work dir is mounted at /work; a gstack arm's holds plan.md, repo/ and the harness's " + STATE_ROOT_DIR + " state root (onboarding markers and config.yaml, no skill, bin or instruction file), and lens's holds plan.md and repo/ only; key.json, alias.json and unit.json are absent; autoplan sees the wrapped plan and the plan-tune state pinned empty; lens has no skills folder and no plan-tune file"],
       [DISALLOWED_TOOLS.includes("WebSearch") && DISALLOWED_TOOLS.includes("WebFetch"), "the driver denies WebSearch and WebFetch"],
       [[...seen.entries()].some(([w]) => w.includes("/none/")) && [...seen.entries()].filter(([w]) => /\/(none|lens)\//.test(w)).every(([, v]) => v.workTop.join(",") === "plan.md,repo" && v.state.length === 0 && v.gstackEnv.length === 0) && [...seen.entries()].filter(([w]) => /\/(plan-devex-review|autoplan)\//.test(w)).every(([, v]) => v.gstackEnv.includes("GSTACK_STATE_ROOT") && v.gstackEnv.includes("GSTACK_HOME")), "none and lens sessions in both batches see plan.md and repo/ only, with no gstack state root and no GSTACK_STATE_ROOT or GSTACK_HOME in their env; the gstack arms keep both"],
