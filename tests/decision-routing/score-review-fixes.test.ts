@@ -8,7 +8,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { testPassLabel, type DockerRunner } from "../../lanes/decision-routing/labels/container.ts";
-import { actingRates } from "../../lanes/decision-routing/score/acting.ts";
+import { actingRates, deciderFailures } from "../../lanes/decision-routing/score/acting.ts";
 import { main } from "../../lanes/decision-routing/score/cli.ts";
 import { callUsd, loadPrices, readJournal } from "../../lanes/decision-routing/score/session.ts";
 
@@ -29,8 +29,13 @@ const METER = JSON.parse(readFileSync(join(FIX, "meter.R-opus-alpha-1.json"), "u
 const own = records("journal.R-opus-alpha-1.ndjson");
 const opusRequest: Record<string, any> = { ...own.find((l) => l.kind === "request" && l.provider === "anthropic")!, reservation_id: "rsv_unknown" };
 const unknownOutcome = { ...own.find((l) => l.kind === "outcome" && l.reservation_id !== opusRequest.reservation_id)!, reservation_id: "rsv_unknown", status: 200, outcome: { kind: "unknown" }, reason: "the stream ended without usage" };
+const NO_TOKENS = { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
+const bookedRequest = { ...opusRequest, reservation_id: "rsv_booked_5xx" };
+const bookedOutcome = { ...unknownOutcome, reservation_id: "rsv_booked_5xx", status: 502, outcome: { kind: "spent", spent_micros: opusRequest.max_micros, usage: NO_TOKENS }, reason: "a 5xx without usage is charged at its reservation" };
+const freeRequest = { ...opusRequest, reservation_id: "rsv_free_4xx" };
+const freeOutcome = { ...unknownOutcome, reservation_id: "rsv_free_4xx", status: 400, outcome: { kind: "spent", spent_micros: 0, usage: NO_TOKENS }, reason: undefined };
 const JOURNAL = join(tmp, "journal.ndjson");
-writeFileSync(JOURNAL, [...own, opusRequest, unknownOutcome, ...records("journal.no-usage-5xx.ndjson")].map((l) => JSON.stringify(l)).join("\n") + "\n");
+writeFileSync(JOURNAL, [...own, opusRequest, unknownOutcome, bookedRequest, bookedOutcome, freeRequest, freeOutcome, ...records("journal.no-usage-5xx.ndjson")].map((l) => JSON.stringify(l)).join("\n") + "\n");
 
 describe("the scorer's bill", () => {
   test("an unknown outcome costs its request's full reservation, as meterSpend charges it; a no-usage 5xx under DR_ALLOWANCE_STOP stays $0", () => {
@@ -39,6 +44,28 @@ describe("the scorer's bill", () => {
     const unknown = calls.get(METER)!.find((c) => c.reservation_id === "rsv_unknown")!;
     expect(callUsd(unknown, prices)).toBeCloseTo(opusRequest.max_micros / 1e6, 12);
     expect(calls.get("m_c9f3397de2c4f586ade06d2e")!.map((c) => callUsd(c, prices))).toEqual([0]);
+  });
+  test("a call without usage costs what the proxy booked: a 5xx outside DR_ALLOWANCE_STOP its reservation, a $0 settle $0", () => {
+    const calls = readJournal([JOURNAL]).get(METER)!;
+    const prices = loadPrices(PRICES);
+    expect(callUsd(calls.find((c) => c.reservation_id === "rsv_booked_5xx")!, prices)).toBeCloseTo(opusRequest.max_micros / 1e6, 12);
+    expect(callUsd(calls.find((c) => c.reservation_id === "rsv_free_4xx")!, prices)).toBe(0);
+  });
+});
+
+describe("degraded cells", () => {
+  const ok = (i: number) => real("ladder-R-opus:1", { decision_id: "ok:" + i });
+  const skipped = (i: number) => {
+    const d = real("ladder-R-opus:1", { decision_id: "skip:" + i });
+    d.layers.jev = { ...d.layers.jev, answer: null, p_yes: null, conf: null, ok: false, error: "state_over_limit", retries: 0, latency_ms: 0, usage: NO_TOKENS, guess_shown: false };
+    return d;
+  };
+  const failed = real("ladder-R-opus:12");
+  test("a Jev layer skipped as state_over_limit made no call, so it never counts as a failed decider call", () => {
+    const under = [...Array.from({ length: 16 }, (_, i) => ok(i)), ...Array.from({ length: 3 }, (_, i) => skipped(i)), failed];
+    expect(deciderFailures(under)).toEqual([{ model: "opus", cell: "R", decisions: 20, failed: 1, share: 0.05, degraded: false }]);
+    const over = [...Array.from({ length: 15 }, (_, i) => ok(i)), ...Array.from({ length: 3 }, (_, i) => skipped(i)), failed];
+    expect(deciderFailures(over)).toEqual([{ model: "opus", cell: "R", decisions: 19, failed: 1, share: 1 / 19, degraded: true }]);
   });
 });
 
@@ -113,6 +140,8 @@ describe("score report", () => {
     expect(json.opus.degraded["R-P"]).toEqual(json.opus.degraded["R-N"]);
     expect(text).toContain("calls with an unknown outcome (no usage came back), charged at their full reservation:\n  opus R: 1, reserved $0.67\n");
     expect(json.unknown_calls).toEqual({ "opus R": { count: 1, reserved_micros: opusRequest.max_micros } });
+    expect(text).toContain("calls without usage that the proxy booked above $0, charged at that booked charge:\n  opus R: 1, booked $0.67\n");
+    expect(json.booked_no_usage_calls).toEqual({ "opus R": { count: 1, booked_micros: opusRequest.max_micros } });
     expect(text).toContain("test-pass labels dropped because the command is not a bare runner (lanes/decision-routing/README.md), per model, cell and acting layer:\n  opus R particle: 1\n");
     expect(json.label_drops_not_bare_runner).toEqual({ "opus R particle": 1 });
   });

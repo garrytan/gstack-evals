@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Session outcomes from Harbor trial directories (prereg section 10). Success is the verifier's reward. The bill is every
 // call the proxy journalled for the session's meter, priced from the dated table by its usage fields; a call whose outcome
-// is unknown (no usage came back) costs its full reservation, as the controller's meterSpend charges it. Time is the
+// is unknown (no usage came back) costs its full reservation, as the controller's meterSpend charges it, and a spent call
+// with no usage costs what the proxy booked for it (a 5xx outside DR_ALLOWANCE_STOP: its reservation). Time is the
 // session's own clock (first model call to end) from dr-summary.json. Stops (step, wall, allowance) are graded; an
 // allowance stop is never a gap. Infrastructure, a Harbor exception, a session that never entered and a session with no
 // reward are missing: coverage gaps, never fails.
@@ -9,7 +10,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 
 export interface Usage { input: number; output: number; reasoning: number; cache_read: number; cache_write: number }
-export interface Call { reservation_id: string; provider: string; model: string; status: number | null; usage: Usage; latency_ms: number | null; reserved_micros?: number }
+export interface Call { reservation_id: string; provider: string; model: string; status: number | null; usage: Usage; latency_ms: number | null; reserved_micros?: number; booked_micros?: number }
 export interface PriceRow { input: number; output: number; cache_read?: number; cache_write?: number; long?: { above_input_tokens: number; input: number; output: number; cache_read?: number; cache_write?: number } }
 export interface PriceTable { date: string; models: Record<string, PriceRow> }
 
@@ -51,7 +52,9 @@ export function readJournal(paths: readonly string[]): Map<string, Call[]> {
       if (r.kind === "request") requests.set(r.reservation_id, { provider: r.provider, model: r.model, max_micros: r.max_micros });
       if (r.kind !== "outcome") continue;
       const u = r.outcome?.usage ?? r.usage ?? {};
-      outcomes.push({ meter: r.meter_id, call: { reservation_id: r.reservation_id, provider: "", model: "", status: r.status ?? null, usage: { input: num(u.input), output: num(u.output), reasoning: num(u.reasoning), cache_read: num(u.cache_read), cache_write: num(u.cache_write) }, latency_ms: typeof r.latency_ms === "number" ? r.latency_ms : null }, unknown: r.outcome?.kind !== "spent" });
+      const usage = { input: num(u.input), output: num(u.output), reasoning: num(u.reasoning), cache_read: num(u.cache_read), cache_write: num(u.cache_write) };
+      const booked = r.outcome?.kind === "spent" && num(r.outcome.spent_micros) > 0 && Object.values(usage).every((v) => v === 0) ? { booked_micros: r.outcome.spent_micros as number } : {};
+      outcomes.push({ meter: r.meter_id, call: { reservation_id: r.reservation_id, provider: "", model: "", status: r.status ?? null, usage, latency_ms: typeof r.latency_ms === "number" ? r.latency_ms : null, ...booked }, unknown: r.outcome?.kind !== "spent" });
     }
   }
   const byMeter = new Map<string, Call[]>();
@@ -67,12 +70,13 @@ export function readJournal(paths: readonly string[]): Map<string, Call[]> {
 }
 
 /** Dollars for one call: fresh input, cache read, cache write, and output plus reasoning at the dated row; an unknown
- *  outcome's full reservation. */
+ *  outcome's full reservation; a spent call with no usage, what the proxy booked. */
 export function callUsd(call: Call, prices: PriceTable): number {
   const key = call.provider + ":" + call.model;
   const row = prices.models[key];
   if (!row) throw new Error("no price row for " + key + " in the dated price table of " + prices.date);
   if (call.reserved_micros !== undefined) return call.reserved_micros / 1e6;
+  if (call.booked_micros !== undefined) return call.booked_micros / 1e6;
   const u = call.usage;
   const rates = row.long && u.input + u.cache_read + u.cache_write > row.long.above_input_tokens ? row.long : row;
   return (u.input * rates.input + u.cache_read * (rates.cache_read ?? rates.input) + u.cache_write * (rates.cache_write ?? rates.input) + (u.output + u.reasoning) * rates.output) / 1e6;

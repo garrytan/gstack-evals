@@ -70,15 +70,15 @@ export function actingRates(decisions: ReadonlyArray<Record<string, any>>, summa
   };
 }
 
-/** Per creative model and cell: decisions with a decider call that failed after its retry (any layer with ok false),
- *  over all the cell's decisions; degraded when the share is strictly over 5%. */
+/** Per creative model and cell: decisions with a decider call that failed after its retry (any layer with ok false,
+ *  except a Jev layer skipped as state_over_limit, which made no call), over all the cell's decisions; degraded when the share is strictly over 5%. */
 export function deciderFailures(decisions: ReadonlyArray<Record<string, any>>): FailureRow[] {
   const rows = new Map<string, FailureRow>();
   for (const d of decisions) {
     const k = d.model + " " + d.cell;
     const r = rows.get(k) ?? { model: d.model, cell: d.cell, decisions: 0, failed: 0, share: 0, degraded: false };
     r.decisions++;
-    if (Object.values(d.layers ?? {}).some((l: any) => l?.ok === false)) r.failed++;
+    if (Object.values(d.layers ?? {}).some((l: any) => l?.ok === false && l.error !== "state_over_limit")) r.failed++;
     rows.set(k, r);
   }
   return [...rows.values()].map((r) => ({ ...r, share: r.failed / r.decisions, degraded: r.failed / r.decisions > DEGRADED_SHARE })).sort((x, y) => (x.model + x.cell).localeCompare(y.model + y.cell));

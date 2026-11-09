@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals decision-routing score: per creative model, Primary A (R against N), Primary B (R against P) and P against
 // N in Primary A's form with no verdict; stops per cell and kind; reruns and missing per cell (prereg line 206); 5xx calls
-// settled at $0 with their shadow reservations; calls with an unknown outcome, charged at their reservation; cells whose
+// settled at $0 with their shadow reservations; calls with an unknown outcome, charged at their reservation; calls
+// without usage that the proxy booked above $0, charged at that booked charge; cells whose
 // decider failures pass 5% (DR_CELL_DEGRADED, beside the verdicts they touch); test-pass labels dropped because the
 // command is not a bare runner; sessions that hit the image's base env; S10 acting rates.
 //   score --trials <dir>... --journal <file>... --prices <prices.json> --planned <planned.json> --admission <admission.json> [--labels <labels.jsonl>...] [--json <out>]
@@ -84,8 +85,15 @@ export async function main(argv: string[]): Promise<number> {
   }
   for (const a of attempts) if (a.meter_id) owner.set(a.meter_id, a.model + " " + a.cell);
   const unknown = new Map<string, { count: number; reserved_micros: number }>();
+  const booked = new Map<string, { count: number; booked_micros: number }>();
   for (const [meter, calls] of ctx.calls) {
     for (const c of calls) {
+      if (c.booked_micros !== undefined) {
+        const k = owner.get(meter) ?? "no session", b = booked.get(k) ?? { count: 0, booked_micros: 0 };
+        b.count++;
+        b.booked_micros += c.booked_micros;
+        booked.set(k, b);
+      }
       if (c.reserved_micros === undefined) continue;
       const k = owner.get(meter) ?? "no session", u = unknown.get(k) ?? { count: 0, reserved_micros: 0 };
       u.count++;
@@ -94,6 +102,7 @@ export async function main(argv: string[]): Promise<number> {
     }
   }
   report.unknown_calls = Object.fromEntries(unknown);
+  report.booked_no_usage_calls = Object.fromEntries(booked);
   const free = new Map<string, { count: number; shadow_micros: number }>();
   for (const l of journals.flatMap(jsonl)) {
     if (l.kind !== "outcome" || l.no_usage_5xx !== true) continue;
@@ -106,6 +115,7 @@ export async function main(argv: string[]): Promise<number> {
   report.base_env = Object.fromEntries(baseEnv);
   lines.push("", "5xx calls without usage settled at $0 (shadow: the reservations they would have charged):", ...(free.size ? [...free.entries()].sort().map(([k, f]) => "  " + k + ": " + f.count + ", shadow $" + (f.shadow_micros / 1e6).toFixed(2)) : ["  none"]));
   lines.push("", "calls with an unknown outcome (no usage came back), charged at their full reservation:", ...(unknown.size ? [...unknown.entries()].sort().map(([k, u]) => "  " + k + ": " + u.count + ", reserved $" + (u.reserved_micros / 1e6).toFixed(2)) : ["  none"]));
+  lines.push("", "calls without usage that the proxy booked above $0, charged at that booked charge:", ...(booked.size ? [...booked.entries()].sort().map(([k, b]) => "  " + k + ": " + b.count + ", booked $" + (b.booked_micros / 1e6).toFixed(2)) : ["  none"]));
   lines.push("", "sessions that hit the image's base env (No module named, or the agent ran conda activate testbed):", ...[...baseEnv.entries()].sort().map(([k, b]) => "  " + k + ": " + b.hit + " of " + b.sessions));
   const labelRows = flags(argv, "--labels").flatMap(jsonl);
   const labels = new Map<string, unknown>(labelRows.map((l: any) => [l.decision_id, l.label]));
