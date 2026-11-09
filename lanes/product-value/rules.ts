@@ -6,6 +6,7 @@
 // rule, leak exposure and the MDD. Every band edge and gate compares values rounded to four decimal places.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { cutoffEnd as sharedCutoffEnd, designMdd as sharedDesignMdd, parsePower as sharedParsePower, scoreGold, type PowerRow as SharedPowerRow } from "../aftermath/readings.ts";
 import { clusteredPairedDelta, holmAdjusted, type PairedItem } from "../../src/runner/stats/paired.ts";
 import type { Io } from "./cli.ts";
 import { loadUnits, need, parseArgs, PvError, readJson, readRecords, readRows, refuseAliases, refuseInRepo, writeJson, type LoadedUnit } from "./io.ts";
@@ -129,33 +130,24 @@ export function judgeScore(model: ModelId, judge: string, cells: readonly CheckC
   const rng = seededRandom(o.seed);
   const antNon = cells.filter((c) => c.gold && c.kind !== "oracle");
   const antOracle = cells.filter((c) => c.gold && c.kind === "oracle");
-  const oracle = shuffle(antOracle, rng).slice(0, Math.min(antOracle.length, antNon.length));
-  const not = cells.filter((c) => !c.gold);
-  const used = [...antNon, ...oracle, ...not];
-  const lists = new Set(used.map((c) => c.list)).size;
-  const shortfall = o.minimum > 0 && (antNon.length + oracle.length < o.minimum || not.length < o.minimum || lists < o.minimum);
-  const real = used.filter((c) => c.kind === "arm");
-  const k = kappa(used.map((c) => [c.gold, c.judged] as const));
-  const kr = kappa(real.map((c) => [c.gold, c.judged] as const));
-  const gNot = used.filter((c) => !c.gold), gAnt = used.filter((c) => c.gold);
-  const kappaOk = k !== null && kr !== null && r4(k) >= KAPPA_BAR && r4(kr) >= KAPPA_BAR;
+  const g = scoreGold(cells, { minimum: o.minimum, bar: KAPPA_BAR, real: (c) => c.kind === "arm", capAnticipated: () => [...antNon, ...shuffle(antOracle, rng).slice(0, Math.min(antOracle.length, antNon.length))] });
   return {
     model,
     judge,
-    anticipated: antNon.length + oracle.length,
-    not: not.length,
+    anticipated: g.anticipated,
+    not: g.not,
     real_anticipated: antNon.filter((c) => c.kind === "arm").length,
     oracle_available: antOracle.length,
-    oracle_used: oracle.length,
-    lists,
+    oracle_used: g.anticipated - antNon.length,
+    lists: g.lists,
     unlabelled: o.unlabelled ?? 0,
-    shortfall,
-    catch_rate: gNot.length ? gNot.filter((c) => !c.judged).length / gNot.length : null,
-    false_fail: gAnt.length ? gAnt.filter((c) => !c.judged).length / gAnt.length : null,
-    kappa: k,
-    kappa_real: kr,
-    pass: !shortfall && kappaOk,
-    reading: shortfall ? "NO READ (judge)" : kappaOk ? "pass" : "kappa under 0.6",
+    shortfall: g.shortfall,
+    catch_rate: g.catch_rate,
+    false_fail: g.false_fail,
+    kappa: g.kappa,
+    kappa_real: g.kappa_real,
+    pass: g.pass,
+    reading: g.shortfall ? "NO READ (judge)" : g.kappa_ok ? "pass" : "kappa under 0.6",
   };
 }
 
@@ -484,11 +476,9 @@ export interface Cutoffs {
 
 /** A month-stated cutoff covers that whole month: "2026-06" reads as 2026-06-30. */
 export function cutoffEnd(c: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(c)) return c;
-  const m = /^(\d{4})-(\d{2})$/.exec(c);
-  if (!m) throw new PvError("E_USAGE", "cutoff " + JSON.stringify(c) + " is neither YYYY-MM nor YYYY-MM-DD");
-  const last = new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate();
-  return m[1] + "-" + m[2] + "-" + String(last).padStart(2, "0");
+  const end = sharedCutoffEnd(c);
+  if (end === null) throw new PvError("E_USAGE", "cutoff " + JSON.stringify(c) + " is neither YYYY-MM nor YYYY-MM-DD");
+  return end;
 }
 
 export function leakReading(metas: readonly UnitMeta[], model: ModelId, cutoffs: Cutoffs): { model: ModelId; stated: boolean; exposed: string[]; units: number; untested: boolean } {
@@ -514,14 +504,7 @@ export interface PowerRow {
 }
 export const MIX_MEAN: Readonly<Record<PowerRow["m"], number>> = { "1": 1, "1-2": 1.5, "2-4": 3 };
 
-export function parsePower(text: string): PowerRow[] {
-  const out: PowerRow[] = [];
-  for (const line of text.split("\n")) {
-    const m = /^m (\S+)\s+p0 ([\d.]+)\s+rho ([\d.]+)\s+n (\d+)\s+passes (\d+)\s+MDD05 ([\d.]+|None)\s+MDD025 ([\d.]+|None)/.exec(line.trim());
-    if (m && m[6] !== "None" && m[7] !== "None") out.push({ m: m[1] as PowerRow["m"], p0: Number(m[2]), rho: Number(m[3]), n: Number(m[4]), passes: Number(m[5]), mdd05: Number(m[6]), mdd025: Number(m[7]) });
-  }
-  return out;
-}
+export const parsePower = (text: string): PowerRow[] => sharedParsePower(text) as PowerRow[];
 
 /**
  * The design MDD (section 12): the power.txt item mix nearest the audited units' mean items a unit (a tie takes the
@@ -529,15 +512,12 @@ export function parsePower(text: string): PowerRow[] {
  * end over ICC and control rate, at alpha 0.025. A larger stage 1 re-estimate governs.
  */
 export function designMdd(rows: readonly PowerRow[], o: { meanItems: number; n: number; passes: number; stage1?: number | null }): { mdd: number; mix: string[]; n: number; table: number; source: "table" | "stage 1" } {
-  const ns = [...new Set(rows.map((r) => r.n))].sort((a, b) => a - b);
-  const n = [...ns].reverse().find((x) => x <= o.n) ?? ns[0]!;
-  const dist = (m: PowerRow["m"]) => Math.abs(MIX_MEAN[m] - o.meanItems);
-  const best = Math.min(...(Object.keys(MIX_MEAN) as PowerRow["m"][]).map(dist));
-  const mixes = (Object.keys(MIX_MEAN) as PowerRow["m"][]).filter((m) => Math.abs(dist(m) - best) < 1e-9);
-  const table = Math.max(...rows.filter((r) => mixes.includes(r.m) && r.n === n && r.passes === o.passes).map((r) => r.mdd025));
-  if (!Number.isFinite(table)) throw new PvError("E_USAGE", "power.txt has no row at " + n + " units and " + o.passes + " passes");
-  const s1 = o.stage1 ?? null;
-  return s1 !== null && s1 > table ? { mdd: s1, mix: mixes, n, table, source: "stage 1" } : { mdd: table, mix: mixes, n, table, source: "table" };
+  const d = sharedDesignMdd(rows as readonly SharedPowerRow[], MIX_MEAN, o);
+  if (d === null) {
+    const ns = [...new Set(rows.map((r) => r.n))].sort((a, b) => a - b);
+    throw new PvError("E_USAGE", "power.txt has no row at " + ([...ns].reverse().find((x) => x <= o.n) ?? ns[0]!) + " units and " + o.passes + " passes");
+  }
+  return d;
 }
 
 // ---- The command ----

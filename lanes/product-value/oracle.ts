@@ -3,6 +3,7 @@
 // anchor. A script, with no model call, turns the unit's primary items into changes that each name one item's need,
 // in primary rank order, one change per item and at most five. A unit with six primary items leaves its sixth out
 // (a change list holds five changes), so its oracle list can earn at most five of six.
+import { oracleChanges } from "../aftermath/oracle.ts";
 import type { Io } from "./cli.ts";
 import { loadUnits, need, parseArgs, PvError, refuseAliases, refuseInRepo, writeJson } from "./io.ts";
 import type { Key } from "./types.ts";
@@ -11,9 +12,7 @@ export const ORACLE_PREFIX = "Plan for this need before launch: ";
 
 /** The oracle list for one key: one change per primary item, the first five in rank order. */
 export function oracleList(key: Key): { changes: string[]; items: string[] } {
-  const byId = new Map(key.items.map((i) => [i.id, i]));
-  const items = key.primary.slice(0, 5);
-  return { changes: items.map((id) => ORACLE_PREFIX + byId.get(id)!.statement.trim()), items };
+  return oracleChanges(key.items, key.primary, 5, (i) => ORACLE_PREFIX + i.statement.trim());
 }
 
 export interface OracleFile {
