@@ -28,6 +28,8 @@ FULL_SAMPLE = 40
 GOLD_PER_CLASS = 40
 BAR_LAND = 0.90
 BAR_SHARE = 0.80
+LEAN_CELLS = [16] * 6 + [21] * 16
+FULL_CELLS = [18] * 9 + [24] * 3 + [27]
 
 T975 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131}
 
@@ -106,32 +108,33 @@ for rho, se, sp in ((0.05, 0.95, 0.95), (0.30, 0.95, 0.95), (0.30, 0.90, 0.85)):
     print(f"rho {rho:.2f}  sens {se:.2f}  spec {sp:.2f}  MDD {mdd if mdd is not None else '>0.60'}")
 print()
 
-def shares(n_runs, cells, mean, rho):
-    p = beta_draw(mean, rho, n_runs)
-    return rng.binomial(cells, p) / cells
+def shares(cells, mean, rho):
+    p = beta_draw(mean, rho, len(cells))
+    return rng.binomial(np.array(cells), p) / np.array(cells)
 
 def boot_mean(x):
     i = rng.integers(0, len(x), (BOOT, len(x)))
     return np.percentile(x[i].mean(1), [2.5, 97.5])
 
-print("Part C. AP-X-2 share of required outputs present, bar 0.80. columns: stratum, runs, cells a run, true mean, ICC rho, P(MET), P(NOT MET), P(UNCLEAR), median half-width")
-for name, n, cells in (("lean", 22, 18), ("full", 13, 30)):
+print("Part C. AP-X-2 share of required outputs present, bar 0.80. columns: stratum, runs, applicable cells a run (observed, lean consensus excluded), true mean, ICC rho, P(MET), P(NOT MET), P(UNCLEAR), median half-width")
+for name, cells, label in (("lean", LEAN_CELLS, "[16]*6+[21]*16"), ("full", FULL_CELLS, "[18]*9+[24]*3+[27]")):
+    n = len(cells)
     for rho in (0.10, 0.30):
         for mean in (0.50, 0.70, 0.80, 0.90, 0.95):
             v = []; hw = []
             for _ in range(SIMS):
-                ci = boot_mean(shares(n, cells, mean, rho))
+                ci = boot_mean(shares(cells, mean, rho))
                 v.append(verdict(ci[0], ci[1], BAR_SHARE)); hw.append((ci[1] - ci[0]) / 2)
             v = np.array(v)
-            print(f"{name}  n {n}  cells {cells}  mean {mean:.2f}  rho {rho:.2f}  MET {np.mean(v=='MET'):.3f}  NOT {np.mean(v=='NOT'):.3f}  UNC {np.mean(v=='UNC'):.3f}  halfwidth {np.median(hw):.3f}")
+            print(f"{name}  n {n}  cells {label}  mean {mean:.2f}  rho {rho:.2f}  MET {np.mean(v=='MET'):.3f}  NOT {np.mean(v=='NOT'):.3f}  UNC {np.mean(v=='UNC'):.3f}  halfwidth {np.median(hw):.3f}")
 print("lean minus full MDD (80% of 95% bootstrap intervals exclude 0), full held at 0.50:")
 for rho in (0.10, 0.30):
     mdd = None
     for d in np.round(np.arange(0.04, 0.52, 0.02), 2):
         ex = 0
         for _ in range(SIMS // 2):
-            a = shares(22, 18, 0.50 + d, rho); b = shares(13, 30, 0.50, rho)
-            ia = rng.integers(0, 22, (BOOT, 22)); ib = rng.integers(0, 13, (BOOT, 13))
+            a = shares(LEAN_CELLS, 0.50 + d, rho); b = shares(FULL_CELLS, 0.50, rho)
+            ia = rng.integers(0, len(LEAN_CELLS), (BOOT, len(LEAN_CELLS))); ib = rng.integers(0, len(FULL_CELLS), (BOOT, len(FULL_CELLS)))
             lo = np.percentile(a[ia].mean(1) - b[ib].mean(1), 2.5)
             ex += lo > 0
         if ex / (SIMS // 2) >= 0.80: mdd = d; break
