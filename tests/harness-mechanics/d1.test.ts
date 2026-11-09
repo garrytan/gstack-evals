@@ -34,11 +34,11 @@ const detachedTree = () => {
 const runSetup = (w: string, origin: string) => Bun.spawnSync(["sh", "-c", taskSetup().run], { cwd: w, env: { ...process.env, HM_ORIGIN: origin }, stdout: "pipe", stderr: "pipe" });
 
 describe("the lane file", () => {
-  test("is at its pinned sha256 and holds one PATH line with the task env first and one RUN", () => {
+  test("is at its pinned sha256 and holds one PATH line with both testbed envs first (D2) and one RUN", () => {
     const s = taskSetup();
     expect(sha256(readFileSync(TASK_SETUP.file))).toBe(TASK_SETUP.sha256);
-    expect(s.envDir).toBe("/opt/miniconda3/envs/testbed/bin");
-    expect(s.path).toBe("/opt/miniconda3/envs/testbed/bin:$PATH");
+    expect(s.envDirs).toEqual(["/opt/miniconda3/envs/testbed/bin", "/opt/conda/envs/testbed/bin"]);
+    expect(s.path).toBe("/opt/miniconda3/envs/testbed/bin:/opt/conda/envs/testbed/bin:$PATH");
     expect(s.text.split("\n").filter((l) => /^[A-Z]+ /.test(l)).map((l) => l.split(" ")[0])).toEqual(["ENV", "RUN"]);
   });
   test("the RUN gives a detached tree an origin whose main and HEAD are the base commit, and leaves the tree clean", () => {

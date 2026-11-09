@@ -194,8 +194,8 @@ function gstackMeta(arm: Exclude<HmTar, "none">, tree: string, fetchFile: string
 }
 
 export const ARMS_DIR = () => process.env.HM_ARMS_DIR ?? join(process.env.HOME ?? "", ".capy/work/hm/arms");
-const dockerOk = () => spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"], { encoding: "utf8" }).status === 0;
-const manifestOf = (arm: string) => join(REPO, "quick/laneb", HM.armManifests, arm + ".json");
+export const dockerOk = () => spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"], { encoding: "utf8" }).status === 0;
+export const manifestOf = (arm: string) => join(REPO, "quick/laneb", HM.armManifests, arm + ".json");
 
 // The scripted sessions and the in-image checks (sessions.ts) run once per dry run, as a subprocess: step 1 starts them,
 // step 2 reads the same sessions.json.

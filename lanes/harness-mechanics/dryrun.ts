@@ -13,6 +13,7 @@ import { stepPatterns, stepScorer } from "./score.ts";
 import { stepAmendment, stepAnalysis, stepVerdictTables } from "./synth.ts";
 import { stepLeases, stepLedger, stepReserve } from "./money.ts";
 import { stepD1Checks } from "./d1.ts";
+import { stepSessionPath } from "./session-path.ts";
 import { stepReplay } from "./replay-fake.ts";
 import { stepJudgeHooks } from "./judge-dryrun.ts";
 
@@ -54,6 +55,7 @@ export const STEPS: Step[] = [
   { name: "leases-per-item", units: [6], run: stepLeases },
   { name: "reserve-mechanics", units: [6], run: stepReserve },
   { name: "d1-checks", units: [5, 6], run: stepD1Checks },
+  { name: "d2-session-path", units: [5, 6], run: stepSessionPath },
   { name: "10-replay", units: [8], run: stepReplay },
 ];
 

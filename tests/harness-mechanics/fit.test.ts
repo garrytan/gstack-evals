@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { baseResult, fit, fitTasks } from "../../lanes/harness-mechanics/fit.ts";
+import { baseResult, fit, fitClass, fitTasks, type FitRow } from "../../lanes/harness-mechanics/fit.ts";
 import { bundleLists, sha256, taskSetup, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
 import { pool } from "../../lanes/harness-mechanics/screen.ts";
 
@@ -30,7 +30,7 @@ function rig(dir: string) {
     "  exec) ;;", "  *) exit 0;;", "esac",
     'case "$s" in',
     '  *"rev-parse origin/main HEAD"*) echo abc; echo abc;;',
-    '  *"command -v pytest"*) echo ' + taskSetup().envDir + "/pytest;;",
+    '  *"command -v pytest"*) case "$mode" in conda) echo /opt/conda/envs/testbed/bin/pytest;; nopy) echo /usr/bin/pytest;; *) echo ' + taskSetup().envDirs[0] + "/pytest;; esac;;",
     '  *HM_CANDIDATE*) echo "HM_CANDIDATE pkg/a.py 900"; if [ "$mode" = broad ]; then echo "HM_CANDIDATE pkg/b.py 400"; else echo "HM_CANDIDATE pkg/b.py 12"; fi;;',
     '  *HM_TEST*) echo "HM_TEST tests/test_b.py"; echo "HM_TEST tests/test_c.py";;',
     "  *'\"$C\" run'*) if [ \"$mode\" = broad ]; then echo 'CHECK lint ENV (ruff missing)'; echo 'CHECK typecheck ENV (mypy missing)'; echo 'CHECK tests TOO_BROAD (900 test files)'; else echo 'CHECK lint PASS'; echo 'CHECK tests FAIL (exit 1)'; fi;;",
@@ -57,13 +57,45 @@ describe("hm fit", () => {
     expect(rows[4]!.error).toMatch(/docker build hm-fit-5 failed: build broke/);
     const calls = readFileSync(join(dir, "calls"), "utf8");
     expect(calls).toContain("run -d --name hm-fit-1-prose --network none");
-    expect(calls).toContain("git checkout -q -- 'pkg/b.py' && " + taskSetup().envDir + "/pytest -q --color=no -p no:cacheprovider 'tests/test_b.py' 'tests/test_c.py'");
+    expect(calls).toContain("git checkout -q -- 'pkg/b.py' && " + taskSetup().envDirs[0] + "/pytest -q --color=no -p no:cacheprovider 'tests/test_b.py' 'tests/test_c.py'");
     expect(calls).toContain("echo '# hm d1 probe edit' >> 'pkg/a.py'");
     for (const n of [1, 2, 3]) expect(calls).toContain("rm -f hm-fit-" + n + "-prose\n");
     for (const n of [1, 2, 3]) expect(calls).toContain("rmi -f hm-fit-" + n + "\n");
     const md = readFileSync(join(out, "fit.md"), "utf8");
     expect(md).toContain("| scored | 3 | 1 | 1 | 1 | 2 | 1 | 0 |");
     expect(md).toContain("| calibration | 2 | 0 | 0 | 0 | 0 | 0 | 2 |");
+    expect(md).toContain("| S2 | 1 | 0 | 0 | 0 | 1 | 1 | 0 |");
+    expect(md).toContain("| no class | 2 | 0 | 0 | 0 | 0 | 0 | 2 |");
+  });
+  test("D2: a pytest under either testbed env is the task env's; one outside both stops the row", () => {
+    const dir = tmp(), out = join(dir, "out"), g = rig(dir);
+    writeFileSync(join(dir, "mode-1"), "conda"); writeFileSync(join(dir, "mode-2"), "nopy");
+    const rows = fit(out, tasks.slice(0, 2), g);
+    expect(rows[0]!.error).toBeUndefined();
+    expect(rows[0]!.checks?.length).toBeGreaterThan(0);
+    expect(rows[1]!.error).toBe("pytest /usr/bin/pytest, not under " + taskSetup().envDirs.join(" or "));
+  });
+  test("HM_FIT_TAG names the images and containers, so parallel workers don't collide", () => {
+    const dir = tmp(), out = join(dir, "out"), g = rig(dir);
+    process.env.HM_FIT_TAG = "hm-fit-w2";
+    try { fit(out, tasks.slice(0, 1), g); } finally { delete process.env.HM_FIT_TAG; }
+    expect(readFileSync(join(dir, "calls"), "utf8")).toContain("run -d --name hm-fit-w2-1-prose --network none");
+  });
+  test("fit classes: GEVA-504's seven, both ways", () => {
+    const row = (x: Partial<FitRow>): FitRow => ({ task: "a__b-1", split: "calibration", repo: "a/b", ...x });
+    const ck = (...v: string[]) => v.map((s) => ({ name: s.split(" ")[0]!, verdict: s.split(" ")[1]! }));
+    expect(fitClass(row({ checks: ck("lint ENV", "tests PASS") }))).toBe("S1");
+    expect(fitClass(row({ checks: ck("tests FAIL"), base_fail: { result: "fail", failed: 1, errors: 0, summary: "" } }))).toBe("S2");
+    expect(fitClass(row({ checks: ck("tests FAIL"), base_fail: { result: "pass" } }))).toBe("S3");
+    expect(fitClass(row({ checks: ck("tests FAIL"), base_fail: { result: "timeout" } }))).toBeNull();
+    expect(fitClass(row({ checks: ck("lint PASS", "tests ENV") }))).toBe("S4");
+    expect(fitClass(row({ checks: ck("typecheck FAIL", "tests TIMEOUT") }))).toBe("S4");
+    expect(fitClass(row({ checks: ck("lint ENV", "typecheck ENV", "tests TOO_BROAD") }))).toBe("S5");
+    expect(fitClass(row({ checks: ck("tests UNMAPPED") }))).toBe("S5");
+    expect(fitClass(row({ error: "no tracked module that a test_<name>.py names" }))).toBe("U1");
+    expect(fitClass(row({ error: "pytest missing, not under /opt/conda/envs/testbed/bin" }))).toBe("U2");
+    expect(fitClass(row({ error: "a__b-1: pull failed: manifest unknown" }))).toBeNull();
+    expect(fitClass(row({}))).toBeNull();
   });
   test("a rerun resumes from fit.jsonl: done rows call no docker, a missing row runs alone", () => {
     const dir = tmp(), out = join(dir, "out"), g = rig(dir);

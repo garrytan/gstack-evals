@@ -4,7 +4,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HmArm, HmScore } from "../../src/types.ts";
-import { admission, AMENDMENT, FIT_CLASSES, report, type Admission, type HmRowIn, type Iv, type ReportConfig } from "./analyze.ts";
+import { admission, AMENDMENT, report, type Admission, type HmRowIn, type Iv, type ReportConfig } from "./analyze.ts";
+import { FIT_CLASSES } from "./fit.ts";
 import type { StepResult } from "./dryrun.ts";
 import { MODELS, type ModelKey } from "./pins.ts";
 
@@ -118,7 +119,7 @@ export const KNOWN: Known[] = [
 // no verdict reads it). Each writes its tables' expected and actual readings under <out>/<step>/.
 const SIMS = 200;
 const admitted = new Map<string, Admission>();
-const FIT = Object.fromEntries([...Array(40).keys()].map((i) => [taskName(i), FIT_CLASSES[i % FIT_CLASSES.length]!.code]));
+const FIT = { sha256: "0".repeat(64), classes: Object.fromEntries([...Array(40).keys()].map((i) => [taskName(i), FIT_CLASSES[i % FIT_CLASSES.length]!.code])) };
 const adm = (name: string) => admitted.get(name) ?? admitted.set(name, admission(stage1(name), { sims: SIMS, fit: FIT })).get(name)!;
 const COSTS: Arms = { "verify-hook": (i) => ({ pass: none(i) && i % 5 !== 1, adherent: i % 2 === 0 }) };
 const save = (out: string, step: string, lines: string[]) => { mkdirSync(join(out, step), { recursive: true }); writeFileSync(join(out, step, "tables.txt"), lines.join("\n") + "\n"); };

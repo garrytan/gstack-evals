@@ -117,7 +117,7 @@ export function d1Rig(gstackDir?: string) {
     build(tag, ["FROM " + ref, "WORKDIR " + SCREEN.workdir, lanebPath, s.text].join("\n"));
     start(c, tag, "prose");
     origin(c);
-    const py = pytest(c), inEnv = py.startsWith(s.envDir + "/");
+    const py = pytest(c), inEnv = s.envDirs.some((d) => py.startsWith(d + "/"));
     // The edit, before any test runs: each candidate gets the one-line edit and its selection count, the first in range
     // keeps it, and the others are restored.
     const search = inEnv ? exec(c, CANDIDATES + ' | while read -r f; do echo "' + EDIT_LINE + '" >> "$f"; n=$(' + selected + ' | sed -n "s/^HM_SELECTED //p"); echo "HM_CANDIDATE $f ${n:--1}"; [ "${n:--1}" -ge 1 ] && [ "${n:--1}" -le ' + D1.maxSelected + ' ] && break; git checkout -q -- "$f"; done', 1800) : null;
@@ -141,7 +141,7 @@ export function stepD1Checks(out: string): StepResult {
       try {
         const tag = "hm-d1-" + tried, { c, py, inEnv, pick } = r.prepare(t, imageRef(p.get(t)!), tag), f = pick.edit?.file ?? "";
         if (pick.first && pick.first.selected > D1.maxSelected) lines.push("d1-checks fit " + t + ": first module " + pick.first.file + " selects " + pick.first.selected + ", over " + D1.maxSelected);
-        if (!inEnv) lines.push("d1-checks fit " + t + ": pytest " + (py || "missing") + ", not under " + s.envDir);
+        if (!inEnv) lines.push("d1-checks fit " + t + ": pytest " + (py || "missing") + ", not under " + s.envDirs.join(" or "));
         else if (!f) lines.push("d1-checks fit " + t + ": " + (pick.first ? "no module that a test_<name>.py names selects 1 to " + D1.maxSelected + " test files" : "no tracked module that a test_<name>.py names"));
         else {
           const before = exec(c, loop);
@@ -160,7 +160,7 @@ export function stepD1Checks(out: string): StepResult {
         start(none, tag, "none");
         origin(none);
         const np = pytest(none), g = exec(none, "find /root /testbed/.claude -iname '*gstack*' -print 2>/dev/null | head -5").out.trim();
-        if (!np.startsWith(s.envDir + "/") || g) throw new Error("the none tar: pytest " + (np || "missing") + (g ? ", gstack files " + g.split("\n").join(", ") : ""));
+        if (!s.envDirs.some((d) => np.startsWith(d + "/")) || g) throw new Error("the none tar: pytest " + (np || "missing") + (g ? ", gstack files " + g.split("\n").join(", ") : ""));
         const rm = exec(c, "git remote remove origin"), no = exec(c, loop);
         if (rm.code !== 0 || no.code !== 3 || !/no pregate context/.test(no.err)) throw new Error(t + ": without the origin the loop exited " + no.code + " (" + last(no.err) + "), not 3 for no pregate context");
         lines.push("d1-checks none-tar " + t + ": origin/main is HEAD, pytest " + np + ", no gstack file; without the origin the loop exits 3 (no pregate context)");

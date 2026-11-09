@@ -163,7 +163,7 @@ export function runInImage(): { lines: string[]; problems: string[]; raw: Record
   return { lines, problems, raw };
 }
 
-function sdkPython(): string {
+export function sdkPython(): string {
   const venv = join(tmpdir(), "laneb-claude-agent-sdk-" + SDK_PIN), py = join(venv, "bin/python");
   const ok = () => existsSync(py) && spawnSync(py, ["-c", "import claude_agent_sdk as s; assert s.__version__ == '" + SDK_PIN + "'"]).status === 0;
   if (!ok()) spawnSync("sh", ["-c", 'python3 -m venv --clear "$1" && "$1/bin/pip" install -q "claude-agent-sdk==$2"', "sh", venv, SDK_PIN], { timeout: 600_000 });

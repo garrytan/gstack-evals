@@ -47,7 +47,7 @@ export function dockerDetect(ref: string, o: { docker: string; gstack: string; l
     Bun.sleepSync(Number(process.env.HM_PULL_WAIT_SEC ?? SCREEN.pullWaitSec) * 1000);
   }
   const s = taskSetup();
-  const script = s.run + " && export PATH=" + s.path + " && { [ -d " + s.envDir + " ] && echo HM_ENV yes || echo HM_ENV no; } >&2 && exec /opt/hm-bun --no-env-file --config=/dev/null /opt/hm-gstack/bin/gstack-checks detect";
+  const script = s.run + " && export PATH=" + s.path + " && { { " + s.envDirs.map((d) => "[ -d " + d + " ]").join(" || ") + "; } && echo HM_ENV yes || echo HM_ENV no; } >&2 && exec /opt/hm-bun --no-env-file --config=/dev/null /opt/hm-gstack/bin/gstack-checks detect";
   const r = sh(["run", "--rm", "--network", "none", "--entrypoint", "", "-v", o.gstack + ":/opt/hm-gstack:ro", "-v", process.execPath + ":/opt/hm-bun:ro", "-w", SCREEN.workdir, ref, "sh", "-c", script], SCREEN.detectTimeoutSec * 1000);
   sh(["rmi", ref]);
   const env = /^HM_ENV (yes|no)$/m.exec(r.err);
@@ -118,7 +118,7 @@ export function screenCommand(outDir: string, log: (l: string) => void = console
 }
 
 // The VM shape L1's tools use: the pinned ubi-runner.sh, UBI_OWNER, and a lease on the vms ledger before the VM starts.
-function vmEnv() {
+export function vmEnv() {
   const runner = process.env.UBI_RUNNER ?? "", owner = (process.env.UBI_OWNER ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!runner || !existsSync(runner)) throw new Error("E_USAGE hm screen-vm: set UBI_RUNNER to the pinned ubi-runner.sh copy (" + UBI_RUNNER.file + ")");
   const got = sha256(readFileSync(runner));
@@ -128,7 +128,7 @@ function vmEnv() {
   if (!ledger || !existsSync(ledger)) throw new Error("E_USAGE hm screen-vm: set LEDGER to the vms item's ledger");
   return { runner, ledger: resolve(ledger) };
 }
-const ubi = (runner: string, args: string[], env: Record<string, string> = {}) => {
+export const ubi = (runner: string, args: string[], env: Record<string, string> = {}) => {
   const p = Bun.spawnSync([runner, ...args], { env: { ...process.env, ...env } as Record<string, string>, stdout: "pipe", stderr: "pipe" });
   if (p.exitCode !== 0) throw new Error("E_INTERNAL ubi-runner " + args[0] + " failed (exit " + p.exitCode + "): " + p.stderr.toString().trim().split("\n").at(-1));
   return p.stdout.toString();

@@ -215,13 +215,13 @@ export const UBI_RUNNER = { file: "quick/laneb/l1/ubi-runner.sh", sha256: "c040c
 
 // D1 (pre-data harness amendment): the lines every arm's task image gets after Lane B's runtime copy, through L1's profile
 // and prepare-run.ts (TASK_SETUP), and that the task-fit screen and the d1-checks dry-run step apply. One file, read at
-// this sha256: its one ENV PATH line and its one RUN line (the origin).
-export const TASK_SETUP = { file: join(REPO, "lanes/harness-mechanics/task-setup.Dockerfile"), sha256: "ae28bde63e6348e944a39c9d41334c070cf794262c43aa9000a60d32a88e9bef" };
-export function taskSetup(): { text: string; path: string; envDir: string; run: string } {
+// this sha256: its one ENV PATH line (the env directories before $PATH, envDirs) and its one RUN line (the origin).
+export const TASK_SETUP = { file: join(REPO, "lanes/harness-mechanics/task-setup.Dockerfile"), sha256: "36176e42ecab7a5548bf9a0f2b1cf3922fd54398d151b7b01c2e314c93feb00b" };
+export function taskSetup(): { text: string; path: string; envDirs: string[]; run: string } {
   const text = readFileSync(TASK_SETUP.file, "utf8");
   if (sha256(text) !== TASK_SETUP.sha256) throw new Error("E_HM_PIN " + TASK_SETUP.file + " has sha256 " + sha256(text) + ", not the pinned " + TASK_SETUP.sha256);
   const lines = text.split("\n"), env = lines.filter((l) => l.startsWith("ENV PATH=")), run = lines.filter((l) => l.startsWith("RUN "));
   if (env.length !== 1 || run.length !== 1) throw new Error("E_HM_PIN " + TASK_SETUP.file + " must hold one ENV PATH line and one RUN line");
   const path = env[0]!.slice("ENV PATH=".length);
-  return { text, path, envDir: path.split(":")[0]!, run: run[0]!.slice("RUN ".length) };
+  return { text, path, envDirs: path.split(":").slice(0, path.split(":").indexOf("$PATH")), run: run[0]!.slice("RUN ".length) };
 }

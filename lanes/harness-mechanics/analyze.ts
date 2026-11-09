@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { clusteredPairedDelta, seededRandom, type PairedItem } from "../../src/runner/stats/paired.ts";
 import type { HmArm, HmSessionRow } from "../../src/types.ts";
 import { BUNDLE, HM, loadBundle, MODELS, REPO } from "./pins.ts";
+import { FIT_CLASSES, fitClass, type FitClass, type FitRow } from "./fit.ts";
 import { patternsPerArm } from "./score.ts";
 
 /** A session row plus the input columns units 7 and 8 fill: on a none row, the bo2 patch the picker ships; on a judge row, the hook logs. */
@@ -29,42 +30,20 @@ const OWNER_USD = 5000;
 const DROPS = ["none", "the judge arms on particle-1", "the judge subset from 60 tasks to 40", "the scored split from 200 tasks to 180"];
 export const AMENDMENT = "Pre-data reporting amendment for H1 (before any data). The H1 verdict rules stand as written; rule 1 carries the A4 guard, and when A4 keeps the shipping test out, rules 3 to 5 decide the verdict. Reporting addition, which changes no verdict, arm or money rule: when A4 keeps the shipping test out, the results print P's interval next to the H1 verdict. If P's upper bound is below 0, the results also say in plain words that the hook arm lost passes on that interval, and that the shipping test carries no verdict because discordance passed the planned 0.20. The label NO MEASURABLE DIFFERENCE never stands alone in that case.";
 
-// Ruling C (GSTA-2, 2026-11-09): Stage 1 also prints rule runs and hook blocks by GEVA-504's seven fit classes, from
-// handoffs/GEVA-504/task-fit-table.md at this sha256. A print only: no verdict, stop or cap reads it.
-export const FIT_SHA256 = "202fc2cc346fe0736c16ada74d6a6f48e8beff177302b6d2b1ef0548b44fc665";
-export const FIT_CLASSES = [
-  { code: "S1", name: "tests PASS on the probe edit" },
-  { code: "S2", name: "tests FAIL, already failing at base" },
-  { code: "S3", name: "tests FAIL, base passes" },
-  { code: "S4", name: "tests ran no test, lint or typecheck gives PASS/FAIL" },
-  { code: "S5", name: "no check gives PASS/FAIL" },
-  { code: "U1", name: "unmeasured: no tracked module a test_<name>.py names" },
-  { code: "U2", name: "unmeasured: no pytest in the D1 env" },
-] as const;
-/** The class of each task under the table's "### signal" headings. Each heading's count must match its list, all seven classes must appear and no task may sit in two. */
-export function fitClasses(text: string): Record<string, string> {
-  const fit: Record<string, string> = {}, seen = new Set<string>(), ls = text.split(/\r?\n/);
-  ls.forEach((l, i) => {
-    const m = /^### signal (S[1-5]|U[12]) .*\((\d+)\)\s*$/.exec(l);
-    if (!m) return;
-    const list = ls.slice(i + 1).find((x) => x.trim() !== "") ?? "";
-    const ids = list.startsWith("#") ? [] : list.split(",").map((x) => x.trim().replace(/\*?(?: \(cal\))?$/, "")).filter(Boolean);
-    if (ids.length !== Number(m[2])) throw new Error("E_HM_INPUT the task-fit table's " + m[1] + " heading counts " + m[2] + " tasks and lists " + ids.length);
-    seen.add(m[1]!);
-    for (const t of ids) {
-      if (fit[t]) throw new Error("E_HM_INPUT the task-fit table puts " + t + " in " + fit[t] + " and " + m[1]);
-      fit[t] = m[1]!;
-    }
-  });
-  const missing = FIT_CLASSES.filter((c) => !seen.has(c.code)).map((c) => c.code);
-  if (missing.length) throw new Error("E_HM_INPUT the task-fit table has no signal heading for " + missing.join(", "));
-  return fit;
-}
-/** GEVA-504's task-fit table, refused unless it is at FIT_SHA256. */
-export function readFitTable(path: string): Record<string, string> {
+// Ruling C (GSTA-2, 2026-11-09), with the Captain's B: Stage 1 also prints rule runs and hook blocks by GEVA-504's seven
+// fit classes, read from the fit probe's rows on the fixed image at the sha256 frozen for them. A print only: no verdict,
+// stop or cap reads it.
+export type FitKey = { sha256: string; classes: Record<string, FitClass | null> };
+/** The fit rows' class per task, refused unless the file is at the frozen sha256 and names each task once. */
+export function readFitRows(path: string, want: string): FitKey {
   const buf = readFileSync(path), sha = createHash("sha256").update(buf).digest("hex");
-  if (sha !== FIT_SHA256) throw new Error("E_HM_INPUT the task-fit table " + path + " is at sha256 " + sha + ", not the frozen " + FIT_SHA256);
-  return fitClasses(buf.toString("utf8"));
+  if (sha !== want) throw new Error("E_HM_INPUT the fit rows " + path + " are at sha256 " + sha + ", not the frozen " + want);
+  const classes: Record<string, FitClass | null> = {};
+  for (const row of buf.toString("utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as FitRow)) {
+    if (row.task in classes) throw new Error("E_HM_INPUT the fit rows name " + row.task + " twice");
+    classes[row.task] = fitClass(row);
+  }
+  return { sha256: sha, classes };
 }
 
 const pts = (x: number) => (100 * x).toFixed(1);
@@ -251,7 +230,7 @@ export type Admission = {
 };
 
 /** Ruling C's split print for one model: rule runs and hook blocks per fit class, then the rule runs that rest only on a lint or typecheck line. */
-function fitSplit(ix: Ix, mk: string, fit: Record<string, string>): string[] {
+function fitSplit(ix: Ix, mk: string, fit: Record<string, FitClass | null>): string[] {
   const prose = graded(ix, mk, "verify-prose"), hook = graded(ix, mk, "verify-hook");
   const tasks = new Set([...ix.tasks].filter(([k]) => k.startsWith(mk + "|")).flatMap(([, s]) => [...s]));
   const n = (rs: HmRowIn[], f: (r: HmRowIn) => boolean) => rs.filter(f).length;
@@ -261,7 +240,7 @@ function fitSplit(ix: Ix, mk: string, fit: Record<string, string>): string[] {
     const p = prose.filter((r) => inc(r.task)), h = hook.filter((r) => inc(r.task));
     const blocked = n(h, (r) => (r.score.hook.blocks ?? 0) > 0), blocks = h.reduce((x, r) => x + (r.score.hook.blocks ?? 0), 0);
     const k = [...tasks].filter(inc).length;
-    return "STAGE1 FIT " + mk + " " + (code ? code + " (" + k + " tasks, " + name + ")" : "not in the table (" + k + " tasks)") +
+    return "STAGE1 FIT " + mk + " " + (code ? code + " (" + k + " tasks, " + name + ")" : "no class (" + k + " tasks, no fit row or none of the seven)") +
       ": verify-prose ran the rule in " + n(p, ran) + " of " + n(p, edit) + " sessions with an edit; verify-hook ran it in " + n(h, ran) + " of " + n(h, edit) + ", and its hook blocked a /verify run in " + blocked + " of " + h.length + " sessions (" + blocks + " blocks)";
   });
   const pr = prose.filter(ran), hr = hook.filter(ran), lint = (r: HmRowIn) => r.score.lint_only === true;
@@ -270,7 +249,7 @@ function fitSplit(ix: Ix, mk: string, fit: Record<string, string>): string[] {
 }
 
 /** Stage 1's admission (section 9), per model and pooled. sims sets power.py's Monte Carlo runs (2,000 as frozen). */
-export function admission(rows: HmRowIn[], o: { sims?: number; fit?: Record<string, string> } = {}): Admission {
+export function admission(rows: HmRowIn[], o: { sims?: number; fit?: FitKey } = {}): Admission {
   const ix = indexRows(rows), models: Record<string, ModelAdmission> = {}, lines: string[] = [];
   const four: HmArm[] = ["verify-prose", "verify-hook"];
   const adhV: Val = (g) => { const x = g("verify-prose").score.adherent, y = g("verify-hook").score.adherent; return x === null || y === null ? null : [+x, +y]; };
@@ -308,13 +287,13 @@ export function admission(rows: HmRowIn[], o: { sims?: number; fit?: Record<stri
   const likely_null = Number.isFinite(pool.gap.x) && adhMdd !== null && pool.gap.x < adhMdd;
   const a6 = recost(rows, ix);
   const ok = (b: boolean) => (b ? "ok" : "FAIL");
-  if (o.fit) lines.push("STAGE1 FIT table: GEVA-504's task-fit-table.md at sha256 " + FIT_SHA256 + "; a print only, which no verdict, stop or cap reads");
+  if (o.fit) lines.push("STAGE1 FIT table: fit rows at sha256 " + o.fit.sha256 + " (" + Object.keys(o.fit.classes).length + " tasks); a print only, which no verdict, stop or cap reads");
   for (const [mk, a] of Object.entries(models)) {
     lines.push("STAGE1 A1 " + mk + ": none passed " + pct(a.a1.rate) + " of " + a.a1.n + " (bar 15% to 90%): " + (a.a1.ok ? "ok" : "FAIL, H2 and H3 saturated on " + mk));
     lines.push("STAGE1 A2 " + mk + ": verify-prose ran the rule in " + pct(a.a2.headroom) + " of " + a.a2.n_edit + " sessions with an edit (bar at most 90%): " + (a.a2.saturated ? "SATURATED, H1 saturated on " + mk : "ok") + "; /verify loaded in " + pct(a.a2.loads) + " of " + a.a2.n_told + " told sessions and the contract record in " + pct(a.a2.record) + " of " + a.a2.n_hook + " verify-hook sessions (bar 90%): " + (a.a2.exposure_ok ? "ok" : "FAIL, H1 FIX-METHOD (exposure); check the build before Stage 4"));
     lines.push("STAGE1 A3 " + mk + ": verify-prose edited a file in " + pct(a.a3.rate) + " of " + a.a3.n + " (bar 80%): " + ok(a.a3.ok));
     lines.push("STAGE1 A4 " + mk + ": d verify-prose vs verify-hook " + dec(a.a4.d.x) + ", 80% " + div(a.a4.d.ci80) + " (" + a.a4.d.n + " tasks); d0 none vs plain-2 " + dec(a.a4.d0.x) + ", 80% " + div(a.a4.d0.ci80) + " (" + a.a4.d0.n + "); adherence gap verify-hook minus verify-prose " + pts(a.a4.gap.x) + " points, 80% " + civ(a.a4.gap.ci80) + " (" + a.a4.gap.n + " tasks with an edit in both)");
-    if (o.fit) lines.push(...fitSplit(ix, mk, o.fit));
+    if (o.fit) lines.push(...fitSplit(ix, mk, o.fit.classes));
   }
   lines.push("STAGE1 A4 pooled: d verify-prose vs verify-hook " + dec(pool.d.x) + ", 80% " + div(pool.d.ci80) + "; shipping test " + (keep_out ? "OUT: the upper end passes 0.20, so H1's shipping test is reported without a verdict" : "IN: the upper end is at most 0.20") + "; d0 none vs plain-2 " + dec(d0) + ", 80% " + div(pool.d0.ci80));
   lines.push("STAGE1 A4 H2 MDD at the measured d0 " + dec(d0) + ": E's pooled MDD " + h2_mdd.map((x) => (x.mdd === null ? "n/a" : pts(x.mdd)) + " points at picker accuracy " + x.q).join(", ") + " (power.py sim_e at f 0.32, 200 tasks per model and its three base rates)");
