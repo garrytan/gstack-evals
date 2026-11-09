@@ -12,8 +12,13 @@
 //   o.interim on, it fires by itself once the arm's first 24 Opus (16 Sol or particle-1) stage 2 sessions read under
 //   0.80 (score/rules.ts interimCheck). The reading goes to the Captain: resume runs the arm on the same lease, and
 //   stopArm is E_DX_EXPOSURE_STOP. settle refuses while a pause awaits that word.
-// - settle stages and marks the lease's close; sessions never started under a stop or a pause are released then.
+// - halt (a cap stop on the lease's item) starts no more sessions at all; nothing is retried to change a verdict.
+// - poll, when given, runs before each session starts, so a stop the Captain records mid-run (the run's control file)
+//   applies to the next session.
+// - settle stages and marks the lease's close (with a cap stop when an ending code stopped the run), and writes it to the approval record when the batch has one
+//   (settleLease); sessions never started under a stop, a pause or a halt are released then.
 import type { ReasonCode } from "../../../src/errors/codes.ts";
+import { settleLease } from "../../../src/runner/ledger/ledger.ts";
 import type { CloseFile } from "../../../src/runner/ledger/record.ts";
 import type { LocalLedger, ScopeFigures } from "../../../src/runner/ledger/local.ts";
 import { GSTACK_ARMS, MODEL_STRINGS, type ArmId, type ModelId, type Stage } from "../types.ts";
@@ -36,7 +41,7 @@ export interface Launched {
 }
 export interface BatchLog {
   at: string;
-  event: "start" | "end" | "model-stop" | "model-settled" | "arm-stop" | "pause" | "resume" | "settled";
+  event: "start" | "end" | "model-stop" | "model-settled" | "arm-stop" | "pause" | "resume" | "halt" | "settled";
   detail: string;
 }
 
@@ -50,8 +55,9 @@ export class DxBatch<R extends Launched = Launched> {
   private checked = new Set<string>();
   private done: Array<{ arm: ArmId; model: ModelId; exposed: boolean | null }> = [];
   private settledClose: CloseFile | null = null;
+  private halted: string | null = null;
 
-  constructor(private o: { ledger: LocalLedger; lease: string; sessions: readonly BatchSession[]; launch: (s: BatchSession) => Promise<R>; parallel?: number; interim?: boolean }) {
+  constructor(private o: { ledger: LocalLedger; lease: string; sessions: readonly BatchSession[]; launch: (s: BatchSession) => Promise<R>; parallel?: number; interim?: boolean; record?: string; poll?: (b: DxBatch<R>) => void }) {
     for (const s of o.sessions) {
       if (this.state.has(s.id)) throw new Error("E_USAGE: session " + s.id + " is planned twice in one batch");
       this.state.set(s.id, { session: s, state: "pending" });
@@ -62,7 +68,7 @@ export class DxBatch<R extends Launched = Launched> {
     this.log.push({ at: new Date().toISOString(), event, detail });
   }
   private key = (arm: ArmId, model: ModelId) => arm + " on " + model;
-  private startable = (s: BatchSession) => !this.stoppedModels.has(s.model) && !this.stoppedArms.has(s.arm) && !this.paused.has(this.key(s.arm, s.model));
+  private startable = (s: BatchSession) => this.halted === null && !this.stoppedModels.has(s.model) && !this.stoppedArms.has(s.arm) && !this.paused.has(this.key(s.arm, s.model));
   private inFlight = (model: ModelId) => [...this.state.values()].some((e) => e.state === "running" && e.session.model === model);
 
   /** A per-model stop: the model's sessions end here, its scope is stopped now and settled once its sends are over. */
@@ -87,6 +93,17 @@ export class DxBatch<R extends Launched = Launched> {
     for (const k of [...this.paused.keys()]) if (k.startsWith(arm + " on ")) this.paused.delete(k);
     this.o.ledger.stopScope(this.o.lease, { field: "arm", value: arm }, code as ReasonCode, why);
     this.note("arm-stop", arm + " " + code + ": " + why);
+  }
+
+  /** A cap stop on the lease's item: no session starts after it, and the unrun ones release at settle. */
+  halt(why: string): void {
+    if (this.halted !== null) return;
+    this.halted = why;
+    this.note("halt", why);
+  }
+  /** Why the batch halted, or null. */
+  haltedBy(): string | null {
+    return this.halted;
   }
 
   /** The interim pause: no new sessions in that arm on that model; the lease stays open. */
@@ -118,7 +135,10 @@ export class DxBatch<R extends Launched = Launched> {
   async run(): Promise<void> {
     if (this.settledClose) throw new Error("E_LEASE_CLOSED: lease " + this.o.lease + " has settled");
     const width = Math.max(1, this.o.parallel ?? 1);
-    const next = () => [...this.state.values()].find((e) => e.state === "pending" && this.startable(e.session));
+    const next = () => {
+      this.o.poll?.(this);
+      return [...this.state.values()].find((e) => e.state === "pending" && this.startable(e.session));
+    };
     const worker = async () => {
       for (let e = next(); e; e = next()) {
         e.state = "running";
@@ -138,11 +158,15 @@ export class DxBatch<R extends Launched = Launched> {
   }
 
   /** Settles the lease: stages and marks its close, and releases every session never started under a stop or a pause. */
-  settle(): { close: CloseFile; released: string[] } {
+  settle(capStop?: string): { close: CloseFile; released: string[] } {
     if (this.paused.size) throw new Error("E_USAGE: " + [...this.paused.keys()].join(", ") + " is paused for the Captain's word; resume it or stop it (E_DX_EXPOSURE_STOP) before the lease settles");
     if ([...this.state.values()].some((e) => e.state === "running")) throw new Error("E_USAGE: a session is still running on lease " + this.o.lease);
-    const close = this.o.ledger.stageClose(this.o.lease);
-    this.o.ledger.markClosed(this.o.lease, "settled");
+    let close: CloseFile;
+    if (this.o.record) close = settleLease(this.o.record, this.o.ledger, this.o.lease, undefined, capStop);
+    else {
+      close = this.o.ledger.stageClose(this.o.lease, capStop);
+      this.o.ledger.markClosed(this.o.lease, "settled");
+    }
     this.settledClose = close;
     const released: string[] = [];
     for (const e of this.state.values()) {

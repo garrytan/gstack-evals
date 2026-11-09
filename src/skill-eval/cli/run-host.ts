@@ -42,7 +42,8 @@ import { hostDriver, skillRoot, type HostDriverOptions } from "../../adapters/ho
 import type { Call as HostCall } from "../../grade/transcript.ts";
 import { openLease, settleLease } from "../../runner/ledger/ledger.ts";
 import { rigAdmission } from "../../rig/admission.ts";
-import { openLocalLedger } from "../../runner/ledger/local.ts";
+import { openLocalLedger, type LocalLedger } from "../../runner/ledger/local.ts";
+import type { CloseFile } from "../../runner/ledger/record.ts";
 import { ProxyControl, type BindRequest, type Binding, type Meter } from "../../runner/proxy/metering-proxy.ts";
 import { cacheStale, dirTreeSha256, envValuesHash, newProgress, recordSession, sessionKey, staleParts, writeProgress, type CacheStop, type SessionKey } from "../../trial/cache.ts";
 import { judgePrompt, parseJudgment, redact } from "../../grade/adjudicate.ts";
@@ -514,7 +515,15 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
 }
 
 /** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it, the installs the run built included. */
-export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean; gstackConfig?: Readonly<Record<string, Readonly<Record<string, string>>>> }): HostRig {
+/** A lease the caller opened and settles itself (a devex frozen run's, lanes/devex/leases.ts): the rig meters on it, and close settles it through settle once the proxy has stopped and its journal is reconciled. */
+export interface RigLease {
+  id: string;
+  local: LocalLedger;
+  /** null leaves the lease open (a devex cell waiting on the Captain). */
+  settle: () => CloseFile | null;
+}
+
+export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "ledger" | "item" | "runId" | "record" | "models" | "policy">, o: { env: Env; skill: string | null; skills?: Readonly<Record<string, string>>; nonce: string; cap: number; voice?: boolean; gstackConfig?: Readonly<Record<string, Readonly<Record<string, string>>>>; lease?: RigLease }): HostRig {
   const bin = o.env.GSTACK_EVALS_DOCKER_BIN || "docker";
   const state = stateRoot(o.env);
   const pin = checkImagePin({ state, docker: bin });
@@ -529,9 +538,9 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
     if ("ok" in kept) throw new Error(kept.code + ": " + kept.message);
     const cells = armCells(installs, call.models, call.policy, join(state, "cells"), { voice: o.voice ?? true, ...(o.gstackConfig ? { gstackConfig: o.gstackConfig } : {}) });
     const images = armImages({ trialImage: pin.pin.tag, home, installs, marks: sentinels(call.arms.arms, o.nonce), tasksDir: dirname(resolve(call.tasks)), state, docker: bin, out: call.out.path, retain, cells: Object.fromEntries(Object.entries(cells).map(([arm, byModel]) => [arm, Object.values(byModel)])) });
-    const local = openLocalLedger(call.ledger);
-    const lease = openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });
-    undo.unshift(() => settleLease(call.record.path, local, lease.lease_id));
+    const local = o.lease?.local ?? openLocalLedger(call.ledger);
+    const lease = o.lease ? { lease_id: o.lease.id } : openLease(call.record.path, local, { item: call.item!, run_id: call.runId, amount_micros: o.cap, requireAdmission: rigAdmission({ proof: "trial" }) });
+    if (!o.lease) undo.unshift(() => settleLease(call.record.path, local, lease.lease_id));
     const network = createTrialNetwork(bin);
     undo.unshift(() => removeTrialNetwork(network, bin));
     const token = randomBytes(32).toString("hex");
@@ -561,10 +570,10 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
         }
       },
       async close() {
-        const { settled } = await recoverRun({ stopProxy: () => proxy.stop(), journal: proxy.journal, ledger: local, settle: () => settleLease(call.record.path, local, lease.lease_id) });
+        const { settled } = await recoverRun({ stopProxy: () => proxy.stop(), journal: proxy.journal, ledger: local, settle: () => (o.lease ? o.lease.settle() : settleLease(call.record.path, local, lease.lease_id)) });
         removeTrialNetwork(network, bin);
         releaseInstalls(hold);
-        return { committed: settled.spent_micros, unknown: settled.unknown_calls, lease_id: lease.lease_id };
+        return { committed: settled?.spent_micros ?? 0, unknown: settled?.unknown_calls ?? 0, lease_id: lease.lease_id };
       },
     };
   } catch (error) {

@@ -34,7 +34,11 @@ export interface HostDriverOptions {
   /** The session's system prompt, its turn cap and its GSTACK_SESSION_KIND (Claude Code only; see its driver). */
   systemPrompt?: SystemPrompt;
   maxTurns?: number;
-  sessionKind?: "unattended";
+  sessionKind?: "unattended" | "interactive";
+  /** Claude Code only: an SDK Stop hook whose returned reason blocks the stop (its driver's stopHook). */
+  stopHook?: (transcript: string) => string | null;
+  /** Claude Code only: record each instruction file the CLI loads to memory.ndjson (its driver's memoryLog). */
+  memoryLog?: boolean;
   /** Claude Code only: GSTACK_SKILL_GATE_DEADLINE_MS for the agent env, and settings printed at session start (driver.ts). */
   skillGateDeadlineMs?: number;
   /** Claude Code only: CLAUDE_CODE_DISABLE_1M_CONTEXT=1, a 200,000-token window on every model (driver.ts). */
@@ -54,7 +58,7 @@ export interface HostDriverOptions {
 export function hostDriver(o: HostDriverOptions): AgentDriver {
   if (o.host === "claude") {
     if (o.provider === "openai") throw new Error("E_INTERNAL: Claude Code cannot run the openai model " + o.model);
-    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.skillGateDeadlineMs ? { skillGateDeadlineMs: o.skillGateDeadlineMs } : {}), ...(o.disable1mContext ? { disable1mContext: true } : {}), ...(o.query ? { query: o.query } : {}), ...(o.settings ? { settings: o.settings } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}), ...(o.followUp ? { followUp: o.followUp } : {}) });
+    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.skillGateDeadlineMs ? { skillGateDeadlineMs: o.skillGateDeadlineMs } : {}), ...(o.disable1mContext ? { disable1mContext: true } : {}), ...(o.query ? { query: o.query } : {}), ...(o.settings ? { settings: o.settings } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}), ...(o.followUp ? { followUp: o.followUp } : {}), ...(o.stopHook ? { stopHook: o.stopHook } : {}), ...(o.memoryLog ? { memoryLog: true } : {}) });
   }
   if (o.provider === "anthropic") throw new Error("E_INTERNAL: Codex cannot run the anthropic model " + o.model);
   return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, interactive: o.interactive, skill: o.skill, out: o.out });
