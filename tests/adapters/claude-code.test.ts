@@ -28,7 +28,7 @@ afterEach(() => {
 const MODEL = "claude-haiku-5-5";
 const READER_MAP = join(import.meta.dir, "..", "..", "src", "trial", "review", "reader-maps", "gstack-77fe28c39796.json");
 
-async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: string) => ClaudeCodeOptions["skill"]; provider?: "anthropic" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; prompt?: string; setupHome?: (home: string) => void; options?: Pick<ClaudeCodeOptions, "systemPrompt" | "maxTurns" | "capStops" | "backgroundWaitMs"> } = {}) {
+async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: string) => ClaudeCodeOptions["skill"]; provider?: "anthropic" | "openrouter"; model?: string; capMicros?: number; env?: Record<string, string>; prompt?: string; setupHome?: (home: string) => void; options?: Pick<ClaudeCodeOptions, "systemPrompt" | "maxTurns" | "capStops" | "backgroundWaitMs">; timeoutMs?: number } = {}) {
   const h = harness(script, { ...(o.capMicros === undefined ? {} : { capMicros: o.capMicros }), ...(o.env ? { env: o.env } : {}) });
   open.push(h);
   const model = o.model ?? MODEL;
@@ -38,7 +38,7 @@ async function run(script: Script, o: { entry?: SidecarTask; skill?: (home: stri
   o.setupHome?.(home);
   const driver = claudeCodeDriver({ model, provider, proxy: { baseUrl: h.baseUrl, slot: binding.slot, token: binding.token }, ...(o.entry ? { entry: o.entry } : {}), skill: o.skill?.(home) ?? null, out: join(h.dir, "host"), query: query as never, ...o.options });
   const session = h.session(join(h.dir, "work", "t"), home, driver.env!);
-  const outcome = await driver.run(session, { id: "t", prompt: o.prompt ?? "Help me think about my idea." }, 120_000);
+  const outcome = await driver.run(session, { id: "t", prompt: o.prompt ?? "Help me think about my idea." }, o.timeoutMs ?? 120_000);
   const meter = await h.proxy.finalize(binding.meter_id);
   const lines = (f: string) => readFileSync(join(h.dir, "host", f), "utf8").trim().split("\n").map((l) => JSON.parse(l));
   return { h, home, outcome, meter, driver, lines };
@@ -911,14 +911,17 @@ describe.skipIf(!HAS_CLAUDE_CLI)("GST-734: background work on the real CLI", () 
     expect(r.outcome.session_end!.released_wakeups[0]).toMatchObject({ delay_s: 1200, running: ['local_agent "reader A"'] });
   }, 240_000);
 
-  // The CLI fires a wakeup on a minute boundary, 60 to 120 s out, which CI's 10-minute job cannot spare; set GSE_SLOW_CLI=1 to run it.
+  // CLI 2.1.314 arms a wakeup for the first whole minute at least 60 s out, so this 60 s wakeup fires 60 to 120 s after the
+  // call. The session's limit starts before the CLI launches, so it covers that 120 s bound plus a minute for the launch and
+  // the turns; at run()'s 120 s the limit came first whenever the call landed in a minute's first seconds. The check job
+  // cannot spare that long, so it runs only where GSE_SLOW_CLI=1 is set (the rig tier).
   test.skipIf(!process.env.GSE_SLOW_CLI)("a ScheduleWakeup set while nothing ran holds the session until the CLI fires it", async () => {
     const script: Script = (t) => {
       if (t.users.some((u) => u.includes("WAKE-PROMPT"))) return [{ type: "text", text: REPORT }];
       if (!t.results.has("toolu_wake")) return [{ type: "tool_use", id: "toolu_wake", name: "ScheduleWakeup", input: { delaySeconds: 60, reason: "check the build again", prompt: "WAKE-PROMPT: check the build", noop: false } }];
       return [{ type: "text", text: "I will check back when the wakeup fires." }];
     };
-    const r = await run(script, { prompt: "Review the branch.", options: { backgroundWaitMs: BACKGROUND_WAIT_MS } });
+    const r = await run(script, { prompt: "Review the branch.", options: { backgroundWaitMs: BACKGROUND_WAIT_MS }, timeoutMs: 180_000 });
     expect([r.outcome.termination, r.outcome.turns.at(-1), r.outcome.session_end?.cause, r.outcome.session_end?.released_wakeups]).toEqual([{ kind: "completed" }, REPORT, "clean", []]);
     expect(r.lines("transcript.ndjson").some((m) => m.type === "command_lifecycle" && m.state === "started" && m.wakeup_source === "loop_wakeup")).toBe(true);
   }, 240_000);
