@@ -19,7 +19,7 @@ links:
 
 ## The ruling
 
-The repository owner directed a one-time wording cleanup of merged wiki posts for public readers, done before the repository opens to the public. GEVA-422 carries it out, tracked as GST-1060.
+The repository owner directed a one-time wording cleanup of merged wiki posts for public readers, done before the repository opens to the public.
 
 ## What changes
 
