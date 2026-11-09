@@ -14,6 +14,7 @@ type Run = (argv: string[], io: Io) => Promise<number> | number;
 
 export const SUBCOMMANDS: Record<string, { module: string; summary: string }> = {
   mine: { module: "mine/cli.ts", summary: "the shared frame and miner: repositories, units, filters, release ancestry, windows and the free screen (GitHub only, no model call)" },
+  handover: { module: "mine/handover.ts", summary: "hand the miner's kept, screen-positive, closed units to authoring: funnel.json, alias.json and ids.json (GitHub only)" },
   snapshot: { module: "unit/snapshot.ts", summary: "build a unit's aliased base snapshot: instruction files stripped, one commit, no remote" },
   alias: { module: "unit/alias.ts", summary: "the alias map and its mechanical replacement, forward and back" },
   author: { module: "author/cli.ts", summary: "authoring under custody: classifier, plan rewrite, triage, key read, audits, recognition probe" },

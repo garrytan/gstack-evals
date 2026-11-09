@@ -17,7 +17,7 @@ const ROOT = join(import.meta.dir, "../../..");
 describe("dry-run lines", () => {
   test("every line passes", async () => {
     const lines = await checks();
-    expect(lines.length).toBe(13);
+    expect(lines.length).toBe(14);
     for (const l of lines) expect({ rule: l.rule, pass: l.pass }).toEqual({ rule: l.rule, pass: true });
   });
 });

@@ -7,6 +7,8 @@
 //       repositories in seeded order, their units in draw order through every rule, then the window read and the
 //       free screen for kept units whose window has closed. With --item the frozen classifier runs on that ledger
 //       item; without it no model is called and the mechanical prefilter's side stands in (a smoke), and says so.
+//       For each screen-positive unit it keeps what dx handover needs at read/<draw digest>.json: the plan text, the
+//       window's records and candidates as the screen read them, the base sha and the base README and manifest paths.
 // Records name repositories, so --out must sit outside the repository; only counts belong in anything committed.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -19,7 +21,8 @@ import { mechanicalSide } from "./frame.ts";
 import { unitDiff } from "./git.ts";
 import { allFiles, baseTree, listPrs, openDxGitHub, readWindow, releasesOf, repoUnion, tagContains, unitFacts, type FrameRepo } from "./github.ts";
 import { DEVEX_FILTERS, DEVEX_RELEASED_BY, draw, earliestBefore, excludedDigests, PER_REPO, planText, releaseByAncestry, treeFacts, type Candidate, type UnitFacts } from "./units.ts";
-import { DIFF_BYTES, screen } from "./window.ts";
+import { basePaths, type UnitRead } from "./handover.ts";
+import { DIFF_BYTES, screenRead } from "./window.ts";
 
 const flag = (argv: string[], name: string) => {
   const i = argv.indexOf(name);
@@ -54,6 +57,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (item) meter = await openMeter({ item, runId: item, out: join(out, "journal"), cacheDir: join(out, "cache"), maxOutputTokens: 2000, driftCode: "E_DX_PROVIDER_DRIFT", onDrift: "stop-model", arm: "dx" });
   const cands: Candidate[] = [];
   const refs = new Map<string, Array<{ kind: "issue" | "pr"; number: number }>>();
+  const paths = new Map<string, ReturnType<typeof basePaths>>();
   try {
     for (const repo of repos) {
       const rel = releasesOf(gh, repo.repo);
@@ -89,6 +93,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
             const f = load();
             if (!f.base_sha) return null;
             const t = baseTree(gh, f.repo, f.base_sha);
+            paths.set(f.repo + "#" + f.number, basePaths(t.tree));
             return treeFacts(t.tree, t.truncated, t.licence);
           },
         };
@@ -104,9 +109,16 @@ export async function run(argv: string[], io: Io): Promise<number> {
         continue;
       }
       const f = cands.find((c) => c.facts.repo === k.repo && c.facts.number === k.number)!.full();
-      const s = screen({ repo: k.repo, number: k.number, title: f.title, text: planText(f).text, closing: f.closing.map((c) => c.number), files: f.files.map((x) => x.path), diff: f.base_sha && f.merge_sha ? unitDiff(k.repo, f.base_sha, f.merge_sha, join(out, "clones"), DIFF_BYTES) : null, timeline_refs: refs.get(k.id) ?? [] }, readWindow(gh, k.repo, k.window));
+      const text = planText(f).text;
+      const r = screenRead({ repo: k.repo, number: k.number, title: f.title, text, closing: f.closing.map((c) => c.number), files: f.files.map((x) => x.path), diff: f.base_sha && f.merge_sha ? unitDiff(k.repo, f.base_sha, f.merge_sha, join(out, "clones"), DIFF_BYTES) : null, timeline_refs: refs.get(k.id) ?? [] }, readWindow(gh, k.repo, k.window));
+      const s = r.screen;
       screened++;
-      if (s.positive) positive++;
+      if (s.positive) {
+        positive++;
+        const read: UnitRead = { id: k.id, source: text, base_sha: f.base_sha, ...(paths.get(k.id) ?? { readme_path: null, manifest_paths: [] }), records: r.records, candidates: r.candidates };
+        mkdirSync(join(out, "read"), { recursive: true, mode: 0o700 });
+        writeFileSync(join(out, "read", k.order + ".json"), JSON.stringify(read), { mode: 0o600 });
+      }
       appendFileSync(join(out, "screen.jsonl"), JSON.stringify({ id: k.id, prerelease: k.release.prerelease, ...s }) + "\n");
     }
     writeFileSync(join(out, "draws.json"), JSON.stringify({ ...result, steps: result.steps }));

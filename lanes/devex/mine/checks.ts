@@ -10,6 +10,8 @@ import { aliasText, buildAliasMap, unaliasText } from "../unit/alias.ts";
 import { buildSnapshot, stripInstructions, treeCheck } from "../unit/snapshot.ts";
 import { assign } from "./frame.ts";
 import { DEVEX_FILTERS, draw, releaseByAncestry, treeFacts, type Candidate, type Drawn, type UnitFacts } from "./units.ts";
+import { loadUnit } from "../author/cli.ts";
+import { run as handover } from "./handover.ts";
 import { screen, type WindowItem } from "./window.ts";
 
 const T = (rule: string, pass: boolean, detail?: string): DryCheck => ({ rule, pass, detail });
@@ -104,6 +106,28 @@ export async function checks(): Promise<DryCheck[]> {
     const removed = stripInstructions(hostile);
     const left = treeCheck(hostile);
     const want = ["AGENTS.md", "CLAUDE.md", "deep/AGENTS.md", "deep/CLAUDE.md", "sub/.claude/AGENTS.md", "sub/CLAUDE.local.md", "sub/CLAUDE.md"];
+    const from = join(dir, "handover-from"), units = join(dir, "handover-units");
+    mkdirSync(join(from, "read"), { recursive: true });
+    const k = (n: number, to: string) => ({ id: "fixture-owner/fixture-repo#" + n, repo: "fixture-owner/fixture-repo", number: n, order: "d" + n, merged_at: "2026-07-20T00:00:00Z", release: { published_at: "2026-08-01T00:00:00Z" }, window: { from: "2026-08-01T00:00:00Z", to } });
+    writeFileSync(join(from, "draws.json"), JSON.stringify({ kept: [k(1, "2026-09-30T00:00:00Z"), k(2, "2026-09-30T00:00:00Z"), k(3, "2026-12-30T00:00:00Z")] }));
+    writeFileSync(join(from, "screen.jsonl"), [1, 2].map((n) => JSON.stringify({ id: "fixture-owner/fixture-repo#" + n, identifiers: [{ token: "--json", df: 0 }], positive: n === 1 })).join("\n"));
+    writeFileSync(join(from, "read", "d1.json"), JSON.stringify({ id: "fixture-owner/fixture-repo#1", source: "plan", base_sha: "b".repeat(40), readme_path: "README.md", manifest_paths: [], records: [], candidates: [] }));
+    let reads = 0;
+    const fake = openGitHub({ floor: 0, tries: 1, backoffMs: () => 0, paceMs: 0, exec: () => ((reads++), { status: 0, stdout: JSON.stringify({ data: { repository: { f0: { text: "# Zorbit\n", isBinary: false } }, rateLimit: { cost: 1, remaining: 4999, resetAt: "2026-11-09T00:00:00Z" } } }), stderr: "" }) });
+    const said: string[] = [], io = { out: (t: string) => void said.push(t), err: () => {} };
+    const argv = ["--from", from, "--units", units, "--now", "2026-11-09T00:00:00Z"];
+    await handover(argv, io, { gh: fake });
+    const ids = JSON.parse(readFileSync(join(units, "ids.json"), "utf8")).units as Array<{ id: string }>;
+    await handover(argv, io, { gh: fake });
+    const again = JSON.parse(readFileSync(join(units, "ids.json"), "utf8")).units as Array<{ id: string }>;
+    let inRepo = false;
+    try {
+      await handover(["--from", from, "--units", join(import.meta.dir, "handover-units")], io, { gh: fake });
+    } catch (e) {
+      inRepo = (e as { code?: string }).code === "E_USAGE";
+    }
+    const u = ids.length === 1 ? loadUnit(units, ids[0]!.id) : null;
+    out.push(T("the handover writes a closed, screen-positive unit that dx author loads under a random id, skips and counts a screen-negative and a window-open unit, reuses the id on a rerun without a read, and refuses an in-repo --units", !!u && u.unit.readme === "# Zorbit\n" && u.unit.draw_digest === "d1" && !/fixture|#/.test(ids[0]!.id) && JSON.stringify(again) === JSON.stringify(ids) && reads === 1 && said[0] === "dx handover: written 1; skipped window-open 1, screen-negative 1, unscreened 0, unread 0, already 0" && said[1] === "dx handover: written 0; skipped window-open 1, screen-negative 1, unscreened 0, unread 0, already 1" && inRepo, said.join(" | ")));
     out.push(T("the instruction-file strip at file level: hostile CLAUDE.md at the root and in a subfolder (one with an @import), CLAUDE.local.md, AGENTS.md and .claude/AGENTS.md removed at any depth and of any entry type and recorded; the imported file stays", JSON.stringify(removed) === JSON.stringify(want) && readFileSync(join(hostile, "notes/extra.md"), "utf8") === "imported text" && left.claude_dir.length === 1, JSON.stringify(removed)));
   } finally {
     rmSync(dir, { recursive: true, force: true });

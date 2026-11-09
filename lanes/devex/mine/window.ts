@@ -4,9 +4,13 @@
 // association kept. The screen lists candidates from three sources: the screen pilot's rule (screen-rule.md, frozen
 // verbatim and parsed from it here), anything in the window that cross-references the unit's pull request or its
 // closing issues, and merged pull requests in the window that change a file the unit changed and also a docs, help or
-// error path. A unit with no candidate drops as screen-negative. No model call.
+// error path. A unit with no candidate drops as screen-negative. No model call. The same pass keeps what the key
+// funnel reads next: every window record, with its body only where one of the unit's identifiers names it (the record
+// touches the unit's surface), and each candidate in full with the passage of its body around the first identifier or
+// cross-reference match (the whole start of the body when the match was in the title, the timeline or the files).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Candidate as FunnelCandidate, WindowRecord } from "../author/funnel.ts";
 import { parsePy } from "./frame.ts";
 import { py, pyEscape } from "./pyre.ts";
 
@@ -35,6 +39,8 @@ export const DOC_TITLE = py("\\b(docs?|documentation|readme|help|error messages?
 export const CLI_DIFF_PATH = py("(^|/)(cli|cmd|commands?|flags|args|options)([/._-]|$)", { I: true });
 export const MAX_IDENTIFIERS = 6;
 export const DIFF_BYTES = 300_000;
+/** Characters of body kept on each side of a candidate's match for its passage. */
+export const PASSAGE_SIDE = 300;
 
 export interface WindowItem {
   kind: "issue" | "discussion" | "pr";
@@ -150,14 +156,26 @@ export interface Screen {
   positive: boolean;
 }
 
-/** Whether text names the unit's pull request or a closing issue by #n, owner/repo#n or URL. */
-function refers(text: string, repo: string, nums: readonly number[]): boolean {
+/** The patterns that name the unit's pull request or a closing issue by #n, owner/repo#n or URL. */
+function refRxs(repo: string, nums: readonly number[]): RegExp[] {
   const r = repo.replace(/[.*+?^$|()[\]\\{}]/g, (c) => "\\" + c);
-  return nums.some((n) => new RegExp("(^|[^\\w/&])#" + n + "(?!\\d)|(^|[^\\w])" + r + "#" + n + "(?!\\d)|github\\.com/" + r + "/(pull|issues)/" + n + "(?!\\d)", "i").test(text));
+  return nums.map((n) => new RegExp("(^|[^\\w/&])#" + n + "(?!\\d)|(^|[^\\w])" + r + "#" + n + "(?!\\d)|github\\.com/" + r + "/(pull|issues)/" + n + "(?!\\d)", "i"));
+}
+
+export interface ScreenRead {
+  screen: Screen;
+  /** Every window item but the unit, by date: a pull request's merge, an issue's or discussion's creation. */
+  records: WindowRecord[];
+  candidates: FunnelCandidate[];
 }
 
 /** The free screen over a unit's window items (the unit itself excluded). */
 export function screen(u: ScreenUnit, all: readonly WindowItem[]): Screen {
+  return screenRead(u, all).screen;
+}
+
+/** The free screen and, from the same matches, the records and candidates the key funnel reads. */
+export function screenRead(u: ScreenUnit, all: readonly WindowItem[]): ScreenRead {
   const items = all.filter((i) => !(i.kind === "pr" && i.number === u.number));
   const repoName = u.repo.split("/")[1]!;
   const raw = [...textCandidates(u.title + "\n" + u.text, repoName), ...(u.diff ? diffCandidates(u.diff) : [])];
@@ -165,18 +183,29 @@ export function screen(u: ScreenUnit, all: readonly WindowItem[]): Screen {
   const rxs = ids.map((x) => tokenRx(x.token));
   const named = (i: WindowItem) => rxs.some((r) => r.test(i.title) || r.test(i.body));
   const unitFiles = new Set(u.files);
-  const refNums = [u.number, ...u.closing];
+  const refs = refRxs(u.repo, [u.number, ...u.closing]);
   const timeline = new Set(u.timeline_refs.map((t) => t.kind + "#" + t.number));
   const cands: Screen["candidates"] = [];
+  const full: FunnelCandidate[] = [];
+  const ref = (i: WindowItem) => i.kind + " " + i.number;
+  const date = (i: WindowItem) => (i.kind === "pr" && i.merged_at ? i.merged_at : i.created_at);
+  const passage = (body: string) => {
+    const at = [...rxs, ...refs].map((r) => r.exec(body)?.index ?? Infinity).reduce((a, b) => Math.min(a, b), Infinity);
+    const from = at === Infinity ? 0 : Math.max(0, at - PASSAGE_SIDE);
+    return body.slice(from, at === Infinity ? 2 * PASSAGE_SIDE : at + PASSAGE_SIDE);
+  };
   for (const i of items) {
     const sources: Array<"screen" | "xref" | "file-doc"> = [];
     if (named(i)) {
       if ((i.kind === "issue" || i.kind === "discussion") && OUTSIDE.has(i.author_association)) sources.push("screen");
       if (i.kind === "pr" && (i.files.some((p) => DOC_PATH.test(p)) || DOC_TITLE.test(i.title))) sources.push("screen");
     }
-    if (timeline.has((i.kind === "pr" ? "pr" : "issue") + "#" + i.number) || refers(i.title + "\n" + i.body, u.repo, refNums)) sources.push("xref");
+    if (timeline.has((i.kind === "pr" ? "pr" : "issue") + "#" + i.number) || refs.some((r) => r.test(i.title + "\n" + i.body))) sources.push("xref");
     if (i.kind === "pr" && i.files.some((p) => unitFiles.has(p)) && i.files.some((p) => DOC_PATH.test(p))) sources.push("file-doc");
-    if (sources.length) cands.push({ kind: i.kind, number: i.number, author_association: i.author_association, sources });
+    if (!sources.length) continue;
+    cands.push({ kind: i.kind, number: i.number, author_association: i.author_association, sources });
+    full.push({ ref: ref(i), date: date(i), title: i.title, association: i.author_association, passage: passage(i.body), body: i.body });
   }
-  return { identifiers: ids, window_items: items.length, candidates: cands, positive: cands.length > 0 };
+  const records = items.map((i) => ({ ref: ref(i), date: date(i), title: i.title, body: named(i) ? i.body : null })).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return { screen: { identifiers: ids, window_items: items.length, candidates: cands, positive: cands.length > 0 }, records, candidates: full };
 }
