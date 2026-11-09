@@ -182,7 +182,7 @@ const line = (file: string, v: unknown) => appendFileSync(file, JSON.stringify(v
 
 /** A row for a planned session no attempt ran for: missing under the code that released it. */
 export function releasedRow(s: BatchSession, code: string, repair: string | null): DxRow {
-  return { unit: s.unit, arm: s.arm, model: s.model, stage: s.stage, pass: s.pass, smoke: s.smoke, end: "missing", code, list: null, words: 0, items: 0, cut: 0, exposed: null, markers: {}, session_kind: null, lean: null, dx_lens: null, gstack_read: null, retried: false, judged: false, limit_stops: 0, spend_micros: 0, session: [s.unit, s.model, s.arm, s.pass].join(":"), reasons: [], repair, answers: null, unknown_micros: 0 };
+  return { unit: s.unit, arm: s.arm, model: s.model, stage: s.stage, pass: s.pass, smoke: s.smoke, end: "missing", code, list: null, words: 0, items: 0, cut: 0, exposed: null, markers: {}, session_kind: null, lean: null, dx_lens: null, gstack_read: null, launched: false, retried: false, judged: false, limit_stops: 0, spend_micros: 0, session: [s.unit, s.model, s.arm, s.pass].join(":"), reasons: [], repair, answers: null, unknown_micros: 0 };
 }
 
 export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {

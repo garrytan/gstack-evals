@@ -70,6 +70,8 @@ export interface DxRow extends Row {
   /** The named reasons of the attempts that did not end the session, then the last one's, in order. */
   reasons: string[];
   repair: string | null;
+  /** False when a stop or a halt released the session before any attempt launched. */
+  launched: boolean;
   answers: AnswerCounts | null;
   unknown_micros: number;
 }
@@ -97,6 +99,7 @@ export function dxRow(s: DxSessionInput): DxRow {
   const web = reads.find((r) => r.outcome.state === "contaminated");
   const audit = s.arm === "none" || s.arm === "lens" ? s.attempts.some((a) => a.transcript !== null && gstackRead(a.transcript)) : null;
   const base: DxRow = {
+    launched: true,
     unit: s.unit, arm: s.arm, model: s.model, stage: s.stage, pass: s.pass, smoke: s.smoke, end: "missing", code: null, list: null, words: 0, items: 0, cut: 0,
     exposed: s.arm === "none" || s.arm === "lens" ? null : (s.exposure?.exposed ?? null), markers: s.exposure?.markers ?? {}, session_kind: s.kind?.session_kind ?? null, lean: s.kind?.lean ?? null,
     dx_lens: s.arm === "autoplan" ? s.dx_lens : null, gstack_read: audit, retried: s.attempts.length > 1, judged: s.judged,
@@ -124,7 +127,7 @@ export function installStops(rows: readonly DxRow[]): Array<{ arm: ArmId; model:
 }
 
 /** A smoke row as smoke rules 1 to 4 read it; gate is autoplan's reviewer-and-gate reading, null elsewhere. */
-export const smokeSession = (r: DxRow): SmokeSession => ({ model: r.model, parsed: r.end === "block", exposed: r.exposed, limit_stops: r.limit_stops, spend_micros: r.spend_micros, gate: r.arm === "autoplan" ? r.markers.reviewer === true && r.markers.gate === true : null });
+export const smokeSession = (r: DxRow): SmokeSession => ({ launched: r.launched !== false, model: r.model, parsed: r.end === "block", exposed: r.exposed, limit_stops: r.limit_stops, spend_micros: r.spend_micros, gate: r.arm === "autoplan" ? r.markers.reviewer === true && r.markers.gate === true : null });
 
 const text = (p: string): string | null => (existsSync(p) ? readFileSync(p, "utf8") : null);
 

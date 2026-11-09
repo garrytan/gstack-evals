@@ -12,7 +12,7 @@ import type { ArmId, ModelId } from "../../../lanes/devex/types.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "dx-readings-test-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
-const row = (arm: ArmId, model: ModelId, i: number, o: Partial<DxRow> = {}): DxRow => ({ ...releasedRow({ id: "x", unit: "u" + i, arm, model, pass: 1, stage: 1, smoke: arm !== "none" }, "E_DX_NO_BLOCK", null), end: "block", code: null, list: ["Print the fix."], exposed: arm === "none" || arm === "lens" ? null : true, markers: { reviewer: true, gate: true }, spend_micros: 1_000_000, ...o });
+const row = (arm: ArmId, model: ModelId, i: number, o: Partial<DxRow> = {}): DxRow => ({ ...releasedRow({ id: "x", unit: "u" + i, arm, model, pass: 1, stage: 1, smoke: arm !== "none" }, "E_DX_NO_BLOCK", null), end: "block", code: null, list: ["Print the fix."], exposed: arm === "none" || arm === "lens" ? null : true, markers: { reviewer: true, gate: true }, spend_micros: 1_000_000, launched: true, ...o });
 const write = (name: string, rows: DxRow[]) => {
   const p = join(dir, name);
   writeFileSync(p, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
@@ -78,8 +78,32 @@ describe("dx readings", () => {
     expect(ok.out).toMatch(/parse rate 19 of 20 \(0\.9500\)/);
     expect(ok.out).toMatch(/admission HEADROOM/);
     const low = await dx(["admission", "--rows", write("none2.ndjson", none.map((r, i) => (i === 1 ? { ...r, end: "missing" as const, code: "E_DX_INFRA_MISSING", list: null } : r))), "--input", input]);
-    expect(low.out).toMatch(/parse rate 18 of 20 \(0\.9000\)/);
+    expect(low.out).toMatch(/parse rate 18 of 19 \(0\.9474\) Opus none replies; the bar is 0\.95; left out 1 infrastructure misses and contaminated rows \(E_DX_INFRA_MISSING 1\)/);
     expect(low.out).toMatch(/admission NO READ/);
+  });
+  test("admission: infrastructure misses and contaminated rows leave the denominator, and model-caused stops stay in it", async () => {
+    const input = join(dir, "admission48.json");
+    writeFileSync(input, JSON.stringify({ noneA: 0.3, stockFail: false, judge: { pass: true, shortfall: false }, floor: { checkA: null, oracleCredit: null } }));
+    const blocks = Array.from({ length: 45 }, (_, i) => row("none", "opus", i));
+    const infra = [row("none", "opus", 45, { end: "missing", code: "E_DX_INFRA_MISSING", list: null }), row("none", "opus", 46, { end: "missing", code: "CAP_STOP", list: null }), row("none", "opus", 47, { end: "missing", code: "E_DX_PROVIDER_DRIFT", list: null, launched: false })];
+    const ok = await dx(["admission", "--rows", write("none48-infra.ndjson", [...blocks, ...infra]), "--input", input]);
+    expect(ok.out).toMatch(/parse rate 45 of 45 \(1\.0000\) Opus none replies; the bar is 0\.95; left out 3 infrastructure misses and contaminated rows \(E_DX_INFRA_MISSING 1, CAP_STOP 1, E_DX_PROVIDER_DRIFT 1\)/);
+    expect(ok.out).toMatch(/admission HEADROOM/);
+    const stops = [45, 46, 47].map((i) => row("none", "opus", i, { end: "session-stop", code: "E_DX_ARM_STOP", list: null }));
+    const low = await dx(["admission", "--rows", write("none48-stops.ndjson", [...blocks, ...stops]), "--input", input]);
+    expect(low.out).toMatch(/parse rate 45 of 48 \(0\.9375\) Opus none replies; the bar is 0\.95; left out 0 infrastructure misses/);
+    expect(low.out).toMatch(/admission NO READ/);
+    const web = await dx(["admission", "--rows", write("none48-web.ndjson", [...blocks, row("none", "opus", 45, { end: "contaminated", code: "E_DX_WEB_CONTAMINATED", list: null })]), "--input", input]);
+    expect(web.out).toMatch(/parse rate 45 of 45 .*\(E_DX_WEB_CONTAMINATED 1\)/);
+  });
+  test("smoke rule 4: the cost median leaves out sessions released before any attempt and keeps a launched session at its spend", async () => {
+    const pdr = (spend: number[], o: Partial<DxRow>[]) => smokeRows(6).map((r) => r).filter((r) => !(r.arm === "plan-devex-review" && r.model === "opus")).concat(spend.map((s, i) => row("plan-devex-review", "opus", i, { spend_micros: s, ...o[i] })));
+    const gone = { end: "missing" as const, code: "CAP_STOP", list: null };
+    const released = await dx(["smoke", "--rows", write("released.ndjson", pdr([7e6, 7e6, 7e6, 0, 0, 0], [{}, {}, {}, { ...gone, launched: false }, { ...gone, launched: false }, { ...gone, launched: false }])), "--projection-fits", "yes", "--doubled-fits", "yes"]);
+    expect(released.out).toMatch(/smoke plan-devex-review: fail: .*rule 4 opus cost-median: Opus smoke median 7000000 micros/);
+    expect(released.out).toMatch(/rule 1 opus parse/);
+    const spent = await dx(["smoke", "--rows", write("spent.ndjson", pdr([1e6, 1e6, 8e6, 8e6, 8e6, 8e6], [{}, {}, gone, gone, gone, gone])), "--projection-fits", "yes", "--doubled-fits", "yes"]);
+    expect(spent.out).toMatch(/rule 4 opus cost-median: Opus smoke median 8000000 micros/);
   });
   test("cells: coverage, contamination and the end rates per cell", async () => {
     const rows = [...Array.from({ length: 9 }, (_, i) => row("lens", "opus", i)), row("lens", "opus", 9, { end: "contaminated", code: "E_DX_ARM_CONTAMINATED", list: null, gstack_read: true })];

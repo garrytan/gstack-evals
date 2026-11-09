@@ -312,6 +312,8 @@ export interface SmokeSession {
   exposed: boolean | null;
   limit_stops: number;
   spend_micros: number | null;
+  /** False for a session released before any attempt launched; rule 4's cost median leaves it out. */
+  launched?: boolean;
   /** autoplan only: the lean run reached its gate with its reviewer on the cell's model. */
   gate: boolean | null;
 }
@@ -347,7 +349,7 @@ export function smokeRules(arm: GstackArm, sessions: readonly SmokeSession[], o:
     if (exposed < need) failures.push({ rule: 2, model: m, kind: "exposure", why: "exposed in " + exposed + " of " + on(m).length + " " + m + " smoke sessions, under " + need });
   }
   const autoplan_out = arm === "autoplan" ? MODEL_IDS.filter((m) => on(m).filter((s) => s.gate === true).length < (m === "opus" ? 5 : 1)) : [];
-  const med = median(opus.map((s) => s.spend_micros ?? 0));
+  const med = median(opus.filter((s) => s.launched !== false).map((s) => s.spend_micros ?? 0));
   if (med > o.sessionLimitMicros / 2) failures.push({ rule: 4, model: "opus", kind: "cost-median", why: "Opus smoke median " + med + " micros exceeds half the session limit" });
   const stops = opus.filter((s) => s.limit_stops > 0).length;
   if (stops >= 2) failures.push({ rule: 4, model: "opus", kind: "cost-stops", why: stops + " of " + opus.length + " Opus sessions stopped by a limit" });
@@ -771,9 +773,13 @@ function readings(argv: string[], io: { out: (t: string) => void; err: (t: strin
     if (typeof input?.stockFail !== "boolean" || typeof input?.judge?.pass !== "boolean" || typeof input?.judge?.shortfall !== "boolean" || !input?.floor || !(input.noneA === null || typeof input.noneA === "number")) usage("--input " + inputPath + " lacks noneA, stockFail, judge {pass, shortfall} or floor {checkA, oracleCredit}", "write each field the admission reads");
     const none = rows.filter((r) => r.arm === "none" && r.model === "opus" && r.stage === 1 && !r.smoke);
     if (!none.length) usage("the rows hold no Opus none stage 1 session", "pass the rows of the s1-none run");
+    const out = none.filter((r) => r.end === "missing" || r.end === "contaminated");
+    const replies = none.length - out.length;
+    if (!replies) usage("every Opus none stage 1 row is an infrastructure miss or contaminated, so no reply is left to read", "take the s1-none run to the Captain");
     const parsed = none.filter((r) => r.end === "block").length;
-    io.out("parse rate " + parsed + " of " + none.length + " (" + (parsed / none.length).toFixed(4) + ") Opus none replies; the bar is " + PARSE_BAR.toFixed(2));
-    const a = admission({ ...input, parsed, replies: none.length });
+    const by = out.reduce<Record<string, number>>((m, r) => ((m[r.code ?? r.end] = (m[r.code ?? r.end] ?? 0) + 1), m), {});
+    io.out("parse rate " + parsed + " of " + replies + " (" + (parsed / replies).toFixed(4) + ") Opus none replies; the bar is " + PARSE_BAR.toFixed(2) + "; left out " + out.length + " infrastructure misses and contaminated rows" + (out.length ? " (" + Object.entries(by).map(([k, v]) => k + " " + v).join(", ") + ")" : ""));
+    const a = admission({ ...input, parsed, replies });
     io.out("admission " + a.reading + ": " + a.reasons.join("; ") + (a.r48 ? "; " + a.r48 : "") + (a.ends ? "; the eval ends here" : ""));
     return 0;
   }
