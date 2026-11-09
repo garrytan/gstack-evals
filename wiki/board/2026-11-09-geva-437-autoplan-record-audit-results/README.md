@@ -82,7 +82,8 @@ Two figures beside it were not preregistered, and neither changes the verdict:
 
 - **Lean, scored against what the runner actually gives the reviewer** (its own checklists, less the outputs a reviewer subagent can't produce): 0.582.
 - **Full kind, on the same Pre-Gate cells:** 0.478 over 13 runs. The gap between the forms is inside the 0.18 to 0.28 this audit could detect between them, and the forms also differ in date, gstack version and plan type, so it's a description, not an effect of the form.
-- **Told:** not read (0 of 9).
+
+Told: not read (0 of 9).
 
 The reason is in gstack's spec. gstack gives runner-driven reviewers a brief and a checklist, never the Pre-Gate cells, and only interactive autoplan reads those cells. The prereg expected this: section 3 warned that on the runner path the methodology never reaches a model, so X-2 measures a proxy, and section 11's prior put lean X-2 well under 0.80 because the lean reviewer gets short checklists. We sent the defect report to gstack's maintainers, and they closed it as by design. So the promise of full-depth outputs doesn't hold for the lean default as specified. That is the lesson.
 
