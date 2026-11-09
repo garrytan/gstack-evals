@@ -55,7 +55,7 @@ This section is an explanation, not a result. SWE-rebench's pool tasks were crea
 
 ## Result
 
-analyze's lines, exactly as printed. It exited 0 for both models.
+analyze's lines as printed, with the cost clauses of the two R3b start lines moved to Agent notes. It exited 0 for both models.
 
 Opus 5.5:
 
@@ -98,7 +98,7 @@ Digests, sha256 of one id per line: the admitted lists, sorted, are df48f3cc0c9e
 
 - **Gate patterns.** Every exposed pilot trial matched DEBUG REPORT. A Phase heading matched in no Opus trial and in one Sol trial.
 - **Pilot passes.** 8 of 10 for each model. The pilot's tasks were drawn from all 200, and only two of them are admitted for each model; told failed both, on both models. One trial on each of 10 tasks is not a comparison, and the prereg freezes none.
-- **Sol's allowance stop.** The check counts each request's worst-case cost before sending it, so it can refuse well under the allowance.
+- **Sol's allowance stop.** One screen-b none session had 6 requests refused at the session budget check and still passed; the amounts are in Agent notes. The check counts each request's worst-case cost before sending it, so it can refuse well under the allowance.
 - **Told against none cost.** A told trial cost about twice a none trial; the costs are in Agent notes. The pilot's 10 tasks are not the screen's 200, so the ratio is rough.
 
 ## Deviations

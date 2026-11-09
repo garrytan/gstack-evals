@@ -63,7 +63,7 @@ This section is an explanation, not a result. R3a4 screened 200 SWE-rebench task
 
 ## Result
 
-analyze's lines, exactly as printed. It exited 5 for both models, its code for an outcome other than KEEP or CUT-CANDIDATE.
+analyze's lines as printed, with the cost clauses of the two re-check lines moved to Agent notes. It exited 5 for both models, its code for an outcome other than KEEP or CUT-CANDIDATE.
 
 Opus 5.5:
 
