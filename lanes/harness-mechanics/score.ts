@@ -127,30 +127,37 @@ function probeCluster(w: string[]): boolean {
 }
 
 export type ScoreOptions = { pass: boolean | null; transcript?: string | null; record?: unknown };
-export function scoreSession(recs: Rec[], opts: ScoreOptions): HmScore {
-  const t = toTranscript(recs);
+/** Section 13's last edit and the checks after it, read the same way by the scorer and by the done hook's exact rule (judge.ts doneFacts). */
+export function lastRun(t: Transcript) {
   const ev = t.events;
   const root = t.cwd ?? null;
-  const results = new Map<string, string>();
-  for (const e of ev) if (e.kind === "tool_result") results.set(e.id, e.text);
-  const edits: number[] = [];
+  const results = new Map<string, { text: string; error: boolean }>();
+  for (const e of ev) if (e.kind === "tool_result") results.set(e.id, { text: e.text, error: e.isError });
+  const edits: number[] = [], files: string[] = [];
   let last = -1, same = "", lastEdit: string | null = null;
   ev.forEach((e, i) => {
     if (e.kind !== "tool_use") return;
     const cmd = e.name === "Bash" ? String(e.input.command ?? "") : null;
     const w = cmd === null ? null : lastBashWrite(cmd, e.cwd ?? root, root);
-    if (w) [last, same, lastEdit] = [i, w.after, "Bash write (" + w.files.join(", ") + ")"];
-    else if (EDIT_TOOLS.test(e.name)) [last, same, lastEdit] = [i, "", e.name];
+    if (w) { [last, same, lastEdit] = [i, w.after, "Bash write (" + w.files.join(", ") + ")"]; files.push(...w.files); }
+    else if (EDIT_TOOLS.test(e.name)) { [last, same, lastEdit] = [i, "", e.name]; files.push(String(e.input.file_path ?? e.input.notebook_path ?? "")); }
     else return;
     edits.push(i);
   });
   const bash = (e: TranscriptEvent) => (e.kind === "tool_use" && e.name === "Bash" ? String(e.input.command ?? "") : null);
+  const res = (e: TranscriptEvent | undefined) => results.get((e as { id: string }).id) ?? { text: "", error: false };
   const cands = last < 0 ? [] : [
-    ...(same ? [{ cmd: same, result: results.get((ev[last] as { id: string }).id) ?? "", at: last }] : []),
-    ...ev.flatMap((e, i) => (i > last && bash(e) !== null ? [{ cmd: bash(e)!, result: results.get((e as { id: string }).id) ?? "", at: i }] : [])),
+    ...(same ? [{ cmd: same, result: res(ev[last]).text, error: res(ev[last]).error, at: last }] : []),
+    ...ev.flatMap((e, i) => (i > last && bash(e) !== null ? [{ cmd: bash(e)!, result: res(e).text, error: res(e).error, at: i }] : [])),
   ];
   const checks = cands.filter((c) => isCheck(c.cmd));
   const ran = checks.filter((c) => showsOutcome(c.result) || isRepro(c.cmd));
+  return { ev, root, edits, last, lastEdit, files: [...new Set(files.filter(Boolean))], checks, ran };
+}
+
+export function scoreSession(recs: Rec[], opts: ScoreOptions): HmScore {
+  const t = toTranscript(recs);
+  const { ev, root, edits, last, lastEdit, checks, ran } = lastRun(t);
 
   const resolve = (p: string, cwd: string | null) => posix.resolve(cwd ?? root ?? "/", p);
   const readLater = (f: string, at: number) => ev.slice(at + 1).some((e) => e.kind === "tool_use" && (
