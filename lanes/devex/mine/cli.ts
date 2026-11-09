@@ -16,9 +16,10 @@ import type { Io } from "../cli.ts";
 import { SEED } from "../types.ts";
 import { classify } from "./classify.ts";
 import { mechanicalSide } from "./frame.ts";
-import { allFiles, baseTree, listPrs, openDxGitHub, readWindow, releasesOf, repoUnion, tagContains, unitDiff, unitFacts, type FrameRepo } from "./github.ts";
+import { unitDiff } from "./git.ts";
+import { allFiles, baseTree, listPrs, openDxGitHub, readWindow, releasesOf, repoUnion, tagContains, unitFacts, type FrameRepo } from "./github.ts";
 import { DEVEX_FILTERS, DEVEX_RELEASED_BY, draw, earliestBefore, excludedDigests, PER_REPO, planText, releaseByAncestry, treeFacts, type Candidate, type UnitFacts } from "./units.ts";
-import { screen } from "./window.ts";
+import { DIFF_BYTES, screen } from "./window.ts";
 
 const flag = (argv: string[], name: string) => {
   const i = argv.indexOf(name);
@@ -103,7 +104,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
         continue;
       }
       const f = cands.find((c) => c.facts.repo === k.repo && c.facts.number === k.number)!.full();
-      const s = screen({ repo: k.repo, number: k.number, title: f.title, text: planText(f).text, closing: f.closing.map((c) => c.number), files: f.files.map((x) => x.path), diff: unitDiff(gh, k.repo, k.number), timeline_refs: refs.get(k.id) ?? [] }, readWindow(gh, k.repo, k.window));
+      const s = screen({ repo: k.repo, number: k.number, title: f.title, text: planText(f).text, closing: f.closing.map((c) => c.number), files: f.files.map((x) => x.path), diff: f.base_sha && f.merge_sha ? unitDiff(k.repo, f.base_sha, f.merge_sha, join(out, "clones"), DIFF_BYTES) : null, timeline_refs: refs.get(k.id) ?? [] }, readWindow(gh, k.repo, k.window));
       screened++;
       if (s.positive) positive++;
       appendFileSync(join(out, "screen.jsonl"), JSON.stringify({ id: k.id, prerelease: k.release.prerelease, ...s }) + "\n");
