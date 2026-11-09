@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
-import { analyse, bootstrap, cellsOf, mddText, verdictOf, wilson, type Row } from "../../lanes/outcome-skills/pfchecks/analysis.ts";
+import { analyse, bootstrap, cellsOf, mddText, report, valueOf, verdictOf, wilson, type Row } from "../../lanes/outcome-skills/pfchecks/analysis.ts";
 import { blindFits, ceilingReading, contrastFloor, costReading, exposureReading, floorReading, infraReading, itemCap, midRunCheck, nRule, reprice } from "../../lanes/outcome-skills/pfchecks/admission.ts";
 import { ITEMS, LINE, lineItemsMicros, OPUS, P1, PLANNING, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
 
@@ -45,6 +45,31 @@ test("pooled and per-model analysis, gaps and the incomplete rule", () => {
   expect(ag.pooled["P-N"].readings.worst_case!.n).toBe(36);
   expect(ag.pooled["P-N"].readings.conflict_as_miss!.n).toBe(36);
   expect(ag.pooled["P-N"].n).toBe(34);
+});
+test("tree-check refusals and wrap-up allowance gaps: counted per arm and model beside every verdict, and a refusal scored as a miss for its own arm", () => {
+  const gap = (r: Row, code: string): Row => ({ ...r, score: null, gap: code, no_static: null, no_api_guess: null, compile_rerun: null });
+  const g = rows().map((r) => (r.model === OPUS && r.arm === "P" && ["u0", "u1"].includes(r.unit) ? gap(r, "E_PF_ARM") : r.model === SOL && r.arm === "C" && r.unit === "u3" ? gap(r, "E_PF_WRAPUP_ALLOWANCE") : r.model === P1 && r.arm === "N" && r.unit === "u5" ? gap(r, "E_PF_FIX_CONFLICT") : r));
+  expect(valueOf(g.find((r) => r.gap === "E_PF_ARM")!, "arm_refusal_as_miss")).toBe(0);
+  expect(valueOf(g.find((r) => r.gap === "E_PF_WRAPUP_ALLOWANCE")!, "arm_refusal_as_miss")).toBeNull();
+  expect(valueOf(g.find((r) => r.gap === "E_PF_FIX_CONFLICT")!, "arm_refusal_as_miss")).toBeNull();
+  const a = analyse(g, 5);
+  const pn = a.pooled["P-N"];
+  expect(pn.n).toBe(33);
+  expect(pn.readings.arm_refusal_as_miss!.n).toBe(35);
+  expect(pn.readings.arm_refusal_as_miss!.delta).toBeCloseTo((pn.delta * 33 - 2) / 35);
+  expect(pn.named_gaps).toEqual({ E_PF_ARM: { [OPUS]: { P: 2, N: 0 }, [P1]: { P: 0, N: 0 }, [SOL]: { P: 0, N: 0 } }, E_PF_WRAPUP_ALLOWANCE: { [OPUS]: { P: 0, N: 0 }, [P1]: { P: 0, N: 0 }, [SOL]: { P: 0, N: 0 } } });
+  expect(a.pooled["P-C"].named_gaps.E_PF_WRAPUP_ALLOWANCE![SOL]).toEqual({ P: 0, C: 1 });
+  expect(a.per_model[OPUS]!["P-N"]!.named_gaps).toEqual({ E_PF_ARM: { [OPUS]: { P: 2, N: 0 } }, E_PF_WRAPUP_ALLOWANCE: { [OPUS]: { P: 0, N: 0 } } });
+  const lines = report(a);
+  const verdicts = lines.map((l, i) => [l, i] as const).filter(([l]) => /^  (P minus|C minus|P-N|P-C|C-N)/.test(l));
+  expect(verdicts.length).toBe(3 + 3 * 3);
+  for (const [, i] of verdicts) {
+    const block = lines.slice(i + 1, lines.findIndex((l, j) => j > i && !l.startsWith("    ")));
+    expect(block.some((l) => l.startsWith("    E_PF_ARM gaps (tree-check refusals):"))).toBe(true);
+    expect(block.some((l) => l.startsWith("    E_PF_WRAPUP_ALLOWANCE gaps (wrap-up refused for its allowance):"))).toBe(true);
+    expect(block.some((l) => l.startsWith("    arm_refusal_as_miss:"))).toBe(true);
+  }
+  expect(lines.find((l) => l.startsWith("    E_PF_ARM gaps") && l.includes(OPUS + " P 2"))).toBeDefined();
 });
 test("admission readings", () => {
   expect(floorReading({ P: 1, C: 1, N: 0 }).reading).toBe("FLOOR");
