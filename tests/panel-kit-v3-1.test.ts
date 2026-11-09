@@ -54,7 +54,7 @@ function kit(bundle: string, dir: string): string {
 
 function check(script: string, panel: string) {
   const t = performance.now();
-  const r = spawnSync("python3", [script, panel, "--wave", "calibration"], { encoding: "utf8", timeout: 5000 });
+  const r = spawnSync("sh", ["-c", 'ulimit -s 8192 && exec python3 "$@"', "sh", script, panel, "--wave", "calibration"], { encoding: "utf8", timeout: 5000 });
   return { status: r.status, killed: r.signal !== null, out: r.stdout ?? "", err: r.stderr ?? "", ms: performance.now() - t };
 }
 
