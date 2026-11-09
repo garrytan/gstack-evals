@@ -8,6 +8,19 @@
 #        vm.sh <runner path> <runner sha256> hygiene <name>            run post-boot.sh again on a VM
 #        vm.sh <runner path> <runner sha256> keys <name>               write the provider keys to ~/.dr-keys (mode 600)
 #        vm.sh <runner path> <runner sha256> down <name>               destroy the VM and check list --mine is empty
+#        vm.sh <runner path> <runner sha256> record-in <name> <record>   copy the ledger record to dr-record in the VM user's home
+#        vm.sh <runner path> <runner sha256> record-out <name> <record>  copy back only the record's new files
+#        vm.sh <runner path> <runner sha256> pull-out <name> <out dir> <run id>  pull a batch's out dir to $DR_RUNS_DIR/<run id>
+#
+# Segments. Runner VMs are deleted after each segment of 6 hours or less, and the real ledger record lives in the Captain
+# drive (ledger/decision-routing/record), which the VM can't see. Before a segment: record-in, then run the batch with
+# --record ~/dr-record and a local sqlite ledger on the VM. The sqlite ledger stays on the VM for the segment, and
+# the controller settles every lease into the record before it exits. After the segment, before down: record-out (a file
+# that already exists in the drive and differs is an error, and then nothing is copied), then pull-out (journals,
+# sessions, Harbor trial dirs, batch.json or answer.json; the runner-only markers stay on the VM). If a VM dies
+# mid-segment, its sqlite ledger and journals are gone, so its open lease is recovered from the provider usage with
+# gstack-evals ledger reconcile --lease <id> --spent <usd> --words <text> --by <who> --source <provider usage export>.
+# DR_RUNS_DIR defaults to ~/.capy/work/geva491/runs.
 #
 # Keys reach the VM only as a file written with umask 077 from ssh's stdin, as quick/laneb/runner/launch.sh does; printf
 # is a shell builtin, so no key appears on any command line.
@@ -68,7 +81,43 @@ case $cmd in
     fi
     echo "vms after down (owner $UBI_OWNER): none"
     ;;
+  record-in)
+    [ $# -eq 2 ] && [ -d "$2" ] || die "E_USAGE: vm.sh ... record-in <name> <record dir>"
+    tar -C "$2" -cf - . | "$runner" ssh "$1" 'cd && rm -rf dr-record && mkdir -p dr-record && tar -C dr-record -xf -'
+    echo "record: copied $2 to ~/dr-record on $1"
+    ;;
+  record-out)
+    [ $# -eq 2 ] && [ -d "$2" ] || die "E_USAGE: vm.sh ... record-out <name> <record dir>"
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    "$runner" pull "$1" dr-record "$tmp"
+    [ -d "$tmp/dr-record" ] || die "E_DR_RUNNER: no dr-record came back from $1; nothing was copied"
+    new=() differ=()
+    while IFS= read -r -d '' f; do
+      rel=${f#"$tmp/dr-record/"}
+      if [ ! -e "$2/$rel" ]; then new+=("$rel"); elif ! cmp -s "$f" "$2/$rel"; then differ+=("$rel"); fi
+    done < <(find "$tmp/dr-record" -type f -print0)
+    [ ${#differ[@]} -eq 0 ] || die "E_DR_RUNNER: these record files exist in $2 and differ on $1: ${differ[*]}; nothing was copied"
+    for rel in "${new[@]}"; do
+      mkdir -p "$(dirname "$2/$rel")"
+      cp -p "$tmp/dr-record/$rel" "$2/$rel"
+    done
+    echo "record: ${#new[@]} new files copied back from $1 to $2"
+    ;;
+  pull-out)
+    [ $# -eq 3 ] || die "E_USAGE: vm.sh ... pull-out <name> <out dir on the VM> <run id>"
+    base=$(basename "$2")
+    dest="${DR_RUNS_DIR:-$HOME/.capy/work/geva491/runs}/$3"
+    mkdir -p "$dest"
+    tmp=$(mktemp -d "$dest/.pull-XXXXXX")
+    trap 'rm -rf "$tmp"' EXIT
+    "$runner" pull "$1" "$2" "$tmp"
+    [ -f "$tmp/$base/batch.json" ] || [ -f "$tmp/$base/answer.json" ] || die "E_DR_RUNNER: $2 on $1 has no batch.json or answer.json; nothing was kept"
+    rm -rf "$tmp/$base/markers" "$dest/$base"
+    mv "$tmp/$base" "$dest/$base"
+    echo "out: $2 from $1 is at $dest/$base"
+    ;;
   *)
-    die "E_USAGE: unknown command $cmd; use up, hygiene, keys or down"
+    die "E_USAGE: unknown command $cmd; use up, hygiene, keys, down, record-in, record-out or pull-out"
     ;;
 esac
