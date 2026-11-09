@@ -1,0 +1,29 @@
+{
+  "as_of": "2026-11-08",
+  "rule": "Section 11: each model's stated training cutoff from its provider's documentation. A unit is leak-exposed for a model when its earliest exposure falls on or before the cutoff; a month-stated cutoff covers that whole month. A model with no published cutoff runs with that limit stated beside its results. More than a quarter of a model's units leak-exposed makes its primaries untested (leak).",
+  "models": {
+    "opus": {
+      "model": "anthropic/claude-opus-5-5",
+      "cutoff": "2026-06",
+      "kind": "training data cutoff",
+      "source": "https://platform.claude.com/docs/en/models/overview",
+      "quote": "Training data cutoff | Jun 2026",
+      "note": "The repository's earlier records note data possibly collected to September 2026 (unverified), which covers the whole merge window; the strict stratum, the by-month print and the recognition probe answer it."
+    },
+    "sol": {
+      "model": "openai/gpt-6.1-sol",
+      "cutoff": "2026-04-30",
+      "kind": "knowledge cutoff",
+      "source": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+      "quote": "Apr 30, 2026 knowledge cutoff"
+    },
+    "particle": {
+      "model": "particle-ai/particle-1",
+      "cutoff": null,
+      "kind": "none published",
+      "release_date": null,
+      "source": "https://docs.particle.ai/models.md",
+      "note": "Particle's model catalog, read 2026-11-08, states no knowledge or training cutoff for particle-1. Section 11 asks for its release date where no cutoff is published; this build did not read one, so the run thread records it here before stage 1. A release date is a stated limit, not a cutoff, so the leak rule does not apply it; particle-1 runs with that limit stated beside its results."
+    }
+  }
+}
