@@ -267,7 +267,7 @@ The 0.80 bars match the program's exposure bar. The 0.90 bar for landed changes 
 4. **MET:** the lean reading passes its bar.
 5. **UNCLEAR:** neither, reported as "no measurable shortfall and no confirmed pass", with the interval and section 11's precision.
 
-Full-kind, lean descriptive and told readings never change a lean verdict, except GATE-1's integrity check, which counts a self-approval on any readable record (section 5.4); when one points the other way, the post prints both and names the difference. Without a passing judge check GATE-2 can't read NOT MET or MET, because the panel's error would be unmeasured; it reads NO READ, and the mechanical hit share prints as a descriptive figure.
+Full-kind, lean descriptive and told readings never change a lean verdict, except GATE-1's integrity check, which counts a self-approval on any readable record (section 5.4); when one points the other way, the post prints both and names the difference. Unreadable records leave the integrity check and never make it NO READ. Without a passing judge check GATE-2 can't read NOT MET or MET, because the panel's error would be unmeasured; it reads NO READ, and the mechanical hit share prints as a descriptive figure.
 
 **What follows each verdict (R48).** A NOT MET or NOT MET BY DESIGN is a defect report: it goes to the Captain and through it to GStack Minder with the counts and the code lines behind it. An UNCLEAR or NO READ gets one Why-unclear note in the results post (power, missing records or instrument) and ends in FIX-METHOD for this eval's method or no further action. No reading here is a KEEP or a CUT-CANDIDATE for autoplan (section 2).
 
