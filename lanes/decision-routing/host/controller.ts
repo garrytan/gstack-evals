@@ -8,7 +8,9 @@
 //   same time, each as one Harbor job (harbor run -c <job.json>) whose process env holds the management socket and token
 //   and no provider key;
 // - stops launching on the STOP file (E_DR_STOPPED), a CAP_STOP from the ledger, or, in a pilot batch, a session meter past
-//   $2.50 (DR_PILOT_SESSION_STOP), lets running sessions end, and never retries;
+//   $2.50 (DR_PILOT_SESSION_STOP), lets running sessions end, and never retries; a DR_PILOT_SESSION_STOP or DR_CUSTODY_HIT
+//   writes the STOP file with its code and session, and a start refuses while any journal of a plan item, live or
+//   .dead-N, holds a DR_CUSTODY_HIT refusal;
 // - settles every lease at the end and writes <out>/batch.json.
 // - with custody inputs, builds each task's runner-only markers (labels/markers.ts) before any lease, writes each
 //   session's list to <out>/markers/<session>.json (owner-only, host side) and names it in the job's markers_file kwarg
@@ -246,7 +248,14 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
   const warn = (code: ReasonCode, message: string) => warnings.push(code + ": " + message);
   if (!isTrialNetworkHost(o.proxyHost)) throw new ControllerError("E_USAGE", "the proxy host " + o.proxyHost + " is not a loopback or private IP literal");
   if (!o.temp && !o.custody) throw new ControllerError("E_USAGE", "a live run (no --temp) needs --pristine-dir and --label-store for the leak scan; nothing was leased or launched");
-  if (existsSync(stopFile)) throw new ControllerError("E_DR_STOPPED", "the stop file " + stopFile + " exists, so nothing was leased or launched; remove it to start the batch");
+  if (existsSync(stopFile)) throw new ControllerError("E_DR_STOPPED", "the stop file " + stopFile + " exists (" + (readFileSync(stopFile, "utf8").trim().split("\n")[0]!.slice(0, 500) || "empty") + "), so nothing was leased or launched; remove it to start the batch");
+  const journals = join(out, "journals");
+  for (const item of new Set(o.plan.map((r) => r.item))) {
+    for (const name of existsSync(journals) ? readdirSync(journals).filter((n) => n === item + ".ndjson" || (n.startsWith(item + ".dead-") && n.endsWith(".ndjson"))) : []) {
+      const hit = readLines(join(journals, name)).find((l) => l.kind === "refusal" && l.code === "DR_CUSTODY_HIT");
+      if (hit) throw new ControllerError("DR_CUSTODY_HIT", "the journal " + join(journals, name) + " holds a custody hit (meter " + hit.meter_id + "), so nothing was leased or launched; start a new batch only on the Captain's word");
+    }
+  }
   if (o.temp && !o.fetch) throw new ControllerError("E_USAGE", "--temp needs --fake-upstreams: a temporary ledger skips admission, so its calls must never reach a real provider; nothing was leased or launched");
   if (!existsSync(o.runtimeTarball) || sha256(o.runtimeTarball) !== o.runtimeSha256) throw new ControllerError("E_DR_RUNTIME", "the runtime tarball " + o.runtimeTarball + " is missing or its sha256 is not " + o.runtimeSha256 + "; nothing was leased or launched");
   if (!existsSync(o.pinFile) || sha256(o.pinFile) !== o.pinSha256) throw new ControllerError("E_DR_PIN", "the pin file " + o.pinFile + " is missing or its sha256 is not " + o.pinSha256 + "; nothing was leased or launched");
@@ -304,17 +313,24 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
     const queue = order.filter((r) => !launchedBefore(r));
     result.skipped = order.filter(launchedBefore).map(sessionId);
 
+    const sessionOf = (item: string, cell: Line | undefined) => {
+      const row = o.plan.find((p) => p.item === item && p.cell === cell?.arm && p.model === cell?.model && (p.task === cell?.task || String(cell?.task).startsWith(basename(p.task) + "__")));
+      return row ? sessionId(row) : "with cell " + JSON.stringify(cell ?? null);
+    };
+    const stopWith = (code: ReasonCode, message: string) => {
+      writeFileSync(stopFile, code + ": " + message + "\n");
+      return { code, message };
+    };
     const checkStops = (): BatchResult["stop"] => {
       if (existsSync(stopFile)) return { code: "E_DR_STOPPED", message: "the stop file " + stopFile + " appeared" };
       for (const r of runs) {
         const lines = readLines(r.journal);
         const hit = lines.find((l) => l.kind === "refusal" && l.code === "DR_CUSTODY_HIT");
         if (hit) {
-          const row = o.plan.find((p) => p.item === r.item && p.cell === hit.cell?.arm && p.model === hit.cell?.model && (p.task === hit.cell?.task || String(hit.cell?.task).startsWith(basename(p.task) + "__")));
           const marks = ((hit.markers ?? []) as Line[]).map((m) => "marker " + m.index + " (sha256 " + m.sha256 + ")").join(", ");
-          const message = "session " + (row ? sessionId(row) : "with cell " + JSON.stringify(hit.cell ?? null)) + " (meter " + hit.meter_id + ") on " + r.item + " sent runner-only content: " + marks + "; running sessions finish and nothing new launches";
+          const message = "session " + sessionOf(r.item, hit.cell) + " (meter " + hit.meter_id + ") on " + r.item + " sent runner-only content: " + marks + "; running sessions finish and nothing new launches";
           log("DR_CUSTODY_HIT: " + message);
-          return { code: "DR_CUSTODY_HIT", message };
+          return stopWith("DR_CUSTODY_HIT", message);
         }
         const cap = lines.find((l) => l.kind === "refusal" && l.code === "CAP_STOP");
         if (cap) {
@@ -322,7 +338,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
           return { code: "CAP_STOP", message: "line item " + r.item + " (lease " + r.lease_id + ") refused a reservation: " + cap.reason };
         }
         if (!o.pilot) continue;
-        for (const [meter, micros] of meterSpend(lines)) if (micros > PILOT_SESSION_STOP_MICROS) return { code: "DR_PILOT_SESSION_STOP", message: "pilot session meter " + meter + " on " + r.item + " reached " + usd(micros) + ", past " + usd(PILOT_SESSION_STOP_MICROS) };
+        for (const [meter, micros] of meterSpend(lines)) if (micros > PILOT_SESSION_STOP_MICROS) return stopWith("DR_PILOT_SESSION_STOP", "pilot session " + sessionOf(r.item, lines.find((l) => l.kind === "request" && l.cell?.meter_id === meter)?.cell) + " (meter " + meter + ") on " + r.item + " reached " + usd(micros) + ", past " + usd(PILOT_SESSION_STOP_MICROS));
       }
       return null;
     };

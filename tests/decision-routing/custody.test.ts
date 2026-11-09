@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runBatch, seededShuffle, sessionId, type BatchOptions, type PlanRow } from "../../lanes/decision-routing/host/controller.ts";
@@ -334,6 +334,30 @@ describe("controller custody stop", () => {
     const canary = readFileSync(join(w.dir, "labels", first.task, "canary.txt"), "utf8").trim();
     expect(JSON.stringify(result)).not.toContain(canary);
     expect(w.logs.join("\n")).not.toContain(canary);
+  });
+
+  test("a custody hit writes the STOP file, and a relaunch launches nothing, even with the STOP file and the live journal gone", async () => {
+    const w = batchWorld(3);
+    const first = seededShuffle(w.rows)[0]!;
+    const result = await runBatch(w.opts({ DR_TEST_LEAK_TASK: first.task }));
+    expect(result.stop?.code).toBe("DR_CUSTODY_HIT");
+    const stopFile = join(w.dir, "out", "STOP");
+    const stop = readFileSync(stopFile, "utf8");
+    expect(stop).toStartWith("DR_CUSTODY_HIT: ");
+    expect(stop).toContain(sessionId(first));
+    const canary = readFileSync(join(w.dir, "labels", first.task, "canary.txt"), "utf8").trim();
+    expect(stop).not.toContain(canary);
+    const jobs = () => readdirSync(join(w.dir, "out", "jobs")).sort();
+    const before = jobs();
+    await expect(runBatch(w.opts())).rejects.toThrow(/^E_DR_STOPPED: .*DR_CUSTODY_HIT/);
+    rmSync(stopFile);
+    await expect(runBatch(w.opts())).rejects.toThrow(/^DR_CUSTODY_HIT: /);
+    expect(readdirSync(join(w.dir, "out", "journals")).filter((n) => n.includes(".dead-"))).toEqual([]);
+    expect(jobs()).toEqual(before);
+    expect(w.sent).toHaveLength(0);
+    renameSync(join(w.dir, "out", "journals", "dr-pilot-rp.ndjson"), join(w.dir, "out", "journals", "dr-pilot-rp.dead-0.ndjson"));
+    await expect(runBatch(w.opts())).rejects.toThrow(/^DR_CUSTODY_HIT: /);
+    expect(jobs()).toEqual(before);
   });
 
   test("a task with no pristine listing is refused before any lease opens", async () => {

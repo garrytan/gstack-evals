@@ -207,6 +207,20 @@ describe("runBatch", () => {
     expect(result.not_launched).toHaveLength(1);
   }, 30_000);
 
+  test("a pilot session stop writes the STOP file with its code and session, and a relaunch launches nothing", async () => {
+    const w = world({ usage: { input_tokens: 700_000, output_tokens: 10 } });
+    const rows = plan(1, ["R", "P"]);
+    const result = await runBatch(w.opts(rows, { pilot: true }));
+    expect(result.stop?.code).toBe("DR_PILOT_SESSION_STOP");
+    const stop = readFileSync(join(w.out, "STOP"), "utf8");
+    expect(stop).toStartWith("DR_PILOT_SESSION_STOP: ");
+    expect(stop).toContain(result.launched[0]!);
+    const jobs = readdirSync(join(w.out, "jobs")).sort();
+    await expect(runBatch(w.opts(rows, { pilot: true }))).rejects.toThrow(/^E_DR_STOPPED: .*DR_PILOT_SESSION_STOP/);
+    expect(readdirSync(join(w.out, "jobs")).sort()).toEqual(jobs);
+    expect(w.read().filter((e) => e.ev === "start")).toHaveLength(1);
+  }, 30_000);
+
   test("the same spend outside a pilot batch does not stop it", async () => {
     const w = world({ usage: { input_tokens: 700_000, output_tokens: 10 } });
     const result = await runBatch(w.opts(plan(1, ["R", "P"])));
