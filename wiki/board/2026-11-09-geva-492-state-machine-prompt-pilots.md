@@ -331,10 +331,14 @@ gstack is Garry Tan's own project.
 
 gbrain is Garry Tan's own project.
 
-The private game repository is Garry Tan's own project.
+The private game repository is also Garry Tan's own project.
 
-No tie between Y Combinator or Garry Tan and Steve Ruiz or tldraw found; checked 2026-11-09 against the YC company directory and https://x.com/steveruizok and https://github.com/steveruizok.
+We found no tie between Y Combinator or Garry Tan and Steve Ruiz or tldraw in the public YC company directory or Steve Ruiz's public profiles, checked 2026-11-09.
 
-No tie between Y Combinator or Garry Tan and Vox (@Voxyz_ai) found; checked 2026-11-09 against the YC company directory and https://x.com/Voxyz_ai.
+We found no tie between Y Combinator or Garry Tan and Vox (@Voxyz_ai) in the public YC company directory or Vox's public profile, checked 2026-11-09.
 
-No tie between Y Combinator or Garry Tan and Lauren Tan, her current employer xAI, or Cursor, which hosts pstack, found; checked 2026-11-09 against the YC company directory and https://x.com/poteto and https://github.com/poteto.
+We found no tie between Y Combinator or Garry Tan and Lauren Tan in the public YC company directory or Lauren Tan's public profiles, checked 2026-11-09.
+
+We found no tie between Y Combinator or Garry Tan and xAI, where Lauren Tan works, in the public YC company directory or Lauren Tan's public profiles, checked 2026-11-09.
+
+We found no tie between Y Combinator or Garry Tan and Cursor (Anysphere), whose plugins repository hosts pstack, in the public YC company directory or Lauren Tan's public profiles, checked 2026-11-09.
