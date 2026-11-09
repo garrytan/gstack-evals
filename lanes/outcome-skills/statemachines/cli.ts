@@ -10,6 +10,8 @@ import { sample } from "./sample.ts";
 import { screen } from "./screen.ts";
 import { fetchMultiLang, manifestSize, pinCandidates, readRows, splitCandidates, type Candidate } from "./source.ts";
 import { readUnit, writeUnit } from "./unit.ts";
+import { runSession } from "./run.ts";
+import { planPart, type PlannedSession } from "./session.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
   source fetch --cache <dir>                         download the pinned MultiLang parquet files and check their sha256
@@ -21,6 +23,12 @@ export const HELP = `gstack-evals outcome sm <command>
   oracle <draw.json> --units <dir> --candidates <file> --cache <dir> --pull-log <file> [--pulls-per-hour 60] [--retry]
   size <candidates.json> --ids <a,b> --pull-log <file>    compressed image sizes by manifest GET (paced)
   sample <candidates.json> --cache <dir> --units <dir> --ids <a,b> --pull-log <file> --out <file>
+  session plan --units <a,b> --models <m,n> --prereg <prereg.json> --part <n> [--lines sm,qa] --out <plan.json>
+                                                     one part's sessions in order (cells shuffled by the frozen order seed)
+  session run --unit <dir> --plan <plan.json> --index <n> --control <url> --proxy <url> --out <run dir>
+              [--attempt 2] [--first <session.json>] [--qa-home <dir> --qa-sha <sha>] [--harbor <bin>]
+                                                     one session: its image, a Harbor run of real_agent in SM mode on the
+                                                     driver at --control (gstack-evals outcome serve), and session.json
 Guide: lanes/outcome-skills/statemachines/README.md`;
 
 function say(e: unknown): number {
@@ -138,6 +146,32 @@ export async function main(argv: string[]): Promise<number> {
     if (sub === "sample") {
       const { pos, f } = flags(rest, ["--cache", "--units", "--ids", "--pull-log", "--out"]);
       await sample({ candidates: loadCands(pos[0]!), cache: need(f, "--cache"), units: need(f, "--units"), ids: need(f, "--ids").split(","), pacer: new Pacer(need(f, "--pull-log")), out: need(f, "--out"), row: (id) => rowOf(need(f, "--cache"), id) });
+      return 0;
+    }
+    if (sub === "session") {
+      const [what, ...r] = rest;
+      if (what === "--help" || what === undefined) {
+        console.log(HELP.split("\n").filter((l) => /^  session|^ {14}|^ {50}/.test(l)).join("\n"));
+        return what === undefined ? 2 : 0;
+      }
+      if (what === "plan") {
+        const { f } = flags(r, ["--units", "--models", "--prereg", "--part", "--lines", "--out"]);
+        const lines = (f.get("--lines") ?? "sm").split(",");
+        if (lines.some((l) => l !== "sm" && l !== "qa")) throw new Error("E_USAGE --lines takes sm, qa or sm,qa");
+        const plan = planPart(need(f, "--units").split(","), need(f, "--models").split(","), readPrereg(need(f, "--prereg")).order_seed, Number(need(f, "--part")), lines as Array<"sm" | "qa">);
+        writeNew(need(f, "--out"), { schema: "sm-plan.v1", sessions: plan });
+        console.log("sessions=" + plan.length + " first=" + plan.filter((x) => x.stage === "first").length + " followon=" + plan.filter((x) => x.stage === "followon").length);
+        return 0;
+      }
+      if (what !== "run") throw new Error("E_USAGE sm session takes plan or run");
+      const { f } = flags(r, ["--unit", "--plan", "--index", "--control", "--proxy", "--out", "--attempt", "--first", "--qa-home", "--qa-sha", "--harbor"]);
+      const index = Number(need(f, "--index"));
+      const session = readJson<{ sessions: PlannedSession[] }>(need(f, "--plan")).sessions.find((x) => x.index === index);
+      if (!session) throw new Error("E_USAGE the plan has no session " + index);
+      const attempt = Number(f.get("--attempt") ?? 1);
+      if (attempt !== 1 && attempt !== 2) throw new Error("E_USAGE --attempt is 1 or 2");
+      const res = runSession({ unitDir: need(f, "--unit"), session, control: need(f, "--control"), proxy: need(f, "--proxy"), out: need(f, "--out"), attempt, ...(f.has("--first") ? { first: f.get("--first")! } : {}), ...(f.has("--qa-home") ? { qaHome: f.get("--qa-home")! } : {}), ...(f.has("--qa-sha") ? { qaSha: f.get("--qa-sha")! } : {}), ...(f.has("--harbor") ? { harbor: f.get("--harbor")! } : {}) });
+      console.log("session=" + session.cell + " end=" + res.record.end + " image=" + res.image.image_id + " lease=" + res.record.lease_id + " harbor_exit=" + res.harbor_exit + " record=" + join(need(f, "--out"), "session.json"));
       return 0;
     }
     throw new Error("E_USAGE unknown sm command " + JSON.stringify(sub) + "; gstack-evals outcome sm --help lists them");

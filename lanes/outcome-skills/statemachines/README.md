@@ -191,3 +191,20 @@ nine follow-ons shuffled the same way, each after its tree's first stage. End ki
   belongs to a package the repository publishes (its repository name, github.com/<repo>, or a name owned.sh reads from the
   tree's Cargo.toml, package.json, go.mod, pom.xml or .csproj files), other_package for any other cache (cargo registry,
   cargo git, the Rust standard library source, Go module cache, node_modules, Maven, Gradle, NuGet), and not_cache.
+
+## P2b: session images, the session CLI and the end-to-end stub session
+
+- image.ts builds one image per session: FROM the unit's runtime image id, the image's repo_dir removed, the prepared
+  tree volume (stripped, one commit) copied in, untracked files the prep runs left there (test output) cleaned with
+  git clean -fd (ignored files stay), then for A3 the /qa install's home copied into /root, and for a follow-on the
+  first stage's patch committed as the second commit (sh/followon.sh). The container is committed with the runtime
+  image's own entrypoint, command, work dir and user, and pinned by id. The session sees only the top layer, so the
+  image's original repository and history never reach it (the e2e checks the original base commit is absent).
+  sessionManifest writes the one-row tg-images.v1 manifest real_agent's U4 image check reads.
+- run.ts runs one session: the image, a Harbor run copy whose environment is only FROM that image (task.toml carries no
+  docker_image), task.json (repo_dir, commits, head, scope = unit scope.dir), an empty arm tar, Harbor with real_agent in
+  SM mode on ledger u4 with every provider key unset, then sm-session.v1 from real_agent's files. A first stage's
+  instruction.md holds no issue text; the follow-on's holds issue.md. It drives the anthropic route only today.
+- CLI: gstack-evals outcome sm session plan and sm session run. The driver serves an SM stage with
+  gstack-evals outcome serve --stage <item>=<model>@<arm>,<arm>.
+- e2e.ts (keyless, P5 reruns it): bun lanes/outcome-skills/statemachines/e2e.ts --unit <unit dir> --harbor <bin> [--keep].

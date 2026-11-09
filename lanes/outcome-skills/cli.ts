@@ -13,6 +13,8 @@ import { readFileSync } from "node:fs";
 export const HELP = `Usage: gstack-evals outcome serve --run <id> --envelope-host <machine id> --stage <item>=<arm> [--stage ...]
            --host <ip> --dir <run dir> [--planned 24] [--reruns 2] [--control-port <n>] [--ttl-hours 72]
            [--ledger <path>] [--ledger-record <dir>]
+A family SM stage is --stage <item>=<model>@<arm>,<arm>: one lease on the item for that model, serving each named SM arm
+at its per-model allowance, with a proxy that refuses provider-side tools.
 
 Opens one U4 lease per stage at its line item's cap through O6's envelope, one metering proxy per lease on --host, and a
 control plane on 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. It prints control=<url> and one
@@ -61,10 +63,11 @@ export async function main(argv: string[]): Promise<number> {
     if (k === "--stage") {
       const m = v.match(/^([^=]+)=(.+)$/);
       if (!m) {
-        console.error(lines("E_USAGE", "--stage takes <item>=<arm>, not " + v));
+        console.error(lines("E_USAGE", "--stage takes <item>=<arm> or, for family SM, <item>=<model>@<arm>,<arm>, not " + v));
         return 2;
       }
-      stages.push({ item: m[1]!, arm: m[2]! });
+      const sm = m[2]!.match(/^([^@]+)@(.+)$/);
+      stages.push(sm ? { item: m[1]!, arm: m[1]!, model: sm[1]!, arms: sm[2]!.split(",") } : { item: m[1]!, arm: m[2]! });
     } else flags.set(k, v);
   }
   const missing = ["--run", "--envelope-host", "--host", "--dir"].filter((k) => !flags.has(k));
