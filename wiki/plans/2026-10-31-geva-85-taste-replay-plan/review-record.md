@@ -105,6 +105,6 @@ Gate: gate_rev 2, 14 decisions (0 pending); answered "uc3a uc4a p1a" answered by
 <details>
 <summary>Agent notes</summary>
 
-Edited 2026-11-09 for public wording; the frozen original is wiki/plans/2026-10-31-geva-85-taste-replay-plan/review-record.md at commit 09d7a8f.
+Edited 2026-11-09 for public wording. Earlier commits keep the text as first merged.
 
 </details>

@@ -109,7 +109,7 @@ The findings index (org drive research/INDEX.md) lists every finding across the 
 ### 8. Publication order
 
 1. Now: nothing is posted. Captains write finding files privately and run the claim check.
-2. First public finding: GBrain-Evals' particle-1 result on LongMemEval, because its repo is already public, after a primary-source check of its report and receipts, a second-judge sensitivity and the disclosure check.
+2. First public finding: the gbrain Captain's particle-1 result on LongMemEval, because its repo is already public, after a primary-source check of its report and receipts, a second-judge sensitivity and the disclosure check.
 3. Then gstack's null, #108 and #109 as one finding (2026-11-01-geva-105-gstack-null-review-and-tb2), after GST-618 closes, the publish audit passes, the trial bundles and a direct-key rerun path exist and another crew has rerun it. Garry makes the repo public.
 4. Then the harness Captain's rule-delivery result (H10) with its frontier rerun, after its audit.
 5. Another crew's private project, after its held-out run.

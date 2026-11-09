@@ -55,7 +55,7 @@ This section is an explanation, not a result. SWE-rebench's pool tasks were crea
 
 ## Result
 
-analyze's lines as printed, with the cost clauses of the two R3b start lines moved to Agent notes. It exited 0 for both models.
+analyze's printed output, with each model's settle line and the cost clauses of its R3b start line moved to Agent notes. It exited 0 for both models.
 
 Opus 5.5:
 
@@ -135,7 +135,7 @@ This post reports an admission pass, not a null. No effect was estimated, so no 
 
 ## Replicate it
 
-The commands that ran are in amendment 4 sections 9 and 10 and in the run records: GEVA-248's step files and scripts/ (oracle preflight, prepare, probe, run) and GEVA-249's step scripts (route check, prepare, probe, launch, relaunch.sh for screen-b). The outcome step is `bun quick/laneb/r3/screen.ts analyze <work dir> --item <item>` from the pin's export, with LEDGER, DROPS and DROPS_SHA256 set, and the lines it printed are quoted above. This record leaves out the trial records and transcripts, which stay in the Captain's drive, so an outsider can't rerun analyze on them.
+The commands that ran are in amendment 4 sections 9 and 10 and in the run records: GEVA-248's step files and scripts/ (oracle preflight, prepare, probe, run) and GEVA-249's step scripts (route check, prepare, probe, launch, relaunch.sh for screen-b). The outcome step is `bun quick/laneb/r3/screen.ts analyze <work dir> --item <item>` from the pin's export, with LEDGER, DROPS and DROPS_SHA256 set, and the lines it printed are above, with the settle lines and cost clauses moved to Agent notes. This record leaves out the trial records and transcripts, which stay in the Captain's drive, so an outsider can't rerun analyze on them.
 
 ## What is held out
 

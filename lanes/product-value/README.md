@@ -12,7 +12,7 @@ sealed outside the repo; the repo gets counts and digests only.
 - meter.ts: the metered client. Every direct model call goes through one lease of one ledger line item and an
   in-process metering proxy, with a reply cache keyed by model and request digest.
 - cli.ts: `gstack-evals pv <command>`, one module per subcommand.
-## Scoring side (GEVA-406, branch pv-score-side)
+## Scoring side (branch pv-score-side)
 
 Every command below is keyless except pv judge and pv generic, which spend only through meter.ts on the item they
 name. Every output path must sit outside the repository, and every command that takes several input or output paths
@@ -90,7 +90,7 @@ words, and the tests drive each in both directions.
     over ICC and control rate, at alpha 0.025.
 19. The twin simulations use power.py's unit model at control 0.35 with 1 or 2 items a unit, at ICC 0.5 and 0.843.
 
-## Review run side (GEVA-406)
+## Review run side
 
 review-units --plan product-value (src/trial/review/pv-cli.ts) runs the sessions. This lane reads them:
 
@@ -115,7 +115,7 @@ The prereg leaves these mechanics open. Each one is tested in both directions un
 11. **Rows.** Exposure is read only for a skill session that ended block or no-block; other rows carry exposed null. A planned session with no journal entry is a missing row with spend null. The opt-in gate arm (plan-ceo-review-gate, smoke rule 3) reads as the skill arm. Rows refuse mixed families or fallback settings and a session planned twice.
 
 
-## Authoring build-time choices (GEVA-406)
+## Authoring build-time choices
 
 - Public records pass a cheap screen before any input is written: a record that is mainly a fix, refactor, chore, docs, tests, CI or a dependency bump is not a plan (section 4), and a record whose 42-day window holds nothing the selector ties to the feature drops.
 - When the release mining linked to a record doesn't contain its merge commit, collect tries the next releases published by 2026-10-09 and keeps the first that does; if that release's window is still open, the record waits for wave B.
