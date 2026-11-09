@@ -250,3 +250,33 @@ export const DRIFT_FORMS: Record<Lang, DriftForm[]> = {
     { kind: "reference", capture: "name", re: /NameError: name '([A-Za-z_]\w*)' is not defined/g, source: "CPython ceval.c: name 'x' is not defined" },
   ],
 };
+
+// ---- P4 lists (frozen at this commit): state constructs, fix-title words and generated marks (post section 10) ----
+
+export type ConstructKind = "enum" | "sealed" | "union" | "table";
+export const CONSTRUCT_KINDS: readonly ConstructKind[] = ["enum", "sealed", "union", "table"];
+/** A line that defines or assigns something named for transitions: a transition table, map or function. */
+const TABLE = /\b\w*transitions?\w*\s*(?::=|=(?!=)|:(?!:))/i;
+const C_ENUM = /\benum\b/;
+/** New state constructs, counted per added line of a source file; one pattern per kind and language. */
+export const STATE_CONSTRUCTS: Record<Lang, Array<{ kind: ConstructKind; re: RegExp }>> = {
+  rust: [{ kind: "enum", re: /^\s*(?:pub(?:\([^)]*\))?\s+)?enum\s+\w/ }, { kind: "sealed", re: /\bmod\s+sealed\b|\btrait\s+Sealed\b/ }, { kind: "table", re: TABLE }],
+  java: [{ kind: "enum", re: /\benum\s+\w/ }, { kind: "sealed", re: /\bsealed\s+(?:abstract\s+)?(?:interface|class)\b|\bpermits\s+\w/ }, { kind: "table", re: TABLE }],
+  c: [{ kind: "enum", re: C_ENUM }, { kind: "table", re: TABLE }],
+  cpp: [{ kind: "enum", re: C_ENUM }, { kind: "union", re: /\bstd::variant\s*</ }, { kind: "table", re: TABLE }],
+  csharp: [{ kind: "enum", re: /\benum\s+\w/ }, { kind: "sealed", re: /\babstract\s+record\b/ }, { kind: "table", re: TABLE }],
+  go: [{ kind: "enum", re: /\biota\b/ }, { kind: "sealed", re: /^\s*is[A-Z]\w*\(\)\s*$/ }, { kind: "table", re: TABLE }],
+  js: [{ kind: "enum", re: /\bObject\.freeze\(\s*\{/ }, { kind: "table", re: TABLE }],
+  ts: [{ kind: "enum", re: /\benum\s+\w/ }, { kind: "union", re: /\btype\s+\w+\s*=\s*\|?\s*(['"\x60])[^'"\x60]*\1\s*\|/ }, { kind: "table", re: TABLE }],
+  python: [{ kind: "enum", re: /^\s*class\s+\w+\(\s*(?:enum\.)?(?:Enum|IntEnum|StrEnum|Flag|IntFlag)\s*\)/ }, { kind: "union", re: /\bLiteral\[\s*['"]/ }, { kind: "table", re: TABLE }],
+};
+
+/** A commit title that names a fix (later-fix overlap), case-insensitive, whole words. */
+export const FIX_TITLE_TEXT = String.raw`\b(fix|fixes|fixed|fixing|bugfix|hotfix|bug|regression|crash|panic|resolve|resolves|resolved)\b`;
+export const FIX_TITLE = new RegExp(FIX_TITLE_TEXT, "i");
+export const fixTitleDigest = (): string => createHash("sha256").update(FIX_TITLE_TEXT).digest("hex");
+
+/** A generated file's header: the word "generated" or "do not edit" on one of its first 5 lines, case-insensitive. */
+export const GENERATED_HEADER = /\bgenerated\b|\bdo not edit\b/i;
+export const GENERATED_LINES = 5;
+

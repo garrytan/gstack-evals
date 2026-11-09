@@ -18,6 +18,9 @@ import { runSession } from "./run.ts";
 import { computeStart, firstInfo, scoreFollowon, treeCounts, treeScores, TREES, type FollowonRecord, type StartSet, type Tree } from "./followon.ts";
 import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
 import { planPart, type PlannedSession, type SessionRecord } from "./session.ts";
+import { LANGS, type Lang } from "./langs.ts";
+import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, labelPacket, r78Check, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Row } from "./packets.ts";
+import { foundIt, laterFix, whatChanged } from "./secondary.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
   source fetch --cache <dir>                         download the pinned MultiLang parquet files and check their sha256
@@ -57,6 +60,19 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      per unit, model and tree: replicate means, the 2-of-3 keep rule,
                                                      first-stage gaps (sm-outcome.v1 records in --firsts), inherited fixes
                                                      and drift counts
+  packets label --unit <dir> --out <packet.json> --key <key.json>
+                                                     section 3's labeller packet: issue, fix and the fix's tests, no unit id
+  packets judge --diff <file> --files <list> --unit <id> --model <m> --cell <name> --out <packet.json> --key <key.json>
+                                                     section 10's judge packet: the folder's file list and the diff cut at
+                                                     1,500 lines; arm, model and session go only in the key
+  packets stock --lang <lang> --tree <dir> --file <path> --files <list> --unit <id> --model <m> --out-dir <dir>
+                                                     the three stock diffs from one file of the unit's own tree
+  packets read label|judge --answer <file> [--packet <packet.json>]
+                                                     reads one reply strictly; a malformed one exits 1 (E_SM_JUDGE_ANSWER)
+  packets r78 --rows <rows.json> --out <file>        the R78 check on [{id, a, b}] replies (a Astra, b Opus) in seeded order
+  secondary --unit <dir> --patch <arm.patch> [--outcome <outcome.json>] [--tree <base dir>] [--clone <dir>] --out <file>
+                                                     section 10's keyless secondaries: found it, what it changed and, with
+                                                     a local clone, later-fix overlap
 Guide: lanes/outcome-skills/statemachines/README.md`;
 
 function scoreFollowonCli(r: string[]): number {
@@ -295,6 +311,86 @@ export async function main(argv: string[]): Promise<number> {
       if (attempt !== 1 && attempt !== 2) throw new Error("E_USAGE --attempt is 1 or 2");
       const res = runSession({ unitDir: need(f, "--unit"), session, control: need(f, "--control"), proxy: need(f, "--proxy"), out: need(f, "--out"), attempt, ...(f.has("--first") ? { first: f.get("--first")! } : {}), ...(f.has("--qa-home") ? { qaHome: f.get("--qa-home")! } : {}), ...(f.has("--qa-sha") ? { qaSha: f.get("--qa-sha")! } : {}), ...(f.has("--harbor") ? { harbor: f.get("--harbor")! } : {}) });
       console.log("session=" + session.cell + " end=" + res.record.end + " image=" + res.image.image_id + " lease=" + res.record.lease_id + " harbor_exit=" + res.harbor_exit + " record=" + join(need(f, "--out"), "session.json"));
+      return 0;
+    }
+    if (sub === "packets") {
+      const [what, ...r] = rest;
+      if (what === "label") {
+        const { f } = flags(r, ["--unit", "--out", "--key"]);
+        const { packet, key } = labelPacket(need(f, "--unit"));
+        assertBlind(packet, [key.unit]);
+        writeNew(need(f, "--out"), packet);
+        writeNew(need(f, "--key"), key);
+        console.log("packet=" + packet.packet + " issue_chars=" + packet.issue.length + " record=" + need(f, "--out"));
+        return 0;
+      }
+      if (what === "judge") {
+        const { f } = flags(r, ["--diff", "--files", "--unit", "--model", "--cell", "--out", "--key"]);
+        const model = need(f, "--model");
+        judgeFor(model);
+        const files = readFileSync(need(f, "--files"), "utf8").split("\n").filter(Boolean);
+        const { packet, lines_total } = judgePacket({ diff: readFileSync(need(f, "--diff"), "utf8"), files });
+        assertBlind(packet, [model, need(f, "--unit")]);
+        writeNew(need(f, "--out"), packet);
+        writeNew(need(f, "--key"), judgeKey(packet, { unit: need(f, "--unit"), model, cell: need(f, "--cell"), lines_total, stock: null }));
+        console.log("packet=" + packet.packet + " lines=" + lines_total + " cut=" + packet.cut + " hunks=" + packet.hunks.length + " judge=" + judgeFor(model));
+        return 0;
+      }
+      if (what === "stock") {
+        const { f } = flags(r, ["--lang", "--tree", "--file", "--files", "--unit", "--model", "--out-dir"]);
+        const lang = need(f, "--lang") as Lang;
+        if (!LANGS.includes(lang)) throw new Error("E_USAGE --lang is one of " + LANGS.join(", "));
+        const path = need(f, "--file"), out = need(f, "--out-dir"), model = need(f, "--model");
+        const files = readFileSync(need(f, "--files"), "utf8").split("\n").filter(Boolean);
+        mkdirSync(out, { recursive: true });
+        const made: string[] = [];
+        for (const s of stockDiffs({ lang, path, text: readFileSync(join(need(f, "--tree"), path), "utf8") })) {
+          if (s.diff === null) { made.push(s.kind + ":none"); continue; }
+          const { packet, lines_total } = judgePacket({ diff: s.diff, files });
+          writeNew(join(out, packet.packet + ".json"), packet);
+          writeNew(join(out, packet.packet + ".key.json"), judgeKey(packet, { unit: need(f, "--unit"), model, cell: "stock", lines_total, stock: s.kind }));
+          made.push(s.kind + ":" + packet.packet);
+        }
+        console.log("stock " + made.join(" "));
+        return 0;
+      }
+      if (what === "read") {
+        const [kind, ...rr] = r;
+        const { f } = flags(rr, ["--answer", "--packet"]);
+        const reply = readFileSync(need(f, "--answer"), "utf8");
+        const res = kind === "label" ? readLabelAnswer(reply) : kind === "judge" ? readJudgeAnswer(reply, readJson<JudgePacket>(need(f, "--packet"))) : (() => { throw new Error("E_USAGE sm packets read takes label or judge"); })();
+        if (!res.ok) {
+          console.error(res.code + " " + res.why);
+          return 1;
+        }
+        console.log(JSON.stringify(res.answer));
+        return 0;
+      }
+      if (what === "r78") {
+        const { f } = flags(r, ["--rows", "--out"]);
+        const res = r78Check(readJson<R78Row[]>(need(f, "--rows")));
+        writeNew(need(f, "--out"), { schema: "sm-r78.v1", ...res });
+        console.log("used=" + res.used + " labelled=" + res.labelled + " short=" + res.short + " " + AXES.map((a) => a + ":kappa=" + res.axes[a].kappa + "," + res.axes[a].reading).join(" "));
+        return 0;
+      }
+      console.log(HELP.split("\n").filter((l, k, a) => /^  packets/.test(l) || (/^ {14}/.test(l) && a.slice(0, k).reverse().find((x) => /^  \S/.test(x))?.startsWith("  packets"))).join("\n"));
+      return what === undefined || what === "--help" ? (what ? 0 : 2) : 2;
+    }
+    if (sub === "secondary") {
+      const { f } = flags(rest, ["--unit", "--patch", "--outcome", "--tree", "--clone", "--out"]);
+      const unitDir = need(f, "--unit");
+      const u = readUnit(unitDir);
+      const arm = readFileSync(need(f, "--patch"), "utf8");
+      const fix = readFileSync(join(unitDir, "fix.patch"), "utf8");
+      const o = f.has("--outcome") ? readJson<{ strict?: { outcome?: string | null } }>(f.get("--outcome")!) : null;
+      const fixed = o?.strict?.outcome ? o.strict.outcome === "clean_fix" || o.strict.outcome === "fix_broke" : null;
+      const tree = f.get("--tree");
+      const readBase = (p: string) => (tree && existsSync(join(tree, p)) ? readFileSync(join(tree, p), "utf8") : null);
+      const found = foundIt(arm, fix, fixed);
+      const changed = whatChanged(arm, { lang: u.lang, scopeDir: u.scope?.dir ?? null, testFiles: u.test_patch.files, readBase });
+      const later = f.has("--clone") ? laterFix(arm, fix, f.get("--clone")!, { base: u.base_commit, pull: u.pull_number }) : null;
+      writeNew(need(f, "--out"), { schema: "sm-secondary.v1", unit: u.id, patch_sha256: createHash("sha256").update(arm).digest("hex"), found, changed, later_fix: later, later_fix_skipped: later ? null : "no --clone" });
+      console.log("found=" + found.found + " nearest=" + found.nearest + " files=" + changed.files + " lines=+" + changed.lines.added + "/-" + changed.lines.removed + " generated=" + changed.generated.length + " constructs=" + JSON.stringify(changed.state_constructs) + (later ? " later_outside=" + later.outside + " later_overlapping=" + later.overlapping + " candidates=" + later.candidates + " excluded=" + later.excluded.length : " later=skipped"));
       return 0;
     }
     if (sub === "score") {

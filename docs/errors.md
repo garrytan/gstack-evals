@@ -201,6 +201,9 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_INFRA_GAP](#e_sm_infra_gap) | 2 | U20 |
 | [E_SM_APPLY_FAILED](#e_sm_apply_failed) | 1 | U20 |
 | [E_SM_TEST_PATCH_CONFLICT](#e_sm_test_patch_conflict) | 2 | U20 |
+| [E_SM_PACKET](#e_sm_packet) | 2 | U20 |
+| [E_SM_JUDGE_ANSWER](#e_sm_judge_answer) | 1 | U20 |
+| [E_SM_SECONDARY](#e_sm_secondary) | 2 | U20 |
 | [E_PROXY_SERVER_TOOL](#e_proxy_server_tool) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -364,6 +367,14 @@ A state machines session's change did not apply to a fresh copy of the unit's ba
 Fix: Nothing to fix in the session: it counts as no fix and is listed per arm. If many sessions hit it, check the snapshot patch and the scorer's readings for a harness fault.
 
 Exit 1. Side effects: None: scoring spends nothing. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_JUDGE_ANSWER
+
+A labeller or judge reply is not one bare JSON object with exactly the frozen fields and values (preregistration sections 3 and 10). The reader fails closed: the answer counts as missing, a unit with a missing label is not eligible, and a missing stock-diff answer counts as scored above 0.
+
+Fix: Nothing to fix in the reply. Report it as malformed; the counts print beside every judged number.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 2: no verdict (INCOMPLETE)
 
@@ -1398,6 +1409,22 @@ A hunk of the fix's tests (test.patch, or the fix patch's in-source test hunks) 
 Fix: Nothing to fix in the session: report the gap per arm and reading. The record names the hunk and the unmerged files.
 
 Exit 2. Side effects: None: scoring spends nothing. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_PACKET
+
+A labeller or judge packet (preregistration sections 3 and 10) could not be built: the unit dir lacks a file, the session model has no frozen judge, a stock copy could not be diffed, or the packet text names the session's model, cell or id, which packets must never show.
+
+Fix: Check the unit dir and the session record. A packet that names its session is never sent; report it and leave that diff unjudged.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_SECONDARY
+
+A keyless secondary (preregistration section 10) could not read the local clone it needs: the base commit or a candidate commit is missing, or git failed.
+
+Fix: Clone the public repository with full history (git clone --filter=blob:none) and fetch refs/pull/&lt;n>/head into refs/sm/pull-&lt;n>, then rerun. Never read history from a paid or keyed API.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_PROXY_SERVER_TOOL
 
