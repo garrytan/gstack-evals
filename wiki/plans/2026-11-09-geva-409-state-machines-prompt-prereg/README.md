@@ -28,7 +28,7 @@ GEVA-409, Captain GEVA-2. Plan only: nothing in this post spends money, and no m
 
 Approved at gate_rev 1 of /autoplan run autoplan-20261109051613 (lean, one Opus 5.5 reviewer), rec_hash e035caa0962a. The project owner took every recommendation on 2026-11-09, relayed by the Captain: the three High fixes (two breakage readings, hunk-level test application, and an incremental follow-on score), all 13 Medium, Low and informational findings, the $4,000 line for this eval, a separate $1,100 line for gstack's /qa, the structure claim in this line, the newest-first draw, and no owner labels for the judged ratings. This revision writes those picks in.
 
-On 2026-11-09, before the build, the Captain added the seed file prereg.json and settled three readings the build follows, written into sections 4, 6 and 14: the proxy's web-tool refusal, the no-answer rule and the exact sign-flip test. After the first build package it settled two more: tests that live inside the fix patch (sections 3, 7 and 18) and how leak drops are reported (section 4). It also had the crew's snapshot strip rule written into section 4. After the first-stage scorer it settled three scoring readings in sections 3 and 7: the fix's in-source test hunks go everywhere the test patch goes, the 2-of-3 rerun works in both directions, and three fallbacks are counted.
+On 2026-11-09, before the build, the Captain added the seed file prereg.json and settled three readings the build follows, written into sections 4, 6 and 14: the proxy's web-tool refusal, the no-answer rule and the exact sign-flip test. After the first build package it settled two more: tests that live inside the fix patch (sections 3, 7 and 18) and how leak drops are reported (section 4). It also had the crew's snapshot strip rule written into section 4. After the first-stage scorer it settled three scoring readings in sections 3 and 7: the fix's in-source test hunks go everywhere the test patch goes, the 2-of-3 rerun works in both directions, and three fallbacks are counted. After the follow-on scorer it settled how a follow-on's own change is scored (section 8, item 3) and kept two literal choices about follow-on gaps, each counted (sections 6 and 8).
 
 ## ELI5
 
@@ -164,7 +164,7 @@ A session ends when its turn ends and its background tasks are quiet (the rig's 
 
 - **Test-patch conflict:** the fix's tests won't merge onto the arm's tree (section 7, step 3). A scoring gap, not a miss.
 
-A unit with a gap in any arm of a contrast leaves that contrast. For claim 2, a gap in a first stage removes that tree's follow-ons; a follow-on gap removes that replicate, and a unit keeps a tree only with at least 2 of 3 replicates. Gap counts are reported per arm and cell, with a worst-case reading that scores each arm's gaps as failures, because the longest sessions (likely A1's) may meet more upstream errors. A cell with gaps on more than 10% of its units is incomplete and gets no verdict.
+A unit with a gap in any arm of a contrast leaves that contrast. For claim 2, a gap in a first stage removes that tree's follow-ons, and that includes a first stage whose fix's tests conflict on its strict tree (section 7, step 3), counted on its own. A start-set merge conflict (section 8, item 2) is a gap for all three replicates on that tree, also counted on its own. A follow-on gap removes that replicate, and a unit keeps a tree only with at least 2 of 3 replicates. Gap counts are reported per arm and cell, with a worst-case reading that scores each arm's gaps as failures, because the longest sessions (likely A1's) may meet more upstream errors. A cell with gaps on more than 10% of its units is incomplete and gets no verdict.
 
 ### 7. Scoring the first stage (claim 1)
 
@@ -186,10 +186,11 @@ Claim 2's follow-on starts from the arm's **full tree**: every edit the arm made
 ### 8. The follow-on (claim 2)
 
 1. For each unit, start three follow-on sessions on each of three trees: the base tree (S0), A1's full tree and S2's full tree, each in a fresh container from the unit's digest with the one-commit history (a first stage's change is committed on top as a second commit).
-2. Each tree's **start set** is the tests that pass in all of three runs of the dataset's test commands on that tree before any follow-on. On S0 it is the base stable set.
-3. Each follow-on is scored by applying the fix's tests as in section 7, step 3, and running the dataset's tests, with two scores:
+2. Each tree's **start set** is the tests that pass in all of three runs of the dataset's test commands on that tree before any follow-on, each run with the fix's tests applied as in section 7, step 3. On S0 it is the base stable set. If the fix's tests won't merge onto an A1 or S2 tree for these runs, every follow-on replicate on that tree is a gap (section 6).
+3. Each follow-on's own change, its tree against the start tree, is scored under section 7's strict reading: existing test files and protected test and build configuration go back to the start tree, its hunks inside in-source test modules are dropped, and its new test files are applied unless protected. The fix's tests are then applied as in section 7, step 3, and the dataset's tests run, with two scores:
    - **Incremental** (claim 2's primary, the structure measure): every fail-to-pass test passes and no test in the tree's start set fails. It asks whether the next fix went through cleanly on the code it was given.
    - **End to end** (the key secondary, net value to a user): every fail-to-pass test passes and every test in the base stable set passes. Whatever the first stage broke and the follow-on didn't repair fails here.
+   - The same two scores on the follow-on's whole change, with nothing restored, are reported beside them and never set a verdict.
 4. A unit's score on a tree is its mean over the replicates. Each contrast is the paired difference of those means between trees.
 5. **Inherited fixes.** If the first stage already fixed the target bug, the follow-on usually passes on both scores. That is part of what a user of the prompt gets, so it counts. The count of first stages that already clean-fixed the target is reported per arm, with a sensitivity reading that leaves those units out (labelled as conditioned on the outcome).
 6. **Drift.** A follow-on is a drift case when the fix's tests fail only because they name an identifier present in the base tree and absent from the start tree. A frozen per-language detector decides: for compiled languages, a compiler error naming such an identifier; for JS, TypeScript and Python, an import, attribute, reference or not-a-function error naming one. A drift case fails both scores, because a later contributor's tests broke. The drift count is reported with a sensitivity reading that leaves drift units out.
@@ -201,7 +202,7 @@ Claim 2's follow-on starts from the arm's **full tree**: every edit the arm made
 |---|---|
 | The agent looks up the real fix online | No egress but the proxy; web tools off in every arm; history cut; leak scan |
 | Future commits sit in the image | One-commit history; leak scan for lines the fix adds that appear nowhere in the base tree |
-| The agent edits or deletes tests to pass | Existing test files and test configs are restored; the fix's tests are applied over them |
+| The agent edits or deletes tests to pass | Existing test files and test configs are restored, in first stages and follow-ons alike; the fix's tests are applied over them |
 | A new test file games the runner | New files matching the protected config list (conftest, build scripts, runner configs) are not applied; others are, and a new test that fails in three scoring runs counts as a break |
 | A refactor renames code and updates its own tests | Strict and adapted readings (section 7); follow-ons start from the arm's full tree |
 | The fix's tests share a source file with the arm's fix (Rust and others) | Hunk-level three-way merge of the fix's tests; a conflict is a counted gap, never a miss |
