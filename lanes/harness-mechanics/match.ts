@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkContract, parseTranscript, validateContract } from "./vendor/gstack/lib/skill-contract.ts";
 import { GSTACK_BLOBS, GSTACK_VENDOR, HM, loadBundle, MATCHER, REPO, type Bundle } from "./pins.ts";
+import { quoteSource } from "./quotes.ts" with { type: "macro" };
 
 const input = (m: string): never => { throw new Error("E_HM_INPUT " + m); };
 const pinErr = (m: string): never => { throw new Error("E_HM_PIN " + m); };
@@ -44,13 +45,10 @@ export function checkCheckout(dir = process.env.HM_GSTACK ?? ""): string {
   return dir;
 }
 
-// gstack's quote transform, read from the vendored checker: every quoted string becomes a pair of empty quotes.
-function quoteTransform(src: string): RegExp {
-  const all = [...src.matchAll(/const bare = cmd\.replace\(\/(.+?)\/([a-z]*), '""'\);/g)];
-  if (all.length !== 1) pinErr("the vendored checker holds " + all.length + " quote transforms, not 1");
-  return new RegExp(all[0]![1]!, all[0]![2]);
-}
-export const QUOTES = quoteTransform(readFileSync(vendorFile("lib/skill-contract.ts"), "utf8"));
+// gstack's quote transform, read from the vendored checker when Bun transpiles or bundles this file (quotes.ts): every
+// quoted string becomes a pair of empty quotes.
+const QUOTE = quoteSource();
+export const QUOTES = new RegExp(QUOTE.source, QUOTE.flags);
 
 export type Label = "COUNT" | "NO" | "FLIP";
 export type Case = { label: Label; cmd: string; line: number };

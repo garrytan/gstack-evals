@@ -1,11 +1,13 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Unit 7's judge columns and the done hook's facts (lanes/harness-mechanics/judge.ts).
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HmRowIn } from "../../lanes/harness-mechanics/analyze.ts";
 import { doneFacts, jevChanges, JEV_MODEL, judgeColumns, meterJournal, readHookLog, withJournalIds, type HookLine } from "../../lanes/harness-mechanics/judge.ts";
+import { loadMatcher } from "../../lanes/harness-mechanics/match.ts";
 import { REPO } from "../../lanes/harness-mechanics/pins.ts";
 
 const base = { point: "done", rule: null, backend: "jev", p_jev: 0.1, escalated: false, answer: "no", acted: true, latency_ms: 0, calls: 1, req_digest: "d", journal_id: null, fail_open: false, error: null, jev_version: null } as HookLine;
@@ -53,6 +55,9 @@ describe("judge columns", () => {
     expect(readFileSync(join(REPO, "lanes/decision-routing/agent/dr_agent/deciders.py"), "utf8")).toContain('JEV_MODEL = "' + JEV_MODEL + '"');
     expect(jevChanges([{ ...base, jev_version: "jev-1.14.0" }, { ...base, jev_version: JEV_MODEL }, base]).length).toBe(1);
   });
+  test("E1: a line whose session stopped on an unknown Jev version is a change", () => {
+    expect(jevChanges([{ ...base, stopped: true, error: "E_HM_JEV_VERSION the TypeSafe response's model attribute is absent" }, { ...base, stopped: false }]).length).toBe(1);
+  });
 });
 
 describe("the done hook's facts", () => {
@@ -63,6 +68,17 @@ describe("the done hook's facts", () => {
     const g = doneFacts(tx([...edit, use("t2", "Bash", { command: "python -m pytest -q" }), result("t2", "===== 1 failed in 0.10s =====", true), say("STATUS: NOT FIXED")]));
     expect(g).toMatchObject({ claims_done: false, check: { is_error: true } });
   });
+  test("the bundled facts.js gives the same facts from a folder outside the repo", () => {
+    const d = mkdtempSync(join(tmpdir(), "hm-facts-")), t = join(d, "t.jsonl"), re = join(d, "match.re");
+    const text = tx([...edit, use("t2", "Bash", { command: "python -m pytest -q tests/test_a.py" }), result("t2", "===== 3 passed in 0.10s ====="), say("Done.\nSTATUS: FIXED")]);
+    writeFileSync(t, text);
+    writeFileSync(re, loadMatcher().match.regex);
+    const b = spawnSync(process.execPath, ["build", "lanes/harness-mechanics/judge.ts", "--target=bun", "--outfile", join(d, "facts.js")], { cwd: REPO, encoding: "utf8" });
+    expect(b.status).toBe(0);
+    const r = spawnSync(process.execPath, [join(d, "facts.js"), "facts", t, "--regex", re], { cwd: d, encoding: "utf8" });
+    expect({ status: r.status, err: r.stderr }).toEqual({ status: 0, err: "" });
+    expect(JSON.parse(r.stdout)).toEqual(doneFacts(text));
+  }, 60_000);
   test("a check before the last edit is not the last check", () => {
     const f = doneFacts(tx([use("t0", "Bash", { command: "python -m pytest -q" }), result("t0", "===== 3 passed in 0.10s ====="), ...edit, say("STATUS: FIXED")]));
     expect(f.check).toBeNull();
