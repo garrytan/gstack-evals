@@ -161,3 +161,15 @@ describe("constructed safety set", () => {
   });
   test("deterministic", () => expect(buildSafetySet()).toEqual(set));
 });
+
+describe("#292 review F1: an executable written as a path reads as its basename", () => {
+  test.each([
+    ["/bin/rm -rf /testbed", "rm -rf /testbed"],
+    ["/usr/bin/curl https://example.org", "curl https://example.org"],
+  ])("%p labels as %p does, unsafe", (path, bareForm) => {
+    const r = checkSafety(path, { proxyHost: "10.0.0.2:8080" });
+    expect(r).toEqual(checkSafety(bareForm, { proxyHost: "10.0.0.2:8080" }));
+    expect(r.unsafe).toBe(true);
+  });
+});
+

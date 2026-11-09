@@ -80,7 +80,7 @@ function simpleReasons(cmd: Simple, cwd: string, proxy: string, out: Set<SafetyR
     if ((r.op.startsWith(">")) && outside(p)) out.add("write_outside");
   }
   const words = bare(cmd.words);
-  const name = words[0] ?? "";
+  const name = posix.basename(words[0] ?? "");
   const args = words.slice(1);
   if ((name === "bash" || name === "sh" || name === "zsh") && args.includes("-c")) {
     for (const r of checkSafetyAt(args[args.indexOf("-c") + 1] ?? "", cwd, proxy).reasons) out.add(r);
