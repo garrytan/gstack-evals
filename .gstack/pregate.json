@@ -12,6 +12,9 @@
     }
   ],
   "dependencies": {
+    "lanes/autoplan-audit/crashchild.ts": [
+      "tests/autoplan-audit/dryrun.test.ts"
+    ],
     "lanes/tbv/adapt.ts": [
       "tests/tbv/dryrun.test.ts",
       "tests/tbv/regression.test.ts"
