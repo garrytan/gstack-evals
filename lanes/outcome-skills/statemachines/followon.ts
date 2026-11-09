@@ -13,7 +13,7 @@ import { decideDrift, namedIds, occurrences } from "./drift.ts";
 import { readSession } from "./exposure.ts";
 import { runBash, sh } from "./history.ts";
 import { basePatches, treeVolume } from "./oracle.ts";
-import { extractChange, fixTestHunks, mergeTests, scoringRun, testHunks, type Outcome, type OutcomeRecord, type RunSummary, type RunView } from "./score.ts";
+import { extractChange, fixTestHunks, mergeTests, readings, scoringRun, testHunks, type Exclusion, type Outcome, type OutcomeRecord, type Readings, type RunSummary, type RunView } from "./score.ts";
 import type { SessionRecord } from "./session.ts";
 import { applyPatches, copyVolume, dropVolume, passed, runName, type Mode } from "./testrun.ts";
 import { readUnit, smFail, type SmUnit } from "./unit.ts";
@@ -44,6 +44,15 @@ export function followScores(f2p: string[], start: string[], stable: string[], r
 export interface FirstInfo { unit: string; model: string | null; cell: string; gap: string | null; strict: Outcome | null }
 export const firstInfo = (rec: OutcomeRecord, sessionGap: string | null = null): FirstInfo => ({ unit: rec.unit, model: rec.model, cell: rec.cell, gap: sessionGap ?? rec.strict.gap, strict: rec.strict.outcome });
 
+/** Section 6's two literal choices as a follow-on's own gap reason: the tree's start set did not merge (start_set_conflict,
+ *  a gap on every replicate of the tree), or its first stage was a strict test-patch conflict (first_stage_test_patch_conflict,
+ *  the tree's follow-ons removed). Null when neither holds. */
+export function followGap(start: { gap: string | null }, first: FirstInfo | null): "start_set_conflict" | "first_stage_test_patch_conflict" | null {
+  if (start.gap) return "start_set_conflict";
+  if (first?.gap === "E_SM_TEST_PATCH_CONFLICT") return "first_stage_test_patch_conflict";
+  return null;
+}
+
 export interface TreeScore {
   unit: string; model: string | null; tree: Tree; kept: boolean; reason: string; replicates: number; gaps: number; scored: number;
   incremental: number | null; end_to_end: number | null; pass3_incremental: boolean | null; pass3_end_to_end: boolean | null;
@@ -68,7 +77,9 @@ export function treeScores(recs: FollowonRecord[], firsts: FirstInfo[], replicat
     const base = { unit: g.unit, model: g.model, tree: g.tree, replicates: reps.length, gaps: reps.length - scored.length, scored: scored.length, drift: scored.filter((r) => r.drift.drift).length, inherited_fix: first?.strict === "clean_fix" };
     const none = { incremental: null, end_to_end: null, pass3_incremental: null, pass3_end_to_end: null };
     if (g.tree !== "S0" && !first) out.push({ ...base, ...none, kept: false, reason: "no first-stage record for the tree" });
+    else if (first?.gap === "E_SM_TEST_PATCH_CONFLICT") out.push({ ...base, ...none, kept: false, reason: "first_stage_test_patch_conflict" });
     else if (first?.gap) out.push({ ...base, ...none, kept: false, reason: "first-stage gap " + first.gap });
+    else if (reps.length && reps.every((r) => r.gap === "start_set_conflict")) out.push({ ...base, ...none, kept: false, reason: "start_set_conflict" });
     else if (scored.length < 2) out.push({ ...base, ...none, kept: false, reason: scored.length + " of " + replicates + " replicates scored" });
     else {
       const mean = (k: "incremental" | "end_to_end") => scored.reduce((a, r) => a + (r[k] ?? 0), 0) / scored.length;
@@ -79,12 +90,15 @@ export function treeScores(recs: FollowonRecord[], firsts: FirstInfo[], replicat
   return out.sort((a, b) => (a.unit + a.model + a.tree).localeCompare(b.unit + b.model + b.tree));
 }
 
-/** Counts per tree for the report: kept trees, removals by reason, inherited fixes (per arm) and drift units. */
-export function treeCounts(scores: TreeScore[]): Record<string, { kept: number; removed_first_gap: number; removed_replicates: number; removed_no_first: number; inherited_fix: number; drift_units: number }> {
+/** Counts per tree for the report: kept trees, removals by reason (the two literal choices each on their own),
+ *  inherited fixes (per arm) and drift units. */
+export function treeCounts(scores: TreeScore[]): Record<string, { kept: number; removed_first_gap: number; removed_first_test_patch_conflict: number; removed_start_set_conflict: number; removed_replicates: number; removed_no_first: number; inherited_fix: number; drift_units: number }> {
   const out: ReturnType<typeof treeCounts> = {};
   for (const s of scores) {
-    const c = (out[s.tree] ??= { kept: 0, removed_first_gap: 0, removed_replicates: 0, removed_no_first: 0, inherited_fix: 0, drift_units: 0 });
+    const c = (out[s.tree] ??= { kept: 0, removed_first_gap: 0, removed_first_test_patch_conflict: 0, removed_start_set_conflict: 0, removed_replicates: 0, removed_no_first: 0, inherited_fix: 0, drift_units: 0 });
     if (s.kept) c.kept++;
+    else if (s.reason === "first_stage_test_patch_conflict") c.removed_first_test_patch_conflict++;
+    else if (s.reason === "start_set_conflict") c.removed_start_set_conflict++;
     else if (s.reason.startsWith("first-stage gap")) c.removed_first_gap++;
     else if (s.reason.startsWith("no first-stage")) c.removed_no_first++;
     else c.removed_replicates++;
@@ -164,13 +178,28 @@ export function computeStart(o: { unitDir: string; tree: Tree; treePatch: string
 
 // ---- One follow-on ----
 
+export type FollowScore = ReturnType<typeof followScores>;
+
 export interface FollowonRecord {
   schema: "sm-followon.v1"; unit: string; model: string | null; tree: Tree; replicate: number | null; cell: string; session: string | null;
   tree_patch_sha256: string; start: { ids: number; ids_sha256: string; gap: string | null };
   change: { files: string[]; lines: number; binary_listed: string[]; unsafe: string[]; patch_sha256: string; empty: boolean };
+  /** The strict reading's exclusions (section 7 step 2 against the start tree). */
+  excluded: Exclusion[];
   applied: boolean; apply_failed: boolean; extractions: number; merge: "clean" | "conflict" | null; three_way: number; conflict: string[];
-  /** E_SM_TEST_PATCH_CONFLICT (start set or follow-on merge), E_SM_UPSTREAM_GAP or E_SM_INFRA_GAP; a gap removes the replicate. */
+  /** start_set_conflict (the tree's start set did not merge; start.gap keeps the code), first_stage_test_patch_conflict
+   *  (the tree's first stage conflicted on its strict tree), E_SM_TEST_PATCH_CONFLICT (the strict tree's own merge),
+   *  E_SM_UPSTREAM_GAP or E_SM_INFRA_GAP; a gap removes the replicate. */
   gap: string | null;
+  /** The verdict reading: section 7's strict reading of the follow-on's change against its start tree. The top-level
+   *  run, f2p_pass, incremental, end_to_end, start_failed and stable_failed are strict's. */
+  strict: FollowScore | null;
+  /** The whole-change score, reported only and never a verdict. A whole change that won't apply scores 0 on both, as
+   *  strict does; null only when it was not scored: a gap, or its fix-test merge conflicts (whole_note says why). */
+  whole: FollowScore | null; whole_run: RunSummary | null;
+  /** Why whole was not run on its own: "same tree as strict" (the readings are identical, so strict's run is reused), a
+   *  merge conflict or an apply failure; null when it ran. */
+  whole_note: string | null;
   run: RunSummary | null; f2p_pass: boolean | null; incremental: 0 | 1 | null; end_to_end: 0 | 1 | null; start_failed: string[]; stable_failed: string[];
   drift: { named: { id: string; kinds: string[] }[]; ids: string[]; drift: boolean };
   first: FirstInfo | null;
@@ -182,9 +211,16 @@ export interface FollowonInput {
   model?: string | null; session?: SessionRecord | null; first?: FirstInfo | null; mode?: Mode; volume?: string; limitMs?: number;
 }
 
+/** Section 8 under section 7's strict reading. The follow-on's change is its snapshot against its start tree. Strict (the
+ *  verdict): its hunks on existing test files and protected configuration stay at the start tree, its hunks inside
+ *  in-source test modules go back to the start tree's modules, its new test files are applied unless protected (score.ts
+ *  readings, with the start tree as the base). Then the fix's tests by git apply --3way, one run and both scores. The whole
+ *  change is scored beside it on its own copy, reported only; when the two readings are the same text it reuses strict's
+ *  run and says so. A change that won't apply is extracted once more, then scores 0 on both. */
 export function scoreFollowon(i: FollowonInput): FollowonRecord {
   const u = readUnit(i.unitDir);
   const image = u.image.runtime_id ?? smFail("E_SM_UNIT", u.id + " has no runtime image");
+  const mode = i.mode ?? "hardened";
   const s = i.session ?? null;
   if (i.start.unit !== u.id || i.start.tree !== i.tree || i.start.tree_patch_sha256 !== sha(i.treePatch)) smFail("E_SM_ARM", "the start set is not " + i.tree + " on " + u.id + " for this first-stage patch");
   if (i.tree !== "S0" && i.first && (i.first.unit !== u.id || i.first.cell !== i.tree)) smFail("E_SM_ARM", "the first-stage outcome is not " + i.tree + " on " + u.id);
@@ -192,7 +228,8 @@ export function scoreFollowon(i: FollowonInput): FollowonRecord {
   const rec: FollowonRecord = {
     schema: "sm-followon.v1", unit: u.id, model: i.model ?? s?.model ?? null, tree: i.tree, replicate: i.replicate ?? null, cell: i.cell, session: s ? s.lease_id + "/" + s.cell : null,
     tree_patch_sha256: sha(i.treePatch), start: { ids: i.start.ids.length, ids_sha256: i.start.ids_sha256, gap: i.start.gap },
-    change: { files: [], lines: 0, binary_listed: [], unsafe: [], patch_sha256: "", empty: true }, applied: false, apply_failed: false, extractions: 0, merge: null, three_way: 0, conflict: [], gap: null,
+    change: { files: [], lines: 0, binary_listed: [], unsafe: [], patch_sha256: "", empty: true }, excluded: [], applied: false, apply_failed: false, extractions: 0, merge: null, three_way: 0, conflict: [], gap: null,
+    strict: null, whole: null, whole_run: null, whole_note: null,
     run: null, f2p_pass: null, incremental: null, end_to_end: null, start_failed: [], stable_failed: [], drift: { named: [], ids: [], drift: false }, first: i.first ?? null,
     secondary: { spent_micros: s ? s.spent_micros : null, unknown_micros: s ? s.unknown_micros : null, turns: s ? s.turns : null, wall_ms: s ? s.wall_ms : null, files_changed: 0, read_first_stage_files: s && s.transcript && existsSync(s.transcript) ? readCreated(readSession(s.transcript), created) : null },
   };
@@ -200,15 +237,34 @@ export function scoreFollowon(i: FollowonInput): FollowonRecord {
     if (s.attempt !== 2) smFail("E_SM_ARM", "follow-on " + s.cell + " ended " + s.end + " on attempt 1; it gets one retry from a fresh container before it is a gap");
     return { ...rec, gap: s.end === "upstream" ? "E_SM_UPSTREAM_GAP" : "E_SM_INFRA_GAP" };
   }
-  if (i.start.gap) return { ...rec, gap: i.start.gap };
-  const zero = () => ({ ...rec, apply_failed: true, f2p_pass: false, incremental: 0 as const, end_to_end: 0 as const });
+  const g = followGap(i.start, i.first ?? null);
+  if (g) return { ...rec, gap: g };
+  const ZERO: FollowScore = { f2p_pass: false, incremental: 0, end_to_end: 0, start_failed: [], stable_failed: [] };
+  const hunks = fixTestHunks(i.unitDir, u);
   const st = runName("follow-tree").toLowerCase();
-  const scored = runName("follow-scored").toLowerCase();
+  const vols = [st];
+  type Scored = { applied: false } | { applied: true; merge: ReturnType<typeof mergeTests>; vol: string; run?: ReturnType<typeof scoringRun>; sc?: FollowScore };
+  const scoreTree = (body: string, label: string): Scored => {
+    const vol = runName("follow-" + label).toLowerCase();
+    vols.push(vol);
+    copyVolume(image, st, vol, "root");
+    if (body && applyPatches(image, vol, u.repo_dir, [["change.patch", body]], "root") !== null) return { applied: false };
+    const merge = mergeTests(u, image, vol, hunks);
+    if (merge.merge === "conflict") return { applied: true, merge, vol };
+    const run = scoringRun(i.unitDir, u, image, vol, 1, mode, "follow-" + label, i.limitMs);
+    return { applied: true, merge, vol, run, sc: followScores(u.tests.f2p, i.start.ids, u.oracle!.stable, run.view) };
+  };
   try {
     const head = startTree(u, image, i.volume ?? treeVolume(u.id), i.tree, i.treePatch, st).head;
     if (head !== i.start.head) smFail("E_SM_HISTORY", u.id + ": the " + i.tree + " tree's head " + head + " is not the start set's " + i.start.head);
-    let applied = false;
-    for (let k = 1; k <= 2 && !applied; k++) {
+    const startFile = (p: string) => {
+      const r = runBash({ kind: "docker", image, volume: st, repoDir: u.repo_dir, name: runName("start-file") }, 'cd "$1" && cat -- "$3"', {}, [p]);
+      if (r.status !== 0) smFail("E_SM_APPLY_FAILED", p + " is not in the start tree");
+      return r.stdout;
+    };
+    let strict: Scored = { applied: false };
+    let whole = "", strictBody = "";
+    for (let k = 1; k <= 2 && !strict.applied; k++) {
       const patch = readFileSync(i.patchFile, "utf8");
       if (i.patchSha && sha(patch) !== i.patchSha) smFail("E_SM_ARM", i.patchFile + " is not the patch the session record pins");
       const ch = extractChange(patch);
@@ -216,28 +272,41 @@ export function scoreFollowon(i: FollowonInput): FollowonRecord {
       rec.change = { files: ch.files.map((f) => f.path), lines: ch.lines, binary_listed: ch.binary, unsafe: ch.unsafe, patch_sha256: sha(patch), empty: !ch.files.length && !ch.binary.length };
       rec.secondary.files_changed = ch.files.length + ch.binary.length;
       if (ch.unsafe.length) continue;
-      dropVolume(scored);
-      copyVolume(image, st, scored, "root");
-      const body = ch.files.map((f) => f.text).join("");
-      applied = !body || applyPatches(image, scored, u.repo_dir, [["change.patch", body]], "root") === null;
+      let rd: Readings;
+      try {
+        rd = readings(u.lang, new Set(u.test_patch.files), ch, startFile);
+      } catch (e) {
+        if ((e as Error).message.startsWith("E_SM_APPLY_FAILED")) continue;
+        throw e;
+      }
+      rec.excluded = rd.excluded;
+      whole = ch.files.map((f) => f.text).join("");
+      strictBody = rd.strict;
+      strict = scoreTree(strictBody, "strict");
     }
-    if (!applied) return zero();
+    if (!strict.applied) {
+      const w = whole ? scoreTree(whole, "whole") : ({ applied: false } as Scored);
+      return { ...rec, apply_failed: true, strict: ZERO, f2p_pass: false, incremental: 0, end_to_end: 0, ...(w.applied && w.sc ? { whole: w.sc, whole_run: w.run!.summary } : w.applied ? { whole_note: "the whole change's fix-test merge conflicts: " + w.merge.conflict.slice(0, 3).join(" ") } : { whole: ZERO, whole_note: "the change does not apply" }) };
+    }
     rec.applied = true;
-    const m = mergeTests(u, image, scored, fixTestHunks(i.unitDir, u));
-    rec.merge = m.merge;
-    rec.three_way = m.three_way;
-    if (m.merge === "conflict") return { ...rec, conflict: m.conflict, gap: "E_SM_TEST_PATCH_CONFLICT" };
-    const r = scoringRun(i.unitDir, u, image, scored, 1, i.mode ?? "hardened", "follow", i.limitMs);
-    const sc = followScores(u.tests.f2p, i.start.ids, u.oracle!.stable, r.view);
-    Object.assign(rec, { run: r.summary, ...sc });
-    if (!sc.f2p_pass && i.tree !== "S0") {
-      const named = namedIds(u.lang, r.log);
-      const occ = occurrences(u, image, scored, named.map((n) => n.id));
+    rec.merge = strict.merge.merge;
+    rec.three_way = strict.merge.three_way;
+    if (strict.merge.merge === "conflict") return { ...rec, conflict: strict.merge.conflict, gap: "E_SM_TEST_PATCH_CONFLICT" };
+    Object.assign(rec, { strict: strict.sc!, run: strict.run!.summary, ...strict.sc! });
+    if (strictBody === whole) Object.assign(rec, { whole: strict.sc!, whole_note: "same tree as strict; strict's run reused" });
+    else {
+      const w = scoreTree(whole, "whole");
+      if (!w.applied) Object.assign(rec, { whole: ZERO, whole_note: "the whole change does not apply" });
+      else if (!w.sc) rec.whole_note = "the whole change's fix-test merge conflicts: " + w.merge.conflict.slice(0, 3).join(" ");
+      else Object.assign(rec, { whole: w.sc, whole_run: w.run!.summary });
+    }
+    if (!strict.sc!.f2p_pass && i.tree !== "S0") {
+      const named = namedIds(u.lang, strict.run!.log);
+      const occ = occurrences(u, image, strict.vol, named.map((n) => n.id));
       rec.drift = { named, ...decideDrift(true, named.map((n) => n.id), occ.base, occ.start) };
     }
     return rec;
   } finally {
-    dropVolume(scored);
-    dropVolume(st);
+    for (const v of vols) dropVolume(v);
   }
 }

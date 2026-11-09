@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decideDrift, identOf, namedIds } from "../../lanes/outcome-skills/statemachines/drift.ts";
-import { createdPaths, firstInfo, followScores, passedInAll, readCreated, treeCounts, treeScores, type FirstInfo, type FollowonRecord } from "../../lanes/outcome-skills/statemachines/followon.ts";
+import { createdPaths, firstInfo, followGap, followScores, passedInAll, readCreated, treeCounts, treeScores, type FirstInfo, type FollowonRecord } from "../../lanes/outcome-skills/statemachines/followon.ts";
 import { COMPILED, DRIFT_FORMS, LANGS, type Lang } from "../../lanes/outcome-skills/statemachines/langs.ts";
 import * as oracle from "../../lanes/outcome-skills/statemachines/oracle.ts";
 import { basePatches } from "../../lanes/outcome-skills/statemachines/oracle.ts";
@@ -60,8 +60,8 @@ describe("the two scores", () => {
 
 const rec = (tree: "S0" | "A1" | "S2", replicate: number, o: Partial<FollowonRecord> = {}): FollowonRecord => ({
   schema: "sm-followon.v1", unit: "u1", model: "m", tree, replicate, cell: "F-" + tree + "-" + replicate, session: null, tree_patch_sha256: "", start: { ids: 1, ids_sha256: "", gap: null },
-  change: { files: [], lines: 0, binary_listed: [], unsafe: [], patch_sha256: "", empty: false }, applied: true, apply_failed: false, extractions: 1, merge: "clean", three_way: 0, conflict: [], gap: null,
-  run: null, f2p_pass: true, incremental: 1, end_to_end: 1, start_failed: [], stable_failed: [], drift: { named: [], ids: [], drift: false }, first: null,
+  change: { files: [], lines: 0, binary_listed: [], unsafe: [], patch_sha256: "", empty: false }, excluded: [], applied: true, apply_failed: false, extractions: 1, merge: "clean", three_way: 0, conflict: [], gap: null,
+  strict: null, whole: null, whole_run: null, whole_note: null, run: null, f2p_pass: true, incremental: 1, end_to_end: 1, start_failed: [], stable_failed: [], drift: { named: [], ids: [], drift: false }, first: null,
   secondary: { spent_micros: null, unknown_micros: null, turns: null, wall_ms: null, files_changed: 0, read_first_stage_files: null }, ...o,
 });
 const first = (cell: string, o: Partial<FirstInfo> = {}): FirstInfo => ({ unit: "u1", model: "m", cell, gap: null, strict: "no_fix", ...o });
@@ -80,16 +80,32 @@ describe("tree scores", () => {
   });
   test("a first-stage gap removes the tree's follow-ons, even with none recorded", () => {
     const t = treeScores([rec("S2", 1), rec("S2", 2), rec("S2", 3)], [first("S2", { gap: "E_SM_TEST_PATCH_CONFLICT" }), first("A1", { gap: "E_SM_UPSTREAM_GAP", strict: null })]);
-    expect(t.map((x) => [x.tree, x.kept, x.reason])).toEqual([["A1", false, "first-stage gap E_SM_UPSTREAM_GAP"], ["S2", false, "first-stage gap E_SM_TEST_PATCH_CONFLICT"]]);
+    expect(t.map((x) => [x.tree, x.kept, x.reason])).toEqual([["A1", false, "first-stage gap E_SM_UPSTREAM_GAP"], ["S2", false, "first_stage_test_patch_conflict"]]);
     expect(treeScores([rec("A1", 1), rec("A1", 2)], [])[0]).toMatchObject({ kept: false, reason: "no first-stage record for the tree" });
   });
   test("an inherited fix is flagged per tree and counted; drift is counted", () => {
     const t = treeScores([rec("A1", 1), rec("A1", 2), rec("A1", 3), rec("S2", 1, { f2p_pass: false, incremental: 0, end_to_end: 0, drift: { named: [{ id: "x", kinds: ["compiler"] }], ids: ["x"], drift: true } }), rec("S2", 2), rec("S0", 1), rec("S0", 2)], [first("A1", { strict: "clean_fix" }), first("S2")]);
     expect(t.map((x) => [x.tree, x.inherited_fix, x.drift])).toEqual([["A1", true, 0], ["S0", false, 0], ["S2", false, 1]]);
-    expect(treeCounts(t)).toEqual({ A1: { kept: 1, removed_first_gap: 0, removed_replicates: 0, removed_no_first: 0, inherited_fix: 1, drift_units: 0 }, S0: { kept: 1, removed_first_gap: 0, removed_replicates: 0, removed_no_first: 0, inherited_fix: 0, drift_units: 0 }, S2: { kept: 1, removed_first_gap: 0, removed_replicates: 0, removed_no_first: 0, inherited_fix: 0, drift_units: 1 } });
+    const z = { kept: 0, removed_first_gap: 0, removed_first_test_patch_conflict: 0, removed_start_set_conflict: 0, removed_replicates: 0, removed_no_first: 0, inherited_fix: 0, drift_units: 0 };
+    expect(treeCounts(t)).toEqual({ A1: { ...z, kept: 1, inherited_fix: 1 }, S0: { ...z, kept: 1 }, S2: { ...z, kept: 1, drift_units: 1 } });
+  });
+  test("the two literal choices are told apart and counted: a first-stage test-patch conflict removes the tree; a start-set conflict is a gap on all three replicates", () => {
+    const sc = (n: number) => rec("S2", n, { gap: "start_set_conflict", incremental: null, end_to_end: null, f2p_pass: null });
+    const t = treeScores([rec("A1", 1), rec("A1", 2), rec("A1", 3), sc(1), sc(2), sc(3), rec("S0", 1), rec("S0", 2), rec("S0", 3)], [first("A1", { gap: "E_SM_TEST_PATCH_CONFLICT" }), first("S2")]);
+    expect(t.map((x) => [x.tree, x.kept, x.reason])).toEqual([["A1", false, "first_stage_test_patch_conflict"], ["S0", true, "kept"], ["S2", false, "start_set_conflict"]]);
+    const z = { kept: 0, removed_first_gap: 0, removed_first_test_patch_conflict: 0, removed_start_set_conflict: 0, removed_replicates: 0, removed_no_first: 0, inherited_fix: 0, drift_units: 0 };
+    expect(treeCounts(t)).toEqual({ A1: { ...z, removed_first_test_patch_conflict: 1 }, S0: { ...z, kept: 1 }, S2: { ...z, removed_start_set_conflict: 1 } });
+    const other = treeScores([rec("A1", 1)], [first("A1", { gap: "E_SM_INFRA_GAP" })]);
+    expect(treeCounts(other).A1).toEqual({ ...z, removed_first_gap: 1 });
   });
   test("a replicate recorded twice is refused", () => {
     expect(() => treeScores([rec("S0", 1), rec("S0", 1)], [])).toThrow(/E_SM_ARM/);
+  });
+  test("follow-on gap reasons: start_set_conflict and first_stage_test_patch_conflict are their own codes", () => {
+    expect(followGap({ gap: "E_SM_TEST_PATCH_CONFLICT" }, null)).toBe("start_set_conflict");
+    expect(followGap({ gap: null }, first("A1", { gap: "E_SM_TEST_PATCH_CONFLICT" }))).toBe("first_stage_test_patch_conflict");
+    expect(followGap({ gap: null }, first("A1", { gap: "E_SM_UPSTREAM_GAP" }))).toBe(null);
+    expect(followGap({ gap: null }, first("A1"))).toBe(null);
   });
   test("firstInfo reads the strict gap and outcome", () => {
     const o = { unit: "u1", model: "m", cell: "A1", strict: { gap: "E_SM_TEST_PATCH_CONFLICT", outcome: null } } as unknown as OutcomeRecord;

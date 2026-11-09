@@ -66,7 +66,7 @@ function scoreFollowonCli(r: string[]): number {
     const trees = treeScores(recs, firsts);
     const counts = treeCounts(trees);
     writeNew(need(f, "--out"), { schema: "sm-followon-trees.v1", records: recs.length, trees, counts });
-    console.log(TREES.map((t) => t + " kept=" + (counts[t]?.kept ?? 0) + " inherited=" + (counts[t]?.inherited_fix ?? 0) + " drift_units=" + (counts[t]?.drift_units ?? 0)).join(" ") + " record=" + need(f, "--out"));
+    console.log(TREES.map((t) => t + " kept=" + (counts[t]?.kept ?? 0) + " inherited=" + (counts[t]?.inherited_fix ?? 0) + " drift_units=" + (counts[t]?.drift_units ?? 0) + " first_conflict=" + (counts[t]?.removed_first_test_patch_conflict ?? 0) + " start_conflict=" + (counts[t]?.removed_start_set_conflict ?? 0)).join(" ") + " record=" + need(f, "--out"));
     return 0;
   }
   const mode = f.get("--mode") ?? "hardened";
@@ -111,7 +111,7 @@ function scoreFollowonCli(r: string[]): number {
   const replicate = Number((cell.match(/^F-(?:S0|A1|S2)-(\d+)$/) ?? [])[1]) || null;
   const rec = scoreFollowon({ unitDir, tree, treePatch, start, patchFile, ...(patchSha ? { patchSha } : {}), cell, replicate, model, session, first: fo ? firstInfo(fo) : null, mode });
   writeNew(need(f, "--out"), rec);
-  console.log("tree=" + tree + " start=" + (start.gap ?? start.ids.length) + " incremental=" + (rec.incremental ?? rec.gap) + " end_to_end=" + (rec.end_to_end ?? rec.gap) + " drift=" + rec.drift.drift + (rec.drift.ids.length ? " (" + rec.drift.ids.join(",") + ")" : "") + " record=" + need(f, "--out"));
+  console.log("tree=" + tree + " start=" + (start.gap ?? start.ids.length) + " incremental=" + (rec.incremental ?? rec.gap) + " end_to_end=" + (rec.end_to_end ?? rec.gap) + " whole=" + (rec.whole ? rec.whole.incremental + "/" + rec.whole.end_to_end : "none") + (rec.whole_note ? " (" + rec.whole_note + ")" : "") + " drift=" + rec.drift.drift + (rec.drift.ids.length ? " (" + rec.drift.ids.join(",") + ")" : "") + " record=" + need(f, "--out"));
   return 0;
 }
 

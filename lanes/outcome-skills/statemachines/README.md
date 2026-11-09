@@ -287,8 +287,10 @@ Assumptions, JUnit 4 @Ignore and Assume; NUnit [Ignore] and xUnit Skip =; each e
 
 - **Trees.** S0 is the stripped base tree. A1 and S2 are that tree with the first stage's whole tree patch committed as
   commit two by sh/followon.sh, after the same git clean the session image runs, so the scored tree is the tree the
-  follow-on session saw. The follow-on's own patch (real_agent's snapshot against that tree's head) is applied whole:
-  text files, binary files listed and left out, unsafe paths fail the apply.
+  follow-on session saw. The follow-on's own change (real_agent's snapshot against that tree's head) is read under
+  section 7's strict reading with the start tree as the base (score.ts readings): hunks on existing test files and
+  protected configuration stay at the start tree, hunks inside in-source test modules are dropped, new test files are
+  applied unless protected. Binary files are listed and left out; unsafe paths fail the apply.
 - **Start sets.** On S0 the base stable set. On A1 and S2: three runs of the unit's commands on the tree with the oracle's
   base-run patches (oracle.ts basePatches, one function for both) merged hunk by hunk with git apply --3way; the start
   set is the ids that pass in all three. On an unchanged base tree that merge gives what the oracle's plain git apply
@@ -299,8 +301,16 @@ Assumptions, JUnit 4 @Ignore and Assume; NUnit [Ignore] and xUnit Skip =; each e
   first-stage scorer runs), then one run (score.ts scoringRun). Incremental: every fail-to-pass id passes and every
   start-set id passes. End to end: every fail-to-pass id passes and every base stable id passes. An id that did not
   pass (failed, skipped, missing) fails, and a build failure fails every id, as in section 7's broke rule.
-- **Gaps and the keep rule.** A follow-on test-patch conflict, a start-set conflict, or a follow-on session that ended
-  upstream or infra on its second attempt is a gap and removes the replicate. A tree is kept with at least 2 of 3
+- **Strict and whole.** The strict score (record field strict, copied to the top-level incremental, end_to_end,
+  f2p_pass, start_failed and stable_failed) is the verdict. The whole change, with nothing restored, is scored beside it
+  on its own volume (whole, whole_run) and never sets a verdict. When the two readings are the same text, strict's run
+  is reused and whole_note says so. A whole change that won't apply scores 0 on both; whole is null only when it was not
+  scored (a gap, or its own fix-test merge conflict, named in whole_note).
+- **Gaps and the keep rule.** A follow-on test-patch conflict on the strict tree, a start-set conflict (gap
+  start_set_conflict on every replicate of the tree; start.gap keeps the code), a first stage's strict test-patch
+  conflict (gap first_stage_test_patch_conflict), or a follow-on session that ended upstream or infra on its second
+  attempt is a gap and removes the replicate. The summary counts the two literal choices on their own
+  (removed_first_test_patch_conflict, removed_start_set_conflict) apart from other first-stage gaps. A tree is kept with at least 2 of 3
   replicates scored; its score is the mean over them; pass3 is set only when all 3 scored. A first stage's gap (its
   session gap, or its strict reading's test-patch conflict) removes its tree. A first stage whose strict outcome is clean
   fix marks the tree as an inherited fix, counted per arm for the sensitivity reading.
@@ -330,11 +340,10 @@ a compiler error.
 
 ### Follow-on readings
 
-- The follow-on's change is applied whole, with no strict or adapted reading: section 8 item 3 names only section 7
-  step 3, and claim 2 scores the tree a next developer leaves. This can move an outcome (a follow-on that edits a
-  start-set test to pass keeps the pass); it is reported to the parent as an open point.
-- A start-set merge conflict is a gap for every replicate on that tree (literal: no start set exists).
-- A first stage's strict test-patch conflict counts as a first-stage gap (section 6 lists it as a gap); it is reported
-  as an open point.
+- The follow-on's change is scored under section 7's strict reading against the start tree (section 8 item 3, a
+  ruling): a follow-on that edits a start-set test to pass loses that edit. The whole change is reported beside it only.
+  No adapted reading runs on follow-ons.
+- A start-set merge conflict is a gap for every replicate on that tree (section 6 and section 8 item 2).
+- A first stage's strict test-patch conflict removes that tree's follow-ons and is counted on its own (section 6).
 - Drift is decided when any fail-to-pass id fails and at least one drift id is named (the design's reading of "fail only
   because").

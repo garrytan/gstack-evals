@@ -48,7 +48,13 @@ describe.skipIf(!on)("follow-on scorer in Docker", () => {
 
     const s0 = follow(u, "S0", "", fix);
     expect(s0.start).toMatchObject({ ids: ["TestAdd"], runs: [], gap: null });
-    expect(s0.rec).toMatchObject({ applied: true, merge: "clean", f2p_pass: true, incremental: 1, end_to_end: 1, gap: null });
+    expect(s0.rec).toMatchObject({ applied: true, merge: "clean", f2p_pass: true, incremental: 1, end_to_end: 1, gap: null, whole_note: "same tree as strict; strict's run reused" });
+    expect(s0.rec.whole).toEqual(s0.rec.strict);
+
+    const gamed = follow(u, "S0", "", patchOf(u.repo, { ...MUL_FIX, "add.go": GO["add.go"].replace("a + b", "a - b"), "add_test.go": GO["add_test.go"].replace("!= 4", "!= 0") }));
+    expect(gamed.rec).toMatchObject({ incremental: 0, end_to_end: 0, strict: { f2p_pass: true, incremental: 0, end_to_end: 0, stable_failed: ["TestAdd"] }, whole: { incremental: 1, end_to_end: 1 }, whole_note: null });
+    expect(gamed.rec.excluded).toEqual([{ path: "add_test.go", rule: "test_file", readings: "strict", detail: "edited" }]);
+    expect(gamed.rec.whole_run).not.toBeNull();
 
     const addSub = patchOf(u.repo, { "sub.go": "package calc\n\nfunc Sub(a, b int) int { return a - b }\n", "sub_test.go": TEST("TestSub", "if Sub(3, 1) != 2 {\n\t\tt.Fatal(\"sub\")\n\t}") });
     const a = follow(u, "A1", addSub, fix);
