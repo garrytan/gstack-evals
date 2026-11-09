@@ -6,7 +6,9 @@ LimitsExceeded with exit_status step_stop, so actions past the limit in one repl
 stays 0 (off), because mini 2.4.6 runs several actions per model call.
 
 A call the metering proxy refuses with DR_ALLOWANCE_STOP ends the session cleanly with exit_status allowance_stop, and
-one it refuses with DR_CUSTODY_HIT (a runner-only marker in the request) ends it cleanly with exit_status custody_hit.
+one it refuses with DR_CUSTODY_HIT ends it cleanly with exit_status custody_hit. The proxy refuses DR_CUSTODY_HIT when a
+request on the slot, the main model's or a decider's, carries the slot's planted canary; any other runner-only marker
+is journaled as a marker_hit line and the call goes on.
 litellm maps the proxy's 403 to PermissionDeniedError, which mini's retry loop aborts on, and the decider SDKs run
 with their own retries off, so the refused call is never sent twice.
 """

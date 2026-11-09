@@ -191,6 +191,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DR_PIN](#e_dr_pin) | 2 | U6 |
 | [E_DR_RUNTIME](#e_dr_runtime) | 2 | U6 |
 | [E_DR_RUNNER](#e_dr_runner) | 2 | U6 |
+| [DR_RESERVE_STOP](#dr_reserve_stop) | 2 | U6 |
 | [E_DR_STOPPED](#e_dr_stopped) | 2 | U6 |
 | [E_PV_NO_BLOCK](#e_pv_no_block) | warning | U20 |
 | [E_PV_INFRA_MISSING](#e_pv_infra_missing) | warning | U20 |
@@ -1352,6 +1353,14 @@ Decision routing: lanes/decision-routing/host/vm.sh was given an Ubicloud runner
 Fix: Point vm.sh at the pinned copy of ubi-runner.sh with its sha256, set UBI_OWNER to the thread code and UBI_TTL_HOURS to cover the longest batch, and rerun.
 
 Exit 2. Side effects: None: refused before any VM call. Retry safe: yes. Resumable: no. Owner: U6.
+
+### DR_RESERVE_STOP
+
+Decision routing: before opening a lease, the controller found a line item whose cap cannot hold what is already committed on it plus the reserve for six sessions in flight at the per-session allowance, so the projection passes the item's cap. It is not a CAP_STOP.
+
+Fix: Bring the item's projection to the Captain, who decides whether to raise the cap or end the item; relaunch only on that decision.
+
+Exit 2. Side effects: None: no lease was written, nothing was leased or launched, and nothing was recorded on the item. Retry safe: yes. Resumable: yes. Owner: U6.
 
 ### E_DR_STOPPED
 

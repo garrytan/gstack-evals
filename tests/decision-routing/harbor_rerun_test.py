@@ -73,6 +73,7 @@ class FakeEnv:
         shutil.copy(source, self.host(target))
 
     async def exec(self, command, env=None, user=None, timeout_sec=None):
+        self.commands = [*getattr(self, "commands", []), (command, user)]
         out = ""
         if "dr_agent.session" in command:
             summary = self.host(dr_harbor.DR_LOG_DIR / "dr-summary.json")
@@ -187,6 +188,30 @@ class Rerun(unittest.TestCase):
         self.assertIs(shadow("N", "opus", "dr-scored-opus"), False)
         self.assertIs(shadow("N", "sol", "dr-pilot-rp"), False)
         self.assertIs(shadow("R", "opus", "dr-calibration"), False)
+
+    def test_every_cell_runs_commands_as_the_agent_user(self):
+        sys.path.insert(0, str(AGENT))
+        from dr_agent.agent_user import AGENT_USER
+
+        logs = self.trial / "agent"
+        logs.mkdir(parents=True)
+        self.meters.append({"micros": 1, "upstream": {"statuses": {"200": 1}}})
+        cells = json.loads(dr_harbor.CELLS_FILE.read_text())["cells"]
+        for cell in cells:
+            agent = dr_harbor.DecisionRoutingAgent(cell=cell, model="opus", runtime_tarball="/rt.tgz", runtime_sha256="ab", pin_file=str(self.pin), item="dr-pilot-rp", logs_dir=logs)
+            self.assertEqual(agent.session_config("s").get("agent_user"), AGENT_USER, cell)
+        env = FakeEnv(logs, self.tmp / "container", "submitted")
+        agent = dr_harbor.DecisionRoutingAgent(cell="N", model="opus", runtime_tarball="/rt.tgz", runtime_sha256="ab", pin_file=str(self.pin), item="dr-pilot-rp", logs_dir=logs)
+        asyncio.run(agent.run("fix it", env, None))
+        order = [c for c, _ in env.commands]
+        session = next(i for i, c in enumerate(order) if "dr_agent.session" in c)
+        setup = order.index("/opt/dr/venv/bin/python -I -m dr_agent.agent_user setup")
+        restore = order.index("/opt/dr/venv/bin/python -I -m dr_agent.agent_user restore")
+        export = next(i for i, c in enumerate(order) if "git add -A" in c)
+        self.assertLess(setup, session)
+        self.assertLess(session, restore)
+        self.assertLess(restore, export)
+        self.assertTrue(all(u == "root" for _, u in env.commands))
 
     def test_harbor_retries_only_on_dr_infra_error_once(self):
         controller = (AGENT.parent / "host" / "controller.ts").read_text()

@@ -26,6 +26,7 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 BLOCKED_EXIT = "blocked"
 TRACEBACK = re.compile(r'File "([^"]+)", line \d+')
 CUT = "\n[... middle cut ...]\n"
+RUN_AS = None
 
 
 def canonical(obj):
@@ -54,8 +55,9 @@ def step_line(command, exit_code):
 
 
 def git(cwd, args, env=None):
+    user = {"user": RUN_AS[0], "group": RUN_AS[1], "extra_groups": []} if RUN_AS else {}
     try:
-        p = subprocess.run(["git", "-c", "core.fileMode=false", *args], cwd=cwd, env=env, capture_output=True, timeout=120)
+        p = subprocess.run(["git", "-c", "core.fileMode=false", *args], cwd=cwd, env=env, capture_output=True, timeout=120, **user)
     except (OSError, subprocess.TimeoutExpired):
         return 1, b""
     return p.returncode, p.stdout
@@ -64,6 +66,8 @@ def git(cwd, args, env=None):
 def snapshot_diff(cwd, *, binary=True, stat=False):
     """The working tree's diff against HEAD, new files included, through a throwaway index (the real index is untouched)."""
     with tempfile.TemporaryDirectory() as tmp:
+        if RUN_AS:
+            os.chown(tmp, *RUN_AS)
         env = {**os.environ, "GIT_INDEX_FILE": os.path.join(tmp, "index")}
         has_head = git(cwd, ["rev-parse", "--verify", "-q", "HEAD"])[0] == 0
         if has_head:

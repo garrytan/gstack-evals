@@ -1550,6 +1550,15 @@ export const CODES = {
     resumable: false,
     owner: "U6",
   },
+  DR_RESERVE_STOP: {
+    exit: 2,
+    meaning: "Decision routing: before opening a lease, the controller found a line item whose cap cannot hold what is already committed on it plus the reserve for six sessions in flight at the per-session allowance, so the projection passes the item's cap. It is not a CAP_STOP.",
+    fix: "Bring the item's projection to the Captain, who decides whether to raise the cap or end the item; relaunch only on that decision.",
+    side_effects: "None: no lease was written, nothing was leased or launched, and nothing was recorded on the item.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U6",
+  },
   E_DR_STOPPED: {
     exit: 2,
     meaning: "Decision routing: the controller found its STOP file, so it launched no new session, let running sessions end and settled every lease.",

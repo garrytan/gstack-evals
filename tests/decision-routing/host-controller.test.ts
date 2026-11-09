@@ -187,14 +187,14 @@ describe("runBatch", () => {
   }, 30_000);
 
   test("a CAP_STOP from the ledger stops the batch: nothing more launches, nothing retries, the lease closes with its stop", async () => {
-    const w = world({ items: [{ item: "dr-pilot-rp", cap_micros: 2_000 }] });
+    const w = world({ items: [{ item: "dr-pilot-rp", cap_micros: 30_000_000 }], usage: { input_tokens: 10_000_000, output_tokens: 0 } });
     const result = await runBatch(w.opts(plan(1, ["N", "R", "P"])));
     expect(result.exit).toBe(2);
     expect(result.stop?.code).toBe("CAP_STOP");
-    expect(result.launched).toHaveLength(1);
-    expect(result.not_launched).toHaveLength(2);
-    expect(w.sent).toHaveLength(0);
-    expect(w.read().find((e) => e.ev === "end").code).toBe("CAP_STOP");
+    expect(result.launched).toHaveLength(2);
+    expect(result.not_launched).toHaveLength(1);
+    expect(w.sent).toHaveLength(1);
+    expect(w.read().filter((e) => e.ev === "end").map((e) => e.code)).toEqual([null, "CAP_STOP"]);
     expect(result.leases[0]!.cap_stop).toBe("batch dr-test-run");
   }, 30_000);
 

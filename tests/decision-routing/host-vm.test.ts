@@ -100,3 +100,29 @@ describe("vm.sh", () => {
     expect(left.err).toStartWith("E_DR_RUNNER: owner GEVA-TEST still has VMs after down vm-1");
   });
 });
+
+describe("post-boot.sh kernel check", () => {
+  const check = (config: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "dr-kernel-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "config"), config);
+    const r = Bun.spawnSync(["bash", join(HOST, "post-boot.sh"), "--kernel-config", join(dir, "config")]);
+    return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
+  };
+
+  test("a kernel config with CONFIG_NFT_FIB_INET built in or as a module passes", () => {
+    for (const line of ["CONFIG_NFT_FIB_INET=y", "CONFIG_NFT_FIB_INET=m"]) {
+      const r = check("CONFIG_NF_TABLES_INET=y\n" + line + "\nCONFIG_NFT_FIB_IPV4=m\n");
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("CONFIG_NFT_FIB_INET");
+    }
+  });
+
+  test("a kernel config without CONFIG_NFT_FIB_INET is refused with E_DR_RUNNER", () => {
+    for (const config of ["CONFIG_NF_TABLES_INET=y\n# CONFIG_NFT_FIB_INET is not set\n", "CONFIG_NFT_FIB_IPV4=m\nCONFIG_NFT_FIB_INET_X=y\n", ""]) {
+      const r = check(config);
+      expect(r.code).toBe(2);
+      expect(r.err).toStartWith("E_DR_RUNNER: ");
+    }
+  });
+});

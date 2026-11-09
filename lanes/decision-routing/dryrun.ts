@@ -14,7 +14,7 @@
 //  6 both verdict printers on a full grid, exactly one verdict per point;
 //  7 draw.py's counts against draw.txt and the split lists, byte for byte;
 //  8 the pilot re-cost, the drop order, the max_tokens fallback and the pilot session stop;
-//  9 the leak scan: a planted canary in a decider request stops the batch with DR_CUSTODY_HIT, a real-fix diff does not;
+//  9 the leak scan: a planted canary in any request on the slot (main model or decider) stops the batch with DR_CUSTODY_HIT, a real-fix diff does not;
 // 10 the scorer end to end on the dry-run sessions: labels with a fake docker runner, tuner, admission, Primary A and B;
 // 11 no gstack: no gstack path, skill, hook or drive in the runtime layer, and no cell's agent opens CLAUDE.md,
 //    AGENTS.md or .claude/ (the session runs under a sys.addaudithook wrapper that records every file it opens).
@@ -609,7 +609,7 @@ async function legLeak(r: Report, out: string) {
   try {
     const hit = await runBatch(opts(TASKS[0]!, true, "canary"));
     const canary = readFileSync(join(dir, "labels", TASKS[0]!, "canary.txt"), "utf8").trim();
-    r.add("leak scan: a planted canary in a decider request stops the batch with DR_CUSTODY_HIT, nothing forwarded, the canary never logged", hit.stop?.code === "DR_CUSTODY_HIT" && sent.length === 0 && !JSON.stringify(hit).includes(canary) && !logs.join("\n").includes(canary) && logs.some((l) => l.startsWith("DR_CUSTODY_HIT: ")), "stop " + (hit.stop?.code ?? "none") + ", forwarded " + sent.length);
+    r.add("leak scan: a planted canary in a request on the slot (here a decider's) stops the batch with DR_CUSTODY_HIT, nothing forwarded, the canary never logged", hit.stop?.code === "DR_CUSTODY_HIT" && sent.length === 0 && !JSON.stringify(hit).includes(canary) && !logs.join("\n").includes(canary) && logs.some((l) => l.startsWith("DR_CUSTODY_HIT: ")), "stop " + (hit.stop?.code ?? "none") + ", forwarded " + sent.length);
     const fix = await runBatch(opts(TASKS[1]!, false, "realfix"));
     r.add("leak scan: an agent diff equal to the real-fix hunk does not stop the batch", fix.stop === null && sent.length === 1 && sent[0]!.includes("return a + b"), "stop " + (fix.stop?.code ?? "none") + ", forwarded " + sent.length);
   } catch (e) {
@@ -841,6 +841,15 @@ function findVenv(flagValue?: string): string | null {
 
 const flag = (argv: string[], name: string): string | undefined => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
 
+/** Why the python legs cannot run here, or null. They need root: mini's BASH_ENV is /root/.bashrc, which only root can
+ * read, so as any other user every command's first output line is a permission error and no submit registers. */
+export function pythonLegsBlocked(keyless: boolean, venv: string | null, uid: number | undefined): string | null {
+  if (keyless) return "--keyless";
+  if (!venv) return "no runtime or dev venv (pass --venv)";
+  if (uid !== 0) return "the python legs need root (mini's BASH_ENV is /root/.bashrc, unreadable as uid " + uid + ", so no submit would register); rerun as root";
+  return null;
+}
+
 export async function main(argv: string[]): Promise<number> {
   const out = resolve(flag(argv, "--out") ?? mkdtempSync(join(tmpdir(), "dr-dryrun-")));
   mkdirSync(out, { recursive: true });
@@ -854,10 +863,11 @@ export async function main(argv: string[]): Promise<number> {
   legTables(r);
   await legLeak(r, out);
   const venv = keyless ? null : findVenv(flag(argv, "--venv"));
-  if (!venv) {
+  const blocked = pythonLegsBlocked(keyless, venv, process.getuid?.());
+  if (blocked || !venv) {
     for (const leg of ["ledger leases per item", "sessions and outcome paths", "shadow timing", "pin read back by the agent", "scorer end to end", "no-gstack audit"]) {
       if (keyless) r.skip(leg, "--keyless");
-      else r.add(leg, false, "no runtime or dev venv (pass --venv)");
+      else r.add(leg, false, blocked ?? "no runtime or dev venv (pass --venv)");
     }
   } else {
     const scratch = mkdtempSync(join(tmpdir(), "drd-"));

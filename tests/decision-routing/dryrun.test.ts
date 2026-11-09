@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { LADDER, main, sessionState } from "../../lanes/decision-routing/dryrun.ts";
+import { LADDER, main, pythonLegsBlocked, sessionState } from "../../lanes/decision-routing/dryrun.ts";
 
 const venv = [process.env.DR_RUNTIME_VENV, join(homedir(), ".cache", "decision-routing", "venv-dev"), "/opt/dr/venv"].find((v) => v && existsSync(join(v, "bin", "python")));
 
@@ -18,6 +18,13 @@ test("the defer ladder's particle and frontier deciders answer a session's first
   }
 });
 
+test("the python legs refuse to run as a user other than root, and say why", () => {
+  expect(pythonLegsBlocked(false, "/opt/dr/venv", 1000)).toContain("need root");
+  expect(pythonLegsBlocked(false, "/opt/dr/venv", 0)).toBeNull();
+  expect(pythonLegsBlocked(true, "/opt/dr/venv", 0)).toBe("--keyless");
+  expect(pythonLegsBlocked(false, null, 0)).toContain("no runtime or dev venv");
+});
+
 test("keyless legs: verdict grids, draw.py, pilot rules, table tests and the leak scan all pass", async () => {
   const out = mkdtempSync(join(tmpdir(), "dr-dryrun-test-"));
   const code = await main(["--keyless", "--out", out]);
@@ -27,7 +34,7 @@ test("keyless legs: verdict grids, draw.py, pilot rules, table tests and the lea
   expect(code).toBe(0);
 }, 900_000);
 
-describe.skipIf(!venv)("python legs (real dr_agent sessions behind the real metering proxy)", () => {
+describe.skipIf(!venv || process.getuid?.() !== 0)("python legs (real dr_agent sessions behind the real metering proxy)", () => {
   test("every frozen rule passes", async () => {
     const out = mkdtempSync(join(tmpdir(), "dr-dryrun-full-"));
     const code = await main(["--venv", venv!, "--out", out]);

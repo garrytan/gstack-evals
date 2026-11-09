@@ -3,7 +3,10 @@
 // {task, cell, model, item}, it:
 // - verifies the runtime tarball and the pin file by sha256 (E_DR_RUNTIME, E_DR_PIN) and refuses while the STOP file exists;
 // - per ledger item in the plan, reconciles the item's journal from any earlier launch (reconcileJournal), settles this
-//   run's open lease, opens one lease (openLease) and starts one MeteringProxy on it with allowanceCode DR_ALLOWANCE_STOP;
+//   run's open lease, then, before any lease, checks every item's cap holds what is committed on it plus the reserve
+//   (reserveMicros: CONCURRENCY sessions at cells.json's allowance), else stops with DR_RESERVE_STOP having leased and
+//   launched nothing; then opens one lease per item (openLease) and starts one MeteringProxy on it with allowanceCode
+//   DR_ALLOWANCE_STOP;
 // - orders the sessions by a seeded shuffle (seed 20261110) and runs at most 6 at once, never two cells of one task at the
 //   same time, each as one Harbor job (harbor run -c <job.json>) whose process env holds the management socket and token
 //   and no provider key;
@@ -238,6 +241,11 @@ function tempRecord(dir: string, itemsFile: string, used: Set<string>): { record
   return { record, local: LocalLedger.open(join(dir, "ledger.sqlite")) };
 }
 
+/** What a new lease must leave room for: CONCURRENCY sessions in flight, each at its worst case, the per-session allowance. */
+export function reserveMicros(): number {
+  return CONCURRENCY * (JSON.parse(readFileSync(join(LANE, "config", "cells.json"), "utf8")) as { limits: { allowance_micros: number } }).limits.allowance_micros;
+}
+
 export async function runBatch(o: BatchOptions): Promise<BatchResult> {
   const log = o.log ?? ((l: string) => console.error(l));
   const out = resolve(o.out);
@@ -294,6 +302,16 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
       }
       const open = readItem(record, item).open;
       if (open && open.run_id === o.runId && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
+    }
+    const reserve = reserveMicros();
+    for (const item of itemNames) {
+      const state = readItem(record, item);
+      if (state.cap_micros !== null && state.cap_micros - state.committed_micros < reserve) {
+        throw new ControllerError("DR_RESERVE_STOP", "line item " + item + " has " + usd(Math.max(state.cap_micros - state.committed_micros, 0)) + " left of its " + usd(state.cap_micros) + " cap (" + usd(state.committed_micros) + " committed), under the " + usd(reserve) + " reserve for " + CONCURRENCY + " sessions in flight; nothing was leased or launched, and the projection comes to the Captain");
+      }
+    }
+    for (const item of itemNames) {
+      const journal = join(out, "journals", item + ".ndjson");
       const lease = openLease(record, local, { item, run_id: o.runId, warn, ...(o.temp ? { requireAdmission: () => null } : {}) });
       const socket = join(scratch, runs.length + ".sock");
       const token = randomBytes(24).toString("hex");

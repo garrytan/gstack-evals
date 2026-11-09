@@ -4,7 +4,50 @@
 # are stopped, disabled and masked so no upgrade runs beside a batch; linger keeps the run user's services alive between
 # ssh sessions; NODE_DISABLE_COMPILE_CACHE=1 and HARBOR_TELEMETRY=0 are set in the run user's environment for login and
 # non-login shells and for user services.
+# First it refuses a runner whose kernel lacks CONFIG_NFT_FIB_INET, which Harbor's egress sidecar needs for the
+# allowlist: the kernel config (/boot/config-<release> or /proc/config.gz) must set it, and an inet table with a fib
+# rule must load and delete. post-boot.sh --kernel-config <file> checks only a config file's text and changes nothing.
 set -euo pipefail
+
+nft_fib_set() { grep -Eq '^CONFIG_NFT_FIB_INET=(y|m)$'; }
+if [ "${1:-}" = "--kernel-config" ]; then
+  if nft_fib_set < "${2:?usage: post-boot.sh --kernel-config <file>}"; then
+    echo "kernel config $2: CONFIG_NFT_FIB_INET is set"
+    exit 0
+  fi
+  echo "E_DR_RUNNER: kernel config $2 does not set CONFIG_NFT_FIB_INET, so Harbor's allowlist cannot run on it" >&2
+  exit 2
+fi
+
+release=$(uname -r)
+if [ -r "/boot/config-$release" ]; then
+  config=$(cat "/boot/config-$release")
+elif [ -r /proc/config.gz ]; then
+  config=$(zcat /proc/config.gz)
+else
+  echo "E_DR_RUNNER: kernel $release has no readable /boot/config-$release or /proc/config.gz, so CONFIG_NFT_FIB_INET cannot be checked; use another runner" >&2
+  exit 2
+fi
+if ! nft_fib_set <<< "$config"; then
+  echo "E_DR_RUNNER: kernel $release does not set CONFIG_NFT_FIB_INET, so Harbor's allowlist cannot run on it; use another runner" >&2
+  exit 2
+fi
+command -v nft > /dev/null || { echo "E_DR_RUNNER: no nft binary on this runner, so the fib probe cannot run" >&2; exit 2; }
+sudo nft delete table inet dr_fib_probe 2> /dev/null || true
+if ! sudo nft -f - <<'NFT'
+table inet dr_fib_probe {
+  chain probe {
+    type filter hook prerouting priority 0; policy accept;
+    fib daddr type local accept
+  }
+}
+NFT
+then
+  echo "E_DR_RUNNER: kernel $release refused an inet table with a fib rule; use another runner" >&2
+  exit 2
+fi
+sudo nft delete table inet dr_fib_probe
+echo "kernel $release: CONFIG_NFT_FIB_INET set, inet fib rule loaded and deleted"
 
 sudo systemctl stop apt-daily.timer apt-daily-upgrade.timer
 sudo systemctl disable apt-daily.timer apt-daily-upgrade.timer

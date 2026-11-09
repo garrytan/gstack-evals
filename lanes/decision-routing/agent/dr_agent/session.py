@@ -3,9 +3,13 @@
 
 Config fields: cell (N R P F J W), model (opus or sol), task_file, pin_file, questions_file, proxy_url_env (the
 env var holding the proxy URL, default DR_PROXY_URL), log_dir, step_limit_actions (100), call_limit (100), wall_s
-(2700), calibration_shadow (bool), cwd (default /testbed). The proxy token comes from DR_PROXY_TOKEN and the session
+(2700), calibration_shadow (bool), cwd (default /testbed), agent_user (the user every command runs as; dr_harbor sets it to
+dr_agent.agent_user's user, and without it commands run as the session's own user). The proxy token comes from DR_PROXY_TOKEN and the session
 id from DR_SESSION; every DR_ variable is removed from the process env before mini starts, so the commands the agent
-runs never see the token.
+runs never see the token. The session stays root, so the token in its initial environment (/proc/<pid>/environ) is
+readable only by root, while every command, the main model's and the deciders' alike, runs as agent_user: <python> -I -S
+-c DROP <uid> <gid> <interpreter> <command> sets the groups, gid and uid and execs the interpreter, so nothing else
+about the command changes (cwd, env, timeout, interpreter). The Tracker's git runs as the same user.
 
 Every cell takes the agent, model and environment sections of mini's own swebench.yaml from the installed package and
 sets only the model, its max_tokens, the limits and the cwd. Every main-model call asks for MAIN_MAX_TOKENS (32000), on
@@ -30,6 +34,7 @@ EXIT_MAP = {"Submitted": "submitted", "step_stop": "step_stop", "call_backstop":
 DOCKER_ONLY = ("environment_class", "image", "executable", "run_args", "forward_env", "container_timeout", "pull_timeout")
 INFRA_MODULES = ("litellm", "openai", "anthropic", "httpx", "httpcore", "typesafe_sdk")
 MAIN_MAX_TOKENS = 32000
+DROP = "import os,sys;u,g=int(sys.argv[1]),int(sys.argv[2]);os.setgroups([]);os.setgid(g);os.setuid(u);os.getuid()!=0 or sys.exit(126);os.execvp(sys.argv[3],sys.argv[3:])"
 STOP_LINE_CODES = {"step_stop": "DR_STEP_STOP", "wall_stop": "DR_WALL_STOP", "allowance_stop": "DR_ALLOWANCE_STOP", "custody_hit": "DR_CUSTODY_HIT"}
 
 
@@ -70,8 +75,24 @@ def model_class():
     return DrLitellmModel
 
 
-def local_environment(section, cwd):
-    """A LocalEnvironment from swebench.yaml's environment section: docker-only keys dropped, the rest kept, cwd set."""
+def agent_ids(cfg):
+    """(uid, gid) of cfg's agent_user, or None without one. A missing or root user is refused (E_DR_RUNTIME)."""
+    if not cfg.get("agent_user"):
+        return None
+    import pwd
+
+    try:
+        pw = pwd.getpwnam(cfg["agent_user"])
+    except KeyError:
+        raise SystemExit(f"E_DR_RUNTIME: no user {cfg['agent_user']!r} for the agent's commands; run python -I -m dr_agent.agent_user setup first")
+    if pw.pw_uid == 0:
+        raise SystemExit(f"E_DR_RUNTIME: the agent user {cfg['agent_user']!r} is uid 0")
+    return pw.pw_uid, pw.pw_gid
+
+
+def local_environment(section, cwd, run_as=None):
+    """A LocalEnvironment from swebench.yaml's environment section: docker-only keys dropped, the rest kept, cwd set.
+    With run_as (uid, gid), every command runs as that user through DROP."""
     from minisweagent.environments.local import LocalEnvironment, LocalEnvironmentConfig
 
     class Config(LocalEnvironmentConfig):
@@ -84,6 +105,9 @@ def local_environment(section, cwd):
         def execute(self, action, cwd="", *, timeout=None):
             if self.config.interpreter:
                 action = {**action, "command": shlex.join([*self.config.interpreter, action.get("command", "")])}
+            if run_as:
+                inner = action.get("command", "") if self.config.interpreter else shlex.join(["sh", "-c", action.get("command", "")])
+                action = {**action, "command": shlex.join([sys.executable, "-I", "-S", "-c", DROP, *map(str, run_as)]) + " " + inner}
             return super().execute(action, cwd, timeout=timeout)
 
     return Env(**{**{k: v for k, v in section.items() if k not in DOCKER_ONLY}, "cwd": cwd})
@@ -111,6 +135,7 @@ def main(argv=None):
     t0 = time.time()
     with open(args.config) as f:
         cfg = json.load(f)
+    run_as = agent_ids(cfg)
     proxy = os.environ.get(cfg.get("proxy_url_env", "DR_PROXY_URL"), "").rstrip("/")
     token = os.environ.get("DR_PROXY_TOKEN", "")
     session_id = os.environ.get("DR_SESSION", "session")
@@ -122,7 +147,10 @@ def main(argv=None):
 
     from dr_agent.deciders import Questions, make_deciders
     from dr_agent.log import DecisionLog
+    from dr_agent import state
     from dr_agent.state import Tracker, sha256
+
+    state.RUN_AS = run_as
 
     cell, model_key = cfg["cell"], cfg.get("model", "opus")
     log_dir = cfg["log_dir"]
@@ -152,7 +180,7 @@ def main(argv=None):
     mcfg.update(ms, cost_tracking="ignore_errors")
     model = model_class()(**mcfg)
     cwd = cfg.get("cwd", "/testbed")
-    env = local_environment(swebench["environment"], cwd)
+    env = local_environment(swebench["environment"], cwd, run_as)
     with open(cfg["task_file"]) as f:
         task = f.read()
     tracker = Tracker(cwd, task)
