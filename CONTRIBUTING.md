@@ -51,4 +51,4 @@ Ideas are triaged like any other outside issue. An idea we take up becomes a pla
 
 ## Checks
 
-Every change must pass the keyless checks in the [README](README.md#run-it-yourself). Write plainly: short paragraphs, active verbs, no marketing words.
+Every change must pass the keyless checks in the [README](README.md#run-the-keyless-checks). Write plainly: short paragraphs, active verbs, no marketing words.
