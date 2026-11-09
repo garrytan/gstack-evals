@@ -151,9 +151,17 @@ Readings this build chose
   skill body reaches the request and Claude Code's own transcript (~/.claude/projects), not the SDK message stream. So
   pf_turns.py copies Claude Code's transcript out as claude-session.jsonl, and the body check reads that file.
 - The short skill names resolve on 2.1.310 with the plugin directory loaded, so the dry run keeps "short" and records it.
-- The wrap-up upstream fixture: the stub fails every request of the first wrap-up attempt with a 500 and
-  x-should-retry: false, which Claude Code does not retry, so the turn ends as error_result (upstream). The rerun resumes
-  the session on the saved S; its messages hold the wrap-up text twice, and the stub answers it, so it completes and scores.
+- The wrap-up upstream fixture: the stub fails every request of the first wrap-up attempt with a 400. A 500 did not work:
+  the metering proxy retries every 5xx and charges a 5xx without usage at its reservation, so three retries used up the
+  wrap-up allowance and the turn ended limit_allowance. Neither the proxy nor Claude Code retries a 400, so the turn ends
+  as error_result (upstream). The rerun resumes the session on the saved S; its messages hold the wrap-up text twice, and
+  the stub answers it, so it completes and scores.
+- PATH in the Bash tool: no /etc/profile.d file is mounted. A login shell on the Debian 12 image (bash -lc) runs
+  /etc/profile, which resets PATH and drops /opt/pf-tools/bin, so pstack's statechart script exits 127 there. But Claude
+  Code 2.1.312's Bash tool keeps the session env's PATH, and the dry run's live-session PATH line shows it in every arm
+  without the file. The line also prints what a bare login shell gets, as a record only.
+- The PATH line's uid 1000 case: the harness runs every session as root, so the same Bash tool call also runs bash as
+  uid 1000 with setpriv (HOME=/tmp), keeping the session env, as a Bash tool run as that uid would.
 - Each turn ends by real_agent's _drive rule: the agent ended its turn and its background tasks are quiet (QUIET_SEC 30,
   then BG_WAIT_SEC 600 with nothing ends it as bg_wait_expired, which counts as completed), bounded by the turn's wall
   limit. pf_turns.py calls RealAgent._drive itself, so the rule has one code path.
@@ -180,12 +188,16 @@ item on a temporary ledger. The driver (serveStages) serves those items in two b
 and model on two stages: pf-opus, pf-sol, pf-particle and pf-blind first, then pf-admit. Each stage's metering proxy
 stands in front of a stub upstream that answers as Anthropic's API. Ten sessions run through runPfSession, so each one
 goes through Harbor, PfAgent and the driver's slots in a container from the fixture's session image: probe (the skill
-names and a background task), A (19 manifest entries), B (26 entries and the scoring ceiling), C (a wrap-up limit), blind,
-then on pf-admit D (a wrap-up upstream end and its rerun), Eopus and Esol (a cold first wrap-up request at a 160k-token
-stub context, about 560 KB, then the next after the stub reports a full cache write), W4 (the first wrap-up answer
-reports 95% of its request's worst case, so the proxy refuses the next) and hostile (a tree holding CLAUDE.md, refused
-before any slot, gap E_PF_ARM with one attempt). effort.json comes from batch 1's proxy records, and every session after
-it is checked against it.
+names and a background task), A (19 manifest entries), B (26 entries and the scoring ceiling), C (a wrap-up limit), blind
+(scope "flag/" plus the stub's session tag), then on pf-admit D (a wrap-up upstream end and its rerun), Eopus and Esol (a
+cold first wrap-up request at a 160k-token stub context, about 560 KB, then the next after the stub reports a full cache
+write; each line fails if either request is at the 1h cache-write rate), W4 (the first wrap-up answer reports 95% of its
+request's worst case, so the proxy refuses the next) and hostile (a tree holding CLAUDE.md, refused before any slot, gap
+E_PF_ARM with one attempt). effort.json comes from batch 1's proxy records, and every session after it is checked against
+it. The first Bash call of probe (P), B (C), C (N) and blind runs the PATH probe: the line passes only when, as root and as
+uid 1000, every arm's PATH is /opt/pf-tools/bin then the image's own PATH, bun resolves to /opt/pf-tools/bin/bun, and
+statechart starts with no args (exit 2 and its usage, not 127) where pstack is mounted. pf-labels and pf-oracle pay for
+the labeller and the VM oracle, not driver stages, so the dry run opens and settles their leases itself at no spend.
 The tree volumes are copied from the fixture repo and owned by root, and git in them trusts only /d. A, B, C and D are
 scored with the Docker executor. It prints one PASS or FAIL line per fixture, and the driver settles every lease.
 
