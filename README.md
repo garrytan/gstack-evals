@@ -21,7 +21,7 @@ Held-out task bodies, hidden tests and answer keys never enter this repo. They a
 | [wiki/plans/](wiki/plans/) | Plans and preregistrations |
 | [wiki/research/](wiki/research/) | Background research |
 
-A merged post never changes except for its `status`; a correction is a new post that supersedes the old one. Run `bun run wiki:index` to write wiki/INDEX.md, a local list of every post with its kind and status.
+A merged post never changes except for its `status`; a correction is a new post that supersedes the old one. The one exception is an owner-directed edit recorded by a waiver row in `wiki/edits/<name>.tsv` (see [wiki/README.md](wiki/README.md), rule 2). Run `bun run wiki:index` to write wiki/INDEX.md, a local list of every post with its kind and status.
 
 Posts and commits use ids like GSTA-12, GEVA-105 or GST-618. These are thread and issue codes from the agent crew that builds this repo for Garry Tan. They are labels for provenance, not links you can follow.
 
