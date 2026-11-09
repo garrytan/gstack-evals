@@ -5,10 +5,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readRows } from "../../quick/laneb/runner/ledger.ts";
+import { readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { approve, itemTotals } from "../../lanes/harness-mechanics/money.ts";
-import { CAPS_USD, REPO, sha256 } from "../../lanes/harness-mechanics/pins.ts";
-import { admit, cohenKappa, countProblems, DECISIONS, decide, drawStratified, LABELS, labelsRead, loadItems, metrics, runReplay, splitOf, truthOf, tune, type Dec, type ReplayClients, type Row } from "../../lanes/harness-mechanics/replay.ts";
+import { CAPS_USD, HM, REPO, sha256 } from "../../lanes/harness-mechanics/pins.ts";
+import { admit, batchFits, cohenKappa, countProblems, DECISIONS, decide, drawStratified, LABELS, labelsRead, loadItems, metrics, PER_CALL_USD, runReplay, splitOf, truthOf, tune, type Dec, type ReplayClients, type Row } from "../../lanes/harness-mechanics/replay.ts";
 import { FIXTURE_COUNTS, fakeClients, fixtureItems, fixtureText, stepReplay } from "../../lanes/harness-mechanics/replay-fake.ts";
 
 const FIXTURE = join(REPO, "tests/harness-mechanics/fixtures/replay/items.jsonl");
@@ -143,6 +143,27 @@ describe("the run", () => {
   test("without the start record the run refuses before any call", async () => {
     const { o } = setup();
     await expect(runReplay({ ...o, start: join(o.out, "missing.md") })).rejects.toThrow(/^E_HM_REPLAY start rule/);
+  });
+  test("the batch stop: settled spend, in-flight reservations and the batch's calls at the dearest call stay at or under $90; before any call settles the dearest is the plan's estimate times 1.5", () => {
+    expect(PER_CALL_USD).toBeCloseTo(60 / (3 * 480 + 5 * (400 + 400 + 200)), 12);
+    const fresh = { spent: 0, inflightMicros: 0, settled: 0, worst: 0, lease: 90 };
+    expect(batchFits(fresh, 6439)).toBe(true);
+    expect(batchFits(fresh, 6441)).toBe(false);
+    const seen = { spent: 50, inflightMicros: 0, settled: 40, worst: 1, lease: 90 };
+    expect(batchFits(seen, 40)).toBe(true);
+    expect(batchFits(seen, 41)).toBe(false);
+    expect(batchFits({ ...seen, inflightMicros: toMicros(10) }, 30)).toBe(true);
+    expect(batchFits({ ...seen, inflightMicros: toMicros(10) }, 31)).toBe(false);
+  });
+  test("a batch that would pass $90 stops before its first call, and every batch that fit ran in full", async () => {
+    const seen: string[] = [];
+    const { ledger, o } = setup(wrap((_, c) => async (req) => { seen.push(req.id); return { ...(await c(req)), cost_usd: 3 }; }));
+    await expect(runReplay(o)).rejects.toThrow(/^E_HM_REPLAY cap stop/);
+    const per = new Map<string, number>(), point = new Map(o.items.map((i) => [i.id, i.point]));
+    for (const id of seen) per.set(id, (per.get(id) ?? 0) + 1);
+    expect(per.size).toBe(HM.concurrent);
+    for (const [id, n] of per) expect(n).toBe(point.get(id) === "done" ? 3 : 5);
+    expect(itemTotals(readRows(ledger), "stage2-replay").settled).toBe(toMicros(3 * seen.length));
   });
   test("a cap stop ends the run incomplete inside the lease, and a client that reports no cost stops it", async () => {
     const { ledger, o } = setup(wrap((_, c) => async (req) => ({ ...(await c(req)), cost_usd: 1 })));

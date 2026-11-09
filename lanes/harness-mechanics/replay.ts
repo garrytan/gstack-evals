@@ -242,7 +242,17 @@ export function replayReport(out: string): ReplayReport {
 
 export type RunOpts = { items: ReplayItem[]; itemsSha256: string; clients: ReplayClients; out: string; start: string; ledger: string; counts?: Counts };
 const ITEM = "stage2-replay";
-type Spend = { spent: number; worst: number; lease: number };
+export type Spend = { spent: number; inflightMicros: number; settled: number; worst: number; lease: number };
+
+// Section 22 gives the replay's expected $60 and no per-call figure, so the plan's per-call estimate is $60 over the
+// planned calls: three per done item and five per route or risky item.
+const C = REPLAY.counts;
+export const PER_CALL_USD = REPLAY.expectedUsd / (3 * C.done + 5 * (C.route + C.risky_sampled + C.risky_written));
+
+// The batch stop: settled spend, plus every in-flight reservation, plus the batch's calls at the dearest call seen so
+// far must stay at or under the lease. Before any call has settled, the dearest call is the per-call estimate times m.
+const dearest = (s: Spend) => (s.settled ? s.worst : PER_CALL_USD * REPLAY.m);
+export const batchFits = (s: Spend, calls: number) => s.spent + s.inflightMicros / 1_000_000 + calls * dearest(s) <= s.lease;
 
 // Before any call: the counts, the start rule's record and the item's ledger (approved at its cap, never used before).
 export function preflight(o: RunOpts) {
@@ -254,10 +264,14 @@ export function preflight(o: RunOpts) {
 
 async function rowOf(i: ReplayItem, split: Split, c: ReplayClients, spend: Spend): Promise<Row> {
   const ask = async (who: keyof ReplayClients, answers: readonly string[]): Promise<ReplayAnswer> => {
-    const t0 = performance.now(), a = await c[who]({ point: i.point, id: i.id, task: i.task, text: i.text, answers });
+    const hold = toMicros(dearest(spend)), t0 = performance.now();
+    spend.inflightMicros += hold;
+    const a = await c[who]({ point: i.point, id: i.id, task: i.task, text: i.text, answers });
+    spend.inflightMicros -= hold;
     if (typeof a?.cost_usd !== "number" || !Number.isFinite(a.cost_usd) || a.cost_usd < 0) fail(who + " answered " + i.id + " without a cost_usd; every call is metered");
     spend.spent += a.cost_usd;
     spend.worst = Math.max(spend.worst, a.cost_usd);
+    spend.settled++;
     return { label: String(a.label), ...(typeof a.score === "number" ? { score: a.score } : {}), cost_usd: a.cost_usd, tokens: Number(a.tokens) || 0, latency_ms: a.latency_ms ?? performance.now() - t0 };
   };
   const [jev, p1, det] = await Promise.all((["jev", "p1", "det"] as const).map((b) => ask(b, DECISIONS[i.point])));
@@ -267,13 +281,13 @@ async function rowOf(i: ReplayItem, split: Split, c: ReplayClients, spend: Spend
   return { ...base, astra, opus };
 }
 
-// HM.concurrent items at a time. Before each batch, a batch at the dearest call seen so far must fit inside the lease;
-// otherwise the run cap-stops, incomplete and never retried.
+// HM.concurrent items at a time. A batch that fails the batch stop ends the run before its first call, incomplete and
+// never retried.
 async function collect(items: ReplayItem[], split: Map<string, Split>, c: ReplayClients, spend: Spend): Promise<Row[]> {
   const rows: Row[] = [];
   for (let k = 0; k < items.length; k += HM.concurrent) {
     const batch = items.slice(k, k + HM.concurrent), calls = batch.reduce((s, i) => s + (i.point === "done" ? 3 : 5), 0);
-    if (spend.spent + calls * spend.worst > spend.lease) fail("cap stop: $" + spend.spent.toFixed(2) + " spent and " + calls + " more calls at up to $" + spend.worst.toFixed(2) + " each would pass the lease of $" + spend.lease + "; the replay is incomplete and is never retried");
+    if (!batchFits(spend, calls)) fail("cap stop: $" + spend.spent.toFixed(2) + " settled, $" + (spend.inflightMicros / 1_000_000).toFixed(2) + " in flight and " + calls + " more calls at up to $" + dearest(spend).toFixed(4) + " each would pass the lease of $" + spend.lease + "; the replay is incomplete and is never retried");
     rows.push(...(await Promise.all(batch.map((i) => rowOf(i, split.get(i.id)!, c, spend)))));
   }
   return rows;
@@ -293,7 +307,7 @@ export async function runReplay(o: RunOpts): Promise<ReplayReport> {
   writeFileSync(join(o.out, "digests.json"), JSON.stringify({ items_sha256: o.itemsSha256, items: o.items.length, written: written.length, written_sha256: sha256(written.join("\n")), start: { path: o.start, sha256: sha256(readFileSync(o.start)) }, dev_sha256: ids("dev"), held_sha256: ids("held") }, null, 2) + "\n");
   const lease = leaseUsd(ITEM)!, ledger = new Ledger(o.ledger, ITEM), id = ITEM + "/run-1";
   if (!ledger.reserve(id, toMicros(lease)).ok) fail("cap stop: the ledger refused the replay's lease of $" + lease);
-  const spend: Spend = { spent: 0, worst: 0, lease };
+  const spend: Spend = { spent: 0, inflightMicros: 0, settled: 0, worst: 0, lease };
   try {
     const dev = await collect(part("dev"), split, o.clients, spend);
     writeJsonl(join(o.out, "answers-dev.jsonl"), dev);
