@@ -12,6 +12,7 @@
 //   primary      section 3's ranking, at most 6; a unit with none left drops
 //   recognition  section 11's probe on all three models under test; an Opus-recognized unit goes to a descriptive
 //                stratum, and a Sol or particle-1 hit keeps the unit out of that model's primary only
+//   miss read    the miss sample's rewrite and key read on a dropped unit, mechanical drops only; it never enters a set
 // The screen itself is the miner's; its candidates arrive here. Logs carry stages, counts and spend, never text.
 import { MeterError, sha256, type Meter, type ModelKey } from "../../aftermath/meter.ts";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
@@ -123,6 +124,49 @@ export function normalizeItems(raw: unknown, window: { from: string; to: string 
 
 const FORESEEABLE = new Set(["yes", "maybe", "no"]);
 
+type Ask = (label: string, model: ModelKey, prompt: string, maxTokens: number, effort: string | null, json: boolean) => Promise<any>;
+
+/** The metered ask for one unit: one resend on an unreadable reply, and no call starts at or past the spend bound. */
+function asker(id: string, d: FunnelDeps): Ask {
+  const log = d.log ?? (() => {});
+  const stale = P.unpinned();
+  if (stale.length) throw new DxError("E_USAGE", "the authoring prompts " + stale.join(", ") + " differ from their pinned sha256; a frozen prompt never changes during a run");
+  return async (label, model, prompt, maxTokens, effort, json) => {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      if (d.limitMicros !== undefined && d.meter.spent() >= d.limitMicros) throw new DxError("E_DX_SUPPLY_SHORT", "authoring spend reached the calibration bound before the set filled (supply rule 1)");
+      const r = await d.meter.call({ model, prompt: attempt === 1 ? prompt : prompt + "\n\nYour previous reply could not be read. Follow the output format exactly.", maxTokens, effort, label: id + ":" + label });
+      log(id, label, { model, status: r.status, micros: r.micros, cached: r.cached });
+      if (r.status !== 200 || r.text === null) {
+        if (attempt === 2) throw new DxError("E_DX_INFRA_MISSING", id + " " + label + ": " + (r.problem ?? "no reply") + " twice");
+        continue;
+      }
+      if (!json) return r.text.trim();
+      const parsed = lastJson(r.text);
+      if (parsed !== null) return parsed;
+    }
+    throw new DxError("E_DX_INFRA_MISSING", id + " " + label + ": the reply did not parse twice");
+  };
+}
+
+const candidatesText = (u: FunnelUnit, full: boolean) => u.candidates.map((c, i) => fence("Candidate " + (i + 1) + " (" + c.ref + ", " + c.date + ", author association " + c.association + "): " + c.title, full ? c.body : c.passage)).join("");
+
+/** Step 2's prompt: the source plan text, the identifiers and each candidate's title, association and passage, never a body. */
+export const triagePrompt = (u: FunnelUnit) => P.TRIAGE + fence("Description", u.source) + fence("Identifiers", u.identifiers.join("\n")) + candidatesText(u, false);
+
+/** Section 11's probe input: plan.md and the first 40 lines of the snapshot's README, both aliased, and no tools. */
+export const recognitionPrompt = (plan: string, readme: string, alias: (t: string) => string) => P.RECOGNITION + fence("plan.md", plan) + fence("README, first 40 lines", alias(readme.split("\n").slice(0, 40).join("\n")));
+
+/** The rewrite and step 3's key read: the whole window's titles, the bodies that touch the surface and every candidate in full. */
+async function keyRead(u: FunnelUnit, d: FunnelDeps, ask: Ask) {
+  const rewrite: string = await ask("rewrite", "opus", P.REWRITE + fence("Description", u.source), 4000, null, false);
+  const window = "from " + u.window.from.slice(0, 10) + " to " + u.window.to.slice(0, 10);
+  const head = (p: string) => p.replace("RELEASE", u.release_at.slice(0, 10)).replace("WINDOW", window);
+  const records = fence("Every record created in the window (titles)", u.records.map((r) => r.date.slice(0, 10) + " " + r.ref + ": " + r.title).join("\n")) + u.records.filter((r) => r.body !== null).map((r) => fence("Record " + r.ref + " (" + r.date.slice(0, 10) + ")", r.body!)).join("");
+  const material = fence("The team's plan", rewrite) + records + candidatesText(u, true);
+  const raw = await ask("key-1", "opus", head(P.KEY) + material, 16000, "high", true);
+  return { plan: d.alias(rewrite), head, records, material, raw };
+}
+
 export async function authorUnit(u: FunnelUnit, d: FunnelDeps): Promise<FunnelResult> {
   const start = d.meter.spent();
   const log = d.log ?? (() => {});
@@ -133,33 +177,11 @@ export async function authorUnit(u: FunnelUnit, d: FunnelDeps): Promise<FunnelRe
     return r;
   };
   if (u.candidates.length === 0) return done("screen-negative");
-  const stale = P.unpinned();
-  if (stale.length) throw new DxError("E_USAGE", "the authoring prompts " + stale.join(", ") + " differ from their pinned sha256; a frozen prompt never changes during a run");
-  const ask = async (label: string, model: ModelKey, prompt: string, maxTokens: number, effort: string | null, json: boolean): Promise<any> => {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      if (d.limitMicros !== undefined && d.meter.spent() >= d.limitMicros) throw new DxError("E_DX_SUPPLY_SHORT", "authoring spend reached the calibration bound of $" + d.limitMicros / 1e6 + " before the set filled (supply rule 1)");
-      const r = await d.meter.call({ model, prompt: attempt === 1 ? prompt : prompt + "\n\nYour previous reply could not be read. Follow the output format exactly.", maxTokens, effort, label: u.id + ":" + label });
-      log(u.id, label, { model, status: r.status, micros: r.micros, cached: r.cached });
-      if (r.status !== 200 || r.text === null) {
-        if (attempt === 2) throw new DxError("E_DX_INFRA_MISSING", u.id + " " + label + ": " + (r.problem ?? "no reply") + " twice");
-        continue;
-      }
-      if (!json) return r.text.trim();
-      const parsed = lastJson(r.text);
-      if (parsed !== null) return parsed;
-    }
-    throw new DxError("E_DX_INFRA_MISSING", u.id + " " + label + ": the reply did not parse twice");
-  };
-  const candidates = (full: boolean) => u.candidates.map((c, i) => fence("Candidate " + (i + 1) + " (" + c.ref + ", " + c.date + ", author association " + c.association + "): " + c.title, full ? c.body : c.passage)).join("");
-  const triage = await ask("triage", "gemini", P.TRIAGE + fence("Description", u.source) + fence("Identifiers", u.identifiers.join("\n")) + candidates(false), 4000, "medium", true);
+  const ask = asker(u.id, d);
+  const triage = await ask("triage", "gemini", triagePrompt(u), 4000, "medium", true);
   if (triage?.flag === false) return done("triage-negative");
-  const rewrite: string = await ask("rewrite", "opus", P.REWRITE + fence("Description", u.source), 4000, null, false);
-  const plan = d.alias(rewrite);
-  const window = "from " + u.window.from.slice(0, 10) + " to " + u.window.to.slice(0, 10);
-  const head = (p: string) => p.replace("RELEASE", u.release_at.slice(0, 10)).replace("WINDOW", window);
-  const records = fence("Every record created in the window (titles)", u.records.map((r) => r.date.slice(0, 10) + " " + r.ref + ": " + r.title).join("\n")) + u.records.filter((r) => r.body !== null).map((r) => fence("Record " + r.ref + " (" + r.date.slice(0, 10) + ")", r.body!)).join("");
-  const material = fence("The team's plan", rewrite) + records + candidates(true);
-  let raw = await ask("key-1", "opus", head(P.KEY) + material, 16000, "high", true);
+  const { plan, head, records, material, raw: first } = await keyRead(u, d, ask);
+  let raw = first;
   let items: KeyItem[] = [];
   for (let round = 1; round <= 2; round++) {
     const n = normalizeItems(raw, u.window, d.alias);
@@ -182,13 +204,30 @@ export async function authorUnit(u: FunnelUnit, d: FunnelDeps): Promise<FunnelRe
   const screened = await d.genericScreen({ unit: u.id, items, primary: [] });
   const key: Key = { unit: u.id, items: screened.items, primary: rankPrimary(u.id, screened.items) };
   if (!key.primary.length) return done("no-primary", plan, key);
-  const readme = d.alias(u.readme.split("\n").slice(0, 40).join("\n"));
   const recognized = {} as Record<ModelId, boolean>;
   for (const m of MODEL_IDS) {
-    const r = await ask("recognition-" + m, m, P.RECOGNITION + fence("plan.md", plan) + fence("README, first 40 lines", readme), 1000, null, true);
+    const r = await ask("recognition-" + m, m, recognitionPrompt(plan, u.readme, d.alias), 1000, null, true);
     recognized[m] = namesProject(String(r?.project ?? ""), u.real_names);
   }
   return done(recognized.opus ? "recognized-opus" : "keyed", plan, key, recognized);
+}
+
+export interface MissRead {
+  id: string;
+  /** Items left after the mechanical drops (no audit, no generic screen: the miss sample is descriptive). */
+  items: number;
+  dropped_items: number;
+  spent_micros: number;
+}
+
+/** The miss sample (section 4): a dropped unit's rewrite and key read anyway; its counts print as the funnel's miss rates and it never enters a set. */
+export async function missRead(u: FunnelUnit, d: FunnelDeps): Promise<MissRead> {
+  const start = d.meter.spent();
+  const { raw } = await keyRead(u, d, asker(u.id, d));
+  const n = normalizeItems(raw, u.window, d.alias);
+  const r = { id: u.id, items: n.items.length, dropped_items: n.dropped, spent_micros: d.meter.spent() - start };
+  (d.log ?? (() => {}))(u.id, "miss-read", { items: r.items, dropped_items: r.dropped_items, spent_micros: r.spent_micros });
+  return r;
 }
 
 export { MeterError };
