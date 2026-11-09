@@ -36,7 +36,7 @@
 //   count_tokens estimate). Refused, they counted toward review-units' 2% degraded share (GEVA-89: all 106 of particle-1's
 //   refusals). The answer only sizes Claude Code's own context checks; the reservation still bounds input by bytes.
 // - Decision routing (B3): a typesafe provider serves TypeSafe's POST /v1/systemone with TYPESAFE_API_KEY as a bearer, takes
-//   the SDK's zstd request body (decoded before the tripwire and the price), and adds no output cap, since Jev's output is
+//   the SDK's zstd request body (decoded before the tripwire and the price, and refused once it decodes past 16 MiB), and adds no output cap, since Jev's output is
 //   free. ProxyOptions.allowanceCode DR_ALLOWANCE_STOP turns a slot's allowance refusal into a 403 whose body every SDK shows
 //   as its error message; the default keeps the 402 E_ALLOWANCE refusal unchanged. Outcome lines carry the call's latency.
 //   BindRequest.forbidden_markers adds runner-only markers to the tripwire for that slot's calls only. On a DR_ALLOWANCE_STOP
@@ -47,6 +47,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
 import { chmodSync, closeSync, existsSync, fstatSync, fsyncSync, ftruncateSync, openSync, readFileSync, readSync, rmSync, writeSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
+import { zstdDecompressSync } from "node:zlib";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
 import { chatPrice, openRouterRouting, PriceError, priceRequest, reservationMicros, sseUsage, usageCost, type MeteredProvider } from "../pricing/prices.ts";
@@ -99,6 +100,8 @@ export const FINALIZE_TIMEOUT_MS = 30_000;
 export const FINALIZE_MAX_MS = 120_000;
 /** One provider call may run this long; long reasoning calls exceed Bun's own 300-second fetch timeout, which is off. */
 export const UPSTREAM_DEADLINE_MS = 900_000;
+/** A zstd request body that decodes past this many bytes is refused, and decoding stops there. */
+export const MAX_DECODED_BODY_BYTES = 16 * 1024 * 1024;
 const NO_TOKENS: TokenUsage = { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
 const usd = (micros: number) => `$${(micros / 1e6).toFixed(6)}`;
 /** Reserve refusals that, under ReservationLedger's contract, mean the ledger holds nothing under the idempotency key. */
@@ -593,7 +596,7 @@ export class MeteringProxy {
     const zstd = provider === "typesafe" && req.headers.get("content-encoding") === "zstd";
     let raw: string;
     try {
-      raw = req.method === "GET" ? "" : zstd ? new TextDecoder().decode(Bun.zstdDecompressSync(new Uint8Array(await req.arrayBuffer()))) : await req.text();
+      raw = req.method === "GET" ? "" : zstd ? new TextDecoder().decode(zstdDecompressSync(new Uint8Array(await req.arrayBuffer()), { maxOutputLength: MAX_DECODED_BODY_BYTES })) : await req.text();
     } catch {
       return this.refuse(ctx, "E_ALLOWANCE", 400, "the zstd request body cannot be decoded, so it cannot be priced");
     }

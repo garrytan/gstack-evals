@@ -205,6 +205,22 @@ describe("TypeSafe System One route", () => {
     expect(t.calls).toHaveLength(0);
   });
 
+  test("a small zstd body that decodes past the request-body limit is refused before it is decoded in full", async () => {
+    const t = setup(tsOk, { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const b = t.bind();
+    const bomb = Bun.zstdCompressSync(Buffer.from(JSON.stringify({ ...systemOne, state: "a".repeat(17 * 1024 * 1024) })));
+    expect(bomb.length).toBeLessThan(64 * 1024);
+    const res = await t.post(b.slot, b.token, "/typesafe/v1/systemone", bomb, { "content-encoding": "zstd" });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.code).toBe("E_ALLOWANCE");
+    expect(body.detail).toContain("cannot be decoded");
+    expect(t.calls).toHaveLength(0);
+    const ok = await t.post(b.slot, b.token, "/typesafe/v1/systemone", Bun.zstdCompressSync(Buffer.from(JSON.stringify(systemOne))), { "content-encoding": "zstd" });
+    expect(ok.status).toBe(200);
+    expect(t.calls).toHaveLength(1);
+  });
+
   test("a System One call over the allowance stops with DR_ALLOWANCE_STOP and is not sent", async () => {
     const t = setup(tsOk, { allowanceCode: "DR_ALLOWANCE_STOP" });
     const b = t.bind({ allowance_micros: 1 });
