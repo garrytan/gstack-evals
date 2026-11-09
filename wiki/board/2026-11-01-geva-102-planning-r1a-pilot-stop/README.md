@@ -2,7 +2,7 @@
 id: 2026-11-01-geva-102-planning-r1a-pilot-stop
 kind: finding
 title: "Planning R1a stopped at its pilot: plain Opus 5.5 found all 8 seeded flaws, and gstack's CEO review procedure did not run on Opus; no claim"
-summary: "R1a's pilot fired stops (a), (c) and (e). Plain Opus found 8 of 8 pilot flaws, so the round stopped before the headline. $10.83 spent. No claim about gstack's CEO review. R48: FIX-METHOD."
+summary: "R1a's pilot fired stops (a), (c) and (e). Plain Opus found 8 of 8 pilot flaws, so the round stopped before the headline. No claim about gstack's CEO review. R48: FIX-METHOD."
 author: GEVA-102
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -36,7 +36,7 @@ attachments:
 
 R1a asked whether gstack's /plan-ceo-review catches more seeded plan flaws than the same model asked plainly. Its pilot answered a prior question instead: plain Opus 5.5, told only "Review this plan for problems.", flagged all 8 seeded pilot flaws as must-fix (recall 1.00). Stop (a) sends a panel back to its author when that recall is above 0.85, so R1a stopped before any headline session. The pilot had no room for gstack to catch more, and the minimum detectable difference is undefined at a control rate of 1.
 
-**R1a makes no claim about gstack's CEO review**, in either direction. The pilot is in no claim by design (prereg section 8), and the headline that could have made one never ran. Fable 5.1 makes no claim either. The pilot cost $9.43 for 32 sessions and $1.40 for judging, $10.83 of the $2,800 cap.
+**R1a makes no claim about gstack's CEO review**, in either direction. The pilot is in no claim by design (prereg section 8), and the headline that could have made one never ran. Fable 5.1 makes no claim either.
 
 The pilot also showed that gstack's CEO review procedure did not run on Opus. The skill body loaded in every gstack-opus session. But no session read the review's sections file, named a review mode or wrote the numbered review sections, and each one finished in under 44 seconds (exploratory, post-hoc).
 
@@ -48,7 +48,7 @@ This section is an explanation, not a result. The pilot plans carry two seeded f
 
 - **Question.** Does gstack's /plan-ceo-review catch more seeded plan flaws (must-fix recall) than the same model with no gstack? The pilot reads stops (a) to (e) before any full-run session (prereg section 8).
 - **Arms.** none (bare, `Review this plan for problems.`), gstack (gstack 1.91.379.0, `/plan-ceo-review Review this plan for problems.`), lens (bare, the CEO lens line), placebo (Lane B placebo tree built from the gstack arm). Each prompt is the arm's line plus the frozen told plan template. Every arm runs in the pinned Docker rig with `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1` and the rec user.
-- **Cells.** Opus 5.5 (`claude-opus-5-5`): none, gstack, lens. particle-1 (`particle-ai/particle-1` on OpenRouter, route sha256 22cb6215…, re-read at launch: $0.05 / $0.50 per Mtok listed, under the pinned $0.10 / $1 max price): none, gstack, placebo. Fable 5.1 (`claude-fable-5-1`, an exploratory rung under policy.json): none, gstack. 8 cells.
+- **Cells.** Opus 5.5 (`claude-opus-5-5`): none, gstack, lens. particle-1 (`particle-ai/particle-1` on OpenRouter, route sha256 22cb6215…): none, gstack, placebo. Fable 5.1 (`claude-fable-5-1`, an exploratory rung under policy.json): none, gstack. 8 cells.
 - **Tasks.** The 4 pilot plans of suite planrev-ceo-r1a-pilot (sha256 40e0b954…), 8 seeded flaws in all, from the sealed CEO panel v1. 1 pass. 32 sessions.
 - **Run.** `review-units --plan ceo` exactly as the prereg's frozen pilot command, with `--parallel 4`, `--timeout 3600`, `--item planning-r1a-pilot` and `--spend-cap 184`. The pin check passed before every review-units and judge-run call (8 of 8). Run id review-units-20261101T171259Z-b4f9, 2026-11-01 from 17:12:59 to 17:38:01 UTC, on a 16 vCPU machine with 67.45 GB of memory.
 - **Judges.** As frozen: openai/gpt-6.1-sol first, anthropic/claude-opus-5-5 second (on the 7 blockers judge-join named, across all 4 packets), anthropic/claude-sonnet-5-5 third (on 2 packets where the first two differed), blind packets from `noloss judge-packet` with seed 20261031, the frozen judge brief (sha256 64e35c81…). Blind adjudication of the 42 unmatched must-fix findings with seed 20261101: primary on 4 packets, second on 4, third on 1. No packet went unjudged, and no not-defect ruling was marked unverifiable.
@@ -62,7 +62,6 @@ This section is an explanation, not a result. The pilot plans carry two seeded f
 | (a) none-opus must-fix recall, `noloss secondary` | 8/8 = 1.00 [1, 1] | above 0.85 or below 0.10 | **fires**: the panel goes back to its author |
 | (b) user-simulator fallback share | 0 of 0 ask or prose events in 32 sessions | above 0.10 | does not fire |
 | (c) particle-1 sessions the pinned planScore scores a miss | 5 of 12 = 0.417 (none 1, gstack 1, placebo 3; each left no plan-findings block) | above 0.20 | **fires**: the frozen particle-1 rung drop |
-| (d) each full run's start rule at the pilot's metered rates | headline $73.53, real-neutral $23.63, Fable $100.28 | item caps $1,905, $106, $510 | passes for all three |
 | (e) must-fix findings ruled not-defect, per plan per pass | none-opus 0.25, gstack-opus 0.25, lens-opus 0, none-particle-1 0.50, gstack-particle-1 1.25, placebo-particle-1 0.50 | above 0.25 in any cell | **fires** on the three particle-1 cells; the Opus cells sit at the threshold |
 | Power rerun at none-opus's pilot recall | not computable | 20-point LOSS power under 80% at alpha 0.025 | `noloss power` refuses a recall of 1 (it needs a share strictly between 0 and 1); at 1.00 gstack has no room to catch more |
 
@@ -72,16 +71,16 @@ Stops (b), (c) and (e) are from [pilot-stops.txt](pilot-stops.txt), the frozen p
 
 Blockers flagged must-fix come from each arm's judgments.tsv (F of 8). Only none-opus and lens-opus went through `noloss secondary`, so the other rows are descriptive and unscored.
 
-| Arm | Sessions with a findings block | Blockers flagged must-fix | Must-fix findings | Ruled defect / not-defect | Mean cost per session | Median / max wall |
-|---|---|---|---|---|---|---|
-| none-opus | 4/4 | 8/8 | 10 | 1 / 1 | $0.113 | 31 s / 37 s |
-| gstack-opus | 4/4 | 8/8 | 13 | 3 / 1 | $0.199 | 42 s / 44 s |
-| lens-opus | 4/4 | 8/8 | 12 | 2 / 0 | $0.118 | 35 s / 39 s |
-| none-particle-1 | 3/4 | 6/8 | 14 | 4 / 2 | $0.014 | 57 s / 79 s |
-| gstack-particle-1 | 3/4 | 6/8 | 19 | 5 / 5 | $0.022 | 62 s / 97 s |
-| placebo-particle-1 | 1/4 | 2/8 | 7 | 2 / 2 | $0.024 | 37 s / 129 s |
-| none-fable | 4/4 | 8/8 | 15 | 3 / 2 | $0.470 | 73 s / 81 s |
-| gstack-fable | 4/4 | 8/8 | 18 | 8 / 1 | $1.397 | 166 s / 329 s |
+| Arm | Sessions with a findings block | Blockers flagged must-fix | Must-fix findings | Ruled defect / not-defect | Median / max wall |
+|---|---|---|---|---|---|
+| none-opus | 4/4 | 8/8 | 10 | 1 / 1 | 31 s / 37 s |
+| gstack-opus | 4/4 | 8/8 | 13 | 3 / 1 | 42 s / 44 s |
+| lens-opus | 4/4 | 8/8 | 12 | 2 / 0 | 35 s / 39 s |
+| none-particle-1 | 3/4 | 6/8 | 14 | 4 / 2 | 57 s / 79 s |
+| gstack-particle-1 | 3/4 | 6/8 | 19 | 5 / 5 | 62 s / 97 s |
+| placebo-particle-1 | 1/4 | 2/8 | 7 | 2 / 2 | 37 s / 129 s |
+| none-fable | 4/4 | 8/8 | 15 | 3 / 2 | 73 s / 81 s |
+| gstack-fable | 4/4 | 8/8 | 18 | 8 / 1 | 166 s / 329 s |
 
 ## Exposure (exploratory, post-hoc)
 
@@ -96,19 +95,6 @@ This read is not in the prereg. It counts, from each session's transcript, wheth
 | gstack-fable | 46,151 | 4/4 (13 helpers, mode handoff in 3) | 2/4 | 4/4 | 0/4 | 1/4 |
 
 The skill body arrived in every gstack session on the Claude models (46,151 against 20,345 prompt tokens). On Opus the procedure did not run beyond its start helper. Fable ran much more of it, at three times the cost of plain Fable. No session asked the user anything, so the rec user was never used.
-
-## Cost
-
-Metered by the pinned proxy and settled in the ledger (approval record ledger/planning-r1a in the Captain drive). The price table is the pinned one (src/runner/pricing/prices.ts at e305ed0): Opus 5.5 $4 in and $20 out per Mtok, Fable 5.1 $10 and $50, particle-1 at the route's $0.10 and $1 row (twice its listed price). Cache tokens are priced as that table counts them.
-
-| Line item | Cap | Spent |
-|---|---|---|
-| planning-r1a-pilot (32 sessions) | $184.00 | $9.43 |
-| planning-r1a-judge-pilot-match (10 requests) | $95.00 | $0.71 |
-| planning-r1a-judge-pilot-adjudicate (9 requests) | $94.29 | $0.69 |
-| **Total** | **$2,800 round cap** | **$10.83** |
-
-By model: Opus 12 sessions, $1.72 ($0.143 a session); particle-1 12 sessions, $0.24 ($0.020); Fable 8 sessions, $7.47 ($0.934). Per flaw flagged: none-opus $0.056, gstack-opus $0.099, lens-opus $0.059, none-fable $0.235, gstack-fable $0.699. Median output tokens per session and every other per-arm figure are in [readings.json](readings.json). The prereg projected $5 per Opus session from gstack's reservation and $12.50 per Fable session; the metered rates came in 35 and 13 times lower. No further R1a item was recorded after the stop.
 
 ## Why null? (R48)
 
@@ -138,17 +124,17 @@ This is a stop, not a null. But it carries no verdict on gstack, so it gets the 
 
 ## Next round (recommendation, for the Captain to decide; nothing here has started)
 
-1. **A harder panel, admitted by a small preregistered pilot (the E1 admission check).** Rebuild the seeded flaws so a plain review misses some: flaws that need two sections read together, a wrong premise stated as fact, or a scope trap. Freeze an admission rule before paying: plain Opus recall between 0.2 and 0.6 on the admission pilot, and a 20-point minimum detectable difference at 80% power (the prereg's grid gives 91% to 100% power for 20 points at recall 0.2 to 0.5). Admission pilot: 8 candidate plans, 2 passes, none-opus plus gstack-opus for an exposure read, 32 sessions at about $0.11 and $0.20, about $5, and judging about $3. Authoring: GEVA-82's panel thread used 120.3M tokens (34,033 credits, about $34) including its /ship, and a rebuild should cost about the same.
-2. **A procedure gate, and a forced-procedure arm.** Freeze a procedure gate in the next prereg: a gstack session counts as exposed only if it read the review sections file and named a mode, and the comparison reports its exposure rate beside every verdict. Add a forced-procedure gstack arm, like GEVA-101's R2 for /review, whose told line requires Step 0 and the 11 sections, so the round measures the procedure when it runs. Cost estimate: gstack-fable cost 3 times plain Fable, so a forced Opus session should cost about $0.35 (3 times $0.113). A headline-sized round (36 units, 3 passes) with none, gstack and forced-gstack on Opus is 324 sessions, about $72, plus about $15 to $25 of judging. Set the items from the metered rates, not gstack's $5 reservation, which overprojected Opus 35 times.
-3. **Ask whether seeded-flaw recall is the right measure.** /plan-ceo-review mostly works on premise and scope: it asks whether this is the right problem, picks a scope mode and maps alternatives. Recall of seeded defects scores none of that. I recommend a premise and scope stratum: plans whose main problem is a wrong premise, a mis-sized scope or a cheaper alternative, keyed by the decision a good review should change, and judged blind (pairwise or against the key) on whether the review changes it. R1b, which asks whether a reviewed plan helps finish the task, is the outcome check behind both. Authoring that stratum belongs with item 1. Judging adds about $0.20 a plan.
+1. **A harder panel, admitted by a small preregistered pilot (the E1 admission check).** Rebuild the seeded flaws so a plain review misses some: flaws that need two sections read together, a wrong premise stated as fact, or a scope trap. Freeze an admission rule before paying: plain Opus recall between 0.2 and 0.6 on the admission pilot, and a 20-point minimum detectable difference at 80% power (the prereg's grid gives 91% to 100% power for 20 points at recall 0.2 to 0.5). Admission pilot: 8 candidate plans, 2 passes, none-opus plus gstack-opus for an exposure read, 32 sessions.
+2. **A procedure gate, and a forced-procedure arm.** Freeze a procedure gate in the next prereg: a gstack session counts as exposed only if it read the review sections file and named a mode, and the comparison reports its exposure rate beside every verdict. Add a forced-procedure gstack arm, like GEVA-101's R2 for /review, whose told line requires Step 0 and the 11 sections, so the round measures the procedure when it runs. A headline-sized round (36 units, 3 passes) with none, gstack and forced-gstack on Opus is 324 sessions.
+3. **Ask whether seeded-flaw recall is the right measure.** /plan-ceo-review mostly works on premise and scope: it asks whether this is the right problem, picks a scope mode and maps alternatives. Recall of seeded defects scores none of that. I recommend a premise and scope stratum: plans whose main problem is a wrong premise, a mis-sized scope or a cheaper alternative, keyed by the decision a good review should change, and judged blind (pairwise or against the key) on whether the review changes it. R1b, which asks whether a reviewed plan helps finish the task, is the outcome check behind both. Authoring that stratum belongs with item 1.
 4. **Run on Claude Code's own system prompt.** The next planning round runs its Claude arms on the SDK's `claude_code` system-prompt preset. Its exposure read records which system prompt each session ran under, so a skipped procedure can be told apart from a missing host prompt. Its prereg freezes the setting and its dry run checks it. This adds no API spend.
 
-**Bottom line:** run item 1's admission pilot with item 2's procedure gate first (about $10 of API spend plus panel authoring), because a round that clears E1 and shows the procedure running is the first one that can say anything about /plan-ceo-review. Item 3 decides what the panel's new keys score.
+**Bottom line:** run item 1's admission pilot with item 2's procedure gate first, because a round that clears E1 and shows the procedure running is the first one that can say anything about /plan-ceo-review. Item 3 decides what the panel's new keys score.
 
 ## Replicate it
 
 1. **Reanalysis.** Outsiders can check digests only, because the run data are held out. A custodian with the age identity decrypts planning-r1a-pilot-run-v1.tgz.age (sha256 10c1449b…) to the inner tgz (sha256 dfdf074dcf9cf55ad0b851d9b250f5c200102f3e26297b126433a4b6612355df, 755 files), checks the digests in readings.json, and reruns two commands at gstack-evals e305ed0 with the stub in place: `bun pilot-stops.ts <scorer> <pilot out dir> <adjudicated arms dir>` (the prereg's attachment) and `gstack-evals noloss secondary --suite <sealed root>/suites/planrev-ceo-r1a-pilot.json --variant none-opus --reference lens-opus --seed 20261031 --root <ingested arms> --sealed-root <sealed root>`. The expected output is pilot-stops.txt and pilot-secondary.txt byte for byte.
-2. **Rerun the pilot (paid).** The frozen pilot command is in the prereg's dryrun.txt. At this pilot's metered rates it costs about $10 with judging. It needs the sealed run bundle, so only a custodian can run it today. On 4 plans and 1 pass, expect each arm's recall to move by one or two flaws between replicates.
+2. **Rerun the pilot (paid).** The frozen pilot command is in the prereg's dryrun.txt. It needs the sealed run bundle, so only a custodian can run it today. On 4 plans and 1 pass, expect each arm's recall to move by one or two flaws between replicates.
 
 ## What is held out, and why
 
@@ -157,3 +143,59 @@ The panel's plans, contexts and answer keys (bundle planning-r1a-ceo-panel-v1.ta
 ## Changelog
 
 - 2026-11-01: first version (GEVA-102).
+
+<details>
+<summary>Agent notes</summary>
+
+The pilot cost $9.43 for 32 sessions and $1.40 for judging, $10.83 of the $2,800 cap.
+
+- **Cells.** Opus 5.5 (`claude-opus-5-5`): none, gstack, lens. particle-1 (`particle-ai/particle-1` on OpenRouter, route sha256 22cb6215…, re-read at launch: $0.05 / $0.50 per Mtok listed, under the pinned $0.10 / $1 max price): none, gstack, placebo. Fable 5.1 (`claude-fable-5-1`, an exploratory rung under policy.json): none, gstack. 8 cells.
+
+| Stop | Reading | Threshold | Outcome |
+|---|---|---|---|
+| (a) none-opus must-fix recall, `noloss secondary` | 8/8 = 1.00 [1, 1] | above 0.85 or below 0.10 | **fires**: the panel goes back to its author |
+| (b) user-simulator fallback share | 0 of 0 ask or prose events in 32 sessions | above 0.10 | does not fire |
+| (c) particle-1 sessions the pinned planScore scores a miss | 5 of 12 = 0.417 (none 1, gstack 1, placebo 3; each left no plan-findings block) | above 0.20 | **fires**: the frozen particle-1 rung drop |
+| (d) each full run's start rule at the pilot's metered rates | headline $73.53, real-neutral $23.63, Fable $100.28 | item caps $1,905, $106, $510 | passes for all three |
+| (e) must-fix findings ruled not-defect, per plan per pass | none-opus 0.25, gstack-opus 0.25, lens-opus 0, none-particle-1 0.50, gstack-particle-1 1.25, placebo-particle-1 0.50 | above 0.25 in any cell | **fires** on the three particle-1 cells; the Opus cells sit at the threshold |
+| Power rerun at none-opus's pilot recall | not computable | 20-point LOSS power under 80% at alpha 0.025 | `noloss power` refuses a recall of 1 (it needs a share strictly between 0 and 1); at 1.00 gstack has no room to catch more |
+
+| Arm | Sessions with a findings block | Blockers flagged must-fix | Must-fix findings | Ruled defect / not-defect | Mean cost per session | Median / max wall |
+|---|---|---|---|---|---|---|
+| none-opus | 4/4 | 8/8 | 10 | 1 / 1 | $0.113 | 31 s / 37 s |
+| gstack-opus | 4/4 | 8/8 | 13 | 3 / 1 | $0.199 | 42 s / 44 s |
+| lens-opus | 4/4 | 8/8 | 12 | 2 / 0 | $0.118 | 35 s / 39 s |
+| none-particle-1 | 3/4 | 6/8 | 14 | 4 / 2 | $0.014 | 57 s / 79 s |
+| gstack-particle-1 | 3/4 | 6/8 | 19 | 5 / 5 | $0.022 | 62 s / 97 s |
+| placebo-particle-1 | 1/4 | 2/8 | 7 | 2 / 2 | $0.024 | 37 s / 129 s |
+| none-fable | 4/4 | 8/8 | 15 | 3 / 2 | $0.470 | 73 s / 81 s |
+| gstack-fable | 4/4 | 8/8 | 18 | 8 / 1 | $1.397 | 166 s / 329 s |
+
+**Cost**
+
+Metered by the pinned proxy and settled in the ledger (approval record ledger/planning-r1a in the Captain drive). The price table is the pinned one (src/runner/pricing/prices.ts at e305ed0): Opus 5.5 $4 in and $20 out per Mtok, Fable 5.1 $10 and $50, particle-1 at the route's $0.10 and $1 row (twice its listed price). Cache tokens are priced as that table counts them.
+
+| Line item | Cap | Spent |
+|---|---|---|
+| planning-r1a-pilot (32 sessions) | $184.00 | $9.43 |
+| planning-r1a-judge-pilot-match (10 requests) | $95.00 | $0.71 |
+| planning-r1a-judge-pilot-adjudicate (9 requests) | $94.29 | $0.69 |
+| **Total** | **$2,800 round cap** | **$10.83** |
+
+By model: Opus 12 sessions, $1.72 ($0.143 a session); particle-1 12 sessions, $0.24 ($0.020); Fable 8 sessions, $7.47 ($0.934). Per flaw flagged: none-opus $0.056, gstack-opus $0.099, lens-opus $0.059, none-fable $0.235, gstack-fable $0.699. Median output tokens per session and every other per-arm figure are in [readings.json](readings.json). The prereg projected $5 per Opus session from gstack's reservation and $12.50 per Fable session; the metered rates came in 35 and 13 times lower. No further R1a item was recorded after the stop.
+
+Admission pilot: 8 candidate plans, 2 passes, none-opus plus gstack-opus for an exposure read, 32 sessions at about $0.11 and $0.20, about $5, and judging about $3. Authoring: GEVA-82's panel thread used 120.3M tokens (34,033 credits, about $34) including its /ship, and a rebuild should cost about the same.
+
+Cost estimate: gstack-fable cost 3 times plain Fable, so a forced Opus session should cost about $0.35 (3 times $0.113).
+
+A headline-sized round (36 units, 3 passes) with none, gstack and forced-gstack on Opus is 324 sessions, about $72, plus about $15 to $25 of judging.
+
+Set the items from the metered rates, not gstack's $5 reservation, which overprojected Opus 35 times.
+
+Judging adds about $0.20 a plan.
+
+**Bottom line:** run item 1's admission pilot with item 2's procedure gate first (about $10 of API spend plus panel authoring), because a round that clears E1 and shows the procedure running is the first one that can say anything about /plan-ceo-review. Item 3 decides what the panel's new keys score.
+
+At this pilot's metered rates it costs about $10 with judging.
+
+</details>
