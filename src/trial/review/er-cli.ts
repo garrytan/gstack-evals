@@ -34,7 +34,7 @@ import { adapterSha256, dockerRig } from "../../skill-eval/cli/run-host.ts";
 import type { ArmSpec } from "../../types.ts";
 import { copyToSink, receiptsSink, volatilePathProblem } from "../durable.ts";
 import { checkImagePin, stateRoot } from "../image.ts";
-import { buildErTree, clonePinProblems, ER_ADMISSION_RULE, ER_ALLOWANCE_MICROS, ER_GSTACK_URL, ER_LENS, ER_MAX_TURNS, ER_MODELS, ER_PINS, ER_REC_USER_SHA256, ER_REPO, ER_SEED, ER_SKILL, ER_SYSTEM_PROMPT, ER_TEMPLATE_SHA256, ER_TIMEOUT_S, erCellId, erOrder, erPrompt, erTaskId, erUnitProblems, erUnitsDigest, installPinProblems, isSkillArm, safeGit, type ErSkillArm } from "./eng-review.ts";
+import { buildErTree, clonePinProblems, ER_ADMISSION_RULE, ER_ALLOWANCE_MICROS, ER_GSTACK_URL, ER_LENS, ER_MAX_TURNS, ER_MODELS, ER_PINS, ER_REC_USER_SHA256, ER_REPO, ER_SEED, ER_INSTALL_SKILL, ER_SYSTEM_PROMPT, ER_TEMPLATE_SHA256, ER_TIMEOUT_S, erCellId, erOrder, erPrompt, erTaskId, erUnitProblems, erUnitsDigest, installPinProblems, isSkillArm, safeGit, type ErSkillArm } from "./eng-review.ts";
 import { erJournal, erStopsFile, runErUnits, type ErUnit } from "./er-run.ts";
 import { gstackDir } from "./plan.ts";
 import { sessionDir } from "./run.ts";
@@ -48,7 +48,7 @@ interface Io {
 export const ER_HELP = [
   "gstack-evals review-units --plan eng-review --units-dir <dir> --units <id>...|all --arms <arm>... --models <id>... --out <dir>",
   "    [--passes <n>] [--parallel <n>] [--enforce precut|engphase|candidate] [--gstack <clone>] [--item <ledger item> --spend-cap <usd>]",
-  "    [--ledger <path>] [--record <dir>] [--policy <file>] [--resume] [--dry-run]",
+  "    [--ledger <path>] [--record <dir>] [--policy <file>] [--resume] [--first-only] [--dry-run]",
   "",
   "Arms: none, lens, precut (plan-eng-review at " + ER_PINS.precut.sha.slice(0, 9) + "), engphase (autoplan's Phase 3 at " + ER_PINS.engphase.sha.slice(0, 9) + "),",
   "candidate (/plan-coverage at " + ER_PINS.candidate.sha.slice(0, 9) + "). Models: " + Object.keys(ER_MODELS).join(", ") + ".",
@@ -56,12 +56,13 @@ export const ER_HELP = [
   "a 200,000-token window, bundled skills off, WebSearch and WebFetch denied, GSTACK_SESSION_KIND=unattended on skill arms,",
   "one retry per arm stop or infrastructure failure. Admission: " + ER_ADMISSION_RULE + ".",
   "--enforce <arm> turns on smoke rule 2's Stop hook for that arm. A run needs GSTACK_EVALS_EPHEMERAL=1 and a",
-  "GSTACK_EVALS_RECEIPTS sink that does not exist yet.",
+  "GSTACK_EVALS_RECEIPTS sink that does not exist yet. --first-only runs the first session of each arm and model alone and",
+  "holds the rest, neither run nor stopped, for a --resume launch on the same item.",
 ].join("\n");
 
 const VALUE = new Set(["--plan", "--units-dir", "--passes", "--out", "--ledger", "--record", "--item", "--spend-cap", "--parallel", "--policy", "--gstack", "--enforce"]);
 const LIST = new Set(["--units", "--arms", "--models"]);
-const BOOL = new Set(["--resume", "--dry-run"]);
+const BOOL = new Set(["--resume", "--dry-run", "--first-only"]);
 class Usage extends Error {}
 const refuse = (why: string, fix: string): never => {
   throw new Usage(why + "\n  fix: " + fix);
@@ -253,17 +254,18 @@ async function erUnits(argv: string[], io: Io, env: Env): Promise<number> {
   });
   const resolved: ResolvedArms = { arms: specs, base: null, skill: null, notes: [] };
   const call = { host: "claude" as const, arms: resolved, tasks, out: { path: out, rule: "--out" }, ledger: ledgerPath(one("--ledger") ?? undefined, env), record, item: item!, runId, models, policy: policy as LoadedPolicy };
-  const skills = Object.fromEntries(arms.flatMap((a) => (ER_SKILL[a] ? [[a, ER_SKILL[a]!]] : [])));
+  const skills = Object.fromEntries(arms.filter(isSkillArm).map((a) => [a, ER_INSTALL_SKILL[a]]));
   const rig = dockerRig(call, { env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap: cap!, voice: false });
   let code = 0;
   try {
     const installs = arms.filter(isSkillArm).flatMap((a) => installPinProblems(a, gstackDir(rig.arms[a]!), rig.arms[a]!.layers?.find((l) => l.dest === "")?.src ?? null));
     if (installs.length) throw new Error("E_USAGE: the installed arms do not match the frozen pins:\n  " + installs.join("\n  ") + "\n  fix: rebuild the arms from the pinned commits");
-    const run = await runErUnits({ units, arms, models, passes, parallel, cap: cap!, out, runId, policy: policy as LoadedPolicy, enforce, keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), adapter_sha256: adapterSha256("claude") } }, rig, (line) => io.err(line));
+    const run = await runErUnits({ units, arms, models, passes, parallel, cap: cap!, out, runId, policy: policy as LoadedPolicy, enforce, firstOnly: flags.has("--first-only"), keyBase: { image_digest: rig.imageDigest, recipe: recipeHash(recipeInputs()), adapter_sha256: adapterSha256("claude") } }, rig, (line) => io.err(line));
     const counts: Record<string, number> = {};
     for (const e of run.entries) counts[e.end_state + (e.arm_stop ? " (arm stop)" : "")] = (counts[e.end_state + (e.arm_stop ? " (arm stop)" : "")] ?? 0) + 1;
     io.out("sessions: " + Object.entries(counts).map(([k, v]) => k + " " + v).join(", ") + "; cap-stopped or unstarted " + run.stopped.length);
     io.out("spent " + usd(run.spent_usd * 1e6) + " this launch; carried " + usd(run.carried_usd * 1e6) + " from reused and earlier cap-stopped cells");
+    if (run.held) io.out("held " + run.held + " session" + (run.held === 1 ? "" : "s") + " for a --resume launch (--first-only)");
     code = run.stops.length ? 2 : 0;
   } finally {
     const closed = await rig.close();

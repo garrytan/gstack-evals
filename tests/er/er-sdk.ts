@@ -11,7 +11,7 @@ import type { HostRig } from "../../src/skill-eval/cli/run-host.ts";
 import { removeTree } from "../../src/trial/cleanup.ts";
 import type { Sandbox } from "../../src/trial/sandbox.ts";
 import { buildErTree, erTaskId } from "../../src/trial/review/eng-review.ts";
-import { runErUnits } from "../../src/trial/review/er-run.ts";
+import { readErJournal, runErUnits } from "../../src/trial/review/er-run.ts";
 import type { ArmId } from "../../lanes/eng-review/types.ts";
 import { harness, localSandbox } from "../adapters/harness.ts";
 
@@ -35,7 +35,7 @@ export const ANSWERS: Record<string, Record<string, string>[]> = {
 };
 
 if (import.meta.main) {
-  const [records, out, root, capUsd, parallel] = process.argv.slice(2) as [string, string, string, string, string];
+  const [records, out, root, capUsd, parallel, mode] = process.argv.slice(2) as [string, string, string, string, string, string | undefined];
   const scratch = (name: string) => mkdtempSync(join(root, name));
   const units = scratch("units-");
   const repo = join(units, UNIT, "repo");
@@ -89,8 +89,11 @@ if (import.meta.main) {
     recovery: null,
   };
   try {
-    const run = await runErUnits({ units: [{ id: UNIT, task, tree: treeDir, tree_sha256: tree.tree_sha256, opening: null }], arms: ARMS, models: [OPUS], passes: 2, parallel: Number(parallel), cap: Math.round(Number(capUsd) * 1e6), out, runId: "er", policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, enforce: "candidate", keyBase: { image_digest: null, recipe: "test", adapter_sha256: "test" } }, rig, (line) => console.error(line));
-    console.log(JSON.stringify({ stops: run.stops, most, spawned, stopped: run.stopped.length }));
+    const input = { units: [{ id: UNIT, task, tree: treeDir, tree_sha256: tree.tree_sha256, opening: null }], arms: ARMS, models: [OPUS], passes: 2, parallel: Number(parallel), cap: Math.round(Number(capUsd) * 1e6), out, runId: "er", policy: loadPolicy(DEFAULT_POLICY) as LoadedPolicy, enforce: "candidate" as const, keyBase: { image_digest: null, recipe: "test", adapter_sha256: "test" } };
+    const first = mode === "first-only" ? await runErUnits({ ...input, firstOnly: true }, rig, (line) => console.error(line)) : null;
+    const firstJournal = first ? readErJournal(out).size : null;
+    const run = await runErUnits(input, rig, (line) => console.error(line));
+    console.log(JSON.stringify({ stops: run.stops, most, spawned, stopped: run.stopped.length, ...(first ? { first: { held: first.held, stops: first.stops, stopped: first.stopped.length, journal: firstJournal } } : {}) }));
   } finally {
     h.proxy.stop();
     removeTree(h.dir);

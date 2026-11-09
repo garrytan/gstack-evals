@@ -71,6 +71,8 @@ export interface ErRunInput {
   runId: string;
   policy: LoadedPolicy;
   enforce: ErSkillArm | null;
+  /** Run only the first queued session of each arm and model that has none journaled, and hold the rest for --resume. */
+  firstOnly?: boolean;
   /** The image, recipe and adapter the session key binds. */
   keyBase: Record<string, unknown>;
 }
@@ -112,6 +114,8 @@ export interface ErRun {
   /** Settled in this launch, and carried from reused and earlier cap-stopped cells. */
   spent_usd: number;
   carried_usd: number;
+  /** Sessions --first-only left queued: neither run nor stopped, so a --resume runs them. */
+  held: number;
 }
 
 export const erJournal = (out: string) => join(out, "sessions.ndjson");
@@ -143,7 +147,7 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
   const stale = plan.filter((c) => prior.has(erCellId(c)) && prior.get(erCellId(c))!.key !== keyOf(c));
   if (stale.length) {
     stops.push({ code: "E_CACHE_STALE", message: stale.length + " journaled session" + (stale.length === 1 ? "" : "s") + " no longer match their key (" + stale.slice(0, 3).map(cellName).join(", ") + "); start a new run in a new --out" });
-    return { entries: [], stopped: [], stops, spent_usd: 0, carried_usd: 0 };
+    return { entries: [], stopped: [], stops, spent_usd: 0, carried_usd: 0, held: 0 };
   }
   const entries: ErEntry[] = plan.flatMap((c) => (prior.has(erCellId(c)) ? [prior.get(erCellId(c))!] : []));
   const stoppedBefore = new Set(priorStops.map((s) => erCellId(s.cell)));
@@ -198,7 +202,17 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
   };
 
   type Job = { cell: ErCell; attempt: number; before: ErAttempt[] };
-  const queue: Job[] = plan.filter((c) => !prior.has(erCellId(c)) && !stoppedBefore.has(erCellId(c))).map((cell) => ({ cell, attempt: 1, before: [] }));
+  const pending: Job[] = plan.filter((c) => !prior.has(erCellId(c)) && !stoppedBefore.has(erCellId(c))).map((cell) => ({ cell, attempt: 1, before: [] }));
+  const started = new Set(entries.map((e) => e.cell.arm + "/" + e.cell.model));
+  const queue = o.firstOnly
+    ? pending.filter((j) => {
+        const k = j.cell.arm + "/" + j.cell.model;
+        if (started.has(k)) return false;
+        started.add(k);
+        return true;
+      })
+    : pending;
+  const held = pending.length - queue.length;
   const running = new Set<Promise<void>>();
   let inFlight = 0;
   let stoppedAt: string | null = null;
@@ -252,7 +266,7 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
   }
   writeFileSync(erStopsFile(o.out), JSON.stringify({ stopped }, null, 2) + "\n");
   for (const s of stops) log(s.code + " " + s.message);
-  return { entries, stopped, stops, spent_usd: settled / 1_000_000, carried_usd };
+  return { entries, stopped, stops, spent_usd: settled / 1_000_000, carried_usd, held };
 }
 
 /** Exposure from a session's last attempt, for rows: only a skill session that ended block or no-block has one. */

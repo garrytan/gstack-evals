@@ -15,13 +15,13 @@ import { ARMS, OPUS, UNIT } from "./er-sdk.ts";
 
 const root = mkdtempSync(join(tmpdir(), "er-sdk-test-"));
 afterAll(() => removeTree(root));
-function launch(name: string, cap: string, parallel: string) {
+function launch(name: string, cap: string, parallel: string, mode?: string) {
   const dir = join(root, name);
   mkdirSync(join(dir, "records"), { recursive: true });
   mkdirSync(join(dir, "scratch"), { recursive: true });
-  const r = spawnSync(process.execPath, [join(import.meta.dir, "er-sdk.ts"), join(dir, "records"), join(dir, "out"), join(dir, "scratch"), cap, parallel], { encoding: "utf8", timeout: 170_000 });
+  const r = spawnSync(process.execPath, [join(import.meta.dir, "er-sdk.ts"), join(dir, "records"), join(dir, "out"), join(dir, "scratch"), cap, parallel, ...(mode ? [mode] : [])], { encoding: "utf8", timeout: 170_000 });
   const last = r.stdout.trim().split("\n").at(-1) ?? "{}";
-  return { out: join(dir, "out"), records: join(dir, "records"), log: r.stderr, result: JSON.parse(last) as { stops: Array<{ code: string }>; most: number; spawned: Record<string, number>; stopped: number } };
+  return { out: join(dir, "out"), records: join(dir, "records"), log: r.stderr, result: JSON.parse(last) as { stops: Array<{ code: string }>; most: number; spawned: Record<string, number>; stopped: number; first?: { held: number; stops: Array<{ code: string }>; stopped: number; journal: number } } };
 }
 let main: ReturnType<typeof launch> | null = null;
 const ran = () => (main ??= launch("main", "25", "3"));
@@ -89,6 +89,15 @@ describe("the eng-review session loop through the real Agent SDK", () => {
     expect(capped.result.spawned).toEqual({});
     expect(readErStops(capped.out).map((s) => s.how)).toEqual(Array(8).fill("unstarted"));
     expect(readErJournal(capped.out).size).toBe(0);
+  });
+  test("--first-only runs one session per arm and holds the rest unstopped; the resume runs them", () => {
+    const held = launch("first-only", "60", "1", "first-only");
+    expect(held.result.first).toEqual({ held: 4, stops: [], stopped: 0, journal: 4 });
+    expect(held.result.stops).toEqual([]);
+    expect(held.result.stopped).toBe(0);
+    expect(held.result.spawned).toEqual({ none: 2, lens: 2, precut: 3, candidate: 3 });
+    expect(readErJournal(held.out).size).toBe(8);
+    expect(readErStops(held.out)).toEqual([]);
   });
 });
 

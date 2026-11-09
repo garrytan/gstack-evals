@@ -62,6 +62,8 @@ export type ErSkillArm = "precut" | "engphase" | "candidate";
 export const isSkillArm = (arm: string): arm is ErSkillArm => arm === "precut" || arm === "engphase" || arm === "candidate";
 /** The skill each arm invokes by name, for the driver's opened signal; engphase pastes autoplan's phase and invokes none. */
 export const ER_SKILL: Readonly<Record<ArmId, string | null>> = { none: null, lens: null, precut: "plan-eng-review", engphase: null, candidate: "plan-coverage" };
+/** The skill the arm install checks for in each skill arm's default install; engphase's is autoplan, whose phase it pastes. */
+export const ER_INSTALL_SKILL: Readonly<Record<ErSkillArm, string>> = { precut: "plan-eng-review", engphase: "autoplan", candidate: "plan-coverage" };
 
 export const ER_MODELS: Readonly<Record<string, ModelId>> = { "claude-opus-5-5": "opus", "openai/gpt-6.1-sol": "sol", "particle-ai/particle-1": "particle" };
 export const ER_SYSTEM_PROMPT = "claude-code-preset" as const;
