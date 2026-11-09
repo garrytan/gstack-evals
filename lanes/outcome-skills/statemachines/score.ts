@@ -172,10 +172,12 @@ export const MERGE = [
 
 export type Outcome = "clean_fix" | "fix_broke" | "no_fix" | "no_fix_broke";
 export interface RunView { parsed: Record<string, string> | null; build_failed: boolean }
+/** The ids that took the 2-of-3 majority, per direction; [] when that direction did not rerun. */
+export interface Reruns { fix: string[]; no_fix: string[]; break: string[] }
 export interface Verdict {
-  fixed: boolean; broke: boolean; outcome: Outcome; rerun_2of3: boolean; deciding: string[]; new_tests: string[];
+  fixed: boolean; broke: boolean; outcome: Outcome; rerun_2of3: boolean; reruns: Reruns; new_tests: string[];
   broke_by: { stable_missing: string[]; stable_failed: string[]; new_test_failed: string[]; build_failed: boolean };
-  /** Stable ids absent from every run (a build failure counts as absent): the adapted reading's existence check. */
+  /** Stable ids absent from every run whose rebuild succeeded (the adapted reading's existence check); none when no run built. */
   absent: string[];
   /** True while fewer than three runs exist and the rules want three (a new test, or an outcome on 2 tests or fewer). */
   wants_more: boolean;
@@ -186,27 +188,33 @@ const pass = (r: RunView, id: string) => !r.build_failed && !!r.parsed && passed
 const has = (r: RunView, id: string) => !r.build_failed && !!r.parsed && id in r.parsed;
 
 /** Section 7 steps 5 to 7 over the runs made so far. known: every id the unit's base and fixed oracle runs report; an id
- *  outside it is a new test the arm wrote. The outcome rests on the fail-to-pass tests when the first run fixes, and on
- *  the failing stable tests when they break it; when those number 1 or 2, each takes its majority over three runs. */
+ *  outside it is a new test the arm wrote. Step 6 in three directions, each judged on its own deciding set from the first
+ *  run: fix (every fail-to-pass id passed: those ids), no fix (the fail-to-pass ids that did not pass) and break (the
+ *  stable ids that did not pass). A direction whose set holds 1 or 2 ids reruns; the two extra runs are shared, and each
+ *  id of a rerun direction takes its majority over the three runs while every other id keeps its first-run result. */
 export function decide(f2p: string[], stable: string[], known: ReadonlySet<string>, runs: RunView[]): Verdict {
   const r1 = runs[0]!;
   const fixed1 = f2p.every((id) => pass(r1, id));
-  const deciding = [...(fixed1 ? f2p : []), ...stable.filter((id) => !pass(r1, id))];
-  const small = deciding.length > 0 && deciding.length <= 2;
+  const sets: Reruns = { fix: fixed1 ? [...f2p] : [], no_fix: fixed1 ? [] : f2p.filter((id) => !pass(r1, id)), break: stable.filter((id) => !pass(r1, id)) };
+  const small = (xs: string[]) => xs.length >= 1 && xs.length <= 2;
+  const rerunIds = new Set([sets.fix, sets.no_fix, sets.break].filter(small).flat());
   const newIds = [...new Set(runs.flatMap((r) => (r.build_failed || !r.parsed ? [] : Object.keys(r.parsed))))].filter((id) => !known.has(id)).sort();
-  const wants_more = runs.length < 3 && (small || newIds.length > 0);
-  const rerun = small && runs.length >= 3;
+  const wants_more = runs.length < 3 && (rerunIds.size > 0 || newIds.length > 0);
+  const rerun = rerunIds.size > 0 && runs.length >= 3;
   const three = runs.slice(0, 3);
-  const ok = (id: string) => (rerun && deciding.includes(id) ? three.filter((r) => pass(r, id)).length >= 2 : pass(r1, id));
-  const seen = (id: string) => (rerun && deciding.includes(id) ? three : [r1]).some((r) => has(r, id));
+  const ok = (id: string) => (rerun && rerunIds.has(id) ? three.filter((r) => pass(r, id)).length >= 2 : pass(r1, id));
+  const seen = (id: string) => (rerun && rerunIds.has(id) ? three : [r1]).some((r) => has(r, id));
+  const built = runs.filter((r) => !r.build_failed && !!r.parsed);
+  const took = (xs: string[]) => (rerun && small(xs) ? xs : []);
   const fixed = f2p.every(ok);
   const notOk = stable.filter((id) => !ok(id));
   const newFailed = runs.length >= 3 ? newIds.filter((id) => three.every((r) => !r.build_failed && r.parsed?.[id] === FAIL)) : [];
   const broke = notOk.length > 0 || newFailed.length > 0;
   return {
-    fixed, broke, outcome: fixed ? (broke ? "fix_broke" : "clean_fix") : broke ? "no_fix_broke" : "no_fix", rerun_2of3: rerun, deciding: small ? deciding : [], new_tests: newIds,
+    fixed, broke, outcome: fixed ? (broke ? "fix_broke" : "clean_fix") : broke ? "no_fix_broke" : "no_fix", rerun_2of3: rerun,
+    reruns: { fix: took(sets.fix), no_fix: took(sets.no_fix), break: took(sets.break) }, new_tests: newIds,
     broke_by: { stable_missing: notOk.filter((id) => !seen(id)), stable_failed: notOk.filter(seen), new_test_failed: newFailed, build_failed: r1.build_failed },
-    absent: stable.filter((id) => !runs.some((r) => has(r, id))), wants_more,
+    absent: built.length ? stable.filter((id) => !built.some((r) => has(r, id))) : [], wants_more,
   };
 }
 
@@ -216,13 +224,18 @@ export interface RunSummary { n: number; wall_ms: number; exits: number[]; stopp
 export interface ReadingResult {
   /** three_way: how many of the fix's test hunks git applied by falling back to the three-way merge. */
   applied: boolean; merge: "clean" | "conflict" | null; three_way: number; conflict: string[]; runs: RunSummary[]; fixed: boolean | null; broke: boolean | null;
-  broke_by: Verdict["broke_by"] | null; absent: string[]; rerun_2of3: boolean; deciding: string[]; new_tests: string[]; outcome: Outcome | null;
+  broke_by: Verdict["broke_by"] | null; absent: string[]; rerun_2of3: boolean; reruns: Reruns; new_tests: string[]; outcome: Outcome | null;
   gap: "E_SM_TEST_PATCH_CONFLICT" | null; apply_failed: boolean;
 }
+/** Section 7 step 9's fallbacks, each counted with its own reason: skip_marker and stable_missing send the adapted
+ *  reading back to strict; test_patch_conflict_adapted is a gap for the adapted reading only; rebuild_failed (per reading)
+ *  is a rebuild command that failed in a scoring run, which misses every test in that run. */
+export type FallbackReason = "skip_marker" | "stable_missing" | "test_patch_conflict_adapted" | "rebuild_failed";
+export interface Fallback { reason: FallbackReason; reading: "strict" | "adapted"; detail: string }
 export interface OutcomeRecord {
   schema: "sm-outcome.v1"; stage: "first"; unit: string; model: string | null; cell: string; session: string | null;
   change: { files: string[]; lines: number; binary_listed: string[]; unsafe: string[]; patch_sha256: string; empty: boolean };
-  excluded: Exclusion[]; deps_changed: string[]; skip_markers: Readings["skip"];
+  excluded: Exclusion[]; deps_changed: string[]; skip_markers: Readings["skip"]; fallbacks: Fallback[];
   strict: ReadingResult;
   adapted: ReadingResult & { same_tree: boolean; fell_back_to_strict: string | null };
   /** Per reading: E_SM_TEST_PATCH_CONFLICT for a gap, E_SM_APPLY_FAILED for a change that won't apply, else null. */
@@ -285,8 +298,42 @@ export function scoringRun(dir: string, u: SmUnit, image: string, volume: string
   }
 }
 
-const blank = (): ReadingResult => ({ applied: false, merge: null, three_way: 0, conflict: [], runs: [], fixed: null, broke: null, broke_by: null, absent: [], rerun_2of3: false, deciding: [], new_tests: [], outcome: null, gap: null, apply_failed: false });
+const blank = (): ReadingResult => ({ applied: false, merge: null, three_way: 0, conflict: [], runs: [], fixed: null, broke: null, broke_by: null, absent: [], rerun_2of3: false, reruns: { fix: [], no_fix: [], break: [] }, new_tests: [], outcome: null, gap: null, apply_failed: false });
 const unapplied = (): ReadingResult => ({ ...blank(), apply_failed: true, fixed: false, broke: false, outcome: "no_fix" });
+
+/** Section 7 step 2's adapted reading and step 9's fallbacks, given the strict result. The adapted change is scored only
+ *  when it differs from strict and holds no skip marker. A skip marker on any added line of the adapted change, or a stable
+ *  id missing from every run that built, sends the adapted reading back to strict; a test-patch conflict on the adapted
+ *  tree is that reading's own gap; an adapted change that won't apply also takes strict's result. rebuild_failed is
+ *  recorded per reading for every scoring run whose rebuild failed (adapted names strict's runs when it took them). */
+export function settleAdapted(strict: ReadingResult, o: { scored: boolean; same: boolean; skip: Readings["skip"]; rebuildCommands: number; scoreAdapted: () => ReadingResult }): { adapted: ReadingResult; fell: string | null; fallbacks: Fallback[] } {
+  const fallbacks: Fallback[] = [];
+  const rebuild = (r: ReadingResult, reading: Fallback["reading"], note = "") => {
+    const bad = r.runs.filter((x) => x.build_failed);
+    if (bad.length) fallbacks.push({ reason: "rebuild_failed", reading, detail: note + bad.map((x) => "run " + x.n + (x.stopped ? " stopped" : x.exits.length < o.rebuildCommands ? " no rebuild exit" : " rebuild exits " + x.exits.slice(0, o.rebuildCommands).join(","))).join("; ") });
+  };
+  rebuild(strict, "strict");
+  let adapted: ReadingResult = { ...strict };
+  let fell: string | null = null;
+  if (o.scored && !o.same) {
+    if (o.skip.length) {
+      fell = "skip marker: " + o.skip.map((s) => s.path + " " + s.marker).join(", ");
+      fallbacks.push({ reason: "skip_marker", reading: "adapted", detail: o.skip.map((s) => s.path + " " + s.marker).join(", ") });
+    } else {
+      const a = o.scoreAdapted();
+      if (a.apply_failed) fell = "the adapted change does not apply";
+      else if (a.absent.length) {
+        fell = a.absent.length + " stable test ids missing from every run: " + a.absent.slice(0, 5).join(", ");
+        fallbacks.push({ reason: "stable_missing", reading: "adapted", detail: a.absent.length + " stable ids missing: " + a.absent.slice(0, 5).join(", ") });
+      } else {
+        adapted = a;
+        if (a.gap) fallbacks.push({ reason: "test_patch_conflict_adapted", reading: "adapted", detail: "strict " + (strict.gap ? "also conflicts" : "keeps its own result") + "; " + a.conflict.slice(0, 3).join(" ") });
+      }
+    }
+  }
+  rebuild(adapted, "adapted", adapted.runs === strict.runs ? "strict's runs: " : "");
+  return { adapted, fell, fallbacks };
+}
 
 /** Scores one first-stage change on the unit's tree volume. */
 export function scoreFirst(i: ScoreInput): OutcomeRecord {
@@ -323,7 +370,7 @@ export function scoreFirst(i: ScoreInput): OutcomeRecord {
         known ??= knownIds(i.unitDir, u, volume, mode, i.limitMs);
         v = decide(u.tests.f2p, u.oracle!.stable, known, views);
       } while (v.wants_more);
-      return { ...res, fixed: v.fixed, broke: v.broke, broke_by: v.broke_by, absent: v.absent, rerun_2of3: v.rerun_2of3, deciding: v.deciding, new_tests: v.new_tests, outcome: v.outcome };
+      return { ...res, fixed: v.fixed, broke: v.broke, broke_by: v.broke_by, absent: v.absent, rerun_2of3: v.rerun_2of3, reruns: v.reruns, new_tests: v.new_tests, outcome: v.outcome };
     } finally {
       dropVolume(scored);
     }
@@ -359,22 +406,12 @@ export function scoreFirst(i: ScoreInput): OutcomeRecord {
   }
   const rd = x.rd;
   const same = !rd || rd.adapted === rd.strict;
-  let adapted: ReadingResult = { ...strict };
-  let fell: string | null = null;
-  if (!strict.apply_failed && !(empty && !i.runEmpty) && !same) {
-    if (rd!.skip.length) fell = "skip marker: " + rd!.skip.map((s) => s.path + " " + s.marker).join(", ");
-    else {
-      const a = score(rd!.adapted);
-      if (a.apply_failed) fell = "the adapted change does not apply";
-      else if (a.absent.length) fell = a.absent.length + " stable test ids missing from every run: " + a.absent.slice(0, 5).join(", ");
-      else adapted = a;
-    }
-  }
+  const { adapted, fell, fallbacks } = settleAdapted(strict, { scored: !strict.apply_failed && !(empty && !i.runEmpty), same, skip: rd?.skip ?? [], rebuildCommands: u.commands.rebuild.length, scoreAdapted: () => score(rd!.adapted) });
   const code = (r: ReadingResult) => r.gap ?? (r.apply_failed ? "E_SM_APPLY_FAILED" : null);
   return {
     schema: "sm-outcome.v1", stage: "first", unit: u.id, model: i.model ?? null, cell: i.cell, session: i.session ?? null,
     change: { files: x.ch.files.map((f) => f.path), lines: x.ch.lines, binary_listed: x.ch.binary, unsafe: x.ch.unsafe, patch_sha256: sha(x.patch), empty },
-    excluded: rd?.excluded ?? [], deps_changed: rd?.deps_changed ?? [], skip_markers: rd?.skip ?? [],
+    excluded: rd?.excluded ?? [], deps_changed: rd?.deps_changed ?? [], skip_markers: rd?.skip ?? [], fallbacks,
     strict, adapted: { ...adapted, same_tree: same, fell_back_to_strict: fell }, codes: { strict: code(strict), adapted: code(adapted) },
     extractions, test_hunks: hunks.length, known_ids: known ? (known as Set<string>).size : 0,
   };

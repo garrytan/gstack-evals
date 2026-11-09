@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fixtureRepo, patchOf } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
-import { decide, extractChange, readings, testHunks, type RunView } from "../../lanes/outcome-skills/statemachines/score.ts";
+import { decide, extractChange, readings, settleAdapted, testHunks, type ReadingResult, type RunView } from "../../lanes/outcome-skills/statemachines/score.ts";
 
 const P = "pass", F = "fail";
 const RUST = ["pub fn bump(x: i32) -> i32 {", "    x + 2", "}", "#[cfg(test)]", "mod tests {", "    use super::*;", "    #[test]", "    fn keeps_sign() {", "        assert!(bump(-5) < 0);", "    }", "}", ""].join("\n");
@@ -115,26 +115,46 @@ describe("outcome rules (steps 5 to 7)", () => {
   test("the outcome table", () => {
     expect(decide(["a", "b", "c"], ["s", "t"], known, [run({ a: P, b: P, c: P, s: P, t: P })])).toMatchObject({ outcome: "clean_fix", wants_more: false });
     expect(decide(["a", "b", "c"], ["s", "t", "u"], known, [run({ a: P, b: P, c: P, s: F, t: F, u: F })])).toMatchObject({ outcome: "fix_broke", wants_more: false });
-    expect(decide(["a", "b", "c"], ["s"], known, [run({ a: F, b: P, c: P, s: P })])).toMatchObject({ outcome: "no_fix", broke: false, wants_more: false });
+    expect(decide(["a", "b", "c"], ["s"], known, [run({ a: F, b: F, c: F, s: P })])).toMatchObject({ outcome: "no_fix", broke: false, wants_more: false });
     const v = decide(["a", "b", "c"], ["s", "t", "u", "b"], known, [run({ a: F, b: P, s: "skip", t: F })]);
-    expect(v).toMatchObject({ outcome: "no_fix_broke", wants_more: false });
+    expect(v).toMatchObject({ outcome: "no_fix_broke", wants_more: true });
     expect(v.broke_by).toEqual({ stable_missing: ["u"], stable_failed: ["s", "t"], new_test_failed: [], build_failed: false });
   });
   test("a build failure misses every test", () => {
     const v = decide(["a", "b", "c"], ["s", "t", "u"], known, [run({ a: P, b: P, c: P, s: P, t: P, u: P }, true)]);
     expect(v).toMatchObject({ outcome: "no_fix_broke", fixed: false });
     expect(v.broke_by).toMatchObject({ stable_missing: ["s", "t", "u"], build_failed: true });
-    expect(v.absent).toEqual(["s", "t", "u"]);
+    expect(v.absent).toEqual([]);
   });
   test("an outcome on 2 tests or fewer takes each test's majority over three runs", () => {
     const one = [run({ a: P, s: P, t: P, u: P })];
     expect(decide(["a"], ["s", "t", "u"], known, one).wants_more).toBe(true);
-    expect(decide(["a"], ["s", "t", "u"], known, [...one, run({ a: F, s: P, t: P, u: P }), run({ a: P, s: P, t: P, u: P })])).toMatchObject({ outcome: "clean_fix", rerun_2of3: true, deciding: ["a"] });
+    expect(decide(["a"], ["s", "t", "u"], known, [...one, run({ a: F, s: P, t: P, u: P }), run({ a: P, s: P, t: P, u: P })])).toMatchObject({ outcome: "clean_fix", rerun_2of3: true, reruns: { fix: ["a"], no_fix: [], break: [] } });
     expect(decide(["a"], ["s", "t", "u"], known, [...one, run({ a: F, s: P, t: P, u: P }), run({ a: F, s: P, t: P, u: P })])).toMatchObject({ outcome: "no_fix", rerun_2of3: true });
     const flaky = [run({ a: F, b: F, c: F, s: F, t: P, u: P }), run({ a: F, b: F, c: F, s: P, t: P, u: P }), run({ a: F, b: F, c: F, s: P, t: P, u: P })];
     expect(decide(["a", "b", "c"], ["s", "t", "u"], known, flaky.slice(0, 1)).wants_more).toBe(true);
-    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, flaky)).toMatchObject({ outcome: "no_fix", broke: false, rerun_2of3: true, deciding: ["s"] });
+    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, flaky)).toMatchObject({ outcome: "no_fix", broke: false, rerun_2of3: true, reruns: { fix: [], no_fix: [], break: ["s"] } });
     expect(decide(["a", "b", "c"], ["s", "t", "u"], known, [run({ a: F, b: F, c: F, s: F, t: F, u: F })])).toMatchObject({ outcome: "no_fix_broke", wants_more: false });
+  });
+  test("a no fix resting on 1 or 2 failing fail-to-pass tests reruns too, and each takes its majority", () => {
+    const r1 = run({ a: F, b: P, c: P, s: P, t: P, u: P });
+    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, [r1])).toMatchObject({ wants_more: true });
+    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, [r1, run({ a: P, b: F, c: P, s: P, t: P, u: P }), run({ a: P, b: P, c: P, s: P, t: P, u: P })])).toMatchObject({ outcome: "clean_fix", rerun_2of3: true, reruns: { fix: [], no_fix: ["a"], break: [] } });
+    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, [r1, run({ a: F, b: P, c: P, s: P, t: P, u: P }), run({ a: P, b: P, c: P, s: P, t: P, u: P })])).toMatchObject({ outcome: "no_fix", rerun_2of3: true, reruns: { fix: [], no_fix: ["a"], break: [] } });
+    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, [run({ a: F, b: F, c: F, s: P, t: P, u: P })])).toMatchObject({ wants_more: false, rerun_2of3: false, reruns: { fix: [], no_fix: [], break: [] } });
+  });
+  test("each direction is judged on its own deciding set; the two extra runs are shared", () => {
+    const big = [run({ a: P, s: F, t: F, u: F }), run({ a: F, s: P, t: P, u: P }), run({ a: P, s: P, t: P, u: P })];
+    expect(decide(["a"], ["s", "t", "u"], known, big)).toMatchObject({ outcome: "fix_broke", rerun_2of3: true, reruns: { fix: ["a"], no_fix: [], break: [] } });
+    const both = [run({ a: F, b: P, c: P, s: F, t: P, u: P }), run({ a: P, b: P, c: P, s: P, t: P, u: P }), run({ a: P, b: P, c: P, s: F, t: P, u: P })];
+    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, both.slice(0, 1)).wants_more).toBe(true);
+    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, both)).toMatchObject({ outcome: "fix_broke", fixed: true, broke: true, rerun_2of3: true, reruns: { fix: [], no_fix: ["a"], break: ["s"] } });
+  });
+  test("a stable id counts as absent only from runs that built; a reading whose every run failed to build has none absent", () => {
+    const v = decide(["a"], ["s", "t", "u"], known, [run({ a: P, s: P, t: P, u: P }, true), run({ a: P, s: P, t: P }), run({ a: P, s: P, t: P })]);
+    expect(v.absent).toEqual(["u"]);
+    expect(v.broke_by.build_failed).toBe(true);
+    expect(decide(["a", "b", "c"], ["s", "t", "u"], known, [run({ a: P }, true)]).absent).toEqual([]);
   });
   test("a new test the arm wrote breaks only when it fails in all three scoring runs", () => {
     const r = (n: string) => run({ a: P, b: P, c: P, s: P, n });
@@ -142,5 +162,41 @@ describe("outcome rules (steps 5 to 7)", () => {
     expect(decide(["a", "b", "c"], ["s"], known, [r(F), r(F), r(F)])).toMatchObject({ outcome: "fix_broke", broke_by: { new_test_failed: ["n"] } });
     expect(decide(["a", "b", "c"], ["s"], known, [r(F), r(P), r(F)])).toMatchObject({ outcome: "clean_fix", wants_more: false });
     expect(decide(["a", "b", "c"], ["s"], known, [r("skip"), r(F), r(F)])).toMatchObject({ outcome: "clean_fix" });
+  });
+});
+
+describe("adapted reading and fallbacks (step 9)", () => {
+  const res = (o: Partial<ReadingResult> = {}): ReadingResult => ({ applied: true, merge: "clean", three_way: 0, conflict: [], runs: [{ n: 1, wall_ms: 1, exits: [0, 0], stopped: false, build_failed: false, parsed_sha256: "x" }], fixed: true, broke: false, broke_by: null, absent: [], rerun_2of3: false, reruns: { fix: [], no_fix: [], break: [] }, new_tests: [], outcome: "clean_fix", gap: null, apply_failed: false, ...o });
+  const base = { scored: true, same: false, skip: [], rebuildCommands: 1 };
+  const never = () => { throw new Error("the adapted change must not be scored"); };
+  test("a skip marker sends adapted back to strict without scoring it", () => {
+    const s = res();
+    const r = settleAdapted(s, { ...base, skip: [{ path: "src/a.rs", marker: "#[ignore]" }], scoreAdapted: never });
+    expect(r.adapted.outcome).toBe("clean_fix");
+    expect(r.fell).toMatch(/^skip marker/);
+    expect(r.fallbacks).toEqual([{ reason: "skip_marker", reading: "adapted", detail: "src/a.rs #[ignore]" }]);
+  });
+  test("a stable id missing from every run that built sends adapted back to strict", () => {
+    const r = settleAdapted(res(), { ...base, scoreAdapted: () => res({ outcome: "no_fix_broke", absent: ["s"] }) });
+    expect(r.adapted.outcome).toBe("clean_fix");
+    expect(r.fallbacks.map((f) => f.reason)).toEqual(["stable_missing"]);
+  });
+  test("a test-patch conflict on the adapted tree is that reading's own gap; strict keeps its result", () => {
+    const r = settleAdapted(res(), { ...base, scoreAdapted: () => res({ merge: "conflict", conflict: ["SM_CONFLICT 2"], gap: "E_SM_TEST_PATCH_CONFLICT", runs: [], outcome: null, fixed: null, broke: null }) });
+    expect(r.adapted.gap).toBe("E_SM_TEST_PATCH_CONFLICT");
+    expect(r.fell).toBeNull();
+    expect(r.fallbacks).toEqual([{ reason: "test_patch_conflict_adapted", reading: "adapted", detail: "strict keeps its own result; SM_CONFLICT 2" }]);
+  });
+  test("a failed rebuild is recorded per reading, and adapted names strict's runs when it took them", () => {
+    const bad = res({ runs: [{ n: 1, wall_ms: 1, exits: [101], stopped: false, build_failed: true, parsed_sha256: null }], outcome: "no_fix_broke" });
+    const same = settleAdapted(bad, { ...base, same: true, scoreAdapted: never });
+    expect(same.fallbacks).toEqual([{ reason: "rebuild_failed", reading: "strict", detail: "run 1 rebuild exits 101" }, { reason: "rebuild_failed", reading: "adapted", detail: "strict's runs: run 1 rebuild exits 101" }]);
+    const own = settleAdapted(res(), { ...base, scoreAdapted: () => bad });
+    expect(own.adapted.outcome).toBe("no_fix_broke");
+    expect(own.fallbacks).toEqual([{ reason: "rebuild_failed", reading: "adapted", detail: "run 1 rebuild exits 101" }]);
+  });
+  test("an unscored or same-tree change takes strict with no fallback", () => {
+    expect(settleAdapted(res(), { ...base, scored: false, scoreAdapted: never }).fallbacks).toEqual([]);
+    expect(settleAdapted(res(), { ...base, same: true, scoreAdapted: never }).fallbacks).toEqual([]);
   });
 });

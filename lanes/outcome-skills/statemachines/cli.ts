@@ -307,7 +307,7 @@ export async function main(argv: string[]): Promise<number> {
       } else input = { unitDir, patchFile: f.get("--patch")!, cell: need(f, "--cell") };
       const rec = scoreFirst({ ...input, mode, runEmpty: f.has("--run-empty") });
       writeNew(need(f, "--out"), rec);
-      console.log("strict=" + (rec.strict.outcome ?? rec.codes.strict) + " adapted=" + (rec.adapted.outcome ?? rec.codes.adapted) + (rec.adapted.fell_back_to_strict ? " (strict: " + rec.adapted.fell_back_to_strict + ")" : "") + " runs=" + rec.strict.runs.length + "/" + (rec.adapted.same_tree ? "same" : rec.adapted.runs.length) + " excluded=" + rec.excluded.length + " record=" + need(f, "--out"));
+      console.log("strict=" + (rec.strict.outcome ?? rec.codes.strict) + " adapted=" + (rec.adapted.outcome ?? rec.codes.adapted) + (rec.adapted.fell_back_to_strict ? " (strict: " + rec.adapted.fell_back_to_strict + ")" : "") + " runs=" + rec.strict.runs.length + "/" + (rec.adapted.same_tree ? "same" : rec.adapted.runs.length) + " excluded=" + rec.excluded.length + " reruns=" + (["strict", "adapted"] as const).map((k) => k + ":fix" + rec[k].reruns.fix.length + ",no_fix" + rec[k].reruns.no_fix.length + ",break" + rec[k].reruns.break.length).join("/") + " fallbacks=" + (rec.fallbacks.map((x) => x.reason + ":" + x.reading).join(",") || "none") + " record=" + need(f, "--out"));
       return 0;
     }
     throw new Error("E_USAGE unknown sm command " + JSON.stringify(sub) + "; gstack-evals outcome sm --help lists them");
