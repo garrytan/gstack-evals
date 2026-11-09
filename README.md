@@ -89,7 +89,7 @@ The verdict words: KEEP means the part helped. CUT means removing it lost nothin
 
 ## Corrections
 
-A merged post never changes, so these posts still print the verdicts they had when they merged. These lines are the current reading.
+A merged post never changes, so these posts still print the verdicts they had when they merged. The one exception is an owner-directed edit recorded by a waiver row in `wiki/edits/<name>.tsv` (see [wiki/README.md](wiki/README.md), rule 2). These lines are the current reading.
 
 - **plan-ceo-review's CUT-CANDIDATE is narrowed.** The stage 2 score measured only whether a review named a plan's deciding issue, never whether the plan got better, so the verdict covers that alone, and [a new preregistered test](wiki/plans/2026-11-08-geva-403-product-value-prereg/README.md) asks whether plans get better for real users. [CEO stage 2 results](wiki/board/2026-11-08-geva-402-ceo-stage-2-results/README.md)
 - **plan-eng-review's CUT-CANDIDATE is narrowed.** It rested on seeded-flaw detection with no gstack arm and on an admission run where told sessions never ran the skill, so it now reads as no effect on finding extra bugs in a plan, with the skill's main aims untested, and [a new preregistered eval](wiki/plans/2026-11-08-geva-405-eng-review-intentions-prereg/README.md) tests those aims. [Panel v3 headroom](wiki/board/2026-11-03-geva-250-panel-v3-headroom-results.md), [G admission results](wiki/board/2026-11-06-geva-364-g-admission-results/README.md)
