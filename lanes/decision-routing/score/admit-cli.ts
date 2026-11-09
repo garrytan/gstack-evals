@@ -1,12 +1,14 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals decision-routing admit: room, transfer and the cut's ceiling from the calibration N sessions, and
-// per-contrast discordance from the pilot (R and P from the pilot, N from calibration, on the pilot's tasks and both models).
+// per-contrast discordance from the pilot (R and P from the pilot, N from calibration, on the pilot's tasks and both models),
+// and the non-root reading over both (score/nonroot.ts: counts per model and cell, no verdict).
 //   admit --calibration <dir> --pilot <dir> --journal <file>... --prices <prices.json> [--out <admission.json>]
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { discordance, roomCheck, s3Share, transferCheck, turnsOf, type Turn } from "./admission.ts";
 import { callUsd, loadPrices, pairOnTasks, readJournal, readTrial, type SessionOutcome } from "./session.ts";
 import { trialDirs } from "./cli.ts";
+import { nonrootReading, printNonroot } from "./nonroot.ts";
 
 const flag = (argv: string[], name: string): string | undefined => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
 const flags = (argv: string[], name: string): string[] => argv.flatMap((a, i) => (a === name && argv[i + 1] !== undefined ? [argv[i + 1]!] : []));
@@ -56,6 +58,8 @@ export async function main(argv: string[]): Promise<number> {
     out.contrasts[name] = d;
     lines.push(name + ": d " + d.d.toFixed(3) + " over " + d.n_pairs + " pairs on " + d.n_tasks + " tasks, 80% upper bound " + d.upper80.toFixed(3) + "; " + (d.admitted ? "non-inferiority admitted" : "above 0.20: no non-inferiority verdict; the Captain hears before the scored stage"));
   }
+  out.nonroot = nonrootReading([...trialDirs(calibration), ...trialDirs(pilot)]);
+  lines.push(...printNonroot(out.nonroot));
   console.log(lines.join("\n"));
   const file = flag(argv, "--out");
   if (file) writeFileSync(file, JSON.stringify(out, null, 2) + "\n");
