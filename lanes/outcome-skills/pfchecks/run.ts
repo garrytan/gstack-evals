@@ -119,6 +119,9 @@ function harbor(bin: string, argv: string[], env: Record<string, string>, timeou
 }
 
 const armRefusal = (summary: Record<string, any> | null) => typeof summary?.refused === "string" && /^E_PF_ARM/.test(summary.refused);
+/** Whether an attempt's end retries the whole session from a fresh container: a task turn's upstream or infra end does,
+ *  a tree or home refusal before any open never does. */
+export const retriesSession = (summary: Record<string, any> | null, record: PfSessionRecord): boolean => !armRefusal(summary) && taskStep([record.task.end]).action === "retry_session";
 
 /** The pf-session.v1 record from one attempt's pf-summary.json (none: an infra end). A tree or home refusal before any
  *  open is gap E_PF_ARM and takes no retry. effortBody is the session's first main request body, when the caller saw it. */
@@ -169,7 +172,7 @@ export async function runPfSession(i: PfRunInput, effort?: (attempt: 1 | 2) => R
     const summary = ev && existsSync(join(ev, "pf-summary.json")) ? (JSON.parse(readFileSync(join(ev, "pf-summary.json"), "utf8")) as Record<string, any>) : null;
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
     record = pfRecord(i, attempt, summary, ev, effort?.(attempt));
-    if (attempt === 2 || armRefusal(summary) || taskStep([record.task.end]).action !== "retry_session") break;
+    if (attempt === 2 || !retriesSession(summary, record)) break;
   }
   const file = join(i.out, "session.json");
   writeSessionRecord(file, record!);

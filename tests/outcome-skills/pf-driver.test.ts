@@ -3,7 +3,7 @@
 // task turn and the wrap-up turn) at each phase's allowance, the open rules per session, the room rule that keeps the
 // wrap-up allowance pending on the lease, and the allowance table admission may double. On a temporary ledger with a stub
 // upstream, in the style of sm-driver.test.ts; no key, no paid call.
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, jest, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -172,4 +172,50 @@ test("pf-blind serves pf:blind on Opus only, and the doubled allowance table cha
   await closeAll();
   expect(await served.stop()).toBe(0);
   local.close?.();
+});
+
+test("a PF slot past its wall limit plus the grace is closed by its deadline and its bearer refused", async () => {
+  const { serve, local, root } = ledger({ "pf-opus": { cap: 100 } });
+  const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }], { deadline_grace_ms: 50 });
+  const { open, closeAll } = client(served.control);
+  expect((await open({ arm: "pf:N", cap: 6, phase: "task" })).status).toBe(200);
+  jest.useFakeTimers();
+  let wrap: Awaited<ReturnType<typeof open>>;
+  try {
+    wrap = await open({ arm: "pf:N", cap: 6, phase: "wrapup" });
+    jest.advanceTimersByTime(300_000 + 51);
+  } finally {
+    jest.useRealTimers();
+  }
+  expect(wrap.status).toBe(200);
+  const sessions = join(root, "run", "sessions.jsonl");
+  const closed = () => readFileSync(sessions, "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((e) => e.event === "close" && e.id === wrap.json.id);
+  for (let i = 0; i < 50 && !closed(); i++) await Bun.sleep(20);
+  expect(closed()).toMatchObject({ reason: "deadline", lease_id: served.stages[0]!.lease_id });
+  const call = await fetch(wrap.json.base_url + "/v1/messages", { method: "POST", headers: { "x-api-key": wrap.json.token, "content-type": "application/json", "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: OPUS, max_tokens: 10, messages: [{ role: "user", content: "hi" }] }) });
+  expect(call.status).toBe(403);
+  await closeAll();
+  expect(await served.stop()).toBe(0);
+  local.close?.();
+});
+
+test("a closed task slot's wrap-up hold keeps its room for the deadline grace, then frees it for the next task open", async () => {
+  const run = async (advance: number) => {
+    let clock = Date.now();
+    const { serve, local } = ledger({ "pf-opus": { cap: 12.5 } });
+    const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }], { deadline_grace_ms: 1_000, now: () => clock });
+    const { open } = client(served.control);
+    const task = await open({ arm: "pf:N", cap: 6, phase: "task", task: "u1" });
+    expect(task.status).toBe(200);
+    expect((await fetch(served.control + "/sessions/" + task.json.id + "/close", { method: "POST", body: JSON.stringify({ reason: "agent_finished" }) })).status).toBe(200);
+    clock += advance;
+    const next = await open({ arm: "pf:N", cap: 6, phase: "task", task: "u2" });
+    await served.stop();
+    local.close?.();
+    return next;
+  };
+  const held = await run(999);
+  expect(held.status).toBe(409);
+  expect(held.json.code).toBe("CAP_STOP");
+  expect((await run(1_001)).status).toBe(200);
 });
