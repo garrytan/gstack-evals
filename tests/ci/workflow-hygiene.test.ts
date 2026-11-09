@@ -94,6 +94,25 @@ describe("workflow hygiene", () => {
     expect([...pins][0]).toMatch(/^\d+\.\d+\.\d+ [0-9a-f]{64}$/);
   });
 
+  test("falls back only to the same version's npm package, checked before it is unpacked, by one step in every workflow", () => {
+    const installs = files.flatMap((f) => steps(f).filter((s) => s.env?.BUN_SHA256));
+    expect(new Set(installs.map((s) => JSON.stringify([s.env, s.run]))).size).toBe(1);
+    const s = installs[0]!;
+    const run = s.run!;
+    expect(s.env!.BUN_NPM_SHA256).toMatch(/^[0-9a-f]{64}$/);
+    expect(run.match(/https:\/\/[^"\s]+/g)).toEqual([
+      "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip",
+      "https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-$BUN_VERSION.tgz",
+    ]);
+    const check = run.indexOf('printf \'%s  %s\\n\' "$BUN_NPM_SHA256" "$RUNNER_TEMP/bun.tgz" | sha256sum -c --strict -');
+    expect(check).toBeGreaterThan(run.indexOf("registry.npmjs.org/@oven/bun-linux-x64/"));
+    expect(check).toBeLessThan(run.indexOf("tar -xzf"));
+    const version = run.indexOf('test "$("$RUNNER_TEMP/bun-linux-x64/bun" --version)" = "$BUN_VERSION"');
+    expect(version).toBeGreaterThan(run.indexOf("fi\n"));
+    expect(version).toBeLessThan(run.indexOf('>> "$GITHUB_PATH"'));
+    expect(run.match(/>> "\$GITHUB_PATH"/g)).toHaveLength(1);
+  });
+
   test("fetches gstack at one pinned commit", () => {
     const pins = files.flatMap((f) => steps(f).flatMap((s) => (s.env?.GSTACK_SHA ? [f + " " + s.env.GSTACK_SHA] : [])));
     expect(pins.some((p) => p.startsWith("sealed.yml "))).toBe(true);
