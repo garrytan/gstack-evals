@@ -51,6 +51,8 @@ export interface UnitMeta {
   rank: number;
   /** Drawn to make up a short type's quota (section 4). */
   fill_in?: boolean;
+  /** The first-parent changes its aftermath candidates name, so no two drawn units hold each other (section 4). */
+  aftermath?: string[];
 }
 
 export interface BugSite {
