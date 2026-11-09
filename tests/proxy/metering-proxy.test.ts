@@ -739,7 +739,7 @@ describe("OpenRouter route", () => {
     const t = setup(() => ok({ prompt_tokens: 32, completion_tokens: 1, cost: 0.00007326 }));
     const a = t.bind({ models: [`openrouter:${ARGON}`] });
     expect((await t.call(a.slot, a.token, PATH, { model: ARGON, messages: [{ role: "user", content: "Hello" }], max_tokens: 1 })).status).toBe(200);
-    expect(t.calls.map(c => c.raw)).toEqual([`{"model":"${ARGON}","messages":[{"role":"user","content":"Hello"}],"max_tokens":1,"provider":${argon}}`]);
+    expect(t.calls.map(c => c.raw)).toEqual([`{"model":"${ARGON}","messages":[{"role":"user","content":"Hello"}],"max_tokens":1,"provider":${argon},"usage":{"include":true}}`]);
   });
 
   // Value: protects=every OpenRouter model but Argon routes exactly as before the image price fix; fails_when=the fix changes max_price, its key order or any other routing byte for a row that lists no image price; why_new=the Argon fix touches the routing every OpenRouter call shares; seam=openRouterRouting and the proxy's outgoing body; no_claim=OpenRouter's live filtering
@@ -758,7 +758,7 @@ describe("OpenRouter route", () => {
     for (const model of Object.keys(MAIN_ROUTING)) expect((await t.call(a.slot, a.token, PATH, { model, messages: [{ role: "user", content: "hi" }], max_tokens: 1 })).status).toBe(200);
     expect((await t.call(a.slot, a.token, "/openrouter/v1/messages", { model: SOL, max_tokens: 1, messages: [{ role: "user", content: "hi" }] })).status).toBe(200);
     expect(t.calls.map(c => c.raw)).toEqual([
-      ...Object.keys(MAIN_ROUTING).map(model => `{"model":"${model}","messages":[{"role":"user","content":"hi"}],"max_tokens":1,"provider":${MAIN_ROUTING[model]}}`),
+      ...Object.keys(MAIN_ROUTING).map(model => `{"model":"${model}","messages":[{"role":"user","content":"hi"}],"max_tokens":1,"provider":${MAIN_ROUTING[model]},"usage":{"include":true}}`),
       `{"model":"${SOL}","max_tokens":1,"messages":[{"role":"user","content":"hi"}],"provider":${MAIN_ROUTING[SOL]}}`,
     ]);
   });
@@ -1412,6 +1412,105 @@ describe("the per-session meter record (the CEO stage 2 amendment, section 5 and
     await expectProblem(await t.call(a.slot, a.token, undefined, { model: "claude-opus-5-5", max_tokens: 1000, messages: [{ role: "user", content: "x".repeat(30_000) }] }), 402, "E_ALLOWANCE");
     const meter = await t.proxy.finalize(a.meter_id);
     expect([meter.peak_inflight_calls, meter.largest_prompt, meter.bytes_per_token, meter.cache_write]).toEqual([1, null, null, ["none"]]);
+  });
+});
+
+
+describe("OpenRouter billed cost in the journal", () => {
+  const PARTICLE = "particle-ai/particle-1";
+  const models = [`openrouter:${PARTICLE}`];
+  const PATH = "/openrouter/v1/chat/completions";
+  const chat = (extra: Record<string, unknown> = {}) => ({ model: PARTICLE, messages: [{ role: "user", content: "hi" }], ...extra });
+  const outcomes = (t: ReturnType<typeof setup>) => t.journal().filter(l => l.kind === "outcome");
+
+  // Value: protects=the decision-routing eval can reconcile the meter against OpenRouter's bill for every particle-1 call; fails_when=the outcome line keeps only max(table, cost), so the billed figure is lost; why_new=decision-routing meter reconciliation; seam=the request body and the outcome line; no_claim=what OpenRouter bills
+  test("a chat call asks OpenRouter for usage accounting, and a caller's own usage setting is kept", async () => {
+    const t = setup(() => ok({ prompt_tokens: 10, completion_tokens: 5, cost: 0.00001 }));
+    const a = t.bind({ models });
+    expect((await t.call(a.slot, a.token, PATH, chat())).status).toBe(200);
+    expect((await t.call(a.slot, a.token, PATH, chat({ usage: { include: false } }))).status).toBe(200);
+    expect((await t.call(a.slot, a.token, PATH, chat({ stream: false }))).status).toBe(200);
+    expect(t.calls.map(c => c.body.usage)).toEqual([{ include: true }, { include: false }, { include: true }]);
+    const held = [...t.ledger.reservations.values()].map(r => r.max_micros);
+    expect(held).toEqual(t.calls.map(c => reservationMicros(priceRequest("openrouter", c.body, c.body.max_tokens))));
+  });
+
+  test("only OpenRouter chat completions get usage accounting", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind({ models: [...models, "anthropic:claude-opus-5-5"] });
+    expect((await t.call(a.slot, a.token, "/openrouter/v1/responses", { model: PARTICLE, store: false, input: "hi" })).status).toBe(200);
+    expect((await t.call(a.slot, a.token, "/openrouter/v1/messages", { model: PARTICLE, max_tokens: 100, messages: [{ role: "user", content: "hi" }] })).status).toBe(200);
+    expect((await t.call(a.slot, a.token)).status).toBe(200);
+    expect(t.calls.map(c => "usage" in c.body)).toEqual([false, false, false]);
+  });
+
+  test("the outcome line carries OpenRouter's billed cost in micros beside the meter, which still settles at max(table, cost)", async () => {
+    const t = setup(() =>
+      t.calls.length === 1 ? ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0.0001234 }) : ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0.0005 }),
+    );
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    await t.call(a.slot, a.token, PATH, chat());
+    const usage = { input: 1000, output: 200, reasoning: 0, cache_read: 0, cache_write: 0 };
+    expect(outcomes(t).map(l => [l.outcome, l.billed_micros])).toEqual([
+      [{ kind: "spent", spent_micros: 300, usage }, 124],
+      [{ kind: "spent", spent_micros: 500, usage }, 500],
+    ]);
+    expect(t.ledger.settles).toEqual([
+      ["res_1", { kind: "spent", spent_micros: 300, usage }],
+      ["res_2", { kind: "spent", spent_micros: 500, usage }],
+    ]);
+    expect((await t.proxy.finalize(a.meter_id)).micros).toBe(800);
+  });
+
+  test("a reply without a cost journals billed_micros null, and a reported zero cost journals 0", async () => {
+    const t = setup(() => (t.calls.length === 1 ? ok({ prompt_tokens: 1000, completion_tokens: 200 }) : ok({ prompt_tokens: 1000, completion_tokens: 200, cost: 0 })));
+    const a = t.bind({ models });
+    await t.call(a.slot, a.token, PATH, chat());
+    await t.call(a.slot, a.token, PATH, chat());
+    const lines = outcomes(t);
+    expect(lines.map(l => l.billed_micros)).toEqual([null, 0]);
+    expect("billed_micros" in lines[0]!).toBe(true);
+    expect(lines.map(l => l.outcome.spent_micros)).toEqual([300, 300]);
+  });
+
+  test("a stream's billed cost comes from its last usage chunk", async () => {
+    const chunks = [`data: ${JSON.stringify({ choices: [{ delta: { content: "hi" } }], usage: null })}`, `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 400, completion_tokens: 100, cost: 0.00007 } })}`, "data: [DONE]"];
+    const t = setup(() => new Response(chunks.join("\n\n") + "\n\n", { headers: { "content-type": "text/event-stream" } }));
+    const a = t.bind({ models });
+    await (await t.call(a.slot, a.token, PATH, chat({ stream: true }))).text();
+    await t.proxy.finalize(a.meter_id);
+    expect(outcomes(t).map(l => [l.outcome.spent_micros, l.billed_micros])).toEqual([[140, 70]]);
+  });
+
+  test("a Responses stream and a Messages reply journal their billed cost too", async () => {
+    const t = setup(() =>
+      t.calls.length === 1
+        ? sse([{ type: "response.completed", response: { usage: { input_tokens: 2000, output_tokens: 300, cost: 0.0004 } } }])
+        : ok({ input_tokens: 100, output_tokens: 10, cost: 0.00002 }),
+    );
+    const a = t.bind({ models });
+    await (await t.call(a.slot, a.token, "/openrouter/v1/responses", { model: PARTICLE, stream: true, store: false, input: "hi" })).text();
+    await t.proxy.finalize(a.meter_id);
+    await t.call(a.slot, a.token, "/openrouter/v1/messages", { model: PARTICLE, max_tokens: 100, messages: [{ role: "user", content: "hi" }] });
+    expect(outcomes(t).map(l => l.billed_micros)).toEqual([400, 20]);
+  });
+
+  test("an OpenRouter 5xx without usage journals billed_micros null", async () => {
+    let n = 0;
+    const t = setup(() => (++n === 1 ? Response.json({ error: { code: 502 } }, { status: 502 }) : ok({ prompt_tokens: 10, completion_tokens: 5, cost: 0.00002 })));
+    const a = t.bind({ models });
+    expect((await t.call(a.slot, a.token, PATH, chat())).status).toBe(200);
+    expect(outcomes(t).map(l => [l.status, l.billed_micros])).toEqual([[502, null], [200, 20]]);
+  });
+
+  test("outcome lines for other providers do not change", async () => {
+    const t = setup(() => ok({ input_tokens: 100, output_tokens: 10, cost: 0.5 }));
+    const a = t.bind();
+    expect((await t.call(a.slot, a.token)).status).toBe(200);
+    const [line] = outcomes(t);
+    expect("billed_micros" in line!).toBe(false);
+    expect(Object.keys(line!).sort()).toEqual(["at", "kind", "latency_ms", "meter_id", "outcome", "reservation_id", "status"]);
   });
 });
 

@@ -240,8 +240,14 @@ export function usageCost(price: RequestPrice, usage: unknown): { micros: number
     (cacheWrite - write1h) * (rates.cache_write ?? rates.input) +
     write1h * rates.input * ANTHROPIC_CACHE_WRITE_1H_MULT +
     allOutput * rates.output;
-  const billed = price.provider === "openrouter" && typeof u.cost === "number" && Number.isFinite(u.cost) ? Math.ceil(Number((u.cost * 1e6).toFixed(3))) : 0;
+  const billed = price.provider === "openrouter" ? (openRouterBilledMicros(u) ?? 0) : 0;
   return { micros: Math.max(Math.ceil(micros), billed), usage: { input: fresh, output: allOutput - reasoning, reasoning, cache_read: cacheRead, cache_write: cacheWrite } };
+}
+
+/** OpenRouter's reported usage.cost in micro-dollars, rounded up, or null when the usage carries no cost. */
+export function openRouterBilledMicros(usage: unknown): number | null {
+  const cost = (usage as Record<string, unknown> | null)?.cost;
+  return typeof cost === "number" && Number.isFinite(cost) ? Math.ceil(Number((cost * 1e6).toFixed(3))) : null;
 }
 
 /**
