@@ -19,6 +19,7 @@
 // - The sample keeps drawing until it has the usable count and at least 4 usable repositories in each licence group
 //   (or the group runs out), at most 45 tries a type, so the without-copyleft read has its own sample.
 // - Usable: the clone succeeds, at least 20 first-parent changes merged in the window, test files at the head.
+// - Before each repository's metadata read, a shared GraphQL quota under 2,500 points waits for its reset.
 // - Clones are --no-checkout, single-branch, no tags, shallow back to 2026-05-01, LFS smudge off; one clone at a time,
 //   deleted after its repository is mined.
 // - Keyable (GEVA-405's strict read): an eligible unit with a defect revert or a B candidate of at least 2 blamed lines;
@@ -31,7 +32,7 @@ import { join } from "node:path";
 import { fetchMeta } from "../../real-outcome/mine/fetch.ts";
 import { gitLines, gitRun } from "../../real-outcome/mine/git.ts";
 import type { RepoMeta } from "../../real-outcome/mine/meta.ts";
-import { graphqlLeft, rest } from "../../product-value/author/gh.ts";
+import { FLOOR, graphqlLeft, rest } from "../../product-value/author/gh.ts";
 import { TOPICS as PV_TOPICS } from "../../product-value/author/mine.ts";
 import { need, parseArgs, PvError, readRecords, refuseInRepo, writeJson } from "../../product-value/io.ts";
 import type { Io } from "../cli.ts";
@@ -145,7 +146,11 @@ const realMiner: Miner = {
     const r = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "clone", "--quiet", "--no-checkout", "--single-branch", "--no-tags", "--shallow-since=" + SHALLOW_SINCE, "https://github.com/" + repo + ".git", dir], { env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: "/nonexistent", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_LFS_SKIP_SMUDGE: "1" }, timeout: 20 * 60_000, encoding: "utf8" });
     return r.status === 0;
   },
-  meta: (repo) => fetchMeta(repo, WINDOW.from),
+  meta: (repo) => {
+    const left = graphqlLeft();
+    if (left.remaining < FLOOR) Bun.sleepSync(Math.max(0, left.reset * 1000 - Date.now()) + 5_000);
+    return fetchMeta(repo, WINDOW.from);
+  },
   points: () => graphqlLeft().remaining,
   plans: undefined,
 };
