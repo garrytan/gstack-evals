@@ -19,7 +19,7 @@ import { computeStart, firstInfo, scoreFollowon, treeCounts, treeScores, TREES, 
 import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
 import { planPart, type PlannedSession, type SessionRecord } from "./session.ts";
 import { LANGS, type Lang } from "./langs.ts";
-import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, labelPacket, r78Check, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Row } from "./packets.ts";
+import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
 import { foundIt, laterFix, whatChanged } from "./secondary.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
@@ -69,7 +69,9 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      the three stock diffs from one file of the unit's own tree
   packets read label|judge --answer <file> [--packet <packet.json>]
                                                      reads one reply strictly; a malformed one exits 1 (E_SM_JUDGE_ANSWER)
-  packets r78 --rows <rows.json> --out <file>        the R78 check on [{id, a, b}] replies (a Astra, b Opus) in seeded order
+  packets labelled --spec <spec.json> --out-dir <dir>  the R78 labelled set from [{unit, lang, tree, file, files}] in draw order
+  packets r78 --real <rows.json> --labelled <rows.json> --out <file>  the R78 check (a Astra, b Opus); labelled rows add kind, axis
+  packets r78-price                                   the sm-judges calls priced at the per-call bound, against the item cap
   secondary --unit <dir> --patch <arm.patch> [--outcome <outcome.json>] [--tree <base dir>] [--clone <dir>] --out <file>
                                                      section 10's keyless secondaries: found it, what it changed and, with
                                                      a local clone, later-fix overlap
@@ -369,12 +371,34 @@ export async function main(argv: string[]): Promise<number> {
         console.log(JSON.stringify(res.answer));
         return 0;
       }
-      if (what === "r78") {
-        const { f } = flags(r, ["--rows", "--out"]);
-        const res = r78Check(readJson<R78Row[]>(need(f, "--rows")));
-        writeNew(need(f, "--out"), { schema: "sm-r78.v1", ...res });
-        console.log("used=" + res.used + " labelled=" + res.labelled + " short=" + res.short + " " + AXES.map((a) => a + ":kappa=" + res.axes[a].kappa + "," + res.axes[a].reading).join(" "));
+      if (what === "labelled") {
+        const { f } = flags(r, ["--spec", "--out-dir"]);
+        const out = need(f, "--out-dir");
+        const spec = readJson<Array<{ unit: string; lang: Lang; tree: string; file: string; files: string }>>(need(f, "--spec"));
+        const set = labelledSet(spec.map((u) => ({ unit: u.unit, lang: u.lang, path: u.file, text: readFileSync(join(u.tree, u.file), "utf8"), files: readFileSync(u.files, "utf8").split("\n").filter(Boolean) })));
+        mkdirSync(out, { recursive: true });
+        for (const it of set.items) {
+          writeNew(join(out, it.packet.packet + ".json"), it.packet);
+          writeNew(join(out, it.packet.packet + ".key.json"), it.key);
+        }
+        console.log("labelled items=" + set.items.length + " bad=" + set.items.filter((x) => x.key.kind === "bad").length + " neutral=" + set.items.filter((x) => x.key.kind === "neutral").length + " skipped=" + (set.skipped.join(",") || "none"));
         return 0;
+      }
+      if (what === "r78") {
+        const { f } = flags(r, ["--real", "--labelled", "--out"]);
+        const res = r78Check({ real: readJson<R78Row[]>(need(f, "--real")), labelled: readJson<R78Labelled[]>(need(f, "--labelled")) });
+        writeNew(need(f, "--out"), { schema: "sm-r78.v2", ...res });
+        const k = AXES.map((a) => a + "=" + res.axes[a].kappa).join(",");
+        for (const [j, v] of Object.entries(res.judges)) console.log(j + " catch=" + v.catch.caught + "/" + v.catch.n + " false_fail=" + v.false_fail.failed + "/" + v.false_fail.n + " stock_above=" + v.stock_above.above + " malformed=" + v.malformed + " kappa " + k);
+        console.log(AXES.map((a) => a + ":kappa=" + res.axes[a].kappa + ",n=" + res.axes[a].n + "," + res.axes[a].reading).join(" "));
+        console.log(res.agreement);
+        return 0;
+      }
+      if (what === "r78-price") {
+        const p = r78Price();
+        console.log("sm-judges calls " + Object.entries(p.calls).map(([k, v]) => k + "=" + v).join(" ") + " bound in=" + p.bound.input_tokens + " out=" + p.bound.output_tokens + " per_call astra=" + p.per_call_usd.astra.toFixed(4) + " opus=" + p.per_call_usd.opus.toFixed(4));
+        console.log("sm-judges usd=" + p.usd.toFixed(2) + " cap=" + p.cap_usd + " fits=" + p.fits);
+        return p.fits ? 0 : 1;
       }
       console.log(HELP.split("\n").filter((l, k, a) => /^  packets/.test(l) || (/^ {14}/.test(l) && a.slice(0, k).reverse().find((x) => /^  \S/.test(x))?.startsWith("  packets"))).join("\n"));
       return what === undefined || what === "--help" ? (what ? 0 : 2) : 2;

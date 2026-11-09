@@ -376,7 +376,7 @@ model or unit (E_SM_PACKET).
   2; every listed hunk id answered once with "yes" or "no". Anything else (a code fence, extra text, an extra key, a
   missing hunk) is E_SM_JUDGE_ANSWER and counts as missing.
 - Stock diffs: three per judge after every 50th diff, built from one file of that diff's unit by keyless transforms, sent
-  as ordinary judge packets (the key marks them). A judge scoring above 0 on more than 10% of its stock diffs is flagged.
+  as ordinary judge packets (the key marks them). A judge scoring above 0 on more than 10% of its stock diffs is flagged. The R78 check runs on a labelled set (labelledSet, plantDiffs; `sm packets labelled`): 8 units in draw order, each giving three known-bad plants (UX, DX, AX) and its three stock diffs as known-neutral, 48 items that both judges grade. r78Check reports each judge's catch and false-fail rates with counts and kappa per axis over the first 60 real diffs beside them; judgedVerdict lets a judged verdict stand only at kappa 0.6 or more. The real diffs' agreement share is one descriptive line. `sm packets r78-price` prices the sm-judges calls against the item cap.
 - R78 check: diffs graded by both judges in seeded order; the first 60, then one more at a time until 40 are labelled or
   supply ends (`short`). Kappa per axis; a judged difference on an axis counts only at kappa 0.6 or more, else it reads
   "judge failed its check".

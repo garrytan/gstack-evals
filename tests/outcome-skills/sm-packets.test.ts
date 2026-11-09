@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { blocks } from "../../lanes/outcome-skills/statemachines/secondary.ts";
 import {
-  cohenKappa, combineLabels, DIFF_LINE_CAP, judgeFor, judgePacket, judgeQueue, labelAgreement, labelPacket, r78Check, readJudgeAnswer, readLabelAnswer, stockDiffs, stockFlag,
+  assertBlind, cohenKappa, combineLabels, DIFF_LINE_CAP, judgedVerdict, judgeFor, judgePacket, judgeQueue, labelAgreement, labelledSet, labelPacket, PLANT_UNITS, plantDiffs, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, stockFlag,
   type JudgeAnswer, type LabelAnswer,
 } from "../../lanes/outcome-skills/statemachines/packets.ts";
 
@@ -167,28 +167,99 @@ describe("judge queue and the stock flag", () => {
   });
 });
 
-describe("R78 check", () => {
-  const ja = (s: number): JudgeAnswer => ({ ux: { score: s, reason: "r" }, dx: { score: s, reason: "r" }, ax: { score: s, reason: "r" }, hunks: [] });
-  const agree = (i: number) => ({ id: "a" + i, a: ja([-2, 1, 2][i % 3]!), b: ja([-1, 2, 1][i % 3]!) });
+describe("R78 check with planted items", () => {
+  const go = (name: string) => [
+    "package core",
+    "",
+    "// " + name + " holds the values.",
+    "// It is safe for one goroutine.",
+    "// Callers own the map.",
+    "type " + name + " struct{ m map[string]int }",
+    "",
+    "func (s *" + name + ") Get(key string) (int, error) {",
+    "\tcount := s.m[key]",
+    "\tif count == 0 {",
+    '\t\treturn 0, errors.New("no value for key")',
+    "\t}",
+    "\treturn count, nil",
+    "}",
+    "",
+  ].join("\n");
+  const unit = (i: number, text = go("Store" + i)) => ({ unit: "u" + i, lang: "go" as const, path: "pkg/core/c" + i + ".go", text, files: ["pkg/core/c" + i + ".go", "go.mod"] });
+  const units = [unit(0), unit(1, "package x\n"), ...Array.from({ length: 9 }, (_, i) => unit(i + 2))];
+
+  test("each plant is mechanical, aimed at one axis, from the base text alone", () => {
+    const p = plantDiffs({ lang: "go", path: "pkg/core/c.go", text: go("Store") });
+    expect(p.map((x) => x.axis)).toEqual(["ux", "dx", "ax"]);
+    expect(p[0]!.diff).toContain("+\tif !(count == 0) {");
+    expect(p[1]!.diff!.split("\n").filter((l) => l.startsWith("-//")).length).toBe(3);
+    expect(p[2]!.diff).toContain('+\t\treturn 0, errors.New("failed")');
+    expect(plantDiffs({ lang: "go", path: "x.go", text: "package x\n" }).every((x) => x.diff === null)).toBe(true);
+  });
+  test("the labelled set is deterministic, fixed in its counts, blind, and skips units in draw order", () => {
+    const s = labelledSet(units), again = labelledSet(units);
+    expect(s).toEqual(again);
+    expect(PLANT_UNITS).toBe(8);
+    expect(s.skipped).toEqual(["u1"]);
+    expect(s.items.length).toBe(48);
+    expect(s.items.filter((x) => x.key.kind === "bad").map((x) => x.key.axis).sort()).toEqual([...Array(8).fill("ax"), ...Array(8).fill("dx"), ...Array(8).fill("ux")]);
+    expect(s.items.filter((x) => x.key.kind === "neutral").length).toBe(24);
+    expect(new Set(s.items.map((x) => x.key.unit))).toEqual(new Set(["u0", "u2", "u3", "u4", "u5", "u6", "u7", "u8"]));
+    for (const x of s.items) {
+      expect(() => assertBlind(x.packet, ["claude-opus-5-5", "openai/gpt-6.1-sol", "A1"])).not.toThrow();
+      const t = JSON.stringify(x.packet);
+      for (const w of ["plant", "neutral", "known", "stock", "u0"]) expect(t.includes(w)).toBe(false);
+      expect(x.key.packet).toBe(x.packet.packet);
+    }
+    expect(() => labelledSet(units.slice(0, 5))).toThrow("E_SM_PACKET");
+  });
+
+  const ja = (u: number, d = u, x = u): JudgeAnswer => ({ ux: { score: u, reason: "r" }, dx: { score: d, reason: "r" }, ax: { score: x, reason: "r" }, hunks: [] });
+  const agree = (i: number) => ({ id: "r" + i, a: ja([-2, 1, 2][i % 3]!), b: ja([-1, 2, 1][i % 3]!) });
   const split = (i: number) => ({ id: "s" + i, a: ja(1), b: ja(-1) });
-  test("adds diffs past 60 in order until 40 are labelled", () => {
-    const rows = [...Array.from({ length: 60 }, (_, i) => (i < 30 ? agree(i) : split(i))), ...Array.from({ length: 15 }, (_, i) => agree(100 + i))];
-    const r = r78Check(rows);
-    expect(r).toMatchObject({ used: 70, labelled: 40, short: false });
-    // Literal reading: on the label set both judges agree by construction, so catch is 1 and false fail 0.
-    expect(r.judges.a.ux).toEqual({ bad: 13, good: 27, catch_rate: 1, false_fail_rate: 0 });
+  const target = (axis: string, s: number) => ja(axis === "ux" ? s : 0, axis === "dx" ? s : 0, axis === "ax" ? s : 0);
+  const lab = () => [
+    ...["ux", "dx", "ax"].flatMap((axis) => Array.from({ length: 8 }, (_, i) => ({ id: axis + i, kind: "bad" as const, axis: axis as "ux", a: target(axis, -1) as JudgeAnswer | null, b: (axis === "ux" ? target(axis, -2) : ja(0)) as JudgeAnswer | null }))),
+    ...Array.from({ length: 24 }, (_, i) => ({ id: "n" + i, kind: "neutral" as const, axis: null, a: ja(0) as JudgeAnswer | null, b: (i < 6 ? ja(0, -1, 0) : i < 9 ? ja(1, 0, 0) : ja(0)) as JudgeAnswer | null })),
+  ];
+
+  test("catch and false-fail rates per judge on stub answers, with kappa beside every result", () => {
+    const rows = lab();
+    rows[0]!.a = null;
+    rows[30]!.a = null;
+    const r = r78Check({ real: Array.from({ length: 60 }, (_, i) => agree(i)), labelled: rows });
+    expect(r.judges.astra.catch).toEqual({ n: 24, caught: 23, rate: 23 / 24 });
+    expect(r.judges.astra.false_fail).toEqual({ n: 24, failed: 1, rate: 1 / 24 });
+    expect(r.judges.astra.malformed).toBe(2);
+    expect(r.judges.opus.catch).toEqual({ n: 24, caught: 8, rate: 8 / 24 });
+    expect(r.judges.opus.false_fail).toEqual({ n: 24, failed: 6, rate: 6 / 24 });
+    expect(r.judges.opus.stock_above).toEqual({ n: 24, above: 3 });
+    for (const j of ["astra", "opus"] as const) expect(r.judges[j].kappa).toEqual({ ux: 1, dx: 1, ax: 1 });
+    expect(r.axes.ux).toEqual({ kappa: 1, n: 60, malformed: 0, may_stand: true, reading: "passes its check" });
   });
-  test("runs short when supply ends, and gates each axis at kappa 0.6", () => {
-    const r = r78Check(Array.from({ length: 65 }, (_, i) => (i < 35 ? agree(i) : split(i))));
-    expect(r).toMatchObject({ used: 65, labelled: 35, short: true });
-    for (const ax of ["ux", "dx", "ax"] as const) expect(r.axes[ax].reading).toBe(r.axes[ax].kappa !== null && r.axes[ax].kappa! >= 0.6 ? "passes its check" : "judge failed its check");
-    const perfect = r78Check(Array.from({ length: 60 }, (_, i) => agree(i)));
-    expect(perfect.axes.ux).toEqual({ kappa: 1, n: 60, reading: "passes its check" });
+  test("the gate refuses a judged verdict under kappa 0.6", () => {
+    const r = r78Check({ real: Array.from({ length: 60 }, (_, i) => (i < 30 ? agree(i) : split(i))), labelled: lab() });
+    expect(r.axes.dx.kappa!).toBeLessThan(0.6);
+    expect(r.axes.dx).toMatchObject({ may_stand: false, reading: "judge failed its check" });
+    expect(judgedVerdict(r, "dx", "A1 beats A0")).toBe("judge failed its check (kappa " + r.axes.dx.kappa!.toFixed(2) + ")");
+    const ok = r78Check({ real: Array.from({ length: 60 }, (_, i) => agree(i)), labelled: lab() });
+    expect(judgedVerdict(ok, "dx", "A1 beats A0")).toBe("A1 beats A0 (kappa 1.00)");
+    const none = r78Check({ real: [{ id: "m", a: null, b: ja(1) }], labelled: lab() });
+    expect(none.axes.ux).toMatchObject({ kappa: null, n: 0, malformed: 1, may_stand: false });
   });
-  test("a malformed answer leaves the diff unlabelled and out of kappa", () => {
-    const rows = [...Array.from({ length: 59 }, (_, i) => agree(i)), { id: "m", a: null, b: ja(1) }];
-    const r = r78Check(rows);
-    expect(r).toMatchObject({ used: 60, labelled: 59, malformed: 1 });
-    expect(r.axes.dx.n).toBe(59);
+  test("the agreement-set reading is one descriptive line and sets nothing", () => {
+    const r = r78Check({ real: Array.from({ length: 60 }, (_, i) => (i < 30 ? agree(i) : split(i))), labelled: lab() });
+    expect(r.agreement).toBe("descriptive only: 30 of 60 real diffs got the same sign from both judges on every axis; this is not a catch or false-fail rate");
+    expect(Object.keys(r).sort()).toEqual(["agreement", "axes", "judges", "real_used"]);
+    expect(r.real_used).toBe(60);
+    expect(r78Check({ real: Array.from({ length: 70 }, (_, i) => agree(i)), labelled: lab() }).real_used).toBe(60);
+  });
+  test("prices the check's judge calls inside the sm-judges item cap", () => {
+    const p = r78Price();
+    expect(p.calls).toEqual({ real_astra: 240, real_opus: 480, stock_astra: 12, stock_opus: 27, r78_real_second: 60, labelled: 96 });
+    expect(p.usd).toBeCloseTo(160.05, 6);
+    expect(p.cap_usd).toBe(180);
+    expect(p.fits).toBe(true);
   });
 });
+

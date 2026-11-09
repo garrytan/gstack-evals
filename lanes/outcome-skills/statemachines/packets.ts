@@ -2,7 +2,7 @@
 // Packets for the judged parts of the post: section 3's labeller packet (the issue, the fix and the fix's tests, never an
 // arm's output) and section 10's judge packet (the folder's file list and a first-stage diff cut at 1,500 lines, never the
 // issue, the fix, the arm, the model or the session), the three stock diffs every 50 diffs, the answer readers (strict
-// JSON, anything else fails closed) and the R78 check. Packets are files; a separate paid step sends them. Nothing here
+// JSON, anything else fails closed) and the R78 check with its planted known-bad items. Packets are files; a separate paid step sends them. Nothing here
 // calls a model. Each packet's id is a digest of what the reader sees; a key file outside the packet maps it back.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Lang } from "./langs.ts";
 import { blocks } from "./secondary.ts";
+import { CHAT_PRICES } from "../../../src/runner/pricing/prices.ts";
+import { ITEMS } from "./items.ts";
 import { smFail } from "./unit.ts";
 
 export const LABELLERS = { astra: "openai/gpt-6-astra", opus: "anthropic/claude-opus-5-5" } as const;
@@ -22,7 +24,6 @@ export const STOCK_EVERY = 50;
 export const STOCK_FLAG_SHARE = 0.1;
 export const KAPPA_GATE = 0.6;
 export const R78_START = 60;
-export const R78_LABELS = 40;
 
 export const judgeFor = (model: string): string => JUDGES[model] ?? smFail("E_SM_PACKET", "no frozen judge for session model " + model + "; section 10 names " + Object.keys(JUDGES).join(", "));
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 16);
@@ -255,34 +256,133 @@ export function stockFlag(answers: ReadonlyArray<JudgeAnswer | null>) {
   return { n: answers.length, above, malformed, flagged: answers.length > 0 && above / answers.length > STOCK_FLAG_SHARE };
 }
 
-// ---- R78 check ----
+// ---- R78 check: planted known-bad items beside the stock items ----
+
+export type Axis = (typeof AXES)[number];
+export const PLANT_UNITS = 8;
+export const PLANT_KINDS = ["negate_condition", "strip_comments", "blank_error_text"] as const;
+export type PlantKind = (typeof PLANT_KINDS)[number];
+const PLANT_AXIS: Record<PlantKind, Axis> = { negate_condition: "ux", strip_comments: "dx", blank_error_text: "ax" };
+const C_IF = { re: /^(\s*)if \((.+)\)(\s*\{?\s*)$/, to: "$1if (!($2))$3" };
+const IF_LINE: Record<Lang, { re: RegExp; to: string }> = {
+  python: { re: /^(\s*)if (.+):(\s*)$/, to: "$1if not ($2):$3" },
+  go: { re: /^(\s*)if ([^;{]+) \{(\s*)$/, to: "$1if !($2) {$3" },
+  rust: { re: /^(\s*)if (?!let )([^{]+) \{(\s*)$/, to: "$1if !($2) {$3" },
+  java: C_IF, c: C_IF, cpp: C_IF, csharp: C_IF, js: C_IF, ts: C_IF,
+};
+const ERROR_LINE = /\b(?:errors\.New|Errorf|panic|raise|throw|bail!|anyhow!)|\w*(?:Error|Exception)\(/;
+const STRING_LITERAL = /"(?:[^"\\\n]|\\.)*"/g;
+export const R78_PRICE_BOUND = { input_tokens: 20_000, output_tokens: 1_500 } as const;
+const REAL_DIFFS_PER_MODEL = 240;
+
+/** The three known-bad plants from one file of a unit's base tree, each aimed at one axis. UX: the first if condition
+ *  in the file is negated. DX: every full-line comment is deleted (at least 3 are needed). AX: every string literal on a
+ *  line that raises or builds an error becomes "failed". A plant the file cannot give is null. */
+export function plantDiffs(x: { lang: Lang; path: string; text: string }): Array<{ kind: PlantKind; axis: Axis; diff: string | null }> {
+  const lines = x.text.split("\n");
+  const rule = IF_LINE[x.lang];
+  const at = lines.findIndex((l) => rule.re.test(l));
+  const negated = at < 0 ? null : lines.map((l, i) => (i === at ? l.replace(rule.re, rule.to) : l)).join("\n");
+  const comment = x.lang === "python" ? /^\s*#(?!!)/ : /^\s*\/\//;
+  const kept = lines.filter((l) => !comment.test(l));
+  const blanked = lines.map((l) => (ERROR_LINE.test(l) ? l.replace(STRING_LITERAL, '"failed"') : l)).join("\n");
+  const diffs: Record<PlantKind, string | null> = {
+    negate_condition: negated === null ? null : unified(x.path, x.text, negated),
+    strip_comments: lines.length - kept.length >= 3 ? unified(x.path, x.text, kept.join("\n")) : null,
+    blank_error_text: blanked === x.text ? null : unified(x.path, x.text, blanked),
+  };
+  return PLANT_KINDS.map((kind) => ({ kind, axis: PLANT_AXIS[kind], diff: diffs[kind] }));
+}
+
+export interface R78Key { schema: "sm-r78-key.v1"; packet: string; unit: string; kind: "bad" | "neutral"; axis: Axis | null; made_by: PlantKind | StockKind; lines_total: number }
+
+/** The labelled set: units in draw order, six items from each unit's base-tree file (three plants, known-bad, and its
+ *  three stock diffs, known-neutral), skipping a unit that cannot give all six, until PLANT_UNITS units give 24 of each. */
+export function labelledSet(units: ReadonlyArray<{ unit: string; lang: Lang; path: string; text: string; files: string[] }>) {
+  const items: Array<{ packet: JudgePacket; key: R78Key }> = [];
+  const skipped: string[] = [];
+  let taken = 0;
+  for (const u of units) {
+    if (taken === PLANT_UNITS) break;
+    const made = [
+      ...plantDiffs(u).map((p) => ({ kind: "bad" as const, axis: p.axis as Axis | null, made_by: p.kind as PlantKind | StockKind, diff: p.diff })),
+      ...stockDiffs(u).map((s) => ({ kind: "neutral" as const, axis: null, made_by: s.kind, diff: s.diff })),
+    ];
+    if (made.some((m) => m.diff === null)) {
+      skipped.push(u.unit);
+      continue;
+    }
+    taken++;
+    for (const m of made) {
+      const { packet, lines_total } = judgePacket({ diff: m.diff!, files: u.files });
+      assertBlind(packet, [u.unit]);
+      items.push({ packet, key: { schema: "sm-r78-key.v1", packet: packet.packet, unit: u.unit, kind: m.kind, axis: m.axis, made_by: m.made_by, lines_total } });
+    }
+  }
+  if (taken < PLANT_UNITS) smFail("E_SM_PACKET", "the labelled set needs " + PLANT_UNITS + " units that give all six items; " + taken + " did, skipped " + skipped.join(", "));
+  return { items, skipped };
+}
 
 export interface R78Row { id: string; a: JudgeAnswer | null; b: JudgeAnswer | null }
+export interface R78Labelled extends R78Row { kind: "bad" | "neutral"; axis: Axis | null }
 const sign = (s: number) => (s > 0 ? "+" : s < 0 ? "-" : "0");
 
-/** Section 10's R78 check over diffs graded by both judges (a: GPT-6 Astra, b: Opus 5.5), in seeded order. It takes the
- *  first 60, then adds diffs one at a time until 40 are labelled or the rows run out (short). A diff is labelled when
- *  both answers read and give the same sign on each axis; its label per axis is that sign (bad below 0, good above).
- *  Kappa is per axis, on signs, over every used diff where both answers read; a judged difference on that axis counts
- *  only at kappa 0.6 or more. */
-export function r78Check(rows: readonly R78Row[]) {
-  const labelled = (r: R78Row) => !!r.a && !!r.b && AXES.every((ax) => sign(r.a![ax].score) === sign(r.b![ax].score));
-  let used = Math.min(R78_START, rows.length);
-  let count = rows.slice(0, used).filter(labelled).length;
-  while (count < R78_LABELS && used < rows.length) if (labelled(rows[used++]!)) count++;
-  const set = rows.slice(0, used);
+/** Section 10's R78 check (a: GPT-6 Astra, b: Opus 5.5). On the labelled set: each judge's catch rate (targeted axis
+ *  below 0) on known-bad items and false-fail rate (any axis below 0) on neutral ones; a malformed answer is a miss or a
+ *  false fail. Kappa per axis on signs over the first 60 real diffs in seeded order where both answers read, printed
+ *  beside every result; a judged verdict on an axis may stand only at kappa 0.6 or more. The real diffs' agreement
+ *  share is one descriptive line. */
+export function r78Check(x: { real: readonly R78Row[]; labelled: readonly R78Labelled[] }) {
+  const set = x.real.slice(0, R78_START);
   const both = set.filter((r) => r.a && r.b);
   const axes = Object.fromEntries(AXES.map((ax) => {
     const kappa = cohenKappa(both.map((r) => [sign(r.a![ax].score), sign(r.b![ax].score)] as const));
-    return [ax, { kappa, n: both.length, reading: kappa !== null && kappa >= KAPPA_GATE ? "passes its check" : "judge failed its check" }];
-  })) as Record<(typeof AXES)[number], { kappa: number | null; n: number; reading: string }>;
-  const lab = set.filter(labelled);
-  const rates = (who: "a" | "b") => Object.fromEntries(AXES.map((ax) => {
-    const badRows = lab.filter((r) => r.a![ax].score < 0), good = lab.filter((r) => r.a![ax].score > 0);
-    const neg = (rs: R78Row[]) => rs.filter((r) => r[who]![ax].score < 0).length;
-    return [ax, { bad: badRows.length, good: good.length, catch_rate: badRows.length ? neg(badRows) / badRows.length : null, false_fail_rate: good.length ? neg(good) / good.length : null }];
-  })) as Record<(typeof AXES)[number], { bad: number; good: number; catch_rate: number | null; false_fail_rate: number | null }>;
-  return { used, labelled: count, short: count < R78_LABELS, malformed: set.length - both.length, axes, judges: { a: rates("a"), b: rates("b") } };
+    const may_stand = kappa !== null && kappa >= KAPPA_GATE;
+    return [ax, { kappa, n: both.length, malformed: set.length - both.length, may_stand, reading: may_stand ? "passes its check" : "judge failed its check" }];
+  })) as Record<Axis, { kappa: number | null; n: number; malformed: number; may_stand: boolean; reading: string }>;
+  const kappa = Object.fromEntries(AXES.map((ax) => [ax, axes[ax].kappa])) as Record<Axis, number | null>;
+  const bad = x.labelled.filter((r) => r.kind === "bad"), neutral = x.labelled.filter((r) => r.kind === "neutral");
+  const judge = (who: "a" | "b") => {
+    const caught = bad.filter((r) => r[who] !== null && r[who]![r.axis!].score < 0).length;
+    const failed = neutral.filter((r) => r[who] === null || AXES.some((ax) => r[who]![ax].score < 0)).length;
+    return {
+      catch: { n: bad.length, caught, rate: bad.length ? caught / bad.length : null },
+      false_fail: { n: neutral.length, failed, rate: neutral.length ? failed / neutral.length : null },
+      stock_above: { n: neutral.length, above: neutral.filter((r) => r[who] !== null && AXES.some((ax) => r[who]![ax].score > 0)).length },
+      malformed: x.labelled.filter((r) => r[who] === null).length,
+      kappa,
+    };
+  };
+  const same = both.filter((r) => AXES.every((ax) => sign(r.a![ax].score) === sign(r.b![ax].score))).length;
+  return {
+    real_used: set.length,
+    axes,
+    judges: { astra: judge("a"), opus: judge("b") },
+    agreement: "descriptive only: " + same + " of " + set.length + " real diffs got the same sign from both judges on every axis; this is not a catch or false-fail rate",
+  };
+}
+
+/** A judged verdict on one axis, or "judge failed its check" when that axis's kappa is under 0.6; kappa prints beside it. */
+export function judgedVerdict(r: ReturnType<typeof r78Check>, axis: Axis, verdict: string): string {
+  const a = r.axes[axis];
+  return (a.may_stand ? verdict : "judge failed its check") + " (kappa " + (a.kappa === null ? "none" : a.kappa.toFixed(2)) + ")";
+}
+
+/** The sm-judges item's judge calls at a per-call bound of 20,000 input and 1,500 output tokens, priced from prices.ts:
+ *  720 real diffs (Astra judges Opus's 240, Opus judges Sol's and particle-1's 480), three stock diffs per 50 in each
+ *  queue, the second grade on the R78 check's 60 real diffs (priced at Astra's rate, the dearer judge) and both judges
+ *  on every labelled item. */
+export function r78Price() {
+  const per = (id: string) => { const p = CHAT_PRICES[id]!; return (R78_PRICE_BOUND.input_tokens * p.input + R78_PRICE_BOUND.output_tokens * p.output) / 1e6; };
+  const astra = per("openai:gpt-6-astra"), opus = per("anthropic:claude-opus-5-5");
+  const calls = {
+    real_astra: REAL_DIFFS_PER_MODEL, real_opus: 2 * REAL_DIFFS_PER_MODEL,
+    stock_astra: Math.floor(REAL_DIFFS_PER_MODEL / STOCK_EVERY) * STOCK_KINDS.length, stock_opus: Math.floor((2 * REAL_DIFFS_PER_MODEL) / STOCK_EVERY) * STOCK_KINDS.length,
+    r78_real_second: R78_START, labelled: PLANT_UNITS * (PLANT_KINDS.length + STOCK_KINDS.length) * 2,
+  };
+  const usd = (calls.real_astra + calls.stock_astra + calls.r78_real_second) * astra + (calls.real_opus + calls.stock_opus) * opus + (calls.labelled / 2) * (astra + opus);
+  const cap_usd = ITEMS["sm-judges"]!.cap_micros / 1e6;
+  return { bound: R78_PRICE_BOUND, per_call_usd: { astra, opus }, calls, usd, cap_usd, fits: usd <= cap_usd };
 }
 
 /** The judge key for a first-stage diff: what the packet leaves out. */
