@@ -396,3 +396,34 @@ export function assertBlind(packet: LabelPacket | JudgePacket, names: string[]):
   for (const n of names) if (n && s.includes(n)) smFail("E_SM_PACKET", "packet " + packet.packet + " names " + JSON.stringify(n) + "; packets are blind to arm, model and session");
 }
 
+
+// ---- The paid sender's order for the labelled items ----
+
+/** A queue seed: 16 random bytes as hex, minted once when a judge's queue file is first built. */
+export function mintSeed(fill: (b: Uint8Array) => Uint8Array = (b) => crypto.getRandomValues(b)): string {
+  return Buffer.from(fill(new Uint8Array(16))).toString("hex");
+}
+
+/** A Fisher-Yates shuffle driven by sha256(seed:counter), so one seed always gives one order. */
+export function seededShuffle<T>(items: readonly T[], seed: string): T[] {
+  const out = [...items];
+  let n = 0;
+  const next = () => Number(BigInt("0x" + createHash("sha256").update(seed + ":" + n++).digest("hex").slice(0, 13))) / 2 ** 52;
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
+/** One judge's queue of labelled items (plants, stock and real, by packet id) in the order the paid sender sends them. The
+ *  first build mints the seed and writes it with the order to file; a rebuild from an existing file reuses its seed. The
+ *  order shuffles the ids in sorted order, so it does not depend on the order they are handed in. */
+export function labelledQueue(file: string, ids: readonly string[]): { schema: "sm-labelled-queue.v1"; seed: string; order: string[] } {
+  const prior = existsSync(file);
+  const seed = prior ? (JSON.parse(readFileSync(file, "utf8")) as { seed: string }).seed : mintSeed();
+  const q = { schema: "sm-labelled-queue.v1" as const, seed, order: seededShuffle([...ids].sort(), seed) };
+  if (!prior) writeFileSync(file, JSON.stringify(q, null, 1) + "\n", { flag: "wx" });
+  return q;
+}
+
