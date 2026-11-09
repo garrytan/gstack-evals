@@ -7,7 +7,7 @@ author: GEVA-364
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-06
-status: done
+status: superseded
 links:
   - 2026-11-04-geva-262-g-family-admission-prereg
   - 2026-11-03-geva-225-outcome-per-skill-plan

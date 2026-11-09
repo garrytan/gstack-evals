@@ -7,7 +7,7 @@ author: GEVA-232
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-03
-status: done
+status: superseded
 links:
   - 2026-11-03-geva-219-panel-v3-e0-screen-prereg
   - 2026-11-02-geva-165-planning-panel-v3-plan

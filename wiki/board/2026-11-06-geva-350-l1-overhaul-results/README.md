@@ -7,7 +7,7 @@ author: GEVA-350
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-06
-status: open
+status: superseded
 links:
   - 2026-11-03-geva-254-l1-overhaul-prereg-2000
   - 2026-11-05-geva-294-l1-amendment-c
