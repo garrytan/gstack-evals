@@ -2,7 +2,7 @@
 // Keyless tests for the hidden-test count (hidden.ts): Rust doctest ids, the ids an early stop hides, the static
 // no-fail-fast reading of a frozen test command, and the summary counts.
 import { describe, expect, test } from "bun:test";
-import { dropOf, hiddenIds, isDoctest, noFailFast, summarize, type HiddenRecord } from "../../lanes/outcome-skills/statemachines/hidden.ts";
+import { dropOf, f2pPassing, hiddenIds, isDoctest, noFailFast, summarize, type HiddenRecord } from "../../lanes/outcome-skills/statemachines/hidden.ts";
 
 describe("doctest ids", () => {
   test("libtest's doctest forms are doctests", () => {
@@ -19,6 +19,16 @@ describe("hidden ids", () => {
     const second = { "a::t": "pass", "d::t": "fail", "f::new": "fail" };
     expect(hiddenIds(first, second)).toEqual({ doctest: ["src/lib.rs - (line 1)"], other: ["b::t"] });
     expect(hiddenIds(first, { ...second, "b::t": "skip" })).toEqual({ doctest: ["src/lib.rs - (line 1)"], other: [] });
+  });
+});
+
+describe("fail-to-pass ids passing on base", () => {
+  test("the unit's fail-to-pass ids that pass in each run, so an id that passes once the fix's tests are on base shows apart", () => {
+    const f2p = ["m::case_2", "m::case_1", "m::bug", "n::absent"];
+    const first = { "m::bug": "fail", "x::old": "pass" };
+    const second = { "m::bug": "fail", "m::case_1": "pass", "m::case_2": "pass", "x::old": "pass" };
+    expect(f2pPassing(f2p, first, second)).toEqual({ first: [], second: ["m::case_1", "m::case_2"] });
+    expect(f2pPassing(f2p, second, { ...second, "m::case_1": "skip" })).toEqual({ first: ["m::case_1", "m::case_2"], second: ["m::case_2"] });
   });
 });
 

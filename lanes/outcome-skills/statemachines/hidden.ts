@@ -50,12 +50,20 @@ export function noFailFast(cmds: string[]): { no_fail_fast: boolean; how: "flag"
   return { no_fail_fast: false, how: null, runners: inv.length };
 }
 
+/** The unit's fail-to-pass ids that pass in each base run. One that passes in the second run (with fix-tests.patch, as
+ *  the oracle's base runs are under the in-source rule) makes the oracle drop the unit as unstable. */
+export function f2pPassing(f2p: string[], first: Record<string, string>, second: Record<string, string>): { first: string[]; second: string[] } {
+  const on = (r: Record<string, string>) => f2p.filter((id) => passed(r, id)).sort();
+  return { first: on(first), second: on(second) };
+}
+
 export interface HiddenRun { wall_ms: number; exit: number; stopped: boolean; ids: number; passed: number }
 export interface HiddenRecord {
   schema: "sm-hidden.v1"; id: string; month: string; in_window: boolean; hidden_doctests: number; hidden_other: number;
   hidden: { doctest: string[]; other: string[] }; no_fail_fast: boolean; how: "flag" | "per_target" | null;
   /** first: test.patch alone; second: test.patch and fix-tests.patch. */
   runs: { first: HiddenRun; second: HiddenRun } | null;
+  f2p_passing?: { first: string[]; second: string[] };
   drop: { code: string; reason: string } | null;
 }
 
@@ -127,6 +135,7 @@ export async function hiddenUnit(o: { cand: Candidate; row: () => MlRow; units: 
       if (!r.parsed || !Object.keys(r.parsed).length) return { ...rec, drop: { code: "E_SM_PARSER", reason: "the " + n + " run's log parsed to no test id (exit " + r.run.exit + ")" } };
     }
     rec.hidden = hiddenIds(a.parsed!, b.parsed!);
+    rec.f2p_passing = f2pPassing(u.tests.f2p, a.parsed!, b.parsed!);
     return { ...rec, hidden_doctests: rec.hidden.doctest.length, hidden_other: rec.hidden.other.length };
   } catch (e) {
     return dropOf(rec, e);
@@ -151,8 +160,9 @@ export function hiddenMarkdown(recs: HiddenRecord[], st: ReturnType<typeof stati
     srow("all eligible, overall", st.all_eligible.overall), srow("all eligible, in window", st.all_eligible.window),
     srow("eligible Rust, overall", st.rust_eligible.overall), srow("eligible Rust, in window", st.rust_eligible.window),
     srow("in-source Rust, overall", st.in_source.overall), srow("in-source Rust, in window", st.in_source.window), "",
-    "## Per unit", "", "| unit | month | in window | hidden doctests | hidden other | no-fail-fast | first run ids | second run ids | drop |", "|---|---|---|---|---|---|---|---|---|",
-    ...recs.map((r) => "| " + [r.id, r.month, r.in_window ? "yes" : "no", r.drop ? "" : r.hidden_doctests, r.drop ? "" : r.hidden_other, r.no_fail_fast ? r.how : "no", r.runs?.first.ids ?? "", r.runs?.second.ids ?? "", r.drop ? r.drop.code + ": " + r.drop.reason.replace(/\|/g, "/").replace(/\n/g, " ").slice(0, 160) : ""].join(" | ") + " |"),
+    "Measured units whose second base run (with fix-tests.patch) passes a fail-to-pass id, so the oracle drops them as unstable: " + recs.filter((r) => !r.drop && (r.f2p_passing?.second.length ?? 0) > 0).length + " of " + s.overall.measured + ".", "",
+    "## Per unit", "", "| unit | month | in window | hidden doctests | hidden other | no-fail-fast | first run ids | second run ids | f2p passing on base, first / second | drop |", "|---|---|---|---|---|---|---|---|---|---|",
+    ...recs.map((r) => "| " + [r.id, r.month, r.in_window ? "yes" : "no", r.drop ? "" : r.hidden_doctests, r.drop ? "" : r.hidden_other, r.no_fail_fast ? r.how : "no", r.runs?.first.ids ?? "", r.runs?.second.ids ?? "", r.f2p_passing ? r.f2p_passing.first.length + " / " + r.f2p_passing.second.length : "", r.drop ? r.drop.code + ": " + r.drop.reason.replace(/\|/g, "/").replace(/\n/g, " ").slice(0, 160) : ""].join(" | ") + " |"),
     "",
   ].join("\n");
 }
