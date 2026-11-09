@@ -146,8 +146,14 @@ export function loadWiki(root: string): { entries: Entry[]; problems: Problem[] 
   for (const name of readdirSync(wiki).sort()) {
     if (name === "README.md" || name === "INDEX.md") continue;
     const rel = "wiki/" + name;
+    if (name === "edits" && statSync(join(wiki, name)).isDirectory()) {
+      for (const item of readdirSync(join(wiki, name)).sort()) {
+        if (!item.endsWith(".tsv") || statSync(join(wiki, name, item)).isDirectory()) problems.push({ file: rel + "/" + item, message: "unexpected file: wiki/edits/ holds only <name>.tsv waiver files" });
+      }
+      continue;
+    }
     if (!(name in SECTIONS) || !statSync(join(wiki, name)).isDirectory()) {
-      problems.push({ file: rel, message: "unexpected file: wiki/ holds README.md, INDEX.md, board/, plans/ and research/" });
+      problems.push({ file: rel, message: "unexpected file: wiki/ holds README.md, INDEX.md, board/, plans/, research/ and edits/" });
       continue;
     }
     for (const item of readdirSync(join(wiki, name)).sort()) {
@@ -286,7 +292,25 @@ const isEntryPath = (path: string) => {
   return (parts.length === 3 && parts[2].endsWith(".md")) || (parts.length === 4 && parts[3] === "README.md");
 };
 
+const DIGEST = /^[0-9a-f]{64}$/;
+const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+
 export function checkImmutable(root: string, baseFiles: Map<string, Buffer>, problems: Problem[]) {
+  const waived = new Set<string>();
+  const edits = join(root, "wiki", "edits");
+  for (const name of existsSync(edits) && statSync(edits).isDirectory() ? readdirSync(edits).sort() : []) {
+    if (!name.endsWith(".tsv") || statSync(join(edits, name)).isDirectory()) continue;
+    readFileSync(join(edits, name), "utf8").split("\n").forEach((line, i) => {
+      if (line === "") return;
+      const p = (message: string) => problems.push({ file: "wiki/edits/" + name, line: i + 1, message });
+      const f = line.split("\t");
+      if (f.length !== 4) p("a waiver row is four tab-separated fields: path, sha256 before, sha256 after, reason");
+      else if (!DIGEST.test(f[1]) || !DIGEST.test(f[2])) p("a waiver digest must be 64 lowercase hex characters");
+      else if (!f[3].trim()) p("a waiver row needs a reason");
+      else if (!baseFiles.has(f[0])) p('waiver path "' + f[0] + '" is not a merged file at the base');
+      else waived.add(f.slice(0, 3).join("\t"));
+    });
+  }
   for (const [path, before] of baseFiles) {
     const abs = join(root, path);
     if (!existsSync(abs)) {
@@ -295,7 +319,7 @@ export function checkImmutable(root: string, baseFiles: Map<string, Buffer>, pro
     }
     const now = readFileSync(abs);
     const changed = isEntryPath(path) ? stripStatus(before.toString("utf8")) !== stripStatus(now.toString("utf8")) : !before.equals(now);
-    if (changed) problems.push({ file: path, message: "merged post was edited; only its status may change (write a new post that supersedes it)" });
+    if (changed && !waived.has([path, sha256(before), sha256(now)].join("\t"))) problems.push({ file: path, message: "merged post was edited; only its status may change (write a new post that supersedes it)" });
   }
 }
 

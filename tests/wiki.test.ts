@@ -298,6 +298,54 @@ describe("the check", () => {
     const out = problems(root, { markers: [], baseFiles: merged });
     expect(out).toContainEqual(BUNDLE + "/notes/a.md: merged post was edited; only its status may change (write a new post that supersedes it)");
   });
+
+  test("lets an edit through only when a waiver row matches its path and both digests", () => {
+    const text = post(fields(DECISION_ID, "decision"));
+    const edited = text.replace("Body.", "Edited body.");
+    const row = (before: string, after: string) => [DECISION, before, after, "GST-1060 public cleanup, wording only"].join("\t") + "\n";
+    const WAIVER = "wiki/edits/cleanup.tsv";
+    const root = makeWiki({ [DECISION]: edited, [WAIVER]: row(sha(text), sha(edited)) });
+    const check = () => problems(root, { markers: [], baseFiles: new Map([[DECISION, Buffer.from(text)]]) });
+    expect(check()).toEqual([]);
+
+    write(root, DECISION, edited.replace("Edited body.", "Edited again."));
+    expect(check()).toContainEqual(expect.stringContaining(DECISION + ": merged post was edited"));
+
+    write(root, DECISION, edited);
+    unlinkSync(join(root, WAIVER));
+    expect(check()).toContainEqual(expect.stringContaining(DECISION + ": merged post was edited"));
+
+    write(root, WAIVER, row(sha("another text"), sha(edited)));
+    expect(check()).toContainEqual(expect.stringContaining(DECISION + ": merged post was edited"));
+
+    write(root, WAIVER, row(sha(text), sha(edited)));
+    unlinkSync(join(root, DECISION));
+    expect(check()).toContainEqual(expect.stringContaining(DECISION + ": merged file was removed or renamed"));
+  });
+
+  test("fails on malformed waiver rows and on other files in wiki/edits/", () => {
+    const text = post(fields(DECISION_ID, "decision"));
+    const d = sha(text);
+    const rows = [
+      [DECISION, d, d],
+      [DECISION, d.toUpperCase(), d, "why"],
+      [DECISION, d, d.slice(1), "why"],
+      [DECISION, d, d, " "],
+      ["wiki/board/2026-10-28-gsta-9-missing.md", d, d, "why"],
+      [DECISION, d, d, "why", "more"],
+    ];
+    const root = makeWiki({ [DECISION]: text, "wiki/edits/bad.tsv": rows.map((r) => r.join("\t")).join("\n") + "\n", "wiki/edits/notes.md": "x" });
+    const fields4 = "a waiver row is four tab-separated fields: path, sha256 before, sha256 after, reason";
+    expect(problems(root, { markers: [], baseFiles: new Map([[DECISION, Buffer.from(text)]]) })).toEqual([
+      "wiki/edits/notes.md: unexpected file: wiki/edits/ holds only <name>.tsv waiver files",
+      "wiki/edits/bad.tsv:1: " + fields4,
+      "wiki/edits/bad.tsv:2: a waiver digest must be 64 lowercase hex characters",
+      "wiki/edits/bad.tsv:3: a waiver digest must be 64 lowercase hex characters",
+      "wiki/edits/bad.tsv:4: a waiver row needs a reason",
+      'wiki/edits/bad.tsv:5: waiver path "wiki/board/2026-10-28-gsta-9-missing.md" is not a merged file at the base',
+      "wiki/edits/bad.tsv:6: " + fields4,
+    ]);
+  });
 });
 
 describe("the index", () => {
