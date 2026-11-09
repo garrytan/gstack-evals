@@ -43,26 +43,18 @@ export function custody<T>(o: CustodyOptions, read: (dir: string) => T): T {
     return fail("E_AR_CUSTODY", why);
   };
   if (!existsSync(shm) || !realpathSync(shm).startsWith("/dev/shm")) incident("the decrypt directory is not on /dev/shm");
-  const sums = new Map(readFileSync(o.sums, "utf8").split("\n").filter((l) => l.trim()).map((l) => [l.slice(66).trim(), l.slice(0, 64)] as const));
-  for (const f of o.files) if (sums.get(basename(f)) !== sha256(readFileSync(f))) incident("a told record's sha256 differs from its SHA256SUMS line (" + basename(f).length + "-character name)");
   for (const name of readdirSync(shm).filter((n) => n.startsWith("ar-custody-"))) {
     const left = join(shm, name);
     rmSync(left, { recursive: true, force: true });
     if (existsSync(left)) incident("a custody directory an earlier run left behind is still on disk after its removal");
     line(o.log, "incident: removed a leftover custody directory from an earlier run (test ! -e passed)", now);
   }
+  const sums = new Map(readFileSync(o.sums, "utf8").split("\n").filter((l) => l.trim()).map((l) => [l.slice(66).trim(), l.slice(0, 64)] as const));
+  for (const f of o.files) if (sums.get(basename(f)) !== sha256(readFileSync(f))) incident("a told record's sha256 differs from its SHA256SUMS line (" + basename(f).length + "-character name)");
   const dir = mkdtempSync(join(shm, "ar-custody-"));
   const dec = join(dir, "told");
   mkdirSync(dec, { mode: 0o700 });
   const identity = join(dir, "identity");
-  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
-  const onSignal = (sig: (typeof signals)[number]) => {
-    rmSync(identity, { force: true });
-    rmSync(dir, { recursive: true, force: true });
-    line(o.log, "incident: " + sig + " during custody, decrypted directory removed (test ! -e " + (existsSync(dir) ? "FAILED" : "passed") + ")", now);
-    process.exit(128 + { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 }[sig]);
-  };
-  for (const s of signals) process.on(s, onSignal);
   line(o.log, "open: " + o.files.length + " told records, digests checked, decrypting into " + dir, now);
   let result: T | undefined;
   let error: unknown = null;
@@ -91,9 +83,6 @@ export function custody<T>(o: CustodyOptions, read: (dir: string) => T): T {
     const swept = sweep(sweepDirs, opened);
     line(o.log, "close: decrypted directory removed (test ! -e " + (gone ? "passed" : "FAILED") + "), sweep deleted " + swept + " told-named files unopened", now);
     if (!gone) error ??= new ArError("E_AR_CUSTODY", "a decrypted told file is still on disk");
-    setImmediate(() => {
-      for (const s of signals) process.off(s, onSignal);
-    });
   }
   if (error) throw error;
   return result as T;

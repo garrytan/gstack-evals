@@ -53,10 +53,11 @@ describe("the request journal and the meter", () => {
     let sends = 0;
     const m = await openMeter({ item: name, runId: name, out: join(dir, "tripwire"), maxOutputTokens: 16_000, forbiddenMarkers: ["Tan"], record, ledger, env: DRY_ENV, fetch: stubUpstream(() => (sends++, { status: 400 })) });
     try {
-      const leak = { ...req, prompt: "The Tangible part follows" };
-      const a = await ask(new Journal(join(dir, "tripwire", "journal")), m.call, leak, parse).then(() => "returned", (e) => (e as { code?: string }).code);
-      const b = await ask(new Journal(join(dir, "tripwire", "journal")), m.call, leak, parse).then((x) => x.missing, (e) => (e as { code?: string }).code);
-      expect({ a, b, sends }).toEqual({ a: "E_AR_PACKET_LEAK", b: "invalid", sends: 0 });
+      const leak = { ...req, prompt: "The Tangible part follows", label: "unit:run-secret-7|k:opus:medium" };
+      const stop = (e: unknown) => ({ code: (e as { code?: string }).code, label: String((e as Error).message).includes("run-secret-7") });
+      const a = await ask(new Journal(join(dir, "tripwire", "journal")), m.call, leak, parse).then(() => "returned", stop);
+      const b = await ask(new Journal(join(dir, "tripwire", "journal")), m.call, leak, parse).then((x) => x.missing, stop);
+      expect({ a, b, sends }).toEqual({ a: { code: "E_AR_PACKET_LEAK", label: false }, b: { code: "E_AR_PACKET_LEAK", label: false }, sends: 0 });
     } finally {
       await m.close();
     }

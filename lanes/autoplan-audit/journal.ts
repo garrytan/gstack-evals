@@ -11,8 +11,8 @@ import { join } from "node:path";
 import type { CallRequest, CallResult, ModelKey } from "./meter.ts";
 import { MeterError, MODELS, requestBody, requestDigest } from "./meter.ts";
 
-export type JState = "pending" | "label" | "invalid" | "unknown" | "failed" | "retried";
-export const TERMINAL: ReadonlySet<JState> = new Set(["label", "invalid", "unknown", "retried"]);
+export type JState = "pending" | "label" | "invalid" | "unknown" | "failed" | "retried" | "leak";
+export const TERMINAL: ReadonlySet<JState> = new Set(["label", "invalid", "unknown", "retried", "leak"]);
 
 export interface JRow {
   digest: string;
@@ -126,6 +126,7 @@ export async function ask(j: Journal, call: (req: CallRequest) => Promise<CallRe
   const meta = { model: req.model, cell: req.label };
   for (;;) {
     const row = j.get(digest);
+    if (row?.state === "leak") throw new MeterError("E_AR_PACKET_LEAK", "the metering proxy refused a packet (digest " + digest.slice(0, 12) + ") on this sink earlier; start a new run with a new sink");
     if (row?.state === "label") {
       const hit = j.serve(digest);
       if (hit) return { digest, text: hit.text, label: hit.label, missing: null, cached: true, result: null };
@@ -147,8 +148,8 @@ export async function ask(j: Journal, call: (req: CallRequest) => Promise<CallRe
     }
     j.hit("after-settle", req.label);
     if (res.text === null && res.problem?.startsWith("E_TRIPWIRE")) {
-      j.set(digest, "invalid", { ...meta, retries });
-      throw new MeterError("E_AR_PACKET_LEAK", "the metering proxy refused a packet for a forbidden marker (" + req.label + "); no packet is sent again");
+      j.set(digest, "leak", { ...meta, retries });
+      throw new MeterError("E_AR_PACKET_LEAK", "the metering proxy refused a packet (digest " + digest.slice(0, 12) + ") for a forbidden marker; no packet is sent again");
     }
     if (res.text === null && res.status !== 200 && res.unknown) {
       j.set(digest, "unknown", { ...meta, retries });
