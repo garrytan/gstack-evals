@@ -19,9 +19,16 @@ import { bundleLists, REPO, SCREEN, taskSetup } from "./pins.ts";
 import { gstackAtPin, imageRef, pool } from "./screen.ts";
 
 export const D1_TASK = "tobymao__sqlglot-6413";
-export const D1 = { pass: 2, maxTasks: 4 };
-export const EDIT_RULE = "the first tracked top-level package module (not a test, doc, script or private file) that a tracked test_<name>.py names";
-const PICK = "for f in $(git ls-files '*.py' | grep -E '^[A-Za-z0-9_]+/[a-z][A-Za-z0-9_]*[.]py$' | grep -v -E '^(tests?|docs?|scripts?|examples?|benchmarks?)/|test'); do git ls-files | grep -q \"test_$(basename \"$f\" .py)[.]py$\" && { echo \"$f\"; break; }; done";
+export const D1 = { pass: 2, maxTasks: 4, maxSelected: 300 };
+export const EDIT_RULE = "the first tracked top-level package module (not a test, doc, script or private file) that a tracked test_<name>.py names and whose pregate selection is 1 to " + D1.maxSelected + " test files";
+// Every tracked top-level package module (the filters above) that a tracked test_<name>.py names, in git ls-files order.
+const CANDIDATES = "for f in $(git ls-files '*.py' | grep -E '^[A-Za-z0-9_]+/[a-z][A-Za-z0-9_]*[.]py$' | grep -v -E '^(tests?|docs?|scripts?|examples?|benchmarks?)/|test'); do git ls-files | grep -q \"test_$(basename \"$f\" .py)[.]py$\" && echo \"$f\"; done";
+
+// The candidates' selection counts from HM_CANDIDATE lines, in order: the first by name, and the first in range (the edit).
+export function editPick(text: string): { first: { file: string; selected: number } | null; edit: { file: string; selected: number } | null } {
+  const c = [...text.matchAll(/^HM_CANDIDATE (\S+) (-?\d+)$/gm)].map((m) => ({ file: m[1]!, selected: Number(m[2]) }));
+  return { first: c[0] ?? null, edit: c.find((x) => x.selected >= 1 && x.selected <= D1.maxSelected) ?? null };
+}
 
 export function checksTrust(): string {
   const m = /^CHECKS_TRUST = "([^"\n]+)"$/m.exec(readFileSync(join(REPO, "quick/laneb/runner/agent/laneb_hooks.py"), "utf8"));
@@ -110,16 +117,19 @@ export function stepD1Checks(out: string): StepResult {
         start(c, tag, "prose");
         origin(c);
         const py = pytest(c), inEnv = py.startsWith(s.envDir + "/");
-        const edit = inEnv ? exec(c, 'f=$(' + PICK + ') && [ -n "$f" ] && echo "# hm d1 probe edit" >> "$f" && echo "$f"') : null;
-        const f = edit && edit.code === 0 ? edit.out.trim() : "";
+        // The edit, before any test runs: each candidate gets the one-line edit and its selection count, the first in range
+        // keeps it, and the others are restored.
+        const search = inEnv ? exec(c, CANDIDATES + ' | while read -r f; do echo "# hm d1 probe edit" >> "$f"; n=$(' + selected + ' | sed -n "s/^HM_SELECTED //p"); echo "HM_CANDIDATE $f ${n:--1}"; [ "${n:--1}" -ge 1 ] && [ "${n:--1}" -le ' + D1.maxSelected + ' ] && break; git checkout -q -- "$f"; done', 1800) : null;
+        const pick = editPick(search ? search.out : ""), f = pick.edit?.file ?? "";
+        if (pick.first && pick.first.selected > D1.maxSelected) lines.push("d1-checks fit " + t + ": first module " + pick.first.file + " selects " + pick.first.selected + ", over " + D1.maxSelected);
         if (!inEnv) lines.push("d1-checks fit " + t + ": pytest " + (py || "missing") + ", not under " + s.envDir);
-        else if (!f) lines.push("d1-checks fit " + t + ": no tracked module that a test_<name>.py names");
+        else if (!f) lines.push("d1-checks fit " + t + ": " + (pick.first ? "no module that a test_<name>.py names selects 1 to " + D1.maxSelected + " test files" : "no tracked module that a test_<name>.py names"));
         else {
           const before = exec(c, loop);
           if (before.code === 0 || !/CHECKS_CONSENT_REQUIRED/.test(before.out + before.err)) throw new Error(t + ": the loop did not refuse before trust (exit " + before.code + ")");
           const tr = exec(c, trust, 300);
           if (tr.code !== 0) throw new Error(t + ": trust exited " + tr.code + ": " + last(tr.err));
-          const count = exec(c, selected, 300), run = exec(c, loop, 1800), lr = loopResult(count.out + "\n" + run.out);
+          const run = exec(c, loop, 1800), lr = loopResult("HM_SELECTED " + pick.edit!.selected + "\n" + run.out);
           const checks = lr.checks.map((x) => (x.startsWith("tests ") ? x + " (" + lr.selected + " selected)" : x)).join(", ") || "no CHECK line, " + lr.selected + " selected (exit " + run.code + ": " + last(run.out + "\n" + run.err) + ")";
           if (lr.selected >= 1 && lr.check) {
             passed.push(t);

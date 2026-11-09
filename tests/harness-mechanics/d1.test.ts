@@ -12,7 +12,7 @@ import { ARM_SPECS as L1_ARMS, L1_PROFILE } from "../../quick/laneb/l1/l1.ts";
 import { ARMS, bundleLists, REPO, sha256, TASK_SETUP, taskSetup } from "../../lanes/harness-mechanics/pins.ts";
 import { HM_PROFILE } from "../../lanes/harness-mechanics/plans.ts";
 import { pool, screen, type Detect } from "../../lanes/harness-mechanics/screen.ts";
-import { checksTrust, D1_TASK, d1Order, loopResult, verifyLoop } from "../../lanes/harness-mechanics/d1.ts";
+import { checksTrust, D1, D1_TASK, d1Order, editPick, loopResult, verifyLoop } from "../../lanes/harness-mechanics/d1.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "hm-d1-"));
 const kwargs = (spec: string) => {
@@ -145,6 +145,13 @@ describe("d1-checks parsers", () => {
     expect(loopResult("HM_SELECTED 0\nCHECK tests PASS 1.0s\n")).toEqual({ selected: 0, check: "PASS", checks: ["tests PASS"] });
     expect(loopResult("gstack-checks: these commands are not trusted for /testbed; nothing was run (CHECKS_CONSENT_REQUIRED)\n")).toEqual({ selected: 0, check: null, checks: [] });
     expect(loopResult("HM_SELECTED 820\nCHECK lint ENV 0.0s  missing-binary: ruff\nCHECK typecheck ENV 0.0s  missing-binary: mypy\nCHECK tests TOO_BROAD 1.1s  pregate selected 820 test files\n")).toEqual({ selected: 820, check: null, checks: ["lint ENV", "typecheck ENV", "tests TOO_BROAD"] });
+  });
+  test("the edit is the first candidate selecting 1 to 300 files, and the first by name is reported when it selects more", () => {
+    expect(editPick("HM_CANDIDATE a/x.py 820\nHM_CANDIDATE a/y.py 0\nHM_CANDIDATE a/z.py 42\n")).toEqual({ first: { file: "a/x.py", selected: 820 }, edit: { file: "a/z.py", selected: 42 } });
+    expect(editPick("HM_CANDIDATE a/x.py 301\nHM_CANDIDATE a/y.py -1\n")).toEqual({ first: { file: "a/x.py", selected: 301 }, edit: null });
+    expect(editPick("HM_CANDIDATE a/x.py 300\n").edit).toEqual({ file: "a/x.py", selected: 300 });
+    expect(editPick("")).toEqual({ first: null, edit: null });
+    expect(D1.maxSelected).toBe(300);
   });
   test("tasks are tried from the probe task, then calibration order, one per repository not tried yet", () => {
     const p = pool(), cal = bundleLists().calibration, order = d1Order(cal, (t) => p.get(t)?.repo);
