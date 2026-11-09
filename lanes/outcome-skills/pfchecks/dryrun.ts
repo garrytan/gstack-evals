@@ -265,7 +265,7 @@ export async function main(argv: string[]): Promise<number> {
       task: { end: tEnd, turns: r.turns.task?.result?.num_turns ?? null, wall_ms: 0, spent_micros: 0 }, wrapup: { ends, turns: null, spent_micros: 0 },
       wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
       checks: keep.checks ? join(r.out, "CHECKS.json") : null, s: { repo: join(r.out, "s.bundle"), ref: "HEAD" }, transcript: join(r.out, "sdk-messages.jsonl"),
-      effort: first ? effortFields(first.body) : null, questions: { ask_user_question: 0, prose: 0 }, env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
+      claude_session: join(r.out, "claude-session.jsonl"), effort: first ? effortFields(first.body) : null, questions: { ask_user_question: 0, prose: 0 }, env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
       disallowed_tools: ["WebSearch", "WebFetch"], plugin: r.arm === "P" || r.arm === "blind" ? PSTACK_DIR : null, tools: toolsVolume(),
     };
     const file = join(r.out, "session.json");

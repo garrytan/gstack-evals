@@ -4,7 +4,7 @@
 // record comes out. The executor is injected so keyless tests use a fake; the CLI passes the Docker executor.
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { classify, isTestPath } from "../statemachines/langs.ts";
 import { basePatches } from "../statemachines/oracle.ts";
 import { patchFiles } from "../statemachines/source.ts";
@@ -23,11 +23,12 @@ import { buildTrees, changesOf, git, show, withoutFiles } from "./trees.ts";
 
 /** The session record fields scoring reads (the session runner writes the rest). gap: the session's own harness gap
  *  (E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP after its one retry); wrapup_end: how the wrap-up turn ended; forced: the
- *  force-captured paths from the session-end commit. */
-export interface SessionIn { unit?: string; model?: string; arm?: Arm; gap?: string | null; wrapup_end?: string | null; forced?: string[]; transcript?: string | null }
+ *  force-captured paths from the session-end commit; claude_session: Claude Code's own transcript (claude-session.jsonl, by
+ *  default beside the transcript), where P's skill body appears. */
+export interface SessionIn { unit?: string; model?: string; arm?: Arm; gap?: string | null; wrapup_end?: string | null; forced?: string[]; transcript?: string | null; claude_session?: string | null }
 
 export interface ScoreIn {
-  s: string; ref?: string; unitDir: string; neutral: string; checks: string | null; session: string; transcript?: string | null;
+  s: string; ref?: string; unitDir: string; neutral: string; checks: string | null; session: string; transcript?: string | null; claudeSession?: string | null;
   exec: (repo: string, u: SmUnit) => Executor & { cleanup?: () => void };
   breaks?: (repo: string, t: string, u: SmUnit) => (Record<string, string> | null)[] | null;
   now?: () => number; ceiling_ms?: number;
@@ -66,7 +67,9 @@ export async function scoreSession(o: ScoreIn) {
     const m = readManifest(text, facts, { wrapupLimit: /^limit/.test(sess.wrapup_end ?? "") });
     const transcript = o.transcript ?? sess.transcript ?? null;
     const records = transcript && existsSync(transcript) ? readSession(transcript) : null;
-    const exposure = { ...(records ? { ...pLoaded(records), checker: ranChecker(records) } : { body: null, statechart_read: null, loaded: null, checker: null }), procedure: pProcedure(edited.filter((f) => f.status === "A")), code_test: codeTest(u.lang, testFiles, tChanges) };
+    const ccFile = o.claudeSession ?? sess.claude_session ?? (transcript ? join(dirname(transcript), "claude-session.jsonl") : null);
+    const cc = ccFile && existsSync(ccFile) ? readSession(ccFile) : null;
+    const exposure = { ...(records ? { ...pLoaded(records, cc), checker: ranChecker(records) } : { body: null, statechart_read: null, loaded: null, checker: null }), procedure: pProcedure(edited.filter((f) => f.status === "A")), code_test: codeTest(u.lang, testFiles, tChanges) };
     const transplant = { product_files: trees.plan.product_files, deleted_restored: trees.plan.deleted_restored, kept_test_hunks: trees.plan.kept_test_hunks, restored_hunks: trees.plan.restored_hunks, mixed_hunks: trees.plan.mixed_hunks };
     const base = { ...head, trees: { s: trees.s, base: trees.base, parent: trees.parent, fix: trees.fix, neutral: trees.neutral }, manifest: { none: m.none, listed: m.listed, skipped: m.skipped, inline: m.inline, names_nothing: m.names_nothing, beyond_cap: m.beyond_cap, run: m.run.map((e) => e.index) }, exposure, transplant, force_captured: (sess.forced ?? []).length };
     if (trees.gap) return { ...base, score: null, gap: trees.gap, conflict: trees.conflict, readings: { no_static: null, no_api_guess: null, compile_rerun: null } };

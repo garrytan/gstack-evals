@@ -81,6 +81,18 @@ test.skipIf(!HAS_DOCKER)("scoreSession: catch, transplant, compile-blocked rerun
   expect(ex!.calls.filter((x) => x === "parent:bash checks/regress_test.sh").length).toBe(3);
 });
 
+test.skipIf(!HAS_DOCKER)("scoreSession: P's exposure reads the skill body from the session's claude-session.jsonl", async () => {
+  const f = fixture();
+  const sdk = f.file("sdk-messages.jsonl", JSON.stringify({ type: "AssistantMessage", phase: "task", content: [{ type: "tool_use", name: "Read", input: { file_path: "/opt/pf-pstack/skills/statechart/SKILL.md" } }] }) + "\n");
+  const cc = (name: string, text: string) => f.file(name, JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n");
+  const rec = (name: string, claude_session: string) => f.file(name, { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "P", gap: null, wrapup_end: "limit_turns", forced: [], transcript: sdk, claude_session });
+  const run = (session: string): Promise<any> => scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks: null, session, exec: () => { throw new Error("no run expected"); } });
+  const loaded = await run(rec("p-body.json", cc("claude-session.jsonl", "# Create a formal verification skill\nSteps")));
+  expect(loaded.exposure).toMatchObject({ body: true, statechart_read: true, loaded: true });
+  const none = await run(rec("p-none.json", cc("claude-session-none.jsonl", "/create-formal-verification-skill model the state machine behind this bug report")));
+  expect(none.exposure).toMatchObject({ body: false, statechart_read: true, loaded: false });
+});
+
 test.skipIf(!HAS_DOCKER)("scoreSession: a wrap-up limit with no manifest scores 0 without a run; a session gap scores null", async () => {
   const f = fixture();
   const limit = f.file("limit.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "P", gap: null, wrapup_end: "limit_turns", forced: [] });

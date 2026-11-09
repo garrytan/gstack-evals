@@ -1,12 +1,14 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Plan section 8's exposure detectors, keyless. The transcript is the session's sdk-messages.jsonl, read with
-// arms/exposure.ts readTranscript as the state machines sessions record it. Exposure decides nothing; it prints beside
-// every verdict.
+// arms/exposure.ts readTranscript as the state machines sessions record it. P's skill body is read from Claude Code's own
+// transcript too (claude-session.jsonl), because from Claude Code 2.1.310 the expanded body reaches the request and that
+// transcript, not the SDK stream. Exposure decides nothing; it prints beside every verdict.
 import { readTranscript } from "../arms/exposure.ts";
 import { isTestPath, type Lang } from "../statemachines/langs.ts";
+import { WRAPUP } from "./arms.ts";
 import type { Change } from "./transplant.ts";
 
-type Rec = { type?: string; content?: unknown };
+type Rec = { type?: string; content?: unknown; phase?: string };
 export const P_HEADING = "# Create a formal verification skill";
 export const STATECHART_SKILL = /(^|\/)statechart\/SKILL\.md$/;
 /** The frozen checker list: TLC (tlc2.TLC, tla2tools.jar, a script in statechart's skill dir) and the other checkers. */
@@ -16,10 +18,20 @@ export const runsChecker = (cmd: string): boolean => CHECKER.some((r) => r.test(
 const toolInputs = (records: Rec[], name: string): Record<string, unknown>[] =>
   records.flatMap((r) => (r.type === "AssistantMessage" && Array.isArray(r.content) ? (r.content as Array<Record<string, any>>).filter((b) => b?.type === "tool_use" && b.name === name).map((b) => (b.input ?? {}) as Record<string, unknown>) : []));
 
-/** P loaded: the skill body's heading appears in the transcript and a Read of statechart's SKILL.md appears. */
-export function pLoaded(records: Rec[]): { body: boolean; statechart_read: boolean; loaded: boolean } {
-  const body = records.some((r) => JSON.stringify(r).includes(P_HEADING));
-  const statechart_read = toolInputs(records, "Read").some((i) => STATECHART_SKILL.test(String(i.file_path ?? "")));
+const WRAPUP_MARK = WRAPUP.slice(0, WRAPUP.indexOf(":"));
+/** Claude Code's own transcript holds both turns (the wrap-up turn resumes the session); its task turn is everything
+ *  before the first record that carries the wrap-up turn's text. */
+const taskPart = (cc: Rec[]): Rec[] => {
+  const i = cc.findIndex((r) => JSON.stringify(r).includes(WRAPUP_MARK));
+  return i < 0 ? cc : cc.slice(0, i);
+};
+
+/** P loaded: in the task turn, the skill body's heading appears in the SDK stream or in Claude Code's own transcript
+ *  (claudeSession, claude-session.jsonl), and a Read of statechart's SKILL.md appears. */
+export function pLoaded(records: Rec[], claudeSession: Rec[] | null = null): { body: boolean; statechart_read: boolean; loaded: boolean } {
+  const task = records.filter((r) => r.phase === undefined || r.phase === "task");
+  const body = [...task, ...(claudeSession ? taskPart(claudeSession) : [])].some((r) => JSON.stringify(r).includes(P_HEADING));
+  const statechart_read = toolInputs(task, "Read").some((i) => STATECHART_SKILL.test(String(i.file_path ?? "")));
   return { body, statechart_read, loaded: body && statechart_read };
 }
 export const ranChecker = (records: Rec[]): boolean => toolInputs(records, "Bash").some((i) => runsChecker(String(i.command ?? "")));

@@ -81,11 +81,13 @@ test("the session record refuses a plugin on C and a record with no S", () => {
   const r: PfSessionRecord = {
     schema: "pf-session.v1", unit: "u", part: 1, index: 0, model: "claude-opus-5-5", arm: "C", item: "pf-opus", lease_id: "l", attempt: 1, names: "short",
     task: { end: "completed", turns: 3, wall_ms: 1, spent_micros: 1 }, wrapup: { ends: ["completed"], turns: 1, spent_micros: 1 }, wrapup_end: "completed", gap: null,
-    capture: null, forced: [], discarded: [], checks: null, s: { repo: "/r", ref: "HEAD" }, transcript: null, effort: null, questions: { ask_user_question: 0, prose: 0 },
+    capture: null, forced: [], discarded: [], checks: null, s: { repo: "/r", ref: "HEAD" }, transcript: null, claude_session: null, effort: null, questions: { ask_user_question: 0, prose: 0 },
     env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" }, disallowed_tools: ["WebSearch", "WebFetch"], plugin: null, tools: "pf-tools-x",
   };
   writeSessionRecord(join(dir, "ok.json"), r);
   expect(() => writeSessionRecord(join(dir, "ok.json"), r)).toThrow();
   expect(() => writeSessionRecord(join(dir, "p.json"), { ...r, plugin: "/opt/pf-pstack" })).toThrow(/E_PF_ARM/);
   expect(() => writeSessionRecord(join(dir, "s.json"), { ...r, s: null })).toThrow(/E_PF_INPUT/);
+  expect(() => writeSessionRecord(join(dir, "pn.json"), { ...r, arm: "P", plugin: "/opt/pf-pstack" })).toThrow(/claude-session/);
+  writeSessionRecord(join(dir, "pc.json"), { ...r, arm: "P", plugin: "/opt/pf-pstack", claude_session: "/r/claude-session.jsonl" });
 });
