@@ -1,13 +1,16 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Dry-run step d1-checks, live with Docker and HM_GSTACK at the pin: D1's build check that /verify's loop selects tests
-// and prints a CHECK line on two tasks. On D1_TASK and the first calibration task from another repository it builds the
-// task image FROM the pinned image with the task workdir, Lane B's runtime PATH line and task-setup.Dockerfile, checks
-// that origin/main is HEAD and pytest resolves in the task's env, extracts the prose tar, makes a one-line edit to a
-// tracked source file, runs the loop before trust (it must refuse with CHECKS_CONSENT_REQUIRED), runs laneb_hooks.py's
+// and prints a CHECK line on two tasks. It tries D1_TASK first, then calibration tasks in calibration.txt order, each from
+// a repository not tried yet, and stops once D1.pass tasks pass or D1.maxTasks have been tried. For each task it builds
+// the image FROM the pinned task image with the task workdir, Lane B's runtime PATH line and task-setup.Dockerfile,
+// checks that origin/main is HEAD and pytest resolves in the task's env, extracts the prose tar, makes a one-line edit
+// (EDIT_RULE), runs the loop before trust (it must refuse with CHECKS_CONSENT_REQUIRED), runs laneb_hooks.py's
 // CHECKS_TRUST, counts the test files gstack's pregate selection picks and runs the loop command from the pin's
-// verify/SKILL.md (which prints no count). On D1_TASK it also checks the none tar (the same
-// origin and PATH, no gstack file) and that the loop exits 3 once the origin is removed. Every container and image it
-// made is removed after; the commands and their output go to <out>/d1-checks.txt.
+// verify/SKILL.md (which prints no count). A task passes with one or more selected test files and a CHECK tests PASS or
+// FAIL line; one that can't (TOO_BROAD, ENV, no env pytest, no module to edit) prints a fit line and fails nothing by
+// itself. On D1_TASK it also checks the none tar (the same origin and PATH, no gstack file) and that the loop exits 3
+// with no pregate context once the origin is removed. Each task's containers and images are removed after it; the lines,
+// commands and output go to <out>/d1-checks.txt.
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,8 +19,8 @@ import { bundleLists, REPO, SCREEN, taskSetup } from "./pins.ts";
 import { gstackAtPin, imageRef, pool } from "./screen.ts";
 
 export const D1_TASK = "tobymao__sqlglot-6413";
-// The edit goes to the first tracked top-level package module (not a test, doc, script or private file) that a tracked
-// test_<name>.py names, so pregate has a test to select.
+export const D1 = { pass: 2, maxTasks: 4 };
+export const EDIT_RULE = "the first tracked top-level package module (not a test, doc, script or private file) that a tracked test_<name>.py names";
 const PICK = "for f in $(git ls-files '*.py' | grep -E '^[A-Za-z0-9_]+/[a-z][A-Za-z0-9_]*[.]py$' | grep -v -E '^(tests?|docs?|scripts?|examples?|benchmarks?)/|test'); do git ls-files | grep -q \"test_$(basename \"$f\" .py)[.]py$\" && { echo \"$f\"; break; }; done";
 
 export function checksTrust(): string {
@@ -34,10 +37,18 @@ export function verifyLoop(gstack: string): string {
   return m[1]!;
 }
 
-// The count line SELECTED prints and the loop's CHECK tests verdict, if a line printed one.
-export function loopResult(text: string): { selected: number; check: string | null } {
+// The count line the step's selection probe prints, the loop's CHECK tests verdict if one printed, and every CHECK line
+// as "<name> <VERDICT>".
+export function loopResult(text: string): { selected: number; check: string | null; checks: string[] } {
   const sel = /^HM_SELECTED (\d+)$/m.exec(text), check = /^CHECK tests (PASS|FAIL)\b/m.exec(text);
-  return { selected: sel ? Number(sel[1]) : 0, check: check ? check[1]! : null };
+  return { selected: sel ? Number(sel[1]) : 0, check: check ? check[1]! : null, checks: [...text.matchAll(/^CHECK (\S+) ([A-Z_]+)\b/gm)].map((m) => m[1] + " " + m[2]) };
+}
+
+// The order d1-checks tries tasks in: D1_TASK, then calibration tasks in file order, each from a repository not tried yet.
+export function d1Order(calibration: string[], repoOf: (t: string) => string | undefined): string[] {
+  const seen = new Set([repoOf(D1_TASK)]), order = [D1_TASK];
+  for (const t of calibration) if (!seen.has(repoOf(t))) { seen.add(repoOf(t)); order.push(t); }
+  return order;
 }
 
 export function stepD1Checks(out: string): StepResult {
@@ -55,9 +66,9 @@ export function stepD1Checks(out: string): StepResult {
   if (!lanebPath) throw new Error("E_HM_INPUT runtime-copy.Dockerfile holds no ENV PATH line");
   const arms = process.env.ARMS ?? join(process.env.HOME ?? "", ".capy/work/hm/arms");
   for (const t of ["prose", "none"]) if (!existsSync(join(arms, t + ".tar"))) return { pass: false, detail: "no " + t + ".tar under " + arms + "; set ARMS to the built arm tars" };
-  const p = pool(), other = bundleLists().calibration.find((t) => p.get(t)?.repo !== p.get(D1_TASK)?.repo);
-  if (!other) return { pass: false, detail: "no calibration task from another repository" };
-  const log: string[] = [], containers: string[] = [], images: string[] = [], found: string[] = [];
+  const p = pool(), order = d1Order(bundleLists().calibration, (t) => p.get(t)?.repo);
+  const log: string[] = [], lines: string[] = [], passed: string[] = [];
+  let containers: string[] = [], images: string[] = [];
   const exec = (c: string, script: string, timeoutSec = 600) => {
     const r = dk(["exec", "-e", "HOME=/root", "-w", SCREEN.workdir, c, "sh", "-c", script], timeoutSec);
     log.push("$ " + c + ": " + script, "exit " + r.code, r.out.trimEnd(), r.err.trimEnd());
@@ -79,46 +90,59 @@ export function stepD1Checks(out: string): StepResult {
     const x = Bun.spawnSync(["sh", "-c", '"$0" exec -i "$1" sh -c "mkdir -p /root && tar -x -C /root" < "$2"', docker, name, join(arms, tar + ".tar")], { stdout: "pipe", stderr: "pipe" });
     if (x.exitCode !== 0) throw new Error(tar + " tar extract failed in " + name + ": " + last(x.stderr.toString()));
   };
-  const originAndPath = (c: string) => {
-    const r = exec(c, "git rev-parse origin/main HEAD && command -v pytest");
-    const [main, head, pytest] = r.out.trim().split("\n");
-    if (r.code !== 0 || main !== head || !(pytest ?? "").startsWith(s.envDir + "/")) throw new Error(c + ": origin/main " + (main || "missing") + ", HEAD " + (head || "?") + ", pytest " + (pytest || "missing"));
+  const origin = (c: string) => {
+    const r = exec(c, "git rev-parse origin/main HEAD"), [main, head] = r.out.trim().split("\n");
+    if (r.code !== 0 || main !== head) throw new Error(c + ": origin/main " + (main || "missing") + " is not HEAD " + (head || "?"));
   };
-  let fail = "";
+  const pytest = (c: string) => exec(c, "command -v pytest").out.trim();
+  const clean = () => { for (const c of containers) dk(["rm", "-f", c]); for (const im of images.reverse()) dk(["rmi", "-f", im]); containers = []; images = []; };
+  let fail = "", tried = 0;
   try {
-    for (const [i, t] of [D1_TASK, other].entries()) {
-      const ref = imageRef(p.get(t)!), tag = "hm-d1-" + i, c = tag + "-prose";
-      const pull = dk(["pull", "-q", ref], 3600);
-      if (pull.code !== 0) throw new Error(t + ": pull failed: " + last(pull.err));
-      images.push(ref);
-      build(tag, ["FROM " + ref, "WORKDIR " + SCREEN.workdir, lanebPath, s.text].join("\n"));
-      start(c, tag, "prose");
-      originAndPath(c);
-      const edit = exec(c, 'f=$(' + PICK + ') && [ -n "$f" ] && echo "# hm d1 probe edit" >> "$f" && echo "$f"');
-      if (edit.code !== 0) throw new Error(t + ": no tracked source file to edit");
-      const before = exec(c, loop);
-      if (before.code === 0 || !/CHECKS_CONSENT_REQUIRED/.test(before.out + before.err)) throw new Error(t + ": the loop did not refuse before trust (exit " + before.code + ")");
-      const tr = exec(c, trust, 300);
-      if (tr.code !== 0) throw new Error(t + ": trust exited " + tr.code + ": " + last(tr.err));
-      const count = exec(c, selected, 300), run = exec(c, loop, 1800), lr = loopResult(count.out + "\n" + run.out);
-      if (!(lr.selected > 0) || !lr.check) throw new Error(t + ": the loop selected " + lr.selected + " test files and printed " + (lr.check ? "CHECK tests " + lr.check : "no CHECK tests line") + " (exit " + run.code + ")");
-      found.push(t + " (" + edit.out.trim() + "): " + lr.selected + " test files, CHECK tests " + lr.check + ", trust '" + (tr.out.trim().split("\n")[0] ?? "") + "', refused before trust");
-      if (i > 0) continue;
-      const none = tag + "-none";
-      start(none, tag, "none");
-      originAndPath(none);
-      const g = exec(none, "find /root /testbed/.claude -iname '*gstack*' -print 2>/dev/null | head -5");
-      if (g.out.trim()) throw new Error("the none tar left gstack files: " + g.out.trim().split("\n").join(", "));
-      const rm = exec(c, "git remote remove origin"), no = exec(c, loop);
-      if (rm.code !== 0 || no.code !== 3 || !/no pregate context/.test(no.err)) throw new Error(t + ": without the origin the loop exited " + no.code + " (" + last(no.err) + "), not 3 for no pregate context");
-      found.push("none tar: origin and PATH, no gstack file; no origin: exit 3");
+    for (const t of order) {
+      if (passed.length >= D1.pass || tried >= D1.maxTasks) break;
+      tried++;
+      try {
+        const ref = imageRef(p.get(t)!), tag = "hm-d1-" + tried, c = tag + "-prose";
+        const pull = dk(["pull", "-q", ref], 3600);
+        if (pull.code !== 0) throw new Error(t + ": pull failed: " + last(pull.err));
+        images.push(ref);
+        build(tag, ["FROM " + ref, "WORKDIR " + SCREEN.workdir, lanebPath, s.text].join("\n"));
+        start(c, tag, "prose");
+        origin(c);
+        const py = pytest(c), inEnv = py.startsWith(s.envDir + "/");
+        const edit = inEnv ? exec(c, 'f=$(' + PICK + ') && [ -n "$f" ] && echo "# hm d1 probe edit" >> "$f" && echo "$f"') : null;
+        const f = edit && edit.code === 0 ? edit.out.trim() : "";
+        if (!inEnv) lines.push("d1-checks fit " + t + ": pytest " + (py || "missing") + ", not under " + s.envDir);
+        else if (!f) lines.push("d1-checks fit " + t + ": no tracked module that a test_<name>.py names");
+        else {
+          const before = exec(c, loop);
+          if (before.code === 0 || !/CHECKS_CONSENT_REQUIRED/.test(before.out + before.err)) throw new Error(t + ": the loop did not refuse before trust (exit " + before.code + ")");
+          const tr = exec(c, trust, 300);
+          if (tr.code !== 0) throw new Error(t + ": trust exited " + tr.code + ": " + last(tr.err));
+          const count = exec(c, selected, 300), run = exec(c, loop, 1800), lr = loopResult(count.out + "\n" + run.out);
+          const checks = lr.checks.map((x) => (x.startsWith("tests ") ? x + " (" + lr.selected + " selected)" : x)).join(", ") || "no CHECK line, " + lr.selected + " selected (exit " + run.code + ": " + last(run.out + "\n" + run.err) + ")";
+          if (lr.selected >= 1 && lr.check) {
+            passed.push(t);
+            lines.push("d1-checks task " + t + " (" + f + "): " + checks + "; trust '" + (tr.out.trim().split("\n")[0] ?? "") + "'");
+          } else lines.push("d1-checks fit " + t + " (" + f + "): " + checks);
+        }
+        if (t !== D1_TASK) continue;
+        const none = tag + "-none";
+        start(none, tag, "none");
+        origin(none);
+        const np = pytest(none), g = exec(none, "find /root /testbed/.claude -iname '*gstack*' -print 2>/dev/null | head -5").out.trim();
+        if (!np.startsWith(s.envDir + "/") || g) throw new Error("the none tar: pytest " + (np || "missing") + (g ? ", gstack files " + g.split("\n").join(", ") : ""));
+        const rm = exec(c, "git remote remove origin"), no = exec(c, loop);
+        if (rm.code !== 0 || no.code !== 3 || !/no pregate context/.test(no.err)) throw new Error(t + ": without the origin the loop exited " + no.code + " (" + last(no.err) + "), not 3 for no pregate context");
+        lines.push("d1-checks none-tar " + t + ": origin/main is HEAD, pytest " + np + ", no gstack file; without the origin the loop exits 3 (no pregate context)");
+      } finally {
+        clean();
+      }
     }
   } catch (e) {
     fail = String((e as Error).message ?? e).split("\n")[0]!;
-  } finally {
-    for (const c of containers) dk(["rm", "-f", c]);
-    for (const im of images.reverse()) dk(["rmi", "-f", im]);
   }
-  writeFileSync(join(out, "d1-checks.txt"), log.join("\n") + "\n");
-  return fail ? { pass: false, detail: fail } : { pass: true, detail: found.join("; ") };
+  lines.push("d1-checks " + passed.length + " of " + tried + " tasks passed (need " + D1.pass + ", at most " + D1.maxTasks + " tried); edit rule: " + EDIT_RULE);
+  writeFileSync(join(out, "d1-checks.txt"), [...lines, "", ...log].join("\n") + "\n");
+  return { pass: !fail && passed.length >= D1.pass, detail: (fail ? fail + "; " : "") + lines.join("; ") };
 }

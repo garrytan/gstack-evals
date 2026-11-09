@@ -11,8 +11,8 @@ import { taskSetupLines } from "../../quick/laneb/runner/prepare-run.ts";
 import { ARM_SPECS as L1_ARMS, L1_PROFILE } from "../../quick/laneb/l1/l1.ts";
 import { ARMS, bundleLists, REPO, sha256, TASK_SETUP, taskSetup } from "../../lanes/harness-mechanics/pins.ts";
 import { HM_PROFILE } from "../../lanes/harness-mechanics/plans.ts";
-import { screen, type Detect } from "../../lanes/harness-mechanics/screen.ts";
-import { checksTrust, loopResult, verifyLoop } from "../../lanes/harness-mechanics/d1.ts";
+import { pool, screen, type Detect } from "../../lanes/harness-mechanics/screen.ts";
+import { checksTrust, D1_TASK, d1Order, loopResult, verifyLoop } from "../../lanes/harness-mechanics/d1.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "hm-d1-"));
 const kwargs = (spec: string) => {
@@ -139,11 +139,19 @@ describe("d1-checks parsers", () => {
     expect(() => verifyLoop(d)).toThrow(/E_HM_INPUT/);
     expect(verifyLoop(join(REPO, "lanes/harness-mechanics/vendor/gstack"))).toBe('C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run');
   });
-  test("a selected count above zero and a CHECK tests line count; a refusal does not", () => {
-    expect(loopResult("HM_SELECTED 42\nCHECK tests PASS 31.2s\n")).toEqual({ selected: 42, check: "PASS" });
-    expect(loopResult("HM_SELECTED 1\nCHECK tests FAIL 3.0s\n")).toEqual({ selected: 1, check: "FAIL" });
-    expect(loopResult("HM_SELECTED 0\nCHECK tests PASS 1.0s\n")).toEqual({ selected: 0, check: "PASS" });
-    expect(loopResult("gstack-checks: these commands are not trusted for /testbed; nothing was run (CHECKS_CONSENT_REQUIRED)\n")).toEqual({ selected: 0, check: null });
-    expect(loopResult("CHECK lint PASS 1.0s\n")).toEqual({ selected: 0, check: null });
+  test("a selected count above zero and a CHECK tests PASS or FAIL line count; a refusal, TOO_BROAD and ENV do not", () => {
+    expect(loopResult("HM_SELECTED 42\nCHECK tests PASS 31.2s\n")).toEqual({ selected: 42, check: "PASS", checks: ["tests PASS"] });
+    expect(loopResult("HM_SELECTED 1\nCHECK tests FAIL 3.0s\n")).toEqual({ selected: 1, check: "FAIL", checks: ["tests FAIL"] });
+    expect(loopResult("HM_SELECTED 0\nCHECK tests PASS 1.0s\n")).toEqual({ selected: 0, check: "PASS", checks: ["tests PASS"] });
+    expect(loopResult("gstack-checks: these commands are not trusted for /testbed; nothing was run (CHECKS_CONSENT_REQUIRED)\n")).toEqual({ selected: 0, check: null, checks: [] });
+    expect(loopResult("HM_SELECTED 820\nCHECK lint ENV 0.0s  missing-binary: ruff\nCHECK typecheck ENV 0.0s  missing-binary: mypy\nCHECK tests TOO_BROAD 1.1s  pregate selected 820 test files\n")).toEqual({ selected: 820, check: null, checks: ["lint ENV", "typecheck ENV", "tests TOO_BROAD"] });
+  });
+  test("tasks are tried from the probe task, then calibration order, one per repository not tried yet", () => {
+    const p = pool(), cal = bundleLists().calibration, order = d1Order(cal, (t) => p.get(t)?.repo);
+    expect(order[0]).toBe(D1_TASK);
+    expect(order[1]).toBe(cal.find((t) => p.get(t)!.repo !== p.get(D1_TASK)!.repo)!);
+    expect(new Set(order.map((t) => p.get(t)!.repo)).size).toBe(order.length);
+    expect(order.slice(1).map((t) => cal.indexOf(t))).toEqual([...order.slice(1).map((t) => cal.indexOf(t))].sort((a, b) => a - b));
+    expect(order).not.toContain("tobymao__sqlglot-6610");
   });
 });
