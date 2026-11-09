@@ -32,8 +32,9 @@ export type BatchSpec = {
 export const PROCEDURE_LINES = { "investigate-phases": "Work through /investigate's phases in order, and finish with its DEBUG REPORT." };
 // closing_line names a fixed line any arm's prompt ends with, after a blank line and after a told arm's procedure line
 // (R3 amendment 6, section 7: R3c's ROOT CAUSE FILES block). CLOSING_LINES must equal prompt_builder.py's and
-// r3/r3c-rules.ts R3C.closingLine, byte for byte (a keyless test checks).
-export const CLOSING_LINES = { "r3c-root-cause-files": "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first." };
+// r3/r3c-rules.ts R3C.closingLine, byte for byte (a keyless test checks). hm-status is the harness mechanics eval's
+// STATUS line (lanes/harness-mechanics/pins.ts CLOSING).
+export const CLOSING_LINES = { "r3c-root-cause-files": "When you are done, end your last message with a ROOT CAUSE FILES block: a line that reads ROOT CAUSE FILES, then up to three file paths relative to the repository root, one per line, the file most likely to hold the root cause first.", "hm-status": "When you finish, end your final message with one line: STATUS: FIXED or STATUS: NOT FIXED." };
 // gstack_hooks=copy runs the arm on laneb_hooks.LanebHooksAgent, which copies the gstack hook state out after the session
 // (R3 amendment 5 section 9 item 2); it is not an agent kwarg.
 export const AGENT_OPTIONS = { system_prompt: ["sdk-default", "claude-code-preset"], session_kind: ["unattended"], procedure_line: Object.keys(PROCEDURE_LINES), closing_line: Object.keys(CLOSING_LINES), gstack_hooks: ["copy"] };

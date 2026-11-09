@@ -347,3 +347,47 @@ export interface L1SessionRow {
   /** The sha256 of the probes.ts that scored this row. */
   probes_sha256: string;
 }
+
+// The harness mechanics eval (lanes/harness-mechanics): its six run arms and one row per session.
+export type HmArm = "none" | "plain-2" | "verify-prose" | "verify-hook" | "judge-jev" | "judge-p1";
+
+/** Section 13's score fields, from lanes/harness-mechanics/score.ts. null until the scorer fills them. */
+export interface HmScore {
+  /** The scorer that wrote these fields ("stub" until the scorer's build). */
+  scorer: string;
+  /** The session edited a file. */
+  edited: boolean | null;
+  /** The stop rule ran: a check after the last edit with its outcome shown. */
+  adherent: boolean | null;
+  /** The final message's STATUS line. */
+  claim: "FIXED" | "NOT FIXED" | null;
+  /** The session claimed FIXED and failed the hidden tests. */
+  false_done: boolean | null;
+  /** /verify loaded, as section 6 counts a load. */
+  verify_load: boolean | null;
+  /** The open notes' patterns 1 to 3, counted per session. */
+  patterns: { redirected_read: number | null; tox_no_tests: number | null; combined_flags: number | null };
+}
+
+export interface HmSessionRow {
+  schema: "hm-session/1";
+  model: string;
+  part: string | null;
+  arm: HmArm;
+  task: string;
+  trial: string;
+  outcome: "graded" | "infra" | "cap_stop" | "contaminated";
+  pass: boolean;
+  reward: number | null;
+  allowance_stop: boolean;
+  turn_cap: boolean;
+  reason: string;
+  cost_usd: number | null;
+  tokens: number | null;
+  /** From evaluator/l1-evidence.json, which laneb_hooks.LanebHooksAgent writes; null when it is missing. */
+  contract_record: boolean | null;
+  contract_check_met: boolean | null;
+  /** The no-gstack read audit's hits (none and plain-2). */
+  audit_hits: string[];
+  score: HmScore;
+}

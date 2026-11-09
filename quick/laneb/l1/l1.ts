@@ -102,7 +102,8 @@ export const ITEMS: Record<string, ItemDef> = {
 };
 
 export type Rect = { tasks: string[]; arms: string[]; attempts: number };
-export type PartPlan = { name: string; prefix: string; rects: Rect[]; relaunch_of?: string };
+// model and cells: a part that runs another model than its item (a profile item with one part per model).
+export type PartPlan = { name: string; prefix: string; rects: Rect[]; relaunch_of?: string; model?: string; cells?: string };
 export type Plan = { item: string; run_id: string; cap_usd: number; model: string; task_set: string; cells: string; seed: number; concurrent: number; parts: PartPlan[]; inputs: Record<string, string>; git_head: string; host_ttl_hours: number };
 
 class Refused extends Error {}
@@ -185,6 +186,35 @@ export function splitJobs(job: any, rects: Rect[]) {
   });
 }
 export const jobFile = (i: number) => (i === 0 ? "job.json" : "job-" + (i + 1) + ".json");
+
+// A launcher profile: the frozen values another lane fills to run its items on this host and part machinery
+// (lanes/harness-mechanics). parts returns an item's parts from its frozen inputs and records their digests in inputs.
+// L1's own profile is the default, so L1's commands behave as before.
+export type Profile = {
+  items: Record<string, ItemDef>;
+  armSpecs: Record<string, string>;
+  tars: string[];
+  armManifests: string;
+  hostRoot: string;
+  ledgerPort: string;
+  seed: number;
+  concurrent: number;
+  parts: (item: string, frozen: (f: { file: string; sha256: string }) => string, inputs: Record<string, string>) => PartPlan[];
+};
+function l1Parts(item: string, frozen: (f: { file: string; sha256: string }) => string, inputs: Record<string, string>): PartPlan[] {
+  let tb2Parts: string | undefined;
+  if (item === "tb2-opus") {
+    const f = process.env.TB2_PARTS ?? "", want = process.env.TB2_PARTS_SHA256 ?? "";
+    if (!f || !/^[0-9a-f]{64}$/.test(want)) usage("set TB2_PARTS to the twin's split file and TB2_PARTS_SHA256 to the digest Amendment C pins for it");
+    if (want !== L1.tb2PartsSha256) usage("TB2_PARTS_SHA256 is not the digest Amendment C pins for the twin's split, " + L1.tb2PartsSha256);
+    tb2Parts = readFileSync(f, "utf8");
+    if (sha256(tb2Parts) !== want) usage(f + " does not hash to TB2_PARTS_SHA256");
+    inputs["tb2-parts"] = want;
+  }
+  return itemParts(item, { fParts: item.startsWith("f1-") ? frozen(L1.fParts) : undefined, pilot: item.startsWith("pilot-") ? frozen(L1.pilot) : undefined, tb2Parts });
+}
+export const L1_PROFILE: Profile = { items: ITEMS, armSpecs: ARM_SPECS, tars: ["none", "before", "after", "off"], armManifests: L1.armManifests, hostRoot: L1.host.root, ledgerPort: L1.host.ledgerPort, seed: L1.seed, concurrent: L1.concurrent, parts: l1Parts };
+let P = L1_PROFILE;
 
 // --- Evidence: which cells started, and why a part ended -------------------------------------------------------------
 
@@ -396,10 +426,11 @@ function sessionRecords(out: string, prefix: string, mirror: Row[]) {
 
 // The item's ledger before its run binds: the approval row at the item's cap, and no reserve or settle rows but the
 // awake hosts' (host-<n>).
-export function itemCheck(rows: Row[], item: string) {
+export function itemCheck(rows: Row[], item: string, capUsd = P.items[item]?.capUsd) {
   const approval = rows.find((r) => r.kind === "approval");
   if (!approval || approval.item !== item) refuse("the ledger has no approval row for " + item);
-  if (approval!.usd_micros !== toMicros(ITEMS[item]!.capUsd)) refuse(item + "'s cap on the ledger is $" + fromMicros(approval!.usd_micros) + ", not the $" + ITEMS[item]!.capUsd + " approvals/ records");
+  if (capUsd === undefined) refuse(item + " is not an item of this launcher");
+  if (approval!.usd_micros !== toMicros(capUsd!)) refuse(item + "'s cap on the ledger is $" + fromMicros(approval!.usd_micros) + ", not the $" + capUsd + " approvals/ records");
   if (rows.filter((r) => r.kind === "approval").length > 1) refuse(item + " holds a cap raise; L1 has no raises (prereg section 9)");
   const used = rows.filter((r) => (r.kind === "reserve" || r.kind === "settle") && !/^host-\d+$/.test(r.id));
   if (used.length) refuse(item + " already holds " + used.length + " reserve or settle rows; an item serves one run");
@@ -473,7 +504,7 @@ export function hostStatus(root: string) {
 
 function hostBind(root: string, runId: string, work: string) {
   const env = hostEnv(root);
-  itemCheck(readRows(env.LEDGER!), env.ITEM!);
+  itemCheck(readRows(env.LEDGER!), env.ITEM!, env.CAP_USD ? Number(env.CAP_USD) : undefined);
   try {
     writeFileSync(env.LEDGER + ".bound", JSON.stringify({ item: env.ITEM, run_id: runId, work, at: new Date().toISOString() }) + "\n", { flag: "wx" });
   } catch (e) {
@@ -577,7 +608,7 @@ function ubi(args: string[], o: { input?: string; env?: Record<string, string> }
   return { code: p.exitCode ?? 1, out: p.stdout.toString(), err: p.stderr.toString() };
 }
 const must = (r: { code: number; out: string; err: string }, what: string) => { if (r.code !== 0) throw new Error(what + " failed (exit " + r.code + "): " + r.err.trim().split("\n").slice(-3).join(" | ")); return r.out; };
-const H = L1.host.root;
+let H = L1.host.root;
 const remoteL1 = (host: string, cmd: string) => ubi(["ssh", host, "export PATH=\"$HOME/.bun/bin:$PATH\"; " + cmd]);
 
 const hostsFile = (work: string) => join(work, "host/hosts.jsonl");
@@ -598,7 +629,7 @@ function usableHost(work: string, missing: string) {
 const recordHost = (work: string, row: Record<string, unknown>) => { mkdirSync(join(work, "host"), { recursive: true }); appendFileSync(hostsFile(work), JSON.stringify({ ...row, ts: new Date().toISOString() }) + "\n"); };
 const readPlan = (work: string): Plan => { if (!existsSync(join(work, "plan.json"))) usage(work + " has no plan.json; run prepare first"); return readJson(join(work, "plan.json")); };
 // The environment host.sh sources before it runs launch.sh, so these values reach launch.sh and its ubi-runner calls.
-export const hostEnvText = (item: string, capUsd: number, owner: string) => ["ITEM=" + item, "LEDGER=$HOME/" + H + "/ledger/" + item + ".jsonl", "LEDGER_PORT=" + (process.env.L1_HOST_LEDGER_PORT ?? L1.host.ledgerPort), "CAP_USD=" + capUsd, "VM_USD_PER_HOUR=" + L1.vm.usdPerHour, "VM_RESERVE_HOURS=" + L1.vm.reserveHours, "UBI_TTL_HOURS=" + L1.vm.ttlHours, "UBI_STORAGE=" + L1.vm.storageGib, "UBI_OWNER=" + owner].join("\n") + "\n";
+export const hostEnvText = (item: string, capUsd: number, owner: string) => ["ITEM=" + item, "LEDGER=$HOME/" + H + "/ledger/" + item + ".jsonl", "LEDGER_PORT=" + (process.env.L1_HOST_LEDGER_PORT ?? P.ledgerPort), "CAP_USD=" + capUsd, "VM_USD_PER_HOUR=" + L1.vm.usdPerHour, "VM_RESERVE_HOURS=" + L1.vm.reserveHours, "UBI_TTL_HOURS=" + L1.vm.ttlHours, "UBI_STORAGE=" + L1.vm.storageGib, "UBI_OWNER=" + owner].join("\n") + "\n";
 const mirrorPath = (work: string) => join(work, "host/ledger.jsonl");
 const ownerTag = (owner = process.env.UBI_OWNER ?? "") => owner.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
 const bundlePath = (vm: string) => join(process.env.UBI_RECOVERY_DIR ?? "", ownerTag(), vm + ".bundle");
@@ -621,7 +652,7 @@ function ledgerEnv() {
 }
 
 function prepare(work: string, item: string) {
-  const def = ITEMS[item] ?? usage("unknown item " + item);
+  const def = P.items[item] ?? usage("unknown item " + item);
   if (existsSync(join(work, "plan.json"))) refuse(work + " already holds a plan");
   const ledger = ledgerEnv();
   if (existsSync(pointerPath(ledger)) || existsSync(ledger + ".bound")) refuse(ledger + " is on a host or bound to a run already");
@@ -630,24 +661,15 @@ function prepare(work: string, item: string) {
     const route = process.env.ROUTE_LEDGER || usage("set ROUTE_LEDGER to " + def.route.item + "'s ledger; " + item + " prepares only after its route check passed there");
     try { bindCheck(resolve(route), def.route, [join(LANEB, "config/proxy.json")]); } catch (e) { refuse((e as Error).message); }
   }
-  const arms = process.env.ARMS ?? usage("set ARMS to the directory holding the none, before, after and off arm tars");
+  const arms = process.env.ARMS ?? usage("set ARMS to the directory holding the " + P.tars.join(", ") + " arm tars");
   const inputs: Record<string, string> = {};
   const frozen = (f: { file: string; sha256: string }) => { const text = readFileSync(join(REPO, f.file), "utf8"); if (sha256(text) !== f.sha256) usage(f.file + " does not hash to the prereg's " + f.sha256); inputs[basename(f.file)] = f.sha256; return text; };
-  let tb2Parts: string | undefined;
-  if (item === "tb2-opus") {
-    const f = process.env.TB2_PARTS ?? "", want = process.env.TB2_PARTS_SHA256 ?? "";
-    if (!f || !/^[0-9a-f]{64}$/.test(want)) usage("set TB2_PARTS to the twin's split file and TB2_PARTS_SHA256 to the digest Amendment C pins for it");
-    if (want !== L1.tb2PartsSha256) usage("TB2_PARTS_SHA256 is not the digest Amendment C pins for the twin's split, " + L1.tb2PartsSha256);
-    tb2Parts = readFileSync(f, "utf8");
-    if (sha256(tb2Parts) !== want) usage(f + " does not hash to TB2_PARTS_SHA256");
-    inputs["tb2-parts"] = want;
-  }
-  const parts = itemParts(item, { fParts: item.startsWith("f1-") ? frozen(L1.fParts) : undefined, pilot: item.startsWith("pilot-") ? frozen(L1.pilot) : undefined, tb2Parts });
+  const parts = P.parts(item, frozen, inputs);
   mkdirSync(work, { recursive: true });
   for (const p of parts) preparePart(work, p, def, arms);
-  for (const tar of ["none", "before", "after", "off"]) { const m = join(LANEB, L1.armManifests, tar + ".json"); if (existsSync(m)) inputs["arm:" + tar] = sha256File(m); }
+  for (const tar of P.tars) { const m = join(LANEB, P.armManifests, tar + ".json"); if (existsSync(m)) inputs["arm:" + tar] = sha256File(m); }
   const git = (args: string[]) => Bun.spawnSync(["git", "-C", REPO, ...args]).stdout.toString().trim();
-  const plan: Plan = { item, run_id: randomBytes(8).toString("hex"), cap_usd: def.capUsd, model: def.model, task_set: def.taskSet, cells: def.cells, seed: L1.seed, concurrent: L1.concurrent, parts, inputs, git_head: git(["rev-parse", "HEAD"]), host_ttl_hours: hostTtlHours(parts.length) };
+  const plan: Plan = { item, run_id: randomBytes(8).toString("hex"), cap_usd: def.capUsd, model: def.model, task_set: def.taskSet, cells: def.cells, seed: P.seed, concurrent: P.concurrent, parts, inputs, git_head: git(["rev-parse", "HEAD"]), host_ttl_hours: hostTtlHours(parts.length) };
   writeJson(join(work, "plan.json"), plan);
   console.log("prepared " + work + ": " + item + ", " + parts.map((p) => p.name + " (" + [...plannedCells(p).values()].reduce((a, b) => a + b, 0) + " sessions)").join(", ") + "; run " + plan.run_id + ", unbound");
 }
@@ -656,9 +678,9 @@ function preparePart(work: string, p: PartPlan, def: ItemDef, arms: string) {
   const dir = join(work, p.name);
   const tasks = [...new Set(p.rects.flatMap((x) => x.tasks))];
   const labels = [...new Set(p.rects.flatMap((x) => x.arms))];
-  const env = { ...process.env, TASK_SET: def.taskSet, CELLS: def.cells, ARM_MANIFESTS: L1.armManifests, TASKS: tasks.join(",") };
+  const env = { ...process.env, TASK_SET: def.taskSet, CELLS: p.cells ?? def.cells, ARM_MANIFESTS: P.armManifests, TASKS: tasks.join(",") };
   const attempts = String(Math.max(...p.rects.map((x) => x.attempts)));
-  const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), def.model, labels.map((a) => ARM_SPECS[a]!).join(","), arms, attempts, String(L1.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
+  const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), p.model ?? def.model, labels.map((a) => P.armSpecs[a]!).join(","), arms, attempts, String(P.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) throw new Error("prepare-run for " + p.name + " exited " + r.exitCode);
   // The proxy can't tell the route hook's line from a copy in the task prompt (runner/proxy.ts routeMark), so a task whose
   // instruction holds it never runs. The work tree's CLAUDE.md and the rest of the context Claude Code loads by itself sit in
@@ -873,7 +895,7 @@ function finishPart(work: string, host: any, st: any, name: string, plan: Plan) 
   if (s.pulled) must(ubi(["pull", host.name, H + "/work/" + name + "/pulled", dir]), "pulling " + name + "'s results");
   if (s.vm_cap_stop) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "vm-cap-stop"), s.vm_cap_stop + "\n"); }
   const launched = readJson(join(work, name + ".launch.json"));
-  const ledger = s.launch_exit === 7 && !s.salvage ? undefined : { rows: readRows(mirrorPath(work)), since: launched.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd, prefix: launched.prefix };
+  const ledger = s.launch_exit === 7 && !s.salvage ? undefined : { rows: readRows(mirrorPath(work)), since: launched.at, sessionCapUsd: P.items[plan.item]!.allowanceUsd, prefix: launched.prefix };
   const result = { ...classify(dir, s.launch_exit, { controllerLost: s.launch_exit === null, ledger }), salvage: s.salvage, at: new Date().toISOString() };
   writeJson(join(work, name + ".result.json"), result);
   if (s.salvage?.vm && s.salvage.vm_down && !s.salvage.pulled) recordVmDeath(work, name, readJson(join(work, name + ".launch.json")).prefix, s.salvage.vm, "ubi-runner down by the salvage on host " + host.name + ", which could not pull the part's records", totals(readRows(mirrorPath(work))).openIds);
@@ -989,8 +1011,8 @@ function relaunch(work: string, partName: string) {
   const record = { part: partName, loss: result.loss, never_started: cells.neverStarted, strays: cells.strays, rects, at: new Date().toISOString() };
   const evidence = JSON.stringify({ event: "relaunch", part: partName, relaunch: rects.length ? partName + "-relaunch" : null, host: host.name, loss: result.loss, vm_deaths: readJsonl(evidencePath(work)).filter((e) => e.event === "vm_death" && e.part === partName).map((e) => e.vm), replicates: cells.neverStarted.reduce((n, c) => n + c.replicates, 0), at: record.at }) + "\n";
   if (!rects.length) { writeJson(join(work, partName + ".relaunch.json"), { ...record, launched: false }); appendFileSync(evidencePath(work), evidence); console.log(partName + ": every planned cell started; nothing to relaunch"); return; }
-  const rp: PartPlan = { name: partName + "-relaunch", prefix: prefixOf(plan.item, partName + "-relaunch"), rects, relaunch_of: partName };
-  preparePart(work, rp, ITEMS[plan.item]!, process.env.ARMS ?? usage("set ARMS to the arm tar directory"));
+  const rp: PartPlan = { name: partName + "-relaunch", prefix: prefixOf(plan.item, partName + "-relaunch"), rects, relaunch_of: partName, ...(part.model ? { model: part.model, cells: part.cells } : {}) };
+  preparePart(work, rp, P.items[plan.item]!, process.env.ARMS ?? usage("set ARMS to the arm tar directory"));
   writeJson(join(work, partName + ".relaunch.json"), { ...record, launched: true });
   appendFileSync(evidencePath(work), evidence);
   launchDir(work, plan, host, rp);
@@ -1094,7 +1116,7 @@ function recover(work: string) {
   recordHost(work, { event: "lost", n: host.n, name: host.name, down_confirmed_at: goneAt, rows_added: add.length });
   const checked = [...rows, ...add.filter((x) => x.kind === "reserve"), ...add.filter((x) => x.kind !== "reserve")];
   for (const p of parts) {
-    const ledgerCheck = { rows: checked, since: p.l.at, sessionCapUsd: ITEMS[plan.item]!.allowanceUsd, prefix: p.l.prefix };
+    const ledgerCheck = { rows: checked, since: p.l.at, sessionCapUsd: P.items[plan.item]!.allowanceUsd, prefix: p.l.prefix };
     const salvage = p.s === running ? {} : { salvage: { by: "recover", vm: p.vm, vm_gone: p.how === "RECOVER_GONE", pulled: p.pulled, vm_down: !!p.vm, at } };
     writeJson(join(work, p.name + ".result.json"), { ...classify(join(work, p.name), p.s === running ? null : 7, { hostLost: true, ledger: ledgerCheck }), ...salvage, at });
   }
@@ -1168,8 +1190,11 @@ function hostDown(work: string) {
   console.log("host " + host.name + " is gone after " + hours.toFixed(2) + " h; the ledger is back at " + ledger);
 }
 
-if (import.meta.main) {
-  const [cmd, a, ...rest] = Bun.argv.slice(2);
+// The command line, under a profile: L1's by default, or another lane's (lanes/harness-mechanics/cli.ts).
+export function l1Main(argv: string[], profile: Profile = L1_PROFILE) {
+  P = profile;
+  H = profile.hostRoot;
+  const [cmd, a, ...rest] = argv;
   const opt = (k: string) => { const i = rest.indexOf("--" + k); return i >= 0 ? rest[i + 1] : undefined; };
   try {
     if (cmd === "host-status") console.log(JSON.stringify(hostStatus(resolve(a!))));
@@ -1191,9 +1216,11 @@ if (import.meta.main) {
   } catch (e) {
     const m = (e as Error).message;
     console.error(m.startsWith("E_") ? m : (e instanceof Refused ? "E_USAGE refused: " : "E_INTERNAL ") + m);
-    process.exit(m.startsWith("E_USAGE") ? 2 : e instanceof Refused ? 3 : 1);
+    process.exit(m.startsWith("E_USAGE") ? 2 : e instanceof Refused ? 3 : /^E_(?!INTERNAL)/.test(m) ? 2 : 1);
   }
 }
+
+if (import.meta.main) l1Main(Bun.argv.slice(2));
 
 // A move that also works across filesystems (a drive folder and ~/.capy/work).
 function moveFile(from: string, to: string) {

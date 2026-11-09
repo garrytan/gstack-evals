@@ -141,6 +141,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OUTCOME_TOLD_INSTALL](#e_outcome_told_install) | 2 | U20 |
 | [E_OUTCOME_CLEAN_ROOM](#e_outcome_clean_room) | 2 | U20 |
 | [E_OUTCOME_IMAGE](#e_outcome_image) | 2 | U20 |
+| [E_HM_INPUT](#e_hm_input) | 2 | U20 |
+| [E_HM_NOT_BUILT](#e_hm_not_built) | 2 | U20 |
 | [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
 | [E_TBV_INPUT](#e_tbv_input) | 2 | U20 |
 | [E_TBV_HISTORY](#e_tbv_history) | 2 | U20 |
@@ -991,6 +993,22 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 T-G's image manifest or a trial's binding to it does not hold (lanes/outcome-skills/images/manifest.ts): the manifest is unreadable, has a row with no sha256 image id, digests or label of its own, or is not tg-images.v1 with home /root and work dir /testbed; or check found a manifest whose sha256 is not the --sha256 recorded for it; or bind found no manifest row for --label, a task dir path that is a symlink, an out path inside the task dir, a task dir whose task.json or environment digest (file bytes and executable bits) differs from its row, a task.json that is not JSON, a file that differs from task.json's file digests (edited, added or deleted), a symlink, a docker tag that failed, an image the manifest pins that is missing or whose local tag resolves to another id, an out dir that exists, or a task.toml with no [environment] section or a docker_image of its own; or pin's out file exists, before its builds or when its exclusive create finds one written meanwhile, quick/laneb's runtime layer did not build on a task image, or in that final image gold fails a required test (the message names it), gold's run stopped, or the empty change passes every required test.
 
 Fix: Pin on a keyless build host and move the images with docker save and docker load, which keep each id. Check with the sha256 the readiness post records for the manifest. Bind the task dir the manifest was pinned from, on the host whose Docker holds the pinned images (the envelope host), into a new out dir. When an image is gone or moved, rebuild it with pin into a new manifest and record that manifest's digests before any session. When pin finds gold failing or the empty change passing in the final image, the runtime layer changes a hidden test's result: repair the task with check and pin again. Nothing was spent and no lease is open.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_INPUT
+
+A harness mechanics input does not hold (lanes/harness-mechanics): a prereg attachment is not at its front-matter sha256, a split list has the wrong length or names a task twice, the judge lists are not the first tasks of their splits, or the task-fit screen's lists are not at HM_SCREENED_SHA256 or name a task outside their split and the spares.
+
+Fix: Fix the named input and run the command again. Never edit a frozen file to make it match.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_NOT_BUILT
+
+A harness mechanics command or function is declared but its unit is not built yet (lanes/harness-mechanics). Nothing ran.
+
+Fix: Use a build of gstack-evals that has it, or build the unit the message names.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

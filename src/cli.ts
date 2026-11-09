@@ -37,6 +37,7 @@ export const COMMANDS: Command[] = [
   { name: "outcome", summary: "Outcome-skills lane: the session driver that serves an admission batch's stages on U4 leases.", module: "lanes/outcome-skills/cli.ts", owner: "GST-1381" },
   { name: "pv", summary: "Product-value eval: authoring under custody, the plan and brief review arms, judge packets, labels, scoring and the frozen readings.", module: "lanes/product-value/cli.ts", owner: "GEVA-406" },
   { name: "tbv", summary: "Trust-but-verify eval: the scorer, history assemblers, shape and splice capture, the report driver, keys, packets, judges, readings, and the handoff and leak checks.", module: "lanes/tbv/cli.ts", owner: "GEVA-330" },
+  { name: "hm", summary: "Harness mechanics eval: frozen pins, item and part plans, the launcher on L1's host and part machinery, the session table, the report and the dry run.", module: "lanes/harness-mechanics/cli.ts", owner: "harness mechanics build" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
   { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
   { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },

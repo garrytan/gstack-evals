@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { COMMANDS, REPO_ROOT, run } from "../src/cli.ts";
 
 // Every command plan v3.2 and interface v0.4 name. A row may move; none may disappear.
-const PLANNED = ["skill-eval", "validate", "doctor", "preflight", "explain", "ledger", "rig", "tokens", "noloss", "review-units", "ceo", "real", "outcome", "waste", "plan", "run", "score", "report", "compare", "seal", "tbv", "pv"];
+const PLANNED = ["skill-eval", "validate", "doctor", "preflight", "explain", "ledger", "rig", "tokens", "noloss", "review-units", "ceo", "real", "outcome", "waste", "plan", "run", "score", "report", "compare", "seal", "tbv", "pv", "hm"];
 
 const roots: string[] = [];
 afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
