@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { baseResult, fit, fitClass, fitTasks, type FitRow } from "../../lanes/harness-mechanics/fit.ts";
+import { baseResult, fit, fitClass, fitTasks, workerScript, type FitRow } from "../../lanes/harness-mechanics/fit.ts";
 import { bundleLists, sha256, taskSetup, unscreenedText } from "../../lanes/harness-mechanics/pins.ts";
 import { pool } from "../../lanes/harness-mechanics/screen.ts";
 
@@ -80,6 +80,25 @@ describe("hm fit", () => {
     process.env.HM_FIT_TAG = "hm-fit-w2";
     try { fit(out, tasks.slice(0, 1), g); } finally { delete process.env.HM_FIT_TAG; }
     expect(readFileSync(join(dir, "calls"), "utf8")).toContain("run -d --name hm-fit-w2-1-prose --network none");
+  });
+  test("the VM worker re-runs itself under the docker group when it has no Docker access, and records a task that left no row", () => {
+    const dir = tmp(), bin = join(dir, "bin"), root = join(dir, "root"), script = join(dir, "worker.sh");
+    mkdirSync(bin); mkdirSync(join(root, "gstack-evals"), { recursive: true }); mkdirSync(join(root, "lists"));
+    writeFileSync(join(root, "lists/sha256"), "x"); writeFileSync(script, workerScript());
+    const stub = (name: string, body: string) => { writeFileSync(join(bin, name), "#!/usr/bin/env bash\n" + body + "\n"); chmodSync(join(bin, name), 0o755); };
+    const run = () => Bun.spawnSync(["bash", script, "3"], { env: { PATH: bin + ":/usr/bin:/bin", HOME: dir, HM_FIT_ROOT: root }, stdout: "pipe", stderr: "pipe" });
+    stub("docker", "exit 1"); stub("sg", 'echo "$*" > ' + join(dir, "sg"));
+    writeFileSync(join(root, "queue.txt"), "a__b-1\n");
+    expect(run().exitCode).toBe(0);
+    expect(readFileSync(join(dir, "sg"), "utf8")).toBe("docker -c HM_FIT_SG=1 bash '" + script + "' 3\n");
+    expect(readFileSync(join(root, "queue.txt"), "utf8")).toBe("a__b-1\n");
+    stub("docker", "exit 0");
+    stub("bun", 'o=$4; mkdir -p "$o"; [ "$6" = a__b-1 ] && echo "{\\"task\\":\\"$6\\"}" > "$o/fit.jsonl"; exit 0');
+    writeFileSync(join(root, "queue.txt"), "a__b-1\nc__d-2\n");
+    expect(run().exitCode).toBe(0);
+    expect(readFileSync(join(root, "out/a__b-1/fit.jsonl"), "utf8")).toBe('{"task":"a__b-1"}\n');
+    expect(readFileSync(join(root, "norow.txt"), "utf8")).toBe("c__d-2\n");
+    expect(readFileSync(join(root, "queue.txt"), "utf8")).toBe("");
   });
   test("fit classes: GEVA-504's seven, both ways", () => {
     const row = (x: Partial<FitRow>): FitRow => ({ task: "a__b-1", split: "calibration", repo: "a/b", ...x });

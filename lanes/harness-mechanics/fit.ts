@@ -9,7 +9,7 @@
 // to <dir>/fit.jsonl as they land and a rerun resumes from it; a refused pull or a failed build is a row. Each task's
 // containers and images are removed after its row. <dir>/fit.md sums the rows per repository and per split.
 import { appendFileSync, existsSync, linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Ledger, readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
 import { ARMS_DIR, manifestOf } from "./arms.ts";
 import { d1Rig, EDIT_LINE, EDIT_RULE, loopResult, type Rig } from "./d1.ts";
@@ -129,16 +129,20 @@ export function fit(out: string, tasks: FitTask[], gstackDir?: string): FitRow[]
 // worker is done, destroys the VM and settles the lease. Both merge the rows into <work>/fit.jsonl in queue order and,
 // once every calibration task's row holds a class, write <work>/calibration.jsonl and print its sha256.
 export const FIT_VM = { size: "standard-16", hours: 4, usdPerHour: 0.6, workers: 8, pullTries: 4, pullWaitSec: 900 } as const;
-const FIT_LEASE = "fit/vm", FR = "hm-fit";
-const workerScript = () => [
+const FR = "hm-fit";
+// One worker: tasks from the shared queue until it is empty. A worker with no Docker access re-runs itself once under the
+// docker group (bootstrap's group change doesn't reach a reused SSH session). A task that leaves no row goes to norow.txt.
+export const workerScript = () => [
   "#!/usr/bin/env bash",
-  'k=$1; R="$HOME/' + FR + '"; cd "$R/gstack-evals" || exit 1',
+  'k=$1; R="${HM_FIT_ROOT:-$HOME/' + FR + '}"; cd "$R/gstack-evals" || exit 1',
+  'if ! docker info >/dev/null 2>&1; then [ -n "$HM_FIT_SG" ] && { echo "worker $k: no Docker access" >> "$R/norow.txt"; exit 1; }; exec sg docker -c "HM_FIT_SG=1 bash \'$0\' $k"; fi',
   'export PATH="$HOME/.bun/bin:$PATH" HM_GSTACK="$R/gstack" ARMS="$R/arms" HM_SCREENED="$R/lists/screened.txt" HM_SCREENED_SHA256="$(cat "$R/lists/sha256")" HM_FIT_TAG="hm-fit-w$k"',
   "while t=$(flock \"$R/queue.lock\" sh -c 'head -n 1 \"$0\"; sed -i 1d \"$0\"' \"$R/queue.txt\"); [ -n \"$t\" ]; do",
   "  for try in $(seq 1 " + FIT_VM.pullTries + "); do",
   '    rm -rf "$R/out/$t"',
   '    bun lanes/harness-mechanics/cli.ts fit --out "$R/out/$t" --only "$t" >> "$R/w$k.log" 2>&1',
-  '    grep -q "pull failed" "$R/out/$t/fit.jsonl" 2>/dev/null || break',
+  '    [ -s "$R/out/$t/fit.jsonl" ] || { echo "$t" >> "$R/norow.txt"; break; }',
+  '    grep -q "pull failed" "$R/out/$t/fit.jsonl" || break',
   "    sleep " + FIT_VM.pullWaitSec,
   "  done",
   "done",
@@ -156,7 +160,7 @@ export function fitMerge(work: string, queue: FitTask[]): { rows: FitRow[]; cali
 }
 
 export function fitVm(cmd: string, work: string, log: (l: string) => void = console.log) {
-  const { runner, ledger } = vmEnv(), state = join(work, "fit-vm.json"), l = new Ledger(ledger, "vms");
+  const { runner, ledger } = vmEnv(), state = join(work, "fit-vm.json"), l = new Ledger(ledger, "vms"), lease = "fit/" + basename(work);
   itemTotals(readRows(ledger), "vms");
   const all = fitTasks(), queue = [...all.filter((t) => t.split === "calibration"), ...all.filter((t) => t.split === "scored")];
   const report = (vm: string) => {
@@ -176,10 +180,10 @@ export function fitVm(cmd: string, work: string, log: (l: string) => void = cons
     }
     writeFileSync(join(lists, "screened.txt"), readFileSync(process.env.HM_SCREENED!)); writeFileSync(join(lists, "sha256"), process.env.HM_SCREENED_SHA256!);
     writeFileSync(join(lists, "queue.txt"), queue.map((t) => t.task + "\n").join("")); writeFileSync(join(lists, "worker.sh"), workerScript());
-    const res = l.reserve(FIT_LEASE, toMicros(usd), { kind_detail: "task-fit probe VM: " + FIT_VM.hours + " h TTL at $" + FIT_VM.usdPerHour.toFixed(2) + "/h (" + FIT_VM.size + ")" });
+    const res = l.reserve(lease, toMicros(usd), { kind_detail: "task-fit probe VM: " + FIT_VM.hours + " h TTL at $" + FIT_VM.usdPerHour.toFixed(2) + "/h (" + FIT_VM.size + ")" });
     if (!res.ok || res.existing) throw new Error("CAP_STOP the vms ledger refused the fit VM's lease of $" + usd.toFixed(2) + (res.ok ? " (the lease is held already)" : " (cap $" + CAPS_USD.vms + ")") + "; no VM started");
     const up = Date.now() / 1000, vm = ubi(runner, ["up", "-s", FIT_VM.size], { UBI_TTL_HOURS: String(FIT_VM.hours) }).trim().split("\n").at(-1)!;
-    writeFileSync(state, JSON.stringify({ vm, up_at: up, lease: FIT_LEASE }, null, 2) + "\n");
+    writeFileSync(state, JSON.stringify({ vm, up_at: up, lease }, null, 2) + "\n");
     ubi(runner, ["sync", vm, REPO, FR + "/gstack-evals"]);
     ubi(runner, ["sync", vm, g, FR + "/gstack"]);
     ubi(runner, ["sync", vm, arms, FR + "/arms"]);
@@ -200,7 +204,7 @@ export function fitVm(cmd: string, work: string, log: (l: string) => void = cons
     ubi(runner, ["pull", st.vm, FR + "/w*.log", join(work, "logs")]);
     ubi(runner, ["down", st.vm]);
     const hours = (Date.now() / 1000 - st.up_at) / 3600;
-    const s = l.settle(FIT_LEASE, toMicros(hours * FIT_VM.usdPerHour), { kind_detail: "task-fit probe VM hours: " + hours.toFixed(4) + " h at $" + FIT_VM.usdPerHour.toFixed(2) + "/h" });
+    const s = l.settle(st.lease, toMicros(hours * FIT_VM.usdPerHour), { kind_detail: "task-fit probe VM hours: " + hours.toFixed(4) + " h at $" + FIT_VM.usdPerHour.toFixed(2) + "/h" });
     if (!s.ok) throw new Error("E_INTERNAL settling the fit lease: " + s.reason);
     report(st.vm);
     writeFileSync(join(work, "fit.md"), fitSummary(fitMerge(work, queue).rows));
