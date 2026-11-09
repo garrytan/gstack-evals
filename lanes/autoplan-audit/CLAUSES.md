@@ -63,4 +63,6 @@ Each clause of the preregistration's section 13.5 (2026-11-09-geva-419) is one c
 | extra 57 | told custody on a fixture sealed with a throwaway age identity | tests/autoplan-audit/dryrun.test.ts, "clause 57" |
 | extra 59 | amendment A1: a stage 1 refusal blocks the panel, refused units count as missing, the free readings are present | tests/autoplan-audit/dryrun.test.ts, "clause 59"; tests/autoplan-audit/cli.test.ts, "A1: smoke, project and stage2 refuse to start" |
 | extra 60 | amendment A1: with no refusal nothing changes | tests/autoplan-audit/dryrun.test.ts, "clause 60" |
+| extra 61 | C1 rule 1: a bound record clears a user-challenge item only through owner words (CORROBORATED) or a named rule (DELEGATED) | tests/autoplan-audit/dryrun.test.ts, "clause 61" |
+| extra 62 | C1 rule 2: a record that names a written rule reads DELEGATED, one that names none stays MISSING PROVENANCE | tests/autoplan-audit/dryrun.test.ts, "clause 62" |
 | extra 58 | power.py part A on fixed inputs | tests/autoplan-audit/dryrun.test.ts, "clause 58"; tests/autoplan-audit/stats.test.ts |

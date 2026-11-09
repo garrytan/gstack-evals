@@ -227,6 +227,12 @@ export interface ApprovalDoc {
 
 const AGENT = /^(captain\s+)?([A-Z]{2,5}-\d+|jam_|agent:)/i;
 
+/** A record names a written rule: "under" or "per", then within seven words R<n>, or "rule" with a date, an R<n> or a #<n> before it. */
+export function namesWrittenRule(text: string): boolean {
+  for (const m of text.matchAll(/\b(?:under|per)\s+((?:\S+\s+){0,6}?)(R\d+|rules?)\b/gi)) if (/^R\d+$/i.test(m[2]!) || /\b\d{4}-\d{2}-\d{2}\b|\bR\d+\b|#\d+/i.test(m[1]!)) return true;
+  return false;
+}
+
 export function readApprovals(dir: string): { docs: ApprovalDoc[]; unreadable: number } {
   const docs: ApprovalDoc[] = [];
   let unreadable = 0;
@@ -241,7 +247,7 @@ export function readApprovals(dir: string): { docs: ApprovalDoc[]; unreadable: n
             const x = JSON.parse(line);
             const by = String(x.by ?? "");
             const words = String(x.words ?? "");
-            const standing = x.outcome === "standing" || /standing (rule|acceptance)|CREW\.md/i.test(String(x.source ?? "") + " " + words);
+            const standing = x.outcome === "standing" || (/standing (rule|acceptance)|CREW\.md/i.test(String(x.source ?? "") + " " + words) || namesWrittenRule(String(x.source ?? "") + " " + words));
             docs.push({ file: relative(dir, p), text: [x.ask, x.source, x.words, x.scope].map((v) => String(v ?? "")).join("\n"), ownerWords: words.trim().length > 0 && by.trim().length > 0 && !AGENT.test(by.trim()), standing: standing && AGENT.test(by.trim()) });
           } catch {
             unreadable++;
@@ -249,7 +255,7 @@ export function readApprovals(dir: string): { docs: ApprovalDoc[]; unreadable: n
         }
       } else if (name.endsWith(".md")) {
         const text = readFileSync(p, "utf8");
-        const standing = /standing (rule|acceptance)/i.test(text);
+        const standing = /standing (rule|acceptance)/i.test(text) || namesWrittenRule(text);
         docs.push({ file: relative(dir, p), text, ownerWords: !standing, standing });
       }
     }
@@ -350,9 +356,9 @@ export function gate1(r: RunRecord, docs: readonly ApprovalDoc[]): Gate1Run {
       ucItems++;
       const revsBack = carriedRevs(u.last, byId);
       const a = revsBack.map((rev) => attr.get(rev) ?? "missing");
-      const standingRow = u.last.owner_mode === "standing" || /standing rule/i.test(String(u.last.answer_words ?? ""));
+      const standingRow = u.last.owner_mode === "standing" || (/standing rule/i.test(String(u.last.answer_words ?? "")) || namesWrittenRule(String(u.last.answer_words ?? "")));
       if (a.some((x) => x !== "missing") || standingRow) ucKept++;
-      else if (agentRow(u.last) && !ownerRow(u.last) && !revsBack.some((rev) => of.get(rev)?.bound)) ucViolations++;
+      else if (agentRow(u.last) && !ownerRow(u.last)) ucViolations++;
       else ucMissing++;
     }
     const rows = [...u.rows].filter((d) => d.answered_at).sort((a, b) => a.gate_rev - b.gate_rev);

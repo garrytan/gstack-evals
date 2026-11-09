@@ -24,7 +24,7 @@ import { openMeter } from "./meter.ts";
 import { buildPacket, outbound, scan, sixGrams, type Identity } from "./packet.ts";
 import { goldCounts, judgeCheck, smoke, GOLD_PER_CLASS, type PanelState } from "./panel.ts";
 import { readRecord } from "./records.ts";
-import { attribution, gate1, leanByDesign, x1, x2, x3, type ApprovalDoc } from "./readers.ts";
+import { attribution, gate1, leanByDesign, namesWrittenRule, readApprovals, x1, x2, x3, type ApprovalDoc } from "./readers.ts";
 import { blockOnRefusals, gate2Reading } from "./stage2.ts";
 import { openSink, printLines, stage1 } from "./stage1.ts";
 import { landedInterval, overMissing } from "./stats.ts";
@@ -419,6 +419,20 @@ export async function dryRun(o: { ledger?: boolean; custody?: boolean } = {}): P
   await check(60, "extra: A1, with no refusal nothing changes", () => {
     const r = a1Run("yes");
     return r.blocked === null && r.free && r.out.gate2.refused === 0 && r.out.counts.packets_refused === 0 && r.refused.length === 0 && !r.out.gate2.reasons.some((x) => x.includes("E_AR_PACKET_LEAK")) && !printLines(r.out).some((l) => l.startsWith("refused run"));
+  });
+  await check(61, "extra: C1 rule 1, a bound record clears a user-challenge item only through owner words or a named rule", () => {
+    const agentOnly = gate1(rec({ id: "c1v", gateOwner: null, decisions: [uc("c1v-uc1")] }), [doc("run c1v gate_rev 1 approved by the agent", false)]);
+    const owner = gate1(rec({ id: "c1w", gateOwner: null, decisions: [uc("c1w-uc1")] }), [doc("run c1w gate_rev 1 approved", true)]);
+    return agentOnly.ucViolations === 1 && agentOnly.ucMissing === 0 && agentOnly.ucKept === 0 && owner.revisions[0]!.attribution === "corroborated" && owner.ucViolations === 0 && owner.ucKept === 1;
+  });
+  await check(62, "extra: C1 rule 2, a row that names a written rule reads DELEGATED and one that names none stays MISSING PROVENANCE", () => {
+    const read = (id: string, words: string) => {
+      const dir = tmp("c1-appr");
+      mkdirSync(join(dir, "a"), { recursive: true });
+      writeFileSync(join(dir, "a", "approvals.jsonl"), JSON.stringify({ by: "ZZZZ-1", words, ask: "run " + id + " gate_rev 1", source: "captain", outcome: "approved" }) + "\n");
+      return attribution(rec({ id, gateOwner: null, decisions: [uc(id + "-uc1")] }), 1, readApprovals(dir).docs);
+    };
+    return read("c1n", "answered under the owner's 2026-11-03 $2,000-per-eval rule") === "delegated" && read("c1m", "answered after reading the review") === "missing" && namesWrittenRule("per R42") && !namesWrittenRule("under the usual rule") && !namesWrittenRule("a standing order per the team");
   });
   rmSync(root, { recursive: true, force: true });
   rmSync(dir, { recursive: true, force: true });

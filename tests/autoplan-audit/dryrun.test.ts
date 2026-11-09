@@ -10,9 +10,9 @@ beforeAll(async () => {
 
 describe("autoplan audit dry run", () => {
   test("drives all 56 clauses of 13.5 in the prereg's order, plus the extra checks", () => {
-    expect(lines.map((l) => l.clause)).toEqual(Array.from({ length: 60 }, (_, i) => i + 1));
+    expect(lines.map((l) => l.clause)).toEqual(Array.from({ length: 62 }, (_, i) => i + 1));
   });
-  for (let clause = 1; clause <= 60; clause++)
+  for (let clause = 1; clause <= 62; clause++)
     test("clause " + clause, () => {
       const l = lines.find((x) => x.clause === clause)!;
       expect({ clause, rule: l.rule, pass: l.pass, detail: l.detail }).toEqual({ clause, rule: l.rule, pass: true, detail: "" });
