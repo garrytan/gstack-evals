@@ -125,3 +125,38 @@ published, then the dataset parser in its sandbox over the print output. Only th
 - Unclear units are never drawn into a test stratum; they can be admission or retry units and count in every total.
 - Reason code owner: the code table's owner type allows only build units, so the family's codes carry U20, the
   outcome-skills lane's unit.
+
+## Sessions (P2)
+
+Arms. Family SM's arms live in lanes/outcome-skills/arms/registry.json under "sm", beside family G's arms and not among
+them, so G's checks read G's arms only. statemachines/arms.ts checks the block (E_SM_ARM) and builds each arm's one turn.
+tests/outcome-skills/sm-arms.test.ts pins every text by sha256 and checks it against the post. Literal readings:
+
+- "Its sentence, then this suffix": the sentence, a blank line, then the suffix, as the follow-on turn puts its blank line.
+- A3 runs on the first stage's limits (section 6), since section 17 scores it by section 7.
+- The /qa pin (sha, version and install command) is recorded at freeze in sm.pins.qa. Until then qa:told refuses to
+  build a turn, and arms/qa-install.sh refuses a missing sha or command.
+- The proxy routes: Opus on anthropic, Sol (openai/gpt-6.1-sol) and particle-1 on OpenRouter's Messages route, as Claude
+  Code arms used before.
+
+Driver. An SM stage is { item, arm (its label), model, arms }: one lease per model's item serves every SM arm it lists,
+at each arm's allowance for that model, and its proxy runs with refuseServerTools on (E_PROXY_SERVER_TOOL before
+pricing). G stages are unchanged. An SM item carries the skill "qa" for qa:told and "sm" for the other arms (P4's items).
+
+real_agent's family SM mode (arm in the registry's "sm" block): one turn, no sidecar, no origin and no gh stub, so the
+tree keeps its one-commit or two-commit history; egress allows only the proxy. Before any session opens it checks, in the
+container, the commit count and head the task names, that no CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude is in the
+tree (E_SM_STRIP), and that a no-gstack home holds no ~/.claude/skills, ~/.claude/CLAUDE.md, ~/.local/share/gstack, ~/.capy
+or ~/.gstack, while A3's home holds gstack at the /qa pin. Nobody answers: AskUserQuestion gets section 6's fixed line,
+a prose question ends the turn, and both are counted (sm_user.py). Claude Code's own transcripts are copied out as
+claude-projects.tar for the memory audit.
+
+Memory audit (strip.ts). Measured on the real 2.1.312 binary with a stub upstream (sm-claude.test.ts): an unstripped
+tree's CLAUDE.md, its @import and .claude/rules reach the request; AGENTS.md and .claude/AGENTS.md reach it through a
+built-in plugin when the tree has no CLAUDE.md; CLAUDE.local.md and nested files do not load at start. Stripped, none
+reaches it. Claude Code's transcript records each loaded file as an instructions attachment, so a paid run's audit reads
+the transcript; the dry run also reads request bodies. The init record's memory_paths names only the auto-memory folder.
+
+Session plan (session.ts): per unit and model, the first-stage cells shuffled by order_seed plus the part number, then the
+nine follow-ons shuffled the same way, each after its tree's first stage. End kinds and the one-retry rule follow section
+6; a second upstream or infra end is E_SM_UPSTREAM_GAP or E_SM_INFRA_GAP.

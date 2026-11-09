@@ -1,0 +1,110 @@
+// Family SM's session runner parts (the implicit state machines prereg, sections 4, 6, 9, 11 and 13): the seeded plan,
+// end kinds and the one-retry rule, the exposure detectors and read audit, and real_agent's family SM mode (its turn
+// text, the no-answer rule and the pre-session tree and home check), the last run in python3 with the SDK stubbed as
+// tests/real-outcome/agent-units.test.ts does.
+import { expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { loadRegistry, REGISTRY_PATH } from "../../lanes/outcome-skills/arms/registry.ts";
+import { smTurn } from "../../lanes/outcome-skills/statemachines/arms.ts";
+import { auditByArm, readAudit } from "../../lanes/outcome-skills/statemachines/audit.ts";
+import { qaExposure, textExposure } from "../../lanes/outcome-skills/statemachines/exposure.ts";
+import { endKind, nextStep, planPart, questionCounts } from "../../lanes/outcome-skills/statemachines/session.ts";
+
+const py = (code: string, ...args: string[]) => {
+  const r = spawnSync("python3", ["-c", code, join(import.meta.dir, "../real-outcome"), ...args], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }, encoding: "utf8" });
+  if (r.status !== 0) console.log(r.stdout + r.stderr);
+  return r.stdout;
+};
+
+// Value: protects=sections 9 and 13's seeded order; fails_when=the order stops being a function of the seed and part, a follow-on precedes its tree's first stage, or a cell is missing; why_new=GEVA-436 P2; seam=session.ts planPart; no_claim=which units are in a part (P1 draw)
+test("the plan is seeded, holds every cell once per unit and model, and puts follow-ons after their tree's first stage", () => {
+  const a = planPart(["u1", "u2"], ["claude-opus-5-5", "particle-ai/particle-1"], 1512176772, 1);
+  expect(planPart(["u1", "u2"], ["claude-opus-5-5", "particle-ai/particle-1"], 1512176772, 1)).toEqual(a);
+  expect(planPart(["u1", "u2"], ["claude-opus-5-5", "particle-ai/particle-1"], 1512176772, 2).map((s) => s.cell)).not.toEqual(a.map((s) => s.cell));
+  expect(a).toHaveLength(2 * 2 * (4 + 9));
+  for (const unit of ["u1", "u2"])
+    for (const model of ["claude-opus-5-5", "particle-ai/particle-1"]) {
+      const mine = a.filter((s) => s.unit === unit && s.model === model);
+      expect(mine.filter((s) => s.stage === "first").map((s) => s.cell).sort()).toEqual(["A0", "A1", "A2", "S2"]);
+      expect(mine.filter((s) => s.stage === "followon").map((s) => s.cell).sort()).toEqual(["S0", "A1", "S2"].flatMap((t) => [1, 2, 3].map((r) => "F-" + t + "-" + r)).sort());
+      const firstAt = (cell: string) => mine.find((s) => s.cell === cell)!.index;
+      for (const f of mine.filter((s) => s.after)) expect(f.index).toBeGreaterThan(firstAt(f.after!));
+    }
+  expect(new Set(a.filter((s) => s.unit === "u1" && s.model === "claude-opus-5-5" && s.stage === "first").map((s) => s.arm))).toEqual(new Set(["sm:A0", "sm:A1", "sm:A2", "sm:S2"]));
+  expect(planPart(["u1"], ["claude-opus-5-5"], 7, 1, ["qa"]).map((s) => [s.cell, s.arm])).toEqual([["A3", "qa:told"]]);
+  expect(() => planPart(["u1"], ["m"], -1, 1)).toThrow(/E_SM_SEED/);
+});
+
+// Value: protects=section 6's end kinds and the one-retry rule; fails_when=a limit counts as a gap, an upstream end is scored, or a third try is allowed; why_new=GEVA-436 P2; seam=session.ts endKind, nextStep; no_claim=gap propagation across contrasts (P4)
+test("end kinds map from real_agent's termination, and upstream or infra ends retry once, then gap", () => {
+  expect(["completed", "bg_wait_expired", "wall_limit", "turn_ceiling", "error_result", "cli_exit", "error"].map((termination) => endKind({ termination }))).toEqual(["completed", "completed", "limit_wall", "limit_turns", "upstream", "infra", "infra"]);
+  expect(endKind({ termination: "error_result", refusals: ["E_ALLOWANCE"] })).toBe("limit_allowance");
+  expect(endKind({ termination: "error", upstream_status: 529 })).toBe("upstream");
+  expect(endKind({ termination: "completed", harness: true })).toBe("infra");
+  expect(nextStep(["completed"])).toEqual({ action: "score" });
+  expect(nextStep(["limit_turns"])).toEqual({ action: "score" });
+  expect(nextStep(["upstream"])).toEqual({ action: "retry" });
+  expect(nextStep(["upstream", "upstream"])).toEqual({ action: "gap", code: "E_SM_UPSTREAM_GAP" });
+  expect(nextStep(["upstream", "infra"])).toEqual({ action: "gap", code: "E_SM_INFRA_GAP" });
+  expect(nextStep(["infra", "completed"])).toEqual({ action: "score" });
+  expect(questionCounts({ t1: { questions: 3, ask_user_question: 2, prose_questions: 1 } })).toEqual({ ask_user_question: 2, prose: 1 });
+});
+
+const msg = (blocks: any[], parent: string | null = null) => ({ type: "AssistantMessage", parent_tool_use_id: parent, content: blocks });
+// Value: protects=section 11's exposure gates and section 4's read audit; fails_when=text before the first tool call counts, a subagent's text counts, or a gstack or drive read goes uncounted; why_new=GEVA-436 P2; seam=exposure.ts, audit.ts; no_claim=that exposure means the procedure ran well
+test("exposure reads the assistant's own text after its first tool call, /qa needs all three marks, and the read audit counts per arm", () => {
+  const before = [msg([{ type: "text", text: "I will map each state machine." }]), msg([{ type: "tool_use", name: "Read", input: { file_path: "/testbed/a.js" } }]), msg([{ type: "text", text: "Fixed it." }])];
+  expect(textExposure(before as any, "A1")).toBe(false);
+  expect(textExposure([...before, msg([{ type: "text", text: "This is a state transition." }], "toolu_x")] as any, "A1")).toBe(false);
+  expect(textExposure([...before, msg([{ type: "text", text: "The Transition table is explicit now." }])] as any, "A1")).toBe(true);
+  expect(textExposure([...before, msg([{ type: "text", text: "I restructured the loader." }])] as any, "S2")).toBe(true);
+  const I = "/root/.claude/skills/gstack";
+  const qa = [msg([{ type: "tool_use", name: "Bash", input: { command: "~/.claude/skills/gstack/bin/gstack-skill-start qa" } }]), msg([{ type: "tool_use", name: "Read", input: { file_path: I + "/qa/SKILL.md" } }])];
+  expect(qaExposure(qa as any).exposed).toBe(false);
+  expect(qaExposure([...qa, msg([{ type: "tool_use", name: "Read", input: { file_path: I + "/qa/sections/fix-loop.md" } }])] as any)).toEqual({ skill_start: true, skill_md: true, section: true, exposed: true });
+  const reads = readAudit([msg([{ type: "tool_use", name: "Bash", input: { command: "ls ~/.capy/drive" } }, { type: "tool_use", name: "Glob", input: { pattern: "~/.claude/skills/**" } }, { type: "tool_use", name: "Edit", input: { file_path: "gstack.txt" } }, { type: "tool_use", name: "Read", input: { file_path: "src/a.js" } }])] as any);
+  expect([reads.inputs, reads.gstack, reads.drive]).toEqual([3, 1, 1]);
+  expect(auditByArm([{ cell: "A0", audit: reads }, { cell: "A0", audit: readAudit([]) }])).toEqual({ A0: { sessions: 2, gstack: 1, drive: 1 } });
+});
+
+// Value: protects=real_agent's family SM turn equals the registry's; fails_when=python and TypeScript substitute the scope or trim the issue differently; why_new=GEVA-436 P2; seam=sm_user.py sm_turn, arms.ts smTurn; no_claim=SDK delivery (sm-claude.test.ts)
+test("real_agent's family SM turn is smTurn's, for every arm but the unpinned qa:told", () => {
+  const reg = loadRegistry();
+  const cases = [{ arm: "sm:A0", scope: "src/a b" }, { arm: "sm:A1", scope: "$&lib" }, { arm: "sm:A2", scope: "x" }, { arm: "sm:S2", scope: "pkg/core" }, { arm: "sm:followon", statement: "Bug: crash.\u00a0\n\n" }];
+  const out = py("import json, sys; sys.path.insert(0, sys.argv[1]); import unit_test as u; import sm_user; reg = json.load(open(sys.argv[2])); print(json.dumps([sm_user.sm_turn(reg['sm']['arms'][c['arm']], {'scope': c.get('scope')}, c.get('statement', ''), u.ra.js_trim_end) for c in json.loads(sys.argv[3])]))", REGISTRY_PATH, JSON.stringify(cases));
+  expect(JSON.parse(out)).toEqual(cases.map((c) => smTurn(reg, c.arm, c)));
+});
+
+// Value: protects=section 6's no-answer rule and section 4's clean-by-construction check in real_agent; fails_when=a stripped file, a wrong commit count, a gstack or drive path in a no-gstack home, or A3's install at another sha passes; why_new=GEVA-436 P2; seam=real_agent.py _open_sm, sm_user.py NoAnswer; no_claim=a real container (P5's dry run)
+test("real_agent's family SM mode answers nobody and refuses an unclean tree or home before any session opens", () => {
+  const code = `
+import json, sys, tempfile, types
+sys.path.insert(0, sys.argv[1])
+import unit_test as u
+from pathlib import Path
+import sm_user
+ra = u.ra
+n = sm_user.NoAnswer("No one is available to answer. Use your own judgment.", Path(tempfile.mkdtemp()) / "e.jsonl")
+n.start("t1")
+out = {"answers": n.answer([{"question": "Which?"}, {"question": "Why?"}]), "prose": [n.prose("Shall I go on?"), n.prose("Done. Fixed it.")], "counts": n.counts}
+ra.egress.apply = lambda c, allow: {"event": "egress", "allow": allow}
+def check(stdout, told, commits=1, sha="a" * 40):
+    fake = types.SimpleNamespace(options=types.SimpleNamespace(probe_node=""), _exec=lambda c, s, stdin=None, timeout=0: types.SimpleNamespace(returncode=0, stdout=stdout.encode(), stderr=b""))
+    task = {"repo_dir": "/testbed", "commits": commits, "base_commit": "b" * 40, "qa_sha": sha}
+    try:
+        ra.RealAgent._open_sm(fake, "c", "t", task, "http://10.0.0.2:9000", told, lambda e: None)
+        return "ok"
+    except ra.SandboxSetupError as e:
+        return str(e).split(" ")[0]
+clean = "COMMITS 1\\nHEAD " + "b" * 40 + "\\n"
+out["checks"] = [check(clean, False), check(clean + "INSTR ./pkg/AGENTS.md\\n", False), check(clean, False, commits=2), check(clean + "HOME /root/.capy\\n", False), check(clean + "HOME /root/.claude/skills\\nGSTACK " + "a" * 40 + "\\n", True), check(clean + "GSTACK " + "c" * 40 + "\\n", True), check(clean, True)]
+print(json.dumps(out))
+`;
+  const out = JSON.parse(py(code));
+  const reply = "No one is available to answer. Use your own judgment.";
+  expect(out.answers).toEqual({ "Which?": reply, "Why?": reply });
+  expect(out.prose).toEqual([null, null]);
+  expect(out.counts).toEqual({ t1: { questions: 3, ask_user_question: 2, prose_questions: 1 } });
+  expect(out.checks).toEqual(["ok", "E_SM_STRIP", "E_SM_HISTORY", "E_SM_STRIP", "ok", "E_SM_STRIP", "E_SM_STRIP"]);
+});

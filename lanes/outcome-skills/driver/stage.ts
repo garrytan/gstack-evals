@@ -20,6 +20,7 @@ import { holderBound, LedgerError, listItems, readItem, type CloseFile, type Hol
 import { closeOpenSessions, cutShort, meterFigures } from "../../../src/runner/ledger/sessions.ts";
 import { isTrialNetworkHost, MeteringProxy, reconcileJournal, type RetryBudget } from "../../../src/runner/proxy/metering-proxy.ts";
 import { loadRegistry, type Registry } from "../arms/registry.ts";
+import { isSmArm, smArm, smLimits, smProvider } from "../statemachines/arms.ts";
 
 export const DEFAULT_TTL_MS = 72 * 3_600_000;
 export const DEADLINE_GRACE_MS = 120_000;
@@ -28,6 +29,9 @@ export const DEFAULT_RETRY: RetryBudget = { attempts: 3, elapsed_ms: 300_000 };
 export interface StageSpec {
   item: string;
   arm: string;
+  /** Family SM only: the model the stage's item pays for, and every SM arm its sessions may name (arm is the stage's label then). Its proxy refuses provider-side tools. */
+  model?: string;
+  arms?: string[];
 }
 
 export interface ServeOptions {
@@ -105,7 +109,10 @@ interface Session {
 interface Stage {
   item: string;
   arm: string;
-  kind: "none" | "told";
+  kind: "none" | "told" | "prompt" | "followon";
+  /** The arms its sessions may name: [arm] for G; the stage's SM arms for family SM, with its model. */
+  arms: string[];
+  model?: string;
   lease_id: string;
   reserved: number;
   expires: number;
@@ -219,8 +226,17 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     fail("E_USAGE", "can't listen on --host " + o.host + " (" + (e as Error).message + "); give an address on this machine; nothing was opened");
   }
   if (!o.stages.length) fail("E_USAGE", "name at least one --stage <item>=<arm>");
-  for (const st of o.stages) if (!Object.hasOwn(reg.arms, st.arm)) fail("E_USAGE", "stage " + st.item + " names arm " + st.arm + ", which the registry does not hold; it holds " + Object.keys(reg.arms).join(", "));
-  if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(o.stages.map((s) => s.arm)).size !== o.stages.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
+  const smStage = (st: StageSpec) => st.model !== undefined || st.arms !== undefined;
+  for (const st of o.stages) {
+    if (!smStage(st)) {
+      if (!Object.hasOwn(reg.arms, st.arm)) fail("E_USAGE", "stage " + st.item + " names arm " + st.arm + ", which the registry does not hold; it holds " + Object.keys(reg.arms).join(", "));
+      continue;
+    }
+    if (!st.model || !st.arms?.length || st.arms.some((a) => !isSmArm(reg, a)) || new Set(st.arms.map((a) => smArm(reg, a).kind === "told")).size !== 1) fail("E_USAGE", "SM stage " + st.item + " needs a model and a list of family SM arms, all told or none told");
+    smProvider(reg, st.model!);
+  }
+  const servedBy = o.stages.flatMap((s) => (smStage(s) ? s.arms!.map((a) => a + "@" + s.model) : [s.arm]));
+  if (new Set(o.stages.map((s) => s.item)).size !== o.stages.length || new Set(servedBy).size !== servedBy.length) fail("E_USAGE", "each stage needs its own line item and its own arm, since a session's arm picks its stage");
   mkdirSync(o.dir, { recursive: true });
   const dir = realpathSync(o.dir);
   if (!existsSync(o.record)) fail("E_LEDGER_MISSING", "no approval record is at " + o.record + "; nothing was opened");
@@ -295,8 +311,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     if (stop) fail("CAP_STOP", (capped.has("") ? "the none stage cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends both skills incomplete" : "stage " + st.item + " cap-stopped in run " + o.run_id + " at " + stop.at + " (scope " + stop.scope + "), which ends its skill incomplete") + "; a cap stop is not retried (plan section 6); nothing was opened");
     if (s.cap_micros === null) return fail("E_LEDGER_MISSING", "no approved cap is on record for line item " + st.item + "; nothing was opened");
     if (s.program === null) return fail("E_USAGE", "line item " + st.item + " is in no program; a G stage is admitted by O6's envelope, so its item joins the program with --program at init; nothing was opened");
-    const arm = reg.arms[st.arm]!;
-    const want = arm.kind === "told" ? [arm.skill!] : [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
+    const arm = smStage(st) ? smArm(reg, st.arms![0]!) : reg.arms[st.arm]!;
+    const want = smStage(st) ? [arm.kind === "told" ? arm.skill! : "sm"] : arm.kind === "told" ? [arm.skill!] : [...new Set(Object.values(reg.arms).flatMap((a) => (a.kind === "told" && a.skill ? [a.skill] : [])))];
     if (s.skills.length !== want.length || want.some((k) => !s.skills.includes(k))) fail("E_USAGE", "line item " + st.item + " splits its spend across " + (s.skills.join(", ") || "no skill") + ", but arm " + st.arm + " spends for " + want.join(", ") + "; a stage's item carries its own arm's skills, so the envelope charges the skill that spends; nothing was opened");
     if (s.run_id !== null && s.run_id !== o.run_id) fail("E_ITEM_BOUND", "line item " + st.item + " is bound to run " + s.run_id + ", so run " + o.run_id + " cannot spend from it; nothing was opened");
     if (s.open) fail("E_LEASE_UNSETTLED", "lease " + s.open.lease_id + " on line item " + st.item + " (machine " + s.open.machine_id + ", run " + s.open.run_id + ") is still open; settle it on that machine, then launch the driver again; nothing was opened");
@@ -395,8 +411,9 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       const lease = openLease(o.record, o.local, { item: st.item, run_id: o.run_id, machine_id: machine, holder, ttl_ms: ttl, warn, requireAdmission: o.requireAdmission, ...(o.now ? { now: new Date(now()) } : {}) });
       opened.push(lease.lease_id);
       const journal = join(dir, lease.lease_id + ".journal.ndjson");
-      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch });
-      const stage: Stage = { item: st.item, arm: st.arm, kind: reg.arms[st.arm]!.kind, lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
+      const sm = smStage(st);
+      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch, ...(sm ? { refuseServerTools: true } : {}) });
+      const stage: Stage = { item: st.item, arm: st.arm, kind: sm ? smArm(reg, st.arms![0]!).kind : reg.arms[st.arm]!.kind, arms: sm ? [...st.arms!] : [st.arm], ...(sm ? { model: st.model } : {}), lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
       stages.push(stage);
       proxy.start();
     } catch (error) {
@@ -407,13 +424,13 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
   const triples = new Map<string, number>();
   if (existsSync(sessionsFile)) {
     for (const line of readFileSync(sessionsFile, "utf8").split("\n")) {
-      let e: { run_id?: string; event?: string; arm?: string; task?: string; trial_n?: number; rerun?: string };
+      let e: { run_id?: string; event?: string; arm?: string; model?: string; task?: string; trial_n?: number; rerun?: string };
       try {
         e = JSON.parse(line);
       } catch {
         continue;
       }
-      const stage = stages.find((s) => s.arm === e.arm);
+      const stage = stages.find((s) => s.arms.includes(e.arm!) && s.model === e.model);
       if (e.run_id !== o.run_id || e.event !== "open" || !stage) continue;
       const key = e.arm + "|" + e.task + "|" + e.trial_n;
       triples.set(key, (triples.get(key) ?? 0) + 1);
@@ -563,10 +580,10 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     const meta = (b.meta ?? {}) as Record<string, any>;
     Object.assign(ctx, { open_key: b.open_key, trial: b.trial, arm: meta.arm, task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}) });
     if (b.ledger !== "u4") return refusal("E_USAGE", 400, "this driver serves only U4 opens (ledger \"u4\"), not " + JSON.stringify(b.ledger ?? null) + "; G sessions spend only through a U4 lease (G prereg section 10 item 4)");
-    const stage = stages.find((s) => s.arm === meta.arm);
+    const stage = stages.find((s) => s.arms.includes(meta.arm) && (s.model === undefined || s.model === b.model));
     if (!stage) return refusal("E_USAGE", 400, "arm " + JSON.stringify(meta.arm ?? null) + " is not in this batch; it serves " + stages.map((s) => s.arm).join(", "));
-    const limits = reg.arms[stage.arm]!.limits;
-    if (b.model !== reg.pins.model) return refusal("E_USAGE", 400, "model " + JSON.stringify(b.model ?? null) + " is not the registry's pinned " + reg.pins.model);
+    const limits = stage.model === undefined ? reg.arms[stage.arm]!.limits : smLimits(reg, meta.arm, stage.model);
+    if (stage.model === undefined && b.model !== reg.pins.model) return refusal("E_USAGE", 400, "model " + JSON.stringify(b.model ?? null) + " is not the registry's pinned " + reg.pins.model);
     if (b.cap_usd !== limits.session_cap_usd) return refusal("E_USAGE", 400, "cap_usd " + JSON.stringify(b.cap_usd ?? null) + " is not arm " + stage.arm + "'s session_cap_usd of " + limits.session_cap_usd);
     if (typeof b.trial !== "string" || !b.trial || typeof meta.task !== "string" || !meta.task || !Number.isSafeInteger(meta.trial_n) || meta.trial_n < 1) return refusal("E_USAGE", 400, "an open needs trial, meta.task and meta.trial_n (a whole number from 1)");
     if (meta.rerun !== undefined && (typeof meta.rerun !== "string" || !meta.rerun)) return refusal("E_USAGE", 400, "meta.rerun, when given, names the repair the rerun follows");
@@ -574,10 +591,10 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       if (stage.ended === "cap_stop") return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") is cap-stopped, scope " + stage.scope + "; do not retry: the stage ends incomplete", { item: stage.item, scope: stage.scope });
       return refusal("E_LEASE_CLOSED", 503, "stage " + stage.item + " (" + stage.arm + ") is " + stage.state + " (" + (stage.ended ?? "stopping") + "); retry after the driver is launched again for run " + o.run_id, { item: stage.item });
     }
-    const key = stage.arm + "|" + meta.task + "|" + meta.trial_n;
+    const key = meta.arm + "|" + meta.task + "|" + meta.trial_n;
     const seen = triples.get(key) ?? 0;
-    if (seen >= 2) return refusal("E_USAGE", 422, "arm " + stage.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened " + seen + " times; a trial gets one rerun at most");
-    if (seen === 1 && !meta.rerun) return refusal("E_USAGE", 422, "arm " + stage.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened; a second open is a rerun and names its repair in meta.rerun");
+    if (seen >= 2) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened " + seen + " times; a trial gets one rerun at most");
+    if (seen === 1 && !meta.rerun) return refusal("E_USAGE", 422, "arm " + meta.arm + " task " + meta.task + " trial " + meta.trial_n + " was already opened; a second open is a rerun and names its repair in meta.rerun");
     if (stage.opens >= planned + reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened " + stage.opens + " sessions, its " + planned + " planned plus " + reruns + " reruns");
     if (!meta.rerun && stage.opens - stage.reruns >= planned) return refusal("E_USAGE", 422, "stage " + stage.item + " has opened its " + planned + " planned sessions; a further open is a rerun and names its repair in meta.rerun");
     if (meta.rerun && stage.reruns >= reruns) return refusal("E_USAGE", 422, "stage " + stage.item + " has used its " + reruns + " reruns");
@@ -598,9 +615,10 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       capStop(stage);
       return refusal("CAP_STOP", 409, "stage " + stage.item + " (" + stage.arm + ") has " + usd(Math.max(room, 0)) + " of room on lease " + stage.lease_id + " (" + usd(stage.reserved) + " reserved, " + usd(held) + " held, " + usd(pending) + " still allowed to live sessions); a session needs " + usd(allowance) + ". Do not retry: the stage ends incomplete, scope " + stage.scope, { item: stage.item, scope: stage.scope, room_micros: room, allowance_micros: allowance });
     }
-    const binding = stage.proxy.bind({ cell: { run_id: o.run_id, arm: stage.arm, task: meta.task, model: b.model, trial: meta.trial_n, attempt: seen + 1 }, models: ["anthropic:" + b.model], allowance_micros: allowance });
+    const provider = stage.model === undefined ? "anthropic" : smProvider(reg, stage.model);
+    const binding = stage.proxy.bind({ cell: { run_id: o.run_id, arm: meta.arm, task: meta.task, model: b.model, trial: meta.trial_n, attempt: seen + 1 }, models: [provider + ":" + b.model], allowance_micros: allowance });
     const id = "ses_" + randomBytes(9).toString("hex");
-    const answer: OpenAnswer = { id, token: binding.token, base_url: "http://" + urlHost(o.host) + ":" + stage.proxy.port + "/" + binding.slot + "/anthropic", ledger: "u4", item: stage.item, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance };
+    const answer: OpenAnswer = { id, token: binding.token, base_url: "http://" + urlHost(o.host) + ":" + stage.proxy.port + "/" + binding.slot + "/" + provider, ledger: "u4", item: stage.item, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance };
     const sess: Session = { id, stage, slot: binding.slot, meter_id: binding.meter_id, allowance, answer, timer: setTimeout(() => void closeSession(sess, "deadline"), wall), closing: null, closed: null };
     sess.timer.unref?.();
     sessions.set(id, sess);
@@ -609,7 +627,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
     stage.opens++;
     if (meta.rerun) stage.reruns++;
     triples.set(key, seen + 1);
-    record({ event: "open", id, item: stage.item, arm: stage.arm, task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}), trial: b.trial, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance });
+    record({ event: "open", id, item: stage.item, arm: meta.arm, ...(stage.model === undefined ? {} : { model: stage.model }), task: meta.task, trial_n: meta.trial_n, ...(meta.rerun ? { rerun: meta.rerun } : {}), trial: b.trial, lease_id: stage.lease_id, meter_id: binding.meter_id, allowance_micros: allowance });
     return Response.json(answer);
   };
 

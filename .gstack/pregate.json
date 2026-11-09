@@ -48,7 +48,9 @@
       "tests/outcome-skills/driver-dryrun.test.ts",
       "tests/outcome-skills/exposure.test.ts",
       "tests/outcome-skills/registry.test.ts",
-      "tests/outcome-skills/told.test.ts"
+      "tests/outcome-skills/told.test.ts",
+      "tests/outcome-skills/sm-arms.test.ts",
+      "tests/outcome-skills/sm-claude.test.ts"
     ],
     "tests/outcome-skills/fixtures/**": [
       "tests/outcome-skills/exposure.test.ts"
@@ -58,7 +60,9 @@
       "tests/real-outcome/agent.test.ts",
       "tests/real-outcome/arms.test.ts",
       "tests/real-outcome/sandbox.test.ts",
-      "tests/outcome-skills/driver-dryrun.test.ts"
+      "tests/outcome-skills/driver-dryrun.test.ts",
+      "tests/outcome-skills/sm-session.test.ts",
+      "tests/outcome-skills/sm-claude.test.ts"
     ],
     "lanes/outcome-skills/mutation/**": [
       "tests/outcome-skills/mutation-docker.test.ts",
@@ -79,7 +83,8 @@
       "tests/errors.test.ts"
     ],
     "src/runner/proxy/**": [
-      "tests/proxy/metering-proxy.test.ts"
+      "tests/proxy/metering-proxy.test.ts",
+      "tests/proxy/sm-proxy.test.ts"
     ],
     "src/runner/pricing/**": [
       "tests/proxy/metering-proxy.test.ts"
@@ -159,13 +164,22 @@
       "tests/outcome-skills/sm-oracle-docker.test.ts",
       "tests/outcome-skills/sm-scope.test.ts",
       "tests/outcome-skills/sm-source.test.ts",
-      "tests/outcome-skills/sm-unit.test.ts"
+      "tests/outcome-skills/sm-unit.test.ts",
+      "tests/outcome-skills/sm-arms.test.ts",
+      "tests/outcome-skills/sm-session.test.ts",
+      "tests/outcome-skills/sm-claude.test.ts"
     ],
     "tests/outcome-skills/fixtures/sm/**": [
       "tests/outcome-skills/sm-draw.test.ts"
     ],
     "wiki/plans/2026-11-09-geva-409-state-machines-prompt-prereg/supply-count.py": [
       "tests/outcome-skills/sm-source.test.ts"
+    ],
+    "wiki/plans/2026-11-09-geva-409-state-machines-prompt-prereg/**": [
+      "tests/outcome-skills/sm-arms.test.ts"
+    ],
+    "tests/real-outcome/unit_test.py": [
+      "tests/outcome-skills/sm-session.test.ts"
     ]
   },
   "guards": [

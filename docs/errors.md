@@ -180,6 +180,11 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_PULL](#e_sm_pull) | 1 | U20 |
 | [E_SM_PARSER](#e_sm_parser) | 1 | U20 |
 | [E_SM_SEED](#e_sm_seed) | 2 | U20 |
+| [E_SM_ARM](#e_sm_arm) | 2 | U20 |
+| [E_SM_STRIP](#e_sm_strip) | 2 | U20 |
+| [E_SM_UPSTREAM_GAP](#e_sm_upstream_gap) | 2 | U20 |
+| [E_SM_INFRA_GAP](#e_sm_infra_gap) | 2 | U20 |
+| [E_PROXY_SERVER_TOOL](#e_proxy_server_tool) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -1286,6 +1291,46 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 The state machines draw found no seed: the preregistration's JSON (prereg.json in the post bundle) is missing, is not sm-prereg.v1, or lacks an unsigned 32-bit integer draw_seed, bootstrap_seed or order_seed.
 
 Fix: Add the seeds through the preregistration's own pull request. The draw never runs on a seed chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_ARM
+
+A state machines arm (family SM in lanes/outcome-skills/arms/registry.json) is refused: an SM arm whose name, kind, install, clean room, turns or per-model limits break the family's shape, an arm text that is not the preregistration's, a scope that is empty or multi-line, or a qa:told run while the /qa pin is not recorded.
+
+Fix: Restore registry.json's family SM arms from the preregistration (tests/outcome-skills/sm-arms.test.ts pins every text by sha256), record the /qa pin at freeze, and pass the unit's scope as one line.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_STRIP
+
+A state machines session saw instructions the strip rule removes: a CLAUDE.md, CLAUDE.local.md or AGENTS.md, or a file under .claude/, inside the repository, in the session's tree or its loaded memory; or an A3 (qa:told) session whose loaded memory lacks gstack's installed instructions. The session is not scored.
+
+Fix: Prepare the unit's base tree again with the strip (gstack-evals outcome sm convert), check nothing in the arm setup writes into the repository, and for A3 check the install went into the container's home after the strip.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_UPSTREAM_GAP
+
+A state machines session ended on a provider or proxy error twice, the first try and its one retry from a fresh container, so the session is a gap (preregistration section 6), not a miss.
+
+Fix: Nothing to fix in the session: report the gap per arm and cell. Check the provider's status and the proxy journal if gaps cluster.
+
+Exit 2. Side effects: The two tries spent what the proxy metered for them. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_INFRA_GAP
+
+A state machines session failed outside the model twice (container, pull, Harbor or agent setup), the first try and its one rerun, so the session is a gap (preregistration section 6), not a miss.
+
+Fix: Read the session's agent log for the failure, fix the harness, and report the gap per arm and cell; a gap is never rerun a third time.
+
+Exit 2. Side effects: The two tries spent what the proxy metered for them. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PROXY_SERVER_TOOL
+
+The metering proxy refused a request whose tools list carries a provider-side tool (a typed tool such as web_search or web_fetch), before pricing it, because its lease runs with refuseServerTools on (the state machines family's stages).
+
+Fix: Disallow the tool in the agent (Claude Code's WebSearch and WebFetch are disallowed in every SM arm). Never turn the option off for an SM stage.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
 

@@ -157,6 +157,8 @@ export interface ProxyOptions {
   maxOutputTokens?: number;
   /** Strings that must never leave the cell (hidden facts, answer keys); a body carrying one is refused. */
   forbiddenMarkers?: string[];
+  /** Refuse with E_PROXY_SERVER_TOOL, before pricing, any request whose tools list carries a provider-side tool (a typed tool other than custom, such as web_search). Off by default; the state machines family turns it on for its stages. */
+  refuseServerTools?: boolean;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -582,6 +584,10 @@ export class MeteringProxy {
     const body = parsed as Record<string, any>;
     ctx.model = typeof body.model === "string" ? body.model : "";
     if (!slot.models.has(`${provider}:${ctx.model}`)) return this.refuse(ctx, "E_ALLOWANCE", 403, `${provider}:${ctx.model || "(no model)"} is not on this slot's model allowlist`);
+    if (o.refuseServerTools) {
+      const server = Array.isArray(body.tools) ? body.tools.filter((t: any) => t && typeof t.type === "string" && t.type !== "custom").map((t: any) => t.type as string) : [];
+      if (server.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side tools are refused on this lease: ${server.join(", ")}`, { tools: server });
+    }
     if (allowed.estimate) {
       this.journal({ kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model, source: ctx.source, status: 200, estimated: true });
       return Response.json({ input_tokens: Math.ceil(Buffer.byteLength(raw) / 4) });
