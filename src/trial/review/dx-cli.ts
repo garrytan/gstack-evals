@@ -16,12 +16,13 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { frozenRuns, openRun } from "../../../lanes/devex/leases.ts";
-import { dxPlan, isStage1Run, MAX_PARALLEL, NONE_PASSES, runDxSessions, STAGE1_RUNS, type DxRunResult, type DxTree } from "../../../lanes/devex/run/session.ts";
+import { dxPlan, isStage1Run, MAX_PARALLEL, NONE_PASSES, runDxSessions, STAGE1_RUNS, stage1Open, type DxRunResult, type DxTree } from "../../../lanes/devex/run/session.ts";
 import { hostDriver } from "../../adapters/host.ts";
 import { stackKind } from "../../arms/stacks.ts";
 import { rigAdmission } from "../../rig/admission.ts";
 import { settleLease } from "../../runner/ledger/ledger.ts";
 import { openLocalLedger } from "../../runner/ledger/local.ts";
+import { readItem } from "../../runner/ledger/record.ts";
 import { ledgerPath, recordPath } from "../../runner/ledger/paths.ts";
 import { dockerRig, type HostRig } from "../../skill-eval/cli/run-host.ts";
 import type { ResolvedArms } from "../../skill-eval/cli/arms.ts";
@@ -262,14 +263,17 @@ async function dxPaid(p: { flags: Map<string, string[]>; unitsDir: string; unitI
   const ledger = ledgerPath(one("--ledger") ?? undefined, p.env);
   const record = recordPath(one("--record") ?? undefined, p.env);
   const local = openLocalLedger(ledger);
-  const opened = openRun(record.path, local, { run: run!, opened: [], mdd: () => Number.POSITIVE_INFINITY, requireAdmission: rigAdmission({ proof: "trial" }) });
+  const open = stage1Open(run!, p.arms, readItem(record.path, frozen.item).leases.length);
+  if ("problem" in open) return refuse(open.problem, open.fix);
+  const leased = frozenRuns(open.design).find((r) => r.id === run)!;
+  const opened = openRun(record.path, local, { run: run!, design: open.design, opened: open.opened, mdd: () => Number.POSITIVE_INFINITY, requireAdmission: rigAdmission({ proof: "trial" }) });
   if (!opened.admission.ok || !opened.lease_id) {
     p.io.err("CAP_STOP review-units: run " + run + " on " + frozen.item + " is not admitted: " + (opened.admission.ok ? "no lease opened" : opened.admission.stop) + "\n  fix: the run stops for the Captain; nothing was spent");
     return 2;
   }
   const lease = opened.lease_id;
   const leaseMicros = opened.admission.lease_micros;
-  p.io.out("lease " + lease + " opened on " + frozen.item + " for " + run + ": " + usd(leaseMicros) + " (projection " + usd(frozen.projection_micros) + " plus a tenth plus the in-flight reserve)");
+  p.io.out("lease " + lease + " opened on " + frozen.item + " for " + run + ": " + usd(leaseMicros) + " (projection " + usd(leased.projection_micros) + " plus a tenth plus the in-flight reserve)");
   const specs: ArmSpec[] = p.arms.map((a) => {
     if (!DX_ARMS[a].gstack) return { name: a, kind: "bare" };
     const stack = parseStackRef(DX_GSTACK.repo + "@" + DX_GSTACK.sha) as Exclude<ReturnType<typeof parseStackRef>, string>;
@@ -295,6 +299,7 @@ async function dxPaid(p: { flags: Map<string, string[]>; unitsDir: string; unitI
     if (s?.paused.length) p.io.out("lease " + lease + " left open for the Captain: " + s.paused.join("; "));
     else p.io.out("lease " + lease + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls" + (s ? ", " + s.released.length + " unrun sessions released" : ""));
   }
+  if (live!.error) throw live!.error;
   const rows = live!.rows;
   const ends = rows.reduce<Record<string, number>>((m, r) => ((m[r.end] = (m[r.end] ?? 0) + 1), m), {});
   p.io.out("rows " + rows.length + " of " + plan.sessions.length + " planned in " + join(p.out, "rows.ndjson") + ": " + Object.entries(ends).map(([k, v]) => k + " " + v).join(", "));

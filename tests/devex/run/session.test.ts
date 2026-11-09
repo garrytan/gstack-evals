@@ -3,10 +3,13 @@
 // run's plan, the arm env check, released rows, and review-units --plan devex's paid refusals, each with a fix line.
 import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { armEnvProblem, dxPlan, releasedRow } from "../../../lanes/devex/run/session.ts";
-import { SMOKE } from "../../../lanes/devex/leases.ts";
+import { armEnvProblem, dxPlan, releasedRow, stage1Open } from "../../../lanes/devex/run/session.ts";
+import { FULL, frozenRuns, ITEMS, openRun, SMOKE } from "../../../lanes/devex/leases.ts";
+import { recordApproval, settleLease } from "../../../src/runner/ledger/ledger.ts";
+import { LocalLedger } from "../../../src/runner/ledger/local.ts";
+import { readItem } from "../../../src/runner/ledger/record.ts";
 import { MODEL_STRINGS } from "../../../lanes/devex/types.ts";
 import { DX_GSTACK, dxArmEnv } from "../../../src/trial/review/devex.ts";
 import { dxMain } from "../../../src/trial/review/dx-cli.ts";
@@ -60,6 +63,18 @@ describe("armEnvProblem and releasedRow", () => {
   });
 });
 
+describe("stage1Open: one lease per frozen run, sized for the arms it runs", () => {
+  test("s1-resmoke's lease is sized for the arms it reruns, not the design's default", () => {
+    const two = stage1Open("s1-resmoke", ["plan-devex-review", "autoplan"], 2);
+    if ("problem" in two) throw new Error(two.problem);
+    const lease = (d: typeof FULL) => frozenRuns(d).find((r) => r.id === "s1-resmoke")!.lease_micros;
+    expect(two.design.resmoke).toEqual(["plan-devex-review", "autoplan"]);
+    expect(two.opened).toEqual(["s1-none", "s1-smoke"]);
+    expect(lease(two.design)).toBeGreaterThan(lease(FULL));
+    expect(stage1Open("s1-resmoke", ["autoplan"], 0)).toMatchObject({ problem: expect.stringMatching(/opens after s1-none and s1-smoke/) });
+  });
+});
+
 describe("review-units --plan devex: the paid run's refusals", () => {
   const unitsDir = join(dir, "units");
   for (const id of units(16)) {
@@ -78,10 +93,10 @@ describe("review-units --plan devex: the paid run's refusals", () => {
   chmodSync(join(fake, "git"), 0o755);
   const env = { GSTACK_EVALS_DX_PIN: pin, PATH: fake + ":/usr/bin:/bin" };
   const all = Object.values(MODEL_STRINGS);
-  const go = async (extra: string[], e: Record<string, string> = env, arms = ["none"], u = ["--units", "all"]) => {
+  const go = async (extra: string[], e: Record<string, string> = env, arms = ["none"], u = ["--units", "all"], outDir = join(dir, "out-" + Math.random().toString(36).slice(2))) => {
     const err: string[] = [];
     const out: string[] = [];
-    const code = await dxMain(["--plan", "devex", "--units-dir", unitsDir, ...u, "--models", ...all, "--out", join(dir, "out-" + Math.random().toString(36).slice(2)), "--arms", ...arms, ...extra], { out: (t) => void out.push(t), err: (t) => void err.push(t) }, e);
+    const code = await dxMain(["--plan", "devex", "--units-dir", unitsDir, ...u, "--models", ...all, "--out", outDir, "--arms", ...arms, ...extra], { out: (t) => void out.push(t), err: (t) => void err.push(t) }, e);
     return { code, err: err.join("\n"), out: out.join("\n") };
   };
   test("no --run: the loop runs only a named stage 1 run", async () => {
@@ -119,6 +134,32 @@ describe("review-units --plan devex: the paid run's refusals", () => {
       expect(r.code).toBe(2);
       expect(r.err).toContain("\n  fix: ");
     }
+  });
+  test("a frozen run the approval record already shows a lease for is refused, and the next stage 1 run still opens", async () => {
+    const t = mkdtempSync(join(dir, "rec-"));
+    const record = join(t, "record");
+    const ledger = join(t, "ledger.sqlite");
+    const item = ITEMS.find((i) => i.id === "dx-s1-runs")!;
+    recordApproval(record, { action: "init", item: item.id, cap_micros: item.cap_micros, quotes: [{ words: "a test record", by: "session.test.ts", source: "a test" }], admission: "warn" });
+    let local = LocalLedger.open(ledger);
+    const first = stage1Open("s1-none", ["none"], readItem(record, item.id).leases.length);
+    if ("problem" in first) throw new Error(first.problem);
+    settleLease(record, local, openRun(record, local, { run: "s1-none", ...first, mdd: () => Number.POSITIVE_INFINITY }).lease_id!);
+    local.close();
+    const kept = mkdtempSync(join(homedir(), ".dx-session-test-"));
+    const again = await go(["--run", "s1-none", "--passes", "3", "--record", record, "--ledger", ledger], env, ["none"], ["--units", "all"], join(kept, "out"));
+    rmSync(kept, { recursive: true, force: true });
+    expect(again.code).toBe(2);
+    expect(again.err).toMatch(/^E_USAGE review-units: the approval record already shows 1 lease on stage 1's item/);
+    expect(again.err).toContain("\n  fix: run s1-smoke next");
+    local = LocalLedger.open(ledger);
+    const next = stage1Open("s1-smoke", ["lens", "plan-devex-review", "autoplan"], readItem(record, item.id).leases.length);
+    if ("problem" in next) throw new Error(next.problem);
+    expect(next.opened).toEqual(["s1-none"]);
+    const smoke = openRun(record, local, { run: "s1-smoke", ...next, mdd: () => Number.POSITIVE_INFINITY });
+    expect(smoke.admission.ok).toBe(true);
+    expect(typeof smoke.lease_id).toBe("string");
+    local.close();
   });
   test("the dry run prints what it printed before, and needs no pin", async () => {
     const r = await go(["--dry-run"], {});

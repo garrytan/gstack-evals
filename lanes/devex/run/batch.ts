@@ -12,7 +12,8 @@
 //   o.interim on, it fires by itself once the arm's first 24 Opus (16 Sol or particle-1) stage 2 sessions read under
 //   0.80 (score/rules.ts interimCheck). The reading goes to the Captain: resume runs the arm on the same lease, and
 //   stopArm is E_DX_EXPOSURE_STOP. settle refuses while a pause awaits that word.
-// - halt (a cap stop on the lease's item) starts no more sessions at all; nothing is retried to change a verdict.
+// - halt (a cap stop on the lease's item) starts no more sessions at all; nothing is retried to change a verdict. A launch
+//   that throws halts the batch too; run waits for every session in flight to end, then throws the first launch error.
 // - poll, when given, runs before each session starts, so a stop the Captain records mid-run (the run's control file)
 //   applies to the next session.
 // - settle stages and marks the lease's close (with a cap stop when an ending code stopped the run), and writes it to the approval record when the batch has one
@@ -139,22 +140,27 @@ export class DxBatch<R extends Launched = Launched> {
       this.o.poll?.(this);
       return [...this.state.values()].find((e) => e.state === "pending" && this.startable(e.session));
     };
+    const failures: unknown[] = [];
     const worker = async () => {
       for (let e = next(); e; e = next()) {
         e.state = "running";
         this.note("start", e.session.id);
         try {
           e.result = await this.o.launch(e.session);
+        } catch (err) {
+          failures.push(err);
+          this.halt("a launch threw: " + ((err as Error).message ?? String(err)).split("\n")[0]);
         } finally {
           e.state = "done";
           this.note("end", e.session.id);
         }
-        this.interim(e.session, e.result!);
+        if (e.result) this.interim(e.session, e.result);
         this.settleModelIfIdle(e.session.model);
       }
     };
-    await Promise.all(Array.from({ length: width }, worker));
+    await Promise.allSettled(Array.from({ length: width }, worker));
     for (const m of this.stoppedModels) this.settleModelIfIdle(m);
+    if (failures.length) throw failures[0];
   }
 
   /** Settles the lease: stages and marks its close, and releases every session never started under a stop or a pause. */

@@ -20,18 +20,27 @@
 // - The repair the arm runs under: the Stop hook (stophook.ts makeStopHook, host/stop-hook.ndjson) for
 //   plan-devex-review, gstack's stop gate settings at the pin (devex.ts dxAutoplanGateSettings) for autoplan, or the
 //   doubled limits for every arm. Its name goes on every row.
-// - After each attempt, run/parse.ts dxAttempt reads its outcome, and run/rows.ts nextAttempt says whether the one retry
-//   runs. An infrastructure failure is reconciled first (the meter's finalize settles every call with no recorded
-//   outcome as unknown spend) and logged to recoveries.ndjson before the retry launches (J1 rules 1, 3 and 5). A cap
-//   stop halts the batch.
+// - The install, skill and env checks run before the slot binds. After each attempt, run/parse.ts dxAttempt reads its
+//   outcome, and run/rows.ts nextAttempt says whether the one retry runs. An infrastructure failure is reconciled first
+//   (the meter's finalize settles every call with no recorded outcome as unknown spend, then the slot unbinds) and logged
+//   to recoveries.ndjson before the retry launches (J1 rules 1, 3 and 5). A meter with calls undrained or unsettled, or a
+//   finalize that fails, is not reconciled: the session ends missing under E_DX_INFRA_MISSING, nothing retries, and the
+//   batch halts for the Captain. A bind failure is the attempt's infra outcome. No retry starts once a halt or a stop on
+//   the session's model or arm has applied, and an infra attempt under such a stop takes the stop's code. A cap stop
+//   halts the batch. A launch that throws halts it too; the sessions in flight end, and settle gives every unfinished
+//   session its row.
 // - Each session ends in one row (dxRow) in rows.ndjson: exposure from exposure.ts sessionExposure, dx_lens, the session
 //   kind the pin's own bin/gstack-session-kind reports in the session's env with autoplan's lean mode (dxSessionKind),
 //   answer counts and the repair. A session whose meter shows another model is missing under E_DX_PROVIDER_DRIFT, and
-//   that model stops on the lease. Sessions a stop released get a missing row under that stop's code at settle.
+//   that model stops on the lease. Sessions a stop released get a missing row at settle under the code of the first stop
+//   that applied to them.
 // - Stops: a per-model stop scopes the model and settles its scope once its sends are over (DxBatch.stopModel); an arm
 //   stop scopes the arm and leaves the lease open (stopArm); both are routed by leases.ts stopAction, from the drift
-//   check or from a control file line the Captain writes ({"code", "model" or "arm", "why"}), read before each start.
-//   Two INSTALL: fail sessions in one cell pause that cell for the Captain, and the lease then stays open.
+//   check or from a control file line the Captain writes ({"code", "model" or "arm", "why"}), read before each start,
+//   newline-terminated lines only. A line whose code routes nowhere, or a scope stop missing its model or arm, halts the
+//   batch for the Captain. Two INSTALL: fail sessions in one cell pause that cell: the run keeps its process and lease and
+//   rereads the control file until a {"resume": arm, "model"} line resumes the cell on the same lease or a stop line
+//   stops its arm.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { BACKGROUND_WAIT_MS } from "../../../src/adapters/claude-code/driver.ts";
@@ -48,7 +57,7 @@ import { STATE_ROOT_DIR } from "../../../src/trial/state-root.ts";
 import type { Sandbox } from "../../../src/trial/sandbox.ts";
 import { runTrial } from "../../../src/trial/trial.ts";
 import type { Termination } from "../../../src/types.ts";
-import { SMOKE, stopAction } from "../leases.ts";
+import { FULL, SMOKE, stopAction, type Design } from "../leases.ts";
 import { MODEL_IDS, MODEL_STRINGS, type ArmId, type ModelId } from "../types.ts";
 import { DxBatch, type ArmStop, type BatchSession, type ModelStop } from "./batch.ts";
 import { sessionExposure } from "./exposure.ts";
@@ -86,6 +95,19 @@ export function dxPlan(run: Stage1Run, units: readonly string[], resmoke: readon
     for (const i of at) sessions.push(planned(units[i]!, arm, model, run === "s1-smoke" ? 1 : 2, true));
   }
   return { sessions };
+}
+
+/**
+ * What a stage 1 run opens its lease with, given how many leases the approval record shows on the item: the design whose
+ * re-smoke is the arms named, and the runs already opened. Stage 1's runs open in STAGE1_RUNS order, one lease each, so
+ * the item's first k leases are its first k runs; a run the record already shows a lease for, or one that skips ahead,
+ * is refused.
+ */
+export function stage1Open(run: Stage1Run, arms: readonly ArmId[], leases: number): { design: Design; opened: Stage1Run[] } | { problem: string; fix: string } {
+  const at = STAGE1_RUNS.indexOf(run);
+  if (leases > at) return { problem: "the approval record already shows " + leases + " lease" + (leases === 1 ? "" : "s") + " on stage 1's item, opened in the order " + STAGE1_RUNS.slice(0, leases).join(", ") + ", so " + run + " has had its one lease; a stopped run is incomplete and is never rerun", fix: leases < STAGE1_RUNS.length ? "run " + STAGE1_RUNS[leases] + " next, or take the stop to the Captain" : "take the stop to the Captain" };
+  if (leases < at) return { problem: run + " opens after " + STAGE1_RUNS.slice(leases, at).join(" and ") + ", and the approval record shows " + leases + " lease" + (leases === 1 ? "" : "s") + " on stage 1's item", fix: "run " + STAGE1_RUNS[leases] + " first" };
+  return { design: { ...FULL, resmoke: run === "s1-resmoke" ? arms : FULL.resmoke }, opened: STAGE1_RUNS.slice(0, at) };
 }
 
 /** Why the driver's agent env does not carry the arm's (dxArmEnv), or null. */
@@ -128,8 +150,10 @@ export interface DxRunInput {
   repairs: ReadonlyMap<ArmId, Repair>;
   /** The pinned gstack checkout whose bin/gstack-session-kind each session's kind is read from. */
   pin: string;
-  /** The control file a stop is recorded in mid-run; null reads none. */
+  /** The control file a stop or a paused cell's resume is recorded in mid-run; null reads none. */
   control: string | null;
+  /** How often a run with a paused cell rereads the control file; defaults to 5 seconds. */
+  pollMs?: number;
   log: (line: string) => void;
 }
 
@@ -141,6 +165,8 @@ export interface DxLaunch {
 export interface DxRunResult {
   batch: DxBatch<DxLaunch>;
   rows: DxRow[];
+  /** What a session's launch threw, once every session in flight had ended; the lease is still open for settle. */
+  error: unknown;
   /** Settles the lease (unless a pause awaits the Captain), writes a row for each released session and settled.json. */
   settle: () => { close: CloseFile | null; released: string[]; paused: string[] };
 }
@@ -168,37 +194,40 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
   const leaseModels = [...new Set(o.sessions.map((s) => s.model))];
   const rows: DxRow[] = [];
   const released = new Map<string, string>();
-  const modelStops = new Map<ModelId, string>();
-  const armStops = new Map<ArmId, string>();
-  let halt: string | null = null;
+  const stops: Array<{ code: string; model?: ModelId; arm?: ArmId }> = [];
+  const stopOf = (s: BatchSession): string | null => stops.find((x) => (!x.model && !x.arm) || x.model === s.model || x.arm === s.arm)?.code ?? null;
+  const haltFor = (code: string, why: string) => {
+    stops.push({ code });
+    batch.halt(code + ": " + why);
+  };
   let endStop: string | null = null;
   const paused = new Set<string>();
   let controlRead = 0;
   let batch!: DxBatch<DxLaunch>;
 
-  /** Routes a stopping code through leases.ts stopAction onto the batch. */
-  const stop = (code: ReasonCode, on: { model?: ModelId; arm?: ArmId }, why: string) => {
+  /** Routes a stopping code through leases.ts stopAction onto the batch; false when it routes nowhere or lacks its target. */
+  const stop = (code: ReasonCode, on: { model?: ModelId; arm?: ArmId }, why: string): boolean => {
     const action = stopAction(code, { stage: 1, model: on.model, lease_models: leaseModels });
-    o.log(code + " " + (on.model ?? on.arm ?? "run") + ": " + why + " (" + action + ")");
     if (action === "scope-model" && on.model) {
-      modelStops.set(on.model, code);
+      stops.push({ code, model: on.model });
       batch.stopModel(on.model, code as ModelStop, why);
     } else if (action === "scope-arm" && on.arm) {
-      armStops.set(on.arm, code);
+      stops.push({ code, arm: on.arm });
       batch.stopArm(on.arm, code as ArmStop, why);
     } else if (action === "end" || action === "settle") {
-      halt ??= code;
       if (action === "end") endStop ??= code + " " + why;
-      batch.halt(code + ": " + why);
-    }
+      haltFor(code, why);
+    } else return false;
+    o.log(code + " " + (on.model ?? on.arm ?? "run") + ": " + why + " (" + action + ")");
+    return true;
   };
   const poll = () => {
     if (!o.control) return;
     const text = readText(o.control);
     if (text === null) return;
-    const lines = text.split("\n").filter((l) => l.trim());
+    const lines = text.slice(0, text.lastIndexOf("\n") + 1).split("\n").filter((l) => l.trim());
     for (; controlRead < lines.length; controlRead++) {
-      let v: { code?: unknown; model?: unknown; arm?: unknown; why?: unknown } | null = null;
+      let v: { code?: unknown; model?: unknown; arm?: unknown; why?: unknown; resume?: unknown } | null = null;
       try {
         v = JSON.parse(lines[controlRead]!);
       } catch {
@@ -206,13 +235,13 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
       }
       const code = typeof v?.code === "string" && isReasonCode(v.code) ? v.code : null;
       const model = MODEL_IDS.find((m) => m === v?.model);
-      const arm = (Object.keys(DX_ARMS) as ArmId[]).find((a) => a === v?.arm);
-      if (!code || (v?.model !== undefined && !model) || (v?.arm !== undefined && !arm)) {
-        halt ??= "E_USAGE";
-        batch.halt("control line " + (controlRead + 1) + " does not read as {code, model or arm, why}, so no session starts until the Captain looks");
+      const arm = (Object.keys(DX_ARMS) as ArmId[]).find((a) => a === (v?.resume ?? v?.arm));
+      if (v?.resume !== undefined && v.code === undefined && arm && model && batch.pauses().some((p) => p.arm_model === arm + " on " + model)) {
+        batch.resume(arm, model);
         continue;
       }
-      stop(code, { model, arm }, typeof v?.why === "string" ? v.why : "recorded in the control file");
+      if (v?.resume === undefined && code && (v?.model === undefined || model) && (v?.arm === undefined || arm) && stop(code, { model, arm }, typeof v?.why === "string" ? v.why : "recorded in the control file")) continue;
+      haltFor("E_USAGE", "control line " + (controlRead + 1) + " does not read as {code, model or arm, why} with a code that stops its target, or as {resume, model} for a paused cell, so no session starts until the Captain looks");
     }
   };
 
@@ -230,7 +259,6 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
     const install = o.rig.arms[s.arm];
     if (!install) throw new Error("E_USAGE: the rig has no arm " + s.arm);
     if (!spec.gstack && (install.gstack || install.skill || (install.plugins ?? []).length)) throw new Error("E_USAGE: arm " + s.arm + " runs no gstack install, no skills folder and no drive mount, and its install holds one");
-    const binding = await o.rig.bind({ cell: { run_id: o.runId, arm: s.arm, task: tree.task, model: ms, trial: s.pass, attempt: n }, models: slotModels(o.policy, ms, null), allowance_micros: limits.usd * 1_000_000 });
     const base = reviewSandbox(o.rig.sandbox(s.arm, false, ms), DX_LENS);
     const sandbox: Sandbox = spec.gstack ? base : Object.assign(Object.create(base) as Sandbox, {
       agent: (task: string, a: Parameters<Sandbox["agent"]>[1]) => {
@@ -244,50 +272,73 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
     const plugins = (install.plugins ?? []).map((p) => posix.join(home, p));
     const repair = repairOf(s.arm, o.repairs, o.doubled);
     const host = join(dir, "host");
-    const options: HostDriverOptions = {
-      host: "claude", model: ms, provider, proxy: { baseUrl: o.rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: true, skill, out: host,
+    const options = (proxy: HostDriverOptions["proxy"]): HostDriverOptions => ({
+      host: "claude", model: ms, provider, proxy, interactive: true, skill, out: host,
       entry: { user: DX_REC_USER }, freeform: dxFreeform(join(host, "persona.ndjson")), followUp: DX_FOLLOW_UP, systemPrompt: DX_SYSTEM_PROMPT, maxTurns: limits.turns,
       disable1mContext: true, capStops: true, memoryLog: true, backgroundWaitMs: BACKGROUND_WAIT_MS, ...(plugins.length ? { plugins } : {}), ...(spec.session_kind ? { sessionKind: spec.session_kind } : {}),
       ...(repair === "stop hook" ? { stopHook: makeStopHook({ log: join(host, "stop-hook.ndjson") }) } : {}),
       ...(repair === "gstack stop gate" ? { skillGateDeadlineMs: GATE_DEADLINE_MS, settings: { command: [posix.join(home, posix.dirname(install.gstack ?? ""), "gstack-skill-gates"), "settings", "--autoplan"].map((w) => "'" + w.replace(/'/g, "'\\''") + "'").join(" "), make: dxAutoplanGateSettings } } : {}),
-    };
-    const agent = (o.rig.driver ?? hostDriver)(options);
-    const env = agent.env ?? {};
-    const envProblem = armEnvProblem(s.arm, env);
+    });
+    const envProblem = armEnvProblem(s.arm, hostDriver(options({ baseUrl: o.rig.baseUrl, slot: "env-check", token: "" })).env ?? {});
     if (envProblem) throw new Error("E_USAGE: " + envProblem);
     let termination: Termination;
     let transcript: string | null = null;
+    let env: Record<string, string> = {};
+    let binding: Awaited<ReturnType<HostRig["bind"]>> | null = null;
     try {
+      binding = await o.rig.bind({ cell: { run_id: o.runId, arm: s.arm, task: tree.task, model: ms, trial: s.pass, attempt: n }, models: slotModels(o.policy, ms, null), allowance_micros: limits.usd * 1_000_000 });
+      const agent = (o.rig.driver ?? hostDriver)(options({ baseUrl: o.rig.baseUrl, slot: binding.slot, token: binding.token }));
+      env = agent.env ?? {};
       const trial = await runTrial({ cell: { model: ms, arm: s.arm, round: 1, trial: s.pass }, task: { id: tree.task, prompt: dxPrompt(s.arm) }, tasksDir: empty, sandbox, agent, dir, timeoutS: limits.minutes * 60, network: o.rig.network, seed, copyDir: { from: STATE_ROOT_DIR, to: join(host, "gstack-state") }, ...dxPlanTuneState(s.arm) });
       termination = trial.record.termination;
       transcript = readText(join(host, "transcript.ndjson"));
     } catch (e) {
-      termination = { kind: "infra", incident: "the session crashed: " + ((e as Error).message ?? String(e)).split("\n")[0] };
+      termination = { kind: "infra", incident: (binding ? "the session crashed: " : "the slot did not bind: ") + ((e as Error).message ?? String(e)).split("\n")[0] };
     }
-    const meter = await o.rig.finalize(binding.meter_id);
+    let meter: Pick<Awaited<ReturnType<HostRig["finalize"]>>, "micros" | "unknown" | "undrained" | "unsettled" | "by_model"> = { micros: 0, unknown: 0, undrained: 0, unsettled: 0, by_model: {} };
+    let finalizeError: string | null = null;
+    if (binding) {
+      try {
+        meter = await o.rig.finalize(binding.meter_id);
+        await o.rig.unbind?.(binding.slot);
+      } catch (e) {
+        finalizeError = ((e as Error).message ?? String(e)).split("\n")[0]!;
+      }
+    }
     const read = dxAttempt(termination, transcript);
     const drift = Object.keys(meter.by_model).filter((k) => k !== provider + ":" + ms);
-    line(files.sessions, { session: s.id, attempt: n, reason, dir, termination, outcome: read.outcome, spend_micros: meter.micros, unknown_calls: meter.unknown, by_model: meter.by_model, repair: repairName(repair), prompt_sha256: DX_PROMPT_SHA256[s.arm] });
-    if (read.outcome.state === "infra") {
-      line(files.recoveries, { at: new Date().toISOString(), session: s.id, attempt: n, reason: read.outcome.reason, detail: read.outcome.detail, spend_micros: meter.micros, unknown_calls: meter.unknown, reconciled: "the meter's finalize settled every call with no recorded outcome as unknown spend" });
-      o.log("E_DX_INFRA_MISSING " + s.id + " attempt " + n + ": " + read.outcome.reason + " (" + read.outcome.detail + "), " + meter.unknown + " unknown calls; recorded in recoveries.ndjson before any retry");
+    const open = [...(finalizeError ? ["the meter's finalize or unbind failed (" + finalizeError + ")"] : []), ...(meter.undrained ? [meter.undrained + " calls were still in flight (undrained)"] : []), ...(meter.unsettled ? [meter.unsettled + " outcomes were not acknowledged by the ledger (unsettled)"] : [])];
+    line(files.sessions, { session: s.id, attempt: n, reason, dir, termination, outcome: read.outcome, spend_micros: meter.micros, unknown_calls: meter.unknown, undrained: meter.undrained, unsettled: meter.unsettled, ...(finalizeError ? { finalize_error: finalizeError } : {}), by_model: meter.by_model, repair: repairName(repair), prompt_sha256: DX_PROMPT_SHA256[s.arm] });
+    const infra = read.outcome.state === "infra" ? read.outcome : null;
+    if (infra || open.length) {
+      line(files.recoveries, { at: new Date().toISOString(), session: s.id, attempt: n, reason: infra?.reason ?? "unreconciled", detail: infra?.detail ?? open.join("; "), spend_micros: meter.micros, unknown_calls: meter.unknown, undrained: meter.undrained, unsettled: meter.unsettled, reconciled: open.length ? "not reconciled: " + open.join("; ") + "; nothing retries, and the run halts for the Captain to reconcile the lease first (J1 rule 1)" : "the meter's finalize settled every call with no recorded outcome as unknown spend" });
+      if (open.length) haltFor("E_DX_INFRA_MISSING", s.id + " attempt " + n + " is not reconciled: " + open.join("; ") + "; recorded in recoveries.ndjson, and the run halts for the Captain");
+      else o.log("E_DX_INFRA_MISSING " + s.id + " attempt " + n + ": " + infra!.reason + " (" + infra!.detail + "), " + meter.unknown + " unknown calls; recorded in recoveries.ndjson before any retry");
     }
-    return { input: { termination, transcript, spend_micros: meter.micros, unknown_micros: 0 } as DxAttemptInput, read: read.outcome, dir, env, repair, drift };
+    return { input: { termination, transcript, spend_micros: meter.micros, unknown_micros: 0 } as DxAttemptInput, read: read.outcome, dir, env, repair, drift, unreconciled: open.length > 0 };
   };
 
   const launch = async (s: BatchSession): Promise<DxLaunch> => {
+    try {
+      return await launchSession(s);
+    } catch (e) {
+      const msg = ((e as Error).message ?? String(e)).split("\n")[0]!;
+      const head = msg.split(":")[0]!;
+      haltFor(isReasonCode(head) ? head : "E_DX_INFRA_MISSING", s.id + "'s launch threw (" + msg + "); no session starts after it");
+      throw e;
+    }
+  };
+  const launchSession = async (s: BatchSession): Promise<DxLaunch> => {
     const inputs: DxAttemptInput[] = [];
     const reads: DxAttempt[] = [];
     let last: Awaited<ReturnType<typeof attempt>> | null = null;
     for (let next = nextAttempt(reads, false); next.retry; next = nextAttempt(reads, false)) {
+      if (inputs.length && stopOf(s)) break;
       last = await attempt(s, inputs.length + 1, next.reason);
       inputs.push(last.input);
       reads.push(last.read);
-      if (last.read.state === "cap") {
-        halt ??= "CAP_STOP";
-        batch.halt("CAP_STOP: " + s.id + " met the item's cap; the run is incomplete, and nothing is retried to change a verdict");
-      }
-      if (last.drift.length) break;
+      if (last.read.state === "cap") haltFor("CAP_STOP", s.id + " met the item's cap; the run is incomplete, and nothing is retried to change a verdict");
+      if (last.drift.length || last.unreconciled) break;
     }
     const a = last!;
     const ms = MODEL_STRINGS[s.model];
@@ -297,8 +348,9 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
     const host = join(a.dir, "host");
     const answers = answerCounts(readText(join(host, "usersim.ndjson")), readText(join(host, "persona.ndjson")), readText(join(host, "session.json")));
     let row = dxRow({ unit: s.unit, arm: s.arm, model: s.model, stage: s.stage, pass: s.pass, smoke: s.smoke, judged: false, attempts: inputs, exposure: exposure ? { exposed: exposure.exposed, markers: { ...exposure.markers } as Record<string, boolean> } : null, dx_lens: exposure && "dx_lens" in exposure ? (exposure.dx_lens as boolean | null) : null, kind, repair: repairName(a.repair), answers });
+    const missing = a.drift.length ? "E_DX_PROVIDER_DRIFT" : a.unreconciled ? "E_DX_INFRA_MISSING" : a.read.state === "infra" ? stopOf(s) : null;
+    if (missing) row = { ...row, end: "missing", code: missing, list: null };
     if (a.drift.length) {
-      row = { ...row, end: "missing", code: "E_DX_PROVIDER_DRIFT", list: null };
       stop("E_DX_PROVIDER_DRIFT", { model: s.model }, s.id + " sent calls to " + a.drift.join(", ") + ", not " + ms);
     }
     rows.push(row);
@@ -313,8 +365,18 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
   };
 
   batch = new DxBatch<DxLaunch>({ ledger: o.ledger, lease: o.lease, sessions: o.sessions, launch, parallel: Math.min(MAX_PARALLEL, Math.max(1, o.parallel)), ...(o.record ? { record: o.record } : {}), poll });
+  let error: unknown = null;
   try {
     await batch.run();
+    if (o.control && batch.pauses().length && !batch.haltedBy()) {
+      o.log("E_DX_INFRA_MISSING " + batch.pauses().map((p) => p.arm_model).join(", ") + " paused: the run waits on lease " + o.lease + " for the Captain's word in " + o.control + ". To resume a cell on this lease, append the line {\"resume\": \"<arm>\", \"model\": \"<model>\"}; to stop its arm, append {\"code\": \"E_DX_ARM_DROPPED\", \"arm\": \"<arm>\", \"why\": \"<why>\"}");
+      while (batch.pauses().length && !batch.haltedBy()) {
+        await new Promise((r) => setTimeout(r, o.pollMs ?? 5_000));
+        await batch.run();
+      }
+    }
+  } catch (e) {
+    error = e;
   } finally {
     writeFileSync(files.batch, batch.log.map((l) => JSON.stringify(l) + "\n").join(""));
   }
@@ -325,9 +387,10 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
       return { close: null, released: [], paused: waiting };
     }
     const done = batch.settle(endStop ?? undefined);
-    for (const id of done.released) {
+    const ended = [...[...batch.state.values()].filter((e) => e.state === "done" && !e.result).map((e) => e.session.id), ...done.released];
+    for (const id of ended) {
       const s = batch.state.get(id)!.session;
-      const code = halt ?? modelStops.get(s.model) ?? armStops.get(s.arm) ?? "E_USAGE";
+      const code = stopOf(s) ?? "E_USAGE";
       released.set(id, code);
       const row = releasedRow(s, code, repairName(repairOf(s.arm, o.repairs, o.doubled)));
       rows.push(row);
@@ -335,7 +398,7 @@ export async function runDxSessions(o: DxRunInput): Promise<DxRunResult> {
     }
     writeFileSync(files.batch, batch.log.map((l) => JSON.stringify(l) + "\n").join(""));
     writeFileSync(files.settled, JSON.stringify({ run: o.run, lease: o.lease, settled: true, close: done.close, released: Object.fromEntries(released), model_settled: Object.fromEntries(batch.modelSettled) }, null, 2) + "\n");
-    return { close: done.close, released: done.released, paused: [] };
+    return { close: done.close, released: ended, paused: [] };
   };
-  return { batch, rows, settle };
+  return { batch, rows, error, settle };
 }

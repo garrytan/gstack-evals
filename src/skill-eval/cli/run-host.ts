@@ -74,6 +74,8 @@ export interface HostRig {
   imageDigest: string | null;
   bind(request: BindRequest): Promise<Binding>;
   finalize(meterId: string): Promise<Meter>;
+  /** Revokes a slot's bearer once its meter is finalized; a rig without one leaves the slot to close with the proxy. */
+  unbind?(slot: string): Promise<void> | void;
   /** Each arm's install: its session key tree, the target skill's paths under HOME and gstack-skill-start, if any. */
   arms: Readonly<Record<string, Pick<ArmInstall, "tree_sha256" | "skill" | "gstack"> & Partial<Pick<ArmInstall, "plugins" | "layers">>>>;
   /** Each stack arm's cell settings by model (src/arms/cells.ts). An arm or model with no entry runs with no cell settings. */
