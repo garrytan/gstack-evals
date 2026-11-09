@@ -10,7 +10,9 @@
 # Then it installs the container firewall: Harbor's sidecar can allowlist the metering proxy's address but not its port,
 # so new TCP connections from Docker's bridges to the host are reset unless they go to the controller's fixed proxy ports
 # (host/controller.ts PROXY_PORT_FIRST and PROXY_PORT_COUNT). post-boot.sh --firewall-rules prints those rules and changes
-# nothing.
+# nothing. It also reserves those ports from the kernel's ephemeral range (net.ipv4.ip_local_reserved_ports, kept across
+# reboots in /etc/sysctl.d), so no program's port-0 listener lands on them mid-batch; the controller refuses a batch whose
+# proxy is off loopback while any of them is unreserved. post-boot.sh --reserved-ports prints the range.
 set -euo pipefail
 
 firewall_rules() {
@@ -24,6 +26,11 @@ RULES
 }
 if [ "${1:-}" = "--firewall-rules" ]; then
   firewall_rules
+  exit 0
+fi
+reserved=47100-47107
+if [ "${1:-}" = "--reserved-ports" ]; then
+  echo "$reserved"
   exit 0
 fi
 
@@ -82,6 +89,13 @@ if [ "$got" != "$(firewall_rules | sort)" ]; then
   exit 2
 fi
 echo "container firewall: Docker's bridges reach the host only on TCP 47100-47107"
+sudo sysctl -q -w net.ipv4.ip_local_reserved_ports="$reserved"
+echo "net.ipv4.ip_local_reserved_ports = $reserved" | sudo tee /etc/sysctl.d/90-dr-proxy-ports.conf > /dev/null
+if [ "$(cat /proc/sys/net/ipv4/ip_local_reserved_ports)" != "$reserved" ]; then
+  echo "E_DR_RUNNER: net.ipv4.ip_local_reserved_ports did not read back as $reserved: $(cat /proc/sys/net/ipv4/ip_local_reserved_ports)" >&2
+  exit 2
+fi
+echo "proxy ports: TCP $reserved reserved from the kernel's ephemeral range"
 
 sudo systemctl stop apt-daily.timer apt-daily-upgrade.timer
 sudo systemctl disable apt-daily.timer apt-daily-upgrade.timer

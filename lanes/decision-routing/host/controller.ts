@@ -7,7 +7,8 @@
 //   (reserveMicros: CONCURRENCY sessions at cells.json's allowance), else stops with DR_RESERVE_STOP having leased and
 //   launched nothing; then opens one lease per item (openLease) and starts one MeteringProxy on it with allowanceCode
 //   DR_ALLOWANCE_STOP; before the leases and again once its proxies listen, it stops with DR_PROXY_PORT_BUSY unless its
-//   own proxies are the only listeners on the proxy port range the container firewall opens (checkProxyListeners);
+//   own proxies are the only listeners on the proxy port range the container firewall opens and, when the proxy host is
+//   off loopback, the kernel holds that range back from ephemeral ports (checkProxyListeners, reservedPorts);
 //   on a real record it launches nothing until vm.sh record-out --confirm shows its leases open in the drive copy of
 //   the record (awaitLeaseConfirmed, DR_LEASE_UNRECORDED);
 // - orders the sessions by a seeded shuffle (seed 20261110) and runs at most 6 at once, never two cells of one task at the
@@ -179,18 +180,31 @@ export function listeningPorts(files: readonly string[] = ["/proc/net/tcp", "/pr
  * batch's own proxies must be the only listeners there and each own proxy on the range must be seen listening (the
  * Captain's condition on the firewall), else DR_PROXY_PORT_BUSY.
  */
-export function checkProxyListeners(own: readonly number[], listening: readonly number[] = listeningPorts()): void {
+export function checkProxyListeners(own: readonly number[], listening: readonly number[] = listeningPorts(), reserved: readonly number[] | null = null): void {
   const onRange = (p: number) => p >= PROXY_PORT_FIRST && p < PROXY_PORT_FIRST + PROXY_PORT_COUNT;
   const others = [...new Set(listening.filter((p) => onRange(p) && !own.includes(p)))].sort((a, b) => a - b);
   const unseen = own.filter((p) => onRange(p) && !listening.includes(p));
-  if (!others.length && !unseen.length) return;
+  const unreserved = reserved ? Array.from({ length: PROXY_PORT_COUNT }, (_, i) => PROXY_PORT_FIRST + i).filter((p) => !reserved.includes(p)) : [];
+  if (!others.length && !unseen.length && !unreserved.length) return;
   throw new ControllerError(
     "DR_PROXY_PORT_BUSY",
     "TCP " + PROXY_PORT_FIRST + "-" + (PROXY_PORT_FIRST + PROXY_PORT_COUNT - 1) + ", which the container firewall opens to the agents, must hold only this batch's proxies" +
       (others.length ? "; something else listens on " + others.join(", ") : "") +
       (unseen.length ? "; this batch's proxy on " + unseen.join(", ") + " is not seen listening" : "") +
+      (unreserved.length ? "; the kernel can still hand " + unreserved.join(", ") + " to any program as an ephemeral port (net.ipv4.ip_local_reserved_ports; post-boot.sh reserves the range)" : "") +
       "; nothing new is launched",
   );
+}
+
+/** Ports the kernel keeps out of its automatic (ephemeral) assignment, from net.ipv4.ip_local_reserved_ports; a missing file reserves none. */
+export function reservedPorts(file = "/proc/sys/net/ipv4/ip_local_reserved_ports"): number[] {
+  if (!existsSync(file)) return [];
+  const ports: number[] = [];
+  for (const part of readFileSync(file, "utf8").trim().split(",").filter(Boolean)) {
+    const [first, last = first] = part.split("-").map((n) => parseInt(n, 10));
+    for (let p = first!; p <= last!; p++) ports.push(p);
+  }
+  return ports;
 }
 
 /**
@@ -391,7 +405,8 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
       if (open && open.run_id === o.runId && local.getLease(open.lease_id)) settleLease(record, local, open.lease_id, warn);
     }
     checkReserve(record, itemNames);
-    checkProxyListeners([]);
+    const reserved = o.proxyHost === "localhost" || o.proxyHost === "::1" || o.proxyHost.startsWith("127.") ? null : reservedPorts();
+    checkProxyListeners([], listeningPorts(), reserved);
     for (const item of itemNames) {
       const journal = join(out, "journals", item + ".ndjson");
       const lease = openLease(record, local, { item, run_id: o.runId, warn, ...(o.temp ? { requireAdmission: () => null } : {}) });
@@ -408,7 +423,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
       runs.push({ item, lease_id: lease.lease_id, journal, proxy, socket, token, base });
       log("lease " + lease.lease_id + " on " + item + ": " + usd(lease.reserved_micros) + ", proxy " + base);
     }
-    checkProxyListeners(runs.map((r) => r.proxy.port));
+    checkProxyListeners(runs.map((r) => r.proxy.port), listeningPorts(), reserved);
     if (!o.temp) {
       log("waiting for vm.sh record-out --confirm " + out + " to show lease " + runs.map((r) => r.lease_id).join(", ") + " open in the drive");
       await awaitLeaseConfirmed(out, runs.map((r) => r.lease_id), o.leaseConfirmMs ?? LEASE_CONFIRM_MS, o.pollMs ?? 5000, () => stop !== null);

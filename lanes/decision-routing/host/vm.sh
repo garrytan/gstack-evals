@@ -15,7 +15,8 @@
 # Segments. Runner VMs are deleted after each segment of 6 hours or less, and the real ledger record lives in the Captain
 # drive (ledger/decision-routing/record), which the VM can't see. Before a segment: record-in, which refuses while an
 # earlier segment of the run id, pulled under DR_RUNS_DIR/<run id>, holds a STOP file the controller wrote (it starts
-# with a reason code) or a DR_CUSTODY_HIT refusal, since those start again only on the Captain's word. Then run the
+# with a reason code) or a DR_CUSTODY_HIT refusal, since those start again only on the Captain's word, and while those
+# pulled journals can't be read, since then a hit can't be ruled out. Then run the
 # batch or the answering step with --record ~/dr-record and a local sqlite ledger on the VM. It opens its lease and
 # launches nothing until lease-confirmed.json in its out dir lists that lease: run record-out --confirm <out dir> once
 # the lease is open, which writes the file only when the drive copy reads back with every lease open on the VM open, so
@@ -96,7 +97,10 @@ case $cmd in
         line=$(head -1 "$stop")
         [[ $line =~ ^[A-Z][A-Z0-9_]*:\  ]] && die "E_DR_RUNNER: an earlier segment of $3 stopped ($stop: ${line:0:300}); the next segment starts only on the Captain's word, and nothing was copied"
       done < <(find "$runs" -mindepth 2 -maxdepth 2 -name STOP -type f -print0)
-      hit=$(grep -rl --include='*.ndjson' '"code":"DR_CUSTODY_HIT"' "$runs" 2> /dev/null | head -1 || true)
+      rc=0
+      hits=$(grep -rl --include='*.ndjson' '"code":"DR_CUSTODY_HIT"' "$runs" 2> /dev/null) || rc=$?
+      [ "$rc" -le 1 ] || die "E_DR_RUNNER: the pulled journals under $runs could not be read (grep exit $rc), so a custody hit can't be ruled out; nothing was copied"
+      hit=$(printf '%s\n' "$hits" | head -1)
       [ -z "$hit" ] || die "E_DR_RUNNER: an earlier segment of $3 has a DR_CUSTODY_HIT refusal ($hit); the next segment starts only on the Captain's word, and nothing was copied"
     fi
     tar -C "$2" -cf - . | "$runner" ssh "$1" 'cd && rm -rf dr-record && mkdir -p dr-record && tar -C dr-record -xf -'

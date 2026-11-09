@@ -3,14 +3,15 @@
 // session clock, on the runner host as root and outside any task container. Given a ledger item, a run id, a list of
 // sessions ({session, log_dir, markers_file}) and a mode, it:
 // - refuses while the stop file exists or any of the item's answer journals holds a DR_CUSTODY_HIT refusal;
-// - refuses an out dir whose answers/<session>.json shows another mode started that session (one --out per mode);
+// - refuses an out dir whose answers/<session>.json shows another mode started that session (one --out per mode), and a
+//   session record there that is not readable JSON (E_USAGE);
 // - reconciles a journal left by an earlier launch, settles this run's open lease, then runs the controller's pre-lease
 //   reserve check (checkReserve, DR_RESERVE_STOP) for ANSWER_SESSIONS_IN_FLIGHT sessions before any lease: answering
 //   runs one session at a time, enforced by OneSession (DR_ANSWER_CONCURRENCY), so its lease reserves one session's
 //   allowance (the lane README's reserve-mechanics amendment);
 // - opens one lease on the item under the run id and starts one MeteringProxy on it with allowanceCode DR_ALLOWANCE_STOP;
 //   on a real record it answers nothing until vm.sh record-out --confirm shows the lease open in the drive
-//   (awaitLeaseConfirmed, DR_LEASE_UNRECORDED);
+//   (awaitLeaseConfirmed, DR_LEASE_UNRECORDED), and a stop file that appears during that wait ends it the same way;
 // - per session, binds a slot whose models and deciders are the mode's deciders only, at cells.json's allowance, with the
 //   session's runner-only markers and canary as forbidden_markers, so the leak scan covers every decider request; runs
 //   <python> -I -m <mode module> with DR_PROXY_URL and DR_PROXY_TOKEN set only in that child's env; then unbinds and
@@ -18,7 +19,8 @@
 // - stops on the stop file, a CAP_STOP or a DR_CUSTODY_HIT (which writes the stop file with its code), lets nothing new
 //   start and never retries: a session with <out>/answers/<session>.json was started once and is never started again;
 // - counts a session whose child exits non-zero as failed, not answered, and the command line then exits 2
-//   (DR_ANSWER_FAILED);
+//   (DR_ANSWER_FAILED); on a relaunch over the same --out, a session whose record shows exit 0 is skipped and one whose
+//   record shows any other exit, or none (a crash mid-session), stays failed, so the exit stays 2;
 // - settles the lease and writes <out>/answer.json.
 // Modes: shadow (calibration: Jev 1.13.0 and particle-1 with and without the guess, dr_agent/shadow.py), safety_calibration
 // (calibration: the safety set's calibration half as one pseudo-session, dr_agent/safety_set.py), and the replay item's
@@ -132,9 +134,17 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
     if (hit) throw new ControllerError("DR_CUSTODY_HIT", "the journal " + join(journals, name) + " holds a custody hit (meter " + hit.meter_id + "), so nothing was leased or answered; start again only on the Captain's word");
   }
   if (o.temp && !o.fetch) throw new ControllerError("E_USAGE", "--temp needs --fake-upstreams; nothing was leased or answered");
+  const readMeta = (meta: string): { mode?: string; exit_code?: unknown } | null => {
+    if (!existsSync(meta)) return null;
+    try {
+      return JSON.parse(readFileSync(meta, "utf8"));
+    } catch {
+      throw new ControllerError("E_USAGE", "the session record " + meta + " is not readable JSON; nothing was leased or answered");
+    }
+  };
   for (const s of o.sessions) {
     const meta = join(out, "answers", s.session + ".json");
-    const started = existsSync(meta) ? (JSON.parse(readFileSync(meta, "utf8")) as { mode?: string }).mode : undefined;
+    const started = readMeta(meta)?.mode;
     if (started !== undefined && started !== o.mode) throw new ControllerError("E_USAGE", "the out dir " + out + " holds " + started + " answers for session " + s.session + "; each answering mode needs its own --out, so nothing was leased or answered");
   }
   for (const s of o.sessions) {
@@ -175,7 +185,7 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
     log("lease " + leaseId + " on " + o.item + ", proxy " + base);
     if (!o.temp) {
       log("waiting for vm.sh record-out --confirm " + out + " to show lease " + leaseId + " open in the drive");
-      await awaitLeaseConfirmed(out, [leaseId], o.leaseConfirmMs ?? LEASE_CONFIRM_MS, 5000);
+      await awaitLeaseConfirmed(out, [leaseId], o.leaseConfirmMs ?? LEASE_CONFIRM_MS, 5000, () => existsSync(stopFile));
     }
 
     const checkStops = (): AnswerResult["stop"] => {
@@ -198,8 +208,13 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
 
     for (const s of o.sessions) {
       const meta = join(out, "answers", s.session + ".json");
-      if (existsSync(meta)) {
-        result.skipped.push(s.session);
+      const before = readMeta(meta);
+      if (before) {
+        if (before.exit_code === 0) result.skipped.push(s.session);
+        else {
+          result.failed.push(s.session);
+          log("failed " + s.session + " before (exit " + (before.exit_code ?? "none recorded") + "); it is never started again");
+        }
         continue;
       }
       result.stop ??= checkStops();

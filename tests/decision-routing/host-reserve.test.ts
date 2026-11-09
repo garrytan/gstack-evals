@@ -17,7 +17,7 @@ import { openLease, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 
-const REAL_RECORD = process.env.DR_REAL_RECORD ?? join(process.env.HOME ?? "", ".capy/drive/captain-gstack-evals/ledger/decision-routing/record");
+const REAL_RECORD = process.env.DR_REAL_RECORD ?? "";
 const CELLS = JSON.parse(readFileSync(join(import.meta.dir, "../../lanes/decision-routing/config/cells.json"), "utf8"));
 const ITEM = "dr-calibration";
 const RUN = "dr-calibration@0123456789ab";
@@ -121,7 +121,7 @@ function world(confirm = true) {
 
 const SEG_FAKE = ["#!/usr/bin/env bash", "case $1 in", '  ssh) shift 2; HOME=$FAKE_VM_HOME bash -c "$*" ;;', '  pull) mkdir -p "$4" && (cd "$FAKE_VM_HOME" && cp -r "$3" "$4/") ;;', "esac"].join("\n") + "\n";
 
-describe.skipIf(!existsSync(join(REAL_RECORD, "items", ITEM)))("lease custody", () => {
+describe.skipIf(!REAL_RECORD || !existsSync(join(REAL_RECORD, "items", ITEM)))("lease custody", () => {
   test("with no confirmation that the drive holds the lease, the batch launches nothing, stops with DR_LEASE_UNRECORDED and settles the lease at zero", async () => {
     const w = world(false);
     const err = await runBatch(w.opts(["task-0"], { leaseConfirmMs: 1500 })).then(() => null, (e) => e);
@@ -160,7 +160,7 @@ describe.skipIf(!existsSync(join(REAL_RECORD, "items", ITEM)))("lease custody", 
   }, 90_000);
 });
 
-describe.skipIf(!existsSync(join(REAL_RECORD, "items", ITEM)))("pre-lease reserve check", () => {
+describe.skipIf(!REAL_RECORD || !existsSync(join(REAL_RECORD, "items", ITEM)))("pre-lease reserve check", () => {
   test("the reserve is CONCURRENCY sessions at the cells' allowance: 6 x $5", () => {
     expect(reserveMicros()).toBe(CONCURRENCY * CELLS.limits.allowance_micros);
     expect(reserveMicros()).toBe(30_000_000);

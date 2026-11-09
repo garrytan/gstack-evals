@@ -13,9 +13,11 @@ mini's swebench.yaml with the session's own code, and checks through it:
   5 the user can write in /testbed and run git there, and the session's Tracker snapshot sees the edit;
   6 after dr_agent.agent_user restore, root's git in /testbed works (the patch export and the verifier);
   7 nothing the user plants in /testbed/.git runs as root: a clean filter, core.fsmonitor and a hooksPath
-    post-index-change hook planted as the user leave no marker through restore and the root export
-    (dr_agent.agent_user export), a process the user left running is gone after restore, and the same plants put back
-    by root do run under the old plain root git add (the check's control).
+    post-index-change hook, a hook in .git/hooks and a .git/commondir naming a directory whose config holds another
+    clean filter, all planted as the user, leave no marker through restore and the root export (dr_agent.agent_user
+    export), and the export writes /logs/artifacts/model.patch (mode 777, as Harbor leaves it) as a new file, never
+    through the symlink the user planted there; a process the user left running is gone after restore, and the same
+    plants put back by root do run under the old plain root git add (the check's control).
 
 It also prints side effects (HOME and site-packages writability, sudo, SO_MARK) without judging them.
 usage: nonroot_probe.py <expected conda env>
@@ -81,14 +83,26 @@ PLANT = (
     " && printf '#!/bin/sh\nid -u > {m}/hook\n' > .git/drhooks/post-index-change && chmod +x .git/drhooks/post-index-change"
     " && git config core.fsmonitor /testbed/.git/fsm.sh && git config core.hooksPath /testbed/.git/drhooks"
 ).format(m=MARKS)
+PLANT_COMMON = (
+    " && mkdir -p .git/hooks && printf '#!/bin/sh\nid -u > {m}/defaulthook\n' > .git/hooks/post-index-change && chmod +x .git/hooks/post-index-change"
+    " && rm -rf /tmp/drcommon && cp -r .git /tmp/drcommon"
+    " && git config -f /tmp/drcommon/config filter.drcommon.clean \"sh -c 'id -u > {m}/commondir; cat'\""
+    " && echo /tmp/drcommon > .git/commondir && echo '*.cfg filter=drcommon' >> .gitattributes && echo x > dr-common.cfg"
+).format(m=MARKS)
+ARTIFACTS = "/logs/artifacts"
+SENTINEL = "/opt/dr/run/dr-sentinel"
 
 
 def planted_checks(agent):
     os.makedirs(MARKS, exist_ok=True)
     os.chmod(MARKS, 0o777)
     setup = subprocess.run([PY, "-I", "-m", "dr_agent.agent_user", "setup"], capture_output=True, text=True)
-    plant = run(agent, PLANT + " && (setsid sleep 600 > /dev/null 2>&1 &) && echo planted")
-    check("7 the user plants a clean filter, core.fsmonitor and a hooksPath hook", setup.returncode == 0 and "planted" in plant.get("output", ""), plant.get("output", "")[-300:])
+    os.makedirs(ARTIFACTS, exist_ok=True)
+    os.chmod(ARTIFACTS, 0o777)
+    with open(SENTINEL, "w") as f:
+        f.write("root's file\n")
+    plant = run(agent, PLANT + PLANT_COMMON + f" && ln -sf {SENTINEL} {ARTIFACTS}/model.patch && (setsid sleep 600 > /dev/null 2>&1 &) && echo planted")
+    check("7 the user plants a clean filter, core.fsmonitor, a hooksPath hook, a .git/hooks hook, a commondir with a filter and a symlinked model.patch", setup.returncode == 0 and "planted" in plant.get("output", ""), plant.get("output", "")[-300:])
     for name in os.listdir(MARKS):
         os.unlink(os.path.join(MARKS, name))
     restore = subprocess.run([PY, "-I", "-m", "dr_agent.agent_user", "restore"], capture_output=True, text=True)
@@ -102,15 +116,18 @@ def planted_checks(agent):
         uids = next((line.split()[1:] for line in status.splitlines() if line.startswith("Uid:")), [])
         left += "10001" in uids and state not in ("Z", "X")
     check("7 restore leaves no process of the user running", restore.returncode == 0 and left == 0, f"restore {restore.returncode}, {left} left; " + restore.stderr.strip()[-200:])
-    export = subprocess.run([PY, "-I", "-m", "dr_agent.agent_user", "export", "/tmp/dr-probe.patch"], capture_output=True, text=True)
+    patch = ARTIFACTS + "/model.patch"
+    export = subprocess.run([PY, "-I", "-m", "dr_agent.agent_user", "export", patch], capture_output=True, text=True)
     check("7 the root export runs none of the plants", export.returncode == 0 and os.listdir(MARKS) == [], f"export {export.returncode}, marks {sorted(os.listdir(MARKS))}; " + export.stderr.strip()[-200:])
-    check("7 the root export still writes the patch", "# dr probe" in open("/tmp/dr-probe.patch").read() if os.path.exists("/tmp/dr-probe.patch") else False)
-    subprocess.run("cd /testbed && git reset -q && " + PLANT.replace("cd /testbed && ", "", 1), shell=True, capture_output=True)
+    written = not os.path.islink(patch) and os.path.isfile(patch) and "# dr probe" in open(patch).read()
+    check("7 the root export writes the patch as a new file, not through the planted symlink", written and open(SENTINEL).read() == "root's file\n", f"link {os.path.islink(patch)}, sentinel {open(SENTINEL).read()[:80]!r}")
+    subprocess.run("cd /testbed && rm -f .git/commondir && git reset -q && " + PLANT.replace("cd /testbed && ", "", 1) + PLANT_COMMON, shell=True, capture_output=True)
     for name in os.listdir(MARKS):
         os.unlink(os.path.join(MARKS, name))
     subprocess.run("cd /testbed && git add -A && git -c core.fileMode=false diff --cached --binary HEAD > /dev/null", shell=True, capture_output=True)
     marks = {n: open(os.path.join(MARKS, n)).read().strip() for n in os.listdir(MARKS)}
-    check("7 control: the same plants run as root under a plain root git add", marks.get("clean") == "0" and marks.get("hook") == "0", json.dumps(marks))
+    check("7 control: the same plants run as root under a plain root git add", marks.get("clean") == "0" and marks.get("hook") == "0" and marks.get("commondir") == "0", json.dumps(marks))
+    subprocess.run("cd /testbed && rm -rf .git/commondir /tmp/drcommon dr-common.cfg .git/hooks/post-index-change", shell=True)
     subprocess.run([PY, "-I", "-m", "dr_agent.agent_user", "setup"], capture_output=True)
     subprocess.run([PY, "-I", "-m", "dr_agent.agent_user", "restore"], capture_output=True)
 

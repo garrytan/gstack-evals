@@ -211,9 +211,31 @@ test("the step's sessions never overlap in time", async () => {
   for (let i = 1; i < rows.length; i++) expect(Date.parse(rows[i]!.started)).toBeGreaterThanOrEqual(Date.parse(rows[i - 1]!.ended));
 });
 
-const REAL_RECORD = process.env.DR_REAL_RECORD ?? join(process.env.HOME ?? "", ".capy/drive/captain-gstack-evals/ledger/decision-routing/record");
+const REAL_RECORD = process.env.DR_REAL_RECORD ?? "";
 
-test.skipIf(!existsSync(join(REAL_RECORD, "items", "dr-calibration")))("on a real record nothing is answered until the drive is confirmed to hold the lease (DR_LEASE_UNRECORDED), and answering runs once it is", async () => {
+const HAS_REAL_RECORD = !!REAL_RECORD && existsSync(join(REAL_RECORD, "items", "dr-calibration"));
+
+test.skipIf(!HAS_REAL_RECORD)("a stop file that appears while the step waits for the drive's confirmation ends the wait at once: nothing answered, the lease settles at zero", async () => {
+  const { dir, opts, list } = world(1);
+  const record = join(dir, "record");
+  cpSync(REAL_RECORD, record, { recursive: true });
+  const real = { ...opts, temp: false, record, ledger: join(dir, "ledger.sqlite"), leaseConfirmMs: 30_000 };
+  const timer = setInterval(() => {
+    if (!readItem(record, "dr-calibration").open) return;
+    writeFileSync(join(opts.out, "STOP"), "operator stop\n");
+  }, 10);
+  const t0 = Date.now();
+  try {
+    await expect(runAnswer(real)).rejects.toThrow("DR_LEASE_UNRECORDED");
+  } finally {
+    clearInterval(timer);
+  }
+  expect(Date.now() - t0).toBeLessThan(15_000);
+  expect(existsSync(join(opts.out, "answers", list[0]!.session + ".shadow.jsonl"))).toBe(false);
+  expect(readItem(record, "dr-calibration").leases.at(-1)!.close?.spent_micros).toBe(0);
+}, 60_000);
+
+test.skipIf(!HAS_REAL_RECORD)("on a real record nothing is answered until the drive is confirmed to hold the lease (DR_LEASE_UNRECORDED), and answering runs once it is", async () => {
   for (const confirm of [false, true]) {
     const { dir, opts, list } = world(1);
     const record = join(dir, "record");
@@ -265,11 +287,37 @@ test("a child that exits non-zero counts as failed, not answered, is never start
   expect(r.answered).toEqual([list[1]!.session]);
   expect(JSON.parse(readFileSync(join(opts.out, "answer.json"), "utf8")).failed).toEqual([list[0]!.session]);
   const again = await runAnswer({ ...opts, fetch: fakeFetch(fakes!.urls) });
-  expect(again.skipped).toEqual(list.map((s) => s.session));
+  expect(again.failed).toEqual([list[0]!.session]);
+  expect(again.skipped).toEqual([list[1]!.session]);
+  expect(JSON.parse(readFileSync(join(opts.out, "answer.json"), "utf8")).failed).toEqual([list[0]!.session]);
   writeFileSync(join(dir, "urls.json"), JSON.stringify(fakes!.urls));
   writeFileSync(join(dir, "sessions.json"), JSON.stringify(list));
   const args = ["--item", opts.item, "--run-id", opts.runId, "--mode", "shadow", "--sessions", join(dir, "sessions.json"), "--questions", opts.questions, "--python", opts.python!.join(" "), "--temp", "--fake-upstreams", join(dir, "urls.json"), "--items", opts.items!];
   expect(await main([...args, "--out", join(dir, "cli-fail")])).toBe(2);
   rmSync(join(list[0]!.log_dir, "fail"));
+  expect(await main([...args, "--out", join(dir, "cli-fail")])).toBe(2);
+  expect(JSON.parse(readFileSync(join(dir, "cli-fail", "answer.json"), "utf8")).failed).toEqual([list[0]!.session]);
   expect(await main([...args, "--out", join(dir, "cli-ok")])).toBe(0);
+});
+
+test("on a relaunch a session whose record has no exit code (a crash mid-session) counts as failed and is never started again", async () => {
+  const { opts, list } = world(2);
+  mkdirSync(join(opts.out, "answers"), { recursive: true });
+  writeFileSync(join(opts.out, "answers", list[0]!.session + ".json"), JSON.stringify({ session: list[0]!.session, mode: "shadow", started: "2026-11-09T00:00:00.000Z" }) + "\n");
+  const r = await runAnswer(opts);
+  expect(r.failed).toEqual([list[0]!.session]);
+  expect(r.answered).toEqual([list[1]!.session]);
+  expect(existsSync(join(opts.out, "answers", list[0]!.session + ".shadow.jsonl"))).toBe(false);
+});
+
+test("a session record in the out dir that is not readable JSON is refused with E_USAGE naming it, before any lease", async () => {
+  const { opts, list } = world(1);
+  mkdirSync(join(opts.out, "answers"), { recursive: true });
+  const meta = join(opts.out, "answers", list[0]!.session + ".json");
+  writeFileSync(meta, '{"session": "' + list[0]!.session + '", "mo');
+  const e = await runAnswer(opts).catch((x) => x);
+  expect(e).toBeInstanceOf(ControllerError);
+  expect((e as ControllerError).code).toBe("E_USAGE");
+  expect((e as Error).message).toContain(meta);
+  expect(existsSync(join(opts.out, "answer.json"))).toBe(false);
 });

@@ -12,4 +12,4 @@ want=${3:?}
 DR_PROXY_TOKEN=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
 export DR_PROXY_TOKEN
 docker run --rm --network none -e DR_PROXY_TOKEN -v "$tarball":/tmp/dr-runtime.tar.gz:ro -v "$here/nonroot_probe.py":/tmp/nonroot_probe.py:ro "$image" \
-  bash -c 'mkdir -p /opt/dr && tar -xzf /tmp/dr-runtime.tar.gz -C /opt/dr && exec env -i PATH="$PATH" HOME=/root DR_PROXY_TOKEN="$DR_PROXY_TOKEN" /opt/dr/venv/bin/python -I /tmp/nonroot_probe.py '"$want"
+  bash -c 'mkdir -p /opt/dr && tar -xzf /tmp/dr-runtime.tar.gz -C /opt/dr && mkdir -p /opt/dr/run && exec env -i PATH="$PATH" HOME=/root DR_PROXY_TOKEN="$DR_PROXY_TOKEN" /opt/dr/venv/bin/python -I /tmp/nonroot_probe.py '"$want"

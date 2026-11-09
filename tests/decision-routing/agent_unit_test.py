@@ -1211,6 +1211,181 @@ def test_agent_user_root_export_runs_nothing_the_agent_planted():
         assert "not a plain directory" in str(e)
 
 
+def _write(path, text, mode=None):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb" if isinstance(text, bytes) else "w") as f:
+        f.write(text)
+    if mode is not None:
+        os.chmod(path, mode)
+
+
+def test_agent_user_export_runs_and_follows_nothing_else_the_agent_planted():
+    """commondir with a filter, config.worktree, hooks in .git/hooks, a diff driver and a symlinked model.patch."""
+    from dr_agent import agent_user
+
+    tb, marks, plant = _planted_repo("export-fresh-dir")
+    root = os.path.dirname(tb)
+    saved = os.path.join(root, "git-config")
+    agent_user.save_git_config(tb, saved)
+    plant()
+    g = os.path.join(tb, ".git")
+    hook = lambda name: f"#!/bin/sh\necho x > {marks}/{name}\n"
+    _write(os.path.join(g, "hooks", "post-index-change"), hook("defaulthook"), 0o755)
+    common = os.path.join(root, "agent-common")
+    shutil.copytree(g, common)
+    _write(os.path.join(common, "hooks", "post-index-change"), hook("commonhook"), 0o755)
+    script = lambda name, body: _write(os.path.join(root, "plants", name), f"#!/bin/sh\necho x > {marks}/{name}\n{body}\n", 0o755) or os.path.join(root, "plants", name)
+    with open(os.path.join(common, "config"), "a") as f:
+        f.write("[core]\n\trepositoryformatversion = 1\n[extensions]\n\tworktreeConfig = true\n")
+        f.write(f"[filter \"drcommon\"]\n\tclean = {script('commondir', 'cat')}\n")
+        f.write(f"[diff \"drtext\"]\n\ttextconv = {script('textconv', 'cat \"$1\"')}\n")
+    _write(os.path.join(g, "config.worktree"), f"[filter \"drwt\"]\n\tclean = {script('worktree', 'cat')}\n")
+    _write(os.path.join(g, "commondir"), common + "\n")
+    _write(os.path.join(g, "info", "attributes"), "* diff=drtext\n")
+    _write(os.path.join(tb, ".gitattributes"), "* filter=drcommon\n*.md filter=drwt\n")
+    with open(os.path.join(tb, "README.md"), "a") as f:
+        f.write("# dr probe\n")
+
+    control = os.path.join(root, "control")
+    shutil.copytree(tb, control, symlinks=True)
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null"}
+    subprocess.run("git add -A && git diff --cached HEAD > /dev/null", cwd=control, shell=True, env=env, check=True, capture_output=True)
+    live = set(os.listdir(marks))
+    assert {"commondir", "worktree"} <= live, live
+    for m in live:
+        os.unlink(os.path.join(marks, m))
+
+    out = os.path.join(root, "artifacts")
+    os.makedirs(out)
+    os.chmod(out, 0o777)
+    sentinel = os.path.join(root, "sentinel")
+    _write(sentinel, "root's file\n")
+    patch = os.path.join(out, "model.patch")
+    os.symlink(sentinel, patch)
+    index = open(os.path.join(g, "index"), "rb").read()
+    agent_user.export(patch, tb, saved)
+    assert os.listdir(marks) == [], os.listdir(marks)
+    assert open(sentinel).read() == "root's file\n"
+    assert not os.path.islink(patch) and "# dr probe" in open(patch).read()
+    assert open(os.path.join(g, "index"), "rb").read() == index
+
+    head = open(os.path.join(g, "HEAD")).read().split()[-1]
+    os.symlink(os.path.join(g, head), os.path.join(g, "refs", "heads", "agent-link"))
+    try:
+        agent_user.export(patch, tb, saved)
+        raise AssertionError("a symlinked ref was copied")
+    except SystemExit as e:
+        assert "not a regular file" in str(e), e
+    os.unlink(os.path.join(g, "refs", "heads", "agent-link"))
+    os.unlink(patch)
+    os.mkdir(patch)
+    try:
+        agent_user.export(patch, tb, saved)
+        raise AssertionError("a directory at the patch path was written into")
+    except SystemExit as e:
+        assert "model.patch" in str(e), e
+    assert os.listdir(marks) == [], os.listdir(marks)
+
+
+def _old_export(patch, testbed):
+    """The export as it stood at 49ea202, the reference the new one must match byte for byte on benign repos."""
+    git_dir = os.path.join(testbed, ".git")
+    env = {**os.environ, "GIT_DIR": git_dir, "GIT_WORK_TREE": testbed, "GIT_CONFIG_GLOBAL": "/dev/null"}
+    safe = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"]
+    os.makedirs(os.path.dirname(patch), exist_ok=True)
+    subprocess.run(["git", *safe, "add", "-A"], cwd=testbed, env=env, check=True, capture_output=True)
+    with open(patch, "wb") as f:
+        subprocess.run(["git", *safe, "-c", "core.fileMode=false", "diff", "--cached", "--binary", "HEAD"], cwd=testbed, env=env, stdout=f, check=True)
+
+
+def _benign_repo(name):
+    from dr_agent import agent_user
+
+    root = os.path.join(TMP, name)
+    tb = os.path.join(root, "testbed")
+    subprocess.run(["git", "init", "-q", tb], check=True)
+    git = lambda *a: subprocess.run(["git", "-C", tb, *a], check=True, capture_output=True)
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    for path, text in {"a.txt": "a line\n" * 20, "b.txt": "b body line\n" * 30, "c.txt": "c\n", "sub/d.txt": "d body line\n" * 30, ".gitignore": "*.log\n", "run.sh": "#!/bin/sh\necho hi\n"}.items():
+        _write(os.path.join(tb, path), text)
+    _write(os.path.join(tb, "bin.dat"), bytes(range(256)) * 8)
+    git("add", ".")
+    git("commit", "-qm", "base")
+    with open(os.path.join(tb, ".git", "info", "exclude"), "a") as f:
+        f.write("scratch/\n")
+    saved = os.path.join(root, "git-config")
+    agent_user.save_git_config(tb, saved)
+    return root, tb, saved, git
+
+
+def test_agent_user_export_matches_the_old_export_byte_for_byte_on_benign_repos():
+    from dr_agent import agent_user
+
+    def everything(tb, git):
+        _write(os.path.join(tb, "a.txt"), "a line\n" * 20 + "agent commit\n")
+        git("commit", "-qam", "agent commit")
+        with open(os.path.join(tb, "a.txt"), "a") as f:
+            f.write("after the commit\n")
+        git("mv", "b.txt", "b2.txt")
+        os.rename(os.path.join(tb, "sub", "d.txt"), os.path.join(tb, "sub", "e.txt"))
+        os.unlink(os.path.join(tb, "c.txt"))
+        _write(os.path.join(tb, "bin.dat"), bytes(reversed(range(256))) * 8)
+        _write(os.path.join(tb, "new.txt"), "untracked\n")
+        _write(os.path.join(tb, "new.bin"), bytes([0, 1, 2, 255]) * 64)
+        _write(os.path.join(tb, "x.log"), "ignored\n")
+        _write(os.path.join(tb, "scratch", "s.txt"), "excluded\n")
+        _write(os.path.join(tb, "forced.log"), "force-added\n")
+        git("add", "-f", "forced.log")
+        os.chmod(os.path.join(tb, "run.sh"), 0o755)
+
+    def packed_detached(tb, git):
+        git("pack-refs", "--all")
+        git("checkout", "-q", "--detach", "HEAD")
+        with open(os.path.join(tb, "a.txt"), "a") as f:
+            f.write("detached edit\n")
+        _write(os.path.join(tb, "new.txt"), "untracked\n")
+
+    def branch_rm_cached(tb, git):
+        git("checkout", "-q", "-b", "agent-branch")
+        _write(os.path.join(tb, "c.txt"), "c changed on a branch\n")
+        git("commit", "-qam", "branch commit")
+        git("rm", "-q", "--cached", "c.txt")
+        with open(os.path.join(tb, ".gitignore"), "a") as f:
+            f.write("c.txt\n")
+
+    def no_index(tb, git):
+        os.unlink(os.path.join(tb, ".git", "index"))
+        with open(os.path.join(tb, "b.txt"), "a") as f:
+            f.write("edited with no index\n")
+
+    def committed_all(tb, git):
+        with open(os.path.join(tb, "a.txt"), "a") as f:
+            f.write("committed\n")
+        git("commit", "-qam", "everything committed")
+
+    for name, steps in (("everything", everything), ("packed-detached", packed_detached), ("branch-rm-cached", branch_rm_cached), ("no-index", no_index), ("committed-all", committed_all)):
+        root, tb, saved, git = _benign_repo("benign-" + name)
+        steps(tb, git)
+        old_root = root + "-old"
+        shutil.copytree(root, old_root, symlinks=True)
+        _old_export(os.path.join(old_root, "out", "model.patch"), os.path.join(old_root, "testbed"))
+        new = os.path.join(root, "out", "model.patch")
+        agent_user.export(new, tb, saved)
+        want = open(os.path.join(old_root, "out", "model.patch"), "rb").read()
+        got = open(new, "rb").read()
+        assert got == want, (name, want[:400], got[:400])
+        if name == "everything":
+            for needle in (b"after the commit", b"rename from b.txt", b"rename to sub/e.txt", b"deleted file mode", b"GIT binary patch", b"new.txt", b"new.bin", b"forced.log"):
+                assert needle in got, (needle, got[:600])
+            for needle in (b"x.log", b"scratch/", b"+agent commit"):
+                assert needle not in got, needle
+        if name == "committed-all":
+            assert got == b"", got[:200]
+        else:
+            assert got, name
+
+
 def test_agent_user_kill_uid_kills_live_processes_and_skips_zombies():
     from dr_agent import agent_user
 

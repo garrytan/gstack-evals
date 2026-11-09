@@ -10,8 +10,11 @@ A user or group that holds the name or the id with the other half different is r
 The agent owns /testbed/.git during the session, so anything it plants there (a clean filter, core.fsmonitor, a
 hooksPath) would run as root in root's git. setup keeps a root-only copy of /testbed/.git/config (SAVED_GIT_CONFIG);
 restore first kills every process of the agent's uid, then gives /testbed back to root and puts that copy back in place
-of whatever the agent left. export runs root's git for the patch with fsmonitor off, hooks pointed at /dev/null and no
-global config, as a second layer, and refuses a /testbed/.git that is not a plain directory.
+of whatever the agent left. export never runs git in the agent's .git: it builds a root-only git dir from setup's config
+copy, the agent repo's HEAD, index, refs and ignore and attribute files copied as plain data (a symlink there stops the
+export), and the repo's objects read through alternates, so a commondir, config.worktree or hook the agent planted is
+never read. It runs that git with fsmonitor off, hooks pointed at /dev/null and no global config, refuses a /testbed/.git
+that is not a plain directory, and writes the patch as a new file, never through a symlink the agent left at its path.
 """
 import grp
 import os
@@ -21,6 +24,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 AGENT_USER = "agent"
@@ -123,16 +127,80 @@ def restore(testbed=TESTBED):
     restore_git_config(testbed)
 
 
-def export(patch, testbed=TESTBED):
-    """Root's patch export: git add -A, then the staged diff against HEAD, with nothing the agent planted able to run."""
+def _copy_plain(src, dst):
+    """Copy one regular file the agent wrote, never through a symlink (E_DR_RUNTIME on anything else)."""
+    try:
+        fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as e:
+        raise SystemExit(f"E_DR_RUNTIME: {src} is not a regular file ({e.strerror}), so the patch is not exported")
+    with os.fdopen(fd, "rb") as fin:
+        if not stat.S_ISREG(os.fstat(fin.fileno()).st_mode):
+            raise SystemExit(f"E_DR_RUNTIME: {src} is not a regular file, so the patch is not exported")
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "xb") as fout:
+            shutil.copyfileobj(fin, fout)
+
+
+def _export_git_dir(git_dir, work, saved):
+    """A root-only git dir for the export: root's saved config, the agent repo's HEAD, index, refs and ignore and
+    attribute files copied as plain data, and its objects read through alternates. Nothing else in the agent's .git
+    (commondir, config, config.worktree, hooks) is read."""
+    if os.path.isfile(saved):
+        shutil.copyfile(saved, os.path.join(work, "config"))
+    os.makedirs(os.path.join(work, "objects", "info"))
+    with open(os.path.join(work, "objects", "info", "alternates"), "w") as f:
+        f.write(os.path.join(git_dir, "objects") + "\n")
+    names = ["HEAD", "index", "packed-refs", "shallow", os.path.join("info", "exclude"), os.path.join("info", "attributes")]
+    names += [n for n in os.listdir(git_dir) if n.startswith("sharedindex.")]
+    for sub in ("info", "refs"):
+        if os.path.islink(os.path.join(git_dir, sub)):
+            raise SystemExit(f"E_DR_RUNTIME: {os.path.join(git_dir, sub)} is not a plain directory, so the patch is not exported")
+    for name in names:
+        if os.path.lexists(os.path.join(git_dir, name)):
+            _copy_plain(os.path.join(git_dir, name), os.path.join(work, name))
+    refs = os.path.join(git_dir, "refs")
+    os.makedirs(os.path.join(work, "refs"))
+    for top, dirs, files in os.walk(refs):
+        for name in dirs:
+            if os.path.islink(os.path.join(top, name)):
+                raise SystemExit(f"E_DR_RUNTIME: {os.path.join(top, name)} is not a plain directory, so the patch is not exported")
+        for name in files:
+            _copy_plain(os.path.join(top, name), os.path.join(work, os.path.relpath(os.path.join(top, name), git_dir)))
+
+
+def _open_patch(patch):
+    """A new file at patch, opened without following a symlink the agent left there or at its directory."""
+    parent, name = os.path.split(os.path.abspath(patch))
+    os.makedirs(parent, exist_ok=True)
+    dfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        try:
+            os.unlink(name, dir_fd=dfd)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            raise SystemExit(f"E_DR_RUNTIME: {patch} could not be cleared ({e.strerror}), so the patch is not exported")
+        return os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=dfd)
+    finally:
+        os.close(dfd)
+
+
+def export(patch, testbed=TESTBED, saved=SAVED_GIT_CONFIG):
+    """Root's patch export: git add -A, then the staged diff against HEAD, run in a root-only git dir so nothing the
+    agent planted in .git is read as config or run."""
     git_dir = os.path.join(testbed, ".git")
     if os.path.islink(git_dir) or not os.path.isdir(git_dir):
         raise SystemExit(f"E_DR_RUNTIME: {git_dir} is not a plain directory, so the patch is not exported")
-    env = {**os.environ, "GIT_DIR": git_dir, "GIT_WORK_TREE": testbed, "GIT_CONFIG_GLOBAL": "/dev/null"}
-    os.makedirs(os.path.dirname(patch), exist_ok=True)
-    subprocess.run(["git", *GIT_SAFE, "add", "-A"], cwd=testbed, env=env, check=True)
-    with open(patch, "wb") as f:
-        subprocess.run(["git", *GIT_SAFE, "-c", "core.fileMode=false", "diff", "--cached", "--binary", "HEAD"], cwd=testbed, env=env, stdout=f, check=True)
+    work = tempfile.mkdtemp(prefix="dr-export-")
+    try:
+        _export_git_dir(git_dir, work, saved)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env.update(GIT_DIR=work, GIT_WORK_TREE=testbed, GIT_CONFIG_GLOBAL="/dev/null")
+        subprocess.run(["git", *GIT_SAFE, "add", "-A"], cwd=testbed, env=env, check=True)
+        with os.fdopen(_open_patch(patch), "wb") as f:
+            subprocess.run(["git", *GIT_SAFE, "-c", "core.fileMode=false", "diff", "--cached", "--binary", "HEAD"], cwd=testbed, env=env, stdout=f, check=True)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def main(argv=None):

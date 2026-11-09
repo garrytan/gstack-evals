@@ -66,6 +66,15 @@ describe("vm.sh", () => {
     expect(res.out).toContain("vm: vm-1");
   });
 
+  test("the post-boot script reserves the controller's proxy port range from the kernel's ephemeral ports and reads it back", () => {
+    const s = readFileSync(join(HOST, "post-boot.sh"), "utf8");
+    const r = Bun.spawnSync(["bash", join(HOST, "post-boot.sh"), "--reserved-ports"]);
+    expect(r.stdout.toString().trim()).toBe(PROXY_PORT_FIRST + "-" + (PROXY_PORT_FIRST + PROXY_PORT_COUNT - 1));
+    expect(s).toContain('sudo sysctl -q -w net.ipv4.ip_local_reserved_ports="$reserved"');
+    expect(s).toContain("/proc/sys/net/ipv4/ip_local_reserved_ports");
+    expect(s).toContain("/etc/sysctl.d/");
+  });
+
   test("the post-boot script turns apt off, enables linger and sets the run user's environment", () => {
     const s = readFileSync(join(HOST, "post-boot.sh"), "utf8");
     for (const line of [

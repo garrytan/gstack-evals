@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openLease } from "../../src/runner/ledger/ledger.ts";
 
-const REAL_RECORD = process.env.DR_REAL_RECORD ?? join(process.env.HOME ?? "", ".capy/drive/captain-gstack-evals/ledger/decision-routing/record");
+const REAL_RECORD = process.env.DR_REAL_RECORD ?? "";
 const RUN = "dr-calibration@abc";
 
 const VM = join(import.meta.dir, "../../lanes/decision-routing/host/vm.sh");
@@ -132,7 +132,24 @@ test("record-in refuses the next segment after a controller-written STOP or a cu
   expect(run("record-in", "vm-1", record).code).not.toBe(0);
 });
 
-test("record-out --confirm tells the VM a lease is in the drive only once the drive copy reads it back open", () => {
+test.if(process.getuid?.() !== 0)("record-in refuses the next segment when an earlier segment's pulled journals can't be read, rather than reading that as no custody hit", () => {
+  const { dir, record, run } = rig();
+  const seg = join(dir, "runs", RUN, "cal-1");
+  mkdirSync(join(seg, "journals"), { recursive: true });
+  writeFileSync(join(seg, "journals", "dr-calibration.ndjson"), JSON.stringify({ kind: "settle" }) + "\n");
+  expect(run("record-in", "vm-1", record, RUN).code).toBe(0);
+  chmodSync(join(seg, "journals", "dr-calibration.ndjson"), 0o000);
+  try {
+    const r = run("record-in", "vm-1", record, RUN);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("E_DR_RUNNER: ");
+    expect(r.out).toContain("could not be read");
+  } finally {
+    chmodSync(join(seg, "journals", "dr-calibration.ndjson"), 0o644);
+  }
+});
+
+test.skipIf(!REAL_RECORD || !existsSync(join(REAL_RECORD, "items", "dr-calibration")))("record-out --confirm tells the VM a lease is in the drive only once the drive copy reads it back open", () => {
   const { dir, vmHome, run } = rig();
   const drive = join(dir, "drive");
   cpSync(REAL_RECORD, drive, { recursive: true });

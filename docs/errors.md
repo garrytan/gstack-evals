@@ -1368,9 +1368,9 @@ Exit 2. Side effects: None: no lease was written, nothing was leased or launched
 
 ### DR_PROXY_PORT_BUSY
 
-Decision routing: at batch start, something other than the batch's own metering proxies listens on the proxy port range that the runner's container firewall opens to the agents (TCP 47100-47107), or one of the batch's proxies on that range is not seen listening.
+Decision routing: at batch start, something other than the batch's own metering proxies listens on the proxy port range that the runner's container firewall opens to the agents (TCP 47100-47107), or one of the batch's proxies on that range is not seen listening, or, when the proxy host is off loopback, a port in that range is not reserved from the kernel's ephemeral ports (net.ipv4.ip_local_reserved_ports).
 
-Fix: Find and stop the other listener on the runner host (ss -ltnp), or find why the proxy is not listening, then relaunch the batch.
+Fix: Find and stop the other listener on the runner host (ss -ltnp), find why the proxy is not listening, or run post-boot.sh (which reserves the range) on the runner, then relaunch the batch.
 
 Exit 2. Side effects: Before the leases: none. After the proxies started: the batch's leases are settled with no session launched. Retry safe: yes. Resumable: yes. Owner: U6.
 
