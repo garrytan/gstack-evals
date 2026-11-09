@@ -232,14 +232,14 @@ The template names no developer, docs, errors or upgrade, so the none arm gets n
 | A cap stop on a ledger item | an incomplete run: cells not run are missing, never retried to change a verdict | none | the ledger's cap stop |
 | Stage 3: a build session that ends with no tree, or a tree the sandbox can't install | descriptive: first success 0 for that build, counted and printed | per the rows above | E_DX_BUILD_INSTRUMENT when the unit's base fails to install |
 
-**Missing-rate rules.** A unit-pass pair with either side missing drops from that paired comparison, and the cluster count is checked against the units left. Coverage, scored reviews over planned, under 0.90 for an arm on a model makes that arm's contrast untested (coverage). When an arm misses more than 5 percentage points more sessions than none on a model, the intention-to-treat read (missing scored 0) becomes that contrast's primary. A sensitivity read that treats session stops as missing instead of 0 prints beside every primary and decides nothing. No-block, arm-stop, missing and contamination rates print per cell.
+**Missing-rate rules.** A unit-pass pair with either side missing drops from that paired comparison, and the cluster count is checked against the units left. Coverage, scored reviews over planned, under 0.90 for an arm on a model makes that arm's contrast untested (coverage). When an arm misses more than 5 percentage points more sessions than none on a model, the intention-to-treat read (missing scored 0) becomes that contrast's primary. A sensitivity read that treats session stops as missing instead of 0 prints beside every primary and decides nothing. No-block, session-stop, missing and contamination rates print per cell.
 
 **Recovery rule (J1), fixed now.** When a paid session's outcome is unknown (a machine or provider fails mid-session):
 
 1. Stop launching new sessions on that item. Reconcile first: read the proxy journal and the ledger lease, settle every call with no recorded outcome as unknown spend (the proxy never resends a lost call), and record the session's state from its sink.
 2. A session counts as judged once any of its blocks has been sent to a judge. A judged session is never retried, whatever happened.
 3. An unjudged session that failed for an infrastructure reason gets one retry under its named reason, on the same item, with the unknown spend counted. A second failure leaves it missing.
-4. A session that failed for a reason the arm caused follows the arm-stop row, never this rule.
+4. A session that failed for a reason the arm caused follows the session-stop row, never this rule.
 5. Every recovery, its reason and its spend go in the run record and the incident log before the next launch.
 
 ### 7. Judging (R78)
