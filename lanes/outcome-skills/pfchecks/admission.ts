@@ -73,7 +73,7 @@ export function reprice(measured: Record<string, Partial<Record<Arm, number[]>>>
 export const itemCap = (prices: Record<Arm, number>, n: number): number => ceil10(n * (prices.P + prices.C + prices.N + 3 * VM_USD));
 
 /** The n rule: the largest n up to 60, never above the supply, whose three re-priced caps fit inside what is left of the
- *  line (its $1,960 less the spend recorded so far and the crew use still held back). Under 30 the Captain decides. */
+ *  line (its $1,970 less the spend recorded so far and the crew use still held back). Under 30 the Captain decides. */
 export function nRule(prices: Record<string, Record<Arm, number>>, o: { supply: number; spent_usd: number; crew_held_usd: number }): { n: number; caps: Record<string, number>; left_usd: number; captain: boolean; owner: boolean } {
   const left_usd = LINE.cap_micros / M - o.spent_usd - o.crew_held_usd;
   const total = (n: number) => MODELS.reduce((s, m) => s + itemCap(prices[m]!, n), 0);

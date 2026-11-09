@@ -80,9 +80,9 @@ test("pf-admit serves all three models with a task slot and a wrap-up slot per s
   expect(task.status).toBe(200);
   expect(task.json).toMatchObject({ item: "pf-admit", ledger: "u4", lease_id: lease, allowance_micros: 12 * D });
   expect(task.json.base_url).toEndWith("/anthropic");
-  const wrap = await open({ arm: "pf:P", cap: 1, phase: "wrapup" });
+  const wrap = await open({ arm: "pf:P", cap: 6, phase: "wrapup" });
   expect(wrap.status).toBe(200);
-  expect(wrap.json).toMatchObject({ item: "pf-admit", lease_id: lease, allowance_micros: 1 * D });
+  expect(wrap.json).toMatchObject({ item: "pf-admit", lease_id: lease, allowance_micros: 6 * D });
   expect(wrap.json.meter_id).not.toBe(task.json.meter_id);
   expect(wrap.json.base_url).not.toBe(task.json.base_url);
   expect(wrap.json.base_url).toEndWith("/anthropic");
@@ -101,15 +101,15 @@ test("pf-admit serves all three models with a task slot and a wrap-up slot per s
   expect((await open({ arm: "pf:blind", cap: 15, phase: "task", task: "u2" })).status).toBe(400);
   expect((await open({ arm: "sm:A0", cap: 6, phase: "task" })).json.detail).toContain("PF sessions only");
 
-  const early = await open({ arm: "pf:C", cap: 1, phase: "wrapup", task: "u3" });
+  const early = await open({ arm: "pf:C", cap: 6, phase: "wrapup", task: "u3" });
   expect(early.status).toBe(422);
   expect(early.json.detail).toContain("no task open yet");
-  expect((await open({ arm: "pf:P", cap: 1, phase: "wrapup" })).status).toBe(422);
-  expect((await open({ arm: "pf:P", cap: 1, phase: "wrapup", rerun: "wrap-up infra end" })).status).toBe(200);
-  expect((await open({ arm: "pf:P", cap: 1, phase: "wrapup", rerun: "again" })).json.detail).toContain("one rerun at most");
+  expect((await open({ arm: "pf:P", cap: 6, phase: "wrapup" })).status).toBe(422);
+  expect((await open({ arm: "pf:P", cap: 6, phase: "wrapup", rerun: "wrap-up infra end" })).status).toBe(200);
+  expect((await open({ arm: "pf:P", cap: 6, phase: "wrapup", rerun: "again" })).json.detail).toContain("one rerun at most");
   expect((await open({ arm: "pf:P", cap: 12, phase: "task" })).status).toBe(422);
   expect((await open({ arm: "pf:P", cap: 12, phase: "task", rerun: "task infra end" })).status).toBe(200);
-  expect((await open({ arm: "pf:P", cap: 1, phase: "wrapup" })).status).toBe(200);
+  expect((await open({ arm: "pf:P", cap: 6, phase: "wrapup" })).status).toBe(200);
   expect((await open({ arm: "pf:P", cap: 12, phase: "task", rerun: "third" })).status).toBe(422);
 
   const status = (await (await fetch(served.control + "/status")).json()) as { stages: Array<{ opens: number; reruns: number }> };
@@ -125,13 +125,13 @@ test("pf-admit serves all three models with a task slot and a wrap-up slot per s
 });
 
 test("a task open needs room for its task and wrap-up allowances, the wrap-up's room stays held for it, and a task open past that cap-stops", async () => {
-  const { serve, local } = ledger({ "pf-opus": { cap: 14 } });
+  const { serve, local } = ledger({ "pf-opus": { cap: 24 } });
   const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
   const { open, closeAll } = client(served.control);
   expect((await open({ arm: "pf:N", cap: 6, phase: "task", task: "u1" })).status).toBe(200);
   expect((await open({ arm: "pf:N", cap: 6, phase: "task", task: "u2" })).status).toBe(200);
-  expect((await open({ arm: "pf:N", cap: 1, phase: "wrapup", task: "u1" })).status).toBe(200);
-  expect((await open({ arm: "pf:N", cap: 1, phase: "wrapup", task: "u2" })).status).toBe(200);
+  expect((await open({ arm: "pf:N", cap: 6, phase: "wrapup", task: "u1" })).status).toBe(200);
+  expect((await open({ arm: "pf:N", cap: 6, phase: "wrapup", task: "u2" })).status).toBe(200);
   await closeAll();
   expect(await served.stop()).toBe(0);
   local.close?.();

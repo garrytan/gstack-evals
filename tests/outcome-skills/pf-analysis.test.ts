@@ -12,7 +12,7 @@ const rows = (): Row[] => {
   }
   return out;
 };
-test("items sum to the line and the line holds the $1,960", () => {
+test("items sum to the line and the line holds the $1,970", () => {
   expect(lineItemsMicros() + LINE.crew_counted_micros).toBe(LINE.cap_micros);
   expect(ITEMS["pf-blind"]!.in_line).toBe(false);
 });
@@ -98,11 +98,11 @@ test("the re-price, the n rule, the mid-run check and the blind fit", () => {
   expect(p[P1]).toEqual(PLANNING[P1]!);
   expect(itemCap(p[OPUS]!, 28)).toBe(580);
   const n = nRule(p, { supply: 50, spent_usd: 500, crew_held_usd: 250 });
-  expect(n.left_usd).toBe(1210);
-  expect(n.caps["pf-opus"]! + n.caps["pf-sol"]! + n.caps["pf-particle"]!).toBeLessThanOrEqual(1210);
+  expect(n.left_usd).toBe(1220);
+  expect(n.caps["pf-opus"]! + n.caps["pf-sol"]! + n.caps["pf-particle"]!).toBeLessThanOrEqual(1220);
   expect(nRule(p, { supply: 50, spent_usd: 500, crew_held_usd: 250 }).n).toBeGreaterThan(nRule(p, { supply: 50, spent_usd: 600, crew_held_usd: 250 }).n - 1);
   expect(nRule(p, { supply: 12, spent_usd: 0, crew_held_usd: 0 })).toMatchObject({ n: 12, captain: true });
   expect(midRunCheck(SOL, { cap_usd: 370, spent_usd: 200, done: 10, n: 28, measured: { P: [10], C: [10], N: [3] } }).stop).toBe(true);
-  expect(blindFits(1840)).toBe(true);
-  expect(blindFits(1841)).toBe(false);
+  expect(blindFits(1850)).toBe(true);
+  expect(blindFits(1851)).toBe(false);
 });

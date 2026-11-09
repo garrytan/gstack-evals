@@ -103,7 +103,7 @@ Analysis and money
 - Re-price: per session and arm, Opus 1.2 x its measured mean, Sol and particle-1 max(planning, 1.5 x measured mean); an
   item's cap for n units is n x (the three arms' prices plus three $0.40 VMs), rounded up to $10. The margin is in the
   price, so the cap adds no second 1.2. At planning prices this gives Opus $580 at n = 28, the post's cap.
-- What is left of the line is $1,960 less the spend recorded so far less the crew use still held back (both inputs).
+- What is left of the line is $1,970 less the spend recorded so far less the crew use still held back (both inputs).
 - The mid-run check projects spend so far plus the remaining units at the new price against the item's cap.
 
 ## Sessions, arms and the dry run
@@ -117,7 +117,7 @@ Rules as built
   trailing whitespace removed, a blank line, then "My app is the repository in this directory. Don't stop to ask." The
   blind probe is its text with {scope}, a blank line and that last line only.
 - Limits: task turn 5,400 s and 250 turns for P, C and the blind probe, 3,600 s and 150 turns for N; wrap-up 300 s and 20
-  turns. Allowances from items.ts ALLOWANCE (or admission.ts costReading's doubled table, passed in); blind $15; wrap-up $1,
+  turns. Allowances from items.ts ALLOWANCE (or admission.ts costReading's doubled table, passed in); blind $15; wrap-up $6 on Opus, $3 on Sol,
   $0.50 on particle-1. Quiet and background waits are the state machines arms' 30 s and 600 s.
 - Session plan: per unit, every (model, arm) cell of the part shuffled by one seededRandom(order_seed + part) stream, as
   #290's planPart reads its seed. Items: pf-opus, pf-sol, pf-particle in the test part; pf-admit in admission; pf-blind.

@@ -4,7 +4,7 @@
 
 const M = 1_000_000;
 
-export const LINE = { name: "pstack-checks", cap_micros: 1960 * M, crew_counted_micros: 250 * M } as const;
+export const LINE = { name: "pstack-checks", cap_micros: 1970 * M, crew_counted_micros: 250 * M } as const;
 export const OWNER_MICROS = 5000 * M;
 
 export interface ItemDef { item: string; program: "pstack-checks"; skills: string[]; cap_micros: number; model: string | null; in_line: boolean; what: string }
@@ -16,7 +16,7 @@ const item = (name: string, usd: number, model: string | null, what: string, in_
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries([
   item("pf-labels", 100, null, "Astra and Opus labels with the state machines labeller, for candidates it never labelled"),
   item("pf-oracle", 80, null, "VMs: the oracle on candidates that eval never ran, and the neutral-tree validation on every drawn unit"),
-  item("pf-admit", 320, OPUS, "8 admission units on Opus (P, C, N told) and the Sol and particle-1 price probe; covers either raise"),
+  item("pf-admit", 330, OPUS, "8 admission units on Opus (P, C, N told) and the Sol and particle-1 price probe; covers either raise"),
   item("pf-opus", 580, OPUS, "n = 28: P, C and N told on Opus"),
   item("pf-sol", 370, SOL, "the same on GPT-6.1 Sol"),
   item("pf-particle", 260, P1, "the same on particle-1"),
