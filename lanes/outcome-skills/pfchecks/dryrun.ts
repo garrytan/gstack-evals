@@ -220,19 +220,19 @@ export async function main(argv: string[]): Promise<number> {
   };
   const { st, server } = startStub(stubSessions, gw);
   const url = "http://" + gw + ":" + server.port;
-  // The driver: one stage per frozen item on the temporary ledger, its proxies in front of the stub. Stages route an open
-  // to the first that serves its arm and model, so batch 1 serves pf-sol, pf-particle, pf-admit and pf-blind and batch 2
-  // pf-opus; each lease is opened and settled by the driver.
+  // The driver: one stage per frozen item on the temporary ledger, its proxies in front of the stub. A batch may not serve
+  // one arm and model on two stages, and pf-admit serves every told arm on every model, so batch 1 serves pf-opus, pf-sol,
+  // pf-particle and pf-blind and batch 2 pf-admit; each lease is opened and settled by the driver.
   const harbor = arg("--harbor") ?? join(homedir(), ".capy/work/real/venv/bin/harbor");
   const treeVol = "pf-dry-tree-" + process.pid, hostileVol = treeVol + "-hostile";
   for (const v of [treeVol, hostileVol]) spawnSync("docker", ["volume", "rm", "-f", v]);
-  const tv0 = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.repo + ":/s:ro", "-v", treeVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", "cp -a /s/. /d/"], { encoding: "utf8" });
+  const tv0 = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.repo + ":/s:ro", "-v", treeVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", "cp -a /s/. /d/ && chown -R 0:0 /d"], { encoding: "utf8" });
   if (tv0.status !== 0) throw new Error("tree volume: " + tv0.stderr);
-  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.repo + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", 'cp -a /s/. /d/ && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit', HOSTILE], { encoding: "utf8" });
+  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.repo + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", 'cp -a /s/. /d/ && chown -R 0:0 /d && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit', HOSTILE], { encoding: "utf8" });
   if (hv.status !== 0) throw new Error("hostile volume: " + hv.stderr);
   const machine = machineId();
   const serve = (n: number, items: string[]) => serveStages({ record, local, run_id: "pf-dryrun-" + n, envelope_host: machine, machine, stages: items.map((item) => ({ item, arm: PF_STAGES[item]!.arms[0]!, arms: [...PF_STAGES[item]!.arms] })), host: gw, dir: join(W, "driver-" + n), fetch: (u, init) => fetch(u.replace("https://api.anthropic.com", url), init), env: { ANTHROPIC_API_KEY: "stub-not-a-key" }, requireAdmission: () => null, log: (l) => console.error(l) });
-  let batch = await serve(1, ["pf-sol", "pf-particle", "pf-admit", "pf-blind"]);
+  let batch = await serve(1, ["pf-opus", "pf-sol", "pf-particle", "pf-blind"]);
   let stopped = false;
   let index = 0;
   const runOne = async (name: string, arm: PfArm, model: string, names: Names, hostile = false) => {
@@ -300,7 +300,7 @@ export async function main(argv: string[]): Promise<number> {
     rule("wrap-up limit with no manifest scores 0", cC.score === 0 && (cC as any).manifest?.none === "wrapup_limit", "wrap-up " + JSON.stringify((C.turns.wrapup ?? []).map((w: any) => w.termination)) + ", score " + cC.score + ", none " + (cC as any).manifest?.none);
     const BL = await runOne("blind", "blind", OPUS, names);
     await batch.stop();
-    batch = await serve(2, ["pf-opus"]);
+    batch = await serve(2, ["pf-admit"]);
     const D = await runOne("D", "P", OPUS, names);
     const fileD = toRecord("D", D, 3);
     const recD = JSON.parse(readFileSync(fileD, "utf8")) as PfSessionRecord;

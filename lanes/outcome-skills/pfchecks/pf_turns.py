@@ -141,7 +141,7 @@ class Session:
                 pass
             closed = self.slots.close(slot, "turn_end")
         self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": slot.get("id"), "allowance_micros": slot.get("allowance_micros"), "close": closed})
-        return {"phase": phase, "termination": termination, "drive": end, "session_id": sid, "wall_s": round(time.time() - started, 1), "refused": (closed or {}).get("refused") or []}
+        return {"phase": phase, "termination": termination, "drive": end, "session_id": sid, "wall_s": round(time.time() - started, 1), "refused": (closed or {}).get("refusals") or []}
 
     async def run(self) -> dict:
         cfg = self.cfg

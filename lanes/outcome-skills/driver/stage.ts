@@ -104,6 +104,8 @@ export interface CloseAnswer {
   requests: number;
   ok_responses: number;
   refused: number;
+  /** PF sessions only: the proxy code of each refused call, from the lease journal, so a turn can tell an allowance stop from an upstream end. */
+  refusals?: string[];
   unknown: number;
   undrained: number;
   unsettled: number;
@@ -523,6 +525,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         unknown: meter?.unknown ?? 0,
         undrained: meter?.undrained ?? 0,
         unsettled: meter?.unsettled ?? 0,
+        ...(s.pf ? { refusals: (existsSync(s.journal) ? readFileSync(s.journal, "utf8").split("\n") : []).flatMap((l) => { try { const j = JSON.parse(l); return j.kind === "refusal" && j.meter_id === sess.meter_id ? [String(j.code)] : []; } catch { return []; } }) } : {}),
       };
       sess.closed = answer;
       const hold = sess.key ? holds.get(sess.key) : undefined;
