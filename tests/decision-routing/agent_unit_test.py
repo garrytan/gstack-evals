@@ -895,40 +895,42 @@ def test_replay_jev_newer_answers_every_logged_state_with_jev_1_14():
     check(status2 == "allowance_stop" and n2 == 0, status2)
 
 
-def test_replay_safety_held_half_as_one_pseudo_session():
-    from dr_agent import safety_held
+def test_replay_safety_set_either_half_as_one_pseudo_session():
+    from dr_agent import safety_set
 
     path = os.path.join(HERE, "..", "..", "lanes", "decision-routing", "labels", "safety-set.json")
-    cases = [c for c in json.load(open(path))["commands"] if c["half"] == "held"]
-    logdir = os.path.join(tempfile.mkdtemp(dir=TMP), "log")
-    j, js = jev(lambda n, s: 0.8)
-    p, ps = gen(lambda k, pl: {"answer": "yes", "confidence": 0.9})
-    out = os.path.join(logdir, "..", "answers.jsonl")
-    n, status = safety_held.run(path, logdir, Q, j, p, out)
-    recs = records(logdir)
-    check(status == "ok" and n == len(recs) == 100, (n, status, len(recs)))
-    check([r["command"] for r in recs] == [c["command"] for c in cases], "not the held half in order")
-    check([(r["case_id"], r["unsafe"], r["kind"]) for r in recs] == [(c["id"], c["unsafe"], c["kind"]) for c in cases], "construction labels")
-    check(sum(r["unsafe"] for r in recs) == 50, "not 50 unsafe")
-    check(all(r["type"] == "safe" and r["session"] == "constructed-held" and r["mode"] == "shadow" for r in recs), recs[0])
-    for r in recs:
-        st = json.load(open(os.path.join(logdir, r["state_file"])))
-        check(st == {**safety_held.EMPTY_STATE, "command": r["command"]}, st)
-    answered = [json.loads(x) for x in open(out)]
-    check(len(answered) == 100 and all({"jev", "particle", "particle_noguess"} <= set(a["layers"]) for a in answered), "layers")
-    check(len(js.calls) == 100 and len(ps.calls) == 200, (len(js.calls), len(ps.calls)))
-    safety_held.run(path, logdir, Q, j, p, out)
-    check(len(records(logdir)) == 100, "a rerun appended to the pseudo-session")
+    for half in ("held", "calibration"):
+        cases = [c for c in json.load(open(path))["commands"] if c["half"] == half]
+        logdir = os.path.join(tempfile.mkdtemp(dir=TMP), "log")
+        j, js = jev(lambda n, s: 0.8)
+        p, ps = gen(lambda k, pl: {"answer": "yes", "confidence": 0.9})
+        out = os.path.join(logdir, "..", "answers.jsonl")
+        n, status = safety_set.run(path, half, logdir, Q, j, p, out)
+        recs = records(logdir)
+        check(status == "ok" and n == len(recs) == 100, (half, n, status, len(recs)))
+        check([r["command"] for r in recs] == [c["command"] for c in cases], f"not the {half} half in order")
+        check([(r["case_id"], r["unsafe"], r["kind"]) for r in recs] == [(c["id"], c["unsafe"], c["kind"]) for c in cases], "construction labels")
+        check(sum(r["unsafe"] for r in recs) == 50, "not 50 unsafe")
+        check(all(r["type"] == "safe" and r["session"] == "constructed-" + half and r["mode"] == "shadow" for r in recs), recs[0])
+        for r in recs:
+            st = json.load(open(os.path.join(logdir, r["state_file"])))
+            check(st == {**safety_set.EMPTY_STATE, "command": r["command"]}, st)
+        answered = [json.loads(x) for x in open(out)]
+        check(len(answered) == 100 and all({"jev", "particle", "particle_noguess"} <= set(a["layers"]) for a in answered), "layers")
+        check(len(js.calls) == 100 and len(ps.calls) == 200, (len(js.calls), len(ps.calls)))
+        safety_set.run(path, half, logdir, Q, j, p, out)
+        check(len(records(logdir)) == 100, "a rerun appended to the pseudo-session")
+    check(safety_set.main(["--log-dir", TMP, "--questions", os.path.join(AGENT_DIR, "dr_agent", "questions.json"), "--safety-set", path, "--half", "both"]) == 2, "an unknown half was accepted")
     bad = json.load(open(path))
     next(c for c in bad["commands"] if c["half"] == "held")["half"] = "calibration"
     badf = os.path.join(TMP, "bad-safety-set.json")
     json.dump(bad, open(badf, "w"))
-    try:
-        safety_held.held_cases(badf)
-        check(False, "a held half of 99 was accepted")
-    except ValueError as e:
-        check(str(e).startswith("E_USAGE"), str(e))
-
+    for half in ("held", "calibration"):
+        try:
+            safety_set.half_cases(badf, half)
+            check(False, f"a {half} half of 99 or 101 was accepted")
+        except ValueError as e:
+            check(str(e).startswith("E_USAGE"), str(e))
 
 def test_replay_guess_ablation_on_logged_R_states():
     from dr_agent import guess_ablation, shadow

@@ -6,8 +6,10 @@
 # answers from <answer out>/answers/<session>.shadow.jsonl. Then tune reads every labelled file and writes tuned.json and
 # rewrite-plan.json. If the plan names a question rewrite (6.3), it stops with exit 3 before pin: rewrite questions.json,
 # re-answer the planned states with the answering step and run this again. Otherwise pin writes pin.json and its sha256.
+# --constructed takes the safety set's calibration-half answers (answer --mode safety_calibration); they get labels by
+# construction (labels constructed), are joined and go to tune beside the real sessions.
 #
-# usage: label-tune.sh <batch out> <answer out> <tasks dir> <work dir> --proxy-host <host> --questions <questions.json> [--particle-max-tokens 8000|16000]
+# usage: label-tune.sh <batch out> <answer out> <tasks dir> <work dir> --proxy-host <host> --questions <questions.json> [--particle-max-tokens 8000|16000] [--constructed <answers.jsonl>]
 # DR_CLI overrides the decision-routing command (default: bun <repo>/bin/gstack-evals decision-routing).
 set -euo pipefail
 
@@ -18,17 +20,19 @@ die() {
 [ $# -ge 8 ] || die "E_USAGE: label-tune.sh <batch out> <answer out> <tasks dir> <work dir> --proxy-host <host> --questions <questions.json> [--particle-max-tokens n]"
 out=$1 answers=$2 tasks=$3 work=$4
 shift 4
-proxy="" questions="" maxtok=()
+proxy="" questions="" maxtok=() constructed=""
 while [ $# -gt 0 ]; do
   case $1 in
     --proxy-host) proxy=$2 ;;
     --questions) questions=$2 ;;
     --particle-max-tokens) maxtok=(--particle-max-tokens "$2") ;;
+    --constructed) constructed=$2 ;;
     *) die "E_USAGE: unknown argument $1" ;;
   esac
   shift 2
 done
 [ -n "$proxy" ] && [ -n "$questions" ] || die "E_USAGE: --proxy-host and --questions are required"
+[ -z "$constructed" ] || [ -f "$constructed" ] || die "E_USAGE: no constructed answers at $constructed"
 if [ -n "${DR_CLI:-}" ]; then
   cli=("$DR_CLI")
 else
@@ -49,6 +53,12 @@ while IFS= read -r result; do
   labelled+=(--labelled "$work/labelled/$session.jsonl")
 done < <(find "$out/harbor" -mindepth 3 -maxdepth 3 -name result.json | sort)
 [ ${#labelled[@]} -gt 0 ] || die "E_USAGE: no Harbor trials under $out/harbor"
+trials=$(( ${#labelled[@]} / 2 ))
+if [ -n "$constructed" ]; then
+  "${cli[@]}" labels constructed --decisions "$constructed" --out "$work/labels/constructed.jsonl"
+  "${cli[@]}" labels join --decisions "$constructed" --labels "$work/labels/constructed.jsonl" --out "$work/labelled/constructed.jsonl"
+  labelled+=(--labelled "$work/labelled/constructed.jsonl")
+fi
 
 "${cli[@]}" tune "${labelled[@]}" --out "$work/tuned.json" --plan "$work/rewrite-plan.json"
 if ! grep -Eq '"types": *\[\]' "$work/rewrite-plan.json"; then
@@ -56,4 +66,4 @@ if ! grep -Eq '"types": *\[\]' "$work/rewrite-plan.json"; then
   exit 3
 fi
 "${cli[@]}" pin --tuned "$work/tuned.json" --questions "$questions" --out "$work/pin.json" "${maxtok[@]}"
-echo "labels, tune and pin done: $(( ${#labelled[@]} / 2 )) trials, $work/pin.json"
+echo "labels, tune and pin done: $trials trials, $work/pin.json"

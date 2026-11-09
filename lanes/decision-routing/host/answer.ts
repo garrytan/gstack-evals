@@ -13,11 +13,12 @@
 // - stops on the stop file, a CAP_STOP or a DR_CUSTODY_HIT (which writes the stop file with its code), lets nothing new
 //   start and never retries: a session with <out>/answers/<session>.json was started once and is never started again;
 // - settles the lease and writes <out>/answer.json.
-// Modes: shadow (calibration: Jev 1.13.0 and particle-1 with and without the guess, dr_agent/shadow.py), and the replay
-// item's three: jev_newer (S7, Jev 1.14.0 on every logged state, dr_agent/jev_newer.py), safety_held (S4, the safety
-// set's held half as one pseudo-session, dr_agent/safety_held.py) and guess_ablation (S11, particle-1 with and without
-// Jev's logged guess on R states, dr_agent/guess_ablation.py). safety_held's pseudo-session (pseudoSession) gets its own
-// planted canary as its only marker; without --sessions the command line builds it under <out>/constructed-held.
+// Modes: shadow (calibration: Jev 1.13.0 and particle-1 with and without the guess, dr_agent/shadow.py), safety_calibration
+// (calibration: the safety set's calibration half as one pseudo-session, dr_agent/safety_set.py), and the replay item's
+// three: jev_newer (S7, Jev 1.14.0 on every logged state, dr_agent/jev_newer.py), safety_held (S4, the held half as one
+// pseudo-session, dr_agent/safety_set.py) and guess_ablation (S11, particle-1 with and without Jev's logged guess on R
+// states, dr_agent/guess_ablation.py). A safety mode's pseudo-session (pseudoSession, named by the mode's pseudo field)
+// gets its own planted canary as its only marker; without --sessions the command line builds it under <out>/<name>.
 // --temp runs on a temporary ledger initialised from config/items.json and is refused without --fake-upstreams.
 
 import { randomBytes } from "node:crypto";
@@ -38,12 +39,12 @@ const LANE = resolve(import.meta.dir, "..");
 const CELLS = JSON.parse(readFileSync(join(LANE, "config", "cells.json"), "utf8")) as { deciders: Record<string, string>; limits: { allowance_micros: number } };
 
 export const MODES = {
-  shadow: { module: "dr_agent.shadow", deciders: [CELLS.deciders.jev!, CELLS.deciders.particle!], args: [], pseudo: false },
-  jev_newer: { module: "dr_agent.jev_newer", deciders: ["typesafe:jev-1.14.0"], args: [], pseudo: false },
-  safety_held: { module: "dr_agent.safety_held", deciders: [CELLS.deciders.jev!, CELLS.deciders.particle!], args: ["--safety-set", SAFETY_SET_PATH], pseudo: true },
-  guess_ablation: { module: "dr_agent.guess_ablation", deciders: [CELLS.deciders.particle!], args: [], pseudo: false },
+  shadow: { module: "dr_agent.shadow", deciders: [CELLS.deciders.jev!, CELLS.deciders.particle!], args: [], pseudo: null },
+  safety_calibration: { module: "dr_agent.safety_set", deciders: [CELLS.deciders.jev!, CELLS.deciders.particle!], args: ["--safety-set", SAFETY_SET_PATH, "--half", "calibration"], pseudo: "constructed-calibration" },
+  jev_newer: { module: "dr_agent.jev_newer", deciders: ["typesafe:jev-1.14.0"], args: [], pseudo: null },
+  safety_held: { module: "dr_agent.safety_set", deciders: [CELLS.deciders.jev!, CELLS.deciders.particle!], args: ["--safety-set", SAFETY_SET_PATH, "--half", "held"], pseudo: "constructed-held" },
+  guess_ablation: { module: "dr_agent.guess_ablation", deciders: [CELLS.deciders.particle!], args: [], pseudo: null },
 } as const;
-export const PSEUDO_SESSION = "constructed-held";
 export const RUNTIME_PYTHON = "/opt/dr/venv/bin/python";
 
 export interface AnswerSession {
@@ -80,11 +81,11 @@ export interface AnswerResult {
   warnings: string[];
 }
 
-/** safety_held's pseudo-session in dir: a canary planted in dir/canary.txt as its only marker, its log in dir/log. */
-export function pseudoSession(dir: string): AnswerSession {
+/** A safety mode's pseudo-session in dir: a canary planted in dir/canary.txt as its only marker, its log in dir/log. */
+export function pseudoSession(dir: string, session: string): AnswerSession {
   const markers_file = join(dir, "markers.json");
   writeFileSync(markers_file, JSON.stringify([plantCanary(dir)]) + "\n", { mode: 0o600 });
-  return { session: PSEUDO_SESSION, log_dir: join(dir, "log"), markers_file };
+  return { session, log_dir: join(dir, "log"), markers_file };
 }
 
 type Line = Record<string, any>;
@@ -215,7 +216,7 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
 }
 
 const FLAGS = new Set(["--item", "--run-id", "--mode", "--sessions", "--out", "--questions", "--pin-file", "--python", "--record", "--ledger", "--items", "--stop-file", "--fake-upstreams"]);
-const USAGE = "usage: answer --item <item> --run-id <id> --mode <" + Object.keys(MODES).join("|") + "> --sessions <sessions.json: [{session, log_dir, markers_file}]; safety_held builds its own when left out> --out <dir> --questions <questions.json> [--pin-file <pin.json>] [--python <command>] [--record <dir> --ledger <sqlite> | --temp --fake-upstreams <urls.json> [--items <items.json>]] [--stop-file <path>]";
+const USAGE = "usage: answer --item <item> --run-id <id> --mode <" + Object.keys(MODES).join("|") + "> --sessions <sessions.json: [{session, log_dir, markers_file}]; the safety modes build their own when left out> --out <dir> --questions <questions.json> [--pin-file <pin.json>] [--python <command>] [--record <dir> --ledger <sqlite> | --temp --fake-upstreams <urls.json> [--items <items.json>]] [--stop-file <path>]";
 
 export async function main(argv: string[]): Promise<number> {
   const f: Record<string, string> = {};
@@ -229,7 +230,7 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
   }
-  const pseudo = MODES[f["--mode"] as keyof typeof MODES]?.pseudo === true;
+  const pseudo = MODES[f["--mode"] as keyof typeof MODES]?.pseudo ?? null;
   const missing = ["--item", "--run-id", "--mode", ...(pseudo ? [] : ["--sessions"]), "--out", "--questions"].filter((k) => !f[k]);
   if (missing.length) {
     console.error("E_USAGE: missing " + missing.join(", ") + "\n" + USAGE);
@@ -240,7 +241,7 @@ export async function main(argv: string[]): Promise<number> {
       item: f["--item"]!,
       runId: f["--run-id"]!,
       mode: f["--mode"] as keyof typeof MODES,
-      sessions: f["--sessions"] ? (JSON.parse(readFileSync(f["--sessions"], "utf8")) as AnswerSession[]) : [pseudoSession(join(resolve(f["--out"]!), PSEUDO_SESSION))],
+      sessions: f["--sessions"] ? (JSON.parse(readFileSync(f["--sessions"], "utf8")) as AnswerSession[]) : [pseudoSession(join(resolve(f["--out"]!), pseudo!), pseudo!)],
       out: f["--out"]!,
       questions: resolve(f["--questions"]!),
       pinFile: f["--pin-file"] ? resolve(f["--pin-file"]) : undefined,

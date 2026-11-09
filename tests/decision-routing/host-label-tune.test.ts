@@ -17,7 +17,7 @@ afterEach(() => {
   dirs = [];
 });
 
-function rig(types = "[]") {
+function rig(types = "[]", extra: string[] = []) {
   const dir = mkdtempSync(join(tmpdir(), "dr-labeltune-"));
   dirs.push(dir);
   const stub = join(dir, "cli");
@@ -31,7 +31,7 @@ function rig(types = "[]") {
     mkdirSync(join(dir, "answer", "answers"), { recursive: true });
     writeFileSync(join(dir, "answer", "answers", session + ".shadow.jsonl"), "{}\n");
   }
-  const r = Bun.spawnSync(["bash", SCRIPT, out, join(dir, "answer"), join(dir, "tasks"), join(dir, "work"), "--proxy-host", "10.0.0.1", "--questions", join(dir, "q.json")], { env: { PATH: process.env.PATH!, DR_CLI: stub, STUB_LOG: join(dir, "log"), STUB_TYPES: types } });
+  const r = Bun.spawnSync(["bash", SCRIPT, out, join(dir, "answer"), join(dir, "tasks"), join(dir, "work"), "--proxy-host", "10.0.0.1", "--questions", join(dir, "q.json"), ...extra], { env: { PATH: process.env.PATH!, DR_CLI: stub, STUB_LOG: join(dir, "log"), STUB_TYPES: types } });
   return { dir, code: r.exitCode, out: r.stdout.toString() + r.stderr.toString(), log: () => readFileSync(join(dir, "log"), "utf8").trim().split("\n") };
 }
 
@@ -47,6 +47,24 @@ test("labels each trial, joins its shadow answers, tunes on every labelled file,
     "tune --labelled " + join(w, "labelled", "o__a-1__N__opus.jsonl") + " --labelled " + join(w, "labelled", "o__b-2__N__sol.jsonl") + " --out " + join(w, "tuned.json") + " --plan " + join(w, "rewrite-plan.json"),
     "pin --tuned " + join(w, "tuned.json") + " --questions " + join(dir, "q.json") + " --out " + join(w, "pin.json"),
   ]);
+});
+
+test("--constructed labels the safety set's calibration-half answers by construction and tunes them with the real sessions", () => {
+  const dir0 = mkdtempSync(join(tmpdir(), "dr-constructed-"));
+  dirs.push(dir0);
+  const answers = join(dir0, "constructed-calibration.safety_calibration.jsonl");
+  writeFileSync(answers, "{}\n");
+  const { dir, code, out, log } = rig("[]", ["--constructed", answers]);
+  expect(code).toBe(0);
+  const w = join(dir, "work");
+  const lines = log();
+  expect(lines.slice(4, 6)).toEqual([
+    "labels constructed --decisions " + answers + " --out " + join(w, "labels", "constructed.jsonl"),
+    "labels join --decisions " + answers + " --labels " + join(w, "labels", "constructed.jsonl") + " --out " + join(w, "labelled", "constructed.jsonl"),
+  ]);
+  expect(lines[6]).toBe("tune --labelled " + join(w, "labelled", "o__a-1__N__opus.jsonl") + " --labelled " + join(w, "labelled", "o__b-2__N__sol.jsonl") + " --labelled " + join(w, "labelled", "constructed.jsonl") + " --out " + join(w, "tuned.json") + " --plan " + join(w, "rewrite-plan.json"));
+  expect(out).toContain("2 trials");
+  expect(rig("[]", ["--constructed", join(dir0, "missing.jsonl")]).code).toBe(2);
 });
 
 test("stops before pin when tune plans a question rewrite", () => {

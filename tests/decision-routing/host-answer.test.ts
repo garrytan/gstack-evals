@@ -7,12 +7,13 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MODES, PSEUDO_SESSION, main, pseudoSession, runAnswer, type AnswerOptions } from "../../lanes/decision-routing/host/answer.ts";
+import { MODES, main, pseudoSession, runAnswer, type AnswerOptions } from "../../lanes/decision-routing/host/answer.ts";
 import { SAFETY_SET_PATH } from "../../lanes/decision-routing/labels/safety-set.ts";
 import { fakeFetch } from "../../lanes/decision-routing/host/controller.ts";
 import { FakeUpstreams } from "../../lanes/decision-routing/fake/upstreams.ts";
 
 const CANARY = "DRCANARY-" + "ab".repeat(16);
+const PSEUDO_SESSION = "constructed-held";
 const STUB = [
   'import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";',
   "const a = process.argv.slice(2);",
@@ -70,13 +71,14 @@ function world(sessions = 2, capMicros = 90_000_000) {
 }
 
 test("shadow mode allows Jev 1.13.0 and particle-1 only", () => {
-  expect(MODES.shadow).toEqual({ module: "dr_agent.shadow", deciders: ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"], args: [], pseudo: false });
+  expect(MODES.shadow).toEqual({ module: "dr_agent.shadow", deciders: ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"], args: [], pseudo: null });
 });
 
 test("the replay modes allow only their own deciders and run their own modules", () => {
-  expect(MODES.jev_newer).toEqual({ module: "dr_agent.jev_newer", deciders: ["typesafe:jev-1.14.0"], args: [], pseudo: false });
-  expect(MODES.safety_held).toEqual({ module: "dr_agent.safety_held", deciders: ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"], args: ["--safety-set", SAFETY_SET_PATH], pseudo: true });
-  expect(MODES.guess_ablation).toEqual({ module: "dr_agent.guess_ablation", deciders: ["openrouter:particle-ai/particle-1"], args: [], pseudo: false });
+  expect(MODES.jev_newer).toEqual({ module: "dr_agent.jev_newer", deciders: ["typesafe:jev-1.14.0"], args: [], pseudo: null });
+  expect(MODES.safety_held).toEqual({ module: "dr_agent.safety_set", deciders: ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"], args: ["--safety-set", SAFETY_SET_PATH, "--half", "held"], pseudo: "constructed-held" });
+  expect(MODES.safety_calibration).toEqual({ module: "dr_agent.safety_set", deciders: ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"], args: ["--safety-set", SAFETY_SET_PATH, "--half", "calibration"], pseudo: "constructed-calibration" });
+  expect(MODES.guess_ablation).toEqual({ module: "dr_agent.guess_ablation", deciders: ["openrouter:particle-ai/particle-1"], args: [], pseudo: null });
 });
 
 test("jev_newer's slot takes Jev 1.14.0 only, guess_ablation's particle-1 only", async () => {
@@ -95,37 +97,41 @@ test("jev_newer's slot takes Jev 1.14.0 only, guess_ablation's particle-1 only",
 
 test("safety_held answers the held half as one pseudo-session whose planted canary the slot forbids", async () => {
   const { dir, opts } = world(0);
-  const ps = pseudoSession(join(dir, "pseudo"));
+  const ps = pseudoSession(join(dir, "pseudo"), PSEUDO_SESSION);
   expect(ps.session).toBe(PSEUDO_SESSION);
   const canary = readFileSync(join(dir, "pseudo", "canary.txt"), "utf8").trim();
   expect(canary).toMatch(/^DRCANARY-[0-9a-f]{32}$/);
   expect(JSON.parse(readFileSync(ps.markers_file, "utf8"))).toEqual([canary]);
   expect(statSync(join(dir, "pseudo", "canary.txt")).mode & 0o777).toBe(0o600);
-  expect(pseudoSession(join(dir, "pseudo"))).toEqual(ps);
+  expect(pseudoSession(join(dir, "pseudo"), PSEUDO_SESSION)).toEqual(ps);
   const r = await runAnswer({ ...opts, mode: "safety_held", sessions: [ps] });
   expect(r.stop).toBeNull();
   expect(r.answered).toEqual([PSEUDO_SESSION]);
   const child = JSON.parse(readFileSync(join(opts.out, "answers", PSEUDO_SESSION + ".safety_held.jsonl"), "utf8"));
-  expect(child.argv.slice(0, 5)).toEqual(["-I", "-m", "dr_agent.safety_held", "--log-dir", ps.log_dir]);
-  expect(child.argv.slice(-2)).toEqual(["--safety-set", SAFETY_SET_PATH]);
+  expect(child.argv.slice(0, 5)).toEqual(["-I", "-m", "dr_agent.safety_set", "--log-dir", ps.log_dir]);
+  expect(child.argv.slice(-4)).toEqual(["--safety-set", SAFETY_SET_PATH, "--half", "held"]);
   expect([child.jev, child.particle]).toEqual([200, 200]);
 
-  const planted = pseudoSession(join(dir, "pseudo2"));
+  const planted = pseudoSession(join(dir, "pseudo2"), PSEUDO_SESSION);
   mkdirSync(planted.log_dir, { recursive: true });
   writeFileSync(join(planted.log_dir, "plant"), JSON.parse(readFileSync(planted.markers_file, "utf8"))[0]);
   const hit = await runAnswer({ ...opts, mode: "safety_held", sessions: [planted], out: join(dir, "out2"), fetch: fakeFetch(fakes!.urls) });
   expect(hit.stop?.code).toBe("DR_CUSTODY_HIT");
 });
 
-test("the safety_held command line builds its pseudo-session under --out when --sessions is left out", async () => {
+test("the safety modes' command line builds the mode's pseudo-session under --out when --sessions is left out", async () => {
   const { dir, opts } = world(0);
   writeFileSync(join(dir, "urls.json"), JSON.stringify(fakes!.urls));
-  const out = join(dir, "cli-out");
-  const code = await main(["--item", opts.item, "--run-id", opts.runId, "--mode", "safety_held", "--out", out, "--questions", opts.questions, "--python", opts.python!.join(" "), "--temp", "--fake-upstreams", join(dir, "urls.json"), "--items", opts.items!]);
-  expect(code).toBe(0);
-  const saved = JSON.parse(readFileSync(join(out, "answer.json"), "utf8"));
-  expect(saved.answered).toEqual([PSEUDO_SESSION]);
-  expect(JSON.parse(readFileSync(join(out, PSEUDO_SESSION, "markers.json"), "utf8"))).toHaveLength(1);
+  for (const [mode, session] of [["safety_held", "constructed-held"], ["safety_calibration", "constructed-calibration"]] as const) {
+    const out = join(dir, mode);
+    const code = await main(["--item", opts.item, "--run-id", opts.runId, "--mode", mode, "--out", out, "--questions", opts.questions, "--python", opts.python!.join(" "), "--temp", "--fake-upstreams", join(dir, "urls.json"), "--items", opts.items!]);
+    expect(code).toBe(0);
+    const saved = JSON.parse(readFileSync(join(out, "answer.json"), "utf8"));
+    expect(saved.answered).toEqual([session]);
+    expect(JSON.parse(readFileSync(join(out, session, "markers.json"), "utf8"))).toHaveLength(1);
+    const child = JSON.parse(readFileSync(join(out, "answers", session + "." + mode + ".jsonl"), "utf8"));
+    expect(child.argv.slice(3, 5)).toEqual(["--log-dir", join(out, session, "log")]);
+  }
   expect(await main(["--item", opts.item, "--run-id", opts.runId, "--mode", "jev_newer", "--out", join(dir, "x"), "--questions", opts.questions])).toBe(2);
 });
 
