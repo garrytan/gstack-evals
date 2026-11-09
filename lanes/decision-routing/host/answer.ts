@@ -13,8 +13,11 @@
 // - stops on the stop file, a CAP_STOP or a DR_CUSTODY_HIT (which writes the stop file with its code), lets nothing new
 //   start and never retries: a session with <out>/answers/<session>.json was started once and is never started again;
 // - settles the lease and writes <out>/answer.json.
-// Modes: shadow (calibration: Jev 1.13.0 and particle-1 with and without the guess, dr_agent/shadow.py). The replay
-// item's modes need their own dr_agent modules and get rows in MODES once those exist.
+// Modes: shadow (calibration: Jev 1.13.0 and particle-1 with and without the guess, dr_agent/shadow.py), and the replay
+// item's three: jev_newer (S7, Jev 1.14.0 on every logged state, dr_agent/jev_newer.py), safety_held (S4, the safety
+// set's held half as one pseudo-session, dr_agent/safety_held.py) and guess_ablation (S11, particle-1 with and without
+// Jev's logged guess on R states, dr_agent/guess_ablation.py). safety_held's pseudo-session (pseudoSession) gets its own
+// planted canary as its only marker; without --sessions the command line builds it under <out>/constructed-held.
 // --temp runs on a temporary ledger initialised from config/items.json and is refused without --fake-upstreams.
 
 import { randomBytes } from "node:crypto";
@@ -27,14 +30,20 @@ import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { ledgerPath, recordPath } from "../../../src/runner/ledger/paths.ts";
 import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
 import { MeteringProxy, ProxyControl, reconcileJournal } from "../../../src/runner/proxy/metering-proxy.ts";
+import { plantCanary } from "../labels/markers.ts";
+import { SAFETY_SET_PATH } from "../labels/safety-set.ts";
 import { checkReserve, ControllerError, fakeFetch, MAX_OUTPUT_TOKENS, RETRY, tempRecord } from "./controller.ts";
 
 const LANE = resolve(import.meta.dir, "..");
 const CELLS = JSON.parse(readFileSync(join(LANE, "config", "cells.json"), "utf8")) as { deciders: Record<string, string>; limits: { allowance_micros: number } };
 
 export const MODES = {
-  shadow: { module: "dr_agent.shadow", deciders: [CELLS.deciders.jev!, CELLS.deciders.particle!] },
+  shadow: { module: "dr_agent.shadow", deciders: [CELLS.deciders.jev!, CELLS.deciders.particle!], args: [], pseudo: false },
+  jev_newer: { module: "dr_agent.jev_newer", deciders: ["typesafe:jev-1.14.0"], args: [], pseudo: false },
+  safety_held: { module: "dr_agent.safety_held", deciders: [CELLS.deciders.jev!, CELLS.deciders.particle!], args: ["--safety-set", SAFETY_SET_PATH], pseudo: true },
+  guess_ablation: { module: "dr_agent.guess_ablation", deciders: [CELLS.deciders.particle!], args: [], pseudo: false },
 } as const;
+export const PSEUDO_SESSION = "constructed-held";
 export const RUNTIME_PYTHON = "/opt/dr/venv/bin/python";
 
 export interface AnswerSession {
@@ -69,6 +78,13 @@ export interface AnswerResult {
   not_run: string[];
   lease: { lease_id: string; spent_micros: number; unknown_micros: number; cap_stop: string | null } | null;
   warnings: string[];
+}
+
+/** safety_held's pseudo-session in dir: a canary planted in dir/canary.txt as its only marker, its log in dir/log. */
+export function pseudoSession(dir: string): AnswerSession {
+  const markers_file = join(dir, "markers.json");
+  writeFileSync(markers_file, JSON.stringify([plantCanary(dir)]) + "\n", { mode: 0o600 });
+  return { session: PSEUDO_SESSION, log_dir: join(dir, "log"), markers_file };
 }
 
 type Line = Record<string, any>;
@@ -161,7 +177,7 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
       const binding = await control.bind({ cell: { run_id: o.item, arm: o.mode, task: s.session, model: "deciders", trial: 1, attempt: 1 }, models: [...mode.deciders], deciders: [...mode.deciders], allowance_micros: CELLS.limits.allowance_micros, forbidden_markers: markers, canary: markers.find((m) => m.startsWith("DRCANARY-"))! });
       let exitCode: number | null = null;
       try {
-        const proc = Bun.spawn([...(o.python ?? [RUNTIME_PYTHON]), "-I", "-m", mode.module, "--log-dir", s.log_dir, "--questions", o.questions, ...(o.pinFile ? ["--pin", o.pinFile] : []), "--out", answers], {
+        const proc = Bun.spawn([...(o.python ?? [RUNTIME_PYTHON]), "-I", "-m", mode.module, "--log-dir", s.log_dir, "--questions", o.questions, ...(o.pinFile ? ["--pin", o.pinFile] : []), "--out", answers, ...mode.args], {
           env: { PATH: env.PATH ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", DR_PROXY_URL: base + "/" + binding.slot, DR_PROXY_TOKEN: binding.token },
           stdout: Bun.file(answers + ".log"),
           stderr: Bun.file(answers + ".err"),
@@ -199,7 +215,7 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
 }
 
 const FLAGS = new Set(["--item", "--run-id", "--mode", "--sessions", "--out", "--questions", "--pin-file", "--python", "--record", "--ledger", "--items", "--stop-file", "--fake-upstreams"]);
-const USAGE = "usage: answer --item <item> --run-id <id> --mode <" + Object.keys(MODES).join("|") + "> --sessions <sessions.json: [{session, log_dir, markers_file}]> --out <dir> --questions <questions.json> [--pin-file <pin.json>] [--python <command>] [--record <dir> --ledger <sqlite> | --temp --fake-upstreams <urls.json> [--items <items.json>]] [--stop-file <path>]";
+const USAGE = "usage: answer --item <item> --run-id <id> --mode <" + Object.keys(MODES).join("|") + "> --sessions <sessions.json: [{session, log_dir, markers_file}]; safety_held builds its own when left out> --out <dir> --questions <questions.json> [--pin-file <pin.json>] [--python <command>] [--record <dir> --ledger <sqlite> | --temp --fake-upstreams <urls.json> [--items <items.json>]] [--stop-file <path>]";
 
 export async function main(argv: string[]): Promise<number> {
   const f: Record<string, string> = {};
@@ -213,7 +229,8 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
   }
-  const missing = ["--item", "--run-id", "--mode", "--sessions", "--out", "--questions"].filter((k) => !f[k]);
+  const pseudo = MODES[f["--mode"] as keyof typeof MODES]?.pseudo === true;
+  const missing = ["--item", "--run-id", "--mode", ...(pseudo ? [] : ["--sessions"]), "--out", "--questions"].filter((k) => !f[k]);
   if (missing.length) {
     console.error("E_USAGE: missing " + missing.join(", ") + "\n" + USAGE);
     return 2;
@@ -223,7 +240,7 @@ export async function main(argv: string[]): Promise<number> {
       item: f["--item"]!,
       runId: f["--run-id"]!,
       mode: f["--mode"] as keyof typeof MODES,
-      sessions: JSON.parse(readFileSync(f["--sessions"]!, "utf8")) as AnswerSession[],
+      sessions: f["--sessions"] ? (JSON.parse(readFileSync(f["--sessions"], "utf8")) as AnswerSession[]) : [pseudoSession(join(resolve(f["--out"]!), PSEUDO_SESSION))],
       out: f["--out"]!,
       questions: resolve(f["--questions"]!),
       pinFile: f["--pin-file"] ? resolve(f["--pin-file"]) : undefined,

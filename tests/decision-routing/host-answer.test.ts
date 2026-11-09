@@ -4,22 +4,26 @@
 // with the session's markers and canary, runs the child with only the proxy URL and token, settles and writes answer.json.
 
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MODES, runAnswer, type AnswerOptions } from "../../lanes/decision-routing/host/answer.ts";
+import { MODES, PSEUDO_SESSION, main, pseudoSession, runAnswer, type AnswerOptions } from "../../lanes/decision-routing/host/answer.ts";
+import { SAFETY_SET_PATH } from "../../lanes/decision-routing/labels/safety-set.ts";
 import { fakeFetch } from "../../lanes/decision-routing/host/controller.ts";
 import { FakeUpstreams } from "../../lanes/decision-routing/fake/upstreams.ts";
 
 const CANARY = "DRCANARY-" + "ab".repeat(16);
 const STUB = [
-  'import { existsSync, writeFileSync } from "node:fs";',
+  'import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";',
   "const a = process.argv.slice(2);",
   "const flag = (n) => a[a.indexOf(n) + 1];",
   "const url = process.env.DR_PROXY_URL, token = process.env.DR_PROXY_TOKEN;",
-  'const plant = existsSync(flag("--log-dir") + "/plant");',
+  'const dir = flag("--log-dir");',
+  'mkdirSync(dir, { recursive: true });',
+  'const plant = existsSync(dir + "/plant") ? readFileSync(dir + "/plant", "utf8").trim() || "' + CANARY + '" : null;',
+  'const jevModel = existsSync(dir + "/jev-model") ? readFileSync(dir + "/jev-model", "utf8").trim() : "jev-1.13.0";',
   'const post = (path, body) => fetch(url + path, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + token }, body: JSON.stringify(body) }).then((r) => r.status);',
-  'const jev = await post("/typesafe/v1/systemone", { model: "jev-1.13.0", state: plant ? "the agent read ' + CANARY + '" : "the agent ran pytest", questions: { tests_passed: { type: "noul", instructions: "Did the tests pass?" } } });',
+  'const jev = await post("/typesafe/v1/systemone", { model: jevModel, state: plant ? "the agent read " + plant : "the agent ran pytest", questions: { tests_passed: { type: "noul", instructions: "Did the tests pass?" } } });',
   'const particle = await post("/openrouter/v1/chat/completions", { model: "particle-ai/particle-1", max_tokens: 100, messages: [{ role: "user", content: "answer" }] });',
   'const opus = await post("/anthropic/v1/messages", { model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content: "hi" }] });',
   'writeFileSync(flag("--out"), JSON.stringify({ argv: a, env: Object.keys(process.env).sort(), jev, particle, opus }) + "\\n");',
@@ -66,7 +70,63 @@ function world(sessions = 2, capMicros = 90_000_000) {
 }
 
 test("shadow mode allows Jev 1.13.0 and particle-1 only", () => {
-  expect(MODES.shadow.deciders).toEqual(["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"]);
+  expect(MODES.shadow).toEqual({ module: "dr_agent.shadow", deciders: ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"], args: [], pseudo: false });
+});
+
+test("the replay modes allow only their own deciders and run their own modules", () => {
+  expect(MODES.jev_newer).toEqual({ module: "dr_agent.jev_newer", deciders: ["typesafe:jev-1.14.0"], args: [], pseudo: false });
+  expect(MODES.safety_held).toEqual({ module: "dr_agent.safety_held", deciders: ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"], args: ["--safety-set", SAFETY_SET_PATH], pseudo: true });
+  expect(MODES.guess_ablation).toEqual({ module: "dr_agent.guess_ablation", deciders: ["openrouter:particle-ai/particle-1"], args: [], pseudo: false });
+});
+
+test("jev_newer's slot takes Jev 1.14.0 only, guess_ablation's particle-1 only", async () => {
+  for (const [mode, jevModel, want] of [["jev_newer", "jev-1.14.0", [200, 403]], ["jev_newer", "jev-1.13.0", [403, 403]], ["guess_ablation", "jev-1.13.0", [403, 200]]] as const) {
+    const { opts, list } = world(1);
+    writeFileSync(join(list[0]!.log_dir, "jev-model"), jevModel);
+    const r = await runAnswer({ ...opts, mode });
+    expect(r.stop).toBeNull();
+    const child = JSON.parse(readFileSync(join(opts.out, "answers", list[0]!.session + "." + mode + ".jsonl"), "utf8"));
+    expect(child.argv.slice(0, 5)).toEqual(["-I", "-m", MODES[mode].module, "--log-dir", list[0]!.log_dir]);
+    expect([child.jev, child.particle, child.opus]).toEqual([...want, 403]);
+    fakes!.stop();
+    fakes = null;
+  }
+});
+
+test("safety_held answers the held half as one pseudo-session whose planted canary the slot forbids", async () => {
+  const { dir, opts } = world(0);
+  const ps = pseudoSession(join(dir, "pseudo"));
+  expect(ps.session).toBe(PSEUDO_SESSION);
+  const canary = readFileSync(join(dir, "pseudo", "canary.txt"), "utf8").trim();
+  expect(canary).toMatch(/^DRCANARY-[0-9a-f]{32}$/);
+  expect(JSON.parse(readFileSync(ps.markers_file, "utf8"))).toEqual([canary]);
+  expect(statSync(join(dir, "pseudo", "canary.txt")).mode & 0o777).toBe(0o600);
+  expect(pseudoSession(join(dir, "pseudo"))).toEqual(ps);
+  const r = await runAnswer({ ...opts, mode: "safety_held", sessions: [ps] });
+  expect(r.stop).toBeNull();
+  expect(r.answered).toEqual([PSEUDO_SESSION]);
+  const child = JSON.parse(readFileSync(join(opts.out, "answers", PSEUDO_SESSION + ".safety_held.jsonl"), "utf8"));
+  expect(child.argv.slice(0, 5)).toEqual(["-I", "-m", "dr_agent.safety_held", "--log-dir", ps.log_dir]);
+  expect(child.argv.slice(-2)).toEqual(["--safety-set", SAFETY_SET_PATH]);
+  expect([child.jev, child.particle]).toEqual([200, 200]);
+
+  const planted = pseudoSession(join(dir, "pseudo2"));
+  mkdirSync(planted.log_dir, { recursive: true });
+  writeFileSync(join(planted.log_dir, "plant"), JSON.parse(readFileSync(planted.markers_file, "utf8"))[0]);
+  const hit = await runAnswer({ ...opts, mode: "safety_held", sessions: [planted], out: join(dir, "out2"), fetch: fakeFetch(fakes!.urls) });
+  expect(hit.stop?.code).toBe("DR_CUSTODY_HIT");
+});
+
+test("the safety_held command line builds its pseudo-session under --out when --sessions is left out", async () => {
+  const { dir, opts } = world(0);
+  writeFileSync(join(dir, "urls.json"), JSON.stringify(fakes!.urls));
+  const out = join(dir, "cli-out");
+  const code = await main(["--item", opts.item, "--run-id", opts.runId, "--mode", "safety_held", "--out", out, "--questions", opts.questions, "--python", opts.python!.join(" "), "--temp", "--fake-upstreams", join(dir, "urls.json"), "--items", opts.items!]);
+  expect(code).toBe(0);
+  const saved = JSON.parse(readFileSync(join(out, "answer.json"), "utf8"));
+  expect(saved.answered).toEqual([PSEUDO_SESSION]);
+  expect(JSON.parse(readFileSync(join(out, PSEUDO_SESSION, "markers.json"), "utf8"))).toHaveLength(1);
+  expect(await main(["--item", opts.item, "--run-id", opts.runId, "--mode", "jev_newer", "--out", join(dir, "x"), "--questions", opts.questions])).toBe(2);
 });
 
 test("one lease, one decider-only slot per session, the child sees only the proxy URL and token, the lease settles", async () => {

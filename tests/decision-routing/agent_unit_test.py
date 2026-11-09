@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 import traceback
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AGENT_DIR = os.path.abspath(os.path.join(HERE, "..", "..", "lanes", "decision-routing", "agent"))
@@ -822,6 +823,142 @@ def test_host_shadow_answers_every_logged_state_twice_for_particle():
     j2, _ = jev(lambda n, s: Exception(ALLOW))
     n2, status2 = shadow.run(logdir, Q, j2, p, out)
     check(status2 == "allowance_stop" and n2 == 0, status2)
+
+
+def fake_typesafe_sdk(seen):
+    """A stand-in typesafe_sdk module that records the model each client and each request names."""
+    mod = types.ModuleType("typesafe_sdk")
+
+    class Noul:
+        def __init__(self, instructions):
+            self.instructions = instructions
+
+    class Choice:
+        def __init__(self, instructions, criteria):
+            self.instructions, self.criteria = instructions, criteria
+
+    class RetryPolicy:
+        def __init__(self, max_retries):
+            self.max_retries = max_retries
+
+    class TypeSafeClient:
+        def __init__(self, **kw):
+            seen.append(("client", kw["model"]))
+
+        def system_one(self, state, questions, model):
+            seen.append(("request", model))
+            answers = {}
+            for n, q in questions.items():
+                if isinstance(q, Choice):
+                    keys = list(q.criteria)
+                    answers[n] = types.SimpleNamespace(type="choice", choice=keys[0], confidence=0.6, probabilities={k: (0.6 if i == 0 else 0.4 / max(1, len(keys) - 1)) for i, k in enumerate(keys)})
+                else:
+                    answers[n] = types.SimpleNamespace(type="noul", noul=0.7)
+            return types.SimpleNamespace(answers=answers, usage=types.SimpleNamespace(input_tokens=5, output_tokens=0))
+
+    mod.Noul, mod.Choice, mod.RetryPolicy, mod.TypeSafeClient = Noul, Choice, RetryPolicy, TypeSafeClient
+    return mod
+
+
+def test_replay_jev_newer_answers_every_logged_state_with_jev_1_14():
+    from dr_agent import jev_newer
+
+    files = {f"src/f{i}.py": "needle\n" for i in range(25)}
+    d = repo(files)
+    _, _, nlog = make("N", d, [["grep -rl needle src"], [SUBMIT]], shadow=True)
+    j, _ = jev(lambda n, s: ("other", 0.99) if n == "next_step" else 0.99)
+    _, _, jlog = make("J", repo({"patch.txt": "x\n"}), [["ls"], [SUBMIT]], j=j)
+    qf = os.path.join(AGENT_DIR, "dr_agent", "questions.json")
+    seen, saved, env = [], sys.modules.get("typesafe_sdk"), dict(os.environ)
+    sys.modules["typesafe_sdk"] = fake_typesafe_sdk(seen)
+    os.environ.update(DR_PROXY_URL="http://127.0.0.1:9/slot", DR_PROXY_TOKEN="tok")
+    try:
+        for logdir in (nlog, jlog):
+            out = os.path.join(logdir, "decisions.jev_newer.jsonl")
+            code = jev_newer.main(["--log-dir", logdir, "--questions", qf, "--out", out])
+            logged, recs = records(logdir), [json.loads(x) for x in open(out)]
+            check(code == 0 and len(recs) == len(logged) > 0, (code, len(recs), len(logged)))
+            for r, before in zip(recs, logged):
+                check(set(r["layers"]) - set(before["layers"]) == {"jev_1_14"} and r["layers"]["jev_1_14"]["ok"], r["layers"].keys())
+                check({k: v for k, v in r.items() if k != "layers"} == {k: v for k, v in before.items() if k != "layers"}, r["decision_id"])
+    finally:
+        os.environ.clear()
+        os.environ.update(env)
+        if saved is None:
+            sys.modules.pop("typesafe_sdk", None)
+        else:
+            sys.modules["typesafe_sdk"] = saved
+    check(seen and {m for _, m in seen} == {"jev-1.14.0"}, seen)
+    check(deciders.JEV_MODEL == "jev-1.13.0", deciders.JEV_MODEL)
+    j2, _ = jev(lambda n, s: Exception(ALLOW))
+    n2, status2 = jev_newer.run(nlog, Q, j2, os.path.join(nlog, "x.jsonl"))
+    check(status2 == "allowance_stop" and n2 == 0, status2)
+
+
+def test_replay_safety_held_half_as_one_pseudo_session():
+    from dr_agent import safety_held
+
+    path = os.path.join(HERE, "..", "..", "lanes", "decision-routing", "labels", "safety-set.json")
+    cases = [c for c in json.load(open(path))["commands"] if c["half"] == "held"]
+    logdir = os.path.join(tempfile.mkdtemp(dir=TMP), "log")
+    j, js = jev(lambda n, s: 0.8)
+    p, ps = gen(lambda k, pl: {"answer": "yes", "confidence": 0.9})
+    out = os.path.join(logdir, "..", "answers.jsonl")
+    n, status = safety_held.run(path, logdir, Q, j, p, out)
+    recs = records(logdir)
+    check(status == "ok" and n == len(recs) == 100, (n, status, len(recs)))
+    check([r["command"] for r in recs] == [c["command"] for c in cases], "not the held half in order")
+    check([(r["case_id"], r["unsafe"], r["kind"]) for r in recs] == [(c["id"], c["unsafe"], c["kind"]) for c in cases], "construction labels")
+    check(sum(r["unsafe"] for r in recs) == 50, "not 50 unsafe")
+    check(all(r["type"] == "safe" and r["session"] == "constructed-held" and r["mode"] == "shadow" for r in recs), recs[0])
+    for r in recs:
+        st = json.load(open(os.path.join(logdir, r["state_file"])))
+        check(st == {**safety_held.EMPTY_STATE, "command": r["command"]}, st)
+    answered = [json.loads(x) for x in open(out)]
+    check(len(answered) == 100 and all({"jev", "particle", "particle_noguess"} <= set(a["layers"]) for a in answered), "layers")
+    check(len(js.calls) == 100 and len(ps.calls) == 200, (len(js.calls), len(ps.calls)))
+    safety_held.run(path, logdir, Q, j, p, out)
+    check(len(records(logdir)) == 100, "a rerun appended to the pseudo-session")
+    bad = json.load(open(path))
+    next(c for c in bad["commands"] if c["half"] == "held")["half"] = "calibration"
+    badf = os.path.join(TMP, "bad-safety-set.json")
+    json.dump(bad, open(badf, "w"))
+    try:
+        safety_held.held_cases(badf)
+        check(False, "a held half of 99 was accepted")
+    except ValueError as e:
+        check(str(e).startswith("E_USAGE"), str(e))
+
+
+def test_replay_guess_ablation_on_logged_R_states():
+    from dr_agent import guess_ablation, shadow
+
+    files = {f"src/f{i}.py": "needle\n" for i in range(25)}
+    d = repo(files)
+    j, _ = jev(lambda n, s: ("other", 0.7) if n == "next_step" else (2.0 if n == "done" else 0.8))
+    p, _ = gen(lambda k, pl: {"answers": [{"hit": h, "answer": "yes", "confidence": 0.9} for h in pl["hits"]]} if k == "hits" else ({"answer": "other", "confidence": 0.5} if k == "choice" else {"answer": "yes", "confidence": 0.9}))
+    _, _, logdir = make("R", d, [["grep -rl needle src"], [SUBMIT]], j=j, p=p)
+    logged = records(logdir)
+    want = [r for r in logged if "jev" in r["layers"] and shadow.guess_of(r["type"], r["layers"]["jev"]) is not None]
+    check(0 < len(want) < len(logged) and any(r["type"] == "done" and not r["layers"]["jev"]["ok"] for r in logged), [(r["type"], list(r["layers"])) for r in logged])
+    p2, ps2 = gen(lambda k, pl: {"answers": [{"hit": h, "answer": "no", "confidence": 0.6} for h in pl["hits"]]} if k == "hits" else ({"answer": "other", "confidence": 0.6} if k == "choice" else {"answer": "no", "confidence": 0.6}))
+    out = os.path.join(logdir, "decisions.guess_ablation.jsonl")
+    n, status = guess_ablation.run(logdir, Q, p2, out)
+    recs = [json.loads(x) for x in open(out)]
+    check(status == "ok" and n == len(recs) == len(want), (n, status, len(want)))
+    check([r["decision_id"] for r in recs] == [r["decision_id"] for r in want], "not the R states with a Jev guess")
+    check(len(ps2.calls) == 2 * n, len(ps2.calls))
+    for r, before, (kg, pg), (kn, pn) in zip(recs, want, ps2.calls[0::2], ps2.calls[1::2]):
+        check(r["layers"]["ablation_guess"]["guess_shown"] and not r["layers"]["ablation_noguess"]["guess_shown"], r["type"])
+        check({k: v for k, v in r["layers"].items() if not k.startswith("ablation_")} == before["layers"], "logged layers changed")
+        check(pg["jev_guess"] == shadow.guess_of(before["type"], before["layers"]["jev"]) and "jev_guess" not in pn, pg.get("jev_guess"))
+        check({k: v for k, v in pg.items() if k != "jev_guess"} == pn, "the two asks differ beyond the guess")
+    _, _, jlog = make("J", repo({"patch.txt": "x\n"}), [["ls"], [SUBMIT]], j=jev(lambda n, s: ("other", 0.99) if n == "next_step" else 0.99)[0])
+    n3, _ = guess_ablation.run(jlog, Q, p2, os.path.join(jlog, "x.jsonl"))
+    check(n3 == 0, "a J state was ablated")
+    p4, _ = gen(lambda k, pl: Exception(ALLOW))
+    n4, status4 = guess_ablation.run(logdir, Q, p4, os.path.join(logdir, "y.jsonl"))
+    check(status4 == "allowance_stop" and n4 == 0, status4)
 
 
 def test_log_record_fields():

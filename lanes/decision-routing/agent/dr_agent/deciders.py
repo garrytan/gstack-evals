@@ -75,16 +75,16 @@ def _err(e):
 
 
 class Jev:
-    def __init__(self, base_url, token, call=None):
-        self.base_url, self.token, self.call, self._client = base_url, token, call or self._sdk_call, None
+    def __init__(self, base_url, token, call=None, model=JEV_MODEL):
+        self.base_url, self.token, self.call, self._client, self.model = base_url, token, call or self._sdk_call, None, model
 
     def _sdk_call(self, state, questions):
         from typesafe_sdk import Choice, Noul, RetryPolicy, TypeSafeClient
 
         if self._client is None:
-            self._client = TypeSafeClient(api_key=self.token, base_url=self.base_url, model=JEV_MODEL, retry=RetryPolicy(max_retries=0), compression=False, timeout=120.0)
+            self._client = TypeSafeClient(api_key=self.token, base_url=self.base_url, model=self.model, retry=RetryPolicy(max_retries=0), compression=False, timeout=120.0)
         qs = {n: Noul(instructions=q["instructions"]) if q["type"] == "noul" else Choice(instructions=q["instructions"], criteria=q["criteria"]) for n, q in questions.items()}
-        resp = self._client.system_one(state=state, questions=qs, model=JEV_MODEL)
+        resp = self._client.system_one(state=state, questions=qs, model=self.model)
         answers = {}
         for n, a in resp.answers.items():
             if a.type == "noul":
