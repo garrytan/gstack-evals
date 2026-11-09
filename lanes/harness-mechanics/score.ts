@@ -21,6 +21,8 @@ export const FIXTURES = join(REPO, "tests/harness-mechanics/fixtures/scorer");
 const EDIT_TOOLS = /^(?:Edit|Write|MultiEdit|NotebookEdit)$/;
 let frozenRegex: string | null = null;
 const frozen = () => (frozenRegex ??= loadMatcher().match.regex);
+/** The judge tar's done-facts bundle has no prereg bundle to load, so it sets match.txt's frozen regex, written into the tar at build time. */
+export const useMatchRegex = (regex: string) => { frozenRegex = regex; };
 const bare = (cmd: string) => cmd.replace(QUOTES, '""');
 export const isCheck = (cmd: string) => new RegExp(frozen(), "i").test(bare(cmd));
 // A repro form: a match of the frozen regex that ends on a .py or .sh path. Only the regex's python-script and bash-script

@@ -7,7 +7,7 @@
 // the reservation_ids of its calls, taken in order from the session meter's request lines.
 import { existsSync, readFileSync } from "node:fs";
 import type { HmRowIn } from "./analyze.ts";
-import { claimOf, lastRun } from "./score.ts";
+import { claimOf, lastRun, useMatchRegex } from "./score.ts";
 import { parseTranscript, turnEnd } from "./vendor/gstack/lib/skill-contract.ts";
 
 export const JEV_MODEL = "jev-1.13.0";
@@ -80,7 +80,8 @@ export function judgeColumns(rows: HmRowIn[], sessions: HookSession[]): HmRowIn[
 }
 
 if (import.meta.main) {
-  const [cmd, path] = process.argv.slice(2);
-  if (cmd !== "facts" || !path) { console.error("E_USAGE: judge.ts facts <transcript.jsonl>"); process.exit(2); }
+  const [cmd, path, flag, regexFile] = process.argv.slice(2);
+  if (cmd !== "facts" || !path || (flag !== undefined && (flag !== "--regex" || !regexFile))) { console.error("E_USAGE: judge.ts facts <transcript.jsonl> [--regex <file>]"); process.exit(2); }
+  if (regexFile) useMatchRegex(readFileSync(regexFile, "utf8").replace(/\n$/, ""));
   console.log(JSON.stringify(doneFacts(readFileSync(path, "utf8"))));
 }

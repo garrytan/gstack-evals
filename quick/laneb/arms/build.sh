@@ -34,7 +34,7 @@ L1_AFTER_SHA=699a41cb6808e01240d02e82247693f9170d401a
 L1_LOADOUT=lite
 # The harness mechanics pin (lanes/harness-mechanics/pins.ts HM.gstackPin) and its arms; unit 7 adds judge.
 HM_SHA=ba2289e1cd9f2387d069b3b6c51b404d56c4a1e9
-HM_ARMS="none prose hook"
+HM_ARMS="none prose hook judge"
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LANEB=$(cd "$HERE/.." && pwd)
@@ -120,6 +120,41 @@ if [ "$MODE" = l1 ]; then build_l1; exit 0; fi
 # (routing and contracts at their defaults); hook is the pin with lanes/harness-mechanics/verify-hook.patch applied to
 # the checkout before setup and skill_contracts set on. The judge tar (hook plus the judgment hooks) is unit 7's: it
 # adds its arm to HM_ARMS and its build here. SKIP_BUILD=1 rewrites the manifests from the tars already in <out>.
+build_judge() {
+  local t=$OUT/trees/judge j=$OUT/trees/judge/.hm/judge root=$LANEB/../.. arm
+  echo "== judge tar: the hook tree plus the decision-routing runtime (its own build.sh at /root/.hm/dr) and hm_judge.py"
+  rm -rf "$t" "$OUT/dr-out"
+  mkdir -p "$t" "$OUT/dr-out"
+  tar -xpf "$OUT/hook.tar" -C "$t"
+  docker run --rm -v "$(command -v uv)":/usr/local/bin/uv:ro -v "$root":/repo:ro -v "$OUT/dr-out":/out debian:bookworm-slim \
+    bash /repo/lanes/decision-routing/agent/runtime/build.sh /out /root/.hm/dr > "$OUT/build-dr.log" 2>&1 || { tail -40 "$OUT/build-dr.log"; exit 1; }
+  mkdir -p "$t/.hm/dr" "$j"
+  tar -xzf "$OUT/dr-out/dr-runtime.tar.gz" -C "$t/.hm/dr"
+  cp "$root/lanes/harness-mechanics/judge/hm_judge.py" "$j/hm_judge.py"
+  cp "${HM_BAND:-$root/lanes/harness-mechanics/judge/band.json}" "$j/band.json"
+  (cd "$root" && bun build lanes/harness-mechanics/judge.ts --target=bun --outfile "$j/facts.js" > "$OUT/build-facts.log" 2>&1) || { cat "$OUT/build-facts.log"; exit 1; }
+  (cd "$root" && bun -e 'import { loadMatcher } from "./lanes/harness-mechanics/match.ts"; process.stdout.write(loadMatcher().match.regex)') > "$j/match.re"
+  for arm in stop risky; do
+    printf '#!/bin/sh\nexec /root/.hm/dr/venv/bin/python -I -B /root/.hm/judge/hm_judge.py %s\n' "$([ $arm = stop ] && echo stop || echo bash)" > "$j/$arm"
+    chmod 755 "$j/$arm"
+  done
+  for arm in jev p1; do
+    printf '{"backend":"%s","band":"/root/.hm/judge/band.json","log":"/root/.hm/log/hooks.jsonl","state_dir":"/root/.hm/state","particle_max_tokens":8000,"contract_hook":"/root/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook","careful":"/root/.claude/skills/gstack/careful/bin/check-careful.sh","done_facts":["/opt/laneb/bin/bun","/root/.hm/judge/facts.js","facts","{transcript}","--regex","/root/.hm/judge/match.re"]}\n' "$arm" > "$j/judge-$arm.json"
+  done
+  python3 - "$t/.claude/settings.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+s = json.load(open(p))
+for e in s["hooks"]["Stop"]:
+    if e.get("_gstack_source") == "gstack-skill-contract":
+        e["hooks"] = [{"type": "command", "command": "/root/.hm/judge/stop", "timeout": 60}]
+s["hooks"].setdefault("PreToolUse", []).append({"matcher": "Bash", "_gstack_source": "hm-judge-risky", "hooks": [{"type": "command", "command": "/root/.hm/judge/risky", "timeout": 60}]})
+json.dump(s, open(p, "w"), indent=2)
+PY
+  cp "$OUT/hook.gstack-config.tsv" "$OUT/judge.gstack-config.tsv"
+  cp "$OUT/hook.loadout.lock.json" "$OUT/judge.loadout.lock.json"
+  canonical_tar -C trees/judge -cf judge.tar $(cd "$t" && ls -A)
+}
 build_hm() {
   local man=$HERE/manifests/hm root=$LANEB/../.. arm head a1 a2 keys src flags b64
   local patch=$root/lanes/harness-mechanics/verify-hook.patch
@@ -161,6 +196,7 @@ build_hm() {
       tar -xpf "$OUT/$arm.tar" -C "$OUT/trees/$arm"
     done
     chmod 755 "$OUT/trees/none/.claude" "$OUT/trees/none/.claude/skills"
+    build_judge
     echo "== tars"
     canonical_tar -C trees/none -cf none.tar .claude
     for arm in $HM_ARMS; do in_builder sh -c "gzip -n -6 -c $arm.tar > $arm.tar.gz"; done
@@ -172,6 +208,10 @@ build_hm() {
     if [ "$arm" != none ]; then
       meta+=(--meta gstack_sha="$HM_SHA" --meta update_check=false --meta onboarding_markers="$(markers "$OUT/trees/$arm")"
         --fetch "$OUT/fetch-pin.json" --config "$OUT/$arm.gstack-config.tsv" --lock "$OUT/$arm.loadout.lock.json")
+    fi
+    if [ "$arm" = judge ]; then
+      meta+=(--meta dr_runtime_sha256="$(cat "$OUT/dr-out/dr-runtime.tar.gz.sha256")" --meta band_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/band.json" | cut -d' ' -f1)"
+        --meta hm_judge_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/hm_judge.py" | cut -d' ' -f1)" --meta facts_sha256="$(sha256sum "$OUT/trees/judge/.hm/judge/facts.js" | cut -d' ' -f1)")
     fi
     bun lanes/harness-mechanics/arms.ts manifest --arm "$arm" --tree "$OUT/trees/$arm" --tar "$OUT/$arm.tar" --out "$man" "${meta[@]}"
   done

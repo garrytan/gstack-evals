@@ -28,6 +28,7 @@ LIMIT_S = {"jev": 2.0, "p1": 30.0}
 FAIL_MARKERS = ("failed", "error", "traceback", "no tests ran")
 PLAIN = {"ls", "cat", "head", "tail", "grep", "rg", "wc", "pwd"}
 GIT_READ = {"status", "diff", "log", "show"}
+PROVIDER = {"order": ["Particle"], "allow_fallbacks": False}
 SEPARATORS = {";", ";;", "&&", "||", "|", "|&", "&", "(", ")"}
 NESTED = ("$(", "`", "<(", ">(")
 
@@ -40,6 +41,26 @@ class _Watch:
         resp = self._c.system_one(**kw)
         self._seen.append(getattr(resp, "model", None))
         return resp
+
+
+class _Routed:
+    def __init__(self, client):
+        self._c, self.chat, self.completions = client, self, self
+
+    def create(self, **kw):
+        return self._c.chat.completions.create(extra_body={"provider": PROVIDER}, **kw)
+
+
+class PinnedParticle(Generative):
+    """deciders.Generative unchanged, with OpenRouter's provider list fixed to Particle and fallbacks off on every call."""
+
+    @property
+    def _client(self):
+        return self._routed
+
+    @_client.setter
+    def _client(self, c):
+        self._routed = None if c is None else _Routed(c)
 
 
 class PinnedJev(Jev):
@@ -249,7 +270,7 @@ def _contract(raw, cfg):
 def main(argv):
     point = argv[1] if len(argv) > 1 else ""
     raw = sys.stdin.read()
-    cfg = json.load(open(os.environ.get("HM_JUDGE_CONFIG", "/opt/hm/judge.json")))
+    cfg = json.load(open(os.environ["HM_JUDGE_CONFIG"]))
     out, code = None, 0
     try:
         payload = json.loads(raw or "{}")
@@ -261,9 +282,9 @@ def main(argv):
             band = json.load(open(cfg["band"]))
             url, token = os.environ["HM_JUDGE_PROXY"], os.environ["HM_JUDGE_TOKEN"]
             jev = PinnedJev(url + "/typesafe", token) if cfg["backend"] == "jev" else None
-            particle = Generative("openai", url + "/openrouter/v1", token, PARTICLE_MODEL, int(cfg["particle_max_tokens"]))
+            particle = PinnedParticle("openai", url + "/openrouter/v1", token, PARTICLE_MODEL, int(cfg["particle_max_tokens"]))
             if point == "stop":
-                facts = json.loads(subprocess.run(cfg["done_facts"] + [payload["transcript_path"]], capture_output=True, timeout=60, check=True).stdout)
+                facts = json.loads(subprocess.run([a.replace("{transcript}", payload["transcript_path"]) for a in cfg["done_facts"]], capture_output=True, timeout=60, check=True).stdout)
                 hook, rec = done(facts, cfg, band, jev, particle)
             elif point == "bash":
                 hook, rec = risky(payload, cfg, band, jev, particle)
