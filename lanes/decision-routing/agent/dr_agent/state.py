@@ -23,6 +23,7 @@ RECENT_STEPS = 10
 MAX_CANDIDATES = 5
 SUBMIT_COMMAND = "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && cat patch.txt"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+BLOCKED_EXIT = "blocked"
 TRACEBACK = re.compile(r'File "([^"]+)", line \d+')
 CUT = "\n[... middle cut ...]\n"
 
@@ -87,7 +88,7 @@ class Tracker:
         self.steps.append((command, exit_code))
         self.last_command, self.last_output, self.last_exit = command, output, exit_code
         self.printed |= {self.norm(p) for p in rules_parser.printed_paths(command)}
-        if by == "main" and rules_parser.is_test_command(command):
+        if by == "main" and exit_code != BLOCKED_EXIT and rules_parser.is_test_command(command):
             self.last_test_command = command
 
     def norm(self, path):

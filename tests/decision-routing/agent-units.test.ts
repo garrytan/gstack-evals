@@ -25,7 +25,7 @@ test("dr_agent units on python3 (mini stand-in when mini is not installed)", () 
   const r = run("python3");
   expect(r.out).not.toContain("FAIL");
   const tier = r.out.match(/^tier (\w+)/m)?.[1];
-  expect(r.out.match(/^PASS /gm)?.length).toBe(tier === "real" ? 36 : 33);
+  expect(r.out.match(/^PASS /gm)?.length).toBe(tier === "real" ? 38 : 35);
   expect(r.status).toBe(0);
 }, 660_000);
 
@@ -33,7 +33,7 @@ describe.skipIf(!existsSync(VENV_PY))("dr_agent on the real mini 2.4.6, litellm 
   test("real tier: litellm and SDK 403 paths, one routed session end to end", () => {
     const r = run(VENV_PY, { DR_TEST_TIER: "real" });
     expect(r.out).not.toContain("FAIL");
-    expect(r.out.match(/^PASS /gm)?.length).toBe(36);
+    expect(r.out.match(/^PASS /gm)?.length).toBe(38);
     expect(r.status).toBe(0);
   }, 660_000);
 });

@@ -709,6 +709,41 @@ def test_safety_blocks():
     check("blocked as unsafe" in obs and agent.blocked_commands == 1 and agent.executed_actions == 1, (obs, agent.executed_actions))
 
 
+def test_tracker_replays_only_test_commands_that_ran():
+    d = repo({"t.py": TESTPY})
+    blocked = "python3 -m unittest -q t; rm -rf /testbed"
+    check(rules_parser.is_test_command(blocked), "the blocked command must contain a test runner")
+    t = state.Tracker(d, ISSUE)
+    t.record(blocked, "blocked as unsafe", "blocked", "main")
+    check("run_tests" not in t.next_options()[0] and t.last_test_command is None, (t.next_options(), t.last_test_command))
+    t.record("python3 -m unittest -q t", "OK", 0, "main")
+    options, _, commands = t.next_options()
+    check("run_tests" in options and commands["run_tests"] == "python3 -m unittest -q t", commands)
+    t.record(blocked, "blocked as unsafe", "blocked", "main")
+    check(t.next_options()[2]["run_tests"] == "python3 -m unittest -q t", t.next_options()[2])
+
+
+def test_blocked_test_command_never_becomes_run_tests():
+    d = repo({"t.py": TESTPY})
+    blocked = "python3 -m unittest -q t; touch made.txt"
+    safe = [0.02]
+
+    def fn(n, s):
+        if n == "safe":
+            return safe.pop(0) if safe else 0.99
+        if n == "next_step":
+            return ("run_tests" if "run_tests" in s["criteria"] else "other", 0.99)
+        return 0.99
+
+    j, js = jev(fn)
+    agent, model, logdir = make("J", d, [[blocked], ["python3 -m unittest -q t"], [SUBMIT]], j=j)
+    check(agent.blocked_commands == 1 and not os.path.exists(os.path.join(d, "made.txt")), "the blocked command ran as a replay")
+    nexts = [r for r in records(logdir) if r["type"] == "next_step"]
+    check("run_tests" not in nexts[0]["options"], nexts[0]["options"])
+    ran = [m["extra"]["actions"][0]["command"] for m in agent.messages if m.get("extra", {}).get("dr_controller")]
+    check(ran == ["python3 -m unittest -q t"], ran)
+
+
 def test_tests_passed_rule_then_decider():
     d = repo({"t.py": TESTPY})
     j, js = jev(lambda n, s: (("other", 0.99) if n == "next_step" else 0.99))

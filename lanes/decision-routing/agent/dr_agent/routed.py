@@ -15,7 +15,7 @@ from minisweagent.exceptions import LimitsExceeded, Submitted, TimeExceeded
 from dr_agent import rules_parser
 from dr_agent.counting import AllowanceStop, CountingMixin, exit_message, stop_status
 from dr_agent.deciders import layer
-from dr_agent.state import Tracker, snapshot_diff
+from dr_agent.state import BLOCKED_EXIT, Tracker, snapshot_diff
 
 CELL_LAYERS = {"R": ("jev", "particle", "frontier"), "P": ("particle", "frontier"), "F": ("frontier",), "J": ("jev", "frontier")}
 LISTING_MIN_HITS = 20
@@ -239,7 +239,7 @@ class RoutedAgent(CountingMixin, DefaultAgent):
             self._finish(rec, out, acted={"no": "blocked", "yes": "allowed"}.get(out["answer"]))
             if blocked:
                 self.blocked_commands += 1
-                self.tracker.record(command, BLOCKED, "blocked", by)
+                self.tracker.record(command, BLOCKED, BLOCKED_EXIT, by)
                 return {"output": BLOCKED, "returncode": 1, "exception_info": ""}
         try:
             output = self.env.execute(action)
