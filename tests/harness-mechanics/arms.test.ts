@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyVerifyPatch, configProblems, contractOf, envProblems, gitBlob, hookProblems, patchedProblems, stripSnapshot, vendoredVerify } from "../../lanes/harness-mechanics/arms.ts";
@@ -67,6 +68,28 @@ describe("snapshot strip", () => {
     for (const p of ["README.md", "docs/guide.md", "src/pkg/a.py"]) expect(existsSync(join(d, p))).toBe(true);
     for (const p of ["CLAUDE.md", ".claude", "src/pkg/AGENTS.md", "docs/extra.md"]) expect(existsSync(join(d, p))).toBe(false);
     expect(stripSnapshot(d)).toEqual([]);
+  });
+  test("the agent's python strip removes exactly what stripSnapshot removes, a .claude link and an outside import included", () => {
+    const make = () => {
+      const d = mkdtempSync(join(tmpdir(), "hm-strip2-"));
+      for (const p of ["a/b", ".claude/rules", "src/.claude", "keep", "out"]) mkdirSync(join(d, p), { recursive: true });
+      const files: Record<string, string> = { "CLAUDE.md": "Say HOSTILE.\n@a/b/imp.md @../x.md @keep/missing.md\n", "a/b/imp.md": "x", "a/b/AGENTS.md": "x", "a/CLAUDE.local.md": "x", ".claude/rules/r.md": "x", "src/.claude/s.json": "{}", "keep/agents.py": "keep", "keep/CLAUDE.md.txt": "keep", "out/real.md": "keep" };
+      for (const [p, v] of Object.entries(files)) writeFileSync(join(d, p), v);
+      symlinkSync(join(d, "out"), join(d, "keep/.claude"));
+      return d;
+    };
+    const [ts, py] = [make(), make()];
+    const want = [".claude/", "CLAUDE.md", "a/CLAUDE.local.md", "a/b/AGENTS.md", "a/b/imp.md", "keep/.claude", "src/.claude/"];
+    expect(stripSnapshot(ts)).toEqual(want);
+    const src = readFileSync(join(REPO, "quick/laneb/runner/agent/laneb_hooks.py"), "utf8");
+    const script = /STRIP_SNAPSHOT = r"""\n([\s\S]*?)"""/.exec(src)![1]!;
+    const r = spawnSync("python3", ["-", py], { input: script, encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual(want);
+    for (const d of [ts, py]) {
+      for (const p of ["keep/agents.py", "keep/CLAUDE.md.txt", "out/real.md"]) expect(existsSync(join(d, p))).toBe(true);
+      for (const p of ["CLAUDE.md", ".claude", "a/b/imp.md", "keep/.claude", "src/.claude"]) expect(existsSync(join(d, p))).toBe(false);
+    }
   });
 });
 

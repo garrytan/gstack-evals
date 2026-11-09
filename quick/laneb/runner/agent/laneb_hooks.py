@@ -27,11 +27,12 @@ import io
 import json
 import re
 import shutil
+import subprocess
 import tarfile
 from datetime import datetime
 from pathlib import Path
 
-from laneb_agent import PROBE_TIMEOUT_S, LanebAgent
+from laneb_agent import PROBE_TIMEOUT_S, LanebAgent, LanebInfraError
 
 # Each copy measures its tar inside the container first and refuses one past the cap. It then sends the tar through head, so
 # a tree that a process the model left running grows between the two passes still sends at most the cap plus one byte: a
@@ -101,7 +102,59 @@ def l1_evidence(transcripts: Path | None, hooks: Path | None) -> dict:
     return out
 
 
+# The harness mechanics snapshot strip (lanes/harness-mechanics/arms.ts stripSnapshot, which tests/harness-mechanics
+# holds this copy equal to): CLAUDE.md, CLAUDE.local.md and AGENTS.md at any depth, the files a CLAUDE.md imports with
+# @path inside the snapshot, and every .claude entry. It runs in the task container with python3 before the arm tar is
+# extracted, so a gstack arm's own install writes after it. Prints the removed paths as one JSON list.
+STRIP_SNAPSHOT = r"""
+import json, os, re, shutil, sys
+root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else ".")
+INSTR = re.compile(r"^(?:CLAUDE\.md|CLAUDE\.local\.md|AGENTS\.md)$")
+IMP = re.compile(r"(?:^|\s)@((?:~|\.{0,2}/|[\w.-]+/)?[\w./-]+)")
+removed, imports = set(), []
+def visit(d):
+    for name in os.listdir(d):
+        p = os.path.join(d, name)
+        if name == ".git":
+            continue
+        if name == ".claude":
+            removed.add(os.path.relpath(p, root) + ("/" if os.path.isdir(p) and not os.path.islink(p) else ""))
+            continue
+        if os.path.isdir(p) and not os.path.islink(p):
+            visit(p)
+        elif INSTR.match(name):
+            removed.add(os.path.relpath(p, root))
+            if name.startswith("CLAUDE") and os.path.isfile(p) and not os.path.islink(p):
+                for m in IMP.finditer(open(p, encoding="utf-8", errors="replace").read()):
+                    imports.append(os.path.normpath(os.path.join(os.path.dirname(p), m.group(1))))
+visit(root)
+for f in imports:
+    if f.startswith(root + "/") and os.path.isfile(f) and not os.path.islink(f):
+        removed.add(os.path.relpath(f, root))
+for r in removed:
+    q = os.path.join(root, r.rstrip("/"))
+    if os.path.isdir(q) and not os.path.islink(q):
+        shutil.rmtree(q, ignore_errors=True)
+    elif os.path.lexists(q):
+        os.remove(q)
+print(json.dumps(sorted(removed)))
+"""
+
+
 class LanebHooksAgent(LanebAgent):
+    def _strip_snapshot(self, container: str) -> list[str]:
+        root = self.options.workdir or "."
+        res = subprocess.run(["docker", "exec", "-i", container, "python3", "-", root], input=STRIP_SNAPSHOT.encode(), capture_output=True, timeout=300)
+        if res.returncode != 0:
+            raise LanebInfraError(f"snapshot strip failed: {res.stderr[-500:]!r}")
+        return json.loads(res.stdout.decode().strip().splitlines()[-1])
+
+    def _inject_arm(self, container: str) -> dict:
+        if not self.options.strip_snapshot:
+            return super()._inject_arm(container)
+        stripped = self._strip_snapshot(container)
+        return {**super()._inject_arm(container), "stripped": stripped}
+
     def _copy_tree(self, container: str, script: str, dest: Path, what: str) -> list[str]:
         shutil.rmtree(dest, ignore_errors=True)
         res = self._exec(container, script, timeout=PROBE_TIMEOUT_S)

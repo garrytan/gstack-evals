@@ -87,7 +87,7 @@ export function stripSnapshot(root: string): string[] {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name), st = lstatSync(p);
       if (name === ".git") continue;
-      if (name === ".claude" && st.isDirectory()) { removed.add(relative(root, p) + "/"); continue; }
+      if (name === ".claude") { removed.add(relative(root, p) + (st.isDirectory() ? "/" : "")); continue; }
       if (st.isDirectory()) visit(p);
       else if (INSTRUCTION.test(name)) {
         removed.add(relative(root, p));
@@ -111,13 +111,21 @@ function gstackMeta(arm: Exclude<HmTar, "none">, tree: string, fetchFile: string
   const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
   const problems = [...configProblems(arm, config), ...hookProblems(arm, hooks)];
   const text = verify.toString("utf8");
-  if (arm === "hook") problems.push(...patchedProblems(text).map((p) => "installed verify: " + p));
+  let patched: { path: string; blob: string }[] | null = null;
+  if (arm === "hook") {
+    problems.push(...patchedProblems(text).map((p) => "installed verify: " + p));
+    patched = [".claude/skills/gstack/verify/SKILL.md", ".gstack/render/claude/verify/SKILL.md", ".claude/skills/verify/SKILL.md"].map((p) => ({ path: p, blob: gitBlob(readFileSync(join(tree, p))) }));
+    if (patched[0]!.blob !== VERIFY_PATCH.patchedBlob) problems.push("the checkout's verify/SKILL.md is blob " + patched[0]!.blob + ", not the patched " + VERIFY_PATCH.patchedBlob);
+    if (patched[2]!.blob !== patched[1]!.blob) problems.push("the ~/.claude/skills verify copy is not the patched render");
+    const applied = readFileSync(join(tree, ".gstack/hm-patched.tsv"), "utf8").trim().split("\n").map((l) => l.split("\t")[1]);
+    if (applied[0] !== patched[0]!.blob || applied[1] !== patched[1]!.blob) problems.push("hm-patched.tsv does not match the installed copies");
+  }
   else if (!text.includes(VERIFY_PATCH.clause) || contractOf(text) !== null) problems.push("installed verify in prose is not the pin's as shipped");
   return {
     meta: {
       gstack_version: readFileSync(join(tree, ".claude/skills/gstack/VERSION"), "utf8").trim(),
       fetch: { repo: fetch.repo, sha: fetch.sha, head: fetch.head, method: fetch.method }, git_archive_sha256: fetch.git_archive_sha256,
-      setup: SETUP, verify_patch: arm === "hook" ? { file: VERIFY_PATCH.file, sha256: VERIFY_PATCH.sha256, blob: VERIFY_PATCH.patchedBlob } : null,
+      setup: SETUP + " --skill-contracts", verify_patch: arm === "hook" ? { file: VERIFY_PATCH.file, sha256: VERIFY_PATCH.sha256, blob: VERIFY_PATCH.patchedBlob, applied: "after setup, to every installed copy", copies: patched } : null,
       lite: { spec: lock.spec, spec_sha256: lock.spec_sha256, files: lock.files, lock_sha256: lock.lock_sha256, tree_digest_normalized: normTree(render).digest },
       hooks, gstack_config: { skill_routing: config.skill_routing ?? "", skill_contracts: config.skill_contracts ?? "" },
       verify: { sha256_normalized: sha(verify), first200_sha256: sha([...text.replace(/^---\n[\s\S]*?\n---\n/, "").trimStart()].slice(0, 200).join("")) },

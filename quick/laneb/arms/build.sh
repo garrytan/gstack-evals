@@ -121,7 +121,7 @@ if [ "$MODE" = l1 ]; then build_l1; exit 0; fi
 # the checkout before setup and skill_contracts set on. The judge tar (hook plus the judgment hooks) is unit 7's: it
 # adds its arm to HM_ARMS and its build here. SKIP_BUILD=1 rewrites the manifests from the tars already in <out>.
 build_hm() {
-  local man=$HERE/manifests/hm root=$LANEB/../.. arm head a1 a2 keys src
+  local man=$HERE/manifests/hm root=$LANEB/../.. arm head a1 a2 keys src flags b64
   local patch=$root/lanes/harness-mechanics/verify-hook.patch
   mkdir -p "$man"
   if [ "${SKIP_BUILD:-0}" != 1 ]; then
@@ -138,18 +138,19 @@ build_hm() {
     git -C "$OUT/src-pin" -c pack.threads=1 repack -a -d -F -q
     printf '{"repo":"%s","sha":"%s","head":"%s","method":"git init; git fetch --depth 1 <repo> <sha>; git checkout FETCH_HEAD","git_archive_sha256":"%s"}\n' \
       "$GSTACK_REPO" "$HM_SHA" "$head" "$a1" > "$OUT/fetch-pin.json"
-    echo "== verify-hook patch"
-    cp -a "$OUT/src-pin" "$OUT/src-hook"
-    git -C "$OUT/src-hook" apply --check "$patch"
-    git -C "$OUT/src-hook" apply "$patch"
+    git -C "$OUT/src-pin" apply --check "$patch"
     rm -rf "$OUT/trees"
     mkdir -p "$OUT/trees/none/.claude/skills"
-    for arm in prose hook; do
-      if [ "$arm" = hook ]; then src=$OUT/src-hook; keys="skill_contracts=on"; else src=$OUT/src-pin; keys=""; fi
-      echo "== $arm arm: ./setup --host claude --no-browser --loadout $L1_LOADOUT at $HM_SHA in docker (keys: ${keys:-none})"
+    for arm in prose hook ${HM_PLAIN:+plain}; do
+      flags=--skill-contracts; keys=""; b64=""
+      if [ "$arm" = prose ]; then keys="skill_contracts=off"; fi
+      if [ "$arm" = hook ]; then b64=$(base64 -w0 "$patch"); fi
+      if [ "$arm" = plain ]; then flags=""; fi
+      src=$OUT/src-pin
+      echo "== $arm arm: ./setup --host claude --no-browser --loadout $L1_LOADOUT $flags at $HM_SHA in docker (keys: ${keys:-none}; patch: ${b64:+after setup})"
       rm -rf "$OUT/$arm-export"
       docker buildx build --progress=plain --no-cache-filter gstack-l1-build --build-context gstack="$src" \
-        --build-arg GSTACK_LOADOUT="$L1_LOADOUT" --build-arg GSTACK_KEYS="$keys" \
+        --build-arg GSTACK_LOADOUT="$L1_LOADOUT" --build-arg GSTACK_SETUP_FLAGS="$flags" --build-arg GSTACK_KEYS="$keys" --build-arg GSTACK_PATCH_B64="$b64" \
         --target gstack-l1-tar --output type=local,dest="$OUT/$arm-export" "$HERE" > "$OUT/build-$arm.log" 2>&1 \
         || { tail -40 "$OUT/build-$arm.log"; exit 1; }
       mv "$OUT/$arm-export/arm.tar" "$OUT/$arm.tar"
