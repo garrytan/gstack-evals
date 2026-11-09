@@ -155,6 +155,8 @@ function sessionsOf(out: string, fresh: boolean): SessionsRun | string {
 export function stepArmTars(out: string): StepResult {
   const problems: string[] = [];
   const parts: string[] = [];
+  const docker = dockerOk();
+  if (!docker) problems.push("needs Docker for the in-image checks and the snapshot strip; docker is missing or not running");
   for (const arm of HM_TARS) {
     if (!existsSync(manifestOf(arm))) { problems.push(arm + ": no manifest"); continue; }
     const m = JSON.parse(readFileSync(manifestOf(arm), "utf8"));
@@ -166,8 +168,7 @@ export function stepArmTars(out: string): StepResult {
     if (got !== m.tar.sha256) problems.push(arm + ": tar sha256 " + got + ", manifest " + m.tar.sha256);
     parts.push(arm + " " + got.slice(0, 12));
   }
-  if (!dockerOk()) problems.push("needs Docker for the in-image checks and the snapshot strip; docker is missing or not running");
-  else {
+  if (docker) {
     const s = sessionsOf(out, true);
     if (typeof s === "string") problems.push(s);
     else problems.push(...s.problems.filter((p) => p.step === 1).map((p) => p.text));
@@ -188,8 +189,8 @@ export function stepVerifyHook(out: string): StepResult {
   }
   writeFileSync(join(out, "verify-hook.txt"), patched);
   const detail = "patch " + VERIFY_PATCH.sha256.slice(0, 12) + " applies to blob " + VERIFY_PATCH.pinBlob.slice(0, 12) + " giving " + VERIFY_PATCH.patchedBlob.slice(0, 12) + "; validateContract accepts check-after-edit";
+  if (!dockerOk()) return { pass: false, detail: "the scripted sessions need Docker, which is missing; " + (p[0] ?? detail) };
   if (p.length) return { pass: false, detail: p[0]! };
-  if (!dockerOk()) return { pass: false, detail: detail + "; the scripted sessions need Docker, which is missing" };
   const s = sessionsOf(out, false);
   if (typeof s === "string") return { pass: false, detail: s };
   const bad = s.problems.filter((x) => x.step === 2);

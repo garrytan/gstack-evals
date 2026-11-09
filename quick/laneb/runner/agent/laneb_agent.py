@@ -166,7 +166,6 @@ class LanebOptions(ClaudeCodeOptions):
     persona_path: str = Field(description="Host path of the simulator persona; never uploaded.")
     arm: str = Field(description="Arm name: none, gstack or placebo.")
     arm_tar: str = Field(description="Host path of the arm tarball, extracted into /root.")
-    strip_snapshot: bool = Field(default=False, description="LanebHooksAgent only: strip auto-loaded instruction files from the snapshot before the arm is extracted (harness mechanics).")
     arm_sha256: str = Field(default="", description="Preregistered sha256 of the arm tarball; a mismatch fails the trial before any model call.")
     control_url: str = Field(default="http://127.0.0.1:8788", description="Proxy control plane.")
     session_cap_usd: float = Field(description="Per-session spend cap, reserved in the ledger.")

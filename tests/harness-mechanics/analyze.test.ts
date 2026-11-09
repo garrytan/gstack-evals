@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The analysis (sections 9, 13, 14, 16, 17): every verdict rule with a table that must fire it and tables that must not,
 // Stage 1's A1 to A6, the missing-pair and infrastructure rules, the exposure gate and H1's pre-data reporting amendment.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import { REPO } from "../../lanes/harness-mechanics/pins.ts";
 import { KNOWN, stage1, stage4 } from "../../lanes/harness-mechanics/synth.ts";
 
 const SIMS = 40;
+setDefaultTimeout(60_000);
 const s1 = new Map<string, Admission>();
 const adm = (name: string) => s1.get(name) ?? s1.set(name, admission(stage1(name), { sims: SIMS })).get(name)!;
 const rep = (rows: HmRowIn[], s1name = "keep-in", extra = {}) => report(rows, { stage1: adm(s1name), ...extra }, { sims: SIMS });

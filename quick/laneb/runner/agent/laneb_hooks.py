@@ -32,7 +32,9 @@ import tarfile
 from datetime import datetime
 from pathlib import Path
 
-from laneb_agent import PROBE_TIMEOUT_S, LanebAgent, LanebInfraError
+from pydantic import Field
+
+from laneb_agent import PROBE_TIMEOUT_S, LanebAgent, LanebInfraError, LanebOptions
 
 # Each copy measures its tar inside the container first and refuses one past the cap. It then sends the tar through head, so
 # a tree that a process the model left running grows between the two passes still sends at most the cap plus one byte: a
@@ -141,7 +143,13 @@ print(json.dumps(sorted(removed)))
 """
 
 
+class LanebHooksOptions(LanebOptions):
+    strip_snapshot: bool = Field(default=False, description="Strip auto-loaded instruction files from the snapshot before the arm is extracted (harness mechanics).")
+
+
 class LanebHooksAgent(LanebAgent):
+    options_model = LanebHooksOptions
+
     def _strip_snapshot(self, container: str) -> list[str]:
         root = self.options.workdir or "."
         res = subprocess.run(["docker", "exec", "-i", container, "python3", "-", root], input=STRIP_SNAPSHOT.encode(), capture_output=True, timeout=300)
