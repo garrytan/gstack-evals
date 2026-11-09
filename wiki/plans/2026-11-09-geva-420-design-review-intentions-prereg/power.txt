@@ -1,74 +1,74 @@
-power.py, seed 20261109, 1000 simulated runs a point, 800 sign flips a run, item sd 0.8, tau 0.5, repository tau 0.3; MDD at 80% power, two-sided, clustered on the repository
-repository sizes: {1: 0.2, 2: 0.25, 3: 0.55}; count mix (shares of keyable units with 1, 2, 3, 4 items, from data in hand, one unit): {1: 0.0, 2: 0.0, 3: 0.0, 4: 1.0}
-Part A. columns: items per unit m, control p0, ICC rho, units n, passes, MDD at alpha 0.05, MDD at alpha 0.025 (Holm step 1 of 2)
-m 1-2    p0 0.20  rho 0.500  n 48  passes 2  MDD05 0.13  MDD025 0.15
+power.py, seed 20261109, 1000 simulated runs a point, 800 sign flips a run, item sd 0.8, tau 0.5, repository tau 0.3; MDD at 80% power, two-sided, clustered on the repository; control calibrated to p0; true zero solved exactly
+repository sizes: {1: 0.2, 2: 0.25, 3: 0.55}; count mix (shares of keyable units with 1 to 6 items, from data in hand, one unit): {1: 0.0, 2: 0.0, 3: 0.0, 4: 1.0, 5: 0.0, 6: 0.0}
+Part A. columns: items per unit m, control p0, ICC rho, units n, passes (both arms), MDD at alpha 0.05, MDD at alpha 0.025 (Holm step 1 of 2)
+m 1-2    p0 0.20  rho 0.500  n 48  passes 2  MDD05 0.13  MDD025 0.14
 m 1-2    p0 0.20  rho 0.843  n 48  passes 2  MDD05 0.11  MDD025 0.13
 m 1-2    p0 0.35  rho 0.500  n 48  passes 2  MDD05 0.14  MDD025 0.16
-m 1-2    p0 0.35  rho 0.843  n 48  passes 2  MDD05 0.11  MDD025 0.13
-m 1-2    p0 0.20  rho 0.500  n 48  passes 1  MDD05 0.18  MDD025 0.20
+m 1-2    p0 0.35  rho 0.843  n 48  passes 2  MDD05 0.10  MDD025 0.12
+m 1-2    p0 0.20  rho 0.500  n 48  passes 1  MDD05 0.18  MDD025 0.21
 m 1-2    p0 0.20  rho 0.843  n 48  passes 1  MDD05 0.15  MDD025 0.17
-m 1-2    p0 0.35  rho 0.500  n 48  passes 1  MDD05 0.20  MDD025 0.23
+m 1-2    p0 0.35  rho 0.500  n 48  passes 1  MDD05 0.20  MDD025 0.22
 m 1-2    p0 0.35  rho 0.843  n 48  passes 1  MDD05 0.15  MDD025 0.17
 m 1-2    p0 0.20  rho 0.500  n 56  passes 2  MDD05 0.12  MDD025 0.13
 m 1-2    p0 0.20  rho 0.843  n 56  passes 2  MDD05 0.09  MDD025 0.11
-m 1-2    p0 0.35  rho 0.500  n 56  passes 2  MDD05 0.14  MDD025 0.15
+m 1-2    p0 0.35  rho 0.500  n 56  passes 2  MDD05 0.13  MDD025 0.15
 m 1-2    p0 0.35  rho 0.843  n 56  passes 2  MDD05 0.09  MDD025 0.10
-m 1-2    p0 0.20  rho 0.500  n 56  passes 1  MDD05 0.16  MDD025 0.18
+m 1-2    p0 0.20  rho 0.500  n 56  passes 1  MDD05 0.17  MDD025 0.18
 m 1-2    p0 0.20  rho 0.843  n 56  passes 1  MDD05 0.13  MDD025 0.15
-m 1-2    p0 0.35  rho 0.500  n 56  passes 1  MDD05 0.18  MDD025 0.21
+m 1-2    p0 0.35  rho 0.500  n 56  passes 1  MDD05 0.19  MDD025 0.21
 m 1-2    p0 0.35  rho 0.843  n 56  passes 1  MDD05 0.13  MDD025 0.15
 m 1-2    p0 0.20  rho 0.500  n 64  passes 2  MDD05 0.11  MDD025 0.12
 m 1-2    p0 0.20  rho 0.843  n 64  passes 2  MDD05 0.08  MDD025 0.09
-m 1-2    p0 0.35  rho 0.500  n 64  passes 2  MDD05 0.12  MDD025 0.14
+m 1-2    p0 0.35  rho 0.500  n 64  passes 2  MDD05 0.12  MDD025 0.13
 m 1-2    p0 0.35  rho 0.843  n 64  passes 2  MDD05 0.08  MDD025 0.09
 m 1-2    p0 0.20  rho 0.500  n 64  passes 1  MDD05 0.15  MDD025 0.17
 m 1-2    p0 0.20  rho 0.843  n 64  passes 1  MDD05 0.11  MDD025 0.13
-m 1-2    p0 0.35  rho 0.500  n 64  passes 1  MDD05 0.17  MDD025 0.19
-m 1-2    p0 0.35  rho 0.843  n 64  passes 1  MDD05 0.12  MDD025 0.13
+m 1-2    p0 0.35  rho 0.500  n 64  passes 1  MDD05 0.17  MDD025 0.18
+m 1-2    p0 0.35  rho 0.843  n 64  passes 1  MDD05 0.11  MDD025 0.13
 m 1-2    p0 0.20  rho 0.500  n 72  passes 2  MDD05 0.10  MDD025 0.11
 m 1-2    p0 0.20  rho 0.843  n 72  passes 2  MDD05 0.07  MDD025 0.08
-m 1-2    p0 0.35  rho 0.500  n 72  passes 2  MDD05 0.12  MDD025 0.13
-m 1-2    p0 0.35  rho 0.843  n 72  passes 2  MDD05 0.07  MDD025 0.09
+m 1-2    p0 0.35  rho 0.500  n 72  passes 2  MDD05 0.11  MDD025 0.13
+m 1-2    p0 0.35  rho 0.843  n 72  passes 2  MDD05 0.08  MDD025 0.08
 m 1-2    p0 0.20  rho 0.500  n 72  passes 1  MDD05 0.14  MDD025 0.16
 m 1-2    p0 0.20  rho 0.843  n 72  passes 1  MDD05 0.10  MDD025 0.11
-m 1-2    p0 0.35  rho 0.500  n 72  passes 1  MDD05 0.15  MDD025 0.17
+m 1-2    p0 0.35  rho 0.500  n 72  passes 1  MDD05 0.16  MDD025 0.18
 m 1-2    p0 0.35  rho 0.843  n 72  passes 1  MDD05 0.10  MDD025 0.12
 m 2-4    p0 0.20  rho 0.500  n 48  passes 2  MDD05 0.09  MDD025 0.10
-m 2-4    p0 0.20  rho 0.843  n 48  passes 2  MDD05 0.07  MDD025 0.09
-m 2-4    p0 0.35  rho 0.500  n 48  passes 2  MDD05 0.10  MDD025 0.12
+m 2-4    p0 0.20  rho 0.843  n 48  passes 2  MDD05 0.07  MDD025 0.10
+m 2-4    p0 0.35  rho 0.500  n 48  passes 2  MDD05 0.10  MDD025 0.11
 m 2-4    p0 0.35  rho 0.843  n 48  passes 2  MDD05 0.07  MDD025 0.08
 m 2-4    p0 0.20  rho 0.500  n 48  passes 1  MDD05 0.12  MDD025 0.14
-m 2-4    p0 0.20  rho 0.843  n 48  passes 1  MDD05 0.11  MDD025 0.13
+m 2-4    p0 0.20  rho 0.843  n 48  passes 1  MDD05 0.10  MDD025 0.12
 m 2-4    p0 0.35  rho 0.500  n 48  passes 1  MDD05 0.14  MDD025 0.15
 m 2-4    p0 0.35  rho 0.843  n 48  passes 1  MDD05 0.10  MDD025 0.12
 m 2-4    p0 0.20  rho 0.500  n 56  passes 2  MDD05 0.08  MDD025 0.09
 m 2-4    p0 0.20  rho 0.843  n 56  passes 2  MDD05 0.06  MDD025 0.07
-m 2-4    p0 0.35  rho 0.500  n 56  passes 2  MDD05 0.10  MDD025 0.10
+m 2-4    p0 0.35  rho 0.500  n 56  passes 2  MDD05 0.09  MDD025 0.11
 m 2-4    p0 0.35  rho 0.843  n 56  passes 2  MDD05 0.06  MDD025 0.07
-m 2-4    p0 0.20  rho 0.500  n 56  passes 1  MDD05 0.11  MDD025 0.12
+m 2-4    p0 0.20  rho 0.500  n 56  passes 1  MDD05 0.11  MDD025 0.13
 m 2-4    p0 0.20  rho 0.843  n 56  passes 1  MDD05 0.09  MDD025 0.10
 m 2-4    p0 0.35  rho 0.500  n 56  passes 1  MDD05 0.13  MDD025 0.14
 m 2-4    p0 0.35  rho 0.843  n 56  passes 1  MDD05 0.08  MDD025 0.10
-m 2-4    p0 0.20  rho 0.500  n 64  passes 2  MDD05 0.08  MDD025 0.08
+m 2-4    p0 0.20  rho 0.500  n 64  passes 2  MDD05 0.08  MDD025 0.09
 m 2-4    p0 0.20  rho 0.843  n 64  passes 2  MDD05 0.05  MDD025 0.06
 m 2-4    p0 0.35  rho 0.500  n 64  passes 2  MDD05 0.09  MDD025 0.10
 m 2-4    p0 0.35  rho 0.843  n 64  passes 2  MDD05 0.06  MDD025 0.06
-m 2-4    p0 0.20  rho 0.500  n 64  passes 1  MDD05 0.11  MDD025 0.12
-m 2-4    p0 0.20  rho 0.843  n 64  passes 1  MDD05 0.08  MDD025 0.08
+m 2-4    p0 0.20  rho 0.500  n 64  passes 1  MDD05 0.10  MDD025 0.11
+m 2-4    p0 0.20  rho 0.843  n 64  passes 1  MDD05 0.07  MDD025 0.09
 m 2-4    p0 0.35  rho 0.500  n 64  passes 1  MDD05 0.12  MDD025 0.13
 m 2-4    p0 0.35  rho 0.843  n 64  passes 1  MDD05 0.08  MDD025 0.09
 m 2-4    p0 0.20  rho 0.500  n 72  passes 2  MDD05 0.07  MDD025 0.08
-m 2-4    p0 0.20  rho 0.843  n 72  passes 2  MDD05 0.05  MDD025 0.06
+m 2-4    p0 0.20  rho 0.843  n 72  passes 2  MDD05 0.05  MDD025 0.05
 m 2-4    p0 0.35  rho 0.500  n 72  passes 2  MDD05 0.08  MDD025 0.09
 m 2-4    p0 0.35  rho 0.843  n 72  passes 2  MDD05 0.05  MDD025 0.06
-m 2-4    p0 0.20  rho 0.500  n 72  passes 1  MDD05 0.10  MDD025 0.11
+m 2-4    p0 0.20  rho 0.500  n 72  passes 1  MDD05 0.09  MDD025 0.11
 m 2-4    p0 0.20  rho 0.843  n 72  passes 1  MDD05 0.07  MDD025 0.08
 m 2-4    p0 0.35  rho 0.500  n 72  passes 1  MDD05 0.11  MDD025 0.12
 m 2-4    p0 0.35  rho 0.843  n 72  passes 1  MDD05 0.07  MDD025 0.08
 m count  p0 0.20  rho 0.500  n 48  passes 2  MDD05 0.08  MDD025 0.09
 m count  p0 0.20  rho 0.843  n 48  passes 2  MDD05 0.06  MDD025 0.08
 m count  p0 0.35  rho 0.500  n 48  passes 2  MDD05 0.09  MDD025 0.10
-m count  p0 0.35  rho 0.843  n 48  passes 2  MDD05 0.06  MDD025 0.07
+m count  p0 0.35  rho 0.843  n 48  passes 2  MDD05 0.06  MDD025 0.08
 m count  p0 0.20  rho 0.500  n 48  passes 1  MDD05 0.11  MDD025 0.12
 m count  p0 0.20  rho 0.843  n 48  passes 1  MDD05 0.09  MDD025 0.10
 m count  p0 0.35  rho 0.500  n 48  passes 1  MDD05 0.12  MDD025 0.14
@@ -76,82 +76,99 @@ m count  p0 0.35  rho 0.843  n 48  passes 1  MDD05 0.09  MDD025 0.10
 m count  p0 0.20  rho 0.500  n 56  passes 2  MDD05 0.07  MDD025 0.08
 m count  p0 0.20  rho 0.843  n 56  passes 2  MDD05 0.05  MDD025 0.06
 m count  p0 0.35  rho 0.500  n 56  passes 2  MDD05 0.08  MDD025 0.09
-m count  p0 0.35  rho 0.843  n 56  passes 2  MDD05 0.05  MDD025 0.06
+m count  p0 0.35  rho 0.843  n 56  passes 2  MDD05 0.06  MDD025 0.06
 m count  p0 0.20  rho 0.500  n 56  passes 1  MDD05 0.10  MDD025 0.11
 m count  p0 0.20  rho 0.843  n 56  passes 1  MDD05 0.07  MDD025 0.09
-m count  p0 0.35  rho 0.500  n 56  passes 1  MDD05 0.11  MDD025 0.12
+m count  p0 0.35  rho 0.500  n 56  passes 1  MDD05 0.11  MDD025 0.13
 m count  p0 0.35  rho 0.843  n 56  passes 1  MDD05 0.07  MDD025 0.09
 m count  p0 0.20  rho 0.500  n 64  passes 2  MDD05 0.07  MDD025 0.07
-m count  p0 0.20  rho 0.843  n 64  passes 2  MDD05 0.05  MDD025 0.05
+m count  p0 0.20  rho 0.843  n 64  passes 2  MDD05 0.04  MDD025 0.06
 m count  p0 0.35  rho 0.500  n 64  passes 2  MDD05 0.08  MDD025 0.09
 m count  p0 0.35  rho 0.843  n 64  passes 2  MDD05 0.05  MDD025 0.06
-m count  p0 0.20  rho 0.500  n 64  passes 1  MDD05 0.09  MDD025 0.11
-m count  p0 0.20  rho 0.843  n 64  passes 1  MDD05 0.06  MDD025 0.08
+m count  p0 0.20  rho 0.500  n 64  passes 1  MDD05 0.09  MDD025 0.10
+m count  p0 0.20  rho 0.843  n 64  passes 1  MDD05 0.07  MDD025 0.07
 m count  p0 0.35  rho 0.500  n 64  passes 1  MDD05 0.10  MDD025 0.11
 m count  p0 0.35  rho 0.843  n 64  passes 1  MDD05 0.07  MDD025 0.08
 m count  p0 0.20  rho 0.500  n 72  passes 2  MDD05 0.06  MDD025 0.07
 m count  p0 0.20  rho 0.843  n 72  passes 2  MDD05 0.04  MDD025 0.05
 m count  p0 0.35  rho 0.500  n 72  passes 2  MDD05 0.07  MDD025 0.08
 m count  p0 0.35  rho 0.843  n 72  passes 2  MDD05 0.05  MDD025 0.05
-m count  p0 0.20  rho 0.500  n 72  passes 1  MDD05 0.09  MDD025 0.09
+m count  p0 0.20  rho 0.500  n 72  passes 1  MDD05 0.08  MDD025 0.09
 m count  p0 0.20  rho 0.843  n 72  passes 1  MDD05 0.06  MDD025 0.07
-m count  p0 0.35  rho 0.500  n 72  passes 1  MDD05 0.10  MDD025 0.11
+m count  p0 0.35  rho 0.500  n 72  passes 1  MDD05 0.10  MDD025 0.10
 m count  p0 0.35  rho 0.843  n 72  passes 1  MDD05 0.06  MDD025 0.07
 Part B. Size the MDD rule needs: the smallest n (steps of 8) with MDD025 <= 0.12 on Opus (2 passes, rho 0.5), and the MDD025 at that n
 m 1-2    p0 0.20  rho 0.500  passes 2  n needed 64 (MDD025 0.12)
-m 1-2    p0 0.35  rho 0.500  passes 2  n needed 72 (MDD025 0.12)
+m 1-2    p0 0.35  rho 0.500  passes 2  n needed 80 (MDD025 0.12)
 m 2-4    p0 0.20  rho 0.500  passes 2  n needed 40 (MDD025 0.12)
 m 2-4    p0 0.35  rho 0.500  passes 2  n needed 48 (MDD025 0.11)
 Part C. Repository effect sensitivity: Opus, 2 passes, rho 0.5, n 64
 m 1-2    p0 0.20  repository tau 0.0  n 64  MDD05 0.11  MDD025 0.12
-m 1-2    p0 0.35  repository tau 0.0  n 64  MDD05 0.12  MDD025 0.14
+m 1-2    p0 0.35  repository tau 0.0  n 64  MDD05 0.12  MDD025 0.13
 m 1-2    p0 0.20  repository tau 0.3  n 64  MDD05 0.11  MDD025 0.12
-m 1-2    p0 0.35  repository tau 0.3  n 64  MDD05 0.12  MDD025 0.13
-m 1-2    p0 0.20  repository tau 0.6  n 64  MDD05 0.11  MDD025 0.13
-m 1-2    p0 0.35  repository tau 0.6  n 64  MDD05 0.13  MDD025 0.14
-m 2-4    p0 0.20  repository tau 0.0  n 64  MDD05 0.08  MDD025 0.08
+m 1-2    p0 0.35  repository tau 0.3  n 64  MDD05 0.12  MDD025 0.14
+m 1-2    p0 0.20  repository tau 0.6  n 64  MDD05 0.12  MDD025 0.13
+m 1-2    p0 0.35  repository tau 0.6  n 64  MDD05 0.12  MDD025 0.14
+m 2-4    p0 0.20  repository tau 0.0  n 64  MDD05 0.07  MDD025 0.08
 m 2-4    p0 0.35  repository tau 0.0  n 64  MDD05 0.08  MDD025 0.09
 m 2-4    p0 0.20  repository tau 0.3  n 64  MDD05 0.08  MDD025 0.09
 m 2-4    p0 0.35  repository tau 0.3  n 64  MDD05 0.09  MDD025 0.10
 m 2-4    p0 0.20  repository tau 0.6  n 64  MDD05 0.08  MDD025 0.09
-m 2-4    p0 0.35  repository tau 0.6  n 64  MDD05 0.09  MDD025 0.11
+m 2-4    p0 0.35  repository tau 0.6  n 64  MDD05 0.09  MDD025 0.10
 Part D. Upper bound below +0.05 (descriptive here: no CUT-CANDIDATE can come from this eval): share of simulated runs at each true difference, and the median half-width at d +0.05
-m 1-2    p0 0.20  rho 0.500  n 48  passes 2  half-width 0.072  |  d -0.05 0.738  d +0.00 0.305  d +0.05 0.047
-m 1-2    p0 0.35  rho 0.500  n 48  passes 2  half-width 0.084  |  d -0.05 0.663  d +0.00 0.241  d +0.05 0.034
-m 1-2    p0 0.20  rho 0.500  n 48  passes 1  half-width 0.097  |  d -0.05 0.521  d +0.00 0.178  d +0.05 0.036
-m 1-2    p0 0.35  rho 0.500  n 48  passes 1  half-width 0.114  |  d -0.05 0.399  d +0.00 0.176  d +0.05 0.050
-m 1-2    p0 0.20  rho 0.500  n 64  passes 2  half-width 0.063  |  d -0.05 0.882  d +0.00 0.389  d +0.05 0.034
-m 1-2    p0 0.35  rho 0.500  n 64  passes 2  half-width 0.072  |  d -0.05 0.764  d +0.00 0.279  d +0.05 0.039
-m 1-2    p0 0.20  rho 0.500  n 64  passes 1  half-width 0.088  |  d -0.05 0.637  d +0.00 0.196  d +0.05 0.029
-m 1-2    p0 0.35  rho 0.500  n 64  passes 1  half-width 0.100  |  d -0.05 0.471  d +0.00 0.177  d +0.05 0.030
-m 2-4    p0 0.20  rho 0.500  n 48  passes 2  half-width 0.053  |  d -0.05 0.947  d +0.00 0.474  d +0.05 0.044
-m 2-4    p0 0.35  rho 0.500  n 48  passes 2  half-width 0.060  |  d -0.05 0.881  d +0.00 0.359  d +0.05 0.045
-m 2-4    p0 0.20  rho 0.500  n 48  passes 1  half-width 0.070  |  d -0.05 0.772  d +0.00 0.307  d +0.05 0.037
-m 2-4    p0 0.35  rho 0.500  n 48  passes 1  half-width 0.082  |  d -0.05 0.663  d +0.00 0.244  d +0.05 0.034
-m 2-4    p0 0.20  rho 0.500  n 64  passes 2  half-width 0.046  |  d -0.05 0.987  d +0.00 0.563  d +0.05 0.047
-m 2-4    p0 0.35  rho 0.500  n 64  passes 2  half-width 0.053  |  d -0.05 0.957  d +0.00 0.466  d +0.05 0.034
-m 2-4    p0 0.20  rho 0.500  n 64  passes 1  half-width 0.062  |  d -0.05 0.882  d +0.00 0.366  d +0.05 0.036
-m 2-4    p0 0.35  rho 0.500  n 64  passes 1  half-width 0.072  |  d -0.05 0.776  d +0.00 0.302  d +0.05 0.030
+m 1-2    p0 0.20  rho 0.500  n 48  passes 2  half-width 0.071  |  d -0.05 0.759  d +0.00 0.318  d +0.05 0.051
+m 1-2    p0 0.35  rho 0.500  n 48  passes 2  half-width 0.084  |  d -0.05 0.636  d +0.00 0.222  d +0.05 0.054
+m 1-2    p0 0.20  rho 0.500  n 48  passes 1  half-width 0.099  |  d -0.05 0.529  d +0.00 0.201  d +0.05 0.033
+m 1-2    p0 0.35  rho 0.500  n 48  passes 1  half-width 0.117  |  d -0.05 0.415  d +0.00 0.145  d +0.05 0.030
+m 1-2    p0 0.20  rho 0.500  n 64  passes 2  half-width 0.063  |  d -0.05 0.862  d +0.00 0.429  d +0.05 0.044
+m 1-2    p0 0.35  rho 0.500  n 64  passes 2  half-width 0.073  |  d -0.05 0.740  d +0.00 0.285  d +0.05 0.032
+m 1-2    p0 0.20  rho 0.500  n 64  passes 1  half-width 0.087  |  d -0.05 0.606  d +0.00 0.251  d +0.05 0.055
+m 1-2    p0 0.35  rho 0.500  n 64  passes 1  half-width 0.101  |  d -0.05 0.507  d +0.00 0.178  d +0.05 0.029
+m 2-4    p0 0.20  rho 0.500  n 48  passes 2  half-width 0.053  |  d -0.05 0.959  d +0.00 0.518  d +0.05 0.041
+m 2-4    p0 0.35  rho 0.500  n 48  passes 2  half-width 0.061  |  d -0.05 0.885  d +0.00 0.400  d +0.05 0.036
+m 2-4    p0 0.20  rho 0.500  n 48  passes 1  half-width 0.070  |  d -0.05 0.800  d +0.00 0.354  d +0.05 0.042
+m 2-4    p0 0.35  rho 0.500  n 48  passes 1  half-width 0.082  |  d -0.05 0.680  d +0.00 0.264  d +0.05 0.033
+m 2-4    p0 0.20  rho 0.500  n 64  passes 2  half-width 0.046  |  d -0.05 0.985  d +0.00 0.635  d +0.05 0.046
+m 2-4    p0 0.35  rho 0.500  n 64  passes 2  half-width 0.053  |  d -0.05 0.948  d +0.00 0.466  d +0.05 0.033
+m 2-4    p0 0.20  rho 0.500  n 64  passes 1  half-width 0.061  |  d -0.05 0.885  d +0.00 0.378  d +0.05 0.046
+m 2-4    p0 0.35  rho 0.500  n 64  passes 1  half-width 0.072  |  d -0.05 0.791  d +0.00 0.284  d +0.05 0.028
 Part E. Descriptive cells: Opus 2 passes, alpha 0.05, rho 0.5 (per surface or per class)
-cell  m 1-2  p0 0.20  n 16  passes 2  MDD05 none<=0.40
-cell  m 1-2  p0 0.35  n 16  passes 2  MDD05 none<=0.40
-cell  m 1-2  p0 0.20  n 24  passes 2  MDD05 0.22
+cell  m 1-2  p0 0.20  n 16  passes 2  MDD05 0.37
+cell  m 1-2  p0 0.35  n 16  passes 2  MDD05 0.36
+cell  m 1-2  p0 0.20  n 24  passes 2  MDD05 0.23
 cell  m 1-2  p0 0.35  n 24  passes 2  MDD05 0.24
-cell  m 1-2  p0 0.20  n 32  passes 2  MDD05 0.17
+cell  m 1-2  p0 0.20  n 32  passes 2  MDD05 0.18
 cell  m 1-2  p0 0.35  n 32  passes 2  MDD05 0.19
 Part F. Stage 1 headroom read: Opus none on 16 calibration units at 3 passes; 95% interval half-width of the unit-mean A
-m 1-2    p0 0.10  n 16  passes 3  median half-width 0.120
-m 1-2    p0 0.20  n 16  passes 3  median half-width 0.158
+m 1-2    p0 0.10  n 16  passes 3  median half-width 0.110
+m 1-2    p0 0.20  n 16  passes 3  median half-width 0.157
 m 1-2    p0 0.35  n 16  passes 3  median half-width 0.186
-m 1-2    p0 0.50  n 16  passes 3  median half-width 0.194
-m 1-2    p0 0.65  n 16  passes 3  median half-width 0.187
-m 2-4    p0 0.10  n 16  passes 3  median half-width 0.103
-m 2-4    p0 0.20  n 16  passes 3  median half-width 0.146
+m 1-2    p0 0.50  n 16  passes 3  median half-width 0.196
+m 1-2    p0 0.65  n 16  passes 3  median half-width 0.185
+m 2-4    p0 0.10  n 16  passes 3  median half-width 0.104
+m 2-4    p0 0.20  n 16  passes 3  median half-width 0.142
 m 2-4    p0 0.35  n 16  passes 3  median half-width 0.173
 m 2-4    p0 0.50  n 16  passes 3  median half-width 0.180
-m 2-4    p0 0.65  n 16  passes 3  median half-width 0.172
-m count  p0 0.10  n 16  passes 3  median half-width 0.102
-m count  p0 0.20  n 16  passes 3  median half-width 0.144
-m count  p0 0.35  n 16  passes 3  median half-width 0.168
-m count  p0 0.50  n 16  passes 3  median half-width 0.174
-m count  p0 0.65  n 16  passes 3  median half-width 0.169
+m 2-4    p0 0.65  n 16  passes 3  median half-width 0.173
+m count  p0 0.10  n 16  passes 3  median half-width 0.097
+m count  p0 0.20  n 16  passes 3  median half-width 0.141
+m count  p0 0.35  n 16  passes 3  median half-width 0.169
+m count  p0 0.50  n 16  passes 3  median half-width 0.176
+m count  p0 0.65  n 16  passes 3  median half-width 0.168
+Part G. The admission read on planning designs: power at a lift of 0.12, alpha 0.025, 4000 runs with fixed seeds, rho 0.5; passes arm/none (2/2 as planned, 1/2 after the cut of the gstack arms' second pass)
+m 1-2    n 48  repositories 21  p0 0.20  passes 2/2  power 0.640  se 0.008  -> fail
+m 1-2    n 48  repositories 21  p0 0.20  passes 1/2  power 0.470  se 0.008  -> fail
+m 1-2    n 48  repositories 21  p0 0.35  passes 2/2  power 0.522  se 0.008  -> fail
+m 1-2    n 48  repositories 21  p0 0.35  passes 1/2  power 0.376  se 0.008  -> fail
+m 1-2    n 64  repositories 27  p0 0.20  passes 2/2  power 0.785  se 0.006  -> fail
+m 1-2    n 64  repositories 27  p0 0.20  passes 1/2  power 0.607  se 0.008  -> fail
+m 1-2    n 64  repositories 27  p0 0.35  passes 2/2  power 0.685  se 0.007  -> fail
+m 1-2    n 64  repositories 27  p0 0.35  passes 1/2  power 0.508  se 0.008  -> fail
+m 2-4    n 48  repositories 21  p0 0.20  passes 2/2  power 0.934  se 0.004  -> pass
+m 2-4    n 48  repositories 21  p0 0.20  passes 1/2  power 0.826  se 0.006  -> pass
+m 2-4    n 48  repositories 21  p0 0.35  passes 2/2  power 0.859  se 0.006  -> pass
+m 2-4    n 48  repositories 21  p0 0.35  passes 1/2  power 0.720  se 0.007  -> fail
+m 2-4    n 64  repositories 27  p0 0.20  passes 2/2  power 0.991  se 0.002  -> pass
+m 2-4    n 64  repositories 27  p0 0.20  passes 1/2  power 0.944  se 0.004  -> pass
+m 2-4    n 64  repositories 27  p0 0.35  passes 2/2  power 0.966  se 0.003  -> pass
+m 2-4    n 64  repositories 27  p0 0.35  passes 1/2  power 0.884  se 0.005  -> pass
