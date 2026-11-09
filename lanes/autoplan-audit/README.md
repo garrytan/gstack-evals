@@ -25,7 +25,7 @@ Stage 1 is free. It checks the frame (E_AR_FRAME_DRIFT on any digest, file or id
 
 Stage 2 is paid and runs only after stage 1's gates pass and the Captain records the panel cap. smoke sends 4 packets through the five judge and effort pairs. project prices every remaining request from the smoke's cost per request byte, adds every unresolved reservation and 12 worst cases, and stops with E_CAP_TOO_LOW past the cap. stage2 runs the gold pool (Astra and Opus at maximum effort, 16,000 output tokens), its one top-up, the judge check (all three judges at medium, 8,000) and production. All calls go through one ledger lease, the metering proxy and the request journal (journal.ts): a row per request digest written before the send, one terminal state, reconciliation on relaunch, one J1 retry, and a reply cache that serves only terminal rows with a label.
 
-Stops: E_AR_FRAME_DRIFT, E_AR_PACKET_LEAK and E_AR_CUSTODY stop the run; E_AR_SUPPLY_SHORT and E_AR_JUDGE_KAPPA stop GATE-2's panel part; E_AR_PROVIDER_DRIFT stops Argon's calls. None is retried, and each settles the open lease first.
+Stops: E_AR_FRAME_DRIFT and E_AR_CUSTODY stop the run, and so does E_AR_PACKET_LEAK except at stage 1, where it stops only GATE-2's panel part (Amendment A1 below); E_AR_SUPPLY_SHORT and E_AR_JUDGE_KAPPA stop GATE-2's panel part; E_AR_PROVIDER_DRIFT stops Argon's calls. None is retried, and each settles the open lease first.
 
 ## Custody
 
