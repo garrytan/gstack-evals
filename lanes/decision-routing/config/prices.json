@@ -1,0 +1,64 @@
+{
+  "v": 1,
+  "read_on": "2026-11-08",
+  "timezone": "America/Los_Angeles",
+  "units": "USD per 1M tokens",
+  "note": "The scorer re-prices every journaled call from this table. Cache reads and writes for Anthropic are reported beside input_tokens; OpenAI and OpenRouter count them inside prompt tokens. TypeSafe bills input only; its output-token count prints beside it.",
+  "models": {
+    "anthropic:claude-opus-5-5": {
+      "input": 4,
+      "output": 20,
+      "cache_read": 0.2,
+      "cache_write": 5,
+      "cache_write_1h": 8,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "read_at": "2026-11-09T05:05Z",
+      "quote": "Claude Opus 5.5 | $4 / MTok | $5 / MTok | $8 / MTok | $0.20 / MTok | $20 / MTok (base input, 5m cache writes, 1h cache writes, cache hits and refreshes, output)"
+    },
+    "openai:gpt-6.1-sol": {
+      "input": 2,
+      "output": 10,
+      "cache_read": 0.1,
+      "cache_write": 2.5,
+      "long": {
+        "above_input_tokens": 272000,
+        "input": 4,
+        "output": 15,
+        "cache_read": 0.2,
+        "cache_write": 5
+      },
+      "source": "https://platform.openai.com/docs/pricing",
+      "read_at": "2026-11-09T05:05Z",
+      "quote": "gpt-6.1-sol | $2.00 | $10.00 | $0.10 | $2.50 | ... | $4.00 | $15.00 | $0.20 | $5.00 (standard tier; long-context rates past 272K prompt tokens, as the repo's openai:gpt-6.1-sol row has them); https://openai.com/api/pricing/ reads Input $2.00, Cached input $0.10, Output $10.00"
+    },
+    "typesafe:jev-1.13.0": {
+      "input": 0.042,
+      "output": 0,
+      "source": "https://typesafe.ai/pricing",
+      "read_at": "2026-11-09T05:05Z",
+      "quote": "Jev 1.13 | jev-1.13.0 | Price (per Btok / per Mtok) $42 / $0.042 | 64k per-request / 32k per-question. You pay per input token. Output tokens are free."
+    },
+    "typesafe:jev-1.14.0": {
+      "input": 0.042,
+      "output": 0,
+      "source": "https://typesafe.ai/pricing",
+      "read_at": "2026-11-09T05:05Z",
+      "quote": "Jev 1.14 | jev-1.14.0 | $42 / $0.042 (replay item only)"
+    },
+    "openrouter:particle-ai/particle-1": {
+      "input": 0.05,
+      "output": 0.5,
+      "cache_read": 0.003,
+      "providers": [
+        "particle-ai"
+      ],
+      "source": "https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/particle-ai/particle-1/endpoints",
+      "read_at": "2026-11-09T05:03:28Z",
+      "quote": "pricing prompt 0.00000005, completion 0.0000005, input_cache_read 0.000000003; one endpoint, Particle AI (particle-ai/us), discount 0"
+    }
+  },
+  "differences": {
+    "prereg_section_5": "None: every price read today matches the preregistration's table (Opus 5.5 $4, $20, $0.20, $5; Sol $2, $10, $0.10, $2.50; Jev $0.042 in, output free; particle-1 $0.05 in, $0.50 out). The preregistration does not list particle-1's cache read ($0.003) or Sol's long-context rates; both are as read.",
+    "proxy_table": "src/runner/pricing/prices.ts keeps particle-ai/particle-1 at $0.10 in, $1 out, $0.003 cache read (read 2026-10-30; other lanes and their tests use that row). The proxy reserves and settles particle-1 calls at twice today's price, so its meter overstates particle-1 spend; the scorer's bill uses this table."
+  }
+}

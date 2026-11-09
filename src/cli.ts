@@ -39,6 +39,7 @@ export const COMMANDS: Command[] = [
   { name: "pv", summary: "Product-value eval: authoring under custody, the plan and brief review arms, judge packets, labels, scoring and the frozen readings.", module: "lanes/product-value/cli.ts", owner: "GEVA-406" },
   { name: "tbv", summary: "Trust-but-verify eval: the scorer, history assemblers, shape and splice capture, the report driver, keys, packets, judges, readings, and the handoff and leak checks.", module: "lanes/tbv/cli.ts", owner: "GEVA-330" },
   { name: "hm", summary: "Harness mechanics eval: frozen pins, item and part plans, the launcher on L1's host and part machinery, the session table, the report and the dry run.", module: "lanes/harness-mechanics/cli.ts", owner: "harness mechanics build" },
+  { name: "decision-routing", summary: "Decision-routing lane: scoring and verdicts, admission, tuning and the pin, grounded labels, dry run and runs (plan 2026-11-09 decision-routing prereg).", module: "lanes/decision-routing/cli.ts", owner: "decision-routing B5 to B8" },
   { name: "plan", summary: "Check a preregistration and its commit order before a counted run.", module: "src/runner/prereg/cli.ts", owner: "v1.1" },
   { name: "run", summary: "Run a preregistered Lane B matrix.", module: "src/runner/run.ts", owner: "v1.1" },
   { name: "score", summary: "Grade finished trials from their receipts.", module: "src/grade/cli.ts", owner: "v1.1" },
