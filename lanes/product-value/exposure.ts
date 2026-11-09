@@ -47,6 +47,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ceoMode, type CeoMode } from "../../src/trial/review/plan.ts";
 import { mainAgentTexts } from "../../src/trial/review/capped.ts";
+import { ownUses, ownWords, skillFileRead } from "../aftermath/exposure.ts";
 import { readTranscript } from "../../src/trial/review/readers.ts";
 import { pvTranscriptParse } from "./parse.ts";
 
@@ -68,41 +69,11 @@ export const GSTACK_PV_PIN = {
 };
 
 type Rec = Record<string, any>;
-type Use = { name: string; input: Rec; ok: boolean; result: string };
-const text = (c: unknown): string => (typeof c === "string" ? c : Array.isArray(c) ? c.map((b) => (typeof b?.text === "string" ? b.text : JSON.stringify(b))).join("\n") : c == null ? "" : JSON.stringify(c));
-const own = (transcript: string) => readTranscript(transcript).filter((m) => !m.parent_tool_use_id && Array.isArray(m.message?.content));
 
-/** The main agent's own tool calls with their results, in order. */
-function ownUses(transcript: string): Use[] {
-  const messages = own(transcript);
-  const results = new Map<string, Rec>();
-  for (const m of messages) if (m.type === "user") for (const b of m.message.content) if (b?.type === "tool_result") results.set(b.tool_use_id, b);
-  return messages
-    .filter((m) => m.type === "assistant" && !m.error && !m.is_api_error_message)
-    .flatMap((m) => m.message.content.filter((b: Rec) => b?.type === "tool_use"))
-    .map((b: Rec) => {
-      const res = results.get(b.id);
-      const result = res ? text(res.content) : "";
-      return { name: b.name, input: b.input ?? {}, ok: !!res && res.is_error !== true && !result.includes("<tool_use_error>"), result };
-    });
-}
-
-/** The main agent's own words, in order: its text blocks and the text its successful Write, Edit and MultiEdit calls wrote. */
-export function ownWords(transcript: string): string[] {
-  const texts = mainAgentTexts(transcript);
-  const writes = ownUses(transcript).filter((u) => u.ok).flatMap((u) => {
-    if (u.name === "Write" && typeof u.input.content === "string") return [u.input.content];
-    if (u.name === "Edit" && typeof u.input.new_string === "string") return [u.input.new_string];
-    if (u.name === "MultiEdit" && Array.isArray(u.input.edits)) return u.input.edits.flatMap((e: Rec) => (typeof e?.new_string === "string" ? [e.new_string] : []));
-    return [];
-  });
-  return [...texts, ...writes];
-}
+export { ownWords };
 
 const MODE_ALT = "SCOPE EXPANSION|SELECTIVE EXPANSION|HOLD SCOPE|SCOPE REDUCTION";
 const HANDOFF_LINE = new RegExp("^(?:Mode: (" + MODE_ALT + "); approved decisions: .*|Auto-decided review mode \u2192 (" + MODE_ALT + ") \\(your preference\\)\\. Change with /plan-tune\\. Approved decisions: .*|Auto-selected review mode \u2192 (" + MODE_ALT + ") \\(CEO-only run: Step 0E's rule\\)\\. Approved decisions: .*)$", "gm");
-const REVIEW_SECTIONS = /(?:^|\/)plan-ceo-review\/sections\/review-sections\.md$/;
-const REVIEW_SECTIONS_BASH = /^\s*(?:cat|head|nl|sed\s+-n\s+(["']?)[\d,$]*p\1)\s[^<>|;&]*plan-ceo-review\/sections\/review-sections\.md\s*$/;
 
 /** The modes the session's successful handoff calls printed, in order. */
 export function handoffModes(transcript: string): CeoMode[] {
@@ -113,8 +84,7 @@ export function handoffModes(transcript: string): CeoMode[] {
   });
 }
 
-const reviewSectionsRead = (transcript: string): boolean =>
-  ownUses(transcript).some((u) => u.ok && u.result.trim() !== "" && ((u.name === "Read" && typeof u.input.file_path === "string" && REVIEW_SECTIONS.test(u.input.file_path)) || (u.name === "Bash" && typeof u.input.command === "string" && REVIEW_SECTIONS_BASH.test(u.input.command))));
+const reviewSectionsRead = (transcript: string): boolean => skillFileRead(transcript, "plan-ceo-review/sections/review-sections.md");
 
 const twoOf = (s: string, checks: RegExp[]) => checks.filter((c) => c.test(s)).length >= 2;
 /** Section 9 (Deployment & Rollout Review) by its name or two of feature flags, rollout order and rollback plan. */
