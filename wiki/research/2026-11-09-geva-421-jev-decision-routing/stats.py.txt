@@ -1,0 +1,72 @@
+"""Stats for the Jev decision-routing replays: Wilson intervals, paired bootstrap, calibration, cascade threshold tuning."""
+import math, random, json
+
+def wilson(k, n, z=1.96):
+    if n == 0:
+        return (float("nan"), float("nan"))
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return (max(0.0, c - h), min(1.0, c + h))
+
+def paired_diff(a, b, iters=10000, seed=7):
+    """a, b: lists of 0/1 correctness on the same items. Returns mean(b-a) and 95% bootstrap CI, plus worse/better counts."""
+    n = len(a)
+    assert n == len(b) and n > 0
+    d = [bb - aa for aa, bb in zip(a, b)]
+    rng = random.Random(seed)
+    boots = []
+    for _ in range(iters):
+        s = 0
+        for _ in range(n):
+            s += d[rng.randrange(n)]
+        boots.append(s / n)
+    boots.sort()
+    return {"diff": sum(d) / n, "lo": boots[int(0.025 * iters)], "hi": boots[int(0.975 * iters) - 1],
+            "worse": sum(1 for x in d if x < 0), "better": sum(1 for x in d if x > 0), "n": n}
+
+def calibration(conf, correct, bins=(0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0001)):
+    """conf: stated probability of the chosen answer. Returns rows (lo, hi, n, mean_conf, hit_rate) and ECE."""
+    rows = []
+    lo = 0.0
+    n_tot = len(conf)
+    ece = 0.0
+    for hi in bins:
+        idx = [i for i, c in enumerate(conf) if lo <= c < hi]
+        if idx:
+            mc = sum(conf[i] for i in idx) / len(idx)
+            hr = sum(correct[i] for i in idx) / len(idx)
+            rows.append((lo, hi, len(idx), mc, hr))
+            ece += len(idx) / n_tot * abs(mc - hr)
+        lo = hi
+    return rows, ece
+
+def tune_threshold(jev_conf, jev_correct, esc_correct, target_acc):
+    """Pick tau on dev: lowest escalation rate whose cascade accuracy >= target_acc; else the tau with max accuracy.
+    An item escalates when jev_conf < tau."""
+    n = len(jev_conf)
+    cands = sorted(set([0.0] + [c for c in jev_conf] + [1.0001]))
+    best = None
+    rows = []
+    for tau in cands:
+        esc = [c < tau for c in jev_conf]
+        corr = [esc_correct[i] if esc[i] else jev_correct[i] for i in range(n)]
+        acc = sum(corr) / n
+        er = sum(esc) / n
+        rows.append((tau, acc, er))
+    ok = [r for r in rows if r[1] >= target_acc - 1e-12]
+    if ok:
+        best = min(ok, key=lambda r: (r[2], -r[1]))
+        rule = "lowest escalation with dev accuracy >= current-model dev accuracy"
+    else:
+        best = max(rows, key=lambda r: (r[1], -r[2]))
+        rule = "no tau reached the current model's dev accuracy; max dev accuracy"
+    return {"tau": best[0], "dev_acc": best[1], "dev_esc": best[2], "rule": rule}
+
+def pct(xs, q):
+    xs = sorted(xs)
+    if not xs:
+        return float("nan")
+    i = min(len(xs) - 1, max(0, int(round(q * (len(xs) - 1)))))
+    return xs[i]
