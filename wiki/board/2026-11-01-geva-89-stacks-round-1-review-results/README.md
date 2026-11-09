@@ -34,7 +34,6 @@ gstack's review shows no measurable lift over plain Opus on this suite, and it c
 | False blockers per PR | 0.02 | 0.00 |
 | Tokens per unit | 1.8M | 1.1M |
 | Tokens per blocker found | 14.5M | 11.6M |
-| Dollars, 66 unit-passes | $66.99 | $45.51 |
 
 The scorer's lines, verbatim:
 
@@ -59,26 +58,18 @@ Both arms sit near a floor, not a ceiling: each misses more than 90% of the bloc
 
 **Grids.** Each grid ran once, with a fresh out dir and receipts sink. Every grid ended with exit 0, and none hit a cap, an allowance or a timeout. Every proxy outcome was 200.
 
-| Item | Cap | Settled | Window (UTC) |
-|---|---|---|---|
-| stacks-r1-review-opus-gstack (none and gstack, parallel 8) | $400 | $112.50 | 02:01:53 to 04:32:49 |
-| stacks-r1-review-opus-tstack (parallel 2) | $200 | $49.50 | 02:05:18 to 04:45:06 |
-| stacks-r1-review-particle-gstack (none and gstack, parallel 8) | $200 | $11.18 | 02:05:21 to 04:27:58 |
-
-| Arm | Unit-passes | Dollars (mean, max per unit-pass) | Wall seconds (median, max) | Parse outcomes | Requests, refused |
-|---|---|---|---|---|---|
-| none, Opus | 66 | $45.51 ($0.690, $1.31) | 160.7, 418.1 | findings 59, empty 6, missing 1 | 1026, 0 |
-| gstack, Opus | 66 | $66.99 ($1.015, $2.90) | 195.4, 975.1 | findings 59, empty 6, missing 1 | 1175, 0 |
-| tstack, Opus (Sol $15.10 included) | 66 | $49.50 ($0.750, $1.32) | 152.1, 391.8 | findings 51, empty 10, missing 5 | 1644, 0 |
-| none, particle-1 | 33 | $5.85 ($0.177, $0.40) | 445.6, 1088.2 | findings 10, missing 14, incomplete 7, empty 2 | 1816, 44 |
-| gstack, particle-1 | 33 | $5.33 ($0.162, $0.31) | 428.8, 786.3 | findings 13, missing 10, incomplete 8, empty 2 | 1762, 62 |
+| Arm | Unit-passes | Wall seconds (median, max) | Parse outcomes | Requests, refused |
+|---|---|---|---|---|
+| none, Opus | 66 | 160.7, 418.1 | findings 59, empty 6, missing 1 | 1026, 0 |
+| gstack, Opus | 66 | 195.4, 975.1 | findings 59, empty 6, missing 1 | 1175, 0 |
+| tstack, Opus (Sol included) | 66 | 152.1, 391.8 | findings 51, empty 10, missing 5 | 1644, 0 |
+| none, particle-1 | 33 | 445.6, 1088.2 | findings 10, missing 14, incomplete 7, empty 2 | 1816, 44 |
+| gstack, particle-1 | 33 | 428.8, 786.3 | findings 13, missing 10, incomplete 8, empty 2 | 1762, 62 |
 
 **Judging.** Both batches used seed 20261031 and the judges Opus 5.5, gpt-6.1-sol and Sonnet 5.5. Both judge items were admitted with `--proof direct` on ci.yml run 41252431611 at 715f837. Neither run had a provider error, a refusal or a cap stop.
 
-- Match: batch ed4fd89b, 33 packets and 408 findings from five arms. The primary judge answered 33 packets, the second 27 and the third 1, with 0 unjudged. The second judge agreed on 33 blockers at kappa 0.9832. The dry run printed: "worst case: primary $39.206844 on 33 packets; second up to $20.555682 and third up to $19.603818 if they read every packet; $79.366344 in all, $158.732688 if every answer is asked again." Lease stacks-r1-review-judge-match.0001.ca507f settled at $2.219919, with 0 unknown calls.
-- Adjudication: item cap $197.780081, which is $200 minus the match spend. Batch 45b6974e, 19 packets and 83 findings. The primary answered 19, the second 12 and the third 3, with 0 unjudged. Unverifiable not-defect rulings: gstack-opus 1, tstack-opus 2, the rest 0. Section 3 prints the verifiable sensitivity. The dry run printed: "worst case: primary $25.643916 on 19 packets; second up to $13.754016 and third up to $12.822186 if they read every packet; $52.220118 in all, $104.440236 if every answer is asked again." Lease stacks-r1-review-judge-adjudicate.0001.677679 settled at $2.130317, with 0 unknown calls.
-
-**Review spend.** Pilots $7.31, grids $173.18 and judging $4.35, so $184.84 against the $2,050 stop.
+- Match: batch ed4fd89b, 33 packets and 408 findings from five arms. The primary judge answered 33 packets, the second 27 and the third 1, with 0 unjudged. The second judge agreed on 33 blockers at kappa 0.9832.
+- Adjudication: Batch 45b6974e, 19 packets and 83 findings. The primary answered 19, the second 12 and the third 3, with 0 unjudged. Unverifiable not-defect rulings: gstack-opus 1, tstack-opus 2, the rest 0. Section 3 prints the verifiable sensitivity.
 
 ## 3. Primary family
 
@@ -216,21 +207,18 @@ Both particle-1 arms stopped, so they get no verdict. 39 of the 66 sessions hit 
 
 TB2's results come in a separate post. Nobody has read a reward from the TB2 grid.
 
-- **Pilot.** It ran 5 tasks on all 13 cells, 65 trials, after the oracle passed on the VM. All 65 got a reward, with no infrastructure or no-reward trials. Four hit the agent timeout and are graded as they stand. Both of quick look 3's gates passed. The route check cost $0.145 and the pilot $8.926.
+- **Pilot.** It ran 5 tasks on all 13 cells, 65 trials, after the oracle passed on the VM. All 65 got a reward, with no infrastructure or no-reward trials. Four hit the agent timeout and are graded as they stand. Both of quick look 3's gates passed.
 - **pstack background check.** In the 25 pstack and pstack-placebo pilot trials, 1 made an Agent call. 42 background tasks started, 42 notifications arrived, and no trial ended with a task running. So pstack stays in TB2 (02:31:03.176Z), and the TB2 post reports, per arm, the trials that ended with a background task still running.
-- **Start rule.** It came to $308.98 against the $300 stop, and the stop became $320 (section 9).
-- **Replicate 1 is complete.** Opus ran 120 sessions for $26.13, Haiku 201 for $2.68, and particle-1 195 on 39 tasks for $15.40. The first particle-1 VM's in-run oracle failed crack-7z-hash: the verifier's apt-get could not get the dpkg lock, the same failure as in quick look 3. Under the frozen in-run oracle rule, the task left the grid with no swap, and the particle-1 batch reran on a fresh VM before any paid trial.
+- **Replicate 1 is complete.** Opus ran 120 sessions, Haiku 201, and particle-1 195 on 39 tasks. The first particle-1 VM's in-run oracle failed crack-7z-hash: the verifier's apt-get could not get the dpkg lock, the same failure as in quick look 3. Under the frozen in-run oracle rule, the task left the grid with no swap, and the particle-1 batch reran on a fresh VM before any paid trial.
 - **Replicate 2 was lost to an outage.** The machine holding the batch controllers and the shared ledger service went down from about 05:51Z to 07:19Z. The VMs kept running without the ledger, so trials that started after 05:51 never got a model session. Only 75 of 117 Opus, 28 of 195 particle-1 and 0 of 190 Haiku trials reached the ledger. The Haiku VM's in-run oracle also failed adaptive-rejection-sampler, so that task left the grid too. 38 tasks remain, 19 of them from the original 20.
 - **Next.** A fresh crew thread reruns replicate 2 whole, once, on infrastructure grounds, then runs replicate 3, and publishes TB2's results. Its analysis leaves out the pre-outage replicate 2 trials and every trial of the two dropped tasks, and lists them apart with their spend.
-- **Spend so far.** The pilot file has $9.07 settled. The grid file has $66.47 settled and $19.50 open: ten replicate 2 reserves whose sessions closed but never settled, and one $1 reserve from replicate 1. The Captain ruled that they stay open.
 
 ## 9. Deviations and rulings
 
 Each ruling is the Captain's (GSTA-2). The rulings through 05:11:52.203Z (item 12) are recorded in approvals/2026-10-31-stacks-round1-cap.md in the Captain drive at the time shown, and the 07:25:15.841Z ruling is in the Captain's NOTES.md. Each of these was made before anyone read a finding it touches. The last one is on GST-762 and came after the readings were read.
 
-- 01:58:58.165Z: pstack leaves the review lane, a $15 allowance applies, and the grid caps are set (the amendment, #105).
-- 02:31:03.176Z: TB2's start rule failed at $308.98 against $300. TB2's stop rises to $320, out of the $50 under the $2,400 cap that no lane holds. pstack stays in TB2. TB2 runs as per-model batches on separate VMs, with replicates in sequence and one shared ledger service.
-- Item 6: the pinned runner's ledger.ts reads only the first approval row. So TB2's grid runs on ledger/stacks-r1-tb2-grid.jsonl with one approval row of $310.93 ($320 minus the pilot's settled $9.071141). The pilot's file gets a note row, and the start rule and the totals add both files together.
+- 01:58:58.165Z: pstack leaves the review lane, and the grid caps are set (the amendment, #105).
+- 02:31:03.176Z: TB2's start rule failed, and TB2's stop was raised. TB2 runs as per-model batches on separate VMs, with replicates in sequence and one shared ledger service.
 - 05:01:10.244Z (items 7 to 9): the judge items. The ruling on tstack's Sol passes (section 4). particle-1 follows the frozen rules.
 - 05:06:54.993Z (item 10): the pinned `noloss ingest` refused all five arms. The frozen severity map has uppercase keys only, the parser keeps each model's own lowercase label, and `mapSeverity` matches exactly. Unmapped findings: none-opus 121 of 122, tstack-opus 101 of 101, none-particle-1 28 of 28. Ingest then reads derived arm copies whose severity map is the frozen map plus a lowercase twin of every key. MAJOR maps like HIGH and MINOR like LOW, and a compound label maps on its first word (tstack's "nit (Sol labelled it should)" maps as NIT). The MAJOR-as-INFORMATIONAL sensitivity is required. No code changed, and the judge admission still binds to 715f837.
 - 05:09:43.834Z and 05:11:52.203Z (items 11 and 12): the publication scan refused 37 lines across the five arms for machine paths in finding prose. A blind script, identical for every arm, replaced only the prefix and kept the rest of each path. Temporary-directory, sandbox-home and VM-home prefixes became `<sandbox>/`, and home-relative and user-home prefixes (POSIX and Windows) became `<home>/`. Item 12 covered names with spaces and temporary entries with no closing slash. Ingest then passed clean, and no finding needed `--digest-only`. Replacements per arm: none-opus 14, gstack-opus 13, tstack-opus 11, none-particle-1 9, gstack-particle-1 6.
@@ -260,3 +248,51 @@ The derived files, the judges' packets and the session transcripts quote reviewe
 - **tstack (Theo Browne).** Its Sol second opinion goes with about three times as many upheld new blockers per pass (p 0.000214, on the derived suite), and with false blockers above zero against none. Its blocking finds are almost all should-level. A Sol-style second reader is an idea worth a gstack variant, measured against the same suite.
 - **pstack (Lauren Tan).** It has no review result this round, because the headless harness closed its background adversaries. GST-734 fixes the driver for round 2.
 - **particle-1.** It runs out of turns on review. A rung that can't finish the task can't show gstack closing the gap.
+
+<details>
+<summary>Agent notes</summary>
+
+| | gstack | none |
+|---|---|---|
+| Blocking recall (42 blocking blockers, 26 PRs, two passes) | 9.5% | 7.1% |
+| Recall at any severity | 12/42, 28.6% | 10/42, 23.8% |
+| False blockers per PR | 0.02 | 0.00 |
+| Tokens per unit | 1.8M | 1.1M |
+| Tokens per blocker found | 14.5M | 11.6M |
+| Dollars, 66 unit-passes | $66.99 | $45.51 |
+
+| Item | Cap | Settled | Window (UTC) |
+|---|---|---|---|
+| stacks-r1-review-opus-gstack (none and gstack, parallel 8) | $400 | $112.50 | 02:01:53 to 04:32:49 |
+| stacks-r1-review-opus-tstack (parallel 2) | $200 | $49.50 | 02:05:18 to 04:45:06 |
+| stacks-r1-review-particle-gstack (none and gstack, parallel 8) | $200 | $11.18 | 02:05:21 to 04:27:58 |
+
+| Arm | Unit-passes | Dollars (mean, max per unit-pass) | Wall seconds (median, max) | Parse outcomes | Requests, refused |
+|---|---|---|---|---|---|
+| none, Opus | 66 | $45.51 ($0.690, $1.31) | 160.7, 418.1 | findings 59, empty 6, missing 1 | 1026, 0 |
+| gstack, Opus | 66 | $66.99 ($1.015, $2.90) | 195.4, 975.1 | findings 59, empty 6, missing 1 | 1175, 0 |
+| tstack, Opus (Sol $15.10 included) | 66 | $49.50 ($0.750, $1.32) | 152.1, 391.8 | findings 51, empty 10, missing 5 | 1644, 0 |
+| none, particle-1 | 33 | $5.85 ($0.177, $0.40) | 445.6, 1088.2 | findings 10, missing 14, incomplete 7, empty 2 | 1816, 44 |
+| gstack, particle-1 | 33 | $5.33 ($0.162, $0.31) | 428.8, 786.3 | findings 13, missing 10, incomplete 8, empty 2 | 1762, 62 |
+
+The dry run printed: "worst case: primary $39.206844 on 33 packets; second up to $20.555682 and third up to $19.603818 if they read every packet; $79.366344 in all, $158.732688 if every answer is asked again." Lease stacks-r1-review-judge-match.0001.ca507f settled at $2.219919, with 0 unknown calls.
+
+Adjudication: item cap $197.780081, which is $200 minus the match spend. The dry run printed: "worst case: primary $25.643916 on 19 packets; second up to $13.754016 and third up to $12.822186 if they read every packet; $52.220118 in all, $104.440236 if every answer is asked again." Lease stacks-r1-review-judge-adjudicate.0001.677679 settled at $2.130317, with 0 unknown calls.
+
+**Review spend.** Pilots $7.31, grids $173.18 and judging $4.35, so $184.84 against the $2,050 stop.
+
+The route check cost $0.145 and the pilot $8.926.
+
+- **Start rule.** It came to $308.98 against the $300 stop, and the stop became $320 (section 9).
+
+**Replicate 1 is complete.** Opus ran 120 sessions for $26.13, Haiku 201 for $2.68, and particle-1 195 on 39 tasks for $15.40.
+
+- **Spend so far.** The pilot file has $9.07 settled. The grid file has $66.47 settled and $19.50 open: ten replicate 2 reserves whose sessions closed but never settled, and one $1 reserve from replicate 1. The Captain ruled that they stay open.
+
+- 01:58:58.165Z: pstack leaves the review lane, a $15 allowance applies, and the grid caps are set (the amendment, #105).
+
+02:31:03.176Z: TB2's start rule failed at $308.98 against $300. TB2's stop rises to $320, out of the $50 under the $2,400 cap that no lane holds. pstack stays in TB2.
+
+- Item 6: the pinned runner's ledger.ts reads only the first approval row. So TB2's grid runs on ledger/stacks-r1-tb2-grid.jsonl with one approval row of $310.93 ($320 minus the pilot's settled $9.071141). The pilot's file gets a note row, and the start rule and the totals add both files together.
+
+</details>

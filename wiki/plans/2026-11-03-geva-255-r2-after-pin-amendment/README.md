@@ -115,6 +115,8 @@ install-pins.json holds the pinned values. The dry run computed them from the re
 
 ## 5. Spend: $2,000 all-in
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 The project owner's ceiling gives this line at most $2,000 all-in from 2026-11-03 13:30Z. All-in covers paid model calls, judges, VMs, and the crew threads' model use on the line: GEVA-255, the run thread and any successor, with their subagents, at about $1 per 1,000 Capy credits. #154's caps came before the ceiling, and the ceiling supersedes them.
 
 | Item | Sessions | Cap | Expected | Basis |

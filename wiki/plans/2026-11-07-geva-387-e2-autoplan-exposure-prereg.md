@@ -104,6 +104,8 @@ These readings don't decide the verdict, with two exceptions. The rule count bel
 
 ## 6. Money
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 | Item | Charged to | Cap | Expected |
 |---|---|---|---|
 | ap-e2, model calls: 4 sessions and at most 1 gap rerun | autoplan | $343 | $70 to $90 with the early stop |

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// The no-gstack arm's exposure check (clean-room rule: FOUN-32 from GGST-6, and the P0 notes on GST-881). A bare arm's
+// The no-gstack arm's exposure check (clean-room rule: FOUN-32 from another crew's run, and the P0 notes on GST-881). A bare arm's
 // trial whose records show gstack's skills listed or loaded, or a read of a gstack install or a Capy drive path, is
 // contaminated: excluded from the comparison and counted, never scored as "no effect". Read from the evaluator's own
 // record of the session (sdk-messages.jsonl), every tool call and result included. Conservative on purpose: an attempt

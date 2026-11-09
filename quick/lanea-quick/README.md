@@ -58,7 +58,7 @@ Each run also writes its own `stages/<stage>.<start ms>.json`: `status: "running
 Each line item has its own cap and its own ledger. A paid run reserves only against a ledger whose first row is an approval with the owner's words, who gave them, a source, and `cap_usd` and `item` equal to `LANEA_CAP_USD` and `LANEA_LINE_ITEM`. Neither has a default: a shell that misses either stops with E_CONFIG, and one that names another cap or item than the ledger's approval stops before it writes a row: E_LEDGER_MISSING on run and project, E_APPROVAL on approve. Record the approval once, with each quoted reply as its own `--words`:
 
 ```
-LANEA_CAP_USD=35 LANEA_LINE_ITEM=lanea-quick-rerun bun src/run.ts approve --words "Rec" --by "Garry Tan" --source "<where the words were given>"
+LANEA_CAP_USD=35 LANEA_LINE_ITEM=lanea-quick-rerun bun src/run.ts approve --words "<the approver's exact words>" --by "<approver>" --source "<where the words were given>"
 ```
 
 Pass the words as separate arguments, not through a shell string with `$` in it (see the last item below). `approve` does nothing when a valid approval row is already there, and refuses a ledger that already has other rows.
