@@ -4,7 +4,7 @@
 // calls, keeps the shared GraphQL quota above its floor by waiting for the reset, counts the points it used and reads
 // rate_limit before and after a job. The egress allowlist admits only GitHub's own hosts: an endpoint or git remote
 // naming any other host is refused before anything leaves the machine. Each eval binds its own floor, pacing and retry
-// rule (product-value keeps its four tries; the devex miner never retries).
+// rule (product-value keeps its four tries; the devex miner retries a transient error twice, 5 s and 10 s apart).
 import { spawnSync } from "node:child_process";
 
 export class GhError extends Error {

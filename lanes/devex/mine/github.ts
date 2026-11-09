@@ -18,7 +18,7 @@ export const PACE_MS = 1000;
 export const SEARCH_PACE_MS = 2200;
 
 export const openDxGitHub = (exec?: GhExec, sleep?: (ms: number) => void, now?: () => number): GitHub =>
-  openGitHub({ floor: FLOOR, tries: 1, backoffMs: () => 0, paceMs: PACE_MS, code: "E_MINE_SOURCE", exec, sleep, now });
+  openGitHub({ floor: FLOOR, tries: 3, backoffMs: (n) => n * 5000, paceMs: PACE_MS, code: "E_MINE_SOURCE", exec, sleep, now });
 
 const RL = " rateLimit { cost remaining resetAt }";
 const EDITS = " lastEditedAt userContentEdits(last: 100) { nodes { editedAt createdAt deletedAt diff } }";
@@ -179,8 +179,10 @@ export function tagContains(gh: GitHub, repo: string, mergeSha: string, tag: str
   return s === "BEHIND" || s === "IDENTICAL";
 }
 
-export const TREE_DEPTH = 3;
-export const TREE_BATCH = 40;
+export const TREE_DEPTH = 1;
+export const TREE_BATCH = 20;
+/** A tree query GitHub could not answer in time, after the client's own tries: the batch halves, and one folder it still cannot list marks the tree truncated, so the base-under-150mb rule drops the unit and counts it. */
+const TREE_TIMEOUT = /HTTP 50[234]|timeout|timed out/i;
 /** REST's recursive tree stops at 100,000 entries and says truncated; the GraphQL walk keeps the same bound. */
 export const TREE_MAX = 100_000;
 const LICENCE_FILE = /licen[cs]e|^copying/i;
@@ -189,7 +191,7 @@ const LIC_Q = "query($owner: String!, $name: String!) { repository(owner: $owner
 const licenceFiles = (entries: any[]) => entries.filter((e) => e.type === "blob" && LICENCE_FILE.test(e.name)).map((e) => e.name + " " + e.oid).sort().join("\n");
 
 /**
- * The base tree, walked through GraphQL TREE_DEPTH levels a call and deeper folders by oid, TREE_BATCH to a call; and
+ * The base tree, walked through GraphQL TREE_DEPTH levels a call and deeper folders by oid, at most TREE_BATCH to a call; and
  * its licence. GraphQL detects a licence only on the default branch, so the base's licence is that detection when the
  * base's root licence files are the same blobs as the default branch's, and null when they differ or there are none.
  */
@@ -208,10 +210,24 @@ export function baseTree(gh: GitHub, repo: string, sha: string): { tree: Array<{
       else queue.push({ prefix: path + "/", sel: 'object(oid: "' + e.oid + '")' });
     }
   };
+  let size = TREE_BATCH;
+  let unlisted = false;
   while (queue.length && tree.length <= TREE_MAX) {
-    const batch = queue.splice(0, TREE_BATCH);
+    const batch = queue.splice(0, size);
     const q = "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { " + batch.map((b, i) => "t" + i + ": " + b.sel + " { ... on Tree { " + levels(TREE_DEPTH) + " } }").join(" ") + " }" + RL + " }";
-    const r = gh.graphql<any>(q, { owner, name }).repository;
+    let r: any;
+    try {
+      r = gh.graphql<any>(q, { owner, name }).repository;
+    } catch (e) {
+      if (!TREE_TIMEOUT.test(String((e as Error).message))) throw e;
+      if (batch.length === 1) {
+        unlisted = true;
+        break;
+      }
+      queue.unshift(...batch);
+      size = Math.ceil(batch.length / 2);
+      continue;
+    }
     batch.forEach((b, i) => {
       const entries = r?.["t" + i]?.entries;
       if (!Array.isArray(entries)) throw Object.assign(new Error("GraphQL returned no tree for " + (b.prefix || sha)), { code: "E_MINE_SOURCE" });
@@ -222,7 +238,7 @@ export function baseTree(gh: GitHub, repo: string, sha: string): { tree: Array<{
   const d = gh.graphql<any>(LIC_Q, { owner, name }).repository;
   const base = licenceFiles(root ?? []);
   const licence = base && base === licenceFiles(d?.defaultBranchRef?.target?.tree?.entries ?? []) ? d?.licenseInfo?.spdxId ?? null : null;
-  return { tree, truncated: tree.length > TREE_MAX, licence };
+  return { tree, truncated: unlisted || tree.length > TREE_MAX, licence };
 }
 
 const WIN_ISSUE_Q = "query($q: String!, $after: String) { search(query: $q, type: ISSUE, first: 50, after: $after) { issueCount pageInfo { hasNextPage endCursor } nodes { ... on Issue { number title body createdAt authorAssociation author { login __typename } } ... on PullRequest { number title body createdAt mergedAt authorAssociation author { login __typename } files(first: 50) { nodes { path } } } } }" + RL + " }";
