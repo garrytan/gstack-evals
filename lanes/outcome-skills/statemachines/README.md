@@ -292,8 +292,8 @@ Assumptions, JUnit 4 @Ignore and Assume; NUnit [Ignore] and xUnit Skip =; each e
 - **Start sets.** On S0 the base stable set. On A1 and S2: three runs of the unit's commands on the tree with the oracle's
   base-run patches (oracle.ts basePatches, one function for both) merged hunk by hunk with git apply --3way; the start
   set is the ids that pass in all three. On an unchanged base tree that merge gives what the oracle's plain git apply
-  gives. `BASE_RUNS_FIX_TESTS` in oracle.ts is the single switch that would add fix-tests.patch to the base runs; it is
-  off, so today's stable sets do not change. The start set is cached in the file `--start` names, pinned by the tree
+  gives. The base-run patches are test.patch and, for a split fix, fix-tests.patch (section 7 step 3: the fix's in-source
+  tests go everywhere test.patch goes), so the stable set and every start set are computed with them. The start set is cached in the file `--start` names, pinned by the tree
   patch's sha256 and the tree's head.
 - **Scores.** The fix's tests merge as in section 7 step 3 (score.ts fixTestHunks and mergeTests, the same code the
   first-stage scorer runs), then one run (score.ts scoringRun). Incremental: every fail-to-pass id passes and every

@@ -1,11 +1,13 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals outcome sm <sub>: the state machines family's commands. P1 builds source, screen, convert, draw, oracle,
 // size and sample; later packages add their own.
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CODES, docAnchor, isReasonCode } from "../../../src/errors/codes.ts";
 import { draw, fill, readPrereg, type Draw, type DrawUnit } from "./draw.ts";
+import { hiddenMarkdown, hiddenUnit, inSourceUnits, staticCounts, type HiddenRecord } from "./hidden.ts";
 import { oracleUnit, Pacer } from "./oracle.ts";
 import { sample } from "./sample.ts";
 import { screen } from "./screen.ts";
@@ -24,6 +26,12 @@ export const HELP = `gstack-evals outcome sm <command>
   convert <candidates.json> --cache <dir> --id <id> --out <unit dir>
   draw <units.json> --prereg <prereg.json> --out <file>   seeded orders; units.json is [{id, repo, month, stratum}]
   oracle <draw.json> --units <dir> --candidates <file> --cache <dir> --pull-log <file> [--pulls-per-hour 60] [--retry]
+  oracle hidden <candidates.json> --cache <dir> --units <dir> --pull-log <file> --out <hidden.jsonl> --md <hidden.md>
+              [--ids <a,b>] [--pulls-per-hour 25] [--static-only]
+                                                     the hidden-test count: each eligible in-source unit's commands on its
+                                                     base tree with test.patch, then with fix-tests.patch too; ids that
+                                                     passed and went missing, doctests apart; no-fail-fast in the frozen
+                                                     test command; resumes past ids already in --out
   size <candidates.json> --ids <a,b> --pull-log <file>    compressed image sizes by manifest GET (paced)
   sample <candidates.json> --cache <dir> --units <dir> --ids <a,b> --pull-log <file> --out <file>
   session plan --units <a,b> --models <m,n> --prereg <prereg.json> --part <n> [--lines sm,qa] --out <plan.json>
@@ -189,6 +197,32 @@ export async function main(argv: string[]): Promise<number> {
       const d = draw(readJson<DrawUnit[]>(pos[0]!), draw_seed);
       writeNew(need(f, "--out"), d);
       console.log("admission=" + d.admission.length + " state=" + d.state.length + " other=" + d.other.length);
+      return 0;
+    }
+    if (sub === "oracle" && rest[0] === "hidden") {
+      const { pos, f } = flags(rest.slice(1), ["--cache", "--units", "--pull-log", "--out", "--md", "--ids", "--pulls-per-hour"], ["--static-only"]);
+      const cands = loadCands(pos[0] ?? need(f, "<candidates>")), cache = need(f, "--cache"), out = need(f, "--out");
+      const rows = new Map(readRows(cache).map((x) => [x.row.instance_id, x.row]));
+      const row = (id: string) => rows.get(id) ?? (() => { throw new Error("E_SM_SOURCE no row " + id + " in the cached revision"); })();
+      const st = staticCounts(cands, (id) => row(id).test_cmds);
+      const ids = f.has("--ids") ? new Set(f.get("--ids")!.split(",")) : null;
+      const todo = inSourceUnits(cands).filter((x) => !ids || ids.has(x.id));
+      const read = () => (existsSync(out) ? readFileSync(out, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HiddenRecord) : []);
+      if (!f.has("--static-only")) {
+        const units = need(f, "--units"), pacer = new Pacer(need(f, "--pull-log"), Number(f.get("--pulls-per-hour") ?? 25));
+        mkdirSync(units, { recursive: true });
+        for (const cand of todo) {
+          if (read().some((x) => x.id === cand.id)) continue;
+          const free = Number(spawnSync("df", ["--output=avail", "-B1", "/var/lib/docker"], { encoding: "utf8" }).stdout.split("\n")[1] ?? 0);
+          if (free < 16e9) throw new Error("E_SM_INFRA_GAP " + Math.round(free / 1e9) + " GB free under /var/lib/docker; the hidden count stops under 16 GB (rerun resumes)");
+          const rec = await hiddenUnit({ cand, row: () => row(cand.id), units, pacer });
+          appendFileSync(out, JSON.stringify(rec) + "\n");
+          console.log("HIDDEN " + cand.id + " " + (rec.drop ? "drop " + rec.drop.code : "doctests=" + rec.hidden_doctests + " other=" + rec.hidden_other) + " no_fail_fast=" + (rec.how ?? "no"));
+        }
+      }
+      const recs = read().filter((x) => todo.some((t) => t.id === x.id));
+      writeFileSync(need(f, "--md"), hiddenMarkdown(recs, st));
+      console.log("units=" + todo.length + " recorded=" + recs.length + " static_in_source_no_fail_fast=" + st.in_source.overall.no_fail_fast + " md=" + f.get("--md"));
       return 0;
     }
     if (sub === "oracle") {

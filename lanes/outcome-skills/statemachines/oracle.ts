@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The oracle preflight (post section 3), per unit in seeded draw order: pull by digest under the pull pacing, the runtime
 // layer and its smoke, the stripped one-commit tree, the scope, the leak scan, then three base and three fixed runs of the
-// unit's own commands (base = base plus test.patch, since the fail-to-pass tests live in it; fixed = base plus test.patch
-// plus fix.patch). A unit stays only when every fail-to-pass test fails in all three base runs and passes in all three
+// unit's own commands (base = base plus test.patch and, for a split fix, fix-tests.patch, the fix's in-source test hunks,
+// since the fail-to-pass tests live in them; fixed = base plus test.patch plus fix.patch). A unit stays only when every fail-to-pass test fails in all three base runs and passes in all three
 // fixed runs; its stable set is every id the parser reports passed in all six runs. A run over 900 s drops it.
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 const rf = readFileSync;
@@ -97,13 +97,13 @@ export function smoke(imageId: string, label: string, pinned?: string): { runtim
 export const treeVolume = (id: string) => "sm-tree-" + id.toLowerCase().replace(/[^a-z0-9_.-]/g, "-");
 
 /** Copies the image's repo_dir into the unit's tree volume, then strips and rewrites history there, then scope and leak. */
-/** With record, a leak hit is returned, not thrown (the sample measures units the scan would drop). */
-export function prepare(u: SmUnit, runtimeId: string, fixPatch: string, record = false, dir?: string): { volume: string; removed: string[]; restored: string[]; preflight: string; scope: SmUnit["scope"]; leak: { needles: number; hits: LeakHit[]; kinds?: Record<HitKind, number> } } {
+/** With record, a leak hit is returned, not thrown (the sample measures units the scan would drop). volume names the tree
+ *  volume when it is not the unit's own (the hidden-test count prepares its trees beside the units'). */
+export function prepare(u: SmUnit, runtimeId: string, fixPatch: string, record = false, dir?: string, volume = treeVolume(u.id)): { volume: string; removed: string[]; restored: string[]; preflight: string; scope: SmUnit["scope"]; leak: { needles: number; hits: LeakHit[]; kinds?: Record<HitKind, number> } } {
   const p = docker(["run", "--rm", "--network", "none", "--entrypoint", "sh", u.image.image_id!, "-c", 'w=$(pwd); echo "WD $w"; for d in "$w" /testbed /testbed/repo; do if [ -d "$d/.git" ]; then echo "REPO $d"; break; fi; done'], { timeoutMs: 120_000 });
   u.work_dir = (p.stdout.match(/^WD (\S+)$/m) ?? [])[1] ?? "";
   u.repo_dir = (p.stdout.match(/^REPO (\S+)$/m) ?? [])[1] ?? "";
   if (!u.repo_dir) smFail("E_SM_HISTORY", u.id + ": no git repository at the image's work dir, /testbed or /testbed/repo");
-  const volume = treeVolume(u.id);
   dropVolume(volume);
   docker(["volume", "create", volume], { timeoutMs: 60_000 });
   const c = dockerRun(runName("seed"), ["--rm", "--network", "none", "--user", "0:0", "-v", volume + ":/sm-tree", "--entrypoint", "sh", u.image.image_id!, "-c", "cp -a " + u.repo_dir + "/. /sm-tree/"], { timeoutMs: 1_800_000 });
@@ -141,25 +141,23 @@ export function splitUnit(dir: string, u: SmUnit, where: Where): void {
 
 export interface RunResult { run: OracleRun; parsed: Record<string, string> | null }
 
-/** Whether the oracle's base runs apply fix-tests.patch (the fix's in-source tests) with test.patch. Off today; a pending
- *  decision may turn it on. The stable set and every follow-on start set read it through basePatches, so they move together. */
-export const BASE_RUNS_FIX_TESTS = false;
-
-/** The patches a base run applies over a tree, in order: test.patch, then fix-tests.patch when BASE_RUNS_FIX_TESTS is on
- *  and the unit has one. The oracle's base runs (the stable set) and the follow-on start-set runs both use this. */
-export function basePatches(dir: string, fixTests = BASE_RUNS_FIX_TESTS): [string, string][] {
+/** The patches a base run applies over a tree, in order: test.patch, then fix-tests.patch (the fix's in-source test hunks,
+ *  section 7 step 3) when the fix was split and the file is not empty. The oracle's base runs (the stable set) and the
+ *  follow-on start-set runs both use this. fixTests false gives the run without the fix's in-source tests, which only the
+ *  hidden-test count (hidden.ts) asks for. */
+export function basePatches(dir: string, fixTests = true): [string, string][] {
   const out: [string, string][] = [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
   const t = fixTests && existsSync(join(dir, "fix-source.patch")) ? rf(join(dir, "fix-tests.patch"), "utf8") : "";
   if (t) out.push(["fix-tests.patch", t]);
   return out;
 }
 
-/** One oracle run on a fresh copy of the tree volume. */
-export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tree: "base" | "fixed", n: number, mode: Mode, limitMs = LIMIT_MS): RunResult {
+/** One oracle run on a fresh copy of the tree volume. baseFixTests false leaves fix-tests.patch off a base run (hidden.ts only). */
+export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tree: "base" | "fixed", n: number, mode: Mode, limitMs = LIMIT_MS, baseFixTests = true): RunResult {
   const copy = volume + "-" + tree + n + "-" + process.pid;
   copyVolume(image, volume, copy, mode);
   try {
-    const patches: [string, string][] = tree === "base" ? basePatches(dir) : [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
+    const patches: [string, string][] = tree === "base" ? basePatches(dir, baseFixTests) : [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
     if (tree === "fixed") {
       const split = existsSync(join(dir, "fix-source.patch"));
       patches.push(["fix-source.patch", rf(join(dir, split ? "fix-source.patch" : "fix.patch"), "utf8")]);

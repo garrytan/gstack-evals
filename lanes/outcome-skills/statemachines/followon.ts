@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { decideDrift, namedIds, occurrences } from "./drift.ts";
 import { readSession } from "./exposure.ts";
 import { runBash, sh } from "./history.ts";
-import { basePatches, BASE_RUNS_FIX_TESTS, treeVolume } from "./oracle.ts";
+import { basePatches, treeVolume } from "./oracle.ts";
 import { extractChange, fixTestHunks, mergeTests, scoringRun, testHunks, type Outcome, type OutcomeRecord, type RunSummary, type RunView } from "./score.ts";
 import type { SessionRecord } from "./session.ts";
 import { applyPatches, copyVolume, dropVolume, passed, runName, type Mode } from "./testrun.ts";
@@ -126,7 +126,7 @@ export function startTree(u: SmUnit, image: string, baseVolume: string, tree: Tr
 }
 
 export interface StartSet {
-  schema: "sm-start.v1"; unit: string; model: string | null; tree: Tree; tree_patch_sha256: string; head: string; base_runs_fix_tests: boolean;
+  schema: "sm-start.v1"; unit: string; model: string | null; tree: Tree; tree_patch_sha256: string; head: string;
   ids: string[]; ids_sha256: string; runs: RunSummary[]; merge: "clean" | "conflict" | null; conflict: string[]; gap: "E_SM_TEST_PATCH_CONFLICT" | null;
 }
 
@@ -138,7 +138,7 @@ export function computeStart(o: { unitDir: string; tree: Tree; treePatch: string
   if (!u.oracle?.stable.length) smFail("E_SM_UNIT", u.id + " has no oracle stable set");
   if ((o.tree === "S0") !== (o.treePatch === "")) smFail("E_SM_ARM", "S0 takes no first-stage patch and A1 and S2 each take one");
   const image = u.image.runtime_id ?? smFail("E_SM_UNIT", u.id + " has no runtime image");
-  const res: StartSet = { schema: "sm-start.v1", unit: u.id, model: o.model ?? null, tree: o.tree, tree_patch_sha256: sha(o.treePatch), head: "", base_runs_fix_tests: BASE_RUNS_FIX_TESTS, ids: [], ids_sha256: "", runs: [], merge: null, conflict: [], gap: null };
+  const res: StartSet = { schema: "sm-start.v1", unit: u.id, model: o.model ?? null, tree: o.tree, tree_patch_sha256: sha(o.treePatch), head: "", ids: [], ids_sha256: "", runs: [], merge: null, conflict: [], gap: null };
   const st = runName("start").toLowerCase();
   try {
     res.head = startTree(u, image, o.volume ?? treeVolume(u.id), o.tree, o.treePatch, st).head;

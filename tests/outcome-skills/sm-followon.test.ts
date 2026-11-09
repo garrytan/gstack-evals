@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { decideDrift, identOf, namedIds } from "../../lanes/outcome-skills/statemachines/drift.ts";
 import { createdPaths, firstInfo, followScores, passedInAll, readCreated, treeCounts, treeScores, type FirstInfo, type FollowonRecord } from "../../lanes/outcome-skills/statemachines/followon.ts";
 import { COMPILED, DRIFT_FORMS, LANGS, type Lang } from "../../lanes/outcome-skills/statemachines/langs.ts";
-import { basePatches, BASE_RUNS_FIX_TESTS } from "../../lanes/outcome-skills/statemachines/oracle.ts";
+import * as oracle from "../../lanes/outcome-skills/statemachines/oracle.ts";
+import { basePatches } from "../../lanes/outcome-skills/statemachines/oracle.ts";
 import type { OutcomeRecord } from "../../lanes/outcome-skills/statemachines/score.ts";
 
 const run = (parsed: Record<string, string> | null, build_failed = false) => ({ parsed, build_failed });
@@ -23,16 +24,17 @@ describe("start sets", () => {
     expect(passedInAll([run({ a: "pass" }), run(null), run({ a: "pass" })])).toEqual([]);
     expect(passedInAll([])).toEqual([]);
   });
-  test("the base-run patches are test.patch alone unless the switch adds fix-tests.patch", () => {
+  test("the base-run patches are test.patch then fix-tests.patch whenever the fix was split, with no switch", () => {
     const dir = mkdtempSync(join(tmpdir(), "sm-followon-"));
     writeFileSync(join(dir, "test.patch"), "T");
-    expect(BASE_RUNS_FIX_TESTS).toBe(false);
+    expect("BASE_RUNS_FIX_TESTS" in oracle).toBe(false);
     expect(basePatches(dir)).toEqual([["test.patch", "T"]]);
-    expect(basePatches(dir, true)).toEqual([["test.patch", "T"]]);
     writeFileSync(join(dir, "fix-source.patch"), "S");
-    writeFileSync(join(dir, "fix-tests.patch"), "F");
+    writeFileSync(join(dir, "fix-tests.patch"), "");
     expect(basePatches(dir)).toEqual([["test.patch", "T"]]);
-    expect(basePatches(dir, true)).toEqual([["test.patch", "T"], ["fix-tests.patch", "F"]]);
+    writeFileSync(join(dir, "fix-tests.patch"), "F");
+    expect(basePatches(dir)).toEqual([["test.patch", "T"], ["fix-tests.patch", "F"]]);
+    expect(basePatches(dir, false)).toEqual([["test.patch", "T"]]);
   });
 });
 
