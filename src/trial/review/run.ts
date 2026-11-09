@@ -82,7 +82,7 @@
 //   path, or a dangling one at or above the sink, is refused too. Both checks run before any session.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
 import { insideRepo } from "../../../lanes/review-noloss/suite.ts";
 import { BACKGROUND_WAIT_MS, MAX_TURNS, type SystemPrompt } from "../../adapters/claude-code/driver.ts";
@@ -110,6 +110,10 @@ import { TOLD_PREFIX, TOLD_SHA256, toldPrompt, toldSkill, type ToldArm } from ".
 import type { UnitRef } from "./unit.ts";
 import { CEO_CONTEXT_ENV, CEO_RUN_PLAN_ARM, ceoRunPrompt, forcedPrefixOk, isCeoRunArm, type CeoRunArm } from "./ceo-arms.ts";
 import { ENFORCED_ARM, GATE_DEADLINE_MS, GATE_KEY, GATE_SETTINGS_ARGS, gateRecord, gateSettings, sha256 } from "./skill-gates.ts";
+import { endStateOf, PV_PARSER_SHA256, pvOutcome, type InfraReason, type PvParse } from "../../../lanes/product-value/parse.ts";
+import type { EndState, Family } from "../../../lanes/product-value/types.ts";
+import { STATE_ROOT_DIR } from "../state-root.ts";
+import { PV_GATE_ARM, PV_GATE_KEY, PV_GSTACK, PV_LENS, PV_TEMPLATE_SHA256, pvArm, pvArmLine, pvGateSettings, pvPrompt, pvRecUser, renderPvChanges } from "./product-value.ts";
 
 type Env = Record<string, string | undefined>;
 
@@ -176,7 +180,9 @@ export interface ReviewRunInput {
    * as finding nothing with a diagnostic note. A timeout, a CLI failure or a completed session before any model output,
    * or an infra failure at any point, is a coverage gap that stops the arm.
    */
-  plan?: { lens: PlanLens | typeof CEO_LENS };
+  plan?: { lens: PlanLens | typeof CEO_LENS | typeof PV_LENS };
+  /** The product-value lens (plan.lens product-value, product-value.ts): the units' family and whether smoke rule 2's fallback sentence is on. */
+  pv?: { family: Family; fallback: boolean };
   /** The models each named arm runs on; an arm not named runs on every model. */
   armModels?: Readonly<Record<string, readonly string[]>>;
   /** The most model turns a session may take; the driver's MAX_TURNS when unset. */
@@ -204,8 +210,10 @@ export interface ReviewEntry {
   key: SessionKey;
   meter_id: string;
   record: TrialRecord;
-  parse: ParseOutcome | PlanParse | CeoParse;
+  parse: ParseOutcome | PlanParse | CeoParse | PvParse;
   cost: MeterCost | null;
+  /** product-value sessions: the parser's sha256 beside its one parse, the end state after the one retry, each attempt, settled spend over every attempt and the last attempt's clock. */
+  pv?: PvSession;
   /** ceo-outcome sessions: the parser's sha256 beside its one parse, section 6's end state, whether the follow-up turn went, the session's own clock and its settled metered spend. */
   ceo_outcome?: { parser_sha256: string; end_state: CeoEndState; follow_up: boolean; wall_s: number | null; usd: number };
   /** Plan units: the review mode the session's gstack mode handoff named, or null. */
@@ -216,6 +224,19 @@ export interface ReviewEntry {
   scored_turn?: ScoredTurn;
   /** ceo-outcome sessions: the proxy's record of the session's peak in-flight reservation, largest prompt, bytes per token and cache-write modes; null when the rig's meter keeps none. */
   meter?: SessionMeter | null;
+}
+
+/** A product-value session's record (lanes/product-value/parse.ts): end_state is null for a session a cap stop ended. */
+export interface PvSession {
+  parser_sha256: string;
+  end_state: EndState | null;
+  /** The named reason a missing session's last attempt failed under. */
+  reason: InfraReason | null;
+  attempts: { termination: string; outcome: string; reason: InfraReason | null; detail: string | null; usd: number }[];
+  /** Successful web results in the last attempt's transcript. */
+  web: number;
+  usd: number;
+  wall_s: number | null;
 }
 
 /** The stage 2 amendment's per-session meter record (its section 5 and carried notes F and K), as ceo rows and readings carry it. */
@@ -307,6 +328,7 @@ export function planScore(e: Pick<ReviewEntry, "record" | "parse">): "findings" 
 }
 
 const PROGRESS = { findings: "pass", miss: "fail", gap: "missing" } as const;
+const PV_PROGRESS = { block: "pass", "no-block": "fail", missing: "missing", contaminated: "missing" } as const;
 const CEO_PROGRESS = { scored: "pass", "no-block": "fail", gap: "missing", incomplete: "missing" } as const;
 
 /** Why a suite's receipts sink would copy held-out material into the repo, or null: a sealed suite, or one whose catalogs resolve under the sealed root, never copies receipts inside it. */
@@ -367,21 +389,26 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   const overlap = "sink" in sink && sink.sink ? sinkOverlapProblem(o.out, sink.sink) : null;
   if (overlap) throw new Error("E_USAGE: " + overlap);
   const inside = (f: string) => !relative(resolve(o.out), resolve(f)).startsWith("..") && !relative(resolve(o.out), resolve(f)).startsWith(sep);
-  const transcripts = o.plan?.lens !== CEO_LENS ? [] : o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => {
+  const pvRun = o.plan?.lens === PV_LENS;
+  const transcripts = o.plan?.lens !== CEO_LENS && !pvRun ? [] : o.arms.flatMap((arm) => (o.armModels?.[arm.name] ?? o.models).flatMap((model) => o.units.flatMap((unit) => Array.from({ length: o.passes }, (_, i) => {
     const dir = sessionDir(o.out, model, arm.name, unit.task, i + 1);
+    if (pvRun) return [dir, dir + "-attempt1"].flatMap((d) => [join(d, "trial.json"), ...["transcript.ndjson", "session.json", "gstack-state", "skill-gates"].map((f) => join(d, "host", f))]);
     return [join(dir, "trial.json"), ...["transcript.ndjson", "ceo-review", "skill-gates"].map((f) => join(dir, "host", f))];
   }).flat())));
-  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
+  const receipts = [join(o.out, "run.json"), join(o.out, "cells.ndjson"), join(o.out, "progress.json"), join(o.out, "units.json"), join(o.out, "parses.tsv"), join(o.out, "refusals.tsv"), join(o.out, "arms"), ...(o.plan ? [join(o.out, "modes.tsv")] : []), ...(o.plan?.lens === CEO_LENS || pvRun ? [join(o.out, "stops.json")] : []), ...(o.journal && inside(o.journal) ? [o.journal] : []), ...transcripts];
   const sealedSink = sealedSinkProblem(o.suite, env);
   if (sealedSink) throw new Error("E_USAGE: " + sealedSink);
   const linked = "sink" in sink && sink.sink ? sinkLinkProblem(o.out, receipts, sink.sink) : null;
   if (linked) throw new Error("E_USAGE: " + linked);
   const plan = o.plan ?? null;
   const ceo = plan?.lens === CEO_LENS;
+  const pv = pvRun ? (o.pv ?? null) : null;
+  if (pvRun && !pv) throw new Error("E_USAGE: a product-value run needs its family\n  fix: run it through review-units --plan product-value --family plan|brief");
+  if (pv && insideRepo(o.out)) throw new Error("E_USAGE: a product-value run holds review text, and its out dir " + o.out + " is inside the repo\n  fix: write the run to an --out outside the repo");
   const lens: PlanLens = "ceo";
   if (ceo && insideRepo(o.out)) throw new Error("E_USAGE: a ceo-outcome run holds review text, and its out dir " + o.out + " is inside the repo\n  fix: write the run to an --out outside the repo");
-  if (ceo && !existsSync(join(o.out, "units.json")) && ((o.reuse?.size ?? 0) > 0 || existsSync(join(o.out, "stops.json")) || (existsSync(join(o.out, "cells.ndjson")) && readFileSync(join(o.out, "cells.ndjson"), "utf8").trim() !== ""))) throw new Error("E_USAGE: " + o.out + " holds cells from an earlier attempt but no units.json, so this resume cannot check the suite binding (catalogs_sha256) those cells ran on\n  fix: restore units.json from the run's receipts sink copy, or start a new run in a new --out");
-  if (ceo && existsSync(join(o.out, "units.json"))) {
+  if ((ceo || pv) && !existsSync(join(o.out, "units.json")) && ((o.reuse?.size ?? 0) > 0 || existsSync(join(o.out, "stops.json")) || (existsSync(join(o.out, "cells.ndjson")) && readFileSync(join(o.out, "cells.ndjson"), "utf8").trim() !== ""))) throw new Error("E_USAGE: " + o.out + " holds cells from an earlier attempt but no units.json, so this resume cannot check the suite binding (catalogs_sha256) those cells ran on\n  fix: restore units.json from the run's receipts sink copy, or start a new run in a new --out");
+  if ((ceo || pv) && existsSync(join(o.out, "units.json"))) {
     const file = join(o.out, "units.json");
     let prior: Partial<ReviewRunInput["suite"]> | undefined;
     try {
@@ -406,7 +433,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (micros === null) throw new Error("E_MODEL_POLICY: " + model + " has no price row, so its session allowance is unknown");
     return micros;
   };
-  const capStops = ceo || (!plan && o.capStops === true);
+  const capStops = ceo || pv !== null || (!plan && o.capStops === true);
   const readers = !plan && o.host === "claude" ? (o.readers ?? null) : null;
   const prefs = new Map<string, string | null>();
   if (plan) for (const arm of o.arms) for (const model of modelsOf(arm.name)) {
@@ -415,6 +442,12 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   }
   if (plan && o.arms.some((a) => a.told === "placebo") && o.arms.some((a) => a.name === "gstack" && a.toldPrefix !== undefined)) throw new Error("E_USAGE: the placebo arm runs the gstack arm's default line, so arm gstack takes no --told-prefix beside it; give the forced line to a gstack-<suffix> arm");
   for (const arm of plan ? o.arms : []) {
+    if (pv) {
+      const spec = pvArm(pv.family, arm.name);
+      if (!spec || spec.told !== arm.told) throw new Error("E_USAGE: arm " + arm.name + " (plan arm " + arm.told + "): the product-value " + pv.family + " family runs arms none, lens and its gstack arm by the names product-value.ts gives\n  fix: run only those arms");
+      if (arm.toldPrefix !== undefined) throw new Error("E_USAGE: arm " + arm.name + ": the product-value lens takes each arm's first line from the prereg, so no arm takes --told-prefix\n  fix: leave out --told-prefix");
+      continue;
+    }
     if (ceo) {
       if (!isCeoRunArm(arm.name) || CEO_RUN_PLAN_ARM[arm.name] !== arm.told) throw new Error("E_USAGE: arm " + arm.name + " (plan arm " + arm.told + "): the ceo-outcome lens runs arms none, lens, gstack-auto, gstack-forced and gstack-enforced, each as its own plan arm\n  fix: run only those five arms");
       if (arm.toldPrefix !== undefined && !forcedPrefixOk(arm.name, arm.toldPrefix)) throw new Error("E_USAGE: arm " + arm.name + ": --told-prefix: the ceo-outcome lens takes its line from the lens, and only gstack-forced's and gstack-enforced's is CEO v2's forced line\n  fix: leave out --told-prefix");
@@ -429,6 +462,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const install = rig.arms[arm.name]!;
     if (arm.told !== "gstack" && arm.told !== "gstack-auto") continue;
     const dir = gstackDir(install);
+    if (pv && gstackVersion(dir) !== PV_GSTACK.version) throw new Error("E_USAGE: arm " + arm.name + ": its gstack tree reads VERSION " + (gstackVersion(dir) ?? "none") + ", and the prereg pins " + PV_GSTACK.repo + "@" + PV_GSTACK.sha + " at VERSION " + PV_GSTACK.version + "\n  fix: run the arm from that commit");
     const kind = arm.sessionKind ?? o.sessionKind;
     if (kind) {
       const model = modelsOf(arm.name)[0]!;
@@ -446,10 +480,10 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     if (text === null) throw new Error("E_USAGE: arm " + arm.name + "'s gstack tree has no question registry (scripts/question-registry.ts), so its questions cannot be set to auto-decide");
     prefs.set(arm.name, text);
   }
-  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: ceo ? ceoRunPrompt(arm.name as CeoRunArm) : plan ? planToldPrompt(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
-  const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
+  const taskOf = (arm: ReviewArm, unit: PreparedUnit): ContractTask => ({ id: unit.task, prompt: pv ? pvPrompt(pv.family, arm.name, pv.fallback) : ceo ? ceoRunPrompt(arm.name as CeoRunArm) : plan ? planToldPrompt(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix) : toldPrompt(arm.told as ToldArm, unit.base_branch, arm.toldPrefix) });
+  const planKey = (arm: ReviewArm) => (plan ? { plan: { lens: plan.lens, rec_user_sha256: pv ? pvRecUser(pv.family).sha256 : REC_USER_SHA256, preferences_sha256: prefs.has(arm.name) ? createHash("sha256").update(prefs.get(arm.name)!).digest("hex") : null } } : {});
   const keyOf = (model: string, arm: ReviewArm, unit: PreparedUnit): SessionKey =>
-    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(ceo ? { allowance_micros: allowance(model) } : capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(arm.sessionKind ?? o.sessionKind ? { session_kind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: ceo ? CEO_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: ceo ? envValuesHash(Object.keys(CEO_CONTEXT_ENV), CEO_CONTEXT_ENV) : envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
+    sessionKey({ ...o.keyBase, arm_tree: armTree(rig, arm.name, model), task: { ...taskOf(arm, unit), told_sha256: pv ? PV_TEMPLATE_SHA256 : ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, unit: unit.unit.id, head: unit.unit.head, merge_base: unit.merge_base, ...planKey(arm), ...(arm.systemPrompt && arm.systemPrompt !== "sdk-default" ? { system_prompt: arm.systemPrompt } : {}), ...(o.maxTurns && o.maxTurns !== MAX_TURNS ? { max_turns: o.maxTurns } : {}), ...(ceo || pv ? { allowance_micros: allowance(model) } : capStops && (o.allowanceMicros ?? null) !== null ? { allowance_micros: o.allowanceMicros } : {}), ...(arm.sessionKind ?? o.sessionKind ? { session_kind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(pv && arm.name === PV_GATE_ARM ? { skill_gates: PV_GATE_KEY } : {}), ...(o.backgroundWaitS !== undefined && o.backgroundWaitS * 1000 !== BACKGROUND_WAIT_MS ? { background_wait_s: o.backgroundWaitS } : {}) }, sidecar_entry: null, fixture_tree: unit.tree_sha256, verifier: pv ? PV_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : ceo ? CEO_PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256 + "+" + CAPPED_PARSER_SHA256 + "+" + READERS_SHA256 + "+" + HELD_PARSER_SHA256, model, timeout_s: o.timeoutS, env_values: ceo || pv ? envValuesHash(Object.keys(CEO_CONTEXT_ENV), CEO_CONTEXT_ENV) : envValuesHash([], env), judge_model: null, policy: o.policy.sha256 });
 
   const groups: Planned[][] = [];
   for (let pass = 1; pass <= o.passes; pass++) for (const model of o.models) for (const unit of o.units) {
@@ -469,12 +503,12 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     for (const s of stale) stops.push({ code: s.code, message: s.message });
     return result();
   }
-  const carried = ceo ? [...readCeoStops(o.out)].filter(([id]) => !entries.has(id)).map(([, c]) => c) : [];
+  const carried = ceo || pv ? [...readCeoStops(o.out)].filter(([id]) => !entries.has(id)).map(([, c]) => c) : [];
   const settled = new Set([...entries.keys(), ...carried.map((c) => reviewCellId(c.cell))]);
 
-  const unitsJson = JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n";
+  const unitsJson = pv ? JSON.stringify({ schema_version: 1, suite: o.suite, lens: PV_LENS, told_sha256: PV_TEMPLATE_SHA256, parser_sha256: PV_PARSER_SHA256, pv: { family: pv.family, fallback: pv.fallback, passes: o.passes, arms: o.arms.map((a) => ({ name: a.name, told: a.told, models: [...modelsOf(a.name)] })), units: o.units.map((u) => ({ id: u.unit.id, task: u.task, tree_sha256: u.tree_sha256 })) } }, null, 2) + "\n" : JSON.stringify({ schema_version: 1, suite: o.suite, told_sha256: ceo ? CEO_TEMPLATE_SHA256 : plan ? TOLD_PLAN_SHA256 : TOLD_SHA256, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256, units: o.units.map((u) => ({ id: u.unit.id, repo: u.unit.repo, pr: u.unit.pr, task: u.task, head: u.unit.head, base: u.unit.base, base_branch: u.base_branch, merge_base: u.merge_base, tree_sha256: u.tree_sha256, retained: u.retained ?? null, instructions: u.instructions, check: u.check ?? null })) }, null, 2) + "\n";
   mkdirSync(o.out, { recursive: true });
-  if (ceo) writeFileSync(join(o.out, "units.json"), unitsJson);
+  if (ceo || pv) writeFileSync(join(o.out, "units.json"), unitsJson);
   const empty = join(o.out, "fixtures");
   mkdirSync(empty, { recursive: true });
   const journal = join(o.out, "cells.ndjson");
@@ -482,27 +516,27 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   let wall = 0;
   let ran = 0;
 
-  const session = async (p: Planned): Promise<ReviewEntry> => {
+  const session = async (p: Planned, attempt = 1, before: PvSession["attempts"] = []): Promise<ReviewEntry> => {
     const { cell, arm, unit } = p;
     const provider = providerOf(o.policy, cell.model);
     if (!provider) throw new Error("E_MODEL_POLICY: " + cell.model + " has no provider in the policy");
     const settings = rig.cells?.[arm.name]?.[cell.model] ?? null;
     const codex = o.host === "claude" ? codexOption(o.policy, settings) : null;
-    const binding = await rig.bind({ cell: { run_id: o.runId, arm: arm.name, task: unit.task, model: cell.model, trial: cell.pass, attempt: 1 }, models: slotModels(o.policy, cell.model, codex ? settings : null), allowance_micros: allowance(cell.model) });
+    const binding = await rig.bind({ cell: { run_id: o.runId, arm: arm.name, task: unit.task, model: cell.model, trial: cell.pass, attempt }, models: slotModels(o.policy, cell.model, codex ? settings : null), allowance_micros: allowance(cell.model) });
     const sandbox = rig.sandbox(arm.name, false, cell.model);
     const dir = sessionDir(o.out, cell.model, arm.name, unit.task, cell.pass);
     rmSync(dir, { recursive: true, force: true });
     const home = sandbox.homePath(dir);
     const install = rig.arms[arm.name]!;
     const plugins = (install.plugins ?? []).map((pl) => posix.join(home, pl));
-    const name = plan ? planSkill(arm.told as PlanArm, ceo ? lens : (plan.lens as PlanLens)) : toldSkill(arm.told as ToldArm, arm.toldPrefix);
-    const enforced = ceo && arm.name === ENFORCED_ARM;
+    const name = pv ? pvArm(pv.family, arm.name)!.skill : plan ? planSkill(arm.told as PlanArm, ceo ? lens : (plan.lens as PlanLens)) : toldSkill(arm.told as ToldArm, arm.toldPrefix);
+    const enforced = (ceo && arm.name === ENFORCED_ARM) || (pv !== null && arm.name === PV_GATE_ARM);
     let printedSha: string | null = null;
     const skill = install.skill && name ? { name, roots: install.skill.roots.map((r) => posix.join(home, r)), home, dir: install.skill.dir, namespaces: armNamespaces(install) } : null;
-    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(arm.sessionKind ?? o.sessionKind ? { sessionKind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo ? { disable1mContext: true } : {}), ...(enforced ? { skillGateDeadlineMs: GATE_DEADLINE_MS, settings: { command: [posix.join(home, posix.dirname(install.gstack ?? ""), "gstack-skill-gates"), ...GATE_SETTINGS_ARGS].map((w) => "'" + w.replace(/'/g, "'\\''") + "'").join(" "), make: (printed: string) => ((printedSha = sha256(printed)), gateSettings(printed)) } } : {}), ...(capStops ? { capStops } : {}), ...(ceo ? { followUp: { text: FOLLOW_UP, needed: needsFollowUp } } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000 });
+    const agent = (rig.driver ?? hostDriver)({ host: o.host, model: cell.model, provider, proxy: { baseUrl: rig.baseUrl, slot: binding.slot, token: binding.token }, interactive: plan !== null, skill, out: join(dir, "host"), ...(pv ? { entry: { user: pvRecUser(pv.family).user }, freeform: pvRecUser(pv.family).freeform } : plan ? { entry: { user: REC_USER }, freeform: recFreeform } : {}), ...(plugins.length ? { plugins } : {}), ...(codex ? { codex } : {}), ...(arm.systemPrompt ? { systemPrompt: arm.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(arm.sessionKind ?? o.sessionKind ? { sessionKind: arm.sessionKind ?? o.sessionKind } : {}), ...(ceo || pv ? { disable1mContext: true } : {}), ...(enforced ? { skillGateDeadlineMs: GATE_DEADLINE_MS, settings: { command: [posix.join(home, posix.dirname(install.gstack ?? ""), "gstack-skill-gates"), ...GATE_SETTINGS_ARGS].map((w) => "'" + w.replace(/'/g, "'\\''") + "'").join(" "), make: (printed: string) => ((printedSha = sha256(printed)), pv ? pvGateSettings(printed) : gateSettings(printed)) } } : {}), ...(capStops ? { capStops } : {}), ...(ceo ? { followUp: { text: FOLLOW_UP, needed: needsFollowUp } } : {}), backgroundWaitMs: (o.backgroundWaitS ?? BACKGROUND_WAIT_MS / 1000) * 1000 });
     const config = settings && Object.keys(settings.gstack_config).length ? settings.gstack_config : null;
     const state = { ...(config ? { stateConfig: config } : {}), ...(prefs.has(arm.name) ? { stateFiles: { [GLOBAL_PREFERENCES]: prefs.get(arm.name)! }, stateProjectFiles: { [PROJECT_PREFERENCES]: prefs.get(arm.name)! } } : {}), ...(enforced ? { gate: (work: string) => gateRecord({ work, host: join(dir, "host"), gstack: gstackDir(install) ?? "", settingsSha256: printedSha }) } : {}) };
-    const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...(ceo ? { copyOut: { name: "ceo-review.md", to: join(dir, "host", "ceo-review") } } : {}), ...state });
+    const trial = await runTrial({ cell: { model: cell.model, arm: arm.name, round: 1, trial: cell.pass }, task: taskOf(arm, unit), tasksDir: empty, sandbox, agent, dir, timeoutS: o.timeoutS, network: rig.network, seed: unit.tree, ...(ceo ? { copyOut: { name: "ceo-review.md", to: join(dir, "host", "ceo-review") } } : {}), ...(pv ? { copyDir: { from: STATE_ROOT_DIR, to: join(dir, "host", "gstack-state") } } : {}), ...state });
     const meter = await rig.finalize(binding.meter_id);
     spent += meter.micros;
     trial.record.cost_micros = meter.micros;
@@ -514,29 +548,40 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     let transcript = "";
     let unreadable = false;
     try {
-      transcript = ceo || readers || (!plan && (capStopped || waited || deadline)) ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
+      transcript = ceo || pv || readers || (!plan && (capStopped || waited || deadline)) ? readFileSync(join(dir, "host", "transcript.ndjson"), "utf8") : "";
     } catch {
       transcript = "";
-      unreadable = ceo;
+      unreadable = ceo || pv !== null;
       if (!plan && (waited || deadline)) log(cellName(cell) + ": host/transcript.ndjson is unreadable, so the session is scored on its final turn" + (deadline ? " and its findings_block is false" : ""));
     }
     const texts = plan ? [] : mainAgentTexts(transcript);
     const ceoParse: CeoParse | null = !ceo ? null : unreadable ? { kind: "unreadable", reason: "host/transcript.ndjson is unreadable" } : ceoTranscriptParse(transcript);
-    if (deadline && trial.record.session_end) trial.record.session_end = { ...trial.record.session_end, findings_block: ceoParse ? ceoParse.kind === "block" : plan ? parsePlanSession({ termination: { kind: "completed" }, turns: trial.record.turns }).kind === "findings" : hasFindingsBlock(texts) };
+    const pvRead = pv ? pvOutcome(trial.record.termination, unreadable ? null : transcript) : null;
+    if (pvRead?.outcome.state === "infra" && attempt === 1) {
+      log(cellName(cell) + ": " + pvRead.outcome.reason + " (" + pvRead.outcome.detail + "); its one retry runs under that reason");
+      rmSync(dir + "-attempt1", { recursive: true, force: true });
+      renameSync(dir, dir + "-attempt1");
+      return session(p, 2, [{ termination: kind, outcome: "infra", reason: pvRead.outcome.reason, detail: pvRead.outcome.detail, usd: meter.micros / 1_000_000 }]);
+    }
+    if (deadline && trial.record.session_end) trial.record.session_end = { ...trial.record.session_end, findings_block: pvRead ? pvRead.parse.kind === "changes" : ceoParse ? ceoParse.kind === "block" : plan ? parsePlanSession({ termination: { kind: "completed" }, turns: trial.record.turns }).kind === "findings" : hasFindingsBlock(texts) };
     const code = plan ? null : codeParse(trial.record, texts, mainAgentTurns(transcript));
-    const parse = code ? code.parse : (ceoParse ?? parsePlanSession(trial.record));
+    const parse = code ? code.parse : pvRead ? pvRead.parse : (ceoParse ?? parsePlanSession(trial.record));
     let clock: { session_ms?: unknown; follow_up?: unknown } = {};
     try {
-      if (ceo) clock = JSON.parse(readFileSync(join(dir, "host", "session.json"), "utf8"));
+      if (ceo || pv) clock = JSON.parse(readFileSync(join(dir, "host", "session.json"), "utf8"));
     } catch {
       clock = {};
     }
     const ceoOutcome = ceoParse ? { parser_sha256: CEO_PARSER_SHA256, end_state: endState(trial.record.termination, ceoParse), follow_up: clock.follow_up === true, wall_s: typeof clock.session_ms === "number" ? clock.session_ms / 1000 : null, usd: meter.micros / 1_000_000 } : null;
-    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(code ? { scored_turn: code.scored_turn } : {}), ...(ceoOutcome ? { ceo_outcome: ceoOutcome, meter: sessionMeter(meter) } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
+    const pvAttempts = pvRead ? [...before, { termination: kind, outcome: pvRead.outcome.state, reason: pvRead.outcome.state === "infra" ? pvRead.outcome.reason : null, detail: pvRead.outcome.state === "infra" ? pvRead.outcome.detail : null, usd: meter.micros / 1_000_000 }] : [];
+    const pvSession: PvSession | null = pvRead ? { parser_sha256: PV_PARSER_SHA256, end_state: endStateOf(pvRead.outcome), reason: pvRead.outcome.state === "infra" ? pvRead.outcome.reason : null, attempts: pvAttempts, web: pvRead.outcome.state === "contaminated" ? pvRead.outcome.web.length : 0, usd: pvAttempts.reduce((s, a) => s + a.usd, 0), wall_s: typeof clock.session_ms === "number" ? clock.session_ms / 1000 : null } : null;
+    if (pvSession?.end_state === "missing") log("E_PV_INFRA_MISSING " + cellName(cell) + ": " + pvAttempts.map((a) => a.reason + " (" + a.detail + ")").join(", then ") + "; the session is missing, never 0");
+    if (pvSession?.end_state === "contaminated") log("E_PV_WEB_CONTAMINATED " + cellName(cell) + ": " + pvSession.web + " successful web result" + (pvSession.web === 1 ? "" : "s") + "; the session is excluded as missing");
+    const entry: ReviewEntry = { cell, key: keyOf(cell.model, arm, unit), meter_id: binding.meter_id, record: trial.record, parse, ...(pvSession ? { pv: pvSession, meter: sessionMeter(meter) } : {}), ...(code ? { scored_turn: code.scored_turn } : {}), ...(ceoOutcome ? { ceo_outcome: ceoOutcome, meter: sessionMeter(meter) } : {}), cost: o.journal ? meterCost(readJournalLines(o.journal), binding.meter_id, codex?.model ?? null) : null, ...(plan ? { ceo_mode: ceoMode(trial.record.turns) } : {}), ...(readers ? { readers: readerUsage(readTranscript(transcript), readers.map) } : {}) };
     entries.set(reviewCellId(cell), entry);
     wall += trial.record.wall_ms ?? 0;
     ran++;
-    progress = recordSession(progress, cellName(cell), ceoOutcome ? CEO_PROGRESS[ceoOutcome.end_state] : plan ? PROGRESS[planScore(entry)] : kind === "timeout" ? "timeout" : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
+    progress = recordSession(progress, cellName(cell), pvSession ? PV_PROGRESS[pvSession.end_state ?? "missing"] : ceoOutcome ? CEO_PROGRESS[ceoOutcome.end_state] : plan ? PROGRESS[planScore(entry)] : kind === "timeout" ? "timeout" : parse.kind === "findings" ? "pass" : parse.kind === "incomplete" ? "missing" : "fail", wall / 1000 / ran, o.parallel);
     writeProgress(o.out, progress);
     if (kind !== "cap_stop") appendFileSync(journal, JSON.stringify(entry) + "\n");
     return entry;
@@ -548,7 +593,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
   for (let i = 0; i < groups.length; i += per) {
     const fresh = groups.slice(i, i + per).flat().filter((p) => !settled.has(reviewCellId(p.cell)));
     if (!fresh.length) continue;
-    const worst = fresh.reduce((s, p) => s + allowance(p.cell.model), 0);
+    const worst = fresh.reduce((s, p) => s + allowance(p.cell.model), 0) * (pv ? 2 : 1);
     if (o.cap !== null && spent + worst > o.cap) {
       stops.push({ code: "CAP_STOP", message: "the next round's worst case (" + fresh.length + " sessions at their allowance) does not fit under the cap" });
       capCells.push(...unstarted(i));
@@ -557,7 +602,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const done = await pool(fresh, o.parallel, session);
     if (done.some((e) => e.record.termination.kind === "cap_stop")) {
       stops.push({ code: "CAP_STOP", message: "the proxy stopped a session at the cap" });
-      capCells.push(...done.filter((e) => e.record.termination.kind === "cap_stop").map((e) => ({ cell: e.cell, how: "stopped" as const, usd: (e.record.cost_micros ?? 0) / 1_000_000, wall_s: e.ceo_outcome?.wall_s ?? null })), ...unstarted(i + per));
+      capCells.push(...done.filter((e) => e.record.termination.kind === "cap_stop").map((e) => ({ cell: e.cell, how: "stopped" as const, usd: e.pv?.usd ?? (e.record.cost_micros ?? 0) / 1_000_000, wall_s: e.ceo_outcome?.wall_s ?? e.pv?.wall_s ?? null })), ...unstarted(i + per));
       break;
     }
   }
@@ -566,7 +611,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
 
   const parseRows = [["arm_id", "arm", "model", "unit", "pass", "outcome", "findings", "reason"].join("\t")];
   const modeRows = [["arm_id", "arm", "model", "unit", "pass", "mode"].join("\t")];
-  const label = (p: ParseOutcome | PlanParse | CeoParse) => (p.kind === "findings" ? (p.findings.length ? "findings" : "empty") : p.kind === "block" ? (p.top.length ? "findings" : "empty") : p.kind);
+  const label = (p: ParseOutcome | PlanParse | CeoParse | PvParse) => (p.kind === "changes" ? (p.changes.length ? "changes" : "empty") : p.kind === "findings" ? (p.findings.length ? "findings" : "empty") : p.kind === "block" ? (p.top.length ? "findings" : "empty") : p.kind);
   const ceoLogs: string[] = [];
   const refusals: CellRefusals[] = [];
   const armDirs: string[] = [];
@@ -576,9 +621,13 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const id = armId(arm.name, model);
     const dir = join(o.out, "arms", id);
     mkdirSync(join(dir, "findings"), { recursive: true });
-    const counts: Record<string, number> = { findings: 0, empty: 0, missing: 0, malformed: 0, incomplete: 0, not_run: 0, ...(ceo ? { unreadable: 0 } : {}) };
+    const counts: Record<string, number> = pv ? { changes: 0, empty: 0, "no-block": 0, unreadable: 0, not_run: 0 } : { findings: 0, empty: 0, missing: 0, malformed: 0, incomplete: 0, not_run: 0, ...(ceo ? { unreadable: 0 } : {}) };
     const states: Record<string, number> = { scored: 0, "no-block": 0, gap: 0, not_run: 0 };
     const ceoGaps: string[] = [];
+    const pvStates: Record<string, number> = { block: 0, "no-block": 0, missing: 0, contaminated: 0, not_run: 0 };
+    const pvMissing: string[] = [];
+    let retries = 0;
+    let lenient = 0;
     const followEnds: Record<string, number> = {};
     let followUps = 0;
     let overThree = 0;
@@ -599,12 +648,13 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         if (!e) {
           counts.not_run!++;
           states.not_run!++;
+          pvStates.not_run!++;
           continue;
         }
         const outcome = label(e.parse);
         counts[outcome]!++;
         const note = unit.unit.id + " pass " + pass + ": " + outcome + ("reason" in e.parse ? ", " + e.parse.reason.replace(/\s+/g, " ") : "");
-        const score = ceo ? null : plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
+        const score = ceo || pv ? null : plan ? planScore(e) : outcome === "malformed" || outcome === "incomplete" ? "gap" : null;
         const ended = e.record.termination.kind;
         if (e.ceo_outcome) {
           const state = e.ceo_outcome.end_state;
@@ -617,6 +667,13 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
           if (e.parse.kind === "block" && e.parse.top.length > 3) overThree++;
           if (ended === "completed" && e.record.model_output === false) zeroOutput++;
         }
+        if (e.pv) {
+          const state = e.pv.end_state ?? "missing";
+          pvStates[state] = (pvStates[state] ?? 0) + 1;
+          if (e.pv.attempts.length > 1) retries++;
+          if (e.parse.kind === "changes" && e.parse.lenient) lenient++;
+          if (state === "missing" || state === "contaminated") pvMissing.push(note + "; " + (state === "contaminated" ? "E_PV_WEB_CONTAMINATED: " + e.pv.web + " successful web result" + (e.pv.web === 1 ? "" : "s") : "E_PV_INFRA_MISSING: " + e.pv.attempts.map((a) => a.reason ?? a.outcome).join(", then ")));
+        }
         if (e.scored_turn?.rule === "held" && e.parse.kind === "findings") held++;
         if (ended === "turn_cap" || ended === "allowance_stop") {
           capped[ended]++;
@@ -626,12 +683,13 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
         if (score === "miss" && ended === "completed" && (e.parse.kind === "incomplete" || e.record.text_output === false)) withoutText++;
         if (score === "miss") diagnostics.push(note + "; scored as finding nothing");
         else if (score === "gap") gaps.push(note + (!plan || (ended !== "arm_failure" && ended !== "timeout" && ended !== "completed") ? "" : e.record.model_output !== false ? " with no model_output recorded" : ended === "completed" ? " and no model output" : " before any model output"));
-        parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "findings" ? String(e.parse.findings.length) : e.parse.kind === "block" ? String(e.parse.top.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
+        parseRows.push([id, arm.name, model, unit.unit.id, String(pass), outcome, e.parse.kind === "changes" ? String(e.parse.changes.length) : e.parse.kind === "findings" ? String(e.parse.findings.length) : e.parse.kind === "block" ? String(e.parse.top.length) : "", "reason" in e.parse ? e.parse.reason.replace(/\s+/g, " ") : ""].join("\t"));
         if (plan) {
           modes[e.ceo_mode ?? "unstated"] = (modes[e.ceo_mode ?? "unstated"] ?? 0) + 1;
           modeRows.push([id, arm.name, model, unit.unit.id, String(pass), e.ceo_mode ?? "unstated"].join("\t"));
         }
         if (e.parse.kind === "block") for (const f of renderCeoFindings(e.parse.top, pass)) lines.push(JSON.stringify(f));
+        if (e.parse.kind === "changes" && pv) for (const f of renderPvChanges(e.parse.changes, pass, pv.family)) lines.push(JSON.stringify(f));
         if (e.parse.kind === "findings") for (const f of plan ? renderPlanFindings((e.parse as Extract<PlanParse, { kind: "findings" }>).findings, pass) : renderFindings((e.parse as Extract<ParseOutcome, { kind: "findings" }>).findings, pass, "/work/" + unit.task)) lines.push(JSON.stringify(f));
         sessions.push({ pr: unit.unit.id, pass, wall_ms: e.record.wall_ms, cost: e.cost, ...(readers ? { readers: e.readers ?? [] } : {}) });
         refused.sessions++;
@@ -652,14 +710,16 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
       status: counts.not_run || stops.length || gaps.length ? "stopped" : "complete", ...(gaps.length ? { coverage_gaps: gaps } : {}), ...(diagnostics.length ? { diagnostics } : {}), ...(source ? { source } : {}),
       models: [{ role: "driver", model }, ...(voice ? [{ role: "voice", model: voice }] : [])], run_by: o.runId,
       ...(o.severityMap?.[arm.name] ? { severity_map: o.severityMap[arm.name] } : {}),
-      told: ceo ? { arm: arm.name, plan_arm: arm.told, lens: CEO_LENS, line: ceoArmLine(arm.name as CeoArm), template_sha256: CEO_TEMPLATE_SHA256, rec_user_sha256: REC_USER_SHA256 } : plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
-      ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { ...(ceo ? {} : { completed_without_text: withoutText }), ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
-      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default", ...(ceo ? { context_env: CEO_CONTEXT_ENV } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}) }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
+      told: pv ? { arm: arm.name, plan_arm: arm.told, lens: PV_LENS, family: pv.family, line: pvArmLine(pv.family, arm.name, pv.fallback), fallback: pv.fallback, template_sha256: PV_TEMPLATE_SHA256, rec_user_sha256: pvRecUser(pv.family).sha256 } : ceo ? { arm: arm.name, plan_arm: arm.told, lens: CEO_LENS, line: ceoArmLine(arm.name as CeoArm), template_sha256: CEO_TEMPLATE_SHA256, rec_user_sha256: REC_USER_SHA256 } : plan ? { arm: arm.told, lens: plan.lens, line: planToldLine(arm.told as PlanArm, plan.lens as PlanLens, arm.toldPrefix), ...(arm.toldPrefix !== undefined ? { prefix: arm.toldPrefix, prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_PLAN_SHA256, rec_user_sha256: REC_USER_SHA256 } : { arm: arm.told, prefix: arm.toldPrefix ?? TOLD_PREFIX[arm.told as ToldArm], ...(arm.toldPrefix !== undefined ? { prefix_sha256: createHash("sha256").update(arm.toldPrefix).digest("hex") } : {}), template_sha256: TOLD_SHA256 }, parser_sha256: pv ? PV_PARSER_SHA256 : ceo ? CEO_PARSER_SHA256 : plan ? PLAN_PARSER_SHA256 : PARSER_SHA256,
+      ...(plan && prefs.has(arm.name) ? { question_preferences: "every registered question never-ask (auto-decide) in " + GLOBAL_PREFERENCES + ", written over any the unit ships, and over each projects/<slug>/" + PROJECT_PREFERENCES + " the unit ships", question_preferences_sha256: createHash("sha256").update(prefs.get(arm.name)!).digest("hex") } : {}), ...(plan ? { ...(ceo || pv ? {} : { completed_without_text: withoutText }), ceo_modes: Object.fromEntries([...CEO_MODES, "unstated"].filter((m) => modes[m]).map((m) => [m, modes[m]])) } : {}),
+      arm_provenance: { ...provenance, system_prompt: arm.systemPrompt ?? "sdk-default", ...(ceo || pv ? { context_env: CEO_CONTEXT_ENV } : {}), ...(ceo && arm.name === ENFORCED_ARM ? { skill_gates: GATE_KEY } : {}), ...(pv && arm.name === PV_GATE_ARM ? { skill_gates: PV_GATE_KEY } : {}) }, cell_tree_sha256: armTree(rig, arm.name, model), parse_outcomes: counts, ...(plan ? {} : { held_rescues: held }),
       ...(capStops ? { cap_stops: { ...capped, units: [...cappedUnits], parser_sha256: CAPPED_PARSER_SHA256 } } : {}), ...(readers ? { reader_map_sha256: readers.sha256 } : {}),
+      ...(pv ? { product_value: { end_states: pvStates, retries, lenient, missing: pvMissing, parser_sha256: PV_PARSER_SHA256, template_sha256: PV_TEMPLATE_SHA256 } } : {}),
       ...(ceo ? { ceo_outcome: { end_states: states, follow_ups: followUps, follow_up_terminations: followEnds, over_three: overThree, zero_output: zeroOutput, gaps: ceoGaps, parser_sha256: CEO_PARSER_SHA256, template_sha256: CEO_TEMPLATE_SHA256 } } : {}),
     };
     writeFileSync(join(dir, "arm.json"), JSON.stringify(armJson, null, 2) + "\n");
     armDirs.push(dir);
+    if (pvMissing.length) ceoLogs.push("MISSING " + id + ": " + pvMissing.length + " session" + (pvMissing.length === 1 ? "" : "s") + " missing or contaminated, each counted against coverage (not an arm stop): " + pvMissing.join("; "));
     if (ceoGaps.length) ceoLogs.push("GAPS " + id + ": " + ceoGaps.length + " gap" + (ceoGaps.length === 1 ? "" : "s") + ", each dropped from the contrasts that hold this arm (not an arm stop): " + ceoGaps.join("; "));
     if (gaps.length) armStops.push({ code: "E_COVERAGE_GAP", message: "arm " + id + " stopped with " + gaps.length + " coverage gap" + (gaps.length === 1 ? "" : "s") + ", so it gets no verdict: " + gaps.join("; ") });
   }
@@ -668,7 +728,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     log(s.code + " " + s.message);
   }
   for (const line of ceoLogs) log(line);
-  if (ceo) writeFileSync(join(o.out, "stops.json"), JSON.stringify({ schema_version: 1, stops: stops.filter((s) => s.code === "CAP_STOP").map((s) => ({ ...s, cells: capCells.map((c) => ({ ...c.cell, how: c.how, ...(c.how === "stopped" ? { usd: c.usd, wall_s: c.wall_s } : {}) })) })) }, null, 2) + "\n");
+  if (ceo || pv) writeFileSync(join(o.out, "stops.json"), JSON.stringify({ schema_version: 1, stops: stops.filter((s) => s.code === "CAP_STOP").map((s) => ({ ...s, cells: capCells.map((c) => ({ ...c.cell, how: c.how, ...(c.how === "stopped" ? { usd: c.usd, wall_s: c.wall_s } : {}) })) })) }, null, 2) + "\n");
   writeFileSync(join(o.out, "parses.tsv"), parseRows.join("\n") + "\n");
   if (plan) writeFileSync(join(o.out, "modes.tsv"), modeRows.join("\n") + "\n");
   writeFileSync(join(o.out, "refusals.tsv"), refusalsTsv(refusals));
