@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -93,6 +93,7 @@ function runStep(install: (typeof installs)[number], c: Case = {}) {
       },
     });
     return {
+      root,
       ok: r.status === 0,
       out: r.stdout + r.stderr,
       log: readFileSync(log, "utf8").split("\n").filter(Boolean),
@@ -106,10 +107,8 @@ function runStep(install: (typeof installs)[number], c: Case = {}) {
 }
 
 test("a run leaves no temp directory behind", () => {
-  const left = () => readdirSync(tmpdir()).filter((d) => d.startsWith("bun-install-")).length;
-  const before = left();
-  runStep(installs[0]);
-  expect(left()).toBe(before);
+  const r = runStep(installs[0]);
+  expect([r.ok, existsSync(r.root)]).toEqual([true, false]);
 });
 
 test("every workflow that installs Bun has the step, with the pins and no other input", () => {
