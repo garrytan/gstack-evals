@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"LEAN: one reviewer (ceo+eng+dx lenses), native voice only, rounds<=1, one gate revision, no carry check"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done.\n\n```plan-changes\n{\"changes\":[\"Add a one-command install check that prints the missing runtime and the fix.\",\"Give every config error the key name, the bad value and the next step.\"]}\n```"}]}}

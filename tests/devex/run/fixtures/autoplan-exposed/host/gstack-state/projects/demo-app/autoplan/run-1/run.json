@@ -1,0 +1,57 @@
+{
+  "revision": 2,
+  "out": "/root/.gstack/projects/demo-app/autoplan/run-1",
+  "plan_source": "/work/plan.md",
+  "active_plan": "plan-active.md",
+  "restore": "restore.md",
+  "scope": {
+    "ui": false,
+    "dx": true,
+    "docs_only": false
+  },
+  "phase_order": [
+    "eng"
+  ],
+  "native_model": "claude-opus-5-5",
+  "outside_enabled": false,
+  "attempt_counter": 1,
+  "spend_cap_usd": null,
+  "history": [],
+  "created_at": "2026-11-09T00:00:00Z",
+  "updated_at": "2026-11-09T00:10:00Z",
+  "lean": {
+    "kind": "feature",
+    "source": "flag"
+  },
+  "amendments": [
+    {
+      "decision": "d1",
+      "title": "Add install check",
+      "chosen": "A",
+      "text": "Add an install check.",
+      "gate_rev": 1,
+      "status": "incorporated",
+      "at": "2026-11-09T00:08:00Z"
+    }
+  ],
+  "phases": {
+    "eng": {
+      "native": {
+        "status": "completed",
+        "attempts": [
+          {
+            "attempt": "a1",
+            "state": "submitted",
+            "prompt": "/root/.gstack/projects/demo-app/autoplan/run-1/phases/eng/native-prompt.md",
+            "result": "/root/.gstack/projects/demo-app/autoplan/run-1/phases/eng/native-result.md",
+            "estimate_usd": 1,
+            "dispatched_at": "2026-11-09T00:01:00Z"
+          }
+        ]
+      }
+    },
+    "ceo": {
+      "skipped": "lean run: merged into the one eng reviewer (R65)"
+    }
+  }
+}

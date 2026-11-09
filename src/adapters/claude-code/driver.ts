@@ -15,7 +15,9 @@
 //   names the slot's allowance) is allowance_stop. Without it, as before, the turn cap ends the session as completed and
 //   the allowance as a missing cell (E_ALLOWANCE). Any other E_ALLOWANCE refusal (a route, model or price the slot does
 //   not allow) stays a missing cell either way.
-//   sessionKind unattended adds GSTACK_SESSION_KIND=unattended to the agent env; unset, the adapter sets no session kind.
+//   sessionKind unattended (or interactive) adds GSTACK_SESSION_KIND with that value to the agent env; unset, the adapter
+//   sets no session kind. stopHook (off unless set) registers an SDK Stop hook: a reason it returns blocks the stop and
+//   goes to the model. memoryLog (off unless set) writes each instruction file the CLI loads to memory.ndjson.
 //   disable1mContext adds CLAUDE_CODE_DISABLE_1M_CONTEXT=1, so a model the CLI would give a 1,000,000-token window (Opus 5.5
 //   at Claude Code 2.1.314, compacting at 967,000) gets 200,000 and compacts at 167,000, as every other model does.
 //   skillGateDeadlineMs adds GSTACK_SKILL_GATE_DEADLINE_MS to the agent env. settings runs its command in the session's
@@ -154,7 +156,11 @@ export interface ClaudeCodeOptions {
   /** The session's system prompt; sdk-default when unset. */
   systemPrompt?: SystemPrompt;
   /** GSTACK_SESSION_KIND for the agent env; unset, the adapter sets none. */
-  sessionKind?: "unattended";
+  sessionKind?: "unattended" | "interactive";
+  /** An SDK Stop hook, evaluator side: at each attempt to stop, the transcript.ndjson text so far in; a reason blocks the stop and goes to the model, null lets it stop. Unset, no Stop hook. */
+  stopHook?: (transcript: string) => string | null;
+  /** Record each instruction file the CLI loads (the SDK's InstructionsLoaded hook) as a line of memory.ndjson: path, memory type and load reason. Unset, nothing is recorded. */
+  memoryLog?: boolean;
   /** GSTACK_SKILL_GATE_DEADLINE_MS for the agent env, the gstack gate hooks' own deadline; unset, the adapter sets none. */
   skillGateDeadlineMs?: number;
   /** CLAUDE_CODE_DISABLE_1M_CONTEXT=1 for the agent env, so the CLI's window is 200,000 tokens on every model; unset, the CLI's own window. */
@@ -513,7 +519,11 @@ export function claudeCodeDriver(o: ClaudeCodeOptions): ClaudeCodeDriver {
             ...(o.plugins?.length ? { plugins: o.plugins.map((path) => ({ type: "local", path })) } : {}),
             abortController: abort,
             canUseTool,
-            hooks: { PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }] },
+            hooks: {
+              PreToolUse: [{ hooks: [async (_input: unknown, toolUseID: string | undefined) => (toolUseID && hooked.add(toolUseID), ROUTE_TO_CAN_USE_TOOL)] }],
+              ...(o.stopHook ? { Stop: [{ hooks: [async () => { const reason = o.stopHook!(messages.map((x) => JSON.stringify(x) + "\n").join("")); return reason === null ? {} : { decision: "block", reason }; }] }] } : {}),
+              ...(o.memoryLog ? { InstructionsLoaded: [{ hooks: [async (input: SdkMessage) => (appendFileSync(join(o.out, "memory.ndjson"), JSON.stringify({ file_path: input.file_path, memory_type: input.memory_type, load_reason: input.load_reason, ...(input.parent_file_path ? { parent_file_path: input.parent_file_path } : {}) }) + "\n"), {})] }] } : {}),
+            },
             spawnClaudeCodeProcess: (s: { args: string[]; env: Record<string, string | undefined> }) => {
               let cli: ChildProcess;
               try {
