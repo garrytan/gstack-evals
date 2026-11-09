@@ -10,9 +10,10 @@ import { report } from "./analyze.ts";
 import { dryrun } from "./dryrun.ts";
 import { CLOSING } from "./pins.ts";
 import { HM_PROFILE } from "./plans.ts";
+import { patternsCommand } from "./score.ts";
 import { buildHmTable } from "./table.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | table <config.json> <out.jsonl> | report <table.jsonl> --stage <stage1|stage3|stage4> --out <dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | table <config.json> <out.jsonl> | patterns <job dir>... | report <table.jsonl> --stage <stage1|stage3|stage4> --out <dir>";
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "recover", "host-down"];
 
 export async function main(argv: string[]): Promise<number> {
@@ -41,6 +42,10 @@ export async function main(argv: string[]): Promise<number> {
       const rows = buildHmTable(JSON.parse(readFileSync(cfg, "utf8")));
       writeFileSync(out, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
       console.log("wrote " + rows.length + " rows to " + out);
+      return 0;
+    }
+    if (cmd === "patterns") {
+      for (const l of patternsCommand(rest)) console.log(l);
       return 0;
     }
     if (cmd === "report") {

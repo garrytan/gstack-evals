@@ -351,22 +351,51 @@ export interface L1SessionRow {
 // The harness mechanics eval (lanes/harness-mechanics): its six run arms and one row per session.
 export type HmArm = "none" | "plain-2" | "verify-prose" | "verify-hook" | "judge-jev" | "judge-p1";
 
-/** Section 13's score fields, from lanes/harness-mechanics/score.ts. null until the scorer fills them. */
+/** The contract record gstack's Stop hook left for the session's /verify runs (copied out by LanebHooksAgent). */
+export interface HmHook {
+  /** null: no hook state was copied; false: the copy holds no record for this session. */
+  record: boolean | null;
+  /** The last /verify run's outcome: met, met_waived, met_after_block, blocked, miss or deferred. */
+  outcome: string | null;
+  /** /verify runs the hook blocked once. */
+  blocks: number | null;
+  /** A /verify run carries a waiver. */
+  waived: boolean | null;
+}
+
+/** Section 13's score fields, from lanes/harness-mechanics/score.ts. */
 export interface HmScore {
-  /** The scorer that wrote these fields ("stub" until the scorer's build). */
+  /** The scorer that wrote these fields. */
   scorer: string;
-  /** The session edited a file. */
-  edited: boolean | null;
-  /** The stop rule ran: a check after the last edit with its outcome shown. */
+  /** The session has a last edit (an edit tool call or a Bash write in the repository). */
+  edited: boolean;
+  /** The last edit: the tool name, or "Bash write (<files>)". */
+  last_edit: string | null;
+  /** The stop rule ran: a check after the last edit with an outcome in its own result, or a repro form. null with no edit. */
   adherent: boolean | null;
-  /** The final message's STATUS line. */
-  claim: "FIXED" | "NOT FIXED" | null;
-  /** The session claimed FIXED and failed the hidden tests. */
+  /** The stricter line: adherent, and the last such check shows no failure. null with no edit. */
+  adherent_strict: boolean | null;
+  /** The last check that met the rule, whitespace collapsed, cut at 200 characters. */
+  check: string | null;
+  /** The last STATUS word in the final assistant message; null when it has no STATUS line. */
+  claim: "FIXED" | "NOT FIXED" | "DONE" | "DONE_WITH_CONCERNS" | "BLOCKED" | "NEEDS_CONTEXT" | null;
+  /** FIXED, DONE, DONE_WITH_CONCERNS or no line. */
+  claims_done: boolean;
+  /** Claims done and fails the hidden tests; null when the session is not graded. */
   false_done: boolean | null;
-  /** /verify loaded, as section 6 counts a load. */
-  verify_load: boolean | null;
-  /** The open notes' patterns 1 to 3, counted per session. */
-  patterns: { redirected_read: number | null; tox_no_tests: number | null; combined_flags: number | null };
+  /** /verify loads as section 6 counts one, the body at the pin arriving. */
+  verify_loads: number;
+  /** An edit came before the last /verify load. */
+  edit_before_last_load: boolean;
+  /** The last edit came before the last /verify load: where the hook and the scorer can disagree. */
+  last_edit_before_last_load: boolean;
+  /** A final STATUS: BLOCKED after a /verify load, which the hook counts as met. */
+  blocked_exit: boolean;
+  hook: HmHook;
+  /** The open notes' patterns 1 to 3, counted per session in the window after the last edit. */
+  patterns: { redirected_read: number; tox_no_tests: number; combined_flags: number };
+  /** The other open-note probes, descriptive, in the same window. */
+  probes: { collectonly: number; cache_show: number; tox_notest: number; make_check_format: number; skill_contract_waive: number };
 }
 
 export interface HmSessionRow {

@@ -8,6 +8,7 @@ import { armSpec, CLOSING_LINES } from "../../quick/laneb/runner/grid.ts";
 import { ARMS, bundleLists, capsTotalUsd, CLOSING, HM, loadBundle, REPO } from "./pins.ts";
 import { stepMatcher72, stepPin, stepProbes189, stepStopHook } from "./match.ts";
 import { itemPlan, ITEMS } from "./plans.ts";
+import { stepPatterns, stepScorer } from "./score.ts";
 
 export type StepResult = { pass: boolean; detail: string };
 export type Step = { name: string; units: number[]; run?: (out: string) => StepResult };
@@ -33,7 +34,7 @@ export const STEPS: Step[] = [
   { name: "1-arm-tars", units: [5] },
   { name: "2-verify-hook", units: [5] },
   { name: "3-matcher-probes", units: [2], run: stepPin },
-  { name: "4-scorer", units: [3] },
+  { name: "4-scorer", units: [3], run: stepScorer },
   { name: "5-judgment-hooks", units: [7] },
   { name: "6-ledger", units: [6] },
   { name: "7-leak-scan-env", units: [5, 7] },
@@ -41,7 +42,7 @@ export const STEPS: Step[] = [
   { name: "stop-hook-loadline", units: [2], run: stepStopHook },
   { name: "matcher-72", units: [2], run: stepMatcher72 },
   { name: "probes-189", units: [2], run: stepProbes189 },
-  { name: "patterns-per-arm", units: [3] },
+  { name: "patterns-per-arm", units: [3], run: stepPatterns },
   { name: "verdict-tables", units: [4] },
   { name: "h1-amendment", units: [4] },
   { name: "leases-per-item", units: [6] },

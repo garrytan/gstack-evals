@@ -5,7 +5,7 @@
 // turn-cap stop after a response is a graded fail; LedgerCapStop is a cap stop; anything else is infra. A no-gstack
 // session whose read audit hits a gstack path or a drive is contaminated.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { readSessionRows, sessionsByTrial, type SessionRow } from "../../quick/laneb/analysis/analyze.ts";
 import { parseLog, runProbes } from "../../quick/laneb/l1/probes.ts";
 import type { HmArm, HmSessionRow } from "../../src/types.ts";
@@ -50,6 +50,13 @@ export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<str
   const usage = readJson(join(dir, "evaluator", "laneb-summary.json"))?.session?.usage;
   const evidence = readJson(join(dir, "evaluator", "l1-evidence.json")) ?? {};
   const flag = (x: unknown) => (typeof x === "boolean" ? x : null);
+  const pass = outcome === "graded" && !stopped && reward !== null && reward >= 1;
+  const cc = join(dir, "evaluator", "claude-projects");
+  const main = existsSync(cc) ? readdirSync(cc).flatMap((p) => (statSync(join(cc, p)).isDirectory() ? readdirSync(join(cc, p)).filter((f) => f.endsWith(".jsonl")).map((f) => join(cc, p, f)) : [])) : [];
+  const stem = main.length === 1 ? basename(main[0]!, ".jsonl") : null;
+  const hooks = join(dir, "evaluator", "gstack-hooks");
+  const recFile = stem ? join(hooks, "skill-contracts", stem.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 128) + ".json") : "";
+  const record = !stem || !existsSync(hooks) ? null : existsSync(recFile) ? readJson(recFile) : false;
   return {
     schema: "hm-session/1",
     model: String(kwargs.upstream_model ?? "?"),
@@ -58,7 +65,7 @@ export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<str
     task,
     trial,
     outcome,
-    pass: outcome === "graded" && !stopped && reward !== null && reward >= 1,
+    pass,
     reward,
     allowance_stop: allowance,
     turn_cap: p.turn_cap,
@@ -68,7 +75,7 @@ export function hmRow(dir: string, ctx: { part: string | null; sessions: Map<str
     contract_record: flag(evidence.contract_record),
     contract_check_met: flag(evidence.contract_check_met),
     audit_hits: p.audit_hits,
-    score: scoreSession(recs, arm),
+    score: scoreSession(recs, { pass: outcome === "graded" ? pass : null, transcript: stem ? readFileSync(main[0]!, "utf8") : null, record }),
   };
 }
 

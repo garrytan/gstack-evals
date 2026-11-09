@@ -164,3 +164,8 @@ export const GSTACK_BLOBS = {
 // tenth of the Stop hook's 5 s deadline), the time BEFORE must pass on one timing case and the limit its child is killed
 // at, the built-in classifier's wrong count on the 72 cases, and the Node major the prereg names.
 export const MATCHER = { count: 31, no: 41, probes: 189, time: 5, timeBoundMs: 500, beforePastMs: 5000, beforeLimitMs: 6000, builtinWrong: 34, nodeMajor: 24 } as const;
+
+// The first 200 characters of /verify's body at the pin (verify/SKILL.md after its front matter, leading whitespace
+// dropped). Section 6 counts a /verify load only when they arrive in the load's result or expansion; dry-run step 4 checks
+// them against HM_GSTACK.
+export const VERIFY_FIRST200 = { sha256: "76532eb558dd12b6e14862f4749706ebd162e96db4bbb6db9a8510941ab0199f", text: "<!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->\n<!-- Regenerate: bun run gen:skill-docs -->\n\n## Preamble (run first)\n\n```bash\n~/.claude/skills/gstack/bin/gstack-skill-start --skill \"" };
