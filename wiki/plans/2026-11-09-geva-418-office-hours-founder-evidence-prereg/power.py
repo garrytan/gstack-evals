@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # power.py: minimum detectable difference (MDD) and CUT-CANDIDATE operating characteristics for the
 # office-hours founder eval's primary contrast, with the two secondaries' MDDs beside it.
-# Primary W is binary per session: the session's recommended first move names the real wedge or the real first
+# Primary W is binary per session: the session's recommended first move names the key's wedge or the key's first
 # customer (1) or not (0). A unit's arm score is the mean of its passes; the contrast is a paired sign-flip on
 # unit-level differences (office-hours minus none), two-sided at alpha 0.05, because each model has one primary
 # contrast (no autoplan arm, and the lens contrasts are side comparisons).
 # Unit difficulty for none is Beta with mean p0 and concentration set by rho (the share of session variance that
 # sits between units); the skill moves each unit by a logit shift plus unit noise tau, with the shift solved so the
-# mean lift is delta. Secondary E (share of a unit's 4 to 8 key facts drawn out) adds fact noise S_ITEM on the logit
+# mean lift is delta (zero included, so a true zero has zero mean lift). Secondary E (share of a unit's 4 to 6 key facts drawn out) adds fact noise S_ITEM on the logit
 # scale around each unit. MDD = the smallest delta (0.01 steps) with power >= 0.80.
 # CUT-CANDIDATE needs the 95% upper bound of office-hours minus none below the frozen margin +0.05; the simulation
 # reads the upper bound as mean + 1.96 * sd / sqrt(n) over unit differences (the prereg uses a cluster bootstrap,
@@ -37,7 +37,7 @@ def unit_logits(p0, rho, shape, rng):
 def solve_shift(p0, rho, tau, delta, rng, facts):
     x = unit_logits(p0, rho, (50000, 1), rng)
     if facts:
-        x = x + rng.normal(0, S_ITEM, (50000, 8))
+        x = x + rng.normal(0, S_ITEM, (50000, 6))
     base = expit(x).mean()
     noise = rng.normal(0, tau, (50000, 1))
     lo, hi = -8.0, 8.0
@@ -48,12 +48,12 @@ def solve_shift(p0, rho, tau, delta, rng, facts):
     return (lo + hi) / 2
 
 def unit_diffs(p0, rho, tau, n, passes, delta, rng, facts=False):
-    shift = solve_shift(p0, rho, tau, delta, rng, facts) if delta != 0 else 0.0
+    shift = solve_shift(p0, rho, tau, delta, rng, facts)
     u = unit_logits(p0, rho, (SIMS, n, 1), rng)
     if facts:
-        m = rng.integers(4, 9, (SIMS, n))
-        mask = np.arange(8)[None, None, :] < m[..., None]
-        x = u + rng.normal(0, S_ITEM, (SIMS, n, 8))
+        m = rng.integers(4, 7, (SIMS, n))
+        mask = np.arange(6)[None, None, :] < m[..., None]
+        x = u + rng.normal(0, S_ITEM, (SIMS, n, 6))
     else:
         m = np.ones((SIMS, n), dtype=int)
         mask = np.ones((SIMS, n, 1), dtype=bool)
@@ -107,7 +107,7 @@ for n in (48, 56, 64, 80):
                 hw = h if delta == 0.0 else hw
                 row.append("d %+.2f %.3f" % (delta, r))
             print("W  p0 %.2f  rho 0.500  n %2d  passes %d  half-width %.3f  |  %s" % (p0, n, passes, hw, "  ".join(row)), flush=True)
-print("Part C. Secondary E (share of 4 to 8 key facts drawn out, mechanical) and N (binary, as W): MDD at alpha 0.05")
+print("Part C. Secondary E (share of 4 to 6 key facts drawn out, mechanical) and N (binary, as W): MDD at alpha 0.05")
 for n in (48, 56, 64):
     for passes in (2, 1):
         for p0 in (0.20, 0.35, 0.50):
@@ -116,3 +116,58 @@ print("Part D. Per-type cells (descriptive): W, Opus 2 passes, alpha 0.05, rho 0
 for n in (8, 12, 16):
     for p0 in (0.25, 0.35):
         print("type cell  W  p0 %.2f  n %2d  passes 2  MDD %s" % (p0, n, f(mdd(p0, 0.5, TAU, n, 2, 0.05, rng))), flush=True)
+
+# Part E. The helps verdict as frozen (section 11): sign-flip p <= 0.05 on W, the W interval above zero, and the
+# specificity interval (W minus shuffled-key W, office-hours minus none, per unit) above zero, all on matched passes.
+# Shuffled credit is Bernoulli(s) for none and Bernoulli(s + k * delta) for office-hours, independent of the true-key
+# credit; each unit-arm-pass is missing with probability MISS, a pass counts only when both arms scored it, and a unit
+# with no matched pass drops. Intervals read as mean + or - 1.96 sd / sqrt(units), as in part B.
+MISS = 0.05
+def helps_rate(p0, rho, tau, n, passes, delta, s, k, rng):
+    shift = solve_shift(p0, rho, tau, delta, rng, False)
+    u = unit_logits(p0, rho, (SIMS, n, 1), rng)
+    q0 = expit(u)
+    q1 = expit(u + shift + rng.normal(0, tau, (SIMS, n, 1)))
+    shape = (SIMS, n, passes)
+    w0 = rng.binomial(1, np.broadcast_to(q0, shape))
+    w1 = rng.binomial(1, np.broadcast_to(q1, shape))
+    s0 = rng.binomial(1, s, shape)
+    s1 = rng.binomial(1, min(s + k * delta, 1.0), shape)
+    keep = (rng.random(shape) >= MISS) & (rng.random(shape) >= MISS)
+    cnt = keep.sum(axis=2)
+    ok = cnt > 0
+    c = np.where(ok, cnt, 1)
+    dw = np.where(ok, ((w1 - w0) * keep).sum(axis=2) / c, 0.0)
+    ds = np.where(ok, (((w1 - s1) - (w0 - s0)) * keep).sum(axis=2) / c, 0.0)
+    ne = ok.sum(axis=1)
+    def lower(d):
+        m = d.sum(axis=1) / ne
+        v = ((d - m[:, None]) ** 2 * ok).sum(axis=1) / (ne - 1)
+        return m, m - 1.96 * np.sqrt(v / ne)
+    mw, lw = lower(dw)
+    ms, ls = lower(ds)
+    signs = rng.choice([-1.0, 1.0], size=(FLIPS, n))
+    null = np.abs(dw @ signs.T) / ne[:, None]
+    pv = (1 + (null >= np.abs(mw)[:, None] - 1e-12).sum(axis=1)) / (FLIPS + 1)
+    wonly = (pv <= 0.05) & (lw > 0)
+    return (wonly & (ls > 0)).mean(), wonly.mean(), (wonly & (ms >= 0.5 * mw)).mean()
+
+print("Part E. The helps verdict: share of simulated runs reading helps at a true W gain of +0.15, with 5%% of unit-arm-passes missing; columns: control p0, ICC rho, units n, passes, shuffled-key credit s, extra shuffled credit k times the gain for office-hours, strict (W, its interval and the specificity interval above zero), guard (W, its interval and the specificity estimate at least half the W estimate), W and its interval alone")
+for n in (56, 64):
+    for passes in (2, 1):
+        for p0 in (0.25, 0.35):
+            for s in (0.05, 0.15):
+                for k in (0.0, 0.33):
+                    h, w, g = helps_rate(p0, 0.5, TAU, n, passes, 0.15, s, k, rng)
+                    print("helps  p0 %.2f  rho 0.500  n %2d  passes %d  s %.2f  k %.2f  strict %.3f  guard %.3f  W-only %.3f" % (p0, n, passes, s, k, h, g, w), flush=True)
+print("Part F. Composite MDD (the smallest gain read helps in at least 80% of runs) under the strict rule and the guard rule, Opus design, rho 0.5")
+for n in (56, 64):
+    for p0 in (0.25, 0.35):
+        for s, k in ((0.05, 0.0), (0.15, 0.33)):
+            for name, col in (("strict", 0), ("guard", 2)):
+                v = None
+                for delta in STEPS:
+                    if p0 + delta >= 0.95: break
+                    if helps_rate(p0, 0.5, TAU, n, 2, delta, s, k, rng)[col] >= 0.80: v = float(delta); break
+                print("helps MDD  %-6s  p0 %.2f  n %2d  passes 2  s %.2f  k %.2f  MDD %s" % (name, p0, n, s, k, f(v)), flush=True)
+
