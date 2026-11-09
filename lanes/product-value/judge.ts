@@ -8,8 +8,9 @@
 // once; a cell still missing stays unlabelled (E_PV_LABEL_MISSING). Every record names the judge model and the
 // version the provider reported; calls are cached by the meter.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { lastJson, readPinned, RESEND_NOTE, versionTap } from "../aftermath/judge.ts";
 import type { Io } from "./cli.ts";
 import { need, parseArgs, PvError, readJson, refuseAliases, refuseInRepo, writeLines } from "./io.ts";
 import { MODELS, openMeter, pool, type ModelKey } from "./meter.ts";
@@ -26,13 +27,14 @@ export const PROMPT_SHA256: Readonly<Record<PromptName, string>> = {
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
+export { lastJson, RESEND_NOTE };
+
 export function loadPrompt(name: PromptName): string {
-  const text = readFileSync(join(import.meta.dir, "prompts", name + ".md"), "utf8");
-  if (sha(text) !== PROMPT_SHA256[name]) throw new PvError("E_USAGE", "lanes/product-value/prompts/" + name + ".md does not match its pinned sha256; the judge prompts are frozen (section 7)");
+  const text = readPinned(join(import.meta.dir, "prompts"), name, PROMPT_SHA256[name]);
+  if (text === null) throw new PvError("E_USAGE", "lanes/product-value/prompts/" + name + ".md does not match its pinned sha256; the judge prompts are frozen (section 7)");
   return text;
 }
 
-export const RESEND_NOTE = "\n\n(This packet is sent a second time because the first answer missed or garbled at least one cell. Answer every cell.)";
 export const EFFORT = { production: "medium", check: "max" } as const;
 const MAX_TOKENS: Record<PromptName, number> = { brief: 16_000, audit: 32_000, pairwise: 4_000, probe: 2_000 };
 
@@ -43,19 +45,6 @@ export interface Reply {
   problem: string | null;
 }
 export type Caller = (o: { judge: JudgeKey; prompt: string; effort: string; maxTokens: number; label: string }) => Promise<Reply>;
-
-/** The last JSON object in a reply, inside a code fence or bare. */
-export function lastJson(text: string): any {
-  const trimmed = text.trim();
-  const fences = [...trimmed.matchAll(/```[a-zA-Z]*\n([\s\S]*?)```/g)].map((m) => m[1]!);
-  for (const cand of [trimmed, ...fences.reverse(), trimmed.slice(trimmed.indexOf("{"), trimmed.lastIndexOf("}") + 1)]) {
-    try {
-      const v = JSON.parse(cand);
-      if (v && typeof v === "object") return v;
-    } catch {}
-  }
-  return null;
-}
 
 export interface Parsed {
   cells: Map<string, { label: Label; quotes?: string[] }>;
@@ -236,20 +225,6 @@ export async function judgePackets(o: { map: PacketMap; packets: Map<string, Pac
 }
 
 const JUDGE_MODEL: Record<JudgeKey, ModelKey> = { astra: "astra", opus: "opus", gemini: "gemini" };
-
-/** The provider's model string from an upstream request and reply, keyed by the prompt it carried. */
-function versionTap(base: typeof fetch, dir: string): typeof fetch {
-  return (async (url: any, init?: any) => {
-    const res = await base(url, init);
-    try {
-      const req = JSON.parse(String(init?.body ?? "null"));
-      const prompt = (req?.input ?? req?.messages)?.[0]?.content;
-      const body = JSON.parse(await res.clone().text());
-      if (typeof prompt === "string" && typeof body?.model === "string") writeFileSync(join(dir, sha(String(req.model) + "\n" + prompt) + ".version"), body.model, { mode: 0o600 });
-    } catch {}
-    return res;
-  }) as typeof fetch;
-}
 
 /** Opens the metered client on a judge item and returns a Caller that records each reply's model version. */
 export async function openJudge(o: { item: string; runId: string; out: string; cacheDir: string; record?: string; ledger?: string; env?: Record<string, string | undefined>; fetch?: typeof fetch; io: Io }): Promise<{ call: Caller; close: () => Promise<void> }> {
