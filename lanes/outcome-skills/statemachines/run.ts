@@ -18,7 +18,7 @@ import { readUnit, smFail } from "./unit.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
-export const HARBOR_MODEL: Record<string, string> = { "claude-opus-5-5": "anthropic/claude-opus-5-5" };
+export const HARBOR_MODEL: Record<string, string> = { "claude-opus-5-5": "anthropic/claude-opus-5-5", "openai/gpt-6.1-sol": "anthropic/openai/gpt-6.1-sol", "particle-ai/particle-1": "anthropic/particle-ai/particle-1" };
 
 export interface RunInput {
   unitDir: string; session: PlannedSession; control: string; proxy: string; out: string;
@@ -45,7 +45,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const u = readUnit(i.unitDir);
   const s = i.session;
   const attempt = i.attempt ?? 1;
-  const model = HARBOR_MODEL[s.model] ?? smFail("E_SM_ARM", "sm session run drives the anthropic route only today, not " + s.model);
+  const model = HARBOR_MODEL[s.model] ?? smFail("E_SM_ARM", "sm session run has no Harbor model for " + s.model);
   if (existsSync(i.out)) return smFail("E_SM_ARM", i.out + " exists; each session attempt writes a new run dir");
   let treePatch: string | undefined;
   let treeRef: SessionRecord["tree_ref"] = null;

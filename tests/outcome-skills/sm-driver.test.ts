@@ -11,6 +11,10 @@ import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 import { serveStages, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
+import { loadRegistry } from "../../lanes/outcome-skills/arms/registry.ts";
+import { smLimits } from "../../lanes/outcome-skills/statemachines/arms.ts";
+import { HARBOR_MODEL } from "../../lanes/outcome-skills/statemachines/run.ts";
+import { chatPrice, openRouterRouting } from "../../src/runner/pricing/prices.ts";
 
 const D = 1_000_000;
 const quote = { words: "test words", by: "test", source: "sm-driver.test.ts" };
@@ -71,5 +75,59 @@ test("an SM stage per model opens one lease each, binds each arm's allowance and
     expect(s.leases.length).toBe(1);
     expect(s.leases[0]!.close).not.toBeNull();
   }
+  local.close?.();
+});
+
+test("Sol and particle-1 sessions reach a stub OpenRouter with the provider pinned and no fallbacks; the slot allowlist takes the model Claude Code sends; the Opus route is unchanged", async () => {
+  const root = mkdtempSync(join(tmpdir(), "sm-driver-test-"));
+  roots.push(root);
+  const record = join(root, "record");
+  const items: Record<string, string> = { "claude-opus-5-5": "sm-opus", "openai/gpt-6.1-sol": "sm-sol", "particle-ai/particle-1": "sm-particle" };
+  recordProgram(record, { program: "w", cap_micros: 1_000 * D, skill_cap_micros: 1_000 * D, skills: ["sm"], credit_rate_micros: D, quotes: [quote] });
+  for (const item of Object.values(items)) recordApproval(record, { action: "init", item, cap_micros: 100 * D, quotes: [quote], admission: "required", program: "w", skills: ["sm"] });
+  const local = LocalLedger.open(join(root, "ledger.sqlite"));
+  const sent: { url: string; body: Record<string, any> }[] = [];
+  const fetchStub = async (url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)) as Record<string, any>;
+    sent.push({ url, body });
+    return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+  };
+  const stages: StageSpec[] = Object.entries(items).map(([model, item]) => ({ item, arm: item, model, arms: ARMS }));
+  const served = await serveStages({ record, local, run_id: "r1", envelope_host: "m1", machine: "m1", stages, host: "127.0.0.1", dir: join(root, "run"), fetch: fetchStub, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key", OPENROUTER_API_KEY: "upstream-key" }, log: () => {} });
+  const reg = loadRegistry();
+  const opened: string[] = [];
+  for (const [model, item] of Object.entries(items)) {
+    expect(HARBOR_MODEL[model]).toBe("anthropic/" + model);
+    const claudeModel = HARBOR_MODEL[model]!.slice("anthropic/".length);
+    const cap = smLimits(reg, "sm:A0", model).session_cap_usd;
+    const res = await fetch(served.control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t-" + item, model, cap_usd: cap, meta: { arm: "sm:A0", task: "u1/" + model + "/A0", trial_n: 1 }, open_key: "A0" + model, ledger: "u4" }) });
+    const s = (await res.json()) as Record<string, any>;
+    expect(res.status).toBe(200);
+    opened.push(s.id);
+    const provider = model === "claude-opus-5-5" ? "anthropic" : "openrouter";
+    expect(s.base_url).toEndWith("/" + provider);
+    const call = (m: string) => fetch(s.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": s.token }, body: JSON.stringify({ model: m, max_tokens: 100, messages: [{ role: "user", content: "hi" }] }) });
+    const before = sent.length;
+    if (provider === "openrouter") {
+      const short = await call(model.split("/")[1]!);
+      expect(short.status).toBe(403);
+      expect(await short.text()).toContain("allowlist");
+      expect(sent.length).toBe(before);
+    }
+    expect((await call(claudeModel)).status).toBe(200);
+    const up = sent.at(-1)!;
+    expect(sent.length).toBe(before + 1);
+    expect(up.body.model).toBe(model);
+    if (provider === "anthropic") {
+      expect(up.url).toBe("https://api.anthropic.com/v1/messages");
+      expect(up.body.provider).toBeUndefined();
+      continue;
+    }
+    expect(up.url).toBe("https://openrouter.ai/api/v1/messages");
+    expect(up.body.provider).toEqual(openRouterRouting(chatPrice("openrouter:" + model)!));
+    expect(up.body.provider).toMatchObject({ only: model === "openai/gpt-6.1-sol" ? ["openai"] : ["particle-ai"], allow_fallbacks: false });
+  }
+  for (const id of opened) expect((await fetch(served.control + "/sessions/" + id + "/close", { method: "POST", body: JSON.stringify({ reason: "agent_finished" }) })).status).toBe(200);
+  expect(await served.stop()).toBe(0);
   local.close?.();
 });

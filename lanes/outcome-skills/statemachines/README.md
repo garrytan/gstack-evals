@@ -208,7 +208,9 @@ nine follow-ons shuffled the same way, each after its tree's first stage. End ki
   docker_image (so Harbor runs the pinned image itself and builds nothing), task.json (repo_dir, commits, head, scope =
   unit scope.dir), an empty arm tar, Harbor with real_agent in SM mode on ledger u4 with every provider key unset, then
   sm-session.v1 from real_agent's files. A first stage's instruction.md holds no issue text; the follow-on's holds
-  issue.md. It drives the anthropic route only today.
+  issue.md. Opus runs on the anthropic route. Sol and particle-1 run on the openrouter route as
+  anthropic/openai/gpt-6.1-sol and anthropic/particle-ai/particle-1: Harbor drops the leading anthropic/, so Claude Code sends
+  the OpenRouter id the slot allows, and the proxy pins the price row's provider with allow_fallbacks false.
 - CLI: gstack-evals outcome sm session plan and sm session run. The driver serves an SM stage with
   gstack-evals outcome serve --stage <item>=<model>@<arm>,<arm>.
 - e2e.ts (keyless, P5 reruns it): bun lanes/outcome-skills/statemachines/e2e.ts --unit <unit dir> --harbor <bin> [--keep].
