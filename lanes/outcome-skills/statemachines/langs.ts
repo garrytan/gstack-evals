@@ -36,6 +36,10 @@ export const TEST_PATH: Record<Lang, RegExp> = {
   python: /(^|\/)tests?\/|(^|\/)(test_[^/]*|[^/]*_test|conftest)\.py$/,
 };
 
+/** An existing test file for the scorer's readings (section 7): one of the unit's test.patch files, or a path that matches
+ *  the language's test-file conventions, whatever its extension (so a fixture under tests/ is a test file too). */
+export const isTestPath = (lang: Lang, path: string, testFiles: ReadonlySet<string>): boolean => testFiles.has(path) || TEST_PATH[lang].test(path);
+
 /** Paths that are never a unit's source: vendored, generated or build output. */
 const NOT_SOURCE = /(^|\/)(node_modules|vendor|third_party|target|\.git|dist|build|__pycache__|\.venv|venv)(\/|$)/;
 

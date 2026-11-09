@@ -7,8 +7,8 @@
 import { classify, SOURCE_EXT, TEST_MODULES, type Lang } from "./langs.ts";
 import { smFail } from "./unit.ts";
 
-interface Hunk { oldStart: number; oldCount: number; newCount: number; tail: string; body: string[]; left: [number, number] }
-interface FileDiff { path: string; oldPath: string | null; header: string[]; hunks: Hunk[]; raw: string[] }
+export interface Hunk { oldStart: number; oldCount: number; newCount: number; tail: string; body: string[]; left: [number, number] }
+export interface FileDiff { path: string; oldPath: string | null; header: string[]; hunks: Hunk[]; raw: string[] }
 
 /** A git diff split into file sections and their hunks. A hunk ends when its line counts are used up (so a next header git
  *  can't parse still ends it); an empty line inside a hunk is an empty context line. A section with no hunk (binary, mode
@@ -63,7 +63,7 @@ type Place = "test" | "source" | "mixed";
 
 /** Applies a file's hunks to its base text, each at its stated line or the nearest offset where its old lines match (as
  *  git apply does, without fuzz); returns the new text and, per hunk, its removed (old) and added (new) line numbers. */
-function walk(base: string, hunks: Hunk[], label: string): { text: string; marks: { old: number[]; new: number[] }[] } {
+export function walk(base: string, hunks: Hunk[], label: string): { text: string; marks: { old: number[]; new: number[] }[] } {
   const src = base === "" ? [] : base.split("\n");
   const out: string[] = [];
   const marks: { old: number[]; new: number[] }[] = [];
@@ -106,7 +106,7 @@ function place(ranges: { old: [number, number][]; new: [number, number][] }, mk:
 }
 
 /** A hunk header with its new start recounted for the hunks kept beside it. */
-function section(f: FileDiff, hunks: Hunk[]): string {
+export function section(f: FileDiff, hunks: Hunk[]): string {
   let delta = 0, s = f.header.join("\n") + "\n";
   for (const h of hunks) {
     const c = h.oldStart + delta + (h.oldCount === 0 ? 1 : 0) - (h.newCount === 0 ? 1 : 0);

@@ -214,3 +214,69 @@ nine follow-ons shuffled the same way, each after its tree's first stage. End ki
 - e2e.ts (keyless, P5 reruns it): bun lanes/outcome-skills/statemachines/e2e.ts --unit <unit dir> --harbor <bin> [--keep].
   It runs each session through gstack-evals outcome sm session run in a child process, as a paid run does, so its own
   process keeps serving the driver's control plane and the stub (run.ts calls Harbor with spawnSync).
+
+## First-stage scorer (score.ts, P3a)
+
+`gstack-evals outcome sm score first --unit <dir> (--session <session.json> | --patch <file> --cell <name>) --out <file>`
+scores one change as section 7 reads and writes sm-outcome.v1. Steps, in order:
+
+1. Extraction: the session's snapshot patch (real_agent's working tree against base, untracked files included) split per
+   file by extractChange, which e2e.ts also uses. Binary files are listed and left out. An unsafe path makes the change
+   one that won't apply.
+2. Readings. Protected test and build configuration is never applied in either reading, whether edited, deleted or new
+   (logged, and listed in deps_changed). An existing test file (isTestPath: one of the unit's test.patch files, or a path
+   that matches the language's test-file convention, whatever its extension) goes back to base in strict and stays in
+   adapted. In a file with in-source test modules (TEST_MODULES, the frozen detector, unchanged), strict puts each test
+   module back to the base file's module of the same name, drops a test module the arm added and puts back one the arm
+   removed; the arm's edits outside test modules stay. New files that are not protected apply in both. Every exclusion is
+   in the record's excluded list with its rule and reading.
+3. The fix's tests: test.patch, then fix-tests.patch, one patch per hunk under its file header, each applied with
+   git apply --3way after the arm's tree is staged. A hunk that still conflicts is a gap for that reading,
+   E_SM_TEST_PATCH_CONFLICT. three_way counts the hunks git merged by falling back to the three-way merge.
+4. Runs: the unit's rebuild, test and print commands on a fresh copy, hardened, then the dataset parser in its sandbox.
+5. Rules (decide): fixed when every fail-to-pass id passes; broke when any stable id does not pass, or a new test fails in
+   all three runs. A build failure (a rebuild command that exits non-zero, a stopped run, or a log that does not parse)
+   misses every test. A new test is an id the run reports that the unit's known ids (one base and one fixed oracle run,
+   cached in the unit dir as oracle-ids.json) do not hold. A tree with a new test gets three runs.
+6. Two more runs when the outcome rests on 2 tests or fewer: the fail-to-pass ids when the first run fixes, plus the
+   stable ids that fail in it. Each of those takes its majority over the three runs.
+7. Outcomes clean_fix, fix_broke, no_fix, no_fix_broke. An empty change scores no fix and not broke without a run
+   (--run-empty runs it anyway, for the dry run).
+8. A change that won't apply is read and split once more from the session's pinned patch file; if it still fails, both
+   readings score no fix with E_SM_APPLY_FAILED.
+
+Adapted falls back to the strict result, with the reason recorded, when an added line in the adapted change holds a skip
+marker, when a stable id is absent from every adapted run (a build failure counts as absent), or when the adapted change
+won't apply. When the adapted change equals the strict one, adapted is the strict result (same_tree).
+
+### Frozen per-language lists for scoring (frozen at this commit)
+
+The lists in "Frozen per-language lists" above are the scorer's lists, frozen at this commit, with one addition:
+isTestPath (langs.ts) matches the test-file conventions on the whole path, whatever the extension.
+
+| List | Where the post fixes it | What the build chose |
+|---|---|---|
+| Test-file conventions | Section 7 step 2 names "the dataset's test patterns plus each language's conventions"; the contents are left to the build | TEST_PATH, plus each unit's test.patch files |
+| Protected test and build configuration | Section 7 step 2 and section 9 name conftest, build scripts and runner configs; the list is left to the build | PROTECTED, starting from real-outcome's PROTECT_ERE |
+| Skip markers | Section 7 step 2: "a frozen per-language list"; contents left to the build | SKIP_MARKERS |
+| In-source test-module detector | Section 7 names Rust's #[cfg(test)] modules and leaves other languages to the build | TEST_MODULES: Rust only (P1b) |
+
+Sources for the conventions: the Cargo book (tests/ and benches/ targets, #[cfg(test)] unit tests, #[ignore]); Maven's
+standard directory layout (src/test) and Surefire and Failsafe's default includes (*Test, *Tests, *IT); Go's testing
+package (*_test.go, t.Skip, t.SkipNow, t.Skipf); Jest's default testMatch (__tests__, .test., .spec.) and the Jest and
+Mocha skip forms (.skip, xit, xdescribe, .todo); pytest's discovery rules (test_*.py, *_test.py, conftest.py) and its
+skip and xfail marks, plus unittest.skip; GoogleTest (DISABLED_ prefix, GTEST_SKIP); JUnit 5 @Disabled and
+Assumptions, JUnit 4 @Ignore and Assume; NUnit [Ignore] and xUnit Skip =; each ecosystem's build and lock files.
+
+### Scorer readings
+
+- Module restore: strict reads "the arm's hunks inside test modules are dropped" as each test module going back to its
+  base text, matched by mod name. Diff alignment makes hunk placement unreliable (git can fold a source edit and a new
+  test module into one hunk), so the scorer places modules, not hunks.
+- Skip markers are checked on every added line of the adapted change, not only on test code.
+- A new test is "failed" only when the parser's status is fail in all three runs; skip or absent is not failed.
+- A conflict on the adapted tree is a gap for the adapted reading; strict keeps its own result.
+- The extraction retry reads the session's pinned patch file again; scoring never reaches back into a session container.
+- Docker tests (tests/outcome-skills/sm-score-docker.test.ts) need GSTACK_EVALS_DOCKER=1 and two images:
+  SM_SCORE_RUST_IMAGE (cargo and git) and SM_SCORE_GO_IMAGE (go, python3 and git). The dry-run units' runtime images serve.
+

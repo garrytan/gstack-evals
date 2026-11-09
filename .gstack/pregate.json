@@ -160,6 +160,8 @@
     "lanes/outcome-skills/statemachines/**": [
       "tests/outcome-skills/sm-draw.test.ts",
       "tests/outcome-skills/sm-history.test.ts",
+      "tests/outcome-skills/sm-score.test.ts",
+      "tests/outcome-skills/sm-score-docker.test.ts",
       "tests/outcome-skills/sm-leak.test.ts",
       "tests/outcome-skills/sm-oracle-docker.test.ts",
       "tests/outcome-skills/sm-scope.test.ts",

@@ -11,7 +11,8 @@ import { screen } from "./screen.ts";
 import { fetchMultiLang, manifestSize, pinCandidates, readRows, splitCandidates, type Candidate } from "./source.ts";
 import { readUnit, writeUnit } from "./unit.ts";
 import { runSession } from "./run.ts";
-import { planPart, type PlannedSession } from "./session.ts";
+import { scoreFirst, type ScoreInput } from "./score.ts";
+import { planPart, type PlannedSession, type SessionRecord } from "./session.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
   source fetch --cache <dir>                         download the pinned MultiLang parquet files and check their sha256
@@ -29,6 +30,10 @@ export const HELP = `gstack-evals outcome sm <command>
               [--attempt 2] [--first <session.json>] [--qa-home <dir> --qa-sha <sha>] [--harbor <bin>]
                                                      one session: its image, a Harbor run of real_agent in SM mode on the
                                                      driver at --control (gstack-evals outcome serve), and session.json
+  score first --unit <dir> (--session <session.json> | --patch <file> --cell <name>) --out <outcome.json>
+              [--mode hardened|root] [--run-empty]
+                                                     section 7's first-stage score: strict and adapted readings, the fix's
+                                                     tests by git apply --3way, the unit's own runs, sm-outcome.v1
 Guide: lanes/outcome-skills/statemachines/README.md`;
 
 function say(e: unknown): number {
@@ -172,6 +177,31 @@ export async function main(argv: string[]): Promise<number> {
       if (attempt !== 1 && attempt !== 2) throw new Error("E_USAGE --attempt is 1 or 2");
       const res = runSession({ unitDir: need(f, "--unit"), session, control: need(f, "--control"), proxy: need(f, "--proxy"), out: need(f, "--out"), attempt, ...(f.has("--first") ? { first: f.get("--first")! } : {}), ...(f.has("--qa-home") ? { qaHome: f.get("--qa-home")! } : {}), ...(f.has("--qa-sha") ? { qaSha: f.get("--qa-sha")! } : {}), ...(f.has("--harbor") ? { harbor: f.get("--harbor")! } : {}) });
       console.log("session=" + session.cell + " end=" + res.record.end + " image=" + res.image.image_id + " lease=" + res.record.lease_id + " harbor_exit=" + res.harbor_exit + " record=" + join(need(f, "--out"), "session.json"));
+      return 0;
+    }
+    if (sub === "score") {
+      const [what, ...r] = rest;
+      if (what === "--help" || what === undefined || r.includes("--help")) {
+        console.log(HELP.split("\n").filter((l, k, a) => /^  score/.test(l) || (/^ {14}/.test(l) && a.slice(0, k).reverse().find((x) => /^  \S/.test(x))?.startsWith("  score"))).join("\n"));
+        return what === undefined ? 2 : 0;
+      }
+      if (what !== "first") throw new Error("E_USAGE sm score takes first");
+      const { f } = flags(r, ["--unit", "--session", "--patch", "--cell", "--out", "--mode"], ["--run-empty"]);
+      const mode = f.get("--mode") ?? "hardened";
+      if (mode !== "hardened" && mode !== "root") throw new Error("E_USAGE --mode is hardened or root");
+      if (f.has("--session") === f.has("--patch")) throw new Error("E_USAGE give --session or --patch, not both");
+      const unitDir = need(f, "--unit");
+      let input: ScoreInput;
+      if (f.has("--session")) {
+        const s = readJson<SessionRecord>(f.get("--session")!);
+        if (s.schema !== "sm-session.v1" || s.stage !== "first") throw new Error("E_SM_ARM " + f.get("--session") + " is not a first-stage sm-session.v1 record");
+        if (s.unit !== readUnit(unitDir).id) throw new Error("E_SM_ARM the session is on " + s.unit + ", not this unit");
+        if (!s.tree_patch) throw new Error("E_SM_ARM the session has no tree patch to score");
+        input = { unitDir, patchFile: s.tree_patch.path, patchSha: s.tree_patch.sha256, cell: s.cell, model: s.model, session: s.lease_id + "/" + s.cell };
+      } else input = { unitDir, patchFile: f.get("--patch")!, cell: need(f, "--cell") };
+      const rec = scoreFirst({ ...input, mode, runEmpty: f.has("--run-empty") });
+      writeNew(need(f, "--out"), rec);
+      console.log("strict=" + (rec.strict.outcome ?? rec.codes.strict) + " adapted=" + (rec.adapted.outcome ?? rec.codes.adapted) + (rec.adapted.fell_back_to_strict ? " (strict: " + rec.adapted.fell_back_to_strict + ")" : "") + " runs=" + rec.strict.runs.length + "/" + (rec.adapted.same_tree ? "same" : rec.adapted.runs.length) + " excluded=" + rec.excluded.length + " record=" + need(f, "--out"));
       return 0;
     }
     throw new Error("E_USAGE unknown sm command " + JSON.stringify(sub) + "; gstack-evals outcome sm --help lists them");

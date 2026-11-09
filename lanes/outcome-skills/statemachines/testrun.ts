@@ -46,7 +46,8 @@ export function runScript(c: { rebuild: string[]; test: string[]; print: string[
   return ["exec 3>&1 1>&2", ...c.rebuild.map(cmd), ...c.test.map(cmd), "exec 1>&3", "echo " + PRINT_MARK, ...c.print.map((x) => "( " + x + " )"), ""].join("\n");
 }
 
-export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr_tail: string }
+/** exits: each rebuild and test command's exit status, in order (the SM_EXIT lines the run script writes). */
+export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr_tail: string; exits: number[] }
 
 export function runTests(o: { image: string; volume: string; repoDir: string; workDir?: string; commands: { rebuild: string[]; test: string[]; print: string[] }; mode: Mode; limitMs?: number; label: string }): TestRun {
   const limit = o.limitMs ?? LIMIT_MS;
@@ -58,7 +59,7 @@ export function runTests(o: { image: string; volume: string; repoDir: string; wo
   const stopped = r.timed_out || r.error !== undefined || r.wall_ms >= limit;
   const i = r.stdout.indexOf(PRINT_MARK);
   const print = i < 0 ? "" : r.stdout.slice(i + PRINT_MARK.length + 1);
-  return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr_tail: r.stderr.slice(-2000) };
+  return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr_tail: r.stderr.slice(-2000), exits: [...r.stderr.matchAll(/^SM_EXIT (\d+)$/gm)].map((m) => Number(m[1])) };
 }
 
 const RUNNER = [

@@ -185,6 +185,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_STRIP](#e_sm_strip) | 2 | U20 |
 | [E_SM_UPSTREAM_GAP](#e_sm_upstream_gap) | 2 | U20 |
 | [E_SM_INFRA_GAP](#e_sm_infra_gap) | 2 | U20 |
+| [E_SM_APPLY_FAILED](#e_sm_apply_failed) | 1 | U20 |
+| [E_SM_TEST_PATCH_CONFLICT](#e_sm_test_patch_conflict) | 2 | U20 |
 | [E_PROXY_SERVER_TOOL](#e_proxy_server_tool) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
@@ -332,6 +334,14 @@ The dataset's log parser, run in its sandbox (pinned python image, no network, n
 Fix: Read the parser's stderr in the message. Never edit a dataset parser; a unit whose parser fails drops.
 
 Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_APPLY_FAILED
+
+A state machines session's change did not apply to a fresh copy of the unit's base tree in the scoring container (or names an unsafe path), first and after one more extraction, so the session scores no fix and is listed (preregistration section 7, step 8).
+
+Fix: Nothing to fix in the session: it counts as no fix and is listed per arm. If many sessions hit it, check the snapshot patch and the scorer's readings for a harness fault.
+
+Exit 1. Side effects: None: scoring spends nothing. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 2: no verdict (INCOMPLETE)
 
@@ -1334,6 +1344,14 @@ A state machines session failed outside the model twice (container, pull, Harbor
 Fix: Read the session's agent log for the failure, fix the harness, and report the gap per arm and cell; a gap is never rerun a third time.
 
 Exit 2. Side effects: The two tries spent what the proxy metered for them. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_TEST_PATCH_CONFLICT
+
+A hunk of the fix's tests (test.patch, or the fix patch's in-source test hunks) still conflicts after git apply --3way over an arm's scored tree, so that reading is a scoring gap (preregistration section 7, step 3), counted per arm, never a miss.
+
+Fix: Nothing to fix in the session: report the gap per arm and reading. The record names the hunk and the unmerged files.
+
+Exit 2. Side effects: None: scoring spends nothing. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_PROXY_SERVER_TOOL
 
