@@ -38,7 +38,7 @@ import type { DxRow } from "./rows.ts";
 
 const REPO = join(import.meta.dir, "..", "..", "..");
 const CLI = join(REPO, "node_modules", "@anthropic-ai", "claude-agent-sdk-" + process.platform + "-" + process.arch, "claude");
-const KEYS = { ANTHROPIC_API_KEY: "sk-ant-fake-key-0123456789", OPENAI_API_KEY: "sk-openai-fake-key-0123456789", OPENROUTER_API_KEY: "sk-or-v1-fake-key-0123456789" };
+const KEYS = { ANTHROPIC_API_KEY: "dryrun-anthropic-not-a-key", OPENAI_API_KEY: "dryrun-openai-not-a-key", OPENROUTER_API_KEY: "dryrun-openrouter-not-a-key" };
 const TOKEN = "management-token-0123456789abcdef";
 const FENCE = "\u0060\u0060\u0060";
 const BLOCK = FENCE + "plan-changes\n" + JSON.stringify({ changes: ["Print the missing runtime and its install command on first run.", "Add a dry-run flag to the migrate command."] }) + "\n" + FENCE;
