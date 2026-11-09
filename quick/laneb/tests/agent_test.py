@@ -8,6 +8,7 @@ import asyncio
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -719,14 +720,17 @@ def test_a_copy_whose_tar_passes_the_cap_is_refused_inside_the_container(tmp):
 
 def test_a_tree_that_grows_between_the_measure_and_the_send_still_sends_at_most_the_cap(tmp):
     # A process the model left running can grow the tree while the copy runs. The tar shim here prints a small archive the
-    # first time (the measure) and a megabyte after that, so a send with no bound would pass the megabyte on; the bounded
-    # send passes at most the cap plus one byte and is refused in the container. The cap is lowered to 1 KiB.
+    # first time (the measure) and runs the real tar on the tree, grown to a megabyte, after that, so a send with no bound
+    # would pass the megabyte on; the bounded send passes at most the cap plus one byte and is refused in the container. The
+    # cap is lowered to 1 KiB.
     shim = tmp / "bin"
     shim.mkdir()
-    (shim / "tar").write_text('#!/bin/sh\nn=$(cat "$COUNT" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNT"\nif [ "$n" -eq 1 ]; then printf small; else head -c 1000000 /dev/zero; fi\n')
+    (tmp / "x").mkdir()
+    (tmp / "x" / "grown").write_bytes(bytes(1000000))
+    (shim / "tar").write_text('#!/bin/sh\nn=$(cat "$COUNT" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNT"\nif [ "$n" -eq 1 ]; then printf small; else exec "$REAL_TAR" "$@"; fi\n')
     (shim / "tar").chmod(0o755)
-    env = {**os.environ, "PATH": f"{shim}:{os.environ['PATH']}", "COUNT": str(tmp / "count")}
-    res = subprocess.run(["sh", "-c", lh._CAPPED_TAR.replace(str(lh.TREE_CAP_BYTES), "1024"), "sh", "x"], capture_output=True, env=env, timeout=60)
+    env = {**os.environ, "PATH": f"{shim}:{os.environ['PATH']}", "COUNT": str(tmp / "count"), "REAL_TAR": shutil.which("tar")}
+    res = subprocess.run(["sh", "-c", lh._CAPPED_TAR.replace(str(lh.TREE_CAP_BYTES), "1024"), "sh", "x"], capture_output=True, env=env, cwd=tmp, timeout=60)
     assert len(res.stdout) <= 1025, len(res.stdout)
     assert res.returncode == 3 and b"grew past the 1024-byte cap" in res.stderr, (res.returncode, res.stderr)
 
