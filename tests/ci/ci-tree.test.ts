@@ -42,7 +42,7 @@ const JUNIT = [
   "</testsuites>",
 ].join("\n");
 
-type Step = { name?: string; uses?: string; run?: string; if?: unknown; "continue-on-error"?: unknown; with?: Record<string, unknown> };
+type Step = { name?: string; id?: string; uses?: string; run?: string; if?: unknown; "continue-on-error"?: unknown; with?: Record<string, unknown> };
 const workflow = Bun.YAML.parse(readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8")) as { on: Record<string, unknown>; jobs: Record<string, { steps: Step[] }> };
 const policy = JSON.parse(readFileSync(join(root, ".gstack", "pregate.json"), "utf8")) as {
   run_profiles: Record<string, { workflow: string; events: string[]; jobs: string[]; artifact: string; os?: string }>;
@@ -211,8 +211,15 @@ describe("ci.yml and .gstack/pregate.json agree on CI carry", () => {
     expect(upload).toBe(steps.length - 1);
   });
 
-  test("no step in the job can be skipped or fail without failing the job", () => {
-    for (const s of steps) expect([s.name ?? s.uses, s.if, s["continue-on-error"]]).toEqual([s.name ?? s.uses, undefined, undefined]);
+  test("no step can fail without failing the job, and only a docs-only pull request skips any, skipping the tests and the record together", () => {
+    const scope = steps.findIndex((s) => s.id === "scope");
+    const gated = [runs.findIndex((r) => r.startsWith("bun run typecheck\n")), runs.findIndex((r) => r.startsWith("bun test ")), record, upload];
+    expect(scope).toBeGreaterThanOrEqual(0);
+    for (const i of gated) expect(i).toBeGreaterThan(scope);
+    for (const [i, s] of steps.entries()) {
+      const when = i === scope ? "github.event_name == 'pull_request' && github.base_ref == github.event.repository.default_branch" : gated.includes(i) ? "steps.scope.outputs.docs_only != 'true'" : undefined;
+      expect([s.name ?? s.uses, s.if, s["continue-on-error"]]).toEqual([s.name ?? s.uses, when, undefined]);
+    }
   });
 
   test("bun test writes the JUnit report the record reads, before the record", () => {
