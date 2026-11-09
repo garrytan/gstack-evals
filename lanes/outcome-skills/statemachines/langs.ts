@@ -186,3 +186,67 @@ export const FEAT_SHA256 = "d1d17a14b6888740aa8c3a6e0b0c53f88194c3c76d1d9c6b4b42
 export const FEAT = new RegExp(FEAT_TEXT, "i");
 export const featFirst800 = (issue: string): boolean => FEAT.test(Array.from(issue).slice(0, 800).join(""));
 export const featDigest = (): string => createHash("sha256").update(FEAT_TEXT).digest("hex");
+
+/** Drift forms (section 8 item 6), frozen at the commit that adds them. Each matches one error in a scoring run's log and
+ *  captures the identifier it names: for compiled languages a compiler error, for JS, TypeScript and Python an import,
+ *  attribute, reference or not-a-function error. A "module" capture is a module path; drift.ts reads its last segment. */
+export interface DriftForm { kind: "import" | "attribute" | "reference" | "not_a_function" | "compiler"; capture: "name" | "module"; re: RegExp; source: string }
+export const COMPILED: ReadonlySet<Lang> = new Set<Lang>(["rust", "java", "c", "cpp", "csharp", "go"]);
+const Q = "['\u2018\`\"]", E = "['\u2019\`\"]";
+const cc = (re: string, source: string): DriftForm => ({ kind: "compiler", capture: "name", re: new RegExp(re, "g"), source });
+const C_FORMS: DriftForm[] = [
+  cc("error: " + Q + "([A-Za-z_][\\w:]*)" + E + " (?:was not declared in this scope|undeclared)", "GCC: 'x' was not declared in this scope (C++), 'x' undeclared (C)"),
+  cc("error: implicit declaration of function " + Q + "([A-Za-z_]\\w*)" + E, "GCC 14 and later: implicit declaration of function 'x' (an error by default)"),
+  cc("has no member named " + Q + "([A-Za-z_]\\w*)" + E, "GCC: 'struct s' has no member named 'x'"),
+  cc("error: " + Q + "([A-Za-z_][\\w:]*)" + E + " (?:is not a member of|has not been declared|does not name a type)", "GCC (C++): 'x' is not a member of 'ns', 'ns::x' has not been declared, 'X' does not name a type"),
+  cc("error: unknown type name " + Q + "([A-Za-z_]\\w*)" + E, "GCC and Clang: unknown type name 'X'"),
+  cc("error: (?:use of undeclared identifier|call to undeclared function) " + Q + "([A-Za-z_][\\w:]*)" + E, "Clang DiagnosticSemaKinds.td: use of undeclared identifier 'x', call to undeclared function 'x'"),
+  cc("error: no (?:member|type) named " + Q + "([A-Za-z_]\\w*)" + E + " in", "Clang DiagnosticSemaKinds.td: no member named 'x' in 'S', no type named 'X' in 'ns'"),
+];
+const JS_FORMS: DriftForm[] = [
+  { kind: "reference", capture: "name", re: /ReferenceError: ([A-Za-z_$][\w$]*) is not defined/g, source: "V8 message-template.h kNotDefined: % is not defined" },
+  { kind: "not_a_function", capture: "name", re: /TypeError: (?:\(0\s*,\s*)?([A-Za-z_$][\w$.]*)\)? is not a function/g, source: "V8 message-template.h kCalledNonCallable: % is not a function (Babel's (0, _m.x) call form included)" },
+  { kind: "import", capture: "name", re: /SyntaxError: The requested module '[^'\n]+' does not provide an export named '([A-Za-z_$][\w$]*)'/g, source: "V8 message-template.h kUnresolvableExport" },
+  { kind: "import", capture: "module", re: /Cannot find module '([^'\n]+)'/g, source: "Node and Jest module resolution: Cannot find module 'x'" },
+];
+export const DRIFT_FORMS: Record<Lang, DriftForm[]> = {
+  rust: [
+    cc("error\\[E0(?:425|412|422|531|405|433)\\]: (?:cannot find|failed to resolve: (?:use of undeclared (?:type|crate or module)|could not find)) [^\x60\\n]*\x60([^\x60]+)\x60", "rustc error index E0425, E0412, E0422, E0531, E0405, E0433: cannot find value, function, type, struct, variant or trait \x60x\x60; failed to resolve"),
+    cc("error: cannot find (?:macro|attribute|derive macro) \x60([^\x60]+)\x60", "rustc: cannot find macro \x60x\x60 in this scope"),
+    cc("error\\[E0432\\]: unresolved imports? \x60([^\x60]+)\x60", "rustc error index E0432: unresolved import \x60a::x\x60"),
+    cc("error\\[E0599\\]: no (?:method|function or associated item|variant or associated item|associated item|variant) named \x60([^\x60]+)\x60", "rustc error index E0599: no method named \x60x\x60 found"),
+    cc("error\\[E0609\\]: no field \x60([^\x60]+)\x60", "rustc error index E0609: no field \x60x\x60 on type"),
+    cc("error\\[E0560\\]: (?:struct|union|variant) \x60[^\x60]+\x60 has no field named \x60([^\x60]+)\x60", "rustc error index E0560: struct \x60S\x60 has no field named \x60x\x60"),
+  ],
+  go: [
+    cc("undefined: ([A-Za-z_][\\w.]*)", "go/types UndeclaredName and UndeclaredImportedName: undefined: x, undefined: pkg.X"),
+    cc("has no field or method ([A-Za-z_]\\w*)", "go/types MissingFieldOrMethod: x.F undefined (type T has no field or method F)"),
+    cc("unknown field '?([A-Za-z_]\\w*)'? in struct literal", "go/types MissingLitField: unknown field F in struct literal"),
+  ],
+  java: [
+    cc("cannot find symbol[\\s\\S]{0,400}?symbol:\\s+(?:class|method|variable|interface|enum|record|static)\\s+([A-Za-z_$][\\w$]*)", "javac compiler.properties compiler.err.cant.resolve: cannot find symbol, symbol: method x"),
+    cc("package ([A-Za-z_][\\w.]*) does not exist", "javac compiler.properties compiler.err.doesnt.exist: package a.b does not exist"),
+  ],
+  c: C_FORMS,
+  cpp: C_FORMS,
+  csharp: [
+    cc("error CS0103: The name '([A-Za-z_]\\w*)' does not exist", "C# CS0103: The name 'x' does not exist in the current context"),
+    cc("error CS(?:0117|1061): '[^'\\n]+' does not contain a definition for '([A-Za-z_]\\w*)'", "C# CS0117 and CS1061: 'T' does not contain a definition for 'x'"),
+    cc("error CS02(?:46|34): The type or namespace name '([A-Za-z_]\\w*)' (?:could not be found|does not exist)", "C# CS0246 and CS0234: The type or namespace name 'X' could not be found"),
+  ],
+  js: JS_FORMS,
+  ts: [
+    ...JS_FORMS,
+    { kind: "reference", capture: "name", re: /TS(?:2304|2552): Cannot find name '([A-Za-z_$][\w$]*)'/g, source: "TypeScript diagnosticMessages.json 2304 and 2552: Cannot find name 'x'" },
+    { kind: "attribute", capture: "name", re: /TS(?:2339|2551): Property '([A-Za-z_$][\w$]*)' does not exist on type/g, source: "TypeScript diagnosticMessages.json 2339 and 2551: Property 'x' does not exist on type 'T'" },
+    { kind: "import", capture: "name", re: /TS(?:2305|2614): Module '.+?' has no exported member '([A-Za-z_$][\w$]*)'/g, source: "TypeScript diagnosticMessages.json 2305 and 2614: Module 'm' has no exported member 'x'" },
+    { kind: "import", capture: "name", re: /TS2724: '.+?' has no exported member named '([A-Za-z_$][\w$]*)'/g, source: "TypeScript diagnosticMessages.json 2724: 'm' has no exported member named 'x'" },
+    { kind: "import", capture: "module", re: /TS2307: Cannot find module '([^'\n]+)'/g, source: "TypeScript diagnosticMessages.json 2307: Cannot find module 'm'" },
+  ],
+  python: [
+    { kind: "import", capture: "name", re: /ImportError: cannot import name '([A-Za-z_]\w*)'/g, source: "CPython import.c: cannot import name 'x' from 'm'" },
+    { kind: "import", capture: "module", re: /ModuleNotFoundError: No module named '([\w.]+)'/g, source: "CPython import.c: No module named 'm'" },
+    { kind: "attribute", capture: "name", re: /AttributeError: (?:module '[\w.]+'|'[^'\n]+' object|type object '[^'\n]+') has no attribute '([A-Za-z_]\w*)'/g, source: "CPython Objects/object.c and moduleobject.c: 'T' object has no attribute 'x', module 'm' has no attribute 'x'" },
+    { kind: "reference", capture: "name", re: /NameError: name '([A-Za-z_]\w*)' is not defined/g, source: "CPython ceval.c: name 'x' is not defined" },
+  ],
+};

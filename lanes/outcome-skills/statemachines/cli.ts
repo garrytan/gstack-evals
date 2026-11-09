@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals outcome sm <sub>: the state machines family's commands. P1 builds source, screen, convert, draw, oracle,
 // size and sample; later packages add their own.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CODES, docAnchor, isReasonCode } from "../../../src/errors/codes.ts";
 import { draw, fill, readPrereg, type Draw, type DrawUnit } from "./draw.ts";
@@ -11,7 +12,8 @@ import { screen } from "./screen.ts";
 import { fetchMultiLang, manifestSize, pinCandidates, readRows, splitCandidates, type Candidate } from "./source.ts";
 import { readUnit, writeUnit } from "./unit.ts";
 import { runSession } from "./run.ts";
-import { scoreFirst, type ScoreInput } from "./score.ts";
+import { computeStart, firstInfo, scoreFollowon, treeCounts, treeScores, TREES, type FollowonRecord, type StartSet, type Tree } from "./followon.ts";
+import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
 import { planPart, type PlannedSession, type SessionRecord } from "./session.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
@@ -34,7 +36,76 @@ export const HELP = `gstack-evals outcome sm <command>
               [--mode hardened|root] [--run-empty]
                                                      section 7's first-stage score: strict and adapted readings, the fix's
                                                      tests by git apply --3way, the unit's own runs, sm-outcome.v1
+  score followon --unit <dir> --tree S0|A1|S2 [--first <session.json> | --tree-patch <file>] [--first-outcome <outcome.json>]
+              --start <start.json> (--session <session.json> | --patch <file> --cell <name>) --out <followon.json>
+              [--mode hardened|root]
+                                                     section 8's follow-on score on one replicate: the tree's start set (read
+                                                     from --start, or computed in three runs and written there), the change
+                                                     on its tree, the fix's tests by git apply --3way, incremental and end to
+                                                     end, drift, secondaries; sm-followon.v1
+  score followon --summary --records <dir> [--firsts <dir>] --out <trees.json>
+                                                     per unit, model and tree: replicate means, the 2-of-3 keep rule,
+                                                     first-stage gaps (sm-outcome.v1 records in --firsts), inherited fixes
+                                                     and drift counts
 Guide: lanes/outcome-skills/statemachines/README.md`;
+
+function scoreFollowonCli(r: string[]): number {
+  const { f } = flags(r, ["--unit", "--tree", "--first", "--tree-patch", "--first-outcome", "--start", "--session", "--patch", "--cell", "--out", "--mode", "--records", "--firsts"], ["--summary"]);
+  const jsons = (dir: string, schema: string) => readdirSync(dir).filter((n) => n.endsWith(".json")).map((n) => readJson<{ schema?: string }>(join(dir, n))).filter((x) => x.schema === schema);
+  if (f.has("--summary")) {
+    const recs = jsons(need(f, "--records"), "sm-followon.v1") as FollowonRecord[];
+    const firsts = f.has("--firsts") ? (jsons(f.get("--firsts")!, "sm-outcome.v1") as OutcomeRecord[]).filter((x) => x.stage === "first").map((x) => firstInfo(x)) : [];
+    const trees = treeScores(recs, firsts);
+    const counts = treeCounts(trees);
+    writeNew(need(f, "--out"), { schema: "sm-followon-trees.v1", records: recs.length, trees, counts });
+    console.log(TREES.map((t) => t + " kept=" + (counts[t]?.kept ?? 0) + " inherited=" + (counts[t]?.inherited_fix ?? 0) + " drift_units=" + (counts[t]?.drift_units ?? 0)).join(" ") + " record=" + need(f, "--out"));
+    return 0;
+  }
+  const mode = f.get("--mode") ?? "hardened";
+  if (mode !== "hardened" && mode !== "root") throw new Error("E_USAGE --mode is hardened or root");
+  const tree = need(f, "--tree") as Tree;
+  if (!TREES.includes(tree)) throw new Error("E_USAGE --tree is S0, A1 or S2");
+  if (f.has("--session") === f.has("--patch")) throw new Error("E_USAGE give --session or --patch, not both");
+  const unitDir = need(f, "--unit");
+  const u = readUnit(unitDir);
+  let treePatch = "";
+  if (tree !== "S0") {
+    if (f.has("--first") === f.has("--tree-patch")) throw new Error("E_USAGE " + tree + " takes --first or --tree-patch, not both");
+    if (f.has("--first")) {
+      const s = readJson<SessionRecord>(f.get("--first")!);
+      if (s.schema !== "sm-session.v1" || s.stage !== "first" || s.unit !== u.id || s.cell !== tree || !s.tree_patch) throw new Error("E_SM_ARM " + f.get("--first") + " is not " + tree + "'s first-stage record on " + u.id + " with a tree patch");
+      treePatch = readFileSync(s.tree_patch.path, "utf8");
+      if (createHash("sha256").update(treePatch).digest("hex") !== s.tree_patch.sha256) throw new Error("E_SM_ARM " + s.tree_patch.path + " is not the patch the first-stage record pins");
+    } else treePatch = readFileSync(f.get("--tree-patch")!, "utf8");
+  } else if (f.has("--first") || f.has("--tree-patch")) throw new Error("E_USAGE S0 takes no first-stage patch");
+  const fo = f.has("--first-outcome") ? readJson<OutcomeRecord>(f.get("--first-outcome")!) : null;
+  if (fo && (fo.schema !== "sm-outcome.v1" || fo.stage !== "first")) throw new Error("E_SM_ARM " + f.get("--first-outcome") + " is not a first-stage sm-outcome.v1 record");
+  let session: SessionRecord | null = null, patchFile: string, patchSha: string | undefined, cell: string;
+  if (f.has("--session")) {
+    session = readJson<SessionRecord>(f.get("--session")!);
+    if (session.schema !== "sm-session.v1" || session.stage !== "followon" || session.unit !== u.id || session.tree_ref?.tree !== tree) throw new Error("E_SM_ARM " + f.get("--session") + " is not a follow-on sm-session.v1 record on " + u.id + " tree " + tree);
+    cell = session.cell;
+    patchFile = session.tree_patch?.path ?? "";
+    patchSha = session.tree_patch?.sha256;
+    if (!patchFile && session.end !== "upstream" && session.end !== "infra") throw new Error("E_SM_ARM the follow-on session has no tree patch to score");
+  } else {
+    patchFile = f.get("--patch")!;
+    cell = need(f, "--cell");
+  }
+  const startFile = need(f, "--start");
+  const model = session?.model ?? fo?.model ?? null;
+  let start: StartSet;
+  if (existsSync(startFile)) start = readJson<StartSet>(startFile);
+  else {
+    start = computeStart({ unitDir, tree, treePatch, model, mode });
+    writeNew(startFile, start);
+  }
+  const replicate = Number((cell.match(/^F-(?:S0|A1|S2)-(\d+)$/) ?? [])[1]) || null;
+  const rec = scoreFollowon({ unitDir, tree, treePatch, start, patchFile, ...(patchSha ? { patchSha } : {}), cell, replicate, model, session, first: fo ? firstInfo(fo) : null, mode });
+  writeNew(need(f, "--out"), rec);
+  console.log("tree=" + tree + " start=" + (start.gap ?? start.ids.length) + " incremental=" + (rec.incremental ?? rec.gap) + " end_to_end=" + (rec.end_to_end ?? rec.gap) + " drift=" + rec.drift.drift + (rec.drift.ids.length ? " (" + rec.drift.ids.join(",") + ")" : "") + " record=" + need(f, "--out"));
+  return 0;
+}
 
 function say(e: unknown): number {
   const m = (e as Error).message;
@@ -185,7 +256,8 @@ export async function main(argv: string[]): Promise<number> {
         console.log(HELP.split("\n").filter((l, k, a) => /^  score/.test(l) || (/^ {14}/.test(l) && a.slice(0, k).reverse().find((x) => /^  \S/.test(x))?.startsWith("  score"))).join("\n"));
         return what === undefined ? 2 : 0;
       }
-      if (what !== "first") throw new Error("E_USAGE sm score takes first");
+      if (what === "followon") return scoreFollowonCli(r);
+      if (what !== "first") throw new Error("E_USAGE sm score takes first or followon");
       const { f } = flags(r, ["--unit", "--session", "--patch", "--cell", "--out", "--mode"], ["--run-empty"]);
       const mode = f.get("--mode") ?? "hardened";
       if (mode !== "hardened" && mode !== "root") throw new Error("E_USAGE --mode is hardened or root");

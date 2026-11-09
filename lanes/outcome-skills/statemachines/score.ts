@@ -251,6 +251,40 @@ export function knownIds(dir: string, u: SmUnit, volume: string, mode: Mode, lim
   return ids;
 }
 
+/** Section 7 step 3's hunks for a unit: test.patch, then fix-tests.patch when the fix was split. The first-stage and
+ *  follow-on scorers both apply these. */
+export function fixTestHunks(dir: string, u: SmUnit): string[] {
+  const rf = (n: string) => (existsSync(join(dir, n)) ? readFileSync(join(dir, n), "utf8") : "");
+  return testHunks(rf("test.patch"), u.split ? rf("fix-tests.patch") : "");
+}
+
+/** Merges hunk patches over the tree in volume (staged first) by MERGE. A clean merge counts the hunks git took by its
+ *  three-way fallback; a conflict lists the hunk and the unmerged files. */
+export function mergeTests(u: SmUnit, image: string, volume: string, hunks: string[]): { merge: "clean" | "conflict"; three_way: number; conflict: string[] } {
+  const m = runBash({ kind: "docker", image, volume, repoDir: u.repo_dir, name: runName("merge") }, MERGE, Object.fromEntries(hunks.map((h, k) => [String(k + 1), h])));
+  if (m.stdout.includes("SM_STAGE_FAILED") || !/SM_MERGED|SM_CONFLICT/.test(m.stdout)) smFail("E_SM_INFRA_GAP", u.id + ": the scorer could not stage the tree for the merge: " + (m.stdout + m.stderr).slice(-300));
+  if (!m.stdout.includes("SM_MERGED")) {
+    const out = m.stdout.split("\n").filter(Boolean);
+    return { merge: "conflict", three_way: 0, conflict: out.length ? out : ["exit " + m.status + ": " + m.stderr.slice(-200)] };
+  }
+  return { merge: "clean", three_way: m.stdout.split("\n").filter((l) => l.startsWith("SM_3WAY ")).length, conflict: [] };
+}
+
+/** One scoring run on a fresh copy of volume: the unit's rebuild, test and print commands, then the dataset's parser. A
+ *  build failure is a rebuild command that exits non-zero, a stopped run or a log the parser gives nothing for. */
+export function scoringRun(dir: string, u: SmUnit, image: string, volume: string, n: number, mode: Mode, label: string, limitMs?: number): { view: RunView; summary: RunSummary; log: string } {
+  const run = volume + "-r" + n;
+  copyVolume(image, volume, run, mode);
+  try {
+    const t = runTests({ image, volume: run, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, ...(limitMs ? { limitMs } : {}), label: u.id + "-" + label + n });
+    const parsed = t.stopped ? null : runParser(readFileSync(join(dir, "parser.py"), "utf8"), t.log, u.id + "-" + label + n);
+    const build_failed = t.stopped || !parsed || t.exits.length < u.commands.rebuild.length || t.exits.slice(0, u.commands.rebuild.length).some((x) => x !== 0);
+    return { view: { parsed, build_failed }, summary: { n, wall_ms: t.wall_ms, exits: t.exits, stopped: t.stopped, build_failed, parsed_sha256: parsed ? sha(JSON.stringify(parsed)) : null }, log: t.log === t.stderr ? t.log : t.stderr + "\n" + t.log };
+  } finally {
+    dropVolume(run);
+  }
+}
+
 const blank = (): ReadingResult => ({ applied: false, merge: null, three_way: 0, conflict: [], runs: [], fixed: null, broke: null, broke_by: null, absent: [], rerun_2of3: false, deciding: [], new_tests: [], outcome: null, gap: null, apply_failed: false });
 const unapplied = (): ReadingResult => ({ ...blank(), apply_failed: true, fixed: false, broke: false, outcome: "no_fix" });
 
@@ -261,8 +295,7 @@ export function scoreFirst(i: ScoreInput): OutcomeRecord {
   const mode = i.mode ?? "hardened";
   const image = u.image.runtime_id ?? smFail("E_SM_UNIT", u.id + " has no runtime image");
   const volume = i.volume ?? treeVolume(u.id);
-  const rf = (n: string) => (existsSync(join(i.unitDir, n)) ? readFileSync(join(i.unitDir, n), "utf8") : "");
-  const hunks = testHunks(rf("test.patch"), u.split ? rf("fix-tests.patch") : "");
+  const hunks = fixTestHunks(i.unitDir, u);
   const base = (p: string) => {
     const r = runBash({ kind: "docker", image, volume, repoDir: u.repo_dir, name: runName("base") }, 'cd "$1" && cat -- "$3"', {}, [p]);
     if (r.status !== 0) smFail("E_SM_APPLY_FAILED", p + " is not in the base tree");
@@ -277,29 +310,16 @@ export function scoreFirst(i: ScoreInput): OutcomeRecord {
     try {
       if (patch && applyPatches(image, scored, u.repo_dir, [["change.patch", patch]], "root")) return { ...res, apply_failed: true };
       res.applied = true;
-      const m = runBash({ kind: "docker", image, volume: scored, repoDir: u.repo_dir, name: runName("merge") }, MERGE, Object.fromEntries(hunks.map((h, k) => [String(k + 1), h])));
-      if (m.stdout.includes("SM_STAGE_FAILED") || !/SM_MERGED|SM_CONFLICT/.test(m.stdout)) smFail("E_SM_INFRA_GAP", u.id + ": the scorer could not stage the arm's tree for the merge: " + (m.stdout + m.stderr).slice(-300));
-      if (!m.stdout.includes("SM_MERGED")) {
-        const out = m.stdout.split("\n").filter(Boolean);
-        return { ...res, merge: "conflict", conflict: out.length ? out : ["exit " + m.status + ": " + m.stderr.slice(-200)], gap: "E_SM_TEST_PATCH_CONFLICT" };
-      }
+      const m = mergeTests(u, image, scored, hunks);
+      if (m.merge === "conflict") return { ...res, merge: "conflict", conflict: m.conflict, gap: "E_SM_TEST_PATCH_CONFLICT" };
       res.merge = "clean";
-      res.three_way = m.stdout.split("\n").filter((l) => l.startsWith("SM_3WAY ")).length;
+      res.three_way = m.three_way;
       const views: RunView[] = [];
       let v: Verdict;
       do {
-        const n = views.length + 1;
-        const run = scored + "-r" + n;
-        copyVolume(image, scored, run, mode);
-        try {
-          const t = runTests({ image, volume: run, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, ...(i.limitMs ? { limitMs: i.limitMs } : {}), label: u.id + "-score" + n });
-          const parsed = t.stopped ? null : runParser(rf("parser.py"), t.log, u.id + "-score" + n);
-          const build_failed = t.stopped || !parsed || t.exits.length < u.commands.rebuild.length || t.exits.slice(0, u.commands.rebuild.length).some((x) => x !== 0);
-          views.push({ parsed, build_failed });
-          res.runs.push({ n, wall_ms: t.wall_ms, exits: t.exits, stopped: t.stopped, build_failed, parsed_sha256: parsed ? sha(JSON.stringify(parsed)) : null });
-        } finally {
-          dropVolume(run);
-        }
+        const r = scoringRun(i.unitDir, u, image, scored, views.length + 1, mode, "score", i.limitMs);
+        views.push(r.view);
+        res.runs.push(r.summary);
         known ??= knownIds(i.unitDir, u, volume, mode, i.limitMs);
         v = decide(u.tests.f2p, u.oracle!.stable, known, views);
       } while (v.wants_more);

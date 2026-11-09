@@ -141,12 +141,25 @@ export function splitUnit(dir: string, u: SmUnit, where: Where): void {
 
 export interface RunResult { run: OracleRun; parsed: Record<string, string> | null }
 
+/** Whether the oracle's base runs apply fix-tests.patch (the fix's in-source tests) with test.patch. Off today; a pending
+ *  decision may turn it on. The stable set and every follow-on start set read it through basePatches, so they move together. */
+export const BASE_RUNS_FIX_TESTS = false;
+
+/** The patches a base run applies over a tree, in order: test.patch, then fix-tests.patch when BASE_RUNS_FIX_TESTS is on
+ *  and the unit has one. The oracle's base runs (the stable set) and the follow-on start-set runs both use this. */
+export function basePatches(dir: string, fixTests = BASE_RUNS_FIX_TESTS): [string, string][] {
+  const out: [string, string][] = [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
+  const t = fixTests && existsSync(join(dir, "fix-source.patch")) ? rf(join(dir, "fix-tests.patch"), "utf8") : "";
+  if (t) out.push(["fix-tests.patch", t]);
+  return out;
+}
+
 /** One oracle run on a fresh copy of the tree volume. */
 export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tree: "base" | "fixed", n: number, mode: Mode, limitMs = LIMIT_MS): RunResult {
   const copy = volume + "-" + tree + n + "-" + process.pid;
   copyVolume(image, volume, copy, mode);
   try {
-    const patches: [string, string][] = [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
+    const patches: [string, string][] = tree === "base" ? basePatches(dir) : [["test.patch", rf(join(dir, "test.patch"), "utf8")]];
     if (tree === "fixed") {
       const split = existsSync(join(dir, "fix-source.patch"));
       patches.push(["fix-source.patch", rf(join(dir, split ? "fix-source.patch" : "fix.patch"), "utf8")]);

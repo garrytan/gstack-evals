@@ -280,3 +280,61 @@ Assumptions, JUnit 4 @Ignore and Assume; NUnit [Ignore] and xUnit Skip =; each e
 - Docker tests (tests/outcome-skills/sm-score-docker.test.ts) need GSTACK_EVALS_DOCKER=1 and two images:
   SM_SCORE_RUST_IMAGE (cargo and git) and SM_SCORE_GO_IMAGE (go, python3 and git). The dry-run units' runtime images serve.
 
+## Follow-on scorer (followon.ts) and drift (drift.ts), P3b
+
+`gstack-evals outcome sm score followon` scores one follow-on replicate (section 8) and writes sm-followon.v1;
+`--summary` turns a dir of those records (and the first stages' sm-outcome.v1 records) into per-tree scores.
+
+- **Trees.** S0 is the stripped base tree. A1 and S2 are that tree with the first stage's whole tree patch committed as
+  commit two by sh/followon.sh, after the same git clean the session image runs, so the scored tree is the tree the
+  follow-on session saw. The follow-on's own patch (real_agent's snapshot against that tree's head) is applied whole:
+  text files, binary files listed and left out, unsafe paths fail the apply.
+- **Start sets.** On S0 the base stable set. On A1 and S2: three runs of the unit's commands on the tree with the oracle's
+  base-run patches (oracle.ts basePatches, one function for both) merged hunk by hunk with git apply --3way; the start
+  set is the ids that pass in all three. On an unchanged base tree that merge gives what the oracle's plain git apply
+  gives. `BASE_RUNS_FIX_TESTS` in oracle.ts is the single switch that would add fix-tests.patch to the base runs; it is
+  off, so today's stable sets do not change. The start set is cached in the file `--start` names, pinned by the tree
+  patch's sha256 and the tree's head.
+- **Scores.** The fix's tests merge as in section 7 step 3 (score.ts fixTestHunks and mergeTests, the same code the
+  first-stage scorer runs), then one run (score.ts scoringRun). Incremental: every fail-to-pass id passes and every
+  start-set id passes. End to end: every fail-to-pass id passes and every base stable id passes. An id that did not
+  pass (failed, skipped, missing) fails, and a build failure fails every id, as in section 7's broke rule.
+- **Gaps and the keep rule.** A follow-on test-patch conflict, a start-set conflict, or a follow-on session that ended
+  upstream or infra on its second attempt is a gap and removes the replicate. A tree is kept with at least 2 of 3
+  replicates scored; its score is the mean over them; pass3 is set only when all 3 scored. A first stage's gap (its
+  session gap, or its strict reading's test-patch conflict) removes its tree. A first stage whose strict outcome is clean
+  fix marks the tree as an inherited fix, counted per arm for the sensitivity reading.
+- **Drift.** When a fail-to-pass id fails on A1 or S2, drift.ts reads the run's log (stderr and the print output) with the
+  language's frozen drift forms. A named identifier that occurs (git grep -w, fixed string) in the source files of commit
+  two's parent and in none of commit two's is a drift id; any drift id makes the follow-on a drift case. Both scores have
+  already failed; the count goes to the sensitivity reading. S0 never drifts.
+- **Secondaries.** Cost (spent and unknown micros), turns and wall time from the follow-on's session record; files
+  changed; and the paths the first stage created that any tool input in the follow-on's transcript names.
+
+### Drift forms (frozen at this commit, langs.ts DRIFT_FORMS)
+
+| Language | Forms (the captured identifier) | Source |
+|---|---|---|
+| Rust | E0425, E0412, E0422, E0531, E0405, E0433 cannot find or failed to resolve; cannot find macro; E0432 unresolved import; E0599 no method or item named; E0609 no field; E0560 no field named | rustc error index |
+| Go | undefined: x (and pkg.X); has no field or method F; unknown field F in struct literal | go/types error codes UndeclaredName, UndeclaredImportedName, MissingFieldOrMethod, MissingLitField |
+| Java | cannot find symbol with its symbol: line; package a.b does not exist | javac compiler.properties cant.resolve, doesnt.exist |
+| C, C++ | GCC: was not declared in this scope, undeclared, implicit declaration of function (an error), has no member named, is not a member of, has not been declared, does not name a type, unknown type name; Clang: use of undeclared identifier, call to undeclared function, no member or type named | GCC diagnostics, Clang DiagnosticSemaKinds.td |
+| C# | CS0103, CS0117, CS1061, CS0246, CS0234 | C# compiler error reference |
+| JS | ReferenceError x is not defined; TypeError x is not a function (Babel's (0, _m.x) form); the requested module does not provide an export named x; Cannot find module (last path segment) | V8 message-template.h, Node and Jest module resolution |
+| TypeScript | the JS forms, and tsc 2304, 2552, 2339, 2551, 2305, 2614, 2724, 2307 | TypeScript diagnosticMessages.json |
+| Python | ImportError cannot import name; ModuleNotFoundError (last dotted segment); AttributeError has no attribute; NameError name is not defined | CPython import.c, object.c, moduleobject.c, ceval.c |
+
+Not forms, by design: Python's "object is not callable" and JS's "Cannot read properties of undefined (reading 'x')"
+name a type or the next property, never the missing identifier; a C implicit declaration that is only a warning is not
+a compiler error.
+
+### Follow-on readings
+
+- The follow-on's change is applied whole, with no strict or adapted reading: section 8 item 3 names only section 7
+  step 3, and claim 2 scores the tree a next developer leaves. This can move an outcome (a follow-on that edits a
+  start-set test to pass keeps the pass); it is reported to the parent as an open point.
+- A start-set merge conflict is a gap for every replicate on that tree (literal: no start set exists).
+- A first stage's strict test-patch conflict counts as a first-stage gap (section 6 lists it as a gap); it is reported
+  as an open point.
+- Drift is decided when any fail-to-pass id fails and at least one drift id is named (the design's reading of "fail only
+  because").

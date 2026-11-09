@@ -162,6 +162,8 @@
       "tests/outcome-skills/sm-history.test.ts",
       "tests/outcome-skills/sm-score.test.ts",
       "tests/outcome-skills/sm-score-docker.test.ts",
+      "tests/outcome-skills/sm-followon.test.ts",
+      "tests/outcome-skills/sm-followon-docker.test.ts",
       "tests/outcome-skills/sm-leak.test.ts",
       "tests/outcome-skills/sm-oracle-docker.test.ts",
       "tests/outcome-skills/sm-scope.test.ts",
