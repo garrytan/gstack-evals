@@ -174,9 +174,6 @@
       "tests/decision-routing/score-verdicts.test.ts",
       "tests/decision-routing/tune-bands.test.ts"
     ],
-    "tests/decision-routing/stubs/**": [
-      "tests/decision-routing/agent-sdk.test.ts"
-    ],
     "tests/decision-routing/*.py": [
       "tests/decision-routing/agent-sdk.test.ts",
       "tests/decision-routing/agent-units.test.ts",
@@ -184,8 +181,7 @@
     ],
     "tests/decision-routing/stubs/**": [
       "tests/decision-routing/agent-sdk.test.ts"
-    ],
-    "tests/decision-routing/docker_test.sh": []
+    ]
   },
   "guards": [
     {
