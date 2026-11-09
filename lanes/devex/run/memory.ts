@@ -3,7 +3,9 @@
 // "Repository instructions stripped", section 5, and section 15 rule 4's strip line). The unit snapshot removes every
 // CLAUDE.md, CLAUDE.local.md, AGENTS.md and .claude/AGENTS.md (lanes/devex/unit/snapshot.ts). Each session then records
 // what Claude Code actually loaded: the driver's memoryLog option writes one memory.ndjson line per instruction file the
-// CLI loads (the Agent SDK's InstructionsLoaded hook), and init.json names the skills the session sees.
+// CLI loads (the Agent SDK's InstructionsLoaded hook), and init.json names the skills the session sees. At SDK 0.3.314
+// the hook fires for session-start files only when one holds an @import, so memory.ndjson is a partial record; pass the
+// request bodies too where they are on hand (the keyless tests do).
 // memoryReading asserts both ways:
 // - no fixture text appears in any loaded file (read through the caller's path map), nor in any request body given,
 //   and no loaded file sits under the unit's repo;
