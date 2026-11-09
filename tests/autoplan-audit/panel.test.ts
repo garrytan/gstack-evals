@@ -11,7 +11,7 @@ import { DRY_ENV, reply, stubUpstream, tmp } from "../../lanes/autoplan-audit/fi
 import { Journal, ask } from "../../lanes/autoplan-audit/journal.ts";
 import { openMeter, type CallRequest } from "../../lanes/autoplan-audit/meter.ts";
 import type { Packet } from "../../lanes/autoplan-audit/packet.ts";
-import { admitPhase, budgetFor, savedGold, writeGold } from "../../lanes/autoplan-audit/stage2.ts";
+import { admitPhase, blockOnParserSmoke, budgetFor, savedGold, writeGold } from "../../lanes/autoplan-audit/stage2.ts";
 
 const dir = tmp("panel");
 const record = join(dir, "record"), ledger = join(dir, "ledger.sqlite");
@@ -47,6 +47,33 @@ describe("the request journal and the meter", () => {
     } finally {
       await m.close();
     }
+  });
+  test("a packet the proxy refuses for a forbidden marker stops the run and is never sent again", async () => {
+    const name = item("ar-test-tripwire");
+    let sends = 0;
+    const m = await openMeter({ item: name, runId: name, out: join(dir, "tripwire"), maxOutputTokens: 16_000, forbiddenMarkers: ["Tan"], record, ledger, env: DRY_ENV, fetch: stubUpstream(() => (sends++, { status: 400 })) });
+    try {
+      const leak = { ...req, prompt: "The Tangible part follows" };
+      const a = await ask(new Journal(join(dir, "tripwire", "journal")), m.call, leak, parse).then(() => "returned", (e) => (e as { code?: string }).code);
+      const b = await ask(new Journal(join(dir, "tripwire", "journal")), m.call, leak, parse).then((x) => x.missing, (e) => (e as { code?: string }).code);
+      expect({ a, b, sends }).toEqual({ a: "E_AR_PACKET_LEAK", b: "invalid", sends: 0 });
+    } finally {
+      await m.close();
+    }
+  });
+});
+
+describe("stage 1's parser smoke", () => {
+  test("a failed parser smoke stops the paid stages, and a passing one does not", () => {
+    const code = (pass: boolean) => {
+      try {
+        blockOnParserSmoke({ smoke: { minors: 3, pass } });
+        return null;
+      } catch (e) {
+        return (e as { code?: string }).code;
+      }
+    };
+    expect({ failed: code(false), passed: code(true) }).toEqual({ failed: "E_AR_SMOKE_FAIL", passed: null });
   });
 });
 

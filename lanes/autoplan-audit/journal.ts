@@ -9,7 +9,7 @@
 import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CallRequest, CallResult, ModelKey } from "./meter.ts";
-import { MODELS, requestBody, requestDigest } from "./meter.ts";
+import { MeterError, MODELS, requestBody, requestDigest } from "./meter.ts";
 
 export type JState = "pending" | "label" | "invalid" | "unknown" | "failed" | "retried";
 export const TERMINAL: ReadonlySet<JState> = new Set(["label", "invalid", "unknown", "retried"]);
@@ -146,6 +146,10 @@ export async function ask(j: Journal, call: (req: CallRequest) => Promise<CallRe
       throw e;
     }
     j.hit("after-settle", req.label);
+    if (res.text === null && res.problem?.startsWith("E_TRIPWIRE")) {
+      j.set(digest, "invalid", { ...meta, retries });
+      throw new MeterError("E_AR_PACKET_LEAK", "the metering proxy refused a packet for a forbidden marker (" + req.label + "); no packet is sent again");
+    }
     if (res.text === null && res.status !== 200 && res.unknown) {
       j.set(digest, "unknown", { ...meta, retries });
       return { digest, text: null, label: null, missing: "unknown", cached: false, result: res };
