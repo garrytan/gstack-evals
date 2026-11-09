@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -56,50 +56,61 @@ type Case = { releaseFails?: number; npm?: "fail"; version?: string; zipBinary?:
 
 function runStep(install: (typeof installs)[number], c: Case = {}) {
   const root = mkdtempSync(join(tmpdir(), "bun-install-"));
-  const stubs = join(root, "stubs");
-  const temp = join(root, "runner");
-  const z = join(root, "z", "bun-linux-x64");
-  const t = join(root, "t", "package", "bin");
-  for (const d of [stubs, temp, z, t]) mkdirSync(d, { recursive: true });
-  writeFileSync(join(stubs, "curl"), CURL);
-  writeFileSync(join(stubs, "sleep"), SLEEP);
-  chmodSync(join(stubs, "curl"), 0o755);
-  chmodSync(join(stubs, "sleep"), 0o755);
-  const bin = "#!/bin/sh\necho " + (c.version ?? install.env.BUN_VERSION) + "\n";
-  writeFileSync(join(z, c.zipBinary === false ? "README" : "bun"), bin, { mode: 0o755 });
-  writeFileSync(join(t, c.tgzBinary === false ? "README" : "bun"), bin, { mode: 0o755 });
-  writeFileSync(join(root, "t", "package", "package.json"), "{}\n");
-  sh("zip -q -r bun.zip bun-linux-x64", join(root, "z"));
-  sh("tar -czf bun.tgz package", join(root, "t"));
-  const log = join(root, "log");
-  const githubPath = join(root, "github_path");
-  writeFileSync(log, "");
-  const r = spawnSync("bash", ["-e", "-c", install.run], {
-    cwd: root,
-    encoding: "utf8",
-    env: {
-      ...install.env,
-      BUN_SHA256: c.zipSha ?? sha256(join(root, "z", "bun.zip")),
-      BUN_NPM_SHA256: c.tgzSha ?? sha256(join(root, "t", "bun.tgz")),
-      PATH: stubs + ":" + (process.env.PATH ?? ""),
-      RUNNER_TEMP: temp,
-      GITHUB_PATH: githubPath,
-      STUB_LOG: log,
-      STUB_ZIP: join(root, "z", "bun.zip"),
-      STUB_TGZ: join(root, "t", "bun.tgz"),
-      STUB_RELEASE_FAILS: String(c.releaseFails ?? 0),
-      STUB_NPM: c.npm ?? "ok",
-    },
-  });
-  return {
-    ok: r.status === 0,
-    out: r.stdout + r.stderr,
-    log: readFileSync(log, "utf8").split("\n").filter(Boolean),
-    path: existsSync(githubPath) ? readFileSync(githubPath, "utf8") : null,
-    onPath: temp + "/bun-linux-x64\n",
-    unpacked: existsSync(join(temp, "bun-linux-x64", "bun")),
-  };
+  try {
+    const stubs = join(root, "stubs");
+    const temp = join(root, "runner");
+    const z = join(root, "z", "bun-linux-x64");
+    const t = join(root, "t", "package", "bin");
+    for (const d of [stubs, temp, z, t]) mkdirSync(d, { recursive: true });
+    writeFileSync(join(stubs, "curl"), CURL);
+    writeFileSync(join(stubs, "sleep"), SLEEP);
+    chmodSync(join(stubs, "curl"), 0o755);
+    chmodSync(join(stubs, "sleep"), 0o755);
+    const bin = "#!/bin/sh\necho " + (c.version ?? install.env.BUN_VERSION) + "\n";
+    writeFileSync(join(z, c.zipBinary === false ? "README" : "bun"), bin, { mode: 0o755 });
+    writeFileSync(join(t, c.tgzBinary === false ? "README" : "bun"), bin, { mode: 0o755 });
+    writeFileSync(join(root, "t", "package", "package.json"), "{}\n");
+    sh("zip -q -r bun.zip bun-linux-x64", join(root, "z"));
+    sh("tar -czf bun.tgz package", join(root, "t"));
+    const log = join(root, "log");
+    const githubPath = join(root, "github_path");
+    writeFileSync(log, "");
+    const r = spawnSync("bash", ["-e", "-c", install.run], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...install.env,
+        BUN_SHA256: c.zipSha ?? sha256(join(root, "z", "bun.zip")),
+        BUN_NPM_SHA256: c.tgzSha ?? sha256(join(root, "t", "bun.tgz")),
+        PATH: stubs + ":" + (process.env.PATH ?? ""),
+        RUNNER_TEMP: temp,
+        GITHUB_PATH: githubPath,
+        STUB_LOG: log,
+        STUB_ZIP: join(root, "z", "bun.zip"),
+        STUB_TGZ: join(root, "t", "bun.tgz"),
+        STUB_RELEASE_FAILS: String(c.releaseFails ?? 0),
+        STUB_NPM: c.npm ?? "ok",
+      },
+    });
+    return {
+      ok: r.status === 0,
+      out: r.stdout + r.stderr,
+      log: readFileSync(log, "utf8").split("\n").filter(Boolean),
+      path: existsSync(githubPath) ? readFileSync(githubPath, "utf8") : null,
+      onPath: temp + "/bun-linux-x64\n",
+      unpacked: existsSync(join(temp, "bun-linux-x64", "bun")),
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
+
+test("a run leaves no temp directory behind", () => {
+  const left = () => readdirSync(tmpdir()).filter((d) => d.startsWith("bun-install-")).length;
+  const before = left();
+  runStep(installs[0]);
+  expect(left()).toBe(before);
+});
 
 test("every workflow that installs Bun has the step, with the pins and no other input", () => {
   expect(installs.map((i) => i.f)).toEqual(["ci.yml", "rig.yml", "sealed.yml"]);
