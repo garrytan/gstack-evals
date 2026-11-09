@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -194,13 +195,15 @@ describe("per-slot leak scan (metering proxy)", () => {
     expect(w.journalText()).not.toContain(MARKERS[2]!);
   });
 
-  test("a main-model request carrying the canary is forwarded and logged, never a stop", async () => {
+  test("a main-model request carrying the canary is refused with DR_CUSTODY_HIT and not forwarded", async () => {
     const w = proxyWorld();
     const b = w.bind(MAIN);
-    expect((await w.post(b, "context " + CANARY)).status).toBe(200);
-    expect(w.calls).toHaveLength(1);
-    expect(hitLines(w)).toEqual([expect.objectContaining({ decider: false, markers: [{ index: 0, sha256: sha(CANARY).slice(0, 12) }] })]);
-    expect(w.journal().some((l) => l.kind === "refusal")).toBe(false);
+    const res = await w.post(b, "context " + CANARY);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as Record<string, unknown>).code).toBe("DR_CUSTODY_HIT");
+    expect(w.calls).toHaveLength(0);
+    expect(hitLines(w)).toHaveLength(0);
+    expect(w.journal().find((l) => l.kind === "refusal")).toMatchObject({ code: "DR_CUSTODY_HIT", markers: [{ index: 0, sha256: sha(CANARY).slice(0, 12) }] });
     expect(w.journalText()).not.toContain(CANARY);
   });
 
@@ -284,6 +287,139 @@ describe("per-slot leak scan (metering proxy)", () => {
     for (const bad of ["", 3, "DRCANARY-ffffffffffffffffffffffffffffffff"]) expect(() => w.bind({ ...DECIDER, canary: bad as never })).toThrow(/^E_USAGE: /);
     expect(() => w.bind({ forbidden_markers: MARKERS, deciders: ["anthropic:claude-opus-5-5"] })).toThrow(/^E_USAGE: /);
     expect(() => w.bind({ deciders: ["anthropic:claude-opus-5-5"] })).not.toThrow();
+  });
+});
+
+/** dr_harbor run as Harbor runs it (Harbor and mini-swe-agent stubbed), stopped at its /bind: the body it sends, and the
+ * frontier decider make_deciders builds for the same cell and main model. */
+const HARBOR_BIND = `import asyncio, json, sys, tempfile, types
+from pathlib import Path, PurePosixPath
+agent_dir, markers_file, runs = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+def stub(name, **attrs):
+    mod = types.ModuleType(name)
+    mod.__dict__.update(attrs)
+    sys.modules[name] = mod
+class Paths:
+    agent_dir = PurePosixPath("/logs/agent")
+    artifacts_dir = PurePosixPath("/logs/artifacts")
+class Options:
+    pass
+class MiniSweAgent:
+    def __init__(self, *args, logs_dir=None, **kwargs):
+        self.logs_dir = logs_dir
+        self.options = types.SimpleNamespace(**{"markers_file": None, **kwargs})
+        self.logger = types.SimpleNamespace(info=lambda *a, **k: None)
+    async def exec_as_root(self, environment, command, env=None):
+        return await environment.exec(command=command, env=env, user="root")
+for pkg in ("harbor", "harbor.agents", "harbor.agents.installed", "harbor.models", "harbor.models.agent", "harbor.models.trial", "harbor.environments"):
+    stub(pkg)
+stub("harbor.agents.installed.mini_swe_agent", MiniSweAgent=MiniSweAgent, MiniSweAgentOptions=Options)
+stub("harbor.environments.base", BaseEnvironment=object)
+stub("harbor.models.agent.context", AgentContext=object)
+stub("harbor.models.trial.paths", EnvironmentPaths=Paths)
+stub("minisweagent")
+stub("minisweagent.exceptions", **{n: type(n, (Exception,), {}) for n in ("InterruptAgentFlow", "LimitsExceeded", "Submitted")})
+sys.path.insert(0, agent_dir)
+import dr_harbor
+from dr_agent import deciders
+class Bound(Exception):
+    pass
+bodies = []
+def manage(route, body):
+    bodies.append(body)
+    raise Bound()
+dr_harbor.manage = manage
+dr_harbor.os.environ["DR_PROXY_BASE"] = "http://127.0.0.1:9"
+class Env:
+    async def upload_file(self, source, target):
+        pass
+    async def exec(self, command, env=None, user=None, timeout_sec=None):
+        return types.SimpleNamespace(return_code=0, stdout="")
+out = []
+with tempfile.TemporaryDirectory() as tmp:
+    pin = Path(tmp) / "pin.json"
+    pin.write_text("{}")
+    for cell, model in runs:
+        logs = Path(tmp) / f"{cell}-{model}" / "task-1" / "task-1__abc" / "agent"
+        logs.mkdir(parents=True)
+        agent = dr_harbor.DecisionRoutingAgent(cell=cell, model=model, runtime_tarball="/rt.tgz", runtime_sha256="ab", pin_file=str(pin), item="dr-pilot-rp", logs_dir=logs, markers_file=markers_file)
+        try:
+            asyncio.run(agent.run("fix it", Env(), None))
+        except Bound:
+            pass
+        frontier = deciders.make_deciders(cell, model, "PROXY", "tok", {})[2]
+        out.append({"cell": cell, "model": model, "bind": bodies[-1], "frontier": {"kind": frontier.kind, "path": frontier.base_url[len("PROXY"):], "model": frontier.model}, "code_ids": {"opus": deciders.OPUS_MODEL, "sol": deciders.SOL_MODEL}})
+print(json.dumps(out))
+`;
+const AGENT_DIR = join(import.meta.dir, "..", "..", "lanes", "decision-routing", "agent");
+const CELLS = JSON.parse(readFileSync(join(AGENT_DIR, "..", "config", "cells.json"), "utf8"));
+const HIDDEN = "test_hidden_regression_case";
+const FRONTIER_RUNS = [["R", "opus"], ["R", "sol"], ["P", "opus"], ["P", "sol"], ["F", "opus"], ["J", "opus"], ["J", "sol"]];
+type HarborBind = { cell: string; model: string; bind: BindRequest; frontier: { kind: string; path: string; model: string }; code_ids: Record<string, string> };
+
+function harborBinds(): HarborBind[] {
+  const markers = join(tempDir("dr-harbor-bind-"), "markers.json");
+  writeFileSync(markers, JSON.stringify([CANARY, HIDDEN]));
+  const r = spawnSync("python3", ["-c", HARBOR_BIND, AGENT_DIR, markers, JSON.stringify(FRONTIER_RUNS)], { env: { PATH: process.env.PATH ?? "", PYTHONDONTWRITEBYTECODE: "1" }, encoding: "utf8", timeout: 60_000 });
+  if (r.status !== 0) throw new Error(r.stderr);
+  const binds = JSON.parse(r.stdout) as HarborBind[];
+  for (const h of binds) {
+    const main = CELLS.models[h.model];
+    expect(h.frontier).toEqual({ kind: main.provider, path: main.proxy_path, model: main.id });
+    expect(h.frontier.model).toBe(h.code_ids[h.model]!);
+    expect(h.bind.canary).toBe(CANARY);
+    expect(h.bind.forbidden_markers).toEqual([CANARY, HIDDEN]);
+    expect(h.bind.deciders).toEqual(CELLS.cells[h.cell].deciders);
+  }
+  expect(binds.map((h) => [h.cell, h.model])).toEqual(FRONTIER_RUNS);
+  return binds;
+}
+
+function frontierWorld() {
+  const sent: string[] = [];
+  const w = proxyWorld({
+    env: { ANTHROPIC_API_KEY: "sk-ant-dr-0123456789", OPENAI_API_KEY: "sk-openai-dr-0123456789" },
+    fetch: async (url, init) => {
+      sent.push(String(init.body ?? ""));
+      return String(url).startsWith("https://api.openai.com")
+        ? Response.json({ id: "chatcmpl", choices: [], usage: { prompt_tokens: 100, completion_tokens: 20 } })
+        : Response.json({ id: "msg", usage: { input_tokens: 100, output_tokens: 20 } });
+    },
+  });
+  const ask = (h: HarborBind, b: { slot: string; token: string }, content: string) => {
+    const anthropic = h.frontier.kind === "anthropic";
+    const body = anthropic ? { model: h.frontier.model, max_tokens: 100, messages: [{ role: "user", content }] } : { model: h.frontier.model, max_completion_tokens: 100, messages: [{ role: "user", content }] };
+    return fetch(`http://127.0.0.1:${w.proxy.port}/${b.slot}${h.frontier.path}${anthropic ? "/v1/messages" : "/chat/completions"}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${b.token}` }, body: JSON.stringify(body) });
+  };
+  return { ...w, sent, ask };
+}
+
+describe("canary custody under dr_harbor's real bind", () => {
+  test("in R, P, F and J the frontier decider's request, on the main model's own id and route, is refused DR_CUSTODY_HIT when it carries the canary", async () => {
+    for (const h of harborBinds()) {
+      const w = frontierWorld();
+      const b = w.proxy.bind(h.bind);
+      const res = await w.ask(h, b, "decider state: " + CANARY);
+      expect([h.cell, h.model, res.status]).toEqual([h.cell, h.model, 403]);
+      expect(((await res.json()) as Record<string, unknown>).code).toBe("DR_CUSTODY_HIT");
+      expect(w.sent).toHaveLength(0);
+      expect(w.journal().filter((l) => l.kind === "refusal")).toEqual([expect.objectContaining({ code: "DR_CUSTODY_HIT", cell: expect.objectContaining({ arm: h.cell, model: h.model }), markers: [{ index: 0, sha256: sha(CANARY).slice(0, 12) }] })]);
+      expect(w.journal().some((l) => l.kind === "request" || l.kind === "marker_hit")).toBe(false);
+      expect(w.journalText()).not.toContain(CANARY);
+    }
+  });
+
+  test("a main-model request carrying the hidden test name and no canary is forwarded and journalled as a marker_hit line", async () => {
+    for (const h of harborBinds()) {
+      const w = frontierWorld();
+      const b = w.proxy.bind(h.bind);
+      const res = await w.ask(h, b, "pytest -k " + HIDDEN);
+      expect([h.cell, h.model, res.status]).toEqual([h.cell, h.model, 200]);
+      expect(w.sent).toHaveLength(1);
+      expect(w.journal().filter((l) => l.kind === "marker_hit")).toEqual([expect.objectContaining({ model: h.frontier.model, decider: false, cell: expect.objectContaining({ arm: h.cell, model: h.model }), markers: [{ index: 1, sha256: sha(HIDDEN).slice(0, 12) }] })]);
+      expect(w.journal().some((l) => l.kind === "refusal")).toBe(false);
+      expect(w.journalText()).not.toContain(HIDDEN);
+    }
   });
 });
 

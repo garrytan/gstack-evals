@@ -40,9 +40,9 @@
 //   free. ProxyOptions.allowanceCode DR_ALLOWANCE_STOP turns a slot's allowance refusal into a 403 whose body every SDK shows
 //   as its error message; the default keeps the 402 E_ALLOWANCE refusal unchanged. Outcome lines carry the call's latency.
 //   BindRequest.forbidden_markers adds runner-only markers to the tripwire for that slot's calls only. On a DR_ALLOWANCE_STOP
-//   proxy a hit on those alone is refused DR_CUSTODY_HIT only when the request names one of the bind's deciders and the hit
-//   includes the bind's canary; every other such hit is journaled as a marker_hit line and the call goes on as if there were
-//   no hit. Both carry the slot's cell and each marker's index and sha256 prefix, never its text. A proxy-wide marker, and
+//   proxy a hit on those alone is refused DR_CUSTODY_HIT when it includes the bind's canary, whatever model the request
+//   names, since the frontier decider asks the main model's own id; every other such hit, on main-model and decider requests
+//   alike, is journaled as a marker_hit line and the call goes on as if there were no hit. Both carry the slot's cell and each marker's index and sha256 prefix, never its text. A proxy-wide marker, and
 //   every hit on other proxies, keeps E_TRIPWIRE byte for byte.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
@@ -630,7 +630,7 @@ export class MeteringProxy {
       const cell = { run_id, arm, task, model, trial, attempt };
       const asked = (parsed as Record<string, unknown> | null)?.model;
       const decider = typeof asked === "string" && slot.deciders.has(`${provider}:${asked}`);
-      if (decider && slot.canary !== null && leaks.includes(slot.canary)) return this.refuse(ctx, "DR_CUSTODY_HIT", 403, `the request carries ${leaks.length} runner-only marker(s); custody hit, the run stops`, { cell, markers });
+      if (slot.canary !== null && leaks.includes(slot.canary)) return this.refuse(ctx, "DR_CUSTODY_HIT", 403, `the request carries ${leaks.length} runner-only marker(s); custody hit, the run stops`, { cell, markers });
       this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route, model: typeof asked === "string" ? asked : null, source: ctx.source, decider, cell, markers });
     } else if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
     if (req.method === "GET") return forwardFree();
