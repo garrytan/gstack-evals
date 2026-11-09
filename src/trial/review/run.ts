@@ -2,7 +2,10 @@
 // review of one unit by one arm on one model in one pass is a trial (runTrial), so it inherits the session cache key,
 // resume, receipts and the rig's admission. This is the run loop for those trials, not a new runner.
 //
-// - Task id <repo name>-<pr>-<first 8 of head>: the agent sees only /work/<id>, seeded with the unit tree.
+// - Task id <repo name>-<pr>-<first 8 of head>: the agent sees only /work/<id>, seeded with the unit tree. The mount
+//   layout is keyed by the plan lens (workMount, reviewSandbox): the devex lens (devex.ts) mounts the work dir at /work
+//   with cwd /work, so its tree reads as /work/plan.md and /work/repo; code units and every other lens keep
+//   /work/<task id>. Process isolation refuses the devex layout. No devex prompt, parser or session runs here yet.
 // - The prompt is the frozen told prompt (told.ts) with the arm's command and the unit's base branch.
 // - The arm's cell (src/arms/cells.ts) sets the slot's models (slotModels), the driver's Codex voice (codexOption), the
 //   gstack config in the state root and the session key's arm tree (armTree). The driver gets the arm's plugins and
@@ -113,9 +116,21 @@ import { ENFORCED_ARM, GATE_DEADLINE_MS, GATE_KEY, GATE_SETTINGS_ARGS, gateRecor
 import { endStateOf, PV_PARSER_SHA256, pvOutcome, type InfraReason, type PvParse } from "../../../lanes/product-value/parse.ts";
 import type { EndState, Family } from "../../../lanes/product-value/types.ts";
 import { STATE_ROOT_DIR } from "../state-root.ts";
+import { DX_LENS, DX_WORK_ROOT } from "./devex.ts";
+import type { Sandbox } from "../sandbox.ts";
 import { PV_GATE_ARM, PV_GATE_KEY, PV_GSTACK, PV_LENS, PV_TEMPLATE_SHA256, pvArm, pvArmLine, pvGateSettings, pvPrompt, pvRecUser, renderPvChanges } from "./product-value.ts";
 
 type Env = Record<string, string | undefined>;
+
+/** Where a trial's work dir appears, keyed by the run's plan lens: /work on the devex lens, /work/<task id> on every other. */
+export const workMount = (lens: string | null, task: string): string => (lens === DX_LENS ? DX_WORK_ROOT : "/work/" + task);
+
+/** The sandbox a review trial runs in: the rig's own on every lens but devex, which mounts the work dir at /work. */
+export function reviewSandbox(sandbox: Sandbox, lens: string | null): Sandbox {
+  if (lens !== DX_LENS) return sandbox;
+  if (!sandbox.atWorkRoot) throw new Error("E_USAGE: the " + sandbox.isolation + " sandbox cannot mount the work dir at " + DX_WORK_ROOT + ", which the devex lens needs\n  fix: run with --isolation docker");
+  return sandbox.atWorkRoot(DX_WORK_ROOT);
+}
 
 /** A unit ready to run: its tree built and checked, and what units.json records about it. */
 export interface PreparedUnit {
@@ -180,7 +195,7 @@ export interface ReviewRunInput {
    * as finding nothing with a diagnostic note. A timeout, a CLI failure or a completed session before any model output,
    * or an infra failure at any point, is a coverage gap that stops the arm.
    */
-  plan?: { lens: PlanLens | typeof CEO_LENS | typeof PV_LENS };
+  plan?: { lens: PlanLens | typeof CEO_LENS | typeof PV_LENS | typeof DX_LENS };
   /** The product-value lens (plan.lens product-value, product-value.ts): the units' family and whether smoke rule 2's fallback sentence is on. */
   pv?: { family: Family; fallback: boolean };
   /** The models each named arm runs on; an arm not named runs on every model. */
@@ -523,7 +538,7 @@ export async function runReviewUnits(o: ReviewRunInput, rig: HostRig, log: (line
     const settings = rig.cells?.[arm.name]?.[cell.model] ?? null;
     const codex = o.host === "claude" ? codexOption(o.policy, settings) : null;
     const binding = await rig.bind({ cell: { run_id: o.runId, arm: arm.name, task: unit.task, model: cell.model, trial: cell.pass, attempt }, models: slotModels(o.policy, cell.model, codex ? settings : null), allowance_micros: allowance(cell.model) });
-    const sandbox = rig.sandbox(arm.name, false, cell.model);
+    const sandbox = reviewSandbox(rig.sandbox(arm.name, false, cell.model), plan?.lens ?? null);
     const dir = sessionDir(o.out, cell.model, arm.name, unit.task, cell.pass);
     rmSync(dir, { recursive: true, force: true });
     const home = sandbox.homePath(dir);

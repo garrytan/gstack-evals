@@ -3,14 +3,21 @@
 // sections 5, 6, 10 and 11 and passes only when that rule was driven on both sides of its edge, keyless, on fixtures.
 // Ledger lines open leases on a temporary LocalLedger and settle them. The session kind line runs a pinned gstack
 // checkout when GSTACK_EVALS_DX_PIN names one (its HEAD must be the pin), and otherwise a stand-in of the pin's
-// documented bin/gstack-session-kind and leanMode, which the line's rule names.
+// documented bin/gstack-session-kind and leanMode, which the line's rule names. The stand-in serves keyless and dry runs
+// only: a paid run refuses without the pinned checkout (dxPinProblem), and its line drives both sides. The layout line
+// drives run.ts's mount layout through a fake docker: devex at /work, every other lens at /work/<task id>.
 import { spawnSync } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DISALLOWED_TOOLS } from "../../../src/adapters/claude-code/driver.ts";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
-import { buildDxTree, DX_ARMS, DX_GSTACK, dxArmEnv, dxAutoplanGateSettings, dxMountProblems, dxSessionKind, dxSessionKindProblem, dxUnitProblems } from "../../../src/trial/review/devex.ts";
+import { CEO_LENS } from "../../../src/trial/review/ceo-outcome.ts";
+import { buildDxTree, DX_ARMS, DX_GSTACK, DX_LENS, DX_MOUNTS, dxArmEnv, dxAutoplanGateSettings, dxMountProblems, dxSessionKind, dxSessionKindProblem, dxUnitProblems } from "../../../src/trial/review/devex.ts";
+import { dxMain } from "../../../src/trial/review/dx-cli.ts";
+import { PV_LENS } from "../../../src/trial/review/product-value.ts";
+import { reviewSandbox } from "../../../src/trial/review/run.ts";
+import { dockerSandbox } from "../../../src/trial/sandbox.ts";
 import type { Termination } from "../../../src/types.ts";
 import * as R from "../score/rules.ts";
 import { MODEL_STRINGS, type ArmId, type DryCheck, type ModelId } from "../types.ts";
@@ -333,6 +340,76 @@ function sessionKinds(): DryCheck {
   }
 }
 
+function layout(): DryCheck {
+  const dir = mkdtempSync(join(tmpdir(), "dx-layout-"));
+  try {
+    const unit = join(dir, "units", "u1");
+    mkdirSync(join(unit, "repo"), { recursive: true });
+    writeFileSync(join(unit, "unit.json"), JSON.stringify({ id: "u1" }));
+    writeFileSync(join(unit, "plan.md"), "Add an init command.\n");
+    writeFileSync(join(unit, "key.json"), "{}");
+    writeFileSync(join(unit, "alias.json"), "{}");
+    writeFileSync(join(unit, "repo", "a.ts"), "export {};\n");
+    const work = join(dir, "work");
+    const tree = buildDxTree(join(dir, "units"), "u1", "none", work);
+    const log = join(dir, "argv.log");
+    const bin = join(dir, "docker");
+    writeFileSync(bin, "#!/bin/sh\nprintf '%s\\037' \"$@\" >> '" + log + "'\nprintf '\\n' >> '" + log + "'\n");
+    chmodSync(bin, 0o755);
+    const mount = (lens: string | null) => {
+      writeFileSync(log, "");
+      const session = reviewSandbox(dockerSandbox({ trialImage: "trial", docker: bin }), lens).agent("t1", { work, env: {} });
+      session.exec("true", 10_000);
+      session.stop();
+      const calls = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => l.split("\x1f"));
+      return calls.filter((c) => c[0] === "run" || c[0] === "exec").map((c) => c.flatMap((a, i) => (a === "-v" || a === "-w" ? [a + " " + c[i + 1]] : [])).join(" ")).join("; ");
+    };
+    const dx = mount(DX_LENS);
+    const seen = tree.files.map((f) => "/work/" + f);
+    const others = [null, "ceo", CEO_LENS, PV_LENS].map(mount);
+    return line("section 5: the devex lens mounts the work dir at /work with cwd /work, so a session sees /work/plan.md and /work/repo; every other lens keeps /work/<task id>", [[dx === "-v " + work + ":/work -w /work; -w /work" && seen.includes(DX_MOUNTS.plan) && seen.every((p) => p === DX_MOUNTS.plan || p.startsWith(DX_MOUNTS.repo + "/")) && tree.problems.length === 0, "devex: -v <work>:/work and -w /work, and the tree holds plan.md and repo/ only, no key.json or alias.json"], [others.every((m) => m === "-v " + work + ":/work/t1 -w /work/t1; -w /work/t1"), "code, ceo, ceo-outcome and product-value: -v <work>:/work/t1 and -w /work/t1, as before"]]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function paidPin(): Promise<DryCheck> {
+  const dir = mkdtempSync(join(tmpdir(), "dx-paid-"));
+  try {
+    const units = join(dir, "units");
+    mkdirSync(join(units, "u1", "repo"), { recursive: true });
+    writeFileSync(join(units, "u1", "unit.json"), JSON.stringify({ id: "u1" }));
+    writeFileSync(join(units, "u1", "plan.md"), "Add an init command.\n");
+    writeFileSync(join(units, "u1", "repo", "a.ts"), "export {};\n");
+    const pin = join(dir, "pin");
+    mkdirSync(join(pin, "bin"), { recursive: true });
+    writeFileSync(join(pin, "bin", "gstack-session-kind"), "#!/bin/sh\necho interactive\n");
+    const git = (...a: string[]) => spawnSync("git", ["-C", pin, ...a], { encoding: "utf8" });
+    git("init", "-q");
+    git("config", "user.email", "eval@example.com");
+    git("config", "user.name", "eval");
+    git("add", "-A");
+    git("commit", "-q", "-m", "fixture");
+    const fake = join(dir, "fake-git");
+    mkdirSync(fake);
+    writeFileSync(join(fake, "git"), "#!/bin/sh\necho " + DX_GSTACK.sha + "\n");
+    chmodSync(join(fake, "git"), 0o755);
+    const argv = ["--plan", "devex", "--units-dir", units, "--units", "all", "--models", MODEL_STRINGS.opus, "--out", join(dir, "out"), "--arms", "none", "plan-devex-review=" + DX_GSTACK.repo + "@" + DX_GSTACK.sha];
+    const go = async (env: Record<string, string>, dry = false) => {
+      const err: string[] = [];
+      const code = await dxMain(dry ? [...argv, "--dry-run"] : argv, { out: () => {}, err: (t) => err.push(t) }, env);
+      return { code, err: err.join("\n") };
+    };
+    const unset = await go({});
+    const wrong = await go({ GSTACK_EVALS_DX_PIN: pin });
+    const pinned = await go({ GSTACK_EVALS_DX_PIN: pin, PATH: fake + ":/usr/bin:/bin" });
+    const dry = await go({}, true);
+    return line("section 5: a paid run refuses without the pinned gstack checkout and at any other commit, and passes the guard with it; dry runs keep the stand-in", [[unset.code === 2 && /^E_USAGE .*GSTACK_EVALS_DX_PIN is not set/.test(unset.err) && unset.err.includes("\n  fix: "), "unset: E_USAGE with a fix line"], [wrong.code === 2 && wrong.err.includes("not the pin " + DX_GSTACK.sha), "a checkout at another commit: E_USAGE"], [pinned.code === 2 && pinned.err.includes("session loop is not built") && !pinned.err.includes("GSTACK_EVALS_DX_PIN"), "the pinned checkout passes the guard and meets the session loop refusal"], [dry.code === 0, "a dry run needs no pin"]]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 function detectors(): DryCheck {
   const t = (name: string) => readFileSync(join(FIXTURES, name, "host", "transcript.ndjson"), "utf8");
   const yes = pdrExposure(t("pdr-exposed"));
@@ -341,5 +418,5 @@ function detectors(): DryCheck {
 }
 
 export async function checks(): Promise<DryCheck[]> {
-  return [...failureTable(), await interim(), ...(await smoke()), await perModel(), mounts(), strip(), sessionKinds(), detectors()];
+  return [...failureTable(), await interim(), ...(await smoke()), await perModel(), mounts(), layout(), await paidPin(), strip(), sessionKinds(), detectors()];
 }

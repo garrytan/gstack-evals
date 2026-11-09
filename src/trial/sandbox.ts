@@ -8,11 +8,13 @@
 // - check: the grade tree and a read-only copy of the tasks directory, a read-only root filesystem with tmpfs for /tmp
 //   and HOME, and no network.
 // The work dir is mounted at /work/<task id>, so the project name the agent sees is the task id and never the
-// evaluator's layout (arm names, run paths).
+// evaluator's layout (arm names, run paths). A sandbox built with workRoot (or atWorkRoot) mounts it at that one path
+// for every task instead; the review run loop asks for /work on the devex lens.
 //
 // --isolation process (explicit only): setup and check run as this user with the env allowlist, and the agent runs under
 // bubblewrap with the system directories read-only, the trial's own HOME and the work dir, and no tasks directory. Without bwrap
-// on PATH it refuses (E_ISOLATION_UNSAFE). The verdict records the mode.
+// on PATH it refuses (E_ISOLATION_UNSAFE). It runs the agent at the work dir's host path, so it refuses atWorkRoot with
+// E_USAGE. The verdict records the mode.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
@@ -59,6 +61,8 @@ export interface Sandbox {
   homePath(dir: string): string;
   step(role: "setup" | "check", command: string, task: string, opts: StepOptions): StepResult;
   agent(task: string, opts: { work: string; env: Record<string, string>; network?: string | null }): AgentSession;
+  /** The same sandbox with the work dir mounted at root for every task; a sandbox that cannot remap paths throws. */
+  atWorkRoot?(root: string): Sandbox;
 }
 
 export class IsolationError extends Error {}
@@ -87,12 +91,13 @@ function dockerStep(docker: string, flags: string[], image: string[], name: stri
 export const dockerAvailable = (docker = "docker"): boolean => spawnSync(docker, ["version", "--format", "{{.Server.Version}}"], { stdio: "ignore", timeout: 15_000 }).status === 0;
 
 /** Containers for setup and check (the trial image) and for the agent (the arm image). */
-export function dockerSandbox(opts: { trialImage: string; armImage?: string; docker?: string }): Sandbox {
+export function dockerSandbox(opts: { trialImage: string; armImage?: string; docker?: string; workRoot?: string }): Sandbox {
   const docker = opts.docker ?? "docker";
-  const workPath = (_work: string, task: string) => "/work/" + task;
+  const workPath = (_work: string, task: string) => opts.workRoot ?? "/work/" + task;
   return {
     isolation: "docker",
     workPath,
+    atWorkRoot: (root) => dockerSandbox({ ...opts, workRoot: root }),
     fixturesPath: () => "/fixtures",
     homePath: () => "/home/agent",
     step(role, command, task, o) {
@@ -150,6 +155,9 @@ export function processSandbox(opts: { bwrap?: string } = {}): Sandbox {
   return {
     isolation: "process",
     workPath: (work) => work,
+    atWorkRoot: (root) => {
+      throw new Error("E_USAGE: --isolation process runs the agent at the work dir's host path, so it cannot mount the work dir at " + root + "\n  fix: run with --isolation docker");
+    },
     fixturesPath: (fixtures) => fixtures,
     homePath: (dir) => {
       mkdirSync(join(dir, "home"), { recursive: true });

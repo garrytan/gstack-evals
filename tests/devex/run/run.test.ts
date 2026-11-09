@@ -81,7 +81,7 @@ describe("review-units --plan devex", () => {
       expect(a.out.join("\n")).toContain("GSTACK_SESSION_KIND=interactive");
       const b = io();
       expect(await main([...base, ...arms], b.io, {})).toBe(2);
-      expect(b.err.join("\n")).toMatch(/^E_USAGE .*session loop is not built/);
+      expect(b.err.join("\n")).toMatch(/^E_USAGE .*GSTACK_EVALS_DX_PIN is not set/);
       const c = io();
       expect(await main([...base, "--arms", "autoplan=" + DX_GSTACK.repo + "@" + "0".repeat(40), "--dry-run"], c.io, {})).toBe(2);
       expect(c.err.join("\n")).toContain("the prereg pins");

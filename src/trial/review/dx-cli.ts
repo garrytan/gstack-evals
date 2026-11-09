@@ -2,10 +2,11 @@
 // review-units --plan devex (prereg wiki/plans/2026-11-09-geva-417-devex-review-intentions-prereg, sections 5, 6 and
 // 10; section 15 rules 4 and 7): the command half of the devex lens (devex.ts). It reads a units directory
 // (lanes/devex/types.ts's layout), checks every unit folder, builds each arm's tree in a scratch dir and asserts its
-// mount, and prints every frozen setting. --dry-run writes nothing under --out and spends nothing. A paid run refuses
-// with E_USAGE until the review run loop can seed a session at /work (section 5 mounts /work/repo and /work/plan.md,
-// and run.ts seeds each trial at /work/<task id>). Whatever it cannot do refuses with E_USAGE before anything is built
-// or spent, and every refusal ends with a fix line.
+// mount, and prints every frozen setting. --dry-run writes nothing under --out and spends nothing. A paid run first
+// needs GSTACK_EVALS_DX_PIN to name a checkout at DX_GSTACK.sha holding bin/gstack-session-kind (dxPinProblem), and
+// never uses the dry run's stand-in; it then refuses with E_USAGE because the devex session loop is not built (run.ts
+// mounts a devex work dir at /work, but runs no devex prompt, parser or session). Whatever it cannot do refuses with
+// E_USAGE before anything is built or spent, and every refusal ends with a fix line.
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,7 +19,7 @@ import { insideRepo } from "../../../lanes/review-noloss/suite.ts";
 import { parseStackRef } from "../../skill-eval/cli/arms.ts";
 import { HOST_PROVIDERS } from "../../skill-eval/cli/call.ts";
 import { DEFAULT_POLICY, loadPolicy, providerOf, type LoadedPolicy } from "../../skill-eval/cli/policy.ts";
-import { buildDxTree, DX_ARMS, DX_AUTOPLAN_GATE, DX_COMMON_SHA256, DX_GSTACK, DX_LENS, DX_MOUNTS, DX_SYSTEM_PROMPT, DX_TEMPLATE_SHA256, dxArmEnv, dxLimits, dxPrompt, dxTaskId, dxUnitProblems, dxUnitsDigest, isDxArm } from "./devex.ts";
+import { buildDxTree, DX_ARMS, DX_AUTOPLAN_GATE, DX_COMMON_SHA256, DX_GSTACK, DX_LENS, DX_MOUNTS, DX_SYSTEM_PROMPT, DX_TEMPLATE_SHA256, dxArmEnv, dxLimits, dxPinProblem, dxPrompt, dxTaskId, dxUnitProblems, dxUnitsDigest, isDxArm } from "./devex.ts";
 
 type Env = Record<string, string | undefined>;
 interface Io {
@@ -88,7 +89,7 @@ export async function dxMain(argv: string[], io: Io, env: Env): Promise<number> 
   }
 }
 
-function dxUnits(argv: string[], io: Io, _env: Env): number {
+function dxUnits(argv: string[], io: Io, env: Env): number {
   const flags = parseArgs(argv);
   const one = (f: string) => flags.get(f)?.[0] ?? null;
   for (const f of ["--units-dir", "--units", "--arms", "--models", "--out"]) if (!flags.has(f)) refuse("--plan devex needs " + f, "pass " + f + "; see --help");
@@ -141,7 +142,11 @@ function dxUnits(argv: string[], io: Io, _env: Env): number {
   if (!Number.isSafeInteger(passes) || passes < 1 || passes > 3) refuse("--passes must be a whole number from 1 to 3", "pass --passes 1 to 3");
   const out = resolve(one("--out")!);
   if (insideRepo(out)) refuse("a devex run holds review text, and --out " + out + " is inside the repo", "pass an --out outside the repo");
-  if (!flags.has("--dry-run")) refuse("the devex session loop is not built: section 5 mounts /work/repo and /work/plan.md, and the review run loop seeds each trial at /work/<task id>", "run --dry-run; a paid run waits for the run loop to seed a devex tree at /work");
+  if (!flags.has("--dry-run")) {
+    const pin = dxPinProblem(env.GSTACK_EVALS_DX_PIN, env.PATH);
+    if (pin) refuse("a paid run records each session's kind from the pinned checkout's own bin/gstack-session-kind: " + pin, "set GSTACK_EVALS_DX_PIN to a checkout of " + DX_GSTACK.repo + " at " + DX_GSTACK.sha + ", or run --dry-run");
+    refuse("the devex session loop is not built: the review run loop mounts a devex work dir at /work (workMount), but runs no devex prompt, parser or session yet", "run --dry-run; a paid run waits for the devex session loop");
+  }
   const limits = dxLimits(repairs.has("all"));
   const digest = dxUnitsDigest(unitsDir, unitIds);
   io.out("review-units dry run: nothing is built under --out, written or spent");

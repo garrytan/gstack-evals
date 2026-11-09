@@ -14,13 +14,16 @@
 //   doubled on every arm and model only under the cost repair (smoke rule 5). The reviewer subagent runs on the cell's
 //   model (the driver sets CLAUDE_CODE_SUBAGENT_MODEL to it). gstack arms get plan-tune's question-preference state
 //   pinned empty.
-// - A unit tree holds plan.md and repo/ only (the aliased snapshot, its one-commit .git included), seeded at /work, so
-//   the session sees /work/plan.md and /work/repo. autoplan's plan.md is the unit's plan wrapped under
+// - A unit tree holds plan.md and repo/ only (the aliased snapshot, its one-commit .git included), seeded in the work
+//   dir that run.ts's workMount mounts at /work with cwd /work, so the session sees /work/plan.md and /work/repo. autoplan's plan.md is the unit's plan wrapped under
 //   "## Implementation plan" and "## Review record". dxMountProblems checks a tree's file list; the run and the dry run
 //   both refuse on any problem. key.json, alias.json and unit.json are never mounted, and no repository instruction file
 //   (CLAUDE.md, CLAUDE.local.md, AGENTS.md, .claude/AGENTS.md at any depth) may sit in repo/.
 // - dxUnitsDigest is the sha256 over "<unit id>/<path> <sha256>" lines of every regular file in each unit's folder,
 //   key.json and alias.json included, so rows and scoring can check that no input or key changed after the runs.
+// - dxPinProblem checks the checkout a paid run records session kinds from: a git checkout whose HEAD is DX_GSTACK.sha
+//   and that holds bin/gstack-session-kind. dx-cli.ts refuses a paid run on any problem; only keyless and dry runs use
+//   a stand-in (lanes/devex/run/checks.ts).
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -181,5 +184,15 @@ export function dxSessionKindProblem(arm: ArmId, got: { session_kind: string | n
   if (want === null) return null;
   if (got.session_kind !== want) return arm + " runs with session kind " + want + ", and the pin reports " + JSON.stringify(got.session_kind);
   if (arm === "autoplan" && got.lean !== true) return "autoplan runs its lean feature kind, and the pin's leanMode reports " + JSON.stringify(got.lean);
+  return null;
+}
+
+/** Why dir is not the pinned gstack checkout a paid run needs, or null when it is. git runs with PATH set to path when given. */
+export function dxPinProblem(dir: string | undefined, path: string | undefined, sha: string = DX_GSTACK.sha): string | null {
+  if (!dir) return "GSTACK_EVALS_DX_PIN is not set, so no pinned gstack checkout is named";
+  if (!lstatSync(join(dir, ".git"), { throwIfNoEntry: false })) return "GSTACK_EVALS_DX_PIN " + dir + " is not a git checkout";
+  const head = spawnSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8", env: { ...process.env, ...(path ? { PATH: path } : {}) } }).stdout?.trim() || "no commit";
+  if (head !== sha) return "GSTACK_EVALS_DX_PIN " + dir + " is at " + head + ", not the pin " + sha;
+  if (!lstatSync(join(dir, "bin", "gstack-session-kind"), { throwIfNoEntry: false })?.isFile()) return "GSTACK_EVALS_DX_PIN " + dir + " holds no bin/gstack-session-kind";
   return null;
 }
