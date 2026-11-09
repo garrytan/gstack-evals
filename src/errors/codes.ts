@@ -1142,6 +1142,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_HM_PIN: {
+    exit: 2,
+    meaning: "A harness mechanics gstack pin does not hold (lanes/harness-mechanics/match.ts): a file vendored under lanes/harness-mechanics/vendor/gstack is missing or is not the git blob pins.ts records, HM_GSTACK is unset, or the checkout it names lacks the pin or holds another blob there, or the vendored checker no longer has exactly one quote transform.",
+    fix: "Point HM_GSTACK at a gstack checkout that holds the pin, and restore the vendored file from that commit with git show. Never edit a vendored file or a pinned blob to make them match.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: false,
+    owner: "U20",
+  },
   E_TBV_NOT_BUILT: {
     exit: 2,
     meaning: "A trust-but-verify command or function is declared but not built yet (lanes/tbv). Nothing ran.",

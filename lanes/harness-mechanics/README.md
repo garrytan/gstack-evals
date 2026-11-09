@@ -9,6 +9,9 @@ The build of the preregistration [2026-11-09-geva-448-harness-mechanics-prereg](
 - table.ts: one HmSessionRow (src/types.ts) per Lane B trial dir, through L1's readers.
 - score.ts: the session scorer. A stub: every score field is null until the scorer's build.
 - analyze.ts: the report entry point. It refuses with E_HM_NOT_BUILT until the analysis build.
+- match.ts: section 6's frozen match regex through gstack's own contract checker at the pin (dry-run step 3). It runs match.txt's 72 cases and probes.txt's 189 probes (REGEX and BEFORE) through the vendored checkContract under Bun, and under Node 24 through node-probe.mjs with the checker's own quote transform and flag i. It prints gstack's built-in classifier beside them, times the five timing cases (REGEX in process, BEFORE in a child killed at 6 s), and checks that the Stop hook at the pin calls checkContract once with no loadLine.
+- node-probe.mjs: the Node and timing child of match.ts, plain JavaScript so Node and Bun both run it.
+- vendor/gstack/: gstack's lib/skill-contract.ts and what it imports (shell-writes.ts, fs-atomic.ts, skill-route.ts, skill-triggers.ts, state-root.ts), byte for byte from the pin, so CI runs gstack's checker with no checkout. The scorer imports lastBashWrite from vendor/gstack/lib/shell-writes.ts. The Stop hook is kept as text (skill-contract-stop-hook.ts.txt): it is read, never run. pins.ts records each file's git blob sha.
 - dryrun.ts: one line per dry-run step and build condition. A step whose unit is not built prints FAIL not built (unit N).
 - cli.ts: the commands below, also reachable as gstack-evals hm.
 
@@ -38,6 +41,8 @@ Models read cells.l1.json (Opus) and cells.l1-sol.json (Sol) as L1 ran them, wit
     bun lanes/harness-mechanics/cli.ts report <table.jsonl> --stage stage1|stage3|stage4 --out <dir>
 
 The launcher commands are L1's (quick/laneb/l1/README.md, "L1 launcher") under this lane's profile: the same environment (LEDGER, ARMS, UBI_RUNNER, UBI_RUNNER_SHA256, UBI_OWNER, UBI_RECOVERY_DIR and the route's key), the same exit codes, host root ~/hm on the awake host, ledger port 9930 and arm manifests under quick/laneb/arms/manifests/hm. prepare also needs HM_SCREENED and HM_SCREENED_SHA256, and writes hm.json (sessions, picker calls, the closing line, the screened lists' digest) beside L1's plan.json. ARMS holds the none, prose, hook and judge tars.
+
+The dry run's matcher steps (3-matcher-probes, matcher-72, probes-189, stop-hook-loadline) need HM_GSTACK, a gstack checkout that holds the pin: each checks that the vendored files are the pin's blobs there. Without it they fail with E_HM_PIN. probes-189 takes about a minute, because BEFORE runs until its child is killed.
 
 The table config is {"jobs": [{"dir": <jobs dir>, "part": <part>}], "sessions": [<proxy-sessions.jsonl>], "home": "/root"}.
 

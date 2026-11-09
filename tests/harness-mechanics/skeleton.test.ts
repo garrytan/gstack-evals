@@ -162,10 +162,11 @@ describe("cli", () => {
 
   test("dryrun prints every step name, passes the skeleton, fails the steps not built and exits 1", () => {
     const out = mkdtempSync(join(tmpdir(), "hm-dry-"));
-    const r = run(["dryrun", "--out", out]);
+    const r = run(["dryrun", "--out", out], { HM_GSTACK: "" });
     const lines = r.stdout.toString().trim().split("\n");
     expect(lines.map((l) => l.split(" ")[1])).toEqual([...STEPS.map((s) => s.name), "FAIL"]);
-    for (const n of ["1-arm-tars", "2-verify-hook", "3-matcher-probes", "4-scorer", "5-judgment-hooks", "6-ledger", "7-leak-scan-env", "8-analysis", "stop-hook-loadline", "matcher-72", "probes-189", "patterns-per-arm", "verdict-tables", "h1-amendment", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL not built (unit "))).toBe(true);
+    for (const n of ["1-arm-tars", "2-verify-hook", "4-scorer", "5-judgment-hooks", "6-ledger", "7-leak-scan-env", "8-analysis", "patterns-per-arm", "verdict-tables", "h1-amendment", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL not built (unit "))).toBe(true);
+    for (const n of ["3-matcher-probes", "stop-hook-loadline", "matcher-72", "probes-189"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL E_HM_PIN set HM_GSTACK"))).toBe(true);
     expect(lines[0]).toStartWith("DRYRUN skeleton PASS");
     expect(lines.at(-1)).toBe("DRYRUN: FAIL");
     expect(r.exitCode).toBe(1);

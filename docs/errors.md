@@ -143,6 +143,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_OUTCOME_IMAGE](#e_outcome_image) | 2 | U20 |
 | [E_HM_INPUT](#e_hm_input) | 2 | U20 |
 | [E_HM_NOT_BUILT](#e_hm_not_built) | 2 | U20 |
+| [E_HM_PIN](#e_hm_pin) | 2 | U20 |
 | [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
 | [E_TBV_INPUT](#e_tbv_input) | 2 | U20 |
 | [E_TBV_HISTORY](#e_tbv_history) | 2 | U20 |
@@ -1009,6 +1010,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 A harness mechanics command or function is declared but its unit is not built yet (lanes/harness-mechanics). Nothing ran.
 
 Fix: Use a build of gstack-evals that has it, or build the unit the message names.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_PIN
+
+A harness mechanics gstack pin does not hold (lanes/harness-mechanics/match.ts): a file vendored under lanes/harness-mechanics/vendor/gstack is missing or is not the git blob pins.ts records, HM_GSTACK is unset, or the checkout it names lacks the pin or holds another blob there, or the vendored checker no longer has exactly one quote transform.
+
+Fix: Point HM_GSTACK at a gstack checkout that holds the pin, and restore the vendored file from that commit with git show. Never edit a vendored file or a pinned blob to make them match.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 

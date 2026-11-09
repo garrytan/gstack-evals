@@ -145,3 +145,22 @@ export function screenedFromEnv(l: Lists): Screened {
   if (!f || !/^[0-9a-f]{64}$/.test(want)) throw new Error("E_USAGE set HM_SCREENED to the task-fit screen's lists and HM_SCREENED_SHA256 to their digest");
   return readScreened(readFileSync(f, "utf8"), want, l);
 }
+
+// gstack files vendored byte for byte from gstackPin under GSTACK_VENDOR, with each file's upstream git blob sha. The
+// matcher runs gstack's own checkContract from them, and the scorer imports the same lastBashWrite. The Stop hook is kept
+// as text (its name plus .txt): it is read for its checkContract call, never run, and its other imports are not vendored.
+export const GSTACK_VENDOR = "lanes/harness-mechanics/vendor/gstack";
+export const GSTACK_BLOBS = {
+  "lib/skill-contract.ts": "d10da8dae892ad57c2687d18c85ec8771ebb0f47",
+  "lib/shell-writes.ts": "4502f77db5e7c06735e22678a7ea07616457e6cc",
+  "lib/fs-atomic.ts": "4b453b455213041b08d8d8a245a914d6f11adc49",
+  "lib/skill-route.ts": "b74e7374a3c642dab8733f414c2997eca8857710",
+  "lib/skill-triggers.ts": "f0052bc6cf14a5f2fa1fedee7eda0922b2ac0639",
+  "lib/state-root.ts": "34a0fa75638678c74f8fb7c7c799ab8c22463cf8",
+  "hosts/claude/hooks/skill-contract-stop-hook.ts": "709a4f8e05533c635bfe785449ad711a5e9aa6c5",
+} as const;
+
+// Section 6's matcher numbers: match.txt's COUNT and NO cases, probes.txt's probes and timing cases, the timing bound (a
+// tenth of the Stop hook's 5 s deadline), the time BEFORE must pass on one timing case and the limit its child is killed
+// at, the built-in classifier's wrong count on the 72 cases, and the Node major the prereg names.
+export const MATCHER = { count: 31, no: 41, probes: 189, time: 5, timeBoundMs: 500, beforePastMs: 5000, beforeLimitMs: 6000, builtinWrong: 34, nodeMajor: 24 } as const;
