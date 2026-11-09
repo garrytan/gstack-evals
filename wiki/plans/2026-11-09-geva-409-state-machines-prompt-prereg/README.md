@@ -15,6 +15,7 @@ links:
 attachments:
   - 4990e150ecda2c8b02c43cacea4aa16a5051d5ffd6245f14a9f2a7c92aca596d  power.py
   - ff5c2f62bd5aa91e1f3220aef74c7835452112fc387f7e2e0842fc7ebdb3cb65  power.txt
+  - 99202cca9a8636a144c1eff0c1293eb1f0950711feb997629f4b2487b5835289  prereg.json
   - 8bf5633369824e79387dec1b80d5600c59c8ef253d891128287d9aa1ce99a11f  supply-count.md
   - 182e0bc9a19a8125c7a83164b767e87f9e3321a3b4e387982984f35f380ac264  supply-count.py
 ---
@@ -26,6 +27,8 @@ GEVA-409, Captain GEVA-2. Plan only: nothing in this post spends money, and no m
 ## Approval
 
 Approved at gate_rev 1 of /autoplan run autoplan-20261109051613 (lean, one Opus 5.5 reviewer), rec_hash e035caa0962a. The project owner took every recommendation on 2026-11-09, relayed by the Captain: the three High fixes (two breakage readings, hunk-level test application, and an incremental follow-on score), all 13 Medium, Low and informational findings, the $4,000 line for this eval, a separate $1,100 line for gstack's /qa, the structure claim in this line, the newest-first draw, and no owner labels for the judged ratings. This revision writes those picks in.
+
+On 2026-11-09, before the build, the Captain added the seed file prereg.json and settled three readings the build follows, written into sections 4, 6 and 14: the proxy's web-tool refusal, the no-answer rule and the exact sign-flip test.
 
 ## ELI5
 
@@ -115,7 +118,7 @@ Every other bug is "other": single-input logic, parsing, formatting, arithmetic,
 
 **Judged eligibility and labels.** GPT-6 Astra and Opus 5.5 each read the issue text, the fix and the fix's tests (never an arm's output) and answer two frozen questions. Is this a defect a reviewer could see in the code before the fix (the code contradicts its documentation, types, tests or plain intent, crashes on valid input, or leaves state inconsistent), rather than a new feature, option or changed spec? Is it state-shaped by section 2? A unit is eligible only when both say defect. It is state-shaped or other when both agree, and unclear otherwise (kept in every total, left out of the stratum split). Agreement (Cohen's kappa) on both questions is reported.
 
-**Draw.** At most 3 units per repository across admission, any file-scope retry units and test. A seeded draw (seed frozen in the preregistration's JSON) takes 15 admission units from March to June first. It then takes 60 test units, 30 state-shaped and 30 other where supply allows, filling each stratum newest first: every eligible July unit in the stratum in seeded order, then June, May, April and March. If a stratum runs short, the other fills the gap. Admission units never enter the test set.
+**Draw.** At most 3 units per repository across admission, any file-scope retry units and test. A seeded draw (draw_seed in the attached prereg.json, minted once from random bytes on 2026-11-09 before any draw and never re-minted) takes 15 admission units from March to June first. It then takes 60 test units, 30 state-shaped and 30 other where supply allows, filling each stratum newest first: every eligible July unit in the stratum in seeded order, then June, May, April and March. If a stratum runs short, the other fills the gap. Admission units never enter the test set.
 
 **Scope.** Each unit's scope is the deepest directory holding every non-test source file the fix changed, widened one parent at a time until it holds at least 10 source files of the unit's language. Its file and line counts are recorded as a covariate.
 
@@ -123,7 +126,7 @@ Every other bug is "other": single-input logic, parsing, formatting, arithmetic,
 
 - A fresh container from the unit's image digest, with the repository at the base commit and its git history replaced by one commit of the base tree: no remotes, tags, reflog or other objects. A preflight checks the commit count (one on a base tree, two on a follow-on tree built on a first stage), then scans the filesystem (outside /proc and /sys) for any line of 30 characters or more that the fix adds and that appears in no file of the base commit's tree. A hit drops the unit as leaked, before any model call, and drops are reported by reason.
 - The fix's tests are never present before scoring.
-- Egress: only the metering proxy, through the existing nftables allowlist. Claude Code's WebSearch and WebFetch are disallowed in every arm, and the proxy refuses any request carrying a server-side web tool.
+- Egress: only the metering proxy, through the existing nftables allowlist. Claude Code's WebSearch and WebFetch are disallowed in every arm, and the proxy refuses any request carrying a server-side web tool. That refusal is an option of the metering proxy, off by default so other lanes' requests pass through unchanged, and on for every session in this family.
 - The harness: the outcome-skills rig's agent on Claude Code's own system prompt at the pinned Claude Code version, with CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 and the frozen environment in every arm. Sol and particle-1 run through the proxy routes earlier runs used, provider pinned, no fallbacks.
 - Every arm in this line runs with no gstack, in containers on Ubicloud VMs that hold no gstack install and no drive path, so they are clean by construction. A read audit after the run checks file reads per arm and is reported as a descriptive check.
 
@@ -153,7 +156,7 @@ Contrasts. Claim 1: primary A1 minus A0; lens A1 minus A2; framing A2 minus A0. 
 
 First stage: wall limit 5,400 seconds and 200 turns; allowance per session Opus $15, Sol $15, particle-1 $3. Follow-on: 3,600 seconds and 150 turns; Opus $6, Sol $6, particle-1 $1. If admission's 95th-percentile Opus session cost is above half its allowance, the allowance doubles for every model before the test run, and the Captain sees the new projection first.
 
-A session ends when its turn ends and its background tasks are quiet (the rig's rule), or at a limit. Whatever the tree holds then is scored.
+A session ends when its turn ends and its background tasks are quiet (the rig's rule), or at a limit. Whatever the tree holds then is scored. Nobody answers the agent: a question asked in prose ends its turn and the session is scored as is, and Claude Code's AskUserQuestion tool gets one fixed reply in every arm, the no-gstack arm included: "No one is available to answer. Use your own judgment." Question counts are reported per arm.
 
 - **Completed** or **limit** (wall, turns, allowance): scored as is. An arm's own overruns count against it.
 - **Upstream:** a provider or proxy error ended the session. One retry from a fresh container; a second upstream end is a gap.
@@ -215,7 +218,7 @@ Claim 2's follow-on starts from the arm's **full tree**: every edit the arm made
 | Arm identity leaks to the judge through comments | Partial blinding only; stated as a limit |
 | Training-data contamination | July stratum reported alone |
 | One repository dominates | 3 units per repository at most; intervals bootstrap over repositories |
-| Provider drift over the run | All arms and follow-ons of a unit run in the same part, interleaved in seeded order |
+| Provider drift over the run | All arms and follow-ons of a unit run in the same part, interleaved in an order seeded by order_seed in prereg.json |
 
 ### 10. Secondaries
 
@@ -247,7 +250,7 @@ Admission decides nothing about either claim, and its units never enter the test
 
 ### 13. The test run, and the stage 2 rule
 
-On the 60 test units and all three models: A0, A1, A2 and S2 once each (720 first-stage sessions), then the follow-on three times on each of S0, A1 and S2's trees (1,620 follow-ons). All sessions of a unit run in the same part, in seeded order.
+On the 60 test units and all three models: A0, A1, A2 and S2 once each (720 first-stage sessions), then the follow-on three times on each of S0, A1 and S2's trees (1,620 follow-ons). All sessions of a unit run in the same part, in an order seeded by order_seed (prereg.json).
 
 **Claim 1's stage 2 rule (frozen).** The 60-unit run is the whole claim 1 test. On a model where A1 clean-fixes more test units than A2, claim 1 gets a stage 2 on that model: 120 fresh units drawn by the same rule, A0, A1 and A2 once each, priced from the test run's measured cost (about $1,110 for Opus or Sol and $140 for particle-1 at planning prices). It needs a cap the Captain records first, and a projection past $5,000 all-in goes to the owner. Stage 2 is analysed on its own units with its own verdict and never pooled with the 60. Its units come from what remains after the test draw, most likely March to June because July fills first, and the results say so. On a model where A1 does not beat A2, claim 1's result on that model is final at n = 60.
 
@@ -255,8 +258,8 @@ Claim 2 has no stage 2 in this line.
 
 ### 14. Analysis and verdicts
 
-- **Claim 1 per model:** A1 minus A0 (primary) and A1 minus A2 (lens), each the paired difference in clean-fix rate with a 95% interval from a bootstrap over repositories (10,000 resamples, frozen seed), the exact McNemar p and the counts of units that got worse and better. The break-rate difference is reported beside each.
-- **Claim 2 per model:** A1 minus S0 (primary) and A1 minus S2 (lens), each the paired difference in per-unit mean incremental follow-on score, with a 95% interval from a bootstrap over repositories, an exact paired sign-flip permutation p, and the counts of units that got worse and better. The same contrasts on the end-to-end score are reported beside them as net value.
+- **Claim 1 per model:** A1 minus A0 (primary) and A1 minus A2 (lens), each the paired difference in clean-fix rate with a 95% interval from a bootstrap over repositories (10,000 resamples, bootstrap_seed in prereg.json), the exact McNemar p and the counts of units that got worse and better. The break-rate difference is reported beside each.
+- **Claim 2 per model:** A1 minus S0 (primary) and A1 minus S2 (lens), each the paired difference in per-unit mean incremental follow-on score, with a 95% interval from a bootstrap over repositories, an exact two-sided paired sign-flip permutation p (each unit's difference flips sign, and p is computed exactly by convolution, not by sampling), and the counts of units that got worse and better. The same contrasts on the end-to-end score are reported beside them as net value.
 - **Verdicts per claim and model:** HELPS when the primary's bootstrap interval lower bound is above 0 and its exact p (McNemar for claim 1, the sign-flip permutation for claim 2) is below 0.05; HURTS when the upper bound is below 0 and the exact p is below 0.05; otherwise NO MEASURABLE DIFFERENCE, stated with the MDD. "Breaks more" is added when the first stage's strict break-rate difference against the comparison arm (S0's is zero) has its interval above 0. Each verdict also prints the gap worst-case reading.
 - **Lens readings:** the lens contrast reads "the lens helps" or "the lens hurts" on the same interval rule, and otherwise "no measurable lens effect" with its MDD. When claim 1 stops at n = 60, the lens upper bound states the largest lens gain the data leaves open.
 - **Pooled:** each contrast pooled across the three models with a bootstrap stratified by model. Descriptive.
