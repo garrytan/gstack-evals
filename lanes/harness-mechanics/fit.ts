@@ -134,8 +134,8 @@ const FR = "hm-fit";
 // docker group (bootstrap's group change doesn't reach a reused SSH session). A task that leaves no row goes to norow.txt.
 export const workerScript = () => [
   "#!/usr/bin/env bash",
-  'k=$1; R="${HM_FIT_ROOT:-$HOME/' + FR + '}"; cd "$R/gstack-evals" || exit 1',
-  'if ! docker info >/dev/null 2>&1; then [ -n "$HM_FIT_SG" ] && { echo "worker $k: no Docker access" >> "$R/norow.txt"; exit 1; }; exec sg docker -c "HM_FIT_SG=1 bash \'$0\' $k"; fi',
+  'k=$1; S="$(readlink -f "$0")"; R="${HM_FIT_ROOT:-$HOME/' + FR + '}"; cd "$R/gstack-evals" || exit 1',
+  'if ! docker info >/dev/null 2>&1; then [ -n "$HM_FIT_SG" ] && { echo "worker $k: no Docker access" >> "$R/norow.txt"; exit 1; }; exec sg docker -c "HM_FIT_SG=1 bash \'$S\' $k"; fi',
   'export PATH="$HOME/.bun/bin:$PATH" HM_GSTACK="$R/gstack" ARMS="$R/arms" HM_SCREENED="$R/lists/screened.txt" HM_SCREENED_SHA256="$(cat "$R/lists/sha256")" HM_FIT_TAG="hm-fit-w$k"',
   "while t=$(flock \"$R/queue.lock\" sh -c 'head -n 1 \"$0\"; sed -i 1d \"$0\"' \"$R/queue.txt\"); [ -n \"$t\" ]; do",
   "  for try in $(seq 1 " + FIT_VM.pullTries + "); do",
