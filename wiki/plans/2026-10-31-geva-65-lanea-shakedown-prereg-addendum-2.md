@@ -54,11 +54,13 @@ policy/models.json is unchanged (sha256 a00180abac95), so the allowances, price 
 
 ## 4. Items, caps and admission
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 **Items.** The ledger binds each item to the first run that leases it (E_ITEM_BOUND), and the first round's items are closed. So each rerun call has a new item: `lanea-shakedown-r2-3c`, `lanea-shakedown-r2-3`, `lanea-shakedown-r2-5c`, `lanea-shakedown-r2-5`, `lanea-shakedown-r2-7c` and `lanea-shakedown-r2-7`. They go in the same approval record as the first round, ledger/u11-lanea-shakedown/ in the Captain drive, so U11's settled spend stays one sum.
 
 **Caps.** Each item's cap, and its call's `--spend-cap`, is the smaller of the table's `--spend-cap` for that row and $480 minus U11's cumulative settled spend, read with `gstack-evals ledger status` just before its init and rounded down to the cent. Cumulative spend counts all 11 first-round items ($14.315538) and every earlier rerun item. The table's caps are $8 (3c), $45 (3), $56 (5c), $360 (5), $64 (7c) and, for row 7, $480 minus ledger spend so far. With $465.68 of headroom at the start, the first five items take the table's cap. Row 7 takes whatever headroom is left. The calls run one at a time, so settled spend plus the one open lease never passes $480.
 
-**Approval and delegation.** Garry's words, "do it" (Captain drive approvals/2026-10-30-u11-lanea-shakedown-cap.md, taking the $500 cap and $480 stop), fund the rerun. The Captain approved the rerun within that cap (approvals/2026-10-31-u11-rerun-rows-3-5-7.md) and delegated each `ledger init --admission required` to the run thread, as in the first round. Each init quotes Garry's words verbatim with that source.
+**Approval and delegation.** Garry's approval (Captain drive approvals/2026-10-30-u11-lanea-shakedown-cap.md, taking the $500 cap and $480 stop), fund the rerun. The Captain approved the rerun within that cap (approvals/2026-10-31-u11-rerun-rows-3-5-7.md) and delegated each `ledger init --admission required` to the run thread, as in the first round. Each init quotes Garry's words verbatim with that source.
 
 **Admission.** Addendum 1's step-by-step admission applies to every rerun item, with three changes:
 

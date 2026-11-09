@@ -356,6 +356,8 @@ Family U's primary (completion over 3 scenarios) and X's (the mean of 2 docs-onl
 
 ### 8. Price per skill and program
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 **Metered anchors** (2026-11-03):
 
 | Source | What ran | Opus 5.5 | GPT-6.1 Sol | particle-1 |

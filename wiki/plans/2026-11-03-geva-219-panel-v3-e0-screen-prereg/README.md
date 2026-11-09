@@ -288,6 +288,8 @@ concentration 8: P(pooled anchor recall >= 0.85), 24 anchors; P(stratum anchor r
 
 ## 8. Cost, caps, ledger items and the start rule
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 Projections are the plan's (section 7): none at $0.33 a session on Opus (#131's measured mean scaled by 2.5 for v3's larger units) and a quarter of that on particle-1. Judging is projected from #127's measured judge spend ($0.72 for 8 packets of v2 size), scaled for three full reads of 24 packets about 1.4 times v2's size: $0.126 a packet read. Each call reads 24 packets as primary, at most 24 as its own second (blockers where the arms differ, plus a 20% sample) and about 12 as third, so about 60 reads a call and 180 for the three calls: about $22.68. That is more than the plan's $9.60, because the plan priced one read with a sampled second.
 
 | Item | Sessions or calls | Projected | Cap |

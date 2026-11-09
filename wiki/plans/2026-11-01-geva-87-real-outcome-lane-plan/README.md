@@ -16,7 +16,7 @@ links:
   - 2026-10-30-geva-64-seeded-mistake-tasks
   - https://github.com/garrytan/harness-evals/pull/181
   - quick/laneb/README.md
-source: "Plan reviewed by gstack /autoplan run autoplan-20261031235625 (reviewed v1 snapshot sha256 effcac0077cf10ba262f490c2f6824621bd6dbd985f507a92775286a3e08893b; approved v3 sha256 aa21bb0a6da43875460d1988ee55b4a306652c187444a0bcef8707c38c1a976c), approved at gate_rev 1 with Garry's reply 'Do it', relayed by the Captain (GEVA-2), and at gate_rev 3 by the Captain (GSTA-2). The Implementation plan section is v3: the reviewed v1 with the gate's changes and the carry check's fixes. review-record.md is the run's public export with em dashes replaced by hyphens."
+source: "Plan reviewed by gstack /autoplan run autoplan-20261031235625 (reviewed v1 snapshot sha256 effcac0077cf10ba262f490c2f6824621bd6dbd985f507a92775286a3e08893b; approved v3 sha256 aa21bb0a6da43875460d1988ee55b4a306652c187444a0bcef8707c38c1a976c), approved at gate_rev 1 with Garry's approval, relayed by the Captain (GEVA-2), and at gate_rev 3 by the Captain (GSTA-2). The Implementation plan section is v3: the reviewed v1 with the gate's changes and the carry check's fixes. review-record.md is the run's public export with em dashes replaced by hyphens."
 attachments:
   - 07a1c7bb46305f18f94574d24ab123ecf20adfccfae9e22fb52af0ea792554ce  power.md
   - 84e9d330409b03f8e711bd4428401fc8ab0c9d7e68b71a90387dd712ba70a21a  mining-yield-probe.md
@@ -26,7 +26,7 @@ attachments:
 
 Plan v3, 2026-11-01. Author GEVA-87 for the gstack-evals Captain (GEVA-2), working for Garry Tan, issue GST-690. GST-386 (harder task sets after the HARN-14 ceiling) is folded in. v3 writes in the four changes Garry approved at the autoplan gate (A1 to D1) and the fixes the carry check asked for; v1 is the text the reviewers read.
 
-Garry, 2026-10-31, after the HARN-14 replication: "No change vs placebo is equivalent to waste of fucking time though sigh", then "Surely there are real world cases we could use that are not 'same'".
+On 2026-10-31, after the HARN-14 replication, Garry judged a no-change result against placebo not worth running, and he asked for tasks from real-world work where the outcome is not a tie.
 
 Inputs read: AGENTS.md and the crew rules; the planning lane plan (2026-10-31-geva-79-planning-lane-plan) and its review record; the stacks round 1 plan and prereg; Lane B quick look 3 results; HARN-14's prereg approval, results and native-ceiling finding; GST-386; the public task sourcing brief (2026-10-27-gsta-4-public-task-sourcing); the seeded-mistake task design; the U20 rig handoff; quick/laneb's runner README; GEVA-82's custody record; gstack's /ship skill at v1.92.2.0. Nothing here builds the lane or spends money. Two keyless checks ran before review: a power and screening simulation (section 9) and a mining-yield probe on public repos (section 2).
 
@@ -34,8 +34,8 @@ Inputs read: AGENTS.md and the crew rules; the planning lane plan (2026-10-31-ge
 
 Approved on 2026-11-01 in two steps, both in autoplan run autoplan-20261031235625.
 
-- gate_rev 1 (rec_hash 7f4485fa61af): Garry's reply, relayed by the Captain (GEVA-2, GST-690) at 2026-11-01T15:43Z: "Do it". That takes every recommendation: A1 (uc1b) makes the ladder round run whatever Opus shows and adds Sonnet 5.5 as a descriptive R1 rung; B1 (d1b) reads shipped clean, then shipped defective, in a fixed order, with a cut rule that needs both; C1 (d2b) adds the ship-replay set; D1 (d3b) puts a 10-task thin slice and its pilot before bulk building; E1 approves.
-- gate_rev 3 (rec_hash ac1bc835021e): accepted by the Captain (GSTA-2) at 2026-11-01T15:53:30.663Z, in these words: "rec on gate_rev 3: accept uc2 to uc5 (v1 to v2 records Garry's A1 to D1; v2 to v3 applies the carry check's High and three Mediums). Haiku stays in R2's ladder only (B1), as Garry accepted."
+- gate_rev 1 (rec_hash 7f4485fa61af): Garry approved it, relayed by the Captain (GEVA-2, GST-690) at 2026-11-01T15:43Z. That takes every recommendation: A1 (uc1b) makes the ladder round run whatever Opus shows and adds Sonnet 5.5 as a descriptive R1 rung; B1 (d1b) reads shipped clean, then shipped defective, in a fixed order, with a cut rule that needs both; C1 (d2b) adds the ship-replay set; D1 (d3b) puts a 10-task thin slice and its pilot before bulk building; E1 approves.
+- gate_rev 3 (rec_hash ac1bc835021e): accepted by the Captain (GSTA-2) at 2026-11-01T15:53:30.663Z. The Captain took the recommendation on gate_rev 3 and accepted uc2 to uc5: the v1 to v2 change writes in the A1 to D1 that Garry approved, and the v2 to v3 change makes the carry check's fixes for its High and three Mediums. Haiku appears only in R2's ladder (B1), matching what Garry accepted.
 
 The review ran one round per phase, as the Captain's brief set: CEO and Eng, two voices each (Opus 5.5 native, gpt-6.1-sol outside), with UI and DX scope off. The reviewers read v1. v2 wrote A1 to D1 into the plan. A cross-family carry check (gpt-6.1-sol) then read that change and found one High: v2 had added Haiku 5.5 cells to the pilot and R1, beyond what Garry accepted. It also found three Mediums: replay outcomes could overlap, the cut rule ignored the replay result, and two validity rules did not fit replay decoys. v3 fixes all four and is the Implementation plan below. Both deltas (v1 to v2 and v2 to v3) were accepted without a second review round, so they are reviewed during the build and at /ship.
 
@@ -109,11 +109,11 @@ After: one lane where real tasks from public repo history, merged after Opus 5.5
 
 ### Why it matters
 
-/ship is the gstack skill every crew runs before every merge (Garry's ship gate), and it is expensive: about 20M Capy tokens for a docs-class PR and about 56M for a gate-class one (crew rules). If its tests, review army and QA read don't change what ships on real work, that is a cut-track result worth a lot of tokens. If they do, we learn by how much, on which kinds of work, and which defects they stop. Either way the answer has to be sharp. A tie with intervals of plus or minus 15 points is what Garry called a waste of time, and the HARN-14 ceiling showed that small synthetic tasks can't produce anything sharper.
+/ship is the gstack skill every crew runs before every merge (Garry's ship gate), and it is expensive: about 20M Capy tokens for a docs-class PR and about 56M for a gate-class one (crew rules). If its tests, review army and QA read don't change what ships on real work, that is a cut-track result worth a lot of tokens. If they do, we learn by how much, on which kinds of work, and which defects they stop. Either way the answer has to be sharp. Garry judged a tie with intervals of plus or minus 15 points not worth running, and the HARN-14 ceiling showed that small synthetic tasks can't produce anything sharper.
 
 ### What caused this work
 
-The HARN-14 replication (harness-evals#181) showed gstack, placebo and plain tied on TB2 puzzles on Haiku 5.5, after quick look 3 showed the same on four models. Garry read the tie as waste and asked for real-world cases. HARN-14's native single-defect tasks hit the ceiling the same week (0 of 16 in band; GST-386). The Captain started this thread to plan the missing lane: real end-to-end work, scored on what shipped, with a no-gstack arm (Garry's standing rule) and a size that makes a null informative.
+The HARN-14 replication (harness-evals#181) showed gstack, placebo and plain tied on TB2 puzzles on Haiku 5.5, after quick look 3 showed the same on four models. Garry saw no value in that tie and asked for tasks from real-world work. HARN-14's native single-defect tasks hit the ceiling the same week (0 of 16 in band; GST-386). The Captain started this thread to plan the missing lane: real end-to-end work, scored on what shipped, with a no-gstack arm (Garry's standing rule) and a size that makes a null informative.
 
 ### Big decisions
 
@@ -149,7 +149,7 @@ Not covered here, because other lanes own it: review recall on known blockers (s
 
 ### 2. Task sources and kinds
 
-All tasks come from public repositories with permissive licences (MIT, Apache-2.0, BSD). Nothing comes from a private repository. Incidents from truther, founderstar and gstack-cso-evaluator may become derived tasks in a later round, rebuilt in fresh code under the crew rule, but not in R1.
+All tasks come from public repositories with permissive licences (MIT, Apache-2.0, BSD). Nothing comes from a private repository. Incidents from three private repositories may become derived tasks in a later round, rebuilt in fresh code under the crew rule, but not in R1.
 
 | Kind | What the agent gets | Hidden tests | Why it fits |
 |---|---|---|---|
@@ -308,6 +308,8 @@ MDD is the smallest true difference, in percentage points, detected 80% of the t
 
 ### 10. Cost, with sources
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 | Item | Figure | Source |
 |---|---|---|
 | Opus 5.5 none, TB2 puzzle trial | $0.17 ($19.85 for 117 trials) | quick look 3 results |
@@ -335,6 +337,8 @@ Range: at $5 per gstack trial R1 Opus costs about $9,000; at $15 about $21,000. 
 **Build envelope, apart from eval money.** Task building (mining, environments, statements, audits) and the code units run on Capy threads and spend tokens, not eval money: about 700M to 1,000M tokens in all (four to six code PRs at about 110M each with a gate-class /ship, thin-slice authoring about 50M, bulk authoring and audits about 0.5M to 1M tokens per candidate). At this thread's measured rate of about 2,500 tokens per credit and the crew's $1 per 1,000 credits, that is about $300 to $400. Each build thread carries its own token cap from the Captain, and host-subagent spend is reported as measured, never as zero.
 
 ### 11. Caps, stops and start rule
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 - P0 and S each run only after the Captain records their cap (org R42: the Captain approves up to $5,000 per thread) and their items' prereg note is committed. R1 runs only after its prereg PR merges and Garry approves its cap, since it passes $5,000. Preregistration and results never share a PR.
 - Every paid call goes through the laneb proxy and ledger with a lease per cell. A cap stop ends the run incomplete, never retried to change a verdict; a rerun needs a named repair.

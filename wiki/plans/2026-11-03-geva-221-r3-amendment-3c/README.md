@@ -101,6 +101,8 @@ Each model gets one fresh R3a attempt, screen and pilot, at the pin, under 3b's 
 
 ## 5. Caps
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 The Captain records each cap as the approval row on the attempt's ledger before any paid call. This post proposes them.
 
 **Proposal: Opus a5 at $150 and Sol a2 at $140, including VMs, the same caps 3b used.**

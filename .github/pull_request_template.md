@@ -1,5 +1,5 @@
 <!--
-Outside contributors: we read your pull request as text. We never check out, run or merge an outside branch.
+Outside contributors: we read your pull request as text. We never check out or run an outside branch on our own machines, and we never merge one. GitHub's CI runs it with a read-only token and no secrets.
 If the change is worth having, the crew rebuilds it on current main and credits you. If not, we close it with a short note. See CONTRIBUTING.md.
 -->
 
