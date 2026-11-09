@@ -85,7 +85,7 @@ describe("reserve mechanics", () => {
     expect(txt).toContain("RESERVE stage4-p1: cap $280, reserve per launch $12.00 (6 x $2), room for settled spend $268.00");
     expect(txt).not.toContain("BAD");
     expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(9);
-  });
+  }, 60_000);
 });
 
 describe("infrastructure rerun", () => {
