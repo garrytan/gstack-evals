@@ -34,6 +34,9 @@ LIMIT_S = {"jev": 2.0, "p1": 30.0}
 FAIL_MARKERS = ("failed", "error", "traceback", "no tests ran")
 PLAIN = {"ls", "cat", "head", "tail", "grep", "rg", "wc", "pwd"}
 GIT_READ = {"status", "diff", "log", "show"}
+FIND_WRITES = ("-delete", "-exec", "-ok", "-fprint", "-fls")
+SED_LONG = {"--quiet", "--silent", "--regexp-extended", "--separate", "--null-data", "--unbuffered", "--posix", "--debug", "--sandbox"}
+AWK_RUNS = re.compile(r"\bsystem\b|\|&?\s*getline\b|@(include|load)\b")
 PROVIDER = {"order": ["Particle"], "allow_fallbacks": False}
 SEPARATORS = {";", ";;", "&&", "||", "|", "|&", "&", "(", ")"}
 NESTED = ("$(", "`", "<(", ">(")
@@ -143,20 +146,152 @@ def _writes_file(words):
     return False
 
 
+def _sed_runs(s):
+    """A sed script with a w, W or e command, an s command with the w or e flag, or anything this scan can't read (the
+    Captain's ruling F1). Text and label arguments end at the next ; or line end, so the scan reads too much, never too
+    little."""
+    n, i = len(s), 0
+
+    def past(i, d):
+        while i < n and s[i] != d:
+            i += 2 if s[i] == "\\" else 1
+        return i + 1 if i < n else None
+
+    while i < n:
+        while i < n and s[i] in " \t\n;":
+            i += 1
+        while i < n and s[i] in "0123456789$,+~/\\ \t":
+            if s[i] not in "/\\":
+                i += 1
+                continue
+            d, i = ("/", i + 1) if s[i] == "/" else (s[i + 1:i + 2], i + 2)
+            i = past(i, d) if d else None
+            if i is None:
+                return True
+            while i < n and s[i] in "IM":
+                i += 1
+        while i < n and s[i] in " \t!":
+            i += 1
+        if i >= n:
+            break
+        c = s[i]
+        if c in "aicrR#:btTv":
+            while i < n and s[i] not in ";\n":
+                i += 1
+        elif c in "sy":
+            d = s[i + 1:i + 2]
+            i = past(i + 2, d) if d not in ("", "\n", "\\") else None
+            i = past(i, d) if i is not None else None
+            if i is None:
+                return True
+            while c == "s" and i < n and s[i] not in ";\n}":
+                if s[i] not in "gpiImM0123456789 \t":
+                    return True
+                i += 1
+        elif c in "lLqQ":
+            i += 1
+            while i < n and s[i] in "0123456789 \t":
+                i += 1
+        elif c in "=dDgGhHnNpPxzF{}":
+            i += 1
+        else:
+            return True
+    return False
+
+
+def _sed_ok(rest):
+    """sed -n with no in-place edit and no script that writes or runs (the Captain's ruling F1). A script file, an option
+    this does not know (an abbreviated long option included) and a short option group holding i take it off the list."""
+    if "-n" not in rest:
+        return False
+    scripts, operands, i, end = [], [], 0, False
+    while i < len(rest):
+        w = rest[i]
+        i += 1
+        if end or w == "-" or not w.startswith("-"):
+            operands.append(w)
+        elif w == "--":
+            end = True
+        elif w.startswith("--"):
+            name, eq, val = w.partition("=")
+            if name in ("--expression", "--line-length") and not eq:
+                val, i = (rest[i] if i < len(rest) else ""), i + 1
+            if name == "--expression":
+                scripts.append(val)
+            elif name != "--line-length" and w not in SED_LONG:
+                return False
+        else:
+            for k, ch in enumerate(w[1:], 2):
+                if ch in "el":
+                    val, i = (w[k:], i) if w[k:] else ((rest[i] if i < len(rest) else ""), i + 1)
+                    if ch == "e":
+                        scripts.append(val)
+                    break
+                if ch not in "nErsuz":
+                    return False
+    scripts = scripts or operands[:1]
+    return bool(scripts) and not any(_sed_runs(s) for s in scripts)
+
+
+def _awk_ok(rest):
+    """awk with its program on the command line, -F and -v the only options, and no print or printf redirected to a file
+    or pipe, no system() and no getline from a command (the Captain's ruling F1). Strings are blanked first; after each
+    print or printf, any > or | outside parentheses takes the command off the list, so the check reads too much, never too
+    little."""
+    i = 0
+    while i < len(rest) and rest[i].startswith("-") and rest[i] != "-":
+        w, i = rest[i], i + 1
+        if w == "--":
+            break
+        if w[:2] not in ("-F", "-v"):
+            return False
+        i += len(w) == 2
+    if i >= len(rest):
+        return False
+    p, code, j = rest[i], [], 0
+    while j < len(p):
+        if p[j] != '"':
+            code.append(p[j])
+            j += 1
+            continue
+        k = j + 1
+        while k < len(p) and p[k] != '"':
+            k += 2 if p[k] == "\\" else 1
+        if k >= len(p):
+            return False
+        code.append('""')
+        j = k + 1
+    code = "".join(code)
+    if AWK_RUNS.search(code):
+        return False
+    for m in re.finditer(r"\bprintf?\b", code):
+        depth = 0
+        for ch in code[m.end():]:
+            depth += (ch == "(") - (ch == ")")
+            if ch in ">|" and depth <= 0:
+                return False
+    return True
+
+
 def on_list(words):
     w0, rest = os.path.basename(words[0]), words[1:]
     if _writes_file(words):
         return False
-    if w0 in ("awk", "echo"):
+    if w0 == "echo":
         return not _redirects_out(words)
+    if w0 == "awk":
+        return not _redirects_out(words) and _awk_ok(rest)
+    if w0 == "rg":
+        return not any(w in ("--pre", "--pre-glob") or w.startswith(("--pre=", "--pre-glob=")) for w in rest)
     if w0 in PLAIN or w0 in ("pytest", "tox"):
         return True
     if w0 == "find":
-        return not any(w.startswith(("-delete", "-exec")) for w in rest)
+        return not any(w.startswith(FIND_WRITES) for w in rest)
     if w0 == "sed":
-        return "-n" in rest and not any(w.startswith(("-i", "--in-place")) for w in rest)
+        return _sed_ok(rest)
     if w0 == "git":
-        return bool(rest) and rest[0] in GIT_READ
+        opts = (w.split("=", 1)[0] for w in rest)
+        return bool(rest) and rest[0] in GIT_READ and not any(len(o) > 2 and "--output".startswith(o) for o in opts)
     if w0 in ("python", "python3"):
         return rest[:2] == ["-m", "pytest"]
     if w0 in ("pip", "pip3"):

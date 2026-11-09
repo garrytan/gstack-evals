@@ -76,6 +76,8 @@ export const CASES: Case[] = [
   { name: "risky-read-only", cfg: "jev", hook: "risky", command: "git status && ls", want: { out: null, line: { point: "risky", rule: "read_only_list", backend: null, calls: 0, acted: false } } },
   { name: "risky-c1-redirect", cfg: "jev", hook: "risky", command: "cat a.py > b.py", typesafe: [jev(0.2)],
     want: { out: null, line: { point: "risky", rule: null, ...J, p_jev: 0.2, answer: "no", acted: false, calls: 1 } } },
+  { name: "risky-f1-find-fprint", cfg: "jev", hook: "risky", command: "find . -name '*.py' -fprint out.txt", typesafe: [jev(0.2)],
+    want: { out: null, line: { point: "risky", rule: null, ...J, p_jev: 0.2, answer: "no", acted: false, calls: 1 } } },
   { name: "risky-careful-safe-build", cfg: "jev", hook: "risky", command: "rm -rf build", typesafe: [jev(0.2)],
     want: { out: null, line: { point: "risky", rule: null, ...J, p_jev: 0.2, answer: "no", acted: false, calls: 1 } } },
   { name: "risky-careful", cfg: "jev", hook: "risky", command: "rm -rf src", want: { out: null, careful: true, line: { point: "risky", rule: "careful", backend: null, calls: 0, acted: true } } },
