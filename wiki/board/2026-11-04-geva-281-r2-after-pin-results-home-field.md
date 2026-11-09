@@ -250,12 +250,6 @@ Nothing here is sealed. The session transcripts and findings stay on the run mac
 - 2026-11-04: this version (GEVA-281) supersedes it. It adds the home-field limit, citing the line of the plan that built the suite, and it states the count as 84 bug-passes over 42 bugs in the title and in What we found, Table 2, Cost and Why null. Every number is unchanged, and the lines quoted from the scripts are unchanged.
 - 2026-11-04: before merge, the summary and the home-field limit say 41 of 42 suite bugs came from gstack-family reviews, not every one, and cite the preregistration line that names the exception (gstack#1808 B1). Table 1's lead-in says what the 48 blockers count, and the source names the run record. Every number is unchanged.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-gbrain is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -312,3 +306,9 @@ Prices are the pinned table (src/runner/pricing/prices.ts at 176fdc7 and 715f837
 Crew model use sits outside the ledger. At the last crew reading it was $115.52 including this thread, which puts the run at about $709 of #194's $2,000 all-in with the earlier threads' $89.06.
 
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+gbrain is Garry Tan's own project.

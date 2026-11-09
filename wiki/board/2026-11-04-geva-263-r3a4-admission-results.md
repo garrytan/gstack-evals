@@ -143,12 +143,6 @@ Nothing is sealed. The run records stay private only because they hold model tra
 
 - 2026-11-04: first version (GEVA-263).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -199,4 +193,12 @@ Prices are the pin's config/proxy.json, in dollars per million tokens, as used o
 
 A fresh replication is a paid screen: about $88 for Opus with the oracle preflight and about $104 for Sol at these runs' costs.
 
+From the summary: Paid: $192.04.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.

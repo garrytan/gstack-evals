@@ -295,14 +295,6 @@ Nothing is sealed. TB2 is public at 69671fba, and stacks-r1 is published with it
 
 - 2026-11-02: first version (GEVA-184).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-gbrain is Garry Tan's own project.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -392,4 +384,14 @@ Four TB2 sessions, two per model, opened a reservation of one session cap each a
 
 This run cost $321.06.
 
+From the summary: $321.06 settled.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+gbrain is Garry Tan's own project.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.

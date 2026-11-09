@@ -146,12 +146,6 @@ Nothing is sealed. The run records stay private only because they hold model tra
 
 - 2026-11-03: first version (GEVA-239).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -201,4 +195,12 @@ Opus a1 (GEVA-168) died at the runner's first sync, because the pinned runner ca
 
 A fresh replication is a paid screen, about $23 on Opus and $31 on Sol at these runs' costs.
 
+From the summary: All R3a: $101.45.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.

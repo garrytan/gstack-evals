@@ -18,7 +18,7 @@ links:
 source: "Plan reviewed by gstack /autoplan run autoplan-20261031221500 (CEO plan snapshot sha256 04a5c7c0deb1e35d78a7df0d57dcfed98b0ca30363531b965f00d7efda0c14ae), approved at gate_rev 1 with Garry's approval, relayed by the Captain (GEVA-2); the revise delta's gate_rev 2 was accepted by the Captain under that approval. The Implementation plan section is the reviewed text plus the accepted delta. review-record.md is the run's public export with em dashes replaced by hyphens; dryrun.md is the keyless dry-run report. The census of Garry's messages kept counts only."
 attachments:
   - 002544ad352de41e4820b6ae13aec287289af0c2e40259b495ae58007e2ff298  dryrun.md
-  - 3e41df8c3dd798dacfdd1baf6017ffa400086e27c748c9d742e21c23e812aae9  review-record.md
+  - e10cdde51eb48aee0dd56408653ded51556a26d74874b99c450cfd85276a0641  review-record.md
 ---
 # Taste-judge replay: can an AI apply Garry's past decisions to new questions, and does gstack's auto-decide do it better than a plain model?
 

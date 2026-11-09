@@ -234,10 +234,6 @@ SWE-rebench is the work of Nebius AI R&D, used under CC-BY-4.0; Lane B runs its 
 
 - 2026-11-06: first version.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -284,4 +280,10 @@ after-t's cost per pass on F1 is 1.27 times none's, the ratio #169's G3 named (d
 
 **Prices.** The build's quick/laneb/config/proxy.json, in dollars per million tokens, as used on 2026-11-05 and 2026-11-06. Opus 5.5: input 4, output 20, cache write 5 (5-minute) or 8 (1-hour), cache read 0.20. Every cache write here was a 5-minute write. VMs: the ledgers reserve and settle part VMs at $0.60 an hour. Ubicloud's published rate for the part VM's shape (standard-16, 640 GiB, one IPv4, hetzner-fsn1, config/billing_rates/vm_metal.yml at ubicloud 08f8108c, active from 2026-09-01) is 16 x $0.0004804689 x 60 + 640 x $0.0000019531 x 60 + $0.000074405 x 60 = $0.5407 an hour, so every VM figure above is the reserve rate, not the bill. Awake hosts at $0.08 an hour.
 
+From the summary: $353.34 paid.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.

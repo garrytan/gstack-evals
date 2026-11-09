@@ -204,10 +204,6 @@ Nothing is sealed. The tasks are public SWE-rebench tasks. The run records stay 
 
 - 2026-11-07: first version (GEVA-380).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -282,4 +278,10 @@ A first look could run that arm beside none on R3c's 18 admitted tasks at 3 repl
 
 A fresh replication is a paid run: about $542 at this run's costs, calibration and host included.
 
+From the summary: Paid $542.41.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.

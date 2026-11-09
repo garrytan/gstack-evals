@@ -228,10 +228,6 @@ Harbor is Apache-2.0. gstack at the pin is MIT. Claude Code is Anthropic's propr
 
 - 2026-11-07: first version.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -301,8 +297,14 @@ An outcome test needs four things on top of that: tasks with headroom (T-G has n
 
 Expected paid assumes $24 to $29 per told session on harder tasks plus $1.50 per none session.
 
-**autoplan's $2,000 line can't power an outcome test.** Less than $800 is left. A 20-point test needs 42 x 4, about $4.3k to $5.1k expected, past the line.
+**autoplan's $2,000 line is too small to give an outcome test enough power.** Less than $800 is left. A 20-point test needs 42 x 4, about $4.3k to $5.1k expected, past the line.
 
 Dry run part 2's first attempt (14:40Z) found /dev/shm empty and failed at once; its temporary-ledger leases opened and settled at $0.00 and $0.03, on the temporary ledger, not the real one.
 
+From the summary: Paid $60.44.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.

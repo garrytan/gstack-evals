@@ -229,10 +229,6 @@ Harbor is Apache-2.0. gstack at the pin is MIT. Claude Code is Anthropic's propr
 
 - 2026-11-08: first version.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -311,4 +307,10 @@ Expected paid assumes $24 to $29 per told session on harder tasks plus $1.50 per
 
 **autoplan's line can't power the comparison.** About $649 is left on the $2,000 line. A 20-point test needs 42 x 4, about $4,280 to $5,120 expected, which is past the line, so the comparison is a funding question for the project owner, which the Captain puts to him.
 
+From the summary: Paid $79.81.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.

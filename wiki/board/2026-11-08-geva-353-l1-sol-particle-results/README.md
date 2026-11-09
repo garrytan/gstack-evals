@@ -292,14 +292,6 @@ SWE-rebench is the work of Nebius AI R&D, used under CC-BY-4.0; Lane B runs its 
 
 - 2026-11-08: first version.
 
-## Disclosures
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -370,4 +362,14 @@ after-t's cost per pass is 1.24 times none's on Sol and 1.18 times on particle-1
 
 **Prices.** The build's quick/laneb/config/proxy.json (sha256 078942d9), in dollars per million tokens, as used on 2026-11-06 and 2026-11-07. gpt-6.1-sol: input 2, output 10, cache write 2.50, cache read 0.10; above 272,000 prompt tokens, input 4, output 15, cache write 5, cache read 0.20. particle-1: input 0.25, output 1, cache write 0.25, cache read 0.03. Part VMs are reserved and settled at $0.60 an hour (the Opus post compares that with Ubicloud's published rate), and awake hosts at $0.08 an hour.
 
+From the summary: $412.95 paid.
+
 </details>
+
+## Disclosures
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
+
+gstack is Garry Tan's own project.

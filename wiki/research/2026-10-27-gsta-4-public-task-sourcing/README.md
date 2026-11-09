@@ -11,7 +11,7 @@ status: done
 source: Captain drive handoffs/GSTA-4/task-sourcing.md (sha256 4421dc06bd8b2157917caa0af60320ba49aadaadb59d4fdeace29ac8ecc1a9e3) and notes/ from four GSTA-4 research subagents, copied by GSTA-6 on 2026-10-28
 attachments:
   - e94162dc1b01ffa53189d1dac54f3ae2ba46d3ba12fef567ec22dd62ac698f03  notes/s1-swebench-deepswe.md
-  - 39c18910bf7f6b0ef1ee2c93154306d818ec131ca2b82174a24d2a054f4e0c49  notes/s2-tbench-harbor-generators.md
+  - 274782a1f611acc0e2e5b7200226723e43aa4a2a3fb83a1951040eee1714d320  notes/s2-tbench-harbor-generators.md
   - 8f89c333070fc06a39a053934c4bdf717c31a1b537149758cad41befb81ae91b  notes/s3-review-qa-lifecycle.md
   - 639c1568c1b9d7ba4c0e1db1327f9d4764548242907d96a371d1e374ba75bf95  notes/s4-selection-contamination.md
 ---

@@ -205,4 +205,6 @@ Each arm cost about $0.15 for 60 sessions.
 
 Per arm, 30 sessions: before $2.79, before2 $2.81, after $2.52, none $1.70.
 
+From the summary: U11's rerun of rows 3, 5 and 7 from rig f5f07b5 settled $84.49.
+
 </details>

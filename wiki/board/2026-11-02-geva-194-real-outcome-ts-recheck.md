@@ -126,10 +126,6 @@ Shortfalls: 1 build task (9 of 10) and 1 K1 pair (2 of 3). The repository target
 - The two L2 readings rest on yes/no probes of the sealed files, not on a fix followed by a recheck.
 - #143's record does not keep GEVA-173's VM setup or check launcher, so this run used its own. The check command is the same.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -139,3 +135,7 @@ gstack is Garry Tan's own project.
 - Agent: this thread's counter read 24.8M tokens and 7,612 credits (about $7.61 at $1 per 1,000 credits) before /ship. That covers reading the record, the runs and this post.
 
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.

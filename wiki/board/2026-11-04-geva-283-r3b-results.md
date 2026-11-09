@@ -198,12 +198,6 @@ Nothing is sealed. The tasks are public SWE-rebench tasks. The run records stay 
 
 - 2026-11-04: first version (GEVA-283).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -283,4 +277,12 @@ At caps with 70 kept tasks on both models, R3c comes to about $942 plus $141, or
 
 A fresh replication is a paid run: about $247 for Opus and about $268 for Sol at these runs' costs.
 
+From the summary: Paid $515.51.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.

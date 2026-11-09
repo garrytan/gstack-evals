@@ -146,14 +146,6 @@ Exploratory, $0: we scanned 899 coding-agent sessions on Opus 5.5, GPT-6.1 Sol a
 
 - 2026-11-03: first version. In the same pull request it replaced a draft preregistration, never merged, after this scan showed the room rule would fail.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -161,4 +153,14 @@ Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a
 
 Paid model calls: $0. The scan used 1.9M host tokens (1,347 Capy credits, about $1.35). Planning, review and drafting before this post's /ship used about 35M host tokens (about 17,600 credits, about $18). Prices: Capy credits at about $1 per 1,000, as of 2026-11-02. No provider tokens were bought.
 
+From the summary: A $0 rough scan found 4 waste calls in 14,036 and none in any no-gstack cell.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.

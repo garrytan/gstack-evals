@@ -212,10 +212,6 @@ Nothing held out is read here. The inputs are private crew sessions and private 
 
 - 2026-11-03: first version.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -223,4 +219,10 @@ gstack is Garry Tan's own project.
 
 Paid model calls: $0. The session scan, the head validation and this draft used 9.1M host tokens (2,923 Capy credits, about $2.92) in one Opus 5.5 subagent. The lead's review of the draft before this post's /ship used about 3.8M host tokens (about 1,200 credits, about $1.20). The reader fix this rests on (#182) and its /ship are counted with that PR. Prices: Capy credits at about $1 per 1,000, as of 2026-11-03. No provider tokens were bought.
 
+From the summary: A $0 counts-only baseline: pushed-head re-runs are 0.07% of ship-check time (upper bound 0.56%), but review rounds past the cap have no measured time, so the kill rule is not shown.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.

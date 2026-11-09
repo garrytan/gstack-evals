@@ -237,12 +237,6 @@ The slice holds the units, their keys and traces. The run bundle holds the run r
 
 - 2026-11-03: first version (GEVA-250).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -282,4 +276,12 @@ Each judge row was written with the run items' approval words, its item and comp
 
 **Thread tokens.** The run thread, GEVA-246, ended at 194.7M tokens on its counter, against a hard stop the Captain raised from 100M to 210M during the run, and about 49,400 credits of model use (about $49 at $1 per 1,000 credits). Authoring and audit took about 150M of that: authors 24.8M, 33.8M, 25.0M and 38.9M, auditors 6.7M, 7.4M, 4.5M and 6.7M, and the candidate-list builder 2.4M. The prereg had priced the whole custodian thread at about 70M, with 40M for authoring. The prereg's threads and this post's thread are not counted here, and neither are machine costs.
 
+From the summary: $41.26 of $294.96.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.

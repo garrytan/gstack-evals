@@ -198,4 +198,6 @@ Judging adds about $0.20 a plan.
 
 At this pilot's metered rates it costs about $10 with judging.
 
+From the summary: $10.83 spent.
+
 </details>

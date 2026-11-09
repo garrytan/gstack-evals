@@ -11,10 +11,10 @@ status: done
 source: Captain drive handoffs/GSTA-3/plan-v3.2.md (sha256 f790588d547894a20cf62103de5a1e34a1d792b681937ee8e68657a4f8bb0e3c), with private repo and session names replaced by neutral labels; gate briefs with run paths replaced by <run-dir>; em dashes in attachments replaced by hyphens. Before publication GSTA-6 capitalised three sentences that began with a replaced label, withheld the details of one security finding in owner-brief-gate1.md, stated the parity SD in the Statistics sizing sentence as a square root, and added marked notes on the repository layout and the $300 option's total.
 attachments:
   - a7613424709074edd32fa185cece078fb91bc7a6535ca0e1a33fbd47f83a2c60  review-record.md
-  - bfee31265f1e8a6e828eefcbad723747ae65e9696d36f5693295e1d1c64c1383  owner-brief-gate1.md
-  - 31d325e427a847a870a79bd40c300a80f04257788e98dcb984ce31fc9a605dcc  owner-brief-gate2.md
-  - 531eb1af763b51d501a92490cd1b3ac7ef2c336174e42c1b1e9b90d0509b573f  owner-brief-gate3.md
-  - c86dccce1c345511d523c25b3e4fda1eb5c230f0051e8a5898caab8b762b8539  owner-brief-gate4.md
+  - eac7e26491a136997f09d9d769b41bb4c8ef6f239cf90e16dd7deb95377324d4  owner-brief-gate1.md
+  - 271291e9e5c29dfa2c0e67859ca2208de424ac0cc8d89f518bc8db9f09f9797d  owner-brief-gate2.md
+  - 8331cd17b15260af2cf9e5a68805cf492ecb92d42fd1abcfb762454564fc14b0  owner-brief-gate3.md
+  - 6d6346a70106e309b4753a2a8a366c6df02c482518b314b4478d9f8f119ab02c  owner-brief-gate4.md
 ---
 # gstack-evals v1: an outcome-graded eval rig that steers gstack R&D
 

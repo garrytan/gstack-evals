@@ -164,10 +164,6 @@ Outsiders can verify digests only. This post sets no release date.
 
 - 2026-11-02: first version (GEVA-142).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -251,4 +247,10 @@ Anthropic reports cache tokens beside input tokens, and the table prices them at
 
 This run cost $16.55 for 48 sessions and $2.51 for judging.
 
+From the summary: $19.06.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.

@@ -190,10 +190,6 @@ Harbor is Apache-2.0. gstack at the pin is MIT. Claude Code is Anthropic's propr
 
 - 2026-11-07: first version.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -235,4 +231,10 @@ An outcome retest still needs tasks with headroom, and prereg section 9 prices a
 
 **Second hours lease.** The operator reused the first hours lease's cell task, so the reserve failed with E_RESERVE_CONFLICT after lease r61-vm.0002.9b6f09 opened, and the lease held the item's remaining $7.98 for a few minutes. A kit script (r61-hours-settle-open.ts) settled that open lease at $0.2286 under its own meter id.
 
+From the summary: Paid $45.13.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.

@@ -229,14 +229,6 @@ All 112 units that ran, the 2 unrun held units and the 6 reserve units are seale
 
 - 2026-11-08: first version, with the fixed comparison and the joined held cell.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -275,4 +267,14 @@ Price table in force at build 2ef58339, committed 2026-11-06 (src/runner/pricing
 
 **The all-in tool** takes only the six stage 2 run items, so the completion's cap rode on opus-p's row in the check before its lease ($1,764.29, a pass).
 
+From the summary: $519.72 paid.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.

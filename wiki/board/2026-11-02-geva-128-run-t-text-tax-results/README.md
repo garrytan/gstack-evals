@@ -173,12 +173,6 @@ Nothing. TB2 is public, and every task digest is pinned in `quick/laneb/tasks/ta
 
 - 2026-11-02: first version (GEVA-128).
 
-## Disclosures
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -218,4 +212,12 @@ The verdict came from the note rows: particle-1 bound $61.65, Haiku $70.46 with 
 
 One particle-1 replicate of all three arms is about $11 metered.
 
+From the summary: $61.06 of $75.
+
 </details>
+
+## Disclosures
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+gstack is Garry Tan's own project.

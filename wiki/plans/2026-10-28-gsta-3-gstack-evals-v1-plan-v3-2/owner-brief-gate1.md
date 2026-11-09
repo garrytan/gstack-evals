@@ -76,6 +76,6 @@ _For the relaying agent, not the person:_ run autoplan-20261028004737, gate_rev=
 <details>
 <summary>Agent notes</summary>
 
-Edited 2026-11-09 for public wording (GST-1060); the frozen original is wiki/plans/2026-10-28-gsta-3-gstack-evals-v1-plan-v3-2/owner-brief-gate1.md at commit 09d7a8f.
+Edited 2026-11-09 for public wording; the frozen original is wiki/plans/2026-10-28-gsta-3-gstack-evals-v1-plan-v3-2/owner-brief-gate1.md at commit 09d7a8f.
 
 </details>

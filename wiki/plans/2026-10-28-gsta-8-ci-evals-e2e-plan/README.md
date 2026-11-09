@@ -12,7 +12,7 @@ source: Captain drive handoffs/GSTA-8/plan.md (sha256 31977c9709f54b812fe465057d
 links: [wiki/plans/2026-10-28-gsta-3-gstack-evals-v1-plan-v3-2, wiki/plans/2026-10-28-gsta-3-v1-build-breakdown.md, wiki/board/2026-10-28-gsta-8-ci-plan-approved.md]
 attachments:
   - 12b85bcf2b44f2c6f68f17e758019abdecdeaea1fcdf55cf9dd5fa93545170a1  review-record.md
-  - 7da42923d91cf1f11068ce0f38f3ef9f33e07fa053c4dc86b4c6edc60ec28ae6  owner-brief-gate3.md
+  - 2e9ca6c62ed896f3f164b4085361d8705941bffdaf874dced21798443e4f4e91  owner-brief-gate3.md
 ---
 # gstack-evals CI, evals in CI and end-to-end tests
 

@@ -128,4 +128,6 @@ That is $0.19 of model calls and $0.33 in all per final valid task. The lease cl
 
 This thread's counter read 33,000 credits (about $33) at the seal, across the envelope host, the binding PR and T-G. T-G's own share comes to roughly 44M tokens, about $14.
 
+From the summary: T-G sealed 12 valid tasks (10 K3, 2 K2) from 9 repositories, plus 1 valid spare, from 48 probed Go candidates, for $3.99 of paid calls and host time.
+
 </details>

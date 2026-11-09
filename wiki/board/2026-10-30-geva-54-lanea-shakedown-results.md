@@ -195,4 +195,6 @@ Rows 1 and 2 passed the preregistered smoke, so row 6 ran. Across their 59 calls
 
 It ran anyway, as the table says, for $0.26.
 
+From the summary: U11 ran all 11 calls from rig 2c38729 for $14.32.
+
 </details>

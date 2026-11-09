@@ -182,4 +182,6 @@ Prices are the rig's table at 715f837 (src/runner/pricing/prices.ts), in dollars
 
 The arms themselves were already paid for: arm C at about 28.8M tokens per PR-pass (GSTA-167), none-opus at $8.89 and gstack-opus at $13.67 per pass over the 14 units (the scorer's exact cost figures). GEVA-113's own agent tokens through the run and this post were about 15M, before /ship.
 
+From the summary: Judging cost $8.19.
+
 </details>

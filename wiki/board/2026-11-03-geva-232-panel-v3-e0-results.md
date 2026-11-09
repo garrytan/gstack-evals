@@ -161,12 +161,6 @@ The run bundle holds the run root, its transcripts, the judge replies and the re
 
 - 2026-11-03: first version.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -198,4 +192,12 @@ Prices are the scorer's table at b7b6aec (src/runner/pricing/prices.ts), in doll
 
 A plain Opus session cost $0.236 on average, under the plan's $0.33 projection, and a particle-1 session cost $0.019 against $0.083. These are one-turn sessions; E1's two-turn protocol will cost more.
 
+From the summary: $25.08 of $62.86.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.

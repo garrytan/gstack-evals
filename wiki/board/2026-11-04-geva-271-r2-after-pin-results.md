@@ -244,12 +244,6 @@ Nothing here is sealed. The session transcripts and findings stay on the run mac
 
 - 2026-11-04: first version (GEVA-271).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-gbrain is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -305,4 +299,12 @@ Prices are the pinned table (src/runner/pricing/prices.ts at 176fdc7 and 715f837
 
 Crew model use sits outside the ledger. At the last crew reading it was $115.52 including this thread, which puts the run at about $709 of #194's $2,000 all-in with the earlier threads' $89.06.
 
+From the summary: $504.78.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+gbrain is Garry Tan's own project.

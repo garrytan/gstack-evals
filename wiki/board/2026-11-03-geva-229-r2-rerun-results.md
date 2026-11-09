@@ -119,12 +119,6 @@ Nothing here is sealed. The session transcripts and findings stay on the run mac
 
 - 2026-11-03: first version (GEVA-229).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-gbrain is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -168,4 +162,12 @@ Prices are the pinned table (src/runner/pricing/prices.ts at 176fdc7 and 715f837
 
 From the smoke, a gstack-full grid arm (66 sessions) would cost about $402. It did not run.
 
+From the summary: $145.42.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+gbrain is Garry Tan's own project.

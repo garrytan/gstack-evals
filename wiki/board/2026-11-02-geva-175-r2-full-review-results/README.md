@@ -257,12 +257,6 @@ Nothing is sealed. stacks-r1-out19 derives from the published stacks-r1 suite by
 - 2026-11-02: first version (GEVA-175).
 - 2026-11-02, before merge (GEVA-178, from the Captain): the mechanism is corrected. Our evaluator's driver ended the 7 sessions at the first result event (src/adapters/claude-code/driver.ts lines 475-493 and 519); the first version blamed headless mode and said the CLI reported success. No number, outcome or verdict changed.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-gbrain is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -327,4 +321,12 @@ Anthropic reports cache tokens beside input tokens, and the table prices them at
 
 This run cost $84.06 for the grids and $1.33 for judging.
 
+From the summary: $85.39.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+gbrain is Garry Tan's own project.

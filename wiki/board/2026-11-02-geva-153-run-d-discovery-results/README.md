@@ -209,14 +209,6 @@ Nothing. TB2 is public, and every task digest is pinned at the tag. The data bun
 
 - 2026-11-02: first version (GEVA-153).
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -283,4 +275,14 @@ Sol's row is OpenRouter's list price on 2026-11-01 as the prereg froze it. GEVA-
 
 Sol's four cells cost $24.42 metered.
 
+From the summary: $83.68 of $126.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.

@@ -220,10 +220,6 @@ Harbor is Apache-2.0. gstack at the pin is MIT. Claude Code is Anthropic's propr
 
 - 2026-11-06: first version.
 
-## Disclosures
-
-gstack is Garry Tan's own project.
-
 <details>
 <summary>Agent notes</summary>
 
@@ -287,4 +283,10 @@ The host hours run from T-G's seal at 2026-11-05T22:57Z to the driver's exit at 
 
 **Prices.** Opus 5.5 in dollars per million tokens, from src/runner/pricing/prices.ts at the run commit, as the proxy used them on 2026-11-05 and 2026-11-06: input 4, output 20, cache read 0.20, cache write 5. The envelope host settles at $0.30 an hour, the Captain's reserve rate; Ubicloud's list rate for its shape is about $0.25 an hour. Per-arm token totals are not in the export; the dollar figures are the ledger's.
 
+From the summary: Paid $690.03.
+
 </details>
+
+## Disclosures
+
+gstack is Garry Tan's own project.
