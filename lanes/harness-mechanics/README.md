@@ -49,6 +49,7 @@ Models read cells.l1.json (Opus) and cells.l1-sol.json (Sol) as L1 ran them, wit
     bun lanes/harness-mechanics/cli.ts patterns <job dir>...
     bun lanes/harness-mechanics/cli.ts admission <stage1 table.jsonl> [--out <dir>]
     bun lanes/harness-mechanics/cli.ts report <table.jsonl> <config.json> <out dir>
+    bun lanes/harness-mechanics/cli.ts pick <config.json> --ledger <item ledger.jsonl> --out <dir>
     bun lanes/harness-mechanics/cli.ts replay items
     bun lanes/harness-mechanics/cli.ts replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir>
     bun lanes/harness-mechanics/cli.ts replay report <out dir>
@@ -58,6 +59,16 @@ The launcher commands are L1's (quick/laneb/l1/README.md, "L1 launcher") under t
 The dry run's matcher steps (3-matcher-probes, matcher-72, probes-189, stop-hook-loadline) need HM_GSTACK, a gstack checkout that holds the pin: each checks that the vendored files are the pin's blobs there. Without it they fail with E_HM_PIN. probes-189 takes about a minute, because BEFORE runs until its child is killed.
 
 The table config is {"jobs": [{"dir": <jobs dir>, "part": <part>}], "sessions": [<proxy-sessions.jsonl>], "home": "/root"}.
+
+## Picker and leak scan (unit 7)
+
+For picker and judgment-hook calls, "the metering proxy" in sections 3 and 8 is the decision-routing metering proxy (src/runner/proxy/metering-proxy.ts, used unchanged with DR_ALLOWANCE_STOP), and every request is journaled there. Lane B's proxy keeps the agent sessions. It can't serve TypeSafe's typed endpoint and has no per-slot canary stop.
+
+leak.ts builds a task's custody with the decision-routing build's markers.ts. taskCustody plants the canary in a runner-only directory and lists the new hidden test names and test-side paths that the pristine image lacks. custodyBind puts them on a slot's bind, with the slot's models as its deciders. A body carrying the canary is refused DR_CUSTODY_HIT and stops the run. A hidden test name or path is journaled as marker_hit and the call goes on, as in the decision-routing build. journalCheck fails a run whose journal holds a DR_CUSTODY_HIT refusal, and counts the marker hits. Part B's judge slots call the same three functions. Dry-run step 7 runs leak.ts dryrun: a canary body, a hidden test name and a clean body through a proxy on a fake upstream.
+
+hm pick runs on the awake host, beside the item's ledger, once every none and plain-2 session of the item is scored. Its provider keys stay in its own env. The config is {"item", "model" (opus, sol or p1), "tasks_dir" (the Harbor task dirs; instruction.md is the issue text), "pristine_dir" (the <task>.json listings the decision-routing build's labels pristine writes), "custody_dir" (runner-only), "tasks": [{"task", "trial", "a": {"diff_file", "pass"}, "b": {"diff_file", "pass"}}]}, with A the none session and B the plain-2 session. It starts one metering proxy on 127.0.0.1 whose ledger is the item's Lane B ledger (LaneBReservations) and binds one slot per task with the task's custody. Each call reserves its worst case (the proxy's output cap and the request size at the pinned prices) under the item's cap and settles at its metered cost. A refused reserve stops with CAP_STOP. It prints the coin order, the ship, parsed and cuts per task, writes picks.jsonl (a rerun skips finished tasks) and journal.ndjson, and ends with the journal check. pickerColumns joins picks.jsonl onto the none rows as bo2_pass, picker_parsed (null when a deterministic rule decided) and picker_cost_usd.
+
+Readings taken: the coin is the low bit of sha256(HM.seed:task), with B first when it is set. A picker call that the proxy refuses or that fails upstream gets no reply, so it is not "any other reply": it stops hm pick with E_HM_PICKER, and a rerun picks up from picks.jsonl. Each slot's allowance is the picker model's session allowance ($5).
 
 ## Scorer
 

@@ -167,7 +167,8 @@ describe("cli", () => {
     const r = run(["dryrun", "--out", out], { HM_GSTACK: "", PATH: bin + ":" + process.env.PATH });
     const lines = r.stdout.toString().trim().split("\n");
     expect(lines.map((l) => l.split(" ")[1])).toEqual([...STEPS.map((s) => s.name), "FAIL"]);
-    for (const n of ["1-arm-tars", "2-verify-hook", "7-leak-scan-env"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toBe(true);
+    for (const n of ["1-arm-tars", "2-verify-hook"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toBe(true);
+    expect(lines.some((l) => l.startsWith("DRYRUN 7-leak-scan-env PASS ") && l.includes("canary body 403 DR_CUSTODY_HIT"))).toBe(true);
     for (const n of ["1-arm-tars", "2-verify-hook"]) expect(lines.find((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toMatch(/Docker/);
     expect(lines.some((l) => l.startsWith("DRYRUN 5-judgment-hooks FAIL not built (unit "))).toBe(true);
     for (const n of ["6-ledger", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " PASS "))).toBe(true);

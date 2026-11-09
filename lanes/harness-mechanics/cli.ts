@@ -76,6 +76,7 @@ export async function main(argv: string[]): Promise<number> {
       }
       return 0;
     }
+    if (cmd === "pick") return await (await import("./picker.ts")).pickRun(rest);
     if (cmd === "replay") {
       const sub = rest[0];
       if (sub === "items") {

@@ -147,6 +147,8 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_HM_SCREEN](#e_hm_screen) | 2 | U20 |
 | [E_HM_FIT](#e_hm_fit) | 2 | U20 |
 | [E_HM_REPLAY](#e_hm_replay) | 2 | U20 |
+| [E_HM_PICKER](#e_hm_picker) | 2 | U20 |
+| [E_HM_CUSTODY](#e_hm_custody) | 2 | U20 |
 | [E_HM_PIN](#e_hm_pin) | 2 | U20 |
 | [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
 | [E_TBV_INPUT](#e_tbv_input) | 2 | U20 |
@@ -1071,6 +1073,22 @@ The harness mechanics Stage 2 replay (lanes/harness-mechanics/replay.ts) refused
 Fix: Read the text after the code. A count, digest or start refusal comes before any call: fix the input and run again. A cap stop or an unmetered answer leaves the replay incomplete with its lease settled at the spend so far; the item serves one run and the run is never retried, so take it to the Captain.
 
 Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_HM_PICKER
+
+The harness mechanics bo2 picker (lanes/harness-mechanics/picker.ts, hm pick) refused or stopped: its config names an unknown item or model, a picker call failed at the metering proxy, or a reserve on the item's ledger was refused.
+
+Fix: Read the text after the code. A config refusal comes before any call: fix the config and run again. picks.jsonl keeps every finished task, so a rerun skips them. A cap stop (CAP_STOP in the text) leaves the item's ledger settled at the spend so far; take it to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: yes. Owner: U20.
+
+### E_HM_CUSTODY
+
+The harness mechanics leak scan (lanes/harness-mechanics/leak.ts) refused a slot bind: the task's planted canary is not among its runner-only markers, so the proxy could not apply the decision-routing custody stop.
+
+Fix: Rebuild the task's custody with taskCustody, which plants the canary and puts it first among the markers, then bind again. No call was made.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_HM_PIN
 

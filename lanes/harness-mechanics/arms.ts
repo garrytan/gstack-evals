@@ -198,7 +198,7 @@ export function stepVerifyHook(out: string): StepResult {
   return { pass: true, detail: detail + "; hook: edit then stop is blocked once with gstack's text, then allowed (miss); prose: nothing blocked, no record; a waiver (met_after_block) and STATUS: BLOCKED (met) let the stop through and print; a reread is met by the hook and non-adherent in score.ts; '/verify ' gives one load; routing off" };
 }
 
-/** Step 7, env part: Harbor runs with HARBOR_TELEMETRY=0 and every Claude Code session with CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The leak scan is unit 7's. */
+/** Step 7, env part: Harbor runs with HARBOR_TELEMETRY=0 and every Claude Code session with CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The leak scan half runs leak.ts dryrun (unit 7). */
 export function envProblems(vmRun: string, agentPy: string): string[] {
   const p: string[] = [];
   const runs = vmRun.split("\n").filter((l) => /harbor run /.test(l) && !/pkill/.test(l));
@@ -220,7 +220,8 @@ export function stepEnv(out: string): StepResult {
   const vm = readFileSync(join(REPO, "quick/laneb/runner/vm-run.sh"), "utf8");
   const p = envProblems(vm, readFileSync(join(REPO, "quick/laneb/runner/agent/laneb_agent.py"), "utf8"));
   if (!p.length) writeFileSync(join(out, "harbor-env.json"), JSON.stringify(harborEnvRecord(vm), null, 2) + "\n");
-  return { pass: false, detail: (p.length ? p[0] : "HARBOR_TELEMETRY=0 on every harbor run line (the pinned job config has no field for Harbor's own env; hm.json records it), CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every session") + "; leak scan not built (unit 7)" };
+  const leak = spawnSync(process.execPath, [join(REPO, "lanes/harness-mechanics/leak.ts"), "dryrun", out], { encoding: "utf8", timeout: 60_000 });
+  return { pass: !p.length && leak.status === 0, detail: (p.length ? p[0] : "HARBOR_TELEMETRY=0 on every harbor run line (the pinned job config has no field for Harbor's own env; hm.json records it), CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every session") + "; leak scan: " + (leak.stdout.trim().split("\n").at(-1) || leak.stderr.trim()) + "" };
 }
 
 if (import.meta.main) {
