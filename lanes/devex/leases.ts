@@ -34,16 +34,16 @@ export interface Item {
   name: string;
   projection_micros: number;
   cap_micros: number;
-  /** The run id every lease on the item carries: an item that served one run refuses another (E_ITEM_BOUND). Null for an item the ledger does not lease. */
+  /** The run id every lease on the item carries, the item's own id as the miner's --item uses: an item that served one run refuses another (E_ITEM_BOUND). Null for an item the ledger does not lease. */
   run_id: string | null;
   note: string;
 }
 
 /** The section 14 table, in its order. */
 export const ITEMS: readonly Item[] = [
-  { id: "dx-s1-runs", name: "Stage 1 runs", projection_micros: $(91), cap_micros: $(160), run_id: "dx-s1", note: "144 none reviews (48 a model), 22 smoke sessions, and a re-smoke reserve for repaired arms in the cap" },
-  { id: "dx-s2-runs", name: "Stage 2 runs", projection_micros: $(1420), cap_micros: $(1560), run_id: "dx-s2", note: "Opus 128 unit-passes at $7.35, Sol 64 at $6.60, particle-1 64 at $0.74" },
-  { id: "dx-s3-builds", name: "Stage 3 builds", projection_micros: $(179), cap_micros: $(210), run_id: "dx-s3", note: "16 units x 4 build arms at $2.80" },
+  { id: "dx-s1-runs", name: "Stage 1 runs", projection_micros: $(91), cap_micros: $(160), run_id: "dx-s1-runs", note: "144 none reviews (48 a model), 22 smoke sessions, and a re-smoke reserve for repaired arms in the cap" },
+  { id: "dx-s2-runs", name: "Stage 2 runs", projection_micros: $(1420), cap_micros: $(1560), run_id: "dx-s2-runs", note: "Opus 128 unit-passes at $7.35, Sol 64 at $6.60, particle-1 64 at $0.74" },
+  { id: "dx-s3-builds", name: "Stage 3 builds", projection_micros: $(179), cap_micros: $(210), run_id: "dx-s3-builds", note: "16 units x 4 build arms at $2.80" },
   { id: "dx-judges", name: "Judges", projection_micros: $(384), cap_micros: $(450), run_id: "dx-judges", note: "stage 1 labels, judge check, stage 2 labels with the blind calibration packets, arm-guess probe and anchors" },
   { id: "dx-authoring", name: "Authoring and mining", projection_micros: $(817), cap_micros: $(1000), run_id: "dx-authoring", note: "86 keyed units at about $7.50, the miss sample, generic-screen labels, stage 3 goals, checkers and probes" },
   { id: "dx-hosts", name: "Runner hosts", projection_micros: $(70), cap_micros: $(80), run_id: "dx-hosts", note: "the miner, run and verifier hosts, stage 3 sandboxes, on Ubicloud" },
@@ -328,7 +328,7 @@ export async function checks(): Promise<DryCheck[]> {
       const a = await driveAll(over8, first3(1.08));
       await driveAll(over12, first3(1.12), "s2-opus-2");
       const room = left(over12, "dx-s2-runs");
-      const refused = codeOf(() => openLease(over12.record, over12.local, { item: "dx-s2-runs", run_id: "dx-s2", amount_micros: lease("s2-opus-2") }));
+      const refused = codeOf(() => openLease(over12.record, over12.local, { item: "dx-s2-runs", run_id: "dx-s2-runs", amount_micros: lease("s2-opus-2") }));
       out.push(T("an 8% overrun on stage 2's first three runs still admits Opus pass 2; at 12%, still inside each lease, the ledger refuses its full lease", [
         [a.opened.includes("s2-opus-2") && (a.left["s2-opus-2"] ?? 0) >= lease("s2-opus-2"), "at 8%, " + usd(a.left["s2-opus-2"] ?? 0) + " left admits " + usd(lease("s2-opus-2"))],
         [refused === "CAP_STOP", "at 12%, " + usd(room) + " left refuses it (" + refused + ")"],
