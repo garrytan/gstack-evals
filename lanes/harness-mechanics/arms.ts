@@ -183,9 +183,21 @@ export function envProblems(vmRun: string, agentPy: string): string[] {
   if (!/"CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1"/.test(agentPy)) p.push("laneb_agent.py's session env lacks CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1");
   return p;
 }
-export function stepEnv(_out: string): StepResult {
-  const p = envProblems(readFileSync(join(REPO, "quick/laneb/runner/vm-run.sh"), "utf8"), readFileSync(join(REPO, "quick/laneb/runner/agent/laneb_agent.py"), "utf8"));
-  return { pass: false, detail: (p.length ? p[0] : "HARBOR_TELEMETRY=0 on every harbor run, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every session") + "; leak scan not built (unit 7)" };
+// Harbor at its pin reads HARBOR_TELEMETRY from its own process env (src/harbor/telemetry.py). Its JobConfig has env maps
+// only for the task environment, the agent and the verifier, which reach containers, not the harbor process, so the job file
+// carries none and vm-run.sh sets it on every harbor run line. prepare writes this record into hm.json.
+export const HARBOR_PIN = "f3a5a923f6d722472c9e797af836ae4425fb215f";
+export function harborEnvRecord(vmRun: string) {
+  const p = envProblems(vmRun, '"CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1"');
+  if (p.length) pinErr(p[0]!);
+  return { HARBOR_TELEMETRY: "0", set_by: "quick/laneb/runner/vm-run.sh, on every harbor run line", job_config_field: false, harbor_pin: HARBOR_PIN,
+    why: "the pinned Harbor reads HARBOR_TELEMETRY from its own process env; JobConfig's env maps (environment, agents, verifier) reach containers only" };
+}
+export function stepEnv(out: string): StepResult {
+  const vm = readFileSync(join(REPO, "quick/laneb/runner/vm-run.sh"), "utf8");
+  const p = envProblems(vm, readFileSync(join(REPO, "quick/laneb/runner/agent/laneb_agent.py"), "utf8"));
+  if (!p.length) writeFileSync(join(out, "harbor-env.json"), JSON.stringify(harborEnvRecord(vm), null, 2) + "\n");
+  return { pass: false, detail: (p.length ? p[0] : "HARBOR_TELEMETRY=0 on every harbor run line (the pinned job config has no field for Harbor's own env; hm.json records it), CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every session") + "; leak scan not built (unit 7)" };
 }
 
 if (import.meta.main) {

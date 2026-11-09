@@ -125,6 +125,7 @@ if (import.meta.main) {
     proxy_config_sha256: sha256(join(run, "proxy.json")), cells,
     arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "", told_skill: options.told ?? "",
       ...(options.gstack_hooks ? { gstack_hooks: options.gstack_hooks } : {}),
+      ...(options.strip_snapshot ? { strip_snapshot: true } : {}),
       ...(options.procedure_line ? { procedure_line: options.procedure_line, procedure_line_sha256: createHash("sha256").update(PROCEDURE_LINES[options.procedure_line as keyof typeof PROCEDURE_LINES]).digest("hex") } : {}),
       ...(options.closing_line ? { closing_line: options.closing_line, closing_line_sha256: createHash("sha256").update(CLOSING_LINES[options.closing_line as keyof typeof CLOSING_LINES]).digest("hex") } : {}) })), tasks,
   };

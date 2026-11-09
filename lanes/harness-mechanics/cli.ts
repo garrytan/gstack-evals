@@ -7,7 +7,8 @@ import { dirname, join, resolve } from "node:path";
 import { l1Main } from "../../quick/laneb/l1/l1.ts";
 import { admission, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
 import { dryrun } from "./dryrun.ts";
-import { CLOSING } from "./pins.ts";
+import { harborEnvRecord } from "./arms.ts";
+import { CLOSING, REPO } from "./pins.ts";
 import { HM_PROFILE } from "./plans.ts";
 import { patternsCommand } from "./score.ts";
 import { buildHmTable } from "./table.ts";
@@ -34,7 +35,7 @@ export async function main(argv: string[]): Promise<number> {
         const sessions = plan.parts.reduce((a: number, x: any) => a + x.rects.reduce((b: number, r: any) => b + r.tasks.length * r.arms.length * r.attempts, 0), 0);
         const tasks = (a: string) => new Set(plan.parts.flatMap((x: any) => x.rects.filter((r: any) => r.arms.includes(a)).flatMap((r: any) => r.tasks)));
         const plain = tasks("plain-2");
-        writeFileSync(join(work, "hm.json"), JSON.stringify({ item: plan.item, sessions, picker_calls: [...tasks("none")].filter((x) => plain.has(x)).length, closing_line: CLOSING, screened_sha256: plan.inputs.screened }, null, 2) + "\n");
+        writeFileSync(join(work, "hm.json"), JSON.stringify({ item: plan.item, sessions, picker_calls: [...tasks("none")].filter((x) => plain.has(x)).length, closing_line: CLOSING, screened_sha256: plan.inputs.screened, harbor_env: harborEnvRecord(readFileSync(join(REPO, "quick/laneb/runner/vm-run.sh"), "utf8")) }, null, 2) + "\n");
       }
       return 0;
     }

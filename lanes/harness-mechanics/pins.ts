@@ -50,7 +50,7 @@ export type ModelKey = keyof typeof MODELS;
 
 // The six run arms as Lane B arm specs (grid.ts armSpec). bo2 has no session: none plus plain-2 plus one picker call.
 // The judge backend is not an agent option yet; the judgment hooks' build adds it.
-const TAIL = ":system_prompt=claude-code-preset:gstack_hooks=copy:closing_line=" + CLOSING.key;
+const TAIL = ":system_prompt=claude-code-preset:gstack_hooks=copy:strip_snapshot=true:closing_line=" + CLOSING.key;
 export const ARMS: Record<HmArm, { spec: string; tar: string; backend?: "jev" | "p1" }> = {
   none: { spec: "none" + TAIL, tar: "none" },
   "plain-2": { spec: "plain-2:tar=none" + TAIL, tar: "none" },
