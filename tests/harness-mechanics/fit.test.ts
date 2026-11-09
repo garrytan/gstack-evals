@@ -49,7 +49,7 @@ describe("hm fit", () => {
     writeFileSync(join(dir, "nopull-" + p.get(tasks[3]!.task)!.image_digest.slice(7)), ""); writeFileSync(join(dir, "nobuild-hm-fit-5"), "");
     const rows = fit(out, tasks, g);
     expect(rows.map((r) => [r.task, r.repo, r.split])).toEqual(tasks.map((t) => [t.task, p.get(t.task)!.repo, t.split]));
-    expect(rows[0]).toMatchObject({ tests_selection: { first: 900, picked: 12, file: "pkg/b.py" }, edited: "pkg/b.py", checks: [{ name: "lint", verdict: "PASS" }, { name: "tests", verdict: "FAIL" }], base_fail: { result: "fail", failed: 2, summary: "==== 2 failed, 73 passed in 1.00s ====" } });
+    expect(rows[0]).toMatchObject({ tests_selection: { first: 900, picked: 12, file: "pkg/b.py" }, edited: "pkg/b.py", checks: [{ name: "lint", verdict: "PASS" }, { name: "tests", verdict: "FAIL" }], base_fail: { result: "fail", failed: 2, errors: 0, summary: "==== 2 failed, 73 passed in 1.00s ====" } });
     expect(rows[1]!.base_fail).toEqual({ result: "pass" });
     expect(rows[2]).toMatchObject({ tests_selection: "too_broad", edited: "pkg/a.py", checks: [{ name: "lint", verdict: "ENV" }, { name: "typecheck", verdict: "ENV" }, { name: "tests", verdict: "TOO_BROAD" }] });
     expect(rows[2]!.base_fail).toBeUndefined();
@@ -57,7 +57,7 @@ describe("hm fit", () => {
     expect(rows[4]!.error).toMatch(/docker build hm-fit-5 failed: build broke/);
     const calls = readFileSync(join(dir, "calls"), "utf8");
     expect(calls).toContain("run -d --name hm-fit-1-prose --network none");
-    expect(calls).toContain("git checkout -q -- 'pkg/b.py' && " + taskSetup().envDir + "/pytest -q -p no:cacheprovider 'tests/test_b.py' 'tests/test_c.py'");
+    expect(calls).toContain("git checkout -q -- 'pkg/b.py' && " + taskSetup().envDir + "/pytest -q --color=no -p no:cacheprovider 'tests/test_b.py' 'tests/test_c.py'");
     expect(calls).toContain("echo '# hm d1 probe edit' >> 'pkg/a.py'");
     for (const n of [1, 2, 3]) expect(calls).toContain("rm -f hm-fit-" + n + "-prose\n");
     for (const n of [1, 2, 3]) expect(calls).toContain("rmi -f hm-fit-" + n + "\n");
@@ -78,9 +78,10 @@ describe("hm fit", () => {
     expect(readFileSync(join(dir, "calls"), "utf8")).not.toContain("hm-fit-1");
     expect(readFileSync(join(dir, "calls"), "utf8")).toContain("build -q -t hm-fit-5");
   });
-  test("pytest at base reads pass, fail with its failed count, or timeout", () => {
-    expect(baseResult(0, "75 passed")).toEqual({ result: "pass" });
-    expect(baseResult(1, "x\n== 3 failed, 1 error in 2s ==")).toEqual({ result: "fail", failed: 3, summary: "== 3 failed, 1 error in 2s ==" });
+  test("pytest at base reads pass, fail with its failed and error counts (errors alone fail too), or timeout", () => {
+    expect(baseResult(0, "x\n==== 75 passed in 1.00s ====")).toEqual({ result: "pass" });
+    expect(baseResult(1, "x\n== 3 failed, 1 error in 2s ==")).toEqual({ result: "fail", failed: 3, errors: 1, summary: "== 3 failed, 1 error in 2s ==" });
+    expect(baseResult(2, "x\n==== 73 warnings, 75 errors in 0.81s ====")).toEqual({ result: "fail", failed: 0, errors: 75, summary: "==== 73 warnings, 75 errors in 0.81s ====" });
     expect(baseResult(null, "")).toEqual({ result: "timeout" });
   });
   test("the task list is the screened lists, scored then calibration; --only keeps one task and refuses one outside them", () => {

@@ -16,7 +16,7 @@ import { imageRef, pool } from "./screen.ts";
 
 export const FIT = { baseTimeoutSec: 900 };
 export type FitTask = { task: string; split: "scored" | "calibration" };
-type Base = { result: "pass" } | { result: "fail"; failed: number; summary: string } | { result: "timeout" };
+type Base = { result: "pass" } | { result: "fail"; failed: number; errors: number; summary: string } | { result: "timeout" };
 export type FitRow = FitTask & { repo: string; tests_selection?: { first: number; picked: number; file: string } | "too_broad"; edited?: string | null; checks?: { name: string; verdict: string }[]; base_fail?: Base; error?: string };
 
 export function fitTasks(only?: string): FitTask[] {
@@ -28,12 +28,13 @@ export function fitTasks(only?: string): FitTask[] {
   return one;
 }
 
-// pytest's exit at base: 0 passes, a kill at the time limit is a timeout, anything else fails with the summary's count.
+// pytest's exit at base: 0 passes, a kill at the time limit is a timeout, anything else fails with the summary's failed
+// and error counts.
 export function baseResult(code: number | null, out: string): Base {
   if (code === null) return { result: "timeout" };
   if (code === 0) return { result: "pass" };
   const summary = (out.trim().split("\n").at(-1) ?? "").slice(0, 200);
-  return { result: "fail", failed: Number(/(\d+) failed/.exec(summary)?.[1] ?? 0), summary };
+  return { result: "fail", failed: Number(/(\d+) failed/.exec(summary)?.[1] ?? 0), errors: Number(/(\d+) errors?\b/.exec(summary)?.[1] ?? 0), summary };
 }
 
 function probeTask(r: Rig, t: string, ref: string, tag: string): Omit<FitRow, keyof FitTask | "repo"> {
@@ -48,7 +49,7 @@ function probeTask(r: Rig, t: string, ref: string, tag: string): Omit<FitRow, ke
   const checks = loopResult(r.exec(c, r.loop, 1800).out).checks.map((x) => ({ name: x.split(" ")[0]!, verdict: x.split(" ")[1]! }));
   if (!checks.some((k) => k.name === "tests" && k.verdict === "FAIL")) return { tests_selection, edited, checks };
   const files = [...r.exec(c, r.probe('"refused" in l ? "" : selectLanes(l.ctx).localTests.map((x) => "HM_TEST " + x).join("\\n")')).out.matchAll(/^HM_TEST (\S+)$/gm)].map((m) => "'" + m[1] + "'");
-  const base = r.exec(c, "git checkout -q -- '" + edited + "' && " + py + " -q -p no:cacheprovider " + files.join(" "), FIT.baseTimeoutSec);
+  const base = r.exec(c, "git checkout -q -- '" + edited + "' && " + py + " -q --color=no -p no:cacheprovider " + files.join(" "), FIT.baseTimeoutSec);
   return { tests_selection, edited, checks, base_fail: baseResult(base.code, base.out) };
 }
 
@@ -60,7 +61,7 @@ function table(key: string, rows: FitRow[], of: (r: FitRow) => string): string[]
   for (const r of rows) groups.set(of(r), [...(groups.get(of(r)) ?? []), r]);
   return ["| " + key + " | " + COLS.join(" | ") + " |", "|---" + "|---".repeat(COLS.length) + "|", ...[...groups].map(([k, rs]) => "| " + k + " | " + counts(rs).join(" | ") + " |")];
 }
-const rowText = (r: FitRow) => r.error ? "error: " + r.error : [typeof r.tests_selection === "object" ? "selects " + r.tests_selection.picked + " (" + r.tests_selection.file + "; first module " + r.tests_selection.first + ")" : "too_broad (" + r.edited + ")", (r.checks ?? []).map((k) => k.name + " " + k.verdict).join(", ") || "no CHECK line", ...(r.base_fail ? ["at base " + r.base_fail.result + ("failed" in r.base_fail ? " " + r.base_fail.failed + " (" + r.base_fail.summary + ")" : "")] : [])].join("; ");
+const rowText = (r: FitRow) => r.error ? "error: " + r.error : [typeof r.tests_selection === "object" ? "selects " + r.tests_selection.picked + " (" + r.tests_selection.file + "; first module " + r.tests_selection.first + ")" : "too_broad (" + r.edited + ")", (r.checks ?? []).map((k) => k.name + " " + k.verdict).join(", ") || "no CHECK line", ...(r.base_fail ? ["at base " + r.base_fail.result + ("failed" in r.base_fail ? " " + r.base_fail.failed + " failed, " + r.base_fail.errors + " errors (" + r.base_fail.summary + ")" : "")] : [])].join("; ");
 
 export function fitSummary(rows: FitRow[]): string {
   const L = ["# Task-fit probe", "", rows.length + " tasks. Edit rule: " + EDIT_RULE + ". FAIL at base means the same selected test files fail on the pristine tree with the env's pytest.", "", "## Per repository", "", ...table("repository", rows, (r) => r.repo), "", "## Per split", "", ...table("split", rows, (r) => r.split), "", "## Tasks", ""];
