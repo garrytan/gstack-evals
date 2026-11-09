@@ -19,7 +19,7 @@ Publication status: unpublished; posting is Garry's. Done: the reader runs, the 
 
 | Field | Value |
 |---|---|
-| Grade | Exploratory. A counts-only baseline from one reader at a pinned commit, on a partial set of sessions. Paid calls: $0. |
+| Grade | Exploratory. A counts-only baseline from one reader at a pinned commit, on a partial set of sessions. No paid calls. |
 | Repo commit | 96431bb065775ba145a46b36729675e905294452 (main after #182). Every reading below comes from `bin/gstack-evals waste` at this commit. |
 | Prereg | None. The readings and the 10% trigger come from 2026-11-03-geva-220-waste-floor, written before this scan. |
 | Data | The reader's JSON outputs, counts and digests only, kept outside the repo. threads output sha256 3f7d26a55354ee06343384aeebf3cf52afbfef35c6e9751ef7e8fb536b0ec49b; receipts output sha256 72f2229caf5164ac9ce3b6a87287d0bd4dc4412695b5c35871bee4ef5cb666e7. Per-session export digests are listed below. |
@@ -220,6 +220,8 @@ Nothing held out is read here. The inputs are private crew sessions and private 
 Paid model calls: $0. The session scan, the head validation and this draft used 9.1M host tokens (2,923 Capy credits, about $2.92) in one Opus 5.5 subagent. The lead's review of the draft before this post's /ship used about 3.8M host tokens (about 1,200 credits, about $1.20). The reader fix this rests on (#182) and its /ship are counted with that PR. Prices: Capy credits at about $1 per 1,000, as of 2026-11-03. No provider tokens were bought.
 
 From the summary: A $0 counts-only baseline: pushed-head re-runs are 0.07% of ship-check time (upper bound 0.56%), but review rounds past the cap have no measured time, so the kill rule is not shown.
+
+| Grade | Exploratory. A counts-only baseline from one reader at a pinned commit, on a partial set of sessions. Paid calls: $0. |
 
 </details>
 

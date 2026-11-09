@@ -1,7 +1,7 @@
 ---
 id: 2026-11-02-geva-194-real-outcome-ts-recheck
 kind: finding
-title: "Real-outcome thin slice recheck with the GST-957 checker fix, counts and labels only"
+title: "Real-outcome thin slice recheck with the GST-957 checker fix, counts only, labels withheld"
 summary: The fixed checker passes 8 of the 10 tasks pending GST-957 and keeps all 7 final ones valid. The set now has 9 build tasks, 2 K1 pairs and 5 build repositories (targets 10, 3, 5).
 author: GEVA-194
 model: anthropic/claude-opus-5-5
@@ -27,7 +27,7 @@ This post amends the [thin-slice yield record](2026-11-02-geva-173-real-outcome-
 
 The checker at main f117467 (#145, GST-957) rechecked all 17 sealed units: the 10 marked pending GST-957, and the 7 final ones as a control. Eight pending units now pass every rule. Two still fail L2 for reasons GST-957 does not cover, so they stay out of the set. All 7 final units stay valid.
 
-This post holds counts, labels and digests only. Statements, commit ids, test ids, file paths and the repository of each task stay in the sealed files.
+This post holds counts and digests only; the sealed-unit labels are withheld. Statements, commit ids, test ids, file paths and the repository of each task stay in the sealed files.
 
 ## How it ran
 
@@ -37,7 +37,7 @@ This post holds counts, labels and digests only. Statements, commit ids, test id
 - Input checks: the 9 part sha256s, the bundle sha256 (ba6b481e...40ab), the inner tar sha256 (b12ccfa0...b362) and all 17 task.json sha256s matched before the run.
 - No agent ran and no model was called.
 
-## Per-label result
+## Per-unit result, labels withheld
 
 "Valid, regression not frozen" means every rule passes, but task.json does not hold a frozen regression list yet, so `verify` refuses the task until `check --freeze-regression` writes one.
 

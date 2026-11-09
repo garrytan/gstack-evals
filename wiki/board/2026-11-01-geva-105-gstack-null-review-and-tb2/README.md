@@ -46,7 +46,7 @@ attachments:
 
 ## What we found
 
-We told Claude Code to use gstack's skills and compared it with the same model and harness with no gstack. On Opus 5.5, gstack's /investigate passed 83.8% of 37 Terminal-Bench 2 (TB2) tasks against 81.1% with no gstack, at $0.33 against $0.18 per success. gstack's /review caught 9.5% of 42 blocking bugs in 26 pull requests against 7.1%, for 47% more dollars. Neither gain is one we could detect: the tests could have seen gains of about 9.1 and 12.6 points with 80% power, and both intervals include zero.
+We told Claude Code to use gstack's skills and compared it with the same model and harness with no gstack. On Opus 5.5, gstack's /investigate passed 83.8% of 37 Terminal-Bench 2 (TB2) tasks against 81.1% with no gstack, at a higher cost per success. gstack's /review caught 9.5% of 42 blocking bugs in 26 pull requests against 7.1%, for 47% more dollars. Neither gain is one we could detect: the tests could have seen gains of about 9.1 and 12.6 points with 80% power, and both intervals include zero.
 
 So the honest reading is "no detectable gain, and these suites can't tell". TB2 sits near a ceiling (Opus alone passes 81%) and review near a floor (Opus alone catches 7% of blocking bugs). In both, Opus read the skill's text and then skipped most of its procedure.
 
@@ -62,7 +62,7 @@ So the honest reading is "no detectable gain, and these suites can't tell". TB2 
 - **Arms.** none (no gstack installed, plain prompt); gstack, told /investigate on TB2 (gstack 61e201e, v1.91.295.0) and /review on review (gstack 53522b1, v1.91.342.0); gstack-placebo on TB2 for Haiku and particle-1 (length-matched prose with no procedure); pstack (Lauren Tan's, told /pstack:poteto-mode) and pstack-placebo on TB2; tstack (Theo Browne's) on review. This file reports gstack against none; #108 and #109 report the other stacks.
 - **Models.** claude-opus-5-5 and claude-haiku-5-5 on Anthropic's API; particle-1 as particle-ai/particle-1 on OpenRouter. The route of every session is in the proxy files in the bundles.
 - **Harness.** Claude Code with CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 in every arm: 2.1.314 on review, as the rig's docker/trial.Dockerfile at 715f837 pins it beside the TypeScript Agent SDK 0.3.314 (amendment #105 says the same), and 2.1.312 on TB2, which ran in Harbor f3a5a923 with claude-agent-sdk 0.2.174. The doctor and plugin-authoring skills were still listed in every arm, none included (GEVA-109).
-- **System prompt (verified): the Claude Agent SDK's default, not Claude Code's.** Neither the review driver (src/adapters/claude-code/driver.ts) nor Lane B's TB2 agent sets a system prompt, so the SDK passes an empty one (claude-agent-sdk 0.2.174 as --system-prompt "", the review driver's TypeScript SDK in its initialize request). Claude Code then sends a billing header and the SDK's stub, "You are a Claude agent, built on Anthropic's Claude Agent SDK.", and leaves out its own guidance block (about 1.9k tokens). Tools, the environment turn and the skill listing still arrive. Both lanes ran this way, the same way in every arm. GEVA-109 verified it on 2026-11-01 at $0 from the code and pins, from each pinned SDK driving the real pinned CLI against a recording fake upstream, and from the recorded traffic: on their first request, 196 of 198 Opus review sessions and 952 of 989 Anthropic TB2 sessions read exactly the cached prefix of tools plus those two short blocks, and the rest had a cold cache. Evidence: the Captain drive's handoffs/GEVA-109/sp-verify/README.md and the org drive's research/sdk-system-prompt-note.md.
+- **System prompt (verified): the Claude Agent SDK's default, not Claude Code's.** Neither the review driver (src/adapters/claude-code/driver.ts) nor Lane B's TB2 agent sets a system prompt, so the SDK passes an empty one (claude-agent-sdk 0.2.174 as --system-prompt "", the review driver's TypeScript SDK in its initialize request). Claude Code then sends a billing header and the SDK's stub, "You are a Claude agent, built on Anthropic's Claude Agent SDK.", and leaves out its own guidance block (about 1.9k tokens). Tools, the environment turn and the skill listing still arrive. Both lanes ran this way, the same way in every arm. GEVA-109 verified it on 2026-11-01 with no paid calls, from the code and pins, from each pinned SDK driving the real pinned CLI against a recording fake upstream, and from the recorded traffic: on their first request, 196 of 198 Opus review sessions and 952 of 989 Anthropic TB2 sessions read exactly the cached prefix of tools plus those two short blocks, and the rest had a cold cache. Evidence: the Captain drive's handoffs/GEVA-109/sp-verify/README.md and the org drive's research/sdk-system-prompt-note.md.
 - **TB2 tasks.** 40 tasks from quick look 3 (quick/laneb/tasks/final.json, sha256 9ccfec13f01c150f4ec838e19285375a1f034522c1a069c0ee83d75d12dd56d9, at the tag laneb-stacks-1-runner), TB2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c. Three tasks left the grid under the frozen oracle rule (crack-7z-hash, adaptive-rejection-sampler, largest-eigenval), so 37 are graded. Each task has its own agent time limit. Three replicates, 111 trials a cell, 1,443 trials in all, all run on 2026-11-01 UTC.
 - **Review suite.** stacks-r1 from #95: 33 units (27 blocking, 6 over-blocking), 42 blocking bugs on 26 merged PRs (gstack and gbrain), sha256 4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d. Opus arms ran two passes, 66 unit-passes an arm.
 - **Judges (review).** Opus 5.5 primary, gpt-6.1-sol second, Sonnet 5.5 third, blind to arm, on the match brief with sha256 ef33d5ca0f802e49e18d1f3e4b16f989bcbd48fa4c46f339bc0533dfb1364427. The second judge agreed on 33 blockers at kappa 0.9832. No human spot check.
@@ -94,12 +94,12 @@ The review scorer forbids the no-loss claim, so this file makes none: it does no
 
 ### The table
 
-| Suite, model | none | gstack | gstack - none [95% CI] | MDD (80% power) | Per success, none / gstack |
-|---|---|---|---|---|---|
-| TB2, Opus 5.5 | 90/111, 81.1% | 93/111, 83.8% | +3 [-3, +9] | 9.1 | $0.179 / $0.328 |
-| TB2, Haiku 5.5 | 84/111, 75.7% | 85/111, 76.6% | +1 [-7, +9] | 11.7 | $0.012 / $0.018 |
-| TB2, particle-1 | 92/111, 82.9% | 86/111, 77.5% | -5 [-14, +1] | 10.6 | $0.087 / $0.105 |
-| Review, Opus 5.5, blocking recall | 6/84, 7.1% | 8/84, 9.5% | +2.4 [-6.4, +11.1] | 12.6 | $7.59 / $8.37 per blocking find (11.6M / 14.5M tokens) |
+| Suite, model | none | gstack | gstack - none [95% CI] | MDD (80% power) |
+|---|---|---|---|---|
+| TB2, Opus 5.5 | 90/111, 81.1% | 93/111, 83.8% | +3 [-3, +9] | 9.1 |
+| TB2, Haiku 5.5 | 84/111, 75.7% | 85/111, 76.6% | +1 [-7, +9] | 11.7 |
+| TB2, particle-1 | 92/111, 82.9% | 86/111, 77.5% | -5 [-14, +1] | 10.6 |
+| Review, Opus 5.5, blocking recall | 6/84, 7.1% | 8/84, 9.5% | +2.4 [-6.4, +11.1] | 12.6 |
 
 Units: TB2 counts trials (37 tasks times 3 replicates); review counts blocker-passes (42 blocking bugs times 2 passes).
 
@@ -312,8 +312,19 @@ Totals: TB2 spent $165.36 (pilot $9.07, the nine analysed batches $131.63, and a
 
 - Next step: told /investigate against no gstack on Opus, on bug-fix tasks where Opus with no gstack passes 20% to 80% (a SWE-bench Verified screen, cap $150, then the main run). Kill rule set now: if Opus shows no lift there, /investigate's phase procedure on Opus becomes a CUT-CANDIDATE. Told /investigate has now come out null or negative in four TB2 rounds; TB2 should stop serving as its signal.
 
-**Across both: CUT-CANDIDATE, taken by Garry.** gstack's operational ceremony in the always-loaded skill bodies (preamble, question tuning, telemetry, learnings, queue status and the like: 22.2 KB, 37.6% of /review's body; 16.3 KB, 54.6% of /investigate's) ran in no Opus review session and only as gstack-skill-start in 6 of 111 Opus TB2 trials (a text match on tool input), and nothing in it can help a one-shot task. On 2026-11-01 Garry approved and took I1: move the ceremony out of the always-loaded body when a session is one-shot and unattended, and verify the change with the before/after skill eval (about $70 for a review grid plus about $3 of judging, and about $31 for an Opus TB2 arm). Status: waiting for the variant from the gstack Captain (GST-824).
+**Across both: CUT-CANDIDATE, taken by Garry.** gstack's operational ceremony in the always-loaded skill bodies (preamble, question tuning, telemetry, learnings, queue status and the like: 22.2 KB, 37.6% of /review's body; 16.3 KB, 54.6% of /investigate's) ran in no Opus review session and only as gstack-skill-start in 6 of 111 Opus TB2 trials (a text match on tool input), and nothing in it can help a one-shot task. On 2026-11-01 Garry approved and took I1: move the ceremony out of the always-loaded body when a session is one-shot and unattended, and verify the change with the before/after skill eval (about $70 for a review grid plus about $3 of judging, and about $31 for an Opus TB2 arm). Status: waiting for the variant from the gstack Captain.
 
 When there is, one Opus replicate of none and gstack on the 37 tasks costs about $16 at the prices above, plus VM time.
+
+On Opus 5.5, gstack's /investigate passed 83.8% of 37 Terminal-Bench 2 (TB2) tasks against 81.1% with no gstack, at $0.33 against $0.18 per success.
+
+Original wording in the System prompt item: "verified it on 2026-11-01 at $0 from the code and pins".
+
+| Suite, model | none | gstack | gstack - none [95% CI] | MDD (80% power) | Per success, none / gstack |
+|---|---|---|---|---|---|
+| TB2, Opus 5.5 | 90/111, 81.1% | 93/111, 83.8% | +3 [-3, +9] | 9.1 | $0.179 / $0.328 |
+| TB2, Haiku 5.5 | 84/111, 75.7% | 85/111, 76.6% | +1 [-7, +9] | 11.7 | $0.012 / $0.018 |
+| TB2, particle-1 | 92/111, 82.9% | 86/111, 77.5% | -5 [-14, +1] | 10.6 | $0.087 / $0.105 |
+| Review, Opus 5.5, blocking recall | 6/84, 7.1% | 8/84, 9.5% | +2.4 [-6.4, +11.1] | 12.6 | $7.59 / $8.37 per blocking find (11.6M / 14.5M tokens) |
 
 </details>

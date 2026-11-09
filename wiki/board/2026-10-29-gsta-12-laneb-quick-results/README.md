@@ -33,17 +33,17 @@ Failure handling follows the preregistration, with two departures from the pinne
 
 Primary, with verifier timeouts counted as 0 and the six outage-orphan zero-request trials reclassified as infrastructure (both documented above and reversed in the sensitivities):
 
-| Model | Arm | Trials | Pass rate [95% CI] | Cost per success | Budget stops | Timeouts |
-|---|---|---|---|---|---|---|
-| Opus 5.5 | none | 59 | 63% [45%, 82%] | $0.28 | 0 | 3 |
-| Opus 5.5 | gstack | 58 | 68% [48%, 87%] | $0.28 | 0 | 0 |
-| Opus 5.5 | placebo | 58 | 68% [52%, 85%] | $0.27 | 0 | 1 |
-| Haiku 5.5 | none | 58 | 55% [37%, 72%] | $0.02 | 0 | 3 |
-| Haiku 5.5 | gstack | 58 | 50% [32%, 68%] | $0.02 | 0 | 1 |
-| Haiku 5.5 | placebo | 59 | 60% [42%, 77%] | $0.02 | 0 | 4 |
-| DeepSeek V4.1 Flash | none | 59 | 66% [48%, 83%] | $0.11 | 1 | 5 |
-| DeepSeek V4.1 Flash | gstack | 60 | 67% [50%, 82%] | $0.13 | 2 | 6 |
-| DeepSeek V4.1 Flash | placebo | 59 | 59% [42%, 77%] | $0.13 | 2 | 10 |
+| Model | Arm | Trials | Pass rate [95% CI] | Budget stops | Timeouts |
+|---|---|---|---|---|---|
+| Opus 5.5 | none | 59 | 63% [45%, 82%] | 0 | 3 |
+| Opus 5.5 | gstack | 58 | 68% [48%, 87%] | 0 | 0 |
+| Opus 5.5 | placebo | 58 | 68% [52%, 85%] | 0 | 1 |
+| Haiku 5.5 | none | 58 | 55% [37%, 72%] | 0 | 3 |
+| Haiku 5.5 | gstack | 58 | 50% [32%, 68%] | 0 | 1 |
+| Haiku 5.5 | placebo | 59 | 60% [42%, 77%] | 0 | 4 |
+| DeepSeek V4.1 Flash | none | 59 | 66% [48%, 83%] | 1 | 5 |
+| DeepSeek V4.1 Flash | gstack | 60 | 67% [50%, 82%] | 2 | 6 |
+| DeepSeek V4.1 Flash | placebo | 59 | 59% [42%, 77%] | 2 | 10 |
 
 ## Arm contrasts
 
@@ -142,5 +142,17 @@ On this task set the gstack skills never fire on their own, so the gstack arm is
 Total spend was $48.02 against the $190 cap. Per cell: Opus about $10, DeepSeek about $4 to $5, Haiku about $0.60. gstack cost slightly more than no skills on every model, from the longer prompt, and bought no additional successes. The per-cell Cost column sums to $47.53, the metered cost across every trial session; the $0.49 gap to the $48.02 ledger total is spend the ledger meters on superseded retry attempts and outage-interrupted reserves that no final trial session records.
 
 Eleven reserves were orphaned when a machine outage at 22:55 UTC stopped their agents, releasing $26 of reserved budget.
+
+| Model | Arm | Trials | Pass rate [95% CI] | Cost per success | Budget stops | Timeouts |
+|---|---|---|---|---|---|---|
+| Opus 5.5 | none | 59 | 63% [45%, 82%] | $0.28 | 0 | 3 |
+| Opus 5.5 | gstack | 58 | 68% [48%, 87%] | $0.28 | 0 | 0 |
+| Opus 5.5 | placebo | 58 | 68% [52%, 85%] | $0.27 | 0 | 1 |
+| Haiku 5.5 | none | 58 | 55% [37%, 72%] | $0.02 | 0 | 3 |
+| Haiku 5.5 | gstack | 58 | 50% [32%, 68%] | $0.02 | 0 | 1 |
+| Haiku 5.5 | placebo | 59 | 60% [42%, 77%] | $0.02 | 0 | 4 |
+| DeepSeek V4.1 Flash | none | 59 | 66% [48%, 83%] | $0.11 | 1 | 5 |
+| DeepSeek V4.1 Flash | gstack | 60 | 67% [50%, 82%] | $0.13 | 2 | 6 |
+| DeepSeek V4.1 Flash | placebo | 59 | 59% [42%, 77%] | $0.13 | 2 | 10 |
 
 </details>

@@ -21,11 +21,13 @@ Money is integer micro-dollars (1 USD is 1,000,000 micros) in every file and tab
 
 When a command stops with E_LEDGER_MISSING, a human approves a cap and records it with their exact words. On Capy, a crew thread asks its Captain through a needs-you report, and the Captain records the reply.
 
+Before you run it, replace each angle-bracket value with the approver's own words and name, because the ledger records whatever you pass.
+
 ```
 gstack-evals ledger init --cap 130 --item lanea-quick --admission required \
   --words "<exact words>" --source "gate 1 of plan v3.2, approving the first cap" \
   --words "<more exact words>" --source "2026-10-28 message moving the quick looks up" \
-  --by "Garry Tan"
+  --by "<approver>"
 ```
 
 - `--item` names the line item: lowercase letters, digits, dots, dashes and underscores.
@@ -57,6 +59,8 @@ gstack-evals ledger status [--item lanea-quick]
 
 A program is a set of line items under one owner-approved total, with a ceiling for each of its skills as well. The outcome-per-skill plan v3 (wiki/plans/2026-11-03-geva-225-outcome-per-skill-plan, build step O6) is the first: one total for wave 1 and a ceiling for each of its six skills, both set in the plan. The envelope counts every dollar the program commits, so a stage is refused before it spends rather than after.
 
+Before you run it, replace each angle-bracket value with the approver's own words and name, because the ledger records whatever you pass.
+
 ```
 gstack-evals ledger envelope --program <name> --cap <usd> --skill-cap <usd> --skills <a,b,...> --credit-rate 1 \
   --words "<owner's exact words>" --by "<who>" --source "<where>"
@@ -82,7 +86,7 @@ gstack-evals ledger status --program <name>
 
 ## Admission
 
-Admission is the rig check before money (GSTA-8's CI plan, decision 3). The ledger checks it at the lease, the one boundary Lane A, the replay lane, direct-API arms and judge calibration all cross.
+Admission is the rig check before money (the CI plan, decision 3). The ledger checks it at the lease, the one boundary Lane A, the replay lane, direct-API arms and judge calibration all cross.
 
 - An item's admission mode is recorded with the owner's words in its first approval file, `items/<item>/approval-0001.json`, as `{ item, admission }` with `admission` set to `required` or `warn`. U2's preregistration check reads those two fields.
 - Before a lease is written, the ledger reads the admission record for that lease's slot, `items/<item>/admission-<slot>.json` (or its latest attempt, `admission-<slot>.<n>.json`). `gstack-evals rig admit` writes it, and [docs/rig.md](rig.md) says what it must prove.
@@ -95,6 +99,8 @@ Admission is the rig check before money (GSTA-8's CI plan, decision 3). The ledg
 `ledger settle` closes a lease into the record from the machine's local ledger. It counts settled calls at their cost and every call with an unknown outcome at its full reservation. Settle is idempotent by lease id. The close is fixed in the local ledger before it is written, so a retry after a lost acknowledgement finds the same bytes already in place. A settle that cannot reach the record exits 2 with E_LEASE_UNSETTLED, and the lease stays reserved until the retry succeeds. A close above the lease's amount, from a call the provider billed above its reservation, is recorded at its real spend with a LEASE_OVERSPENT warning on stderr; the item's committed total counts the real figure, so a new lease gets only what is left of the cap. On a lease that names a driver's run directory (its holder), a settle then writes a `close` line for each session that directory's sessions.jsonl still shows open on the lease, and `ledger reconcile` does the same, so admission can read the run; either warns SESSIONS_OPEN when the run directory, or for a settle the lease's local ledger, is not on this machine (lanes/outcome-skills/driver/README.md).
 
 A lease whose machine or local ledger is gone stays reserved in full. It is never released silently. Once the lease has expired, so the old machine can admit no more calls even if it comes back, the owner settles it from the provider's usage export:
+
+Before you run it, replace each angle-bracket value with the approver's own words and name, because the ledger records whatever you pass.
 
 ```
 gstack-evals ledger reconcile --lease <lease id> --spent 3.10 \

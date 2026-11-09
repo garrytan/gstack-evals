@@ -47,8 +47,8 @@ Its install check passed (arm tree cc5c6a37, install tree 6967df0e), and so did 
 
 ### Setup deviations
 
-1. **Smoke, attempt 1.** The operator's launch wrapper misparsed a value it reads before launching and stopped there: no out dir, no lease, $0. The wrapper line was fixed and the smoke ran as a new launch. The attempt is set aside in the run record.
-2. **none-rr grid, attempt 1 (the Captain's decision A on GST-1163).** The first launch filled the 128 GB disk at unit 30 of 33. It exited 2 with empty stderr, never leased and spent $0. Under decision A, 64 retained tree tarballs were deleted after each digest matched a unit in units.json or unit.json (75.2 GB freed). The install tree 6967df0e and one unmatched tarball (3ab0c76c) were kept. The list of deleted digests is in the run record (deleted-tarballs.tsv, sha256 752551fd48457010ec3a7936f8f37cd85117f5f929968e7e0366b0015b7f1fc1). The wrapper gained a free-disk check that refuses a launch below 90 GB, with no code change.
+1. **Smoke, attempt 1.** The operator's launch wrapper misparsed a value it reads before launching and stopped there: no out dir, no lease, no paid calls. The wrapper line was fixed and the smoke ran as a new launch. The attempt is set aside in the run record.
+2. **none-rr grid, attempt 1 (the Captain's decision A on GST-1163).** The first launch filled the 128 GB disk at unit 30 of 33. It exited 2 with empty stderr, never leased and made no paid calls. Under decision A, 64 retained tree tarballs were deleted after each digest matched a unit in units.json or unit.json (75.2 GB freed). The install tree 6967df0e and one unmatched tarball (3ab0c76c) were kept. The list of deleted digests is in the run record (deleted-tarballs.tsv, sha256 752551fd48457010ec3a7936f8f37cd85117f5f929968e7e0366b0015b7f1fc1). The wrapper gained a free-disk check that refuses a launch below 90 GB, with no code change.
 3. **ADVISORY (decision A).** The frozen sevmap.ts stopped on gstack-full's unmapped ADVISORY label: 6 of 592 findings in 5 sessions. The Captain's words: "gstack-full's ADVISORY label maps to INFORMATIONAL: at the after pin, review/SKILL.md lists [ADVISORY] items as optional advice outside the defect count and strips the mark from any CRITICAL, so ADVISORY is never blocking; added as one severity_map.default entry, source arm recomputed with sha256 before and after, no frozen script edited, recorded as a deviation (GSTA-2, 2026-11-04)." The sha256 of all 35 source-arm files before and after is in the run record. It can move only the any-severity line.
 4. **Sealed-marker hit (decisions A and A1).** R1's scrub chain flagged one gstack-full finding whose evidence quotes the sealed guard's answer marker from a probe string. The Captain's words: "gstack-full finding gstack#3556 p1-2 (INFORMATIONAL, lib/sealed-guard.ts:265) is ingested --digest-only because its evidence quotes the sealed guard's answer marker from a probe string; it holds no sealed material, it cannot move blocking recall, and it can only lower gstack-full's any-severity recall (GSTA-2, 2026-11-04)." Ingest's `--digest-only` matches a bare id across every unit, and p1-2 named 33 findings, 8 of them CRITICAL. So, in the Captain's words: "the finding's id is renamed p1-2 to p1-2-sg in garrytan__gstack#3556@95d9c6d06ef1.jsonl only, sha256 of every source-arm file recorded before and after, because ingest's --digest-only matches a bare id across every unit (GSTA-2, 2026-11-04)." The ingested arm lists exactly one digest-only entry, p1-2-sg, at sha256:27e9e79f46622c7034f6b5fdcf749d47d9a71121e17e922c9c833554aa07dc61. The judges saw only that digest. The primary judge read the unit's one blocker and did not match the finding to it. The second and third judges did not read that packet. As an INFORMATIONAL finding it was not in the adjudication batch.
 5. **rr-decide.py, attempt 1.** It exited 5 because the operator had not copied rr-gate.py beside it. After the copy it ran unchanged and exited 0. The step is keyless.
@@ -217,7 +217,7 @@ This is not a null, but #194 asks for the cycle beside the verdict.
 ## What this steers
 
 - **The procedure helps on frontier Opus at this pin, and the hook is part of why it runs.** 42 of 66 sessions dispatched their readers only after the contract hook blocked them. Work that makes the procedure run unprompted would cut gstack's reliance on the hook. The hook is what a user gets today, so this result covers it.
-- **Cost per session is the price.** gstack-full cost 8.9 times as much per session. Per blocking find, it cost $19.56 against $16.15, because it found about 7 times as many.
+- **Cost per session is the price.** gstack-full cost 8.9 times as much per session. Per blocking find, it cost somewhat more, because it found about 7 times as many.
 - **The upheld unmatched findings are candidate blockers.** gstack-full raised 49 unmatched blocking findings that blind adjudication upheld as defects. A later suite version could review them as blockers. They count for nothing here.
 
 ## Limits and threats
@@ -300,6 +300,12 @@ Prices are the pinned table (src/runner/pricing/prices.ts at 176fdc7 and 715f837
 Crew model use sits outside the ledger. At the last crew reading it was $115.52 including this thread, which puts the run at about $709 of #194's $2,000 all-in with the earlier threads' $89.06.
 
 From the summary: $504.78.
+
+The operator's launch wrapper misparsed a value it reads before launching and stopped there: no out dir, no lease, $0.
+
+It exited 2 with empty stderr, never leased and spent $0.
+
+Per blocking find, it cost $19.56 against $16.15, because it found about 7 times as many.
 
 </details>
 

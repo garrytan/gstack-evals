@@ -57,6 +57,8 @@ Each run also writes its own `stages/<stage>.<start ms>.json`: `status: "running
 
 Each line item has its own cap and its own ledger. A paid run reserves only against a ledger whose first row is an approval with the owner's words, who gave them, a source, and `cap_usd` and `item` equal to `LANEA_CAP_USD` and `LANEA_LINE_ITEM`. Neither has a default: a shell that misses either stops with E_CONFIG, and one that names another cap or item than the ledger's approval stops before it writes a row: E_LEDGER_MISSING on run and project, E_APPROVAL on approve. Record the approval once, with each quoted reply as its own `--words`:
 
+Before you run it, replace each angle-bracket value with the approver's own words and name, because the ledger records whatever you pass.
+
 ```
 LANEA_CAP_USD=35 LANEA_LINE_ITEM=lanea-quick-rerun bun src/run.ts approve --words "<the approver's exact words>" --by "<approver>" --source "<where the words were given>"
 ```
@@ -103,7 +105,7 @@ A paid run resolves every image tag to its id and refuses one that `images.json`
 
 ## What U5 to U7 should reuse
 
-- **Drive Claude Code from the evaluator side.** The Agent SDK's `spawnClaudeCodeProcess` option runs `docker exec -i <container> claude <args>` with a fixed env list, so `canUseTool` answers AskUserQuestion on the host and the persona never enters the container. GSTA-10 found the same with the Python SDK.
+- **Drive Claude Code from the evaluator side.** The Agent SDK's `spawnClaudeCodeProcess` option runs `docker exec -i <container> claude <args>` with a fixed env list, so `canUseTool` answers AskUserQuestion on the host and the persona never enters the container. A crew thread found the same with the Python SDK.
 - **office-hours also asks in prose.** Many turns end in a plain-text question, not an AskUserQuestion call. A simulator that only answers AskUserQuestion stops those sessions at the first prose question. Classify the turn's final text and send the reply as the next user message.
 - **Seed the gstack state root as an onboarded user.** Without the markers (`.feature-prompted-model-overlay`, `.completeness-intro-seen`, `.telemetry-prompted`, `.proactive-prompted`, `.activated`, `.first-loop-tip-shown`, `.writing-style-prompted`) and config (`telemetry off`, `update_check false`, `proactive core`, `cross_project_learnings false`, `routing_declined true`), `gstack-skill-start` emits onboarding blocks. The routing block asks to edit and commit CLAUDE.md, which breaks no-code safety checks. Calibrate with `gstack-skill-start`: expect `SESSION_KIND: interactive` and no `GSTACK_INSTRUCTION_BEGIN`.
 - **The SDK's entrypoint keeps gstack interactive.** `CLAUDE_CODE_ENTRYPOINT=sdk-ts` resolves to `SESSION_KIND: interactive`. Setting `GSTACK_SESSION_KIND` would change the skill's behavior.

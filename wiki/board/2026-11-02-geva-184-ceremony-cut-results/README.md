@@ -56,7 +56,7 @@ This is an explanation, not a result. Removing text changed what Opus did, not o
 
 **Review.** stacks-r1 (sha256 4f46bb17b7ef98a34db9bf4b03c69755c694eb17dfc7ca0e29e1049a1bcc9a1d): 33 units, 42 blocking blockers on 26 PRs. control, variant and none at 2 passes (66 unit-passes each), control-sdk at 1 pass (33). #95's severity map (sha256 8bcbc928de440bcbdb49434b523a33d27130e20c5b7b0865e3102998a23fbbc6). Judges as #95 section 3: Opus 5.5 primary, gpt-6.1-sol second, Sonnet 5.5 third on disagreement, seed 20261101, judge brief sha256 ef33d5ca0f802e49e18d1f3e4b16f989bcbd48fa4c46f339bc0533dfb1364427.
 
-**TB2.** 37 tasks (quick look 3's 40 less crack-7z-hash, adaptive-rejection-sampler and largest-eigenval), 3 replicates, 111 trials per cell, 12 trials at a time, in-run oracle on (37 of 37 passed on both VMs). The arm tars were rebuilt from the tag before any paid call and matched the prereg: gstack-render.tar eeab89bf220323bfb54277c38c9f418fff385da2bf185527a8a44a111d628e1e, gstack-render-unattended.tar 406d4a865eee2fcc94d2d97b112af427e5d293ab364f244c358bf6d7a534f5b1, none.tar 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e ([run-log.txt](run-log.txt)). Session caps: Opus $2.50, particle-1 $0.80.
+**TB2.** 37 tasks (quick look 3's 40 less crack-7z-hash, adaptive-rejection-sampler and largest-eigenval), 3 replicates, 111 trials per cell, 12 trials at a time, in-run oracle on (37 of 37 passed on both VMs). The arm tars were rebuilt from the tag before any paid call and matched the prereg: gstack-render.tar eeab89bf220323bfb54277c38c9f418fff385da2bf185527a8a44a111d628e1e, gstack-render-unattended.tar 406d4a865eee2fcc94d2d97b112af427e5d293ab364f244c358bf6d7a534f5b1, none.tar 8bab483364e4153a832c0995d6bc06d2953af805f32ae70a2e40788965a6764e ([run-log.txt](run-log.txt)). Session caps are in Agent notes.
 
 **Scoring.** The frozen scripts at 409ff47 (#128): decide.py d8a4f9006bcffd6dd7d4149fae5c708389c45d3b17fd70c9d63c68eaa5728cf1, exposure.py 033152090fbfe4f5c9e3358ddcf6d8a0bb1c23546221ac7ec7e31fa7d0933486, review-cost.py 704f65b8e4cd36aa345dc534a538f9f0770a6dab289e3ea3087d7c53ab5f35e8, peak.py fabfcc9e802d0b790cf1e329f731874b7b2b222e08472d1316e2cf1e803a6311, ceremony-tb2.ts b6b53a098b84182ceecdd530ee8daee60af27aafef9d51d304190a6eda8fcad8. noloss score at the rig pin with comparisons.ceremony-r1.json (d5dfdf48fadac37286c494e7a414187ec9f9a476100e26c1889f11eae1ef71b2) and comparisons.ceremony-r1-secondary.json (c4ad189204ee2bec4ad40db4b22073c57c0234c0033142a088c721ca00374d10).
 
@@ -111,16 +111,16 @@ review cost per unit-pass, variant/control: 0.920 [0.871, 0.972]
 
 ### TB2
 
-ceremony-tb2.ts, verbatim, with no-reward trials scored 0 (the primary reading):
+ceremony-tb2.ts, verbatim except that its Per success column is in Agent notes, with no-reward trials scored 0 (the primary reading):
 
-| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Per success | Requests | First-request tokens (median, min, max) |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| claude-opus-5-5 | control | 111 | 111 | 88.3% (98) | 0 | 0 | 0 | 0 | $0.2890 | 6.71 | 36361, 36033, 39042 |
-| claude-opus-5-5 | variant | 111 | 111 | 82.9% (92) | 0 | 0 | 1 | 0 | $0.2802 | 6.68 | 31751, 31423, 34432 |
-| claude-opus-5-5 | none | 111 | 111 | 82.9% (92) | 0 | 0 | 0 | 0 | $0.1662 | 5.89 | 22619, 22450, 65081 |
-| particle-1 | control | 111 | 111 | 75.7% (84) | 0 | 0 | 5 | 0 | $0.1053 | 19.44 | 99853, 98989, 107174 |
-| particle-1 | variant | 111 | 111 | 78.4% (87) | 0 | 0 | 5 | 0 | $0.0714 | 17.59 | 89150, 88286, 96471 |
-| particle-1 | none | 111 | 111 | 80.2% (89) | 0 | 1 | 5 | 0 | $0.0775 | 18.42 | 64264, 63757, 68270 |
+| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | control | 111 | 111 | 88.3% (98) | 0 | 0 | 0 | 0 | 6.71 | 36361, 36033, 39042 |
+| claude-opus-5-5 | variant | 111 | 111 | 82.9% (92) | 0 | 0 | 1 | 0 | 6.68 | 31751, 31423, 34432 |
+| claude-opus-5-5 | none | 111 | 111 | 82.9% (92) | 0 | 0 | 0 | 0 | 5.89 | 22619, 22450, 65081 |
+| particle-1 | control | 111 | 111 | 75.7% (84) | 0 | 0 | 5 | 0 | 19.44 | 99853, 98989, 107174 |
+| particle-1 | variant | 111 | 111 | 78.4% (87) | 0 | 0 | 5 | 0 | 17.59 | 89150, 88286, 96471 |
+| particle-1 | none | 111 | 111 | 80.2% (89) | 0 | 1 | 5 | 0 | 18.42 | 64264, 63757, 68270 |
 
 
 | Model | Contrast | Tasks | Difference, pp | 90% CI | 95% CI | LOSS p (one-sided) | Margin | Size | No-loss |
@@ -256,7 +256,7 @@ exposure.py on review (selected rows, sessions per arm):
 1. **The unattended render doesn't meet its ship condition for Opus.** Section 1 ships gstack PR #3818 only on CUT with no-loss yes, and rule 6 makes the Opus verdict the answer to I1. The Captain carries this to the gstack Captain.
 2. **Read the four Opus tasks before any rerun.** feal-differential-cryptanalysis, model-extraction-relu-logits, polyglot-rust-c and query-optimize lost passes in the variant. A cut that also changes which steps Opus runs (start line 103 against 14) is not the plain text diet I1 assumed, so the next step is to read those transcripts side by side.
 3. **Freeze an UPSTREAM rule before rerunning review.** One upstream error voided the review lane, as GEVA-131's lesson in CREW warns. A rerun also needs blockers the no-gstack arm can reach.
-4. **The saving is small on Opus, and on TB2 it is not shown.** About 8% per review unit-pass (95% CI 0.871 to 0.972) and 9% per TB2 trial, whose interval (0.842 to 1.012) includes no saving. The mechanical part is $0.028 per TB2 trial and $0.043 per review unit-pass. On particle-1 the saving is 30%.
+4. **The saving is small on Opus, and on TB2 it is not shown.** About 8% per review unit-pass (95% CI 0.871 to 0.972) and 9% per TB2 trial, whose interval (0.842 to 1.012) includes no saving. The mechanical part's cost per TB2 trial and per review unit-pass is in Agent notes. On particle-1 the saving is 30%.
 
 ## Limits and threats
 
@@ -316,7 +316,7 @@ Nothing is sealed. TB2 is public at 69671fba, and stacks-r1 is published with it
 | gstack under test | garrytan/gstack 142757b107edeffff7c78453490c4d2786996fa7 (gstack PR #3818): the full render (control) against the unattended render (variant), same commit |
 | Models under test | claude-opus-5-5 (Anthropic API), review and TB2; particle-ai/particle-1 (OpenRouter), TB2 only |
 | Harness | Review: review-units at the rig pin b792646b43cb8ea170039623b420229e0d669216 (#119), Claude Code 2.1.314, 60 turns, $8 allowance per session. TB2: Lane B tag laneb-stacks-3-runner (8cd497367e3d7e609103540c22e01542b705604d), Claude Code 2.1.312, Harbor, terminal-bench-2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c |
-| Run | 2026-11-02 UTC. Pilots and both review grids by GEVA-131 (review-grid from 03:01Z, review-sdk 08:17Z to about 09:55Z). TB2 10:07Z to 12:58Z on two Ubicloud VMs, judges 13:08Z to 13:13Z, scoring after, by GEVA-184 |
+| Run | 2026-11-02 UTC. Pilots and both review grids (review-grid from 03:01Z, review-sdk 08:17Z to about 09:55Z). TB2 10:07Z to 12:58Z on two Ubicloud VMs, judges 13:08Z to 13:13Z, scoring after |
 | Data | TB2 job folders and the judged review arms, not published (see What is held out) |
 | Spend | $321.06 settled through the ledger ($325.88 with the review grid's own log figure), $6.60 still reserved; ceiling $496.12 |
 
@@ -396,6 +396,19 @@ Four TB2 sessions, two per model, opened a reservation of one session cap each a
 This run cost $321.06.
 
 From the summary: $321.06 settled.
+
+Session caps: Opus $2.50, particle-1 $0.80.
+
+| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Per success | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | control | 111 | 111 | 88.3% (98) | 0 | 0 | 0 | 0 | $0.2890 | 6.71 | 36361, 36033, 39042 |
+| claude-opus-5-5 | variant | 111 | 111 | 82.9% (92) | 0 | 0 | 1 | 0 | $0.2802 | 6.68 | 31751, 31423, 34432 |
+| claude-opus-5-5 | none | 111 | 111 | 82.9% (92) | 0 | 0 | 0 | 0 | $0.1662 | 5.89 | 22619, 22450, 65081 |
+| particle-1 | control | 111 | 111 | 75.7% (84) | 0 | 0 | 5 | 0 | $0.1053 | 19.44 | 99853, 98989, 107174 |
+| particle-1 | variant | 111 | 111 | 78.4% (87) | 0 | 0 | 5 | 0 | $0.0714 | 17.59 | 89150, 88286, 96471 |
+| particle-1 | none | 111 | 111 | 80.2% (89) | 0 | 1 | 5 | 0 | $0.0775 | 18.42 | 64264, 63757, 68270 |
+
+The mechanical part is $0.028 per TB2 trial and $0.043 per review unit-pass.
 
 </details>
 

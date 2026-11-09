@@ -43,7 +43,7 @@ The project owner asked the crew to test what plan-eng-review is for, not only i
 
 ## What caused this work
 
-gstack#4108 cut the standalone skill after the panel v3 and G admission results. The registry's correction line of 2026-11-08 narrowed the verdict, and the Captain asked for a plan that scores the skill's intentions, with the no-gstack arm, the pre-cut skill, autoplan's eng phase and a rebuilt candidate from GStack Minder.
+gstack#4108 cut the standalone skill after the panel v3 and G admission results. The registry's correction line of 2026-11-08 narrowed the verdict, and the Captain asked for a plan that scores the skill's intentions, with the no-gstack arm, the pre-cut skill, autoplan's eng phase and a rebuilt candidate from the gstack Captain.
 
 ## Big decisions
 
@@ -55,7 +55,7 @@ gstack#4108 cut the standalone skill after the panel v3 and G admission results.
 6. **Models and size.** Pick 16 calibration and 56 comparison units; Opus 5.5 at 2 passes, and GPT-6.1 Sol and particle-1 at 1 pass, each on all five arms. Design MDD on Opus about 10 to 13 points at a control near 0.20 (section 13). 12 points on Opus is the smallest effect worth acting on, and the projection before stage 2 must reach it or the set is re-sized (start rule 5).
 7. **Cut margin.** A CUT-CANDIDATE needs skill minus none's 95% upper bound below a frozen +0.05. The trim-to-lens reading (the procedure adds nothing over one line) uses the same margin on skill minus lens. The margin sits below the MDD on purpose, a stricter bound than the crew's admission rule asks for: a skill truly worth 5 points reads CUT-CANDIDATE in only 2% to 5% of simulated runs (section 13). The gate answer (F1) and the Captain's approval record accept that departure.
 8. **Project types.** Four named types with quotas: consumer, server-side data or enterprise, mobile, and developer tools. The free supply count found mobile and consumer short under the first frame, so the frame widens for every type (section 4, gate answer I1) and admits copyleft repositories (J1). Transposed units stay the last fallback, used only if a named type still falls short.
-9. **The rebuilt candidate.** GStack Minder writes it from a frozen intentions statement and the pre-cut skill's public text, never seeing units, keys, scoring rules or any arm output, before stage 1 starts. The Captain sent the request on 2026-11-08, right after the gate answer (K1), and the candidate, /plan-coverage, arrived the same day. Its commit and digests are frozen in section 15 and land with the results.
+9. **The rebuilt candidate.** The gstack Captain writes it from a frozen intentions statement and the pre-cut skill's public text, never seeing units, keys, scoring rules or any arm output, before stage 1 starts. The Captain sent the request on 2026-11-08, right after the gate answer (K1), and the candidate, /plan-coverage, arrived the same day. Its commit and digests are frozen in section 15 and land with the results.
 
 ## Implementation plan
 
@@ -90,7 +90,7 @@ What the score does not cover, said plainly: the live back-and-forth with a pers
 
 The CUT-CANDIDATE on plan-eng-review rested on two results. Panel v3's eng stratum (#191) planted engineering flaws in plans and asked whether a plain review found them: plain Opus 5.5 found 15 of 16 and no gstack arm ran, so it measured a ceiling and no lift. The G admission (#253) asked whether a feature built after a told review passed its hidden tests: plain Opus solved 22 of 22, and the told plan-eng-review arm showed the procedure in 0 of 18 scored sessions, which R56 counts as untested. Neither scored a path map, coverage, the choice of test type, CI or evals.
 
-Under R48 and the crew's construct-fit rule of 2026-11-08, the verdict on plan-eng-review narrows to: **no effect on finding extra flaws in a plan (plain Opus 5.5 already finds them); its engineering-planning intentions untested; R48 FIX-METHOD on task fit for the main claim, not CUT-CANDIDATE**, on Opus 5.5. Both posts' numbers stand as published. The registry line of 2026-11-08 already records this, the owner's gate 1 answer adopted it (L1), and this post makes it part of the preregistered record. gstack's cut is gstack's decision and this eval doesn't change gstack's code; its result goes to the Captain and through it to GStack Minder.
+Under R48 and the crew's construct-fit rule of 2026-11-08, the verdict on plan-eng-review narrows to: **no effect on finding extra flaws in a plan (plain Opus 5.5 already finds them); its engineering-planning intentions untested; R48 FIX-METHOD on task fit for the main claim, not CUT-CANDIDATE**, on Opus 5.5. Both posts' numbers stand as published. The registry line of 2026-11-08 already records this, the owner's gate 1 answer adopted it (L1), and this post makes it part of the preregistered record. gstack's cut is gstack's decision and this eval doesn't change gstack's code; its result goes to the Captain and through it to the gstack Captain.
 
 ### 3. Ground truth: what happened after each change merged
 
@@ -375,11 +375,11 @@ The whole line sits at its $4,000 guideline at caps and under the $5,000 stop. E
 
 ### 15. The rebuilt candidate
 
-The candidate's skill text belongs to GStack Minder. The crew requests it through the Captain with this intentions statement, frozen here, and the pre-cut skill's public text (plan-eng-review/ at b493d4e31) as a starting point:
+The candidate's skill text belongs to the gstack Captain. The crew requests it through the Captain with this intentions statement, frozen here, and the pre-cut skill's public text (plan-eng-review/ at b493d4e31) as a starting point:
 
 > Before code is written, map every code path and user flow a planned change touches, each branch, error path and edge, as a diagram; put the existing tests on each path; for each gap, choose a unit test, an end-to-end test, a CI job or an eval, and justify each by the regression it would catch; plan the CI lanes and evals the change needs; and write the result as a path map, a coverage map and a test plan, so the shipped change has fewer untested paths and catches its regressions. Drop bug-hunting in the plan's design beyond what the path map surfaces. The skill must run unattended, taking its recommended option at every decision, and finish in one session.
 
-The Captain sent the request (handoffs/GEVA-405/candidate-request.md in its drive) to GStack Minder on 2026-11-08, right after the gate answer (K1). GStack Minder never sees units, keys, the closing template, this post's sections 3 to 14, or any arm output; the request says so, and its answer attests it. Whether gstack restores or folds the shipped skill stays GStack Minder's call. **The candidate as frozen.** GStack Minder delivered it through the Captain on 2026-11-08, with an attestation that it was built from the intentions statement and the pre-cut text at b493d4e31 only. The Captain checked the commit and both digests from a fresh fetch, and so did this post's author:
+The Captain sent the request (handoffs/GEVA-405/candidate-request.md in its drive) to the gstack Captain on 2026-11-08, right after the gate answer (K1). The gstack Captain never sees units, keys, the closing template, this post's sections 3 to 14, or any arm output; the request says so, and its answer attests it. Whether gstack restores or folds the shipped skill stays the gstack Captain's call. **The candidate as frozen.** The gstack Captain delivered it through the Captain on 2026-11-08, with an attestation that it was built from the intentions statement and the pre-cut text at b493d4e31 only. The Captain checked the commit and both digests from a fresh fetch, and so did this post's author:
 
 - skill /plan-coverage (folder plan-coverage/), garrytan/gstack branch eng-review-intentions-candidate, cut from main b6155921a;
 - commit 57295cbc510fcafc4d404d4ba70afc463b01e341, on which the arm is frozen;

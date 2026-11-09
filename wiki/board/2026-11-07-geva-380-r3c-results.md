@@ -41,7 +41,7 @@ On those tasks, told /investigate did not beat no skill by an amount we could de
 
 The skill was in play. The told arm showed the procedure in 358 of 360 trials (99.4%, against a 90% gate), and no session in either arm hit its spending allowance. The frozen rule reads FIX-METHOD (power): the primary is above zero and its interval includes zero. It is not a CUT-CANDIDATE.
 
-Told costs more. A told trial cost $0.62 against $0.41 for none, and a pass cost $1.24 told against $0.86 none, about 43% more per success.
+Told costs more. A told trial cost about 1.52 times a none trial, and a pass cost about 43% more told than none.
 
 ## How it works
 
@@ -67,7 +67,7 @@ It mostly didn't. One reason fits the report-only localization lines. Every arm 
 
 ## Result
 
-analyze's lines, exactly as printed, with two changes: the admit line's path on the controller host is written as `<work dir>`, and three lines of dollar amounts and the GO line's closing dollar projection are in Agent notes instead. It exited 5, its code for an outcome other than KEEP or CUT-CANDIDATE. The frozen lines are the grid counts, exposure, allowance stops, the primary, D1 and the outcome. Every line marked "report only" decides nothing. The admit lines near the top were frozen at admission, before any grid trial.
+analyze's lines, exactly as printed, with two changes: the admit line's path on the controller host is written as `<work dir>`, and three lines of dollar amounts, the cost per success line and the GO line's closing dollar projection are in Agent notes instead. It exited 5, its code for an outcome other than KEEP or CUT-CANDIDATE. The frozen lines are the grid counts, exposure, allowance stops, the primary, D1 and the outcome. Every line marked "report only" decides nothing. The admit lines near the top were frozen at admission, before any grid trial.
 
 ```text
 oracle per-test (report only): 405 oracle trials, 405 score f2pShare 1 and 0 score null
@@ -86,7 +86,6 @@ MDD re-simulated at the grid's own none rates (report only): 10 points at 20 rep
 task fit (report only): the grid's none arm puts 5 of 18 admitted tasks outside the band [0.2, 0.8] (27.8%)
 far tasks (report only): told minus none +8.8 points (95% CI -10.0 to +33.8) on 4 paired far tasks
 Stop hook (report only): ran in 358 of 360 graded told grid trials and held a stop back in 100; the route hook logged in 360
-cost per success (report only): none $0.86, told $1.24
 localization (report only): a closing block in none 99.7% and told 99.4% of graded trials; hit@1 none 88.6%, told 92.8%; hit@3 none 91.7%, told 93.6% (360 and 360 trials scored; 0 tasks out of the measure with no root-cause file)
 localization lifts (report only): hit@1 +4.2 points (95% CI -0.8 to +10.8), hit@3 +1.9 points (95% CI -0.8 to +6.7), locRank +3.5 points (95% CI -0.6 to +9.4) (locRank none 0.896, told 0.931)
 told localization by Stop hook (report only): held a stop back 100 trials, hit@1 98.0%, hit@3 99.0%; did not 260 trials, hit@1 90.8%, hit@3 91.5%
@@ -121,7 +120,7 @@ These are analyze's own report-only lines. They decide nothing.
 - **Far tasks.** On the 4 tasks whose issue text names neither a patched file nor a patched function, told minus none was +8.8 points (95% CI -10.0 to +33.8).
 - **f2pShare.** The share of FAIL_TO_PASS tests passing under the PASS_TO_PASS gate was 0.526 none and 0.551 told, +2.5 points (-6.7 to +11.4).
 - **Task fit.** The grid's none arm put 5 of the 18 admitted tasks outside [0.2, 0.8].
-- **Cost per success.** none $0.86, told $1.24.
+- **Cost per success.** Told cost about 43% more per success than none. The figures are in Agent notes.
 - **Oracle.** 405 of 405 oracle trials scored f2pShare 1.
 
 ### Tallies from the run's records (not frozen)
@@ -139,7 +138,7 @@ The run thread counted these from trials.tsv after analyze. No rule names them.
 - **Task fit worked.** The tasks were chosen by a measured none rate, and the grid's none rate (47.2%) landed near admission's estimate (51.2%). 17 of 18 tasks were solved at least once, against R3b's 15 of 70 for Opus. 5 of 18 tasks fell outside the band in the grid's none arm (report only). That is close to what the prereg expected: its forecast put 83% of admitted tasks truly in the band, and 20 trials measure each task with noise.
 - **Power is the limit.** The frozen MDD is 10 points, and a re-simulation at the grid's own none rates also gives 10. The observed +2.8 is well under it. The control rate is 47.2%, so this is neither a floor nor a ceiling, and saturation does not explain the null. The interval rules out a lift above about 11 points. It can rule out neither zero nor a lift of 3 to 5 points.
 - **Plain Opus does much of the job.** With no skill, Opus 5.5 solves about half of these calibrated tasks, and it names a root-cause file first in 88.6% of trials (report only). On these tasks plain Opus already does most of the time the step /investigate teaches, finding the root cause.
-- **Cost.** Told costs 1.52 times as much per trial ($0.620 against $0.408 in model spend) and about 43% more per success ($1.24 against $0.86).
+- **Cost.** Told costs 1.52 times as much per trial in model spend and about 43% more per success.
 
 So the R48 verdict is **FIX-METHOD (power)**, as the frozen rule reads it. The method to fix is the size of the test: a much larger grid, or a primary with less noise. Nothing here is a CUT-CANDIDATE, and nothing here says /investigate should lose lines.
 
@@ -281,6 +280,14 @@ A first look could run that arm beside none on R3c's 18 admitted tasks at 3 repl
 A fresh replication is a paid run: about $542 at this run's costs, calibration and host included.
 
 From the summary: Paid $542.41.
+
+cost per success (report only): none $0.86, told $1.24
+
+Told costs more. A told trial cost $0.62 against $0.41 for none, and a pass cost $1.24 told against $0.86 none, about 43% more per success.
+
+- **Cost per success.** none $0.86, told $1.24.
+
+- **Cost.** Told costs 1.52 times as much per trial ($0.620 against $0.408 in model spend) and about 43% more per success ($1.24 against $0.86).
 
 </details>
 

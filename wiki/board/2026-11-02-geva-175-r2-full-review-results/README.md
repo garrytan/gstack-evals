@@ -40,7 +40,7 @@ Unpublished. Publication waits on the claim check by a cross-family reviewer and
 | Build | gstack-evals f255edf5e6e7f9ddcfc37b792058500edae3643d (#124's merge commit), clean, checked before each grid ([run-log.txt](run-log.txt)); judging and scoring at the rig pin 715f837 |
 | gstack under test | garrytan/gstack 77fe28c39796cf5573e3d0836b83b2ee436a8f12 (v1.92.39.0), interactive render |
 | Model under test | claude-opus-5-5 (Anthropic API), both arms |
-| Harness | review-units at the build, Claude Code CLI 2.1.314 driven through the Agent SDK's query() with streaming input, one non-interactive session per unit, claude-code-preset on both arms, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, 200 turns and $40 per session, --cap-stops |
+| Harness | review-units at the build, Claude Code CLI 2.1.314 driven through the Agent SDK's query() with streaming input, one non-interactive session per unit, claude-code-preset on both arms, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, 200 turns and a per-session dollar cap (in Agent notes), --cap-stops |
 | Run | 2026-11-02 UTC. none-r2 03:20 to 04:18 (run review-units-20261102T032019Z-d912), gstack-full 05:13 to 06:35 (run review-units-20261102T045455Z-0e5e), judging from 06:42, one Capy machine at --parallel 2 |
 | Data | final judged arms, tree sha256 32d8b1eff4cd3d19a9f1775d701a70c88185365fa57d3d1488d2a48d2bc11b7f (gstack-full) and 17dc602a973143061691452f76b292ac9af803674fda078402dae86c3736ff86 (none-r2), not published (see What is held out) |
 
@@ -272,7 +272,7 @@ Nothing is sealed. stacks-r1-out19 derives from the published stacks-r1 suite by
 | Data | final judged arms, tree sha256 32d8b1eff4cd3d19a9f1775d701a70c88185365fa57d3d1488d2a48d2bc11b7f (gstack-full) and 17dc602a973143061691452f76b292ac9af803674fda078402dae86c3736ff86 (none-r2), not published (see What is held out) |
 | Spend | $85.39, settled through the ledger on four items |
 
-**Caps and timeout.** The Captain (GEVA-2) raised both grid items to $760 (#112 set $25 and $325) and set --timeout 10800 on both arms. The grids spent $84.06 in all.
+**Caps and timeout.** The Captain raised both grid items to $760 (#112 set $25 and $325) and set --timeout 10800 on both arms. The grids spent $84.06 in all.
 
 2. **Disk.** The machine has a 65 GB disk. none-r2's first lease died on ENOSPC at 03:44:29Z, was settled by hand at $14.395891, and the run resumed with --resume --parallel 2 --spend-cap 745.60. gstack-full's first attempt died on ENOSPC in unit preparation, before any lease. 40 replicator-only tree tars (1.2 to 1.3 GB each) were deleted, 34 by hand and 6 by a disk guard; their sha256 stay in each run's units.json. Both arms ran at --parallel 2.
 
