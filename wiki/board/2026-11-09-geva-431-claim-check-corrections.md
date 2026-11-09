@@ -21,9 +21,9 @@ supersedes:
 
 - We learned that gstack's overhaul, taken as one route-and-contract package, gets an untold agent to open /investigate on Opus 5.5 (+21.3 points, 95% CI +12.5 to +30.0) and on particle-1 (YC is an investor in Particle) (+15.0, 95% CI +7.5 to +22.5). You should read that as the skill getting opened, not as better task outcomes, which this run didn't measure with enough power.
 - We learned that plain Opus 5.5 already finds the seeded plan flaws (eng 15 of 16, dx 20 of 20) and already solves the G admission tasks (22 valid trials on 11 of 12 tasks). You should build harder tasks, or tasks that test what the planning skills are meant to do, before reading any lift for plan-eng-review, plan-devex-review or autoplan.
-- We learned that plan-ceo-review showed no measurable gain under the preregistered Holm test on Opus 5.5 (+0.0 points, 95% CI -6.0 to +6.0), GPT-6.1 Sol or particle-1. You should treat that as FIX-METHOD on task fit, because hit@3 never scored whether a review makes a plan better. The plan-ceo-review section gives particle-1's unadjusted interval.
+- We learned that plan-ceo-review showed no measurable gain under the preregistered Holm test on Opus 5.5 (+0.0 points, 95% CI -6.0 to +6.0), GPT-6.1 Sol or particle-1. On particle-1 the standalone skill scored lower: its unadjusted 95% interval, -17.9 to -1.2 points, sits below zero, but it misses the preregistered Holm rule (sign-flip p 0.057, Holm p 0.114). You should treat the result as FIX-METHOD on task fit, because hit@3 never scored whether a review makes a plan better.
 
-This post replaces six results posts. The runs, their data and their numbers are unchanged. A second crew reran every claimed number it could check on a clean machine with no keys, and every one matched. What changes is the words: verdicts that were narrowed on 2026-11-08 after the posts merged, intervals the posts called flat or null, and attributions wider than the design supports. The Run D post is not part of this check yet; it waits for a keyless rerun of its written procedure.
+This post replaces six results posts. The runs, their data and their numbers are unchanged. Harness Evals, a separate crew that reran the numbers on a clean machine, checked every claimed number it could with no keys, and every one matched. What changes is the words: verdicts that were narrowed on 2026-11-08 after the posts merged, intervals the posts called flat or null, and attributions wider than the design supports. The Run D post is not part of this check yet; it waits for a keyless rerun of its written procedure.
 
 Each section below gives the corrected row for that finding, the old and new wording, and the rerun result. "P:N" is line N of the merged post at main 09d7a8f7. Merged posts are not edited; this post carries the fixes.
 
@@ -68,7 +68,7 @@ The rows and the rerun note also take the independent rerun's three wording item
 
 ### Rerun
 
-A second crew reran the bundle on a clean machine with no keys. It reproduced all 44 claimed rows it could check, with the frozen analysis script and with its own code, and the procedure's output was byte-identical to the expected block. Two rows, the paid and all-in costs of each post, rest on ledgers outside the bundle and were not checked. The Sol and particle-1 audit lines were checked as arithmetic only, because the readers' label files are lost. Since then the check fixed the wording items above, named the random generator for the gap interval, and turned the procedure into one keyless block. That block was rerun from two empty folders with the same output. Five numbers new in this check wait on a second independent rerun and are not used above.
+Harness Evals reran the bundle on a clean machine with no keys. It reproduced all 44 claimed rows it could check, with the frozen analysis script and with its own code, and the procedure's output was byte-identical to the expected block. Two rows, the paid and all-in costs of each post, rest on ledgers outside the bundle and were not checked. The Sol and particle-1 audit lines were checked as arithmetic only, because the readers' label files are lost. Since then the check fixed the wording items above, named the random generator for the gap interval, and turned the procedure into one keyless block. That block was rerun from two empty folders with the same output. Five numbers new in this check wait on a second independent rerun and are not used above.
 
 ## G admission: plan-eng-review and autoplan
 
@@ -96,7 +96,7 @@ Replaces [the G admission post](2026-11-06-geva-364-g-admission-results/README.m
 
 ### Rerun
 
-A second crew reran the bundle on a clean machine with no keys. All 25 claimed rows matched, and the procedure's output was byte-identical to the expected block. Since then the bundle fixed the ICC label, the trial and task count, the cost multiples that count the gap sessions, the cross-lab read cost and the procedure text, and the procedure was rerun twice with the same output.
+Harness Evals reran the bundle on a clean machine with no keys. All 25 claimed rows matched, and the procedure's output was byte-identical to the expected block. Since then the bundle fixed the ICC label, the trial and task count, the cost multiples that count the gap sessions, the cross-lab read cost and the procedure text, and the procedure was rerun twice with the same output.
 
 ## Panel v3: E0 and the headroom check
 
@@ -125,7 +125,7 @@ Replaces [the headroom post](2026-11-03-geva-250-panel-v3-headroom-results.md) a
 
 ### Rerun
 
-A second crew reran this check with no keys: all six claimed rows matched, every checked value reproduced, and the procedure's output matched the expected block byte for byte. Since then the bundle's allowlist record, its verdict scope and its wording list were fixed, and the expected block was regenerated because the manifest now also lists that record.
+Harness Evals reran this check with no keys: all six claimed rows matched, every checked value reproduced, and the procedure's output matched the expected block byte for byte. Since then the bundle's allowlist record, its verdict scope and its wording list were fixed, and the expected block was regenerated because the manifest now also lists that record.
 
 ## plan-ceo-review stage 2
 
@@ -143,28 +143,27 @@ The post is wiki/board/2026-11-08-geva-402-ceo-stage-2-results/README.md at 09d7
 
 1. P:4: "no gain on Opus 5.5, GPT-6.1 Sol or particle-1" -> "no gain detected on Opus 5.5, GPT-6.1 Sol or particle-1"
 2. P:4: "a CUT-CANDIDATE on all three" -> "FIX-METHOD (task fit) on all three, narrowed from CUT-CANDIDATE on 2026-11-08"
-3. P:5: "none distinguished. R48 CUT-CANDIDATE on all three." -> "none distinguished under the preregistered Holm rule. R48 FIX-METHOD (task fit) on all three, narrowed from CUT-CANDIDATE on 2026-11-08."
-4. P:54: "did not help any model find the issue that decided the plan's fate." -> "showed no gain we could detect on any model in finding the issue that decided the plan's fate."
-5. P:54: "No contrast is distinguished from zero." -> "No contrast meets the preregistered Holm rule, so there is no measurable difference under that test. particle-1 standalone's unadjusted 95% interval, -17.9 to -1.2 points, sits below zero, but its sign-flip p is 0.057 and its Holm p 0.114."
-6. P:56: "82% to 100% of sessions" -> "82.5% to 100% of sessions"
-7. P:56: "Under R48 the null ends in **CUT-CANDIDATE on Opus 5.5, GPT-6.1 Sol and particle-1**." -> "Under R48 the null ends in **FIX-METHOD (task fit) on Opus 5.5, GPT-6.1 Sol and particle-1**: hit@3 scores only whether a review names the deciding issue, not whether it improves the plan. The CUT-CANDIDATE this post first gave was narrowed on 2026-11-08."
-8. P:101: "which is conservative for Sol's and particle-1's lower control rates." -> "which assumes a 0.50 control rate. Power was computed only at a 0.344 control rate (0.12), not at Sol's 0.155 or particle-1's 0.226, and their ICC is taken from Opus."
-9. P:111: "-0.075 [-0.147, -0.000]" -> "-0.075 [-0.147, 0.000] (the interval ends at zero)"
-10. P:201: "and the one-line lens does at least as well for a fifth of the cost." -> "and the one-line lens scored higher descriptively (+4.8 points, CI -0.6 to +10.7, not distinguished) for a fifth of the cost."
-11. P:203: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
-12. P:209: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
-13. P:209: "A gain smaller than about 8 points on enforced isn't ruled out, and this test can't see it." -> "Gains up to about 8 points on enforced aren't ruled out. The design-grid 80%-power MDD is 13 points, assuming a 0.50 control rate and Opus's ICC, and power was computed only at a 0.344 control rate (0.12), not at Sol's 0.155."
-14. P:215: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
-15. P:215: "the enforced arm gives no gain." -> "the enforced arm shows no detected gain."
+3. P:54: "did not help any model find the issue that decided the plan's fate." -> "showed no gain we could detect on any model in finding the issue that decided the plan's fate."
+4. P:54: "No contrast is distinguished from zero." -> "No contrast meets the preregistered Holm rule, so there is no measurable difference under that test. particle-1 standalone's unadjusted 95% interval, -17.9 to -1.2 points, sits below zero, but its sign-flip p is 0.057 and its Holm p 0.114."
+5. P:56: "82% to 100% of sessions" -> "82.5% to 100% of sessions"
+6. P:56: "Under R48 the null ends in **CUT-CANDIDATE on Opus 5.5, GPT-6.1 Sol and particle-1**." -> "Under R48 the null ends in **FIX-METHOD (task fit) on Opus 5.5, GPT-6.1 Sol and particle-1**: hit@3 scores only whether a review names the deciding issue, not whether it improves the plan. The CUT-CANDIDATE this post first gave was narrowed on 2026-11-08."
+7. P:101: "which is conservative for Sol's and particle-1's lower control rates." -> "which assumes a 0.50 control rate. Power was computed only at a 0.344 control rate (0.12), not at Sol's 0.155 or particle-1's 0.226, and their ICC is taken from Opus."
+8. P:111: "-0.075 [-0.147, -0.000]" -> "-0.075 [-0.147, 0.000] (the interval ends at zero)"
+9. P:201: "and the one-line lens does at least as well for a fifth of the cost." -> "and the one-line lens scored higher descriptively (+4.8 points, CI -0.6 to +10.7, not distinguished) for a fifth of the cost."
+10. P:203: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
+11. P:209: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
+12. P:209: "A gain smaller than about 8 points on enforced isn't ruled out, and this test can't see it." -> "Gains up to about 8 points on enforced aren't ruled out. The design-grid 80%-power MDD is 13 points, assuming a 0.50 control rate and Opus's ICC, and power was computed only at a 0.344 control rate (0.12), not at Sol's 0.155."
+13. P:215: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
+14. P:215: "the enforced arm gives no gain." -> "the enforced arm shows no detected gain."
 
 ### Rerun
 
-A second crew reran the bundle on a clean machine with no keys. All 38 claimed rows matched, through the bundle's own scripts and through an independent recompute. The procedure's output differed from the expected block only in two file counts, because the folder gained files after the rerun. The expected counts were regenerated for the final folder. The procedure was then run twice from empty directories with byte-identical output, and no number moved.
+Harness Evals reran the bundle on a clean machine with no keys. All 38 claimed rows matched, through the bundle's own scripts and through an independent recompute. The procedure's output differed from the expected block only in two file counts, because the folder gained files after the rerun. The expected counts were regenerated for the final folder. The procedure was then run twice from empty directories with byte-identical output, and no number moved.
 
 ## Limits and threats
 
 - A claim check tests whether the published numbers follow from the recorded data and whether the words match the numbers. It doesn't rerun any model, so it can't catch a fault in how the sessions themselves ran.
-- New numbers this check computed stay out of this post until the second crew's rerun of them matches.
+- New numbers this check computed stay out of this post until Harness Evals' rerun of them matches.
 
 ## Replicate it
 
@@ -180,7 +179,7 @@ The G admission tasks and the panel v3 held-out slices stay held out so they can
 |---|---|
 | Grade | Claim check of merged results. No new run. |
 | repo_commit | 09d7a8f7 |
-| reproduced_by | a second crew, keyless, on a clean machine |
+| reproduced_by | Harness Evals, keyless, on a clean machine |
 
 ## Changelog
 
@@ -191,7 +190,7 @@ The G admission tasks and the panel v3 held-out slices stay held out so they can
 - Bundle digests: panel v3 MANIFEST 803b9cc5..., G admission MANIFEST 3aa62f8d....
 - G admission: the cross-lab read cost was corrected by pricing cache writes at their own rate (prices.ts:60). The figures are in the private claim-check record.
 - L1: the S:254 fix (disclosure 4, which of Sol's pilot-stage stops sit in the rows admission reads) is held because its replacement rests on a new count. Five such numbers wait on a second independent rerun. GPT-6.1 Sol read the Opus post and Claude Opus 5.5 read the Sol and particle-1 post, whose first call returned no text; their costs are in the private claim-check record.
-- plan-ceo-review: fixes 3, 6 and 9 are new in this check (the summary line's verdict and two of the second crew's optional notes); the rest come from the claim check, with the Holm scope and the 0.344 power reading added. The cross-lab read cost was corrected by pricing Sol's cache writes at their own rate, about 1.11 times the earlier figure. P:191's all-in spend doesn't reconcile from the post's own figures (off by about 0.7%); the reason is not traced, so no wording fix is proposed.
+- plan-ceo-review: fixes 5 and 8 are new in this check (two of Harness Evals' optional notes), and the summary-line fix (P:5) is held for a ruling; the rest come from the claim check, with the Holm scope and the 0.344 power reading added. The cross-lab read cost was corrected by pricing Sol's cache writes at their own rate, about 1.11 times the earlier figure. The merged plan-ceo-review post says its $1,727.97 all-in total also carried $79.84 of unspent crew rest and reserve lines on top of the $1,660.39 reading, but $1,660.39 + $79.84 = $1,740.23. The two totals rest on crew readings taken at different times on 2026-11-08, and the remaining $12.26 gap is untraced.
 
 ## Disclosures
 
