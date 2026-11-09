@@ -12,7 +12,7 @@ import { parseLog, stripReadNumbers, type Rec } from "../../quick/laneb/l1/probe
 import type { HmHook, HmScore } from "../../src/types.ts";
 import type { StepResult } from "./dryrun.ts";
 import { checkCheckout, loadMatcher, QUOTES } from "./match.ts";
-import { ARMS, HM, REPO, VERIFY_FIRST200 } from "./pins.ts";
+import { ARMS, HM, REPO, VERIFY_FIRST200, VERIFY_RENDER_FIRST200 } from "./pins.ts";
 import { parseTranscript, sameSkill, skillLoads, turnEnd, UnknownShape, type Transcript, type TranscriptEvent } from "./vendor/gstack/lib/skill-contract.ts";
 import { lastBashWrite, shellCommands } from "./vendor/gstack/lib/shell-writes.ts";
 
@@ -74,7 +74,7 @@ function arrived(ev: TranscriptEvent[], at: number): boolean {
     if (i > at && (e.kind === "text" || e.kind === "tool_use")) break;
     if (e.kind !== "tool_use") text += "\n" + stripReadNumbers(e.text);
   }
-  return text.includes(VERIFY_FIRST200.text);
+  return text.includes(VERIFY_FIRST200.text) || text.includes(VERIFY_RENDER_FIRST200.text);
 }
 
 const STATUS = /^[ \t>*_-]*(?:\*\*|__)?STATUS(?:\*\*|__)?[ \t]*(?:\*\*|__)?:[ \t]*(?:\*\*|__)?[ \t]*(NOT[ _]FIXED|FIXED|DONE_WITH_CONCERNS|DONE|BLOCKED|NEEDS_CONTEXT)\b/gim;

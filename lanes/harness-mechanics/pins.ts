@@ -168,6 +168,9 @@ export const MATCHER = { count: 31, no: 41, probes: 189, time: 5, timeBoundMs: 5
 // The first 200 characters of /verify's body at the pin (verify/SKILL.md after its front matter, leading whitespace
 // dropped). Section 6 counts a /verify load only when they arrive in the load's result or expansion; dry-run step 4 checks
 // them against HM_GSTACK.
+// The same for the installed copy a slash command expands: setup's lite render at the pin (the prose and hook manifests'
+// verify.first200_sha256), which adds a loadout line to the generated header.
+export const VERIFY_RENDER_FIRST200 = { sha256: "aff54b3dd500a6e8b587164ca9dbb878c4138a291ab73a4f3f24769486a5ad84", text: "<!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->\n<!-- Regenerate: bun run gen:skill-docs -->\n<!-- loadout: lite -->\n\n## Preamble (run first)\n\n```bash\n~/.claude/skills/gstack/bin/gstac" };
 export const VERIFY_FIRST200 = { sha256: "76532eb558dd12b6e14862f4749706ebd162e96db4bbb6db9a8510941ab0199f", text: "<!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->\n<!-- Regenerate: bun run gen:skill-docs -->\n\n## Preamble (run first)\n\n```bash\n~/.claude/skills/gstack/bin/gstack-skill-start --skill \"" };
 
 // Section 6's verify-hook patch: one committed patch file on verify/SKILL.md at gstackPin. It drops step 2's clause and

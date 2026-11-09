@@ -134,9 +134,22 @@ function gstackMeta(arm: Exclude<HmTar, "none">, tree: string, fetchFile: string
   };
 }
 
-const ARMS_DIR = () => process.env.HM_ARMS_DIR ?? join(process.env.HOME ?? "", ".capy/work/hm/arms");
+export const ARMS_DIR = () => process.env.HM_ARMS_DIR ?? join(process.env.HOME ?? "", ".capy/work/hm/arms");
 const dockerOk = () => spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"], { encoding: "utf8" }).status === 0;
 const manifestOf = (arm: string) => join(REPO, "quick/laneb", HM.armManifests, arm + ".json");
+
+// The scripted sessions and the in-image checks (sessions.ts) run once per dry run, as a subprocess: step 1 starts them,
+// step 2 reads the same sessions.json.
+type SessionsRun = { in_image: string[]; problems: { step: 1 | 2; text: string }[] };
+function sessionsOf(out: string, fresh: boolean): SessionsRun | string {
+  const dir = join(out, "sessions"), f = join(dir, "sessions.json");
+  if (fresh) rmSync(dir, { recursive: true, force: true });
+  if (!existsSync(f)) {
+    const r = spawnSync("bun", [join(REPO, "lanes/harness-mechanics/sessions.ts"), "run", "--out", dir], { encoding: "utf8", timeout: 1_800_000 });
+    if (!existsSync(f)) return "the scripted sessions did not run: " + ((r.stderr ?? "").trim().split("\n").pop() ?? "");
+  }
+  return JSON.parse(readFileSync(f, "utf8"));
+}
 
 /** Step 1: each tar's committed manifest, the tar's bytes at it, none clean, and each gstack arm's config, hooks and /verify. */
 export function stepArmTars(out: string): StepResult {
@@ -154,7 +167,12 @@ export function stepArmTars(out: string): StepResult {
     parts.push(arm + " " + got.slice(0, 12));
   }
   if (!dockerOk()) problems.push("needs Docker for the in-image checks and the snapshot strip; docker is missing or not running");
-  else problems.push("the in-image checks and the strip sessions are not built (unit 5)");
+  else {
+    const s = sessionsOf(out, true);
+    if (typeof s === "string") problems.push(s);
+    else problems.push(...s.problems.filter((p) => p.step === 1).map((p) => p.text));
+    if (!problems.length) parts.push("in-image checks pass; the hostile CLAUDE.md, AGENTS.md and .claude/ reached no session's first request (the strip-off control loaded them); gstack's install survived in prose and hook");
+  }
   writeFileSync(join(out, "arm-tars.txt"), [...parts, ...problems].join("\n") + "\n");
   return { pass: problems.length === 0, detail: (parts.join(", ") || "no tars") + (problems.length ? "; " + problems[0] + (problems.length > 1 ? " (+" + (problems.length - 1) + ")" : "") : "") };
 }
@@ -172,7 +190,11 @@ export function stepVerifyHook(out: string): StepResult {
   const detail = "patch " + VERIFY_PATCH.sha256.slice(0, 12) + " applies to blob " + VERIFY_PATCH.pinBlob.slice(0, 12) + " giving " + VERIFY_PATCH.patchedBlob.slice(0, 12) + "; validateContract accepts check-after-edit";
   if (p.length) return { pass: false, detail: p[0]! };
   if (!dockerOk()) return { pass: false, detail: detail + "; the scripted sessions need Docker, which is missing" };
-  return { pass: false, detail: detail + "; the scripted sessions are not built (unit 5)" };
+  const s = sessionsOf(out, false);
+  if (typeof s === "string") return { pass: false, detail: s };
+  const bad = s.problems.filter((x) => x.step === 2);
+  if (bad.length) return { pass: false, detail: bad[0]!.text + (bad.length > 1 ? " (+" + (bad.length - 1) + ")" : "") };
+  return { pass: true, detail: detail + "; hook: edit then stop is blocked once with gstack's text, then allowed (miss); prose: nothing blocked, no record; a waiver (met_after_block) and STATUS: BLOCKED (met) let the stop through and print; a reread is met by the hook and non-adherent in score.ts; '/verify ' gives one load; routing off" };
 }
 
 /** Step 7, env part: Harbor runs with HARBOR_TELEMETRY=0 and every Claude Code session with CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The leak scan is unit 7's. */

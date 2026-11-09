@@ -160,12 +160,15 @@ describe("cli", () => {
     expect(again.stderr.toString()).toStartWith("E_HM_INPUT");
   });
 
-  test("dryrun prints every step name, passes the skeleton, fails the steps not built and exits 1", () => {
+  test("dryrun prints every step name, passes the skeleton, fails the steps not built and fails closed without Docker", () => {
     const out = mkdtempSync(join(tmpdir(), "hm-dry-"));
-    const r = run(["dryrun", "--out", out], { HM_GSTACK: "" });
+    const bin = mkdtempSync(join(tmpdir(), "hm-nodocker-"));
+    writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    const r = run(["dryrun", "--out", out], { HM_GSTACK: "", PATH: bin + ":" + process.env.PATH });
     const lines = r.stdout.toString().trim().split("\n");
     expect(lines.map((l) => l.split(" ")[1])).toEqual([...STEPS.map((s) => s.name), "FAIL"]);
     for (const n of ["1-arm-tars", "2-verify-hook", "7-leak-scan-env"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toBe(true);
+    for (const n of ["1-arm-tars", "2-verify-hook"]) expect(lines.find((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toMatch(/Docker/);
     for (const n of ["5-judgment-hooks", "6-ledger", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL not built (unit "))).toBe(true);
     for (const n of ["3-matcher-probes", "stop-hook-loadline", "matcher-72", "probes-189"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL E_HM_PIN set HM_GSTACK"))).toBe(true);
     expect(lines[0]).toStartWith("DRYRUN skeleton PASS");
