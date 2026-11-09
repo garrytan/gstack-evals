@@ -2,17 +2,19 @@
 
 **Do [gstack](https://github.com/garrytan/gstack)'s skills help, on which models, and at what cost?** We hold the model and the tasks fixed, change only the part of gstack under test, and always run an arm with no gstack beside it. The answers steer gstack's research and development, and a skill that loses to no skill, or to a placebo, is reported as plainly as one that wins.
 
+To read the findings, start with [Reading this repo](docs/reading-this-repo.md): where the findings live, what the codes in them mean and what stays sealed. [Why this repo is open](wiki/board/2026-11-09-geva-422-why-this-repo-is-open.md) says why we publish it.
+
 ## Results that passed an independent check
 
-Every number in this table passed two checks: a model from another lab read it against the run's data, and another crew reran it from the published record. Brackets are 95% intervals.
+Every number in this table passed two checks: a model from another lab checked the claims against the finding and its data, and another crew reran the numbers from the run's record. Each row links the record of its checks. Brackets are 95% intervals.
 
 | Skill | Model | Result [95% interval] | Verdict | Limit | Finding |
 |---|---|---|---|---|---|
-| /review, full procedure (gstack 699a41cb) | Opus 5.5 | Caught 26.2% of known blocking bugs (each reviewed twice) against 3.6% with no gstack: +22.6 points [+11.0, +33.7], at 8.9 times the cost per session | KEEP | Home field: 41 of the 42 bugs came from reviews by gstack-family tools. 42 of the 66 gstack sessions ran the procedure only after a hook blocked them | [R2 at the after pin](wiki/board/2026-11-04-geva-281-r2-after-pin-results-home-field.md) |
+| /review, full procedure (gstack 699a41cb) | Opus 5.5 | Marked 26.2% of bug-passes as blocking (42 known blocking bugs, each reviewed twice), against 3.6% with no gstack: +22.6 points [+11.0, +33.7], at 8.9 times the cost per session | KEEP | Home field: 41 of the 42 bugs came from reviews by gstack-family tools. 42 of the 66 gstack sessions ran the procedure only after a hook blocked them | [R2 at the after pin](wiki/board/2026-11-04-geva-281-r2-after-pin-results-home-field.md), [its checks](wiki/board/2026-11-09-geva-421-r2-independent-checks.md) |
 
 ## /review
 
-- **The full procedure catches more blocking bugs.** On 33 review units holding 42 known blocking bugs, each reviewed twice, gstack's full /review marked 22 of the 84 bug-passes as blocking and Opus 5.5 with no gstack marked 3 (+22.6 points [+11.0, +33.7]).
+- **The full procedure flags more of the known blocking bugs.** On 33 review units holding 42 known blocking bugs, each reviewed twice, gstack's full /review marked 22 of the 84 bug-passes as blocking and Opus 5.5 with no gstack marked 3 (+22.6 points [+11.0, +33.7]).
 - **Most sessions ran it only after a hook made them.** In 42 of the 66 gstack sessions, the specialist reviewers and the adversarial reader ran only after gstack's contract hook blocked the session, and 24 ran them unprompted. The split was not randomized.
 - **The suite may favour gstack.** 41 of the 42 bugs came from reviews by gstack-family tools, so the suite may hold the kind of bug gstack's reviewers look for.
 - **It costs more.** A gstack session cost 8.9 times as much as one with no gstack.
@@ -97,7 +99,7 @@ A merged post never changes, so these posts still print the verdicts they had wh
 2. Since 2026-10-31, every head-to-head includes a no-gstack arm: the same model, tasks and harness with no gstack installed and a plain prompt. Many also include a placebo arm.
 3. The run spends only through a budget ledger. A run that hits its cap stops and is reported as incomplete; it is never rerun to change a verdict.
 4. A results post reports each skill's lift per model with its interval. A null result states the control arm's rate and the smallest effect the test could have seen, and says why it came out null.
-5. A result enters the table at the top only after a model from another lab has checked its numbers against the run's data and another crew has rerun it from the published record.
+5. A result enters the table at the top only after a model from another lab has checked its claims against the finding and its data, and another crew has rerun its numbers from the run's record.
 
 Held-out task bodies, hidden tests and answer keys never enter this repo. They are sealed outside it, and the repo commits only their counts and digests, so a reader can check later that nothing changed.
 
