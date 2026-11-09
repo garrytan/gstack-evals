@@ -1,13 +1,13 @@
 {
   "arm": "judge",
   "claude_code": "2.1.312",
-  "tar_gz_sha256": "977edc452e8039efc6f1e51761e1e703551d1ab7aa45d88f66fe7cbdd5272c93",
+  "tar_gz_sha256": "0b23c87a60b0d61206b1f9d0ae70aab56ba6c859cd568b75c25aa5a32dc4086d",
   "gstack_sha": "ba2289e1cd9f2387d069b3b6c51b404d56c4a1e9",
   "update_check": "false",
   "onboarding_markers": ".gstack/.activated .gstack/.completeness-intro-seen .gstack/.feature-prompted-model-overlay .gstack/.first-loop-tip-shown .gstack/.proactive-prompted .gstack/.telemetry-prompted",
   "dr_runtime_sha256": "7fb1a0a81b975c3c74a63a8032ec5592c7043b8a91bbb587eb1f3d4207a78154",
   "band_sha256": "ea64917e550e7805575e306f0a2485fc7dc6c866b32677620912b2d2b35ccc68",
-  "hm_judge_sha256": "fe166b2f792a43d0fee98baaa3a3c6601d0f2a4d7a61f78b02262f1fba4654cd",
+  "hm_judge_sha256": "83257e1fada365b88ff000fdaa74d7591b526ee8b81bb5351bf3cb07414c3e90",
   "facts_sha256": "6f9109159f4e0dc4414a038ecd9c56ba3185cb9e8b4556a50256604b4a741218",
   "gstack_version": "1.98.0.0",
   "fetch": {
@@ -76,14 +76,14 @@
   "tar": {
     "file": "judge.tar",
     "bytes": 2205696000,
-    "sha256": "5c9a0eaafda00e14ac64867a4f1eb33b539c5568dc24e67f2d6c07b0602c9d67"
+    "sha256": "355dc6204a9f234ffda7254cb538d15ee14e189f301be97b6bc0045686af44b7"
   },
   "tree": {
     "files": 49854,
     "symlinks": 1063,
     "dirs": 6792,
-    "bytes": 2146779220,
-    "digest": "04f59a51ed3147d2a7a4c9c7735c52e75a2d4f9548d4c4c81fc776aea0695c80"
+    "bytes": 2146784212,
+    "digest": "67ba462d0f3261753c8a699f56f7cb49e2dc53c8bc0fd4c9f831cb17a10c9a2d"
   },
   "skills": {
     "count": 63,
@@ -181,5 +181,5 @@
       }
     ]
   },
-  "inventory_sha256": "acae7a09183b327364f2863be7e08c7c37f4b30f3085b209dcdecb1180b811ea"
+  "inventory_sha256": "37576de3241e3dd42473ba6d64a7f956942b340babd45407ff57cf7ff444d5e7"
 }
