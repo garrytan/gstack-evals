@@ -86,6 +86,17 @@ describe("cargo target reading (keyless)", () => {
     expect(cargoTargets(log(lib, "\x1b[1m\x1b[32m     Running\x1b[0m tests/wibble.rs (target/debug/deps/wibble-ffffeeeeddddcccc)", doc))).toEqual({ targets: ["Doc-tests zorp", "Running tests/wibble.rs (target/debug/deps/wibble-*)", "Running unittests src/lib.rs (target/debug/deps/zorp-*)"], stop: false });
     expect(cargoTargets(log(lib) + "\n" + stop).stop).toBe(true);
   });
+  test("reads cargo's verbose test binary lines, never its rustc, rustdoc or build script lines", () => {
+    const v = [
+      "     Running `/rt/bin/rustc --crate-name zorp --edition=2021 zorp/src/lib.rs --test`",
+      "     Running `/testbed/target/debug/build/zorp-0123456789abcdef/build-script-build`",
+      "     Running `/testbed/target/debug/deps/zorp-0a1b2c3d4e5f6789`",
+      "     Running `CARGO=/rt/bin/cargo CARGO_PKG_NAME=wibble /testbed/target/debug/deps/wibble-1111222233334444 --nocapture`",
+      "     Running `rustdoc --edition=2021 --crate-type lib --test zorp/src/lib.rs`",
+      "   Doc-tests zorp",
+    ].join("\n");
+    expect(cargoTargets(v).targets).toEqual(["Doc-tests zorp", "Running /testbed/target/debug/deps/wibble-*", "Running /testbed/target/debug/deps/zorp-*"]);
+  });
   test("cargo stopped early when a target the fixed runs reached appears in no base run", () => {
     const base = [0, 1, 2].map(() => log(lib) + "\n" + stop), fixed = [0, 1, 2].map(() => log(lib, wib, doc));
     expect(targetReading(base, fixed)).toEqual({ base: base.map(() => ["Running unittests src/lib.rs (target/debug/deps/zorp-*)"]), fixed: fixed.map(() => ["Doc-tests zorp", "Running tests/wibble.rs (target/debug/deps/wibble-*)", "Running unittests src/lib.rs (target/debug/deps/zorp-*)"]), not_on_base: ["Doc-tests zorp", "Running tests/wibble.rs (target/debug/deps/wibble-*)"], fail_fast_stop: true, cargo_stopped_early: true });

@@ -142,12 +142,19 @@ export function splitUnit(dir: string, u: SmUnit, where: Where): void {
 /** log: the run's stderr and print output, read for cargo's targets. */
 export interface RunResult { run: OracleRun; parsed: Record<string, string> | null; log: string }
 
-/** cargo's test targets in one run log: its "Running <path>" lines (a target's hash written as *, so builds compare) and
- *  "Doc-tests <crate>" lines, and whether cargo printed its fail-fast stop line. */
+/** cargo's test targets in one run log: its "Running <path>" lines, and under --verbose its "Running `<test binary>`" lines
+ *  (the first word that is not an env setting, when it is a binary in a deps dir; rustc, rustdoc and build scripts are
+ *  not targets), a target's hash written as * so builds compare; its "Doc-tests <crate>" lines; and whether cargo printed
+ *  its fail-fast stop line. */
 export function cargoTargets(log: string): { targets: string[]; stop: boolean } {
   const text = log.replace(/\x1b\[[0-9;]*m/g, "");
   const t = new Set<string>();
-  for (const m of text.matchAll(/^[ \t]*(Running|Doc-tests) ([^`\s].*?)[ \t]*$/gm)) t.add(m[1] + " " + m[2]!.replace(/-[0-9a-f]{16}\b/g, "-*"));
+  const hash = (s: string) => s.replace(/-[0-9a-f]{16}\b/g, "-*");
+  for (const m of text.matchAll(/^[ \t]*(Running|Doc-tests) ([^`\s].*?)[ \t]*$/gm)) t.add(m[1] + " " + hash(m[2]!));
+  for (const m of text.matchAll(/^[ \t]*Running `([^`]*)`/gm)) {
+    const bin = m[1]!.split(/\s+/).find((w) => w && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) ?? "";
+    if (/\/deps\/[^/]+-[0-9a-f]{16}$/.test(bin)) t.add("Running " + hash(bin));
+  }
   return { targets: [...t].sort(), stop: /error: test failed, to rerun pass/.test(text) };
 }
 
