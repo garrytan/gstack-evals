@@ -74,6 +74,8 @@ export interface DxRow extends Row {
   launched: boolean;
   answers: AnswerCounts | null;
   unknown_micros: number;
+  /** An attempt's finalize failed, so its spend is the ledger's settled and reserved figure for its meter; rule 4's median leaves the row out. */
+  cost_unknown: boolean;
 }
 
 const reasonOf = (o: DxAttempt): string | null => ("reason" in o ? o.reason : o.state === "cap" ? "cap stop" : null);
@@ -104,7 +106,7 @@ export function dxRow(s: DxSessionInput): DxRow {
     exposed: s.arm === "none" || s.arm === "lens" ? null : (s.exposure?.exposed ?? null), markers: s.exposure?.markers ?? {}, session_kind: s.kind?.session_kind ?? null, lean: s.kind?.lean ?? null,
     dx_lens: s.arm === "autoplan" ? s.dx_lens : null, gstack_read: audit, retried: s.attempts.length > 1, judged: s.judged,
     limit_stops: reads.filter((r) => r.outcome.state === "arm-stop" && LIMITS.has(r.outcome.reason)).length, spend_micros: spend, session: [s.unit, s.model, s.arm, s.pass].join(":"),
-    reasons: reads.map((r) => reasonOf(r.outcome)).filter((x): x is string => x !== null), repair: s.repair, answers: s.answers, unknown_micros: unknown,
+    reasons: reads.map((r) => reasonOf(r.outcome)).filter((x): x is string => x !== null), repair: s.repair, answers: s.answers, unknown_micros: unknown, cost_unknown: false,
   };
   if (web) return { ...base, end: "contaminated", code: "E_DX_WEB_CONTAMINATED" };
   if (audit) return { ...base, end: "contaminated", code: "E_DX_ARM_CONTAMINATED" };
@@ -127,7 +129,7 @@ export function installStops(rows: readonly DxRow[]): Array<{ arm: ArmId; model:
 }
 
 /** A smoke row as smoke rules 1 to 4 read it; gate is autoplan's reviewer-and-gate reading, null elsewhere. */
-export const smokeSession = (r: DxRow): SmokeSession => ({ launched: r.launched !== false, model: r.model, parsed: r.end === "block", exposed: r.exposed, limit_stops: r.limit_stops, spend_micros: r.spend_micros, gate: r.arm === "autoplan" ? r.markers.reviewer === true && r.markers.gate === true : null });
+export const smokeSession = (r: DxRow): SmokeSession => ({ launched: r.launched !== false, cost_unknown: r.cost_unknown === true, model: r.model, parsed: r.end === "block", exposed: r.exposed, limit_stops: r.limit_stops, spend_micros: r.spend_micros, gate: r.arm === "autoplan" ? r.markers.reviewer === true && r.markers.gate === true : null });
 
 const text = (p: string): string | null => (existsSync(p) ? readFileSync(p, "utf8") : null);
 

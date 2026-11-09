@@ -516,6 +516,15 @@ export function armImages(o: { trialImage: string; home: string; installs: reado
   return images;
 }
 
+/** A rig's slot calls on the proxy's management socket: bind, finalize, and unbind, which revokes the slot's bearer. */
+export const proxyRigControl = (control: ProxyControl): Pick<HostRig, "bind" | "finalize" | "unbind"> => ({
+  bind: (request) => control.bind(request),
+  finalize: (meterId) => control.finalize(meterId),
+  unbind: async (slot) => {
+    await control.unbind(slot);
+  },
+});
+
 /** The Docker rig: arm installs and images, the lease, the trial network and the proxy container. Throws with a reason code when a step fails, after undoing the steps before it, the installs the run built included. */
 /** A lease the caller opened and settles itself (a devex frozen run's, lanes/devex/leases.ts): the rig meters on it, and close settles it through settle once the proxy has stopped and its journal is reconciled. */
 export interface RigLease {
@@ -554,8 +563,7 @@ export function dockerRig(call: Pick<Call, "host" | "arms" | "tasks" | "out" | "
       network: network.name,
       imageDigest: pin.pin.digest,
       recovery: { lease_id: lease.lease_id, proxy_container: proxy.container, journal: proxy.journal },
-      bind: (request) => control.bind(request),
-      finalize: (meterId) => control.finalize(meterId),
+      ...proxyRigControl(control),
       arms: Object.fromEntries(installs.map((i) => [i.name, i])),
       cells,
       sandbox: (arm, calibration, model) => dockerSandbox({ trialImage: pin.pin.tag, armImage: images.get(calibration ? arm + "#calibration" : model && images.has(arm + "@" + model) ? arm + "@" + model : arm)!, docker: bin }),

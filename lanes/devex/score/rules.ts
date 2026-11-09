@@ -32,6 +32,9 @@ export const PARSE_BAR = 0.95;
 export const FLOOR_ORACLE = 0.9;
 export const LEAK_SHARE = 0.25;
 export const MDD_BOUND = 0.13;
+/** Stage 1's calibration units and Opus none passes: admission reads 16 x 3 planned Opus none sessions. */
+export const CALIBRATION_UNITS = 16;
+export const NONE_PASSES = 3;
 /** Section 11: the interim check reads an arm after its first 24 Opus sessions, or 16 on Sol and on particle-1. */
 export const INTERIM: Readonly<Record<ModelId, number>> = { opus: 24, sol: 16, particle: 16 };
 export const STAT = { seed: SEED, draws: DRAWS };
@@ -314,6 +317,8 @@ export interface SmokeSession {
   spend_micros: number | null;
   /** False for a session released before any attempt launched; rule 4's cost median leaves it out. */
   launched?: boolean;
+  /** An attempt's finalize failed, so the spend is the ledger's figure; rule 4's cost median leaves it out and counts it. */
+  cost_unknown?: boolean;
   /** autoplan only: the lean run reached its gate with its reviewer on the cell's model. */
   gate: boolean | null;
 }
@@ -329,6 +334,8 @@ export interface SmokeReading {
   /** Rule 3: models where autoplan's lean run can't reach its gate on the cell's model; its cells there don't run. */
   autoplan_out: ModelId[];
   pass: boolean;
+  /** Opus sessions rule 4's cost median left out because their cost is unknown. */
+  cost_unknown: number;
 }
 
 const median = (xs: readonly number[]) => {
@@ -349,12 +356,13 @@ export function smokeRules(arm: GstackArm, sessions: readonly SmokeSession[], o:
     if (exposed < need) failures.push({ rule: 2, model: m, kind: "exposure", why: "exposed in " + exposed + " of " + on(m).length + " " + m + " smoke sessions, under " + need });
   }
   const autoplan_out = arm === "autoplan" ? MODEL_IDS.filter((m) => on(m).filter((s) => s.gate === true).length < (m === "opus" ? 5 : 1)) : [];
-  const med = median(opus.filter((s) => s.launched !== false).map((s) => s.spend_micros ?? 0));
+  const ran = opus.filter((s) => s.launched !== false);
+  const med = median(ran.filter((s) => !s.cost_unknown).map((s) => s.spend_micros ?? 0));
   if (med > o.sessionLimitMicros / 2) failures.push({ rule: 4, model: "opus", kind: "cost-median", why: "Opus smoke median " + med + " micros exceeds half the session limit" });
   const stops = opus.filter((s) => s.limit_stops > 0).length;
   if (stops >= 2) failures.push({ rule: 4, model: "opus", kind: "cost-stops", why: stops + " of " + opus.length + " Opus sessions stopped by a limit" });
   if (!o.projectionFits) failures.push({ rule: 4, model: "opus", kind: "cost-projection", why: "the measured medians put the stage 2 projection past its cap after the cut list" });
-  return { arm, failures, autoplan_out, pass: !failures.length };
+  return { arm, failures, autoplan_out, pass: !failures.length, cost_unknown: ran.filter((s) => s.cost_unknown).length };
 }
 
 export interface SmokeDecision {
@@ -694,7 +702,7 @@ export function smokeReadings(rows: readonly DxRow[], o: { projectionFits: boole
       const doubled = pass > 1 && names[0] === "double limits";
       return smokeRules(arm, rs.map(smokeSession), { sessionLimitMicros: dxLimits(doubled).usd * 1_000_000, projectionFits: doubled ? o.doubledFits : o.projectionFits });
     };
-    const first = read(1)!;
+    const first = read(1) ?? usage(arm + " has smoke pass 2 rows and no pass 1 rows, and a rerun is judged beside its smoke", "pass the rows of the s1-smoke run together with its s1-resmoke");
     const rerun = read(2);
     return { arm, first, rerun, decision: smokeDecision(first, { doubledFits: o.doubledFits, ...(rerun ? { rerun } : {}) }) };
   });
@@ -754,8 +762,9 @@ function readings(argv: string[], io: { out: (t: string) => void; err: (t: strin
     if (!read.length) usage("the rows hold no gstack arm smoke session", "pass the rows of an s1-smoke run (and its s1-resmoke)");
     const fails = (s: SmokeReading) => s.failures.map((f) => "rule " + f.rule + " " + f.model + " " + f.kind + ": " + f.why).join("; ");
     for (const r of read) {
-      io.out("smoke " + r.arm + ": " + (r.first.pass ? "pass" : "fail: " + fails(r.first)) + (r.first.autoplan_out.length ? "; rule 3: autoplan's cells don't run on " + r.first.autoplan_out.join(", ") : ""));
-      if (r.rerun) io.out("rerun " + r.arm + ": " + (r.rerun.pass ? "pass" : "fail: " + fails(r.rerun)));
+      const unknown = (s: SmokeReading) => "; rule 4's cost median left out " + s.cost_unknown + " cost_unknown Opus session" + (s.cost_unknown === 1 ? "" : "s");
+      io.out("smoke " + r.arm + ": " + (r.first.pass ? "pass" : "fail: " + fails(r.first)) + (r.first.autoplan_out.length ? "; rule 3: autoplan's cells don't run on " + r.first.autoplan_out.join(", ") : "") + unknown(r.first));
+      if (r.rerun) io.out("rerun " + r.arm + ": " + (r.rerun.pass ? "pass" : "fail: " + fails(r.rerun)) + unknown(r.rerun));
       const d = r.decision;
       io.out("decision " + r.arm + ": " + (d.outcome === "pass" ? "pass" + (d.repair ? " " + (d.repair.name ?? "with " + d.repair.kind) : "") : d.outcome === "repair" ? "repair " + (d.repair!.name ?? d.repair!.kind) + (d.code ? " (" + d.code + ")" : "") : "dropped on " + d.dropped_on.join(", ") + " (" + d.code + "); " + d.r48 + ", Holm p = 1"));
     }
@@ -771,8 +780,15 @@ function readings(argv: string[], io: { out: (t: string) => void; err: (t: strin
       return usage("--input " + inputPath + " does not read as JSON", "pass a JSON object with noneA, stockFail, judge {pass, shortfall} and floor {checkA, oracleCredit}");
     }
     if (typeof input?.stockFail !== "boolean" || typeof input?.judge?.pass !== "boolean" || typeof input?.judge?.shortfall !== "boolean" || !input?.floor || !(input.noneA === null || typeof input.noneA === "number")) usage("--input " + inputPath + " lacks noneA, stockFail, judge {pass, shortfall} or floor {checkA, oracleCredit}", "write each field the admission reads");
+    const floor = input.floor as unknown as Record<string, unknown>;
+    const numeric = (v: unknown) => v === null || (typeof v === "number" && Number.isFinite(v));
+    if (typeof floor !== "object" || Array.isArray(floor) || !numeric(floor.checkA) || !numeric(floor.oracleCredit)) usage("--input " + inputPath + ": floor must hold checkA and oracleCredit, each a number or null, and it is " + JSON.stringify(input.floor) + "; a floor that does not read is refused, never read as FLOOR", "write floor {checkA, oracleCredit} from floorCheckA and oracleCredit on the check pass");
     const none = rows.filter((r) => r.arm === "none" && r.model === "opus" && r.stage === 1 && !r.smoke);
     if (!none.length) usage("the rows hold no Opus none stage 1 session", "pass the rows of the s1-none run");
+    const planned = CALIBRATION_UNITS * NONE_PASSES;
+    const slots = new Set(none.map((r) => r.unit + "#" + r.pass));
+    const units = new Set(none.map((r) => r.unit));
+    if (none.length !== planned || slots.size !== planned || units.size !== CALIBRATION_UNITS || none.some((r) => r.pass < 1 || r.pass > NONE_PASSES)) usage("admission reads every planned Opus none session of the s1-none run (" + CALIBRATION_UNITS + " units x " + NONE_PASSES + " passes, " + planned + " rows, each scored or an infrastructure miss), and the rows hold " + none.length + " rows for " + slots.size + " sessions on " + units.size + " units", "take the incomplete s1-none run to the Captain: a run that held has no row for its unrun sessions");
     const out = none.filter((r) => r.end === "missing" || r.end === "contaminated");
     const replies = none.length - out.length;
     if (!replies) usage("every Opus none stage 1 row is an infrastructure miss or contaminated, so no reply is left to read", "take the s1-none run to the Captain");

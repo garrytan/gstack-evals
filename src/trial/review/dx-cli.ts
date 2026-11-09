@@ -9,20 +9,24 @@
 // kinds must match each gstack arm, its one lease opens on the item (openRun: projection plus a tenth plus the in-flight
 // reserve), the Docker rig meters on that lease, the session loop (lanes/devex/run/session.ts) runs its sessions in plan
 // order at most --parallel at once and writes one row per planned session to <out>/rows.ndjson, and the lease settles at
-// the end, printing what settled. A stage 2 run id is refused: its loop is not built at this commit. Whatever it cannot
-// do refuses with E_USAGE before anything is built or spent, and every refusal ends with a fix line.
+// the end, printing what settled. The lease count, stage1Open and openRun run under one lock on the item
+// (session.ts openStage1Run); a lease counts as its frozen run once a session launched on it, and one that closes before
+// any launch (the Docker rig failing, the loop failing before its first bind) is voided and logged, so its run is not
+// used up. An infrastructure or harness failure holds the run: exit 2 under the hold's code, the lease left open and no
+// row for the sessions that never launched. A stage 2 run id is refused: its loop is not built at this commit. Whatever
+// it cannot do refuses with E_USAGE before anything is built or spent, and every refusal ends with a fix line.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { frozenRuns, openRun } from "../../../lanes/devex/leases.ts";
-import { dxPlan, isStage1Run, MAX_PARALLEL, NONE_PASSES, runDxSessions, STAGE1_RUNS, stage1Open, type DxRunResult, type DxTree } from "../../../lanes/devex/run/session.ts";
+import { dxPlan, isStage1Run, launchedOn, MAX_PARALLEL, NONE_PASSES, openStage1Run, runDxSessions, STAGE1_RUNS, voidLease, type DxRunResult, type DxSettle, type DxTree } from "../../../lanes/devex/run/session.ts";
+import { isReasonCode } from "../../errors/codes.ts";
 import { hostDriver } from "../../adapters/host.ts";
 import { stackKind } from "../../arms/stacks.ts";
 import { rigAdmission } from "../../rig/admission.ts";
 import { settleLease } from "../../runner/ledger/ledger.ts";
 import { openLocalLedger } from "../../runner/ledger/local.ts";
-import { readItem } from "../../runner/ledger/record.ts";
 import { ledgerPath, recordPath } from "../../runner/ledger/paths.ts";
 import { dockerRig, type HostRig } from "../../skill-eval/cli/run-host.ts";
 import type { ResolvedArms } from "../../skill-eval/cli/arms.ts";
@@ -162,6 +166,7 @@ async function dxUnits(argv: string[], io: Io, env: Env): Promise<number> {
     if (!(arm === "plan-devex-review" && repair === "stop hook") && !(arm === "autoplan" && repair === "gstack stop gate")) refuse("--repair " + JSON.stringify(r) + ": smoke rule 5 gives plan-devex-review the Stop hook and autoplan gstack's stop gate, one each", "pass plan-devex-review=stop-hook, autoplan=gstack-stop-gate or double-limits");
     repairs.set(arm as ArmId, repair!);
   }
+  if (repairs.has("all") && repairs.size > 1) refuse("--repair double-limits runs every arm at doubled limits, and --repair also names " + [...repairs.keys()].filter((k) => k !== "all").join(" and ") + "'s own repair; one rerun runs one repair, so its rows say which limits it ran at", "pass --repair double-limits alone, or only the arms' own repairs");
   const passes = Number(one("--passes") ?? "1");
   if (!Number.isSafeInteger(passes) || passes < 1 || passes > 3) refuse("--passes must be a whole number from 1 to 3", "pass --passes 1 to 3");
   const out = resolve(one("--out")!);
@@ -263,10 +268,10 @@ async function dxPaid(p: { flags: Map<string, string[]>; unitsDir: string; unitI
   const ledger = ledgerPath(one("--ledger") ?? undefined, p.env);
   const record = recordPath(one("--record") ?? undefined, p.env);
   const local = openLocalLedger(ledger);
-  const open = stage1Open(run!, p.arms, readItem(record.path, frozen.item).leases.length);
+  const open = openStage1Run(record.path, frozen.item, run!, p.arms, (o) => ({ design: o.design, opened: openRun(record.path, local, { run: run!, design: o.design, opened: o.opened, mdd: () => Number.POSITIVE_INFINITY, requireAdmission: rigAdmission({ proof: "trial" }) }) }));
   if ("problem" in open) return refuse(open.problem, open.fix);
   const leased = frozenRuns(open.design).find((r) => r.id === run)!;
-  const opened = openRun(record.path, local, { run: run!, design: open.design, opened: open.opened, mdd: () => Number.POSITIVE_INFINITY, requireAdmission: rigAdmission({ proof: "trial" }) });
+  const opened = open.opened;
   if (!opened.admission.ok || !opened.lease_id) {
     p.io.err("CAP_STOP review-units: run " + run + " on " + frozen.item + " is not admitted: " + (opened.admission.ok ? "no lease opened" : opened.admission.stop) + "\n  fix: the run stops for the Captain; nothing was spent");
     return 2;
@@ -282,26 +287,45 @@ async function dxPaid(p: { flags: Map<string, string[]>; unitsDir: string; unitI
   const skills = Object.fromEntries(p.arms.flatMap((a) => (DX_ARMS[a].skill ? [[a, DX_ARMS[a].skill!]] : [])));
   writeFileSync(join(p.out, "run.json"), JSON.stringify({ run_id: frozen.run_id, frozen_run: run, item: frozen.item, lease_id: lease, lease_micros: leaseMicros, sessions: plan.sessions.length, arms: p.arms, models: p.models, passes: p.passes, parallel, limits: dxLimits(doubled), repairs: Object.fromEntries([...p.repairs].map(([k, v]) => [k, { repair: v, name: REPAIR_NAME[v] }])), prompts: Object.fromEntries(p.arms.map((a) => [a, { sha256: DX_PROMPT_SHA256[a], env: dxArmEnv(a) }])), template_sha256: DX_TEMPLATE_SHA256, parser_sha256: DX_PARSER_SHA256, rec_user_sha256: DX_REC_USER_SHA256, gstack: DX_GSTACK, units: dxUnitsDigest(p.unitsDir, p.unitIds), sink: { out: p.out, existed: false, checked_at: new Date().toISOString() } }, null, 2) + "\n");
   let live: DxRunResult | null = null;
-  let settled: ReturnType<DxRunResult["settle"]> | null = null;
+  let settled: DxSettle | null = null;
+  let loopError: unknown = null;
   let rig: HostRig;
+  const voidLine = (code: string, path: string) => p.io.err(code + " review-units: lease " + lease + " on " + frozen.item + " closed before any session launched on it with a bound attempt, so it is void and " + run + " is not used up (" + path + ")");
+  const voidFor = (e: unknown) => {
+    const msg = ((e as Error)?.message ?? String(e)).split("\n")[0]!;
+    const head = msg.split(/[: ]/)[0]!;
+    const code = isReasonCode(head) ? head : "E_DX_INFRA_MISSING";
+    voidLine(code, voidLease(record.path, lease, code, msg));
+  };
+  const settleUnlaunched = () => {
+    if (launchedOn(record.path, lease)) return null;
+    const close = settleLease(record.path, local, lease);
+    voidFor(loopError ?? new Error("E_DX_INFRA_MISSING: the session loop ended before any launch"));
+    return close;
+  };
   const call = { host: "claude" as const, arms: { arms: specs, base: null, skill: null, notes: [] } as ResolvedArms, tasks, out: { path: p.out, rule: "--out" }, ledger, record, item: frozen.item, runId: frozen.run_id, models: p.models, policy: p.policy };
   try {
-    rig = dockerRig(call, { env: p.env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap: leaseMicros, voice: false, lease: { id: lease, local, settle: () => (settled = live ? live.settle() : { close: settleLease(record.path, local, lease), released: [], paused: [] }).close } });
+    rig = dockerRig(call, { env: p.env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap: leaseMicros, voice: false, lease: { id: lease, local, settle: () => (live ? (settled = live.settle()).close : settleUnlaunched()) } });
   } catch (e) {
     settleLease(record.path, local, lease);
+    voidFor(e);
     throw e;
   }
   try {
     live = await runDxSessions({ run: run!, runId: frozen.run_id, sessions: plan.sessions, trees, rig, ledger: local, record: record.path, lease, policy: p.policy, out: p.out, parallel, doubled, repairs: armRepairs, pin, control: one("--control") ? resolve(one("--control")!) : join(p.out, "control.ndjson"), log: (l) => p.io.err(l) });
+  } catch (e) {
+    loopError = e;
+    throw e;
   } finally {
     const closed = await rig.close();
-    const s = settled as ReturnType<DxRunResult["settle"]> | null;
-    if (s?.paused.length) p.io.out("lease " + lease + " left open for the Captain: " + s.paused.join("; "));
+    const s = settled as DxSettle | null;
+    if (s?.held) p.io.err(s.stop + " review-units: run " + run + " holds for the Captain: " + s.held + "; lease " + lease + " is left open, and the sessions that never launched have no row");
+    else if (s?.paused.length) p.io.out("lease " + lease + " left open for the Captain: " + s.paused.join("; "));
     else p.io.out("lease " + lease + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls" + (s ? ", " + s.released.length + " unrun sessions released" : ""));
+    if (s?.voided) voidLine(s.stop ?? "E_DX_INFRA_MISSING", s.voided);
   }
-  if (live!.error) throw live!.error;
   const rows = live!.rows;
   const ends = rows.reduce<Record<string, number>>((m, r) => ((m[r.end] = (m[r.end] ?? 0) + 1), m), {});
   p.io.out("rows " + rows.length + " of " + plan.sessions.length + " planned in " + join(p.out, "rows.ndjson") + ": " + Object.entries(ends).map(([k, v]) => k + " " + v).join(", "));
-  return (settled as ReturnType<DxRunResult["settle"]> | null)?.paused.length || live!.batch.haltedBy() ? 2 : 0;
+  return (settled as DxSettle | null)?.exit ?? 2;
 }
