@@ -99,3 +99,30 @@ describe("the G arm registry", () => {
     }
   });
 });
+
+describe("H's arms file (h-registry.json)", () => {
+  const H_PATH = join(import.meta.dir, "..", "..", "lanes", "outcome-skills", "arms", "h-registry.json");
+  const H_LIMITS: Record<string, Record<string, number>> = {
+    none: { session_cap_usd: 16, max_turns: 400, wall_limit_sec: 10800 },
+    "autoplan:told": { session_cap_usd: 90, max_turns: 800, wall_limit_sec: 28800 },
+  };
+
+  test("loads, and holds the H prereg's section 4 limits for none and told autoplan", () => {
+    const h = loadRegistry(H_PATH);
+    for (const [arm, want] of Object.entries(H_LIMITS)) expect(h.arms[arm]!.limits).toMatchObject(want);
+  });
+
+  test("differs from registry.json only in those six numbers", () => {
+    const base = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
+    const h = JSON.parse(readFileSync(H_PATH, "utf8"));
+    for (const [arm, want] of Object.entries(H_LIMITS)) {
+      for (const [k, v] of Object.entries(want)) {
+        expect(base.arms[arm].limits[k]).not.toBe(v);
+        expect(h.arms[arm].limits[k]).toBe(v);
+        h.arms[arm].limits[k] = base.arms[arm].limits[k];
+      }
+    }
+    expect(h).toEqual(base);
+    expect(readFileSync(H_PATH, "utf8").split("\n").length).toBe(readFileSync(REGISTRY_PATH, "utf8").split("\n").length);
+  });
+});
