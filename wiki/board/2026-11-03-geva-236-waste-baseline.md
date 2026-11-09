@@ -19,8 +19,6 @@ Publication status: unpublished; posting is Garry's. Done: the reader runs, the 
 
 | Field | Value |
 |---|---|
-| Field | Value |
-|---|---|
 | Grade | Exploratory. A counts-only baseline from one reader at a pinned commit, on a partial set of sessions. No paid calls. |
 | Repo commit | 96431bb065775ba145a46b36729675e905294452 (main after #182). Every reading below comes from `bin/gstack-evals waste` at this commit. |
 | Prereg | None. The readings and the 10% trigger come from 2026-11-03-geva-220-waste-floor, written before this scan. |
@@ -223,6 +221,8 @@ Paid model calls: $0. The session scan, the head validation and this draft used 
 
 From the summary: A $0 counts-only baseline: pushed-head re-runs are 0.07% of ship-check time (upper bound 0.56%), but review rounds past the cap have no measured time, so the kill rule is not shown.
 
+| Field | Value |
+|---|---|
 | Grade | Exploratory. A counts-only baseline from one reader at a pinned commit, on a partial set of sessions. Paid calls: $0. |
 
 </details>
