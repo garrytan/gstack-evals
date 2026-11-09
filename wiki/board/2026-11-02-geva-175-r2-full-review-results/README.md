@@ -2,7 +2,7 @@
 id: 2026-11-02-geva-175-r2-full-review-results
 kind: finding
 title: "R2 gives no outcome: gstack's full /review procedure was dispatched in 10 of 19 PR-passes (the gate needs 18), and both arms caught 0 of 13 blocking blockers"
-summary: "R2 has no outcome: the procedure gate failed (10 of 19, 18 needed); our eval driver ended 7 sessions before their readers returned. Blocking recall 0/13 vs 0/13. $85.39. R48: FIX-METHOD."
+summary: "R2 has no outcome: the procedure gate failed (10 of 19, 18 needed); our eval driver ended 7 sessions before their readers returned. Blocking recall 0/13 vs 0/13. R48: FIX-METHOD."
 author: GEVA-175
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -43,7 +43,6 @@ Unpublished. Publication waits on the claim check by a cross-family reviewer and
 | Harness | review-units at the build, Claude Code CLI 2.1.314 driven through the Agent SDK's query() with streaming input, one non-interactive session per unit, claude-code-preset on both arms, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, 200 turns and $40 per session, --cap-stops |
 | Run | 2026-11-02 UTC. none-r2 03:20 to 04:18 (run review-units-20261102T032019Z-d912), gstack-full 05:13 to 06:35 (run review-units-20261102T045455Z-0e5e), judging from 06:42, one Capy machine at --parallel 2 |
 | Data | final judged arms, tree sha256 32d8b1eff4cd3d19a9f1775d701a70c88185365fa57d3d1488d2a48d2bc11b7f (gstack-full) and 17dc602a973143061691452f76b292ac9af803674fda078402dae86c3736ff86 (none-r2), not published (see What is held out) |
-| Spend | $85.39, settled through the ledger on four items |
 
 ## What we found
 
@@ -57,7 +56,7 @@ This is an explanation, not a result. review-units drives Claude Code through th
 
 In 7 gstack-full sessions the main agent sent its readers out, said it would write the report when they returned, and ended its turn. Some first scheduled a ScheduleWakeup fallback or searched for a tool. Our driver ended the session at that turn's result event, with the readers still out, so no findings block was written. The parser recorded a missing pass, and the frozen rule scores a missing pass as finding nothing.
 
-This was our harness, not gstack and not Claude Code. GStack Minder's probes on Claude Code 2.1.314 (GST-734) show that plain `claude -p` waits for background Agents and fires ScheduleWakeup. The same driver limit took pstack out of stacks round 1's review lane and cost tstack 5 passes there ([#108](../2026-11-01-geva-89-stacks-round-1-review-results/README.md)). GST-734, the driver fix that keeps a session open until its background tasks finish, is in progress, and R2's build does not have it. R1's arm C ran the same procedure inside Capy, where a parent waits for its subagents, and found 67.2% of a different suite's blocking blockers ([R1](../2026-11-01-geva-113-r1-blind-rejudge-results/README.md)).
+This was our harness, not gstack and not Claude Code. The gstack Captain's probes on Claude Code 2.1.314 (GST-734) show that plain `claude -p` waits for background Agents and fires ScheduleWakeup. The same driver limit took pstack out of stacks round 1's review lane and cost tstack 5 passes there ([#108](../2026-11-01-geva-89-stacks-round-1-review-results/README.md)). GST-734, the driver fix that keeps a session open until its background tasks finish, is in progress, and R2's build does not have it. R1's arm C ran the same procedure inside Capy, where a parent waits for its subagents, and found 67.2% of a different suite's blocking blockers ([R1](../2026-11-01-geva-113-r1-blind-rejudge-results/README.md)).
 
 ## Setup
 
@@ -79,8 +78,8 @@ This was our harness, not gstack and not Claude Code. GStack Minder's probes on 
 
 Seven, each recorded in [run-log.txt](run-log.txt) or [phase-scripts.txt](phase-scripts.txt). None reran a paid batch to change a result.
 
-1. **Caps and timeout.** The Captain (GEVA-2) raised both grid items to $760 (#112 set $25 and $325) and set --timeout 10800 on both arms. These depart from #112 section 5 without a new amendment. The grids spent $84.06 in all.
-2. **Disk.** The machine has a 65 GB disk. none-r2's first lease died on ENOSPC at 03:44:29Z, was settled by hand at $14.395891, and the run resumed with --resume --parallel 2 --spend-cap 745.60. gstack-full's first attempt died on ENOSPC in unit preparation, before any lease. 40 replicator-only tree tars (1.2 to 1.3 GB each) were deleted, 34 by hand and 6 by a disk guard; their sha256 stay in each run's units.json. Both arms ran at --parallel 2.
+1. **Caps and timeout.** The Captain (GEVA-2) raised both grid items' caps and set --timeout 10800 on both arms. These depart from #112 section 5 without a new amendment.
+2. **Disk.** The machine has a 65 GB disk. none-r2's first lease died on ENOSPC at 03:44:29Z, was settled by hand, and the run resumed with --resume --parallel 2 --spend-cap 745.60. gstack-full's first attempt died on ENOSPC in unit preparation, before any lease. 40 replicator-only tree tars (1.2 to 1.3 GB each) were deleted, 34 by hand and 6 by a disk guard; their sha256 stay in each run's units.json. Both arms ran at --parallel 2.
 3. **Clones.** Partial clones of gstack and gbrain failed with E_UNIT_REPO (a promisor fetch) and were replaced by full clones.
 4. **Stack source.** The rig never fetches a stack, and the machine's gstack checkout lacked 77fe28c (E_STACK_SOURCE). A local clone of the run's gstack clone went into the rig's sources dir. No rig code changed.
 5. **Machine restart.** A restart killed gstack-full's third attempt before any lease. The run resumed with --resume.
@@ -135,17 +134,17 @@ The gate counts a PR-pass when the session dispatched at least one specialist re
 
 The 7 sessions that returned no report. The last column paraphrases the main agent's last message; no transcript text is quoted.
 
-| Unit | Turns | Agent calls | Readers dispatched (gate names) | Last tool call | Metered cost | Last message, paraphrased |
-|---|---|---|---|---|---|---|
-| gbrain#7511 | 22 | 2 | other | Agent | $1.61 | both reviewers running in the background; it will wait for them |
-| gbrain#7684 | 17 | 2 | other | ToolSearch | not metered | reviewers still running; the branch's tests pass; report when they return |
-| gbrain#7789 | 44 | 6 | adversarial-native, batched, performance, red-team, security, testing | ScheduleWakeup (1,200 s) | $5.68 | four of five specialists back, two critical bypasses confirmed by probes; waiting on two readers |
-| gbrain#7901 | 22 | 3 | maintainability, other, testing | ScheduleWakeup (1,200 s) | $2.25 | its own pass done, the branch's tests pass; will merge findings when readers report |
-| gstack#3475 | 50 | 6 | adversarial-native, maintainability, performance, security, simplification, testing | ScheduleWakeup (1,200 s) | $5.06 | waiting on two readers |
-| gstack#3507 | 28 | 6 | adversarial-native, maintainability, performance, red-team, simplification, testing | ToolSearch | $4.08 | listed five confirmed issues; report when the red team finishes |
-| gstack#3516 | 14 | 2 | other | ToolSearch | $1.48 | both readers still running; report when they return |
+| Unit | Turns | Agent calls | Readers dispatched (gate names) | Last tool call | Last message, paraphrased |
+|---|---|---|---|---|---|
+| gbrain#7511 | 22 | 2 | other | Agent | both reviewers running in the background; it will wait for them |
+| gbrain#7684 | 17 | 2 | other | ToolSearch | reviewers still running; the branch's tests pass; report when they return |
+| gbrain#7789 | 44 | 6 | adversarial-native, batched, performance, red-team, security, testing | ScheduleWakeup (1,200 s) | four of five specialists back, two critical bypasses confirmed by probes; waiting on two readers |
+| gbrain#7901 | 22 | 3 | maintainability, other, testing | ScheduleWakeup (1,200 s) | its own pass done, the branch's tests pass; will merge findings when readers report |
+| gstack#3475 | 50 | 6 | adversarial-native, maintainability, performance, security, simplification, testing | ScheduleWakeup (1,200 s) | waiting on two readers |
+| gstack#3507 | 28 | 6 | adversarial-native, maintainability, performance, red-team, simplification, testing | ToolSearch | listed five confirmed issues; report when the red team finishes |
+| gstack#3516 | 14 | 2 | other | ToolSearch | both readers still running; report when they return |
 
-By last tool call: 1 Agent, 3 ScheduleWakeup, 3 ToolSearch. In every one the turn's result event had subtype success, and our driver ended the session there. Two of them, gbrain#7789 and gstack#3507, had already confirmed defects that were never scored, because no findings block was written. The six metered ones cost $20.16, a third of gstack-full's metered spend.
+By last tool call: 1 Agent, 3 ScheduleWakeup, 3 ToolSearch. In every one the turn's result event had subtype success, and our driver ended the session there. Two of them, gbrain#7789 and gstack#3507, had already confirmed defects that were never scored, because no findings block was written.
 
 ### Every unmatched blocking finding
 
@@ -188,37 +187,6 @@ Post hoc, at the Captain's request. derive --drop-file removed the 7 missing uni
 
 #108's gstack-opus and none-opus ran these units at other settings (SDK default prompt, 60 turns, two passes) and decide nothing here. Blocking recall 0/13 against 0/13. At any severity 3.5/13 = 26.9% [7.7, 50.0] against 2/13 = 15.4% [0, 34.6]. New blockers per pass per PR 0.21 against 0.16, difference 0.05 [-0.05, 0.16], p 0.625.
 
-## Cost
-
-| Ledger item | Cap | Settled |
-|---|---|---|
-| r2a-grid (none-r2), 2 leases | $760 (#112: $25) | $21.47 |
-| r2b-grid (gstack-full), 1 lease | $760 (#112: $325) | $62.59 |
-| r2-judge-match | $25 | $0.72 |
-| r2-judge-adjudicate | $25 | $0.62 |
-| **Total** | | **$85.39** |
-
-The ledger record is all settled, with no open reserve. none-r2's first lease was settled by hand at $14.40: $10.90 metered plus $3.50 counted for 2 calls whose cost was unknown when it died. The 19 kept none-r2 sessions meter $15.70, so about $5.77 of the item went to those 2 calls and to work that died with the first lease and ran again. gstack-full's lease covers all 19 sessions; the per-session file has no meter row for gbrain#7684, so the 18 metered sessions sum to $60.41.
-
-Tokens and dollars per arm, summed from each session's metered row ([cost-gstack-full.tsv](cost-gstack-full.tsv), [cost-none-r2.tsv](cost-none-r2.tsv)):
-
-| Arm | Sessions metered | Input | Cache read | Cache write | Output | Total | Requests | Dollars | Mean per session |
-|---|---|---|---|---|---|---|---|---|---|
-| gstack-full | 18 of 19 | 2,262 | 81,294,907 | 5,966,497 | 719,359 | 87,983,025 | 1,161 | $60.41 | $3.36 |
-| none-r2 | 19 of 19 | 728 | 25,301,262 | 1,300,340 | 206,610 | 26,808,940 | 364 | $15.70 | $0.83 |
-
-On the 18 units metered in both, gstack-full used 4.9M tokens per unit against 1.4M (medians 3.4M and 1.0M) and $60.41 against $14.56. It also ran longer: a mean of 347 seconds a session against 222. Neither arm found a blocker, so there is no cost per success. The two judging batches cost $1.33; the record keeps their item totals, not a split by judge model.
-
-**Prices** are the scorer's table, src/runner/pricing/prices.ts at the build f255edf of 2026-11-02 (unchanged on main since a50deb5), in dollars per million tokens:
-
-| Model | Input | Output | Cache read | Cache write |
-|---|---|---|---|---|
-| claude-opus-5-5 (both arms, primary judge) | 4 | 20 | 0.20 | 5 |
-| claude-sonnet-5-5 (third judge) | 2 | 10 | 0.20 | 2.50 |
-| gpt-6.1-sol (second judge; above 272,000 input tokens: 4, 15, 0.20, 5) | 2 | 10 | 0.10 | 2.50 |
-
-Anthropic reports cache tokens beside input tokens, and the table prices them at their own rates. These rates reproduce every metered session's dollars to within $0.001, except gstack#3381 and gstack#3494, which each metered about $0.04 less than the table gives. The record doesn't say why.
-
 ## Why null? (R48)
 
 The result is no outcome through a failed gate, so one Why-null cycle runs.
@@ -250,7 +218,7 @@ The result is no outcome through a failed gate, so one Why-null cycle runs.
 ## Replicate it
 
 1. **Reanalysis (keyless).** It needs the final judged arms, which are not published (tree sha256 in the record table). With them, at the rig pin 715f837, run the score, secondary and r2-decide.py steps in [run-log.txt](run-log.txt) (log/f2b-out.txt) with #112's comparisons.r2.json and r2-decide.py and #129's r1-exposure.py. The expected output is those lines. The gate count can also be checked by hand from the reader rows in [cost-gstack-full.tsv](cost-gstack-full.tsv). Outsiders can verify digests and that count today, not the scores.
-2. **Rerun (paid).** From a checkout of f255edf with gstack 77fe28c in a local source, run the two review-units commands in run-log.txt (log/d2-none-head.txt and log/e4-full-head.txt), then the F1 to F2b steps. This run cost $84.06 for the grids and $1.33 for judging. Nothing in the harness has changed, so a rerun at these pins can end sessions the same way.
+2. **Rerun (paid).** From a checkout of f255edf with gstack 77fe28c in a local source, run the two review-units commands in run-log.txt (log/d2-none-head.txt and log/e4-full-head.txt), then the F1 to F2b steps. Nothing in the harness has changed, so a rerun at these pins can end sessions the same way.
 
 The attached record holds every phase script that ran and the lines they printed. It leaves out the machine setup (clones, the trial image, the gstack install check), the transcripts, the review-units out dirs, the ledger database, and the judge packets and replies.
 
@@ -294,3 +262,69 @@ Nothing is sealed. stacks-r1-out19 derives from the published stacks-r1 suite by
 gstack is Garry Tan's own project.
 
 gbrain is Garry Tan's own project.
+
+<details>
+<summary>Agent notes</summary>
+
+| Record | |
+|---|---|
+| Grade | No outcome under the preregistered rule (#112 section 3.5): the procedure gate failed. One model, one pass, a development-only suite. The 12-unit line below is exploratory. |
+| Preregistration | [2026-11-01-geva-101-r48-follow-ups-prereg](../../plans/2026-11-01-geva-101-r48-follow-ups-prereg/README.md), section 3 (#112, main f0b81c0), amended by [2026-11-02-geva-122-r2-amendment](../../plans/2026-11-02-geva-122-r2-amendment/README.md) (#129, main eae6efc) |
+| Build | gstack-evals f255edf5e6e7f9ddcfc37b792058500edae3643d (#124's merge commit), clean, checked before each grid ([run-log.txt](run-log.txt)); judging and scoring at the rig pin 715f837 |
+| gstack under test | garrytan/gstack 77fe28c39796cf5573e3d0836b83b2ee436a8f12 (v1.92.39.0), interactive render |
+| Model under test | claude-opus-5-5 (Anthropic API), both arms |
+| Harness | review-units at the build, Claude Code CLI 2.1.314 driven through the Agent SDK's query() with streaming input, one non-interactive session per unit, claude-code-preset on both arms, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1, 200 turns and $40 per session, --cap-stops |
+| Run | 2026-11-02 UTC. none-r2 03:20 to 04:18 (run review-units-20261102T032019Z-d912), gstack-full 05:13 to 06:35 (run review-units-20261102T045455Z-0e5e), judging from 06:42, one Capy machine at --parallel 2 |
+| Data | final judged arms, tree sha256 32d8b1eff4cd3d19a9f1775d701a70c88185365fa57d3d1488d2a48d2bc11b7f (gstack-full) and 17dc602a973143061691452f76b292ac9af803674fda078402dae86c3736ff86 (none-r2), not published (see What is held out) |
+| Spend | $85.39, settled through the ledger on four items |
+
+**Caps and timeout.** The Captain (GEVA-2) raised both grid items to $760 (#112 set $25 and $325) and set --timeout 10800 on both arms. The grids spent $84.06 in all.
+
+2. **Disk.** The machine has a 65 GB disk. none-r2's first lease died on ENOSPC at 03:44:29Z, was settled by hand at $14.395891, and the run resumed with --resume --parallel 2 --spend-cap 745.60. gstack-full's first attempt died on ENOSPC in unit preparation, before any lease. 40 replicator-only tree tars (1.2 to 1.3 GB each) were deleted, 34 by hand and 6 by a disk guard; their sha256 stay in each run's units.json. Both arms ran at --parallel 2.
+
+| Unit | Turns | Agent calls | Readers dispatched (gate names) | Last tool call | Metered cost | Last message, paraphrased |
+|---|---|---|---|---|---|---|
+| gbrain#7511 | 22 | 2 | other | Agent | $1.61 | both reviewers running in the background; it will wait for them |
+| gbrain#7684 | 17 | 2 | other | ToolSearch | not metered | reviewers still running; the branch's tests pass; report when they return |
+| gbrain#7789 | 44 | 6 | adversarial-native, batched, performance, red-team, security, testing | ScheduleWakeup (1,200 s) | $5.68 | four of five specialists back, two critical bypasses confirmed by probes; waiting on two readers |
+| gbrain#7901 | 22 | 3 | maintainability, other, testing | ScheduleWakeup (1,200 s) | $2.25 | its own pass done, the branch's tests pass; will merge findings when readers report |
+| gstack#3475 | 50 | 6 | adversarial-native, maintainability, performance, security, simplification, testing | ScheduleWakeup (1,200 s) | $5.06 | waiting on two readers |
+| gstack#3507 | 28 | 6 | adversarial-native, maintainability, performance, red-team, simplification, testing | ToolSearch | $4.08 | listed five confirmed issues; report when the red team finishes |
+| gstack#3516 | 14 | 2 | other | ToolSearch | $1.48 | both readers still running; report when they return |
+
+The six metered ones cost $20.16, a third of gstack-full's metered spend.
+
+**Cost**
+
+| Ledger item | Cap | Settled |
+|---|---|---|
+| r2a-grid (none-r2), 2 leases | $760 (#112: $25) | $21.47 |
+| r2b-grid (gstack-full), 1 lease | $760 (#112: $325) | $62.59 |
+| r2-judge-match | $25 | $0.72 |
+| r2-judge-adjudicate | $25 | $0.62 |
+| **Total** | | **$85.39** |
+
+The ledger record is all settled, with no open reserve. none-r2's first lease was settled by hand at $14.40: $10.90 metered plus $3.50 counted for 2 calls whose cost was unknown when it died. The 19 kept none-r2 sessions meter $15.70, so about $5.77 of the item went to those 2 calls and to work that died with the first lease and ran again. gstack-full's lease covers all 19 sessions; the per-session file has no meter row for gbrain#7684, so the 18 metered sessions sum to $60.41.
+
+Tokens and dollars per arm, summed from each session's metered row ([cost-gstack-full.tsv](cost-gstack-full.tsv), [cost-none-r2.tsv](cost-none-r2.tsv)):
+
+| Arm | Sessions metered | Input | Cache read | Cache write | Output | Total | Requests | Dollars | Mean per session |
+|---|---|---|---|---|---|---|---|---|---|
+| gstack-full | 18 of 19 | 2,262 | 81,294,907 | 5,966,497 | 719,359 | 87,983,025 | 1,161 | $60.41 | $3.36 |
+| none-r2 | 19 of 19 | 728 | 25,301,262 | 1,300,340 | 206,610 | 26,808,940 | 364 | $15.70 | $0.83 |
+
+On the 18 units metered in both, gstack-full used 4.9M tokens per unit against 1.4M (medians 3.4M and 1.0M) and $60.41 against $14.56. It also ran longer: a mean of 347 seconds a session against 222. Neither arm found a blocker, so there is no cost per success. The two judging batches cost $1.33; the record keeps their item totals, not a split by judge model.
+
+**Prices** are the scorer's table, src/runner/pricing/prices.ts at the build f255edf of 2026-11-02 (unchanged on main since a50deb5), in dollars per million tokens:
+
+| Model | Input | Output | Cache read | Cache write |
+|---|---|---|---|---|
+| claude-opus-5-5 (both arms, primary judge) | 4 | 20 | 0.20 | 5 |
+| claude-sonnet-5-5 (third judge) | 2 | 10 | 0.20 | 2.50 |
+| gpt-6.1-sol (second judge; above 272,000 input tokens: 4, 15, 0.20, 5) | 2 | 10 | 0.10 | 2.50 |
+
+Anthropic reports cache tokens beside input tokens, and the table prices them at their own rates. These rates reproduce every metered session's dollars to within $0.001, except gstack#3381 and gstack#3494, which each metered about $0.04 less than the table gives. The record doesn't say why.
+
+This run cost $84.06 for the grids and $1.33 for judging.
+
+</details>

@@ -2,7 +2,7 @@
 id: 2026-11-07-geva-384-r61-autoplan-gate-results
 kind: finding
 title: "R61 results: autoplan with gstack's opt-in stop gate read 0 of 2 told Opus 5.5 sessions exposed (fail at the early stop); the review loads ran but the frozen detector saw 2 of 6, so FIX-METHOD"
-summary: "Stop gate on (gstack ca5dbfc7), Opus 5.5, T-G: 0 of 2 exposed, fail at the early stop. Exploratory: all 6 review loads ran, the detector saw 2. FIX-METHOD. Paid $45.13."
+summary: "Stop gate on (gstack ca5dbfc7), Opus 5.5, T-G: 0 of 2 exposed, fail at the early stop. Exploratory: all 6 review loads ran, the detector saw 2. FIX-METHOD."
 author: GEVA-384
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -44,7 +44,7 @@ The gate worked as built. In both sessions it held the final stop until the phas
 
 An exploratory check on the sealed records, run after the verdict, found that the review-skill loads did happen. In both sessions every applicable phase read its whole review methodology, in the session's own records, before it published. The detector counted CEO's load and missed DX's and Eng's: the session piped the command that names the methodology file through python3, and the detector learns that file's path only from the command's raw JSON. With those loads counted, session 2 would read exposed and session 1 would not. That does not change the verdict.
 
-R48: **FIX-METHOD** (an exposure null, R61's one attempt). The attempt failed in part on gstack-evals' own detector, which R61 treats as a method limit, and the skill's load step ran in every phase, so there is no cut question. Paid spend was $45.13 against $509 in caps.
+R48: **FIX-METHOD** (an exposure null, R61's one attempt). The attempt failed in part on gstack-evals' own detector, which R61 treats as a method limit, and the skill's load step ran in every phase, so there is no cut question.
 
 ## How it works
 
@@ -58,7 +58,7 @@ The gate counts a publish from "Phase N ... complete" wording and also needs the
 
 - **Question.** With gstack's opt-in stop gate on, does told /autoplan on Opus 5.5 visibly run its procedure? The estimand is the share of told sessions that G's frozen detector reads exposed. The check passes at 3 of 4.
 - **Arm.** G's told autoplan arm with one change, the gstack pin: ca5dbfc7 (1.97.0.0), installed with `./setup --host claude --loadout lite --autoplan-gate` in a clean HOME that the session sees as /root. The pin also dropped G's skill-contract Stop hook and skill-route UserPromptSubmit hook (Limits). There is no none arm and no judge, because the check reads exposure only.
-- **Model and harness.** claude-opus-5-5 through Anthropic's API and the run's metering proxy. Claude Code 2.1.312 with the claude-code-preset system prompt, claude-agent-sdk 0.2.174, Harbor f3a5a92 with HARBOR_TELEMETRY=0, and CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The arm's limits from registry.json: $45, 400 turns, 4 hours, quiet 30 s, background wait 600 s. The session kind is interactive, and autoplan runs its default full kind with a Claude subagent as its outside voice. The registry turns t1 to t3 run verbatim (t2 is `/autoplan PLAN.md`), with the rec persona and its hold line.
+- **Model and harness.** claude-opus-5-5 through Anthropic's API and the run's metering proxy. Claude Code 2.1.312 with the claude-code-preset system prompt, claude-agent-sdk 0.2.174, Harbor f3a5a92 with HARBOR_TELEMETRY=0, and CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The session kind is interactive, and autoplan runs its default full kind with a Claude subagent as its outside voice. The registry turns t1 to t3 run verbatim (t2 is `/autoplan PLAN.md`), with the rec persona and its hold line.
 - **Tasks.** The first four distinct tasks of G's frozen autoplan draw on T-G: tg0b7b079452, tged20545f89, tgff24032962 and tg0a031169b2. One trial each, one at a time, in that order.
 - **Detector.** autoplanExposure in lanes/outcome-skills/arms/exposure.ts, sha256 074336a6f7d31c8669fc69e214c847c6251c9a550dfa4ca1d56c1d068258a0fd, unchanged since G's run. A session reads exposed only when config, scope, review_skills_loaded and findings_in_order all pass.
 - **Rules.** Intention to treat. A gap reruns once in the whole check. The early stop comes at 3 exposed or 2 not exposed. A cap stop is an incomplete run.
@@ -100,8 +100,6 @@ The gate counts a publish from "Phase N ... complete" wording and also needs the
 | /autoplan loads in t2 | 1 | 1 |
 | Model calls | 320, none refused | 168, none refused |
 | Tool calls | 409 | 182 |
-| Metered cost | $30.364065 | $13.524139 |
-| G's ungated told session on the same task (trial 1, prereg section 6) | $28.05 | $5.52 |
 
 None of the question-stop risks in prereg section 2 showed up. Each session asked the persona one question, which got the recommended reply, and no prose question went unanswered. No session loaded /autoplan a second time (prereg section 5, item 3).
 
@@ -116,24 +114,6 @@ The R48 reading turns on one question the frozen readings can't answer: did the 
 5. **Subagents loaded nothing.** Each session made 6 Agent calls (general-purpose, no model override). Their records hold 3 and 5 Reads, none of them a review SKILL.md or a methodology file.
 6. **Publishes.** In both sessions the first run of publish no-ops (ceo, dx, eng, eng in session 1; ceo, ceo, dx, eng, eng in session 2) came with no "Phase N complete" line in the session's own text since the previous no-op. Of the 7 reports the detector counted, 6 came after a gate block. In session 1, eng came before any block, ceo and eng after the first block and dx after the second. In session 2, ceo, dx and eng came after the first, second and third blocks.
 7. **A widened reading.** A detector that also credited a Read of the phase's own methodology file (autoplan-<phase>-methodology-*/methodology.md) before that phase's first publish reads session 2 exposed, with all four checks true, and session 1 not exposed on findings_in_order. That is 1 of 2, which would still leave the 3-of-4 rule undecided. It is not the frozen reading, and the verdict stands.
-
-## Cost
-
-**Paid** (the ledger, wave 1 envelope).
-
-| Item | Charged to | Leases | Settled | Cap | Share of cap |
-|---|---|---|---|---|---|
-| ap-r61, model calls | autoplan | ap-r61.0001.6fd211 $30.364065; ap-r61.0002.5e8cfe $13.524139 | $43.888204 | $500 | 8.8% |
-| r61-vm, run host hours | autoplan | r61-vm.0001.c7aae7 3.393 h $1.0179; r61-vm.0002.9b6f09 0.762 h $0.2286 | $1.246500 | $9 | 13.9% |
-| **Paid** | | | **$45.134704** | **$509** | 8.9% |
-
-Both model-call leases settled with unknown $0.00 (settle.txt). The host hours run from the host's creation at 03:58:16Z to the teardown margin: 4.155 hours of a standard-8 at the Captain's $0.30 reserve rate. After settling, wave 1 reads $1,434.041177 committed of $10,000 with nothing open, and autoplan's line on the ledger reads $867.078548 settled of $2,000.
-
-**Prices.** Opus 5.5 in dollars per million tokens, from src/runner/pricing/prices.ts at the run commit, as the proxy used them on 2026-11-07: input 4, output 20, cache read 0.20, cache write 5. Per-session token totals are not in the export, so the dollar figures are the proxy's and the ledger's.
-
-**Crew**, from the thread counters at the Captain's rate of $1 per 1,000 credits: the prereg thread (GEVA-375) $27.43 and 77.7M tokens; the run thread with its two operator subagents (GEVA-382) $23.98 and 63.3M tokens; this post's thread (GEVA-384) about $5 when the post was written, not final.
-
-**autoplan's line, all-in.** The ledger's $867.08 holds autoplan's paid share, $474.68 from G (g-ap plus half of g-none, g-vm and g-tg) and $45.13 from R61, plus $347.26 of crew rows: half of the $694.53 recorded for 19 G threads on 2026-11-05. Read from the counters instead, G's 29 threads (those 19 and the 10 that followed, through G's results post) came to $906.79, and autoplan's half is $453.40. So autoplan's line stands at $519.82 paid plus $453.40 of G crew plus $51.41 of R61 crew, $1,024.62, plus this post's thread: about $1,030 of $2,000. gstack's own lane built the gate, and that work is not on this line.
 
 ## Why null? (R48)
 
@@ -153,7 +133,7 @@ Where it goes, as prereg section 9 says for fewer than 3 exposed:
 
 - **To gstack's maintainers,** with the per-check reasons and the gate's reading above. In both sessions the first run of publish no-ops came with no phase report, 6 of the 7 counted reports came after a gate block, and session 1 published Eng's report first.
 - **To gstack-evals.** The detector's methodology-path rule fails closed on piped output. A fix credits a Read of the phase's own methodology file, keeps refusing a load that comes after the phase's publish, and needs tests in both directions before any reuse. G's 0 of 23 used the same rule, and G's session records were deleted when its custody closed, so G can't be re-read for this miss.
-- **A confirmatory reading** needs a new preregistered check with the fixed detector. An outcome retest still needs tasks with headroom, and prereg section 9 prices autoplan alone at about $2,810 or more for a 24 x 4 design at G's metered prices, more than the line has left (about $970).
+- **A confirmatory reading** needs a new preregistered check with the fixed detector.
 
 ## Deviations
 
@@ -164,8 +144,8 @@ None changes the arm, a task, the detector, a scoring rule, a cap or the verdict
 3. **Empty jobs folder.** r61-harbor-job.sh appends to the jobs folder's launch.log (line 94) before `one` creates that folder (line 71), so the first batch launch exited at once and spent nothing. Creating the empty folder fixed it. The run file was not edited.
 4. **rig.yml dispatch.** Main's push at 2b596ec6 touched no rig path, so no rig.yml run existed there and `rig admit` refused. rig.yml was dispatched at 2b596ec6 from a temporary branch (run 42343856227, green), every admit used that run, and the branch was deleted afterwards.
 5. **Host adoption.** The host was created without a recovery bundle, so its ssh key existed only on its creator's machine. The creating thread added the run thread's public key. Nothing else on the host changed.
-6. **Relaunch, the Captain's one named deviation.** The first batch ran without bun on PATH, so after session 1 the job file could not read the session, and an end watcher with no settled check settled the driver (lease 1, $30.364065, one session). The Captain ruled that an operator error is not a cap or arm stop. A new driver ran sessions 2 to 4 with `--planned 3 --reruns 1`, so the check still totals 4 sessions and one rerun, on a second ap-r61 lease with slot-2 admits naming run r61. Session 1's reading stands. A guarded end script, keyed on the job file's "settled:" line, was tested on stand-in logs before the paid relaunch.
-7. **Second hours lease.** The operator reused the first hours lease's cell task, so the reserve failed with E_RESERVE_CONFLICT after lease r61-vm.0002.9b6f09 opened, and the lease held the item's remaining $7.98 for a few minutes. A kit script (r61-hours-settle-open.ts) settled that open lease at $0.2286 under its own meter id. No run file changed.
+6. **Relaunch, the Captain's one named deviation.** The Captain ruled that an operator error is not a cap or arm stop. A new driver ran sessions 2 to 4 with `--planned 3 --reruns 1`, so the check still totals 4 sessions and one rerun, on a second ap-r61 lease with slot-2 admits naming run r61. Session 1's reading stands. A guarded end script, keyed on the job file's "settled:" line, was tested on stand-in logs before the paid relaunch.
+7. **Second hours lease.** No run file changed.
 8. **Reading session 1 during the relaunch check.** Session 1's result was read from its job folder's read.txt, because batch2.log fills only at the batch's end.
 9. **The pre-R48 opening.** At the Captain's request, this post's thread opened the sealed trial records once, on its own machine, for the exploratory check. The prereg names no such opening. It reads no outcome and changes no reading.
 10. **Run files not attached.** Prereg section 7 says the run files are published as text with the results, and the run thread's handoff asked for them and the dry run part 2 kit as .txt files beside this post. Prereg section 7 cites them by sha256, and this post leaves their text in the project-user drive (Replicate it), because attaching scripts moves the post's review from the docs class to a code-class /ship. They can follow in a post of their own.
@@ -213,3 +193,46 @@ Harbor is Apache-2.0. gstack at the pin is MIT. Claude Code is Anthropic's propr
 ## Disclosures
 
 gstack is Garry Tan's own project.
+
+<details>
+<summary>Agent notes</summary>
+
+Paid spend was $45.13 against $509 in caps.
+
+The arm's limits from registry.json: $45, 400 turns, 4 hours, quiet 30 s, background wait 600 s.
+
+| | Session 1 | Session 2 |
+|---|---|---|
+| How t2 ended | quiet; termination completed; no exception | quiet; termination completed; no exception |
+| Persona in t2 | 1 question (recommended reply), 0 prose | 1 question (recommended reply), 0 prose |
+| /autoplan loads in t2 | 1 | 1 |
+| Model calls | 320, none refused | 168, none refused |
+| Tool calls | 409 | 182 |
+| Metered cost | $30.364065 | $13.524139 |
+| G's ungated told session on the same task (trial 1, prereg section 6) | $28.05 | $5.52 |
+
+**Cost**
+
+**Paid** (the ledger, wave 1 envelope).
+
+| Item | Charged to | Leases | Settled | Cap | Share of cap |
+|---|---|---|---|---|---|
+| ap-r61, model calls | autoplan | ap-r61.0001.6fd211 $30.364065; ap-r61.0002.5e8cfe $13.524139 | $43.888204 | $500 | 8.8% |
+| r61-vm, run host hours | autoplan | r61-vm.0001.c7aae7 3.393 h $1.0179; r61-vm.0002.9b6f09 0.762 h $0.2286 | $1.246500 | $9 | 13.9% |
+| **Paid** | | | **$45.134704** | **$509** | 8.9% |
+
+Both model-call leases settled with unknown $0.00 (settle.txt). The host hours run from the host's creation at 03:58:16Z to the teardown margin: 4.155 hours of a standard-8 at the Captain's $0.30 reserve rate. After settling, wave 1 reads $1,434.041177 committed of $10,000 with nothing open, and autoplan's line on the ledger reads $867.078548 settled of $2,000.
+
+**Prices.** Opus 5.5 in dollars per million tokens, from src/runner/pricing/prices.ts at the run commit, as the proxy used them on 2026-11-07: input 4, output 20, cache read 0.20, cache write 5. Per-session token totals are not in the export, so the dollar figures are the proxy's and the ledger's.
+
+**Crew**, from the thread counters at the Captain's rate of $1 per 1,000 credits: the prereg thread (GEVA-375) $27.43 and 77.7M tokens; the run thread with its two operator subagents (GEVA-382) $23.98 and 63.3M tokens; this post's thread (GEVA-384) about $5 when the post was written, not final.
+
+**autoplan's line, all-in.** The ledger's $867.08 holds autoplan's paid share, $474.68 from G (g-ap plus half of g-none, g-vm and g-tg) and $45.13 from R61, plus $347.26 of crew rows: half of the $694.53 recorded for 19 G threads on 2026-11-05. Read from the counters instead, G's 29 threads (those 19 and the 10 that followed, through G's results post) came to $906.79, and autoplan's half is $453.40. So autoplan's line stands at $519.82 paid plus $453.40 of G crew plus $51.41 of R61 crew, $1,024.62, plus this post's thread: about $1,030 of $2,000. gstack's own lane built the gate, and that work is not on this line.
+
+An outcome retest still needs tasks with headroom, and prereg section 9 prices autoplan alone at about $2,810 or more for a 24 x 4 design at G's metered prices, more than the line has left (about $970).
+
+**Relaunch, the Captain's one named deviation.** The first batch ran without bun on PATH, so after session 1 the job file could not read the session, and an end watcher with no settled check settled the driver (lease 1, $30.364065, one session).
+
+**Second hours lease.** The operator reused the first hours lease's cell task, so the reserve failed with E_RESERVE_CONFLICT after lease r61-vm.0002.9b6f09 opened, and the lease held the item's remaining $7.98 for a few minutes. A kit script (r61-hours-settle-open.ts) settled that open lease at $0.2286 under its own meter id.
+
+</details>

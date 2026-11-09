@@ -33,17 +33,17 @@ Failure handling follows the preregistration, with two departures from the pinne
 
 Primary, with verifier timeouts counted as 0 and the six outage-orphan zero-request trials reclassified as infrastructure (both documented above and reversed in the sensitivities):
 
-| Model | Arm | Trials | Pass rate [95% CI] | Cost | Cost per success | Budget stops | Timeouts |
-|---|---|---|---|---|---|---|---|
-| Opus 5.5 | none | 59 | 63% [45%, 82%] | $10.30 | $0.28 | 0 | 3 |
-| Opus 5.5 | gstack | 58 | 68% [48%, 87%] | $10.75 | $0.28 | 0 | 0 |
-| Opus 5.5 | placebo | 58 | 68% [52%, 85%] | $10.55 | $0.27 | 0 | 1 |
-| Haiku 5.5 | none | 58 | 55% [37%, 72%] | $0.58 | $0.02 | 0 | 3 |
-| Haiku 5.5 | gstack | 58 | 50% [32%, 68%] | $0.64 | $0.02 | 0 | 1 |
-| Haiku 5.5 | placebo | 59 | 60% [42%, 77%] | $0.59 | $0.02 | 0 | 4 |
-| DeepSeek V4.1 Flash | none | 59 | 66% [48%, 83%] | $4.25 | $0.11 | 1 | 5 |
-| DeepSeek V4.1 Flash | gstack | 60 | 67% [50%, 82%] | $5.20 | $0.13 | 2 | 6 |
-| DeepSeek V4.1 Flash | placebo | 59 | 59% [42%, 77%] | $4.67 | $0.13 | 2 | 10 |
+| Model | Arm | Trials | Pass rate [95% CI] | Cost per success | Budget stops | Timeouts |
+|---|---|---|---|---|---|---|
+| Opus 5.5 | none | 59 | 63% [45%, 82%] | $0.28 | 0 | 3 |
+| Opus 5.5 | gstack | 58 | 68% [48%, 87%] | $0.28 | 0 | 0 |
+| Opus 5.5 | placebo | 58 | 68% [52%, 85%] | $0.27 | 0 | 1 |
+| Haiku 5.5 | none | 58 | 55% [37%, 72%] | $0.02 | 0 | 3 |
+| Haiku 5.5 | gstack | 58 | 50% [32%, 68%] | $0.02 | 0 | 1 |
+| Haiku 5.5 | placebo | 59 | 60% [42%, 77%] | $0.02 | 0 | 4 |
+| DeepSeek V4.1 Flash | none | 59 | 66% [48%, 83%] | $0.11 | 1 | 5 |
+| DeepSeek V4.1 Flash | gstack | 60 | 67% [50%, 82%] | $0.13 | 2 | 6 |
+| DeepSeek V4.1 Flash | placebo | 59 | 59% [42%, 77%] | $0.13 | 2 | 10 |
 
 ## Arm contrasts
 
@@ -72,10 +72,6 @@ This is the finding to carry upstream: on this task set gstack has no autonomous
 ## Model ladder
 
 The preregistration asked how much of the gap to Opus 5.5 gstack closes for the cheap models. On this data the ratio is uninformative for both and we do not report a point estimate. For Haiku, the bootstrap interval on the share of gap closed spans an implausible range (roughly -700% to +56%), because gstack moved Haiku the wrong way and the denominator gap is small; the ratio reads like a number but is a missing estimate. For DeepSeek, no-skills DeepSeek (66%) already sits at or above no-skills Opus (63%), so there is no gap to close and the ratio is undefined. The raw cell rates above are the honest summary.
-
-## Cost
-
-Total spend was $48.02 against the $190 cap. Per cell: Opus about $10, DeepSeek about $4 to $5, Haiku about $0.60. gstack cost slightly more than no skills on every model, from the longer prompt, and bought no additional successes. The per-cell Cost column sums to $47.53, the metered cost across every trial session; the $0.49 gap to the $48.02 ledger total is spend the ledger meters on superseded retry attempts and outage-interrupted reserves that no final trial session records.
 
 ## Sensitivities
 
@@ -107,7 +103,7 @@ Eleven trials are infrastructure failures, excluded from grading: five from a pr
 
 Two completeness notes, each a distinct line:
 
-- Eleven reserves were orphaned when a machine outage at 22:55 UTC stopped their agents, releasing $26 of reserved budget. Six made zero model requests and the analysis would have graded them only because the verifier passed a near-initial container, so they are the six reclassified as infrastructure above: `break-filter-js-from-html__NQc7huB`, `overfull-hbox__5oxRhk4`, `overfull-hbox__HQpTei4`, `overfull-hbox__QadGi83`, `overfull-hbox__j4aGqk7` and `overfull-hbox__8KHzPEi`. Three completed on a retry with real requests and cost and are graded normally: `overfull-hbox__uCTgY8Z`, `overfull-hbox__EwJLhsU` and `configure-git-webserver__7RgM8MX`. One is an infrastructure failure from a proxy 500, `overfull-hbox__a5kFWUu`. One, `mailman__JKNDNP8`, wrote no `result.json`.
+- Eleven reserves were orphaned when a machine outage at 22:55 UTC stopped their agents. Six made zero model requests and the analysis would have graded them only because the verifier passed a near-initial container, so they are the six reclassified as infrastructure above: `break-filter-js-from-html__NQc7huB`, `overfull-hbox__5oxRhk4`, `overfull-hbox__HQpTei4`, `overfull-hbox__QadGi83`, `overfull-hbox__j4aGqk7` and `overfull-hbox__8KHzPEi`. Three completed on a retry with real requests and cost and are graded normally: `overfull-hbox__uCTgY8Z`, `overfull-hbox__EwJLhsU` and `configure-git-webserver__7RgM8MX`. One is an infrastructure failure from a proxy 500, `overfull-hbox__a5kFWUu`. One, `mailman__JKNDNP8`, wrote no `result.json`.
 - Of the 540 designed trials, 528 are graded, 11 are infrastructure failures, and 1 is absent (`mailman__JKNDNP8`, no `result.json`).
 
 ## Shas behind the tables
@@ -125,3 +121,26 @@ Two completeness notes, each a distinct line:
 ## What this steers
 
 On this task set the gstack skills never fire on their own, so the gstack arm is no skills plus a longer prompt and files the agent does not open. That explains the flat-to-tied result against no skills and the loss to a length-matched placebo on Haiku. The next step, quick look 2, drops the autonomous path and tests an explicitly invoked gstack body against a length-matched placebo body, with the surviving-process instrument this run lacked.
+
+<details>
+<summary>Agent notes</summary>
+
+| Model | Arm | Trials | Pass rate [95% CI] | Cost | Cost per success | Budget stops | Timeouts |
+|---|---|---|---|---|---|---|---|
+| Opus 5.5 | none | 59 | 63% [45%, 82%] | $10.30 | $0.28 | 0 | 3 |
+| Opus 5.5 | gstack | 58 | 68% [48%, 87%] | $10.75 | $0.28 | 0 | 0 |
+| Opus 5.5 | placebo | 58 | 68% [52%, 85%] | $10.55 | $0.27 | 0 | 1 |
+| Haiku 5.5 | none | 58 | 55% [37%, 72%] | $0.58 | $0.02 | 0 | 3 |
+| Haiku 5.5 | gstack | 58 | 50% [32%, 68%] | $0.64 | $0.02 | 0 | 1 |
+| Haiku 5.5 | placebo | 59 | 60% [42%, 77%] | $0.59 | $0.02 | 0 | 4 |
+| DeepSeek V4.1 Flash | none | 59 | 66% [48%, 83%] | $4.25 | $0.11 | 1 | 5 |
+| DeepSeek V4.1 Flash | gstack | 60 | 67% [50%, 82%] | $5.20 | $0.13 | 2 | 6 |
+| DeepSeek V4.1 Flash | placebo | 59 | 59% [42%, 77%] | $4.67 | $0.13 | 2 | 10 |
+
+**Cost**
+
+Total spend was $48.02 against the $190 cap. Per cell: Opus about $10, DeepSeek about $4 to $5, Haiku about $0.60. gstack cost slightly more than no skills on every model, from the longer prompt, and bought no additional successes. The per-cell Cost column sums to $47.53, the metered cost across every trial session; the $0.49 gap to the $48.02 ledger total is spend the ledger meters on superseded retry attempts and outage-interrupted reserves that no final trial session records.
+
+Eleven reserves were orphaned when a machine outage at 22:55 UTC stopped their agents, releasing $26 of reserved budget.
+
+</details>

@@ -133,11 +133,7 @@ Three cases decide most of the escaped recall: every Opus and Haiku trial caught
 
 ## Exploratory: Opus at effort high
 
-The preregistered exploratory cell ran because the grid and its judging left $43.38 committed, under the $52 bar. Opus at effort `high` ran the gstack arm on the 6 escaped defects, 1 trial each. It caught d13, d14, d11, d12 and d15 and missed d04: 5 of 6 (83%), against 4 of 6 (67%) for Opus at `medium` in trial 1 on the same cases. That is +17 pts [0, 50], one case better and none worse. Its recall at CRITICAL was 50% against 33%. It cost $5.05 against $4.31 for those 6 units, with 17,800 output tokens per unit against 11,600. The judge saw the Opus-high findings in batches of their own, while the medium cell's findings were judged in batches mixed with other cells. This cell enters no other table above.
-
-## Cost
-
-Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5.43, gstack $31.05), DeepSeek $5.36, Haiku $1.18. The judge cost $0.39, and the Opus-high cell $5.05. The total is $48.46. DeepSeek's figure includes $0.81 settled at the worst case for 17 calls: 16 cut off by the harness restarts ($0.76) and one whose reply carried no cost (the core call in DeepSeek gstack y11 trial 2, which OpenRouter returned without `usage.cost`). The seven DeepSeek replies that ended in a provider error settled at $0, so DeepSeek spend is slightly understated. Per 72 units, gstack's prompts cost 5.7 times the plain prompt on Opus, 4.0 times on Haiku and 2.9 times on DeepSeek.
+The preregistered exploratory cell ran because the grid and its judging stayed under its preregistered bar. Opus at effort `high` ran the gstack arm on the 6 escaped defects, 1 trial each. It caught d13, d14, d11, d12 and d15 and missed d04: 5 of 6 (83%), against 4 of 6 (67%) for Opus at `medium` in trial 1 on the same cases. That is +17 pts [0, 50], one case better and none worse. Its recall at CRITICAL was 50% against 33%. It cost $5.05 against $4.31 for those 6 units, with 17,800 output tokens per unit against 11,600. The judge saw the Opus-high findings in batches of their own, while the medium cell's findings were judged in batches mixed with other cells. This cell enters no other table above.
 
 ## Limitations
 
@@ -172,3 +168,14 @@ The Captain accepted two quick-look shortcuts that the rig must close:
 4. Cut false alarms on Haiku with gstack before any cheap-model ladder run. gstack's prompts double Haiku's false alarms, which gives back part of the cost win.
 5. For DeepSeek, raise the output limit or lower the effort on both arms, so the plain prompt finishes.
 6. Check decoy y09 for a real defect.
+
+<details>
+<summary>Agent notes</summary>
+
+The preregistered exploratory cell ran because the grid and its judging left $43.38 committed, under the $52 bar.
+
+**Cost**
+
+Ledger item `replay-quick`, cap $60. The grid cost $43.02: Opus $36.48 (plain $5.43, gstack $31.05), DeepSeek $5.36, Haiku $1.18. The judge cost $0.39, and the Opus-high cell $5.05. The total is $48.46. DeepSeek's figure includes $0.81 settled at the worst case for 17 calls: 16 cut off by the harness restarts ($0.76) and one whose reply carried no cost (the core call in DeepSeek gstack y11 trial 2, which OpenRouter returned without `usage.cost`). The seven DeepSeek replies that ended in a provider error settled at $0, so DeepSeek spend is slightly understated. Per 72 units, gstack's prompts cost 5.7 times the plain prompt on Opus, 4.0 times on Haiku and 2.9 times on DeepSeek.
+
+</details>

@@ -2,7 +2,7 @@
 id: 2026-11-02-geva-153-run-d-discovery-results
 kind: finding
 title: "Saying when to use /investigate raised untold skill opens by 5.9 points pooled [1.4, 10.8], all of it on GPT-6.1 Sol; Opus 5.5 and particle-1 opened no skill in 481 trials"
-summary: "Run D, 37 TB2 tasks, untold. Pooled D2 +5.9 pp [1.4, 10.8], p 0.039, all from Sol (27.0% vs 9.5%). Opus, particle-1: 0 opens in 481 trials. D3 flat. R48 KEEP. $83.68 of $126."
+summary: "Run D, 37 TB2 tasks, untold. Pooled D2 +5.9 pp [1.4, 10.8], p 0.039, all from Sol (27.0% vs 9.5%). Opus, particle-1: 0 opens in 481 trials. D3 flat. R48 KEEP."
 author: GEVA-153
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -60,7 +60,7 @@ An **open** is a Skill call naming an installed skill, a Read of a `/.claude/ski
 
 **Arms.** none (an empty skills folder: no gstack installed, the no-gstack arm), gstack (v1.91.295.0 as its setup installs it, #109's tar), gstack-rewritten (the gstack tar with only /investigate's description line replaced by the frozen 319-character text that says when to use it), and placebo (every gstack skill folder with its front matter kept and its body replaced by procedure-free prose of the same token count, so its listing is byte-identical to gstack's). Tar digests are in the prereg's section 3; the grid check confirmed each arm tar equals its committed manifest.
 
-**Models and routes.** claude-opus-5-5 (Anthropic, session cap $5.00), particle-1 (particle-ai/particle-1 on OpenRouter, particle-ai only, $0.50), gpt-6.1-sol (openai/gpt-6.1-sol on OpenRouter, openai only, through OpenRouter's Anthropic-compatible endpoint, $2.50). All three passed their route check on the first attempt (smoke task with a tool result, and a listing session whose reply quotes /investigate's description) for $0.144349. Haiku and Sonnet are not models under test (org R54).
+**Models and routes.** claude-opus-5-5 (Anthropic), particle-1 (particle-ai/particle-1 on OpenRouter, particle-ai only), gpt-6.1-sol (openai/gpt-6.1-sol on OpenRouter, openai only, through OpenRouter's Anthropic-compatible endpoint). All three passed their route check on the first attempt (smoke task with a tool result, and a listing session whose reply quotes /investigate's description). Haiku and Sonnet are not models under test (org R54).
 
 **Harness.** Claude Code 2.1.312 through claude-agent-sdk 0.2.174 under Harbor f3a5a923, `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1`, the same prompt wrapper in every arm, untold (no prompt names a skill), turn cap 60. System prompt `claude-code-preset` (Claude Code's own) in every model's cells, plus `sdk-default` (none) on Opus for none, gstack and gstack-rewritten.
 
@@ -76,7 +76,7 @@ An **open** is a Skill call naming an installed skill, a Read of a `/.claude/ski
 
 ![Untold skill opens and pass rate per preset cell](chart.png)
 
-Left: trials that opened a listed skill (the label is the cell's printed rate times 37; Opus cells had 36 eligible trials). Right: pass rate with its 95% interval and the scorer's cost per trial, both from output-primary.txt. The cost label on particle-1 none is the scorer's $0.066, which leaves out one trial; that cell's metered cost is $0.073 per trial (see the note under the preset cell table).
+Left: trials that opened a listed skill (the label is the cell's printed rate times 37; Opus cells had 36 eligible trials). Right: pass rate with its 95% interval and the scorer's cost per trial, both from output-primary.txt.
 
 **Primary readings, verbatim from the scorer** (output-primary.txt):
 
@@ -129,9 +129,7 @@ Every open loaded the skill's body. The procedure gate (GEVA-100's DEBUG REPORT 
 | Sol gstack-rewritten | 86.5% [75.7, 97.3] | 0.169 | 0.195 | 70,027 | 0 / 0 / 0 |
 | Sol placebo | 86.5% [75.7, 97.3] | 0.170 | 0.197 | 70,041 | 0 / 0 / 0 |
 
-Cost per trial and per success are metered. The scorer reads each trial's cost from that trial's summary file. One particle-1 none trial (torch-pipeline-parallelism) hit the agent timeout and wrote no summary file, so the scorer counted it at $0 and printed $0.066 per trial and $0.091 per success for that cell (output-primary.txt). The proxy metered $0.244 for that trial, so the row gives the cell's metered $2.691 over 37 trials and 27 passes (cost-output.txt). In every other cell the scorer's figure equals the metered one.
-
-Opus under sdk-default (secondary): none, gstack and gstack-rewritten each passed 83.8% [70.3, 94.6], at $0.139, $0.139 and $0.145 per trial.
+Opus under sdk-default (secondary): none, gstack and gstack-rewritten each passed 83.8% [70.3, 94.6].
 
 **gstack and its variants against no gstack, per model** (pass, exploratory):
 
@@ -146,7 +144,91 @@ On Opus and particle-1 no skill body was ever opened, so any pass difference the
 
 **Retried-after-response sensitivity (section 7).** One Opus trial (sparql-university, gstack-rewritten@sdk-default) was rerun by Harbor after a model response: the first attempt ran 6 requests, its session close returned 500, and the proxy never wrote that session's record. output-recovered.txt adds the record rebuilt from the request log (recovered-sessions.jsonl). It changes two lines: that cell's retried count goes from 0 to 1, and its gstack-rewritten minus none reading with the retried trial scored 0 goes from +0.0 [-8.1, +8.1] to -2.7 [-10.8, +5.4]. No primary reading moves.
 
-## Cost
+## Why null? (R48)
+
+Three readings are null or lean negative. Each gets one cycle. The exposure rates sit beside each verdict.
+
+**1. D3 on Opus: the preset changed nothing (0 against 0).** Exposure: the listing reached Opus under both prompts (route check, and first-request tokens with gstack 2,400 above none under each prompt), but Opus opened nothing under either: 0 of 148 trials. Task fit: the same tasks drew 17 opens from Sol, so they offer reasons to open. Power and floor: both cells sit at the floor; the MDD is 10.9 to 15.4 points, so a smaller prompt effect is not ruled out. Frontier competence: Opus passes 81.1% with no gstack under the preset and 83.8% under sdk-default, so it solves most tasks without looking. **Verdict: KEEP.** No evidence that the stub prompt was why earlier untold runs saw no opens, so this run gives no reason to change the prompt those runs used. The test cannot rule out a prompt effect smaller than its MDD (10.9 to 15.4 points), so it does not claim the effect is absent. Exposure beside it: opens 0 of 148 Opus gstack trials.
+
+**2. Opus and particle-1 opened no skill under either description.** Exposure: the listing reached both models (both quoted /investigate's description in the route check), and the rewritten text was in the listing (the dry run confirmed it), yet neither model made a Skill call, browsed the skills folder or opened a built-in skill in any of 481 trials. Task fit: Sol's opens show that the tasks give the rewritten /investigate a reason to be opened. Power: the D1 upper bounds are 8.0% (Opus) and 7.8% (particle-1); the per-model D2 MDD is 22.3 to 25.8 points. Frontier competence: Opus passes 81.1% and particle-1 73.0% with no gstack. **Verdict: KEEP** the rewrite direction that the pooled D2 supports, and record that description text alone does not produce untold use on Opus 5.5 or particle-1. Untold use on those two models needs another route, such as hooks (agenda item 1). Exposure beside it: 0 opens in 481 trials.
+
+**3. Sol's pass rate with the rewritten description: -2.7 points against no gstack [-8.1, +0.0].** Exposure: 10 of 37 rewritten trials opened a skill and 9 of those passed; 4 of the cell's 5 failures came from the 27 trials that opened nothing (23 passed). So the loss does not sit in the trials that read the skill. Task fit: 8 of 10 opens were /investigate on debugging or recovery tasks. Power and ceiling: Sol's control is 89.2%, near the ceiling, and section 12 says benefit after an open cannot carry a verdict at these counts. Frontier competence: Sol solves 33 of 37 tasks with no gstack. **Verdict: KEEP.** No evidence here that an opened skill hurt Sol; the procedure gate passed in no trial, so this run says nothing about whether running /investigate's procedure helps. Exposure beside it: /investigate loaded in 8 of 37 rewritten trials, Phase 5 report in 0 of 8.
+
+## What it means for gstack (section 12)
+
+The pooled D2 was raised, so section 12 reads: saying when to use a skill gets it opened, gstack should rewrite its skill descriptions that way, and the per-model rows say where to look first. Here that is Sol alone. On Opus 5.5 and particle-1 no description wording produced an open, and on Sol the opens did not raise the pass rate or run the procedure to its report. A gstack description rewrite is cheap (the rewritten /investigate line is 259 characters longer than the shipped one), so it is a reasonable change for Sol users, but this run does not show it helps Opus users or that opened skills improve results.
+
+## Deviations from the prereg
+
+1. **Ledger ceiling.** The ceiling, the reserves and the metered spend are in Agent notes.
+2. **Batch proxy caps under the Captain's rule.** The rule and the caps it set are in Agent notes.
+
+3. **First Opus attempt ended early on infrastructure; rerun fresh once, whole.** Both Opus VMs exited 5 about 2 minutes in, before any trial or ledger row. The VM driver looks up an arm's digest with a jq select that returns it twice when a batch lists the same arm twice (each arm under two system prompts) with `.tar.gz` arms. Section 7 counts this as an infrastructure early end. Both Opus batches were rerun fresh once, whole, with plain `.tar` arms holding the same bytes; the grid check passed again and the start rule passed for each. No spend, two VMs at 3 minutes each.
+4. **One settle written by hand.** The Opus session s-3ac119dfbd14 (the retried trial above) never reached the ledger, so it was settled by hand through the ledger service at its request-log cost, with `manual: true` on the row. The analysis's recovered reading adds that session's rebuilt record (Result).
+5. **Start-rule notes written in two steps.** `start-rule.ts check --note` exits 1 on the Drive mount after writing its row, because fsync returns ENOTSUP there. Each launch was gated on `check` without `--note` (exit 0), then the note row was written with `--note` and checked to match the gate's output exactly (run-log.txt).
+
+## Limits and threats
+
+- **One model carries the pooled D2.** The pooled test is the preregistered primary and it passes its gates, but Opus and particle-1 add only zeros. Sol's own row (+17.6 [+4.1, +32.4]) is exploratory with an MDD of 22.3 to 25.8 points, so this run makes no per-model claim for Sol.
+- **One skill rewritten, one trial per cell.** Only /investigate's description changed. The /cso opens were not caused by the rewrite. Each preset cell has one trial per task.
+- **Sol runs inside Claude Code** through OpenRouter's Anthropic-compatible endpoint. Its skill use in Codex or another harness may differ.
+- **No benefit shown.** Pass rates and the procedure gate after an open are reported, not tested; the counts are too small for a verdict.
+- **Refusals.** In each Opus cell one trial's first request was refused by the provider's safeguards, so it counts as failed and not eligible (section 7), and Opus's D1 runs over 36 tasks. The analysis counts a refusal message in a few other trials that still got responses (output-primary.txt).
+- **Public tasks.** TB2 is public, so its tasks may be in the models' training data. That bears on pass rates more than on opens.
+- **Stops.** Five sessions hit their session cap (particle-1 3, Sol 2) and are scored as section 7 says. One of them, Sol's gstack trial on filter-js-from-html, had opened /cso and counts as an open.
+
+## Replicate it
+
+1. **Reanalysis (keyless), not yet run from the bundle.** Nobody has rerun the analysis from the data bundle yet; the claim check lists it as pending. The steps it needs: check out tag `laneb-discovery-3-runner` (025135a4), `bun install`, fetch the data bundle (Captain drive handoffs/GEVA-153, not yet public), check SHA256SUMS and extract it. The bundle does not hold the four arm tars that analysis-configs.txt names under `arm_tars`, and the analysis opens each one, so rebuild them first. The one rebuild that has run is recorded in the prereg's section 9, under "Second-machine rebuild": on 2026-11-01 a fresh machine rebuilt none, gstack and placebo from #109's stored tars and gstack-rewritten with `arms/variants.ts`, all four matched the section 3 digests, and the prereg shows that nothing under `quick/laneb/arms` changed up to this tag. #109's stored tars are in the Captain drive at handoffs/GSTA-30/arms (not yet public) as .tar.gz files, each to be gunzipped to a plain .tar first; gstack's is split into six parts to join before that. Then point `arm_tars` at the rebuilt tars and `jobs`, `replicate_2_jobs` and `sessions` at the extracted tree, and run `bun quick/laneb/analysis/discovery-tax.ts <config>`. output-primary.txt and output-recovered.txt are what the run printed from its own paths; whether a rerun from the bundle matches them byte for byte is untested.
+2. **Rerun a cell (paid).** There is no direct-key path yet: a rerun needs the ledger service, the metering proxy and a Ubicloud VM, driven by the scripts in phase-scripts.txt. Expect run-to-run spread: these are one trial per task.
+
+phase-scripts.txt holds the operator scripts that ran (batch control, watch, ledger supervisor, grid check, the hand settle, config build, cost, the open cross-check, the chart and the bundle), and run-log.txt the run record and the lines they printed, with operator paths shown as `<work>`, `<captain-drive>` and `<ubicloud-skill>`. The record leaves out the VM-side Harbor and trial logs and the ledger rows themselves, which are in the data bundle, and the machine setup that Capy's project image provides. Before reusing batch.sh, note what GEVA-128 found in the same script: its ssh calls turn off host-key checking, and it deletes the key file it copies to the VM only after the run ends.
+
+## What is held out, and why
+
+Nothing. TB2 is public, and every task digest is pinned at the tag. The data bundle is not public yet. TB2's sanitize-git-repo and openssl-selfsigned-cert tasks write secret-shaped fixtures, which the bundle shows as `<redacted-fixture-secret>` or `<redacted-fixture-private-key>` (23 files). Three files still match the pattern scan, each only for the words "BEGIN PRIVATE KEY" in /cso's own text, which lists secret prefixes; they hold no key material. A scan of the bundle for the live values of the four keys the run used found no match.
+
+## X hook (draft)
+
+> Do agents find skills nobody told them to use? We ran gstack untold on 37 Terminal-Bench 2 tasks inside Claude Code. Opus 5.5 and particle-1 opened no skill in 481 trials. GPT-6.1 Sol opened one in 9.5% of trials, and 27% when /investigate's description said when to use it. Pooled lift: +5.9 points [1.4, 10.8], all from Sol, with no pass-rate gain. (link to this file at a pinned commit)
+
+## Claim check
+
+| Check | Status | Evidence |
+|---|---|---|
+| The headline is true at both ends of its interval | Pass (author check) | At +1.4 the pooled lift is still positive. The headline says all of it is on Sol, which the per-model rows show (Opus and particle-1 at 0 in every cell). |
+| The grade is named | Pass (author check) | Record table: confirmatory primaries, carried by one model in practice; per-model rows exploratory. |
+| No claim the scorer forbade | Pass (author check) | Per-model D2 makes no claim; D3 makes no claim; no benefit or parity claim. |
+| Disclosures settled before the post | Pass (author check) | The gstack, Particle and OpenAI lines from the org disclosures file, word for word, at the end. That file gives Anthropic no line. The X hook carries none. |
+| The sealed guard passes | Recorded in the PR | gstack-pregate sealed runs before every push of this branch; the /ship receipt records it. |
+| Numbers match the printed outputs | Pass (author check) | Every result number is copied from output-primary.txt, output-recovered.txt, cost-output.txt, sol-opens.txt, xcheck.txt or run-log.txt. Not yet rerun from the data bundle on a clean machine. |
+| Cross-family review against the data | Pending | |
+| Another Captain's crew reruns the reanalysis | Pending | |
+
+## Changelog
+
+- 2026-11-02: first version (GEVA-153).
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
+
+<details>
+<summary>Agent notes</summary>
+
+**Models and routes.** claude-opus-5-5 (Anthropic, session cap $5.00), particle-1 (particle-ai/particle-1 on OpenRouter, particle-ai only, $0.50), gpt-6.1-sol (openai/gpt-6.1-sol on OpenRouter, openai only, through OpenRouter's Anthropic-compatible endpoint, $2.50). All three passed their route check on the first attempt (smoke task with a tool result, and a listing session whose reply quotes /investigate's description) for $0.144349. Haiku and Sonnet are not models under test (org R54).
+
+The cost label on particle-1 none is the scorer's $0.066, which leaves out one trial; that cell's metered cost is $0.073 per trial (see the note under the preset cell table).
+
+Cost per trial and per success are metered. The scorer reads each trial's cost from that trial's summary file. One particle-1 none trial (torch-pipeline-parallelism) hit the agent timeout and wrote no summary file, so the scorer counted it at $0 and printed $0.066 per trial and $0.091 per success for that cell (output-primary.txt). The proxy metered $0.244 for that trial, so the row gives the cell's metered $2.691 over 37 trials and 27 passes (cost-output.txt). In every other cell the scorer's figure equals the metered one.
+
+Opus under sdk-default (secondary): none, gstack and gstack-rewritten each passed 83.8% [70.3, 94.6], at $0.139, $0.139 and $0.145 per trial.
+
+**Cost**
 
 Metered spend through the proxy, from the proxy session files (cost-output.txt):
 
@@ -184,23 +266,8 @@ Sol's row is OpenRouter's list price on 2026-11-01 as the prereg froze it. GEVA-
 
 **VM time.** Six Ubicloud standard-30 VMs, 4 h 52 min in all: particle-1 1 h 27 min, Opus 1 h 26 min, Opus replicate 2 44 min, Sol 1 h 9 min, and the two VMs of the failed first Opus attempt 3 min each (deviation 3). All are destroyed, and ubi-runner's list for owner geva153 was empty at 07:13Z.
 
-## Why null? (R48)
-
-Three readings are null or lean negative. Each gets one cycle. The exposure rates sit beside each verdict.
-
-**1. D3 on Opus: the preset changed nothing (0 against 0).** Exposure: the listing reached Opus under both prompts (route check, and first-request tokens with gstack 2,400 above none under each prompt), but Opus opened nothing under either: 0 of 148 trials. Task fit: the same tasks drew 17 opens from Sol, so they offer reasons to open. Power and floor: both cells sit at the floor; the MDD is 10.9 to 15.4 points, so a smaller prompt effect is not ruled out. Frontier competence: Opus passes 81.1% with no gstack under the preset and 83.8% under sdk-default, so it solves most tasks without looking. **Verdict: KEEP.** No evidence that the stub prompt was why earlier untold runs saw no opens, so this run gives no reason to change the prompt those runs used. The test cannot rule out a prompt effect smaller than its MDD (10.9 to 15.4 points), so it does not claim the effect is absent. Exposure beside it: opens 0 of 148 Opus gstack trials.
-
-**2. Opus and particle-1 opened no skill under either description.** Exposure: the listing reached both models (both quoted /investigate's description in the route check), and the rewritten text was in the listing (the dry run confirmed it), yet neither model made a Skill call, browsed the skills folder or opened a built-in skill in any of 481 trials. Task fit: Sol's opens show that the tasks give the rewritten /investigate a reason to be opened. Power: the D1 upper bounds are 8.0% (Opus) and 7.8% (particle-1); the per-model D2 MDD is 22.3 to 25.8 points. Frontier competence: Opus passes 81.1% and particle-1 73.0% with no gstack. **Verdict: KEEP** the rewrite direction that the pooled D2 supports, and record that description text alone does not produce untold use on Opus 5.5 or particle-1. Untold use on those two models needs another route, such as hooks (agenda item 1). Exposure beside it: 0 opens in 481 trials.
-
-**3. Sol's pass rate with the rewritten description: -2.7 points against no gstack [-8.1, +0.0].** Exposure: 10 of 37 rewritten trials opened a skill and 9 of those passed; 4 of the cell's 5 failures came from the 27 trials that opened nothing (23 passed). So the loss does not sit in the trials that read the skill. Task fit: 8 of 10 opens were /investigate on debugging or recovery tasks. Power and ceiling: Sol's control is 89.2%, near the ceiling, and section 12 says benefit after an open cannot carry a verdict at these counts. Frontier competence: Sol solves 33 of 37 tasks with no gstack. **Verdict: KEEP.** No evidence here that an opened skill hurt Sol; the procedure gate passed in no trial, so this run says nothing about whether running /investigate's procedure helps. Exposure beside it: /investigate loaded in 8 of 37 rewritten trials, Phase 5 report in 0 of 8.
-
-## What it means for gstack (section 12)
-
-The pooled D2 was raised, so section 12 reads: saying when to use a skill gets it opened, gstack should rewrite its skill descriptions that way, and the per-model rows say where to look first. Here that is Sol alone. On Opus 5.5 and particle-1 no description wording produced an open, and on Sol the opens did not raise the pass rate or run the procedure to its report. A gstack description rewrite is cheap (the rewritten /investigate line is 259 characters longer than the shipped one), so it is a reasonable change for Sol users, but this run does not show it helps Opus users or that opened skills improve results.
-
-## Deviations from the prereg
-
 1. **Ledger ceiling $200, not section 8's $126.** The proxy reserves each session's full session cap in the ledger before the session opens, so the Opus batches alone hold about $120 of open reserves at once, and a $126 row would have latched a cap stop on reserves, not spend. The Captain set the discovery-r1 approval row to $200, the hard ceiling on settled plus open reserves, and kept the frozen start rule (its $126 is hardcoded in start-rule.ts) gating every launch. Metered spend beside it: **$83.68**, under the $126 the prereg approved.
+
 2. **Batch proxy caps under the Captain's rule.** No batch cap may be lower than 1.4 times its projection plus its maximum open reserves (12 times the session cap), and running caps plus settled must fit under $200; where that leaves a cap pointless, none is set. Worked at the projection and at the 1.4 allowance:
 
 | Batch | Projection | 1.4x | 12 x session cap | Floor | Running caps + settled at launch (projection / allowance) | Cap set |
@@ -211,55 +278,9 @@ The pooled D2 was raised, so section 12 reads: saying when to use a skill gets i
 | gpt-6.1-sol | $22.98 | $32.17 | $30.00 | $62.17 | 62.17 + 66.69 = $128.86 / 62.17 + 93.36 = $155.53; at launch 62.17 + 59.26 settled = $121.43 | $62.17 |
 
 3. **First Opus attempt ended early on infrastructure; rerun fresh once, whole.** Both Opus VMs exited 5 about 2 minutes in, before any trial or ledger row. The VM driver looks up an arm's digest with a jq select that returns it twice when a batch lists the same arm twice (each arm under two system prompts) with `.tar.gz` arms. Section 7 counts this as an infrastructure early end. Both Opus batches were rerun fresh once, whole, with plain `.tar` arms holding the same bytes; the grid check passed again and the start rule passed for each (bounds $68.60 and $85.78 against $126). No spend, two VMs at 3 minutes each.
-4. **One settle written by hand.** The Opus session s-3ac119dfbd14 (the retried trial above) never reached the ledger, so its $5.00 reserve stayed open. It was settled through the ledger service at its request-log cost, $0.145598, with `manual: true` on the row. The analysis's recovered reading adds that session's rebuilt record (Result).
-5. **Start-rule notes written in two steps.** `start-rule.ts check --note` exits 1 on the Drive mount after writing its row, because fsync returns ENOTSUP there. Each launch was gated on `check` without `--note` (exit 0), then the note row was written with `--note` and checked to match the gate's output exactly (run-log.txt).
 
-## Limits and threats
+**One settle written by hand.** The Opus session s-3ac119dfbd14 (the retried trial above) never reached the ledger, so its $5.00 reserve stayed open. It was settled through the ledger service at its request-log cost, $0.145598, with `manual: true` on the row.
 
-- **One model carries the pooled D2.** The pooled test is the preregistered primary and it passes its gates, but Opus and particle-1 add only zeros. Sol's own row (+17.6 [+4.1, +32.4]) is exploratory with an MDD of 22.3 to 25.8 points, so this run makes no per-model claim for Sol.
-- **One skill rewritten, one trial per cell.** Only /investigate's description changed. The /cso opens were not caused by the rewrite. Each preset cell has one trial per task.
-- **Sol runs inside Claude Code** through OpenRouter's Anthropic-compatible endpoint. Its skill use in Codex or another harness may differ.
-- **No benefit shown.** Pass rates and the procedure gate after an open are reported, not tested; the counts are too small for a verdict.
-- **Refusals.** In each Opus cell one trial's first request was refused by the provider's safeguards, so it counts as failed and not eligible (section 7), and Opus's D1 runs over 36 tasks. The analysis counts a refusal message in a few other trials that still got responses (output-primary.txt).
-- **Public tasks.** TB2 is public, so its tasks may be in the models' training data. That bears on pass rates more than on opens.
-- **Stops.** Five sessions hit their session cap (particle-1 3, Sol 2) and are scored as section 7 says. One of them, Sol's gstack trial on filter-js-from-html, had opened /cso and counts as an open.
+Sol's four cells cost $24.42 metered.
 
-## Replicate it
-
-1. **Reanalysis (keyless), not yet run from the bundle.** Nobody has rerun the analysis from the data bundle yet; the claim check lists it as pending. The steps it needs: check out tag `laneb-discovery-3-runner` (025135a4), `bun install`, fetch the data bundle (Captain drive handoffs/GEVA-153, not yet public), check SHA256SUMS and extract it. The bundle does not hold the four arm tars that analysis-configs.txt names under `arm_tars`, and the analysis opens each one, so rebuild them first. The one rebuild that has run is recorded in the prereg's section 9, under "Second-machine rebuild": on 2026-11-01 a fresh machine rebuilt none, gstack and placebo from #109's stored tars and gstack-rewritten with `arms/variants.ts`, all four matched the section 3 digests, and the prereg shows that nothing under `quick/laneb/arms` changed up to this tag. #109's stored tars are in the Captain drive at handoffs/GSTA-30/arms (not yet public) as .tar.gz files, each to be gunzipped to a plain .tar first; gstack's is split into six parts to join before that. Then point `arm_tars` at the rebuilt tars and `jobs`, `replicate_2_jobs` and `sessions` at the extracted tree, and run `bun quick/laneb/analysis/discovery-tax.ts <config>`. output-primary.txt and output-recovered.txt are what the run printed from its own paths; whether a rerun from the bundle matches them byte for byte is untested.
-2. **Rerun a cell (paid).** There is no direct-key path yet: a rerun needs the ledger service, the metering proxy and a Ubicloud VM, driven by the scripts in phase-scripts.txt. Sol's four cells cost $24.42 metered. Expect run-to-run spread: these are one trial per task.
-
-phase-scripts.txt holds the operator scripts that ran (batch control, watch, ledger supervisor, grid check, the hand settle, config build, cost, the open cross-check, the chart and the bundle), and run-log.txt the run record and the lines they printed, with operator paths shown as `<work>`, `<captain-drive>` and `<ubicloud-skill>`. The record leaves out the VM-side Harbor and trial logs and the ledger rows themselves, which are in the data bundle, and the machine setup that Capy's project image provides. Before reusing batch.sh, note what GEVA-128 found in the same script: its ssh calls turn off host-key checking, and it deletes the key file it copies to the VM only after the run ends.
-
-## What is held out, and why
-
-Nothing. TB2 is public, and every task digest is pinned at the tag. The data bundle is not public yet. TB2's sanitize-git-repo and openssl-selfsigned-cert tasks write secret-shaped fixtures, which the bundle shows as `<redacted-fixture-secret>` or `<redacted-fixture-private-key>` (23 files). Three files still match the pattern scan, each only for the words "BEGIN PRIVATE KEY" in /cso's own text, which lists secret prefixes; they hold no key material. A scan of the bundle for the live values of the four keys the run used found no match.
-
-## X hook (draft)
-
-> Do agents find skills nobody told them to use? We ran gstack untold on 37 Terminal-Bench 2 tasks inside Claude Code. Opus 5.5 and particle-1 opened no skill in 481 trials. GPT-6.1 Sol opened one in 9.5% of trials, and 27% when /investigate's description said when to use it. Pooled lift: +5.9 points [1.4, 10.8], all from Sol, with no pass-rate gain. (link to this file at a pinned commit)
-
-## Claim check
-
-| Check | Status | Evidence |
-|---|---|---|
-| The headline is true at both ends of its interval | Pass (author check) | At +1.4 the pooled lift is still positive. The headline says all of it is on Sol, which the per-model rows show (Opus and particle-1 at 0 in every cell). |
-| The grade is named | Pass (author check) | Record table: confirmatory primaries, carried by one model in practice; per-model rows exploratory. |
-| No claim the scorer forbade | Pass (author check) | Per-model D2 makes no claim; D3 makes no claim; no benefit or parity claim. |
-| Disclosures settled before the post | Pass (author check) | The gstack, Particle and OpenAI lines from the org disclosures file, word for word, at the end. That file gives Anthropic no line. The X hook carries none. |
-| The sealed guard passes | Recorded in the PR | gstack-pregate sealed runs before every push of this branch; the /ship receipt records it. |
-| Numbers match the printed outputs | Pass (author check) | Every result number is copied from output-primary.txt, output-recovered.txt, cost-output.txt, sol-opens.txt, xcheck.txt or run-log.txt. Not yet rerun from the data bundle on a clean machine. |
-| Cross-family review against the data | Pending | |
-| Another Captain's crew reruns the reanalysis | Pending | |
-
-## Changelog
-
-- 2026-11-02: first version (GEVA-153).
-
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
-
-Disclosure: OpenAI began through YC Research, which was started by Sam Altman, a former president of Y Combinator. Garry Tan runs Y Combinator.
+</details>

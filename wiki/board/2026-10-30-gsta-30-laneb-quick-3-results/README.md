@@ -87,41 +87,41 @@ The primary contrast is negative on every model on both task sets. None is clear
 
 All 39 tasks. Cost comes only from the proxy's session rows. "Budget stops" are session-cap stops; "Timeouts" are agent timeouts, graded as they stand.
 
-| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | $6.07 | $0.07 | 0% | 0 | 1 | 0 |
-| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | $10.51 | $0.12 | 0% | 0 | 3 | 0 |
-| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | $10.79 | $0.12 | 0% | 0 | 2 | 0 |
-| particle-1 | none | 39 | 117 | 71% [58%, 84%] | $8.07 | $0.10 | 0% | 5 | 4 | 0 |
-| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | n/a (1 missing) | n/a | 0% | 4 | 7 | 0 |
-| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | $9.51 | $0.11 | 3% | 8 | 3 | 0 |
-| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | $7.22 | $0.08 | 0% | 4 | 7 | 0 |
-| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | $7.05 | $0.08 | 0% | 1 | 12 | 0 |
-| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | $7.90 | $0.08 | 3% | 4 | 15 | 0 |
-| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | $1.03 | $0.01 | 0% | 0 | 4 | 1 |
-| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | $1.81 | $0.02 | 0% | 0 | 4 | 0 |
-| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | $1.70 | $0.02 | 0% | 0 | 3 | 1 |
-| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | $19.85 | $0.21 | 0% | 0 | 1 | 0 |
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
+|---|---|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | $0.07 | 0% | 0 | 1 | 0 |
+| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | $0.12 | 0% | 0 | 3 | 0 |
+| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | $0.12 | 0% | 0 | 2 | 0 |
+| particle-1 | none | 39 | 117 | 71% [58%, 84%] | $0.10 | 0% | 5 | 4 | 0 |
+| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | n/a | 0% | 4 | 7 | 0 |
+| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | $0.11 | 3% | 8 | 3 | 0 |
+| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | $0.08 | 0% | 4 | 7 | 0 |
+| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | $0.08 | 0% | 1 | 12 | 0 |
+| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | $0.08 | 3% | 4 | 15 | 0 |
+| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | $0.01 | 0% | 0 | 4 | 1 |
+| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | $0.02 | 0% | 0 | 4 | 0 |
+| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | $0.02 | 0% | 0 | 3 | 1 |
+| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | $0.21 | 0% | 0 | 1 | 0 |
 
-particle-1 gstack shows n/a because one trial, pytorch-model-cli__LLPXjm4, has no session row (Integrity). Its other 116 trials cost $8.91, so its cost per success over the trials with a row is $0.10 ([mechanism.md](mechanism.md)).
+particle-1 gstack shows n/a because one trial, pytorch-model-cli__LLPXjm4, has no session row (Integrity). Over its other 116 trials, its cost per success is $0.10 ([mechanism.md](mechanism.md)).
 
 Original 20 tasks:
 
-| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| claude-sonnet-5-5 | none | 20 | 60 | 62% [43%, 80%] | $4.01 | $0.11 | 0% | 0 | 1 | 0 |
-| claude-sonnet-5-5 | gstack | 20 | 60 | 52% [32%, 72%] | $5.99 | $0.19 | 0% | 0 | 3 | 0 |
-| claude-sonnet-5-5 | placebo | 20 | 60 | 55% [35%, 75%] | $6.02 | $0.18 | 0% | 0 | 2 | 0 |
-| particle-1 | none | 20 | 60 | 48% [30%, 67%] | $5.30 | $0.18 | 0% | 2 | 4 | 0 |
-| particle-1 | gstack | 20 | 60 | 55% [40%, 70%] | n/a (1 missing) | n/a | 0% | 3 | 6 | 0 |
-| particle-1 | placebo | 20 | 60 | 62% [45%, 77%] | $6.02 | $0.16 | 5% | 4 | 1 | 0 |
-| deepseek-v4.1-flash-1017 | none | 20 | 60 | 67% [50%, 82%] | $4.95 | $0.12 | 0% | 3 | 5 | 0 |
-| deepseek-v4.1-flash-1017 | gstack | 20 | 60 | 58% [42%, 73%] | $4.84 | $0.14 | 0% | 1 | 8 | 0 |
-| deepseek-v4.1-flash-1017 | placebo | 20 | 60 | 65% [47%, 82%] | $4.95 | $0.13 | 5% | 2 | 11 | 0 |
-| claude-haiku-5-5 | none | 20 | 60 | 57% [40%, 73%] | $0.68 | $0.02 | 0% | 0 | 4 | 1 |
-| claude-haiku-5-5 | gstack | 20 | 60 | 50% [32%, 67%] | $1.18 | $0.04 | 0% | 0 | 4 | 0 |
-| claude-haiku-5-5 | placebo | 20 | 60 | 58% [40%, 77%] | $1.13 | $0.03 | 0% | 0 | 3 | 1 |
-| claude-opus-5-5 | none | 20 | 60 | 67% [47%, 85%] | $12.55 | $0.31 | 0% | 0 | 1 | 0 |
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
+|---|---|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 20 | 60 | 62% [43%, 80%] | $0.11 | 0% | 0 | 1 | 0 |
+| claude-sonnet-5-5 | gstack | 20 | 60 | 52% [32%, 72%] | $0.19 | 0% | 0 | 3 | 0 |
+| claude-sonnet-5-5 | placebo | 20 | 60 | 55% [35%, 75%] | $0.18 | 0% | 0 | 2 | 0 |
+| particle-1 | none | 20 | 60 | 48% [30%, 67%] | $0.18 | 0% | 2 | 4 | 0 |
+| particle-1 | gstack | 20 | 60 | 55% [40%, 70%] | n/a | 0% | 3 | 6 | 0 |
+| particle-1 | placebo | 20 | 60 | 62% [45%, 77%] | $0.16 | 5% | 4 | 1 | 0 |
+| deepseek-v4.1-flash-1017 | none | 20 | 60 | 67% [50%, 82%] | $0.12 | 0% | 3 | 5 | 0 |
+| deepseek-v4.1-flash-1017 | gstack | 20 | 60 | 58% [42%, 73%] | $0.14 | 0% | 1 | 8 | 0 |
+| deepseek-v4.1-flash-1017 | placebo | 20 | 60 | 65% [47%, 82%] | $0.13 | 5% | 2 | 11 | 0 |
+| claude-haiku-5-5 | none | 20 | 60 | 57% [40%, 73%] | $0.02 | 0% | 0 | 4 | 1 |
+| claude-haiku-5-5 | gstack | 20 | 60 | 50% [32%, 67%] | $0.04 | 0% | 0 | 4 | 0 |
+| claude-haiku-5-5 | placebo | 20 | 60 | 58% [40%, 77%] | $0.03 | 0% | 0 | 3 | 1 |
+| claude-opus-5-5 | none | 20 | 60 | 67% [47%, 85%] | $0.31 | 0% | 0 | 1 | 0 |
 
 Failure lines:
 
@@ -266,18 +266,11 @@ Trial-level decisions under the prereg's Failure handling line ("A trial where n
 
 ## Pilot
 
-laneb3-pilot: Sonnet 5.5 and particle-1, arms gstack and placebo, 5 tasks, 1 trial each, 20 trials, $2.53. Both models passed both gates: body load 10 of 10 each, and the tool-use gate, which is why both ran in the grid. The pilot is never pooled into the grid. Its audit flagged three particle-1 trials: one network_bypass and one offlist_attempt in placebo, and one pypi_direct in gstack.
-
-## Cost
-
-- Ledger `laneb-quick-3` (exploratory jsonl in the Captain drive): $103.162449 settled against the $280 stop ($300 cap Garry approved), plus 6 open reserves worth $7. All 3,097 rows carry prereg 82cda7db (3,097 match).
-- Proxy totals: route check about $0.20, pilot $2.53, laneb3-r1 $32.54, laneb3-r23 $67.88, laneb3-r23x $0.14.
-- The 6 open reserves are sessions with no ledger settle row. Four laneb3-r1 sessions (configure-git-webserver__zmn3eUw, kv-store-grpc__rF3VuSM, git-multibranch__yZmwFxo and filter-js-from-html__6bfQivA, $6 reserved) and one laneb3-r23 session (pytorch-model-cli__jSwAbG5, $0.50) have proxy session rows, so their costs ($0.15 together) are counted in the proxy totals and this post. We did not find why the ledger missed the r1 settles; jSwAbG5 was open when the 14:16 restart killed the local ledger. The sixth, pytorch-model-cli__LLPXjm4 ($0.50), has no session row at all, so its cost is unknown and bounded by that reserve.
-- Ubicloud VM cost: unknown. The standard-30 hourly rate is not verified anywhere in this thread, so this post does not estimate it. VM time includes the first replicate 1 VM (about 6 hours with a hung session), the laneb3-r23 VM's idle stretch below and the rerun VM.
+laneb3-pilot: Sonnet 5.5 and particle-1, arms gstack and placebo, 5 tasks, 1 trial each, 20 trials. Both models passed both gates: body load 10 of 10 each, and the tool-use gate, which is why both ran in the grid. The pilot is never pooled into the grid. Its audit flagged three particle-1 trials: one network_bypass and one offlist_attempt in placebo, and one pypi_direct in gstack.
 
 ## Deviations and operations log
 
-- Interim peeks. Two tables were read before the grid finished and sent to the Captain: the pilot table and the replicate 1 table. Both were used only to re-project cost. The replicate 1 projection (spend so far plus twice replicate 1's cost, about $100) was under the $230 rule, so all three replicates ran in every cell.
+- Interim peeks. Two tables were read before the grid finished and sent to the Captain: the pilot table and the replicate 1 table. Both were used only to re-project cost. The replicate 1 projection was under the prereg's spend rule, so all three replicates ran in every cell.
 - crack-7z-hash dropped. On the first replicate 1 VM the in-run oracle for crack-7z-hash failed because the verifier's apt-get could not get the dpkg lock. By the in-run oracle rule it was dropped with no swap. No paid trial ran on that VM, and its ssh session hung for about 6 hours. The grid ran on a second VM with 39 tasks.
 - Four oracle-failed tasks were replaced before the grid, as the prereg records: qemu-startup, financial-document-processor, build-pmars and build-cython-ext by fix-git, git-leak-recovery, git-multibranch and kv-store-grpc.
 - Operator scripts. Two operator-side shell scripts ran beside the launcher: a watchdog (`watch-launch2.sh`) that watched the launcher and the VM job, and a recover script (`recover-run.sh`) that re-attached to a VM after its launcher died, waited for the job to finish, pulled the results and deleted the VM. Neither touches the agent, the arms, the tasks or the grading. They are not committed: they hold machine-specific paths and are not reusable as written.
@@ -298,3 +291,57 @@ The ladder question needs harder tasks. Opus 5.5 with no skills passes 79% and D
 - Runner: tag `laneb-quick-3-runner`, 9c4e2121ba461d17eef0d38a8607a3e132593f2c. Task list `tasks/final.json` sha256 9ccfec13f01c150f4ec838e19285375a1f034522c1a069c0ee83d75d12dd56d9.
 - Analysis: `quick/laneb/analysis` at the prereg commit, unchanged. Config: [analysis-config.md](analysis-config.md); its job paths are relative to the operator's run folder, and `runs/r23f/jobs/laneb3-r23` is the filtered laneb3-r23 folder.
 - Job directories (trial results, SDK logs, proxy rows) are kept outside the repo in the Captain drive under handoffs/GEVA-30/, after a secret scan. No transcript is committed here.
+
+<details>
+<summary>Agent notes</summary>
+
+All 39 tasks:
+
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | $6.07 | $0.07 | 0% | 0 | 1 | 0 |
+| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | $10.51 | $0.12 | 0% | 0 | 3 | 0 |
+| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | $10.79 | $0.12 | 0% | 0 | 2 | 0 |
+| particle-1 | none | 39 | 117 | 71% [58%, 84%] | $8.07 | $0.10 | 0% | 5 | 4 | 0 |
+| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | n/a (1 missing) | n/a | 0% | 4 | 7 | 0 |
+| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | $9.51 | $0.11 | 3% | 8 | 3 | 0 |
+| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | $7.22 | $0.08 | 0% | 4 | 7 | 0 |
+| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | $7.05 | $0.08 | 0% | 1 | 12 | 0 |
+| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | $7.90 | $0.08 | 3% | 4 | 15 | 0 |
+| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | $1.03 | $0.01 | 0% | 0 | 4 | 1 |
+| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | $1.81 | $0.02 | 0% | 0 | 4 | 0 |
+| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | $1.70 | $0.02 | 0% | 0 | 3 | 1 |
+| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | $19.85 | $0.21 | 0% | 0 | 1 | 0 |
+
+Its other 116 trials cost $8.91, so its cost per success over the trials with a row is $0.10 ([mechanism.md](mechanism.md)).
+
+Original 20 tasks:
+
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 20 | 60 | 62% [43%, 80%] | $4.01 | $0.11 | 0% | 0 | 1 | 0 |
+| claude-sonnet-5-5 | gstack | 20 | 60 | 52% [32%, 72%] | $5.99 | $0.19 | 0% | 0 | 3 | 0 |
+| claude-sonnet-5-5 | placebo | 20 | 60 | 55% [35%, 75%] | $6.02 | $0.18 | 0% | 0 | 2 | 0 |
+| particle-1 | none | 20 | 60 | 48% [30%, 67%] | $5.30 | $0.18 | 0% | 2 | 4 | 0 |
+| particle-1 | gstack | 20 | 60 | 55% [40%, 70%] | n/a (1 missing) | n/a | 0% | 3 | 6 | 0 |
+| particle-1 | placebo | 20 | 60 | 62% [45%, 77%] | $6.02 | $0.16 | 5% | 4 | 1 | 0 |
+| deepseek-v4.1-flash-1017 | none | 20 | 60 | 67% [50%, 82%] | $4.95 | $0.12 | 0% | 3 | 5 | 0 |
+| deepseek-v4.1-flash-1017 | gstack | 20 | 60 | 58% [42%, 73%] | $4.84 | $0.14 | 0% | 1 | 8 | 0 |
+| deepseek-v4.1-flash-1017 | placebo | 20 | 60 | 65% [47%, 82%] | $4.95 | $0.13 | 5% | 2 | 11 | 0 |
+| claude-haiku-5-5 | none | 20 | 60 | 57% [40%, 73%] | $0.68 | $0.02 | 0% | 0 | 4 | 1 |
+| claude-haiku-5-5 | gstack | 20 | 60 | 50% [32%, 67%] | $1.18 | $0.04 | 0% | 0 | 4 | 0 |
+| claude-haiku-5-5 | placebo | 20 | 60 | 58% [40%, 77%] | $1.13 | $0.03 | 0% | 0 | 3 | 1 |
+| claude-opus-5-5 | none | 20 | 60 | 67% [47%, 85%] | $12.55 | $0.31 | 0% | 0 | 1 | 0 |
+
+laneb3-pilot: Sonnet 5.5 and particle-1, arms gstack and placebo, 5 tasks, 1 trial each, 20 trials, $2.53.
+
+**Cost**
+
+- Ledger `laneb-quick-3` (exploratory jsonl in the Captain drive): $103.162449 settled against the $280 stop ($300 cap Garry approved), plus 6 open reserves worth $7. All 3,097 rows carry prereg 82cda7db (3,097 match).
+- Proxy totals: route check about $0.20, pilot $2.53, laneb3-r1 $32.54, laneb3-r23 $67.88, laneb3-r23x $0.14.
+- The 6 open reserves are sessions with no ledger settle row. Four laneb3-r1 sessions (configure-git-webserver__zmn3eUw, kv-store-grpc__rF3VuSM, git-multibranch__yZmwFxo and filter-js-from-html__6bfQivA, $6 reserved) and one laneb3-r23 session (pytorch-model-cli__jSwAbG5, $0.50) have proxy session rows, so their costs ($0.15 together) are counted in the proxy totals and this post. We did not find why the ledger missed the r1 settles; jSwAbG5 was open when the 14:16 restart killed the local ledger. The sixth, pytorch-model-cli__LLPXjm4 ($0.50), has no session row at all, so its cost is unknown and bounded by that reserve.
+- Ubicloud VM cost: unknown. The standard-30 hourly rate is not verified anywhere in this thread, so this post does not estimate it. VM time includes the first replicate 1 VM (about 6 hours with a hung session), the laneb3-r23 VM's idle stretch below and the rerun VM.
+
+The replicate 1 projection (spend so far plus twice replicate 1's cost, about $100) was under the $230 rule, so all three replicates ran in every cell.
+
+</details>

@@ -2,7 +2,7 @@
 id: 2026-11-02-geva-184-ceremony-cut-results
 kind: finding
 title: "The ceremony cut gets no verdict on Opus 5.5 (a coverage gate failed), and its TB2 cell shows a loss of 5.4 points (95% CI -10.8 to -0.9); on particle-1 it shows no loss at 0.70 times the cost"
-summary: "I1, gstack 142757b. Opus 5.5: FIX-METHOD (G4 failed on review), TB2 -5.4 points, Holm p 0.042 (LOSS), cost 0.910x. particle-1: CUT, no-loss yes, cost 0.703x. $321.06 settled. R48: FIX-METHOD."
+summary: "I1, gstack 142757b. Opus 5.5: FIX-METHOD (G4 failed on review), TB2 -5.4 points, Holm p 0.042 (LOSS), cost 0.910x. particle-1: CUT, no-loss yes, cost 0.703x. R48: FIX-METHOD."
 author: GEVA-184
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -34,10 +34,9 @@ Unpublished. Publication waits on the claim check by a cross-family reviewer and
 | Preregistration | [2026-11-01-geva-108-ceremony-cut-prereg](../../plans/2026-11-01-geva-108-ceremony-cut-prereg/README.md) (#122, main 64e4d62), amended by [2026-11-01-geva-136-ceremony-cut-g3-amendment](../../plans/2026-11-01-geva-136-ceremony-cut-g3-amendment/README.md) (#128, main 409ff47) |
 | gstack under test | garrytan/gstack 142757b107edeffff7c78453490c4d2786996fa7 (gstack PR #3818): the full render (control) against the unattended render (variant), same commit |
 | Models under test | claude-opus-5-5 (Anthropic API), review and TB2; particle-ai/particle-1 (OpenRouter), TB2 only |
-| Harness | Review: review-units at the rig pin b792646b43cb8ea170039623b420229e0d669216 (#119), Claude Code 2.1.314, 60 turns, $8 allowance per session. TB2: Lane B tag laneb-stacks-3-runner (8cd497367e3d7e609103540c22e01542b705604d), Claude Code 2.1.312, Harbor, terminal-bench-2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c |
+| Harness | Review: review-units at the rig pin b792646b43cb8ea170039623b420229e0d669216 (#119), Claude Code 2.1.314, 60 turns. TB2: Lane B tag laneb-stacks-3-runner (8cd497367e3d7e609103540c22e01542b705604d), Claude Code 2.1.312, Harbor, terminal-bench-2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c |
 | Run | 2026-11-02 UTC. Pilots and both review grids by GEVA-131 (review-grid from 03:01Z, review-sdk 08:17Z to about 09:55Z). TB2 10:07Z to 12:58Z on two Ubicloud VMs, judges 13:08Z to 13:13Z, scoring after, by GEVA-184 |
 | Data | TB2 job folders and the judged review arms, not published (see What is held out) |
-| Spend | $321.06 settled through the ledger ($325.88 with the review grid's own log figure), $6.60 still reserved; ceiling $496.12 |
 
 ## What we found
 
@@ -67,7 +66,7 @@ This is an explanation, not a result. Removing text changed what Opus did, not o
 2. **Session caps.** Set in a worktree of the tag (config/cells.json: claude-opus-5-5 2.5, particle-1 0.8), as caps.py and the handoff say, so the run manifest shows the tree dirty.
 3. **Edits before blinding.** Judge ingest refused the raw arms. The derived-arm chain below ran on all four arms under the Captain's decision.
 4. **Review cost.** review-cost.py stopped on control-opus's gap row (`ValueError: could not convert string to float: 'unavailable'`). It was rerun unchanged on a symlink copy of the grid's out dir whose control-opus cost.tsv leaves out that one row (133 rows to 132). The review cost ratios and decide.py's review cost line come from that copy. No cost ratio enters a verdict (prereg section 6, rule 5).
-5. **Ceiling.** $496.12 (the Captain's ruling A on section 9's remedy). Every start rule counted the review grid at its log figure, $181.04.
+5. **Ceiling.** The ceiling and the start-rule figures are in Agent notes.
 
 ### The derived-arm chain before judging
 
@@ -104,26 +103,24 @@ TB2 particle-1 cost per trial, variant/control: 0.703 [0.569, 0.874]
 review cost per unit-pass, variant/control: 0.920 [0.871, 0.972]
 ```
 
-| Model, lane | Verdict | No-loss | Variant minus control | Cost, variant / control [95% CI] | Peak exposure | Start line run, variant and control |
-|---|---|---|---|---|---|---|
-| Opus 5.5, TB2 | FIX-METHOD (G4 fails on review) | no | -5.4 points, 90% CI [-9.9, -1.8]; LOSS, Holm p 0.042 | 0.910 [0.842, 1.012] per trial | highest session $1.19 control, $1.14 variant, $0.92 none, against a $2.50 cap; 0 sessions at the cap | 103 of 111, 14 of 111 |
-| Opus 5.5, review | no verdict: control-opus stopped | no | blocking recall +1.2 points, 95% CI [-3.7, 6.8]; p loss 0.813 | 0.920 [0.871, 0.972] per unit-pass | highest session $4.95 control, $4.42 variant, $3.95 none, $5.01 control-sdk, against an $8 allowance | 49 of 66, 1 of 66 |
-| particle-1, TB2 | CUT | yes | +2.7 points, 90% CI [-3.6, +9.0]; margin 10, size 0.838 | 0.703 [0.569, 0.874] per trial | highest session $0.53 control, $0.24 variant, $0.47 none, against a $0.80 cap; 0 sessions at the cap | 97 of 111, 39 of 111 |
-
-Review peak exposure is peak.py's reading: a session's settled spend plus its open reservations, at their highest (p95 $4.19 control, $4.18 variant, $3.44 none, $4.37 control-sdk).
+| Model, lane | Verdict | No-loss | Variant minus control | Cost, variant / control [95% CI] | Start line run, variant and control |
+|---|---|---|---|---|---|
+| Opus 5.5, TB2 | FIX-METHOD (G4 fails on review) | no | -5.4 points, 90% CI [-9.9, -1.8]; LOSS, Holm p 0.042 | 0.910 [0.842, 1.012] per trial | 103 of 111, 14 of 111 |
+| Opus 5.5, review | no verdict: control-opus stopped | no | blocking recall +1.2 points, 95% CI [-3.7, 6.8]; p loss 0.813 | 0.920 [0.871, 0.972] per unit-pass | 49 of 66, 1 of 66 |
+| particle-1, TB2 | CUT | yes | +2.7 points, 90% CI [-3.6, +9.0]; margin 10, size 0.838 | 0.703 [0.569, 0.874] per trial | 97 of 111, 39 of 111 |
 
 ### TB2
 
 ceremony-tb2.ts, verbatim, with no-reward trials scored 0 (the primary reading):
 
-| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Spend | Per trial | Per success | Requests | First-request tokens (median, min, max) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| claude-opus-5-5 | control | 111 | 111 | 88.3% (98) | 0 | 0 | 0 | 0 | $28.3189 | $0.2551 | $0.2890 | 6.71 | 36361, 36033, 39042 |
-| claude-opus-5-5 | variant | 111 | 111 | 82.9% (92) | 0 | 0 | 1 | 0 | $25.7744 | $0.2322 | $0.2802 | 6.68 | 31751, 31423, 34432 |
-| claude-opus-5-5 | none | 111 | 111 | 82.9% (92) | 0 | 0 | 0 | 0 | $15.2936 | $0.1378 | $0.1662 | 5.89 | 22619, 22450, 65081 |
-| particle-1 | control | 111 | 111 | 75.7% (84) | 0 | 0 | 5 | 0 | $8.8439 | $0.0797 | $0.1053 | 19.44 | 99853, 98989, 107174 |
-| particle-1 | variant | 111 | 111 | 78.4% (87) | 0 | 0 | 5 | 0 | $6.2154 | $0.0560 | $0.0714 | 17.59 | 89150, 88286, 96471 |
-| particle-1 | none | 111 | 111 | 80.2% (89) | 0 | 1 | 5 | 0 | $6.9000 | $0.0622 | $0.0775 | 18.42 | 64264, 63757, 68270 |
+| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Per success | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | control | 111 | 111 | 88.3% (98) | 0 | 0 | 0 | 0 | $0.2890 | 6.71 | 36361, 36033, 39042 |
+| claude-opus-5-5 | variant | 111 | 111 | 82.9% (92) | 0 | 0 | 1 | 0 | $0.2802 | 6.68 | 31751, 31423, 34432 |
+| claude-opus-5-5 | none | 111 | 111 | 82.9% (92) | 0 | 0 | 0 | 0 | $0.1662 | 5.89 | 22619, 22450, 65081 |
+| particle-1 | control | 111 | 111 | 75.7% (84) | 0 | 0 | 5 | 0 | $0.1053 | 19.44 | 99853, 98989, 107174 |
+| particle-1 | variant | 111 | 111 | 78.4% (87) | 0 | 0 | 5 | 0 | $0.0714 | 17.59 | 89150, 88286, 96471 |
+| particle-1 | none | 111 | 111 | 80.2% (89) | 0 | 1 | 5 | 0 | $0.0775 | 18.42 | 64264, 63757, 68270 |
 
 
 | Model | Contrast | Tasks | Difference, pp | 90% CI | 95% CI | LOSS p (one-sided) | Margin | Size | No-loss |
@@ -225,7 +222,121 @@ exposure.py on review (selected rows, sessions per arm):
 - **GST-734.** Both grids ran on a driver older than the GST-734 fix. GEVA-131 counted the sessions that ended with a background task still open at the first result before review-sdk launched: 0 of 66 in each of control, variant and none, and 0 of 2 in each pilot arm. The same script, with only its paths changed, finds 1 of 33 in control-sdk (gstack#3540, pass 1, a background bash). That touches only the control-against-control-sdk secondary, which has no verdict.
 - **GST-958 does not apply.** All 666 TB2 trials have laneb-summary.json.
 
-## Cost
+## Why null? (R48)
+
+**Opus 5.5: FIX-METHOD, with a TB2 loss beside it.**
+
+- **Exposure.** The part under test is text the variant no longer loads, so the question is whether the variant loaded its render and still ran the kept steps. It did: G2 and G3 hold in both lanes, and the variant ran the start line in 103 of 111 TB2 trials and 49 of 66 review sessions. The ceremony ran in 9 of 111 control TB2 trials and in no review session, so on review the cut removed text Opus never acted on. Neither lane exercised the skills' main procedure: /investigate's DEBUG REPORT ran in 0 Opus trials and /review's Agent dispatches in 0 sessions.
+- **Task fit.** Most TB2 tasks are not debugging tasks, and plain Opus passes 82.9% of them. stacks-r1 sits at a floor: control found 8.3% of blocking blockers and none 7.1%.
+- **Power, floor and ceiling.** TB2 control sits at 88.3%, near the ceiling; the planned MDD was 5.5 points under the null (8.2 with real task-by-arm spread). The LOSS test fired anyway: 6 lost passes on 4 of 37 tasks, none the other way. The review lane's MDD is about 11 points against a 10-point margin, on a development-only suite, so it could only have shown a large loss.
+- **Frontier model without the skill.** Plain Opus 5.5 ties the variant on TB2 (+0.0 points, 90% CI -5.4 to +5.4), and the full render beats it by 5.4 (90% CI 0.0 to +11.7). On this grid the cut brings Opus back to its no-gstack pass rate.
+- **Verdict: FIX-METHOD**, from the frozen rule, because G4 failed on review. Plainly: the TB2 data say the cut costs Opus quality, and had every gate held, rule 3 would have given KEEP from that LOSS alone. It is not a CUT-CANDIDATE.
+
+**particle-1: CUT, no-loss yes.**
+
+- **Exposure.** The variant ran the start line in 97 of 111 trials (control 39) and printed RENDER_KIND: unattended in 96 of the 97 counted. The ceremony ran in 4 control trials (telemetry 2, learnings 2) and in no variant trial. The variant ran more of the kept procedure: DEBUG REPORT 57 against 18, the status line 80 against 21, Scope Lock 23 against 0.
+- **Task fit.** The same 37 tasks; plain particle-1 passes 80.2%.
+- **Power, floor and ceiling.** Control at 75.7%, MDD 9.5 points at a 10-point margin, size 0.838. A loss of up to 3.6 points sits inside the 90% interval.
+- **Frontier model without the skill.** Not the question for a low-cost model. Plain particle-1 passed more trials than either gstack arm (control -4.5 points, 90% CI -13.5 to +3.6; variant -1.8, -9.0 to +4.5), so gstack shows no lift to keep on particle-1 here.
+- **Verdict: CUT** under the frozen rule. The ceremony text is a CUT-CANDIDATE for particle-1's unattended sessions: it ran in 4 of 111 trials, and removing it showed no loss within the 10-point margin while cutting cost by 30%.
+
+## What this steers
+
+1. **The unattended render doesn't meet its ship condition for Opus.** Section 1 ships gstack PR #3818 only on CUT with no-loss yes, and rule 6 makes the Opus verdict the answer to I1. The Captain carries this to the gstack Captain.
+2. **Read the four Opus tasks before any rerun.** feal-differential-cryptanalysis, model-extraction-relu-logits, polyglot-rust-c and query-optimize lost passes in the variant. A cut that also changes which steps Opus runs (start line 103 against 14) is not the plain text diet I1 assumed, so the next step is to read those transcripts side by side.
+3. **Freeze an UPSTREAM rule before rerunning review.** One upstream error voided the review lane, as GEVA-131's lesson in CREW warns. A rerun also needs blockers the no-gstack arm can reach.
+4. **The saving is small on Opus, and on TB2 it is not shown.** About 8% per review unit-pass (95% CI 0.871 to 0.972) and 9% per TB2 trial, whose interval (0.842 to 1.012) includes no saving. The mechanical part is $0.028 per TB2 trial and $0.043 per review unit-pass. On particle-1 the saving is 30%.
+
+## Limits and threats
+
+- **The review lane.** One UPSTREAM gap (gstack#3564, pass 2) voided control-opus; the Captain ruled the gap stands. No session in any arm ran /review's Agent dispatches, so this lane doesn't test the review procedure. stacks-r1 is development-only, and the scorer never lets a review no-loss claim stand.
+- **Judge agreement.** Matching agreed at kappa 0.9454 on 28 second reads. Adjudication agreed at kappa 0 on 14, and the third read decided 4, so the false-blocker rows are soft.
+- **Edits before blinding.** The derived-arm chain changed severity maps and machine paths in all four arms, under the Captain's decision and the GEVA-89 precedent. Its severity steps touch only readings with none-opus.
+- **Review cost** comes from a copy without the gap row (deviation 4).
+- **GST-734.** One control-sdk session ended with a background bash still running.
+- **Housekeeping requests.** In each Opus TB2 arm, Claude Code asked for claude-opus-5 on 3 requests and claude-opus-4-8 on 3, out of 654 to 745. The counts are equal across arms.
+- **Models.** Opus 5.5 and particle-1 only. GPT-6.1 Sol did not run; the prereg's ceiling held these cells and no more. particle-1 has no review lane (prereg section 2).
+- **Scope** (prereg section 12): nothing here speaks to interactive sessions, /ship, or skills other than /review and /investigate. The TB2 margin (7.5 points on Opus) is wider than gstack's own measured lift on Opus, so even a CUT could not have shown the cut keeps a lift.
+
+## Replicate it
+
+1. **Reanalysis (keyless).** It needs the TB2 job folders and the judged review arms, which are not published. The Captain drive's handoffs/GEVA-184/ holds them with a SHA256SUMS file: tb2-jobs-and-out.tar.gz, judged-arms.tar.gz, score-outputs.tar.gz (scorer outputs, tb2-config.json, decide.json) and the TB2 ledger file. With them, at the rig pin b792646 and with #128's frozen scripts, run score-review.sh, score-part2.sh and score-mi.sh from [phase-scripts.txt](phase-scripts.txt), and ceremony-tb2.ts and exposure.py on the job folders with tb2-config.json. The expected output is in [run-log.txt](run-log.txt). Outsiders can verify the digests today, not the scores.
+2. **Rerun (paid).** From GEVA-131's handoff, run the pilots and the two review-units grids; from phase-scripts.txt, setup-tb2.sh, tb2/batch.sh with the pinned ubi-runner, judge-prep.sh and judge2.sh, each after its start rule.
+
+The attached record holds every script GEVA-184 ran and the lines each printed. It leaves out the machine setup (clones, the gstack install check), GEVA-131's pilot and review-grid commands (in its handoff), the single commands that ran ceremony-tb2.ts and exposure.py on TB2 (their output is in run-log.txt), the transcripts, the ledger database and the judge packets and replies.
+
+## What is held out, and why
+
+Nothing is sealed. TB2 is public at 69671fba, and stacks-r1 is published with its sha256 above. The transcripts, the TB2 job folders and the judged review arms are not published: they hold model-written text that quotes the units' code, and session text. They are in the Captain drive (handoffs/GEVA-184/), and outsiders can verify their digests only.
+
+## Attachments
+
+- [run-log.txt](run-log.txt): the lines every phase printed, in run order, with machine paths replaced.
+- [phase-scripts.txt](phase-scripts.txt): every script GEVA-184 ran or wrote for this run, each with its original sha256.
+- [derived.sha256.txt](derived.sha256.txt): every derived-arm file's sha256 before and after each chain step.
+
+## X hook (draft)
+
+> We tested gstack's ceremony cut: the same skills without their housekeeping text, in unattended sessions. On Opus 5.5 it lost 5.4 points on 37 Terminal-Bench 2 tasks (95% CI -10.8 to -0.9) and cost 9% less per trial (not significant), so it doesn't ship for Opus. On particle-1 it showed no loss (within a 10-point margin) and cost 30% less. Our review lane gave no answer: one provider error voided an arm.
+
+## Claim check
+
+| Check | Evidence |
+|---|---|
+| The headline holds at both ends of the interval | Opus TB2 -5.4 points, 95% CI -10.8 to -0.9, below zero at both ends; the headline says no verdict on Opus, as the frozen rule does; particle-1's 90% CI lower end -3.6 sits above the -10 margin |
+| The headline names the grade | one verdict per model, review development-only (record table) |
+| No claim the scorer forbade | no review no-loss claim is made |
+| No parity claim | none made; particle-1 is compared only with itself |
+| Disclosures settled before the post | the closing section, with the lines from the org's research/disclosures.md for gstack, gbrain and particle-1; Opus 5.5 gets no line, and GPT-6.1 Sol was a judge with no result |
+| The sealed guard passes | gstack-pregate sealed on this branch before the push |
+| Cross-family claim check and a clean-machine reanalysis by another crew | not done; publication waits on both |
+
+## Changelog
+
+- 2026-11-02: first version (GEVA-184).
+
+## Disclosures
+
+gstack is Garry Tan's own project.
+
+gbrain is Garry Tan's own project.
+
+Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+
+<details>
+<summary>Agent notes</summary>
+
+| Record | |
+|---|---|
+| Grade | Preregistered, one verdict per model. TB2: 37 tasks, 3 replicates, Opus 5.5 and particle-1. Review: Opus 5.5 on a development-only suite at a floor, with no verdict (an arm stopped). |
+| Preregistration | [2026-11-01-geva-108-ceremony-cut-prereg](../../plans/2026-11-01-geva-108-ceremony-cut-prereg/README.md) (#122, main 64e4d62), amended by [2026-11-01-geva-136-ceremony-cut-g3-amendment](../../plans/2026-11-01-geva-136-ceremony-cut-g3-amendment/README.md) (#128, main 409ff47) |
+| gstack under test | garrytan/gstack 142757b107edeffff7c78453490c4d2786996fa7 (gstack PR #3818): the full render (control) against the unattended render (variant), same commit |
+| Models under test | claude-opus-5-5 (Anthropic API), review and TB2; particle-ai/particle-1 (OpenRouter), TB2 only |
+| Harness | Review: review-units at the rig pin b792646b43cb8ea170039623b420229e0d669216 (#119), Claude Code 2.1.314, 60 turns, $8 allowance per session. TB2: Lane B tag laneb-stacks-3-runner (8cd497367e3d7e609103540c22e01542b705604d), Claude Code 2.1.312, Harbor, terminal-bench-2 at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c |
+| Run | 2026-11-02 UTC. Pilots and both review grids by GEVA-131 (review-grid from 03:01Z, review-sdk 08:17Z to about 09:55Z). TB2 10:07Z to 12:58Z on two Ubicloud VMs, judges 13:08Z to 13:13Z, scoring after, by GEVA-184 |
+| Data | TB2 job folders and the judged review arms, not published (see What is held out) |
+| Spend | $321.06 settled through the ledger ($325.88 with the review grid's own log figure), $6.60 still reserved; ceiling $496.12 |
+
+5. **Ceiling.** $496.12 (the Captain's ruling A on section 9's remedy). Every start rule counted the review grid at its log figure, $181.04.
+
+| Model, lane | Verdict | No-loss | Variant minus control | Cost, variant / control [95% CI] | Peak exposure | Start line run, variant and control |
+|---|---|---|---|---|---|---|
+| Opus 5.5, TB2 | FIX-METHOD (G4 fails on review) | no | -5.4 points, 90% CI [-9.9, -1.8]; LOSS, Holm p 0.042 | 0.910 [0.842, 1.012] per trial | highest session $1.19 control, $1.14 variant, $0.92 none, against a $2.50 cap; 0 sessions at the cap | 103 of 111, 14 of 111 |
+| Opus 5.5, review | no verdict: control-opus stopped | no | blocking recall +1.2 points, 95% CI [-3.7, 6.8]; p loss 0.813 | 0.920 [0.871, 0.972] per unit-pass | highest session $4.95 control, $4.42 variant, $3.95 none, $5.01 control-sdk, against an $8 allowance | 49 of 66, 1 of 66 |
+| particle-1, TB2 | CUT | yes | +2.7 points, 90% CI [-3.6, +9.0]; margin 10, size 0.838 | 0.703 [0.569, 0.874] per trial | highest session $0.53 control, $0.24 variant, $0.47 none, against a $0.80 cap; 0 sessions at the cap | 97 of 111, 39 of 111 |
+
+Review peak exposure is peak.py's reading: a session's settled spend plus its open reservations, at their highest (p95 $4.19 control, $4.18 variant, $3.44 none, $4.37 control-sdk).
+
+| Model | Arm | Trials | Graded | Pass | Infra | No reward | Agent timeouts | Session caps | Spend | Per trial | Per success | Requests | First-request tokens (median, min, max) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-opus-5-5 | control | 111 | 111 | 88.3% (98) | 0 | 0 | 0 | 0 | $28.3189 | $0.2551 | $0.2890 | 6.71 | 36361, 36033, 39042 |
+| claude-opus-5-5 | variant | 111 | 111 | 82.9% (92) | 0 | 0 | 1 | 0 | $25.7744 | $0.2322 | $0.2802 | 6.68 | 31751, 31423, 34432 |
+| claude-opus-5-5 | none | 111 | 111 | 82.9% (92) | 0 | 0 | 0 | 0 | $15.2936 | $0.1378 | $0.1662 | 5.89 | 22619, 22450, 65081 |
+| particle-1 | control | 111 | 111 | 75.7% (84) | 0 | 0 | 5 | 0 | $8.8439 | $0.0797 | $0.1053 | 19.44 | 99853, 98989, 107174 |
+| particle-1 | variant | 111 | 111 | 78.4% (87) | 0 | 0 | 5 | 0 | $6.2154 | $0.0560 | $0.0714 | 17.59 | 89150, 88286, 96471 |
+| particle-1 | none | 111 | 111 | 80.2% (89) | 0 | 1 | 5 | 0 | $6.9000 | $0.0622 | $0.0775 | 18.42 | 64264, 63757, 68270 |
+
+**Cost**
 
 Prices from the rig pin's src/runner/pricing/prices.ts, read 2026-11-01, in dollars per million tokens (prereg section 4):
 
@@ -277,84 +388,8 @@ Prices from the rig pin's src/runner/pricing/prices.ts, read 2026-11-01, in doll
 
 Four TB2 sessions, two per model, opened a reservation of one session cap each and never settled, so $6.60 stays reserved on the item. The proxy's global counters run $0.247043 above the settled sessions (Opus $69.532834 against $69.386883, particle-1 $22.060466 against $21.959374), which is what those four sessions spent. Every cell still has 111 graded trials, each with its own settled session. Every start rule fit the ceiling; the largest was TB2's, $405.57.
 
-## Why null? (R48)
-
-**Opus 5.5: FIX-METHOD, with a TB2 loss beside it.**
-
-- **Exposure.** The part under test is text the variant no longer loads, so the question is whether the variant loaded its render and still ran the kept steps. It did: G2 and G3 hold in both lanes, and the variant ran the start line in 103 of 111 TB2 trials and 49 of 66 review sessions. The ceremony ran in 9 of 111 control TB2 trials and in no review session, so on review the cut removed text Opus never acted on. Neither lane exercised the skills' main procedure: /investigate's DEBUG REPORT ran in 0 Opus trials and /review's Agent dispatches in 0 sessions.
-- **Task fit.** Most TB2 tasks are not debugging tasks, and plain Opus passes 82.9% of them. stacks-r1 sits at a floor: control found 8.3% of blocking blockers and none 7.1%.
-- **Power, floor and ceiling.** TB2 control sits at 88.3%, near the ceiling; the planned MDD was 5.5 points under the null (8.2 with real task-by-arm spread). The LOSS test fired anyway: 6 lost passes on 4 of 37 tasks, none the other way. The review lane's MDD is about 11 points against a 10-point margin, on a development-only suite, so it could only have shown a large loss.
-- **Frontier model without the skill.** Plain Opus 5.5 ties the variant on TB2 (+0.0 points, 90% CI -5.4 to +5.4), and the full render beats it by 5.4 (90% CI 0.0 to +11.7). On this grid the cut brings Opus back to its no-gstack pass rate.
-- **Verdict: FIX-METHOD**, from the frozen rule, because G4 failed on review. Plainly: the TB2 data say the cut costs Opus quality, and had every gate held, rule 3 would have given KEEP from that LOSS alone. It is not a CUT-CANDIDATE.
-
-**particle-1: CUT, no-loss yes.**
-
-- **Exposure.** The variant ran the start line in 97 of 111 trials (control 39) and printed RENDER_KIND: unattended in 96 of the 97 counted. The ceremony ran in 4 control trials (telemetry 2, learnings 2) and in no variant trial. The variant ran more of the kept procedure: DEBUG REPORT 57 against 18, the status line 80 against 21, Scope Lock 23 against 0.
-- **Task fit.** The same 37 tasks; plain particle-1 passes 80.2%.
-- **Power, floor and ceiling.** Control at 75.7%, MDD 9.5 points at a 10-point margin, size 0.838. A loss of up to 3.6 points sits inside the 90% interval.
-- **Frontier model without the skill.** Not the question for a low-cost model. Plain particle-1 passed more trials than either gstack arm (control -4.5 points, 90% CI -13.5 to +3.6; variant -1.8, -9.0 to +4.5), so gstack shows no lift to keep on particle-1 here.
-- **Verdict: CUT** under the frozen rule. The ceremony text is a CUT-CANDIDATE for particle-1's unattended sessions: it ran in 4 of 111 trials, and removing it showed no loss within the 10-point margin while cutting cost by 30%.
-
-## What this steers
-
-1. **The unattended render doesn't meet its ship condition for Opus.** Section 1 ships gstack PR #3818 only on CUT with no-loss yes, and rule 6 makes the Opus verdict the answer to I1. The Captain carries this to GStack Minder.
-2. **Read the four Opus tasks before any rerun.** feal-differential-cryptanalysis, model-extraction-relu-logits, polyglot-rust-c and query-optimize lost passes in the variant. A cut that also changes which steps Opus runs (start line 103 against 14) is not the plain text diet I1 assumed, so the next step is to read those transcripts side by side.
-3. **Freeze an UPSTREAM rule before rerunning review.** One upstream error voided the review lane, as GEVA-131's lesson in CREW warns. A rerun also needs blockers the no-gstack arm can reach.
-4. **The saving is small on Opus, and on TB2 it is not shown.** About 8% per review unit-pass (95% CI 0.871 to 0.972) and 9% per TB2 trial, whose interval (0.842 to 1.012) includes no saving. The mechanical part is $0.028 per TB2 trial and $0.043 per review unit-pass. On particle-1 the saving is 30%.
-
-## Limits and threats
-
-- **The review lane.** One UPSTREAM gap (gstack#3564, pass 2) voided control-opus; the Captain ruled the gap stands. No session in any arm ran /review's Agent dispatches, so this lane doesn't test the review procedure. stacks-r1 is development-only, and the scorer never lets a review no-loss claim stand.
-- **Judge agreement.** Matching agreed at kappa 0.9454 on 28 second reads. Adjudication agreed at kappa 0 on 14, and the third read decided 4, so the false-blocker rows are soft.
-- **Edits before blinding.** The derived-arm chain changed severity maps and machine paths in all four arms, under the Captain's decision and the GEVA-89 precedent. Its severity steps touch only readings with none-opus.
-- **Review cost** comes from a copy without the gap row (deviation 4).
-- **GST-734.** One control-sdk session ended with a background bash still running.
 - **Open reserves.** $6.60 stays reserved on the TB2 item for four sessions that never settled (Cost).
-- **Housekeeping requests.** In each Opus TB2 arm, Claude Code asked for claude-opus-5 on 3 requests and claude-opus-4-8 on 3, out of 654 to 745. The counts are equal across arms.
-- **Models.** Opus 5.5 and particle-1 only. GPT-6.1 Sol did not run; the prereg's ceiling held these cells and no more. particle-1 has no review lane (prereg section 2).
-- **Scope** (prereg section 12): nothing here speaks to interactive sessions, /ship, or skills other than /review and /investigate. The TB2 margin (7.5 points on Opus) is wider than gstack's own measured lift on Opus, so even a CUT could not have shown the cut keeps a lift.
 
-## Replicate it
+This run cost $321.06.
 
-1. **Reanalysis (keyless).** It needs the TB2 job folders and the judged review arms, which are not published. The Captain drive's handoffs/GEVA-184/ holds them with a SHA256SUMS file: tb2-jobs-and-out.tar.gz, judged-arms.tar.gz, score-outputs.tar.gz (scorer outputs, tb2-config.json, decide.json) and the TB2 ledger file. With them, at the rig pin b792646 and with #128's frozen scripts, run score-review.sh, score-part2.sh and score-mi.sh from [phase-scripts.txt](phase-scripts.txt), and ceremony-tb2.ts and exposure.py on the job folders with tb2-config.json. The expected output is in [run-log.txt](run-log.txt). Outsiders can verify the digests today, not the scores.
-2. **Rerun (paid).** From GEVA-131's handoff, run the pilots and the two review-units grids; from phase-scripts.txt, setup-tb2.sh, tb2/batch.sh with the pinned ubi-runner, judge-prep.sh and judge2.sh, each after its start rule. This run cost $321.06.
-
-The attached record holds every script GEVA-184 ran and the lines each printed. It leaves out the machine setup (clones, the gstack install check), GEVA-131's pilot and review-grid commands (in its handoff), the single commands that ran ceremony-tb2.ts and exposure.py on TB2 (their output is in run-log.txt), the transcripts, the ledger database and the judge packets and replies.
-
-## What is held out, and why
-
-Nothing is sealed. TB2 is public at 69671fba, and stacks-r1 is published with its sha256 above. The transcripts, the TB2 job folders and the judged review arms are not published: they hold model-written text that quotes the units' code, and session text. They are in the Captain drive (handoffs/GEVA-184/), and outsiders can verify their digests only.
-
-## Attachments
-
-- [run-log.txt](run-log.txt): the lines every phase printed, in run order, with machine paths replaced.
-- [phase-scripts.txt](phase-scripts.txt): every script GEVA-184 ran or wrote for this run, each with its original sha256.
-- [derived.sha256.txt](derived.sha256.txt): every derived-arm file's sha256 before and after each chain step.
-
-## X hook (draft)
-
-> We tested gstack's ceremony cut: the same skills without their housekeeping text, in unattended sessions. On Opus 5.5 it lost 5.4 points on 37 Terminal-Bench 2 tasks (95% CI -10.8 to -0.9) and cost 9% less per trial (not significant), so it doesn't ship for Opus. On particle-1 it showed no loss (within a 10-point margin) and cost 30% less. Our review lane gave no answer: one provider error voided an arm.
-
-## Claim check
-
-| Check | Evidence |
-|---|---|
-| The headline holds at both ends of the interval | Opus TB2 -5.4 points, 95% CI -10.8 to -0.9, below zero at both ends; the headline says no verdict on Opus, as the frozen rule does; particle-1's 90% CI lower end -3.6 sits above the -10 margin |
-| The headline names the grade | one verdict per model, review development-only (record table) |
-| No claim the scorer forbade | no review no-loss claim is made |
-| No parity claim | none made; particle-1 is compared only with itself |
-| Disclosures settled before the post | the closing section, with the lines from the org's research/disclosures.md for gstack, gbrain and particle-1; Opus 5.5 gets no line, and GPT-6.1 Sol was a judge with no result |
-| The sealed guard passes | gstack-pregate sealed on this branch before the push |
-| Cross-family claim check and a clean-machine reanalysis by another crew | not done; publication waits on both |
-
-## Changelog
-
-- 2026-11-02: first version (GEVA-184).
-
-## Disclosures
-
-gstack is Garry Tan's own project.
-
-gbrain is Garry Tan's own project.
-
-Disclosure: Y Combinator, which Garry Tan runs, is an investor in Particle, which makes particle-1.
+</details>

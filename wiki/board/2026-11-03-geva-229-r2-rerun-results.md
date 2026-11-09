@@ -2,7 +2,7 @@
 id: 2026-11-03-geva-229-r2-rerun-results
 kind: finding
 title: "R2 rerun gives no outcome: gstack's full /review ran in 2 of 3 exposure-smoke sessions (3 needed), and plain Opus 5.5 passes admission at 5.7% blocking recall on all 33 stacks-r1 units"
-summary: "No outcome: the smoke gate failed at 2 of 3, so no grid ran. The fixed driver held. The no-gstack pilot passed admission at 5.7% [3.0, 8.6], MDD 24.5. $145.42. R48: FIX-METHOD."
+summary: "No outcome: the smoke gate failed at 2 of 3, so no grid ran. The fixed driver held. The no-gstack pilot passed admission at 5.7% [3.0, 8.6], MDD 24.5. R48: FIX-METHOD."
 author: GEVA-229
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -24,7 +24,6 @@ Publication status: unpublished; posting is Garry's. Done: the smoke, the pilot,
 | Field | Value |
 |---|---|
 | Grade | Run under a merged preregistration ([2026-11-02-geva-195-r2-rerun-amendment](../plans/2026-11-02-geva-195-r2-rerun-amendment/README.md), #154). The comparison gives no outcome; the admission reading is the preregistered pass line. |
-| Paid calls | $145.42 in all: smoke $18.28, pilot sessions $125.11, pilot judging $2.03. |
 
 ## What we found
 
@@ -40,7 +39,7 @@ Publication status: unpublished; posting is Garry's. Done: the smoke, the pilot,
 
 ## Setup
 
-Every session ran from gstack-evals 176fdc7 (#141's driver), on Opus 5.5 with Claude Code CLI 2.1.314, the claude-code-preset system prompt, bundled skills off, 200 turns, a $40 allowance, `--cap-stops`, `--timeout 10800` and a background wait of 3600 s, in the rig's Docker sandbox. gstack-full ran gstack 5209e92 (v1.93.6.0) with R2's told prefix (db9ec7b4) and the reader map a17fc2c0. Judging ran at rig 715f837 with #108's brief and judges (Opus 5.5 primary, GPT-6.1 Sol second, Sonnet 5.5 third read), seed 20261031. The suite is stacks-r1 (4f46bb17): 33 units, 42 blocking blockers on 26 PR clusters. The ledger held #154's seven items at their caps, and rr-pause.py ran before each launch; it never paused.
+Every session ran from gstack-evals 176fdc7 (#141's driver), on Opus 5.5 with Claude Code CLI 2.1.314, the claude-code-preset system prompt, bundled skills off, 200 turns, `--cap-stops`, `--timeout 10800` and a background wait of 3600 s, in the rig's Docker sandbox. gstack-full ran gstack 5209e92 (v1.93.6.0) with R2's told prefix (db9ec7b4) and the reader map a17fc2c0. Judging ran at rig 715f837 with #108's brief and judges (Opus 5.5 primary, GPT-6.1 Sol second, Sonnet 5.5 third read), seed 20261031. The suite is stacks-r1 (4f46bb17): 33 units, 42 blocking blockers on 26 PR clusters. The ledger held #154's seven items at their caps, and rr-pause.py ran before each launch; it never paused.
 
 ### Setup deviations
 
@@ -55,11 +54,11 @@ Every session ran from gstack-evals 176fdc7 (#141's driver), on Opus 5.5 with Cl
 
 Run review-units-20261103T034836Z-7bb4, gstack-full, 1 pass. rr-gate.py: 3 of 3 PR-passes returned; a specialist with tokens in 2, adversarial-native with tokens in 2, both in 2; red-team 2, targeted 0; gate FAIL, exit 3.
 
-| Unit | Parse | Scored rule | session_end | Waited | Readers with tokens | Cost |
-|---|---|---|---|---|---|---|
-| gbrain#7789@49eb4da5f7c8 | 3 findings | final | clean | 0 s | other (1) | $3.44 |
-| gstack#3475@fc69d3ff0bfe | 9 findings | final | clean | 107 s | adversarial-native, batched, maintainability, red-team, security, testing | $7.00 |
-| gstack#3507@8c021d124220 | 14 findings | final | clean | 379 s | adversarial-native, maintainability, performance, red-team, security, simplification, state-machines, testing | $7.84 |
+| Unit | Parse | Scored rule | session_end | Waited | Readers with tokens |
+|---|---|---|---|---|---|
+| gbrain#7789@49eb4da5f7c8 | 3 findings | final | clean | 0 s | other (1) |
+| gstack#3475@fc69d3ff0bfe | 9 findings | final | clean | 107 s | adversarial-native, batched, maintainability, red-team, security, testing |
+| gstack#3507@8c021d124220 | 14 findings | final | clean | 379 s | adversarial-native, maintainability, performance, red-team, security, simplification, state-machines, testing |
 
 On gbrain#7789 the session read the diff, checked it by hand, ran one general-purpose reader in the foreground with its own short adversarial brief (no gstack marker, no checklist path), and wrote its report. It sent no Review Army specialist.
 
@@ -82,33 +81,6 @@ Read audit, descriptive: across the 165 transcripts, no tool input names ~/.capy
 ### The comparison
 
 No outcome. No grid ran, so rr-decide.py never ran, and there is no gstack-full against no-gstack delta.
-
-## Cost
-
-| Ledger item | Cap | Settled |
-|---|---|---|
-| rr-smoke-full | $120 | $18.28 |
-| rr-pilot-none | $6,600 | $125.11 |
-| rr-pilot-judge | $332 | $2.03 |
-| rr-grid-none, rr-grid-full, rr-judge-match, rr-judge-adjudicate | $2,640, $2,640, $332, $1,130 | $0 |
-| **Total** | | **$145.42** |
-
-Every lease closed at or under its reservation, with $0 unknown.
-
-| Run | Sessions | Input | Cache read | Cache write | Output | Total tokens | Requests | Dollars | Mean |
-|---|---|---|---|---|---|---|---|---|---|
-| Smoke, gstack-full | 3 | 694 | 27,980,447 | 1,704,153 | 207,863 | 29,893,157 | 344 | $18.28 | $6.09 |
-| Pilot, no gstack | 165 | 5,518 | 189,200,284 | 11,013,438 | 1,609,214 | 201,828,454 | 2,756 | $125.11 | $0.76 |
-
-Prices are the pinned table (src/runner/pricing/prices.ts at 176fdc7 and 715f837, read 2026-11-03), in dollars per million tokens:
-
-| Model | Input | Output | Cache read | Cache write |
-|---|---|---|---|---|
-| claude-opus-5-5 (sessions, primary judge) | 4 | 20 | 0.20 | 5 |
-| claude-sonnet-5-5 (third judge) | 2 | 10 | 0.20 | 2.50 |
-| gpt-6.1-sol (second judge; above 272,000 input tokens: 4, 15, 0.20, 5) | 2 | 10 | 0.10 | 2.50 |
-
-From the smoke, a gstack-full grid arm (66 sessions) would cost about $402. It did not run.
 
 ## Why null? (R48)
 
@@ -152,3 +124,48 @@ Nothing here is sealed. The session transcripts and findings stay on the run mac
 gstack is Garry Tan's own project.
 
 gbrain is Garry Tan's own project.
+
+<details>
+<summary>Agent notes</summary>
+
+| Field | Value |
+|---|---|
+| Grade | Run under a merged preregistration ([2026-11-02-geva-195-r2-rerun-amendment](../plans/2026-11-02-geva-195-r2-rerun-amendment/README.md), #154). The comparison gives no outcome; the admission reading is the preregistered pass line. |
+| Paid calls | $145.42 in all: smoke $18.28, pilot sessions $125.11, pilot judging $2.03. |
+
+Every session ran from gstack-evals 176fdc7 (#141's driver), on Opus 5.5 with Claude Code CLI 2.1.314, the claude-code-preset system prompt, bundled skills off, 200 turns, a $40 allowance, `--cap-stops`, `--timeout 10800` and a background wait of 3600 s, in the rig's Docker sandbox. gstack-full ran gstack 5209e92 (v1.93.6.0) with R2's told prefix (db9ec7b4) and the reader map a17fc2c0. Judging ran at rig 715f837 with #108's brief and judges (Opus 5.5 primary, GPT-6.1 Sol second, Sonnet 5.5 third read), seed 20261031. The suite is stacks-r1 (4f46bb17): 33 units, 42 blocking blockers on 26 PR clusters. The ledger held #154's seven items at their caps, and rr-pause.py ran before each launch; it never paused.
+
+| Unit | Parse | Scored rule | session_end | Waited | Readers with tokens | Cost |
+|---|---|---|---|---|---|---|
+| gbrain#7789@49eb4da5f7c8 | 3 findings | final | clean | 0 s | other (1) | $3.44 |
+| gstack#3475@fc69d3ff0bfe | 9 findings | final | clean | 107 s | adversarial-native, batched, maintainability, red-team, security, testing | $7.00 |
+| gstack#3507@8c021d124220 | 14 findings | final | clean | 379 s | adversarial-native, maintainability, performance, red-team, security, simplification, state-machines, testing | $7.84 |
+
+**Cost**
+
+| Ledger item | Cap | Settled |
+|---|---|---|
+| rr-smoke-full | $120 | $18.28 |
+| rr-pilot-none | $6,600 | $125.11 |
+| rr-pilot-judge | $332 | $2.03 |
+| rr-grid-none, rr-grid-full, rr-judge-match, rr-judge-adjudicate | $2,640, $2,640, $332, $1,130 | $0 |
+| **Total** | | **$145.42** |
+
+Every lease closed at or under its reservation, with $0 unknown.
+
+| Run | Sessions | Input | Cache read | Cache write | Output | Total tokens | Requests | Dollars | Mean |
+|---|---|---|---|---|---|---|---|---|---|
+| Smoke, gstack-full | 3 | 694 | 27,980,447 | 1,704,153 | 207,863 | 29,893,157 | 344 | $18.28 | $6.09 |
+| Pilot, no gstack | 165 | 5,518 | 189,200,284 | 11,013,438 | 1,609,214 | 201,828,454 | 2,756 | $125.11 | $0.76 |
+
+Prices are the pinned table (src/runner/pricing/prices.ts at 176fdc7 and 715f837, read 2026-11-03), in dollars per million tokens:
+
+| Model | Input | Output | Cache read | Cache write |
+|---|---|---|---|---|
+| claude-opus-5-5 (sessions, primary judge) | 4 | 20 | 0.20 | 5 |
+| claude-sonnet-5-5 (third judge) | 2 | 10 | 0.20 | 2.50 |
+| gpt-6.1-sol (second judge; above 272,000 input tokens: 4, 15, 0.20, 5) | 2 | 10 | 0.10 | 2.50 |
+
+From the smoke, a gstack-full grid arm (66 sessions) would cost about $402. It did not run.
+
+</details>
