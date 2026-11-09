@@ -61,7 +61,7 @@ a.options = types.SimpleNamespace(
     persona_path=str(REPO / "quick/laneb/runner/agent/persona.json"), arm=SPEC["arm"], arm_tar=SPEC["tar"], arm_sha256="", strip_snapshot=SPEC["strip"],
     control_url="http://127.0.0.1:9", session_cap_usd=5.0, wrapper_path=str(REPO / "quick/laneb/runner/prompt-wrapper.md"), upstream_model="claude-opus-5-5",
     repo_dir="/testbed", workdir="/testbed", max_output_tokens=32000, sdk_max_turns=30, close_timeout_sec=30, system_prompt="claude-code-preset",
-    session_kind="", told_skill=SPEC["told"], procedure_line="", closing_line="hm-status",
+    session_kind="", told_skill=SPEC["told"], procedure_line="", closing_line="hm-status", checks_trust=False,
 )
 a.logs_dir = out / "agent"
 a.logs_dir.mkdir(parents=True, exist_ok=True)

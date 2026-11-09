@@ -76,3 +76,12 @@ describe("step 1's in-image checks", () => {
     expect(inImageProblems("prose", out("prose").replace(/claude=\S+/, "claude=2.1.300")).length).toBe(1);
   });
 });
+
+describe("sessions-driver.py's agent options", () => {
+  test("set every option LanebHooksAgent and LanebAgent read, so the driver can't drift from the agent", () => {
+    const read = new Set(["laneb_agent.py", "laneb_hooks.py"].flatMap((f) => [...readFileSync(join(REPO, "quick/laneb/runner/agent", f), "utf8").matchAll(/self\.options\.(\w+)/g)].map((m) => m[1]!)));
+    const opts = readFileSync(join(REPO, "lanes/harness-mechanics/sessions-driver.py"), "utf8").match(/a\.options = types\.SimpleNamespace\(([\s\S]*?)\n\)/)![1]!;
+    const set = new Set([...opts.matchAll(/(\w+)=/g)].map((m) => m[1]!));
+    expect([...read].filter((o) => !set.has(o))).toEqual([]);
+  });
+});
