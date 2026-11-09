@@ -143,16 +143,24 @@ Readings this build chose
   skill body reaches the request and Claude Code's own transcript (~/.claude/projects), not the SDK message stream. So
   pf_turns.py copies Claude Code's transcript out as claude-session.jsonl, and the body check reads that file.
 - The short skill names resolve on 2.1.310 with the plugin directory loaded, so the dry run keeps "short" and records it.
-- Open: the dry run's stub answers the first wrap-up request with a 401, but Claude Code 2.1.310 retries a 400 and a 401
-  inside the turn and then completes, so the wrap-up upstream rerun fixture still prints FAIL. The rerun rule
-  (wrapupStep, wrapup.sh reset, --resume) is covered by keyless tests only.
-- A turn ends at its ResultMessage; pf_turns.py does not yet wait out background tasks the way real_agent's _drive does.
+- The wrap-up upstream fixture: the stub fails every request of the first wrap-up attempt with a 500 and
+  x-should-retry: false, which Claude Code does not retry, so the turn ends as error_result (upstream). The rerun resumes
+  the session on the saved S; its messages hold the wrap-up text twice, and the stub answers it, so it completes and scores.
+- Each turn ends by real_agent's _drive rule: the agent ended its turn and its background tasks are quiet (QUIET_SEC 30,
+  then BG_WAIT_SEC 600 with nothing ends it as bg_wait_expired, which counts as completed), bounded by the turn's wall
+  limit. pf_turns.py calls RealAgent._drive itself, so the rule has one code path.
+- Sessions run the pinned Claude Code 2.1.312 binary (statemachines/stub-claude.ts CLAUDE_BIN, or --claude) at
+  /usr/local/bin/claude in the session container, never the SDK's bundled 2.1.310, and pf-summary.json records its
+  claude --version from inside the container.
 
 Dry run. `gstack-evals outcome pf dryrun [--out dir] [--python <python with claude_agent_sdk 0.2.174>]` builds the volumes,
 opens and settles one lease per frozen item on a temporary ledger, runs six stub sessions through pf_turns.py in
 containers from a fixture unit's image, scores them with the Docker executor and prints one PASS or FAIL line per
-fixture. The fixture unit comes from #290's fixtures helper (lang go, shell-sourceable product code). Not yet done: the
-Harbor wiring of pf_turns.py through real_agent and the driver's proxy slots, and the dry run on real MultiLang units.
+fixture. The fixture unit comes from #290's fixtures helper (lang go, shell-sourceable product code). pf_agent.py
+(pf_agent:PfAgent, a RealAgent subclass) runs the same core under Harbor with one driver slot per turn (meta.phase task or
+wrapup, cap_usd from that turn's allowance, meta.rerun on the wrap-up rerun). Not yet done: run.ts (session image, Harbor
+run copy, pf-session.v1 record), the dry run through Harbor, pf_agent and serveStages, keyless pf_agent tests on the
+real SDK, and the dry run on real MultiLang units.
 
 ### Driver
 

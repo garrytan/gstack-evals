@@ -15,7 +15,7 @@ test("the stub's script: the task turn plants files once; the wrap-up writes the
   expect(stubReply(s, "task", 1, true).blocks[0]).toMatchObject({ type: "text" });
   expect(String((stubReply(s, "wrapup", 0, true).blocks[0] as any).input.command)).toContain("> CHECKS.json && printf 'exit 0\\n' > checks/late_test.sh");
   expect(stubReply({ ...s, wrapup: "limit" }, "wrapup", 7, true).blocks[0]).toMatchObject({ input: { command: "true" } });
-  expect(stubReply({ ...s, wrapup: "upstream" }, "wrapup", 0, true).status).toBe(401);
+  expect(stubReply({ ...s, wrapup: "upstream" }, "wrapup", 0, true).status).toBe(500);
   expect(stubReply({ ...s, wrapup: "upstream" }, "wrapup", 0, false).blocks[0]).toMatchObject({ type: "tool_use" });
 });
 

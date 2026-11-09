@@ -17,6 +17,7 @@ import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
 import { sse } from "../../../quick/laneb/runner/fake_upstream.ts";
 import { patchOf, scoreUnit } from "../statemachines/fixtures.ts";
+import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { NAMES, NO_ANSWER, WRAPUP, sessionLimits, taskTurn, type Names, type PfArm } from "./arms.ts";
 import { readCapture } from "./capture.ts";
 import { ITEMS, LINE, OPUS, P1, SOL } from "./items.ts";
@@ -98,15 +99,17 @@ function writeCommand(files: Record<string, string>): string {
   return "echo " + b64(tar.stdout) + " | base64 -d | tar -xzf - --no-same-owner";
 }
 
-export interface StubSession { task: string; wrapup: "manifest" | "limit" | "upstream" | "none"; checks?: string }
+export interface StubSession { task: string; wrapup: "manifest" | "limit" | "upstream" | "none"; checks?: string; bg?: string }
 interface StubState { bodies: Array<{ session: string; phase: string; body: Record<string, any> }>; calls: Map<string, number>; failed: Set<string> }
 /** The stub's reply to one Messages request: the task turn's first main request writes the fixture files; the wrap-up
- *  turn writes CHECKS.json and one late test file, keeps calling a tool (limit), or answers 400 once (upstream). */
+ *  turn writes CHECKS.json and one late test file, keeps calling a tool (limit), or fails every request of its first attempt
+ *  with a 500 that Claude Code does not retry (upstream; x-should-retry: false), so the turn ends upstream and its rerun,
+ *  whose resumed messages hold the wrap-up text twice, completes. bg starts a background Bash command at the end of the task turn. */
 export function stubReply(s: StubSession, phase: string, n: number, first: boolean): { status?: number; blocks: Array<Record<string, unknown>> } {
   const tool = (command: string) => [{ type: "tool_use", id: "toolu_pf_" + phase + "_" + n, name: "Bash", input: { command, description: "Fixture step" } }];
-  if (phase === "task") return { blocks: n === 0 ? tool(s.task) : [{ type: "text", text: "Done." }] };
+  if (phase === "task") return { blocks: n === 0 ? tool(s.task) : n === 1 && s.bg ? [{ type: "tool_use", id: "toolu_pf_bg_" + n, name: "Bash", input: { command: s.bg, description: "Background fixture step", run_in_background: true } }] : [{ type: "text", text: "Done." }] };
   if (s.wrapup === "limit") return { blocks: tool("true") };
-  if (s.wrapup === "upstream" && first) return { status: 401, blocks: [] };
+  if (s.wrapup === "upstream" && first) return { status: 500, blocks: [] };
   if (s.wrapup === "none" || n > 0) return { blocks: [{ type: "text", text: "Done." }] };
   return { blocks: tool("echo " + b64(s.checks ?? "[]") + " | base64 -d > CHECKS.json && printf 'exit 0\\n' > checks/late_test.sh") };
 }
@@ -127,12 +130,12 @@ function startStub(sessions: Record<string, StubSession>, host: string) {
       const key = session + ":" + phase;
       const n = st.calls.get(key) ?? 0;
       st.calls.set(key, n + 1);
-      const first = !st.failed.has(key);
+      const first = JSON.stringify(body.messages ?? []).split(JSON.stringify(WRAPUP).slice(1, -1)).length <= 2;
       const r = stubReply(sessions[session]!, phase, n, first);
       if (r.status) {
         st.failed.add(key);
         st.calls.set(key, 0);
-        return Response.json({ type: "error", error: { type: "authentication_error", message: "stub upstream end" } }, { status: r.status });
+        return Response.json({ type: "error", error: { type: "api_error", message: "stub upstream end" } }, { status: r.status, headers: { "x-should-retry": "false" } });
       }
       return new Response(sse(body.model, r.blocks as any), { headers: { "content-type": "text/event-stream" } });
     },
@@ -163,7 +166,8 @@ export async function main(argv: string[]): Promise<number> {
   const rule = (name: string, ok: boolean, detail: string) => { const l = (ok ? "PASS " : "FAIL ") + name + ": " + detail; lines.push(l); console.log(l); };
   const cli = spawnSync(python, ["-c", "import claude_agent_sdk,os;print(claude_agent_sdk.__version__, os.path.dirname(claude_agent_sdk.__file__)+'/_bundled/claude')"], { encoding: "utf8" }).stdout.trim().split(" ");
   if (cli.length !== 2 || !existsSync(cli[1]!)) { rule("python SDK", false, python + " has no claude_agent_sdk with a bundled CLI"); return 1; }
-  const claudeVersion = spawnSync(cli[1]!, ["--version"], { encoding: "utf8" }).stdout.trim();
+  const claudeBin = arg("--claude") ?? CLAUDE_BIN;
+  const claudeVersion = spawnSync(claudeBin, ["--version"], { encoding: "utf8" }).stdout.trim();
   console.log("sdk " + cli[0] + ", claude " + claudeVersion + ", work " + W);
 
   // Ledger: one lease opened and settled per frozen item on a temporary ledger.
@@ -205,7 +209,7 @@ export async function main(argv: string[]): Promise<number> {
   // Sessions through pf_turns.py, each in its own container.
   const gw = spawnSync("docker", ["network", "inspect", "bridge", "-f", "{{(index .IPAM.Config 0).Gateway}}"], { encoding: "utf8" }).stdout.trim();
   const stubSessions: Record<string, StubSession> = {
-    probe: { task: "true", wrapup: "none" },
+    probe: { task: "true", wrapup: "none", bg: "sleep 45 && echo bg-done" },
     A: { task: plant, wrapup: "manifest", checks: manifest(MANIFEST_A.map((e) => e.command)) },
     B: { task: plant, wrapup: "manifest", checks: manifest(Array.from({ length: 26 }, () => "bash checks/fail.sh")) },
     C: { task: plant, wrapup: "limit" },
@@ -220,7 +224,7 @@ export async function main(argv: string[]): Promise<number> {
     const cid = "pf-dry-" + name + "-" + process.pid;
     const plugin = arm === "P" || arm === "blind";
     spawnSync("docker", ["rm", "-f", cid]);
-    const run = spawnSync("docker", ["run", "-d", "--name", cid, "--mount", tv.mount, ...(plugin ? ["--mount", pv.mount] : []), "-v", cli[1]! + ":/usr/local/bin/claude:ro", "-v", SH + ":/opt/pf-sh:ro", "--entrypoint", "sleep", FIXTURE_IMAGE, "infinity"], { encoding: "utf8" });
+    const run = spawnSync("docker", ["run", "-d", "--name", cid, "--mount", tv.mount, ...(plugin ? ["--mount", pv.mount] : []), "-v", claudeBin + ":/usr/local/bin/claude:ro", "-v", SH + ":/opt/pf-sh:ro", "--entrypoint", "sleep", FIXTURE_IMAGE, "infinity"], { encoding: "utf8" });
     if (run.status !== 0) throw new Error("E_PF_INFRA_GAP session container: " + run.stderr);
     const seed = mkdtempSync(join(W, "seed-"));
     spawnSync("git", ["clone", "-q", fx.repo, join(seed, "w")]);
@@ -247,7 +251,7 @@ export async function main(argv: string[]): Promise<number> {
     clearTimeout(timer);
     writeFileSync(join(out, "turns.log"), so + se);
     spawnSync("docker", ["rm", "-f", cid]);
-    const turns = existsSync(join(out, "turns.json")) ? JSON.parse(readFileSync(join(out, "turns.json"), "utf8")) : { refused: "no turns.json: " + se.slice(-400) };
+    const turns = existsSync(join(out, "pf-summary.json")) ? JSON.parse(readFileSync(join(out, "pf-summary.json"), "utf8")) : { refused: "no pf-summary.json: " + se.slice(-400) };
     return { out, turns, arm, model, names };
   };
   type Ran = Awaited<ReturnType<typeof runOne>>;
@@ -283,7 +287,7 @@ export async function main(argv: string[]): Promise<number> {
   try {
     // P's skill command: the short names, or the recorded fallback to the /pstack: names.
     let names: Names = "short";
-    await runOne("probe", "P", OPUS, "short");
+    const probe = await runOne("probe", "P", OPUS, "short");
     const probeBody = JSON.stringify(st.bodies.filter((b) => b.session === "probe").map((b) => b.body.messages));
     if (!probeBody.includes(P_HEADING)) names = "plugin";
     const A = await runOne("A", "P", OPUS, names);
@@ -327,6 +331,10 @@ export async function main(argv: string[]): Promise<number> {
     rule("first request body's effort and thinking fields recorded per model", Object.keys(effort).length === 3, JSON.stringify(effort));
     const H = await runOne("hostile", "C", OPUS, names, true);
     const reached = st.bodies.filter((b) => JSON.stringify(b.body).includes("PF-HOSTILE")).length;
+    for (const [n, r] of Object.entries({ probe, A, B, C, D })) rule("claude --version is 2.1.312 in session " + n, /^2\.1\.312 /.test(String(r.turns.claude_version)), String(r.turns.claude_version));
+    const pTask = readFileSync(join(probe.out, "sdk-messages.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.phase === "task");
+    const bgDone = pTask.findIndex((m) => m.subtype === "task_notification" && m.data?.status === "completed");
+    rule("background task started near the end of a task turn holds the turn open until it finishes", bgDone >= 0 && probe.turns.task?.termination === "completed" && probe.turns.task.wall_s >= 45, "task_notification completed at record " + bgDone + " of " + pTask.length + ", task end " + probe.turns.task?.termination + " after " + probe.turns.task?.wall_s + " s");
     rule("hostile CLAUDE.md reaches no arm", /E_PF_ARM/.test(String(H.turns.refused ?? "")) && reached === 0 && st.bodies.every((b) => b.session !== "hostile"), "refused: " + String(H.turns.refused ?? "no").slice(0, 120) + "; request bodies holding the text " + reached);
   } catch (e) {
     rule("dry run", false, (e as Error).stack?.slice(0, 800) ?? String(e));
