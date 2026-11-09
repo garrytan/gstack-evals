@@ -233,14 +233,14 @@ Publication status: published in this post. The claim check below must pass befo
 | Repo commit | gstack b6155921, gbrain 15e3ab8c |
 | Prereg | None. We plan a preregistered eval |
 | Data | Attached to this post |
-| Reviewed by | GPT-6.1 Sol, a cross-lab read (recheck of its edits pending) |
+| Reviewed by | GPT-6.1 Sol, a cross-lab read, clean on the final text |
 | Reproduced by | The Harness Evals recompute (an independent crew, on a clean machine), and a separate Opus 5.5 recompute |
 
 ## The claim check
 
 | Check | Result |
 |---|---|
-| Cross-lab read of every number and sentence against the attachments (GPT-6.1 Sol) | Every number in the Result tables matched. It asked for 19 edits to wording, labels and attribution, all made in this version. A recheck of those edits is pending |
+| Cross-lab read of every number and sentence against the attachments (GPT-6.1 Sol) | Every number in the Result tables matched. It asked for 19 edits to wording, labels and attribution, then 3 more on its rechecks. All are made in this version, and its final read of the text was clean |
 | Independent recompute of every headline number from the raw files (a separate Opus 5.5 agent with its own scorer) | Every number it checked matched, across the three Result tables and most body figures, except three medians on even counts, where it averaged the two middle values (see Latency) |
 | Harness Evals recompute (independent crew, clean machine) | Every number reproduced: the shipped recompute's output byte for byte, 520 of 520 values against its own scorer, all 31 attachment digests and all 1,139 public items. It found the three median differences and four wording issues ("measurably" in the takeaway, the two cut-off dream-triage replies, the unreadable label and the 7 of 8 count), all fixed in this version. Not independently checked: the truth labels against the pinned repos, particle-1's per-call prices, and the private items, of which it checked counts only |
 
