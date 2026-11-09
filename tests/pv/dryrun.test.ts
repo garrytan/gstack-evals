@@ -27,6 +27,17 @@ describe("pv dryrun (section 17 item 4)", () => {
     expect(approvedCaps(f).drift).toEqual(["pv-o1-render"]);
   });
 
+  test("the twin simulations take a pair count, and --twin-pairs runs the twin rules on it", async () => {
+    expect(simulateTwins({ rho: 0.5, p0: 0.35, related: true, runs: 200, seed: SEED, pairs: 7 })).toBeLessThanOrEqual(0.064);
+    expect(simulateTwins({ rho: 0.5, p0: 0.35, related: false, runs: 200, seed: SEED, pairs: 7 })).toBeGreaterThanOrEqual(0.5);
+    expect(simulateTwins({ rho: 0.5, p0: 0.35, related: false, runs: 50, seed: SEED, pairs: 7 })).not.toBe(simulateTwins({ rho: 0.5, p0: 0.35, related: false, runs: 50, seed: SEED }));
+    const c = capture();
+    await run(["--no-sims", "--no-ledger", "--twin-pairs", "7"], c.io);
+    expect(c.out.some((l) => l.startsWith("PASS twin check end to end on 7 pairs"))).toBe(true);
+    expect(c.out.some((l) => l.startsWith("PASS admission reads all 23 calibration units"))).toBe(true);
+    for (const bad of ["1", "9", "7.5", "x"]) await expect(run(["--twin-pairs", bad], capture().io)).rejects.toThrow(/--twin-pairs takes/);
+  }, 60_000);
+
   test("an unknown argument is a usage error", async () => {
     await expect(run(["--fast"], capture().io)).rejects.toThrow(/unknown argument/);
   });

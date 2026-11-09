@@ -105,17 +105,18 @@ function drawUnit(p0: number, rho: number, rng: () => number): number[] {
 }
 const passA = (q: number[], rng: () => number) => q.filter((p) => rng() < p).length / q.length;
 
-/** The share of 1,000 simulated twin checks whose part (b) fails, with identical or unrelated twins. */
-export function simulateTwins(o: { rho: number; p0: number; related: boolean; runs: number; seed: number }): number {
+/** The share of 1,000 simulated twin checks whose part (b) fails, with identical or unrelated twins, over 8 pairs or the count given. */
+export function simulateTwins(o: { rho: number; p0: number; related: boolean; runs: number; seed: number; pairs?: number }): number {
   const rng = seededRandom(o.seed);
+  const n = o.pairs ?? 8;
   let fails = 0;
   for (let run = 0; run < o.runs; run++) {
-    const pairs = Array.from({ length: 8 }, () => {
+    const pairs = Array.from({ length: n }, () => {
       const q = drawUnit(o.p0, o.rho, rng);
       const t = o.related ? q : drawUnit(o.p0, o.rho, rng);
       return { a: [0, 1, 2].map(() => passA(q, rng)), b: [0, 1, 2].map(() => passA(t, rng)) };
     });
-    const observed = pairs.reduce((s, p) => s + Math.abs((p.a[0]! + p.a[1]! + p.a[2]!) / 3 - (p.b[0]! + p.b[1]! + p.b[2]!) / 3), 0) / 8;
+    const observed = pairs.reduce((s, p) => s + Math.abs((p.a[0]! + p.a[1]! + p.a[2]!) / 3 - (p.b[0]! + p.b[1]! + p.b[2]!) / 3), 0) / n;
     const draws = resplitDraws(pairs, { seed: SEED, draws: 10_000 });
     if (twinDecide([0, 0], observed, draws[9499]!).b_fail) fails++;
   }
@@ -124,7 +125,8 @@ export function simulateTwins(o: { rho: number; p0: number; related: boolean; ru
 
 // ---- the dry run ----
 
-export async function dryRun(o: { sims: boolean; ledger: boolean; approvals?: string }): Promise<Line[]> {
+export async function dryRun(o: { sims: boolean; ledger: boolean; approvals?: string; twinPairs?: number }): Promise<Line[]> {
+  const nT = o.twinPairs ?? 8;
   const out: Line[] = [];
   const check = (rule: string, pass: boolean, detail = "") => out.push({ rule, pass, detail });
 
@@ -182,19 +184,19 @@ export async function dryRun(o: { sims: boolean; ledger: boolean; approvals?: st
   const tw = (lo: number, hi: number) => twinDecide([lo, hi], 0.05, 0.1);
   check("twin part (a): a 90% interval ending 0.10 from zero tracks, 0.11 from zero fails, on either side", !tw(0.1, 0.3).a_fail && tw(0.11, 0.3).a_fail && !tw(-0.3, -0.1).a_fail && tw(-0.3, -0.11).a_fail);
   check("twin part (b): a mean absolute difference at its 95th percentile tracks, just above it fails", !twinDecide([0, 0], 0.1234, 0.1234).b_fail && twinDecide([0, 0], 0.1235, 0.1234).b_fail);
-  const pairsT: TwinPair[] = Array.from({ length: 8 }, (_, i) => ({ unit: "p" + i, twin: "t" + i, a: [0.5, (i % 3) / 2, 0], b: [0.5, 0, ((i + 1) % 3) / 2] }));
+  const pairsT: TwinPair[] = Array.from({ length: nT }, (_, i) => ({ unit: "p" + i, twin: "t" + i, a: [0.5, (i % 3) / 2, 0], b: [0.5, 0, ((i + 1) % 3) / 2] }));
   const tc = twinCheck(pairsT);
-  check("twin check end to end on 8 pairs: bootstrap 10,000 draws and 10,000 re-splits with seed 20261108; Spearman prints only", tc.pairs === 8 && tc.track, "ci90 " + r4(tc.ci90[0]) + " to " + r4(tc.ci90[1]) + ", observed " + r4(tc.observed) + ", p95 " + r4(tc.p95));
+  check("twin check end to end on " + nT + " pairs: bootstrap 10,000 draws and 10,000 re-splits with seed 20261108; Spearman prints only", tc.pairs === nT && tc.track, "ci90 " + r4(tc.ci90[0]) + " to " + r4(tc.ci90[1]) + ", observed " + r4(tc.observed) + ", p95 " + r4(tc.p95));
   if (o.sims) {
     for (const rho of [0.5, 0.843]) {
-      const same = simulateTwins({ rho, p0: 0.35, related: true, runs: 1000, seed: SEED + Math.round(rho * 1000) });
-      const diff = simulateTwins({ rho, p0: 0.35, related: false, runs: 1000, seed: SEED + 7 + Math.round(rho * 1000) });
-      check("twin simulation at ICC " + rho + ": identical twins fail part (b) in at most 0.064 of 1,000 runs", same <= 0.064, "false-fail rate " + same);
-      check("twin simulation at ICC " + rho + ": part (b) catches unrelated twins in at least half of 1,000 runs", diff >= 0.5, "catch rate " + diff);
+      const same = simulateTwins({ rho, p0: 0.35, related: true, runs: 1000, seed: SEED + Math.round(rho * 1000), pairs: nT });
+      const diff = simulateTwins({ rho, p0: 0.35, related: false, runs: 1000, seed: SEED + 7 + Math.round(rho * 1000), pairs: nT });
+      check("twin simulation at ICC " + rho + " on " + nT + " pairs: identical twins fail part (b) in at most 0.064 of 1,000 runs", same <= 0.064, "false-fail rate " + same);
+      check("twin simulation at ICC " + rho + " on " + nT + " pairs: part (b) catches unrelated twins in at least half of 1,000 runs", diff >= 0.5, "catch rate " + diff);
     }
   }
-  const calib = unitsOf([...Array.from({ length: 16 }, (_, i) => meta("c" + i, { set: "calibration" })), ...Array.from({ length: 8 }, (_, i) => meta("t" + i, { set: "calibration", source: "transposed", source_kind: "transposed", twin_of: "c" + i }))]);
-  check("admission reads all 24 calibration units when the twins track, the 16 public ones when they don't", admittedUnits(calib, "pooled").length === 24 && admittedUnits(calib, "public").length === 16);
+  const calib = unitsOf([...Array.from({ length: 16 }, (_, i) => meta("c" + i, { set: "calibration" })), ...Array.from({ length: nT }, (_, i) => meta("t" + i, { set: "calibration", source: "transposed", source_kind: "transposed", twin_of: "c" + i }))]);
+  check("admission reads all " + (16 + nT) + " calibration units when the twins track, the 16 public ones when they don't", admittedUnits(calib, "pooled").length === 16 + nT && admittedUnits(calib, "public").length === 16);
 
   // Section 11: verdicts and the reading rule.
   const base: ReadingInput = { none: { verdict: "no measurable difference", ci95: [-0.03, 0.049] }, lens: { verdict: "no measurable difference", ci95: [-0.05, 0.05] }, exposure: 0.9, headroom: true, stockPass: true, judgePass: true, coverage: 0.95, ceiling: false, pairwise: null, rItems: 40 };
@@ -412,18 +414,22 @@ async function ledgerLeases(approvals: string): Promise<Line[]> {
   return out;
 }
 
-const USAGE = "gstack-evals pv dryrun [--no-sims] [--no-ledger] [--approvals <path>]";
+const USAGE = "gstack-evals pv dryrun [--no-sims] [--no-ledger] [--approvals <path>] [--twin-pairs <n>]";
 
 export async function run(argv: string[], io: Io): Promise<number> {
   const flags = new Set(argv.filter((a) => a.startsWith("--")));
   let approvals: string | undefined;
+  let twinPairs: number | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--approvals") approvals = argv[++i];
-    else if (a !== "--no-sims" && a !== "--no-ledger") throw new PvError("E_USAGE", "unknown argument " + JSON.stringify(a) + "; usage: " + USAGE);
+    else if (a === "--twin-pairs") {
+      twinPairs = Number(argv[++i]);
+      if (!Number.isSafeInteger(twinPairs) || twinPairs < 2 || twinPairs > 8) throw new PvError("E_USAGE", "--twin-pairs takes a whole number of pairs from 2 to 8; usage: " + USAGE);
+    } else if (a !== "--no-sims" && a !== "--no-ledger") throw new PvError("E_USAGE", "unknown argument " + JSON.stringify(a) + "; usage: " + USAGE);
   }
   if (flags.has("--approvals") && !approvals) throw new PvError("E_USAGE", "--approvals needs a path; usage: " + USAGE);
-  const lines = await dryRun({ sims: !flags.has("--no-sims"), ledger: !flags.has("--no-ledger"), approvals });
+  const lines = await dryRun({ sims: !flags.has("--no-sims"), ledger: !flags.has("--no-ledger"), approvals, twinPairs });
   for (const l of lines) io.out((l.pass ? "PASS " : "FAIL ") + l.rule + (l.detail ? " (" + l.detail + ")" : ""));
   const failed = lines.filter((l) => !l.pass).length;
   io.out("pv dryrun: " + (lines.length - failed) + " PASS, " + failed + " FAIL");
