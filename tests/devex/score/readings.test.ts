@@ -48,6 +48,27 @@ describe("dx readings", () => {
     const r = await dx(["smoke", "--rows", write("rerun.ndjson", [...first, ...rerun]), "--projection-fits", "yes", "--doubled-fits", "no"]);
     expect(r.out).toMatch(/decision autoplan: dropped on opus \(E_DX_ARM_DROPPED\)/);
   });
+  test("smoke: pass 1 is judged at the plain limits, and a rerun at the limits its rows' repair names", async () => {
+    const at = (rows: DxRow[], arm: ArmId, pass: number, o: Partial<DxRow>) => rows.filter((r) => r.arm === arm).map((r) => ({ ...r, pass, ...o }));
+    const base = smokeRows(6);
+    const dear = base.map((r) => (r.arm === "plan-devex-review" && r.model === "opus" ? { ...r, spend_micros: 8_000_000 } : r));
+    const first = await dx(["smoke", "--rows", write("dear.ndjson", [...dear, ...at(base, "plan-devex-review", 2, { repair: "double limits" })]), "--projection-fits", "yes", "--doubled-fits", "yes"]);
+    expect(first.code).toBe(0);
+    expect(first.out).toMatch(/smoke plan-devex-review: fail: rule 4 opus cost-median/);
+    expect(first.out).toMatch(/rerun plan-devex-review: pass/);
+    const rerun = await dx(["smoke", "--rows", write("doubled.ndjson", [...dear, ...at(base, "plan-devex-review", 2, { repair: "double limits", spend_micros: 10_000_000 })]), "--projection-fits", "yes", "--doubled-fits", "yes"]);
+    expect(rerun.out).toMatch(/rerun plan-devex-review: pass/);
+    const plain = await dx(["smoke", "--rows", write("plain.ndjson", [...dear, ...at(base, "plan-devex-review", 2, { repair: "stop hook", spend_micros: 10_000_000 })]), "--projection-fits", "yes", "--doubled-fits", "yes"]);
+    expect(plain.out).toMatch(/rerun plan-devex-review: fail: rule 4 opus cost-median/);
+    const unfit = await dx(["smoke", "--rows", write("unfit.ndjson", [...base, ...at(base, "plan-devex-review", 2, { repair: "double limits" })]), "--projection-fits", "yes", "--doubled-fits", "no"]);
+    expect(unfit.out).toMatch(/smoke plan-devex-review: pass/);
+    expect(unfit.out).toMatch(/rerun plan-devex-review: fail: rule 4 opus cost-projection/);
+    const mixed = at(base, "plan-devex-review", 2, { repair: "double limits" }).map((r, i) => (i === 0 ? { ...r, repair: "stop hook" } : r));
+    const refused = await dx(["smoke", "--rows", write("mixed.ndjson", [...base, ...mixed]), "--projection-fits", "yes", "--doubled-fits", "yes"]);
+    expect(refused.code).toBe(2);
+    expect(refused.err).toMatch(/^E_USAGE dx readings: plan-devex-review smoke pass 2 rows name repairs/);
+    expect(refused.err).toContain("\n  fix: ");
+  });
   test("admission: the parse rate from the Opus none rows, then the band", async () => {
     const none = Array.from({ length: 20 }, (_, i) => row("none", "opus", i, i === 0 ? { end: "no-block", code: "E_DX_NO_BLOCK", list: null } : {}));
     const input = join(dir, "admission.json");
@@ -65,6 +86,15 @@ describe("dx readings", () => {
     const r = await dx(["cells", "--rows", write("cells.ndjson", rows)]);
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/lens on opus stage 1 smoke: 10 planned; coverage 0\.9000 \(before judging[^)]*\); contamination 0\.1000 \(untested: contamination\); block 0\.9000/);
+  });
+  test("cells: coverage with --reviews counts distinct sessions, so a duplicate review lifts nothing", async () => {
+    const rows = Array.from({ length: 10 }, (_, i) => row("lens", "opus", i, { session: "u" + i + ":opus:lens:1" }));
+    const review = (i: number) => ({ unit: "u" + i, model: "opus", arm: "lens", stage: 1, pass: 1, smoke: true, session: "u" + i + ":opus:lens:1", status: "scored", A: 0.5 });
+    const reviews = join(dir, "reviews.ndjson");
+    writeFileSync(reviews, [0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0].map((i) => JSON.stringify(review(i))).join("\n") + "\n");
+    const r = await dx(["cells", "--rows", write("cells-reviews.ndjson", rows), "--reviews", reviews]);
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/lens on opus stage 1 smoke: 10 planned; coverage 0\.9000;/);
   });
   test("usage errors are E_USAGE with a fix line", async () => {
     for (const argv of [[], ["nope"], ["smoke"], ["smoke", "--rows", join(dir, "missing.ndjson"), "--projection-fits", "yes", "--doubled-fits", "no"], ["smoke", "--rows", join(dir, "smoke.ndjson")], ["admission", "--rows", join(dir, "none.ndjson")]]) {

@@ -650,7 +650,7 @@ export function projection(rows: readonly PowerRow[], o: { meanItems: number; n:
 
 // ---- dx readings: the CLI over the stage 1 readings ----
 
-const READINGS_USAGE = "gstack-evals dx readings smoke --rows <rows.ndjson> --projection-fits yes|no --doubled-fits yes|no [--doubled]\n" +
+const READINGS_USAGE = "gstack-evals dx readings smoke --rows <rows.ndjson> --projection-fits yes|no --doubled-fits yes|no\n" +
   "       gstack-evals dx readings admission --rows <rows.ndjson> --input <admission.json>\n" +
   "       gstack-evals dx readings cells --rows <rows.ndjson> [--reviews <reviews.ndjson>]";
 
@@ -675,15 +675,25 @@ function readNdjson<T>(path: string, what: string): T[] {
   });
 }
 
-/** Smoke rules 1 to 4 and the rule 5 and 6 decision per gstack arm, from the smoke rows: pass 1 is the smoke, pass 2 its rerun. */
-export function smokeReadings(rows: readonly DxRow[], o: { projectionFits: boolean; doubledFits: boolean; doubled: boolean }): Array<{ arm: GstackArm; first: SmokeReading; rerun: SmokeReading | null; decision: SmokeDecision }> {
-  const limit = dxLimits(o.doubled).usd * 1_000_000;
+/**
+ * Smoke rules 1 to 4 and the rule 5 and 6 decision per gstack arm, from the smoke rows: pass 1 is the smoke, judged at
+ * the plain limits and the projection's fit; pass 2 its rerun, judged at the limits its rows' repair names (doubled under
+ * "double limits") and, when doubled, the doubled projection's fit. An arm whose rows in one pass name two repairs is
+ * refused.
+ */
+export function smokeReadings(rows: readonly DxRow[], o: { projectionFits: boolean; doubledFits: boolean }): Array<{ arm: GstackArm; first: SmokeReading; rerun: SmokeReading | null; decision: SmokeDecision }> {
   const arms: GstackArm[] = ["plan-devex-review", "autoplan"];
   return arms.filter((arm) => rows.some((r) => r.smoke && r.arm === arm)).map((arm) => {
-    const of = (pass: number) => rows.filter((r) => r.smoke && r.arm === arm && r.pass === pass).map(smokeSession);
-    const first = smokeRules(arm, of(1), { sessionLimitMicros: limit, projectionFits: o.projectionFits });
-    const again = of(2);
-    const rerun = again.length ? smokeRules(arm, again, { sessionLimitMicros: limit, projectionFits: o.projectionFits }) : null;
+    const read = (pass: number): SmokeReading | null => {
+      const rs = rows.filter((r) => r.smoke && r.arm === arm && r.pass === pass);
+      if (!rs.length) return null;
+      const names = [...new Set(rs.map((r) => r.repair ?? null))];
+      if (names.length > 1) usage(arm + " smoke pass " + pass + " rows name repairs " + names.map((n) => JSON.stringify(n)).join(" and ") + ", and one pass runs one repair", "pass the rows of one s1-smoke run and its one s1-resmoke, unedited");
+      const doubled = pass > 1 && names[0] === "double limits";
+      return smokeRules(arm, rs.map(smokeSession), { sessionLimitMicros: dxLimits(doubled).usd * 1_000_000, projectionFits: doubled ? o.doubledFits : o.projectionFits });
+    };
+    const first = read(1)!;
+    const rerun = read(2);
     return { arm, first, rerun, decision: smokeDecision(first, { doubledFits: o.doubledFits, ...(rerun ? { rerun } : {}) }) };
   });
 }
@@ -698,7 +708,7 @@ export function cellReadings(rows: readonly DxRow[], reviews: readonly Review[] 
   return [...cells].map(([cell, rs]) => {
     const planned = rs.length;
     const r0 = rs[0]!;
-    const scored = reviews ? reviews.filter((v) => v.arm === r0.arm && v.model === r0.model && v.stage === r0.stage && v.smoke === r0.smoke && !isMissing(v)).length : rs.filter((r) => r.end !== "missing" && r.end !== "contaminated").length;
+    const scored = reviews ? new Set(reviews.filter((v) => v.arm === r0.arm && v.model === r0.model && v.stage === r0.stage && v.smoke === r0.smoke && !isMissing(v)).map((v) => v.session)).size : rs.filter((r) => r.end !== "missing" && r.end !== "contaminated").length;
     const coverage = planned ? scored / planned : 0;
     const contamination = planned ? rs.filter((r) => r.code === "E_DX_ARM_CONTAMINATED" || r.gstack_read === true).length / planned : 0;
     const rates = Object.fromEntries((["block", "no-block", "session-stop", "missing", "contaminated"] as const).map((e) => [e, planned ? rs.filter((r) => r.end === e).length / planned : 0]));
@@ -724,11 +734,9 @@ function readings(argv: string[], io: { out: (t: string) => void; err: (t: strin
     return 0;
   }
   const flags = new Map<string, string>();
-  const bools = new Set<string>();
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
-    if (a === "--doubled") bools.add(a);
-    else if (["--rows", "--input", "--reviews", "--projection-fits", "--doubled-fits"].includes(a) && rest[i + 1] !== undefined && !rest[i + 1]!.startsWith("--")) flags.set(a, rest[++i]!);
+    if (["--rows", "--input", "--reviews", "--projection-fits", "--doubled-fits"].includes(a) && rest[i + 1] !== undefined && !rest[i + 1]!.startsWith("--")) flags.set(a, rest[++i]!);
     else usage("unknown or malformed argument " + JSON.stringify(a), "see gstack-evals dx readings --help");
   }
   const need = (f: string) => flags.get(f) ?? usage("dx readings " + (what ?? "") + " needs " + f, "pass " + f + "; see gstack-evals dx readings --help");
@@ -738,7 +746,7 @@ function readings(argv: string[], io: { out: (t: string) => void; err: (t: strin
     return v === "yes";
   };
   if (what === "smoke") {
-    const o = { projectionFits: yesNo("--projection-fits"), doubledFits: yesNo("--doubled-fits"), doubled: bools.has("--doubled") };
+    const o = { projectionFits: yesNo("--projection-fits"), doubledFits: yesNo("--doubled-fits") };
     const rows = readNdjson<DxRow>(need("--rows"), "rows");
     const read = smokeReadings(rows, o);
     if (!read.length) usage("the rows hold no gstack arm smoke session", "pass the rows of an s1-smoke run (and its s1-resmoke)");
