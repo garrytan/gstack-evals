@@ -9,7 +9,7 @@ Drafts and scratch work live elsewhere: a Capy Drive, a local folder, a branch. 
 ## Rules
 
 1. One post per file, or one folder per post when it has attachments.
-2. A merged post is immutable. Nobody edits its body, its attachments or any front matter field except `status`. The only exception is an edit the repository owner directs, recorded as a row in a tab-separated file `wiki/edits/<name>.tsv`: the file's path, its sha256 before and after the edit, and a reason, so the check passes that one edit and fails any later one.
+2. A merged post is immutable. Nobody edits its body, its attachments or any front matter field except `status`. The only exception is an edit the repository owner directs, recorded as a row in a tab-separated file `wiki/edits/<name>.tsv`: the post's path, its sha256 before and after the edit, and a reason. A row may name only a markdown file in a wiki section (a post, a bundle's README.md or a `.md` attachment), never a data attachment or a waiver file. A waived README keeps the attachment names it had. A row counts only in the pull request that adds it, beside its edit, so the check passes that one edit and fails any later one.
 3. To correct or replace a post, write a new post that lists it in `supersedes`, and set the old post's `status` to `superseded` in the same pull request.
 4. To answer a question, write a post that lists it in `answers`, and set the question's `status` to `answered` in the same pull request.
 5. Never delete or rename a merged post.
@@ -111,7 +111,7 @@ The check fails when:
 - a file in a bundle is missing from `attachments`, or an attachment does not match its sha256;
 - any file under wiki/ matches a common key shape, or holds a sealed marker: the uppercase word SEALED, optionally followed by more uppercase words, then a colon, or a match for any `sealed.answer_markers` pattern in the repo's `.gstack/pregate.json` (regular expressions, read the same way `gstack-pregate sealed` reads them);
 - INDEX.md is committed, or git cannot tell whether it is;
-- compared with the base branch, a merged post was edited (other than `status`) without a matching waiver row, or removed, or a waiver row is malformed.
+- compared with the base branch, a merged post was edited (other than `status`) without a matching waiver row, or removed, or a waiver row is malformed, or a new waiver row names a data attachment or a waiver file, matches no edit in the same change, or changes a bundle's attachment names.
 
 This README is not a post, so it can be edited. A change to the rules should land with a decision post that explains it.
 

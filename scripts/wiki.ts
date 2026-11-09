@@ -294,8 +294,15 @@ const isEntryPath = (path: string) => {
 
 const DIGEST = /^[0-9a-f]{64}$/;
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+const attachmentNames = (bytes: Buffer) => {
+  const parsed = parseFrontMatter(bytes.toString("utf8"));
+  const listed = "fm" in parsed ? parsed.fm.attachments : undefined;
+  return (Array.isArray(listed) ? listed : []).map((a) => a.replace(/^[0-9a-f]{64} {2}/, "")).sort().join("\n");
+};
 
 export function checkImmutable(root: string, baseFiles: Map<string, Buffer>, problems: Problem[]) {
+  const merged = new Set<string>();
+  for (const [path, bytes] of baseFiles) if (path.startsWith("wiki/edits/")) for (const line of bytes.toString("utf8").split("\n")) merged.add(line.split("\t").slice(0, 3).join("\t"));
   const waived = new Set<string>();
   const edits = join(root, "wiki", "edits");
   for (const name of existsSync(edits) && statSync(edits).isDirectory() ? readdirSync(edits).sort() : []) {
@@ -307,7 +314,11 @@ export function checkImmutable(root: string, baseFiles: Map<string, Buffer>, pro
       if (f.length !== 4) p("a waiver row is four tab-separated fields: path, sha256 before, sha256 after, reason");
       else if (!DIGEST.test(f[1]) || !DIGEST.test(f[2])) p("a waiver digest must be 64 lowercase hex characters");
       else if (!f[3].trim()) p("a waiver row needs a reason");
+      else if (merged.has(f.slice(0, 3).join("\t"))) return;
       else if (!baseFiles.has(f[0])) p('waiver path "' + f[0] + '" is not a merged file at the base');
+      else if (!(f[0].split("/")[1] in SECTIONS) || !f[0].endsWith(".md")) p('waiver path "' + f[0] + '" is not a markdown file in a wiki section; a row may waive a post, a bundle README.md or a .md attachment');
+      else if (sha256(baseFiles.get(f[0])!) !== f[1] || !existsSync(join(root, f[0])) || sha256(readFileSync(join(root, f[0]))) !== f[2]) p('waiver row for "' + f[0] + '" matches no edit in this change: before must be its sha256 at the base and after its sha256 now');
+      else if (f[0].split("/").length === 4 && f[0].endsWith("/README.md") && attachmentNames(baseFiles.get(f[0])!) !== attachmentNames(readFileSync(join(root, f[0])))) p('waiver row for "' + f[0] + "\" changes the bundle's attachment names; a waived README keeps the attachments it had at the base");
       else waived.add(f.slice(0, 3).join("\t"));
     });
   }

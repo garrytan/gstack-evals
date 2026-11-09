@@ -30,7 +30,7 @@ The repository owner directed a one-time wording cleanup of merged wiki posts fo
 
 ## How the check allows it
 
-A merged post stays immutable. The one exception is an edit with a waiver row in a tab-separated file, `wiki/edits/<name>.tsv`. Each row names the edited file, its sha256 before the edit, its sha256 after the edit, and a reason. `bun run wiki:check` passes a changed merged file only when a row matches its path and both digests, so any later edit to that file fails again. Removing or renaming a merged file still fails, whatever the rows say. The rule is in [README.md](../README.md), rule 2.
+A merged post stays immutable. The one exception is an edit with a waiver row in a tab-separated file, `wiki/edits/<name>.tsv`. Each row names the edited post, its sha256 before the edit, its sha256 after the edit, and a reason. `bun run wiki:check` passes a changed merged post only when a row added in the same change matches its path and both digests, so any later edit to that post fails again. A row that matches no edit in its change fails, and so does a row that names a data attachment or a waiver file, or one that changes a bundle's attachment names. Removing or renaming a merged file still fails, whatever the rows say. The rule is in [README.md](../README.md), rule 2.
 
 ## What stays
 
