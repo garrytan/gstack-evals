@@ -5,9 +5,18 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { main } from "../../lanes/decision-routing/dryrun.ts";
+import { LADDER, main, sessionState } from "../../lanes/decision-routing/dryrun.ts";
 
 const venv = [process.env.DR_RUNTIME_VENV, join(homedir(), ".cache", "decision-routing", "venv-dev"), "/opt/dr/venv"].find((v) => v && existsSync(join(v, "bin", "python")));
+
+test("the defer ladder's particle and frontier deciders answer a session's first submit no and every later one yes", () => {
+  const done = { type: "done", state: {}, options: ["yes", "no"], hits: [] };
+  for (const decide of [LADDER.particle!, LADDER.frontier!]) {
+    const st = sessionState();
+    expect([decide(done, st), decide(done, st), decide(done, st)]).toEqual([{ p: 0.1 }, { p: 0.9 }, { p: 0.9 }]);
+    expect(decide(done, sessionState())).toEqual({ p: 0.1 });
+  }
+});
 
 test("keyless legs: verdict grids, draw.py, pilot rules, table tests and the leak scan all pass", async () => {
   const out = mkdtempSync(join(tmpdir(), "dr-dryrun-test-"));

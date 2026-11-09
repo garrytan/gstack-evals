@@ -317,7 +317,7 @@ export async function runSession(ctx: Ctx, spec: Spec): Promise<Session> {
   writeFileSync(cfgFile, JSON.stringify(cfg, null, 2) + "\n");
 
   const fakes = FakeUpstreams.start();
-  const st: Record<string, number> = { main: 0, jev: 0 };
+  const st = sessionState();
   const route = async (url: string, init: RequestInit) => {
     const provider = (Object.keys(UPSTREAM) as FakeProvider[]).find((p) => url.startsWith((UPSTREAM as Record<string, string>)[p]!))!;
     fakes.push(provider, replyFor(provider, parse(asText(init.body)), spec, st));
@@ -382,6 +382,10 @@ async function pool<T, R>(xs: readonly T[], n: number, fn: (x: T) => Promise<R>)
 const has = (s: unknown, m: string) => String(s ?? "").includes(m);
 const hitNo = (h: string) => Number(/f(\d+)\.txt/.exec(h)?.[1] ?? -1);
 
+/** One session's fake-upstream counters: main replies, jev calls, and the ladder's particle and frontier done answers.
+ * Each starts at 0: an unset counter increments to NaN, and the ladder's done deciders then answer no on every submit. */
+export const sessionState = (): Record<string, number> => ({ main: 0, jev: 0, pdone: 0, fdone: 0 });
+
 /** The defer ladder: markers in the command decide which layer would act, so each layer of each cell is reachable. */
 const LADDER_MAIN: MainReply[] = [
   ["ls pkg/m01.py && echo NS_J"],
@@ -394,7 +398,7 @@ const LADDER_MAIN: MainReply[] = [
   [SUBMIT_COMMAND],
   [SUBMIT_COMMAND],
 ];
-const LADDER: Pick<Spec, "jev" | "particle" | "frontier"> = {
+export const LADDER: Pick<Spec, "jev" | "particle" | "frontier"> = {
   jev: (a) => {
     if (a.type === "safe") return { p: has(a.state.command, "SAFE_J") ? 0.99 : has(a.state.command, "SAFE_B") ? 0.01 : 0.5 };
     if (a.type === "tests_passed") return { p: has(a.state.command, "TP_J") ? 0.99 : 0.5 };

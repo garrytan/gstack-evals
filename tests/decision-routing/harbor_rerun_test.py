@@ -20,9 +20,14 @@ class _Paths:
     artifacts_dir = PurePosixPath("/logs/artifacts")
 
 
+class _MiniSweAgentOptions:
+    pass
+
+
 class _MiniSweAgent:
     def __init__(self, *args, logs_dir=None, **kwargs):
         self.logs_dir = logs_dir
+        self.options = types.SimpleNamespace(markers_file=None, **kwargs)
         self.logger = types.SimpleNamespace(info=lambda *a, **k: None)
 
     async def exec_as_root(self, environment, command, env=None):
@@ -37,7 +42,7 @@ def _stub(name, **attrs):
 
 for pkg in ("harbor", "harbor.agents", "harbor.agents.installed", "harbor.models", "harbor.models.agent", "harbor.models.trial", "harbor.environments"):
     _stub(pkg)
-_stub("harbor.agents.installed.mini_swe_agent", MiniSweAgent=_MiniSweAgent)
+_stub("harbor.agents.installed.mini_swe_agent", MiniSweAgent=_MiniSweAgent, MiniSweAgentOptions=_MiniSweAgentOptions)
 _stub("harbor.environments.base", BaseEnvironment=object)
 _stub("harbor.models.agent.context", AgentContext=object)
 _stub("harbor.models.trial.paths", EnvironmentPaths=_Paths)

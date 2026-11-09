@@ -2,7 +2,9 @@
 """The decision-routing Harbor agent: one session of one cell in one task container.
 
 Harbor loads it by import path (dr_harbor:DecisionRoutingAgent) in the runner host's Harbor process. It subclasses
-Harbor's installed MiniSweAgent and replaces install and run:
+Harbor's installed MiniSweAgent and replaces install and run. It declares its own name and options model, so Harbor checks
+the controller's kwargs against DecisionRoutingOptions, before it queues a trial and again when it builds the agent,
+rather than against mini-swe-agent's schema:
 
 - install copies the prebuilt runtime tarball (build.sh) into the container and unpacks it at /opt/dr. The container
   needs no network. The tarball's sha256 must equal the runtime_sha256 kwarg, checked on the host and in the container.
@@ -31,7 +33,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any, override
 
-from harbor.agents.installed.mini_swe_agent import MiniSweAgent
+from harbor.agents.installed.mini_swe_agent import MiniSweAgent, MiniSweAgentOptions
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 from harbor.models.trial.paths import EnvironmentPaths
@@ -126,38 +128,48 @@ def attempt_dir(trial_dir: Path) -> Path:
     return trial_dir.parent / INFRA_ATTEMPTS / trial_dir.name
 
 
-class DecisionRoutingAgent(MiniSweAgent):
-    """Takes exactly the kwargs the controller's Harbor job writes: cell, model, runtime_tarball, runtime_sha256,
-    pin_file, item and, with custody on, markers_file (a JSON list of the session's runner-only markers, sent to the
-    proxy's bind as forbidden_markers). The slot's allowlist, wall limit and allowance come from config/cells.json."""
+class DecisionRoutingOptions(MiniSweAgentOptions):
+    """Exactly the kwargs the controller's Harbor job writes: cell, model, runtime_tarball, runtime_sha256, pin_file,
+    item and, with custody on, markers_file (a JSON list of the session's runner-only markers, sent to the proxy's bind
+    as forbidden_markers). Harbor refuses any other kwarg."""
 
-    def __init__(
-        self,
-        cell: str,
-        model: str,
-        runtime_tarball: str,
-        runtime_sha256: str,
-        pin_file: str,
-        item: str,
-        *args: Any,
-        markers_file: str | None = None,
-        **kwargs: Any,
-    ) -> None:
+    cell: str
+    model: str
+    runtime_tarball: str
+    runtime_sha256: str
+    pin_file: str
+    item: str
+    markers_file: str | None = None
+
+
+class DecisionRoutingAgent(MiniSweAgent):
+    """Takes the kwargs in DecisionRoutingOptions. The slot's allowlist, wall limit and allowance come from
+    config/cells.json."""
+
+    options_model = DecisionRoutingOptions
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        o = self.options
         cells = json.loads(CELLS_FILE.read_text())
-        if cell not in cells["cells"] or model not in cells["models"]:
-            raise ValueError(f"E_USAGE: no cell {cell!r} or model {model!r} in {CELLS_FILE}")
-        self._cell = cell
-        self._model = model
-        self._item = item
-        self._main = cells["models"][model]
-        self._allow = [self._main["allow"], *cells["cells"][cell]["deciders"]]
+        if o.cell not in cells["cells"] or o.model not in cells["models"]:
+            raise ValueError(f"E_USAGE: no cell {o.cell!r} or model {o.model!r} in {CELLS_FILE}")
+        self._cell = o.cell
+        self._model = o.model
+        self._item = o.item
+        self._main = cells["models"][o.model]
+        self._allow = [self._main["allow"], *cells["cells"][o.cell]["deciders"]]
         self._limits = cells["limits"]
-        self._runtime_tarball = Path(runtime_tarball)
-        self._runtime_sha256 = runtime_sha256
-        self._pin_file = Path(pin_file)
-        self._markers_file = markers_file
+        self._runtime_tarball = Path(o.runtime_tarball)
+        self._runtime_sha256 = o.runtime_sha256
+        self._pin_file = Path(o.pin_file)
+        self._markers_file = o.markers_file
         self._meter: dict[str, Any] | None = None
+
+    @staticmethod
+    @override
+    def name() -> str:
+        return "decision-routing"
 
     @classmethod
     @override
