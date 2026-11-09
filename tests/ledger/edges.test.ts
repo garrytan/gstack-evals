@@ -17,7 +17,7 @@ const scratch = () => {
   dirs.push(d);
   return d;
 };
-const quote = { words: "Rec", by: "Garry Tan", source: "gate 1" };
+const quote = { words: "(paraphrase) took the recommendation", by: "Garry Tan", source: "gate 1" };
 const DOLLAR = 1_000_000;
 const cell = { run_id: "run-a", arm: "after", task: "t1", model: "m", trial: 1, attempt: 1, meter_id: "m-1" };
 const usage: TokenUsage = { input: 10, output: 5, reasoning: 0, cache_read: 0, cache_write: 0 };

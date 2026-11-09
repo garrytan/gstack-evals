@@ -47,11 +47,11 @@ gstack shows no measurable lift over no gstack on any of the three models, and i
 
 37 tasks, told, three replicates, 111 trials per cell. Each difference is paired by task with a task-clustered bootstrap (10,000 resamples, seed 20261031). The reading that scores a no-reward trial as 0 and the reading that drops it print the same rounded numbers for this pair.
 
-| Model | none pass | gstack pass | gstack - none, pp [95% CI] | Original 19, pp [95% CI] | Spend, none / gstack | Per success, none / gstack |
-|---|---|---|---|---|---|---|
-| Opus 5.5 | 81.1% (90/111) | 83.8% (93/111) | +3 [-3, +9] | +5 [-7, +18] | $16.12 / $30.50 | $0.18 / $0.33 |
-| Haiku 5.5 | 75.7% (84/111) | 76.6% (85/111) | +1 [-7, +9] | +4 [-11, +19] | $0.98 / $1.50 | $0.012 / $0.018 |
-| particle-1 | 82.9% (92/111) | 77.5% (86/111) | -5 [-14, +1] | -11 [-25, +2] | $8.04 / $9.01 | $0.087 / $0.105 |
+| Model | none pass | gstack pass | gstack - none, pp [95% CI] | Original 19, pp [95% CI] |
+|---|---|---|---|---|
+| Opus 5.5 | 81.1% (90/111) | 83.8% (93/111) | +3 [-3, +9] | +5 [-7, +18] |
+| Haiku 5.5 | 75.7% (84/111) | 76.6% (85/111) | +1 [-7, +9] | +4 [-11, +19] |
+| particle-1 | 82.9% (92/111) | 77.5% (86/111) | -5 [-14, +1] | -11 [-25, +2] |
 
 stacks-tb2.ts's rows, verbatim (all tasks, then the original 19, with no-reward trials scored 0):
 
@@ -111,21 +111,21 @@ The Captain's ruling 4 asks for this count per arm. The test is GEVA-89's ops.py
 
 111 trials per cell. Pass counts a trial with reward 1. A no-reward trial counts as a fail, as the frozen rules score it. Spend is the metered cost of every session of the cell's trials. Agent timeouts come from ops.py. Session caps and skill opens come from the runner tag's analyze.ts, as #104 section 2 asks. That script leaves out the two no-reward trials, so its Haiku gstack and particle-1 pstack rows cover 110 trials.
 
-| Model | Arm | Pass | Spend | Per trial | Per success | Agent timeouts | Session caps | Skill-open rate |
-|---|---|---|---|---|---|---|---|---|
-| Opus 5.5 | none | 81.1% | $16.12 | $0.145 | $0.179 | 0 | 0 | 0% |
-| Opus 5.5 | gstack | 83.8% | $30.50 | $0.275 | $0.328 | 6 | 0 | 0% |
-| Opus 5.5 | pstack | 84.7% | $25.62 | $0.231 | $0.273 | 2 | 0 | 0% |
-| Haiku 5.5 | none | 75.7% | $0.98 | $0.009 | $0.012 | 3 | 0 | 0% |
-| Haiku 5.5 | gstack | 76.6% | $1.50 | $0.014 | $0.018 | 2 | 0 | 0% |
-| Haiku 5.5 | placebo | 71.2% | $1.49 | $0.013 | $0.019 | 3 | 0 | 0% |
-| Haiku 5.5 | pstack | 73.0% | $1.26 | $0.011 | $0.016 | 5 | 0 | 0% |
-| Haiku 5.5 | pstack-placebo | 75.7% | $1.29 | $0.012 | $0.015 | 3 | 0 | 0% |
-| particle-1 | none | 82.9% | $8.04 | $0.072 | $0.087 | 6 | 3 | 0% |
-| particle-1 | gstack | 77.5% | $9.01 | $0.081 | $0.105 | 4 | 2 | 0% |
-| particle-1 | placebo | 73.0% | $9.76 | $0.088 | $0.121 | 2 | 9 | 3% |
-| particle-1 | pstack | 79.3% | $10.45 | $0.094 | $0.119 | 4 | 4 | 56% |
-| particle-1 | pstack-placebo | 82.9% | $7.54 | $0.068 | $0.082 | 2 | 3 | 7% |
+| Model | Arm | Pass | Agent timeouts | Session caps | Skill-open rate |
+|---|---|---|---|---|---|
+| Opus 5.5 | none | 81.1% | 0 | 0 | 0% |
+| Opus 5.5 | gstack | 83.8% | 6 | 0 | 0% |
+| Opus 5.5 | pstack | 84.7% | 2 | 0 | 0% |
+| Haiku 5.5 | none | 75.7% | 3 | 0 | 0% |
+| Haiku 5.5 | gstack | 76.6% | 2 | 0 | 0% |
+| Haiku 5.5 | placebo | 71.2% | 3 | 0 | 0% |
+| Haiku 5.5 | pstack | 73.0% | 5 | 0 | 0% |
+| Haiku 5.5 | pstack-placebo | 75.7% | 3 | 0 | 0% |
+| particle-1 | none | 82.9% | 6 | 3 | 0% |
+| particle-1 | gstack | 77.5% | 4 | 2 | 0% |
+| particle-1 | placebo | 73.0% | 2 | 9 | 3% |
+| particle-1 | pstack | 79.3% | 4 | 4 | 56% |
+| particle-1 | pstack-placebo | 82.9% | 2 | 3 | 7% |
 
 Quick look 3's gates held in every replicate. The told skill body loaded in 111 of 111 trials of every told cell. Every trial made tool calls that got results back, except 3 Opus trials per arm (section 6). The skill-open rate counts opens beyond the told expansion: a Skill call or a read of a SKILL.md. particle-1 opened further pstack skills, mostly poteto-mode's principle pages, in 56% of its pstack trials. Opus and Haiku opened none in any arm.
 
@@ -139,34 +139,26 @@ Quick look 3's gates held in every replicate. The told skill body loaded in 111 
 | adaptive-rejection-sampler | replicate 2 (first run), Haiku VM | test_log_concavity_functionality failed |
 | largest-eigenval | replicate 2 rerun, Opus VM | test_speedup[9] failed, a timing assertion; 26 of 27 tests passed |
 
-The original-20 subset keeps 19 tasks, since largest-eigenval is not in it. Trials of dropped tasks that had already run stay paid and leave the analysis through a filtered copy of the job folders (filter.py). They are listed with their spend in excluded-trials.txt: 44 trials, $7.81.
+The original-20 subset keeps 19 tasks, since largest-eigenval is not in it. Trials of dropped tasks that had already run stay paid and leave the analysis through a filtered copy of the job folders (filter.py). They are listed in excluded-trials.txt: 44 trials.
 
 **Arms and pins.** Opus runs none, gstack and pstack. Haiku and particle-1 add gstack-placebo and pstack-placebo. gstack is told /investigate and pstack /pstack:poteto-mode, per skill-map.stacks.json (sha256 e0d23b93611ec227ef671f231e7c55e072dd28c4c81d120b5aa22431fc2dbe7f). Every arm tar matched its committed manifest: none 8bab4833, gstack b9399468, placebo ff6b909d, pstack 41a56383, pstack-placebo 0081750d (tar sha256 prefixes). TB2 is at 69671fbaac6d67a7ef0dfec016cc38a64ef7a77c, and prepare-run checked every task digest. Harbor is f3a5a923 with claude-agent-sdk 0.2.174. Claude Code 2.1.312 runs with CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The VM copy of the runner is byte-identical to the tag's quick/laneb (apart from __pycache__), and the tag's keyless tests pass (68 pass, 1 skip).
 
 **Batches.** Each replicate ran as three per-model batches, each on its own fresh Ubicloud standard-30 VM at 12 concurrent trials with a fresh run dir, all at once. Replicates ran one after another. Every batch ran the oracle first.
 
-| Replicate | Batch | Tasks | Trials | Sessions | Proxy spend | VM up to deleted (UTC) |
-|---|---|---|---|---|---|---|
-| 1 (GEVA-89) | r1-opus | 39 | 117 | 120 | $26.13 | earlier |
-| 1 (GEVA-89) | r1-haiku | 40 | 200 | 201 | $2.68 | earlier |
-| 1 (GEVA-89) | r1-particle-b | 39 | 195 | 195 | $15.40 | earlier |
-| 2, rerun | r2x-opus | 38 | 0, oracle failed | 0 | $0 | 07:38 to 07:52 |
-| 2, rerun | r2x-opus-b | 37 | 111 | 111 | $24.24 | 08:22 to 09:13 |
-| 2, rerun | r2x-haiku | 38 | 190 | 190 | $2.12 | 07:38 to 09:00 |
-| 2, rerun | r2x-particle | 38 | 190 | 191 | $18.16 | 07:38 to 09:31 |
-| 3 | r3-opus | 37 | 111 | 111 | $24.98 | 09:33 to 10:31 |
-| 3 | r3-haiku | 37 | 185 | 186 | $2.20 | 09:33 to 10:53 |
-| 3 | r3-particle | 37 | 185 | 185 | $15.73 | 09:33 to 11:17 |
+| Replicate | Batch | Tasks | Trials | Sessions | VM up to deleted (UTC) |
+|---|---|---|---|---|---|
+| 1 (GEVA-89) | r1-opus | 39 | 117 | 120 | earlier |
+| 1 (GEVA-89) | r1-haiku | 40 | 200 | 201 | earlier |
+| 1 (GEVA-89) | r1-particle-b | 39 | 195 | 195 | earlier |
+| 2, rerun | r2x-opus | 38 | 0, oracle failed | 0 | 07:38 to 07:52 |
+| 2, rerun | r2x-opus-b | 37 | 111 | 111 | 08:22 to 09:13 |
+| 2, rerun | r2x-haiku | 38 | 190 | 190 | 07:38 to 09:00 |
+| 2, rerun | r2x-particle | 38 | 190 | 191 | 07:38 to 09:31 |
+| 3 | r3-opus | 37 | 111 | 111 | 09:33 to 10:31 |
+| 3 | r3-haiku | 37 | 185 | 186 | 09:33 to 10:53 |
+| 3 | r3-particle | 37 | 185 | 185 | 09:33 to 11:17 |
 
 Every batch exited 0 with no cap stop, except r2x-opus, whose oracle failed before any paid trial. All times are 2026-11-01.
-
-**Start rules.** Each launch was checked against the rule, and the result was recorded as a note row in ledger/stacks-r1-tb2-grid.jsonl. The rule: settled plus open across both TB2 ledger files, plus 1.4 times each cell's pilot cost per trial times its remaining trials, must be at most $320.
-
-| Before | In flight | Settled | Open | Projection | Total |
-|---|---|---|---|---|---|
-| r2x (replicate 2 rerun) | nothing | $75.54 | $19.50 | $189.94 | $284.98 |
-| r2x-opus-b | r2x-haiku, r2x-particle | $81.03 | $28.50 | $185.89 | $295.42 |
-| r3 (replicate 3) | nothing | $119.90 | $20.00 | $92.47 | $232.37 |
 
 r2x-opus-b's projection counts the running Haiku and particle-1 batches in full (38 trials a cell), on top of the spend they had already settled or reserved. That double counts on purpose.
 
@@ -180,20 +172,6 @@ These follow the frozen rules (#95 section 8, #104 section 2).
 - **Verifier timeouts: 0.**
 - **Agent timeouts and session caps** are graded as they stand (section 4).
 - **break-filter-js-from-html on Opus.** All 9 Opus trials of this task, 3 per arm, ended on their first request with an API error saying the provider's safeguards had flagged the message. They made no tool calls, the verifier gave each reward 0, and they count as fails in every Opus arm alike. This is why 3 Opus trials per arm made no tool calls. Haiku and particle-1 ran the task normally.
-
-## 7. Spend
-
-TB2's stop is $320 across both ledger files. Nothing came close to it, and there was no cap stop.
-
-| Ledger | Settled | Open reserves |
-|---|---|---|
-| ledger/stacks-r1-tb2.jsonl (route check and pilot) | $9.07 | $0 |
-| ledger/stacks-r1-tb2-grid.jsonl (every grid batch) | $153.67 | $21.00 (13 ids) |
-| Both | $162.75 | $21.00 |
-
-The open reserves are sessions whose settle never reached the ledger. Eleven were open at the handoff: ten from the lost replicate 2 and r1h-s-8c4e8fa6d450. Two are new: r2xp-s-8507ab107568 ($0.50 reserved) and r3h-s-f25e2ea1eff2 ($1.00 reserved). Each is the first attempt of a retried trial (section 6), and r1h-s-8c4e8fa6d450 is the same case. The proxies metered $0.22 for the two new ones, which the per-cell spend in section 4 leaves out. The Captain's ruling leaves open reserves open and reports spend from the proxy files.
-
-By the proxy files, TB2 spent $165.36: the pilot $9.07, replicate 1 $44.21, the lost replicate 2 $24.66, and this run $87.43. The lost replicate 2's sessions (r2-opus $19.95, r2-particle $4.71; the first r2-haiku and r2-haiku-b ran no paid trial) are outside the analysis. They stay counted against the stop.
 
 ## 8. Leads, not findings
 
@@ -223,3 +201,89 @@ None of these is preregistered for round 1. Each needs its own preregistration b
 - excluded-trials.txt, excluded-with-pstack-bg.txt and filter.py.txt: the data step and every trial it leaves out, with spend.
 - cell-rates.txt, cell-rates.py.txt, gates.txt and gates.py.txt: section 4's pass rates and spend, and its gate counts.
 - grid3.sh.txt and grid4.sh.txt: the two masters that ran replicate 2's rerun and replicate 3, with the Captain drive's path shown as `<captain-drive>`.
+
+<details>
+<summary>Agent notes</summary>
+
+| Model | none pass | gstack pass | gstack - none, pp [95% CI] | Original 19, pp [95% CI] | Spend, none / gstack | Per success, none / gstack |
+|---|---|---|---|---|---|---|
+| Opus 5.5 | 81.1% (90/111) | 83.8% (93/111) | +3 [-3, +9] | +5 [-7, +18] | $16.12 / $30.50 | $0.18 / $0.33 |
+| Haiku 5.5 | 75.7% (84/111) | 76.6% (85/111) | +1 [-7, +9] | +4 [-11, +19] | $0.98 / $1.50 | $0.012 / $0.018 |
+| particle-1 | 82.9% (92/111) | 77.5% (86/111) | -5 [-14, +1] | -11 [-25, +2] | $8.04 / $9.01 | $0.087 / $0.105 |
+
+| Model | Arm | Pass | Spend | Per trial | Per success | Agent timeouts | Session caps | Skill-open rate |
+|---|---|---|---|---|---|---|---|---|
+| Opus 5.5 | none | 81.1% | $16.12 | $0.145 | $0.179 | 0 | 0 | 0% |
+| Opus 5.5 | gstack | 83.8% | $30.50 | $0.275 | $0.328 | 6 | 0 | 0% |
+| Opus 5.5 | pstack | 84.7% | $25.62 | $0.231 | $0.273 | 2 | 0 | 0% |
+| Haiku 5.5 | none | 75.7% | $0.98 | $0.009 | $0.012 | 3 | 0 | 0% |
+| Haiku 5.5 | gstack | 76.6% | $1.50 | $0.014 | $0.018 | 2 | 0 | 0% |
+| Haiku 5.5 | placebo | 71.2% | $1.49 | $0.013 | $0.019 | 3 | 0 | 0% |
+| Haiku 5.5 | pstack | 73.0% | $1.26 | $0.011 | $0.016 | 5 | 0 | 0% |
+| Haiku 5.5 | pstack-placebo | 75.7% | $1.29 | $0.012 | $0.015 | 3 | 0 | 0% |
+| particle-1 | none | 82.9% | $8.04 | $0.072 | $0.087 | 6 | 3 | 0% |
+| particle-1 | gstack | 77.5% | $9.01 | $0.081 | $0.105 | 4 | 2 | 0% |
+| particle-1 | placebo | 73.0% | $9.76 | $0.088 | $0.121 | 2 | 9 | 3% |
+| particle-1 | pstack | 79.3% | $10.45 | $0.094 | $0.119 | 4 | 4 | 56% |
+| particle-1 | pstack-placebo | 82.9% | $7.54 | $0.068 | $0.082 | 2 | 3 | 7% |
+
+They are listed with their spend in excluded-trials.txt: 44 trials, $7.81.
+
+| Replicate | Batch | Tasks | Trials | Sessions | Proxy spend | VM up to deleted (UTC) |
+|---|---|---|---|---|---|---|
+| 1 | r1-opus | 39 | 117 | 120 | $26.13 | earlier |
+| 1 | r1-haiku | 40 | 200 | 201 | $2.68 | earlier |
+| 1 | r1-particle-b | 39 | 195 | 195 | $15.40 | earlier |
+| 2, rerun | r2x-opus | 38 | 0, oracle failed | 0 | $0 | 07:38 to 07:52 |
+| 2, rerun | r2x-opus-b | 37 | 111 | 111 | $24.24 | 08:22 to 09:13 |
+| 2, rerun | r2x-haiku | 38 | 190 | 190 | $2.12 | 07:38 to 09:00 |
+| 2, rerun | r2x-particle | 38 | 190 | 191 | $18.16 | 07:38 to 09:31 |
+| 3 | r3-opus | 37 | 111 | 111 | $24.98 | 09:33 to 10:31 |
+| 3 | r3-haiku | 37 | 185 | 186 | $2.20 | 09:33 to 10:53 |
+| 3 | r3-particle | 37 | 185 | 185 | $15.73 | 09:33 to 11:17 |
+
+**Start rules.** Each launch was checked against the rule, and the result was recorded as a note row in ledger/stacks-r1-tb2-grid.jsonl. The rule: settled plus open across both TB2 ledger files, plus 1.4 times each cell's pilot cost per trial times its remaining trials, must be at most $320.
+
+| Before | In flight | Settled | Open | Projection | Total |
+|---|---|---|---|---|---|
+| r2x (replicate 2 rerun) | nothing | $75.54 | $19.50 | $189.94 | $284.98 |
+| r2x-opus-b | r2x-haiku, r2x-particle | $81.03 | $28.50 | $185.89 | $295.42 |
+| r3 (replicate 3) | nothing | $119.90 | $20.00 | $92.47 | $232.37 |
+
+**7. Spend**
+
+TB2's stop is $320 across both ledger files. Nothing came close to it, and there was no cap stop.
+
+| Ledger | Settled | Open reserves |
+|---|---|---|
+| ledger/stacks-r1-tb2.jsonl (route check and pilot) | $9.07 | $0 |
+| ledger/stacks-r1-tb2-grid.jsonl (every grid batch) | $153.67 | $21.00 (13 ids) |
+| Both | $162.75 | $21.00 |
+
+The open reserves are sessions whose settle never reached the ledger. Eleven were open at the handoff: ten from the lost replicate 2 and r1h-s-8c4e8fa6d450. Two are new: r2xp-s-8507ab107568 ($0.50 reserved) and r3h-s-f25e2ea1eff2 ($1.00 reserved). Each is the first attempt of a retried trial (section 6), and r1h-s-8c4e8fa6d450 is the same case. The proxies metered $0.22 for the two new ones, which the per-cell spend in section 4 leaves out. The Captain's ruling leaves open reserves open and reports spend from the proxy files.
+
+By the proxy files, TB2 spent $165.36: the pilot $9.07, replicate 1 $44.21, the lost replicate 2 $24.66, and this run $87.43. The lost replicate 2's sessions (r2-opus $19.95, r2-particle $4.71; the first r2-haiku and r2-haiku-b ran no paid trial) are outside the analysis. They stay counted against the stop.
+
+| Model | none pass | gstack pass | gstack - none, pp [95% CI] | Original 19, pp [95% CI] | Per success, none / gstack |
+|---|---|---|---|---|---|
+| Opus 5.5 | 81.1% (90/111) | 83.8% (93/111) | +3 [-3, +9] | +5 [-7, +18] | $0.18 / $0.33 |
+| Haiku 5.5 | 75.7% (84/111) | 76.6% (85/111) | +1 [-7, +9] | +4 [-11, +19] | $0.012 / $0.018 |
+| particle-1 | 82.9% (92/111) | 77.5% (86/111) | -5 [-14, +1] | -11 [-25, +2] | $0.087 / $0.105 |
+
+| Model | Arm | Pass | Per success | Agent timeouts | Session caps | Skill-open rate |
+|---|---|---|---|---|---|---|
+| Opus 5.5 | none | 81.1% | $0.179 | 0 | 0 | 0% |
+| Opus 5.5 | gstack | 83.8% | $0.328 | 6 | 0 | 0% |
+| Opus 5.5 | pstack | 84.7% | $0.273 | 2 | 0 | 0% |
+| Haiku 5.5 | none | 75.7% | $0.012 | 3 | 0 | 0% |
+| Haiku 5.5 | gstack | 76.6% | $0.018 | 2 | 0 | 0% |
+| Haiku 5.5 | placebo | 71.2% | $0.019 | 3 | 0 | 0% |
+| Haiku 5.5 | pstack | 73.0% | $0.016 | 5 | 0 | 0% |
+| Haiku 5.5 | pstack-placebo | 75.7% | $0.015 | 3 | 0 | 0% |
+| particle-1 | none | 82.9% | $0.087 | 6 | 3 | 0% |
+| particle-1 | gstack | 77.5% | $0.105 | 4 | 2 | 0% |
+| particle-1 | placebo | 73.0% | $0.121 | 2 | 9 | 3% |
+| particle-1 | pstack | 79.3% | $0.119 | 4 | 4 | 56% |
+| particle-1 | pstack-placebo | 82.9% | $0.082 | 2 | 3 | 7% |
+
+</details>

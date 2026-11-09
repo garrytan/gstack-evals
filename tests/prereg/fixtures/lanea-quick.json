@@ -110,7 +110,7 @@
     "funding": "program",
     "line_item": "lanea-quick",
     "ledger": "captain-gstack-evals/ledger/lanea-quick.jsonl",
-    "approval": {"words":"Rec","by":"Garry Tan","source":"gate 1 of the v1 plan (first cap $500), moved up on \"It should be fast like this week\""},
+    "approval": {"words":"(paraphrase) took the recommendation","by":"Garry Tan","source":"gate 1 of the v1 plan (first cap $500), moved up at his request"},
     "reservation": "A reserve row at each session's worst case before it starts (Opus $7.25, Haiku $1.05), settled with measured usage after; the proxy refuses a request past the session ceiling.",
     "stop_rule": "A reservation that would pass the cap stops the run: CAP_STOP, incomplete, never retried to change a result.",
     "order": ["S0: /learn on Haiku, all four arms","S1: office-hours before, after and none, both models, trial by trial","S2: office-hours before2 as cap allows","S3: /learn on Opus as cap allows"]

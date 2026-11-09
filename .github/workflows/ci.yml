@@ -38,9 +38,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Install Bun from the release zip, or from npm if GitHub's download keeps failing, checked against a pinned SHA-256
-        # Four tries at the release zip over about two minutes (waits of 15, 30 and 60 seconds), then the same version's npm
-        # package. Either archive must match its pinned digest before it is unpacked, and the step fails unless the binary
-        # reports BUN_VERSION. Both archives hold the same binary (sha256 10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235).
+        # Four tries at the release zip, with waits of 15, 30 and 60 seconds between them, then the same version's npm package.
+        # The tries take about two minutes when each fails fast and about four when each stalls to its 30-second limit, and the
+        # npm download, with curl's own retries, can add about four more, so the job's time limit must cover about eight
+        # (workflow-hygiene.test.ts checks it). Either archive must match its pinned digest before it is unpacked, and the step
+        # fails unless the binary reports BUN_VERSION. Both archives hold the same binary (sha256 10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235).
         env:
           BUN_VERSION: 1.4.4
           BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
@@ -94,6 +96,8 @@ jobs:
         run: |
           bun run typecheck
           echo 'bun run typecheck' >> "$RUNNER_TEMP/checks-passed.txt"
+      - name: Install age (the autoplan audit dry run's custody clause)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends age
       - name: Tests
         if: steps.scope.outputs.docs_only != 'true'
         run: bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"

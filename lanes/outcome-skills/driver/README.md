@@ -4,7 +4,7 @@
 
 ## Operator rule: a driver failure ends the item
 
-If the driver fails with E_INTERNAL or E_LEASE_UNSETTLED, each line item it was serving ends incomplete, and the driver is not launched again for that item unless GSTA-2 reads the ledger and rules otherwise.
+If the driver fails with E_INTERNAL or E_LEASE_UNSETTLED, each line item it was serving ends incomplete, and the driver is not launched again for that item unless the Captain reads the ledger and rules otherwise.
 
 ## Cap stops
 

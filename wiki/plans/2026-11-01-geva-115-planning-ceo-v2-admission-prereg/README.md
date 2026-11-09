@@ -224,6 +224,8 @@ So the band admits a 0.7 panel about one time in five. The headline keeps its ow
 
 ## 9. Cost and cap
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 R1a's pilot metered none-opus at $0.113 and gstack-opus at $0.199 a session under the stub prompt, and gstack on Fable at three times plain Fable. Panel v2's plans and contexts are up to about twice v1's size, and the claude_code preset adds about 1.9k tokens a request. The forced arm has never been metered: it reads SKILL.md, the preamble and the 1,172-line review-sections.md, writes ten or eleven sections, and may start an outside-voice subagent. No keyless way meters it, and a paid smoke before this prereg is not allowed.
 
 | Item | Sessions or calls | Projection | Cap |

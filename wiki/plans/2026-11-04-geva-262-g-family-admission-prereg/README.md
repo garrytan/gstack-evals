@@ -187,6 +187,8 @@ For the four designs this post can run, power at the claimed MDD is 0.817 or mor
 
 ### 9. Caps, reserve and the envelope
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 Each skill's evaluation is capped at $2,000 all-in and the program at $10,000 (plan v3 8): paid model calls, VMs, and crew threads' own model use at about $1 per 1,000 credits. This post asks the Captain to record these stage caps in approvals/ after it merges:
 
 | Stage | Expected at house prices | Cap, reserved by O6 before the stage starts | Charged to |

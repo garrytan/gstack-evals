@@ -342,6 +342,8 @@ A stratum at E0's level (0.9 or more) almost never reads HEADROOM under either m
 
 ## Cost, caps, ledger items and the start rule
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 Priced from E0's measured sessions: Opus $0.236 a session mean (90% upper bound $0.242) at 4.1 turns and about 108k input tokens, particle-1 $0.019 ($0.020). A unit up to ten times larger can't be read whole, so the projection assumes about 25 turns at a mean context near 100k tokens: about 2.5M cache-read, 150k cache-write and 20k output tokens, $1.65 at Opus prices, 7.2 times E0's mean. Projections: Opus $1.70 a session, particle-1 $0.14. Judge packets now carry up to 480 KiB of unit tree (about 120k tokens at 4 bytes a token) against E0's 45 KB, so a judge request costs about $0.26 on Sol or Sonnet and $0.52 on Opus; about 19 requests a read (8 primary, about 8 second, 3 third) put the three reads near $26. Step 3b reprices the real packets at 3 bytes a token before any judge call.
 
 | Item | Sessions or calls | Projected | Cap |
@@ -431,7 +433,7 @@ No sentence quotes or paraphrases any unit, item or finding. Headroom candidates
 
 ## Review record
 
-The plan went through gstack's /autoplan in its lean form (R65): one anthropic/claude-opus-5-5 reviewer read the plan and the draft together and raised 22 findings (1 critical, 5 high, 11 medium, 4 low, 1 informational). The Captain answered the gate rec, taking every recommendation, with every medium and low fix folded into the approved plan (rev d83b55dff1a1). The critical finding (judge-packet refuses trees over 512 KiB) set the 480 KiB unit cap; the highs added hr-rule.ts, the stratum-level stop and gap rules, the smoke item, the code-behavior judging rule in brief v3.1 and the second operating-characteristic table. This post's own /ship review is recorded in its pull request.
+The plan went through gstack's /autoplan in its lean form (R65): one anthropic/claude-opus-5-5 reviewer read the plan and the draft together and raised 22 findings (1 critical, 5 high, 11 medium, 4 low, 1 informational). At the gate the Captain accepted every recommendation, and the approved plan (rev d83b55dff1a1) includes every medium and low fix. The critical finding (judge-packet refuses trees over 512 KiB) set the 480 KiB unit cap; the highs added hr-rule.ts, the stratum-level stop and gap rules, the smoke item, the code-behavior judging rule in brief v3.1 and the second operating-characteristic table. This post's own /ship review is recorded in its pull request.
 
 ## Dry run
 

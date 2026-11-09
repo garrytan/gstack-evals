@@ -37,7 +37,7 @@ Every earlier Lane B run drove Claude Code through the Agent SDK's stub system p
 - **Discovery.** With gstack installed and never mentioned, how often does the agent open a gstack skill on its own, and does a description that says when to use /investigate change that?
 - **System prompt.** Does Claude Code's preset system prompt change how often the agent opens an untold skill, against the SDK stub that earlier runs used?
 
-The decisions. If the rewritten description raises opens, gstack should rewrite its skill descriptions to say when to use each skill. If neither description gets skills opened, untold skills need another route, such as hooks (agenda item 1, Harness Evals). If the preset raises opens, later untold runs should use it, and earlier stub-prompt readings understate discovery.
+The decisions. If the rewritten description raises opens, gstack should rewrite its skill descriptions to say when to use each skill. If neither description gets skills opened, untold skills need another route, such as hooks (agenda item 1, the harness Captain). If the preset raises opens, later untold runs should use it, and earlier stub-prompt readings understate discovery.
 
 ## 2. Tasks
 
@@ -86,6 +86,8 @@ One replicate of every cell, plus a second replicate of Opus's two D3 cells (gst
 **Built-in skills.** With bundled skills disabled, Claude Code still lists built-in skills. Reconciled on this runner by the dry run (section 10): the SDK's init record lists `doctor` and `plugin-authoring` in every cell under both system prompts (2 skills in none, 66 in the gstack, gstack-rewritten and placebo cells), while the listing that reaches the model names `plugin-authoring` and not `doctor` in every cell. Run D counts both as untold exposure, counts their opens on their own, and never counts them as gstack opens. They give the no-gstack arm a reading: the base rate of opening a listed skill nobody mentioned.
 
 ## 4. Models, routes and session caps
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 | Model | Lab | Route | Session cap |
 |---|---|---|---|
@@ -175,6 +177,8 @@ Settled here, before any run. Each row applies to every cell.
 A trial's arm, system prompt, model and task come from its Harbor config, never from its directory name.
 
 ## 8. Money
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 **Cap: $126** of metered model spend through the proxy (raised from $125 by the Captain on 2026-11-01, when the route check's cost entered the projection), one ledger item, `discovery-r1`, in its own file `ledger/discovery-r1.jsonl`, with one approval row carrying the cap, this post's merge commit and the runner tag sha. The Captain records the approval in approvals/ when this post merges. Ubicloud VM time is reported beside the cap and counts toward the org's R42 approval. Every batch of Run D uses this one ledger service. Open reserves left by a settle that never reached the ledger stay open; spend is reported from the proxy files, as #109 did.
 
@@ -309,7 +313,7 @@ Every null gets one Why-null cycle in the results post (org R48): exposure, task
 
 ## 13. Out of scope
 
-Agenda item 1 (where an instruction must live to be obeyed: Harness Evals leads), Run T (item 4, its own preregistration), the ceremony eval (GEVA-108), the rendered gstack 142757b arms, Haiku 5.5 and Sonnet 5.5 (org R54), Codex as a host, the open-weight ladder slots beyond DeepSeek, and any posting.
+Agenda item 1 (where an instruction must live to be obeyed: the harness Captain leads), Run T (item 4, its own preregistration), the ceremony eval (GEVA-108), the rendered gstack 142757b arms, Haiku 5.5 and Sonnet 5.5 (org R54), Codex as a host, the open-weight ladder slots beyond DeepSeek, and any posting.
 
 ## Disclosures
 

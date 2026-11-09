@@ -1,6 +1,6 @@
 # src/waste: the crew-log waste reader
 
-`gstack-evals waste` turns exported crew-session logs, /ship receipts and per-PR replay data into counts for the in-the-wild waste baseline (GST-1114). The step before it, [wiki/board/2026-11-03-geva-220-waste-floor.md](../../wiki/board/2026-11-03-geva-220-waste-floor.md), found almost no waste in single-task benchmark sessions and moved the question to multi-hour crew ship pipelines.
+`gstack-evals waste` turns exported crew-session logs, /ship receipts and per-PR replay data into counts for the in-the-wild waste baseline. The step before it, [wiki/board/2026-11-03-geva-220-waste-floor.md](../../wiki/board/2026-11-03-geva-220-waste-floor.md), found almost no waste in single-task benchmark sessions and moved the question to multi-hour crew ship pipelines.
 
 It is keyless, makes no network call and decides no verdict. It prints counts, the label you pass and sha256 digests of its inputs. It never prints a command line, a path, a result or any other text from what it reads, so its output is safe to commit when the inputs are private. Labels are yours to mint; mint them from random bytes when an input names a private repository.
 

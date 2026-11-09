@@ -183,7 +183,7 @@ Anyone can skip the official registry. A custom `registry.json` can point tasks 
 - **SlopCodeBench.** 36 **multi-step** tasks. The agent extends its own code across checkpoints and earlier tests stay in force. Metrics include erosion and verbosity (https://hub.harborframework.com/datasets/gabeorlanski/slopcodebench). It maps well to plan → build → review, and to gstack's LOC and over-engineering concern.
 - **SWE-Atlas.** Scale AI's QnA (124), Test Writing (90) and Refactoring (70) splits. TW and RF run with internet disabled apart from package registries, and harbor 0.22.0 plus agent versions are pinned (https://raw.githubusercontent.com/scaleapi/SWE-Atlas/main/README.md). QnA fits /investigate. TW fits /qa-style test authoring. RF fits /review-plus-fix. AA uses SWE-Atlas-QnA with a GPT-6 Luna judge (https://artificialanalysis.ai/methodology/coding-agents-benchmarking).
 - **SkillsBench 1.1.** 87 active tasks and Apache-2.0 data. The headline metric is the paired skill lift, with and without task skills (https://huggingface.co/datasets/benchflow/skillsbench). Its tasks bundle skills in `environment/skills`, so a run with gstack vs none vs curated skills is cheap to set up.
-- **Senior SWE-Bench v2026.06.** 50 public tasks graded by LLM judges whose defaults are **Sonnet 4.6**. Using it would need a judge override to respect Garry's "don't use sonnet" ruling (https://hub.harborframework.com/datasets/snorkel-ai/senior-swe-bench-v2026.06).
+- **Senior SWE-Bench v2026.06.** 50 public tasks graded by LLM judges whose defaults are **Sonnet 4.6**. Using it would need a judge override to respect Garry's no-Sonnet ruling (https://hub.harborframework.com/datasets/snorkel-ai/senior-swe-bench-v2026.06).
 - **FrontierCode v1.1.** Maintainer-merge rubrics on 150 tasks, **not public**, used in AA's index (AA methodology). It is not available to us.
 - **FeatureBench** (200 feature tasks) and **SWE-Marathon** (20 ultra-long tasks) are registered but unchecked.
 
@@ -198,3 +198,10 @@ Anyone can skip the official registry. A custom `registry.json` can point tasks 
 - Repo2RLEnv Tasksmith's per-task cost. The README says costs are recorded, but I did not read the figures.
 - Whether Step 5 Preview has open weights. The HF eval-results list `stepfun-ai/Step-5-Preview`, which I did not open.
 - The number of GPU tasks in v4.0.0: Vals says 3, and main has 4 with `gpus > 0`.
+
+<details>
+<summary>Agent notes</summary>
+
+Edited 2026-11-09 for public wording. Earlier commits keep the text as first merged.
+
+</details>
