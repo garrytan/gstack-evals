@@ -51,14 +51,20 @@ export interface AgentSession {
 
 export interface Sandbox {
   isolation: "docker" | "process";
-  /** Where the work dir appears to the trial's children. */
-  workPath(work: string, task: string): string;
+  /** Where the work dir appears to the trial's children; root mounts it at the sandbox's work root itself (/work in docker). */
+  workPath(work: string, task: string, root?: boolean): string;
   /** Where the tasks directory copy appears to setup and check. */
   fixturesPath(fixtures: string): string;
   /** The HOME every child gets, given the trial's evaluator-side directory. */
   homePath(dir: string): string;
   step(role: "setup" | "check", command: string, task: string, opts: StepOptions): StepResult;
-  agent(task: string, opts: { work: string; env: Record<string, string>; network?: string | null }): AgentSession;
+  agent(task: string, opts: { work: string; env: Record<string, string>; network?: string | null; root?: boolean; mounts?: readonly ReadOnlyMount[] }): AgentSession;
+}
+
+/** A host file or directory the agent sees read-only at path. */
+export interface ReadOnlyMount {
+  host: string;
+  path: string;
 }
 
 export class IsolationError extends Error {}
@@ -89,7 +95,7 @@ export const dockerAvailable = (docker = "docker"): boolean => spawnSync(docker,
 /** Containers for setup and check (the trial image) and for the agent (the arm image). */
 export function dockerSandbox(opts: { trialImage: string; armImage?: string; docker?: string }): Sandbox {
   const docker = opts.docker ?? "docker";
-  const workPath = (_work: string, task: string) => "/work/" + task;
+  const workPath = (_work: string, task: string, root?: boolean) => (root ? "/work" : "/work/" + task);
   return {
     isolation: "docker",
     workPath,
@@ -103,8 +109,9 @@ export function dockerSandbox(opts: { trialImage: string; armImage?: string; doc
     },
     agent(task, o) {
       const name = "gse-agent-" + randomBytes(6).toString("hex");
-      const path = workPath(o.work, task);
-      const start = dockerStep(docker, ["-d", "--network", o.network ?? "none", "--user", uid(), ...HARDENING, "-v", o.work + ":" + path, "-w", path], ["--entrypoint", "sleep", opts.armImage ?? opts.trialImage, "infinity"], name, o.env, 120_000);
+      const path = workPath(o.work, task, o.root);
+      const ro = (o.mounts ?? []).flatMap((m) => ["-v", m.host + ":" + m.path + ":ro"]);
+      const start = dockerStep(docker, ["-d", "--network", o.network ?? "none", "--user", uid(), ...HARDENING, "-v", o.work + ":" + path, ...ro, "-w", path], ["--entrypoint", "sleep", opts.armImage ?? opts.trialImage, "infinity"], name, o.env, 120_000);
       if (start.exitCode !== 0) throw new IsolationError("could not start the agent container: " + start.stderr.trim().split("\n").slice(-1)[0]);
       let stopped = false;
       return {
@@ -166,6 +173,7 @@ export function processSandbox(opts: { bwrap?: string } = {}): Sandbox {
     agent(_task, o) {
       const home = o.env.HOME;
       if (!home) throw new IsolationError("the agent's env has no HOME to bind into its bubblewrap session");
+      if (o.root || o.mounts?.length) throw new IsolationError("a session with a work root or read-only mounts runs under --isolation docker");
       return {
         exec: (command, timeoutMs) => result(spawnSync(bwrap, bwrapArgs(o.work, home, command), { env: o.env, timeout: timeoutMs, encoding: "utf8", maxBuffer: STEP_BUFFER })),
         spawn: (argv, env = {}) => spawn(bwrap, bwrapArgv(o.work, home, argv), { env: { ...o.env, ...env }, stdio: ["pipe", "pipe", "pipe"] }),

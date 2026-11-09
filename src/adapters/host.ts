@@ -48,13 +48,15 @@ export interface HostDriverOptions {
   backgroundWaitMs?: number;
   /** Claude Code only: one follow-up user message when needed(the transcript so far) is true (its driver's followUp). */
   followUp?: { text: string; needed: (transcript: string) => boolean };
+  /** Claude Code only: an SDK-side Stop hook on the transcript so far (its driver's stopHook). */
+  stopHook?: (transcript: string) => string | null;
 }
 
 /** The adapter for one session. Claude Code takes Anthropic and OpenRouter models; Codex takes OpenAI and OpenRouter ones. */
 export function hostDriver(o: HostDriverOptions): AgentDriver {
   if (o.host === "claude") {
     if (o.provider === "openai") throw new Error("E_INTERNAL: Claude Code cannot run the openai model " + o.model);
-    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.skillGateDeadlineMs ? { skillGateDeadlineMs: o.skillGateDeadlineMs } : {}), ...(o.disable1mContext ? { disable1mContext: true } : {}), ...(o.query ? { query: o.query } : {}), ...(o.settings ? { settings: o.settings } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}), ...(o.followUp ? { followUp: o.followUp } : {}) });
+    return claudeCodeDriver({ model: o.model, provider: o.provider, proxy: o.proxy, skill: o.skill, out: o.out, ...(o.entry ? { entry: o.entry } : {}), ...(o.freeform ? { freeform: o.freeform } : {}), ...(o.plugins ? { plugins: o.plugins } : {}), ...(o.codex ? { codex: o.codex } : {}), ...(o.systemPrompt ? { systemPrompt: o.systemPrompt } : {}), ...(o.maxTurns ? { maxTurns: o.maxTurns } : {}), ...(o.sessionKind ? { sessionKind: o.sessionKind } : {}), ...(o.skillGateDeadlineMs ? { skillGateDeadlineMs: o.skillGateDeadlineMs } : {}), ...(o.disable1mContext ? { disable1mContext: true } : {}), ...(o.query ? { query: o.query } : {}), ...(o.settings ? { settings: o.settings } : {}), ...(o.capStops ? { capStops: o.capStops } : {}), ...(o.backgroundWaitMs !== undefined ? { backgroundWaitMs: o.backgroundWaitMs } : {}), ...(o.followUp ? { followUp: o.followUp } : {}), ...(o.stopHook ? { stopHook: o.stopHook } : {}) });
   }
   if (o.provider === "anthropic") throw new Error("E_INTERNAL: Codex cannot run the anthropic model " + o.model);
   return codexDriver({ model: o.model, provider: o.provider, proxy: o.proxy, interactive: o.interactive, skill: o.skill, out: o.out });
