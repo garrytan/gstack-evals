@@ -169,3 +169,16 @@ export const MATCHER = { count: 31, no: 41, probes: 189, time: 5, timeBoundMs: 5
 // dropped). Section 6 counts a /verify load only when they arrive in the load's result or expansion; dry-run step 4 checks
 // them against HM_GSTACK.
 export const VERIFY_FIRST200 = { sha256: "76532eb558dd12b6e14862f4749706ebd162e96db4bbb6db9a8510941ab0199f", text: "<!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->\n<!-- Regenerate: bun run gen:skill-docs -->\n\n## Preamble (run first)\n\n```bash\n~/.claude/skills/gstack/bin/gstack-skill-start --skill \"" };
+
+// Section 6's verify-hook patch: one committed patch file on verify/SKILL.md at gstackPin. It drops step 2's clause and
+// adds the contract item with match.txt's frozen regex. pinBlob and patchedBlob are git blob shas before and after; the
+// pin's file is vendored at GSTACK_VENDOR/verify/SKILL.md.
+export const VERIFY_PATCH = {
+  file: "lanes/harness-mechanics/verify-hook.patch",
+  sha256: "6d000d53f4390deb36977f084eb47104c2aaa690a1710be45cef0ee818c7fa14",
+  pinBlob: "2c13cc1ab52f9675387a30bf1336ecabf96411a2",
+  patchedBlob: "5c7249382c3821ca657ea87951a89e6fe0e5a689",
+  clause: ", then a full\n  `run` before you stop",
+  item: { id: "check-after-edit", kind: "check_after_last_edit", fix: "run a full check after your last edit before you stop, and show its result" },
+} as const;
+

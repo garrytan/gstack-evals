@@ -138,7 +138,7 @@ if [ -s "$run/out/pull-fails.txt" ]; then echo "an image did not pull (6 tries a
 bash "$runner/task-hooks.sh" "$run" > "$run/out/task-hooks.tsv" 2> "$run/out/task-hooks.log" || true
 echo "task hooks: $(awk -F'\t' 'NR > 1 && $4 == "yes"' "$run/out/task-hooks.tsv" | wc -l) of $(awk 'NR > 1' "$run/out/task-hooks.tsv" | wc -l) tasks name a UserPromptSubmit hook, $(awk -F'\t' 'NR > 1 && $4 == "unknown"' "$run/out/task-hooks.tsv" | wc -l) unknown"
 if [ -f "$run/oracle.json" ]; then
-  (cd "$run" && sg docker -c "harbor run -y -c '$run/oracle.json'") > "$run/out/oracle.log" 2>&1 || true
+  (cd "$run" && sg docker -c "HARBOR_TELEMETRY=0 harbor run -y -c '$run/oracle.json'") > "$run/out/oracle.log" 2>&1 || true
   # Every task in the oracle job needs a trial with reward 1; a task with no trial directory fails too.
   passed=$(for d in "$run"/jobs/*-oracle/*/; do
     [ -f "$d/config.json" ] || continue
@@ -209,7 +209,7 @@ rc=0
 for j in "${jobs[@]}"; do
   if [ -e "$run/STOP" ] || [ -e "$run/out/cap-stop.json" ]; then [ "$rc" -ne 0 ] || rc=130; break; fi
   log=harbor.log; [ "$j" = job ] || log="harbor-${j#job-}.log"
-  sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' ${order}harbor run -y -c '$run/out/$j.resolved.json'" > "$run/out/$log" 2>&1
+  sg docker -c "env -u ANTHROPIC_API_KEY -u OPENROUTER_API_KEY -u OPENAI_API_KEY ANTHROPIC_API_KEY=placeholder-not-a-key PYTHONPATH='$runner/agent' ${order}HARBOR_TELEMETRY=0 harbor run -y -c '$run/out/$j.resolved.json'" > "$run/out/$log" 2>&1
   r=$?
   [ "$rc" -ne 0 ] || rc=$r
 done

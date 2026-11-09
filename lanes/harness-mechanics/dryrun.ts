@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { armSpec, CLOSING_LINES } from "../../quick/laneb/runner/grid.ts";
 import { ARMS, bundleLists, capsTotalUsd, CLOSING, HM, loadBundle, REPO } from "./pins.ts";
+import { stepArmTars, stepEnv, stepVerifyHook } from "./arms.ts";
 import { stepMatcher72, stepPin, stepProbes189, stepStopHook } from "./match.ts";
 import { itemPlan, ITEMS } from "./plans.ts";
 import { stepPatterns, stepScorer } from "./score.ts";
@@ -32,13 +33,13 @@ function skeleton(): StepResult {
 
 export const STEPS: Step[] = [
   { name: "skeleton", units: [1], run: skeleton },
-  { name: "1-arm-tars", units: [5] },
-  { name: "2-verify-hook", units: [5] },
+  { name: "1-arm-tars", units: [5], run: stepArmTars },
+  { name: "2-verify-hook", units: [5], run: stepVerifyHook },
   { name: "3-matcher-probes", units: [2], run: stepPin },
   { name: "4-scorer", units: [3], run: stepScorer },
   { name: "5-judgment-hooks", units: [7] },
   { name: "6-ledger", units: [6] },
-  { name: "7-leak-scan-env", units: [5, 7] },
+  { name: "7-leak-scan-env", units: [5, 7], run: stepEnv },
   { name: "8-analysis", units: [4], run: stepAnalysis },
   { name: "stop-hook-loadline", units: [2], run: stepStopHook },
   { name: "matcher-72", units: [2], run: stepMatcher72 },

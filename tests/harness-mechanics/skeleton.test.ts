@@ -165,7 +165,8 @@ describe("cli", () => {
     const r = run(["dryrun", "--out", out], { HM_GSTACK: "" });
     const lines = r.stdout.toString().trim().split("\n");
     expect(lines.map((l) => l.split(" ")[1])).toEqual([...STEPS.map((s) => s.name), "FAIL"]);
-    for (const n of ["1-arm-tars", "2-verify-hook", "5-judgment-hooks", "6-ledger", "7-leak-scan-env", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL not built (unit "))).toBe(true);
+    for (const n of ["1-arm-tars", "2-verify-hook", "7-leak-scan-env"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL "))).toBe(true);
+    for (const n of ["5-judgment-hooks", "6-ledger", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL not built (unit "))).toBe(true);
     for (const n of ["3-matcher-probes", "stop-hook-loadline", "matcher-72", "probes-189"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL E_HM_PIN set HM_GSTACK"))).toBe(true);
     expect(lines[0]).toStartWith("DRYRUN skeleton PASS");
     expect(lines.at(-1)).toBe("DRYRUN: FAIL");

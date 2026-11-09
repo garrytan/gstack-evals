@@ -4,6 +4,8 @@
 #
 #   quick/laneb/arms/build.sh [out-dir]      default out-dir: ~/.capy/work/laneb-arms
 #   quick/laneb/arms/build.sh l1 [out-dir]   default out-dir: ~/.capy/work/laneb-arms-l1
+#   quick/laneb/arms/build.sh hm [out-dir]   default out-dir: ~/.capy/work/hm/arms; the harness mechanics arms
+#                                            (none, prose, hook), manifests in manifests/hm/
 #
 # l1 output, outside git: <out>/{none,before,after,off}.tar and .tar.gz, their
 # file inventories (<arm>.files.tsv), the pins' checkouts and fetch records, and
@@ -30,12 +32,16 @@ SEED=${PLACEBO_SEED:-gstack-evals/laneb/placebo/v1}
 L1_BEFORE_SHA=82db89ab3ea3c64185538b8af33da2ffd1a18b57
 L1_AFTER_SHA=699a41cb6808e01240d02e82247693f9170d401a
 L1_LOADOUT=lite
+# The harness mechanics pin (lanes/harness-mechanics/pins.ts HM.gstackPin) and its arms; unit 7 adds judge.
+HM_SHA=ba2289e1cd9f2387d069b3b6c51b404d56c4a1e9
+HM_ARMS="none prose hook"
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LANEB=$(cd "$HERE/.." && pwd)
 DEFAULT_OUT=$HOME/.capy/work/laneb-arms
 MODE=default
 if [ "${1:-}" = l1 ]; then MODE=l1; DEFAULT_OUT=$HOME/.capy/work/laneb-arms-l1; shift; fi
+if [ "${1:-}" = hm ]; then MODE=hm; DEFAULT_OUT=$HOME/.capy/work/hm/arms; shift; fi
 OUT=$(mkdir -p "${1:-$DEFAULT_OUT}" && cd "${1:-$DEFAULT_OUT}" && pwd)
 BUILDER=$(sed -n 's/^ARG BUILDER_IMAGE=//p' "$HERE/Dockerfile")
 in_builder() { docker run --rm --network none -u "$(id -u):$(id -g)" -v "$OUT:/out" -w /out "$BUILDER" "$@"; }
@@ -108,6 +114,69 @@ build_l1() {
   ls -l "$OUT"/*.tar "$OUT"/*.tar.gz
 }
 if [ "$MODE" = l1 ]; then build_l1; exit 0; fi
+
+# The harness mechanics arms (wiki/plans/2026-11-09-geva-448-harness-mechanics-prereg, sections 5 and 6): none, prose
+# and hook at the pin, with L1's builder, Claude Code, setup run, seeded user and --loadout. prose is gstack as shipped
+# (routing and contracts at their defaults); hook is the pin with lanes/harness-mechanics/verify-hook.patch applied to
+# the checkout before setup and skill_contracts set on. The judge tar (hook plus the judgment hooks) is unit 7's: it
+# adds its arm to HM_ARMS and its build here. SKIP_BUILD=1 rewrites the manifests from the tars already in <out>.
+build_hm() {
+  local man=$HERE/manifests/hm root=$LANEB/../.. arm head a1 a2 keys src
+  local patch=$root/lanes/harness-mechanics/verify-hook.patch
+  mkdir -p "$man"
+  if [ "${SKIP_BUILD:-0}" != 1 ]; then
+    echo "== gstack at $HM_SHA"
+    rm -rf "$OUT/src-pin" "$OUT/src-hook"
+    git init -q "$OUT/src-pin"
+    git -C "$OUT/src-pin" fetch -q --depth 1 "$GSTACK_REPO" "$HM_SHA"
+    git -C "$OUT/src-pin" checkout -q FETCH_HEAD
+    head=$(git -C "$OUT/src-pin" rev-parse HEAD)
+    test "$head" = "$HM_SHA"
+    a1=$(git -C "$OUT/src-pin" archive --format=tar "$HM_SHA" | sha256sum | cut -d' ' -f1)
+    a2=$(git -C "$OUT/src-pin" archive --format=tar "$HM_SHA" | sha256sum | cut -d' ' -f1)
+    test "$a1" = "$a2"
+    git -C "$OUT/src-pin" -c pack.threads=1 repack -a -d -F -q
+    printf '{"repo":"%s","sha":"%s","head":"%s","method":"git init; git fetch --depth 1 <repo> <sha>; git checkout FETCH_HEAD","git_archive_sha256":"%s"}\n' \
+      "$GSTACK_REPO" "$HM_SHA" "$head" "$a1" > "$OUT/fetch-pin.json"
+    echo "== verify-hook patch"
+    cp -a "$OUT/src-pin" "$OUT/src-hook"
+    git -C "$OUT/src-hook" apply --check "$patch"
+    git -C "$OUT/src-hook" apply "$patch"
+    rm -rf "$OUT/trees"
+    mkdir -p "$OUT/trees/none/.claude/skills"
+    for arm in prose hook; do
+      if [ "$arm" = hook ]; then src=$OUT/src-hook; keys="skill_contracts=on"; else src=$OUT/src-pin; keys=""; fi
+      echo "== $arm arm: ./setup --host claude --no-browser --loadout $L1_LOADOUT at $HM_SHA in docker (keys: ${keys:-none})"
+      rm -rf "$OUT/$arm-export"
+      docker buildx build --progress=plain --no-cache-filter gstack-l1-build --build-context gstack="$src" \
+        --build-arg GSTACK_LOADOUT="$L1_LOADOUT" --build-arg GSTACK_KEYS="$keys" \
+        --target gstack-l1-tar --output type=local,dest="$OUT/$arm-export" "$HERE" > "$OUT/build-$arm.log" 2>&1 \
+        || { tail -40 "$OUT/build-$arm.log"; exit 1; }
+      mv "$OUT/$arm-export/arm.tar" "$OUT/$arm.tar"
+      mv "$OUT/$arm-export/gstack-config.tsv" "$OUT/$arm.gstack-config.tsv"
+      mv "$OUT/$arm-export/loadout.lock.json" "$OUT/$arm.loadout.lock.json"
+      rm -rf "$OUT/$arm-export"
+      mkdir -p "$OUT/trees/$arm"
+      tar -xpf "$OUT/$arm.tar" -C "$OUT/trees/$arm"
+    done
+    chmod 755 "$OUT/trees/none/.claude" "$OUT/trees/none/.claude/skills"
+    echo "== tars"
+    canonical_tar -C trees/none -cf none.tar .claude
+    for arm in $HM_ARMS; do in_builder sh -c "gzip -n -6 -c $arm.tar > $arm.tar.gz"; done
+  fi
+  echo "== manifests"
+  cd "$root"
+  for arm in $HM_ARMS; do
+    meta=(--meta claude_code="$CLAUDE_CODE_VERSION" --meta tar_gz_sha256="$(sha256sum "$OUT/$arm.tar.gz" | cut -d' ' -f1)")
+    if [ "$arm" != none ]; then
+      meta+=(--meta gstack_sha="$HM_SHA" --meta update_check=false --meta onboarding_markers="$(markers "$OUT/trees/$arm")"
+        --fetch "$OUT/fetch-pin.json" --config "$OUT/$arm.gstack-config.tsv" --lock "$OUT/$arm.loadout.lock.json")
+    fi
+    bun lanes/harness-mechanics/arms.ts manifest --arm "$arm" --tree "$OUT/trees/$arm" --tar "$OUT/$arm.tar" --out "$man" "${meta[@]}"
+  done
+  ls -l "$OUT"/*.tar "$OUT"/*.tar.gz
+}
+if [ "$MODE" = hm ]; then build_hm; exit 0; fi
 
 echo "== gstack checkout at $GSTACK_SHA"
 rm -rf "$OUT/gstack-src"

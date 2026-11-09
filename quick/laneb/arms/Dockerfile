@@ -16,7 +16,8 @@
 #               `./setup --host claude --no-browser --loadout <GSTACK_LOADOUT>`
 #               result at the pin in the "gstack" context, the same seeded user
 #               as gstack-tar, then skill_routing and skill_contracts set off
-#               when GSTACK_OFF_KEYS=true.
+#               when GSTACK_OFF_KEYS=true, and each GSTACK_KEYS key=value pair set
+#               (the harness mechanics arms).
 #
 # The gstack checkout comes in as the named build context "gstack".
 
@@ -166,6 +167,12 @@ ARG GSTACK_OFF_KEYS=false
 RUN set -eu; \
     cfg=/root/.claude/skills/gstack/bin/gstack-config; \
     if [ "$GSTACK_OFF_KEYS" = true ]; then "$cfg" set skill_routing off; "$cfg" set skill_contracts off; fi
+# The harness mechanics hook arm: key=value pairs set with gstack's own config command, after the seeded user. Empty
+# (every other arm) sets nothing.
+ARG GSTACK_KEYS=""
+RUN set -eu; \
+    cfg=/root/.claude/skills/gstack/bin/gstack-config; \
+    for kv in $GSTACK_KEYS; do "$cfg" set "${kv%%=*}" "${kv#*=}"; done
 # The same steps as gstack-build, with two differences. Only absolute symlinks
 # become copies: the checkout's own relative link (connect-chrome, tracked in
 # git as a link to open-gstack-browser) stays a link, because the pin's
