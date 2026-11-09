@@ -153,3 +153,13 @@ opens and settles one lease per frozen item on a temporary ledger, runs six stub
 containers from a fixture unit's image, scores them with the Docker executor and prints one PASS or FAIL line per
 fixture. The fixture unit comes from #290's fixtures helper (lang go, shell-sourceable product code). Not yet done: the
 Harbor wiring of pf_turns.py through real_agent and the driver's proxy slots, and the dry run on real MultiLang units.
+
+### Driver
+
+`gstack-evals outcome serve --stage <pf item>=pf:P,pf:C,pf:N [--pf-allowance <json file>]` serves PF sessions (driver/stage.ts).
+
+- pf-admit serves Opus, Sol and particle-1; pf-opus, pf-sol and pf-particle serve their own model; pf-blind serves pf:blind on Opus only. A stage that mixes PF arms with G or SM arms, or whose item carries skills other than pf, is refused.
+- Each session opens two slots on the stage's lease: meta.phase "task", then "wrapup". cap_usd must equal sessionLimits(arm, model, allowance) for that phase, and each slot's deadline is that phase's wall limit plus the grace.
+- Per arm, model, task and trial: the task phase opens at most twice, the second naming meta.rerun (the whole-session retry). Within each task attempt the wrap-up opens at most twice, the second naming meta.rerun, and only after that attempt's task open. planned and reruns count task opens only.
+- A task open needs room for its task allowance plus its wrap-up allowance. The wrap-up allowance stays pending until the wrap-up opens, a new task attempt replaces it, or the task slot has been closed for the deadline grace.
+- --pf-allowance takes the task-turn table (costReading's doubled one after admission); the default is items.ts ALLOWANCE. Sol and particle-1 route through OpenRouter, Opus through Anthropic, from registry.json's sm.models map.
