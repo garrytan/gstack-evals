@@ -171,9 +171,12 @@ tests/er drives each in both directions.
     <unit@example.invalid>" at the base's committer date, no remote.
 12. Audits: each auditor runs an input audit on plan.md (with the key's statements, for the signpost check), a key
     audit and the foreseeable rating. A statement over 30 words, an item dated outside its window, an unknown candidate,
-    a fix verdict, a missing candidate or an unreviewed item fails the round; an item either auditor drops is removed.
-    One fix round, then a second failure drops the unit. The input audit reads plan.md only; repo/ is the base tree by
-    construction.
+    a fix verdict, a missing candidate or an unreviewed item fails the round; an item either auditor drops is removed
+    first, so a fix verdict, an unreviewed mark or a mechanical problem on a dropped item doesn't count. Before each
+    audit, an item's kind is set from its candidate's (B or R as B, T, C), and the key audit is told so. The input audit
+    holds plan.md to the frozen rewrite: it keeps the description's decisions, and a wish only the request states may be
+    kept or left out. One fix round, then a second failure drops the unit. The input audit reads plan.md only; repo/ is
+    the base tree by construction.
 13. Primary order: B (defect revert, then a fix whose linked issue someone outside the maintainers opened, then other
     fixes), then C, then T, then sha256("20261108\n" + unit + "\n" + item). A unit with no primary item drops at
     authoring; the score side's generic screen may drop more.
@@ -188,3 +191,18 @@ tests/er drives each in both directions.
     sha256 over the sorted lines of id and the hashes of unit.json, plan.md, key.json and the repo/ tree.
 17. Drop: a repository matches case-insensitively and a commit of at least 7 hex as a prefix of the merge or base
     commit. Matched units are deleted; matched candidates become ineligible. Counts only.
+18. Candidate diffs: a merge commit's diff is taken against its first parent, its pull request's net change, as a
+    merged unit counts. Plain git show prints a clean merge's combined diff, which is empty.
+
+Build-time fixes after authoring pilot 1, made before pilot 2 (none changes frozen text):
+
+- F1, candidate diffs (choice 18): every merge-commit candidate reached the key writer and the auditors with an empty
+  diff.
+- F2, the input audit's rule 1 (choice 12): it counted a wish only the request states as an omitted decision, while
+  section 4's frozen rewrite keeps every decision the description states. Rule 1 now counts only the description's
+  omitted decisions. This is a build-prompt change, so INPUT_AUDIT's pinned digest moved.
+- F3, audit rounds (choice 12): drops apply first, so a fix verdict, an unreviewed mark or a mechanical problem on an
+  item the other auditor drops no longer fails the round.
+- F4, item kinds (choice 12): each item's kind is set from its candidate's before the audit, as section 3 takes B
+  candidates only from SZZ and reverts, and the key audit is told the kind is fixed. KEY_AUDIT's pinned digest moved;
+  the key writer's prompt is unchanged.

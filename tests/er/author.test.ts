@@ -4,10 +4,10 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { join } from "node:path";
 import { mineClone, withPlans, type MineResult } from "../../lanes/eng-review/author/mine.ts";
 import { PROMPT_SHA256, PROMPTS, REWRITE, sha256 } from "../../lanes/eng-review/author/prompts.ts";
-import { buildUnitRepo, cloneDir, custody, mechanical, rankPrimary, readAudit, run, touchedOf, unitId, type Material } from "../../lanes/eng-review/author/run.ts";
+import { buildUnitRepo, candidateDiff, cloneDir, custody, mechanical, rankPrimary, readAudit, run, touchedOf, unitId, withKinds, type Material } from "../../lanes/eng-review/author/run.ts";
 import type { Key, KeyItem, UnitMeta } from "../../lanes/eng-review/types.ts";
 import { git } from "../../lanes/real-outcome/mine/git.ts";
-import { tempDir } from "../real/fixture.ts";
+import { buildRepo, tempDir } from "../real/fixture.ts";
 import { capture, ENV, ledgerWith } from "../pv/fixtures.ts";
 import { buildShop } from "./shop-fixture.ts";
 
@@ -70,6 +70,46 @@ describe("audit rules", () => {
     expect(readAudit(d, [pass, { ...pass, key: { items: [{ index: 0, verdict: "keep" }] } }], []).key).toEqual(["item 1: unreviewed"]);
     expect(readAudit(d, [pass, { ...pass, input: { verdict: "fail", problems: [{ quote: "q", fix: "f" }] } }], []).input).toEqual(["q: f"]);
     expect(readAudit(d, [pass, pass], ["item 0: statement over 30 words"]).failed).toBe(true);
+  });
+  test("a fix, an unreviewed mark or a mechanical problem on an item the other auditor drops doesn't fail the round; on a kept item it does", () => {
+    const d = { items: [{ candidate: "B1", kind: "B", statement: "s", file: "a", mentioned: false }, { candidate: "T1", kind: "T", statement: "s", file: "a", mentioned: false }], own: [] };
+    const pass = { input: { verdict: "pass", problems: [] }, key: { verdict: "pass", items: [{ index: 0, verdict: "keep" }, { index: 1, verdict: "keep" }], missing: [] } };
+    const dropOne = { ...pass, key: { verdict: "fail", items: [{ index: 0, verdict: "keep" }, { index: 1, verdict: "drop" }], missing: [] } };
+    const fixOne = readAudit(d, [dropOne, { ...pass, key: { verdict: "fail", items: [{ index: 0, verdict: "keep" }, { index: 1, verdict: "fix", note: "n" }], missing: [] } }], []);
+    expect([fixOne.failed, [...fixOne.drops], fixOne.key]).toEqual([false, [1], []]);
+    expect(readAudit(d, [dropOne, { ...pass, key: { verdict: "fail", items: [{ index: 0, verdict: "fix", note: "n" }, { index: 1, verdict: "keep" }], missing: [] } }], []).key).toEqual(["item 0: n"]);
+    expect(readAudit(d, [dropOne, { ...pass, key: { items: [{ index: 0, verdict: "keep" }] } }], []).failed).toBe(false);
+    expect(readAudit(d, [dropOne, { ...pass, key: { items: [{ index: 1, verdict: "keep" }] } }], []).key).toEqual(["item 0: unreviewed"]);
+    expect(readAudit(d, [dropOne, pass], ["item 1: statement over 30 words"]).failed).toBe(false);
+    expect(readAudit(d, [dropOne, pass], ["item 0: statement over 30 words"]).key).toEqual(["item 0: statement over 30 words"]);
+    expect(readAudit(d, [dropOne, { ...pass, key: { ...pass.key, missing: ["C1"] } }], []).key).toEqual(["missing C1"]);
+  });
+  test("an item's kind is set from its candidate's, and an unknown candidate stays a mechanical problem", () => {
+    const m = mat({ candidates: [...mat().candidates, { ...mat().candidates[0]!, id: "R1", kind: "R" }] });
+    const it = { candidate: "C1", kind: "B", statement: "s", file: "a", mentioned: false };
+    const d = withKinds(m, { items: [it, { ...it, candidate: "R1", kind: "T" }, { ...it, candidate: "T1", kind: "B" }, { ...it, candidate: "B1", kind: "C" }, { ...it, candidate: "X9", kind: "B" }], own: ["o"] });
+    expect(d.items.map((i) => i.kind)).toEqual(["C", "B", "T", "B", "B"]);
+    expect(d.own).toEqual(["o"]);
+    expect(mechanical(m, { items: [it], own: [] })).toEqual(["item 0: kind B on a C candidate", "item 0: outside the window"]);
+    expect(mechanical(m, withKinds(m, { items: [it], own: [] }))).toEqual(["item 0: outside the window"]);
+    expect(mechanical(m, d).filter((p) => p.startsWith("item 4"))).toEqual(["item 4: unknown candidate"]);
+  });
+});
+
+describe("candidate diffs", () => {
+  const t = tempDir("er-merge-");
+  afterAll(() => t.cleanup());
+  test("a merge commit's diff is its first-parent net change where plain git show prints nothing, and a plain commit's is unchanged", () => {
+    const dir = join(t.dir, "r");
+    const sha = buildRepo(dir, [
+      { name: "a", message: "a", date: "2026-07-01T00:00:00Z", files: { "src/x.ts": "one\n" } },
+      { name: "f", message: "f", date: "2026-07-02T00:00:00Z", branch: "feat", from: "a", files: { "src/x.ts": "two\n" } },
+      { name: "m", message: "Merge pull request #2", date: "2026-07-03T00:00:00Z", from: "a", merge: "f", files: { "src/x.ts": "two\n" } },
+    ]);
+    expect(git(dir, ["show", "--format=", "--no-ext-diff", "--no-textconv", "--no-renames", sha.m!]).trim()).toBe("");
+    expect(candidateDiff(dir, sha.m!)).toContain("+two");
+    expect(candidateDiff(dir, sha.m!).trim()).toBe(git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", sha.a!, sha.m!]).trim());
+    expect(candidateDiff(dir, sha.f!)).toBe(git(dir, ["show", "--format=", "--no-ext-diff", "--no-textconv", "--no-renames", sha.f!]));
   });
 });
 

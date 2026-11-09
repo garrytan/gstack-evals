@@ -25,8 +25,10 @@
 //   runs; submodules are left out. Its one commit is written by fast-import as "unit <unit@example.invalid>" at the
 //   base commit's committer date.
 // - An item statement over 30 words, an item dated outside its window or an item whose candidate is unknown counts as
-//   an audit problem. Items either auditor drops are removed; a fix verdict, a missing candidate or an unreviewed item
-//   fails the round.
+//   an audit problem. Items either auditor drops are removed first, so a fix verdict, an unreviewed mark or a mechanical
+//   problem on a dropped item doesn't count; on any other item they fail the round, and so does a missing candidate.
+// - Before each audit, an item's kind is set from its candidate's (B or R as B, T, C).
+// - A candidate's diff is a merge commit's diff against its first parent, its pull request's net change.
 // - Primary order: B (defect revert, then a fix linked to an issue opened by someone outside the maintainer team, then
 //   other fixes), then C, then T, then sha256("20261108\n" + unit + "\n" + item id); mentioned and generic items never
 //   enter; at most 6.
@@ -191,7 +193,7 @@ export function collect(clone: string, c: Candidate, query: Query): Material | s
     count[x.kind] = (count[x.kind] ?? 0) + 1;
     return {
       id: x.kind + count[x.kind], kind: x.kind, change: x.change, pr: x.pr, merged_at: x.merged_at, subject: x.subject, message: cut(git(clone, ["log", "-1", "--format=%B", x.change]).trim(), 300),
-      pr_text: p ? p.title + "\n" + cut(p.body ?? "", 400) : "", issues, diff: cut(gitRun(clone, ["show", "--format=", "--no-ext-diff", "--no-textconv", "--no-renames", x.change]).stdout, 2500),
+      pr_text: p ? p.title + "\n" + cut(p.body ?? "", 400) : "", issues, diff: cut(candidateDiff(clone, x.change), 2500),
       sites: x.kind === "B" ? x.sites ?? [] : x.kind === "R" ? x.files.map((file) => ({ file, function: null })) : [],
     };
   });
@@ -219,6 +221,15 @@ interface Draft {
 
 const draftOf = (x: any): Draft => ({ items: Array.isArray(x?.items) ? x.items.filter((i: any) => i && typeof i.statement === "string") : [], own: Array.isArray(x?.own) ? x.own.filter((s: any) => typeof s === "string").slice(0, MAX_OWN) : [] });
 
+/** A candidate's diff: a merge commit's against its first parent, its pull request's net change (plain git show prints a clean merge's combined diff, which is empty). */
+export const candidateDiff = (clone: string, sha: string) => gitRun(clone, ["show", "--format=", "--diff-merges=first-parent", "--no-ext-diff", "--no-textconv", "--no-renames", sha]).stdout;
+
+/** An item's kind follows its candidate's: a B or R candidate keys as B, a T candidate as T and a C candidate as C, since section 3 takes B candidates only from SZZ and reverts. */
+export function withKinds(m: Material, d: Draft): Draft {
+  const by = new Map(m.candidates.map((c) => [c.id, c.kind]));
+  return { ...d, items: d.items.map((it) => (by.has(it.candidate) ? { ...it, kind: by.get(it.candidate) === "R" ? "B" : by.get(it.candidate)! } : it)) };
+}
+
 /** Mechanical problems an audit round counts: an unknown candidate, a kind its candidate can't carry, a statement over 30 words, a date outside the window. */
 export function mechanical(m: Material, d: Draft): string[] {
   const by = new Map(m.candidates.map((c) => [c.id, c]));
@@ -243,17 +254,15 @@ export interface AuditVerdict {
 /** Reads one round's four audit replies (input and key, from each auditor) beside the mechanical problems. */
 export function readAudit(d: Draft, replies: Array<{ input: any; key: any }>, mech: string[]): AuditVerdict {
   const drops = new Set<number>();
-  const input: string[] = [], key: string[] = [...mech];
+  for (const r of replies) for (const x of Array.isArray(r.key?.items) ? r.key.items : []) if (x?.verdict === "drop") drops.add(Number(x.index));
+  const input: string[] = [], key: string[] = mech.filter((p) => !drops.has(Number(/^item (\d+):/.exec(p)?.[1] ?? -1)));
   for (const r of replies) {
     const probs = Array.isArray(r.input?.problems) ? r.input.problems : [];
     if (r.input?.verdict !== "pass" || probs.length) input.push(...(probs.length ? probs.map((p: any) => String(p.quote ?? "") + ": " + String(p.fix ?? "")) : ["the input audit did not pass"]));
     const v: any[] = Array.isArray(r.key?.items) ? r.key.items : [];
     const seen = new Set(v.map((x) => Number(x?.index)));
-    for (let i = 0; i < d.items.length; i++) if (!seen.has(i)) key.push("item " + i + ": unreviewed");
-    for (const x of v) {
-      if (x?.verdict === "drop") drops.add(Number(x.index));
-      else if (x?.verdict !== "keep") key.push("item " + x?.index + ": " + String(x?.note ?? "fix"));
-    }
+    for (let i = 0; i < d.items.length; i++) if (!seen.has(i) && !drops.has(i)) key.push("item " + i + ": unreviewed");
+    for (const x of v) if (x?.verdict !== "drop" && x?.verdict !== "keep" && !drops.has(Number(x?.index))) key.push("item " + x?.index + ": " + String(x?.note ?? "fix"));
     for (const miss of Array.isArray(r.key?.missing) ? r.key.missing : []) key.push("missing " + String(miss));
   }
   return { failed: input.length > 0 || key.length > 0, drops, input, key };
@@ -408,13 +417,13 @@ export async function run(argv: string[], io: Io, o: RunOptions = {}): Promise<n
         }
         state.status = "open";
         if (state.stage === "key") {
-          const d = draftOf(await call(ctx, uid, "key-1", "opus", P.KEY + material(m, readFileSync(join(unit, "plan.md"), "utf8")), 16000, true));
+          const d = withKinds(m, draftOf(await call(ctx, uid, "key-1", "opus", P.KEY + material(m, readFileSync(join(unit, "plan.md"), "utf8")), 16000, true)));
           put(join(scratch, "key-draft-1.json"), d);
           state.stage = "audit";
           save();
         }
         if (state.stage === "audit") {
-          let d = readJson(join(scratch, "key-draft-1.json")) as Draft;
+          let d = withKinds(m, readJson(join(scratch, "key-draft-1.json")) as Draft);
           let plan = readFileSync(join(unit, "plan.md"), "utf8");
           let v = await audit(ctx, uid, m, plan, d, 1, scratch);
           log(uid, "audit-1", { failed: v.failed, input_problems: v.input.length, key_problems: v.key.length, drops: v.drops.size });
@@ -424,7 +433,7 @@ export async function run(argv: string[], io: Io, o: RunOptions = {}): Promise<n
               put(join(unit, "plan.md"), plan);
             }
             if (v.key.length || v.drops.size) {
-              d = draftOf(await call(ctx, uid, "key-2", "opus", P.KEY + material(m, plan) + fence("Your earlier key", JSON.stringify(d, null, 1)) + fence("Auditors' notes", v.key.concat([...v.drops].map((i) => "item " + i + ": drop")).join("\n")) + "\n\n" + P.KEY_FIX, 16000, true));
+              d = withKinds(m, draftOf(await call(ctx, uid, "key-2", "opus", P.KEY + material(m, plan) + fence("Your earlier key", JSON.stringify(d, null, 1)) + fence("Auditors' notes", v.key.concat([...v.drops].map((i) => "item " + i + ": drop")).join("\n")) + "\n\n" + P.KEY_FIX, 16000, true)));
               put(join(scratch, "key-draft-2.json"), d);
             }
             v = await audit(ctx, uid, m, plan, d, 2, scratch);
