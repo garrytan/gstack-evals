@@ -11,6 +11,7 @@ Every number in this table passed two checks: a model from another lab checked t
 | Skill | Model | Result [95% interval] | Verdict | Limit | Finding |
 |---|---|---|---|---|---|
 | /review, full procedure (gstack 699a41cb) | Opus 5.5 | Marked 26.2% of bug-passes as blocking (42 known blocking bugs, each reviewed twice), against 3.6% with no gstack: +22.6 points [+11.0, +33.7], at 8.9 times the cost per session | KEEP | Home field: 41 of the 42 bugs came from reviews by gstack-family tools. 42 of the 66 gstack sessions ran the procedure only after a hook blocked them | [R2 at the after pin](wiki/board/2026-11-04-geva-281-r2-after-pin-results-home-field.md), [its checks](wiki/board/2026-11-09-geva-421-r2-independent-checks.md) |
+| Routing small decisions to Jev, escalating to particle-1 (research, not a gstack skill) | jev-1.13.0 and particle-1, against each repo's current model | The cascade cost 0.2% to 6.8% of today's model on all 8 decision points. particle-1 alone matched or beat it on 7 and measurably beat today's model on 4 | Descriptive | Not preregistered, 39 to 296 held items a point. The cascade lost on gstack's rubric judges, -9.9 points [-18.5, -1.2], and escalated 64% on gbrain's dream triage | [Jev decision routing](wiki/research/2026-11-09-geva-421-jev-decision-routing/README.md), [its checks](wiki/research/2026-11-09-geva-421-jev-decision-routing/README.md#the-claim-check) |
 
 ## /review
 
@@ -18,6 +19,12 @@ Every number in this table passed two checks: a model from another lab checked t
 - **Most sessions ran it only after a hook made them.** In 42 of the 66 gstack sessions, the specialist reviewers and the adversarial reader ran only after gstack's contract hook blocked the session, and 24 ran them unprompted. The split was not randomized.
 - **The suite may favour gstack.** 41 of the 42 bugs came from reviews by gstack-family tools, so the suite may hold the kind of bug gstack's reviewers look for.
 - **It costs more.** A gstack session cost 8.9 times as much as one with no gstack.
+
+## Routing small decisions to cheaper models
+
+- **The cost cut is real.** A cascade that keeps Jev's answer when Jev is confident and sends the rest to particle-1 cost 0.2% to 6.8% of today's model on all 8 decision points we replayed from gstack, gbrain and a private game, and Jev answered in 70 to 88 ms at the median.
+- **The escalation model alone did as well or better.** particle-1 on its own matched or beat the cascade on 7 of 8 points and measurably beat today's model on 4, so run it alone before you credit a router with its gains.
+- **It breaks where the confidence is wrong or the decision isn't small.** The cascade lost on gstack's long rubric judges, -9.9 points [-18.5, -1.2], and on gbrain's dream triage Jev's confidence ran backwards, so the cascade escalated 64% of transcripts.
 
 ## Measured, independent check pending
 
@@ -79,10 +86,6 @@ The verdict words: KEEP means the part helped. CUT means removing it lost nothin
 
 - **FIX-METHOD**, archived benchmark sessions: gstack sessions wasted almost no tool calls, so there was nothing to cut. [Waste floor](wiki/board/2026-11-03-geva-220-waste-floor.md)
 - **Untested**, crew sessions: re-running /ship's checks at an already pushed head took a tiny share of check time, but the case for cutting it could not be shown. [Waste baseline](wiki/board/2026-11-03-geva-236-waste-baseline.md)
-
-**Routing small decisions to cheaper models**
-
-- **Descriptive**, Jev, particle-1 and each repo's current model: a cascade from TypeSafe's Jev to particle-1 cut the cost of small decisions in gstack and gbrain, but particle-1 alone matched or beat it on most points, and the cascade lost on gstack's long rubric judges. [Jev decision routing](wiki/research/2026-11-09-geva-421-jev-decision-routing/README.md)
 
 ## Corrections
 
