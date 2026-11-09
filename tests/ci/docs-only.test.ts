@@ -226,6 +226,7 @@ describe("the rule on this repo's own tree", () => {
     "tests/wiki.test.ts": "runs wiki:check's rules on the committed wiki, which the wiki:check step also runs on a docs-only pull request",
     "lanes/tbv/dryrun.ts": "lists a wiki/plans preregistration folder, and wiki/plans is never docs-only",
     "tests/arms/stacks.test.ts": "writes and reads README.md in a scratch repo, not the committed one",
+    "tests/outcome-skills/sm-history.test.ts": "lists the files of a scratch repo it builds, docs folder included, not the committed one",
   };
   test("code that reads docs by folder or reads the root README is listed with a reason", () => {
     const lists = /readdirSync|readdir\(|opendirSync|ls-files|ls-tree|Glob|globSync|walk\(/;
