@@ -16,6 +16,7 @@ import { machineId, recordApproval } from "../../../src/runner/ledger/ledger.ts"
 import { PF_STAGES, serveStages } from "../driver/stage.ts";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
+import { UPSTREAM } from "../../../src/runner/proxy/metering-proxy.ts";
 import { sse } from "../../../quick/laneb/runner/fake_upstream.ts";
 import { patchOf, scoreUnit } from "../statemachines/fixtures.ts";
 import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
@@ -231,7 +232,7 @@ export async function main(argv: string[]): Promise<number> {
   const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.repo + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", 'cp -a /s/. /d/ && chown -R 0:0 /d && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit', HOSTILE], { encoding: "utf8" });
   if (hv.status !== 0) throw new Error("hostile volume: " + hv.stderr);
   const machine = machineId();
-  const serve = (n: number, items: string[]) => serveStages({ record, local, run_id: "pf-dryrun-" + n, envelope_host: machine, machine, stages: items.map((item) => ({ item, arm: PF_STAGES[item]!.arms[0]!, arms: [...PF_STAGES[item]!.arms] })), host: gw, dir: join(W, "driver-" + n), fetch: (u, init) => fetch(u.replace("https://api.anthropic.com", url), init), env: { ANTHROPIC_API_KEY: "stub-not-a-key" }, requireAdmission: () => null, log: (l) => console.error(l) });
+  const serve = (n: number, items: string[]) => serveStages({ record, local, run_id: "pf-dryrun-" + n, envelope_host: machine, machine, stages: items.map((item) => ({ item, arm: PF_STAGES[item]!.arms[0]!, arms: [...PF_STAGES[item]!.arms] })), host: gw, dir: join(W, "driver-" + n), fetch: (u, init) => fetch(u.replace(UPSTREAM.anthropic, url).replace(UPSTREAM.openrouter, url), init), env: { ANTHROPIC_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" }, requireAdmission: () => null, log: (l) => console.error(l) });
   let batch = await serve(1, ["pf-opus", "pf-sol", "pf-particle", "pf-blind"]);
   let stopped = false;
   let index = 0;
