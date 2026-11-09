@@ -3,10 +3,10 @@
 // config and hook checks, the snapshot strip, and dry-run steps 1-arm-tars, 2-verify-hook and the env part of
 // 7-leak-scan-env.
 //
-//   bun lanes/harness-mechanics/arms.ts manifest --arm <none|prose|hook> --tree <dir> --tar <file> --out <dir> [--fetch <json> --config <tsv> --lock <json>] [--meta k=v ...]
+//   bun lanes/harness-mechanics/arms.ts manifest --arm <none|prose|hook|judge> --tree <dir> --tar <file> --out <dir> [--fetch <json> --config <tsv> --lock <json>] [--meta k=v ...]
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, lstatSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { manifest } from "../../quick/laneb/arms/tree.ts";
@@ -16,7 +16,7 @@ import { loadMatcher } from "./match.ts";
 import { GSTACK_VENDOR, HM, REPO, VERIFY_PATCH } from "./pins.ts";
 import { parseContract, type Contract } from "./vendor/gstack/lib/skill-contract.ts";
 
-export const HM_TARS = ["none", "prose", "hook"] as const;
+export const HM_TARS = ["none", "prose", "hook", "judge"] as const;
 export type HmTar = (typeof HM_TARS)[number];
 export const SETUP = "./setup --host claude --no-browser --loadout lite";
 export const CLAUDE_CODE_VERSION = "2.1.312";
@@ -24,8 +24,15 @@ export const CLAUDE_CODE_VERSION = "2.1.312";
 export const CONFIG: Record<Exclude<HmTar, "none">, { skill_routing: string; skill_contracts: string }> = {
   prose: { skill_routing: "off", skill_contracts: "off" },
   hook: { skill_routing: "off", skill_contracts: "on" },
+  judge: { skill_routing: "off", skill_contracts: "on" },
 };
 export const CONTRACT_SOURCE = "gstack-skill-contract";
+export const RISKY_SOURCE = "hm-judge-risky";
+export const JUDGE_STOP = "<HOME>/.hm/judge/stop";
+export const JUDGE_RISKY = "<HOME>/.hm/judge/risky";
+export const JUDGE_FILES = { band_sha256: ".hm/judge/band.json", hm_judge_sha256: ".hm/judge/hm_judge.py", facts_sha256: ".hm/judge/facts.js" } as const;
+export const SECRET_ENV = ["OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
+const KEY_SHAPES: [string, RegExp][] = [["an OpenRouter key", /sk-or-v1-[0-9a-f]{32,}/], ["an Anthropic key", /sk-ant-api\d\d-[\w-]{20,}/], ["an OpenAI key", /sk-proj-[\w-]{20,}/]];
 
 const pinErr = (m: string): never => { throw new Error("E_HM_PIN " + m); };
 export const gitBlob = (b: Buffer | string) => { const buf = Buffer.from(b); return createHash("sha1").update("blob " + buf.length + "\0").update(buf).digest("hex"); };
@@ -71,10 +78,61 @@ export function patchedProblems(skillMd: string, regex = loadMatcher().match.reg
 export function configProblems(arm: Exclude<HmTar, "none">, values: Record<string, string>): string[] {
   return Object.entries(CONFIG[arm]).filter(([k, v]) => values[k] !== v).map(([k, v]) => arm + " " + k + " is " + JSON.stringify(values[k] ?? null) + ", not " + v);
 }
-/** Both gstack arms register gstack's contract Stop hook (inert in prose, contracts off). */
+/** Every gstack arm registers gstack's contract Stop hook once (inert in prose, contracts off). In judge it runs the judge's stop, which calls the contract hook first, and judge adds one PreToolUse entry for the risky point. */
 export function hookProblems(arm: Exclude<HmTar, "none">, entries: Hook[]): string[] {
-  const n = entries.filter((h) => h.event === "Stop" && h._gstack_source === CONTRACT_SOURCE).length;
-  return n === 1 ? [] : [arm + " registers the contract Stop hook " + n + " times, not once"];
+  const contract = entries.filter((h) => h.event === "Stop" && h._gstack_source === CONTRACT_SOURCE);
+  const p = contract.length === 1 ? [] : [arm + " registers the contract Stop hook " + contract.length + " times, not once"];
+  if (arm !== "judge") return p;
+  if (contract.length === 1 && contract[0]!.command !== JUDGE_STOP) p.push("judge's contract Stop entry runs " + contract[0]!.command + ", not " + JUDGE_STOP);
+  const risky = entries.filter((h) => h._gstack_source === RISKY_SOURCE);
+  if (risky.length !== 1 || risky[0]!.event !== "PreToolUse" || risky[0]!.command !== JUDGE_RISKY) p.push("judge registers the risky hook as " + JSON.stringify(risky) + ", not one PreToolUse entry running " + JUDGE_RISKY);
+  return p;
+}
+
+/** The names of the key shapes, and of the env keys whose values, found in a buffer. Never the values. */
+export function keyHits(buf: Buffer, secrets: [string, string][]): string[] {
+  const text = buf.toString("latin1");
+  return [...KEY_SHAPES.filter(([, re]) => re.test(text)).map(([n]) => n), ...secrets.filter(([, v]) => v.length >= 16 && text.includes(v)).map(([n]) => n)];
+}
+/** keyHits over a file read in 64 MiB chunks that overlap by 512 bytes, so a multi-GB tar never becomes one string. */
+export function keyHitsFile(path: string, secrets: [string, string][]): string[] {
+  const size = 64 << 20, keep = 512, buf = Buffer.alloc(size + keep), hits = new Set<string>(), fd = openSync(path, "r");
+  let carry = 0;
+  try {
+    for (let n = readSync(fd, buf, carry, size, null); n > 0; n = readSync(fd, buf, carry, size, null)) {
+      const end = carry + n;
+      for (const h of keyHits(buf.subarray(0, end), secrets)) hits.add(h);
+      carry = Math.min(keep, end);
+      buf.copy(buf, 0, end - carry, end);
+    }
+  } finally { closeSync(fd); }
+  return [...hits];
+}
+export const envSecrets = (): [string, string][] => SECRET_ENV.flatMap((k) => (process.env[k] ? [[k, process.env[k]!] as [string, string]] : []));
+
+/** Step 1's judge checks on the unpacked tar: the matcher on the risky entry, the judge files at the manifest's digests, hm_judge.py as committed, the runtime digest and its python, both backend configs, and no key in the tar. */
+export function judgeTarProblems(tree: string, m: Record<string, any>, tar: string, secrets: [string, string][], drTarball?: string): string[] {
+  const p: string[] = [];
+  const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+  const risky = ((m.settings?.hooks ?? []) as { event: string; matcher: string; command: string }[]).filter((h) => h.command === JUDGE_RISKY.replace("<HOME>", "/root"));
+  if (risky.length !== 1 || risky[0]!.event !== "PreToolUse" || risky[0]!.matcher !== "Bash") p.push("the risky hook is not one PreToolUse entry with matcher Bash");
+  for (const [k, f] of Object.entries(JUDGE_FILES)) {
+    const f2 = join(tree, f);
+    if (!existsSync(f2)) { p.push("judge: no " + f); continue; }
+    if (sha(readFileSync(f2)) !== m[k]) p.push("judge: " + f + " is not the manifest's " + k);
+  }
+  const committed = join(REPO, "lanes/harness-mechanics/judge/hm_judge.py");
+  if (existsSync(join(tree, JUDGE_FILES.hm_judge_sha256)) && !readFileSync(join(tree, JUDGE_FILES.hm_judge_sha256)).equals(readFileSync(committed))) p.push("judge: hm_judge.py differs from the committed file");
+  if (!/^[0-9a-f]{64}$/.test(String(m.dr_runtime_sha256 ?? ""))) p.push("judge: no dr_runtime_sha256");
+  else if (drTarball && existsSync(drTarball) && sha(readFileSync(drTarball)) !== m.dr_runtime_sha256) p.push("judge: the decision-routing runtime tarball is not the manifest's dr_runtime_sha256");
+  try { lstatSync(join(tree, ".hm/dr/venv/bin/python")); } catch { p.push("judge: no runtime python at .hm/dr/venv/bin/python"); }
+  for (const b of ["jev", "p1"]) {
+    const f = join(tree, ".hm/judge/judge-" + b + ".json");
+    if (!existsSync(f) || JSON.parse(readFileSync(f, "utf8")).backend !== b) p.push("judge: judge-" + b + ".json is missing or not backend " + b);
+  }
+  const hits = keyHitsFile(tar, secrets);
+  if (hits.length) p.push("judge: the tar holds " + hits.join(", "));
+  return p;
 }
 
 // Section 3's snapshot strip: auto-loaded instruction files at any depth, and the files a CLAUDE.md imports with @path
@@ -112,7 +170,7 @@ function gstackMeta(arm: Exclude<HmTar, "none">, tree: string, fetchFile: string
   const problems = [...configProblems(arm, config), ...hookProblems(arm, hooks)];
   const text = verify.toString("utf8");
   let patched: { path: string; blob: string }[] | null = null;
-  if (arm === "hook") {
+  if (arm !== "prose") {
     problems.push(...patchedProblems(text).map((p) => "installed verify: " + p));
     patched = [".claude/skills/gstack/verify/SKILL.md", ".gstack/render/claude/verify/SKILL.md", ".claude/skills/verify/SKILL.md"].map((p) => ({ path: p, blob: gitBlob(readFileSync(join(tree, p))) }));
     if (patched[0]!.blob !== VERIFY_PATCH.patchedBlob) problems.push("the checkout's verify/SKILL.md is blob " + patched[0]!.blob + ", not the patched " + VERIFY_PATCH.patchedBlob);
@@ -125,7 +183,7 @@ function gstackMeta(arm: Exclude<HmTar, "none">, tree: string, fetchFile: string
     meta: {
       gstack_version: readFileSync(join(tree, ".claude/skills/gstack/VERSION"), "utf8").trim(),
       fetch: { repo: fetch.repo, sha: fetch.sha, head: fetch.head, method: fetch.method }, git_archive_sha256: fetch.git_archive_sha256,
-      setup: SETUP + " --skill-contracts", verify_patch: arm === "hook" ? { file: VERIFY_PATCH.file, sha256: VERIFY_PATCH.sha256, blob: VERIFY_PATCH.patchedBlob, applied: "after setup, to every installed copy", copies: patched } : null,
+      setup: SETUP + " --skill-contracts", verify_patch: arm !== "prose" ? { file: VERIFY_PATCH.file, sha256: VERIFY_PATCH.sha256, blob: VERIFY_PATCH.patchedBlob, applied: "after setup, to every installed copy", copies: patched } : null,
       lite: { spec: lock.spec, spec_sha256: lock.spec_sha256, files: lock.files, lock_sha256: lock.lock_sha256, tree_digest_normalized: normTree(render).digest },
       hooks, gstack_config: { skill_routing: config.skill_routing ?? "", skill_contracts: config.skill_contracts ?? "" },
       verify: { sha256_normalized: sha(verify), first200_sha256: sha([...text.replace(/^---\n[\s\S]*?\n---\n/, "").trimStart()].slice(0, 200).join("")) },
@@ -167,6 +225,16 @@ export function stepArmTars(out: string): StepResult {
     const got = createHash("sha256").update(readFileSync(tar)).digest("hex");
     if (got !== m.tar.sha256) problems.push(arm + ": tar sha256 " + got + ", manifest " + m.tar.sha256);
     parts.push(arm + " " + got.slice(0, 12));
+    if (arm === "judge") {
+      const tree = join(out, "judge-tree");
+      rmSync(tree, { recursive: true, force: true });
+      spawnSync("mkdir", ["-p", tree]);
+      const x = spawnSync("tar", ["-xf", tar, "-C", tree], { encoding: "utf8" });
+      if (x.status !== 0) { problems.push("judge: the tar does not unpack: " + x.stderr.trim().slice(0, 120)); continue; }
+      const jp = judgeTarProblems(tree, m, tar, envSecrets(), join(ARMS_DIR(), "dr-out/dr-runtime.tar.gz"));
+      problems.push(...jp);
+      if (!jp.length) parts.push("judge: contract Stop once and PreToolUse Bash once, runtime " + m.dr_runtime_sha256.slice(0, 12) + ", band " + m.band_sha256.slice(0, 12) + ", hm_judge " + m.hm_judge_sha256.slice(0, 12) + ", facts " + m.facts_sha256.slice(0, 12) + ", no key in the tar");
+    }
   }
   if (docker) {
     const s = sessionsOf(out, true);
@@ -230,7 +298,7 @@ if (import.meta.main) {
   const arm = flag("--arm") as HmTar | undefined;
   const [tree, tar, outDir] = [flag("--tree"), flag("--tar"), flag("--out")];
   if (args[0] !== "manifest" || !arm || !HM_TARS.includes(arm) || !tree || !tar || !outDir) {
-    console.error("E_USAGE usage: arms.ts manifest --arm <none|prose|hook> --tree <dir> --tar <file> --out <dir> [--fetch <json> --config <tsv> --lock <json>] [--meta k=v ...]");
+    console.error("E_USAGE usage: arms.ts manifest --arm <none|prose|hook|judge> --tree <dir> --tar <file> --out <dir> [--fetch <json> --config <tsv> --lock <json>] [--meta k=v ...]");
     process.exit(2);
   }
   const meta: Record<string, unknown> = {};

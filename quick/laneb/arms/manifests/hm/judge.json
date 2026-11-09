@@ -1,0 +1,185 @@
+{
+  "arm": "judge",
+  "claude_code": "2.1.312",
+  "tar_gz_sha256": "993a025aff276cf3950085108d763f6c9d3537019be38a8d4c372cfe79f8c5d9",
+  "gstack_sha": "ba2289e1cd9f2387d069b3b6c51b404d56c4a1e9",
+  "update_check": "false",
+  "onboarding_markers": ".gstack/.activated .gstack/.completeness-intro-seen .gstack/.feature-prompted-model-overlay .gstack/.first-loop-tip-shown .gstack/.proactive-prompted .gstack/.telemetry-prompted",
+  "dr_runtime_sha256": "7fb1a0a81b975c3c74a63a8032ec5592c7043b8a91bbb587eb1f3d4207a78154",
+  "band_sha256": "ea64917e550e7805575e306f0a2485fc7dc6c866b32677620912b2d2b35ccc68",
+  "hm_judge_sha256": "e966ebb9224269c75f29dd6264a1216eec87b937e993187d027fa080328a6f1d",
+  "facts_sha256": "226f3a145f36b009ffb4788fc1f39fee6161e3dd661cdb45ac09e14583cd069b",
+  "gstack_version": "1.98.0.0",
+  "fetch": {
+    "repo": "https://github.com/garrytan/gstack.git",
+    "sha": "ba2289e1cd9f2387d069b3b6c51b404d56c4a1e9",
+    "head": "ba2289e1cd9f2387d069b3b6c51b404d56c4a1e9",
+    "method": "git init; git fetch --depth 1 <repo> <sha>; git checkout FETCH_HEAD"
+  },
+  "git_archive_sha256": "776c66cefa504f14c1a5660d11b0a4a75e3572061ab65131880841256045ebde",
+  "setup": "./setup --host claude --no-browser --loadout lite --skill-contracts",
+  "verify_patch": {
+    "file": "lanes/harness-mechanics/verify-hook.patch",
+    "sha256": "6d000d53f4390deb36977f084eb47104c2aaa690a1710be45cef0ee818c7fa14",
+    "blob": "5c7249382c3821ca657ea87951a89e6fe0e5a689",
+    "applied": "after setup, to every installed copy",
+    "copies": [
+      {
+        "path": ".claude/skills/gstack/verify/SKILL.md",
+        "blob": "5c7249382c3821ca657ea87951a89e6fe0e5a689"
+      },
+      {
+        "path": ".gstack/render/claude/verify/SKILL.md",
+        "blob": "adceb408d3b3364f850bc4d0a3cd467d417c47c1"
+      },
+      {
+        "path": ".claude/skills/verify/SKILL.md",
+        "blob": "adceb408d3b3364f850bc4d0a3cd467d417c47c1"
+      }
+    ]
+  },
+  "lite": {
+    "spec": "lite",
+    "spec_sha256": "c5df50f999eb649abc0cd48c40907fe29c5ba71e4534a5cc63ae6e3d26234f1d",
+    "files": 198,
+    "lock_sha256": "53632f514d4db760bf4a8346e57a2bdf935c3076c9f4f0c0f7d585a89ec4acd6",
+    "tree_digest_normalized": "dc740d048789bf62566c4ca3d5eac1466719fd18119243558138e1d7975099a3"
+  },
+  "hooks": [
+    {
+      "event": "PreToolUse",
+      "_gstack_source": "hm-judge-risky",
+      "command": "<HOME>/.hm/judge/risky",
+      "timeout": 60
+    },
+    {
+      "event": "Stop",
+      "_gstack_source": "gstack-timeline-stop",
+      "command": "<HOME>/.claude/skills/gstack/hosts/claude/hooks/timeline-stop-hook",
+      "timeout": 5
+    },
+    {
+      "event": "Stop",
+      "_gstack_source": "gstack-skill-contract",
+      "command": "<HOME>/.hm/judge/stop",
+      "timeout": 60
+    }
+  ],
+  "gstack_config": {
+    "skill_routing": "off",
+    "skill_contracts": "on"
+  },
+  "verify": {
+    "sha256_normalized": "8b07970d824f6c552da4800379e07728f26eda276701ff603685a2d85a4c489c",
+    "first200_sha256": "aff54b3dd500a6e8b587164ca9dbb878c4138a291ab73a4f3f24769486a5ad84"
+  },
+  "tar": {
+    "file": "judge.tar",
+    "bytes": 2205696000,
+    "sha256": "fd75dcced68668cf25cdb02ef44513573887625209b58bee8fe1befbea872566"
+  },
+  "tree": {
+    "files": 49854,
+    "symlinks": 1063,
+    "dirs": 6792,
+    "bytes": 2146776886,
+    "digest": "3bc42518864e46d48afd9d708c35cb32df97582d048e994542b336657935c15b"
+  },
+  "skills": {
+    "count": 63,
+    "tree_digest": "8720b83176c485ae15b37a27c46d1927e5bd979339cd3f75d4a0ed3336dea959",
+    "skill_md_digest": "c1258c4e538090cabd18a1a0d34d760e23a5b3e370dae252a28dc7e1e3ed305e",
+    "names": [
+      "_gstack-command",
+      "autoplan",
+      "benchmark",
+      "benchmark-models",
+      "browse",
+      "canary",
+      "careful",
+      "codex",
+      "connect-chrome",
+      "context-restore",
+      "context-save",
+      "cso",
+      "design-consultation",
+      "design-html",
+      "design-motion",
+      "design-review",
+      "design-shotgun",
+      "deslop-shared-libs",
+      "devex-review",
+      "diagram",
+      "document-generate",
+      "document-release",
+      "eval-plan",
+      "freeze",
+      "gstack",
+      "gstack-upgrade",
+      "guard",
+      "health",
+      "ios-clean",
+      "ios-design-review",
+      "ios-fix",
+      "ios-qa",
+      "ios-sync",
+      "land-and-deploy",
+      "landing-report",
+      "learn",
+      "make-pdf",
+      "modernize",
+      "office-hours",
+      "open-gstack-browser",
+      "pair-agent",
+      "plan-ceo-review",
+      "plan-design-review",
+      "plan-devex-review",
+      "plan-tune",
+      "qa",
+      "qa-only",
+      "retro",
+      "review",
+      "runaway-stopper",
+      "scrape",
+      "setup-browser-cookies",
+      "setup-deploy",
+      "setup-gbrain",
+      "ship",
+      "skillify",
+      "spec",
+      "sync-gbrain",
+      "test-audit",
+      "ubicloud",
+      "unfreeze",
+      "verify",
+      "write-skill"
+    ]
+  },
+  "settings": {
+    "sha256": "7aa3ad91218b0f5ba76d200e8bf3dc4dd95018d213cd152ced0a98a50a47b306",
+    "hooks": [
+      {
+        "event": "Stop",
+        "matcher": "",
+        "command": "/root/.claude/skills/gstack/hosts/claude/hooks/timeline-stop-hook",
+        "timeout": 5,
+        "source": null
+      },
+      {
+        "event": "Stop",
+        "matcher": "",
+        "command": "/root/.hm/judge/stop",
+        "timeout": 60,
+        "source": null
+      },
+      {
+        "event": "PreToolUse",
+        "matcher": "Bash",
+        "command": "/root/.hm/judge/risky",
+        "timeout": 60,
+        "source": null
+      }
+    ]
+  },
+  "inventory_sha256": "2a797ef6ce4cdfa226af97667f10c8a08736c54ed3b2a080eba65dd22322ed8d"
+}

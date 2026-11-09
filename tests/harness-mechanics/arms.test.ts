@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyVerifyPatch, configProblems, contractOf, envProblems, gitBlob, hookProblems, patchedProblems, stripSnapshot, vendoredVerify } from "../../lanes/harness-mechanics/arms.ts";
+import { applyVerifyPatch, CONFIG, configProblems, contractOf, envProblems, gitBlob, hookProblems, JUDGE_RISKY, JUDGE_STOP, judgeTarProblems, keyHits, patchedProblems, RISKY_SOURCE, stripSnapshot, vendoredVerify } from "../../lanes/harness-mechanics/arms.ts";
 import { session } from "../../lanes/harness-mechanics/match.ts";
 import { REPO, VERIFY_PATCH } from "../../lanes/harness-mechanics/pins.ts";
 import { checkContract, parseTranscript } from "../../lanes/harness-mechanics/vendor/gstack/lib/skill-contract.ts";
@@ -55,6 +55,55 @@ describe("arm config and hooks", () => {
     const h = { event: "Stop", _gstack_source: "gstack-skill-contract", command: "x", timeout: 10 };
     expect(hookProblems("prose", [h])).toEqual([]);
     expect(hookProblems("hook", []).length).toBe(1);
+  });
+});
+
+describe("judge tar", () => {
+  const stop = { event: "Stop", _gstack_source: "gstack-skill-contract", command: JUDGE_STOP, timeout: 60 };
+  const risky = { event: "PreToolUse", _gstack_source: RISKY_SOURCE, command: JUDGE_RISKY, timeout: 60 };
+  test("judge's gstack config is verify-hook's", () => {
+    expect(CONFIG.judge).toEqual(CONFIG.hook);
+    expect(configProblems("judge", { skill_routing: "off", skill_contracts: "on" })).toEqual([]);
+    expect(configProblems("judge", { skill_routing: "off", skill_contracts: "off" }).length).toBe(1);
+  });
+  test("the contract Stop entry once, running the judge's stop, and one PreToolUse risky entry", () => {
+    expect(hookProblems("judge", [stop, risky])).toEqual([]);
+    expect(hookProblems("judge", [stop, stop, risky]).length).toBe(1);
+    expect(hookProblems("judge", [{ ...stop, command: "<HOME>/.claude/skills/gstack/hosts/claude/hooks/skill-contract-stop-hook" }, risky]).length).toBe(1);
+    expect(hookProblems("judge", [stop]).length).toBe(1);
+    expect(hookProblems("judge", [stop, risky, risky]).length).toBe(1);
+    expect(hookProblems("hook", [stop])).toEqual([]);
+  });
+  test("keyHits names key shapes and env key values, never the values", () => {
+    const v = "stub-typesafe-key-0123456789";
+    expect(keyHits(Buffer.from("nothing here"), [["TYPESAFE_API_KEY", v]])).toEqual([]);
+    expect(keyHits(Buffer.from("x " + v + " y"), [["TYPESAFE_API_KEY", v]])).toEqual(["TYPESAFE_API_KEY"]);
+    expect(keyHits(Buffer.from("sk-or-v1-" + "a".repeat(64)), [])).toEqual(["an OpenRouter key"]);
+  });
+  test("judgeTarProblems passes a well-formed tree and names each fault", () => {
+    const d = mkdtempSync(join(tmpdir(), "hm-judge-tar-"));
+    const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+    mkdirSync(join(d, ".hm/judge"), { recursive: true });
+    mkdirSync(join(d, ".hm/dr/venv/bin"), { recursive: true });
+    writeFileSync(join(d, ".hm/dr/venv/bin/python"), "");
+    const py = readFileSync(join(REPO, "lanes/harness-mechanics/judge/hm_judge.py"), "utf8");
+    writeFileSync(join(d, ".hm/judge/hm_judge.py"), py);
+    writeFileSync(join(d, ".hm/judge/band.json"), "{}");
+    writeFileSync(join(d, ".hm/judge/facts.js"), "f");
+    for (const b of ["jev", "p1"]) writeFileSync(join(d, ".hm/judge/judge-" + b + ".json"), JSON.stringify({ backend: b }));
+    const m = { band_sha256: sha("{}"), hm_judge_sha256: sha(py), facts_sha256: sha("f"), dr_runtime_sha256: "c".repeat(64),
+      settings: { hooks: [{ event: "PreToolUse", matcher: "Bash", command: "/root/.hm/judge/risky" }] } };
+    const tarf = join(d, "t.tar");
+    writeFileSync(tarf, "tar");
+    expect(judgeTarProblems(d, m, tarf, [])).toEqual([]);
+    expect(judgeTarProblems(d, { ...m, facts_sha256: sha("g") }, tarf, []).length).toBe(1);
+    expect(judgeTarProblems(d, { ...m, settings: { hooks: [{ event: "PreToolUse", matcher: "", command: "/root/.hm/judge/risky" }] } }, tarf, []).length).toBe(1);
+    expect(judgeTarProblems(d, { ...m, dr_runtime_sha256: undefined }, tarf, []).length).toBe(1);
+    const keyed = join(d, "keyed.tar");
+    writeFileSync(keyed, Buffer.concat([Buffer.alloc((64 << 20) - 10), Buffer.from("stub-openrouter-key-0123456789")]));
+    expect(judgeTarProblems(d, m, keyed, [["OPENROUTER_API_KEY", "stub-openrouter-key-0123456789"]])).toEqual(["judge: the tar holds OPENROUTER_API_KEY"]);
+    writeFileSync(join(d, ".hm/judge/hm_judge.py"), py + "#");
+    expect(judgeTarProblems(d, { ...m, hm_judge_sha256: sha(py + "#") }, tarf, [])).toEqual(["judge: hm_judge.py differs from the committed file"]);
   });
 });
 
