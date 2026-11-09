@@ -1,0 +1,78 @@
+power.py, seed 20261109, 1000 simulated audits a point, 400 bootstrap draws an audit
+lean primary units: 43 over 10 runs; lean with a built text: 57 over 14 runs; full: 103 over 8 runs, 40 sampled
+gold: 40 items a binary class; panel sensitivity and specificity drawn from Jeffreys posteriors on gold in every bootstrap draw
+
+Part A. AP-GATE-2 lean primary landed share, bar 0.90. columns: true share, ICC rho, panel sensitivity, specificity, missing labels, P(MET), P(NOT MET), P(UNCLEAR), coverage of the 95% interval, median half-width
+L 0.75  rho 0.05  sens 0.95  spec 0.95  miss 0.00  MET 0.001  NOT 0.228  UNC 0.771  coverage 0.959  halfwidth 0.188
+L 0.80  rho 0.05  sens 0.95  spec 0.95  miss 0.00  MET 0.005  NOT 0.117  UNC 0.878  coverage 0.956  halfwidth 0.175
+L 0.85  rho 0.05  sens 0.95  spec 0.95  miss 0.00  MET 0.007  NOT 0.033  UNC 0.960  coverage 0.949  halfwidth 0.149
+L 0.90  rho 0.05  sens 0.95  spec 0.95  miss 0.00  MET 0.064  NOT 0.009  UNC 0.927  coverage 0.927  halfwidth 0.119
+L 0.95  rho 0.05  sens 0.95  spec 0.95  miss 0.00  MET 0.193  NOT 0.000  UNC 0.807  coverage 0.952  halfwidth 0.086
+L 1.00  rho 0.05  sens 0.95  spec 0.95  miss 0.00  MET 0.517  NOT 0.000  UNC 0.483  coverage 0.996  halfwidth 0.049
+L 0.75  rho 0.30  sens 0.95  spec 0.95  miss 0.00  MET 0.007  NOT 0.128  UNC 0.865  coverage 0.915  halfwidth 0.234
+L 0.80  rho 0.30  sens 0.95  spec 0.95  miss 0.00  MET 0.009  NOT 0.070  UNC 0.921  coverage 0.911  halfwidth 0.201
+L 0.85  rho 0.30  sens 0.95  spec 0.95  miss 0.00  MET 0.030  NOT 0.019  UNC 0.951  coverage 0.926  halfwidth 0.171
+L 0.90  rho 0.30  sens 0.95  spec 0.95  miss 0.00  MET 0.088  NOT 0.003  UNC 0.909  coverage 0.909  halfwidth 0.130
+L 0.95  rho 0.30  sens 0.95  spec 0.95  miss 0.00  MET 0.226  NOT 0.001  UNC 0.773  coverage 0.919  halfwidth 0.090
+L 1.00  rho 0.30  sens 0.95  spec 0.95  miss 0.00  MET 0.525  NOT 0.000  UNC 0.475  coverage 0.998  halfwidth 0.047
+L 0.75  rho 0.30  sens 0.90  spec 0.85  miss 0.00  MET 0.004  NOT 0.109  UNC 0.887  coverage 0.946  halfwidth 0.256
+L 0.80  rho 0.30  sens 0.90  spec 0.85  miss 0.00  MET 0.007  NOT 0.060  UNC 0.933  coverage 0.932  halfwidth 0.235
+L 0.85  rho 0.30  sens 0.90  spec 0.85  miss 0.00  MET 0.018  NOT 0.022  UNC 0.960  coverage 0.943  halfwidth 0.193
+L 0.90  rho 0.30  sens 0.90  spec 0.85  miss 0.00  MET 0.053  NOT 0.011  UNC 0.936  coverage 0.936  halfwidth 0.156
+L 0.95  rho 0.30  sens 0.90  spec 0.85  miss 0.00  MET 0.119  NOT 0.001  UNC 0.880  coverage 0.943  halfwidth 0.119
+L 1.00  rho 0.30  sens 0.90  spec 0.85  miss 0.00  MET 0.224  NOT 0.000  UNC 0.776  coverage 0.994  halfwidth 0.082
+L 0.75  rho 0.30  sens 0.90  spec 0.85  miss 0.10  MET 0.002  NOT 0.097  UNC 0.901  coverage 0.955  halfwidth 0.266
+L 0.80  rho 0.30  sens 0.90  spec 0.85  miss 0.10  MET 0.008  NOT 0.049  UNC 0.943  coverage 0.931  halfwidth 0.234
+L 0.85  rho 0.30  sens 0.90  spec 0.85  miss 0.10  MET 0.016  NOT 0.021  UNC 0.963  coverage 0.935  halfwidth 0.196
+L 0.90  rho 0.30  sens 0.90  spec 0.85  miss 0.10  MET 0.051  NOT 0.008  UNC 0.941  coverage 0.941  halfwidth 0.161
+L 0.95  rho 0.30  sens 0.90  spec 0.85  miss 0.10  MET 0.121  NOT 0.004  UNC 0.875  coverage 0.941  halfwidth 0.123
+L 1.00  rho 0.30  sens 0.90  spec 0.85  miss 0.10  MET 0.242  NOT 0.001  UNC 0.757  coverage 0.990  halfwidth 0.086
+
+Part B. lean (every unit with a built text) minus full (40 sampled units) landed share, descriptive. columns: ICC rho, sensitivity, specificity, MDD (smallest full deficit with 80% of intervals excluding 0), lean held at 0.95
+rho 0.05  sens 0.95  spec 0.95  MDD 0.44
+rho 0.30  sens 0.95  spec 0.95  MDD 0.56
+rho 0.30  sens 0.90  spec 0.85  MDD >0.60
+
+Part C. AP-X-2 share of required outputs present, bar 0.80. columns: stratum, runs, cells a run, true mean, ICC rho, P(MET), P(NOT MET), P(UNCLEAR), median half-width
+lean  n 22  cells 18  mean 0.50  rho 0.10  MET 0.000  NOT 1.000  UNC 0.000  halfwidth 0.078
+lean  n 22  cells 18  mean 0.70  rho 0.10  MET 0.001  NOT 0.803  UNC 0.196  halfwidth 0.070
+lean  n 22  cells 18  mean 0.80  rho 0.10  MET 0.055  NOT 0.019  UNC 0.926  halfwidth 0.062
+lean  n 22  cells 18  mean 0.90  rho 0.10  MET 0.938  NOT 0.000  UNC 0.062  halfwidth 0.044
+lean  n 22  cells 18  mean 0.95  rho 0.10  MET 1.000  NOT 0.000  UNC 0.000  halfwidth 0.030
+lean  n 22  cells 18  mean 0.50  rho 0.30  MET 0.000  NOT 1.000  UNC 0.000  halfwidth 0.116
+lean  n 22  cells 18  mean 0.70  rho 0.30  MET 0.000  NOT 0.436  UNC 0.564  halfwidth 0.106
+lean  n 22  cells 18  mean 0.80  rho 0.30  MET 0.073  NOT 0.027  UNC 0.900  halfwidth 0.092
+lean  n 22  cells 18  mean 0.90  rho 0.30  MET 0.700  NOT 0.000  UNC 0.300  halfwidth 0.066
+lean  n 22  cells 18  mean 0.95  rho 0.30  MET 0.966  NOT 0.000  UNC 0.034  halfwidth 0.044
+full  n 13  cells 30  mean 0.50  rho 0.10  MET 0.000  NOT 1.000  UNC 0.000  halfwidth 0.092
+full  n 13  cells 30  mean 0.70  rho 0.10  MET 0.002  NOT 0.661  UNC 0.337  halfwidth 0.083
+full  n 13  cells 30  mean 0.80  rho 0.10  MET 0.072  NOT 0.024  UNC 0.904  halfwidth 0.071
+full  n 13  cells 30  mean 0.90  rho 0.10  MET 0.812  NOT 0.000  UNC 0.188  halfwidth 0.051
+full  n 13  cells 30  mean 0.95  rho 0.10  MET 0.997  NOT 0.000  UNC 0.003  halfwidth 0.035
+full  n 13  cells 30  mean 0.50  rho 0.30  MET 0.000  NOT 0.969  UNC 0.031  halfwidth 0.145
+full  n 13  cells 30  mean 0.70  rho 0.30  MET 0.001  NOT 0.308  UNC 0.691  halfwidth 0.132
+full  n 13  cells 30  mean 0.80  rho 0.30  MET 0.090  NOT 0.017  UNC 0.893  halfwidth 0.114
+full  n 13  cells 30  mean 0.90  rho 0.30  MET 0.550  NOT 0.000  UNC 0.450  halfwidth 0.080
+full  n 13  cells 30  mean 0.95  rho 0.30  MET 0.886  NOT 0.000  UNC 0.114  halfwidth 0.046
+lean minus full MDD (80% of 95% bootstrap intervals exclude 0), full held at 0.50:
+rho 0.10  MDD 0.18
+rho 0.30  MDD 0.28
+
+Part D. AP-X-1 one-pass reading per run, Wilson 95%, bar 0.80. smallest k of n that reads MET, and P(MET) at true rates
+n 22  MET needs k >= 22  NOT MET when k <= 13  P(MET|p=0.80) 0.009  P(MET|p=0.90) 0.098  P(MET|p=0.95) 0.324  P(MET|p=0.98) 0.642  P(MET|p=1.00) 1.000
+n 35  MET needs k >= 33  NOT MET when k <= 23  P(MET|p=0.80) 0.018  P(MET|p=0.90) 0.307  P(MET|p=0.95) 0.744  P(MET|p=0.98) 0.967  P(MET|p=1.00) 1.000
+
+Part E. AP-GATE-1 zero-violation reading: exact one-sided 95% upper bound on the violation rate when 0 of n gates violate
+n 22  upper bound 0.127
+n 35  upper bound 0.082
+
+Part F. AP-X-3 full-kind readings (descriptive), Wilson 95% half-widths
+n 31 phases, outside ran  p 0.50  halfwidth 0.166
+n 31 phases, outside ran  p 0.80  halfwidth 0.135
+n 31 phases, outside ran  p 0.95  halfwidth 0.095
+n 22 completed phases, cross-family  p 0.50  halfwidth 0.193
+n 22 completed phases, cross-family  p 0.80  halfwidth 0.156
+n 22 completed phases, cross-family  p 0.95  halfwidth 0.105
+n 118 outside findings, outside only (no clustering)  p 0.50  halfwidth 0.089
+n 118 outside findings, outside only (no clustering)  p 0.80  halfwidth 0.072
+n 118 outside findings, outside only (no clustering)  p 0.95  halfwidth 0.041
