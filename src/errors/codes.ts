@@ -1550,6 +1550,15 @@ export const CODES = {
     resumable: false,
     owner: "U6",
   },
+  DR_ITEM_CLOSED: {
+    exit: 2,
+    meaning: "Decision routing: a batch plan or an answering step named a line item that config/items.json marks closed. A closed item keeps its record and what it settled, and takes no new lease; its work continues on the item the closing note names.",
+    fix: "Run the stage on the item that replaced it (the plans name it); a closed item reopens only by a new Captain decision recorded in items.json.",
+    side_effects: "None: nothing was written, leased, launched or answered.",
+    retry_safe: true,
+    resumable: false,
+    owner: "U6",
+  },
   DR_RESERVE_STOP: {
     exit: 2,
     meaning: "Decision routing: before opening a lease, the controller or the answering step found a line item whose cap cannot hold what is already committed on it plus the reserve for its sessions in flight at the per-session allowance (six for a batch, one for an answering step), so the projection passes the item's cap. It is not a CAP_STOP.",

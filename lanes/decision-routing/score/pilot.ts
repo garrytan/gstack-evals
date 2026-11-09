@@ -2,7 +2,7 @@
 // Pilot rules (preregistration section 8), decided on pilot data only:
 // - the re-cost: each cell's session rate becomes the higher of its planning rate (price.py, frozen) and its pilot mean,
 //   and the plan is priced again with price.py's own formulas; items already recorded (calibration, pilot, replay,
-//   crew) keep their caps from config/items.json;
+//   crew) keep their caps from config/items.json, and a closed item counts at what it settled;
 // - the drop order: while the all-in at caps passes the $2,000 line, drop W, then J on Sol, then F, then the subset from
 //   100 to 80 tasks, each printed as "not run under the line";
 // - particle-1's max_tokens: when its no-answer rate after its retry passes 2% of its pilot decisions, decision
@@ -26,13 +26,14 @@ export const NO_ANSWER_LINE = 0.02;
 export const PARTICLE_MAX_TOKENS = { base: 8000, raised: 16000 } as const;
 export const ITEMS_FILE = join(import.meta.dir, "..", "config", "items.json");
 /** Items whose caps the Captain records before the pilot re-cost; their caps come from items.json. */
-const RECORDED = ["dr-calibration", "dr-pilot-rp", "dr-pilot-jfw", "dr-replay", "dr-crew"];
+const RECORDED = ["dr-calibration-r2", "dr-pilot-rp", "dr-pilot-jfw", "dr-replay", "dr-crew"];
 
 export interface Scope { S: number; S2: number; w: boolean; jSol: boolean; f: boolean }
 export const FULL_SCOPE: Scope = { S: 280, S2: 100, w: true, jSol: true, f: true };
 export interface PlanItem { item: string; sessions: number; expected: number; cap: number }
 export interface Plan { items: PlanItem[]; sessions: number; label_runs: number; vm_hours: number; all_in_expected: number; all_in_cap: number }
-export interface ItemsFile { line_micros: number; items: Array<{ item: string; cap_micros: number }> }
+/** closed_micros is what a closed item settled; it takes no new lease, so the plan carries it at that, with no sessions. */
+export interface ItemsFile { line_micros: number; items: Array<{ item: string; cap_micros: number; closed_micros?: number; closed?: string }> }
 
 const ceil10 = (x: number) => Math.ceil(x / 10) * 10;
 export const rateKey = (cell: string, model: string) => cell + ":" + (cell === "W" ? "-" : model);
@@ -47,7 +48,8 @@ export function plan(rate: Readonly<Record<string, number>>, scope: Scope, items
     items.push({ item, sessions: cells.length * n, expected, cap: ceil10((o.m ?? 1.35) * expected + 30) });
     labelRuns += cells.filter((c) => (o.labelled ?? []).includes(c.split(":")[0]!)).length * n * LABEL_RUNS_PER_SESSION;
   };
-  add("dr-calibration", ["N:opus", "N:sol"], 40, { extra: SHADOW_PER_SESSION * 2 * 40, m: 1.5, labelled: ["N"] });
+  for (const row of itemsFile.items) if (row.closed_micros !== undefined) items.push({ item: row.item, sessions: 0, expected: row.closed_micros / 1e6, cap: row.closed_micros / 1e6 });
+  add("dr-calibration-r2", ["N:opus", "N:sol"], 40, { extra: SHADOW_PER_SESSION * 2 * 40, m: 1.5, labelled: ["N"] });
   add("dr-pilot-rp", ["R:opus", "R:sol", "P:opus", "P:sol"], 20, { m: 1.5 });
   add("dr-pilot-jfw", ["J:opus", "J:sol", "F:opus", "W:-"], 12, { m: 1.5 });
   add("dr-scored-opus", ["N:opus", "R:opus", "P:opus"], scope.S, { labelled: ["R", "P"] });

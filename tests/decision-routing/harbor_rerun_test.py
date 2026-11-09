@@ -183,11 +183,12 @@ class Rerun(unittest.TestCase):
             agent = dr_harbor.DecisionRoutingAgent(cell=cell, model=model, runtime_tarball="/rt.tgz", runtime_sha256="ab", pin_file=str(self.pin), item=item, logs_dir=logs)
             return agent.session_config("s").get("calibration_shadow")
 
-        self.assertIs(shadow("N", "opus", "dr-calibration"), True)
-        self.assertIs(shadow("N", "sol", "dr-calibration"), True)
+        self.assertIs(shadow("N", "opus", "dr-calibration-r2"), True)
+        self.assertIs(shadow("N", "sol", "dr-calibration-r2"), True)
+        self.assertIs(shadow("N", "opus", "dr-calibration"), False)
         self.assertIs(shadow("N", "opus", "dr-scored-opus"), False)
         self.assertIs(shadow("N", "sol", "dr-pilot-rp"), False)
-        self.assertIs(shadow("R", "opus", "dr-calibration"), False)
+        self.assertIs(shadow("R", "opus", "dr-calibration-r2"), False)
 
     def test_every_cell_runs_commands_as_the_agent_user(self):
         sys.path.insert(0, str(AGENT))

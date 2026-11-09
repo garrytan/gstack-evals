@@ -191,6 +191,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DR_PIN](#e_dr_pin) | 2 | U6 |
 | [E_DR_RUNTIME](#e_dr_runtime) | 2 | U6 |
 | [E_DR_RUNNER](#e_dr_runner) | 2 | U6 |
+| [DR_ITEM_CLOSED](#dr_item_closed) | 2 | U6 |
 | [DR_RESERVE_STOP](#dr_reserve_stop) | 2 | U6 |
 | [DR_PROXY_PORT_BUSY](#dr_proxy_port_busy) | 2 | U6 |
 | [DR_LEASE_UNRECORDED](#dr_lease_unrecorded) | 2 | U6 |
@@ -1357,6 +1358,14 @@ Decision routing: lanes/decision-routing/host/vm.sh was given an Ubicloud runner
 Fix: Point vm.sh at the pinned copy of ubi-runner.sh with its sha256, set UBI_OWNER to the thread code and UBI_TTL_HOURS to cover the longest batch, and rerun.
 
 Exit 2. Side effects: None: refused before any VM call. Retry safe: yes. Resumable: no. Owner: U6.
+
+### DR_ITEM_CLOSED
+
+Decision routing: a batch plan or an answering step named a line item that config/items.json marks closed. A closed item keeps its record and what it settled, and takes no new lease; its work continues on the item the closing note names.
+
+Fix: Run the stage on the item that replaced it (the plans name it); a closed item reopens only by a new Captain decision recorded in items.json.
+
+Exit 2. Side effects: None: nothing was written, leased, launched or answered. Retry safe: yes. Resumable: no. Owner: U6.
 
 ### DR_RESERVE_STOP
 

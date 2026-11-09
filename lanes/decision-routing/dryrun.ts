@@ -3,7 +3,7 @@
 // rule against fake upstreams and prints one PASS or FAIL line per rule, then exits 1 when any rule failed.
 //   dry-run [--out <dir>] [--venv <runtime or dev venv>] [--keyless] [--concurrency <n>]
 // Legs:
-//  1 a temporary ledger record with one lease opened and settled for each item in config/items.json, the sessions'
+//  1 a temporary ledger record with one lease opened and settled for each open item in config/items.json, the sessions'
 //    spend landing on their items;
 //  2 the real MeteringProxy (allowanceCode DR_ALLOWANCE_STOP) in front of fake/upstreams.ts, and real dr_agent.session
 //    runs in a scratch git repo standing in for /testbed, for every cell on both main models: every outcome path of
@@ -28,6 +28,7 @@ import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { MeteringProxy, UPSTREAM, type Meter } from "../../src/runner/proxy/metering-proxy.ts";
 import { anthropicText, anthropicToolUse, anthropicUsage, asksInlineReasoning, errorReply, FakeUpstreams, openaiJson, openaiResponsesText, openaiResponsesToolCalls, openaiToolCalls, openrouterJson, SUBMIT_COMMAND, typesafeAnswers, type FakeProvider, type FakeReply, type FakeUsage } from "./fake/upstreams.ts";
+import { CALIBRATION_ITEM } from "./host/plans.ts";
 import { fakeFetch, HARBOR_RETRY, MAX_OUTPUT_TOKENS, PILOT_SESSION_STOP_MICROS, RETRY, runBatch, type BatchOptions } from "./host/controller.ts";
 import { joinLabels, labelTrial, main as labelsMain, type LabelRow } from "./labels/cli.ts";
 import type { DockerRunner } from "./labels/container.ts";
@@ -205,7 +206,7 @@ export interface Session {
   item: string;
 }
 
-const itemOf = (s: Spec) => (s.cell === "N" ? "dr-calibration" : s.cell === "R" || s.cell === "P" ? "dr-pilot-rp" : "dr-pilot-jfw");
+const itemOf = (s: Spec) => (s.cell === "N" ? CALIBRATION_ITEM : s.cell === "R" || s.cell === "P" ? "dr-pilot-rp" : "dr-pilot-jfw");
 const allowOf = (cell: string, model: string): string[] => [CELLS.models[model].allow, ...CELLS.cells[cell].deciders];
 
 function classify(provider: FakeProvider, body: any): string {
@@ -356,6 +357,7 @@ export async function runSession(ctx: Ctx, spec: Spec): Promise<Session> {
     fakes.stop();
   }
   writeFileSync(join(trial, "result.json"), JSON.stringify({ task_name: task, trial_name: spec.name }) + "\n");
+  writeFileSync(join(trial, "config.json"), JSON.stringify({ agent: { kwargs: { cell: spec.cell, model: spec.model, item: itemOf(spec) } } }) + "\n");
   mkdirSync(join(trial, "artifacts"), { recursive: true });
   writeFileSync(join(trial, "artifacts", "model.patch"), Bun.spawnSync(["bash", "-c", "git add -A && git -c core.fileMode=false diff --cached --binary HEAD"], { cwd: repo }).stdout);
   mkdirSync(join(trial, "verifier"), { recursive: true });
@@ -533,10 +535,11 @@ function legDraw(r: Report, out: string) {
 
 function legPilot(r: Report) {
   const items = JSON.parse(readFileSync(ITEMS, "utf8")) as ItemsFile;
-  r.guard("pilot re-cost at planning rates reproduces every item cap in items.json and the $1,940 all-in", () => {
+  r.guard("pilot re-cost at planning rates reproduces every item cap in items.json (a closed item at what it settled) and their all-in", () => {
     const p = plan(PLANNING_RATE, FULL_SCOPE, items);
-    const off = items.items.filter((i) => p.items.find((x) => x.item === i.item)?.cap !== i.cap_micros / 1e6).map((i) => i.item);
-    return off.length ? "caps differ: " + off.join(", ") : p.all_in_cap === 1940 && recost({}).fits && recost({}).dropped.length === 0 ? true : "all-in " + p.all_in_cap;
+    const off = items.items.filter((i) => p.items.find((x) => x.item === i.item)?.cap !== (i.closed_micros ?? i.cap_micros) / 1e6).map((i) => i.item);
+    const sum = items.items.reduce((s, i) => s + (i.closed_micros ?? i.cap_micros), 0);
+    return off.length ? "caps differ: " + off.join(", ") : Math.round(p.all_in_cap * 1e6) === sum && recost({}).fits && recost({}).dropped.length === 0 ? true : "all-in " + p.all_in_cap;
   });
   r.guard("pilot re-cost: a rate is the higher of planning rate and pilot mean", () => {
     const x = recost({ "R:opus": 0.5, "P:sol": 0.1 });
@@ -882,11 +885,12 @@ export async function main(argv: string[]): Promise<number> {
     const items = (JSON.parse(readFileSync(ITEMS, "utf8")) as ItemsFile).items;
     const leases = new Map<string, string>();
     const warnings: string[] = [];
-    for (const it of items) {
+    for (const it of items.filter((i) => !i.closed)) {
       recordApproval(record, { action: "init", item: it.item, cap_micros: it.cap_micros, admission: "warn", quotes: [{ words: "keyless dry run on a temporary ledger", by: "decision-routing dry-run", source: "lanes/decision-routing/dryrun.ts" }] });
       leases.set(it.item, openLease(record, ledger, { item: it.item, run_id: "dryrun", warn: (c: string, m: string) => warnings.push(c + " " + m), requireAdmission: () => null } as any).lease_id);
     }
-    r.add("one lease opened on a temporary ledger record for each of the " + items.length + " items in items.json", leases.size === items.length && items.length === 10);
+    const open = items.filter((i) => !i.closed);
+    r.add("one lease opened on a temporary ledger record for each of the " + open.length + " open items in items.json", leases.size === open.length && open.length === 10);
     const pin = join(out, "pin-ladder.json");
     writePin(pin, buildPin(ladderTuned(), pinMeta()));
     const ctx: Ctx = { out, python: join(venv, "bin", "python"), template, ledger, leases, pin, scratch };
@@ -904,7 +908,7 @@ export async function main(argv: string[]): Promise<number> {
     for (const s of all) {
       spent.set(s.item, (spent.get(s.item) ?? 0) + (s.meter?.micros ?? 0) + (readJson(join(s.trial, "shadow-meter.json"))?.micros ?? 0));
     }
-    const closes = items.map((it) => ({ item: it.item, close: settleLease(record, ledger, leases.get(it.item)!, (c: string, m: string) => warnings.push(c + " " + m)) }));
+    const closes = [...leases].map(([item, lease]) => ({ item, close: settleLease(record, ledger, lease, (c: string, m: string) => warnings.push(c + " " + m)) }));
     ledger.close();
     const off = closes.filter((c) => c.close.spent_micros !== (spent.get(c.item) ?? 0) || c.close.unknown_micros !== 0);
     r.add("every lease settled; each item's settled spend equals its sessions' meters (allowance stops included)", off.length === 0 && closes.length === 10, off.length ? off.map((c) => c.item + " settled " + c.close.spent_micros + " metered " + (spent.get(c.item) ?? 0)).join(", ") : [...spent.entries()].map(([k, v]) => k + " " + v).join(", "));

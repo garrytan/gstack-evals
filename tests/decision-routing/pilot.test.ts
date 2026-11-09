@@ -6,10 +6,12 @@ import { DROPS, FULL_SCOPE, ITEMS_FILE, particleNoAnswers, pilotSessionStops, pl
 
 const items = JSON.parse(readFileSync(ITEMS_FILE, "utf8")) as ItemsFile;
 
-test("planning rates reproduce every cap in items.json and the $1,940 all-in", () => {
+test("planning rates reproduce every cap in items.json, a closed item at what it settled, and the all-in", () => {
   const p = plan(PLANNING_RATE, FULL_SCOPE, items);
-  for (const it of items.items) expect(p.items.find((x) => x.item === it.item)?.cap).toBe(it.cap_micros / 1e6);
-  expect(p.all_in_cap).toBe(1940);
+  for (const it of items.items) expect(p.items.find((x) => x.item === it.item)?.cap).toBe((it.closed_micros ?? it.cap_micros) / 1e6);
+  expect(p.items.find((x) => x.item === "dr-calibration")).toEqual({ item: "dr-calibration", sessions: 0, expected: 1.144225, cap: 1.144225 });
+  expect(p.items.find((x) => x.item === "dr-calibration-r2")).toMatchObject({ sessions: 80, cap: 88.86 });
+  expect(Math.round(p.all_in_cap * 1e6)).toBe(1_940_004_225);
   expect(p.sessions).toBe(2288);
   expect(recost({}).dropped).toEqual([]);
 });

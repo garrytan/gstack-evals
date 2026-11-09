@@ -46,7 +46,7 @@ function world(sessions = 2, capMicros = 90_000_000) {
   dirs.push(dir);
   fakes = FakeUpstreams.start();
   writeFileSync(join(dir, "stub.ts"), STUB);
-  writeFileSync(join(dir, "items.json"), JSON.stringify({ items: [{ item: "dr-calibration", cap_micros: capMicros }] }));
+  writeFileSync(join(dir, "items.json"), JSON.stringify({ items: [{ item: "dr-calibration-r2", cap_micros: capMicros }] }));
   writeFileSync(join(dir, "questions.json"), "{}");
   const list = Array.from({ length: sessions }, (_, i) => {
     const log_dir = join(dir, "trials", "s" + i, "agent", "dr");
@@ -56,8 +56,8 @@ function world(sessions = 2, capMicros = 90_000_000) {
     return { session: "task-" + i + "__N__opus", log_dir, markers_file };
   });
   const opts: AnswerOptions = {
-    item: "dr-calibration",
-    runId: "dr-calibration@0123456789ab",
+    item: "dr-calibration-r2",
+    runId: "dr-calibration-r2@0123456789ab",
     mode: "shadow",
     sessions: list,
     out: join(dir, "out"),
@@ -213,7 +213,14 @@ test("the step's sessions never overlap in time", async () => {
 
 const REAL_RECORD = process.env.DR_REAL_RECORD ?? "";
 
-const HAS_REAL_RECORD = !!REAL_RECORD && existsSync(join(REAL_RECORD, "items", "dr-calibration"));
+const HAS_REAL_RECORD = !!REAL_RECORD && existsSync(join(REAL_RECORD, "items", "dr-calibration-r2"));
+
+test("answering on the closed dr-calibration item is refused with DR_ITEM_CLOSED before anything is written or leased", async () => {
+  const { dir, opts } = world(1);
+  const err = await runAnswer({ ...opts, item: "dr-calibration", runId: "dr-calibration@0123456789ab", items: join(import.meta.dir, "../../lanes/decision-routing/config/items.json") }).then(() => null, (e) => e);
+  expect((err as Error).message).toStartWith("DR_ITEM_CLOSED: line item dr-calibration is closed");
+  expect(existsSync(join(dir, "out"))).toBe(false);
+});
 
 test.skipIf(!HAS_REAL_RECORD)("a stop file that appears while the step waits for the drive's confirmation ends the wait at once: nothing answered, the lease settles at zero", async () => {
   const { dir, opts, list } = world(1);
@@ -221,7 +228,7 @@ test.skipIf(!HAS_REAL_RECORD)("a stop file that appears while the step waits for
   cpSync(REAL_RECORD, record, { recursive: true });
   const real = { ...opts, temp: false, record, ledger: join(dir, "ledger.sqlite"), leaseConfirmMs: 30_000 };
   const timer = setInterval(() => {
-    if (!readItem(record, "dr-calibration").open) return;
+    if (!readItem(record, "dr-calibration-r2").open) return;
     writeFileSync(join(opts.out, "STOP"), "operator stop\n");
   }, 10);
   const t0 = Date.now();
@@ -232,7 +239,7 @@ test.skipIf(!HAS_REAL_RECORD)("a stop file that appears while the step waits for
   }
   expect(Date.now() - t0).toBeLessThan(15_000);
   expect(existsSync(join(opts.out, "answers", list[0]!.session + ".shadow.jsonl"))).toBe(false);
-  expect(readItem(record, "dr-calibration").leases.at(-1)!.close?.spent_micros).toBe(0);
+  expect(readItem(record, "dr-calibration-r2").leases.at(-1)!.close?.spent_micros).toBe(0);
 }, 60_000);
 
 test.skipIf(!HAS_REAL_RECORD)("on a real record nothing is answered until the drive is confirmed to hold the lease (DR_LEASE_UNRECORDED), and answering runs once it is", async () => {
@@ -243,7 +250,7 @@ test.skipIf(!HAS_REAL_RECORD)("on a real record nothing is answered until the dr
     const real = { ...opts, temp: false, record, ledger: join(dir, "ledger.sqlite"), leaseConfirmMs: 1500 };
     const timer = confirm
       ? setInterval(() => {
-          const open = readItem(record, "dr-calibration").open;
+          const open = readItem(record, "dr-calibration-r2").open;
           if (!open) return;
           mkdirSync(opts.out, { recursive: true });
           writeFileSync(join(opts.out, "lease-confirmed.json"), JSON.stringify({ leases: [open.lease_id] }));
@@ -253,7 +260,7 @@ test.skipIf(!HAS_REAL_RECORD)("on a real record nothing is answered until the dr
       if (!confirm) {
         await expect(runAnswer(real)).rejects.toThrow("DR_LEASE_UNRECORDED");
         expect(existsSync(join(opts.out, "answers", list[0]!.session + ".shadow.jsonl"))).toBe(false);
-        expect(readItem(record, "dr-calibration").leases.at(-1)!.close?.spent_micros).toBe(0);
+        expect(readItem(record, "dr-calibration-r2").leases.at(-1)!.close?.spent_micros).toBe(0);
       } else {
         expect((await runAnswer(real)).answered).toEqual([list[0]!.session]);
       }

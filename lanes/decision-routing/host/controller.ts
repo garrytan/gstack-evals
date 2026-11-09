@@ -330,6 +330,13 @@ export function tempRecord(dir: string, itemsFile: string, used: Set<string>): {
   return { record, local: LocalLedger.open(join(dir, "ledger.sqlite")) };
 }
 
+/** A plan or an answering step naming an item that items.json marks closed is refused before anything is written or leased. */
+export function refuseClosedItems(itemsFile: string, items: readonly string[], what: string): void {
+  const rows = (JSON.parse(readFileSync(itemsFile, "utf8")) as { items: Array<{ item: string; closed?: string }> }).items;
+  const closed = rows.find((r) => r.closed && items.includes(r.item));
+  if (closed) throw new ControllerError("DR_ITEM_CLOSED", "line item " + closed.item + " is closed: " + closed.closed + "; nothing was " + what);
+}
+
 /** What a new lease must leave room for: its sessions in flight (CONCURRENCY for a batch), each at its worst case, the per-session allowance. */
 export function reserveMicros(sessions = CONCURRENCY): number {
   return sessions * (JSON.parse(readFileSync(join(LANE, "config", "cells.json"), "utf8")) as { limits: { allowance_micros: number } }).limits.allowance_micros;
@@ -356,6 +363,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
   const warn = (code: ReasonCode, message: string) => warnings.push(code + ": " + message);
   if (!isTrialNetworkHost(o.proxyHost)) throw new ControllerError("E_USAGE", "the proxy host " + o.proxyHost + " is not a loopback or private IP literal");
   if (!o.temp && !o.custody) throw new ControllerError("E_USAGE", "a live run (no --temp) needs --pristine-dir and --label-store for the leak scan; nothing was leased or launched");
+  refuseClosedItems(o.items ?? join(LANE, "config", "items.json"), o.plan.map((r) => r.item), "leased or launched");
   if (existsSync(stopFile)) throw new ControllerError("E_DR_STOPPED", "the stop file " + stopFile + " exists (" + (readFileSync(stopFile, "utf8").trim().split("\n")[0]!.slice(0, 500) || "empty") + "), so nothing was leased or launched; remove it to start the batch");
   const journals = join(out, "journals");
   for (const item of new Set(o.plan.map((r) => r.item))) {

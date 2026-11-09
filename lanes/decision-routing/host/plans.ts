@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Decision-routing batch plans (preregistration sections 5, 8 and 9) from the frozen draw lists beside the
-// preregistration: calibration is N on both models over calibration.txt (dr-calibration); the pilot is R and P on both
+// preregistration: calibration is N on both models over calibration.txt (dr-calibration-r2, which replaced the closed
+// dr-calibration after its first batch stopped); the pilot is R and P on both
 // models over pilot.txt (dr-pilot-rp) plus J on both models, F on Opus and W over its first 12 (dr-pilot-jfw); scored is
 // N, R and P per model over scored.txt (dr-scored-opus, dr-scored-sol); the subset stage is F on Opus and J on both models
 // (dr-subset) plus W (dr-w-reference) over subset.txt. A failed scored task's spare replacement is not planned here.
@@ -11,6 +12,8 @@ import { join, resolve } from "node:path";
 import type { PlanRow } from "./controller.ts";
 
 export const PREREG = resolve(import.meta.dir, "../../../wiki/plans/2026-11-09-geva-411-decision-routing-prereg");
+/** The line item calibration runs on, and the only one admission reads. */
+export const CALIBRATION_ITEM = "dr-calibration-r2";
 type Cell = [PlanRow["cell"], PlanRow["model"]];
 
 const rows = (tasks: string[], item: string, cells: Cell[]): PlanRow[] => tasks.flatMap((task) => cells.map(([cell, model]) => ({ task, cell, model, item })));
@@ -21,7 +24,7 @@ export function buildPlans(prereg = PREREG): Record<"calibration" | "pilot" | "s
   const scored = list("scored.txt");
   const subset = list("subset.txt");
   return {
-    calibration: rows(list("calibration.txt"), "dr-calibration", [["N", "opus"], ["N", "sol"]]),
+    calibration: rows(list("calibration.txt"), CALIBRATION_ITEM, [["N", "opus"], ["N", "sol"]]),
     pilot: [...rows(pilot, "dr-pilot-rp", [["R", "opus"], ["R", "sol"], ["P", "opus"], ["P", "sol"]]), ...rows(pilot.slice(0, 12), "dr-pilot-jfw", [["J", "opus"], ["J", "sol"], ["F", "opus"], ["W", "particle"]])],
     scored: [...rows(scored, "dr-scored-opus", [["N", "opus"], ["R", "opus"], ["P", "opus"]]), ...rows(scored, "dr-scored-sol", [["N", "sol"], ["R", "sol"], ["P", "sol"]])],
     subset: [...rows(subset, "dr-subset", [["F", "opus"], ["J", "opus"], ["J", "sol"]]), ...rows(subset, "dr-w-reference", [["W", "particle"]])],

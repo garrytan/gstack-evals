@@ -9,6 +9,7 @@ import { discordance, roomCheck, s3Share, transferCheck, turnsOf, type Turn } fr
 import { callUsd, loadPrices, pairOnTasks, readJournal, readTrial, type SessionOutcome } from "./session.ts";
 import { trialDirs } from "./cli.ts";
 import { nonrootReading, printNonroot } from "./nonroot.ts";
+import { CALIBRATION_ITEM } from "../host/plans.ts";
 
 const flag = (argv: string[], name: string): string | undefined => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
 const flags = (argv: string[], name: string): string[] => argv.flatMap((a, i) => (a === name && argv[i + 1] !== undefined ? [argv[i + 1]!] : []));
@@ -18,6 +19,9 @@ export async function main(argv: string[]): Promise<number> {
   if (!calibration || !pilot || !journals.length || !prices) { console.error("E_USAGE admit --calibration <dir> --pilot <dir> --journal <file>... --prices <prices.json> [--out <admission.json>]"); return 2; }
   const gone = [calibration, pilot, ...journals, prices].find((p) => !existsSync(p));
   if (gone) { console.error("E_USAGE no such file or directory: " + gone); return 2; }
+  const itemOf = (d: string) => (existsSync(join(d, "config.json")) ? JSON.parse(readFileSync(join(d, "config.json"), "utf8"))?.agent?.kwargs?.item : undefined);
+  const strays = trialDirs(calibration).filter((d) => itemOf(d) !== CALIBRATION_ITEM);
+  if (strays.length) { console.error("E_USAGE admission reads only the " + CALIBRATION_ITEM + " run: " + strays.length + " calibration session(s) under " + calibration + " name another item or none in their config.json, first " + strays[0]); return 2; }
   const ctx = { calls: readJournal(journals), prices: loadPrices(prices) };
   const read = (root: string) => trialDirs(root).map((d) => readTrial(d, ctx));
   const cal = read(calibration), pil = read(pilot);

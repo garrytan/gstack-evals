@@ -16,6 +16,7 @@ import { openLease } from "../../src/runner/ledger/ledger.ts";
 
 const REAL_RECORD = process.env.DR_REAL_RECORD ?? "";
 const RUN = "dr-calibration@abc";
+const R2_RUN = "dr-calibration-r2@abc";
 
 const VM = join(import.meta.dir, "../../lanes/decision-routing/host/vm.sh");
 const FAKE = ["#!/usr/bin/env bash", "case $1 in", '  ssh) shift 2; HOME=$FAKE_VM_HOME bash -c "$*" ;;', '  pull) mkdir -p "$4" && (cd "$FAKE_VM_HOME" && cp -r "$3" "$4/") ;;', "esac"].join("\n") + "\n";
@@ -149,21 +150,21 @@ test.if(process.getuid?.() !== 0)("record-in refuses the next segment when an ea
   }
 });
 
-test.skipIf(!REAL_RECORD || !existsSync(join(REAL_RECORD, "items", "dr-calibration")))("record-out --confirm tells the VM a lease is in the drive only once the drive copy reads it back open", () => {
+test.skipIf(!REAL_RECORD || !existsSync(join(REAL_RECORD, "items", "dr-calibration-r2")))("record-out --confirm tells the VM a lease is in the drive only once the drive copy reads it back open", () => {
   const { dir, vmHome, run } = rig();
   const drive = join(dir, "drive");
   cpSync(REAL_RECORD, drive, { recursive: true });
-  expect(run("record-in", "vm-1", drive, RUN).code).toBe(0);
-  const lease = openLease(join(vmHome, "dr-record"), null, { item: "dr-calibration", run_id: RUN });
+  expect(run("record-in", "vm-1", drive, R2_RUN).code).toBe(0);
+  const lease = openLease(join(vmHome, "dr-record"), null, { item: "dr-calibration-r2", run_id: R2_RUN });
   const out = join(vmHome, "out", "cal");
   mkdirSync(out, { recursive: true });
   const confirmed = join(out, "lease-confirmed.json");
-  const leaseFile = readdirSync(join(vmHome, "dr-record", "items", "dr-calibration")).find((n) => !existsSync(join(drive, "items", "dr-calibration", n)))!;
-  writeFileSync(join(drive, "items", "dr-calibration", leaseFile), "a different file under the same name\n");
+  const leaseFile = readdirSync(join(vmHome, "dr-record", "items", "dr-calibration-r2")).find((n) => !existsSync(join(drive, "items", "dr-calibration-r2", n)))!;
+  writeFileSync(join(drive, "items", "dr-calibration-r2", leaseFile), "a different file under the same name\n");
   const bad = run("record-out", "vm-1", drive, "--confirm", out);
   expect(bad.code).not.toBe(0);
   expect(existsSync(confirmed)).toBe(false);
-  rmSync(join(drive, "items", "dr-calibration", leaseFile));
+  rmSync(join(drive, "items", "dr-calibration-r2", leaseFile));
   const good = run("record-out", "vm-1", drive, "--confirm", out);
   expect(good.code).toBe(0);
   expect(JSON.parse(readFileSync(confirmed, "utf8")).leases).toEqual([lease.lease_id]);

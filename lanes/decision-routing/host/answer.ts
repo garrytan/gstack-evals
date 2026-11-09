@@ -42,7 +42,7 @@ import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
 import { MeteringProxy, ProxyControl, reconcileJournal } from "../../../src/runner/proxy/metering-proxy.ts";
 import { plantCanary } from "../labels/markers.ts";
 import { SAFETY_SET_PATH } from "../labels/safety-set.ts";
-import { awaitLeaseConfirmed, checkReserve, ControllerError, fakeFetch, LEASE_CONFIRM_MS, MAX_OUTPUT_TOKENS, RETRY, tempRecord } from "./controller.ts";
+import { awaitLeaseConfirmed, checkReserve, ControllerError, fakeFetch, LEASE_CONFIRM_MS, MAX_OUTPUT_TOKENS, refuseClosedItems, RETRY, tempRecord } from "./controller.ts";
 
 const LANE = resolve(import.meta.dir, "..");
 const CELLS = JSON.parse(readFileSync(join(LANE, "config", "cells.json"), "utf8")) as { deciders: Record<string, string>; limits: { allowance_micros: number } };
@@ -126,6 +126,7 @@ export async function runAnswer(o: AnswerOptions): Promise<AnswerResult> {
   const env = o.env ?? process.env;
   const mode = Object.hasOwn(MODES, o.mode) ? MODES[o.mode] : undefined;
   if (!mode) throw new ControllerError("E_USAGE", "unknown answering mode " + JSON.stringify(o.mode) + "; modes are " + Object.keys(MODES).join(", "));
+  refuseClosedItems(o.items ?? join(LANE, "config", "items.json"), [o.item], "leased or answered");
   if (existsSync(stopFile)) throw new ControllerError("E_DR_STOPPED", "the stop file " + stopFile + " exists (" + (readFileSync(stopFile, "utf8").trim().split("\n")[0]!.slice(0, 500) || "empty") + "), so nothing was leased or answered; remove it to start");
   const journals = join(out, "journals");
   const journal = join(journals, o.item + ".ndjson");
