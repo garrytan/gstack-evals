@@ -11,7 +11,7 @@ same files. Costs are in multiples of today's model's mean cost per decision on 
 The frontier reference scores Opus 5.5's own labels against GPT-6 Astra's labels, beside particle-1 on the same items.
 Needs only the Python standard library.
 """
-import json, math, os, sys
+import json, math, os, statistics, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stats
 
@@ -98,6 +98,7 @@ def summarize(c, cost=None, lat=None):
     if lat is not None:
         row["lat_p50"] = stats.pct(lat, 0.5)
         row["lat_p90"] = stats.pct(lat, 0.9)
+        row["lat_median_averaged"] = statistics.median(lat) if lat else None
     return row
 
 
@@ -191,6 +192,7 @@ def score_point(doc):
         for i, c_first in zip(common, first["esc"]):
             fc.append(c_first if by_id[i]["jev"]["conf"] < tune["tau"] else correct(by_id[i]["jev"], truth[i], options))
         first["cascade"] = fc
+        res["retried_all_splits"] = {a: sum(1 for it in items if (it.get(a) or {}).get("retried")) for a in ("particle", "esc")}
         res["at_shipped_token_cap"] = {
             "note": "replies cut off at the shipped token cap were retried once at 4,000 tokens; here those items count as wrong",
             "retried_held": {a: sum(1 for i in common if by_id[i][a].get("retried")) for a in ("particle", "esc")},

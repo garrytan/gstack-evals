@@ -478,6 +478,18 @@
       "n": 117
      }
     }
+   },
+   "retried_all_splits": {
+    "particle": 5,
+    "esc": 4
+   },
+   "latency_median_averaged_held": {
+    "current": 1426.18727684021,
+    "particle": 1711.6034030914307,
+    "jev": 76.9,
+    "esc": 1700.1996040344238,
+    "cascade_maxacc": null,
+    "cascade": 1659.6512615203858
    }
   }
  },
@@ -909,6 +921,14 @@
       }
      }
     }
+   },
+   "latency_median_averaged_held": {
+    "current": 1175.0744581222534,
+    "particle": 714.6327495574951,
+    "jev": 71.4,
+    "esc": 778.1153917312622,
+    "cascade_maxacc": null,
+    "cascade": 74.25
    }
   }
  }

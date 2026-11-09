@@ -84,6 +84,7 @@
     "cost_x": 1.0000000000000002,
     "lat_p50": 1782.9883098602295,
     "lat_p90": 5070.387125015259,
+    "lat_median_averaged": 1782.9883098602295,
     "no_answer": 0
    },
    "particle": {
@@ -97,6 +98,7 @@
     "cost_x": 0.079645367072587,
     "lat_p50": 2831.697940826416,
     "lat_p90": 6067.960262298584,
+    "lat_median_averaged": 2831.697940826416,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.09174311926605505,
@@ -118,6 +120,7 @@
     "cost_x": 0.035270012737406604,
     "lat_p50": 87.5,
     "lat_p90": 125.2,
+    "lat_median_averaged": 87.5,
     "no_answer": 0,
     "vs_current": {
      "diff": -0.10091743119266056,
@@ -139,6 +142,7 @@
     "cost_x": 0.06669294002872002,
     "lat_p50": 2608.517646789551,
     "lat_p90": 5407.336711883545,
+    "lat_median_averaged": 2608.517646789551,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.09174311926605505,
@@ -179,6 +183,7 @@
     "cost_x": 0.0677881943712021,
     "lat_p50": 1556.3861820220948,
     "lat_p90": 3570.9120029449464,
+    "lat_median_averaged": 1556.3861820220948,
     "esc_rate": 0.6422018348623854,
     "vs_current": {
      "diff": 0.01834862385321101,
@@ -303,6 +308,7 @@
     "cost_x": 1.0,
     "lat_p50": 1938.0156993865967,
     "lat_p90": 2496.943473815918,
+    "lat_median_averaged": 1938.0156993865967,
     "no_answer": 4
    },
    "particle": {
@@ -316,6 +322,7 @@
     "cost_x": 0.07701135099610583,
     "lat_p50": 1263.8893127441406,
     "lat_p90": 2957.270860671997,
+    "lat_median_averaged": 1263.8893127441406,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.16470588235294117,
@@ -337,6 +344,7 @@
     "cost_x": 0.019957075735431155,
     "lat_p50": 69.7,
     "lat_p90": 89.3,
+    "lat_median_averaged": 69.7,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.16470588235294117,
@@ -358,6 +366,7 @@
     "cost_x": 0.07657428153844645,
     "lat_p50": 1035.8474254608154,
     "lat_p90": 1750.9515285491943,
+    "lat_median_averaged": 1035.8474254608154,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.16470588235294117,
@@ -398,6 +407,7 @@
     "cost_x": 0.019957075735431155,
     "lat_p50": 69.7,
     "lat_p90": 89.3,
+    "lat_median_averaged": 69.7,
     "esc_rate": 0.0,
     "vs_current": {
      "diff": 0.16470588235294117,
@@ -614,6 +624,10 @@
     }
    }
   },
+  "retried_all_splits": {
+   "particle": 6,
+   "esc": 2
+  },
   "at_shipped_token_cap": {
    "note": "replies cut off at the shipped token cap were retried once at 4,000 tokens; here those items count as wrong",
    "retried_held": {
@@ -779,6 +793,7 @@
     "cost_x": 0.9999999999999998,
     "lat_p50": 2507.5509548187256,
     "lat_p90": 3212.3990058898926,
+    "lat_median_averaged": 2506.3936710357666,
     "no_answer": 2
    },
    "particle": {
@@ -792,6 +807,7 @@
     "cost_x": 0.038508241891042676,
     "lat_p50": 1197.6566314697266,
     "lat_p90": 2480.6196689605713,
+    "lat_median_averaged": 1195.4509019851685,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.057432432432432436,
@@ -813,6 +829,7 @@
     "cost_x": 0.010998417685825237,
     "lat_p50": 73.0,
     "lat_p90": 104.7,
+    "lat_median_averaged": 72.9,
     "no_answer": 0,
     "vs_current": {
      "diff": -0.030405405405405407,
@@ -834,6 +851,7 @@
     "cost_x": 0.039507239909121666,
     "lat_p50": 1245.4562187194824,
     "lat_p90": 2498.7270832061768,
+    "lat_median_averaged": 1238.184094429016,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.05067567567567568,
@@ -874,6 +892,7 @@
     "cost_x": 0.015720217270105218,
     "lat_p50": 74.6,
     "lat_p90": 151.0,
+    "lat_median_averaged": 74.44999999999999,
     "esc_rate": 0.08783783783783784,
     "vs_current": {
      "diff": 0.010135135135135136,
@@ -892,6 +911,10 @@
    "worse": 1,
    "better": 15,
    "n": 296
+  },
+  "retried_all_splits": {
+   "particle": 13,
+   "esc": 13
   },
   "at_shipped_token_cap": {
    "note": "replies cut off at the shipped token cap were retried once at 4,000 tokens; here those items count as wrong",
@@ -1051,6 +1074,7 @@
     "cost_x": 1.0,
     "lat_p50": 867.7985668182373,
     "lat_p90": 1031.078815460205,
+    "lat_median_averaged": 867.7985668182373,
     "no_answer": 0
    },
    "particle": {
@@ -1064,6 +1088,7 @@
     "cost_x": 0.14217902476725802,
     "lat_p50": 1298.8090515136719,
     "lat_p90": 2059.42964553833,
+    "lat_median_averaged": 1298.8090515136719,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.07692307692307693,
@@ -1085,6 +1110,7 @@
     "cost_x": 0.03957133321623046,
     "lat_p50": 72.6,
     "lat_p90": 95.4,
+    "lat_median_averaged": 72.6,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.02564102564102564,
@@ -1106,6 +1132,7 @@
     "cost_x": 0.17417405796592306,
     "lat_p50": 1042.8192615509033,
     "lat_p90": 4239.010572433472,
+    "lat_median_averaged": 1042.8192615509033,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.07692307692307693,
@@ -1146,6 +1173,7 @@
     "cost_x": 0.03957133321623046,
     "lat_p50": 72.6,
     "lat_p90": 95.4,
+    "lat_median_averaged": 72.6,
     "esc_rate": 0.0,
     "vs_current": {
      "diff": 0.02564102564102564,
@@ -1251,6 +1279,7 @@
     "cost_x": 1.0,
     "lat_p50": 1426.7501831054688,
     "lat_p90": 1744.0216541290283,
+    "lat_median_averaged": 1429.2980432510376,
     "no_answer": 0
    },
    "particle": {
@@ -1264,6 +1293,7 @@
     "cost_x": 0.10861408236544519,
     "lat_p50": 2214.8656845092773,
     "lat_p90": 5403.4013748168945,
+    "lat_median_averaged": 2349.412202835083,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.1,
@@ -1285,6 +1315,7 @@
     "cost_x": 0.032971188371937146,
     "lat_p50": 72.3,
     "lat_p90": 94.9,
+    "lat_median_averaged": 72.4,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.05714285714285714,
@@ -1306,6 +1337,7 @@
     "cost_x": 0.1365766981050777,
     "lat_p50": 2623.3980655670166,
     "lat_p90": 5379.642009735107,
+    "lat_median_averaged": 2625.248074531555,
     "no_answer": 0,
     "vs_current": {
      "diff": 0.05714285714285714,
@@ -1346,6 +1378,7 @@
     "cost_x": 0.032971188371937146,
     "lat_p50": 72.3,
     "lat_p90": 94.9,
+    "lat_median_averaged": 72.4,
     "esc_rate": 0.0,
     "vs_current": {
      "diff": 0.05714285714285714,
@@ -1676,6 +1709,7 @@
     "cost_x": 1.0,
     "lat_p50": 16469,
     "lat_p90": 54267,
+    "lat_median_averaged": 16469,
     "no_answer": 1
    },
    "particle": {
@@ -1689,6 +1723,7 @@
     "cost_x": 0.009186193552827964,
     "lat_p50": 5162.6410484313965,
     "lat_p90": 27975.38733482361,
+    "lat_median_averaged": 5162.6410484313965,
     "no_answer": 11,
     "vs_current": {
      "diff": -0.24691358024691357,
@@ -1710,6 +1745,7 @@
     "cost_x": 0.0007562858460418147,
     "lat_p50": 80.3,
     "lat_p90": 105.8,
+    "lat_median_averaged": 80.3,
     "no_answer": 0,
     "vs_current": {
      "diff": -0.1111111111111111,
@@ -1731,6 +1767,7 @@
     "cost_x": 0.009446693253421361,
     "lat_p50": 5892.616271972656,
     "lat_p90": 44037.606954574585,
+    "lat_median_averaged": 5892.616271972656,
     "no_answer": 10,
     "vs_current": {
      "diff": -0.20987654320987653,
@@ -1771,6 +1808,7 @@
     "cost_x": 0.002076095623171965,
     "lat_p50": 82.8,
     "lat_p90": 2195.1596858978273,
+    "lat_median_averaged": 82.8,
     "esc_rate": 0.12345679012345678,
     "vs_current": {
      "diff": -0.09876543209876543,
