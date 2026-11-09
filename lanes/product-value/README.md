@@ -36,6 +36,12 @@ refuses two that resolve to the same real file or directory (the four-paths guar
 - pv dryrun (dryrun.ts): drives every frozen rule of item 4 on both sides of its edge, runs the twin simulations and
   opens and settles one ledger lease per stage 1 item on a temporary ledger. The run side's own checks plug in through
   run-checks.ts (export runSideChecks()); until that module exists the dry run prints one FAIL line for them and exits 1.
+- pv taste (taste.ts): section 15's 10 blind pairs for the owner from calibration units, which never count toward any
+  score. Each Opus skill list pairs with the Opus none list on its unit (the lowest pass with a block) and, where one
+  exists, the Opus lens list; 7 plan and 3 brief pairs come in seeded order (sha256 of the seed, family, unit and
+  partner arm), and a seeded coin picks which side the skill list takes. One Opus call per drawn (family, unit) on the
+  render item writes the summary from plan.md or brief.md and context/ only, cut at 150 words. pairs.md carries no unit
+  id, arm or key; the answers file, which must sit outside the packet folder, maps each pair back.
 - cutoffs.json: each model's stated training cutoff with its provider source, read 2026-11-08. Particle publishes none.
 
 ### Build-time choices
