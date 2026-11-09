@@ -2,18 +2,20 @@
 // bun lanes/harness-mechanics/cli.ts <command>: the harness mechanics eval (lanes/harness-mechanics/README.md).
 // prepare, host-up, launch, attach, relaunch, recover and host-down run on L1's host and part machinery under this lane's
 // profile (plans.ts HM_PROFILE), with L1's exit codes.
-import { readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { l1Main } from "../../quick/laneb/l1/l1.ts";
-import type { HmSessionRow } from "../../src/types.ts";
-import { report } from "./analyze.ts";
+import { admission, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
 import { dryrun } from "./dryrun.ts";
 import { CLOSING } from "./pins.ts";
 import { HM_PROFILE } from "./plans.ts";
 import { patternsCommand } from "./score.ts";
 import { buildHmTable } from "./table.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | table <config.json> <out.jsonl> | patterns <job dir>... | report <table.jsonl> --stage <stage1|stage3|stage4> --out <dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--out <dir>] | report <table.jsonl> <config.json> <out dir>";
+const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
+// HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
+const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
 const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "recover", "host-down"];
 
 export async function main(argv: string[]): Promise<number> {
@@ -48,11 +50,24 @@ export async function main(argv: string[]): Promise<number> {
       for (const l of patternsCommand(rest)) console.log(l);
       return 0;
     }
+    if (cmd === "admission") {
+      if (!rest[0] || rest[0].startsWith("--")) throw new Error(USAGE);
+      const a = admission(readTable(rest[0]), { sims: sims() });
+      for (const l of a.lines) console.log(l);
+      const out = opt("out");
+      if (out) {
+        mkdirSync(out, { recursive: true });
+        writeFileSync(join(out, "admission.json"), JSON.stringify(a, null, 2) + "\n");
+        writeFileSync(join(out, "admission.md"), a.lines.join("\n") + "\n");
+      }
+      return 0;
+    }
     if (cmd === "report") {
-      const stage = opt("stage"), out = opt("out");
-      if (!rest[0] || !out || (stage !== "stage1" && stage !== "stage3" && stage !== "stage4")) throw new Error(USAGE);
-      const rows = readFileSync(rest[0], "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmSessionRow);
-      for (const l of report(rows, { stage, out: resolve(out) }).lines) console.log(l);
+      const [table, cfgPath, out] = rest;
+      if (!table || !cfgPath || !out || [table, cfgPath, out].some((x) => x.startsWith("--"))) throw new Error(USAGE);
+      const cfg = JSON.parse(readFileSync(cfgPath, "utf8")) as ReportConfig;
+      if (!cfg.stage1 && cfg.stage1_table) cfg.stage1 = admission(readTable(resolve(dirname(cfgPath), cfg.stage1_table)), { sims: sims() });
+      for (const l of report(readTable(table), cfg, { out: resolve(out), sims: sims() }).lines) console.log(l);
       return 0;
     }
     throw new Error(USAGE);

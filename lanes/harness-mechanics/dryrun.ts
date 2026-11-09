@@ -9,6 +9,7 @@ import { ARMS, bundleLists, capsTotalUsd, CLOSING, HM, loadBundle, REPO } from "
 import { stepMatcher72, stepPin, stepProbes189, stepStopHook } from "./match.ts";
 import { itemPlan, ITEMS } from "./plans.ts";
 import { stepPatterns, stepScorer } from "./score.ts";
+import { stepAmendment, stepAnalysis, stepVerdictTables } from "./synth.ts";
 
 export type StepResult = { pass: boolean; detail: string };
 export type Step = { name: string; units: number[]; run?: (out: string) => StepResult };
@@ -38,13 +39,13 @@ export const STEPS: Step[] = [
   { name: "5-judgment-hooks", units: [7] },
   { name: "6-ledger", units: [6] },
   { name: "7-leak-scan-env", units: [5, 7] },
-  { name: "8-analysis", units: [4] },
+  { name: "8-analysis", units: [4], run: stepAnalysis },
   { name: "stop-hook-loadline", units: [2], run: stepStopHook },
   { name: "matcher-72", units: [2], run: stepMatcher72 },
   { name: "probes-189", units: [2], run: stepProbes189 },
   { name: "patterns-per-arm", units: [3], run: stepPatterns },
-  { name: "verdict-tables", units: [4] },
-  { name: "h1-amendment", units: [4] },
+  { name: "verdict-tables", units: [4], run: stepVerdictTables },
+  { name: "h1-amendment", units: [4], run: stepAmendment },
   { name: "leases-per-item", units: [6] },
   { name: "reserve-mechanics", units: [6] },
 ];

@@ -165,19 +165,20 @@ describe("cli", () => {
     const r = run(["dryrun", "--out", out], { HM_GSTACK: "" });
     const lines = r.stdout.toString().trim().split("\n");
     expect(lines.map((l) => l.split(" ")[1])).toEqual([...STEPS.map((s) => s.name), "FAIL"]);
-    for (const n of ["1-arm-tars", "2-verify-hook", "5-judgment-hooks", "6-ledger", "7-leak-scan-env", "8-analysis", "verdict-tables", "h1-amendment", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL not built (unit "))).toBe(true);
+    for (const n of ["1-arm-tars", "2-verify-hook", "5-judgment-hooks", "6-ledger", "7-leak-scan-env", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL not built (unit "))).toBe(true);
     for (const n of ["3-matcher-probes", "stop-hook-loadline", "matcher-72", "probes-189"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL E_HM_PIN set HM_GSTACK"))).toBe(true);
     expect(lines[0]).toStartWith("DRYRUN skeleton PASS");
     expect(lines.at(-1)).toBe("DRYRUN: FAIL");
     expect(r.exitCode).toBe(1);
     expect(readFileSync(join(out, "dryrun.txt"), "utf8").trim().split("\n")).toEqual(lines);
-  });
+    for (const n of ["8-analysis", "verdict-tables", "h1-amendment"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " PASS "))).toBe(true);
+  }, 300_000);
 
-  test("report refuses with E_HM_NOT_BUILT until the analysis is built", () => {
+  test("report needs a table, a config and an out dir", () => {
     const d = mkdtempSync(join(tmpdir(), "hm-rep-"));
     writeFileSync(join(d, "t.jsonl"), "");
     const r = run(["report", join(d, "t.jsonl"), "--stage", "stage1", "--out", d]);
     expect(r.exitCode).toBe(2);
-    expect(r.stderr.toString()).toStartWith("E_HM_NOT_BUILT");
+    expect(r.stderr.toString()).toStartWith("E_USAGE");
   });
 });
