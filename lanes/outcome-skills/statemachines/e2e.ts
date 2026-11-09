@@ -3,9 +3,11 @@
 // The family SM session path end to end, keyless (P5 reruns it): the session driver (stage.ts) on a temporary ledger with
 // a stub Anthropic upstream in this process, Harbor at its pin, real_agent in SM mode and the runtime image's pinned Claude
 // Code, on one real dry-run unit's prepared tree. The stub answers each main-loop request with one Bash edit of the unit's
-// first fix file, then ends the turn. It runs the A1 first stage and then its follow-on F-A1-1 on that tree, and prints one
-// PASS or FAIL line per check. Usage: bun e2e.ts --unit <unit dir> --harbor <harbor bin> [--keep]
-import { spawnSync } from "node:child_process";
+// first fix file, then ends the turn. It runs the A1 first stage and then its follow-on F-A1-1 on that tree, each through
+// the same gstack-evals outcome sm session run command a paid run uses, in a child process so this process keeps serving
+// the control plane and the stub. It prints one PASS or FAIL line per check.
+// Usage: bun e2e.ts --unit <unit dir> --harbor <harbor bin> [--keep]
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -17,8 +19,8 @@ import { readItem } from "../../../src/runner/ledger/record.ts";
 import { sse } from "../../../quick/laneb/runner/fake_upstream.ts";
 import { parsePatch } from "../mutation/diff.ts";
 import { serveStages } from "../driver/stage.ts";
-import { runSession } from "./run.ts";
-import { planPart } from "./session.ts";
+import type { SessionImage } from "./image.ts";
+import { planPart, type SessionRecord } from "./session.ts";
 import { readUnit } from "./unit.ts";
 
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
@@ -54,8 +56,7 @@ const stub = Bun.serve({
     const body = (await req.json()) as Record<string, any>;
     if (path.endsWith("/count_tokens")) return Response.json({ input_tokens: 10 });
     const main = Array.isArray(body.tools) && body.tools.length > 0;
-    const last = JSON.stringify(body.messages?.at(-1) ?? {});
-    const edit = main && !last.includes("tool_result");
+    const edit = main && !JSON.stringify(body.messages ?? []).includes("tool_result");
     stubLog.push({ path, main, edit, tools: main ? body.tools.map((t: any) => t.name ?? t.type) : [] });
     const reply = edit ? [{ type: "tool_use", id: "toolu_e2e_" + stubLog.length, name: "Bash", input: { command: "printf '\\n// " + MARK + "\\n' >> " + file + " && printf '" + MARK + "\\n' > " + UNTRACKED + " && printf '\\000\\001\\002e2e\\000' > " + BLOB, description: "Append one line and write two new files" } }] : [{ type: "text", text: "Done." }];
     if (body.stream) return new Response(sse(body.model, reply as any), { headers: { "content-type": "text/event-stream" } });
@@ -68,12 +69,26 @@ const served = await serveStages({ record, local, run_id: "sm-e2e", envelope_hos
 const lease = served.stages[0]!.lease_id;
 rule("lease opens", readItem(record, "sm-opus").open?.lease_id === lease, "lease " + lease + " on sm-opus, proxy " + served.stages[0]!.proxy);
 const plan = planPart([u.id], ["claude-opus-5-5"], 1, 1);
+const planFile = join(W, "plan.json");
+writeFileSync(planFile, JSON.stringify({ schema: "sm-plan.v1", sessions: plan }));
 const images: string[] = [];
+async function runSession(index: number, out: string, first?: string): Promise<{ record: SessionRecord; image: SessionImage; harbor_exit: string }> {
+  const args = ["outcome", "sm", "session", "run", "--unit", unitDir, "--plan", planFile, "--index", String(index), "--control", served.control, "--proxy", served.stages[0]!.proxy, "--out", out, "--harbor", harbor, ...(first ? ["--first", first] : [])];
+  let said = "";
+  const code = await new Promise<number>((done) => {
+    const c = spawn(join(import.meta.dir, "../../../bin/gstack-evals"), args, { env: process.env, stdio: ["ignore", "pipe", "inherit"] });
+    c.stdout.on("data", (d) => { said += d; process.stdout.write(d); });
+    c.on("close", (n) => done(n ?? 1));
+  });
+  if (code !== 0) throw new Error("sm session run --index " + index + " exited " + code);
+  const image = (JSON.parse(readFileSync(join(out, "images.json"), "utf8")) as { rows: SessionImage[] }).rows[0]!;
+  images.push(image.tag);
+  return { record: JSON.parse(readFileSync(join(out, "session.json"), "utf8")) as SessionRecord, image, harbor_exit: (said.match(/harbor_exit=(\S+)/) ?? [])[1] ?? "?" };
+}
 try {
   const a1 = plan.find((s) => s.cell === "A1")!;
   const f1 = plan.find((s) => s.cell === "F-A1-1")!;
-  const one = runSession({ unitDir, session: a1, control: served.control, proxy: served.stages[0]!.proxy, out: join(W, "s1"), harbor });
-  images.push(one.image.tag);
+  const one = await runSession(a1.index, join(W, "s1"));
   const t1 = sh(one.image.tag, "cd " + u.repo_dir + " && git rev-list --all --count && git rev-parse HEAD && (git cat-file -t " + u.base_commit + " 2>/dev/null || echo absent) && git status --porcelain | wc -l");
   const [c1, h1, orig1, dirty1] = t1.stdout.trim().split("\n");
   rule("A1 image tree is the stripped one-commit tree", c1 === "1" && h1 === one.image.head && orig1 === "absent" && dirty1 === "0", "commits " + c1 + ", head " + h1 + ", the image's original base commit " + orig1 + ", " + dirty1 + " dirty paths; image " + one.image.image_id);
@@ -87,11 +102,10 @@ try {
   const ap1 = r1.tree_patch ? sh(one.image.tag, "cd " + u.repo_dir + " && git apply --check /e2e/text.patch && echo applies", join(W, "s1")) : null;
   const untracked1 = text1.find((x) => x.c.oldPath === null && x.c.newPath === UNTRACKED);
   rule("A1 change extracts as a diff against base", text1.some((x) => x.c.newPath === file && x.s.includes(MARK)) && untracked1?.s.includes("+" + MARK) === true && binary1.length === 1 && binary1[0] === BLOB && ap1?.stdout.includes("applies") === true, text1.length + " text files (" + text1.map((x) => x.c.newPath).join(", ") + "), binary listed and left out: " + JSON.stringify(binary1) + ", git apply --check of the text diff on the base tree: " + (ap1 ? ap1.stdout.trim() || ap1.stderr.trim().slice(-200) : "not run"));
-  const two = runSession({ unitDir, session: f1, control: served.control, proxy: served.stages[0]!.proxy, out: join(W, "s2"), first: join(W, "s1/session.json"), harbor });
-  images.push(two.image.tag);
-  const t2 = sh(two.image.tag, "cd " + u.repo_dir + " && git rev-list --all --count && git rev-parse HEAD^ && git show --stat --format=%s HEAD | head -3");
+  const two = await runSession(f1.index, join(W, "s2"), join(W, "s1/session.json"));
+  const t2 = sh(two.image.tag, "cd " + u.repo_dir + " && git rev-list --all --count && git rev-parse HEAD^ && git log -1 --format=%s && git diff --name-only HEAD^ HEAD");
   const [c2, parent2] = t2.stdout.trim().split("\n");
-  rule("follow-on image tree is two commits on the A1 tree", c2 === "2" && parent2 === one.image.head && t2.stdout.includes(file), "commits " + c2 + ", parent " + parent2 + ", second commit: " + t2.stdout.trim().split("\n").slice(2).join(" | "));
+  rule("follow-on image tree is two commits on the A1 tree", c2 === "2" && parent2 === one.image.head && t2.stdout.trim().split("\n").slice(3).includes(file), "commits " + c2 + ", parent " + parent2 + ", second commit: " + t2.stdout.trim().split("\n").slice(2).join(" | "));
   const r2 = two.record;
   const p2 = r2.tree_patch ? readFileSync(r2.tree_patch.path, "utf8") : "";
   rule("follow-on session record and diff", r2.end === "completed" && r2.lease_id === lease && r2.tree_ref?.tree === "A1" && p2.includes(MARK), "end " + r2.end + ", tree_ref " + JSON.stringify(r2.tree_ref) + ", " + p2.split("\n").length + " patch lines against the two-commit base");

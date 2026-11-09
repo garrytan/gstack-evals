@@ -194,17 +194,23 @@ nine follow-ons shuffled the same way, each after its tree's first stage. End ki
 
 ## P2b: session images, the session CLI and the end-to-end stub session
 
-- image.ts builds one image per session: FROM the unit's runtime image id, the image's repo_dir removed, the prepared
-  tree volume (stripped, one commit) copied in, untracked files the prep runs left there (test output) cleaned with
-  git clean -fd (ignored files stay), then for A3 the /qa install's home copied into /root, and for a follow-on the
-  first stage's patch committed as the second commit (sh/followon.sh). The container is committed with the runtime
-  image's own entrypoint, command, work dir and user, and pinned by id. The session sees only the top layer, so the
-  image's original repository and history never reach it (the e2e checks the original base commit is absent).
-  sessionManifest writes the one-row tg-images.v1 manifest real_agent's U4 image check reads.
-- run.ts runs one session: the image, a Harbor run copy whose environment is only FROM that image (task.toml carries no
-  docker_image), task.json (repo_dir, commits, head, scope = unit scope.dir), an empty arm tar, Harbor with real_agent in
-  SM mode on ledger u4 with every provider key unset, then sm-session.v1 from real_agent's files. A first stage's
-  instruction.md holds no issue text; the follow-on's holds issue.md. It drives the anthropic route only today.
+- image.ts builds one image per session. It runs a build container from the unit's runtime image id with the entrypoint
+  cleared and the build script as its command: the image's repo_dir removed, the prepared tree volume (stripped, one
+  commit) copied in, git clean -fd as a guard (prep already cleans untracked files in sh/rewrite.sh; ignored files stay),
+  then for A3 the /qa install's home copied into /root, and for a follow-on the first stage's patch committed as the
+  second commit (sh/followon.sh, after a git update-index --refresh, since the copy changes every file's stat data).
+  The container is committed with the runtime image's own command, work dir and user, and its entrypoint only when the
+  runtime has one; a committed entrypoint that is not the runtime's is refused (E_SM_INFRA_GAP). The image is pinned by
+  id. The session sees only the top layer, so the image's original repository and history never reach it (the e2e
+  checks the original base commit is absent). sessionManifest writes the one-row tg-images.v1 manifest real_agent's U4
+  image check reads.
+- run.ts runs one session: the image, a Harbor run copy whose task.toml names the session tag as its prebuilt
+  docker_image (so Harbor runs the pinned image itself and builds nothing), task.json (repo_dir, commits, head, scope =
+  unit scope.dir), an empty arm tar, Harbor with real_agent in SM mode on ledger u4 with every provider key unset, then
+  sm-session.v1 from real_agent's files. A first stage's instruction.md holds no issue text; the follow-on's holds
+  issue.md. It drives the anthropic route only today.
 - CLI: gstack-evals outcome sm session plan and sm session run. The driver serves an SM stage with
   gstack-evals outcome serve --stage <item>=<model>@<arm>,<arm>.
 - e2e.ts (keyless, P5 reruns it): bun lanes/outcome-skills/statemachines/e2e.ts --unit <unit dir> --harbor <bin> [--keep].
+  It runs each session through gstack-evals outcome sm session run in a child process, as a paid run does, so its own
+  process keeps serving the driver's control plane and the stub (run.ts calls Harbor with spawnSync).
