@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, chmodS
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../../src/runner/ledger/envelope.ts";
-import { machineId, recordApproval } from "../../../src/runner/ledger/ledger.ts";
+import { machineId, openLease, recordApproval, settleLease } from "../../../src/runner/ledger/ledger.ts";
 import { PF_STAGES, serveStages } from "../driver/stage.ts";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
@@ -29,7 +29,7 @@ import { dockerExecutor } from "./runner.ts";
 import { runPfSession, type PfRun } from "./run.ts";
 import { scoreSession, type CatchRecord } from "./score.ts";
 import { effortFields, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfSessionRecord } from "./session.ts";
-import { buildToolsVolume, runTlc, tla2tools, toolsEnv, toolsMount, toolsVolume, TLC_CFG, TLC_SPEC } from "./tools.ts";
+import { buildToolsVolume, imagePath, runTlc, tla2tools, toolsEnv, toolsMount, toolsVolume, TLC_CFG, TLC_SPEC, TOOLS_DIR } from "./tools.ts";
 
 export const FIXTURE_IMAGE = "buildpack-deps@sha256:5bac6b3020afcf0358de87990605d5dc4c3f060629381912266b9b9278375af3";
 const SH = join(import.meta.dir, "sh");
@@ -89,6 +89,15 @@ export const MANIFEST_A: Array<{ command: string; want: string }> = [
   { command: "bash checks/late_test.sh", want: "names_nothing" },
   { command: TLC, want: "no_catch" },
 ];
+const STATECHART = PSTACK_DIR + "/skills/statechart/scripts/statechart";
+/** One shell's PATH report, tagged: its PATH, where bun resolves, and pstack's statechart script's exit with no args (and
+ *  whether it printed its usage), or "absent" where pstack is not mounted. No single quote, so it nests in bash -lc '...'. */
+const pathReport = (tag: string) => 'echo "PF_PATH_' + tag + '=$PATH"; echo "PF_BUN_' + tag + '=$(command -v bun)"; if [ -e ' + STATECHART + " ]; then o=$(" + STATECHART + ' 2>&1); echo "PF_SC_' + tag + '=$? $(printf %s "$o" | grep -c "Usage: statechart")"; else echo "PF_SC_' + tag + '=absent"; fi';
+const asUid1000 = "HOME=/tmp setpriv --reuid=1000 --regid=1000 --clear-groups ";
+/** The live-session PATH probe, one Bash tool call. Checked: the Bash tool's own shell (root, as the harness runs every
+ *  session), and a bash run as uid 1000 that keeps the session env, as a Bash tool run as that uid would. Recorded only:
+ *  a bare login shell (bash -lc) as root and as uid 1000, where Debian's /etc/profile resets PATH. */
+export const PATH_PROBE = "( " + pathReport("root") + "; " + asUid1000 + "bash -c '" + pathReport("1000") + "'; bash -lc '" + pathReport("rootlogin") + "'; " + asUid1000 + "bash -lc '" + pathReport("1000login") + "' )";
 const manifest = (cmds: string[]) => JSON.stringify(cmds.map((command, i) => ({ name: "check-" + i, command, what_it_checks: "fixture " + i })));
 
 /** A tar.gz of files, as one Bash command the stub sends. */
@@ -106,13 +115,13 @@ export interface StubSession { task: string; wrapup: "manifest" | "limit" | "ups
 interface StubState { bodies: Array<{ session: string; phase: string; body: Record<string, any> }>; calls: Map<string, number>; failed: Set<string> }
 /** The stub's reply to one Messages request: the task turn's first main request writes the fixture files; the wrap-up
  *  turn writes CHECKS.json and one late test file, keeps calling a tool (limit), or fails every request of its first attempt
- *  with a 500 that Claude Code does not retry (upstream; x-should-retry: false), so the turn ends upstream and its rerun,
- *  whose resumed messages hold the wrap-up text twice, completes. bg starts a background Bash command at the end of the task turn. */
+ *  with a 400 that neither the proxy (it retries only 429 and 5xx) nor Claude Code retries, so the turn ends on an API
+ *  error result (upstream) and its rerun, whose resumed messages hold the wrap-up text twice, completes. bg starts a background Bash command at the end of the task turn. */
 export function stubReply(s: StubSession, phase: string, n: number, first: boolean): { status?: number; blocks: Array<Record<string, unknown>> } {
   const tool = (command: string) => [{ type: "tool_use", id: "toolu_pf_" + phase + "_" + n, name: "Bash", input: { command, description: "Fixture step" } }];
   if (phase === "task") return { blocks: n === 0 ? tool(s.task) : n === 1 && s.bg ? [{ type: "tool_use", id: "toolu_pf_bg_" + n, name: "Bash", input: { command: s.bg, description: "Background fixture step", run_in_background: true } }] : [{ type: "text", text: "Done." }] };
   if (s.wrapup === "limit") return { blocks: tool("true") };
-  if (s.wrapup === "upstream" && first) return { status: 500, blocks: [] };
+  if (s.wrapup === "upstream" && first) return { status: 400, blocks: [] };
   if (s.wrapup === "none" || n > 0) return { blocks: [{ type: "text", text: "Done." }] };
   return { blocks: tool("echo " + b64(s.checks ?? "[]") + " | base64 -d > CHECKS.json && printf 'exit 0\\n' > checks/late_test.sh") };
 }
@@ -140,7 +149,7 @@ function startStub(sessions: Record<string, StubSession>, host: string) {
       if (r.status) {
         st.failed.add(key);
         st.calls.set(key, 0);
-        return Response.json({ type: "error", error: { type: "api_error", message: "stub upstream end" } }, { status: r.status, headers: { "x-should-retry": "false" } });
+        return Response.json({ type: "error", error: { type: "invalid_request_error", message: "stub upstream end" } }, { status: r.status });
       }
       return new Response(sse(body.model, r.blocks as any), { headers: { "content-type": "text/event-stream" } });
     },
@@ -211,13 +220,13 @@ export async function main(argv: string[]): Promise<number> {
   // Sessions through pf_turns.py, each in its own container.
   const gw = spawnSync("docker", ["network", "inspect", "bridge", "-f", "{{(index .IPAM.Config 0).Gateway}}"], { encoding: "utf8" }).stdout.trim();
   const stubSessions: Record<string, StubSession> = {
-    probe: { task: "true", wrapup: "none", bg: "sleep 45 && echo bg-done" },
+    probe: { task: PATH_PROBE, wrapup: "none", bg: "sleep 45 && echo bg-done" },
     A: { task: plant, wrapup: "manifest", checks: manifest(MANIFEST_A.map((e) => e.command)) },
-    B: { task: plant, wrapup: "manifest", checks: manifest(Array.from({ length: 26 }, () => "bash checks/fail.sh")) },
-    C: { task: plant, wrapup: "limit" },
+    B: { task: PATH_PROBE + "; " + plant, wrapup: "manifest", checks: manifest(Array.from({ length: 26 }, () => "bash checks/fail.sh")) },
+    C: { task: PATH_PROBE + "; " + plant, wrapup: "limit" },
     D: { task: plant, wrapup: "upstream", checks: manifest(["bash checks/regress_test.sh"]) },
     hostile: { task: "true", wrapup: "none" },
-    blind: { task: "true", wrapup: "none" },
+    blind: { task: PATH_PROBE, wrapup: "none" },
   };
   const { st, server } = startStub(stubSessions, gw);
   const url = "http://" + gw + ":" + server.port;
@@ -229,7 +238,7 @@ export async function main(argv: string[]): Promise<number> {
   for (const v of [treeVol, hostileVol]) spawnSync("docker", ["volume", "rm", "-f", v]);
   const tv0 = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.repo + ":/s:ro", "-v", treeVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", "cp -a /s/. /d/ && chown -R 0:0 /d"], { encoding: "utf8" });
   if (tv0.status !== 0) throw new Error("tree volume: " + tv0.stderr);
-  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.repo + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", 'cp -a /s/. /d/ && chown -R 0:0 /d && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit', HOSTILE], { encoding: "utf8" });
+  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.repo + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", 'cp -a /s/. /d/ && chown -R 0:0 /d && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit && for r in $(git -c safe.directory=/d for-each-ref --format="%(refname)"); do git -c safe.directory=/d update-ref "$r" HEAD; done', HOSTILE], { encoding: "utf8" });
   if (hv.status !== 0) throw new Error("hostile volume: " + hv.stderr);
   const machine = machineId();
   const serve = (n: number, items: string[]) => serveStages({ record, local, run_id: "pf-dryrun-" + n, envelope_host: machine, machine, stages: items.map((item) => ({ item, arm: PF_STAGES[item]!.arms[0]!, arms: [...PF_STAGES[item]!.arms] })), host: gw, dir: join(W, "driver-" + n), fetch: (u, init) => fetch(u.replace(UPSTREAM.anthropic, url).replace(UPSTREAM.openrouter, url), init), env: { ANTHROPIC_API_KEY: "stub-not-a-key", OPENROUTER_API_KEY: "stub-not-a-key" }, requireAdmission: () => null, log: (l) => console.error(l) });
@@ -240,7 +249,7 @@ export async function main(argv: string[]): Promise<number> {
     const stage = batch.stages.find((s) => PF_STAGES[s.item]!.arms.includes("pf:" + arm) && PF_STAGES[s.item]!.models.includes(model));
     const session = { unit: "pf-dry-flag", part: 0, index: index++, model, arm, item: stage?.item ?? "none" };
     const issue = "The flag in flag/flag.go is never reset after a run, so the next run starts in the wrong state. (pf-dry-session " + name + ")";
-    const run: PfRun = await runPfSession({ unitDir: fx.dir, session, names, control: batch.control, proxy: stage?.proxy ?? batch.stages[0]!.proxy, out: join(W, "s-" + name), volume: hostile ? hostileVol : treeVol, issue, harbor, claude: claudeBin, probeNode: "", jobName: "pf-dry-" + name }, () => st.bodies.find((b) => b.session === name && Array.isArray(b.body.tools) && b.body.tools.length)?.body);
+    const run: PfRun = await runPfSession({ unitDir: fx.dir, session, names, control: batch.control, proxy: stage?.proxy ?? batch.stages[0]!.proxy, out: join(W, "s-" + name), volume: hostile ? hostileVol : treeVol, issue, ...(arm === "blind" ? { scope: "flag/ (pf-dry-session " + name + ")" } : {}), harbor, claude: claudeBin, probeNode: "", jobName: "pf-dry-" + name }, () => st.bodies.find((b) => b.session === name && Array.isArray(b.body.tools) && b.body.tools.length)?.body);
     const a = run.attempts.at(-1)!;
     const turns = a.summary ?? { refused: "no pf-summary.json: " + readFileSync(join(a.dir, "harbor.log"), "utf8").slice(-400) };
     return { out: a.evaluator ?? a.dir, turns, arm, model, names, run };
@@ -300,6 +309,23 @@ export async function main(argv: string[]): Promise<number> {
     const cC = await score(C, toRecord("C", C, 2));
     rule("wrap-up limit with no manifest scores 0", cC.score === 0 && (cC as any).manifest?.none === "wrapup_limit", "wrap-up " + JSON.stringify((C.turns.wrapup ?? []).map((w: any) => w.termination)) + ", score " + cC.score + ", none " + (cC as any).manifest?.none);
     const BL = await runOne("blind", "blind", OPUS, names);
+    const toolOut = (session: string, id: string): string => {
+      for (const b of st.bodies) if (b.session === session) for (const m of (b.body.messages ?? []) as Array<{ content?: unknown }>) for (const c of Array.isArray(m.content) ? m.content : []) if (c.type === "tool_result" && c.tool_use_id === id) return typeof c.content === "string" ? c.content : (c.content ?? []).map((x: { text?: string }) => x.text ?? "").join("");
+      return "";
+    };
+    const wantPath = TOOLS_DIR + "/bin:" + imagePath(FIXTURE_IMAGE);
+    const seen = [["P", "probe"], ["C", "B"], ["N", "C"], ["blind", "blind"]].map(([arm, s]) => {
+      const out = toolOut(s!, "toolu_pf_task_0");
+      const get = (k: string) => new RegExp("^" + k + "=(.*)$", "m").exec(out)?.[1] ?? null;
+      const report = (u: string) => {
+        const path = get("PF_PATH_" + u), bun = get("PF_BUN_" + u), sc = get("PF_SC_" + u);
+        const scOk = arm === "P" || arm === "blind" ? !!sc && /^\d+ [1-9]/.test(sc) && !sc.startsWith("127 ") : sc === "absent";
+        return { u, path, ok: path === wantPath && bun === TOOLS_DIR + "/bin/bun" && scOk, text: u + " bun " + bun + ", statechart " + sc + (path === wantPath ? "" : ", PATH " + path) };
+      };
+      return { arm, users: ["root", "1000"].map(report), login: ["rootlogin", "1000login"].map(report) };
+    });
+    const samePath = [0, 1].every((n) => new Set(seen.map((a) => a.users[n]!.path)).size === 1);
+    rule("live Claude Code Bash tool PATH in every arm, as root and as uid 1000: tools bin first, bun from the tools volume, statechart starts where pstack is mounted", samePath && seen.every((a) => a.users.every((x) => x.ok)), "want " + wantPath + "; " + seen.map((a) => a.arm + ": " + a.users.map((x) => (x.ok ? "" : "BAD ") + x.text).join("; ")).join(" | ") + " (recorded only, bare login shells: " + seen.map((a) => a.arm + " " + a.login.map((x) => x.text).join("; ")).join(" | ") + ")");
     await batch.stop();
     batch = await serve(2, ["pf-admit"]);
     const D = await runOne("D", "P", OPUS, names);
@@ -320,9 +346,12 @@ export async function main(argv: string[]): Promise<number> {
     rule("session hostile opened no slot", (H.turns.slots ?? []).length === 0, "slots " + (H.turns.slots ?? []).length);
     stopped = true;
     const code = await batch.stop();
+    // pf-labels and pf-oracle pay for the labeller and the VM oracle, which are not driver stages: their leases are opened
+    // and settled here, at no spend.
+    for (const d of Object.values(ITEMS)) if (!PF_STAGES[d.item]) settleLease(record, local, openLease(record, local, { item: d.item, run_id: "pf-dryrun-direct", machine_id: machine, requireAdmission: () => null }).lease_id);
     for (const d of Object.values(ITEMS)) {
       const it = readItem(record, d.item);
-      rule("ledger lease " + d.item, it.open === null && it.leases.length === 1 && it.leases[0]!.close !== null, "lease " + (it.leases[0]?.lease as any)?.lease_id + " opened and settled by the driver, spent " + it.leases[0]?.close?.spent_micros + " of cap " + d.cap_micros + ", driver exit " + code);
+      rule("ledger lease " + d.item, it.open === null && it.leases.length === 1 && it.leases[0]!.close !== null, "lease " + (it.leases[0]?.lease as any)?.lease_id + " opened and settled " + (PF_STAGES[d.item] ? "by the driver" : "directly (not a driver stage)") + ", spent " + it.leases[0]?.close?.spent_micros + " of cap " + d.cap_micros + ", driver exit " + code);
     }
     rule("hostile CLAUDE.md reaches no arm", /E_PF_ARM/.test(String(H.turns.refused ?? "")) && reached === 0 && st.bodies.every((b) => b.session !== "hostile"), "refused: " + String(H.turns.refused ?? "no").slice(0, 120) + "; request bodies holding the text " + reached);
   } catch (e) {

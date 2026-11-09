@@ -34,7 +34,9 @@ export interface PfRunInput {
   /** The tree volume the session image copies (the unit's prepared, stripped tree). */
   volume: string;
   /** The bug report; the unit's issue.md by default. */
-  issue?: string; allowance?: Record<Arm, Record<string, number>>; harbor?: string; claude?: string;
+  issue?: string;
+  /** The blind probe's one-line scope (section 4's {scope}); only the blind arm's task turn uses it. */
+  scope?: string; allowance?: Record<Arm, Record<string, number>>; harbor?: string; claude?: string;
   /** real_agent's in-container egress probe node; "" skips the probe (an image with no node). */
   probeNode?: string; jobName?: string;
 }
@@ -79,7 +81,7 @@ export function runCopy(i: PfRunInput, image: SessionImage, attempt: 1 | 2, dir:
   writeFileSync(taskJson, JSON.stringify({ repo_dir: u.repo_dir, commits: image.commits, base_commit: image.head, kind: "PF" }));
   const overlay = composeOverlay(s.arm, image.tag, i.claude ?? CLAUDE_BIN);
   const config = {
-    schema: "pf-config.v1", arm: s.arm, names: i.names, task_text: taskTurn(s.arm, { issue: i.issue ?? readFileSync(join(i.unitDir, "issue.md"), "utf8"), names: i.names }), wrapup_text: WRAPUP,
+    schema: "pf-config.v1", arm: s.arm, names: i.names, task_text: taskTurn(s.arm, { issue: i.issue ?? readFileSync(join(i.unitDir, "issue.md"), "utf8"), scope: i.scope, names: i.names }), wrapup_text: WRAPUP,
     limits: sessionLimits(s.arm, s.model, i.allowance), no_answer: NO_ANSWER, plugin: loadsPlugin(s.arm) ? PSTACK_DIR : null, env: { ...CLAUDE_ENV, ...overlay.services.main.environment },
   };
   const pfConfig = join(dir, "pf-config.json");

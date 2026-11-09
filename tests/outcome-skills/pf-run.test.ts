@@ -97,6 +97,16 @@ test("runCopy's attempt 2 names its rerun, and an arm with no plugin mounts no p
   expect(() => runCopy({ ...haiku, session: { ...haiku.session, model: "claude-haiku-5-5" } }, image, 1, temp("pf-run-copy-"))).toThrow("E_PF_ARM");
 });
 
+test("runCopy gives the blind probe its one-line scope and refuses a blind session with none", () => {
+  const blind = { ...input("blind"), session: { ...input("blind").session, item: "pf-blind" }, scope: "flag/" };
+  const { config } = runCopy(blind, image, 1, temp("pf-run-copy-"));
+  expect(config.task_text).toStartWith("/create-formal-verification-skill model the state machines in flag/, one skill per subsystem");
+  expect(config.task_text).not.toContain("The flag is never reset.");
+  expect(config.plugin).toBe(PSTACK_DIR);
+  expect(() => runCopy({ ...blind, scope: undefined }, image, 1, temp("pf-run-copy-"))).toThrow("E_PF_ARM");
+  expect(() => runCopy({ ...blind, scope: "flag/\nmore" }, image, 1, temp("pf-run-copy-"))).toThrow("E_PF_ARM");
+});
+
 const turn = (termination: string, refused: string[] = []) => ({ termination, refused, wall_s: 12.5 });
 const slot = (phase: string, spent: number, rerun: string | null = null) => ({ phase, rerun, id: "ses_" + phase + spent, allowance_micros: 1, close: { spent_micros: spent } });
 const summary = (o: { task?: unknown; wrapup?: unknown[]; slots?: unknown[] }) => ({
