@@ -4,13 +4,29 @@
 // (lanes/devex/types.ts's layout), checks every unit folder, builds each arm's tree in a scratch dir and asserts its
 // mount, and prints every frozen setting. --dry-run writes nothing under --out and spends nothing. A paid run first
 // needs GSTACK_EVALS_DX_PIN to name a checkout at DX_GSTACK.sha holding bin/gstack-session-kind (dxPinProblem), and
-// never uses the dry run's stand-in; it then refuses with E_USAGE because the devex session loop is not built (run.ts
-// mounts a devex work dir at /work, but runs no devex prompt, parser or session). Whatever it cannot do refuses with
-// E_USAGE before anything is built or spent, and every refusal ends with a fix line.
-import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+// never uses the dry run's stand-in. It then runs one stage 1 frozen run (--run s1-none, s1-smoke or s1-resmoke;
+// lanes/devex/leases.ts): the flags must name that run's own arms, models, passes and units (dxPlan), the pin's session
+// kinds must match each gstack arm, its one lease opens on the item (openRun: projection plus a tenth plus the in-flight
+// reserve), the Docker rig meters on that lease, the session loop (lanes/devex/run/session.ts) runs its sessions in plan
+// order at most --parallel at once and writes one row per planned session to <out>/rows.ndjson, and the lease settles at
+// the end, printing what settled. A stage 2 run id is refused: its loop is not built at this commit. Whatever it cannot
+// do refuses with E_USAGE before anything is built or spent, and every refusal ends with a fix line.
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { frozenRuns, openRun } from "../../../lanes/devex/leases.ts";
+import { dxPlan, isStage1Run, MAX_PARALLEL, NONE_PASSES, runDxSessions, STAGE1_RUNS, type DxRunResult, type DxTree } from "../../../lanes/devex/run/session.ts";
+import { hostDriver } from "../../adapters/host.ts";
+import { stackKind } from "../../arms/stacks.ts";
+import { rigAdmission } from "../../rig/admission.ts";
+import { settleLease } from "../../runner/ledger/ledger.ts";
+import { openLocalLedger } from "../../runner/ledger/local.ts";
+import { ledgerPath, recordPath } from "../../runner/ledger/paths.ts";
+import { dockerRig, type HostRig } from "../../skill-eval/cli/run-host.ts";
+import type { ResolvedArms } from "../../skill-eval/cli/arms.ts";
+import type { ArmSpec } from "../../types.ts";
+import { volatilePathProblem } from "../durable.ts";
 import { DX_PARSER_SHA256 } from "../../../lanes/devex/run/parse.ts";
 import { DX_FINISH, DX_REC_USER_SHA256 } from "../../../lanes/devex/run/persona.ts";
 import { REPAIR_NAME, STOP_HOOK_MAX, type Repair } from "../../../lanes/devex/run/stophook.ts";
@@ -19,7 +35,7 @@ import { insideRepo } from "../../../lanes/review-noloss/suite.ts";
 import { parseStackRef } from "../../skill-eval/cli/arms.ts";
 import { HOST_PROVIDERS } from "../../skill-eval/cli/call.ts";
 import { DEFAULT_POLICY, loadPolicy, providerOf, type LoadedPolicy } from "../../skill-eval/cli/policy.ts";
-import { buildDxTree, DX_ARMS, DX_AUTOPLAN_GATE, DX_COMMON_SHA256, DX_GSTACK, DX_LENS, DX_MOUNTS, DX_SYSTEM_PROMPT, DX_TEMPLATE_SHA256, dxArmEnv, dxLimits, dxPinProblem, dxPrompt, dxTaskId, dxUnitProblems, dxUnitsDigest, isDxArm } from "./devex.ts";
+import { buildDxTree, DX_ARMS, DX_AUTOPLAN_GATE, DX_COMMON_SHA256, DX_GSTACK, DX_LENS, DX_MOUNTS, DX_PROMPT_SHA256, DX_SYSTEM_PROMPT, DX_TEMPLATE_SHA256, dxArmEnv, dxLimits, dxPinProblem, dxPrompt, dxSessionKind, dxSessionKindProblem, dxTaskId, dxUnitProblems, dxUnitsDigest, isDxArm } from "./devex.ts";
 
 type Env = Record<string, string | undefined>;
 interface Io {
@@ -32,6 +48,7 @@ const REPAIRS: Readonly<Record<string, Repair>> = { "stop-hook": "stop hook", "g
 export const DX_HELP = [
   "gstack-evals review-units --plan devex --units-dir <dir> --units <id>...|all --arms <spec>... --models <id>... --out <dir>",
   "    [--passes <n>] [--repair <arm>=stop-hook|gstack-stop-gate | --repair double-limits]... [--policy <file>] [--dry-run]",
+  "    [--run s1-none|s1-smoke|s1-resmoke] [--parallel <1-8>] [--ledger <path>] [--record <path>] [--control <file>]",
   "",
   "Arms: none, lens, plan-devex-review=" + DX_GSTACK.repo + "@" + DX_GSTACK.sha + " and autoplan=" + DX_GSTACK.repo + "@" + DX_GSTACK.sha + " (VERSION " + DX_GSTACK.version + ").",
   "Models: " + Object.values(MODEL_STRINGS).join(", ") + ".",
@@ -40,10 +57,14 @@ export const DX_HELP = [
   "GSTACK_SESSION_KIND=unattended for plan-devex-review and interactive for autoplan; plan-tune state pinned empty in the gstack",
   "arms; WebSearch and WebFetch denied; the reviewer subagent on the cell's model; mounts " + DX_MOUNTS.repo + " and " + DX_MOUNTS.plan + " only.",
   "--repair names smoke rule 5's one repair: plan-devex-review=stop-hook (with an enforced procedure), autoplan=gstack-stop-gate",
-  "(with gstack's stop gate), or double-limits for every arm. A paid run is not built yet; --dry-run checks and prints everything.",
+  "(with gstack's stop gate), or double-limits for every arm. --dry-run checks and prints everything and spends nothing.",
+  "A paid run needs GSTACK_EVALS_DX_PIN and --run, one stage 1 frozen run on its own ledger lease: s1-none (16 units, 3 passes),",
+  "s1-smoke (units 1 to 10 in draw order) or s1-resmoke (the repaired arms). It writes one row per planned session to",
+  "<out>/rows.ndjson and settles the lease at the end. --control names the file a stop the Captain records mid-run goes in",
+  "(<out>/control.ndjson by default). Stage 2 runs are not built at this commit.",
 ].join("\n");
 
-const VALUE = new Set(["--plan", "--units-dir", "--passes", "--out", "--policy"]);
+const VALUE = new Set(["--plan", "--units-dir", "--passes", "--out", "--policy", "--run", "--parallel", "--ledger", "--record", "--control"]);
 const LIST = new Set(["--units", "--arms", "--models", "--repair"]);
 const BOOL = new Set(["--dry-run"]);
 class Usage extends Error {}
@@ -51,6 +72,7 @@ const refuse = (why: string, fix: string): never => {
   throw new Usage(why + "\n  fix: " + fix);
 };
 const sha256 = (t: string) => createHash("sha256").update(t).digest("hex");
+const usd = (micros: number) => "$" + (micros / 1_000_000).toFixed(2);
 
 function parseArgs(argv: readonly string[]): Map<string, string[]> {
   const flags = new Map<string, string[]>();
@@ -78,18 +100,19 @@ export async function dxMain(argv: string[], io: Io, env: Env): Promise<number> 
     return 0;
   }
   try {
-    return dxUnits(argv, io, env);
+    return await dxUnits(argv, io, env);
   } catch (e) {
     if (e instanceof Usage) {
       io.err("E_USAGE review-units: " + e.message);
       return 2;
     }
-    io.err("E_INTERNAL review-units: " + (e as Error).message);
+    const message = (e as Error).message;
+    io.err(/^E_[A-Z_]+[: ]/.test(message) ? message : "E_INTERNAL review-units: " + message);
     return 2;
   }
 }
 
-function dxUnits(argv: string[], io: Io, env: Env): number {
+async function dxUnits(argv: string[], io: Io, env: Env): Promise<number> {
   const flags = parseArgs(argv);
   const one = (f: string) => flags.get(f)?.[0] ?? null;
   for (const f of ["--units-dir", "--units", "--arms", "--models", "--out"]) if (!flags.has(f)) refuse("--plan devex needs " + f, "pass " + f + "; see --help");
@@ -145,8 +168,9 @@ function dxUnits(argv: string[], io: Io, env: Env): number {
   if (!flags.has("--dry-run")) {
     const pin = dxPinProblem(env.GSTACK_EVALS_DX_PIN, env.PATH);
     if (pin) refuse("a paid run records each session's kind from the pinned checkout's own bin/gstack-session-kind: " + pin, "set GSTACK_EVALS_DX_PIN to a checkout of " + DX_GSTACK.repo + " at " + DX_GSTACK.sha + ", or run --dry-run");
-    refuse("the devex session loop is not built: the review run loop mounts a devex work dir at /work (workMount), but runs no devex prompt, parser or session yet", "run --dry-run; a paid run waits for the devex session loop");
+    return await dxPaid({ flags, unitsDir, unitIds, all: refs.length === 1 && refs[0] === "all", arms, models, passes, repairs, out, policy: policy as LoadedPolicy, env, io });
   }
+  for (const f of ["--run", "--parallel", "--ledger", "--record", "--control"]) if (flags.has(f)) refuse(f + " is a paid run's flag, and --dry-run spends nothing", "leave out " + f + " with --dry-run");
   const limits = dxLimits(repairs.has("all"));
   const digest = dxUnitsDigest(unitsDir, unitIds);
   io.out("review-units dry run: nothing is built under --out, written or spent");
@@ -182,4 +206,97 @@ function dxUnits(argv: string[], io: Io, env: Env): number {
   io.out("every arm: system prompt " + DX_SYSTEM_PROMPT + "; $" + limits.usd + ", " + limits.turns + " turns, " + limits.minutes + " minutes a session; WebSearch and WebFetch denied; the reviewer subagent on the cell's model; the rec persona answers every question, and a session with no block and no limit stop gets " + JSON.stringify(DX_FINISH) + " once");
   io.out("out " + out);
   return 0;
+}
+
+/** The paid stage 1 run: the frozen run's plan, its one lease, the Docker rig on that lease and the session loop. */
+async function dxPaid(p: { flags: Map<string, string[]>; unitsDir: string; unitIds: string[]; all: boolean; arms: ArmId[]; models: string[]; passes: number; repairs: Map<ArmId | "all", Repair>; out: string; policy: LoadedPolicy; env: Env; io: Io }): Promise<number> {
+  const one = (f: string) => p.flags.get(f)?.[0] ?? null;
+  const run = one("--run");
+  if (run === null) refuse("a paid run names its frozen run, and the devex session loop is not built for a run that names none; it runs the stage 1 runs " + STAGE1_RUNS.join(", "), "pass --run s1-none, s1-smoke or s1-resmoke, or run --dry-run");
+  const frozen = frozenRuns().find((r) => r.id === run);
+  if (frozen?.item === "dx-s2-runs") refuse("--run " + run + " is a stage 2 run, and the devex session loop is not built for stage 2 at this commit: stage 2 needs stage 1's readings, the DX scope rate and the interim exposure check wired to its model-pass leases", "run a stage 1 run (s1-none, s1-smoke or s1-resmoke)");
+  if (!frozen || !isStage1Run(run!)) return refuse("--run " + run + " names no stage 1 frozen run", "pass --run s1-none, s1-smoke or s1-resmoke");
+  const parallel = Number(one("--parallel") ?? "1");
+  if (!Number.isSafeInteger(parallel) || parallel < 1 || parallel > MAX_PARALLEL) refuse("--parallel must be a whole number from 1 to " + MAX_PARALLEL + ", the most sessions the lease's in-flight reserve holds", "pass --parallel 1 to " + MAX_PARALLEL);
+  const known = Object.values(MODEL_STRINGS);
+  const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x));
+  if (!same(p.models, known)) refuse(run + " runs on every model under test, and --models names " + p.models.join(", "), "pass --models " + known.join(" "));
+  const doubled = p.repairs.has("all");
+  const armRepairs = new Map([...p.repairs].filter((e): e is [ArmId, Repair] => e[0] !== "all"));
+  if (run === "s1-none") {
+    if (!same(p.arms, ["none"])) refuse("s1-none runs arms none only, and --arms names " + p.arms.join(", "), "pass --arms none");
+    if (p.passes !== NONE_PASSES) refuse("s1-none runs " + NONE_PASSES + " passes, and --passes is " + p.passes, "pass --passes " + NONE_PASSES);
+  } else {
+    if (p.all) refuse(run + " takes the calibration units in draw order, and --units all lists the folders sorted", "name the calibration units with --units in draw order");
+    if (p.passes !== 1) refuse(run + " is its own smoke pass, and --passes is " + p.passes, "leave out --passes");
+  }
+  if (run === "s1-smoke" && !same(p.arms, ["lens", "plan-devex-review", "autoplan"])) refuse("s1-smoke runs arms lens, plan-devex-review and autoplan, and --arms names " + p.arms.join(", "), "pass --arms lens plan-devex-review=" + DX_GSTACK.repo + "@" + DX_GSTACK.sha + " autoplan=" + DX_GSTACK.repo + "@" + DX_GSTACK.sha);
+  if (run !== "s1-resmoke" && p.repairs.size) refuse(run + " takes no --repair: smoke rule 5's one repair follows the smoke and reruns as s1-resmoke", "leave out --repair, or run --run s1-resmoke");
+  if (run === "s1-resmoke") for (const a of p.arms) if (!armRepairs.has(a) && !doubled) refuse("s1-resmoke reruns a repaired arm, and arm " + a + " needs its repair", "pass --repair " + (a === "autoplan" ? "autoplan=gstack-stop-gate" : a === "plan-devex-review" ? "plan-devex-review=stop-hook" : "double-limits") + ", or leave the arm out");
+  const plan = dxPlan(run!, p.unitIds, p.arms);
+  if ("problem" in plan) return refuse(plan.problem, "name the units the frozen run needs, in draw order");
+  if (existsSync(p.out)) refuse(p.out + " exists, and every launch uses an out dir that does not exist before it (start rule 7)", "pass a new --out");
+  const volatile = volatilePathProblem(p.out);
+  if (volatile) throw new Error("E_RECEIPTS_VOLATILE " + volatile);
+  const pin = p.env.GSTACK_EVALS_DX_PIN!;
+  for (const a of p.arms.filter((x) => DX_ARMS[x].gstack)) {
+    const env = { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: p.out, LANG: "C.UTF-8", TERM: "dumb", ...hostDriver({ host: "claude", model: MODEL_STRINGS.opus, provider: "anthropic", proxy: { baseUrl: "http://127.0.0.1:1", slot: "session-kind-check", token: "" }, interactive: true, skill: null, out: p.out, sessionKind: DX_ARMS[a].session_kind!, disable1mContext: true }).env, CLAUDE_CODE_ENTRYPOINT: "sdk-ts" };
+    const kind = dxSessionKind(pin, a, env);
+    const problem = kind.problem ?? dxSessionKindProblem(a, kind);
+    if (problem) throw new Error("E_SESSION_KIND_PIN: arm " + a + ": " + problem + "\n  fix: run with GSTACK_EVALS_DX_PIN naming the pinned checkout " + DX_GSTACK.sha);
+  }
+  mkdirSync(p.out, { recursive: true });
+  const trees: Record<string, DxTree> = {};
+  const bad: string[] = [];
+  for (const id of [...new Set(plan.sessions.map((s) => s.unit))]) {
+    const task = dxTaskId(id);
+    const plain = buildDxTree(p.unitsDir, id, "none", join(p.out, "units", task, "plain"));
+    const wrapped = plan.sessions.some((s) => s.unit === id && s.arm === "autoplan") ? buildDxTree(p.unitsDir, id, "autoplan", join(p.out, "units", task, "autoplan")) : null;
+    bad.push(...plain.problems, ...(wrapped?.problems ?? []));
+    trees[id] = { task, plain: join(p.out, "units", task, "plain"), autoplan: wrapped ? join(p.out, "units", task, "autoplan") : null };
+  }
+  if (bad.length) refuse("a unit tree is not a devex mount:\n  " + bad.join("\n  "), "repair the unit folders; key.json and alias.json are never mounted");
+  const tasks = join(p.out, "fixtures", "tasks.json");
+  mkdirSync(dirname(tasks), { recursive: true });
+  writeFileSync(tasks, "[]\n");
+  const ledger = ledgerPath(one("--ledger") ?? undefined, p.env);
+  const record = recordPath(one("--record") ?? undefined, p.env);
+  const local = openLocalLedger(ledger);
+  const opened = openRun(record.path, local, { run: run!, opened: [], mdd: () => Number.POSITIVE_INFINITY, requireAdmission: rigAdmission({ proof: "trial" }) });
+  if (!opened.admission.ok || !opened.lease_id) {
+    p.io.err("CAP_STOP review-units: run " + run + " on " + frozen.item + " is not admitted: " + (opened.admission.ok ? "no lease opened" : opened.admission.stop) + "\n  fix: the run stops for the Captain; nothing was spent");
+    return 2;
+  }
+  const lease = opened.lease_id;
+  const leaseMicros = opened.admission.lease_micros;
+  p.io.out("lease " + lease + " opened on " + frozen.item + " for " + run + ": " + usd(leaseMicros) + " (projection " + usd(frozen.projection_micros) + " plus a tenth plus the in-flight reserve)");
+  const specs: ArmSpec[] = p.arms.map((a) => {
+    if (!DX_ARMS[a].gstack) return { name: a, kind: "bare" };
+    const stack = parseStackRef(DX_GSTACK.repo + "@" + DX_GSTACK.sha) as Exclude<ReturnType<typeof parseStackRef>, string>;
+    return { name: a, kind: "stack", stack, install: { ...stackKind(stack)?.install } };
+  });
+  const skills = Object.fromEntries(p.arms.flatMap((a) => (DX_ARMS[a].skill ? [[a, DX_ARMS[a].skill!]] : [])));
+  writeFileSync(join(p.out, "run.json"), JSON.stringify({ run_id: frozen.run_id, frozen_run: run, item: frozen.item, lease_id: lease, lease_micros: leaseMicros, sessions: plan.sessions.length, arms: p.arms, models: p.models, passes: p.passes, parallel, limits: dxLimits(doubled), repairs: Object.fromEntries([...p.repairs].map(([k, v]) => [k, { repair: v, name: REPAIR_NAME[v] }])), prompts: Object.fromEntries(p.arms.map((a) => [a, { sha256: DX_PROMPT_SHA256[a], env: dxArmEnv(a) }])), template_sha256: DX_TEMPLATE_SHA256, parser_sha256: DX_PARSER_SHA256, rec_user_sha256: DX_REC_USER_SHA256, gstack: DX_GSTACK, units: dxUnitsDigest(p.unitsDir, p.unitIds), sink: { out: p.out, existed: false, checked_at: new Date().toISOString() } }, null, 2) + "\n");
+  let live: DxRunResult | null = null;
+  let settled: ReturnType<DxRunResult["settle"]> | null = null;
+  let rig: HostRig;
+  const call = { host: "claude" as const, arms: { arms: specs, base: null, skill: null, notes: [] } as ResolvedArms, tasks, out: { path: p.out, rule: "--out" }, ledger, record, item: frozen.item, runId: frozen.run_id, models: p.models, policy: p.policy };
+  try {
+    rig = dockerRig(call, { env: p.env, skill: null, skills, nonce: randomBytes(6).toString("hex"), cap: leaseMicros, voice: false, lease: { id: lease, local, settle: () => (settled = live ? live.settle() : { close: settleLease(record.path, local, lease), released: [], paused: [] }).close } });
+  } catch (e) {
+    settleLease(record.path, local, lease);
+    throw e;
+  }
+  try {
+    live = await runDxSessions({ run: run!, runId: frozen.run_id, sessions: plan.sessions, trees, rig, ledger: local, record: record.path, lease, policy: p.policy, out: p.out, parallel, doubled, repairs: armRepairs, pin, control: one("--control") ? resolve(one("--control")!) : join(p.out, "control.ndjson"), log: (l) => p.io.err(l) });
+  } finally {
+    const closed = await rig.close();
+    const s = settled as ReturnType<DxRunResult["settle"]> | null;
+    if (s?.paused.length) p.io.out("lease " + lease + " left open for the Captain: " + s.paused.join("; "));
+    else p.io.out("lease " + lease + " settled: " + usd(closed.committed) + " committed, " + closed.unknown + " unknown calls" + (s ? ", " + s.released.length + " unrun sessions released" : ""));
+  }
+  const rows = live!.rows;
+  const ends = rows.reduce<Record<string, number>>((m, r) => ((m[r.end] = (m[r.end] ?? 0) + 1), m), {});
+  p.io.out("rows " + rows.length + " of " + plan.sessions.length + " planned in " + join(p.out, "rows.ndjson") + ": " + Object.entries(ends).map(([k, v]) => k + " " + v).join(", "));
+  return (settled as ReturnType<DxRunResult["settle"]> | null)?.paused.length || live!.batch.haltedBy() ? 2 : 0;
 }
