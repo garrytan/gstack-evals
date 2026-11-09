@@ -8,7 +8,7 @@
 # autoplan minus none), so Holm's first step runs at alpha 0.05/2 = 0.025.
 # Unit difficulty is Beta with mean p0 and concentration set by rho (ICC); each item moves around its unit on the
 # logit scale with sd S_ITEM; the arm moves each unit by a logit shift plus unit noise tau, with the shift solved so
-# the mean lift is delta. Items per unit m: "1" is one item; "1-2" draws m from 1 and 2; "1-3" from 1, 2 and 3;
+# the mean lift is delta (also at delta 0, so the unit noise adds no lift of its own). Items per unit m: "1" is one item; "1-2" draws m from 1 and 2; "1-3" from 1, 2 and 3;
 # "2-4" from 2, 3 and 4 (uniform).
 # MDD = the smallest delta (0.01 steps) with power >= 0.80.
 # CUT-CANDIDATE needs the 95% upper bound of arm minus none below the frozen margin +0.05; the simulation reads
@@ -57,7 +57,7 @@ def draw_m(mset, shape, rng):
     return rng.integers(2, 5, shape)
 
 def unit_diffs(p0, rho, tau, n, passes, mset, delta, rng):
-    shift = solve_shift(p0, rho, tau, delta, rng) if delta != 0 else 0.0
+    shift = solve_shift(p0, rho, tau, delta, rng)
     x = draw_items(p0, rho, (SIMS, n, MAXM), rng)
     m = draw_m(mset, (SIMS, n), rng)
     mask = np.arange(MAXM)[None, None, :] < m[..., None]
