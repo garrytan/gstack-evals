@@ -13,6 +13,7 @@ import { sample } from "./sample.ts";
 import { screen } from "./screen.ts";
 import { fetchMultiLang, manifestSize, pinCandidates, readRows, splitCandidates, type Candidate } from "./source.ts";
 import { readUnit, writeUnit } from "./unit.ts";
+import { rebenchCandidates, rebenchRowById } from "./rebench.ts";
 import { runSession } from "./run.ts";
 import { computeStart, firstInfo, scoreFollowon, treeCounts, treeScores, TREES, type FollowonRecord, type StartSet, type Tree } from "./followon.ts";
 import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
@@ -22,10 +23,11 @@ export const HELP = `gstack-evals outcome sm <command>
   source fetch --cache <dir>                         download the pinned MultiLang parquet files and check their sha256
   source pin --cache <dir> --out <candidates.json>   every row to a candidate, images pinned by linux/amd64 digest
   source split <candidates.json> --cache <dir> --out <file>   the in-source test split (base files from GitHub raw)
+  source rebench --export <dir> --out <candidates.json>   the pinned SWE-rebench pool's window from its Harbor packages
   screen <candidates.json> --out <file>              keyless eligibility, each drop with E_SM_INELIGIBLE and its rule
-  convert <candidates.json> --cache <dir> --id <id> --out <unit dir>
+  convert <candidates.json> (--cache <dir> | --export <dir>) --id <id> --out <unit dir>
   draw <units.json> --prereg <prereg.json> --out <file>   seeded orders; units.json is [{id, repo, month, stratum}]
-  oracle <draw.json> --units <dir> --candidates <file> --cache <dir> --pull-log <file> [--pulls-per-hour 60] [--retry]
+  oracle <draw.json> --units <dir> --candidates <file> --cache <dir> [--export <dir>] --pull-log <file> [--pulls-per-hour 60] [--retry]
   oracle hidden <candidates.json> --cache <dir> --units <dir> --pull-log <file> --out <hidden.jsonl> --md <hidden.md>
               [--ids <a,b>] [--pulls-per-hour 25] [--static-only]
                                                      the hidden-test count: each eligible in-source unit's commands on its
@@ -33,7 +35,7 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      passed and went missing, doctests apart; no-fail-fast in the frozen
                                                      test command; resumes past ids already in --out
   size <candidates.json> --ids <a,b> --pull-log <file>    compressed image sizes by manifest GET (paced)
-  sample <candidates.json> --cache <dir> --units <dir> --ids <a,b> --pull-log <file> --out <file>
+  sample <candidates.json> --cache <dir> [--export <dir>] --units <dir> --ids <a,b> --pull-log <file> --out <file>
   session plan --units <a,b> --models <m,n> --prereg <prereg.json> --part <n> [--lines sm,qa] --out <plan.json>
                                                      one part's sessions in order (cells shuffled by the frozen order seed)
   session run --unit <dir> --plan <plan.json> --index <n> --control <url> --proxy <url> --out <run dir>
@@ -143,6 +145,8 @@ const need = (f: Map<string, string>, k: string) => f.get(k) ?? (() => { throw n
 const readJson = <T>(p: string): T => JSON.parse(readFileSync(p, "utf8")) as T;
 const writeNew = (p: string, v: unknown) => writeFileSync(p, JSON.stringify(v, null, 1) + "\n", { flag: "wx" });
 const loadCands = (p: string) => readJson<{ schema: string; candidates: Candidate[] }>(p).candidates;
+/** A candidate's row: MultiLang's from the parquet cache, a rebench task's from its Harbor package in the export. */
+const rowFor = (c: Candidate, f: Map<string, string>) => (c.source === "rebench-r3a4" ? rebenchRowById(need(f, "--export"), c.id) : rowOf(need(f, "--cache"), c.id));
 function rowOf(cache: string, id: string) {
   const r = readRows(cache).find((x) => x.row.instance_id === id);
   if (!r) throw new Error("E_SM_SOURCE no row " + id + " in the cached revision");
@@ -158,6 +162,13 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (sub === "source") {
       const [what, ...r] = rest;
+      if (what === "rebench") {
+        const { f } = flags(r, ["--export", "--out"]);
+        const c = await rebenchCandidates(need(f, "--export"));
+        writeNew(need(f, "--out"), { schema: "sm-candidates.v1", rows: c.length, candidates: c });
+        console.log("candidates=" + c.length + " pinned=" + c.filter((x) => x.image_digest).length);
+        return 0;
+      }
       if (what === "split") {
         const { pos, f } = flags(r, ["--cache", "--out"]);
         const c = await splitCandidates(need(f, "--cache"), loadCands(pos[0] ?? need(f, "<candidates>")));
@@ -183,11 +194,11 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (sub === "convert") {
-      const { pos, f } = flags(rest, ["--cache", "--id", "--out"]);
+      const { pos, f } = flags(rest, ["--cache", "--export", "--id", "--out"]);
       const id = need(f, "--id");
       const c = loadCands(pos[0]!).find((x) => x.id === id);
       if (!c) throw new Error("E_USAGE no candidate " + id);
-      const u = writeUnit(need(f, "--out"), c, rowOf(need(f, "--cache"), id));
+      const u = writeUnit(need(f, "--out"), c, rowFor(c, f));
       console.log("unit=" + u.id + " image=" + u.image.ref);
       return 0;
     }
@@ -226,14 +237,15 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (sub === "oracle") {
-      const { pos, f } = flags(rest, ["--units", "--candidates", "--cache", "--pull-log", "--pulls-per-hour"], ["--retry"]);
+      const { pos, f } = flags(rest, ["--units", "--candidates", "--cache", "--export", "--pull-log", "--pulls-per-hour"], ["--retry"]);
       const d = readJson<Draw>(pos[0]!);
-      const units = need(f, "--units"), cands = loadCands(need(f, "--candidates")), cache = need(f, "--cache");
+      const units = need(f, "--units"), cands = loadCands(need(f, "--candidates"));
       const pacer = new Pacer(need(f, "--pull-log"), Number(f.get("--pulls-per-hour") ?? 60));
       mkdirSync(units, { recursive: true });
       const res = await fill(d, async (id) => {
         const dir = join(units, id);
-        if (!existsSync(dir)) writeUnit(dir, cands.find((c) => c.id === id)!, rowOf(cache, id));
+        const c = cands.find((x) => x.id === id)!;
+        if (!existsSync(dir)) writeUnit(dir, c, rowFor(c, f));
         const prior = readUnit(dir).oracle?.verdict;
         const v = prior && prior !== "running" ? { id, verdict: prior, detail: "recorded" } : await oracleUnit(dir, pacer);
         console.log("ORACLE " + id + " " + v.verdict + " " + v.detail.replace(/\n/g, " ").slice(0, 300));
@@ -254,8 +266,9 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (sub === "sample") {
-      const { pos, f } = flags(rest, ["--cache", "--units", "--ids", "--pull-log", "--out"]);
-      await sample({ candidates: loadCands(pos[0]!), cache: need(f, "--cache"), units: need(f, "--units"), ids: need(f, "--ids").split(","), pacer: new Pacer(need(f, "--pull-log")), out: need(f, "--out"), row: (id) => rowOf(need(f, "--cache"), id) });
+      const { pos, f } = flags(rest, ["--cache", "--export", "--units", "--ids", "--pull-log", "--out"]);
+      const cands = loadCands(pos[0]!);
+      await sample({ candidates: cands, cache: f.get("--cache") ?? "", units: need(f, "--units"), ids: need(f, "--ids").split(","), pacer: new Pacer(need(f, "--pull-log")), out: need(f, "--out"), row: (id) => rowFor(cands.find((x) => x.id === id)!, f) });
       return 0;
     }
     if (sub === "session") {

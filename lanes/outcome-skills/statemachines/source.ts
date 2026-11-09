@@ -37,13 +37,15 @@ export interface MlRow {
 }
 
 export interface Candidate {
-  id: string; source: "live-multilang"; revision: string; repo: string; pull_number: string; created_at: string; month: string;
+  id: string; source: "live-multilang" | "rebench-r3a4"; revision: string; repo: string; pull_number: string; created_at: string; month: string;
   lang: Lang; docker_image: string; image_digest: string | null; image_error?: string; base_commit: string; f2p: number; p2p: number;
   fix_files: number; fix_source_files: number; test_files: number; tests_share_fix_file: boolean; feature_screen: boolean;
   issue_sha256: string; row_sha256: string;
   /** The in-source test split (sm source split), for languages with a test-module detector: non-test source files, mixed
    *  hunks and test hunks. fix_source_files is then the split's count. */
   split?: { source_files: number; mixed: number; test_hunks: number } | { error: string };
+  /** A rebench task's Harbor package digest (rebench.ts), checked against the pinned pool. */
+  package?: { digest: string };
 }
 
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
@@ -97,7 +99,7 @@ export function toCandidate(lang: Lang, row: MlRow): Candidate {
   };
 }
 
-const ACCEPT = [
+export const ACCEPT = [
   "application/vnd.docker.distribution.manifest.list.v2+json", "application/vnd.oci.image.index.v1+json",
   "application/vnd.docker.distribution.manifest.v2+json", "application/vnd.oci.image.manifest.v1+json",
 ].join(", ");
@@ -107,7 +109,7 @@ export const splitImage = (image: string): { repo: string; tag: string } => {
   return { repo: m[1]!.includes("/") ? m[1]! : "library/" + m[1]!, tag: m[2] ?? "latest" };
 };
 
-async function token(repo: string, fetchFn: typeof fetch): Promise<string> {
+export async function token(repo: string, fetchFn: typeof fetch): Promise<string> {
   const r = await fetchFn("https://auth.docker.io/token?service=registry.docker.io&scope=repository:" + repo + ":pull");
   if (!r.ok) throw new Error("token " + r.status);
   return ((await r.json()) as { token: string }).token;

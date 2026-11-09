@@ -72,7 +72,7 @@ export function writeUnit(dir: string, c: Candidate, row: MlRow): SmUnit {
     writeFileSync(join(dir, p), body[p]!, { flag: "wx" });
   }
   const u: SmUnit = {
-    schema: "sm-unit.v1", id: row.instance_id, source: "live-multilang", revision: c.revision, repo: row.repo, pull_number: String(row.pull_number),
+    schema: "sm-unit.v1", id: row.instance_id, source: c.source, revision: c.revision, repo: row.repo, pull_number: String(row.pull_number),
     created_at: c.created_at, month: c.month, lang: c.lang, base_commit: row.base_commit, repo_dir: "", work_dir: "",
     image: { ref, image_id: null, runtime_id: null },
     commands: { rebuild: row.rebuild_cmds ?? [], test: row.test_cmds, print: row.print_cmds ?? [] }, parser_sha256: sha(row.log_parser),

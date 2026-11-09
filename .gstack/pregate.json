@@ -117,6 +117,7 @@
       "tests/lanea-shakedown-tasks.test.ts"
     ],
     "quick/laneb/**": [
+      "tests/outcome-skills/sm-rebench.test.ts",
       "quick/laneb/tests/agent.test.ts",
       "quick/laneb/tests/analysis-load.test.ts",
       "quick/laneb/tests/analysis.test.ts",
@@ -179,7 +180,8 @@
       "tests/outcome-skills/sm-analysis.test.ts",
       "tests/outcome-skills/sm-admission.test.ts",
       "tests/outcome-skills/sm-packets.test.ts",
-      "tests/outcome-skills/sm-secondary.test.ts"
+      "tests/outcome-skills/sm-secondary.test.ts",
+      "tests/outcome-skills/sm-rebench.test.ts"
     ],
     "tests/outcome-skills/fixtures/sm/**": [
       "tests/outcome-skills/sm-draw.test.ts"
