@@ -185,14 +185,14 @@ function replacer(pairs: ReadonlyArray<[string, string]>): (text: string) => str
   if (pairs.length === 0) return (t) => t;
   const by = new Map(pairs.map(([from, to]) => [from.toLowerCase(), { from, to }]));
   const keys = [...by.keys()].sort((a, b) => b.length - a.length);
-  const re = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + keys.map(esc).join("|") + ")(?![\\p{L}\\p{N}_])", "giu");
+  const re = new RegExp("(?<![\\p{L}\\p{N}])(?:" + keys.map(esc).join("|") + ")(?![\\p{L}\\p{N}])", "giu");
   return (text) => text.replace(re, (m) => {
     const e = by.get(m.toLowerCase())!;
     return m === e.from ? e.to : caseLike(m, e.to);
   });
 }
 
-/** Forward: originals to aliases, whole-word and case-preserving. */
+/** Forward: originals to aliases, whole-word and case-preserving; an underscore separates words, so ZORBIT_HOME is replaced too. */
 export function aliasText(text: string, map: AliasMap): string {
   return replacer(map.entries.map((e) => [e.original, e.alias]))(text);
 }

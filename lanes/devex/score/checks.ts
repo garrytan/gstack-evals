@@ -20,11 +20,11 @@ export const row = (unit: string, model: ModelId, arm: Row["arm"], list: string[
 export const L = (anticipated: boolean, changes: number[] = []): Label => ({ anticipated, changes: anticipated ? changes : [], surface: anticipated, surface_changes: anticipated ? changes : [], who: null, who_changes: [] });
 
 /** Labels every cell of a map as its production reader, from decide(meta, list kind, key item id). */
-export function labelMap(map: PacketMap, decide: (meta: PacketMeta, kind: ListKind, item: string) => Label | null, judge?: LabelRecord["judge"]): LabelRecord[] {
+export function labelMap(map: PacketMap, decide: (meta: PacketMeta, kind: ListKind, item: string, list: string) => Label | null, judge?: LabelRecord["judge"]): LabelRecord[] {
   const out: LabelRecord[] = [];
   for (const meta of Object.values(map.packets))
     for (const [lid, ref] of Object.entries(meta.lists))
-      for (const [pid, kid] of Object.entries(meta.items)) out.push({ packet: meta.id, judge: judge ?? (meta.model ? READER[meta.model] : "astra"), subject: meta.model, model_id: "fake", version: "fake-1", effort: "medium", cache_key: "k", list: lid, item: pid, label: decide(meta, ref.kind, kid) });
+      for (const [pid, kid] of Object.entries(meta.items)) out.push({ packet: meta.id, judge: judge ?? (meta.model ? READER[meta.model] : "astra"), subject: meta.model, model_id: "fake", version: "fake-1", effort: "medium", cache_key: "k", list: lid, item: pid, label: decide(meta, ref.kind, kid, lid) });
   return out;
 }
 
@@ -190,7 +190,7 @@ function calibration(): DryCheck[] {
   const map: PacketMap = { version: 1, kind: "label", stage: 2, seed: 1, packets: Object.fromEntries(b.metas.map((m) => [m.id, m])) };
   const lab = (wrong: number) => {
     let w = 0;
-    return R.recheck(map, labelMap(map, (m, _, item) => { const g = (m.gold ?? []).find((x) => m.items[x.item] === item); return L(g ? (w++ < wrong ? !g.gold : g.gold) : false, [1]); }), "opus");
+    return R.recheck(map, labelMap(map, (m, _, item, lid) => { const g = (m.gold ?? []).find((x) => x.list === lid && m.items[x.item] === item); return L(g ? (w++ < wrong ? !g.gold : g.gold) : false, [1]); }), "opus");
   };
   return [line("stage 2's blind calibration packets: seeded positions until 40 gold cells under the caps, and the re-check at kappa 0.6", [[b.metas.length === 4 && b.gold === 40 && !b.short && new Set(b.positions).size === 4 && b.positions.every((p) => p < 24), "4 packets of 10 gold cells at 4 seeded positions in a queue of 24"], [lab(0).recheck_pass, "a judge agreeing with the gold passes the re-check"], [!lab(12).recheck_pass, "one with kappa under 0.6 fails it (untested (judge))"]])];
 }
