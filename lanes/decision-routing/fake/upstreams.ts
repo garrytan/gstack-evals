@@ -85,10 +85,14 @@ const response = (model: string, output: unknown[], usage?: FakeUsage): FakeRepl
   json: { id: nextId("resp"), object: "response", created_at: 1_762_000_000, status: "completed", model, output, usage: openaiResponsesUsage(usage) },
 });
 
-/** A Responses main-model turn: a reasoning item, then one function_call item per command. */
-export function openaiResponsesToolCalls(commands: string[], usage?: FakeUsage, model = "gpt-6.1-sol"): FakeReply {
+/** True when a Responses request asks for its reasoning inline, which OpenAI then returns as each reasoning item's encrypted_content. */
+export const asksInlineReasoning = (body: any): boolean => Array.isArray(body?.include) && body.include.includes("reasoning.encrypted_content");
+
+/** A Responses main-model turn: a reasoning item, with an opaque encrypted_content when the request asked for it inline, then one function_call item per command. */
+export function openaiResponsesToolCalls(commands: string[], usage?: FakeUsage, model = "gpt-6.1-sol", inline = false): FakeReply {
   const calls = commands.map((command) => ({ type: "function_call", id: nextId("fc"), call_id: nextId("call"), name: "bash", arguments: JSON.stringify({ command }), status: "completed" }));
-  return response(model, [{ type: "reasoning", id: nextId("rs"), summary: [] }, ...calls], usage);
+  const id = nextId("rs");
+  return response(model, [{ type: "reasoning", id, summary: [], ...(inline ? { encrypted_content: "gAAAAB-fake-" + id } : {}) }, ...calls], usage);
 }
 
 /** A Responses turn with only a text message. */
@@ -129,7 +133,7 @@ export function sampleOf(schema: any): unknown {
 /** The reply a provider gives when nothing is scripted. */
 export function defaultReply(provider: FakeProvider, body: any, path = ROUTES[provider][0]): FakeReply {
   const usage = { input: Math.ceil(JSON.stringify(body ?? {}).length / 4), output: 10 };
-  if (path === "/v1/responses") return openaiResponsesToolCalls([SUBMIT_COMMAND], usage, body?.model);
+  if (path === "/v1/responses") return openaiResponsesToolCalls([SUBMIT_COMMAND], usage, body?.model, asksInlineReasoning(body));
   if (provider === "typesafe") {
     const answers = Object.fromEntries(
       Object.entries((body?.questions ?? {}) as Record<string, any>).map(([name, q]) => {

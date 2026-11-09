@@ -27,7 +27,7 @@ import { join, resolve } from "node:path";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { MeteringProxy, UPSTREAM, type Meter } from "../../src/runner/proxy/metering-proxy.ts";
-import { anthropicText, anthropicToolUse, anthropicUsage, errorReply, FakeUpstreams, openaiJson, openaiResponsesText, openaiResponsesToolCalls, openaiToolCalls, openrouterJson, SUBMIT_COMMAND, typesafeAnswers, type FakeProvider, type FakeReply, type FakeUsage } from "./fake/upstreams.ts";
+import { anthropicText, anthropicToolUse, anthropicUsage, asksInlineReasoning, errorReply, FakeUpstreams, openaiJson, openaiResponsesText, openaiResponsesToolCalls, openaiToolCalls, openrouterJson, SUBMIT_COMMAND, typesafeAnswers, type FakeProvider, type FakeReply, type FakeUsage } from "./fake/upstreams.ts";
 import { fakeFetch, HARBOR_RETRY, MAX_OUTPUT_TOKENS, PILOT_SESSION_STOP_MICROS, RETRY, runBatch, type BatchOptions } from "./host/controller.ts";
 import { joinLabels, labelTrial, main as labelsMain, type LabelRow } from "./labels/cli.ts";
 import type { DockerRunner } from "./labels/container.ts";
@@ -247,7 +247,7 @@ function replyFor(provider: FakeProvider, body: any, spec: Spec, st: Record<stri
     const commands = Array.isArray(m) ? m : m.commands;
     const usage = Array.isArray(m) ? undefined : m.usage;
     if (provider === "anthropic") return anthropicToolUse(commands, usage);
-    if (responses) return openaiResponsesToolCalls(commands, usage);
+    if (responses) return openaiResponsesToolCalls(commands, usage, undefined, asksInlineReasoning(body));
     return openaiToolCalls(commands, usage, provider === "openrouter" ? "particle-ai/particle-1" : "gpt-6.1-sol");
   }
   if (kind === "jev") {

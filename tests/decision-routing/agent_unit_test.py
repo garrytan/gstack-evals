@@ -990,6 +990,8 @@ def test_every_main_model_call_asks_for_32000_output_tokens():
             check(ms["model_kwargs"]["max_tokens"] == 32000, (cell, model, ms))
     check(session.model_settings("N", "opus", "http://proxy", "tok")["model_name"] == "anthropic/claude-opus-5-5", "opus")
     check(session.model_settings("N", "sol", "http://proxy", "tok")["model_name"] == "openai/responses/gpt-6.1-sol", "sol on the Responses API")
+    sol = session.model_settings("N", "sol", "http://proxy", "tok")["model_kwargs"]
+    check(sol.get("store") is False and sol.get("include") == ["reasoning.encrypted_content"], ("sol asks for its reasoning inline", sol))
     check(session.model_settings("W", "opus", "http://proxy", "tok")["model_name"] == "openrouter/particle-ai/particle-1", "W")
 
 
@@ -1018,6 +1020,15 @@ class Fake(http.server.BaseHTTPRequestHandler):
                 return self.reply(200, self.anthropic([("answer", s["gen"]("frontier", body))]))
             cmds = s["main"].pop(0)
             return self.reply(200, self.anthropic([("bash", {"command": c}) for c in cmds]))
+        if self.path.endswith("/responses"):
+            n = sum(s["hits"].values())
+            rs = {"type": "reasoning", "id": f"rs_{n}", "summary": []}
+            if "reasoning.encrypted_content" in (body.get("include") or []):
+                rs["encrypted_content"] = f"gAAAAB-opaque-{n}"
+            calls = [{"type": "function_call", "id": f"fc_{n}_{i}", "call_id": f"call_{n}_{i}", "name": "bash", "arguments": json.dumps({"command": c}), "status": "completed"}
+                     for i, c in enumerate(s["main"].pop(0))]
+            return self.reply(200, {"id": f"resp_{n}", "object": "response", "created_at": 0, "status": "completed", "model": body.get("model"), "output": [rs] + calls,
+                                    "usage": {"input_tokens": 11, "input_tokens_details": {"cached_tokens": 0}, "output_tokens": 4, "output_tokens_details": {"reasoning_tokens": 2}, "total_tokens": 15}})
         content = s["gen"]("openai", body)
         return self.reply(200, {"id": "c1", "object": "chat.completion", "created": 0, "model": body.get("model"),
                                 "choices": [{"index": 0, "message": {"role": "assistant", "content": json.dumps(content)}, "finish_reason": "stop"}],
@@ -1149,6 +1160,36 @@ def test_real_session_routed_end_to_end():
         server.shutdown()
 
 
+
+@real_tier
+def test_real_sol_session_replays_its_reasoning_inline():
+    server, url = fake_proxy()
+    try:
+        d = repo({"a.py": "print(1)\n", "patch.txt": "diff\n"})
+        Fake.srv["main"] = [["echo hi"], [SUBMIT]]
+        logdir = tempfile.mkdtemp(dir=TMP)
+        pinf, qf, taskf, cfgf = (os.path.join(logdir, n) for n in ("pin.json", "q.json", "task.txt", "cfg.json"))
+        json.dump(PIN, open(pinf, "w"))
+        shutil.copy(os.path.join(AGENT_DIR, "dr_agent", "questions.json"), qf)
+        open(taskf, "w").write(ISSUE)
+        out = os.path.join(logdir, "dr")
+        json.dump({"cell": "N", "model": "sol", "task_file": taskf, "pin_file": pinf, "questions_file": qf, "proxy_url_env": "DR_PROXY_URL",
+                   "log_dir": out, "step_limit_actions": 100, "wall_s": 2700, "calibration_shadow": False, "cwd": d}, open(cfgf, "w"))
+        env = {"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/root"), "DR_PROXY_URL": url, "DR_PROXY_TOKEN": "tok", "DR_SESSION": "e2e-sol",
+               "MSWEA_COST_TRACKING": "ignore_errors"}
+        code = f"import sys; sys.path.insert(0, {AGENT_DIR!r}); from dr_agent.session import main; sys.exit(main(['--config', {cfgf!r}]))"
+        p = subprocess.run([sys.executable, "-I", "-c", code], env=env, capture_output=True, text=True, timeout=180)
+        check(p.returncode == 0, p.stdout[-2000:] + p.stderr[-2000:])
+        summ = json.load(open(os.path.join(out, "dr-summary.json")))
+        check(summ["exit_status"] == "submitted" and summ["main_calls"] == 2, summ)
+        mains = [b for pth, b in Fake.srv["bodies"] if pth == "/openai/v1/responses"]
+        check(len(mains) == 2, [pth for pth, _ in Fake.srv["bodies"]])
+        check(all(b.get("store") is False and b.get("include") == ["reasoning.encrypted_content"] and b.get("max_output_tokens") == 32000 for b in mains),
+              [{k: b.get(k) for k in ("store", "include", "max_output_tokens")} for b in mains])
+        replayed = [i for i in mains[1]["input"] if isinstance(i, dict) and i.get("type") == "reasoning"]
+        check(replayed and all(isinstance(i.get("encrypted_content"), str) for i in replayed), replayed)
+    finally:
+        server.shutdown()
 
 def _planted_repo(name):
     """A git repo with one commit, and the three things an agent could plant in .git to run code in root's git."""

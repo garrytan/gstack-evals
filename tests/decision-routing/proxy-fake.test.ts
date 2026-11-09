@@ -89,6 +89,27 @@ describe("fake upstreams through the metering proxy", () => {
     expect(responses.outcome).toEqual(completions.outcome);
   });
 
+  test("OpenAI Responses: asked for its reasoning inline, the reply carries it; turn two replaying it inline is forwarded, while an id-only replay is reserved at the context bound and stops the slot", async () => {
+    const r = rig();
+    const tools = [{ type: "function", name: "bash", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } }];
+    const plain = await r.call("/openai/v1/responses", { model: "gpt-6.1-sol", max_output_tokens: 32_000, input: [{ role: "user", content: "go" }], tools });
+    expect(plain.json.output.find((o: any) => o.type === "reasoning").encrypted_content).toBeUndefined();
+    const ask = { model: "gpt-6.1-sol", max_output_tokens: 32_000, store: false, include: ["reasoning.encrypted_content"], tools };
+    const first = await r.call("/openai/v1/responses", { ...ask, input: [{ role: "user", content: "go" }] });
+    expect(first.status).toBe(200);
+    const reasoning = first.json.output.find((o: any) => o.type === "reasoning");
+    expect(typeof reasoning.encrypted_content).toBe("string");
+    const call = first.json.output.find((o: any) => o.type === "function_call");
+    const turn = (rs: unknown) => [{ role: "user", content: "go" }, rs, { type: "function_call", call_id: call.call_id, name: "bash", arguments: call.arguments }, { type: "function_call_output", call_id: call.call_id, output: "ok" }];
+    const inline = await r.call("/openai/v1/responses", { ...ask, input: turn(reasoning) });
+    expect(inline.status).toBe(200);
+    const { encrypted_content: _, ...byId } = reasoning;
+    const stored = await r.call("/openai/v1/responses", { ...ask, input: turn(byId) });
+    expect(stored.status).toBe(403);
+    expect(stored.json.code).toBe("DR_ALLOWANCE_STOP");
+    expect(r.fakes.requests.length).toBe(3);
+  });
+
   test("OpenRouter: a json_schema request gets a schema-shaped answer, and the fake sees the Particle AI pin", async () => {
     const r = rig();
     const schema = { type: "object", properties: { answer: { type: "string", enum: ["run_tests", "submit", "other"] }, confidence: { type: "number" } }, required: ["answer", "confidence"] };
