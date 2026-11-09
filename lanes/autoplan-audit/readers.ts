@@ -266,7 +266,7 @@ export function readApprovals(dir: string): { docs: ApprovalDoc[]; unreadable: n
 
 export type Attribution = "recorded" | "corroborated" | "delegated" | "missing";
 
-const revMarker = (rev: number) => new RegExp("(?:\\b(?:gate[_ ]?rev(?:ision)?|revision|rev|gate)\\s*[:=#]?\\s*" + rev + "\\b|\\br" + rev + "\\b)", "i");
+const revMarker = (rev: number) => new RegExp("(?:\\b(?:gate[_ ]?rev(?:ision)?|revision|rev|gate)\\s*[:=#]?\\s*" + rev + "\\b|\\br" + rev + "\\b)");
 
 /** Approvals records bound to one gate revision: they name the run id and either the revision or one of its rec hashes. */
 export function boundApprovals(docs: readonly ApprovalDoc[], run: string, rev: number, recHashes: readonly string[]): ApprovalDoc[] {

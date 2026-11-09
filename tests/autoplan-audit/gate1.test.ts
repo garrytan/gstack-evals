@@ -2,7 +2,7 @@
 // GATE-1 on the older record schema, where a carry link sits only in gate.r<n>.json as items[].carried.from.
 import { describe, expect, test } from "bun:test";
 import { at, tmp, writeRecord, type RecordSpec } from "../../lanes/autoplan-audit/fixtures.ts";
-import { gate1 } from "../../lanes/autoplan-audit/readers.ts";
+import { boundApprovals, gate1, type ApprovalDoc } from "../../lanes/autoplan-audit/readers.ts";
 import { readRecord } from "../../lanes/autoplan-audit/records.ts";
 
 const root = tmp("gate1");
@@ -23,5 +23,16 @@ describe("GATE-1 carry links from the gate file", () => {
     const changed = ["Accept the change both reviewers recommend, now with a new limit", "Keep your direction"];
     const r = gate1(rec({ id: "lg-open", gateOwner: null, decisions: [uc("lg-open-r1-uc1", { owner_reply: "accept it" }), { ...uc("lg-open-r2-uc1", { gate_rev: 2, options: changed }), answered_at: undefined, chosen: undefined }], files: carried("lg-open", "lg-open-r1-uc1", "lg-open-r2-uc1", changed) }), []);
     expect({ items: r.ucItems, kept: r.ucKept, missing: r.ucMissing }).toEqual({ items: 1, kept: 0, missing: 1 });
+  });
+});
+
+describe("the approvals revision marker", () => {
+  const doc = (text: string) => ({ text }) as unknown as ApprovalDoc;
+  const binds = (text: string) => boundApprovals([doc(text)], "run-a", 2, []).length === 1;
+  test("another experiment named R2 in an approvals doc's prose does not bind revision 2", () => {
+    expect(binds("run-a was planned beside the R2 experiment.")).toBe(false);
+  });
+  test("the real marker forms still bind revision 2", () => {
+    expect({ gate: binds("run-a gate_rev 2 approved"), short: binds("run-a r2 approved"), word: binds("run-a revision 2 approved") }).toEqual({ gate: true, short: true, word: true });
   });
 });
