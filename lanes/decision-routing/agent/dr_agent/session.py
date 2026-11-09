@@ -14,7 +14,9 @@ about the command changes (cwd, env, timeout, interpreter). The Tracker's git ru
 Every cell takes the agent, model and environment sections of mini's own swebench.yaml from the installed package and
 sets only the model, its max_tokens, the limits and the cwd. Every main-model call asks for MAIN_MAX_TOKENS (32000), on
 every model and in every cell: litellm's own default for claude-opus-5-5 is 128000, above the proxy's 32000 output cap,
-which refuses it. On the openai route litellm sends the same setting as max_completion_tokens. The environment section runs in a LocalEnvironment with its docker-only
+which refuses it. Sol's main model runs on OpenAI's Responses API (litellm's openai/responses/ route), because OpenAI refuses
+function tools on chat completions for gpt-6.1-sol at its default reasoning; there litellm sends the same setting as
+max_output_tokens. The environment section runs in a LocalEnvironment with its docker-only
 keys dropped and the rest kept alike in every cell (cwd, timeout, env, and the interpreter, which LocalEnvironment
 lacks, so each command runs as <interpreter> <command>). Writes decisions.jsonl, states/, snapshots/,
 trajectory.json and dr-summary.json under log_dir.
@@ -46,7 +48,7 @@ def model_settings(cell, model, proxy, token):
         return {"model_name": "anthropic/claude-opus-5-5", "model_kwargs": {"api_base": proxy + "/anthropic", "api_key": token, "max_tokens": MAIN_MAX_TOKENS},
                 "set_cache_control": "default_end"}
     if model == "sol":
-        return {"model_name": "openai/gpt-6.1-sol", "model_kwargs": {"api_base": proxy + "/openai/v1", "api_key": token, "max_tokens": MAIN_MAX_TOKENS}}
+        return {"model_name": "openai/responses/gpt-6.1-sol", "model_kwargs": {"api_base": proxy + "/openai/v1", "api_key": token, "max_tokens": MAIN_MAX_TOKENS}}
     raise ValueError(f"unknown model {model!r}")
 
 

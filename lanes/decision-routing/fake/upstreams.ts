@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Scriptable fake upstreams for the decision-routing dry run: one Bun server per provider, each serving the route the
-// metering proxy forwards to (Anthropic Messages, OpenAI and OpenRouter chat completions, TypeSafe System One). Each server
-// answers from its queue of scripted replies, then from a default derived from the request: a bash tool call that submits
-// for a main-model turn, a schema-shaped JSON answer for a json_schema request, and one answer per question for System
-// One. Every reply carries usage, with cache fields where the provider reports them. Requests are recorded with their
+// Scriptable fake upstreams for the decision-routing dry run: one Bun server per provider, each serving the routes the
+// metering proxy forwards to (Anthropic Messages, OpenAI chat completions and Responses, OpenRouter chat completions,
+// TypeSafe System One). Each server answers from its queue of scripted replies, then from a default derived from the
+// request: a bash tool call that submits for a main-model turn (a function_call output item on the Responses route), a
+// schema-shaped JSON answer for a json_schema request, and one answer per question for System One. Every reply carries usage, with cache fields where the provider reports them. Requests are recorded with their
 // header names only, never header values.
 //
 // Control routes on every server: POST /__script appends replies (a JSON array), GET /__requests lists what it served.
@@ -16,7 +16,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 export const FAKE_PROVIDERS = ["anthropic", "openai", "openrouter", "typesafe"] as const;
 export type FakeProvider = (typeof FAKE_PROVIDERS)[number];
 
-const ROUTE: Record<FakeProvider, string> = { anthropic: "/v1/messages", openai: "/v1/chat/completions", openrouter: "/v1/chat/completions", typesafe: "/v1/systemone" };
+const ROUTES: Record<FakeProvider, string[]> = { anthropic: ["/v1/messages"], openai: ["/v1/chat/completions", "/v1/responses"], openrouter: ["/v1/chat/completions"], typesafe: ["/v1/systemone"] };
 /** mini-swe-agent ends a session when a command's output starts with this line. */
 export const SUBMIT_COMMAND = "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT";
 
@@ -75,6 +75,27 @@ export function openaiToolCalls(commands: string[], usage?: FakeUsage, model = "
   return chat(model, { content: null, tool_calls: commands.map((command) => ({ id: nextId("call"), type: "function", function: { name: "bash", arguments: JSON.stringify({ command }) } })) }, "tool_calls", usage);
 }
 
+/** Responses-shaped usage: cache reads inside input_tokens, reasoning inside output_tokens. */
+export const openaiResponsesUsage = (u: FakeUsage = {}) => {
+  const c = openaiUsage(u);
+  return { input_tokens: c.prompt_tokens, input_tokens_details: c.prompt_tokens_details, output_tokens: c.completion_tokens, output_tokens_details: c.completion_tokens_details, total_tokens: c.total_tokens };
+};
+
+const response = (model: string, output: unknown[], usage?: FakeUsage): FakeReply => ({
+  json: { id: nextId("resp"), object: "response", created_at: 1_762_000_000, status: "completed", model, output, usage: openaiResponsesUsage(usage) },
+});
+
+/** A Responses main-model turn: a reasoning item, then one function_call item per command. */
+export function openaiResponsesToolCalls(commands: string[], usage?: FakeUsage, model = "gpt-6.1-sol"): FakeReply {
+  const calls = commands.map((command) => ({ type: "function_call", id: nextId("fc"), call_id: nextId("call"), name: "bash", arguments: JSON.stringify({ command }), status: "completed" }));
+  return response(model, [{ type: "reasoning", id: nextId("rs"), summary: [] }, ...calls], usage);
+}
+
+/** A Responses turn with only a text message. */
+export function openaiResponsesText(text: string, usage?: FakeUsage, model = "gpt-6.1-sol"): FakeReply {
+  return response(model, [{ type: "message", id: nextId("msg"), role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] }], usage);
+}
+
 /** A structured reply: the object as the message content, as a json_schema response_format returns it. */
 export function openaiJson(answer: unknown, usage?: FakeUsage, model = "gpt-6.1-sol"): FakeReply {
   return chat(model, { content: JSON.stringify(answer) }, "stop", usage);
@@ -106,8 +127,9 @@ export function sampleOf(schema: any): unknown {
 }
 
 /** The reply a provider gives when nothing is scripted. */
-export function defaultReply(provider: FakeProvider, body: any): FakeReply {
+export function defaultReply(provider: FakeProvider, body: any, path = ROUTES[provider][0]): FakeReply {
   const usage = { input: Math.ceil(JSON.stringify(body ?? {}).length / 4), output: 10 };
+  if (path === "/v1/responses") return openaiResponsesToolCalls([SUBMIT_COMMAND], usage, body?.model);
   if (provider === "typesafe") {
     const answers = Object.fromEntries(
       Object.entries((body?.questions ?? {}) as Record<string, any>).map(([name, q]) => {
@@ -163,8 +185,8 @@ export class FakeUpstreams {
     } catch {}
     const names = [...req.headers.keys()];
     this.requests.push({ provider, method: req.method, path, header_names: names, authorized: provider === "anthropic" ? req.headers.has("x-api-key") : /^Bearer \S+/.test(req.headers.get("authorization") ?? ""), body });
-    if (req.method !== "POST" || path !== ROUTE[provider]) return Response.json({ error: { type: "not_found", message: "fake " + provider + " serves POST " + ROUTE[provider] } }, { status: 404 });
-    const reply = this.queues[provider].shift() ?? defaultReply(provider, body);
+    if (req.method !== "POST" || !ROUTES[provider].includes(path)) return Response.json({ error: { type: "not_found", message: "fake " + provider + " serves POST " + ROUTES[provider].join(" and ") } }, { status: 404 });
+    const reply = this.queues[provider].shift() ?? defaultReply(provider, body, path);
     if (reply.delay_ms) await Bun.sleep(reply.delay_ms);
     if (reply.sse) return new Response(reply.sse.map((e) => "data: " + JSON.stringify(e) + "\n\n").join("") + "data: [DONE]\n\n", { status: reply.status ?? 200, headers: { "content-type": "text/event-stream" } });
     return Response.json(reply.json ?? {}, { status: reply.status ?? 200 });

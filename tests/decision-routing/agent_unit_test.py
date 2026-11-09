@@ -989,6 +989,7 @@ def test_every_main_model_call_asks_for_32000_output_tokens():
             ms = session.model_settings(cell, model, "http://proxy", "tok")
             check(ms["model_kwargs"]["max_tokens"] == 32000, (cell, model, ms))
     check(session.model_settings("N", "opus", "http://proxy", "tok")["model_name"] == "anthropic/claude-opus-5-5", "opus")
+    check(session.model_settings("N", "sol", "http://proxy", "tok")["model_name"] == "openai/responses/gpt-6.1-sol", "sol on the Responses API")
     check(session.model_settings("W", "opus", "http://proxy", "tok")["model_name"] == "openrouter/particle-ai/particle-1", "W")
 
 
@@ -1058,7 +1059,7 @@ def test_real_litellm_403_not_retried():
     server, url = fake_proxy()
     try:
         Fake.srv["mode"] = "403"
-        routes = [("anthropic/claude-opus-5-5", url + "/anthropic", "/anthropic/v1/messages"), ("openai/gpt-6.1-sol", url + "/openai/v1", "/openai/v1/chat/completions"),
+        routes = [("anthropic/claude-opus-5-5", url + "/anthropic", "/anthropic/v1/messages"), ("openai/responses/gpt-6.1-sol", url + "/openai/v1", "/openai/v1/responses"),
                   ("openrouter/particle-ai/particle-1", url + "/openrouter/v1", "/openrouter/v1/chat/completions")]
         check(issubclass(model_class(), LitellmModel), "not mini's model")
         for name, base, path in routes:

@@ -27,7 +27,7 @@ import { join, resolve } from "node:path";
 import { openLease, recordApproval, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { MeteringProxy, UPSTREAM, type Meter } from "../../src/runner/proxy/metering-proxy.ts";
-import { anthropicText, anthropicToolUse, anthropicUsage, errorReply, FakeUpstreams, openaiJson, openaiToolCalls, openrouterJson, SUBMIT_COMMAND, typesafeAnswers, type FakeProvider, type FakeReply, type FakeUsage } from "./fake/upstreams.ts";
+import { anthropicText, anthropicToolUse, anthropicUsage, errorReply, FakeUpstreams, openaiJson, openaiResponsesText, openaiResponsesToolCalls, openaiToolCalls, openrouterJson, SUBMIT_COMMAND, typesafeAnswers, type FakeProvider, type FakeReply, type FakeUsage } from "./fake/upstreams.ts";
 import { fakeFetch, HARBOR_RETRY, MAX_OUTPUT_TOKENS, PILOT_SESSION_STOP_MICROS, RETRY, runBatch, type BatchOptions } from "./host/controller.ts";
 import { joinLabels, labelTrial, main as labelsMain, type LabelRow } from "./labels/cli.ts";
 import type { DockerRunner } from "./labels/container.ts";
@@ -242,10 +242,12 @@ function replyFor(provider: FakeProvider, body: any, spec: Spec, st: Record<stri
   if (kind === "main") {
     const m = spec.main[st.main++] ?? spec.after ?? [SUBMIT_COMMAND];
     if ("status" in m) return errorReply(m.status);
-    if ("text" in m) return provider === "anthropic" ? anthropicText(m.text) : openaiJson(m.text);
+    const responses = provider === "openai" && body?.input !== undefined;
+    if ("text" in m) return provider === "anthropic" ? anthropicText(m.text) : responses ? openaiResponsesText(m.text) : openaiJson(m.text);
     const commands = Array.isArray(m) ? m : m.commands;
     const usage = Array.isArray(m) ? undefined : m.usage;
     if (provider === "anthropic") return anthropicToolUse(commands, usage);
+    if (responses) return openaiResponsesToolCalls(commands, usage);
     return openaiToolCalls(commands, usage, provider === "openrouter" ? "particle-ai/particle-1" : "gpt-6.1-sol");
   }
   if (kind === "jev") {
@@ -642,7 +644,7 @@ function legSessions(r: Report, all: Session[]) {
   const fe = by("format-errors-N-opus");
   r.add("three replies in a row with no tool call end the session as agent_error (mini's RepeatedFormatError at the pin), graded", fe.summary?.exit_status === "agent_error" && fe.summary.main_calls === 3 && existsSync(join(fe.trial, "verifier", "reward.txt")), JSON.stringify({ exit: fe.summary?.exit_status, calls: fe.summary?.main_calls }));
   const capField: Record<string, string> = { anthropic: "max_tokens", openai: "max_completion_tokens", openrouter: "max_tokens" };
-  const mains = all.flatMap((s) => s.requests.filter((q) => q.kind === "main").map((q) => ({ name: s.spec.name, asked: q.body?.[capField[q.provider]!] })));
+  const mains = all.flatMap((s) => s.requests.filter((q) => q.kind === "main").map((q) => ({ name: s.spec.name, asked: q.body?.[q.provider === "openai" && q.body?.input !== undefined ? "max_output_tokens" : capField[q.provider]!] })));
   const offCap = mains.filter((m) => m.asked !== MAX_OUTPUT_TOKENS);
   r.add("every main-model call in every cell asks for " + MAX_OUTPUT_TOKENS + " output tokens and passes the proxy's cap", mains.length > 0 && offCap.length === 0, mains.length + " main-model requests" + (offCap.length ? "; off the cap: " + offCap.slice(0, 4).map((m) => m.name + "=" + m.asked).join(", ") : ""));
   for (const name of ["wall-stop-N-sol", "wall-stop-R-opus"]) {
