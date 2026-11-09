@@ -7,7 +7,8 @@
 // the worse count, the specificity contrast, the length-adjusted line and the repository-clustered sensitivity); coverage,
 // contamination and the intention-to-treat switch; the five-step verdict precedence; every R48 reading; the framing
 // readings; leak exposure with the recognition probe; and the projection's MDD against the 0.13 bound. Every band edge and
-// gate compares values rounded to four decimal places.
+// gate compares values rounded to four decimal places. run(argv, io) is dx readings: the smoke rules and decision from a
+// rows file, the parse rate and admission, and coverage and contamination per cell.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { clusteredPairedDelta, holmAdjusted, type PairedItem } from "../../../src/runner/stats/paired.ts";
@@ -16,6 +17,8 @@ import { clusterBootstrap, DRAWS, mean, ols, percentileInterval, r4, seededRando
 import { MODEL_IDS, SEED, type ArmId, type Key, type ModelId, type Row, type UnitMeta } from "../types.ts";
 import { listKey, READER, type LabelRecord, type ListKind, type PacketMap, type PacketMeta, type Reader } from "./packets.ts";
 import { credit, indexLabels, isMissing, unitMean, type Review, type StockCredit } from "./score.ts";
+import { smokeSession, type DxRow } from "../run/rows.ts";
+import { dxLimits } from "../../../src/trial/review/devex.ts";
 
 export const BAND = { lo: 0.1, hi: 0.65 } as const;
 export const MARGIN = 0.05;
@@ -642,4 +645,135 @@ export function projection(rows: readonly PowerRow[], o: { meanItems: number; n:
   const d = designMdd(rows, MIX_MEAN, o);
   if (!d) throw new Error("E_USAGE power.txt has no row at " + o.n + " units and " + o.passes + " passes");
   return { mdd: d.mdd, within: r4(d.mdd) <= MDD_BOUND, source: d.source, n: d.n };
+}
+
+
+// ---- dx readings: the CLI over the stage 1 readings ----
+
+const READINGS_USAGE = "gstack-evals dx readings smoke --rows <rows.ndjson> --projection-fits yes|no --doubled-fits yes|no [--doubled]\n" +
+  "       gstack-evals dx readings admission --rows <rows.ndjson> --input <admission.json>\n" +
+  "       gstack-evals dx readings cells --rows <rows.ndjson> [--reviews <reviews.ndjson>]";
+
+class ReadingsUsage extends Error {}
+const usage = (why: string, fix: string): never => {
+  throw new ReadingsUsage(why + "\n  fix: " + fix);
+};
+
+function readNdjson<T>(path: string, what: string): T[] {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return usage(what + " " + path + " does not read", "pass the " + what + " file the run wrote");
+  }
+  return text.split("\n").filter((l) => l.trim()).map((l, i) => {
+    try {
+      return JSON.parse(l) as T;
+    } catch {
+      return usage(what + " " + path + " line " + (i + 1) + " is not JSON", "pass the " + what + " file the run wrote, unedited");
+    }
+  });
+}
+
+/** Smoke rules 1 to 4 and the rule 5 and 6 decision per gstack arm, from the smoke rows: pass 1 is the smoke, pass 2 its rerun. */
+export function smokeReadings(rows: readonly DxRow[], o: { projectionFits: boolean; doubledFits: boolean; doubled: boolean }): Array<{ arm: GstackArm; first: SmokeReading; rerun: SmokeReading | null; decision: SmokeDecision }> {
+  const limit = dxLimits(o.doubled).usd * 1_000_000;
+  const arms: GstackArm[] = ["plan-devex-review", "autoplan"];
+  return arms.filter((arm) => rows.some((r) => r.smoke && r.arm === arm)).map((arm) => {
+    const of = (pass: number) => rows.filter((r) => r.smoke && r.arm === arm && r.pass === pass).map(smokeSession);
+    const first = smokeRules(arm, of(1), { sessionLimitMicros: limit, projectionFits: o.projectionFits });
+    const again = of(2);
+    const rerun = again.length ? smokeRules(arm, again, { sessionLimitMicros: limit, projectionFits: o.projectionFits }) : null;
+    return { arm, first, rerun, decision: smokeDecision(first, { doubledFits: o.doubledFits, ...(rerun ? { rerun } : {}) }) };
+  });
+}
+
+/** Per cell (arm on model, stage, smoke or not): planned, coverage, contamination and section 6's end rates. */
+export function cellReadings(rows: readonly DxRow[], reviews: readonly Review[] | null): Array<{ cell: string; planned: number; coverage: number; contamination: number; rates: Record<string, number>; untested: string[] }> {
+  const cells = new Map<string, DxRow[]>();
+  for (const r of rows) {
+    const k = r.arm + " on " + r.model + " stage " + r.stage + (r.smoke ? " smoke" : "");
+    cells.set(k, [...(cells.get(k) ?? []), r]);
+  }
+  return [...cells].map(([cell, rs]) => {
+    const planned = rs.length;
+    const r0 = rs[0]!;
+    const scored = reviews ? reviews.filter((v) => v.arm === r0.arm && v.model === r0.model && v.stage === r0.stage && v.smoke === r0.smoke && !isMissing(v)).length : rs.filter((r) => r.end !== "missing" && r.end !== "contaminated").length;
+    const coverage = planned ? scored / planned : 0;
+    const contamination = planned ? rs.filter((r) => r.code === "E_DX_ARM_CONTAMINATED" || r.gstack_read === true).length / planned : 0;
+    const rates = Object.fromEntries((["block", "no-block", "session-stop", "missing", "contaminated"] as const).map((e) => [e, planned ? rs.filter((r) => r.end === e).length / planned : 0]));
+    const untested = [...(r4(coverage) < COVERAGE_BAR ? ["coverage"] : []), ...(r4(contamination) > CONTAMINATION_BAR ? ["contamination"] : [])];
+    return { cell, planned, coverage, contamination, rates, untested };
+  });
+}
+
+export function run(argv: string[], io: { out: (t: string) => void; err: (t: string) => void }): number {
+  try {
+    return readings(argv, io);
+  } catch (e) {
+    if (!(e instanceof ReadingsUsage)) throw e;
+    io.err("E_USAGE dx readings: " + e.message);
+    return 2;
+  }
+}
+
+function readings(argv: string[], io: { out: (t: string) => void; err: (t: string) => void }): number {
+  const [what, ...rest] = argv;
+  if (what === "--help" || what === "-h") {
+    io.out(READINGS_USAGE);
+    return 0;
+  }
+  const flags = new Map<string, string>();
+  const bools = new Set<string>();
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]!;
+    if (a === "--doubled") bools.add(a);
+    else if (["--rows", "--input", "--reviews", "--projection-fits", "--doubled-fits"].includes(a) && rest[i + 1] !== undefined && !rest[i + 1]!.startsWith("--")) flags.set(a, rest[++i]!);
+    else usage("unknown or malformed argument " + JSON.stringify(a), "see gstack-evals dx readings --help");
+  }
+  const need = (f: string) => flags.get(f) ?? usage("dx readings " + (what ?? "") + " needs " + f, "pass " + f + "; see gstack-evals dx readings --help");
+  const yesNo = (f: string) => {
+    const v = need(f);
+    if (v !== "yes" && v !== "no") usage(f + " takes yes or no, not " + JSON.stringify(v), "pass " + f + " yes or " + f + " no");
+    return v === "yes";
+  };
+  if (what === "smoke") {
+    const o = { projectionFits: yesNo("--projection-fits"), doubledFits: yesNo("--doubled-fits"), doubled: bools.has("--doubled") };
+    const rows = readNdjson<DxRow>(need("--rows"), "rows");
+    const read = smokeReadings(rows, o);
+    if (!read.length) usage("the rows hold no gstack arm smoke session", "pass the rows of an s1-smoke run (and its s1-resmoke)");
+    const fails = (s: SmokeReading) => s.failures.map((f) => "rule " + f.rule + " " + f.model + " " + f.kind + ": " + f.why).join("; ");
+    for (const r of read) {
+      io.out("smoke " + r.arm + ": " + (r.first.pass ? "pass" : "fail: " + fails(r.first)) + (r.first.autoplan_out.length ? "; rule 3: autoplan's cells don't run on " + r.first.autoplan_out.join(", ") : ""));
+      if (r.rerun) io.out("rerun " + r.arm + ": " + (r.rerun.pass ? "pass" : "fail: " + fails(r.rerun)));
+      const d = r.decision;
+      io.out("decision " + r.arm + ": " + (d.outcome === "pass" ? "pass" + (d.repair ? " " + (d.repair.name ?? "with " + d.repair.kind) : "") : d.outcome === "repair" ? "repair " + (d.repair!.name ?? d.repair!.kind) + (d.code ? " (" + d.code + ")" : "") : "dropped on " + d.dropped_on.join(", ") + " (" + d.code + "); " + d.r48 + ", Holm p = 1"));
+    }
+    return 0;
+  }
+  if (what === "admission") {
+    const rows = readNdjson<DxRow>(need("--rows"), "rows");
+    const inputPath = need("--input");
+    let input: Omit<AdmissionInput, "parsed" | "replies">;
+    try {
+      input = JSON.parse(readFileSync(inputPath, "utf8"));
+    } catch {
+      return usage("--input " + inputPath + " does not read as JSON", "pass a JSON object with noneA, stockFail, judge {pass, shortfall} and floor {checkA, oracleCredit}");
+    }
+    if (typeof input?.stockFail !== "boolean" || typeof input?.judge?.pass !== "boolean" || typeof input?.judge?.shortfall !== "boolean" || !input?.floor || !(input.noneA === null || typeof input.noneA === "number")) usage("--input " + inputPath + " lacks noneA, stockFail, judge {pass, shortfall} or floor {checkA, oracleCredit}", "write each field the admission reads");
+    const none = rows.filter((r) => r.arm === "none" && r.model === "opus" && r.stage === 1 && !r.smoke);
+    if (!none.length) usage("the rows hold no Opus none stage 1 session", "pass the rows of the s1-none run");
+    const parsed = none.filter((r) => r.end === "block").length;
+    io.out("parse rate " + parsed + " of " + none.length + " (" + (parsed / none.length).toFixed(4) + ") Opus none replies; the bar is " + PARSE_BAR.toFixed(2));
+    const a = admission({ ...input, parsed, replies: none.length });
+    io.out("admission " + a.reading + ": " + a.reasons.join("; ") + (a.r48 ? "; " + a.r48 : "") + (a.ends ? "; the eval ends here" : ""));
+    return 0;
+  }
+  if (what === "cells") {
+    const rows = readNdjson<DxRow>(need("--rows"), "rows");
+    const reviews = flags.has("--reviews") ? readNdjson<Review>(flags.get("--reviews")!, "reviews") : null;
+    for (const c of cellReadings(rows, reviews)) io.out(c.cell + ": " + c.planned + " planned; coverage " + c.coverage.toFixed(4) + (reviews ? "" : " (before judging: block, no-block and session-stop rows)") + "; contamination " + c.contamination.toFixed(4) + (c.untested.length ? " (untested: " + c.untested.join(", ") + ")" : "") + "; " + Object.entries(c.rates).map(([k, v]) => k + " " + v.toFixed(4)).join(", "));
+    return 0;
+  }
+  return usage(what === undefined ? "dx readings needs a reading" : "unknown reading " + JSON.stringify(what), "run smoke, admission or cells; see gstack-evals dx readings --help");
 }
