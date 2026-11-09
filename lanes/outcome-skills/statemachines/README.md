@@ -349,3 +349,77 @@ a compiler error.
 - A first stage's strict test-patch conflict removes that tree's follow-ons and is counted on its own (section 6).
 - Drift is decided when any fail-to-pass id fails and at least one drift id is named (the design's reading of "fail only
   because").
+
+## Packets, the R78 check and keyless secondaries (packets.ts, secondary.ts), P4b
+
+No model is called here. packets.ts writes packet files and reads replies; a separate paid step under sm-labels and
+sm-judges sends them. Every packet holds only what its reader may see, and its id is a digest of that content. A key file
+beside it maps the id back to unit, model, cell and judge. `assertBlind` refuses a packet whose text names the session's
+model or unit (E_SM_PACKET).
+
+- Labeller packet (section 3): the issue, fix.patch as published, and the fix's tests (test.patch, plus fix-tests.patch
+  when prep wrote one), the two frozen questions and section 2's state-shaped definition word for word. Never an arm's
+  output, never the unit id. Answer: one JSON object `{defect, state_shaped, reason}`, each "yes" or "no".
+- Labels: eligible only when both labellers say defect; state or other when both agree, else unclear. Cohen's kappa on
+  both questions over units where both answers read. `combineLabels` returns `stratum` as "state", "other" or
+  "unclear", the field analysis.ts `buildInput` reads from `unit.labels.stratum`.
+- Judge packet (section 10): the folder's file list and the first-stage diff cut at 1,500 lines with `cut` set, plus
+  at most 8 hunks, largest first. Never the issue, the fix, the arm, the model or the session. Judge by session model:
+  GPT-6 Astra for claude-opus-5-5; Opus 5.5 for openai/gpt-6.1-sol and particle-ai/particle-1.
+- Answer reader: the reply must be one bare JSON object with exactly the frozen keys; scores are whole numbers from -2 to
+  2; every listed hunk id answered once with "yes" or "no". Anything else (a code fence, extra text, an extra key, a
+  missing hunk) is E_SM_JUDGE_ANSWER and counts as missing.
+- Stock diffs: three per judge after every 50th diff, built from one file of that diff's unit by keyless transforms, sent
+  as ordinary judge packets (the key marks them). A judge scoring above 0 on more than 10% of its stock diffs is flagged.
+- R78 check: diffs graded by both judges in seeded order; the first 60, then one more at a time until 40 are labelled or
+  supply ends (`short`). Kappa per axis; a judged difference on an axis counts only at kappa 0.6 or more, else it reads
+  "judge failed its check".
+- Secondaries (`sm secondary`, sm-secondary.v1): found it, found but not fixed, what it changed, and later-fix overlap
+  when given `--clone`, a local clone of the public repository. The clone comes from git over HTTPS, never a paid or
+  keyed API: `git clone --filter=blob:none <repo url>` then `git fetch origin pull/<n>/head:refs/sm/pull-<n>`. Check
+  the host's robots.txt and terms before the first clone and record it in the build log.
+
+### Frozen lists for P4 (frozen at this commit, langs.ts and packets.ts)
+
+- State constructs, counted per added line of a source file: enum (Rust, Java, C#, TypeScript `enum Name`; C and C++
+  `enum`; Go `iota`; JavaScript `Object.freeze({`; Python a class over Enum, IntEnum, StrEnum, Flag or IntFlag),
+  sealed (Rust `mod sealed` or `trait Sealed`; Java `sealed class|interface` or `permits`; C# `abstract record`; Go
+  a lone `isName()` marker method), union (TypeScript string-literal type unions, Python `Literal["`, C++
+  `std::variant<`), table (any language: a line that defines or assigns a name containing "transition").
+- Fix-title words, case-insensitive, whole words: fix, fixes, fixed, fixing, bugfix, hotfix, bug, regression, crash,
+  panic, resolve, resolves, resolved (`fixTitleDigest()` pins the pattern).
+- Generated marks: a `linguist-generated` attribute in any .gitattributes on the path (a later or deeper line wins), or
+  "generated" or "do not edit" as words on one of the first 5 lines, case-insensitive.
+- Stock transforms: comments and whitespace only (a blank line and a "Reviewed." comment above each function, or one
+  comment at the top when none is found); rename only (the file's first local declared with four or more characters,
+  renamed to name plus "Value", or "_value" in Python and Rust, everywhere in the file); logging (one log call per
+  function: Go log.Println, Rust eprintln!, Java System.err.println, C fprintf(stderr), C++ std::cerr, C#
+  System.Console.Error.WriteLine, JS and TS console.log, Python print). A kind the file cannot give is skipped and
+  printed as none.
+
+### P4b readings (literal; each one that can move a reported number is marked)
+
+- Hunk: a run of consecutive changed lines, as git diff -U0 writes it, whatever context the patch carries. Positions are
+  base-file lines; a run that only adds lines sits between two base lines (k + 0.5). "Within N lines" is a gap of N or
+  less between the two spans. The real fix's hunks are all of fix.patch, in-source test hunks included. (Reported.)
+- Found but not fixed uses the strict reading's outcome: fixed means clean_fix or fix_broke.
+- What it changed: lines are added plus removed; a file is outside the folder when its old or new path lies outside the
+  unit's scope dir (null before scope is set); test files follow the test-file conventions or test.patch; build files
+  are the protected test and build configuration list; state constructs count per file as added matches minus removed
+  matches, never below 0, in source files only.
+- Later-fix overlap: non-merge commits on the clone's HEAD (the default branch), committer date after the base commit's
+  and at most 120 days later, subject matching the fix words. The target fix's commits are those on refs/sm/pull-<n>
+  past the base and any commit whose message names #<n>. A hunk is outside the real fix when it shares no line with a
+  fix hunk; hunks in every file count, test files included. Each candidate's runs map to base lines through the diff
+  from the base to the candidate's parent. (Exploratory; reported.)
+- UX, DX and AX are not defined in the post; the judge text reads them as the effect on people who use the software,
+  developers who work in the code, and AI agents that work in the code. (Reported.)
+- Hunks listed for the "real defect" question are the 8 largest wholly inside the 1,500-line cut, so a hunk past the cut
+  is never asked about. Size is added plus removed lines; ties keep diff order. (Reported.)
+- Stock diffs come after each judge's 50th, 100th, ... diff, from the unit of that diff. "Scores a stock diff above 0"
+  means above 0 on any of the three axes; a malformed stock answer counts as above 0 (fail closed). (Reported.)
+- R78 labels: a diff is labelled when both answers read and give the same sign on all three axes. Kappa is per axis on
+  signs (-, 0, +) over every used diff where both answers read. Catch rate is the share of bad-labelled diffs a judge
+  scores below 0; false-fail rate the share of good-labelled diffs it scores below 0. On this label set both judges
+  agree by construction, so the literal rates are 1 and 0 (open point). (Reported.)
+
