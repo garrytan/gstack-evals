@@ -1,0 +1,125 @@
+power.py, seed 20261109, 1000 simulated runs a point, 800 sign flips a run, fact sd 0.8, tau 0.5; MDD at 80% power, two-sided, alpha 0.05
+Part A. Primary W (binary per session). columns: control p0, ICC rho, units n, passes, MDD
+W  p0 0.15  rho 0.500  n 40  passes 2  MDD 0.15
+W  p0 0.15  rho 0.843  n 40  passes 2  MDD 0.13
+W  p0 0.25  rho 0.500  n 40  passes 2  MDD 0.17
+W  p0 0.25  rho 0.843  n 40  passes 2  MDD 0.14
+W  p0 0.35  rho 0.500  n 40  passes 2  MDD 0.17
+W  p0 0.35  rho 0.843  n 40  passes 2  MDD 0.14
+W  p0 0.50  rho 0.500  n 40  passes 2  MDD 0.18
+W  p0 0.50  rho 0.843  n 40  passes 2  MDD 0.14
+W  p0 0.15  rho 0.500  n 40  passes 1  MDD 0.22
+W  p0 0.15  rho 0.843  n 40  passes 1  MDD 0.20
+W  p0 0.25  rho 0.500  n 40  passes 1  MDD 0.25
+W  p0 0.25  rho 0.843  n 40  passes 1  MDD 0.20
+W  p0 0.35  rho 0.500  n 40  passes 1  MDD 0.25
+W  p0 0.35  rho 0.843  n 40  passes 1  MDD 0.20
+W  p0 0.50  rho 0.500  n 40  passes 1  MDD 0.25
+W  p0 0.50  rho 0.843  n 40  passes 1  MDD 0.19
+W  p0 0.15  rho 0.500  n 48  passes 2  MDD 0.14
+W  p0 0.15  rho 0.843  n 48  passes 2  MDD 0.12
+W  p0 0.25  rho 0.500  n 48  passes 2  MDD 0.15
+W  p0 0.25  rho 0.843  n 48  passes 2  MDD 0.11
+W  p0 0.35  rho 0.500  n 48  passes 2  MDD 0.16
+W  p0 0.35  rho 0.843  n 48  passes 2  MDD 0.11
+W  p0 0.50  rho 0.500  n 48  passes 2  MDD 0.17
+W  p0 0.50  rho 0.843  n 48  passes 2  MDD 0.12
+W  p0 0.15  rho 0.500  n 48  passes 1  MDD 0.20
+W  p0 0.15  rho 0.843  n 48  passes 1  MDD 0.17
+W  p0 0.25  rho 0.500  n 48  passes 1  MDD 0.23
+W  p0 0.25  rho 0.843  n 48  passes 1  MDD 0.17
+W  p0 0.35  rho 0.500  n 48  passes 1  MDD 0.23
+W  p0 0.35  rho 0.843  n 48  passes 1  MDD 0.17
+W  p0 0.50  rho 0.500  n 48  passes 1  MDD 0.23
+W  p0 0.50  rho 0.843  n 48  passes 1  MDD 0.17
+W  p0 0.15  rho 0.500  n 56  passes 2  MDD 0.13
+W  p0 0.15  rho 0.843  n 56  passes 2  MDD 0.10
+W  p0 0.25  rho 0.500  n 56  passes 2  MDD 0.14
+W  p0 0.25  rho 0.843  n 56  passes 2  MDD 0.10
+W  p0 0.35  rho 0.500  n 56  passes 2  MDD 0.15
+W  p0 0.35  rho 0.843  n 56  passes 2  MDD 0.10
+W  p0 0.50  rho 0.500  n 56  passes 2  MDD 0.15
+W  p0 0.50  rho 0.843  n 56  passes 2  MDD 0.10
+W  p0 0.15  rho 0.500  n 56  passes 1  MDD 0.18
+W  p0 0.15  rho 0.843  n 56  passes 1  MDD 0.14
+W  p0 0.25  rho 0.500  n 56  passes 1  MDD 0.20
+W  p0 0.25  rho 0.843  n 56  passes 1  MDD 0.15
+W  p0 0.35  rho 0.500  n 56  passes 1  MDD 0.21
+W  p0 0.35  rho 0.843  n 56  passes 1  MDD 0.15
+W  p0 0.50  rho 0.500  n 56  passes 1  MDD 0.21
+W  p0 0.50  rho 0.843  n 56  passes 1  MDD 0.15
+W  p0 0.15  rho 0.500  n 64  passes 2  MDD 0.11
+W  p0 0.15  rho 0.843  n 64  passes 2  MDD 0.09
+W  p0 0.25  rho 0.500  n 64  passes 2  MDD 0.13
+W  p0 0.25  rho 0.843  n 64  passes 2  MDD 0.09
+W  p0 0.35  rho 0.500  n 64  passes 2  MDD 0.14
+W  p0 0.35  rho 0.843  n 64  passes 2  MDD 0.09
+W  p0 0.50  rho 0.500  n 64  passes 2  MDD 0.14
+W  p0 0.50  rho 0.843  n 64  passes 2  MDD 0.09
+W  p0 0.15  rho 0.500  n 64  passes 1  MDD 0.17
+W  p0 0.15  rho 0.843  n 64  passes 1  MDD 0.13
+W  p0 0.25  rho 0.500  n 64  passes 1  MDD 0.19
+W  p0 0.25  rho 0.843  n 64  passes 1  MDD 0.13
+W  p0 0.35  rho 0.500  n 64  passes 1  MDD 0.21
+W  p0 0.35  rho 0.843  n 64  passes 1  MDD 0.13
+W  p0 0.50  rho 0.500  n 64  passes 1  MDD 0.19
+W  p0 0.50  rho 0.843  n 64  passes 1  MDD 0.13
+W  p0 0.15  rho 0.500  n 80  passes 2  MDD 0.10
+W  p0 0.15  rho 0.843  n 80  passes 2  MDD 0.07
+W  p0 0.25  rho 0.500  n 80  passes 2  MDD 0.11
+W  p0 0.25  rho 0.843  n 80  passes 2  MDD 0.07
+W  p0 0.35  rho 0.500  n 80  passes 2  MDD 0.12
+W  p0 0.35  rho 0.843  n 80  passes 2  MDD 0.08
+W  p0 0.50  rho 0.500  n 80  passes 2  MDD 0.13
+W  p0 0.50  rho 0.843  n 80  passes 2  MDD 0.08
+W  p0 0.15  rho 0.500  n 80  passes 1  MDD 0.15
+W  p0 0.15  rho 0.843  n 80  passes 1  MDD 0.11
+W  p0 0.25  rho 0.500  n 80  passes 1  MDD 0.16
+W  p0 0.25  rho 0.843  n 80  passes 1  MDD 0.11
+W  p0 0.35  rho 0.500  n 80  passes 1  MDD 0.17
+W  p0 0.35  rho 0.843  n 80  passes 1  MDD 0.12
+W  p0 0.50  rho 0.500  n 80  passes 1  MDD 0.18
+W  p0 0.50  rho 0.843  n 80  passes 1  MDD 0.11
+Part B. CUT-CANDIDATE reading on W (95% upper bound of office-hours minus none below +0.05): share of simulated runs at each true difference d, and the median half-width of the interval
+W  p0 0.25  rho 0.500  n 48  passes 2  half-width 0.087  |  d -0.15 0.984  d -0.10 0.892  d -0.05 0.574  d +0.00 0.169  d +0.05 0.029
+W  p0 0.35  rho 0.500  n 48  passes 2  half-width 0.097  |  d -0.15 0.973  d -0.10 0.855  d -0.05 0.507  d +0.00 0.159  d +0.05 0.030
+W  p0 0.25  rho 0.500  n 48  passes 1  half-width 0.124  |  d -0.15 0.866  d -0.10 0.656  d -0.05 0.378  d +0.00 0.135  d +0.05 0.032
+W  p0 0.35  rho 0.500  n 48  passes 1  half-width 0.136  |  d -0.15 0.815  d -0.10 0.591  d -0.05 0.314  d +0.00 0.117  d +0.05 0.025
+W  p0 0.25  rho 0.500  n 56  passes 2  half-width 0.081  |  d -0.15 0.996  d -0.10 0.922  d -0.05 0.650  d +0.00 0.237  d +0.05 0.034
+W  p0 0.35  rho 0.500  n 56  passes 2  half-width 0.090  |  d -0.15 0.983  d -0.10 0.885  d -0.05 0.613  d +0.00 0.189  d +0.05 0.034
+W  p0 0.25  rho 0.500  n 56  passes 1  half-width 0.115  |  d -0.15 0.923  d -0.10 0.691  d -0.05 0.401  d +0.00 0.140  d +0.05 0.028
+W  p0 0.35  rho 0.500  n 56  passes 1  half-width 0.127  |  d -0.15 0.862  d -0.10 0.656  d -0.05 0.345  d +0.00 0.122  d +0.05 0.024
+W  p0 0.25  rho 0.500  n 64  passes 2  half-width 0.076  |  d -0.15 0.999  d -0.10 0.961  d -0.05 0.720  d +0.00 0.252  d +0.05 0.039
+W  p0 0.35  rho 0.500  n 64  passes 2  half-width 0.084  |  d -0.15 0.995  d -0.10 0.934  d -0.05 0.656  d +0.00 0.215  d +0.05 0.026
+W  p0 0.25  rho 0.500  n 64  passes 1  half-width 0.107  |  d -0.15 0.937  d -0.10 0.755  d -0.05 0.426  d +0.00 0.162  d +0.05 0.016
+W  p0 0.35  rho 0.500  n 64  passes 1  half-width 0.115  |  d -0.15 0.898  d -0.10 0.706  d -0.05 0.389  d +0.00 0.136  d +0.05 0.029
+W  p0 0.25  rho 0.500  n 80  passes 2  half-width 0.068  |  d -0.15 1.000  d -0.10 0.985  d -0.05 0.785  d +0.00 0.315  d +0.05 0.039
+W  p0 0.35  rho 0.500  n 80  passes 2  half-width 0.075  |  d -0.15 0.999  d -0.10 0.968  d -0.05 0.745  d +0.00 0.267  d +0.05 0.024
+W  p0 0.25  rho 0.500  n 80  passes 1  half-width 0.095  |  d -0.15 0.978  d -0.10 0.846  d -0.05 0.513  d +0.00 0.160  d +0.05 0.039
+W  p0 0.35  rho 0.500  n 80  passes 1  half-width 0.105  |  d -0.15 0.967  d -0.10 0.787  d -0.05 0.467  d +0.00 0.158  d +0.05 0.026
+Part C. Secondary E (share of 4 to 8 key facts drawn out, mechanical) and N (binary, as W): MDD at alpha 0.05
+E  p0 0.20  rho 0.500  n 48  passes 2  MDD 0.06
+E  p0 0.35  rho 0.500  n 48  passes 2  MDD 0.07
+E  p0 0.50  rho 0.500  n 48  passes 2  MDD 0.07
+E  p0 0.20  rho 0.500  n 48  passes 1  MDD 0.08
+E  p0 0.35  rho 0.500  n 48  passes 1  MDD 0.10
+E  p0 0.50  rho 0.500  n 48  passes 1  MDD 0.10
+E  p0 0.20  rho 0.500  n 56  passes 2  MDD 0.06
+E  p0 0.35  rho 0.500  n 56  passes 2  MDD 0.07
+E  p0 0.50  rho 0.500  n 56  passes 2  MDD 0.07
+E  p0 0.20  rho 0.500  n 56  passes 1  MDD 0.08
+E  p0 0.35  rho 0.500  n 56  passes 1  MDD 0.09
+E  p0 0.50  rho 0.500  n 56  passes 1  MDD 0.09
+E  p0 0.20  rho 0.500  n 64  passes 2  MDD 0.05
+E  p0 0.35  rho 0.500  n 64  passes 2  MDD 0.06
+E  p0 0.50  rho 0.500  n 64  passes 2  MDD 0.06
+E  p0 0.20  rho 0.500  n 64  passes 1  MDD 0.07
+E  p0 0.35  rho 0.500  n 64  passes 1  MDD 0.08
+E  p0 0.50  rho 0.500  n 64  passes 1  MDD 0.08
+Part D. Per-type cells (descriptive): W, Opus 2 passes, alpha 0.05, rho 0.5
+type cell  W  p0 0.25  n  8  passes 2  MDD none<=0.50
+type cell  W  p0 0.35  n  8  passes 2  MDD none<=0.50
+type cell  W  p0 0.25  n 12  passes 2  MDD 0.43
+type cell  W  p0 0.35  n 12  passes 2  MDD 0.42
+type cell  W  p0 0.25  n 16  passes 2  MDD 0.33
+type cell  W  p0 0.35  n 16  passes 2  MDD 0.33
