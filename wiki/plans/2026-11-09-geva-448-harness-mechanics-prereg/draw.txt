@@ -1,0 +1,9 @@
+kept 346 f06321599465c9be76dcb847a92ee41490be51c28ae3a4db8171b5fcdfd9c1d8
+twins dropped 1 pytest-dev__pyfakefs-1286
+pool 345 repositories 190
+scored.txt 200 sorted sha256 84ff7632d49d23a2659ccd76f521835c89e61b5ff1273aba3edb66d56c41b3f2 repositories 142
+calibration.txt 40 sorted sha256 251cfb500a4fdec334a89ed22fd4462fde66921c103e22e18188a7b4dbdeb492 repositories 29
+spare.txt 96 sorted sha256 f8498248ad50097dbabd5ad7c5524c29d1fa18b100551657975300f9eb3de3de repositories 73
+judge-subset.txt 60 sorted sha256 d8abba98d6821e02b6f50df9f6b3a84ca5fd594fbf5c46357ea426182cfd6d08 repositories 50
+judge-pilot.txt 12 sorted sha256 a75d6b3d8a7d2d2e4ec345ae3bbe2c40da40f4a27789593f8bb7c7cc2ce50c80 repositories 6
+stranded 9 BerriAI__litellm-16550 BerriAI__litellm-16864 tobymao__sqlglot-6067 tobymao__sqlglot-6314 tobymao__sqlglot-6374 tobymao__sqlglot-6383 tobymao__sqlglot-6385 tobymao__sqlglot-6573 tobymao__sqlglot-6991
