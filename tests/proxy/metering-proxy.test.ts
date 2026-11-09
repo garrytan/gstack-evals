@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { CHAT_PRICES, openRouterRouting, priceRequest, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
 import { isTrialNetworkHost, MeteringProxy, ProxyControl, reconcileJournal, routable, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
+import { proxyRigControl } from "../../src/skill-eval/cli/run-host.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
 const KEY = "sk-ant-real-key-0123456789";
@@ -155,6 +156,15 @@ describe("management socket", () => {
     expect(meter.micros).toBe(1000 * 4 + 100 * 20);
   });
 
+  test("the rig's unbind (proxyRigControl, which dockerRig spreads) revokes the slot's bearer on the management socket (ruling 7)", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const rig = proxyRigControl(new ProxyControl(join(t.dir, "management.sock"), MANAGEMENT));
+    const a = await rig.bind({ cell, models: ["anthropic:claude-opus-5-5"], allowance_micros: 1_000_000 });
+    expect((await t.call(a.slot, a.token)).status).toBe(200);
+    await rig.unbind!(a.slot);
+    await expectProblem(await t.call(a.slot, a.token), 403, "E_SLOT_DENIED");
+    expect(t.calls).toHaveLength(1);
+  });
   test("the trial listener serves no management route, and binds only to the trial network", async () => {
     const t = setup(() => ok({}));
     for (const path of ["/bind", "/finalize", "/__proxy/bind"]) {

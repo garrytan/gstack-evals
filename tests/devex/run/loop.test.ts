@@ -102,8 +102,8 @@ async function go(name: string, sessions: BatchSession[], scripts: Scripts, o: {
   const live = await runDxSessions({ run: "s1-none", runId: "dx-s1-runs", sessions, trees, rig, ledger, record: null, lease: "L1", policy, out, parallel: o.parallel ?? 1, doubled: false, repairs: new Map(), pin: root, control, pollMs: 20, log: (l) => void logs.push(l) });
   const ran = live.rows.map((r) => r.session);
   const settled = live.settle();
-  const rows = new Map(readFileSync(join(out, "rows.ndjson"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as DxRow).map((r) => [r.unit, r]));
   const lines = (f: string) => (existsSync(join(out, f)) ? readFileSync(join(out, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+  const rows = new Map(lines("rows.ndjson").map((r: DxRow) => [r.unit, r]));
   return { live, ran, settled, rows, binds, unbinds, logs, ledgerCalls, sessions: lines("sessions.ndjson"), recoveries: lines("recoveries.ndjson") };
 }
 
@@ -152,7 +152,9 @@ describe("runDxSessions: stops, retries and releases", () => {
     expect(r.binds).toEqual(["u1#1"]);
     expect(r.unbinds).toEqual(["slot-u1-1"]);
     expect(r.rows.get("u1")!.code).toBe("E_DX_INFRA_MISSING");
-    expect(r.rows.get("u2")!.code).toBe("E_DX_INFRA_MISSING");
+    expect(r.rows.has("u2")).toBe(false);
+    expect(r.settled.held).toMatch(/^E_DX_INFRA_MISSING: /);
+    expect(r.settled.close).toBeNull();
     expect(r.sessions[0]).toMatchObject({ undrained: 1, unsettled: 0 });
     expect(r.recoveries[0].reconciled).toMatch(/^not reconciled: 1 calls were still in flight \(undrained\); nothing retries/);
     expect(r.live.batch.haltedBy()).toMatch(/^E_DX_INFRA_MISSING: /);
@@ -165,7 +167,7 @@ describe("runDxSessions: stops, retries and releases", () => {
     expect(r.recoveries[0]).toMatchObject({ undrained: 0, unsettled: 0 });
   });
 
-  test("one launch that throws halts the batch, waits for the session in flight, and every unfinished session gets its row at settle", async () => {
+  test("one launch that throws holds the batch, waits for the session in flight, and only a launched session gets a row; the lease stays open", async () => {
     let release!: () => void;
     const done = go("throws", [S("u1"), S("nope"), S("u3")], { "u1#1": { wait: new Promise<void>((r) => (release = r)) } }, { parallel: 2, missingTree: "nope" });
     await sleep(100);
@@ -175,29 +177,35 @@ describe("runDxSessions: stops, retries and releases", () => {
     expect(r.ran).toContain("u1:opus:none:1");
     expect(r.binds).toEqual(["u1#1"]);
     expect(r.rows.get("u1")!.code).toBe("E_USAGE");
-    expect(r.rows.get("nope")!.code).toBe("E_USAGE");
-    expect(r.rows.get("u3")!.code).toBe("E_USAGE");
-    expect(r.settled.released).toEqual(["nope:opus:none:1", "u3:opus:none:1"]);
+    expect(r.rows.has("nope")).toBe(false);
+    expect(r.rows.has("u3")).toBe(false);
+    expect(r.settled.released).toEqual([]);
+    expect(r.settled.close).toBeNull();
+    expect(r.settled.held).toMatch(/^E_USAGE: nope:opus:none:1's launch threw/);
   });
 
-  test("a launch that throws after an attempt ran keeps that attempt's spend, and the row reads launched for rule 4's median", async () => {
+  test("a launch that throws after an attempt ran keeps that attempt's spend and reasons, and the row reads launched for rule 4's median", async () => {
     const r = await go("throws-late", [S("u1"), S("u2")], { "u1#1": { occupyNext: true } });
     expect(String((r.live.error as Error).message)).toMatch(/^E_USAGE: the session sink .*attempt-2 exists before its launch/);
     expect(r.binds).toEqual(["u1#1"]);
     expect(r.rows.get("u1")).toMatchObject({ launched: true, spend_micros: 1_000, end: "missing", code: "E_USAGE" });
     expect(smokeSession(r.rows.get("u1")!).launched).toBe(true);
-    expect(r.rows.get("u2")).toMatchObject({ launched: false, spend_micros: 0, code: "E_USAGE" });
+    expect(r.rows.get("u1")!.reasons.length).toBe(1);
+    expect(r.rows.get("u1")!.limit_stops).toBe(0);
+    expect(r.rows.has("u2")).toBe(false);
   });
 });
 
 describe("runDxSessions: the control file", () => {
-  test("a malformed line (a code that routes nowhere, a scope stop with no target, not JSON) halts for the Captain and releases every session", async () => {
+  test("a malformed line (a code that routes nowhere, a scope stop with no target, not JSON) holds for the Captain and releases no session", async () => {
     let i = 0;
     for (const bad of ['{"code":"CAP_STOP","why":"x"}\n', '{"code":"E_DX_PROVIDER_DRIFT","why":"no model named"}\n', '{"code":"E_DX_INFRA_MISSING","model":"sol"}\n', "not json\n"]) {
       const r = await go("bad-" + i++, [S("u1"), S("u2", "sol")], {}, { control: [bad] });
       expect(r.live.batch.haltedBy()).toMatch(/^E_USAGE: control line 1 does not read as/);
       expect(r.binds).toEqual([]);
-      expect([...r.rows.values()].map((x) => x.code)).toEqual(["E_USAGE", "E_USAGE"]);
+      expect(r.rows.size).toBe(0);
+      expect(r.settled.released).toEqual([]);
+      expect(r.settled.held).toMatch(/^E_USAGE: control line 1 does not read as/);
     }
   });
 

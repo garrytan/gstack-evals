@@ -2,10 +2,10 @@
 // The devex paid session path's keyless parts (prereg 2026-11-09-geva-417, sections 5, 6, 10 and 14): each stage 1 frozen
 // run's plan, the arm env check, released rows, and review-units --plan devex's paid refusals, each with a fix line.
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { armEnvProblem, dxPlan, releasedRow, stage1Open } from "../../../lanes/devex/run/session.ts";
+import { armEnvProblem, dxPlan, markLaunched, releasedRow, stage1Open, stage1Runs } from "../../../lanes/devex/run/session.ts";
 import { FULL, frozenRuns, ITEMS, openRun, SMOKE } from "../../../lanes/devex/leases.ts";
 import { recordApproval, settleLease } from "../../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
@@ -135,7 +135,7 @@ describe("review-units --plan devex: the paid run's refusals", () => {
       expect(r.err).toContain("\n  fix: ");
     }
   });
-  test("a frozen run the approval record already shows a lease for is refused, and the next stage 1 run still opens", async () => {
+  test("a frozen run whose lease a session launched on is refused, and the next stage 1 run still opens", async () => {
     const t = mkdtempSync(join(dir, "rec-"));
     const record = join(t, "record");
     const ledger = join(t, "ledger.sqlite");
@@ -144,7 +144,9 @@ describe("review-units --plan devex: the paid run's refusals", () => {
     let local = LocalLedger.open(ledger);
     const first = stage1Open("s1-none", ["none"], readItem(record, item.id).leases.length);
     if ("problem" in first) throw new Error(first.problem);
-    settleLease(record, local, openRun(record, local, { run: "s1-none", ...first, mdd: () => Number.POSITIVE_INFINITY }).lease_id!);
+    const firstLease = openRun(record, local, { run: "s1-none", ...first, mdd: () => Number.POSITIVE_INFINITY }).lease_id!;
+    markLaunched(record, firstLease, "c01:opus:none:1");
+    settleLease(record, local, firstLease);
     local.close();
     const kept = mkdtempSync(join(homedir(), ".dx-session-test-"));
     const again = await go(["--run", "s1-none", "--passes", "3", "--record", record, "--ledger", ledger], env, ["none"], ["--units", "all"], join(kept, "out"));
@@ -160,6 +162,57 @@ describe("review-units --plan devex: the paid run's refusals", () => {
     expect(smoke.admission.ok).toBe(true);
     expect(typeof smoke.lease_id).toBe("string");
     local.close();
+  });
+  const fresh = (name: string) => {
+    const t = mkdtempSync(join(dir, name + "-"));
+    const record = join(t, "record");
+    const item = ITEMS.find((i) => i.id === "dx-s1-runs")!;
+    recordApproval(record, { action: "init", item: item.id, cap_micros: item.cap_micros, quotes: [{ words: "a test record", by: "session.test.ts", source: "a test" }], admission: "warn" });
+    return { record, ledger: join(t, "ledger.sqlite"), item: item.id };
+  };
+  const s1none = (r: { record: string; ledger: string }, out: string) => go(["--run", "s1-none", "--passes", "3", "--record", r.record, "--ledger", r.ledger], env, ["none"], ["--units", "all"], out);
+  test("a lease that closes before any session launches on it is void, and its frozen run still opens (ruling 9, decision 17 as amended)", async () => {
+    const r = fresh("void");
+    const kept = mkdtempSync(join(homedir(), ".dx-session-test-"));
+    const first = await s1none(r, join(kept, "out1"));
+    const second = await s1none(r, join(kept, "out2"));
+    rmSync(kept, { recursive: true, force: true });
+    for (const x of [first, second]) {
+      expect(x.code).toBe(2);
+      expect(x.err).toMatch(/closed before any session launched on it with a bound attempt, so it is void and s1-none is not used up/);
+    }
+    const leases = readItem(r.record, r.item).leases;
+    expect(leases.length).toBe(2);
+    expect(leases.every((l) => l.close !== null && existsSync(join(r.record, "dx", "void", l.lease.lease_id + ".json")))).toBe(true);
+    expect(stage1Runs(r.record, r.item)).toBe(0);
+  });
+  test("a second invocation is refused while one holds the item's lease lock, and a lease left open counts as its frozen run (ruling 9)", async () => {
+    const r = fresh("lock");
+    const lock = join(r.record, "dx", "dx-s1-runs.open-lock");
+    mkdirSync(join(r.record, "dx"), { recursive: true });
+    writeFileSync(lock, "{}\n");
+    const kept = mkdtempSync(join(homedir(), ".dx-session-test-"));
+    const locked = await s1none(r, join(kept, "out1"));
+    expect(locked.code).toBe(2);
+    expect(locked.err).toMatch(/E_USAGE review-units: another review-units invocation holds the lease lock .*dx-s1-runs\.open-lock/);
+    expect(readItem(r.record, r.item).leases.length).toBe(0);
+    rmSync(lock);
+    const local = LocalLedger.open(r.ledger);
+    const o = stage1Open("s1-none", ["none"], 0);
+    if ("problem" in o) throw new Error(o.problem);
+    openRun(r.record, local, { run: "s1-none", ...o, mdd: () => Number.POSITIVE_INFINITY });
+    local.close();
+    expect(stage1Runs(r.record, r.item)).toBe(1);
+    const again = await s1none(r, join(kept, "out2"));
+    rmSync(kept, { recursive: true, force: true });
+    expect(again.code).toBe(2);
+    expect(again.err).toMatch(/^E_USAGE review-units: the approval record already shows 1 lease on stage 1's item/);
+  });
+  test("--repair double-limits beside an arm's own repair is refused under E_USAGE (ruling 8)", async () => {
+    const r = await go(["--run", "s1-resmoke", "--repair", "double-limits", "--repair", "autoplan=gstack-stop-gate"], env, ["autoplan=" + DX_GSTACK.repo + "@" + DX_GSTACK.sha], ["--units", ...units(10)]);
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/^E_USAGE review-units: --repair double-limits runs every arm at doubled limits, and --repair also names autoplan's own repair/);
+    expect(r.err).toContain("\n  fix: ");
   });
   test("the dry run prints what it printed before, and needs no pin", async () => {
     const r = await go(["--dry-run"], {});

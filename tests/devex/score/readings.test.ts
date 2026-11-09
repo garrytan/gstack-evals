@@ -13,6 +13,8 @@ import type { ArmId, ModelId } from "../../../lanes/devex/types.ts";
 const dir = mkdtempSync(join(tmpdir(), "dx-readings-test-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 const row = (arm: ArmId, model: ModelId, i: number, o: Partial<DxRow> = {}): DxRow => ({ ...releasedRow({ id: "x", unit: "u" + i, arm, model, pass: 1, stage: 1, smoke: arm !== "none" }, "E_DX_NO_BLOCK", null), end: "block", code: null, list: ["Print the fix."], exposed: arm === "none" || arm === "lens" ? null : true, markers: { reviewer: true, gate: true }, spend_micros: 1_000_000, launched: true, ...o });
+/** The s1-none run's planned Opus none slots: 16 units x 3 passes, in order. */
+const planned = (rows: DxRow[]) => rows.map((r, i) => ({ ...r, unit: "u" + (i % 16), pass: Math.floor(i / 16) + 1 }));
 const write = (name: string, rows: DxRow[]) => {
   const p = join(dir, name);
   writeFileSync(p, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
@@ -70,31 +72,70 @@ describe("dx readings", () => {
     expect(refused.err).toContain("\n  fix: ");
   });
   test("admission: the parse rate from the Opus none rows, then the band", async () => {
-    const none = Array.from({ length: 20 }, (_, i) => row("none", "opus", i, i === 0 ? { end: "no-block", code: "E_DX_NO_BLOCK", list: null } : {}));
+    const none = planned(Array.from({ length: 48 }, (_, i) => row("none", "opus", i, i < 8 ? { end: "missing", code: "E_DX_INFRA_MISSING", list: null } : i < 10 ? { end: "no-block", code: "E_DX_NO_BLOCK", list: null } : {})));
     const input = join(dir, "admission.json");
     writeFileSync(input, JSON.stringify({ noneA: 0.3, stockFail: false, judge: { pass: true, shortfall: false }, floor: { checkA: null, oracleCredit: null } }));
     const ok = await dx(["admission", "--rows", write("none.ndjson", none), "--input", input]);
     expect(ok.code).toBe(0);
-    expect(ok.out).toMatch(/parse rate 19 of 20 \(0\.9500\)/);
+    expect(ok.out).toMatch(/parse rate 38 of 40 \(0\.9500\)/);
     expect(ok.out).toMatch(/admission HEADROOM/);
-    const low = await dx(["admission", "--rows", write("none2.ndjson", none.map((r, i) => (i === 1 ? { ...r, end: "missing" as const, code: "E_DX_INFRA_MISSING", list: null } : r))), "--input", input]);
-    expect(low.out).toMatch(/parse rate 18 of 19 \(0\.9474\) Opus none replies; the bar is 0\.95; left out 1 infrastructure misses and contaminated rows \(E_DX_INFRA_MISSING 1\)/);
+    const low = await dx(["admission", "--rows", write("none2.ndjson", none.map((r, i) => (i === 10 ? { ...r, end: "missing" as const, code: "E_DX_INFRA_MISSING", list: null } : r))), "--input", input]);
+    expect(low.out).toMatch(/parse rate 37 of 39 \(0\.9487\) Opus none replies; the bar is 0\.95; left out 9 infrastructure misses and contaminated rows \(E_DX_INFRA_MISSING 9\)/);
     expect(low.out).toMatch(/admission NO READ/);
+  });
+  test("admission refuses a floor that does not read and an s1-none run that is not complete (ruling 3)", async () => {
+    const full = planned(Array.from({ length: 48 }, (_, i) => row("none", "opus", i)));
+    const rows = write("none-full.ndjson", full);
+    let n = 0;
+    for (const floor of [{}, { checkA: 0.1 }, { checkA: "0.1", oracleCredit: 0.95 }, { checkA: 0.1, oracleCredit: true }, [0.1, 0.95], null]) {
+      const input = join(dir, "floor-bad-" + n++ + ".json");
+      writeFileSync(input, JSON.stringify({ noneA: 0.05, stockFail: false, judge: { pass: true, shortfall: false }, floor }));
+      const r = await dx(["admission", "--rows", rows, "--input", input]);
+      expect(r.code).toBe(2);
+      expect(r.err).toMatch(/E_USAGE/);
+      expect(r.err).toMatch(/floor must hold checkA and oracleCredit, each a number or null|lacks/);
+      expect(r.out).not.toMatch(/admission (FLOOR|NO READ|HEADROOM)/);
+    }
+    const input = join(dir, "floor-ok.json");
+    writeFileSync(input, JSON.stringify({ noneA: 0.3, stockFail: false, judge: { pass: true, shortfall: false }, floor: { checkA: null, oracleCredit: null } }));
+    const cases: Array<[string, DxRow[]]> = [["short", full.slice(0, 47)], ["twice", [...full.slice(0, 47), full[0]!]], ["pass4", full.map((r, i) => (i === 47 ? { ...r, pass: 4 } : r))], ["held", full.slice(0, 20)]];
+    for (const [name, rs] of cases) {
+      const r = await dx(["admission", "--rows", write("none-" + name + ".ndjson", rs), "--input", input]);
+      expect(r.code).toBe(2);
+      expect(r.err).toMatch(/E_USAGE/);
+      expect(r.err).toMatch(/admission reads every planned Opus none session of the s1-none run \(16 units x 3 passes, 48 rows/);
+    }
+    expect((await dx(["admission", "--rows", rows, "--input", input])).code).toBe(0);
+  });
+  test("rule 4's cost median leaves out cost_unknown Opus sessions and prints how many (ruling 6)", async () => {
+    const dear = smokeRows(6).map((r, i) => (i >= 3 && i <= 5 ? { ...r, spend_micros: 10_000_000_000 } : r));
+    const counted = await dx(["smoke", "--rows", write("smoke-dear.ndjson", dear), "--projection-fits", "yes", "--doubled-fits", "no"]);
+    expect(counted.out).toMatch(/smoke plan-devex-review: fail: .*rule 4/);
+    const left = await dx(["smoke", "--rows", write("smoke-unknown.ndjson", dear.map((r, i) => (i === 5 ? { ...r, cost_unknown: true } : r))), "--projection-fits", "yes", "--doubled-fits", "no"]);
+    expect(left.out).toMatch(/smoke plan-devex-review: pass/);
+    expect(left.out).toMatch(/rule 4's cost median left out 1 cost_unknown Opus session(?!s)/);
+  });
+  test("an arm with smoke pass 2 rows and no pass 1 rows is refused under E_USAGE, not a TypeError (ruling 10)", async () => {
+    const rows = [...smokeRows(6).filter((r) => r.arm !== "autoplan"), ...smokeRows(6).filter((r) => r.arm === "autoplan").map((r) => ({ ...r, pass: 2 }))];
+    const r = await dx(["smoke", "--rows", write("smoke-pass2.ndjson", rows), "--projection-fits", "yes", "--doubled-fits", "no"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/E_USAGE.*autoplan has smoke pass 2 rows and no pass 1 rows/);
+    expect(r.err).not.toMatch(/TypeError/);
   });
   test("admission: infrastructure misses and contaminated rows leave the denominator, and model-caused stops stay in it", async () => {
     const input = join(dir, "admission48.json");
     writeFileSync(input, JSON.stringify({ noneA: 0.3, stockFail: false, judge: { pass: true, shortfall: false }, floor: { checkA: null, oracleCredit: null } }));
     const blocks = Array.from({ length: 45 }, (_, i) => row("none", "opus", i));
     const infra = [row("none", "opus", 45, { end: "missing", code: "E_DX_INFRA_MISSING", list: null }), row("none", "opus", 46, { end: "missing", code: "CAP_STOP", list: null }), row("none", "opus", 47, { end: "missing", code: "E_DX_PROVIDER_DRIFT", list: null, launched: false })];
-    const ok = await dx(["admission", "--rows", write("none48-infra.ndjson", [...blocks, ...infra]), "--input", input]);
+    const ok = await dx(["admission", "--rows", write("none48-infra.ndjson", planned([...blocks, ...infra])), "--input", input]);
     expect(ok.out).toMatch(/parse rate 45 of 45 \(1\.0000\) Opus none replies; the bar is 0\.95; left out 3 infrastructure misses and contaminated rows \(E_DX_INFRA_MISSING 1, CAP_STOP 1, E_DX_PROVIDER_DRIFT 1\)/);
     expect(ok.out).toMatch(/admission HEADROOM/);
     const stops = [45, 46, 47].map((i) => row("none", "opus", i, { end: "session-stop", code: "E_DX_ARM_STOP", list: null }));
-    const low = await dx(["admission", "--rows", write("none48-stops.ndjson", [...blocks, ...stops]), "--input", input]);
+    const low = await dx(["admission", "--rows", write("none48-stops.ndjson", planned([...blocks, ...stops])), "--input", input]);
     expect(low.out).toMatch(/parse rate 45 of 48 \(0\.9375\) Opus none replies; the bar is 0\.95; left out 0 infrastructure misses/);
     expect(low.out).toMatch(/admission NO READ/);
-    const web = await dx(["admission", "--rows", write("none48-web.ndjson", [...blocks, row("none", "opus", 45, { end: "contaminated", code: "E_DX_WEB_CONTAMINATED", list: null })]), "--input", input]);
-    expect(web.out).toMatch(/parse rate 45 of 45 .*\(E_DX_WEB_CONTAMINATED 1\)/);
+    const web = await dx(["admission", "--rows", write("none48-web.ndjson", planned([...blocks, ...[45, 46, 47].map((i) => row("none", "opus", i, { end: "contaminated", code: "E_DX_WEB_CONTAMINATED", list: null }))])), "--input", input]);
+    expect(web.out).toMatch(/parse rate 45 of 45 .*\(E_DX_WEB_CONTAMINATED 3\)/);
   });
   test("smoke rule 4: the cost median leaves out sessions released before any attempt and keeps a launched session at its spend", async () => {
     const pdr = (spend: number[], o: Partial<DxRow>[]) => smokeRows(6).map((r) => r).filter((r) => !(r.arm === "plan-devex-review" && r.model === "opus")).concat(spend.map((s, i) => row("plan-devex-review", "opus", i, { spend_micros: s, ...o[i] })));
