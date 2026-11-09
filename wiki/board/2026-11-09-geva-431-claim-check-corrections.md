@@ -143,18 +143,19 @@ The post is wiki/board/2026-11-08-geva-402-ceo-stage-2-results/README.md at 09d7
 
 1. P:4: "no gain on Opus 5.5, GPT-6.1 Sol or particle-1" -> "no gain detected on Opus 5.5, GPT-6.1 Sol or particle-1"
 2. P:4: "a CUT-CANDIDATE on all three" -> "FIX-METHOD (task fit) on all three, narrowed from CUT-CANDIDATE on 2026-11-08"
-3. P:54: "did not help any model find the issue that decided the plan's fate." -> "showed no gain we could detect on any model in finding the issue that decided the plan's fate."
-4. P:54: "No contrast is distinguished from zero." -> "No contrast meets the preregistered Holm rule, so there is no measurable difference under that test. particle-1 standalone's unadjusted 95% interval, -17.9 to -1.2 points, sits below zero, but its sign-flip p is 0.057 and its Holm p 0.114."
-5. P:56: "82% to 100% of sessions" -> "82.5% to 100% of sessions"
-6. P:56: "Under R48 the null ends in **CUT-CANDIDATE on Opus 5.5, GPT-6.1 Sol and particle-1**." -> "Under R48 the null ends in **FIX-METHOD (task fit) on Opus 5.5, GPT-6.1 Sol and particle-1**: hit@3 scores only whether a review names the deciding issue, not whether it improves the plan. The CUT-CANDIDATE this post first gave was narrowed on 2026-11-08."
-7. P:101: "which is conservative for Sol's and particle-1's lower control rates." -> "which assumes a 0.50 control rate. Power was computed only at a 0.344 control rate (0.12), not at Sol's 0.155 or particle-1's 0.226, and their ICC is taken from Opus."
-8. P:111: "-0.075 [-0.147, -0.000]" -> "-0.075 [-0.147, 0.000] (the interval ends at zero)"
-9. P:201: "and the one-line lens does at least as well for a fifth of the cost." -> "and the one-line lens scored higher descriptively (+4.8 points, CI -0.6 to +10.7, not distinguished) for a fifth of the cost."
-10. P:203: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
-11. P:209: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
-12. P:209: "A gain smaller than about 8 points on enforced isn't ruled out, and this test can't see it." -> "Gains up to about 8 points on enforced aren't ruled out. The design-grid 80%-power MDD is 13 points, assuming a 0.50 control rate and Opus's ICC, and power was computed only at a 0.344 control rate (0.12), not at Sol's 0.155."
-13. P:215: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
-14. P:215: "the enforced arm gives no gain." -> "the enforced arm shows no detected gain."
+3. P:5: "none distinguished. R48 CUT-CANDIDATE on all three." -> "none distinguished under the preregistered Holm rule. R48 FIX-METHOD (task fit) on all three, narrowed from CUT-CANDIDATE on 2026-11-08."
+4. P:54: "did not help any model find the issue that decided the plan's fate." -> "showed no gain we could detect on any model in finding the issue that decided the plan's fate."
+5. P:54: "No contrast is distinguished from zero." -> "No contrast meets the preregistered Holm rule, so there is no measurable difference under that test. particle-1 standalone's unadjusted 95% interval, -17.9 to -1.2 points, sits below zero, but its sign-flip p is 0.057 and its Holm p 0.114."
+6. P:56: "82% to 100% of sessions" -> "82.5% to 100% of sessions"
+7. P:56: "Under R48 the null ends in **CUT-CANDIDATE on Opus 5.5, GPT-6.1 Sol and particle-1**." -> "Under R48 the null ends in **FIX-METHOD (task fit) on Opus 5.5, GPT-6.1 Sol and particle-1**: hit@3 scores only whether a review names the deciding issue, not whether it improves the plan. The CUT-CANDIDATE this post first gave was narrowed on 2026-11-08."
+8. P:101: "which is conservative for Sol's and particle-1's lower control rates." -> "which assumes a 0.50 control rate. Power was computed only at a 0.344 control rate (0.12), not at Sol's 0.155 or particle-1's 0.226, and their ICC is taken from Opus."
+9. P:111: "-0.075 [-0.147, -0.000]" -> "-0.075 [-0.147, 0.000] (the interval ends at zero)"
+10. P:201: "and the one-line lens does at least as well for a fifth of the cost." -> "and the one-line lens scored higher descriptively (+4.8 points, CI -0.6 to +10.7, not distinguished) for a fifth of the cost."
+11. P:203: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
+12. P:209: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
+13. P:209: "A gain smaller than about 8 points on enforced isn't ruled out, and this test can't see it." -> "Gains up to about 8 points on enforced aren't ruled out. The design-grid 80%-power MDD is 13 points, assuming a 0.50 control rate and Opus's ICC, and power was computed only at a 0.344 control rate (0.12), not at Sol's 0.155."
+14. P:215: "**Verdict: CUT-CANDIDATE.**" -> "**Verdict: FIX-METHOD (task fit)**, narrowed from CUT-CANDIDATE on 2026-11-08."
+15. P:215: "the enforced arm gives no gain." -> "the enforced arm shows no detected gain."
 
 ### Rerun
 
@@ -190,7 +191,7 @@ The G admission tasks and the panel v3 held-out slices stay held out so they can
 - Bundle digests: panel v3 MANIFEST 803b9cc5..., G admission MANIFEST 3aa62f8d....
 - G admission: the cross-lab read cost was corrected by pricing cache writes at their own rate (prices.ts:60). The figures are in the private claim-check record.
 - L1: the S:254 fix (disclosure 4, which of Sol's pilot-stage stops sit in the rows admission reads) is held because its replacement rests on a new count. Five such numbers wait on a second independent rerun. GPT-6.1 Sol read the Opus post and Claude Opus 5.5 read the Sol and particle-1 post, whose first call returned no text; their costs are in the private claim-check record.
-- plan-ceo-review: fixes 5 and 8 are new in this check (two of Harness Evals' optional notes), and the summary-line fix (P:5) is held for a ruling; the rest come from the claim check, with the Holm scope and the 0.344 power reading added. The cross-lab read cost was corrected by pricing Sol's cache writes at their own rate, about 1.11 times the earlier figure. The merged plan-ceo-review post says its $1,727.97 all-in total also carried $79.84 of unspent crew rest and reserve lines on top of the $1,660.39 reading, but $1,660.39 + $79.84 = $1,740.23. The two totals rest on crew readings taken at different times on 2026-11-08, and the remaining $12.26 gap is untraced.
+- plan-ceo-review: fixes 3, 6 and 9 are new in this check (the summary line's verdict and two of Harness Evals' optional notes); the rest come from the claim check, with the Holm scope and the 0.344 power reading added. The cross-lab read cost was corrected by pricing Sol's cache writes at their own rate, about 1.11 times the earlier figure. The merged plan-ceo-review post says its $1,727.97 all-in total also carried $79.84 of unspent crew rest and reserve lines on top of the $1,660.39 reading, but $1,660.39 + $79.84 = $1,740.23. The two totals rest on crew readings taken at different times on 2026-11-08, and the remaining $12.26 gap is untraced.
 
 ## Disclosures
 
