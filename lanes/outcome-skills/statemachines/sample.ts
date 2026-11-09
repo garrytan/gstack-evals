@@ -24,7 +24,7 @@ export async function sample(o: { candidates: Candidate[]; cache: string; units:
       u.image.image_id = await pull(u.image.ref, o.pacer);
       rec.pull_ms = Date.now() - t0;
       try {
-        const s = smoke(u.image.image_id, id);
+        const s = smoke(u.image.image_id, id, u.image.runtime_id ?? undefined);
         u.image.runtime_id = s.runtime_id;
         rec.layer = "ok";
         rec.smoke = s.verdict;

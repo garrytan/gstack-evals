@@ -11,7 +11,9 @@ const files = {
   "docs/guide.md": "guide\n", "docs/in-span.md": "x\n", "docs/in-block.md": "y\n",
   "a/b/CLAUDE.local.md": "@note.txt\n", "a/b/note.txt": "note\n",
   "a/AGENTS.md": "agents\n", ".claude/AGENTS.md": "x\n", "deep/x/.claude/settings.json": "{}\n",
+  ".gitignore": "target/\n",
   "untracked:target/debug/build.log": "build output\n",
+  "untracked:test-output.json": "{}\n",
 };
 
 describe("history and strip", () => {
@@ -26,7 +28,8 @@ describe("history and strip", () => {
     expect(out.removed).toEqual([".claude", "CLAUDE.md", "a/AGENTS.md", "a/b/CLAUDE.local.md", "a/b/note.txt", "deep/x/.claude", "docs/guide.md"]);
     expect(out.preflight).toBe("PREFLIGHT count=1 refs=refs/heads/main remotes=0 stash=0 loose=0 logs=0 headmatch=1");
     expect(existsSync(join(dir, "docs/in-span.md")) && existsSync(join(dir, "target/debug/build.log"))).toBe(true);
-    expect(gitOut(dir, "ls-files").split("\n").sort()).toEqual(["docs/in-block.md", "docs/in-span.md", "src/lib.rs"]);
+    expect(existsSync(join(dir, "test-output.json"))).toBe(false);
+    expect(gitOut(dir, "ls-files").split("\n").sort()).toEqual([".gitignore", "docs/in-block.md", "docs/in-span.md", "src/lib.rs"]);
     expect(gitOut(dir, "tag")).toBe("");
     const two = prepareFollowOn({ kind: "host", dir }, "diff --git a/src/new.rs b/src/new.rs\nnew file mode 100644\n--- /dev/null\n+++ b/src/new.rs\n@@ -0,0 +1 @@\n+pub fn n() {}\n", "fixture");
     expect(two).toContain("count=2 refs=refs/heads/main");

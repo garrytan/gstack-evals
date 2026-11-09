@@ -49,17 +49,19 @@ export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first"
       writeFileSync(join(inDir, "second"), "");
     }
     if (o.qaHome) cpSync(o.qaHome, join(inDir, "home"), { recursive: true, verbatimSymlinks: true });
-    const r = docker(["run", "--name", name, "--network", "none", "--user", "0:0", "-v", o.volume + ":/sm-src:ro", "-v", inDir + ":/sm-in:ro", "--entrypoint", "bash", runtime, "-c", BUILD, "bash", u.repo_dir], { timeoutMs: 1_800_000 });
+    const r = docker(["run", "--name", name, "--network", "none", "--user", "0:0", "-v", o.volume + ":/sm-src:ro", "-v", inDir + ":/sm-in:ro", "--entrypoint", "", runtime, "bash", "-c", BUILD, "bash", u.repo_dir], { timeoutMs: 1_800_000 });
     const got = Object.fromEntries(r.stdout.split("\n").filter((l) => /^(COMMITS|HEAD) /.test(l)).map((l) => l.split(" ") as [string, string]));
     const commits = o.stage === "first" ? 1 : 2;
     if (r.status !== 0 || Number(got.COMMITS) !== commits || !/^[0-9a-f]{40}$/.test(got.HEAD ?? "")) return smFail("E_SM_HISTORY", "the session tree for " + u.id + " has " + (got.COMMITS ?? "no") + " commits, not " + commits + " (exit " + r.status + ": " + r.stderr.trim().slice(-300) + ")");
     const key = createHash("sha256").update([runtime, o.volume, o.stage, o.treePatch ?? "", o.qaHome ? "qa" : "none", got.HEAD].join("\0")).digest("hex").slice(0, 24);
     const tag = SESSION_REPO + ":" + key;
-    const changes = ["ENTRYPOINT " + JSON.stringify(cfg.Entrypoint ?? []), "CMD " + JSON.stringify(cfg.Cmd ?? []), "WORKDIR " + (cfg.WorkingDir || "/"), "USER " + (cfg.User || "0")].flatMap((c) => ["--change", c]);
+    const changes = [...(cfg.Entrypoint?.length ? ["ENTRYPOINT " + JSON.stringify(cfg.Entrypoint)] : []), "CMD " + JSON.stringify(cfg.Cmd?.length ? cfg.Cmd : ["/bin/bash"]), "WORKDIR " + (cfg.WorkingDir || "/"), "USER " + (cfg.User || "0")].flatMap((c) => ["--change", c]);
     const c = docker(["commit", ...changes, name, tag], { timeoutMs: 1_800_000 });
     if (c.status !== 0) return smFail("E_SM_INFRA_GAP", "docker commit for " + u.id + " failed: " + c.stderr.trim().slice(-300));
     const id = docker(["image", "inspect", "--format", "{{.Id}}", tag], { timeoutMs: 30_000 }).stdout.trim();
     if (!/^sha256:[0-9a-f]{64}$/.test(id)) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has no id");
+    const entry = docker(["image", "inspect", "--format", "{{json .Config.Entrypoint}}", tag], { timeoutMs: 30_000 }).stdout.trim();
+    if (JSON.stringify(cfg.Entrypoint?.length ? cfg.Entrypoint : null) !== entry) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has entrypoint " + entry + ", not the runtime image's");
     return { image_id: id, tag, runtime_id: runtime, volume: o.volume, commits, head: got.HEAD!, home: o.qaHome ? "qa" : "none", tree_patch_sha256: o.treePatch === undefined ? null : createHash("sha256").update(o.treePatch).digest("hex") };
   } finally {
     docker(["rm", "-f", name], { timeoutMs: 60_000 });

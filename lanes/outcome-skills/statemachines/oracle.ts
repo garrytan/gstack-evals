@@ -19,6 +19,7 @@ import { addUnitFile, readUnit, saveUnit, smFail, type OracleRun, type SmUnit } 
 import { join } from "node:path";
 
 export const CLAUDE_VERSION = "2.1.312";
+export const RUNTIME_REPO = "gstack-evals-sm-runtime";
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -69,14 +70,19 @@ const PROBE = "const n=require('net');const t=[['1.1.1.1',443],['8.8.8.8',53],['
 
 /** The runtime smoke: the runtime layer builds on the image, claude --version prints the pinned version, node runs and the
  *  egress probe opens no denied target (in P1's prep container no target is allowed; the proxy route is checked in the
- *  session's own preflight). */
-export function smoke(imageId: string, label: string): { runtime_id: string; claude_version: string; egress_probe: string; verdict: string } {
+ *  session's own preflight). pinned is the unit's recorded runtime id: smoke reuses it while it is on the host and refuses a
+ *  rebuild that gives another id, so a unit's runtime never changes unnoticed. Every runtime is tagged
+ *  RUNTIME_REPO:<label>, so removing a session image built on it never prunes it. */
+export function smoke(imageId: string, label: string, pinned?: string): { runtime_id: string; claude_version: string; egress_probe: string; verdict: string } {
   let runtime_id: string;
   try {
-    runtime_id = withRuntime(imageId);
+    runtime_id = pinned && docker(["image", "inspect", pinned], { timeoutMs: 30_000 }).status === 0 ? pinned : withRuntime(imageId);
   } catch (e) {
     return smFail("E_SM_SMOKE", label + ": the runtime layer did not build: " + (e as Error).message.slice(-400));
   }
+  if (pinned && runtime_id !== pinned) smFail("E_SM_SMOKE", label + ": the runtime rebuild is " + runtime_id + ", not the unit's runtime " + pinned + "; clear image.runtime_id in unit.json to accept a new runtime");
+  const tag = docker(["tag", runtime_id, RUNTIME_REPO + ":" + label.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 128)], { timeoutMs: 30_000 });
+  if (tag.status !== 0) smFail("E_SM_SMOKE", label + ": tagging the runtime " + runtime_id + " failed: " + tag.stderr.slice(-200));
   const r = dockerRun(runName("smoke"), ["--rm", "--network", "none", "--entrypoint", "sh", runtime_id, "-c", 'export PATH="$PATH:/opt/laneb/bin:/usr/local/bin"; claude --version; node -e "$0"', PROBE], { timeoutMs: 120_000 });
   const version = (r.stdout.match(/(\d+\.\d+\.\d+)/) ?? [])[1] ?? "";
   const probe = r.stdout.split("\n").reverse().find((l) => l.startsWith("{")) ?? "";
@@ -179,7 +185,7 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
   const codeOf = (e: unknown) => ((e as Error).message.match(/^(E_[A-Z_]+)/) ?? [])[1] ?? "E_SM_ORACLE_UNSTABLE";
   try {
     u.image.image_id = await pull(u.image.ref, pacer);
-    const s = smoke(u.image.image_id, u.id);
+    const s = smoke(u.image.image_id, u.id, u.image.runtime_id ?? undefined);
     u.image.runtime_id = s.runtime_id;
     const p = prepare(u, s.runtime_id, rf(join(dir, "fix.patch"), "utf8"), false, dir);
     u.strip = { removed: p.removed, restored: p.restored };

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // One family SM session through the real path (the implicit state machines prereg, sections 4 to 6 and 8): the session
-// image (image.ts), a Harbor run copy whose environment is only FROM that image, real_agent in SM mode on the driver's
+// image (image.ts), a Harbor run copy that names that image as its prebuilt docker_image, real_agent in SM mode on the driver's
 // control plane (ledger u4), then the sm-session.v1 record from what real_agent wrote. The run copy holds no test, no fix
 // and, for a first stage, no issue text: the arm's turn carries the scope. Every provider key is unset for Harbor; the
 // only credential the session holds is the driver's slot token.
@@ -66,7 +66,9 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const task = join(i.out, "task");
   mkdirSync(join(task, "environment"), { recursive: true });
   writeFileSync(join(task, "environment/Dockerfile"), "FROM " + image.tag + "\n");
-  writeFileSync(join(task, "task.toml"), readFileSync(join(i.unitDir, "harbor/task.toml"), "utf8").replace(/^\s*docker_image\s*=.*\n?/m, ""));
+  const toml = readFileSync(join(i.unitDir, "harbor/task.toml"), "utf8").replace(/^\s*docker_image\s*=.*\n?/m, "");
+  if (!/^\[environment\]$/m.test(toml)) return smFail("E_SM_ARM", "unit " + u.id + "'s harbor/task.toml has no [environment] section");
+  writeFileSync(join(task, "task.toml"), toml.replace(/^\[environment\]$/m, "[environment]\ndocker_image = " + JSON.stringify(image.tag)));
   writeFileSync(join(task, "instruction.md"), s.stage === "followon" ? readFileSync(join(i.unitDir, "issue.md"), "utf8") : "The arm's turn names the scope.\n");
   const label = u.id + "/" + s.model + "/" + s.cell;
   const taskJson = join(i.out, "task.json");
