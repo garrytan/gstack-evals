@@ -1,0 +1,2 @@
+{"kind":"start","task":"unit-x"}
+{"kind":"ask","question":"Approve the gate?","options":["A) Accept the recommended changes (recommended)","B) Keep the plan"],"reply":"A) Accept the recommended changes (recommended)","source":"freeform"}
