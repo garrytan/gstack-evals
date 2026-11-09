@@ -187,7 +187,8 @@
       "tests/outcome-skills/sm-source.test.ts"
     ],
     "wiki/plans/2026-11-09-geva-409-state-machines-prompt-prereg/**": [
-      "tests/outcome-skills/sm-arms.test.ts"
+      "tests/outcome-skills/sm-arms.test.ts",
+      "tests/outcome-skills/sm-analysis.test.ts"
     ],
     "tests/real-outcome/unit_test.py": [
       "tests/outcome-skills/sm-session.test.ts"
