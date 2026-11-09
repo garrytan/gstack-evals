@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commitLocal, inventoryLocal } from "../../lanes/outcome-skills/pfchecks/capture.ts";
-import { effortDiffers, effortFields, planPart, readWrapup, taskStep, wrapupStep, writeSessionRecord, type PfSessionRecord } from "../../lanes/outcome-skills/pfchecks/session.ts";
+import { effortDiffers, effortFields, effortHolds, planPart, readWrapup, taskStep, wrapupStep, writeSessionRecord, type PfSessionRecord } from "../../lanes/outcome-skills/pfchecks/session.ts";
 
 test("the plan: 9 told cells per unit, interleaved by order_seed, each on its model's item; admission and blind parts", () => {
   const p = planPart(["u1", "u2"], 2151444076, 1);
@@ -35,6 +35,9 @@ test("end rules: the task turn retries the whole session once; the wrap-up turn 
   expect(wrapupStep(["upstream"])).toEqual({ action: "rerun_wrapup" });
   expect(wrapupStep(["upstream", "completed"])).toEqual({ action: "score", wrapup_end: "completed" });
   expect(wrapupStep(["upstream", "upstream"])).toEqual({ action: "gap", code: "E_PF_UPSTREAM_GAP" });
+  expect(wrapupStep(["limit_allowance"])).toEqual({ action: "gap", code: "E_PF_WRAPUP_ALLOWANCE" });
+  expect(wrapupStep(["upstream", "limit_allowance"])).toEqual({ action: "gap", code: "E_PF_WRAPUP_ALLOWANCE" });
+  expect(taskStep(["limit_allowance"])).toEqual({ action: "wrapup" });
 });
 
 test("effort fields of a first request and the infra-gap comparison", () => {
@@ -42,6 +45,11 @@ test("effort fields of a first request and the infra-gap comparison", () => {
   expect(effortFields(body)).toEqual({ thinking: { type: "adaptive" }, output_config: null, reasoning: null, reasoning_effort: null, effort: null });
   expect(effortDiffers(body, { ...body, messages: [1] })).toBe(false);
   expect(effortDiffers(body, { ...body, output_config: { effort: "high" } })).toBe(true);
+  const rec = effortFields(body);
+  expect(effortHolds({ thinking: { type: "adaptive" } }, rec)).toBe(true);
+  expect(effortHolds(null, rec)).toBe(false);
+  expect(effortHolds({ thinking: { type: "adaptive" } }, undefined)).toBe(false);
+  expect(effortHolds({ thinking: { type: "disabled" } }, rec)).toBe(false);
 });
 
 const WRAP = join(import.meta.dir, "../../lanes/outcome-skills/pfchecks/sh/wrapup.sh");

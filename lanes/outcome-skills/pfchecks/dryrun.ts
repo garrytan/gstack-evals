@@ -16,6 +16,8 @@ import { machineId, openLease, recordApproval, settleLease } from "../../../src/
 import { PF_STAGES, serveStages } from "../driver/stage.ts";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
+import { usd } from "../../../src/runner/ledger/money.ts";
+import { priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
 import { UPSTREAM } from "../../../src/runner/proxy/metering-proxy.ts";
 import { sse } from "../../../quick/laneb/runner/fake_upstream.ts";
 import { patchOf, scoreUnit } from "../statemachines/fixtures.ts";
@@ -26,9 +28,9 @@ import { ITEMS, LINE, OPUS, P1, SOL } from "./items.ts";
 import { P_HEADING } from "./exposure.ts";
 import { pstackMount, buildPstackVolume, PSTACK_DIR } from "./pstack.ts";
 import { dockerExecutor } from "./runner.ts";
-import { runPfSession, type PfRun } from "./run.ts";
+import { pfRecord, runPfSession, type PfRun, type PfRunInput } from "./run.ts";
 import { scoreSession, type CatchRecord } from "./score.ts";
-import { effortFields, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfSessionRecord } from "./session.ts";
+import { effortFields, effortHolds, readWrapup, type PfSessionRecord } from "./session.ts";
 import { buildToolsVolume, imagePath, runTlc, tla2tools, toolsEnv, toolsMount, toolsVolume, TLC_CFG, TLC_SPEC, TOOLS_DIR } from "./tools.ts";
 
 export const FIXTURE_IMAGE = "buildpack-deps@sha256:5bac6b3020afcf0358de87990605d5dc4c3f060629381912266b9b9278375af3";
@@ -111,19 +113,41 @@ function writeCommand(files: Record<string, string>): string {
   return "echo " + b64(tar.stdout) + " | base64 -d | tar -xzf - --no-same-owner";
 }
 
-export interface StubSession { task: string; wrapup: "manifest" | "limit" | "upstream" | "none"; checks?: string; bg?: string }
-interface StubState { bodies: Array<{ session: string; phase: string; body: Record<string, any> }>; calls: Map<string, number>; failed: Set<string> }
-/** The stub's reply to one Messages request: the task turn's first main request writes the fixture files; the wrap-up
- *  turn writes CHECKS.json and one late test file, keeps calling a tool (limit), or fails every request of its first attempt
+/** The wrap-up allowance fixture (section 15): a 160k-token stub context, about 560 KB of request body at 3.5 bytes a token. */
+export const WRAP_CONTEXT_TOKENS = 160_000;
+export const WRAP_BYTES = 560_000;
+export interface StubSession {
+  task: string; wrapup: "manifest" | "limit" | "upstream" | "none"; checks?: string; bg?: string;
+  /** The task turn's last answer is text that brings the next request, the wrap-up's first, to about this many bytes. */
+  filler?: number;
+  /** What the wrap-up's first answer reports as usage: a full cache write of the stub context, or 95% of its request's worst case. */
+  usage?: "cache_write" | "worst";
+}
+interface StubState { bodies: Array<{ session: string; phase: string; body: Record<string, any>; bytes: number }>; calls: Map<string, number>; failed: Set<string> }
+/** The stub's reply to one Messages request of bytes bytes: the task turn's first main request writes the fixture files; the
+ *  wrap-up turn writes CHECKS.json and one late test file, keeps calling a tool (limit), or fails every request of its first attempt
  *  with a 400 that neither the proxy (it retries only 429 and 5xx) nor Claude Code retries, so the turn ends on an API
  *  error result (upstream) and its rerun, whose resumed messages hold the wrap-up text twice, completes. bg starts a background Bash command at the end of the task turn. */
-export function stubReply(s: StubSession, phase: string, n: number, first: boolean): { status?: number; blocks: Array<Record<string, unknown>> } {
+export function stubReply(s: StubSession, phase: string, n: number, first: boolean, bytes = 0): { status?: number; blocks: Array<Record<string, unknown>>; usage?: Record<string, number> } {
   const tool = (command: string) => [{ type: "tool_use", id: "toolu_pf_" + phase + "_" + n, name: "Bash", input: { command, description: "Fixture step" } }];
-  if (phase === "task") return { blocks: n === 0 ? tool(s.task) : n === 1 && s.bg ? [{ type: "tool_use", id: "toolu_pf_bg_" + n, name: "Bash", input: { command: s.bg, description: "Background fixture step", run_in_background: true } }] : [{ type: "text", text: "Done." }] };
+  if (phase === "task") return { blocks: n === 0 ? tool(s.task) : n === 1 && s.bg ? [{ type: "tool_use", id: "toolu_pf_bg_" + n, name: "Bash", input: { command: s.bg, description: "Background fixture step", run_in_background: true } }] : [{ type: "text", text: n === 1 && s.filler ? "x".repeat(Math.max(0, s.filler - bytes)) : "Done." }] };
   if (s.wrapup === "limit") return { blocks: tool("true") };
   if (s.wrapup === "upstream" && first) return { status: 400, blocks: [] };
   if (s.wrapup === "none" || n > 0) return { blocks: [{ type: "text", text: "Done." }] };
-  return { blocks: tool("echo " + b64(s.checks ?? "[]") + " | base64 -d > CHECKS.json && printf 'exit 0\\n' > checks/late_test.sh") };
+  const usage = s.usage === "cache_write" ? { input_tokens: 3, cache_creation_input_tokens: WRAP_CONTEXT_TOKENS, cache_read_input_tokens: 0, output_tokens: 150 } : s.usage === "worst" ? { input_tokens: 0, cache_creation_input_tokens: Math.floor(0.95 * bytes), cache_read_input_tokens: 0, output_tokens: Math.floor(0.95 * 32_000) } : undefined;
+  return { blocks: tool("echo " + b64(s.checks ?? "[]") + " | base64 -d > CHECKS.json && printf 'exit 0\\n' > checks/late_test.sh"), ...(usage ? { usage } : {}) };
+}
+/** sse() with the stub's usage in place of its fixed one, when given. */
+function sseWith(model: string, blocks: Array<Record<string, unknown>>, usage?: Record<string, number>): string {
+  const text = sse(model, blocks as any);
+  if (!usage) return text;
+  return text.split("\n").map((l) => {
+    if (!l.startsWith("data: ")) return l;
+    const e = JSON.parse(l.slice(6));
+    if (e.type === "message_start") e.message.usage = { ...usage, output_tokens: 1 };
+    if (e.type === "message_delta") e.usage = { output_tokens: usage.output_tokens };
+    return "data: " + JSON.stringify(e);
+  }).join("\n");
 }
 
 function startStub(sessions: Record<string, StubSession>, host: string) {
@@ -133,25 +157,26 @@ function startStub(sessions: Record<string, StubSession>, host: string) {
     async fetch(req) {
       const path = new URL(req.url).pathname;
       if (req.method !== "POST") return Response.json({});
-      const body = (await req.json()) as Record<string, any>;
+      const raw = await req.text();
+      const body = JSON.parse(raw) as Record<string, any>;
       if (path.endsWith("/count_tokens")) return Response.json({ input_tokens: 10 });
       const said = JSON.stringify(body.messages ?? []);
       const session = /pf-dry-session (\w+)/.exec(said)?.[1] ?? "?";
       const phase = said.includes(JSON.stringify(WRAPUP).slice(1, -1)) ? "wrapup" : "task";
-      st.bodies.push({ session, phase, body });
+      st.bodies.push({ session, phase, body, bytes: Buffer.byteLength(raw) });
       const main = Array.isArray(body.tools) && body.tools.length > 0;
       if (!main || !sessions[session]) return new Response(sse(body.model, [{ type: "text", text: "DONE" }] as any), { headers: { "content-type": "text/event-stream" } });
       const key = session + ":" + phase;
       const n = st.calls.get(key) ?? 0;
       st.calls.set(key, n + 1);
       const first = JSON.stringify(body.messages ?? []).split(JSON.stringify(WRAPUP).slice(1, -1)).length <= 2;
-      const r = stubReply(sessions[session]!, phase, n, first);
+      const r = stubReply(sessions[session]!, phase, n, first, Buffer.byteLength(raw));
       if (r.status) {
         st.failed.add(key);
         st.calls.set(key, 0);
         return Response.json({ type: "error", error: { type: "invalid_request_error", message: "stub upstream end" } }, { status: r.status });
       }
-      return new Response(sse(body.model, r.blocks as any), { headers: { "content-type": "text/event-stream" } });
+      return new Response(sseWith(body.model, r.blocks, r.usage), { headers: { "content-type": "text/event-stream" } });
     },
   });
   return { st, server };
@@ -227,6 +252,9 @@ export async function main(argv: string[]): Promise<number> {
     D: { task: plant, wrapup: "upstream", checks: manifest(["bash checks/regress_test.sh"]) },
     hostile: { task: "true", wrapup: "none" },
     blind: { task: PATH_PROBE, wrapup: "none" },
+    Eopus: { task: "mkdir -p checks", filler: WRAP_BYTES, wrapup: "manifest", usage: "cache_write" },
+    Esol: { task: "mkdir -p checks", filler: WRAP_BYTES, wrapup: "manifest", usage: "cache_write" },
+    W4: { task: "mkdir -p checks", filler: WRAP_BYTES, wrapup: "manifest", usage: "worst" },
   };
   const { st, server } = startStub(stubSessions, gw);
   const url = "http://" + gw + ":" + server.port;
@@ -245,14 +273,18 @@ export async function main(argv: string[]): Promise<number> {
   let batch = await serve(1, ["pf-opus", "pf-sol", "pf-particle", "pf-blind"]);
   let stopped = false;
   let index = 0;
+  // effort.json: each model's first main request fields as the driver's proxy recorded them, from batch 1's sessions.
+  // Every session after it is checked against it, as a paid session is.
+  let effortRecord: Record<string, Record<string, unknown>> | null = null;
   const runOne = async (name: string, arm: PfArm, model: string, names: Names, hostile = false) => {
     const stage = batch.stages.find((s) => PF_STAGES[s.item]!.arms.includes("pf:" + arm) && PF_STAGES[s.item]!.models.includes(model));
     const session = { unit: "pf-dry-flag", part: 0, index: index++, model, arm, item: stage?.item ?? "none" };
     const issue = "The flag in flag/flag.go is never reset after a run, so the next run starts in the wrong state. (pf-dry-session " + name + ")";
-    const run: PfRun = await runPfSession({ unitDir: fx.dir, session, names, control: batch.control, proxy: stage?.proxy ?? batch.stages[0]!.proxy, out: join(W, "s-" + name), volume: hostile ? hostileVol : treeVol, issue, ...(arm === "blind" ? { scope: "flag/ (pf-dry-session " + name + ")" } : {}), harbor, claude: claudeBin, probeNode: "", jobName: "pf-dry-" + name }, () => st.bodies.find((b) => b.session === name && Array.isArray(b.body.tools) && b.body.tools.length)?.body);
+    const input: PfRunInput = { unitDir: fx.dir, session, names, control: batch.control, proxy: stage?.proxy ?? batch.stages[0]!.proxy, out: join(W, "s-" + name), volume: hostile ? hostileVol : treeVol, issue, ...(arm === "blind" ? { scope: "flag/ (pf-dry-session " + name + ")" } : {}), harbor, claude: claudeBin, probeNode: "", jobName: "pf-dry-" + name, effort: effortRecord };
+    const run: PfRun = await runPfSession(input);
     const a = run.attempts.at(-1)!;
     const turns = a.summary ?? { refused: "no pf-summary.json: " + readFileSync(join(a.dir, "harbor.log"), "utf8").slice(-400) };
-    return { out: a.evaluator ?? a.dir, turns, arm, model, names, run };
+    return { name, out: a.evaluator ?? a.dir, turns, arm, model, names, run, input };
   };
   type Ran = Awaited<ReturnType<typeof runOne>>;
   const toRecord = (_name: string, r: Ran, _index: number): string => r.run.file;
@@ -326,6 +358,13 @@ export async function main(argv: string[]): Promise<number> {
     });
     const samePath = [0, 1].every((n) => new Set(seen.map((a) => a.users[n]!.path)).size === 1);
     rule("live Claude Code Bash tool PATH in every arm, as root and as uid 1000: tools bin first, bun from the tools volume, statechart starts where pstack is mounted", samePath && seen.every((a) => a.users.every((x) => x.ok)), "want " + wantPath + "; " + seen.map((a) => a.arm + ": " + a.users.map((x) => (x.ok ? "" : "BAD ") + x.text).join("; ")).join(" | ") + " (recorded only, bare login shells: " + seen.map((a) => a.arm + " " + a.login.map((x) => x.text).join("; ")).join(" | ") + ")");
+    const stubSaw = (name: string) => effortFields(st.bodies.find((b) => b.session === name && Array.isArray(b.body.tools) && b.body.tools.length)?.body ?? {});
+    const byModel: Array<[string, Ran]> = [[OPUS, A], [SOL, B], [P1, C]];
+    effortRecord = Object.fromEntries(byModel.map(([m, r]) => [m, r.run.record.effort!]));
+    writeFileSync(join(W, "effort.json"), JSON.stringify(effortRecord, null, 1) + "\n");
+    const sawSame = byModel.map(([m, r]) => [m, r.run.record.effort !== null && JSON.stringify(r.run.record.effort) === JSON.stringify(stubSaw(r.name))] as const);
+    const batch1 = [probe, A, B, C, BL].map((r) => [r.name, effortHolds(r.run.record.effort, effortRecord![r.model])] as const);
+    rule("first main request's effort and thinking fields recorded at the driver's proxy per model, equal to what the stub saw", sawSame.every((x) => x[1]) && batch1.every((x) => x[1]), byModel.map(([m, r]) => m + " " + JSON.stringify(r.run.record.effort)).join("; ") + "; equal to the stub's first main request body: " + sawSame.map((x) => x[0] + " " + x[1]).join(", ") + "; each batch 1 session matches its model's record: " + batch1.map((x) => x[0] + " " + x[1]).join(", "));
     await batch.stop();
     batch = await serve(2, ["pf-admit"]);
     const D = await runOne("D", "P", OPUS, names);
@@ -333,9 +372,56 @@ export async function main(argv: string[]): Promise<number> {
     const recD = JSON.parse(readFileSync(fileD, "utf8")) as PfSessionRecord;
     const cD = await score(D, fileD);
     rule("wrap-up upstream end reruns the wrap-up turn once on the saved S", JSON.stringify(recD.wrapup?.ends) === '["upstream","completed"]' && cD.score === 1, "ends " + JSON.stringify(recD.wrapup?.ends) + ", score " + cD.score);
-    const effort = Object.fromEntries([["A", OPUS], ["B", SOL], ["C", P1]].map(([s, m]) => [m, effortFields(st.bodies.find((b) => b.session === s && Array.isArray(b.body.tools) && b.body.tools.length)?.body ?? {})]));
-    writeFileSync(join(W, "effort.json"), JSON.stringify(effort, null, 1) + "\n");
-    rule("first request body's effort and thinking fields recorded per model", Object.keys(effort).length === 3, JSON.stringify(effort));
+    const noRecord = structuredClone(D.turns) as Record<string, any>;
+    for (const x of noRecord.slots ?? []) if (x.phase === "task" && x.close) delete x.close.first_request;
+    const missing = pfRecord(D.input, recD.attempt, noRecord, null);
+    rule("effort check: a session whose proxy-recorded fields match its model's record passes, and a session with no record is an infra gap", recD.gap === null && effortHolds(recD.effort, effortRecord[OPUS]) && missing.gap === "E_PF_INFRA_GAP" && missing.effort === null, "D, checked live against effort.json: gap " + recD.gap + ", effort " + JSON.stringify(recD.effort) + "; D's pf-summary.json with its task slot's record removed: gap " + missing.gap + ", effort " + missing.effort);
+    // The wrap-up allowance at a 160k-token stub context, and a wrap-up refused for its allowance (sections 5 and 13).
+    const journal = (r: Ran) => {
+      const slot = ((r.turns.slots ?? []) as Array<Record<string, any>>).find((x) => x.phase === "wrapup");
+      const meter = ((r.turns.events ?? []) as Array<Record<string, any>>).find((e) => e.event === "u4_slot" && e.session === slot?.id)?.meter_id;
+      const lines = readFileSync(join(W, "driver-2", r.run.record.lease_id + ".journal.ndjson"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, any>);
+      return { slot, lines: lines.filter((j) => meter && (j.meter_id ?? j.cell?.meter_id) === meter) };
+    };
+    /** Each main wrap-up request in order: its bytes, the proxy's worst case for it (priceRequest, as the proxy prices it),
+     *  what the slot had committed when it came, and whether the proxy sent it on (a reserve and a request line at that worst case). */
+    const wrapRequests = (r: Ran) => {
+      const { slot, lines } = journal(r);
+      let settled = 0;
+      const inflight = new Map<string, number>(), rid = new Map<string, string>(), seen: Array<{ max: number; committed: number; sent: boolean }> = [];
+      for (const j of lines) {
+        if (j.kind === "reserve") {
+          seen.push({ max: j.max_micros, committed: settled + [...inflight.values()].reduce((a, b) => a + b, 0), sent: false });
+          inflight.set(j.idempotency_key, j.max_micros);
+        } else if (j.kind === "request") {
+          rid.set(j.reservation_id, j.idempotency_key);
+          const s = seen.findLast((x) => x.max === j.max_micros);
+          if (s) s.sent = true;
+        } else if (j.kind === "outcome") {
+          const k = rid.get(j.reservation_id) ?? "";
+          settled += j.outcome?.kind === "spent" ? j.outcome.spent_micros : (inflight.get(k) ?? 0);
+          inflight.delete(k);
+        }
+      }
+      const provider = r.model === OPUS ? "anthropic" : "openrouter";
+      const mains = st.bodies.filter((b) => b.session === r.name && b.phase === "wrapup" && Array.isArray(b.body.tools) && b.body.tools.length);
+      const reqs = mains.map((b) => ({ bytes: b.bytes, worst: reservationMicros(priceRequest(provider, b.body, b.body.max_tokens ?? 32_000, "/v1/messages")) })).map((q) => ({ ...q, ...(seen.find((x) => x.max === q.worst) ?? { committed: null, sent: false }) }));
+      const refusals = lines.filter((j) => j.kind === "refusal").map((j) => j.code + " " + j.reason);
+      return { allowance: slot?.allowance_micros as number, reqs, refusals };
+    };
+    const showWrap = (w: ReturnType<typeof wrapRequests>) => w.reqs.map((q, k) => (k ? "next" : "first") + " wrap-up request " + q.bytes + " bytes, worst case " + usd(q.worst) + " + " + (q.committed === null ? "?" : usd(q.committed)) + " committed = " + (q.committed === null ? "?" : usd(q.worst + q.committed)) + " of the " + usd(w.allowance ?? 0) + " allowance, " + (q.sent ? "admitted" : "not sent")).join("; ") + (w.refusals.length ? "; refused: " + w.refusals.join(" | ") : "");
+    for (const [label, name, model] of [["Opus", "Eopus", OPUS], ["Sol", "Esol", SOL]] as const) {
+      const E = await runOne(name, "C", model, names);
+      const w = wrapRequests(E);
+      const ok = w.reqs.length >= 2 && w.reqs[0]!.bytes >= WRAP_BYTES && w.reqs.slice(0, 2).every((q) => q.sent && q.committed !== null && q.worst + q.committed <= w.allowance) && !w.refusals.length && JSON.stringify(E.run.record.wrapup?.ends) === '["completed"]';
+      rule("cold first wrap-up request at a " + WRAP_CONTEXT_TOKENS / 1000 + "k-token stub context, and the next after a full cache write, admitted inside the wrap-up allowance on " + label, ok, showWrap(w) + "; wrap-up ends " + JSON.stringify(E.run.record.wrapup?.ends) + ", gap " + E.run.record.gap);
+      slotLine(name, E);
+    }
+    const W4 = await runOne("W4", "N", OPUS, names);
+    const w4 = wrapRequests(W4);
+    const wslots = ((W4.turns.slots ?? []) as Array<Record<string, any>>).filter((x) => x.phase === "wrapup").length;
+    rule("wrap-up turn refused for its allowance is gap E_PF_WRAPUP_ALLOWANCE, with one wrap-up attempt and one session attempt", W4.run.record.gap === "E_PF_WRAPUP_ALLOWANCE" && JSON.stringify(W4.run.record.wrapup?.ends) === '["limit_allowance"]' && wslots === 1 && W4.run.attempts.length === 1 && w4.refusals.some((x) => x.startsWith("E_ALLOWANCE ")), "gap " + W4.run.record.gap + ", wrap-up ends " + JSON.stringify(W4.run.record.wrapup?.ends) + ", wrap-up slots " + wslots + ", session attempts " + W4.run.attempts.length + "; " + showWrap(w4));
+    slotLine("W4", W4);
     const H = await runOne("hostile", "C", OPUS, names, true);
     const reached = st.bodies.filter((b) => JSON.stringify(b.body).includes("PF-HOSTILE")).length;
     for (const [n, r] of Object.entries({ probe, A, B, C, D })) rule("claude --version is 2.1.312 in session " + n, /^2\.1\.312 /.test(String(r.turns.claude_version)), String(r.turns.claude_version));
@@ -354,6 +440,7 @@ export async function main(argv: string[]): Promise<number> {
       rule("ledger lease " + d.item, it.open === null && it.leases.length === 1 && it.leases[0]!.close !== null, "lease " + (it.leases[0]?.lease as any)?.lease_id + " opened and settled " + (PF_STAGES[d.item] ? "by the driver" : "directly (not a driver stage)") + ", spent " + it.leases[0]?.close?.spent_micros + " of cap " + d.cap_micros + ", driver exit " + code);
     }
     rule("hostile CLAUDE.md reaches no arm", /E_PF_ARM/.test(String(H.turns.refused ?? "")) && reached === 0 && st.bodies.every((b) => b.session !== "hostile"), "refused: " + String(H.turns.refused ?? "no").slice(0, 120) + "; request bodies holding the text " + reached);
+    rule("tree-check refusal is gap E_PF_ARM with one attempt, no retry", H.run.record.gap === "E_PF_ARM" && H.run.attempts.length === 1, "hostile session record: gap " + H.run.record.gap + ", attempts " + H.run.attempts.length);
   } catch (e) {
     rule("dry run", false, (e as Error).stack?.slice(0, 800) ?? String(e));
   } finally {

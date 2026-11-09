@@ -6,7 +6,10 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { BASE_FLAG, MANIFEST_A, agentFiles, misses, outcomes, stubReply } from "../../lanes/outcome-skills/pfchecks/dryrun.ts";
+import { priceRequest, reservationMicros, usageCost } from "../../src/runner/pricing/prices.ts";
+import { WRAPUP_ALLOWANCE } from "../../lanes/outcome-skills/pfchecks/arms.ts";
+import { BASE_FLAG, MANIFEST_A, WRAP_BYTES, WRAP_CONTEXT_TOKENS, agentFiles, misses, outcomes, stubReply } from "../../lanes/outcome-skills/pfchecks/dryrun.ts";
+import { OPUS } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { readManifest } from "../../lanes/outcome-skills/pfchecks/manifest.ts";
 
 test("the stub's script: the task turn plants files once; the wrap-up writes the manifest, loops to its limit, or ends upstream once", () => {
@@ -17,6 +20,33 @@ test("the stub's script: the task turn plants files once; the wrap-up writes the
   expect(stubReply({ ...s, wrapup: "limit" }, "wrapup", 7, true).blocks[0]).toMatchObject({ input: { command: "true" } });
   expect(stubReply({ ...s, wrapup: "upstream" }, "wrapup", 0, true).status).toBe(400);
   expect(stubReply({ ...s, wrapup: "upstream" }, "wrapup", 0, false).blocks[0]).toMatchObject({ type: "tool_use" });
+});
+
+test("the stub's wrap-up allowance fixtures: the task turn's last answer fills the context, and the wrap-up's first answer reports a full cache write or 95% of its worst case", () => {
+  const s = { task: "mkdir -p checks", wrapup: "manifest" as const, filler: WRAP_BYTES, usage: "cache_write" as const };
+  expect((stubReply(s, "task", 1, true, 70_000).blocks[0] as any).text).toBe("x".repeat(WRAP_BYTES - 70_000));
+  expect((stubReply({ ...s, filler: undefined }, "task", 1, true, 70_000).blocks[0] as any).text).toBe("Done.");
+  expect(stubReply(s, "wrapup", 0, true, 561_000).usage).toEqual({ input_tokens: 3, cache_creation_input_tokens: WRAP_CONTEXT_TOKENS, cache_read_input_tokens: 0, output_tokens: 150 });
+  expect(stubReply({ ...s, usage: "worst" }, "wrapup", 0, true, 561_000).usage).toEqual({ input_tokens: 0, cache_creation_input_tokens: 532_950, cache_read_input_tokens: 0, output_tokens: 30_400 });
+  expect(stubReply(s, "wrapup", 1, true, 561_000).usage).toBeUndefined();
+  expect(stubReply({ ...s, usage: undefined }, "wrapup", 0, true, 561_000).usage).toBeUndefined();
+});
+
+test("on Opus at the stub context, a full cache write leaves room for the next wrap-up request, and a report of 95% of the worst case does not", () => {
+  const body = (bytes: number) => {
+    const b = { model: OPUS, max_tokens: 32_000, system: [{ type: "text", text: "s", cache_control: { type: "ephemeral" } }], tools: [{ name: "Bash", input_schema: { type: "object" } }], messages: [{ role: "user", content: "" }] };
+    b.messages[0]!.content = "x".repeat(bytes - Buffer.byteLength(JSON.stringify(b)));
+    return b;
+  };
+  const price = priceRequest("anthropic", body(WRAP_BYTES), 32_000, "/v1/messages");
+  const worst = reservationMicros(price);
+  const allowance = WRAPUP_ALLOWANCE[OPUS]! * 1_000_000;
+  const write = usageCost(price, stubReply({ task: "", wrapup: "manifest", usage: "cache_write" }, "wrapup", 0, true, WRAP_BYTES).usage)!.micros;
+  const near = usageCost(price, stubReply({ task: "", wrapup: "manifest", usage: "worst" }, "wrapup", 0, true, WRAP_BYTES).usage)!.micros;
+  expect(worst).toBeLessThan(allowance);
+  expect(write + worst).toBeLessThan(allowance);
+  expect(near).toBeLessThan(worst);
+  expect(near + worst).toBeGreaterThan(allowance);
 });
 
 test("the fixture manifest covers section 15's entry fixtures and reads as the scorer reads it", () => {

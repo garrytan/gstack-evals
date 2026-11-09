@@ -3,8 +3,9 @@
 Harbor and by the dry run. The task turn runs on its own slot, then capture.sh commits S in the session container and
 wrapup.sh saves it, then the wrap-up turn resumes the same Claude Code session in a new CLI process with its own limits
 (300 s, 20 turns) on its own slot. An upstream or infra end of the wrap-up turn puts the tree back to S (wrapup.sh reset)
-and reruns the wrap-up turn once on a new slot naming meta.rerun. wrapup.sh keep then keeps only CHECKS.json and counts
-every other change. S leaves the container as a git bundle.
+and reruns the wrap-up turn once on a new slot naming meta.rerun. A wrap-up turn refused for its allowance (an E_ALLOWANCE
+refusal on its slot, or the driver's 409 on its open, raised as OpenRefused) is never rerun. wrapup.sh keep then keeps only
+CHECKS.json and counts every other change. S leaves the container as a git bundle.
 
 Each turn ends as real_agent's _drive ends a phase: the agent ended its turn and its background tasks are quiet (quiet_sec,
 then bg_wait_sec with nothing ends it as bg_wait_expired), bounded by the turn's wall limit. AskUserQuestion and prose
@@ -33,6 +34,11 @@ from real_agent import SM_CHECK, RealAgent, message_record  # noqa: E402
 from sm_user import NoAnswer  # noqa: E402
 
 RERUN = {"task": "task_upstream_or_infra", "wrapup": "wrapup_upstream_or_infra"}
+
+
+class OpenRefused(Exception):
+    """The driver refused a wrap-up slot's open for lack of room (409 CAP_STOP). The wrap-up turn is then refused for its
+    allowance (section 5): it never starts and never reruns."""
 
 
 class StaticSlots:
@@ -85,8 +91,14 @@ class Session:
         user = self.user
         limits = cfg["limits"][phase]
         self.limits = limits
-        slot = self.slots.open(phase, rerun)
         sid = resume
+        try:
+            slot = self.slots.open(phase, rerun)
+        except OpenRefused as e:
+            if phase != "wrapup":
+                raise
+            self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": None, "allowance_micros": None, "close": None, "open_refused": str(e)[:300]})
+            return {"phase": phase, "termination": "open_refused", "drive": {"error": str(e)[:400]}, "session_id": sid, "wall_s": 0.0, "refused": ["CAP_STOP"]}
 
         async def can_use_tool(tool_name, tool_input, ctx):
             if tool_name == "AskUserQuestion":
@@ -158,7 +170,7 @@ class Session:
         for attempt in (1, 2):
             w = await self.turn("wrapup", cfg["wrapup_text"], task["session_id"], RERUN["wrapup"] if attempt == 2 else None)
             out["wrapup"].append(w)
-            if w["termination"] not in ("error_result", "error", "cli_exit") or "E_ALLOWANCE" in w["refused"] or attempt == 2:
+            if w["termination"] not in ("error_result", "error", "cli_exit") or {"E_ALLOWANCE", "CAP_STOP"} & set(w["refused"]) or attempt == 2:
                 break
             self.script("wrapup.sh", "reset", repo, work)
         out["keep"] = self.script("wrapup.sh", "keep", repo, work)

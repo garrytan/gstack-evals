@@ -123,7 +123,9 @@ Rules as built
   #290's planPart reads its seed. Items: pf-opus, pf-sol, pf-particle in the test part; pf-admit in admission; pf-blind.
 - Ends: endKind is #290's. Task turn: completed or a limit goes to the wrap-up; upstream or infra retries the whole
   session once, then E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP. Wrap-up: upstream or infra reruns the wrap-up turn once after
-  wrapup.sh reset, resuming the same Claude Code session; a second is a gap.
+  wrapup.sh reset, resuming the same Claude Code session; a second is a gap. A wrap-up refused for its allowance (the
+  proxy's E_ALLOWANCE on its slot, or the driver's 409 CAP_STOP on its open, which pf_turns.py records as termination
+  open_refused) is gap E_PF_WRAPUP_ALLOWANCE, with no wrap-up rerun and no session retry.
 - Between turns: capture.sh commit (S), then wrapup.sh save. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
   regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
   S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD.
@@ -135,8 +137,12 @@ Rules as built
   bun goes ahead of the image's own PATH. The JDK and bun are glibc builds, so a musl (Alpine) unit image cannot run them.
 - pstack volume pf-pstack-cdbbd4ca5dd2 at /opt/pf-pstack, read-only, loaded with the SDK's plugins option (--plugin-dir).
   stackTree checks the tree id; stacks.ts's install command (pstack's bootstrap) runs in the bun builder with egress.
-- Effort: no effort, thinking or reasoning setting is passed. The dry run records each model's first request fields in
-  effort.json; effortDiffers marks a later session that differs as an infra gap.
+- Effort: no effort, thinking or reasoning setting is passed. The driver's metering proxy records the effort and thinking
+  fields (session.ts EFFORT_KEYS) of each slot's first paid request whose tools list is non-empty (ProxyOptions
+  firstRequestFields, on for PF stages only), and the driver's close answer carries them as first_request. pfRecord reads
+  the task slot's record. The dry run writes those records per model to effort.json; a session run with that record
+  (PfRunInput effort, which every paid session passes) whose task slot recorded no fields, or fields that differ from its
+  model's record, is gap E_PF_INFRA_GAP (effortHolds).
 
 Readings this build chose
 - P's exposure (section 8, "the task turn's transcript holds the body"): measured on Claude Code 2.1.310, the expanded
@@ -170,10 +176,14 @@ Dry run. `gstack-evals outcome pf dryrun [--out dir] [--python <python with clau
 and a fixture unit from #290's fixtures helper (lang go, shell-sourceable product code), and opens one lease per frozen
 item on a temporary ledger. The driver (serveStages) serves those items in two batches, since a batch never serves one arm
 and model on two stages: pf-opus, pf-sol, pf-particle and pf-blind first, then pf-admit. Each stage's metering proxy
-stands in front of a stub upstream that answers as Anthropic's API. Seven sessions run through runPfSession, so each one
+stands in front of a stub upstream that answers as Anthropic's API. Ten sessions run through runPfSession, so each one
 goes through Harbor, PfAgent and the driver's slots in a container from the fixture's session image: probe (the skill
 names and a background task), A (19 manifest entries), B (26 entries and the scoring ceiling), C (a wrap-up limit), blind,
-D (on pf-admit, a wrap-up upstream end and its rerun) and hostile (a tree holding CLAUDE.md, refused before any slot).
+then on pf-admit D (a wrap-up upstream end and its rerun), Eopus and Esol (a cold first wrap-up request at a 160k-token
+stub context, about 560 KB, then the next after the stub reports a full cache write), W4 (the first wrap-up answer
+reports 95% of its request's worst case, so the proxy refuses the next) and hostile (a tree holding CLAUDE.md, refused
+before any slot, gap E_PF_ARM with one attempt). effort.json comes from batch 1's proxy records, and every session after
+it is checked against it.
 The tree volumes are copied from the fixture repo and owned by root, and git in them trusts only /d. A, B, C and D are
 scored with the Docker executor. It prints one PASS or FAIL line per fixture, and the driver settles every lease.
 

@@ -1961,6 +1961,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_PF_WRAPUP_ALLOWANCE: {
+    exit: 2,
+    meaning: "A pstack-checks session's wrap-up turn was refused for its allowance: the metering proxy stopped a wrap-up request at the wrap-up allowance, or the driver refused the wrap-up slot's open for lack of room. The session is a gap with no rerun of the wrap-up turn and no retry of the session, and because it can depend on the arm it is counted per arm and model.",
+    fix: "Report the gap count per arm and model beside every verdict. Nothing is rerun, and the frozen wrap-up allowances in lanes/outcome-skills/pfchecks/arms.ts do not change.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   E_PF_CELL_INCOMPLETE: {
     exit: 1,
     meaning: "A pstack-checks analysis cell (one model and one arm) has gaps on more than 10% of its units, so every verdict that uses it reads INCOMPLETE. The analysis still writes every number, the gap worst case included, then exits 1.",

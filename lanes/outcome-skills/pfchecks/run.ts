@@ -19,7 +19,7 @@ import { readCapture } from "./capture.ts";
 import type { Arm } from "./items.ts";
 import { pfFail } from "./prereg.ts";
 import { PSTACK_DIR, pstackVolume } from "./pstack.ts";
-import { effortFields, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfSessionRecord } from "./session.ts";
+import { effortFields, effortHolds, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfPlanned, type PfSessionRecord } from "./session.ts";
 import { TOOLS_DIR, toolsEnv, toolsVolume } from "./tools.ts";
 
 const ROOT = join(import.meta.dir, "../../..");
@@ -39,6 +39,10 @@ export interface PfRunInput {
   scope?: string; allowance?: Record<Arm, Record<string, number>>; harbor?: string; claude?: string;
   /** real_agent's in-container egress probe node; "" skips the probe (an image with no node). */
   probeNode?: string; jobName?: string;
+  /** The dry run's effort record per model (effort.json). With it, a session whose task slot has no proxy-recorded effort
+   *  fields, or fields that differ from its model's record, is gap E_PF_INFRA_GAP (section 3). Every paid session passes
+   *  it; null only for the dry run's own sessions that write the record. */
+  effort: Record<string, Record<string, unknown>> | null;
 }
 export interface PfRun { record: PfSessionRecord; file: string; image: SessionImage; attempts: Array<{ dir: string; harbor_exit: number; summary: Record<string, any> | null; evaluator: string | null }> }
 
@@ -126,17 +130,21 @@ const armRefusal = (summary: Record<string, any> | null) => typeof summary?.refu
 export const retriesSession = (summary: Record<string, any> | null, record: PfSessionRecord): boolean => !armRefusal(summary) && taskStep([record.task.end]).action === "retry_session";
 
 /** The pf-session.v1 record from one attempt's pf-summary.json (none: an infra end). A tree or home refusal before any
- *  open is gap E_PF_ARM and takes no retry. effortBody is the session's first main request body, when the caller saw it. */
-export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, effortBody?: Record<string, unknown>): PfSessionRecord {
+ *  open is gap E_PF_ARM and takes no retry. A wrap-up turn refused for its allowance (E_ALLOWANCE on its slot, or the
+ *  driver's 409 CAP_STOP on its open) is gap E_PF_WRAPUP_ALLOWANCE. The effort fields are the task slot's, as the driver's
+ *  proxy recorded them; with i.effort, missing or different fields make the session gap E_PF_INFRA_GAP. */
+export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null): PfSessionRecord {
   const s = i.session;
   const slots = (summary?.slots ?? []) as Array<Record<string, any>>;
   const spent = (phase: string) => sum(slots.filter((x) => x.phase === phase).map((x) => x.close?.spent_micros));
   const t = summary?.task as Record<string, any> | null | undefined;
   const tEnd = endKind({ termination: t && t.termination !== "error" ? t.termination : null, refusals: t?.refused ?? [], harness: !t || t.termination === "error" });
-  const ends: EndKind[] = ((summary?.wrapup ?? []) as Array<Record<string, any>>).map((w) => endKind({ termination: w.termination === "error" ? null : w.termination, refusals: w.refused ?? [], harness: w.termination === "error" }));
+  const ends: EndKind[] = ((summary?.wrapup ?? []) as Array<Record<string, any>>).map((w) => ((w.refused ?? []).includes("CAP_STOP") ? "limit_allowance" : endKind({ termination: w.termination === "error" ? null : w.termination, refusals: w.refused ?? [], harness: w.termination === "error" })));
   const ts = armRefusal(summary) ? null : taskStep(attempt === 2 ? ["infra", tEnd] : [tEnd]);
   const ws = ts?.action === "wrapup" && ends.length ? wrapupStep(ends) : null;
-  const gap = !ts ? "E_PF_ARM" : ts.action === "gap" ? ts.code : ts.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
+  const first = slots.find((x) => x.phase === "task")?.close?.first_request as Record<string, unknown> | null | undefined;
+  const effort = first ? effortFields(first) : null;
+  const gap = !ts ? "E_PF_ARM" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts.action === "gap" ? ts.code : ts.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
   const cap = summary?.capture ? readCapture(summary.capture) : null;
   const keep = summary?.keep ? readWrapup(summary.keep) : { checks: false, discarded: [] as string[] };
   const cs = ev ? join(ev, "claude-session.jsonl") : "";
@@ -148,17 +156,17 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
     task: { end: tEnd, turns: null, wall_ms: Math.round((t?.wall_s ?? 0) * 1000), spent_micros: spent("task") }, wrapup: ends.length ? { ends, turns: null, spent_micros: spent("wrapup") } : null,
     wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
     checks: keep.checks && ev ? join(ev, "CHECKS.json") : null, s: bundle && existsSync(bundle) && statSync(bundle).size > 0 ? { repo: bundle, ref: "HEAD" } : null,
-    transcript: ev ? join(ev, "sdk-messages.jsonl") : null, claude_session: cs && existsSync(cs) && statSync(cs).size > 0 ? cs : null, effort: effortBody ? effortFields(effortBody) : null,
+    transcript: ev ? join(ev, "sdk-messages.jsonl") : null, claude_session: cs && existsSync(cs) && statSync(cs).size > 0 ? cs : null, effort,
     questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
     disallowed_tools: [...DISALLOWED_TOOLS], plugin: loadsPlugin(s.arm) ? PSTACK_DIR : null, tools: toolsVolume(),
   };
 }
 
 /** Builds the image, runs Harbor (and the whole-session retry from a fresh container when the task turn ends upstream or
- *  infra), and writes out/session.json. Async, so a caller serving the control plane in this process keeps serving it.
- *  effort(attempt) may return the session's first main request body (the dry run's stub sees it; the driver does not). */
-export async function runPfSession(i: PfRunInput, effort?: (attempt: 1 | 2) => Record<string, unknown> | undefined): Promise<PfRun> {
+ *  infra), and writes out/session.json. Async, so a caller serving the control plane in this process keeps serving it. */
+export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   if (existsSync(i.out)) pfFail("E_PF_ARM", i.out + " exists; each session writes a new run dir");
+  if (i.effort && !i.effort[i.session.model]) pfFail("E_PF_INPUT", "the effort record has no entry for " + i.session.model + "; the dry run's effort.json names every model");
   mkdirSync(i.out, { recursive: true });
   const image = buildSessionImage(readUnit(i.unitDir), { volume: i.volume, stage: "first" });
   const limits = sessionLimits(i.session.arm, i.session.model, i.allowance);
@@ -173,7 +181,7 @@ export async function runPfSession(i: PfRunInput, effort?: (attempt: 1 | 2) => R
     const ev = find(join(dir, "jobs"), "evaluator");
     const summary = ev && existsSync(join(ev, "pf-summary.json")) ? (JSON.parse(readFileSync(join(ev, "pf-summary.json"), "utf8")) as Record<string, any>) : null;
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
-    record = pfRecord(i, attempt, summary, ev, effort?.(attempt));
+    record = pfRecord(i, attempt, summary, ev);
     if (attempt === 2 || !retriesSession(summary, record)) break;
   }
   const file = join(i.out, "session.json");

@@ -45,23 +45,29 @@ export function taskStep(ends: EndKind[]): { action: "wrapup" } | { action: "ret
   if (ends.length === 1) return { action: "retry_session" };
   return { action: "gap", code: last === "upstream" ? "E_PF_UPSTREAM_GAP" : "E_PF_INFRA_GAP" };
 }
-/** Section 5, wrap-up turn: completed or a limit is scored (a limit with no valid manifest scores 0, "no manifest
- *  (wrap-up limit)"); an upstream end reruns only the wrap-up turn once, resuming the same session on the saved S, and a
- *  second is a gap. An infra end in the wrap-up turn takes the same one rerun (this build's reading of "Infra: one rerun"). */
-export function wrapupStep(ends: EndKind[]): { action: "score"; wrapup_end: EndKind } | { action: "rerun_wrapup" } | { action: "gap"; code: "E_PF_UPSTREAM_GAP" | "E_PF_INFRA_GAP" } {
+/** Section 5, wrap-up turn: completed or a time or turn limit is scored (a limit with no valid manifest scores 0, "no
+ *  manifest (wrap-up limit)"); a wrap-up refused for its allowance (limit_allowance: the proxy's E_ALLOWANCE on its slot, or
+ *  the driver's refusal of its open) is gap E_PF_WRAPUP_ALLOWANCE, with no rerun; an upstream end reruns only the wrap-up
+ *  turn once, resuming the same session on the saved S, and a second is a gap. An infra end in the wrap-up turn takes the
+ *  same one rerun (this build's reading of "Infra: one rerun"). */
+export function wrapupStep(ends: EndKind[]): { action: "score"; wrapup_end: EndKind } | { action: "rerun_wrapup" } | { action: "gap"; code: "E_PF_UPSTREAM_GAP" | "E_PF_INFRA_GAP" | "E_PF_WRAPUP_ALLOWANCE" } {
   const last = ends.at(-1) ?? pfFail("E_PF_INPUT", "wrapupStep needs at least one end");
+  if (last === "limit_allowance") return { action: "gap", code: "E_PF_WRAPUP_ALLOWANCE" };
   if (last === "completed" || LIMIT.has(last)) return { action: "score", wrapup_end: last };
   if (ends.length === 1) return { action: "rerun_wrapup" };
   return { action: "gap", code: last === "upstream" ? "E_PF_UPSTREAM_GAP" : "E_PF_INFRA_GAP" };
 }
 
-/** The effort and thinking fields of a request body (section 4's model settings). Missing keys read null. */
+/** The effort and thinking fields of a request body (section 3's model settings). Missing keys read null. */
 export const EFFORT_KEYS = ["thinking", "output_config", "reasoning", "reasoning_effort", "effort"] as const;
 export function effortFields(body: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(EFFORT_KEYS.map((k) => [k, body[k] ?? null]));
 }
 /** A session whose first request's effort fields differ from the dry run's record for its model is an infra gap. */
 export const effortDiffers = (recorded: Record<string, unknown>, body: Record<string, unknown>): boolean => JSON.stringify(effortFields(body)) !== JSON.stringify(effortFields(recorded));
+/** Section 3's effort check: the session's fields, as the driver's proxy recorded them from its task slot's first main
+ *  request, equal the dry run's record for its model (effort.json). No recorded fields, or no record for the model, fails. */
+export const effortHolds = (recorded: Record<string, unknown> | null, want: Record<string, unknown> | undefined): boolean => recorded !== null && want !== undefined && !effortDiffers(want, recorded);
 
 export interface Discard { checks: boolean; discarded: string[] }
 /** wrapup.sh keep's lines: PF_DISCARD <path> per discarded change and one PF_WRAPUP line. */

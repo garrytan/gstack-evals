@@ -24,6 +24,7 @@ import { isSmArm, smArm, smLimits, smProvider } from "../statemachines/arms.ts";
 import { sessionLimits, type PfArm } from "../pfchecks/arms.ts";
 import { ALLOWANCE, ITEMS, MODEL_ITEM, MODELS, type Arm } from "../pfchecks/items.ts";
 import { PfError } from "../pfchecks/prereg.ts";
+import { EFFORT_KEYS } from "../pfchecks/session.ts";
 
 export const DEFAULT_TTL_MS = 72 * 3_600_000;
 export const DEADLINE_GRACE_MS = 120_000;
@@ -43,7 +44,7 @@ export interface StageSpec {
   arm: string;
   /** Family SM only: the model the stage's item pays for, and every SM arm its sessions may name (arm is the stage's label then). Its proxy refuses provider-side tools. */
   model?: string;
-  /** Family SM's arms, or a PF stage's: pf:P, pf:C, pf:N on a told PF item, pf:blind on pf-blind. A PF stage takes its models from PF_STAGES and its proxy refuses provider-side tools. */
+  /** Family SM's arms, or a PF stage's: pf:P, pf:C, pf:N on a told PF item, pf:blind on pf-blind. A PF stage takes its models from PF_STAGES, and its proxy refuses provider-side tools and records each slot's first main request's effort fields. */
   arms?: string[];
 }
 
@@ -106,6 +107,8 @@ export interface CloseAnswer {
   refused: number;
   /** PF sessions only: the proxy code of each refused call, from the lease journal, so a turn can tell an allowance stop from an upstream end. */
   refusals?: string[];
+  /** PF sessions only: the effort and thinking fields (pfchecks session.ts EFFORT_KEYS) of the slot's first request with a tools list, as its metering proxy recorded them, or null when it sent none. */
+  first_request?: Record<string, unknown> | null;
   unknown: number;
   undrained: number;
   unsettled: number;
@@ -456,7 +459,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       const journal = join(dir, lease.lease_id + ".journal.ndjson");
       const sm = smStage(st);
       const pf = pfStage(st);
-      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch, ...(sm || pf ? { refuseServerTools: true } : {}) });
+      const proxy = new MeteringProxy({ ledger: o.local, leaseId: lease.lease_id, host: o.host, managementSocket: join(dir, "p" + i + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: o.retry ?? DEFAULT_RETRY, env: o.env, fetch: o.fetch, ...(sm || pf ? { refuseServerTools: true } : {}), ...(pf ? { firstRequestFields: [...EFFORT_KEYS] } : {}) });
       const stage: Stage = { item: st.item, arm: st.arm, kind: pf ? "prompt" : sm ? smArm(reg, st.arms![0]!).kind : reg.arms[st.arm]!.kind, arms: pf ? [...(st.arms ?? [st.arm])] : sm ? [...st.arms!] : [st.arm], ...(sm ? { model: st.model } : {}), ...(pf ? { models: PF_STAGES[st.item]!.models } : {}), pf, lease_id: lease.lease_id, reserved: lease.reserved_micros, expires: Date.parse(lease.expires_at), proxy, journal, state: "serving", ended: null, scope: null, live: new Map(), opens: 0, reruns: 0, finished: 0, settling: null, close: null };
       stages.push(stage);
       proxy.start();
@@ -525,7 +528,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         unknown: meter?.unknown ?? 0,
         undrained: meter?.undrained ?? 0,
         unsettled: meter?.unsettled ?? 0,
-        ...(s.pf ? { refusals: (existsSync(s.journal) ? readFileSync(s.journal, "utf8").split("\n") : []).flatMap((l) => { try { const j = JSON.parse(l); return j.kind === "refusal" && j.meter_id === sess.meter_id ? [String(j.code)] : []; } catch { return []; } }) } : {}),
+        ...(s.pf ? { refusals: (existsSync(s.journal) ? readFileSync(s.journal, "utf8").split("\n") : []).flatMap((l) => { try { const j = JSON.parse(l); return j.kind === "refusal" && j.meter_id === sess.meter_id ? [String(j.code)] : []; } catch { return []; } }), first_request: meter?.first_request ?? null } : {}),
       };
       sess.closed = answer;
       const hold = sess.key ? holds.get(sess.key) : undefined;

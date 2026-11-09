@@ -92,10 +92,11 @@ for line in sys.stdin:
 
 
 class Control:
-    """The driver's control plane: one slot per open, its base URL on this server, a fixed spend per close."""
+    """The driver's control plane: one slot per open, its base URL on this server, a fixed spend per close, and the
+    proxy-recorded effort fields on the first close. cap_stop True refuses every open with 409; "wrapup" only wrap-up opens."""
 
-    def __init__(self, cap_stop=False):
-        self.opens, self.closes = [], []
+    def __init__(self, cap_stop=False, wrapup_refusals=()):
+        self.opens, self.closes, self.refused = [], [], []
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -105,13 +106,16 @@ class Control:
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers.get("content-length") or 0)) or b"{}")
                 if self.path == "/sessions":
-                    if cap_stop:
+                    if cap_stop is True or (cap_stop == "wrapup" and body["meta"]["phase"] == "wrapup"):
+                        outer.refused.append(body)
                         return self.answer(409, {"code": "CAP_STOP", "detail": "stage pf-opus has no room"})
                     outer.opens.append(body)
                     n = len(outer.opens)
                     return self.answer(200, {"id": f"ses_{n}", "token": f"tok-{n}", "base_url": f"{outer.url}/slot{n}/anthropic", "ledger": "u4", "item": "pf-opus", "lease_id": "pf-opus.0001.abcdef", "meter_id": f"m{n}", "allowance_micros": round(body["cap_usd"] * 1e6)})
                 outer.closes.append({"path": self.path, **body})
-                return self.answer(200, {"spent_micros": 1000 * len(outer.closes), "requests": 1, "ok_responses": 1, "refused": 0, "refusals": [], "usage": {}})
+                first = {"thinking": {"type": "adaptive"}, "output_config": None, "reasoning": None, "reasoning_effort": None, "effort": None} if len(outer.closes) == 1 else None
+                refusals = list(wrapup_refusals) if len(outer.closes) > 1 else []
+                return self.answer(200, {"spent_micros": 1000 * len(outer.closes), "requests": 1, "ok_responses": 1, "refused": len(refusals), "refusals": refusals, "usage": {}, "first_request": first})
 
             def answer(self, code, obj):
                 raw = json.dumps(obj).encode()
@@ -135,7 +139,7 @@ def sh(cwd, cmd):
     return r.stdout.strip()
 
 
-def session(scenario="ok", instr=False, cap_stop=False, arm="P"):
+def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=()):
     """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json."""
     d = Path(tempfile.mkdtemp(prefix="pf-agent-sdk-"))
     DIRS.append(d)
@@ -161,7 +165,7 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P"):
     (d / "pf-config.json").write_text(json.dumps(pf))
     manifest = d / "images.json"
     manifest.write_text(json.dumps({"schema": "tg-images.v1", "rows": [{"label": LABEL, "image_id": IMAGE}]}))
-    control = Control(cap_stop)
+    control = Control(cap_stop, wrapup_refusals)
     pf_agent.SH_DIR = str(d / "pf-sh")
     pf_agent.WORK = str(d / "pf-work")
     agent = pf_agent.PfAgent(
@@ -223,6 +227,7 @@ def test_two_turns_each_on_its_own_driver_slot():
     check(sm["claude_version"] == "2.1.312 (Claude Code)", sm["claude_version"])
     check(sm["task"]["termination"] == "completed" and [w["termination"] for w in sm["wrapup"]] == ["completed"], (sm["task"], sm["wrapup"]))
     check([(x["phase"], x["id"], x["allowance_micros"], x["close"]["spent_micros"]) for x in sm["slots"]] == [("task", "ses_1", 12_000_000, 1000), ("wrapup", "ses_2", 6_000_000, 2000)], sm["slots"])
+    check(sm["slots"][0]["close"]["first_request"] == {"thinking": {"type": "adaptive"}, "output_config": None, "reasoning": None, "reasoning_effort": None, "effort": None} and sm["slots"][1]["close"]["first_request"] is None, sm["slots"])
     check("PF_CAPTURE changed=1 " in sm["capture"], sm["capture"])
     check(sm["checks"] is True and "PF_DISCARD late_1.txt" in sm["keep"] and "discarded=1" in sm["keep"], sm["keep"])
     check(json.loads((s.ev / "CHECKS.json").read_text())[0]["command"] == "bash checks/regress_test.sh", (s.ev / "CHECKS.json").read_text())
@@ -252,6 +257,26 @@ def test_a_tree_refusal_opens_no_slot_and_starts_no_claude():
     check(s.summary["refused"].startswith("E_PF_ARM ") and "INSTR ./CLAUDE.md" in s.summary["refused"], s.summary.get("refused"))
     check(s.control.opens == [] and s.stub == [] and s.summary["slots"] == [] and s.summary["task"] is None, (s.control.opens, s.stub))
     check(s.context.cost_usd is None, s.context.cost_usd)
+
+
+def test_a_wrapup_stopped_at_its_allowance_by_the_proxy_is_not_rerun():
+    s = session("wrapup_error", wrapup_refusals=("E_ALLOWANCE",))
+    check(s.error is None, repr(s.error))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task", "wrapup"], s.control.opens)
+    check([(w["termination"], w["refused"]) for w in s.summary["wrapup"]] == [("error_result", ["E_ALLOWANCE"])], s.summary["wrapup"])
+    check([x["phase"] for x in s.stub] == ["task", "wrapup"], s.stub)
+
+
+def test_a_cap_stop_on_the_wrapup_open_refuses_the_wrapup_once_with_no_rerun_and_keeps_s():
+    s = session(cap_stop="wrapup")
+    check(s.error is None, repr(s.error))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"] and [o["meta"]["phase"] for o in s.control.refused] == ["wrapup"], (s.control.opens, s.control.refused))
+    check([x["phase"] for x in s.stub] == ["task"], s.stub)
+    w = s.summary["wrapup"]
+    check(len(w) == 1 and w[0]["termination"] == "open_refused" and w[0]["refused"] == ["CAP_STOP"] and w[0]["session_id"] == "s-1", w)
+    check([(x["phase"], x["id"], x["close"]) for x in s.summary["slots"]] == [("task", "ses_1", s.summary["slots"][0]["close"]), ("wrapup", None, None)] and "CAP_STOP" in s.summary["slots"][1]["open_refused"], s.summary["slots"])
+    check(s.summary["checks"] is False and "PF_WRAPUP checks=0 discarded=0" in s.summary["keep"] and (s.ev / "s.bundle").stat().st_size > 0, s.summary["keep"])
+    check(any(e["event"] == "ledger_cap_stop" and e["phase"] == "wrapup" for e in s.summary["events"]), s.summary["events"])
 
 
 def test_a_cap_stop_on_the_task_open_raises_before_claude_starts():

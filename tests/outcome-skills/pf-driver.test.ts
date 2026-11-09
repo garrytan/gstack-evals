@@ -219,3 +219,21 @@ test("a closed task slot's wrap-up hold keeps its room for the deadline grace, t
   expect(held.json.code).toBe("CAP_STOP");
   expect((await run(1_001)).status).toBe(200);
 });
+
+test("a PF slot's close answer carries the effort and thinking fields of its first request with a tools list, as its proxy recorded them, or null when it sent none", async () => {
+  const { serve, local } = ledger({ "pf-opus": { cap: 100 } });
+  const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
+  const { open } = client(served.control);
+  const task = await open({ arm: "pf:P", cap: 12, phase: "task" });
+  const call = (body: unknown) => fetch(task.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": task.json.token }, body: JSON.stringify(body) });
+  const tools = [{ name: "Bash", description: "run", input_schema: { type: "object" } }];
+  expect((await call({ model: OPUS, max_tokens: 100, messages: [{ role: "user", content: "title" }] })).status).toBe(200);
+  expect((await call({ model: OPUS, messages: [{ role: "user", content: "fix" }], tools, thinking: { type: "adaptive" } })).status).toBe(200);
+  expect((await call({ model: OPUS, messages: [{ role: "user", content: "again" }], tools, thinking: { type: "disabled" }, effort: "low" })).status).toBe(200);
+  const close = async (id: string) => (await (await fetch(served.control + "/sessions/" + id + "/close", { method: "POST", body: JSON.stringify({ reason: "turn_end" }) })).json()) as Record<string, any>;
+  expect((await close(task.json.id)).first_request).toEqual({ thinking: { type: "adaptive" }, output_config: null, reasoning: null, reasoning_effort: null, effort: null });
+  const wrap = await open({ arm: "pf:P", cap: 6, phase: "wrapup" });
+  expect((await close(wrap.json.id)).first_request).toBeNull();
+  expect(await served.stop()).toBe(0);
+  local.close?.();
+});

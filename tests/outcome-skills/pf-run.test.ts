@@ -42,7 +42,7 @@ function unitDir(): string {
 }
 
 const image: SessionImage = { image_id: "sha256:" + "e".repeat(64), tag: "pf-session:test", runtime_id: "sha256:" + "c".repeat(64), volume: "v", commits: 1, head: "a".repeat(40), home: "none", tree_patch_sha256: null };
-const input = (arm: PfArm, model = OPUS): PfRunInput => ({ unitDir: unitDir(), session: { unit: "pf-run-flag", part: 0, index: 3, model, arm, item: "pf-opus" }, names: "short", control: "http://172.17.0.1:9000", proxy: "172.17.0.1:9001", out: "/unused", volume: "v", claude: "/opt/claude", probeNode: "" });
+const input = (arm: PfArm, model = OPUS): PfRunInput => ({ unitDir: unitDir(), session: { unit: "pf-run-flag", part: 0, index: 3, model, arm, item: "pf-opus" }, names: "short", control: "http://172.17.0.1:9000", proxy: "172.17.0.1:9001", out: "/unused", volume: "v", claude: "/opt/claude", probeNode: "", effort: null });
 const ak = (argv: string[]): Record<string, string> => Object.fromEntries(argv.flatMap((a, i) => (argv[i - 1] === "--ak" ? [[a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1)]] : [])));
 
 test("runCopy writes the run copy naming the session image, the pf config and the overlay, with no provider key", () => {
@@ -108,7 +108,7 @@ test("runCopy gives the blind probe its one-line scope and refuses a blind sessi
 });
 
 const turn = (termination: string, refused: string[] = []) => ({ termination, refused, wall_s: 12.5 });
-const slot = (phase: string, spent: number, rerun: string | null = null) => ({ phase, rerun, id: "ses_" + phase + spent, allowance_micros: 1, close: { spent_micros: spent } });
+const slot = (phase: string, spent: number, rerun: string | null = null, first?: Record<string, unknown> | null) => ({ phase, rerun, id: "ses_" + phase + spent, allowance_micros: 1, close: { spent_micros: spent, ...(first !== undefined ? { first_request: first } : {}) } });
 const summary = (o: { task?: unknown; wrapup?: unknown[]; slots?: unknown[] }) => ({
   task: o.task ?? null, wrapup: o.wrapup ?? [], slots: o.slots ?? [],
   capture: "PF_CAPTURE changed=1 deleted=0 forced=0 head=" + "a".repeat(40) + "\n", keep: "PF_WRAPUP checks=1 discarded=1\nPF_DISCARD checks/late_test.sh\n",
@@ -116,7 +116,7 @@ const summary = (o: { task?: unknown; wrapup?: unknown[]; slots?: unknown[] }) =
 });
 
 test("pfRecord: a completed session scores, with each turn's spend, the lease, the discard and the questions", () => {
-  const r = pfRecord(input("P"), 1, summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 41_200), slot("wrapup", 10_300)] }), null, { model: OPUS, thinking: { type: "adaptive" } });
+  const r = pfRecord(input("P"), 1, summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 41_200, null, { thinking: { type: "adaptive" }, output_config: null, reasoning: null, reasoning_effort: null, effort: null }), slot("wrapup", 10_300, null, { thinking: { type: "disabled" } })] }), null);
   expect(r).toMatchObject({ schema: "pf-session.v1", unit: "pf-run-flag", index: 3, model: OPUS, arm: "P", item: "pf-opus", attempt: 1, lease_id: "pf-opus.0001.abcdef", gap: null, wrapup_end: "completed", plugin: PSTACK_DIR, tools: toolsVolume() });
   expect(r.task).toEqual({ end: "completed", turns: null, wall_ms: 12_500, spent_micros: 41_200 });
   expect(r.wrapup).toEqual({ ends: ["completed"], turns: null, spent_micros: 10_300 });
@@ -128,12 +128,39 @@ test("pfRecord: a completed session scores, with each turn's spend, the lease, t
   expect(retriesSession(summary({ task: turn("completed") }), r)).toBe(false);
 });
 
-test("pfRecord: a limit in either turn still scores, and a wrap-up limit is the scored wrap-up end", () => {
+test("pfRecord: a limit in either turn still scores, and a wrap-up time or turn limit is the scored wrap-up end", () => {
   const i = input("C");
   expect(pfRecord(i, 1, summary({ task: turn("wall_limit"), wrapup: [turn("completed")] }), null)).toMatchObject({ task: { end: "limit_wall" }, wrapup_end: "completed", gap: null });
   expect(pfRecord(i, 1, summary({ task: turn("completed", ["E_ALLOWANCE"]), wrapup: [turn("completed")] }), null)).toMatchObject({ task: { end: "limit_allowance" }, gap: null });
   expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("turn_ceiling")] }), null)).toMatchObject({ wrapup_end: "limit_turns", gap: null });
-  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed", ["E_ALLOWANCE"])] }), null)).toMatchObject({ wrapup_end: "limit_allowance", gap: null });
+  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("wall_limit")] }), null)).toMatchObject({ wrapup_end: "limit_wall", gap: null });
+});
+
+test("pfRecord: a wrap-up turn refused for its allowance, by the proxy or at the driver's open, is gap E_PF_WRAPUP_ALLOWANCE with no rerun and no session retry", () => {
+  const i = input("P");
+  const proxy = summary({ task: turn("completed"), wrapup: [turn("error_result", ["E_ALLOWANCE"])], slots: [slot("task", 10), slot("wrapup", 2)] });
+  const a = pfRecord(i, 1, proxy, null);
+  expect(a).toMatchObject({ attempt: 1, task: { end: "completed" }, wrapup: { ends: ["limit_allowance"], spent_micros: 2 }, wrapup_end: null, gap: "E_PF_WRAPUP_ALLOWANCE" });
+  expect(retriesSession(proxy, a)).toBe(false);
+  const open = summary({ task: turn("completed"), wrapup: [{ termination: "open_refused", refused: ["CAP_STOP"], wall_s: 0 }], slots: [slot("task", 10), { phase: "wrapup", rerun: null, id: null, allowance_micros: null, close: null, open_refused: "409 CAP_STOP" }] });
+  const b = pfRecord(i, 1, open, null);
+  expect(b).toMatchObject({ wrapup: { ends: ["limit_allowance"], spent_micros: 0 }, wrapup_end: null, gap: "E_PF_WRAPUP_ALLOWANCE" });
+  expect(retriesSession(open, b)).toBe(false);
+  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("error_result"), { termination: "open_refused", refused: ["CAP_STOP"], wall_s: 0 }] }), null)).toMatchObject({ wrapup: { ends: ["upstream", "limit_allowance"] }, gap: "E_PF_WRAPUP_ALLOWANCE" });
+  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed", ["E_ALLOWANCE"])] }), null)).toMatchObject({ wrapup_end: null, gap: "E_PF_WRAPUP_ALLOWANCE" });
+});
+
+test("pfRecord: effort is the task slot's proxy record; with the dry run's record, a match scores and a missing or different record is an infra gap", () => {
+  const rec = { thinking: { type: "adaptive" }, output_config: null, reasoning: null, reasoning_effort: null, effort: null };
+  const i = { ...input("N"), effort: { [OPUS]: rec } };
+  const run = (first?: Record<string, unknown> | null) => pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 10, null, first), slot("wrapup", 2, null, rec)] }), null);
+  expect(run({ thinking: { type: "adaptive" } })).toMatchObject({ gap: null, effort: rec, wrapup_end: "completed" });
+  expect(run(null)).toMatchObject({ gap: "E_PF_INFRA_GAP", effort: null });
+  expect(run()).toMatchObject({ gap: "E_PF_INFRA_GAP", effort: null });
+  expect(run({ thinking: { type: "adaptive" }, output_config: { effort: "high" } })).toMatchObject({ gap: "E_PF_INFRA_GAP", effort: { output_config: { effort: "high" } } });
+  expect(pfRecord({ ...i, session: { ...i.session, model: P1 } }, 1, summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 10, null, rec)] }), null).gap).toBe("E_PF_INFRA_GAP");
+  expect(pfRecord({ ...i, effort: null }, 1, summary({ task: turn("completed"), wrapup: [turn("completed")], slots: [slot("task", 10)] }), null)).toMatchObject({ gap: null, effort: null });
+  expect(pfRecord(i, 1, { refused: "E_PF_ARM the tree holds CLAUDE.md", task: null, wrapup: [], slots: [], events: [] }, null).gap).toBe("E_PF_ARM");
 });
 
 test("pfRecord: an upstream task end retries the whole session once, and a second upstream end is a gap", () => {

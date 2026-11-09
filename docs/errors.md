@@ -240,6 +240,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PF_NO_MANIFEST](#e_pf_no_manifest) | 1 | U20 |
 | [E_PF_UPSTREAM_GAP](#e_pf_upstream_gap) | 2 | U20 |
 | [E_PF_INFRA_GAP](#e_pf_infra_gap) | 2 | U20 |
+| [E_PF_WRAPUP_ALLOWANCE](#e_pf_wrapup_allowance) | 2 | U20 |
 | [E_PF_CELL_INCOMPLETE](#e_pf_cell_incomplete) | 1 | U20 |
 | [E_PF_CAPTURE](#e_pf_capture) | 2 | U20 |
 | [E_PF_ARM](#e_pf_arm) | 2 | U20 |
@@ -1720,6 +1721,14 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 The harness failed outside the model twice for a pstack-checks session or a scoring run (a container, a volume or a mount), so it is a gap.
 
 Fix: Report the gap and take the harness fault to the Captain. Nothing is rerun to change an outcome.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_WRAPUP_ALLOWANCE
+
+A pstack-checks session's wrap-up turn was refused for its allowance: the metering proxy stopped a wrap-up request at the wrap-up allowance, or the driver refused the wrap-up slot's open for lack of room. The session is a gap with no rerun of the wrap-up turn and no retry of the session, and because it can depend on the arm it is counted per arm and model.
+
+Fix: Report the gap count per arm and model beside every verdict. Nothing is rerun, and the frozen wrap-up allowances in lanes/outcome-skills/pfchecks/arms.ts do not change.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 

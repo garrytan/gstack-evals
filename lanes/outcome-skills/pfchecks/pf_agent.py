@@ -24,7 +24,7 @@ from pydantic import Field
 
 import egress
 import laneb_agent as lb
-from pf_turns import Session, run_session
+from pf_turns import OpenRefused, Session, run_session
 from real_agent import FREEZE, RealAgent, RealOptions, SandboxSetupError
 
 SH = Path(__file__).resolve().parent / "sh"
@@ -37,7 +37,9 @@ class PfOptions(RealOptions):
 
 
 class DriverSlots:
-    """One U4 slot per turn on the outcome-skills driver: phase task or wrapup in meta, cap_usd from that turn's allowance."""
+    """One U4 slot per turn on the outcome-skills driver: phase task or wrapup in meta, cap_usd from that turn's allowance.
+    A 409 on a wrap-up open raises OpenRefused (the wrap-up is refused for its allowance); on a task open, LedgerCapStop.
+    Each close keeps the driver's answer, first_request (the proxy-recorded effort fields) included."""
 
     def __init__(self, agent: "PfAgent", trial: str, limits: dict, log):
         self.agent, self.trial, self.limits, self.log = agent, trial, limits, log
@@ -53,7 +55,7 @@ class DriverSlots:
             except lb.HttpStatusError as e:
                 if e.code == 409:
                     self.log({"event": "ledger_cap_stop", "phase": phase, "message": str(e)[:300]})
-                    raise lb.LedgerCapStop(str(e)) from None
+                    raise (OpenRefused if phase == "wrapup" else lb.LedgerCapStop)(str(e)) from None
                 if e.code < 500 or attempt == lb.OPEN_ATTEMPTS:
                     raise lb.LanebInfraError(f"{phase} slot open failed: {e}") from None
             except Exception as e:
@@ -72,7 +74,7 @@ class DriverSlots:
         except Exception as e:
             self.log({"event": "close_failed", "session": slot["id"], "message": str(e)[:300]})
             return {"error": f"{type(e).__name__}: {e}"[:300]}
-        info = {k: closed.get(k) for k in ("spent_micros", "requests", "ok_responses", "refused", "refusals", "usage")}
+        info = {k: closed.get(k) for k in ("spent_micros", "requests", "ok_responses", "refused", "refusals", "usage", "first_request")}
         self.log({"event": "slot_close", "phase": slot["phase"], "session": slot["id"], **{k: info[k] for k in ("spent_micros", "refused")}})
         return info
 
