@@ -441,3 +441,25 @@ model or unit (E_SM_PACKET).
   scores below 0; false-fail rate the share of good-labelled diffs it scores below 0. On this label set both judges
   agree by construction, so the literal rates are 1 and 0 (open point). (Reported.)
 
+
+## Stale report readings (reports.ts, testrun.ts)
+
+- Every run (oracle base and fixed runs, sample runs, scoring runs) goes through runTests, so the rule lives there. Before
+  the rebuild, the run script deletes every file the print command's report paths name under the repo dir that git does
+  not track. After the test commands it moves aside every file they name that is older than the run's start mark, and
+  writes the counts on an SM_REPORTS line. File times tick coarsely, so a file as new as the mark counts as fresh.
+- A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
+  and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
+  The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the
+  1,077 cached rows has a separate rebuild step, so rebuild_failed can apply to every unit.
+- Report paths are read literally from the print command: a glob given to cat or to a for loop, expanded by bash from the
+  directory the command cd's to, or a find with its root, -L, depth and -path or -name tests, one path per -o branch. A
+  print command with any other reader is unreadable: it gets no paths, the run touches no file and keeps the old reading.
+- A print command is a log when every path it reads is a plain file the unit's own rebuild or test commands write by
+  redirection or tee; otherwise it reads report files. Counts over the 1,077 cached rows (report / log / unreadable): c
+  32 / 78 / 1, cpp 71 / 71 / 0, cs 120 / 9 / 7, go 14 / 124 / 0, java 141 / 1 / 18, js 30 / 78 / 0, rust 7 / 162 / 2,
+  ts 29 / 81 / 1. In all, 444 read report files, 604 only a log and 29 cannot be read literally (xargs with another
+  command, sed, awk, perl, bash -lc, ls, a find -exec of sh).
+- The oracle records the reading on the unit (reports) and each run's stale_deleted, stale_refused and built_nothing. A
+  scoring run that built nothing is a build failure.
+

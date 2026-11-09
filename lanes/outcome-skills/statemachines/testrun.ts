@@ -11,6 +11,7 @@
 import { docker, dockerRun } from "../../real-outcome/task/docker.ts";
 import { RUN_UID } from "../../real-outcome/task/verify.ts";
 import { runBash } from "./history.ts";
+import { listSrc, printReading } from "./reports.ts";
 import { smFail } from "./unit.ts";
 
 export const PY_IMAGE = "python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337";
@@ -43,14 +44,64 @@ export function applyPatches(image: string, volume: string, repoDir: string, pat
   return null;
 }
 
-/** The run script: rebuild and test output to stderr, then the mark, then the print commands' output. */
-export function runScript(c: { rebuild: string[]; test: string[]; print: string[] }): string {
+const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
+
+/** The run script: rebuild and test output to stderr, then the mark, then the print commands' output. When the print
+ *  command reads report paths (reports.ts), the script first deletes every file they name under repoDir that git does not
+ *  track, then marks the start; after the test commands it moves aside every file they name that is not newer than the
+ *  mark (file times tick coarsely, so a file as new as the mark is fresh), so the print command reads only reports this run wrote, and writes the counts on an SM_REPORTS line. */
+export function runScript(c: { rebuild: string[]; test: string[]; print: string[] }, repoDir: string): string {
   const cmd = (x: string) => "( " + x + " )\necho \"SM_EXIT $?\" >&2";
-  return ["exec 3>&1 1>&2", ...c.rebuild.map(cmd), ...c.test.map(cmd), "exec 1>&3", "echo " + PRINT_MARK, ...c.print.map((x) => "( " + x + " )"), ""].join("\n");
+  const paths = printReading(c).paths;
+  const start = paths.length
+    ? [
+        "SM_WD=$PWD; SM_REPO=" + sq(repoDir) + "; SM_T=$(mktemp -d 2>/dev/null || { mkdir -p /tmp/.sm-$$ && echo /tmp/.sm-$$; })",
+        'sm_abs() { case $1 in /*) printf "%s\\n" "$1";; *) printf "%s\\n" "$PWD/${1#./}";; esac; }',
+        "sm_list() {\n" + paths.map(listSrc).join("\n") + "\n}",
+        'SM_DEL=0; SM_KEPT=0; sm_git=0; git -C "$SM_REPO" rev-parse --git-dir >/dev/null 2>&1 && sm_git=1',
+        'sm_list | sort -u > "$SM_T/start"',
+        'while IFS= read -r f; do case $f in "$SM_REPO"/*) git -C "$SM_REPO" ls-files --error-unmatch -- ":(literal)$f" >/dev/null 2>&1; sm_rc=$?; if [ $sm_git = 1 ] && [ $sm_rc = 1 ] && rm -f -- "$f"; then SM_DEL=$((SM_DEL+1)); else SM_KEPT=$((SM_KEPT+1)); fi;; *) SM_KEPT=$((SM_KEPT+1));; esac; done < "$SM_T/start"; unset f',
+        'touch "$SM_T/mark"',
+      ]
+    : [];
+  const end = paths.length
+    ? [
+        'sm_list | sort -u > "$SM_T/end"; SM_FRESH=0; SM_REF=0; SM_UNHID=0; mkdir -p "$SM_T/stale"',
+        'while IFS= read -r f; do if ! [ "$SM_T/mark" -nt "$f" ]; then SM_FRESH=$((SM_FRESH+1)); elif mv -f -- "$f" "$SM_T/stale/$SM_REF" 2>/dev/null; then SM_REF=$((SM_REF+1)); else SM_UNHID=$((SM_UNHID+1)); fi; done < "$SM_T/end"; unset f',
+        'echo "SM_REPORTS deleted=$SM_DEL kept=$SM_KEPT refused=$SM_REF unhidden=$SM_UNHID fresh=$SM_FRESH" >&2',
+      ]
+    : [];
+  return ["exec 3>&1 1>&2", ...start, ...c.rebuild.map(cmd), ...c.test.map(cmd), ...end, "exec 1>&3", "echo " + PRINT_MARK, ...c.print.map((x) => "( " + x + " )"), ""].join("\n");
 }
 
+/** The stale report counts: untracked report files deleted at the start, report files kept there (tracked, or outside the
+ *  tree), and after the tests the files refused as not written by this run (moved aside), the ones that could not be moved
+ *  aside, and the fresh ones. null when the print command reads no report path (reports.ts). */
+export interface Reports { deleted: number; kept: number; refused: number; unhidden: number; fresh: number }
+/** Why a run built nothing: a separate rebuild step exited non-zero, no report the run wrote is left for the print command,
+ *  or a stale report could not be moved aside. A test command's own exit is never one. */
+export type BuiltNothing = "rebuild_failed" | "no_fresh_report" | "stale_unhidden";
+
 /** exits: each rebuild and test command's exit status, in order (the SM_EXIT lines the run script writes). */
-export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr: string; stderr_tail: string; exits: number[] }
+export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr: string; stderr_tail: string; exits: number[]; reports: Reports | null; built_nothing: BuiltNothing | null }
+
+/** A finished run script's result read into a TestRun, with the stale report counts and the built-nothing reason. */
+export function settleRun(r: { stdout: string; stderr: string; status: number; wall_ms: number; timed_out?: boolean; error?: unknown }, commands: { rebuild: string[] }, limit: number): TestRun {
+  const stopped = !!r.timed_out || r.error !== undefined || r.wall_ms >= limit;
+  const i = r.stdout.indexOf(PRINT_MARK);
+  const print = i < 0 ? "" : r.stdout.slice(i + PRINT_MARK.length + 1);
+  const exits = [...r.stderr.matchAll(/^SM_EXIT (\d+)$/gm)].map((m) => Number(m[1]));
+  const m = r.stderr.match(/^SM_REPORTS deleted=(\d+) kept=(\d+) refused=(\d+) unhidden=(\d+) fresh=(\d+)$/m);
+  const reports = m ? { deleted: +m[1]!, kept: +m[2]!, refused: +m[3]!, unhidden: +m[4]!, fresh: +m[5]! } : null;
+  const n = commands.rebuild.length;
+  const built_nothing: BuiltNothing | null = n && exits.slice(0, n).some((x) => x !== 0) ? "rebuild_failed" : reports?.unhidden ? "stale_unhidden" : reports && !reports.fresh ? "no_fresh_report" : null;
+  return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr: r.stderr, stderr_tail: r.stderr.slice(-2000), exits, reports, built_nothing };
+}
+
+/** The dataset's parser over a run's log, or nothing when the run built nothing (the parser does not run). */
+export function parseRun(t: TestRun, src: string, label: string, parse: (src: string, log: string, label: string) => Record<string, string> = runParser): Record<string, string> {
+  return t.built_nothing ? {} : parse(src, t.log, label);
+}
 
 /** A fresh volume holding a copy of the image's home directory (root's HOME in the image) under home/, owned by uid
  *  10001, and passwd: the image's /etc/passwd with uid 10001's line naming that home. Returns the home path. */
@@ -79,14 +130,11 @@ export function runTests(o: { image: string; volume: string; repoDir: string; wo
   let r;
   try {
     const home = homeVol ? { volume: homeVol, path: homeVolume(o.image, homeVol) } : undefined;
-    r = dockerRun(name, runArgs({ ...o, name, home }), { timeoutMs: limit, input: runScript(o.commands) });
+    r = dockerRun(name, runArgs({ ...o, name, home }), { timeoutMs: limit, input: runScript(o.commands, o.repoDir) });
   } finally {
     if (homeVol) dropVolume(homeVol);
   }
-  const stopped = r.timed_out || r.error !== undefined || r.wall_ms >= limit;
-  const i = r.stdout.indexOf(PRINT_MARK);
-  const print = i < 0 ? "" : r.stdout.slice(i + PRINT_MARK.length + 1);
-  return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr: r.stderr, stderr_tail: r.stderr.slice(-2000), exits: [...r.stderr.matchAll(/^SM_EXIT (\d+)$/gm)].map((m) => Number(m[1])) };
+  return settleRun(r, o.commands, limit);
 }
 
 const RUNNER = [

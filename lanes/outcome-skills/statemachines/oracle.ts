@@ -14,7 +14,8 @@ import { classifyHits, leakCheck, needles, ownNames, scan, type LeakHit, type Hi
 import { needsBase, splitFix } from "./fixsplit.ts";
 import { runBash } from "./history.ts";
 import { scope } from "./scope.ts";
-import { applyPatches, copyVolume, dropVolume, LIMIT_MS, passed, runName, runParser, runTests, type Mode } from "./testrun.ts";
+import { applyPatches, copyVolume, dropVolume, LIMIT_MS, parseRun, passed, runName, runTests, type Mode } from "./testrun.ts";
+import { printReading } from "./reports.ts";
 import { addUnitFile, readUnit, saveUnit, smFail, type OracleRun, type SmUnit, type TargetReading } from "./unit.ts";
 import { join } from "node:path";
 
@@ -194,9 +195,10 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
     if (bad) return { run: { tree, n, wall_ms: 0, exit: -1, parsed_sha256: null, stopped: false, exits: [] }, parsed: null, log: "" };
     const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n });
     const log = t.log === t.stderr ? t.stderr : t.stderr + "\n" + t.log;
-    if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true, exits: t.exits }, parsed: null, log };
-    const parsed = runParser(rf(join(dir, "parser.py"), "utf8"), t.log, u.id + "-" + tree + n);
-    return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false, exits: t.exits }, parsed, log };
+    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing };
+    if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true, exits: t.exits, ...stale }, parsed: null, log };
+    const parsed = parseRun(t, rf(join(dir, "parser.py"), "utf8"), u.id + "-" + tree + n);
+    return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false, exits: t.exits, ...stale }, parsed, log };
   } finally {
     dropVolume(copy);
   }
@@ -231,6 +233,7 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
   };
   const codeOf = (e: unknown) => ((e as Error).message.match(/^(E_[A-Z_]+)/) ?? [])[1] ?? "E_SM_ORACLE_UNSTABLE";
   try {
+    u.reports = printReading(u.commands);
     u.image.image_id = await pull(u.image.ref, pacer);
     const s = smoke(u.image.image_id, u.id, u.image.runtime_id ?? undefined);
     u.image.runtime_id = s.runtime_id;

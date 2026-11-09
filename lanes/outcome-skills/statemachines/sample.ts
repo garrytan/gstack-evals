@@ -6,7 +6,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { smoke, prepare, pull, type Pacer } from "./oracle.ts";
 import { manifestSize, type Candidate, type MlRow } from "./source.ts";
-import { applyPatches, copyVolume, dropVolume, PASS, passed, runParser, runTests, type Mode } from "./testrun.ts";
+import { applyPatches, copyVolume, dropVolume, parseRun, PASS, passed, runTests, type Mode } from "./testrun.ts";
 import { readUnit, saveUnit, writeUnit } from "./unit.ts";
 
 export async function sample(o: { candidates: Candidate[]; cache: string; units: string; ids: string[]; pacer: Pacer; out: string; row: (id: string) => MlRow }): Promise<void> {
@@ -53,7 +53,7 @@ export async function sample(o: { candidates: Candidate[]; cache: string; units:
           const r: Record<string, unknown> = { wall_s: Math.round(t.wall_ms / 1000), exit: t.exit, stopped: t.stopped };
           if (!t.stopped) {
             try {
-              const parsed = runParser(readFileSync(join(dir, "parser.py"), "utf8"), t.log, id);
+              const parsed = parseRun(t, readFileSync(join(dir, "parser.py"), "utf8"), id);
               const st = Object.values(parsed);
               Object.assign(r, { parsed: st.length, passed: st.filter((v) => v === PASS).length, statuses: [...new Set(st)], f2p_failing: u.tests.f2p.filter((x) => !passed(parsed, x)).length, f2p: u.tests.f2p.length, p2p_passing: u.tests.p2p.filter((x) => passed(parsed, x)).length, p2p: u.tests.p2p.length });
             } catch (e) {

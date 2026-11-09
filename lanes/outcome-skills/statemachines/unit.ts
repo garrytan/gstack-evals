@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ReasonCode } from "../../../src/errors/codes.ts";
 import { classify, type Lang } from "./langs.ts";
+import type { PrintReading } from "./reports.ts";
 import { imageRef, patchFiles, type Candidate, type MlRow } from "./source.ts";
 
 export const smFail = (code: ReasonCode, message: string): never => {
@@ -15,7 +16,9 @@ export const smFail = (code: ReasonCode, message: string): never => {
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
 
 /** exits: each rebuild and test command's exit status, in order. */
-export interface OracleRun { tree: "base" | "fixed"; n: number; wall_ms: number; exit: number; parsed_sha256: string | null; stopped: boolean; exits?: number[] }
+/** stale_deleted: untracked report files the run deleted at its start; stale_refused: report files it moved aside after the
+ *  tests as not written by this run; built_nothing: why the run built nothing (testrun.ts BuiltNothing), or null. */
+export interface OracleRun { tree: "base" | "fixed"; n: number; wall_ms: number; exit: number; parsed_sha256: string | null; stopped: boolean; exits?: number[]; stale_deleted?: number; stale_refused?: number; built_nothing?: string | null }
 /** A cargo unit's base-run target reading (oracle.ts targetReading): the targets each run reached, the fixed runs' targets
  *  no base run reached, and whether a base run printed cargo's fail-fast stop line. */
 export interface TargetReading { base: string[][]; fixed: string[][]; not_on_base: string[]; fail_fast_stop: boolean; cargo_stopped_early: boolean }
@@ -36,6 +39,8 @@ export interface SmUnit {
   split?: { in_source_tests: boolean; test_hunks: number; source_files: string[] };
   oracle: null | { runs: OracleRun[]; stable: string[]; stable_sha256: string; f2p?: string[]; f2p_removed?: { count: number; ids: string[]; reason: string }; f2p_flaky?: { count: number; ids: string[]; reason: string }; targets?: TargetReading; reason?: string; f2p_ok: boolean; max_wall_ms: number; verdict: string; smoke: { claude_version: string; egress_probe: string; verdict: string } | null; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } | null; history: string | null };
   files: Record<string, string>;
+  /** The report paths read from the print command (reports.ts), recorded by the oracle. */
+  reports?: PrintReading;
 }
 
 export const added30 = (patch: string): string[] =>

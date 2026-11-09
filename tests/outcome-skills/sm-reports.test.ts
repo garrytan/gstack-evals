@@ -1,0 +1,125 @@
+// Copyright (c) 2026 Garry Tan. MIT License.
+// The stale report rule (keyless): the report paths read literally from a print command, and the run script run by the
+// host's bash on a small git tree. A run deletes the untracked report files its print command reads before it starts,
+// hides report files the run did not write, and parses nothing when no fresh report is left or a separate rebuild step
+// exits non-zero. A test command's own non-zero exit never means the run built nothing.
+import { afterEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { printReading } from "../../lanes/outcome-skills/statemachines/reports.ts";
+import { parseRun, runScript, settleRun, type TestRun } from "../../lanes/outcome-skills/statemachines/testrun.ts";
+
+describe("report paths read from the print command", () => {
+  test("a cat of a glob is a report path under the command's cd", () => {
+    const r = printReading({ rebuild: [], test: ["mvn -q test"], print: ["cd /testbed && cat target/surefire-reports/*.xml"] });
+    expect(r.kind).toBe("report");
+    expect(r.paths).toEqual([{ cwd: "/testbed", glob: "target/surefire-reports/*.xml" }]);
+  });
+  test("a find with -path tests is read as the same find, each -o branch its own path", () => {
+    const r = printReading({ rebuild: [], test: ["mvn test"], print: ["cd /testbed; { printf '%s\\n' '<x>'; find . -type f \\( -path '*/target/surefire-reports/TEST-*.xml' -o -path '*/target/failsafe-reports/TEST-*.xml' \\) -print0 | sort -z | xargs -0 cat; }"] });
+    expect(r.kind).toBe("report");
+    expect(r.paths).toEqual([
+      { cwd: "/testbed", find: { root: ".", follow: false, tests: [["-path", "*/target/surefire-reports/TEST-*.xml"]] } },
+      { cwd: "/testbed", find: { root: ".", follow: false, tests: [["-path", "*/target/failsafe-reports/TEST-*.xml"]] } },
+    ]);
+  });
+  test("a for loop over a glob and a cat of its variable reads the glob", () => {
+    const r = printReading({ rebuild: [], test: ["ctest"], print: ["for f in reports/gtest/*.json; do printf '\\n===== %s =====\\n' \"$f\"; cat \"$f\"; done"] });
+    expect(r.paths).toEqual([{ cwd: "", glob: "reports/gtest/*.json" }]);
+  });
+  test("a file the test command writes by redirection is a log, not a report", () => {
+    const r = printReading({ rebuild: [], test: ["cargo test 2>&1 | tee test-output.log"], print: ["cd /testbed ; cat test-output.log"] });
+    expect(r.kind).toBe("log");
+    expect(r.paths).toEqual([{ cwd: "/testbed", glob: "test-output.log" }]);
+  });
+  test("a command it cannot read literally is unreadable and gives no paths", () => {
+    const r = printReading({ rebuild: [], test: ["t"], print: ["python3 collect.py reports"] });
+    expect(r.kind).toBe("unreadable");
+    expect(r.paths).toEqual([]);
+    expect(r.unread).toContain("python3");
+  });
+});
+
+const dirs: string[] = [];
+afterEach(() => {
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
+/** A small git tree with one tracked source file and a stale untracked report from an earlier build. */
+function tree(): string {
+  const d = mkdtempSync(join(tmpdir(), "sm-reports-"));
+  dirs.push(d);
+  const g = (...a: string[]) => spawnSync("git", ["-C", d, ...a], { encoding: "utf8" });
+  mkdirSync(join(d, "src"));
+  writeFileSync(join(d, "src/A.txt"), "source\n");
+  writeFileSync(join(d, ".gitignore"), "target/\n");
+  g("init", "-q");
+  g("-c", "user.email=t@example.com", "-c", "user.name=t", "add", ".");
+  g("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "base");
+  mkdirSync(join(d, "target/reports"), { recursive: true });
+  writeFileSync(join(d, "target/reports/TEST-old.xml"), "old PASSED\n");
+  utimesSync(join(d, "target/reports/TEST-old.xml"), new Date(2020, 0, 1), new Date(2020, 0, 1));
+  return d;
+}
+
+function run(d: string, commands: { rebuild: string[]; test: string[]; print: string[] }): TestRun {
+  const tmp = mkdtempSync(join(tmpdir(), "sm-reports-tmp-"));
+  dirs.push(tmp);
+  const r = spawnSync("bash", ["-s"], { cwd: d, input: runScript(commands, d), encoding: "utf8", env: { PATH: process.env.PATH!, TMPDIR: tmp, HOME: tmp } });
+  return settleRun({ stdout: r.stdout, stderr: r.stderr, status: r.status ?? -1, wall_ms: 1, timed_out: false }, commands, 60_000);
+}
+
+const PRINT = ["cat target/reports/*.xml"];
+
+describe("the stale report rule on a run", () => {
+  test("a stale report with no build is deleted at the start, and the run parses nothing", () => {
+    const d = tree();
+    const t = run(d, { rebuild: [], test: ["exit 3"], print: PRINT });
+    expect(t.reports).toEqual({ deleted: 1, kept: 0, refused: 0, unhidden: 0, fresh: 0 });
+    expect(t.built_nothing).toBe("no_fresh_report");
+    expect(t.log).not.toContain("old PASSED");
+    expect(parseRun(t, "src", "x", () => { throw new Error("the parser ran"); })).toEqual({});
+  });
+  test("a fresh run parses as before", () => {
+    const d = tree();
+    const t = run(d, { rebuild: ["true"], test: ["mkdir -p target/reports && echo 'new PASSED' > target/reports/TEST-new.xml"], print: PRINT });
+    expect(t.reports).toEqual({ deleted: 1, kept: 0, refused: 0, unhidden: 0, fresh: 1 });
+    expect(t.built_nothing).toBeNull();
+    expect(t.log).toBe("new PASSED\n");
+    expect(parseRun(t, "src", "x", (_s, log) => ({ got: log.trim() }))).toEqual({ got: "new PASSED" });
+  });
+  test("a tracked file is never deleted at the start; the freshness check refuses it when the run did not write it", () => {
+    const d = tree();
+    spawnSync("git", ["-C", d, "add", "-f", "target/reports/TEST-old.xml"]);
+    const t = run(d, { rebuild: [], test: ["test -f target/reports/TEST-old.xml"], print: PRINT });
+    expect(t.exits).toEqual([0]);
+    expect(t.reports).toEqual({ deleted: 0, kept: 1, refused: 1, unhidden: 0, fresh: 0 });
+    expect(t.built_nothing).toBe("no_fresh_report");
+    expect(readFileSync(join(d, "src/A.txt"), "utf8")).toBe("source\n");
+  });
+  test("a rebuild command that exits non-zero, in a unit with a separate rebuild step, builds nothing", () => {
+    const d = tree();
+    const t = run(d, { rebuild: ["exit 1"], test: ["mkdir -p target/reports && echo 'new PASSED' > target/reports/TEST-new.xml"], print: PRINT });
+    expect(t.exits).toEqual([1, 0]);
+    expect(t.built_nothing).toBe("rebuild_failed");
+  });
+  test("a test command's non-zero exit never means the run built nothing", () => {
+    for (const rebuild of [[], ["true"]]) {
+      const d = tree();
+      const t = run(d, { rebuild, test: ["mkdir -p target/reports && echo 'new FAILED' > target/reports/TEST-new.xml; exit 1"], print: PRINT });
+      expect(t.exits.at(-1)).toBe(1);
+      expect(t.built_nothing).toBeNull();
+      expect(t.log).toBe("new FAILED\n");
+    }
+  });
+  test("a print command it cannot read touches no file and keeps the old reading", () => {
+    const d = tree();
+    const t = run(d, { rebuild: [], test: ["true"], print: ["python3 -c 'print(1)' >/dev/null; cat target/reports/*.xml"] });
+    expect(t.reports).toBeNull();
+    expect(t.built_nothing).toBeNull();
+    expect(t.log).toBe("old PASSED\n");
+    expect(existsSync(join(d, "target/reports/TEST-old.xml"))).toBe(true);
+  });
+});

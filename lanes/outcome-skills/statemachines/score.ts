@@ -13,7 +13,7 @@ import { parsePatch, section, walk } from "./fixsplit.ts";
 import { runBash } from "./history.ts";
 import { isProtected, isTestPath, SKIP_MARKERS, SOURCE_EXT, TEST_MODULES, type Lang } from "./langs.ts";
 import { oneRun, treeVolume } from "./oracle.ts";
-import { applyPatches, copyVolume, dropVolume, passed, runName, runParser, runTests, type Mode } from "./testrun.ts";
+import { applyPatches, copyVolume, dropVolume, parseRun, passed, runName, runTests, type Mode } from "./testrun.ts";
 import { addUnitFile, oracleF2p, readUnit, saveUnit, smFail, type SmUnit } from "./unit.ts";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -220,7 +220,8 @@ export function decide(f2p: string[], stable: string[], known: ReadonlySet<strin
 
 // ---- The record ----
 
-export interface RunSummary { n: number; wall_ms: number; exits: number[]; stopped: boolean; build_failed: boolean; parsed_sha256: string | null }
+/** stale_deleted, stale_refused and built_nothing as on an oracle run (unit.ts OracleRun). */
+export interface RunSummary { n: number; wall_ms: number; exits: number[]; stopped: boolean; build_failed: boolean; parsed_sha256: string | null; stale_deleted?: number; stale_refused?: number; built_nothing?: string | null }
 export interface ReadingResult {
   /** three_way: how many of the fix's test hunks git applied by falling back to the three-way merge. */
   applied: boolean; merge: "clean" | "conflict" | null; three_way: number; conflict: string[]; runs: RunSummary[]; fixed: boolean | null; broke: boolean | null;
@@ -290,9 +291,9 @@ export function scoringRun(dir: string, u: SmUnit, image: string, volume: string
   copyVolume(image, volume, run, mode);
   try {
     const t = runTests({ image, volume: run, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, ...(limitMs ? { limitMs } : {}), label: u.id + "-" + label + n });
-    const parsed = t.stopped ? null : runParser(readFileSync(join(dir, "parser.py"), "utf8"), t.log, u.id + "-" + label + n);
-    const build_failed = t.stopped || !parsed || t.exits.length < u.commands.rebuild.length || t.exits.slice(0, u.commands.rebuild.length).some((x) => x !== 0);
-    return { view: { parsed, build_failed }, summary: { n, wall_ms: t.wall_ms, exits: t.exits, stopped: t.stopped, build_failed, parsed_sha256: parsed ? sha(JSON.stringify(parsed)) : null }, log: t.log === t.stderr ? t.log : t.stderr + "\n" + t.log };
+    const parsed = t.stopped ? null : parseRun(t, readFileSync(join(dir, "parser.py"), "utf8"), u.id + "-" + label + n);
+    const build_failed = t.stopped || !parsed || t.built_nothing !== null || t.exits.length < u.commands.rebuild.length || t.exits.slice(0, u.commands.rebuild.length).some((x) => x !== 0);
+    return { view: { parsed, build_failed }, summary: { n, wall_ms: t.wall_ms, exits: t.exits, stopped: t.stopped, build_failed, parsed_sha256: parsed ? sha(JSON.stringify(parsed)) : null, stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing }, log: t.log === t.stderr ? t.log : t.stderr + "\n" + t.log };
   } finally {
     dropVolume(run);
   }
