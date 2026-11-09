@@ -10,6 +10,11 @@
 # after its command passed. .gstack/pregate.json's run_profiles and ship_lanes_from say which runs and lanes it covers.
 # gstack is fetched at the commit sealed.yml pins, because tests/ci/sealed-workflow.test.ts runs sealed.yml's steps with
 # gstack's real sealed checker on scratch repositories.
+# Docs-only pull requests: when every path a pull request into the default branch changes is human-facing docs, typecheck
+# and the tests skip, and so does the tested-tree record, so no lane carries from that run. errors:check, wiki:check and
+# sealed.yml still run, and the checks job still reports success. The default branch's scripts/docs-only.ts decides, on the
+# merge commit against its first parent, so a branch never changes the rule that judges it. A push, a dispatch, a pull request
+# into another branch, a base without the script or any classifier error runs every check.
 name: ci
 
 on:
@@ -40,6 +45,19 @@ jobs:
           printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
           unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
           printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
+      - name: Docs-only scope (the base branch's scripts/docs-only.ts; any error runs every check)
+        id: scope
+        if: github.event_name == 'pull_request' && github.base_ref == github.event.repository.default_branch
+        shell: bash
+        run: |
+          if ! git show HEAD^1:scripts/docs-only.ts > "$RUNNER_TEMP/docs-only.ts" 2> "$RUNNER_TEMP/docs-only-show.txt"; then
+            echo "DOCS_ONLY: no (no scripts/docs-only.ts on the base: $(head -n 1 "$RUNNER_TEMP/docs-only-show.txt")), so every check runs"
+            exit 0
+          fi
+          code=0
+          bun --no-env-file --config=/dev/null "$RUNNER_TEMP/docs-only.ts" --base HEAD^1 --head HEAD --github-output "$GITHUB_OUTPUT" || code=$?
+          [ "$code" -le 1 ] || echo "::warning::scripts/docs-only.ts exited $code, so every check runs"
+          grep -q '^docs_only=' "$GITHUB_OUTPUT" || echo "::warning::scripts/docs-only.ts wrote no verdict (exit $code), so every check runs"
       - name: Install (frozen lockfile)
         run: bun install --frozen-lockfile
       - name: Fetch gstack at the pinned commit
@@ -51,10 +69,12 @@ jobs:
           git -C "$RUNNER_TEMP/gstack" checkout -q --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/gstack" rev-parse HEAD)" = "$GSTACK_SHA"
       - name: Typecheck
+        if: steps.scope.outputs.docs_only != 'true'
         run: |
           bun run typecheck
           echo 'bun run typecheck' >> "$RUNNER_TEMP/checks-passed.txt"
       - name: Tests
+        if: steps.scope.outputs.docs_only != 'true'
         run: bun test --reporter=junit --reporter-outfile="$RUNNER_TEMP/junit.xml"
       - name: Reason-code doc is fresh (docs/errors.md from src/errors/codes.ts)
         run: |
@@ -74,10 +94,12 @@ jobs:
           [ "$BASE_IS_DEFAULT" = true ] || { echo "wiki:check ran against $GITHUB_BASE_REF, not the default branch: no carry entry"; exit 0; }
           echo 'bun run wiki:check' >> "$RUNNER_TEMP/checks-passed.txt"
       - name: Record the tested tree for CI carry (tree.json)
+        if: steps.scope.outputs.docs_only != 'true'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bun scripts/ci-tree.ts record --junit "$RUNNER_TEMP/junit.xml" --checks "$RUNNER_TEMP/checks-passed.txt" --out "$RUNNER_TEMP/tested-tree/tree.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: steps.scope.outputs.docs_only != 'true'
         with:
           name: tested-tree
           path: ${{ runner.temp }}/tested-tree/tree.json
