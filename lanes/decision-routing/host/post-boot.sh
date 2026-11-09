@@ -7,7 +7,25 @@
 # First it refuses a runner whose kernel lacks CONFIG_NFT_FIB_INET, which Harbor's egress sidecar needs for the
 # allowlist: the kernel config (/boot/config-<release> or /proc/config.gz) must set it, and an inet table with a fib
 # rule must load and delete. post-boot.sh --kernel-config <file> checks only a config file's text and changes nothing.
+# Then it installs the container firewall: Harbor's sidecar can allowlist the metering proxy's address but not its port,
+# so new TCP connections from Docker's bridges to the host are reset unless they go to the controller's fixed proxy ports
+# (host/controller.ts PROXY_PORT_FIRST and PROXY_PORT_COUNT). post-boot.sh --firewall-rules prints those rules and changes
+# nothing.
 set -euo pipefail
+
+firewall_rules() {
+  cat <<'RULES'
+-N DR_CONTAINER_IN
+-A DR_CONTAINER_IN -p tcp -m tcp --dport 47100:47107 -j RETURN
+-A DR_CONTAINER_IN -p tcp -m conntrack --ctstate NEW -j REJECT --reject-with tcp-reset
+-A INPUT -i docker0 -j DR_CONTAINER_IN
+-A INPUT -i br-+ -j DR_CONTAINER_IN
+RULES
+}
+if [ "${1:-}" = "--firewall-rules" ]; then
+  firewall_rules
+  exit 0
+fi
 
 nft_fib_set() { grep -Eq '^CONFIG_NFT_FIB_INET=(y|m)$'; }
 if [ "${1:-}" = "--kernel-config" ]; then
@@ -48,6 +66,22 @@ then
 fi
 sudo nft delete table inet dr_fib_probe
 echo "kernel $release: CONFIG_NFT_FIB_INET set, inet fib rule loaded and deleted"
+
+command -v iptables > /dev/null || { echo "E_DR_RUNNER: no iptables binary on this runner, so the container firewall cannot be installed" >&2; exit 2; }
+sudo iptables -N DR_CONTAINER_IN 2> /dev/null || sudo iptables -F DR_CONTAINER_IN
+firewall_rules | grep '^-A DR_CONTAINER_IN ' | while read -r rule; do
+  # shellcheck disable=SC2086
+  sudo iptables $rule
+done
+for dev in docker0 'br-+'; do
+  sudo iptables -C INPUT -i "$dev" -j DR_CONTAINER_IN 2> /dev/null || sudo iptables -I INPUT 1 -i "$dev" -j DR_CONTAINER_IN
+done
+got=$({ sudo iptables -S DR_CONTAINER_IN; sudo iptables -S INPUT | grep -- ' -j DR_CONTAINER_IN$'; } | sort)
+if [ "$got" != "$(firewall_rules | sort)" ]; then
+  echo "E_DR_RUNNER: the container firewall did not read back as written: $(printf '%s' "$got" | tr '\n' ';')" >&2
+  exit 2
+fi
+echo "container firewall: Docker's bridges reach the host only on TCP 47100-47107"
 
 sudo systemctl stop apt-daily.timer apt-daily-upgrade.timer
 sudo systemctl disable apt-daily.timer apt-daily-upgrade.timer

@@ -24,8 +24,8 @@ for id in "$@"; do
   "n_attempts": 1,
   "n_concurrent_trials": 1,
   "quiet": true,
-  "environment": { "type": "docker", "delete": true, "extra_allowed_hosts": ["$host"] },
-  "agents": [{ "import_path": "oracle_agent:OracleProbeAgent", "kwargs": { "cell": "N", "model": "opus", "runtime_tarball": "$tarball", "runtime_sha256": "$sha", "pin_file": "$out/pin.json", "item": "dr-calibration", "solution_dir": "$tasks/$id/solution" } }],
+  "environment": { "type": "docker", "delete": true },
+  "agents": [{ "import_path": "oracle_agent:OracleProbeAgent", "extra_allowed_hosts": ["$host"], "kwargs": { "cell": "N", "model": "opus", "runtime_tarball": "$tarball", "runtime_sha256": "$sha", "pin_file": "$out/pin.json", "item": "dr-calibration", "solution_dir": "$tasks/$id/solution" } }],
   "tasks": [{ "path": "$tasks/$id" }]
 }
 JSON

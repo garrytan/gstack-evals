@@ -46,6 +46,9 @@ export const MAX_OUTPUT_TOKENS = 32_000;
 export const PILOT_SESSION_STOP_MICROS = 2_500_000;
 export const HARBOR_RETRY = { max_retries: 1, include_exceptions: ["DrInfraError", "EnvironmentStartTimeoutError", "AgentSetupTimeoutError"] };
 export const AGENT_IMPORT_PATH = "dr_harbor:DecisionRoutingAgent";
+/** The runner's container firewall (host/post-boot.sh) lets containers reach the host only on these ports, one per leased item. */
+export const PROXY_PORT_FIRST = 47100;
+export const PROXY_PORT_COUNT = 8;
 const LANE = resolve(import.meta.dir, "..");
 const PROVIDER_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "UBICLOUD_API_KEY"];
 
@@ -124,7 +127,19 @@ export interface JobInputs {
   pinFile: string;
 }
 
-/** One Harbor job with one trial: the decision-routing agent, docker with delete, the proxy host on the network allowlist. */
+/** Item k's proxy port: any free port on a loopback host, else the k-th port the runner's container firewall opens. */
+export function proxyPort(host: string, index: number): number | undefined {
+  const h = host.trim().replace(/^\[(.*)\]$/, "$1");
+  if (h === "::1" || h.startsWith("127.")) return undefined;
+  if (index >= PROXY_PORT_COUNT) throw new ControllerError("E_USAGE", "a batch whose proxy listens on " + host + " can hold at most " + PROXY_PORT_COUNT + " ledger items, one per port the runner's container firewall opens; nothing was leased or launched");
+  return PROXY_PORT_FIRST + index;
+}
+
+/**
+ * One Harbor job with one trial: the decision-routing agent, docker with delete, the proxy host on the agent's allowlist.
+ * The task's [agent] network_mode is allowlist with no host, and Harbor merges only the agent's extra_allowed_hosts into
+ * it; environment.extra_allowed_hosts reaches the setup baseline alone, so the agent's run would reach no proxy.
+ */
 export function harborJob(row: PlanRow, o: JobInputs, markersFile?: string) {
   return {
     job_name: sessionId(row),
@@ -133,8 +148,8 @@ export function harborJob(row: PlanRow, o: JobInputs, markersFile?: string) {
     n_concurrent_trials: 1,
     quiet: true,
     retry: HARBOR_RETRY,
-    environment: { type: "docker", delete: true, extra_allowed_hosts: [o.proxyHost] },
-    agents: [{ import_path: AGENT_IMPORT_PATH, kwargs: { cell: row.cell, model: row.model, runtime_tarball: o.runtimeTarball, runtime_sha256: o.runtimeSha256, pin_file: o.pinFile, item: row.item, ...(markersFile ? { markers_file: markersFile } : {}) } }],
+    environment: { type: "docker", delete: true },
+    agents: [{ import_path: AGENT_IMPORT_PATH, extra_allowed_hosts: [o.proxyHost], kwargs: { cell: row.cell, model: row.model, runtime_tarball: o.runtimeTarball, runtime_sha256: o.runtimeSha256, pin_file: o.pinFile, item: row.item, ...(markersFile ? { markers_file: markersFile } : {}) } }],
     tasks: [{ path: join(o.tasksDir, row.task) }],
   };
 }
@@ -288,6 +303,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
 
   const order = seededShuffle(o.plan, o.seed ?? SEED);
   const itemNames = [...new Set(order.map((r) => r.item))];
+  proxyPort(o.proxyHost, itemNames.length - 1);
   for (const d of ["journals", "jobs", "sessions"]) mkdirSync(join(out, d), { recursive: true });
   if (o.custody) mkdirSync(join(out, "markers"), { recursive: true, mode: 0o700 });
   const scratch = mkdtempSync(join(tmpdir(), "dr-ctl-"));
@@ -320,7 +336,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
       const lease = openLease(record, local, { item, run_id: o.runId, warn, ...(o.temp ? { requireAdmission: () => null } : {}) });
       const socket = join(scratch, runs.length + ".sock");
       const token = randomBytes(24).toString("hex");
-      const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: o.proxyHost, managementSocket: socket, managementToken: token, journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: MAX_OUTPUT_TOKENS, allowanceCode: "DR_ALLOWANCE_STOP" });
+      const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: o.proxyHost, port: proxyPort(o.proxyHost, runs.length), managementSocket: socket, managementToken: token, journal, retry: RETRY, env, fetch: o.fetch, maxOutputTokens: MAX_OUTPUT_TOKENS, allowanceCode: "DR_ALLOWANCE_STOP" });
       try {
         proxy.start();
       } catch (e) {

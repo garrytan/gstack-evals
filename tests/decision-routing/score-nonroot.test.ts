@@ -29,7 +29,7 @@ const CASES: Array<[string, string, string, number, string[]]> = [
 
 for (const [name, command, output, returncode, kinds] of CASES) {
   test("table: " + name, () => {
-    expect([...hitKinds({ command, output, returncode })].sort()).toEqual(kinds);
+    expect([...hitKinds({ command, output, returncode })].sort() as string[]).toEqual(kinds);
   });
 }
 

@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PROXY_PORT_COUNT, PROXY_PORT_FIRST } from "../../lanes/decision-routing/host/controller.ts";
 
 const HOST = join(import.meta.dir, "../../lanes/decision-routing/host");
 const FAKE = ["#!/usr/bin/env bash", 'printf "%s\\n" "$*" >> "$FAKE_LOG"', "case $1 in", '  list) cat "$FAKE_STATE" 2> /dev/null || true ;;', '  up) echo "vm-1  loc" > "$FAKE_STATE"; echo vm-1 ;;', '  ssh) cat > "$FAKE_STDIN/$(ls "$FAKE_STDIN" | wc -l)" ;;', '  down) [ -n "$FAKE_LEAVE" ] || : > "$FAKE_STATE" ;;', "esac", ""].join("\n");
@@ -126,3 +127,24 @@ describe("post-boot.sh kernel check", () => {
     }
   });
 });
+
+describe("post-boot.sh container firewall", () => {
+  test("containers on Docker's bridges reach the host only on the controller's fixed proxy ports: every other new TCP connection to the host is reset", () => {
+    const r = Bun.spawnSync(["bash", join(HOST, "post-boot.sh"), "--firewall-rules"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.toString().trim().split("\n")).toEqual([
+      "-N DR_CONTAINER_IN",
+      "-A DR_CONTAINER_IN -p tcp -m tcp --dport " + PROXY_PORT_FIRST + ":" + (PROXY_PORT_FIRST + PROXY_PORT_COUNT - 1) + " -j RETURN",
+      "-A DR_CONTAINER_IN -p tcp -m conntrack --ctstate NEW -j REJECT --reject-with tcp-reset",
+      "-A INPUT -i docker0 -j DR_CONTAINER_IN",
+      "-A INPUT -i br-+ -j DR_CONTAINER_IN",
+    ]);
+  });
+
+  test("the hygiene step installs those rules and refuses a runner where they don't read back", () => {
+    const s = readFileSync(join(HOST, "post-boot.sh"), "utf8");
+    expect(s).toContain("sudo iptables -S DR_CONTAINER_IN");
+    expect(s).toContain("E_DR_RUNNER: the container firewall");
+  });
+});
+
