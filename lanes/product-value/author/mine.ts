@@ -8,10 +8,10 @@
 //                                 merge, published by 2026-10-09; written to records.jsonl in seeded order
 // The provisional type only orders the quotas; every unit's type comes from the frozen classifier rule before any arm
 // runs. Record ids are sealed material once authored, so --out must sit on tmpfs.
-import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Io } from "../cli.ts";
+import { drawOrder, searchTopic } from "../../aftermath/draw.ts";
 import type { ProjectType } from "../types.ts";
 import { graphql, graphqlLeft, pointsUsed, rest } from "./gh.ts";
 
@@ -28,7 +28,7 @@ export const TOPICS: Record<ProjectType, string[]> = {
   other: ["cli", "developer-tools", "framework", "library", "sdk", "devtools", "compiler", "testing-tools", "linter", "terminal"],
 };
 
-export const order = (id: string) => createHash("sha256").update(SEED + "\n" + id).digest("hex");
+export const order = (id: string) => drawOrder(SEED, id);
 const words = (s: string) => (s.match(/\S+/g) ?? []).length;
 const BAD_TITLE = /\b(fix(es|ed)?|bug|hotfix|chore|docs?|documentation|readme|typos?|bump(s|ed)?|deps?|dependenc\w*|upgrade|refactor\w*|clean ?up|lint\w*|format\w*|ci|tests?|release|revert\w*|translations?|i18n|l10n|changelog|security patch)\b/i;
 const BAD_LABEL = /^(bug|type: ?bug|kind\/bug|dependencies|deps|documentation|docs|chore|refactor|ci|release|translation|i18n|security)$/i;
@@ -45,19 +45,15 @@ function repos(out: string, io: Io): number {
   let added = 0;
   for (const [type, topics] of Object.entries(TOPICS) as [ProjectType, string[]][]) {
     for (const topic of topics) {
-      for (let page = 1; page <= 2; page++) {
-        const q = encodeURIComponent("topic:" + topic + " stars:>=" + MIN_STARS + " pushed:>=" + FRAME.from + " archived:false fork:false");
-        const r = rest<any>("search/repositories?q=" + q + "&sort=stars&order=desc&per_page=100&page=" + page);
-        Bun.sleepSync(2_200);
-        for (const it of r.items ?? []) {
+      searchTopic((path) => rest<any>(path), { topic, stars: ">=" + MIN_STARS, pushedSince: FRAME.from, maxPages: 2, paceMs: 2_200 }, (items) => {
+        for (const it of items) {
           const spdx = it.license?.spdx_id;
           if (!LICENCES.has(spdx) || seen.has(it.full_name)) continue;
           seen.add(it.full_name);
           appendFileSync(file, JSON.stringify({ repo: it.full_name, stars: it.stargazers_count, licence: spdx, type_prov: type, topic, order: order(it.full_name) }) + "\n");
           added++;
         }
-        if ((r.items ?? []).length < 100) break;
-      }
+      });
     }
   }
   io.out("pv mine repos: " + added + " added, " + seen.size + " in repos.jsonl");

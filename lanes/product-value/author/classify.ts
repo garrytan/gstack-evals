@@ -6,6 +6,7 @@
 //   pv classify --units <dir> --item pv-auth-classify [--ids a,b]
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { decide as panelDecide, panel } from "../../aftermath/panel.ts";
 import type { Io } from "../cli.ts";
 import { openMeter, pool, type ModelKey } from "../meter.ts";
 import type { ProjectType, UnitMeta } from "../types.ts";
@@ -45,8 +46,7 @@ export function material(dir: string): string {
 }
 
 export function decide(a: ProjectType | null, b: ProjectType | null, third: ProjectType | null): ProjectType | null {
-  if (a && a === b) return a;
-  return third;
+  return panelDecide(a, b, third);
 }
 
 export async function run(argv: string[], io: Io): Promise<number> {
@@ -72,9 +72,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
           return null;
         }
       };
-      const [a, b] = await Promise.all(CLASSIFIERS.map(label));
-      const third = a && a === b ? null : await label(THIRD);
-      const type = decide(a, b, third);
+      const { a, b, third, decided: type } = await panel(label, [CLASSIFIERS[0]!, CLASSIFIERS[1]!], THIRD);
       put(join(dir, "unit/classify.json"), { [CLASSIFIERS[0]!]: a, [CLASSIFIERS[1]!]: b, [THIRD]: third, type, head });
       if (!type) return out.push(uid + " unclassified");
       const meta: UnitMeta = readJson(join(dir, "unit/unit.json"));
