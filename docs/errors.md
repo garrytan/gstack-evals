@@ -242,6 +242,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PF_INFRA_GAP](#e_pf_infra_gap) | 2 | U20 |
 | [E_PF_CELL_INCOMPLETE](#e_pf_cell_incomplete) | 1 | U20 |
 | [E_PF_CAPTURE](#e_pf_capture) | 2 | U20 |
+| [E_PF_ARM](#e_pf_arm) | 2 | U20 |
+| [E_PF_TOOLS](#e_pf_tools) | 2 | U20 |
+| [E_PF_PLUGIN](#e_pf_plugin) | 2 | U20 |
+| [E_PF_DRYRUN](#e_pf_dryrun) | 1 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -458,6 +462,14 @@ Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 A pstack-checks analysis cell (one model and one arm) has gaps on more than 10% of its units, so every verdict that uses it reads INCOMPLETE. The analysis still writes every number, the gap worst case included, then exits 1.
 
 Fix: Nothing to fix in the analysis: report the cell as incomplete.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_DRYRUN
+
+A pstack-checks dry-run fixture printed FAIL: a frozen rule did not hold on the stub session or the scoring path.
+
+Fix: Read the FAIL line, fix the rule's code, and run the dry run again before any spend.
 
 Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
@@ -1718,6 +1730,30 @@ The session-end capture (sh/capture.sh) failed or printed no PF_CAPTURE line, so
 Fix: Fix the capture step in the session runner and rerun the session as an infra end.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_PF_ARM
+
+A pstack-checks arm, turn or session record broke plan sections 3 to 5: an unknown arm or model, an empty bug report, a blind scope that is not one line, a missing allowance, a plugin on an arm other than P, or a record without S.
+
+Fix: Fix the session input or the runner; the arm texts and limits in lanes/outcome-skills/pfchecks/arms.ts are frozen.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_TOOLS
+
+The pstack-checks tools volume could not be built or checked: tla2tools.jar does not match prereg.json's sha256, a pinned image is missing, or a build step failed.
+
+Fix: Pull the pinned images by digest, fetch the pinned jar, then build the volume again (outcome pf tools).
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_PLUGIN
+
+The pstack plugin for arm P could not be installed: prereg.json's pin differs from src/arms/stacks.ts, the extracted tree is not the pinned tree, or pstack's installer failed in the builder.
+
+Fix: Fetch the pinned cursor/plugins commit into a local clone and build the plugin volume again.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

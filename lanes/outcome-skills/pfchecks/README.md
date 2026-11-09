@@ -3,8 +3,8 @@
 The keyless scoring core for the preregistration in wiki/plans/2026-11-09-geva-487-pstack-checks-prereg/README.md (the
 post, from plan v2). The post is the source of truth; this file records the rules as built and the readings this build
 chose where the plan leaves a detail open. It reuses the state machines harness (lanes/outcome-skills/statemachines/)
-read-only. Out of scope here: the arm texts, the session runner and its two turns, the tools volume, the pstack plugin
-mount, ledger leases and the dry run on real units.
+read-only. The second build adds the arms, the tools volume, the pstack plugin, the two-turn session core, the session
+plan and the dry run (section "Sessions, arms and the dry run" below).
 
 ## Commands
 
@@ -105,3 +105,51 @@ Analysis and money
   price, so the cap adds no second 1.2. At planning prices this gives Opus $580 at n = 28, the post's cap.
 - What is left of the line is $1,960 less the spend recorded so far less the crew use still held back (both inputs).
 - The mid-run check projects spend so far plus the remaining units at the new price against the item's cap.
+
+## Sessions, arms and the dry run
+
+Files: arms.ts (section 4's texts and sections 5 and 13's limits), tools.ts (the tools volume), pstack.ts (the plugin
+volume), session.ts (plan, end rules, effort fields, pf-session.v1), sh/wrapup.sh (the wrap-up keep rule), pf_turns.py (the
+two-turn session on the real Claude Agent SDK) and dryrun.ts (`gstack-evals outcome pf dryrun`).
+
+Rules as built
+- Task turn: the arm's text, a blank line, "Here is the bug report:", a blank line, the issue text with JavaScript's
+  trailing whitespace removed, a blank line, then "My app is the repository in this directory. Don't stop to ask." The
+  blind probe is its text with {scope}, a blank line and that last line only.
+- Limits: task turn 5,400 s and 250 turns for P, C and the blind probe, 3,600 s and 150 turns for N; wrap-up 300 s and 20
+  turns. Allowances from items.ts ALLOWANCE (or admission.ts costReading's doubled table, passed in); blind $15; wrap-up $1,
+  $0.50 on particle-1. Quiet and background waits are the state machines arms' 30 s and 600 s.
+- Session plan: per unit, every (model, arm) cell of the part shuffled by one seededRandom(order_seed + part) stream, as
+  #290's planPart reads its seed. Items: pf-opus, pf-sol, pf-particle in the test part; pf-admit in admission; pf-blind.
+- Ends: endKind is #290's. Task turn: completed or a limit goes to the wrap-up; upstream or infra retries the whole
+  session once, then E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP. Wrap-up: upstream or infra reruns the wrap-up turn once after
+  wrapup.sh reset, resuming the same Claude Code session; a second is a gap.
+- Between turns: capture.sh commit (S), then wrapup.sh save. After the wrap-up: wrapup.sh keep copies CHECKS.json (a
+  regular file at the root), prints PF_DISCARD for every other added, changed or deleted path, and puts the tree back to S.
+  S leaves the container as a git bundle, which score.ts fetches as --s with ref HEAD.
+- The wrap-up turn is a new CLI process with --resume and its own max turns, deadline and proxy slot (its allowance).
+- Before any turn pf_turns.py refuses a tree holding CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude, or a home holding
+  gstack or a drive path (E_PF_ARM), as real_agent's SM check does. AskUserQuestion gets #290's NoAnswer reply.
+- Tools volume pf-tools-<pin hash> at /opt/pf-tools, read-only: Temurin JDK 21 from eclipse-temurin:21-jdk@sha256:ebfbb18d...,
+  bun 1.4.4 from oven/bun:1@sha256:1d22548f..., tla2tools.jar checked against prereg.json. TLA2TOOLS and JAVA are set and
+  bun goes ahead of the image's own PATH. The JDK and bun are glibc builds, so a musl (Alpine) unit image cannot run them.
+- pstack volume pf-pstack-cdbbd4ca5dd2 at /opt/pf-pstack, read-only, loaded with the SDK's plugins option (--plugin-dir).
+  stackTree checks the tree id; stacks.ts's install command (pstack's bootstrap) runs in the bun builder with egress.
+- Effort: no effort, thinking or reasoning setting is passed. The dry run records each model's first request fields in
+  effort.json; effortDiffers marks a later session that differs as an infra gap.
+
+Readings this build chose
+- P's exposure (section 8, "the task turn's transcript holds the body"): measured on Claude Code 2.1.310, the expanded
+  skill body reaches the request and Claude Code's own transcript (~/.claude/projects), not the SDK message stream. So
+  pf_turns.py copies Claude Code's transcript out as claude-session.jsonl, and the body check reads that file.
+- The short skill names resolve on 2.1.310 with the plugin directory loaded, so the dry run keeps "short" and records it.
+- Open: the dry run's stub answers the first wrap-up request with a 401, but Claude Code 2.1.310 retries a 400 and a 401
+  inside the turn and then completes, so the wrap-up upstream rerun fixture still prints FAIL. The rerun rule
+  (wrapupStep, wrapup.sh reset, --resume) is covered by keyless tests only.
+- A turn ends at its ResultMessage; pf_turns.py does not yet wait out background tasks the way real_agent's _drive does.
+
+Dry run. `gstack-evals outcome pf dryrun [--out dir] [--python <python with claude_agent_sdk 0.2.174>]` builds the volumes,
+opens and settles one lease per frozen item on a temporary ledger, runs six stub sessions through pf_turns.py in
+containers from a fixture unit's image, scores them with the Docker executor and prints one PASS or FAIL line per
+fixture. The fixture unit comes from #290's fixtures helper (lang go, shell-sourceable product code). Not yet done: the
+Harbor wiring of pf_turns.py through real_agent and the driver's proxy slots, and the dry run on real MultiLang units.

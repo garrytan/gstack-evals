@@ -1979,6 +1979,42 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_PF_ARM: {
+    exit: 2,
+    meaning: "A pstack-checks arm, turn or session record broke plan sections 3 to 5: an unknown arm or model, an empty bug report, a blind scope that is not one line, a missing allowance, a plugin on an arm other than P, or a record without S.",
+    fix: "Fix the session input or the runner; the arm texts and limits in lanes/outcome-skills/pfchecks/arms.ts are frozen.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_PF_TOOLS: {
+    exit: 2,
+    meaning: "The pstack-checks tools volume could not be built or checked: tla2tools.jar does not match prereg.json's sha256, a pinned image is missing, or a build step failed.",
+    fix: "Pull the pinned images by digest, fetch the pinned jar, then build the volume again (outcome pf tools).",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_PF_PLUGIN: {
+    exit: 2,
+    meaning: "The pstack plugin for arm P could not be installed: prereg.json's pin differs from src/arms/stacks.ts, the extracted tree is not the pinned tree, or pstack's installer failed in the builder.",
+    fix: "Fetch the pinned cursor/plugins commit into a local clone and build the plugin volume again.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
+  E_PF_DRYRUN: {
+    exit: 1,
+    meaning: "A pstack-checks dry-run fixture printed FAIL: a frozen rule did not hold on the stub session or the scoring path.",
+    fix: "Read the FAIL line, fix the rule's code, and run the dry run again before any spend.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
 } as const satisfies Record<string, CodeInfo>;
 
 export type ReasonCode = keyof typeof CODES;

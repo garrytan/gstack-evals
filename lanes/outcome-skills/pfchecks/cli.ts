@@ -17,6 +17,7 @@ import { dockerBreaks, rowOf, scoreSession, type CatchRecord } from "./score.ts"
 import { toldScreen } from "./told.ts";
 
 export const HELP = `Usage: gstack-evals outcome pf <command>
+  dryrun [--out <dir>] [--python <python with claude_agent_sdk>] [--pstack-source <cursor/plugins clone>]
   draw --prereg <prereg.json> --candidates <candidates.json> --units <dir> --neutral <dir> [--labels <file>]... [--raise] [--n <n>] --out <draw.json>
   told --unit <dir> [--unit <dir>]...
   neutral --unit <dir> --out <dir> [--image <id>] [--volume <name>] [--mode hardened|root]
@@ -144,6 +145,7 @@ export async function main(argv: string[]): Promise<number> {
     console.log(HELP);
     return cmd === undefined ? 2 : 0;
   }
+  if (cmd === "dryrun") return await (await import("./dryrun.ts")).main(rest);
   try {
     return await run(cmd, parse(rest));
   } catch (e) {
