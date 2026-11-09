@@ -19,6 +19,19 @@ import { armSpec, CLOSING_LINES, jobConfig, PROCEDURE_LINES } from "./grid.ts";
 
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
+// D1's task setup (harness mechanics): TASK_SETUP names Dockerfile lines appended after runtime-copy.Dockerfile in every
+// task's environment image, never the verifier's, and TASK_SETUP_SHA256 the bytes they must have. With neither set, every
+// Dockerfile is byte-identical to before.
+export function taskSetupLines(env: Record<string, string | undefined> = process.env): string {
+  const file = env.TASK_SETUP, want = env.TASK_SETUP_SHA256;
+  if (!file && !want) return "";
+  if (!file || !want) throw new Error("E_USAGE set TASK_SETUP and TASK_SETUP_SHA256 together");
+  if (!existsSync(file)) throw new Error(`E_USAGE TASK_SETUP ${file} does not exist`);
+  const got = sha256(file);
+  if (got !== want) throw new Error(`E_USAGE TASK_SETUP ${file} has sha256 ${got}, not TASK_SETUP_SHA256 ${want}`);
+  return "\n" + readFileSync(file, "utf8");
+}
+
 // Copies every arm's tar into <run>/arms. Each must be the preregistered bytes: its tar sha256 must equal the committed
 // manifest's. Arms that share a tar (tar=<name>) share one copy of it in the run dir and one manifest.
 export function stageArms(armsCsv: string, o: { armDir: string; run: string; root: string; armManifests: string; vm: string }) {
@@ -63,7 +76,7 @@ if (import.meta.main) {
   if (!/^[\w/-]+$/.test(armManifests) || !existsSync(join(root, armManifests))) throw new Error(`E_USAGE ARM_MANIFESTS ${armManifests} is not a directory under ${root}`);
   const cells = JSON.parse(readFileSync(join(root, "config", cellsFile), "utf8"));
   const runtimeStages = readFileSync(join(here, "runtime-stages.Dockerfile"), "utf8");
-  const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8");
+  const runtimeCopy = readFileSync(join(here, "runtime-copy.Dockerfile"), "utf8") + taskSetupLines();
   const band = taskSet === "swebv-r3" ? loadSwebvTasks(join(root, "tasks/swebv-r3.txt"), join(root, "tasks/swebv-r3.json"), R3_BAND_SHA256) : [];
   const drops = taskSet === "swebv-r3" ? loadR3Drops(join(root, R3_DROP_FILE), R3_DROP_SHA256, band.map((t) => t.task_id)) : [];
   const swebv = band.filter((t) => !drops.some((d) => d.task_id === t.task_id));
@@ -126,6 +139,7 @@ if (import.meta.main) {
     arms: arms.map(({ options, ...arm }) => ({ ...arm, system_prompt: options.system_prompt ?? "sdk-default", session_kind: options.session_kind ?? "", told_skill: options.told ?? "",
       ...(options.gstack_hooks ? { gstack_hooks: options.gstack_hooks } : {}),
       ...(options.strip_snapshot ? { strip_snapshot: true } : {}),
+      ...(options.checks_trust ? { checks_trust: true } : {}),
       ...(options.procedure_line ? { procedure_line: options.procedure_line, procedure_line_sha256: createHash("sha256").update(PROCEDURE_LINES[options.procedure_line as keyof typeof PROCEDURE_LINES]).digest("hex") } : {}),
       ...(options.closing_line ? { closing_line: options.closing_line, closing_line_sha256: createHash("sha256").update(CLOSING_LINES[options.closing_line as keyof typeof CLOSING_LINES]).digest("hex") } : {}) })), tasks,
   };

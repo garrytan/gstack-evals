@@ -143,8 +143,15 @@ print(json.dumps(sorted(removed)))
 """
 
 
+# Harness mechanics D1: a gstack arm consents to the repo's checks before the session, as a user who installs gstack in
+# their own repo would. It runs at the workdir with HOME=/root after the arm tar is extracted; its first output line goes in
+# the arm info and a nonzero exit is an infrastructure failure. The dry run's d1-checks step runs this same text.
+CHECKS_TRUST = "/root/.claude/skills/gstack/bin/gstack-checks trust"
+
+
 class LanebHooksOptions(LanebOptions):
     strip_snapshot: bool = Field(default=False, description="Strip auto-loaded instruction files from the snapshot before the arm is extracted (harness mechanics).")
+    checks_trust: bool = Field(default=False, description="Run gstack-checks trust at the workdir after the arm is extracted (harness mechanics D1, gstack arms only).")
 
 
 class LanebHooksAgent(LanebAgent):
@@ -157,11 +164,24 @@ class LanebHooksAgent(LanebAgent):
             raise LanebInfraError(f"snapshot strip failed: {res.stderr[-500:]!r}")
         return json.loads(res.stdout.decode().strip().splitlines()[-1])
 
+    def _checks_trust(self, container: str) -> str:
+        workdir = ["-w", self.options.workdir] if self.options.workdir else []
+        try:
+            res = subprocess.run(["docker", "exec", "-i", "-e", "HOME=/root", *workdir, container, "sh", "-c", CHECKS_TRUST], capture_output=True, timeout=300)
+        except subprocess.TimeoutExpired:
+            raise LanebInfraError("gstack-checks trust timed out") from None
+        if res.returncode != 0:
+            raise LanebInfraError(f"gstack-checks trust exited {res.returncode}: {res.stderr[-500:]!r}")
+        return (res.stdout.decode(errors="replace").strip().splitlines() or [""])[0]
+
     def _inject_arm(self, container: str) -> dict:
-        if not self.options.strip_snapshot:
-            return super()._inject_arm(container)
-        stripped = self._strip_snapshot(container)
-        return {**super()._inject_arm(container), "stripped": stripped}
+        stripped = self._strip_snapshot(container) if self.options.strip_snapshot else None
+        info = super()._inject_arm(container)
+        if stripped is not None:
+            info = {**info, "stripped": stripped}
+        if self.options.checks_trust:
+            info = {**info, "checks_trust": self._checks_trust(container)}
+        return info
 
     def _copy_tree(self, container: str, script: str, dest: Path, what: str) -> list[str]:
         shutil.rmtree(dest, ignore_errors=True)

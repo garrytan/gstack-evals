@@ -198,6 +198,7 @@ export type Profile = {
   hostRoot: string;
   ledgerPort: string;
   seed: number;
+  taskSetup?: { file: string; sha256: string };
   concurrent: number;
   parts: (item: string, frozen: (f: { file: string; sha256: string }) => string, inputs: Record<string, string>) => PartPlan[];
 };
@@ -678,7 +679,7 @@ function preparePart(work: string, p: PartPlan, def: ItemDef, arms: string) {
   const dir = join(work, p.name);
   const tasks = [...new Set(p.rects.flatMap((x) => x.tasks))];
   const labels = [...new Set(p.rects.flatMap((x) => x.arms))];
-  const env = { ...process.env, TASK_SET: def.taskSet, CELLS: p.cells ?? def.cells, ARM_MANIFESTS: P.armManifests, TASKS: tasks.join(",") };
+  const env = { ...process.env, TASK_SET: def.taskSet, CELLS: p.cells ?? def.cells, ARM_MANIFESTS: P.armManifests, TASKS: tasks.join(","), ...(P.taskSetup ? { TASK_SETUP: P.taskSetup.file, TASK_SETUP_SHA256: P.taskSetup.sha256 } : {}) };
   const attempts = String(Math.max(...p.rects.map((x) => x.attempts)));
   const r = Bun.spawnSync([process.execPath, process.env.L1_PREPARE_RUN ?? join(LANEB, "runner/prepare-run.ts"), dir, p.name.replace(/[^a-z0-9-]/g, "-"), p.model ?? def.model, labels.map((a) => P.armSpecs[a]!).join(","), arms, attempts, String(P.concurrent)], { env: env as Record<string, string>, stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) throw new Error("prepare-run for " + p.name + " exited " + r.exitCode);
