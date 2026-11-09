@@ -92,6 +92,8 @@ Each job launches with `ITEM=laneb-quick-2 LEDGER=<Captain drive>/ledger/laneb-q
 
 ## Money and the stop rule
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 The cap is $90 on line item `laneb-quick-2`. The pilot counts toward the cap. Ledger and proxy rules are prereg 1's: a reserve before each session, a settle after, no reserve past the cap, and a latched stop. A cap stop is reported as an incomplete run and never retried.
 
 The run stops at the cap or at 12:00 PT on Monday 2026-11-02, whichever comes first, and is reported as it stands. A trial in which no model response reached the agent is an infrastructure failure and is rerun up to twice. A session that hits its cap or the agent timeout is graded as it stands.

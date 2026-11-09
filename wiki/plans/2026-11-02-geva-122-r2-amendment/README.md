@@ -49,6 +49,8 @@ The Captain (GSTA-2) ruled that R2 runs every Claude arm on `claude-code-preset`
 
 ## 3. How R2 scores a cap-stopped session
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 The R2 build records a session that the turn cap ends as its own termination, `turn_cap` (the CLI's `error_max_turns` result), and a session that the per-session allowance stops as `allowance_stop` (the metering proxy's E_ALLOWANCE refusal that names the slot's allowance). Before the build, the first was recorded as completed and the second as a missing cell (GEVA-116's open note on #119).
 
 Both R2 runs set `--cap-stops`, which turns these terminations and the rule below on. A run without it, whatever its `--max-turns` and `--allowance`, keeps main's records: the turn cap ends a session as completed, and an allowance refusal is a missing cell (E_ALLOWANCE). GSTA-2 ruled on 2026-11-02 how R2 scores capped sessions:

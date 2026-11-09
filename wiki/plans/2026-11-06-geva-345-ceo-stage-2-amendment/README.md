@@ -47,7 +47,7 @@ Stage 1 showed the CEO line can measure something: plain Opus misses the decidin
 
 - Stage 1 read HEADROOM on 2026-11-06 (GEVA-340), and autoplan-ceo failed its exposure smoke on all three models. Rule 5 (#214, section 10) makes that FIX-METHOD on the harness and sends it to the Captain.
 - #242, section 5 committed the next step: a stage 2 amendment with the harness fixes, then a full smoke rerun that passes the frozen gate with no exception.
-- The project owner decided on 2026-11-05 that each eval line's next round brings in its hook-enforced arm, under an amendment. gstack shipped the /plan-ceo-review gate on main at 4743132 (1.96.0.0).
+- On 2026-11-05 the project owner ruled that every eval line adds its hook-enforced arm at its next round, through an amendment. gstack shipped the /plan-ceo-review gate on main at 4743132 (1.96.0.0).
 - The Captain's ruling on B2 start rule 6 approves comparison authoring only when the all-in check fits $2,000 with a stated MDD.
 
 ## Big decisions
@@ -274,6 +274,8 @@ Units still win per session, but a unit also costs authoring, mining and a sessi
 
 ### 7. Money: the re-projection and the all-in check
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 #### 7.1 Crew spent
 
 The 18 threads on the CEO line to this post's start read 469,608 credits, $469.61 at $1 per 1,000: the design and its /ship tail, the guard, ladder and stop-label amendments, B0, B1 and its /ship, the harness follow-up and the exposure fix with their tails, both pin posts and the part 2 /ship, B2's mining and authoring, stage 1's run threads and the stage 1 gate amendment. The difficulty ladder plan, which served every line, is left out, as B2's re-projection left it out. This thread is counted at its 70M-token stop in 7.2.
@@ -383,4 +385,4 @@ Rerun: `uv run --with numpy==2.3.4 python stage2-sizing.py > stage2-sizing.txt`.
 
 ## Review record
 
-Lean /autoplan (feature kind), one Opus 5.5 reviewer, one round: 13 findings (2 High, 5 Medium, 5 Low, 1 Informational) and no outside terms. The reviewer reran the money part of stage2-sizing.py and traced every number to the evidence. The Captain took every recommendation at gate 1 and extended the session-kind fix to both gstack arms. Every finding is applied: completed sessions keep their class when the gate report fails (Big decision 4); both gstack arms run unattended (Big decision 10); the replaced smoke items, stage 2 envelope and allin fields have rows in section 1; the PASS line carries the unit counts; the armed test gained the unit layout, the question-ending, exhausted, copy-failure and usage-error cases and a frozen deadline; a $30 crew reserve re-sized shape B from 64 to 62 changed units; gate_armed needs a fired record; cross-references name #214; the stage 2 pin post opens temporary leases; part 2d adds the wider-spread power rows; the trip rule is recomputed on measured inputs; and section 3.5 notes the conservative MDD after a cut. The /ship record is in the pull request.
+Lean /autoplan (feature kind), one Opus 5.5 reviewer, one round: 13 findings (2 High, 5 Medium, 5 Low, 1 Informational) and no outside terms. The reviewer reran the money part of stage2-sizing.py and traced every number to the evidence. At gate 1 the Captain accepted every recommendation and widened the session-kind fix to cover both gstack arms. Every finding is applied: completed sessions keep their class when the gate report fails (Big decision 4); both gstack arms run unattended (Big decision 10); the replaced smoke items, stage 2 envelope and allin fields have rows in section 1; the PASS line carries the unit counts; the armed test gained the unit layout, the question-ending, exhausted, copy-failure and usage-error cases and a frozen deadline; a $30 crew reserve re-sized shape B from 64 to 62 changed units; gate_armed needs a fired record; cross-references name #214; the stage 2 pin post opens temporary leases; part 2d adds the wider-spread power rows; the trip rule is recomputed on measured inputs; and section 3.5 notes the conservative MDD after a cut. The /ship record is in the pull request.

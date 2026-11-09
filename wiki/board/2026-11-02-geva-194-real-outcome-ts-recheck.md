@@ -43,23 +43,23 @@ This post holds counts, labels and digests only. Statements, commit ids, test id
 
 | Label | Kind | Old status | New verdict | Valid, regression not frozen | Failing checks |
 |---|---|---|---|---|---|
-| ro0fa1017a87 | K2 | final | valid | no (frozen) | none |
-| ro1114bd8298 | K4 decoy | final | valid | no (frozen) | none |
-| ro1bdb9c8c6a | K2 | final | valid | no (frozen) | none |
-| ro21de8c8ae4 | K2 | final | valid | no (frozen) | none |
-| ro92292a7480 | K4 decoy | final | valid | no (frozen) | none |
-| road3bffc961 | K2 | final | valid | no (frozen) | none |
-| rodd207329fc | K2 | final | valid | no (frozen) | none |
-| ro282239633b | K4 decoy | pending GST-957 | valid | yes | none |
-| ro295c720607 | K1 | pending GST-957 | valid | yes | none |
-| ro3785d98d4f | K1 | pending GST-957 | invalid | n/a | L2 |
-| ro4a8a04dace | K2 | pending GST-957 | valid | yes | none |
-| ro5a40c3948d | K4 replay | pending GST-957 | valid | yes | none |
-| ro64b761eab6 | K1 | pending GST-957 | valid | yes | none |
-| ro9b531846c5 | K2 | pending GST-957 | invalid | n/a | L2 |
-| ro9e9527ebc8 | K2 | pending GST-957 | valid | yes | none |
-| rod0227497e2 | K4 replay | pending GST-957 | valid | yes | none |
-| rodb53f1bc5b | K4 replay | pending GST-957 | valid | yes | none |
+| (withheld) | K2 | final | valid | no (frozen) | none |
+| (withheld) | K4 decoy | final | valid | no (frozen) | none |
+| (withheld) | K2 | final | valid | no (frozen) | none |
+| (withheld) | K2 | final | valid | no (frozen) | none |
+| (withheld) | K4 decoy | final | valid | no (frozen) | none |
+| (withheld) | K2 | final | valid | no (frozen) | none |
+| (withheld) | K2 | final | valid | no (frozen) | none |
+| (withheld) | K4 decoy | pending GST-957 | valid | yes | none |
+| (withheld) | K1 | pending GST-957 | valid | yes | none |
+| (withheld) | K1 | pending GST-957 | invalid | n/a | L2 |
+| (withheld) | K2 | pending GST-957 | valid | yes | none |
+| (withheld) | K4 replay | pending GST-957 | valid | yes | none |
+| (withheld) | K1 | pending GST-957 | valid | yes | none |
+| (withheld) | K2 | pending GST-957 | invalid | n/a | L2 |
+| (withheld) | K2 | pending GST-957 | valid | yes | none |
+| (withheld) | K4 replay | pending GST-957 | valid | yes | none |
+| (withheld) | K4 replay | pending GST-957 | valid | yes | none |
 
 ## What reproduced
 
@@ -120,16 +120,21 @@ Shortfalls: 1 build task (9 of 10) and 1 K1 pair (2 of 3). The repository target
 - Inner tar sha256: 224383ba42c0f524fbfdad3e60b005e13c06b9649e1f1bd73b67eb04c3702c8a
 - It holds, per label, the new verdict, every rule line and every failing rule line, the derived regression lists, the GST-1004 and GST-996 facts, the two L2 probes and the scripts that produced them.
 
-## Cost
-
-- VM: one standard-16 for 44.7 minutes at $0.00831 a minute, about $0.37, booked on ledger item ts-recheck-gst957 (cap $10).
-- Agent: this thread's counter read 24.8M tokens and 7,612 credits (about $7.61 at $1 per 1,000 credits) before /ship. That covers reading the record, the runs and this post.
-
 ## What this does not cover
 
 - No agent has run any task, so nothing here says whether the tasks fall inside the plan's difficulty band.
 - The two L2 readings rest on yes/no probes of the sealed files, not on a fix followed by a recheck.
 - #143's record does not keep GEVA-173's VM setup or check launcher, so this run used its own. The check command is the same.
+
+<details>
+<summary>Agent notes</summary>
+
+**Cost**
+
+- VM: one standard-16 for 44.7 minutes at $0.00831 a minute, about $0.37, booked on ledger item ts-recheck-gst957 (cap $10).
+- Agent: this thread's counter read 24.8M tokens and 7,612 credits (about $7.61 at $1 per 1,000 credits) before /ship. That covers reading the record, the runs and this post.
+
+</details>
 
 ## Disclosures
 

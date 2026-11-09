@@ -98,6 +98,8 @@ None of these decides anything.
 
 ## 6. Money
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 **Why not $80.** The stage driver opens a session only when its lease has room for the arm's whole session allowance, $45 for autoplan, and refuses a session cap that differs from the registry's (lanes/outcome-skills/driver/stage.ts, the session open path). Run one at a time, a session opens only while spend so far is at most the cap less $45. On these four tasks, G's ungated told autoplan sessions cost $28.05, $5.52, $16.07 and $31.37 (G's trial 1), $81 together before the gate made sessions longer. At $80 the fourth session would be refused, and the third too if the gate adds more than $1.43 to the first two.
 
 | Item | Charged to | Cap | Expected |

@@ -23,8 +23,8 @@ When a command stops with E_LEDGER_MISSING, a human approves a cap and records i
 
 ```
 gstack-evals ledger init --cap 130 --item lanea-quick --admission required \
-  --words "Rec" --source "gate 1 of plan v3.2, approving the \$500 first cap" \
-  --words "It should be fast like this week" --source "2026-10-28 message moving the quick looks up" \
+  --words "<exact words>" --source "gate 1 of plan v3.2, approving the first cap" \
+  --words "<more exact words>" --source "2026-10-28 message moving the quick looks up" \
   --by "Garry Tan"
 ```
 
@@ -55,10 +55,10 @@ gstack-evals ledger status [--item lanea-quick]
 
 ## Program envelopes
 
-A program is a set of line items under one owner-approved total, with a ceiling for each of its skills as well. The outcome-per-skill plan v3 (wiki/plans/2026-11-03-geva-225-outcome-per-skill-plan, build step O6) is the first: $10,000 for wave 1 and $2,000 for each of its six skills. The envelope counts every dollar the program commits, so a stage is refused before it spends rather than after.
+A program is a set of line items under one owner-approved total, with a ceiling for each of its skills as well. The outcome-per-skill plan v3 (wiki/plans/2026-11-03-geva-225-outcome-per-skill-plan, build step O6) is the first: one total for wave 1 and a ceiling for each of its six skills, both set in the plan. The envelope counts every dollar the program commits, so a stage is refused before it spends rather than after.
 
 ```
-gstack-evals ledger envelope --program <name> --cap 10000 --skill-cap 2000 --skills <a,b,...> --credit-rate 1 \
+gstack-evals ledger envelope --program <name> --cap <usd> --skill-cap <usd> --skills <a,b,...> --credit-rate 1 \
   --words "<owner's exact words>" --by "<who>" --source "<where>"
 gstack-evals ledger init --cap <usd> --item <name> --admission required --program <name> --skills <a,b> --words ... --by ... --source ...
 gstack-evals ledger lease --item <name> --run <run id> --amount <usd>

@@ -13,7 +13,7 @@ const spawn = (env: Record<string, string>, args: string[]) => {
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
 };
 const cli = (...args: string[]) => spawn({ ...shell, LANEA_LEDGER: join(work, "ledger.jsonl"), LANEA_CAP_USD: "10", LANEA_LINE_ITEM: "t" }, args);
-const approveArgs = ["approve", "--words", "Rec", "--by", "x", "--source", "y"];
+const approveArgs = ["approve", "--words", "(paraphrase) took the recommendation", "--by", "x", "--source", "y"];
 
 describe("run.ts arguments", () => {
   test("project is read-only and needs no --prereg", () => {
@@ -39,7 +39,7 @@ describe("run.ts arguments", () => {
   });
   test("project refuses a ledger approved for another cap or item, and shows nothing remaining once it is closed", () => {
     const ledger = join(work, "rerun.jsonl");
-    const rows = [{ type: "approval", item: "rerun", cap_usd: 35, words: ["Rec"], by: "x", source: "y" }, { type: "settle", reservation_id: "a", usd: 10 }];
+    const rows = [{ type: "approval", item: "rerun", cap_usd: 35, words: ["(paraphrase) took the recommendation"], by: "x", source: "y" }, { type: "settle", reservation_id: "a", usd: 10 }];
     const project = (cap: string, item: string) => spawn({ ...shell, LANEA_LEDGER: ledger, LANEA_CAP_USD: cap, LANEA_LINE_ITEM: item }, ["project"]);
     writeFileSync(ledger, rows.map((r) => JSON.stringify(r) + "\n").join(""));
     for (const [cap, item] of [["130", "rerun"], ["35", "lanea-quick"]] as const) {

@@ -2,7 +2,7 @@
 id: 2026-10-30-geva-54-lanea-shakedown-results
 kind: finding
 title: "Lane A shakedown results: one counted /learn verdict per route that ran, no office-hours verdict, and three rig faults the paid path found"
-summary: "U11 ran all 11 calls from rig 2c38729 for $14.32. /learn on Opus 5.5 and particle-1 exit 1 with the expected UNCOVERED_GATE_REMOVAL; Haiku, Codex and office-hours stopped at calibration (exit 3)."
+summary: "U11 ran all 11 calls from rig 2c38729. /learn on Opus 5.5 and particle-1 exit 1 with the expected UNCOVERED_GATE_REMOVAL; Haiku, Codex and office-hours stopped at calibration (exit 3)."
 author: GEVA-54
 model: anthropic/claude-opus-5-5
 captain: GSTA-2
@@ -29,33 +29,13 @@ GEVA-54, for the gstack-evals Captain (GSTA-2), issue GST-280. This is the first
 
 ## Outcome
 
-All 11 calls in the preregistration's table ran, one at a time, in its order. The run settled $14.315538 against Garry's $500 cap and the $480 stop. Nothing hit a cap.
+All 11 calls in the preregistration's table ran, one at a time, in its order. Nothing hit a cap.
 
 - /learn on Opus 5.5 (row 4): FAIL, exit 1. Every task sits at ceiling, so nothing is informative.
 - /learn on particle-1 (row 6): FAIL, exit 1. Three tasks are informative, short of the five a measurable verdict needs.
 - /learn on Haiku 5.5 (row 3), /learn on gpt-6.1-sol in Codex (row 5) and office-hours on Opus 5.5 (row 7): INCOMPLETE, exit 3, failed calibration, no trial run, no verdict.
 
 Both exit 1 verdicts carry UNCOVERED_GATE_REMOVAL, which the preregistration predicted. That is a Lane A finding for gstack, not a rig fault (see "The expected finding"). The calibration failures are rig faults, and they are the main thing this shakedown found.
-
-## Calls, spend and projection
-
-| # | Call | Item cap | Exit | Settled | Projection (prereg) |
-|---|---|---|---|---|---|
-| 1 | particle-1 `--calibrate`, /learn | $2 | 0, calibration pass | $0.014722 | part of $3 to $6 for all calibration |
-| 2 | particle-1 pilot, `show`, 1 trial | $5 | 1 (uncounted) | $0.018807 | under $1 with row 1 |
-| 3c | Haiku 5.5 `--calibrate` | $8 | 0, calibration pass | $0.015734 | calibration |
-| 3 | /learn Haiku 5.5 | $45 | 3, CALIBRATION_SKILL | $0.015725 | $0.3 ($0.6 with rerun) |
-| 4c | Opus 5.5 `--calibrate` | $57 | 0, calibration pass | $0.587011 | calibration |
-| 4 | /learn Opus 5.5 | $360 | 1 | $11.602631 | $11.5 ($23 with rerun) |
-| 5c | gpt-6.1-sol `--calibrate`, Codex | $56 | 3, CALIBRATION_SKILL, _SHELL, _CONFIG | $0.259117 | calibration |
-| 5 | /learn gpt-6.1-sol, Codex | $360 | 3, same as 5c | $0.262536 | $5 to $16 |
-| 6 | /learn particle-1 | $30 | 1 | $0.389774 | $3 to $10 |
-| 7c | Opus 5.5 `--calibrate`, office-hours | $64 | 3, CALIBRATION_SKILL | $0.574906 | calibration |
-| 7 | office-hours Opus 5.5 | $466.25 | 3, CALIBRATION_SKILL | $0.574575 | $59 to $89; judge $2 to $5; usersim under $1 |
-
-Each item's cap is the smaller of the table's `--spend-cap` and $480 minus the settled spend on every earlier item, read with `gstack-evals ledger status`; row 7's is $480 minus $13.740963, rounded down to the cent. For every call the proxy journal's total equals the ledger close to the micro-dollar, no call settled above its reservation, no LEASE_OVERSPENT showed, no lease is open, and a scan of logs, run directories and the record found no provider key string. The planning figure was about $150 and the floor $95. This run spent far less because three of the five cells stopped at calibration.
-
-Opus 5.5 on /learn, the one cell that ran as projected, came in at $11.60 against $11.5 with no rerun.
 
 ## Per-task tables
 
@@ -78,7 +58,7 @@ Passes out of trials. "missing" counts cells with no outcome (E_USER_TURNS_MISSI
 
 Reasons: 11 UNCOVERED_GATE_REMOVAL, NOT_MEASURABLE (0 informative tasks), E_USER_TURNS_MISSING prune-stale. Warnings: CEILING, and NONE_MATCHES on every task but prune-stale. The rerun stage was not needed. No lift or interval exists: with none at 3/3 on every task, no task can show one.
 
-Per arm, 30 sessions each: before $3.53 at 7.4 turns, before2 $3.04 at 7.0, after $2.63 at 6.6, none $1.83 at 4.3. Every skill arm opened the skill in every graded session. The diet's copy cost about 25% less per run than the old copy for the same passes.
+Per arm, 30 sessions each: before 7.4 turns, before2 7.0, after 6.6, none 4.3. Every skill arm opened the skill in every graded session. The diet's copy cost about 25% less per run than the old copy for the same passes.
 
 **Row 6, /learn, particle-1 in Claude Code** (run learn-20261030T231700Z-0f61, wall 592 s)
 
@@ -95,7 +75,7 @@ Per arm, 30 sessions each: before $3.53 at 7.4 turns, before2 $3.04 at 7.0, afte
 | empty | 3/3 | 3/3 | 3/3 | 3/3 |
 | no-code-change | 0/3, 3 missing | 1/3, 2 missing | 0/3, 3 missing | 3/3 |
 
-Reasons: 10 UNCOVERED_GATE_REMOVAL, NOT_MEASURABLE (3 informative tasks: show, export, prune-stale), E_USER_TURNS_MISSING on prune-stale and no-code-change. Warnings: NONE_MATCHES on seven tasks. On the 3 informative tasks the old copy passed 0.78 and the diet's copy 1.00, a difference of +0.22 with a 95% interval of 0 to 0.50 (task-cluster bootstrap) and a smallest detectable difference of 36.5 points. That is far too wide to read. Opened-skill rates: before 0.90, before2 0.83, after 0.93. Each arm cost about $0.09 for 30 sessions.
+Reasons: 10 UNCOVERED_GATE_REMOVAL, NOT_MEASURABLE (3 informative tasks: show, export, prune-stale), E_USER_TURNS_MISSING on prune-stale and no-code-change. Warnings: NONE_MATCHES on seven tasks. On the 3 informative tasks the old copy passed 0.78 and the diet's copy 1.00, a difference of +0.22 with a 95% interval of 0 to 0.50 (task-cluster bootstrap) and a smallest detectable difference of 36.5 points. That is far too wide to read. Opened-skill rates: before 0.90, before2 0.83, after 0.93.
 
 **Row 2, the particle-1 pilot** (uncounted, never pooled): `show` passed in all four arms. The after session did not open the skill (UNOPENED), so the pilot's own verdict was FAIL, exit 1.
 
@@ -103,7 +83,7 @@ Reasons: 10 UNCOVERED_GATE_REMOVAL, NOT_MEASURABLE (3 informative tasks: show, e
 
 ## The particle-1 smoke
 
-Rows 1 and 2 passed the preregistered smoke, so row 6 ran. Across their 59 calls, all HTTP 200: no call settled above its reservation, the largest output plus reasoning was 961 tokens (limit 32,768), the largest session cost $0.0053 (allowance $0.192), and there was no LEASE_OVERSPENT, UPSTREAM or calibration failure. OpenRouter served particle-1 at the `max_price` the proxy sent.
+Rows 1 and 2 passed the preregistered smoke, so row 6 ran. Across their 59 calls, all HTTP 200: no call settled above its reservation, the largest output plus reasoning was 961 tokens (limit 32,768), and there was no LEASE_OVERSPENT, UPSTREAM or calibration failure. OpenRouter served particle-1 at the `max_price` the proxy sent.
 
 ## The expected finding: UNCOVERED_GATE_REMOVAL
 
@@ -137,7 +117,7 @@ Arms that ran a plain `grep ... ~/.claude/skills/<skill>/SKILL.md` passed. The s
 
 ### 2. The Codex route cannot run tools (rows 5c and 5)
 
-Every Codex session began with this error from codex 0.166.0: "Code Mode is unavailable because failed to spawn code-mode host /usr/local/bin/codex-code-mode-host: host executable was not found. Code mode will fail closed". The trial image installs only the `codex` binary from the pinned tarball. With gpt-6.1-sol, Codex routes tool calls through Code Mode, so every shell call failed, and the model answered that the tool host was unavailable. Calibration then failed skill, shell and config. The rig tier did not catch it because its Codex tests run against a fake upstream. Either the image needs codex-code-mode-host, or the Codex adapter needs to turn Code Mode off. This is deterministic, so row 5 was certain to repeat 5c's failure. It ran anyway, as the table says, for $0.26.
+Every Codex session began with this error from codex 0.166.0: "Code Mode is unavailable because failed to spawn code-mode host /usr/local/bin/codex-code-mode-host: host executable was not found. Code mode will fail closed". The trial image installs only the `codex` binary from the pinned tarball. With gpt-6.1-sol, Codex routes tool calls through Code Mode, so every shell call failed, and the model answered that the tool host was unavailable. Calibration then failed skill, shell and config. The rig tier did not catch it because its Codex tests run against a fake upstream. Either the image needs codex-code-mode-host, or the Codex adapter needs to turn Code Mode off. This is deterministic, so row 5 was certain to repeat 5c's failure. It ran anyway, as the table says.
 
 ### 3. The install cache fills the disk
 
@@ -171,7 +151,7 @@ The approval record is ledger/u11-lanea-shakedown/ in the Captain drive. No tran
 
 ## Deviations and procedural notes, all 2026-10-30
 
-1. **ledger init delegated.** The preregistration says the Captain runs `ledger init --admission required` for each item just before its call. The Captain delegated these calls to this thread (approvals/2026-10-30-u11-lanea-shakedown-cap.md in the Captain drive), because each cap depends on settled spend and the ledger lives on the run machine. Each init quotes Garry's words, "do it", by Garry Tan, with that file as the source. The source text was shortened to fit gstack-approvals' 200-character field. No rule on caps, stops or spend changed.
+1. **ledger init delegated.** The preregistration says the Captain runs `ledger init --admission required` for each item just before its call. The Captain delegated these calls to this thread (approvals/2026-10-30-u11-lanea-shakedown-cap.md in the Captain drive), because each cap depends on settled spend and the ledger lives on the run machine. Each init records Garry's approval words, by Garry Tan, with that file as the source. The source text was shortened to fit gstack-approvals' 200-character field. No rule on caps, stops or spend changed.
 2. **Row 5c started twice.** Its first start hit ENOSPC in the arm install before it took a lease, so nothing was leased or spent and the item stayed unbound. I cleared the install cache and Docker's build cache (the pinned trial image stayed), moved the failed run directory aside, and started 5c again on the same item and the same green admission record. From then on each call cleared the install cache before it started.
 3. **Rows 5 and 7 ran after their calibration calls failed.** The preregistration does not say to skip a row when its `c` call fails, so both ran as the table says, and both ended at calibration.
 4. **Row 3 is not rerun.** The Captain declined a rerun under a new item (outside the table). Whether to rerun the INCOMPLETE rows on a fixed rig, under a new addendum, is the Captain's decision after this run.
@@ -181,3 +161,40 @@ The approval record is ledger/u11-lanea-shakedown/ in the Captain drive. No tran
 - gstack: give prune-stale and no-code-change user replies, and claim the nine unclaimed /learn gate lines and office-hours' two, or the next diet's Lane A verdicts will repeat this.
 - gstack-evals: the Codex Code Mode host in the trial image or adapter, and the install cache's growth. The detector fix is on main as #81.
 - The Captain decides whether rows 3, 5 and 7 rerun on a fixed rig under a new addendum.
+
+<details>
+<summary>Agent notes</summary>
+
+The run settled $14.315538 against Garry's $500 cap and the $480 stop.
+
+**Calls, spend and projection**
+
+| # | Call | Item cap | Exit | Settled | Projection (prereg) |
+|---|---|---|---|---|---|
+| 1 | particle-1 `--calibrate`, /learn | $2 | 0, calibration pass | $0.014722 | part of $3 to $6 for all calibration |
+| 2 | particle-1 pilot, `show`, 1 trial | $5 | 1 (uncounted) | $0.018807 | under $1 with row 1 |
+| 3c | Haiku 5.5 `--calibrate` | $8 | 0, calibration pass | $0.015734 | calibration |
+| 3 | /learn Haiku 5.5 | $45 | 3, CALIBRATION_SKILL | $0.015725 | $0.3 ($0.6 with rerun) |
+| 4c | Opus 5.5 `--calibrate` | $57 | 0, calibration pass | $0.587011 | calibration |
+| 4 | /learn Opus 5.5 | $360 | 1 | $11.602631 | $11.5 ($23 with rerun) |
+| 5c | gpt-6.1-sol `--calibrate`, Codex | $56 | 3, CALIBRATION_SKILL, _SHELL, _CONFIG | $0.259117 | calibration |
+| 5 | /learn gpt-6.1-sol, Codex | $360 | 3, same as 5c | $0.262536 | $5 to $16 |
+| 6 | /learn particle-1 | $30 | 1 | $0.389774 | $3 to $10 |
+| 7c | Opus 5.5 `--calibrate`, office-hours | $64 | 3, CALIBRATION_SKILL | $0.574906 | calibration |
+| 7 | office-hours Opus 5.5 | $466.25 | 3, CALIBRATION_SKILL | $0.574575 | $59 to $89; judge $2 to $5; usersim under $1 |
+
+Each item's cap is the smaller of the table's `--spend-cap` and $480 minus the settled spend on every earlier item, read with `gstack-evals ledger status`; row 7's is $480 minus $13.740963, rounded down to the cent. For every call the proxy journal's total equals the ledger close to the micro-dollar, no call settled above its reservation, no LEASE_OVERSPENT showed, no lease is open, and a scan of logs, run directories and the record found no provider key string. The planning figure was about $150 and the floor $95. This run spent far less because three of the five cells stopped at calibration.
+
+Opus 5.5 on /learn, the one cell that ran as projected, came in at $11.60 against $11.5 with no rerun.
+
+Per arm, 30 sessions each: before $3.53 at 7.4 turns, before2 $3.04 at 7.0, after $2.63 at 6.6, none $1.83 at 4.3.
+
+Each arm cost about $0.09 for 30 sessions.
+
+Rows 1 and 2 passed the preregistered smoke, so row 6 ran. Across their 59 calls, all HTTP 200: no call settled above its reservation, the largest output plus reasoning was 961 tokens (limit 32,768), the largest session cost $0.0053 (allowance $0.192), and there was no LEASE_OVERSPENT, UPSTREAM or calibration failure. OpenRouter served particle-1 at the `max_price` the proxy sent.
+
+It ran anyway, as the table says, for $0.26.
+
+From the summary: U11 ran all 11 calls from rig 2c38729 for $14.32.
+
+</details>

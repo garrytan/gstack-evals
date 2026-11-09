@@ -2,7 +2,7 @@
 id: 2026-11-08-geva-396-autoplan-report-order-recheck-results
 kind: finding
 title: "With gstack's report-order gate, told autoplan visibly ran its review procedure in 3 of 4 Opus 5.5 sessions (pass); every phase report came before its publish, and the one miss looks like a detector undercount"
-summary: "Report-order gate (gstack ddbf1c9a), Opus 5.5, T-G: 3 of 4 exposed, pass. Reports came before publishes in all 4; 18 early publishes refused. One Design load uncredited. Paid $79.81."
+summary: "Report-order gate (gstack ddbf1c9a), Opus 5.5, T-G: 3 of 4 exposed, pass. Reports came before publishes in all 4; 18 early publishes refused. One Design load uncredited."
 author: GEVA-396
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
@@ -51,7 +51,7 @@ The report step held in all 4 sessions: every counted publish came after its own
 
 The one session that read not exposed is the spare, tg6b9daf7138. The pin's wider UI scope rule made Design apply there, and the detector credited no Design load, so review_skills_loaded read false and the class is load step. The counts show the session read Design's methodology file 3 times, right after a methodology call the detector can't credit. That looks like a detector undercount, not a skipped load. The frozen reading stands.
 
-R48: not a null, so there is no cut question. autoplan's exposure is met on Opus 5.5 with this gate. That says the procedure ran where we can see it. It says nothing about whether autoplan improves outcomes, and autoplan's line can't pay for the test that would (What comes next). Paid spend was $79.81 against $352 in caps.
+R48: not a null, so there is no cut question. autoplan's exposure is met on Opus 5.5 with this gate. That says the procedure ran where we can see it. It says nothing about whether autoplan improves outcomes, and autoplan's line can't pay for the test that would (What comes next).
 
 ## How it works
 
@@ -67,7 +67,7 @@ In E3, autoplan still reached for the publish first. In all four sessions the fi
 
 - **Question.** With gstack's order-enforcing gate on, does told /autoplan on Opus 5.5 visibly run its procedure, as read by the frozen detector? The estimand is the share of told sessions read exposed after the three checks. The check passes at 3 of 4.
 - **Arm.** E2's told arm with the gstack pin moved to ddbf1c9a, installed with the lite loadout and the gate on in a clean HOME that the session sees as /root. The run host built the arm tar with e3-told-install.sh (sha256 a0505070...), and its checks passed: the pin's commit and version, the lite loadout and the gate on, exactly the pin's three hooks (Stop for the timeline and the gate, and the gate's new PreToolUse check with matcher Bash), a clean checkout, and a lite render of 197 files with digest 70db9ce6, as the addendum froze. There is no none arm and no judge, because the check reads exposure only.
-- **Model and harness.** claude-opus-5-5 through Anthropic's API and the run's metering proxy. Claude Code 2.1.312 with the claude-code-preset system prompt, claude-agent-sdk 0.2.174, Harbor f3a5a92 with HARBOR_TELEMETRY=0, and CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The arm's limits: $45, 400 turns, 4 hours, quiet 30 s, background wait 600 s. The session kind is interactive, and autoplan runs its default full kind. The registry turns t1 to t3 run verbatim (t2 loads /autoplan), with the rec persona and its hold line.
+- **Model and harness.** claude-opus-5-5 through Anthropic's API and the run's metering proxy. Claude Code 2.1.312 with the claude-code-preset system prompt, claude-agent-sdk 0.2.174, Harbor f3a5a92 with HARBOR_TELEMETRY=0, and CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The session kind is interactive, and autoplan runs its default full kind. The registry turns t1 to t3 run verbatim (t2 loads /autoplan), with the rec persona and its hold line.
 - **Tasks.** tg5dce6b3f8b (E2's unopened session 4), tg6b9daf7138 (the sealed spare, admitted by the Captain's recorded decision, with no cost filter because it has no G session), then tgff24032962 and tg8d524982ac (E2's first two tasks, in E2's order). gstack built its replay tests from E2's sessions, so tasks 3 and 4 are replay sources. One trial each, one at a time.
 - **Detector.** autoplanExposure at the run commit, the file E2 ran. A session reads exposed only when config, scope, review_skills_loaded and findings_in_order all pass.
 - **Rules.** Intention to treat. As each session settled, the run thread read it with e3-read.ts, applied the refusal rule (a refused call reads not exposed) and the over-credit rule (a load that rests on an open over-credit shape reads not exposed), checked that every refused publish read as an error, wrote the class of any not-exposed session, and only then decided the early stop and opened the next session. A gap reruns once in the whole check. The early stop comes at 3 exposed or 2 not exposed. A cap stop is an incomplete run.
@@ -116,8 +116,10 @@ No refusal was for order: each was a publish before its own report. Where the re
 
 | Task | E2 | E3 |
 |---|---|---|
-| tgff24032962 | exposed; gate blocked 3 (ceo, dx, eng), released; $17.19 | exposed; blocked 3 (ceo, dx, eng), released, 5 publishes refused; $16.62 |
-| tg8d524982ac | not exposed, findings_in_order false, nothing counted as published; gate blocked 3 (ceo each time) and exhausted before any report; $13.73 | exposed, published ceo, dx, eng in order; blocked 3 (ceo, dx, eng), released, 4 publishes refused; $17.04 |
+| tgff24032962 | exposed; gate blocked 3 (ceo, dx, eng), released | exposed; blocked 3 (ceo, dx, eng), released, 5 publishes refused |
+| tg8d524982ac | not exposed, findings_in_order false, nothing counted as published; gate blocked 3 (ceo each time) and exhausted before any report | exposed, published ceo, dx, eng in order; blocked 3 (ceo, dx, eng), released, 4 publishes refused |
+
+The per-session costs are in Agent notes.
 
 **Session facts** (report-only, session-facts.txt and the stage driver's session log).
 
@@ -129,8 +131,6 @@ No refusal was for order: each was a publish before its own report. Where the re
 | Model calls (proxy requests, all answered) | 202 | 264 | 194 | 190 |
 | Tool calls (the session's own) | 224 (182) | 299 (239) | 251 (209) | 200 (154) |
 | Own tool results that read as errors | 12 | 10 | 13 | 11 |
-| Metered cost | $21.919167 | $22.655697 | $16.624229 | $17.037058 |
-| G's ungated told session on the same task, trials 1 and 2 | $17.10, $14.81 | none (the spare) | $16.07, $14.20 | $15.57, $17.26 |
 
 No session ended on the budget, the turn limit or the wall limit. On the three tasks with a G reading, E3's gated sessions cost 1.17 times G's ungated sessions (both G trials averaged), against E2's 1.12 and R61's 1.31. That is a description from one trial per task, not an estimate of what the gate costs.
 
@@ -165,47 +165,6 @@ Across the four sessions, no phase report came before the gate's first refusal. 
 
 **4. Session facts** are in the Result section above.
 
-## Cost
-
-**Paid** (the ledger, wave 1 envelope; settle.txt).
-
-| Item | Charged to | Lease | Settled | Cap | Share of cap |
-|---|---|---|---|---|---|
-| ap-e3, model calls | autoplan | ap-e3.0001.df8579, 4 sessions | $78.236151 | $343 | 22.8% |
-| e3-vm, run host hours | autoplan | e3-vm.0001.d6ea45, 5.234 h | $1.570200 | $9 | 17.4% |
-| **Paid** | | | **$79.806351** | **$352** | 22.7% |
-
-The model-call lease settled with unknown $0.00, and the four sessions' metered costs sum to it exactly. The host hours run from the host's creation at 20:46:23Z to the lease settle at 01:30:25Z, plus the half-hour teardown allowance, as in E2: 5.234 hours of a standard-8 at the Captain's $0.30 reserve rate. The host was destroyed inside the allowance. The addendum expected $80 to $100 for four sessions. After settling, wave 1 reads $1,574.29218 committed of $10,000 with nothing open, and autoplan's line on the ledger reads $1,007.329551 settled of $2,000.
-
-**Tokens** (the close events in the stage driver's session log, from the metering proxy). The run thread's readers didn't print these. This post reads them from that log, a plain file in the run's host logs (host-run.tar, listed in the plain outputs' MANIFEST).
-
-| | Input | Output | Cache read | Cache write | Total |
-|---|---|---|---|---|---|
-| Session 1 | 406 | 181,256 | 48,640,235 | 1,712,860 | 50,534,757 |
-| Session 2 | 530 | 200,123 | 72,919,304 | 813,432 | 73,933,389 |
-| Session 3 | 390 | 180,338 | 47,574,705 | 700,178 | 48,455,611 |
-| Session 4 | 382 | 217,509 | 46,109,086 | 692,693 | 47,019,670 |
-| **All four** | 1,708 | 779,226 | 215,243,330 | 3,919,163 | 219,943,427 |
-
-**Prices.** Opus 5.5 in dollars per million tokens, from src/runner/pricing/prices.ts at the run commit, as the proxy used them on 2026-11-07 and 2026-11-08: input 4, output 20, cache read 0.20, cache write 5. Cache reads and writes are counted as the proxy reported them, and the token totals at these prices give each session's metered cost to the cent. Per session the mean was $19.56, and per exposed session $26.08.
-
-**Crew**, from the thread counters at the Captain's rate of $1 per 1,000 credits, read on 2026-11-08. Every thread below has finished except this one.
-
-| Thread | Work | Credits | Tokens | Dollars |
-|---|---|---|---|---|
-| GEVA-375 | R61 prereg | 27,426 | 77.7M | $27.43 |
-| GEVA-382 | R61 run | 23,982 | 63.3M | $23.98 |
-| GEVA-384 | R61 results post | 18,001 | 54.8M | $18.00 |
-| GEVA-386 | R61 results post, /ship tail | 5,872 | 20.5M | $5.87 |
-| GEVA-387 | next-round plan, first detector fix and E2 prereg | 38,555 | 104.4M | $38.56 |
-| GEVA-389 | first detector fix and E2 prereg, /ship tail | 19,470 | 73.9M | $19.47 |
-| GEVA-390 | R61 re-read, second detector fix, E2 run | 37,047 | 100.8M | $37.05 |
-| GEVA-391 | E2 results post | 12,771 | 41.1M | $12.77 |
-| GEVA-393 | E3 addendum and run | 50,940 | 97.6M | $50.94 |
-| GEVA-396 | this post, when written | 3,359 | 10.7M | $3.36 |
-
-**autoplan's line, all-in, on actuals.** Paid on the ledger: G's autoplan share $474.68 (g-ap plus half of g-none, g-vm and g-tg), R61 $45.13, E2 $60.44 and E3 $79.81, so $660.07. G's crew: $453.40, autoplan's half of $906.79 over G's 29 threads at final counters, as the R61 results post read them. The crew after G, in the table above without this thread: $234.07. That is $1,347.54, plus this post's thread ($3.36 when written, not final): about $1,351 of $2,000, with about $649 left. The ledger's own $1,007.33 includes $347.26 of G crew rows recorded on 2026-11-05, which the counter reading replaces. gstack's own lane built the gate, and that work is not on this line.
-
 ## R48 reading
 
 **Not a null.** The addendum's section 5 fixed the reading before the run: a pass means autoplan's exposure is met on Opus 5.5 with this gate, and the next step is a funding question for an outcome test. R48's cycle applies to null and negative results, so no KEEP, FIX-METHOD or CUT-CANDIDATE verdict is owed.
@@ -217,21 +176,21 @@ The model-call lease settled with unknown $0.00, and the four sessions' metered 
 
 ## What comes next
 
-Exposure passing doesn't show that autoplan improves outcomes. It shows only that, with this gate, the procedure ran where the detector can see it. An outcome test needs four things on top of that: tasks with headroom (T-G has none), a headroom check on the no-gstack arm before the comparison (the next-round plan priced one at 20 tasks x 3 trials, about $290 expected with a $485 cap), a no-gstack arm paired with the told arm on every task, and enough pairs to detect a useful effect.
+Exposure passing doesn't show that autoplan improves outcomes. It shows only that, with this gate, the procedure ran where the detector can see it. An outcome test needs four things on top of that: tasks with headroom (T-G has none), a headroom check on the no-gstack arm before the comparison (the next-round plan priced one at 20 tasks x 3 trials, and its price and cap are in Agent notes), a no-gstack arm paired with the told arm on every task, and enough pairs to detect a useful effect.
 
 E2's results post sized the comparison with plan v3's power script (the same grid, times 1.2), told gated autoplan against no gstack, scored solved or not:
 
-| Design (tasks x trials) | Pairs | MDD, points | Expected paid | At G-style caps |
-|---|---|---|---|---|
-| 16 x 1, or 8 x 2 | 16 | above 40 | $410 to $490 | $930 |
-| 30 x 1 | 30 | 43.2 | $770 to $920 | $1,750 |
-| 24 x 4 | 96 | 26.4 | $2,450 to $2,930 | $5,600 |
-| 36 x 4 | 144 | 21.0 | $3,670 to $4,390 | $8,400 |
-| 42 x 4 | 168 | 19.8 | $4,280 to $5,120 | $9,800 |
+| Design (tasks x trials) | Pairs | MDD, points |
+|---|---|---|
+| 16 x 1, or 8 x 2 | 16 | above 40 |
+| 30 x 1 | 30 | 43.2 |
+| 24 x 4 | 96 | 26.4 |
+| 36 x 4 | 144 | 21.0 |
+| 42 x 4 | 168 | 19.8 |
 
-Expected paid assumes $24 to $29 per told session on harder tasks plus $1.50 per none session. For comparison, E3's told sessions averaged $19.56 on T-G. At 24 pairs or fewer the power script finds no MDD up to 40 points.
+At 24 pairs or fewer the power script finds no MDD up to 40 points.
 
-**autoplan's line can't power the comparison.** About $649 is left on the $2,000 line. Spent on pairs alone, that buys fewer than 30, and even 30 pairs has an MDD of 43.2 points. A 20-point test needs 42 x 4, about $4,280 to $5,120 expected, which is past the line, so the comparison is a funding question for the project owner, which the Captain puts to him. The next step needs a new preregistration of its own: find harder tasks and run the headroom check inside the line, so that the question reaches the owner with the no-gstack arm's measured rate on those tasks. Any comparison run inside the line would be descriptive only.
+**autoplan's line can't power the comparison.** Spent on pairs alone, that buys fewer than 30, and even 30 pairs has an MDD of 43.2 points. The next step needs a new preregistration of its own: find harder tasks and run the headroom check inside the line, so that the question reaches the owner with the no-gstack arm's measured rate on those tasks. Any comparison run inside the line would be descriptive only.
 
 ## Deviations
 
@@ -283,6 +242,88 @@ Harbor is Apache-2.0. gstack at the pin is MIT. Claude Code is Anthropic's propr
 ## Changelog
 
 - 2026-11-08: first version.
+
+<details>
+<summary>Agent notes</summary>
+
+Paid spend was $79.81 against $352 in caps.
+
+The arm's limits: $45, 400 turns, 4 hours, quiet 30 s, background wait 600 s.
+
+| Task | E2 | E3 |
+|---|---|---|
+| tgff24032962 | exposed; gate blocked 3 (ceo, dx, eng), released; $17.19 | exposed; blocked 3 (ceo, dx, eng), released, 5 publishes refused; $16.62 |
+| tg8d524982ac | not exposed, findings_in_order false, nothing counted as published; gate blocked 3 (ceo each time) and exhausted before any report; $13.73 | exposed, published ceo, dx, eng in order; blocked 3 (ceo, dx, eng), released, 4 publishes refused; $17.04 |
+
+| | Session 1 | Session 2 | Session 3 | Session 4 |
+|---|---|---|---|---|
+| Termination | completed | completed | completed | completed |
+| Persona in t2 | 1 question (recommended reply), 0 prose | 2 questions (recommended reply), 0 prose | 1 question (recommended reply), 0 prose | 1 question (recommended reply), 0 prose |
+| /autoplan loads in t2 | 1 | 1 | 1 | 1 |
+| Model calls (proxy requests, all answered) | 202 | 264 | 194 | 190 |
+| Tool calls (the session's own) | 224 (182) | 299 (239) | 251 (209) | 200 (154) |
+| Own tool results that read as errors | 12 | 10 | 13 | 11 |
+| Metered cost | $21.919167 | $22.655697 | $16.624229 | $17.037058 |
+| G's ungated told session on the same task, trials 1 and 2 | $17.10, $14.81 | none (the spare) | $16.07, $14.20 | $15.57, $17.26 |
+
+**Cost**
+
+**Paid** (the ledger, wave 1 envelope; settle.txt).
+
+| Item | Charged to | Lease | Settled | Cap | Share of cap |
+|---|---|---|---|---|---|
+| ap-e3, model calls | autoplan | ap-e3.0001.df8579, 4 sessions | $78.236151 | $343 | 22.8% |
+| e3-vm, run host hours | autoplan | e3-vm.0001.d6ea45, 5.234 h | $1.570200 | $9 | 17.4% |
+| **Paid** | | | **$79.806351** | **$352** | 22.7% |
+
+The model-call lease settled with unknown $0.00, and the four sessions' metered costs sum to it exactly. The host hours run from the host's creation at 20:46:23Z to the lease settle at 01:30:25Z, plus the half-hour teardown allowance, as in E2: 5.234 hours of a standard-8 at the Captain's $0.30 reserve rate. The host was destroyed inside the allowance. The addendum expected $80 to $100 for four sessions. After settling, wave 1 reads $1,574.29218 committed of $10,000 with nothing open, and autoplan's line on the ledger reads $1,007.329551 settled of $2,000.
+
+**Tokens** (the close events in the stage driver's session log, from the metering proxy). The run thread's readers didn't print these. This post reads them from that log, a plain file in the run's host logs (host-run.tar, listed in the plain outputs' MANIFEST).
+
+| | Input | Output | Cache read | Cache write | Total |
+|---|---|---|---|---|---|
+| Session 1 | 406 | 181,256 | 48,640,235 | 1,712,860 | 50,534,757 |
+| Session 2 | 530 | 200,123 | 72,919,304 | 813,432 | 73,933,389 |
+| Session 3 | 390 | 180,338 | 47,574,705 | 700,178 | 48,455,611 |
+| Session 4 | 382 | 217,509 | 46,109,086 | 692,693 | 47,019,670 |
+| **All four** | 1,708 | 779,226 | 215,243,330 | 3,919,163 | 219,943,427 |
+
+**Prices.** Opus 5.5 in dollars per million tokens, from src/runner/pricing/prices.ts at the run commit, as the proxy used them on 2026-11-07 and 2026-11-08: input 4, output 20, cache read 0.20, cache write 5. Cache reads and writes are counted as the proxy reported them, and the token totals at these prices give each session's metered cost to the cent. Per session the mean was $19.56, and per exposed session $26.08.
+
+**Crew**, from the thread counters at the Captain's rate of $1 per 1,000 credits, read on 2026-11-08. Every thread below has finished except this one.
+
+| Thread | Work | Credits | Tokens | Dollars |
+|---|---|---|---|---|
+| GEVA-375 | R61 prereg | 27,426 | 77.7M | $27.43 |
+| GEVA-382 | R61 run | 23,982 | 63.3M | $23.98 |
+| GEVA-384 | R61 results post | 18,001 | 54.8M | $18.00 |
+| GEVA-386 | R61 results post, /ship tail | 5,872 | 20.5M | $5.87 |
+| GEVA-387 | next-round plan, first detector fix and E2 prereg | 38,555 | 104.4M | $38.56 |
+| GEVA-389 | first detector fix and E2 prereg, /ship tail | 19,470 | 73.9M | $19.47 |
+| GEVA-390 | R61 re-read, second detector fix, E2 run | 37,047 | 100.8M | $37.05 |
+| GEVA-391 | E2 results post | 12,771 | 41.1M | $12.77 |
+| GEVA-393 | E3 addendum and run | 50,940 | 97.6M | $50.94 |
+| GEVA-396 | this post, when written | 3,359 | 10.7M | $3.36 |
+
+**autoplan's line, all-in, on actuals.** Paid on the ledger: G's autoplan share $474.68 (g-ap plus half of g-none, g-vm and g-tg), R61 $45.13, E2 $60.44 and E3 $79.81, so $660.07. G's crew: $453.40, autoplan's half of $906.79 over G's 29 threads at final counters, as the R61 results post read them. The crew after G, in the table above without this thread: $234.07. That is $1,347.54, plus this post's thread ($3.36 when written, not final): about $1,351 of $2,000, with about $649 left. The ledger's own $1,007.33 includes $347.26 of G crew rows recorded on 2026-11-05, which the counter reading replaces. gstack's own lane built the gate, and that work is not on this line.
+
+An outcome test needs four things on top of that: tasks with headroom (T-G has none), a headroom check on the no-gstack arm before the comparison (the next-round plan priced one at 20 tasks x 3 trials, about $290 expected with a $485 cap), a no-gstack arm paired with the told arm on every task, and enough pairs to detect a useful effect.
+
+| Design (tasks x trials) | Pairs | MDD, points | Expected paid | At G-style caps |
+|---|---|---|---|---|
+| 16 x 1, or 8 x 2 | 16 | above 40 | $410 to $490 | $930 |
+| 30 x 1 | 30 | 43.2 | $770 to $920 | $1,750 |
+| 24 x 4 | 96 | 26.4 | $2,450 to $2,930 | $5,600 |
+| 36 x 4 | 144 | 21.0 | $3,670 to $4,390 | $8,400 |
+| 42 x 4 | 168 | 19.8 | $4,280 to $5,120 | $9,800 |
+
+Expected paid assumes $24 to $29 per told session on harder tasks plus $1.50 per none session. For comparison, E3's told sessions averaged $19.56 on T-G.
+
+**autoplan's line can't power the comparison.** About $649 is left on the $2,000 line. A 20-point test needs 42 x 4, about $4,280 to $5,120 expected, which is past the line, so the comparison is a funding question for the project owner, which the Captain puts to him.
+
+From the summary: Paid $79.81.
+
+</details>
 
 ## Disclosures
 
