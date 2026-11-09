@@ -59,7 +59,7 @@ export const TASK_LIMITS: Record<PfArm, { wall_limit_sec: number; max_turns: num
   P: { wall_limit_sec: 5400, max_turns: 250 }, C: { wall_limit_sec: 5400, max_turns: 250 }, N: { wall_limit_sec: 3600, max_turns: 150 }, blind: { wall_limit_sec: 5400, max_turns: 250 },
 };
 export const WRAPUP_LIMITS = { wall_limit_sec: 300, max_turns: 20 } as const;
-export const WRAPUP_ALLOWANCE: Record<string, number> = { [OPUS]: 6, [SOL]: 3, [P1]: 0.5 };
+export const WRAPUP_ALLOWANCE: Record<string, number> = { [OPUS]: 6, [SOL]: 5, [P1]: 0.5 };
 
 /** Both turns' limits for one session. allowance is the task-turn table (items.ts ALLOWANCE, or costReading's doubled one). */
 export function sessionLimits(arm: PfArm, model: string, allowance: Record<Arm, Record<string, number>> = ALLOWANCE): { task: TurnLimits; wrapup: TurnLimits } {

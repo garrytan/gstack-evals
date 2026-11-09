@@ -11,7 +11,7 @@ import type { SessionImage } from "../../lanes/outcome-skills/statemachines/imag
 import { sessionLimits, type PfArm } from "../../lanes/outcome-skills/pfchecks/arms.ts";
 import { OPUS, P1 } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { PSTACK_DIR, pstackVolume } from "../../lanes/outcome-skills/pfchecks/pstack.ts";
-import { TASK_RERUN, pfRecord, retriesSession, runCopy, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
+import { TASK_RERUN, finishSession, pfRecord, retriesSession, runCopy, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
 import { toolsVolume } from "../../lanes/outcome-skills/pfchecks/tools.ts";
 
 const roots: string[] = [];
@@ -181,6 +181,32 @@ test("pfRecord: an attempt with no summary or a harness error is an infra end, r
   expect(retriesSession(null, none)).toBe(true);
   expect(pfRecord(i, 1, summary({ task: turn("error") }), null).task.end).toBe("infra");
   expect(pfRecord(i, 2, null, null)).toMatchObject({ attempt: 2, gap: "E_PF_INFRA_GAP" });
+});
+
+test("a task open refused with 409 CAP_STOP (the agent's LedgerCapStop, as Harbor records it) ends the part as a cap stop, with no session retry and no gap", () => {
+  const i = input("P");
+  for (const attempt of [1, 2] as const) {
+    const r = pfRecord(i, attempt, null, null, "LedgerCapStop");
+    expect(r).toMatchObject({ attempt, cap_stop: true, gap: null, wrapup: null, wrapup_end: null, s: null });
+    expect(retriesSession(null, r)).toBe(false);
+    const file = join(temp("pf-run-cap-"), "session.json");
+    expect(() => finishSession(file, r)).toThrow(/^CAP_STOP /);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ cap_stop: true, gap: null, attempt });
+  }
+});
+
+test("a task turn that ends for an infra reason other than a cap stop still retries once and reads E_PF_INFRA_GAP on a second failure", () => {
+  const i = input("C");
+  for (const exception of [null, "LanebInfraError", "RuntimeError", "SandboxSetupError"]) {
+    const a1 = pfRecord(i, 1, null, null, exception);
+    expect(a1).toMatchObject({ cap_stop: false, task: { end: "infra" }, gap: "E_PF_INFRA_GAP" });
+    expect(retriesSession(null, a1)).toBe(true);
+    const a2 = pfRecord(i, 2, null, null, exception);
+    expect(a2).toMatchObject({ cap_stop: false, attempt: 2, gap: "E_PF_INFRA_GAP" });
+    const file = join(temp("pf-run-infra-"), "session.json");
+    finishSession(file, a2);
+    expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ cap_stop: false, gap: "E_PF_INFRA_GAP" });
+  }
 });
 
 test("pfRecord: a tree-check refusal before any slot is gap E_PF_ARM and takes no retry", () => {

@@ -85,6 +85,8 @@ export interface PfSessionRecord {
   wrapup: { ends: EndKind[]; turns: number | null; spent_micros: number } | null; wrapup_end: EndKind | null; gap: string | null;
   capture: Capture | null; forced: string[]; discarded: string[]; checks: string | null; s: { repo: string; ref: string } | null; transcript: string | null;
   claude_session: string | null; effort: Record<string, unknown> | null; questions: { ask_user_question: number; prose: number };
+  /** The driver refused the task open with 409 CAP_STOP (the agent's LedgerCapStop): the part ends incomplete, with no gap and no retry. */
+  cap_stop: boolean;
   env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" }; disallowed_tools: string[]; plugin: string | null; tools: string;
 }
 
@@ -92,7 +94,8 @@ export interface PfSessionRecord {
 export function writeSessionRecord(file: string, r: PfSessionRecord): void {
   if (r.schema !== "pf-session.v1" || r.env.CLAUDE_CODE_DISABLE_BUNDLED_SKILLS !== "1" || DISALLOWED_TOOLS.some((t) => !r.disallowed_tools.includes(t))) pfFail("E_PF_ARM", "the session record breaks section 4's harness rules");
   if ((r.plugin !== null) !== (r.arm === "P" || r.arm === "blind")) pfFail("E_PF_ARM", "only P and the blind probe mount the pstack plugin");
-  if (!r.gap && (!r.s || r.wrapup_end === null)) pfFail("E_PF_INPUT", "a session with no gap exports S and the wrap-up turn's end");
-  if (!r.gap && r.plugin !== null && !r.claude_session) pfFail("E_PF_INPUT", "a P or blind session with no gap names its claude-session.jsonl, where the skill body appears (section 8)");
+  if (r.cap_stop && r.gap) pfFail("E_PF_INPUT", "a cap-stopped session is not a gap");
+  if (!r.gap && !r.cap_stop && (!r.s || r.wrapup_end === null)) pfFail("E_PF_INPUT", "a session with no gap exports S and the wrap-up turn's end");
+  if (!r.gap && !r.cap_stop && r.plugin !== null && !r.claude_session) pfFail("E_PF_INPUT", "a P or blind session with no gap names its claude-session.jsonl, where the skill body appears (section 8)");
   writeFileSync(file, JSON.stringify(r, null, 1) + "\n", { flag: "wx" });
 }

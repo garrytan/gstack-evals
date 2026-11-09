@@ -383,8 +383,9 @@ export async function main(argv: string[]): Promise<number> {
       const lines = readFileSync(join(W, "driver-2", r.run.record.lease_id + ".journal.ndjson"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, any>);
       return { slot, lines: lines.filter((j) => meter && (j.meter_id ?? j.cell?.meter_id) === meter) };
     };
-    /** Each main wrap-up request in order: its bytes, the proxy's worst case for it (priceRequest, as the proxy prices it),
-     *  what the slot had committed when it came, and whether the proxy sent it on (a reserve and a request line at that worst case). */
+    /** Each main wrap-up request in order: its bytes, the cache-write rate the proxy reserves it at (none, 5m or 1h), the
+     *  proxy's worst case for it (priceRequest, as the proxy prices it), what the slot had committed when it came, and
+     *  whether the proxy sent it on (a reserve and a request line at that worst case). */
     const wrapRequests = (r: Ran) => {
       const { slot, lines } = journal(r);
       let settled = 0;
@@ -405,16 +406,16 @@ export async function main(argv: string[]): Promise<number> {
       }
       const provider = r.model === OPUS ? "anthropic" : "openrouter";
       const mains = st.bodies.filter((b) => b.session === r.name && b.phase === "wrapup" && Array.isArray(b.body.tools) && b.body.tools.length);
-      const reqs = mains.map((b) => ({ bytes: b.bytes, worst: reservationMicros(priceRequest(provider, b.body, b.body.max_tokens ?? 32_000, "/v1/messages")) })).map((q) => ({ ...q, ...(seen.find((x) => x.max === q.worst) ?? { committed: null, sent: false }) }));
+      const reqs = mains.map((b) => priceRequest(provider, b.body, b.body.max_tokens ?? 32_000, "/v1/messages")).map((p, k) => ({ bytes: mains[k]!.bytes, cache: p.cacheWrite, worst: reservationMicros(p) })).map((q) => ({ ...q, ...(seen.find((x) => x.max === q.worst) ?? { committed: null, sent: false }) }));
       const refusals = lines.filter((j) => j.kind === "refusal").map((j) => j.code + " " + j.reason);
       return { allowance: slot?.allowance_micros as number, reqs, refusals };
     };
-    const showWrap = (w: ReturnType<typeof wrapRequests>) => w.reqs.map((q, k) => (k ? "next" : "first") + " wrap-up request " + q.bytes + " bytes, worst case " + usd(q.worst) + " + " + (q.committed === null ? "?" : usd(q.committed)) + " committed = " + (q.committed === null ? "?" : usd(q.worst + q.committed)) + " of the " + usd(w.allowance ?? 0) + " allowance, " + (q.sent ? "admitted" : "not sent")).join("; ") + (w.refusals.length ? "; refused: " + w.refusals.join(" | ") : "");
+    const showWrap = (w: ReturnType<typeof wrapRequests>) => w.reqs.map((q, k) => (k ? "next" : "first") + " wrap-up request " + q.bytes + " bytes, cache write " + q.cache + ", worst case " + usd(q.worst) + " + " + (q.committed === null ? "?" : usd(q.committed)) + " committed = " + (q.committed === null ? "?" : usd(q.worst + q.committed)) + " of the " + usd(w.allowance ?? 0) + " allowance, " + (q.sent ? "admitted" : "not sent")).join("; ") + (w.refusals.length ? "; refused: " + w.refusals.join(" | ") : "");
     for (const [label, name, model] of [["Opus", "Eopus", OPUS], ["Sol", "Esol", SOL]] as const) {
       const E = await runOne(name, "C", model, names);
       const w = wrapRequests(E);
-      const ok = w.reqs.length >= 2 && w.reqs[0]!.bytes >= WRAP_BYTES && w.reqs.slice(0, 2).every((q) => q.sent && q.committed !== null && q.worst + q.committed <= w.allowance) && !w.refusals.length && JSON.stringify(E.run.record.wrapup?.ends) === '["completed"]';
-      rule("cold first wrap-up request at a " + WRAP_CONTEXT_TOKENS / 1000 + "k-token stub context, and the next after a full cache write, admitted inside the wrap-up allowance on " + label, ok, showWrap(w) + "; wrap-up ends " + JSON.stringify(E.run.record.wrapup?.ends) + ", gap " + E.run.record.gap);
+      const ok = w.reqs.length >= 2 && w.reqs[0]!.bytes >= WRAP_BYTES && w.reqs.slice(0, 2).every((q) => q.sent && q.cache !== "1h" && q.committed !== null && q.worst + q.committed <= w.allowance) && !w.refusals.length && JSON.stringify(E.run.record.wrapup?.ends) === '["completed"]';
+      rule("cold first wrap-up request at a " + WRAP_CONTEXT_TOKENS / 1000 + "k-token stub context, and the next after a full cache write, admitted inside the wrap-up allowance on " + label + ", neither at the 1h cache-write rate", ok, showWrap(w) + "; wrap-up ends " + JSON.stringify(E.run.record.wrapup?.ends) + ", gap " + E.run.record.gap);
       slotLine(name, E);
     }
     const W4 = await runOne("W4", "N", OPUS, names);

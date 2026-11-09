@@ -4,12 +4,13 @@
 // compose overlay that mounts the tools volume read-only at /opt/pf-tools for every arm and the pstack volume at
 // /opt/pf-pstack for P and blind (with the tools env) and the pinned Claude Code read-only, then pf_agent:PfAgent on the
 // driver's control plane (ledger u4, one slot per turn), then the pf-session.v1 record. A task turn that ends upstream or
-// infra retries the whole session once as attempt 2 from a fresh container, naming meta.rerun. Every provider key is
+// infra retries the whole session once as attempt 2 from a fresh container, naming meta.rerun; a task open the driver
+// refuses with 409 CAP_STOP (LedgerCapStop) ends the part as a cap stop, never retried. Every provider key is
 // unset for Harbor and HARBOR_TELEMETRY is 0; the only credential the session holds is the driver's slot token.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { buildSessionImage, sessionManifest, type SessionImage } from "../statemachines/image.ts";
 import { HARBOR_MODEL } from "../statemachines/run.ts";
 import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
@@ -126,14 +127,17 @@ function harbor(bin: string, argv: string[], env: Record<string, string>, timeou
 
 const armRefusal = (summary: Record<string, any> | null) => typeof summary?.refused === "string" && /^E_PF_ARM/.test(summary.refused);
 /** Whether an attempt's end retries the whole session from a fresh container: a task turn's upstream or infra end does,
- *  a tree or home refusal before any open never does. */
-export const retriesSession = (summary: Record<string, any> | null, record: PfSessionRecord): boolean => !armRefusal(summary) && taskStep([record.task.end]).action === "retry_session";
+ *  a tree or home refusal before any open or a cap stop never does. */
+export const retriesSession = (summary: Record<string, any> | null, record: PfSessionRecord): boolean => !record.cap_stop && !armRefusal(summary) && taskStep([record.task.end]).action === "retry_session";
 
 /** The pf-session.v1 record from one attempt's pf-summary.json (none: an infra end). A tree or home refusal before any
  *  open is gap E_PF_ARM and takes no retry. A wrap-up turn refused for its allowance (E_ALLOWANCE on its slot, or the
  *  driver's 409 CAP_STOP on its open) is gap E_PF_WRAPUP_ALLOWANCE. The effort fields are the task slot's, as the driver's
- *  proxy recorded them; with i.effort, missing or different fields make the session gap E_PF_INFRA_GAP. */
-export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null): PfSessionRecord {
+ *  proxy recorded them; with i.effort, missing or different fields make the session gap E_PF_INFRA_GAP. exception is
+ *  Harbor's exception type for the trial: LedgerCapStop (the driver refused the task open with 409 CAP_STOP) is a cap stop,
+ *  which ends the part with no gap and no retry, as the other lanes read it. */
+export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, ev: string | null, exception: string | null = null): PfSessionRecord {
+  const capStop = exception === "LedgerCapStop";
   const s = i.session;
   const slots = (summary?.slots ?? []) as Array<Record<string, any>>;
   const spent = (phase: string) => sum(slots.filter((x) => x.phase === phase).map((x) => x.close?.spent_micros));
@@ -144,7 +148,7 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
   const ws = ts?.action === "wrapup" && ends.length ? wrapupStep(ends) : null;
   const first = slots.find((x) => x.phase === "task")?.close?.first_request as Record<string, unknown> | null | undefined;
   const effort = first ? effortFields(first) : null;
-  const gap = !ts ? "E_PF_ARM" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts.action === "gap" ? ts.code : ts.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
+  const gap = capStop ? null : !ts ? "E_PF_ARM" : i.effort && !effortHolds(effort, i.effort[s.model]) ? "E_PF_INFRA_GAP" : ts.action === "gap" ? ts.code : ts.action === "retry_session" ? "E_PF_INFRA_GAP" : !ws ? "E_PF_INFRA_GAP" : ws.action === "gap" ? ws.code : ws.action === "rerun_wrapup" ? "E_PF_INFRA_GAP" : null;
   const cap = summary?.capture ? readCapture(summary.capture) : null;
   const keep = summary?.keep ? readWrapup(summary.keep) : { checks: false, discarded: [] as string[] };
   const cs = ev ? join(ev, "claude-session.jsonl") : "";
@@ -157,9 +161,15 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
     wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
     checks: keep.checks && ev ? join(ev, "CHECKS.json") : null, s: bundle && existsSync(bundle) && statSync(bundle).size > 0 ? { repo: bundle, ref: "HEAD" } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : null, claude_session: cs && existsSync(cs) && statSync(cs).size > 0 ? cs : null, effort,
-    questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
+    questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, cap_stop: capStop, env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
     disallowed_tools: [...DISALLOWED_TOOLS], plugin: loadsPlugin(s.arm) ? PSTACK_DIR : null, tools: toolsVolume(),
   };
+}
+
+/** Writes out/session.json. A cap stop then ends the part (CAP_STOP): it is incomplete, and nothing is retried. */
+export function finishSession(file: string, record: PfSessionRecord): void {
+  writeSessionRecord(file, record);
+  if (record.cap_stop) pfFail("CAP_STOP", record.unit + "/" + record.model + "/" + record.arm + "/" + record.index + " stopped at the cap (LedgerCapStop): the driver refused its task open, so the part ends incomplete and is not retried; " + file);
 }
 
 /** Builds the image, runs Harbor (and the whole-session retry from a fresh container when the task turn ends upstream or
@@ -180,11 +190,12 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
     const exit = await harbor(i.harbor ?? "harbor", argv, env, timeout, join(dir, "harbor.log"));
     const ev = find(join(dir, "jobs"), "evaluator");
     const summary = ev && existsSync(join(ev, "pf-summary.json")) ? (JSON.parse(readFileSync(join(ev, "pf-summary.json"), "utf8")) as Record<string, any>) : null;
+    const result = ev && existsSync(join(dirname(ev), "result.json")) ? (JSON.parse(readFileSync(join(dirname(ev), "result.json"), "utf8")) as Record<string, any>) : null;
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
-    record = pfRecord(i, attempt, summary, ev);
+    record = pfRecord(i, attempt, summary, ev, result?.exception_info?.exception_type ?? null);
     if (attempt === 2 || !retriesSession(summary, record)) break;
   }
   const file = join(i.out, "session.json");
-  writeSessionRecord(file, record!);
+  finishSession(file, record!);
   return { record: record!, file, image, attempts };
 }

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { priceRequest, reservationMicros, usageCost } from "../../src/runner/pricing/prices.ts";
 import { WRAPUP_ALLOWANCE } from "../../lanes/outcome-skills/pfchecks/arms.ts";
 import { BASE_FLAG, MANIFEST_A, WRAP_BYTES, WRAP_CONTEXT_TOKENS, agentFiles, misses, outcomes, stubReply } from "../../lanes/outcome-skills/pfchecks/dryrun.ts";
-import { OPUS } from "../../lanes/outcome-skills/pfchecks/items.ts";
+import { OPUS, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { readManifest } from "../../lanes/outcome-skills/pfchecks/manifest.ts";
 
 test("the stub's script: the task turn plants files once; the wrap-up writes the manifest, loops to its limit, or ends upstream once", () => {
@@ -32,21 +32,34 @@ test("the stub's wrap-up allowance fixtures: the task turn's last answer fills t
   expect(stubReply({ ...s, usage: undefined }, "wrapup", 0, true, 561_000).usage).toBeUndefined();
 });
 
-test("on Opus at the stub context, a full cache write leaves room for the next wrap-up request, and a report of 95% of the worst case does not", () => {
-  const body = (bytes: number) => {
-    const b = { model: OPUS, max_tokens: 32_000, system: [{ type: "text", text: "s", cache_control: { type: "ephemeral" } }], tools: [{ name: "Bash", input_schema: { type: "object" } }], messages: [{ role: "user", content: "" }] };
-    b.messages[0]!.content = "x".repeat(bytes - Buffer.byteLength(JSON.stringify(b)));
-    return b;
-  };
-  const price = priceRequest("anthropic", body(WRAP_BYTES), 32_000, "/v1/messages");
-  const worst = reservationMicros(price);
-  const allowance = WRAPUP_ALLOWANCE[OPUS]! * 1_000_000;
-  const write = usageCost(price, stubReply({ task: "", wrapup: "manifest", usage: "cache_write" }, "wrapup", 0, true, WRAP_BYTES).usage)!.micros;
-  const near = usageCost(price, stubReply({ task: "", wrapup: "manifest", usage: "worst" }, "wrapup", 0, true, WRAP_BYTES).usage)!.micros;
-  expect(worst).toBeLessThan(allowance);
-  expect(write + worst).toBeLessThan(allowance);
-  expect(near).toBeLessThan(worst);
-  expect(near + worst).toBeGreaterThan(allowance);
+const wrapBody = (model: string, bytes: number, ttl?: string) => {
+  const b = { model, max_tokens: 32_000, system: [{ type: "text", text: "s", cache_control: { type: "ephemeral", ...(ttl ? { ttl } : {}) } }], tools: [{ name: "Bash", input_schema: { type: "object" } }], messages: [{ role: "user", content: "" }] };
+  b.messages[0]!.content = "x".repeat(bytes - Buffer.byteLength(JSON.stringify(b)));
+  return b;
+};
+const wrapCosts = (provider: "anthropic" | "openrouter", model: string, ttl?: string) => {
+  const price = priceRequest(provider, wrapBody(model, WRAP_BYTES, ttl), 32_000, "/v1/messages");
+  const cost = (usage: "cache_write" | "worst") => usageCost(price, stubReply({ task: "", wrapup: "manifest", usage }, "wrapup", 0, true, WRAP_BYTES).usage)!.micros;
+  return { cache: price.cacheWrite, worst: reservationMicros(price), write: cost("cache_write"), near: cost("worst"), allowance: WRAPUP_ALLOWANCE[model]! * 1_000_000 };
+};
+
+test("at the stub context, a full cache write leaves room for the next wrap-up request on Opus and Sol, and on Opus a report of 95% of the worst case does not", () => {
+  const opus = wrapCosts("anthropic", OPUS);
+  expect(opus.cache).toBe("5m");
+  expect(opus.worst).toBeLessThan(opus.allowance);
+  expect(opus.write + opus.worst).toBeLessThan(opus.allowance);
+  expect(opus.near).toBeLessThan(opus.worst);
+  expect(opus.near + opus.worst).toBeGreaterThan(opus.allowance);
+  const sol = wrapCosts("openrouter", SOL);
+  expect(sol.cache).toBe("5m");
+  expect(sol.write + sol.worst).toBeLessThan(sol.allowance);
+});
+
+test("a one-hour cache write would not hold Sol's wrap-up pair at the stub context, which is why the dry run fails a 1h request", () => {
+  const sol = wrapCosts("openrouter", SOL, "1h");
+  expect(sol.cache).toBe("1h");
+  expect(sol.worst).toBeLessThan(sol.allowance);
+  expect(sol.write + sol.worst).toBeGreaterThan(sol.allowance);
 });
 
 test("the fixture manifest covers section 15's entry fixtures and reads as the scorer reads it", () => {
