@@ -7,7 +7,7 @@ gstack-evals measures whether gstack's skills help, on which models, and at what
 Plans, designs, research, decisions, findings, handoffs and reports worth keeping go into [wiki/](wiki/README.md) as posts, through a pull request.
 
 - Run `bun run wiki:index`, then read wiki/INDEX.md to see what is open and what has been decided. The index is generated and never committed.
-- A merged post is immutable except for its `status`. To change one, write a new post that supersedes it.
+- A merged post is immutable except for its `status`. To change one, write a new post that supersedes it. The only exception is an owner-directed edit with a matching waiver row in `wiki/edits/<name>.tsv` (see wiki/README.md).
 - Run `bun run wiki:check` before you push.
 - A drive or scratch folder is the inbox; wiki/ is the record.
 

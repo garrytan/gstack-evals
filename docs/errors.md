@@ -169,6 +169,18 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PIN_MISMATCH](#e_pin_mismatch) | 2 | U20 |
 | [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | warning | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
+| [E_PV_NO_BLOCK](#e_pv_no_block) | warning | U20 |
+| [E_PV_INFRA_MISSING](#e_pv_infra_missing) | warning | U20 |
+| [E_PV_WEB_CONTAMINATED](#e_pv_web_contaminated) | warning | U20 |
+| [E_PV_LABEL_MISSING](#e_pv_label_missing) | warning | U20 |
+| [E_PV_JUDGE_KAPPA](#e_pv_judge_kappa) | warning | U20 |
+| [E_PV_STOCK_FAIL](#e_pv_stock_fail) | warning | U20 |
+| [E_PV_NO_READ](#e_pv_no_read) | warning | U20 |
+| [E_PV_EXPOSURE_FALLBACK](#e_pv_exposure_fallback) | warning | U20 |
+| [E_PV_EXPOSURE_STOP](#e_pv_exposure_stop) | warning | U20 |
+| [E_PV_LEAK_EXPOSED](#e_pv_leak_exposed) | warning | U20 |
+| [E_PV_PROVIDER_DRIFT](#e_pv_provider_drift) | 2 | U20 |
+| [E_PV_SUPPLY_SHORT](#e_pv_supply_short) | 2 | U20 |
 | [E_SM_UNIT](#e_sm_unit) | 2 | U20 |
 | [E_SM_SOURCE](#e_sm_source) | 2 | U20 |
 | [E_SM_INELIGIBLE](#e_sm_ineligible) | 1 | U20 |
@@ -1299,6 +1311,22 @@ Fix: Copy the record again from the path the message names (the Captain-drive pa
 
 Exit 2. Side effects: None: refused before anything was prepared, bound or launched. Retry safe: yes. Resumable: no. Owner: U20.
 
+### E_PV_PROVIDER_DRIFT
+
+Product-value eval (section 17, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.
+
+Fix: Stop leasing the model's items, keep the journal line that shows the provider, and send the question to the Captain. Never retry on another provider.
+
+Exit 2. Side effects: Calls already sent on the lease stay on its journal and its spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PV_SUPPLY_SHORT
+
+Product-value eval (section 4): supply is short. A named project type has fewer than 4 eligible units across both sources, the pooled count of passing comparison units is under 48, or a second named type is short of 2 audited public units in the calibration slice. Authoring stops and the question goes to the Captain.
+
+Fix: Stop authoring, report the counts per type and source, and wait for the Captain's ruling before any more authoring spend.
+
+Exit 2. Side effects: None beyond the authoring spend already settled. Retry safe: no. Resumable: no. Owner: U20.
+
 ### E_SM_UNIT
 
 A state machines unit (sm-unit.v1, lanes/outcome-skills/statemachines/unit.ts) is refused: a dataset row with an empty or unparseable FAIL_TO_PASS or PASS_TO_PASS list, a base commit that is not 40 hex, an image with no pinned digest, a patch that is not a git diff, a parser with no parser(), no test command, or a unit dir whose files differ from unit.json's digests.
@@ -1606,3 +1634,83 @@ A program's line, or one of its skills' lines, holds more than its ceiling: crew
 Fix: Nothing to undo: the money is spent and recorded. Report it to the Captain with gstack-evals ledger status --program &lt;program>. The line's skill stops as incomplete.
 
 Warning. Owner: U4.
+
+### E_PV_NO_BLOCK
+
+Product-value eval (prereg 2026-11-08-geva-403, section 6): a completed reply holds no plan-changes block that the strict parse or the one frozen lenient parse can read. The review scores 0 and counts as no-block in its cell; it is not missing.
+
+Fix: Nothing to rerun: no-block is the arm's own outcome. The no-block rate prints per cell, and smoke rule 1 reads it for the gstack arms.
+
+Warning. Owner: U20.
+
+### E_PV_INFRA_MISSING
+
+Product-value eval (section 6): a session ended on an infrastructure failure (an API error, a crash, a harness timeout, an allowance stop or a context overflow before any reply) and its one retry under the same named reason failed too. The session is missing: it counts against coverage and never scores 0.
+
+Fix: Nothing to rerun: a missing session stays missing. If one cause repeats across sessions, read the session logs the message names and report it before the next item leases.
+
+Warning. Owner: U20.
+
+### E_PV_WEB_CONTAMINATED
+
+Product-value eval (section 5): a session's transcript holds a successful WebSearch or WebFetch result even though every arm runs with both tools denied. The session is excluded as missing, counted against coverage and reported per arm.
+
+Fix: Check that the arm's disallowed tools list still names WebSearch and WebFetch and that the trial network reaches only the metering proxy; then report the count per arm.
+
+Warning. Owner: U20.
+
+### E_PV_LABEL_MISSING
+
+Product-value eval (section 7): a judge left a (list, key item) cell without a parsable label after the packet was resent once, whole, or a Gemini tie-break failed twice. The cell stays unlabelled and counts against coverage, never as not anticipated, and a review with any unlabelled primary cell is unscored.
+
+Fix: Nothing to resend: the frozen rule allows one resend per packet and one retry per tie-break. Read the judge's raw reply named in the message; the coverage line reports the cell.
+
+Warning. Owner: U20.
+
+### E_PV_JUDGE_KAPPA
+
+Product-value eval (section 7, R78): a production judge's Cohen's kappa against the gold cells is under 0.6, on all gold cells or on real-list cells alone. Only the contrasts of the models that judge serves read untested (judge); the other judges' contrasts stand.
+
+Fix: Nothing to rerun under this preregistration. Report the judge's catch rate, false-fail rate and both kappas beside each contrast it serves.
+
+Warning. Owner: U20.
+
+### E_PV_STOCK_FAIL
+
+Product-value eval (section 8): for at least one production judge, one stock row was credited with a primary item on more than one unit in eight (more than 3 of the 24 calibration units in stage 1, more than n/8 rounded down of n comparison units in stage 2). In stage 1 the family stops; in stage 2 every contrast of the family reads untested (stock).
+
+Fix: Nothing to rerun. Report the per-judge, per-row counts; the next attempt needs a new preregistration.
+
+Warning. Owner: U20.
+
+### E_PV_NO_READ
+
+Product-value eval (sections 7 and 10): a reading cannot be made. Either a production judge has fewer than 40 gold cells in either class from at least 40 distinct lists (NO READ (judge)), or a stage 1 admission input failed: the Astra judge's check on Opus lists or the none arm's parse rate under 95%.
+
+Fix: Nothing to rerun under this preregistration. Report which input failed and its counts; the family ends at stage 1.
+
+Warning. Owner: U20.
+
+### E_PV_EXPOSURE_FALLBACK
+
+Product-value eval (section 10, smoke rules 2 and 3): a smoke rule tripped and its frozen fallback applies. Rule 2: fewer than 4 of plan-ceo-review's 6 Opus smoke blocks carried an expansion proposal, so every plan-family arm gets the fallback sentence and the smoke reruns. Rule 3: plan-ceo-review was exposed in fewer than 5 of 6 Opus smoke sessions, so its stage 2 arm runs under gstack's opt-in gate after its own 6-session smoke.
+
+Fix: Run the fallback items the Captain recorded for the rule (pv-s1-plan-fb-*), name the fallback in every headline that reports the family, and read admission only after the rerun.
+
+Warning. Owner: U20.
+
+### E_PV_EXPOSURE_STOP
+
+Product-value eval (sections 10 and 11): a skill arm's exposure is too low to go on. Either its exposure after the first 32 Opus skill sessions of stage 2 is under 0.70 (its cells read untested and its remaining caps are released), or office-hours was exposed in fewer than 5 of its 6 Opus smoke sessions, so its stage 2 does not start (FIX-METHOD on the instrument).
+
+Fix: Stop leasing that arm's items and report the exposure count and the detector lines behind it to the Captain.
+
+Warning. Owner: U20.
+
+### E_PV_LEAK_EXPOSED
+
+Product-value eval (section 11): a model's stated training cutoff falls after a unit's plan date, so that unit's cells are descriptive and out of the model's primaries. When more than a quarter of a model's units are leak-exposed, the model's primaries read untested (leak).
+
+Fix: Nothing to rerun. Check the cutoff the build recorded from the provider's published documentation and the unit's plan date, and report the count per model.
+
+Warning. Owner: U20.

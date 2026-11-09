@@ -1,5 +1,6 @@
 # Keyless CI: typecheck, unit tests, the reason-code doc and the wiki check. Nothing here needs a secret.
-# Actions are pinned to commit SHAs. Bun is downloaded at a pinned version and checked against the release's SHA-256.
+# Actions are pinned to commit SHAs. Bun is downloaded at a pinned version, from the release or, when GitHub's release download
+# fails four times, from npm, and checked against a pinned SHA-256.
 # workflow_dispatch lets gstack's merge train run these checks on train/<nonce> as the train's free run (U19). Main's copy keeps
 # the token read-only, but a dispatch runs the dispatched ref's copy, so trains stay off until gstack dispatches them on the base
 # ref (GST-254, gstack GST-255). The checkout keeps no credentials, since no step needs them.
@@ -36,14 +37,36 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Install Bun, checked against the release's SHA-256
+      - name: Install Bun from the release zip, or from npm if GitHub's download keeps failing, checked against a pinned SHA-256
+        # Four tries at the release zip, with waits of 15, 30 and 60 seconds between them, then the same version's npm package.
+        # The tries take about two minutes when each fails fast and about four when each stalls to its 30-second limit, and the
+        # npm download, with curl's own retries, can add about four more, so the job's time limit must cover about eight
+        # (workflow-hygiene.test.ts checks it). Either archive must match its pinned digest before it is unpacked, and the step
+        # fails unless the binary reports BUN_VERSION. Both archives hold the same binary (sha256 10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235).
         env:
           BUN_VERSION: 1.4.4
           BUN_SHA256: bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c # bun-linux-x64.zip in the release's SHASUMS256.txt
+          BUN_NPM_SHA256: 93ca5a2abe45f3bcac6dd55baff8bb06c4ac824b70f89650b54e5c8b80dbef18 # @oven/bun-linux-x64-1.4.4.tgz on registry.npmjs.org (its dist.integrity is sha512-CHbbkmHVM28T1GFq+6GL4Ao4ujwwYwj1CxFFwEFzLanPfNsId9AhbIP0Q4reWuWBkGimUkoQygrK7Rgjtj3vog==)
         run: |
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
-          printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
-          unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          for delay in 15 30 60 end; do
+            curl -fsSL --connect-timeout 10 --max-time 30 -o "$RUNNER_TEMP/bun.zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip" && break
+            rm -f "$RUNNER_TEMP/bun.zip"
+            [ "$delay" = end ] && break
+            echo "::warning::The Bun release download failed; trying again in ${delay}s"
+            sleep "$delay"
+          done
+          if [ -f "$RUNNER_TEMP/bun.zip" ]; then
+            printf '%s  %s\n' "$BUN_SHA256" "$RUNNER_TEMP/bun.zip" | sha256sum -c --strict -
+            unzip -q -o "$RUNNER_TEMP/bun.zip" -d "$RUNNER_TEMP"
+          else
+            echo "::warning::The Bun release download failed 4 times, so this job installs @oven/bun-linux-x64@$BUN_VERSION from registry.npmjs.org"
+            curl -fsSL --retry 3 --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/bun.tgz" "https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-$BUN_VERSION.tgz"
+            printf '%s  %s\n' "$BUN_NPM_SHA256" "$RUNNER_TEMP/bun.tgz" | sha256sum -c --strict -
+            mkdir -p "$RUNNER_TEMP/bun-linux-x64"
+            tar -xzf "$RUNNER_TEMP/bun.tgz" -C "$RUNNER_TEMP/bun-linux-x64" --strip-components=2 package/bin/bun
+          fi
+          test -x "$RUNNER_TEMP/bun-linux-x64/bun"
+          test "$("$RUNNER_TEMP/bun-linux-x64/bun" --version)" = "$BUN_VERSION"
           printf '%s\n' "$RUNNER_TEMP/bun-linux-x64" >> "$GITHUB_PATH"
       - name: Docs-only scope (the base branch's scripts/docs-only.ts; any error runs every check)
         id: scope

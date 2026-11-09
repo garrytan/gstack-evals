@@ -1,10 +1,12 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codexArgs } from "../../src/adapters/codex/driver.ts";
 import { recipeHash } from "../../src/rig/recipe.ts";
+import { dirTreeSha256 } from "../../src/trial/cache.ts";
 import { removeTree } from "../../src/trial/cleanup.ts";
 import { buildArmImage, buildTrialImage, checkImagePin, imageFixtures, retainImage, retainTree, trialTag, type Runner } from "../../src/trial/image.ts";
 
@@ -212,4 +214,36 @@ describe.skipIf(!DOCKER)("trial and arm images (Docker tier, GSTACK_EVALS_DOCKER
     expect(removeTree(join(parent, "work"), { image: trial })).toBeNull();
     expect(existsSync(join(parent, "work"))).toBe(false);
   }, 300_000);
+});
+
+describe("retained trees under concurrent runs", () => {
+  // Value: protects=runs launched together that first retain one install tree all start, and each records the finished tar's sha256; fails_when=retainTree shares one temp path, so later renames fail with ENOENT or a manifest line hashes a tar still being written; why_new=product-value stage 1 lost two Opus smoke launches to that rename race when four items retained one gstack install at once (2026-11-09)
+  test("four processes retaining one tree at once each finish with the same whole tar", async () => {
+    const src = scratch("race-src");
+    for (let d = 0; d < 40; d++) {
+      mkdirSync(join(src, "d" + d));
+      for (let f = 0; f < 50; f++) writeFileSync(join(src, "d" + d, "f" + f + ".txt"), (d + ":" + f + "\n").repeat(400));
+    }
+    const dir = scratch("race-keep");
+    const image = join(import.meta.dir, "../../src/trial/image.ts");
+    const code = "const { retainTree } = await import(" + JSON.stringify(image) + "); console.log(JSON.stringify(retainTree(" + JSON.stringify(src) + ", " + JSON.stringify(dir) + ")));";
+    const runs = await Promise.all(
+      [0, 1, 2, 3].map(async () => {
+        const p = Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" });
+        const [out, err, status] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+        return { out, err, status };
+      }),
+    );
+    for (const r of runs) expect({ status: r.status, err: r.err }).toEqual({ status: 0, err: "" });
+    const kept = runs.map((r) => JSON.parse(r.out.trim()) as { file: string; sha256: string; ref: string });
+    const file = join(dir, kept[0]!.file);
+    const sha = createHash("sha256").update(readFileSync(file)).digest("hex");
+    expect(kept.map((k) => k.sha256)).toEqual([sha, sha, sha, sha]);
+    expect(readdirSync(join(dir, "trees"))).toEqual([kept[0]!.ref + ".tar"]);
+    const lines = readFileSync(join(dir, "MANIFEST.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { sha256: string });
+    expect(lines.every((l) => l.sha256 === sha)).toBe(true);
+    const back = scratch("race-back");
+    expect(spawnSync("tar", ["-xf", file, "-C", back]).status).toBe(0);
+    expect(dirTreeSha256(back)).toBe(kept[0]!.ref);
+  }, 120_000);
 });
