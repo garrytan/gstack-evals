@@ -10,6 +10,8 @@
 # construction (labels constructed), are joined and go to tune beside the real sessions.
 # --rewritten names the types whose question was already rewritten once (6.3), for the second pass after the re-answer:
 # tune plans no second rewrite for them, so the pass can pin.
+# Every session's answering child, and the constructed set's, must have exited 0 (exit_code in answers/<session>.json):
+# otherwise its answers are partial, and nothing is labelled.
 #
 # usage: label-tune.sh <batch out> <answer out> <tasks dir> <work dir> --proxy-host <host> --questions <questions.json> [--particle-max-tokens 8000|16000] [--constructed <answers.jsonl>] [--rewritten <type,type>]
 # DR_CLI overrides the decision-routing command (default: bun <repo>/bin/gstack-evals decision-routing).
@@ -43,10 +45,24 @@ else
 fi
 mkdir -p "$work/labels" "$work/labelled"
 
-labelled=()
+exited_0() {
+  [ -f "$1" ] && grep -Eq '"exit_code": *0 *[,}]' "$1"
+}
+results=()
 while IFS= read -r result; do
-  trial=$(dirname "$result")
   grep -q '"task_name"' "$result" || continue
+  results+=("$result")
+  session=$(basename "$(dirname "$(dirname "$result")")")
+  exited_0 "$answers/answers/$session.json" || die "E_USAGE: session $session's answering child did not exit 0 ($answers/answers/$session.json), so its answers are partial; nothing was labelled"
+done < <(find "$out/harbor" -mindepth 3 -maxdepth 3 -name result.json | sort)
+if [ -n "$constructed" ]; then
+  meta="$(dirname "$constructed")/$(basename "$constructed" | sed 's/\.[^.]*\.jsonl$//').json"
+  exited_0 "$meta" || die "E_USAGE: the constructed set's answering child did not exit 0 ($meta), so its answers are partial; nothing was labelled"
+fi
+
+labelled=()
+for result in "${results[@]}"; do
+  trial=$(dirname "$result")
   session=$(basename "$(dirname "$trial")")
   task=$(sed -n 's/.*"task_name" *: *"\([^"]*\)".*/\1/p' "$result" | head -1)
   shadow="$answers/answers/$session.shadow.jsonl"
@@ -54,7 +70,7 @@ while IFS= read -r result; do
   "${cli[@]}" labels trial "$trial" --task "$tasks/$task" --proxy-host "$proxy" --out "$work/labels/$session.jsonl"
   "${cli[@]}" labels join --decisions "$shadow" --labels "$work/labels/$session.jsonl" --out "$work/labelled/$session.jsonl"
   labelled+=(--labelled "$work/labelled/$session.jsonl")
-done < <(find "$out/harbor" -mindepth 3 -maxdepth 3 -name result.json | sort)
+done
 [ ${#labelled[@]} -gt 0 ] || die "E_USAGE: no Harbor trials under $out/harbor"
 trials=$(( ${#labelled[@]} / 2 ))
 if [ -n "$constructed" ]; then

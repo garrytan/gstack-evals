@@ -2,14 +2,17 @@
 // The controller's pre-lease reserve check, on a scratch copy of the decision-routing ledger record with a temp SQLite
 // ledger: before it opens a lease on an item it needs the item's cap to hold everything already committed on the item
 // plus CONCURRENCY sessions' allowance in flight. Spend is put on the item through real open, reserve, settle and
-// settle-lease calls. The real record is only read.
+// settle-lease calls. The real record is only read. The batch-start proxy port check (DR_PROXY_PORT_BUSY) refuses the
+// same way, before any lease. Lease custody: with a real record the batch launches nothing until <out>/lease-confirmed.json
+// lists its lease, which vm.sh record-out --confirm writes once the drive copy reads the lease back open; world() runs a
+// stand-in confirmer unless a test turns it off.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CONCURRENCY, ControllerError, reserveMicros, runBatch, type BatchOptions, type PlanRow } from "../../lanes/decision-routing/host/controller.ts";
+import { CONCURRENCY, ControllerError, PROXY_PORT_COUNT, PROXY_PORT_FIRST, reserveMicros, runBatch, type BatchOptions, type PlanRow } from "../../lanes/decision-routing/host/controller.ts";
 import { openLease, settleLease } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
@@ -33,7 +36,10 @@ if (env.DR_TEST_TOUCH_STOP) writeFileSync(env.DR_TEST_TOUCH_STOP, "segment end\\
 `;
 
 let dirs: string[] = [];
+let confirmers: Array<ReturnType<typeof setInterval>> = [];
 afterEach(() => {
+  for (const c of confirmers) clearInterval(c);
+  confirmers = [];
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
   dirs = [];
 });
@@ -51,10 +57,10 @@ function snapshot(dir: string): Record<string, string> {
   return out;
 }
 
-function world() {
+function world(confirm = true) {
   const dir = mkdtempSync(join(tmpdir(), "dr-reserve-"));
   dirs.push(dir);
-  const record = join(dir, "record");
+  const record = join(dir, "dr-record");
   cpSync(REAL_RECORD, record, { recursive: true });
   const sqlite = join(dir, "ledger.sqlite");
   writeFileSync(join(dir, "fake-harbor.ts"), FAKE_HARBOR);
@@ -102,8 +108,57 @@ function world() {
       local.close();
     }
   };
+  if (confirm) {
+    confirmers.push(setInterval(() => {
+      const open = readItem(record, ITEM).open;
+      if (!open) return;
+      mkdirSync(join(dir, "out"), { recursive: true });
+      writeFileSync(join(dir, "out", "lease-confirmed.json"), JSON.stringify({ leases: [open.lease_id] }));
+    }, 10));
+  }
   return { dir, record, sqlite, opts, spend };
 }
+
+const SEG_FAKE = ["#!/usr/bin/env bash", "case $1 in", '  ssh) shift 2; HOME=$FAKE_VM_HOME bash -c "$*" ;;', '  pull) mkdir -p "$4" && (cd "$FAKE_VM_HOME" && cp -r "$3" "$4/") ;;', "esac"].join("\n") + "\n";
+
+describe.skipIf(!existsSync(join(REAL_RECORD, "items", ITEM)))("lease custody", () => {
+  test("with no confirmation that the drive holds the lease, the batch launches nothing, stops with DR_LEASE_UNRECORDED and settles the lease at zero", async () => {
+    const w = world(false);
+    const err = await runBatch(w.opts(["task-0"], { leaseConfirmMs: 1500 })).then(() => null, (e) => e);
+    expect(err).toBeInstanceOf(ControllerError);
+    expect((err as ControllerError).code).toBe("DR_LEASE_UNRECORDED");
+    expect(existsSync(join(w.dir, "out", "jobs")) ? readdirSync(join(w.dir, "out", "jobs")) : []).toEqual([]);
+    const leases = readItem(w.record, ITEM).leases;
+    expect(leases.at(-1)!.close?.spent_micros).toBe(0);
+  }, 60_000);
+
+  test("record-out --confirm through the runner lets the batch launch once the drive copy reads the lease open, and a failed record-out does not", async () => {
+    for (const good of [false, true]) {
+      const w = world(false);
+      const drive = join(w.dir, "drive");
+      cpSync(w.record, drive, { recursive: true });
+      const runner = join(w.dir, "ubi-runner.sh");
+      writeFileSync(runner, SEG_FAKE);
+      chmodSync(runner, 0o755);
+      const batch = runBatch(w.opts(["task-0"], { leaseConfirmMs: good ? 30_000 : 3000 })).then((r) => r, (e) => e);
+      let open = readItem(w.record, ITEM).open;
+      for (let i = 0; !open && i < 500; i++) {
+        await Bun.sleep(10);
+        open = readItem(w.record, ITEM).open;
+      }
+      expect(open).toBeTruthy();
+      if (!good) {
+        const name = readdirSync(join(w.record, "items", ITEM)).find((n) => !existsSync(join(drive, "items", ITEM, n)))!;
+        writeFileSync(join(drive, "items", ITEM, name), "a different file under the same name\n");
+      }
+      const p = Bun.spawn(["bash", join(import.meta.dir, "../../lanes/decision-routing/host/vm.sh"), runner, sha(SEG_FAKE), "record-out", "vm-1", drive, "--confirm", join(w.dir, "out")], { env: { PATH: process.env.PATH!, UBI_OWNER: "GEVA-TEST", UBI_TTL_HOURS: "6", FAKE_VM_HOME: w.dir }, stdout: "pipe", stderr: "pipe" });
+      expect(await p.exited === 0).toBe(good);
+      const result = await batch;
+      if (good) expect(result.launched).toEqual(["task-0__N__opus"]);
+      else expect((result as ControllerError).code).toBe("DR_LEASE_UNRECORDED");
+    }
+  }, 90_000);
+});
 
 describe.skipIf(!existsSync(join(REAL_RECORD, "items", ITEM)))("pre-lease reserve check", () => {
   test("the reserve is CONCURRENCY sessions at the cells' allowance: 6 x $5", () => {
@@ -138,6 +193,26 @@ describe.skipIf(!existsSync(join(REAL_RECORD, "items", ITEM)))("pre-lease reserv
     expect(snapshot(w.record)).toEqual(before);
     expect(readItem(w.record, ITEM).leases).toHaveLength(1);
     expect(existsSync(join(w.dir, "out", "jobs")) ? readdirSync(join(w.dir, "out", "jobs")) : []).toEqual([]);
+  }, 60_000);
+
+  test.if(process.platform === "linux")("a stranger listening on the proxy port range stops the batch with DR_PROXY_PORT_BUSY before any lease, and the batch runs once it is gone", async () => {
+    const w = world();
+    const before = snapshot(w.record);
+    const port = PROXY_PORT_FIRST + PROXY_PORT_COUNT - 1;
+    const stranger = Bun.listen({ hostname: "127.0.0.1", port, socket: { data() {} } });
+    let err: unknown;
+    try {
+      err = await runBatch(w.opts(["task-0"])).then(() => null, (e) => e);
+    } finally {
+      stranger.stop(true);
+    }
+    expect(err).toBeInstanceOf(ControllerError);
+    expect((err as ControllerError).code).toBe("DR_PROXY_PORT_BUSY");
+    expect((err as Error).message).toContain(String(port));
+    expect(snapshot(w.record)).toEqual(before);
+    expect(existsSync(join(w.dir, "out", "jobs")) ? readdirSync(join(w.dir, "out", "jobs")) : []).toEqual([]);
+    const result = await runBatch(w.opts(["task-0"]));
+    expect(result.launched).toEqual(["task-0__N__opus"]);
   }, 60_000);
 
   test("a long run's segments: one drains through the stop file and settles, and the next opens its own lease under the same run id", async () => {

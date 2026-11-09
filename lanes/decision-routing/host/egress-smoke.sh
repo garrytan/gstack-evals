@@ -7,7 +7,8 @@
 # Harbor's sidecar accepts every TCP connect and resets what it doesn't allow. The proxy must read open; the off port
 # (outside the runner's container firewall, post-boot.sh) and example.com:80, 1.1.1.1:80 and pypi.org:443 (TLS) must read
 # closed. DNS stays open under the sidecar and is printed, not judged. It exits 1 with E_DR_RUNNER when a path that must
-# be closed reads open, and 2 when the proxy doesn't read open, a probe can't be judged or the trial gave no result.
+# be closed reads open, and 2 when the proxy doesn't read open, a probe can't be judged or the trial gave no result. It
+# clears <out dir>/harbor before its trial, so only this run's result is judged.
 # usage: egress-smoke.sh <task dir> <out dir> [proxy host IP, default docker0's IPv4] [proxy port, default 47107] [off port, default 18791]
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -39,6 +40,7 @@ cat > "$out/job.json" << JSON
   "tasks": [{ "path": "$task" }]
 }
 JSON
+rm -rf "$out/harbor"
 DR_SMOKE_PROXY_HOST=$host DR_SMOKE_PROXY_PORT=$port DR_SMOKE_OFF_PORT=$off HARBOR_TELEMETRY=0 PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" \
   harbor run -c "$out/job.json" > "$out/harbor.log" 2>&1 || true
 result=$(find "$out/harbor" -name egress.json | head -1)

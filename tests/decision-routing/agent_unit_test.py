@@ -1148,6 +1148,84 @@ def test_real_session_routed_end_to_end():
         server.shutdown()
 
 
+
+def _planted_repo(name):
+    """A git repo with one commit, and the three things an agent could plant in .git to run code in root's git."""
+    root = os.path.join(TMP, name)
+    tb, marks = os.path.join(root, "testbed"), os.path.join(root, "marks")
+    os.makedirs(marks)
+    git = lambda *a: subprocess.run(["git", "-C", tb, *a], check=True, capture_output=True)
+    subprocess.run(["git", "init", "-q", tb], check=True)
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    with open(os.path.join(tb, "README.md"), "w") as f:
+        f.write("hi\n")
+    git("add", ".")
+    git("commit", "-qm", "init")
+
+    def plant(clean=True):
+        if clean:
+            git("config", "filter.drprobe.clean", f"sh -c 'echo x > {marks}/clean; cat'")
+            with open(os.path.join(tb, ".gitattributes"), "w") as f:
+                f.write("* filter=drprobe\n")
+        for hook, path in (("fsmonitor", os.path.join(tb, ".git", "fsm.sh")), ("hook", os.path.join(tb, ".git", "drhooks", "post-index-change"))):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(f"#!/bin/sh\necho x > {marks}/{hook}\n")
+            os.chmod(path, 0o755)
+        git("config", "core.fsmonitor", os.path.join(tb, ".git", "fsm.sh"))
+        git("config", "core.hooksPath", os.path.join(tb, ".git", "drhooks"))
+
+    return tb, marks, plant
+
+
+def test_agent_user_root_export_runs_nothing_the_agent_planted():
+    from dr_agent import agent_user
+
+    tb, marks, plant = _planted_repo("export-planted")
+    saved = os.path.join(os.path.dirname(tb), "git-config")
+    agent_user.save_git_config(tb, saved)
+    plant()
+    with open(os.path.join(tb, "README.md"), "a") as f:
+        f.write("# dr probe\n")
+    subprocess.run("git add -A && git -c core.fileMode=false diff --cached --binary HEAD > /dev/null", cwd=tb, shell=True, check=True, capture_output=True)
+    assert sorted(os.listdir(marks)) == ["clean", "fsmonitor", "hook"], os.listdir(marks)
+    agent_user.restore_git_config(tb, saved)
+    subprocess.run(["git", "-C", tb, "reset", "-q"], check=True)
+    for m in os.listdir(marks):
+        os.unlink(os.path.join(marks, m))
+    patch = os.path.join(os.path.dirname(tb), "out", "model.patch")
+    agent_user.export(patch, tb)
+    assert os.listdir(marks) == [], os.listdir(marks)
+    assert "# dr probe" in open(patch).read()
+    assert "drprobe" not in open(os.path.join(tb, ".git", "config")).read()
+    plant(clean=False)
+    agent_user.export(patch, tb)
+    assert os.listdir(marks) == [], os.listdir(marks)
+    os.rename(os.path.join(tb, ".git"), os.path.join(tb, ".git-real"))
+    os.symlink(os.path.join(tb, ".git-real"), os.path.join(tb, ".git"))
+    try:
+        agent_user.export(patch, tb)
+        raise AssertionError("a symlinked .git was exported")
+    except SystemExit as e:
+        assert "not a plain directory" in str(e)
+
+
+def test_agent_user_kill_uid_kills_live_processes_and_skips_zombies():
+    from dr_agent import agent_user
+
+    proc = os.path.join(TMP, "fake-proc")
+    os.makedirs(os.path.join(proc, "999999"))
+    child = subprocess.Popen(["sleep", "60"])
+    os.symlink(f"/proc/{child.pid}", os.path.join(proc, str(child.pid)))
+    uid = os.getuid()
+    with open(os.path.join(proc, "999999", "status"), "w") as f:
+        f.write(f"Name:\tz\nState:\tZ (zombie)\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n")
+    agent_user.kill_uid(uid, proc=proc)
+    assert child.wait(timeout=5) == -9
+    agent_user.kill_uid(uid + 1, proc=proc)
+
+
 def main():
     failed = 0
     if os.environ.get("DR_TEST_TIER") == "real" and TIER != "real":

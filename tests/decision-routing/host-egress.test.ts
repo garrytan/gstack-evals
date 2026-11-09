@@ -55,12 +55,16 @@ describe("egress-smoke.sh verdict", () => {
     GOOD["proxy_as_" + u] = "open";
     for (const n of ["host_off_port", "closed_example_com_80", "closed_1_1_1_1_80", "closed_pypi_org_443"]) GOOD[n + "_as_" + u] = "closed";
   }
-  const smoke = async (readings: Record<string, string>) => {
+  const smoke = async (readings: Record<string, string> | null, stale?: Record<string, string>) => {
     const dir = mkdtempSync(join(tmpdir(), "dr-egress-"));
     dirs.push(dir);
     mkdirSync(join(dir, "bin"));
     mkdirSync(join(dir, "task"));
-    writeFileSync(join(dir, "readings.json"), JSON.stringify(readings));
+    if (readings) writeFileSync(join(dir, "readings.json"), JSON.stringify(readings));
+    if (stale) {
+      mkdirSync(join(dir, "out", "harbor", "egress-smoke-old", "t", "agent"), { recursive: true });
+      writeFileSync(join(dir, "out", "harbor", "egress-smoke-old", "t", "agent", "egress.json"), JSON.stringify(stale));
+    }
     writeFileSync(join(dir, "bin", "harbor"), '#!/usr/bin/env bash\njobs=$(python3 -c \'import json,sys; print(json.load(open(sys.argv[1]))["jobs_dir"])\' "$3")\nmkdir -p "$jobs/egress-smoke/t/agent"\ncp "$DR_TEST_READINGS" "$jobs/egress-smoke/t/agent/egress.json"\n');
     chmodSync(join(dir, "bin", "harbor"), 0o755);
     const r = Bun.spawnSync(["bash", join(HOST, "egress-smoke.sh"), join(dir, "task"), join(dir, "out"), "127.0.0.1", String(await freePort()), String(await freePort())], { env: { ...process.env, PATH: join(dir, "bin") + ":" + process.env.PATH, DR_TEST_READINGS: join(dir, "readings.json") } });
@@ -81,6 +85,12 @@ describe("egress-smoke.sh verdict", () => {
       expect(r.code).toBe(1);
       expect(r.err).toContain("E_DR_RUNNER: " + key.replace(/_as_.*$/, "") + " reads open");
     }
+  });
+
+  test("an earlier run's passing egress.json in the out dir never stands in for this run's trial", async () => {
+    const r = await smoke(null, GOOD);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("E_DR_RUNNER: the smoke trial wrote no egress.json");
   });
 
   test("a silent proxy, or a probe that can't be judged, exits 2", async () => {

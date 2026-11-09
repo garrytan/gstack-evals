@@ -2,13 +2,20 @@
 // Results off the runner VM and the ledger record (vm.sh record-in, record-out, pull-out) against a fake runner whose ssh
 // runs locally under a fake VM home and whose pull copies like the real runner's tar pull: the record goes to the VM before
 // a segment; after it only new files come back, and a file that exists and differs is an error that copies nothing; the
-// batch's out dir lands under runs/<run id> without the runner-only markers.
+// batch's out dir lands under runs/<run id> without the runner-only markers, never over an earlier segment's pull.
+// record-out --confirm writes <out>/lease-confirmed.json on the VM only when the drive copy reads back with every lease
+// that is open on the VM open (lease custody). record-in refuses the next segment while an earlier segment's pulled out
+// dir holds a STOP file the controller wrote (a reason code) or a DR_CUSTODY_HIT refusal.
 
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { openLease } from "../../src/runner/ledger/ledger.ts";
+
+const REAL_RECORD = process.env.DR_REAL_RECORD ?? join(process.env.HOME ?? "", ".capy/drive/captain-gstack-evals/ledger/decision-routing/record");
+const RUN = "dr-calibration@abc";
 
 const VM = join(import.meta.dir, "../../lanes/decision-routing/host/vm.sh");
 const FAKE = ["#!/usr/bin/env bash", "case $1 in", '  ssh) shift 2; HOME=$FAKE_VM_HOME bash -c "$*" ;;', '  pull) mkdir -p "$4" && (cd "$FAKE_VM_HOME" && cp -r "$3" "$4/") ;;', "esac"].join("\n") + "\n";
@@ -40,7 +47,7 @@ function rig() {
 
 test("record-in copies the record to the VM; record-out brings back only new files", () => {
   const { record, vmHome, run } = rig();
-  expect(run("record-in", "vm-1", record).code).toBe(0);
+  expect(run("record-in", "vm-1", record, RUN).code).toBe(0);
   expect(readFileSync(join(vmHome, "dr-record", "items", "dr-calibration", "0001-init.json"), "utf8")).toBe("init\n");
   writeFileSync(join(vmHome, "dr-record", "items", "dr-calibration", "0002-lease.json"), "lease\n");
   const r = run("record-out", "vm-1", record);
@@ -51,7 +58,7 @@ test("record-in copies the record to the VM; record-out brings back only new fil
 
 test("record-out refuses a file that exists and differs and copies nothing", () => {
   const { record, vmHome, run } = rig();
-  expect(run("record-in", "vm-1", record).code).toBe(0);
+  expect(run("record-in", "vm-1", record, RUN).code).toBe(0);
   writeFileSync(join(vmHome, "dr-record", "items", "dr-calibration", "0001-init.json"), "changed\n");
   writeFileSync(join(vmHome, "dr-record", "items", "dr-calibration", "0002-lease.json"), "lease\n");
   const r = run("record-out", "vm-1", record);
@@ -74,4 +81,73 @@ test("pull-out lands the out dir under runs/<run id> without the markers, and ne
   const dest = join(dir, "runs", "dr-calibration@abc", "cal");
   expect(readFileSync(join(dest, "journals", "dr-calibration.ndjson"), "utf8")).toBe("{}\n");
   expect(existsSync(join(dest, "markers"))).toBe(false);
+});
+
+test("pull-out keeps the safety pseudo-session's canary and markers file on the VM too", () => {
+  const { dir, vmHome, run } = rig();
+  const out = join(vmHome, "out", "answer-sc");
+  mkdirSync(join(out, "constructed-calibration", "log"), { recursive: true });
+  writeFileSync(join(out, "answer.json"), "{}");
+  writeFileSync(join(out, "constructed-calibration", "canary.txt"), "DRCANARY-" + "cd".repeat(16) + "\n");
+  writeFileSync(join(out, "constructed-calibration", "markers.json"), "[]\n");
+  writeFileSync(join(out, "constructed-calibration", "log", "decisions.jsonl"), "{}\n");
+  expect(run("pull-out", "vm-1", out, RUN).code).toBe(0);
+  const dest = join(dir, "runs", RUN, "answer-sc");
+  expect(readFileSync(join(dest, "constructed-calibration", "log", "decisions.jsonl"), "utf8")).toBe("{}\n");
+  expect(existsSync(join(dest, "constructed-calibration", "canary.txt"))).toBe(false);
+  expect(existsSync(join(dest, "constructed-calibration", "markers.json"))).toBe(false);
+  expect(existsSync(join(out, "constructed-calibration", "canary.txt"))).toBe(true);
+  expect(readdirSync(vmHome).filter((n) => n.startsWith(".dr-pull"))).toEqual([]);
+});
+
+test("pull-out never lands over an earlier segment's pull of the same out dir name", () => {
+  const { dir, vmHome, run } = rig();
+  const out = join(vmHome, "out", "cal");
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, "batch.json"), "segment 1");
+  expect(run("pull-out", "vm-1", out, RUN).code).toBe(0);
+  writeFileSync(join(out, "batch.json"), "segment 2");
+  const again = run("pull-out", "vm-1", out, RUN);
+  expect(again.code).not.toBe(0);
+  expect(again.out).toContain("E_DR_RUNNER: ");
+  expect(readFileSync(join(dir, "runs", RUN, "cal", "batch.json"), "utf8")).toBe("segment 1");
+});
+
+test("record-in refuses the next segment after a controller-written STOP or a custody hit, and not after an operator's drain", () => {
+  const { dir, record, run } = rig();
+  const seg = join(dir, "runs", RUN, "cal-1");
+  mkdirSync(join(seg, "journals"), { recursive: true });
+  writeFileSync(join(seg, "STOP"), "segment end\n");
+  expect(run("record-in", "vm-1", record, RUN).code).toBe(0);
+  writeFileSync(join(seg, "STOP"), "DR_PILOT_SESSION_STOP: pilot session over its stop\n");
+  const stopped = run("record-in", "vm-1", record, RUN);
+  expect(stopped.code).not.toBe(0);
+  expect(stopped.out).toContain("DR_PILOT_SESSION_STOP");
+  rmSync(join(seg, "STOP"));
+  writeFileSync(join(seg, "journals", "dr-calibration.ndjson"), JSON.stringify({ kind: "refusal", code: "DR_CUSTODY_HIT", meter_id: "m1" }) + "\n");
+  const hit = run("record-in", "vm-1", record, RUN);
+  expect(hit.code).not.toBe(0);
+  expect(hit.out).toContain("DR_CUSTODY_HIT");
+  expect(run("record-in", "vm-1", record, "dr-calibration@other").code).toBe(0);
+  expect(run("record-in", "vm-1", record).code).not.toBe(0);
+});
+
+test("record-out --confirm tells the VM a lease is in the drive only once the drive copy reads it back open", () => {
+  const { dir, vmHome, run } = rig();
+  const drive = join(dir, "drive");
+  cpSync(REAL_RECORD, drive, { recursive: true });
+  expect(run("record-in", "vm-1", drive, RUN).code).toBe(0);
+  const lease = openLease(join(vmHome, "dr-record"), null, { item: "dr-calibration", run_id: RUN });
+  const out = join(vmHome, "out", "cal");
+  mkdirSync(out, { recursive: true });
+  const confirmed = join(out, "lease-confirmed.json");
+  const leaseFile = readdirSync(join(vmHome, "dr-record", "items", "dr-calibration")).find((n) => !existsSync(join(drive, "items", "dr-calibration", n)))!;
+  writeFileSync(join(drive, "items", "dr-calibration", leaseFile), "a different file under the same name\n");
+  const bad = run("record-out", "vm-1", drive, "--confirm", out);
+  expect(bad.code).not.toBe(0);
+  expect(existsSync(confirmed)).toBe(false);
+  rmSync(join(drive, "items", "dr-calibration", leaseFile));
+  const good = run("record-out", "vm-1", drive, "--confirm", out);
+  expect(good.code).toBe(0);
+  expect(JSON.parse(readFileSync(confirmed, "utf8")).leases).toEqual([lease.lease_id]);
 });

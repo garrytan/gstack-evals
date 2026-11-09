@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The labels, tune and pin driver (lanes/decision-routing/host/label-tune.sh) with a stub CLI: labels trial and labels
 // join run once per Harbor trial with that session's shadow answers, tune reads every labelled file, and pin runs only
-// when tune plans no question rewrite (prereg 6.3 re-answers first).
+// when tune plans no question rewrite (prereg 6.3 re-answers first). A session, or the constructed set, whose answering
+// child did not exit 0 (its answer meta's exit_code) is refused before anything is labelled.
 
 import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -17,7 +18,7 @@ afterEach(() => {
   dirs = [];
 });
 
-function rig(types = "[]", extra: string[] = []) {
+function rig(types = "[]", extra: string[] = [], exits: Record<string, number | null> = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dr-labeltune-"));
   dirs.push(dir);
   const stub = join(dir, "cli");
@@ -30,9 +31,10 @@ function rig(types = "[]", extra: string[] = []) {
     writeFileSync(join(out, "harbor", session, task + "__x1", "result.json"), JSON.stringify({ task_name: task }));
     mkdirSync(join(dir, "answer", "answers"), { recursive: true });
     writeFileSync(join(dir, "answer", "answers", session + ".shadow.jsonl"), "{}\n");
+    writeFileSync(join(dir, "answer", "answers", session + ".json"), JSON.stringify({ session, mode: "shadow", exit_code: session in exits ? exits[session] : 0 }) + "\n");
   }
   const r = Bun.spawnSync(["bash", SCRIPT, out, join(dir, "answer"), join(dir, "tasks"), join(dir, "work"), "--proxy-host", "10.0.0.1", "--questions", join(dir, "q.json"), ...extra], { env: { PATH: process.env.PATH!, DR_CLI: stub, STUB_LOG: join(dir, "log"), STUB_TYPES: types } });
-  return { dir, code: r.exitCode, out: r.stdout.toString() + r.stderr.toString(), log: () => readFileSync(join(dir, "log"), "utf8").trim().split("\n") };
+  return { dir, code: r.exitCode, out: r.stdout.toString() + r.stderr.toString(), log: () => (existsSync(join(dir, "log")) ? readFileSync(join(dir, "log"), "utf8").trim().split("\n") : []) };
 }
 
 test("labels each trial, joins its shadow answers, tunes on every labelled file, then pins", () => {
@@ -54,6 +56,7 @@ test("--constructed labels the safety set's calibration-half answers by construc
   dirs.push(dir0);
   const answers = join(dir0, "constructed-calibration.safety_calibration.jsonl");
   writeFileSync(answers, "{}\n");
+  writeFileSync(join(dir0, "constructed-calibration.json"), JSON.stringify({ session: "constructed-calibration", exit_code: 0 }) + "\n");
   const { dir, code, out, log } = rig("[]", ["--constructed", answers]);
   expect(code).toBe(0);
   const w = join(dir, "work");
@@ -73,6 +76,24 @@ test("--rewritten passes the types already rewritten once to tune, so the second
   const w = join(dir, "work");
   expect(log()[4]).toBe("tune --labelled " + join(w, "labelled", "o__a-1__N__opus.jsonl") + " --labelled " + join(w, "labelled", "o__b-2__N__sol.jsonl") + " --out " + join(w, "tuned.json") + " --plan " + join(w, "rewrite-plan.json") + " --rewritten next_step,done");
   expect(log()[5]).toStartWith("pin ");
+});
+
+test("a session whose answering child did not exit 0, or recorded no exit code, is refused before anything is labelled", () => {
+  for (const exit of [3, null]) {
+    const { code, out, log } = rig("[]", [], { "o__b-2__N__sol": exit });
+    expect(code).toBe(2);
+    expect(out).toContain("o__b-2__N__sol");
+    expect(log().some((l) => l.startsWith("tune "))).toBe(false);
+    expect(log().some((l) => l.startsWith("labels "))).toBe(false);
+  }
+  const dir0 = mkdtempSync(join(tmpdir(), "dr-constructed-"));
+  dirs.push(dir0);
+  const answers = join(dir0, "constructed-calibration.safety_calibration.jsonl");
+  writeFileSync(answers, "{}\n");
+  writeFileSync(join(dir0, "constructed-calibration.json"), JSON.stringify({ session: "constructed-calibration", exit_code: 1 }) + "\n");
+  const bad = rig("[]", ["--constructed", answers]);
+  expect(bad.code).toBe(2);
+  expect(bad.out).toContain("constructed-calibration");
 });
 
 test("stops before pin when tune plans a question rewrite", () => {

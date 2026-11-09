@@ -25,7 +25,7 @@ test("dr_agent units on python3 (mini stand-in when mini is not installed)", () 
   const r = run("python3");
   expect(r.out).not.toContain("FAIL");
   const tier = r.out.match(/^tier (\w+)/m)?.[1];
-  expect(r.out.match(/^PASS /gm)?.length).toBe(tier === "real" ? 41 : 38);
+  expect(r.out.match(/^PASS /gm)?.length).toBe(tier === "real" ? 43 : 40);
   expect(r.status).toBe(0);
 }, 660_000);
 

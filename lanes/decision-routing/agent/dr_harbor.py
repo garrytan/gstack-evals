@@ -61,10 +61,7 @@ CALIBRATION_ITEM = "dr-calibration"
 AGENT_USER = "agent"
 AGENT_SETUP = f"{RUNTIME_PYTHON} -I -m dr_agent.agent_user setup"
 AGENT_RESTORE = f"{RUNTIME_PYTHON} -I -m dr_agent.agent_user restore"
-EXPORT_PATCH = (
-    f"mkdir -p {EnvironmentPaths.artifacts_dir} && cd /testbed && git add -A && "
-    f"git -c core.fileMode=false diff --cached --binary HEAD > {PATCH_PATH}"
-)
+EXPORT_PATCH = f"{RUNTIME_PYTHON} -I -m dr_agent.agent_user export {PATCH_PATH}"
 
 
 class DrInfraError(RuntimeError):

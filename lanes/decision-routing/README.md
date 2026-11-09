@@ -9,3 +9,7 @@ The prereg labels a test-pass decision with "the runner's exit code, from the sa
 3. Otherwise the label is missing (DR_LABEL_MISSING), never a pass or a fail. `pytest tests; echo $?`, `pytest || true`, `pytest && echo ok`, `make test` and a project script such as `./tests/runtests.py` all drop: their exit code is not the tests' result, or the frozen list does not name the runner.
 
 `score` prints how many test-pass labels this drops, per model, cell and acting layer (jev, particle, frontier, main_turn, rule), in its text and JSON reports. `labels trial` prints the count for one trial. The results post discloses both.
+
+## Reserve mechanics amendment (2026-11-09)
+
+The Captain's ruling on the pre-lease reserve: before each new lease, an item's cap must hold everything settled on it plus the reserve for the sessions that lease can have in flight, each at the per-session allowance ($5). A batch lease runs up to 6 sessions at once, so it reserves 6 × $5 = $30. An answering lease (host/answer.ts, every mode) reserves 1 × $5 = $5, because answering runs one session at a time, and the step enforces that: OneSession refuses a second session while one is in flight on the lease (DR_ANSWER_CONCURRENCY). The reserve exists to cover sessions in flight, and answering has at most one, so the caps stay where they were approved, dr-replay's $40 included.

@@ -207,7 +207,7 @@ class Rerun(unittest.TestCase):
         session = next(i for i, c in enumerate(order) if "dr_agent.session" in c)
         setup = order.index("/opt/dr/venv/bin/python -I -m dr_agent.agent_user setup")
         restore = order.index("/opt/dr/venv/bin/python -I -m dr_agent.agent_user restore")
-        export = next(i for i, c in enumerate(order) if "git add -A" in c)
+        export = next(i for i, c in enumerate(order) if "dr_agent.agent_user export" in c)
         self.assertLess(setup, session)
         self.assertLess(session, restore)
         self.assertLess(restore, export)

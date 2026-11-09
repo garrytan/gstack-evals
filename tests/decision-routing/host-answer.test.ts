@@ -4,12 +4,13 @@
 // with the session's markers and canary, runs the child with only the proxy URL and token, settles and writes answer.json.
 
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { readItem } from "../../src/runner/ledger/record.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MODES, main, pseudoSession, runAnswer, type AnswerOptions } from "../../lanes/decision-routing/host/answer.ts";
+import { ANSWER_SESSIONS_IN_FLIGHT, MODES, OneSession, main, pseudoSession, runAnswer, type AnswerOptions } from "../../lanes/decision-routing/host/answer.ts";
 import { SAFETY_SET_PATH } from "../../lanes/decision-routing/labels/safety-set.ts";
-import { fakeFetch } from "../../lanes/decision-routing/host/controller.ts";
+import { ControllerError, fakeFetch, reserveMicros } from "../../lanes/decision-routing/host/controller.ts";
 import { FakeUpstreams } from "../../lanes/decision-routing/fake/upstreams.ts";
 
 const CANARY = "DRCANARY-" + "ab".repeat(16);
@@ -28,6 +29,7 @@ const STUB = [
   'const particle = await post("/openrouter/v1/chat/completions", { model: "particle-ai/particle-1", max_tokens: 100, messages: [{ role: "user", content: "answer" }] });',
   'const opus = await post("/anthropic/v1/messages", { model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content: "hi" }] });',
   'writeFileSync(flag("--out"), JSON.stringify({ argv: a, env: Object.keys(process.env).sort(), jev, particle, opus }) + "\\n");',
+  'if (existsSync(dir + "/fail")) process.exit(3);',
 ].join("\n");
 
 let dirs: string[] = [];
@@ -169,9 +171,105 @@ test("a planted canary in a decider request stops the step with DR_CUSTODY_HIT a
   await expect(runAnswer({ ...opts, fetch: fakeFetch(fakes!.urls) })).rejects.toThrow("E_DR_STOPPED");
 });
 
-test("a cap under the controller's reserve is refused before any lease or child", async () => {
-  const { opts } = world(1, 10_000_000);
-  await expect(runAnswer(opts)).rejects.toThrow("DR_RESERVE_STOP");
-  expect(existsSync(join(opts.out, "answers"))).toBe(false);
+test("an answering lease reserves one session at the allowance: a cap just under it is refused before any lease or child, just over it answers", async () => {
+  expect(ANSWER_SESSIONS_IN_FLIGHT).toBe(1);
+  const one = reserveMicros(1);
+  expect(one).toBe(5_000_000);
+  const under = world(1, one - 1);
+  await expect(runAnswer(under.opts)).rejects.toThrow("reserve for 1 session in flight");
+  expect(existsSync(join(under.opts.out, "answers"))).toBe(false);
+  expect(existsSync(join(under.opts.out, "answer.json"))).toBe(false);
+  fakes?.stop();
+  const over = world(1, one + 1_000_000);
+  const r = await runAnswer(over.opts);
+  expect(r.stop).toBeNull();
+  expect(r.answered).toEqual([over.list[0]!.session]);
+});
+
+test("one answering session in flight per lease: a second start while one runs is refused with DR_ANSWER_CONCURRENCY, and starts after an end", () => {
+  const slot = new OneSession();
+  slot.start("a");
+  let err: unknown = null;
+  try {
+    slot.start("b");
+  } catch (e) {
+    err = e;
+  }
+  expect(err).toBeInstanceOf(ControllerError);
+  expect((err as ControllerError).code).toBe("DR_ANSWER_CONCURRENCY");
+  expect((err as Error).message).toContain("a is still in flight");
+  slot.end();
+  slot.start("b");
+  slot.end();
+});
+
+test("the step's sessions never overlap in time", async () => {
+  const { opts } = world(3);
+  await runAnswer(opts);
+  const rows = JSON.parse(readFileSync(join(opts.out, "answer.json"), "utf8")).sessions as Array<{ started: string; ended: string }>;
+  expect(rows).toHaveLength(3);
+  for (let i = 1; i < rows.length; i++) expect(Date.parse(rows[i]!.started)).toBeGreaterThanOrEqual(Date.parse(rows[i - 1]!.ended));
+});
+
+const REAL_RECORD = process.env.DR_REAL_RECORD ?? join(process.env.HOME ?? "", ".capy/drive/captain-gstack-evals/ledger/decision-routing/record");
+
+test.skipIf(!existsSync(join(REAL_RECORD, "items", "dr-calibration")))("on a real record nothing is answered until the drive is confirmed to hold the lease (DR_LEASE_UNRECORDED), and answering runs once it is", async () => {
+  for (const confirm of [false, true]) {
+    const { dir, opts, list } = world(1);
+    const record = join(dir, "record");
+    cpSync(REAL_RECORD, record, { recursive: true });
+    const real = { ...opts, temp: false, record, ledger: join(dir, "ledger.sqlite"), leaseConfirmMs: 1500 };
+    const timer = confirm
+      ? setInterval(() => {
+          const open = readItem(record, "dr-calibration").open;
+          if (!open) return;
+          mkdirSync(opts.out, { recursive: true });
+          writeFileSync(join(opts.out, "lease-confirmed.json"), JSON.stringify({ leases: [open.lease_id] }));
+        }, 10)
+      : null;
+    try {
+      if (!confirm) {
+        await expect(runAnswer(real)).rejects.toThrow("DR_LEASE_UNRECORDED");
+        expect(existsSync(join(opts.out, "answers", list[0]!.session + ".shadow.jsonl"))).toBe(false);
+        expect(readItem(record, "dr-calibration").leases.at(-1)!.close?.spent_micros).toBe(0);
+      } else {
+        expect((await runAnswer(real)).answered).toEqual([list[0]!.session]);
+      }
+    } finally {
+      if (timer) clearInterval(timer);
+      fakes?.stop();
+    }
+  }
+}, 60_000);
+
+test("a mode name off the MODES table, a prototype key included, is refused before any lease", async () => {
+  const { opts } = world(1);
+  for (const mode of ["constructor", "toString", "nope"]) await expect(runAnswer({ ...opts, mode: mode as any })).rejects.toThrow("unknown answering mode");
   expect(existsSync(join(opts.out, "answer.json"))).toBe(false);
+});
+
+test("a second mode on an out dir that holds another mode's sessions is refused before any lease", async () => {
+  const { opts } = world(1);
+  await runAnswer(opts);
+  const lease = JSON.parse(readFileSync(join(opts.out, "answer.json"), "utf8")).lease.lease_id;
+  await expect(runAnswer({ ...opts, mode: "jev_newer", fetch: fakeFetch(fakes!.urls) })).rejects.toThrow("holds shadow answers");
+  expect(JSON.parse(readFileSync(join(opts.out, "answer.json"), "utf8")).lease.lease_id).toBe(lease);
+  expect(existsSync(join(opts.out, "answers", opts.sessions[0]!.session + ".jev_newer.jsonl"))).toBe(false);
+});
+
+test("a child that exits non-zero counts as failed, not answered, is never started again, and the command line exits 2", async () => {
+  const { dir, opts, list } = world(2);
+  writeFileSync(join(list[0]!.log_dir, "fail"), "");
+  const r = await runAnswer(opts);
+  expect(r.failed).toEqual([list[0]!.session]);
+  expect(r.answered).toEqual([list[1]!.session]);
+  expect(JSON.parse(readFileSync(join(opts.out, "answer.json"), "utf8")).failed).toEqual([list[0]!.session]);
+  const again = await runAnswer({ ...opts, fetch: fakeFetch(fakes!.urls) });
+  expect(again.skipped).toEqual(list.map((s) => s.session));
+  writeFileSync(join(dir, "urls.json"), JSON.stringify(fakes!.urls));
+  writeFileSync(join(dir, "sessions.json"), JSON.stringify(list));
+  const args = ["--item", opts.item, "--run-id", opts.runId, "--mode", "shadow", "--sessions", join(dir, "sessions.json"), "--questions", opts.questions, "--python", opts.python!.join(" "), "--temp", "--fake-upstreams", join(dir, "urls.json"), "--items", opts.items!];
+  expect(await main([...args, "--out", join(dir, "cli-fail")])).toBe(2);
+  rmSync(join(list[0]!.log_dir, "fail"));
+  expect(await main([...args, "--out", join(dir, "cli-ok")])).toBe(0);
 });

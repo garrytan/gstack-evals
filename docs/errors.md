@@ -192,6 +192,10 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_DR_RUNTIME](#e_dr_runtime) | 2 | U6 |
 | [E_DR_RUNNER](#e_dr_runner) | 2 | U6 |
 | [DR_RESERVE_STOP](#dr_reserve_stop) | 2 | U6 |
+| [DR_PROXY_PORT_BUSY](#dr_proxy_port_busy) | 2 | U6 |
+| [DR_LEASE_UNRECORDED](#dr_lease_unrecorded) | 2 | U6 |
+| [DR_ANSWER_CONCURRENCY](#dr_answer_concurrency) | 2 | U6 |
+| [DR_ANSWER_FAILED](#dr_answer_failed) | 2 | U6 |
 | [E_DR_STOPPED](#e_dr_stopped) | 2 | U6 |
 | [E_PV_NO_BLOCK](#e_pv_no_block) | warning | U20 |
 | [E_PV_INFRA_MISSING](#e_pv_infra_missing) | warning | U20 |
@@ -1356,11 +1360,43 @@ Exit 2. Side effects: None: refused before any VM call. Retry safe: yes. Resumab
 
 ### DR_RESERVE_STOP
 
-Decision routing: before opening a lease, the controller found a line item whose cap cannot hold what is already committed on it plus the reserve for six sessions in flight at the per-session allowance, so the projection passes the item's cap. It is not a CAP_STOP.
+Decision routing: before opening a lease, the controller or the answering step found a line item whose cap cannot hold what is already committed on it plus the reserve for its sessions in flight at the per-session allowance (six for a batch, one for an answering step), so the projection passes the item's cap. It is not a CAP_STOP.
 
 Fix: Bring the item's projection to the Captain, who decides whether to raise the cap or end the item; relaunch only on that decision.
 
 Exit 2. Side effects: None: no lease was written, nothing was leased or launched, and nothing was recorded on the item. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### DR_PROXY_PORT_BUSY
+
+Decision routing: at batch start, something other than the batch's own metering proxies listens on the proxy port range that the runner's container firewall opens to the agents (TCP 47100-47107), or one of the batch's proxies on that range is not seen listening.
+
+Fix: Find and stop the other listener on the runner host (ss -ltnp), or find why the proxy is not listening, then relaunch the batch.
+
+Exit 2. Side effects: Before the leases: none. After the proxies started: the batch's leases are settled with no session launched. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### DR_LEASE_UNRECORDED
+
+Decision routing: a batch or answering step on a real record opened its lease on the runner VM's copy of the record, but no vm.sh record-out --confirm showed the drive copy holding that lease open before the wait ran out, so nothing was launched.
+
+Fix: Run vm.sh &lt;runner> &lt;sha256> record-out &lt;vm> &lt;record> --confirm &lt;out dir> while the step waits; if record-out refuses, resolve the record conflict it names, then relaunch.
+
+Exit 2. Side effects: The lease is settled on the VM's copy at what it spent (nothing, since no session ran); record-out at the segment end copies both lease and close to the drive. Retry safe: yes. Resumable: yes. Owner: U6.
+
+### DR_ANSWER_CONCURRENCY
+
+Decision routing: the answering step tried to start a second answering session while one was still in flight on its lease. An answering lease reserves one session, so it runs one at a time.
+
+Fix: A bug in the answering step: report it with the out dir's answer.json; do not relaunch until it is fixed.
+
+Exit 2. Side effects: The step stops; its lease is settled and answer.json is written with the sessions that ran. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_ANSWER_FAILED
+
+Decision routing: one or more answering children exited non-zero, so their sessions' answers are partial. They count as failed, not answered, and label-tune refuses them.
+
+Fix: Read each failed session's &lt;answers>.err and .log in the out dir and bring the count to the Captain; a failed session is never started again on the same out dir.
+
+Exit 2. Side effects: The lease is settled and answer.json lists the failed sessions; the other sessions' answers stand. Retry safe: no. Resumable: no. Owner: U6.
 
 ### E_DR_STOPPED
 
