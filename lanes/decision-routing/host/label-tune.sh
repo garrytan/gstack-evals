@@ -8,8 +8,10 @@
 # re-answer the planned states with the answering step and run this again. Otherwise pin writes pin.json and its sha256.
 # --constructed takes the safety set's calibration-half answers (answer --mode safety_calibration); they get labels by
 # construction (labels constructed), are joined and go to tune beside the real sessions.
+# --rewritten names the types whose question was already rewritten once (6.3), for the second pass after the re-answer:
+# tune plans no second rewrite for them, so the pass can pin.
 #
-# usage: label-tune.sh <batch out> <answer out> <tasks dir> <work dir> --proxy-host <host> --questions <questions.json> [--particle-max-tokens 8000|16000] [--constructed <answers.jsonl>]
+# usage: label-tune.sh <batch out> <answer out> <tasks dir> <work dir> --proxy-host <host> --questions <questions.json> [--particle-max-tokens 8000|16000] [--constructed <answers.jsonl>] [--rewritten <type,type>]
 # DR_CLI overrides the decision-routing command (default: bun <repo>/bin/gstack-evals decision-routing).
 set -euo pipefail
 
@@ -20,13 +22,14 @@ die() {
 [ $# -ge 8 ] || die "E_USAGE: label-tune.sh <batch out> <answer out> <tasks dir> <work dir> --proxy-host <host> --questions <questions.json> [--particle-max-tokens n]"
 out=$1 answers=$2 tasks=$3 work=$4
 shift 4
-proxy="" questions="" maxtok=() constructed=""
+proxy="" questions="" maxtok=() constructed="" rewritten=()
 while [ $# -gt 0 ]; do
   case $1 in
     --proxy-host) proxy=$2 ;;
     --questions) questions=$2 ;;
     --particle-max-tokens) maxtok=(--particle-max-tokens "$2") ;;
     --constructed) constructed=$2 ;;
+    --rewritten) rewritten=(--rewritten "$2") ;;
     *) die "E_USAGE: unknown argument $1" ;;
   esac
   shift 2
@@ -60,7 +63,7 @@ if [ -n "$constructed" ]; then
   labelled+=(--labelled "$work/labelled/constructed.jsonl")
 fi
 
-"${cli[@]}" tune "${labelled[@]}" --out "$work/tuned.json" --plan "$work/rewrite-plan.json"
+"${cli[@]}" tune "${labelled[@]}" --out "$work/tuned.json" --plan "$work/rewrite-plan.json" "${rewritten[@]}"
 if ! grep -Eq '"types": *\[\]' "$work/rewrite-plan.json"; then
   echo "tune plans a question rewrite ($work/rewrite-plan.json): rewrite questions.json, re-answer the planned states, then run this again; no pin was written" >&2
   exit 3

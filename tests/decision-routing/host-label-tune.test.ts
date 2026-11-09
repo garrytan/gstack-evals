@@ -67,6 +67,14 @@ test("--constructed labels the safety set's calibration-half answers by construc
   expect(rig("[]", ["--constructed", join(dir0, "missing.jsonl")]).code).toBe(2);
 });
 
+test("--rewritten passes the types already rewritten once to tune, so the second pass after a rewrite can pin", () => {
+  const { dir, code, log } = rig("[]", ["--rewritten", "next_step,done"]);
+  expect(code).toBe(0);
+  const w = join(dir, "work");
+  expect(log()[4]).toBe("tune --labelled " + join(w, "labelled", "o__a-1__N__opus.jsonl") + " --labelled " + join(w, "labelled", "o__b-2__N__sol.jsonl") + " --out " + join(w, "tuned.json") + " --plan " + join(w, "rewrite-plan.json") + " --rewritten next_step,done");
+  expect(log()[5]).toStartWith("pin ");
+});
+
 test("stops before pin when tune plans a question rewrite", () => {
   const { dir, code, out, log } = rig('[{"type": "safe"}]');
   expect(code).toBe(3);
