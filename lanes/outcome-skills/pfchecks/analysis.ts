@@ -4,22 +4,26 @@
 // bootstrap p (twice the smaller share of resampled differences at or beyond 0) and Holm over the two contrasts; the
 // exact McNemar p and the counts worse and better beside them. Per model the same contrasts carry the exact McNemar p
 // with Holm over P minus N and P minus C; C minus N is descriptive. Beside every verdict: the gap worst case, the reading
-// that scores fix-merge conflicts and fix-tree rebuild failures as misses, the static-text, API-guess and compile-blocked
-// readings, and the exposure rates. Strata are descriptive.
+// that scores fix-merge conflicts and fix-tree rebuild failures as misses, the reading that scores tree-check refusals
+// (E_PF_ARM) as misses for the arm that produced them, the static-text, API-guess and compile-blocked readings, the
+// E_PF_ARM and E_PF_WRAPUP_ALLOWANCE gaps per arm and model, and the exposure rates. Strata are descriptive.
 import { exactMcNemar, holmAdjusted, seededRandom } from "../../../src/runner/stats/paired.ts";
 import type { Arm } from "./items.ts";
 
 export const DRAWS = 10_000;
 export type Score = 0 | 1 | null;
 export interface Row { unit: string; repo: string; model: string; arm: Arm; stratum: string; score: Score; gap: string | null; no_static: Score; no_api_guess: Score; compile_rerun: Score; loaded?: boolean; checker?: boolean }
-export const READINGS = ["primary", "worst_case", "conflict_as_miss", "no_static", "no_api_guess", "compile_rerun"] as const;
+export const READINGS = ["primary", "worst_case", "conflict_as_miss", "arm_refusal_as_miss", "no_static", "no_api_guess", "compile_rerun"] as const;
 export type Reading = (typeof READINGS)[number];
 export const MISS_GAPS = new Set(["E_PF_FIX_CONFLICT", "E_PF_REBUILD_FIX"]);
+/** Gaps an arm's own session can cause, counted per arm and model beside every verdict. */
+export const NAMED_GAPS = { E_PF_ARM: "tree-check refusals", E_PF_WRAPUP_ALLOWANCE: "wrap-up refused for its allowance" } as const;
 
 export function valueOf(r: Row, k: Reading): Score {
   if (k === "primary") return r.score;
   if (k === "worst_case") return r.score ?? 0;
   if (k === "conflict_as_miss") return r.score ?? (r.gap && MISS_GAPS.has(r.gap) ? 0 : null);
+  if (k === "arm_refusal_as_miss") return r.score ?? (r.gap === "E_PF_ARM" ? 0 : null);
   return r[k];
 }
 
@@ -100,7 +104,7 @@ export function mddText(units: number, pooled: boolean): string {
   return "MDD (section 14, tabulated n = " + n + (pooled ? ", pooled" : ", per model") + "): " + t;
 }
 
-export interface ContrastOut { n: number; n_repos: number; delta: number; ci95: [number, number] | null; p: number; p_holm: number | null; mcnemar_p: number; worse: number; better: number; verdict: Verdict | null; mdd: string; readings: Record<string, { n: number; delta: number; ci95: [number, number] | null; p: number }> }
+export interface ContrastOut { n: number; n_repos: number; delta: number; ci95: [number, number] | null; p: number; p_holm: number | null; mcnemar_p: number; worse: number; better: number; verdict: Verdict | null; mdd: string; readings: Record<string, { n: number; delta: number; ci95: [number, number] | null; p: number }>; named_gaps: Record<string, Record<string, Partial<Record<Arm, number>>>> }
 
 function contrast(rows: readonly Row[], a: Arm, b: Arm, seed: number, models: string[] | undefined, pooled: boolean): Omit<ContrastOut, "p_holm" | "verdict"> {
   const pairs = pairsOf(rows, a, b, "primary", models);
@@ -112,7 +116,12 @@ function contrast(rows: readonly Row[], a: Arm, b: Arm, seed: number, models: st
     const x = bootstrap(pk, seed);
     readings[k] = { n: pk.length, delta: x.delta, ci95: x.ci95, p: x.p };
   }
-  return { n: pairs.length, n_repos: new Set(pairs.map((p) => p.repo)).size, delta: bs.delta, ci95: bs.ci95, p: bs.p, mcnemar_p: mc.p_two_sided, worse: pairs.filter((p) => p.b < p.a).length, better: pairs.filter((p) => p.b > p.a).length, mdd: mddText(new Set(pairs.map((p) => p.unit)).size, pooled), readings };
+  const named_gaps: ContrastOut["named_gaps"] = {};
+  for (const code of Object.keys(NAMED_GAPS)) {
+    const by: Record<string, Partial<Record<Arm, number>>> = (named_gaps[code] = {});
+    for (const m of models ?? [...new Set(rows.map((r) => r.model))].sort()) by[m] = Object.fromEntries([b, a].map((arm) => [arm, rows.filter((r) => r.model === m && r.arm === arm && r.gap === code).length]));
+  }
+  return { n: pairs.length, n_repos: new Set(pairs.map((p) => p.repo)).size, delta: bs.delta, ci95: bs.ci95, p: bs.p, mcnemar_p: mc.p_two_sided, worse: pairs.filter((p) => p.b < p.a).length, better: pairs.filter((p) => p.b > p.a).length, mdd: mddText(new Set(pairs.map((p) => p.unit)).size, pooled), readings, named_gaps };
 }
 
 export interface Cell { model: string; arm: Arm; units: number; gaps: number; incomplete: boolean }
@@ -188,6 +197,7 @@ export function report(a: Analysis): string[] {
   const line = (name: string, c: ContrastOut) => {
     out.push("  " + name + ": " + (c.verdict ?? "descriptive") + "; delta " + pct(c.delta) + " points " + ci(c.ci95) + ", n " + c.n + " pairs over " + c.n_repos + " repositories, bootstrap p " + c.p.toFixed(4) + (c.p_holm !== null ? ", Holm p " + c.p_holm.toFixed(4) : "") + ", McNemar p " + c.mcnemar_p.toFixed(4) + ", worse " + c.worse + ", better " + c.better);
     for (const [k, v] of Object.entries(c.readings)) out.push("    " + k + ": delta " + pct(v.delta) + " " + ci(v.ci95) + " (n " + v.n + ")");
+    for (const [code, by] of Object.entries(c.named_gaps)) out.push("    " + code + " gaps (" + NAMED_GAPS[code as keyof typeof NAMED_GAPS] + "): " + Object.entries(by).map(([m, arms]) => m + " " + Object.entries(arms).map(([arm, n]) => arm + " " + n).join(", ")).join("; "));
     out.push("    " + c.mdd);
   };
   out.push("pooled verdicts:");
