@@ -140,6 +140,7 @@ def mdds(p0, rho, n, pa, pn, mset, tau_r, rng):
 def admit(p0, rho, m, ids, R, pa, pn):
     rng = fixed_rng(p0, rho, pa, pn, len(ids), 3)
     d = unit_diffs(p0, rho, m, ids, R, pa, pn, ADMIT_DELTA, TAU_R, ADMIT_SIMS, rng)
+    assert np.isfinite(d).all(), "unit differences must be finite"
     pw = float((pvalues(d, ids, R, rng) <= ADMIT_ALPHA).mean())
     return pw, float(np.sqrt(pw * (1 - pw) / ADMIT_SIMS))
 
@@ -152,16 +153,23 @@ def bound_rate(p0, rho, n, pa, pn, mset, delta, rng):
     se = np.sqrt(R / (R - 1) * ((s - mean[:, None] * cnt) ** 2).sum(axis=1)) / n
     return float((mean + 1.96 * se < MARGIN).mean()), float(np.median(1.96 * se))
 
+def usage(msg):
+    print("E_USAGE " + msg, file=sys.stderr)
+    sys.exit(2)
+
 def design_mode(path):
     spec = json.load(open(path))
     units = spec["units"]
+    p0, rho, pa, pn = float(spec["p0"]), float(spec.get("rho", 0.5)), int(spec["passes_arm"]), int(spec["passes_none"])
+    if not units or pa < 1 or pn < 1 or not 0 < p0 < 1 or not 0 < rho < 1:
+        usage("design needs units, passes_arm and passes_none of at least 1, and p0 and rho strictly between 0 and 1")
     repos = sorted({u["repo"] for u in units})
     ids = np.array([repos.index(u["repo"]) for u in units])
     m = np.array([int(u["items"]) for u in units])
-    if m.min() < 1 or m.max() > MAXM: sys.exit("E_USAGE items must be 1 to %d" % MAXM)
-    pw, se = admit(float(spec["p0"]), float(spec.get("rho", 0.5)), m, ids, len(repos), int(spec["passes_arm"]), int(spec["passes_none"]))
+    if m.min() < 1 or m.max() > MAXM: usage("items must be 1 to %d" % MAXM)
+    pw, se = admit(p0, rho, m, ids, len(repos), pa, pn)
     print("ADMIT units %d repositories %d p0 %.3f passes_arm %d passes_none %d delta %.2f alpha %.3f sims %d power %.3f se %.3f -> %s"
-          % (len(units), len(repos), float(spec["p0"]), int(spec["passes_arm"]), int(spec["passes_none"]), ADMIT_DELTA, ADMIT_ALPHA, ADMIT_SIMS, pw, se, "pass" if pw >= 0.80 else "fail"))
+          % (len(units), len(repos), p0, pa, pn, ADMIT_DELTA, ADMIT_ALPHA, ADMIT_SIMS, pw, se, "pass" if pw >= 0.80 else "fail"))
 
 if len(sys.argv) == 3 and sys.argv[1] == "--design":
     design_mode(sys.argv[2]); sys.exit(0)
