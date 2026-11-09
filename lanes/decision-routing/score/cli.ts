@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // gstack-evals decision-routing score: per creative model, Primary A (R against N), Primary B (R against P) and P against
-// N in Primary A's form with no verdict; stops per cell and kind; reruns and missing per cell (prereg line 206); 5xx calls
+// N in Primary A's form with no verdict; stops per cell and kind; the proxy's marker_hit lines per arm and per session; reruns and missing per cell (prereg line 206); 5xx calls
 // settled at $0 with their shadow reservations; calls with an unknown outcome, charged at their reservation; calls
 // without usage that the proxy booked above $0, charged at that booked charge; cells whose
 // decider failures pass 5% (DR_CELL_DEGRADED, beside the verdicts they touch); test-pass labels dropped because the
@@ -68,6 +68,16 @@ export async function main(argv: string[]): Promise<number> {
   const stops = new Map<string, number>();
   for (const s of sessions) { const k = s.model + " " + s.cell + " " + (s.status === "missing" ? "missing: " + s.reason : s.exit_status); stops.set(k, (stops.get(k) ?? 0) + 1); }
   lines.push("", "stops and outcomes per cell:", ...[...stops.entries()].sort().map(([k, v]) => "  " + k + ": " + v));
+  const perArm = new Map<string, number>(), perSession = new Map<string, number>();
+  for (const l of journals.flatMap(jsonl)) {
+    if (l.kind !== "marker_hit") continue;
+    const arm = l.cell.model + " " + l.cell.arm, session = l.cell.task + " " + arm + " trial " + l.cell.trial + " attempt " + l.cell.attempt;
+    perArm.set(arm, (perArm.get(arm) ?? 0) + 1);
+    perSession.set(session, (perSession.get(session) ?? 0) + 1);
+  }
+  report.marker_hits = { per_arm: Object.fromEntries(perArm), per_session: Object.fromEntries(perSession) };
+  const counts = (m: Map<string, number>) => (m.size ? [...m.entries()].sort().map(([k, v]) => "  " + k + ": " + v) : ["  none"]);
+  lines.push("", "marker_hit lines (a runner-only marker other than the canary, logged and forwarded), per arm:", ...counts(perArm), "", "marker_hit lines per session:", ...counts(perSession));
   const attempts = roots.flatMap(infraAttempts);
   const reruns = rerunRows(attempts, sessions);
   report.reruns = reruns;

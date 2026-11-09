@@ -98,7 +98,7 @@ describe("test-pass labels", () => {
   });
 });
 
-async function score(name: string, decisions: Array<Record<string, any>>, labels: object[] = []): Promise<{ text: string; json: any }> {
+async function score(name: string, decisions: Array<Record<string, any>>, labels: object[] = [], journal = JOURNAL): Promise<{ text: string; json: any }> {
   const root = join(tmp, name), t = join(root, "trials", "R-opus-alpha-1"), dr = join(t, "agent", "dr");
   mkdirSync(dr, { recursive: true });
   mkdirSync(join(t, "verifier"));
@@ -114,7 +114,7 @@ async function score(name: string, decisions: Array<Record<string, any>>, labels
   const log = console.log;
   console.log = (m: string) => out.push(m);
   try {
-    expect(await main(["--trials", join(root, "trials"), "--journal", JOURNAL, "--prices", PRICES, "--planned", join(root, "planned.json"), "--admission", join(root, "admission.json"), "--labels", join(root, "labels.jsonl"), "--json", join(root, "report.json")])).toBe(0);
+    expect(await main(["--trials", join(root, "trials"), "--journal", journal, "--prices", PRICES, "--planned", join(root, "planned.json"), "--admission", join(root, "admission.json"), "--labels", join(root, "labels.jsonl"), "--json", join(root, "report.json")])).toBe(0);
   } finally { console.log = log; }
   return { text: out.join("\n"), json: JSON.parse(readFileSync(join(root, "report.json"), "utf8")) };
 }
@@ -144,5 +144,23 @@ describe("score report", () => {
     expect(json.booked_no_usage_calls).toEqual({ "opus R": { count: 1, booked_micros: opusRequest.max_micros } });
     expect(text).toContain("test-pass labels dropped because the command is not a bare runner (lanes/decision-routing/README.md), per model, cell and acting layer:\n  opus R particle: 1\n");
     expect(json.label_drops_not_bare_runner).toEqual({ "opus R particle": 1 });
+  });
+  test("marker_hit lines count per arm and per session beside the custody stops, and move no verdict", async () => {
+    const decisions = Array.from({ length: 20 }, (_, i) => ok(i));
+    const hitCell = { run_id: "dr-pilot-rp", arm: "R", task: "dryrun__alpha-1", model: "opus", trial: 1, attempt: 1 };
+    const hit = (decider: boolean, index: number) => ({ kind: "marker_hit", meter_id: METER, provider: "anthropic", route: "/v1/messages", model: "claude-opus-5-5", source: "127.0.0.1", decider, cell: hitCell, markers: [{ index, sha256: "0123456789ab" }] });
+    const withHits = join(tmp, "journal.marker-hits.ndjson");
+    writeFileSync(withHits, readFileSync(JOURNAL, "utf8") + [hit(false, 1), hit(true, 2), { ...hit(false, 1), cell: { ...hitCell, attempt: 2 } }].map((l) => JSON.stringify(l)).join("\n") + "\n");
+    const before = await score("no-hits", decisions);
+    const after = await score("hits", decisions, [], withHits);
+    const verdicts = (t: string) => t.slice(0, t.indexOf("stops and outcomes per cell:"));
+    expect(verdicts(after.text)).toBe(verdicts(before.text));
+    for (const model of ["opus", "sol"]) expect(after.json[model]).toEqual(before.json[model]);
+    expect(before.text).toContain("marker_hit lines (a runner-only marker other than the canary, logged and forwarded), per arm:\n  none\n");
+    expect(before.json.marker_hits).toEqual({ per_arm: {}, per_session: {} });
+    expect(after.text).toContain("marker_hit lines (a runner-only marker other than the canary, logged and forwarded), per arm:\n  opus R: 3\n");
+    expect(after.text).toContain("marker_hit lines per session:\n  dryrun__alpha-1 opus R trial 1 attempt 1: 2\n  dryrun__alpha-1 opus R trial 1 attempt 2: 1\n");
+    expect(after.json.marker_hits).toEqual({ per_arm: { "opus R": 3 }, per_session: { "dryrun__alpha-1 opus R trial 1 attempt 1": 2, "dryrun__alpha-1 opus R trial 1 attempt 2": 1 } });
+    expect(after.text.indexOf("marker_hit lines")).toBeGreaterThan(after.text.indexOf("stops and outcomes per cell:"));
   });
 });
