@@ -1,11 +1,15 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// Section 14: the told sessions under custody, and their mechanical readings (sections 5.1 and 5.5). custody() checks
+// Section 14: the told sessions under custody, and their mechanical readings (sections 5.1 and 5.5). custody() first
+// removes any ar-custody-* directory an earlier opening left on /dev/shm and logs an incident for each. It then checks
 // each sealed record's sha256 against its SHA256SUMS line, writes the identity (streamed in on stdin) to a fresh
 // directory on /dev/shm, decrypts every record there with age, removes the identity and checks it is gone (test ! -e),
-// runs the reader, removes the decrypted directory and checks it is gone, then sweeps /tmp, /var/tmp and
-// ~/.capy/tool-outputs: files with a told record's name written since the opening are counted and deleted without
-// being opened. Every step is a CUSTODY.md line; any failure stops the run with E_AR_CUSTODY. No model sees told
-// content, and the reader returns counts only.
+// and runs the reader. On a normal exit, a failed step included, it removes the decrypted directory, checks it is gone,
+// then sweeps /tmp, /var/tmp and ~/.capy/tool-outputs: files with a told record's name written since the opening are
+// counted and deleted without being opened. An interrupt or kill skips that cleanup: the identity and the decrypted
+// directory stay on /dev/shm until the next opening's leftover sweep removes them and logs an incident. So after an
+// interrupted opening, the operator reruns told (or any opening) on that machine before leaving it. Each step that runs
+// is a CUSTODY.md line; any failure stops the run with E_AR_CUSTODY. No model sees told content, and the reader
+// returns counts only.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
