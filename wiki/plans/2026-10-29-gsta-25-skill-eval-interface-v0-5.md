@@ -233,6 +233,8 @@ Start the eval as a background operation (Capy's limit is six hours per operatio
 
 ## Cost at a typical size
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 12 tasks x 4 arms x 3 trials = 144 sessions, plus calibration, judges and any rerun stage: about $60 on Opus 5.5 (range $30 to $120), $2 to $4 on Haiku 5.5, about $30 on gpt-6.1-sol in Codex. Callers pay through their own ledgers.
 
 ## Hosts

@@ -77,6 +77,8 @@ Per suite and model:
 
 ## Cap and stop rule
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 - Cap: $130, line item `lanea-quick`, ledger `captain-gstack-evals/ledger/lanea-quick.jsonl`. Its first row is the approval.
 - Before each session, a reserve row at its worst case: Opus $7.25, Haiku $1.05. After each session, a settle row with measured usage.
 - The metering proxy keeps each session under its reservation. It forwards one paid request per session at a time, so subagents on the same session queue. It refuses a request once the session has spent its ceiling, $3.50 (Opus) or $0.50 (Haiku), or when the request's upper bound would take spend past the reservation. The bound prices one prompt token per two body bytes at the dearest input rate, plus max_tokens of output and five web searches. Each reservation is the ceiling plus the bound for a 600 KB body and 64k max_tokens, so for smaller requests the ceiling binds first.

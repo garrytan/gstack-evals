@@ -26,7 +26,7 @@ After v1:
 
 - Garry asked on 2026-10-27 for a gstack-evals repo built from harness-evals and gbrain-evals, then asked whether it is a good idea; the Captain answered yes, if v1 is narrow.
 - GSTA-36 forwarded GSTA-133's interface for a shared skill eval; GBRA-225 and HARN-1 added requirements. Four crews wait on Lane A.
-- Garry's directions the same day, relayed by the Captain: the eval is open source and earnest, to "steer our ai research and r&d"; stacks use current versions; a skill that "does nothing on opus 5.5" is useful to know (harder evals or shorter skills); measure whether gstack gets "cheaper smaller or open source models to opus 5.5 or frontier model quality", pegged to the most-used open codegen models on OpenRouter; allow claims that gstack brought a cheap model to parity with a frontier model.
+- Garry's directions the same day, relayed by the Captain: the eval is open source and earnest, to steer gstack's AI research and R&D; stacks use current versions; a skill that adds nothing on Opus 5.5 is worth knowing about (harder evals or shorter skills); measure whether gstack lifts low-cost, small or open models to the level of a frontier model such as Opus 5.5, pegged to the most-used open codegen models on OpenRouter; allow claims that gstack brought a cheap model to parity with a frontier model.
 - GSTA-4 researched task sources; the Captain adopted its mix. Run 1's reviewers found plan v1 underpowered and its Lane A verdict logic unsafe; v2 fixes both.
 
 ### Big decisions
@@ -72,3 +72,10 @@ Cost so far: spent 0.00, worst case 30.00 (cap 80.00, headroom 50.00, 6 host att
 ---
 
 _For the relaying agent, not the person:_ run autoplan-20261028004737, gate_rev=1, rec_hash=e417483c7f3d; rec resolves to d1a d2b d3b d4b d5b d6b d7b d8b p1b; plan <run-dir>/plan-active.md (sha256 84981b694707). Answer with `gstack-autoplan answer --out <run-dir> --gate-rev 1 --reply rec --rec-hash e417483c7f3d --by agent:<id> --owner-reply "<their exact words>"`, then `gstack-approvals import --autoplan <run-dir> --by <name>`.
+
+<details>
+<summary>Agent notes</summary>
+
+Edited 2026-11-09 for public wording (GST-1060); the frozen original is wiki/plans/2026-10-28-gsta-3-gstack-evals-v1-plan-v3-2/owner-brief-gate1.md at commit 09d7a8f.
+
+</details>

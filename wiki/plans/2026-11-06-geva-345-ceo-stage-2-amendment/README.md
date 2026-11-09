@@ -274,6 +274,8 @@ Units still win per session, but a unit also costs authoring, mining and a sessi
 
 ### 7. Money: the re-projection and the all-in check
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 #### 7.1 Crew spent
 
 The 18 threads on the CEO line to this post's start read 469,608 credits, $469.61 at $1 per 1,000: the design and its /ship tail, the guard, ladder and stop-label amendments, B0, B1 and its /ship, the harness follow-up and the exposure fix with their tails, both pin posts and the part 2 /ship, B2's mining and authoring, stage 1's run threads and the stage 1 gate amendment. The difficulty ladder plan, which served every line, is left out, as B2's re-projection left it out. This thread is counted at its 70M-token stop in 7.2.

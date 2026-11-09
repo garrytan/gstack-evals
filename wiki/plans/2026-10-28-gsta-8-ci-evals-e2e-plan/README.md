@@ -12,11 +12,11 @@ source: Captain drive handoffs/GSTA-8/plan.md (sha256 31977c9709f54b812fe465057d
 links: [wiki/plans/2026-10-28-gsta-3-gstack-evals-v1-plan-v3-2, wiki/plans/2026-10-28-gsta-3-v1-build-breakdown.md, wiki/board/2026-10-28-gsta-8-ci-plan-approved.md]
 attachments:
   - 12b85bcf2b44f2c6f68f17e758019abdecdeaea1fcdf55cf9dd5fa93545170a1  review-record.md
-  - 519328e7abfa12cf93ca173dd72024bfda94c36efe008e5aa643d1906d1e9ebe  owner-brief-gate3.md
+  - 7da42923d91cf1f11068ce0f38f3ef9f33e07fa053c4dc86b4c6edc60ec28ae6  owner-brief-gate3.md
 ---
 # gstack-evals CI, evals in CI and end-to-end tests
 
-Plan v5, 2026-10-28. Author GSTA-8 for the gstack-evals Captain (GSTA-2), working for Garry Tan. A companion to GSTA-3's plan v3.2 (approved at gate_rev 4, reply "Rec") and its build breakdown (units U1 to U18). It adds units U19 to U22 for the merge train, rig proof and the gstack-facing checks, stacked on U1's CI (PR #3). It re-decides nothing v3.2 decided (lanes, arms, ladder, parity, sealed sources), rewrites nothing U1 owns, and cites Amendment A2's rules as v1.1. Inputs: gstack-evals at 828fc22 and U1's PR #3; gstack v1.91.295.0; GSTA-3's plan, breakdown, interface v0.4 and A2; the callers' requirements; gbrain's harness-check; five crews' harness-codify lists.
+Plan v5, 2026-10-28. Author GSTA-8 for the gstack-evals Captain (GSTA-2), working for Garry Tan. A companion to GSTA-3's plan v3.2 (approved at gate_rev 4, recommendation taken) and its build breakdown (units U1 to U18). It adds units U19 to U22 for the merge train, rig proof and the gstack-facing checks, stacked on U1's CI (PR #3). It re-decides nothing v3.2 decided (lanes, arms, ladder, parity, sealed sources), rewrites nothing U1 owns, and cites Amendment A2's rules as v1.1. Inputs: gstack-evals at 828fc22 and U1's PR #3; gstack v1.91.295.0; GSTA-3's plan, breakdown, interface v0.4 and A2; the callers' requirements; gbrain's harness-check; five crews' harness-codify lists.
 
 ## Implementation plan
 
@@ -40,7 +40,7 @@ After:
 
 ### What caused this work
 
-- Garry, 2026-10-28: "Start thinking about CI evals and e2e tests", "Take the Gstack requirements the other captains have", "Autoplan and eli5 plan for approval", "Ship gate before merge to main"; on merging, "You're the captain use a merge queue you manage and run tests in concert so you can speed up bulk merge back to back when you have a queue." and "Merge on green."
+- Garry, 2026-10-28, asked the Captain to plan CI evals and end-to-end tests, to fold in what the other Captains need from gstack, to bring a plain-language /autoplan plan for his approval, and to gate every merge to main on /ship. For merging, he asked the Captain to run its own merge queue that tests queued PRs together so they land one after another, and to merge once every check passes.
 - The Captain: align the plan to GSTA-3's build breakdown as new units on U1's CI, map each end-to-end test to its unit, leave A2's rules to v1.1, and add a PR CI step for gstack-pregate sealed, a gap U1's review flagged (gstack-evals#3).
 - This run's two CEO and two Eng rounds (Opus 5.5 and gpt-6.1-sol); v2 to v5 apply the findings judged real.
 
@@ -49,11 +49,11 @@ After:
 Three are Garry's. Each paid run still needs its cap in the ledger with his words.
 
 1. gstack's PR CI. Keep v3.2's line: gstack-evals runs no job in gstack's PR CI in v1.0. It reaches gstack through the nightly drift check (U21), a diet-binding request for gstack's /ship (decision 2) and free-test requests (U22) (rec). Or a keyless gstack-evals check on every gstack PR, which needs a read token for this private repo in gstack's secrets, pin bumps and a warning week. Flips when gstack-evals is public and nightly breaks prove too slow; then a SHA-pinned reusable workflow with no token.
-2. The diet receipt. gstack's /ship and /write-skill (GStack Minder's code) ask for it only on a PR that declares a diet or cut, or removes a contract line listed in the skill's committed lock. Generated shared files such as the rendered preamble do not trigger it. The diet lane runs the eval; a NOT_MEASURABLE verdict (write-skill has 2 tasks, under Lane A's floor of 5 informative tasks) records a waiver with its reason code, and an exit 1 still shows as a loss. Advisory until the warning data shows no deadlock (rec). Or a blocking receipt on every edit to a covered skill, which turns each fix into a paid run (about $60 on Opus 5.5) and can never pass for write-skill. Flips if GStack Minder wants other edits covered once run volume and caller caps are agreed.
+2. The diet receipt. gstack's /ship and /write-skill (the gstack Captain's code) ask for it only on a PR that declares a diet or cut, or removes a contract line listed in the skill's committed lock. Generated shared files such as the rendered preamble do not trigger it. The diet lane runs the eval; a NOT_MEASURABLE verdict (write-skill has 2 tasks, under Lane A's floor of 5 informative tasks) records a waiver with its reason code, and an exit 1 still shows as a loss. Advisory until the warning data shows no deadlock (rec). Or a blocking receipt on every edit to a covered skill, which turns each fix into a paid run (about $60 on Opus 5.5) and can never pass for write-skill. Flips if the gstack Captain wants other edits covered once run volume and caller caps are agreed.
 3. Rig proof before money. Admission sits at the ledger lease (U4), the one boundary Lane A, the replay lane, direct-API arms and judge calibration all cross. ledger init --item takes an explicit --admission required|warn, recorded with the owner's words in the item's write-once file; a required item's lease refuses with E_RIG_UNPROVEN unless a matching admission record exists; a warn item, such as a caller's own Lane A run, gets a warning, and U2's preregistration check refuses a program preregistration whose item is not required. The record holds the proof set the preregistration names: for arms in src/trial (U11, the agentic arms of U16 and U18, counted runs), a green Docker tier at the run's commit and recipe plus the keyless probes on the machine that spends; for direct-API runs and judge calibration, a green ci.yml at the commit plus the replay lane's fake-upstream tests. Admission is keyless and adds no spend; the run's own calibration, already paid for, is bound into its receipt (rec). Or rig proof for counted runs only, with a weekly paid smoke under a standing $25 a month. Flips if U20 has not merged its first PR by 11-14; the Captain then asks Garry whether U11 and U16 wait or run without it.
 
-Defaults the Captain or GStack Minder owns, with flip conditions:
-- Merge flow: gstack's train, settled by Garry's "use a merge queue you manage" and "Merge on green". Flips to the hand procedure if the dry runs hit a gap gstack cannot close in a week.
+Defaults the Captain or the gstack Captain owns, with flip conditions:
+- Merge flow: gstack's train, settled by Garry's request for a Captain-managed merge queue that merges on green. Flips to the hand procedure if the dry runs hit a gap gstack cannot close in a week.
 - Versions: VERSION and CHANGELOG.md change only in a release PR, as the breakdown says, and trains merge unstamped heads. Flips to a stamp at each slot if the dry run refuses unstamped pins.
 - wiki/INDEX.md becomes generated and gitignored, since every wiki PR rewrites it and two in one train would conflict. Flips if Garry wants a one-page index on GitHub; then wiki PRs ride one per train.
 - Rig proof binds to a recipe hash, not an image digest, because builds on GitHub runners and Ubicloud shards do not share a digest. Flips if the program sets up a private registry.
@@ -135,11 +135,11 @@ Other keyless tests (U2, U5, U6, U7, U13) stay where the breakdown puts them. A 
 - Files: schema/interface.json, scripts/interface.ts, .github/workflows/nightly.yml, src/skill-eval/verify/, tests/interface/, tests/verify/.
 - Stacking: one PR, on U6, U7 and U9, after U20's first PR in the same thread. About 15 million tokens.
 
-### U22. gstack-side requests (in garrytan/gstack, through the Captain and GStack Minder)
+### U22. gstack-side requests (in garrytan/gstack, through the Captain and the gstack Captain)
 
-Like U12, this is gstack work. Harness Evals, GBrain Minder, Alphaclaw and two crews on private repos tag these failures "Fix: gstack", and gstack has a test file for most (matched by name, assertions read at build): /ship's result line, receipt refusals and PR-body writes (gstack-ship-receipt, gstack-ship-queue), receipt carry (ship-receipt-carry-pregate), pregate allowlist, starter, stamp-only, removed-path and scratch-name rules (five pregate-* files), install modes (gstack-capy-install), rec bound to rec_hash (gate-list), frozen review scope (review-scope), no bare env in a fence (launch-env-echo-ratchet) and claims against receipts (ship-receipt-prose). The review-gate classifier has none.
+Like U12, this is gstack work. The harness Captain, the gbrain Captain, the alphaclaw Captain and two crews on private repos tag these failures "Fix: gstack", and gstack has a test file for most (matched by name, assertions read at build): /ship's result line, receipt refusals and PR-body writes (gstack-ship-receipt, gstack-ship-queue), receipt carry (ship-receipt-carry-pregate), pregate allowlist, starter, stamp-only, removed-path and scratch-name rules (five pregate-* files), install modes (gstack-capy-install), rec bound to rec_hash (gate-list), frozen review scope (review-scope), no bare env in a fence (launch-env-echo-ratchet) and claims against receipts (ship-receipt-prose). The review-gate classifier has none.
 
-The requests: cases where an assertion is missing; Harness Evals' three open asks (an unattended rec under a recorded standing rule, /ship refusing a PR that adds a preregistration and its results, a check run from the receipt step); the main backstop's freeze writer exposed as a queue verb; and decision 2's diet binding, calling U21's verify --promote. Behaviors that need a model go to the review replay lane's public catalog.
+The requests: cases where an assertion is missing; the harness Captain's three open asks (an unattended rec under a recorded standing rule, /ship refusing a PR that adds a preregistration and its results, a check run from the receipt step); the main backstop's freeze writer exposed as a queue verb; and decision 2's diet binding, calling U21's verify --promote. Behaviors that need a model go to the review replay lane's public catalog.
 
 ### Amendment A2 and v1.1
 
@@ -150,6 +150,8 @@ A2's release rules (one pass bit per counted release, one frozen champion per se
 GSTA-133's contract call and /write-skill's /learn: U5 to U7 and U21's nightly. GBRA-225's noise floor, per-model verdicts, hashed preregistration and sandbox: U2, U5, U6, U9, U10 and U20. HARN-1's stable interface and reused proxy, ledger, prereg and stats: U2 to U4 and U21. GSTA-131's catalog and control arms: U13. Garry's no-Sonnet rule: U7's policy file. harness-check's cross-repo check and the crews' gstack issues: U21 and U22. Rig before money: U20. Sealed content before review (gstack-evals#3): U19a. Ship gate, queue and merge on green: U19a and U19b.
 
 ### Cost
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 Monthly, at about 40 gstack-evals PRs and 15 trains (estimates): ci.yml and sealed.yml about 135 runs each at 2 to 5 minutes (about 900 minutes); train-gate.yml 15 runs at about 20 minutes (300); rig.yml from M1b about 40 runs at 15 minutes (600); nightly.yml 30 runs at 15 minutes (450). GitHub bills a standard Linux runner at $0.006 a minute and includes $12 to $18 of compute a month on its Free and Pro plans, so CI runs about $14 a month before that allowance and nothing once the repo is public. Admission adds no model spend. A diet's own Lane A run is not CI spend: interface v0.4 prices it at about $60 on Opus 5.5 ($30 to $120), $2 to $4 on Haiku 5.5 and about $30 on gpt-6.1-sol, on the diet lane's own ledger. Agent work for U19 to U21 is about 50 million tokens (estimate).
 

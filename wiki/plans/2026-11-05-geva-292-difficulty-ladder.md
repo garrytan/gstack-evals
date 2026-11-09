@@ -261,6 +261,8 @@ Before T-G authoring, with no prereg change: tag each mined task for the hidden-
 
 #### 7.1 /investigate (R3; R3c proposed, Opus only, $750 planned, caps not recorded)
 
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
+
 | Tier | Tasks | Strict | Primary | Plain Opus target |
 |---|---|---|---|---|
 | T0 | SWE-bench Verified | solved | | 0.945 (86 of 91) |
@@ -326,6 +328,8 @@ CEO's stage 2 envelope has about $63 of planning headroom before the crew re-pro
 Recommendation: keep it optional. Run it as the remedy when a told arm fails its exposure smoke, where today that arm reads UNTESTED, and on Opus only where a line's money leaves room after its primary design. Report told and enforced apart: told is what users get, and enforced is what the procedure does when it runs.
 
 ### 10. Cost and power at each tier
+
+_Internal planning record: these budget and cost figures are plans and caps, not findings._
 
 Cost per session equals the line's current design's on every tier, and admission checks it (section 2). So each line's money buys the same sessions at 2x and at 10x as its current design; what changes is the band and the measure, and so the MDD.
 
