@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS reservations (
   cell TEXT NOT NULL, max_micros INTEGER NOT NULL, state TEXT NOT NULL, spent_micros INTEGER, usage TEXT, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS reservations_lease ON reservations (lease_id, state);
 CREATE TABLE IF NOT EXISTS stops (lease_id TEXT PRIMARY KEY, scope TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS scope_stops (
+  lease_id TEXT NOT NULL REFERENCES leases (lease_id), field TEXT NOT NULL, value TEXT NOT NULL, code TEXT NOT NULL, scope TEXT NOT NULL,
+  stopped_at TEXT NOT NULL, PRIMARY KEY (lease_id, field, value));
 CREATE TABLE IF NOT EXISTS releases (
   reservation_id TEXT PRIMARY KEY REFERENCES reservations (reservation_id), idempotency_key TEXT NOT NULL, lease_id TEXT NOT NULL,
   generation_id TEXT NOT NULL, record_sha256 TEXT NOT NULL, prior_state TEXT NOT NULL, prior_spent_micros INTEGER, prior_usage TEXT,
@@ -53,6 +56,26 @@ const outcomeText = (r: Pick<Row, "state" | "spent_micros">) => (r.state === "se
 function toReservation(r: Row): Reservation {
   const { reservation_id, idempotency_key, lease_id, max_micros, state, spent_micros } = r;
   return { reservation_id, idempotency_key, lease_id, cell: JSON.parse(r.cell), max_micros, state, spent_micros, usage: r.usage === null ? null : JSON.parse(r.usage) };
+}
+
+/** A scope of a lease's cells: those whose cell field holds value (a model under test, or an arm). */
+export interface ScopeMatch {
+  field: "model" | "arm";
+  value: string;
+}
+
+export interface ScopeStop extends ScopeMatch {
+  code: ReasonCode;
+  scope: string;
+  stopped_at: string;
+}
+
+/** A stopped scope's own figures on its lease: settled calls and their spend, and calls of unknown cost at their full charge. */
+export interface ScopeFigures {
+  settled_calls: number;
+  spent_micros: number;
+  unknown_calls: number;
+  unknown_micros: number;
 }
 
 export class LocalLedger implements ReservationLedger {
@@ -150,6 +173,8 @@ export class LocalLedger implements ReservationLedger {
       if (!lease) return refuse("E_LEDGER_MISSING", "no lease " + lease_id + " in the local ledger " + this.path + "; the run leases its line item before it spends");
       if (lease.state !== "open") return refuse("E_LEASE_CLOSED", "lease " + lease_id + " is " + lease.state);
       if (this.now() >= new Date(lease.file.expires_at)) return refuse("E_LEASE_CLOSED", "lease " + lease_id + " expired at " + lease.file.expires_at);
+      const stop = this.scopeStopOf(lease_id, request.cell);
+      if (stop) return refuse(stop.code, "lease " + lease_id + " stopped " + stop.field + " " + stop.value + " (" + stop.scope + "), so this call is not sent; the lease stays open for its other cells");
       const held = this.held(lease_id);
       if (held + max_micros > lease.file.reserved_micros) {
         return refuse("CAP_STOP", "lease " + lease_id + " holds " + usd(held) + " of " + usd(lease.file.reserved_micros) + "; this call needs up to " + usd(max_micros));
@@ -175,6 +200,54 @@ export class LocalLedger implements ReservationLedger {
       }
       this.db.run("UPDATE reservations SET state = ?, spent_micros = ?, usage = ? WHERE reservation_id = ?", [next.state, next.spent_micros, next.usage, reservation_id]);
       return { ok: true, reservation: toReservation({ ...row, ...next }) };
+    });
+  }
+
+  /** The scope stops recorded on a lease, oldest first. */
+  scopeStops(lease_id: string): ScopeStop[] {
+    return this.db.query("SELECT field, value, code, scope, stopped_at FROM scope_stops WHERE lease_id = ? ORDER BY stopped_at, field, value").all(lease_id) as ScopeStop[];
+  }
+
+  private scopeStopOf(lease_id: string, cell: CellAttempt): ScopeStop | undefined {
+    return this.scopeStops(lease_id).find((s) => cell[s.field] === s.value);
+  }
+
+  /**
+   * Stops one scope of an open lease: every later reserve for a cell whose field holds value is refused with code, and
+   * every other cell keeps reserving on the same lease, which stays open (GST-2016: a per-model stop on a lease shared by
+   * several models settles only that model's sessions and reservations). The first stop on a scope stands. Returns how
+   * many of the scope's calls are still in flight; settleScope settles them once their sends are known to be over.
+   */
+  stopScope(lease_id: string, match: ScopeMatch, code: ReasonCode, scope: string): { first: boolean; stop: ScopeStop; in_flight: number } {
+    return this.tx(() => {
+      const lease = this.getLease(lease_id);
+      if (!lease) throw new LedgerError("E_LEDGER_MISSING", "no lease " + lease_id + " in the local ledger " + this.path);
+      if (lease.state !== "open") throw new LedgerError("E_LEASE_CLOSED", "lease " + lease_id + " is " + lease.state + ", so no scope of it can be stopped");
+      const inserted = this.db.run("INSERT OR IGNORE INTO scope_stops (lease_id, field, value, code, scope, stopped_at) VALUES (?, ?, ?, ?, ?, ?)", [lease_id, match.field, match.value, code, scope, this.now().toISOString()]).changes === 1;
+      const stop = this.db.query("SELECT field, value, code, scope, stopped_at FROM scope_stops WHERE lease_id = ? AND field = ? AND value = ?").get(lease_id, match.field, match.value) as ScopeStop;
+      return { first: inserted, stop, in_flight: this.scopeRows(lease_id, match).filter((r) => r.state === "reserved").length };
+    });
+  }
+
+  private scopeRows(lease_id: string, match: ScopeMatch): Row[] {
+    return (this.db.query("SELECT * FROM reservations WHERE lease_id = ?").all(lease_id) as Row[]).filter((r) => (JSON.parse(r.cell) as CellAttempt)[match.field] === match.value);
+  }
+
+  /**
+   * Settles a stopped scope's own reservations on its open lease and nothing else: a call of the scope still reserved
+   * becomes unknown, its full charge kept, as stageClose does for a whole lease, and a later settle of it is a conflict.
+   * Call it only once the scope's sends are over (its sessions ended or killed). Other cells and the lease are untouched.
+   */
+  settleScope(lease_id: string, match: ScopeMatch): ScopeFigures {
+    return this.tx(() => {
+      const lease = this.getLease(lease_id);
+      if (!lease) throw new LedgerError("E_LEDGER_MISSING", "no lease " + lease_id + " in the local ledger " + this.path);
+      const stopped = this.db.query("SELECT 1 FROM scope_stops WHERE lease_id = ? AND field = ? AND value = ?").get(lease_id, match.field, match.value);
+      if (!stopped) throw new LedgerError("E_USAGE", "lease " + lease_id + " has no stop on " + match.field + " " + match.value + "; stop the scope before settling it");
+      for (const r of this.scopeRows(lease_id, match)) if (r.state === "reserved") this.db.run("UPDATE reservations SET state = 'unknown' WHERE reservation_id = ? AND state = 'reserved'", [r.reservation_id]);
+      const rows = this.scopeRows(lease_id, match);
+      const unknown = rows.filter((r) => r.state === "unknown");
+      return { settled_calls: rows.length - unknown.length, spent_micros: rows.reduce((s, r) => s + (r.state === "settled" ? (r.spent_micros ?? 0) : 0), 0), unknown_calls: unknown.length, unknown_micros: unknown.reduce((s, r) => s + r.max_micros, 0) };
     });
   }
 
