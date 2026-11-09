@@ -59,7 +59,7 @@ It mostly didn't. One reason fits the report-only localization lines. Every arm 
 - **Harness.** Lane B's runner at 239d227. Each part ran on its own Ubicloud standard-16 VM in eu-central-h1, six trials at a time, one part at a time, with the run-time oracle gate on. The controller ran on its own standard-2 host that stayed awake for the whole run (30.0 hours).
 - **Candidates.** 201 tasks in four tiers from R3a4's SWE-rebench pool (sorted ids sha256 7a2b33c723b14ae97c4d8286a42bc5d914ffe2d856eb1ef42b50e1dcddfd1d27). SWE-rebench is the work of Nebius AI R&D, used under CC-BY-4.0.
 - **Calibration.** cal-1a to cal-1c ran 438 none trials by tier, and cal-2 ran 4 more on the one t4 task that failed its cal-1 trial. All 442 were graded, and 308 passed.
-- **Admission.** `r3c.ts admit` refitted the task law on every Opus none trial and kept 18 tasks in the band (list sha256 e5727033c05e649b04da006a1973c8025976e334579c8ef2f9c52bed32b0ef23, 4 of them far tasks). The prereg forecast 16.7 (p10 13, p90 21). The Captain approved the grid as admitted.
+- **Admission.** `r3c.ts admit` refitted the task law on every Opus none trial and kept 18 tasks in the band (list sha256 e5727033c05e649b04da006a1973c8025976e334579c8ef2f9c52bed32b0ef23, 4 of them far tasks). The prereg forecast 16.7 (p10 13, p90 21). It priced a task-replicate pair (the price is in Agent notes), found 24 replicates affordable, and chose 20, with a frozen MDD of 10 points and a null size of 4.1%. The Captain approved the grid as admitted.
 - **Grid.** 18 tasks x 20 replicates x {none, told}, 720 trials, in five parts of 4 replicates. Each part ran every task 4 times in each arm, in one seeded shuffle of task and arm (seed 20261113), so both arms shared each part's VM and hours.
 - **Grading.** A trial passes when the task's own tests pass in the separate verifier. A told trial is exposed when it opened /investigate and its own text matches DEBUG REPORT or a "Phase 1" to "Phase 5" heading.
 - **Outcome rule.** analyze()'s task-clustered paired bootstrap of told minus none, 10,000 draws, seed 20261101. After the 90% exposure gate, the truncation bound and the infra bounds: a 95% interval above zero is KEEP. A primary above zero whose interval includes zero is FIX-METHOD (power). A primary at or below zero is CUT-CANDIDATE when the D1 contrast is also at or below zero and the D1 set holds at least ceil(3n/7) tasks, and otherwise FIX-METHOD (task fit).
@@ -67,7 +67,7 @@ It mostly didn't. One reason fits the report-only localization lines. Every arm 
 
 ## Result
 
-analyze's lines, exactly as printed, with one change: the admit line's path on the controller host is written as `<work dir>`. It exited 5, its code for an outcome other than KEEP or CUT-CANDIDATE. The frozen lines are the grid counts, exposure, allowance stops, the primary, D1 and the outcome. Every line marked "report only" decides nothing. The admit lines near the top were frozen at admission, before any grid trial.
+analyze's lines, exactly as printed, with two changes: the admit line's path on the controller host is written as `<work dir>`, and three lines of dollar amounts and the GO line's closing dollar projection are in Agent notes instead. It exited 5, its code for an outcome other than KEEP or CUT-CANDIDATE. The frozen lines are the grid counts, exposure, allowance stops, the primary, D1 and the outcome. Every line marked "report only" decides nothing. The admit lines near the top were frozen at admission, before any grid trial.
 
 ```text
 oracle per-test (report only): 405 oracle trials, 405 score f2pShare 1 and 0 score null
@@ -75,6 +75,7 @@ calibration: 442 none trials, 442 graded, 308 passed
 admit: bun quick/laneb/r3/r3c-rules.ts admit <INHAND> --model opus --calibration <work dir>/calibration.jsonl --cap-usd 750 --settled-usd 159.813435
 r3c admission opus: 18 tasks admitted (sha256 e5727033c05e649b04da006a1973c8025976e334579c8ef2f9c52bed32b0ef23; 4 far) from 442 calibration none trials; refitted band mass 12.4%, mean posterior none rate 0.512
 report only, beta-binomial law (a 0.088, b 0.051, band mass 8.5%): MDD 10 points, null size 4.5% at 20 replicates
+R3c grid for opus: GO with 18 tasks x 20 replicates x {none, told}; MDD 10 points (16 if the lift sits on half the tasks, report only); null size 4.1%
 grid: none 170 of 360 graded trials passed (control rate 47.2%), told 180 of 360 (50.0%); 18 paired tasks of 18 admitted
 exposure: 358 of 360 graded told grid trials exposed (99.4%; the gate needs 90%)
 allowance stops: told 0 of 360 sessions (0.0%), none 0 of 360 (0.0%), infra included; the truncation bound is 5 points
@@ -169,14 +170,15 @@ Nothing in this section is frozen. It lays out what each option would cost, and 
 
 **A pass-rate grid that resolves a 3 to 5 point lift.** A prereg would size its own grid by simulation.
 
+- If the lift were the same on every task, as the frozen power model assumes, the MDD falls with the square root of the number of pairs. 5 points needs about 1,440 pairs (four times R3c's grid) and could reuse R3c's 18 admitted tasks at 80 replicates. 3 points needs about 4,000 pairs. The grid costs are in Agent notes.
 - R3c's data argue against that model. The per-task lifts varied 2.35 times as much as trial noise alone would give (p about 0.001 against no spread), which puts the spread of true per-task lifts near 15 points, a loose estimate from 18 tasks. With that spread, more replicates on the same 18 tasks barely help: 80 replicates would still leave the MDD near 10 points. The grid needs many more tasks. At 10 replicates, a 5-point MDD takes about 160 tasks (1,620 pairs) and a 3-point MDD about 450 tasks (4,510 pairs).
 - Tasks cost money before the grid. Its candidates were every pool task not already at the floor or held for L1, so more in-band tasks need a new source.
 
 **Localization as a lower-noise primary.** hit@1's interval here was 11.6 points wide against the primary's 17.2. Two limits: none already sits at 88.6%, so told has at most 11.4 points to gain, and a localization result says the model named the file, not that it fixed the bug. This lift came from R3c's own report-only lines, so a confirmatory test needs a fresh grid.
 
-**The hook-enforced /investigate arm.** the gstack Captain was asked to build an arm whose hooks enforce the procedure. R3c's told arm showed a DEBUG REPORT in nearly every trial but a numbered phase heading in none, so enforcement is the open question about exposure. At that size its MDD would be near 26 points, so it would claim no effect.
+**The hook-enforced /investigate arm.** the gstack Captain was asked to build an arm whose hooks enforce the procedure. R3c's told arm showed a DEBUG REPORT in nearly every trial but a numbered phase heading in none, so enforcement is the open question about exposure. A first look could run that arm beside none on R3c's 18 admitted tasks at 3 replicates each (108 trials; the cost estimate is in Agent notes) to measure exposure and cost. At that size its MDD would be near 26 points, so it would claim no effect.
 
-**What the line's remainder can buy.** The remainder can fund the enforced arm's first look with a lean amendment, pin and run, if that arm is built and pinned. Any powered round needs a new line or a raised ceiling, which is the project owner's call.
+**What the line's remainder can buy.** No pass-rate or localization round that resolves 3 to 5 points fits in what is left of the line. The amounts are in Agent notes. The remainder can fund the enforced arm's first look with a lean amendment, pin and run, if that arm is built and pinned. Any powered round needs a new line or a raised ceiling, which is the project owner's call.
 
 ## Deviations
 

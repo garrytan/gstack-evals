@@ -109,6 +109,38 @@ Units: TB2 counts trials (37 tasks times 3 replicates); review counts blocker-pa
 - **The placebo on the cheaper rungs (not preregistered).** gstack minus placebo: Haiku +5.4 points, particle-1 +4.5 (raw rates). Placebo minus none: Haiku -4.5, particle-1 -9.9 (the runner tag's analyze.ts gives -10 [-18, -2] on particle-1). So on particle-1 the added text alone may cost passes, and the procedure wins some back.
 - **Spread between replicates.** Opus none passed 78.4%, 81.1% and 83.8% in replicates 1 to 3, and gstack 81.1%, 86.5% and 83.8%. particle-1 gstack ranged from 70.3% to 89.2%. One replicate is not enough to confirm or refute a few points.
 
+### Reanalysis by task difficulty and of the timeouts (exploratory, post hoc)
+
+Run on 2026-11-01 for this file with item0.py (attached). It answers two questions from the insight plan's item 0. Every stratum we defined is reported; none was picked after seeing its result.
+
+**Does gstack lift Opus on the hard tasks?** We split TB2 by how hard each task was for Opus with no gstack. Splitting on the same none trials that the contrast uses biases the hard stratum's lift upward, because tasks land there partly by none's bad luck. So the main split is cross-fitted: in each replicate, a task counts as hard when none failed at least one of the other two replicates. Two splits use only outside information: the public TB2 leaderboard's frontier solve rate (below the median of these 37 tasks, 0.884) and TB2's own difficulty label.
+
+| Opus 5.5, hard stratum | Tasks | Paired trials | none | gstack | gstack - none [95% CI] | Tasks that differ | Swap-test p | MDD |
+|---|---|---|---|---|---|---|---|---|
+| Cross-fitted on none (main) | 9 | 25 | 24.0% | 36.0% | +12.0 [-8.0, +34.6] | 3 | 0.45 | 33.3 |
+| Leaderboard frontier rate below the median | 16 | 48 | 56.2% | 62.5% | +6.2 [-8.3, +20.8] | 7 | 0.59 | 21.2 |
+| TB2 label "hard" | 10 | 30 | 73.3% | 86.7% | +13.3 [+0.0, +33.3] | 2 | 0.50 | 24.9 |
+| In-sample on none (biased upward, descriptive only) | 9 | 27 | 22.2% | 40.7% | +18.5 [+0.0, +40.7] | 5 | 0.33 | 31.5 |
+
+The interval is a task-clustered percentile bootstrap (10,000 resamples, seed 20261031). The p-value comes from a permutation test that swaps the two arms' results within a task and recomputes the stratum each time, so it stays valid when the stratum is chosen from the none arm. The MDD is a normal approximation from a cluster-robust standard error, not a measured power.
+
+On the easy side no split shows a detectable difference (cross-fitted 97.7% against 97.7%; leaderboard easy half 100% against 100%; TB2 easy or medium -1.2 [-6.2, +3.7]). So under the cross-fitted and leaderboard splits all of gstack's net +3 on Opus sits on the harder tasks, but it rests on 2 to 7 tasks that differ, no test comes near significance, and the hard strata could only have seen gains of about 21 to 33 points. On Haiku and particle-1 the cross-fitted hard strata read +3.0 [-28.1, +29.4] and -7.7 [-29.2, +7.4]. A percentile interval that ends at exactly +0.0 means every task that differed favored gstack; the swap test, which accounts for how few they are, is the one to read.
+
+The answer: these 37 tasks can't tell whether gstack helps Opus on hard tasks. Five of the nine hard tasks were solved by at least one Opus arm in the analysed trials; the other four may still be solvable. Settling it needs new tasks where Opus with no gstack passes 20% to 80% of the time (the Why-null cycle sizes it at about 70 tasks).
+
+**Were gstack's 6 Opus timeouts tasks it was solving slowly?** Four of the six timeout trials passed; whether more time would have rescued the two failures is unknown. Each task has its own agent limit (12.5 or 15 minutes for these four tasks; #109 and an earlier draft of this file called it a 30-minute limit, which is the task-selection cap).
+
+| Task, replicate | Limit | Reward | What happened |
+|---|---|---|---|
+| model-extraction-relu-logits, 1 | 15 min | 0 | The model ended its last turn at minute 3.0 with a background task still running; the trial then sat until the limit. |
+| query-optimize, 1 | 15 min | 1 | Ended its last turn at minute 5.3, background task still running. |
+| overfull-hbox, 3 | 12.5 min | 0 | Ended its last turn at minute 9.6, background task still running. |
+| overfull-hbox, 1 | 12.5 min | 1 | Ended its last turn at minute 10.0, background task still running. |
+| torch-pipeline-parallelism, 1 | 15 min | 1 | Cut off mid-turn while running tests; its solution already passed. |
+| torch-pipeline-parallelism, 3 | 15 min | 1 | Cut off mid-turn while running tests; its last file edit was at minute 2.8. |
+
+In four of the six, Opus had ended its turn and a background task it had started kept the trial open until the limit. In the other two, Opus was still testing a solution that already passed. Four of the six passed; whether more time would have rescued the other two was not tested. The none arm solved torch-pipeline-parallelism in all 3 replicates, each session under a minute. So the timeouts cost time and money; on these four tasks gstack passed 10 of 12 and none 8 of 12. By #109's count, 5 Opus gstack trials ended with a background task still running, against 0 for none.
+
 ## Why null? (R48)
 
 The Why-null cycle is GEVA-100's (report at the Captain drive's reports/GEVA-100.md); its counts reproduce from the bundles.

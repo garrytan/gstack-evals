@@ -68,6 +68,7 @@ analyze's lines, exactly as printed. It exited 5 for both models, its code for a
 Opus 5.5:
 
 ```text
+re-check: 10 of 10 graded told trials exposed (0 infra), 8 passed (report only); Stop hook ran in 10 and held a stop back in 1 (report only)
 grid: none 16 of 210 graded trials passed (control rate 7.6%), told 16 of 210 (7.6%); 70 paired tasks
 exposure: 209 of 210 graded told grid trials exposed (99.5%; the gate needs 90%)
 allowance stops: told 0 of 210 sessions (0.0%), none 0 of 210 (0.0%), infra included; the truncation bound is 5 points
@@ -86,6 +87,7 @@ R3b outcome for Opus 5.5: FIX-METHOD (task fit). The primary is at or below zero
 GPT-6.1 Sol:
 
 ```text
+re-check: 10 of 10 graded told trials exposed (0 infra), 8 passed (report only); Stop hook ran in 10 and held a stop back in 8 (report only)
 grid: none 7 of 210 graded trials passed (control rate 3.3%), told 9 of 210 (4.3%); 70 paired tasks
 exposure: 210 of 210 graded told grid trials exposed (100.0%; the gate needs 90%)
 allowance stops: told 0 of 210 sessions (0.0%), none 0 of 210 (0.0%), infra included; the truncation bound is 5 points
@@ -169,12 +171,12 @@ The aim is to test told /investigate where it can matter: on tasks each model so
 
 How many tasks the admission keeps is exactly what R3c would measure. R3b shows that amendment 5's task model overstates headroom, so this post doesn't use it to guess the yield.
 
-Those are the hard tasks' costs.
+The rough cost, at R3b's measured costs a trial, is in Agent notes. Those are the hard tasks' costs. Tasks with headroom cost less in the screens, so these figures lean high.
 
 
 R3c can reuse R3b's code and add one admission stage, so its build may cost less, but the estimate keeps R3b's figure.
 
-Does it fit?
+Does it fit? At caps with 70 kept tasks on both models, it fits, and capping the grid at 50 kept tasks per model leaves more to spare. The admission alone answers the headroom question even if no grid follows. The costs are in Agent notes.
 
 ## Limits
 

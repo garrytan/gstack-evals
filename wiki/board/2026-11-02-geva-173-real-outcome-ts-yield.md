@@ -92,6 +92,7 @@ Shortfalls against the plan's thin-slice targets: 5 of 10 build tasks, 0 of 3 K1
 - Environment build rate: 181 of 189 probes built (96%). The 8 failures were gold conflicts, not environment failures, so image builds succeeded 181 of 181. Task builds succeeded 34 of 34.
 - Probe medians per task: build 4 s, image build 58 s, start 36 s, gold run 39 s.
 - Check medians per task: mechanical 297 s, full 497 s. The task build itself took a median of 5 s.
+- Cost: the VM time, the model spend, and the cost per valid task (7) and per sealed task (17) are in Agent notes.
 
 ## Sealed bundle
 

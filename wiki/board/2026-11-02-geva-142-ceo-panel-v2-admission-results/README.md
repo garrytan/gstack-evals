@@ -101,6 +101,19 @@ Panel: NOT ADMITTED, ceiling (none R = 1, any severity 1, Power n/a; flags F1 se
 - **By item kind.** none found every item kind in the draw, at must-fix, in every pass: H-X (4 items), H-F (3), H-T (1), P-alt (2) and U (2). The draw held no P-premise or P-size item ([readings-extra.txt](readings-extra.txt)).
 - **Judging coverage** was complete. Matching took 12 judge requests in all, 8 of them primary. No blocker had an arm disagreement, so judge-join sent the second judge only its seeded 20% sample, 3 of the 12 blockers, and the third judge the 1 blocker where the first two differed. Adjudication took 21 judge requests in all, 8 of them primary; the second judge read 24 findings (every one the primary ruled not-defect or known-informational, plus a seeded 20% sample of the rest) and the third read 8. Nothing was left unjudged.
 
+## Cost
+
+Tokens per arm, summed from each session's metered usage over 16 sessions ([tokens.txt](tokens.txt)):
+
+| Arm | Input | Cache read | Cache write | Output | Total | Requests |
+|---|---|---|---|---|---|---|
+| none | 96 | 1,031,632 | 153,774 | 57,850 | 1,243,352 | 48 |
+| gstack | 122 | 2,538,328 | 597,589 | 87,872 | 3,223,911 | 61 |
+| gstack-forced | 200 | 5,239,095 | 951,551 | 168,014 | 6,358,860 | 100 |
+| All arms | 418 | 8,809,055 | 1,702,914 | 313,736 | 10,826,123 | 209 |
+
+So per session, gstack used 2.6 times none's tokens (means) and cost 2.5 times as much (medians), and gstack-forced used 5.1 times the tokens (means) at 4.5 times the cost (medians). Neither bought any recall on this panel.
+
 ## Why null? (R48)
 
 The panel disposition is NOT ADMITTED and flags F1 and F3 are raised, so one Why-null cycle runs (prereg section 11). Exposure rates, beside the verdict: gstack-forced exposed 16 of 16 and ran the procedure 16 of 16; gstack exposed 0 of 16 and ran it 0 of 16; none 0 of 16.

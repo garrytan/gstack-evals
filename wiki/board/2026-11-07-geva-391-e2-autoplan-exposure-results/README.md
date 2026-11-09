@@ -65,7 +65,7 @@ The opt-in stop gate holds the session's final stop while an applicable phase ha
 - **Question.** With gstack's opt-in stop gate on, does told /autoplan on Opus 5.5 visibly run its procedure, as read by the fixed detector? The estimand is the share of told sessions read exposed after the two verdict-line checks. The check passes at 3 of 4.
 - **Arm.** R61's told arm, unchanged: gstack ca5dbfc7 installed with the lite loadout and the stop gate in a clean HOME that the session sees as /root. The run host rebuilt the arm tar with R61's install script (sha256 683e54cf...), and its checks passed: head ca5dbfc7 and its pinned version, lite loadout and gate on, exactly the pin's two Stop hooks, a clean checkout, and a render of 205 files with digest 3a06ddf7, as in R61. There is no none arm and no judge, because the check reads exposure only.
 - **Model and harness.** claude-opus-5-5 through Anthropic's API and the run's metering proxy. Claude Code 2.1.312 with the claude-code-preset system prompt, claude-agent-sdk 0.2.174, Harbor f3a5a92 with HARBOR_TELEMETRY=0, and CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1. The session kind is interactive, and autoplan runs its default full kind. The registry turns t1 to t3 run verbatim (t2 loads /autoplan), with the rec persona and its hold line.
-- **Tasks.** One trial each, one at a time.
+- **Tasks.** tgff24032962, tg8d524982ac, tg5b38fec201 and tg5dce6b3f8b, in that order: G's frozen autoplan draw on T-G, minus R61's two tasks and the two tasks whose ungated G session cost more than a set bar (the bar is in Agent notes). One trial each, one at a time.
 - **Detector.** autoplanExposure at the run commit. It is G's frozen detector with one rule changed, when a phase counts as loaded: a Read of the methodology path from the snapshot's JSON or of the review SKILL.md (as before), a Read of the phase's own methodology file after a sole methodology call piped at most once (new), or a simple Bash read of either file (new). The amendment lets one leading cd to a plain path come before the sole call. A session reads exposed only when config, scope, review_skills_loaded and findings_in_order all pass.
 - **Rules.** Intention to treat. As each session settled, the run thread read it with e2-read.ts, counted the rule that credited each phase's load, applied the refusal rule (a refused call reads not exposed) and the over-credit rule (a load that rests on an open over-credit shape reads not exposed), and only then decided the early stop and opened the next session. A gap reruns once in the whole check. The early stop comes at 3 exposed or 2 not exposed. A cap stop is an incomplete run.
 - **Start rules.** All 12 held before the first lease. The R61 re-read at the run commit matched the amended prediction (13:47:23Z). The image manifest was rebuilt under custody (13 rows, sha256 6138d946...). Dry run part 2 passed on a temporary ledger with a stand-in upstream. The dry run of both verdict-line checks passed on the host and on the run thread's machine: case 1 read not exposed by the refusal rule, cases 2 and 3 by the over-credit rule, and case 4 stayed exposed. Three detector-exposed sessions with one reclassified tallied 2 exposed and 1 not exposed, which doesn't settle a pass.
@@ -104,6 +104,13 @@ The opt-in stop gate holds the session's final stop while an applicable phase ha
 
 **Session facts** (report-only, session-facts.txt and the stage driver's session log).
 
+| | Session 1 | Session 2 | Session 3 |
+|---|---|---|---|
+| Termination | completed | completed | completed |
+| Persona in t2 | 1 question (recommended reply), 0 prose | 1 question (recommended reply), 0 prose | 1 question (recommended reply), 0 prose |
+| /autoplan loads in t2 | 1 | 1 | 1 |
+| Model calls (proxy requests, all answered) | 191 | 171 | 292 |
+| Tool calls | 242 | 179 | 353 |
 
 None of the question-stop risks in R61 prereg section 2 showed up, and no session ended on the budget. Pooled, E2's gated sessions cost 1.12 times G's ungated sessions on the same tasks (both G trials averaged), against R61's 1.31 on two sessions. That is a description from one trial per task, not an estimate of what the gate costs.
 
@@ -163,7 +170,7 @@ Where it goes, as prereg section 9 says for fewer than 3 exposed:
 
 ## What an outcome test would need
 
-An exposure pass shows only that the procedure ran where the detector can see it.
+An exposure pass shows only that the procedure ran where the detector can see it. An outcome test needs four things on top of that: tasks with headroom (T-G has none: plain Opus 5.5 solved 22 of 22), a headroom check on the no-gstack arm before the comparison (the next-round plan priced one, and its price and cap are in Agent notes), a no-gstack arm paired with the told arm on every task, and enough pairs to detect a useful effect.
 
 The next-round plan sized the comparison with plan v3's power script (the same grid, times 1.2), told gated autoplan against no gstack, scored solved or not:
 
@@ -297,7 +304,7 @@ An outcome test needs four things on top of that: tasks with headroom (T-G has n
 
 Expected paid assumes $24 to $29 per told session on harder tasks plus $1.50 per none session.
 
-**autoplan's $2,000 line is too small to give an outcome test enough power.** Less than $800 is left. A 20-point test needs 42 x 4, about $4.3k to $5.1k expected, past the line.
+**autoplan's $2,000 line can't power an outcome test.** Less than $800 is left. Spent entirely on pairs, with no headroom check, it buys fewer than 30 once harder tasks are mined, and even 30 pairs has an MDD of 43.2 points. A 20-point test needs 42 x 4, about $4.3k to $5.1k expected, past the line. Any comparison run inside the line would be descriptive.
 
 Dry run part 2's first attempt (14:40Z) found /dev/shm empty and failed at once; its temporary-ledger leases opened and settled at $0.00 and $0.03, on the temporary ledger, not the real one.
 

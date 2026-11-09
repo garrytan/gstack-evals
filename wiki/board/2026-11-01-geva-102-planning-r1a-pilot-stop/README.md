@@ -96,6 +96,10 @@ This read is not in the prereg. It counts, from each session's transcript, wheth
 
 The skill body arrived in every gstack session on the Claude models (46,151 against 20,345 prompt tokens). On Opus the procedure did not run beyond its start helper. Fable ran much more of it, at three times the cost of plain Fable. No session asked the user anything, so the rec user was never used.
 
+## Cost
+
+Costs by model, per session and per flaw flagged are in Agent notes. Median output tokens per session and every other per-arm figure are in [readings.json](readings.json). The prereg projected a cost per Opus session from gstack's reservation and one per Fable session; the metered rates came in 35 and 13 times lower. No further R1a item was recorded after the stop.
+
 ## Why null? (R48)
 
 This is a stop, not a null. But it carries no verdict on gstack, so it gets the cycle.

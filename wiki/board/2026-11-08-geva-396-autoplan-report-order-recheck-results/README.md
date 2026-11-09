@@ -114,9 +114,23 @@ No refusal was for order: each was a publish before its own report. Where the re
 
 **By draw group** (report-only, addendum section 2). On tasks 1 and 2, which the fix's replays didn't come from, 1 of 2 read exposed, and the miss is the spare. On tasks 3 and 4, the replay sources, 2 of 2 read exposed. A pass needed at least one exposed session on a replay-source task, and it rests on both. Beside E2 on the same tasks:
 
+| Task | E2 | E3 |
+|---|---|---|
+| tgff24032962 | exposed; gate blocked 3 (ceo, dx, eng), released | exposed; blocked 3 (ceo, dx, eng), released, 5 publishes refused |
+| tg8d524982ac | not exposed, findings_in_order false, nothing counted as published; gate blocked 3 (ceo each time) and exhausted before any report | exposed, published ceo, dx, eng in order; blocked 3 (ceo, dx, eng), released, 4 publishes refused |
+
+The per-session costs are in Agent notes.
 
 **Session facts** (report-only, session-facts.txt and the stage driver's session log).
 
+| | Session 1 | Session 2 | Session 3 | Session 4 |
+|---|---|---|---|---|
+| Termination | completed | completed | completed | completed |
+| Persona in t2 | 1 question (recommended reply), 0 prose | 2 questions (recommended reply), 0 prose | 1 question (recommended reply), 0 prose | 1 question (recommended reply), 0 prose |
+| /autoplan loads in t2 | 1 | 1 | 1 | 1 |
+| Model calls (proxy requests, all answered) | 202 | 264 | 194 | 190 |
+| Tool calls (the session's own) | 224 (182) | 299 (239) | 251 (209) | 200 (154) |
+| Own tool results that read as errors | 12 | 10 | 13 | 11 |
 
 No session ended on the budget, the turn limit or the wall limit. On the three tasks with a G reading, E3's gated sessions cost 1.17 times G's ungated sessions (both G trials averaged), against E2's 1.12 and R61's 1.31. That is a description from one trial per task, not an estimate of what the gate costs.
 
@@ -162,7 +176,7 @@ Across the four sessions, no phase report came before the gate's first refusal. 
 
 ## What comes next
 
-Exposure passing doesn't show that autoplan improves outcomes. It shows only that, with this gate, the procedure ran where the detector can see it.
+Exposure passing doesn't show that autoplan improves outcomes. It shows only that, with this gate, the procedure ran where the detector can see it. An outcome test needs four things on top of that: tasks with headroom (T-G has none), a headroom check on the no-gstack arm before the comparison (the next-round plan priced one at 20 tasks x 3 trials, and its price and cap are in Agent notes), a no-gstack arm paired with the told arm on every task, and enough pairs to detect a useful effect.
 
 E2's results post sized the comparison with plan v3's power script (the same grid, times 1.2), told gated autoplan against no gstack, scored solved or not:
 

@@ -222,6 +222,17 @@ exposure.py on review (selected rows, sessions per arm):
 - **GST-734.** Both grids ran on a driver older than the GST-734 fix. GEVA-131 counted the sessions that ended with a background task still open at the first result before review-sdk launched: 0 of 66 in each of control, variant and none, and 0 of 2 in each pilot arm. The same script, with only its paths changed, finds 1 of 33 in control-sdk (gstack#3540, pass 1, a background bash). That touches only the control-against-control-sdk secondary, which has no verdict.
 - **GST-958 does not apply.** All 666 TB2 trials have laneb-summary.json.
 
+## Cost
+
+**Review**, review-cost.py on the copy without the gap row:
+
+| Ratio of mean dollars per unit-pass | Units | PRs | Ratio [95% CI] |
+|---|---|---|---|
+| variant / control | 33 | 32 | 0.920 [0.871, 0.972] |
+| control / none | 33 | 32 | 1.340 [1.254, 1.427] |
+| variant / none | 33 | 32 | 1.232 [1.166, 1.310] |
+| control / control-sdk | 33 | 32 | 0.940 [0.879, 1.009] |
+
 ## Why null? (R48)
 
 **Opus 5.5: FIX-METHOD, with a TB2 loss beside it.**

@@ -135,6 +135,10 @@ Three cases decide most of the escaped recall: every Opus and Haiku trial caught
 
 The preregistered exploratory cell ran because the grid and its judging stayed under its preregistered bar. Opus at effort `high` ran the gstack arm on the 6 escaped defects, 1 trial each. It caught d13, d14, d11, d12 and d15 and missed d04: 5 of 6 (83%), against 4 of 6 (67%) for Opus at `medium` in trial 1 on the same cases. That is +17 pts [0, 50], one case better and none worse. Its recall at CRITICAL was 50% against 33%. It cost $5.05 against $4.31 for those 6 units, with 17,800 output tokens per unit against 11,600. The judge saw the Opus-high findings in batches of their own, while the medium cell's findings were judged in batches mixed with other cells. This cell enters no other table above.
 
+## Cost
+
+Per 72 units, gstack's prompts cost 5.7 times the plain prompt on Opus, 4.0 times on Haiku and 2.9 times on DeepSeek.
+
 ## Limitations
 
 - The treatment is a diff-only single call per reviewer prompt, not the /review workflow (see above).

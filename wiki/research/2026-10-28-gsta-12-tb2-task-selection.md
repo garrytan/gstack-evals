@@ -20,7 +20,7 @@ Use Terminal-Bench 2.0 only (`terminal-bench@2.0` in Harbor's registry), with th
 
 The main caveat: Terminal-Bench 2.0 is close to saturated for the newest frontier models in the published data (Claude Opus 4.7 and GPT-5.5, April to May 2026). Only 10 tasks meet the full target window (frontier passes sometimes, cheap models mostly fail) and also fit the cost limits. The other 10 slots go to tasks that Opus 4.7 and GPT-5.5 already pass 72 to 93% of the time, and most of them are also easier for cheap models. Expect Opus 5.5 at or near ceiling on most of ranks 11 to 20. Report Opus 5.5 lift on ranks 1 to 10 separately.
 
-Estimated cost per trial: Opus 5.5 about $1.29, Haiku 5.5 about $0.05 to $0.24, DeepSeek V4.1 Flash 1017 about $0.05 to $0.16. (see "Cost estimate").
+Estimated cost per trial: Opus 5.5 about $1.29, Haiku 5.5 about $0.05 to $0.24, DeepSeek V4.1 Flash 1017 about $0.05 to $0.16. Gate the full run on a measured Opus 5.5 cost per trial (see "Cost estimate").
 
 ## Sources
 
@@ -164,6 +164,10 @@ Each task's token profile is WOZCODE's Opus 4.7 median per trial. Across the 20 
 - Opus 5.5: for each task, the larger of (a) those tokens at Opus 5.5 prices with 5% of cached tokens counted as 5m writes, and (b) 0.85 times the median billed Opus 4.6 cost (0.85 converts Opus 4.6 prices to Opus 5.5 prices, including the larger tokenizer). Mean over the list: $1.29. Range: $0.46 (polyglot-c-py) to $1.97 (adaptive-rejection-sampler).
 - Haiku 5.5, assuming 1.5 times the Opus tokens: $0.05 if prompts stay under 100k tokens, $0.24 if every prompt is over 100k.
 - DeepSeek V4.1 Flash 1017, assuming 1.5 times the Opus tokens: $0.05 off-peak with 95% cache hits, $0.16 at peak with 80% cache hits.
+
+### Whole run
+
+The whole-run scenarios (20 tasks, 3 arms, Opus 1 trial, Haiku and DeepSeek 2 trials each) and their costs are in Agent notes. The planning scenario fits the cap. The high scenario does not. The Opus cells carry most of the risk. A suggested gate: run the none arm on Opus for 2 or 3 list tasks first and read the real cost per trial. If the mean is above the threshold given in Agent notes, cut Opus to ranks 1 to 13 or to the 10 tier A tasks before running the skill arms. The Haiku figure depends mostly on whether prompts cross 100k tokens, which short TB 2.0 tasks mostly should not.
 
 These estimates are rough. Each task's token profile rests on 5 trials from one harness. Opus 5.5 may think more or less than Opus 4.7. Claude Code adds its own system prompt and tool definitions, and the skill arms add skill text and possibly extra steps.
 

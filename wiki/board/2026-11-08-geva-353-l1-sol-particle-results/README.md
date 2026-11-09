@@ -73,8 +73,8 @@ Sol's before-t report item, 11 of 80, is where the blind audit found the probe w
 
 Everything not listed here is as the Opus post's Setup gives it: the question, both pins, the arms and their tars, F1's 80 tasks and four parts, the probes and the analysis.
 
-- **Models.** The details are in Agent notes.
-- **Order.** Every item ran and settled, and none hit a cap stop.
+- **Models.** gpt-6.1-sol (OpenRouter's openai/gpt-6.1-sol, provider openai only, no fallback) and particle-1 (OpenRouter's particle-ai/particle-1, provider particle-ai only, no fallback), each inside Claude Code through Lane B's metering proxy, with a dollar allowance per SWE-rebench session (the amount is in Agent notes) and 100 turns.
+- **Order.** Section 9's leftover rule as Amendment E built it (the line's size is in Agent notes): Sol first (l1-route-sol, pilot-sol, l1-route-sol-f, f1-sol, f1-sol-offu), then particle-1 (l1-route-p1, pilot-p1, f1-p1), each launch behind a passing ceiling check. Every item ran and settled, and none hit a cap stop.
 - **Arms.** F1 ran none, before-u, after-u, before-t and after-t on both models, 400 sessions each. Amendment E added off-u on Sol only (f1-sol-offu, 80 sessions, its own launch after f1-sol). Neither model ran off-t, so S6's off-t lines print no outcome, and neither ran the TB2 twin, so S12 prints no outcome.
 - **Pilots.** 32 sessions per model: the pilot's 10 tasks on before-u and before-t, and 3 smoke tasks on after-u, after-t, off-u and off-t. The pilot rows feed admission only.
 - **Input bound.** OpenRouter has no token-count endpoint, so the proxy reserves each request's input from its body bytes. Amendment F moved Sol from one token per byte to one per 3 bytes after the pilot. particle-1 stayed at one per byte. See Run disclosures.
@@ -170,7 +170,7 @@ Every session of every arm was graded on both models: infra 0, cap stops 0, cont
 - **S10, probe I against the contract's own check** (after-t, 80). Sol: both met 63, probe only 0, contract only 16, neither 0, unrecorded 1. particle-1: both met 19, probe only 0, contract only 58, neither 0, unrecorded 3. The contract is never the score.
 - **S11, hooks.** The route hook fired in 36 of 80 after-u sessions on each model by the proxy's reading, and in 19 of 19 on the routed stratum. The proxy's and the transcript's readings disagree in 28 of 512 Sol sessions and 2 of 432 particle-1 sessions. They were not traced, and this post's hook counts use the proxy's reading.
 - **S13, background work at the result.** No F1 arm on either model is near the 10% rule. Sol's smoke after-u and after-t each had 1 of 3.
-- **Stops inside sessions.** These sessions stay in the tables as graded, with their verifier result.
+- **Stops inside sessions.** Sol hit the session allowance in 4 of 32 pilot sessions and 8 of 480 F1 sessions (before-u 1, after-u 1, before-t 2, after-t 1, off-u 3), and the turn cap in 4 F1 sessions (none 1, before-t 2, after-t 1). particle-1 never hit the allowance and hit the turn cap in 21 F1 sessions (none 3, before-u 5, after-u 3, before-t 7, after-t 3). These sessions stay in the tables as graded, with their verifier result.
 
 ## Opus 5.5 beside Sol and particle-1
 
@@ -249,13 +249,17 @@ particle-1's B1 is a KEEP and needs no cycle. Sol's B3 reads a gain but carries 
 None of these changes a primary, a cap, an arm, a draw or a scoring rule.
 
 1. **Harbor telemetry.** Harbor jobs on the part VMs ran with Harbor's PostHog telemetry on, as every Opus L1 part did. launch.sh passes no HARBOR_TELEMETRY to the VM. The payload is counts, durations, token and cost totals, enum labels and flag names, with no task, repository or path identifiers. The local route checks set HARBOR_TELEMETRY=0.
-2. **The input estimate on the OpenRouter route.** The proxy bounds each request's input from its body bytes, because OpenRouter has no token count.
-3. **The vyper-4801 refusals.** In f1-sol's part f1-3, 15 requests on vyperlang__vyper-4801, one session in each of the five arms, ended with the provider's content flag for possible cybersecurity content, passed through by OpenRouter, or were the retry that followed. The watch run after every part from l1-route-sol-f on (watch-f, sha256 e2dad529) found no other such request. Sol's off-u session on the same task drew no flag.
+2. **The input estimate on the OpenRouter route.** The proxy bounds each request's input from its body bytes, because OpenRouter has no token count. At one token per byte, pilot-sol had 4 of 32 allowance stops, all on unit8co__darts-2985 (the spend at each refusal and the allowance are in Agent notes). Amendment F set Sol's bound to one token per 3 bytes for every later Sol item (the pilot's tightest request ran at 3.35 bytes per token). particle-1 stayed at one token per byte.
+3. **The vyper-4801 refusals.** In f1-sol's part f1-3, 15 requests on vyperlang__vyper-4801, one session in each of the five arms, ended with the provider's content flag for possible cybersecurity content, passed through by OpenRouter, or were the retry that followed. A stream cut before it reports input is charged its bytes/3 worst case, so the ledger holds worst-case charges for requests the provider refused (the amount is in Agent notes), and the log can't show what the provider billed. The watch run after every part from l1-route-sol-f on (watch-f, sha256 e2dad529) found no other such request. Sol's off-u session on the same task drew no flag.
 4. **Sol's and off-u's allowance stops.** Under one token per 3 bytes, f1-sol had 5 of 400 allowance stops (before-t 2, before-u 1, after-t 1, after-u 1, none 0) and f1-sol-offu 3 of 80. Two of f1-sol's five are the vyper-4801 sessions in before-t and after-u, where the worst-case charges pushed spend toward the allowance. The pilot's 4 stops (item 2) are in the pilot rows that admission reads.
 5. **particle-1's pilot loads.** In pilot-p1, particle-1 loaded /investigate in 0 of 32 sessions, told arms included (before-t 0 of 10, after-t 0 of 3, off-t 0 of 3). That is why B1 was admitted (before-u 0 of 10). F1's probe gate makes the exposure call for B3.
 6. **A score seen before the read audit.** While counting exposure on f1-p1, the run's operator printed load_investigate per F1 arm (after-u 12 of 80, every other arm 0 of 80). That is B1's measure, seen before the read audit. No other score line was read early, and the read audit changed no load count.
 7. **Two particle-1 none rows restored.** The run table held 2 none rows as contaminated (vyperlang__vyper-4801 and Cambridge-ICCS__TCTrack-119). The read audit overturned both, because no gstack file content came back, and audit.ts apply returned them to graded.
 8. **Seven particle-1 packets labeled by a fresh reader.** Two readers stopped on the crew's cost watch with 7 packets left. One fresh Opus 5.5 reader labeled them at medium effort, where the other 18 readers ran at high effort. The 7 packets are all probe L packets, and probe L agreed on all 32.
+
+## Cost
+
+The dollar figures are in Agent notes. after-t's cost per pass is 1.24 times none's on Sol and 1.18 times on particle-1 (Opus: 1.27), the ratio #169's G3 named (descriptive here).
 
 ## Limits and threats
 

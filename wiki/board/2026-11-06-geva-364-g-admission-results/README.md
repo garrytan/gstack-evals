@@ -139,19 +139,20 @@ No rerun ran. A cap stop is never retried; a rerun at the same allowance would s
 
 - *Exposure.* 0 of 18 scored told sessions showed the procedure. So this run did not see the skill's procedure work, and the CUT-CANDIDATE does not rest on a measured null effect of it.
 - *Task fit.* The slice is the work the skill claims to help with: multi-file features and fixes in real repositories, planned before code.
-- *Power, floor and ceiling.* none solved 22 of 22 (95% CI 84.6% to 100%). On these tasks there is no solve-rate room for any skill to show a gain.
+- *Power, floor and ceiling.* none solved 22 of 22 (95% CI 84.6% to 100%). On these tasks there is no solve-rate room for any skill to show a gain. At metered prices the skill alone can't reach a 20-point MDD within its cap. The costs are in Agent notes.
 - *Frontier without it.* Plain Opus 5.5 does the job without the skill. This is the second attempt to raise the ceiling that found none, after the seeded-flaw [panel v3 headroom check](../2026-11-03-geva-250-panel-v3-headroom-results.md), where plain Opus 5.5 found 15 of 16 planted engineering flaws.
 
-The prereg's section 11 tied plan-eng-review's cut reading to a confirmatory told arm. Admission stopped, so that arm won't run under this prereg, and the Captain sent the CUT-CANDIDATE to the project owner on this evidence and panel v3's.
+The CUT-CANDIDATE rests on the last two checks: Opus 5.5 does this job without the skill, and the skill's cap can't power a 20-point test of the skill alone. The prereg's section 11 tied plan-eng-review's cut reading to a confirmatory told arm. Admission stopped, so that arm won't run under this prereg, and the Captain sent the CUT-CANDIDATE to the project owner on this evidence and panel v3's.
 
 **autoplan: FIX-METHOD (saturation and exposure).**
 
 - *Exposure.* 0 of 23 scored told sessions showed the procedure. Unattended told autoplan, in its default full kind, never visibly ran it.
 - *Task fit.* As for plan-eng-review.
+- *Power, floor and ceiling.* The same none ceiling. The price of autoplan's cheapest re-size rung of any size, alone, is in Agent notes.
 - *Frontier without it.* As for plan-eng-review.
 - *Cost.* A told autoplan session cost 19.7 times a none session, about four times plan v3's house multiple.
 
-The thing to fix before any retest: unattended autoplan costs about 20 times a none session and never visibly ran its procedure. Plan v3's section 9 names the strict stratum as autoplan's one ceiling raise, a proposal with its own price and approval.
+The thing to fix before any retest: unattended autoplan costs about 20 times a none session and never visibly ran its procedure. A retest needs an unattended told session in which the procedure runs where the detector can see it, at a cost the skill's line can power, and tasks with headroom. Plan v3's section 9 names the strict stratum as autoplan's one ceiling raise, a proposal with its own price and approval.
 
 **R56 rows.**
 

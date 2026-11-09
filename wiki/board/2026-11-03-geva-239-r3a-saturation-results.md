@@ -102,6 +102,10 @@ Three tasks are on both lists (django__django-15695, sphinx-doc__sphinx-8595, sy
 - **Pilot passes.** 9 of 10 and 10 of 10 told trials passed. They are not a comparison with the screen: the prereg froze none, and 10 single trials can't show one.
 - **Sol's budget stops.** In 4 of Sol's 10 told sessions, the proxy refused at least one request at the session budget check. The check counts each request's worst-case cost before sending it (runner/proxy.ts at the pin), so it can refuse well under the cap. All four still passed. None of the four was one of Sol's four exposed sessions, so 4 of Sol's 6 unexposed told sessions had a budget refusal. A refusal may have cut a session short before any report, or not; we read no transcripts. It is a harness note for the next Sol run.
 
+## Cost
+
+The ledger amounts and the per-cell cost table are in Agent notes. A told session cost 2.2 times a none session on Opus and 2.7 times on Sol. The pilot's 10 tasks are not the screen's 91, so the ratios are rough.
+
 ## Why null? (R48)
 
 This is a saturation null under R61. An exposure problem sits behind it and would have stopped the run on its own.

@@ -40,6 +40,7 @@ Before admission's first session, the host checks out the run commit again and r
 |---|---|
 | 1. The prereg has merged | Yes |
 | 2. O6 merged with its concurrency test; the envelope host is initialized, awake and named in the approvals entry | Yes; the host is below |
+| 3. The Captain recorded the stage caps | Yes; the caps are in Agent notes |
 | 4. O6 admits and reserves each stage; every paid stage spends through a U4 lease | Enforced by the session driver at the run commit |
 | 5. O1, O2 and O4 merged | Yes |
 | 6. O5's keyless dry run passed | Yes (O5 pin post) |

@@ -61,12 +61,14 @@ Opus 5.5:
 
 ```text
 admission: 71 of 200 graded screen tasks unsolved by Opus 5.5 none (0 infra); pilot exposure 10 of 10 graded told trials
+R3b start: 70 tasks; the Captain records both caps before R3b starts
 ```
 
 GPT-6.1 Sol:
 
 ```text
 admission: 81 of 200 graded screen tasks unsolved by GPT-6.1 Sol none (0 infra); pilot exposure 10 of 10 graded told trials
+R3b start for GPT-6.1 Sol: 70 tasks; the Captain records r3b4-sol's cap before Sol's R3b starts
 ```
 
 Counts from each run's record.json and trials.jsonl:
@@ -97,7 +99,7 @@ Digests, sha256 of one id per line: the admitted lists, sorted, are df48f3cc0c9e
 - **Gate patterns.** Every exposed pilot trial matched DEBUG REPORT. A Phase heading matched in no Opus trial and in one Sol trial.
 - **Pilot passes.** 8 of 10 for each model. The pilot's tasks were drawn from all 200, and only two of them are admitted for each model; told failed both, on both models. One trial on each of 10 tasks is not a comparison, and the prereg freezes none.
 - **Sol's allowance stop.** The check counts each request's worst-case cost before sending it, so it can refuse well under the allowance.
-- **Told against none cost.** The pilot's 10 tasks are not the screen's 200, so the ratio is rough.
+- **Told against none cost.** A told trial cost about twice a none trial; the costs are in Agent notes. The pilot's 10 tasks are not the screen's 200, so the ratio is rough.
 
 ## Deviations
 
