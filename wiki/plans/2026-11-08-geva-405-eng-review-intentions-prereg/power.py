@@ -92,7 +92,7 @@ for mset in ("1-2", "2-4"):
                     m5 = mdd(p0, rho, TAU, n, passes, mset, 0.05, rng)
                     m17 = mdd(p0, rho, TAU, n, passes, mset, 0.05 / 3, rng)
                     print("m %-3s  p0 %.2f  rho %.3f  n %2d  passes %d  MDD05 %s  MDD0167 %s" % (mset, p0, rho, n, passes, f(m5), f(m17)), flush=True)
-print("Part B. CUT-CANDIDATE reading (95%% upper bound of skill minus none below +%.2f): share of simulated runs, and the median half-width of the interval" % MARGIN)
+print("Part B. CUT-CANDIDATE reading (95%% upper bound of skill minus none below +%.2f): share of simulated runs, and the median half-width of the interval at d +0.05" % MARGIN)
 for mset in ("1-2", "2-4"):
     for n in (48, 64):
         for passes in (2, 1):

@@ -17,8 +17,8 @@ links:
   - garrytan/gstack-evals#191
   - garrytan/gstack-evals#253
 attachments:
-  - 41fc2b28f2c23411cdf4e25db89e71160b39e8ce1ce7d2ebe743749dd5ffd612  power.py
-  - efcf7a182ed2e1d44667856dd7a2a3f89ac3215d9da8a0a812fc127613715a63  power.txt
+  - b6363cd9457125e71300977f322e56fcf6fb51ed5b660cca7760b66f18166510  power.py
+  - b157d572138336f4daa2414ba6bf3451c62ab4fce1f9eaff3b42b4f2b43c3430  power.txt
 ---
 
 # Preregistration: does gstack's engineering plan review get a change's risky paths tested?
@@ -317,7 +317,7 @@ On the 16 calibration units:
 - **KEEP** for a skill arm on a model needs skill minus none to read helps. It is worded "its test plan names more of the paths where real bugs and later tests landed". It is flagged when the pairwise secondary shows the skill losing (a length-controlled win rate below 0.5 with an interval that excludes 0.5), or when stage 3 shows that arm's block leading to builds that pass fewer aftermath tests than none's, with an interval that excludes zero.
 - **The one-line framing carries it** is written only when skill minus none helps and skill minus lens has an upper bound below +0.05, the bound trim-to-lens uses. That reading is an R48 lead to cut the lines that don't help. When lens minus none helps but skill minus lens doesn't meet that bound, the post writes that the framing carries part of the gain, and that is no lead to cut.
 - **CUT-CANDIDATE** for a skill arm on a model needs skill minus none's 95% upper bound below the frozen margin of +0.05, with exposure at least 0.80, admitted headroom, passing stock and judge checks, and coverage at least 0.90. **Trim-to-lens** reads the same way on skill minus lens: an upper bound below +0.05 says the procedure adds nothing measurable over one line, even when both beat none.
-- A null whose upper bound reaches +0.05 is "no measurable difference" and FIX-METHOD on power. power.txt part B prints how often a true zero reaches CUT-CANDIDATE at this size: 26% to 34% of runs with 1 or 2 items a unit and 41% to 53% with 2 to 4, so a null here usually reads FIX-METHOD on power, and the post says so.
+- A null whose upper bound reaches +0.05 is "no measurable difference" and FIX-METHOD on power. power.txt part D prints how often a true zero reaches CUT-CANDIDATE at this size: 26% to 34% of runs with 1 or 2 items a unit and 41% to 53% with 2 to 4, so a null here usually reads FIX-METHOD on power, and the post says so.
 - Any null covers naming where real defects, follow-up tests and CI changes landed. It does not cover architecture review, the interactive skill, or what ships (stage 3 reads that descriptively).
 
 **What each result means for gstack's cut, written now.** A KEEP for the pre-cut skill on Opus says the cut removed something that worked, and the post recommends restoring it or carrying its working part into autoplan. A KEEP for the eng phase says autoplan still carries it. A KEEP for the candidate with the pre-cut skill not shown or null says the rebuilt skill should ship. CUT-CANDIDATE on every skill arm says plain Opus already plans these tests as well as any of them, and the cut stands on the main claim. The trim-to-lens reading names the lines to cut. Each goes to the Captain plainly, losses included.
@@ -363,11 +363,11 @@ The prior, stated before data: a gain of 5 to 15 points on Opus is plausible, be
 | Stage 2 runs: Opus 112 unit-passes at $7.55, Sol 56 at $6.80, particle-1 56 at $0.76 | $1,270 | $1,500 |
 | Stage 3 builds: 24 units x 6 build arms | $216 | $280 |
 | Judges: stage 1 labels $121, judge check $65, stage 2 labels $165, pairwise on Opus and Sol $45, arm-guess probe $3 | $399 | $520 |
-| Authoring and mining: 78 units at about $5.50 a passing unit, failures included; 24 stage 3 build units at about $8; generic-screen labels $22 | $676 | $800 |
+| Authoring and mining: 78 units at about $5.50 a passing unit, failures included; 24 stage 3 build units at about $8; generic-screen labels $22 | $643 | $800 |
 | Runner hosts (mining, run and verifier hosts on Ubicloud) | $55 | $70 |
 | Crew (this plan and its review, the build, run threads, stage 3, results and its review), re-costed from comparable measured lines | $480 | $520 |
 | Reserve | | $110 |
-| **All-in** | **about $3,230** | **$4,000** |
+| **All-in** | **about $3,200** | **$4,000** |
 
 The whole line sits at its $4,000 guideline at caps and under the $5,000 stop. Expected spend is about four fifths of the caps. The judge check costs about $65 of projection, and R78's cross-family judging with Astra is most of the judge line. Crew is re-costed from comparable lines measured from thread counters at about $1 per 1,000 credits ($753.29 over 15 L1 threads, $469.61 over 18 threads, so $26 to $50 a thread); this eval plans about ten threads.
 

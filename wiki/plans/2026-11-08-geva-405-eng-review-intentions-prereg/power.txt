@@ -32,7 +32,7 @@ m 2-4  p0 0.20  rho 0.500  n 64  passes 1  MDD05 0.10  MDD0167 0.11
 m 2-4  p0 0.20  rho 0.843  n 64  passes 1  MDD05 0.07  MDD0167 0.08
 m 2-4  p0 0.35  rho 0.500  n 64  passes 1  MDD05 0.11  MDD0167 0.13
 m 2-4  p0 0.35  rho 0.843  n 64  passes 1  MDD05 0.07  MDD0167 0.09
-Part B. CUT-CANDIDATE reading (95% upper bound of skill minus none below +0.05): share of simulated runs, and the median half-width of the interval
+Part B. CUT-CANDIDATE reading (95% upper bound of skill minus none below +0.05): share of simulated runs, and the median half-width of the interval at d +0.05
 m 1-2  p0 0.20  rho 0.500  n 48  passes 2  half-width 0.073  |  d -0.05 0.797  d -0.02 0.485  d +0.00 0.297  d +0.02 0.146  d +0.05 0.041
 m 1-2  p0 0.35  rho 0.500  n 48  passes 2  half-width 0.084  |  d -0.05 0.665  d -0.02 0.409  d +0.00 0.245  d +0.02 0.113  d +0.05 0.034
 m 1-2  p0 0.20  rho 0.500  n 48  passes 1  half-width 0.101  |  d -0.05 0.526  d -0.02 0.307  d +0.00 0.184  d +0.02 0.104  d +0.05 0.029
