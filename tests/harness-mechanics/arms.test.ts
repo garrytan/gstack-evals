@@ -99,6 +99,8 @@ describe("judge tar", () => {
     expect(judgeTarProblems(d, { ...m, facts_sha256: sha("g") }, tarf, []).length).toBe(1);
     expect(judgeTarProblems(d, { ...m, settings: { hooks: [{ event: "PreToolUse", matcher: "", command: "/root/.hm/judge/risky" }] } }, tarf, []).length).toBe(1);
     expect(judgeTarProblems(d, { ...m, dr_runtime_sha256: undefined }, tarf, []).length).toBe(1);
+    writeFileSync(join(d, "shape.tar"), "sk-proj-" + "b".repeat(40));
+    expect(judgeTarProblems(d, m, join(d, "shape.tar"), [])).toEqual([]);
     const keyed = join(d, "keyed.tar");
     writeFileSync(keyed, Buffer.concat([Buffer.alloc((64 << 20) - 10), Buffer.from("stub-openrouter-key-0123456789")]));
     expect(judgeTarProblems(d, m, keyed, [["OPENROUTER_API_KEY", "stub-openrouter-key-0123456789"]])).toEqual(["judge: the tar holds OPENROUTER_API_KEY"]);

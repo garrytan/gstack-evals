@@ -90,18 +90,18 @@ export function hookProblems(arm: Exclude<HmTar, "none">, entries: Hook[]): stri
 }
 
 /** The names of the key shapes, and of the env keys whose values, found in a buffer. Never the values. */
-export function keyHits(buf: Buffer, secrets: [string, string][]): string[] {
+export function keyHits(buf: Buffer, secrets: [string, string][], shapes = true): string[] {
   const text = buf.toString("latin1");
-  return [...KEY_SHAPES.filter(([, re]) => re.test(text)).map(([n]) => n), ...secrets.filter(([, v]) => v.length >= 16 && text.includes(v)).map(([n]) => n)];
+  return [...(shapes ? KEY_SHAPES : []).filter(([, re]) => re.test(text)).map(([n]) => n), ...secrets.filter(([, v]) => v.length >= 16 && text.includes(v)).map(([n]) => n)];
 }
 /** keyHits over a file read in 64 MiB chunks that overlap by 512 bytes, so a multi-GB tar never becomes one string. */
-export function keyHitsFile(path: string, secrets: [string, string][]): string[] {
+export function keyHitsFile(path: string, secrets: [string, string][], shapes = true): string[] {
   const size = 64 << 20, keep = 512, buf = Buffer.alloc(size + keep), hits = new Set<string>(), fd = openSync(path, "r");
   let carry = 0;
   try {
     for (let n = readSync(fd, buf, carry, size, null); n > 0; n = readSync(fd, buf, carry, size, null)) {
       const end = carry + n;
-      for (const h of keyHits(buf.subarray(0, end), secrets)) hits.add(h);
+      for (const h of keyHits(buf.subarray(0, end), secrets, shapes)) hits.add(h);
       carry = Math.min(keep, end);
       buf.copy(buf, 0, end - carry, end);
     }
@@ -110,7 +110,7 @@ export function keyHitsFile(path: string, secrets: [string, string][]): string[]
 }
 export const envSecrets = (): [string, string][] => SECRET_ENV.flatMap((k) => (process.env[k] ? [[k, process.env[k]!] as [string, string]] : []));
 
-/** Step 1's judge checks on the unpacked tar: the matcher on the risky entry, the judge files at the manifest's digests, hm_judge.py as committed, the runtime digest and its python, both backend configs, and no key in the tar. */
+/** Step 1's judge checks on the unpacked tar: the matcher on the risky entry, the judge files at the manifest's digests, hm_judge.py as committed, the runtime digest and its python, both backend configs, and no key in the tar: no env key value anywhere, and no key shape in the judge's own files (gstack ships fake keys in its redaction tests). */
 export function judgeTarProblems(tree: string, m: Record<string, any>, tar: string, secrets: [string, string][], drTarball?: string): string[] {
   const p: string[] = [];
   const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
@@ -130,7 +130,8 @@ export function judgeTarProblems(tree: string, m: Record<string, any>, tar: stri
     const f = join(tree, ".hm/judge/judge-" + b + ".json");
     if (!existsSync(f) || JSON.parse(readFileSync(f, "utf8")).backend !== b) p.push("judge: judge-" + b + ".json is missing or not backend " + b);
   }
-  const hits = keyHitsFile(tar, secrets);
+  const judgeDir = join(tree, ".hm/judge");
+  const hits = [...keyHitsFile(tar, secrets, false), ...(existsSync(judgeDir) ? readdirSync(judgeDir).flatMap((f) => keyHits(readFileSync(join(judgeDir, f)), [])) : [])];
   if (hits.length) p.push("judge: the tar holds " + hits.join(", "));
   return p;
 }
