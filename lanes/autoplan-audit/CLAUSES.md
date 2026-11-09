@@ -61,4 +61,6 @@ Each clause of the preregistration's section 13.5 (2026-11-09-geva-419) is one c
 | 55 | crashes after send, after settlement, before and after a cache write (real ledger) | tests/autoplan-audit/dryrun.test.ts, "clause 55" (dryrun.ts check 55) |
 | 56 | one ledger lease opened and settled with a refused call at the admission edge (E_ALLOWANCE) | tests/autoplan-audit/dryrun.test.ts, "clause 56" (dryrun.ts check 56) |
 | extra 57 | told custody on a fixture sealed with a throwaway age identity | tests/autoplan-audit/dryrun.test.ts, "clause 57" |
+| extra 59 | amendment A1: a stage 1 refusal blocks the panel, refused units count as missing, the free readings are present | tests/autoplan-audit/dryrun.test.ts, "clause 59"; tests/autoplan-audit/cli.test.ts, "A1: smoke, project and stage2 refuse to start" |
+| extra 60 | amendment A1: with no refusal nothing changes | tests/autoplan-audit/dryrun.test.ts, "clause 60" |
 | extra 58 | power.py part A on fixed inputs | tests/autoplan-audit/dryrun.test.ts, "clause 58"; tests/autoplan-audit/stats.test.ts |

@@ -108,10 +108,17 @@ export function builtFor(records: readonly RunRecord[], g: Git, frozen?: Frozen)
   });
 }
 
-export function unitRows(built: readonly Built[], id: Identity): { rows: UnitRow[]; packets: Map<string, Packet>; changes: Map<string, string> } {
+export interface Refusal {
+  run: string;
+  path: string;
+  packets: number;
+}
+
+export function unitRows(built: readonly Built[], id: Identity): { rows: UnitRow[]; packets: Map<string, Packet>; changes: Map<string, string>; refused: Map<string, Refusal> } {
   const rows: UnitRow[] = [];
   const packets = new Map<string, Packet>();
   const changes = new Map<string, string>();
+  const refused = new Map<string, Refusal>();
   for (const b of built) {
     const owner = sixGrams(ownerTextOf(b.record));
     if (b.stratum === "none" && b.record.kind === "full") continue;
@@ -128,15 +135,23 @@ export function unitRows(built: readonly Built[], id: Identity): { rows: UnitRow
         const src = { unit: uid, commit: "", path: b.path, built: b.text, change };
         const p = buildPacket(src, id);
         if (p) {
-          outbound(p, () => src, id, owner);
-          packets.set(uid, p);
-          bytes = p.bytes;
+          try {
+            outbound(p, () => src, id, owner);
+            packets.set(uid, p);
+            bytes = p.bytes;
+          } catch (e) {
+            if (!(e instanceof ArError) || e.code !== "E_AR_PACKET_LEAK") throw e;
+            const key = b.record.id + "\t" + b.path;
+            const r = refused.get(key) ?? { run: b.record.id, path: b.path, packets: 0 };
+            r.packets++;
+            refused.set(key, r);
+          }
         }
       }
       rows.push({ id: uid, run: b.record.id, kind: b.record.kind, stratum: b.stratum, path: b.path, hit, score, ablatable, packetBytes: bytes, incorporated: u.incorporated });
     }
   }
-  return { rows, packets, changes };
+  return { rows, packets, changes, refused };
 }
 
 export interface Reading {
@@ -158,8 +173,10 @@ export interface Stage1Out {
   counts: Record<string, number>;
   readable: Record<string, { parsed: number; total: number; gate: boolean }>;
   readings: Reading[];
-  gate2: { eligibleRuns: number; eligibleUnits: number; missing: number; hits: number; ablatable: number; ok: boolean; reasons: string[] };
+  gate2: { eligibleRuns: number; eligibleUnits: number; missing: number; hits: number; ablatable: number; refused: number; refusedRuns: number; ok: boolean; reasons: string[] };
   smoke: { minors: number; pass: boolean };
+  /** Amendment A1: the refused packets by run and post, kept out of stage1.json and written to refused.json. */
+  refusals?: Refusal[];
 }
 
 export function stage1(o: { frame: string; repo: string; commit: string; matrix: Matrix; withheld?: string[]; sink: string; frozenFrame?: FrozenFrame }): Stage1Out {
@@ -217,7 +234,9 @@ export function stage1(o: { frame: string; repo: string; commit: string; matrix:
 
   // GATE-2 preparation
   const built = builtFor(records, g);
-  const { rows, packets } = unitRows(built, id);
+  const { rows, packets, refused } = unitRows(built, id);
+  const refusedPackets = [...refused.values()].reduce((a, r) => a + r.packets, 0);
+  const refusedRuns = new Set([...refused.values()].map((r) => r.run)).size;
   const primary = rows.filter((r) => r.stratum === "lean-primary");
   const primaryMissing = primary.filter((r) => r.packetBytes === null).length;
   const eligibleRuns = new Set(built.filter((b) => b.stratum === "lean-primary").map((b) => b.record.id)).size;
@@ -229,7 +248,8 @@ export function stage1(o: { frame: string; repo: string; commit: string; matrix:
   if (primary.length < 40) reasons.push("fewer than 40 eligible lean units");
   if (overMissing(primaryMissing, primary.length)) reasons.push("more than 20% of eligible units missing");
   if (!sup.ok) reasons.push("gold supply short");
-  const gate2 = { eligibleRuns, eligibleUnits: primary.length, missing: primaryMissing, hits: sup.hits, ablatable: sup.ablatable, ok: reasons.length === 0, reasons };
+  if (refusedPackets) reasons.push("E_AR_PACKET_LEAK refused " + refusedPackets + " packets in " + refusedRuns + " runs");
+  const gate2 = { eligibleRuns, eligibleUnits: primary.length, missing: primaryMissing, hits: sup.hits, ablatable: sup.ablatable, refused: refusedPackets, refusedRuns, ok: reasons.length === 0, reasons };
   const frozen: Frozen = { main_commit: g.commit, paths: Object.fromEntries(built.filter((b) => b.path).map((b) => [b.record.id, { path: b.path!, how: b.how! }])) };
   const draws = { seed: SEED, gold: drawGold(cands), full: drawFullSample(rows.filter((r) => r.stratum === "full" && r.packetBytes !== null).map((r) => r.id)) };
 
@@ -259,6 +279,7 @@ export function stage1(o: { frame: string; repo: string; commit: string; matrix:
     units_full_built: rows.filter((r) => r.stratum === "full").length,
     mechanical_hits_primary: primary.filter((r) => r.hit === true).length,
     packets: packets.size,
+    packets_refused: refusedPackets,
     largest_packet: Math.max(0, ...[...packets.values()].map((p) => p.bytes)),
   };
   const out: Stage1Out = { counts, readable, readings, gate2, smoke };
@@ -268,7 +289,8 @@ export function stage1(o: { frame: string; repo: string; commit: string; matrix:
   writeJson(join(o.sink, "matched.json"), frozen);
   writeJson(join(o.sink, "units.json"), rows);
   writeJson(join(o.sink, "draws.json"), draws);
-  return out;
+  writeJson(join(o.sink, "refused.json"), [...refused.values()]);
+  return { ...out, refusals: [...refused.values()] };
 }
 
 export function printLines(out: Stage1Out): string[] {
@@ -278,6 +300,7 @@ export function printLines(out: Stage1Out): string[] {
     ...Object.entries(out.readable).map(([k, v]) => "readable " + k + " " + v.parsed + " of " + v.total + (v.gate ? " pass" : " FAIL")),
     ...out.readings.map((r) => r.intention + " " + r.verdict + (r.k !== undefined ? " k " + r.k : "") + (r.n !== undefined ? " n " + r.n : "") + (r.value !== undefined ? " value " + f(r.value) : "") + (r.lo !== undefined ? " ci " + f(r.lo) + " " + f(r.hi) : "") + (r.missing !== undefined ? " missing " + r.missing : "") + " | " + Object.entries(r.notes).map(([k, v]) => k + " " + (typeof v === "number" ? f(v) : String(v))).join(" ")),
     "gate2 eligible_runs " + out.gate2.eligibleRuns + " eligible_units " + out.gate2.eligibleUnits + " missing " + out.gate2.missing + " hits " + out.gate2.hits + " ablatable " + out.gate2.ablatable + " " + (out.gate2.ok ? "pass" : "NO READ (" + out.gate2.reasons.join("; ") + ")"),
+    ...(out.refusals ?? []).map((r) => "refused run " + r.run + " path " + r.path + " packets " + r.packets),
     "parser smoke minors " + out.smoke.minors + " " + (out.smoke.pass ? "pass" : "FAIL"),
   ];
 }

@@ -114,8 +114,14 @@ function goldItems(pp: Prepared, d: GoldDraw): GoldItem[] {
 /** The production units: every lean unit with a built text (census) and the full-kind sample. */
 export const productionUnits = (pp: Prepared) => [...pp.rows.filter((r) => (r.stratum === "lean-primary" || r.stratum === "lean-desc") && pp.packets.has(r.id)).map((r) => r.id), ...pp.draws.full.filter((u) => pp.packets.has(u))];
 
+/** Amendment A1: no packet is sent while any stage 1 refusal stands, so smoke, project and stage2 refuse to start. */
+export function blockOnRefusals(s: Pick<Stage1Out, "gate2">): void {
+  if (s.gate2.refused) fail("E_AR_PACKET_LEAK", "stage 1 refused " + s.gate2.refused + " packets in " + s.gate2.refusedRuns + " runs; no packet is sent while a refusal stands");
+}
+
 export async function stage2(o: Stage2Options): Promise<Record<string, unknown>> {
   const pp = prepare(o);
+  blockOnRefusals(pp.stage1);
   if (!pp.stage1.gate2.ok) fail("E_AR_SUPPLY_SHORT", "stage 1's GATE-2 gates did not pass (" + pp.stage1.gate2.reasons.join("; ") + "); no panel call is made");
   const markers = [...pp.id.runIds, ...pp.id.names, ...sixGrams(pp.id.ownerText)];
   const meter = await openMeter({ item: o.item, runId: o.runId, out: o.sink, maxOutputTokens: 16_000, forbiddenMarkers: markers, record: o.record, ledger: o.ledger, env: o.env, fetch: o.fetch });

@@ -16,7 +16,7 @@ import { present, distinctScores, type CellInput } from "./detect.ts";
 import { ablate, diffScore, tSet } from "./diff.ts";
 import { drawGold, topUp, type Candidate } from "./draws.ts";
 import { ArError } from "./errors.ts";
-import { at, DRY_ENV, git, preGateSkill, repo, reply, stubUpstream, tmp, writeRecord, type RecordSpec } from "./fixtures.ts";
+import { at, DRY_ENV, git, manifest, preGateSkill, repo, reply, stubUpstream, tmp, writeRecord, type RecordSpec } from "./fixtures.ts";
 import { Journal, ask } from "./journal.ts";
 import { combine, parseVote, quoteFound, type Label } from "./judge.ts";
 import { checkPinned, Matrix } from "./matrix.ts";
@@ -25,7 +25,8 @@ import { buildPacket, outbound, scan, sixGrams, type Identity } from "./packet.t
 import { goldCounts, judgeCheck, smoke, GOLD_PER_CLASS, type PanelState } from "./panel.ts";
 import { readRecord } from "./records.ts";
 import { attribution, gate1, leanByDesign, x1, x2, x3, type ApprovalDoc } from "./readers.ts";
-import { gate2Reading } from "./stage2.ts";
+import { blockOnRefusals, gate2Reading } from "./stage2.ts";
+import { openSink, printLines, stage1 } from "./stage1.ts";
 import { landedInterval, overMissing } from "./stats.ts";
 import { custody, readTold } from "./told.ts";
 import { accepted, changeTextOf, unitsOf } from "./units.ts";
@@ -41,6 +42,32 @@ export interface Line {
 const W = (n: number, stem = "word") => Array.from({ length: n }, (_, i) => stem + String.fromCharCode(97 + Math.floor(i / 26) % 26) + String.fromCharCode(97 + (i % 26))).join(" ");
 const THIRTY = W(32, "plain");
 const ID: Identity = { runIds: ["run-fixture-aa"], names: ["Pat Quill"], ownerText: ["please keep the quiet harbor ledger rule exactly as written"], withheldIds: ["task-withheld-zz"] };
+
+
+// Amendment A1: a stage 1 refusal blocks only GATE-2's panel part; the free readings are still read and written.
+function a1Frame(reply: string) {
+  const dir = tmp("frame");
+  mkdirSync(join(dir, "records"), { recursive: true });
+  const opts = ["Apply the fix: state the retry ceiling as three attempts within fifteen minutes for each call", "Keep your direction"];
+  writeRecord(join(dir, "records"), { id: "run-a", plan: "---\nid: 2030-01-01-fixture-post\n---\n# Plan\n", decisions: [{ id: "run-a-d1", options: opts, chosen: "a", answered_at: at(3), owner_reply: reply }], run: { gstack_version: "9.1.0.0", created_at: "2000-01-01T00:00:00Z" } });
+  writeRecord(join(dir, "records"), { id: "run-b", kind: "full", decisions: [{ id: "run-b-d1", options: opts, chosen: "a", answered_at: at(3), owner_reply: "yes" }], run: { gstack_version: "9.1.0.0" } });
+  return { dir, frozen: manifest(dir, ["run-a", "run-b"], { "a/approvals.jsonl": JSON.stringify({ by: "ZZZZ-1", words: "", ask: "run-a gate_rev 1", source: "manual", outcome: "approved" }) + "\n" }) };
+}
+function a1Run(reply: string) {
+  const f = a1Frame(reply);
+  const wiki = repo([{ "wiki/plans/2030-01-01-fixture-post/README.md": "---\nid: 2030-01-01-fixture-post\n---\n# Post\n\nThe retry ceiling is three attempts within fifteen minutes for each call.\n" }]);
+  const gs = repo([{ VERSION: "9.1.0.0\n", "autoplan/SKILL.md": preGateSkill() }]);
+  const sink = openSink(join(tmp("a1-sink"), "s1"), "stage1");
+  const out = stage1({ frame: f.dir, repo: wiki.dir, commit: wiki.commits[0]!, matrix: new Matrix(gs.dir, gs.commits[0]!), sink, frozenFrame: f.frozen });
+  let blocked: string | null = null;
+  try {
+    blockOnRefusals(JSON.parse(readFileSync(join(sink, "stage1.json"), "utf8")));
+  } catch (e) {
+    blocked = e instanceof ArError ? e.code : "other";
+  }
+  const free = ["AP-X-1", "AP-X-2", "AP-X-3", "AP-GATE-1"].every((i) => out.readings.some((r) => r.intention === i)) && existsSync(join(sink, "stage1.json"));
+  return { out, blocked, free, refused: JSON.parse(readFileSync(join(sink, "refused.json"), "utf8")) as Array<{ packets: number }> };
+}
 
 export async function dryRun(o: { ledger?: boolean; custody?: boolean } = {}): Promise<Line[]> {
   const out: Line[] = [];
@@ -385,6 +412,14 @@ export async function dryRun(o: { ledger?: boolean; custody?: boolean } = {}): P
   // Extra checks: told custody on a fixture, and power.py part A on fixed inputs.
   if (o.custody !== false) await check(57, "extra: told custody on a fixture sealed with a throwaway age identity (digest, decrypt on /dev/shm, identity removed, sweep)", () => custodyDry(dir));
   await check(58, "extra: power.py part A on fixed inputs (point, widening, clipping and percentiles)", () => powerFixed());
+  await check(59, "extra: A1, a stage 1 refusal blocks the panel and the free readings are present", () => {
+    const r = a1Run("The retry ceiling is three attempts within fifteen minutes for each call");
+    return r.blocked === "E_AR_PACKET_LEAK" && r.free && !r.out.gate2.ok && r.out.gate2.refused >= 1 && r.out.gate2.missing >= 1 && r.out.counts.packets_refused === r.out.gate2.refused && r.refused.length === 1 && r.refused[0]!.packets === r.out.gate2.refused && printLines(r.out).some((l) => l.startsWith("refused run run-a path wiki/plans/"));
+  });
+  await check(60, "extra: A1, with no refusal nothing changes", () => {
+    const r = a1Run("yes");
+    return r.blocked === null && r.free && r.out.gate2.refused === 0 && r.out.counts.packets_refused === 0 && r.refused.length === 0 && !r.out.gate2.reasons.some((x) => x.includes("E_AR_PACKET_LEAK")) && !printLines(r.out).some((l) => l.startsWith("refused run"));
+  });
   rmSync(root, { recursive: true, force: true });
   rmSync(dir, { recursive: true, force: true });
   rmSync(wiki.dir, { recursive: true, force: true });

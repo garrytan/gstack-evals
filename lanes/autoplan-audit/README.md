@@ -35,6 +35,10 @@ The snapshot holds private records. Only counts, shares, intervals and digests l
 
 meter.ts and stats.ts are adapted from lanes/product-value at commit 3744a20, and lastJson in judge.ts comes from that build's judge.ts. Each file's header names its source. The imports from src/ are unchanged.
 
+## Amendment A1
+
+A1 is a post-data amendment the Captain made in the results PR, and the code matches it. At stage 1, an E_AR_PACKET_LEAK refusal of any packet stops only GATE-2's panel part. Refused units count as missing in GATE-2's coverage and bounds. X-1, X-2, X-3 and GATE-1 are still read and written. Stage 1 prints each refusal as a run id, a post path and a packet count, and writes the same rows to refused.json in its sink. No packet is ever sent while any refusal stands: smoke, project and stage2 refuse to start with E_AR_PACKET_LEAK. The scans on the reply cache and the aggregate exports are unchanged.
+
 ## Build-time choices
 
 Where the prereg left a detail open, the build took the reading closest to its words:

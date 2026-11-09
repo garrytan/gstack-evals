@@ -9,7 +9,7 @@ import { ArError } from "./errors.ts";
 import { checkFrame } from "./frame.ts";
 import { Matrix } from "./matrix.ts";
 import { openSink, printLines, stage1, writeJson, type Stage1Out, type UnitRow } from "./stage1.ts";
-import { gate2Export, gate2Reading, prepare, stage2, type Phase2 } from "./stage2.ts";
+import { blockOnRefusals, gate2Export, gate2Reading, prepare, stage2, type Phase2 } from "./stage2.ts";
 import type { CheckResult } from "./panel.ts";
 import { custody, readTold } from "./told.ts";
 
@@ -101,6 +101,7 @@ export async function main(argv: string[], io: Io = { out: (t) => console.log(t)
       case "project":
       case "stage2": {
         const sink = need(f, "sink");
+        blockOnRefusals(JSON.parse(readFileSync(join(need(f, "stage1"), "stage1.json"), "utf8")));
         if (sub === "smoke") openSink(sink, "stage2");
         else if (!existsSync(join(sink, "SINK.json"))) throw new ArError("E_USAGE", "the paid sink must be the one smoke created");
         const phases: Phase2[] = sub === "smoke" ? ["smoke"] : sub === "project" ? ["project"] : ((f.get("phases") ?? "gold,check,production").split(",") as Phase2[]);

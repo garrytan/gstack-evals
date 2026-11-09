@@ -56,4 +56,15 @@ describe("autoplan audit cli", () => {
     expect(text).not.toContain("retry ceiling");
     expect(text).toContain("AP-X-3 NOT MET BY DESIGN");
   });
+  test("A1: smoke, project and stage2 refuse to start while a stage 1 refusal stands", async () => {
+    const s1 = tmp("a1-stage1");
+    writeFileSync(join(s1, "stage1.json"), JSON.stringify({ gate2: { refused: 2, refusedRuns: 1 } }));
+    for (const sub of ["smoke", "project", "stage2"]) {
+      const a = io();
+      const sink = join(tmp("a1-paid"), "paid");
+      expect(await main([sub, "--frame", s1, "--repo", s1, "--stage1", s1, "--sink", sink, "--item", "x"], a.io)).toBe(2);
+      expect(a.err[0]).toStartWith("E_AR_PACKET_LEAK");
+      expect(existsSync(sink)).toBe(false);
+    }
+  });
 });
