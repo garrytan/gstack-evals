@@ -5,8 +5,11 @@
 # repro forms the scorer counts. In the case lines, a backslash n stands for a newline inside the command, and a
 # case's command is the rest of its line after the label and one space, leading spaces included. Because gstack
 # compiles the regex with flag i, the whole regex sits in a (?-i:...) group and matches case-sensitively, so pytest -V
-# (a version probe) doesn't count and pytest -v (a run) does.
-REGEX (?-i:(?:^|[;&|(\n])\s*(?:(?:env|time|nice|command|exec)\s+|(?:uv|poetry|pipenv|pdm|hatch)\s+run\s+|timeout\s+\S+\s+|\w+=\S*\s+)*(?:(?:""|\$\{?C\}?|\S*gstack-checks)\s+run\b|(?:\S*/)?(?:py\.test|pytest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|-[hV]\b))|(?:\S*/)?(?:tox|nox)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only|list[\w-]*)\b|-[hVl]\b))|(?:\S*/)?python3?(?:\.\d+)?\s+(?:-m\s+(?:pytest|unittest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|-[hV]\b))|(?!-)(?![^\s;&|]*setup\.py)[^\s;&|]+\.py\b)|bash\s+(?!-)[^\s;&|]+\.sh\b|make\s+(?:test|check)\b|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|(?:go|cargo)\s+test\b))
+# (a version probe) doesn't count and pytest -v (a run) does. The engine is Bun's: the hook runs under Bun at the build
+# pin and compiles the regex there. The short flags are literal alternatives, (?:-h|-V) and (?:-h|-V|-l|-a), not a
+# character class, because V8 (Node 24) still folds case inside a character class in a (?-i:...) group. Every case
+# below lands on its side under Bun and under Node.
+REGEX (?-i:(?:^|[;&|(\n])\s*(?:(?:env|time|nice|command|exec)\s+|(?:uv|poetry|pipenv|pdm|hatch)\s+run\s+|timeout\s+\S+\s+|\w+=\S*\s+)*(?:(?:""|\$\{?C\}?|\S*gstack-checks)\s+run\b|(?:\S*/)?(?:py\.test|pytest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|(?:-h|-V)\b))|(?:\S*/)?(?:tox\b(?!\s+(?:list|l|config|c)\b)|nox\b)(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only|list[\w-]*|showconfig)\b|(?:-h|-V|-l|-a)\b))|(?:\S*/)?python3?(?:\.\d+)?\s+(?:-m\s+(?:pytest|unittest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|(?:-h|-V)\b))|(?!-)(?![^\s;&|]*setup\.py)[^\s;&|]+\.py\b)|bash\s+(?!-)[^\s;&|]+\.sh\b|make\s+(?:test|check)\b|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|(?:go|cargo)\s+test\b))
 COUNT C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run
 COUNT C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run --allow-repo-commands
 COUNT C="$HOME/x/gstack-checks"; "$C" run --only unit
@@ -18,6 +21,7 @@ COUNT python3 -m unittest discover
 COUNT timeout 120 pytest -k "foo and bar"
 COUNT tox -e py311
 COUNT nox -s tests
+COUNT tox run -e py311
 COUNT python reproduce_issue.py
 COUNT python3 /tmp/repro.py
 COUNT bash run_tests.sh
@@ -71,3 +75,10 @@ NO tox -l
 NO nox -l
 NO tox --listenvs
 NO nox --list
+NO tox list
+NO tox l
+NO tox config
+NO tox c
+NO tox -a
+NO tox --showconfig
+NO nox --list-sessions
