@@ -25,3 +25,29 @@ describe("decision-routing lane CLI", () => {
     expect(logs.at(-1)).toContain("safety set matches its build");
   });
 });
+
+describe("lane CLIs refuse a missing input path as input, never as a defect", () => {
+  const ROOT = join(import.meta.dir, "../..");
+  const PRICES = "lanes/decision-routing/config/prices.json";
+  const run = (args: string[]) => {
+    const p = Bun.spawnSync(["bin/gstack-evals", "decision-routing", ...args], { cwd: ROOT, env: { ...process.env, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", OPENROUTER_API_KEY: "" } });
+    return { code: p.exitCode, err: p.stderr.toString() };
+  };
+  const cases: Array<[string, string[], string]> = [
+    ["score", ["score", "--trials", "/nonexistent", "--journal", "/nonexistent.ndjson", "--prices", PRICES, "--planned", "/nonexistent.json", "--admission", "/nonexistent.json"], "/nonexistent"],
+    ["score with only the planned file missing", ["score", "--trials", ROOT, "--journal", PRICES, "--prices", PRICES, "--planned", "/nonexistent-planned.json", "--admission", PRICES], "/nonexistent-planned.json"],
+    ["labels join", ["labels", "join", "--decisions", "/nonexistent-decisions.jsonl", "--labels", PRICES], "/nonexistent-decisions.jsonl"],
+    ["labels trial", ["labels", "trial", "/nonexistent-trial", "--task", "/nonexistent-task", "--proxy-host", "127.0.0.1", "--verifier-image", "x"], "/nonexistent-trial"],
+    ["admit", ["admit", "--calibration", ROOT, "--pilot", ROOT, "--journal", "/nonexistent-journal.ndjson", "--prices", PRICES], "/nonexistent-journal.ndjson"],
+    ["pilot", ["pilot", "--trials", ROOT, "--journal", "/nonexistent-journal.ndjson", "--prices", PRICES], "/nonexistent-journal.ndjson"],
+  ];
+  for (const [name, args, path] of cases) {
+    test(name + ": exit 2 with E_USAGE naming " + path + ", no E_INTERNAL line", () => {
+      const r = run(args);
+      expect(r.code).toBe(2);
+      expect(r.err).not.toContain("E_INTERNAL");
+      expect(r.err.split("\n").find((l) => l.startsWith("E_USAGE"))).toContain(path);
+    });
+  }
+});
+

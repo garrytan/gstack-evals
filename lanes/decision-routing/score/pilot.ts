@@ -136,6 +136,8 @@ export async function main(argv: string[]): Promise<number> {
     console.error("E_USAGE pilot --trials <dir>... --journal <file>... --prices <prices.json> [--items <items.json>] [--json <out>]");
     return 2;
   }
+  const gone = [...roots, ...journals, prices, ...(flag(argv, "--items") ? [flag(argv, "--items")!] : [])].find((p) => !existsSync(p));
+  if (gone) { console.error("E_USAGE no such file or directory: " + gone); return 2; }
   const calls = readJournal(journals), table = loadPrices(prices);
   const sums: Record<string, { usd: number; n: number }> = {};
   const sessions: Array<{ session: string; usd: number }> = [];

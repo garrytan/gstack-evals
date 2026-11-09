@@ -38,6 +38,8 @@ export async function main(argv: string[]): Promise<number> {
     console.error("E_USAGE score --trials <dir>... --journal <file>... --prices <prices.json> --planned <planned.json> --admission <admission.json> [--labels <labels.jsonl>...] [--json <out>]");
     return 2;
   }
+  const gone = [...roots, ...journals, prices, planned, admission, ...flags(argv, "--labels")].find((p) => !existsSync(p));
+  if (gone) { console.error("E_USAGE no such file or directory: " + gone); return 2; }
   const ctx = { calls: readJournal(journals), prices: loadPrices(prices) };
   const dirs = roots.flatMap(trialDirs);
   const sessions: SessionOutcome[] = dirs.map((d) => readTrial(d, ctx));

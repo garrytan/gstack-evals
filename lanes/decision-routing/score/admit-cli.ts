@@ -14,6 +14,8 @@ const flags = (argv: string[], name: string): string[] => argv.flatMap((a, i) =>
 export async function main(argv: string[]): Promise<number> {
   const calibration = flag(argv, "--calibration"), pilot = flag(argv, "--pilot"), journals = flags(argv, "--journal"), prices = flag(argv, "--prices");
   if (!calibration || !pilot || !journals.length || !prices) { console.error("E_USAGE admit --calibration <dir> --pilot <dir> --journal <file>... --prices <prices.json> [--out <admission.json>]"); return 2; }
+  const gone = [calibration, pilot, ...journals, prices].find((p) => !existsSync(p));
+  if (gone) { console.error("E_USAGE no such file or directory: " + gone); return 2; }
   const ctx = { calls: readJournal(journals), prices: loadPrices(prices) };
   const read = (root: string) => trialDirs(root).map((d) => readTrial(d, ctx));
   const cal = read(calibration), pil = read(pilot);

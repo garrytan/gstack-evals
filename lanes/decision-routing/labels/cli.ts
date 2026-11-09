@@ -25,6 +25,7 @@ const flag = (argv: string[], name: string): string | undefined => { const i = a
 const jsonl = (path: string) => readFileSync(path, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as Record<string, any>);
 const repoPath = (p: string) => p.replace(/^\/testbed\//, "").replace(/^(\.\/)+/, "");
 const usage = (m: string) => { console.error("E_USAGE " + m); return 2; };
+const missing = (paths: string[]) => { const gone = paths.find((p) => !existsSync(p)); return gone === undefined ? null : usage("no such file or directory: " + gone); };
 
 /** Grounded labels for every decision of one trial (prereg section 6.2). Docker runs only for done and tests_passed. */
 export async function labelTrial(trialDir: string, o: { taskDir: string; proxyHost: string; verifierImage: string; docker: DockerRunner }): Promise<LabelRow[]> {
@@ -105,6 +106,8 @@ export async function main(argv: string[], docker: DockerRunner = dockerCli): Pr
   if (sub === "trial") {
     const dir = rest[0], task = flag(rest, "--task"), proxyHost = flag(rest, "--proxy-host");
     if (!dir || !task || !proxyHost) return usage("labels trial <trial dir> --task <task dir> --proxy-host <host[:port]> [--verifier-image <tag>] [--out <file>]");
+    const gone = missing([dir, task]);
+    if (gone !== null) return gone;
     const verifierImage = flag(rest, "--verifier-image") ?? "dr-verify:" + task.split("/").filter(Boolean).at(-1)!.toLowerCase();
     if (!flag(rest, "--verifier-image")) {
       const b = await docker.run(verifierBuild(task, verifierImage));
@@ -121,6 +124,8 @@ export async function main(argv: string[], docker: DockerRunner = dockerCli): Pr
   if (sub === "join") {
     const decisions = flag(rest, "--decisions"), labels = flag(rest, "--labels");
     if (!decisions || !labels) return usage("labels join --decisions <decisions.jsonl> --labels <labels.jsonl> [--out <file>]");
+    const gone = missing([decisions, labels]);
+    if (gone !== null) return gone;
     const text = joinLabels(jsonl(decisions), jsonl(labels) as LabelRow[]).map((r) => JSON.stringify(r)).join("\n") + "\n";
     const out = flag(rest, "--out");
     if (out) writeFileSync(out, text); else process.stdout.write(text);
@@ -129,6 +134,8 @@ export async function main(argv: string[], docker: DockerRunner = dockerCli): Pr
   if (sub === "pristine") {
     const tasksDir = flag(rest, "--tasks-dir"), tasks = flag(rest, "--tasks"), out = flag(rest, "--out");
     if (!tasksDir || !tasks || !out) return usage("labels pristine --tasks-dir <dir> --tasks <id,id,...|file> --out <dir>");
+    const gone = missing([tasksDir]);
+    if (gone !== null) return gone;
     const ids = (existsSync(tasks) ? readFileSync(tasks, "utf8") : tasks).split(/[\s,]+/).filter(Boolean);
     mkdirSync(out, { recursive: true });
     for (const id of ids) {
