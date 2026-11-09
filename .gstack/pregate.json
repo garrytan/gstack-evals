@@ -200,6 +200,23 @@
     "tests/outcome-skills/fixtures/sm/**": [
       "tests/outcome-skills/sm-draw.test.ts"
     ],
+    "lanes/outcome-skills/pfchecks/**": [
+      "tests/outcome-skills/pf-prereg.test.ts",
+      "tests/outcome-skills/pf-told.test.ts",
+      "tests/outcome-skills/pf-neutral.test.ts",
+      "tests/outcome-skills/pf-capture.test.ts",
+      "tests/outcome-skills/pf-manifest.test.ts",
+      "tests/outcome-skills/pf-runner.test.ts",
+      "tests/outcome-skills/pf-runner-docker.test.ts",
+      "tests/outcome-skills/pf-trees.test.ts",
+      "tests/outcome-skills/pf-draw.test.ts",
+      "tests/outcome-skills/pf-exposure.test.ts",
+      "tests/outcome-skills/pf-secondaries.test.ts",
+      "tests/outcome-skills/pf-analysis.test.ts"
+    ],
+    "tests/outcome-skills/fixtures/pf/**": [
+      "tests/outcome-skills/pf-prereg.test.ts"
+    ],
     "wiki/plans/2026-11-09-geva-409-state-machines-prompt-prereg/supply-count.py": [
       "tests/outcome-skills/sm-source.test.ts"
     ],

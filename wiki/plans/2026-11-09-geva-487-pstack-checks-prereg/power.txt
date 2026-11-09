@@ -1,0 +1,23 @@
+== MDD by simulation of the exact two-sided McNemar test, 80% power, design effect 1.2 (up to 3 units a repository)
+alpha 0.025 is the stricter Holm step of the two verdict contrasts; none means no difference that size fits under that discordant share
+n pairs | d | MDD alpha 0.05 | MDD alpha 0.025
+per model, n=28 | 0.2 | none | none
+per model, n=28 | 0.3 | none | none
+per model, n=28 | 0.4 | 37 | 39
+per model, n=28 | 0.5 | 41 | 43
+per model, n=36 | 0.2 | none | none
+per model, n=36 | 0.3 | 28 | 30
+per model, n=36 | 0.4 | 33 | 35
+per model, n=36 | 0.5 | 37 | 39
+per model, n=44 | 0.2 | none | none
+per model, n=44 | 0.3 | 25 | 27
+per model, n=44 | 0.4 | 30 | 32
+per model, n=44 | 0.5 | 33 | 36
+pooled 3 models, n=28 | 0.2 | 16 | 17
+pooled 3 models, n=28 | 0.3 | 19 | 21
+pooled 3 models, n=28 | 0.4 | 23 | 24
+pooled 3 models, n=28 | 0.5 | 25 | 27
+pooled 3 models, n=44 | 0.2 | 13 | 14
+pooled 3 models, n=44 | 0.3 | 15 | 17
+pooled 3 models, n=44 | 0.4 | 18 | 19
+pooled 3 models, n=44 | 0.5 | 20 | 22

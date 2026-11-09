@@ -228,6 +228,20 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_JUDGE_ANSWER](#e_sm_judge_answer) | 1 | U20 |
 | [E_SM_SECONDARY](#e_sm_secondary) | 2 | U20 |
 | [E_PROXY_SERVER_TOOL](#e_proxy_server_tool) | 2 | U20 |
+| [E_PF_SEED](#e_pf_seed) | 2 | U20 |
+| [E_PF_INPUT](#e_pf_input) | 2 | U20 |
+| [E_PF_PENDING](#e_pf_pending) | 2 | U20 |
+| [E_PF_LABELS](#e_pf_labels) | 1 | U20 |
+| [E_PF_ORACLE](#e_pf_oracle) | 1 | U20 |
+| [E_PF_TOLD](#e_pf_told) | 1 | U20 |
+| [E_PF_NEUTRAL_INVALID](#e_pf_neutral_invalid) | 1 | U20 |
+| [E_PF_FIX_CONFLICT](#e_pf_fix_conflict) | 2 | U20 |
+| [E_PF_REBUILD_FIX](#e_pf_rebuild_fix) | 2 | U20 |
+| [E_PF_NO_MANIFEST](#e_pf_no_manifest) | 1 | U20 |
+| [E_PF_UPSTREAM_GAP](#e_pf_upstream_gap) | 2 | U20 |
+| [E_PF_INFRA_GAP](#e_pf_infra_gap) | 2 | U20 |
+| [E_PF_CELL_INCOMPLETE](#e_pf_cell_incomplete) | 1 | U20 |
+| [E_PF_CAPTURE](#e_pf_capture) | 2 | U20 |
 
 ## Exit 1: the edit lost something (FAIL)
 
@@ -396,6 +410,54 @@ Exit 1. Side effects: None: scoring spends nothing. Retry safe: yes. Resumable: 
 A labeller or judge reply is not one bare JSON object with exactly the frozen fields and values (preregistration sections 3 and 10). The reader fails closed: the answer counts as missing, a unit with a missing label is not eligible, and a missing stock-diff answer counts as scored above 0.
 
 Fix: Nothing to fix in the reply. Report it as malformed; the counts print beside every judged number.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_LABELS
+
+A candidate dropped at the labels: the two labellers did not both say defect and state-shaped (not_defect, not_state_shaped, unclear), or an answer was malformed.
+
+Fix: Nothing to fix: the unit is not drawn and uses no repository slot. Drops are counted per reason.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_ORACLE
+
+A candidate dropped at the state machines oracle: its oracle record's verdict is not kept (the reason is the oracle's own code, for example E_SM_ORACLE_UNSTABLE).
+
+Fix: Nothing to fix: the oracle's drop rules apply as written and the unit uses no repository slot.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_TOLD
+
+A candidate failed the told-mode screen: the issue is missing or under 200 characters, holds a line starting with @@, +++ or ---, or holds two or more lines of 30 characters or more that the fix adds.
+
+Fix: Nothing to fix: the unit is not drawn and uses no repository slot.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_NEUTRAL_INVALID
+
+A unit's neutral edit failed validation: with the comment lines at the top and end, and then with the end line alone, a fail-to-pass test passed or a stable test failed in one of three runs with the fix's tests applied.
+
+Fix: Nothing to fix: the unit drops before any model run and uses no repository slot.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_NO_MANIFEST
+
+A session left no usable CHECKS.json (absent, not JSON, not an array, an element that is not an object, or the wrap-up turn reached a limit). It is the arm's own output: the session scores 0 and is counted per arm.
+
+Fix: Nothing to fix: the count is reported per arm.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_CELL_INCOMPLETE
+
+A pstack-checks analysis cell (one model and one arm) has gaps on more than 10% of its units, so every verdict that uses it reads INCOMPLETE. The analysis still writes every number, the gap worst case included, then exits 1.
+
+Fix: Nothing to fix in the analysis: report the cell as incomplete.
 
 Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
@@ -1592,6 +1654,70 @@ The metering proxy refused a request whose tools list carries a provider-side to
 Fix: Disallow the tool in the agent (Claude Code's WebSearch and WebFetch are disallowed in every SM arm). Never turn the option off for an SM stage.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PF_SEED
+
+The pstack-checks draw or analysis found no seed: the preregistration's prereg.json is missing, is not pf-prereg.v1, lacks an unsigned 32-bit integer draw_seed, order_seed or bootstrap_seed, or pins another MultiLang revision.
+
+Fix: Add the seeds through the preregistration's own pull request. Nothing runs on a seed chosen anywhere else.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_PF_INPUT
+
+A pstack-checks command could not read an input it needs: a file that is not the JSON or schema it expects, a git step on the scoring repo that failed, or a session tree whose history does not sit on the unit's one-commit base.
+
+Fix: Fix the named input and rerun. Scoring reads its inputs and changes none of them.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_PENDING
+
+The pstack-checks draw stopped at a candidate whose gate input does not exist yet (its label record, its oracle record or its neutral record). The draw is lazy: it names the one candidate it waits on.
+
+Fix: Produce the named record (labels under pf-labels, the state machines oracle, or gstack-evals outcome pf neutral) and run the draw again. The order never changes.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_FIX_CONFLICT
+
+The real fix did not apply to a session's transplanted tree with git apply --3way, so the fix tree does not exist. It is a scoring gap for that session, counted per arm; every verdict also prints the reading that scores it as a miss.
+
+Fix: Nothing to rerun: report the gap. A harness cause goes to the Captain.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_REBUILD_FIX
+
+The unit's rebuild command exited non-zero on the fix tree for an entry and no entry of the session caught, so the session's score is a gap; every verdict also prints the reading that scores it as a miss.
+
+Fix: Nothing to rerun: report the gap. A rebuild-exempt unit never gets this code.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_UPSTREAM_GAP
+
+A pstack-checks session ended on a provider or proxy error twice (the task turn's one whole-session retry, or the wrap-up turn's one rerun), so it is a gap.
+
+Fix: Report the gap. Gaps are never rerun to change a verdict.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_INFRA_GAP
+
+The harness failed outside the model twice for a pstack-checks session or a scoring run (a container, a volume or a mount), so it is a gap.
+
+Fix: Report the gap and take the harness fault to the Captain. Nothing is rerun to change an outcome.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_CAPTURE
+
+The session-end capture (sh/capture.sh) failed or printed no PF_CAPTURE line, so the session tree S was not committed.
+
+Fix: Fix the capture step in the session runner and rerun the session as an infra end.
+
+Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
 
 ## Exit 3: calibration failed (INCOMPLETE)
 

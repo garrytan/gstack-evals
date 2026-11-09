@@ -24,6 +24,7 @@ Provider keys come from its environment as the proxy reads them. Guide: wiki/pla
 Usage: gstack-evals outcome images pin --out <manifest.json> --set <name> --commit <sha> <task dir>...
        gstack-evals outcome images check <manifest.json> --sha256 <hex>
        gstack-evals outcome sm <command>   the state machines family (gstack-evals outcome sm --help)
+       gstack-evals outcome pf <command>   the pstack-checks scoring core (gstack-evals outcome pf --help)
        gstack-evals outcome images public <manifest.json>
        gstack-evals outcome images bind <manifest.json> --task <task dir> --label <label> --out <run copy>
 
@@ -47,6 +48,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   if (sub === "images") return await images(rest);
   if (sub === "sm") return await (await import("./statemachines/cli.ts")).main(rest);
+  if (sub === "pf") return await (await import("./pfchecks/cli.ts")).main(rest);
   if (sub !== "serve") {
     console.error(lines("E_USAGE", "unknown subcommand " + JSON.stringify(sub) + "; gstack-evals outcome --help lists them"));
     return 2;
