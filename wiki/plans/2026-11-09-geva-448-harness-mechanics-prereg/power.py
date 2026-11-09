@@ -68,7 +68,7 @@ if __name__ == "__main__":
     for d in ds:
         print(f"{d:<6}" + "".join(f"{100*mdd(d,n):>7.1f}" for n in ns))
     print()
-    for n in (200, 180, 600):
+    for n in (200, 180, 600, 120, 80):
         print(f"2. Power of the 7.5-point non-inferiority test at {n} paired units, by true difference (points)")
         deltas = [0.0, -0.02, -0.03]
         print("d     " + "".join(f"{100*x:>8.0f}" for x in deltas))

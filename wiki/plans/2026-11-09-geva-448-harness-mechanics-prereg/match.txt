@@ -2,8 +2,11 @@
 # gstack (lib/skill-contract.ts at 350d4196) tests it with flag i against each Bash command after the last edit,
 # after replacing every quoted string with "" (double-quoted with escapes, or single-quoted). It replaces gstack's
 # built-in classifier, so it has to count /verify's own gstack-checks run forms as well as the test runners and the
-# repro forms the scorer counts. In the case lines, a backslash n stands for a newline inside the command.
-REGEX (?:^|[;&|(\n]\s*)(?:(?:env|time|nice|command|exec)\s+|(?:uv|poetry|pipenv|pdm|hatch)\s+run\s+|timeout\s+\S+\s+|\w+=\S*\s+)*(?:(?:""|\$\{?C\}?|\S*gstack-checks)\s+run\b|(?:\S*/)?(?:py\.test|pytest|tox|nox)\b(?![^;&|\n]*\s--?(?:version|help|collect-only|co)\b)|(?:\S*/)?python3?(?:\.\d+)?\s+(?:-m\s+(?:pytest|unittest)\b(?![^;&|\n]*\s--?(?:version|help)\b)|(?!-)(?![^\s;&|]*setup\.py)[^\s;&|]+\.py\b)|bash\s+(?!-)[^\s;&|]+\.sh\b|make\s+(?:test|check)\b|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|(?:go|cargo)\s+test\b)
+# repro forms the scorer counts. In the case lines, a backslash n stands for a newline inside the command, and a
+# case's command is the rest of its line after the label and one space, leading spaces included. Because gstack
+# compiles the regex with flag i, the whole regex sits in a (?-i:...) group and matches case-sensitively, so pytest -V
+# (a version probe) doesn't count and pytest -v (a run) does.
+REGEX (?-i:(?:^|[;&|(\n])\s*(?:(?:env|time|nice|command|exec)\s+|(?:uv|poetry|pipenv|pdm|hatch)\s+run\s+|timeout\s+\S+\s+|\w+=\S*\s+)*(?:(?:""|\$\{?C\}?|\S*gstack-checks)\s+run\b|(?:\S*/)?(?:py\.test|pytest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|-[hV]\b))|(?:\S*/)?(?:tox|nox)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only|list[\w-]*)\b|-[hVl]\b))|(?:\S*/)?python3?(?:\.\d+)?\s+(?:-m\s+(?:pytest|unittest)\b(?![^;&|\n]*\s(?:--?(?:version|help|collect-only|co|fixtures|markers|setup-plan|setup-only)\b|-[hV]\b))|(?!-)(?![^\s;&|]*setup\.py)[^\s;&|]+\.py\b)|bash\s+(?!-)[^\s;&|]+\.sh\b|make\s+(?:test|check)\b|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b|(?:go|cargo)\s+test\b))
 COUNT C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run
 COUNT C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run --allow-repo-commands
 COUNT C="$HOME/x/gstack-checks"; "$C" run --only unit
@@ -27,6 +30,13 @@ COUNT cd /testbed\npytest -q
 COUNT uv run pytest -q
 COUNT PYTHONPATH=src python -m pytest tests
 COUNT .venv/bin/pytest -x
+COUNT   pytest -q
+COUNT pytest -v
+COUNT pytest -vv
+COUNT pytest -x -q
+COUNT python -m pytest -v tests/
+COUNT pytest -k 'not slow'
+COUNT pytest -l tests/
 NO pytest --version
 NO python -m pytest --help
 NO pytest --collect-only -q
@@ -48,3 +58,16 @@ NO echo test
 NO "$C" detect
 NO C="$HOME/x/gstack-checks"; "$C" status
 NO cd /testbed\npytest --version
+NO python -m pytest --collect-only -q
+NO python -m pytest --co
+NO pytest -h
+NO python -m pytest -h
+NO pytest -V
+NO pytest --fixtures
+NO pytest --markers
+NO pytest --setup-plan
+NO pytest --setup-only
+NO tox -l
+NO nox -l
+NO tox --listenvs
+NO nox --list
