@@ -1154,7 +1154,7 @@ export const CODES = {
   E_HM_SCREEN: {
     exit: 2,
     meaning: "The harness mechanics task-fit screen could not decide (lanes/harness-mechanics/screen.ts): gstack-checks detect exited 3 for want of a pregate context (no origin/<base> ref in the task's container), so every task would read the same and no screened lists were written.",
-    fix: "Take it to the lead: the screen needs a decision on how detect gets a base ref in a pristine container before it can run. Nothing was replaced.",
+    fix: "D1's origin step should make this impossible, so a hit means task-setup.Dockerfile's origin RUN or PATH did not reach the screen's container. Look at the docker run command in lanes/harness-mechanics/screen.ts dockerDetect, which runs that RUN and PATH before detect. Nothing was replaced.",
     side_effects: NO_SPEND,
     retry_safe: true,
     resumable: false,
