@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HmArm, HmScore } from "../../src/types.ts";
-import { admission, AMENDMENT, report, type Admission, type HmRowIn, type Iv, type ReportConfig } from "./analyze.ts";
+import { admission, AMENDMENT, FIT_CLASSES, report, type Admission, type HmRowIn, type Iv, type ReportConfig } from "./analyze.ts";
 import type { StepResult } from "./dryrun.ts";
 import { MODELS, type ModelKey } from "./pins.ts";
 
@@ -30,7 +30,7 @@ export function synth(s: SynthSpec): HmRowIn[] {
     const adherent = edited ? (c.adherent ?? false) : null;
     const record = arm === "verify-hook" ? (c.record ?? true) : null;
     const score: HmScore = {
-      scorer: "synthetic", edited, last_edit: edited ? "Edit" : null, adherent, adherent_strict: adherent, check: null,
+      scorer: "synthetic", edited, last_edit: edited ? "Edit" : null, adherent, adherent_strict: adherent, check: null, lint_only: edited ? false : null,
       claim: claims ? "FIXED" : "NOT FIXED", claims_done: claims, false_done: outcome === "graded" ? claims && !pass : null,
       verify_loads: c.loads ?? (told ? 1 : 0), edit_before_last_load: false, last_edit_before_last_load: false, blocked_exit: false,
       hook: { record, outcome: null, blocks: 0, waived: false },
@@ -118,7 +118,8 @@ export const KNOWN: Known[] = [
 // no verdict reads it). Each writes its tables' expected and actual readings under <out>/<step>/.
 const SIMS = 200;
 const admitted = new Map<string, Admission>();
-const adm = (name: string) => admitted.get(name) ?? admitted.set(name, admission(stage1(name), { sims: SIMS })).get(name)!;
+const FIT = Object.fromEntries([...Array(40).keys()].map((i) => [taskName(i), FIT_CLASSES[i % FIT_CLASSES.length]!.code]));
+const adm = (name: string) => admitted.get(name) ?? admitted.set(name, admission(stage1(name), { sims: SIMS, fit: FIT })).get(name)!;
 const COSTS: Arms = { "verify-hook": (i) => ({ pass: none(i) && i % 5 !== 1, adherent: i % 2 === 0 }) };
 const save = (out: string, step: string, lines: string[]) => { mkdirSync(join(out, step), { recursive: true }); writeFileSync(join(out, step, "tables.txt"), lines.join("\n") + "\n"); };
 const upper = (v: { detail: Record<string, unknown> }) => ((v.detail.P as { ci: Iv }).ci ?? [NaN, NaN])[1];
@@ -129,6 +130,11 @@ export function stepAnalysis(out: string): StepResult {
   const a = adm("keep-in");
   const missing = ["A1", "A2", "A3", "A4", "A5", "A6"].filter((k) => !a.lines.some((l) => l.startsWith("STAGE1 " + k + " ")));
   if (missing.length) bad.push("Stage 1 printout lacks " + missing.join(", "));
+  for (const mk of Object.keys(MODELS)) {
+    const at = a.lines.findIndex((l) => l.startsWith("STAGE1 A4 " + mk + ":"));
+    const split = at < 0 ? [] : a.lines.slice(at + 1, at + 3 + FIT_CLASSES.length);
+    if (split.length !== FIT_CLASSES.length + 2 || !split.every((l) => l.startsWith("STAGE1 FIT " + mk + " "))) bad.push("Stage 1 printout lacks ruling C's split print after A4 for " + mk);
+  }
   for (const [name, keep, want] of [["keep-out", "OUT", "NO MEASURABLE DIFFERENCE"], ["keep-in", "IN", "HOOK COSTS PASSES"]] as const) {
     const r = report(stage4(COSTS), { stage1: adm(name) }, { out: join(out, "8-analysis", name), sims: SIMS });
     const v = r.json.verdicts.H1, vl = r.lines.find((l) => l.startsWith("H1 VERDICT"))!;
@@ -140,7 +146,7 @@ export function stepAnalysis(out: string): StepResult {
     if (!existsSync(join(out, "8-analysis", name, "report.json")) || !existsSync(join(out, "8-analysis", name, "report.md"))) bad.push(name + " wrote no report files");
   }
   save(out, "8-analysis", lines);
-  return bad.length ? { pass: false, detail: bad.join("; ") } : { pass: true, detail: "Stage 1 prints A1 to A6; P below 0 with A4 out reads NO MEASURABLE DIFFERENCE beside P's interval and the pass-loss sentence, with A4 in HOOK COSTS PASSES; report.md and report.json written" };
+  return bad.length ? { pass: false, detail: bad.join("; ") } : { pass: true, detail: "Stage 1 prints A1 to A6 and ruling C's split print by fit class; P below 0 with A4 out reads NO MEASURABLE DIFFERENCE beside P's interval and the pass-loss sentence, with A4 in HOOK COSTS PASSES; report.md and report.json written" };
 }
 
 /** Every verdict rule of H1, H2 and H3 and every end-state branch on a table with a known answer. */

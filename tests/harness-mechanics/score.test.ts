@@ -150,3 +150,33 @@ describe("the patterns command and the table", () => {
     expect(row.score.hook).toEqual({ record: true, outcome: "met_after_block", blocks: 1, waived: false });
   });
 });
+
+describe("the lint or typecheck only flag (ruling C's split print)", () => {
+  const gc = 'C="$HOME/.claude/skills/gstack/bin/gstack-checks"; "$C" run';
+  const session = (edit: boolean, results: string[]) => [
+    { type: "SystemMessage", subtype: "init", init: { cwd: "/testbed" } },
+    ...(edit ? [{ type: "AssistantMessage", content: [{ id: "w", name: "Write", input: { file_path: "/testbed/src/app.py", content: "x = 1\n" } }], usage }, { type: "UserMessage", content: [{ tool_use_id: "w", content: "ok" }] }] : []),
+    ...results.flatMap((text, i) => [
+      { type: "AssistantMessage", content: [{ id: "c" + i, name: "Bash", input: { command: gc } }], usage },
+      { type: "UserMessage", content: [{ tool_use_id: "c" + i, content: text }] },
+    ]),
+    { type: "AssistantMessage", content: [{ text: "STATUS: FIXED" }], usage },
+  ];
+  const read = (edit: boolean, ...results: string[]) => { const s = scoreSession(session(edit, results), { pass: null }); return [s.adherent, s.lint_only]; };
+  test("a rule run that rests only on a CHECK lint or CHECK typecheck line is lint only", () => {
+    expect(read(true, "CHECK tests ENV 0.0s  no pytest\nCHECK lint PASS 0.4s")).toEqual([true, true]);
+    expect(read(true, "CHECK typecheck FAIL 2.1s  src/app.py:1 error")).toEqual([true, true]);
+    expect(read(true, "CHECK lint PASS 0.4s", "CHECK typecheck PASS 1.0s")).toEqual([true, true]);
+  });
+  test("a rule run with a tests line or another outcome is not lint only", () => {
+    expect(read(true, "CHECK tests PASS 3.1s\nCHECK lint PASS 0.4s")).toEqual([true, false]);
+    expect(read(true, "CHECK lint PASS 0.4s", "CHECK tests FAIL 2.0s  1 failed")).toEqual([true, false]);
+    expect(read(true, "CHECK build PASS 4.0s")).toEqual([true, false]);
+    expect(read(true, "CHECK lint PASS 0.4s\n===== 3 passed in 0.12s =====")).toEqual([true, false]);
+  });
+  test("no rule run is never lint only; no edit reads null", () => {
+    expect(read(true, "CHECK tests ENV 0.0s  no pytest\nCHECK lint ENV 0.0s  no ruff")).toEqual([false, false]);
+    expect(read(true)).toEqual([false, false]);
+    expect(read(false, "CHECK lint PASS 0.4s")).toEqual([null, null]);
+  });
+});

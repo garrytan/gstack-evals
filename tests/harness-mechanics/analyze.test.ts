@@ -5,8 +5,8 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admission, AMENDMENT, h1Verdict, h2Verdict, h3Verdict, powerPy, repoOf, report, type Admission, type HmRowIn } from "../../lanes/harness-mechanics/analyze.ts";
-import { REPO } from "../../lanes/harness-mechanics/pins.ts";
+import { admission, AMENDMENT, FIT_CLASSES, FIT_SHA256, fitClasses, h1Verdict, h2Verdict, h3Verdict, powerPy, readFitTable, repoOf, report, type Admission, type HmRowIn } from "../../lanes/harness-mechanics/analyze.ts";
+import { MODELS, REPO } from "../../lanes/harness-mechanics/pins.ts";
 import { KNOWN, stage1, stage4 } from "../../lanes/harness-mechanics/synth.ts";
 
 const SIMS = 40;
@@ -201,5 +201,96 @@ describe("cli", () => {
     const bad = run(["report", join(d, "s4.jsonl")]);
     expect(bad.exitCode).toBe(2);
     expect(bad.stderr.toString()).toStartWith("E_USAGE");
+  });
+});
+
+describe("Stage 1 split print by fit class (ruling C)", () => {
+  const CLASSES = ["S1", "S2", "S3", "S4", "S5", "U1", "U2"];
+  const snippet = (over: Record<string, string> = {}) => ["# t", "", "## Task ids per class", "", "### CHECKS: none (2)", "", "a__x-1, a__x-2", "",
+    ...CLASSES.flatMap((c, i) => ["### signal " + c + " some words (" + (over[c] ? over[c]!.split(", ").length : 1) + ")", "", over[c] ?? "org__t-" + i + (i % 2 ? "*" : ""), ""]),
+    "### tests ENV (1)", "", "org__t-0", ""].join("\n");
+  test("the table parses into the seven signal classes; a stray count or a task in two classes is E_HM_INPUT", () => {
+    expect(FIT_CLASSES.map((c): string => c.code)).toEqual(CLASSES);
+    expect(fitClasses(snippet())).toEqual(Object.fromEntries(CLASSES.map((c, i) => ["org__t-" + i, c])));
+    expect(fitClasses(snippet({ S4: "b__y-1, b__y-2*" }))["b__y-2"]).toBe("S4");
+    expect(fitClasses(snippet({ S5: "c__z-1 (cal), c__z-2* (cal), c__z-3_interface*" }))).toMatchObject({ "c__z-1": "S5", "c__z-2": "S5", "c__z-3_interface": "S5" });
+    expect(() => fitClasses(snippet().replace("### signal S2 some words (1)", "### signal S2 some words (2)"))).toThrow(/^E_HM_INPUT /);
+    expect(() => fitClasses(snippet({ U2: "org__t-0" }))).toThrow(/^E_HM_INPUT /);
+    expect(() => fitClasses(snippet().replace(/### signal U1[^\n]*\n\n[^\n]*\n/, ""))).toThrow(/^E_HM_INPUT /);
+  });
+  test("readFitTable refuses a file that is not at the frozen sha256", () => {
+    const d = mkdtempSync(join(tmpdir(), "hm-fit-"));
+    writeFileSync(join(d, "t.md"), snippet());
+    expect(FIT_SHA256).toBe("202fc2cc346fe0736c16ada74d6a6f48e8beff177302b6d2b1ef0548b44fc665");
+    expect(() => readFitTable(join(d, "t.md"))).toThrow(/^E_HM_INPUT /);
+  });
+
+  const mk = "opus";
+  const setup = () => {
+    const rows = stage1("keep-in");
+    const tasks = [...new Set(rows.map((r) => r.task))];
+    const fit = Object.fromEntries(tasks.slice(1).map((t, i) => [t, CLASSES[i % 7]!]));
+    return { rows, tasks, fit };
+  };
+  const fitLines = (a: Admission) => a.lines.filter((l) => l.startsWith("STAGE1 FIT "));
+  test("rule runs and hook blocks print by class for every model, beside A2 and A4", () => {
+    const { rows, tasks, fit } = setup();
+    const s2 = tasks.filter((t) => fit[t] === "S2");
+    const hookS2 = rows.filter((r) => r.model === MODELS.opus.id && r.arm === "verify-hook" && s2.includes(r.task) && r.outcome === "graded");
+    hookS2[0]!.score.hook.blocks = 2;
+    hookS2[1]!.score.hook.blocks = null;
+    const a = admission(rows, { sims: SIMS, fit });
+    const lines = fitLines(a);
+    expect(lines[0]).toBe("STAGE1 FIT table: GEVA-504's task-fit-table.md at sha256 " + FIT_SHA256 + "; a print only, which no verdict, stop or cap reads");
+    for (const m of Object.keys(MODELS)) {
+      const own = lines.filter((l) => l.startsWith("STAGE1 FIT " + m + " "));
+      expect(own.map((l) => l.split(" ")[3])).toEqual([...CLASSES, "not", "lint"]);
+      const at = a.lines.findIndex((l) => l.startsWith("STAGE1 A4 " + m + ":"));
+      expect(a.lines.slice(at + 1, at + 10)).toEqual(own);
+    }
+    const g = (arm: string, ts: string[]) => rows.filter((r) => r.model === MODELS.opus.id && r.arm === arm && ts.includes(r.task) && r.outcome === "graded");
+    const ed = (arm: string, ts: string[]) => g(arm, ts).filter((r) => r.score.adherent !== null);
+    const ran = (arm: string, ts: string[]) => ed(arm, ts).filter((r) => r.score.adherent === true).length;
+    expect(lines).toContain("STAGE1 FIT opus S2 (" + s2.length + " tasks, tests FAIL, already failing at base): verify-prose ran the rule in " + ran("verify-prose", s2) + " of " + ed("verify-prose", s2).length + " sessions with an edit; verify-hook ran it in " + ran("verify-hook", s2) + " of " + ed("verify-hook", s2).length + ", and its hook blocked a /verify run in 1 of " + hookS2.length + " sessions (2 blocks)");
+    const out = [tasks[0]!];
+    expect(lines).toContain("STAGE1 FIT opus not in the table (1 tasks): verify-prose ran the rule in " + ran("verify-prose", out) + " of " + ed("verify-prose", out).length + " sessions with an edit; verify-hook ran it in " + ran("verify-hook", out) + " of " + ed("verify-hook", out).length + ", and its hook blocked a /verify run in 0 of " + g("verify-hook", out).length + " sessions (0 blocks)");
+  });
+  test("both directions: a rule run resting only on a lint or typecheck line counts, a tests PASS rule run does not", () => {
+    const { rows, fit } = setup();
+    const told = (arm: string) => rows.filter((r) => r.model === MODELS.opus.id && r.arm === arm && r.outcome === "graded" && r.score.adherent === true);
+    const [p, h] = [told("verify-prose"), told("verify-hook")];
+    const line = () => fitLines(admission(rows, { sims: SIMS, fit })).find((l) => l.startsWith("STAGE1 FIT opus lint"));
+    const want = (x: number, xp: number, xh: number) => "STAGE1 FIT opus lint or typecheck only: " + x + " of " + (p.length + h.length) + " rule runs rest only on a CHECK lint or CHECK typecheck line (verify-prose " + xp + " of " + p.length + ", verify-hook " + xh + " of " + h.length + ")";
+    expect(line()).toBe(want(0, 0, 0));
+    p[0]!.score.lint_only = true;
+    p[1]!.score.lint_only = true;
+    h[0]!.score.lint_only = true;
+    expect(line()).toBe(want(3, 2, 1));
+    h[1]!.score.check = "pytest -q";
+    h[1]!.score.lint_only = false;
+    expect(line()).toBe(want(3, 2, 1));
+  });
+  test("a print only: verdicts, A1 to A6 and every other line are the same with and without the table", () => {
+    const { rows, fit } = setup();
+    const a = admission(rows, { sims: SIMS }), b = admission(rows, { sims: SIMS, fit });
+    expect(JSON.stringify([b.models, b.pooled, b.a6])).toBe(JSON.stringify([a.models, a.pooled, a.a6]));
+    expect(b.lines.filter((l) => !l.startsWith("STAGE1 FIT "))).toEqual(a.lines);
+    expect(fitLines(a)).toEqual([]);
+  });
+});
+
+describe("cli: admission --fit", () => {
+  const CLI = join(REPO, "lanes/harness-mechanics/cli.ts");
+  const run = (args: string[]) => Bun.spawnSync([process.execPath, CLI, ...args], { cwd: REPO, env: { ...process.env, HM_SIMS: String(SIMS) } });
+  test("without --fit it says the split is not printed; a table off the frozen sha256 is E_HM_INPUT", () => {
+    const d = mkdtempSync(join(tmpdir(), "hm-fitcli-"));
+    writeFileSync(join(d, "s1.jsonl"), stage1("keep-in").map((r) => JSON.stringify(r)).join("\n") + "\n");
+    writeFileSync(join(d, "t.md"), "### signal S1 x (1)\n\norg0__repo0-1000\n");
+    const a = run(["admission", join(d, "s1.jsonl")]);
+    expect(a.exitCode).toBe(0);
+    expect(a.stdout.toString()).toContain("STAGE1 FIT not printed: pass --fit <GEVA-504's task-fit-table.md>");
+    const b = run(["admission", join(d, "s1.jsonl"), "--fit", join(d, "t.md")]);
+    expect(b.exitCode).toBe(2);
+    expect(b.stderr.toString()).toMatch(/^E_HM_INPUT /m);
   });
 });

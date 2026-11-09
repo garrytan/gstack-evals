@@ -377,6 +377,8 @@ export interface HmScore {
   adherent_strict: boolean | null;
   /** The last check that met the rule, whitespace collapsed, cut at 200 characters. */
   check: string | null;
+  /** The rule ran only on a CHECK lint or CHECK typecheck line: with those lines set aside, no check after the last edit shows an outcome and none is a repro form. null with no edit. Printed by Stage 1's split print (ruling C) and read by no verdict. */
+  lint_only: boolean | null;
   /** The last STATUS word in the final assistant message; null when it has no STATUS line. */
   claim: "FIXED" | "NOT FIXED" | "DONE" | "DONE_WITH_CONCERNS" | "BLOCKED" | "NEEDS_CONTEXT" | null;
   /** FIXED, DONE, DONE_WITH_CONCERNS or no line. */

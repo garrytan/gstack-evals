@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { l1Main } from "../../quick/laneb/l1/l1.ts";
-import { admission, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
+import { admission, readFitTable, report, type HmRowIn, type ReportConfig } from "./analyze.ts";
 import { dryrun } from "./dryrun.ts";
 import { harborEnvRecord } from "./arms.ts";
 import { CLOSING, REPO } from "./pins.ts";
@@ -18,7 +18,7 @@ import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--fit <task-fit-table.md>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
@@ -111,8 +111,10 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (cmd === "admission") {
       if (!rest[0] || rest[0].startsWith("--")) throw new Error(USAGE);
-      const a = admission(readTable(rest[0]), { sims: sims() });
+      const fit = opt("fit");
+      const a = admission(readTable(rest[0]), { sims: sims(), fit: fit ? readFitTable(fit) : undefined });
       for (const l of a.lines) console.log(l);
+      if (!fit) console.log("STAGE1 FIT not printed: pass --fit <GEVA-504's task-fit-table.md>");
       const out = opt("out");
       if (out) {
         mkdirSync(out, { recursive: true });

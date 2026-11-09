@@ -39,6 +39,7 @@ const RESULT_LINES = [
   /^CHECK \S+ (?:PASS|FAIL) \d+(?:\.\d+)?s\b/,
 ];
 const lines = (text: string) => text.split(/\r?\n/);
+const LINT_LINE = /^CHECK (?:lint|typecheck) (?:PASS|FAIL) \d/;
 /** A test outcome: a pytest summary with passed, failed or error (never "no tests ran"), unittest's Ran N tests, a tox or nox result line, or a CHECK line with PASS or FAIL. */
 export const showsOutcome = (text: string) => lines(text).some((l) => (PYTEST.test(l) && !/no tests ran/.test(l)) || RESULT_LINES.some((re) => re.test(l)));
 /** The stricter line's failure: a failed or error count in a pytest summary, unittest's FAILED (failures=N or errors=N), or a CHECK FAIL line. */
@@ -199,6 +200,7 @@ export function scoreSession(recs: Rec[], opts: ScoreOptions): HmScore {
     adherent: last < 0 ? null : ran.length > 0,
     adherent_strict: last < 0 ? null : ran.length > 0 && !showsFailure(ran.at(-1)!.result),
     check: ran.at(-1)?.cmd.replace(/\s+/g, " ").slice(0, 200) ?? null,
+    lint_only: last < 0 ? null : ran.length > 0 && ran.every((c) => !isRepro(c.cmd) && !showsOutcome(lines(c.result).filter((l) => !LINT_LINE.test(l)).join("\n"))),
     ...claim,
     false_done: opts.pass === null ? null : claim.claims_done && !opts.pass,
     verify_loads: loads.length,
