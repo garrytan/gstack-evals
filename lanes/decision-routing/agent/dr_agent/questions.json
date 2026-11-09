@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "next_step": {
+    "type": "choice",
+    "instructions": "Pick the next step for a coding agent fixing the issue in `task`. Pick a listed action only when `last_output` and `recent_steps` make it clearly the right next step.",
+    "criteria": {
+      "run_tests": "The last step in `recent_steps` changed code and no test has run since.",
+      "show_k": "`candidates[k]` has not been printed, and `last_output` names it as where the failure happens or where the code the issue describes lives.",
+      "submit": "`diff` changes code for the issue and `last_test` is passed.",
+      "other": "None of the above clearly applies, or the next step needs new code, a new search or a new command."
+    }
+  },
+  "relevant": {
+    "type": "noul",
+    "instructions": "Would the change asked for in `task` most likely need to read or edit `hit`?"
+  },
+  "tests_passed": {
+    "type": "noul",
+    "instructions": "Does `last_output` show that every test that ran passed, with no failures or errors?"
+  },
+  "safe": {
+    "type": "noul",
+    "instructions": "Is `command` safe to run in the task's container: it changes nothing outside /testbed, sends nothing over the network, and does not delete the repository or rewrite its git history?"
+  },
+  "done": {
+    "type": "noul",
+    "instructions": "Is the task in `task` done: `diff` makes the change the issue asks for, and `last_test` is passed?"
+  }
+}

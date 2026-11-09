@@ -150,7 +150,7 @@ Creative (main) model M is Opus 5.5 or GPT-6.1 Sol in every cell except W.
 
 **What each comparison isolates.** R against N: the claim. R against P: what Jev adds over a cheap reasoning model answering every decision (the router's main comparison). P against N: moving decisions off the frontier with no router. F against N: the cost and success of restructuring an agent into typed decisions. R against J: particle-1 as the middle layer. W against N, R and P: switching the whole agent against routing its decisions.
 
-**No gstack in any cell.** The loop contains no gstack file, skill, hook or drive path, so every cell is a no-gstack arm by construction (cited code, checked in the dry run). No gstack cell runs, because no gstack decision point is a code-level call on a coding agent's path (section 3); the results post says so. Folding routing into gstack is GStack Minder's call after the results (R56).
+**No gstack in any cell.** The loop contains no gstack file, skill, hook or drive path, so every cell is a no-gstack arm by construction (cited code, checked in the dry run). No gstack cell runs, because no gstack decision point is a code-level call on a coding agent's path (section 3); the results post says so. Folding routing into gstack is the gstack Captain's call after the results (R56).
 
 **Pins.** anthropic claude-opus-5-5 (Anthropic API); openai gpt-6.1-sol (OpenAI API); TypeSafe jev-1.13.0 through POST /v1/systemone with typesafe-sdk at a pinned version; particle-ai/particle-1 through OpenRouter with the provider list fixed to Particle AI and fallbacks off. The price table is re-read and dated at the build pin (read 2026-11-08: Opus 5.5 $4 in, $20 out, $0.20 cache read, $5 cache write per million; Sol $2, $10, $0.10, $2.50; Jev $0.042 in, output free; particle-1 $0.05 in, $0.50 out).
 
@@ -355,7 +355,7 @@ The build lands with the results PR, pinned by commit before calibration (R77: t
 - **R78.** No model judge scores anything, so R78's judge check does not apply. Any judge a later amendment adds is cross-family (GPT-6 Astra on Claude runs, Opus on GPT runs), checked on at least 40 labelled outputs with kappa at least 0.6, and the line becomes $4,000.
 - **R51.** This preregistration is an eval write-up with frozen price and power scripts; /ship runs the depth gstack's review planner prints for it. The build is gate class and ships with the results.
 - **R55.** The results post carries the Particle line and, because it reports GPT-6.1 Sol results, the OpenAI line, both at the end. An X post featuring particle-1 carries the short Particle tie line. At gate 1 the project owner confirmed that neither he nor Y Combinator has a tie to TypeSafe AI, so no TypeSafe line is needed.
-- **R56.** gstack adopts routing only on this eval's frontier-model evidence, and only by GStack Minder's call after the results. The workflow Captain gets the merged finding file for the post.
+- **R56.** gstack adopts routing only on this eval's frontier-model evidence, and only by the gstack Captain's call after the results. The workflow Captain gets the merged finding file for the post.
 
 ### 17. Outside terms and rights
 

@@ -7,7 +7,7 @@ author: GEVA-364
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-06
-status: done
+status: superseded
 links:
   - 2026-11-04-geva-262-g-family-admission-prereg
   - 2026-11-03-geva-225-outcome-per-skill-plan
@@ -93,7 +93,7 @@ None of these decides anything.
 | AUTH_PAID | 0.3624 | T-G's settled paid author and audit dollars per valid task, over 12 valid tasks |
 | AUTH_EXTRA | 1.2 | unmeasured; resize.py's value when it is absent, as the Captain accepted before the run |
 
-No told trial was exposed, so every told mean is the unexposed mean. Unknown calls: 0 calls and $0 in every arm. admitG computes these means over scored trials; the 9 gap sessions are in the settled spend below but not in the means.
+No told trial was exposed, so every told mean is the unexposed mean. Unknown calls: 0 calls in every arm, with no spend on them. admitG computes these means over scored trials; the 9 gap sessions are in the settled spend below but not in the means.
 
 resize.py (the prereg's file, sha256 1265268921e9, under python3 -I, AGENT_USER unset) exited 0 and printed the same lines as the runner's own g-resize.ts:
 
@@ -285,6 +285,8 @@ The host hours run from T-G's seal at 2026-11-05T22:57Z to the driver's exit at 
 **Prices.** Opus 5.5 in dollars per million tokens, from src/runner/pricing/prices.ts at the run commit, as the proxy used them on 2026-11-05 and 2026-11-06: input 4, output 20, cache read 0.20, cache write 5. The envelope host settles at $0.30 an hour, the Captain's reserve rate; Ubicloud's list rate for its shape is about $0.25 an hour. Per-arm token totals are not in the export; the dollar figures are the ledger's.
 
 From the summary: Paid $690.03.
+
+Unknown calls: 0 calls and $0 in every arm.
 
 </details>
 

@@ -178,6 +178,20 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_AR_CUSTODY](#e_ar_custody) | 2 | U20 |
 | [E_TRANSCRIPT_UNREADABLE](#e_transcript_unreadable) | warning | U20 |
 | [ENVELOPE_OVER](#envelope_over) | warning | U4 |
+| [DR_ALLOWANCE_STOP](#dr_allowance_stop) | 2 | U6 |
+| [DR_STEP_STOP](#dr_step_stop) | 2 | U6 |
+| [DR_WALL_STOP](#dr_wall_stop) | 2 | U6 |
+| [DR_DECIDER_FAILED](#dr_decider_failed) | warning | U6 |
+| [DR_STATE_OVER_LIMIT](#dr_state_over_limit) | warning | U6 |
+| [DR_LABEL_MISSING](#dr_label_missing) | warning | U6 |
+| [DR_CELL_DEGRADED](#dr_cell_degraded) | warning | U6 |
+| [DR_CUSTODY_HIT](#dr_custody_hit) | 2 | U6 |
+| [DR_ADMISSION_STOP](#dr_admission_stop) | 2 | U6 |
+| [DR_PILOT_SESSION_STOP](#dr_pilot_session_stop) | 2 | U6 |
+| [E_DR_PIN](#e_dr_pin) | 2 | U6 |
+| [E_DR_RUNTIME](#e_dr_runtime) | 2 | U6 |
+| [E_DR_RUNNER](#e_dr_runner) | 2 | U6 |
+| [E_DR_STOPPED](#e_dr_stopped) | 2 | U6 |
 | [E_PV_NO_BLOCK](#e_pv_no_block) | warning | U20 |
 | [E_PV_INFRA_MISSING](#e_pv_infra_missing) | warning | U20 |
 | [E_PV_WEB_CONTAMINATED](#e_pv_web_contaminated) | warning | U20 |
@@ -1387,6 +1401,86 @@ Fix: Delete any leftover decrypted file (test ! -e after), log the incident in C
 
 Exit 2. Side effects: Partial: CUSTODY.md holds every opening and the incident; no told content left the machine. Retry safe: yes. Resumable: no. Owner: U20.
 
+### DR_ALLOWANCE_STOP
+
+Decision routing: the metering proxy refused a session's next model or decider call because the session's $5 allowance could not hold its worst case. The proxy answers HTTP 403 with DR_ALLOWANCE_STOP in the body and journals the refusal; the session wrapper ends the session as allowance_stop, never as an infrastructure error, so Harbor does not rerun it.
+
+Fix: Nothing to repair in the session: the verifier grades the patch in /testbed as it stands and the stop prints per cell. If many sessions stop this way, send the proxy journal and the per-cell counts to the Captain; the allowance is frozen by the preregistration.
+
+Exit 2. Side effects: Partial: the session's earlier calls are spent, settled and counted; the refused call was neither reserved nor sent. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_STEP_STOP
+
+Decision routing: a session reached 100 executed actions (main-model and decider actions alike), so the action counter ended it as step_stop before running another action.
+
+Fix: Nothing to repair: the verifier grades the patch in /testbed as it stands, and the stop prints per cell and kind. The limit is frozen by the preregistration.
+
+Exit 2. Side effects: Partial: the session's spend and time count; actions past the 100th in the same reply were not run. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_WALL_STOP
+
+Decision routing: a session ran past its 2,700-second wall limit, so it ended as wall_stop.
+
+Fix: Nothing to repair: the verifier grades the patch in /testbed as it stands, and the stop prints per cell and kind. If wall stops cluster on one host, check that host's load before the next batch.
+
+Exit 2. Side effects: Partial: the session's spend and time count up to the stop. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_CUSTODY_HIT
+
+Decision routing: a request on a decision-routing slot carried the slot's planted canary, content that exists only on the runner, so the run stopped and the hit was logged. This holds for any model, main or decider, since the frontier decider asks the main model's own id. Any other runner-only marker (a hidden test name or a path absent from the pristine image), on a main-model or a decider request, is logged as a marker_hit line and never stops a session or a batch. An existing test name, or an agent diff equal to the real fix, is not a marker.
+
+Fix: Stop and report to the Captain with the hit's log line. Find how the content reached the agent's side, fix the custody path, and start a new batch only on the Captain's word. Do not --resume.
+
+Exit 2. Side effects: Partial: sessions that already ended keep their spend and grades; the controller settles every open lease. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_ADMISSION_STOP
+
+Decision routing: an admission rule of the preregistration (room in the control, transfer, or the MDD inside the margin) failed on calibration or pilot data, so the run stopped for the Captain before the next stage.
+
+Fix: Send the admission printout to the Captain and wait for a decision. Nothing reruns to change an admission reading.
+
+Exit 2. Side effects: None beyond the finished stages: their spend is settled, and no session of the next stage was launched. Retry safe: no. Resumable: no. Owner: U6.
+
+### DR_PILOT_SESSION_STOP
+
+Decision routing: a pilot session's proxy meter passed $2.50, so the controller stopped the batch: it launches no new session and lets running ones end.
+
+Fix: Send the session's meter and journal to the Captain and wait for a decision before any relaunch. The controller reconciles open leases before it starts again.
+
+Exit 2. Side effects: Partial: running sessions ended and their spend counts; every lease is settled. Retry safe: no. Resumable: no. Owner: U6.
+
+### E_DR_PIN
+
+Decision routing: the pin file's sha256, or one of the digests it names (questions, mapping, safety rule), is not the one the run was frozen with, so nothing launched.
+
+Fix: Copy the pinned file again from the run record and rerun the same command. Never edit a pin to match a changed file.
+
+Exit 2. Side effects: None: refused before any lease, proxy or session started. Retry safe: yes. Resumable: no. Owner: U6.
+
+### E_DR_RUNTIME
+
+Decision routing: the runtime tarball's sha256 is not the pinned one, so no session was launched with it.
+
+Fix: Rebuild the tarball with lanes/decision-routing/agent/runtime/build.sh at the pinned commit, or copy the pinned tarball again, and rerun.
+
+Exit 2. Side effects: None: refused before any session started. Retry safe: yes. Resumable: no. Owner: U6.
+
+### E_DR_RUNNER
+
+Decision routing: lanes/decision-routing/host/vm.sh was given an Ubicloud runner whose sha256 is not the pinned one, or no UBI_OWNER or UBI_TTL_HOURS, so it did not call the runner.
+
+Fix: Point vm.sh at the pinned copy of ubi-runner.sh with its sha256, set UBI_OWNER to the thread code and UBI_TTL_HOURS to cover the longest batch, and rerun.
+
+Exit 2. Side effects: None: refused before any VM call. Retry safe: yes. Resumable: no. Owner: U6.
+
+### E_DR_STOPPED
+
+Decision routing: the controller found its STOP file, so it launched no new session, let running sessions end and settled every lease.
+
+Fix: Remove the STOP file once the reason for it is dealt with, then relaunch the same plan; the controller reconciles open leases first and runs only the sessions that never launched.
+
+Exit 2. Side effects: Partial: sessions that ran keep their spend and results; every lease is settled. Retry safe: yes. Resumable: yes. Owner: U6.
+
 ### E_PV_PROVIDER_DRIFT
 
 Product-value eval (section 17, rule 6): a call through OpenRouter was served by a provider other than the one its route pins (OpenAI for GPT-6.1 Sol, the recorded serving provider for particle-1 and Gemini), or the provider's recorded terms changed. That model's items stop for the Captain.
@@ -1742,6 +1836,38 @@ A program's line, or one of its skills' lines, holds more than its ceiling: crew
 Fix: Nothing to undo: the money is spent and recorded. Report it to the Captain with gstack-evals ledger status --program &lt;program>. The line's skill stops as incomplete.
 
 Warning. Owner: U4.
+
+### DR_DECIDER_FAILED
+
+Decision routing: a decider call (Jev, particle-1 or the typed frontier question) failed after its retry, so the decision fell to the next layer (for relevance, the hit is kept) and the session went on. Its cost and time are billed, and decision-level scores count it as wrong.
+
+Fix: Nothing to undo. Read the session's decisions.jsonl and the proxy journal for the cause. Over 5% of a cell's decisions failing marks the cell degraded (DR_CELL_DEGRADED).
+
+Warning. Owner: U6.
+
+### DR_STATE_OVER_LIMIT
+
+Decision routing: a decision state stayed over Jev's 32K per-question limit after trimming, so Jev was not asked and the decision went to the next layer. It is counted per cell.
+
+Fix: Nothing to undo. If the count is high, report it with the results; the trimming rule is frozen by the preregistration.
+
+Warning. Owner: U6.
+
+### DR_LABEL_MISSING
+
+Decision routing: a grounded label could not be computed for a decision (for example, a snapshot that will not build), so that decision has no label. It is counted and never imputed.
+
+Fix: Nothing to undo. Read the label run's log on the runner for the cause; the decision stays unlabelled in every score.
+
+Warning. Owner: U6.
+
+### DR_CELL_DEGRADED
+
+Decision routing: over 5% of a cell's decisions had a decider failure, so the cell is marked degraded, and a null on it reads FIX-METHOD on infrastructure.
+
+Fix: Report the cell and its failure causes from the proxy journal with the results. Nothing reruns to change the reading.
+
+Warning. Owner: U6.
 
 ### E_PV_NO_BLOCK
 

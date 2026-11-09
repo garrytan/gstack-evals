@@ -46,7 +46,7 @@ Shortening the told body to 846 tokens gave no difference we could claim: placeb
 
 ## How it works
 
-An explanation, not a result. A told skill puts its whole body into every later request of the session. On particle-1 the told placebo made each request larger (the proxy's estimate of the median first request: 105,464 tokens against 57,905 with no gstack) and cost more ($0.115 a trial against $0.086), and it hit the session cap more often (13 stops against 7). Part of the extra stops come from the rig: the session cap binds on metered prices above particle-1's list prices, and the OpenRouter route counts a token per byte, so stops come earlier than real spend would put them, which pushes toward finding a tax. None of that moved the pass rate by an amount we could see. #109's 10-point gap and quick look 3's +6 now look like run-to-run spread around a small or zero effect, or something that changed at particle-1's provider between runs.
+An explanation, not a result. A told skill puts its whole body into every later request of the session. On particle-1 the told placebo made each request larger (the proxy's estimate of the median first request: 105,464 tokens against 57,905 with no gstack) and cost more per trial, and it hit the session cap more often (13 stops against 7). Part of the extra stops come from the rig: the session cap binds on metered prices above particle-1's list prices, and the OpenRouter route counts a token per byte, so stops come earlier than real spend would put them, which pushes toward finding a tax. None of that moved the pass rate by an amount we could see. #109's 10-point gap and quick look 3's +6 now look like run-to-run spread around a small or zero effect, or something that changed at particle-1's provider between runs.
 
 ## Setup
 
@@ -66,12 +66,12 @@ An explanation, not a result. A told skill puts its whole body into every later 
 
 chart.py.txt draws the chart from analysis-primary.txt: `uv run --no-project --with matplotlib==3.9.2 python chart.py.txt analysis-primary.txt chart.png` gives chart.png byte for byte.
 
-The primary readings, verbatim from the tag's `analysis/discovery-tax.ts` (analysis-primary.txt):
+The primary readings, verbatim from the tag's `analysis/discovery-tax.ts` (analysis-primary.txt), except that the closing cost clause of each particle-1 line is in Agent notes:
 
 ```
-particle-1 none: graded 185, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 77.8% [67.6%, 87.0%]; session-cap stops 7 (3.8%), agent timeouts 5; median requests 14, median first-request tokens 57905; cost per trial $0.086, per success $0.111
-particle-1 placebo-short: graded 185, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 81.6% [71.4%, 90.3%]; session-cap stops 9 (4.9%), agent timeouts 8; median requests 16, median first-request tokens 69823; cost per trial $0.095, per success $0.116
-particle-1 placebo: graded 185, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 75.7% [65.4%, 84.9%]; session-cap stops 13 (7.0%), agent timeouts 10; median requests 16, median first-request tokens 105464; cost per trial $0.115, per success $0.152
+particle-1 none: graded 185, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 77.8% [67.6%, 87.0%]; session-cap stops 7 (3.8%), agent timeouts 5; median requests 14, median first-request tokens 57905
+particle-1 placebo-short: graded 185, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 81.6% [71.4%, 90.3%]; session-cap stops 9 (4.9%), agent timeouts 8; median requests 16, median first-request tokens 69823
+particle-1 placebo: graded 185, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 75.7% [65.4%, 84.9%]; session-cap stops 13 (7.0%), agent timeouts 10; median requests 16, median first-request tokens 105464
 T1 (placebo minus none): -2.2 [-7.0, +2.7] pp over 37 tasks; verdict not confirmed, smaller than the lead
 T2 (placebo minus placebo-short): -5.9 [-11.9, +0.0] pp, p 0.0908, Holm 0.182; no claim
 ```
@@ -131,7 +131,7 @@ The verdict rests on particle-1 alone. Under org rule R54 Haiku 5.5 is not a mod
 
 **Deviations from the prereg**, each recorded in run-log.txt:
 
-1. **DeepSeek dropped.** Its first route try failed: all 11 requests returned 502 "Insufficient Balance" from OpenRouter's deepseek provider, $0 spent. The Captain found OpenRouter's own account at DeepSeek out of balance (is_byok false; deepseek endpoint status -5) and ruled that the second try wait for status 0. Before any second try, the Captain dropped DeepSeek under org rule R54 (Garry, 2026-11-01), through section 7's drop path: p = 1 in T2's family. Our one endpoint reading, at 2026-11-01T23:03:45Z, showed the deepseek provider back at status 0 (100% uptime over 30 minutes).
+1. **DeepSeek dropped.** Its first route try failed: all 11 requests returned 502 "Insufficient Balance" from OpenRouter's deepseek provider, and nothing was charged. The Captain found OpenRouter's own account at DeepSeek out of balance (is_byok false; deepseek endpoint status -5) and ruled that the second try wait for status 0. Before any second try, the Captain dropped DeepSeek under org rule R54 (Garry, 2026-11-01), through section 7's drop path: p = 1 in T2's family. Our one endpoint reading, at 2026-11-01T23:03:45Z, showed the deepseek provider back at status 0 (100% uptime over 30 minutes).
 2. **Batch controller.** GEVA-93's batch.sh instead of the tag's launch.sh, on the Captain's word (A1): particle-1's batch outlasts ubi-runner's default 4-hour TTL, and batch.sh runs vm-run.sh detached on the VM so a lost controller can re-attach. Diff from GEVA-93's copy: owner geva128, runner path, TTL 12 h.
 3. **Route check, first try.** It stalled before any session opened: Harbor's `docker exec -i` read the shell's terminal and got SIGTTIN. Nothing was spent. The second try ran the same route.sh under setsid with stdin from /dev/null.
 4. **Start rule.** `start-rule.ts check --note` wrote passing note rows and then crashed on fsync (ENOTSUP on the Capy Drive mount that holds the ledger; start-rule.ts:94 does not catch it, ledger.ts does). The verdict came from the note rows: both bounds were under the cap.
@@ -213,6 +213,16 @@ The verdict came from the note rows: particle-1 bound $61.65, Haiku $70.46 with 
 One particle-1 replicate of all three arms is about $11 metered.
 
 From the summary: $61.06 of $75.
+
+and cost more ($0.115 a trial against $0.086)
+
+particle-1 none: graded 185, missing 0, refused 0, retried after a response 0; eligible 100.0%; pass 77.8% [67.6%, 87.0%]; session-cap stops 7 (3.8%), agent timeouts 5; median requests 14, median first-request tokens 57905; cost per trial $0.086, per success $0.111
+
+particle-1 placebo-short: graded 185, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 81.6% [71.4%, 90.3%]; session-cap stops 9 (4.9%), agent timeouts 8; median requests 16, median first-request tokens 69823; cost per trial $0.095, per success $0.116
+
+particle-1 placebo: graded 185, missing 0, refused 0, retried after a response 0; body load 100.0%; pass 75.7% [65.4%, 84.9%]; session-cap stops 13 (7.0%), agent timeouts 10; median requests 16, median first-request tokens 105464; cost per trial $0.115, per success $0.152
+
+all 11 requests returned 502 "Insufficient Balance" from OpenRouter's deepseek provider, $0 spent.
 
 </details>
 

@@ -184,7 +184,7 @@ The next-round plan sized the comparison with plan v3's power script (the same g
 
 At 24 pairs or fewer the power script finds no MDD up to 40 points.
 
-**autoplan's $2,000 line is too small to give an outcome test enough power.** Spent entirely on pairs, with no headroom check, it buys fewer than 30 once harder tasks are mined, and even 30 pairs has an MDD of 43.2 points. Any comparison run inside the line would be descriptive.
+**autoplan's spending line is too small to give an outcome test enough power.** Spent entirely on pairs, with no headroom check, it buys fewer than 30 once harder tasks are mined, and even 30 pairs has an MDD of 43.2 points. Any comparison run inside the line would be descriptive.
 
 ## Deviations
 
@@ -309,6 +309,8 @@ Expected paid assumes $24 to $29 per told session on harder tasks plus $1.50 per
 Dry run part 2's first attempt (14:40Z) found /dev/shm empty and failed at once; its temporary-ledger leases opened and settled at $0.00 and $0.03, on the temporary ledger, not the real one.
 
 From the summary: Paid $60.44.
+
+**autoplan's $2,000 line is too small to give an outcome test enough power.** Spent entirely on pairs, with no headroom check, it buys fewer than 30 once harder tasks are mined, and even 30 pairs has an MDD of 43.2 points. Any comparison run inside the line would be descriptive.
 
 </details>
 

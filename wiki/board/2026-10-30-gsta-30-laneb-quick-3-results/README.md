@@ -85,43 +85,43 @@ The primary contrast is negative on every model on both task sets. None is clear
 
 ## Pass rates, cost and failure lines
 
-All 39 tasks. Cost comes only from the proxy's session rows. "Budget stops" are session-cap stops; "Timeouts" are agent timeouts, graded as they stand.
+All 39 tasks. Cost per success, in Agent notes, comes only from the proxy's session rows. "Budget stops" are session-cap stops; "Timeouts" are agent timeouts, graded as they stand.
 
-| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
-|---|---|---|---|---|---|---|---|---|---|
-| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | $0.07 | 0% | 0 | 1 | 0 |
-| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | $0.12 | 0% | 0 | 3 | 0 |
-| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | $0.12 | 0% | 0 | 2 | 0 |
-| particle-1 | none | 39 | 117 | 71% [58%, 84%] | $0.10 | 0% | 5 | 4 | 0 |
-| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | n/a | 0% | 4 | 7 | 0 |
-| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | $0.11 | 3% | 8 | 3 | 0 |
-| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | $0.08 | 0% | 4 | 7 | 0 |
-| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | $0.08 | 0% | 1 | 12 | 0 |
-| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | $0.08 | 3% | 4 | 15 | 0 |
-| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | $0.01 | 0% | 0 | 4 | 1 |
-| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | $0.02 | 0% | 0 | 4 | 0 |
-| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | $0.02 | 0% | 0 | 3 | 1 |
-| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | $0.21 | 0% | 0 | 1 | 0 |
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
+|---|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | 0% | 0 | 1 | 0 |
+| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | 0% | 0 | 3 | 0 |
+| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | 0% | 0 | 2 | 0 |
+| particle-1 | none | 39 | 117 | 71% [58%, 84%] | 0% | 5 | 4 | 0 |
+| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | 0% | 4 | 7 | 0 |
+| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | 3% | 8 | 3 | 0 |
+| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | 0% | 4 | 7 | 0 |
+| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | 0% | 1 | 12 | 0 |
+| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | 3% | 4 | 15 | 0 |
+| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | 0% | 0 | 4 | 1 |
+| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | 0% | 0 | 4 | 0 |
+| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | 0% | 0 | 3 | 1 |
+| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | 0% | 0 | 1 | 0 |
 
-particle-1 gstack shows n/a because one trial, pytorch-model-cli__LLPXjm4, has no session row (Integrity). Over its other 116 trials, its cost per success is $0.10 ([mechanism.md](mechanism.md)).
+In the Agent notes copy of this table, particle-1 gstack's cost per success shows n/a because one trial, pytorch-model-cli__LLPXjm4, has no session row (Integrity). Its cost per success over its other 116 trials is in Agent notes ([mechanism.md](mechanism.md)).
 
 Original 20 tasks:
 
-| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
-|---|---|---|---|---|---|---|---|---|---|
-| claude-sonnet-5-5 | none | 20 | 60 | 62% [43%, 80%] | $0.11 | 0% | 0 | 1 | 0 |
-| claude-sonnet-5-5 | gstack | 20 | 60 | 52% [32%, 72%] | $0.19 | 0% | 0 | 3 | 0 |
-| claude-sonnet-5-5 | placebo | 20 | 60 | 55% [35%, 75%] | $0.18 | 0% | 0 | 2 | 0 |
-| particle-1 | none | 20 | 60 | 48% [30%, 67%] | $0.18 | 0% | 2 | 4 | 0 |
-| particle-1 | gstack | 20 | 60 | 55% [40%, 70%] | n/a | 0% | 3 | 6 | 0 |
-| particle-1 | placebo | 20 | 60 | 62% [45%, 77%] | $0.16 | 5% | 4 | 1 | 0 |
-| deepseek-v4.1-flash-1017 | none | 20 | 60 | 67% [50%, 82%] | $0.12 | 0% | 3 | 5 | 0 |
-| deepseek-v4.1-flash-1017 | gstack | 20 | 60 | 58% [42%, 73%] | $0.14 | 0% | 1 | 8 | 0 |
-| deepseek-v4.1-flash-1017 | placebo | 20 | 60 | 65% [47%, 82%] | $0.13 | 5% | 2 | 11 | 0 |
-| claude-haiku-5-5 | none | 20 | 60 | 57% [40%, 73%] | $0.02 | 0% | 0 | 4 | 1 |
-| claude-haiku-5-5 | gstack | 20 | 60 | 50% [32%, 67%] | $0.04 | 0% | 0 | 4 | 0 |
-| claude-haiku-5-5 | placebo | 20 | 60 | 58% [40%, 77%] | $0.03 | 0% | 0 | 3 | 1 |
-| claude-opus-5-5 | none | 20 | 60 | 67% [47%, 85%] | $0.31 | 0% | 0 | 1 | 0 |
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
+|---|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 20 | 60 | 62% [43%, 80%] | 0% | 0 | 1 | 0 |
+| claude-sonnet-5-5 | gstack | 20 | 60 | 52% [32%, 72%] | 0% | 0 | 3 | 0 |
+| claude-sonnet-5-5 | placebo | 20 | 60 | 55% [35%, 75%] | 0% | 0 | 2 | 0 |
+| particle-1 | none | 20 | 60 | 48% [30%, 67%] | 0% | 2 | 4 | 0 |
+| particle-1 | gstack | 20 | 60 | 55% [40%, 70%] | 0% | 3 | 6 | 0 |
+| particle-1 | placebo | 20 | 60 | 62% [45%, 77%] | 5% | 4 | 1 | 0 |
+| deepseek-v4.1-flash-1017 | none | 20 | 60 | 67% [50%, 82%] | 0% | 3 | 5 | 0 |
+| deepseek-v4.1-flash-1017 | gstack | 20 | 60 | 58% [42%, 73%] | 0% | 1 | 8 | 0 |
+| deepseek-v4.1-flash-1017 | placebo | 20 | 60 | 65% [47%, 82%] | 5% | 2 | 11 | 0 |
+| claude-haiku-5-5 | none | 20 | 60 | 57% [40%, 73%] | 0% | 0 | 4 | 1 |
+| claude-haiku-5-5 | gstack | 20 | 60 | 50% [32%, 67%] | 0% | 0 | 4 | 0 |
+| claude-haiku-5-5 | placebo | 20 | 60 | 58% [40%, 77%] | 0% | 0 | 3 | 1 |
+| claude-opus-5-5 | none | 20 | 60 | 67% [47%, 85%] | 0% | 0 | 1 | 0 |
 
 Failure lines:
 
@@ -142,27 +142,27 @@ Haiku's gstack minus placebo is -8 [-22, +5] on the original 20 and -5 [-12, +2]
 
 ## particle-1 beside DeepSeek V4.1 Flash
 
-Same day, same jobs, paired by task. particle-1 minus DeepSeek is -10 [-20, -2] with no skills, -5 [-13, +2] with gstack and -3 [-9, +4] with placebo. particle-1 uses fewer tokens per trial (median 352k vs 492k with no skills) but its cache reads cost five times DeepSeek's, so its cost per success is higher ($0.10 to $0.11 vs $0.08). By the prereg's rule, particle-1's token savings come at a cost in passes, and DeepSeek stays the cheaper rung to carry forward.
+Same day, same jobs, paired by task. particle-1 minus DeepSeek is -10 [-20, -2] with no skills, -5 [-13, +2] with gstack and -3 [-9, +4] with placebo. particle-1 uses fewer tokens per trial (median 352k vs 492k with no skills) but its cache reads cost five times DeepSeek's, so its cost per success is higher. By the prereg's rule, particle-1's token savings come at a cost in passes, and DeepSeek stays the cheaper rung to carry forward.
 
 ## Model comparison (secondary, exploratory)
 
 All 39 tasks. Median tokens are billed tokens (input, both cache writes, cache reads and output) summed over the trial's proxy sessions. No parity or ranking claim is made.
 
-| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost per success | Median tokens per trial | Median wall min per trial |
-|---|---|---|---|---|---|---|---|
-| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | $0.07 | 87893 | 0.3 |
-| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | $0.12 | 146537 | 0.4 |
-| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | $0.12 | 146385 | 0.4 |
-| particle-1 | none | 39 | 117 | 71% [58%, 84%] | $0.10 | 351604 | 1.6 |
-| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | n/a | 553449 | 1.7 |
-| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | $0.11 | 532499 | 2.0 |
-| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | $0.08 | 492113 | 2.5 |
-| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | $0.08 | 797892 | 2.9 |
-| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | $0.08 | 790182 | 2.9 |
-| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | $0.01 | 163426 | 0.7 |
-| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | $0.02 | 311412 | 1.0 |
-| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | $0.02 | 294547 | 0.9 |
-| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | $0.21 | 114043 | 0.6 |
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Median tokens per trial | Median wall min per trial |
+|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | 87893 | 0.3 |
+| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | 146537 | 0.4 |
+| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | 146385 | 0.4 |
+| particle-1 | none | 39 | 117 | 71% [58%, 84%] | 351604 | 1.6 |
+| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | 553449 | 1.7 |
+| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | 532499 | 2.0 |
+| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | 492113 | 2.5 |
+| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | 797892 | 2.9 |
+| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | 790182 | 2.9 |
+| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | 163426 | 0.7 |
+| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | 311412 | 1.0 |
+| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | 294547 | 0.9 |
+| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | 114043 | 0.6 |
 
 The wall-time column is the agent's own `wall_s` from its summary, which is what the pinned `model-contrast.ts` reads. The prereg's text says "from the trial's own start and finish times". Measured that way, which adds environment start and the verifier, the medians over the 1,521 grid trials are 1.1 to 1.2 minutes for Sonnet and Opus, 1.7 to 2.0 for Haiku, 2.6 to 2.8 for particle-1 and 3.6 to 3.9 for DeepSeek. The order of the models is the same either way.
 
@@ -343,5 +343,57 @@ laneb3-pilot: Sonnet 5.5 and particle-1, arms gstack and placebo, 5 tasks, 1 tri
 - Ubicloud VM cost: unknown. The standard-30 hourly rate is not verified anywhere in this thread, so this post does not estimate it. VM time includes the first replicate 1 VM (about 6 hours with a hung session), the laneb3-r23 VM's idle stretch below and the rerun VM.
 
 The replicate 1 projection (spend so far plus twice replicate 1's cost, about $100) was under the $230 rule, so all three replicates ran in every cell.
+
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
+|---|---|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | $0.07 | 0% | 0 | 1 | 0 |
+| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | $0.12 | 0% | 0 | 3 | 0 |
+| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | $0.12 | 0% | 0 | 2 | 0 |
+| particle-1 | none | 39 | 117 | 71% [58%, 84%] | $0.10 | 0% | 5 | 4 | 0 |
+| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | n/a | 0% | 4 | 7 | 0 |
+| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | $0.11 | 3% | 8 | 3 | 0 |
+| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | $0.08 | 0% | 4 | 7 | 0 |
+| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | $0.08 | 0% | 1 | 12 | 0 |
+| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | $0.08 | 3% | 4 | 15 | 0 |
+| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | $0.01 | 0% | 0 | 4 | 1 |
+| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | $0.02 | 0% | 0 | 4 | 0 |
+| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | $0.02 | 0% | 0 | 3 | 1 |
+| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | $0.21 | 0% | 0 | 1 | 0 |
+
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost per success | Skill-open rate | Budget stops | Timeouts | No reward, scored 0 |
+|---|---|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 20 | 60 | 62% [43%, 80%] | $0.11 | 0% | 0 | 1 | 0 |
+| claude-sonnet-5-5 | gstack | 20 | 60 | 52% [32%, 72%] | $0.19 | 0% | 0 | 3 | 0 |
+| claude-sonnet-5-5 | placebo | 20 | 60 | 55% [35%, 75%] | $0.18 | 0% | 0 | 2 | 0 |
+| particle-1 | none | 20 | 60 | 48% [30%, 67%] | $0.18 | 0% | 2 | 4 | 0 |
+| particle-1 | gstack | 20 | 60 | 55% [40%, 70%] | n/a | 0% | 3 | 6 | 0 |
+| particle-1 | placebo | 20 | 60 | 62% [45%, 77%] | $0.16 | 5% | 4 | 1 | 0 |
+| deepseek-v4.1-flash-1017 | none | 20 | 60 | 67% [50%, 82%] | $0.12 | 0% | 3 | 5 | 0 |
+| deepseek-v4.1-flash-1017 | gstack | 20 | 60 | 58% [42%, 73%] | $0.14 | 0% | 1 | 8 | 0 |
+| deepseek-v4.1-flash-1017 | placebo | 20 | 60 | 65% [47%, 82%] | $0.13 | 5% | 2 | 11 | 0 |
+| claude-haiku-5-5 | none | 20 | 60 | 57% [40%, 73%] | $0.02 | 0% | 0 | 4 | 1 |
+| claude-haiku-5-5 | gstack | 20 | 60 | 50% [32%, 67%] | $0.04 | 0% | 0 | 4 | 0 |
+| claude-haiku-5-5 | placebo | 20 | 60 | 58% [40%, 77%] | $0.03 | 0% | 0 | 3 | 1 |
+| claude-opus-5-5 | none | 20 | 60 | 67% [47%, 85%] | $0.31 | 0% | 0 | 1 | 0 |
+
+| Model | Arm | Tasks | Trials | Pass rate [95% CI] | Cost per success | Median tokens per trial | Median wall min per trial |
+|---|---|---|---|---|---|---|---|
+| claude-sonnet-5-5 | none | 39 | 117 | 76% [64%, 86%] | $0.07 | 87893 | 0.3 |
+| claude-sonnet-5-5 | gstack | 39 | 117 | 74% [61%, 86%] | $0.12 | 146537 | 0.4 |
+| claude-sonnet-5-5 | placebo | 39 | 117 | 76% [63%, 87%] | $0.12 | 146385 | 0.4 |
+| particle-1 | none | 39 | 117 | 71% [58%, 84%] | $0.10 | 351604 | 1.6 |
+| particle-1 | gstack | 39 | 117 | 73% [62%, 83%] | n/a | 553449 | 1.7 |
+| particle-1 | placebo | 39 | 117 | 77% [66%, 87%] | $0.11 | 532499 | 2.0 |
+| deepseek-v4.1-flash-1017 | none | 39 | 117 | 81% [71%, 91%] | $0.08 | 492113 | 2.5 |
+| deepseek-v4.1-flash-1017 | gstack | 39 | 117 | 78% [67%, 87%] | $0.08 | 797892 | 2.9 |
+| deepseek-v4.1-flash-1017 | placebo | 39 | 117 | 79% [68%, 90%] | $0.08 | 790182 | 2.9 |
+| claude-haiku-5-5 | none | 39 | 117 | 77% [66%, 87%] | $0.01 | 163426 | 0.7 |
+| claude-haiku-5-5 | gstack | 39 | 117 | 72% [60%, 83%] | $0.02 | 311412 | 1.0 |
+| claude-haiku-5-5 | placebo | 39 | 117 | 77% [65%, 88%] | $0.02 | 294547 | 0.9 |
+| claude-opus-5-5 | none | 39 | 117 | 79% [68%, 91%] | $0.21 | 114043 | 0.6 |
+
+particle-1 gstack shows n/a because one trial, pytorch-model-cli__LLPXjm4, has no session row (Integrity). Over its other 116 trials, its cost per success is $0.10 ([mechanism.md](mechanism.md)).
+
+particle-1 uses fewer tokens per trial (median 352k vs 492k with no skills) but its cache reads cost five times DeepSeek's, so its cost per success is higher ($0.10 to $0.11 vs $0.08).
 
 </details>

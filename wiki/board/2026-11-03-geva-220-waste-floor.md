@@ -19,7 +19,7 @@ Publication status: unpublished; posting is Garry's. Done: the scan, this file a
 
 | Field | Value |
 |---|---|
-| Grade | Exploratory. One rough scan of two archives, with no frozen detector and no precision or recall audit. Paid calls: $0. |
+| Grade | Exploratory. One rough scan of two archives, with no frozen detector and no precision or recall audit. No paid calls. |
 | Repo commit | None. The scratch scanner is not in the repo; the counts come from the archives below. |
 | Prereg | None. The scan ran as a room check for a draft plan that this post replaces. |
 | Data | geva153-rund-data.tar.gz, sha256 51f09d0cce87e2b17eee52499691c9f854121c75dd19f7be9c6416c954f4cb4b, and review-data.tar.gz, sha256 cfa9ea1781fb3414be8617882e5279398a72391883f4b4bea2bcf3e356064190, held by the gstack-evals Captain; not public |
@@ -106,7 +106,7 @@ The two columns rank the models differently: Opus 5.5 has the lowest U1 rate and
 ## What changes
 
 - The planned secondary analysis of GST-1089's transcripts is dropped: the confirmatory waste families, their admission and custody steps, and the detector PR. Nothing is frozen against GST-1089, and the requests to GST-1089 for extra transcript fields are withdrawn.
-- Next, at $0 in paid calls: a reader for crew session logs, in its own PR, and a counts-only in-the-wild baseline of crew ship pipelines, as its own post. The baseline counts deterministic re-runs at a head CI already ran, review rounds past the cap, CI reruns, and which gate caught each bug first. Only counts and digests leave the logs, and no transcript text is committed. Those crews ran almost entirely on Opus 5.5, so the baseline describes one model and compares none.
+- Next, with no paid calls: a reader for crew session logs, in its own PR, and a counts-only in-the-wild baseline of crew ship pipelines, as its own post. The baseline counts deterministic re-runs at a head CI already ran, review rounds past the cap, CI reruns, and which gate caught each bug first. Only counts and digests leave the logs, and no transcript text is committed. Those crews ran almost entirely on Opus 5.5, so the baseline describes one model and compares none.
 - A paid ship-task suite keeps its own gate. The plan gave it three start triggers. The first, a claim from the GST-1089 comparison, went with that comparison. The other two still hold. It starts if the baseline shows deterministic re-runs at a tree CI ran, plus review rounds past the cap, above 10% of the measured ship-check wall clock. It also starts if admission or public data show some model and arm cell's waste share at 10% or more, with a model contrast whose 95% interval excludes 0. Otherwise it is not built.
 
 ## Limits and threats
@@ -126,7 +126,7 @@ Nothing held out is read here. Run D uses public Terminal-Bench 2 tasks, and sta
 
 ## X hook (draft)
 
-Exploratory, $0: we scanned 899 coding-agent sessions on Opus 5.5, GPT-6.1 Sol and particle-1 for tool calls that added nothing. We found 4 in 14,036. Single-task benchmark sessions leave almost nothing to waste, so we're measuring multi-hour ship pipelines next.
+Exploratory, with no paid calls: we scanned 899 coding-agent sessions on Opus 5.5, GPT-6.1 Sol and particle-1 for tool calls that added nothing. We found 4 in 14,036. Single-task benchmark sessions leave almost nothing to waste, so we're measuring multi-hour ship pipelines next.
 
 ## Claim check
 
@@ -154,6 +154,12 @@ Exploratory, $0: we scanned 899 coding-agent sessions on Opus 5.5, GPT-6.1 Sol a
 Paid model calls: $0. The scan used 1.9M host tokens (1,347 Capy credits, about $1.35). Planning, review and drafting before this post's /ship used about 35M host tokens (about 17,600 credits, about $18). Prices: Capy credits at about $1 per 1,000, as of 2026-11-02. No provider tokens were bought.
 
 From the summary: A $0 rough scan found 4 waste calls in 14,036 and none in any no-gstack cell.
+
+From the Grade row: Paid calls: $0.
+
+- Next, at $0 in paid calls: a reader for crew session logs, in its own PR, and a counts-only in-the-wild baseline of crew ship pipelines, as its own post.
+
+Exploratory, $0: we scanned 899 coding-agent sessions on Opus 5.5, GPT-6.1 Sol and particle-1 for tool calls that added nothing.
 
 </details>
 

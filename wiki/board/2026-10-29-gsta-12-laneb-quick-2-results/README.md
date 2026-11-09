@@ -52,19 +52,19 @@ Every invoked cell loaded the body on every session, pilot and grid alike. The i
 
 Preregistered `analyze.ts` at 09f69e99 (see Deviations for the pin note). Timeouts are graded as the session stands; no paid trial lacked a reward.
 
-| Model | Arm | Trials | Pass rate [95% CI] | Cost per success | Budget stops | Timeouts |
-|---|---|---|---|---|---|---|
-| Opus 5.5 | none | 60 | 72% [53%, 88%] | $0.25 | 0 | 3 |
-| Opus 5.5 | gstack | 60 | 65% [47%, 82%] | $0.48 | 0 | 2 |
-| Opus 5.5 | placebo | 60 | 70% [50%, 88%] | $0.45 | 0 | 0 |
-| Haiku 5.5 | none | 60 | 47% [30%, 63%] | $0.04 | 0 | 3 |
-| Haiku 5.5 | gstack | 60 | 43% [25%, 62%] | $0.04 | 0 | 2 |
-| Haiku 5.5 | placebo | 60 | 63% [48%, 78%] | $0.03 | 0 | 2 |
-| DeepSeek V4.1 Flash | none | 60 | 53% [33%, 72%] | $0.16 | 1 | 9 |
-| DeepSeek V4.1 Flash | gstack | 60 | 60% [43%, 75%] | $0.15 | 2 | 3 |
-| DeepSeek V4.1 Flash | placebo | 60 | 67% [53%, 80%] | $0.14 | 2 | 4 |
+| Model | Arm | Trials | Pass rate [95% CI] | Budget stops | Timeouts |
+|---|---|---|---|---|---|
+| Opus 5.5 | none | 60 | 72% [53%, 88%] | 0 | 3 |
+| Opus 5.5 | gstack | 60 | 65% [47%, 82%] | 0 | 2 |
+| Opus 5.5 | placebo | 60 | 70% [50%, 88%] | 0 | 0 |
+| Haiku 5.5 | none | 60 | 47% [30%, 63%] | 0 | 3 |
+| Haiku 5.5 | gstack | 60 | 43% [25%, 62%] | 0 | 2 |
+| Haiku 5.5 | placebo | 60 | 63% [48%, 78%] | 0 | 2 |
+| DeepSeek V4.1 Flash | none | 60 | 53% [33%, 72%] | 1 | 9 |
+| DeepSeek V4.1 Flash | gstack | 60 | 60% [43%, 75%] | 2 | 3 |
+| DeepSeek V4.1 Flash | placebo | 60 | 67% [53%, 80%] | 2 | 4 |
 
-The gstack arm costs about 70% more than no skills on Opus for a lower pass rate, so its cost per success is nearly double ($0.48 vs $0.25). The extra cost is the injected body, read from cache after the first turn; on the cheap models the absolute cost is small either way.
+The gstack arm costs about 70% more than no skills on Opus for a lower pass rate, so its cost per success is nearly double. The extra cost is the injected body, read from cache after the first turn; on the cheap models the absolute cost is small either way.
 
 ## Arm contrasts
 
@@ -125,7 +125,7 @@ Each invoked trial is coded from its first assistant message through the third t
 
 Agents neither cite the skill ("the skill says...") nor dismiss it; they take the body as context and proceed to work. The coding is identical between gstack and placebo in every cell, so the content difference produces no observable difference in how the agent opens the task. Combined with the outcome, the `/investigate` body reads as inert-to-harmful context rather than a procedure the model follows.
 
-One known gap: in a trial with fewer than three tool calls, the coder ends the window at the last tool call, so assistant text after that call is not coded. A dismissal or citation written there would be counted as `continues`, so these short trials could be under-coded as dismisses or cites. A follow-up fixes the window rule and reruns the coder at $0 over this grid.
+One known gap: in a trial with fewer than three tool calls, the coder ends the window at the last tool call, so assistant text after that call is not coded. A dismissal or citation written there would be counted as `continues`, so these short trials could be under-coded as dismisses or cites. A follow-up fixes the window rule and reruns the coder over this grid with no paid calls.
 
 ## Model ladder
 
@@ -133,29 +133,29 @@ The preregistration asked how much of the gap to Opus 5.5 gstack closes for the 
 
 ## Mechanism
 
-All from the $0 proxy session rows, 60 trials per cell. Agent timeouts is the share of graded trials that hit the agent's wall clock; requests per trial is the mean of forwarded model calls; median tokens per trial sums a session's input, output and cache tokens; cost per success is metered spend over passes.
+All from the proxy session rows, read with no paid calls, 60 trials per cell. Agent timeouts is the share of graded trials that hit the agent's wall clock; requests per trial is the mean of forwarded model calls; median tokens per trial sums a session's input, output and cache tokens; cost per success, in Agent notes, is metered spend over passes.
 
-| Model | Arm | Agent timeouts | Requests/trial | Median tokens/trial | Cost/success |
-|---|---|---|---|---|---|
-| Opus 5.5 | none | 5% (3/60) | 6.8 | 149k | $0.25 |
-| Opus 5.5 | placebo | 0% (0/60) | 7.0 | 239k | $0.45 |
-| Opus 5.5 | gstack | 3% (2/60) | 7.5 | 277k | $0.48 |
-| Haiku 5.5 | none | 5% (3/60) | 10.1 | 199k | $0.04 |
-| Haiku 5.5 | placebo | 3% (2/60) | 10.0 | 317k | $0.03 |
-| Haiku 5.5 | gstack | 3% (2/60) | 10.3 | 347k | $0.04 |
-| DeepSeek V4.1 Flash | none | 15% (9/60) | 29.9 | 1.01M | $0.16 |
-| DeepSeek V4.1 Flash | placebo | 7% (4/60) | 32.5 | 1.33M | $0.14 |
-| DeepSeek V4.1 Flash | gstack | 5% (3/60) | 28.5 | 1.15M | $0.15 |
+| Model | Arm | Agent timeouts | Requests/trial | Median tokens/trial |
+|---|---|---|---|---|
+| Opus 5.5 | none | 5% (3/60) | 6.8 | 149k |
+| Opus 5.5 | placebo | 0% (0/60) | 7.0 | 239k |
+| Opus 5.5 | gstack | 3% (2/60) | 7.5 | 277k |
+| Haiku 5.5 | none | 5% (3/60) | 10.1 | 199k |
+| Haiku 5.5 | placebo | 3% (2/60) | 10.0 | 317k |
+| Haiku 5.5 | gstack | 3% (2/60) | 10.3 | 347k |
+| DeepSeek V4.1 Flash | none | 15% (9/60) | 29.9 | 1.01M |
+| DeepSeek V4.1 Flash | placebo | 7% (4/60) | 32.5 | 1.33M |
+| DeepSeek V4.1 Flash | gstack | 5% (3/60) | 28.5 | 1.15M |
 
-The body arms add tokens without changing the request count. On the Claude models requests per trial barely move (Opus about 7, Haiku about 10) while median tokens per trial jump roughly 90k on Opus and 130k on Haiku in the body arms, the injected body read mostly from cache after turn 1. That extra load nearly doubles Opus cost per success ($0.25 none to $0.45 to $0.48 in the body arms) with no accuracy gain, while Haiku stays near $0.03 to $0.04 because the model is cheap. DeepSeek is the outlier: about 30 requests and over a million tokens per trial, and its agent-timeout share falls from 15% with no skills to 5 to 7% in the body arms, so for the slow cheap model the longer body coincides with more trials finishing, the same body-length effect the contrasts show. Nothing in the mechanism separates gstack's content from the placebo's: the arms differ in which prose fills the body, not in how the agent runs.
+The body arms add tokens without changing the request count. On the Claude models requests per trial barely move (Opus about 7, Haiku about 10) while median tokens per trial jump roughly 90k on Opus and 130k on Haiku in the body arms, the injected body read mostly from cache after turn 1. That extra load nearly doubles Opus cost per success with no accuracy gain, while Haiku's stays small because the model is cheap. DeepSeek is the outlier: about 30 requests and over a million tokens per trial, and its agent-timeout share falls from 15% with no skills to 5 to 7% in the body arms, so for the slow cheap model the longer body coincides with more trials finishing, the same body-length effect the contrasts show. Nothing in the mechanism separates gstack's content from the placebo's: the arms differ in which prose fills the body, not in how the agent runs.
 
 ## Integrity
 
 [audit.py](../../../quick/laneb/analysis/audit.py) ran on both grid jobs. Clean on the runner defects it checks: no duplicate rerun sessions, no sessions without a trial directory, no trials without a session, no settle failures, no missing summaries, no bad `max_tokens`, no no-reward trials, and no successful response with absent usage. Upstream provider errors numbered 19 across 540 trials and were retried per the run rules; agent timeouts (per-cell counts in the Mechanism table) are graded as the session stands.
 
-Sandbox integrity: the run used the allowlist network policy, which blocks off-list hosts at the network layer. Quick look 1's review left a detection gap in audit.py, since fixed: its off-list-failure test caught silent `curl`, `wget` and `urlretrieve` but not a silent Python `requests`, `urllib`, `httpx`, `urlopen` or session fetch, so a silently successful Python fetch could have been scored as a cleanly blocked attempt. The fix extends that test to those Python verbs, and the fixed audit was rerun at $0 over this grid and over quick look 1's two jobs. On the prereg-2 grid (540 trials) it flags 53 trials with a Bash call naming an off-list host and a fetch verb, now all 53 also flagged `offlist_unclear` for a manual read (the fix moved 2 borderline Python or curl calls from cleanly-blocked to unclear), plus 2 `network_bypass` and 16 `solution_seeking`, almost all DeepSeek. On quick look 1's two jobs (540 trials) it flags 36 off-list attempts, 33 unclear, 0 `network_bypass` and 17 `solution_seeking`. A manual read of every flagged call carrying a success marker found all benign: each is task HTML content (the filter-js-from-html tasks embed URLs such as example.com, ok.com and xss.rocks in their test vectors) or a fetch to the allowed pypi.org returning 200, and the off-list hosts return SSL or connection errors, so only allowlisted hosts answer. No trial in either quick look retrieved off-list data. The two prereg-2 `network_bypass` flags are false positives: one is the model's own reasoning text plus a `which nsenter unshare` tool-availability check, the other a single diagnostic `ip route`. The `solution_seeking` calls are DeepSeek web or code-host searches, all blocked by the allowlist, and the usual pypi installs are logged.
+Sandbox integrity: the run used the allowlist network policy, which blocks off-list hosts at the network layer. Quick look 1's review left a detection gap in audit.py, since fixed: its off-list-failure test caught silent `curl`, `wget` and `urlretrieve` but not a silent Python `requests`, `urllib`, `httpx`, `urlopen` or session fetch, so a silently successful Python fetch could have been scored as a cleanly blocked attempt. The fix extends that test to those Python verbs, and the fixed audit was rerun with no paid calls over this grid and over quick look 1's two jobs. On the prereg-2 grid (540 trials) it flags 53 trials with a Bash call naming an off-list host and a fetch verb, now all 53 also flagged `offlist_unclear` for a manual read (the fix moved 2 borderline Python or curl calls from cleanly-blocked to unclear), plus 2 `network_bypass` and 16 `solution_seeking`, almost all DeepSeek. On quick look 1's two jobs (540 trials) it flags 36 off-list attempts, 33 unclear, 0 `network_bypass` and 17 `solution_seeking`. A manual read of every flagged call carrying a success marker found all benign: each is task HTML content (the filter-js-from-html tasks embed URLs such as example.com, ok.com and xss.rocks in their test vectors) or a fetch to the allowed pypi.org returning 200, and the off-list hosts return SSL or connection errors, so only allowlisted hosts answer. No trial in either quick look retrieved off-list data. The two prereg-2 `network_bypass` flags are false positives: one is the model's own reasoning text plus a `which nsenter unshare` tool-availability check, the other a single diagnostic `ip route`. The `solution_seeking` calls are DeepSeek web or code-host searches, all blocked by the allowlist, and the usual pypi installs are logged.
 
-One known gap remains in the audit: its outer fetch test matches only `requests.get`, `post` and `head`, so a Bash call that reaches an off-list host only through `requests.put`, `patch`, `delete`, `request` or `Session`, or through `session.get`, `post`, `head` or `request`, is never flagged. The `offlist_attempt` and `offlist_unclear` counts above could rise once that is fixed. The network allowlist, not the audit, is the primary off-list control. A follow-up extends the fetch test and reruns the audit at $0 over both quick looks' grids.
+One known gap remains in the audit: its outer fetch test matches only `requests.get`, `post` and `head`, so a Bash call that reaches an off-list host only through `requests.put`, `patch`, `delete`, `request` or `Session`, or through `session.get`, `post`, `head` or `request`, is never flagged. The `offlist_attempt` and `offlist_unclear` counts above could rise once that is fixed. The network allowlist, not the audit, is the primary off-list control. A follow-up extends the fetch test and reruns the audit with no paid calls over both quick looks' grids.
 
 ## Pilot
 
@@ -225,5 +225,41 @@ Pass rates and every contrast are identical under both; only DeepSeek none cost 
 - As-pinned analysis: running the branch's `analyze.ts` (111829df) instead of the preregistered 09f69e99 leaves every pass rate and contrast identical, moving only DeepSeek none cost by $0.44.
 
 - Spend ledger line item `laneb-quick-2`, cap $120, settled $73.22, closed with $11 released, in the Captain drive.
+
+| Model | Arm | Trials | Pass rate [95% CI] | Cost per success | Budget stops | Timeouts |
+|---|---|---|---|---|---|---|
+| Opus 5.5 | none | 60 | 72% [53%, 88%] | $0.25 | 0 | 3 |
+| Opus 5.5 | gstack | 60 | 65% [47%, 82%] | $0.48 | 0 | 2 |
+| Opus 5.5 | placebo | 60 | 70% [50%, 88%] | $0.45 | 0 | 0 |
+| Haiku 5.5 | none | 60 | 47% [30%, 63%] | $0.04 | 0 | 3 |
+| Haiku 5.5 | gstack | 60 | 43% [25%, 62%] | $0.04 | 0 | 2 |
+| Haiku 5.5 | placebo | 60 | 63% [48%, 78%] | $0.03 | 0 | 2 |
+| DeepSeek V4.1 Flash | none | 60 | 53% [33%, 72%] | $0.16 | 1 | 9 |
+| DeepSeek V4.1 Flash | gstack | 60 | 60% [43%, 75%] | $0.15 | 2 | 3 |
+| DeepSeek V4.1 Flash | placebo | 60 | 67% [53%, 80%] | $0.14 | 2 | 4 |
+
+The gstack arm costs about 70% more than no skills on Opus for a lower pass rate, so its cost per success is nearly double ($0.48 vs $0.25).
+
+A follow-up fixes the window rule and reruns the coder at $0 over this grid.
+
+All from the $0 proxy session rows, 60 trials per cell.
+
+| Model | Arm | Agent timeouts | Requests/trial | Median tokens/trial | Cost/success |
+|---|---|---|---|---|---|
+| Opus 5.5 | none | 5% (3/60) | 6.8 | 149k | $0.25 |
+| Opus 5.5 | placebo | 0% (0/60) | 7.0 | 239k | $0.45 |
+| Opus 5.5 | gstack | 3% (2/60) | 7.5 | 277k | $0.48 |
+| Haiku 5.5 | none | 5% (3/60) | 10.1 | 199k | $0.04 |
+| Haiku 5.5 | placebo | 3% (2/60) | 10.0 | 317k | $0.03 |
+| Haiku 5.5 | gstack | 3% (2/60) | 10.3 | 347k | $0.04 |
+| DeepSeek V4.1 Flash | none | 15% (9/60) | 29.9 | 1.01M | $0.16 |
+| DeepSeek V4.1 Flash | placebo | 7% (4/60) | 32.5 | 1.33M | $0.14 |
+| DeepSeek V4.1 Flash | gstack | 5% (3/60) | 28.5 | 1.15M | $0.15 |
+
+That extra load nearly doubles Opus cost per success ($0.25 none to $0.45 to $0.48 in the body arms) with no accuracy gain, while Haiku stays near $0.03 to $0.04 because the model is cheap.
+
+The fix extends that test to those Python verbs, and the fixed audit was rerun at $0 over this grid and over quick look 1's two jobs.
+
+A follow-up extends the fetch test and reruns the audit at $0 over both quick looks' grids.
 
 </details>

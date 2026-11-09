@@ -90,10 +90,14 @@
     ],
     "src/runner/proxy/**": [
       "tests/proxy/metering-proxy.test.ts",
+      "tests/decision-routing/proxy-dr.test.ts",
+      "tests/decision-routing/custody.test.ts",
       "tests/proxy/sm-proxy.test.ts"
     ],
     "src/runner/pricing/**": [
-      "tests/proxy/metering-proxy.test.ts"
+      "tests/proxy/metering-proxy.test.ts",
+      "tests/decision-routing/proxy-dr.test.ts",
+      "tests/decision-routing/custody.test.ts"
     ],
     ".gstack/pregate.json": [
       "tests/wiki.test.ts",
@@ -123,7 +127,6 @@
       "tests/lanea-shakedown-tasks.test.ts"
     ],
     "quick/laneb/**": [
-      "tests/outcome-skills/sm-rebench.test.ts",
       "quick/laneb/tests/agent.test.ts",
       "quick/laneb/tests/analysis-load.test.ts",
       "quick/laneb/tests/analysis.test.ts",
@@ -142,7 +145,8 @@
       "quick/laneb/tests/r3c.test.ts",
       "quick/laneb/tests/runner.test.ts",
       "quick/laneb/tests/stacks.test.ts",
-      "quick/laneb/tests/vm-run.test.ts"
+      "quick/laneb/tests/vm-run.test.ts",
+      "tests/outcome-skills/sm-rebench.test.ts"
     ],
     "quick/lanea-quick/**": [
       "quick/lanea-quick/test/grade.test.ts",
@@ -205,6 +209,33 @@
     ],
     "tests/real-outcome/unit_test.py": [
       "tests/outcome-skills/sm-session.test.ts"
+    ],
+    "lanes/decision-routing/**": [
+      "tests/decision-routing/agent-sdk.test.ts",
+      "tests/decision-routing/agent-units.test.ts",
+      "tests/decision-routing/custody.test.ts",
+      "tests/decision-routing/dryrun.test.ts",
+      "tests/decision-routing/host-controller.test.ts",
+      "tests/decision-routing/host-vm.test.ts",
+      "tests/decision-routing/labels-rules.test.ts",
+      "tests/decision-routing/pilot.test.ts",
+      "tests/decision-routing/proxy-dr.test.ts",
+      "tests/decision-routing/proxy-fake.test.ts",
+      "tests/decision-routing/score-acting.test.ts",
+      "tests/decision-routing/score-admission.test.ts",
+      "tests/decision-routing/score-cli.test.ts",
+      "tests/decision-routing/score-offplan.test.ts",
+      "tests/decision-routing/score-session.test.ts",
+      "tests/decision-routing/score-verdicts.test.ts",
+      "tests/decision-routing/tune-bands.test.ts"
+    ],
+    "tests/decision-routing/*.py": [
+      "tests/decision-routing/agent-sdk.test.ts",
+      "tests/decision-routing/agent-units.test.ts",
+      "tests/decision-routing/dryrun.test.ts"
+    ],
+    "tests/decision-routing/stubs/**": [
+      "tests/decision-routing/agent-sdk.test.ts"
     ]
   },
   "guards": [
