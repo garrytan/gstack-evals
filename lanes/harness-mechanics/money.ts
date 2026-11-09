@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { hostTtlHours, itemCheck, L1, plannedCells, relaunchRects, type PartPlan } from "../../quick/laneb/l1/l1.ts";
 import { appendRow, fromMicros, Ledger, readRows, toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
 import type { HmArm, HmSessionRow } from "../../src/types.ts";
-import { bundleLists, CAPS_USD, HM, JUDGE, MODELS, NO_GSTACK, RATES_USD, VM_HOURS_PER_SESSION, type ModelKey } from "./pins.ts";
+import { bundleLists, CAPS_USD, HM, JUDGE, MODELS, NO_GSTACK, RATES_USD, REPLAY, VM_HOURS_PER_SESSION, type ModelKey } from "./pins.ts";
 import { ITEMS, itemPlan } from "./plans.ts";
 import { hmRow } from "./table.ts";
 
@@ -165,8 +165,9 @@ export function infraRerun(first: HmSessionRow[], second: HmSessionRow[] = []) {
   };
 }
 
-// The reserve per launch: a session item's parallel allowances; vms leases one part-VM block; the replay's lease is unit 8's.
-export const leaseUsd = (item: Item) => (ITEMS[item] ? HM.concurrent * ITEMS[item]!.allowanceUsd : item === "vms" ? blockUsd : null);
+// The reserve per launch: a session item's parallel allowances; vms leases one part-VM block; the replay, which runs no
+// sessions, leases its expected spend times section 22's margin for its one run (replay.ts runReplay).
+export const leaseUsd = (item: Item) => (ITEMS[item] ? HM.concurrent * ITEMS[item]!.allowanceUsd : item === "vms" ? blockUsd : item === "stage2-replay" ? REPLAY.m * REPLAY.expectedUsd : null);
 
 type StepResult = { pass: boolean; detail: string };
 const tmpLedgers = (out: string) => { const d = mkdtempSync(join(tmpdir(), "hm-ledger-")); mkdirSync(out, { recursive: true }); return d; };

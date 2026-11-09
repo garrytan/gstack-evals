@@ -1160,6 +1160,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_HM_REPLAY: {
+    exit: 2,
+    meaning: "The harness mechanics Stage 2 replay (lanes/harness-mechanics/replay.ts) refused or stopped: its items are off the preregistered counts or their digest, the start rule's record is missing, a stratified draw ran short, a client answered without a metered cost, or the next batch of calls would pass the replay's lease (a cap stop).",
+    fix: "Read the text after the code. A count, digest or start refusal comes before any call: fix the input and run again. A cap stop or an unmetered answer leaves the replay incomplete with its lease settled at the spend so far; the item serves one run and the run is never retried, so take it to the Captain.",
+    side_effects: PARTIAL,
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_HM_PIN: {
     exit: 2,
     meaning: "A harness mechanics gstack pin does not hold (lanes/harness-mechanics/match.ts): a file vendored under lanes/harness-mechanics/vendor/gstack is missing or is not the git blob pins.ts records, HM_GSTACK is unset, or the checkout it names lacks the pin or holds another blob there, or the vendored checker no longer has exactly one quote transform.",

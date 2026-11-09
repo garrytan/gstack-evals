@@ -35,6 +35,14 @@ export const CAPS_USD = { "stage1-opus": 150, "stage1-sol": 180, "stage1-p1": 70
 export const ledgerCapsUsd = () => Object.values(CAPS_USD).reduce((a, b) => a + b, 0);
 // The ledger items' caps plus the crew's: 2,880 inside the 3,000 line.
 export const capsTotalUsd = () => ledgerCapsUsd() + HM.crewCapUsd;
+// Section 10's replay: the item counts, the route sources, the kappa bar, the tuning tolerance (1 point of balanced
+// accuracy) and its band grid, the admission's false-block or false-deny bar, the calibration bins, and section 22's
+// expected spend and margin, whose product is the replay's one lease (money.ts leaseUsd).
+export const REPLAY = {
+  counts: { route: 400, done: 480, risky_sampled: 400, risky_written: 200 },
+  routeSources: ["swe-rebench", "terminal-bench-2", "gstack-routing"],
+  kappaMin: 0.6, tunePoints: 0.01, bandStep: 0.01, falseRateMax: 0.1, eceBins: 10, expectedUsd: 60, m: 1.5,
+} as const;
 
 // The closing line every arm's prompt ends with. grid.ts and prompt_builder.py hold the same text under this key.
 export const CLOSING = { key: "hm-status", text: "When you finish, end your final message with one line: STATUS: FIXED or STATUS: NOT FIXED." } as const;

@@ -145,6 +145,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_HM_NOT_BUILT](#e_hm_not_built) | 2 | U20 |
 | [E_HM_LAUNCH](#e_hm_launch) | 2 | U20 |
 | [E_HM_SCREEN](#e_hm_screen) | 2 | U20 |
+| [E_HM_REPLAY](#e_hm_replay) | 2 | U20 |
 | [E_HM_PIN](#e_hm_pin) | 2 | U20 |
 | [E_TBV_NOT_BUILT](#e_tbv_not_built) | 2 | U20 |
 | [E_TBV_INPUT](#e_tbv_input) | 2 | U20 |
@@ -1039,6 +1040,14 @@ The harness mechanics task-fit screen could not decide (lanes/harness-mechanics/
 Fix: D1's origin step should make this impossible, so a hit means task-setup.Dockerfile's origin RUN or PATH did not reach the screen's container. Look at the docker run command in lanes/harness-mechanics/screen.ts dockerDetect, which runs that RUN and PATH before detect. Nothing was replaced.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: no. Owner: U20.
+
+### E_HM_REPLAY
+
+The harness mechanics Stage 2 replay (lanes/harness-mechanics/replay.ts) refused or stopped: its items are off the preregistered counts or their digest, the start rule's record is missing, a stratified draw ran short, a client answered without a metered cost, or the next batch of calls would pass the replay's lease (a cap stop).
+
+Fix: Read the text after the code. A count, digest or start refusal comes before any call: fix the input and run again. A cap stop or an unmetered answer leaves the replay incomplete with its lease settled at the spend so far; the item serves one run and the run is never retried, so take it to the Captain.
+
+Exit 2. Side effects: Partial: completed cells and their spend are kept; nothing is sent twice. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_HM_PIN
 

@@ -133,7 +133,7 @@ export function clusterBoot<T extends { cluster: string }>(units: T[], stat: (us
   for (let i = 0; i < draws; i++) { const s: T[] = []; for (let j = 0; j < cs.length; j++) s.push(...cs[Math.floor(rng() * cs.length)]!); out.push(stat(s)); }
   return out.filter(Number.isFinite).sort((x, y) => x - y);
 }
-const iv = (b: number[], tail: number): Iv => (b.length ? [b[Math.floor(b.length * tail)]!, b[Math.ceil(b.length * (1 - tail)) - 1]!] : null);
+export const iv = (b: number[], tail: number): Iv => (b.length ? [b[Math.floor(b.length * tail)]!, b[Math.ceil(b.length * (1 - tail)) - 1]!] : null);
 
 // Exposure (section 17): /verify loaded in told arms, the contract record in verify-hook, hook logs in the judge arms,
 // and the no-gstack arms clean, each with a 90% bar; blocks fired print beside them.

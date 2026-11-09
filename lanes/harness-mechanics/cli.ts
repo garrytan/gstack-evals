@@ -15,8 +15,9 @@ import { approve, isItem, launchGuard, markDone, type HmCrew, type Item } from "
 import { readRows } from "../../quick/laneb/runner/ledger.ts";
 import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
+import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--out <dir>] | report <table.jsonl> <config.json> <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
@@ -72,6 +73,26 @@ export async function main(argv: string[]): Promise<number> {
         writeFileSync(join(work, "hm.json"), JSON.stringify({ item: plan.item, sessions, picker_calls: [...tasks("none")].filter((x) => plain.has(x)).length, closing_line: CLOSING, screened_sha256: plan.inputs.screened, harbor_env: harborEnvRecord(readFileSync(join(REPO, "quick/laneb/runner/vm-run.sh"), "utf8")) }, null, 2) + "\n");
       }
       return 0;
+    }
+    if (cmd === "replay") {
+      const sub = rest[0];
+      if (sub === "items") {
+        const { items, sha256 } = itemsFromEnv(), bad = countProblems(items);
+        console.log("replay items " + sha256 + ": " + items.length + " items" + (bad.length ? "" : " at the preregistered counts"));
+        if (bad.length) throw new Error("E_HM_REPLAY counts: " + bad.join("; "));
+        return 0;
+      }
+      if (sub === "run") {
+        const clients = opt("clients"), start = opt("start"), ledger = opt("ledger"), out = opt("out");
+        if (!clients || !start || !ledger || !out) throw new Error(USAGE);
+        const { items, sha256 } = itemsFromEnv(), mod = await import(resolve(clients));
+        if (typeof mod.replayClients !== "function") throw new Error("E_USAGE hm replay run: " + clients + " exports no replayClients()");
+        const r = await runReplay({ items, itemsSha256: sha256, clients: mod.replayClients(), out: resolve(out), start: resolve(start), ledger: resolve(ledger) });
+        console.log("wrote " + join(resolve(out), "report.md") + "; h3_admission " + JSON.stringify(r.h3_admission));
+        return 0;
+      }
+      if (sub === "report" && rest[1]) { console.log("h3_admission " + JSON.stringify(replayReport(resolve(rest[1])).h3_admission)); return 0; }
+      throw new Error(USAGE);
     }
     if (cmd === "table") {
       const [cfg, out] = rest;
