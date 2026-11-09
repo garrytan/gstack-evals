@@ -19,3 +19,7 @@ test("drops two verbatim added lines of 30 characters or more, not one", () => {
   expect(toldScreen(long + "\n        self.state = State::Idle; // reset after close, always\n", fix)).toBeNull();
   expect(toldScreen(long + "\n  self.state = State::Idle; // reset after close, always\nself.retries = 0; // and the retry counter goes back too\n", fix)).toEqual({ rule: "fix_lines", value: 2 });
 });
+test("drops the Rust dry-run unit skim-rs__skim-1044, whose issue text is 108 characters, under the 200-character floor", () => {
+  const issue = "--border none as in FZF (support for neovim fzf-lua)\nImplement value `none` for option `--border` as in FZF\n";
+  expect(toldScreen(issue, "")).toEqual({ rule: "issue_short", value: 108 });
+});
