@@ -1498,7 +1498,7 @@ export const CODES = {
   },
   DR_CUSTODY_HIT: {
     exit: 2,
-    meaning: "Decision routing: content that exists only on the runner (a hidden test hunk that adds tests, a path absent from the pristine image, or a planted canary) was found where an agent could read it, so the run stopped and the hit was logged. An existing test name, or an agent diff equal to the real fix, is logged and never stops a run.",
+    meaning: "Decision routing: a decider's request carried the slot's planted canary, content that exists only on the runner, so the run stopped and the hit was logged. Any other runner-only marker on a decider request (a hidden test name or a path absent from the pristine image), and any marker on a main-model request, the canary included, is logged as a marker_hit line and never stops a session or a batch. An existing test name, or an agent diff equal to the real fix, is not a marker.",
     fix: "Stop and report to the Captain with the hit's log line. Find how the content reached the agent's side, fix the custody path, and start a new batch only on the Captain's word. Do not --resume.",
     side_effects: "Partial: sessions that already ended keep their spend and grades; the controller settles every open lease.",
     retry_safe: false,

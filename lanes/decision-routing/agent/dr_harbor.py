@@ -26,6 +26,7 @@ import hashlib
 import http.client
 import json
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -159,7 +160,8 @@ class DecisionRoutingAgent(MiniSweAgent):
         self._model = o.model
         self._item = o.item
         self._main = cells["models"][o.model]
-        self._allow = [self._main["allow"], *cells["cells"][o.cell]["deciders"]]
+        self._deciders = cells["cells"][o.cell]["deciders"]
+        self._allow = [self._main["allow"], *self._deciders]
         self._limits = cells["limits"]
         self._runtime_tarball = Path(o.runtime_tarball)
         self._runtime_sha256 = o.runtime_sha256
@@ -251,12 +253,17 @@ class DecisionRoutingAgent(MiniSweAgent):
         path = (await self.exec_as_root(environment, command='printf %s "$PATH"')).stdout or "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
         cell_attempt = {"run_id": self._item, "arm": self._cell, "task": self.logs_dir.parent.parent.name, "model": self._model, "trial": 1, "attempt": 2 if attempt_dir(self.logs_dir.parent).exists() else 1}
+        markers = json.loads(Path(self._markers_file).read_text()) if self._markers_file else None
+        canaries = [m for m in markers or [] if re.fullmatch(r"DRCANARY-[0-9a-f]{32}", m)]
+        if markers is not None and len(canaries) != 1:
+            raise ValueError(f"E_USAGE: the markers file {self._markers_file} must hold exactly one DRCANARY- canary")
         binding = await asyncio.to_thread(
             manage, "/bind", {
                 "cell": cell_attempt,
                 "models": self._allow,
+                "deciders": self._deciders,
                 "allowance_micros": self._limits["allowance_micros"],
-                **({"forbidden_markers": json.loads(Path(self._markers_file).read_text())} if self._markers_file else {}),
+                **({"forbidden_markers": markers, "canary": canaries[0]} if markers is not None else {}),
             },
         )
         values = {

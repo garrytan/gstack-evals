@@ -95,12 +95,14 @@ class Rerun(unittest.TestCase):
         self.pin = self.tmp / "pin.json"
         self.pin.write_text("{}")
         self.binds = []
+        self.bodies = []
         self.meters = []
         dr_harbor.os.environ["DR_PROXY_BASE"] = "http://127.0.0.1:9"
 
         def manage(route, body):
             if route == "/bind":
                 self.binds.append(body["cell"]["attempt"])
+                self.bodies.append(body)
                 return {"slot": "s", "token": "tok", "meter_id": f"m{len(self.binds)}"}
             if route == "/finalize":
                 return self.meters[len(self.binds) - 1]
@@ -155,6 +157,22 @@ class Rerun(unittest.TestCase):
         self.assertEqual(self.binds, [1, 2])
         self.assertEqual((self.kept() / "attempt.json").read_text(), first)
         self.assertEqual(json.loads((self.trial / "agent" / "dr" / "dr-summary.json").read_text())["exit_status"], "infra_error")
+
+    def test_the_bind_names_the_cells_deciders_and_the_canary(self):
+        logs = self.trial / "agent"
+        logs.mkdir(parents=True)
+        canary = "DRCANARY-" + "0123456789abcdef" * 2
+        markers = self.tmp / "markers.json"
+        markers.write_text(json.dumps([canary, "test_hidden_regression_case"]))
+        self.meters.append({"micros": 0, "upstream": {"statuses": {"200": 1}}})
+        agent = dr_harbor.DecisionRoutingAgent(cell="R", model="opus", runtime_tarball="/rt.tgz", runtime_sha256="ab", pin_file=str(self.pin), item="dr-pilot-rp", logs_dir=logs)
+        agent._markers_file = str(markers)
+        asyncio.run(agent.run("fix it", FakeEnv(logs, self.tmp / "container", "submitted"), None))
+        body = self.bodies[0]
+        self.assertEqual(body["models"], ["anthropic:claude-opus-5-5", "typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"])
+        self.assertEqual(body["deciders"], ["typesafe:jev-1.13.0", "openrouter:particle-ai/particle-1"])
+        self.assertEqual(body["canary"], canary)
+        self.assertEqual(body["forbidden_markers"], [canary, "test_hidden_regression_case"])
 
     def test_only_calibration_n_sessions_log_shadow_data(self):
         logs = self.trial / "agent"

@@ -164,10 +164,13 @@ function proxyWorld(overrides: Partial<ProxyOptions> = {}) {
 
 describe("per-slot leak scan (metering proxy)", () => {
   const MARKERS = [CANARY, "TestParserRegression", "test_parse_collapses_whitespace", "tests/test_hidden_regression_data.py"];
+  const DECIDER = { forbidden_markers: MARKERS, deciders: ["anthropic:claude-opus-5-5"], canary: CANARY };
+  const MAIN = { forbidden_markers: MARKERS, deciders: [], canary: CANARY };
+  const hitLines = (w: ReturnType<typeof proxyWorld>) => w.journal().filter((l) => l.kind === "marker_hit");
 
   test("a planted canary in a decider request is refused with DR_CUSTODY_HIT, journalled by index and hash only, and not forwarded", async () => {
     const w = proxyWorld();
-    const b = w.bind({ forbidden_markers: MARKERS });
+    const b = w.bind(DECIDER);
     const res = await w.post(b, "state: the agent ran pytest; label store says " + CANARY);
     expect(res.status).toBe(403);
     const body = (await res.json()) as Record<string, unknown>;
@@ -180,34 +183,60 @@ describe("per-slot leak scan (metering proxy)", () => {
     expect(w.journalText()).not.toContain(CANARY);
   });
 
-  test("a hidden new test name is a custody hit at its own index", async () => {
+  test("a main-model request carrying a hidden test name is forwarded, and the hit is logged by index and hash only", async () => {
     const w = proxyWorld();
-    const b = w.bind({ forbidden_markers: MARKERS });
-    expect((await w.post(b, "pytest -k test_parse_collapses_whitespace")).status).toBe(403);
-    expect(w.journal().find((l) => l.kind === "refusal")?.markers).toEqual([{ index: 2, sha256: sha(MARKERS[2]!).slice(0, 12) }]);
+    const b = w.bind(MAIN);
+    expect((await w.post(b, "pytest -k test_parse_collapses_whitespace")).status).toBe(200);
+    expect(w.calls).toHaveLength(1);
+    expect(hitLines(w)).toEqual([expect.objectContaining({ meter_id: b.meter_id, model: "claude-opus-5-5", decider: false, cell: { run_id: "dr", arm: "R", task: "t1", model: "opus", trial: 1, attempt: 1 }, markers: [{ index: 2, sha256: sha(MARKERS[2]!).slice(0, 12) }] })]);
+    expect(w.journal().some((l) => l.kind === "refusal")).toBe(false);
+    expect(w.journal().some((l) => l.kind === "request")).toBe(true);
     expect(w.journalText()).not.toContain(MARKERS[2]!);
+  });
+
+  test("a main-model request carrying the canary is forwarded and logged, never a stop", async () => {
+    const w = proxyWorld();
+    const b = w.bind(MAIN);
+    expect((await w.post(b, "context " + CANARY)).status).toBe(200);
+    expect(w.calls).toHaveLength(1);
+    expect(hitLines(w)).toEqual([expect.objectContaining({ decider: false, markers: [{ index: 0, sha256: sha(CANARY).slice(0, 12) }] })]);
+    expect(w.journal().some((l) => l.kind === "refusal")).toBe(false);
+    expect(w.journalText()).not.toContain(CANARY);
+  });
+
+  test("a decider request carrying a non-canary marker is forwarded and logged, never a stop", async () => {
+    const w = proxyWorld();
+    const b = w.bind(DECIDER);
+    expect((await w.post(b, "FAILED TestParserRegression")).status).toBe(200);
+    expect(w.calls).toHaveLength(1);
+    expect(hitLines(w)).toEqual([expect.objectContaining({ decider: true, markers: [{ index: 1, sha256: sha(MARKERS[1]!).slice(0, 12) }] })]);
+    expect(w.journal().some((l) => l.kind === "refusal")).toBe(false);
+    expect(w.journalText()).not.toContain(MARKERS[1]!);
   });
 
   test("an agent diff equal to the real-fix hunk passes", async () => {
     const w = proxyWorld();
-    const b = w.bind({ forbidden_markers: MARKERS });
+    const b = w.bind(DECIDER);
     const res = await w.post(b, "diff so far:\n" + FIX_PATCH);
     expect(res.status).toBe(200);
     expect(w.calls).toHaveLength(1);
+    expect(hitLines(w)).toHaveLength(0);
   });
 
   test("an existing test name passes", async () => {
     const w = proxyWorld();
-    const b = w.bind({ forbidden_markers: MARKERS });
+    const b = w.bind(DECIDER);
     expect((await w.post(b, "FAILED tests/test_parser.py::test_parse_keeps_text")).status).toBe(200);
     expect(w.calls).toHaveLength(1);
+    expect(hitLines(w)).toHaveLength(0);
   });
 
   test("a marker on slot A does not affect slot B", async () => {
     const w = proxyWorld();
-    const a = w.bind({ forbidden_markers: MARKERS });
+    const a = w.bind(DECIDER);
     const b = w.bind();
-    const c = w.bind({ forbidden_markers: ["DRCANARY-ffffffffffffffffffffffffffffffff"] });
+    const other = "DRCANARY-ffffffffffffffffffffffffffffffff";
+    const c = w.bind({ forbidden_markers: [other], deciders: ["anthropic:claude-opus-5-5"], canary: other });
     expect((await w.post(b, "context " + CANARY)).status).toBe(200);
     expect((await w.post(c, "context " + CANARY)).status).toBe(200);
     expect((await w.post(a, "context " + CANARY)).status).toBe(403);
@@ -216,10 +245,15 @@ describe("per-slot leak scan (metering proxy)", () => {
 
   test("a proxy-wide marker on a decision-routing proxy keeps today's E_TRIPWIRE", async () => {
     const w = proxyWorld({ forbiddenMarkers: ["proxy-wide-hidden-fact"] });
-    const b = w.bind({ forbidden_markers: MARKERS });
-    expect((await w.post(b, "proxy-wide-hidden-fact " + CANARY)).status).toBe(403);
-    expect(w.journal().find((l) => l.kind === "refusal")).toMatchObject({ code: "E_TRIPWIRE" });
-    expect(w.journal().find((l) => l.kind === "refusal")?.markers).toBeUndefined();
+    for (const bind of [DECIDER, MAIN]) {
+      const b = w.bind(bind);
+      expect((await w.post(b, "proxy-wide-hidden-fact " + CANARY)).status).toBe(403);
+    }
+    const refusals = w.journal().filter((l) => l.kind === "refusal");
+    expect(refusals.map((l) => l.code)).toEqual(["E_TRIPWIRE", "E_TRIPWIRE"]);
+    expect(refusals.every((l) => l.markers === undefined)).toBe(true);
+    expect(hitLines(w)).toHaveLength(0);
+    expect(w.calls).toHaveLength(0);
   });
 
   test("default lanes keep E_TRIPWIRE and its bytes, for proxy-wide and slot markers", async () => {
@@ -243,6 +277,14 @@ describe("per-slot leak scan (metering proxy)", () => {
     const w = proxyWorld();
     for (const bad of ["x", [""], [3], [CANARY, null]]) expect(() => w.bind({ forbidden_markers: bad as never })).toThrow(/^E_USAGE: /);
   });
+
+  test("bind refuses deciders off the slot's models, a canary off its markers, and markers with no canary on a decision-routing proxy", () => {
+    const w = proxyWorld();
+    for (const bad of ["x", [3], ["typesafe:jev-1.13.0"]]) expect(() => w.bind({ ...DECIDER, deciders: bad as never })).toThrow(/^E_USAGE: /);
+    for (const bad of ["", 3, "DRCANARY-ffffffffffffffffffffffffffffffff"]) expect(() => w.bind({ ...DECIDER, canary: bad as never })).toThrow(/^E_USAGE: /);
+    expect(() => w.bind({ forbidden_markers: MARKERS, deciders: ["anthropic:claude-opus-5-5"] })).toThrow(/^E_USAGE: /);
+    expect(() => w.bind({ deciders: ["anthropic:claude-opus-5-5"] })).not.toThrow();
+  });
 });
 
 const FAKE_HARBOR = `import { readFileSync } from "node:fs";
@@ -252,7 +294,7 @@ const kw = job.agents[0].kwargs;
 const task = job.tasks[0].path.split("/").pop();
 const markers = JSON.parse(readFileSync(kw.markers_file, "utf8"));
 const mgmt = (path, body) => fetch("http://localhost" + path, { unix: env.DR_MGMT_SOCKET, method: "POST", headers: { "content-type": "application/json", "x-gstack-evals-management": env.DR_MGMT_TOKEN }, body: JSON.stringify(body) }).then((r) => r.json());
-const b = await mgmt("/bind", { cell: { run_id: "dr-test", arm: kw.cell, task, model: kw.model, trial: 1, attempt: 1 }, models: ["anthropic:claude-opus-5-5"], allowance_micros: 5000000, forbidden_markers: markers });
+const b = await mgmt("/bind", { cell: { run_id: "dr-test", arm: kw.cell, task, model: kw.model, trial: 1, attempt: 1 }, models: ["anthropic:claude-opus-5-5"], allowance_micros: 5000000, forbidden_markers: markers, deciders: ["anthropic:claude-opus-5-5"], canary: markers.find((m) => /^DRCANARY-[0-9a-f]{32}$/.test(m)) });
 const content = env.DR_TEST_LEAK_TASK === task ? "decider state: " + markers[0] : "decider state: " + env.DR_TEST_FIX;
 await fetch(env.DR_PROXY_BASE + "/" + b.slot + "/anthropic/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": b.token }, body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content }] }) });
 await mgmt("/unbind", { slot: b.slot });

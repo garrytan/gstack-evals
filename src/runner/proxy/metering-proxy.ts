@@ -40,8 +40,10 @@
 //   free. ProxyOptions.allowanceCode DR_ALLOWANCE_STOP turns a slot's allowance refusal into a 403 whose body every SDK shows
 //   as its error message; the default keeps the 402 E_ALLOWANCE refusal unchanged. Outcome lines carry the call's latency.
 //   BindRequest.forbidden_markers adds runner-only markers to the tripwire for that slot's calls only. On a DR_ALLOWANCE_STOP
-//   proxy a hit on those alone is DR_CUSTODY_HIT, journaled with the slot's cell and each marker's index and sha256 prefix,
-//   never its text; a proxy-wide marker, and every hit on other proxies, keeps E_TRIPWIRE byte for byte.
+//   proxy a hit on those alone is refused DR_CUSTODY_HIT only when the request names one of the bind's deciders and the hit
+//   includes the bind's canary; every other such hit is journaled as a marker_hit line and the call goes on as if there were
+//   no hit. Both carry the slot's cell and each marker's index and sha256 prefix, never its text. A proxy-wide marker, and
+//   every hit on other proxies, keeps E_TRIPWIRE byte for byte.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { dlopen, FFIType } from "bun:ffi";
@@ -186,6 +188,10 @@ export interface BindRequest {
   allowance_micros: number;
   /** Runner-only strings that this slot's calls must never carry, added to ProxyOptions.forbiddenMarkers for this slot only. */
   forbidden_markers?: string[];
+  /** The provider:model ids among models that are this slot's deciders; on a DR_ALLOWANCE_STOP proxy only their requests can stop on the canary. */
+  deciders?: string[];
+  /** The forbidden_markers entry that is this slot's planted canary; a DR_ALLOWANCE_STOP proxy needs it whenever forbidden_markers is set. */
+  canary?: string;
 }
 
 export interface Binding {
@@ -228,6 +234,8 @@ interface Slot {
   cell: CellAttempt;
   models: Set<string>;
   markers: string[];
+  deciders: Set<string>;
+  canary: string | null;
   allowanceMicros: number;
   /** Spent plus reserved plus unknown, in micro-dollars. */
   committedMicros: number;
@@ -448,8 +456,11 @@ export class MeteringProxy {
   bind(request: BindRequest): Binding {
     if (!request.models?.length || !Number.isSafeInteger(request.allowance_micros) || request.allowance_micros <= 0) throw new Error("E_USAGE: metering proxy: bind needs a non-empty models list and a positive integer allowance_micros");
     if (request.forbidden_markers !== undefined && (!Array.isArray(request.forbidden_markers) || request.forbidden_markers.some(m => typeof m !== "string" || !m))) throw new Error("E_USAGE: metering proxy: bind's forbidden_markers must be a list of non-empty strings");
+    if (request.deciders !== undefined && (!Array.isArray(request.deciders) || request.deciders.some(m => typeof m !== "string" || !request.models.includes(m)))) throw new Error("E_USAGE: metering proxy: bind's deciders must be a list of ids from its models");
+    if (request.canary !== undefined && (typeof request.canary !== "string" || !request.forbidden_markers?.includes(request.canary))) throw new Error("E_USAGE: metering proxy: bind's canary must be one of its forbidden_markers");
+    if (this.options.allowanceCode === "DR_ALLOWANCE_STOP" && request.forbidden_markers?.length && request.canary === undefined) throw new Error("E_USAGE: metering proxy: a decision-routing bind with forbidden_markers must name its canary");
     const binding = { slot: `s_${randomBytes(9).toString("base64url")}`, token: `gse_${randomBytes(32).toString("base64url")}`, meter_id: `m_${randomBytes(12).toString("hex")}` };
-    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), markers: [...(request.forbidden_markers ?? [])], allowanceMicros: request.allowance_micros, committedMicros: 0, inflightMicros: 0, inflightCalls: 0, calls: 0 });
+    this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), markers: [...(request.forbidden_markers ?? [])], deciders: new Set(request.deciders ?? []), canary: request.canary ?? null, allowanceMicros: request.allowance_micros, committedMicros: 0, inflightMicros: 0, inflightCalls: 0, calls: 0 });
     this.meters.set(binding.meter_id, newMeter(binding.meter_id));
     return binding;
   }
@@ -616,9 +627,12 @@ export class MeteringProxy {
     if (leaks.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(text, o.forbiddenMarkers ?? []).length) {
       const markers = leaks.map(m => ({ index: slot.markers.indexOf(m), sha256: createHash("sha256").update(m).digest("hex").slice(0, 12) }));
       const { run_id, arm, task, model, trial, attempt } = slot.cell;
-      return this.refuse(ctx, "DR_CUSTODY_HIT", 403, `the request carries ${leaks.length} runner-only marker(s); custody hit, the run stops`, { cell: { run_id, arm, task, model, trial, attempt }, markers });
-    }
-    if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
+      const cell = { run_id, arm, task, model, trial, attempt };
+      const asked = (parsed as Record<string, unknown> | null)?.model;
+      const decider = typeof asked === "string" && slot.deciders.has(`${provider}:${asked}`);
+      if (decider && slot.canary !== null && leaks.includes(slot.canary)) return this.refuse(ctx, "DR_CUSTODY_HIT", 403, `the request carries ${leaks.length} runner-only marker(s); custody hit, the run stops`, { cell, markers });
+      this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route, model: typeof asked === "string" ? asked : null, source: ctx.source, decider, cell, markers });
+    } else if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
     if (req.method === "GET") return forwardFree();
     if (!isJson) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body must be a JSON object");

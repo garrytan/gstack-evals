@@ -8,6 +8,6 @@ test("dr_harbor reruns a provider or transport failure once, keeps the first att
   const r = spawnSync("python3", [join(import.meta.dir, "harbor_rerun_test.py")], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }, encoding: "utf8", timeout: 120_000 });
   const out = (r.stdout ?? "") + (r.stderr ?? "");
   if (r.status !== 0) console.log(out);
-  expect(out).toContain("Ran 6 tests");
+  expect(out).toContain("Ran 7 tests");
   expect(r.status).toBe(0);
 }, 150_000);

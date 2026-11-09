@@ -589,7 +589,7 @@ async function legLeak(r: Report, out: string) {
     'const task = job.tasks[0].path.split("/").pop();',
     'const markers = JSON.parse(readFileSync(kw.markers_file, "utf8"));',
     'const mgmt = (path, body) => fetch("http://localhost" + path, { unix: env.DR_MGMT_SOCKET, method: "POST", headers: { "content-type": "application/json", "x-gstack-evals-management": env.DR_MGMT_TOKEN }, body: JSON.stringify(body) }).then((r) => r.json());',
-    'const b = await mgmt("/bind", { cell: { run_id: "dryrun", arm: kw.cell, task, model: kw.model, trial: 1, attempt: 1 }, models: ["typesafe:jev-1.13.0"], allowance_micros: 5000000, forbidden_markers: markers });',
+    'const b = await mgmt("/bind", { cell: { run_id: "dryrun", arm: kw.cell, task, model: kw.model, trial: 1, attempt: 1 }, models: ["typesafe:jev-1.13.0"], allowance_micros: 5000000, forbidden_markers: markers, deciders: ["typesafe:jev-1.13.0"], canary: markers.find((m) => /^DRCANARY-[0-9a-f]{32}$/.test(m)) });',
     'const last_output = env.DR_DRYRUN_LEAK === "1" ? "decider state: " + markers[0] : "decider state: " + env.DR_DRYRUN_FIX;',
     'await fetch(env.DR_PROXY_BASE + "/" + b.slot + "/typesafe/v1/systemone", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + b.token }, body: JSON.stringify({ model: "jev-1.13.0", state: { last_output }, questions: { done: { type: "noul", instructions: "Is the task done?" } } }) });',
     'await mgmt("/unbind", { slot: b.slot });',
