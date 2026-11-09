@@ -190,7 +190,8 @@
       "tests/outcome-skills/sm-rebench.test.ts",
       "tests/outcome-skills/sm-testrun.test.ts",
       "tests/outcome-skills/sm-reports.test.ts",
-      "tests/outcome-skills/sm-queue.test.ts"
+      "tests/outcome-skills/sm-queue.test.ts",
+      "tests/outcome-skills/sm-dryrun.test.ts"
     ],
     "tests/outcome-skills/fixtures/sm/**": [
       "tests/outcome-skills/sm-draw.test.ts"

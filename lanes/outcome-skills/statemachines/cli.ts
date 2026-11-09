@@ -19,6 +19,7 @@ import { computeStart, firstInfo, scoreFollowon, treeCounts, treeScores, TREES, 
 import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
 import { planPart, type PlannedSession, type SessionRecord } from "./session.ts";
 import { LANGS, type Lang } from "./langs.ts";
+import { dryrun, type DryrunConfig } from "./dryrun.ts";
 import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, LABELLERS, labelledQueue, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
 import { foundIt, laterFix, whatChanged } from "./secondary.ts";
 
@@ -60,6 +61,9 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      per unit, model and tree: replicate means, the 2-of-3 keep rule,
                                                      first-stage gaps (sm-outcome.v1 records in --firsts), inherited fixes
                                                      and drift counts
+  dryrun --config <config.json> --out-dir <dir> [--from <case>]
+                                                     section 18's scorer cases on real units, one PASS or FAIL line each,
+                                                     stopping at the first miss; ends DRYRUN: ok
   packets label --unit <dir> --out <packet.json> --key <key.json>
                                                      section 3's labeller packet: issue, fix and the fix's tests, no unit id
   packets judge --diff <file> --files <list> --unit <id> --model <m> --cell <name> --out <packet.json> --key <key.json>
@@ -319,6 +323,10 @@ export async function main(argv: string[]): Promise<number> {
       const res = runSession({ unitDir: need(f, "--unit"), session, control: need(f, "--control"), proxy: need(f, "--proxy"), out: need(f, "--out"), attempt, ...(f.has("--first") ? { first: f.get("--first")! } : {}), ...(f.has("--qa-home") ? { qaHome: f.get("--qa-home")! } : {}), ...(f.has("--qa-sha") ? { qaSha: f.get("--qa-sha")! } : {}), ...(f.has("--harbor") ? { harbor: f.get("--harbor")! } : {}) });
       console.log("session=" + session.cell + " end=" + res.record.end + " image=" + res.image.image_id + " lease=" + res.record.lease_id + " harbor_exit=" + res.harbor_exit + " record=" + join(need(f, "--out"), "session.json"));
       return 0;
+    }
+    if (sub === "dryrun") {
+      const { f } = flags(rest, ["--config", "--out-dir", "--from"]);
+      return dryrun(readJson<DryrunConfig>(need(f, "--config")), need(f, "--out-dir"), f.has("--from") ? { from: f.get("--from")! } : {});
     }
     if (sub === "packets") {
       const [what, ...r] = rest;
