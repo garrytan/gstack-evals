@@ -2,9 +2,10 @@
 // Git on untrusted clones (devex prereg section 15 rule 7): every call runs with hooks off (core.hooksPath=/dev/null),
 // no global or system config (so no filter driver, credential helper or URL rewrite reaches it), no LFS smudge, no
 // fsmonitor, HTTPS as the only protocol and no submodules, and the remote must pass the GitHub egress allowlist. No
-// repository code runs. exportBase fetches one commit shallowly and leaves its tree without .git.
+// repository code runs. exportBase fetches one commit shallowly and leaves its tree without .git. unitDiff reads a
+// unit's diff from a blobless partial clone kept per repository, with no external diff and no textconv.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { assertGitHub } from "../../aftermath/gh.ts";
 
@@ -59,5 +60,27 @@ export function exportBase(repo: string, sha: string, dest: string): void {
   } catch (e) {
     rmSync(work, { recursive: true, force: true });
     throw e;
+  }
+}
+
+/**
+ * The unit's diff, the merge commit against its first parent (base), first maxBytes, or null when git can't produce
+ * it. A bare blobless partial clone of the repository is kept at clones/<owner>__<name>.git and reused across runs;
+ * each unit fetches its two commits at depth 1 and git diff fetches only the changed files' blobs.
+ */
+export function unitDiff(repo: string, baseSha: string, mergeSha: string, clones: string, maxBytes: number): string | null {
+  if (!/^[0-9a-f]{40}$/.test(baseSha) || !/^[0-9a-f]{40}$/.test(mergeSha)) throw Object.assign(new Error("unitDiff needs full commit shas"), { code: "E_USAGE" });
+  const url = assertGitHub("https://github.com/" + repo + ".git", "E_MINE_SOURCE").toString();
+  const dir = join(clones, repo.replace("/", "__") + ".git");
+  try {
+    if (!existsSync(join(dir, "HEAD"))) {
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      git(dir, ["init", "-q", "--bare", "--template="]);
+      git(dir, ["remote", "add", "origin", url]);
+    }
+    git(dir, ["fetch", "-q", "--filter=blob:none", "--depth", "1", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head", "origin", mergeSha, baseSha]);
+    return git(dir, ["diff", "--no-ext-diff", "--no-textconv", "--no-color", baseSha, mergeSha]).slice(0, maxBytes);
+  } catch {
+    return null;
   }
 }
