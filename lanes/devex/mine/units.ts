@@ -196,7 +196,10 @@ export type Step =
 
 /** One candidate's facts and the reads that cost a call, made lazily so a dropped unit spends nothing more. */
 export interface Candidate {
+  /** The listed facts: enough for the dates, the title and label filter and the size rule. */
   facts: UnitFacts;
+  /** The full facts (histories, closing issues, commits, every file, merge and base), read once on first use. */
+  full: () => UnitFacts;
   repo: RepoFacts & { licence_field: string | null };
   release: () => Release | null;
   label: () => Promise<{ dev: boolean; ui: boolean } | null>;
@@ -205,12 +208,12 @@ export interface Candidate {
 
 /** Shared rules, then assignment, then the eval's filters in order, then the cap; the first failing rule names the drop. */
 export async function drawOne(c: Candidate, plan: DrawPlan, kept: readonly Drawn[]): Promise<Step> {
-  const f = c.facts;
-  const order = unitOrder(f.repo, f.number);
+  const order = unitOrder(c.facts.repo, c.facts.number);
   if (plan.excluded.has(order)) return { drop: "excluded" };
-  if (!inDates(f)) return { drop: "dates" };
-  if (titleExcluded(f.title, f.labels)) return { drop: "title-label" };
-  if (!sizeRule(f.files)) return { drop: "size" };
+  if (!inDates(c.facts)) return { drop: "dates" };
+  if (titleExcluded(c.facts.title, c.facts.labels)) return { drop: "title-label" };
+  if (!sizeRule(c.facts.files) && !sizeRule(c.full().files)) return { drop: "size" };
+  const f = c.full();
   if (planText(f).words < MIN_PLAN_WORDS) return { drop: "plan-words" };
   const release = c.release();
   if (!release) return { drop: "not-released" };
