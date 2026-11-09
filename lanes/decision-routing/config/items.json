@@ -1,0 +1,58 @@
+{
+  "v": 1,
+  "approval_id": "a-e3673284bc5d",
+  "line_micros": 2000000000,
+  "note": "One ledger line item per row, caps in integer micro-dollars (preregistration section 14). The Captain records each cap before its first lease. vms and crew are not leased by the controller; they are read from VM and thread counters.",
+  "items": [
+    {
+      "item": "dr-calibration",
+      "cap_micros": 90000000,
+      "what": "Calibration: N on both models, deciders in shadow after each session (80 sessions)"
+    },
+    {
+      "item": "dr-pilot-rp",
+      "cap_micros": 70000000,
+      "what": "Pilot: R and P on both models, 20 tasks (80 sessions)"
+    },
+    {
+      "item": "dr-pilot-jfw",
+      "cap_micros": 70000000,
+      "what": "Pilot: J on both models, F on Opus and W, 12 tasks (48 sessions)"
+    },
+    {
+      "item": "dr-scored-opus",
+      "cap_micros": 420000000,
+      "what": "Scored, Opus: N, R and P on 280 tasks (840 sessions)"
+    },
+    {
+      "item": "dr-scored-sol",
+      "cap_micros": 460000000,
+      "what": "Scored, Sol: N, R and P on 280 tasks (840 sessions)"
+    },
+    {
+      "item": "dr-subset",
+      "cap_micros": 240000000,
+      "what": "Scored subset: F on Opus, J on both models, 100 tasks (300 sessions)"
+    },
+    {
+      "item": "dr-w-reference",
+      "cap_micros": 60000000,
+      "what": "Reference: whole agent on particle-1, 100 tasks (100 sessions)"
+    },
+    {
+      "item": "dr-replay",
+      "cap_micros": 40000000,
+      "what": "Decision-level replay: Jev 1.14.0, safety set, guess ablation"
+    },
+    {
+      "item": "dr-vms",
+      "cap_micros": 140000000,
+      "what": "Runner VMs: 139 hours, with 3,000 label runs and image pulls"
+    },
+    {
+      "item": "dr-crew",
+      "cap_micros": 350000000,
+      "what": "Crew: every thread on this line, read from counters"
+    }
+  ]
+}
