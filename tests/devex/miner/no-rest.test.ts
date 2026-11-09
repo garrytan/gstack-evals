@@ -35,19 +35,28 @@ if (!(args[0] === "api" && args[1] === "graphql")) {
 }
 const { query: q, variables: v } = JSON.parse(readFileSync(0, "utf8"));
 appendFileSync(log, JSON.stringify({ args, query: q, variables: v }) + "\\n");
-const res = (repository) => ok({ data: { repository, rateLimit: rl } });
-if (q.includes("releases(first: 100")) res({ releases: { totalCount: 1, nodes: [{ tagName: "v1.0.0", publishedAt: "2026-08-01T00:00:00Z", isDraft: false, isPrerelease: false }] }, refs: { nodes: [] } });
-if (q.includes("type: DISCUSSION")) ok({ data: empty });
-if (q.includes("baseRefName")) ok({ data: { search: { issueCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ number: 7, title: "Add a --json flag to the export command", createdAt: "2026-07-10T00:00:00Z", mergedAt: "2026-07-20T00:00:00Z", baseRefName: "main", labels: { nodes: [] }, files: { totalCount: 2, nodes: [{ path: "src/cli/export.ts", additions: 50 }] } }] }, rateLimit: rl } });
-if (q.includes("type: ISSUE")) ok({ data: empty });
-if (q.includes("closingIssuesReferences")) res({ pullRequest: { body: a.words, createdAt: "2026-07-10T00:00:00Z", lastEditedAt: null, userContentEdits: { nodes: [] }, mergeCommit: { oid: a.A, parents: { nodes: [{ oid: a.B }] } }, commits: { nodes: [{ commit: { authoredDate: "2026-07-09T00:00:00Z", committedDate: "2026-07-09T00:00:00Z" } }] }, timelineItems: { nodes: [] }, closingIssuesReferences: { nodes: [] } } });
-if (q.includes("files(first: 100, after: $after)")) res({ pullRequest: { files: v.after ? { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ path: "src/format.ts", additions: 20 }] } : { pageInfo: { hasNextPage: true, endCursor: "c1" }, nodes: [{ path: "src/cli/export.ts", additions: 50 }] } } });
-if (q.includes("compare(headRef")) res({ ref: v.ref === "refs/tags/v1.0.0" && v.head === a.A ? { compare: { status: "BEHIND" } } : null });
-if (q.includes("object(expression:")) res({ t0: { entries: [{ name: "LICENSE", type: "blob", size: 1000, oid: "c".repeat(40), object: {} }, { name: "src", type: "tree", size: 0, oid: "d".repeat(40), object: { entries: [{ name: "cli", type: "tree", size: 0, oid: "e".repeat(40), object: { entries: [{ name: "deep", type: "tree", size: 0, oid: "f".repeat(40) }] } }] } }] } });
-if (q.includes("object(oid:")) res({ t0: { entries: [{ name: "export.ts", type: "blob", size: 500, oid: "1".repeat(40), object: {} }, { name: ".claude-notes.md", type: "blob", size: 5, oid: "2".repeat(40), object: {} }] } });
-if (q.includes("licenseInfo")) res({ licenseInfo: { spdxId: "MIT" }, defaultBranchRef: { target: { tree: { entries: [{ name: "LICENSE", type: "blob", oid: "c".repeat(40) }] } } } });
-process.stderr.write("the fake has no answer for this query\\n");
-process.exit(1);
+const one = (q, v) => {
+  const res = (repository) => ({ repository });
+  const found = (search) => ({ search });
+  if (q.includes("releases(first: 100")) return res({ releases: { totalCount: 1, nodes: [{ tagName: "v1.0.0", publishedAt: "2026-08-01T00:00:00Z", isDraft: false, isPrerelease: false }] }, refs: { nodes: [] } });
+  if (q.includes("type: DISCUSSION")) return empty;
+  if (q.includes("baseRefName")) return found({ issueCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ number: 7, title: "Add a --json flag to the export command", createdAt: "2026-07-10T00:00:00Z", mergedAt: "2026-07-20T00:00:00Z", baseRefName: "main", labels: { nodes: [] }, files: { totalCount: 2, nodes: [{ path: "src/cli/export.ts", additions: 50 }] } }] });
+  if (q.includes("type: ISSUE")) return empty;
+  if (q.includes("closingIssuesReferences")) return res({ pullRequest: { body: a.words, createdAt: "2026-07-10T00:00:00Z", lastEditedAt: null, userContentEdits: { nodes: [] }, mergeCommit: { oid: a.A, parents: { nodes: [{ oid: a.B }] } }, commits: { nodes: [{ commit: { authoredDate: "2026-07-09T00:00:00Z", committedDate: "2026-07-09T00:00:00Z" } }] }, timelineItems: { nodes: [] }, closingIssuesReferences: { nodes: [] } } });
+  if (q.includes("files(first: 100, after: $after)")) return res({ pullRequest: { files: v.after ? { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [{ path: "src/format.ts", additions: 20 }] } : { pageInfo: { hasNextPage: true, endCursor: "c1" }, nodes: [{ path: "src/cli/export.ts", additions: 50 }] } } });
+  if (q.includes("compare(headRef")) return res({ ref: v.ref === "refs/tags/v1.0.0" && v.head === a.A ? { compare: { status: "BEHIND" } } : null });
+  if (q.includes("object(expression:")) return res({ t0: { entries: [{ name: "LICENSE", type: "blob", size: 1000, oid: "c".repeat(40), object: {} }, { name: "src", type: "tree", size: 0, oid: "d".repeat(40), object: { entries: [{ name: "cli", type: "tree", size: 0, oid: "e".repeat(40), object: { entries: [{ name: "deep", type: "tree", size: 0, oid: "f".repeat(40) }] } }] } }] } });
+  if (q.includes("object(oid:")) return res({ t0: { entries: [{ name: "export.ts", type: "blob", size: 500, oid: "1".repeat(40), object: {} }, { name: ".claude-notes.md", type: "blob", size: 5, oid: "2".repeat(40), object: {} }] } });
+  if (q.includes("licenseInfo")) return res({ licenseInfo: { spdxId: "MIT" }, defaultBranchRef: { target: { tree: { entries: [{ name: "LICENSE", type: "blob", oid: "c".repeat(40) }] } } } });
+  process.stderr.write("the fake has no answer for this query\\n");
+  process.exit(1);
+};
+const parts = [...q.matchAll(/\\bp(\\d+): /g)];
+const data = parts.length ? Object.fromEntries(parts.map((m, k) => {
+  const i = m[1], vi = Object.fromEntries(Object.entries(v).filter(([n]) => n.endsWith("_" + i)).map(([n, x]) => [n.slice(0, -1 - i.length), x]));
+  return ["p" + i, Object.values(one(q.slice(m.index, parts[k + 1]?.index ?? q.length), vi))[0]];
+})) : one(q, v);
+ok({ data: { ...data, rateLimit: rl } });
 `;
 
 const FAKE_GIT = `

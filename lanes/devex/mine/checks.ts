@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The miner's and the unit builder's lines in the keyless dry run (devex prereg section 15 rule 4): each drives one
 // frozen rule of sections 3, 4 and 15 rule 7 on both sides of its edge, on fixtures, with no key and no network.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertGitHub, openGitHub } from "../../aftermath/gh.ts";
+import { assertGitHub, openGitHub, type GitHub } from "../../aftermath/gh.ts";
 import type { DryCheck } from "../types.ts";
 import { aliasText, buildAliasMap, unaliasText } from "../unit/alias.ts";
 import { buildSnapshot, stripInstructions, treeCheck } from "../unit/snapshot.ts";
@@ -12,6 +12,9 @@ import { assign } from "./frame.ts";
 import { DEVEX_FILTERS, draw, releaseByAncestry, treeFacts, type Candidate, type Drawn, type UnitFacts } from "./units.ts";
 import { loadUnit } from "../author/cli.ts";
 import { run as handover } from "./handover.ts";
+import { MORE_REMAINS, run as mine } from "./cli.ts";
+import { fixtureGitHub } from "./fixture-github.ts";
+import { paced } from "./pace.ts";
 import { screen, type WindowItem } from "./window.ts";
 
 const T = (rule: string, pass: boolean, detail?: string): DryCheck => ({ rule, pass, detail });
@@ -66,6 +69,42 @@ export async function checks(): Promise<DryCheck[]> {
   }
   gh.rest("repos/x/y");
   out.push(T("the miner's egress allowlist holds only GitHub: GitHub's API and clone hosts pass, any other host is refused before a call", !!assertGitHub("https://api.github.com/x") && !!assertGitHub("https://github.com/o/r.git") && refused && fakeRefused && calls === 1));
+  const segDir = mkdtempSync(join(tmpdir(), "dx-mine-segments-"));
+  try {
+    const said: string[] = [];
+    const go = (d: string, f: ReturnType<typeof fixtureGitHub>, extra: string[]) => mine(["draw", "--out", d, "--draws", "70", "--repos", "all", ...extra], { out: (t) => void said.push(t), err: () => {} }, { exec: f.exec, now: f.now, sleep: f.sleep, diff: () => null });
+    const outputs = (d: string) => ["draws.json", "screen.jsonl", ...readdirSync(join(d, "read")).sort().map((x) => "read/" + x)].map((p) => p + "\n" + readFileSync(join(d, p), "utf8")).join("\n");
+    const [whole, cut] = ["whole", "cut"].map((n) => {
+      mkdirSync(join(segDir, n));
+      writeFileSync(join(segDir, n, "repos.json"), JSON.stringify({ repos: fixtureGitHub().repos }));
+      return join(segDir, n);
+    });
+    const wholeCode = await go(whole!, fixtureGitHub(), []);
+    let segments = 0, stops = 0, last = -1;
+    for (; segments < 400 && last !== 0; segments++) {
+      try {
+        last = segments % 2 ? await go(cut!, fixtureGitHub({ failAt: 2 + (segments % 5) * 3 }), []) : await go(cut!, fixtureGitHub(), ["--max-minutes", "0.05"]);
+      } catch {
+        stops++;
+      }
+    }
+    const midListing = said.some((l) => l.startsWith("dx mine draw: more remains") && l.includes('"phase":"listing"'));
+    const paceAt = (remaining: (reads: number, used: number) => number, cost: number, calls: number) => {
+      let used = 0, n = 0, reads = 0, t = 0;
+      const fake = { graphql: () => ((n++, (t += 100), (used += cost)), {}), rest: () => ((n++, reads++), { resources: { graphql: { limit: 5000, remaining: remaining(reads, used), reset: 7 } } }), pointsUsed: () => used, calls: () => n } as unknown as GitHub;
+      const g = paced(fake, { pace: 3000, now: () => t, sleep: (ms) => void (t += ms), log: () => {} });
+      g.read("start");
+      for (let i = 0; i < calls; i++) g.graphql("q");
+      t = Math.max(t, 360_000);
+      const r = g.read("end");
+      return { pace: r.pace, perHour: (used - cost) / (t / 3_600_000) };
+    };
+    const steady = paceAt(() => 4900, 10, 400), low = paceAt(() => 1999, 1, 1), atShare = paceAt(() => 2000, 1, 1);
+    const busy = paceAt((r, used) => 4900 - used - (r > 1 ? 310 : 0), 1, 1), calm = paceAt((r, used) => 4900 - used - (r > 1 ? 290 : 0), 1, 1);
+    out.push(T("the miner's draw resumes: segments ended by --max-minutes (one mid-listing, exit 3) or stopped mid-call give byte-identical draws.json, screen.jsonl and read/ to one run; GraphQL stays under --pace and drops to half while the quota is under 40% or others use over 3,000 points an hour, not at 40% or 3,000", wholeCode === 0 && last === 0 && segments > 5 && stops > 3 && midListing && said.some((l) => l.startsWith("dx mine draw: more remains")) && MORE_REMAINS === 3 && outputs(cut!) === outputs(whole!) && steady.perHour <= 3000 && steady.pace === 3000 && low.pace === 1500 && atShare.pace === 3000 && busy.pace === 1500 && calm.pace === 3000, JSON.stringify({ segments, stops, steady: Math.round(steady.perHour) })));
+  } finally {
+    rmSync(segDir, { recursive: true, force: true });
+  }
   const rel = releaseByAncestry("2026-07-20T00:00:00Z", "2026-09-30T23:59:59Z", [{ tag: "v2.0.0-rc.1", published_at: "2026-07-25T00:00:00Z", draft: false, prerelease: true }, { tag: "v1.9", published_at: "2026-07-22T00:00:00Z", draft: false, prerelease: false }], [], (t) => t !== "v1.9");
   out.push(T("a window opened by a prerelease is recorded as one", rel?.tag === "v2.0.0-rc.1" && rel.prerelease === true));
   const dir = mkdtempSync(join(tmpdir(), "dx-mine-checks-"));
