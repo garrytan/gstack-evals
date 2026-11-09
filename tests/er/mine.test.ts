@@ -140,4 +140,18 @@ describe("plan text (section 4)", () => {
     expect(at(120)).toMatchObject({ eligible: true, plan_words: 120 });
     expect(at(119).reasons).toEqual(["plan_under_120_words"]);
   });
+  test("a plan that says no behavior change is intended is out of frame; a scoped statement stays in", () => {
+    const at = (body: string) => {
+      const res = mineClone({ repoDir: shop.dir, repo: "fixture/shop", licence: "MIT", branch: "main", meta: shop.meta, minedAt: "2026-11-08" });
+      withPlans(res, () => reply(body + " " + "w ".repeat(130), { totalCount: 0, nodes: [] }, []));
+      return res.candidates.find((c) => c.change === shop.sha.u1)!;
+    };
+    expect(at("Pure refactor. No behaviour change is intended.").reasons).toEqual(["no_behavior_change"]);
+    expect(at("There is no intended user-facing behavior change.").eligible).toBe(false);
+    expect(at("Behavior-preserving, purely mechanical.").eligible).toBe(false);
+    expect(at("Adds opt-in signing. Default behaviour is unchanged for existing users.")).toMatchObject({ eligible: true, reasons: [] });
+    expect(at("Android only; desktop behavior is unchanged.").eligible).toBe(true);
+    expect(at("No behavior change to the limits themselves.").eligible).toBe(true);
+    expect(at("No breaking changes.").eligible).toBe(true);
+  });
 });

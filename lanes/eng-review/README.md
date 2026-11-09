@@ -208,3 +208,12 @@ Build-time fixes after authoring pilot 1, made before pilot 2 (none changes froz
   the key writer's prompt is unchanged.
 - F5, missing candidates (choice 12): a candidate one auditor says is missing fails the round only when the other
   auditor names it too, the mirror of the rule that an item stays only when both keep it.
+
+Build-time fix during the calibration hold, before more authoring (it changes no frozen text):
+
+- F6, plans that say no behavior change (section 4, units): section 4 admits only "a feature or behavior change", and
+  the miner read the kind from titles and labels only, so a pull request whose title or description says, without
+  qualification, that no behavior change is intended passed as a feature. Such a candidate is now ineligible with the
+  reason no_behavior_change. Qualified statements (a default, a platform or a named part left unchanged) and refactors
+  that never say so stay in. At the recount it removed 9 of 621 eligible candidates, one of them an authored unit that
+  had already dropped, and no passing unit.

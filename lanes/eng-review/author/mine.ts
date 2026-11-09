@@ -362,6 +362,19 @@ export function planTexts(repo: string, prs: Array<{ pr: number; merged_at: stri
   return out;
 }
 
+const NO_CHANGE = [
+  /\bno (?:intended |expected )?(?:user[- ]facing |functional |visible |observable )?(?:behaviou?r(?:al)?|functional|logic|user[- ]facing) changes?\b/i,
+  /\b(?:pure(?:ly)?|mechanical) refactor(?:ing)?\b|\brefactor(?:ing)?[ -]only\b/i,
+  /\bbehaviou?r[- ]preserving\b/i,
+  /\b(?:does not|doesn't|should not|will not|won't|not intended to) (?:change|alter|affect) (?:any )?(?:behaviou?r|functionality)\b/i,
+  /\b(?:behaviou?r|functionality) (?:is|remains|stays) (?:unchanged|the same)\b/i,
+];
+const SCOPED = /\b(?:existing|default|backwards?[- ]compat\w*|except|other than|apart from|unless|only|themselves|itself)\b|\b(?:to|in|for) the \w+|\b(?:desktop|mobile|android|ios|windows|linux|macos|web)(?:\/\w+)? behaviou?r\b/i;
+
+/** Section 4 admits a feature or behavior change: a title or description saying, unscoped, that no behavior change is intended marks a refactor. */
+export const statesNoBehaviorChange = (t: PlanText) =>
+  (t.title + "\n" + t.description).split(/(?<=[.!?\n])\s+/).some((s) => NO_CHANGE.some((re) => re.test(s)) && !SCOPED.test(s));
+
 /** Fills plan_words for eligible candidates; one with no pull request or no recoverable description has no plan text. */
 export function withPlans(r: MineResult, query: Query = graphql): Map<number, PlanText | null> {
   const wanted = r.candidates.filter((c) => c.eligible && c.pr !== null);
@@ -371,6 +384,7 @@ export function withPlans(r: MineResult, query: Query = graphql): Map<number, Pl
     c.plan_words = t?.words ?? 0;
     if (!t) c.reasons.push("no_plan_text");
     else if (t.words < MIN_PLAN_WORDS) c.reasons.push("plan_under_120_words");
+    else if (statesNoBehaviorChange(t)) c.reasons.push("no_behavior_change");
     c.eligible = c.reasons.length === 0;
   }
   return texts;
