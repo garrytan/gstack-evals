@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readItem } from "../../src/runner/ledger/record.ts";
-import { ControllerError, harborEnv, harborJob, HARBOR_RETRY, meterSpend, nextRunnable, parsePlan, prng, runBatch, seededShuffle, sessionId, type BatchOptions, type PlanRow } from "../../lanes/decision-routing/host/controller.ts";
+import { ControllerError, fakeFetch, harborEnv, harborJob, HARBOR_RETRY, meterSpend, nextRunnable, parsePlan, prng, runBatch, seededShuffle, sessionId, type BatchOptions, type PlanRow } from "../../lanes/decision-routing/host/controller.ts";
 
 const CONTROLLER = join(import.meta.dir, "../../lanes/decision-routing/host/controller.ts");
 const FAKE_HARBOR = "import { appendFileSync, readFileSync, writeFileSync } from \"node:fs\";\nconst env = process.env;\nconst job = JSON.parse(readFileSync(process.argv[process.argv.indexOf(\"-c\") + 1], \"utf8\"));\nconst kw = job.agents[0].kwargs;\nconst task = job.tasks[0].path.split(\"/\").pop();\nconst ev = (e) => appendFileSync(env.DR_TEST_EVENTS, JSON.stringify({ ...e, task, cell: kw.cell, t: performance.timeOrigin + performance.now() }) + \"\\n\");\nev({ ev: \"start\", keys_seen: Object.keys(env).filter((k) => /_API_KEY$/.test(k)), telemetry: env.HARBOR_TELEMETRY, mgmt: !!env.DR_MGMT_SOCKET && !!env.DR_MGMT_TOKEN, base: env.DR_PROXY_BASE, pythonpath: env.PYTHONPATH });\nconst mgmt = (path, body) => fetch(\"http://localhost\" + path, { unix: env.DR_MGMT_SOCKET, method: \"POST\", headers: { \"content-type\": \"application/json\", \"x-gstack-evals-management\": env.DR_MGMT_TOKEN }, body: JSON.stringify(body) }).then((r) => r.json());\nconst b = await mgmt(\"/bind\", { cell: { run_id: \"dr-test\", arm: kw.cell, task, model: kw.model, trial: 1, attempt: 1 }, models: [\"anthropic:claude-opus-5-5\"], allowance_micros: 5000000 });\nconst res = await fetch(env.DR_PROXY_BASE + \"/\" + b.slot + \"/anthropic/v1/messages\", { method: \"POST\", headers: { \"content-type\": \"application/json\", \"x-api-key\": b.token }, body: JSON.stringify({ model: \"claude-opus-5-5\", max_tokens: 100, messages: [{ role: \"user\", content: \"hi\" }] }) });\nconst answer = await res.json();\nawait Bun.sleep(Number(env.DR_TEST_SLEEP_MS ?? 150));\nawait mgmt(\"/unbind\", { slot: b.slot });\nawait mgmt(\"/finalize\", { meter_id: b.meter_id });\nif (env.DR_TEST_TOUCH_STOP) writeFileSync(env.DR_TEST_TOUCH_STOP, \"stop\\n\");\nev({ ev: \"end\", status: res.status, code: answer.code ?? null });\n";
@@ -242,5 +242,33 @@ describe("runBatch", () => {
     const r = Bun.spawnSync([process.execPath, CONTROLLER, "--plan", join(w.dir, "plan.json"), "--out", w.out, "--run-id", "x", "--tasks-dir", o.tasksDir, "--runtime-tarball", o.runtimeTarball, "--runtime-sha256", o.runtimeSha256, "--pin-file", o.pinFile, "--pin-sha256", o.pinSha256, "--temp", "--items", o.items!], { env: { PATH: process.env.PATH! } });
     expect(r.exitCode).toBe(2);
     expect(r.stderr.toString()).toStartWith("E_DR_STOPPED: ");
+  });
+
+  test("--temp without fake upstreams is refused with E_USAGE before anything is leased or written", async () => {
+    const w = world();
+    await expect(runBatch(w.opts(plan(1, ["N"]), { fetch: undefined }))).rejects.toThrow(/^E_USAGE: --temp needs --fake-upstreams/);
+    expect(existsSync(w.out)).toBe(false);
+    writeFileSync(join(w.dir, "plan.json"), JSON.stringify(plan(1, ["N"])));
+    const o = w.opts([]);
+    const r = Bun.spawnSync([process.execPath, CONTROLLER, "--plan", join(w.dir, "plan.json"), "--out", w.out, "--run-id", "x", "--tasks-dir", o.tasksDir, "--runtime-tarball", o.runtimeTarball, "--runtime-sha256", o.runtimeSha256, "--pin-file", o.pinFile, "--pin-sha256", o.pinSha256, "--temp", "--items", o.items!], { env: { PATH: process.env.PATH!, ANTHROPIC_API_KEY: "sk-ant-fake-0123456789" } });
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr.toString()).toStartWith("E_USAGE: ");
+    expect(existsSync(w.out)).toBe(false);
+    expect(w.read()).toHaveLength(0);
+  });
+
+  test("fakeFetch throws for a provider with no fake and never calls the real fetch", async () => {
+    const real = globalThis.fetch;
+    const reached: string[] = [];
+    globalThis.fetch = (async (input: string) => (reached.push(String(input)), Response.json({}))) as typeof fetch;
+    try {
+      const send = fakeFetch({ anthropic: "http://127.0.0.1:9" });
+      expect(() => send("https://api.openai.com/v1/chat/completions", { method: "POST" })).toThrow(/^E_INTERNAL: no fake upstream/);
+      expect(() => send("https://api.typesafe.ai/v1/systemone", { method: "POST" })).toThrow(/^E_INTERNAL: no fake upstream/);
+      await send("https://api.anthropic.com/v1/messages", { method: "POST" });
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(reached).toEqual(["http://127.0.0.1:9/v1/messages"]);
   });
 });

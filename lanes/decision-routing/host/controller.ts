@@ -15,7 +15,8 @@
 //   for the agent's bind; a DR_CUSTODY_HIT refusal in any journal stops launching with DR_CUSTODY_HIT and logs the
 //   session and marker index, never the marker.
 // A session whose job file exists was launched once and is never launched again.
-// --temp runs the whole flow on a temporary ledger and record initialised from config/items.json, for keyless dry runs.
+// --temp runs the whole flow on a temporary ledger and record initialised from config/items.json, for keyless dry runs,
+// and is refused without --fake-upstreams.
 
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -246,6 +247,7 @@ export async function runBatch(o: BatchOptions): Promise<BatchResult> {
   if (!isTrialNetworkHost(o.proxyHost)) throw new ControllerError("E_USAGE", "the proxy host " + o.proxyHost + " is not a loopback or private IP literal");
   if (!o.temp && !o.custody) throw new ControllerError("E_USAGE", "a live run (no --temp) needs --pristine-dir and --label-store for the leak scan; nothing was leased or launched");
   if (existsSync(stopFile)) throw new ControllerError("E_DR_STOPPED", "the stop file " + stopFile + " exists, so nothing was leased or launched; remove it to start the batch");
+  if (o.temp && !o.fetch) throw new ControllerError("E_USAGE", "--temp needs --fake-upstreams: a temporary ledger skips admission, so its calls must never reach a real provider; nothing was leased or launched");
   if (!existsSync(o.runtimeTarball) || sha256(o.runtimeTarball) !== o.runtimeSha256) throw new ControllerError("E_DR_RUNTIME", "the runtime tarball " + o.runtimeTarball + " is missing or its sha256 is not " + o.runtimeSha256 + "; nothing was leased or launched");
   if (!existsSync(o.pinFile) || sha256(o.pinFile) !== o.pinSha256) throw new ControllerError("E_DR_PIN", "the pin file " + o.pinFile + " is missing or its sha256 is not " + o.pinSha256 + "; nothing was leased or launched");
 
