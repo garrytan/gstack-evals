@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "decision-routing pin",
+  "description": "Thresholds, acting bands and frozen-rule digests, written by lanes/decision-routing/tune/pin.ts before any pilot or scored session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "questions_sha256",
+    "mapping_sha256",
+    "safety_rule_sha256",
+    "particle_max_tokens",
+    "jev",
+    "particle_guess",
+    "particle_noguess",
+    "j_fixed",
+    "ece",
+    "n_labelled"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "questions_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "mapping_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "safety_rule_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "particle_max_tokens": {
+      "enum": [
+        8000,
+        16000
+      ]
+    },
+    "jev": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "next_step",
+        "tests_passed",
+        "done",
+        "safe",
+        "relevant"
+      ],
+      "properties": {
+        "next_step": {
+          "type": "object",
+          "required": [
+            "edge"
+          ],
+          "properties": {
+            "edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            }
+          }
+        },
+        "tests_passed": {
+          "type": "object",
+          "required": [
+            "edge"
+          ],
+          "properties": {
+            "edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            }
+          }
+        },
+        "done": {
+          "type": "object",
+          "required": [
+            "edge"
+          ],
+          "properties": {
+            "edge": {
+              "const": null
+            }
+          }
+        },
+        "safe": {
+          "type": "object",
+          "required": [
+            "block_edge",
+            "allow_edge"
+          ],
+          "properties": {
+            "block_edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            },
+            "allow_edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            }
+          }
+        },
+        "relevant": {
+          "type": "object",
+          "required": [
+            "drop_edge"
+          ],
+          "properties": {
+            "drop_edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            }
+          }
+        }
+      }
+    },
+    "particle_guess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "next_step",
+        "relevant"
+      ],
+      "properties": {
+        "next_step": {
+          "type": "object",
+          "required": [
+            "edge"
+          ],
+          "properties": {
+            "edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            }
+          }
+        },
+        "relevant": {
+          "type": "object",
+          "required": [
+            "drop_edge"
+          ],
+          "properties": {
+            "drop_edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            }
+          }
+        }
+      }
+    },
+    "particle_noguess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "next_step",
+        "relevant"
+      ],
+      "properties": {
+        "next_step": {
+          "type": "object",
+          "required": [
+            "edge"
+          ],
+          "properties": {
+            "edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            }
+          }
+        },
+        "relevant": {
+          "type": "object",
+          "required": [
+            "drop_edge"
+          ],
+          "properties": {
+            "drop_edge": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "enum": [
+                0.5,
+                0.6,
+                0.7,
+                0.8,
+                0.9,
+                0.95,
+                null
+              ]
+            }
+          }
+        }
+      }
+    },
+    "j_fixed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "choice",
+        "noul_yes",
+        "noul_no",
+        "relevant_drop_p"
+      ],
+      "properties": {
+        "choice": {
+          "const": 0.9
+        },
+        "noul_yes": {
+          "const": 0.9
+        },
+        "noul_no": {
+          "const": 0.1
+        },
+        "relevant_drop_p": {
+          "const": 0.1
+        }
+      }
+    },
+    "ece": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    },
+    "n_labelled": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  }
+}
