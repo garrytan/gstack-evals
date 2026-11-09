@@ -12,7 +12,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, chmodS
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../../src/runner/ledger/envelope.ts";
-import { openLease, recordApproval, settleLease } from "../../../src/runner/ledger/ledger.ts";
+import { machineId, recordApproval } from "../../../src/runner/ledger/ledger.ts";
+import { PF_STAGES, serveStages } from "../driver/stage.ts";
 import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { readItem } from "../../../src/runner/ledger/record.ts";
 import { sse } from "../../../quick/laneb/runner/fake_upstream.ts";
@@ -24,6 +25,7 @@ import { ITEMS, LINE, OPUS, P1, SOL } from "./items.ts";
 import { P_HEADING } from "./exposure.ts";
 import { pstackMount, buildPstackVolume, PSTACK_DIR } from "./pstack.ts";
 import { dockerExecutor } from "./runner.ts";
+import { runPfSession, type PfRun } from "./run.ts";
 import { scoreSession, type CatchRecord } from "./score.ts";
 import { effortFields, endKind, readWrapup, taskStep, wrapupStep, writeSessionRecord, type EndKind, type PfSessionRecord } from "./session.ts";
 import { buildToolsVolume, runTlc, tla2tools, toolsEnv, toolsMount, toolsVolume, TLC_CFG, TLC_SPEC } from "./tools.ts";
@@ -123,7 +125,9 @@ function startStub(sessions: Record<string, StubSession>, host: string) {
       if (req.method !== "POST") return Response.json({});
       const body = (await req.json()) as Record<string, any>;
       if (path.endsWith("/count_tokens")) return Response.json({ input_tokens: 10 });
-      const [session, phase] = (req.headers.get("x-api-key") ?? "?:?").split(":") as [string, string];
+      const said = JSON.stringify(body.messages ?? []);
+      const session = /pf-dry-session (\w+)/.exec(said)?.[1] ?? "?";
+      const phase = said.includes(JSON.stringify(WRAPUP).slice(1, -1)) ? "wrapup" : "task";
       st.bodies.push({ session, phase, body });
       const main = Array.isArray(body.tools) && body.tools.length > 0;
       if (!main || !sessions[session]) return new Response(sse(body.model, [{ type: "text", text: "DONE" }] as any), { headers: { "content-type": "text/event-stream" } });
@@ -178,10 +182,6 @@ export async function main(argv: string[]): Promise<number> {
   const local = LocalLedger.open(join(W, "ledger.sqlite"));
   for (const d of Object.values(ITEMS)) {
     recordApproval(record, { action: "init", item: d.item, cap_micros: d.cap_micros, quotes: [quote], admission: "required", program: LINE.name, skills: ["pf"] });
-    const lease = openLease(record, local, { item: d.item, run_id: "pf-dryrun", requireAdmission: () => null });
-    settleLease(record, local, lease.lease_id);
-    const it = readItem(record, d.item);
-    rule("ledger lease " + d.item, it.open === null && it.leases.length === 1 && it.leases[0]!.close !== null, "lease " + lease.lease_id + " opened and settled, spent " + it.leases[0]?.close?.spent_micros + " of cap " + d.cap_micros);
   }
 
   // Tools volume, pstack plugin volume and a real TLC run, offline, in the unit image.
@@ -200,6 +200,7 @@ export async function main(argv: string[]): Promise<number> {
   uj.files["fix.patch"] = sha(fixPatch);
   uj.fix.files = ["flag/flag.go"];
   uj.oracle.rebuild_rule = { applies: true };
+  uj.image.runtime_id = spawnSync("docker", ["image", "inspect", "--format", "{{.Id}}", FIXTURE_IMAGE], { encoding: "utf8" }).stdout.trim();
   writeFileSync(join(fx.dir, "unit.json"), JSON.stringify(uj, null, 1) + "\n");
   const neutral = join(W, "neutral.json");
   writeFileSync(neutral, JSON.stringify({ schema: "pf-neutral.v1", id: "pf-dry-flag", verdict: "kept", mode: "both", files: ["flag/flag.go"], tried: [], patch_sha256: null }));
@@ -215,66 +216,40 @@ export async function main(argv: string[]): Promise<number> {
     C: { task: plant, wrapup: "limit" },
     D: { task: plant, wrapup: "upstream", checks: manifest(["bash checks/regress_test.sh"]) },
     hostile: { task: "true", wrapup: "none" },
+    blind: { task: "true", wrapup: "none" },
   };
   const { st, server } = startStub(stubSessions, gw);
   const url = "http://" + gw + ":" + server.port;
+  // The driver: one stage per frozen item on the temporary ledger, its proxies in front of the stub. Stages route an open
+  // to the first that serves its arm and model, so batch 1 serves pf-sol, pf-particle, pf-admit and pf-blind and batch 2
+  // pf-opus; each lease is opened and settled by the driver.
+  const harbor = arg("--harbor") ?? join(homedir(), ".capy/work/real/venv/bin/harbor");
+  const hostileVol = fx.volume + "-hostile";
+  spawnSync("docker", ["volume", "rm", "-f", hostileVol]);
+  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", fx.volume + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", FIXTURE_IMAGE, "-c", 'cp -a /s/. /d/ && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git add CLAUDE.md && git -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit', HOSTILE], { encoding: "utf8" });
+  if (hv.status !== 0) throw new Error("hostile volume: " + hv.stderr);
+  const machine = machineId();
+  const serve = (n: number, items: string[]) => serveStages({ record, local, run_id: "pf-dryrun-" + n, envelope_host: machine, machine, stages: items.map((item) => ({ item, arm: PF_STAGES[item]!.arms[0]!, arms: [...PF_STAGES[item]!.arms] })), host: gw, dir: join(W, "driver-" + n), fetch: (u, init) => fetch(u.replace("https://api.anthropic.com", url), init), env: { ANTHROPIC_API_KEY: "stub-not-a-key" }, requireAdmission: () => null, log: (l) => console.error(l) });
+  let batch = await serve(1, ["pf-sol", "pf-particle", "pf-admit", "pf-blind"]);
+  let stopped = false;
+  let index = 0;
   const runOne = async (name: string, arm: PfArm, model: string, names: Names, hostile = false) => {
-    const out = join(W, "s-" + name);
-    mkdirSync(out, { recursive: true });
-    const cid = "pf-dry-" + name + "-" + process.pid;
-    const plugin = arm === "P" || arm === "blind";
-    spawnSync("docker", ["rm", "-f", cid]);
-    const run = spawnSync("docker", ["run", "-d", "--name", cid, "--mount", tv.mount, ...(plugin ? ["--mount", pv.mount] : []), "-v", claudeBin + ":/usr/local/bin/claude:ro", "-v", SH + ":/opt/pf-sh:ro", "--entrypoint", "sleep", FIXTURE_IMAGE, "infinity"], { encoding: "utf8" });
-    if (run.status !== 0) throw new Error("E_PF_INFRA_GAP session container: " + run.stderr);
-    const seed = mkdtempSync(join(W, "seed-"));
-    spawnSync("git", ["clone", "-q", fx.repo, join(seed, "w")]);
-    if (hostile) writeFileSync(join(seed, "w", "CLAUDE.md"), HOSTILE + "\n");
-    spawnSync("docker", ["cp", join(seed, "w"), cid + ":/w"]);
-    const env: Record<string, string> = { ANTHROPIC_MODEL: model, CLAUDE_CONFIG_DIR: "/root/.claude", HOME: "/root", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "32000", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1", IS_SANDBOX: "1" };
-    const tenv = Object.fromEntries(toolsEnv(FIXTURE_IMAGE).map((e) => [e.slice(0, e.indexOf("=")), e.slice(e.indexOf("=") + 1)]));
-    const fwd = [...Object.keys(env), ...Object.keys(tenv), "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_AGENT_SDK_VERSION"];
-    const wrapper = join(out, "claude-in-container");
-    writeFileSync(wrapper, "#!/bin/sh\nexec docker exec -i -w /w " + fwd.map((k) => "-e " + k).join(" ") + " " + cid + " claude \"$@\"\n");
-    chmodSync(wrapper, 0o755);
-    const lim = sessionLimits(arm, model);
-    const cfg = {
-      cli_path: wrapper, cwd: out, repo: "/w", work: "/tmp/pf-work", sh_dir: "/opt/pf-sh", exec_prefix: ["docker", "exec", "-i", "-w", "/w", cid], out, model, no_answer: NO_ANSWER,
-      env: { ...env, ...tenv }, base_urls: { task: url, wrapup: url }, tokens: { task: name + ":task", wrapup: name + ":wrapup" }, plugin: plugin ? PSTACK_DIR : null,
-      task_text: taskTurn(arm, { issue: "The flag in flag/flag.go is never reset after a run, so the next run starts in the wrong state.", names }), wrapup_text: WRAPUP,
-      limits: { task: { ...lim.task, wall_limit_sec: 600 }, wrapup: lim.wrapup },
-    };
-    writeFileSync(join(out, "config.json"), JSON.stringify(cfg));
-    const env2 = Object.fromEntries(Object.entries(process.env).filter(([k]) => !KEYS.test(k))) as Record<string, string>;
-    const p = Bun.spawn([python, TURNS, join(out, "config.json")], { env: { ...env2, PYTHONDONTWRITEBYTECODE: "1" }, stdout: "pipe", stderr: "pipe" });
-    const timer = setTimeout(() => p.kill(), 1_800_000);
-    const [so, se] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-    clearTimeout(timer);
-    writeFileSync(join(out, "turns.log"), so + se);
-    spawnSync("docker", ["rm", "-f", cid]);
-    const turns = existsSync(join(out, "pf-summary.json")) ? JSON.parse(readFileSync(join(out, "pf-summary.json"), "utf8")) : { refused: "no pf-summary.json: " + se.slice(-400) };
-    return { out, turns, arm, model, names };
+    const stage = batch.stages.find((s) => PF_STAGES[s.item]!.arms.includes("pf:" + arm) && PF_STAGES[s.item]!.models.includes(model));
+    const session = { unit: "pf-dry-flag", part: 0, index: index++, model, arm, item: stage?.item ?? "none" };
+    const issue = "The flag in flag/flag.go is never reset after a run, so the next run starts in the wrong state. (pf-dry-session " + name + ")";
+    const run: PfRun = await runPfSession({ unitDir: fx.dir, session, names, control: batch.control, proxy: stage?.proxy ?? batch.stages[0]!.proxy, out: join(W, "s-" + name), volume: hostile ? hostileVol : fx.volume, issue, harbor, claude: claudeBin, probeNode: "", jobName: "pf-dry-" + name }, () => st.bodies.find((b) => b.session === name && Array.isArray(b.body.tools) && b.body.tools.length)?.body);
+    const a = run.attempts.at(-1)!;
+    const turns = a.summary ?? { refused: "no pf-summary.json: " + readFileSync(join(a.dir, "harbor.log"), "utf8").slice(-400) };
+    return { out: a.evaluator ?? a.dir, turns, arm, model, names, run };
   };
   type Ran = Awaited<ReturnType<typeof runOne>>;
-  const toRecord = (name: string, r: Ran, index: number): string => {
-    const ends: EndKind[] = (r.turns.wrapup ?? []).map((w: any) => endKind({ termination: w.termination === "error" ? null : w.termination, harness: w.termination === "error" }));
-    const tEnd = endKind({ termination: r.turns.task?.termination ?? null });
-    const ts = taskStep([tEnd]);
-    const ws = ends.length ? wrapupStep(ends) : null;
-    const gap = ts.action === "gap" ? ts.code : ws?.action === "gap" ? ws.code : null;
-    const cap = r.turns.capture ? readCapture(r.turns.capture) : null;
-    const keep = r.turns.keep ? readWrapup(r.turns.keep) : { checks: false, discarded: [] };
-    const first = st.bodies.find((b) => b.session === name && Array.isArray(b.body.tools) && b.body.tools.length);
-    const rec: PfSessionRecord = {
-      schema: "pf-session.v1", unit: "pf-dry-flag", part: 0, index, model: r.model, arm: r.arm, item: "pf-admit", lease_id: "dry-run", attempt: 1, names: r.names,
-      task: { end: tEnd, turns: r.turns.task?.result?.num_turns ?? null, wall_ms: 0, spent_micros: 0 }, wrapup: { ends, turns: null, spent_micros: 0 },
-      wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
-      checks: keep.checks ? join(r.out, "CHECKS.json") : null, s: { repo: join(r.out, "s.bundle"), ref: "HEAD" }, transcript: join(r.out, "sdk-messages.jsonl"),
-      claude_session: join(r.out, "claude-session.jsonl"), effort: first ? effortFields(first.body) : null, questions: { ask_user_question: 0, prose: 0 }, env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
-      disallowed_tools: ["WebSearch", "WebFetch"], plugin: r.arm === "P" || r.arm === "blind" ? PSTACK_DIR : null, tools: toolsVolume(),
-    };
-    const file = join(r.out, "session.json");
-    writeSessionRecord(file, rec);
-    return file;
+  const toRecord = (_name: string, r: Ran, _index: number): string => r.run.file;
+  const slotLine = (name: string, r: Ran) => {
+    const slots = (r.turns.slots ?? []) as Array<Record<string, any>>;
+    const lim = sessionLimits(r.arm, r.model);
+    const want = (x: Record<string, any>) => Math.round(lim[x.phase as "task" | "wrapup"].allowance_usd * 1_000_000);
+    const ok = slots.filter((x) => x.phase === "task").length === 1 && slots.some((x) => x.phase === "wrapup") && slots.every((x) => x.id && x.allowance_micros === want(x) && x.close && !x.close.error && typeof x.close.spent_micros === "number");
+    rule("session " + name + " opened a task slot and a wrap-up slot on the driver with their allowances, all closed", ok, slots.map((x) => x.phase + (x.rerun ? " rerun" : "") + " " + x.id + " allowance " + x.allowance_micros + " of " + want(x) + ", spent " + x.close?.spent_micros).join("; ") || "no slot");
   };
   const score = async (r: Ran, file: string, ceiling?: number) => {
     const mounts = [toolsMount(), ...(r.arm === "P" ? [pstackMount()] : [])].flatMap((m) => ["--mount", m]);
@@ -321,6 +296,9 @@ export async function main(argv: string[]): Promise<number> {
     const C = await runOne("C", "N", P1, names);
     const cC = await score(C, toRecord("C", C, 2));
     rule("wrap-up limit with no manifest scores 0", cC.score === 0 && (cC as any).manifest?.none === "wrapup_limit", "wrap-up " + JSON.stringify((C.turns.wrapup ?? []).map((w: any) => w.termination)) + ", score " + cC.score + ", none " + (cC as any).manifest?.none);
+    const BL = await runOne("blind", "blind", OPUS, names);
+    await batch.stop();
+    batch = await serve(2, ["pf-opus"]);
     const D = await runOne("D", "P", OPUS, names);
     const fileD = toRecord("D", D, 3);
     const recD = JSON.parse(readFileSync(fileD, "utf8")) as PfSessionRecord;
@@ -335,10 +313,19 @@ export async function main(argv: string[]): Promise<number> {
     const pTask = readFileSync(join(probe.out, "sdk-messages.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.phase === "task");
     const bgDone = pTask.findIndex((m) => m.subtype === "task_notification" && m.data?.status === "completed");
     rule("background task started near the end of a task turn holds the turn open until it finishes", bgDone >= 0 && probe.turns.task?.termination === "completed" && probe.turns.task.wall_s >= 45, "task_notification completed at record " + bgDone + " of " + pTask.length + ", task end " + probe.turns.task?.termination + " after " + probe.turns.task?.wall_s + " s");
+    for (const [n, r] of Object.entries({ probe, A, B, C, blind: BL, D })) slotLine(n, r);
+    rule("session hostile opened no slot", (H.turns.slots ?? []).length === 0, "slots " + (H.turns.slots ?? []).length);
+    stopped = true;
+    const code = await batch.stop();
+    for (const d of Object.values(ITEMS)) {
+      const it = readItem(record, d.item);
+      rule("ledger lease " + d.item, it.open === null && it.leases.length === 1 && it.leases[0]!.close !== null, "lease " + (it.leases[0]?.lease as any)?.lease_id + " opened and settled by the driver, spent " + it.leases[0]?.close?.spent_micros + " of cap " + d.cap_micros + ", driver exit " + code);
+    }
     rule("hostile CLAUDE.md reaches no arm", /E_PF_ARM/.test(String(H.turns.refused ?? "")) && reached === 0 && st.bodies.every((b) => b.session !== "hostile"), "refused: " + String(H.turns.refused ?? "no").slice(0, 120) + "; request bodies holding the text " + reached);
   } catch (e) {
     rule("dry run", false, (e as Error).stack?.slice(0, 800) ?? String(e));
   } finally {
+    if (!stopped) await batch.stop();
     server.stop(true);
   }
   writeFileSync(join(W, "dryrun.txt"), lines.join("\n") + "\n");
