@@ -31,6 +31,8 @@ export interface UnitMeta {
   repo: string;
   licence: string;
   copyleft: boolean;
+  /** The repository's main language at base (the shuffled-key control prefers a key in the same language). */
+  language: string;
   /** The first-parent commit on the default branch that is the unit, its parent (the base) and its pull request. */
   merge_sha: string;
   base_sha: string;
@@ -100,6 +102,8 @@ export interface Key {
   own: OwnItem[];
   /** The real diff's touched non-test source files and, where the language's diff headers give them, functions (path-map recall). */
   touched: { files: string[]; functions: FunctionRef[] };
+  /** The real merged diff's file list with line counts (pairwise packets show it; it is a fact about the change, not its aftermath). */
+  diffstat: Array<{ file: string; added: number; deleted: number }>;
 }
 
 /** One planned review session's outcome (section 6). no-block covers a completed reply with no block and an arm stop after its retry. */
