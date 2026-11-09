@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { checkSafety } from "./safety.ts";
 import { dockerCli, doneLabel, pristineImage, testPassLabel, verifierBuild, type DockerRunner } from "./container.ts";
+import { NOT_BARE_RUNNER } from "./runner-exit.ts";
 import { fixFiles } from "./fix-files.ts";
 import { pristineListing } from "./markers.ts";
 import { mapNextStep } from "./next-step.ts";
@@ -114,7 +115,7 @@ export async function main(argv: string[], docker: DockerRunner = dockerCli): Pr
     const out = flag(rest, "--out");
     if (!out) { process.stdout.write(text); return 0; }
     writeFileSync(out, text);
-    console.log("labels: " + rows.length + " decisions, " + rows.filter((r) => r.missing).length + " missing (DR_LABEL_MISSING, counted, never imputed)");
+    console.log("labels: " + rows.length + " decisions, " + rows.filter((r) => r.missing).length + " missing (DR_LABEL_MISSING, counted, never imputed), " + rows.filter((r) => r.missing === NOT_BARE_RUNNER).length + " of them test-pass labels whose command is not a bare runner");
     return 0;
   }
   if (sub === "join") {

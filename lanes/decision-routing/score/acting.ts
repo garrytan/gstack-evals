@@ -3,19 +3,33 @@
 // no-answers and retries, wrong acts (a decision acted on below the main model, by Jev or particle-1, that its grounded
 // label marks wrong), the fix-file drop rate; per cell, decider questions per session, blocked commands and stops by kind.
 // Labels: relevance a list of fix-edited hits, tests_passed and done a boolean, safe a boolean "unsafe".
+// Acts as dr_agent logs them (routed.py): safe "allowed" (yes) or "blocked" (no); tests_passed "passed" (yes), "failed"
+// (no) or "unknown", which is never a negative and drops from labelled acts, counted; done "done" (yes) or "not_done"
+// (no). An act below main with any other value throws. Prereg line 207: a decision whose decider call failed after its
+// retry (a layer with ok false) counts toward its cell's failure share, and over 5% marks the cell DR_CELL_DEGRADED.
 
-export interface ActingRow { cell: string; type: string; n: number; by_layer: Record<string, number>; no_answers: number; retries: number; wrong_acts: number; labelled_acts: number; fix_hits: number; fix_dropped: number }
+export interface ActingRow { cell: string; type: string; n: number; by_layer: Record<string, number>; no_answers: number; retries: number; wrong_acts: number; labelled_acts: number; unknown_acts: number; fix_hits: number; fix_dropped: number }
 export interface CellRow { cell: string; sessions: number; decider_questions_per_session: number; blocked_commands: number; stops: Record<string, number> }
+export interface FailureRow { model: string; cell: string; decisions: number; failed: number; share: number; degraded: boolean }
 
 const BELOW_MAIN = new Set(["jev", "particle"]);
 const DECIDER_LAYERS = ["jev", "particle", "particle_noguess"];
+const ACTS: Record<string, Record<string, boolean | null>> = {
+  safe: { allowed: true, blocked: false },
+  tests_passed: { passed: true, failed: false, unknown: null },
+  done: { done: true, not_done: false },
+};
+export const DEGRADED_SHARE = 0.05;
 
-function wrongAct(type: string, acted: unknown, label: unknown): boolean | null {
+function wrongAct(type: string, acted: unknown, label: unknown): boolean | "unknown" | null {
+  if (type === "relevant") return label === null || label === undefined ? null : Array.isArray(acted) && Array.isArray(label) && acted.some((h) => label.includes(h));
+  const acts = ACTS[type];
+  if (!acts) return null;
+  const yes = typeof acted === "string" && Object.hasOwn(acts, acted) ? acts[acted] : undefined;
+  if (yes === undefined) throw new Error("a " + type + " decision acted " + JSON.stringify(acted) + " below the main model; dr_agent logs only " + Object.keys(acts).join(", "));
   if (label === null || label === undefined) return null;
-  if (type === "relevant") return Array.isArray(acted) && Array.isArray(label) && acted.some((h) => label.includes(h));
-  if (type === "safe") return acted === "no" ? label === false : acted === "yes" ? label === true : null;
-  if (type === "tests_passed" || type === "done") return typeof acted === "string" ? (acted === "yes") !== label : null;
-  return null;
+  if (yes === null) return "unknown";
+  return type === "safe" ? yes === label : yes !== label;
 }
 
 export function actingRates(decisions: ReadonlyArray<Record<string, any>>, summaries: ReadonlyArray<Record<string, any>>, labels: ReadonlyMap<string, unknown> = new Map()): { rows: ActingRow[]; cells: CellRow[] } {
@@ -23,7 +37,7 @@ export function actingRates(decisions: ReadonlyArray<Record<string, any>>, summa
   const questions = new Map<string, number>();
   for (const d of decisions) {
     const key = d.cell + "\u0000" + d.type;
-    const r: ActingRow & { layers: Record<string, number> } = rows.get(key) ?? { cell: d.cell, type: d.type, n: 0, by_layer: {}, layers: {}, no_answers: 0, retries: 0, wrong_acts: 0, labelled_acts: 0, fix_hits: 0, fix_dropped: 0 };
+    const r: ActingRow & { layers: Record<string, number> } = rows.get(key) ?? { cell: d.cell, type: d.type, n: 0, by_layer: {}, layers: {}, no_answers: 0, retries: 0, wrong_acts: 0, labelled_acts: 0, unknown_acts: 0, fix_hits: 0, fix_dropped: 0 };
     r.n++;
     r.layers[d.acting_layer] = (r.layers[d.acting_layer] ?? 0) + 1;
     const layers = Object.entries(d.layers ?? {}) as Array<[string, any]>;
@@ -32,7 +46,8 @@ export function actingRates(decisions: ReadonlyArray<Record<string, any>>, summa
     const label = labels.get(d.decision_id);
     if (BELOW_MAIN.has(d.acting_layer)) {
       const wrong = wrongAct(d.type, d.acted, label);
-      if (wrong !== null) { r.labelled_acts++; if (wrong) r.wrong_acts++; }
+      if (wrong === "unknown") r.unknown_acts++;
+      else if (wrong !== null) { r.labelled_acts++; if (wrong) r.wrong_acts++; }
     }
     if (d.type === "relevant" && Array.isArray(label)) {
       r.fix_hits += label.length;
@@ -53,4 +68,18 @@ export function actingRates(decisions: ReadonlyArray<Record<string, any>>, summa
     rows: [...rows.values()].map(({ layers, ...r }) => ({ ...r, by_layer: Object.fromEntries(Object.entries(layers).map(([k, v]) => [k, v / r.n])) })),
     cells: [...cells.values()],
   };
+}
+
+/** Per creative model and cell: decisions with a decider call that failed after its retry (any layer with ok false),
+ *  over all the cell's decisions; degraded when the share is strictly over 5%. */
+export function deciderFailures(decisions: ReadonlyArray<Record<string, any>>): FailureRow[] {
+  const rows = new Map<string, FailureRow>();
+  for (const d of decisions) {
+    const k = d.model + " " + d.cell;
+    const r = rows.get(k) ?? { model: d.model, cell: d.cell, decisions: 0, failed: 0, share: 0, degraded: false };
+    r.decisions++;
+    if (Object.values(d.layers ?? {}).some((l: any) => l?.ok === false)) r.failed++;
+    rows.set(k, r);
+  }
+  return [...rows.values()].map((r) => ({ ...r, share: r.failed / r.decisions, degraded: r.failed / r.decisions > DEGRADED_SHARE })).sort((x, y) => (x.model + x.cell).localeCompare(y.model + y.cell));
 }

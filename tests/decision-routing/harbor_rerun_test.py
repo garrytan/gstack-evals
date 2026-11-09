@@ -156,6 +156,20 @@ class Rerun(unittest.TestCase):
         self.assertEqual((self.kept() / "attempt.json").read_text(), first)
         self.assertEqual(json.loads((self.trial / "agent" / "dr" / "dr-summary.json").read_text())["exit_status"], "infra_error")
 
+    def test_only_calibration_n_sessions_log_shadow_data(self):
+        logs = self.trial / "agent"
+        logs.mkdir(parents=True)
+
+        def shadow(cell, model, item):
+            agent = dr_harbor.DecisionRoutingAgent(cell=cell, model=model, runtime_tarball="/rt.tgz", runtime_sha256="ab", pin_file=str(self.pin), item=item, logs_dir=logs)
+            return agent.session_config("s").get("calibration_shadow")
+
+        self.assertIs(shadow("N", "opus", "dr-calibration"), True)
+        self.assertIs(shadow("N", "sol", "dr-calibration"), True)
+        self.assertIs(shadow("N", "opus", "dr-scored-opus"), False)
+        self.assertIs(shadow("N", "sol", "dr-pilot-rp"), False)
+        self.assertIs(shadow("R", "opus", "dr-calibration"), False)
+
     def test_harbor_retries_only_on_dr_infra_error_once(self):
         controller = (AGENT.parent / "host" / "controller.ts").read_text()
         self.assertIn('export const HARBOR_RETRY = { max_retries: 1, include_exceptions: ["DrInfraError"', controller)

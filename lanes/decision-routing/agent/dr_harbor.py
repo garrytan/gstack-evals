@@ -52,6 +52,7 @@ MANAGEMENT_TIMEOUT_SEC = 120
 WALL_GRACE_SEC = 300
 CLEAN_STOPS = ("allowance_stop", "custody_hit")
 INFRA_ATTEMPTS = "dr-infra-attempts"
+CALIBRATION_ITEM = "dr-calibration"
 EXPORT_PATCH = (
     f"mkdir -p {EnvironmentPaths.artifacts_dir} && cd /testbed && git add -A && "
     f"git -c core.fileMode=false diff --cached --binary HEAD > {PATCH_PATH}"
@@ -213,7 +214,11 @@ class DecisionRoutingAgent(MiniSweAgent):
             return None
 
     def session_config(self, session: str) -> dict[str, Any]:
-        """What dr_agent.session reads from /opt/dr/run/session.json (the field names in its docstring)."""
+        """What dr_agent.session reads from /opt/dr/run/session.json (the field names in its docstring).
+
+        calibration_shadow is true only for N on the calibration item: prereg section 6 logs shadow data in the 80
+        calibration sessions, never in pilot or scored N sessions.
+        """
         return {
             "session": session,
             "cell": self._cell,
@@ -227,6 +232,7 @@ class DecisionRoutingAgent(MiniSweAgent):
             "call_limit": CALL_BACKSTOP,
             "wall_s": self._limits["wall_s"],
             "cwd": "/testbed",
+            "calibration_shadow": self._cell == "N" and self._item == CALIBRATION_ITEM,
         }
 
     @override

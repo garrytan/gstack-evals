@@ -2,11 +2,15 @@
 // The label container recipe (prereg section 6.2). Labels run after the session, never in the agent's container.
 // Done: the task's hidden tests on the snapshot, through the separate verifier image that quick/laneb/runner/materialize.ts
 // builds (pristine task image plus test.sh behind APPLY_BLOCK, which applies /logs/artifacts/model.patch). Test pass: the
-// pristine image plus the snapshot diff, then the same test command without its pipe; the label is its exit code.
+// pristine image plus the snapshot diff, then the same test command without its pipe; the label is its exit code. The
+// label is missing unless what remains after the pipe is stripped is a bare runner by the frozen rule, optionally after
+// cd <dir> && (runner-exit.ts; the stated reading is in lanes/decision-routing/README.md), so a chain such as
+// pytest; echo $? never labels its own exit code.
 // Docker sits behind DockerRunner so the recipe is testable without docker.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { baseImage } from "../../../quick/laneb/runner/materialize.ts";
+import { NOT_BARE_RUNNER, isRunnerExit } from "./runner-exit.ts";
 import { firstPipe } from "./shell.ts";
 
 export interface DockerRunner { run(args: string[], opts?: { timeoutMs?: number }): Promise<{ code: number; stdout: string; stderr: string }> }
@@ -47,8 +51,10 @@ export async function doneLabel(docker: DockerRunner, o: { verifierImage: string
   return { done: Number(m[1]) >= 1, missing: null };
 }
 
-export async function testPassLabel(docker: DockerRunner, o: { image: string; snapshot: string; command: string }): Promise<{ passed: boolean | null; exit_code: number; missing: string | null }> {
-  const script = "cd /testbed && if [ -s /dr/snapshot.diff ]; then git apply --index --whitespace=nowarn /dr/snapshot.diff || exit " + APPLY_FAILED + "; fi; " + stripPipe(o.command);
+export async function testPassLabel(docker: DockerRunner, o: { image: string; snapshot: string; command: string }): Promise<{ passed: boolean | null; exit_code: number | null; missing: string | null }> {
+  const command = stripPipe(o.command);
+  if (!isRunnerExit(command)) return { passed: null, exit_code: null, missing: NOT_BARE_RUNNER };
+  const script = "cd /testbed && if [ -s /dr/snapshot.diff ]; then git apply --index --whitespace=nowarn /dr/snapshot.diff || exit " + APPLY_FAILED + "; fi; " + command;
   const r = await docker.run(["run", "--rm", "--network", "none", "-v", o.snapshot + ":/dr/snapshot.diff:ro", o.image, "bash", "-c", script], { timeoutMs: LABEL_TIMEOUT_MS });
   if (r.code === APPLY_FAILED) return { passed: null, exit_code: r.code, missing: "DR_LABEL_MISSING: the snapshot did not apply to the pristine image" };
   return { passed: r.code === 0, exit_code: r.code, missing: null };

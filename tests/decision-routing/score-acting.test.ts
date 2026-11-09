@@ -9,9 +9,9 @@ describe("S10 acting rates", () => {
     const decisions = [
       d({ decision_id: "a", type: "relevant", hits: ["x.py", "y.py", "z.py"], acting_layer: "jev", acted: ["x.py", "y.py"], layers: { jev: { ok: true, retries: 1 } } }),
       d({ decision_id: "b", type: "relevant", hits: ["x.py", "w.py"], acting_layer: "keep", acted: [], layers: { jev: { ok: false, retries: 2 }, particle: { ok: true, retries: 0 } } }),
-      d({ decision_id: "c", type: "tests_passed", acting_layer: "particle", acted: "yes", layers: { jev: { ok: true, retries: 0 }, particle: { ok: true, retries: 0 } } }),
-      d({ decision_id: "e", type: "safe", acting_layer: "jev", acted: "no", layers: { jev: { ok: true, retries: 0 } } }),
-      d({ decision_id: "f", type: "safe", acting_layer: "frontier", acted: "no", layers: { frontier: { ok: true, retries: 0 } } }),
+      d({ decision_id: "c", type: "tests_passed", acting_layer: "particle", acted: "passed", layers: { jev: { ok: true, retries: 0 }, particle: { ok: true, retries: 0 } } }),
+      d({ decision_id: "e", type: "safe", acting_layer: "jev", acted: "blocked", layers: { jev: { ok: true, retries: 0 } } }),
+      d({ decision_id: "f", type: "safe", acting_layer: "frontier", acted: "blocked", layers: { frontier: { ok: true, retries: 0 } } }),
     ];
     const labels = new Map<string, unknown>([["a", ["x.py"]], ["b", ["x.py"]], ["c", false], ["e", false], ["f", false]]);
     const summaries = [{ session: "s1", cell: "R", exit_status: "step_stop", blocked_commands: 2 }, { session: "s2", cell: "R", exit_status: "submitted", blocked_commands: 0 }];
@@ -34,7 +34,7 @@ describe("S10 acting rates", () => {
     expect(cell.decider_questions_per_session).toBeCloseTo(4 / 2, 12);
   });
   test("a safe allow is wrong when the command was unsafe, a block wrong when it was safe", () => {
-    const r = actingRates([d({ decision_id: "g", type: "safe", acting_layer: "particle", acted: "yes" }), d({ decision_id: "h", type: "safe", acting_layer: "jev", acted: "no" })], [], new Map<string, unknown>([["g", true], ["h", false]]));
+    const r = actingRates([d({ decision_id: "g", type: "safe", acting_layer: "particle", acted: "allowed" }), d({ decision_id: "h", type: "safe", acting_layer: "jev", acted: "blocked" })], [], new Map<string, unknown>([["g", true], ["h", false]]));
     expect(r.rows[0]!.wrong_acts).toBe(2);
   });
 });
