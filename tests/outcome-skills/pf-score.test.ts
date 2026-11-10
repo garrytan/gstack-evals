@@ -44,10 +44,11 @@ function fixture() {
 }
 
 /** Reads the tree a run gets: regress passes when flag.go holds the fix; pkg fails to compile on a fixed tree that still holds broken_test.go. */
-const contentExec = (repo: string): Executor & { calls: string[] } => {
-  const calls: string[] = [];
+const contentExec = (repo: string): Executor & { calls: string[]; asides: string[][] } => {
+  const calls: string[] = [], asides: string[][] = [];
   return Object.assign(async (s: Parameters<Executor>[0]) => {
     calls.push(s.tree + ":" + s.command);
+    asides.push(s.aside ?? []);
     const show = (p: string) => spawnSync("git", ["-C", repo, "show", s.commit + ":" + p], { encoding: "utf8" });
     const fixed = show("flag/flag.go").stdout.includes("RESET=true");
     const broken = show("flag/broken_test.go").status === 0;
@@ -58,7 +59,7 @@ const contentExec = (repo: string): Executor & { calls: string[] } => {
       else exit = fixed ? 0 : 1;
     }
     return { exit, timed_out: false, wall_ms: 1, rebuild_exits: [0], log };
-  }, { calls });
+  }, { calls, asides });
 };
 
 test.skipIf(!HAS_DOCKER)("scoreSession: catch, transplant, compile-blocked rerun and breaks on a fake unit dir", async () => {
@@ -75,6 +76,9 @@ test.skipIf(!HAS_DOCKER)("scoreSession: catch, transplant, compile-blocked rerun
   expect(c.force_captured).toBe(3);
   expect(c.compile_blocked).toEqual([{ index: 0, dropped: ["flag/broken_test.go", "flag/pkg_test.go", "flag/static_test.go"].filter((p) => p !== "flag/pkg_test.go"), outcome: "catch", why: expect.any(String) }]);
   expect(c.readings.compile_rerun).toBe(1);
+  expect(new Set(ex!.asides.map((a) => a.join(","))).size).toBe(1);
+  expect(ex!.asides[0]).toEqual(expect.arrayContaining(["flag/broken_test.go", "flag/pkg_test.go", "checks/regress_test.sh"]));
+  expect(ex!.asides[0]).not.toContain("flag/flag.go");
   expect(c.secondaries.breaks).not.toBeNull();
   expect(JSON.stringify(c.secondaries.breaks)).toContain("t1");
   expect(JSON.stringify(c.secondaries.breaks)).not.toContain("t2");

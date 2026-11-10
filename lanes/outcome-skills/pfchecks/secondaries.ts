@@ -23,9 +23,11 @@ export function aimed(tFiles: { path: string; text: string }[], fixFiles: string
   return tFiles.some((f) => res.some((r) => r.test(f.text)));
 }
 
-/** Breaks: stable ids that fail (do not pass) in two or more of three runs on T with the fix's tests applied. */
+/** Breaks: stable ids of three runs on T with the fix's tests applied that two or more runs stop on or report not passed,
+ *  or that no run reports passed. A test a run's parser loses counts neither way, so a broken build still breaks every
+ *  stable test while a lost result line breaks none. */
 export function decideBreaks(stable: string[], runs: (Record<string, string> | null)[]): string[] {
-  return stable.filter((id) => runs.filter((r) => !r || !passed(r, id)).length >= 2);
+  return stable.filter((id) => runs.filter((r) => r === null || (r[id] !== undefined && !passed(r, id))).length >= 2 || !runs.some((r) => r !== null && passed(r, id)));
 }
 
 export const GREP_CMD = /^(grep|egrep|fgrep|rg|sed|awk|gawk)$/;

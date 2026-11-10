@@ -77,7 +77,8 @@ export async function scoreSession(o: ScoreIn) {
     exec = o.exec(repo, u);
     const now = o.now ?? Date.now;
     const t0 = now(), ceiling = o.ceiling_ms ?? CEILING_MS;
-    const common = { timeout_s: entryTimeout(u), exempt: rebuildExempt(u), now };
+    const added = tChanges.filter((c) => c.status === "A").map((c) => c.path);
+    const common = { timeout_s: entryTimeout(u), exempt: rebuildExempt(u), now, aside: added };
     const run = await scoreEntries(m.run.map((e) => ({ index: e.index, command: e.command })), exec, { ...common, trees: { parent: trees.parent, fix: trees.fix!, neutral: trees.neutral }, ceiling_ms: ceiling });
     const rs = run.results;
     const productBase = new Set(tPaths.filter((p) => classify(u.lang, p, testFiles) === "source").map((p) => p.split("/").pop()!));
@@ -85,7 +86,6 @@ export async function scoreSession(o: ScoreIn) {
     const staticEntries = rs.filter((r) => sec.isStaticEntry(r.command, staticFiles, u.lang)).map((r) => r.index);
     const apiGuess = Object.fromEntries(rs.map((r) => [r.index, sec.apiGuess(repo, u.lang, trees.parent, trees.fix!, r)]).filter(([, ids]) => (ids as string[]).length));
     const drift = Object.fromEntries(rs.filter((r) => r.outcome === "no_catch").map((r) => [r.index, sec.drift(repo, u.lang, trees.parent, trees.fix!, r)]).filter(([, ids]) => (ids as string[]).length));
-    const added = tChanges.filter((c) => c.status === "A").map((c) => c.path);
     const compile: Array<{ index: number; dropped: string[]; outcome: string; why: string }> = [];
     for (const r of rs.filter((x) => x.outcome === "no_catch")) {
       const drop = sec.compileBlocked(u.lang, r, added, new Set(tPaths));

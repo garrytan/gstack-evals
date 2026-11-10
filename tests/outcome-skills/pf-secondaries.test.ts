@@ -21,6 +21,16 @@ test("aimed, breaks, static text and sync gate", () => {
   expect(syncGate(red("bash check.sh", "error: model is stale, run sync"))).toBe(true);
   expect(syncGate(red("bash check.sh", "assertion failed"))).toBe(false);
 });
+test("breaks: a broken build, a real regression and two stopped runs count; a test the parser loses in one or two runs does not", () => {
+  expect(decideBreaks(["s"], [{}, {}, {}])).toEqual(["s"]);
+  expect(decideBreaks(["s"], [{ s: "fail" }, { s: "fail" }, { s: "fail" }])).toEqual(["s"]);
+  expect(decideBreaks(["s"], [{ s: "fail" }, { s: "fail" }, { s: "pass" }])).toEqual(["s"]);
+  expect(decideBreaks(["s"], [null, null, { s: "pass" }])).toEqual(["s"]);
+  expect(decideBreaks(["s"], [{ s: "skip" }, { s: "skip" }, { s: "pass" }])).toEqual(["s"]);
+  expect(decideBreaks(["s"], [{}, { s: "pass" }, { s: "pass" }])).toEqual([]);
+  expect(decideBreaks(["s"], [{}, {}, { s: "pass" }])).toEqual([]);
+  expect(decideBreaks(["s"], [{}, { s: "fail" }, { s: "pass" }])).toEqual([]);
+});
 test("compile-blocked drops the other agent-added files of the blocking file's compile unit", () => {
   const t = new Set(["Cargo.toml", "src/lib.rs", "tests/a.rs", "tests/b.rs", "sub/Cargo.toml", "sub/tests/c.rs"]);
   expect(compileUnit("rust", "sub/tests/c.rs", t)).toBe("sub");

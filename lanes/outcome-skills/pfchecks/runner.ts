@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Plan sections 6.5 to 6.8: each run is a fresh container from the unit's image with the caller's mounts (the tools
 // volume and, for P, the pstack plugin dir), no network and a fresh copy of the tree. It runs the unit's rebuild command
-// first, then the entry with bash -c from the repository root under the entry timeout. Pass is exit 0 within the
-// timeout; anything else fails. The catch rule: fail in all three parent runs, pass in all three fix runs, fail in all
+// first with the files the agent added moved out of the tree, moves them back byte for byte, then runs the entry with
+// bash -c from the repository root under the entry timeout. Pass is exit 0 within the timeout; anything else fails. The catch rule: fail in all three parent runs, pass in all three fix runs, fail in all
 // three neutral runs. Run order: parent run 1 for every entry, parent runs 2 and 3 for entries that failed run 1, then fix
 // runs 1 to 3 and neutral runs 1 to 3 for entries still able to catch; an entry leaves at its first result that rules it
 // out. Up to 4 runs at once. Runs not started within the 3-hour ceiling leave their entries unreached (non-catches). A
@@ -20,7 +20,7 @@ import { pfFail } from "./prereg.ts";
 import { git } from "./trees.ts";
 
 export type TreeName = "parent" | "fix" | "neutral";
-export interface RunSpec { entry: number; tree: TreeName; run: number; command: string; timeout_s: number; commit: string; label: string }
+export interface RunSpec { entry: number; tree: TreeName; run: number; command: string; timeout_s: number; commit: string; label: string; aside?: string[] }
 export interface RunOut { exit: number; timed_out: boolean; wall_ms: number; rebuild_exits: number[]; log: string }
 export type Executor = (s: RunSpec) => Promise<RunOut>;
 export interface RunRec { tree: TreeName; run: number; exit: number; pass: boolean; timed_out: boolean; wall_ms: number; rebuild_failed: boolean; log: string }
@@ -47,7 +47,7 @@ async function pool<T>(items: T[], k: number, f: (x: T) => Promise<void>): Promi
 const PHASES: Array<Array<[TreeName, number]>> = [[["parent", 1]], [["parent", 2], ["parent", 3]], [["fix", 1], ["fix", 2], ["fix", 3], ["neutral", 1], ["neutral", 2], ["neutral", 3]]];
 
 /** Scores entries on the trees. fixOnly skips the parent runs (the compile-blocked rerun, whose parent runs are known). */
-export async function scoreEntries(entries: { index: number; command: string }[], exec: Executor, o: { trees: Record<TreeName, string>; timeout_s: number; exempt: boolean; ceiling_ms?: number; concurrency?: number; now?: () => number; fixOnly?: boolean; label?: string }): Promise<{ results: EntryResult[]; ceiling_hit: boolean; wall_ms: number }> {
+export async function scoreEntries(entries: { index: number; command: string }[], exec: Executor, o: { trees: Record<TreeName, string>; timeout_s: number; exempt: boolean; ceiling_ms?: number; concurrency?: number; now?: () => number; fixOnly?: boolean; label?: string; aside?: string[] }): Promise<{ results: EntryResult[]; ceiling_hit: boolean; wall_ms: number }> {
   const now = o.now ?? Date.now;
   const start = now(), deadline = start + (o.ceiling_ms ?? CEILING_MS);
   let hit = false;
@@ -59,7 +59,7 @@ export async function scoreEntries(entries: { index: number; command: string }[]
         Object.assign(r, { outcome: "unreached", why: "ceiling before " + tree + " run " + run, done: true });
         return;
       }
-      const out = await exec({ entry: r.index, tree, run, command: r.command, timeout_s: o.timeout_s, commit: o.trees[tree], label: (o.label ?? "e") + r.index + "-" + tree + run });
+      const out = await exec({ entry: r.index, tree, run, command: r.command, timeout_s: o.timeout_s, commit: o.trees[tree], label: (o.label ?? "e") + r.index + "-" + tree + run, aside: o.aside ?? [] });
       const pass = out.exit === 0 && !out.timed_out;
       const rebuild_failed = out.rebuild_exits.some((x) => x !== 0);
       r.runs.push({ tree, run, exit: out.exit, pass, timed_out: out.timed_out, wall_ms: out.wall_ms, rebuild_failed, log: out.log.slice(-LOG_TAIL) });
@@ -84,16 +84,23 @@ export function unitScore(results: EntryResult[], sessionGap: string | null): { 
 
 const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
-/** The container script: the rebuild commands from the work dir (each exit printed), then the entry from the repository
- *  root under coreutils timeout when the image has it, then every rebuild exit again, so the kept tail of a long entry
- *  output still holds them. The markers carry a per-run nonce the entry cannot know. */
-export function entryScript(rebuild: string[], repoDir: string, workDir: string, timeoutS: number, nonce: string): string {
+/** The container script: the files the agent added (aside, repository paths) move out of the tree to /tmp, the rebuild
+ *  commands run from the work dir (each exit printed), the moved files move back, then the entry runs from the repository
+ *  root under coreutils timeout when the image has it, then every rebuild exit prints again, so the kept tail of a long
+ *  entry output still holds them. A file that can't be moved out or back stops the run before the entry. The markers carry
+ *  a per-run nonce the entry cannot know, and each starts its own line, so output with no final newline can't hide one. */
+export function entryScript(rebuild: string[], repoDir: string, workDir: string, timeoutS: number, nonce: string, aside: string[] = []): string {
   const run = 'bash -c "$PF_CMD" </dev/null';
-  return ["exec 2>&1", "cd " + sq(workDir), ...rebuild.map((c, i) => "( " + c + " ) </dev/null\npf_r" + i + "=$?\necho \"PF_REBUILD_" + nonce + " $pf_r" + i + "\""), "cd " + sq(repoDir),
-    "if command -v timeout >/dev/null 2>&1; then timeout -k 10 " + timeoutS + " " + run + "; else " + run + "; fi", "echo \"PF_ENTRY_" + nonce + " $?\"",
-    "echo \"PF_REBUILDS_" + nonce + rebuild.map((_, i) => " $pf_r" + i).join("") + "\"", ""].join("\n");
+  const mark = (name: string, value: string) => "printf '\\n" + name + "_" + nonce + "%s\\n' \"" + value + "\"";
+  const dir = "/tmp/pf-aside-" + nonce;
+  const out = aside.length ? ["pf_af=", "cd " + sq(repoDir), "mkdir -p " + dir + " || pf_af=1", ...aside.map((p, i) => "pf_m" + i + "=; if [ -e " + sq(p) + " ] || [ -L " + sq(p) + " ]; then mv -f -- " + sq(p) + " " + dir + "/" + i + " && pf_m" + i + "=1 || pf_af=1; fi")] : [];
+  const back = aside.length ? [...aside.map((p, i) => 'if [ -n "$pf_m' + i + '" ]; then mkdir -p -- "$(dirname -- ' + sq(p) + ')" && mv -f -- ' + dir + "/" + i + " " + sq(p) + " || pf_af=1; fi"), 'if [ -n "$pf_af" ]; then ' + mark("PF_ASIDE", " failed") + "; exit 97; fi"] : [];
+  return ["exec 2>&1", ...out, "cd " + sq(workDir), ...rebuild.map((c, i) => "( " + c + " ) </dev/null\npf_r" + i + "=$?\n" + mark("PF_REBUILD", " $pf_r" + i)), "cd " + sq(repoDir), ...back,
+    "if command -v timeout >/dev/null 2>&1; then timeout -k 10 " + timeoutS + " " + run + "; else " + run + "; fi", "pf_e=$?", mark("PF_ENTRY", " $pf_e"),
+    mark("PF_REBUILDS", rebuild.map((_, i) => " $pf_r" + i).join("")), ""].join("\n");
 }
 export function readRun(out: string, killed: boolean, wall_ms: number, nonce: string): RunOut {
+  if (new RegExp("^PF_ASIDE_" + nonce + " failed$", "m").test(out)) pfFail("E_PF_INFRA_GAP", "a file the agent added could not be moved out of the tree for the rebuild or back before the entry");
   const all = [...out.matchAll(new RegExp("^PF_REBUILDS_" + nonce + "((?: \\d+)*)$", "gm"))].pop();
   const rebuild_exits = all ? all[1]!.split(" ").filter(Boolean).map(Number) : [...out.matchAll(new RegExp("^PF_REBUILD_" + nonce + " (\\d+)$", "gm"))].map((m) => Number(m[1]));
   const m = [...out.matchAll(new RegExp("^PF_ENTRY_" + nonce + " (\\d+)$", "gm"))].pop();
@@ -198,7 +205,7 @@ export function dockerExecutor(o: { repo: string; image: string; base: string; r
       args.splice(args.indexOf("--entrypoint"), 0, ...(o.mounts ?? []), ...Object.entries(o.env ?? {}).flatMap(([k, v]) => ["-e", k + "=" + v]), "-e", "PF_CMD=" + s.command);
       const nonce = randomUUID().replace(/-/g, "");
       const t0 = Date.now();
-      const r = await runAsync(name, args, entryScript(o.rebuild, o.repoDir, o.workDir || o.repoDir, s.timeout_s, nonce), (o.rebuildLimitMs ?? LIMIT_MS) + s.timeout_s * 1000 + 60_000);
+      const r = await runAsync(name, args, entryScript(o.rebuild, o.repoDir, o.workDir || o.repoDir, s.timeout_s, nonce, s.aside), (o.rebuildLimitMs ?? LIMIT_MS) + s.timeout_s * 1000 + 60_000);
       return readRun(r.stdout, r.killed, Date.now() - t0, nonce);
     } finally {
       dropVolume(copy);
