@@ -142,6 +142,7 @@ const HOSTED_TOOL = /web_search|web_fetch|file_search|code_interpreter|code_exec
 
 const CLIENT_TOKEN = /^[A-Za-z0-9_.-]{1,40}$/;
 const CLIENT_MODEL = /^[A-Za-z0-9_.-]{1,40}(\/[A-Za-z0-9_.-]{1,40}){0,2}(:[A-Za-z0-9_.-]{1,40})?$/;
+const CLIENT_PATH = /^(\/[A-Za-z0-9_.-]{0,64}){1,8}$/;
 export const UNQUOTED = "<unquoted>";
 
 /**
@@ -165,12 +166,13 @@ export function maskMarkers(text: string, markers: readonly string[] = []): stri
 /**
  * The text a refusal may quote from a client value: a string of 1 to 40 letters, digits and _.- (for n, also a number,
  * boolean or null whose JSON is one), JSON-quoted unless it is a tool type, which keeps a literal openrouter: prefix, or a
- * model id, which may be 1 to 3 such tokens joined by /, the last with one :suffix token (particle-ai/particle-1:online).
+ * model id, which may be 1 to 3 such tokens joined by /, the last with one :suffix token (particle-ai/particle-1:online),
+ * or a URL path, 1 to 8 segments that each start with / and hold up to 64 such characters (room for a provider's ids).
  * Anything else is UNQUOTED, so a long string, a newline or a marker never reaches a refusal's answer or the journal. Each
  * of markers found in the quoted text is masked there (maskMarkers). The metering proxy quotes its own refusals with it too.
  */
-export function quoteClientValue(value: unknown, form: "json" | "n" | "type" | "model", markers: readonly string[] = []): string {
-  if (form === "model") return typeof value === "string" && CLIENT_MODEL.test(value) ? maskMarkers(value, markers) : UNQUOTED;
+export function quoteClientValue(value: unknown, form: "json" | "n" | "type" | "model" | "path", markers: readonly string[] = []): string {
+  if (form === "model" || form === "path") return typeof value === "string" && (form === "model" ? CLIENT_MODEL : CLIENT_PATH).test(value) ? maskMarkers(value, markers) : UNQUOTED;
   const prefix = form === "type" && typeof value === "string" && value.startsWith("openrouter:") ? "openrouter:" : "";
   const scalar = form === "n" && (typeof value === "number" || typeof value === "boolean" || value === null);
   const token = typeof value === "string" ? value.slice(prefix.length) : scalar ? JSON.stringify(value) : "";

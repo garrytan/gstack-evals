@@ -33,7 +33,9 @@
 // - A refusal quotes a client value (a model, a tool type, a field) only as a short token (quoteClientValue in prices.ts).
 //   On a request that carried slot markers past the tripwire, a refusal replaces each marker with <unquoted> in the client
 //   values it quotes (maskMarkers: nested or overlapping markers become one <unquoted>) and leaves its own text as
-//   written; the marker_hit line journals a model that holds a marker as <unquoted>.
+//   written; the marker_hit line journals a model that holds a marker as <unquoted>. The route-not-allowlisted refusal
+//   quotes the request path the same way, masking any marker it holds, and on a DR_ALLOWANCE_STOP proxy each slot marker in
+//   that path, the canary included, is journaled in a marker_hit line before it; the refusal keeps its place, status and code.
 // - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
 //   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
@@ -267,7 +269,7 @@ interface CallContext {
   model: string;
   source: string | null;
   secrets: string[];
-  /** The slot markers a DR_ALLOWANCE_STOP request carried past the tripwire: a refusal masks them in the client values it quotes. */
+  /** The markers a request carried past the tripwire on a DR_ALLOWANCE_STOP proxy, or in a refused route's path: a refusal masks them in the client values it quotes. */
   marked?: string[];
   /** The bytes of the request body sent upstream, once priced. */
   bytes?: number;
@@ -276,6 +278,11 @@ interface CallContext {
 }
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest();
+/** A marker hit's slot cell and each marker's index and sha256 prefix, never its text. */
+const hitFields = (slot: Slot, leaks: string[]) => {
+  const { run_id, arm, task, model, trial, attempt } = slot.cell;
+  return { cell: { run_id, arm, task, model, trial, attempt }, markers: leaks.map(m => ({ index: slot.markers.indexOf(m), sha256: createHash("sha256").update(m).digest("hex").slice(0, 12) })) };
+};
 const sameSecret = (expected: Buffer, presented: string | null) => presented !== null && timingSafeEqual(expected, hash(presented));
 const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, refusals: [], allowance_stops: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0, peak_inflight_micros: 0, peak_inflight_calls: 0, largest_prompt: null, bytes_per_token: null, cache_write: [] });
 
@@ -590,7 +597,13 @@ export class MeteringProxy {
     const o = this.options;
     const { provider, route, slot } = ctx;
     const allowed = ROUTES[provider].find(r => r.method === req.method && r.path.test(route) && (!r.query || r.query.test(new URL(req.url).search)));
-    if (!allowed) return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${route} is not allowlisted`);
+    if (!allowed) {
+      const path = [route, percentDecoded(route)].join("\n");
+      ctx.marked = findLeaks(path, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
+      ctx.route = quoteClientValue(route, "path", ctx.marked);
+      if (ctx.marked.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(path, o.forbiddenMarkers ?? []).length) this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, source: ctx.source, decider: false, ...hitFields(slot, ctx.marked) });
+      return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${ctx.route} is not allowlisted`);
+    }
     const key = (o.env ?? process.env)[KEY_ENV[provider]];
     if (!key) return this.refuse(ctx, "E_KEY_MISSING", 503, `${KEY_ENV[provider]} is not set in the proxy's environment`);
     ctx.secrets.push(key);
@@ -644,9 +657,7 @@ export class MeteringProxy {
     const text = channels.join("\n");
     const leaks = findLeaks(text, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
     if (leaks.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(text, o.forbiddenMarkers ?? []).length) {
-      const markers = leaks.map(m => ({ index: slot.markers.indexOf(m), sha256: createHash("sha256").update(m).digest("hex").slice(0, 12) }));
-      const { run_id, arm, task, model, trial, attempt } = slot.cell;
-      const cell = { run_id, arm, task, model, trial, attempt };
+      const { cell, markers } = hitFields(slot, leaks);
       const asked = (parsed as Record<string, unknown> | null)?.model;
       const decider = typeof asked === "string" && slot.deciders.has(`${provider}:${asked}`);
       if (slot.canary !== null && leaks.includes(slot.canary)) return this.refuse(ctx, "DR_CUSTODY_HIT", 403, `the request carries ${leaks.length} runner-only marker(s); custody hit, the run stops`, { cell, markers });
