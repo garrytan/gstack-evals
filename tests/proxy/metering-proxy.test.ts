@@ -1415,3 +1415,335 @@ describe("the per-session meter record (the CEO stage 2 amendment, section 5 and
   });
 });
 
+
+describe("free POST routes and the request-shape refusals (containment tightening)", () => {
+  const PARTICLE = "particle-ai/particle-1";
+  const COUNT = "/anthropic/v1/messages/count_tokens";
+  const ESTIMATE = "/openrouter/v1/messages/count_tokens";
+  const count = { model: "claude-opus-5-5", messages: [{ role: "user", content: "hi" }] };
+  const mcpServer = { type: "url", url: "https://mcp.example.com/sse", name: "x" };
+  const toolset = { type: "mcp_toolset", mcp_server_name: "x" };
+  const shapes: Record<string, unknown>[] = [
+    { tools: [{ type: "web_search_20250305", name: "web_search" }] },
+    { tools: [{ type: "web_fetch_20250910", name: "web_fetch" }] },
+    { tools: [{ type: "code_execution_20250825", name: "code_execution" }] },
+    { mcp_servers: [mcpServer], tools: [toolset] },
+    { mcp_servers: [] },
+    { tools: [toolset] },
+    { messages: [{ role: "user", content: [{ type: "document", source: { type: "url", url: "https://example.com/a.pdf" } }] }] },
+    { messages: [{ role: "user", content: [{ type: "document", source: { type: "file", file_id: "file_1" } }] }] },
+    { messages: [{ role: "user", content: [{ type: "image", source: { type: "url", url: "https://example.com/a.png" } }] }] },
+    { n: 2 },
+    { speed: "fast" },
+    { inference_geo: "us" },
+  ];
+
+  // Value: protects=the free Anthropic count route, which forwards its body to the provider unreserved: a count body can no longer carry a hosted tool, an MCP server or toolset, a remote or stored source, or any other shape the paid route refuses; fails_when=the free route forwards before the shape check, or answers one shape differently from the paid route; why_new=GST-2321; seam=forward's free routes; no_claim=whether Anthropic connects to an MCP server while counting
+  test("the free count route refuses every request shape the paid route refuses, before the provider and with the paid route's answer", async () => {
+    const t = setup(() => Response.json({ input_tokens: 12 }));
+    const a = t.bind();
+    for (const shape of shapes) {
+      const free = await expectProblem(await t.call(a.slot, a.token, COUNT, { ...count, ...shape }), 402, "E_ALLOWANCE");
+      const paid = await expectProblem(await t.call(a.slot, a.token, undefined, { ...count, max_tokens: 1000, ...shape }), 402, "E_ALLOWANCE");
+      expect(free.detail).toStartWith("E_ALLOWANCE: metering proxy: unpriced request refused: ");
+      expect(free.detail).toBe(paid.detail);
+    }
+    expect(t.calls).toHaveLength(0);
+    expect(t.ledger.reservations.size).toBe(0);
+    const refusals = t.journal().filter(l => l.route === "/v1/messages/count_tokens");
+    expect(refusals.map(l => [l.kind, l.code])).toEqual(shapes.map(() => ["refusal", "E_ALLOWANCE"]));
+    expect((await t.call(a.slot, a.token, COUNT, count)).status).toBe(200);
+    expect(t.calls).toHaveLength(1);
+    expect(t.calls[0]!.raw).toBe(JSON.stringify(count));
+    expect(await t.proxy.finalize(a.meter_id)).toMatchObject({ micros: 0, requests: 0, refused: shapes.length * 2 });
+  });
+
+  // Value: protects=the free count route sends the provider only the body its checks read, as the paid route does, so a duplicate JSON key cannot hide a hosted tool, an MCP server or a remote source in the copy JSON.parse drops; fails_when=the free route forwards the raw bytes, or the paid route stops sending its checked body; why_new=GST-2321 (Captain's scope addition: forward the checked body); seam=forward's free routes; no_claim=which copy a provider's parser keeps
+  test("a duplicate key cannot hide a refused shape from the checks: every checked route forwards the body it checked", async () => {
+    const t = setup(url => (url.endsWith("/count_tokens") ? Response.json({ input_tokens: 12 }) : ok({ input_tokens: 10, output_tokens: 5 })));
+    const a = t.bind();
+    const send = (path: string, text: string) => fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-api-key": a.token }, body: text });
+    const head = '{"model":"claude-opus-5-5","max_tokens":1000';
+    const hidden = [
+      head + ',"tools":[{"type":"web_search_20250305","name":"web_search"}],"messages":[{"role":"user","content":"hi"}],"tools":[]}',
+      head + ',"messages":[{"role":"user","content":[{"type":"document","source":{"type":"url","url":"https://example.com/a.pdf"},"source":{"type":"text","media_type":"text/plain","data":"x"}}]}]}',
+    ];
+    for (const text of hidden) {
+      for (const path of [COUNT, "/anthropic/v1/messages"]) {
+        expect((await send(path, text)).status).toBe(200);
+        const out = t.calls.at(-1)!.raw;
+        expect(out).not.toMatch(/web_search|example\.com/);
+        expect(out).toBe(JSON.stringify({ ...JSON.parse(text), ...(path === COUNT ? {} : { inference_geo: "global" }) }));
+      }
+    }
+    const servers = head + ',"messages":[{"role":"user","content":"hi"}],"mcp_servers":[{"type":"url","url":"https://mcp.example.com/sse","name":"x"}],"mcp_servers":[]}';
+    for (const path of [COUNT, "/anthropic/v1/messages"]) await expectProblem(await send(path, servers), 402, "E_ALLOWANCE");
+    expect(t.calls).toHaveLength(hidden.length * 2);
+  });
+
+  // Value: protects=the OpenRouter count route, answered by the proxy, which gives no count for a body the paid route refuses; fails_when=a refused shape gets an estimate; why_new=GST-2321 (every free POST route); seam=forward's estimate route; no_claim=what OpenRouter does with a count
+  test("the estimate route answers no count for a request shape the paid route refuses", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind({ models: [`openrouter:${PARTICLE}`] });
+    const body = { ...count, model: PARTICLE };
+    const routerShapes: Record<string, unknown>[] = [
+      ...shapes.filter(s => s.speed === undefined && s.inference_geo === undefined),
+      { plugins: [{ id: "web" }] },
+      { web_search_options: {} },
+      { tools: [{ type: "openrouter:web_search" }] },
+      { messages: [{ role: "user", content: [{ type: "file", file: { filename: "a.pdf", file_data: "https://example.com/a.pdf" } }] }] },
+    ];
+    for (const shape of routerShapes) await expectProblem(await t.call(a.slot, a.token, ESTIMATE, { ...body, ...shape }), 402, "E_ALLOWANCE");
+    expect(t.journal().filter(l => l.estimated)).toHaveLength(0);
+    const res = await t.call(a.slot, a.token, ESTIMATE, body);
+    expect(await res.json()).toEqual({ input_tokens: Math.ceil(Buffer.byteLength(JSON.stringify(body)) / 4) });
+    expect(t.calls).toHaveLength(0);
+    expect(t.ledger.reservations.size).toBe(0);
+  });
+
+  // Value: protects=the three named refusals on the paid routes: mcp_servers and an mcp_toolset tool on every chat provider, and OpenAI's web_search_options; fails_when=an empty mcp_servers, a toolset with no server URL beside it, or web_search_options on the openai route reaches the provider; why_new=GST-2321 items 2 to 4; seam=refuseRequestShape; no_claim=how the provider would bill them
+  test("mcp_servers, an mcp_toolset tool and OpenAI's web_search_options are refused by name on the paid routes", async () => {
+    const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
+    const a = t.bind({ models: ["anthropic:claude-opus-5-5", "openai:gpt-6.1-sol", `openrouter:${PARTICLE}`] });
+    const named: Array<[string, Record<string, unknown>, string]> = [
+      ["/anthropic/v1/messages", { ...count, max_tokens: 1000, mcp_servers: [] }, "mcp_servers"],
+      ["/anthropic/v1/messages", { ...count, max_tokens: 1000, mcp_servers: [{ type: "url", name: "x" }] }, "mcp_servers"],
+      ["/anthropic/v1/messages", { ...count, max_tokens: 1000, tools: [toolset] }, "mcp_toolset"],
+      ["/openrouter/v1/messages", { ...count, model: PARTICLE, max_tokens: 1000, mcp_servers: [] }, "mcp_servers"],
+      ["/openrouter/v1/chat/completions", { ...count, model: PARTICLE, tools: [toolset] }, "mcp_toolset"],
+      ["/openai/v1/chat/completions", { model: "gpt-6.1-sol", messages: [{ role: "user", content: "hi" }], web_search_options: {} }, "web_search_options"],
+      ["/openai/v1/responses", { model: "gpt-6.1-sol", input: "hi", web_search_options: { search_context_size: "low" } }, "web_search_options"],
+    ];
+    for (const [path, body, name] of named) expect((await expectProblem(await t.call(a.slot, a.token, path, body), 402, "E_ALLOWANCE")).detail).toContain(name);
+    expect(t.calls).toHaveLength(0);
+    for (const [path, body] of named.slice(0, 3)) await expectProblem(await t.call(a.slot, a.token, path.replace("/v1/messages", "/v1/messages/count_tokens"), body), 402, "E_ALLOWANCE");
+    expect(t.calls).toHaveLength(0);
+  });
+
+  // Value: protects=every refusal that existed before this change: a body refused before keeps its code, status and message, because the named refusals run after every older check; fails_when=a new check runs first and changes an older refusal's message; why_new=GST-2321 (no existing refusal changes); seam=refuseRequestShape's order; no_claim=the order among the new checks
+  test("a body refused before the named refusals existed keeps its message", () => {
+    const reason = (provider: Parameters<typeof priceRequest>[0], body: Record<string, unknown>) => {
+      try {
+        priceRequest(provider, body, 1000);
+        return "priced";
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    const msg = { model: "claude-opus-5-5", max_tokens: 1000, messages: [] };
+    const remote = "the request uses a remote url, whose cost the proxy cannot bound from the request";
+    expect(reason("anthropic", { ...msg, mcp_servers: [mcpServer], tools: [toolset] })).toBe(remote);
+    expect(reason("anthropic", { ...msg, tools: [toolset], mcp_servers: [mcpServer] })).toBe(remote);
+    expect(reason("anthropic", { ...msg, mcp_servers: [], speed: "fast" })).toBe('speed "fast" bills above the standard rates in the price table');
+    expect(reason("anthropic", { ...msg, tools: [toolset], inference_geo: "us" })).toBe('inference_geo "us" may bill above the standard rates in the price table');
+    expect(reason("anthropic", { ...msg, n: 3, mcp_servers: [] })).toBe("n=3 asks for several completions, each billed in full");
+    expect(reason("openai", { model: "gpt-6.1-sol", messages: [], web_search_options: {}, service_tier: "priority" })).toBe('service_tier "priority" may bill above the standard rates in the price table');
+    expect(reason("openai", { model: "gpt-6.1-sol", input: "hi", web_search_options: {}, prompt: { id: "p" } })).toBe("a stored prompt adds input, and may enable hosted tools, that the request does not show");
+    expect(reason("openrouter", { model: PARTICLE, messages: [], web_search_options: {} })).toBe("OpenRouter's web_search_options field can reach other models, tiers, stored input or paid tools that the price row does not cover");
+    expect(reason("openrouter", { model: PARTICLE, messages: [{ role: "user", content: [{ type: "file", file: { filename: "a.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } }] }], mcp_servers: [] })).toBe("a file part can be fetched from a URL or parsed by paid OCR, which the request's bytes do not bound");
+    expect(reason("typesafe", { model: "jev-1.14.0", mcp_servers: [] })).toBe("a System One request with no questions cannot be priced");
+  });
+
+  // Value: protects=refuseServerTools leases (the state machines and planning families): a count body with a server tool or mcp_servers still gets E_PROXY_SERVER_TOOL, as before, and the shape refusals apply after it; fails_when=the shape check runs before the lease's own check and changes its code; why_new=GST-2321 (keep #290's refusals as they are); seam=forward's order; no_claim=the paid route, which sm-proxy.test.ts covers
+  test("on a refuseServerTools lease a count body with a server tool or mcp_servers still gets E_PROXY_SERVER_TOOL", async () => {
+    const t = setup(() => Response.json({ input_tokens: 12 }), { refuseServerTools: true });
+    const a = t.bind();
+    await expectProblem(await t.call(a.slot, a.token, COUNT, { ...count, tools: [{ type: "web_search_20250305", name: "web_search" }] }), 403, "E_PROXY_SERVER_TOOL");
+    await expectProblem(await t.call(a.slot, a.token, COUNT, { ...count, mcp_servers: [mcpServer] }), 403, "E_PROXY_SERVER_TOOL");
+    await expectProblem(await t.call(a.slot, a.token, COUNT, { ...count, ...shapes[6] }), 402, "E_ALLOWANCE");
+    expect(t.calls).toHaveLength(0);
+    expect((await t.call(a.slot, a.token, COUNT, count)).status).toBe(200);
+  });
+
+  // Value: protects=honest Claude Code traffic: the shapes Claude Code 2.1.314 sends (captured against a local upstream: per-tool counts from /context with untyped client tools, deferred MCP tools and JSON Schema bodies, and a tool-use turn) and every key Lane B's allow list admits pass the free and paid routes, and a count body is forwarded byte for byte; fails_when=a new check refuses an untyped client tool, a tool named WebFetch or WebSearch, a schema property named url, defer_loading, a system message, thinking, context_management or output_config; why_new=GST-2321 (honest traffic unchanged); seam=refuseRequestShape on the free and paid routes; no_claim=Claude Code versions other than the capture's
+  test("Claude Code's own count and message shapes pass both count routes and the paid route unchanged", async () => {
+    const t = setup(url => (url.endsWith("/count_tokens") ? Response.json({ input_tokens: 12 }) : sse([{ type: "message_start", message: { usage: { input_tokens: 10, output_tokens: 1 } } }, { type: "message_delta", usage: { output_tokens: 5 } }])));
+    const a = t.bind({ models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`] });
+    const schema = (properties: Record<string, unknown>) => ({ $schema: "http://json-schema.org/draft-07/schema#", type: "object", properties, required: Object.keys(properties).slice(0, 1), additionalProperties: false });
+    const tools = [
+      { name: "Read", description: "Read a file.", input_schema: schema({ file_path: { type: "string" }, limit: { type: "number" } }) },
+      { name: "WebFetch", description: "Fetch a page.", input_schema: schema({ url: { type: "string", format: "uri" }, prompt: { type: "string" } }) },
+      { name: "WebSearch", description: "Search the web.", input_schema: schema({ query: { type: "string" }, allowed_domains: { type: "array", items: { type: "string" } } }) },
+      { name: "mcp__t__echo", description: "Echo text back", defer_loading: true, input_schema: schema({ text: { type: "string" }, url: { type: "string", description: "optional link" } }) },
+    ];
+    const counts = [{ model: "claude-opus-5-5", messages: [{ role: "user", content: "x" }], tools: [] }, ...tools.map(tool => ({ model: "claude-opus-5-5", messages: [{ role: "user", content: "x" }], tools: [tool] }))];
+    const turn = {
+      model: "claude-opus-5-5",
+      messages: [
+        { role: "user", content: [{ type: "text", text: "Read a.py" }] },
+        { role: "system", content: "a reminder" },
+        { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "/w/a.py" } }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "print(1)" }] },
+      ],
+      system: [{ type: "text", text: "You are a coding agent." }, { type: "text", text: "Rules.", cache_control: { type: "ephemeral" } }],
+      tools,
+      tool_choice: { type: "auto" },
+      metadata: { user_id: "user_1" },
+      max_tokens: 32_000,
+      stop_sequences: ["END"],
+      temperature: 1,
+      top_p: 0.95,
+      top_k: 40,
+      output_format: { type: "json_schema", schema: schema({ answer: { type: "string" } }) },
+      thinking: { type: "adaptive", display: "omitted" },
+      context_management: { edits: [{ type: "clear_thinking_20251015", keep: "all" }] },
+      output_config: { effort: "medium" },
+      stream: true,
+    };
+    for (const body of counts) {
+      expect((await t.call(a.slot, a.token, COUNT, body)).status).toBe(200);
+      expect(t.calls.at(-1)!.raw).toBe(JSON.stringify(body));
+      expect((await t.call(a.slot, a.token, ESTIMATE, { ...body, model: PARTICLE })).status).toBe(200);
+    }
+    expect((await t.call(a.slot, a.token, COUNT, { ...turn, max_tokens: undefined, stream: undefined })).status).toBe(200);
+    expect((await t.call(a.slot, a.token, undefined, turn)).status).toBe(200);
+    expect(t.calls).toHaveLength(counts.length + 2);
+    expect(t.journal().filter(l => l.kind === "refusal")).toHaveLength(0);
+  });
+  // Value: protects=a refusal that quotes a client value (n, service_tier, speed, inference_geo, a hosted tool type, an OpenRouter server tool type, the mcp_toolset type) gives an honest value the same text as before; fails_when=bounding the quote changes the text an honest value gets; why_new=GST-2321 review (bounded quoting of client values, Captain's A2); seam=refuseRequestShape's reasons; no_claim=values no provider documents
+  test("a refusal quotes an honest client value with the same text as before", () => {
+    const reason = (provider: Parameters<typeof priceRequest>[0], body: Record<string, unknown>) => {
+      try {
+        priceRequest(provider, body, 1000);
+        return "priced";
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    const msg = { model: "claude-opus-5-5", max_tokens: 1000, messages: [] };
+    const sol = { model: "gpt-6.1-sol", messages: [] };
+    const router = { model: PARTICLE, messages: [] };
+    const several = "asks for several completions, each billed in full";
+    const tier = "may bill above the standard rates in the price table";
+    const hosted = (type: string) => `the request uses the hosted tool ${type}, whose cost the proxy cannot bound from the request`;
+    const honest: Array<[Parameters<typeof priceRequest>[0], Record<string, unknown>, string]> = [
+      ["anthropic", { ...msg, n: 2 }, `n=2 ${several}`],
+      ["anthropic", { ...msg, n: "2" }, `n="2" ${several}`],
+      ["anthropic", { ...msg, n: 0 }, `n=0 ${several}`],
+      ["anthropic", { ...msg, n: null }, `n=null ${several}`],
+      ["anthropic", { ...msg, n: true }, `n=true ${several}`],
+      ["openai", { ...sol, service_tier: "priority" }, `service_tier "priority" ${tier}`],
+      ["openai", { ...sol, service_tier: "flex" }, `service_tier "flex" ${tier}`],
+      ["openai", { ...sol, service_tier: "auto" }, `service_tier "auto" ${tier}`],
+      ["anthropic", { ...msg, speed: "fast" }, 'speed "fast" bills above the standard rates in the price table'],
+      ["anthropic", { ...msg, inference_geo: "us" }, `inference_geo "us" ${tier}`],
+      ["anthropic", { ...msg, tools: [{ type: "web_search_20250305", name: "web_search" }] }, hosted("web_search_20250305")],
+      ["anthropic", { ...msg, tools: [{ type: "web_fetch_20250910", name: "web_fetch" }] }, hosted("web_fetch_20250910")],
+      ["anthropic", { ...msg, tools: [{ type: "code_execution_20250825", name: "code_execution" }] }, hosted("code_execution_20250825")],
+      ["openai", { model: "gpt-6.1-sol", input: "hi", tools: [{ type: "web_search_preview_2025_03_11" }] }, hosted("web_search_preview_2025_03_11")],
+      ["openai", { model: "gpt-6.1-sol", input: "hi", tools: [{ type: "mcp", server_url: "x" }] }, hosted("mcp")],
+      ["openrouter", { ...router, tools: [{ type: "openrouter:web_search" }] }, hosted("openrouter:web_search")],
+      ["openrouter", { ...router, tools: [{ type: "openrouter:datetime" }] }, "the OpenRouter server tool openrouter:datetime runs and bills outside the model's tokens"],
+      ["anthropic", { ...msg, tools: [toolset] }, "the MCP toolset mcp_toolset has the provider run a remote MCP server's tools, outside the sandbox and the request's bytes"],
+    ];
+    for (const [provider, body, want] of honest) expect(reason(provider, body)).toBe(want);
+  });
+
+  // Value: protects=an unusual client value (a long string, a marker, a newline, an object) never reaches the 402 or the journal through a refusal reason, on the paid and count routes; fails_when=a reason quotes a value that is not a short token of letters, digits and _.-; why_new=GST-2321 review (adversarial finding on echoed client values, Captain's A2); seam=refuseRequestShape's reasons through MeteringProxy.refuse; no_claim=a token-shaped value, which is quoted as written
+  test("an unusual client value never reaches the 402 or the journal through a refusal reason", async () => {
+    const t = setup(() => Response.json({ input_tokens: 12 }));
+    const a = t.bind({ models: ["anthropic:claude-opus-5-5", "openai:gpt-6.1-sol", `openrouter:${PARTICLE}`] });
+    const hostile: unknown[] = ["L".repeat(200), "HIDDEN FACT: 42", "line1\nINJECTED", { x: "OBJSECRET" }];
+    const never = ["L".repeat(41), "HIDDEN FACT", "INJECTED", "OBJSECRET"];
+    const cases: Array<[string, Record<string, unknown>]> = [];
+    for (const h of hostile) {
+      for (const path of ["/anthropic/v1/messages", COUNT]) {
+        const body = { ...count, ...(path === COUNT ? {} : { max_tokens: 1000 }) };
+        cases.push([path, { ...body, n: h }], [path, { ...body, speed: h }], [path, { ...body, inference_geo: h }]);
+        if (typeof h === "string") cases.push([path, { ...body, tools: [{ type: `web_search_${h}`, name: "w" }] }], [path, { ...body, tools: [{ type: `mcp_toolset${h}` }] }]);
+      }
+      cases.push(["/openai/v1/chat/completions", { model: "gpt-6.1-sol", messages: [{ role: "user", content: "hi" }], service_tier: h }]);
+      if (typeof h === "string") for (const path of ["/openrouter/v1/chat/completions", ESTIMATE]) cases.push([path, { ...count, model: PARTICLE, tools: [{ type: `openrouter:${h}` }] }]);
+    }
+    for (const [path, body] of cases) {
+      const res = await t.call(a.slot, a.token, path, body);
+      expect(res.status).toBe(402);
+      const text = await res.text();
+      for (const s of never) expect(text).not.toContain(s);
+    }
+    const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+    for (const s of never) expect(journal).not.toContain(s);
+    expect(t.journal().filter(l => l.kind === "refusal" && l.code === "E_ALLOWANCE")).toHaveLength(cases.length);
+    expect(t.calls).toHaveLength(0);
+  });
+  // Value: protects=the proxy's own refusals that quote a client value (the allowlist's model, a refuseServerTools lease's tool types and capabilities) give an honest value the same text and journal fields as before; fails_when=bounding the quote changes an honest model id or tool type; why_new=GST-2321 review (Captain's A2, widened to metering-proxy.ts); seam=forward's allowlist and refuseServerTools refusals; no_claim=model ids outside the 1 to 3 segment shape
+  test("the proxy's allowlist and server-tool refusals quote an honest value with the same text as before", async () => {
+    const plain = setup(() => Response.json({ input_tokens: 12 }));
+    const a = plain.bind({ models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`] });
+    const detail = async (t: typeof plain, slot: { slot: string; token: string }, path: string, body: Record<string, unknown>, status: number, code: string) => (await expectProblem(await t.call(slot.slot, slot.token, path, body), status, code)).detail;
+    expect(await detail(plain, a, "/anthropic/v1/messages", { ...count, model: "claude-haiku-5-5", max_tokens: 1000 }, 403, "E_ALLOWANCE")).toBe("E_ALLOWANCE: metering proxy: anthropic:claude-haiku-5-5 is not on this slot's model allowlist");
+    expect(await detail(plain, a, "/openrouter/v1/chat/completions", { ...count, model: "meta/muse-spark-1.3" }, 403, "E_ALLOWANCE")).toBe("E_ALLOWANCE: metering proxy: openrouter:meta/muse-spark-1.3 is not on this slot's model allowlist");
+    expect(await detail(plain, a, "/anthropic/v1/messages", { messages: [], max_tokens: 1000 }, 403, "E_ALLOWANCE")).toBe("E_ALLOWANCE: metering proxy: anthropic:(no model) is not on this slot's model allowlist");
+    expect(plain.journal().map(l => l.model)).toEqual(["claude-haiku-5-5", "meta/muse-spark-1.3", null]);
+    const sm = setup(() => Response.json({ input_tokens: 12 }), { refuseServerTools: true });
+    const b = sm.bind({ models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`] });
+    const lease = "E_PROXY_SERVER_TOOL: metering proxy: provider-side tools are refused on this lease: ";
+    expect(await detail(sm, b, "/anthropic/v1/messages", { ...count, max_tokens: 1000, tools: [{ type: "web_search_20250305", name: "web_search" }] }, 403, "E_PROXY_SERVER_TOOL")).toBe(lease + "web_search_20250305");
+    expect(await detail(sm, b, COUNT, { ...count, tools: [{ type: "function", name: "f" }, { type: "custom", name: "c" }, { type: "bash_20250124", name: "bash" }] }, 403, "E_PROXY_SERVER_TOOL")).toBe(lease + "function, bash_20250124");
+    expect(await detail(sm, b, "/openrouter/v1/chat/completions", { ...count, model: PARTICLE, tools: [{ type: "openrouter:web_search" }] }, 403, "E_PROXY_SERVER_TOOL")).toBe(lease + "openrouter:web_search");
+    expect(await detail(sm, b, COUNT, { ...count, mcp_servers: [], plugins: [] }, 403, "E_PROXY_SERVER_TOOL")).toBe("E_PROXY_SERVER_TOOL: metering proxy: provider-side capabilities are refused on this lease: mcp_servers, plugins");
+    expect(sm.journal().map(l => l.tools)).toEqual([["web_search_20250305"], ["function", "bash_20250124"], ["openrouter:web_search"], ["mcp_servers", "plugins"]]);
+    expect(plain.calls.length + sm.calls.length).toBe(0);
+  });
+
+  // Value: protects=an unusual model id or tool type (a long string, a marker-like phrase, a newline, a path of more than 3 segments) never reaches the 403 or the journal through the allowlist or refuseServerTools refusals; fails_when=the proxy quotes a model or tool type that is not a short token; why_new=GST-2321 review (Captain's A2, widened to metering-proxy.ts); seam=forward's allowlist and refuseServerTools refusals; no_claim=a token-shaped value, which is quoted as written
+  test("an unusual model id or tool type never reaches the 403 or the journal", async () => {
+    const hostile = ["L".repeat(200), "HIDDEN FACT: 42", "line1\nINJECTED", "seg1/seg2/seg3/SEG4X"];
+    const never = ["L".repeat(41), "HIDDEN FACT", "INJECTED", "SEG4X"];
+    const plain = setup(() => Response.json({ input_tokens: 12 }));
+    const a = plain.bind();
+    const sm = setup(() => Response.json({ input_tokens: 12 }), { refuseServerTools: true });
+    const b = sm.bind({ models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`] });
+    const bodies: string[] = [];
+    for (const h of hostile) {
+      for (const path of ["/anthropic/v1/messages", COUNT]) {
+        bodies.push(await (await plain.call(a.slot, a.token, path, { ...count, model: h, max_tokens: 1000 })).text());
+        bodies.push(await (await sm.call(b.slot, b.token, path, { ...count, max_tokens: 1000, tools: [{ type: h }] })).text());
+      }
+      bodies.push(await (await sm.call(b.slot, b.token, "/openrouter/v1/chat/completions", { ...count, model: PARTICLE, tools: [{ type: `openrouter:${h}` }] })).text());
+    }
+    const journals = readFileSync(join(plain.dir, "journal.ndjson"), "utf8") + readFileSync(join(sm.dir, "journal.ndjson"), "utf8");
+    for (const s of never) {
+      for (const body of bodies) expect(body).not.toContain(s);
+      expect(journals).not.toContain(s);
+    }
+    expect(plain.journal().map(l => l.code)).toEqual(hostile.flatMap(() => ["E_ALLOWANCE", "E_ALLOWANCE"]));
+    expect(sm.journal().map(l => l.code)).toEqual(hostile.flatMap(() => ["E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL"]));
+    expect(plain.calls.length + sm.calls.length).toBe(0);
+  });
+
+  // Value: protects=a DR_ALLOWANCE_STOP slot's non-canary markers never reach a journal line or a refusal's answer, wherever the request puts them (the model, a tool type, a refused field), on the paid and count routes, while the call's stops, codes and allowance stops stay as before; fails_when=a refusal or the marker_hit line quotes a marker the request carried; why_new=GST-2321 review (Captain's A1 on the marker_hit model field); seam=forward's marker_hit line and MeteringProxy.refuse; no_claim=what the provider echoes back in an upstream error
+  test("a slot marker the request carries never reaches a journal line or a refusal's answer", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const markers = ["TestParserRegression", "tests/test_hidden_regression_data.py", "x y hidden phrase"];
+    const slotOf = (t: ReturnType<typeof setup>) => t.bind({ forbidden_markers: [CANARY, ...markers], canary: CANARY, deciders: ["anthropic:claude-opus-5-5"] });
+    const plain = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const sm = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP", refuseServerTools: true });
+    const a = slotOf(plain);
+    const b = slotOf(sm);
+    const answers: Array<[number, string]> = [];
+    for (const marker of markers) {
+      for (const path of ["/anthropic/v1/messages", COUNT]) {
+        const body = { ...count, ...(path === COUNT ? {} : { max_tokens: 1000 }) };
+        for (const sent of [{ ...body, model: marker }, { ...body, model: `x ${marker}` }, { ...body, speed: marker }, { ...body, inference_geo: marker }, { ...body, tools: [{ type: `web_search_${marker}` }] }]) {
+          const res = await plain.call(a.slot, a.token, path, sent);
+          answers.push([res.status, await res.text()]);
+        }
+        const res = await sm.call(b.slot, b.token, path, { ...body, tools: [{ type: marker }] });
+        answers.push([res.status, await res.text()]);
+      }
+    }
+    const journals = readFileSync(join(plain.dir, "journal.ndjson"), "utf8") + readFileSync(join(sm.dir, "journal.ndjson"), "utf8");
+    for (const marker of markers) {
+      for (const [, text] of answers) expect(text).not.toContain(marker);
+      expect(journals).not.toContain(marker);
+    }
+    expect(answers.map(([status]) => status)).toEqual(markers.flatMap(() => [403, 403, 402, 402, 402, 403, 403, 403, 402, 402, 402, 403]));
+    const lines = [...plain.journal(), ...sm.journal()];
+    expect(lines.filter(l => l.kind === "marker_hit")).toHaveLength(answers.length);
+    expect(lines.filter(l => l.kind === "refusal").map(l => l.code).sort()).toEqual(markers.flatMap(() => [...Array(4).fill("E_ALLOWANCE"), ...Array(6).fill("E_ALLOWANCE"), "E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL"]).sort());
+    expect(plain.calls.length + sm.calls.length).toBe(0);
+    expect(await plain.proxy.finalize(a.meter_id)).toMatchObject({ allowance_stops: 0 });
+  });
+});
+
