@@ -6,20 +6,22 @@ import { openLocalLedger } from "../../src/runner/ledger/local.ts";
 import { ledgerPath, recordPath } from "../../src/runner/ledger/paths.ts";
 import { LedgerError } from "../../src/runner/ledger/record.ts";
 import { serveStages, type StageSpec } from "./driver/stage.ts";
+import { loadRegistry } from "./arms/registry.ts";
 import { TaskError } from "../real-outcome/task/format.ts";
 import { bind, check, pin, publicForm, readManifest } from "./images/manifest.ts";
 import { readFileSync } from "node:fs";
 
 export const HELP = `Usage: gstack-evals outcome serve --run <id> --envelope-host <machine id> --stage <item>=<arm> [--stage ...]
            --host <ip> --dir <run dir> [--planned 24] [--reruns 2] [--control-port <n>] [--ttl-hours 72]
-           [--ledger <path>] [--ledger-record <dir>]
+           [--ledger <path>] [--ledger-record <dir>] [--registry <arms file>]
 A family SM stage is --stage <item>=<model>@<arm>,<arm>: one lease on the item for that model, serving each named SM arm
 at its per-model allowance, with a proxy that refuses provider-side tools.
 
 Opens one U4 lease per stage at its line item's cap through O6's envelope, one metering proxy per lease on --host, and a
 control plane on 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. It prints control=<url> and one
 stage= line per stage, serves until POST /stop, SIGTERM or SIGINT, and settles every lease on every exit path.
-Provider keys come from its environment as the proxy reads them. Guide: wiki/plans/2026-11-04-geva-286-u4-session-driver.
+--registry names the arms file the driver reads each arm's limits from (default: arms/registry.json); real_agent's
+arms_path must name the same file. Provider keys come from its environment as the proxy reads them. Guide: wiki/plans/2026-11-04-geva-286-u4-session-driver.
 
 Usage: gstack-evals outcome images pin --out <manifest.json> --set <name> --commit <sha> <task dir>...
        gstack-evals outcome images check <manifest.json> --sha256 <hex>
@@ -53,7 +55,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   const flags = new Map<string, string>();
   const stages: StageSpec[] = [];
-  const allowed = new Set(["--run", "--envelope-host", "--stage", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record"]);
+  const allowed = new Set(["--run", "--envelope-host", "--stage", "--host", "--dir", "--planned", "--reruns", "--control-port", "--ttl-hours", "--ledger", "--ledger-record", "--registry"]);
   for (let i = 0; i < rest.length; i += 2) {
     const [k, v] = [rest[i]!, rest[i + 1]];
     if (!allowed.has(k) || v === undefined) {
@@ -84,6 +86,7 @@ export async function main(argv: string[]): Promise<number> {
   const ttlHours = num("--ttl-hours");
   let local: ReturnType<typeof openLocalLedger> | null = null;
   try {
+    const registry = flags.has("--registry") ? loadRegistry(flags.get("--registry")!) : undefined;
     local = openLocalLedger(ledgerPath(flags.get("--ledger")));
     const served = await serveStages({
       record: recordPath(flags.get("--ledger-record")).path,
@@ -97,6 +100,7 @@ export async function main(argv: string[]): Promise<number> {
       reruns: num("--reruns"),
       control_port: num("--control-port"),
       ttl_ms: ttlHours === undefined ? undefined : Math.round(ttlHours * 3_600_000),
+      registry,
     });
     console.log("control=" + served.control);
     for (const s of served.stages) console.log("stage=" + s.item + " arm=" + s.arm + " lease=" + s.lease_id + " reserved=" + s.reserved_micros + " proxy=" + s.proxy);

@@ -84,7 +84,6 @@ To rerun a paid experiment, follow the "Replicate it" section of its post, with 
 - **Small decisions sent to cheaper models.** If a small, fast model answers a coding agent's simple either-or decisions when it's sure, and passes the rest to a cheaper general model, does the bill fall without losing task success? [Plan](wiki/plans/2026-11-09-geva-411-decision-routing-prereg/README.md).
 - **A widely shared prompt about hidden state.** Does asking an agent to find the implicit state machines in a codebase, the hidden states a program moves between, turn up real bugs? [Pilot](wiki/board/2026-11-09-geva-492-state-machine-prompt-pilots.md).
 - **pstack's checked models of that state.** Does a second step that writes those states down as a precise model and has a tool check every path, as Lauren Tan's pstack skills do, turn the prompt into a bug finder? [Pilot](wiki/board/2026-11-09-geva-492-state-machine-prompt-pilots.md).
-- **autoplan on harder tasks.** Plain Opus solved our earlier planning tasks, so the next test uses larger features and first checks that plain Opus doesn't already solve them. [Plan](wiki/plans/2026-11-08-geva-397-autoplan-larger-features-prereg/README.md).
 
 ## Other research
 

@@ -1,0 +1,16 @@
+FLAG_TABLE rows 29 tilde_paths 9 drive_paths 0 gstack_install_paths 0 gstack_skill_listed_or_loaded 0
+
+h1-none-th22febd06e1-t1 task files 765 forms {"result tilde":20,"call tilde":3} same token found in task files {"result tilde":19,"call tilde":3}
+h1-none-th22febd06e1-t2 task files 765 forms {"result tilde":8,"call tilde":2} same token found in task files {"result tilde":8,"call tilde":2}
+h1-none-th22febd06e1-t3 task files 765 forms {"result tilde":5,"call tilde":3} same token found in task files {"result tilde":5,"call tilde":3}
+h1-none-thafc1efccdd-t2 task files 1222 forms {"result tilde":1} same token found in task files {"result tilde":0}
+
+h1-none-th22febd06e1-t1 calls naming a ~ skill path: {"Bash:python3":2} | results with a ~ path not in task files, by the call behind them: {"Bash:cat":1}
+h1-none-th22febd06e1-t2 calls naming a ~ skill path: {"Edit":1} | results with a ~ path not in task files, by the call behind them: {}
+h1-none-th22febd06e1-t3 calls naming a ~ skill path: {"Edit":1} | results with a ~ path not in task files, by the call behind them: {}
+h1-none-thafc1efccdd-t2 calls naming a ~ skill path: {} | results with a ~ path not in task files, by the call behind them: {"Bash:cd":1}
+
+h1-none-th22febd06e1-t1 cat target class relative pipeline has grep true has go test false
+h1-none-th22febd06e1-t1 python/bash call naming ~ path: expanduser false listdir/glob/exists false writes a file true replace true first word python3
+h1-none-th22febd06e1-t1 python/bash call naming ~ path: expanduser false listdir/glob/exists false writes a file true replace true first word python3
+h1-none-thafc1efccdd-t2 cd target class /testbed pipeline has grep true has go test false

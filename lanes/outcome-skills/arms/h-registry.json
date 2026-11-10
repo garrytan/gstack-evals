@@ -1,0 +1,131 @@
+{
+  "$comment": "The outcome-skills arm registry (plan v3 section 13 step 2, O1; family G per the G admission prereg, sections 2 to 5). Each arm is real_agent-compatible: arms.<name>.limits is what lanes/real-outcome/agent/real_agent.py reads, and turns is what the G rig sends, in order, in one conversation, each after the previous goes quiet under quiet_sec and bg_wait_sec, as real_agent's turns do. The rig must record each message's phase (the turn's) and parent_tool_use_id, which the exposure detectors (exposure.ts) require. {statement} is the task statement with trailing whitespace removed. tests/outcome-skills/registry.test.ts pins every turn text by sha256.",
+  "schema": 1,
+  "prereg": "2026-11-04-geva-262-g-family-admission-prereg",
+  "pins": {
+    "gstack": {
+      "repo": "garrytan/gstack",
+      "sha": "699a41cb6808e01240d02e82247693f9170d401a",
+      "version": "1.94.39.0",
+      "install": "./setup --host claude --loadout lite"
+    },
+    "model": "claude-opus-5-5"
+  },
+  "families": {
+    "G": {
+      "skills": [
+        "plan-eng-review",
+        "autoplan"
+      ],
+      "built": true
+    },
+    "X": {
+      "skills": [
+        "plan-devex-review",
+        "devex-review"
+      ],
+      "built": false,
+      "why": "X's admission prereg pins its arms, and its exposure detectors come with that family (plan v3 13, step 7)"
+    },
+    "U": {
+      "skills": [
+        "plan-design-review",
+        "design-review"
+      ],
+      "built": false,
+      "why": "U's admission prereg pins its arms, and its exposure detectors come with that family (plan v3 13, step 8)"
+    }
+  },
+  "arms": {
+    "none": {
+      "family": "G",
+      "skill": null,
+      "kind": "none",
+      "install": "none",
+      "clean_room": true,
+      "turns": [
+        {
+          "phase": "t1",
+          "text": "{statement}\n\nWork in this repository. Implement this, and make sure it works. Don't stop to ask."
+        }
+      ],
+      "limits": {
+        "session_cap_usd": 16,
+        "wall_limit_sec": 10800,
+        "max_turns": 400,
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
+      }
+    },
+    "plan-eng-review:told": {
+      "family": "G",
+      "skill": "plan-eng-review",
+      "kind": "told",
+      "install": "gstack",
+      "clean_room": false,
+      "turns": [
+        {
+          "phase": "t1",
+          "text": "{statement}\n\nBefore you write code, draft your plan in PLAN.md. Don't write code yet."
+        },
+        {
+          "phase": "t2",
+          "text": "/plan-eng-review PLAN.md",
+          "skill_turn": true
+        },
+        {
+          "phase": "t3",
+          "text": "Now implement your plan, and make sure it works."
+        }
+      ],
+      "limits": {
+        "session_cap_usd": 20,
+        "wall_limit_sec": 7200,
+        "max_turns": 200,
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
+      }
+    },
+    "autoplan:told": {
+      "family": "G",
+      "skill": "autoplan",
+      "kind": "told",
+      "install": "gstack",
+      "clean_room": false,
+      "turns": [
+        {
+          "phase": "t1",
+          "text": "{statement}\n\nBefore you write code, draft your plan in PLAN.md. Don't write code yet."
+        },
+        {
+          "phase": "t2",
+          "text": "/autoplan PLAN.md",
+          "skill_turn": true
+        },
+        {
+          "phase": "t3",
+          "text": "Now implement your plan, and make sure it works."
+        }
+      ],
+      "limits": {
+        "session_cap_usd": 90,
+        "wall_limit_sec": 28800,
+        "max_turns": 800,
+        "quiet_sec": 30,
+        "bg_wait_sec": 600
+      }
+    }
+  },
+  "not_run": {
+    "plan-eng-review": {
+      "stand-in": "Not at admission (G prereg section 4). If admission's metered prices pass plan v3 8's 2-point rule, the confirmatory prereg adds the row and freezes its line by sha256.",
+      "forced": "None: the after pin 699a41cb is named, so told runs there and no forced line or before-pin arm runs (G prereg, big decision 1).",
+      "untold": "Dropped: no measurement shows untold opens at the after pin, and its route hook never routes to this skill (G prereg section 4)."
+    },
+    "autoplan": {
+      "stand-in": "None in G: plan v3 4 and the G prereg run no stand-in row for autoplan.",
+      "forced": "None: the after pin 699a41cb is named, so told runs there and no forced line or before-pin arm runs (G prereg, big decision 1).",
+      "untold": "Dropped: no measurement shows untold opens at the after pin, and its route hook never routes to this skill (G prereg section 4)."
+    }
+  }
+}

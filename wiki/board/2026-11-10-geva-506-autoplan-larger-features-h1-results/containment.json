@@ -1,0 +1,75 @@
+{
+ "journal none": {
+  "lines": 15549,
+  "by": {
+   "request anthropic /v1/messages claude-opus-5-5": 5135,
+   "free anthropic /v1/messages/count_tokens claude-opus-5-5": 52,
+   "refusal anthropic /models null": 92
+  },
+  "refusals": {
+   "E_ALLOWANCE route GET /anthropic/models is not allowlisted": 92
+  },
+  "raw_key_lines": 0,
+  "usage_keys": [
+   "input",
+   "output",
+   "reasoning",
+   "cache_read",
+   "cache_write"
+  ],
+  "usage_with_server": 0
+ },
+ "journal told": {
+  "lines": 1548,
+  "by": {
+   "request anthropic /v1/messages claude-opus-5-5": 505,
+   "free anthropic /v1/messages/count_tokens claude-opus-5-5": 33
+  },
+  "refusals": {},
+  "raw_key_lines": 0,
+  "usage_keys": [
+   "input",
+   "output",
+   "reasoning",
+   "cache_read",
+   "cache_write"
+  ],
+  "usage_with_server": 0
+ },
+ "transcripts none": {
+  "jobs": 126,
+  "transcripts": 126,
+  "records": 29285,
+  "tool_uses": 5367,
+  "server_blocks": 0,
+  "websearch_webfetch_calls": 0,
+  "mcp_tool_calls": 0,
+  "calls_naming_proxy_or_key": 19,
+  "trials_with_call_naming_proxy": 8,
+  "key_in_call": 83,
+  "key_in_call_naming_proxy": 0,
+  "key_in_result": 67,
+  "other_block_types": {},
+  "models": {
+   "init:claude-opus-5-5": 130
+  }
+ },
+ "transcripts told": {
+  "jobs": 2,
+  "transcripts": 2,
+  "records": 4346,
+  "tool_uses": 547,
+  "server_blocks": 0,
+  "websearch_webfetch_calls": 0,
+  "mcp_tool_calls": 0,
+  "calls_naming_proxy_or_key": 2,
+  "trials_with_call_naming_proxy": 2,
+  "key_in_call": 0,
+  "key_in_call_naming_proxy": 0,
+  "key_in_result": 0,
+  "other_block_types": {},
+  "models": {
+   "init:claude-opus-5-5": 8
+  }
+ }
+}
