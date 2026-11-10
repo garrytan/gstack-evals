@@ -27,7 +27,9 @@
 // - Free routes (model listings, Anthropic token counts, an OpenRouter generation record by id) are forwarded unreserved, and every request, free, paid or
 //   refused, is journaled with its source address.
 // - A free POST route (a token count) first passes the request-shape refusals every paid call passes (refuseRequestShape),
-//   with the paid route's answer, so a count body takes no hosted tool, MCP server or remote source to the provider.
+//   with the paid route's answer, so a count body takes no hosted tool, MCP server or remote source to the provider. Like
+//   the paid route, it forwards the body it checked (the parsed body, serialized again), so a duplicate key cannot hide a
+//   refused shape in a copy the check never read.
 // - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
 //   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
@@ -667,7 +669,7 @@ export class MeteringProxy {
       this.journal({ kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model, source: ctx.source, status: 200, estimated: true });
       return Response.json({ input_tokens: Math.ceil(Buffer.byteLength(raw) / 4) });
     }
-    if (allowed.free) return forwardFree(raw);
+    if (allowed.free) return forwardFree(JSON.stringify(body));
     if (body.stream === true && route === "/v1/chat/completions") body.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
     if (provider === "openai" && body.service_tier === undefined) body.service_tier = "default";
     if (provider === "anthropic" && body.inference_geo === undefined && acceptsInferenceGeo(ctx.model)) body.inference_geo = "global";

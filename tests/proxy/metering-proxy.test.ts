@@ -1458,6 +1458,29 @@ describe("free POST routes and the request-shape refusals (containment tightenin
     expect(await t.proxy.finalize(a.meter_id)).toMatchObject({ micros: 0, requests: 0, refused: shapes.length * 2 });
   });
 
+  // Value: protects=the free count route sends the provider only the body its checks read, as the paid route does, so a duplicate JSON key cannot hide a hosted tool, an MCP server or a remote source in the copy JSON.parse drops; fails_when=the free route forwards the raw bytes, or the paid route stops sending its checked body; why_new=GST-2321 (Captain's scope addition: forward the checked body); seam=forward's free routes; no_claim=which copy a provider's parser keeps
+  test("a duplicate key cannot hide a refused shape from the checks: every checked route forwards the body it checked", async () => {
+    const t = setup(url => (url.endsWith("/count_tokens") ? Response.json({ input_tokens: 12 }) : ok({ input_tokens: 10, output_tokens: 5 })));
+    const a = t.bind();
+    const send = (path: string, text: string) => fetch(`http://127.0.0.1:${t.proxy.port}/${a.slot}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-api-key": a.token }, body: text });
+    const head = '{"model":"claude-opus-5-5","max_tokens":1000';
+    const hidden = [
+      head + ',"tools":[{"type":"web_search_20250305","name":"web_search"}],"messages":[{"role":"user","content":"hi"}],"tools":[]}',
+      head + ',"messages":[{"role":"user","content":[{"type":"document","source":{"type":"url","url":"https://example.com/a.pdf"},"source":{"type":"text","media_type":"text/plain","data":"x"}}]}]}',
+    ];
+    for (const text of hidden) {
+      for (const path of [COUNT, "/anthropic/v1/messages"]) {
+        expect((await send(path, text)).status).toBe(200);
+        const out = t.calls.at(-1)!.raw;
+        expect(out).not.toMatch(/web_search|example\.com/);
+        expect(out).toBe(JSON.stringify({ ...JSON.parse(text), ...(path === COUNT ? {} : { inference_geo: "global" }) }));
+      }
+    }
+    const servers = head + ',"messages":[{"role":"user","content":"hi"}],"mcp_servers":[{"type":"url","url":"https://mcp.example.com/sse","name":"x"}],"mcp_servers":[]}';
+    for (const path of [COUNT, "/anthropic/v1/messages"]) await expectProblem(await send(path, servers), 402, "E_ALLOWANCE");
+    expect(t.calls).toHaveLength(hidden.length * 2);
+  });
+
   // Value: protects=the OpenRouter count route, answered by the proxy, which gives no count for a body the paid route refuses; fails_when=a refused shape gets an estimate; why_new=GST-2321 (every free POST route); seam=forward's estimate route; no_claim=what OpenRouter does with a count
   test("the estimate route answers no count for a request shape the paid route refuses", async () => {
     const t = setup(() => ok({ input_tokens: 10, output_tokens: 5 }));
