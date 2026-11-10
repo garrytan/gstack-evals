@@ -137,6 +137,13 @@ describe("D7's object-level read", () => {
     expect(d7Problems(d)).toEqual([]);
     expect(d.commits).toEqual({ testbed: 0, origin: 0, "sub:lib/schema": 0 });
   });
+  test("a submodule shipped past the commit the base pins reads past its pin before the RUN, and clean after it", () => {
+    const t = withSubmodule(leakyTree()), env = checkEnv(t.root);
+    git(join(t.w, t.sub), "merge", "-q", "--ff-only", "origin/work");
+    expect(d7Problems(check(t.root, []))).toContain("D7: the submodule at lib/schema is not at the commit the base pins");
+    expect(setup(t.w, env.ORIGIN).exitCode).toBe(0);
+    expect(d7Problems(check(t.root, [HIDDEN]))).toEqual([]);
+  });
   test("a submodule off the commit the base pins, or a submodule git directory nothing checks out, fails the read", () => {
     const moved = withSubmodule(leakyTree());
     git(join(moved.w, moved.sub), "checkout", "-q", "--detach", moved.subFuture);

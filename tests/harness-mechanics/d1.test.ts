@@ -114,13 +114,33 @@ describe("D7: the RUN strips history past the base before D1's origin", () => {
     expect(gitOut(t.w, "status", "--porcelain")).toBe("");
     expect(readdirSync(join(t.w, ".git")).filter((f) => f.startsWith("hm-d7-"))).toEqual([]);
   });
-  test("the RUN refuses a submodule that is not at the commit the base pins, or a submodule git directory nothing checks out", () => {
-    const moved = withSubmodule(leakyTree());
-    git(join(moved.w, moved.sub), "checkout", "-q", "--detach", moved.subFuture);
-    const r = runSetup(moved.w, join(moved.root, "opt", "hm-origin.git"));
+  test("a submodule shipped past the commit the base pins, as py-pdf__pdfly-219's is, is checked out at the pin, then stripped past it", () => {
+    const t = withSubmodule(leakyTree()), s = join(t.w, t.sub);
+    git(s, "merge", "-q", "--ff-only", "origin/work");
+    expect([gitOut(s, "rev-parse", "HEAD"), gitOut(t.w, "status", "--porcelain")]).toEqual([t.subFuture, "M lib/schema"]);
+    const r = runSetup(t.w, join(t.root, "opt", "hm-origin.git"));
+    expect([r.exitCode, r.stderr.toString()]).toEqual([0, ""]);
+    expect(gitOut(s, "rev-parse", "HEAD")).toBe(t.pinned);
+    expect(gitOut(s, "for-each-ref", "--format=%(refname)")).toBe("");
+    expect(git(s, "cat-file", "-e", t.subFuture).exitCode).not.toBe(0);
+    expect(readFileSync(join(s, "schema.yaml"), "utf8")).toBe("v: 1\n");
+    expect(existsSync(join(s, "test_schema.py"))).toBe(false);
+    expect(gitOut(t.w, "status", "--porcelain")).toBe("");
+  });
+  test("the RUN refuses a submodule neither at the commit the base pins nor past it, one past it with local changes, or a submodule git directory nothing checks out", () => {
+    const other = withSubmodule(leakyTree());
+    git(join(other.w, other.sub), "checkout", "-q", "--orphan", "other");
+    git(join(other.w, other.sub), "commit", "-q", "--allow-empty", "-m", "unrelated");
+    const r = runSetup(other.w, join(other.root, "opt", "hm-origin.git"));
     expect(r.exitCode).not.toBe(0);
-    expect(r.stderr.toString()).toContain("fatal: D7 history refused: the submodule at lib/schema is not at the commit the base pins");
-    expect(gitOut(moved.w, "rev-parse", "-q", "--verify", "refs/tags/v9^{commit}")).toBe(moved.future);
+    expect(r.stderr.toString()).toContain("fatal: D7 history refused: the submodule at lib/schema is neither at the commit the base pins nor past it");
+    expect(gitOut(other.w, "rev-parse", "-q", "--verify", "refs/tags/v9^{commit}")).toBe(other.future);
+    const dirty = withSubmodule(leakyTree());
+    git(join(dirty.w, dirty.sub), "merge", "-q", "--ff-only", "origin/work");
+    writeFileSync(join(dirty.w, dirty.sub, "schema.yaml"), "v: 2\n");
+    const d = runSetup(dirty.w, join(dirty.root, "opt", "hm-origin.git"));
+    expect(d.exitCode).not.toBe(0);
+    expect(d.stderr.toString()).toContain("fatal: D7 history refused: the submodule at lib/schema has local changes past the commit the base pins");
     const orphan = withSubmodule(leakyTree());
     git(orphan.w, "submodule", "deinit", "-q", "-f", orphan.sub);
     const o = runSetup(orphan.w, join(orphan.root, "opt", "hm-origin.git"));
