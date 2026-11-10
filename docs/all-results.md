@@ -57,6 +57,26 @@ The 95% range sits below zero, but the stricter test the plan fixed in advance d
 
 The plan needed plain Opus to solve between 20% and 80% of trials, to leave room for a gain. It solved every trial that finished (95% range 84.6% to 100%, on 11 of 12 tasks), so the comparison never ran. That range treats every trial as independent, so it may be too narrow. Asked to use these skills, Opus showed no sign of running their steps in any scored session (0 of 18 for plan-eng-review, 0 of 23 for autoplan), by an automatic check for those steps.
 
+## Results that have had both checks
+
+A model from another lab checked each of these posts against its data, and a separate team reran its numbers from the run's record. Each post applies the corrections both checks found. The README's scorecard does not list them.
+
+**/investigate on coding and command-line tasks**
+
+- **No loss we could measure**, particle-1: loading placebo text as long as a skill into the prompt didn't lower its pass rate on command-line tasks by any amount we could measure. [Placebo text cost](../wiki/board/2026-11-10-geva-513-run-t-text-tax-results.md)
+
+**The standard steps at the top of every gstack skill**
+
+- **Cutting them met the non-inferiority margin on particle-1; no verdict on Opus 5.5**: removing the standard steps that open every gstack skill met its preregistered 10-point non-inferiority margin on particle-1. On Opus the command-line task score fell measurably with the cut, but a required check on the run failed, which left Opus without a verdict. [Results](../wiki/board/2026-11-10-geva-513-ceremony-cut-results.md)
+
+**plan-ceo-review and office-hours**
+
+- **Couldn't test, the procedures didn't run**, Opus 5.5: in a descriptive first-stage check, neither planning skill passed its procedure detector (0 of 18 plan-ceo-review sessions across three tries, 0 of 6 office-hours sessions), so no comparison of the skills' effect on plans ran. [Product value, stage 1](../wiki/board/2026-11-10-geva-513-product-value-stage-1-results.md)
+
+**autoplan**
+
+- **Three promises not met**, the team's own autoplan runs: audited against autoplan's own promises from 40 of its run records, the lean default's one reviewer produced 0.358 of the required outputs (95% range 0.275 to 0.443, against a bar of 0.80), no second model family runs in it, and its gate let an agent's own words settle three items only the owner should decide. [Autoplan record audit](../wiki/board/2026-11-10-geva-513-autoplan-record-audit-results.md)
+
 ## Results waiting for their independent check
 
 These results have no numbers here, because they haven't yet had both checks the scorecard needs. Each post has its numbers and ranges. Losses, results that showed no difference and tests with no room sit beside wins, because a test with no room to show a gain is a result too.
@@ -79,15 +99,10 @@ These results have no numbers here, because they haven't yet had both checks the
 - **Couldn't test**, Opus 5.5: with gstack installed but not named in the prompt, agents never opened a skill. [/investigate quick look 1](../wiki/board/2026-10-29-gsta-12-laneb-quick-results/README.md)
 - **Worse, exploratory**, Opus 5.5: asked to use /investigate, Opus did measurably worse than with no skill in this exploratory look. Its loss to the placebo did not replicate, as the corrections below say. [/investigate quick look 2, corrected](../wiki/board/2026-10-29-gsta-30-laneb-quick-2-body-load-correction/README.md)
 - **No difference we could measure**, particle-1: asked to use /investigate, particle-1 did no better, and it trailed the placebo without a gap we could measure. [/investigate quick look 3](../wiki/board/2026-10-30-gsta-30-laneb-quick-3-results/README.md)
-- **No loss we could measure**, particle-1: loading placebo text as long as a skill into the prompt didn't lower its pass rate on command-line tasks by any amount we could measure. [Placebo text cost](../wiki/board/2026-11-02-geva-128-run-t-text-tax-results/README.md)
 
 **Getting agents to open skills**
 
 - **Helps (opens only), waiting on a recount**, particle-1: gstack's routing overhaul got particle-1 to open /investigate on its own more often, only where the new hook named the skill, and no setup with the hooks switched off ran on particle-1. The result rests on a blind check by readers whose records were lost. Without those records the run's own analysis can't confirm it, so it waits until that check can be redone. [Overhaul on Sol and particle-1](../wiki/board/2026-11-08-geva-353-l1-sol-particle-results/README.md), [claim check](../wiki/board/2026-11-09-geva-431-claim-check-corrections.md#l1-gstacks-overhaul-before-and-after-opus-55-gpt-61-sol-particle-1)
-
-**The standard steps at the top of every gstack skill**
-
-- **Cutting them lost nothing on particle-1; no verdict on Opus 5.5**: removing the standard steps that open every gstack skill lost nothing measurable on particle-1. On Opus the command-line task score fell measurably with the cut, but a required check on the run failed, which left Opus without a verdict. [Results](../wiki/board/2026-11-02-geva-184-ceremony-cut-results/README.md)
 
 **plan-ceo-review**
 

@@ -7,7 +7,7 @@ author: GEVA-437
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-09
-status: done
+status: superseded
 links:
   - 2026-11-09-geva-419-autoplan-record-audit-prereg
   - 2026-11-07-geva-391-e2-autoplan-exposure-results

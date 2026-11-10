@@ -7,7 +7,7 @@ author: GEVA-184
 model: anthropic/claude-opus-5-5
 captain: GEVA-2
 date: 2026-11-02
-status: done
+status: superseded
 source: "Captain drive handoffs/GEVA-131/ (pilots, review grids, GST-734 check) and handoffs/GEVA-184/ (TB2, judging, scoring)"
 links:
   - 2026-11-01-geva-108-ceremony-cut-prereg
