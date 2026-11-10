@@ -3,6 +3,7 @@
 // allowance at open, a cap_usd that is not the arm's refused, and the SM proxy's provider-side tool refusal before any
 // upstream call. In the style of driver.test.ts, on a temporary ledger with a stub upstream; no key, no paid call.
 import { afterAll, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ import { serveStages, type StageSpec } from "../../lanes/outcome-skills/driver/s
 import { loadRegistry } from "../../lanes/outcome-skills/arms/registry.ts";
 import { smLimits } from "../../lanes/outcome-skills/statemachines/arms.ts";
 import { HARBOR_MODEL } from "../../lanes/outcome-skills/statemachines/run.ts";
+import { nextStep, sessionEnd } from "../../lanes/outcome-skills/statemachines/session.ts";
 import { chatPrice, openRouterRouting } from "../../src/runner/pricing/prices.ts";
 
 const D = 1_000_000;
@@ -165,3 +167,40 @@ test("the one-open-per-trial key carries the model: the same arm, task and trial
   expect(await served.stop()).toBe(0);
   local.close?.();
 });
+
+// Value: protects=section 6's end kind on the real path: the driver's close answer carries the refusal codes and the unpriced spend, real_agent copies them into real-summary.json, and run.ts's sessionEnd reads them; fails_when=any hop drops the codes or unknown_micros, so an allowance stop reads as upstream and is retried in a fresh container; why_new=#290 review (red team CRITICAL); seam=stage.ts CloseAnswer, real_agent.py proxy_summary, session.ts sessionEnd; no_claim=a real Claude Code session (P5's dry run)
+test("a session's close answer carries its refusal codes and unknown_micros through real-summary.json, so an E_ALLOWANCE stop ends limit_allowance and is scored, not retried", async () => {
+  const root = mkdtempSync(join(tmpdir(), "sm-driver-test-"));
+  roots.push(root);
+  const record = join(root, "record");
+  recordProgram(record, { program: "w", cap_micros: 1_000 * D, skill_cap_micros: 1_000 * D, skills: ["sm"], credit_rate_micros: D, quotes: [quote] });
+  recordApproval(record, { action: "init", item: "sm-opus", cap_micros: 100 * D, quotes: [quote], admission: "required", program: "w", skills: ["sm"] });
+  const local = LocalLedger.open(join(root, "ledger.sqlite"));
+  const fetchStub = async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)) as { model: string };
+    return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+  };
+  const served = await serveStages({ record, local, run_id: "r1", envelope_host: "m1", machine: "m1", stages: [OPUS], host: "127.0.0.1", dir: join(root, "run"), fetch: fetchStub, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key" }, log: () => {} });
+  const res = await fetch(served.control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t-u1", model: "claude-opus-5-5", cap_usd: 15, meta: { arm: "sm:A1", task: "u1/A1", trial_n: 1 }, open_key: "A1u1", ledger: "u4" }) });
+  const s = (await res.json()) as Record<string, any>;
+  expect(res.status).toBe(200);
+  const call = (body: Record<string, unknown>) => fetch(s.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": s.token }, body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content: "hi" }], ...body }) });
+  expect((await call({ tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 1 }] })).status).toBe(403);
+  expect((await call({ model: "claude-opus-5-5:online" })).status).toBe(403);
+  expect((await call({})).status).toBe(200);
+  const answer = (await (await fetch(served.control + "/sessions/" + s.id + "/close", { method: "POST", body: JSON.stringify({ reason: "agent_finished" }) })).json()) as Record<string, any>;
+  expect(answer.refused).toBe(2);
+  expect(answer.refusals).toEqual(["E_PROXY_SERVER_TOOL", "E_ALLOWANCE"]);
+  expect(typeof answer.unknown_micros).toBe("number");
+  const py = spawnSync("python3", ["-c", "import json, sys; sys.path.insert(0, sys.argv[1]); import unit_test as u; print(json.dumps(u.ra.proxy_summary(json.loads(sys.argv[2]))))", join(import.meta.dir, "../real-outcome"), JSON.stringify(answer)], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }, encoding: "utf8" });
+  expect(py.stderr).toBe("");
+  const proxy = JSON.parse(py.stdout) as Record<string, any>;
+  expect(proxy).toMatchObject({ refused: 2, refusals: ["E_PROXY_SERVER_TOOL", "E_ALLOWANCE"], unknown_micros: answer.unknown_micros, spent_micros: answer.spent_micros });
+  const stopped = sessionEnd({ termination: "error_result", proxy }, false);
+  expect(stopped).toEqual({ end: "limit_allowance", unknown_micros: answer.unknown_micros });
+  expect(nextStep([stopped.end])).toEqual({ action: "score" });
+  expect(sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: [] } }, false).end).toBe("upstream");
+  expect(await served.stop()).toBe(0);
+  local.close?.();
+});
+

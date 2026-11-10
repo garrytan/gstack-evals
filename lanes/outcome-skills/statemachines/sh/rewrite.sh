@@ -16,7 +16,7 @@ sm_rm() {
   esac
 }
 while IFS= read -r -d '' p; do if [ -e "$p" ] || [ -L "$p" ]; then sm_rm "$p"; printf 'REMOVED\t%s\n' "$(printf %s "$p" | base64 -w0)"; fi; done < "$2/remove"
-git clean -fdq "${ex[@]}"
+git clean -fdq ${ex[@]+"${ex[@]}"}
 t=$(mktemp); k=$(mktemp)
 git ls-files -z > "$t"
 while IFS= read -r -d '' f; do if [ -e "$f" ] || [ -L "$f" ]; then printf '%s\0' "$f"; fi; done < "$t" > "$k"

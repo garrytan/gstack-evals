@@ -52,7 +52,7 @@ function setup(extra: Partial<ProxyOptions>) {
   const slot = proxy.bind({ cell, models: ["anthropic:claude-opus-5-5"], allowance_micros: 5_000_000 });
   const call = (body: unknown) => fetch("http://127.0.0.1:" + proxy.port + "/" + slot.slot + "/anthropic/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": slot.token }, body: JSON.stringify(body) });
   const journal = () => readFileSync(join(dir, "journal.ndjson"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
-  return { ledger, sent, call, journal };
+  return { ledger, sent, call, journal, proxy, slot };
 }
 
 const plain = { model: "claude-opus-5-5", max_tokens: 1000, messages: [{ role: "user", content: "hi" }], tools: [{ name: "Bash", description: "run", input_schema: { type: "object" } }] };
@@ -98,3 +98,52 @@ test("with refuseServerTools off or unset, every request gets today's answer and
   const kinds = (t: ReturnType<typeof setup>) => t.journal().map((e) => e.kind + ":" + (e.code ?? "") + ":" + (e.reason ?? ""));
   expect(kinds(off)).toEqual(kinds(unset));
 });
+
+// Value: protects=section 4's clean room against provider-side capabilities asked for outside body.tools (a curl from the agent's Bash with the slot token); fails_when=a top-level mcp_servers, plugins or web_search_options body reaches pricing or the upstream on an SM lease, or the off path changes; why_new=#290 review (red team); seam=metering-proxy.ts forward; no_claim=what Claude Code itself sends
+test("with refuseServerTools on, a body asking for mcp_servers, plugins or web_search_options at the top level is refused before pricing; off, the same bodies get the answer they got before", async () => {
+  const on = setup({ refuseServerTools: true });
+  const off = setup({});
+  const bodies: [string, Record<string, unknown>][] = [
+    ["mcp_servers", { ...plain, mcp_servers: [{ type: "url", url: "https://mcp.example.com/sse", name: "x" }] }],
+    ["plugins", { ...plain, plugins: [{ id: "web" }] }],
+    ["web_search_options", { ...plain, web_search_options: { search_context_size: "low" } }],
+  ];
+  const offAnswers: string[] = [];
+  for (const [key, b] of bodies) {
+    const res = await on.call(b);
+    expect(res.status).toBe(403);
+    const j = (await res.json()) as { code: string; detail: string };
+    expect(j.code).toBe("E_PROXY_SERVER_TOOL");
+    expect(j.detail).toContain(key);
+    const o = await off.call(b);
+    offAnswers.push(key + " " + o.status + " " + ((await o.json()) as { code?: string }).code);
+  }
+  expect(on.sent).toHaveLength(0);
+  expect(on.ledger.reserves).toBe(0);
+  expect(offAnswers).toEqual(["mcp_servers 402 E_ALLOWANCE", "plugins 200 undefined", "web_search_options 200 undefined"]);
+});
+
+// Value: protects=the slot's one-model pin, so an OpenRouter :online suffix or another model never reaches the upstream; fails_when=the allowlist matches a prefix or drops a suffix; why_new=#290 review (red team); seam=metering-proxy.ts forward; no_claim=OpenRouter's own routing
+test("a slot takes only its session's model: an :online suffix or another model is refused before pricing", async () => {
+  const t = setup({ refuseServerTools: true });
+  for (const model of ["claude-opus-5-5:online", "claude-sonnet-5-5", "anthropic/claude-opus-5-5"]) {
+    const res = await t.call({ ...plain, model });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { code: string }).code).toBe("E_ALLOWANCE");
+  }
+  expect(t.sent).toHaveLength(0);
+  expect(t.ledger.reserves).toBe(0);
+});
+
+// Value: protects=section 6's end kind input, the codes a session's refusals carried; fails_when=the meter keeps only a count, so the driver's close answer cannot name E_ALLOWANCE; why_new=#290 review (red team CRITICAL); seam=Meter.refusals; no_claim=the close answer (sm-driver.test.ts)
+test("the meter records each refusal's code once, in the order met, beside the refusal count", async () => {
+  const t = setup({ refuseServerTools: true });
+  await t.call(web);
+  await t.call({ ...plain, model: "claude-sonnet-5-5" });
+  await t.call(web);
+  expect((await t.call(plain)).status).toBe(200);
+  const m = await t.proxy.finalize(t.slot.meter_id);
+  expect(m.refused).toBe(3);
+  expect(m.refusals).toEqual(["E_PROXY_SERVER_TOOL", "E_ALLOWANCE"]);
+});
+

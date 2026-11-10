@@ -4,12 +4,18 @@
 // tests/real-outcome/agent-units.test.ts does.
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadRegistry, REGISTRY_PATH } from "../../lanes/outcome-skills/arms/registry.ts";
 import { smTurn } from "../../lanes/outcome-skills/statemachines/arms.ts";
 import { auditByArm, readAudit } from "../../lanes/outcome-skills/statemachines/audit.ts";
 import { qaExposure, textExposure } from "../../lanes/outcome-skills/statemachines/exposure.ts";
-import { endKind, nextStep, planPart, questionCounts } from "../../lanes/outcome-skills/statemachines/session.ts";
+import { fixtureRow } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
+import { runSession } from "../../lanes/outcome-skills/statemachines/run.ts";
+import { endKind, nextStep, planPart, questionCounts, sessionEnd, type PlannedSession } from "../../lanes/outcome-skills/statemachines/session.ts";
+import { toCandidate } from "../../lanes/outcome-skills/statemachines/source.ts";
+import { writeUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
 
 const py = (code: string, ...args: string[]) => {
   const r = spawnSync("python3", ["-c", code, join(import.meta.dir, "../real-outcome"), ...args], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }, encoding: "utf8" });
@@ -107,4 +113,70 @@ print(json.dumps(out))
   expect(out.prose).toEqual([null, null]);
   expect(out.counts).toEqual({ t1: { questions: 3, ask_user_question: 2, prose_questions: 1 } });
   expect(out.checks).toEqual(["ok", "E_SM_STRIP", "E_SM_HISTORY", "E_SM_STRIP", "ok", "E_SM_STRIP", "E_SM_STRIP"]);
+});
+
+// Value: protects=section 6's end kind from real_agent's summary; fails_when=a count or a missing refusals is read as no refusals, or unknown_micros is dropped or written as 0; why_new=#290 review (red team CRITICAL); seam=session.ts sessionEnd; no_claim=the driver's close answer (sm-driver.test.ts)
+test("sessionEnd reads the refusal codes and unknown_micros real_agent copied, refuses refusals that are not an array of codes, and leaves a harness failure as infra", () => {
+  const proxy = { spent_micros: 5, requests: 3, ok_responses: 1, refused: 1, refusals: ["E_ALLOWANCE"], unknown_micros: 7, unknown_calls: 1 };
+  expect(sessionEnd({ termination: "error_result", proxy }, false)).toEqual({ end: "limit_allowance", unknown_micros: 7 });
+  expect(nextStep([sessionEnd({ termination: "error_result", proxy }, false).end])).toEqual({ action: "score" });
+  expect(sessionEnd({ termination: "error_result", proxy: { ...proxy, refused: 0, refusals: [] } }, false)).toEqual({ end: "upstream", unknown_micros: 7 });
+  expect(nextStep([sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: ["UPSTREAM"] } }, false).end])).toEqual({ action: "retry" });
+  expect(() => sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: 1 } }, false)).toThrow(/^E_SM_ARM /);
+  expect(() => sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: undefined } }, false)).toThrow(/^E_SM_ARM /);
+  expect(() => sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: [402] } }, false)).toThrow(/^E_SM_ARM /);
+  expect(() => sessionEnd({ termination: "completed", proxy: { ...proxy, unknown_micros: null } }, false)).toThrow(/^E_SM_ARM /);
+  expect(sessionEnd(null, true)).toEqual({ end: "infra", unknown_micros: 0 });
+  expect(sessionEnd({ termination: "completed", proxy: { refused: 1 } }, true)).toEqual({ end: "infra", unknown_micros: 0 });
+});
+
+// Value: protects=A3's /qa pin on the path that runs; fails_when=qa:told builds its turn with no recorded pin, or with a task qa_sha that is not the pin; why_new=#290 review (red team); seam=sm_user.py sm_turn; no_claim=the install at that pin (real_agent _open_sm)
+test("real_agent's qa:told turn refuses a null or missing /qa pin and a task qa_sha that is not the pin", () => {
+  const code = `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import unit_test as u
+import sm_user
+spec = json.load(open(sys.argv[2]))["sm"]["arms"]["qa:told"]
+a = "a" * 40
+def turn(pin, sha):
+    try:
+        return sm_user.sm_turn(spec, {"scope": "src", "qa_sha": sha}, "", u.ra.js_trim_end, pin)
+    except ValueError:
+        return "refused"
+print(json.dumps([turn(None, a), turn({"sha": None}, a), turn({}, a), turn({"sha": a}, "b" * 40), turn({"sha": a}, a)]))
+`;
+  const spec = loadRegistry().sm!.arms["qa:told"]!;
+  expect(JSON.parse(py(code, REGISTRY_PATH))).toEqual(["refused", "refused", "refused", "refused", spec.turns[0]!.text.replace("{scope}", "src")]);
+});
+
+// Value: protects=section 4's clean home for A3, which may hold only the /qa install (its skills dir and the ~/.gstack state its setup writes); fails_when=a drive, a home CLAUDE.md or a stray gstack checkout passes in a told arm; why_new=#290 review (security specialist); seam=real_agent.py _open_sm; no_claim=a real container (P5's dry run)
+test("real_agent's family SM check refuses a drive, a home CLAUDE.md or a stray gstack in A3's home, and passes the /qa install's own paths", () => {
+  const code = `
+import json, sys, types
+sys.path.insert(0, sys.argv[1])
+import unit_test as u
+ra = u.ra
+ra.egress.apply = lambda c, allow: {"event": "egress", "allow": allow}
+def check(stdout):
+    fake = types.SimpleNamespace(options=types.SimpleNamespace(probe_node=""), _exec=lambda c, s, stdin=None, timeout=0: types.SimpleNamespace(returncode=0, stdout=stdout.encode(), stderr=b""))
+    task = {"repo_dir": "/testbed", "commits": 1, "base_commit": "b" * 40, "qa_sha": "a" * 40}
+    try:
+        ra.RealAgent._open_sm(fake, "c", "t", task, "http://10.0.0.2:9000", True, lambda e: None)
+        return "ok"
+    except ra.SandboxSetupError as e:
+        return str(e).split(" ")[0]
+qa = "COMMITS 1\\nHEAD " + "b" * 40 + "\\nHOME /root/.claude/skills\\nHOME /root/.gstack\\nGSTACK " + "a" * 40 + "\\n"
+print(json.dumps([check(qa), check(qa + "HOME /root/.capy\\n"), check(qa + "HOME /root/.claude/CLAUDE.md\\n"), check(qa + "HOME /root/.local/share/gstack\\n")]))
+`;
+  expect(JSON.parse(py(code))).toEqual(["ok", "E_SM_STRIP", "E_SM_STRIP", "E_SM_STRIP"]);
+});
+
+// Value: protects=A3's /qa pin in run.ts before any image is built; fails_when=A3 runs while registry.json sm.pins.qa.sha is null or another sha than --qa-sha; why_new=#290 review (red team); seam=run.ts runSession; no_claim=a pinned A3 run
+test("runSession refuses A3 while registry.json holds no /qa pin, before any image is built", () => {
+  const dir = join(mkdtempSync(join(tmpdir(), "sm-run-")), "u");
+  writeUnit(dir, { ...toCandidate("rust", fixtureRow()), image_digest: "sha256:" + "c".repeat(64) }, fixtureRow());
+  const session: PlannedSession = { unit: "u", part: 1, index: 0, model: "claude-opus-5-5", cell: "A3", stage: "first", arm: "qa:told" };
+  expect(loadRegistry().sm!.pins.qa.sha).toBeNull();
+  expect(() => runSession({ unitDir: dir, session, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out: join(dir, "../out"), qaHome: dir, qaSha: "a".repeat(40) })).toThrow(/^E_SM_ARM .*\/qa pin/);
 });

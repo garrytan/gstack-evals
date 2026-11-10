@@ -89,6 +89,8 @@ export interface CloseAnswer {
   requests: number;
   ok_responses: number;
   refused: number;
+  /** The distinct reason codes of the proxy's refusals (E_ALLOWANCE, E_PROXY_SERVER_TOOL and so on), so a session's end kind can tell an allowance stop. */
+  refusals: string[];
   unknown: number;
   undrained: number;
   unsettled: number;
@@ -470,6 +472,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         requests: meter?.requests ?? 0,
         ok_responses: Object.entries(meter?.upstream.statuses ?? {}).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0),
         refused: meter?.refused ?? 0,
+        refusals: [...(meter?.refusals ?? [])],
         unknown: meter?.unknown ?? 0,
         undrained: meter?.undrained ?? 0,
         unsettled: meter?.unsettled ?? 0,

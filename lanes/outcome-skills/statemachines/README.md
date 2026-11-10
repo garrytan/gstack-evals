@@ -497,6 +497,12 @@ model or unit (E_SM_PACKET).
   point, or holds one, failed the history rewrite with E_SM_HISTORY. The mount point now stays and everything around it
   goes, so a VOLUME at a .claude dir leaves an empty .claude dir, which the build's empty-mount check still covers. No
   unit in the oracle run failed there; with no such mount the strip removes the same paths as before.
+- Allowance stops end as limits (pre-data build fix, 2026-11-10, session.ts sessionEnd, stage.ts, real_agent.py): the
+  proxy's meter keeps the distinct codes of its refusals, the driver's close answer carries them as refusals, and
+  real-summary.json's proxy block copies them with unknown_micros. sessionEnd reads both, so an E_ALLOWANCE stop ends
+  limit_allowance and is scored as section 6 says, not retried as upstream. Refusals that are not an array of codes, or
+  an unknown_micros that is not a number, refuse the session (E_SM_ARM). The session record's unknown_micros is the
+  close answer's, not 0. No rule changes.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

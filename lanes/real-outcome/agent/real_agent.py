@@ -108,6 +108,17 @@ sdk_query_client.parse_message = mark_keyless(sdk_query_client.parse_message)
 STATEMENT = "{statement}"
 # Family SM's session check (the implicit state machines prereg, sections 4 and 5): the tree's commit count and head, any
 # file the strip rule removes, and the home paths that would carry gstack or a drive into a no-gstack arm.
+# The home paths A3's /qa install itself writes: its skills dir and the ~/.gstack state gstack's setup creates.
+QA_HOME = ("/root/.claude/skills", "/root/.gstack")
+# The close answer's fields real-summary.json's proxy block keeps: run.ts reads refusals and unknown_micros for the session record.
+PROXY_KEYS = ("spent_micros", "requests", "ok_responses", "refused", "refusals", "unknown_micros", "unknown_calls")
+
+
+def proxy_summary(closed) -> dict:
+    """real-summary.json's proxy block: the driver's close answer's fields, each None when no close answer arrived."""
+    return {k: (closed or {}).get(k) for k in PROXY_KEYS}
+
+
 SM_CHECK = r"""cd {repo} || exit 3
 echo "COMMITS $(git rev-list --all --count)"
 echo "HEAD $(git rev-parse HEAD)"
@@ -327,6 +338,8 @@ class RealAgent(lb.LanebAgent):
             raise SandboxSetupError(f"E_SM_STRIP A3's gstack install is at {got['GSTACK']}, not the /qa pin {task.get('qa_sha')}; nothing was opened")
         if not told and got["HOME"]:
             raise SandboxSetupError(f"E_SM_STRIP a no-gstack arm's home holds {got['HOME']}; nothing was opened")
+        if told and [p for p in got["HOME"] if p not in QA_HOME]:
+            raise SandboxSetupError(f"E_SM_STRIP A3's home holds {[p for p in got['HOME'] if p not in QA_HOME]}, outside the /qa install's own {list(QA_HOME)}; nothing was opened")
         return {"trial": trial, "branch": None, "head": got["HEAD"][0], "project_docs": [], "check": check}
 
     def _snapshot(self, container: str, task: dict, name: str) -> dict:
@@ -467,7 +480,7 @@ class RealAgent(lb.LanebAgent):
                 raise SandboxSetupError(f"E_SM_ARM arm {self.options.arm} has no allowance for model {self.options.upstream_model}; family SM runs {sorted(caps)}")
             self.limits = {**sm_spec["limits"], "session_cap_usd": caps[self.options.upstream_model]}
             try:
-                phases = [("t1", sm_turn(sm_spec, task, instruction, js_trim_end))]
+                phases = [("t1", sm_turn(sm_spec, task, instruction, js_trim_end, ((arms.get("sm") or {}).get("pins") or {}).get("qa")))]
             except ValueError as e:
                 raise SandboxSetupError(f"E_SM_ARM arm {self.options.arm}: {e}") from None
         else:
@@ -667,7 +680,7 @@ class RealAgent(lb.LanebAgent):
             "trial": trial, "arm": self.options.arm, "kind": task["kind"], "termination": outcome["termination"], "phases": outcome["phases"],
             "limits": self.limits, "frozen_env": FROZEN_ENV, "sandbox": sandbox, "shipment": shipment, "turn1": outcome["turn1"], "final": final,
             "persona": user.counts, "ship_steps": ship_phase["steps"], "skill_calls": {p: ship_steps(by_phase.get(p, []))["skill_calls"] for p in (by_phase if self.registry else ("build", "ship"))},
-            "tool_calls": steps["tool_calls"], "proxy": {k: (summary["session"] or {}).get(k) for k in ("spent_micros", "requests", "ok_responses", "refused")}, "errors": errors,
+            "tool_calls": steps["tool_calls"], "proxy": proxy_summary(summary["session"]), "errors": errors,
         }
         (self._evaluator_dir() / "real-summary.json").write_text(json.dumps(real, indent=2, default=str))
         summary["real"] = real

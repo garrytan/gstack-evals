@@ -5,6 +5,7 @@
 // writes sm-session.v1 (design 2.2) with exclusive create.
 import { writeFileSync } from "node:fs";
 import { seededRandom } from "../../../src/runner/stats/paired.ts";
+import { smFail } from "./unit.ts";
 
 export const FIRST_CELLS = ["A0", "A1", "A2", "S2"] as const;
 export const QA_CELL = "A3";
@@ -50,6 +51,15 @@ export function endKind(o: { termination: string | null; refusals?: string[]; up
   if (o.termination === "completed" || o.termination === "bg_wait_expired") return "completed";
   if (refused.includes("UPSTREAM") || (o.upstream_status ?? 0) >= 500 || o.upstream_status === 429 || o.termination === "error_result") return "upstream";
   return "infra";
+}
+
+/** The end kind and unpriced spend of one session from real_agent's real-summary.json, whose proxy block copies the driver's close answer. A harness failure is infra whatever the block holds; otherwise refusals must be the close answer's array of refusal codes and unknown_micros a number, or the session is refused, so an allowance stop is never read as an upstream end. */
+export function sessionEnd(summary: { termination?: string | null; proxy?: Record<string, any> | null } | null, harness: boolean): { end: EndKind; unknown_micros: number } {
+  const p = summary?.proxy ?? {};
+  if (!summary || harness) return { end: "infra", unknown_micros: typeof p.unknown_micros === "number" ? p.unknown_micros : 0 };
+  if (!Array.isArray(p.refusals) || !p.refusals.every((c: unknown) => typeof c === "string")) return smFail("E_SM_ARM", "real-summary.json's proxy.refusals is " + JSON.stringify(p.refusals) + ", not the close answer's array of refusal codes");
+  if (typeof p.unknown_micros !== "number") return smFail("E_SM_ARM", "real-summary.json's proxy.unknown_micros is " + JSON.stringify(p.unknown_micros) + ", not the close answer's number");
+  return { end: endKind({ termination: summary.termination ?? null, refusals: p.refusals }), unknown_micros: p.unknown_micros };
 }
 
 /** Scored as is, one retry from a fresh container, or a gap with its code. */

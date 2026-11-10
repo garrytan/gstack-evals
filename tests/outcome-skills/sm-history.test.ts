@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fixtureRepo, gitOut } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
-import { importsOf, prepareBase, prepareFollowOn, preflight, stripPlan } from "../../lanes/outcome-skills/statemachines/history.ts";
+import { importsOf, prepareBase, prepareFollowOn, preflight, REWRITE_SCRIPT, stripPlan } from "../../lanes/outcome-skills/statemachines/history.ts";
 import { buildSessionImage } from "../../lanes/outcome-skills/statemachines/image.ts";
 import { startTree } from "../../lanes/outcome-skills/statemachines/followon.ts";
 import { dropVolume, PY_IMAGE } from "../../lanes/outcome-skills/statemachines/testrun.ts";
@@ -170,4 +170,12 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("session image on a run
     expect(() => buildSessionImage(unit(tag.full), { volume: tree.one, stage: "first" })).toThrow(/^E_SM_HISTORY .*SM_MOUNT_NOT_EMPTY mnt_tmp/);
     expect(anon()).toEqual(before);
   }, 300_000);
+});
+
+// Value: protects=the history rewrite on images whose bash is older than 4.4, where an empty array's "${a[@]}" under set -u aborts as unbound; fails_when=an array expansion in rewrite.sh loses its ${a[@]+...} guard; why_new=#290 review (testing specialist); seam=sh/rewrite.sh; no_claim=a run on an old-bash image
+test("every array expansion in rewrite.sh is guarded for set -u on bash before 4.4", () => {
+  const all = [...REWRITE_SCRIPT.matchAll(/"\$\{(\w+)\[@\]\}"/g)].length;
+  const guarded = [...REWRITE_SCRIPT.matchAll(/\$\{(\w+)\[@\]\+"\$\{\1\[@\]\}"\}/g)].length;
+  expect(all).toBeGreaterThan(0);
+  expect(guarded).toBe(all);
 });
