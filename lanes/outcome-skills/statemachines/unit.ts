@@ -19,7 +19,7 @@ const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex")
 /** stale_deleted: untracked report files the run deleted at its start; stale_refused: report files it moved aside after the
  *  tests as not written by this run; built_nothing: why the run built nothing (testrun.ts BuiltNothing), or null;
  *  created_dirs: the report directories the run created at its start (testrun.ts TestRun). */
-export interface OracleRun { tree: "base" | "fixed"; n: number; wall_ms: number; exit: number; parsed_sha256: string | null; stopped: boolean; exits?: number[]; stale_deleted?: number; stale_refused?: number; built_nothing?: string | null; stale_fresh?: number | null; created_dirs?: string[] }
+export interface OracleRun { tree: "base" | "fixed"; n: number; wall_ms: number; exit: number; parsed_sha256: string | null; stopped: boolean; exits?: number[]; stale_deleted?: number; stale_refused?: number; built_nothing?: string | null; stale_fresh?: number | null; created_dirs?: string[]; infra?: string | null }
 /** A cargo unit's base-run target reading (oracle.ts targetReading): the targets each run reached, the fixed runs' targets
  *  no base run reached, and whether a base run printed cargo's fail-fast stop line. */
 export interface TargetReading { base: string[][]; fixed: string[][]; not_on_base: string[]; fail_fast_stop: boolean; cargo_stopped_early: boolean }

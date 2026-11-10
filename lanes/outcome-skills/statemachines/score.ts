@@ -298,6 +298,7 @@ export function scoringRun(dir: string, u: SmUnit, image: string, volume: string
   copyVolume(image, volume, run, mode);
   try {
     const t = runTests({ image, volume: run, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, ...(limitMs ? { limitMs } : {}), label: u.id + "-" + label + n, rule: applies ? "applies" : "exempt" });
+    if (t.infra) smFail("E_SM_INFRA_GAP", u.id + " " + label + n + ": the run could not make its mark dir (" + t.infra + "), an infra error, not a score");
     const parsed = t.stopped ? null : parseRun(t, readFileSync(join(dir, "parser.py"), "utf8"), u.id + "-" + label + n);
     const build_failed = buildFailed(t, u.commands.rebuild.length, applies, parsed);
     return { view: { parsed, build_failed }, summary: { n, wall_ms: t.wall_ms, exits: t.exits, stopped: t.stopped, build_failed, parsed_sha256: parsed ? sha(JSON.stringify(parsed)) : null, stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing }, log: t.log === t.stderr ? t.log : t.stderr + "\n" + t.log };

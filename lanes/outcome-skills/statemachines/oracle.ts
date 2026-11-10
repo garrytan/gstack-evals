@@ -196,7 +196,8 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
     const rule: RebuildRule = u.oracle?.rebuild_rule?.applies ? "applies" : "exempt";
     const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n, rule });
     const log = t.log === t.stderr ? t.stderr : t.stderr + "\n" + t.log;
-    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing, stale_fresh: t.reports ? t.reports.fresh : null, created_dirs: t.created_dirs };
+    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing, stale_fresh: t.reports ? t.reports.fresh : null, created_dirs: t.created_dirs, infra: t.infra };
+    if (t.infra) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: false, exits: t.exits, ...stale }, parsed: null, log };
     if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true, exits: t.exits, ...stale }, parsed: null, log };
     const parsed = parseRun(t, rf(join(dir, "parser.py"), "utf8"), u.id + "-" + tree + n);
     return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false, exits: t.exits, ...stale }, parsed, log };
@@ -271,6 +272,10 @@ export async function oracleUnit(dir: string, pacer: Pacer, opts: { mode?: Mode;
         const r = oneRun(dir, u, p.volume, s.runtime_id, tree, n, opts.mode ?? "hardened", opts.limitMs);
         u.oracle.runs.push(r.run);
         u.oracle.max_wall_ms = Math.max(u.oracle.max_wall_ms, r.run.wall_ms);
+        if (r.run.infra) {
+          u.oracle.verdict = "E_SM_INFRA_GAP";
+          return done("E_SM_INFRA_GAP", tree + " run " + n + " could not make its mark dir (" + r.run.infra + "): an infra error, neither kept nor dropped");
+        }
         if (r.run.stopped) {
           u.oracle.verdict = "E_SM_SLOW_TEST";
           return done("E_SM_SLOW_TEST", tree + " run " + n + " passed " + (opts.limitMs ?? LIMIT_MS) + " ms (wall " + r.run.wall_ms + " ms)");

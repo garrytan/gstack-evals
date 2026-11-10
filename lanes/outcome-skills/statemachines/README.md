@@ -467,6 +467,13 @@ model or unit (E_SM_PACKET).
   rules: no directory the test command makes or cd's into, no .. step, no glob in the directory, nothing outside the
   tree. 9 more of the 1,077 cached rows are selected (oauth2-proxy__oauth2-proxy-2524: `cd /testbed && go test -v -json
   ./... > reports/results.json`, then `cat /testbed/reports/results.json`).
+- A /tmp the run user can write (pre-data build change, 2026-11-09): a tmpfs mounted with no mode copies the image's
+  /tmp mode, which is 0755 root in some images (both vercel__turborepo units), so uid 10001 could not make the mark dir
+  and every run read fresh=0. The hardened /tmp tmpfs now mounts rw,exec,size=4g,mode=1777. A run that still cannot
+  make its mark dir writes SM_INFRA no_mark_dir and stops; TestRun.infra and the oracle run record carry it, the unit's
+  verdict is E_SM_INFRA_GAP (neither kept nor dropped, counted per language on its own line, rerun on the next pass),
+  and a scoring run with it fails as E_SM_INFRA_GAP instead of scoring broke. The pstack eval (#305) shares this
+  container code.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

@@ -5,8 +5,8 @@
 // run creates before its test command, empty and owned by the run user.
 import { describe, expect, test } from "bun:test";
 import { buildFailed } from "../../lanes/outcome-skills/statemachines/score.ts";
-import { copyVolume, parseRun, PY_IMAGE, runArgs, runTests } from "../../lanes/outcome-skills/statemachines/testrun.ts";
-import { docker } from "../../lanes/real-outcome/task/docker.ts";
+import { copyVolume, parseRun, PY_IMAGE, runArgs, runScript, runTests, settleRun } from "../../lanes/outcome-skills/statemachines/testrun.ts";
+import { docker, dockerRun } from "../../lanes/real-outcome/task/docker.ts";
 
 const on = process.env.GSTACK_EVALS_DOCKER === "1";
 const pair = (a: string[], k: string, v: string) => a.some((x, i) => x === k && a[i + 1] === v);
@@ -15,7 +15,7 @@ describe("test run container arguments (keyless)", () => {
   const base = { image: "img", volume: "tree", repoDir: "/r", name: "n" };
   test("hardened keeps uid 10001, the read-only root, no network, no capabilities, no new privileges and the caps", () => {
     const a = runArgs({ ...base, mode: "hardened", home: { volume: "n-home", path: "/root" } });
-    for (const [k, v] of [["--user", "10001:10001"], ["--network", "none"], ["--cap-drop", "ALL"], ["--security-opt", "no-new-privileges"], ["--tmpfs", "/tmp:rw,exec,size=4g"], ["--cpus", "4"], ["--memory", "12g"], ["--pids-limit", "8192"], ["-v", "tree:/r"], ["-w", "/r"]]) expect(pair(a, k!, v!)).toBe(true);
+    for (const [k, v] of [["--user", "10001:10001"], ["--network", "none"], ["--cap-drop", "ALL"], ["--security-opt", "no-new-privileges"], ["--tmpfs", "/tmp:rw,exec,size=4g,mode=1777"], ["--cpus", "4"], ["--memory", "12g"], ["--pids-limit", "8192"], ["-v", "tree:/r"], ["-w", "/r"]]) expect(pair(a, k!, v!)).toBe(true);
     expect(a).toContain("--read-only");
     expect(a.some((x) => /^--privileged|^--cap-add|^--network=|^host$/.test(x))).toBe(false);
   });
@@ -178,3 +178,54 @@ describe.skipIf(!on)("commands read no stdin (docker)", () => {
     }
   }, 180_000);
 });
+
+describe.skipIf(!on)("a /tmp the run user cannot write (docker)", () => {
+  const img = "sm-test-tmp0755:" + process.pid;
+  const commands = (test: string) => ({ rebuild: [], test: [test], print: ["cat reports/out.log"] });
+  function withTree<T>(f: (vol: string) => T): T {
+    const vol = "sm-test-tmp-" + process.pid + "-" + Math.random().toString(36).slice(2, 8);
+    docker(["volume", "create", vol]);
+    docker(["run", "--rm", "--network", "none", "-v", vol + ":/w", "--entrypoint", "sh", PY_IMAGE, "-c", "mkdir /w/reports && chown -R 10001:10001 /w"]);
+    try {
+      return f(vol);
+    } finally {
+      docker(["volume", "rm", "-f", vol]);
+    }
+  }
+  test("the image's /tmp is 0755 root, and a tmpfs mounted with no mode copies that, so uid 10001 cannot write it", () => {
+    const b = docker(["build", "-q", "-t", img, "-"], { input: "FROM " + PY_IMAGE + "\nRUN chmod 0755 /tmp\n" });
+    expect(b.status).toBe(0);
+    const r = docker(["run", "--rm", "--network", "none", "--user", "10001:10001", "--read-only", "--tmpfs", "/tmp:rw,exec,size=4g", "--entrypoint", "sh", img, "-c", "stat -c '%a %u' /tmp; mktemp -d >/dev/null 2>&1 && echo writable || echo refused"]);
+    expect(r.stdout.trim().split("\n")).toEqual(["755 0", "refused"]);
+  }, 300_000);
+  test("on that image a hardened run writes its report under the mode 1777 /tmp and reads fresh", () => {
+    withTree((vol) => {
+      const t = runTests({ image: img, volume: vol, repoDir: "/w", mode: "hardened", label: "tmp-fresh", commands: commands("echo 't1 pass' > reports/out.log") });
+      expect(t.reports).toMatchObject({ fresh: 1 });
+      expect(t.infra).toBeNull();
+      expect(t.built_nothing).toBeNull();
+      expect(t.log).toBe("t1 pass\n");
+    });
+  }, 300_000);
+  test("on that image a run that writes nothing still reads no_fresh_report", () => {
+    withTree((vol) => {
+      const t = runTests({ image: img, volume: vol, repoDir: "/w", mode: "hardened", label: "tmp-none", commands: commands("true") });
+      expect(t.infra).toBeNull();
+      expect(t.built_nothing).toBe("no_fresh_report");
+    });
+  }, 300_000);
+  test("with the tmpfs still mounted with no mode, the run ends as an infra error and never reads no_fresh_report", () => {
+    withTree((vol) => {
+      const c = commands("echo 't1 pass' > reports/out.log");
+      const a = runArgs({ image: img, volume: vol, repoDir: "/w", mode: "hardened", name: "sm-tmp-broken-" + process.pid }).map((x) => (x.startsWith("/tmp:") ? "/tmp:rw,exec,size=4g" : x));
+      const r = dockerRun("sm-tmp-broken-" + process.pid, a, { timeoutMs: 120_000, input: runScript(c, "/w") });
+      const t = settleRun(r, c, 120_000);
+      expect(t.infra).toBe("no_mark_dir");
+      expect(t.built_nothing).toBeNull();
+      expect(t.exits).toEqual([]);
+      expect(parseRun(t, "", "broken", () => ({ t1: "pass" }))).toEqual({});
+    });
+    docker(["rmi", "-f", img]);
+  }, 300_000);
+});
+

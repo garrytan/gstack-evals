@@ -52,7 +52,8 @@ const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
  *  mark (file times tick coarsely, so a file as new as the mark is fresh), so the print command reads only reports this run wrote, and writes the counts on an SM_REPORTS line.
  *  Between the deletion and the mark it creates, as the run user, each report directory the test commands write into
  *  (reports.ts reportDirs) that is missing, only where its nearest existing parent resolves inside repoDir, and writes an
- *  SM_MKDIR line for each one it created. Every rebuild, test and print command reads its stdin from /dev/null, because the
+ *  SM_MKDIR line for each one it created. A run that cannot make its mark dir (a /tmp the run user cannot write) writes
+ *  SM_INFRA no_mark_dir and stops before any command runs, an infra error rather than a run that built nothing. Every rebuild, test and print command reads its stdin from /dev/null, because the
  *  script itself reaches bash -s on stdin and a command that reads stdin (ant, mvn, gradle, npx) would swallow the rest. */
 export function runScript(c: { rebuild: string[]; test: string[]; print: string[] }, repoDir: string, workDir = repoDir): string {
   const cmd = (x: string) => "( " + x + " ) </dev/null\necho \"SM_EXIT $?\" >&2";
@@ -61,13 +62,15 @@ export function runScript(c: { rebuild: string[]; test: string[]; print: string[
   const start = paths.length
     ? [
         "SM_WD=$PWD; SM_REPO=" + sq(repoDir) + "; SM_T=$(mktemp -d 2>/dev/null || { mkdir -p /tmp/.sm-$$ && echo /tmp/.sm-$$; })",
+        'sm_infra() { echo "SM_INFRA no_mark_dir" >&2; exit 97; }',
+        '[ -n "$SM_T" ] && [ -d "$SM_T" ] && [ -w "$SM_T" ] || sm_infra',
         'sm_abs() { case $1 in /*) printf "%s\\n" "$1";; *) printf "%s\\n" "$PWD/${1#./}";; esac; }',
         "sm_list() {\n" + paths.map(listSrc).join("\n") + "\n}",
         'SM_DEL=0; SM_KEPT=0; sm_git=0; git -C "$SM_REPO" rev-parse --git-dir >/dev/null 2>&1 && sm_git=1',
         'sm_list | sort -u > "$SM_T/start"',
         'while IFS= read -r f; do case $f in "$SM_REPO"/*) git -C "$SM_REPO" ls-files --error-unmatch -- ":(literal)$f" >/dev/null 2>&1; sm_rc=$?; if [ $sm_git = 1 ] && [ $sm_rc = 1 ] && rm -f -- "$f"; then SM_DEL=$((SM_DEL+1)); else SM_KEPT=$((SM_KEPT+1)); fi;; *) SM_KEPT=$((SM_KEPT+1));; esac; done < "$SM_T/start"; unset f',
         ...(mk.length ? ['SM_REPOP=$(cd "$SM_REPO" 2>/dev/null && pwd -P)', ...mk] : []),
-        'touch "$SM_T/mark"',
+        'touch "$SM_T/mark" || sm_infra',
       ]
     : [];
   const end = paths.length
@@ -93,8 +96,9 @@ export type BuiltNothing = "rebuild_failed" | "no_fresh_report" | "stale_unhidde
 export type RebuildRule = "applies" | "exempt";
 
 /** exits: each rebuild and test command's exit status, in order (the SM_EXIT lines the run script writes); created_dirs:
- *  the report directories the run created at its start, relative to repoDir (the SM_MKDIR lines). */
-export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr: string; stderr_tail: string; exits: number[]; reports: Reports | null; built_nothing: BuiltNothing | null; created_dirs: string[] }
+ *  the report directories the run created at its start, relative to repoDir (the SM_MKDIR lines); infra: the run stopped
+ *  at its start because it could not make its mark dir (the SM_INFRA line), so it counts as neither a keep nor a drop. */
+export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr: string; stderr_tail: string; exits: number[]; reports: Reports | null; built_nothing: BuiltNothing | null; created_dirs: string[]; infra: "no_mark_dir" | null }
 
 /** A finished run script's result read into a TestRun, with the stale report counts and the built-nothing reason. */
 export function settleRun(r: { stdout: string; stderr: string; status: number; wall_ms: number; timed_out?: boolean; error?: unknown }, commands: { rebuild: string[] }, limit: number, rule: RebuildRule = "applies"): TestRun {
@@ -105,14 +109,15 @@ export function settleRun(r: { stdout: string; stderr: string; status: number; w
   const m = r.stderr.match(/^SM_REPORTS deleted=(\d+) kept=(\d+) refused=(\d+) unhidden=(\d+) fresh=(\d+)$/m);
   const reports = m ? { deleted: +m[1]!, kept: +m[2]!, refused: +m[3]!, unhidden: +m[4]!, fresh: +m[5]! } : null;
   const n = commands.rebuild.length;
-  const built_nothing: BuiltNothing | null = rule === "applies" && n && exits.slice(0, n).some((x) => x !== 0) ? "rebuild_failed" : reports?.unhidden ? "stale_unhidden" : reports && !reports.fresh ? "no_fresh_report" : null;
+  const infra = /^SM_INFRA no_mark_dir$/m.test(r.stderr) ? "no_mark_dir" : null;
+  const built_nothing: BuiltNothing | null = infra ? null : rule === "applies" && n && exits.slice(0, n).some((x) => x !== 0) ? "rebuild_failed" : reports?.unhidden ? "stale_unhidden" : reports && !reports.fresh ? "no_fresh_report" : null;
   const created_dirs = [...r.stderr.matchAll(/^SM_MKDIR (.+)$/gm)].map((m) => m[1]!);
-  return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr: r.stderr, stderr_tail: r.stderr.slice(-2000), exits, reports, built_nothing, created_dirs };
+  return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr: r.stderr, stderr_tail: r.stderr.slice(-2000), exits, reports, built_nothing, created_dirs, infra };
 }
 
-/** The dataset's parser over a run's log, or nothing when the run built nothing (the parser does not run). */
+/** The dataset's parser over a run's log, or nothing when the run built nothing or hit an infra error (the parser does not run). */
 export function parseRun(t: TestRun, src: string, label: string, parse: (src: string, log: string, label: string) => Record<string, string> = runParser): Record<string, string> {
-  return t.built_nothing ? {} : parse(src, t.log, label);
+  return t.built_nothing || t.infra ? {} : parse(src, t.log, label);
 }
 
 /** A fresh volume holding a copy of the image's home directory (root's HOME in the image) under home/, owned by uid
@@ -130,7 +135,7 @@ export function homeVolume(image: string, dst: string): string {
 /** The test container's docker run arguments. The home copy applies to hardened mode only. */
 export function runArgs(o: { image: string; volume: string; repoDir: string; workDir?: string; mode: Mode; name: string; home?: { volume: string; path: string } }): string[] {
   const hard = o.mode === "hardened"
-    ? ["--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=4g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", ...(o.home ? ["--mount", "type=volume,src=" + o.home.volume + ",dst=" + o.home.path + ",volume-subpath=home", "--mount", "type=volume,src=" + o.home.volume + ",dst=/etc/passwd,volume-subpath=passwd,readonly", "-e", "HOME=" + o.home.path] : ["-e", "HOME=/tmp"])]
+    ? ["--user", RUN_UID, "--read-only", "--tmpfs", "/tmp:rw,exec,size=4g,mode=1777", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", ...(o.home ? ["--mount", "type=volume,src=" + o.home.volume + ",dst=" + o.home.path + ",volume-subpath=home", "--mount", "type=volume,src=" + o.home.volume + ",dst=/etc/passwd,volume-subpath=passwd,readonly", "-e", "HOME=" + o.home.path] : ["-e", "HOME=/tmp"])]
     : ["--user", "0:0", "--security-opt", "no-new-privileges"];
   return ["--rm", "-i", "--network", "none", ...hard, "--cpus", LIMITS.cpus, "--memory", LIMITS.memory, "--pids-limit", LIMITS.pids, "-v", o.volume + ":" + o.repoDir, "-w", o.workDir || o.repoDir, "--entrypoint", "bash", o.image, "-s"];
 }
