@@ -34,13 +34,18 @@
 //   On a request that carried slot markers past the tripwire, a refusal replaces each marker with <unquoted> in the client
 //   values it quotes (maskMarkers: nested or overlapping markers become one <unquoted>) and leaves its own text as
 //   written; the marker_hit line journals a model that holds a marker as <unquoted>. The route-not-allowlisted refusal
-//   quotes the request path the same way, masking any marker it holds, and keeps its place, status and code. On a
-//   DR_ALLOWANCE_STOP proxy a slot marker in that path is journaled before it as the tripwire would journal it: a path
-//   holding the canary writes the tripwire's DR_CUSTODY_HIT refusal line, so the controller's journal check stops the run,
-//   while the call is still answered 403 E_ALLOWANCE; any other slot marker there writes a marker_hit line. An allowlisted
-//   path that holds a marker (GET /v1/models/<id>) is journaled in the same path form in every line. A slot denial
-//   (E_SLOT_DENIED) quotes an unmatched path in that form, and masks the proxy-wide markers and every open slot's markers
-//   in it and in the slot id it quotes.
+//   quotes the request path the same way, masking any marker it holds, and keeps its place, status, code and answer.
+//   A request the proxy answers before its tripwire has read it (a route off the allowlist, a missing key, a body that
+//   cannot be read or decoded) or whose body is too deep for the tripwire's recursive walk is first scanned for markers
+//   in its path, query string, headers and body, the body's parsed strings walked without recursion, and keeps its
+//   answer and its count on the meter: a proxy-wide marker writes the tripwire's masked E_TRIPWIRE refusal line, so the
+//   cell reads invalid; on a DR_ALLOWANCE_STOP proxy the slot's canary writes the tripwire's DR_CUSTODY_HIT refusal line,
+//   beside the E_TRIPWIRE line when a proxy-wide marker rides with it, so the controller's journal check stops the run,
+//   and any other slot marker, with no proxy-wide marker, writes a marker_hit line (on other proxies it writes nothing).
+//   A body that cannot be read or decoded writes one body_unscannable line, which is not a stop. An allowlisted path
+//   that holds a marker (GET /v1/models/<id>) is journaled in the same path form in every line. A slot denial
+//   (E_SLOT_DENIED) quotes an unmatched path in that form, and masks the proxy-wide markers and the markers of every slot
+//   bound so far, open or closed, in it and in the slot id it quotes.
 // - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
 //   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
@@ -292,6 +297,9 @@ const hitFields = (slot: Slot, leaks: string[]) => {
   const { run_id, arm, task, model, trial, attempt } = slot.cell;
   return { cell: { run_id, arm, task, model, trial, attempt }, markers: leaks.map(m => ({ index: slot.markers.indexOf(m), sha256: createHash("sha256").update(m).digest("hex").slice(0, 12) })) };
 };
+/** The reasons the tripwire's DR_CUSTODY_HIT and E_TRIPWIRE refusal lines give for n markers. */
+const custodyReason = (n: number) => `the request carries ${n} runner-only marker(s); custody hit, the run stops`;
+const tripwireReason = (n: number) => `the request carries ${n} forbidden marker(s); the cell is invalid`;
 const sameSecret = (expected: Buffer, presented: string | null) => presented !== null && timingSafeEqual(expected, hash(presented));
 const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, refusals: [], allowance_stops: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0, peak_inflight_micros: 0, peak_inflight_calls: 0, largest_prompt: null, bytes_per_token: null, cache_write: [] });
 
@@ -398,6 +406,34 @@ function decodedStrings(value: unknown, out: string[] = []): string[] {
   return out;
 }
 
+/** Everything the tripwire reads in a request: the route, the query string and every header, each raw and percent-decoded, the body as sent, and the strings its parsed JSON holds. */
+function tripwireText(req: Request, route: string, raw: string, strings: string[]): string {
+  const url = new URL(req.url);
+  const headerText = [...req.headers].flat();
+  return [route, percentDecoded(route), url.search, percentDecoded(url.search), ...[...url.searchParams].flat(), ...headerText, ...headerText.map(percentDecoded), raw, ...strings].join("\n");
+}
+
+/**
+ * The strings decodedStrings returns, walked with an explicit stack instead of recursion, so a body nested deeper than the
+ * call stack is still read. The tripwire itself keeps decodedStrings, so a body too deep for it keeps its 500 answer.
+ */
+function walkedStrings(value: unknown): string[] {
+  const out: string[] = [];
+  const stack = [value];
+  while (stack.length) {
+    const v = stack.pop();
+    if (typeof v === "string") out.push(v);
+    else if (Array.isArray(v)) for (const x of v) stack.push(x);
+    else if (v && typeof v === "object") {
+      for (const [k, x] of Object.entries(v)) {
+        out.push(k);
+        stack.push(x);
+      }
+    }
+  }
+  return out;
+}
+
 function presentedCredential(req: Request): string | null {
   const apiKey = req.headers.get("x-api-key");
   if (apiKey) return apiKey;
@@ -439,6 +475,8 @@ export class MeteringProxy {
   private journalTorn = false;
   private journalLock: number | null = null;
   private slots = new Map<string, Slot>();
+  /** Every marker a slot has been bound with, open or closed: a slot denial masks them all. */
+  private slotMarkers = new Set<string>();
   private meters = new Map<string, Meter>();
   private inflight = new Map<string, number>();
   private waiters = new Map<string, Array<() => void>>();
@@ -491,6 +529,7 @@ export class MeteringProxy {
     if (request.deciders !== undefined && (!Array.isArray(request.deciders) || request.deciders.some(m => typeof m !== "string" || !request.models.includes(m)))) throw new Error("E_USAGE: metering proxy: bind's deciders must be a list of ids from its models");
     if (request.canary !== undefined && (typeof request.canary !== "string" || !request.forbidden_markers?.includes(request.canary))) throw new Error("E_USAGE: metering proxy: bind's canary must be one of its forbidden_markers");
     if (this.options.allowanceCode === "DR_ALLOWANCE_STOP" && request.forbidden_markers?.length && request.canary === undefined) throw new Error("E_USAGE: metering proxy: a decision-routing bind with forbidden_markers must name its canary");
+    for (const m of request.forbidden_markers ?? []) this.slotMarkers.add(m);
     const binding = { slot: `s_${randomBytes(9).toString("base64url")}`, token: `gse_${randomBytes(32).toString("base64url")}`, meter_id: `m_${randomBytes(12).toString("hex")}` };
     this.slots.set(binding.slot, { tokenHash: hash(binding.token), cell: { ...request.cell, meter_id: binding.meter_id }, models: new Set(request.models), markers: [...(request.forbidden_markers ?? [])], deciders: new Set(request.deciders ?? []), canary: request.canary ?? null, allowanceMicros: request.allowance_micros, committedMicros: 0, inflightMicros: 0, inflightCalls: 0, calls: 0 });
     this.meters.set(binding.meter_id, newMeter(binding.meter_id));
@@ -568,7 +607,7 @@ export class MeteringProxy {
     const slot = match ? this.slots.get(match[1]!) : undefined;
     const credential = presentedCredential(req);
     if (!match || !slot || !sameSecret(slot.tokenHash, credential)) {
-      const markers = [...(this.options.forbiddenMarkers ?? []), ...[...this.slots.values()].flatMap(s => s.markers)];
+      const markers = [...(this.options.forbiddenMarkers ?? []), ...this.slotMarkers];
       const id = match ? maskMarkers(match[1]!, markers) : null;
       const reason = !match ? `no provider route ${quoteClientValue(path, "path", markers)}` : !slot ? `slot ${id} is not open` : `the credential presented is not slot ${id}'s bearer`;
       this.journal({ kind: "refusal", code: "E_SLOT_DENIED", slot: id, reason, source });
@@ -594,12 +633,17 @@ export class MeteringProxy {
     }
   }
 
+  /** Journals a refusal line as refuse() writes it, with no answer and no count on the meter. */
+  private refusalLine(ctx: CallContext, code: ReasonCode, reason: string, extra: Record<string, unknown> = {}): void {
+    this.journal({ kind: "refusal", code, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model || null, reason, source: ctx.source, ...extra });
+  }
+
   private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string, extra: Record<string, unknown> = {}): Response {
     ctx.model = maskMarkers(ctx.model, ctx.marked);
     const m = this.meter(ctx.slot);
     m.refused++;
     if (!m.refusals.includes(code)) m.refusals.push(code);
-    this.journal({ kind: "refusal", code, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model || null, reason, source: ctx.source, ...extra });
+    this.refusalLine(ctx, code, reason, extra);
     return problem(code, status, reason, code === "DR_ALLOWANCE_STOP" ? "allowance_stop" : undefined);
   }
 
@@ -610,19 +654,44 @@ export class MeteringProxy {
     const allowed = ROUTES[provider].find(r => r.method === req.method && r.path.test(route) && (!r.query || r.query.test(new URL(req.url).search)));
     const path = [route, percentDecoded(route)].join("\n");
     const inPath = findLeaks(path, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
+    const zstd = provider === "typesafe" && req.headers.get("content-encoding") === "zstd";
+    /** The request body, zstd-decoded on the TypeSafe route, or null when it cannot be read or decoded. */
+    const readBody = async (): Promise<string | null> => {
+      try {
+        return req.method === "GET" ? "" : zstd ? new TextDecoder().decode(zstdDecompressSync(new Uint8Array(await req.arrayBuffer()), { maxOutputLength: MAX_DECODED_BODY_BYTES })) : await req.text();
+      } catch {
+        return null;
+      }
+    };
+    /** Before an answer the tripwire did not decide: journals what the tripwire finds, without an answer or a count on the meter, and a body_unscannable line for a body that cannot be read (raw null). */
+    const journalMarkers = (raw: string | null) => {
+      if (raw === null) this.journal({ kind: "body_unscannable", meter_id: slot.cell.meter_id, provider, route: ctx.route, reason: `the ${zstd ? "zstd request body cannot be decoded" : "request body cannot be read"}, so only its path, query string and headers were scanned`, source: ctx.source });
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw ?? "");
+      } catch {}
+      const text = tripwireText(req, route, raw ?? "", walkedStrings(parsed));
+      const leaks = findLeaks(text, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
+      const wide = findLeaks(text, o.forbiddenMarkers ?? []).length > 0;
+      const dr = o.allowanceCode === "DR_ALLOWANCE_STOP";
+      if (dr && slot.canary !== null && leaks.includes(slot.canary)) {
+        const runnerOnly = leaks.filter(m => slot.markers.includes(m));
+        this.refusalLine(ctx, "DR_CUSTODY_HIT", custodyReason(runnerOnly.length), hitFields(slot, runnerOnly));
+      } else if (dr && leaks.length && !wide) this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, source: ctx.source, decider: false, ...hitFields(slot, leaks) });
+      if (wide) this.refusalLine(ctx, "E_TRIPWIRE", tripwireReason(leaks.length));
+    };
     if (!allowed) {
       ctx.marked = inPath;
       ctx.route = quoteClientValue(route, "path", inPath);
-      if (inPath.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(path, o.forbiddenMarkers ?? []).length) {
-        const { cell, markers } = hitFields(slot, inPath);
-        if (slot.canary !== null && inPath.includes(slot.canary)) this.journal({ kind: "refusal", code: "DR_CUSTODY_HIT", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, reason: `the request carries ${inPath.length} runner-only marker(s); custody hit, the run stops`, source: ctx.source, cell, markers });
-        else this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, source: ctx.source, decider: false, cell, markers });
-      }
+      journalMarkers(await readBody());
       return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${ctx.route} is not allowlisted`);
     }
     if (inPath.length) ctx.route = quoteClientValue(route, "path", inPath);
     const key = (o.env ?? process.env)[KEY_ENV[provider]];
-    if (!key) return this.refuse(ctx, "E_KEY_MISSING", 503, `${KEY_ENV[provider]} is not set in the proxy's environment`);
+    if (!key) {
+      journalMarkers(await readBody());
+      return this.refuse(ctx, "E_KEY_MISSING", 503, `${KEY_ENV[provider]} is not set in the proxy's environment`);
+    }
     ctx.secrets.push(key);
     const target = `${UPSTREAM[provider]}${route}${new URL(req.url).search}`;
     const headers = new Headers(req.headers);
@@ -653,11 +722,9 @@ export class MeteringProxy {
       return new Response(text, { status: res.status, headers: strip(res) });
     };
 
-    const zstd = provider === "typesafe" && req.headers.get("content-encoding") === "zstd";
-    let raw: string;
-    try {
-      raw = req.method === "GET" ? "" : zstd ? new TextDecoder().decode(zstdDecompressSync(new Uint8Array(await req.arrayBuffer()), { maxOutputLength: MAX_DECODED_BODY_BYTES })) : await req.text();
-    } catch {
+    const raw = await readBody();
+    if (raw === null) {
+      journalMarkers(null);
       return this.refuse(ctx, "E_ALLOWANCE", 400, "the zstd request body cannot be decoded, so it cannot be priced");
     }
     if (zstd) headers.delete("content-encoding");
@@ -668,20 +735,24 @@ export class MeteringProxy {
     } catch {
       isJson = false;
     }
-    const url = new URL(req.url);
-    const headerText = [...req.headers].flat();
-    const channels = [route, percentDecoded(route), url.search, percentDecoded(url.search), ...[...url.searchParams].flat(), ...headerText, ...headerText.map(percentDecoded), raw, ...decodedStrings(parsed)];
-    const text = channels.join("\n");
+    let strings: string[];
+    try {
+      strings = decodedStrings(parsed);
+    } catch (e) {
+      journalMarkers(raw);
+      throw e;
+    }
+    const text = tripwireText(req, route, raw, strings);
     const leaks = findLeaks(text, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
     if (leaks.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(text, o.forbiddenMarkers ?? []).length) {
       const { cell, markers } = hitFields(slot, leaks);
       const asked = (parsed as Record<string, unknown> | null)?.model;
       const decider = typeof asked === "string" && slot.deciders.has(`${provider}:${asked}`);
-      if (slot.canary !== null && leaks.includes(slot.canary)) return this.refuse(ctx, "DR_CUSTODY_HIT", 403, `the request carries ${leaks.length} runner-only marker(s); custody hit, the run stops`, { cell, markers });
+      if (slot.canary !== null && leaks.includes(slot.canary)) return this.refuse(ctx, "DR_CUSTODY_HIT", 403, custodyReason(leaks.length), { cell, markers });
       ctx.marked = leaks;
       const shown = typeof asked === "string" ? quoteClientValue(asked, "model") : null;
       this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: shown !== null && leaks.some(m => shown.includes(m)) ? UNQUOTED : shown, source: ctx.source, decider, cell, markers });
-    } else if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
+    } else if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, tripwireReason(leaks.length));
     if (req.method === "GET") return forwardFree();
     if (!isJson) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body must be a JSON object");
