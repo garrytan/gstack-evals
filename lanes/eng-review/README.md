@@ -19,8 +19,11 @@ session loop. This lane reads and checks them:
 - stophook.ts is smoke rule 2's Stop hook, on only for a run started with --enforce <arm>.
 - run-checks.ts exports runSideChecks(), the run-side cases of section 16 item 4, for the score side's dry run.
 
-**Admission.** An attempt starts only when the settled spend plus the $10 allowance of every attempt in flight plus its
-own $10 allowance fits under --spend-cap. A retry is a new attempt admitted the same way, and one that doesn't fit is a
+**Admission.** An attempt starts only when the settled spend plus the allowance of every attempt in flight plus its own
+allowance fits under --spend-cap, each at its model's allowance (ER_ALLOWANCE_MICROS): $10 for Opus and particle-1, and
+a higher figure for Sol from stage 2 on. The metering proxy reserves each call's input at its request bytes, which ran 5
+to 10 times Sol's real input tokens in stage 1, so Sol attempts that had settled $1 to $2 hit the $10 allowance on
+reservations alone (Captain ruling GSTA-2, 2026-11-10). A retry is a new attempt admitted the same way, and one that doesn't fit is a
 cap stop. The proxy's own cap stop stays. --parallel n (default 1) caps attempts in flight. --spend-cap is the lease the
 launch opens on --item, and the command refuses one larger than the item's recorded cap less its committed spend. The
 shared run loop admits whole rounds at twice their worst case (src/trial/review/run.ts, the round loop), so this lens has

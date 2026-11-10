@@ -8,7 +8,7 @@
 //   the unit's rendered opening, each skill prefix followed by ER_FORCED. Build-time choice: each part sits on its own
 //   line (joined by one newline), since the prereg names the parts and their order but not what joins them.
 // - Settings, frozen for every arm and model: the claude-code-preset system prompt, 200 turns, 90 minutes (5400 s) and a
-//   $10 allowance per attempt, CLAUDE_CODE_DISABLE_1M_CONTEXT=1, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 (the driver sets it
+//   per-attempt allowance of its model (ER_ALLOWANCE_MICROS), CLAUDE_CODE_DISABLE_1M_CONTEXT=1, CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1 (the driver sets it
 //   for every session), WebSearch and WebFetch denied (the driver's DISALLOWED_TOOLS), cap stops on, and
 //   GSTACK_SESSION_KIND=unattended on the three skill arms only. Harbor does not run in review-units, so there is no
 //   HARBOR_TELEMETRY to set.
@@ -25,9 +25,12 @@
 // - Order (seed 20261108): units in the order given; within a unit, its cells (arm, model, pass) sorted by the sha256 of
 //   "20261108/<unit>/<arm>/<model>/<pass>", so the arms interleave and the order does not depend on which other cells
 //   run.
+// - Allowance: $10 an attempt for Opus and particle-1. Sol's is higher from stage 2 on (Captain ruling GSTA-2, 2026-11-10,
+//   option 3): the proxy reserves a call's input at its request bytes, which ran 5 to 10 times Sol's real input tokens in
+//   stage 1, so Sol attempts that had settled $1 to $2 were refused on reservations alone. The proxy is unchanged.
 // - Admission: an attempt starts only when the settled spend plus the allowance of every attempt in flight plus its own
-//   allowance fits under the cap (--spend-cap, the lease this launch opens on the item). A retry is a new attempt
-//   admitted the same way. The proxy's own cap stop stays.
+//   allowance fits under the cap (--spend-cap, the lease this launch opens on the item), each at its model's allowance.
+//   A retry is a new attempt admitted the same way. The proxy's own cap stop stays.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, lstatSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -69,7 +72,13 @@ export const ER_MODELS: Readonly<Record<string, ModelId>> = { "claude-opus-5-5":
 export const ER_SYSTEM_PROMPT = "claude-code-preset" as const;
 export const ER_MAX_TURNS = 200;
 export const ER_TIMEOUT_S = 5400;
-export const ER_ALLOWANCE_MICROS = 10_000_000;
+/** Each model's allowance per attempt, in micro-dollars: the slot allowance its metering proxy binds and what admission counts. */
+export const ER_ALLOWANCE_MICROS: Readonly<Record<string, number>> = { "claude-opus-5-5": 10_000_000, "openai/gpt-6.1-sol": 34_000_000, "particle-ai/particle-1": 10_000_000 };
+export function erAllowance(model: string): number {
+  const micros = ER_ALLOWANCE_MICROS[model];
+  if (micros === undefined) throw new Error("E_MODEL_POLICY: " + model + " has no eng-review allowance");
+  return micros;
+}
 export const ER_SEED = 20261108;
 export const ER_STATE_ROOT_MOUNT = "/work/.gstack-home";
 export const ER_INPUT_MOUNT = "/work/autoplan";
@@ -223,6 +232,6 @@ export function erOrder(units: readonly string[], arms: readonly ArmId[], models
   return units.flatMap((unit) => arms.flatMap((arm) => models.flatMap((model) => Array.from({ length: passes }, (_, i): ErCell => ({ unit, arm, model, pass: i + 1 })))).sort((a, b) => (orderKey(a) < orderKey(b) ? -1 : 1)));
 }
 
-/** The admission rule: settled spend, plus every in-flight attempt's allowance, plus this attempt's, fits under the cap. */
-export const erAdmits = (settled: number, inFlight: number, allowance: number, cap: number): boolean => settled + inFlight * allowance + allowance <= cap;
-export const ER_ADMISSION_RULE = "an attempt starts only when the settled spend plus the $10 allowance of every attempt in flight plus its own $10 allowance fits under --spend-cap; a retry is a new attempt admitted the same way, and one that doesn't fit is a cap stop; the proxy's own cap stop stays";
+/** The admission rule: settled spend, plus the allowances of the attempts in flight (inFlightMicros), plus this attempt's, fits under the cap. */
+export const erAdmits = (settled: number, inFlightMicros: number, allowance: number, cap: number): boolean => settled + inFlightMicros + allowance <= cap;
+export const ER_ADMISSION_RULE = "an attempt starts only when the settled spend plus the allowance of every attempt in flight plus its own allowance fits under --spend-cap; a retry is a new attempt admitted the same way, and one that doesn't fit is a cap stop; the proxy's own cap stop stays" + ", each at its model's allowance: $10 for an Opus or particle-1 attempt and $" + erAllowance("openai/gpt-6.1-sol") / 1e6 + " for a Sol attempt";

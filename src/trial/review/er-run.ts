@@ -6,7 +6,7 @@
 // - Order: eng-review.ts's erOrder. Every attempt runs in a fresh directory, <session>/a1 and <session>/a2, where
 //   <session> is run.ts's sessionDir.
 // - Admission (eng-review.ts erAdmits): the head of the queue starts only when the spend settled in this launch plus
-//   the $10 allowance of every attempt in flight plus its own fits under the cap, with at most --parallel attempts in
+//   the allowance of every attempt in flight plus its own (each its model's, ER_ALLOWANCE_MICROS) fits under the cap, with at most --parallel attempts in
 //   flight. When it doesn't fit, the loop waits for an attempt in flight to settle; with none in flight it is a cap
 //   stop. Attempts start in queue order and a retry goes to the head of the queue. A proxy cap stop (cap_stop) stops the
 //   launch too. Attempts in flight at a stop finish and are journaled; nothing a cap stop ended is retried.
@@ -39,7 +39,7 @@ import { armNamespaces, armTree, slotModels, type HostRig } from "../../skill-ev
 import type { ReadOnlyMount } from "../sandbox.ts";
 import { STATE_ROOT_DIR } from "../state-root.ts";
 import { runTrial } from "../trial.ts";
-import { ER_ALLOWANCE_MICROS, ER_COVERAGE_DIR, ER_MAX_TURNS, ER_REC_USER, ER_REC_USER_SHA256, ER_SKILL, ER_SYSTEM_PROMPT, ER_TEMPLATE_SHA256, ER_TIMEOUT_S, erAdmits, erCellId, erFreeform, erOrder, erPrompt, isSkillArm, type ErCell, type ErSkillArm } from "./eng-review.ts";
+import { ER_COVERAGE_DIR, ER_MAX_TURNS, ER_REC_USER, ER_REC_USER_SHA256, ER_SKILL, ER_SYSTEM_PROMPT, ER_TEMPLATE_SHA256, ER_TIMEOUT_S, erAdmits, erAllowance, erCellId, erFreeform, erOrder, erPrompt, isSkillArm, type ErCell, type ErSkillArm } from "./eng-review.ts";
 import { sessionDir } from "./run.ts";
 
 const sha256 = (t: string) => createHash("sha256").update(t).digest("hex");
@@ -139,7 +139,7 @@ const cellName = (c: ErCell) => c.arm + "/" + c.model + "/" + c.unit + "/p" + c.
 export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string) => void = () => {}): Promise<ErRun> {
   const units = new Map(o.units.map((u) => [u.id, u]));
   const promptOf = (c: ErCell) => erPrompt(c.arm, c.arm === "engphase" ? units.get(c.unit)!.opening?.text ?? null : null);
-  const keyOf = (c: ErCell) => sha256(JSON.stringify({ lens: "eng-review", ...o.keyBase, arm_tree: armTree(rig, c.arm, c.model), prompt: sha256(promptOf(c)), template: ER_TEMPLATE_SHA256, tree: units.get(c.unit)!.tree_sha256, model: c.model, max_turns: ER_MAX_TURNS, timeout_s: ER_TIMEOUT_S, allowance: ER_ALLOWANCE_MICROS, parser: ER_PARSER_SHA256, rec_user: ER_REC_USER_SHA256, enforced: o.enforce === c.arm, policy: o.policy.sha256 }));
+  const keyOf = (c: ErCell) => sha256(JSON.stringify({ lens: "eng-review", ...o.keyBase, arm_tree: armTree(rig, c.arm, c.model), prompt: sha256(promptOf(c)), template: ER_TEMPLATE_SHA256, tree: units.get(c.unit)!.tree_sha256, model: c.model, max_turns: ER_MAX_TURNS, timeout_s: ER_TIMEOUT_S, allowance: erAllowance(c.model), parser: ER_PARSER_SHA256, rec_user: ER_REC_USER_SHA256, enforced: o.enforce === c.arm, policy: o.policy.sha256 }));
   const plan = erOrder(o.units.map((u) => u.id), o.arms, o.models, o.passes);
   const prior = readErJournal(o.out);
   const priorStops = readErStops(o.out);
@@ -164,7 +164,7 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
     const provider = providerOf(o.policy, cell.model);
     if (!provider) throw new Error("E_MODEL_POLICY: " + cell.model + " has no provider in the policy");
     const skillArm = isSkillArm(cell.arm);
-    const binding = await rig.bind({ cell: { run_id: o.runId, arm: cell.arm, task: unit.task, model: cell.model, trial: cell.pass, attempt }, models: slotModels(o.policy, cell.model, null), allowance_micros: ER_ALLOWANCE_MICROS });
+    const binding = await rig.bind({ cell: { run_id: o.runId, arm: cell.arm, task: unit.task, model: cell.model, trial: cell.pass, attempt }, models: slotModels(o.policy, cell.model, null), allowance_micros: erAllowance(cell.model) });
     const sandbox = rig.sandbox(cell.arm, false, cell.model);
     const dir = join(sessionDir(o.out, cell.model, cell.arm, unit.task, cell.pass), "a" + attempt);
     rmSync(dir, { recursive: true, force: true });
@@ -215,6 +215,7 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
   const held = pending.length - queue.length;
   const running = new Set<Promise<void>>();
   let inFlight = 0;
+  let inFlightMicros = 0;
   let stoppedAt: string | null = null;
   const settle = (job: Job, r: Awaited<ReturnType<typeof attemptOnce>>) => {
     const attempts = [...job.before, r.attempt];
@@ -240,21 +241,24 @@ export async function runErUnits(o: ErRunInput, rig: HostRig, log: (line: string
     appendFileSync(erJournal(o.out), JSON.stringify(entry) + "\n");
   };
   while (queue.length && stoppedAt === null) {
-    if (inFlight < o.parallel && erAdmits(settled, inFlight, ER_ALLOWANCE_MICROS, o.cap)) {
+    if (inFlight < o.parallel && erAdmits(settled, inFlightMicros, erAllowance(queue[0]!.cell.model), o.cap)) {
       const job = queue.shift()!;
+      const allowance = erAllowance(job.cell.model);
       inFlight++;
+      inFlightMicros += allowance;
       const p: Promise<void> = attemptOnce(job.cell, job.attempt).then((r) => {
         settled += r.micros;
         settle(job, r);
       }).finally(() => {
         inFlight--;
+        inFlightMicros -= allowance;
         running.delete(p);
       });
       running.add(p);
       continue;
     }
     if (inFlight === 0) {
-      stoppedAt = "the next attempt (" + cellName(queue[0]!.cell) + " a" + queue[0]!.attempt + ") does not fit: $" + (settled / 1e6).toFixed(2) + " settled plus its $" + (ER_ALLOWANCE_MICROS / 1e6).toFixed(2) + " allowance passes the $" + (o.cap / 1e6).toFixed(2) + " cap";
+      stoppedAt = "the next attempt (" + cellName(queue[0]!.cell) + " a" + queue[0]!.attempt + ") does not fit: $" + (settled / 1e6).toFixed(2) + " settled plus its $" + (erAllowance(queue[0]!.cell.model) / 1e6).toFixed(2) + " allowance passes the $" + (o.cap / 1e6).toFixed(2) + " cap";
       break;
     }
     await Promise.race(running);

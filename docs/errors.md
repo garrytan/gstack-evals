@@ -1598,7 +1598,7 @@ Warning. Owner: U20.
 
 ### E_ER_ARM_STOP
 
-Plan-eng-review intentions eval (section 6, gate answer C1): a session stopped itself (context overflow, the 90-minute harness timeout, the 200-turn limit or the $10 allowance) and its one retry under the same named reason stopped too. The session scores 0 on every block score as no-block; a sensitivity read treats it as missing.
+Plan-eng-review intentions eval (section 6, gate answer C1): a session stopped itself (context overflow, the 90-minute harness timeout, the 200-turn limit or its model's per-attempt allowance) and its one retry under the same named reason stopped too. The session scores 0 on every block score as no-block; a sensitivity read treats it as missing.
 
 Fix: Nothing to rerun: the stop is the arm's own outcome. The arm-stop rate prints per cell beside the missing-instead-of-0 sensitivity read.
 

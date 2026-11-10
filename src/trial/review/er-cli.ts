@@ -34,7 +34,7 @@ import { adapterSha256, dockerRig } from "../../skill-eval/cli/run-host.ts";
 import type { ArmSpec } from "../../types.ts";
 import { copyToSink, receiptsSink, volatilePathProblem } from "../durable.ts";
 import { checkImagePin, stateRoot } from "../image.ts";
-import { buildErTree, clonePinProblems, ER_ADMISSION_RULE, ER_ALLOWANCE_MICROS, ER_GSTACK_URL, ER_LENS, ER_MAX_TURNS, ER_MODELS, ER_PINS, ER_REC_USER_SHA256, ER_REPO, ER_SEED, ER_INSTALL_SKILL, ER_SYSTEM_PROMPT, ER_TEMPLATE_SHA256, ER_TIMEOUT_S, erCellId, erOrder, erPrompt, erTaskId, erUnitProblems, erUnitsDigest, installPinProblems, isSkillArm, safeGit, type ErSkillArm } from "./eng-review.ts";
+import { buildErTree, clonePinProblems, ER_ADMISSION_RULE, erAllowance, ER_GSTACK_URL, ER_LENS, ER_MAX_TURNS, ER_MODELS, ER_PINS, ER_REC_USER_SHA256, ER_REPO, ER_SEED, ER_INSTALL_SKILL, ER_SYSTEM_PROMPT, ER_TEMPLATE_SHA256, ER_TIMEOUT_S, erCellId, erOrder, erPrompt, erTaskId, erUnitProblems, erUnitsDigest, installPinProblems, isSkillArm, safeGit, type ErSkillArm } from "./eng-review.ts";
 import { erJournal, erStopsFile, runErUnits, type ErUnit } from "./er-run.ts";
 import { gstackDir } from "./plan.ts";
 import { sessionDir } from "./run.ts";
@@ -52,7 +52,7 @@ export const ER_HELP = [
   "",
   "Arms: none, lens, precut (plan-eng-review at " + ER_PINS.precut.sha.slice(0, 9) + "), engphase (autoplan's Phase 3 at " + ER_PINS.engphase.sha.slice(0, 9) + "),",
   "candidate (/plan-coverage at " + ER_PINS.candidate.sha.slice(0, 9) + "). Models: " + Object.keys(ER_MODELS).join(", ") + ".",
-  "Frozen for every arm and model: the " + ER_SYSTEM_PROMPT + " system prompt, " + ER_MAX_TURNS + " turns, " + ER_TIMEOUT_S / 60 + " minutes, a $" + ER_ALLOWANCE_MICROS / 1e6 + " allowance per attempt,",
+  "Frozen for every arm and model: the " + ER_SYSTEM_PROMPT + " system prompt, " + ER_MAX_TURNS + " turns, " + ER_TIMEOUT_S / 60 + " minutes, an allowance per attempt of $10 (Opus, particle-1) or $" + erAllowance("openai/gpt-6.1-sol") / 1e6 + " (Sol),",
   "a 200,000-token window, bundled skills off, WebSearch and WebFetch denied, GSTACK_SESSION_KIND=unattended on skill arms,",
   "one retry per arm stop or infrastructure failure. Admission: " + ER_ADMISSION_RULE + ".",
   "--enforce <arm> turns on smoke rule 2's Stop hook for that arm. A run needs GSTACK_EVALS_EPHEMERAL=1 and a",
@@ -179,7 +179,7 @@ async function erUnits(argv: string[], io: Io, env: Env): Promise<number> {
   if (pins.length) refuse("the gstack clone " + clone.dir + " does not hold the frozen pins:\n  " + pins.join("\n  "), "pass a fresh clone of " + ER_GSTACK_URL);
   const digest = erUnitsDigest(unitsDir, unitIds);
   const order = erOrder(unitIds, arms, models, passes);
-  const settings = { arms, models, passes, enforce, max_turns: ER_MAX_TURNS, timeout_s: ER_TIMEOUT_S, allowance_usd: ER_ALLOWANCE_MICROS / 1e6, system_prompt: ER_SYSTEM_PROMPT, seed: ER_SEED, units_sha256: digest };
+  const settings = { arms, models, passes, enforce, max_turns: ER_MAX_TURNS, timeout_s: ER_TIMEOUT_S, allowance_usd: Object.fromEntries(models.map((m) => [m, erAllowance(m) / 1e6])), system_prompt: ER_SYSTEM_PROMPT, seed: ER_SEED, units_sha256: digest };
 
   if (dry) {
     const scratch = mkdtempSync(join(tmpdir(), "er-mounts-"));
@@ -199,7 +199,7 @@ async function erUnits(argv: string[], io: Io, env: Env): Promise<number> {
       io.out("mounts: ok; every session sees /work/plan.md and /work/repo only, skill arms add /work/.gstack-home, the eng phase arm adds its rendered inputs read-only; key.json is never mounted and repo/ holds one commit");
       for (const a of arms) io.out("arm " + a + " (" + (isSkillArm(a) ? ER_REPO + "@" + ER_PINS[a].sha + ", default install, unattended" + (enforce === a ? ", Stop hook on" : "") : "no gstack install, no skills folder, no drive mount, no state root") + ")" + (a === "engphase" ? ": prompt per unit, above" : ": prompt sha256 " + sha(erPrompt(a))));
       for (const r of routes) io.out("model " + r.model + " via " + r.provider + (r.routing ? " " + JSON.stringify(r.routing) : ""));
-      io.out("every arm: system prompt " + ER_SYSTEM_PROMPT + "; max turns " + ER_MAX_TURNS + "; timeout " + ER_TIMEOUT_S + " s; allowance " + usd(ER_ALLOWANCE_MICROS) + " per attempt; CLAUDE_CODE_DISABLE_1M_CONTEXT=1; CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1; WebSearch and WebFetch denied; network only through the metering proxy");
+      io.out("every arm: system prompt " + ER_SYSTEM_PROMPT + "; max turns " + ER_MAX_TURNS + "; timeout " + ER_TIMEOUT_S + " s; allowance per attempt " + models.map((m) => m + " " + usd(erAllowance(m))).join(", ") + "; CLAUDE_CODE_DISABLE_1M_CONTEXT=1; CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1; WebSearch and WebFetch denied; network only through the metering proxy");
       io.out("order: seed " + ER_SEED + ", " + order.length + " sessions, each unit's cells interleaved; parallel " + parallel);
       io.out("admission: " + ER_ADMISSION_RULE + "; spend cap " + (cap === null ? "none" : usd(cap)));
       io.out("out " + out + (resume ? " (resume)" : ""));

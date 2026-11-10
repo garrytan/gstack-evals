@@ -44,8 +44,8 @@ describe("eng-review order and admission", () => {
     expect(order.slice(0, 6).map((c) => c.arm).join(",")).not.toBe("none,none,lens,lens,precut,precut");
   });
   test("an attempt starts only when settled plus in-flight allowances plus its own fit under the cap", () => {
-    expect(erAdmits(5_000_000, 1, 10_000_000, 25_000_000)).toBe(true);
-    expect(erAdmits(5_000_001, 1, 10_000_000, 25_000_000)).toBe(false);
+    expect(erAdmits(5_000_000, 10_000_000, 10_000_000, 25_000_000)).toBe(true);
+    expect(erAdmits(5_000_001, 10_000_000, 10_000_000, 25_000_000)).toBe(false);
     expect(erAdmits(0, 0, 10_000_000, 10_000_000)).toBe(true);
     expect(erAdmits(0, 0, 10_000_000, 9_999_999)).toBe(false);
   });
@@ -129,7 +129,7 @@ describe("review-units --plan eng-review", () => {
     expect(code).toBe(0);
     expect(text).toMatch(/eng phase opening sha256 [0-9a-f]{64}/);
     expect(text).toMatch(/mounts: ok/);
-    expect(text).toContain("admission: an attempt starts only when the settled spend plus the $10 allowance of every attempt in flight");
+    expect(text).toContain("admission: an attempt starts only when the settled spend plus the allowance of every attempt in flight plus its own allowance fits under --spend-cap");
     expect(text).toMatch(/model openai\/gpt-6\.1-sol via openrouter .*"only":\["openai"\],"allow_fallbacks":false/);
     expect(text).toMatch(/order: seed 20261108, 15 sessions/);
     expect(existsSync(join(root, "out"))).toBe(false);
