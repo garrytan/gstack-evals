@@ -258,7 +258,8 @@ Record, 2026-11-10, keyless, stub sessions:
   replay of agentscope's P session cuts the waiting summed over entries from 67,951 s to 15,396 s, but the hang entry
   waits 1,688 s instead of 1,486 s and starts its last neutral run at 11,953 s instead of 11,751 s. Runs don't depend on
   other entries' phases either way: each is a fresh container on its own tree commit.
-- Containment: blocky-2016 and agentscope-java-2257 passed with one ref, one commit and no hit.
+- Containment: blocky-2016, gitoxide-2476 and agentscope-java-2257 passed, each with one ref, one commit, no other git
+  directory holding the dataset's base commit and no hit (58,627, 120,274 and 53,466 files read).
 
 ### Driver
 
