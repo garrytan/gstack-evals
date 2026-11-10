@@ -38,7 +38,7 @@ export interface SmUnit {
   /** Set at prep (fixsplit.ts): fix-source.patch holds the fix's non-test hunks, fix-tests.patch the hunks wholly inside
    *  in-source test modules (applied only with test.patch); in_source_tests is true when that file is not empty. */
   split?: { in_source_tests: boolean; test_hunks: number; source_files: string[] };
-  oracle: null | { runs: OracleRun[]; stable: string[]; stable_sha256: string; f2p?: string[]; f2p_removed?: { count: number; ids: string[]; reason: string }; f2p_flaky?: { count: number; ids: string[]; reason: string }; targets?: TargetReading; reason?: string; f2p_ok: boolean; max_wall_ms: number; verdict: string; smoke: { claude_version: string; egress_probe: string; verdict: string } | null; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } | null; history: string | null; rebuild_rule?: { applies: boolean; fixed_rebuild_exits: number[][] } };
+  oracle: null | { runs: OracleRun[]; stable: string[]; stable_sha256: string; f2p?: string[]; f2p_removed?: { count: number; ids: string[]; reason: string }; f2p_flaky?: { count: number; ids: string[]; reason: string }; ambiguous?: { f2p: string[]; stable: number }; targets?: TargetReading; reason?: string; f2p_ok: boolean; max_wall_ms: number; verdict: string; smoke: { claude_version: string; egress_probe: string; verdict: string } | null; leak: { needles: number; hits: { path: string; needle_sha256: string }[] } | null; history: string | null; rebuild_rule?: { applies: boolean; fixed_rebuild_exits: number[][] } };
   files: Record<string, string>;
   /** The report paths read from the print command (reports.ts), recorded by the oracle. */
   reports?: PrintReading;

@@ -1691,6 +1691,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_SM_AMBIGUOUS_TEST: {
+    exit: 1,
+    meaning: "The oracle preflight (post section 3) dropped a Go unit: every dataset fail-to-pass id is a bare test name (no package path before it) whose top-level test func more than one package dir defines, so the dataset parser's result for that name can be another package's. A Go unit also drops this way when the scan for those funcs does not finish (fail closed). The record lists the ids.",
+    fix: "Nothing to fix: the unit drops and the next unit in draw order is tried.",
+    side_effects: NO_SPEND,
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   E_SM_ORACLE_UNSTABLE: {
     exit: 1,
     meaning: "The oracle preflight (post section 3) dropped the unit: a fail-to-pass test passed in a base run or did not pass in a fixed run across the three base and three fixed runs, or no test passed in all six runs (no stable test). The record lists the failing ids.",

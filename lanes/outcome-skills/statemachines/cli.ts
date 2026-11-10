@@ -6,9 +6,9 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CODES, docAnchor, isReasonCode } from "../../../src/errors/codes.ts";
-import { draw, fill, readPrereg, type Draw, type DrawUnit } from "./draw.ts";
+import { draw, readPrereg, type Draw, type DrawUnit } from "./draw.ts";
 import { hiddenMarkdown, hiddenUnit, inSourceUnits, staticCounts, type HiddenRecord } from "./hidden.ts";
-import { oracleUnit, Pacer } from "./oracle.ts";
+import { oracleUnit, oracleWalk, Pacer } from "./oracle.ts";
 import { sample } from "./sample.ts";
 import { screen } from "./screen.ts";
 import { fetchMultiLang, manifestSize, pinCandidates, readRows, splitCandidates, type Candidate } from "./source.ts";
@@ -266,26 +266,20 @@ export async function main(argv: string[]): Promise<number> {
       const units = need(f, "--units"), cands = loadCands(need(f, "--candidates"));
       const pacer = new Pacer(need(f, "--pull-log"), Number(f.get("--pulls-per-hour") ?? 60));
       mkdirSync(units, { recursive: true });
-      const drops: Record<string, number> = {}, infra: Record<string, number> = {};
-      const res = await fill(d, async (id) => {
+      const w = await oracleWalk(d, async (id) => {
         const dir = join(units, id);
         const c = cands.find((x) => x.id === id)!;
         if (!existsSync(dir)) writeUnit(dir, c, rowFor(c, f));
         const prior = readUnit(dir).oracle?.verdict;
         const v = prior && prior !== "running" && prior !== "E_SM_INFRA_GAP" ? { id, verdict: prior, detail: "recorded" } : await oracleUnit(dir, pacer);
         console.log("ORACLE " + id + " " + v.verdict + " " + v.detail.replace(/\n/g, " ").slice(0, 300));
-        if (v.verdict === "E_SM_INFRA_GAP") {
-          infra[c.lang] = (infra[c.lang] ?? 0) + 1;
-          return "infra";
-        }
-        const why = v.verdict === "E_SM_ORACLE_UNSTABLE" ? v.verdict + ": " + (readUnit(dir).oracle?.reason ?? "not recorded") : v.verdict;
-        if (v.verdict !== "kept") drops[why] = (drops[why] ?? 0) + 1;
-        return v.verdict === "kept";
+        return { verdict: v.verdict, lang: c.lang, reason: readUnit(dir).oracle?.reason };
       }, { retry: f.has("--retry") });
+      const res = w.fill;
       writeFileSync(join(units, "fill.json"), JSON.stringify(res, null, 1) + "\n");
-      console.log("admission=" + res.admission.length + " state=" + res.state.length + " other=" + res.other.length + " reserve=" + res.reserve.length + " retry=" + res.retry.length + " drops=" + JSON.stringify(drops));
-      for (const [lang, n] of Object.entries(infra)) console.log("infra_errors " + lang + "=" + n + " (neither kept nor dropped; rerun resumes them)");
-      if (!res.infra.length) return 0;
+      console.log("admission=" + res.admission.length + " state=" + res.state.length + " other=" + res.other.length + " reserve=" + res.reserve.length + " retry=" + res.retry.length + " drops=" + JSON.stringify(w.drops));
+      for (const [lang, n] of Object.entries(w.infra)) console.log("infra_errors " + lang + "=" + n + " (neither kept nor dropped; rerun resumes them)");
+      if (w.final) return 0;
       console.error("E_SM_INFRA_GAP the fill is not final: " + res.infra.join(", ") + " hit an infra error, neither kept nor dropped; rerun sm oracle to resume them");
       return 2;
     }

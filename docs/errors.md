@@ -210,6 +210,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_MIXED_TEST_HUNK](#e_sm_mixed_test_hunk) | 1 | U20 |
 | [E_SM_LEAKED](#e_sm_leaked) | 1 | U20 |
 | [E_SM_HISTORY](#e_sm_history) | 1 | U20 |
+| [E_SM_AMBIGUOUS_TEST](#e_sm_ambiguous_test) | 1 | U20 |
 | [E_SM_ORACLE_UNSTABLE](#e_sm_oracle_unstable) | 1 | U20 |
 | [E_SM_SLOW_TEST](#e_sm_slow_test) | 1 | U20 |
 | [E_SM_SMOKE](#e_sm_smoke) | 1 | U20 |
@@ -332,6 +333,14 @@ Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 The commit-count preflight or the history rewrite refused (post section 4): the image's tree was not at base_commit or its tracked files differed, the rewrite failed, or the tree does not hold exactly one commit on a base tree (two on a follow-on tree) on main alone with no remote, stash, reflog or loose object.
 
 Fix: The unit or tree drops before any model call. Read the PREFLIGHT line in the message.
+
+Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_SM_AMBIGUOUS_TEST
+
+The oracle preflight (post section 3) dropped a Go unit: every dataset fail-to-pass id is a bare test name (no package path before it) whose top-level test func more than one package dir defines, so the dataset parser's result for that name can be another package's. A Go unit also drops this way when the scan for those funcs does not finish (fail closed). The record lists the ids.
+
+Fix: Nothing to fix: the unit drops and the next unit in draw order is tried.
 
 Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
 
