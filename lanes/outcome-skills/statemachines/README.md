@@ -457,6 +457,10 @@ model or unit (E_SM_PACKET).
   reportDirs). It skips a directory the test command makes itself, an absolute path, a .. step, a glob in the
   directory (a glob file name gives its parent) and any path whose nearest existing parent resolves outside the tree.
   Each created directory gets an SM_MKDIR line; the run's created_dirs and the oracle record list them.
+- Commands read no stdin (pre-data build change, 2026-11-09): the run script reaches bash -s on stdin, so a command
+  that reads stdin (ant, mvn, gradle, npx) swallowed the rest of the script and later commands never ran
+  (gwtproject__gwt-10054: ant test never ran). 219 of the 1,077 cached rows start one of those tools, all 160 Java rows
+  among them. Every rebuild, test and print command now reads its stdin from /dev/null.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

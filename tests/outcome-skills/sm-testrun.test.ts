@@ -140,3 +140,18 @@ describe.skipIf(!on)("report directories the test command writes into (docker)",
     }
   }, 180_000);
 });
+
+describe.skipIf(!on)("commands read no stdin (docker)", () => {
+  test("in the container a command that reads stdin no longer swallows the later commands", () => {
+    const vol = "sm-test-stdin-" + process.pid;
+    docker(["volume", "create", vol]);
+    try {
+      const t = runTests({ image: PY_IMAGE, volume: vol, repoDir: "/w", mode: "root", label: "stdin", commands: { rebuild: ["cat > /dev/null"], test: ["cat > /dev/null", "echo 't1 pass' > out.log"], print: ["cat out.log"] } });
+      expect(t.exits).toEqual([0, 0, 0]);
+      expect(t.reports).toMatchObject({ fresh: 1 });
+      expect(t.log).toBe("t1 pass\n");
+    } finally {
+      docker(["volume", "rm", "-f", vol]);
+    }
+  }, 180_000);
+});

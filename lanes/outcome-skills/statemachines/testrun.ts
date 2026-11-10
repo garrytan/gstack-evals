@@ -52,9 +52,10 @@ const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
  *  mark (file times tick coarsely, so a file as new as the mark is fresh), so the print command reads only reports this run wrote, and writes the counts on an SM_REPORTS line.
  *  Between the deletion and the mark it creates, as the run user, each report directory the test commands write into
  *  (reports.ts reportDirs) that is missing, only where its nearest existing parent resolves inside repoDir, and writes an
- *  SM_MKDIR line for each one it created. */
+ *  SM_MKDIR line for each one it created. Every rebuild, test and print command reads its stdin from /dev/null, because the
+ *  script itself reaches bash -s on stdin and a command that reads stdin (ant, mvn, gradle, npx) would swallow the rest. */
 export function runScript(c: { rebuild: string[]; test: string[]; print: string[] }, repoDir: string): string {
-  const cmd = (x: string) => "( " + x + " )\necho \"SM_EXIT $?\" >&2";
+  const cmd = (x: string) => "( " + x + " ) </dev/null\necho \"SM_EXIT $?\" >&2";
   const paths = printReading(c).paths;
   const mk = reportDirs(c).map((d) => '( cd "$SM_WD"' + (d.cwd ? " && cd " + sq(d.cwd) : "") + ' 2>/dev/null && sm_d="$(pwd -P)"/' + sq(d.dir) + ' && ! [ -e "$sm_d" ] && ! [ -L "$sm_d" ] && sm_a=$sm_d && while [ -n "$sm_a" ] && ! [ -e "$sm_a" ] && ! [ -L "$sm_a" ]; do sm_a=${sm_a%/*}; done && sm_a=$(cd "${sm_a:-/}" 2>/dev/null && pwd -P) && [ -n "$SM_REPOP" ] && case $sm_a/ in "$SM_REPOP"/*) mkdir -p -- "$sm_d" && printf "SM_MKDIR %s\\n" "${sm_d#"$SM_REPOP"/}";; esac ) || true');
   const start = paths.length
@@ -76,7 +77,7 @@ export function runScript(c: { rebuild: string[]; test: string[]; print: string[
         'echo "SM_REPORTS deleted=$SM_DEL kept=$SM_KEPT refused=$SM_REF unhidden=$SM_UNHID fresh=$SM_FRESH" >&2',
       ]
     : [];
-  return ["exec 3>&1 1>&2", ...start, ...c.rebuild.map(cmd), ...c.test.map(cmd), ...end, "exec 1>&3", "echo " + PRINT_MARK, ...c.print.map((x) => "( " + x + " )"), ""].join("\n");
+  return ["exec 3>&1 1>&2", ...start, ...c.rebuild.map(cmd), ...c.test.map(cmd), ...end, "exec 1>&3", "echo " + PRINT_MARK, ...c.print.map((x) => "( " + x + " ) </dev/null"), ""].join("\n");
 }
 
 /** The stale report counts: untracked report files deleted at the start, report files kept there (tracked, or outside the

@@ -217,3 +217,22 @@ describe("report directories the test command writes into (run)", () => {
     expect(existsSync(join(d, "r"))).toBe(false);
   });
 });
+
+describe("commands read no stdin", () => {
+  test("a command that reads stdin no longer swallows the rest of the script, so a later command runs", () => {
+    const d = bare();
+    const t = run(d, { rebuild: ["cat > /dev/null"], test: ["cat > /dev/null; echo 't1 PASSED' > out.log"], print: ["cat > /dev/null; cat out.log"] });
+    expect(t.exits).toEqual([0, 0]);
+    expect(t.reports).toMatchObject({ fresh: 1 });
+    expect(t.built_nothing).toBeNull();
+    expect(t.log).toBe("t1 PASSED\n");
+  });
+  test("a command that reads nothing behaves as before", () => {
+    const d = bare();
+    const t = run(d, { rebuild: ["true"], test: ["echo 't1 PASSED' > out.log", "exit 4"], print: ["cat out.log"] });
+    expect(t.exits).toEqual([0, 0, 4]);
+    expect(t.reports).toEqual({ deleted: 0, kept: 0, refused: 0, unhidden: 0, fresh: 1 });
+    expect(t.built_nothing).toBeNull();
+    expect(t.log).toBe("t1 PASSED\n");
+  });
+});
