@@ -3,14 +3,17 @@
 LanebHooksAgent runs as in a trial with only Harbor stubbed: the pinned claude-agent-sdk on the host, Claude Code in a
 running arm container through the agent's docker exec -i wrapper, the arm tar extracted (after the snapshot strip when
 strip is on) by the agent's own _inject_arm, and its _preflight and _teardown. The proxy is replaced by the stub model
-(fake-model.ts), so the session token is a stand-in and no key reaches the container. Run by sessions.ts with the pinned
-SDK's python and PYTHONPATH at quick/laneb/runner/agent.
+(fake-model.ts), so the session token is a stand-in and no key reaches the container. Run by sessions.ts and session-path.ts
+with the pinned SDK's python and PYTHONPATH at quick/laneb/runner/agent. workdir is the agent's option (/testbed when
+unset; "" is a trial's, where every docker exec runs in the image's WORKDIR), and after_inject is a shell command run in
+the container after _inject_arm and before the session.
 
-    python sessions-driver.py '<json: case, arm, tar, strip, told, container, base_url, instruction, out>'
+    python sessions-driver.py '<json: case, arm, tar, strip, told, container, base_url, instruction, out[, checks_trust, workdir, after_inject]>'
 """
 
 import asyncio
 import json
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -60,13 +63,15 @@ a = lh.LanebHooksAgent.__new__(lh.LanebHooksAgent)
 a.options = types.SimpleNamespace(
     persona_path=str(REPO / "quick/laneb/runner/agent/persona.json"), arm=SPEC["arm"], arm_tar=SPEC["tar"], arm_sha256="", strip_snapshot=SPEC["strip"],
     control_url="http://127.0.0.1:9", session_cap_usd=5.0, wrapper_path=str(REPO / "quick/laneb/runner/prompt-wrapper.md"), upstream_model="claude-opus-5-5",
-    repo_dir="/testbed", workdir="/testbed", max_output_tokens=32000, sdk_max_turns=30, close_timeout_sec=30, system_prompt="claude-code-preset",
+    repo_dir="/testbed", workdir=SPEC.get("workdir", "/testbed"), max_output_tokens=32000, sdk_max_turns=30, close_timeout_sec=30, system_prompt="claude-code-preset",
     session_kind="", told_skill=SPEC["told"], procedure_line="", closing_line="hm-status", checks_trust=SPEC.get("checks_trust", False),
 )
 a.logs_dir = out / "agent"
 a.logs_dir.mkdir(parents=True, exist_ok=True)
 a._container_id = lambda environment: SPEC["container"]
 a._arm_info = a._inject_arm(SPEC["container"])
+if SPEC.get("after_inject"):
+    subprocess.run(["docker", "exec", SPEC["container"], "sh", "-c", SPEC["after_inject"]], check=True, timeout=120)
 a._preflight(SPEC["container"])
 asyncio.run(a.run(SPEC["instruction"], types.SimpleNamespace(session_id=SPEC["case"]), types.SimpleNamespace()))
 print(json.dumps({"case": SPEC["case"], "arm_info": a._arm_info}))

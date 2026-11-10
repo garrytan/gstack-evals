@@ -31,8 +31,20 @@ export const HM = {
 } as const;
 
 // Ledger items and their caps in USD (section 22). The crew's 400 is not a ledger item.
-export const CAPS_USD = { "stage1-opus": 150, "stage1-sol": 180, "stage1-p1": 70, "stage2-replay": 90, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
-export const ledgerCapsUsd = () => Object.values(CAPS_USD).reduce((a, b) => a + b, 0);
+export const CAPS_USD = { "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-p1": 70, "stage2-replay": 90, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 } as const;
+// Deviation D3 (ruling A on Stage 1's WORKDIR defect): at 6aeabc2 the image build failed before any model call for every
+// arm of these 23 calibration tasks, in stage1-opus's two parts. stage1-opus's ledger is bound to that run, so it closed
+// at $28.314616 settled, and the 92 cells rerun on stage1-opus-r2, whose cap is the rest of stage1-opus's $150 and sits
+// inside it (CARVED), so the caps still sum to 2,480. The rerun is section 13's one attempt for those cells. The tasks
+// are in the screened calibration list's order (ef74c5c6).
+export const STAGE1_OPUS_R2_TASKS = [
+  "BerriAI__litellm-16526", "astropy__astropy-18868", "schemathesis__schemathesis-3388", "astropy__astropy-18958", "BerriAI__litellm-16487", "BerriAI__litellm-16275",
+  "getmoto__moto-9590", "BerriAI__litellm-16315", "sympy__sympy-28564", "sympy__sympy-28639", "schemathesis__schemathesis-3195", "astropy__astropy-18818",
+  "marimo-team__marimo-6819", "imperialcollegelondon__pyrealm-593", "delgan__loguru-1425", "dstackai__gpuhunt-197", "sympy__sympy-28790", "yt-project__unyt-628",
+  "spack__spack-51723", "scientific-python__docstub-123", "holoviz__holoviews-6783", "omni-us__jsonargparse-781", "sympy__sympy-28467",
+];
+export const CARVED: Partial<Record<keyof typeof CAPS_USD, keyof typeof CAPS_USD>> = { "stage1-opus-r2": "stage1-opus" };
+export const ledgerCapsUsd = () => Object.entries(CAPS_USD).filter(([k]) => !Object.hasOwn(CARVED, k)).reduce((a, [, b]) => a + b, 0);
 // The ledger items' caps plus the crew's: 2,880 inside the 3,000 line.
 export const capsTotalUsd = () => ledgerCapsUsd() + HM.crewCapUsd;
 // Section 10's replay: the item counts, the route sources, the kappa bar, the tuning tolerance (1 point of balanced
@@ -216,7 +228,7 @@ export const UBI_RUNNER = { file: "quick/laneb/l1/ubi-runner.sh", sha256: "c040c
 // D1 (pre-data harness amendment): the lines every arm's task image gets after Lane B's runtime copy, through L1's profile
 // and prepare-run.ts (TASK_SETUP), and that the task-fit screen and the d1-checks dry-run step apply. One file, read at
 // this sha256: its one ENV PATH line (the env directories before $PATH, envDirs) and its one RUN line (the origin).
-export const TASK_SETUP = { file: join(REPO, "lanes/harness-mechanics/task-setup.Dockerfile"), sha256: "36176e42ecab7a5548bf9a0f2b1cf3922fd54398d151b7b01c2e314c93feb00b" };
+export const TASK_SETUP = { file: join(REPO, "lanes/harness-mechanics/task-setup.Dockerfile"), sha256: "31a1f215444f62b0fa3786ce10326ae9120a438dc34f12be574d47f95cf41cc9" };
 export function taskSetup(): { text: string; path: string; envDirs: string[]; run: string } {
   const text = readFileSync(TASK_SETUP.file, "utf8");
   if (sha256(text) !== TASK_SETUP.sha256) throw new Error("E_HM_PIN " + TASK_SETUP.file + " has sha256 " + sha256(text) + ", not the pinned " + TASK_SETUP.sha256);

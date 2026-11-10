@@ -2,8 +2,7 @@
 // Dry-run step d1-checks, live with Docker and HM_GSTACK at the pin: D1's build check that /verify's loop selects tests
 // and prints a CHECK line on two tasks. It tries D1_TASK first, then calibration tasks in calibration.txt order, each from
 // a repository not tried yet, and stops once D1.pass tasks pass or D1.maxTasks have been tried. For each task it builds
-// the image FROM the pinned task image with the task workdir, Lane B's runtime PATH line and task-setup.Dockerfile,
-// checks that origin/main is HEAD and pytest resolves in the task's env, extracts the prose tar, makes a one-line edit
+// the trial's own image (the environment directory prepare-run writes, with no line added), checks that origin/main is HEAD and pytest resolves in the task's env, extracts the prose tar, makes a one-line edit
 // (EDIT_RULE), runs the loop before trust (it must refuse with CHECKS_CONSENT_REQUIRED), runs laneb_hooks.py's
 // CHECKS_TRUST, counts the test files gstack's pregate selection picks and runs the loop command from the pin's
 // verify/SKILL.md (which prints no count). A task passes with one or more selected test files and a CHECK tests PASS or
@@ -16,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StepResult } from "./dryrun.ts";
 import { bundleLists, REPO, SCREEN, taskSetup } from "./pins.ts";
-import { gstackAtPin, imageRef, pool } from "./screen.ts";
+import { gstackAtPin, imageRef, pool, trialEnvironment } from "./screen.ts";
 
 export const D1_TASK = "tobymao__sqlglot-6413";
 export const D1 = { pass: 2, maxTasks: 4, maxSelected: 300 };
@@ -62,8 +61,10 @@ export function d1Order(calibration: string[], repoOf: (t: string) => string | u
 type Problem = { problem: string };
 
 // The per-task rig d1-checks and hm fit share: Docker, the pin's loop and trust, the task setup, gstack's own selection
-// probe, the arm tars, and the steps that build, start, check and clean a task's containers, logging every exec.
-export function d1Rig(gstackDir?: string) {
+// probe, the arm tars, and the steps that build, start, check and clean a task's containers, logging every exec. image
+// "trial" (d1-checks) builds the trial's own environment directory (screen.ts trialEnvironment); "fit" (hm fit, whose
+// frozen rows were made so) builds the pinned task image with WORKDIR /testbed, Lane B's PATH line and the task setup.
+export function d1Rig(gstackDir?: string, image: "fit" | "trial" = "fit") {
   const docker = process.env.HM_DOCKER ?? "docker";
   const last = (s: string) => (s.trim().split("\n").at(-1) ?? "").slice(0, 200);
   const dk = (args: string[], timeoutSec = 600) => { const p = Bun.spawnSync([docker, ...args], { stdout: "pipe", stderr: "pipe", timeout: timeoutSec * 1000 }); return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() }; };
@@ -86,10 +87,10 @@ export function d1Rig(gstackDir?: string) {
     log.push("$ " + c + ": " + script, "exit " + r.code, r.out.trimEnd(), r.err.trimEnd());
     return r;
   };
-  const build = (tag: string, text: string) => {
+  const build = (tag: string, t: string, ref: string) => {
     const ctx = mkdtempSync(join(tmpdir(), "hm-d1-"));
-    writeFileSync(join(ctx, "Dockerfile"), text);
-    const b = dk(["build", "-q", "-t", tag, ctx], 1800);
+    if (image === "fit") writeFileSync(join(ctx, "Dockerfile"), ["FROM " + ref, "WORKDIR " + SCREEN.workdir, lanebPath, s.text].join("\n"));
+    const b = dk(["build", "-q", "-t", tag, image === "fit" ? ctx : trialEnvironment(t, join(ctx, "trial"))], 1800);
     rmSync(ctx, { recursive: true, force: true });
     if (b.code !== 0) throw new Error("docker build " + tag + " failed: " + last(b.err));
     images.push(tag);
@@ -114,7 +115,7 @@ export function d1Rig(gstackDir?: string) {
     const pull = dk(["pull", "-q", ref], 3600);
     if (pull.code !== 0) throw new Error(t + ": pull failed: " + last(pull.err));
     images.push(ref);
-    build(tag, ["FROM " + ref, "WORKDIR " + SCREEN.workdir, lanebPath, s.text].join("\n"));
+    build(tag, t, ref);
     start(c, tag, "prose");
     origin(c);
     const py = pytest(c), inEnv = s.envDirs.some((d) => py.startsWith(d + "/"));
@@ -128,7 +129,7 @@ export function d1Rig(gstackDir?: string) {
 export type Rig = Exclude<ReturnType<typeof d1Rig>, Problem>;
 
 export function stepD1Checks(out: string): StepResult {
-  const r = d1Rig();
+  const r = d1Rig(undefined, "trial");
   if ("problem" in r) return { pass: false, detail: r.problem };
   const { last, log, loop, trust, s, exec, start, origin, pytest, clean } = r;
   const p = pool(), order = d1Order(bundleLists().calibration, (t) => p.get(t)?.repo);

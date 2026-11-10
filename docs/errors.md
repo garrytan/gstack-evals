@@ -1029,7 +1029,7 @@ Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_HM_INPUT
 
-A harness mechanics input does not hold (lanes/harness-mechanics): a prereg attachment is not at its front-matter sha256, a split list has the wrong length or names a task twice, the judge lists are not the first tasks of their splits, the task-fit screen's lists are not at HM_SCREENED_SHA256 or name a task outside their split and the spares, or the fit rows given to admission --fit are not at --fit-sha256 or name a task twice.
+A harness mechanics input does not hold (lanes/harness-mechanics): a prereg attachment is not at its front-matter sha256, a split list has the wrong length or names a task twice, the judge lists are not the first tasks of their splits, the task-fit screen's lists are not at HM_SCREENED_SHA256 or name a task outside their split and the spares, or the fit rows given to admission --fit are not at --fit-sha256 or name a task twice, or stage1-opus-r2 names a task outside the screened calibration list.
 
 Fix: Fix the named input and run the command again. Never edit a frozen file to make it match.
 

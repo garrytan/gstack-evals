@@ -14,11 +14,12 @@ import { patternsCommand } from "./score.ts";
 import { approve, isItem, launchGuard, markDone, type HmCrew, type Item } from "./money.ts";
 import { readRows } from "../../quick/laneb/runner/ledger.ts";
 import { fit, fitTasks, fitVm } from "./fit.ts";
+import { buildCheckCommand } from "./build-check.ts";
 import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
@@ -63,6 +64,7 @@ export async function main(argv: string[]): Promise<number> {
     if (cmd === "guard") { if (!rest[0]) throw new Error(USAGE); guard(resolve(rest[0])); return 0; }
     if (cmd === "screen") { const out = opt("out"); if (!out) throw new Error(USAGE); for (const l of screenCommand(resolve(out), () => {}).lines) console.log(l); return 0; }
     if (cmd === "fit") { const out = opt("out"); if (!out) throw new Error(USAGE); const rows = fit(resolve(out), fitTasks(opt("only"))); console.log("fit " + rows.length + " rows in " + join(resolve(out), "fit.jsonl") + ", summary in fit.md"); return 0; }
+    if (cmd === "build-check") { const out = opt("out"); if (!out) throw new Error(USAGE); return buildCheckCommand(resolve(out)); }
     if (cmd === "fit-vm") { if (!rest[0] || !rest[1]) throw new Error(USAGE); return fitVm(rest[0], resolve(rest[1])); }
     if (cmd === "screen-vm") { if (!rest[0] || !rest[1]) throw new Error(USAGE); return screenVm(rest[0], resolve(rest[1])); }
     if (cmd && LAUNCHER.includes(cmd)) {

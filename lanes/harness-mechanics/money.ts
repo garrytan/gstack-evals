@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { hostTtlHours, itemCheck, L1, plannedCells, relaunchRects, type PartPlan } from "../../quick/laneb/l1/l1.ts";
 import { appendRow, fromMicros, Ledger, readRows, toMicros, type Row } from "../../quick/laneb/runner/ledger.ts";
 import type { HmArm, HmSessionRow } from "../../src/types.ts";
-import { bundleLists, CAPS_USD, HM, JUDGE, MODELS, NO_GSTACK, RATES_USD, REPLAY, VM_HOURS_PER_SESSION, type ModelKey } from "./pins.ts";
+import { bundleLists, CAPS_USD, CARVED, HM, JUDGE, MODELS, NO_GSTACK, RATES_USD, REPLAY, VM_HOURS_PER_SESSION, type ModelKey } from "./pins.ts";
 import { ITEMS, itemPlan } from "./plans.ts";
 import { hmRow } from "./table.ts";
 
@@ -71,10 +71,12 @@ export function crewMicros(crew: HmCrew) {
 }
 
 // The line all-in: each item's settled and open spend, an item not done at the larger of that and its cap, plus the crew.
+// A carved item (CARVED) has its cap inside its parent's, so it counts at its spent until the parent is done.
 export function lineCheck(ledgers: Partial<Record<Item, Row[]>>, crew: HmCrew) {
   const items = (Object.keys(CAPS_USD) as Item[]).map((item) => {
-    const t = itemTotals(ledgers[item] ?? [], item), spent = t.settled + t.open;
-    return { item, ...t, counted: t.done ? spent : Math.max(t.cap, spent) };
+    const t = itemTotals(ledgers[item] ?? [], item), spent = t.settled + t.open, parent = CARVED[item];
+    const capped = !t.done && (!parent || itemTotals(ledgers[parent] ?? [], parent).done);
+    return { item, ...t, counted: capped ? Math.max(t.cap, spent) : spent };
   });
   const crewSpent = crewMicros(crew), total = items.reduce((x, i) => x + i.counted, 0) + crewSpent;
   return { items, crew: crewSpent, total, line: toMicros(HM.lineUsd), fits: total <= toMicros(HM.lineUsd) };
@@ -114,6 +116,9 @@ export function launchGuard(item: string, ledgers: Partial<Record<Item, Row[]>>,
   const done = line.items.find((i) => i.item === item)!.done;
   const why: string[] = [];
   if (done) why.push(item + " is marked done; a done item never launches again");
+  const parent = CARVED[item], pt = parent ? itemTotals(ledgers[parent] ?? [], parent) : null;
+  if (parent && !pt!.done) why.push(item + "'s cap sits inside " + parent + "'s, so it launches only once " + parent + " is marked done");
+  else if (parent && pt!.settled + toMicros(CAPS_USD[item]) !== toMicros(CAPS_USD[parent])) why.push(item + "'s cap " + usd(toMicros(CAPS_USD[item])) + " is not " + parent + "'s cap less its settled " + usd(pt!.settled));
   if (!line.fits) why.push("the line: all-in " + usd(line.total) + " (items " + usd(line.total - line.crew) + " with each item not done at its cap, crew " + usd(line.crew) + ") passes " + usd(line.line));
   if (!c1.fits) why.push("C1: " + item + "'s projection " + usd(c1.total) + " (model " + usd(c1.model) + " with the " + usd(c1.parallel) + " parallel reserve, VM share " + usd(c1.vm) + ") passes its cap " + usd(c1.cap) + " by " + usd(c1.total - c1.cap));
   const lines = [

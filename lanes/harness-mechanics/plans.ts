@@ -3,13 +3,14 @@
 // (quick/laneb/l1/l1.ts). Each part is one launch; a task's arms run in one part, in the seeded order L1's seeded() gives.
 import { plannedCells, prefixOf, seeded, type ItemDef, type PartPlan, type Profile, type Rect } from "../../quick/laneb/l1/l1.ts";
 import type { HmArm } from "../../src/types.ts";
-import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, TARS, TASK_SETUP, type ModelKey } from "./pins.ts";
+import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, STAGE1_OPUS_R2_TASKS, TARS, TASK_SETUP, type ModelKey } from "./pins.ts";
 
 const item = (m: ModelKey, capUsd: number): ItemDef => ({ capUsd, taskSet: "swerebench-r3a4", cells: MODELS[m].cells, allowanceUsd: MODELS[m].allowanceUsd, model: MODELS[m].id });
 // stage3-pilot is one item with one part per model: one ledger item binds one run, and a part runs one model's cells. Its
 // allowance for L1's cap-stop check is the largest of the three models', which can only make a stop more likely.
 export const ITEMS: Record<string, ItemDef> = {
   "stage1-opus": item("opus", CAPS_USD["stage1-opus"]),
+  "stage1-opus-r2": item("opus", CAPS_USD["stage1-opus-r2"]),
   "stage1-sol": item("sol", CAPS_USD["stage1-sol"]),
   "stage1-p1": item("p1", CAPS_USD["stage1-p1"]),
   "stage3-pilot": item("opus", CAPS_USD["stage3-pilot"]),
@@ -25,6 +26,7 @@ export function itemPlan(name: string, s: { scored: string[]; calibration: strin
   const part = (p: string, rects: Rect[], extra: Partial<PartPlan> = {}): PartPlan => ({ name: p, prefix: prefixOf(name, p), rects: seeded(rects.filter((r) => r.tasks.length), HM.seed), ...extra });
   let parts: PartPlan[];
   if (/^stage1-(opus|sol|p1)$/.test(name)) parts = chunks(s.calibration, HM.partTasks).map((tasks, i) => part("s1-" + (i + 1), [{ tasks, arms: FOUR, attempts: 1 }]));
+  else if (name === "stage1-opus-r2") parts = [part("r2-1", [{ tasks: STAGE1_OPUS_R2_TASKS, arms: FOUR, attempts: 1 }])];
   else if (name === "stage3-pilot") {
     const pilot = s.calibration.slice(0, HM.splits.judgePilot);
     parts = (Object.keys(MODELS) as ModelKey[]).map((m) => part("pilot-" + m, [{ tasks: pilot, arms: JUDGE, attempts: 1 }], { model: MODELS[m].id, cells: MODELS[m].cells }));
@@ -56,6 +58,8 @@ export const HM_PROFILE: Profile = {
     for (const [f, d] of b.digests) inputs[f] = d;
     const s = screenedFromEnv(bundleLists(b));
     inputs.screened = s.sha256;
+    const stray = name === "stage1-opus-r2" ? STAGE1_OPUS_R2_TASKS.filter((t) => !s.calibration.includes(t)) : [];
+    if (stray.length) throw new Error("E_HM_INPUT stage1-opus-r2 names " + stray.join(", ") + ", not in the screened calibration list");
     return itemPlan(name, s).parts;
   },
 };

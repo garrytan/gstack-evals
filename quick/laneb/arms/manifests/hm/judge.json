@@ -1,14 +1,14 @@
 {
   "arm": "judge",
   "claude_code": "2.1.312",
-  "tar_gz_sha256": "79b8711505a400a08790d41e47b722a432d1c09cd3ab83da726810be74c4a2ce",
+  "tar_gz_sha256": "0378c6b39f8b6932f275f0389f676ae5e93708a53dff035aa2b251d84e20f18f",
   "gstack_sha": "ba2289e1cd9f2387d069b3b6c51b404d56c4a1e9",
   "update_check": "false",
   "onboarding_markers": ".gstack/.activated .gstack/.completeness-intro-seen .gstack/.feature-prompted-model-overlay .gstack/.first-loop-tip-shown .gstack/.proactive-prompted .gstack/.telemetry-prompted",
   "dr_runtime_sha256": "7fb1a0a81b975c3c74a63a8032ec5592c7043b8a91bbb587eb1f3d4207a78154",
   "band_sha256": "ea64917e550e7805575e306f0a2485fc7dc6c866b32677620912b2d2b35ccc68",
   "hm_judge_sha256": "83257e1fada365b88ff000fdaa74d7591b526ee8b81bb5351bf3cb07414c3e90",
-  "facts_sha256": "491f53ba3e75d6bfe4547bb8438b4bf129574844a3d1d2eb0e644eb5b08fccc4",
+  "facts_sha256": "623c13168fece587ca726d9c2d11b53a259e8828df7dec431d68719650e1a740",
   "gstack_version": "1.98.0.0",
   "fetch": {
     "repo": "https://github.com/garrytan/gstack.git",
@@ -76,14 +76,14 @@
   "tar": {
     "file": "judge.tar",
     "bytes": 2205696000,
-    "sha256": "5b5bbc5d2d84eac203632463841cedb63ac18257a63bca1a2711dd5ccfe9af24"
+    "sha256": "2a3093867b30891d4755994258089672f7828937dda9f4b6600f8c0c3e187f61"
   },
   "tree": {
     "files": 49854,
     "symlinks": 1063,
     "dirs": 6792,
     "bytes": 2146784212,
-    "digest": "07b18203a8dc99d130e67909b444267f2cea4635a1aa5f7197df00f18d519285"
+    "digest": "900691695dbc64966f6f60edd7c5ad043db87f22e8f6221dc14b170ff7b3c337"
   },
   "skills": {
     "count": 63,
@@ -181,5 +181,5 @@
       }
     ]
   },
-  "inventory_sha256": "61dec10cf2e6936831f95839daaf04c0e738c91770718fd23bcf13ed95c50e9f"
+  "inventory_sha256": "050ac84aad281f6d058dfde3c5fbbe4e6852ca72e3bbcf4e26adedcec9943a19"
 }

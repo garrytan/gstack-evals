@@ -13,6 +13,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Ledger, readRows, toMicros } from "../../quick/laneb/runner/ledger.ts";
+import { loadRebenchPool, materializeRebench, R3A4_POOL_FILE, R3A4_POOL_SHA256 } from "../../quick/laneb/runner/materialize.ts";
+import { taskSetupLines } from "../../quick/laneb/runner/prepare-run.ts";
 import { itemTotals } from "./money.ts";
 import { bundleLists, CAPS_USD, HM, REPO, SCREEN, sha256, TASK_SETUP, taskSetup, UBI_RUNNER, type Lists } from "./pins.ts";
 
@@ -23,6 +25,21 @@ export function pool(): Map<string, Task> {
   return new Map((d.tasks as Task[]).map((t) => [t.task_id, t]));
 }
 export const imageRef = (t: Task) => t.image.replace(/:[^:/]+$/, "") + "@" + t.image_digest;
+
+// A task's trial environment directory, written as L1's prepare-run.ts writes it under the hm profile: materializeRebench
+// from the SWEREBENCH export (the pinned Harbor's, as Stage 1 sets it) with Lane B's runtime stages, runtime-copy.Dockerfile
+// and the task setup. Dry-run steps d1-checks and d2-session-path and the build check build this directory, so their
+// images are the trials' own, WORKDIR included. Returns <dest>/environment.
+export function trialEnvironment(task: string, dest: string): string {
+  const lane = join(REPO, "quick/laneb"), runner = join(lane, "runner");
+  const root = process.env.SWEREBENCH ?? join(process.env.HOME ?? "", ".capy/work/ref/swe-rebench-leaderboard");
+  const t = loadRebenchPool(join(lane, R3A4_POOL_FILE), R3A4_POOL_SHA256).find((x) => x.task_id === task);
+  if (!t) throw new Error("E_USAGE " + task + " is not a swerebench-r3a4 pool task");
+  if (!existsSync(join(root, task))) throw new Error("E_USAGE " + task + " is not in the SWE-rebench export at " + root + "; set SWEREBENCH to the pinned Harbor's export");
+  const runtimeCopy = readFileSync(join(runner, "runtime-copy.Dockerfile"), "utf8") + taskSetupLines({ TASK_SETUP: TASK_SETUP.file, TASK_SETUP_SHA256: TASK_SETUP.sha256 });
+  materializeRebench(root, t, dest, { runtimeStages: readFileSync(join(runner, "runtime-stages.Dockerfile"), "utf8"), runtimeCopy, network: "allowlist" });
+  return join(dest, "environment");
+}
 export const sortedDigest = (xs: string[]) => sha256([...xs].sort().join("\n") + "\n");
 
 export function classifyDetect(code: number | null, out: string, err: string): Detect {

@@ -1,14 +1,19 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-// D2's live-session dry-run step, keyless: the stub model's cmds script, the reads and every assertion both ways.
+// D2's live-session dry-run step, keyless: the stub model's cmds script, the reads and every assertion both ways, and that
+// the step and d1-checks build the trial's own image with no WORKDIR of their own (ruling A on Stage 1's WORKDIR defect).
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { scriptTurn } from "../../lanes/harness-mechanics/fake-model.ts";
-import { PATH_PROBE, PATH_TASKS, pathProblems, readArm, type ArmRead, type PathTask } from "../../lanes/harness-mechanics/session-path.ts";
+import { REPO } from "../../lanes/harness-mechanics/pins.ts";
+import { PATH_PROBE, PATH_TASKS, pathProblems, readArm, STRIP_PROBE, type ArmRead, type PathTask } from "../../lanes/harness-mechanics/session-path.ts";
 
 const [sq, hv] = PATH_TASKS as [PathTask, PathTask];
 const IMG = "/opt/miniconda3/envs/testbed/bin:/opt/conda/envs/testbed/bin:/opt/conda/bin:/usr/local/bin:/usr/bin:/bin:/opt/laneb/bin";
-const arm = (env: string, over: Partial<ArmRead> = {}): ArmRead => ({ path: IMG, bun: "/opt/laneb/bin/bun", pytest: env + "/pytest", python3: env + "/python3", hook_path: IMG, checks: null, ...over });
+const TRUST = "gstack-checks: trusted 1 check(s) and the pregate test commands for /testbed";
+const arm = (env: string, over: Partial<ArmRead> = {}): ArmRead => ({ pwd: "/testbed", path: IMG, bun: "/opt/laneb/bin/bun", pytest: env + "/pytest", python3: env + "/python3", hook_path: IMG, checks: null, stripped: [STRIP_PROBE], trust: null, ...over });
 const told = (t: PathTask) => (t.checks === "run" ? "CHECK lint ENV 0.1s  ruff missing\nCHECK tests PASS 50.4s" : "CHECK tests python3 -m pytest  (pregate)");
-const good = (t: PathTask): Record<string, ArmRead | null> => ({ none: arm(t.env), prose: arm(t.env, { checks: told(t) }), hook: arm(t.env, { checks: told(t) }) });
+const good = (t: PathTask): Record<string, ArmRead | null> => ({ none: arm(t.env), prose: arm(t.env, { checks: told(t), trust: TRUST }), hook: arm(t.env, { checks: told(t), trust: TRUST }) });
 
 describe("D2's live-session step", () => {
   test("the two tasks: sqlglot-7479 on /opt/conda runs the loop, holoviews-6783 on miniconda runs detect", () => {
@@ -31,10 +36,29 @@ describe("D2's live-session step", () => {
     expect(bad(sq, "prose", { checks: "CHECK lint ENV 0.1s  ruff missing\nCHECK tests ENV 0.0s  not on PATH: pytest" })).toEqual([sq.task + " prose: the loop printed no CHECK tests PASS"]);
     expect(pathProblems(sq, { ...good(sq), prose: null })).toEqual([sq.task + " prose: no session read"]);
   });
+  test("Claude Code's cwd, the strip root and the CHECKS_TRUST root must each be /testbed", () => {
+    const bad = (t: PathTask, a: string, over: Partial<ArmRead>) => pathProblems(t, { ...good(t), [a]: { ...good(t)[a]!, ...over } });
+    expect(bad(hv, "none", { pwd: "/" })).toEqual([hv.task + " none: Claude Code's cwd is /, not /testbed"]);
+    expect(bad(hv, "hook", { pwd: "" })).toEqual([hv.task + " hook: Claude Code's cwd is missing, not /testbed"]);
+    expect(bad(hv, "prose", { stripped: ["testbed/" + STRIP_PROBE] })).toEqual([hv.task + " prose: the snapshot strip did not remove " + STRIP_PROBE + " from /testbed (it removed [\"testbed/" + STRIP_PROBE + "\"])"]);
+    expect(bad(hv, "none", { stripped: null })).toEqual([hv.task + " none: the snapshot strip did not remove " + STRIP_PROBE + " from /testbed (it removed nothing it reported)"]);
+    expect(bad(hv, "hook", { trust: "gstack-checks: trusted 1 check(s) and the pregate test commands for /" })).toEqual([hv.task + " hook: CHECKS_TRUST did not run at /testbed (gstack-checks: trusted 1 check(s) and the pregate test commands for /)"]);
+    expect(bad(hv, "prose", { trust: null })).toEqual([hv.task + " prose: CHECKS_TRUST did not run at /testbed (no trust line)"]);
+    expect(bad(hv, "none", { trust: null })).toEqual([]);
+  });
+  test("the step and d1-checks build the trial's environment directory and add no WORKDIR; the step runs the agent with a trial's options", () => {
+    const src = (f: string) => readFileSync(join(REPO, "lanes/harness-mechanics", f), "utf8");
+    for (const f of ["session-path.ts", "d1.ts"]) expect(src(f)).toMatch(/trialEnvironment\(t(\.task)?, join\(ctx, "trial"\)\)/);
+    expect(src("session-path.ts")).not.toMatch(/"WORKDIR |\\nWORKDIR/);
+    expect(src("d1.ts")).toMatch(/export function stepD1Checks[^]*?d1Rig\(undefined, "trial"\)/);
+    expect(src("session-path.ts")).toMatch(/strip: true, [^}]*workdir: "", after_inject: hook \}/);
+    expect(src("sessions-driver.py")).toMatch(/workdir=SPEC\.get\("workdir", "\/testbed"\)/);
+  });
   test("readArm takes the probe's lines and the gstack-checks output from the tool results", () => {
-    const r = readArm({ toolu_hm_c0: "HM_PATH=" + IMG + "\nHM_BUN=/opt/laneb/bin/bun\nHM_PYTEST=/opt/conda/envs/testbed/bin/pytest\nHM_PYTHON3=/opt/conda/envs/testbed/bin/python3\n", toolu_hm_c2: "CHECK tests PASS 1.0s" }, IMG, "toolu_hm_c2");
-    expect(r).toEqual({ path: IMG, bun: "/opt/laneb/bin/bun", pytest: "/opt/conda/envs/testbed/bin/pytest", python3: "/opt/conda/envs/testbed/bin/python3", hook_path: IMG, checks: "CHECK tests PASS 1.0s" });
-    expect(readArm({ toolu_hm_c0: "HM_PATH=/x\nHM_BUN=\nHM_PYTEST=\nHM_PYTHON3=\n" }, null, null)).toEqual({ path: "/x", bun: "", pytest: "", python3: "", hook_path: null, checks: null });
+    const r = readArm({ toolu_hm_c0: "HM_PWD=/testbed\nHM_PATH=" + IMG + "\nHM_BUN=/opt/laneb/bin/bun\nHM_PYTEST=/opt/conda/envs/testbed/bin/pytest\nHM_PYTHON3=/opt/conda/envs/testbed/bin/python3\n", toolu_hm_c2: "CHECK tests PASS 1.0s" }, IMG, "toolu_hm_c2", { stripped: [STRIP_PROBE], checks_trust: TRUST });
+    expect(r).toEqual({ pwd: "/testbed", path: IMG, bun: "/opt/laneb/bin/bun", pytest: "/opt/conda/envs/testbed/bin/pytest", python3: "/opt/conda/envs/testbed/bin/python3", hook_path: IMG, checks: "CHECK tests PASS 1.0s", stripped: [STRIP_PROBE], trust: TRUST });
+    expect(readArm({ toolu_hm_c0: "HM_PATH=/x\nHM_BUN=\nHM_PYTEST=\nHM_PYTHON3=\n" }, null, null, null)).toEqual({ pwd: "", path: "/x", bun: "", pytest: "", python3: "", hook_path: null, checks: null, stripped: null, trust: null });
+    expect(PATH_PROBE.startsWith("printf 'HM_PWD=%s\\nHM_PATH=%s")).toBe(true);
   });
   test("the stub's cmds script runs each [hm-cmd] in order through the Bash tool, then stops", () => {
     const cmds = [PATH_PROBE, "echo '# hm d1 probe edit' >> 'sqlglot/diff.py'"];
