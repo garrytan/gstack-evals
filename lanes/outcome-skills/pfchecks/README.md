@@ -139,7 +139,9 @@ Rules as built
   whose close answer says the proxy's finalize failed (finalized false) has unknown counts and is an infra end, unless it
   also counts an allowance stop, which reads first. Such a turn with no allowance stop halts the session before any
   retry or wrap-up rerun (E_PF_FINALIZE_HALT, no session record), and the driver halts the item's stage and names the
-  session and the lease's journal; the Captain rules on a retry after reading it. A task open the driver refuses
+  session and the lease's journal; the Captain rules on a retry after reading it. The halt line stays in the run's
+  sessions.jsonl, so a relaunch refuses the item (E_SM_FINALIZE_HALT, the family SM halt's reading) until --lift-halt
+  names the session. A task open the driver refuses
   with 409 CAP_STOP raises LedgerCapStop in PfAgent, Harbor records it as the trial's exception, and pfRecord reads it as a
   cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record.
 - Between turns: capture.sh commit (S), then wrapup.sh save. After the wrap-up: wrapup.sh keep copies CHECKS.json (a

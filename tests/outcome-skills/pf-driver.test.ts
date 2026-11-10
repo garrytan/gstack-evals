@@ -264,7 +264,7 @@ test("a PF slot refuses provider-side tools and capabilities, and its close answ
 });
 
 // Value: protects=the PF end kinds' input when the proxy's finalize fails, and the Captain's halt of the item; fails_when=a PF close answer reports counts it never read, drops the journal's refusal codes or keeps an effort record, or the stage opens another slot or the driver names no session and journal; why_new=the state machines eval's finalized flag, read by PF turns; seam=driver/stage.ts closeSession's PF branch; no_claim=the end kind and the session halt (pf-run.test.ts) or the agent (pf_agent_sdk_test.py)
-test("a PF slot whose proxy finalize fails closes with finalized false, null counts, its journal's refusal codes and no effort record, and halts its stage, naming the session and the journal", async () => {
+test("a PF slot whose proxy finalize fails closes with finalized false, null counts, its journal's refusal codes and no effort record, and halts its stage, naming the session and the journal, until a relaunch lifts it", async () => {
   const { serve, local, root } = ledger({ "pf-opus": { cap: 100 }, "pf-sol": { cap: 100 } });
   const lines: string[] = [];
   const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }, { item: "pf-sol", arm: "pf-sol", arms: TOLD }], { log: (line) => lines.push(line) });
@@ -292,5 +292,11 @@ test("a PF slot whose proxy finalize fails closes with finalized false, null cou
   const next = await open({ arm: "pf:P", cap: 12, phase: "task", task: "u2" });
   expect([next.status, next.json.code]).toEqual([503, "E_LEASE_CLOSED"]);
   expect(await served.stop()).toBe(2);
+  const stage = [{ item: "pf-opus", arm: "pf-opus", arms: TOLD }];
+  const relaunch = await serve(stage).then(async (s) => (await s.stop(), "served"), (err: { code?: string; message: string }) => err.code + " " + err.message);
+  expect(relaunch).toStartWith("E_SM_FINALIZE_HALT line item pf-opus halted in run r1");
+  expect(relaunch).toContain(task.json.id);
+  const lifted = await serve(stage, { lift_halts: [task.json.id] });
+  expect(await lifted.stop()).toBe(0);
   local.close?.();
 });
