@@ -127,8 +127,9 @@ Rules as built
   allowance stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 CAP_STOP on
   its open, which pf_turns.py records as termination open_refused) is gap E_PF_WRAPUP_ALLOWANCE, with no wrap-up rerun and no session retry. A turn
   whose close answer says the proxy's finalize failed (finalized false) has unknown counts and is an infra end, unless it
-  also counts an allowance stop, which reads first: pf_turns.py stops the session after such a task turn and reruns such
-  a wrap-up turn once. A task open the driver refuses
+  also counts an allowance stop, which reads first. Such a turn with no allowance stop halts the session before any
+  retry or wrap-up rerun (E_PF_FINALIZE_HALT, no session record), and the driver halts the item's stage and names the
+  session and the lease's journal; the Captain rules on a retry after reading it. A task open the driver refuses
   with 409 CAP_STOP raises LedgerCapStop in PfAgent, Harbor records it as the trial's exception, and pfRecord reads it as a
   cap stop: no gap, no retry, and runPfSession ends the part with CAP_STOP after writing the record.
 - Between turns: capture.sh commit (S), then wrapup.sh save. After the wrap-up: wrapup.sh keep copies CHECKS.json (a

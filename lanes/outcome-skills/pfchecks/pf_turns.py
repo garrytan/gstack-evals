@@ -6,8 +6,8 @@ wrapup.sh saves it, then the wrap-up turn resumes the same Claude Code session i
 and reruns the wrap-up turn once on a new slot naming meta.rerun. A wrap-up turn refused for its allowance (an allowance
 stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 on its open, raised as
 OpenRefused) is never rerun; the proxy's other E_ALLOWANCE refusals are no allowance stop. A turn whose close answer says
-the proxy's finalize failed (finalized false), with no allowance stop counted, is an infra end: the session stops after
-such a task turn (run.ts retries it), and such a wrap-up turn takes the one rerun. wrapup.sh keep then keeps only
+the proxy's finalize failed (finalized false), with no allowance stop counted, halts the session: nothing more opens
+after such a task turn, such a wrap-up turn is not rerun, and run.ts stops with E_PF_FINALIZE_HALT. wrapup.sh keep then keeps only
 CHECKS.json and counts every other change. S leaves the container as a git bundle.
 
 Each turn ends as real_agent's _drive ends a phase: the agent ended its turn and its background tasks are quiet (quiet_sec,
@@ -173,7 +173,7 @@ class Session:
         for attempt in (1, 2):
             w = await self.turn("wrapup", cfg["wrapup_text"], task["session_id"], RERUN["wrapup"] if attempt == 2 else None)
             out["wrapup"].append(w)
-            if (w["termination"] not in ("error_result", "error", "cli_exit") and w["finalized"] is not False) or w["allowance_stops"] or "CAP_STOP" in w["refused"] or attempt == 2:
+            if w["termination"] not in ("error_result", "error", "cli_exit") or w["finalized"] is False or w["allowance_stops"] or "CAP_STOP" in w["refused"] or attempt == 2:
                 break
             self.script("wrapup.sh", "reset", repo, work)
         out["keep"] = self.script("wrapup.sh", "keep", repo, work)

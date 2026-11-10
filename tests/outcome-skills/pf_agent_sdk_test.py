@@ -289,12 +289,12 @@ def test_a_task_turn_whose_proxy_finalize_failed_ends_the_session_before_the_wra
     check([x["phase"] for x in s.stub] == ["task"], s.stub)
 
 
-def test_a_wrapup_whose_proxy_finalize_failed_is_rerun_once_on_a_new_slot():
-    s = session(unfinalized=(2,))
+def test_a_wrapup_whose_proxy_finalize_failed_is_not_rerun():
+    s = session("wrapup_error", unfinalized=(2,))
     check(s.error is None, repr(s.error))
-    check([(o["meta"]["phase"], o["meta"].get("rerun")) for o in s.control.opens] == [("task", None), ("wrapup", None), ("wrapup", "wrapup_upstream_or_infra")], s.control.opens)
-    check([(w["termination"], w["allowance_stops"], w["finalized"]) for w in s.summary["wrapup"]] == [("completed", 0, False), ("completed", 0, True)], s.summary["wrapup"])
-    check(s.summary["task"]["finalized"] is True, s.summary["task"])
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task", "wrapup"], s.control.opens)
+    check([(w["termination"], w["allowance_stops"], w["finalized"]) for w in s.summary["wrapup"]] == [("error_result", 0, False)], s.summary["wrapup"])
+    check(s.summary["task"]["finalized"] is True and [x["close"]["finalized"] for x in s.summary["slots"]] == [True, False], s.summary["slots"])
 
 
 def test_a_wrapup_allowance_stop_whose_proxy_finalize_failed_is_not_rerun():

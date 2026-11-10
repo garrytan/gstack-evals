@@ -1988,6 +1988,15 @@ export const CODES = {
     resumable: true,
     owner: "U20",
   },
+  E_PF_FINALIZE_HALT: {
+    exit: 2,
+    meaning: "A pstack-checks slot closed after its metering proxy's finalize failed (finalized false), so the driver could not read the slot's counts and cannot tell an allowance stop from any other end. The session halts before any retry or wrap-up rerun and writes no session record, and the driver's stage for the item takes no more opens.",
+    fix: "Take the session id and the lease's journal path from the driver's E_PF_FINALIZE_HALT line to the Captain, who rules on the retry after reading the journal. Open no new lease on the item until then.",
+    side_effects: "Partial: the halted session's calls stay in the lease's journal and the ledger; nothing more opens on the item.",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_PF_CELL_INCOMPLETE: {
     exit: 1,
     meaning: "A pstack-checks analysis cell (one model and one arm) has gaps on more than 10% of its units, so every verdict that uses it reads INCOMPLETE. The analysis still writes every number, the gap worst case included, then exits 1.",

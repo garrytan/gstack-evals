@@ -169,6 +169,17 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
   };
 }
 
+/** After one attempt, whether the whole session retries from a fresh container. A slot whose close answer says the proxy's
+ *  finalize failed (finalized false), with no allowance stop counted, first halts the session with E_PF_FINALIZE_HALT:
+ *  no retry and no session record, while the driver halts the item's stage and names the lease's journal, which the
+ *  Captain reads before ruling on a retry. */
+export function retryAfter(i: PfRunInput, attempt: 1 | 2, summary: Record<string, any> | null, record: PfSessionRecord, dir: string): boolean {
+  const lost = ((summary?.slots ?? []) as Array<Record<string, any>>).filter((x) => x.close?.finalized === false && !((x.close?.allowance_stops ?? 0) > 0)).map((x) => String(x.id));
+  const s = i.session;
+  if (lost.length) pfFail("E_PF_FINALIZE_HALT", s.unit + "/" + s.model + "/" + s.arm + "/" + s.index + " attempt " + attempt + ": the proxy's finalize failed at the close of session " + lost.join(", ") + " on lease " + record.lease_id + ", so its counts are unknown; the session halts with no retry and no session record, and the driver's E_PF_FINALIZE_HALT line names the journal (" + record.lease_id + ".journal.ndjson in its run dir); " + dir);
+  return attempt === 1 && retriesSession(summary, record);
+}
+
 /** Writes out/session.json. A cap stop then ends the part (CAP_STOP): it is incomplete, and nothing is retried. */
 export function finishSession(file: string, record: PfSessionRecord): void {
   writeSessionRecord(file, record);
@@ -176,7 +187,7 @@ export function finishSession(file: string, record: PfSessionRecord): void {
 }
 
 /** Builds the image, runs Harbor (and the whole-session retry from a fresh container when the task turn ends upstream or
- *  infra), and writes out/session.json. Async, so a caller serving the control plane in this process keeps serving it. */
+ *  infra, unless a failed proxy finalize halts it first), and writes out/session.json. Async, so a caller serving the control plane in this process keeps serving it. */
 export async function runPfSession(i: PfRunInput): Promise<PfRun> {
   if (existsSync(i.out)) pfFail("E_PF_ARM", i.out + " exists; each session writes a new run dir");
   if (i.effort && !i.effort[i.session.model]) pfFail("E_PF_INPUT", "the effort record has no entry for " + i.session.model + "; the dry run's effort.json names every model");
@@ -196,7 +207,7 @@ export async function runPfSession(i: PfRunInput): Promise<PfRun> {
     const result = ev && existsSync(join(dirname(ev), "result.json")) ? (JSON.parse(readFileSync(join(dirname(ev), "result.json"), "utf8")) as Record<string, any>) : null;
     attempts.push({ dir, harbor_exit: exit, summary, evaluator: ev });
     record = pfRecord(i, attempt, summary, ev, result?.exception_info?.exception_type ?? null);
-    if (attempt === 2 || !retriesSession(summary, record)) break;
+    if (!retryAfter(i, attempt, summary, record, dir)) break;
   }
   const file = join(i.out, "session.json");
   finishSession(file, record!);

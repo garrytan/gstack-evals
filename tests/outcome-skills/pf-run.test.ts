@@ -11,7 +11,7 @@ import type { SessionImage } from "../../lanes/outcome-skills/statemachines/imag
 import { sessionLimits, type PfArm } from "../../lanes/outcome-skills/pfchecks/arms.ts";
 import { OPUS, P1 } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { PSTACK_DIR, pstackVolume } from "../../lanes/outcome-skills/pfchecks/pstack.ts";
-import { TASK_RERUN, finishSession, pfRecord, retriesSession, runCopy, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
+import { TASK_RERUN, finishSession, pfRecord, retriesSession, retryAfter, runCopy, type PfRunInput } from "../../lanes/outcome-skills/pfchecks/run.ts";
 import { toolsVolume } from "../../lanes/outcome-skills/pfchecks/tools.ts";
 
 const roots: string[] = [];
@@ -161,15 +161,13 @@ test("pfRecord: only the proxy's allowance stop count makes an allowance end; an
 });
 
 // Value: protects=sections 5 and 6.8's end kinds when the driver's proxy finalize fails; fails_when=a turn with unknown counts scores by its own termination, or an allowance stop on such a turn reads as infra and gets a second attempt; why_new=the state machines eval's finalized flag, ordered after the allowance stop; seam=run.ts pfRecord over pf_turns.py's turn finalized; no_claim=the driver's close answer (pf-driver.test.ts)
-test("pfRecord: a turn whose proxy finalize failed is an infra end, read after its allowance stop: the task retries the session, the wrap-up reruns once, and a turn that also counts an allowance stop keeps its allowance end", () => {
+test("pfRecord: a turn whose proxy finalize failed is an infra end, read after its allowance stop, so a turn that also counts an allowance stop keeps its allowance end and is never retried", () => {
   const i = input("P");
   const lost = summary({ task: turn("completed", [], 0, false), slots: [slot("task", 9)] });
   const a1 = pfRecord(i, 1, lost, null);
   expect(a1).toMatchObject({ task: { end: "infra" }, wrapup: null, gap: "E_PF_INFRA_GAP" });
-  expect(retriesSession(lost, a1)).toBe(true);
   expect(pfRecord(i, 2, lost, null)).toMatchObject({ attempt: 2, task: { end: "infra" }, gap: "E_PF_INFRA_GAP" });
   expect(pfRecord(i, 1, summary({ task: turn("completed", [], 0, true), wrapup: [turn("completed", [], 0, true)] }), null)).toMatchObject({ task: { end: "completed" }, wrapup_end: "completed", gap: null });
-  expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed", [], 0, false), turn("completed", [], 0, true)] }), null)).toMatchObject({ wrapup: { ends: ["infra", "completed"] }, wrapup_end: "completed", gap: null });
   expect(pfRecord(i, 1, summary({ task: turn("completed"), wrapup: [turn("completed", [], 0, false)] }), null)).toMatchObject({ wrapup: { ends: ["infra"] }, wrapup_end: null, gap: "E_PF_INFRA_GAP" });
   const both = summary({ task: turn("error_result", ["E_ALLOWANCE"], 1, false), wrapup: [turn("completed")] });
   const b = pfRecord(i, 1, both, null);
@@ -179,6 +177,24 @@ test("pfRecord: a turn whose proxy finalize failed is an infra end, read after i
   const w = pfRecord(i, 1, wrapBoth, null);
   expect(w).toMatchObject({ wrapup: { ends: ["limit_allowance"] }, wrapup_end: null, gap: "E_PF_WRAPUP_ALLOWANCE" });
   expect(retriesSession(wrapBoth, w)).toBe(false);
+});
+
+// Value: protects=the Captain's ruling that a failed proxy finalize is a harness fault to read before any retry; fails_when=a slot with unknown counts gets the automatic fresh-container retry, or a retry starts on attempt 2's slot, or a slot that counts an allowance stop halts; why_new=today's in-process proxy never reports finalized false, so one that does is a fault, not an infra end to retry; seam=run.ts retryAfter, which runPfSession calls after every attempt; no_claim=the driver's halt of the stage (pf-driver.test.ts)
+test("a slot whose proxy finalize failed halts the session with E_PF_FINALIZE_HALT before its fresh-container retry; a slot that also counts an allowance stop does not halt", () => {
+  const i = input("P");
+  const lostSlot = (phase: string, stops: number | null = null) => ({ ...slot(phase, 9), id: "ses_lost_" + phase, close: { spent_micros: 9, finalized: false, allowance_stops: stops } });
+  const task = summary({ task: turn("completed", [], 0, false), slots: [lostSlot("task")] });
+  const a1 = pfRecord(i, 1, task, null);
+  expect(retriesSession(task, a1)).toBe(true);
+  expect(() => retryAfter(i, 1, task, a1, "/out/a1")).toThrow(/^E_PF_FINALIZE_HALT pf-run-flag\/claude-opus-5-5\/P\/3 attempt 1: the proxy's finalize failed at the close of session ses_lost_task on lease pf-opus\.0001\.abcdef/);
+  const wrap = summary({ task: turn("completed"), wrapup: [turn("completed", [], 0, false)], slots: [slot("task", 4), lostSlot("wrapup")] });
+  expect(() => retryAfter(i, 1, wrap, pfRecord(i, 1, wrap, null), "/out/a1")).toThrow("session ses_lost_wrapup");
+  expect(() => retryAfter(i, 2, task, pfRecord(i, 2, task, null), "/out/a2")).toThrow("E_PF_FINALIZE_HALT");
+  const upstream = summary({ task: turn("error_result"), slots: [{ ...slot("task", 5), close: { spent_micros: 5, finalized: true } }] });
+  expect(retryAfter(i, 1, upstream, pfRecord(i, 1, upstream, null), "/out/a1")).toBe(true);
+  expect(retryAfter(i, 2, upstream, pfRecord(i, 2, upstream, null), "/out/a2")).toBe(false);
+  const both = summary({ task: turn("error_result", ["E_ALLOWANCE"], 1, false), wrapup: [turn("completed")], slots: [lostSlot("task", 1), slot("wrapup", 2)] });
+  expect(retryAfter(i, 1, both, pfRecord(i, 1, both, null), "/out/a1")).toBe(false);
 });
 
 test("pfRecord: effort is the task slot's proxy record; with the dry run's record, a match scores and a missing or different record is an infra gap", () => {

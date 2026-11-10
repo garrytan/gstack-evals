@@ -546,6 +546,11 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
       s.live.delete(sess.id);
       s.finished++;
       record({ event: "close", item: s.item, ...answer });
+      if (s.pf && !answer.finalized) {
+        warn("E_PF_FINALIZE_HALT", "PF session " + sess.id + " on stage " + s.item + " (lease " + s.lease_id + "): the proxy's finalize failed, so its counts are unknown; the stage takes no more opens, and the Captain rules on a retry after reading the journal " + s.journal);
+        record({ event: "halt", item: s.item, id: sess.id, lease_id: s.lease_id, journal: s.journal });
+        drain(s, "failed", "finalize halt: session " + sess.id);
+      }
       if (s.state === "draining" && s.live.size === 0) void settleStage(s);
       return answer;
     })();

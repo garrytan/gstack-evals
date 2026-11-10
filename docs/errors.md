@@ -243,6 +243,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PF_UPSTREAM_GAP](#e_pf_upstream_gap) | 2 | U20 |
 | [E_PF_INFRA_GAP](#e_pf_infra_gap) | 2 | U20 |
 | [E_PF_WRAPUP_ALLOWANCE](#e_pf_wrapup_allowance) | 2 | U20 |
+| [E_PF_FINALIZE_HALT](#e_pf_finalize_halt) | 2 | U20 |
 | [E_PF_CELL_INCOMPLETE](#e_pf_cell_incomplete) | 1 | U20 |
 | [E_PF_CAPTURE](#e_pf_capture) | 2 | U20 |
 | [E_PF_ARM](#e_pf_arm) | 2 | U20 |
@@ -1750,6 +1751,14 @@ A pstack-checks session's wrap-up turn was refused for its allowance: the meteri
 Fix: Report the gap count per arm and model beside every verdict. Nothing is rerun, and the frozen wrap-up allowances in lanes/outcome-skills/pfchecks/arms.ts do not change.
 
 Exit 2. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_FINALIZE_HALT
+
+A pstack-checks slot closed after its metering proxy's finalize failed (finalized false), so the driver could not read the slot's counts and cannot tell an allowance stop from any other end. The session halts before any retry or wrap-up rerun and writes no session record, and the driver's stage for the item takes no more opens.
+
+Fix: Take the session id and the lease's journal path from the driver's E_PF_FINALIZE_HALT line to the Captain, who rules on the retry after reading the journal. Open no new lease on the item until then.
+
+Exit 2. Side effects: Partial: the halted session's calls stay in the lease's journal and the ledger; nothing more opens on the item. Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_PF_CAPTURE
 
