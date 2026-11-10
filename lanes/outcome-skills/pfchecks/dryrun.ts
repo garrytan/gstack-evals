@@ -100,10 +100,10 @@ const asUid1000 = "HOME=/tmp setpriv --reuid=1000 --regid=1000 --clear-groups ";
  *  session), and a bash run as uid 1000 that keeps the session env, as a Bash tool run as that uid would. Recorded only:
  *  a bare login shell (bash -lc) as root and as uid 1000, where Debian's /etc/profile resets PATH. */
 export const PATH_PROBE = "( " + pathReport("root") + "; " + asUid1000 + "bash -c '" + pathReport("1000") + "'; bash -lc '" + pathReport("rootlogin") + "'; " + asUid1000 + "bash -lc '" + pathReport("1000login") + "' )";
-const manifest = (cmds: string[]) => JSON.stringify(cmds.map((command, i) => ({ name: "check-" + i, command, what_it_checks: "fixture " + i })));
+export const manifest = (cmds: string[]) => JSON.stringify(cmds.map((command, i) => ({ name: "check-" + i, command, what_it_checks: "fixture " + i })));
 
 /** A tar.gz of files, as one Bash command the stub sends. */
-function writeCommand(files: Record<string, string>): string {
+export function writeCommand(files: Record<string, string>): string {
   const dir = mkdtempSync(join(homedir(), ".capy/work/pf-tar-"));
   for (const [p, t] of Object.entries(files)) {
     mkdirSync(join(dir, p, ".."), { recursive: true });
@@ -122,6 +122,8 @@ export interface StubSession {
   filler?: number;
   /** What the wrap-up's first answer reports as usage: a full cache write of the stub context, or 95% of its request's worst case. */
   usage?: "cache_write" | "worst";
+  /** The test file the wrap-up's first answer adds beside CHECKS.json, and its text; checks/late_test.sh by default. */
+  late?: { path: string; text: string };
 }
 interface StubState { bodies: Array<{ session: string; phase: string; body: Record<string, any>; bytes: number }>; calls: Map<string, number>; failed: Set<string> }
 /** The stub's reply to one Messages request of bytes bytes: the task turn's first main request writes the fixture files; the
@@ -135,7 +137,8 @@ export function stubReply(s: StubSession, phase: string, n: number, first: boole
   if (s.wrapup === "upstream" && first) return { status: 400, blocks: [] };
   if (s.wrapup === "none" || n > 0) return { blocks: [{ type: "text", text: "Done." }] };
   const usage = s.usage === "cache_write" ? { input_tokens: 3, cache_creation_input_tokens: WRAP_CONTEXT_TOKENS, cache_read_input_tokens: 0, output_tokens: 150 } : s.usage === "worst" ? { input_tokens: 0, cache_creation_input_tokens: Math.floor(0.95 * bytes), cache_read_input_tokens: 0, output_tokens: Math.floor(0.95 * 32_000) } : undefined;
-  return { blocks: tool("echo " + b64(s.checks ?? "[]") + " | base64 -d > CHECKS.json && printf 'exit 0\\n' > checks/late_test.sh"), ...(usage ? { usage } : {}) };
+  const late = s.late ? "mkdir -p \"$(dirname " + JSON.stringify(s.late.path) + ")\" && echo " + b64(s.late.text) + " | base64 -d > " + JSON.stringify(s.late.path) : "printf 'exit 0\\n' > checks/late_test.sh";
+  return { blocks: tool("echo " + b64(s.checks ?? "[]") + " | base64 -d > CHECKS.json && " + late), ...(usage ? { usage } : {}) };
 }
 /** sse() with the stub's usage in place of its fixed one, when given. */
 function sseWith(model: string, blocks: Array<Record<string, unknown>>, usage?: Record<string, number>): string {
@@ -150,7 +153,7 @@ function sseWith(model: string, blocks: Array<Record<string, unknown>>, usage?: 
   }).join("\n");
 }
 
-function startStub(sessions: Record<string, StubSession>, host: string) {
+export function startStub(sessions: Record<string, StubSession>, host: string) {
   const st: StubState = { bodies: [], calls: new Map(), failed: new Set() };
   const server = Bun.serve({
     hostname: host, port: 0,
