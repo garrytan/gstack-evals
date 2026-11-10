@@ -7,7 +7,7 @@
 // sessions holds six allowances open; each settles at its metered cost. A refused reserve latches the proxy's cap stop:
 // the sessions already open finish inside their own reserves, no session opens after it, and a cap stop is never relaunched
 // (l1.ts relaunch) or rerun (infraRerun).
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostTtlHours, itemCheck, L1, plannedCells, relaunchRects, type PartPlan } from "../../quick/laneb/l1/l1.ts";
@@ -15,7 +15,7 @@ import { appendRow, fromMicros, Ledger, readRows, toMicros, type Row } from "../
 import type { HmArm, HmSessionRow } from "../../src/types.ts";
 import { bundleLists, CAPS_USD, CARVED, HM, JUDGE, MODELS, NO_GSTACK, RATES_USD, REPLAY, VM_HOURS_PER_SESSION, type ModelKey } from "./pins.ts";
 import { ITEMS, itemPlan } from "./plans.ts";
-import { hmRow } from "./table.ts";
+import { buildHmTable, hmRow } from "./table.ts";
 
 export type Item = keyof typeof CAPS_USD;
 export const isItem = (x: string): x is Item => Object.hasOwn(CAPS_USD, x);
@@ -168,6 +168,17 @@ export function infraRerun(first: HmSessionRow[], second: HmSessionRow[] = []) {
     missing: rerun.filter((r) => again.has(key(r)) && !["graded", "contaminated"].includes(again.get(key(r))!.outcome)).map(key),
     pending: rerun.filter((r) => !again.has(key(r))).map(key),
   };
+}
+
+// The launcher's attempt 2 (plans.ts HM_PROFILE.attempt2, l1.ts rerun): the sessions needsRerun picks in a part's pulled
+// results and its relaunch's, each with its reason, and infraRerun's rectangles for them. Only the outcome class is read.
+export function attempt2Owed(runs: { part: string; dir: string }[]) {
+  const jobs = runs.flatMap((r) => {
+    const d = join(r.dir, "jobs");
+    return existsSync(d) ? readdirSync(d).filter((j) => statSync(join(d, j)).isDirectory()).map((j) => ({ dir: join(d, j), part: r.part })) : [];
+  });
+  const rows = jobs.length ? buildHmTable({ jobs, sessions: runs.map((r) => join(r.dir, "out/proxy-sessions.jsonl")).filter((f) => existsSync(f)) }) : [];
+  return { owed: rows.filter(needsRerun).map((r) => ({ task: r.task, arm: r.arm, reason: r.reason })), rects: infraRerun(rows).rects };
 }
 
 // The reserve per launch: a session item's parallel allowances; vms leases one part-VM block; the replay, which runs no

@@ -3,6 +3,7 @@
 // (quick/laneb/l1/l1.ts). Each part is one launch; a task's arms run in one part, in the seeded order L1's seeded() gives.
 import { plannedCells, prefixOf, seeded, type ItemDef, type PartPlan, type Profile, type Rect } from "../../quick/laneb/l1/l1.ts";
 import type { HmArm } from "../../src/types.ts";
+import { attempt2Owed } from "./money.ts";
 import { ARMS, bundleLists, CAPS_USD, FOUR, HM, JUDGE, loadBundle, MODELS, screenedFromEnv, STAGE1_OPUS_R2_TASKS, TARS, TASK_SETUP, type ModelKey } from "./pins.ts";
 
 const item = (m: ModelKey, capUsd: number): ItemDef => ({ capUsd, taskSet: "swerebench-r3a4", cells: MODELS[m].cells, allowanceUsd: MODELS[m].allowanceUsd, model: MODELS[m].id });
@@ -53,6 +54,11 @@ export const HM_PROFILE: Profile = {
   seed: HM.seed,
   concurrent: HM.concurrent,
   taskSetup: TASK_SETUP,
+  // Section 13's attempt 2 (l1.ts rerun). stage1-opus-r2 is itself the one attempt for its cells (D3).
+  attempt2: {
+    skip: (name) => (name === "stage1-opus-r2" ? "stage1-opus-r2 is section 13's one attempt for Stage 1 Opus's 92 unstarted cells (D3), so it takes no attempt 2 of its own" : null),
+    owed: (runs) => attempt2Owed(runs),
+  },
   parts: (name, _frozen, inputs) => {
     const b = loadBundle();
     for (const [f, d] of b.digests) inputs[f] = d;

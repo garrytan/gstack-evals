@@ -45,6 +45,7 @@ Models read cells.l1.json (Opus) and cells.l1-sol.json (Sol) as L1 ran them, wit
     bun lanes/harness-mechanics/cli.ts launch <work> --part <part>
     bun lanes/harness-mechanics/cli.ts attach <work>
     bun lanes/harness-mechanics/cli.ts relaunch <work> --part <part>
+    bun lanes/harness-mechanics/cli.ts rerun <work> --part <part>
     bun lanes/harness-mechanics/cli.ts recover <work>
     bun lanes/harness-mechanics/cli.ts host-down <work>
     bun lanes/harness-mechanics/cli.ts table <config.json> <out.jsonl>
@@ -175,7 +176,17 @@ Commands:
 - hm approve --ledger <item>.jsonl --item <item> --usd <cap> --approved-by <who>, and hm done --ledger <jsonl> --item <item>
   once every launch of the item has settled.
 - hm guard <work> prints the guard. host-up, launch and relaunch run it first and exit 2 with E_HM_LAUNCH when the line or
-  the item's C1 projection does not fit. Inputs: LEDGER (or the host mirror in <work>/host/ledger.jsonl), HM_LEDGERS (a
+  the item's C1 projection does not fit. A prepared attempt 2 (<part>-a2) counts as a part still to run until it finishes.
+- hm rerun <work> --part <part> is section 13's attempt 2 on the launcher. Once a part has finished, and its relaunch
+  after a loss, it reads their pulled results through hm table and money.ts needsRerun: a session with no result.json,
+  no model response or no verifier reward owes one more run. It records <part>.rerun.json (what each owed cell's reason
+  was, or that none was owed) and prepares <part>-a2 with those cells, with no host and no spend; launch --part <part>-a2
+  runs it under the guard, before the next part may launch. It reads each session's outcome class, never its grade. A
+  second failure is missing: an attempt 2 is never rerun or relaunched (relaunch only salvages one whose controller was
+  lost, and its cells that never started are missing), a cap stop takes none, and stage1-opus-r2 takes none, since it is
+  itself the one attempt for its cells (D3). A cell with no trial dir at all, such as one whose part VM was lost after it
+  started, is not read as owing one. The host's TTL is unchanged: a launch that finds under 18 h of it left refuses, and
+  host-down then host-up brings a new host. Inputs: LEDGER (or the host mirror in <work>/host/ledger.jsonl), HM_LEDGERS (a
   folder of <item>.jsonl for the other items) and HM_CREW (the crew file: as_of and threads [{code, credits}], from each
   thread's counter).
 - hm screen --out <dir> (HM_GSTACK at the pin, Docker) writes screened.txt, detect.json and screen.txt. hm screen-vm start

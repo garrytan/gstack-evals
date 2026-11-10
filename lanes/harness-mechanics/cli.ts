@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // bun lanes/harness-mechanics/cli.ts <command>: the harness mechanics eval (lanes/harness-mechanics/README.md).
-// prepare, host-up, launch, attach, relaunch, recover and host-down run on L1's host and part machinery under this lane's
+// prepare, host-up, launch, attach, relaunch, rerun, recover and host-down run on L1's host and part machinery under this lane's
 // profile (plans.ts HM_PROFILE), with L1's exit codes.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -19,12 +19,12 @@ import { screenCommand, screenVm } from "./screen.ts";
 import { buildHmTable } from "./table.ts";
 import { countProblems, itemsFromEnv, replayReport, runReplay } from "./replay.ts";
 
-const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
+const USAGE = "E_USAGE usage: hm dryrun --out <dir> | prepare <work> --item <item> | host-up|attach|recover|host-down <work> | launch|relaunch|rerun <work> --part <part> | approve --ledger <jsonl> --item <item> --usd <cap> --approved-by <who> | done --ledger <jsonl> --item <item> | guard <work> | screen --out <dir> | fit --out <dir> [--only <task>] | build-check --out <dir> | fit-vm start|status|finish <work> | screen-vm start|finish <work> | table <config.json> <out.jsonl> | patterns <job dir>... | admission <stage1 table.jsonl> [--fit <fit rows.jsonl> --fit-sha256 <sha256>] [--out <dir>] | report <table.jsonl> <config.json> <out dir> | replay items | replay run --clients <module.ts> --start <file> --ledger <jsonl> --out <dir> | replay report <out dir>";
 const readTable = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as HmRowIn);
 // HM_SIMS cuts power.py's Monte Carlo for keyless tests; the report runs power.py's own 2,000 without it.
 const sims = () => (process.env.HM_SIMS ? Number(process.env.HM_SIMS) : undefined);
 
-// The launch guard's inputs: the work dir's plan and finished parts, the item's own ledger (LEDGER, or the host mirror
+// The launch guard's inputs: the work dir's plan and finished parts (a prepared attempt 2 counts as a part), the item's own ledger (LEDGER, or the host mirror
 // l1.ts keeps while the ledger is on the host), every other item's ledger as HM_LEDGERS/<item>.jsonl, and HM_CREW.
 function guard(work: string) {
   const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
@@ -34,13 +34,14 @@ function guard(work: string) {
   for (const f of Object.keys(HM_PROFILE.items).concat(["stage2-replay", "vms"])) if (isItem(f) && existsSync(join(dir, f + ".jsonl"))) ledgers[f] = readRows(join(dir, f + ".jsonl"));
   const mirror = join(work, "host/ledger.jsonl");
   ledgers[plan.item as Item] = own && existsSync(own) ? readRows(own) : existsSync(mirror) ? readRows(mirror) : ledgers[plan.item as Item] ?? [];
-  const finished = plan.parts.map((p: any) => p.name).filter((n: string) => existsSync(join(work, n + ".result.json")));
-  const g = launchGuard(plan.item, ledgers, JSON.parse(readFileSync(crewPath, "utf8")) as HmCrew, plan.parts, finished);
+  const parts = [...plan.parts, ...plan.parts.map((p: any) => join(work, p.name + "-a2", "l1-part.json")).filter((f: string) => existsSync(f)).map((f: string) => JSON.parse(readFileSync(f, "utf8")))];
+  const finished = parts.map((p: any) => p.name).filter((n: string) => existsSync(join(work, n + ".result.json")));
+  const g = launchGuard(plan.item, ledgers, JSON.parse(readFileSync(crewPath, "utf8")) as HmCrew, parts, finished);
   for (const l of g.lines) console.log(l);
   if (!g.ok) throw new Error("E_HM_LAUNCH " + plan.item + ": " + g.why.join("; ") + "; take it to the Captain before launching");
 }
 const GUARDED = ["host-up", "launch", "relaunch"];
-const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "recover", "host-down"];
+const LAUNCHER = ["prepare", "host-up", "launch", "attach", "relaunch", "rerun", "recover", "host-down"];
 
 export async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
