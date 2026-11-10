@@ -13,7 +13,7 @@ import { ARMS, bundleLists, REPO, sha256, TASK_SETUP, taskSetup } from "../../la
 import { HM_PROFILE } from "../../lanes/harness-mechanics/plans.ts";
 import { pool, screen, type Detect } from "../../lanes/harness-mechanics/screen.ts";
 import { checksTrust, D1, D1_TASK, d1Order, editPick, loopResult, verifyLoop } from "../../lanes/harness-mechanics/d1.ts";
-import { gitOut, leakyTree } from "./d7-fixture.ts";
+import { gitOut, leakyTree, withSubmodule } from "./d7-fixture.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "hm-d1-"));
 const kwargs = (spec: string) => {
@@ -90,14 +90,42 @@ describe("D7: the RUN strips history past the base before D1's origin", () => {
     expect(existsSync(origin)).toBe(false);
     expect(gitOut(t.w, "rev-parse", "-q", "--verify", "refs/tags/v9^{commit}")).toBe(t.future);
   });
-  test("the RUN refuses a tree holding a nested .git", () => {
+  test("the RUN refuses a tree holding a nested .git that is not a submodule the base pins, before it strips anything", () => {
     const t = leakyTree(), origin = join(t.root, "opt", "hm-origin.git");
     mkdirSync(join(t.w, "vendor", "pkg"), { recursive: true });
     Bun.spawnSync(["git", "init", "-q", join(t.w, "vendor", "pkg")]);
     const r = runSetup(t.w, origin);
     expect(r.exitCode).not.toBe(0);
-    expect(r.stderr.toString()).toContain("fatal: D7 history refused: the tree holds a submodule or a nested .git");
+    expect(r.stderr.toString()).toContain("fatal: D7 history refused: the tree holds a nested .git that is not a submodule the base pins");
     expect(existsSync(origin)).toBe(false);
+    expect(gitOut(t.w, "rev-parse", "-q", "--verify", "refs/tags/v9^{commit}")).toBe(t.future);
+  });
+  test("a submodule the base pins is stripped the same way, against the commit the base pins for it", () => {
+    const t = withSubmodule(leakyTree()), origin = join(t.root, "opt", "hm-origin.git"), s = join(t.w, t.sub);
+    const r = runSetup(t.w, origin);
+    expect([r.exitCode, r.stderr.toString()]).toEqual([0, ""]);
+    expect(gitOut(s, "rev-parse", "HEAD")).toBe(t.pinned);
+    expect(gitOut(s, "for-each-ref", "--format=%(refname)")).toBe("refs/heads/work");
+    expect(git(s, "cat-file", "-e", t.subFuture).exitCode).not.toBe(0);
+    const commits = gitOut(s, "cat-file", "--batch-all-objects", "--batch-check=%(objecttype) %(objectname)").split("\n").filter((l) => l.startsWith("commit ")).map((l) => l.slice(7));
+    expect(commits).toEqual([t.pinned]);
+    expect(gitOut(s, "reflog", "show", "HEAD")).toBe("");
+    expect(git(t.w, "cat-file", "-e", t.future).exitCode).not.toBe(0);
+    expect(gitOut(t.w, "status", "--porcelain")).toBe("");
+    expect(readdirSync(join(t.w, ".git")).filter((f) => f.startsWith("hm-d7-"))).toEqual([]);
+  });
+  test("the RUN refuses a submodule that is not at the commit the base pins, or a submodule git directory nothing checks out", () => {
+    const moved = withSubmodule(leakyTree());
+    git(join(moved.w, moved.sub), "checkout", "-q", "--detach", moved.subFuture);
+    const r = runSetup(moved.w, join(moved.root, "opt", "hm-origin.git"));
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr.toString()).toContain("fatal: D7 history refused: the submodule at lib/schema is not at the commit the base pins");
+    expect(gitOut(moved.w, "rev-parse", "-q", "--verify", "refs/tags/v9^{commit}")).toBe(moved.future);
+    const orphan = withSubmodule(leakyTree());
+    git(orphan.w, "submodule", "deinit", "-q", "-f", orphan.sub);
+    const o = runSetup(orphan.w, join(orphan.root, "opt", "hm-origin.git"));
+    expect(o.exitCode).not.toBe(0);
+    expect(o.stderr.toString()).toContain("fatal: D7 history refused: the tree holds a submodule git directory the base does not check out");
   });
 });
 

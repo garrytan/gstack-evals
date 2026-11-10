@@ -8,10 +8,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildError, buildProblems, D7_CHECK, d7Names, d7Problems, readD7, type D7Read } from "../../lanes/harness-mechanics/build-check.ts";
 import { taskSetup } from "../../lanes/harness-mechanics/pins.ts";
-import { checkEnv, git, HIDDEN, leakyTree } from "./d7-fixture.ts";
+import { checkEnv, git, HIDDEN, leakyTree, withSubmodule } from "./d7-fixture.ts";
 
 const C = "0123456789abcdef0123456789abcdef01234567";
-const clean: D7Read = { base: C, names: 1, refs: [], pseudo: [], commits: { testbed: 0, origin: 0 }, unreachable: { testbed: 0, origin: 0 }, alternates: [], origin: true, git_dirs: [], hits: [], done: true };
+const clean: D7Read = { base: C, names: 1, refs: [], pseudo: [], commits: { testbed: 0, origin: 0 }, unreachable: { testbed: 0, origin: 0 }, alternates: [], origin: true, git_dirs: [], subheads: [], hits: [], done: true };
 const good = { task: "holoviz__holoviews-6783", workdir: "/testbed", pwd: "/testbed", main: C, head: C, d7: clean };
 // The shape of BuildKit's plain progress when the origin RUN runs outside a git tree, as Stage 1's 92 cells failed.
 const PLAIN = [
@@ -41,6 +41,26 @@ describe("hm build-check", () => {
     expect(buildError(PLAIN)).toBe("0.104 fatal: not a git repository (or any of the parent directories): .git");
     expect(buildError("#5 ERROR: pull access denied\nERROR: failed to build: failed to solve: x")).toBe("#5 ERROR: pull access denied");
     expect(buildError("ERROR: failed to build: failed to solve: x\n")).toBe("ERROR: failed to build: failed to solve: x");
+  });
+  test("a refused step reports what the command printed, not the step's own text, which quotes its fatal: lines", () => {
+    const run = 'RUN export GIT_NO_REPLACE_OBJECTS=1 && d7() { echo "fatal: D7 history refused: $1" >&2; exit 1; } && B=$(git rev-parse HEAD)';
+    const out = [
+      "#17 [stage-2 9/9] " + run,
+      "#17 0.253 fatal: D7 history refused: the tree holds a nested .git that is not a submodule the base pins",
+      '#17 ERROR: process "/bin/bash -c export GIT_NO_REPLACE_OBJECTS=1 && d7() { echo \\"fatal: D7 history refused: $1\\" >&2; exit 1; }" did not complete successfully: exit code: 1',
+      "------",
+      " > [stage-2 9/9] " + run + ":",
+      "0.253 fatal: D7 history refused: the tree holds a nested .git that is not a submodule the base pins",
+      "------",
+      "Dockerfile:37",
+      "--------------------",
+      "  36 |     WORKDIR /testbed",
+      "  37 | >>> " + run,
+      "  38 |",
+      "--------------------",
+      'ERROR: failed to build: failed to solve: process "/bin/bash -c export GIT_NO_REPLACE_OBJECTS=1 && d7() { echo \\"fatal: D7 history refused: $1\\" >&2; exit 1; }" did not complete successfully: exit code: 1',
+    ].join("\n");
+    expect(buildError(out)).toBe("0.253 fatal: D7 history refused: the tree holds a nested .git that is not a submodule the base pins");
   });
   test("a built image passes only with WORKDIR /testbed, pwd /testbed, origin/main equal to HEAD and a clean D7 read", () => {
     expect(buildProblems(good)).toEqual([]);
@@ -104,6 +124,26 @@ describe("D7's object-level read", () => {
     expect(d.commits.testbed).toBeGreaterThan(0);
     expect(d.unreachable.testbed).toBeGreaterThan(0);
     expect(d.names).toBe(0);
+  });
+  test("reads a submodule the base pins against the commit it pins: past the pin before the RUN, clean after it", () => {
+    const t = withSubmodule(leakyTree()), env = checkEnv(t.root);
+    const before = d7Problems(check(t.root, [HIDDEN]));
+    expect(before).toContain("D7: sub:lib/schema ref refs/tags/sv9 points past the base");
+    expect(before).toContain("D7: sub:lib/schema ref refs/remotes/origin/work points past the base");
+    expect(before).toContain("D7: sub:lib/schema holds 1 commit past the base");
+    expect(before.some((x) => x.includes("a git directory at"))).toBe(false);
+    expect([setup(t.w, env.ORIGIN).exitCode]).toEqual([0]);
+    const d = check(t.root, [HIDDEN]);
+    expect(d7Problems(d)).toEqual([]);
+    expect(d.commits).toEqual({ testbed: 0, origin: 0, "sub:lib/schema": 0 });
+  });
+  test("a submodule off the commit the base pins, or a submodule git directory nothing checks out, fails the read", () => {
+    const moved = withSubmodule(leakyTree());
+    git(join(moved.w, moved.sub), "checkout", "-q", "--detach", moved.subFuture);
+    expect(d7Problems(check(moved.root, []))).toContain("D7: the submodule at lib/schema is not at the commit the base pins");
+    const orphan = withSubmodule(leakyTree());
+    git(orphan.w, "submodule", "deinit", "-q", "-f", orphan.sub);
+    expect(d7Problems(check(orphan.root, []))).toContain("D7: a git directory at " + join(orphan.w, ".git", "modules", "lib", "schema") + " besides the tree's and the origin's");
   });
   test("an unfinished or baseless read fails", () => {
     expect(d7Problems(readD7("D7 base " + C + "\n"))).toContain("D7: the read did not finish");
