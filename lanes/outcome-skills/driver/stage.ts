@@ -511,6 +511,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         record({ event: "halt", item: s.item, id: sess.id, lease_id: s.lease_id, meter_id: sess.meter_id, journal: s.journal });
         log("E_SM_FINALIZE_HALT outcome driver: session " + sess.id + " on line item " + s.item + " closed with its proxy finalize failed, so its allowance stops are unknown; the item opens no more sessions or leases until the Captain rules on the proxy journal " + s.journal + " and a relaunch lifts the halt with --lift-halt " + sess.id);
         drain(s, "halted", null);
+        if (s.ended !== "cap_stop") s.ended = "halted";
       }
       if (s.state === "draining" && s.live.size === 0) void settleStage(s);
       return answer;

@@ -336,7 +336,7 @@ describe("the SM stage (#290 notes 5 and 6)", () => {
     const body = JSON.parse(String(init.body)) as { model: string };
     return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
   };
-  const serve = (l: ReturnType<typeof ledger>, stages: StageSpec[], extra: { lift_halts?: string[] } = {}) =>
+  const serve = (l: ReturnType<typeof ledger>, stages: StageSpec[], extra: { lift_halts?: string[]; now?: () => number } = {}) =>
     serveStages({ record: l.record, local: l.db, run_id: "r1", envelope_host: "m1", machine: "m1", stages, host: "127.0.0.1", dir: join(l.root, "run"), fetch: fetchStub, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key", OPENROUTER_API_KEY: "upstream-key" }, log: () => {}, ...extra });
   const OPUS_STAGE: StageSpec[] = [{ item: "sm-opus", arm: "sm-opus", model: "claude-opus-5-5", arms: ARMS }];
   const openA1 = async (control: string, key: string, model = "claude-opus-5-5") => (await fetch(control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t-" + key, model, cap_usd: model === "claude-opus-5-5" ? 15 : 3, meta: { arm: "sm:A1", task: key + "/A1", trial_n: 1 }, open_key: key + model, ledger: "u4" }) }));
@@ -415,6 +415,37 @@ describe("the SM stage (#290 notes 5 and 6)", () => {
     expect(s2.status).toBe(200);
     expect((await closeWith(lifted.control, ((await s2.json()) as Record<string, any>).id, false)).finalized).toBe(true);
     expect(await lifted.stop()).toBe(0);
+    l.db.close?.();
+  });
+
+  // Value: protects=the halt's exit and settled row when the stage is already draining (its lease is too short for another open), where E_SM_FINALIZE_HALT says the driver exits 2; fails_when=the halt line is written but the stage settles lease_expired and the driver exits 0; why_new=#318 /ship review (state-machines specialist, stage.ts drain); seam=driver/stage.ts closeSession and drain; no_claim=the halt on a serving stage (the test above)
+  test("a halt on a stage already draining for its lease settles halted, and the driver exits 2", async () => {
+    const l = ledger(["sm-opus"]);
+    let clock = Date.now();
+    const served = await serve(l, OPUS_STAGE, { now: () => clock });
+    const s1 = (await (await openA1(served.control, "u1")).json()) as Record<string, any>;
+    clock += 365 * 24 * 3600 * 1000;
+    expect((await openA1(served.control, "u2")).status).toBe(503);
+    expect((await closeWith(served.control, s1.id, true)).finalized).toBe(false);
+    expect(runLines(l, "halt")).toEqual([expect.objectContaining({ item: "sm-opus", id: s1.id })]);
+    expect(await served.stop()).toBe(2);
+    expect(runLines(l, "settled")).toEqual([expect.objectContaining({ item: "sm-opus", ended: "halted" })]);
+    l.db.close?.();
+  });
+
+  // Value: protects=--lift-halt's refusal of an id that names no standing halt (unknown, or already lifted), before any recovery or lease; fails_when=a stale or made-up lift opens a lease or writes a lift line; why_new=#318 /ship review (testing specialist, stage.ts --lift-halt); seam=driver/stage.ts serve; no_claim=the lift that succeeds (the test above)
+  test("a --lift-halt naming no standing halt is refused before any lease opens", async () => {
+    const l = ledger(["sm-opus"]);
+    const served = await serve(l, OPUS_STAGE);
+    const s1 = (await (await openA1(served.control, "u1")).json()) as Record<string, any>;
+    expect((await closeWith(served.control, s1.id, true)).finalized).toBe(false);
+    expect(await served.stop()).toBe(2);
+    const lifted = await serve(l, OPUS_STAGE, { lift_halts: [s1.id] });
+    expect(await lifted.stop()).toBe(0);
+    const tried = (ids: string[]) => serve(l, OPUS_STAGE, { lift_halts: ids }).then(async (s) => (await s.stop(), "served"), (e: LedgerError) => e.code + " " + e.message);
+    for (const id of [s1.id, "made-up"]) expect(await tried([id])).toStartWith("E_USAGE --lift-halt " + id + " names no halt still standing in run r1");
+    expect(readItem(l.record, "sm-opus").leases.length).toBe(2);
+    expect(runLines(l, "lift").length).toBe(1);
     l.db.close?.();
   });
 
