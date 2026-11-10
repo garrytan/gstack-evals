@@ -750,6 +750,14 @@ describe("the containment check before any session (E_SM_CONTAIN)", () => {
     expect(check(t).checks.stores).toEqual({ ok: false, findings: ["store /root/.claude/skills/gstack/.git"] });
   });
 
+  // Value: protects=the record and the E_SM_CONTAIN message when the check cannot read the repo; fails_when=a CHECK line that says fail reads as a passing check; why_new=Capy's review of #318; seam=contain.ts parseContain; no_claim=why a repo dir is missing
+  test("a check the script reports as failed reads as failed, as do the checks that never ran", () => {
+    const t = tree("norepo");
+    const r = contain({ kind: "host", root: t.root, repo: join(t.root, "missing") }, { want: t.base, names: [NAME], markers: [MARK] });
+    expect(r.ok).toBe(false);
+    expect(Object.values(r.checks).map((c) => c.ok)).toEqual([false, false, false, false]);
+  });
+
   test("the inputs are the FAIL_TO_PASS leaf names and the 30-code-point lines test.patch and fix-tests.patch add", () => {
     const dir = unitDir(scratch("contain-inputs"), (u) => { u.tests.f2p = ["tests/test_a.py::TestK::test_one[p1]", "src/lib.rs::tests::two", "testThree(com.x.FooTest)", "com.x.BarTest#testFour", "TestFive/sub_case"]; });
     const files = { "test.patch": "diff --git a/t b/t\n--- a/t\n+++ b/t\n@@ -0,0 +1,2 @@\n+short\n+" + MARK + "\n", "fix-tests.patch": "diff --git a/s b/s\n--- a/s\n+++ b/s\n@@ -0,0 +1 @@\n+        assert_eq!(parse_contain(\"y\"), Some(7));\n" };

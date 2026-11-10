@@ -61,6 +61,19 @@ describe("sm dryrun", () => {
     expect(dryrun(cfg(), join(d, "e"), { run: () => ({ status: 2, out: "E_SM_UNIT no rebuild rule flag" }), log: (l) => lines.push(l) })).toBe(1);
     expect(lines.at(-1)).toContain("exit 2: E_SM_UNIT");
   });
+  // Value: protects=a planted-leak control in the dry run: sm contain exits 2 (E_SM_CONTAIN) after writing its record, so a contain case reads the record whatever the exit; fails_when=a contain case expecting ok false fails on the exit alone, or one with no record passes; why_new=Capy's review of #318; seam=dryrun.ts dryrun; no_claim=the check itself (sm-predata's containment tests)
+  test("a contain case reads its record even when sm contain exits 2, and fails with no record", () => {
+    const d = mkdtempSync(join(tmpdir(), "sm-dryrun-"));
+    roots.push(d);
+    const c: DryrunConfig = { schema: "sm-dryrun-config.v1", units: { u: { dir: "/units/u", image_digest: "sha256:" + "a".repeat(64) } }, cases: [{ name: "leak", kind: "contain", unit: "u", expect: { ok: false } }] };
+    const lines: string[] = [];
+    const planted = (args: string[]) => (writeFileSync(args[args.indexOf("--out") + 1]!, JSON.stringify({ schema: "sm-contain.v1", unit: "u", ok: false })), { status: 2, out: "E_SM_CONTAIN u (first image) fails" });
+    expect(dryrun(c, join(d, "a"), { run: planted, log: (l) => lines.push(l) })).toBe(0);
+    expect(lines).toEqual(["PASS leak: ok=false", "DRYRUN: ok"]);
+    lines.length = 0;
+    expect(dryrun(c, join(d, "b"), { run: () => ({ status: 2, out: "E_SM_CONTAIN the check did not run" }), log: (l) => lines.push(l) })).toBe(1);
+    expect(lines.at(-1)).toContain("FAIL leak: exit 2: E_SM_CONTAIN the check did not run");
+  });
 });
 
 const gated = process.env.GSTACK_EVALS_DOCKER === "1" && !!process.env.GSTACK_EVALS_SM_DRYRUN_CONFIG;

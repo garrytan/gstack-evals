@@ -43,11 +43,11 @@ export function containInputs(unitDir: string): { names: string[]; markers: stri
 /** Reads contain.sh's lines into the result; test text never leaves this function, only its sha256. */
 export function parseContain(stdout: string): ContainResult {
   const f: Record<ContainCheck, string[]> = { refs: [], objects: [], stores: [], scan: [] };
-  const seen = new Set<string>();
+  const status = new Map<string, string>();
   const archives: string[] = [];
   for (const l of stdout.split("\n")) {
     const [k, a = "", b = "", c = ""] = l.split(" ");
-    if (k === "CHECK") seen.add(a);
+    if (k === "CHECK") status.set(a, b);
     else if (k === "REF") f.refs.push(b64(a) + " " + b);
     else if (k === "OBJ") f.objects.push(a);
     else if (k === "STORE") f.stores.push(a + " " + b64(b));
@@ -56,7 +56,7 @@ export function parseContain(stdout: string): ContainResult {
   }
   const checks = Object.fromEntries((Object.keys(f) as ContainCheck[]).map((k) => {
     const findings = [...new Set(f[k])].sort();
-    return [k, { ok: seen.has(k) && findings.length === 0, findings }];
+    return [k, { ok: status.has(k) && status.get(k) !== "fail" && findings.length === 0, findings }];
   })) as ContainResult["checks"];
   return { ok: Object.values(checks).every((c) => c.ok), checks, archives: archives.sort() };
 }

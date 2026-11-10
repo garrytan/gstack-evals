@@ -10,6 +10,7 @@ import { join } from "node:path";
 const BIN = join(import.meta.dir, "../../../bin/gstack-evals");
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 
+/** A contain case reads its record whatever sm contain's exit: the check exits 2 (E_SM_CONTAIN) after writing it. */
 export interface DryrunCase {
   name: string;
   kind: "first" | "followon" | "contain";
@@ -59,7 +60,7 @@ export function dryrun(cfg: DryrunConfig, outDir: string, o: { from?: string; ru
     const out = join(outDir, c.name + ".json");
     if (existsSync(out)) throw new Error("E_USAGE " + out + " exists; a dry run writes each record once");
     const r = run(caseArgs(c, u.dir, out));
-    const miss = r.status !== 0 || !existsSync(out) ? ["exit " + r.status + ": " + r.out.trim().split("\n").slice(-2).join(" | ")] : misses(JSON.parse(readFileSync(out, "utf8")), c.expect);
+    const miss = (r.status !== 0 && c.kind !== "contain") || !existsSync(out) ? ["exit " + r.status + ": " + r.out.trim().split("\n").slice(-2).join(" | ")] : misses(JSON.parse(readFileSync(out, "utf8")), c.expect);
     log((miss.length ? "FAIL " : "PASS ") + c.name + ": " + (miss.length ? miss.join("; ") : Object.entries(c.expect).map(([p, v]) => p + "=" + JSON.stringify(v)).join(" ")));
     if (miss.length) return 1;
   }
