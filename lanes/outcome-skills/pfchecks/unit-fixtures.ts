@@ -96,7 +96,7 @@ function blocky(c: FixtureCtx): UnitFixture {
       { role: "built", command: "bash checks/built.sh", want: "catch" },
       { role: "inline", command: 'python3 -c "print(1)" config/blocking_test.go', want: "inline" },
       { role: "nothing", command: "ls -la", want: "names_nothing" },
-      { role: "static", command: "go test -count=1 ./pfcheck/static/static_test.go", want: "catch" },
+      { role: "static", command: go("pfcheck/static", "TestPFStatic"), want: "catch" },
       { role: "sync", command: "bash checks/sync.sh", want: "no_catch" },
       { role: "late", command: "go test -count=1 ./late/", want: "names_nothing" },
       { role: "tlc", command: tlc("site/verify-blocking"), want: "no_catch" },
