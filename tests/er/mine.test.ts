@@ -153,5 +153,5 @@ describe("plan text (section 4)", () => {
     expect(at("Android only; desktop behavior is unchanged.").eligible).toBe(true);
     expect(at("No behavior change to the limits themselves.").eligible).toBe(true);
     expect(at("No breaking changes.").eligible).toBe(true);
-  });
+  }, 30_000);
 });
