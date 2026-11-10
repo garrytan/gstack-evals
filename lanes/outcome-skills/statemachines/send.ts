@@ -10,7 +10,10 @@
 // past it, or one the proxy refuses at its allowance check, halts the item before the next send: a halt line in the
 // replies file refuses every later send until one with --lift-halt records the Captain's ruling. Every reply
 // goes through the strict readers that sm packets read uses; a malformed one is recorded with E_SM_JUDGE_ANSWER and
-// never asked again, since the prereg allows no re-ask. An upstream failure is recorded and stops the send. A call once
+// never asked again, since the prereg allows no re-ask. An upstream failure is recorded and stops the send. One with no
+// answer and nothing charged (the proxy meter shows $0 spent, $0 unknown and nothing lost in transit) is recorded as
+// uncharged, and the next send asks it once more; if that one resend also fails uncharged, the call is recorded as a gap
+// that names both codes and is never sent again. Any other call once
 // sent is never sent again, including one whose answer a stopped send never recorded (recorded as lost): its send line
 // is on disk before the call goes out, one live send holds the item, and a send whose replies file does not name every
 // call the ledger holds for the item and run is refused before it recovers or sends anything.
@@ -36,9 +39,9 @@ import { assertBlind, judgeFor, LABELLERS, R78_PRICE_BOUND, readJudgeAnswer, rea
 import { smFail } from "./unit.ts";
 
 export type Reader = keyof typeof LABELLERS;
-export type Outcome = "answered" | "malformed" | "allowance_stop" | "cap_stop" | "upstream" | "lost";
+export type Outcome = "answered" | "malformed" | "allowance_stop" | "cap_stop" | "upstream" | "uncharged" | "gap" | "lost";
 const READERS = Object.keys(LABELLERS) as Reader[];
-const OUTCOMES: Outcome[] = ["answered", "malformed", "allowance_stop", "cap_stop", "upstream", "lost"];
+const OUTCOMES: Outcome[] = ["answered", "malformed", "allowance_stop", "cap_stop", "upstream", "uncharged", "gap", "lost"];
 const KEY_ENV = { anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" } as const;
 const MODEL = Object.fromEntries(READERS.map((r) => [r, { provider: LABELLERS[r].split("/")[0] as keyof typeof KEY_ENV, model: LABELLERS[r].split("/")[1]! }])) as Record<Reader, { provider: keyof typeof KEY_ENV; model: string }>;
 /** The fields the metering proxy adds to a request before it prices it, sent up front so the worst case priced here is the one the proxy reserves. */
@@ -206,9 +209,9 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
       closeSync(dir);
     }
   };
-  const reply = (job: Job, r: { outcome: Outcome; code?: ReasonCode; why?: string; answer?: unknown; raw?: string; micros?: number; meter_id?: string }) => {
+  const reply = (job: Job, r: { outcome: Outcome; code?: ReasonCode; first_code?: ReasonCode; why?: string; answer?: unknown; raw?: string; micros?: number; meter_id?: string }) => {
     counts[r.outcome]++;
-    write({ event: "reply", packet: job.packet, reader: job.reader, model: LABELLERS[job.reader], outcome: r.outcome, code: r.code ?? null, why: r.why ?? null, answer: r.answer ?? null, raw: r.raw ?? null, micros: r.micros ?? null, meter_id: r.meter_id ?? null });
+    write({ event: "reply", packet: job.packet, reader: job.reader, model: LABELLERS[job.reader], outcome: r.outcome, code: r.code ?? null, ...(r.first_code ? { first_code: r.first_code } : {}), why: r.why ?? null, answer: r.answer ?? null, raw: r.raw ?? null, micros: r.micros ?? null, meter_id: r.meter_id ?? null });
   };
   const prior: Array<{ at?: string; event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string; outcome?: Outcome; code?: ReasonCode; why?: string }> = [];
   for (const l of existsSync(repliesFile) ? readFileSync(repliesFile, "utf8").split("\n") : []) {
@@ -219,9 +222,12 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   const other = prior.find((l) => l.item !== o.item || l.run_id !== o.run_id);
   if (other) smFail("E_USAGE", repliesFile + " holds replies of " + other.item + " for run " + other.run_id + ", not " + o.item + " for run " + o.run_id + "; give each send its own --out");
   const k = (j: { packet: string; reader: string }) => j.packet + " " + j.reader;
-  const done = new Set(prior.filter((l) => l.event === "reply" && l.outcome !== "cap_stop").map(k));
+  const done = new Set(prior.filter((l) => l.event === "reply" && l.outcome !== "cap_stop" && l.outcome !== "uncharged").map(k));
+  const uncharged = new Map<string, (typeof prior)[number]>();
+  for (const l of prior) if (l.event === "reply" && l.outcome === "uncharged" && !uncharged.has(k(l))) uncharged.set(k(l), l);
+  const replied = new Set(prior.filter((l) => l.event === "reply" && l.meter_id).map((l) => l.meter_id));
   const lost = new Map<string, (typeof prior)[number]>();
-  for (const l of prior) if (l.event === "send" && !done.has(k(l)) && !lost.has(k(l))) lost.set(k(l), l);
+  for (const l of prior) if (l.event === "send" && !replied.has(l.meter_id) && !done.has(k(l)) && !lost.has(k(l))) lost.set(k(l), l);
   const todo = order.filter((j) => !done.has(k(j)) && !lost.has(k(j)));
   const halts = new Map<string, (typeof prior)[number]>();
   for (const l of prior) {
@@ -305,7 +311,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     }
     const settled = local.meters(lease.lease_id).get(b.meter_id);
     const base = { micros: settled?.held_micros ?? 0, meter_id: b.meter_id };
-    const r = ((): Parameters<typeof reply>[1] => {
+    const failed = ((): Parameters<typeof reply>[1] => {
       if (status === 200) {
         let answer: string | null = null;
         try {
@@ -325,6 +331,9 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
       const why = (meter.requests ? "sent " + meter.requests + " time(s), provider answers " + JSON.stringify(meter.upstream.statuses) + (meter.upstream.failed ? ", " + meter.upstream.failed + " lost in transit" : "") + "; " : "") + "the proxy answered HTTP " + status + (problem?.detail ? ": " + problem.detail : status === 200 ? ": the provider's response is not JSON" : "");
       return { outcome: "upstream", code, why, ...base };
     })();
+    const first = uncharged.get(k(job));
+    const free = failed.outcome === "upstream" && meter.upstream.failed === 0 && !settled?.spent_micros && !settled?.unknown_micros;
+    const r: Parameters<typeof reply>[1] = !free ? failed : first ? { ...failed, outcome: "gap", first_code: first.code ?? "UPSTREAM", why: failed.why + "; its one resend after a first uncharged failure (" + (first.code ?? "UPSTREAM") + ") failed uncharged again, so it is a gap and is never sent again" } : { ...failed, outcome: "uncharged", why: failed.why + "; no answer and nothing charged, so the next send asks it once more" };
     const u = settled?.usage;
     const usage = u ? { input: u.input + u.cache_read + u.cache_write, output: u.output + u.reasoning } : null;
     const past = usage !== null && (usage.input > R78_PRICE_BOUND.input_tokens || usage.output > R78_PRICE_BOUND.output_tokens);
@@ -335,7 +344,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
         : null;
     if (halt) write({ event: "halt", packet: job.packet, reader: job.reader, meter_id: b.meter_id, code: halt.code, why: halt.why, usage });
     reply(job, r);
-    if (r.outcome === "upstream") stop ??= { code: r.code!, why: job.reader + " on packet " + job.packet + ": " + r.why + "; the send stops, and a rerun sends only what is not recorded" };
+    if (r.outcome === "upstream" || r.outcome === "uncharged" || r.outcome === "gap") stop ??= { code: r.code!, why: job.reader + " on packet " + job.packet + ": " + r.why + "; the send stops, and a rerun sends only what is not recorded, plus an uncharged call once more" };
     if (halt) stop = { code: halt.code, why: halt.why + "; the item halts before the next send until the Captain rules, then send again with --lift-halt " + b.meter_id };
   };
 

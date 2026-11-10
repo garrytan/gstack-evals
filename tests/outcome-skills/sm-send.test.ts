@@ -411,11 +411,11 @@ describe("failures are recorded, never resent", () => {
     const r4 = await send(four, "sm-labels", calls, (model, packet) => (model === "gpt-6-astra" && packet === a ? { status: 400 } : {}));
     expect(r4.code).toBe("UPSTREAM");
     expect(sentTo(calls)).toEqual(["gpt-6-astra " + a]);
-    expect(replies(four, "sm-labels").map((x) => [x.outcome, x.code])).toEqual([["upstream", "UPSTREAM"]]);
+    expect(replies(four, "sm-labels").map((x) => [x.outcome, x.code])).toEqual([["uncharged", "UPSTREAM"]]);
     expect(readItem(four.record, "sm-labels").leases[0]!.close).toMatchObject({ spent_micros: 0, unknown_micros: 0, unknown_calls: 0 });
     const resumed = await send(four, "sm-labels", calls);
     expect(resumed.code).toBe("ok");
-    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a, "claude-opus-5-5 " + a, "gpt-6-astra " + b, "claude-opus-5-5 " + b]);
+    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a, "gpt-6-astra " + a, "claude-opus-5-5 " + a, "gpt-6-astra " + b, "claude-opus-5-5 " + b]);
 
     const lost = setup({ "sm-labels": 150 });
     labels(lost, 1);
@@ -435,6 +435,40 @@ describe("failures are recorded, never resent", () => {
     expect(readItem(five.record, "sm-labels").leases[0]!.close).toMatchObject({ spent_micros: charged[0], unknown_micros: 0 });
     await send(five, "sm-labels", calls);
     expect(sentTo(calls.slice(m))).toEqual(["gpt-6-astra " + p5, "claude-opus-5-5 " + p5]);
+  });
+
+  test("a failure with no answer and nothing charged is resent at most once: a second uncharged failure is recorded as a gap that keeps the first code, and no later send asks again; a charged 5xx and a call lost in transit are never resent", async () => {
+    const s = setup({ "sm-labels": 150 });
+    const [a] = labels(s, 1) as [string];
+    const calls: Call[] = [];
+    const deny = (model: string) => (model === "gpt-6-astra" ? { status: 401 } : {});
+    expect((await send(s, "sm-labels", calls, deny)).code).toBe("UPSTREAM");
+    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a]);
+    expect(replies(s, "sm-labels").map((x) => [x.outcome, x.code])).toEqual([["uncharged", "UPSTREAM"]]);
+    expect(readItem(s.record, "sm-labels").leases[0]!.close).toMatchObject({ spent_micros: 0, unknown_micros: 0, unknown_calls: 0 });
+    expect((await send(s, "sm-labels", calls, deny)).code).toBe("UPSTREAM");
+    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a, "gpt-6-astra " + a]);
+    expect(replies(s, "sm-labels").map((x) => [x.outcome, x.code, x.first_code])).toEqual([["uncharged", "UPSTREAM", undefined], ["gap", "UPSTREAM", "UPSTREAM"]]);
+    const third = await send(s, "sm-labels", calls, deny);
+    expect([third.code, third.result?.counts.gap]).toEqual(["ok", 0]);
+    expect(sentTo(calls)).toEqual(["gpt-6-astra " + a, "gpt-6-astra " + a, "claude-opus-5-5 " + a]);
+    expect((await send(s, "sm-labels", calls, deny)).result?.sent).toBe(0);
+
+    const five = setup({ "sm-labels": 150 });
+    const [p5] = labels(five, 1) as [string];
+    const m = calls.length;
+    expect((await send(five, "sm-labels", calls, () => ({ status: 500 }))).code).toBe("UPSTREAM");
+    expect(replies(five, "sm-labels").map((x) => x.outcome)).toEqual(["upstream"]);
+    await send(five, "sm-labels", calls);
+    expect(sentTo(calls.slice(m))).toEqual(["gpt-6-astra " + p5, "claude-opus-5-5 " + p5]);
+
+    const transit = setup({ "sm-labels": 150 });
+    const [pt] = labels(transit, 1) as [string];
+    const n = calls.length;
+    expect((await send(transit, "sm-labels", calls, () => ({ throws: true }))).code).toBe("UPSTREAM");
+    expect(replies(transit, "sm-labels").map((x) => x.outcome)).toEqual(["upstream"]);
+    await send(transit, "sm-labels", calls);
+    expect(sentTo(calls.slice(n))).toEqual(["gpt-6-astra " + pt, "claude-opus-5-5 " + pt]);
   });
 
   test("a call whose answer was never recorded is recorded as lost on the next send and never resent", async () => {

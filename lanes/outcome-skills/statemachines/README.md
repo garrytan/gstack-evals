@@ -474,9 +474,12 @@ counts sessions.
 - Each reply goes through the readers `sm packets read` uses. A malformed one is recorded (E_SM_JUDGE_ANSWER) with its
   raw text and never asked again: the prereg allows no re-ask.
 - An upstream failure is recorded (UPSTREAM) and stops the send. The lease settles by the ledger's rules: a 4xx releases
-  the reservation, a lost send keeps it as unknown, and a 5xx without usage is charged. A rerun with the same --run and
-  --out sends only calls with no record; a call that a stopped send sent but never recorded is recorded as lost and
-  never sent again.
+  the reservation, a lost send keeps it as unknown, and a 5xx without usage is charged. A failure with no answer and
+  nothing charged ($0 spent, $0 unknown and nothing lost in transit, such as a provider 401) is recorded as uncharged.
+  A rerun with the same --run and --out sends calls with no record, and sends each uncharged call at most once more: if
+  that resend also fails uncharged, the call is recorded as a gap that keeps the first failure's code (first_code) and
+  is never sent again. A charged failure is never resent, and a call that a stopped send sent but never recorded is
+  recorded as lost and never sent again.
 - One live send holds an item on a host, through a lock file beside the record, so a second send on it is refused
   (E_USAGE) and never settles a lease the live one meters. Each send line is fsynced before its call goes out. A send
   whose replies.jsonl does not name every call the ledger holds for the item and run (another --out, or a file emptied
