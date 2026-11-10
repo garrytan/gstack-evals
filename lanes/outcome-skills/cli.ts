@@ -14,6 +14,8 @@ import { readFileSync } from "node:fs";
 export const HELP = `Usage: gstack-evals outcome serve --run <id> --envelope-host <machine id> --stage <item>=<arm> [--stage ...]
            --host <ip> --dir <run dir> [--planned 24] [--reruns 2] [--control-port <n>] [--ttl-hours 72]
            [--ledger <path>] [--ledger-record <dir>] [--registry <arms file>]
+A family SM stage is --stage <item>=<model>@<arm>,<arm>: one lease on the item for that model, serving each named SM arm
+at its per-model allowance, with a proxy that refuses provider-side tools.
 
 Opens one U4 lease per stage at its line item's cap through O6's envelope, one metering proxy per lease on --host, and a
 control plane on 127.0.0.1 that real_agent's U4 mode opens and closes sessions on. It prints control=<url> and one
@@ -23,6 +25,7 @@ arms_path must name the same file. Provider keys come from its environment as th
 
 Usage: gstack-evals outcome images pin --out <manifest.json> --set <name> --commit <sha> <task dir>...
        gstack-evals outcome images check <manifest.json> --sha256 <hex>
+       gstack-evals outcome sm <command>   the state machines family (gstack-evals outcome sm --help)
        gstack-evals outcome images public <manifest.json>
        gstack-evals outcome images bind <manifest.json> --task <task dir> --label <label> --out <run copy>
 
@@ -45,6 +48,7 @@ export async function main(argv: string[]): Promise<number> {
     return sub === undefined ? 2 : 0;
   }
   if (sub === "images") return await images(rest);
+  if (sub === "sm") return await (await import("./statemachines/cli.ts")).main(rest);
   if (sub !== "serve") {
     console.error(lines("E_USAGE", "unknown subcommand " + JSON.stringify(sub) + "; gstack-evals outcome --help lists them"));
     return 2;
@@ -61,10 +65,11 @@ export async function main(argv: string[]): Promise<number> {
     if (k === "--stage") {
       const m = v.match(/^([^=]+)=(.+)$/);
       if (!m) {
-        console.error(lines("E_USAGE", "--stage takes <item>=<arm>, not " + v));
+        console.error(lines("E_USAGE", "--stage takes <item>=<arm> or, for family SM, <item>=<model>@<arm>,<arm>, not " + v));
         return 2;
       }
-      stages.push({ item: m[1]!, arm: m[2]! });
+      const sm = m[2]!.match(/^([^@]+)@(.+)$/);
+      stages.push(sm ? { item: m[1]!, arm: m[1]!, model: sm[1]!, arms: sm[2]!.split(",") } : { item: m[1]!, arm: m[2]! });
     } else flags.set(k, v);
   }
   const missing = ["--run", "--envelope-host", "--host", "--dir"].filter((k) => !flags.has(k));
