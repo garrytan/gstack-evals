@@ -96,6 +96,11 @@ describe("session outcomes, section 10", () => {
     expect(taskRepo("scikit-learn__scikit-learn-25747")).toBe("scikit-learn/scikit-learn");
     expect(() => taskRepo("nonsense")).toThrow();
   });
+  test("an _interface task belongs to its repository's cluster", () => {
+    expect(taskRepo("marimo-team__marimo-8387_interface")).toBe("marimo-team/marimo");
+    expect(taskRepo("aws__bedrock-agentcore-sdk-python-279_interface")).toBe("aws/bedrock-agentcore-sdk-python");
+    expect(() => taskRepo("django__django-11099_other")).toThrow();
+  });
 });
 
 describe("coverage and pairing", () => {
