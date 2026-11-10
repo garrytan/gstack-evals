@@ -325,17 +325,18 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
       const why = (meter.requests ? "sent " + meter.requests + " time(s), provider answers " + JSON.stringify(meter.upstream.statuses) + (meter.upstream.failed ? ", " + meter.upstream.failed + " lost in transit" : "") + "; " : "") + "the proxy answered HTTP " + status + (problem?.detail ? ": " + problem.detail : status === 200 ? ": the provider's response is not JSON" : "");
       return { outcome: "upstream", code, why, ...base };
     })();
-    reply(job, r);
-    if (r.outcome === "upstream") stop ??= { code: r.code!, why: job.reader + " on packet " + job.packet + ": " + r.why + "; the send stops, and a rerun sends only what is not recorded" };
     const u = settled?.usage;
     const usage = u ? { input: u.input + u.cache_read + u.cache_write, output: u.output + u.reasoning } : null;
     const past = usage !== null && (usage.input > R78_PRICE_BOUND.input_tokens || usage.output > R78_PRICE_BOUND.output_tokens);
-    if (!past && r.outcome !== "allowance_stop") return;
     const halt = past
       ? { code: "E_SM_USAGE_HALT" as ReasonCode, why: job.reader + " on packet " + job.packet + " (meter " + b.meter_id + ") reported " + usage!.input + " input and " + usage!.output + " output tokens, past the prereg's bound of " + R78_PRICE_BOUND.input_tokens + " input and " + R78_PRICE_BOUND.output_tokens + " output tokens" }
-      : { code: "E_ALLOWANCE" as ReasonCode, why: job.reader + " on packet " + job.packet + " (meter " + b.meter_id + "): " + r.why };
-    write({ event: "halt", packet: job.packet, reader: job.reader, meter_id: b.meter_id, code: halt.code, why: halt.why, usage });
-    stop = { code: halt.code, why: halt.why + "; the item halts before the next send until the Captain rules, then send again with --lift-halt " + b.meter_id };
+      : r.outcome === "allowance_stop"
+        ? { code: "E_ALLOWANCE" as ReasonCode, why: job.reader + " on packet " + job.packet + " (meter " + b.meter_id + "): " + r.why }
+        : null;
+    if (halt) write({ event: "halt", packet: job.packet, reader: job.reader, meter_id: b.meter_id, code: halt.code, why: halt.why, usage });
+    reply(job, r);
+    if (r.outcome === "upstream") stop ??= { code: r.code!, why: job.reader + " on packet " + job.packet + ": " + r.why + "; the send stops, and a rerun sends only what is not recorded" };
+    if (halt) stop = { code: halt.code, why: halt.why + "; the item halts before the next send until the Captain rules, then send again with --lift-halt " + b.meter_id };
   };
 
   try {

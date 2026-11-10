@@ -240,6 +240,13 @@ describe("each call reserves its packet's byte worst case and runs alone", () =>
     expect(replies(s, "sm-labels").map((x) => [x.packet, x.reader, x.outcome])).toEqual([[a, "astra", "answered"]]);
     const item = readItem(s.record, "sm-labels");
     expect([item.open, item.stops.length, item.leases[0]!.close!.how]).toEqual([null, 0, "settled"]);
+    const file = join(outDir(s, "sm-labels"), "replies.jsonl");
+    const full = readFileSync(file, "utf8");
+    const answered = lines(s, "sm-labels").findIndex((l) => l.event === "reply" && l.packet === a && l.reader === "astra");
+    writeFileSync(file, full.split("\n").slice(0, answered + 1).join("\n") + "\n");
+    const cut = await send(s, "sm-labels", calls);
+    expect([cut.code, calls.length]).toEqual(["E_SM_USAGE_HALT", 1]);
+    writeFileSync(file, full);
     const again = await send(s, "sm-labels", calls);
     expect([again.code, calls.length]).toEqual(["E_SM_USAGE_HALT", 1]);
     expect(again.message).toContain("--lift-halt " + sent.meter_id);
