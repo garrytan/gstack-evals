@@ -85,14 +85,17 @@ export function unitScore(results: EntryResult[], sessionGap: string | null): { 
 const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
 /** The container script: the rebuild commands from the work dir (each exit printed), then the entry from the repository
- *  root under coreutils timeout when the image has it. The markers carry a per-run nonce the entry cannot know. */
+ *  root under coreutils timeout when the image has it, then every rebuild exit again, so the kept tail of a long entry
+ *  output still holds them. The markers carry a per-run nonce the entry cannot know. */
 export function entryScript(rebuild: string[], repoDir: string, workDir: string, timeoutS: number, nonce: string): string {
   const run = 'bash -c "$PF_CMD" </dev/null';
-  return ["exec 2>&1", "cd " + sq(workDir), ...rebuild.map((c) => "( " + c + " ) </dev/null\necho \"PF_REBUILD_" + nonce + " $?\""), "cd " + sq(repoDir),
-    "if command -v timeout >/dev/null 2>&1; then timeout -k 10 " + timeoutS + " " + run + "; else " + run + "; fi", "echo \"PF_ENTRY_" + nonce + " $?\"", ""].join("\n");
+  return ["exec 2>&1", "cd " + sq(workDir), ...rebuild.map((c, i) => "( " + c + " ) </dev/null\npf_r" + i + "=$?\necho \"PF_REBUILD_" + nonce + " $pf_r" + i + "\""), "cd " + sq(repoDir),
+    "if command -v timeout >/dev/null 2>&1; then timeout -k 10 " + timeoutS + " " + run + "; else " + run + "; fi", "echo \"PF_ENTRY_" + nonce + " $?\"",
+    "echo \"PF_REBUILDS_" + nonce + rebuild.map((_, i) => " $pf_r" + i).join("") + "\"", ""].join("\n");
 }
 export function readRun(out: string, killed: boolean, wall_ms: number, nonce: string): RunOut {
-  const rebuild_exits = [...out.matchAll(new RegExp("^PF_REBUILD_" + nonce + " (\\d+)$", "gm"))].map((m) => Number(m[1]));
+  const all = [...out.matchAll(new RegExp("^PF_REBUILDS_" + nonce + "((?: \\d+)*)$", "gm"))].pop();
+  const rebuild_exits = all ? all[1]!.split(" ").filter(Boolean).map(Number) : [...out.matchAll(new RegExp("^PF_REBUILD_" + nonce + " (\\d+)$", "gm"))].map((m) => Number(m[1]));
   const m = [...out.matchAll(new RegExp("^PF_ENTRY_" + nonce + " (\\d+)$", "gm"))].pop();
   const exit = killed || !m ? -1 : Number(m[1]);
   return { exit, timed_out: killed || exit === 124, wall_ms, rebuild_exits, log: out.slice(-LOG_TAIL) };

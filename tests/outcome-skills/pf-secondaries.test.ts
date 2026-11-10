@@ -30,3 +30,19 @@ test("compile-blocked drops the other agent-added files of the blocking file's c
   expect(compileBlocked("rust", e, ["tests/a.rs", "tests/b.rs", "sub/tests/c.rs"], t)).toEqual(["tests/b.rs"]);
   expect(compileBlocked("rust", red("cargo test --test a", "assertion failed"), ["tests/a.rs", "tests/b.rs"], t)).toBeNull();
 });
+
+test("Go: a static-text test file run through its package dir is a static-text entry", () => {
+  const files = ["pfcheck/static/static_test.go"];
+  expect(isStaticEntry("go test ./pfcheck/static/ -run TestPFStatic", files, "go")).toBe(true);
+  expect(isStaticEntry("go test -count=1 ./pfcheck/...", files, "go")).toBe(true);
+  expect(isStaticEntry("go test ./...", files, "go")).toBe(true);
+  expect(isStaticEntry("go test ./pfcheck/replay/", files, "go")).toBe(false);
+  expect(isStaticEntry("cargo test ./pfcheck/static/", files, "rust")).toBe(false);
+});
+test("Go: compiler lines with a column and [build failed] count as compile errors", () => {
+  const t = new Set(["go.mod", "pfcheck/pkg/a_test.go", "pfcheck/pkg/broken_test.go"]);
+  const added = ["pfcheck/pkg/a_test.go", "pfcheck/pkg/broken_test.go"];
+  const log = "# example.com/m/pfcheck/pkg [example.com/m/pfcheck/pkg.test]\npfcheck/pkg/broken_test.go:8:6: undefined: OldName\nFAIL\texample.com/m/pfcheck/pkg [build failed]";
+  expect(compileBlocked("go", red("go test -run TestA pfcheck/pkg/a_test.go", log), added, t)).toEqual(["pfcheck/pkg/broken_test.go"]);
+  expect(compileBlocked("go", red("go test -run TestA pfcheck/pkg/a_test.go", "    broken_test.go:12: want 1, got 2\nFAIL"), added, t)).toBeNull();
+});

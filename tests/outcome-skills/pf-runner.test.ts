@@ -1,6 +1,10 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
-import { entryScript, entryTimeout, readRun, scoreEntries, unitScore, type Executor, type RunSpec } from "../../lanes/outcome-skills/pfchecks/runner.ts";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { entryScript, entryTimeout, LOG_TAIL, readRun, scoreEntries, unitScore, type Executor, type RunSpec } from "../../lanes/outcome-skills/pfchecks/runner.ts";
 
 const trees = { parent: "P", fix: "F", neutral: "N" };
 const run = (rule: (s: RunSpec) => number, rebuild: (s: RunSpec) => number = () => 0): Executor & { calls: RunSpec[]; peak: number } => {
@@ -56,4 +60,15 @@ test("the entry timeout clamp and the run script markers", () => {
   const out = readRun("PF_REBUILD_n1 2\nPF_ENTRY_n1 0\nPF_ENTRY_n1 0\nPF_ENTRY_n1 1\n", false, 5, "n1");
   expect(out).toMatchObject({ exit: 1, rebuild_exits: [2], timed_out: false });
   expect(readRun("PF_ENTRY_n1 0\n", true, 5, "n1")).toMatchObject({ exit: -1, timed_out: true });
+});
+
+test("a fix-tree rebuild failure followed by more than 80,000 characters of entry output is still gap E_PF_REBUILD_FIX", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pf-tail-"));
+  const p = spawnSync("bash", [], { input: entryScript(["exit 3"], dir, dir, 30, "n9"), env: { ...process.env, PF_CMD: "yes x | head -c 90000; echo; exit 1" }, encoding: "utf8", maxBuffer: 1 << 24 });
+  expect(p.stdout.length).toBeGreaterThan(4 * LOG_TAIL);
+  const out = readRun(p.stdout.slice(-4 * LOG_TAIL), false, 1, "n9");
+  expect(out.rebuild_exits).toEqual([3]);
+  const r = await scoreEntries([{ index: 0, command: "x" }], async () => out, { trees: { parent: "p", fix: "f", neutral: "n" }, timeout_s: 30, exempt: false });
+  expect(r.results[0]!.outcome).toBe("gap");
+  expect(unitScore(r.results, null)).toEqual({ score: null, gap: "E_PF_REBUILD_FIX" });
 });

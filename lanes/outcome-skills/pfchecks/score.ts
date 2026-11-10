@@ -82,7 +82,7 @@ export async function scoreSession(o: ScoreIn) {
     const rs = run.results;
     const productBase = new Set(tPaths.filter((p) => classify(u.lang, p, testFiles) === "source").map((p) => p.split("/").pop()!));
     const staticFiles = sec.staticTextFiles(editedTests.filter((f) => f.status === "A"), productBase);
-    const staticEntries = rs.filter((r) => sec.isStaticEntry(r.command, staticFiles)).map((r) => r.index);
+    const staticEntries = rs.filter((r) => sec.isStaticEntry(r.command, staticFiles, u.lang)).map((r) => r.index);
     const apiGuess = Object.fromEntries(rs.map((r) => [r.index, sec.apiGuess(repo, u.lang, trees.parent, trees.fix!, r)]).filter(([, ids]) => (ids as string[]).length));
     const drift = Object.fromEntries(rs.filter((r) => r.outcome === "no_catch").map((r) => [r.index, sec.drift(repo, u.lang, trees.parent, trees.fix!, r)]).filter(([, ids]) => (ids as string[]).length));
     const added = tChanges.filter((c) => c.status === "A").map((c) => c.path);

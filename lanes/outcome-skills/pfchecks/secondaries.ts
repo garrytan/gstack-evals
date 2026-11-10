@@ -34,12 +34,21 @@ export const GREP_CMD = /^(grep|egrep|fgrep|rg|sed|awk|gawk)$/;
 export function staticTextFiles(newTests: { path: string; text: string }[], productBasenames: ReadonlySet<string>): string[] {
   return newTests.filter((f) => [...f.text.matchAll(/["'\x60]([^"'\x60\n]{1,300})["'\x60]/g)].some((m) => productBasenames.has(m[1]!.split(/[\\/]/).pop()!))).map((f) => f.path);
 }
-/** A static-text entry reads source with grep, rg, sed or awk, or names a static-text test file by path, basename or stem. */
-export function isStaticEntry(cmd: string, staticFiles: string[]): boolean {
+/** A static-text entry reads source with grep, rg, sed or awk, or names a static-text test file by path, basename or stem.
+ *  Go runs a test file through its package, so for Go a path word naming the file's package dir (./pkg/ or pkg) or a
+ *  ./pkg/... pattern above it also counts. */
+export function isStaticEntry(cmd: string, staticFiles: string[], lang?: Lang): boolean {
   const t = tokens(cmd);
   if (cmd.split(/[\s;|&()]+/).some((w) => GREP_CMD.test(w.split("/").pop() ?? ""))) return true;
   const names = new Set(staticFiles.flatMap((p) => { const b = p.split("/").pop()!; return [p, b, b.replace(/\.[^.]*$/, ""), b.replace(/\..*$/, "")]; }));
-  return t.some((x) => names.has(x));
+  if (t.some((x) => names.has(x))) return true;
+  if (lang !== "go") return false;
+  const dirs = staticFiles.map((p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "."));
+  return cmd.split(/[\s;|&()'"=]+/).filter((w) => w.includes("/") || w === ".").some((w) => {
+    const rec = /(^|\/)\.\.\.$/.test(w);
+    const d = (rec ? w.replace(/\/?\.\.\.$/, "") : w).replace(/^\.\//, "").replace(/\/+$/, "") || ".";
+    return dirs.some((x) => x === d || (rec && (d === "." || x.startsWith(d + "/"))));
+  });
 }
 
 /** Which of ids occur as whole words in the source files of a commit (git grep on the host scoring repo). */
@@ -87,7 +96,8 @@ export function compileUnit(lang: Lang, path: string, tPaths: ReadonlySet<string
 }
 
 /** Compile-blocked: the entry's first fix-run failure has an error line (a line holding "error", or the line after it,
- *  where rustc prints its location) naming an agent-added file the entry does not name. Returns the agent-added files of that file's compile unit to drop for the rerun (the entry's own files stay), or
+ *  where rustc prints its location; for Go also a compiler line, file.go:line:col:, or a [build failed] line) naming an
+ *  agent-added file the entry does not name. Returns the agent-added files of that file's compile unit to drop for the rerun (the entry's own files stay), or
  *  null when the entry is not compile-blocked. */
 export function compileBlocked(lang: Lang, r: EntryResult, agentAdded: string[], tPaths: ReadonlySet<string>): string[] | null {
   const f = firstFixFailure(r);
@@ -95,7 +105,8 @@ export function compileBlocked(lang: Lang, r: EntryResult, agentAdded: string[],
   const t = new Set(tokens(r.command));
   const named = (p: string) => t.has(p) || stems(p).some((s) => t.has(s));
   const lines = f.log.split("\n");
-  const errLines = lines.flatMap((l, i) => (/error/i.test(l) ? [l, lines[i + 1] ?? ""] : []));
+  const isErr = (l: string) => /error/i.test(l) || (lang === "go" && (/\.go:\d+:\d+: /.test(l) || l.includes("[build failed]")));
+  const errLines = lines.flatMap((l, i) => (isErr(l) ? [l, lines[i + 1] ?? ""] : []));
   const blocking = agentAdded.filter((p) => !named(p) && errLines.some((l) => l.includes(p) || new RegExp("(^|[^\\w.-])" + esc(p.split("/").pop()!) + "\\b").test(l)));
   const units = new Set(blocking.map((p) => compileUnit(lang, p, tPaths)).filter((u): u is string => u !== null));
   if (!units.size) return null;
