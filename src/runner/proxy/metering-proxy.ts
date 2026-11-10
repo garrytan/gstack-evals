@@ -31,8 +31,16 @@
 //   the paid route, it forwards the body it checked (the parsed body, serialized again), so a duplicate key cannot hide a
 //   refused shape in a copy the check never read.
 // - A refusal quotes a client value (a model, a tool type, a field) only as a short token (quoteClientValue in prices.ts).
-//   On a request that carried a slot marker past the tripwire, every refusal replaces the marker with <unquoted>, and so
-//   does the model its marker_hit line journals.
+//   On a request that carried slot markers past the tripwire, a refusal replaces each marker with <unquoted> in the client
+//   values it quotes (maskMarkers: nested or overlapping markers become one <unquoted>) and leaves its own text as
+//   written; the marker_hit line journals a model that holds a marker as <unquoted>. The route-not-allowlisted refusal
+//   quotes the request path the same way, masking any marker it holds, and keeps its place, status and code. On a
+//   DR_ALLOWANCE_STOP proxy a slot marker in that path is journaled before it as the tripwire would journal it: a path
+//   holding the canary writes the tripwire's DR_CUSTODY_HIT refusal line, so the controller's journal check stops the run,
+//   while the call is still answered 403 E_ALLOWANCE; any other slot marker there writes a marker_hit line. An allowlisted
+//   path that holds a marker (GET /v1/models/<id>) is journaled in the same path form in every line. A slot denial
+//   (E_SLOT_DENIED) quotes an unmatched path in that form, and masks the proxy-wide markers and every open slot's markers
+//   in it and in the slot id it quotes.
 // - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
 //   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
@@ -59,7 +67,7 @@ import { BlockList, isIP } from "node:net";
 import { zstdDecompressSync } from "node:zlib";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
-import { chatPrice, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider } from "../pricing/prices.ts";
+import { chatPrice, maskMarkers, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider } from "../pricing/prices.ts";
 import { findLeaks } from "./sanitize.ts";
 
 export const UPSTREAM: Record<MeteredProvider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", openrouter: "https://openrouter.ai/api", typesafe: "https://api.typesafe.ai" };
@@ -266,7 +274,7 @@ interface CallContext {
   model: string;
   source: string | null;
   secrets: string[];
-  /** The slot markers a DR_ALLOWANCE_STOP request carried past the tripwire: a refusal replaces each one with UNQUOTED. */
+  /** The markers a request carried past the tripwire on a DR_ALLOWANCE_STOP proxy, or in a refused route's path: a refusal masks them in the client values it quotes. */
   marked?: string[];
   /** The bytes of the request body sent upstream, once priced. */
   bytes?: number;
@@ -275,6 +283,11 @@ interface CallContext {
 }
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest();
+/** A marker hit's slot cell and each marker's index and sha256 prefix, never its text. */
+const hitFields = (slot: Slot, leaks: string[]) => {
+  const { run_id, arm, task, model, trial, attempt } = slot.cell;
+  return { cell: { run_id, arm, task, model, trial, attempt }, markers: leaks.map(m => ({ index: slot.markers.indexOf(m), sha256: createHash("sha256").update(m).digest("hex").slice(0, 12) })) };
+};
 const sameSecret = (expected: Buffer, presented: string | null) => presented !== null && timingSafeEqual(expected, hash(presented));
 const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, refusals: [], allowance_stops: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0, peak_inflight_micros: 0, peak_inflight_calls: 0, largest_prompt: null, bytes_per_token: null, cache_write: [] });
 
@@ -551,8 +564,10 @@ export class MeteringProxy {
     const slot = match ? this.slots.get(match[1]!) : undefined;
     const credential = presentedCredential(req);
     if (!match || !slot || !sameSecret(slot.tokenHash, credential)) {
-      const reason = !match ? `no provider route ${path}` : !slot ? `slot ${match[1]} is not open` : `the credential presented is not slot ${match[1]}'s bearer`;
-      this.journal({ kind: "refusal", code: "E_SLOT_DENIED", slot: match?.[1] ?? null, reason, source });
+      const markers = [...(this.options.forbiddenMarkers ?? []), ...[...this.slots.values()].flatMap(s => s.markers)];
+      const id = match ? maskMarkers(match[1]!, markers) : null;
+      const reason = !match ? `no provider route ${quoteClientValue(path, "path", markers)}` : !slot ? `slot ${id} is not open` : `the credential presented is not slot ${id}'s bearer`;
+      this.journal({ kind: "refusal", code: "E_SLOT_DENIED", slot: id, reason, source });
       return problem("E_SLOT_DENIED", 403, reason);
     }
     const meterId = slot.cell.meter_id;
@@ -576,10 +591,7 @@ export class MeteringProxy {
   }
 
   private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string, extra: Record<string, unknown> = {}): Response {
-    const unmark = (s: string) => (ctx.marked ?? []).reduce((t, marker) => t.split(marker).join(UNQUOTED), s);
-    reason = unmark(reason);
-    ctx.model = unmark(ctx.model);
-    if (Array.isArray(extra.tools)) extra = { ...extra, tools: extra.tools.map((t: string) => unmark(t)) };
+    ctx.model = maskMarkers(ctx.model, ctx.marked);
     const m = this.meter(ctx.slot);
     m.refused++;
     if (!m.refusals.includes(code)) m.refusals.push(code);
@@ -592,7 +604,19 @@ export class MeteringProxy {
     const o = this.options;
     const { provider, route, slot } = ctx;
     const allowed = ROUTES[provider].find(r => r.method === req.method && r.path.test(route) && (!r.query || r.query.test(new URL(req.url).search)));
-    if (!allowed) return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${route} is not allowlisted`);
+    const path = [route, percentDecoded(route)].join("\n");
+    const inPath = findLeaks(path, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
+    if (!allowed) {
+      ctx.marked = inPath;
+      ctx.route = quoteClientValue(route, "path", inPath);
+      if (inPath.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(path, o.forbiddenMarkers ?? []).length) {
+        const { cell, markers } = hitFields(slot, inPath);
+        if (slot.canary !== null && inPath.includes(slot.canary)) this.journal({ kind: "refusal", code: "DR_CUSTODY_HIT", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, reason: `the request carries ${inPath.length} runner-only marker(s); custody hit, the run stops`, source: ctx.source, cell, markers });
+        else this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, source: ctx.source, decider: false, cell, markers });
+      }
+      return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${ctx.route} is not allowlisted`);
+    }
+    if (inPath.length) ctx.route = quoteClientValue(route, "path", inPath);
     const key = (o.env ?? process.env)[KEY_ENV[provider]];
     if (!key) return this.refuse(ctx, "E_KEY_MISSING", 503, `${KEY_ENV[provider]} is not set in the proxy's environment`);
     ctx.secrets.push(key);
@@ -610,7 +634,7 @@ export class MeteringProxy {
       return out;
     };
     const forwardFree = async (body?: string) => {
-      const free = { kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model || null, source: ctx.source };
+      const free = { kind: "free", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: ctx.model || null, source: ctx.source };
       let res: Response;
       let text: string;
       try {
@@ -646,15 +670,13 @@ export class MeteringProxy {
     const text = channels.join("\n");
     const leaks = findLeaks(text, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
     if (leaks.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(text, o.forbiddenMarkers ?? []).length) {
-      const markers = leaks.map(m => ({ index: slot.markers.indexOf(m), sha256: createHash("sha256").update(m).digest("hex").slice(0, 12) }));
-      const { run_id, arm, task, model, trial, attempt } = slot.cell;
-      const cell = { run_id, arm, task, model, trial, attempt };
+      const { cell, markers } = hitFields(slot, leaks);
       const asked = (parsed as Record<string, unknown> | null)?.model;
       const decider = typeof asked === "string" && slot.deciders.has(`${provider}:${asked}`);
       if (slot.canary !== null && leaks.includes(slot.canary)) return this.refuse(ctx, "DR_CUSTODY_HIT", 403, `the request carries ${leaks.length} runner-only marker(s); custody hit, the run stops`, { cell, markers });
       ctx.marked = leaks;
       const shown = typeof asked === "string" ? quoteClientValue(asked, "model") : null;
-      this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route, model: shown !== null && leaks.some(m => shown.includes(m)) ? UNQUOTED : shown, source: ctx.source, decider, cell, markers });
+      this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: shown !== null && leaks.some(m => shown.includes(m)) ? UNQUOTED : shown, source: ctx.source, decider, cell, markers });
     } else if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
     if (req.method === "GET") return forwardFree();
     if (!isJson) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");
@@ -662,18 +684,18 @@ export class MeteringProxy {
     const body = parsed as Record<string, any>;
     ctx.model = typeof body.model === "string" ? body.model : "";
     if (!slot.models.has(`${provider}:${ctx.model}`)) {
-      ctx.model = ctx.model && quoteClientValue(ctx.model, "model");
+      ctx.model = ctx.model && quoteClientValue(ctx.model, "model", ctx.marked);
       return this.refuse(ctx, "E_ALLOWANCE", 403, `${provider}:${ctx.model || "(no model)"} is not on this slot's model allowlist`);
     }
     if (o.refuseServerTools) {
-      const server = Array.isArray(body.tools) ? body.tools.filter((t: any) => t && typeof t.type === "string" && t.type !== "custom").map((t: any) => quoteClientValue(t.type, "type")) : [];
+      const server = Array.isArray(body.tools) ? body.tools.filter((t: any) => t && typeof t.type === "string" && t.type !== "custom").map((t: any) => quoteClientValue(t.type, "type", ctx.marked)) : [];
       if (server.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side tools are refused on this lease: ${server.join(", ")}`, { tools: server });
       const asked = ["mcp_servers", "plugins", "web_search_options"].filter((k) => k in body);
       if (asked.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side capabilities are refused on this lease: ${asked.join(", ")}`, { tools: asked });
     }
     if (allowed.free) {
       try {
-        refuseRequestShape(provider, body);
+        refuseRequestShape(provider, body, ctx.marked);
       } catch (e) {
         if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
         throw e;
@@ -692,13 +714,13 @@ export class MeteringProxy {
     const cap = o.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     const fields = outputFields(provider, route);
     const stated = fields.map(f => body[f]).filter((v): v is number => typeof v === "number");
-    if (stated.some(v => v > cap)) return this.refuse(ctx, "E_ALLOWANCE", 400, `the request asks for ${Math.max(...stated)} output tokens, above this cell's cap of ${cap}`);
+    if (stated.some(v => v > cap)) return this.refuse(ctx, "E_ALLOWANCE", 400, `the request asks for ${maskMarkers(String(Math.max(...stated)), ctx.marked)} output tokens, above this cell's cap of ${cap}`);
     if (!stated.length && fields.length) body[fields[0]!] = cap;
     if (provider === "openrouter" && route === "/v1/chat/completions") body.max_tokens ??= body.max_completion_tokens;
     const outBody = JSON.stringify(body);
     let price: ReturnType<typeof priceRequest>;
     try {
-      price = priceRequest(provider, body, stated.length ? Math.max(...stated) : cap, route);
+      price = priceRequest(provider, body, stated.length ? Math.max(...stated) : cap, route, ctx.marked);
     } catch (e) {
       if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
       throw e;
