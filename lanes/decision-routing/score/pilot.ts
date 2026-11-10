@@ -3,7 +3,7 @@
 // - the re-cost: each cell's session rate becomes the higher of its planning rate (price.py, frozen) and its pilot mean,
 //   and the plan is priced again with price.py's own formulas; items already recorded (calibration, pilot, replay,
 //   crew) keep their caps from config/items.json, and a closed item counts at what it settled;
-// - the drop order: while the all-in at caps passes the $2,000 line, drop W, then J on Sol, then F, then the subset from
+// - the drop order: while the all-in at caps passes the line (line_micros in config/items.json), drop W, then J on Sol, then F, then the subset from
 //   100 to 80 tasks, each printed as "not run under the line";
 // - particle-1's max_tokens: when its no-answer rate after its retry passes 2% of its pilot decisions, decision
 //   max_tokens rises once to 16,000 for the scored stage;
