@@ -24,7 +24,7 @@ import { assertContained, containImage, type ContainCheck } from "./contain.ts";
 import { buildSessionImage } from "./image.ts";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { loadRegistry, REGISTRY_PATH } from "../arms/registry.ts";
-import { assertBlind, AXES, judgeFor, judgeKey, judgePacket, LABELLERS, labelledQueue, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
+import { assertBlind, AXES, buildStock, judgeFor, judgeKey, judgePacket, LABELLERS, labelledQueue, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
 import { foundIt, laterFix, whatChanged } from "./secondary.ts";
 import { sendPackets } from "./send.ts";
 
@@ -80,11 +80,14 @@ export const HELP = `gstack-evals outcome sm <command>
   packets judge --diff <file> --files <list> --unit <id> --model <m> --cell <name> --out <packet.json> --key <key.json>
                                                      section 10's judge packet: the folder's file list and the diff cut at
                                                      1,500 lines; arm, model and session go only in the key
-  packets stock --lang <lang> --tree <dir> --file <path> --files <list> --unit <id> --model <m> --out-dir <dir>
-                                                     the three stock diffs from one file of the unit's own tree
+  packets stock --lang <lang> --tree <dir> --file <path> --files <list> --unit <id> --unit-dir <dir> --model <m> --out-dir <dir>
+                                                     the three stock diffs from one file of the unit's own tree, each
+                                                     built in the unit's runtime image first; one that fails is none
+                                                     (stock-build-<unit>.json)
   packets read label|judge --answer <file> [--packet <packet.json>]
                                                      reads one reply strictly; a malformed one exits 1 (E_SM_JUDGE_ANSWER)
-  packets labelled --spec <spec.json> --out-dir <dir>  the R78 labelled set from [{unit, lang, tree, file, files}] in draw order
+  packets labelled --spec <spec.json> --out-dir <dir>  the R78 labelled set from [{unit, unit_dir, lang, tree, file, files}] in
+                                                     draw order, each unit's stock diffs built first (stock-build.json)
   packets queue --labelled <dir> --real <ids.txt> --out-dir <dir>  each judge's labelled queue (queue-<judge>.json), its seed
                                                      minted once and reused on a rerun; ids are the labelled packets and the real ones
   packets r78 --real <rows.json> --labelled <rows.json> --out <file>  the R78 check (a Astra, b Opus); labelled rows add kind, axis
@@ -402,15 +405,17 @@ export async function main(argv: string[]): Promise<number> {
         return 0;
       }
       if (what === "stock") {
-        const { f } = flags(r, ["--lang", "--tree", "--file", "--files", "--unit", "--model", "--out-dir"]);
+        const { f } = flags(r, ["--lang", "--tree", "--file", "--files", "--unit", "--unit-dir", "--model", "--out-dir"]);
         const lang = need(f, "--lang") as Lang;
         if (!LANGS.includes(lang)) throw new Error("E_USAGE --lang is one of " + LANGS.join(", "));
-        const path = need(f, "--file"), out = need(f, "--out-dir"), model = need(f, "--model");
+        const path = need(f, "--file"), out = need(f, "--out-dir"), model = need(f, "--model"), unitDir = need(f, "--unit-dir");
         const files = readFileSync(need(f, "--files"), "utf8").split("\n").filter(Boolean);
+        const built = buildStock(unitDir, path, stockDiffs({ lang, path, text: readFileSync(join(need(f, "--tree"), path), "utf8") }));
         mkdirSync(out, { recursive: true });
+        writeNew(join(out, "stock-build-" + need(f, "--unit") + ".json"), { schema: "sm-stock-build.v1", unit: need(f, "--unit"), file: path, commands: built.commands, control: built.control, kinds: built.kinds.map((s) => ({ kind: s.kind, build: s.build })) });
         const made: string[] = [];
-        for (const s of stockDiffs({ lang, path, text: readFileSync(join(need(f, "--tree"), path), "utf8") })) {
-          if (s.diff === null) { made.push(s.kind + ":none"); continue; }
+        for (const s of built.kinds) {
+          if (s.diff === null) { made.push(s.kind + ":none(" + s.build + ")"); continue; }
           const { packet, lines_total } = judgePacket({ diff: s.diff, files });
           writeNew(join(out, packet.packet + ".json"), packet);
           writeNew(join(out, packet.packet + ".key.json"), judgeKey(packet, { unit: need(f, "--unit"), model, cell: "stock", lines_total, stock: s.kind }));
@@ -434,9 +439,13 @@ export async function main(argv: string[]): Promise<number> {
       if (what === "labelled") {
         const { f } = flags(r, ["--spec", "--out-dir"]);
         const out = need(f, "--out-dir");
-        const spec = readJson<Array<{ unit: string; lang: Lang; tree: string; file: string; files: string }>>(need(f, "--spec"));
-        const set = labelledSet(spec.map((u) => ({ unit: u.unit, lang: u.lang, path: u.file, text: readFileSync(join(u.tree, u.file), "utf8"), files: readFileSync(u.files, "utf8").split("\n").filter(Boolean) })));
+        const spec = readJson<Array<{ unit: string; unit_dir: string; lang: Lang; tree: string; file: string; files: string }>>(need(f, "--spec"));
+        const missing = spec.filter((u) => !u.unit_dir).map((u) => u.unit);
+        if (missing.length) throw new Error("E_USAGE spec entries " + missing.join(", ") + " have no unit_dir, the unit dir their stock diffs build in");
+        const dirs = new Map(spec.map((u) => [u.unit, u.unit_dir]));
+        const set = labelledSet(spec.map((u) => ({ unit: u.unit, lang: u.lang, path: u.file, text: readFileSync(join(u.tree, u.file), "utf8"), files: readFileSync(u.files, "utf8").split("\n").filter(Boolean) })), (u, stock) => buildStock(dirs.get(u.unit)!, u.path, stock).kinds);
         mkdirSync(out, { recursive: true });
+        writeNew(join(out, "stock-build.json"), { schema: "sm-stock-build.v1", units: set.built });
         for (const it of set.items) {
           writeNew(join(out, it.packet.packet + ".json"), it.packet);
           writeNew(join(out, it.packet.packet + ".key.json"), it.key);
