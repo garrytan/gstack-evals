@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runBatch, type BatchOptions } from "../../lanes/decision-routing/host/controller.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
-import { CHAT_PRICES, openRouterRouting, priceRequest, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
-import { isTrialNetworkHost, MeteringProxy, ProxyControl, reconcileJournal, routable, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
+import { CHAT_PRICES, openRouterRouting, priceRequest, quoteClientValue, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
+import { isTrialNetworkHost, MeteringProxy, problem, ProxyControl, reconcileJournal, routable, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
 const KEY = "sk-ant-real-key-0123456789";
@@ -1744,6 +1746,517 @@ describe("free POST routes and the request-shape refusals (containment tightenin
     expect(lines.filter(l => l.kind === "refusal").map(l => l.code).sort()).toEqual(markers.flatMap(() => [...Array(4).fill("E_ALLOWANCE"), ...Array(6).fill("E_ALLOWANCE"), "E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL"]).sort());
     expect(plain.calls.length + sm.calls.length).toBe(0);
     expect(await plain.proxy.finalize(a.meter_id)).toMatchObject({ allowance_stops: 0 });
+  });
+
+  // Value: protects=a DR_ALLOWANCE_STOP slot whose markers nest (one a prefix of another) or overlap leaves no piece of either marker in a refusal's answer or its journal line, wherever the request puts the value (the model, a field, a hosted, server or OpenRouter tool type) on the paid, count and estimate routes; fails_when=the shorter marker is masked first and the longer one's tail stays, or one of two overlapping markers is masked and the rest of the other stays; why_new=#313's open note on nested markers; seam=quoteClientValue's marker masking (maskMarkers) through MeteringProxy.refuse; no_claim=the marker_hit line, which journals a model that holds a marker as <unquoted>
+  test("nested or overlapping slot markers leave no piece of either marker in a refusal", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const SHORT = "authx";
+    const LONG = "authx_rejects_expired_token";
+    const LEFT = "parser_case";
+    const RIGHT = "case_hidden_row";
+    const BOTH = "parser_case_hidden_row";
+    const plain = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const sm = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP", refuseServerTools: true });
+    const slot = { models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`], forbidden_markers: [CANARY, SHORT, LONG, LEFT, RIGHT], canary: CANARY };
+    const a = plain.bind(slot);
+    const b = sm.bind(slot);
+    const detail = async (t: typeof plain, s: { slot: string; token: string }, path: string, body: Record<string, unknown>, status: number, code: string) => (await expectProblem(await t.call(s.slot, s.token, path, body), status, code)).detail;
+    const unpriced = "E_ALLOWANCE: metering proxy: unpriced request refused: ";
+    for (const path of ["/anthropic/v1/messages", COUNT]) {
+      const body = { ...count, ...(path === COUNT ? {} : { max_tokens: 1000 }) };
+      expect(await detail(plain, a, path, { ...body, speed: LONG }, 402, "E_ALLOWANCE")).toBe(`${unpriced}speed "<unquoted>" bills above the standard rates in the price table`);
+      expect(await detail(plain, a, path, { ...body, inference_geo: BOTH }, 402, "E_ALLOWANCE")).toBe(`${unpriced}inference_geo "<unquoted>" may bill above the standard rates in the price table`);
+      expect(await detail(plain, a, path, { ...body, n: `${LONG}.v2` }, 402, "E_ALLOWANCE")).toBe(`${unpriced}n="<unquoted>.v2" asks for several completions, each billed in full`);
+      expect(await detail(plain, a, path, { ...body, tools: [{ type: `web_search_${BOTH}`, name: "w" }] }, 402, "E_ALLOWANCE")).toBe(`${unpriced}the request uses the hosted tool web_search_<unquoted>, whose cost the proxy cannot bound from the request`);
+      expect(await detail(plain, a, path, { ...body, model: `acme/${LONG}` }, 403, "E_ALLOWANCE")).toBe("E_ALLOWANCE: metering proxy: anthropic:acme/<unquoted> is not on this slot's model allowlist");
+      expect(await detail(sm, b, path, { ...body, tools: [{ type: BOTH, name: "x" }] }, 403, "E_PROXY_SERVER_TOOL")).toBe("E_PROXY_SERVER_TOOL: metering proxy: provider-side tools are refused on this lease: <unquoted>");
+    }
+    for (const path of ["/openrouter/v1/chat/completions", ESTIMATE]) expect(await detail(plain, a, path, { ...count, model: PARTICLE, tools: [{ type: `openrouter:${LONG}` }] }, 402, "E_ALLOWANCE")).toBe(`${unpriced}the OpenRouter server tool openrouter:<unquoted> runs and bills outside the model's tokens`);
+    const journals = readFileSync(join(plain.dir, "journal.ndjson"), "utf8") + readFileSync(join(sm.dir, "journal.ndjson"), "utf8");
+    for (const piece of [LONG, RIGHT, "_rejects_expired_token", "_hidden_row", "parser_"]) expect(journals).not.toContain(piece);
+    const refusals = [...plain.journal(), ...sm.journal()].filter(l => l.kind === "refusal");
+    expect(refusals.map(l => l.model)).toEqual([...Array(2).fill(["claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5", "acme/<unquoted>"]).flat(), PARTICLE, PARTICLE, "claude-opus-5-5", "claude-opus-5-5"]);
+    expect(refusals.filter(l => l.code === "E_PROXY_SERVER_TOOL").map(l => l.tools)).toEqual([["<unquoted>"], ["<unquoted>"]]);
+    expect([...plain.journal(), ...sm.journal()].filter(l => l.kind === "marker_hit")).toHaveLength(refusals.length);
+    expect(plain.calls.length + sm.calls.length).toBe(0);
+  });
+
+  // Value: protects=on a request that carried slot markers, a refusal masks only the client values it quotes: markers that are words of the proxy's own text (model, price, lease, tokens, plugins) or a piece of the <unquoted> placeholder leave every answer and every refusal line's reason, model and tools exactly as a slot without markers gets them; fails_when=a refusal masks its whole reason, so "this slot's model allowlist", "the price table", a refused capability's name or the placeholder itself changes; why_new=#313's open review finding at metering-proxy.ts:579; seam=MeteringProxy.refuse and the quoting sites in forward and prices.ts; no_claim=a marker inside a quoted client value, which the nested-marker test covers
+  test("a slot marker masks only the client values a refusal quotes, never the proxy's text or the placeholder", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const words = ["model", "price", "lease", "tokens", "plugins", "quot"];
+    const said = [{ role: "user", content: words.join(" ") }];
+    const sends: Array<[string, Record<string, unknown>]> = [
+      ["/anthropic/v1/messages", { model: "claude-haiku-5-5", max_tokens: 1000, messages: said }],
+      ["/anthropic/v1/messages", { model: "x y", max_tokens: 1000, messages: said }],
+      ["/anthropic/v1/messages", { model: "claude-opus-5-5", max_tokens: 1000, speed: "fast", messages: said }],
+      [COUNT, { model: "claude-opus-5-5", tools: [{ type: "web_search_20250305", name: "web_search" }], messages: said }],
+      [COUNT, { model: "claude-opus-5-5", plugins: [], messages: said }],
+      ["/anthropic/v1/messages", { model: "claude-opus-5-5", max_tokens: 999_999, messages: said }],
+    ];
+    const run = async (markers: string[]) => {
+      const t = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP", refuseServerTools: true, maxOutputTokens: 4096 });
+      const s = t.bind(markers.length ? { forbidden_markers: [CANARY, ...markers], canary: CANARY } : {});
+      const answers: string[] = [];
+      for (const [path, body] of sends) {
+        const res = await t.call(s.slot, s.token, path, body);
+        answers.push(`${res.status} ${await res.text()}`);
+      }
+      const lines = t.journal();
+      expect(t.calls).toHaveLength(0);
+      return { answers, hits: lines.filter(l => l.kind === "marker_hit").length, refusals: lines.filter(l => l.kind === "refusal").map(({ code, model, reason, tools }) => ({ code, model, reason, tools })) };
+    };
+    const marked = await run(words);
+    const unmarked = await run([]);
+    expect(marked.hits).toBe(sends.length);
+    expect(unmarked.hits).toBe(0);
+    expect(marked.refusals.map(l => l.reason)).toEqual([
+      "anthropic:claude-haiku-5-5 is not on this slot's model allowlist",
+      "anthropic:<unquoted> is not on this slot's model allowlist",
+      'unpriced request refused: speed "fast" bills above the standard rates in the price table',
+      "provider-side tools are refused on this lease: web_search_20250305",
+      "provider-side capabilities are refused on this lease: plugins",
+      "the request asks for 999999 output tokens, above this cell's cap of 4096",
+    ]);
+    expect(marked.refusals.map(l => l.model)).toEqual(["claude-haiku-5-5", "<unquoted>", "claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5"]);
+    expect(marked.refusals).toEqual(unmarked.refusals);
+    expect(marked.answers).toEqual(unmarked.answers);
+  });
+
+  // Value: protects=an OpenRouter model id with one :suffix token on its last segment (particle-ai/particle-1:online) is quoted as written in the allowlist refusal, its journal line and the marker_hit line, while a second colon, a colon before the last segment, an empty or over-long suffix, or a fourth segment still reads <unquoted>; fails_when=the model form refuses a :suffix, or accepts a colon anywhere else; why_new=#313's open review finding at prices.ts:153; seam=quoteClientValue's model form; no_claim=which suffixes OpenRouter serves
+  test("a model id with one :suffix token on its last segment is quoted as written", async () => {
+    for (const id of [`${PARTICLE}:online`, `${PARTICLE}:free`, "a:b", "a/b/c:d"]) expect(quoteClientValue(id, "model")).toBe(id);
+    for (const id of ["a:b:c", "a:b/c", "a/b:c/d", "a/b:", ":b", `a/b:${"s".repeat(41)}`, "a/b/c/d:e", "a/b: c", "a/b:c d"]) expect(quoteClientValue(id, "model")).toBe("<unquoted>");
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const t = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const a = t.bind({ models: [`openrouter:${PARTICLE}`], forbidden_markers: [CANARY, MARK], canary: CANARY });
+    const res = await t.call(a.slot, a.token, "/openrouter/v1/chat/completions", { model: `${PARTICLE}:online`, messages: [{ role: "user", content: MARK }] });
+    expect((await expectProblem(res, 403, "E_ALLOWANCE")).detail).toBe(`E_ALLOWANCE: metering proxy: openrouter:${PARTICLE}:online is not on this slot's model allowlist`);
+    expect(t.journal().map(l => [l.kind, l.model])).toEqual([["marker_hit", `${PARTICLE}:online`], ["refusal", `${PARTICLE}:online`]]);
+    expect(t.calls).toHaveLength(0);
+  });
+
+  // Value: protects=the route-not-allowlisted refusal quotes the request path through quoteClientValue: an honest path (extra segments, a doubled or trailing slash) keeps its text in the 403 and the journal, an unusual one (a segment past 64 characters, a percent escape, more than 8 segments) reads <unquoted>, and a marker in the path (plain, nested, or percent-encoded) is masked on any proxy, in the tripwire's E_TRIPWIRE line for a proxy-wide marker too, while the refusal keeps its place before the key check, its 403 and its E_ALLOWANCE; fails_when=the refusal echoes the raw path, so a marker or a long string reaches the answer or the journal's reason or route field; why_new=the route echo the outside review of #313 left (Captain's ruling to fold it into this PR); seam=forward's route allowlist refusal; no_claim=the E_SLOT_DENIED path refusal, which runs before any slot is known
+  test("the route refusal quotes the path, masking any marker in it, in the 403 and the journal", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const SHORT = "authx";
+    const LONG = "authx_rejects_expired_token";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const WIDE = "PROXY-WIDE-MARKER-0042";
+    const reason = (path: string) => `E_ALLOWANCE: metering proxy: route POST /anthropic${path} is not allowlisted`;
+    const send = async (t: ReturnType<typeof setup>, s: { slot: string; token: string }, path: string) => (await expectProblem(await t.call(s.slot, s.token, `/anthropic${path}`, { ...count, max_tokens: 1000 }), 403, "E_ALLOWANCE")).detail;
+    const honest = ["/v1/nope", "/v1/messages/batches", "/api/event_logging/batch", "//v1/messages", "/v1/messages/", "/v1.2/a_b/c-d", "/v1/responses/resp_67ccd2bed1ec8190b14f964abc0542670bb6a6b452d3795b/input_items"];
+    const unusual = [`/v1/${"L".repeat(65)}`, "/v1/a%20b", "/a/b/c/d/e/f/g/h/i", "/v1/a:b"];
+    const plain = setup(() => Response.json({}), { env: {}, forbiddenMarkers: [WIDE] });
+    const p = plain.bind({ forbidden_markers: [MARK] });
+    for (const path of honest) expect(await send(plain, p, path)).toBe(reason(path));
+    for (const path of unusual) expect(await send(plain, p, path)).toBe(reason("<unquoted>"));
+    expect(await send(plain, p, `/v1/${MARK}`)).toBe(reason("/v1/<unquoted>"));
+    expect(await send(plain, p, `/v1/${WIDE}/x`)).toBe(reason("/v1/<unquoted>/x"));
+    expect(plain.journal().map(l => [l.kind, l.code, l.route])).toEqual([...honest.map(r => ["refusal", "E_ALLOWANCE", r]), ...unusual.map(() => ["refusal", "E_ALLOWANCE", "<unquoted>"]), ["refusal", "E_ALLOWANCE", "/v1/<unquoted>"], ["refusal", "E_TRIPWIRE", "/v1/<unquoted>/x"], ["refusal", "E_ALLOWANCE", "/v1/<unquoted>/x"]]);
+    const dr = setup(() => Response.json({}), { env: {}, allowanceCode: "DR_ALLOWANCE_STOP" });
+    const d = dr.bind({ forbidden_markers: [CANARY, SHORT, LONG, MARK], canary: CANARY });
+    expect(await send(dr, d, `/v1/${LONG}`)).toBe(reason("/v1/<unquoted>"));
+    expect(await send(dr, d, `/v1/x-${MARK}-y/z`)).toBe(reason("/v1/x-<unquoted>-y/z"));
+    expect(await send(dr, d, `/v1/%53EALED-MARKER-7f3a9c`)).toBe(reason("<unquoted>"));
+    expect(dr.journal().filter(l => l.kind === "refusal").map(l => [l.code, l.route, l.reason])).toEqual([
+      ["E_ALLOWANCE", "/v1/<unquoted>", "route POST /anthropic/v1/<unquoted> is not allowlisted"],
+      ["E_ALLOWANCE", "/v1/x-<unquoted>-y/z", "route POST /anthropic/v1/x-<unquoted>-y/z is not allowlisted"],
+      ["E_ALLOWANCE", "<unquoted>", "route POST /anthropic<unquoted> is not allowlisted"],
+    ]);
+    const journals = readFileSync(join(plain.dir, "journal.ndjson"), "utf8") + readFileSync(join(dr.dir, "journal.ndjson"), "utf8");
+    for (const piece of [MARK, WIDE, LONG, "_rejects_expired_token", "EALED-MARKER", "L".repeat(65)]) expect(journals).not.toContain(piece);
+    expect(plain.calls.length + dr.calls.length).toBe(0);
+  });
+
+  const journalCheck = (dir: string) => {
+    const out = join(dir, "batch");
+    mkdirSync(join(out, "journals"), { recursive: true });
+    writeFileSync(join(out, "journals", "dr-x.ndjson"), readFileSync(join(dir, "journal.ndjson")));
+    return runBatch({ plan: [{ item: "dr-x" }], out, proxyHost: "127.0.0.1", temp: true } as unknown as BatchOptions);
+  };
+
+  // Value: protects=a canary in a refused route's path on a DR_ALLOWANCE_STOP proxy writes the line the tripwire writes for a canary in a body (a DR_CUSTODY_HIT refusal line with the slot's cell, each marker's index and sha256 prefix, no model and the same reason) on the masked path, so the decision-routing controller's journal check stops on it, and writes no marker_hit line for it, while the call is still answered 403 E_ALLOWANCE and the meter counts one E_ALLOWANCE refusal; fails_when=a canary in a refused path is journaled as a marker_hit line or not at all, the controller's journal check passes, or the custody line carries the raw path; why_new=Captain's ruling on #315 (a canary in a refused path counts as a canary); seam=forward's route allowlist refusal and the controller's pre-launch journal check; no_claim=the controller's in-run stop, which reads the same line and tests/decision-routing covers
+  test("a canary in a refused route's path writes the tripwire's custody line and no marker_hit, so the journal check stops, and the call is still refused E_ALLOWANCE", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const sha = (m: string) => createHash("sha256").update(m).digest("hex").slice(0, 12);
+    const t = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const s = t.bind({ forbidden_markers: [CANARY, MARK], canary: CANARY });
+    for (const path of [`/v1/${CANARY}`, `/v1/${MARK}/x-${CANARY}`]) await expectProblem(await t.call(s.slot, s.token, `/anthropic${path}`, { ...count, max_tokens: 1000 }), 403, "E_ALLOWANCE");
+    const custody = (route: string, markers: Array<[number, string]>) => ({ kind: "refusal", code: "DR_CUSTODY_HIT", meter_id: s.meter_id, provider: "anthropic", route, model: null, reason: `the request carries ${markers.length} runner-only marker(s); custody hit, the run stops`, source: "127.0.0.1", cell, markers: markers.map(([index, m]) => ({ index, sha256: sha(m) })) });
+    const lines = t.journal().map(({ at, ...l }) => l);
+    expect(lines.map(l => (l.kind === "refusal" ? l.code : l.kind))).toEqual(["DR_CUSTODY_HIT", "E_ALLOWANCE", "DR_CUSTODY_HIT", "E_ALLOWANCE"]);
+    expect(lines.filter(l => l.code === "DR_CUSTODY_HIT")).toEqual([custody("/v1/<unquoted>", [[0, CANARY]]), custody("/v1/<unquoted>/x-<unquoted>", [[0, CANARY], [1, MARK]])]);
+    const u = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const b = u.bind({ forbidden_markers: [CANARY, MARK], canary: CANARY });
+    await expectProblem(await u.call(b.slot, b.token, "/anthropic/v1/messages", { ...count, max_tokens: 1000, messages: [{ role: "user", content: CANARY }] }), 403, "DR_CUSTODY_HIT");
+    const tripwire = u.journal().map(({ at, ...l }) => l)[0]!;
+    expect(Object.keys(lines[0]!)).toEqual(Object.keys(tripwire));
+    expect({ ...lines[0], meter_id: b.meter_id, route: "/v1/messages" }).toEqual(tripwire);
+    const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+    for (const piece of [CANARY, MARK, "00112233445566778899"]) expect(journal).not.toContain(piece);
+    await expect(journalCheck(t.dir)).rejects.toThrow(new RegExp(`^DR_CUSTODY_HIT: the journal .* holds a custody hit \\(meter ${s.meter_id}\\)`));
+    expect(await t.proxy.finalize(s.meter_id)).toMatchObject({ refused: 2, refusals: ["E_ALLOWANCE"], allowance_stops: 0 });
+    expect(t.calls.length + u.calls.length).toBe(0);
+  });
+
+  // Value: protects=any other slot marker in a refused route's path on a DR_ALLOWANCE_STOP proxy is recorded as a marker_hit line (the slot's cell and each marker's index and sha256 prefix, the masked path, no model) right before the 403 E_ALLOWANCE, never as a custody line, so the controller's journal check passes; a path with no marker records none, a proxy without DR_ALLOWANCE_STOP records none for a slot marker, and a proxy-wide marker writes the tripwire's E_TRIPWIRE line instead of a marker_hit line; fails_when=a marker in a non-allowlisted path skips the tripwire and leaves no marker_hit line, the line carries the raw path, or a non-canary marker writes a custody line that stops the run; why_new=Captain's ruling on #315 (the route echo also hid the containment signal, and a non-canary marker never counts as a canary); seam=forward's route allowlist refusal and its marker_hit line; no_claim=none
+  test("any other slot marker in a refused route's path writes a marker_hit line only, before the refusal, and the journal check passes", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const OTHER = "tests/test_hidden_regression_data.py";
+    const WIDE = "PROXY-WIDE-MARKER-0042";
+    const sha = (m: string) => createHash("sha256").update(m).digest("hex").slice(0, 12);
+    const t = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP", forbiddenMarkers: [WIDE] });
+    const s = t.bind({ forbidden_markers: [CANARY, MARK, OTHER], canary: CANARY });
+    for (const path of [`/v1/${MARK}`, "/v1/nope", `/v1/%53EALED-MARKER-7f3a9c/${encodeURIComponent(OTHER)}`, `/v1/${WIDE}`]) await expectProblem(await t.call(s.slot, s.token, `/anthropic${path}`, { ...count, max_tokens: 1000 }), 403, "E_ALLOWANCE");
+    const hit = (route: string, markers: Array<[number, string]>) => ({ kind: "marker_hit", meter_id: s.meter_id, provider: "anthropic", route, model: null, source: "127.0.0.1", decider: false, cell, markers: markers.map(([index, m]) => ({ index, sha256: sha(m) })) });
+    const lines = t.journal().map(({ at, ...l }) => l);
+    expect(lines.filter(l => l.kind === "marker_hit")).toEqual([hit("/v1/<unquoted>", [[1, MARK]]), hit("<unquoted>", [[1, MARK], [2, OTHER]])]);
+    expect(lines.map(l => (l.kind === "refusal" ? l.code : l.kind))).toEqual(["marker_hit", "E_ALLOWANCE", "E_ALLOWANCE", "marker_hit", "E_ALLOWANCE", "E_TRIPWIRE", "E_ALLOWANCE"]);
+    await expect(journalCheck(t.dir)).rejects.toThrow(/^E_USAGE: --temp needs --fake-upstreams/);
+    const plain = setup(() => Response.json({}));
+    const q = plain.bind({ forbidden_markers: [MARK] });
+    await expectProblem(await plain.call(q.slot, q.token, `/anthropic/v1/${MARK}`, { ...count, max_tokens: 1000 }), 403, "E_ALLOWANCE");
+    expect(plain.journal().map(l => [l.kind, l.code, l.route])).toEqual([["refusal", "E_ALLOWANCE", "/v1/<unquoted>"]]);
+    expect(await t.proxy.finalize(s.meter_id)).toMatchObject({ refused: 4, refusals: ["E_ALLOWANCE"], allowance_stops: 0 });
+    expect(t.calls.length + plain.calls.length).toBe(0);
+  });
+
+  // Value: protects=an allowlisted path that holds a marker (GET /v1/models/<id>) is journaled in the path form in every line the call writes (the marker_hit and free lines on a DR_ALLOWANCE_STOP proxy, the tripwire's custody line for a canary, and the E_TRIPWIRE refusal for a proxy-wide marker on any proxy), while the call is forwarded and answered as before, and an honest path, or a marker outside the path, leaves the path's text as it was; fails_when=a journal line carries the raw path or a piece of a marker; why_new=Captain's ruling on #315; seam=forward's path masking for allowlisted routes, before the key check; no_claim=a non-2xx upstream answer that echoes the id, which the free line's upstream_body does not scrub for a GET
+  test("an allowlisted models path that holds a marker is journaled in the path form in every line", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const WIDE = "PROXY-WIDE-MARKER-0042";
+    const t = setup(() => Response.json({ id: "m" }), { allowanceCode: "DR_ALLOWANCE_STOP", forbiddenMarkers: [WIDE] });
+    const s = t.bind({ forbidden_markers: [CANARY, MARK], canary: CANARY });
+    const get = (w: ReturnType<typeof setup>, b: { slot: string; token: string }, path: string, extra: Record<string, string> = {}) => fetch(`http://127.0.0.1:${w.proxy.port}/${b.slot}/anthropic/v1/models${path}`, { headers: { "x-api-key": b.token, ...extra } });
+    const ids = [`/${MARK}`, `/x-${MARK}`, "/claude-opus-5-5", "/%53EALED-MARKER-7f3a9c"];
+    for (const path of ids) expect((await get(t, s, path)).status).toBe(200);
+    expect((await get(t, s, "/claude-opus-5-5", { "x-note": MARK })).status).toBe(200);
+    await expectProblem(await get(t, s, `/${CANARY}`), 403, "DR_CUSTODY_HIT");
+    expect((await expectProblem(await get(t, s, `/${WIDE}`), 403, "E_TRIPWIRE")).detail).toBe("E_TRIPWIRE: metering proxy: the request carries 1 forbidden marker(s); the cell is invalid");
+    expect(t.journal().map(l => [l.kind === "refusal" ? l.code : l.kind, l.route])).toEqual([
+      ["marker_hit", "/v1/models/<unquoted>"],
+      ["free", "/v1/models/<unquoted>"],
+      ["marker_hit", "/v1/models/x-<unquoted>"],
+      ["free", "/v1/models/x-<unquoted>"],
+      ["free", "/v1/models/claude-opus-5-5"],
+      ["marker_hit", "<unquoted>"],
+      ["free", "<unquoted>"],
+      ["marker_hit", "/v1/models/claude-opus-5-5"],
+      ["free", "/v1/models/claude-opus-5-5"],
+      ["DR_CUSTODY_HIT", "/v1/models/<unquoted>"],
+      ["E_TRIPWIRE", "/v1/models/<unquoted>"],
+    ]);
+    const plain = setup(() => Response.json({ id: "m" }), { forbiddenMarkers: [WIDE] });
+    const p = plain.bind();
+    await expectProblem(await get(plain, p, `/${WIDE}`), 403, "E_TRIPWIRE");
+    expect(plain.journal().map(l => [l.code, l.route])).toEqual([["E_TRIPWIRE", "/v1/models/<unquoted>"]]);
+    const journals = readFileSync(join(t.dir, "journal.ndjson"), "utf8") + readFileSync(join(plain.dir, "journal.ndjson"), "utf8");
+    for (const piece of [CANARY, MARK, WIDE, "EALED-MARKER"]) expect(journals).not.toContain(piece);
+    expect(t.calls.map(c => c.url)).toEqual([...ids, "/claude-opus-5-5"].map(path => `https://api.anthropic.com/v1/models${path}`));
+    expect(plain.calls).toHaveLength(0);
+  });
+
+  // Value: protects=a slot denial quotes an unmatched path through the path form (an honest path keeps its text, an unusual one becomes <unquoted>) and masks the proxy-wide markers and every open slot's markers in that path and in the slot id it quotes, in the 403 and the journal, while every denial stays a 403 E_SLOT_DENIED; fails_when=a denial echoes a marker, or an unmatched path's raw text past the path form; why_new=Captain's ruling on #315; seam=handle's E_SLOT_DENIED refusal; no_claim=a custody line for a canary in a denied path, since no slot's tripwire runs on a denied call
+  test("a slot denial quotes an unmatched path in the path form and masks every open slot's markers, in the 403 and the journal", async () => {
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const WIDE = "PROXY-WIDE-MARKER-0042";
+    const t = setup(() => Response.json({}), { forbiddenMarkers: [WIDE] });
+    const s = t.bind({ forbidden_markers: [MARK] });
+    const cases: Array<[string, string | null, string | null, string]> = [
+      ["/nope/v1/messages", null, null, "no provider route /nope/v1/messages"],
+      [`/x/${MARK}/y`, null, null, "no provider route /x/<unquoted>/y"],
+      [`/x-${WIDE}`, null, null, "no provider route /x-<unquoted>"],
+      ["/a%20b", null, null, "no provider route <unquoted>"],
+      ["/a/b/c/d/e/f/g/h/i", null, null, "no provider route <unquoted>"],
+      [`/${MARK}/anthropic/v1/messages`, s.token, "<unquoted>", "slot <unquoted> is not open"],
+      ["/s_unknown/anthropic/v1/messages", s.token, "s_unknown", "slot s_unknown is not open"],
+      [`/${s.slot}/anthropic/v1/messages`, "wrong", s.slot, `the credential presented is not slot ${s.slot}'s bearer`],
+    ];
+    for (const [path, credential, , reason] of cases) {
+      const res = await fetch(`http://127.0.0.1:${t.proxy.port}${path}`, { headers: credential ? { "x-api-key": credential } : {} });
+      expect((await expectProblem(res, 403, "E_SLOT_DENIED")).detail).toBe(`E_SLOT_DENIED: metering proxy: ${reason}`);
+    }
+    expect(t.journal().map(l => [l.code, l.slot, l.reason])).toEqual(cases.map(([, , slot, reason]) => ["E_SLOT_DENIED", slot, reason]));
+    expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toMatch(/SEALED|PROXY-WIDE/);
+    expect(t.calls).toHaveLength(0);
+  });
+
+  const PLACES = ["path", "body", "query", "headers"] as const;
+  type Place = (typeof PLACES)[number];
+  type Riders = { path?: string; content?: string; query?: string; header?: string };
+  const rider = (place: Place, marker: string): Riders => (place === "path" ? { path: `/v1/nope-${marker}` } : place === "body" ? { content: `context ${marker}` } : place === "query" ? { query: marker } : { header: marker });
+  const refused = (t: ReturnType<typeof setup>, s: { slot: string; token: string }, at: Riders) =>
+    fetch(`http://127.0.0.1:${t.proxy.port}/${s.slot}/anthropic${at.path ?? "/v1/nope"}${at.query ? `?note=${encodeURIComponent(at.query)}` : ""}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": s.token, ...(at.header ? { "x-note": at.header } : {}) },
+      body: JSON.stringify({ ...count, max_tokens: 1000, messages: [{ role: "user", content: at.content ?? "hi" }] }),
+    });
+  const routeAnswer = (route: string) => problem("E_ALLOWANCE", 403, `route POST /anthropic${route} is not allowlisted`).text();
+  const shortSha = (m: string) => createHash("sha256").update(m).digest("hex").slice(0, 12);
+  const withoutAt = (t: ReturnType<typeof setup>) => t.journal().map(({ at, ...l }) => l);
+
+  // Value: protects=a canary anywhere in a request the route allowlist refuses (its path, body, query string or headers) on a DR_ALLOWANCE_STOP proxy writes the tripwire's DR_CUSTODY_HIT line, key for key and value for value as for a canary in an allowlisted body apart from the meter and the masked route, so the controller's journal check stops the run, while the 403 E_ALLOWANCE answer stays byte for byte what it was and the meter counts the one E_ALLOWANCE refusal; fails_when=a canary in a refused request's body, query string or headers leaves no custody line, or the line or the answer differs; why_new=#315's review (a canary outside a refused route's path wrote no custody line), by the Captain's ruling; seam=forward's route allowlist refusal and the controller's pre-launch journal check; no_claim=the refusals before the tripwire other than the route's (E_KEY_MISSING, an undecodable zstd body, E_SLOT_DENIED)
+  test("a canary anywhere in a refused request writes the tripwire's custody line, so the journal check stops, and the answer is unchanged", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const slot = { forbidden_markers: [CANARY, MARK], canary: CANARY };
+    const u = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const b = u.bind(slot);
+    await expectProblem(await u.call(b.slot, b.token, "/anthropic/v1/messages", { ...count, max_tokens: 1000, messages: [{ role: "user", content: CANARY }] }), 403, "DR_CUSTODY_HIT");
+    const tripwire = withoutAt(u)[0]!;
+    for (const place of PLACES) {
+      const t = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP" });
+      const s = t.bind(slot);
+      const route = place === "path" ? "/v1/nope-<unquoted>" : "/v1/nope";
+      const res = await refused(t, s, rider(place, CANARY));
+      expect(res.status).toBe(403);
+      expect(await res.text()).toBe(await routeAnswer(route));
+      const lines = withoutAt(t);
+      expect(lines.map(l => l.code)).toEqual(["DR_CUSTODY_HIT", "E_ALLOWANCE"]);
+      expect(Object.keys(lines[0]!)).toEqual(Object.keys(tripwire));
+      expect(lines[0]).toEqual({ ...tripwire, meter_id: s.meter_id, route });
+      expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(CANARY);
+      await expect(journalCheck(t.dir)).rejects.toThrow(new RegExp(`^DR_CUSTODY_HIT: the journal .* holds a custody hit \\(meter ${s.meter_id}\\)`));
+      expect(await t.proxy.finalize(s.meter_id)).toMatchObject({ refused: 1, refusals: ["E_ALLOWANCE"], allowance_stops: 0 });
+      expect(t.calls).toHaveLength(0);
+    }
+  });
+
+  // Value: protects=any other slot marker anywhere in a refused request (its path, body, query string or headers) on a DR_ALLOWANCE_STOP proxy writes one marker_hit line (the slot's cell, the marker's index and sha256 prefix, the masked route, no model) and no custody line, so the controller's journal check passes, while the answer stays byte for byte what it was; fails_when=a marker in a refused request's body, query string or headers leaves no marker_hit line, or a non-canary marker writes a custody line that stops the run; why_new=#315's review, by the Captain's ruling; seam=forward's route allowlist refusal and its marker_hit line; no_claim=the decision-routing scorer's label for these lines
+  test("any other slot marker anywhere in a refused request writes only its marker_hit line, and the journal check passes", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    for (const place of PLACES) {
+      const t = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP" });
+      const s = t.bind({ forbidden_markers: [CANARY, MARK], canary: CANARY });
+      const route = place === "path" ? "/v1/nope-<unquoted>" : "/v1/nope";
+      const res = await refused(t, s, rider(place, MARK));
+      expect(res.status).toBe(403);
+      expect(await res.text()).toBe(await routeAnswer(route));
+      expect(withoutAt(t)).toEqual([
+        { kind: "marker_hit", meter_id: s.meter_id, provider: "anthropic", route, model: null, source: "127.0.0.1", decider: false, cell, markers: [{ index: 1, sha256: shortSha(MARK) }] },
+        { kind: "refusal", code: "E_ALLOWANCE", meter_id: s.meter_id, provider: "anthropic", route, model: null, reason: `route POST /anthropic${route} is not allowlisted`, source: "127.0.0.1" },
+      ]);
+      expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(MARK);
+      await expect(journalCheck(t.dir)).rejects.toThrow(/^E_USAGE: --temp needs --fake-upstreams/);
+      expect(t.calls).toHaveLength(0);
+    }
+  });
+
+  // Value: protects=a proxy-wide marker anywhere in a refused request (its path, body, query string or headers) writes the tripwire's E_TRIPWIRE refusal line, key for key and value for value as for that marker in an allowlisted body apart from the meter and the masked route, on a default proxy and a DR_ALLOWANCE_STOP one, so the cell reads invalid, with no marker_hit or custody line, while the answer stays byte for byte the 403 E_ALLOWANCE it was and the meter counts only that refusal; fails_when=a proxy-wide marker in a refused request is masked and leaves no record, the record carries the marker, or the answer changes; why_new=#315's review (a proxy-wide marker in a refused path left no record), by the Captain's ruling; seam=forward's route allowlist refusal; no_claim=a slot marker on a proxy without DR_ALLOWANCE_STOP, which a refused request still does not record
+  test("a proxy-wide marker anywhere in a refused request writes the tripwire's masked E_TRIPWIRE line on any proxy, and the answer is unchanged", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const WIDE = "PROXY-WIDE-MARKER-0042";
+    for (const allowanceCode of [undefined, "DR_ALLOWANCE_STOP"] as const) {
+      const slot = allowanceCode ? { forbidden_markers: [CANARY, MARK], canary: CANARY } : {};
+      const u = setup(() => Response.json({}), { allowanceCode, forbiddenMarkers: [WIDE] });
+      const b = u.bind(slot);
+      await expectProblem(await u.call(b.slot, b.token, "/anthropic/v1/messages", { ...count, max_tokens: 1000, messages: [{ role: "user", content: WIDE }] }), 403, "E_TRIPWIRE");
+      const tripwire = withoutAt(u)[0]!;
+      for (const place of PLACES) {
+        const t = setup(() => Response.json({}), { allowanceCode, forbiddenMarkers: [WIDE] });
+        const s = t.bind(slot);
+        const route = place === "path" ? "/v1/nope-<unquoted>" : "/v1/nope";
+        const res = await refused(t, s, rider(place, WIDE));
+        expect(res.status).toBe(403);
+        expect(await res.text()).toBe(await routeAnswer(route));
+        const lines = withoutAt(t);
+        expect(lines.map(l => l.code)).toEqual(["E_TRIPWIRE", "E_ALLOWANCE"]);
+        expect(Object.keys(lines[0]!)).toEqual(Object.keys(tripwire));
+        expect(lines[0]).toEqual({ ...tripwire, meter_id: s.meter_id, route });
+        expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(WIDE);
+        if (allowanceCode) await expect(journalCheck(t.dir)).rejects.toThrow(/^E_USAGE: --temp needs --fake-upstreams/);
+        expect(await t.proxy.finalize(s.meter_id)).toMatchObject({ refused: 1, refusals: ["E_ALLOWANCE"], allowance_stops: 0 });
+        expect(t.calls).toHaveLength(0);
+      }
+    }
+  });
+
+  // Value: protects=a canary riding with a proxy-wide marker in a refused request, in any mix of places, writes both the tripwire's custody line (the slot's markers only, with their indexes) and its E_TRIPWIRE line (every marker counted), so the controller's journal check still stops the run, while each answer stays byte for byte the 403 E_ALLOWANCE it was; fails_when=the proxy-wide marker hides the canary, so no custody line is written and the run goes on; why_new=#315's review note on a canary beside a proxy-wide marker, by the Captain's ruling; seam=forward's route allowlist refusal and the controller's pre-launch journal check; no_claim=an allowlisted request carrying both, which keeps today's single E_TRIPWIRE refusal (tests/decision-routing/custody.test.ts)
+  test("a canary riding with a proxy-wide marker in a refused request writes both the custody and the E_TRIPWIRE lines, so the run still stops", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const WIDE = "PROXY-WIDE-MARKER-0042";
+    const t = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP", forbiddenMarkers: [WIDE] });
+    const s = t.bind({ forbidden_markers: [CANARY, MARK], canary: CANARY });
+    const cases: Array<[Riders, string, Array<[number, string]>, number]> = [
+      [{ path: `/v1/${WIDE}/nope-${CANARY}` }, "/v1/<unquoted>/nope-<unquoted>", [[0, CANARY]], 2],
+      [{ path: `/v1/nope-${WIDE}`, content: CANARY }, "/v1/nope-<unquoted>", [[0, CANARY]], 2],
+      [{ path: `/v1/nope-${CANARY}`, header: WIDE }, "/v1/nope-<unquoted>", [[0, CANARY]], 2],
+      [{ query: WIDE, content: `${MARK} ${CANARY}` }, "/v1/nope", [[0, CANARY], [1, MARK]], 3],
+    ];
+    const expected: Record<string, unknown>[] = [];
+    for (const [at, route, markers, all] of cases) {
+      const res = await refused(t, s, at);
+      expect(res.status).toBe(403);
+      expect(await res.text()).toBe(await routeAnswer(route));
+      const line = { meter_id: s.meter_id, provider: "anthropic", route, model: null };
+      expected.push(
+        { kind: "refusal", code: "DR_CUSTODY_HIT", ...line, reason: `the request carries ${markers.length} runner-only marker(s); custody hit, the run stops`, source: "127.0.0.1", cell, markers: markers.map(([index, m]) => ({ index, sha256: shortSha(m) })) },
+        { kind: "refusal", code: "E_TRIPWIRE", ...line, reason: `the request carries ${all} forbidden marker(s); the cell is invalid`, source: "127.0.0.1" },
+        { kind: "refusal", code: "E_ALLOWANCE", ...line, reason: `route POST /anthropic${route} is not allowlisted`, source: "127.0.0.1" },
+      );
+    }
+    expect(withoutAt(t)).toEqual(expected);
+    const journal = readFileSync(join(t.dir, "journal.ndjson"), "utf8");
+    for (const piece of [CANARY, MARK, WIDE]) expect(journal).not.toContain(piece);
+    await expect(journalCheck(t.dir)).rejects.toThrow(new RegExp(`^DR_CUSTODY_HIT: the journal .* holds a custody hit \\(meter ${s.meter_id}\\)`));
+    expect(await t.proxy.finalize(s.meter_id)).toMatchObject({ refused: cases.length, refusals: ["E_ALLOWANCE"], allowance_stops: 0 });
+    expect(t.calls).toHaveLength(0);
+  });
+
+  // Value: protects=a refused request whose JSON body nests 100,000 levels deep, past what a recursive walk of its parsed strings can read, is still scanned in its path, query string, headers and body, the body's strings walked without recursion so a JSON-escaped canary is found too, so the canary writes the custody line and the answer stays the 403 E_ALLOWANCE it was, never a 500 with no record; fails_when=the body's traversal overflows the stack and the call ends E_INTERNAL with no custody line, or a canary in the headers or the body (raw or escaped) of a refused request is not recorded; why_new=Capy's review of #319 (deeply nested refused bodies suppressed custody evidence) and the Captain's ruling that the scan must not recurse; seam=forward's journal-only scan (journalMarkers, walkedStrings); no_claim=none
+  test("a refused request whose body nests too deep to walk recursively still records a canary in its path, headers or body, escaped or not, and the answer is unchanged", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const deep = (inner: string) => `${"[".repeat(100_000)}${inner}${"]".repeat(100_000)}`;
+    const cases: Array<[Riders, string, string]> = [
+      [{ path: `/v1/nope-${CANARY}` }, "/v1/nope-<unquoted>", deep("")],
+      [{ header: CANARY }, "/v1/nope", deep("")],
+      [{}, "/v1/nope", deep(JSON.stringify(CANARY))],
+      [{}, "/v1/nope", deep(JSON.stringify(CANARY).replace("D", "\\u0044"))],
+    ];
+    for (const [at, route, body] of cases) {
+      const t = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP" });
+      const s = t.bind({ forbidden_markers: [CANARY], canary: CANARY });
+      const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${s.slot}/anthropic${at.path ?? "/v1/nope"}`, { method: "POST", headers: { "content-type": "application/json", "x-api-key": s.token, ...(at.header ? { "x-note": at.header } : {}) }, body });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toBe(await routeAnswer(route));
+      expect(withoutAt(t).map(l => [l.code, l.route])).toEqual([["DR_CUSTODY_HIT", route], ["E_ALLOWANCE", route]]);
+      expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(CANARY);
+      await expect(journalCheck(t.dir)).rejects.toThrow(/^DR_CUSTODY_HIT: /);
+      expect(t.calls).toHaveLength(0);
+    }
+  });
+
+  // Value: protects=a request refused E_KEY_MISSING, which the proxy answers before its tripwire reads it, is first scanned in its path (an allowlisted models id), body, query string and headers: on a DR_ALLOWANCE_STOP proxy a canary writes the tripwire's custody line, so the journal check stops the run, and any other slot marker a marker_hit line; a proxy-wide marker writes the masked E_TRIPWIRE line on any proxy; and the 503 answer and the meter's one E_KEY_MISSING refusal stay as they were; fails_when=a missing key hides a canary or a proxy-wide marker from the journal, or the answer changes; why_new=Subagent review of #319 and the Captain's ruling (every request the proxy answers before its tripwire gets the tripwire's records); seam=forward's key check and journalMarkers; no_claim=E_SLOT_DENIED, which names no slot
+  test("a canary or marker in a request refused E_KEY_MISSING is recorded as the tripwire would record it, and the answer is unchanged", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const WIDE = "PROXY-WIDE-MARKER-0042";
+    const answer = await problem("E_KEY_MISSING", 503, "ANTHROPIC_API_KEY is not set in the proxy's environment").text();
+    const send = (t: ReturnType<typeof setup>, s: { slot: string; token: string }, place: Place, marker: string) =>
+      place === "path"
+        ? fetch(`http://127.0.0.1:${t.proxy.port}/${s.slot}/anthropic/v1/models/${marker}`, { headers: { "x-api-key": s.token } })
+        : fetch(`http://127.0.0.1:${t.proxy.port}/${s.slot}/anthropic/v1/messages${place === "query" ? `?note=${marker}` : ""}`, { method: "POST", headers: { "content-type": "application/json", "x-api-key": s.token, ...(place === "headers" ? { "x-note": marker } : {}) }, body: JSON.stringify({ ...count, max_tokens: 1000, messages: [{ role: "user", content: place === "body" ? marker : "hi" }] }) });
+    for (const [allowanceCode, marker, kinds] of [["DR_ALLOWANCE_STOP", CANARY, ["DR_CUSTODY_HIT", "E_KEY_MISSING"]], ["DR_ALLOWANCE_STOP", MARK, ["marker_hit", "E_KEY_MISSING"]], [undefined, WIDE, ["E_TRIPWIRE", "E_KEY_MISSING"]]] as const) {
+      for (const place of PLACES) {
+        const t = setup(() => Response.json({}), { env: {}, allowanceCode, forbiddenMarkers: [WIDE] });
+        const s = t.bind(allowanceCode ? { forbidden_markers: [CANARY, MARK], canary: CANARY } : {});
+        const route = place === "path" ? "/v1/models/<unquoted>" : "/v1/messages";
+        const res = await send(t, s, place, marker);
+        expect(res.status).toBe(503);
+        expect(await res.text()).toBe(answer);
+        const lines = withoutAt(t);
+        expect(lines.map(l => (l.kind === "refusal" ? l.code : l.kind))).toEqual([...kinds]);
+        expect(lines.every(l => l.route === route && l.model === null)).toBe(true);
+        if (marker === CANARY) expect(lines[0]!.markers).toEqual([{ index: 0, sha256: shortSha(CANARY) }]);
+        if (marker === WIDE) expect(lines[0]!.reason).toBe("the request carries 1 forbidden marker(s); the cell is invalid");
+        expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(marker);
+        if (marker === CANARY) await expect(journalCheck(t.dir)).rejects.toThrow(/^DR_CUSTODY_HIT: /);
+        if (marker === MARK) await expect(journalCheck(t.dir)).rejects.toThrow(/^E_USAGE: --temp needs --fake-upstreams/);
+        expect(await t.proxy.finalize(s.meter_id)).toMatchObject({ refused: 1, refusals: ["E_KEY_MISSING"] });
+        expect(t.calls).toHaveLength(0);
+      }
+    }
+  });
+
+  // Value: protects=a body the proxy cannot decode (zstd bytes that do not decode, or that decode past the 16 MiB limit) on TypeSafe's allowlisted route or a refused one writes one body_unscannable line naming the route and why, then the tripwire's records from the path, query string and headers (a canary's custody line, any other slot marker's marker_hit line), while the 400 or 403 answer stays byte for byte what it was; the body_unscannable line alone never stops the journal check; fails_when=an undecodable body hides a canary in the headers or query string from the journal, leaves no record that the body went unscanned, or a body_unscannable line stops the run; why_new=Subagent review of #319 and the Captain's ruling (an undecodable body writes body_unscannable, which is not a stop); seam=forward's readBody failure and journalMarkers; no_claim=what the undecodable body itself holds
+  test("an undecodable body writes one body_unscannable line and the tripwire's records from its path, query string and headers, and the answer is unchanged", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const garbage = Buffer.from("these bytes are not a zstd frame");
+    const bomb = Bun.zstdCompressSync(Buffer.from(JSON.stringify({ model: "jev-1.13.0", state: "a".repeat(17 * 1024 * 1024) })));
+    const reason = "the zstd request body cannot be decoded, so only its path, query string and headers were scanned";
+    const undecodable = await problem("E_ALLOWANCE", 400, "the zstd request body cannot be decoded, so it cannot be priced").text();
+    const options = { allowanceCode: "DR_ALLOWANCE_STOP" as const, env: { TYPESAFE_API_KEY: "ts-key-0123456789" } };
+    const slot = { models: ["typesafe:jev-1.13.0"], forbidden_markers: [CANARY, MARK], canary: CANARY };
+    const send = (t: ReturnType<typeof setup>, s: { slot: string; token: string }, path: string, body: Uint8Array, extra: Record<string, string> = {}) => fetch(`http://127.0.0.1:${t.proxy.port}/${s.slot}/typesafe${path}`, { method: "POST", headers: { "content-type": "application/json", "content-encoding": "zstd", "x-api-key": s.token, ...extra }, body });
+    const cases: Array<[string, Uint8Array, Record<string, string>, string, string, string]> = [
+      ["/v1/systemone", garbage, { "x-note": CANARY }, "/v1/systemone", "DR_CUSTODY_HIT", undecodable],
+      ["/v1/systemone?note=" + MARK, garbage, {}, "/v1/systemone", "marker_hit", undecodable],
+      ["/v1/nope", bomb, { "x-note": CANARY }, "/v1/nope", "DR_CUSTODY_HIT", await problem("E_ALLOWANCE", 403, "route POST /typesafe/v1/nope is not allowlisted").text()],
+    ];
+    for (const [path, body, extra, route, kind, answer] of cases) {
+      const t = setup(() => Response.json({}), options);
+      const s = t.bind(slot);
+      const res = await send(t, s, path, body, extra);
+      expect(await res.text()).toBe(answer);
+      const lines = withoutAt(t);
+      expect(lines.map(l => (l.kind === "refusal" ? l.code : l.kind))).toEqual(["body_unscannable", kind, "E_ALLOWANCE"]);
+      expect(lines[0]).toEqual({ kind: "body_unscannable", meter_id: s.meter_id, provider: "typesafe", route, reason, source: "127.0.0.1" });
+      expect(lines[1]!.markers).toEqual(kind === "marker_hit" ? [{ index: 1, sha256: shortSha(MARK) }] : [{ index: 0, sha256: shortSha(CANARY) }]);
+      expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toMatch(/DRCANARY|SEALED/);
+      if (kind === "DR_CUSTODY_HIT") await expect(journalCheck(t.dir)).rejects.toThrow(/^DR_CUSTODY_HIT: /);
+      expect(t.calls).toHaveLength(0);
+    }
+    const quiet = setup(() => Response.json({}), options);
+    const q = quiet.bind(slot);
+    for (const body of [garbage, bomb]) expect(await (await send(quiet, q, "/v1/systemone", body)).text()).toBe(undecodable);
+    expect(withoutAt(quiet).map(l => (l.kind === "refusal" ? l.code : l.kind))).toEqual(["body_unscannable", "E_ALLOWANCE", "body_unscannable", "E_ALLOWANCE"]);
+    await expect(journalCheck(quiet.dir)).rejects.toThrow(/^E_USAGE: --temp needs --fake-upstreams/);
+    expect(await quiet.proxy.finalize(q.meter_id)).toMatchObject({ refused: 2, refusals: ["E_ALLOWANCE"] });
+    expect(quiet.calls).toHaveLength(0);
+  });
+
+  // Value: protects=an allowlisted request whose body nests 100,000 levels deep, past the tripwire's recursive walk, keeps its 500 E_INTERNAL answer byte for byte but is first scanned with the walk that does not recurse, so a canary in it (raw or JSON-escaped) writes the custody line and the journal check stops the run, any other slot marker writes a marker_hit line, and a proxy-wide marker writes the masked E_TRIPWIRE line on any proxy; fails_when=the stack overflow ends the call with an empty journal, so a canary in a deep body never stops the run, or the answer changes; why_new=Subagent review of #319 and the Captain's ruling (the journal-only scan must not recurse, tested at 100,000 levels); seam=forward's tripwire and journalMarkers; no_claim=whether a later step would have refused the request
+  test("an allowlisted body too deep for the tripwire's walk records its canary or marker before the 500 it is answered, which is unchanged", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const WIDE = "PROXY-WIDE-MARKER-0042";
+    const answer = await problem("E_INTERNAL", 500, "Maximum call stack size exceeded.").text();
+    const deep = (inner: string) => `${JSON.stringify({ ...count, max_tokens: 1000 }).slice(0, -1)},"x":${"[".repeat(100_000)}${inner}${"]".repeat(100_000)}}`;
+    const cases: Array<[ProxyOptions["allowanceCode"], string, string]> = [
+      ["DR_ALLOWANCE_STOP", JSON.stringify(CANARY), "DR_CUSTODY_HIT"],
+      ["DR_ALLOWANCE_STOP", JSON.stringify(CANARY).replace("D", "\\u0044"), "DR_CUSTODY_HIT"],
+      ["DR_ALLOWANCE_STOP", JSON.stringify(MARK), "marker_hit"],
+      [undefined, JSON.stringify(WIDE), "E_TRIPWIRE"],
+      ["DR_ALLOWANCE_STOP", JSON.stringify("nothing here"), ""],
+    ];
+    for (const [allowanceCode, inner, kind] of cases) {
+      const t = setup(() => Response.json({}), { allowanceCode, forbiddenMarkers: [WIDE] });
+      const s = t.bind(allowanceCode ? { forbidden_markers: [CANARY, MARK], canary: CANARY } : {});
+      const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${s.slot}/anthropic/v1/messages`, { method: "POST", headers: { "content-type": "application/json", "x-api-key": s.token }, body: deep(inner) });
+      expect(res.status).toBe(500);
+      expect(await res.text()).toBe(answer);
+      const lines = withoutAt(t);
+      expect(lines.map(l => (l.kind === "refusal" ? l.code : l.kind))).toEqual(kind ? [kind] : []);
+      for (const l of lines) expect(l).toMatchObject({ meter_id: s.meter_id, provider: "anthropic", route: "/v1/messages", model: null });
+      if (kind === "DR_CUSTODY_HIT") await expect(journalCheck(t.dir)).rejects.toThrow(/^DR_CUSTODY_HIT: /);
+      expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toMatch(/DRCANARY|SEALED|PROXY-WIDE/);
+      expect(t.calls).toHaveLength(0);
+    }
+  });
+
+  // Value: protects=a slot denial masks the markers of slots that have closed as well as the open slots' markers, in the unmatched path and the slot id it quotes, in the 403 and the journal, while every denial stays a 403 E_SLOT_DENIED and an honest path or slot id keeps its text; fails_when=unbinding a slot drops its markers from the denial's masking, so a later denial echoes one; why_new=#315's review (E_SLOT_DENIED did not mask closed slots' markers), by the Captain's ruling; seam=handle's E_SLOT_DENIED refusal and unbind; no_claim=a custody line for a canary in a denied call, since no slot's tripwire runs on it
+  test("a slot denial masks the markers of closed slots as well as open ones, in the 403 and the journal", async () => {
+    const CLOSED = "SEALED-MARKER-7f3a9c";
+    const OPEN = "OPEN-SLOT-MARKER-0055";
+    const t = setup(() => Response.json({}));
+    const a = t.bind({ forbidden_markers: [CLOSED] });
+    const b = t.bind({ forbidden_markers: [OPEN] });
+    t.proxy.unbind(a.slot);
+    const cases: Array<[string, string | null, string | null, string]> = [
+      [`/x/${CLOSED}/y`, null, null, "no provider route /x/<unquoted>/y"],
+      [`/x-${OPEN}`, null, null, "no provider route /x-<unquoted>"],
+      [`/${CLOSED}/anthropic/v1/messages`, b.token, "<unquoted>", "slot <unquoted> is not open"],
+      [`/${a.slot}/anthropic/v1/messages`, a.token, a.slot, `slot ${a.slot} is not open`],
+      ["/nope/v1/messages", null, null, "no provider route /nope/v1/messages"],
+    ];
+    for (const [path, credential, , reason] of cases) {
+      const res = await fetch(`http://127.0.0.1:${t.proxy.port}${path}`, { headers: credential ? { "x-api-key": credential } : {} });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toBe(await problem("E_SLOT_DENIED", 403, reason).text());
+    }
+    expect(t.journal().map(l => [l.code, l.slot, l.reason])).toEqual(cases.map(([, , slot, reason]) => ["E_SLOT_DENIED", slot, reason]));
+    expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toMatch(/SEALED|OPEN-SLOT/);
+    expect(t.calls).toHaveLength(0);
   });
 });
 

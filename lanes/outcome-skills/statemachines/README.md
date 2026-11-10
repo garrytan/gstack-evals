@@ -154,8 +154,9 @@ tests/outcome-skills/sm-arms.test.ts pins every text by sha256 and checks it aga
 
 - "Its sentence, then this suffix": the sentence, a blank line, then the suffix, as the follow-on turn puts its blank line.
 - A3 runs on the first stage's limits (section 6), since section 17 scores it by section 7.
-- The /qa pin (sha, version and install command) is recorded at freeze in sm.pins.qa. Until then qa:told refuses to
-  build a turn, and arms/qa-install.sh refuses a missing sha or command.
+- The /qa pin (sha, version and install command) is recorded in sm.pins.qa: garrytan/gstack b6155921 (1.98.0.0), main's
+  last commit on 2026-11-08 UTC, installed with `./setup --host claude`. qa:told refuses to build a turn while the pin is
+  null, and arms/qa-install.sh refuses a missing sha or command.
 - The proxy routes: Opus on anthropic, Sol (openai/gpt-6.1-sol) and particle-1 on OpenRouter's Messages route, as Claude
   Code arms used before.
 
@@ -167,7 +168,7 @@ real_agent's family SM mode (arm in the registry's "sm" block): one turn, no sid
 tree keeps its one-commit or two-commit history; egress allows only the proxy. Before any session opens it checks, in the
 container, the commit count and head the task names, that no CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude is in the
 tree (E_SM_STRIP), and that a no-gstack home holds no ~/.claude/skills, ~/.claude/CLAUDE.md, ~/.local/share/gstack, ~/.capy
-or ~/.gstack, while A3's home holds gstack at the /qa pin. Nobody answers: AskUserQuestion gets section 6's fixed line,
+or ~/.gstack, while A3's home holds gstack at the /qa pin and no ~/.claude/CLAUDE.md. Nobody answers: AskUserQuestion gets section 6's fixed line,
 a prose question ends the turn, and both are counted (sm_user.py). Claude Code's own transcripts are copied out as
 claude-projects.tar for the memory audit.
 
@@ -441,6 +442,53 @@ model or unit (E_SM_PACKET).
   scores below 0; false-fail rate the share of good-labelled diffs it scores below 0. On this label set both judges
   agree by construction, so the literal rates are 1 and 0 (open point). (Reported.)
 
+## The paid sender for packets (send.ts, GST-1959)
+
+`sm packets send --item sm-labels|sm-judges --run <id> --packets <dir> --out <dir>` is the paid step for the packets
+above. It leases its own item through the ledger (openLease, settleLease) and sends each call through an in-process
+metering proxy, one slot per call and one call at a time, as the product-value meter and noloss judge-run do. The stage driver cannot serve
+these two items: neither names a session model, sm-labels pays for two models, and a driver stage takes one model and
+counts sessions.
+
+- Readers. Labels: GPT-6 Astra and Opus 5.5 each answer every label packet. Judges: each key's frozen judge (Astra for
+  Opus runs, Opus for Sol and particle-1 runs), plus every judge whose queue (queue-astra.json, queue-opus.json, from
+  `sm packets queue`) names the packet; an R78 labelled item must be in both queues. Two sessions with the same diff and
+  files share one packet: every key that names it is checked, and each of their judges reads it once. Each judge sends its queue in
+  order, then its other packets by id, and the two readers take turns.
+- The prompt is the packet's body as JSON, the exact text its id digests. A packet that no longer matches its digest, or
+  has no key, is refused before anything is opened (E_SM_PACKET). The routes and request shape are judge.ts's
+  (JUDGE_ROUTE, judgeRequest, JUDGE_REASONING_EFFORT on OpenAI), with a 1,500-token output cap.
+- Each call reserves its packet's byte worst case by the proxy's own formula (prices.ts priceRequest and
+  reservationMicros): request bytes plus 64 at the input rate (Astra's $12.50/M cache-write rate, Opus's $4/M), plus
+  1,500 output tokens. The sender prices the exact body the proxy forwards, so it adds service_tier and inference_geo
+  itself. Before each call the lease's room (reserved, less held) must hold that worst case. A call that does not fit
+  cap-stops the item before it is sent: the stop is written to the record, nothing more is sent, and the lease closes
+  with cap_stop, so the ledger admits no new lease (CAP_STOP).
+- Before any call: no recorded cap is E_LEDGER_MISSING; a cap-stopped item, or one with nothing left, is CAP_STOP; an
+  item bound to another run is E_ITEM_BOUND.
+- After each call settles, its reported usage (input with cache reads and writes, output with reasoning) is checked
+  against the prereg's bound of 20,000 input and 1,500 output tokens (R78_PRICE_BOUND). A call past it halts the item
+  before the next send (E_SM_USAGE_HALT): a halt line in replies.jsonl names the meter, packet, reader and usage, and
+  every later send is refused until `--lift-halt <meter>` records the Captain's ruling. The halted call keeps its reply
+  and is never sent again. A call the proxy refuses at its own allowance check halts the item the same way
+  (E_ALLOWANCE). The slot's allowance is one worst case, so the proxy does not resend a charged 5xx.
+- Each reply goes through the readers `sm packets read` uses. A malformed one is recorded (E_SM_JUDGE_ANSWER) with its
+  raw text and never asked again: the prereg allows no re-ask.
+- An upstream failure is recorded (UPSTREAM) and stops the send. The lease settles by the ledger's rules: a 4xx releases
+  the reservation, a lost send keeps it as unknown, and a 5xx without usage is charged. A failure with no answer and
+  nothing charged ($0 spent, $0 unknown and nothing lost in transit, such as a provider 401) is recorded as uncharged.
+  A rerun with the same --run and --out sends calls with no record, and sends each uncharged call at most once more: if
+  that resend also fails uncharged, the call is recorded as a gap that keeps the first failure's code (first_code) and
+  is never sent again. A charged failure is never resent, and a call that a stopped send sent but never recorded is
+  recorded as lost and never sent again.
+- One live send holds an item on a host, through a lock file beside the record, so a second send on it is refused
+  (E_USAGE) and never settles a lease the live one meters. Each send line is fsynced before its call goes out. A send
+  whose replies.jsonl does not name every call the ledger holds for the item and run (another --out, or a file emptied
+  or cut short) is refused before it recovers, settles or sends anything (E_USAGE).
+- --out holds replies.jsonl (a send line with the call's worst case before each call, then one reply line per call with
+  packet, reader, model, outcome, code, why, answer, raw and micros, plus a halt line for each halt and a lift line for
+  each ruling), raw/<reader>/<packet>.txt and each lease's proxy journal.
+
 
 ## Stale report readings (reports.ts, testrun.ts)
 
@@ -510,6 +558,59 @@ model or unit (E_SM_PACKET).
   block with no field set, which real_agent writes when no close answer came, ends the session as infra and the
   session keeps its record, instead of being refused. An allowance_stops that is not a number refuses the session
   (E_SM_ARM). No rule changes.
+- A close whose proxy finalize failed halts its item (pre-data build change, 2026-11-10, session.ts sessionEnd,
+  driver/stage.ts; #314 review note 8; the Captain accepted, GSTA-2): a close answer with finalized false still ends
+  limit_allowance when it names an allowance stop (allowance_stops above 0), so a real stop is scored as is and never
+  spends again. The driver's own close path can't report one: when finalize fails, allowance_stops is null, so the
+  session ends infra. The driver then halts that SM line item before any retry: it writes a halt line with the session
+  id and its proxy journal path to the run's sessions.jsonl, opens no more sessions on the item (E_SM_FINALIZE_HALT,
+  HTTP 423), settles its lease, exits 2, and refuses a lease on the item at the next launch. The Captain reads the
+  journal and rules; a launch with --lift-halt <session id> records the lift and serves the item again. Section 6's
+  retry rule is unchanged: the halt only delays the retry until that ruling. With today's in-process proxy, finalize
+  can't fail, so this path does not fire.
+- A3's home is installed at /root (pre-data build change, 2026-11-10, arms/qa-install.sh, image.ts qaHomeCopy; #314
+  review note 4; the Captain accepted, GSTA-2): qa-install.sh runs the clone, checkout and `./setup --host claude` in a
+  throwaway container (buildpack-deps trixie with Bun 1.4.4, both by digest) with the home dir mounted at /root, no API
+  key, no drive and no host environment, and removes the container afterwards. Every link, text file and compiled binary
+  then names /root, so the image build copies the home as written, owned by root as a root install's is (cp -a had kept
+  the host user's uid, so git refused the gstack checkout, the session check read no commit and refused every A3
+  session); the old rewrite of host-dir links and text is gone (no other arm used it). The copy fails closed (E_SM_ARM) on a link that leaves the home, a file that names the host
+  dir, or a binary that names gstack's checkout under any home but /root, and names the files. At the pin, a home
+  installed on the host left the host dir in gstack's browse binary, which resolves its root from it. The session
+  record keeps the copied home's file digest (qa_home_sha256). A3 still has no Chromium (GSTACK_SKIP_PLAYWRIGHT=1), so
+  /qa's browser steps can't run in it.
+- No home CLAUDE.md in A3 (pre-data build fix, 2026-11-10, real_agent.py; #314 review note 5): A3's home check took any
+  path the image build listed, so a /root/.claude/CLAUDE.md the install wrote would pass. It is now refused in A3 as in
+  every no-gstack arm, even when listed. No rule changes.
+- Two /qa caps above section 17's $50 (deviation, 2026-11-10, items.ts, recorded before any outcome data; the Captain
+  accepted, GSTA-2): an item opens a session only while its remaining cap covers the allowance, so n sessions at mean m
+  with k concurrent need (n - k) * m + k * allowance. At the /qa line's planning price (twice section 16's first-stage
+  price with VMs: $6.16 on Opus and Sol, $0.76 on particle-1), k = 1 and E1's doubled allowance, sm-qa-admit needs
+  4 * 6.16 + 30 = $54.64 and sm-qa-particle 59 * 0.76 + 6 = $50.84. They are $55 and $51; the $6 comes from the line's
+  reserve, so the line stays $1,100 (items $986, crew use $60 counted). No other cap moves.
+- A containment check runs in every session image before any session (pre-data build change, 2026-11-10, contain.ts,
+  sh/contain.sh, run.ts, cli.ts `sm contain`, dryrun.ts; the Captain's scope, GSTA-2, after GEVA-503 found the upstream
+  fix behind git tags past the base in 12 of 40 SWE-rebench images). Inside the first-stage, A3 and follow-on images, as
+  the session sees them: (a) HEAD is the recorded head and every ref (peeled tags, branches, remotes, notes, replace refs,
+  the stash), FETCH_HEAD, ORIG_HEAD, MERGE_HEAD, CHERRY_PICK_HEAD and each packed-refs line names it or an ancestor;
+  (b) every commit object in the store does too; (c) no alternates (file or GIT_ALTERNATE_OBJECT_DIRECTORIES), no
+  .gitmodules or nested .git under the repo, and no other git object store on the filesystem but proc and sys, except
+  A3's gstack checkout when its HEAD is the /qa pin; (d) no file outside the repo, /tmp included, holds a hidden test
+  name (a FAIL_TO_PASS leaf name the base tree never names, as a whole word) or a marker (a line of 30 code points or
+  more that test.patch or fix-tests.patch adds and no base file holds, anywhere in a line, so a patch file's added lines
+  count). A hit keeps the path and the sha256, never the text; compressed archives outside the repo are listed by path,
+  never failed. Any failure is E_SM_CONTAIN: the unit halts before any session and is not dropped, so section 4's drop
+  rule is unchanged; the fix goes into the image or setup step, test-first, and a repin waits for the next part.
+  `sm contain --unit <dir>` runs it before sm-admit and writes one run-record line per image and check.
+- Paid packet sends reserve each call's byte worst case, one call at a time (pre-data build change, 2026-11-10, send.ts,
+  accepted by GSTA-2): the proxy reserves input at one token per request byte, so at the prereg's per-call price a
+  request over 15,936 bytes (Astra) or 19,936 bytes (Opus) could never be sent, and a full judge packet is larger (1,500
+  lines of 40 bytes is about 65 KB). Each label and judge call now reserves its packet's byte worst case by the proxy's
+  own formula (about $0.89 for Astra and $0.29 for Opus on that packet) and runs alone, and a call that does not fit the
+  item's remaining cap cap-stops the item before it is sent. After each call settles, its reported usage is checked
+  against the prereg's bound of 20,000 input and 1,500 output tokens, and a call past it halts the item for the
+  Captain's ruling (E_SM_USAGE_HALT). The pricing bound (R78_PRICE_BOUND, r78Price), the $160.05 plan and the $180
+  sm-judges cap do not change.
 - Stock diffs build before a judge sees them (pre-data build fix, 2026-11-10, GST-1959, packets.ts buildStock and
   stockDiffs, cli.ts): `sm packets stock` (now with --unit-dir) and `sm packets labelled` (now with unit_dir in each
   spec entry) apply each stock diff to a fresh copy of the unit's prepared tree in its runtime image and run the unit's

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { CODES, docAnchor, isReasonCode } from "../../../src/errors/codes.ts";
 import { draw, readPrereg, type Draw, type DrawUnit } from "./draw.ts";
 import { hiddenMarkdown, hiddenUnit, inSourceUnits, staticCounts, type HiddenRecord } from "./hidden.ts";
-import { oracleUnit, oracleWalk, Pacer } from "./oracle.ts";
+import { oracleUnit, oracleWalk, Pacer, treeVolume } from "./oracle.ts";
 import { sample } from "./sample.ts";
 import { screen } from "./screen.ts";
 import { fetchMultiLang, manifestSize, pinCandidates, readRows, splitCandidates, type Candidate } from "./source.ts";
@@ -20,8 +20,13 @@ import { scoreFirst, type OutcomeRecord, type ScoreInput } from "./score.ts";
 import { planPart, refuseUnscored, type PlannedSession, type SessionRecord } from "./session.ts";
 import { LANGS, type Lang } from "./langs.ts";
 import { dryrun, type DryrunConfig } from "./dryrun.ts";
+import { assertContained, containImage, type ContainCheck } from "./contain.ts";
+import { buildSessionImage } from "./image.ts";
+import { docker } from "../../real-outcome/task/docker.ts";
+import { loadRegistry, REGISTRY_PATH } from "../arms/registry.ts";
 import { assertBlind, AXES, buildStock, judgeFor, judgeKey, judgePacket, LABELLERS, labelledQueue, labelledSet, labelPacket, r78Check, r78Price, readJudgeAnswer, readLabelAnswer, stockDiffs, type JudgePacket, type R78Labelled, type R78Row } from "./packets.ts";
 import { foundIt, laterFix, whatChanged } from "./secondary.ts";
+import { sendPackets } from "./send.ts";
 
 export const HELP = `gstack-evals outcome sm <command>
   source fetch --cache <dir>                         download the pinned MultiLang parquet files and check their sha256
@@ -61,6 +66,12 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      per unit, model and tree: replicate means, the 2-of-3 keep rule,
                                                      first-stage gaps (sm-outcome.v1 records in --firsts), inherited fixes
                                                      and drift counts
+  contain --unit <dir> --out <file> [--record <run record>] [--qa-home <dir>] [--tree-patch <file>]
+                                                     the containment check before sm-admit: builds the unit's first-stage
+                                                     image (with --qa-home, A3's too, at registry.json's /qa pin; with
+                                                     --tree-patch, a follow-on) and checks refs, objects, object stores and
+                                                     the files outside the repo; one record line per image and check;
+                                                     any failure exits with E_SM_CONTAIN and the unit halts
   dryrun --config <config.json> --out-dir <dir> [--from <case>]
                                                      section 18's scorer cases on real units, one PASS or FAIL line each,
                                                      stopping at the first miss; ends DRYRUN: ok
@@ -81,6 +92,12 @@ export const HELP = `gstack-evals outcome sm <command>
                                                      minted once and reused on a rerun; ids are the labelled packets and the real ones
   packets r78 --real <rows.json> --labelled <rows.json> --out <file>  the R78 check (a Astra, b Opus); labelled rows add kind, axis
   packets r78-price                                   the sm-judges calls priced at the per-call bound, against the item cap
+  packets send --item sm-labels|sm-judges --run <id> --packets <dir> --out <dir> [--record <dir>] [--ledger <file>] [--lift-halt <meter,...>]
+                                                     the paid step: each packet to its readers (labels: Astra and Opus;
+                                                     judges: the key's judge, and both on queued items), one call at a
+                                                     time on the item's own lease, each reserving its packet's byte worst
+                                                     case; a call past 20,000 input or 1,500 output tokens halts the item
+                                                     until --lift-halt records the Captain's ruling; replies.jsonl in --out
   secondary --unit <dir> --patch <arm.patch> [--outcome <outcome.json>] [--tree <base dir>] [--clone <dir>] --out <file>
                                                      section 10's keyless secondaries: found it, what it changed and, with
                                                      a local clone, later-fix overlap
@@ -329,6 +346,37 @@ export async function main(argv: string[]): Promise<number> {
       console.log("session=" + session.cell + " end=" + res.record.end + " image=" + res.image.image_id + " lease=" + res.record.lease_id + " harbor_exit=" + res.harbor_exit + " record=" + join(need(f, "--out"), "session.json"));
       return 0;
     }
+    if (sub === "contain") {
+      const { f } = flags(rest, ["--unit", "--out", "--record", "--qa-home", "--tree-patch"]);
+      const dir = need(f, "--unit");
+      const u = readUnit(dir);
+      const qaPin = f.has("--qa-home") ? (loadRegistry(REGISTRY_PATH).sm?.pins?.qa?.sha ?? (() => { throw new Error("E_SM_ARM A3's image needs the /qa pin recorded in registry.json sm.pins.qa"); })()) : undefined;
+      const builds: Array<{ image: "first" | "qa" | "followon"; o: Parameters<typeof buildSessionImage>[1] }> = [
+        { image: "first", o: { volume: treeVolume(u.id), stage: "first" } },
+        ...(f.has("--qa-home") ? [{ image: "qa" as const, o: { volume: treeVolume(u.id), stage: "first" as const, qaHome: f.get("--qa-home")! } }] : []),
+        ...(f.has("--tree-patch") ? [{ image: "followon" as const, o: { volume: treeVolume(u.id), stage: "followon" as const, treePatch: readFileSync(f.get("--tree-patch")!, "utf8") } }] : []),
+      ];
+      const images = builds.map((b) => {
+        const img = buildSessionImage(u, b.o);
+        try {
+          return { image: b.image, head: img.head, ...containImage(img, u, dir, b.image === "qa" ? qaPin : undefined) };
+        } finally {
+          docker(["image", "rm", "-f", img.tag], { timeoutMs: 120_000 });
+        }
+      });
+      const ok = images.every((i) => i.ok);
+      writeNew(need(f, "--out"), { schema: "sm-contain.v1", unit: u.id, ok, images });
+      for (const i of images) {
+        for (const check of ["refs", "objects", "stores", "scan"] as ContainCheck[]) {
+          const c = i.checks[check];
+          const line = { event: "sm_contain", unit: u.id, image: i.image, head: i.head, check, ok: c.ok, findings: c.findings, ...(check === "scan" ? { archives: i.archives.length, archive_paths: i.archives } : {}) };
+          if (f.has("--record")) appendFileSync(f.get("--record")!, JSON.stringify(line) + "\n");
+          console.log("contain unit=" + u.id + " image=" + i.image + " check=" + check + " " + (c.ok ? "ok" : "fail findings=" + c.findings.length) + (check === "scan" ? " archives=" + i.archives.length : ""));
+        }
+      }
+      for (const i of images) assertContained(u.id + " (" + i.image + " image)", i);
+      return 0;
+    }
     if (sub === "dryrun") {
       const { f } = flags(rest, ["--config", "--out-dir", "--from"]);
       return dryrun(readJson<DryrunConfig>(need(f, "--config")), need(f, "--out-dir"), f.has("--from") ? { from: f.get("--from")! } : {});
@@ -432,6 +480,12 @@ export async function main(argv: string[]): Promise<number> {
         console.log("sm-judges calls " + Object.entries(p.calls).map(([k, v]) => k + "=" + v).join(" ") + " bound in=" + p.bound.input_tokens + " out=" + p.bound.output_tokens + " per_call astra=" + p.per_call_usd.astra.toFixed(4) + " opus=" + p.per_call_usd.opus.toFixed(4));
         console.log("sm-judges usd=" + p.usd.toFixed(2) + " cap=" + p.cap_usd + " fits=" + p.fits);
         return p.fits ? 0 : 1;
+      }
+      if (what === "send") {
+        const { f } = flags(r, ["--item", "--run", "--packets", "--out", "--record", "--ledger", "--lift-halt"]);
+        const s = await sendPackets({ item: need(f, "--item"), run_id: need(f, "--run"), packets: need(f, "--packets"), out: need(f, "--out"), record: f.get("--record"), ledger: f.get("--ledger"), lift_halts: f.get("--lift-halt")?.split(",").filter(Boolean) });
+        console.log("send item=" + s.item + " run=" + s.run_id + " lease=" + (s.lease_id ?? "none") + " sent=" + s.sent + " " + Object.entries(s.counts).map(([k, v]) => k + "=" + v).join(" ") + " spent_micros=" + s.spent_micros + " unknown_micros=" + s.unknown_micros + " replies=" + s.replies);
+        return 0;
       }
       console.log(HELP.split("\n").filter((l, k, a) => /^  packets/.test(l) || (/^ {14}/.test(l) && a.slice(0, k).reverse().find((x) => /^  \S/.test(x))?.startsWith("  packets"))).join("\n"));
       return what === undefined || what === "--help" ? (what ? 0 : 2) : 2;

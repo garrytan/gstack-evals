@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The family SM dry run (the post's section 18): it reads a config of real units and cases, runs the cases in order
-// through the module's own CLI (score first, score followon), checks each record against the case's expected fields,
+// through the module's own CLI (score first, score followon, contain), checks each record against the case's expected fields,
 // prints one PASS or FAIL line per case and stops at the first miss. Unit ids, digests and planted patches live in the
 // config, outside the repo. It ends DRYRUN: ok when every case passed. No key, no paid call.
 import { spawnSync } from "node:child_process";
@@ -10,9 +10,10 @@ import { join } from "node:path";
 const BIN = join(import.meta.dir, "../../../bin/gstack-evals");
 const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|TYPESAFE)_[A-Z_]*KEY$|_TOKEN$/;
 
+/** A contain case reads its record whatever sm contain's exit: the check exits 2 (E_SM_CONTAIN) after writing it. */
 export interface DryrunCase {
   name: string;
-  kind: "first" | "followon";
+  kind: "first" | "followon" | "contain";
   unit: string;
   /** The change to score; omitted for the base tree, which scores with --run-empty. */
   patch?: string;
@@ -36,6 +37,7 @@ export function misses(record: unknown, expect: Record<string, unknown>): string
 /** The CLI arguments that score one case into out. */
 export function caseArgs(c: DryrunCase, unitDir: string, out: string): string[] {
   const cell = ["--cell", c.cell ?? c.name];
+  if (c.kind === "contain") return ["outcome", "sm", "contain", "--unit", unitDir, "--out", out];
   if (c.kind === "first") return ["outcome", "sm", "score", "first", "--unit", unitDir, ...(c.patch ? ["--patch", c.patch, ...cell] : ["--patch", "/dev/null", ...cell, "--run-empty"]), "--out", out];
   if (!c.tree || !c.start || !c.patch) throw new Error("E_USAGE followon case " + c.name + " needs tree, start and patch");
   return ["outcome", "sm", "score", "followon", "--unit", unitDir, "--tree", c.tree, ...(c.tree_patch ? ["--tree-patch", c.tree_patch] : []), "--start", c.start, "--patch", c.patch, ...cell, "--out", out];
@@ -58,7 +60,7 @@ export function dryrun(cfg: DryrunConfig, outDir: string, o: { from?: string; ru
     const out = join(outDir, c.name + ".json");
     if (existsSync(out)) throw new Error("E_USAGE " + out + " exists; a dry run writes each record once");
     const r = run(caseArgs(c, u.dir, out));
-    const miss = r.status !== 0 || !existsSync(out) ? ["exit " + r.status + ": " + r.out.trim().split("\n").slice(-2).join(" | ")] : misses(JSON.parse(readFileSync(out, "utf8")), c.expect);
+    const miss = (r.status !== 0 && c.kind !== "contain") || !existsSync(out) ? ["exit " + r.status + ": " + r.out.trim().split("\n").slice(-2).join(" | ")] : misses(JSON.parse(readFileSync(out, "utf8")), c.expect);
     log((miss.length ? "FAIL " : "PASS ") + c.name + ": " + (miss.length ? miss.join("; ") : Object.entries(c.expect).map(([p, v]) => p + "=" + JSON.stringify(v)).join(" ")));
     if (miss.length) return 1;
   }
