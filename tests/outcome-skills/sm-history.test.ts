@@ -1,10 +1,13 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fixtureRepo, gitOut } from "../../lanes/outcome-skills/statemachines/fixtures.ts";
 import { importsOf, prepareBase, prepareFollowOn, preflight, stripPlan } from "../../lanes/outcome-skills/statemachines/history.ts";
+import { buildSessionImage } from "../../lanes/outcome-skills/statemachines/image.ts";
+import { PY_IMAGE } from "../../lanes/outcome-skills/statemachines/testrun.ts";
+import type { SmUnit } from "../../lanes/outcome-skills/statemachines/unit.ts";
 
 const files = {
   "src/lib.rs": "pub fn add(a: i32, b: i32) -> i32 { a + b }\n",
@@ -75,4 +78,54 @@ describe.skipIf(!(process.env.GSTACK_EVALS_DOCKER === "1" && MNT_IMAGE))("histor
       d(["image", "rm", "-f", tag]);
     }
   });
+});
+
+describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("session image on a runtime image that declares a VOLUME inside the repo dir (docker)", () => {
+  const pid = process.pid;
+  const d = (args: string[], input?: string) => spawnSync("docker", args, { encoding: "utf8", input, timeout: 900_000 });
+  const tag = { git: "sm-test-git:" + pid, plain: "sm-test-novol:" + pid, vol: "sm-test-vol:" + pid, full: "sm-test-volfull:" + pid };
+  const tree = { one: "sm-test-tree1-" + pid, two: "sm-test-tree2-" + pid };
+  const built: string[] = [];
+  const unit = (t: string): SmUnit => ({ id: "vol-unit", repo_dir: "/w", image: { runtime_id: d(["image", "inspect", "--format", "{{.Id}}", t]).stdout.trim() } }) as unknown as SmUnit;
+  const anon = () => d(["volume", "ls", "-q"]).stdout.split("\n").filter((v) => /^[0-9a-f]{64}$/.test(v)).sort();
+  const look = (image: string) => d(["run", "--rm", "--network", "none", "--entrypoint", "sh", image, "-c", "cd /w && echo \"STATUS[$(git status --porcelain)]\" && ls -A"]).stdout.trim().split("\n");
+  const repo = (n: number) => "cd /d && git init -q && " + Array.from({ length: n }, (_, i) => "echo " + i + " > a.txt && git add a.txt && git -c user.name=t -c user.email=t@e commit -qm c" + i).join(" && ") + " && echo junk > untracked.txt";
+  beforeAll(() => {
+    expect(d(["build", "-q", "-t", tag.git, "-"], "FROM " + PY_IMAGE + "\nRUN apt-get update -qq && apt-get install -y -qq --no-install-recommends git >/dev/null && rm -rf /var/lib/apt/lists/*\n").status).toBe(0);
+    expect(d(["build", "-q", "-t", tag.plain, "-"], "FROM " + tag.git + "\nRUN mkdir -p /w && echo orig > /w/orig.txt\n").status).toBe(0);
+    expect(d(["build", "-q", "-t", tag.vol, "-"], "FROM " + tag.plain + "\nVOLUME /w/mnt_tmp\n").status).toBe(0);
+    expect(d(["build", "-q", "-t", tag.full, "-"], "FROM " + tag.plain + "\nRUN mkdir -p /w/mnt_tmp && echo orig > /w/mnt_tmp/x\nVOLUME /w/mnt_tmp\n").status).toBe(0);
+    for (const [v, n] of [[tree.one, 1], [tree.two, 2]] as const) {
+      d(["volume", "create", v]);
+      expect(d(["run", "--rm", "--network", "none", "-v", v + ":/d", "--entrypoint", "sh", tag.git, "-c", repo(n)]).status).toBe(0);
+    }
+  }, 900_000);
+  afterAll(() => {
+    for (const t of [...built, tag.full, tag.vol, tag.plain, tag.git]) d(["image", "rm", "-f", t]);
+    for (const v of Object.values(tree)) d(["volume", "rm", "-f", v]);
+  });
+  test("an image with no volume builds as before: one commit, a clean tree, the image's own files gone", () => {
+    const img = buildSessionImage(unit(tag.plain), { volume: tree.one, stage: "first" });
+    built.push(img.tag);
+    expect(img.commits).toBe(1);
+    expect(look(img.image_id)).toEqual(["STATUS[]", ".git", "a.txt"]);
+  }, 300_000);
+  test("an image with a VOLUME inside the repo dir builds: the rm and git clean skip the mount point, the tree is clean, and no anonymous volume is left", () => {
+    const before = anon();
+    const img = buildSessionImage(unit(tag.vol), { volume: tree.one, stage: "first" });
+    built.push(img.tag);
+    expect(img.commits).toBe(1);
+    expect(look(img.image_id)).toEqual(["STATUS[]", ".git", "a.txt", "mnt_tmp"]);
+    expect(anon()).toEqual(before);
+  }, 300_000);
+  test("a failed build on such an image leaves no anonymous volume", () => {
+    const before = anon();
+    expect(() => buildSessionImage(unit(tag.vol), { volume: tree.two, stage: "first" })).toThrow(/^E_SM_HISTORY .*has 2 commits, not 1/);
+    expect(anon()).toEqual(before);
+  }, 300_000);
+  test("an image whose volume path already holds files fails closed, since every session's volume would start with them", () => {
+    const before = anon();
+    expect(() => buildSessionImage(unit(tag.full), { volume: tree.one, stage: "first" })).toThrow(/^E_SM_HISTORY .*SM_MOUNT_NOT_EMPTY mnt_tmp/);
+    expect(anon()).toEqual(before);
+  }, 300_000);
 });

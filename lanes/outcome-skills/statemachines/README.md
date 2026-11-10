@@ -482,6 +482,13 @@ model or unit (E_SM_PACKET).
   keeps the dropped fail-to-pass ids and the dropped stable count. A unit whose every fail-to-pass id goes this way drops
   as E_SM_AMBIGUOUS_TEST; a scan that runs and fails in the image drops as E_SM_TEST_SCAN, and one that never finishes
   is E_SM_INFRA_GAP. Package-qualified ids are never touched.
+- A volume inside the repo dir (pre-data build change, 2026-11-09, image.ts): a runtime image that declares a VOLUME
+  under repo_dir (0xERR0R__blocky-2016: /testbed/mnt_tmp) gets an anonymous volume there in the build container, and
+  rm -rf failed on it. The build now reads the mount points under repo_dir from /proc/self/mountinfo, deletes around
+  them, keeps them out of git clean (as sh/rewrite.sh does), and stops with SM_MOUNT_NOT_EMPTY under E_SM_HISTORY when
+  one still holds files after the copy. The build container goes with docker rm -f -v, and harbor run gets --delete
+  (compose down --volumes), so neither a failed build nor a session leaves an anonymous volume. With no such mount the
+  build runs the same commands as before.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the
