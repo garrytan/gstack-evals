@@ -1819,7 +1819,7 @@ export const CODES = {
   },
   E_SM_FINALIZE_HALT: {
     exit: 2,
-    meaning: "A state machines session closed with its metering proxy's finalize failed (the close answer's finalized is false), so its refusal and allowance-stop counts are unknown (allowance_stops is null). The driver halts that line item: it writes a halt line naming the session and its proxy journal to the run's sessions.jsonl, opens no more sessions on the item (HTTP 423), settles its lease, exits 2, and refuses to open a lease on the item at the next launch. A real allowance stop is never retried, and the session's one retry (preregistration section 6) waits for the Captain's ruling.",
+    meaning: "A state machines session closed with its metering proxy's finalize failed (the close answer's finalized is false), so its refusal and allowance-stop counts are unknown (allowance_stops is null). The driver halts that line item: it writes a halt line naming the session and its proxy journal to the run's sessions.jsonl, opens no more sessions on the item (HTTP 423), settles its lease, exits 2, and refuses to open a lease on the item at the next launch. A real allowance stop is never retried, and the session's one retry (preregistration section 6) waits for the Captain's ruling. A session the driver never closed itself halts its item the same way, its halt line naming the cause: one the driver's crash recovery closes (recovered), or one ledger settle or reconcile closed (settled, reconciled). Every halt line is on disk before its close line.",
     fix: "Bring the session id and the proxy journal the halt line names to the Captain, who reads the journal and rules. Then relaunch the driver for the same run with --lift-halt <session id>; the launch records the lift and serves the item again.",
     side_effects: "The session spent what its lease's ledger meter holds; the halted stage's lease is settled.",
     retry_safe: false,
@@ -1828,7 +1828,7 @@ export const CODES = {
   },
   E_SM_CONTAIN: {
     exit: 2,
-    meaning: "A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem (A3's gstack checkout at the /qa pin is the one exception), or a file outside the repo holds a hidden test name or a test-side marker. Findings name refs, commits, paths and sha256s, never the test text.",
+    meaning: "A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem, with or without a HEAD file (A3's gstack checkout at the /qa pin is the one exception), a file outside the repo or a file in the repo that git does not track (ignored ones included) holds a hidden test name or a test-side marker, or a git listing, find or grep inside the check failed (an error finding). Findings name refs, commits, paths and sha256s, never the test text. A file or dir the check can't read is listed, never failed.",
     fix: "Bring the unit and the failed checks to the Captain. The unit halts and is not dropped. Fix the image or the setup step (strip every ref and object past the base, as GEVA-503's D7 does) test-first, and repin only between parts; then rerun sm contain on the unit.",
     side_effects: "No session opened and no lease was taken for the unit; the session image the check read stays built (sm contain removes its own).",
     retry_safe: false,
@@ -1882,7 +1882,7 @@ export const CODES = {
   },
   E_SM_USAGE_HALT: {
     exit: 2,
-    meaning: "A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. Every later send on that --out is refused until the halt is lifted.",
+    meaning: "A paid label or judge call (sm packets send) reported usage past the preregistration's per-call bound of 20,000 input or 1,500 output tokens. The item halted before its next send, and the halt line in the send's replies.jsonl names the call's meter, the packet, the reader and the usage. A call whose reply and halt a crash lost halts the same way at the next send, once its settled usage shows it past the bound. Every later send on that --out is refused until the halt is lifted.",
     fix: "Bring the halt line to the Captain. Once the Captain rules, record the ruling in the run record and send again with --lift-halt <meter>. The halted call is never sent again.",
     side_effects: PARTIAL,
     retry_safe: false,

@@ -6,7 +6,8 @@
 // hidden test name (a FAIL_TO_PASS leaf name the base tree never names) or a marker (a line of 30 code points or more that
 // test.patch or fix-tests.patch adds and no base file holds). A hit keeps the path and the sha256, never the text.
 // Compressed archives outside the repo are listed by path, never failed. Any failed check is E_SM_CONTAIN: the unit halts
-// before any session and is not dropped.
+// before any session and is not dropped. A git listing, find or grep that fails inside the check fails its check as an
+// "error <tool>" finding, and a file or dir the check can't read is skipped and listed (unreadable), never failed.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -19,7 +20,7 @@ import { added30, readUnit, smFail, type SmUnit } from "./unit.ts";
 
 export const CONTAIN_SCRIPT = sh("contain.sh");
 export type ContainCheck = "refs" | "objects" | "stores" | "scan";
-export interface ContainResult { ok: boolean; checks: Record<ContainCheck, { ok: boolean; findings: string[] }>; archives: string[] }
+export interface ContainResult { ok: boolean; checks: Record<ContainCheck, { ok: boolean; findings: string[] }>; archives: string[]; unreadable?: string[] }
 export interface ContainInput { want: string; names: string[]; markers: string[]; qaPin?: string }
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -45,6 +46,7 @@ export function parseContain(stdout: string): ContainResult {
   const f: Record<ContainCheck, string[]> = { refs: [], objects: [], stores: [], scan: [] };
   const status = new Map<string, string>();
   const archives: string[] = [];
+  const unreadable: string[] = [];
   for (const l of stdout.split("\n")) {
     const [k, a = "", b = "", c = ""] = l.split(" ");
     if (k === "CHECK") status.set(a, b);
@@ -53,12 +55,14 @@ export function parseContain(stdout: string): ContainResult {
     else if (k === "STORE") f.stores.push(a + " " + b64(b));
     else if (k === "HIT") f.scan.push(a + " " + b64(b) + " sha256=" + sha(b64(c)));
     else if (k === "ARCHIVE") archives.push(b64(a));
+    else if (k === "UNREADABLE") unreadable.push(b64(a));
+    else if (k === "ERR" && Object.hasOwn(f, a)) f[a as ContainCheck].push("error " + b64(b));
   }
   const checks = Object.fromEntries((Object.keys(f) as ContainCheck[]).map((k) => {
     const findings = [...new Set(f[k])].sort();
     return [k, { ok: status.has(k) && status.get(k) !== "fail" && findings.length === 0, findings }];
   })) as ContainResult["checks"];
-  return { ok: Object.values(checks).every((c) => c.ok), checks, archives: archives.sort() };
+  return { ok: Object.values(checks).every((c) => c.ok), checks, archives: archives.sort(), ...(unreadable.length ? { unreadable: [...new Set(unreadable)].sort() } : {}) };
 }
 
 /** Runs the check on a host fixture root (tests) or inside a built session image, with the image's own env. */

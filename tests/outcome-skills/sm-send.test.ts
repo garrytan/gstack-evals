@@ -483,6 +483,86 @@ describe("failures are recorded, never resent", () => {
   });
 });
 
+describe("pre-run fixes for #317's deferred findings", () => {
+  // Value: protects=calls already paid for when a rerun names the same --run on a fresh local ledger (and a fresh --out): the record holds the run's lease, the fresh ledger does not, so the guard that asks the local ledger alone saw nothing to account for and the send went out again; fails_when=a send on a ledger that lacks a lease the item record holds for the run opens a lease or sends a call; why_new=#317 deferred outside-voice finding 1 (send.ts unnamed check), the Captain's pre-run list item 6; seam=send.ts sendHeld with two local ledgers on one record; no_claim=a send from another machine, which the same rule refuses
+  test("a rerun with the same --run on a fresh --ledger is refused before it sends, because the record holds a lease that ledger lacks", async () => {
+    const s = setup({ "sm-labels": 150 });
+    labels(s, 1);
+    const calls: Call[] = [];
+    expect((await send(s, "sm-labels", calls)).code).toBe("ok");
+    const fresh = await send(s, "sm-labels", calls, undefined, { ledger: join(s.root, "fresh.sqlite"), out: join(s.root, "out-fresh") });
+    expect([fresh.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_USAGE", 2, 1]);
+    expect(fresh.message).toContain(readItem(s.record, "sm-labels").leases[0]!.lease.lease_id);
+    const sameOut = await send(s, "sm-labels", calls, undefined, { ledger: join(s.root, "fresh-2.sqlite") });
+    expect([sameOut.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_USAGE", 2, 1]);
+  });
+
+  // Value: protects=the usage halt across a crash after the call settles: a send whose reply and halt never reached replies.jsonl but whose settled usage passes 20,000 input or 1,500 output tokens becomes a standing halt at the next send, before any lease opens; fails_when=the next send records the call as lost and goes on sending; why_new=#317 deferred outside-voice finding 2, the Captain's pre-run list item 7; seam=send.ts sendHeld's lost-call recovery, with replies.jsonl cut after the call's send line; no_claim=a call whose usage the ledger never settled, which stays lost at its full reservation
+  test("a call that settled past the bound but whose halt and reply a crash lost halts the item at the next send, and after the lift it stays lost, never resent", async () => {
+    const s = setup({ "sm-labels": 150 });
+    const [a, b] = labels(s, 2, (i) => "x".repeat(30_000) + " (" + i + ").\n") as [string, string];
+    const calls: Call[] = [];
+    const over = (model: string, packet: string): Reply => (model === "gpt-6-astra" && packet === a ? { usage: { input: 20_001, output: 100 } } : {});
+    expect((await send(s, "sm-labels", calls, over)).code).toBe("E_SM_USAGE_HALT");
+    const file = join(outDir(s, "sm-labels"), "replies.jsonl");
+    const all = readFileSync(file, "utf8").split("\n").filter(Boolean);
+    const sendAt = all.findIndex((l) => JSON.parse(l).event === "send");
+    const meter = JSON.parse(all[sendAt]!).meter_id as string;
+    writeFileSync(file, all.slice(0, sendAt + 1).join("\n") + "\n");
+    const rerun = await send(s, "sm-labels", calls);
+    expect([rerun.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_SM_USAGE_HALT", 1, 1]);
+    expect(rerun.message).toContain("--lift-halt " + meter);
+    expect(lines(s, "sm-labels").filter((l) => l.event === "halt")).toEqual([expect.objectContaining({ packet: a, reader: "astra", meter_id: meter, code: "E_SM_USAGE_HALT", usage: { input: 20_001, output: 100 } })]);
+    expect(replies(s, "sm-labels").map((x) => [x.packet, x.reader, x.outcome])).toEqual([[a, "astra", "lost"]]);
+    expect([(await send(s, "sm-labels", calls)).code, calls.length]).toEqual(["E_SM_USAGE_HALT", 1]);
+    const lifted = await send(s, "sm-labels", calls, undefined, { lift_halts: [meter] });
+    expect([lifted.code, lifted.message]).toEqual(["ok", ""]);
+    expect(sentTo(calls.slice(1))).toEqual(["claude-opus-5-5 " + a, "gpt-6-astra " + b, "claude-opus-5-5 " + b]);
+    expect(lines(s, "sm-labels").filter((l) => l.event === "halt").length).toBe(1);
+  });
+
+  // Value: protects=replies.jsonl as the send's record: a line that won't parse is refused, unless it is the torn tail a crash left at the end, which the next send marks with a torn line so later sends read past it; fails_when=an unparseable line in the middle is dropped silently (so its reply reads as missing), or a torn tail blocks the send or any later send; why_new=the Captain's pre-run list item 8 (send.ts catch {}); seam=send.ts sendHeld's reader and write; no_claim=a file someone edited by hand into valid JSON
+  test("a replies line that won't parse is refused unless it is the torn tail a crash left, which the next send marks so later sends read past it", async () => {
+    const m = setup({ "sm-labels": 150 });
+    labels(m, 2);
+    const calls: Call[] = [];
+    expect([(await send(m, "sm-labels", calls)).code, calls.length]).toEqual(["ok", 4]);
+    const mfile = join(outDir(m, "sm-labels"), "replies.jsonl");
+    const parts = readFileSync(mfile, "utf8").split("\n");
+    const mid = parts.findIndex((l) => l.includes('"event":"reply"'));
+    parts[mid] = parts[mid]!.slice(0, 40);
+    writeFileSync(mfile, parts.join("\n"));
+    const bad = await send(m, "sm-labels", calls);
+    expect([bad.code, calls.length]).toEqual(["E_USAGE", 4]);
+    expect(bad.message).toContain("line " + (mid + 1));
+    expect(readFileSync(mfile, "utf8")).toBe(parts.join("\n"));
+
+    const s = setup({ "sm-labels": 150 });
+    labels(s, 2);
+    const more: Call[] = [];
+    mkdirSync(outDir(s, "sm-labels"));
+    const file = join(outDir(s, "sm-labels"), "replies.jsonl");
+    const torn = '{"item":"sm-labels","run_id":"run-1","event":"se';
+    writeFileSync(file, torn);
+    expect([(await send(s, "sm-labels", more)).code, more.length]).toEqual(["ok", 4]);
+    const after = readFileSync(file, "utf8").split("\n");
+    expect(after[0]).toBe(torn);
+    expect(JSON.parse(after[1]!)).toMatchObject({ item: "sm-labels", run_id: "run-1", event: "torn" });
+    expect([(await send(s, "sm-labels", more)).code, more.length]).toEqual(["ok", 4]);
+  });
+
+  // Value: protects=the packets dir as the send's whole input: a key whose packet is missing is refused before anything is opened, as a packet with no key already is; fails_when=the send skips the orphan key and spends on the rest; why_new=the Captain's pre-run list item 9; seam=send.ts loadPackets; no_claim=why a packet went missing
+  test("a key whose packet is missing is refused before anything is opened", async () => {
+    const s = setup({ "sm-labels": 150 });
+    const [id] = labels(s, 1) as [string];
+    const key = JSON.parse(readFileSync(join(s.packets, id + ".key.json"), "utf8"));
+    writeFileSync(join(s.packets, "orphan.key.json"), JSON.stringify({ ...key, packet: "0123456789abcdef" }));
+    const calls: Call[] = [];
+    const r = await send(s, "sm-labels", calls);
+    expect([r.code, r.message.includes("0123456789abcdef"), calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_SM_PACKET", true, 0, 0]);
+  });
+});
+
 test("sm packets send is listed and refuses an item that is not sm-labels or sm-judges", async () => {
   const log = console.log, err = console.error;
   const out: string[] = [];
