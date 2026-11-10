@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
@@ -95,6 +95,21 @@ describe("A3's home (#290 notes 1 and 3)", () => {
     for (const d of ["dot", "rel"]) expect(readFileSync(join(root, d, ".claude/skills/gstack/run.ts"), "utf8")).toBe(script.replace(src, "/root"));
   });
 
+  // Value: protects=the host's pinned /qa install: a --qa-home given as a symlink is copied as the tree it names, and the host's files stay as written; fails_when=the copy keeps the link and the rewrite walks through it into the host install; why_new=the /ship review of #314 (red team on image.ts); seam=image.ts qaHomeCopy; no_claim=how an operator names the dir
+  test("a home given as a symlink is copied as its tree, and the host install stays as written", () => {
+    const root = scratch("qahome-link");
+    const real = join(root, "real");
+    mkdirSync(join(real, ".claude/skills/gstack"), { recursive: true });
+    const text = "path=" + realpathSync(real) + "/x\n";
+    writeFileSync(join(real, ".claude/skills/gstack/f.txt"), text);
+    symlinkSync(real, join(root, "link"));
+    const dst = join(root, "copy");
+    expect(qaHomeCopy(join(root, "link"), dst).files).toBe(1);
+    expect(lstatSync(dst).isDirectory()).toBe(true);
+    expect(readFileSync(join(dst, ".claude/skills/gstack/f.txt"), "utf8")).toBe("path=/root/x\n");
+    expect(readFileSync(join(real, ".claude/skills/gstack/f.txt"), "utf8")).toBe(text);
+  });
+
   // Value: protects=the session home holding nothing from outside the install; fails_when=a link that leaves the home, absolute or relative, is copied into the image; why_new=#290 named note 1; seam=image.ts qaHomeCopy; no_claim=links gstack's setup writes today, which all point inside the home
   test("a link that leaves the home fails closed", () => {
     for (const target of ["/etc", "../../.."]) {
@@ -170,6 +185,37 @@ test("sm score first scores no session that ended upstream or infra: a first att
   }
 });
 
+// Value: protects=section 6's gap rule where a first stage seeds a tree: an upstream or infra first stage seeds no A1 or S2 follow-on, so attempt 1 goes back for its retry and attempt 2 is a gap; fails_when=a first-stage record that ended upstream or infra, with its empty patch, seeds a follow-on start set or image, so the base tree is scored as A1 or S2; why_new=the /ship review of #314 (red team on followon.ts); seam=cli.ts sm score followon --first and run.ts runSession; no_claim=analysis's reading of the gap
+test("a first stage that ended upstream or infra seeds no follow-on tree: attempt 1 goes back for its retry, attempt 2 is a gap", async () => {
+  const root = scratch("seed");
+  const dir = unitDir(root);
+  writeFileSync(join(root, "p.patch"), "");
+  for (const end of ["upstream", "infra"]) for (const attempt of [1, 2]) {
+    const f = join(root, end + attempt + ".json");
+    writeFileSync(f, JSON.stringify({ schema: "sm-session.v1", unit: fixtureRow().instance_id, stage: "first", cell: "A1", model: "claude-opus-5-5", lease_id: "l1", end, attempt, tree_patch: { path: join(root, "p.patch"), sha256: sha("") } }));
+    const want = attempt === 1 ? "E_SM_ARM the session ended " + end + " on attempt 1, so it is not scored and seeds no follow-on" : (end === "upstream" ? "E_SM_UPSTREAM_GAP" : "E_SM_INFRA_GAP") + " the session ended " + end + " on its retry";
+    const errs: string[] = [];
+    const orig = console.error;
+    console.error = (...a: unknown[]) => void errs.push(a.join(" "));
+    let code: number;
+    try {
+      code = await main(["score", "followon", "--unit", dir, "--tree", "A1", "--first", f, "--patch", join(root, "p.patch"), "--out", join(root, end + attempt + ".out.json")]);
+    } finally {
+      console.error = orig;
+    }
+    expect(code).toBe(2);
+    expect(errs[0] ?? "").toStartWith(want);
+    const session: PlannedSession = { unit: "u", part: 1, index: 0, model: "claude-opus-5-5", cell: "F-A1-1", stage: "followon", arm: "sm:followon", tree: "A1", replicate: 1, after: "A1" };
+    let err = "";
+    try {
+      runSession({ unitDir: dir, session, control: "http://127.0.0.1:1", proxy: "127.0.0.1:1", out: join(root, "run-" + end + attempt), first: f });
+    } catch (e) {
+      err = (e as Error).message;
+    }
+    expect(err).toStartWith(want);
+  }
+});
+
 describe("the SM stage (#290 notes 5 and 6)", () => {
   const D = 1_000_000;
   const quote = { words: "test words", by: "test", source: "sm-predata.test.ts" };
@@ -239,13 +285,17 @@ describe("stock diffs stay valid code (pre-data item 9)", () => {
     { lang: "rust", path: "src/lib.rs", tool: "rustc", check: (f, d) => ["rustc", "--edition", "2021", "--crate-type", "lib", "--emit=metadata", "-o", join(d, "out.rmeta"), f],
       text: ["pub const fn double(x: u32) -> u32 {", "    x * 2", "}", "", "pub fn sum(items: &[u32]) -> u32 {", "    let mut total = 0;", "    for v in items {", "        total += v;", "    }", "    total", "}"] },
     { lang: "java", path: "src/Counter.java", tool: "javac", check: (f, d) => ["javac", "-d", join(d, "out"), f],
-      text: ["class Base {", "    Base(int n) {", "    }", "}", "", "public class Counter extends Base {", "    Counter() {", "        super(1);", "    }", "", "    int count(java.util.List<Integer> items) {", "        int size = items.size();", "        int total = size * 2;", "        return total;", "    }", "}"] },
+      text: ["class Base {", "    Base(int n) {", "    }", "}", "", "public class Counter extends Base {", "    Counter() {", "        super(1);", "    }", "", "    int count(java.util.List<Integer> items) {", "        int size = items.size();", "        int total = size * 2;", "        return total;", "    }", "",
+        "    int pick(int k) {", "        int result = 0;", "        switch (k) {", "            case 1:", "                result = 10;", "                break;", "            default:", "                result = 20;", "        }", "        return result;", "    }", "",
+        "    void go(java.util.concurrent.ExecutorService ex) {", "        ex.submit(new Runnable() {", "            public void run() {", "                int k = 1;", "            }", "        });", "    }", "}"] },
     { lang: "c", path: "src/sum.c", tool: "gcc", check: (f) => ["gcc", "-fsyntax-only", "-std=c11", "-Werror=implicit-function-declaration", f],
       text: ["int sum(const int *items, int n) {", "    int total = 0;", "    for (int i = 0; i < n; i++) {", "        total += items[i];", "    }", "    return total;", "}"] },
     { lang: "cpp", path: "src/sum.cpp", tool: "g++", check: (f) => ["g++", "-fsyntax-only", "-std=c++17", f],
       text: ["#include <vector>", "", "int sum(const std::vector<int>& items) {", "    int total = 0;", "    for (int v : items) {", "        total += v;", "    }", "    return total;", "}"] },
     { lang: "csharp", path: "src/Counter.cs", tool: dotnet ? "dotnet" : null, check: (_f, d) => (writeFileSync(join(d, "x.csproj"), CSPROJ), ["dotnet", "build", "-nologo", "-v", "q", join(d, "x.csproj")]),
-      text: ["public record Point(int X, int Y) {", "    public int Sum() {", "        return X + Y;", "    }", "}", "", "public class Counter {", "    public int Count(int[] items) {", "        int total = 0;", "        foreach (var v in items) {", "            total += v;", "        }", "        return total;", "    }", "}"] },
+      text: ["public record Point(int X, int Y) {", "    public int Sum() {", "        return X + Y;", "    }", "}", "", "public class Counter {", "    public int Count(int[] items) {", "        int total = 0;", "        foreach (var v in items) {", "            total += v;", "        }", "        return total;", "    }", "",
+        "    public int Pick(int k) {", "        int result = 0;", "        switch (k) {", "            case 1:", "                result = 10;", "                break;", "            default:", "                result = 20;", "                break;", "        }", "        return result;", "    }", "",
+        "    public void Fill(System.Collections.Generic.List<Cell> cells) {", "        cells.Add(new Cell() {", "            V = 1", "        });", "    }", "}", "", "public class Cell { public int V; }"] },
     { lang: "js", path: "src/sum.mjs", tool: "node", check: (f) => ["node", "--check", f],
       text: ["export function sum(items) {", "  let total = 0;", "  for (const v of items) {", "    total += v;", "  }", "  return total;", "}"] },
     { lang: "ts", path: "src/read.ts", tool: "node", check: (f) => [join(ROOT, "node_modules/.bin/tsc"), "--noEmit", "--strict", "--target", "es2022", "--lib", "es2022,dom", "--types", "", f],
@@ -267,6 +317,14 @@ describe("stock diffs stay valid code (pre-data item 9)", () => {
     const r = spawnSync(argv[0]!, argv.slice(1), { cwd: d, encoding: "utf8", timeout: 300_000, env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: "1", DOTNET_NOLOGO: "1" } });
     return r.status === 0 ? "ok" : (r.stdout + r.stderr).trim().split("\n").slice(0, 4).join(" | ");
   };
+  // Value: protects=a Python function's docstring staying its first statement under the logging diff, so __doc__ and doctests keep working; fails_when=the log line goes above the docstring; why_new=the /ship review of #314 (testing specialist on packets.ts); seam=packets.ts stockDiffs; no_claim=what a judge scores
+  test("python: the logging diff keeps a docstring first, on one line or several", () => {
+    const one = stockDiffs({ lang: "python", path: "t.py", text: ["def total(items):", '    """Sum the items."""', "    result = 0", "    return result", ""].join("\n") })[2]!.diff!;
+    expect(one).toContain(' def total(items):\n     """Sum the items."""\n+    print("enter")');
+    const many = stockDiffs({ lang: "python", path: "t.py", text: ["def total(items):", '    """Sum', "    the items.", '    """', "    return 0", ""].join("\n") })[2]!.diff!;
+    expect(many).toContain('     the items.\n     """\n+    print("enter")');
+  });
+
   for (const c of CASES) {
     // Value: protects=section 10's stock diffs as neutral code a judge can read as the same program: every kind applies to the unit's own file and still compiles or parses, and logging brings the header or import its call needs; fails_when=a log call goes in without its import or header, before a constructor's super call, into a const fn, an interface member or an anonymous struct type, at the wrong Python indent, or a rename reaches a member of another type; why_new=the Captain's pre-data item 9 for #290 (packets.ts stock diffs); seam=packets.ts stockDiffs; no_claim=a unit's real file, or what a judge scores
     test.skipIf(!c.tool || !has(c.tool))(c.lang + ": the base file and each of its three stock diffs apply and compile or parse", () => {

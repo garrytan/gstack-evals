@@ -84,6 +84,14 @@ export interface SessionRecord {
   exposure: Record<string, unknown>; reads: { inputs: number; gstack: number; drive: number };
 }
 
+/** Section 6: a session that ended upstream or infra is never scored and seeds no follow-on tree. On attempt 1 it gets its
+ *  one retry from a fresh container; on attempt 2 it is a gap, and a first stage's gap removes that tree's follow-ons. */
+export function refuseUnscored(s: { end: EndKind; attempt: number }): void {
+  if (s.end !== "upstream" && s.end !== "infra") return;
+  if (s.attempt !== 2) smFail("E_SM_ARM", "the session ended " + s.end + " on attempt " + s.attempt + ", so it is not scored and seeds no follow-on: it gets one retry from a fresh container (sm session run --attempt 2) before it is a gap");
+  smFail(s.end === "upstream" ? "E_SM_UPSTREAM_GAP" : "E_SM_INFRA_GAP", "the session ended " + s.end + " on its retry, so it is a gap: it is not scored and seeds no follow-on; analysis reads the gap from its session record");
+}
+
 export function writeSessionRecord(file: string, r: SessionRecord): void {
   if (r.schema !== "sm-session.v1" || (r.attempt !== 1 && r.attempt !== 2) || r.env.CLAUDE_CODE_DISABLE_BUNDLED_SKILLS !== "1" || ["WebSearch", "WebFetch"].some((t) => !r.disallowed_tools.includes(t))) throw new Error("E_SM_ARM the session record breaks section 4's harness rules");
   writeFileSync(file, JSON.stringify(r, null, 1) + "\n", { flag: "wx" });

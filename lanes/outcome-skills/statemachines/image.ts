@@ -63,8 +63,9 @@ export interface QaHome { paths: string[]; links: number; files: number; binarie
  *  /root. A link that leaves the home fails closed. A top-level .capy is left out: a host's tools can write there while
  *  the install runs (Capy's git shim logs to ~/.capy), and the session's check refuses a drive path in every arm. */
 export function qaHomeCopy(src: string, dst: string): QaHome {
-  const home = resolve(src);
-  const roots = [...new Set([home, realpathSync(home)])].sort((a, b) => b.length - a.length);
+  const given = resolve(src);
+  const home = realpathSync(given);
+  const roots = [...new Set([given, home])].sort((a, b) => b.length - a.length);
   const lexists = (f: string) => { try { lstatSync(f); return true; } catch { return false; } };
   const drive = join(home, ".capy");
   cpSync(home, dst, { recursive: true, verbatimSymlinks: true, filter: (f) => f !== drive });

@@ -13,7 +13,7 @@ import { readAudit } from "./audit.ts";
 import { qaExposure, readSession, textExposure } from "./exposure.ts";
 import { buildSessionImage, sessionManifest, type SessionImage } from "./image.ts";
 import { treeVolume } from "./oracle.ts";
-import { questionCounts, sessionEnd, writeSessionRecord, type PlannedSession, type SessionRecord } from "./session.ts";
+import { questionCounts, refuseUnscored, sessionEnd, writeSessionRecord, type PlannedSession, type SessionRecord } from "./session.ts";
 import { memoryPaths } from "./strip.ts";
 import { readUnit, smFail } from "./unit.ts";
 
@@ -57,6 +57,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
     else {
       const f = JSON.parse(readFileSync(i.first ?? smFail("E_SM_ARM", "follow-on " + s.cell + " needs --first, its tree's first-stage session record"), "utf8")) as SessionRecord;
       if (f.unit !== u.id || f.model !== s.model || f.cell !== s.tree || !f.tree_patch) return smFail("E_SM_ARM", "the first-stage record is not " + s.tree + " on " + u.id + " for " + s.model + " with a tree patch");
+      refuseUnscored(f);
       treePatch = readFileSync(f.tree_patch.path, "utf8");
       if (sha(treePatch) !== f.tree_patch.sha256) return smFail("E_SM_ARM", f.tree_patch.path + " is not the patch the first-stage record pins");
       treeRef = { tree: s.tree!, first_session: f.lease_id + "/" + f.cell };

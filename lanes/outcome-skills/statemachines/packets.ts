@@ -186,7 +186,7 @@ export function readJudgeAnswer(reply: string, packet: JudgePacket): Read<JudgeA
 export const STOCK_KINDS = ["comments_whitespace", "rename_only", "logging"] as const;
 export type StockKind = (typeof STOCK_KINDS)[number];
 const NOT_A_FUNCTION = String.raw`(?!(?:if|for|while|switch|catch|else|do|return|try|synchronized|using|lock|foreach|new|throw)\b)`;
-const C_FN = new RegExp(String.raw`^\s*` + NOT_A_FUNCTION + String.raw`[\w<>\[\],.*&:~ ]*?\b\w+\s*\([^;]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:throws\s+[\w., ]+)?\{\s*$`);
+const C_FN = new RegExp(String.raw`^\s*(?=\S)` + NOT_A_FUNCTION + String.raw`[\w<>\[\],.*&:~ ]*?\b\w+\s*\([^;]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:throws\s+[\w., ]+)?\{\s*$`);
 const JS_FN = new RegExp(String.raw`^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\b.*\{\s*$|=>\s*\{\s*$|^\s*(?:(?:public|private|protected|static|async)\s+)*` + NOT_A_FUNCTION + String.raw`\w+\s*\([^;]*\)\s*(?::\s*[^{=]+)?\{\s*$`);
 /** A line that opens a function body. */
 export const FUNCTION_LINE: Record<Lang, RegExp> = {
@@ -239,7 +239,8 @@ function code(lang: Lang, line: string): string {
 }
 
 /** The function bodies the stock diffs touch: each line that opens one (FUNCTION_LINE) and the body's last line. A line
- *  after a macro continuation, a Java or C# type with a parameter list (a record or primary constructor), a TypeScript
+ *  after a macro continuation, a Java or C# type with a parameter list (a record or primary constructor), a Java or C#
+ *  anonymous class or object initializer passed as an argument, a TypeScript
  *  type or interface member, and a TypeScript signature whose return type is an object type open no body and are left out. */
 function functionBodies(lang: Lang, lines: string[]): Array<{ at: number; end: number }> {
   const depth = [0];
@@ -255,6 +256,7 @@ function functionBodies(lang: Lang, lines: string[]): Array<{ at: number; end: n
   lines.forEach((l, i) => {
     if (!FUNCTION_LINE[lang].test(l) || (i > 0 && /\\\s*$/.test(lines[i - 1]!)) || typed.has(i)) return;
     if ((lang === "java" || lang === "csharp") && /\b(?:class|record|struct|interface|enum)\b/.test(code(lang, l).split("(")[0]!)) return;
+    if ((lang === "java" || lang === "csharp") && /\bnew\s+[\w.<>\[\], ]+\([^()]*\)\s*\{\s*$/.test(code(lang, l))) return;
     if (lang === "ts" && /\)\s*:\s*\{\s*$/.test(l)) return;
     let end = i;
     if (lang === "python") while (end + 1 < lines.length && (!lines[end + 1]!.trim() || indentOf(lines[end + 1]!).length > indentOf(l).length)) end++;
@@ -264,18 +266,25 @@ function functionBodies(lang: Lang, lines: string[]): Array<{ at: number; end: n
   return out;
 }
 
-/** The log line for one function body, or null where a statement can't go first: a Go signature ending in an anonymous
- *  struct or interface type, a Rust const fn, a Java enum constant's body or a constructor that must call super or this
- *  first, and a Python body whose indent can't be read. A Python body takes its first statement's indent. */
-function logLine(lang: Lang, lines: string[], f: { at: number; end: number }, unit: string): string | null {
+/** The log line for one function body and the line it goes after, or null where a statement can't go first: a Go
+ *  signature ending in an anonymous struct or interface type, a Rust const fn, a Java enum constant's body or a
+ *  constructor that must call super or this first, and a Python body whose indent can't be read. A Python body takes its
+ *  first statement's indent, and its log line goes after a docstring so the docstring stays the body's first statement. */
+function logLine(lang: Lang, lines: string[], f: { at: number; end: number }, unit: string): { after: number; line: string } | null {
   const l = lines[f.at]!;
-  const body = lines.slice(f.at + 1, f.end + 1).find((x) => x.trim() && !(lang === "python" && x.trim().startsWith("#")));
+  const b = lines.findIndex((x, i) => i > f.at && i <= f.end && x.trim() && !(lang === "python" && x.trim().startsWith("#")));
+  const body = b < 0 ? undefined : lines[b];
   if (lang === "go" && /\b(?:struct|interface)\s*\{\s*$/.test(l)) return null;
   if (lang === "rust" && /\bconst\s+(?:unsafe\s+)?fn\b/.test(l)) return null;
   if (lang === "java" && (/^\s*[A-Z][A-Z0-9_]*\s*\(/.test(l) || /^\s*(?:super|this)\s*\(/.test(body ?? ""))) return null;
-  if (lang !== "python") return indentOf(l) + unit + LOG_CALL[lang];
+  if (lang !== "python") return { after: f.at, line: indentOf(l) + unit + LOG_CALL[lang] };
   const ind = indentOf(body ?? "");
-  return ind.length > indentOf(l).length && ind.startsWith(indentOf(l)) ? ind + LOG_CALL.python : null;
+  if (!(ind.length > indentOf(l).length && ind.startsWith(indentOf(l)))) return null;
+  const doc = /^\s*[rRuUbB]{0,2}("""|'''|"|')/.exec(body!)?.[1];
+  if (!doc) return { after: f.at, line: ind + LOG_CALL.python };
+  const rest = body!.trim().replace(/^[rRuUbB]{0,2}/, "").slice(doc.length);
+  const after = doc.length === 1 || rest.includes(doc) ? b : lines.findIndex((x, i) => i > b && i <= f.end && x.includes(doc));
+  return after < 0 ? null : { after, line: ind + LOG_CALL.python };
 }
 
 /** The C or C++ header line added before the file's first #include outside any #if (an include guard's block counts as
@@ -362,7 +371,7 @@ export function stockDiffs(x: { lang: Lang; path: string; text: string }): Array
   if (!fn.size) commented.unshift(comment + " Reviewed.");
   const logs = new Map(fns.flatMap((f) => {
     const s = logLine(x.lang, lines, f, unit);
-    return s === null ? [] : [[f.at, s] as const];
+    return s === null ? [] : [[s.after, s.line] as const];
   }));
   let logged = lines.flatMap((l, i) => (logs.has(i) ? [l, logs.get(i)!] : [l]));
   const header = LOG_HEADER[x.lang];
