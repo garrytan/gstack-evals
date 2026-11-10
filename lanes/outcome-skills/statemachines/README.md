@@ -448,6 +448,15 @@ model or unit (E_SM_PACKET).
   the rebuild, the run script deletes every file the print command's report paths name under the repo dir that git does
   not track. After the test commands it moves aside every file they name that is older than the run's start mark, and
   writes the counts on an SM_REPORTS line. File times tick coarsely, so a file as new as the mark counts as fresh.
+- Report directories (pre-data build change, 2026-11-09): prep's git clean removes the untracked report directory the
+  image's own runs left, and in 89 of the 1,077 cached rows the test command tees or redirects its report into a
+  relative directory it never makes (casey__just-2785: `... | tee reports/test-output.log`, then `cat
+  reports/test-output.log`). tee could not open the file, so every run read no_fresh_report. Between the stale deletion
+  and the mark, the run script now creates, as the run user (uid 10001 in hardened mode), each missing parent directory
+  of a report path that both the print command reads and a test command writes by tee or redirection (reports.ts
+  reportDirs). It skips a directory the test command makes itself, an absolute path, a .. step, a glob in the
+  directory (a glob file name gives its parent) and any path whose nearest existing parent resolves outside the tree.
+  Each created directory gets an SM_MKDIR line; the run's created_dirs and the oracle record list them.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

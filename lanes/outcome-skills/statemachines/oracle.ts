@@ -196,7 +196,7 @@ export function oneRun(dir: string, u: SmUnit, volume: string, image: string, tr
     const rule: RebuildRule = u.oracle?.rebuild_rule?.applies ? "applies" : "exempt";
     const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, limitMs, label: u.id + "-" + tree + n, rule });
     const log = t.log === t.stderr ? t.stderr : t.stderr + "\n" + t.log;
-    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing, stale_fresh: t.reports ? t.reports.fresh : null };
+    const stale = { stale_deleted: t.reports?.deleted ?? 0, stale_refused: t.reports?.refused ?? 0, built_nothing: t.built_nothing, stale_fresh: t.reports ? t.reports.fresh : null, created_dirs: t.created_dirs };
     if (t.stopped) return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: null, stopped: true, exits: t.exits, ...stale }, parsed: null, log };
     const parsed = parseRun(t, rf(join(dir, "parser.py"), "utf8"), u.id + "-" + tree + n);
     return { run: { tree, n, wall_ms: t.wall_ms, exit: t.exit, parsed_sha256: sha(JSON.stringify(parsed)), stopped: false, exits: t.exits, ...stale }, parsed, log };

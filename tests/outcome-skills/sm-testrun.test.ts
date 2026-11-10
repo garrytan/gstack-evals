@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The state machines test run's container arguments (keyless) and, with GSTACK_EVALS_DOCKER=1, a hardened run that reads
 // the image's own root-owned home, finds that home through its passwd entry and writes under HOME, while the privilege
-// flags stay as they were; the stale report rule and the rebuild rule on a small built fixture.
+// flags stay as they were; the stale report rule and the rebuild rule on a small built fixture; and the report directory a
+// run creates before its test command, empty and owned by the run user.
 import { describe, expect, test } from "bun:test";
 import { buildFailed } from "../../lanes/outcome-skills/statemachines/score.ts";
-import { parseRun, PY_IMAGE, runArgs, runTests } from "../../lanes/outcome-skills/statemachines/testrun.ts";
+import { copyVolume, parseRun, PY_IMAGE, runArgs, runTests } from "../../lanes/outcome-skills/statemachines/testrun.ts";
 import { docker } from "../../lanes/real-outcome/task/docker.ts";
 
 const on = process.env.GSTACK_EVALS_DOCKER === "1";
@@ -87,6 +88,55 @@ describe.skipIf(!on)("stale reports and the rebuild rule (docker)", () => {
       expect(buildFailed(e, 1, false, parseRun(e, "", "exempt", parse))).toBe(false);
     } finally {
       docker(["volume", "rm", "-f", vol]);
+    }
+  }, 180_000);
+});
+
+describe.skipIf(!on)("report directories the test command writes into (docker)", () => {
+  function tree(src: string): { src: string; copy: string } {
+    const id = process.pid + "-" + Math.random().toString(36).slice(2, 8);
+    const vol = "sm-test-dirs-" + id, copy = "sm-test-dirs-copy-" + id;
+    docker(["volume", "create", vol]);
+    const r = docker(["run", "--rm", "--network", "none", "-v", vol + ":/w", "--entrypoint", "sh", PY_IMAGE, "-c", "set -e; cd /w; echo source > A.txt; " + src]);
+    if (r.status !== 0) throw new Error("fixture: " + r.stderr);
+    copyVolume(PY_IMAGE, vol, copy, "hardened");
+    return { src: vol, copy };
+  }
+  const drop = (t: { src: string; copy: string }) => docker(["volume", "rm", "-f", t.src, t.copy]);
+  test("a hardened run writes its report into a directory created at its start, empty and owned by uid 10001, and reads fresh", () => {
+    const v = tree("true");
+    try {
+      const t = runTests({ image: PY_IMAGE, volume: v.copy, repoDir: "/w", mode: "hardened", label: "dirs-fresh", commands: { rebuild: ["true"], test: ['echo "SM_DIR_PROBE $(stat -c %u reports) $(ls -A reports | wc -l)"; echo "t1 pass" 2>&1 | tee reports/test-output.log'], print: ["cat reports/test-output.log"] } });
+      expect(t.created_dirs).toEqual(["reports"]);
+      expect(t.stderr).toContain("SM_DIR_PROBE 10001 0");
+      expect(t.reports).toMatchObject({ fresh: 1 });
+      expect(t.built_nothing).toBeNull();
+      expect(t.log).toBe("t1 pass\n");
+    } finally {
+      drop(v);
+    }
+  }, 180_000);
+  test("a hardened run that writes nothing still reads no_fresh_report", () => {
+    const v = tree("true");
+    try {
+      const t = runTests({ image: PY_IMAGE, volume: v.copy, repoDir: "/w", mode: "hardened", label: "dirs-none", commands: { rebuild: [], test: ["true || tee reports/test-output.log"], print: ["cat reports/test-output.log"] } });
+      expect(t.created_dirs).toEqual(["reports"]);
+      expect(t.built_nothing).toBe("no_fresh_report");
+    } finally {
+      drop(v);
+    }
+  }, 180_000);
+  test("a stale report from before the run start is not read, and its existing directory is not created", () => {
+    const v = tree('mkdir reports; echo "t1 pass" > reports/test-output.log; touch -d 2020-01-01 reports/test-output.log');
+    try {
+      const t = runTests({ image: PY_IMAGE, volume: v.copy, repoDir: "/w", mode: "hardened", label: "dirs-stale", commands: { rebuild: [], test: ["true || tee reports/test-output.log"], print: ["cat reports/test-output.log"] } });
+      expect(t.created_dirs).toEqual([]);
+      expect(t.reports).toMatchObject({ fresh: 0 });
+      expect(t.reports!.deleted + t.reports!.refused).toBe(1);
+      expect(t.built_nothing).toBe("no_fresh_report");
+      expect(t.log).not.toContain("t1 pass");
+    } finally {
+      drop(v);
     }
   }, 180_000);
 });

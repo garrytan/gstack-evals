@@ -11,7 +11,7 @@
 import { docker, dockerRun } from "../../real-outcome/task/docker.ts";
 import { RUN_UID } from "../../real-outcome/task/verify.ts";
 import { runBash } from "./history.ts";
-import { listSrc, printReading } from "./reports.ts";
+import { listSrc, printReading, reportDirs } from "./reports.ts";
 import { smFail } from "./unit.ts";
 
 export const PY_IMAGE = "python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337";
@@ -49,10 +49,14 @@ const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 /** The run script: rebuild and test output to stderr, then the mark, then the print commands' output. When the print
  *  command reads report paths (reports.ts), the script first deletes every file they name under repoDir that git does not
  *  track, then marks the start; after the test commands it moves aside every file they name that is not newer than the
- *  mark (file times tick coarsely, so a file as new as the mark is fresh), so the print command reads only reports this run wrote, and writes the counts on an SM_REPORTS line. */
+ *  mark (file times tick coarsely, so a file as new as the mark is fresh), so the print command reads only reports this run wrote, and writes the counts on an SM_REPORTS line.
+ *  Between the deletion and the mark it creates, as the run user, each report directory the test commands write into
+ *  (reports.ts reportDirs) that is missing, only where its nearest existing parent resolves inside repoDir, and writes an
+ *  SM_MKDIR line for each one it created. */
 export function runScript(c: { rebuild: string[]; test: string[]; print: string[] }, repoDir: string): string {
   const cmd = (x: string) => "( " + x + " )\necho \"SM_EXIT $?\" >&2";
   const paths = printReading(c).paths;
+  const mk = reportDirs(c).map((d) => '( cd "$SM_WD"' + (d.cwd ? " && cd " + sq(d.cwd) : "") + ' 2>/dev/null && sm_d="$(pwd -P)"/' + sq(d.dir) + ' && ! [ -e "$sm_d" ] && ! [ -L "$sm_d" ] && sm_a=$sm_d && while [ -n "$sm_a" ] && ! [ -e "$sm_a" ] && ! [ -L "$sm_a" ]; do sm_a=${sm_a%/*}; done && sm_a=$(cd "${sm_a:-/}" 2>/dev/null && pwd -P) && [ -n "$SM_REPOP" ] && case $sm_a/ in "$SM_REPOP"/*) mkdir -p -- "$sm_d" && printf "SM_MKDIR %s\\n" "${sm_d#"$SM_REPOP"/}";; esac ) || true');
   const start = paths.length
     ? [
         "SM_WD=$PWD; SM_REPO=" + sq(repoDir) + "; SM_T=$(mktemp -d 2>/dev/null || { mkdir -p /tmp/.sm-$$ && echo /tmp/.sm-$$; })",
@@ -61,6 +65,7 @@ export function runScript(c: { rebuild: string[]; test: string[]; print: string[
         'SM_DEL=0; SM_KEPT=0; sm_git=0; git -C "$SM_REPO" rev-parse --git-dir >/dev/null 2>&1 && sm_git=1',
         'sm_list | sort -u > "$SM_T/start"',
         'while IFS= read -r f; do case $f in "$SM_REPO"/*) git -C "$SM_REPO" ls-files --error-unmatch -- ":(literal)$f" >/dev/null 2>&1; sm_rc=$?; if [ $sm_git = 1 ] && [ $sm_rc = 1 ] && rm -f -- "$f"; then SM_DEL=$((SM_DEL+1)); else SM_KEPT=$((SM_KEPT+1)); fi;; *) SM_KEPT=$((SM_KEPT+1));; esac; done < "$SM_T/start"; unset f',
+        ...(mk.length ? ['SM_REPOP=$(cd "$SM_REPO" 2>/dev/null && pwd -P)', ...mk] : []),
         'touch "$SM_T/mark"',
       ]
     : [];
@@ -86,8 +91,9 @@ export type BuiltNothing = "rebuild_failed" | "no_fresh_report" | "stale_unhidde
  *  run, so a rebuild that exits non-zero means the run built nothing; "exempt" otherwise. */
 export type RebuildRule = "applies" | "exempt";
 
-/** exits: each rebuild and test command's exit status, in order (the SM_EXIT lines the run script writes). */
-export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr: string; stderr_tail: string; exits: number[]; reports: Reports | null; built_nothing: BuiltNothing | null }
+/** exits: each rebuild and test command's exit status, in order (the SM_EXIT lines the run script writes); created_dirs:
+ *  the report directories the run created at its start, relative to repoDir (the SM_MKDIR lines). */
+export interface TestRun { wall_ms: number; exit: number; stopped: boolean; log: string; stderr: string; stderr_tail: string; exits: number[]; reports: Reports | null; built_nothing: BuiltNothing | null; created_dirs: string[] }
 
 /** A finished run script's result read into a TestRun, with the stale report counts and the built-nothing reason. */
 export function settleRun(r: { stdout: string; stderr: string; status: number; wall_ms: number; timed_out?: boolean; error?: unknown }, commands: { rebuild: string[] }, limit: number, rule: RebuildRule = "applies"): TestRun {
@@ -99,7 +105,8 @@ export function settleRun(r: { stdout: string; stderr: string; status: number; w
   const reports = m ? { deleted: +m[1]!, kept: +m[2]!, refused: +m[3]!, unhidden: +m[4]!, fresh: +m[5]! } : null;
   const n = commands.rebuild.length;
   const built_nothing: BuiltNothing | null = rule === "applies" && n && exits.slice(0, n).some((x) => x !== 0) ? "rebuild_failed" : reports?.unhidden ? "stale_unhidden" : reports && !reports.fresh ? "no_fresh_report" : null;
-  return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr: r.stderr, stderr_tail: r.stderr.slice(-2000), exits, reports, built_nothing };
+  const created_dirs = [...r.stderr.matchAll(/^SM_MKDIR (.+)$/gm)].map((m) => m[1]!);
+  return { wall_ms: r.wall_ms, exit: r.status, stopped, log: print.trim() ? print : r.stderr, stderr: r.stderr, stderr_tail: r.stderr.slice(-2000), exits, reports, built_nothing, created_dirs };
 }
 
 /** The dataset's parser over a run's log, or nothing when the run built nothing (the parser does not run). */
