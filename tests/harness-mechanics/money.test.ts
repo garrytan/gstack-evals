@@ -209,3 +209,55 @@ describe("launch guard", () => {
     expect(run(["launch", work, "--part", "s1-1"], { HM_CREW: c }).stderr.toString()).toStartWith("E_USAGE hm launch guard");
   });
 });
+
+describe("D6: done needs the item's pick records", () => {
+  const work = (item: string, pickerCalls: number, arms: string[], picks: string[] | null) => {
+    const w = tmp();
+    writeFileSync(join(w, "hm.json"), JSON.stringify({ item, sessions: 2 * arms.length, picker_calls: pickerCalls }) + "\n");
+    writeFileSync(join(w, "plan.json"), JSON.stringify({ item, parts: [{ name: "p1", rects: [{ tasks: ["t1", "t2"], arms, attempts: 1 }] }] }) + "\n");
+    if (picks) { mkdirSync(join(w, "pick")); writeFileSync(join(w, "pick", "picks.jsonl"), picks.map((t) => JSON.stringify({ task: t, trial: t + "__x", ships: "A" }) + "\n").join("")); }
+    return w;
+  };
+  const ledger = (item: Item) => { const p = join(tmp(), item + ".jsonl"); approve(p, item, CAPS_USD[item], "t"); return p; };
+  const done = (p: string) => readRows(p).some((r) => r.kind === "note" && r.id === "done");
+  const pairArms = ["none", "plain-2", "verify-prose", "verify-hook"];
+
+  test("hm done refuses an item with picker calls until its pick records cover every none and plain-2 pair", () => {
+    const p = ledger("stage4-p1");
+    const bare = run(["done", "--ledger", p, "--item", "stage4-p1"]);
+    expect(bare.exitCode).toBe(2);
+    expect(bare.stderr.toString()).toStartWith("E_USAGE refused: hm done needs --work <work> for stage4-p1");
+    const none = run(["done", "--ledger", p, "--item", "stage4-p1", "--work", work("stage4-p1", 2, pairArms, null)]);
+    expect(none.exitCode).toBe(2);
+    expect(none.stderr.toString()).toStartWith("E_USAGE refused: stage4-p1 has 2 of 2 picker pairs with no pick record");
+    const half = run(["done", "--ledger", p, "--item", "stage4-p1", "--work", work("stage4-p1", 2, pairArms, ["t1"])]);
+    expect(half.exitCode).toBe(2);
+    expect(half.stderr.toString()).toContain("1 of 2 picker pairs with no pick record");
+    expect(half.stderr.toString()).toContain("(t2)");
+    expect(done(p)).toBe(false);
+    const full = run(["done", "--ledger", p, "--item", "stage4-p1", "--work", work("stage4-p1", 2, pairArms, ["t1", "t2"])]);
+    expect(full.exitCode).toBe(0);
+    expect(done(p)).toBe(true);
+  });
+
+  test("another item's work dir is refused, and an item with no picker calls is done with its work dir alone", () => {
+    const p = ledger("stage4-sol");
+    const other = run(["done", "--ledger", p, "--item", "stage4-sol", "--work", work("stage4-p1", 2, pairArms, ["t1", "t2"])]);
+    expect(other.exitCode).toBe(2);
+    expect(other.stderr.toString()).toContain("stage4-p1's work dir, not stage4-sol's");
+    expect(done(p)).toBe(false);
+    const q = ledger("stage3-pilot");
+    const judge = run(["done", "--ledger", q, "--item", "stage3-pilot", "--work", work("stage3-pilot", 0, ["judge-jev", "judge-p1"], null)]);
+    expect(judge.exitCode).toBe(0);
+    expect(done(q)).toBe(true);
+  });
+
+  test("vms and stage2-replay, which plan no sessions, are done with no work dir", () => {
+    for (const item of ["vms", "stage2-replay"] as Item[]) {
+      const p = ledger(item);
+      expect(run(["done", "--ledger", p, "--item", item]).exitCode).toBe(0);
+      expect(done(p)).toBe(true);
+    }
+  });
+});
+

@@ -7,7 +7,7 @@
 // sessions holds six allowances open; each settles at its metered cost. A refused reserve latches the proxy's cap stop:
 // the sessions already open finish inside their own reserves, no session opens after it, and a cap stop is never relaunched
 // (l1.ts relaunch) or rerun (infraRerun).
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostTtlHours, itemCheck, L1, plannedCells, relaunchRects, type PartPlan } from "../../quick/laneb/l1/l1.ts";
@@ -40,6 +40,26 @@ export function markDone(path: string, item: Item) {
   if (t.done) refuse(item + " is marked done already");
   if (t.openIds.length) refuse(item + " still holds " + t.openIds.length + " open reservations (" + t.openIds.slice(0, 3).join(", ") + "); settle them first");
   appendRow(path, { ts: new Date().toISOString(), item, kind: "note", id: "done", usd_micros: 0 });
+}
+
+// D6 (the Captain's pick A, 2026-11-10): Stage 1's items were marked done before hm pick ran, and host-up refuses a done
+// item. So hm done now reads the work dir prepare wrote: an item whose hm.json plans picker calls is done only once
+// <work>/pick/picks.jsonl holds a pick for every task its plan.json runs in both none and plain-2. vms and stage2-replay
+// plan no sessions and need no work dir.
+const NO_WORK: Item[] = ["vms", "stage2-replay"];
+export function doneCheck(item: Item, work: string | undefined) {
+  if (NO_WORK.includes(item)) return;
+  if (!work) return refuse("hm done needs --work <work> for " + item + ", so it can check the item's pick records (D6)");
+  const hm = existsSync(join(work, "hm.json")) ? JSON.parse(readFileSync(join(work, "hm.json"), "utf8")) : null;
+  if (!hm) return refuse(work + " holds no hm.json, so " + item + "'s picker plan cannot be checked");
+  if (hm.item !== item) refuse(work + " is " + hm.item + "'s work dir, not " + item + "'s");
+  if (!hm.picker_calls) return;
+  const plan = JSON.parse(readFileSync(join(work, "plan.json"), "utf8"));
+  const tasks = (a: string) => new Set<string>(plan.parts.flatMap((x: any) => x.rects.filter((r: any) => r.arms.includes(a)).flatMap((r: any) => r.tasks)));
+  const plain = tasks("plain-2"), pairs = [...tasks("none")].filter((t) => plain.has(t)), f = join(work, "pick", "picks.jsonl");
+  const picked = new Set(existsSync(f) ? readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).task) : []);
+  const gap = pairs.filter((t) => !picked.has(t));
+  if (gap.length) refuse(item + " has " + gap.length + " of " + pairs.length + " picker pairs with no pick record in " + f + " (" + gap.slice(0, 3).join(", ") + "); run hm pick before done");
 }
 
 export type ItemTotals = { cap: number; settled: number; open: number; openIds: string[]; done: boolean; vmSettled: number; vmOpen: number; hostOpen: boolean };
