@@ -94,9 +94,11 @@ for line in sys.stdin:
 class Control:
     """The driver's control plane: one slot per open, its base URL on this server, a fixed spend per close, and the
     proxy-recorded effort fields on the first close. cap_stop True refuses every open with 409; "wrapup" only wrap-up opens.
-    wrapup_refusals and wrapup_stops are every wrap-up close's refusal codes and allowance stop count."""
+    wrapup_refusals and wrapup_stops are every wrap-up close's refusal codes and allowance stop count. unfinalized names the
+    closes (1 is the first) whose proxy finalize failed: finalized false and the driver's null counts, but a wrap-up close
+    still carries wrapup_stops when set, the case where a turn has both."""
 
-    def __init__(self, cap_stop=False, wrapup_refusals=(), wrapup_stops=0):
+    def __init__(self, cap_stop=False, wrapup_refusals=(), wrapup_stops=0, unfinalized=()):
         self.opens, self.closes, self.refused = [], [], []
         outer = self
 
@@ -114,9 +116,12 @@ class Control:
                     n = len(outer.opens)
                     return self.answer(200, {"id": f"ses_{n}", "token": f"tok-{n}", "base_url": f"{outer.url}/slot{n}/anthropic", "ledger": "u4", "item": "pf-opus", "lease_id": "pf-opus.0001.abcdef", "meter_id": f"m{n}", "allowance_micros": round(body["cap_usd"] * 1e6)})
                 outer.closes.append({"path": self.path, **body})
-                first = {"thinking": {"type": "adaptive"}, "output_config": None, "reasoning": None, "reasoning_effort": None, "effort": None} if len(outer.closes) == 1 else None
-                refusals = list(wrapup_refusals) if len(outer.closes) > 1 else []
-                return self.answer(200, {"spent_micros": 1000 * len(outer.closes), "requests": 1, "ok_responses": 1, "refused": len(refusals), "refusals": refusals, "allowance_stops": wrapup_stops if len(outer.closes) > 1 else 0, "usage": {}, "first_request": first})
+                n = len(outer.closes)
+                lost = n in unfinalized
+                first = {"thinking": {"type": "adaptive"}, "output_config": None, "reasoning": None, "reasoning_effort": None, "effort": None} if n == 1 and not lost else None
+                refusals = list(wrapup_refusals) if n > 1 else []
+                stops = wrapup_stops if n > 1 else 0
+                return self.answer(200, {"spent_micros": 1000 * n, "finalized": not lost, "requests": None if lost else 1, "ok_responses": None if lost else 1, "refused": None if lost else len(refusals), "refusals": refusals, "allowance_stops": (stops or None) if lost else stops, "usage": {}, "first_request": first})
 
             def answer(self, code, obj):
                 raw = json.dumps(obj).encode()
@@ -140,7 +145,7 @@ def sh(cwd, cmd):
     return r.stdout.strip()
 
 
-def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0):
+def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals=(), wrapup_stops=0, unfinalized=()):
     """One PfAgent trial; returns the error it raised, the control plane's calls, the stub's log and pf-summary.json."""
     d = Path(tempfile.mkdtemp(prefix="pf-agent-sdk-"))
     DIRS.append(d)
@@ -166,7 +171,7 @@ def session(scenario="ok", instr=False, cap_stop=False, arm="P", wrapup_refusals
     (d / "pf-config.json").write_text(json.dumps(pf))
     manifest = d / "images.json"
     manifest.write_text(json.dumps({"schema": "tg-images.v1", "rows": [{"label": LABEL, "image_id": IMAGE}]}))
-    control = Control(cap_stop, wrapup_refusals, wrapup_stops)
+    control = Control(cap_stop, wrapup_refusals, wrapup_stops, unfinalized)
     pf_agent.SH_DIR = str(d / "pf-sh")
     pf_agent.WORK = str(d / "pf-work")
     agent = pf_agent.PfAgent(
@@ -274,6 +279,30 @@ def test_a_wrapup_e_allowance_refusal_that_is_no_allowance_stop_is_rerun_once():
     check(s.error is None, repr(s.error))
     check([(o["meta"]["phase"], o["meta"].get("rerun")) for o in s.control.opens] == [("task", None), ("wrapup", None), ("wrapup", "wrapup_upstream_or_infra")], s.control.opens)
     check([(w["termination"], w["refused"], w["allowance_stops"]) for w in s.summary["wrapup"]] == [("error_result", ["E_ALLOWANCE"], 0), ("completed", ["E_ALLOWANCE"], 0)], s.summary["wrapup"])
+
+
+def test_a_task_turn_whose_proxy_finalize_failed_ends_the_session_before_the_wrapup():
+    s = session(unfinalized=(1,))
+    check(s.error is None, repr(s.error))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task"], s.control.opens)
+    check(s.summary["task"]["finalized"] is False and s.summary["task"]["allowance_stops"] == 0 and s.summary["wrapup"] == [], s.summary["task"])
+    check([x["phase"] for x in s.stub] == ["task"], s.stub)
+
+
+def test_a_wrapup_whose_proxy_finalize_failed_is_rerun_once_on_a_new_slot():
+    s = session(unfinalized=(2,))
+    check(s.error is None, repr(s.error))
+    check([(o["meta"]["phase"], o["meta"].get("rerun")) for o in s.control.opens] == [("task", None), ("wrapup", None), ("wrapup", "wrapup_upstream_or_infra")], s.control.opens)
+    check([(w["termination"], w["allowance_stops"], w["finalized"]) for w in s.summary["wrapup"]] == [("completed", 0, False), ("completed", 0, True)], s.summary["wrapup"])
+    check(s.summary["task"]["finalized"] is True, s.summary["task"])
+
+
+def test_a_wrapup_allowance_stop_whose_proxy_finalize_failed_is_not_rerun():
+    s = session("wrapup_error", wrapup_refusals=("E_ALLOWANCE",), wrapup_stops=1, unfinalized=(2,))
+    check(s.error is None, repr(s.error))
+    check([o["meta"]["phase"] for o in s.control.opens] == ["task", "wrapup"], s.control.opens)
+    check([(w["termination"], w["refused"], w["allowance_stops"], w["finalized"]) for w in s.summary["wrapup"]] == [("error_result", ["E_ALLOWANCE"], 1, False)], s.summary["wrapup"])
+    check([x["phase"] for x in s.stub] == ["task", "wrapup"], s.stub)
 
 
 def test_a_cap_stop_on_the_wrapup_open_refuses_the_wrapup_once_with_no_rerun_and_keeps_s():

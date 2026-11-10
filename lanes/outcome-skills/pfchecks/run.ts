@@ -132,7 +132,9 @@ export const retriesSession = (summary: Record<string, any> | null, record: PfSe
 
 /** The pf-session.v1 record from one attempt's pf-summary.json (none: an infra end). A tree or home refusal before any
  *  open is gap E_PF_ARM and takes no retry. A wrap-up turn refused for its allowance (an allowance stop on its slot, as
- *  the close answer's allowance_stops counts it, or the driver's 409 CAP_STOP on its open) is gap E_PF_WRAPUP_ALLOWANCE. The effort fields are the task slot's, as the driver's
+ *  the close answer's allowance_stops counts it, or the driver's 409 CAP_STOP on its open) is gap E_PF_WRAPUP_ALLOWANCE. A
+ *  turn whose close answer says the proxy's finalize failed (finalized false) has unknown counts and ends as infra, but
+ *  an allowance stop reads first, so a turn that also counts one stays an allowance end. The effort fields are the task slot's, as the driver's
  *  proxy recorded them; with i.effort, missing or different fields make the session gap E_PF_INFRA_GAP. exception is
  *  Harbor's exception type for the trial: LedgerCapStop (the driver refused the task open with 409 CAP_STOP) is a cap stop,
  *  which ends the part with no gap and no retry, as the other lanes read it. */
@@ -142,8 +144,9 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
   const slots = (summary?.slots ?? []) as Array<Record<string, any>>;
   const spent = (phase: string) => sum(slots.filter((x) => x.phase === phase).map((x) => x.close?.spent_micros));
   const t = summary?.task as Record<string, any> | null | undefined;
-  const tEnd = endKind({ termination: t && t.termination !== "error" ? t.termination : null, refusals: t?.refused ?? [], allowance_stop: (t?.allowance_stops ?? 0) > 0, harness: !t || t.termination === "error" });
-  const ends: EndKind[] = ((summary?.wrapup ?? []) as Array<Record<string, any>>).map((w) => ((w.refused ?? []).includes("CAP_STOP") ? "limit_allowance" : endKind({ termination: w.termination === "error" ? null : w.termination, refusals: w.refused ?? [], allowance_stop: (w.allowance_stops ?? 0) > 0, harness: w.termination === "error" })));
+  const unfinalized = (x: Record<string, any>) => x.finalized === false && !((x.allowance_stops ?? 0) > 0);
+  const tEnd = endKind({ termination: t && t.termination !== "error" ? t.termination : null, refusals: t?.refused ?? [], allowance_stop: (t?.allowance_stops ?? 0) > 0, harness: !t || t.termination === "error" || unfinalized(t) });
+  const ends: EndKind[] = ((summary?.wrapup ?? []) as Array<Record<string, any>>).map((w) => ((w.refused ?? []).includes("CAP_STOP") ? "limit_allowance" : endKind({ termination: w.termination === "error" ? null : w.termination, refusals: w.refused ?? [], allowance_stop: (w.allowance_stops ?? 0) > 0, harness: w.termination === "error" || unfinalized(w) })));
   const ts = armRefusal(summary) ? null : taskStep(attempt === 2 ? ["infra", tEnd] : [tEnd]);
   const ws = ts?.action === "wrapup" && ends.length ? wrapupStep(ends) : null;
   const first = slots.find((x) => x.phase === "task")?.close?.first_request as Record<string, unknown> | null | undefined;

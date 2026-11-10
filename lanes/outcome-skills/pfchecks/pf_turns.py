@@ -5,7 +5,9 @@ wrapup.sh saves it, then the wrap-up turn resumes the same Claude Code session i
 (300 s, 20 turns) on its own slot. An upstream or infra end of the wrap-up turn puts the tree back to S (wrapup.sh reset)
 and reruns the wrap-up turn once on a new slot naming meta.rerun. A wrap-up turn refused for its allowance (an allowance
 stop on its slot, which the driver's close answer counts in allowance_stops, or the driver's 409 on its open, raised as
-OpenRefused) is never rerun; the proxy's other E_ALLOWANCE refusals are no allowance stop. wrapup.sh keep then keeps only
+OpenRefused) is never rerun; the proxy's other E_ALLOWANCE refusals are no allowance stop. A turn whose close answer says
+the proxy's finalize failed (finalized false), with no allowance stop counted, is an infra end: the session stops after
+such a task turn (run.ts retries it), and such a wrap-up turn takes the one rerun. wrapup.sh keep then keeps only
 CHECKS.json and counts every other change. S leaves the container as a git bundle.
 
 Each turn ends as real_agent's _drive ends a phase: the agent ended its turn and its background tasks are quiet (quiet_sec,
@@ -99,7 +101,7 @@ class Session:
             if phase != "wrapup":
                 raise
             self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": None, "allowance_micros": None, "close": None, "open_refused": str(e)[:300]})
-            return {"phase": phase, "termination": "open_refused", "drive": {"error": str(e)[:400]}, "session_id": sid, "wall_s": 0.0, "refused": ["CAP_STOP"], "allowance_stops": 0}
+            return {"phase": phase, "termination": "open_refused", "drive": {"error": str(e)[:400]}, "session_id": sid, "wall_s": 0.0, "refused": ["CAP_STOP"], "allowance_stops": 0, "finalized": None}
 
         async def can_use_tool(tool_name, tool_input, ctx):
             if tool_name == "AskUserQuestion":
@@ -154,7 +156,7 @@ class Session:
                 pass
             closed = self.slots.close(slot, "turn_end")
         self.summary["slots"].append({"phase": phase, "rerun": rerun, "id": slot.get("id"), "allowance_micros": slot.get("allowance_micros"), "close": closed})
-        return {"phase": phase, "termination": termination, "drive": end, "session_id": sid, "wall_s": round(time.time() - started, 1), "refused": (closed or {}).get("refusals") or [], "allowance_stops": int((closed or {}).get("allowance_stops") or 0)}
+        return {"phase": phase, "termination": termination, "drive": end, "session_id": sid, "wall_s": round(time.time() - started, 1), "refused": (closed or {}).get("refusals") or [], "allowance_stops": int((closed or {}).get("allowance_stops") or 0), "finalized": (closed or {}).get("finalized")}
 
     async def run(self) -> dict:
         cfg = self.cfg
@@ -164,14 +166,14 @@ class Session:
         out["claude_version"] = self.sh("claude --version").stdout.decode(errors="replace").strip()
         self.sh('mkdir -p "$2" && bash "$1/capture.sh" inventory "$3" > "$2/inv"', cfg["sh_dir"], work, repo)
         task = out["task"] = await self.turn("task", cfg["task_text"], None)
-        if task["termination"] in ("error", "cli_exit") or not task["session_id"]:
+        if task["termination"] in ("error", "cli_exit") or not task["session_id"] or (task["finalized"] is False and not task["allowance_stops"]):
             return out
         out["capture"] = self.script("capture.sh", "commit", repo, work + "/inv")
         self.script("wrapup.sh", "save", repo, work)
         for attempt in (1, 2):
             w = await self.turn("wrapup", cfg["wrapup_text"], task["session_id"], RERUN["wrapup"] if attempt == 2 else None)
             out["wrapup"].append(w)
-            if w["termination"] not in ("error_result", "error", "cli_exit") or w["allowance_stops"] or "CAP_STOP" in w["refused"] or attempt == 2:
+            if (w["termination"] not in ("error_result", "error", "cli_exit") and w["finalized"] is not False) or w["allowance_stops"] or "CAP_STOP" in w["refused"] or attempt == 2:
                 break
             self.script("wrapup.sh", "reset", repo, work)
         out["keep"] = self.script("wrapup.sh", "keep", repo, work)

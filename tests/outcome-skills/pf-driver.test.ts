@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
+import { MeteringProxy } from "../../src/runner/proxy/metering-proxy.ts";
 import { serveStages, type ServeOptions, type StageSpec } from "../../lanes/outcome-skills/driver/stage.ts";
 import { costReading } from "../../lanes/outcome-skills/pfchecks/admission.ts";
 import { OPUS, P1, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
@@ -258,6 +259,30 @@ test("a PF slot refuses provider-side tools and capabilities, and its close answ
   const wrap = await open({ arm: "pf:P", cap: 6, phase: "wrapup" });
   expect((await caller(wrap)({ messages: [{ role: "user", content: "x".repeat(4_000_000) }] })).status).toBe(402);
   expect(await close(wrap.json.id)).toMatchObject({ refusals: ["E_ALLOWANCE"], allowance_stops: 1 });
+  expect(await served.stop()).toBe(0);
+  local.close?.();
+});
+
+// Value: protects=the PF end kinds' input when the proxy's finalize fails; fails_when=a PF close answer reports counts it never read, drops the journal's refusal codes or keeps an effort record; why_new=the state machines eval's finalized flag, read by PF turns; seam=driver/stage.ts closeSession's PF branch; no_claim=the end kind (pf-run.test.ts) or the agent (pf_agent_sdk_test.py)
+test("a PF slot whose proxy finalize fails closes with finalized false, null counts, its journal's refusal codes and no effort record", async () => {
+  const { serve, local } = ledger({ "pf-opus": { cap: 100 } });
+  const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
+  const { open } = client(served.control);
+  const task = await open({ arm: "pf:P", cap: 12, phase: "task" });
+  const call = (body: Record<string, unknown>) => fetch(task.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": task.json.token }, body: JSON.stringify({ model: OPUS, max_tokens: 100, messages: [{ role: "user", content: "hi" }], ...body }) });
+  expect((await call({ tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 1 }] })).status).toBe(403);
+  expect((await call({ tools: [{ name: "Bash", description: "run", input_schema: { type: "object" } }], thinking: { type: "adaptive" } })).status).toBe(200);
+  const finalize = MeteringProxy.prototype.finalize;
+  MeteringProxy.prototype.finalize = async () => {
+    throw new Error("finalize failed in this test");
+  };
+  let answer: Record<string, any>;
+  try {
+    answer = (await (await fetch(served.control + "/sessions/" + task.json.id + "/close", { method: "POST", body: JSON.stringify({ reason: "turn_end" }) })).json()) as Record<string, any>;
+  } finally {
+    MeteringProxy.prototype.finalize = finalize;
+  }
+  expect(answer).toMatchObject({ finalized: false, requests: null, ok_responses: null, refused: null, refusals: ["E_PROXY_SERVER_TOOL"], allowance_stops: null, first_request: null });
   expect(await served.stop()).toBe(0);
   local.close?.();
 });

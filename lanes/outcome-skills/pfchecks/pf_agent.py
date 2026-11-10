@@ -39,7 +39,8 @@ class PfOptions(RealOptions):
 class DriverSlots:
     """One U4 slot per turn on the outcome-skills driver: phase task or wrapup in meta, cap_usd from that turn's allowance.
     A 409 on a wrap-up open raises OpenRefused (the wrap-up is refused for its allowance); on a task open, LedgerCapStop.
-    Each close keeps the driver's answer, first_request (the proxy-recorded effort fields) included."""
+    Each close keeps the driver's answer, first_request (the proxy-recorded effort fields) and finalized (false when the
+    proxy's finalize failed, so the answer's counts are unknown) included."""
 
     def __init__(self, agent: "PfAgent", trial: str, limits: dict, log):
         self.agent, self.trial, self.limits, self.log = agent, trial, limits, log
@@ -74,8 +75,8 @@ class DriverSlots:
         except Exception as e:
             self.log({"event": "close_failed", "session": slot["id"], "message": str(e)[:300]})
             return {"error": f"{type(e).__name__}: {e}"[:300]}
-        info = {k: closed.get(k) for k in ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "usage", "first_request")}
-        self.log({"event": "slot_close", "phase": slot["phase"], "session": slot["id"], **{k: info[k] for k in ("spent_micros", "refused", "allowance_stops")}})
+        info = {k: closed.get(k) for k in ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "usage", "first_request", "finalized")}
+        self.log({"event": "slot_close", "phase": slot["phase"], "session": slot["id"], **{k: info[k] for k in ("spent_micros", "refused", "allowance_stops", "finalized")}})
         return info
 
 
