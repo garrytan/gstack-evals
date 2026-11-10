@@ -227,11 +227,18 @@ grace.
 run. It waits for the neutral record, so it can start while the neutral gate still runs.
 
 - Containment comes first, on the session image built as the first session's would be, and every session waits on it.
-  `gstack-evals outcome pf contain --unit <dir>` runs the same check alone. sh/contain.sh runs as root with no network in
+  runPfSession runs the same gate (containUnit) before every session: the unit's first session runs the check and
+  records it in the unit dir's pf-contain.json, one entry per session image tag; later sessions on the same image reuse
+  a passing entry, and a failure halts the unit with E_PF_CONTAINMENT before any session, without dropping it.
+  `gstack-evals outcome pf contain --unit <dir>` runs the check alone and writes the same record. sh/contain.sh runs as root with no network in
   a container of that image. It fails when any ref (branches, tags, remotes, notes, replace refs, stash, packed refs,
   FETCH_HEAD, ORIG_HEAD and the other special heads) or reflog entry points past the base commit, when any commit object is neither the base nor an
   ancestor, when the repository has alternates, a gitfile, a modules store or a nested .git, when a tracked file differs
-  from the base, or when another git directory on the filesystem holds the base commit. Its needles are the added lines
+  from the base, or when the repository holds a blob of a file the fix or the test patch changes as it reads after the
+  patch (git apply --cached on a scratch index and object dir gives the blob ids). It lists every other git directory on
+  the filesystem with its path and commit count, and fails when one holds the dataset's base commit, one of those blobs
+  or a commit after the base that the unit's runtime image holds (upstreamAfter: every commit object in the image's
+  repository that is not the base or an ancestor, or every commit object when the base is absent). Its needles are the added lines
   of 30 characters or more in fix.patch and test.patch that no base file holds, and the fail-to-pass test leaf names of
   12 characters or more that no tracked base file holds; it looks for them in every file outside the repository and in
   untracked and ignored files inside it, as whole lines and as file names. Output names a needle by a sha256 prefix,
