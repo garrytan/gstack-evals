@@ -2112,6 +2112,28 @@ describe("free POST routes and the request-shape refusals (containment tightenin
     expect(t.calls).toHaveLength(0);
   });
 
+  // Value: protects=a refused request whose JSON body nests too deep for the tripwire to walk its parsed strings is still scanned in its path, query string, headers and raw body, so a canary there writes the custody line and the answer stays the 403 E_ALLOWANCE it was, never a 500 with no record; fails_when=the body's traversal overflows the stack and the call ends E_INTERNAL with no custody line, or a canary in the headers or the raw body of a refused request is not recorded; why_new=Capy's review of #319 (deeply nested refused bodies suppressed custody evidence); seam=forward's route allowlist refusal and tripwireText; no_claim=a JSON-escaped marker inside a body too deep to walk, which only the raw text is searched for
+  test("a refused request whose body nests too deep to walk still records a canary in its path, headers or raw body, and the answer is unchanged", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const deep = (inner: string) => `${"[".repeat(100_000)}${inner}${"]".repeat(100_000)}`;
+    const cases: Array<[Riders, string, string]> = [
+      [{ path: `/v1/nope-${CANARY}` }, "/v1/nope-<unquoted>", deep("")],
+      [{ header: CANARY }, "/v1/nope", deep("")],
+      [{}, "/v1/nope", deep(JSON.stringify(CANARY))],
+    ];
+    for (const [at, route, body] of cases) {
+      const t = setup(() => Response.json({}), { allowanceCode: "DR_ALLOWANCE_STOP" });
+      const s = t.bind({ forbidden_markers: [CANARY], canary: CANARY });
+      const res = await fetch(`http://127.0.0.1:${t.proxy.port}/${s.slot}/anthropic${at.path ?? "/v1/nope"}`, { method: "POST", headers: { "content-type": "application/json", "x-api-key": s.token, ...(at.header ? { "x-note": at.header } : {}) }, body });
+      expect(res.status).toBe(403);
+      expect(await res.text()).toBe(await routeAnswer(route));
+      expect(withoutAt(t).map(l => [l.code, l.route])).toEqual([["DR_CUSTODY_HIT", route], ["E_ALLOWANCE", route]]);
+      expect(readFileSync(join(t.dir, "journal.ndjson"), "utf8")).not.toContain(CANARY);
+      await expect(journalCheck(t.dir)).rejects.toThrow(/^DR_CUSTODY_HIT: /);
+      expect(t.calls).toHaveLength(0);
+    }
+  });
+
   // Value: protects=a slot denial masks the markers of slots that have closed as well as the open slots' markers, in the unmatched path and the slot id it quotes, in the 403 and the journal, while every denial stays a 403 E_SLOT_DENIED and an honest path or slot id keeps its text; fails_when=unbinding a slot drops its markers from the denial's masking, so a later denial echoes one; why_new=#315's review (E_SLOT_DENIED did not mask closed slots' markers), by the Captain's ruling; seam=handle's E_SLOT_DENIED refusal and unbind; no_claim=a custody line for a canary in a denied call, since no slot's tripwire runs on it
   test("a slot denial masks the markers of closed slots as well as open ones, in the 403 and the journal", async () => {
     const CLOSED = "SEALED-MARKER-7f3a9c";

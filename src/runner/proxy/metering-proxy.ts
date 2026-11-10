@@ -35,8 +35,9 @@
 //   values it quotes (maskMarkers: nested or overlapping markers become one <unquoted>) and leaves its own text as
 //   written; the marker_hit line journals a model that holds a marker as <unquoted>. The route-not-allowlisted refusal
 //   quotes the request path the same way, masking any marker it holds, and keeps its place, status, code and answer.
-//   Before it, the tripwire reads the whole refused request (path, query string, headers and body) and journals what it
-//   finds as it would for an allowlisted request, while the call is still answered 403 E_ALLOWANCE and only that refusal
+//   Before it, the tripwire reads the whole refused request (path, query string, headers and body, the body's parsed
+//   strings too unless it will not parse or nests too deep to walk) and journals what it finds as it would for an
+//   allowlisted request, while the call is still answered 403 E_ALLOWANCE and only that refusal
 //   counts on the meter: a proxy-wide marker writes the tripwire's masked E_TRIPWIRE refusal line, so the cell reads
 //   invalid; on a DR_ALLOWANCE_STOP proxy the slot's canary writes the tripwire's DR_CUSTODY_HIT refusal line, beside the
 //   E_TRIPWIRE line when a proxy-wide marker rides with it, so the controller's journal check stops the run, and any other
@@ -636,11 +637,10 @@ export class MeteringProxy {
       try {
         raw = await readBody();
       } catch {}
-      let parsed: unknown;
+      let text = tripwireText(req, route, raw, undefined);
       try {
-        parsed = JSON.parse(raw);
+        text = tripwireText(req, route, raw, JSON.parse(raw));
       } catch {}
-      const text = tripwireText(req, route, raw, parsed);
       const leaks = findLeaks(text, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
       const wide = findLeaks(text, o.forbiddenMarkers ?? []).length > 0;
       const dr = o.allowanceCode === "DR_ALLOWANCE_STOP";
