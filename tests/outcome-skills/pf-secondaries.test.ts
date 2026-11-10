@@ -46,3 +46,11 @@ test("Go: compiler lines with a column and [build failed] count as compile error
   expect(compileBlocked("go", red("go test -run TestA pfcheck/pkg/a_test.go", log), added, t)).toEqual(["pfcheck/pkg/broken_test.go"]);
   expect(compileBlocked("go", red("go test -run TestA pfcheck/pkg/a_test.go", "    broken_test.go:12: want 1, got 2\nFAIL"), added, t)).toBeNull();
 });
+test("Go: an entry run through its package dir keeps its own test file when another file blocks the build", () => {
+  const t = new Set(["go.mod", "pfcheck/pkg/a_test.go", "pfcheck/pkg/broken_test.go"]);
+  const added = ["pfcheck/pkg/a_test.go", "pfcheck/pkg/broken_test.go"];
+  const log = "# example.com/m/pfcheck/pkg [example.com/m/pfcheck/pkg.test]\npfcheck/pkg/broken_test.go:8:6: undefined: OldName\nFAIL\texample.com/m/pfcheck/pkg [build failed]";
+  expect(compileBlocked("go", red("go test -count=1 ./pfcheck/pkg/ -run TestA", log), added, t)).toEqual(["pfcheck/pkg/broken_test.go"]);
+  expect(compileBlocked("go", red("go test pfcheck/pkg", log), added, t)).toEqual(["pfcheck/pkg/broken_test.go"]);
+  expect(compileBlocked("go", red("go test ./pfcheck/...", log), added, t)).toEqual(added);
+});

@@ -43,11 +43,15 @@ export function isStaticEntry(cmd: string, staticFiles: string[], lang?: Lang): 
   const names = new Set(staticFiles.flatMap((p) => { const b = p.split("/").pop()!; return [p, b, b.replace(/\.[^.]*$/, ""), b.replace(/\..*$/, "")]; }));
   if (t.some((x) => names.has(x))) return true;
   if (lang !== "go") return false;
-  const dirs = staticFiles.map((p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "."));
-  return cmd.split(/[\s;|&()'"=]+/).filter((w) => w.includes("/") || w === ".").some((w) => {
+  const dirs = staticFiles.map(goDir);
+  return goDirWords(cmd).some(({ d, rec }) => dirs.some((x) => x === d || (rec && (d === "." || x.startsWith(d + "/")))));
+}
+const goDir = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : ".");
+/** The package dirs a Go command names: each path word (./pkg/, pkg/sub or .) as a dir, rec for a ./pkg/... pattern. */
+function goDirWords(cmd: string): { d: string; rec: boolean }[] {
+  return cmd.split(/[\s;|&()'"=]+/).filter((w) => w.includes("/") || w === ".").map((w) => {
     const rec = /(^|\/)\.\.\.$/.test(w);
-    const d = (rec ? w.replace(/\/?\.\.\.$/, "") : w).replace(/^\.\//, "").replace(/\/+$/, "") || ".";
-    return dirs.some((x) => x === d || (rec && (d === "." || x.startsWith(d + "/"))));
+    return { d: (rec ? w.replace(/\/?\.\.\.$/, "") : w).replace(/^\.\//, "").replace(/\/+$/, "") || ".", rec };
   });
 }
 
@@ -97,12 +101,14 @@ export function compileUnit(lang: Lang, path: string, tPaths: ReadonlySet<string
 
 /** Compile-blocked: the entry's first fix-run failure has an error line (a line holding "error", or the line after it,
  *  where rustc prints its location; for Go also a compiler line, file.go:line:col:, or a [build failed] line) naming an
- *  agent-added file the entry does not name. Returns the agent-added files of that file's compile unit to drop for the rerun (the entry's own files stay), or
+ *  agent-added file the entry does not name. A Go entry runs a test file through its package, so the files of a package
+ *  dir it names outright (./pkg/, not a ./pkg/... pattern) stay too, except the blocking files themselves. Returns the agent-added files of that file's compile unit to drop for the rerun (the entry's own files stay), or
  *  null when the entry is not compile-blocked. */
 export function compileBlocked(lang: Lang, r: EntryResult, agentAdded: string[], tPaths: ReadonlySet<string>): string[] | null {
   const f = firstFixFailure(r);
   if (!f || !failedParent3(r)) return null;
   const t = new Set(tokens(r.command));
+  const goDirs = lang === "go" ? goDirWords(r.command).filter((w) => !w.rec).map((w) => w.d) : [];
   const named = (p: string) => t.has(p) || stems(p).some((s) => t.has(s));
   const lines = f.log.split("\n");
   const isErr = (l: string) => /error/i.test(l) || (lang === "go" && (/\.go:\d+:\d+: /.test(l) || l.includes("[build failed]")));
@@ -110,7 +116,7 @@ export function compileBlocked(lang: Lang, r: EntryResult, agentAdded: string[],
   const blocking = agentAdded.filter((p) => !named(p) && errLines.some((l) => l.includes(p) || new RegExp("(^|[^\\w.-])" + esc(p.split("/").pop()!) + "\\b").test(l)));
   const units = new Set(blocking.map((p) => compileUnit(lang, p, tPaths)).filter((u): u is string => u !== null));
   if (!units.size) return null;
-  return agentAdded.filter((p) => !named(p) && units.has(compileUnit(lang, p, tPaths) ?? "\0"));
+  return agentAdded.filter((p) => !named(p) && (blocking.includes(p) || !goDirs.includes(goDir(p))) && units.has(compileUnit(lang, p, tPaths) ?? "\0"));
 }
 
 export interface EntryCounts { listed: number; counted: number; skipped: number; inline: number; names_nothing: number; beyond_cap: number; run: number; unreached: number; not_runnable: number; timeouts: number; static_text: number; catching: number; catch_share: number | null; rebuild_failed: Record<TreeName, number> }
