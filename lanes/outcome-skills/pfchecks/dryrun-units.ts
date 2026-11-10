@@ -4,11 +4,12 @@
 // rebuild and its own fail-to-pass test. Three stub sessions run through the driver on the unit's session image, one per
 // arm (P on Opus, C on Sol, N on particle-1), and a fourth, on a copy of the tree holding a hostile CLAUDE.md, is refused.
 // Each session is scored in the unit's runtime image by the Docker executor in hardened mode, as outcome pf score does;
-// the three sessions score at the same time, once the neutral record exists (it may still be in the making).
+// the three sessions score at the same time, once the neutral record exists (it may still be in the making), or one after
+// another with --serial, for a unit whose runs are too heavy to share the machine.
 // The session mechanics that do not depend on the unit (leases, slots, effort, allowances, D, W4) stay with dryrun.ts.
 // One PASS, FAIL or N/A line per fixture (N/A: the fixture cannot apply to this unit, and why); exit 1 on any FAIL.
 // Usage: bun dryrun-units.ts --unit <unit dir> --neutral <pf-neutral.v1 record> --out <dir>
-//        [--pstack-source <cursor/plugins clone>] [--harbor <bin>] [--claude <bin>]
+//        [--pstack-source <cursor/plugins clone>] [--harbor <bin>] [--claude <bin>] [--serial]
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -67,8 +68,11 @@ export async function main(argv: string[]): Promise<number> {
 
   // The hostile tree: the unit's prepared tree with a CLAUDE.md in its one commit, every ref moved to it.
   const hostileVol = "pf-dry-unit-hostile-" + process.pid;
-  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", volume + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", image, "-c", 'cp -a /s/. /d/ && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit && for r in $(git -c safe.directory=/d for-each-ref --format="%(refname)"); do git -c safe.directory=/d update-ref "$r" HEAD; done', HOSTILE], { encoding: "utf8" });
-  if (hv.status !== 0) throw new Error("hostile volume: " + hv.stderr);
+  const hv = spawnSync("docker", ["run", "--rm", "--network", "none", "--user", "0:0", "-v", volume + ":/s:ro", "-v", hostileVol + ":/d", "--entrypoint", "sh", image, "-c", 'cp -a /s/. /d/ && cd /d && printf "%s\\n" "$0" > CLAUDE.md && git -c safe.directory=/d add -f CLAUDE.md && git -c safe.directory=/d -c user.name=fixture -c user.email=fixture@example.invalid commit -q --amend --no-edit && for r in $(git -c safe.directory=/d for-each-ref --format="%(refname)"); do git -c safe.directory=/d update-ref "$r" HEAD; done', HOSTILE], { encoding: "utf8" });
+  if (hv.status !== 0) {
+    spawnSync("docker", ["volume", "rm", "-f", hostileVol]);
+    throw new Error("hostile volume: " + hv.stderr);
+  }
 
   // A temporary ledger and the driver: pf-opus, pf-sol and pf-particle each serve one arm's session.
   const quote = { words: "dry-run fixture words on a temporary ledger, not an approval", by: "pf-dryrun", source: "pfchecks/dryrun-units.ts" };
@@ -148,7 +152,7 @@ export async function main(argv: string[]): Promise<number> {
       console.log("waiting for the neutral record " + neutral);
       while (!existsSync(neutral)) await Bun.sleep(30_000);
     }
-    const [cP, cC, cN] = await Promise.all([score(P), score(C), score(N, 1)]);
+    const [cP, cC, cN] = argv.includes("--serial") ? [await score(P), await score(C), await score(N, 1)] : await Promise.all([score(P), score(C), score(N, 1)]);
     const got = outcomes(cP);
     const entries = ((cP as any).entries ?? []) as Array<{ index: number; outcome: string; why: string; runs: Array<{ tree: string; exit: number; pass: boolean; timed_out: boolean; wall_ms: number }> }>;
     const entry = (role: Role) => entries.find((e) => e.index === fx.manifest.findIndex((m) => m.role === role));

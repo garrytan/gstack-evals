@@ -198,4 +198,96 @@ function gitoxide(c: FixtureCtx): UnitFixture {
   };
 }
 
-export const FIXTURES: Record<string, (c: FixtureCtx) => UnitFixture> = { "0xERR0R__blocky-2016": blocky, "GitoxideLabs__gitoxide-2476": gitoxide };
+/** agentscope (Java). The bug: GenerateOptions.parallelToolCalls never reaches an Anthropic request, because Anthropic takes it
+ *  only as disable_parallel_tool_use inside the tool_choice object and AnthropicToolsHelper never sets that field; the fix
+ *  sets it from the option (AnthropicToolsHelper.java). Every test of the anthropic module compiles together, so each check
+ *  is one file that carries its own copy of the probe, and the check that needs the agent's product edit finds it by
+ *  reflection. */
+function agentscope(c: FixtureCtx): UnitFixture {
+  const MOD = "agentscope-extensions/agentscope-extensions-model/agentscope-extensions-model-anthropic";
+  const FIX = MOD + "/src/main/java/io/agentscope/extensions/model/anthropic/formatter/AnthropicToolsHelper.java";
+  const OWN_TEST = MOD + "/src/test/java/io/agentscope/extensions/model/anthropic/formatter/AnthropicToolsHelperTest.java";
+  const DIR = MOD + "/src/test/java/io/agentscope/extensions/model/anthropic/pfcheck/";
+  const probe = [
+    "    /** Applies one tool with parallel tool calls turned off and reports whether the request turns off parallel tool use. */",
+    "    static boolean parallelOff() {",
+    "        MessageCreateParams.Builder builder =",
+    "                MessageCreateParams.builder()",
+    '                        .model("pf-model")',
+    "                        .maxTokens(16)",
+    '                        .addMessage(MessageParam.builder().role(MessageParam.Role.USER).content("hi").build());',
+    '        ToolSchema tool = ToolSchema.builder().name("lookup").description("Lookup").parameters(Map.of("type", "object")).build();',
+    "        GenerateOptions options = GenerateOptions.builder().toolChoice(new ToolChoice.Auto()).parallelToolCalls(false).build();",
+    "        AnthropicToolsHelper.applyTools(builder, List.of(tool), options);",
+    "        MessageCreateParams params = builder.build();",
+    "        return params.toolChoice().isPresent()",
+    "                && params.toolChoice().get().isAuto()",
+    "                && params.toolChoice().get().asAuto().disableParallelToolUse().orElse(false);",
+    "    }",
+  ];
+  const PROBE_IMPORTS = ["com.anthropic.models.messages.MessageCreateParams", "com.anthropic.models.messages.MessageParam", "io.agentscope.core.model.GenerateOptions", "io.agentscope.core.model.ToolChoice", "io.agentscope.core.model.ToolSchema", "io.agentscope.extensions.model.anthropic.formatter.AnthropicToolsHelper", "java.util.List", "java.util.Map"];
+  const jTest = (name: string, imports: string[], body: string[], withProbe = false) => {
+    const all = [...new Set([...(withProbe ? PROBE_IMPORTS : []), ...imports])];
+    const statics = all.filter((i) => i.startsWith("static ")).sort(), plain = all.filter((i) => !i.startsWith("static ")).sort();
+    return ["package io.agentscope.extensions.model.anthropic.pfcheck;", "", ...statics.map((i) => "import " + i + ";"), ...(statics.length ? [""] : []), ...plain.map((i) => "import " + i + ";"), "import org.junit.jupiter.api.Test;", "",
+      "class " + name + " {", ...(withProbe ? [...probe, ""] : []), "    @Test", "    void check() throws Exception {", ...body.map((l) => "        " + l), "    }", "}", ""].join("\n");
+  };
+  const MVN = "mvn -o -q -pl " + MOD + " test -Dspotless.check.skip=true -Dtest=";
+  const assertTrue = "static org.junit.jupiter.api.Assertions.assertTrue";
+  const files: Record<string, string> = {
+    [DIR + "PFFailTest.java"]: jTest("PFFailTest", ["static org.junit.jupiter.api.Assertions.fail"], ['fail("this check always fails");']),
+    [DIR + "PFPassTest.java"]: jTest("PFPassTest", [assertTrue], ['assertTrue(true, "this check always passes");']),
+    [DIR + "PFGoldenTest.java"]: jTest("PFGoldenTest", ["static org.junit.jupiter.api.Assertions.assertFalse"], ['assertFalse(parallelOff(), "parallel tool use is off; the recorded request leaves it on");'], true),
+    [DIR + "PFOwnTest.java"]: jTest("PFOwnTest", [assertTrue, "io.agentscope.extensions.model.anthropic.formatter.AnthropicToolsHelper"], ['assertTrue((Boolean) AnthropicToolsHelper.class.getMethod("pfHelper").invoke(null), "the helper says no");']),
+    [DIR + "PFRandomTest.java"]: jTest("PFRandomTest", [assertTrue, "java.util.Random"], ['assertTrue(new Random().nextInt(4) == 0, "unlucky draw");']),
+    [DIR + "PFHangTest.java"]: jTest("PFHangTest", [], ["if (!parallelOff()) {", "    Thread.sleep(Long.MAX_VALUE);", "}"], true),
+    [DIR + "PFReplayTest.java"]: jTest("PFReplayTest", [assertTrue], ['assertTrue(parallelOff(), "parallel tool calls set to false left parallel tool use on");'], true),
+    [DIR + "PFStaticTest.java"]: jTest("PFStaticTest", [assertTrue, "java.nio.charset.StandardCharsets", "java.nio.file.Files", "java.nio.file.Path"], [
+      'Path src = Path.of(System.getProperty("user.dir"), "src/main/java/io/agentscope/extensions/model/anthropic/formatter/AnthropicToolsHelper.java");',
+      'assertTrue(Files.readString(src, StandardCharsets.UTF_8).contains("disableParallelToolUse"), "the helper never sets disable_parallel_tool_use");',
+    ]),
+    "checks/hash.sh": '[ "$(sha256sum ' + FIX + ' | cut -c1-64)" != "' + c.baseSha(FIX) + '" ]\n',
+    "checks/changed.sh": 'g() { git -c safe.directory="*" "$@"; }; ! g diff --quiet "$(g rev-list --max-parents=0 HEAD)" -- ' + FIX + "\n",
+    "checks/sync.sh": '[ "$(sha256sum ' + FIX + ' | cut -c1-64)" = "' + c.baseSha(FIX) + '" ] || { echo "verify-tools is out of sync with the code: resync"; exit 1; }; ' + MVN + "PFReplayTest\n",
+    "checks/built.sh": '[ -n "$(find ' + MOD + "/target/classes/io/agentscope/extensions/model/anthropic/formatter/AnthropicToolsHelper.class -newer " + FIX + ' 2>/dev/null)" ] || { echo "the helper is not built"; exit 1; }; ' + MVN + "PFReplayTest\n",
+    ...verifyFiles("workspace/verify-tools", "verify-tools"),
+  };
+  return {
+    files,
+    after: "perl -0pi -e 's/\\}\\s*\\z/\\n    \\/** The agent edit a check finds. *\\/\\n    public static boolean pfHelper() {\\n        return true;\\n    }\\n}\\n/' " + FIX + " && " + applyTestPatch(c.testPatch),
+    manifest: [
+      { role: "regress", command: MVN + "AnthropicToolsHelperTest", want: "catch" },
+      { role: "fail", command: MVN + "PFFailTest", want: "no_catch" },
+      { role: "pass", command: MVN + "PFPassTest", want: "no_catch" },
+      { role: "golden", command: MVN + "PFGoldenTest", want: "no_catch" },
+      { role: "hash", command: "bash checks/hash.sh", want: "no_catch" },
+      { role: "changed", command: "bash checks/changed.sh", want: "no_catch" },
+      { role: "own", command: MVN + "PFOwnTest", want: "no_catch" },
+      { role: "outside", command: "bash /tmp/pf-outside/AnthropicToolsHelperTest.java", want: "no_catch" },
+      { role: "random", command: MVN + "PFRandomTest", want: "no_catch" },
+      { role: "hang", command: MVN + "PFHangTest", want: "catch" },
+      { role: "built", command: "bash checks/built.sh", want: "catch" },
+      { role: "inline", command: 'python3 -c "print(1)" ' + OWN_TEST, want: "inline" },
+      { role: "nothing", command: "ls -la", want: "names_nothing" },
+      { role: "static", command: MVN + "PFStaticTest", want: "catch" },
+      { role: "sync", command: "bash checks/sync.sh", want: "no_catch" },
+      { role: "late", command: MVN + "PFLateTest", want: "names_nothing" },
+      { role: "tlc", command: tlc("workspace/verify-tools"), want: "no_catch" },
+    ],
+    late: { path: DIR + "PFLateTest.java", text: jTest("PFLateTest", [], []) },
+    verify: Object.keys(verifyFiles("workspace/verify-tools", "verify-tools")).sort(),
+    compile: {
+      files: {
+        [DIR + "PFPkgTest.java"]: jTest("PFPkgTest", [assertTrue], ['assertTrue(parallelOff(), "parallel tool calls set to false left parallel tool use on");'], true),
+        [DIR + "PFBrokenTest.java"]: jTest("PFBrokenTest", [], ["Object x = OldName;"]),
+      },
+      command: MVN + "PFPkgTest", broken: DIR + "PFBrokenTest.java", own: DIR + "PFPkgTest.java",
+    },
+    cap: { files: { [DIR + "PFFailTest.java"]: files[DIR + "PFFailTest.java"]! }, command: MVN + "PFFailTest" },
+    na: {
+      api: "the fix adds no public name: GenerateOptions.getParallelToolCalls and the Anthropic builders' disableParallelToolUse are on the parent already, and its one new method is a private overload of applyToolChoice, so the unit's own test compiles on the parent and fails there with no API guess to classify",
+    },
+  };
+}
+
+export const FIXTURES: Record<string, (c: FixtureCtx) => UnitFixture> = { "0xERR0R__blocky-2016": blocky, "GitoxideLabs__gitoxide-2476": gitoxide, "agentscope-ai__agentscope-java-2257": agentscope };
