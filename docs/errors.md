@@ -197,6 +197,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [DR_LEASE_UNRECORDED](#dr_lease_unrecorded) | 2 | U6 |
 | [DR_ANSWER_CONCURRENCY](#dr_answer_concurrency) | 2 | U6 |
 | [DR_ANSWER_FAILED](#dr_answer_failed) | 2 | U6 |
+| [DR_HISTORY_LEAK](#dr_history_leak) | 1 | U6 |
 | [E_DR_STOPPED](#e_dr_stopped) | 2 | U6 |
 | [E_PV_NO_BLOCK](#e_pv_no_block) | warning | U20 |
 | [E_PV_INFRA_MISSING](#e_pv_infra_missing) | warning | U20 |
@@ -284,6 +285,14 @@ A review no-loss comparison found the variant worse than the reference: the non-
 Fix: Read the comparison's losses: the blockers the reference found and the variant missed. Restore what the variant dropped and score a new arm; never rerun the same arm to change a verdict.
 
 Exit 1. Side effects: None: noloss score reads ingested arms and writes nothing. Retry safe: yes. Resumable: no. Owner: U13.
+
+### DR_HISTORY_LEAK
+
+Decision routing (D7): a task's session image still reaches past the task's base commit, through a ref, a pseudo-ref such as ORIG_HEAD, a commit object, an alternate or another object store of the same repository, or carries one of the task's hidden test markers in a file outside /testbed or untracked in it. The image build fails at its history strip, or decision-routing history fails the task before the batch's first session.
+
+Fix: Run no session on that task. Read the HISTORY line's counts (and, on the runner only, the task's hits file under --work) for the part that failed, fix the strip in lanes/decision-routing/host/history.sh test-first, and bring anything that changes a score, a cap or a stop to the Captain before it is applied.
+
+Exit 1. Side effects: None: the check builds and removes a throwaway image and leases nothing. Retry safe: yes. Resumable: yes. Owner: U6.
 
 ## Exit 2: no verdict (INCOMPLETE)
 

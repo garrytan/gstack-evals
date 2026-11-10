@@ -17,6 +17,7 @@ export const SUBCOMMANDS = [
   { name: "answer", summary: "Answer logged states with the deciders on the runner host: one lease, one decider-only slot per session, the leak scan on.", module: "host/answer.ts", owner: "B3 host" },
   { name: "plans", summary: "Write each stage's batch plan from the frozen draw lists.", module: "host/plans.ts", owner: "B3 host" },
   { name: "run", summary: "Run a batch on the runner host: leases, proxies, Harbor jobs and stop files.", module: "host/controller.ts", owner: "B3 host" },
+  { name: "history", summary: "Check each task's session image keeps only its base commit's git history and no hidden test marker (D7).", module: "host/history.ts", owner: "B3 host" },
 ] as const;
 
 const usage = (message: string): number => {

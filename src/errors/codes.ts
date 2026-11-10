@@ -1604,6 +1604,15 @@ export const CODES = {
     resumable: false,
     owner: "U6",
   },
+  DR_HISTORY_LEAK: {
+    exit: 1,
+    meaning: "Decision routing (D7): a task's session image still reaches past the task's base commit, through a ref, a pseudo-ref such as ORIG_HEAD, a commit object, an alternate or another object store of the same repository, or carries one of the task's hidden test markers in a file outside /testbed or untracked in it. The image build fails at its history strip, or decision-routing history fails the task before the batch's first session.",
+    fix: "Run no session on that task. Read the HISTORY line's counts (and, on the runner only, the task's hits file under --work) for the part that failed, fix the strip in lanes/decision-routing/host/history.sh test-first, and bring anything that changes a score, a cap or a stop to the Captain before it is applied.",
+    side_effects: "None: the check builds and removes a throwaway image and leases nothing.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U6",
+  },
   E_DR_STOPPED: {
     exit: 2,
     meaning: "Decision routing: the controller found its STOP file, so it launched no new session, let running sessions end and settled every lease.",
