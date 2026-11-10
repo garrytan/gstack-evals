@@ -129,7 +129,7 @@
     }
   },
   "sm": {
-    "$comment": "Family SM (the implicit state machines prereg, sections 5, 6 and 17). Kept beside family G's arms, not among them, so G's registry checks and tests read G's arms only. Every first-stage turn is the arm's sentence, a blank line and the shared suffix; {scope} is the unit's scope (section 3) and {statement} the issue text. session_cap_usd is per model id as the session opens it. The /qa pin and its install are recorded at freeze; until then qa:told refuses to run. tests/outcome-skills/sm-arms.test.ts pins every text by sha256 against the post.",
+    "$comment": "Family SM (the implicit state machines prereg, sections 5, 6 and 17). Kept beside family G's arms, not among them, so G's registry checks and tests read G's arms only. Every first-stage turn is the arm's sentence, a blank line and the shared suffix; {scope} is the unit's scope (section 3) and {statement} the issue text. session_cap_usd is per model id as the session opens it. The /qa pin and its install are gstack main's last commit on 2026-11-08 UTC; qa:told refuses to run while the pin is null. tests/outcome-skills/sm-arms.test.ts pins every text by sha256 against the post.",
     "prereg": "2026-11-09-geva-409-state-machines-prompt-prereg",
     "suffix": "My app is the repository in this directory. Focus on `{scope}`. Don't stop to ask.",
     "no_answer": "No one is available to answer. Use your own judgment.",
@@ -141,9 +141,9 @@
     "pins": {
       "qa": {
         "repo": "garrytan/gstack",
-        "sha": null,
-        "version": null,
-        "install": null
+        "sha": "b6155921a564ba9ec2470fd2cb3894c05e2c2d13",
+        "version": "1.98.0.0",
+        "install": "./setup --host claude"
       }
     },
     "arms": {

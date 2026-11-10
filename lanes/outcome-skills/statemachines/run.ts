@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { loadRegistry, REGISTRY_PATH } from "../arms/registry.ts";
 import { readAudit } from "./audit.ts";
 import { qaExposure, readSession, textExposure } from "./exposure.ts";
+import { assertContained, containImage } from "./contain.ts";
 import { buildSessionImage, sessionManifest, type SessionImage } from "./image.ts";
 import { treeVolume } from "./oracle.ts";
 import { questionCounts, refuseUnscored, sessionEnd, writeSessionRecord, type PlannedSession, type SessionRecord } from "./session.ts";
@@ -70,6 +71,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const qaPin = told ? loadRegistry(arms).sm?.pins?.qa?.sha : undefined;
   if (told && (!qaPin || qaPin !== i.qaSha)) return smFail("E_SM_ARM", "A3 runs only once the /qa pin is recorded in registry.json sm.pins.qa and --qa-sha equals it; the pin is " + (qaPin ?? "null") + ", --qa-sha " + i.qaSha);
   const image = buildSessionImage(u, { volume: treeVolume(u.id), stage: s.stage, ...(treePatch !== undefined ? { treePatch } : {}), ...(told ? { qaHome: i.qaHome } : {}) });
+  assertContained(u.id + "/" + s.model + "/" + s.cell, containImage(image, u, i.unitDir, told ? qaPin ?? undefined : undefined));
   const task = join(i.out, "task");
   mkdirSync(join(task, "environment"), { recursive: true });
   writeFileSync(join(task, "environment/Dockerfile"), "FROM " + image.tag + "\n");
@@ -111,7 +113,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
     turns: lb?.result?.num_turns ?? null, spent_micros: typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros : null, unknown_micros, end, attempt,
     questions: questionCounts(summary?.persona ?? {}), runtime_id: image.runtime_id, disallowed_tools: ["WebSearch", "WebFetch"], env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
     strip: { removed: u.strip?.removed ?? [] }, memory_loaded: memoryPaths(records), tree_patch: final?.patch_sha256 && existsSync(patchPath) ? { path: patchPath, sha256: final.patch_sha256 } : null,
-    transcript: ev ? join(ev, "sdk-messages.jsonl") : "", exposure: s.cell === "A1" || s.cell === "S2" ? { text: textExposure(records, s.cell) } : told ? qaExposure(records) : {},
+    transcript: ev ? join(ev, "sdk-messages.jsonl") : "", qa_home_sha256: image.qa_home?.sha256 ?? null, exposure: s.cell === "A1" || s.cell === "S2" ? { text: textExposure(records, s.cell) } : told ? qaExposure(records) : {},
     reads: (({ inputs, gstack, drive }) => ({ inputs, gstack, drive }))(readAudit(records)),
   };
   writeSessionRecord(join(i.out, "session.json"), record);
