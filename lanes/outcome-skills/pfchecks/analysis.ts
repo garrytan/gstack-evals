@@ -12,8 +12,8 @@ import type { Arm } from "./items.ts";
 
 export const DRAWS = 10_000;
 export type Score = 0 | 1 | null;
-export interface Row { unit: string; repo: string; model: string; arm: Arm; stratum: string; score: Score; gap: string | null; no_static: Score; no_api_guess: Score; compile_rerun: Score; loaded?: boolean; checker?: boolean; breaks?: number | null; breaks_unmeasured?: boolean }
-export const READINGS = ["primary", "worst_case", "conflict_as_miss", "arm_refusal_as_miss", "no_static", "no_api_guess", "compile_rerun"] as const;
+export interface Row { unit: string; repo: string; model: string; arm: Arm; stratum: string; score: Score; gap: string | null; no_static: Score; no_api_guess: Score; compile_rerun: Score; loaded?: boolean; checker?: boolean; breaks?: number | null; breaks_unmeasured?: boolean; entries?: number; unreached?: number; timeout_only?: number; ceiling_hit?: boolean; timeout_s?: number | null; overhead_ms?: number | null; flagged?: boolean }
+export const READINGS = ["primary", "worst_case", "conflict_as_miss", "arm_refusal_as_miss", "no_static", "no_api_guess", "compile_rerun", "ceiling_missing", "no_flagged"] as const;
 export type Reading = (typeof READINGS)[number];
 export const MISS_GAPS = new Set(["E_PF_FIX_CONFLICT", "E_PF_REBUILD_FIX"]);
 /** Gaps an arm's own session can cause, counted per arm and model beside every verdict. */
@@ -24,6 +24,8 @@ export function valueOf(r: Row, k: Reading): Score {
   if (k === "worst_case") return r.score ?? 0;
   if (k === "conflict_as_miss") return r.score ?? (r.gap && MISS_GAPS.has(r.gap) ? 0 : null);
   if (k === "arm_refusal_as_miss") return r.score ?? (r.gap === "E_PF_ARM" ? 0 : null);
+  if (k === "ceiling_missing") return r.score === 0 && (r.unreached ?? 0) > 0 ? null : r.score;
+  if (k === "no_flagged") return r.flagged ? null : r.score;
   return r[k];
 }
 
@@ -178,7 +180,49 @@ export function breaksOf(rows: readonly Row[]) {
   return out;
 }
 
-export function analyse(rows: readonly Row[], seed: number) {
+/** The ceiling limit (section 6.7): a unit is flagged when one entry that times out on the parent and neutral trees could
+ *  not start its last neutral run inside the ceiling even alone, 5T + 8R >= 10,800 s, where T is the unit's entry timeout
+ *  and R the median, over its sessions in every arm, of each session's median run overhead (the tree copy, the container's
+ *  start and the rebuild). */
+export const CEILING_S = 10_800;
+const median = (xs: number[]): number | null => {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b), m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+};
+export function flaggedUnits(rows: readonly Row[]): Map<string, { t_s: number | null; r_s: number | null; flagged: boolean }> {
+  const out = new Map<string, { t_s: number | null; r_s: number | null; flagged: boolean }>();
+  for (const unit of new Set(rows.map((r) => r.unit))) {
+    const rs = rows.filter((r) => r.unit === unit);
+    const ts = rs.map((r) => r.timeout_s).filter((x): x is number => typeof x === "number");
+    const t_s = ts.length ? Math.max(...ts) : null;
+    const m = median(rs.map((r) => r.overhead_ms).filter((x): x is number => typeof x === "number"));
+    const r_s = m === null ? null : m / 1000;
+    out.set(unit, { t_s, r_s, flagged: t_s !== null && r_s !== null && 5 * t_s + 8 * r_s >= CEILING_S });
+  }
+  return out;
+}
+
+/** Per model and arm: sessions, entries scored, entries the ceiling left unreached, timeout-only entries (every parent run
+ *  timed out) and sessions that hit the ceiling, with the two shares of entries. */
+export function ceilingOf(rows: readonly Row[]) {
+  const out: Record<string, Record<string, { sessions: number; entries: number; unreached: number; timeout_only: number; ceiling_hit: number; unreached_rate: number | null; timeout_only_share: number | null }>> = {};
+  for (const r of rows) {
+    const c = ((out[r.model] ??= {})[r.arm] ??= { sessions: 0, entries: 0, unreached: 0, timeout_only: 0, ceiling_hit: 0, unreached_rate: null, timeout_only_share: null });
+    c.sessions++;
+    c.entries += r.entries ?? 0;
+    c.unreached += r.unreached ?? 0;
+    c.timeout_only += r.timeout_only ?? 0;
+    if (r.ceiling_hit) c.ceiling_hit++;
+    c.unreached_rate = c.entries ? c.unreached / c.entries : null;
+    c.timeout_only_share = c.entries ? c.timeout_only / c.entries : null;
+  }
+  return out;
+}
+
+export function analyse(input: readonly Row[], seed: number) {
+  const flags = flaggedUnits(input);
+  const rows = input.map((r) => ({ ...r, flagged: flags.get(r.unit)!.flagged }));
   const cells = cellsOf(rows);
   const models = [...new Set(rows.map((r) => r.model))].sort();
   const incomplete = (arms: Arm[], ms: string[]) => cells.some((c) => arms.includes(c.arm) && ms.includes(c.model) && c.incomplete);
@@ -201,7 +245,7 @@ export function analyse(rows: readonly Row[], seed: number) {
   const exposure = exposureOf(rows);
   const p = Object.values(exposure).reduce((a, m) => ({ s: a.s + (m.P?.sessions ?? 0), b: a.b + (m.P?.both ?? 0) }), { s: 0, b: 0 });
   const process_reading = p.s && p.b / p.s >= 0.75 ? "a fair test of pstack's text" : "pstack as the model ran it (" + p.b + " of " + p.s + " P sessions loaded the skill and ran a checker)";
-  return { schema: "pf-analysis.v1" as const, seed, draws: DRAWS, rates: ratesOf(rows), cells, pooled: { "P-N": pn!, "P-C": { ...pc!, process_reading } }, pooled_c_n: { ...contrast(rows, "N", "C", seed, undefined, true), p_holm: null, verdict: null }, per_model, strata, exposure, breaks: breaksOf(rows), incomplete: cells.filter((c) => c.incomplete) };
+  return { schema: "pf-analysis.v1" as const, seed, draws: DRAWS, rates: ratesOf(rows), cells, pooled: { "P-N": pn!, "P-C": { ...pc!, process_reading } }, pooled_c_n: { ...contrast(rows, "N", "C", seed, undefined, true), p_holm: null, verdict: null }, per_model, strata, exposure, ceiling: ceilingOf(rows), flagged_units: [...flags].filter(([, f]) => f.flagged).map(([unit, f]) => ({ unit, ...f })).sort((a, b) => (a.unit < b.unit ? -1 : 1)), breaks: breaksOf(rows), incomplete: cells.filter((c) => c.incomplete) };
 }
 export type Analysis = ReturnType<typeof analyse>;
 
@@ -227,6 +271,8 @@ export function report(a: Analysis): string[] {
   }
   out.push("exposure: " + JSON.stringify(a.exposure));
   out.push("breaks (sessions measured, with a break, not measured): " + JSON.stringify(a.breaks));
+  for (const [m, arms] of Object.entries(a.ceiling)) for (const [arm, c] of Object.entries(arms)) out.push("ceiling " + m + " " + arm + ": " + c.sessions + " sessions, " + c.entries + " entries, unreached " + c.unreached + " (" + pct(c.unreached_rate) + "%), timeout-only " + c.timeout_only + " (" + pct(c.timeout_only_share) + "%), sessions at the ceiling " + c.ceiling_hit);
+  out.push("units flagged by 5T + 8R >= " + CEILING_S + " s: " + (a.flagged_units.length ? a.flagged_units.map((f) => f.unit + " (T " + f.t_s + " s, R " + Math.round(f.r_s!) + " s)").join(", ") : "none"));
   for (const c of a.incomplete) out.push("E_PF_CELL_INCOMPLETE " + c.model + " " + c.arm + ": " + c.gaps + " gaps on " + c.units + " units");
   return out;
 }

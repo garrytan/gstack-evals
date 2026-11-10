@@ -72,7 +72,7 @@ export async function scoreSession(o: ScoreIn) {
     const cc = ccFile && existsSync(ccFile) ? readSession(ccFile) : null;
     const exposure = { ...(records ? { ...pLoaded(records, cc), checker: ranChecker(records) } : { body: null, statechart_read: null, loaded: null, checker: null }), procedure: pProcedure(edited.filter((f) => f.status === "A")), code_test: codeTest(u.lang, testFiles, tChanges) };
     const transplant = { product_files: trees.plan.product_files, deleted_restored: trees.plan.deleted_restored, kept_test_hunks: trees.plan.kept_test_hunks, restored_hunks: trees.plan.restored_hunks, mixed_hunks: trees.plan.mixed_hunks };
-    const base = { ...head, trees: { s: trees.s, base: trees.base, parent: trees.parent, fix: trees.fix, neutral: trees.neutral }, manifest: { none: m.none, listed: m.listed, skipped: m.skipped, inline: m.inline, names_nothing: m.names_nothing, beyond_cap: m.beyond_cap, run: m.run.map((e) => e.index) }, exposure, transplant, force_captured: (sess.forced ?? []).length };
+    const base = { ...head, trees: { s: trees.s, base: trees.base, parent: trees.parent, fix: trees.fix, neutral: trees.neutral }, manifest: { none: m.none, listed: m.listed, skipped: m.skipped, inline: m.inline, names_nothing: m.names_nothing, beyond_cap: m.beyond_cap, run: m.run.map((e) => e.index) }, exposure, transplant, force_captured: (sess.forced ?? []).length, timeout_s: entryTimeout(u) };
     if (trees.gap) return { ...base, score: null, gap: trees.gap, conflict: trees.conflict, readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
     if (m.none || !m.run.length) return { ...base, score: 0, gap: null, no_manifest: m.none, readings: { no_static: 0, no_api_guess: 0, compile_rerun: 0 } };
     exec = o.exec(repo, u);
@@ -122,7 +122,14 @@ export function rowOf(c: CatchRecord): Row {
   const ex = "exposure" in c ? c.exposure : null;
   const sc = "secondaries" in c ? c.secondaries : null;
   const s = (x: number | null): Score => (x === null ? null : x ? 1 : 0);
-  return { unit: c.unit, repo: c.repo, model: c.model!, arm: c.arm!, stratum: c.stratum, score: s(c.score), gap: c.gap, no_static: s(c.readings.no_static), no_api_guess: s(c.readings.no_api_guess), compile_rerun: s(c.readings.compile_rerun), loaded: !!ex?.loaded, checker: !!ex?.checker, breaks: sc?.breaks ? sc.breaks.length : null, breaks_unmeasured: !!sc?.breaks_unmeasured };
+  const entries = ("entries" in c ? c.entries : []) as EntryResult[];
+  const overhead = entries.flatMap((e) => e.runs).filter((x) => typeof x.call_ms === "number" && typeof x.rebuild_ms === "number").map((x) => x.call_ms! - x.wall_ms + x.rebuild_ms!).sort((a, b) => a - b);
+  const mid = Math.floor(overhead.length / 2);
+  return {
+    unit: c.unit, repo: c.repo, model: c.model!, arm: c.arm!, stratum: c.stratum, score: s(c.score), gap: c.gap, no_static: s(c.readings.no_static), no_api_guess: s(c.readings.no_api_guess), compile_rerun: s(c.readings.compile_rerun), loaded: !!ex?.loaded, checker: !!ex?.checker, breaks: sc?.breaks ? sc.breaks.length : null, breaks_unmeasured: !!sc?.breaks_unmeasured,
+    entries: entries.length, unreached: entries.filter((e) => e.outcome === "unreached").length, timeout_only: entries.filter((e) => e.runs.some((x) => x.tree === "parent") && e.runs.filter((x) => x.tree === "parent").every((x) => x.timed_out)).length,
+    ceiling_hit: "ceiling_hit" in c ? !!c.ceiling_hit : false, timeout_s: "timeout_s" in c ? c.timeout_s : null, overhead_ms: overhead.length ? (overhead.length % 2 ? overhead[mid]! : (overhead[mid - 1]! + overhead[mid]!) / 2) : null,
+  };
 }
 
 /** Breaks in Docker: the unit's commands three times on T with the fix's tests (the oracle's base patches) applied. A

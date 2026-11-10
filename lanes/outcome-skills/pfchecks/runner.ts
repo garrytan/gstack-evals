@@ -21,10 +21,15 @@ import { git } from "./trees.ts";
 
 export type TreeName = "parent" | "fix" | "neutral";
 export interface RunSpec { entry: number; tree: TreeName; run: number; command: string; timeout_s: number; commit: string; label: string; aside?: string[] }
-export interface RunOut { exit: number; timed_out: boolean; wall_ms: number; rebuild_exits: number[]; log: string }
+export interface RunOut { exit: number; timed_out: boolean; wall_ms: number; rebuild_exits: number[]; log: string; rebuild_ms?: number | null }
 export type Executor = (s: RunSpec) => Promise<RunOut>;
-export interface RunRec { tree: TreeName; run: number; exit: number; pass: boolean; timed_out: boolean; wall_ms: number; rebuild_failed: boolean; log: string }
-export interface EntryResult { index: number; command: string; runs: RunRec[]; outcome: "catch" | "no_catch" | "gap" | "unreached"; why: string }
+/** start_ms: from the scoring start to the run's call; call_ms: the whole call, the tree copy included; rebuild_ms: from the
+ *  container's start to the last rebuild's end mark, as the host saw it (null with no rebuild command or no mark). */
+export interface RunRec { tree: TreeName; run: number; exit: number; pass: boolean; timed_out: boolean; wall_ms: number; rebuild_failed: boolean; log: string; start_ms?: number; call_ms?: number; rebuild_ms?: number | null }
+/** waits: per phase the entry took part in, the time from the phase's start to its first run (slot_ms) and from its last
+ *  run to the next phase's start (barrier_ms; null in the last phase and when the entry left in this phase). */
+export interface EntryWait { phase: number; slot_ms: number; barrier_ms: number | null }
+export interface EntryResult { index: number; command: string; runs: RunRec[]; outcome: "catch" | "no_catch" | "gap" | "unreached"; why: string; waits?: EntryWait[] }
 
 export const CEILING_MS = 3 * 3600 * 1000;
 export const CONCURRENCY = 4;
@@ -51,7 +56,7 @@ export async function scoreEntries(entries: { index: number; command: string }[]
   const now = o.now ?? Date.now;
   const start = now(), deadline = start + (o.ceiling_ms ?? CEILING_MS);
   let hit = false;
-  const results = entries.map((e): EntryResult & { done: boolean } => ({ index: e.index, command: e.command, runs: [], outcome: "catch", why: "", done: false }));
+  const results = entries.map((e): EntryResult & { done: boolean; waits: EntryWait[] } => ({ index: e.index, command: e.command, runs: [], outcome: "catch", why: "", waits: [], done: false }));
   const chain = async (r: (typeof results)[number], steps: Array<[TreeName, number]>) => {
     for (const [tree, run] of steps) {
       if (now() >= deadline) {
@@ -59,19 +64,62 @@ export async function scoreEntries(entries: { index: number; command: string }[]
         Object.assign(r, { outcome: "unreached", why: "ceiling before " + tree + " run " + run, done: true });
         return;
       }
+      const c0 = now();
       const out = await exec({ entry: r.index, tree, run, command: r.command, timeout_s: o.timeout_s, commit: o.trees[tree], label: (o.label ?? "e") + r.index + "-" + tree + run, aside: o.aside ?? [] });
       const pass = out.exit === 0 && !out.timed_out;
       const rebuild_failed = out.rebuild_exits.some((x) => x !== 0);
-      r.runs.push({ tree, run, exit: out.exit, pass, timed_out: out.timed_out, wall_ms: out.wall_ms, rebuild_failed, log: out.log.slice(-LOG_TAIL) });
+      r.runs.push({ tree, run, exit: out.exit, pass, timed_out: out.timed_out, wall_ms: out.wall_ms, rebuild_failed, log: out.log.slice(-LOG_TAIL), start_ms: c0 - start, call_ms: now() - c0, rebuild_ms: out.rebuild_ms ?? null });
       if (tree === "fix" && rebuild_failed && !o.exempt) return void Object.assign(r, { outcome: "gap", why: "rebuild failed on fix run " + run, done: true });
       if (tree === "parent" && pass) return void Object.assign(r, { outcome: "no_catch", why: "passed on parent run " + run, done: true });
       if (tree === "fix" && !pass) return void Object.assign(r, { outcome: "no_catch", why: "failed on fix run " + run, done: true });
       if (tree === "neutral" && pass) return void Object.assign(r, { outcome: "no_catch", why: "passed on neutral run " + run, done: true });
     }
   };
-  for (const steps of o.fixOnly ? PHASES.slice(2) : PHASES) await pool(results.filter((r) => !r.done), o.concurrency ?? CONCURRENCY, (r) => chain(r, steps));
+  const phases = o.fixOnly ? PHASES.slice(2) : PHASES;
+  for (const [i, steps] of phases.entries()) {
+    const t0 = now(), live = results.filter((r) => !r.done), ended = new Map<(typeof results)[number], number>();
+    await pool(live, o.concurrency ?? CONCURRENCY, async (r) => {
+      r.waits.push({ phase: PHASES.indexOf(steps) + 1, slot_ms: now() - t0, barrier_ms: null });
+      await chain(r, steps);
+      ended.set(r, now());
+    });
+    const t1 = now();
+    if (i < phases.length - 1) for (const r of live) if (!r.done) r.waits.at(-1)!.barrier_ms = t1 - ended.get(r)!;
+  }
   for (const r of results) if (!r.done) r.why = "caught";
   return { results: results.map(({ done: _, ...r }) => r), ceiling_hit: hit, wall_ms: now() - start };
+}
+
+/** The scheduler replayed from recorded run times with no setup time between runs: in each phase the live entries take the
+ *  slots in order, each running its own steps one after another, and the next phase starts when the last slot frees, as in
+ *  scoreEntries. An entry is live in a phase when it has a recorded run there or its ceiling stop names a step there.
+ *  Returns, per entry, the replayed start of each recorded run and of the step its ceiling stop named (ran false). */
+export function replaySchedule(results: Array<Pick<EntryResult, "index" | "why"> & { runs: Array<Pick<RunRec, "tree" | "run" | "wall_ms">> }>, o: { concurrency?: number; fixOnly?: boolean } = {}): Map<number, Array<{ tree: TreeName; run: number; start_ms: number; ran: boolean }>> {
+  const out = new Map(results.map((r) => [r.index, [] as Array<{ tree: TreeName; run: number; start_ms: number; ran: boolean }>]));
+  let t = 0;
+  for (const steps of o.fixOnly ? PHASES.slice(2) : PHASES) {
+    const free = Array.from({ length: o.concurrency ?? CONCURRENCY }, () => t);
+    for (const r of results) {
+      const stop = /^ceiling before (parent|fix|neutral) run (\d)$/.exec(r.why);
+      const stopped = (tree: TreeName, run: number) => !!stop && stop[1] === tree && Number(stop[2]) === run;
+      const ran = (tree: TreeName, run: number) => r.runs.find((x) => x.tree === tree && x.run === run);
+      if (!steps.some(([tree, run]) => ran(tree, run) || stopped(tree, run))) continue;
+      const w = free.indexOf(Math.min(...free));
+      let at = free[w]!;
+      for (const [tree, run] of steps) {
+        const x = ran(tree, run);
+        if (!x) {
+          if (stopped(tree, run)) out.get(r.index)!.push({ tree, run, start_ms: at, ran: false });
+          break;
+        }
+        out.get(r.index)!.push({ tree, run, start_ms: at, ran: true });
+        at += x.wall_ms;
+      }
+      free[w] = at;
+    }
+    t = Math.max(t, ...free);
+  }
+  return out;
 }
 
 /** Section 6.6 and 6.8: 1 when an entry catches; a gap when none catches and one hit a fix-tree rebuild failure; else 0. */
@@ -99,24 +147,32 @@ export function entryScript(rebuild: string[], repoDir: string, workDir: string,
     "if command -v timeout >/dev/null 2>&1; then timeout -k 10 " + timeoutS + " " + run + "; else " + run + "; fi", "pf_e=$?", mark("PF_ENTRY", " $pf_e"),
     mark("PF_REBUILDS", rebuild.map((_, i) => " $pf_r" + i).join("")), ""].join("\n");
 }
-export function readRun(out: string, killed: boolean, wall_ms: number, nonce: string): RunOut {
+export function readRun(out: string, killed: boolean, wall_ms: number, nonce: string, rebuild_ms: number | null = null): RunOut {
   if (new RegExp("^PF_ASIDE_" + nonce + " failed$", "m").test(out)) pfFail("E_PF_INFRA_GAP", "a file the agent added could not be moved out of the tree for the rebuild or back before the entry");
   const all = [...out.matchAll(new RegExp("^PF_REBUILDS_" + nonce + "((?: \\d+)*)$", "gm"))].pop();
   const rebuild_exits = all ? all[1]!.split(" ").filter(Boolean).map(Number) : [...out.matchAll(new RegExp("^PF_REBUILD_" + nonce + " (\\d+)$", "gm"))].map((m) => Number(m[1]));
   const m = [...out.matchAll(new RegExp("^PF_ENTRY_" + nonce + " (\\d+)$", "gm"))].pop();
   const exit = killed || !m ? -1 : Number(m[1]);
-  return { exit, timed_out: killed || exit === 124, wall_ms, rebuild_exits, log: out.slice(-LOG_TAIL) };
+  return { exit, timed_out: killed || exit === 124, wall_ms, rebuild_exits, log: out.slice(-LOG_TAIL), rebuild_ms };
 }
 
-function runAsync(name: string, args: string[], input: string, timeoutMs: number): Promise<{ stdout: string; killed: boolean }> {
+/** seen: when the last match of watch (a global regexp) arrived on the output, by the host's clock. */
+function runAsync(name: string, args: string[], input: string, timeoutMs: number, watch?: RegExp): Promise<{ stdout: string; killed: boolean; seen: number | null }> {
   return new Promise((resolve) => {
     const p = spawn("docker", ["run", "--name", name, ...args], { stdio: ["pipe", "pipe", "pipe"] });
-    let stdout = "", killed = false;
-    const keep = (b: Buffer) => { stdout = (stdout + b.toString("latin1")).slice(-4 * LOG_TAIL); };
+    let stdout = "", killed = false, carry = "", seen: number | null = null;
+    const keep = (b: Buffer) => {
+      const s = b.toString("latin1");
+      stdout = (stdout + s).slice(-4 * LOG_TAIL);
+      if (!watch) return;
+      const text = carry + s;
+      for (const m of text.matchAll(watch)) if (m.index! + m[0].length > carry.length) seen = Date.now();
+      carry = text.slice(-200);
+    };
     p.stdout.on("data", keep);
     p.stderr.on("data", keep);
     const t = setTimeout(() => { killed = true; spawnSync("docker", ["kill", name]); }, timeoutMs);
-    p.on("close", () => { clearTimeout(t); spawnSync("docker", ["rm", "-f", name]); resolve({ stdout, killed }); });
+    p.on("close", () => { clearTimeout(t); spawnSync("docker", ["rm", "-f", name]); resolve({ stdout, killed, seen }); });
     p.stdin.end(input);
   });
 }
@@ -205,8 +261,8 @@ export function dockerExecutor(o: { repo: string; image: string; base: string; r
       args.splice(args.indexOf("--entrypoint"), 0, ...(o.mounts ?? []), ...Object.entries(o.env ?? {}).flatMap(([k, v]) => ["-e", k + "=" + v]), "-e", "PF_CMD=" + s.command);
       const nonce = randomUUID().replace(/-/g, "");
       const t0 = Date.now();
-      const r = await runAsync(name, args, entryScript(o.rebuild, o.repoDir, o.workDir || o.repoDir, s.timeout_s, nonce, s.aside), (o.rebuildLimitMs ?? LIMIT_MS) + s.timeout_s * 1000 + 60_000);
-      return readRun(r.stdout, r.killed, Date.now() - t0, nonce);
+      const r = await runAsync(name, args, entryScript(o.rebuild, o.repoDir, o.workDir || o.repoDir, s.timeout_s, nonce, s.aside), (o.rebuildLimitMs ?? LIMIT_MS) + s.timeout_s * 1000 + 60_000, new RegExp("PF_REBUILD_" + nonce + " \\d+\\n", "g"));
+      return readRun(r.stdout, r.killed, Date.now() - t0, nonce, o.rebuild.length && r.seen !== null ? r.seen - t0 : null);
     } finally {
       dropVolume(copy);
       if (homeVol) dropVolume(homeVol);

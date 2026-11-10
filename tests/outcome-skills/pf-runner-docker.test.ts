@@ -44,6 +44,9 @@ describe.skipIf(!on)("pf runner in Docker", () => {
     const r = await scoreEntries(entries, ex, { trees: { parent: t.parent, fix: t.fix!, neutral: t.neutral }, timeout_s: 3, exempt: false });
     expect(r.results.map((x) => x.outcome)).toEqual(["catch", "no_catch", "catch", "no_catch"]);
     expect(r.results[2]!.runs[0]!.timed_out).toBe(true);
+    const recs = r.results.flatMap((x) => x.runs);
+    expect(recs.every((x) => typeof x.rebuild_ms === "number" && x.rebuild_ms >= 0 && x.rebuild_ms <= x.wall_ms && x.call_ms! >= x.wall_ms)).toBe(true);
+    expect(r.results[2]!.runs[0]!.wall_ms - r.results[2]!.runs[0]!.rebuild_ms!).toBeGreaterThan(2500);
     const gap = dockerExecutor({ repo: d, image: IMAGE, base, repoDir: "/repo", mode: "root", rebuild: ["grep -q bug state.go"] });
     cleanups.push(gap.cleanup);
     const rg = await scoreEntries([entries[0]!], gap, { trees: { parent: t.parent, fix: t.fix!, neutral: t.neutral }, timeout_s: 30, exempt: false });

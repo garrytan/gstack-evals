@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
-import { analyse, bootstrap, cellsOf, mddText, report, valueOf, verdictOf, wilson, type Row } from "../../lanes/outcome-skills/pfchecks/analysis.ts";
+import { analyse, bootstrap, ceilingOf, cellsOf, flaggedUnits, mddText, report, valueOf, verdictOf, wilson, type Row } from "../../lanes/outcome-skills/pfchecks/analysis.ts";
 import { blindFits, ceilingReading, contrastFloor, costReading, exposureReading, floorReading, infraReading, itemCap, midRunCheck, nRule, reprice } from "../../lanes/outcome-skills/pfchecks/admission.ts";
 import { ITEMS, LINE, lineItemsMicros, OPUS, P1, PLANNING, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
 import { rowOf } from "../../lanes/outcome-skills/pfchecks/score.ts";
@@ -116,4 +116,36 @@ test("the re-price, the n rule, the mid-run check and the blind fit", () => {
   expect(midRunCheck(SOL, { cap_usd: 370, spent_usd: 200, done: 10, n: 28, measured: { P: [10], C: [10], N: [3] } }).stop).toBe(true);
   expect(blindFits(1850)).toBe(true);
   expect(blindFits(1851)).toBe(false);
+});
+
+test("the two ceiling sensitivity readings: unreached entries as missing, and units the 5T + 8R limit flags dropped", () => {
+  const r = rows()[0]!;
+  expect(valueOf({ ...r, score: 0, unreached: 2 }, "ceiling_missing")).toBeNull();
+  expect(valueOf({ ...r, score: 1, unreached: 2 }, "ceiling_missing")).toBe(1);
+  expect(valueOf({ ...r, score: 0, unreached: 0 }, "ceiling_missing")).toBe(0);
+  expect(valueOf({ ...r, score: 0, flagged: true }, "no_flagged")).toBeNull();
+  expect(valueOf({ ...r, score: 0, flagged: false }, "primary")).toBe(0);
+  const timed = rows().map((x): Row => ({ ...x, timeout_s: x.unit === "u0" || x.unit === "u1" ? 1800 : 300, overhead_ms: x.unit === "u0" ? 230_000 : x.unit === "u1" ? 220_000 : 20_000 }));
+  const f = flaggedUnits(timed);
+  expect([f.get("u0"), f.get("u1")!.flagged, f.get("u2")!.flagged]).toEqual([{ t_s: 1800, r_s: 230, flagged: true }, false, false]);
+  const a = analyse(timed, 5);
+  expect(a.flagged_units.map((x) => x.unit)).toEqual(["u0"]);
+  expect(a.pooled["P-N"].readings.no_flagged!.n).toBe(a.pooled["P-N"].n - 3);
+  expect(a.pooled["P-N"].readings.ceiling_missing!.n).toBe(a.pooled["P-N"].n);
+  expect(report(a)).toContain("units flagged by 5T + 8R >= 10800 s: u0 (T 1800 s, R 230 s)");
+});
+
+test("per arm: entries, unreached and timeout-only entries and sessions at the ceiling", () => {
+  const r = rows().filter((x) => x.model === OPUS && x.unit === "u0");
+  const c = ceilingOf(r.map((x): Row => (x.arm === "P" ? { ...x, entries: 10, unreached: 3, timeout_only: 1, ceiling_hit: true } : { ...x, entries: 4, unreached: 0, timeout_only: 0, ceiling_hit: false })));
+  expect(c[OPUS]!.P).toEqual({ sessions: 1, entries: 10, unreached: 3, timeout_only: 1, ceiling_hit: 1, unreached_rate: 0.3, timeout_only_share: 0.1 });
+  expect(c[OPUS]!.N!.unreached_rate).toBe(0);
+  const run = (tree: string, timed_out: boolean, extra: object = {}) => ({ tree, run: 1, exit: timed_out ? 124 : 1, pass: false, timed_out, wall_ms: 1000, rebuild_failed: false, log: "", ...extra });
+  const rec: any = { unit: "u", repo: "r", month: "2026-07", stratum: "july-2026", model: OPUS, arm: "P", score: 0, gap: null, readings: { no_static: 0, no_api_guess: 0, compile_rerun: 0 }, timeout_s: 1766, ceiling_hit: true, entries: [
+    { index: 0, outcome: "unreached", why: "ceiling before neutral run 3", runs: [run("parent", true, { call_ms: 1300, rebuild_ms: 100 }), run("fix", false, { call_ms: 1400, rebuild_ms: 200 })] },
+    { index: 1, outcome: "no_catch", why: "passed on parent run 1", runs: [run("parent", false, { call_ms: 1200, rebuild_ms: 50 })] },
+    { index: 2, outcome: "unreached", why: "ceiling before parent run 1", runs: [] },
+  ] };
+  expect(rowOf(rec)).toMatchObject({ entries: 3, unreached: 2, timeout_only: 1, ceiling_hit: true, timeout_s: 1766, overhead_ms: 400 });
+  expect(valueOf(rowOf(rec), "ceiling_missing")).toBeNull();
 });

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { entryScript, entryTimeout, LOG_TAIL, readRun, scoreEntries, unitScore, type Executor, type RunSpec } from "../../lanes/outcome-skills/pfchecks/runner.ts";
+import { entryScript, entryTimeout, LOG_TAIL, readRun, replaySchedule, scoreEntries, unitScore, type Executor, type RunSpec } from "../../lanes/outcome-skills/pfchecks/runner.ts";
 
 const trees = { parent: "P", fix: "F", neutral: "N" };
 const run = (rule: (s: RunSpec) => number, rebuild: (s: RunSpec) => number = () => 0): Executor & { calls: RunSpec[]; peak: number } => {
@@ -159,4 +159,36 @@ test("a moved file that cannot be put back stops scoring with E_PF_INFRA_GAP bef
   const ex = local(["rm -rf /tmp/pf-aside-" + n], () => n);
   const spec = { entry: 0, tree: "fix" as const, run: 1, command: "true", timeout_s: 30, commit: treeDirs({ "t/agent_test.x": "x\n" }).fix, label: "lost", aside: ["t/agent_test.x"] };
   await expect(ex(spec)).rejects.toThrow(/E_PF_INFRA_GAP/);
+});
+
+test("each entry records its slot and barrier waits, each run its start, call and rebuild times, and the outcomes stay the same", async () => {
+  let clock = 0;
+  const rule = (s: RunSpec) => (s.command === "pass" ? 0 : s.tree === "fix" ? 0 : 1);
+  const ex: Executor = async (s) => {
+    const d = s.command === "slow" ? 50 : 10;
+    clock += d;
+    return { exit: rule(s), timed_out: false, wall_ms: d, rebuild_exits: [0], log: "", rebuild_ms: 3 };
+  };
+  const entries = [{ index: 0, command: "slow" }, { index: 1, command: "pass" }, { index: 2, command: "fast" }];
+  const r = await scoreEntries(entries, ex, { ...o, concurrency: 1, now: () => clock });
+  expect(r.results.map((x) => x.outcome)).toEqual(["catch", "no_catch", "catch"]);
+  expect(r.results.map((x) => x.waits)).toEqual([
+    [{ phase: 1, slot_ms: 0, barrier_ms: 20 }, { phase: 2, slot_ms: 0, barrier_ms: 20 }, { phase: 3, slot_ms: 0, barrier_ms: null }],
+    [{ phase: 1, slot_ms: 50, barrier_ms: null }],
+    [{ phase: 1, slot_ms: 60, barrier_ms: 0 }, { phase: 2, slot_ms: 100, barrier_ms: 0 }, { phase: 3, slot_ms: 300, barrier_ms: null }],
+  ]);
+  expect(r.results[2]!.runs.map((x) => [x.tree + x.run, x.start_ms, x.call_ms, x.rebuild_ms])).toEqual([
+    ["parent1", 60, 10, 3], ["parent2", 170, 10, 3], ["parent3", 180, 10, 3], ["fix1", 490, 10, 3], ["fix2", 500, 10, 3], ["fix3", 510, 10, 3], ["neutral1", 520, 10, 3], ["neutral2", 530, 10, 3], ["neutral3", 540, 10, 3],
+  ]);
+  const plain = await scoreEntries(entries, run(rule), o);
+  expect(r.results.map((x) => [x.outcome, x.why, x.runs.map((y) => [y.tree, y.run, y.exit, y.pass])])).toEqual(plain.results.map((x) => [x.outcome, x.why, x.runs.map((y) => [y.tree, y.run, y.exit, y.pass])]));
+  expect(unitScore(r.results, null)).toEqual(unitScore(plain.results, null));
+  const replay = replaySchedule(r.results, { concurrency: 1 });
+  for (const e of r.results) expect(replay.get(e.index)!.map((x) => x.start_ms)).toEqual(e.runs.map((x) => x.start_ms!));
+});
+
+test("readRun carries the rebuild time it is given", () => {
+  const out = readRun("PF_REBUILD_n 0\nPF_ENTRY_n 0\nPF_REBUILDS_n 0\n", false, 900, "n", 120);
+  expect([out.rebuild_ms, out.wall_ms, out.exit]).toEqual([120, 900, 0]);
+  expect(readRun("PF_ENTRY_n 0\n", false, 900, "n").rebuild_ms).toBeNull();
 });
