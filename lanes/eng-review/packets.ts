@@ -36,7 +36,7 @@ import { randomId, SEED, seededRandom, shuffle } from "../product-value/stats.ts
 import type { OracleFile } from "./oracle.ts";
 import { normalizeChecks, words } from "./parse.ts";
 import { stockPaths, stockRow } from "./stock.ts";
-import { MODELS_IN_ORDER, SKILL_ARMS, type ArmId, type ItemKind, type Key, type Label, type ModelId, type Row } from "./types.ts";
+import { isDrawn, MODELS_IN_ORDER, SKILL_ARMS, type ArmId, type ItemKind, type Key, type Label, type ModelId, type Row } from "./types.ts";
 import { loadUnits, readPlan, readRows, type LoadedUnit } from "./units.ts";
 
 export type JudgeKey = "astra" | "opus" | "gemini";
@@ -234,7 +234,7 @@ export function cells(inp: BuildInput): Array<{ unit: string; pass: number; mode
 }
 
 function oracleFor(inp: BuildInput, unit: string, model: ModelId, pass: number): Array<{ ref: ListRef; checks: string[] }> {
-  if (inp.stage !== 1 || inp.units.get(unit)!.meta.set !== "calibration") return [];
+  if (inp.stage !== 1 || !isDrawn(inp.units.get(unit)!.meta, "calibration")) return [];
   const o = inp.oracle?.units[unit];
   if (!o) throw new PvError("E_USAGE", "calibration unit " + unit + " has no oracle list; run er oracle and pass --oracle");
   const checks = normalizeChecks([...o.checks]);

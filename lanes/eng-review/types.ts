@@ -21,6 +21,11 @@ export type ArmId = "none" | "lens" | "precut" | "engphase" | "candidate";
 export const ARMS: readonly ArmId[] = ["none", "lens", "precut", "engphase", "candidate"];
 export const SKILL_ARMS: readonly ArmId[] = ["precut", "engphase", "candidate"];
 export type Set_ = "pilot" | "calibration" | "comparison" | "reserve";
+/** A unit is in a set only once er sets drew it: the draw wrote its set and a rank of 1 or more. The --set label er author
+ * writes, with rank 0, puts no unit in any set. With a set named, the unit must have been drawn into that set. */
+export function isDrawn(u: { set: Set_; rank?: number }, set?: Set_): boolean {
+  return u.set !== "pilot" && (set === undefined || u.set === set) && (u.rank ?? 0) >= 1;
+}
 export type Foreseeable = "yes" | "maybe" | "no";
 
 export interface UnitMeta {

@@ -217,3 +217,12 @@ Build-time fix during the calibration hold, before more authoring (it changes no
   reason no_behavior_change. Qualified statements (a default, a platform or a named part left unchanged) and refactors
   that never say so stay in. At the recount it removed 9 of 621 eligible candidates, one of them an authored unit that
   had already dropped, and no passing unit.
+
+Build-time fix before the calibration draw (selection code only; it changes no frozen text and no rule):
+
+- F7, drawn units (section 4, sets and timing): er author writes its --set label with rank 0, but er sets counted any
+  calibration, comparison or reserve label as already drawn, and the stage 1 and stage 2 selectors (er oracle, stage 1
+  packets, er probe, er readings) picked units by that label alone. So the calibration draw couldn't take pilot or
+  calibration-authored passes, and a selector could pick up a unit no draw had chosen. One check, isDrawn in types.ts
+  (a draw wrote the set and a rank of 1 or more), now serves the draws and every selector. Units are authored with the
+  default pilot label from here, and only er sets --write assigns a set.

@@ -39,7 +39,7 @@ import { cutoffEnd } from "../product-value/rules.ts";
 import { bootstrapMeans, DRAWS, mean, percentileInterval, r4, SEED } from "../product-value/stats.ts";
 import { goldCells, isAnchor, itemKey, listKey, listStratum, type LabelRecord, type PacketMap } from "./packets.ts";
 import { indexLabels, isMissing, isStrict, type PairwiseSummary, type Review, type StockCredit } from "./score.ts";
-import { MODELS_IN_ORDER, SKILL_ARMS, type ArmId, type ModelId, type Row, type UnitMeta } from "./types.ts";
+import { isDrawn, MODELS_IN_ORDER, SKILL_ARMS, type ArmId, type ModelId, type Row, type Set_, type UnitMeta } from "./types.ts";
 import { loadUnits, readRows, type LoadedUnit } from "./units.ts";
 
 export const MODELS = MODELS_IN_ORDER;
@@ -580,7 +580,7 @@ export function run(argv: string[], io: Io, o: { mdd?: MddFn } = {}): number {
   const reviews = scores.reviews;
   const out: Record<string, unknown> = { version: 1, stage };
   const lines: string[] = [];
-  const set = (s: string) => [...units.values()].filter((u) => u.meta.set === s);
+  const set = (s: Set_) => [...units.values()].filter((u) => isDrawn(u.meta, s));
   if (stage === "projection") {
     need(a, ["actuals"], USAGE);
     const comparison = set("comparison");

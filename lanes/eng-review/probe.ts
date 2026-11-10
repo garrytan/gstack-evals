@@ -15,6 +15,7 @@ import { lastJson, RESEND_NOTE } from "../product-value/judge.ts";
 import { loadPrompt, openErJudge, type Caller } from "./judge.ts";
 import type { LabelRecord, PacketMap } from "./packets.ts";
 import { loadUnits, readPlan, type LoadedUnit } from "./units.ts";
+import { isDrawn } from "./types.ts";
 
 export const probeInput = (u: LoadedUnit): string => "PROJECT\n" + u.meta.repo + "\n\nMERGED\n" + u.meta.merged_at.slice(0, 10) + "\n\nPLAN\n" + readPlan(u).trim();
 
@@ -79,8 +80,8 @@ export async function run(argv: string[], io: Io, o: { fetch?: typeof fetch; env
   for (const f of ["record", "ledger"]) if (a.one[f]) paths.push(["--" + f, a.one[f]!]);
   refuseAliases(paths);
   for (const [f, p] of paths.slice(1, 4)) refuseInRepo(f, p);
-  const units = [...loadUnits(a.one.units!, { keys: false }).values()].filter((u) => u.meta.set === "calibration");
-  if (!units.length) throw new PvError("E_USAGE", "no calibration unit under " + a.one.units + "; the probe runs on the calibration slice");
+  const units = [...loadUnits(a.one.units!, { keys: false }).values()].filter((u) => isDrawn(u.meta, "calibration"));
+  if (!units.length) throw new PvError("E_USAGE", "no drawn calibration unit under " + a.one.units + "; the probe runs on the calibration slice, once er sets calibration --write has drawn it");
   const judge = await openErJudge({ item: a.one.item!, runId: a.one["run-id"]!, out: runDir, cacheDir: a.one.cache!, record: a.one.record, ledger: a.one.ledger, env: o.env, fetch: o.fetch, io });
   const replies: Record<string, ProbeReply> = {};
   try {

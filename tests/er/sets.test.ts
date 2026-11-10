@@ -75,10 +75,24 @@ describe("er sets (section 4)", () => {
   });
   test("reserve: the next 6; units already in a set never return but count toward caps", () => {
     const p = pool({ mobile: 3, consumer: 3, server: 3, devtools: 3 });
-    p[0]!.set = "comparison";
+    Object.assign(p[0]!, { set: "comparison", rank: 1 });
     const r = draw("reserve", p);
     expect(r).toHaveLength(6);
     expect(r).not.toContain(p[0]);
+  });
+  test("an authoring label with rank 0 takes no unit; a drawn rank does", () => {
+    const p = pool({ mobile: 4, consumer: 4, server: 4, devtools: 4 });
+    for (const u of p.slice(0, 8)) Object.assign(u, { set: "calibration", rank: 0 });
+    expect(draw("calibration", p)).toHaveLength(16);
+    p[0]!.rank = 1;
+    expect(() => draw("calibration", p)).toThrow(/E_ER_SUPPLY_SHORT/);
+  });
+  test("the comparison draw takes rank-0 comparison labels and skips a drawn unit", () => {
+    const q = pool({ mobile: 14, consumer: 14, server: 14, devtools: 14 });
+    for (const u of q) Object.assign(u, { set: "comparison", rank: 0 });
+    expect(draw("comparison", q)).toHaveLength(56);
+    Object.assign(q[0]!, { rank: 1 });
+    expect(draw("comparison", q)).not.toContain(q[0]);
   });
   test("per-repository caps (4 for mobile and consumer, 3 for the others) and the aftermath rule", () => {
     const p = [...units("mobile", 5, { repo: "one/app" }), ...units("server", 4, { repo: "one/db" }), ...units("consumer", 4), ...units("devtools", 4), ...units("server", 1)];

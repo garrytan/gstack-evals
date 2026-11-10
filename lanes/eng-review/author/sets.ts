@@ -10,7 +10,8 @@
 // 3 for the others, counted across every set, and no two units where one's aftermath holds the other.
 // Build-time choices where the prereg is silent (lanes/eng-review/README.md, authoring side):
 // - Audited: unit.json, key.json with at least one primary item that is neither generic nor mentioned, and a classifier
-//   label. Pilot units are full units and may be drawn. A unit already in a set never enters a later draw.
+//   label. Pilot units are full units and may be drawn. A unit an earlier draw wrote (its set and a rank of 1 or more) never
+//   enters a later draw; the --set label er author writes, with rank 0, takes no unit.
 // - Seeded order is sha256("20261108\n" + unit id). Quotas take each type's first units in that order (4, or 14 for the
 //   comparison set); the comparison set's free places then take the next units of any type in the same order. The cap
 //   and the aftermath rule skip a unit at its turn.
@@ -29,7 +30,7 @@ import { git } from "../../real-outcome/mine/git.ts";
 import { pinnedHead } from "../../product-value/author/run.ts";
 import { need, parseArgs, PvError, refuseInRepo, writeJson } from "../../product-value/io.ts";
 import type { Io } from "../cli.ts";
-import { PROJECT_TYPES, type Key, type ProjectType, type Set_, type UnitMeta } from "../types.ts";
+import { isDrawn, PROJECT_TYPES, type Key, type ProjectType, type Set_, type UnitMeta } from "../types.ts";
 import { CAP } from "./frame.ts";
 import type { MineResult } from "./mine.ts";
 import { order } from "./mine.ts";
@@ -46,6 +47,7 @@ export interface PoolUnit {
   set: Set_;
   merge_sha: string;
   aftermath: string[];
+  rank?: number;
 }
 
 const byOrder = (a: PoolUnit, b: PoolUnit) => (order(a.id) < order(b.id) ? -1 : 1);
@@ -54,7 +56,7 @@ const holds = (a: PoolUnit, b: PoolUnit) => a.aftermath.includes(b.merge_sha) ||
 /** One draw from the pool: units already in a set are skipped but count toward the caps and the aftermath rule. */
 export function draw(what: Draw, pool: readonly PoolUnit[]): PoolUnit[] {
   const size = SIZES[what];
-  const taken = pool.filter((u) => u.set === "calibration" || u.set === "comparison" || u.set === "reserve");
+  const taken = pool.filter((u) => isDrawn(u));
   const free = pool.filter((u) => !taken.includes(u)).sort(byOrder);
   const chosen: PoolUnit[] = [];
   const fits = (u: PoolUnit) => [...taken, ...chosen].filter((x) => x.repo === u.repo).length < CAP[u.type] && ![...taken, ...chosen].some((x) => holds(x, u));
@@ -147,7 +149,7 @@ export function run(argv: string[], io: Io, o: { custodyRoot?: string; head?: st
   if (existsSync(a.one.out!)) throw new PvError("E_USAGE", a.one.out + " exists; each set is drawn once");
   const pool: PoolUnit[] = ids.filter((id) => !auditProblems(join(units, id)).length).map((id) => {
     const m = readJson(join(units, id, "unit.json")) as UnitMeta;
-    return { id, type: m.type, repo: m.repo, set: m.set, merge_sha: m.merge_sha, aftermath: m.aftermath ?? [] };
+    return { id, type: m.type, repo: m.repo, set: m.set, merge_sha: m.merge_sha, aftermath: m.aftermath ?? [], rank: m.rank };
   });
   const chosen = draw(what as Draw, pool);
   if (a.flag.has("write")) chosen.forEach((u, i) => put(join(units, u.id, "unit.json"), { ...(readJson(join(units, u.id, "unit.json")) as UnitMeta), set: what, rank: i + 1 }));

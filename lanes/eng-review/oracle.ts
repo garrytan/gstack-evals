@@ -7,7 +7,7 @@
 import type { Io } from "./cli.ts";
 import { need, parseArgs, PvError, refuseAliases, refuseInRepo, writeJson } from "../product-value/io.ts";
 import { normalizeChecks } from "./parse.ts";
-import type { Key, KeyItem } from "./types.ts";
+import { isDrawn, type Key, type KeyItem } from "./types.ts";
 import { loadUnits } from "./units.ts";
 
 export function oracleCheck(item: KeyItem): string {
@@ -33,9 +33,9 @@ export function run(argv: string[], io: Io): number {
   refuseAliases([["--units", a.one.units!], ["--out", a.one.out!]]);
   refuseInRepo("--out", a.one.out!);
   const out: OracleFile = { version: 1, units: {} };
-  for (const [id, u] of loadUnits(a.one.units!, { keys: true })) if (u.meta.set === "calibration") out.units[id] = oracleList(u.key!);
+  for (const [id, u] of loadUnits(a.one.units!, { keys: true })) if (isDrawn(u.meta, "calibration")) out.units[id] = oracleList(u.key!);
   const n = Object.keys(out.units).length;
-  if (!n) throw new PvError("E_USAGE", "no calibration unit under " + a.one.units + "; oracle lists are built for the calibration slice only");
+  if (!n) throw new PvError("E_USAGE", "no drawn calibration unit under " + a.one.units + "; oracle lists are built for the calibration slice only, once er sets calibration --write has drawn it");
   writeJson(a.one.out!, out);
   io.out("er oracle: wrote " + n + " oracle lists to " + a.one.out);
   return 0;
