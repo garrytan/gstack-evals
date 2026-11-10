@@ -409,6 +409,8 @@ export async function main(argv: string[]): Promise<number> {
         const lang = need(f, "--lang") as Lang;
         if (!LANGS.includes(lang)) throw new Error("E_USAGE --lang is one of " + LANGS.join(", "));
         const path = need(f, "--file"), out = need(f, "--out-dir"), model = need(f, "--model"), unitDir = need(f, "--unit-dir");
+        const held = readUnit(unitDir).id;
+        if (held !== need(f, "--unit")) throw new Error("E_USAGE --unit " + need(f, "--unit") + " is not the unit in --unit-dir, which holds " + held);
         const files = readFileSync(need(f, "--files"), "utf8").split("\n").filter(Boolean);
         const built = buildStock(unitDir, path, stockDiffs({ lang, path, text: readFileSync(join(need(f, "--tree"), path), "utf8") }));
         mkdirSync(out, { recursive: true });
@@ -442,6 +444,12 @@ export async function main(argv: string[]): Promise<number> {
         const spec = readJson<Array<{ unit: string; unit_dir: string; lang: Lang; tree: string; file: string; files: string }>>(need(f, "--spec"));
         const missing = spec.filter((u) => !u.unit_dir).map((u) => u.unit);
         if (missing.length) throw new Error("E_USAGE spec entries " + missing.join(", ") + " have no unit_dir, the unit dir their stock diffs build in");
+        const twice = [...new Set(spec.map((u) => u.unit).filter((u, i, a) => a.indexOf(u) !== i))];
+        if (twice.length) throw new Error("E_USAGE spec lists " + twice.join(", ") + " more than once");
+        for (const u of spec) {
+          const held = readUnit(u.unit_dir).id;
+          if (held !== u.unit) throw new Error("E_USAGE spec entry " + u.unit + " is not the unit in its unit_dir, which holds " + held);
+        }
         const dirs = new Map(spec.map((u) => [u.unit, u.unit_dir]));
         const set = labelledSet(spec.map((u) => ({ unit: u.unit, lang: u.lang, path: u.file, text: readFileSync(join(u.tree, u.file), "utf8"), files: readFileSync(u.files, "utf8").split("\n").filter(Boolean) })), (u, stock) => buildStock(dirs.get(u.unit)!, u.path, stock).kinds);
         mkdirSync(out, { recursive: true });
