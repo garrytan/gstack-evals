@@ -47,7 +47,7 @@ function parse(argv: string[]): Args {
   return a;
 }
 const need = (a: Args, k: string): string => {
-  const v = a[k];
+  const v = Array.isArray(a[k]) && (a[k] as string[]).length === 1 ? (a[k] as string[])[0] : a[k];
   if (typeof v !== "string") throw new PfError("E_USAGE", "--" + k + " is required (gstack-evals outcome pf --help)");
   return v;
 };

@@ -4,7 +4,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { neutralEdit, neutralOk, neutralPatch, validateNeutral } from "../../lanes/outcome-skills/pfchecks/neutral.ts";
+import { main } from "../../lanes/outcome-skills/pfchecks/cli.ts";
+import { neutralEdit, neutralOk, neutralPatch, validateNeutral, volumeTexts } from "../../lanes/outcome-skills/pfchecks/neutral.ts";
 
 const C = "// gstack-evals neutral line";
 test("top and end lines, after a shebang, an encoding line or a PHP tag", () => {
@@ -41,4 +42,19 @@ test("the validation rule and its fallback", () => {
   const drop = validateNeutral("u", "go", files, ["f"], ["s"], () => pass);
   expect(drop.record).toMatchObject({ verdict: "dropped", mode: null });
   expect(drop.record.tried.map((t) => t.mode)).toEqual(["both", "end"]);
+});
+
+test("a fix that only adds files has no base text to read, and a single --unit reaches the command", async () => {
+  expect(volumeTexts("no-image", "no-volume", "/w", [])).toEqual([]);
+  expect(validateNeutral("u", "go", [], ["f"], ["s"], () => null).record.tried).toEqual([{ mode: "both", ok: false, reason: "no_source_file" }]);
+  const errs: string[] = [];
+  const orig = console.error;
+  console.error = (m: unknown) => void errs.push(String(m));
+  try {
+    for (const cmd of ["neutral", "score"]) await main([cmd, "--unit", join(tmpdir(), "pf-no-such-unit"), "--out", join(tmpdir(), "pf-no-such-out")]);
+  } finally {
+    console.error = orig;
+  }
+  expect(errs.length).toBe(2);
+  expect(errs.join("\n")).not.toContain("--unit is required");
 });

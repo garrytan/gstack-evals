@@ -105,6 +105,7 @@ export function validateNeutral(id: string, lang: Lang, files: { path: string; t
 
 /** Reads the base texts of files from a prepared tree volume (the state machines oracle's tree volume). */
 export function volumeTexts(image: string, volume: string, repoDir: string, paths: string[]): { path: string; text: string }[] {
+  if (!paths.length) return [];
   const script = 'cd "$1" && while IFS= read -r f; do printf "PF_FILE %s\\n" "$f"; base64 < "$f" | tr -d "\\n"; echo; done';
   const r = dockerRun(runName("pf-texts"), ["--rm", "-i", "--network", "none", "--user", "0:0", "-v", volume + ":" + repoDir + ":ro", "--entrypoint", "bash", image, "-c", script, "pf", repoDir], { timeoutMs: 600_000, input: paths.join("\n") + "\n" });
   const lines = r.stdout.split("\n");
