@@ -8,8 +8,8 @@
 // small bash script, and lang is go so test files, test names and compile units follow Go's rules.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
-import { homedir } from "node:os";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, chmodSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordProgram } from "../../../src/runner/ledger/envelope.ts";
 import { machineId, openLease, recordApproval, settleLease } from "../../../src/runner/ledger/ledger.ts";
@@ -233,7 +233,12 @@ export async function main(argv: string[]): Promise<number> {
   const base = { "flag/flag.go": BASE_FLAG, ".gitignore": "gen/\n", "README.md": "pf dry-run fixture\n" };
   const fx = scoreUnit({ id: "pf-dry-flag", lang: "go", image: FIXTURE_IMAGE, files: base, tests: {}, commands: { rebuild: ["mkdir -p out && cp flag/flag.go out/flag.built"], test: ["true"], print: ["true"] }, f2p: ["t1"], stable: ["t2"], known: ["t1", "t2"] });
   spawnSync("docker", ["volume", "rm", "-f", fx.volume]);
-  const fixPatch = patchOf(fx.repo, { "flag/flag.go": FIX_FLAG });
+  // patchOf stages the fix in the repo it diffs, which leaves the fixed file's blob in that object store; the containment
+  // gate fails a tree that holds it, so the patch comes from a throwaway copy.
+  const scratch = join(mkdtempSync(join(tmpdir(), "pf-dry-fix-")), "repo");
+  cpSync(fx.repo, scratch, { recursive: true });
+  const fixPatch = patchOf(scratch, { "flag/flag.go": FIX_FLAG });
+  rmSync(join(scratch, ".."), { recursive: true, force: true });
   writeFileSync(join(fx.dir, "fix.patch"), fixPatch);
   const uj = JSON.parse(readFileSync(join(fx.dir, "unit.json"), "utf8"));
   uj.files["fix.patch"] = sha(fixPatch);
