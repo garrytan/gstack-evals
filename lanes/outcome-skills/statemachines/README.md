@@ -635,10 +635,16 @@ counts sessions.
   that exits with an error adds an "error <tool>" finding instead of reading as an empty, clean listing. git cat-file
   also counts as failed when it writes to stderr, since it skips a broken pack index with exit 0. Files and dirs the
   check can't read are skipped and listed in the result's unreadable field, never failed, so a clean unit stays clean.
-- The containment scan reads the repo's untracked files (pre-data build change, 2026-11-11, sh/contain.sh; the Captain's
-  pre-run list item 3, GSTA-2, from #318's deferred findings): every file in the repo that git does not track, ignored
-  ones included (build output, dependency trees, test caches), is scanned for hidden test names and markers like a file
-  outside the repo. Tracked files and the repo's .git dir are not scanned, and only archives outside the repo are listed.
+  The scan's git ls-tree, git hash-object and git grep calls count the same way (the Captain's ruling A2 on #320,
+  GSTA-2, 2026-11-11).
+- The containment scan reads every file in the repo that the base commit does not hold (pre-data build change,
+  2026-11-11, sh/contain.sh; the Captain's pre-run list item 3, GSTA-2, from #318's deferred findings, and the Captain's
+  ruling A2 on #320, GSTA-2, 2026-11-11): every file in the repo that want does not hold byte for byte is scanned for
+  hidden test names and markers like a file outside the repo. That covers untracked files, ignored ones (build output,
+  dependency trees, test caches), files staged but never committed, and tracked files whose working copy differs from
+  want's blob. The tracked list and the base names and markers come from want's tree, never from the index or the
+  working tree. Files equal to want's blobs and the repo's .git dir are not scanned, and only archives outside the repo
+  are listed.
 - A finalize halt is on disk before its close (pre-data build change, 2026-11-11, driver/stage.ts; the Captain's pre-run
   list item 4, GSTA-2, from #318's deferred findings): the driver writes and fsyncs the halt line before the close line,
   so a crash between them leaves a standing halt, never a close with no halt.
@@ -658,16 +664,21 @@ counts sessions.
   send's local ledger does not hold, the send is refused (E_USAGE) before it recovers, settles or opens anything, since
   another ledger can't tell which calls are already paid for. A lease the owner reconciled is exempt only when the
   --out's replies.jsonl holds its lease line (each send now writes one when it opens a lease, before any call), since
-  those replies record every call it made and none is asked again; with them missing, the send is refused as above
-  (the Captain's correction on #320). An item that is cap-stopped or has no cap left still reports CAP_STOP first.
+  those replies record every call it made and none is asked again; with them missing, the send is refused as above (the
+  Captain's correction on #320). An item that is cap-stopped or has no cap left still reports CAP_STOP first, and when
+  it also holds such a lease the send stops with CAP_STOP before it writes any lift, recovery or lost-reply line (the
+  Captain's ruling C on #320, GSTA-2, 2026-11-11).
 - A lost call that settled past the bound halts the item (pre-data build change, 2026-11-11, send.ts; the Captain's
   pre-run list item 7, GSTA-2, from #317's deferred findings): when a send stopped after a call settled but before its
   reply and halt were recorded, the next send records the call as lost, and if the call's settled usage passes the
-  prereg's bound it also writes the usage halt and stops (E_SM_USAGE_HALT) until --lift-halt. A lost call on a lease
-  the owner reconciled has no usage any ledger shows, so it halts the same way with the reason "usage unknown"; its
-  halt line and the error name the lease's proxy journal (<lease>.journal.ndjson in --out) and the provider export the
-  reconcile cites, which the Captain reads before ruling (the Captain's pick A on #320, GSTA-2). The lost call is never
-  sent again.
+  prereg's bound it also writes the usage halt and stops (E_SM_USAGE_HALT) until --lift-halt. A lost call on a lease the
+  owner reconciled has no usage any ledger shows, so it halts the same way with the reason "usage unknown"; its halt
+  line and the error name the lease's proxy journal (<lease>.journal.ndjson in --out) and the provider export the
+  reconcile cites, which the Captain reads before ruling (the Captain's pick A on #320, GSTA-2). A lost call on a lease
+  this ledger still holds halts the same way as usage unknown when its meter shows the call unknown, and its halt line
+  and the error name the lease and its proxy journal; a lost call with no meter on the lease never reached its
+  reservation and stays unhalted (the Captain's ruling B2 on #320, GSTA-2, 2026-11-11). The lost call is never sent
+  again.
 - A replies line that won't parse is refused (pre-data build change, 2026-11-11, send.ts; the Captain's pre-run list
   item 8, GSTA-2): only the lines a crash cut short at the end of replies.jsonl may fail to parse. The next send writes
   a torn line after them, so later sends read past them; any other unparseable line refuses the send (E_USAGE) instead

@@ -267,7 +267,8 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     if (state.cap_micros !== null && (state.program !== def!.program || state.skills.join() !== def!.skills.join())) smFail("E_USAGE", "line item " + o.item + " is recorded in program " + (state.program ?? "none") + " for " + (state.skills.join(", ") || "no skill") + ", not " + def!.program + " for " + def!.skills.join(", ") + " (items.ts); nothing was opened");
     const cannotLease = capStopRefusal(state) !== null || (state.cap_micros !== null && state.committed_micros >= state.cap_micros);
     const leased = new Set(prior.flatMap((l) => (l.event === "lease" && l.lease_id ? [l.lease_id] : [])));
-    const unheld = cannotLease ? [] : state.leases.filter(({ lease, close }) => lease.run_id === o.run_id && !local.getLease(lease.lease_id) && !(close?.how === "reconciled" && leased.has(lease.lease_id))).map(({ lease }) => lease.lease_id);
+    const unheld = state.leases.filter(({ lease, close }) => lease.run_id === o.run_id && !local.getLease(lease.lease_id) && !(close?.how === "reconciled" && leased.has(lease.lease_id))).map(({ lease }) => lease.lease_id);
+    if (unheld.length && cannotLease) smFail("CAP_STOP", (capStopRefusal(state)?.message ?? "line item " + o.item + " has " + usd(Math.max(state.cap_micros! - state.committed_micros, 0)) + " left of its " + usd(state.cap_micros!) + " cap (" + usd(state.committed_micros) + " committed)") + "; it also holds run " + o.run_id + "'s lease " + unheld.join(", ") + ", which the local ledger at " + local.path + " does not hold; nothing was lifted, recovered, settled or opened");
     if (unheld.length) smFail("E_USAGE", "line item " + o.item + " holds run " + o.run_id + "'s lease " + unheld.join(", ") + ", which the local ledger at " + local.path + " does not hold. A send resumes only on the ledger that sent the run's calls, since another ledger can't tell which calls are already paid for. The one exception is a lease the owner reconciled whose lease line is in " + repliesFile + ", since those replies record every call it made; nothing was recovered, settled or opened");
     const named = new Set(prior.flatMap((l) => (l.event === "send" && l.meter_id ? [l.meter_id] : [])));
     const unnamed = state.leases.filter(({ lease }) => lease.run_id === o.run_id).flatMap(({ lease }) => [...local.meters(lease.lease_id).keys()].filter((m) => !named.has(m)).map((m) => "lease " + lease.lease_id + " meter " + m));
@@ -289,16 +290,23 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     }
     const newHalts: Array<{ meter_id: string; why: string }> = [];
     for (const l of lost.values()) {
-      const u = runLeases.map((id) => local.meters(id).get(l.meter_id!)).find(Boolean)?.usage;
+      const metered = runLeases.flatMap((id) => {
+        const m = local.meters(id).get(l.meter_id!);
+        return m ? [{ lease_id: id, meter: m }] : [];
+      })[0];
+      const u = metered?.meter.usage;
       const usage = u ? { input: u.input + u.cache_read + u.cache_write, output: u.output + u.reasoning } : null;
       const gone = state.leases.find(({ lease, close }) => lease.lease_id === leaseOf.get(l.meter_id!) && close?.how === "reconciled" && !local.getLease(lease.lease_id));
       const past = usage !== null && (usage.input > R78_PRICE_BOUND.input_tokens || usage.output > R78_PRICE_BOUND.output_tokens);
-      if ((gone || past) && !halted.has(l.meter_id!)) {
-        const journal = gone && join(out, gone.lease.lease_id + ".journal.ndjson");
+      const unknown = !gone && !past && metered && metered.meter.unknown_calls > 0 ? metered.lease_id : null;
+      if ((gone || past || unknown) && !halted.has(l.meter_id!)) {
+        const journal = gone ? join(out, gone.lease.lease_id + ".journal.ndjson") : unknown ? join(out, unknown + ".journal.ndjson") : null;
         const why = gone
           ? l.reader + " on packet " + l.packet + " (meter " + l.meter_id + "): usage unknown. It was sent on lease " + gone.lease.lease_id + ", which the owner reconciled from the provider export " + (gone.close!.source ?? "(none named)") + " after its ledger was lost, and its send stopped before its reply was recorded, so no ledger shows its usage; read the lease's proxy journal " + journal + " and that export"
+          : unknown
+          ? l.reader + " on packet " + l.packet + " (meter " + l.meter_id + "): usage unknown. It was sent on lease " + unknown + ", which this ledger holds, and its send stopped before its reply was recorded; the ledger holds the call as unknown at its full reservation, so no settled usage shows it within the bound; read the lease's proxy journal " + journal
           : l.reader + " on packet " + l.packet + " (meter " + l.meter_id + ") settled at " + usage!.input + " input and " + usage!.output + " output tokens, past the prereg's bound of " + R78_PRICE_BOUND.input_tokens + " input and " + R78_PRICE_BOUND.output_tokens + " output tokens, and its send stopped before its reply and halt were recorded";
-        write({ event: "halt", packet: l.packet, reader: l.reader, meter_id: l.meter_id, code: "E_SM_USAGE_HALT", why, usage, ...(gone ? { lease_id: gone.lease.lease_id, journal, source: gone.close!.source ?? null, source_sha256: gone.close!.source_sha256 ?? null } : {}) });
+        write({ event: "halt", packet: l.packet, reader: l.reader, meter_id: l.meter_id, code: "E_SM_USAGE_HALT", why, usage: unknown ? null : usage, ...(gone ? { lease_id: gone.lease.lease_id, journal, source: gone.close!.source ?? null, source_sha256: gone.close!.source_sha256 ?? null } : unknown ? { lease_id: unknown, journal } : {}) });
         newHalts.push({ meter_id: l.meter_id!, why });
       }
       reply({ packet: l.packet, reader: l.reader }, { outcome: "lost", code: "UPSTREAM", why: "sent on meter " + l.meter_id + ", but that send stopped before its answer was recorded; the proxy journal settles the call as unknown at its full reservation, and it is never sent again", meter_id: l.meter_id });

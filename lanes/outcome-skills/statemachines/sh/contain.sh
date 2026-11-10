@@ -7,9 +7,10 @@
 #   (c) stores: no alternates (file or variable; each store they reach is listed), no .gitmodules or nested .git under
 #       the repo, and no other git object store anywhere but proc and sys, with or without a HEAD file (a pack or loose
 #       objects is a store), except A3's gstack checkout when its HEAD is the /qa pin.
-#   (d) scan: no file outside the repo, and no file in the repo that git does not track (ignored ones included), holds a
+#   (d) scan: no file outside the repo, and no file in the repo that want does not hold byte for byte (untracked,
+#       ignored, staged but never committed, or tracked with a working copy that differs from want's blob), holds a
 #       hidden test name (a whole word) or a marker (anywhere in a line), read raw as scan.sh reads (binary included,
-#       devices skipped); archives outside the repo are listed, never failed.
+#       devices skipped); base names and markers come from want's blobs; archives outside the repo are listed, never failed.
 # A git listing, find or grep that fails prints an ERR line and fails its check, never reading as an empty, clean
 # listing. A file or dir the check can't read is skipped and listed (UNREADABLE), never failed.
 set -u -o pipefail
@@ -97,12 +98,19 @@ find "$top" \( -path "$r/proc" -o -path "$r/sys" -o -path "$r/sm-in" -o -path "$
   -o -type f ! -readable -fprint0 "$tmp/unreadable-files" \
   -o -type f -print0 > "$tmp/found" || err scan "find"
 cat "$tmp/unreadable-dirs" "$tmp/unreadable-files" | while IFS= read -r -d '' p; do printf 'UNREADABLE %s\n' "$(enc "$(rel "$p")")"; done
-git ls-files -z > "$tmp/ls" || err scan "git ls-files"
-while IFS= read -r -d '' p; do printf '%s/%s\0' "$repo" "$p"; done < "$tmp/ls" > "$tmp/tracked"
-{ LC_ALL=C sort -z -o "$tmp/found" "$tmp/found" && LC_ALL=C sort -z -u -o "$tmp/tracked" "$tmp/tracked" && LC_ALL=C comm -z -12 "$tmp/found" "$tmp/tracked" > "$tmp/base" && LC_ALL=C comm -z -23 "$tmp/found" "$tmp/tracked" > "$tmp/files"; } || err scan "sort or comm"
-inbase() { xargs -0 -r sh -c 'grep "$@"; [ $? -le 1 ]' sh -h -a "$@" -- < "$tmp/base"; }
-inbase -o -F -w -f "$in/names" > "$tmp/name-in-base" && g -v -x -F -f "$tmp/name-in-base" "$in/names" | g . > "$tmp/names" || err scan "grep base names"
-inbase -F -x -f "$in/markers" > "$tmp/mark-in-base" && g -v -x -F -f "$tmp/mark-in-base" "$in/markers" | g . > "$tmp/markers" || err scan "grep base markers"
+git ls-tree -r -z "$want" > "$tmp/tree" || err scan "git ls-tree"
+while IFS= read -r -d '' e; do
+  m=${e%%$'\t'*}; p=${e#*$'\t'}
+  case "$m" in "100644 blob "* | "100755 blob "*) ;; *) continue ;; esac
+  case "$p" in *$'\n'*) continue ;; esac
+  [ -f "$p" ] && [ ! -L "$p" ] && [ -r "$p" ] && printf '%s\t%s\n' "${m##* }" "$p"
+done < "$tmp/tree" > "$tmp/blobs"
+cut -f2- "$tmp/blobs" | git hash-object --no-filters --stdin-paths > "$tmp/now" || err scan "git hash-object"
+paste "$tmp/now" "$tmp/blobs" | awk -F'\t' '$1 == $2 { sub(/^[^\t]*\t[^\t]*\t/, ""); print }' | while IFS= read -r p; do printf '%s/%s\0' "$repo" "$p"; done > "$tmp/tracked" || err scan "git hash-object"
+{ LC_ALL=C sort -z -o "$tmp/found" "$tmp/found" && LC_ALL=C sort -z -u -o "$tmp/tracked" "$tmp/tracked" && LC_ALL=C comm -z -23 "$tmp/found" "$tmp/tracked" > "$tmp/files"; } || err scan "sort or comm"
+inbase() { [ -s "$in/$1" ] || return 0; git grep -h -a "${@:2}" -f "$in/$1" "$want" --; [ $? -le 1 ]; }
+inbase names -o -F -w > "$tmp/name-in-base" && g -v -x -F -f "$tmp/name-in-base" "$in/names" | g . > "$tmp/names" || err scan "grep base names"
+inbase markers -F | g -x -F -f "$in/markers" > "$tmp/mark-in-base" && g -v -x -F -f "$tmp/mark-in-base" "$in/markers" | g . > "$tmp/markers" || err scan "grep base markers"
 hit() { while IFS= read -r -d '' p && IFS= read -r m; do printf 'HIT %s %s %s\n' "$1" "$(enc "$(rel "$p")")" "$(enc "$m")"; done; }
 scan() {
   [ -s "$tmp/$1s" ] || return 0

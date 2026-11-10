@@ -592,6 +592,44 @@ describe("pre-run fixes for #317's deferred findings", () => {
     expect(lines(s, "sm-labels").filter((l) => l.event === "halt").length).toBe(1);
   });
 
+  // Value: protects=the usage halt for a call whose usage no ledger settled: a lost call on a lease this ledger holds, whose meter shows the call unknown, halts the item as usage unknown and names the lease and its proxy journal, while a lost call with no meter on the lease never reached its reservation and stays unhalted; fails_when=the unknown call is written off as lost and the send goes on, its halt names no lease or journal, or the call with no meter halts; why_new=the Red Team's finding on #320 (send.ts:292), the Captain's ruling B2 (GSTA-2, 2026-11-11); seam=sendPackets with a fetch that throws, then replies.jsonl cut after the send line; no_claim=what a real provider bills for an unanswered call
+  test("a lost call on a lease this ledger holds halts as usage unknown when its meter shows the call unknown, naming the lease and its proxy journal, and a lost call with no meter on the lease stays unhalted", async () => {
+    const s = setup({ "sm-labels": 150 });
+    const [a, c] = labels(s, 2) as [string, string];
+    const calls: Call[] = [];
+    expect((await send(s, "sm-labels", calls, () => ({ throws: true }))).code).toBe("UPSTREAM");
+    const file = join(outDir(s, "sm-labels"), "replies.jsonl");
+    const all = readFileSync(file, "utf8").split("\n").filter(Boolean);
+    const sendAt = all.findIndex((l) => JSON.parse(l).event === "send");
+    const meter = JSON.parse(all[sendAt]!).meter_id as string;
+    const none = { item: "sm-labels", run_id: "run-1", event: "send", packet: c, reader: "astra", meter_id: "m-none" };
+    writeFileSync(file, [...all.slice(0, sendAt + 1), JSON.stringify(none)].join("\n") + "\n");
+    const lease_id = readItem(s.record, "sm-labels").leases[0]!.lease.lease_id;
+    const journal = join(outDir(s, "sm-labels"), lease_id + ".journal.ndjson");
+    const rerun = await send(s, "sm-labels", calls);
+    expect([rerun.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_SM_USAGE_HALT", 1, 1]);
+    for (const part of ["usage unknown", lease_id, journal, "--lift-halt " + meter]) expect(rerun.message).toContain(part);
+    expect(rerun.message).not.toContain("m-none");
+    expect(lines(s, "sm-labels").filter((l) => l.event === "halt")).toEqual([expect.objectContaining({ packet: a, reader: "astra", meter_id: meter, code: "E_SM_USAGE_HALT", usage: null, lease_id, journal })]);
+    expect(replies(s, "sm-labels").map((x) => [x.packet, x.reader, x.outcome])).toEqual([[a, "astra", "lost"], [c, "astra", "lost"]]);
+  });
+
+  // Value: protects=the cap stop's place first: an item that can't lease (cap-stopped or no cap left) whose run lease this ledger lacks is refused CAP_STOP before the send writes any lift, recovery or lost-reply line, so a later send on the right ledger still sees every lost call; fails_when=the send writes a lift or a lost reply before CAP_STOP, or returns ok; why_new=the Red Team's finding on #320 (send.ts:268), the Captain's ruling C (GSTA-2, 2026-11-11); seam=sendPackets on a fresh --ledger against a drained item with a reconciled lease whose lease line is missing; no_claim=none beyond protects
+  test("an item that can't lease, with a run lease this ledger lacks, is CAP_STOP before any lift, recovery or lost-reply line is written", async () => {
+    const s = setup({ "sm-labels": 1 });
+    const [a, b] = labels(s, 2) as [string, string];
+    reconciled(s);
+    recorded(s, a, b, null, true);
+    const file = join(outDir(s, "sm-labels"), "replies.jsonl");
+    appendFileSync(file, JSON.stringify({ item: "sm-labels", run_id: "run-1", event: "halt", packet: b, reader: "astra", meter_id: "m-b", code: "E_SM_USAGE_HALT", why: "a test halt" }) + "\n");
+    const before = readFileSync(file, "utf8");
+    const calls: Call[] = [];
+    const r = await send(s, "sm-labels", calls, undefined, { ledger: join(s.root, "fresh.sqlite"), lift_halts: ["m-b"] });
+    expect([r.code, calls.length]).toEqual(["CAP_STOP", 0]);
+    expect(r.message).toContain("$0.00 left");
+    expect(readFileSync(file, "utf8")).toBe(before);
+  });
+
   // Value: protects=replies.jsonl as the send's record: a line that won't parse is refused, unless it is the torn tail a crash left at the end, which the next send marks with a torn line so later sends read past it; fails_when=an unparseable line in the middle is dropped silently (so its reply reads as missing), or a torn tail blocks the send or any later send; why_new=the Captain's pre-run list item 8 (send.ts catch {}); seam=send.ts sendHeld's reader and write; no_claim=a file someone edited by hand into valid JSON
   test("a replies line that won't parse is refused unless it is the torn tail a crash left, which the next send marks so later sends read past it", async () => {
     const m = setup({ "sm-labels": 150 });

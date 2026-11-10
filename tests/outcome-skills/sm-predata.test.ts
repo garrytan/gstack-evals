@@ -1194,6 +1194,20 @@ describe("the containment check before any session (E_SM_CONTAIN)", () => {
     expect(r.checks.scan).toEqual({ ok: false, findings: ["marker /w/node_modules/x/t.js sha256=" + sha(MARK), "name /w/.pytest_cache/v/cache/nodeids sha256=" + sha(NAME), "name /w/notes.txt sha256=" + sha(NAME), "name /w/target/debug/leak.txt sha256=" + sha(NAME)] });
     expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.stores.ok]).toEqual([false, true, true, true]);
   });
+
+  // Value: protects=the scan against content the base commit does not hold byte for byte: a file staged but never committed and a tracked file whose working copy changed are scanned, and base names and markers come from want's blobs, so a base name a changed file still holds is no hit; fails_when=a staged-only or changed tracked file naming a hidden test or holding a marker passes, a clean base fails, or a name want's own copy of a changed file holds becomes a hit; why_new=the Red Team's CRITICAL on #320 (contain.sh:100), the Captain's ruling A2 (GSTA-2, 2026-11-11); seam=contain.ts contain with sh/contain.sh on a fixture root; no_claim=what a real image's index and working tree hold
+  test("a file staged but never committed and a tracked file changed in the working tree are scanned, and base names come from want's blobs", () => {
+    const t = commitBase(tree("changed"), { "b.py": "def test_base_name():\n    pass\n" });
+    const names = [NAME, "test_base_name"];
+    expect(check(t, { names })).toEqual({ ok: true, checks: clean, archives: [] });
+    writeFileSync(join(t.w, "leak.py"), "def " + NAME + "():\n    pass\n");
+    git(t.w, "add", "leak.py");
+    appendFileSync(join(t.w, "a.py"), MARK + "\n");
+    appendFileSync(join(t.w, "b.py"), "# edited\n");
+    const r = check(t, { names });
+    expect(r.checks.scan).toEqual({ ok: false, findings: ["marker /w/a.py sha256=" + sha(MARK), "name /w/leak.py sha256=" + sha(NAME)] });
+    expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.stores.ok]).toEqual([false, true, true, true]);
+  });
 });
 
 // Value: protects=sh/contain.sh as it runs in a real session image (Debian's git, grep and find, as root): a git store with no HEAD file fails the stores check, an ignored file in the repo naming a hidden test fails the scan, a grep that fails fails the scan, and a clean tree stays clean, also when root cannot read a file (its read override dropped); fails_when=any of those passes, or the unreadable file fails the clean tree; why_new=the Captain's pre-run list (a docker test for contain.sh covering a no-HEAD store, a tool error, an unreadable file and an ignored file holding a hidden name); seam=contain.ts contain (docker kind) and the script run directly with --cap-drop DAC_OVERRIDE and DAC_READ_SEARCH; no_claim=the three dry-run units, which the Captain runs on their own images
@@ -1209,6 +1223,8 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("contain.sh in a real c
     clean: "",
     nohead: "RUN git init -q /s && cd /s && echo later > l.txt && git add l.txt && " + git + " commit -qm later && git repack -a -d -q && mkdir -p /opt/cache/objects && cp -r .git/objects/pack /opt/cache/objects/ && rm -rf /s",
     ignored: "RUN echo 'fn " + NAME + "() {}' > /w/target/leak.rs",
+    staged: "RUN cd /w && echo 'def " + NAME + "(): pass' > leak.py && git add leak.py",
+    modified: "RUN echo '" + MARK + "' >> /w/a.py",
     grepfail: "RUN printf '#!/bin/sh\\ncase \" $* \" in *\" -H \"*) exit 2;; esac\\nexec /usr/bin/grep \"$@\"\\n' > /usr/local/bin/grep && chmod 755 /usr/local/bin/grep",
   };
   const want: Record<string, string> = {};
@@ -1255,6 +1271,14 @@ describe.skipIf(process.env.GSTACK_EVALS_DOCKER !== "1")("contain.sh in a real c
     const r = inside("grepfail");
     expect(r.checks.scan).toEqual({ ok: false, findings: ["error grep markers", "error grep names"] });
     expect([r.ok, r.checks.refs.ok, r.checks.objects.ok, r.checks.stores.ok]).toEqual([false, true, true, true]);
+  }, 900_000);
+
+  test("a file staged but never committed and a tracked file changed in the working tree fail the scan", () => {
+    const st = inside("staged");
+    expect(st.checks.scan).toEqual({ ok: false, findings: ["name /w/leak.py sha256=" + sha(NAME)] });
+    const m = inside("modified");
+    expect(m.checks.scan).toEqual({ ok: false, findings: ["marker /w/a.py sha256=" + sha(MARK)] });
+    expect([st.ok, st.checks.refs.ok, st.checks.objects.ok, st.checks.stores.ok, m.ok, m.checks.refs.ok, m.checks.objects.ok, m.checks.stores.ok]).toEqual([false, true, true, true, false, true, true, true]);
   }, 900_000);
 });
 

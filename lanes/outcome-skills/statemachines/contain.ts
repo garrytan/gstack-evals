@@ -2,7 +2,8 @@
 // The object-level containment check (C1, the Captain's scope of 2026-11-10, after GEVA-503 found the upstream fix and its
 // tests behind git tags past the base in 12 of 40 SWE-rebench images). It runs sh/contain.sh inside each built session
 // image, as the session sees it, before any session: (a) every ref names the base or an ancestor, (b) every commit object
-// does, (c) no other object store exists but A3's gstack checkout at the /qa pin, and (d) no file outside the repo holds a
+// does, (c) no other object store exists but A3's gstack checkout at the /qa pin, and (d) no file outside the repo, and no
+// file in the repo that the base commit does not hold byte for byte (untracked, ignored, staged only or changed), holds a
 // hidden test name (a FAIL_TO_PASS leaf name the base tree never names) or a marker (a line of 30 code points or more that
 // test.patch or fix-tests.patch adds and no base file holds). A hit keeps the path and the sha256, never the text.
 // Compressed archives outside the repo are listed by path, never failed. Any failed check is E_SM_CONTAIN: the unit halts
