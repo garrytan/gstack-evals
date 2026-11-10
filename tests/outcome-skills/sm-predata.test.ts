@@ -24,6 +24,7 @@ import { CONTAIN_SCRIPT, contain, containInputs, parseContain } from "../../lane
 import { computeStart } from "../../lanes/outcome-skills/statemachines/followon.ts";
 import { qaHomeCopy } from "../../lanes/outcome-skills/statemachines/image.ts";
 import type { Lang } from "../../lanes/outcome-skills/statemachines/langs.ts";
+import { checkRename } from "../../lanes/outcome-skills/statemachines/bindcheck.ts";
 import { buildStock, stockDiffs, type StockKind } from "../../lanes/outcome-skills/statemachines/packets.ts";
 import { treeVolume } from "../../lanes/outcome-skills/statemachines/oracle.ts";
 import { runSession } from "../../lanes/outcome-skills/statemachines/run.ts";
@@ -1314,4 +1315,147 @@ describe.skipIf(!(process.env.GSTACK_EVALS_DOCKER === "1" && GO_IMAGE))("the sto
     const n = unit("stock-none", "go", { "go.mod": mod, "core.go": go }, ["cd /w && false"]);
     expect(buildStock(n.dir, "core.go", stockDiffs({ lang: "go", path: "core.go", text: go }), { mode: "root", volume: n.volume }).kinds.map((k) => [k.diff, k.build])).toEqual(Array(3).fill([null, "the control passes no command: exits 1"]));
   }, 900_000);
+});
+
+describe("stock diffs keep the program's behavior: the #316 follow-ups (GST-1959)", () => {
+  const has = (bin: string) => spawnSync("sh", ["-c", "command -v " + bin], { encoding: "utf8" }).status === 0;
+  const rename = (lang: Lang, path: string, text: string[]) => stockDiffs({ lang, path, text: text.join("\n") }).find((s) => s.kind === "rename_only")!.diff;
+  /** argv run in a scratch dir holding the files, with the diff applied when one is given: its output, or why it failed. */
+  const run = (files: Record<string, string[]>, diff: string | null, argv: string[]) => {
+    const d = scratch("gst1959-behavior");
+    for (const [p, t] of Object.entries(files)) {
+      mkdirSync(dirname(join(d, p)), { recursive: true });
+      writeFileSync(join(d, p), t.join("\n"));
+    }
+    if (diff !== null) {
+      writeFileSync(join(d, "stock.patch"), diff);
+      const a = spawnSync("git", ["apply", "stock.patch"], { cwd: d, encoding: "utf8" });
+      if (a.status !== 0) return "does not apply: " + a.stderr.trim();
+    }
+    const r = spawnSync(argv[0]!, argv.slice(1), { cwd: d, encoding: "utf8", timeout: 300_000, env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
+    return r.status === 0 ? r.stdout.trim() : "exit " + r.status + ": " + (r.stdout + r.stderr).trim().split("\n").slice(0, 3).join(" | ");
+  };
+  /** A JavaScript module's call under node, or a TypeScript one's under bun, run where the module is c<ext>. */
+  const call = (ext: string, expr: string) => [...(ext === ".ts" ? [process.execPath] : ["node", "--input-type=module"]), "-e", "const m = await import('./c" + ext + "'); console.log(JSON.stringify(" + expr + "))"];
+
+  // Value: protects=section 10's rename-only stock diff as a refactor that keeps behavior when a for, if, while, try, using or catch header declares the local; fails_when=the header's scope runs to the end of its line, or to the close of a one-line block that opened before the header on the same line, so a later use that names an outer binding (a global, an inherited field, a package variable in another file) is renamed; why_new=the deferred adversarial finding at packets.ts:415 on #316 and its fix-check note; seam=packets.ts renameOnly scope(); no_claim=an if header's else branch, which this scope leaves out
+  test("a header declaration's scope ends with the block or statement its header opens, wherever the line starts", () => {
+    const line = (decl: string) => ["    for (" + decl + " total = 0; total < 3; total++) { g(total); } total = 5;"];
+    const cases: Array<[Lang, string, string[]]> = [
+      ["js", "c.mjs", ["export function f() {", ...line("let"), "}", "function g(x) {}", ""]],
+      ["ts", "c.ts", ["export function f(): void {", ...line("let"), "}", "function g(x: number) {}", ""]],
+      ["java", "C.java", ["class C extends Base {", "  void f() {", ...line("int"), "  }", "  void g(int x) {}", "}", ""]],
+      ["c", "c.c", ["#include \"glob.h\"", "", "void f(void) {", ...line("int"), "}", ""]],
+      ["cpp", "c.cpp", ["#include \"glob.h\"", "", "void f() {", ...line("int"), "}", ""]],
+      ["csharp", "C.cs", ["class C : Base {", "  void F() {", ...line("int"), "  }", "  void g(int x) {}", "}", ""]],
+      ["js", "o.mjs", ["export function f(ok) {", "  if (ok) { for (let count = 0; count < 3; count++) {", "    g(count);", "  }", "  use(count); }", "}", ""]],
+      ["java", "O.java", ["class O extends Base {", "  void f(boolean ok) {", "    if (ok) { for (int count = 0; count < 3; count++) {", "      g(count);", "    }", "    use(count); }", "  }", "}", ""]],
+    ];
+    expect(cases.map(([lang, path, text]) => [path, rename(lang, path, text)])).toEqual(cases.map(([, path]) => [path, null]));
+    const go = ["package core", "", "func F(ok bool) int {", "\tif ok { for count := 0; count < 3; count++ {", "\t\t_ = count", "\t}", "\treturn count }", "\treturn 0", "}", ""];
+    expect(rename("go", "c.go", go)).toBeNull();
+    if (has("go")) expect(run({ "c.go": go, "other.go": ["package core", "", "var count = 10", ""], "go.mod": ["module example.com/core", "", "go 1.16", ""] }, null, ["go", "build", "./..."])).toBe("");
+    const own = ["export function g(xs) {", "  for (let step = 0; step < xs.length; step++) {", "    use(xs[step], step);", "  }", "  return xs;", "}", ""];
+    expect(rename("js", "g.mjs", own)).toContain("+  for (let stepValue = 0; stepValue < xs.length; stepValue++) {\n+    use(xs[stepValue], stepValue);");
+  }, 600_000);
+
+  // Value: protects=section 10's rename-only stock diff in Go switch and select statements, where each case clause is its own block; fails_when=a local declared in one case clause keeps its scope into the next clause, so a use there that names a package variable in another file is renamed and the diff stops compiling; why_new=the deferred adversarial finding at packets.ts:415 on #316 (a scope that runs past its declaration's block); seam=packets.ts renameOnly scope(); no_claim=a select clause's receive declaration, which this scope never renames
+  test("go: a local declared in a case clause stays in its clause", () => {
+    const text = ["package core", "", "func Pick(k int) int {", "\tswitch k {", "\tcase 1:", "\t\tcount := 5", "\t\treturn count", "\tcase 2:", "\t\treturn count", "\t}", "\treturn 0", "}", ""];
+    expect(rename("go", "c.go", text)).toBeNull();
+    if (has("go")) expect(run({ "c.go": text, "other.go": ["package core", "", "var count = 10", ""], "go.mod": ["module example.com/core", "", "go 1.16", ""] }, null, ["go", "build", "./..."])).toBe("");
+  }, 600_000);
+
+  // Value: protects=section 10's rename-only stock diff in Rust and C++, where a declaration's scope starts after its whole statement or ends with the braceless statement it is; fails_when=a Rust let's scope starts at its first line break, so a use of an outer binding on the statement's next line is renamed, or a C++ declaration that is an if's braceless body keeps a scope to the end of the enclosing block; why_new=the deferred adversarial finding at packets.ts:415 on #316; seam=packets.ts renameOnly scope(); no_claim=a Rust let-else, whose else block this scope leaves out
+  test("rust and c++: a let's scope starts after its statement, and a braceless body's declaration ends with it", () => {
+    expect(rename("rust", "src/lib.rs", ["pub fn f(xs: &[u32]) -> u32 {", "    let total = xs.len() as u32", "        + total;", "    total", "}", ""])).toBeNull();
+    const cpp = ["#include \"glob.h\"", "", "int pick(bool ok) {", "    if (ok)", "        int total = 1;", "    return total;", "}", ""];
+    expect(rename("cpp", "pick.cpp", cpp)).toBeNull();
+    if (has("g++")) expect(run({ "pick.cpp": cpp, "glob.h": ["extern int total;", ""] }, null, ["g++", "-fsyntax-only", "-std=c++17", "pick.cpp"])).toBe("");
+  });
+
+  // Value: protects=section 10's rename-only stock diff in Python, where a class body is no function scope and a parameter's name is part of how callers call it; fails_when=a class attribute is renamed with the method uses that name a global, or a nested function's or lambda's parameter is renamed, so a call by keyword raises TypeError; why_new=the deferred adversarial finding at packets.ts:415 on #316 (the Captain asked for every language the rename handles); seam=packets.ts renameOnly; no_claim=names reached through locals() or vars()
+  test("python: a class attribute and a nested function's or lambda's parameter are never renamed", () => {
+    const cls = ["from cfg import *", "", "", "def make():", "    class Counter:", "        total = 0", "", "        def get(self):", "            return total", "", "    return Counter", ""];
+    const param = ["def make():", "    total = 0", "    def add(total):", "        return total + 1", "    return add", ""];
+    const lam = ["def make():", "    total = 0", "    step = lambda total, by: total + by", "    return step", ""];
+    expect([rename("python", "t.py", cls), rename("python", "t.py", param)]).toEqual([null, null]);
+    const l = rename("python", "t.py", lam);
+    expect([l?.includes("total_value"), l?.includes("step_value")]).toEqual([false, true]);
+    if (has("python3")) {
+      const call = (c: string) => ["python3", "-c", "import t; print(" + c + ")"];
+      expect(run({ "t.py": cls, "cfg.py": ["total = 10", ""] }, null, call("t.make()().get()"))).toBe("10");
+      expect(run({ "t.py": param }, null, call("t.make()(total=4)"))).toBe("5");
+      expect([run({ "t.py": lam }, null, call("t.make()(total=1, by=2)")), run({ "t.py": lam }, l!, call("t.make()(total=1, by=2)"))]).toEqual(["3", "3"]);
+    }
+  });
+
+  // Value: protects=section 10's rename-only stock diff in JavaScript and TypeScript as a refactor that keeps what the code does, where the rebuild check gives only node --check; fails_when=a rename the line rules allow still changes behavior: a destructured property's binding, an object method or class field in the local's scope, a regular expression, JSX text, a function's inferred name, a TypeScript parameter property, or a name a direct eval reads; why_new=the Captain's item 2 for GST-1959 (a JS or TS behavioural check for rename controls, after #316's review); seam=packets.ts renameOnly and bindcheck.ts; no_claim=messages of errors the code throws, which can quote source text
+  test("js and ts: a rename that would change what the code does is never made, and a plain one still is", () => {
+    const cases: Array<[Lang, string, string[], string | null, string]> = [
+      ["js", ".mjs", ["export function pick(opts) {", "  let total = 1;", "  {", "    const { total = 5 } = opts;", "    return total;", "  }", "}", ""], "m.pick({ total: 7 })", "7"],
+      ["js", ".mjs", ["export function make() {", "  let total = 0;", "  total += 1;", "  return { total() { return 2; } };", "}", ""], "m.make().total()", "2"],
+      ["js", ".mjs", ["export function count(s) {", "  const word = 'x';", "  return (s.match(/word/g) || []).length + word.length;", "}", ""], "m.count('word word')", "3"],
+      ["js", ".mjs", ["export function named() {", "  const handler = () => 1;", "  return handler.name;", "}", ""], "m.named()", '"handler"'],
+      ["js", ".mjs", ["export function calc(code) {", "  let total = 2;", "  return eval(code);", "}", ""], "m.calc('total * 3')", "6"],
+      ["js", ".mjs", ["export function calc(code) {", "  let total = 2;", "  return (eval)(code);", "}", ""], "m.calc('total * 3')", "6"],
+      ["ts", ".ts", ["export function calc(code: string) {", "  let total = 2;", "  return (eval as any)(code);", "}", ""], "m.calc('total * 3')", "6"],
+      ["ts", ".ts", ["export function make() {", "  let total = 1;", "  class Box {", "    constructor(public total) {}", "  }", "  return new Box(total);", "}", ""], "m.make().total", "1"],
+      ["js", ".jsx", ["export function Title() {", "  const label = 'Hi';", "  return <h1>label {label.toUpperCase()}</h1>;", "}", ""], null, ""],
+    ];
+    expect(cases.map(([lang, ext, text]) => [text[1], rename(lang, "c" + ext, text)])).toEqual(cases.map(([, , text]) => [text[1], null]));
+    for (const [, ext, text, expr, out] of cases) if (expr && (ext === ".ts" || has("node"))) expect(run({ ["c" + ext]: text }, null, call(ext, expr))).toBe(out);
+    const plain = ["export function sum(items: number[]): number {", "  let total = 0;", "  for (const v of items) {", "    total += v;", "  }", "  const label = `sum ${total}`;", "  return label.length + total;", "}", ""];
+    const r = rename("ts", "c.ts", plain);
+    expect(r).toContain("+  let totalValue = 0;");
+    expect(run({ "c.ts": plain }, r, call(".ts", "m.sum([1, 2, 3])"))).toBe(run({ "c.ts": plain }, null, call(".ts", "m.sum([1, 2, 3])")));
+  }, 120_000);
+
+  // Value: protects=section 10's rename-only control in JavaScript and TypeScript when the binder check cannot run; fails_when=a child that fails or prints nothing reads as a file with no safe rename, or as a safe one; why_new=the testing finding on bindcheck.ts:22 in this PR's /ship review; seam=bindcheck.ts checkRename; no_claim=why the child failed
+  test("a JavaScript or TypeScript rename check that cannot run refuses with E_SM_PACKET", () => {
+    expect(() => checkRename({ path: "", before: "let a = 1;", after: "let aValue = 1;", name: "a", renamed: "aValue" })).toThrow(/^E_SM_PACKET /);
+  });
+
+  // Value: protects=a run host's Docker volumes when the stock build check's tree copy fails; fails_when=copyVolume creates the copy volume and then its copy fails before the try that drops it, so the volume stays behind; why_new=the deferred adversarial finding at packets.ts:520 on #316; seam=packets.ts buildStock; no_claim=a volume left by a Docker daemon that stops answering
+  test("the stock build check drops its copy volume when the copy into it fails", () => {
+    const root = scratch("stock-volume");
+    const stub = join(root, "bin");
+    mkdirSync(stub);
+    writeFileSync(join(stub, "docker"), ["#!/bin/sh", "echo \"$*\" >> \"$DOCKER_CONFIG/calls\"", "[ \"$1\" = run ] && exit 1", "exit 0", ""].join("\n"), { mode: 0o755 });
+    const dir = unitDir(root, (u) => Object.assign(u, { image: { ...u.image, runtime_id: "sha256:" + "d".repeat(64) }, commands: { ...u.commands, rebuild: ["true"] }, repo_dir: "/w", work_dir: "/w" }));
+    const script = "import { buildStock } from " + JSON.stringify(join(ROOT, "lanes/outcome-skills/statemachines/packets.ts")) + "; try { buildStock(" + JSON.stringify(dir) + ", 'src/lib.rs', [{ kind: 'logging', diff: null }], { mode: 'root', volume: 'sm-tree-stub' }); } catch (e) { console.log(e.message.split(' ')[0]); }";
+    const r = spawnSync(process.execPath, ["-e", script], { encoding: "utf8", env: { ...process.env, PATH: stub + ":" + process.env.PATH, DOCKER_CONFIG: root } });
+    expect(r.stdout.trim()).toBe("E_SM_HISTORY");
+    const calls = readFileSync(join(root, "calls"), "utf8").trim().split("\n");
+    const made = calls.find((c) => c.startsWith("volume create "))!.slice("volume create ".length);
+    expect(calls.at(-1)).toBe("volume rm -f " + made);
+  });
+
+  // Value: protects=the stock-build and judge-key records, which name the unit the stock diffs came from; fails_when=sm packets stock builds in one unit's image and records the stock under another --unit, or sm packets labelled keeps the last unit_dir of a unit listed twice or builds a spec entry in another unit's dir; why_new=the deferred adversarial finding at cli.ts:363 on #316; seam=cli.ts sm packets stock and labelled; no_claim=a unit dir whose tree and file list belong to another unit
+  test("sm packets stock and labelled refuse a unit that is not the one in its unit dir, and labelled refuses a unit listed twice", async () => {
+    const root = scratch("unit-checks");
+    const dir = unitDir(root), id = fixtureRow().instance_id;
+    const tree = join(root, "tree");
+    mkdirSync(join(tree, "src"), { recursive: true });
+    writeFileSync(join(tree, "src/lib.rs"), "pub fn f() -> u32 {\n    let total = 1;\n    total\n}\n");
+    writeFileSync(join(root, "files.txt"), "src/lib.rs\n");
+    const err = async (argv: string[]) => {
+      const errs: string[] = [];
+      const orig = console.error;
+      console.error = (...a: unknown[]) => void errs.push(a.join(" "));
+      try {
+        return { code: await main(argv), err: errs[0] ?? "" };
+      } finally {
+        console.error = orig;
+      }
+    };
+    const stock = await err(["packets", "stock", "--lang", "rust", "--tree", tree, "--file", "src/lib.rs", "--files", join(root, "files.txt"), "--unit", "other__unit-1", "--unit-dir", dir, "--model", "claude-opus-5-5", "--out-dir", join(root, "out")]);
+    expect(stock).toEqual({ code: 2, err: "E_USAGE --unit other__unit-1 is not the unit in --unit-dir, which holds " + id });
+    const entry = (unit: string) => ({ unit, unit_dir: dir, lang: "rust", tree, file: "src/lib.rs", files: join(root, "files.txt") });
+    for (const [spec, want] of [[[entry(id), entry(id)], "E_USAGE spec lists " + id + " more than once"], [[entry("other__unit-1")], "E_USAGE spec entry other__unit-1 is not the unit in its unit_dir, which holds " + id]] as const) {
+      writeFileSync(join(root, "spec.json"), JSON.stringify(spec));
+      expect(await err(["packets", "labelled", "--spec", join(root, "spec.json"), "--out-dir", join(root, "lab")])).toEqual({ code: 2, err: want });
+    }
+    expect(existsSync(join(root, "out")) || existsSync(join(root, "lab"))).toBe(false);
+  });
 });
