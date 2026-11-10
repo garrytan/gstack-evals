@@ -31,8 +31,9 @@
 //   the paid route, it forwards the body it checked (the parsed body, serialized again), so a duplicate key cannot hide a
 //   refused shape in a copy the check never read.
 // - A refusal quotes a client value (a model, a tool type, a field) only as a short token (quoteClientValue in prices.ts).
-//   On a request that carried a slot marker past the tripwire, every refusal replaces the marker with <unquoted>, and so
-//   does the model its marker_hit line journals.
+//   On a request that carried slot markers past the tripwire, a refusal replaces each marker with <unquoted> in the client
+//   values it quotes (maskMarkers: nested or overlapping markers become one <unquoted>) and leaves its own text as
+//   written; the marker_hit line journals a model that holds a marker as <unquoted>.
 // - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
 //   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
@@ -59,7 +60,7 @@ import { BlockList, isIP } from "node:net";
 import { zstdDecompressSync } from "node:zlib";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
-import { chatPrice, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider } from "../pricing/prices.ts";
+import { chatPrice, maskMarkers, openRouterRouting, PriceError, priceRequest, quoteClientValue, refuseRequestShape, reservationMicros, sseUsage, UNQUOTED, usageCost, type MeteredProvider } from "../pricing/prices.ts";
 import { findLeaks } from "./sanitize.ts";
 
 export const UPSTREAM: Record<MeteredProvider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", openrouter: "https://openrouter.ai/api", typesafe: "https://api.typesafe.ai" };
@@ -266,7 +267,7 @@ interface CallContext {
   model: string;
   source: string | null;
   secrets: string[];
-  /** The slot markers a DR_ALLOWANCE_STOP request carried past the tripwire: a refusal replaces each one with UNQUOTED. */
+  /** The slot markers a DR_ALLOWANCE_STOP request carried past the tripwire: a refusal masks them in the client values it quotes. */
   marked?: string[];
   /** The bytes of the request body sent upstream, once priced. */
   bytes?: number;
@@ -576,10 +577,7 @@ export class MeteringProxy {
   }
 
   private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string, extra: Record<string, unknown> = {}): Response {
-    const unmark = (s: string) => (ctx.marked ?? []).reduce((t, marker) => t.split(marker).join(UNQUOTED), s);
-    reason = unmark(reason);
-    ctx.model = unmark(ctx.model);
-    if (Array.isArray(extra.tools)) extra = { ...extra, tools: extra.tools.map((t: string) => unmark(t)) };
+    ctx.model = maskMarkers(ctx.model, ctx.marked);
     const m = this.meter(ctx.slot);
     m.refused++;
     if (!m.refusals.includes(code)) m.refusals.push(code);
@@ -662,18 +660,18 @@ export class MeteringProxy {
     const body = parsed as Record<string, any>;
     ctx.model = typeof body.model === "string" ? body.model : "";
     if (!slot.models.has(`${provider}:${ctx.model}`)) {
-      ctx.model = ctx.model && quoteClientValue(ctx.model, "model");
+      ctx.model = ctx.model && quoteClientValue(ctx.model, "model", ctx.marked);
       return this.refuse(ctx, "E_ALLOWANCE", 403, `${provider}:${ctx.model || "(no model)"} is not on this slot's model allowlist`);
     }
     if (o.refuseServerTools) {
-      const server = Array.isArray(body.tools) ? body.tools.filter((t: any) => t && typeof t.type === "string" && t.type !== "custom").map((t: any) => quoteClientValue(t.type, "type")) : [];
+      const server = Array.isArray(body.tools) ? body.tools.filter((t: any) => t && typeof t.type === "string" && t.type !== "custom").map((t: any) => quoteClientValue(t.type, "type", ctx.marked)) : [];
       if (server.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side tools are refused on this lease: ${server.join(", ")}`, { tools: server });
       const asked = ["mcp_servers", "plugins", "web_search_options"].filter((k) => k in body);
       if (asked.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side capabilities are refused on this lease: ${asked.join(", ")}`, { tools: asked });
     }
     if (allowed.free) {
       try {
-        refuseRequestShape(provider, body);
+        refuseRequestShape(provider, body, ctx.marked);
       } catch (e) {
         if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
         throw e;
@@ -692,13 +690,13 @@ export class MeteringProxy {
     const cap = o.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     const fields = outputFields(provider, route);
     const stated = fields.map(f => body[f]).filter((v): v is number => typeof v === "number");
-    if (stated.some(v => v > cap)) return this.refuse(ctx, "E_ALLOWANCE", 400, `the request asks for ${Math.max(...stated)} output tokens, above this cell's cap of ${cap}`);
+    if (stated.some(v => v > cap)) return this.refuse(ctx, "E_ALLOWANCE", 400, `the request asks for ${maskMarkers(String(Math.max(...stated)), ctx.marked)} output tokens, above this cell's cap of ${cap}`);
     if (!stated.length && fields.length) body[fields[0]!] = cap;
     if (provider === "openrouter" && route === "/v1/chat/completions") body.max_tokens ??= body.max_completion_tokens;
     const outBody = JSON.stringify(body);
     let price: ReturnType<typeof priceRequest>;
     try {
-      price = priceRequest(provider, body, stated.length ? Math.max(...stated) : cap, route);
+      price = priceRequest(provider, body, stated.length ? Math.max(...stated) : cap, route, ctx.marked);
     } catch (e) {
       if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
       throw e;

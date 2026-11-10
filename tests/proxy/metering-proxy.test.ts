@@ -3,7 +3,7 @@ import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
-import { CHAT_PRICES, openRouterRouting, priceRequest, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
+import { CHAT_PRICES, openRouterRouting, priceRequest, quoteClientValue, reservationMicros, sseUsage, TOOL_USE_SYSTEM_TOKENS, UNKNOWN_CHAIN_CONTEXT_TOKENS, usageCost } from "../../src/runner/pricing/prices.ts";
 import { isTrialNetworkHost, MeteringProxy, ProxyControl, reconcileJournal, routable, scrubbedCause, type BindRequest, type ProxyOptions } from "../../src/runner/proxy/metering-proxy.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, Reservation, ReservationLedger } from "../../src/types.ts";
 
@@ -1744,6 +1744,96 @@ describe("free POST routes and the request-shape refusals (containment tightenin
     expect(lines.filter(l => l.kind === "refusal").map(l => l.code).sort()).toEqual(markers.flatMap(() => [...Array(4).fill("E_ALLOWANCE"), ...Array(6).fill("E_ALLOWANCE"), "E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL"]).sort());
     expect(plain.calls.length + sm.calls.length).toBe(0);
     expect(await plain.proxy.finalize(a.meter_id)).toMatchObject({ allowance_stops: 0 });
+  });
+
+  // Value: protects=a DR_ALLOWANCE_STOP slot whose markers nest (one a prefix of another) or overlap leaves no piece of either marker in a refusal's answer or its journal line, wherever the request puts the value (the model, a field, a hosted, server or OpenRouter tool type) on the paid, count and estimate routes; fails_when=the shorter marker is masked first and the longer one's tail stays, or one of two overlapping markers is masked and the rest of the other stays; why_new=#313's open note on nested markers; seam=quoteClientValue's marker masking (maskMarkers) through MeteringProxy.refuse; no_claim=the marker_hit line, which journals a model that holds a marker as <unquoted>
+  test("nested or overlapping slot markers leave no piece of either marker in a refusal", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const SHORT = "authx";
+    const LONG = "authx_rejects_expired_token";
+    const LEFT = "parser_case";
+    const RIGHT = "case_hidden_row";
+    const BOTH = "parser_case_hidden_row";
+    const plain = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const sm = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP", refuseServerTools: true });
+    const slot = { models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`], forbidden_markers: [CANARY, SHORT, LONG, LEFT, RIGHT], canary: CANARY };
+    const a = plain.bind(slot);
+    const b = sm.bind(slot);
+    const detail = async (t: typeof plain, s: { slot: string; token: string }, path: string, body: Record<string, unknown>, status: number, code: string) => (await expectProblem(await t.call(s.slot, s.token, path, body), status, code)).detail;
+    const unpriced = "E_ALLOWANCE: metering proxy: unpriced request refused: ";
+    for (const path of ["/anthropic/v1/messages", COUNT]) {
+      const body = { ...count, ...(path === COUNT ? {} : { max_tokens: 1000 }) };
+      expect(await detail(plain, a, path, { ...body, speed: LONG }, 402, "E_ALLOWANCE")).toBe(`${unpriced}speed "<unquoted>" bills above the standard rates in the price table`);
+      expect(await detail(plain, a, path, { ...body, inference_geo: BOTH }, 402, "E_ALLOWANCE")).toBe(`${unpriced}inference_geo "<unquoted>" may bill above the standard rates in the price table`);
+      expect(await detail(plain, a, path, { ...body, n: `${LONG}.v2` }, 402, "E_ALLOWANCE")).toBe(`${unpriced}n="<unquoted>.v2" asks for several completions, each billed in full`);
+      expect(await detail(plain, a, path, { ...body, tools: [{ type: `web_search_${BOTH}`, name: "w" }] }, 402, "E_ALLOWANCE")).toBe(`${unpriced}the request uses the hosted tool web_search_<unquoted>, whose cost the proxy cannot bound from the request`);
+      expect(await detail(plain, a, path, { ...body, model: `acme/${LONG}` }, 403, "E_ALLOWANCE")).toBe("E_ALLOWANCE: metering proxy: anthropic:acme/<unquoted> is not on this slot's model allowlist");
+      expect(await detail(sm, b, path, { ...body, tools: [{ type: BOTH, name: "x" }] }, 403, "E_PROXY_SERVER_TOOL")).toBe("E_PROXY_SERVER_TOOL: metering proxy: provider-side tools are refused on this lease: <unquoted>");
+    }
+    for (const path of ["/openrouter/v1/chat/completions", ESTIMATE]) expect(await detail(plain, a, path, { ...count, model: PARTICLE, tools: [{ type: `openrouter:${LONG}` }] }, 402, "E_ALLOWANCE")).toBe(`${unpriced}the OpenRouter server tool openrouter:<unquoted> runs and bills outside the model's tokens`);
+    const journals = readFileSync(join(plain.dir, "journal.ndjson"), "utf8") + readFileSync(join(sm.dir, "journal.ndjson"), "utf8");
+    for (const piece of [LONG, RIGHT, "_rejects_expired_token", "_hidden_row", "parser_"]) expect(journals).not.toContain(piece);
+    const refusals = [...plain.journal(), ...sm.journal()].filter(l => l.kind === "refusal");
+    expect(refusals.map(l => l.model)).toEqual([...Array(2).fill(["claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5", "acme/<unquoted>"]).flat(), PARTICLE, PARTICLE, "claude-opus-5-5", "claude-opus-5-5"]);
+    expect(refusals.filter(l => l.code === "E_PROXY_SERVER_TOOL").map(l => l.tools)).toEqual([["<unquoted>"], ["<unquoted>"]]);
+    expect([...plain.journal(), ...sm.journal()].filter(l => l.kind === "marker_hit")).toHaveLength(refusals.length);
+    expect(plain.calls.length + sm.calls.length).toBe(0);
+  });
+
+  // Value: protects=on a request that carried slot markers, a refusal masks only the client values it quotes: markers that are words of the proxy's own text (model, price, lease, tokens, plugins) or a piece of the <unquoted> placeholder leave every answer and every refusal line's reason, model and tools exactly as a slot without markers gets them; fails_when=a refusal masks its whole reason, so "this slot's model allowlist", "the price table", a refused capability's name or the placeholder itself changes; why_new=#313's open review finding at metering-proxy.ts:579; seam=MeteringProxy.refuse and the quoting sites in forward and prices.ts; no_claim=a marker inside a quoted client value, which the nested-marker test covers
+  test("a slot marker masks only the client values a refusal quotes, never the proxy's text or the placeholder", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const words = ["model", "price", "lease", "tokens", "plugins", "quot"];
+    const said = [{ role: "user", content: words.join(" ") }];
+    const sends: Array<[string, Record<string, unknown>]> = [
+      ["/anthropic/v1/messages", { model: "claude-haiku-5-5", max_tokens: 1000, messages: said }],
+      ["/anthropic/v1/messages", { model: "x y", max_tokens: 1000, messages: said }],
+      ["/anthropic/v1/messages", { model: "claude-opus-5-5", max_tokens: 1000, speed: "fast", messages: said }],
+      [COUNT, { model: "claude-opus-5-5", tools: [{ type: "web_search_20250305", name: "web_search" }], messages: said }],
+      [COUNT, { model: "claude-opus-5-5", plugins: [], messages: said }],
+      ["/anthropic/v1/messages", { model: "claude-opus-5-5", max_tokens: 999_999, messages: said }],
+    ];
+    const run = async (markers: string[]) => {
+      const t = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP", refuseServerTools: true, maxOutputTokens: 4096 });
+      const s = t.bind(markers.length ? { forbidden_markers: [CANARY, ...markers], canary: CANARY } : {});
+      const answers: string[] = [];
+      for (const [path, body] of sends) {
+        const res = await t.call(s.slot, s.token, path, body);
+        answers.push(`${res.status} ${await res.text()}`);
+      }
+      const lines = t.journal();
+      expect(t.calls).toHaveLength(0);
+      return { answers, hits: lines.filter(l => l.kind === "marker_hit").length, refusals: lines.filter(l => l.kind === "refusal").map(({ code, model, reason, tools }) => ({ code, model, reason, tools })) };
+    };
+    const marked = await run(words);
+    const unmarked = await run([]);
+    expect(marked.hits).toBe(sends.length);
+    expect(unmarked.hits).toBe(0);
+    expect(marked.refusals.map(l => l.reason)).toEqual([
+      "anthropic:claude-haiku-5-5 is not on this slot's model allowlist",
+      "anthropic:<unquoted> is not on this slot's model allowlist",
+      'unpriced request refused: speed "fast" bills above the standard rates in the price table',
+      "provider-side tools are refused on this lease: web_search_20250305",
+      "provider-side capabilities are refused on this lease: plugins",
+      "the request asks for 999999 output tokens, above this cell's cap of 4096",
+    ]);
+    expect(marked.refusals.map(l => l.model)).toEqual(["claude-haiku-5-5", "<unquoted>", "claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5"]);
+    expect(marked.refusals).toEqual(unmarked.refusals);
+    expect(marked.answers).toEqual(unmarked.answers);
+  });
+
+  // Value: protects=an OpenRouter model id with one :suffix token on its last segment (particle-ai/particle-1:online) is quoted as written in the allowlist refusal, its journal line and the marker_hit line, while a second colon, a colon before the last segment, an empty or over-long suffix, or a fourth segment still reads <unquoted>; fails_when=the model form refuses a :suffix, or accepts a colon anywhere else; why_new=#313's open review finding at prices.ts:153; seam=quoteClientValue's model form; no_claim=which suffixes OpenRouter serves
+  test("a model id with one :suffix token on its last segment is quoted as written", async () => {
+    for (const id of [`${PARTICLE}:online`, `${PARTICLE}:free`, "a:b", "a/b/c:d"]) expect(quoteClientValue(id, "model")).toBe(id);
+    for (const id of ["a:b:c", "a:b/c", "a/b:c/d", "a/b:", ":b", `a/b:${"s".repeat(41)}`, "a/b/c/d:e", "a/b: c", "a/b:c d"]) expect(quoteClientValue(id, "model")).toBe("<unquoted>");
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const MARK = "SEALED-MARKER-7f3a9c";
+    const t = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const a = t.bind({ models: [`openrouter:${PARTICLE}`], forbidden_markers: [CANARY, MARK], canary: CANARY });
+    const res = await t.call(a.slot, a.token, "/openrouter/v1/chat/completions", { model: `${PARTICLE}:online`, messages: [{ role: "user", content: MARK }] });
+    expect((await expectProblem(res, 403, "E_ALLOWANCE")).detail).toBe(`E_ALLOWANCE: metering proxy: openrouter:${PARTICLE}:online is not on this slot's model allowlist`);
+    expect(t.journal().map(l => [l.kind, l.model])).toEqual([["marker_hit", `${PARTICLE}:online`], ["refusal", `${PARTICLE}:online`]]);
+    expect(t.calls).toHaveLength(0);
   });
 });
 
