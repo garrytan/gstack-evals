@@ -74,33 +74,67 @@ while IFS= read -r -d '' h; do
   while read -r id rest; do [ "$rest" = missing ] || { lafter=$((lafter + 1)); say "leak after $id $d"; }; done < <([ -s "$t/after" ] && og cat-file --batch-check < "$t/after")
   while read -r id rest; do [ "$rest" = missing ] || { lfix=$((lfix + 1)); say "leak fix $id $d"; }; done < <([ -s "$t/blobs" ] && og cat-file --batch-check < "$t/blobs")
 done < <(find "$root/" \( -path "$root/proc" -o -path "$root/sys" -o -path "$root/dev" -o -path "$in" -o -path "$t" \) -prune -o -name HEAD -type f -print0 2>/dev/null)
-g ls-files -z | (cd "$repo" && xargs -0 -r grep -h -a -F -x -f "$in/lines" -- 2>/dev/null) | sort -u > "$t/lines.base"
+bstream() { g ls-tree -r "$base" 2>/dev/null | awk '$2 == "blob" { print $3 }' | g cat-file --batch 2>/dev/null; }
+bstream | grep -a -x -F -f "$in/lines" 2>/dev/null | sort -u > "$t/lines.base"
 grep -a -v -x -F -f "$t/lines.base" "$in/lines" > "$t/lines" 2>/dev/null || true
 [ -s "$t/lines.base" ] || cp "$in/lines" "$t/lines"
-g ls-files -z | (cd "$repo" && xargs -0 -r grep -h -o -a -F -f "$in/names" -- 2>/dev/null) | sort -u > "$t/names.base"
+bstream | grep -a -o -F -f "$in/names" 2>/dev/null | sort -u > "$t/names.base"
 grep -a -v -x -F -f "$t/names.base" "$in/names" > "$t/names" 2>/dev/null || true
 [ -s "$t/names.base" ] || cp "$in/names" "$t/names"
 : > "$t/names.keep"
-while IFS= read -r n; do [ -n "$n" ] || continue; g grep -q -a -F -e "$n" 2>/dev/null || printf '%s\n' "$n" >> "$t/names.keep"; done < "$t/names"
+while IFS= read -r n; do [ -n "$n" ] || continue; g grep -q -a -F -e "$n" "$base" -- 2>/dev/null || printf '%s\n' "$n" >> "$t/names.keep"; done < "$t/names"
 mv "$t/names.keep" "$t/names"
 sed -i '/^$/d' "$t/lines" "$t/names"
 nl=$(wc -l < "$t/lines"); nn=$(wc -l < "$t/names")
+declare -A bt
+while IFS= read -r -d '' e; do m=${e%%$'\t'*}; case "$m" in *" blob "*) bt["${e#*$'\t'}"]=${m##* } ;; esac; done < <(g ls-tree -r -z "$base" 2>/dev/null)
+changed=0
+differs() { changed=$((changed + 1)); [ "$changed" -le 20 ] && say "tracked_changed $1"; }
+exec 6> "$t/repo.files" 7> "$t/hash.paths"
+while IFS= read -r -d '' p; do
+  r=${p#"$repo/"}
+  if [ -z "${bt["$r"]+x}" ]; then printf '%s\0' "$p" >&6
+  elif [[ "$r" == *$'\n'* || "$r" == '"'* ]]; then
+    [ "$(g hash-object --no-filters -- "$r" 2>/dev/null)" = "${bt["$r"]}" ] || printf '%s\0' "$p" >&6
+    [ "$(g hash-object -- "$r" 2>/dev/null)" = "${bt["$r"]}" ] || differs "$r"
+  else printf '%s\n' "$r" >&7; fi
+done < <(find "$repo" -path "$repo/.git" -prune -o -type f -print0 2>/dev/null)
+exec 7>&-
+if [ -s "$t/hash.paths" ]; then
+  n=$(wc -l < "$t/hash.paths")
+  if g hash-object --no-filters --stdin-paths < "$t/hash.paths" > "$t/hash.raw" 2>/dev/null && g hash-object --stdin-paths < "$t/hash.paths" > "$t/hash.filt" 2>/dev/null &&
+    [ "$(wc -l < "$t/hash.raw")" = "$n" ] && [ "$(wc -l < "$t/hash.filt")" = "$n" ]; then
+    while IFS= read -r r <&3 && IFS= read -r a <&4 && IFS= read -r b <&5; do
+      [ "$a" = "${bt["$r"]}" ] || printf '%s\0' "$repo/$r" >&6
+      [ "$b" = "${bt["$r"]}" ] || differs "$r"
+    done 3< "$t/hash.paths" 4< "$t/hash.raw" 5< "$t/hash.filt"
+  else
+    say "error hashing the repository's tracked files failed"
+  fi
+fi
+exec 6>&-
+[ "$changed" -eq 0 ] || tracked=1
+g cat-file --batch-all-objects --batch-check='%(objectname) %(objecttype)' 2>/dev/null | awk '$2 == "blob" { print $1 }' | sort -u > "$t/blobs.all"
+g rev-list --objects "$base" 2>/dev/null | cut -d' ' -f1 | sort -u > "$t/reach"
+comm -23 "$t/blobs.all" "$t/reach" > "$t/blobs.extra"
+xb=$(wc -l < "$t/blobs.extra")
 { find "$root/" \( -path "$root/proc" -o -path "$root/sys" -o -path "$root/dev" -o -path "$in" -o -path "$t" -o -path "$repo" \) -prune -o -type f -print0 2>/dev/null
-  g ls-files -z --others | while IFS= read -r -d '' f; do printf '%s\0' "$repo/$f"; done; } > "$t/files"
+  cat "$t/repo.files"; } > "$t/files"
 files=$(tr -cd '\0' < "$t/files" | wc -c)
 hits=0
+hit() { hits=$((hits + 1)); [ "$hits" -le 50 ] && say "hit $1 $(printf %s "$2" | sha256sum | cut -c1-16) $3"; }
 scan() {
-  local kind="$1" list="$2" x="$3" p n
+  local kind="$1" list="$2" x="$3" p n id
   [ -s "$list" ] || return 0
   while IFS= read -r -d '' p; do
-    while IFS= read -r n; do
-      hits=$((hits + 1))
-      [ "$hits" -le 50 ] && say "hit $kind $(printf %s "$n" | sha256sum | cut -c1-16) $p"
-    done < <(grep -a -o $x -F -f "$list" -- "$p" 2>/dev/null | sort -u)
+    while IFS= read -r n; do hit "$kind" "$n" "$p"; done < <(grep -a -o $x -F -f "$list" -- "$p" 2>/dev/null | sort -u)
   done < <(xargs -0 -r grep -a -l -s $x -F -f "$list" -- < "$t/files" | tr '\n' '\0')
+  while read -r id; do
+    while IFS= read -r n; do hit "$kind" "$n" "blob:$id"; done < <(g cat-file blob "$id" 2>/dev/null | grep -a -o $x -F -f "$list" | sort -u)
+  done < "$t/blobs.extra"
 }
 scan line "$t/lines" -x
 scan name "$t/names" ""
 rm -rf "$t"
-say "summary base=$base refs=$refs bad_refs=$bad special=$special reflog=$reflog commits=$commits bad_commits=$badc alternates=$alt gitfile=$gitfile modules=$modules nested=$nested gitmodules=$gitmodules tracked_changed=$tracked fix_blobs=$fixb repo_fix_blobs=$rfb after=$na other_gitdirs=$other clones=$clones leaked_after=$lafter leaked_fix=$lfix lines=$nl names=$nn files=$files hits=$hits"
+say "summary base=$base refs=$refs bad_refs=$bad special=$special reflog=$reflog commits=$commits bad_commits=$badc alternates=$alt gitfile=$gitfile modules=$modules nested=$nested gitmodules=$gitmodules tracked_changed=$tracked fix_blobs=$fixb repo_fix_blobs=$rfb extra_blobs=$xb after=$na other_gitdirs=$other clones=$clones leaked_after=$lafter leaked_fix=$lfix lines=$nl names=$nn files=$files hits=$hits"
 say done

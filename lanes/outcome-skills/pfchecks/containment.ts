@@ -5,13 +5,17 @@
 // pstack volume and the Claude binary, read-only), as root, with no network. It checks (a) every ref, tag, remote, note,
 // replace ref, stash, packed ref, FETCH_HEAD, ORIG_HEAD and reflog entry points at the base commit or an ancestor; (b)
 // every commit object is the base or an ancestor; (c) no alternates, gitfile, submodule store or nested .git, and tracked
-// files equal the base commit; (d) no other git directory on the filesystem holds the dataset's base commit (a clone of
+// files equal the base commit, both by git diff and by hashing each working copy as git add would store it, so an index
+// flag (skip-worktree, assume-unchanged) cannot hide a change; (d) no other git directory on the filesystem holds the dataset's base commit (a clone of
 // the repository), a blob of a file the fix or the test patch changes as it reads after the patch, or a commit id after
 // the base that the unit's own image holds (upstreamAfter), and the session repository holds no such blob; every other git
-// directory is recorded with its path and commit count; (e) no file outside the repository, and no untracked or ignored
-// file inside it, holds a hidden marker: a line of 30 code points or more that the fix or the test patch adds and no base
-// file holds as a line (whole lines, as the leak scan), or the leaf name of a hidden fail-to-pass test, 12 characters or
-// more, that no tracked base file holds (fixed strings). runPfSession runs containUnit before every session, so a unit's
+// directory is recorded with its path and commit count; (e) no file outside the repository, no file inside it that the
+// base commit's tree does not hold byte for byte (untracked, ignored, staged only, or a tracked file whose working copy
+// differs), and no blob in the session repository that the base commit does not reach holds a hidden marker: a line of
+// 30 code points or more that the fix or the test patch adds and no file in the base commit's tree holds as a line
+// (whole lines, as the leak scan), or the leaf name of a hidden fail-to-pass test, 12 characters or more, that no file in
+// the base commit's tree holds (fixed strings). Base content comes from the base commit's blobs, never the index or the
+// working tree. runPfSession runs containUnit before every session, so a unit's
 // first session runs the check and later ones reuse its passing record.
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";

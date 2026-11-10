@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { SessionImage } from "../../lanes/outcome-skills/statemachines/image.ts";
@@ -169,6 +169,55 @@ test("a hidden line outside the repository and a hidden name in an ignored file 
   expect(r.findings.filter((x) => x.startsWith("hit line ")).map((x) => x.split(" ").pop())).toEqual([join(f.root, "tmp/leftover.patch")]);
   expect(r.findings.filter((x) => x.startsWith("hit name ")).map((x) => x.split(" ").pop())).toEqual([join(f.repo, "build/classes.txt")]);
   expect(r.detail).not.toContain(NAME);
+  rmSync(f.root, { recursive: true, force: true });
+});
+
+test("a hidden test staged but never committed is a hit against the base commit's tree, in the working tree and as a blob", () => {
+  const hidden = { "tests/hidden_test.txt": "void " + NAME + "() {}\n" + LINE + "\n" };
+  const hitsAt = (r: ReturnType<typeof containHost>, kind: string) => r.findings.filter((x) => x.startsWith("hit " + kind + " ")).map((x) => x.split(" ").pop()).sort();
+  const f = fixture();
+  put(f.repo, hidden);
+  g(f.repo, "add", "tests/hidden_test.txt");
+  const blob = g(f.repo, "rev-parse", ":tests/hidden_test.txt");
+  const r = containHost(f.repo, inputs(), f.root);
+  expect(r.ok).toBe(false);
+  expect(r.summary).toMatchObject({ tracked_changed: "1", lines: "1", names: "1", hits: "4" });
+  expect(hitsAt(r, "line")).toEqual([join(f.repo, "tests/hidden_test.txt"), "blob:" + blob].sort());
+  expect(hitsAt(r, "name")).toEqual([join(f.repo, "tests/hidden_test.txt"), "blob:" + blob].sort());
+  rmSync(f.root, { recursive: true, force: true });
+  const d = fixture();
+  put(d.repo, hidden);
+  g(d.repo, "add", "tests/hidden_test.txt");
+  const left = g(d.repo, "rev-parse", ":tests/hidden_test.txt");
+  g(d.repo, "rm", "-q", "--cached", "tests/hidden_test.txt");
+  rmSync(join(d.repo, "tests"), { recursive: true, force: true });
+  const rd = containHost(d.repo, inputs(), d.root);
+  expect(rd.ok).toBe(false);
+  expect(rd.summary).toMatchObject({ tracked_changed: "0", lines: "1", names: "1", hits: "2" });
+  expect([...hitsAt(rd, "line"), ...hitsAt(rd, "name")]).toEqual(["blob:" + left, "blob:" + left]);
+  rmSync(d.root, { recursive: true, force: true });
+});
+
+test("a tracked file whose working copy differs from the base commit fails and is scanned, even when an index flag hides the change", () => {
+  for (const flag of ["--skip-worktree", "--assume-unchanged"]) {
+    const f = fixture({ ...BASE, "t.txt": "base text\n" });
+    g(f.repo, "update-index", flag, "t.txt");
+    put(f.repo, { "t.txt": "void " + NAME + "() {}\n" + LINE + "\n" });
+    const r = containHost(f.repo, inputs(), f.root);
+    expect([flag, r.ok, r.summary.tracked_changed, r.summary.lines, r.summary.names, r.summary.hits]).toEqual([flag, false, "1", "1", "1", "2"]);
+    expect(r.findings.filter((x) => x.startsWith("hit ")).map((x) => x.split(" ").pop())).toEqual([join(f.repo, "t.txt"), join(f.repo, "t.txt")]);
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("a working copy that differs from its blob only by the checkout's line-ending conversion is no tracked change and no hit", () => {
+  const f = fixture({ ...BASE, ".gitattributes": "*.txt text eol=crlf\n", "t.txt": "void " + NAME + "() {}\n" + LINE + "\n" });
+  for (const p of ["a.txt", "t.txt"]) rmSync(join(f.repo, p));
+  g(f.repo, "checkout", "--", "a.txt", "t.txt");
+  expect(readFileSync(join(f.repo, "t.txt"), "utf8")).toContain(LINE + "\r\n");
+  const r = containHost(f.repo, inputs(), f.root);
+  expect(r.ok).toBe(true);
+  expect(r.summary).toMatchObject({ tracked_changed: "0", lines: "0", names: "0", hits: "0" });
   rmSync(f.root, { recursive: true, force: true });
 });
 

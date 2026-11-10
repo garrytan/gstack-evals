@@ -246,14 +246,18 @@ run. It waits for the neutral record, so it can start while the neutral gate sti
   a container of that image. It fails when any ref (branches, tags, remotes, notes, replace refs, stash, packed refs,
   FETCH_HEAD, ORIG_HEAD and the other special heads) or reflog entry points past the base commit, when any commit object is neither the base nor an
   ancestor, when the repository has alternates, a gitfile, a modules store or a nested .git, when a tracked file differs
-  from the base, or when the repository holds a blob of a file the fix or the test patch changes as it reads after the
+  from the base (git diff, and each working copy hashed as git add would store it, so skip-worktree and assume-unchanged
+  flags hide nothing), or when the repository holds a blob of a file the fix or the test patch changes as it reads after the
   patch (git apply --cached on a scratch index and object dir gives the blob ids). It lists every other git directory on
   the filesystem with its path and commit count, and fails when one holds the dataset's base commit, one of those blobs
   or a commit after the base that the unit's runtime image holds (upstreamAfter: every commit object in the image's
   repository that is not the base or an ancestor, or every commit object when the base is absent). Its needles are the added lines
-  of 30 characters or more in fix.patch and test.patch that no base file holds, and the fail-to-pass test leaf names of
-  12 characters or more that no tracked base file holds; it looks for them in every file outside the repository and in
-  untracked and ignored files inside it, as whole lines and as file names. Output names a needle by a sha256 prefix,
+  of 30 characters or more in fix.patch and test.patch that no blob in the base commit's tree holds, and the
+  fail-to-pass test leaf names of 12 characters or more that no blob in that tree holds (base content never comes from
+  the index or the working tree); it looks for them, as whole lines and as fixed strings, in every file outside the
+  repository, in every file inside it whose bytes differ from the base commit's blob at that path or that the base
+  commit lacks (untracked, ignored or staged only), and in every blob the base commit does not reach (named blob:<id>,
+  counted as extra_blobs). Output names a needle by a sha256 prefix,
   never by its text. A failure is E_PF_CONTAINMENT and no session runs.
 - The hang line reads N/A, not FAIL, when the ceiling left the hang entry unreached, every run it had matches a catch,
   and replaySchedule over the session's recorded runs still starts the entry's next run after the ceiling. The line
