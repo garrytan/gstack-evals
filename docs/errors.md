@@ -244,6 +244,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_PF_INFRA_GAP](#e_pf_infra_gap) | 2 | U20 |
 | [E_PF_WRAPUP_ALLOWANCE](#e_pf_wrapup_allowance) | 2 | U20 |
 | [E_PF_FINALIZE_HALT](#e_pf_finalize_halt) | 2 | U20 |
+| [E_PF_CONTAINMENT](#e_pf_containment) | 1 | U20 |
 | [E_PF_CELL_INCOMPLETE](#e_pf_cell_incomplete) | 1 | U20 |
 | [E_PF_CAPTURE](#e_pf_capture) | 2 | U20 |
 | [E_PF_ARM](#e_pf_arm) | 2 | U20 |
@@ -477,6 +478,14 @@ A session left no usable CHECKS.json (absent, not JSON, not an array, an element
 Fix: Nothing to fix: the count is reported per arm.
 
 Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable: yes. Owner: U20.
+
+### E_PF_CONTAINMENT
+
+The containment check found something from the fix commit or after in a pstack-checks session workspace: a ref, reflog entry or commit object that is not the base commit or an ancestor, an alternates file, gitfile, submodule store or nested .git, tracked files that differ from the base commit, another git directory holding the dataset's base commit, or a hidden marker (a line the fix or the test patch adds, or a hidden test's name) in a file outside the repository or untracked inside it.
+
+Fix: Read the PF_CONTAIN lines it printed (each hit names a path and a needle's sha256), fix the unit's image or tree preparation test-first, rebuild the tree and run outcome pf contain again. No paid session runs on the unit until it passes.
+
+Exit 1. Side effects: None: the check reads a container of the session image and writes nothing. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_PF_CELL_INCOMPLETE
 

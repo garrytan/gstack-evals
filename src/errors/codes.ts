@@ -1997,6 +1997,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_PF_CONTAINMENT: {
+    exit: 1,
+    meaning: "The containment check found something from the fix commit or after in a pstack-checks session workspace: a ref, reflog entry or commit object that is not the base commit or an ancestor, an alternates file, gitfile, submodule store or nested .git, tracked files that differ from the base commit, another git directory holding the dataset's base commit, or a hidden marker (a line the fix or the test patch adds, or a hidden test's name) in a file outside the repository or untracked inside it.",
+    fix: "Read the PF_CONTAIN lines it printed (each hit names a path and a needle's sha256), fix the unit's image or tree preparation test-first, rebuild the tree and run outcome pf contain again. No paid session runs on the unit until it passes.",
+    side_effects: "None: the check reads a container of the session image and writes nothing.",
+    retry_safe: true,
+    resumable: true,
+    owner: "U20",
+  },
   E_PF_CELL_INCOMPLETE: {
     exit: 1,
     meaning: "A pstack-checks analysis cell (one model and one arm) has gaps on more than 10% of its units, so every verdict that uses it reads INCOMPLETE. The analysis still writes every number, the gap worst case included, then exits 1.",

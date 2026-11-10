@@ -6,8 +6,11 @@ import { CODES, isReasonCode } from "../../../src/errors/codes.ts";
 import type { Candidate } from "../statemachines/source.ts";
 import { readUnit } from "../statemachines/unit.ts";
 import { treeVolume as smTreeVolume } from "../statemachines/oracle.ts";
+import { buildSessionImage } from "../statemachines/image.ts";
+import { docker } from "../../real-outcome/task/docker.ts";
 import { analyse, report } from "./analysis.ts";
 import * as adm from "./admission.ts";
+import { containImage, containInputs } from "./containment.ts";
 import { labelsGate, neutralGate, oracleGate, poolOf, readLabels, toldGate, walkDraw } from "./draw.ts";
 import { itemsTable } from "./items.ts";
 import { dockerNeutralRun, neutralFiles, validateNeutral, volumeTexts } from "./neutral.ts";
@@ -20,6 +23,7 @@ export const HELP = `Usage: gstack-evals outcome pf <command>
   dryrun [--out <dir>] [--python <python with claude_agent_sdk>] [--pstack-source <cursor/plugins clone>]
   draw --prereg <prereg.json> --candidates <candidates.json> --units <dir> --neutral <dir> [--labels <file>]... [--raise] [--n <n>] --out <draw.json>
   told --unit <dir> [--unit <dir>]...
+  contain --unit <dir> [--unit <dir>]...
   neutral --unit <dir> --out <dir> [--image <id>] [--volume <name>] [--mode hardened|root]
   score --s <repo> [--ref HEAD] --unit <dir> --neutral <record.json> --checks <CHECKS.json> --session <session.json> --out <catch.json>
         [--transcript <sdk-messages.jsonl>] [--claude-session <claude-session.jsonl>] [--image <id>] [--volume <name>] [--mode hardened|root] [--mount <spec>]... [--env K=V]... [--breaks]
@@ -79,6 +83,22 @@ async function run(cmd: string, a: Args): Promise<number> {
       const r = toldScreen(issue, readFileSync(join(dir, "fix.patch"), "utf8"));
       console.log(r ? "E_PF_TOLD " + dir + " " + r.rule + " " + r.value : "ok " + dir);
       if (r) bad++;
+    }
+    return bad ? 1 : 0;
+  }
+  if (cmd === "contain") {
+    let bad = 0;
+    for (const dir of list(a, "unit")) {
+      const u = readUnit(dir);
+      const img = buildSessionImage(u, { volume: smTreeVolume(u.id), stage: "first" });
+      try {
+        const r = containImage(img.tag, u.repo_dir, containInputs(dir, u));
+        for (const f of r.findings) console.log("PF_CONTAIN " + u.id + " " + f);
+        console.log(r.ok ? "ok " + u.id + " " + r.detail : "E_PF_CONTAINMENT " + u.id + " " + r.detail);
+        if (!r.ok) bad++;
+      } finally {
+        docker(["rmi", img.tag], { timeoutMs: 120_000 });
+      }
     }
     return bad ? 1 : 0;
   }

@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The pstack-checks dry run on a real MultiLang unit (plan section 15). dryrun.ts drives every fixture on a synthetic unit;
 // this drives the fixtures that depend on the unit (unit-fixtures.ts) on a real one: its image, its prepared tree, its
-// rebuild and its own fail-to-pass test. Three stub sessions run through the driver on the unit's session image, one per
-// arm (P on Opus, C on Sol, N on particle-1), and a fourth, on a copy of the tree holding a hostile CLAUDE.md, is refused.
+// rebuild and its own fail-to-pass test. The containment check runs on the session image first (containment.ts). Three
+// stub sessions run through the driver on the unit's session image, one per arm (P on Opus, C on Sol, N on particle-1),
+// and a fourth, on a copy of the tree holding a hostile CLAUDE.md, is refused.
 // Each session is scored in the unit's runtime image by the Docker executor in hardened mode, as outcome pf score does;
 // the three sessions score at the same time, once the neutral record exists (it may still be in the making), or one after
 // another with --serial, for a unit whose runs are too heavy to share the machine. N's score also runs the breaks secondary
@@ -22,16 +23,18 @@ import { LocalLedger } from "../../../src/runner/ledger/local.ts";
 import { UPSTREAM } from "../../../src/runner/proxy/metering-proxy.ts";
 import { PF_STAGES, serveStages } from "../driver/stage.ts";
 import { treeVolume as smTreeVolume } from "../statemachines/oracle.ts";
+import { buildSessionImage } from "../statemachines/image.ts";
 import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { passed } from "../statemachines/testrun.ts";
 import { readUnit, type SmUnit } from "../statemachines/unit.ts";
 import type { PfArm } from "./arms.ts";
+import { containImage, containInputs } from "./containment.ts";
 import { manifest, outcomes, PATH_PROBE, startStub, writeCommand, type StubSession } from "./dryrun.ts";
 import { P_HEADING } from "./exposure.ts";
 import { ITEMS, LINE, OPUS, P1, SOL } from "./items.ts";
 import { volumeTexts } from "./neutral.ts";
 import { buildPstackVolume, pstackMount } from "./pstack.ts";
-import { dockerExecutor, entryTimeout, treeVolume } from "./runner.ts";
+import { CEILING_MS, dockerExecutor, entryTimeout, replaySchedule, treeVolume, type TreeName } from "./runner.ts";
 import { runPfSession, type PfRun } from "./run.ts";
 import { dockerBreaks, scoreSession, type CatchRecord, type ScoreIn } from "./score.ts";
 import type { BreaksRuns } from "./secondaries.ts";
@@ -55,6 +58,26 @@ export function breaksLine(stable: string[], b: BreaksRuns | null, breaks: strin
     ok: rs.length === 3 && rs.every((r) => r !== null) && !b?.skipped.length && !b?.unmeasured && breaks?.length === 0,
     detail: "stable " + stable.length + ", ids lost per run " + JSON.stringify(lost) + ", breaks under the reading before F1 " + before + ", skipped " + (b?.skipped.length ? b.skipped.join(", ") : "none") + ", breaks " + shown,
   };
+}
+
+type DryEntry = { index: number; outcome: string; why: string; runs: Array<{ tree: TreeName; run: number; exit: number; pass: boolean; timed_out: boolean; wall_ms: number }> };
+const secs = (ms: number) => Math.round(ms / 1000) + " s";
+
+/** The hang line (section 15). PASS: the hang entry catches, and every parent and neutral run it had timed out. N/A: the
+ *  ceiling left it unreached, every run it had matches a catch (parent and neutral runs timed out, fix runs passed), and
+ *  the scheduler replayed from the session's recorded run times with no setup time would still start its next step at or
+ *  after the ceiling, so the unit's timeout and the session's other entries decide it, not the rule. Otherwise FAIL. */
+export function hangReading(entries: DryEntry[], index: number, ceiling_ms = CEILING_MS): { state: "PASS" | "FAIL" | "N/A"; detail: string } {
+  const e = entries.find((x) => x.index === index);
+  if (!e) return { state: "FAIL", detail: "no scored hang entry" };
+  const runs = "runs " + e.runs.map((x) => x.tree + " " + (x.timed_out ? "timeout" : x.exit) + " " + secs(x.wall_ms)).join(", ");
+  if (e.outcome === "catch") return { state: e.runs.filter((x) => x.tree !== "fix").every((x) => x.timed_out) ? "PASS" : "FAIL", detail: runs };
+  const next = replaySchedule(entries).get(index)?.find((x) => !x.ran);
+  const shaped = e.outcome === "unreached" && e.runs.every((x) => (x.tree === "fix" ? x.pass : x.timed_out));
+  const at = next ? "; with no setup time the replayed scheduler starts " + next.tree + " run " + next.run + " at " + secs(next.start_ms) + ", against the " + secs(ceiling_ms) + " ceiling" : "";
+  if (!shaped || !next || next.start_ms < ceiling_ms) return { state: "FAIL", detail: "got " + e.outcome + " (" + e.why + "); " + runs + at };
+  const own = e.runs.reduce((a, x) => a + x.wall_ms, 0);
+  return { state: "N/A", detail: "the ceiling left the entry unreached (" + e.why + ") after " + e.runs.length + " runs that all match a catch" + at + ": its own runs before it take " + secs(own) + " and it waits " + secs(next.start_ms - own) + " for slots and phase barriers; " + runs };
 }
 
 export async function main(argv: string[]): Promise<number> {
@@ -82,6 +105,15 @@ export async function main(argv: string[]): Promise<number> {
   buildPstackVolume([arg("--pstack-source") ?? join(homedir(), ".capy/work/pstack/plugins")]);
   const tlc = runTlc(image);
   rule("real TLC run from the tools volume, offline, in the unit image", tlc.exit !== 0 && /Invariant NeverDone is violated/.test(tlc.out), "volume " + tv.volume + ", image " + image + ", exit " + tlc.exit + ", " + (tlc.out.match(/TLC2 Version [^\n]*/)?.[0] ?? "no version"));
+
+  // Containment, before any session: the session image's repository holds only the base commit and its filesystem no hidden marker.
+  const contained = buildSessionImage(u, { volume, stage: "first" });
+  try {
+    const ct = containImage(contained.tag, u.repo_dir, containInputs(unitDir, u));
+    rule("containment: every ref and commit at the base commit, no alternates, nested repo or clone, no hidden marker on the session image's filesystem", ct.ok, ct.detail);
+  } finally {
+    spawnSync("docker", ["rmi", contained.tag]);
+  }
 
   // The hostile tree: the unit's prepared tree with a CLAUDE.md in its one commit, every ref moved to it.
   const hostileVol = "pf-dry-unit-hostile-" + process.pid;
@@ -174,10 +206,16 @@ export async function main(argv: string[]): Promise<number> {
     const nBreaks = (repo: string, t: string, uu: SmUnit) => (nRuns = runBreaks(repo, t, uu));
     const [cP, cC, cN] = argv.includes("--serial") ? [await score(P), await score(C), await score(N, 1, nBreaks)] : await Promise.all([score(P), score(C), score(N, 1, nBreaks)]);
     const got = outcomes(cP);
-    const entries = ((cP as any).entries ?? []) as Array<{ index: number; outcome: string; why: string; runs: Array<{ tree: string; exit: number; pass: boolean; timed_out: boolean; wall_ms: number }> }>;
+    const entries = ((cP as any).entries ?? []) as DryEntry[];
     const entry = (role: Role) => entries.find((e) => e.index === fx.manifest.findIndex((m) => m.role === role));
     const at = (role: Role) => fx.manifest.findIndex((m) => m.role === role);
-    fx.manifest.forEach((e, i) => rule("entry " + i + " " + e.role + " " + e.command.slice(0, 48), got[i] === e.want, "got " + got[i] + ", want " + e.want + (entries.find((x) => x.index === i)?.why ? " (" + entries.find((x) => x.index === i)!.why + ")" : "")));
+    const hang = hangReading(entries, at("hang"));
+    fx.manifest.forEach((e, i) => {
+      const name = "entry " + i + " " + e.role + " " + e.command.slice(0, 48), why = entries.find((x) => x.index === i)?.why;
+      const detail = "got " + got[i] + ", want " + e.want + (why ? " (" + why + ")" : "");
+      if (e.role === "hang" && hang.state === "N/A") say("N/A " + name + ": " + detail + "; the hang line below gives the arithmetic");
+      else rule(name, got[i] === e.want, detail);
+    });
     const sec = (cP as any).secondaries ?? {};
     rule("one catching entry among several: the unit catches", cP.score === 1, "score " + cP.score + ", gap " + cP.gap + ", catching " + entries.filter((e) => e.outcome === "catch").map((e) => e.index).join(","));
     rule("hash detector and changed-since-base gate ruled out by the neutral tree", (["hash", "changed"] as Role[]).every((r) => /neutral/.test(entry(r)?.why ?? "")), (["hash", "changed"] as Role[]).map((r) => r + " " + entry(r)?.why).join("; "));
@@ -185,7 +223,8 @@ export async function main(argv: string[]): Promise<number> {
     const own = entry("own");
     rule("product edit counted, its check fails everywhere", sec.product_edits === 1 && got[at("own")] === "no_catch" && !!own && own.runs.every((x) => !x.pass), "product_edits " + sec.product_edits + ", product files " + JSON.stringify((cP as any).transplant?.product_files) + ", own runs " + own?.runs.map((x) => x.tree + " " + x.exit).join(", "));
     rule("check outside the repository is not runnable", entry("outside")?.runs[0]?.exit === 127, "exit " + entry("outside")?.runs[0]?.exit);
-    rule("hang on the parent counts as a fail and the check catches", got[at("hang")] === "catch" && !!entry("hang") && entry("hang")!.runs.filter((x) => x.tree !== "fix").every((x) => x.timed_out), "runs " + entry("hang")?.runs.map((x) => x.tree + " " + (x.timed_out ? "timeout" : x.exit) + " " + Math.round(x.wall_ms / 1000) + "s").join(", "));
+    if (hang.state === "N/A") say("N/A hang on the parent counts as a fail and the check catches: " + hang.detail);
+    else rule("hang on the parent counts as a fail and the check catches", hang.state === "PASS", hang.detail);
     rule("catch that exists only after the rebuild", got[at("built")] === "catch", "built " + entry("built")?.why);
     rule("verify skill and model under a gitignored dir captured and counted", (cP as any).force_captured === fx.verify.length && fx.verify.every((p) => String(P.turns.capture).includes("PF_FORCED " + p)), "force_captured " + (cP as any).force_captured + " of " + fx.verify.join(", "));
     rule("wrap-up turn's test file discarded and counted", readWrapup(P.turns.keep).discarded.join() === fx.late.path, "discarded " + JSON.stringify(readWrapup(P.turns.keep).discarded));
