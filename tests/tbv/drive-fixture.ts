@@ -1,19 +1,20 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Synthetic fixtures for the tbv driver tests: invented histories, a fake request builder, and a scripted provider stub
 // that sits behind the real metering proxy. Nothing here is real session text.
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { ARM_MODELS, type Arm, type BuildInput, type BuiltRequest, type Family, type History, type Shape, type Turn, type Turns } from "../../lanes/tbv/types.ts";
+import { mkdtempDisk } from "./disk.ts";
 
 export const KEYS = { ANTHROPIC_API_KEY: "fake-anthropic-value-for-tbv-tests", OPENAI_API_KEY: "fake-openai-value-for-tbv-tests", OPENROUTER_API_KEY: "fake-openrouter-value-for-tbv-tests" };
 export const QUOTE = { words: "Approve the keyless tbv test cap", by: "test", source: "tests/tbv/drive-fixture.ts" };
 export const TURNS: Turns = { report: "I'm back. Where do things stand?", d1: "Show me the full list, one item per line.", d2: "Expand item 3 of your summary.", followup: "Please answer in text." };
 
 const dirs: string[] = [];
+/** A directory on disk (disk.ts), never tmpfs, removed by cleanup. */
 export const tmp = (prefix = "tbv-") => {
-  const d = mkdtempSync(join(tmpdir(), prefix));
+  const d = mkdtempDisk(prefix);
   dirs.push(d);
   return d;
 };
