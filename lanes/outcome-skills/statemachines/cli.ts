@@ -114,20 +114,20 @@ function scoreFollowonCli(r: string[]): number {
   } else if (f.has("--first") || f.has("--tree-patch")) throw new Error("E_USAGE S0 takes no first-stage patch");
   const fo = f.has("--first-outcome") ? readJson<OutcomeRecord>(f.get("--first-outcome")!) : null;
   if (fo && (fo.schema !== "sm-outcome.v1" || fo.stage !== "first")) throw new Error("E_SM_ARM " + f.get("--first-outcome") + " is not a first-stage sm-outcome.v1 record");
-  let session: SessionRecord | null = null, patchFile: string, patchSha: string | undefined, cell: string;
+  let followon: SessionRecord | null = null, patchFile: string, patchSha: string | undefined, cell: string;
   if (f.has("--session")) {
-    session = readJson<SessionRecord>(f.get("--session")!);
-    if (session.schema !== "sm-session.v1" || session.stage !== "followon" || session.unit !== u.id || session.tree_ref?.tree !== tree) throw new Error("E_SM_ARM " + f.get("--session") + " is not a follow-on sm-session.v1 record on " + u.id + " tree " + tree);
-    cell = session.cell;
-    patchFile = session.tree_patch?.path ?? "";
-    patchSha = session.tree_patch?.sha256;
-    if (!patchFile && session.end !== "upstream" && session.end !== "infra") throw new Error("E_SM_ARM the follow-on session has no tree patch to score");
+    followon = readJson<SessionRecord>(f.get("--session")!);
+    if (followon.schema !== "sm-session.v1" || followon.stage !== "followon" || followon.unit !== u.id || followon.tree_ref?.tree !== tree) throw new Error("E_SM_ARM " + f.get("--session") + " is not a follow-on sm-session.v1 record on " + u.id + " tree " + tree);
+    cell = followon.cell;
+    patchFile = followon.tree_patch?.path ?? "";
+    patchSha = followon.tree_patch?.sha256;
+    if (!patchFile && followon.end !== "upstream" && followon.end !== "infra") throw new Error("E_SM_ARM the follow-on session has no tree patch to score");
   } else {
     patchFile = f.get("--patch")!;
     cell = need(f, "--cell");
   }
   const startFile = need(f, "--start");
-  const model = session?.model ?? fo?.model ?? null;
+  const model = followon?.model ?? fo?.model ?? null;
   let start: StartSet;
   if (existsSync(startFile)) start = readJson<StartSet>(startFile);
   else {
@@ -135,7 +135,7 @@ function scoreFollowonCli(r: string[]): number {
     writeNew(startFile, start);
   }
   const replicate = Number((cell.match(/^F-(?:S0|A1|S2)-(\d+)$/) ?? [])[1]) || null;
-  const rec = scoreFollowon({ unitDir, tree, treePatch, start, patchFile, ...(patchSha ? { patchSha } : {}), cell, replicate, model, session, first: fo ? firstInfo(fo) : null, mode });
+  const rec = scoreFollowon({ unitDir, tree, treePatch, start, patchFile, ...(patchSha ? { patchSha } : {}), cell, replicate, model, session: followon, first: fo ? firstInfo(fo) : null, mode });
   writeNew(need(f, "--out"), rec);
   console.log("tree=" + tree + " start=" + (start.gap ?? start.ids.length) + " incremental=" + (rec.incremental ?? rec.gap) + " end_to_end=" + (rec.end_to_end ?? rec.gap) + " whole=" + (rec.whole ? rec.whole.incremental + "/" + rec.whole.end_to_end : "none") + (rec.whole_note ? " (" + rec.whole_note + ")" : "") + " drift=" + rec.drift.drift + (rec.drift.ids.length ? " (" + rec.drift.ids.join(",") + ")" : "") + " record=" + need(f, "--out"));
   return 0;
