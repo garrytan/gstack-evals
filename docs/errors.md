@@ -1694,7 +1694,7 @@ Exit 2. Side effects: None: scoring spends nothing. Retry safe: yes. Resumable: 
 
 ### E_SM_PACKET
 
-A labeller or judge packet (preregistration sections 3 and 10) could not be built: the unit dir lacks a file, the session model has no frozen judge, a stock copy could not be diffed, or the packet text names the session's model, cell or id, which packets must never show.
+A labeller or judge packet (preregistration sections 3 and 10) could not be built: the unit dir lacks a file, the session model has no frozen judge, a stock copy could not be diffed or its JavaScript or TypeScript rename check could not run, or the packet text names the session's model, cell or id, which packets must never show.
 
 Fix: Check the unit dir and the session record. A packet that names its session is never sent; report it and leave that diff unjudged.
 

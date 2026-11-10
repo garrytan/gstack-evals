@@ -10,6 +10,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rustCode, type Lang } from "./langs.ts";
+import { checkRename } from "./bindcheck.ts";
 import { treeVolume } from "./oracle.ts";
 import { blocks } from "./secondary.ts";
 import { applyPatches, copyVolume, dropVolume, runName, runTests, type Mode } from "./testrun.ts";
@@ -379,14 +380,25 @@ function headerAt(code: string[]): number {
   return last >= 0 ? last + 1 : guard >= 0 ? guard + 1 : 0;
 }
 
+/** Header keywords whose parentheses can declare a local scoped to the block or statement after them. */
+const HEADER_PAREN = /\b(?:for(?:\s+await)?|foreach|if|while|switch|catch|using|lock|fixed|try)\s*$/;
+/** Keywords that, before a declaration in its statement, make it a braceless body or a using declaration. */
+const CONTROL_WORD = /\b(?:if|else|for|foreach|while|do|switch|using|lock|fixed|catch|try)\b/;
+/** Go keywords that end a line without ending its statement (no semicolon goes in after them). */
+const GO_GOES_ON = /\b(?:case|chan|const|default|defer|else|for|func|go|if|import|interface|map|package|range|select|struct|switch|type|var)$/;
+
 /** The rename-only diff: the file's first local (LOCAL_NAME) whose every use sits in the body of the function that
  *  declares it, renamed there. A use as a member, a key, a field shorthand or a named argument (a Python one inside an
  *  open bracket on any line), a use inside a string or comment, or a Python global or nonlocal of that name skips the
- *  local, so the rename keeps the behavior. Outside Python, a use must also sit in the scope of a declaration of that
- *  name in the same function: from the end of its declarator (in Go and Rust, the end of its statement) to the close of
- *  its block, which for a declaration in an if, for, while, switch, catch, using or try header is the block that header
- *  opens. */
-function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string[], code: string[], fns: Array<{ at: number; end: number }>): string | null {
+ *  local, and so does, in Python, a use in a class body or on a nested def's or a lambda's parameters, which a caller can
+ *  name. Outside Python, a use must also sit in the scope of a declaration of that name in the same function, read so it
+ *  never runs past the real one: from the end of its declarator (in Go and Rust, the end of its statement) to the close
+ *  of its block, or in Go to the next case of its switch or select; for a declaration in a for, if, while, switch,
+ *  catch, using or try header, to the end of the block or statement that header opens. A declaration that is a braceless
+ *  statement's body, follows a using, or sits in other parentheses has no scope. In JavaScript and TypeScript the rename
+ *  then stands only when TypeScript's binder finds that it keeps every binding (bindcheck.ts). */
+function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string[], m: { code: string[]; open: boolean[] }, fns: Array<{ at: number; end: number }>): string | null {
+  const code = m.code;
   const word = (n: string, flags = "") => new RegExp("(?<![\\w$])" + n.replace(/\$/g, "\\$") + "(?![\\w$])", flags);
   const starts = [0];
   for (const l of lines) starts.push(starts.at(-1)! + l.length + 1);
@@ -410,29 +422,75 @@ function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string
   const all = code.join("\n");
   const bracket = [0];
   for (const c of code) bracket.push(bracket.at(-1)! + brackets(c));
+  const step = (c: string) => ("([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0);
+  const close = (k: number) => {
+    for (let j = k, d = 0; j < all.length; j++) if ((d += step(all[j]!)) === 0) return j;
+    return all.length;
+  };
+  const enclosing = (at: number) => {
+    for (let k = at - 1, d = 0; k >= 0; k--) if ((d -= step(all[k]!)) < 0) return k;
+    return -1;
+  };
+  const ends = (k: number) => {
+    if (all[k] === ";") return true;
+    if (x.lang !== "go" || all[k] !== "\n") return false;
+    const t = all.slice(all.lastIndexOf("\n", k - 1) + 1, k).trimEnd();
+    return /(?:[\w"'`)\]}]|\+\+|--)$/.test(t) && !GO_GOES_ON.test(t);
+  };
+  const prefix = (at: number, from: number) => {
+    let k = at - 1;
+    for (let d = 0; k > from && !(d === 0 && (ends(k) || all[k] === "}")); k--) d -= step(all[k]!);
+    return all.slice(k + 1, at);
+  };
   const scope = (p: number, name: string): [number, number] => {
-    const i = lineAt(p), lineEnd = starts[i]! + lines[i]!.length;
-    const header = /^\s*(?:\}\s*)?(?:else\s+)?(?:if|for|foreach|while|switch|select|catch|using|lock|try)\b/.test(code[i]!) && !code[i]!.slice(0, p - starts[i]!).replace(/^\s*\}/, "").includes("{");
-    let start = p + name.length, end = all.length;
-    if (x.lang === "go" || x.lang === "rust") {
-      start = all.length;
-      for (let k = p + name.length, n = 0; k < all.length; k++) {
-        const c = all[k]!;
-        if (n <= 0 && (c === ";" || c === "\n" || (header && c === "{"))) {
-          start = k;
-          break;
-        }
-        n += "([{".includes(c) ? 1 : ")]}".includes(c) ? -1 : 0;
+    const o = enclosing(p), from = p + name.length;
+    if (o >= 0 && all[o] === "(" && x.lang !== "go" && x.lang !== "rust") {
+      if (!HEADER_PAREN.test(all.slice(Math.max(0, o - 16), o))) return [p, p];
+      let b = close(o) + 1;
+      while (/\s/.test(all[b] ?? "")) b++;
+      if (all[b] === "{") return [from, close(b)];
+      for (let k = b, d = 0; k < all.length; k++) {
+        if (d === 0 && all[k] === ";") return [from, k];
+        d += step(all[k]!);
+        if (d < 0 || (d === 0 && all[k] === "}")) return [from, k];
       }
+      return [p, p];
     }
-    for (let k = p, r = 0; k < all.length; k++) {
-      r += all[k] === "{" ? 1 : all[k] === "}" ? -1 : 0;
-      if (header ? k >= lineEnd && r < 1 : r < 0) {
-        end = k;
-        break;
+    if (o < 0 || all[o] !== "{") return [p, p];
+    const pre = prefix(p, o);
+    if (x.lang !== "go" && x.lang !== "rust") return CONTROL_WORD.test(pre) ? [p, p] : [from, close(o)];
+    const header = (x.lang === "go" ? /\b(?:if|for|switch|select)\b/ : /\b(?:if|while|for|match)\b/).test(pre);
+    let start = -1;
+    for (let k = from, d = 0; k < all.length && d >= 0; k++) {
+      if (d === 0 && header && all[k] === "{") return [start < 0 ? k : start, close(k)];
+      if (d === 0 && start < 0 && ends(k)) {
+        start = k;
+        if (!header) break;
       }
+      d += step(all[k]!);
+    }
+    if (header || start < 0) return [p, p];
+    const end = close(o);
+    for (let k = start, d = 0; x.lang === "go" && k < end; k++) {
+      if (d === 0 && /^(?:case|default)\b/.test(all.slice(k, k + 8)) && !/[\w$]/.test(all[k - 1]!)) return [start, k];
+      d += step(all[k]!);
     }
     return [start, end];
+  };
+  const logical = (i: number) => {
+    let s = i;
+    while (s > 0 && (bracket[s]! > 0 || m.open[s - 1] || /\\$/.test(code[s - 1]!))) s--;
+    return s;
+  };
+  const inClass = (i: number, f: { at: number }) => {
+    let ind = indentOf(lines[logical(i)]!).length;
+    for (let k = logical(i) - 1; k > f.at; k--) {
+      if (!code[k]!.trim() || logical(k) !== k || indentOf(lines[k]!).length >= ind) continue;
+      if (/^\s*class\b/.test(code[k]!)) return true;
+      if (/^\s*(?:async\s+)?def\b/.test(code[k]!)) return false;
+      ind = indentOf(lines[k]!).length;
+    }
+    return false;
   };
   const suffix = x.lang === "python" || x.lang === "rust" ? "_value" : "Value";
   const decls = [...x.text.matchAll(new RegExp(LOCAL_NAME[x.lang].source, LOCAL_NAME[x.lang].flags.replace("g", "") + "g"))].map((m) => ({ name: m[1]!, at: m.index! + m[0].indexOf(m[1]!) }));
@@ -447,9 +505,13 @@ function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string
       return i <= f.at || i > f.end || c.slice(col, col + name.length) !== name || /(?:\.|->|::)\s*$/.test(before) || (o.index !== declAt && /^\s*:(?![:=])/.test(after)) ||
         (/^\s*[,}]/.test(after) && (opener(before) === "{" || !before.trim())) ||
         (x.lang === "python" && /^\s*=(?!=)/.test(after) && (/[(,]\s*$/.test(before) || bracket[i]! + brackets(before) > 0)) ||
+        (x.lang === "python" && (inClass(i, f) || /^\s*(?:async\s+)?def\b/.test(code[logical(i)]!) || /\blambda\b/.test(code.slice(logical(i), i).join("\n") + "\n" + before))) ||
         (x.lang !== "python" && !own.some((d) => d.at === o.index || (o.index! >= d.scope[0] && o.index! < d.scope[1])));
     });
-    if (!bad) return unified(x.path, x.text, lines.map((l, i) => (i > f.at && i <= f.end ? l.replace(word(name, "g"), name + suffix) : l)).join("\n"));
+    if (bad) continue;
+    const renamed = lines.map((l, i) => (i > f.at && i <= f.end ? l.replace(word(name, "g"), name + suffix) : l)).join("\n");
+    if ((x.lang === "js" || x.lang === "ts") && checkRename({ path: x.path, before: x.text, after: renamed, name, renamed: name + suffix }) !== null) continue;
+    return unified(x.path, x.text, renamed);
   }
   return null;
 }
@@ -491,7 +553,7 @@ export function stockDiffs(x: { lang: Lang; path: string; text: string }): Array
   const noStd = x.lang === "rust" && /^\s*#!\[no_std\]/m.test(x.text);
   return [
     { kind: "comments_whitespace", diff: unified(x.path, x.text, commented.join("\n")) },
-    { kind: "rename_only", diff: renameOnly(x, lines, m.code, fns) },
+    { kind: "rename_only", diff: renameOnly(x, lines, m, fns) },
     { kind: "logging", diff: logs.size && !noStd ? unified(x.path, x.text, logged.join("\n")) : null },
   ];
 }
@@ -517,8 +579,8 @@ export function buildStock(unitDir: string, path: string, stock: ReadonlyArray<{
   const commands = [...u.commands.rebuild, ...(parse ? [parse(join(u.repo_dir, path))] : [])];
   const run = (label: string, diff: string | null): number[] | string => {
     const copy = runName(u.id + "-stock-" + label);
-    copyVolume(image, volume, copy, mode);
     try {
+      copyVolume(image, volume, copy, mode);
       if (diff !== null && applyPatches(image, copy, u.repo_dir, [["stock", diff]], mode)) return "does not apply";
       const t = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: { rebuild: commands, test: [], print: [] }, mode, label: u.id + "-stock-" + label, rule: "exempt" });
       return t.stopped || t.infra || t.exits.length < commands.length ? "stopped" : t.exits;

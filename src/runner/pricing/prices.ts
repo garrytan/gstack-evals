@@ -130,7 +130,7 @@ export interface RequestPrice extends TokenPrices {
   /** The prompt-cache write the request may pay for: none, a cache_write-rate write, or Anthropic's one-hour write. */
   cacheWrite: "none" | "5m" | "1h";
   long?: ChatPrice["long"];
-  /** Input-token bound: one token per byte of the outgoing body, plus framing, the tool-use system prompt, and the stored context a previous_response_id, conversation or item reference pulls in. */
+  /** Input-token bound: one token per byte of the outgoing body, plus framing, the tool-use system prompt, and the stored context a previous_response_id, conversation or item reference pulls in. The metering proxy lowers it to a provider's free count where countPlan (input-count.ts) finds one. */
   inputTokens: number;
   maxOutputTokens: number;
 }
@@ -241,6 +241,12 @@ export function refuseRequestShape(provider: MeteredProvider, body: Record<strin
   if (provider === "openai" && body.web_search_options !== undefined) throw new PriceError("OpenAI's web_search_options field turns on a web search that runs and bills outside the model's tokens");
 }
 
+/** True when a request pulls in stored context its body does not hold: a previous_response_id, a conversation, an item reference, or a stored item or reasoning id. */
+export function storedContext(body: Record<string, unknown>, json = JSON.stringify(body)): boolean {
+  const stored = (i: Record<string, unknown>) => typeof i.id === "string" && ((i.type == null && i.role === undefined) || (i.type === "reasoning" && typeof i.encrypted_content !== "string"));
+  return typeof body.previous_response_id === "string" || body.conversation !== undefined || json.includes('"item_reference"') || (Array.isArray(body.input) && body.input.some(i => i && typeof i === "object" && stored(i)));
+}
+
 /** Price a chat request from its outgoing JSON body, or throw PriceError: a request the table cannot price is never forwarded. A reason masks markers in the client values it quotes. */
 export function priceRequest(provider: MeteredProvider, body: Record<string, unknown>, maxOutputTokens: number, route = "", markers: readonly string[] = []): RequestPrice {
   const model = typeof body.model === "string" ? body.model : "";
@@ -254,8 +260,7 @@ export function priceRequest(provider: MeteredProvider, body: Record<string, unk
     return { provider, model, format: "openai", ...price, cacheWrite: "none", inputTokens: (Buffer.byteLength(JSON.stringify(body)) + REQUEST_OVERHEAD_TOKENS) * questions, maxOutputTokens: 0 };
   }
   const json = JSON.stringify(body);
-  const stored = (i: Record<string, unknown>) => typeof i.id === "string" && ((i.type == null && i.role === undefined) || (i.type === "reasoning" && typeof i.encrypted_content !== "string"));
-  const chained = typeof body.previous_response_id === "string" || body.conversation !== undefined || json.includes('"item_reference"') || (Array.isArray(body.input) && body.input.some(i => i && typeof i === "object" && stored(i))) ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
+  const chained = storedContext(body, json) ? UNKNOWN_CHAIN_CONTEXT_TOKENS : 0;
   const toolUse = Array.isArray(body.tools) && body.tools.length > 0 ? TOOL_USE_SYSTEM_TOKENS : 0;
   // OpenAI caches automatically; Anthropic writes its cache only where a request sets cache_control.
   const cacheWrite = provider === "openai" ? "5m" : !json.includes('"cache_control"') ? "none" : /"ttl"\s*:\s*"1h"/.test(json) ? "1h" : "5m";

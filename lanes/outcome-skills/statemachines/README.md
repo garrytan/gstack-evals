@@ -624,6 +624,29 @@ counts sessions.
   log line after a docstring's whole statement; leave out a Python keyword argument on any line of a call and a Java or
   C# anonymous class whose constructor call nests parentheses; and rename a local only where every use sits in the
   scope of a declaration of that name. No rule changes.
+- A rename stays inside its declaration's scope (pre-data build fix, 2026-11-11, GST-1959, packets.ts renameOnly): a
+  local declared in a for, if, while, switch, catch, using or try header now has the scope of the block or statement
+  that header opens, wherever its line starts, so a use after a block that closes on the header's own line, or after the
+  header's block inside an outer block opened on that line, is no longer renamed. A Go local's scope ends at the next
+  case of its switch or select and starts after its statement's real end, a Rust let's scope starts after its whole
+  statement, and a C++ declaration that is a braceless if or loop body has no scope past it. In Python, a use in a class
+  body or on a nested def's or a lambda's parameters blocks the rename, since a class attribute is no local and a caller
+  can pass a parameter by name. No rule changes.
+- JavaScript and TypeScript renames keep their bindings (pre-data build fix, 2026-11-11, GST-1959, bindcheck.ts,
+  packets.ts renameOnly): the build check gives these files only node --check or the unit's rebuild, which a rename that
+  changes behavior can pass. The rename-only diff now stands only when TypeScript's own binder, from the pinned
+  typescript package, reads the file before and after the rename and finds each renamed name a local variable, every
+  reference to it renamed, and the same bindings on both sides. So a destructured property, an object method or class
+  field in the local's scope, a regular expression, JSX text, a function that takes its name from the local, a parameter
+  property, and a file with a with statement or a direct eval all give no rename. The check runs keyless on the harness,
+  in a child process, and a check that cannot run stops the step (E_SM_PACKET). No rule changes.
+- A failed tree copy leaves no volume (pre-data build fix, 2026-11-11, GST-1959, packets.ts buildStock): the build check
+  now makes its copy volume inside the try that drops it, so a copy that fails after the volume exists no longer leaves
+  it behind.
+- The stock commands check their unit (pre-data build fix, 2026-11-11, GST-1959, cli.ts): sm packets stock refuses an
+  --unit that is not the unit in --unit-dir, and sm packets labelled refuses a unit listed twice or a spec entry whose
+  unit_dir holds another unit (E_USAGE), so no stock-build record or judge key names a unit other than the one its diffs
+  came from.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the
