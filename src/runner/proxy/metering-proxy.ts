@@ -61,8 +61,8 @@
 //   count. The call reserves its input at that count with its plan's allowances, never above the byte bound, and the
 //   long-context tier follows the count. A count that fails, answers no positive whole number or is slower than
 //   countTimeoutMs leaves the byte bound, and the reserve line's input_count records which. A settled call whose real input
-//   exceeds its counted input writes a count_overrun line, and its provider and route reserve at the byte bound for the rest
-//   of the proxy's life. A proxy given fetch and no count sender counts nothing.
+//   exceeds its counted input writes a count_overrun line, and its provider and route reserve every later attempt, retries of
+//   calls already counted included, at the byte bound for the rest of the proxy's life. A proxy given fetch and no count sender counts nothing.
 // - Decision routing (B3): a typesafe provider serves TypeSafe's POST /v1/systemone with TYPESAFE_API_KEY as a bearer, takes
 //   the SDK's zstd request body (decoded before the tripwire and the price, and refused once it decodes past 16 MiB), and adds no output cap, since Jev's output is
 //   free. ProxyOptions.allowanceCode DR_ALLOWANCE_STOP turns a slot's allowance refusal into a 403 whose body every SDK shows
@@ -136,6 +136,9 @@ export const COUNT_TIMEOUT_MS = 10_000;
 /** A zstd request body that decodes past this many bytes is refused, and decoding stops there. */
 export const MAX_DECODED_BODY_BYTES = 16 * 1024 * 1024;
 const NO_TOKENS: TokenUsage = { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 };
+/** A reserve line's input_count record for a call reserved at its byte bound instead of a count. */
+const byteFallback = (counter: "anthropic" | "openai", tokens: number, reason: string) => ({ counter, count: null, tokens, byte_tokens: tokens, fallback: reason });
+const shortRoute = (rid: string) => `reservation ${rid} on this route used more input than its count reserved, so the route reserves at its byte bound`;
 const usd = (micros: number) => `$${(micros / 1e6).toFixed(6)}`;
 /** Reserve refusals that, under ReservationLedger's contract, mean the ledger holds nothing under the idempotency key. */
 const NOTHING_HELD = new Set(["CAP_STOP", "E_LEASE_CLOSED", "E_LEDGER_MISSING"]);
@@ -819,9 +822,7 @@ export class MeteringProxy {
       if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
       throw e;
     }
-    const counted = await this.countInput(ctx, body, price, headers);
-    if (counted) price = { ...price, inputTokens: counted.tokens };
-    const maxMicros = reservationMicros(price);
+    let counted = await this.countInput(ctx, body, price, headers);
     const meter = this.meter(slot);
     if (!meter.cache_write.includes(price.cacheWrite)) meter.cache_write = (["none", "5m", "1h"] as const).filter((m) => m === price.cacheWrite || meter.cache_write.includes(m));
     ctx.bytes = Buffer.byteLength(outBody);
@@ -838,6 +839,12 @@ export class MeteringProxy {
         await sleep(wait);
         sleptUntil = until;
       }
+      const short = ctx.counted && this.shortCounts.get(ctx.counted.route);
+      if (ctx.counted && short) {
+        counted = { tokens: price.inputTokens, line: byteFallback(ctx.counted.counter, price.inputTokens, shortRoute(short)) };
+        ctx.counted = undefined;
+      }
+      const maxMicros = reservationMicros(counted ? { ...price, inputTokens: counted.tokens } : price);
       if (slot.committedMicros + maxMicros > slot.allowanceMicros) {
         const stop = o.allowanceCode === "DR_ALLOWANCE_STOP";
         meter.allowance_stops++;
@@ -967,9 +974,9 @@ export class MeteringProxy {
     const plan = send && countPlan(ctx.provider, ctx.route, body, price);
     if (!plan) return null;
     const route = `${ctx.provider}${ctx.route}`;
-    const fallback = (reason: string) => ({ tokens: price.inputTokens, line: { counter: plan.counter, count: null, tokens: price.inputTokens, byte_tokens: price.inputTokens, fallback: reason } });
+    const fallback = (reason: string) => ({ tokens: price.inputTokens, line: byteFallback(plan.counter, price.inputTokens, reason) });
     const short = this.shortCounts.get(route);
-    if (short) return fallback(`reservation ${short} on this route used more input than its count reserved, so the route reserves at its byte bound`);
+    if (short) return fallback(shortRoute(short));
     let countHeaders = headers;
     if (plan.counter !== ctx.provider) {
       const key = (o.env ?? process.env)[KEY_ENV[plan.counter]];

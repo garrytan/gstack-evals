@@ -348,6 +348,62 @@ describe("the guard on a measured count", () => {
     await t.proxy.finalize(b.meter_id);
     expect(t.journal().filter((l) => l.kind === "count_overrun")).toEqual([expect.objectContaining({ provider: "openrouter", route: "/v1/messages", counter: "openai", reserved_tokens: solBound(1000), real_tokens: 30_000 })]);
   });
+
+  // Value: protects=a retry of a call whose own attempt ran past its count reserves at the byte bound; fails_when=a retryable 429 or 5xx that reports input above the count re-reserves at the stale count; why_new=Capy review of the guard; seam=forward's retry loop; no_claim=none
+  test("a retry after an attempt whose real input ran past its count reserves at the byte bound", async () => {
+    let n = 0;
+    const t = setup({ count: counted(1000), upstream: () => (n++ === 0 ? Response.json({ usage: { input_tokens: 5000, output_tokens: 0 } }, { status: 429, headers: { "retry-after": "1" } }) : usage({ input_tokens: 10, output_tokens: 5 })), extra: { retry: { attempts: 3, elapsed_ms: 60_000 } } });
+    const before = await byteReservation("/anthropic/v1/messages", opus(20_000));
+    expect((await t.call(t.bind(), "/anthropic/v1/messages", opus(20_000))).status).toBe(200);
+    const [first, second] = t.reserves();
+    expect(first!.input_count.count).toBe(1000);
+    expect(second!.max_micros).toBe(before.reserve.max_micros);
+    expect(second!.input_count).toMatchObject({ counter: "anthropic", count: null, tokens: second!.input_count.byte_tokens });
+    expect(second!.input_count.fallback).toContain("res_1");
+    expect(t.journal().filter((l) => l.kind === "count_overrun")).toHaveLength(1);
+  });
+
+  // Value: protects=a call that counted before another call tripped its route reserves its next attempt at the byte bound; fails_when=a call waiting out a provider pause retries at its stale count; why_new=Capy review of the guard; seam=forward's retry loop after the pause; no_claim=none
+  test("a call that counted before another call tripped its route retries at the byte bound", async () => {
+    let n = 0;
+    let paused!: () => void;
+    let release!: () => void;
+    const hit = new Promise<void>((r) => (paused = r));
+    const gate = new Promise<void>((r) => (release = r));
+    let sleeps = 0;
+    const sleep = async () => {
+      if (sleeps++ === 0) {
+        paused();
+        await gate;
+      }
+    };
+    const upstream = () => (n++ === 0 ? new Response("{}", { status: 429, headers: { "retry-after": "1" } }) : usage({ input_tokens: n === 2 ? 5000 : 10, output_tokens: 5 }));
+    const t = setup({ count: counted(1000), upstream, extra: { retry: { attempts: 3, elapsed_ms: 60_000 }, sleep } });
+    const before = await byteReservation("/anthropic/v1/messages", opus(20_000));
+    const b = t.bind();
+    const a = t.call(b, "/anthropic/v1/messages", opus(20_000));
+    await hit;
+    expect((await t.call(b, "/anthropic/v1/messages", opus(20_000))).status).toBe(200);
+    expect(t.journal().filter((l) => l.kind === "count_overrun")).toEqual([expect.objectContaining({ reservation_id: "res_2" })]);
+    release();
+    expect((await a).status).toBe(200);
+    const retry = t.reserves().find((r) => r.try === 2)!;
+    expect(retry.max_micros).toBe(before.reserve.max_micros);
+    expect(retry.input_count).toMatchObject({ counter: "anthropic", count: null });
+    expect(retry.input_count.fallback).toContain("res_2");
+  });
+
+  // Value: protects=a retry whose route never ran past its count keeps the counted reservation; fails_when=the recheck drops every retry to bytes; why_new=Capy review of the guard, the passing direction; seam=forward's retry loop; no_claim=none
+  test("a retry on a route no count has run past keeps its counted reservation", async () => {
+    let n = 0;
+    const t = setup({ count: counted(1000), upstream: () => (n++ === 0 ? new Response("{}", { status: 429, headers: { "retry-after": "1" } }) : usage({ input_tokens: 900, output_tokens: 5 })), extra: { retry: { attempts: 3, elapsed_ms: 60_000 } } });
+    expect((await t.call(t.bind(), "/anthropic/v1/messages", opus(20_000))).status).toBe(200);
+    const [first, second] = t.reserves();
+    expect(second!.max_micros).toBe(first!.max_micros);
+    expect(second!.input_count).toEqual(first!.input_count);
+    expect(t.counts).toHaveLength(1);
+    expect(t.journal().filter((l) => l.kind === "count_overrun")).toEqual([]);
+  });
 });
 
 describe("the measured margin for OpenRouter's Sol translation", () => {
