@@ -461,6 +461,10 @@ export async function main(argv: string[]): Promise<number> {
         const s = readJson<SessionRecord>(f.get("--session")!);
         if (s.schema !== "sm-session.v1" || s.stage !== "first") throw new Error("E_SM_ARM " + f.get("--session") + " is not a first-stage sm-session.v1 record");
         if (s.unit !== readUnit(unitDir).id) throw new Error("E_SM_ARM the session is on " + s.unit + ", not this unit");
+        if (s.end === "upstream" || s.end === "infra") {
+          if (s.attempt !== 2) throw new Error("E_SM_ARM the session ended " + s.end + " on attempt " + s.attempt + ", so it is not scored: it gets one retry from a fresh container (sm session run --attempt 2) before it is a gap");
+          throw new Error((s.end === "upstream" ? "E_SM_UPSTREAM_GAP" : "E_SM_INFRA_GAP") + " the session ended " + s.end + " on its retry, so it is a gap and is not scored; analysis reads the gap from its session record");
+        }
         if (!s.tree_patch) throw new Error("E_SM_ARM the session has no tree patch to score");
         input = { unitDir, patchFile: s.tree_patch.path, patchSha: s.tree_patch.sha256, cell: s.cell, model: s.model, session: s.lease_id + "/" + s.cell };
       } else input = { unitDir, patchFile: f.get("--patch")!, cell: need(f, "--cell") };

@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadRegistry } from "../arms/registry.ts";
+import { loadRegistry, REGISTRY_PATH } from "../arms/registry.ts";
 import { readAudit } from "./audit.ts";
 import { qaExposure, readSession, textExposure } from "./exposure.ts";
 import { buildSessionImage, sessionManifest, type SessionImage } from "./image.ts";
@@ -24,6 +24,8 @@ export const HARBOR_MODEL: Record<string, string> = { "claude-opus-5-5": "anthro
 export interface RunInput {
   unitDir: string; session: PlannedSession; control: string; proxy: string; out: string;
   attempt?: 1 | 2; first?: string; qaHome?: string; qaSha?: string; harbor?: string; jobName?: string;
+  /** The arms registry: A3's /qa pin is read from it here, and real_agent reads its turns and the same pin from it as arms_path. */
+  registry?: string;
 }
 
 const sha = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
@@ -63,7 +65,8 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   }
   const told = s.cell === "A3";
   if (told && !(i.qaHome && i.qaSha)) return smFail("E_SM_ARM", "A3 needs --qa-home and --qa-sha, the /qa install and its pin");
-  const qaPin = told ? loadRegistry().sm?.pins?.qa?.sha : undefined;
+  const arms = i.registry ?? REGISTRY_PATH;
+  const qaPin = told ? loadRegistry(arms).sm?.pins?.qa?.sha : undefined;
   if (told && (!qaPin || qaPin !== i.qaSha)) return smFail("E_SM_ARM", "A3 runs only once the /qa pin is recorded in registry.json sm.pins.qa and --qa-sha equals it; the pin is " + (qaPin ?? "null") + ", --qa-sha " + i.qaSha);
   const image = buildSessionImage(u, { volume: treeVolume(u.id), stage: s.stage, ...(treePatch !== undefined ? { treePatch } : {}), ...(told ? { qaHome: i.qaHome } : {}) });
   const task = join(i.out, "task");
@@ -75,7 +78,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   writeFileSync(join(task, "instruction.md"), s.stage === "followon" ? readFileSync(join(i.unitDir, "issue.md"), "utf8") : "The arm's turn names the scope.\n");
   const label = u.id + "/" + s.model + "/" + s.cell;
   const taskJson = join(i.out, "task.json");
-  writeFileSync(taskJson, JSON.stringify({ repo_dir: u.repo_dir, commits: image.commits, base_commit: image.head, kind: "SM", scope: u.scope?.dir ?? smFail("E_SM_ARM", "unit " + u.id + " has no scope"), ...(told ? { qa_sha: i.qaSha } : {}) }));
+  writeFileSync(taskJson, JSON.stringify({ repo_dir: u.repo_dir, commits: image.commits, base_commit: image.head, kind: "SM", scope: u.scope?.dir ?? smFail("E_SM_ARM", "unit " + u.id + " has no scope"), ...(told ? { qa_sha: i.qaSha, qa_home: image.qa_home!.paths } : {}) }));
   const manifest = join(i.out, "images.json");
   const manifestSha = sessionManifest(manifest, label, image);
   const armTar = join(i.out, "arm.tar");
@@ -84,7 +87,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   env.ANTHROPIC_API_KEY = "placeholder-not-a-key";
   env.PYTHONPATH = join(ROOT, "lanes/real-outcome/agent") + ":" + join(ROOT, "quick/laneb/runner/agent");
   env.PYTHONDONTWRITEBYTECODE = "1";
-  const ak = { skip_install: "true", task_json: taskJson, arm: s.arm, arm_tar: armTar, upstream_model: s.model, arms_path: join(ROOT, "lanes/outcome-skills/arms/registry.json"), control_url: i.control, ledger: "u4", task_label: label, trial_n: "1", ...(attempt === 2 ? { rerun: "fresh container after an " + "upstream or infra end" } : {}), image_id: image.image_id, manifest, manifest_sha256: manifestSha, repo_dir: u.repo_dir, workdir: u.work_dir };
+  const ak = { skip_install: "true", task_json: taskJson, arm: s.arm, arm_tar: armTar, upstream_model: s.model, arms_path: arms, control_url: i.control, ledger: "u4", task_label: label, trial_n: "1", ...(attempt === 2 ? { rerun: "fresh container after an " + "upstream or infra end" } : {}), image_id: image.image_id, manifest, manifest_sha256: manifestSha, repo_dir: u.repo_dir, workdir: u.work_dir };
   const started = Date.now();
   const h = spawnSync(i.harbor ?? "harbor", ["run", "-y", "-p", task, "-a", "real_agent:RealAgent", "-m", model, "--base-url", /^https?:\/\//.test(i.proxy) ? i.proxy : "http://" + i.proxy, ...Object.entries(ak).flatMap(([k, v]) => ["--ak", k + "=" + v]), "-e", "docker", "--extra-docker-compose", join(ROOT, "quick/laneb/runner/agent-caps.compose.yaml"), "-o", join(i.out, "jobs"), "--job-name", i.jobName ?? "sm-" + sha(label + attempt + started).slice(0, 12), "--disable-verification", "--delete"], { env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: (s.stage === "first" ? 5400 : 3600) * 1000 + 900_000 });
   const ended = Date.now();
@@ -104,7 +107,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const record: SessionRecord = {
     schema: "sm-session.v1", unit: u.id, part: s.part, index: s.index, model: s.model, cell: s.cell, stage: s.stage, tree_ref: treeRef,
     lease_id: slot?.lease_id ?? "", slot: slot?.meter_id ?? "", started_at: new Date(started).toISOString(), ended_at: new Date(ended).toISOString(), wall_ms: ended - started,
-    turns: lb?.result?.num_turns ?? null, spent_micros: summary?.proxy?.spent_micros ?? 0, unknown_micros, end, attempt,
+    turns: lb?.result?.num_turns ?? null, spent_micros: typeof summary?.proxy?.spent_micros === "number" ? summary.proxy.spent_micros : null, unknown_micros, end, attempt,
     questions: questionCounts(summary?.persona ?? {}), runtime_id: image.runtime_id, disallowed_tools: ["WebSearch", "WebFetch"], env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
     strip: { removed: u.strip?.removed ?? [] }, memory_loaded: memoryPaths(records), tree_patch: final?.patch_sha256 && existsSync(patchPath) ? { path: patchPath, sha256: final.patch_sha256 } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : "", exposure: s.cell === "A1" || s.cell === "S2" ? { text: textExposure(records, s.cell) } : told ? qaExposure(records) : {},

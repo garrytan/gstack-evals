@@ -108,10 +108,14 @@ sdk_query_client.parse_message = mark_keyless(sdk_query_client.parse_message)
 STATEMENT = "{statement}"
 # Family SM's session check (the implicit state machines prereg, sections 4 and 5): the tree's commit count and head, any
 # file the strip rule removes, and the home paths that would carry gstack or a drive into a no-gstack arm.
-# The home paths A3's /qa install itself writes: its skills dir and the ~/.gstack state gstack's setup creates.
+# The home paths A3's /qa install wrote, as the session image build listed them in task.json's qa_home (image.ts
+# qaHomeCopy); a task that lists none gets QA_HOME, its skills dir and the ~/.gstack state gstack's setup creates. A drive
+# path (/root/.capy) passes in no arm.
 QA_HOME = ("/root/.claude/skills", "/root/.gstack")
-# The close answer's fields real-summary.json's proxy block keeps: run.ts reads refusals, allowance_stops and unknown_micros for the session record.
-PROXY_KEYS = ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "unknown_micros", "unknown_calls")
+DRIVE_HOME = "/root/.capy"
+# The close answer's fields real-summary.json's proxy block keeps: run.ts reads refusals, allowance_stops, unknown_micros and
+# finalized (false when the proxy's finalize failed, so its counts are unknown) for the session record.
+PROXY_KEYS = ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "unknown_micros", "unknown_calls", "finalized")
 
 
 def proxy_summary(closed) -> dict:
@@ -338,8 +342,9 @@ class RealAgent(lb.LanebAgent):
             raise SandboxSetupError(f"E_SM_STRIP A3's gstack install is at {got['GSTACK']}, not the /qa pin {task.get('qa_sha')}; nothing was opened")
         if not told and got["HOME"]:
             raise SandboxSetupError(f"E_SM_STRIP a no-gstack arm's home holds {got['HOME']}; nothing was opened")
-        if told and [p for p in got["HOME"] if p not in QA_HOME]:
-            raise SandboxSetupError(f"E_SM_STRIP A3's home holds {[p for p in got['HOME'] if p not in QA_HOME]}, outside the /qa install's own {list(QA_HOME)}; nothing was opened")
+        qa_home = [p for p in (task["qa_home"] if isinstance(task.get("qa_home"), list) else QA_HOME) if p != DRIVE_HOME]
+        if told and [p for p in got["HOME"] if p not in qa_home]:
+            raise SandboxSetupError(f"E_SM_STRIP A3's home holds {[p for p in got['HOME'] if p not in qa_home]}, outside the /qa install's own {qa_home}; nothing was opened")
         return {"trial": trial, "branch": None, "head": got["HEAD"][0], "project_docs": [], "check": check}
 
     def _snapshot(self, container: str, task: dict, name: str) -> dict:

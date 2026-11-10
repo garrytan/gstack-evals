@@ -10,9 +10,9 @@
 // fails closed), and the build container goes with its anonymous volumes. sessionManifest writes the one-row manifest
 // real_agent's image check reads.
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, posix, relative } from "node:path";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { runName } from "./testrun.ts";
 import { smFail, type SmUnit } from "./unit.ts";
@@ -45,7 +45,63 @@ echo "COMMITS $(git rev-list --all --count)"
 echo "HEAD $(git rev-parse HEAD)"
 `;
 
-export interface SessionImage { image_id: string; tag: string; runtime_id: string; volume: string; commits: number; head: string; home: "none" | "qa"; tree_patch_sha256: string | null }
+export interface SessionImage { image_id: string; tag: string; runtime_id: string; volume: string; commits: number; head: string; home: "none" | "qa"; tree_patch_sha256: string | null; qa_home: QaHome | null }
+
+/** The session's home, where the image build puts A3's /qa install, and the home paths real_agent's family SM check lists
+ *  (real_agent.py SM_CHECK), relative to it. */
+export const SESSION_HOME = "/root";
+export const HOME_CHECKED = [".claude/skills", ".claude/CLAUDE.md", ".local/share/gstack", ".capy", ".gstack"] as const;
+
+/** paths: the checked home paths the install wrote, as the session sees them. links and files: how many symlinks and
+ *  text files named the install's host dir and now name the session home. binaries: files with a NUL byte that name the
+ *  host dir, left as built. */
+export interface QaHome { paths: string[]; links: number; files: number; binaries: string[] }
+
+/** Copies A3's /qa home (the host dir qa-install.sh filled) to dst, for the session's /root. gstack's setup writes its
+ *  own host dir into symlink targets and text files (the rendered skills, the settings hook, its markers), and in the
+ *  session that dir does not exist, so every link into the home becomes relative and the host dir in a text file becomes
+ *  /root. A link that leaves the home fails closed. A top-level .capy is left out: a host's tools can write there while
+ *  the install runs (Capy's git shim logs to ~/.capy), and the session's check refuses a drive path in every arm. */
+export function qaHomeCopy(src: string, dst: string): QaHome {
+  const roots = [...new Set([src.replace(/\/+$/, ""), realpathSync(src)])].sort((a, b) => b.length - a.length);
+  const lexists = (f: string) => { try { lstatSync(f); return true; } catch { return false; } };
+  const drive = join(src, ".capy");
+  cpSync(src, dst, { recursive: true, verbatimSymlinks: true, filter: (f) => f !== drive });
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const named = new RegExp("(?:" + roots.map(esc).join("|") + ")(?![\\w.-])", "g");
+  const inside = (t: string) => roots.map((r) => (t === r ? "/" : t.startsWith(r + "/") ? t.slice(r.length) : null)).find((x) => x !== null) ?? null;
+  const out: QaHome = { paths: [], links: 0, files: 0, binaries: [] };
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const f = join(dir, e.name);
+      const at = "/" + relative(dst, f);
+      if (e.isSymbolicLink()) {
+        const t = readlinkSync(f);
+        const to = isAbsolute(t) ? inside(t) : posix.join("/h", posix.dirname(at), t).startsWith("/h/") ? "" : null;
+        if (to === null) return smFail("E_SM_ARM", "A3's home links " + at + " to " + t + ", outside the home");
+        if (!to) continue;
+        rmSync(f);
+        symlinkSync(posix.relative(posix.dirname(at), to) || ".", f);
+        out.links++;
+      } else if (e.isDirectory()) walk(f);
+      else if (e.isFile()) {
+        const b = readFileSync(f);
+        const text = b.toString("latin1");
+        if (!new RegExp(named.source).test(text)) continue;
+        if (b.includes(0)) {
+          out.binaries.push(at);
+          continue;
+        }
+        writeFileSync(f, Buffer.from(text.replace(named, SESSION_HOME), "latin1"));
+        out.files++;
+      }
+    }
+  };
+  walk(dst);
+  out.paths = HOME_CHECKED.filter((p) => lexists(join(dst, p))).map((p) => SESSION_HOME + "/" + p);
+  out.binaries.sort();
+  return out;
+}
 
 /** Builds one session's image. treePatch (follow-on only) is the first stage's full-tree patch, "" for S0. qaHome (A3 only) is the host dir qa-install.sh filled. */
 export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first" | "followon"; treePatch?: string; qaHome?: string }): SessionImage {
@@ -64,7 +120,7 @@ export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first"
       writeFileSync(join(inDir, "followon.sh"), readFileSync(join(SH, "followon.sh")));
       writeFileSync(join(inDir, "second"), "");
     }
-    if (o.qaHome) cpSync(o.qaHome, join(inDir, "home"), { recursive: true, verbatimSymlinks: true });
+    const qa = o.qaHome ? qaHomeCopy(o.qaHome, join(inDir, "home")) : null;
     const r = docker(["run", "--name", name, "--network", "none", "--user", "0:0", "-v", o.volume + ":/sm-src:ro", "-v", inDir + ":/sm-in:ro", "--entrypoint", "", runtime, "bash", "-c", BUILD, "bash", u.repo_dir], { timeoutMs: 1_800_000 });
     const got = Object.fromEntries(r.stdout.split("\n").filter((l) => /^(COMMITS|HEAD) /.test(l)).map((l) => l.split(" ") as [string, string]));
     const commits = o.stage === "first" ? 1 : 2;
@@ -78,7 +134,7 @@ export function buildSessionImage(u: SmUnit, o: { volume: string; stage: "first"
     if (!/^sha256:[0-9a-f]{64}$/.test(id)) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has no id");
     const entry = docker(["image", "inspect", "--format", "{{json .Config.Entrypoint}}", tag], { timeoutMs: 30_000 }).stdout.trim();
     if (JSON.stringify(cfg.Entrypoint?.length ? cfg.Entrypoint : null) !== entry) return smFail("E_SM_INFRA_GAP", "the session image " + tag + " has entrypoint " + entry + ", not the runtime image's");
-    return { image_id: id, tag, runtime_id: runtime, volume: o.volume, commits, head: got.HEAD!, home: o.qaHome ? "qa" : "none", tree_patch_sha256: o.treePatch === undefined ? null : createHash("sha256").update(o.treePatch).digest("hex") };
+    return { image_id: id, tag, runtime_id: runtime, volume: o.volume, commits, head: got.HEAD!, home: o.qaHome ? "qa" : "none", tree_patch_sha256: o.treePatch === undefined ? null : createHash("sha256").update(o.treePatch).digest("hex"), qa_home: qa };
   } finally {
     docker(["rm", "-f", "-v", name], { timeoutMs: 60_000 });
     rmSync(inDir, { recursive: true, force: true });

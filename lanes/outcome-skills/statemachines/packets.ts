@@ -204,9 +204,136 @@ export const LOCAL_NAME: Record<Lang, RegExp> = {
   python: /^\s*([a-z_][a-z0-9_]{3,})\s*=(?!=)/m,
 };
 export const LOG_CALL: Record<Lang, string> = {
-  go: 'log.Println("enter")', rust: 'eprintln!("enter");', java: 'System.err.println("enter");', c: 'fprintf(stderr, "enter\\n");',
+  go: 'println("enter")', rust: 'eprintln!("enter");', java: 'System.err.println("enter");', c: 'fprintf(stderr, "enter\\n");',
   cpp: 'std::cerr << "enter\\n";', csharp: 'System.Console.Error.WriteLine("enter");', js: 'console.log("enter");', ts: 'console.log("enter");', python: 'print("enter")',
 };
+/** The header a C or C++ log call needs, added when the file does not include it. */
+export const LOG_HEADER: Partial<Record<Lang, { line: string; has: RegExp }>> = {
+  c: { line: "#include <stdio.h>", has: /^\s*#\s*include\s*<stdio\.h>/m },
+  cpp: { line: "#include <iostream>", has: /^\s*#\s*include\s*<iostream>/m },
+};
+const QUOTES: Record<Lang, string> = { go: '"`', rust: '"', java: "\"'", csharp: "\"'", c: "\"'", cpp: "\"'", js: "\"'`", ts: "\"'`", python: "\"'" };
+const TS_TYPE = /^\s*(?:export\s+)?(?:declare\s+)?(?:interface\s+\w|type\s+\w[^=]*=)/;
+const indentOf = (l: string) => /^\s*/.exec(l)![0];
+
+/** A line with its one-line string literals blanked and its line comment cut, columns kept. */
+function code(lang: Lang, line: string): string {
+  let out = "", q = "";
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (q) {
+      if (c === "\\") {
+        out += "  ";
+        i++;
+      } else if (c === q) {
+        q = "";
+        out += c;
+      } else out += " ";
+      continue;
+    }
+    if (lang === "python" ? c === "#" : c === "/" && line[i + 1] === "/") break;
+    if (QUOTES[lang].includes(c)) q = c;
+    out += c;
+  }
+  return out;
+}
+
+/** The function bodies the stock diffs touch: each line that opens one (FUNCTION_LINE) and the body's last line. A line
+ *  after a macro continuation, a Java or C# type with a parameter list (a record or primary constructor), a TypeScript
+ *  type or interface member, and a TypeScript signature whose return type is an object type open no body and are left out. */
+function functionBodies(lang: Lang, lines: string[]): Array<{ at: number; end: number }> {
+  const depth = [0];
+  for (const l of lines) {
+    const c = code(lang, l);
+    depth.push(depth.at(-1)! + (c.match(/\{/g)?.length ?? 0) - (c.match(/\}/g)?.length ?? 0));
+  }
+  const typed = new Set<number>();
+  if (lang === "ts" || lang === "js") lines.forEach((l, i) => {
+    if (TS_TYPE.test(l)) for (let j = i; j < lines.length && (j === i || depth[j]! > depth[i]!); j++) typed.add(j);
+  });
+  const out: Array<{ at: number; end: number }> = [];
+  lines.forEach((l, i) => {
+    if (!FUNCTION_LINE[lang].test(l) || (i > 0 && /\\\s*$/.test(lines[i - 1]!)) || typed.has(i)) return;
+    if ((lang === "java" || lang === "csharp") && /\b(?:class|record|struct|interface|enum)\b/.test(code(lang, l).split("(")[0]!)) return;
+    if (lang === "ts" && /\)\s*:\s*\{\s*$/.test(l)) return;
+    let end = i;
+    if (lang === "python") while (end + 1 < lines.length && (!lines[end + 1]!.trim() || indentOf(lines[end + 1]!).length > indentOf(l).length)) end++;
+    else while (end + 1 < lines.length && depth[end + 1]! > depth[i]!) end++;
+    out.push({ at: i, end });
+  });
+  return out;
+}
+
+/** The log line for one function body, or null where a statement can't go first: a Go signature ending in an anonymous
+ *  struct or interface type, a Rust const fn, a Java enum constant's body or a constructor that must call super or this
+ *  first, and a Python body whose indent can't be read. A Python body takes its first statement's indent. */
+function logLine(lang: Lang, lines: string[], f: { at: number; end: number }, unit: string): string | null {
+  const l = lines[f.at]!;
+  const body = lines.slice(f.at + 1, f.end + 1).find((x) => x.trim() && !(lang === "python" && x.trim().startsWith("#")));
+  if (lang === "go" && /\b(?:struct|interface)\s*\{\s*$/.test(l)) return null;
+  if (lang === "rust" && /\bconst\s+(?:unsafe\s+)?fn\b/.test(l)) return null;
+  if (lang === "java" && (/^\s*[A-Z][A-Z0-9_]*\s*\(/.test(l) || /^\s*(?:super|this)\s*\(/.test(body ?? ""))) return null;
+  if (lang !== "python") return indentOf(l) + unit + LOG_CALL[lang];
+  const ind = indentOf(body ?? "");
+  return ind.length > indentOf(l).length && ind.startsWith(indentOf(l)) ? ind + LOG_CALL.python : null;
+}
+
+/** The C or C++ header line added before the file's first #include outside any #if (an include guard's block counts as
+ *  outside), else after the include guard's #define, else at the top. */
+function withHeader(lines: string[], header: string): string[] {
+  let depth = 0, guard = -1;
+  const at = (i: number) => [...lines.slice(0, i), header, ...lines.slice(i)];
+  for (let i = 0; i < lines.length; i++) {
+    const d = /^\s*#\s*(\w+)/.exec(lines[i]!)?.[1];
+    if (d === "include" && (depth === 0 || (depth === 1 && guard >= 0))) return at(i);
+    if (d === "if" || d === "ifdef" || d === "ifndef") {
+      const next = lines.slice(i + 1).find((x) => x.trim());
+      if (depth === 0 && guard < 0 && d === "ifndef" && /^\s*#\s*define\b/.test(next ?? "")) guard = lines.indexOf(next!, i + 1);
+      depth++;
+    } else if (d === "endif") depth--;
+  }
+  return at(guard >= 0 ? guard + 1 : 0);
+}
+
+/** The rename-only diff: the file's first local (LOCAL_NAME) whose every use sits in the body of the function that
+ *  declares it, renamed there. A use as a member, a key, a field shorthand or a named argument, a use inside a string or
+ *  comment on its line, or a Python global or nonlocal of that name skips the local, so the rename keeps the behavior. */
+function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string[], fns: Array<{ at: number; end: number }>): string | null {
+  const word = (n: string, flags = "") => new RegExp("(?<![\\w$])" + n.replace(/\$/g, "\\$") + "(?![\\w$])", flags);
+  const starts = [0];
+  for (const l of lines) starts.push(starts.at(-1)! + l.length + 1);
+  const lineAt = (off: number) => {
+    let lo = 0, hi = lines.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid]! <= off) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  const opener = (s: string) => {
+    let d = 0;
+    for (let k = s.length - 1; k >= 0; k--) {
+      if (")]}".includes(s[k]!)) d++;
+      else if ("([{".includes(s[k]!) && d-- === 0) return s[k]!;
+    }
+    return null;
+  };
+  const suffix = x.lang === "python" || x.lang === "rust" ? "_value" : "Value";
+  for (const m of x.text.matchAll(new RegExp(LOCAL_NAME[x.lang].source, LOCAL_NAME[x.lang].flags.replace("g", "") + "g"))) {
+    const name = m[1]!, declAt = m.index! + m[0].indexOf(name), at = lineAt(declAt);
+    const f = fns.filter((g) => g.at < at && at <= g.end).at(-1);
+    if (!f || word(name + suffix).test(x.text) || (x.lang === "python" && new RegExp("\\b(?:global|nonlocal)\\b.*" + word(name).source).test(x.text))) continue;
+    const bad = [...x.text.matchAll(word(name, "g"))].some((o) => {
+      const i = lineAt(o.index!), col = o.index! - starts[i]!, c = code(x.lang, lines[i]!);
+      const before = c.slice(0, col), after = c.slice(col + name.length);
+      return i <= f.at || i > f.end || c.slice(col, col + name.length) !== name || /(?:\.|->|::)\s*$/.test(before) || (o.index !== declAt && /^\s*:(?![:=])/.test(after)) ||
+        (/^\s*[,}]/.test(after) && (opener(before) === "{" || !before.trim())) || (x.lang === "python" && /[(,]\s*$/.test(before) && /^\s*=(?!=)/.test(after));
+    });
+    if (!bad) return unified(x.path, x.text, lines.map((l, i) => (i > f.at && i <= f.end ? l.replace(word(name, "g"), name + suffix) : l)).join("\n"));
+  }
+  return null;
+}
 
 function unified(path: string, before: string, after: string): string | null {
   if (before === after) return null;
@@ -222,24 +349,29 @@ function unified(path: string, before: string, after: string): string | null {
   }
 }
 
-/** The three stock diffs from one file of the unit's own tree, by keyless transforms. A kind the file cannot give (no
- *  local to rename, no function for the log call) is null. */
+/** The three stock diffs from one file of the unit's own tree, by keyless transforms that keep the file valid. A kind the
+ *  file cannot give (no local to rename safely, no function a log call can open, a Rust no_std file) is null. Logging
+ *  adds the header a C or C++ log call needs. */
 export function stockDiffs(x: { lang: Lang; path: string; text: string }): Array<{ kind: StockKind; diff: string | null }> {
   const lines = x.text.split("\n");
-  const fn = lines.map((l, i) => (FUNCTION_LINE[x.lang].test(l) ? i : -1)).filter((i) => i >= 0);
-  const indent = (l: string) => /^\s*/.exec(l)![0];
+  const fns = functionBodies(x.lang, lines);
+  const fn = new Set(fns.map((f) => f.at));
   const unit = lines.some((l) => l.startsWith("\t")) ? "\t" : "    ";
   const comment = x.lang === "python" ? "#" : "//";
-  const commented = lines.flatMap((l, i) => (fn.includes(i) ? ["", indent(l) + comment + " Reviewed.", l] : [l]));
-  if (!fn.length) commented.unshift(comment + " Reviewed.");
-  const name = LOCAL_NAME[x.lang].exec(x.text)?.[1];
-  const renamed = name ? name + (x.lang === "python" || x.lang === "rust" ? "_value" : "Value") : null;
-  const rename = name && renamed && !new RegExp("\\b" + renamed + "\\b").test(x.text) ? x.text.replace(new RegExp("(?<![\\w$])" + name.replace(/\$/g, "\\$") + "(?![\\w$])", "g"), renamed) : null;
-  const logged = lines.flatMap((l, i) => (fn.includes(i) ? [l, indent(l) + unit + LOG_CALL[x.lang]] : [l]));
+  const commented = lines.flatMap((l, i) => (fn.has(i) ? ["", indentOf(l) + comment + " Reviewed.", l] : [l]));
+  if (!fn.size) commented.unshift(comment + " Reviewed.");
+  const logs = new Map(fns.flatMap((f) => {
+    const s = logLine(x.lang, lines, f, unit);
+    return s === null ? [] : [[f.at, s] as const];
+  }));
+  let logged = lines.flatMap((l, i) => (logs.has(i) ? [l, logs.get(i)!] : [l]));
+  const header = LOG_HEADER[x.lang];
+  if (header && !header.has.test(x.text)) logged = withHeader(logged, header.line);
+  const noStd = x.lang === "rust" && /^\s*#!\[no_std\]/m.test(x.text);
   return [
     { kind: "comments_whitespace", diff: unified(x.path, x.text, commented.join("\n")) },
-    { kind: "rename_only", diff: rename === null ? null : unified(x.path, x.text, rename) },
-    { kind: "logging", diff: fn.length ? unified(x.path, x.text, logged.join("\n")) : null },
+    { kind: "rename_only", diff: renameOnly(x, lines, fns) },
+    { kind: "logging", diff: logs.size && !noStd ? unified(x.path, x.text, logged.join("\n")) : null },
   ];
 }
 
