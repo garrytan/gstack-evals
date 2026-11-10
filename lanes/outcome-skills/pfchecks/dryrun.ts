@@ -28,6 +28,7 @@ import { ITEMS, LINE, OPUS, P1, SOL } from "./items.ts";
 import { P_HEADING } from "./exposure.ts";
 import { pstackMount, buildPstackVolume, PSTACK_DIR } from "./pstack.ts";
 import { dockerExecutor } from "./runner.ts";
+import { CONTAIN_RECORD, type ContainRecord } from "./containment.ts";
 import { pfRecord, runPfSession, type PfRun, type PfRunInput } from "./run.ts";
 import { scoreSession, type CatchRecord } from "./score.ts";
 import { effortFields, effortHolds, readWrapup, type PfSessionRecord } from "./session.ts";
@@ -444,6 +445,8 @@ export async function main(argv: string[]): Promise<number> {
       rule("ledger lease " + d.item, it.open === null && it.leases.length === 1 && it.leases[0]!.close !== null, "lease " + (it.leases[0]?.lease as any)?.lease_id + " opened and settled " + (PF_STAGES[d.item] ? "by the driver" : "directly (not a driver stage)") + ", spent " + it.leases[0]?.close?.spent_micros + " of cap " + d.cap_micros + ", driver exit " + code);
     }
     rule("hostile CLAUDE.md reaches no arm", /E_PF_ARM/.test(String(H.turns.refused ?? "")) && reached === 0 && st.bodies.every((b) => b.session !== "hostile"), "refused: " + String(H.turns.refused ?? "no").slice(0, 120) + "; request bodies holding the text " + reached);
+    const checks = (JSON.parse(readFileSync(join(fx.dir, CONTAIN_RECORD), "utf8")) as { checks: Record<string, ContainRecord> }).checks;
+    rule("containment gate before the unit's sessions: a passing record for each session image (the tree and the hostile tree)", [probe.run.image.tag, H.run.image.tag].every((t) => checks[t]?.ok === true) && Object.keys(checks).length === 2, Object.values(checks).map((c) => c.tag.slice(-8) + " " + (c.ok ? "ok" : "FAIL") + ", fix_blobs " + c.summary.fix_blobs + ", other git dirs " + c.gitdirs.length + ", after " + c.after_source + " " + c.after).join("; "));
     rule("tree-check refusal is gap E_PF_ARM with one attempt, no retry", H.run.record.gap === "E_PF_ARM" && H.run.attempts.length === 1, "hostile session record: gap " + H.run.record.gap + ", attempts " + H.run.attempts.length);
   } catch (e) {
     rule("dry run", false, (e as Error).stack?.slice(0, 800) ?? String(e));

@@ -481,11 +481,11 @@ Exit 1. Side effects: None: refused before any spend. Retry safe: yes. Resumable
 
 ### E_PF_CONTAINMENT
 
-The containment check found something from the fix commit or after in a pstack-checks session workspace: a ref, reflog entry or commit object that is not the base commit or an ancestor, an alternates file, gitfile, submodule store or nested .git, tracked files that differ from the base commit, another git directory holding the dataset's base commit, or a hidden marker (a line the fix or the test patch adds, or a hidden test's name) in a file outside the repository or untracked inside it.
+The containment check found something from the fix commit or after in a pstack-checks session workspace: a ref, reflog entry or commit object that is not the base commit or an ancestor, an alternates file, gitfile, submodule store or nested .git, tracked files that differ from the base commit, a blob of the fix's or the test patch's files as they read after the patch in the session repository, another git directory holding the dataset's base commit, such a blob, or a commit id after the base that the unit's own image holds, or a hidden marker (a line the fix or the test patch adds, or a hidden test's name) in a file outside the repository or untracked inside it.
 
-Fix: Read the PF_CONTAIN lines it printed (each hit names a path and a needle's sha256), fix the unit's image or tree preparation test-first, rebuild the tree and run outcome pf contain again. No paid session runs on the unit until it passes.
+Fix: The unit halts before any session and is not dropped. Bring it to the Captain with the unit's pf-contain.json record (each finding names a path, a needle's sha256 or an object id, and every other git directory is listed with its commit count). After the Captain rules, fix the unit's image or tree preparation test-first, rebuild the tree and run outcome pf contain again. No paid session runs on the unit until it passes.
 
-Exit 1. Side effects: None: the check reads a container of the session image and writes nothing. Retry safe: yes. Resumable: yes. Owner: U20.
+Exit 1. Side effects: Writes the check's record to the unit dir's pf-contain.json; the check itself reads containers of the runtime and session images and changes neither. Retry safe: yes. Resumable: yes. Owner: U20.
 
 ### E_PF_CELL_INCOMPLETE
 

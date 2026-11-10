@@ -10,7 +10,7 @@ import { buildSessionImage } from "../statemachines/image.ts";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { analyse, report } from "./analysis.ts";
 import * as adm from "./admission.ts";
-import { containImage, containInputs } from "./containment.ts";
+import { checkUnit } from "./containment.ts";
 import { labelsGate, neutralGate, oracleGate, poolOf, readLabels, toldGate, walkDraw } from "./draw.ts";
 import { itemsTable } from "./items.ts";
 import { dockerNeutralRun, neutralFiles, validateNeutral, volumeTexts } from "./neutral.ts";
@@ -92,8 +92,10 @@ async function run(cmd: string, a: Args): Promise<number> {
       const u = readUnit(dir);
       const img = buildSessionImage(u, { volume: smTreeVolume(u.id), stage: "first" });
       try {
-        const r = containImage(img.tag, u.repo_dir, containInputs(dir, u));
+        const r = checkUnit(dir, u, img);
+        for (const d of r.gitdirs) console.log("PF_CONTAIN " + u.id + " gitdir commits=" + d.commits + " " + d.path);
         for (const f of r.findings) console.log("PF_CONTAIN " + u.id + " " + f);
+        console.log("PF_CONTAIN " + u.id + " after " + r.after_source + " " + r.after);
         console.log(r.ok ? "ok " + u.id + " " + r.detail : "E_PF_CONTAINMENT " + u.id + " " + r.detail);
         if (!r.ok) bad++;
       } finally {
