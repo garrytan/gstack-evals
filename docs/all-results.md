@@ -1,6 +1,6 @@
 # All results
 
-This page lists every gstack-evals result, including the ones still waiting for their independent checks. It also says how a result is made and what the words in the posts mean. The [README](../README.md) shows the checked results as a scorecard.
+This page lists every gstack-evals result, including the ones still waiting for their independent checks. It also gives the full notes behind the README's scorecard, how a result is made and what the words in the posts mean. The [README](../README.md) shows the checked results as a scorecard.
 
 ## How a result is made
 
@@ -20,6 +20,42 @@ Unpublished tasks, hidden tests and answer keys never enter this repo, so models
 - **Worse:** the gstack setup did measurably worse. "Lower, not confirmed" means it scored lower but missed the bar fixed in advance.
 - **Couldn't test yet:** the test couldn't answer its question. Usually the plain model already solved nearly everything, the skill never ran, or the run broke. The test needs fixing or harder tasks before it can say anything.
 - **No verdict:** the run's own entry check didn't admit the comparison.
+
+## Scorecard notes
+
+The README's scorecard keeps each note to one line. These are the notes in full.
+
+### Reading the table
+
+A skill is a written procedure the agent can open, which loads its instructions into the session. A hook is a small program that runs during a session and can stop the agent until a rule is met. /review checks a code change for bugs, /investigate debugs a failure, plan-ceo-review and plan-eng-review review a plan before any code is written, and autoplan runs gstack's plan reviews one after another. "On its own" means the task didn't name the skill, though gstack's routing hook may have. The routing and description rows compare two versions of gstack, and both appear under "With gstack". The models are Anthropic's Claude Opus 5.5, OpenAI's GPT-6.1 Sol and particle-1, a low-cost model from Particle.
+
+### /review, full procedure
+
+A blocking bug is one serious enough that the change shouldn't merge. Each of the 42 known blocking bugs, in 33 review tasks, was reviewed twice. 41 of the 42 came from code reviews done with gstack or its close relatives, so the test may suit gstack. In 42 of the 66 gstack sessions the full procedure ran only after a gstack hook blocked the agent for skipping it; 24 ran it unprompted. A gstack session cost 8.9 times as much as one with no gstack.
+
+### Skill-routing overhaul
+
+The overhaul is gstack v1.94.39.0, which adds a hook that names the right skill for the task, hooks that enforce a skill's steps and rewritten skill descriptions, tested as one package against v1.93.22.0. With no gstack there is no skill to open. These rows count opens, not solved tasks: pass rates showed no change we could measure (Opus, prompt not naming the skill: -2.5 [-7.5, +2.5]; Sol, prompt asking for it: +0.0 [-5.0, +5.0]), and the test was too small to see one. On Opus every open came on one of the 19 tasks the new hook sent to the skill, and none came with the new hooks switched off.
+
+### Skill-routing overhaul on GPT-6.1 Sol
+
+The run's entry check, a small pilot that decides whether a comparison goes ahead, didn't let this one through, so it has no verdict. The pilot's reason was that Sol had no room to improve, and that reason doesn't hold up: with the new hooks switched off Sol opened the skill in 88.8% of sessions (71 of 80), and at Sol's 65.0% starting rate the test could see a gain of 18.6 points, inside the 20 points it was looking for.
+
+### /investigate description that says when to use it
+
+This compares the rewritten description with the one gstack shipped. All of the gain came from Sol, and Sol's own change is exploratory: it wasn't the planned comparison. Sol's 9.5% for the old wording pools the gstack setup with a placebo setup, a stand-in used for comparison. Opus 5.5 and particle-1 opened nothing in 363 eligible trials. No effect on solving tasks was tested. The test used 37 tasks from Terminal-Bench 2, a public benchmark of command-line tasks, one trial per task per setup.
+
+### plan-ceo-review
+
+On 84 real product plans, the score is whether a review named the issue that later decided the plan's fate, not whether the plan got better, so it doesn't tell us whether the skill improves plans. [A new test](../wiki/plans/2026-11-08-geva-403-product-value-prereg/README.md) asks that. "With its gate hook" is a later gstack with plan-ceo-review's gate switched on, a hook that checks the review's steps. The two Opus rows count slightly different sets of reviews, so Opus's no-gstack rate differs between them.
+
+### plan-ceo-review on particle-1
+
+The 95% range sits below zero, but the stricter test the plan fixed in advance didn't pass. That test allows for trying two versions on each model, so one lucky result doesn't count. It isn't a confirmed loss.
+
+### plan-eng-review and autoplan
+
+The plan needed plain Opus to solve between 20% and 80% of trials, to leave room for a gain. It solved every trial that finished (95% range 84.6% to 100%, on 11 of 12 tasks), so the comparison never ran. That range treats every trial as independent, so it may be too narrow. Asked to use these skills, Opus showed no sign of running their steps in any scored session (0 of 18 for plan-eng-review, 0 of 23 for autoplan), by an automatic check for those steps.
 
 ## Results waiting for their independent check
 
