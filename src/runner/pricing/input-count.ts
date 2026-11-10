@@ -10,8 +10,8 @@
 //   is the count. A request that pulls in stored context (storedContext) is not counted.
 // - OpenRouter's Messages route, for a model whose row pins it to the openai provider (Sol, as Claude Code runs it): no
 //   counter takes the request, so its text, tool calls, tool results and tools are translated into Responses input and
-//   counted by the model's own OpenAI counter. Parts the counter is not sent (thinking signatures, media, unknown blocks and
-//   tools) stay at a token per byte of their JSON. The bound adds TRANSLATED_BLOCK_TOKENS per translated block, for framing
+//   counted by the model's own OpenAI counter. Parts the counter is not sent (thinking signatures, media, unknown blocks,
+//   tools and top-level fields other than the generation fields) stay at a token per byte of their JSON. The bound adds TRANSLATED_BLOCK_TOKENS per translated block, for framing
 //   OpenRouter's own translation may add, and TRANSLATED_COUNT_MARGIN, sized from paid probes on this route. That bound is
 //   measured, not proven, so the proxy also checks every settled call's real input against it.
 // Every bound is capped at the byte bound. Every other route, and any count that fails, keeps the byte bound.
@@ -53,6 +53,9 @@ const GENERATION_FIELDS = new Set(["max_tokens", "stream", "metadata", "temperat
 const RESPONSES_COUNT_FIELDS = ["model", "input", "instructions", "tools", "tool_choice", "parallel_tool_calls", "reasoning", "text", "truncation"];
 
 const ROLES = new Set(["user", "assistant", "system"]);
+
+/** The top-level fields a translated plan sends to the counter, plus the provider routing the proxy sets; every other field, a structured-output schema included, is reserved at a token per byte. */
+const TRANSLATED_FIELDS = new Set(["model", "messages", "system", "tools", "provider"]);
 
 /** The free count that bounds this call's input, or null when its route has none. body is the request as the proxy sends it. */
 export function countPlan(provider: MeteredProvider, route: string, body: Record<string, unknown>, price: RequestPrice): CountPlan | null {
@@ -104,9 +107,10 @@ function translatedPlan(model: string, body: Record<string, any>): CountPlan | n
     }
   }
   for (const t of Array.isArray(body.tools) ? body.tools : body.tools === undefined ? [] : [body.tools]) {
-    if ((t?.type === undefined || t.type === "custom") && typeof t.name === "string" && t.input_schema && typeof t.input_schema === "object") tools.push({ type: "function", name: t.name, ...(typeof t.description === "string" ? { description: t.description } : {}), parameters: t.input_schema, strict: false });
+    if (t && (t.type === undefined || t.type === "custom") && typeof t.name === "string" && t.input_schema && typeof t.input_schema === "object") tools.push({ type: "function", name: t.name, ...(typeof t.description === "string" ? { description: t.description } : {}), parameters: t.input_schema, strict: false });
     else opaque(t);
   }
+  for (const [k, v] of Object.entries(body)) if (!TRANSLATED_FIELDS.has(k) && !GENERATION_FIELDS.has(k)) opaque({ [k]: v });
   return { counter: "openai", path: "/v1/responses/input_tokens", body: { model, input, ...(tools.length ? { tools } : {}) }, translated: true, blocks: input.length + tools.length, opaqueBytes };
 }
 

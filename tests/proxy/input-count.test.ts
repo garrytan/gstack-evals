@@ -302,6 +302,40 @@ describe("input-token counts for the reservation", () => {
     expect(t.sends).toHaveLength(1);
     expect(t.reserves()[0]!.input_count).toBeUndefined();
   });
+
+  // Value: protects=a malformed tools entry on the translated route gets the answer it got before counting existed; fails_when=a null tool makes the count plan throw and the proxy answer 500 instead of forwarding; why_new=/ship review; seam=translatedPlan's tool loop; no_claim=what the upstream answers such a request
+  test("a null tool entry on OpenRouter's Sol route is forwarded as before, with its bytes reserved", async () => {
+    const body = { ...sol(1000), tools: [null] };
+    const before = await byteReservation("/openrouter/v1/messages", body);
+    const t = setup();
+    const res = await t.call(t.bind(), "/openrouter/v1/messages", body);
+    expect(res.status).toBe(before.status);
+    expect(await res.text()).toBe(before.text);
+    expect(t.sends.map((s) => s.url + "\n" + s.raw)).toEqual(before.sends);
+    expect(countPlan("openrouter", "/v1/messages", body, priceRequest("openrouter", body, 1000, "/v1/messages"))!.opaqueBytes).toBe(Buffer.byteLength("null"));
+  });
+
+  // Value: protects=input a translated request carries outside system, messages and tools stays reserved at a token per byte; fails_when=a structured-output schema or another untranslated top-level field drops out of the bound; why_new=/ship review; seam=translatedPlan; no_claim=how OpenRouter bills each field
+  test("top-level fields the Sol translation does not send to the counter are reserved at a token per byte", async () => {
+    const schema = { format: { type: "json_schema", schema: { type: "object", description: "z".repeat(50_000) } } };
+    const body = { ...sol(1000), output_config: schema };
+    const plan = countPlan("openrouter", "/v1/messages", body, priceRequest("openrouter", body, 1000, "/v1/messages"))!;
+    expect(plan.opaqueBytes).toBeGreaterThanOrEqual(Buffer.byteLength(JSON.stringify(schema)));
+    const t = setup({ count: counted(10) });
+    expect((await t.call(t.bind(), "/openrouter/v1/messages", body)).status).toBe(200);
+    expect(t.reserves()[0]!.input_count.tokens).toBeGreaterThanOrEqual(Buffer.byteLength(JSON.stringify(schema)));
+    expect(countPlan("openrouter", "/v1/messages", sol(1000), priceRequest("openrouter", sol(1000), 1000, "/v1/messages"))!.opaqueBytes).toBe(0);
+  });
+  // Value: protects=an OpenRouter Sol call reserves at bytes and sends no count when the proxy has no OpenAI key; fails_when=the count goes out with another key or none; why_new=/ship review, an untested fallback; seam=countInput's key check; no_claim=none
+  test("an OpenRouter Sol call with no OPENAI_API_KEY sends no count and reserves at the byte bound", async () => {
+    const before = await byteReservation("/openrouter/v1/messages", sol(1000));
+    const t = setup({ extra: { env: { ANTHROPIC_API_KEY: KEY, OPENROUTER_API_KEY: OPENROUTER_KEY } } });
+    expect((await t.call(t.bind(), "/openrouter/v1/messages", sol(1000))).status).toBe(200);
+    expect(t.counts).toHaveLength(0);
+    expect(t.reserves()[0]!.max_micros).toBe(before.reserve.max_micros);
+    expect(t.reserves()[0]!.input_count).toMatchObject({ counter: "openai", count: null });
+    expect(t.reserves()[0]!.input_count.fallback).toContain("OPENAI_API_KEY is not set");
+  });
 });
 
 describe("the guard on a measured count", () => {
