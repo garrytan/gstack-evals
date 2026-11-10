@@ -58,3 +58,15 @@ test("a fix that only adds files has no base text to read, and a single --unit r
   expect(errs.length).toBe(2);
   expect(errs.join("\n")).not.toContain("--unit is required");
 });
+test("a stable test the parser loses in one or two runs does not fail the neutral gate; a broken build, a failure or a test lost from every run still does", () => {
+  const ok = { f: "fail", s: "pass" }, lost = { f: "fail" };
+  expect(neutralOk(["f"], ["s"], [ok, lost, ok])).toEqual({ ok: true, reason: "ok" });
+  expect(neutralOk(["f"], ["s"], [lost, ok, lost])).toEqual({ ok: true, reason: "ok" });
+  expect(neutralOk(["f"], ["s"], [lost, lost, lost])).toMatchObject({ ok: false, reason: "stable_failed 1 s" });
+  expect(neutralOk(["f"], ["s", "t"], [{}, {}, {}])).toMatchObject({ ok: false, reason: "stable_failed 2 s,t" });
+  expect(neutralOk(["f"], ["s"], [ok, { f: "fail", s: "fail" }, ok])).toMatchObject({ ok: false, reason: "stable_failed 1 s" });
+  expect(neutralOk(["f"], ["s"], [ok, { f: "fail", s: "skip" }, lost])).toMatchObject({ ok: false, reason: "stable_failed 1 s" });
+  expect(neutralOk(["f"], ["s"], [ok, null, ok])).toMatchObject({ ok: false, reason: "stable_failed 1 s" });
+  expect(neutralOk(["f"], ["s"], [lost, { s: "pass" }, ok])).toMatchObject({ ok: true });
+  expect(neutralOk(["f"], ["s"], [lost, { f: "pass", s: "pass" }, ok])).toMatchObject({ ok: false, reason: "fail_to_pass_passed f" });
+});

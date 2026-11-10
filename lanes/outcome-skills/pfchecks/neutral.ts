@@ -73,13 +73,15 @@ export function neutralPatch(lang: Lang, files: { path: string; text: string }[]
   }
 }
 
-/** The validation rule over three runs' parsed results (null: the run built nothing or stopped). */
+/** The validation rule over three runs' parsed results (null: the run built nothing or stopped). A stable test fails it
+ *  when a run stopped, when a run reports it with any status but pass, or when no run reports it at all; a test the parser
+ *  loses in one or two runs (another test's output inside its result line) does not. */
 export function neutralOk(f2p: string[], stable: string[], runs: (Record<string, string> | null)[]): { ok: boolean; reason: string } {
   if (runs.length !== 3) return { ok: false, reason: "runs_" + runs.length };
   const rs = runs.map((r) => r ?? {});
   const f2pPassed = f2p.filter((id) => rs.some((r) => passed(r, id)));
   if (f2pPassed.length) return { ok: false, reason: "fail_to_pass_passed " + f2pPassed.slice(0, 10).join(",") };
-  const stableFailed = stable.filter((id) => rs.some((r) => !passed(r, id)));
+  const stableFailed = stable.filter((id) => runs.some((r) => r === null || (r[id] !== undefined && !passed(r, id))) || !rs.some((r) => passed(r, id)));
   if (stableFailed.length) return { ok: false, reason: "stable_failed " + stableFailed.length + " " + stableFailed.slice(0, 10).join(",") };
   return { ok: true, reason: "ok" };
 }
