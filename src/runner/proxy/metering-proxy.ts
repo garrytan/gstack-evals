@@ -26,6 +26,8 @@
 // - Money is integer micro-dollars throughout, and each reserve carries an idempotency key naming the call attempt.
 // - Free routes (model listings, Anthropic token counts, an OpenRouter generation record by id) are forwarded unreserved, and every request, free, paid or
 //   refused, is journaled with its source address.
+// - A free POST route (a token count) first passes the request-shape refusals every paid call passes (refuseRequestShape),
+//   with the paid route's answer, so a count body takes no hosted tool, MCP server or remote source to the provider.
 // - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
 //   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
@@ -52,7 +54,7 @@ import { BlockList, isIP } from "node:net";
 import { zstdDecompressSync } from "node:zlib";
 import { docAnchor, type ReasonCode } from "../../errors/codes.ts";
 import type { CallOutcome, CellAttempt, LedgerReply, ReservationLedger, TokenUsage } from "../../types.ts";
-import { chatPrice, openRouterRouting, PriceError, priceRequest, reservationMicros, sseUsage, usageCost, type MeteredProvider } from "../pricing/prices.ts";
+import { chatPrice, openRouterRouting, PriceError, priceRequest, refuseRequestShape, reservationMicros, sseUsage, usageCost, type MeteredProvider } from "../pricing/prices.ts";
 import { findLeaks } from "./sanitize.ts";
 
 export const UPSTREAM: Record<MeteredProvider, string> = { anthropic: "https://api.anthropic.com", openai: "https://api.openai.com", openrouter: "https://openrouter.ai/api", typesafe: "https://api.typesafe.ai" };
@@ -574,7 +576,7 @@ export class MeteringProxy {
     return problem(code, status, reason, code === "DR_ALLOWANCE_STOP" ? "allowance_stop" : undefined);
   }
 
-  /** Route allowlist, key, tripwire, model allowlist, output cap, price, then per attempt: rate-limit pause, allowance, journal, reserve, journal, send, settle. */
+  /** Route allowlist, key, tripwire, model allowlist, a free route's request shape, output cap, price, then per attempt: rate-limit pause, allowance, journal, reserve, journal, send, settle. */
   private async forward(req: Request, ctx: CallContext, beginStream: () => () => void): Promise<Response> {
     const o = this.options;
     const { provider, route, slot } = ctx;
@@ -652,6 +654,14 @@ export class MeteringProxy {
       if (server.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side tools are refused on this lease: ${server.join(", ")}`, { tools: server });
       const asked = ["mcp_servers", "plugins", "web_search_options"].filter((k) => k in body);
       if (asked.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side capabilities are refused on this lease: ${asked.join(", ")}`, { tools: asked });
+    }
+    if (allowed.free) {
+      try {
+        refuseRequestShape(provider, body);
+      } catch (e) {
+        if (e instanceof PriceError) return this.refuse(ctx, "E_ALLOWANCE", 402, `unpriced request refused: ${e.message}`);
+        throw e;
+      }
     }
     if (allowed.estimate) {
       this.journal({ kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model, source: ctx.source, status: 200, estimated: true });

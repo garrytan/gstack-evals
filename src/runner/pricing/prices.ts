@@ -13,6 +13,8 @@
 //   token per byte of the outgoing body (upstream's proxy applied the same floor on top of a 3-bytes-per-token estimate).
 // - Inputs the provider bills beyond their bytes (remote media, stored files, hosted tools) are refused, and Anthropic's
 //   one-hour cache writes are priced at twice input, in the reservation and the settlement.
+// - The request-shape refusals are refuseRequestShape, which the metering proxy also runs on its free POST routes;
+//   mcp_servers, an mcp_toolset tool and OpenAI's web_search_options are refused by name.
 // - TypeSafe's System One (decision routing, B3) is priced again, for the pinned Jev versions only: input tokens at the row,
 //   output free, and a reservation that bounds every question reading the whole request at one token per byte.
 
@@ -166,31 +168,47 @@ function unboundedInput(value: unknown, key = ""): string | null {
   return null;
 }
 
+/**
+ * Throw PriceError for a request shape the proxy never sends on: input or a tool the provider fetches, runs or bills beyond
+ * the request's bytes, several completions, a dearer tier, stored input, an OpenRouter field that reroutes the call, MCP
+ * servers or an MCP toolset, or OpenAI's web search option. priceRequest runs it on every paid call, and the metering proxy on
+ * every free POST route before the request leaves. The named MCP and web search checks run last, so a request refused before
+ * they existed keeps its message. TypeSafe's System One takes questions, not chat fields, so it stops after the first two.
+ */
+export function refuseRequestShape(provider: MeteredProvider, body: Record<string, unknown>): void {
+  const unbounded = unboundedInput(body);
+  if (unbounded) throw new PriceError(`the request uses ${unbounded}, whose cost the proxy cannot bound from the request`);
+  if (body.n !== undefined && body.n !== 1) throw new PriceError(`n=${JSON.stringify(body.n)} asks for several completions, each billed in full`);
+  if (provider === "typesafe") return;
+  if (provider === "openai" && body.service_tier !== undefined && body.service_tier !== "default") throw new PriceError(`service_tier ${JSON.stringify(body.service_tier)} may bill above the standard rates in the price table`);
+  if (provider === "anthropic" && body.speed !== undefined && body.speed !== "standard") throw new PriceError(`speed ${JSON.stringify(body.speed)} bills above the standard rates in the price table`);
+  if (provider === "anthropic" && body.inference_geo !== undefined && body.inference_geo !== "global") throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);
+  if (provider === "openai" && body.prompt !== undefined) throw new PriceError("a stored prompt adds input, and may enable hosted tools, that the request does not show");
+  const tools = Array.isArray(body.tools) ? (body.tools as Array<{ type?: unknown }>) : [];
+  if (provider === "openrouter") {
+    const rerouted = ["models", "route", "preset", "plugins", "web_search_options", "service_tier", "prompt", "background", "modalities", "image_config", "max_price"].find(k => body[k] !== undefined);
+    if (rerouted) throw new PriceError(`OpenRouter's ${rerouted} field can reach other models, tiers, stored input or paid tools that the price row does not cover`);
+    const server = tools.find(t => typeof t?.type === "string" && t.type.startsWith("openrouter:"));
+    if (server) throw new PriceError(`the OpenRouter server tool ${server.type} runs and bills outside the model's tokens`);
+    if (filePart(body.messages) || filePart(body.input)) throw new PriceError("a file part can be fetched from a URL or parsed by paid OCR, which the request's bytes do not bound");
+  }
+  if (body.mcp_servers !== undefined) throw new PriceError("mcp_servers has the provider call remote MCP servers, which run outside the sandbox and the request's bytes");
+  const toolset = tools.find(t => typeof t?.type === "string" && t.type.startsWith("mcp_toolset"));
+  if (toolset) throw new PriceError(`the MCP toolset ${toolset.type} has the provider run a remote MCP server's tools, outside the sandbox and the request's bytes`);
+  if (provider === "openai" && body.web_search_options !== undefined) throw new PriceError("OpenAI's web_search_options field turns on a web search that runs and bills outside the model's tokens");
+}
+
 /** Price a chat request from its outgoing JSON body, or throw PriceError: a request the table cannot price is never forwarded. */
 export function priceRequest(provider: MeteredProvider, body: Record<string, unknown>, maxOutputTokens: number, route = ""): RequestPrice {
   const model = typeof body.model === "string" ? body.model : "";
   if (!model) throw new PriceError("the request names no model, so its cost cannot be reserved");
   const price = chatPrice(`${provider}:${model}`);
   if (!price) throw new PriceError(`no price for ${provider}:${model}, so its cost cannot be reserved`);
-  const unbounded = unboundedInput(body);
-  if (unbounded) throw new PriceError(`the request uses ${unbounded}, whose cost the proxy cannot bound from the request`);
-  if (body.n !== undefined && body.n !== 1) throw new PriceError(`n=${JSON.stringify(body.n)} asks for several completions, each billed in full`);
+  refuseRequestShape(provider, body);
   if (provider === "typesafe") {
     const questions = body.questions && typeof body.questions === "object" && !Array.isArray(body.questions) ? Object.keys(body.questions).length : 0;
     if (questions === 0) throw new PriceError("a System One request with no questions cannot be priced");
     return { provider, model, format: "openai", ...price, cacheWrite: "none", inputTokens: (Buffer.byteLength(JSON.stringify(body)) + REQUEST_OVERHEAD_TOKENS) * questions, maxOutputTokens: 0 };
-  }
-  if (provider === "openai" && body.service_tier !== undefined && body.service_tier !== "default") throw new PriceError(`service_tier ${JSON.stringify(body.service_tier)} may bill above the standard rates in the price table`);
-  if (provider === "anthropic" && body.speed !== undefined && body.speed !== "standard") throw new PriceError(`speed ${JSON.stringify(body.speed)} bills above the standard rates in the price table`);
-  if (provider === "anthropic" && body.inference_geo !== undefined && body.inference_geo !== "global") throw new PriceError(`inference_geo ${JSON.stringify(body.inference_geo)} may bill above the standard rates in the price table`);
-  if (provider === "openai" && body.prompt !== undefined) throw new PriceError("a stored prompt adds input, and may enable hosted tools, that the request does not show");
-  if (provider === "openrouter") {
-    const rerouted = ["models", "route", "preset", "plugins", "web_search_options", "service_tier", "prompt", "background", "modalities", "image_config", "max_price"].find(k => body[k] !== undefined);
-    if (rerouted) throw new PriceError(`OpenRouter's ${rerouted} field can reach other models, tiers, stored input or paid tools that the price row does not cover`);
-    const tools = Array.isArray(body.tools) ? (body.tools as Array<{ type?: unknown }>) : [];
-    const server = tools.find(t => typeof t?.type === "string" && t.type.startsWith("openrouter:"));
-    if (server) throw new PriceError(`the OpenRouter server tool ${server.type} runs and bills outside the model's tokens`);
-    if (filePart(body.messages) || filePart(body.input)) throw new PriceError("a file part can be fetched from a URL or parsed by paid OCR, which the request's bytes do not bound");
   }
   const json = JSON.stringify(body);
   const stored = (i: Record<string, unknown>) => typeof i.id === "string" && ((i.type == null && i.role === undefined) || (i.type === "reasoning" && typeof i.encrypted_content !== "string"));
