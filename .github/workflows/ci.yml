@@ -85,7 +85,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Fetch gstack at the pinned commit
         env:
-          GSTACK_SHA: 68410828fd85611caea2c8429846f683849f425a # gstack v1.93.17.0
+          GSTACK_SHA: 9ab50347ac3728b7bdf03735b4ccceca88b6d958 # gstack v1.99.0.0
         run: |
           git init -q "$RUNNER_TEMP/gstack"
           git -C "$RUNNER_TEMP/gstack" fetch -q --depth 1 https://github.com/garrytan/gstack.git "$GSTACK_SHA"

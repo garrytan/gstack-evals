@@ -1,15 +1,16 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // Shared synthetic fixtures for the tbv keys, packets, judge and readings tests: invented neutral names, no session text.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { messagesResponse, responsesResponse } from "../adapters/harness.ts";
 import type { Extract, History, Io, ItemRun, Judge, Key, Packet, ReadingRecord, SendRequest, SendResult, SplitManifest } from "../../lanes/tbv/types.ts";
+import { mkdtempDisk } from "./disk.ts";
 
 export const REPO = join(import.meta.dir, "..", "..");
 const dirs: string[] = [];
+/** A directory on disk (disk.ts), never tmpfs, removed with the rest. */
 export const tmp = (prefix: string) => {
-  const d = mkdtempSync(join(tmpdir(), prefix));
+  const d = mkdtempDisk(prefix);
   dirs.push(d);
   return d;
 };
