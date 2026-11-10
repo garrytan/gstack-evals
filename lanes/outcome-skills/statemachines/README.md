@@ -517,7 +517,8 @@ model or unit (E_SM_PACKET).
   first on the tree without the diff (the control). A kind that does not apply, or fails a command its control passes,
   is none, and so is every kind of a unit whose control passes no command. stock-build-<unit>.json (stock-build.json for
   the labelled set) records why, and the labelled set skips such a unit, as section 10 says. The transforms now read
-  each file's code with multi-line strings, block comments and Go runes blanked; put a C or C++ header after the
+  each file's code with multi-line strings, block comments and Go runes blanked, and a JavaScript or TypeScript
+  template's ${...} read as code; put a C or C++ header after the
   includes before the first line of code, and take an include guard only when its #endif ends the file; put a Python
   log line after a docstring's whole statement; leave out a Python keyword argument on any line of a call and a Java or
   C# anonymous class whose constructor call nests parentheses; and rename a local only where every use sits in the

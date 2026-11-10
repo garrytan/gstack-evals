@@ -227,12 +227,14 @@ const sq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
 /** The file's lines as code: string and char literals blanked between their quotes, comments blanked, columns kept. A
  *  string that runs on over lines (LONG_QUOTES, or a one-line string that a final backslash continues where SPLICE
- *  allows it) stays blanked on every line it covers, and a quote inside a block comment opens nothing. Rust goes through
- *  rustCode. open[i] says a string is still open at the end of line i. */
+ *  allows it) stays blanked on every line it covers, and a quote inside a block comment opens nothing. A JavaScript or
+ *  TypeScript template's ${...} is code, so a template nested in it is a string of its own. Rust goes through rustCode.
+ *  open[i] says a string is still open at the end of line i. */
 function codeLines(lang: Lang, lines: string[]): { code: string[]; open: boolean[] } {
   if (lang === "rust") return { code: rustCode(lines.join("\n")).split("\n"), open: lines.map(() => false) };
   const long = LONG_QUOTES[lang] ?? [];
   const code: string[] = [], open: boolean[] = [];
+  const interp: number[] = [];
   let q = "", comment = false;
   for (const line of lines) {
     let out = "", spliced = false;
@@ -248,6 +250,11 @@ function codeLines(lang: Lang, lines: string[]): { code: string[]; open: boolean
         if (c === "\\" && !((q === "`" && lang === "go") || (q === '"""' && lang === "csharp"))) {
           spliced = i + 1 === line.length;
           out += spliced ? " " : "  ";
+          i++;
+        } else if (q === "`" && (lang === "js" || lang === "ts") && line.startsWith("${", i)) {
+          interp.push(0);
+          q = "";
+          out += "${";
           i++;
         } else if (line.startsWith(q, i)) {
           out += q;
@@ -265,7 +272,15 @@ function codeLines(lang: Lang, lines: string[]): { code: string[]; open: boolean
         q = long.find((x) => line.startsWith(x, i)) ?? c;
         out += q;
         i += q.length - 1;
-      } else out += c;
+      } else {
+        const top = interp.length - 1;
+        if (top >= 0 && c === "{") interp[top]!++;
+        else if (top >= 0 && c === "}" && interp[top] === 0) {
+          interp.pop();
+          q = "`";
+        } else if (top >= 0 && c === "}") interp[top]!--;
+        out += c;
+      }
     }
     if (q && !long.includes(q) && !(spliced && SPLICE.has(lang))) q = "";
     code.push(out);
@@ -387,7 +402,7 @@ function renameOnly(x: { lang: Lang; path: string; text: string }, lines: string
     let d = 0;
     for (let k = s.length - 1; k >= 0; k--) {
       if (")]}".includes(s[k]!)) d++;
-      else if ("([{".includes(s[k]!) && d-- === 0) return s[k]!;
+      else if ("([{".includes(s[k]!) && d-- === 0) return s[k] === "{" && s[k - 1] === "$" && (x.lang === "js" || x.lang === "ts") ? "${" : s[k]!;
     }
     return null;
   };

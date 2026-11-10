@@ -443,6 +443,20 @@ describe("stock diffs stay valid code: the #314 follow-ups (GST-1959)", () => {
       expect(got.slice(at, at + 6)).toEqual(doc.slice(1, 7));
     }
   });
+  // Value: protects=section 10's rename-only stock diff in JavaScript and TypeScript templates that nest, where a template inside another's ${} keeps its text and a use inside ${} is code; fails_when=the nested template's opening backtick reads as the outer one's close, its text reads as code, and a local named in that text is renamed with it, so the program returns other text; why_new=Capy finding 01M735TWT564TV5VRT8XCMPGFR on #316 (packets.ts codeLines); seam=packets.ts codeLines and renameOnly; no_claim=a tagged template's raw strings
+  test("js: a template nested in another's ${} keeps its text out of the rename, and a use inside ${} is renamed", () => {
+    const run = (text: string[], diff: string | null) => {
+      const t = tree({ "c.mjs": text }, diff);
+      if (t.error) return t.error;
+      const r = spawnSync("node", ["-e", "import('./c.mjs').then((m) => console.log(JSON.stringify(m.render())))"], { cwd: t.d, encoding: "utf8" });
+      return r.status === 0 ? r.stdout.trim() : "exit " + r.status + ": " + r.stderr.trim();
+    };
+    const nested = ["export function render() {", "  const template = `head ${`", "let count = 1; count`} template`;", "  let count = 2;", "  const width = count + 1;", "  return [template, count, width];", "}", ""];
+    const inner = ["export function render() {", "  const person = 'you';", "  return `hi ${person} and ${`", "nested ${person}`}`;", "}", ""];
+    const a = stock("js", "c.mjs", nested).rename_only, b = stock("js", "c.mjs", inner).rename_only;
+    expect([a?.includes("countValue"), a?.includes("widthValue"), b?.includes("${personValue} and"), b?.includes("nested ${personValue}")]).toEqual([false, true, true, true]);
+    if (has("node")) expect([run(nested, a ?? null), run(inner, b ?? null)]).toEqual([run(nested, null), run(inner, null)]);
+  });
 
   // Value: protects=section 10's stock diffs in Go files with rune literals, where brace depth decides each function body's end; fails_when=a rune literal '{' adds to the depth, the body runs to the end of the file, and the rename reaches a package-level variable another file uses; why_new=the Captain's item 17 for GST-1959, adversarial-native#9 on #314 (packets.ts:215); seam=packets.ts functionBodies and its line masking; no_claim=Rust char literals, which the Rust masking reads
   test("go: a rune literal '{' opens no block, so the rename stays in its own function", () => {
