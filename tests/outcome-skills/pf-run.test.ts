@@ -73,11 +73,11 @@ test("runCopy writes the run copy naming the session image, the pf config and th
   const pf = JSON.parse(readFileSync(k.pf_config!, "utf8"));
   expect(pf).toEqual(JSON.parse(JSON.stringify(config)));
   expect(pf.limits).toEqual(sessionLimits("P", OPUS));
-  expect(pf.limits.wrapup.allowance_usd).toBe(6);
+  expect(pf.limits.wrapup.allowance_usd).toBe(13);
   expect(pf.plugin).toBe(PSTACK_DIR);
   expect(pf.task_text).toStartWith("/create-formal-verification-skill ");
   expect(pf.task_text).toContain("The flag is never reset.");
-  expect(pf.env).toMatchObject({ CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1", HOME: "/root" });
+  expect(pf.env).toMatchObject({ CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1", CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "2", HOME: "/root" });
   const overlay = JSON.parse(readFileSync(join(dir, "pf.compose.yaml"), "utf8"));
   expect(overlay.services.main.volumes.map((v: any) => [v.source, v.target, v.read_only])).toEqual([[toolsVolume(), "/opt/pf-tools", true], [pstackVolume(), PSTACK_DIR, true], ["/opt/claude", "/usr/local/bin/claude", true]]);
   expect(Object.keys(overlay.volumes)).toEqual([toolsVolume(), pstackVolume()]);
@@ -108,7 +108,7 @@ test("runCopy gives the blind probe its one-line scope and refuses a blind sessi
 });
 
 const turn = (termination: string, refused: string[] = [], allowance_stops = 0, finalized?: boolean) => ({ termination, refused, allowance_stops, wall_s: 12.5, ...(finalized === undefined ? {} : { finalized }) });
-const slot = (phase: string, spent: number, rerun: string | null = null, first?: Record<string, unknown> | null) => ({ phase, rerun, id: "ses_" + phase + spent, allowance_micros: 1, close: { spent_micros: spent, ...(first !== undefined ? { first_request: first } : {}) } });
+const slot = (phase: string, spent: number, rerun: string | null = null, first?: Record<string, unknown> | null, bound?: number) => ({ phase, rerun, id: "ses_" + phase + spent, allowance_micros: 1, close: { spent_micros: spent, ...(first !== undefined ? { first_request: first } : {}), ...(bound !== undefined ? { reservation_bound: bound } : {}) } });
 const summary = (o: { task?: unknown; wrapup?: unknown[]; slots?: unknown[] }) => ({
   task: o.task ?? null, wrapup: o.wrapup ?? [], slots: o.slots ?? [],
   capture: "PF_CAPTURE changed=1 deleted=0 forced=0 head=" + "a".repeat(40) + "\n", keep: "PF_WRAPUP checks=1 discarded=1\nPF_DISCARD checks/late_test.sh\n",
@@ -125,7 +125,19 @@ test("pfRecord: a completed session scores, with each turn's spend, the lease, t
   expect(r.effort).toMatchObject({ thinking: { type: "adaptive" }, effort: null });
   expect(r.checks).toBeNull();
   expect(r.s).toBeNull();
+  expect(r.in_flight).toEqual({ reservation_bound: 0, subagents: 0, subagent_cap_refused: 0 });
+  expect(r.env).toEqual({ CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1", CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "2" });
   expect(retriesSession(summary({ task: turn("completed") }), r)).toBe(false);
+});
+
+test("pfRecord counts reservation-bound refusals from each slot's close answer, and subagent spawns and cap refusals from the SDK stream", () => {
+  const ev = temp("pf-run-ev-");
+  const spawn = (id: string) => ({ type: "AssistantMessage", phase: "task", content: [{ type: "tool_use", id, name: "Agent", input: { subagent_type: "Explore", prompt: "look", run_in_background: true } }] });
+  const result = (id: string, text: string, is_error = false) => ({ type: "UserMessage", content: [{ type: "tool_result", tool_use_id: id, content: text, is_error }] });
+  const lines = [spawn("a1"), result("a1", "Async agent launched"), spawn("a2"), spawn("a3"), result("a3", "Concurrent subagent limit reached. You can run 2 subagents at once. Do not retry.", true), { type: "AssistantMessage", phase: "wrapup", content: [{ type: "tool_use", id: "t1", name: "Task", input: {} }] }];
+  writeFileSync(join(ev, "sdk-messages.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  const r = pfRecord(input("P"), 1, summary({ task: turn("completed", ["E_ALLOWANCE"], 2), wrapup: [turn("completed")], slots: [slot("task", 41_200, null, undefined, 2), slot("wrapup", 10_300, null, undefined, 1)] }), ev);
+  expect(r.in_flight).toEqual({ reservation_bound: 3, subagents: 4, subagent_cap_refused: 1 });
 });
 
 test("pfRecord: a limit in either turn still scores, and a wrap-up time or turn limit is the scored wrap-up end", () => {

@@ -21,7 +21,7 @@ const TOLD = ["pf:P", "pf:C", "pf:N"];
 const roots: string[] = [];
 afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
 
-function ledger(items: Record<string, { cap: number; skills?: string[] }>) {
+function ledger(items: Record<string, { cap: number; skills?: string[] }>, upstream?: (url: string, init: RequestInit) => Promise<Response>) {
   const root = mkdtempSync(join(tmpdir(), "pf-driver-test-"));
   roots.push(root);
   const record = join(root, "record");
@@ -32,7 +32,7 @@ function ledger(items: Record<string, { cap: number; skills?: string[] }>) {
     const body = JSON.parse(String(init.body)) as { model: string };
     return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
   };
-  const serve = (stages: StageSpec[], extra: Partial<ServeOptions> = {}) => serveStages({ record, local, run_id: "r1", envelope_host: "m1", machine: "m1", stages, host: "127.0.0.1", dir: join(root, "run"), fetch: fetchStub, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key", OPENROUTER_API_KEY: "upstream-key" }, log: () => {}, ...extra });
+  const serve = (stages: StageSpec[], extra: Partial<ServeOptions> = {}) => serveStages({ record, local, run_id: "r1", envelope_host: "m1", machine: "m1", stages, host: "127.0.0.1", dir: join(root, "run"), fetch: upstream ?? fetchStub, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key", OPENROUTER_API_KEY: "upstream-key" }, log: () => {}, ...extra });
   return { root, local, serve };
 }
 
@@ -77,13 +77,13 @@ test("pf-admit serves all three models with a task slot and a wrap-up slot per s
   const served = await serve([{ item: "pf-admit", arm: "pf-admit", arms: TOLD }, { item: "sm-opus", arm: "sm-opus", model: OPUS, arms: ["sm:A0"] }]);
   const { open, closeAll } = client(served.control);
   const lease = served.stages[0]!.lease_id;
-  const task = await open({ arm: "pf:P", cap: 12, phase: "task" });
+  const task = await open({ arm: "pf:P", cap: 13, phase: "task" });
   expect(task.status).toBe(200);
-  expect(task.json).toMatchObject({ item: "pf-admit", ledger: "u4", lease_id: lease, allowance_micros: 12 * D });
+  expect(task.json).toMatchObject({ item: "pf-admit", ledger: "u4", lease_id: lease, allowance_micros: 13 * D });
   expect(task.json.base_url).toEndWith("/anthropic");
-  const wrap = await open({ arm: "pf:P", cap: 6, phase: "wrapup" });
+  const wrap = await open({ arm: "pf:P", cap: 13, phase: "wrapup" });
   expect(wrap.status).toBe(200);
-  expect(wrap.json).toMatchObject({ item: "pf-admit", lease_id: lease, allowance_micros: 6 * D });
+  expect(wrap.json).toMatchObject({ item: "pf-admit", lease_id: lease, allowance_micros: 13 * D });
   expect(wrap.json.meter_id).not.toBe(task.json.meter_id);
   expect(wrap.json.base_url).not.toBe(task.json.base_url);
   expect(wrap.json.base_url).toEndWith("/anthropic");
@@ -97,21 +97,21 @@ test("pf-admit serves all three models with a task slot and a wrap-up slot per s
 
   expect((await open({ arm: "pf:P", cap: 1, phase: "task", task: "u2" })).json.detail).toContain("task allowance_usd");
   expect((await open({ arm: "pf:P", cap: 12, phase: "wrapup", task: "u2" })).status).toBe(400);
-  expect((await open({ arm: "pf:P", cap: 12, task: "u2" })).json.detail).toContain("meta.phase");
-  expect((await open({ arm: "pf:P", cap: 12, phase: "t1", task: "u2" })).json.detail).toContain("meta.phase");
+  expect((await open({ arm: "pf:P", cap: 13, task: "u2" })).json.detail).toContain("meta.phase");
+  expect((await open({ arm: "pf:P", cap: 13, phase: "t1", task: "u2" })).json.detail).toContain("meta.phase");
   expect((await open({ arm: "pf:blind", cap: 15, phase: "task", task: "u2" })).status).toBe(400);
   expect((await open({ arm: "sm:A0", cap: 6, phase: "task" })).json.detail).toContain("PF sessions only");
 
-  const early = await open({ arm: "pf:C", cap: 6, phase: "wrapup", task: "u3" });
+  const early = await open({ arm: "pf:C", cap: 13, phase: "wrapup", task: "u3" });
   expect(early.status).toBe(422);
   expect(early.json.detail).toContain("no task open yet");
-  expect((await open({ arm: "pf:P", cap: 6, phase: "wrapup" })).status).toBe(422);
-  expect((await open({ arm: "pf:P", cap: 6, phase: "wrapup", rerun: "wrap-up infra end" })).status).toBe(200);
-  expect((await open({ arm: "pf:P", cap: 6, phase: "wrapup", rerun: "again" })).json.detail).toContain("one rerun at most");
-  expect((await open({ arm: "pf:P", cap: 12, phase: "task" })).status).toBe(422);
-  expect((await open({ arm: "pf:P", cap: 12, phase: "task", rerun: "task infra end" })).status).toBe(200);
-  expect((await open({ arm: "pf:P", cap: 6, phase: "wrapup" })).status).toBe(200);
-  expect((await open({ arm: "pf:P", cap: 12, phase: "task", rerun: "third" })).status).toBe(422);
+  expect((await open({ arm: "pf:P", cap: 13, phase: "wrapup" })).status).toBe(422);
+  expect((await open({ arm: "pf:P", cap: 13, phase: "wrapup", rerun: "wrap-up infra end" })).status).toBe(200);
+  expect((await open({ arm: "pf:P", cap: 13, phase: "wrapup", rerun: "again" })).json.detail).toContain("one rerun at most");
+  expect((await open({ arm: "pf:P", cap: 13, phase: "task" })).status).toBe(422);
+  expect((await open({ arm: "pf:P", cap: 13, phase: "task", rerun: "task infra end" })).status).toBe(200);
+  expect((await open({ arm: "pf:P", cap: 13, phase: "wrapup" })).status).toBe(200);
+  expect((await open({ arm: "pf:P", cap: 13, phase: "task", rerun: "third" })).status).toBe(422);
 
   const status = (await (await fetch(served.control + "/status")).json()) as { stages: Array<{ opens: number; reruns: number }> };
   expect(status.stages[0]).toMatchObject({ opens: 4, reruns: 1 });
@@ -126,32 +126,32 @@ test("pf-admit serves all three models with a task slot and a wrap-up slot per s
 });
 
 test("a task open needs room for its task and wrap-up allowances, the wrap-up's room stays held for it, and a task open past that cap-stops", async () => {
-  const { serve, local } = ledger({ "pf-opus": { cap: 24 } });
+  const { serve, local } = ledger({ "pf-opus": { cap: 52 } });
   const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
   const { open, closeAll } = client(served.control);
-  expect((await open({ arm: "pf:N", cap: 6, phase: "task", task: "u1" })).status).toBe(200);
-  expect((await open({ arm: "pf:N", cap: 6, phase: "task", task: "u2" })).status).toBe(200);
-  expect((await open({ arm: "pf:N", cap: 6, phase: "wrapup", task: "u1" })).status).toBe(200);
-  expect((await open({ arm: "pf:N", cap: 6, phase: "wrapup", task: "u2" })).status).toBe(200);
+  expect((await open({ arm: "pf:N", cap: 13, phase: "task", task: "u1" })).status).toBe(200);
+  expect((await open({ arm: "pf:N", cap: 13, phase: "task", task: "u2" })).status).toBe(200);
+  expect((await open({ arm: "pf:N", cap: 13, phase: "wrapup", task: "u1" })).status).toBe(200);
+  expect((await open({ arm: "pf:N", cap: 13, phase: "wrapup", task: "u2" })).status).toBe(200);
   await closeAll();
   expect(await served.stop()).toBe(0);
   local.close?.();
 
-  const small = ledger({ "pf-opus": { cap: 12.5 } });
+  const small = ledger({ "pf-opus": { cap: 13.5 } });
   const s2 = await small.serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
   const c2 = client(s2.control);
-  const stop = await c2.open({ arm: "pf:P", cap: 12, phase: "task" });
+  const stop = await c2.open({ arm: "pf:P", cap: 13, phase: "task" });
   expect(stop.status).toBe(409);
   expect(stop.json.code).toBe("CAP_STOP");
   expect(stop.json.detail).toContain("for its wrap-up turn");
   await s2.done;
   small.local.close?.();
 
-  const two = ledger({ "pf-opus": { cap: 13.5 } });
+  const two = ledger({ "pf-opus": { cap: 26.5 } });
   const s3 = await two.serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
   const c3 = client(s3.control);
-  expect((await c3.open({ arm: "pf:N", cap: 6, phase: "task", task: "u1" })).status).toBe(200);
-  const third = await c3.open({ arm: "pf:N", cap: 6, phase: "task", task: "u2" });
+  expect((await c3.open({ arm: "pf:N", cap: 13, phase: "task", task: "u1" })).status).toBe(200);
+  const third = await c3.open({ arm: "pf:N", cap: 13, phase: "task", task: "u2" });
   expect(third.json.code).toBe("CAP_STOP");
   await c3.closeAll();
   await s3.done;
@@ -161,14 +161,14 @@ test("a task open needs room for its task and wrap-up allowances, the wrap-up's 
 test("pf-blind serves pf:blind on Opus only, and the doubled allowance table changes the task cap a told open must name", async () => {
   const { serve, local } = ledger({ "pf-blind": { cap: 100 }, "pf-opus": { cap: 100 } });
   const doubled = costReading({ P: [10, 10, 10], C: [1, 1], N: [1] }).allowance;
-  expect(doubled.P[OPUS]).toBe(24);
+  expect(doubled.P[OPUS]).toBe(26);
   const served = await serve([{ item: "pf-blind", arm: "pf-blind", arms: ["pf:blind"] }, { item: "pf-opus", arm: "pf-opus", arms: TOLD }], { pf_allowance: doubled });
   const { open, closeAll } = client(served.control);
   expect((await open({ arm: "pf:blind", cap: 15, phase: "task" })).json).toMatchObject({ item: "pf-blind", allowance_micros: 15 * D });
   expect((await open({ arm: "pf:blind", model: SOL, cap: 15, phase: "task" })).status).toBe(400);
-  expect((await open({ arm: "pf:P", cap: 12, phase: "task" })).status).toBe(400);
-  expect((await open({ arm: "pf:P", cap: 24, phase: "task" })).json).toMatchObject({ item: "pf-opus", allowance_micros: 24 * D });
-  expect((await open({ arm: "pf:C", cap: 12, phase: "task" })).json).toMatchObject({ item: "pf-opus", allowance_micros: 12 * D });
+  expect((await open({ arm: "pf:P", cap: 13, phase: "task" })).status).toBe(400);
+  expect((await open({ arm: "pf:P", cap: 26, phase: "task" })).json).toMatchObject({ item: "pf-opus", allowance_micros: 26 * D });
+  expect((await open({ arm: "pf:C", cap: 13, phase: "task" })).json).toMatchObject({ item: "pf-opus", allowance_micros: 13 * D });
   expect((await open({ arm: "pf:P", model: SOL, cap: 24, phase: "task" })).status).toBe(400);
   await closeAll();
   expect(await served.stop()).toBe(0);
@@ -179,11 +179,11 @@ test("a PF slot past its wall limit plus the grace is closed by its deadline and
   const { serve, local, root } = ledger({ "pf-opus": { cap: 100 } });
   const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }], { deadline_grace_ms: 50 });
   const { open, closeAll } = client(served.control);
-  expect((await open({ arm: "pf:N", cap: 6, phase: "task" })).status).toBe(200);
+  expect((await open({ arm: "pf:N", cap: 13, phase: "task" })).status).toBe(200);
   jest.useFakeTimers();
   let wrap: Awaited<ReturnType<typeof open>>;
   try {
-    wrap = await open({ arm: "pf:N", cap: 6, phase: "wrapup" });
+    wrap = await open({ arm: "pf:N", cap: 13, phase: "wrapup" });
     jest.advanceTimersByTime(300_000 + 51);
   } finally {
     jest.useRealTimers();
@@ -203,14 +203,14 @@ test("a PF slot past its wall limit plus the grace is closed by its deadline and
 test("a closed task slot's wrap-up hold keeps its room for the deadline grace, then frees it for the next task open", async () => {
   const run = async (advance: number) => {
     let clock = Date.now();
-    const { serve, local } = ledger({ "pf-opus": { cap: 12.5 } });
+    const { serve, local } = ledger({ "pf-opus": { cap: 26.5 } });
     const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }], { deadline_grace_ms: 1_000, now: () => clock });
     const { open } = client(served.control);
-    const task = await open({ arm: "pf:N", cap: 6, phase: "task", task: "u1" });
+    const task = await open({ arm: "pf:N", cap: 13, phase: "task", task: "u1" });
     expect(task.status).toBe(200);
     expect((await fetch(served.control + "/sessions/" + task.json.id + "/close", { method: "POST", body: JSON.stringify({ reason: "agent_finished" }) })).status).toBe(200);
     clock += advance;
-    const next = await open({ arm: "pf:N", cap: 6, phase: "task", task: "u2" });
+    const next = await open({ arm: "pf:N", cap: 13, phase: "task", task: "u2" });
     await served.stop();
     local.close?.();
     return next;
@@ -225,7 +225,7 @@ test("a PF slot's close answer carries the effort and thinking fields of its fir
   const { serve, local } = ledger({ "pf-opus": { cap: 100 } });
   const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
   const { open } = client(served.control);
-  const task = await open({ arm: "pf:P", cap: 12, phase: "task" });
+  const task = await open({ arm: "pf:P", cap: 13, phase: "task" });
   const call = (body: unknown) => fetch(task.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": task.json.token }, body: JSON.stringify(body) });
   const tools = [{ name: "Bash", description: "run", input_schema: { type: "object" } }];
   expect((await call({ model: OPUS, max_tokens: 100, messages: [{ role: "user", content: "title" }] })).status).toBe(200);
@@ -233,7 +233,7 @@ test("a PF slot's close answer carries the effort and thinking fields of its fir
   expect((await call({ model: OPUS, messages: [{ role: "user", content: "again" }], tools, thinking: { type: "disabled" }, effort: "low" })).status).toBe(200);
   const close = async (id: string) => (await (await fetch(served.control + "/sessions/" + id + "/close", { method: "POST", body: JSON.stringify({ reason: "turn_end" }) })).json()) as Record<string, any>;
   expect((await close(task.json.id)).first_request).toEqual({ thinking: { type: "adaptive" }, output_config: null, reasoning: null, reasoning_effort: null, effort: null });
-  const wrap = await open({ arm: "pf:P", cap: 6, phase: "wrapup" });
+  const wrap = await open({ arm: "pf:P", cap: 13, phase: "wrapup" });
   expect((await close(wrap.json.id)).first_request).toBeNull();
   expect(await served.stop()).toBe(0);
   local.close?.();
@@ -245,7 +245,7 @@ test("a PF slot refuses provider-side tools and capabilities, and its close answ
   const { open } = client(served.control);
   const close = async (id: string) => (await (await fetch(served.control + "/sessions/" + id + "/close", { method: "POST", body: JSON.stringify({ reason: "turn_end" }) })).json()) as Record<string, any>;
   const caller = (slot: { json: Record<string, any> }) => (body: Record<string, unknown>) => fetch(slot.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": slot.json.token }, body: JSON.stringify({ model: OPUS, max_tokens: 100, messages: [{ role: "user", content: "hi" }], ...body }) });
-  const task = await open({ arm: "pf:P", cap: 12, phase: "task" });
+  const task = await open({ arm: "pf:P", cap: 13, phase: "task" });
   const call = caller(task);
   const web = await call({ tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 1 }] });
   expect(web.status).toBe(403);
@@ -256,9 +256,38 @@ test("a PF slot refuses provider-side tools and capabilities, and its close answ
   expect((await call({ model: OPUS + ":online" })).status).toBe(403);
   expect((await call({})).status).toBe(200);
   expect(await close(task.json.id)).toMatchObject({ refusals: ["E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL", "E_ALLOWANCE"], allowance_stops: 0 });
-  const wrap = await open({ arm: "pf:P", cap: 6, phase: "wrapup" });
+  const wrap = await open({ arm: "pf:P", cap: 13, phase: "wrapup" });
   expect((await caller(wrap)({ messages: [{ role: "user", content: "x".repeat(4_000_000) }] })).status).toBe(402);
   expect(await close(wrap.json.id)).toMatchObject({ refusals: ["E_ALLOWANCE"], allowance_stops: 1 });
+  expect(await served.stop()).toBe(0);
+  local.close?.();
+});
+
+test("a PF slot's close answer counts the allowance stops that only its calls still in flight caused (reservation_bound)", async () => {
+  let arrived = () => {}, release = () => {};
+  const inFlight = new Promise<void>((r) => (arrived = r)), held = new Promise<void>((r) => (release = r));
+  const upstream = async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)) as { model: string; messages: Array<{ content: string }> };
+    if (body.messages[0]!.content.length > 1_000_000) {
+      arrived();
+      await held;
+    }
+    return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+  };
+  const { serve, local } = ledger({ "pf-opus": { cap: 100 } }, upstream);
+  const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }]);
+  const { open } = client(served.control);
+  const task = await open({ arm: "pf:P", cap: 13, phase: "task" });
+  const call = (content: string) => fetch(task.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": task.json.token }, body: JSON.stringify({ model: OPUS, max_tokens: 32_000, messages: [{ role: "user", content }] }) });
+  const big = call("x".repeat(2_400_000));
+  await inFlight;
+  expect((await call("x".repeat(750_000))).status).toBe(402);
+  release();
+  expect((await big).status).toBe(200);
+  expect((await call("x".repeat(4_000_000))).status).toBe(402);
+  expect((await call("hi")).status).toBe(200);
+  const closed = (await (await fetch(served.control + "/sessions/" + task.json.id + "/close", { method: "POST", body: JSON.stringify({ reason: "turn_end" }) })).json()) as Record<string, any>;
+  expect(closed).toMatchObject({ allowance_stops: 2, reservation_bound: 1 });
   expect(await served.stop()).toBe(0);
   local.close?.();
 });
@@ -269,7 +298,7 @@ test("a PF slot whose proxy finalize fails closes with finalized false, null cou
   const lines: string[] = [];
   const served = await serve([{ item: "pf-opus", arm: "pf-opus", arms: TOLD }, { item: "pf-sol", arm: "pf-sol", arms: TOLD }], { log: (line) => lines.push(line) });
   const { open } = client(served.control);
-  const task = await open({ arm: "pf:P", cap: 12, phase: "task" });
+  const task = await open({ arm: "pf:P", cap: 13, phase: "task" });
   const call = (body: Record<string, unknown>) => fetch(task.json.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": task.json.token }, body: JSON.stringify({ model: OPUS, max_tokens: 100, messages: [{ role: "user", content: "hi" }], ...body }) });
   expect((await call({ tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 1 }] })).status).toBe(403);
   expect((await call({ tools: [{ name: "Bash", description: "run", input_schema: { type: "object" } }], thinking: { type: "adaptive" } })).status).toBe(200);
@@ -289,7 +318,7 @@ test("a PF slot whose proxy finalize fails closes with finalized false, null cou
   expect(lines.find((l) => l.startsWith("E_PF_FINALIZE_HALT "))).toEndWith(journal);
   const events = readFileSync(join(root, "run", "sessions.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
   expect(events.filter((e) => e.event === "halt")).toEqual([expect.objectContaining({ item: "pf-opus", id: task.json.id, lease_id: answer.lease_id, journal })]);
-  const next = await open({ arm: "pf:P", cap: 12, phase: "task", task: "u2" });
+  const next = await open({ arm: "pf:P", cap: 13, phase: "task", task: "u2" });
   expect([next.status, next.json.code]).toEqual([503, "E_LEASE_CLOSED"]);
   expect(await served.stop()).toBe(2);
   const stage = [{ item: "pf-opus", arm: "pf-opus", arms: TOLD }];

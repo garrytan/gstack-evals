@@ -12,7 +12,7 @@ import type { Arm } from "./items.ts";
 
 export const DRAWS = 10_000;
 export type Score = 0 | 1 | null;
-export interface Row { unit: string; repo: string; model: string; arm: Arm; stratum: string; score: Score; gap: string | null; no_static: Score; no_api_guess: Score; compile_rerun: Score; loaded?: boolean; checker?: boolean; breaks?: number | null; breaks_unmeasured?: boolean; entries?: number; unreached?: number; timeout_only?: number; ceiling_hit?: boolean; timeout_s?: number | null; overhead_ms?: number | null; flagged?: boolean }
+export interface Row { unit: string; repo: string; model: string; arm: Arm; stratum: string; score: Score; gap: string | null; no_static: Score; no_api_guess: Score; compile_rerun: Score; loaded?: boolean; checker?: boolean; breaks?: number | null; breaks_unmeasured?: boolean; entries?: number; unreached?: number; timeout_only?: number; ceiling_hit?: boolean; timeout_s?: number | null; overhead_ms?: number | null; flagged?: boolean; reservation_bound?: number; subagents?: number; subagent_cap_refused?: number }
 export const READINGS = ["primary", "worst_case", "conflict_as_miss", "arm_refusal_as_miss", "no_static", "no_api_guess", "compile_rerun", "ceiling_missing", "no_flagged"] as const;
 export type Reading = (typeof READINGS)[number];
 export const MISS_GAPS = new Set(["E_PF_FIX_CONFLICT", "E_PF_REBUILD_FIX"]);
@@ -220,6 +220,22 @@ export function ceilingOf(rows: readonly Row[]) {
   return out;
 }
 
+/** Per model and arm (section 12): allowance stops that only calls still in flight caused, and the subagents sessions asked
+ *  for and the ones the concurrent-subagent cap refused, so a cap that bit one arm harder shows beside every verdict. */
+export function inFlightOf(rows: readonly Row[]) {
+  const out: Record<string, Record<string, { sessions: number; reservation_bound: number; sessions_reservation_bound: number; subagents: number; subagent_cap_refused: number; sessions_cap_refused: number }>> = {};
+  for (const r of rows) {
+    const c = ((out[r.model] ??= {})[r.arm] ??= { sessions: 0, reservation_bound: 0, sessions_reservation_bound: 0, subagents: 0, subagent_cap_refused: 0, sessions_cap_refused: 0 });
+    c.sessions++;
+    c.reservation_bound += r.reservation_bound ?? 0;
+    if (r.reservation_bound) c.sessions_reservation_bound++;
+    c.subagents += r.subagents ?? 0;
+    c.subagent_cap_refused += r.subagent_cap_refused ?? 0;
+    if (r.subagent_cap_refused) c.sessions_cap_refused++;
+  }
+  return out;
+}
+
 export function analyse(input: readonly Row[], seed: number) {
   const flags = flaggedUnits(input);
   const rows = input.map((r) => ({ ...r, flagged: flags.get(r.unit)!.flagged }));
@@ -245,7 +261,7 @@ export function analyse(input: readonly Row[], seed: number) {
   const exposure = exposureOf(rows);
   const p = Object.values(exposure).reduce((a, m) => ({ s: a.s + (m.P?.sessions ?? 0), b: a.b + (m.P?.both ?? 0) }), { s: 0, b: 0 });
   const process_reading = p.s && p.b / p.s >= 0.75 ? "a fair test of pstack's text" : "pstack as the model ran it (" + p.b + " of " + p.s + " P sessions loaded the skill and ran a checker)";
-  return { schema: "pf-analysis.v1" as const, seed, draws: DRAWS, rates: ratesOf(rows), cells, pooled: { "P-N": pn!, "P-C": { ...pc!, process_reading } }, pooled_c_n: { ...contrast(rows, "N", "C", seed, undefined, true), p_holm: null, verdict: null }, per_model, strata, exposure, ceiling: ceilingOf(rows), flagged_units: [...flags].filter(([, f]) => f.flagged).map(([unit, f]) => ({ unit, ...f })).sort((a, b) => (a.unit < b.unit ? -1 : 1)), breaks: breaksOf(rows), incomplete: cells.filter((c) => c.incomplete) };
+  return { schema: "pf-analysis.v1" as const, seed, draws: DRAWS, rates: ratesOf(rows), cells, pooled: { "P-N": pn!, "P-C": { ...pc!, process_reading } }, pooled_c_n: { ...contrast(rows, "N", "C", seed, undefined, true), p_holm: null, verdict: null }, per_model, strata, exposure, ceiling: ceilingOf(rows), in_flight: inFlightOf(rows), flagged_units: [...flags].filter(([, f]) => f.flagged).map(([unit, f]) => ({ unit, ...f })).sort((a, b) => (a.unit < b.unit ? -1 : 1)), breaks: breaksOf(rows), incomplete: cells.filter((c) => c.incomplete) };
 }
 export type Analysis = ReturnType<typeof analyse>;
 
@@ -272,6 +288,7 @@ export function report(a: Analysis): string[] {
   out.push("exposure: " + JSON.stringify(a.exposure));
   out.push("breaks (sessions measured, with a break, not measured): " + JSON.stringify(a.breaks));
   for (const [m, arms] of Object.entries(a.ceiling)) for (const [arm, c] of Object.entries(arms)) out.push("ceiling " + m + " " + arm + ": " + c.sessions + " sessions, " + c.entries + " entries, unreached " + c.unreached + " (" + pct(c.unreached_rate) + "%), timeout-only " + c.timeout_only + " (" + pct(c.timeout_only_share) + "%), sessions at the ceiling " + c.ceiling_hit);
+  for (const [m, arms] of Object.entries(a.in_flight)) for (const [arm, c] of Object.entries(arms)) out.push("in flight " + m + " " + arm + ": " + c.sessions + " sessions; reservation-bound refusals " + c.reservation_bound + " (" + c.sessions_reservation_bound + " sessions); subagents asked " + c.subagents + ", refused at the cap " + c.subagent_cap_refused + " (" + c.sessions_cap_refused + " sessions)");
   out.push("units flagged by 5T + 8R >= " + CEILING_S + " s: " + (a.flagged_units.length ? a.flagged_units.map((f) => f.unit + " (T " + f.t_s + " s, R " + Math.round(f.r_s!) + " s)").join(", ") : "none"));
   for (const c of a.incomplete) out.push("E_PF_CELL_INCOMPLETE " + c.model + " " + c.arm + ": " + c.gaps + " gaps on " + c.units + " units");
   return out;

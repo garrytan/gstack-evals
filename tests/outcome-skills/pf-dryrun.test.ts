@@ -29,6 +29,8 @@ test("the stub's wrap-up allowance fixtures: the task turn's last answer fills t
   expect((stubReply({ ...s, filler: undefined }, "task", 1, true, 70_000).blocks[0] as any).text).toBe("Done.");
   expect(stubReply(s, "wrapup", 0, true, 561_000).usage).toEqual({ input_tokens: 3, cache_creation_input_tokens: WRAP_CONTEXT_TOKENS, cache_read_input_tokens: 0, output_tokens: 150 });
   expect(stubReply({ ...s, usage: "worst" }, "wrapup", 0, true, 561_000).usage).toEqual({ input_tokens: 0, cache_creation_input_tokens: 532_950, cache_read_input_tokens: 0, output_tokens: 30_400 });
+  expect(stubReply({ ...s, wrapup: "limit", usage: "worst" }, "wrapup", 3, false, 561_000)).toEqual({ blocks: [{ type: "tool_use", id: "toolu_pf_wrapup_3", name: "Bash", input: { command: "true", description: "Fixture step" } }], usage: { input_tokens: 0, cache_creation_input_tokens: 532_950, cache_read_input_tokens: 0, output_tokens: 30_400 } });
+  expect(stubReply({ ...s, wrapup: "limit" }, "wrapup", 3, false, 561_000).usage).toBeUndefined();
   expect(stubReply(s, "wrapup", 1, true, 561_000).usage).toBeUndefined();
   expect(stubReply({ ...s, usage: undefined }, "wrapup", 0, true, 561_000).usage).toBeUndefined();
 });
@@ -44,39 +46,41 @@ const wrapCosts = (provider: "anthropic" | "openrouter", model: string, ttl?: st
   return { cache: price.cacheWrite, worst: reservationMicros(price), write: cost("cache_write"), near: cost("worst"), allowance: WRAPUP_ALLOWANCE[model]! * 1_000_000 };
 };
 
-test("at the stub context, a full cache write leaves room for the next wrap-up request on Opus and Sol, and on Opus a report of 95% of the worst case does not", () => {
+test("at the stub context, a full cache write leaves room for the next wrap-up request on Opus and Sol, and on Opus three reports of 95% of the worst case leave none for a fourth request", () => {
   const opus = wrapCosts("anthropic", OPUS);
   expect(opus.cache).toBe("5m");
   expect(opus.worst).toBeLessThan(opus.allowance);
   expect(opus.write + opus.worst).toBeLessThan(opus.allowance);
   expect(opus.near).toBeLessThan(opus.worst);
-  expect(opus.near + opus.worst).toBeGreaterThan(opus.allowance);
+  expect(2 * opus.near + opus.worst).toBeLessThan(opus.allowance);
+  expect(3 * opus.near + opus.worst).toBeGreaterThan(opus.allowance);
   const sol = wrapCosts("openrouter", SOL);
   expect(sol.cache).toBe("5m");
   expect(sol.write + sol.worst).toBeLessThan(sol.allowance);
 });
 
-test("a one-hour cache write would not hold Sol's wrap-up pair at the stub context, which is why the dry run fails a 1h request", () => {
+test("at the one-hour cache-write rate Sol's wrap-up allowance would not hold three calls in flight at the stub context, which is why the dry run fails a 1h request", () => {
   const sol = wrapCosts("openrouter", SOL, "1h");
   expect(sol.cache).toBe("1h");
   expect(sol.worst).toBeLessThan(sol.allowance);
-  expect(sol.write + sol.worst).toBeGreaterThan(sol.allowance);
+  expect(3 * sol.worst).toBeGreaterThan(sol.allowance);
+  expect(3 * wrapCosts("openrouter", SOL).worst).toBeLessThan(sol.allowance);
 });
 
-test("the concurrency line: each allowance against the worst case of one call at a 200k-token context times the calls a session can hold in flight", () => {
+test("the concurrency line: each allowance holds the worst case of one call at a 200k-token context once for each call a session can hold in flight", () => {
+  expect(CLAUDE_ENV.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe("2");
   const now = concurrencyCheck(CLAUDE_ENV);
-  expect(now.inflight).toBe(21);
-  expect(now.ok).toBe(false);
-  const opus = now.models.find((m) => m.model === OPUS)!, sol = now.models.find((m) => m.model === SOL)!, p1 = now.models.find((m) => m.model === P1)!;
-  expect([opus.worst_micros, sol.worst_micros]).toEqual([4_145_320, 3_985_320]);
-  expect(Object.fromEntries(opus.allowances.map((a) => [a.slot, a.holds]))).toEqual({ "P task": 2, "C task": 2, "N task": 1, "blind task": 3, "wrap-up": 1 });
-  expect(Object.fromEntries(sol.allowances.map((a) => [a.slot, a.holds]))).toEqual({ "P task": 3, "C task": 3, "N task": 1, "wrap-up": 1 });
-  expect(p1.allowances.find((a) => a.slot === "wrap-up")!.holds).toBe(4);
-  expect(now.detail).toContain("21 calls in flight");
-  const serial = concurrencyCheck({ ...CLAUDE_ENV, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "0" });
-  expect(serial.inflight).toBe(1);
-  expect(serial.ok).toBe(true);
-  expect(concurrencyCheck({ ...CLAUDE_ENV, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "1" }).ok).toBe(false);
+  expect(now.inflight).toBe(3);
+  expect(now.ok).toBe(true);
+  const holds = (model: string) => Object.fromEntries(now.models.find((m) => m.model === model)!.allowances.map((a) => [a.slot, a.holds]));
+  expect(now.models.filter((m) => m.model !== P1).map((m) => m.worst_micros)).toEqual([4_145_320, 3_985_320]);
+  expect(holds(OPUS)).toEqual({ "P task": 3, "C task": 3, "N task": 3, "blind task": 3, "wrap-up": 3 });
+  expect(holds(SOL)).toEqual({ "P task": 3, "C task": 3, "N task": 3, "wrap-up": 3 });
+  expect(holds(P1)).toEqual({ "P task": 48, "C task": 48, "N task": 29, "wrap-up": 4 });
+  expect(now.detail).toContain("3 calls in flight");
+  const { CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: _, ...unset } = CLAUDE_ENV;
+  expect(concurrencyCheck(unset)).toMatchObject({ inflight: 21, ok: false });
+  expect(concurrencyCheck({ ...CLAUDE_ENV, CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "3" })).toMatchObject({ inflight: 4, ok: false });
 });
 
 test("the fixture manifest covers section 15's entry fixtures and reads as the scorer reads it", () => {

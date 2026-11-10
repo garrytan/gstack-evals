@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
 import { WRAPUP } from "../../lanes/outcome-skills/pfchecks/arms.ts";
-import { codeTest, pLoaded, pProcedure, ranChecker } from "../../lanes/outcome-skills/pfchecks/exposure.ts";
+import { codeTest, pLoaded, pProcedure, ranChecker, subagentUse } from "../../lanes/outcome-skills/pfchecks/exposure.ts";
 
 const tool = (name: string, input: object) => ({ type: "AssistantMessage", content: [{ type: "tool_use", name, input }] });
 test("P loaded needs the skill heading and a Read of statechart's SKILL.md", () => {
@@ -33,4 +33,11 @@ test("P's procedure and a code test in T", () => {
   expect(pProcedure([{ path: ".claude/skills/conn-fsm/SKILL.md", text: "no front matter" }])).toBe(false);
   expect(codeTest("go", new Set(), [{ path: "a_test.go", status: "A" }])).toBe(true);
   expect(codeTest("go", new Set(), [{ path: "a.go", status: "M" }, { path: "x_test.go", status: "D" }])).toBe(false);
+});
+
+test("subagent use: Agent and Task spawns, and the spawns the concurrent-subagent cap refused", () => {
+  const refused = (content: unknown) => ({ type: "UserMessage", content: [{ type: "tool_result", tool_use_id: "x", content, is_error: true }] });
+  const records = [tool("Agent", { prompt: "p" }), tool("Task", { prompt: "p" }), tool("Bash", { command: "echo Concurrent subagent limit reached" }), refused("Concurrent subagent limit reached. You can run 2 subagents at once. Do not retry."), refused([{ type: "text", text: "Concurrent subagent limit reached." }])];
+  expect(subagentUse(records)).toEqual({ subagents: 2, subagent_cap_refused: 2 });
+  expect(subagentUse([])).toEqual({ subagents: 0, subagent_cap_refused: 0 });
 });

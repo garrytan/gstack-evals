@@ -26,7 +26,7 @@ import { ITEMS } from "../statemachines/items.ts";
 import { sessionLimits, type PfArm } from "../pfchecks/arms.ts";
 import { ALLOWANCE, ITEMS as PF_ITEMS, MODEL_ITEM, MODELS, type Arm } from "../pfchecks/items.ts";
 import { PfError } from "../pfchecks/prereg.ts";
-import { EFFORT_KEYS } from "../pfchecks/session.ts";
+import { EFFORT_KEYS, reservationBound } from "../pfchecks/session.ts";
 
 export const DEFAULT_TTL_MS = 72 * 3_600_000;
 export const DEADLINE_GRACE_MS = 120_000;
@@ -117,9 +117,17 @@ export interface CloseAnswer {
   allowance_stops: number | null;
   /** PF sessions only: the effort and thinking fields (pfchecks session.ts EFFORT_KEYS) of the slot's first request with a tools list, as its metering proxy recorded them, or null when it sent none. */
   first_request?: Record<string, unknown> | null;
+  /** PF sessions only: the slot's allowance stops that only its calls still in flight caused (pfchecks session.ts reservationBound). */
+  reservation_bound?: number;
   unknown: number | null;
   undrained: number | null;
   unsettled: number | null;
+}
+
+/** A PF close answer's journal reads: every refusal code on the slot's meter, and its reservation-bound allowance stops. */
+function pfClose(journal: string, meterId: string, allowance: number, first: Record<string, unknown> | null): Pick<CloseAnswer, "refusals" | "first_request" | "reservation_bound"> {
+  const lines = (existsSync(journal) ? readFileSync(journal, "utf8").split("\n") : []).flatMap((l) => { try { return [JSON.parse(l) as Record<string, any>]; } catch { return []; } });
+  return { refusals: lines.filter((j) => j.kind === "refusal" && j.meter_id === meterId).map((j) => String(j.code)), first_request: first, reservation_bound: reservationBound(lines, meterId, allowance) };
 }
 
 interface Session {
@@ -555,7 +563,7 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         unknown: meter ? meter.unknown : null,
         undrained: meter ? meter.undrained : null,
         unsettled: meter ? meter.unsettled : null,
-        ...(s.pf ? { refusals: (existsSync(s.journal) ? readFileSync(s.journal, "utf8").split("\n") : []).flatMap((l) => { try { const j = JSON.parse(l); return j.kind === "refusal" && j.meter_id === sess.meter_id ? [String(j.code)] : []; } catch { return []; } }), first_request: meter?.first_request ?? null } : {}),
+        ...(s.pf ? pfClose(s.journal, sess.meter_id, sess.allowance, meter?.first_request ?? null) : {}),
       };
       sess.closed = answer;
       const hold = sess.key ? holds.get(sess.key) : undefined;

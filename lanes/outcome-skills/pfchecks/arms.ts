@@ -59,7 +59,7 @@ export const TASK_LIMITS: Record<PfArm, { wall_limit_sec: number; max_turns: num
   P: { wall_limit_sec: 5400, max_turns: 250 }, C: { wall_limit_sec: 5400, max_turns: 250 }, N: { wall_limit_sec: 3600, max_turns: 150 }, blind: { wall_limit_sec: 5400, max_turns: 250 },
 };
 export const WRAPUP_LIMITS = { wall_limit_sec: 300, max_turns: 20 } as const;
-export const WRAPUP_ALLOWANCE: Record<string, number> = { [OPUS]: 6, [SOL]: 5, [P1]: 0.5 };
+export const WRAPUP_ALLOWANCE: Record<string, number> = { [OPUS]: 13, [SOL]: 12, [P1]: 0.5 };
 
 /** Both turns' limits for one session. allowance is the task-turn table (items.ts ALLOWANCE, or costReading's doubled one). */
 export function sessionLimits(arm: PfArm, model: string, allowance: Record<Arm, Record<string, number>> = ALLOWANCE): { task: TurnLimits; wrapup: TurnLimits } {
@@ -71,7 +71,9 @@ export function sessionLimits(arm: PfArm, model: string, allowance: Record<Arm, 
   return { task: { ...TASK_LIMITS[arm], allowance_usd: task!, ...rig }, wrapup: { ...WRAPUP_LIMITS, allowance_usd: WRAPUP_ALLOWANCE[model]!, ...rig } };
 }
 
-/** The harness rules every arm shares (sections 3 and 4). P and the blind probe alone mount the pstack plugin. */
-export const ARM_ENV = { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" } as const;
+/** The harness rules every arm shares (sections 3 and 4). P and the blind probe alone mount the pstack plugin. Claude Code
+ *  runs at most 2 subagents at once, so a session holds at most 3 calls in flight, which every allowance holds at the
+ *  worst case of a 200k-token request (section 13). */
+export const ARM_ENV = { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1", CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "2" } as const;
 export const DISALLOWED_TOOLS = ["WebSearch", "WebFetch"] as const;
 export const loadsPlugin = (arm: PfArm): boolean => arm === "P" || arm === "blind";

@@ -75,7 +75,7 @@ class DriverSlots:
         except Exception as e:
             self.log({"event": "close_failed", "session": slot["id"], "message": str(e)[:300]})
             return {"error": f"{type(e).__name__}: {e}"[:300]}
-        info = {k: closed.get(k) for k in ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "usage", "first_request", "finalized")}
+        info = {k: closed.get(k) for k in ("spent_micros", "requests", "ok_responses", "refused", "refusals", "allowance_stops", "reservation_bound", "usage", "first_request", "finalized")}
         self.log({"event": "slot_close", "phase": slot["phase"], "session": slot["id"], **{k: info[k] for k in ("spent_micros", "refused", "allowance_stops", "finalized")}})
         return info
 

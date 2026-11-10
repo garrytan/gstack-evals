@@ -160,10 +160,11 @@ interface StubState { bodies: Array<{ session: string; phase: string; body: Reco
 export function stubReply(s: StubSession, phase: string, n: number, first: boolean, bytes = 0): { status?: number; blocks: Array<Record<string, unknown>>; usage?: Record<string, number> } {
   const tool = (command: string) => [{ type: "tool_use", id: "toolu_pf_" + phase + "_" + n, name: "Bash", input: { command, description: "Fixture step" } }];
   if (phase === "task") return { blocks: n === 0 ? tool(s.task) : n === 1 && s.bg ? [{ type: "tool_use", id: "toolu_pf_bg_" + n, name: "Bash", input: { command: s.bg, description: "Background fixture step", run_in_background: true } }] : [{ type: "text", text: n === 1 && s.filler ? "x".repeat(Math.max(0, s.filler - bytes)) : "Done." }] };
-  if (s.wrapup === "limit") return { blocks: tool("true") };
+  const worst = { input_tokens: 0, cache_creation_input_tokens: Math.floor(0.95 * bytes), cache_read_input_tokens: 0, output_tokens: Math.floor(0.95 * 32_000) };
+  if (s.wrapup === "limit") return { blocks: tool("true"), ...(s.usage === "worst" ? { usage: worst } : {}) };
   if (s.wrapup === "upstream" && first) return { status: 400, blocks: [] };
   if (s.wrapup === "none" || n > 0) return { blocks: [{ type: "text", text: "Done." }] };
-  const usage = s.usage === "cache_write" ? { input_tokens: 3, cache_creation_input_tokens: WRAP_CONTEXT_TOKENS, cache_read_input_tokens: 0, output_tokens: 150 } : s.usage === "worst" ? { input_tokens: 0, cache_creation_input_tokens: Math.floor(0.95 * bytes), cache_read_input_tokens: 0, output_tokens: Math.floor(0.95 * 32_000) } : undefined;
+  const usage = s.usage === "cache_write" ? { input_tokens: 3, cache_creation_input_tokens: WRAP_CONTEXT_TOKENS, cache_read_input_tokens: 0, output_tokens: 150 } : s.usage === "worst" ? worst : undefined;
   const late = s.late ? "mkdir -p \"$(dirname " + JSON.stringify(s.late.path) + ")\" && echo " + b64(s.late.text) + " | base64 -d > " + JSON.stringify(s.late.path) : "printf 'exit 0\\n' > checks/late_test.sh";
   return { blocks: tool("echo " + b64(s.checks ?? "[]") + " | base64 -d > CHECKS.json && " + late), ...(usage ? { usage } : {}) };
 }
@@ -289,7 +290,7 @@ export async function main(argv: string[]): Promise<number> {
     blind: { task: PATH_PROBE, wrapup: "none" },
     Eopus: { task: "mkdir -p checks", filler: WRAP_BYTES, wrapup: "manifest", usage: "cache_write" },
     Esol: { task: "mkdir -p checks", filler: WRAP_BYTES, wrapup: "manifest", usage: "cache_write" },
-    W4: { task: "mkdir -p checks", filler: WRAP_BYTES, wrapup: "manifest", usage: "worst" },
+    W4: { task: "mkdir -p checks", filler: WRAP_BYTES, wrapup: "limit", usage: "worst" },
   };
   const { st, server } = startStub(stubSessions, gw);
   const url = "http://" + gw + ":" + server.port;
@@ -443,7 +444,7 @@ export async function main(argv: string[]): Promise<number> {
       const mains = st.bodies.filter((b) => b.session === r.name && b.phase === "wrapup" && Array.isArray(b.body.tools) && b.body.tools.length);
       const reqs = mains.map((b) => priceRequest(provider, b.body, b.body.max_tokens ?? 32_000, "/v1/messages")).map((p, k) => ({ bytes: mains[k]!.bytes, cache: p.cacheWrite, worst: reservationMicros(p) })).map((q) => ({ ...q, ...(seen.find((x) => x.max === q.worst) ?? { committed: null, sent: false }) }));
       const refusals = lines.filter((j) => j.kind === "refusal").map((j) => j.code + " " + j.reason);
-      return { allowance: slot?.allowance_micros as number, reqs, refusals };
+      return { allowance: slot?.allowance_micros as number, reqs, refusals, slot };
     };
     const showWrap = (w: ReturnType<typeof wrapRequests>) => w.reqs.map((q, k) => (k ? "next" : "first") + " wrap-up request " + q.bytes + " bytes, cache write " + q.cache + ", worst case " + usd(q.worst) + " + " + (q.committed === null ? "?" : usd(q.committed)) + " committed = " + (q.committed === null ? "?" : usd(q.worst + q.committed)) + " of the " + usd(w.allowance ?? 0) + " allowance, " + (q.sent ? "admitted" : "not sent")).join("; ") + (w.refusals.length ? "; refused: " + w.refusals.join(" | ") : "");
     for (const [label, name, model] of [["Opus", "Eopus", OPUS], ["Sol", "Esol", SOL]] as const) {
@@ -456,7 +457,7 @@ export async function main(argv: string[]): Promise<number> {
     const W4 = await runOne("W4", "N", OPUS, names);
     const w4 = wrapRequests(W4);
     const wslots = ((W4.turns.slots ?? []) as Array<Record<string, any>>).filter((x) => x.phase === "wrapup").length;
-    rule("wrap-up turn refused for its allowance is gap E_PF_WRAPUP_ALLOWANCE, with one wrap-up attempt and one session attempt", W4.run.record.gap === "E_PF_WRAPUP_ALLOWANCE" && JSON.stringify(W4.run.record.wrapup?.ends) === '["limit_allowance"]' && wslots === 1 && W4.run.attempts.length === 1 && w4.refusals.some((x) => x.startsWith("E_ALLOWANCE ")), "gap " + W4.run.record.gap + ", wrap-up ends " + JSON.stringify(W4.run.record.wrapup?.ends) + ", wrap-up slots " + wslots + ", session attempts " + W4.run.attempts.length + "; " + showWrap(w4));
+    rule("wrap-up turn refused for its allowance is gap E_PF_WRAPUP_ALLOWANCE, with one wrap-up attempt and one session attempt", W4.run.record.gap === "E_PF_WRAPUP_ALLOWANCE" && JSON.stringify(W4.run.record.wrapup?.ends) === '["limit_allowance"]' && wslots === 1 && W4.run.attempts.length === 1 && w4.refusals.some((x) => x.startsWith("E_ALLOWANCE ")) && w4.slot?.close?.reservation_bound === 0, "gap " + W4.run.record.gap + ", wrap-up ends " + JSON.stringify(W4.run.record.wrapup?.ends) + ", wrap-up slots " + wslots + ", session attempts " + W4.run.attempts.length + ", reservation-bound refusals " + w4.slot?.close?.reservation_bound + "; " + showWrap(w4));
     slotLine("W4", W4);
     const conc = concurrencyCheck(CLAUDE_ENV);
     rule("each allowance holds the worst case of one call at a 200k-token context times the calls a session can hold in flight", conc.ok, conc.detail);

@@ -33,11 +33,14 @@ test("task turns: text, blank line, suffix with the issue trimmed; P opens with 
 });
 
 test("limits per arm and model (sections 5 and 13), and the doubled allowance from costReading", () => {
-  expect(sessionLimits("P", OPUS).task).toEqual({ wall_limit_sec: 5400, max_turns: 250, allowance_usd: 12, quiet_sec: 30, bg_wait_sec: 600 });
+  expect(sessionLimits("P", OPUS).task).toEqual({ wall_limit_sec: 5400, max_turns: 250, allowance_usd: 13, quiet_sec: 30, bg_wait_sec: 600 });
+  expect(sessionLimits("N", OPUS).task.allowance_usd).toBe(13);
+  expect(sessionLimits("P", SOL).task.allowance_usd).toBe(12);
+  expect(sessionLimits("N", OPUS).wrapup.allowance_usd).toBe(13);
   expect(sessionLimits("N", P1).task.allowance_usd).toBe(3);
-  expect(sessionLimits("N", SOL).task).toMatchObject({ wall_limit_sec: 3600, max_turns: 150, allowance_usd: 6 });
+  expect(sessionLimits("N", SOL).task).toMatchObject({ wall_limit_sec: 3600, max_turns: 150, allowance_usd: 12 });
   expect(sessionLimits("C", P1).wrapup).toEqual({ wall_limit_sec: 300, max_turns: 20, allowance_usd: 0.5, quiet_sec: 30, bg_wait_sec: 600 });
-  expect(sessionLimits("C", SOL).wrapup.allowance_usd).toBe(5);
+  expect(sessionLimits("C", SOL).wrapup.allowance_usd).toBe(12);
   expect(sessionLimits("blind", OPUS).task).toMatchObject({ wall_limit_sec: 5400, allowance_usd: 15 });
   expect(() => sessionLimits("blind", SOL)).toThrow(/E_PF_ARM/);
   const doubled = costReading({ P: [1, 2, 7], C: [1, 1, 1], N: [1, 1, 1] }).allowance;

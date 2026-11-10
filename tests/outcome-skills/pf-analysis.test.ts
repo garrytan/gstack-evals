@@ -13,8 +13,10 @@ const rows = (): Row[] => {
   }
   return out;
 };
-test("items sum to the line and the line holds the $1,970", () => {
+test("items sum to the line and the line holds the $1,980", () => {
   expect(lineItemsMicros() + LINE.crew_counted_micros).toBe(LINE.cap_micros);
+  expect(LINE.cap_micros).toBe(1_980_000_000);
+  expect(ITEMS["pf-admit"]!.cap_micros).toBe(340_000_000);
   expect(ITEMS["pf-blind"]!.in_line).toBe(false);
 });
 test("Wilson, the bootstrap p and the verdict words", () => {
@@ -99,7 +101,7 @@ test("admission readings", () => {
   const c = costReading({ P: [1, 2, 7], C: [1], N: [1] });
   expect(c.arms[0]!.over).toBe(true);
   expect(c.allowance.P[SOL]).toBe(24);
-  expect(c.allowance.N[OPUS]).toBe(6);
+  expect(c.allowance.N[OPUS]).toBe(13);
 });
 test("the re-price, the n rule, the mid-run check and the blind fit", () => {
   const plan = { [OPUS]: { P: [7], C: [7], N: [2] }, [SOL]: { P: [4.2], C: [4.2], N: [1.2] }, [P1]: {} };
@@ -109,13 +111,13 @@ test("the re-price, the n rule, the mid-run check and the blind fit", () => {
   expect(p[P1]).toEqual(PLANNING[P1]!);
   expect(itemCap(p[OPUS]!, 28)).toBe(580);
   const n = nRule(p, { supply: 50, spent_usd: 500, crew_held_usd: 250 });
-  expect(n.left_usd).toBe(1220);
-  expect(n.caps["pf-opus"]! + n.caps["pf-sol"]! + n.caps["pf-particle"]!).toBeLessThanOrEqual(1220);
+  expect(n.left_usd).toBe(1230);
+  expect(n.caps["pf-opus"]! + n.caps["pf-sol"]! + n.caps["pf-particle"]!).toBeLessThanOrEqual(1230);
   expect(nRule(p, { supply: 50, spent_usd: 500, crew_held_usd: 250 }).n).toBeGreaterThan(nRule(p, { supply: 50, spent_usd: 600, crew_held_usd: 250 }).n - 1);
   expect(nRule(p, { supply: 12, spent_usd: 0, crew_held_usd: 0 })).toMatchObject({ n: 12, captain: true });
   expect(midRunCheck(SOL, { cap_usd: 370, spent_usd: 200, done: 10, n: 28, measured: { P: [10], C: [10], N: [3] } }).stop).toBe(true);
-  expect(blindFits(1850)).toBe(true);
-  expect(blindFits(1851)).toBe(false);
+  expect(blindFits(1860)).toBe(true);
+  expect(blindFits(1861)).toBe(false);
 });
 
 test("the two ceiling sensitivity readings: unreached entries as missing, and units the 5T + 8R limit flags dropped", () => {
@@ -148,4 +150,15 @@ test("per arm: entries, unreached and timeout-only entries and sessions at the c
   ] };
   expect(rowOf(rec)).toMatchObject({ entries: 3, unreached: 2, timeout_only: 1, ceiling_hit: true, timeout_s: 1766, overhead_ms: 400 });
   expect(valueOf(rowOf(rec), "ceiling_missing")).toBeNull();
+});
+
+test("beside every verdict, per model and arm: reservation-bound refusals and the spawns the subagent cap refused", () => {
+  const rs = rows().map((r) => ({ ...r, reservation_bound: r.model === SOL && r.arm === "P" && r.unit === "u0" ? 2 : 0, subagents: r.arm === "P" ? 3 : 1, subagent_cap_refused: r.arm === "P" && r.unit === "u1" ? 1 : 0 }));
+  const a = analyse(rs, 1);
+  expect(a.in_flight[SOL]!.P).toEqual({ sessions: 12, reservation_bound: 2, sessions_reservation_bound: 1, subagents: 36, subagent_cap_refused: 1, sessions_cap_refused: 1 });
+  expect(a.in_flight[OPUS]!.N).toEqual({ sessions: 12, reservation_bound: 0, sessions_reservation_bound: 0, subagents: 12, subagent_cap_refused: 0, sessions_cap_refused: 0 });
+  expect(report(a)).toContain("in flight " + SOL + " P: 12 sessions; reservation-bound refusals 2 (1 sessions); subagents asked 36, refused at the cap 1 (1 sessions)");
+  const gap = { schema: "pf-catch.v1", unit: "u9", repo: "r9", month: "2026-07", stratum: "july-2026", model: OPUS, arm: "P", in_flight: { reservation_bound: 1, subagents: 4, subagent_cap_refused: 2 }, score: null, gap: "E_PF_WRAPUP_ALLOWANCE", readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
+  expect(rowOf(gap as any)).toMatchObject({ gap: "E_PF_WRAPUP_ALLOWANCE", reservation_bound: 1, subagents: 4, subagent_cap_refused: 2 });
+  expect(rowOf({ ...gap, in_flight: undefined } as any)).toMatchObject({ reservation_bound: 0, subagents: 0, subagent_cap_refused: 0 });
 });

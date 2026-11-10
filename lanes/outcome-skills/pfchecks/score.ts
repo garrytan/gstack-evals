@@ -26,7 +26,7 @@ import { buildTrees, changesOf, git, show, withoutFiles } from "./trees.ts";
  *  (E_PF_UPSTREAM_GAP or E_PF_INFRA_GAP after its one retry); wrapup_end: how the wrap-up turn ended; forced: the
  *  force-captured paths from the session-end commit; claude_session: Claude Code's own transcript (claude-session.jsonl, by
  *  default beside the transcript), where P's skill body appears. */
-export interface SessionIn { unit?: string; model?: string; arm?: Arm; gap?: string | null; wrapup_end?: string | null; forced?: string[]; transcript?: string | null; claude_session?: string | null }
+export interface SessionIn { unit?: string; model?: string; arm?: Arm; gap?: string | null; wrapup_end?: string | null; forced?: string[]; transcript?: string | null; claude_session?: string | null; in_flight?: { reservation_bound: number; subagents: number; subagent_cap_refused: number } }
 
 export interface ScoreIn {
   s: string; ref?: string; unitDir: string; neutral: string; checks: string | null; session: string; transcript?: string | null; claudeSession?: string | null;
@@ -49,7 +49,7 @@ export async function scoreSession(o: ScoreIn) {
   const nrec = readJson<NeutralRecord>(o.neutral);
   if (nrec.schema !== "pf-neutral.v1" || nrec.id !== u.id || nrec.verdict !== "kept" || !nrec.mode) pfFail("E_PF_INPUT", o.neutral + " is not a kept neutral record for " + u.id);
   const sess = readJson<SessionIn>(o.session);
-  const head = { schema: "pf-catch.v1" as const, unit: u.id, repo: u.repo, month: u.month, stratum: stratumOf(u.month), model: sess.model ?? null, arm: sess.arm ?? null };
+  const head = { schema: "pf-catch.v1" as const, unit: u.id, repo: u.repo, month: u.month, stratum: stratumOf(u.month), model: sess.model ?? null, arm: sess.arm ?? null, in_flight: sess.in_flight ?? null };
   if (sess.gap) return { ...head, score: null, gap: sess.gap, readings: { no_static: null, no_api_guess: null, compile_rerun: null } };
   const tmp = mkdtempSync(join(tmpdir(), "pf-score-"));
   const repo = join(tmp, "repo");
@@ -128,6 +128,7 @@ export function rowOf(c: CatchRecord): Row {
   return {
     unit: c.unit, repo: c.repo, model: c.model!, arm: c.arm!, stratum: c.stratum, score: s(c.score), gap: c.gap, no_static: s(c.readings.no_static), no_api_guess: s(c.readings.no_api_guess), compile_rerun: s(c.readings.compile_rerun), loaded: !!ex?.loaded, checker: !!ex?.checker, breaks: sc?.breaks ? sc.breaks.length : null, breaks_unmeasured: !!sc?.breaks_unmeasured,
     entries: entries.length, unreached: entries.filter((e) => e.outcome === "unreached").length, timeout_only: entries.filter((e) => e.runs.some((x) => x.tree === "parent") && e.runs.filter((x) => x.tree === "parent").every((x) => x.timed_out)).length,
+    reservation_bound: c.in_flight?.reservation_bound ?? 0, subagents: c.in_flight?.subagents ?? 0, subagent_cap_refused: c.in_flight?.subagent_cap_refused ?? 0,
     ceiling_hit: "ceiling_hit" in c ? !!c.ceiling_hit : false, timeout_s: "timeout_s" in c ? c.timeout_s : null, overhead_ms: overhead.length ? (overhead.length % 2 ? overhead[mid]! : (overhead[mid - 1]! + overhead[mid]!) / 2) : null,
   };
 }

@@ -43,3 +43,14 @@ export function pProcedure(newFiles: { path: string; text: string }[]): boolean 
 export const codeTest = (lang: Lang, testFiles: ReadonlySet<string>, tChanges: Change[]): boolean => tChanges.some((c) => c.status !== "D" && isTestPath(lang, c.path, testFiles));
 
 export const readSession = (file: string): Rec[] => readTranscript(file).records as unknown as Rec[];
+
+/** Section 12: the subagents a session asked for (Agent tool calls, Task in older Claude Code) and the ones the pinned
+ *  Claude Code refused at its concurrent-subagent cap, which answers "Concurrent subagent limit reached". */
+export const SUBAGENT_CAP_TEXT = "Concurrent subagent limit reached";
+export function subagentUse(records: Rec[]): { subagents: number; subagent_cap_refused: number } {
+  const blocks = (type: string, kind: string) => records.flatMap((r) => (r.type === type && Array.isArray(r.content) ? (r.content as Array<Record<string, any>>).filter((b) => b?.type === kind) : []));
+  return {
+    subagents: blocks("AssistantMessage", "tool_use").filter((b) => b.name === "Agent" || b.name === "Task").length,
+    subagent_cap_refused: blocks("UserMessage", "tool_result").filter((b) => JSON.stringify(b.content ?? "").includes(SUBAGENT_CAP_TEXT)).length,
+  };
+}

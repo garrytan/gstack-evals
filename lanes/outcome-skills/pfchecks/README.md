@@ -113,7 +113,14 @@ Analysis and money
   the median over its sessions of each session's median run overhead (call_ms less wall_ms plus rebuild_ms). The report
   prints per model and arm the sessions, entries, unreached entries, timeout-only entries (every parent run timed out)
   and sessions at the ceiling, and lists the flagged units.
-- What is left of the line is $1,970 less the spend recorded so far less the crew use still held back (both inputs).
+- In flight (analysis.ts inFlightOf): per model and arm the sessions, the reservation-bound refusals and the sessions
+  with one, and the subagents asked for and refused at the cap, with the sessions that had a refusal. A reservation-bound
+  refusal is an allowance refusal where the slot's settled spend plus the refused call's own worst case (read from the
+  proxy's refusal reason) fits the allowance. session.ts reservationBound reads it from the slot's journal lines, counting
+  a call with no recorded spend at its full reservation, and the driver's close answer carries it as reservation_bound.
+  Subagents are Agent (or Task) tool calls in sdk-messages.jsonl; a refusal is a tool result holding "Concurrent subagent
+  limit reached" (exposure.ts subagentUse). pfRecord writes both into the session record's in_flight.
+- What is left of the line is $1,980 less the spend recorded so far less the crew use still held back (both inputs).
 - The mid-run check projects spend so far plus the remaining units at the new price against the item's cap.
 
 ## Sessions, arms and the dry run
@@ -127,8 +134,8 @@ Rules as built
   trailing whitespace removed, a blank line, then "My app is the repository in this directory. Don't stop to ask." The
   blind probe is its text with {scope}, a blank line and that last line only.
 - Limits: task turn 5,400 s and 250 turns for P, C and the blind probe, 3,600 s and 150 turns for N; wrap-up 300 s and 20
-  turns. Allowances from items.ts ALLOWANCE (or admission.ts costReading's doubled table, passed in); blind $15; wrap-up $6 on Opus, $5 on Sol,
-  $0.50 on particle-1. Quiet and background waits are the state machines arms' 30 s and 600 s.
+  turns. Allowances from items.ts ALLOWANCE (or admission.ts costReading's doubled table, passed in); blind $15; wrap-up $13 on Opus, $12 on Sol,
+  $0.50 on particle-1. The session env sets CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=2 in every arm (arms.ts ARM_ENV). Quiet and background waits are the state machines arms' 30 s and 600 s.
 - Session plan: per unit, every (model, arm) cell of the part shuffled by one seededRandom(order_seed + part) stream, as
   #290's planPart reads its seed. Items: pf-opus, pf-sol, pf-particle in the test part; pf-admit in admission; pf-blind.
 - Ends: endKind is #290's. Task turn: completed or a limit goes to the wrap-up; upstream or infra retries the whole
@@ -212,7 +219,7 @@ request's worst case, so the proxy refuses the next) and hostile (a tree holding
 E_PF_ARM with one attempt). A line with no session prices one request at section 13's 200k-token ceiling (700,000
 bytes, 32,000 output tokens) per model as the proxy prices it, and fails unless every task and wrap-up allowance holds
 that worst case once for each call a session can hold in flight: the main loop plus CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS
-(20 in the pinned Claude Code unless the session env sets it). effort.json comes from batch 1's proxy records, and every session after it is checked against
+(ARM_ENV sets 2; the pinned Claude Code's default is 20). effort.json comes from batch 1's proxy records, and every session after it is checked against
 it. The first Bash call of probe (P), B (C), C (N) and blind runs the PATH probe: the line passes only when, as root and as
 uid 1000, every arm's PATH is /opt/pf-tools/bin then the image's own PATH, bun resolves to /opt/pf-tools/bin/bun, and
 statechart starts with no args (exit 2 and its usage, not 127) where pstack is mounted. pf-labels and pf-oracle pay for

@@ -17,6 +17,7 @@ import { CLAUDE_BIN } from "../statemachines/stub-claude.ts";
 import { readUnit } from "../statemachines/unit.ts";
 import { ARM_ENV, DISALLOWED_TOOLS, NO_ANSWER, WRAPUP, loadsPlugin, sessionLimits, taskTurn, type Names, type PfArm } from "./arms.ts";
 import { readCapture } from "./capture.ts";
+import { readSession, subagentUse } from "./exposure.ts";
 import { containUnit } from "./containment.ts";
 import type { Arm } from "./items.ts";
 import { pfFail } from "./prereg.ts";
@@ -156,6 +157,7 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
   const cap = summary?.capture ? readCapture(summary.capture) : null;
   const keep = summary?.keep ? readWrapup(summary.keep) : { checks: false, discarded: [] as string[] };
   const cs = ev ? join(ev, "claude-session.jsonl") : "";
+  const sdk = ev ? join(ev, "sdk-messages.jsonl") : "";
   const bundle = ev ? join(ev, "s.bundle") : "";
   const q = Object.values((summary?.questions ?? {}) as Record<string, { ask_user_question?: number; prose_questions?: number }>);
   return {
@@ -165,8 +167,9 @@ export function pfRecord(i: PfRunInput, attempt: 1 | 2, summary: Record<string, 
     wrapup_end: ws?.action === "score" ? ws.wrapup_end : null, gap, capture: cap, forced: cap?.forced ?? [], discarded: keep.discarded,
     checks: keep.checks && ev ? join(ev, "CHECKS.json") : null, s: bundle && existsSync(bundle) && statSync(bundle).size > 0 ? { repo: bundle, ref: "HEAD" } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : null, claude_session: cs && existsSync(cs) && statSync(cs).size > 0 ? cs : null, effort,
-    questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, cap_stop: capStop, env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
+    questions: { ask_user_question: sum(q.map((x) => x.ask_user_question)), prose: sum(q.map((x) => x.prose_questions)) }, cap_stop: capStop, env: { ...ARM_ENV },
     disallowed_tools: [...DISALLOWED_TOOLS], plugin: loadsPlugin(s.arm) ? PSTACK_DIR : null, tools: toolsVolume(),
+    in_flight: { reservation_bound: sum(slots.map((x) => x.close?.reservation_bound)), ...(sdk && existsSync(sdk) ? subagentUse(readSession(sdk)) : { subagents: 0, subagent_cap_refused: 0 }) },
   };
 }
 

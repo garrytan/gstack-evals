@@ -6,7 +6,7 @@
 import { writeFileSync } from "node:fs";
 import { seededRandom } from "../../../src/runner/stats/paired.ts";
 import { endKind, type EndKind } from "../statemachines/session.ts";
-import { DISALLOWED_TOOLS, type Names, type PfArm } from "./arms.ts";
+import { ARM_ENV, DISALLOWED_TOOLS, type Names, type PfArm } from "./arms.ts";
 import type { Capture } from "./capture.ts";
 import { ARMS, MODEL_ITEM, MODELS, OPUS } from "./items.ts";
 import { pfFail } from "./prereg.ts";
@@ -87,15 +87,40 @@ export interface PfSessionRecord {
   claude_session: string | null; effort: Record<string, unknown> | null; questions: { ask_user_question: number; prose: number };
   /** The driver refused the task open with 409 CAP_STOP (the agent's LedgerCapStop): the part ends incomplete, with no gap and no retry. */
   cap_stop: boolean;
-  env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" }; disallowed_tools: string[]; plugin: string | null; tools: string;
+  env: typeof ARM_ENV; disallowed_tools: string[]; plugin: string | null; tools: string;
+  /** Section 12: the slots' allowance stops that only calls still in flight caused (reservationBound), the subagents
+   *  the session asked for and the ones the concurrent-subagent cap refused. */
+  in_flight: { reservation_bound: number; subagents: number; subagent_cap_refused: number };
 }
 
 /** Writes pf-session.v1 once (exclusive create) after checking section 4's harness rules. */
 export function writeSessionRecord(file: string, r: PfSessionRecord): void {
-  if (r.schema !== "pf-session.v1" || r.env.CLAUDE_CODE_DISABLE_BUNDLED_SKILLS !== "1" || DISALLOWED_TOOLS.some((t) => !r.disallowed_tools.includes(t))) pfFail("E_PF_ARM", "the session record breaks section 4's harness rules");
+  if (r.schema !== "pf-session.v1" || Object.entries(ARM_ENV).some(([k, v]) => (r.env as Record<string, string>)[k] !== v) || DISALLOWED_TOOLS.some((t) => !r.disallowed_tools.includes(t))) pfFail("E_PF_ARM", "the session record breaks section 4's harness rules");
   if ((r.plugin !== null) !== (r.arm === "P" || r.arm === "blind")) pfFail("E_PF_ARM", "only P and the blind probe mount the pstack plugin");
   if (r.cap_stop && r.gap) pfFail("E_PF_INPUT", "a cap-stopped session is not a gap");
   if (!r.gap && !r.cap_stop && (!r.s || r.wrapup_end === null)) pfFail("E_PF_INPUT", "a session with no gap exports S and the wrap-up turn's end");
   if (!r.gap && !r.cap_stop && r.plugin !== null && !r.claude_session) pfFail("E_PF_INPUT", "a P or blind session with no gap names its claude-session.jsonl, where the skill body appears (section 8)");
   writeFileSync(file, JSON.stringify(r, null, 1) + "\n", { flag: "wx" });
+}
+
+/** Refusals at a slot's allowance check that only the worst cases of its calls still in flight caused: the slot's settled
+ *  spend plus the refused call's own worst case would have fit the allowance. Read in order from the metering proxy's
+ *  journal lines for the slot's meter; a call with no recorded spend counts at its full reservation, as the proxy
+ *  counts it. */
+export function reservationBound(lines: readonly Record<string, any>[], meterId: string, allowanceMicros: number): number {
+  let settled = 0, bound = 0;
+  const held = new Map<string, number>(), keyOf = new Map<string, string>();
+  for (const j of lines) {
+    if (j.kind === "reserve" && j.cell?.meter_id === meterId) held.set(j.idempotency_key, j.max_micros);
+    else if (j.kind === "request" && held.has(j.idempotency_key)) keyOf.set(j.reservation_id, j.idempotency_key);
+    else if (j.kind === "outcome" && j.meter_id === meterId) {
+      const key = keyOf.get(j.reservation_id) ?? "";
+      settled += j.outcome?.kind === "spent" ? j.outcome.spent_micros : (held.get(key) ?? 0);
+      held.delete(key);
+    } else if (j.kind === "refusal" && j.meter_id === meterId) {
+      const worst = /cannot hold this call's worst case of \$(\d+(?:\.\d+)?)/.exec(String(j.reason ?? ""));
+      if (worst && settled + Math.round(Number(worst[1]) * 1_000_000) <= allowanceMicros) bound++;
+    }
+  }
+  return bound;
 }
