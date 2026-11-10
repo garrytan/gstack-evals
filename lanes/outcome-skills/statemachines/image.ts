@@ -12,7 +12,7 @@
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, posix, relative } from "node:path";
+import { isAbsolute, join, posix, relative, resolve } from "node:path";
 import { docker } from "../../real-outcome/task/docker.ts";
 import { runName } from "./testrun.ts";
 import { smFail, type SmUnit } from "./unit.ts";
@@ -63,10 +63,11 @@ export interface QaHome { paths: string[]; links: number; files: number; binarie
  *  /root. A link that leaves the home fails closed. A top-level .capy is left out: a host's tools can write there while
  *  the install runs (Capy's git shim logs to ~/.capy), and the session's check refuses a drive path in every arm. */
 export function qaHomeCopy(src: string, dst: string): QaHome {
-  const roots = [...new Set([src.replace(/\/+$/, ""), realpathSync(src)])].sort((a, b) => b.length - a.length);
+  const home = resolve(src);
+  const roots = [...new Set([home, realpathSync(home)])].sort((a, b) => b.length - a.length);
   const lexists = (f: string) => { try { lstatSync(f); return true; } catch { return false; } };
-  const drive = join(src, ".capy");
-  cpSync(src, dst, { recursive: true, verbatimSymlinks: true, filter: (f) => f !== drive });
+  const drive = join(home, ".capy");
+  cpSync(home, dst, { recursive: true, verbatimSymlinks: true, filter: (f) => f !== drive });
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const named = new RegExp("(?:" + roots.map(esc).join("|") + ")(?![\\w.-])", "g");
   const inside = (t: string) => roots.map((r) => (t === r ? "/" : t.startsWith(r + "/") ? t.slice(r.length) : null)).find((x) => x !== null) ?? null;

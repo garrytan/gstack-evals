@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
 import { recordApproval } from "../../src/runner/ledger/ledger.ts";
 import { LocalLedger } from "../../src/runner/ledger/local.ts";
@@ -75,6 +75,24 @@ describe("A3's home (#290 notes 1 and 3)", () => {
     expect(JSON.parse(readFileSync(join(dst, ".claude/settings.json"), "utf8")).hook).toBe("/root/.claude/skills/gstack/bin/hook");
     expect(readFileSync(join(dst, ".gstack/browse")).includes(Buffer.from(src))).toBe(true);
     expect(existsSync(join(dst, ".capy"))).toBe(false);
+  });
+
+  // Value: protects=files the install wrote that name no host dir; fails_when=a relative --qa-home such as "." becomes a root the rewrite matches, so "./helper.ts" or a sentence's last period turns into /root; why_new=Capy's review of #314; seam=image.ts qaHomeCopy; no_claim=which dir an operator passes
+  test("a relative home path is resolved first, so text that names no host dir is left as written", () => {
+    const root = scratch("qahome-rel");
+    const src = join(root, "host-home");
+    mkdirSync(join(src, ".claude/skills/gstack"), { recursive: true });
+    const script = 'import { help } from "./helper.ts";\n// Ends with a period.\nconst home = "' + src + '/.claude";\n';
+    writeFileSync(join(src, ".claude/skills/gstack/run.ts"), script);
+    const cwd = process.cwd();
+    process.chdir(src);
+    try {
+      expect(qaHomeCopy(".", join(root, "dot")).files).toBe(1);
+      expect(qaHomeCopy(relative(src, src + "/../host-home"), join(root, "rel")).files).toBe(1);
+    } finally {
+      process.chdir(cwd);
+    }
+    for (const d of ["dot", "rel"]) expect(readFileSync(join(root, d, ".claude/skills/gstack/run.ts"), "utf8")).toBe(script.replace(src, "/root"));
   });
 
   // Value: protects=the session home holding nothing from outside the install; fails_when=a link that leaves the home, absolute or relative, is copied into the image; why_new=#290 named note 1; seam=image.ts qaHomeCopy; no_claim=links gstack's setup writes today, which all point inside the home
