@@ -105,6 +105,43 @@ describe("history.sh against a SWE-rebench-shaped /testbed", () => {
     expect(row.counts).toMatchObject({ d_outside: "0", d_untracked: "1" });
   });
 
+  test("check reads base content from the base commit's tree: a staged hidden test, a staged-then-deleted one and a modified tracked file all fail (d)", () => {
+    const staged = fixture();
+    expect(staged.run("strip").status).toBe(0);
+    writeFileSync(join(staged.repo, HIDDEN_PATH), "def " + HIDDEN + "():\n    pass\n");
+    sh(staged.repo, "git add " + HIDDEN_PATH);
+    const a = parseResult("t", staged.run("check", staged.markers).stdout);
+    expect(a.failed).toEqual(["d"]);
+    expect(a.counts).toMatchObject({ d_outside: "0", d_untracked: "0", d_worktree: "1" });
+
+    const gone = fixture();
+    expect(gone.run("strip").status).toBe(0);
+    writeFileSync(join(gone.repo, HIDDEN_PATH), "def " + HIDDEN + "():\n    pass\n");
+    sh(gone.repo, "git add " + HIDDEN_PATH + " && rm " + HIDDEN_PATH);
+    const b = parseResult("t", gone.run("check", gone.markers).stdout);
+    expect(b.failed).toEqual(["d"]);
+    expect(b.counts).toMatchObject({ d_worktree: "0", d_objects: "1", d_gitmeta: "1" });
+
+    const edited = fixture();
+    expect(edited.run("strip").status).toBe(0);
+    writeFileSync(join(edited.repo, "tests", "test_old.py"), "def test_old_case():\n    pass\n\n\ndef " + HIDDEN + "():\n    pass\n");
+    const c = parseResult("t", edited.run("check", edited.markers).stdout);
+    expect(c.failed).toEqual(["d"]);
+    expect(c.counts).toMatchObject({ d_worktree: "1" });
+  });
+
+  test("a marker the base commit itself holds is base content, not a leak", () => {
+    const f = fixture();
+    expect(f.run("strip").status).toBe(0);
+    const base = parseResult("t", f.run("check", f.markers).stdout);
+    expect(base.pass).toBe(true);
+    sh(f.repo, "git checkout -q -b scratch && printf '%s\\n' '# mentions " + HIDDEN + "' > notes.txt && git add notes.txt && git commit -q -m notes && git tag -d v1 >/dev/null && git checkout -q --detach HEAD && git branch -D -q scratch");
+    expect(f.run("strip").status).toBe(0);
+    const row = parseResult("t", f.run("check", f.markers).stdout);
+    expect(row).toMatchObject({ pass: true, failed: [] });
+    expect(row.counts).toMatchObject({ d_worktree: "0", d_objects: "0", d_gitmeta: "0" });
+  });
+
   test("strip fails the build when another object store of the same repository still holds the fix", () => {
     const f = fixture();
     sh(f.root, "git clone -q --mirror " + f.repo + " " + join(f.root, "opt", "mirror.git"));

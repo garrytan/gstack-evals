@@ -31,7 +31,7 @@ export const PARTS = {
   a: ["a_bad", "pseudo_bad", "grafts"],
   b: ["b_later"],
   c: ["c_alt", "c_modstore", "c_worktrees", "stores_later"],
-  d: ["d_outside", "d_untracked"],
+  d: ["d_outside", "d_untracked", "d_worktree", "d_objects", "d_gitmeta"],
 } as const;
 
 export function addHistoryStrip(taskDir: string): void {

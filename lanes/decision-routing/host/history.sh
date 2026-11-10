@@ -12,7 +12,10 @@
 # (b) every commit object (git cat-file --batch-all-objects) is the base or an ancestor;
 # (c) no alternates, no submodule object store, no worktree, and no other object store holding this repository's
 #     commits past the base;
-# (d) none of the task's runner-only markers (host/history.ts) is in a file outside the repository or untracked in it.
+# (d) none of the task's runner-only markers (host/history.ts) is in a file outside the repository, in a file under it
+#     that the base commit's tree (git ls-tree -r) does not hold byte for byte (untracked, ignored, staged-only or
+#     modified; the index is never taken as base content), in an object the base commit does not reach, or in git's own
+#     files outside objects/ (the index, logs, messages).
 # Marker text never reaches stdout; the paths of (d) hits go to stderr. DR_REPO, DR_ROOT and DR_WORK move /testbed, /
 # and the scratch dir for tests.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*' GIT_PAGER=cat
@@ -91,14 +94,28 @@ case "${1:-}" in
   check)
     M=$2; [ -r "$M" ] || { echo "RESULT error=no_markers"; exit 9; }
     measure
-    nm=$(grep -c . "$M"); mf=0; dout=0; dunt=0
+    nm=$(grep -c . "$M"); mf=0; dout=0; dunt=0; dwt=0; dobj=0; dmeta=0
+    git -c core.quotePath=false ls-tree -r "$B" | awk -F '\t' '{split($1, a, " "); print a[3] "\t" $2}' | LC_ALL=C sort > "$W/base"
+    find . -path ./.git -prune -o -type f -print | sed 's|^\./||' | LC_ALL=C sort > "$W/files"
+    if git hash-object --no-filters --stdin-paths < "$W/files" > "$W/shas" 2>/dev/null && [ "$(wc -l < "$W/shas")" -eq "$(wc -l < "$W/files")" ]; then
+      paste "$W/shas" "$W/files" | LC_ALL=C sort | LC_ALL=C comm -23 - "$W/base" | cut -f2- > "$W/differ"
+    else
+      cp "$W/files" "$W/differ"
+    fi
+    ndiff=$(wc -l < "$W/differ")
+    git rev-list --objects "$B" | cut -d' ' -f1 | sort -u > "$W/reach"
+    awk '{print $2}' "$W/objs" | sort -u | comm -23 - "$W/reach" > "$W/unreached"
+    nunr=$(wc -l < "$W/unreached")
     if [ "$nm" -gt 0 ]; then
       [ "$bc" -gt 0 ] && mf=$(git log --no-walk=unsorted --stdin -p --format=%H < "$W/later" 2>/dev/null | grep -aoF -f "$M" | sort -u | wc -l)
       find "$ROOT" -xdev \( -path "$R/proc" -o -path "$R/sys" -o -path "$R/dev" -o -path "$REPO" -o -path "$W" -o -path "$M" \) -prune -o -type f -print0 2>/dev/null | xargs -0 -r grep -laF -f "$M" 2>/dev/null > "$W/dout"
       git ls-files -o -z 2>/dev/null | xargs -0 -r grep -laF -f "$M" 2>/dev/null | sed "s|^|$REPO/|" > "$W/dunt"
-      dout=$(wc -l < "$W/dout"); dunt=$(wc -l < "$W/dunt")
-      cat "$W/dout" "$W/dunt" >&2
+      tr '\n' '\0' < "$W/differ" | xargs -0 -r grep -laF -f "$M" 2>/dev/null | sed "s|^|$REPO/|" > "$W/dwt"
+      [ "$nunr" -gt 0 ] && dobj=$(git cat-file --batch < "$W/unreached" 2>/dev/null | grep -aoF -f "$M" | sort -u | wc -l)
+      find .git -path .git/objects -prune -o -type f -print0 2>/dev/null | xargs -0 -r grep -laF -f "$M" 2>/dev/null > "$W/dmeta"
+      dout=$(wc -l < "$W/dout"); dunt=$(wc -l < "$W/dunt"); dwt=$(wc -l < "$W/dwt"); dmeta=$(wc -l < "$W/dmeta")
+      cat "$W/dout" "$W/dwt" "$W/dmeta" >&2
     fi
-    echo "RESULT markers=$nm $(counts) later_with_markers=$mf d_outside=$dout d_untracked=$dunt" ;;
+    echo "RESULT markers=$nm $(counts) later_with_markers=$mf not_in_base_files=$ndiff unreached_objects=$nunr d_outside=$dout d_untracked=$dunt d_worktree=$dwt d_objects=$dobj d_gitmeta=$dmeta" ;;
   *) echo "usage: history.sh strip | check <markers file>" >&2; exit 2 ;;
 esac
