@@ -8,8 +8,8 @@ plan and the dry run (section "Sessions, arms and the dry run" below).
 
 ## Commands
 
-`gstack-evals outcome pf --help` lists them: `draw`, `told`, `neutral`, `score`, `analyze`, `admission`, `reprice` and
-`items`. Every refusal prints its reason code first (docs/errors.md, codes E_PF_*).
+`gstack-evals outcome pf --help` lists them: `draw`, `told`, `neutral`, `score`, `analyze`, `admission`, `reprice`,
+`items`, `dryrun` and `contain`. Every refusal prints its reason code first (docs/errors.md, codes E_PF_*).
 
 ## Files
 
@@ -18,6 +18,7 @@ plan and the dry run (section "Sessions, arms and the dry run" below).
   its validation. capture.ts and sh/capture.sh: section 6.1. transplant.ts: 6.2. trees.ts: 6.3. manifest.ts: 6.4.
   runner.ts: 6.5 to 6.8. secondaries.ts: section 9. exposure.ts: section 8. analysis.ts: section 12. admission.ts:
   sections 10 and 13. items.ts: the frozen items and prices. score.ts: one session to a pf-catch.v1 record.
+  containment.ts and sh/contain.sh: section 15's containment check.
 
 ## Entry points for the session build step
 
@@ -70,6 +71,10 @@ Trees and runs
   limit. Exit 124 or a kill reads as a timeout. Markers carry a per-run nonce, so an entry cannot print its own result.
 - Parent runs 2 and 3 stop at the first pass, since a pass already rules out both the catch and red-on-parent.
 - After the ceiling no run starts; runs in flight finish. The compile-blocked reruns share what is left of the ceiling.
+- Each run record keeps start_ms (from the scoring start), call_ms (the whole call, the tree copy included) and
+  rebuild_ms (from the container's start to the rebuild's end mark, as the host sees it). Each entry keeps, per phase it
+  took part in, slot_ms (from the phase's start to its first run) and barrier_ms (from its last run to the next phase's
+  start). No score reads them. replaySchedule replays a session from its runs' wall_ms with the same slots and phases.
 - A session with an entry gap (fix-tree rebuild failure) and no catching entry scores a gap; any catch scores 1.
 
 Manifest
@@ -103,6 +108,11 @@ Analysis and money
 - Re-price: per session and arm, Opus 1.2 x its measured mean, Sol and particle-1 max(planning, 1.5 x measured mean); an
   item's cap for n units is n x (the three arms' prices plus three $0.40 VMs), rounded up to $10. The margin is in the
   price, so the cap adds no second 1.2. At planning prices this gives Opus $580 at n = 28, the post's cap.
+- Ceiling readings: ceiling_missing reads a session that scored 0 with at least one unreached entry as missing;
+  no_flagged drops every unit with 5T + 8R >= 10,800 s, where T is the largest entry timeout over the unit's rows and R
+  the median over its sessions of each session's median run overhead (call_ms less wall_ms plus rebuild_ms). The report
+  prints per model and arm the sessions, entries, unreached entries, timeout-only entries (every parent run timed out)
+  and sessions at the ceiling, and lists the flagged units.
 - What is left of the line is $1,970 less the spend recorded so far less the crew use still held back (both inputs).
 - The mid-run check projects spend so far plus the remaining units at the new price against the item's cap.
 
@@ -210,7 +220,45 @@ real pinned SDK and Harbor with a stub Claude Code, a stand-in docker and a stub
 holding both (REAL_OUTCOME_PYTHON). pf-driver.test.ts covers the PF stage branch, the slot deadline and the wrap-up hold's
 grace.
 
-Not yet done: the dry run on real MultiLang units.
+### Real-unit dry run
+
+`bun lanes/outcome-skills/pfchecks/dryrun-units.ts --unit <unit dir> --neutral <pf-neutral.v1 record> --out <dir>
+[--serial]` drives the fixtures that depend on the unit (unit-fixtures.ts) on a real MultiLang unit once its oracle has
+run. It waits for the neutral record, so it can start while the neutral gate still runs.
+
+- Containment comes first, on the session image built as the first session's would be, and every session waits on it.
+  `gstack-evals outcome pf contain --unit <dir>` runs the same check alone. sh/contain.sh runs as root with no network in
+  a container of that image. It fails when any ref (branches, tags, remotes, notes, replace refs, stash, packed refs,
+  FETCH_HEAD, ORIG_HEAD and the other special heads) or reflog entry points past the base commit, when any commit object is neither the base nor an
+  ancestor, when the repository has alternates, a gitfile, a modules store or a nested .git, when a tracked file differs
+  from the base, or when another git directory on the filesystem holds the base commit. Its needles are the added lines
+  of 30 characters or more in fix.patch and test.patch that no base file holds, and the fail-to-pass test leaf names of
+  12 characters or more that no tracked base file holds; it looks for them in every file outside the repository and in
+  untracked and ignored files inside it, as whole lines and as file names. Output names a needle by a sha256 prefix,
+  never by its text. A failure is E_PF_CONTAINMENT and no session runs.
+- The hang line reads N/A, not FAIL, when the ceiling left the hang entry unreached, every run it had matches a catch,
+  and replaySchedule over the session's recorded runs still starts the entry's next run after the ceiling. The line
+  prints that arithmetic.
+
+Record, 2026-11-10, keyless, stub sessions:
+
+- blocky-2016 (Go), local machine: DRYRUN ok at 74c273f, 38 lines, 37 PASS and 1 N/A (API guess: the fix adds no name
+  a test could guess).
+- gitoxide-2476 (Rust), one VM per run: DRYRUN ok at 74c273f, 38 lines, 37 PASS and 1 N/A (API guess); again at the
+  build with the breaks line, 39 lines, 38 PASS and 1 N/A. Its breaks line passed with 7, 9 and 9 stable ids lost per
+  run to the --nocapture parse and 0 breaks, where the reading before the breaks rule would have counted 2.
+- agentscope-java-2257 (Java, Maven), one VM: 38 lines at 5a37165, 35 PASS, 1 N/A (API guess), 2 FAIL. Both FAILs are
+  the hang entry, left unreached before its last neutral run. Its own runs before that run took 10,265 s (parent
+  timeouts 1,956, 1,950 and 1,931 s; fix 184, 183 and 187 s; neutral timeouts 1,945 and 1,929 s), and it waited 1,486 s
+  for slots and phase barriers behind the session's other entries. replaySchedule starts its last neutral run at
+  11,751 s against the 10,800 s ceiling, so the hang line as built here reads N/A on that record
+  (tests/outcome-skills/pf-dryrun-units.test.ts holds its runs). That run scored its three sessions at the same time,
+  not one after another as its run plan said, so C's and N's runs shared the VM with P's for their first 1,981 s.
+- The phase barriers stay. With no barriers, each entry running its own steps back to back on the same 4 slots, the
+  replay of agentscope's P session cuts the waiting summed over entries from 67,951 s to 15,396 s, but the hang entry
+  waits 1,688 s instead of 1,486 s and starts its last neutral run at 11,953 s instead of 11,751 s. Runs don't depend on
+  other entries' phases either way: each is a fresh container on its own tree commit.
+- Containment: blocky-2016 and agentscope-java-2257 passed with one ref, one commit and no hit.
 
 ### Driver
 
