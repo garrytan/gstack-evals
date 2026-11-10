@@ -16,7 +16,9 @@
 // that names both codes and is never sent again. Any other call once
 // sent is never sent again, including one whose answer a stopped send never recorded (recorded as lost): its send line
 // is on disk before the call goes out, one live send holds the item, and a send whose replies file does not name every
-// call the ledger holds for the item and run is refused before it recovers or sends anything.
+// call the ledger holds for the item and run is refused before it recovers or sends anything. So is a send whose local
+// ledger lacks one of the run's leases, unless the owner reconciled that lease and the replies file holds its lease
+// line, which a send writes when it opens a lease.
 import { createHash, randomBytes } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeFileSync, writeSync } from "node:fs";
@@ -28,7 +30,7 @@ import { openLease, recordStop, settleLease, type RequireAdmission } from "../..
 import { openLocalLedger } from "../../../src/runner/ledger/local.ts";
 import { usd } from "../../../src/runner/ledger/money.ts";
 import { ledgerPath, recordPath } from "../../../src/runner/ledger/paths.ts";
-import { LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
+import { capStopRefusal, LedgerError, readItem } from "../../../src/runner/ledger/record.ts";
 import { cutShort } from "../../../src/runner/ledger/sessions.ts";
 import { priceRequest, reservationMicros } from "../../../src/runner/pricing/prices.ts";
 import { MeteringProxy, reconcileJournal } from "../../../src/runner/proxy/metering-proxy.ts";
@@ -217,7 +219,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     counts[r.outcome]++;
     write({ event: "reply", packet: job.packet, reader: job.reader, model: LABELLERS[job.reader], outcome: r.outcome, code: r.code ?? null, ...(r.first_code ? { first_code: r.first_code } : {}), why: r.why ?? null, answer: r.answer ?? null, raw: r.raw ?? null, micros: r.micros ?? null, meter_id: r.meter_id ?? null });
   };
-  const prior: Array<{ at?: string; event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string; outcome?: Outcome; code?: ReasonCode; why?: string }> = [];
+  const prior: Array<{ at?: string; event?: string; item?: string; run_id?: string; packet: string; reader: Reader; meter_id?: string; lease_id?: string; outcome?: Outcome; code?: ReasonCode; why?: string }> = [];
   const rows = existsSync(repliesFile) ? readFileSync(repliesFile, "utf8").split("\n") : [];
   if (rows.at(-1) === "") rows.pop();
   for (const [i, row] of rows.entries()) {
@@ -262,8 +264,10 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
   try {
     const state = ledger(() => readItem(record, o.item));
     if (state.cap_micros !== null && (state.program !== def!.program || state.skills.join() !== def!.skills.join())) smFail("E_USAGE", "line item " + o.item + " is recorded in program " + (state.program ?? "none") + " for " + (state.skills.join(", ") || "no skill") + ", not " + def!.program + " for " + def!.skills.join(", ") + " (items.ts); nothing was opened");
-    const unheld = state.leases.filter(({ lease, close }) => lease.run_id === o.run_id && close?.how !== "reconciled" && !local.getLease(lease.lease_id)).map(({ lease }) => lease.lease_id);
-    if (unheld.length) smFail("E_USAGE", "line item " + o.item + " holds run " + o.run_id + "'s lease " + unheld.join(", ") + ", which the local ledger at " + local.path + " does not hold. A send resumes only on the ledger that sent the run's calls, since another ledger can't tell which calls are already paid for (a lease the owner reconciled is the one exception, as its ledger is gone); nothing was recovered, settled or opened");
+    const cannotLease = capStopRefusal(state) !== null || (state.cap_micros !== null && state.committed_micros >= state.cap_micros);
+    const leased = new Set(prior.flatMap((l) => (l.event === "lease" && l.lease_id ? [l.lease_id] : [])));
+    const unheld = cannotLease ? [] : state.leases.filter(({ lease, close }) => lease.run_id === o.run_id && !local.getLease(lease.lease_id) && !(close?.how === "reconciled" && leased.has(lease.lease_id))).map(({ lease }) => lease.lease_id);
+    if (unheld.length) smFail("E_USAGE", "line item " + o.item + " holds run " + o.run_id + "'s lease " + unheld.join(", ") + ", which the local ledger at " + local.path + " does not hold. A send resumes only on the ledger that sent the run's calls, since another ledger can't tell which calls are already paid for. The one exception is a lease the owner reconciled whose lease line is in " + repliesFile + ", since those replies record every call it made; nothing was recovered, settled or opened");
     const named = new Set(prior.flatMap((l) => (l.event === "send" && l.meter_id ? [l.meter_id] : [])));
     const unnamed = state.leases.filter(({ lease }) => lease.run_id === o.run_id).flatMap(({ lease }) => [...local.meters(lease.lease_id).keys()].filter((m) => !named.has(m)).map((m) => "lease " + lease.lease_id + " meter " + m));
     if (unnamed.length) smFail("E_USAGE", repliesFile + " names no send for " + unnamed.join(", ") + ", which the ledger holds for run " + o.run_id + " on line item " + o.item + ". A send resumes only from the --out that holds its replies, so a replies file that is missing, emptied, cut short by a crash or from another --out can't serve the run; nothing was recovered, settled or opened");
@@ -297,6 +301,7 @@ async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
     throw e;
   }
   result.lease_id = lease.lease_id;
+  write({ event: "lease", lease_id: lease.lease_id });
   const journal = join(out, lease.lease_id + ".journal.ndjson");
   const proxy = new MeteringProxy({ ledger: local, leaseId: lease.lease_id, host: "127.0.0.1", managementSocket: join(tmpdir(), "sm-send-" + randomBytes(6).toString("hex") + ".sock"), managementToken: randomBytes(24).toString("hex"), journal, retry: DEFAULT_RETRY, env, fetch: o.fetch, sleep: o.sleep, maxOutputTokens: R78_PRICE_BOUND.output_tokens, refuseServerTools: true });
   const scope = o.item + " only";

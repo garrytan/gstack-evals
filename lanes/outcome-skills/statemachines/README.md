@@ -656,8 +656,10 @@ counts sessions.
 - A send refuses a run whose lease its local ledger lacks (pre-data build change, 2026-11-11, send.ts; the Captain's
   pre-run list item 6, GSTA-2, from #317's deferred findings): when the item record holds a lease of the run that the
   send's local ledger does not hold, the send is refused (E_USAGE) before it recovers, settles or opens anything, since
-  another ledger can't tell which calls are already paid for. A lease the owner reconciled is exempt, as its ledger is
-  gone by definition.
+  another ledger can't tell which calls are already paid for. A lease the owner reconciled is exempt only when the
+  --out's replies.jsonl holds its lease line (each send now writes one when it opens a lease, before any call), since
+  those replies record every call it made and none is asked again; with them missing, the send is refused as above
+  (the Captain's correction on #320). An item that is cap-stopped or has no cap left still reports CAP_STOP first.
 - A lost call that settled past the bound halts the item (pre-data build change, 2026-11-11, send.ts; the Captain's
   pre-run list item 7, GSTA-2, from #317's deferred findings): when a send stopped after a call settled but before its
   reply and halt were recorded, the next send records the call as lost, and if the call's settled usage passes the
