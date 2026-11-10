@@ -15,9 +15,12 @@ import time
 from pathlib import Path
 
 
-def sm_turn(spec: dict, task: dict, instruction: str, trim) -> str:
-    """The one user turn an SM arm sends, as lanes/outcome-skills/statemachines/arms.ts smTurn writes it."""
+def sm_turn(spec: dict, task: dict, instruction: str, trim, qa_pin=None) -> str:
+    """The one user turn an SM arm sends, as lanes/outcome-skills/statemachines/arms.ts smTurn writes it. qa:told refuses
+    until registry.json sm.pins.qa records the /qa sha (qa_pin), and refuses a task whose qa_sha is not that pin."""
     text = spec["turns"][0]["text"]
+    if spec["kind"] == "told" and not ((qa_pin or {}).get("sha") and qa_pin["sha"] == task.get("qa_sha")):
+        raise ValueError(f"qa:told runs only once the /qa pin is recorded in registry.json sm.pins.qa and the task's qa_sha equals it; the pin is {(qa_pin or {}).get('sha')}, the task's {task.get('qa_sha')}")
     if spec["kind"] == "followon":
         statement = trim(instruction)
         if not statement.strip():

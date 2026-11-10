@@ -105,8 +105,10 @@ export interface CloseAnswer {
   requests: number;
   ok_responses: number;
   refused: number;
-  /** PF sessions only: the proxy code of each refused call, from the lease journal, so a turn can tell an allowance stop from an upstream end. */
-  refusals?: string[];
+  /** The distinct reason codes of the proxy's refusals (E_ALLOWANCE, E_PROXY_SERVER_TOOL and so on), so a session's end kind can tell an allowance stop. */
+  refusals: string[];
+  /** Refusals at the slot's allowance check, the proxy's only allowance stop; the end kind reads this, never the E_ALLOWANCE code. */
+  allowance_stops: number;
   /** PF sessions only: the effort and thinking fields (pfchecks session.ts EFFORT_KEYS) of the slot's first request with a tools list, as its metering proxy recorded them, or null when it sent none. */
   first_request?: Record<string, unknown> | null;
   unknown: number;
@@ -525,6 +527,8 @@ async function serve(o: ServeOptions, held: { lock: string | null; run: Database
         requests: meter?.requests ?? 0,
         ok_responses: Object.entries(meter?.upstream.statuses ?? {}).reduce((n, [code, k]) => n + (code.startsWith("2") ? k : 0), 0),
         refused: meter?.refused ?? 0,
+        refusals: [...(meter?.refusals ?? [])],
+        allowance_stops: meter?.allowance_stops ?? 0,
         unknown: meter?.unknown ?? 0,
         undrained: meter?.undrained ?? 0,
         unsettled: meter?.unsettled ?? 0,

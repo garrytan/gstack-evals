@@ -215,6 +215,10 @@ export interface Meter {
   unknown: number;
   /** Requests from this slot's bearer that the proxy refused. */
   refused: number;
+  /** The distinct reason codes of those refusals, in the order first met. */
+  refusals: string[];
+  /** Refusals at the slot's allowance check, the only refusal that is an allowance stop; E_ALLOWANCE also names other refusals (route, model, body, output cap, price). */
+  allowance_stops: number;
   /** Outcomes the journal failed to record or the ledger did not acknowledge; reconcileJournal settles them. */
   unsettled: number;
   by_model: Record<string, { micros: number; requests: number }>;
@@ -267,7 +271,7 @@ interface CallContext {
 
 const hash = (secret: string) => createHash("sha256").update(secret).digest();
 const sameSecret = (expected: Buffer, presented: string | null) => presented !== null && timingSafeEqual(expected, hash(presented));
-const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0, peak_inflight_micros: 0, peak_inflight_calls: 0, largest_prompt: null, bytes_per_token: null, cache_write: [] });
+const newMeter = (meter_id: string): Meter => ({ meter_id, micros: 0, requests: 0, unknown: 0, refused: 0, refusals: [], allowance_stops: 0, unsettled: 0, by_model: {}, upstream: { statuses: {}, failed: 0 }, undrained: 0, peak_inflight_micros: 0, peak_inflight_calls: 0, largest_prompt: null, bytes_per_token: null, cache_write: [] });
 
 const TRIAL_NETWORKS = new BlockList();
 for (const [net, bits] of [["127.0.0.0", 8], ["10.0.0.0", 8], ["172.16.0.0", 12], ["192.168.0.0", 16]] as const) TRIAL_NETWORKS.addSubnet(net, bits, "ipv4");
@@ -567,7 +571,9 @@ export class MeteringProxy {
   }
 
   private refuse(ctx: CallContext, code: ReasonCode, status: number, reason: string, extra: Record<string, unknown> = {}): Response {
-    this.meter(ctx.slot).refused++;
+    const m = this.meter(ctx.slot);
+    m.refused++;
+    if (!m.refusals.includes(code)) m.refusals.push(code);
     this.journal({ kind: "refusal", code, meter_id: ctx.slot.cell.meter_id, provider: ctx.provider, route: ctx.route, model: ctx.model || null, reason, source: ctx.source, ...extra });
     return problem(code, status, reason, code === "DR_ALLOWANCE_STOP" ? "allowance_stop" : undefined);
   }
@@ -648,6 +654,8 @@ export class MeteringProxy {
     if (o.refuseServerTools) {
       const server = Array.isArray(body.tools) ? body.tools.filter((t: any) => t && typeof t.type === "string" && t.type !== "custom").map((t: any) => t.type as string) : [];
       if (server.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side tools are refused on this lease: ${server.join(", ")}`, { tools: server });
+      const asked = ["mcp_servers", "plugins", "web_search_options"].filter((k) => k in body);
+      if (asked.length) return this.refuse(ctx, "E_PROXY_SERVER_TOOL", 403, `provider-side capabilities are refused on this lease: ${asked.join(", ")}`, { tools: asked });
     }
     if (allowed.estimate) {
       this.journal({ kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model, source: ctx.source, status: 200, estimated: true });
@@ -693,6 +701,7 @@ export class MeteringProxy {
       }
       if (slot.committedMicros + maxMicros > slot.allowanceMicros) {
         const stop = o.allowanceCode === "DR_ALLOWANCE_STOP";
+        meter.allowance_stops++;
         return this.refuse(ctx, stop ? "DR_ALLOWANCE_STOP" : "E_ALLOWANCE", stop ? 403 : 402, `the slot's allowance of ${usd(slot.allowanceMicros)} cannot hold this call's worst case of ${usd(maxMicros)} (${usd(slot.committedMicros)} already committed)`);
       }
       const idempotencyKey = `${slot.cell.meter_id}:${call}:${attempt}`;

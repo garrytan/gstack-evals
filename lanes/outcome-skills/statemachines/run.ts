@@ -8,11 +8,12 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { loadRegistry } from "../arms/registry.ts";
 import { readAudit } from "./audit.ts";
 import { qaExposure, readSession, textExposure } from "./exposure.ts";
 import { buildSessionImage, sessionManifest, type SessionImage } from "./image.ts";
 import { treeVolume } from "./oracle.ts";
-import { endKind, questionCounts, writeSessionRecord, type PlannedSession, type SessionRecord } from "./session.ts";
+import { questionCounts, sessionEnd, writeSessionRecord, type PlannedSession, type SessionRecord } from "./session.ts";
 import { memoryPaths } from "./strip.ts";
 import { readUnit, smFail } from "./unit.ts";
 
@@ -62,6 +63,8 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   }
   const told = s.cell === "A3";
   if (told && !(i.qaHome && i.qaSha)) return smFail("E_SM_ARM", "A3 needs --qa-home and --qa-sha, the /qa install and its pin");
+  const qaPin = told ? loadRegistry().sm?.pins?.qa?.sha : undefined;
+  if (told && (!qaPin || qaPin !== i.qaSha)) return smFail("E_SM_ARM", "A3 runs only once the /qa pin is recorded in registry.json sm.pins.qa and --qa-sha equals it; the pin is " + (qaPin ?? "null") + ", --qa-sha " + i.qaSha);
   const image = buildSessionImage(u, { volume: treeVolume(u.id), stage: s.stage, ...(treePatch !== undefined ? { treePatch } : {}), ...(told ? { qaHome: i.qaHome } : {}) });
   const task = join(i.out, "task");
   mkdirSync(join(task, "environment"), { recursive: true });
@@ -95,14 +98,13 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const init = lines(ev ? join(ev, "sdk-messages.jsonl") : "").find((r) => r.type === "SystemMessage" && r.subtype === "init");
   const tools: string[] = init?.data?.tools ?? [];
   if (init && tools.some((t) => t === "WebSearch" || t === "WebFetch")) return smFail("E_SM_ARM", "the session's tools list carries a web tool: " + tools.join(", "));
-  const refused = summary?.proxy?.refused;
-  const end = endKind({ termination: summary?.termination ?? null, refusals: Array.isArray(refused) ? refused : [], harness: !summary || !slot });
+  const { end, unknown_micros } = sessionEnd(summary, !summary || !slot);
   const final = summary?.final as { patch_sha256?: string } | undefined;
   const patchPath = ev ? join(ev, "final.patch") : "";
   const record: SessionRecord = {
     schema: "sm-session.v1", unit: u.id, part: s.part, index: s.index, model: s.model, cell: s.cell, stage: s.stage, tree_ref: treeRef,
     lease_id: slot?.lease_id ?? "", slot: slot?.meter_id ?? "", started_at: new Date(started).toISOString(), ended_at: new Date(ended).toISOString(), wall_ms: ended - started,
-    turns: lb?.result?.num_turns ?? null, spent_micros: summary?.proxy?.spent_micros ?? 0, unknown_micros: 0, end, attempt,
+    turns: lb?.result?.num_turns ?? null, spent_micros: summary?.proxy?.spent_micros ?? 0, unknown_micros, end, attempt,
     questions: questionCounts(summary?.persona ?? {}), runtime_id: image.runtime_id, disallowed_tools: ["WebSearch", "WebFetch"], env: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: "1" },
     strip: { removed: u.strip?.removed ?? [] }, memory_loaded: memoryPaths(records), tree_patch: final?.patch_sha256 && existsSync(patchPath) ? { path: patchPath, sha256: final.patch_sha256 } : null,
     transcript: ev ? join(ev, "sdk-messages.jsonl") : "", exposure: s.cell === "A1" || s.cell === "S2" ? { text: textExposure(records, s.cell) } : told ? qaExposure(records) : {},

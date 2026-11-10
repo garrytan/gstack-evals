@@ -3,6 +3,7 @@
 // allowance at open, a cap_usd that is not the arm's refused, and the SM proxy's provider-side tool refusal before any
 // upstream call. In the style of driver.test.ts, on a temporary ledger with a stub upstream; no key, no paid call.
 import { afterAll, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ import { serveStages, type StageSpec } from "../../lanes/outcome-skills/driver/s
 import { loadRegistry } from "../../lanes/outcome-skills/arms/registry.ts";
 import { smLimits } from "../../lanes/outcome-skills/statemachines/arms.ts";
 import { HARBOR_MODEL } from "../../lanes/outcome-skills/statemachines/run.ts";
+import { nextStep, sessionEnd } from "../../lanes/outcome-skills/statemachines/session.ts";
 import { chatPrice, openRouterRouting } from "../../src/runner/pricing/prices.ts";
 
 const D = 1_000_000;
@@ -165,3 +167,60 @@ test("the one-open-per-trial key carries the model: the same arm, task and trial
   expect(await served.stop()).toBe(0);
   local.close?.();
 });
+
+// Value: protects=section 6's end kind on the real path: the driver's close answer carries the refusal codes, the allowance stops and the unpriced spend, real_agent copies them into real-summary.json, and run.ts's sessionEnd reads them; a refused model is no allowance stop, and a failed close ends infra; fails_when=any hop drops the allowance stops or unknown_micros, a stray E_ALLOWANCE refusal ends a session as a limit, or a failed close throws; an allowance stop read as upstream is retried in a fresh container; why_new=#290 review (red team CRITICAL); seam=stage.ts CloseAnswer, real_agent.py proxy_summary, session.ts sessionEnd; no_claim=a real Claude Code session (P5's dry run)
+test("a session's close answer carries its refusal codes, allowance stops and unknown_micros through real-summary.json, so only the slot's allowance stop ends limit_allowance, a refused model does not, and a failed close ends infra", async () => {
+  const root = mkdtempSync(join(tmpdir(), "sm-driver-test-"));
+  roots.push(root);
+  const record = join(root, "record");
+  recordProgram(record, { program: "w", cap_micros: 1_000 * D, skill_cap_micros: 1_000 * D, skills: ["sm"], credit_rate_micros: D, quotes: [quote] });
+  recordApproval(record, { action: "init", item: "sm-opus", cap_micros: 100 * D, quotes: [quote], admission: "required", program: "w", skills: ["sm"] });
+  const local = LocalLedger.open(join(root, "ledger.sqlite"));
+  const fetchStub = async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)) as { model: string };
+    return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, content: [{ type: "text", text: "ok" }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+  };
+  const served = await serveStages({ record, local, run_id: "r1", envelope_host: "m1", machine: "m1", stages: [OPUS], host: "127.0.0.1", dir: join(root, "run"), fetch: fetchStub, requireAdmission: () => null, env: { ANTHROPIC_API_KEY: "upstream-key" }, log: () => {} });
+  const open = async (n: number) => {
+    const res = await fetch(served.control + "/sessions", { method: "POST", body: JSON.stringify({ trial: "t-u" + n, model: "claude-opus-5-5", cap_usd: 15, meta: { arm: "sm:A1", task: "u" + n + "/A1", trial_n: 1 }, open_key: "A1u" + n, ledger: "u4" }) });
+    expect(res.status).toBe(200);
+    const s = (await res.json()) as Record<string, any>;
+    const call = (body: Record<string, unknown>) => fetch(s.base_url + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": s.token }, body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100, messages: [{ role: "user", content: "hi" }], ...body }) });
+    const close = async () => (await (await fetch(served.control + "/sessions/" + s.id + "/close", { method: "POST", body: JSON.stringify({ reason: "agent_finished" }) })).json()) as Record<string, any>;
+    return { call, close };
+  };
+  const summarize = (closed: unknown) => {
+    const py = spawnSync("python3", ["-c", "import json, sys; sys.path.insert(0, sys.argv[1]); import unit_test as u; print(json.dumps(u.ra.proxy_summary(json.loads(sys.argv[2]))))", join(import.meta.dir, "../real-outcome"), JSON.stringify(closed)], { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }, encoding: "utf8" });
+    expect(py.stderr).toBe("");
+    return JSON.parse(py.stdout) as Record<string, any>;
+  };
+  const first = await open(1);
+  expect((await first.call({ tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 1 }] })).status).toBe(403);
+  expect((await first.call({ model: "claude-opus-5-5:online" })).status).toBe(403);
+  expect((await first.call({})).status).toBe(200);
+  const answer = await first.close();
+  expect(answer.refused).toBe(2);
+  expect(answer.refusals).toEqual(["E_PROXY_SERVER_TOOL", "E_ALLOWANCE"]);
+  expect(answer.allowance_stops).toBe(0);
+  expect(typeof answer.unknown_micros).toBe("number");
+  const proxy = summarize(answer);
+  expect(proxy).toMatchObject({ refused: 2, refusals: ["E_PROXY_SERVER_TOOL", "E_ALLOWANCE"], allowance_stops: 0, unknown_micros: answer.unknown_micros, spent_micros: answer.spent_micros });
+  const refusedModel = sessionEnd({ termination: "error_result", proxy }, false);
+  expect(refusedModel).toEqual({ end: "upstream", unknown_micros: answer.unknown_micros });
+  expect(nextStep([refusedModel.end])).toEqual({ action: "retry" });
+  expect(sessionEnd({ termination: "error_result", proxy: { ...proxy, refusals: [] } }, false).end).toBe("upstream");
+  const second = await open(2);
+  expect((await second.call({ messages: [{ role: "user", content: "x".repeat(4_000_000) }] })).status).toBe(402);
+  const answer2 = await second.close();
+  expect(answer2.refusals).toEqual(["E_ALLOWANCE"]);
+  expect(answer2.allowance_stops).toBe(1);
+  const stopped = sessionEnd({ termination: "error_result", proxy: summarize(answer2) }, false);
+  expect(stopped).toEqual({ end: "limit_allowance", unknown_micros: answer2.unknown_micros });
+  expect(nextStep([stopped.end])).toEqual({ action: "score" });
+  const failedClose = sessionEnd({ termination: "completed", proxy: summarize(null) }, false);
+  expect(failedClose).toEqual({ end: "infra", unknown_micros: 0 });
+  expect(nextStep([failedClose.end])).toEqual({ action: "retry" });
+  expect(await served.stop()).toBe(0);
+  local.close?.();
+});
+

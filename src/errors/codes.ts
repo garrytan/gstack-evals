@@ -1864,7 +1864,7 @@ export const CODES = {
   },
   E_PROXY_SERVER_TOOL: {
     exit: 2,
-    meaning: "The metering proxy refused a request whose tools list carries a provider-side tool (a typed tool such as web_search or web_fetch), before pricing it, because its lease runs with refuseServerTools on (the state machines family's stages).",
+    meaning: "The metering proxy refused a request whose tools list carries a provider-side tool (a typed tool such as web_search or web_fetch), or whose body asks for mcp_servers, plugins or web_search_options at the top level, before pricing it, because its lease runs with refuseServerTools on (the state machines family's stages).",
     fix: "Disallow the tool in the agent (Claude Code's WebSearch and WebFetch are disallowed in every SM arm). Never turn the option off for an SM stage.",
     side_effects: NO_SPEND,
     retry_safe: false,
