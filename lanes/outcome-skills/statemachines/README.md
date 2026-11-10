@@ -442,6 +442,53 @@ model or unit (E_SM_PACKET).
   scores below 0; false-fail rate the share of good-labelled diffs it scores below 0. On this label set both judges
   agree by construction, so the literal rates are 1 and 0 (open point). (Reported.)
 
+## The paid sender for packets (send.ts, GST-1959)
+
+`sm packets send --item sm-labels|sm-judges --run <id> --packets <dir> --out <dir>` is the paid step for the packets
+above. It leases its own item through the ledger (openLease, settleLease) and sends each call through an in-process
+metering proxy, one slot per call and one call at a time, as the product-value meter and noloss judge-run do. The stage driver cannot serve
+these two items: neither names a session model, sm-labels pays for two models, and a driver stage takes one model and
+counts sessions.
+
+- Readers. Labels: GPT-6 Astra and Opus 5.5 each answer every label packet. Judges: each key's frozen judge (Astra for
+  Opus runs, Opus for Sol and particle-1 runs), plus every judge whose queue (queue-astra.json, queue-opus.json, from
+  `sm packets queue`) names the packet; an R78 labelled item must be in both queues. Two sessions with the same diff and
+  files share one packet: every key that names it is checked, and each of their judges reads it once. Each judge sends its queue in
+  order, then its other packets by id, and the two readers take turns.
+- The prompt is the packet's body as JSON, the exact text its id digests. A packet that no longer matches its digest, or
+  has no key, is refused before anything is opened (E_SM_PACKET). The routes and request shape are judge.ts's
+  (JUDGE_ROUTE, judgeRequest, JUDGE_REASONING_EFFORT on OpenAI), with a 1,500-token output cap.
+- Each call reserves its packet's byte worst case by the proxy's own formula (prices.ts priceRequest and
+  reservationMicros): request bytes plus 64 at the input rate (Astra's $12.50/M cache-write rate, Opus's $4/M), plus
+  1,500 output tokens. The sender prices the exact body the proxy forwards, so it adds service_tier and inference_geo
+  itself. Before each call the lease's room (reserved, less held) must hold that worst case. A call that does not fit
+  cap-stops the item before it is sent: the stop is written to the record, nothing more is sent, and the lease closes
+  with cap_stop, so the ledger admits no new lease (CAP_STOP).
+- Before any call: no recorded cap is E_LEDGER_MISSING; a cap-stopped item, or one with nothing left, is CAP_STOP; an
+  item bound to another run is E_ITEM_BOUND.
+- After each call settles, its reported usage (input with cache reads and writes, output with reasoning) is checked
+  against the prereg's bound of 20,000 input and 1,500 output tokens (R78_PRICE_BOUND). A call past it halts the item
+  before the next send (E_SM_USAGE_HALT): a halt line in replies.jsonl names the meter, packet, reader and usage, and
+  every later send is refused until `--lift-halt <meter>` records the Captain's ruling. The halted call keeps its reply
+  and is never sent again. A call the proxy refuses at its own allowance check halts the item the same way
+  (E_ALLOWANCE). The slot's allowance is one worst case, so the proxy does not resend a charged 5xx.
+- Each reply goes through the readers `sm packets read` uses. A malformed one is recorded (E_SM_JUDGE_ANSWER) with its
+  raw text and never asked again: the prereg allows no re-ask.
+- An upstream failure is recorded (UPSTREAM) and stops the send. The lease settles by the ledger's rules: a 4xx releases
+  the reservation, a lost send keeps it as unknown, and a 5xx without usage is charged. A failure with no answer and
+  nothing charged ($0 spent, $0 unknown and nothing lost in transit, such as a provider 401) is recorded as uncharged.
+  A rerun with the same --run and --out sends calls with no record, and sends each uncharged call at most once more: if
+  that resend also fails uncharged, the call is recorded as a gap that keeps the first failure's code (first_code) and
+  is never sent again. A charged failure is never resent, and a call that a stopped send sent but never recorded is
+  recorded as lost and never sent again.
+- One live send holds an item on a host, through a lock file beside the record, so a second send on it is refused
+  (E_USAGE) and never settles a lease the live one meters. Each send line is fsynced before its call goes out. A send
+  whose replies.jsonl does not name every call the ledger holds for the item and run (another --out, or a file emptied
+  or cut short) is refused before it recovers, settles or sends anything (E_USAGE).
+- --out holds replies.jsonl (a send line with the call's worst case before each call, then one reply line per call with
+  packet, reader, model, outcome, code, why, answer, raw and micros, plus a halt line for each halt and a lift line for
+  each ruling), raw/<reader>/<packet>.txt and each lease's proxy journal.
+
 
 ## Stale report readings (reports.ts, testrun.ts)
 
@@ -555,6 +602,15 @@ model or unit (E_SM_PACKET).
   never failed. Any failure is E_SM_CONTAIN: the unit halts before any session and is not dropped, so section 4's drop
   rule is unchanged; the fix goes into the image or setup step, test-first, and a repin waits for the next part.
   `sm contain --unit <dir>` runs it before sm-admit and writes one run-record line per image and check.
+- Paid packet sends reserve each call's byte worst case, one call at a time (pre-data build change, 2026-11-10, send.ts,
+  accepted by GSTA-2): the proxy reserves input at one token per request byte, so at the prereg's per-call price a
+  request over 15,936 bytes (Astra) or 19,936 bytes (Opus) could never be sent, and a full judge packet is larger (1,500
+  lines of 40 bytes is about 65 KB). Each label and judge call now reserves its packet's byte worst case by the proxy's
+  own formula (about $0.89 for Astra and $0.29 for Opus on that packet) and runs alone, and a call that does not fit the
+  item's remaining cap cap-stops the item before it is sent. After each call settles, its reported usage is checked
+  against the prereg's bound of 20,000 input and 1,500 output tokens, and a call past it halts the item for the
+  Captain's ruling (E_SM_USAGE_HALT). The pricing bound (R78_PRICE_BOUND, r78Price), the $160.05 plan and the $180
+  sm-judges cap do not change.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the
