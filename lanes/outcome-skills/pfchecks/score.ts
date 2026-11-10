@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { classify, isTestPath } from "../statemachines/langs.ts";
+import { runBash } from "../statemachines/history.ts";
 import { basePatches } from "../statemachines/oracle.ts";
 import { patchFiles } from "../statemachines/source.ts";
 import { applyPatches, copyVolume, dropVolume, parseRun, runName, runTests, type Mode, type RebuildRule } from "../statemachines/testrun.ts";
@@ -30,7 +31,7 @@ export interface SessionIn { unit?: string; model?: string; arm?: Arm; gap?: str
 export interface ScoreIn {
   s: string; ref?: string; unitDir: string; neutral: string; checks: string | null; session: string; transcript?: string | null; claudeSession?: string | null;
   exec: (repo: string, u: SmUnit) => Executor & { cleanup?: () => void };
-  breaks?: (repo: string, t: string, u: SmUnit) => (Record<string, string> | null)[] | null;
+  breaks?: (repo: string, t: string, u: SmUnit) => sec.BreaksRuns | null;
   now?: () => number; ceiling_ms?: number;
 }
 
@@ -104,7 +105,7 @@ export async function scoreSession(o: ScoreIn) {
       entries: strip(rs), ceiling_hit: run.ceiling_hit, wall_ms: run.wall_ms, compile_blocked: compile,
       secondaries: {
         red_on_parent: sec.redOnParent(rs), model_only_red: sec.modelOnlyRed(rs), aimed: sec.aimed(edited, patchFiles(readFileSync(join(o.unitDir, "fix.patch"), "utf8"))),
-        breaks: breaksRuns ? sec.decideBreaks(u.oracle?.stable ?? [], breaksRuns) : null, product_edits: trees.plan.product_files.length, counts: sec.entryCounts(m, rs, staticEntries),
+        breaks: breaksRuns ? sec.breaksReading(u.oracle?.stable ?? [], breaksRuns) : null, breaks_skipped: breaksRuns?.skipped ?? null, breaks_unmeasured: breaksRuns?.unmeasured ?? null, product_edits: trees.plan.product_files.length, counts: sec.entryCounts(m, rs, staticEntries),
         static_entries: staticEntries, static_files: staticFiles, api_guess: apiGuess, drift, sync_gate: rs.filter(sec.syncGate).map((r) => r.index),
       },
     };
@@ -119,28 +120,48 @@ export type CatchRecord = Awaited<ReturnType<typeof scoreSession>>;
 export function rowOf(c: CatchRecord): Row {
   if (!c.model || !c.arm) pfFail("E_PF_INPUT", c.unit + ": the catch record names no model or arm");
   const ex = "exposure" in c ? c.exposure : null;
+  const sc = "secondaries" in c ? c.secondaries : null;
   const s = (x: number | null): Score => (x === null ? null : x ? 1 : 0);
-  return { unit: c.unit, repo: c.repo, model: c.model!, arm: c.arm!, stratum: c.stratum, score: s(c.score), gap: c.gap, no_static: s(c.readings.no_static), no_api_guess: s(c.readings.no_api_guess), compile_rerun: s(c.readings.compile_rerun), loaded: !!ex?.loaded, checker: !!ex?.checker };
+  return { unit: c.unit, repo: c.repo, model: c.model!, arm: c.arm!, stratum: c.stratum, score: s(c.score), gap: c.gap, no_static: s(c.readings.no_static), no_api_guess: s(c.readings.no_api_guess), compile_rerun: s(c.readings.compile_rerun), loaded: !!ex?.loaded, checker: !!ex?.checker, breaks: sc?.breaks ? sc.breaks.length : null, breaks_unmeasured: !!sc?.breaks_unmeasured };
 }
 
-/** Breaks in Docker: the unit's commands three times on T with the fix's tests applied (the oracle's base patches). */
+/** Breaks in Docker: the unit's commands three times on T with the fix's tests (the oracle's base patches) applied. A
+ *  patch that does not apply on T (git apply --check fails) is skipped and named. The session's breaks are not measured,
+ *  and unmeasured says why, when a patch that passed the check then fails to apply, or when a run stops, builds nothing
+ *  or reports no stable test after a patch was skipped. */
 export function dockerBreaks(unitDir: string, image: string, mode: Mode, treeVol: (repo: string, t: string, vol: string) => void) {
-  return (repo: string, t: string, u: SmUnit): (Record<string, string> | null)[] | null => {
+  return (repo: string, t: string, u: SmUnit): sec.BreaksRuns => {
     const vol = runName("pf-breaks");
     treeVol(repo, t, vol);
+    const stable = u.oracle?.stable ?? [];
+    const skipped = new Set<string>();
+    let unmeasured: string | null = null;
     try {
-      return [1, 2, 3].map((n) => {
+      const runs = [1, 2, 3].map((n) => {
         const copy = vol + "-" + n;
         copyVolume(image, vol, copy, mode);
         try {
-          if (applyPatches(image, copy, u.repo_dir, basePatches(unitDir), mode)) return null;
+          const skip: string[] = [];
+          for (const [name, body] of basePatches(unitDir)) {
+            if (runBash({ kind: "docker", image, volume: copy, repoDir: u.repo_dir, name: runName("apply-check") }, 'cd "$1" && git apply --check --binary --whitespace=nowarn "$2/p"', { p: body }).status !== 0) {
+              skip.push(name);
+              skipped.add(name);
+            } else if (applyPatches(image, copy, u.repo_dir, [[name, body]], mode)) {
+              unmeasured ??= "run " + n + " stopped at the " + name + " step: it passed git apply --check, then failed to apply";
+              return null;
+            }
+          }
           const rule: RebuildRule = u.oracle?.rebuild_rule?.applies ? "applies" : "exempt";
           const r = runTests({ image, volume: copy, repoDir: u.repo_dir, workDir: u.work_dir, commands: u.commands, mode, label: u.id + "-breaks" + n, rule });
-          return r.stopped ? null : parseRun(r, readFileSync(join(unitDir, "parser.py"), "utf8"), u.id + "-breaks" + n);
+          const res = r.stopped ? null : parseRun(r, readFileSync(join(unitDir, "parser.py"), "utf8"), u.id + "-breaks" + n);
+          const nothing = r.built_nothing ?? r.infra;
+          if (skip.length && (!res || nothing || !stable.some((id) => id in res))) unmeasured ??= "run " + n + (!res ? " stopped" : nothing ? " built nothing (" + nothing + ")" : " reported no stable test") + " after skipping " + skip.join(", ");
+          return res;
         } finally {
           dropVolume(copy);
         }
       });
+      return { runs, skipped: [...skipped], unmeasured };
     } finally {
       dropVolume(vol);
     }

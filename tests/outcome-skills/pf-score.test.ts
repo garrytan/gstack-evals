@@ -67,7 +67,7 @@ test.skipIf(!HAS_DOCKER)("scoreSession: catch, transplant, compile-blocked rerun
   const checks = f.file("CHECKS.json", [{ name: "pkg", command: "bash flag/pkg_test.go" }, { name: "r", command: "bash checks/regress_test.sh" }, { name: "n", command: "ls" }]);
   const session = f.file("session.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "N", gap: null, wrapup_end: "completed", forced: f.cap.forced });
   let ex: ReturnType<typeof contentExec> | null = null;
-  const breaks = () => [{ t1: "pass", t2: "pass" }, { t1: "fail", t2: "pass" }, { t1: "fail", t2: "pass" }];
+  const breaks = () => ({ runs: [{ t1: "pass", t2: "pass" }, { t1: "fail", t2: "pass" }, { t1: "fail", t2: "pass" }], skipped: [], unmeasured: null });
   const c: any = await scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks, session, exec: (repo) => (ex = contentExec(repo)), breaks });
   expect(c.score).toBe(1);
   expect(c.entries.map((e: any) => e.outcome)).toEqual(["no_catch", "catch"]);
@@ -82,8 +82,22 @@ test.skipIf(!HAS_DOCKER)("scoreSession: catch, transplant, compile-blocked rerun
   expect(c.secondaries.breaks).not.toBeNull();
   expect(JSON.stringify(c.secondaries.breaks)).toContain("t1");
   expect(JSON.stringify(c.secondaries.breaks)).not.toContain("t2");
+  expect(c.secondaries).toMatchObject({ breaks_skipped: [], breaks_unmeasured: null });
   expect(ex!.calls.filter((x) => x === "parent:bash checks/regress_test.sh").length).toBe(3);
 });
+
+test.skipIf(!HAS_DOCKER)("scoreSession: breaks not measured is null with its reason, and a skipped fix test patch is named and its missing tests count neither way", async () => {
+  const f = fixture();
+  const checks = f.file("CHECKS.json", [{ name: "r", command: "bash checks/regress_test.sh" }]);
+  const session = f.file("session.json", { unit: "pf-score-flag", model: "claude-opus-5-5", arm: "N", gap: null, wrapup_end: "completed", forced: f.cap.forced });
+  const run = (b: any): Promise<any> => scoreSession({ s: f.repo, unitDir: f.fx.dir, neutral: f.neutral, checks, session, exec: (repo) => contentExec(repo), breaks: () => b });
+  const stopped = await run({ runs: [{ t1: "pass" }, null, { t1: "pass" }], skipped: ["test.patch"], unmeasured: "run 2 stopped after skipping test.patch" });
+  expect(stopped.secondaries).toMatchObject({ breaks: null, breaks_skipped: ["test.patch"], breaks_unmeasured: "run 2 stopped after skipping test.patch" });
+  const skipped = await run({ runs: [{ t1: "pass" }, { t1: "pass" }, { t1: "pass" }], skipped: ["test.patch"], unmeasured: null });
+  expect(skipped.secondaries).toMatchObject({ breaks: [], breaks_skipped: ["test.patch"], breaks_unmeasured: null });
+  const applied = await run({ runs: [{ t1: "pass" }, { t1: "pass" }, { t1: "pass" }], skipped: [], unmeasured: null });
+  expect(applied.secondaries).toMatchObject({ breaks: ["t2"], breaks_skipped: [], breaks_unmeasured: null });
+}, 60_000);
 
 test.skipIf(!HAS_DOCKER)("scoreSession: P's exposure reads the skill body from the session's claude-session.jsonl", async () => {
   const f = fixture();

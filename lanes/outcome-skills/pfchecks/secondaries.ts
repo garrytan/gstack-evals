@@ -23,12 +23,21 @@ export function aimed(tFiles: { path: string; text: string }[], fixFiles: string
   return tFiles.some((f) => res.some((r) => r.test(f.text)));
 }
 
+/** The three breaks runs of a session (score.ts dockerBreaks): each run's results (null when it stopped), the fix test
+ *  patches skipped because they do not apply on T, and why the session's breaks are not measured, when they are not. */
+export interface BreaksRuns { runs: (Record<string, string> | null)[]; skipped: string[]; unmeasured: string | null }
+
 /** Breaks: stable ids of three runs on T with the fix's tests applied that two or more runs stop on or report not passed,
  *  or that no run reports passed. A test a run's parser loses counts neither way, so a broken build still breaks every
- *  stable test while a lost result line breaks none. */
-export function decideBreaks(stable: string[], runs: (Record<string, string> | null)[]): string[] {
-  return stable.filter((id) => runs.filter((r) => r === null || (r[id] !== undefined && !passed(r, id))).length >= 2 || !runs.some((r) => r !== null && passed(r, id)));
+ *  stable test while a lost result line breaks none. Once a fix test patch was skipped, a test no run reports also counts
+ *  neither way, since the skipped patch may be the one that adds it, or that a later patch's tests need to compile. */
+export function decideBreaks(stable: string[], runs: (Record<string, string> | null)[], skipped = false): string[] {
+  return stable.filter((id) => runs.filter((r) => r === null || (r[id] !== undefined && !passed(r, id))).length >= 2 || (!skipped && !runs.some((r) => r !== null && passed(r, id))));
 }
+
+/** A session's breaks: null when they are not measured (a run stopped at a patch step, or stopped, built nothing or
+ *  reported no stable test after a patch was skipped), otherwise decideBreaks. */
+export const breaksReading = (stable: string[], b: BreaksRuns): string[] | null => (b.unmeasured ? null : decideBreaks(stable, b.runs, b.skipped.length > 0));
 
 export const GREP_CMD = /^(grep|egrep|fgrep|rg|sed|awk|gawk)$/;
 /** New test files of T that open a product source path as text: a quoted string whose last path segment is the basename

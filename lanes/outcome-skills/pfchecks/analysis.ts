@@ -12,7 +12,7 @@ import type { Arm } from "./items.ts";
 
 export const DRAWS = 10_000;
 export type Score = 0 | 1 | null;
-export interface Row { unit: string; repo: string; model: string; arm: Arm; stratum: string; score: Score; gap: string | null; no_static: Score; no_api_guess: Score; compile_rerun: Score; loaded?: boolean; checker?: boolean }
+export interface Row { unit: string; repo: string; model: string; arm: Arm; stratum: string; score: Score; gap: string | null; no_static: Score; no_api_guess: Score; compile_rerun: Score; loaded?: boolean; checker?: boolean; breaks?: number | null; breaks_unmeasured?: boolean }
 export const READINGS = ["primary", "worst_case", "conflict_as_miss", "arm_refusal_as_miss", "no_static", "no_api_guess", "compile_rerun"] as const;
 export type Reading = (typeof READINGS)[number];
 export const MISS_GAPS = new Set(["E_PF_FIX_CONFLICT", "E_PF_REBUILD_FIX"]);
@@ -162,6 +162,22 @@ export function exposureOf(rows: readonly Row[]) {
   return out;
 }
 
+/** The breaks secondary per model and arm: sessions it measured, those with at least one break, and those it could not
+ *  measure. Sessions scored without the breaks runs are not counted. */
+export function breaksOf(rows: readonly Row[]) {
+  const out: Record<string, Record<string, { measured: number; with_breaks: number; not_measured: number }>> = {};
+  for (const r of rows) {
+    if ((r.breaks ?? null) === null && !r.breaks_unmeasured) continue;
+    const c = ((out[r.model] ??= {})[r.arm] ??= { measured: 0, with_breaks: 0, not_measured: 0 });
+    if (r.breaks_unmeasured) c.not_measured++;
+    else {
+      c.measured++;
+      if (r.breaks! > 0) c.with_breaks++;
+    }
+  }
+  return out;
+}
+
 export function analyse(rows: readonly Row[], seed: number) {
   const cells = cellsOf(rows);
   const models = [...new Set(rows.map((r) => r.model))].sort();
@@ -185,7 +201,7 @@ export function analyse(rows: readonly Row[], seed: number) {
   const exposure = exposureOf(rows);
   const p = Object.values(exposure).reduce((a, m) => ({ s: a.s + (m.P?.sessions ?? 0), b: a.b + (m.P?.both ?? 0) }), { s: 0, b: 0 });
   const process_reading = p.s && p.b / p.s >= 0.75 ? "a fair test of pstack's text" : "pstack as the model ran it (" + p.b + " of " + p.s + " P sessions loaded the skill and ran a checker)";
-  return { schema: "pf-analysis.v1" as const, seed, draws: DRAWS, rates: ratesOf(rows), cells, pooled: { "P-N": pn!, "P-C": { ...pc!, process_reading } }, pooled_c_n: { ...contrast(rows, "N", "C", seed, undefined, true), p_holm: null, verdict: null }, per_model, strata, exposure, incomplete: cells.filter((c) => c.incomplete) };
+  return { schema: "pf-analysis.v1" as const, seed, draws: DRAWS, rates: ratesOf(rows), cells, pooled: { "P-N": pn!, "P-C": { ...pc!, process_reading } }, pooled_c_n: { ...contrast(rows, "N", "C", seed, undefined, true), p_holm: null, verdict: null }, per_model, strata, exposure, breaks: breaksOf(rows), incomplete: cells.filter((c) => c.incomplete) };
 }
 export type Analysis = ReturnType<typeof analyse>;
 
@@ -210,6 +226,7 @@ export function report(a: Analysis): string[] {
     for (const [k, c] of Object.entries(cs)) line(k, c);
   }
   out.push("exposure: " + JSON.stringify(a.exposure));
+  out.push("breaks (sessions measured, with a break, not measured): " + JSON.stringify(a.breaks));
   for (const c of a.incomplete) out.push("E_PF_CELL_INCOMPLETE " + c.model + " " + c.arm + ": " + c.gaps + " gaps on " + c.units + " units");
   return out;
 }

@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { analyse, bootstrap, cellsOf, mddText, report, valueOf, verdictOf, wilson, type Row } from "../../lanes/outcome-skills/pfchecks/analysis.ts";
 import { blindFits, ceilingReading, contrastFloor, costReading, exposureReading, floorReading, infraReading, itemCap, midRunCheck, nRule, reprice } from "../../lanes/outcome-skills/pfchecks/admission.ts";
 import { ITEMS, LINE, lineItemsMicros, OPUS, P1, PLANNING, SOL } from "../../lanes/outcome-skills/pfchecks/items.ts";
+import { rowOf } from "../../lanes/outcome-skills/pfchecks/score.ts";
 
 const rows = (): Row[] => {
   const out: Row[] = [];
@@ -70,6 +71,16 @@ test("tree-check refusals and wrap-up allowance gaps: counted per arm and model 
     expect(block.some((l) => l.startsWith("    arm_refusal_as_miss:"))).toBe(true);
   }
   expect(lines.find((l) => l.startsWith("    E_PF_ARM gaps") && l.includes(OPUS + " P 2"))).toBeDefined();
+});
+test("breaks secondary: sessions measured, with a break and not measured, counted per arm and model", () => {
+  const b = rows().map((r): Row => (r.model === OPUS && r.arm === "P" && r.unit === "u0" ? { ...r, breaks: null, breaks_unmeasured: true } : r.model === OPUS && r.arm === "P" && r.unit === "u1" ? { ...r, breaks: 3, breaks_unmeasured: false } : r.model === SOL && r.arm === "N" && r.unit === "u2" ? { ...r, breaks: 0, breaks_unmeasured: false } : r));
+  const a = analyse(b, 5);
+  expect(a.breaks).toEqual({ [OPUS]: { P: { measured: 1, with_breaks: 1, not_measured: 1 } }, [SOL]: { N: { measured: 1, with_breaks: 0, not_measured: 0 } } });
+  expect(report(a).find((l) => l.startsWith("breaks (sessions measured, with a break, not measured): "))).toContain('"not_measured":1');
+  const c: any = { unit: "u", repo: "r", month: "2026-07", stratum: "july-2026", model: OPUS, arm: "P", score: 1, gap: null, readings: { no_static: 1, no_api_guess: 1, compile_rerun: 1 } };
+  expect(rowOf({ ...c, secondaries: { breaks: null, breaks_skipped: ["test.patch"], breaks_unmeasured: "run 2 stopped after skipping test.patch" } })).toMatchObject({ breaks: null, breaks_unmeasured: true });
+  expect(rowOf({ ...c, secondaries: { breaks: ["s1", "s2"], breaks_skipped: [], breaks_unmeasured: null } })).toMatchObject({ breaks: 2, breaks_unmeasured: false });
+  expect(rowOf({ ...c, secondaries: { breaks: null, breaks_skipped: null, breaks_unmeasured: null } })).toMatchObject({ breaks: null, breaks_unmeasured: false });
 });
 test("admission readings", () => {
   expect(floorReading({ P: 1, C: 1, N: 0 }).reading).toBe("FLOOR");

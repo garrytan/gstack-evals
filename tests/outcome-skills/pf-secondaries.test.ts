@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 import { expect, test } from "bun:test";
 import type { EntryResult, RunRec } from "../../lanes/outcome-skills/pfchecks/runner.ts";
-import { aimed, compileBlocked, compileUnit, decideBreaks, isStaticEntry, modelOnlyRed, redOnParent, staticTextFiles, syncGate } from "../../lanes/outcome-skills/pfchecks/secondaries.ts";
+import { aimed, breaksReading, compileBlocked, compileUnit, decideBreaks, isStaticEntry, modelOnlyRed, redOnParent, staticTextFiles, syncGate } from "../../lanes/outcome-skills/pfchecks/secondaries.ts";
 
 const rr = (tree: "parent" | "fix" | "neutral", run: number, pass: boolean, log = ""): RunRec => ({ tree, run, exit: pass ? 0 : 1, pass, timed_out: false, wall_ms: 1, rebuild_failed: false, log });
 const red = (command: string, fixLog = ""): EntryResult => ({ index: 0, command, outcome: "no_catch", why: "", runs: [rr("parent", 1, false), rr("parent", 2, false), rr("parent", 3, false), rr("fix", 1, false, fixLog)] });
@@ -30,6 +30,15 @@ test("breaks: a broken build, a real regression and two stopped runs count; a te
   expect(decideBreaks(["s"], [{}, { s: "pass" }, { s: "pass" }])).toEqual([]);
   expect(decideBreaks(["s"], [{}, {}, { s: "pass" }])).toEqual([]);
   expect(decideBreaks(["s"], [{}, { s: "fail" }, { s: "pass" }])).toEqual([]);
+});
+test("breaks after a skipped fix test patch: a test no run reports counts neither way; a run stopped at a patch step or after a skip is not measured", () => {
+  expect(decideBreaks(["s", "t"], [{ t: "pass" }, { t: "pass" }, { t: "pass" }], true)).toEqual([]);
+  expect(decideBreaks(["s", "t"], [{ t: "pass" }, { t: "pass" }, { t: "pass" }])).toEqual(["s"]);
+  expect(decideBreaks(["t"], [{ t: "fail" }, { t: "fail" }, { t: "pass" }], true)).toEqual(["t"]);
+  expect(breaksReading(["s"], { runs: [{}, {}, {}], skipped: [], unmeasured: null })).toEqual(["s"]);
+  expect(breaksReading(["s", "t"], { runs: [{ t: "pass" }, { t: "pass" }, { t: "pass" }], skipped: ["test.patch"], unmeasured: null })).toEqual([]);
+  expect(breaksReading(["s"], { runs: [{ s: "pass" }, {}, { s: "pass" }], skipped: ["test.patch"], unmeasured: "run 2 built nothing (rebuild_failed) after skipping test.patch" })).toBeNull();
+  expect(breaksReading(["s"], { runs: [null, null, null], skipped: [], unmeasured: "run 1 stopped at the test.patch patch step" })).toBeNull();
 });
 test("compile-blocked drops the other agent-added files of the blocking file's compile unit", () => {
   const t = new Set(["Cargo.toml", "src/lib.rs", "tests/a.rs", "tests/b.rs", "sub/Cargo.toml", "sub/tests/c.rs"]);
