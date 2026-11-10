@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { loadRegistry, REGISTRY_PATH } from "../arms/registry.ts";
 import { readAudit } from "./audit.ts";
 import { qaExposure, readSession, textExposure } from "./exposure.ts";
+import { assertContained, containImage } from "./contain.ts";
 import { buildSessionImage, sessionManifest, type SessionImage } from "./image.ts";
 import { treeVolume } from "./oracle.ts";
 import { questionCounts, refuseUnscored, sessionEnd, writeSessionRecord, type PlannedSession, type SessionRecord } from "./session.ts";
@@ -70,6 +71,7 @@ export function runSession(i: RunInput): { record: SessionRecord; image: Session
   const qaPin = told ? loadRegistry(arms).sm?.pins?.qa?.sha : undefined;
   if (told && (!qaPin || qaPin !== i.qaSha)) return smFail("E_SM_ARM", "A3 runs only once the /qa pin is recorded in registry.json sm.pins.qa and --qa-sha equals it; the pin is " + (qaPin ?? "null") + ", --qa-sha " + i.qaSha);
   const image = buildSessionImage(u, { volume: treeVolume(u.id), stage: s.stage, ...(treePatch !== undefined ? { treePatch } : {}), ...(told ? { qaHome: i.qaHome } : {}) });
+  assertContained(u.id + "/" + s.model + "/" + s.cell, containImage(image, u, i.unitDir, told ? qaPin ?? undefined : undefined));
   const task = join(i.out, "task");
   mkdirSync(join(task, "environment"), { recursive: true });
   writeFileSync(join(task, "environment/Dockerfile"), "FROM " + image.tag + "\n");

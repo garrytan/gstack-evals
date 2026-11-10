@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Garry Tan. MIT License.
 // The family SM dry run (the post's section 18): it reads a config of real units and cases, runs the cases in order
-// through the module's own CLI (score first, score followon), checks each record against the case's expected fields,
+// through the module's own CLI (score first, score followon, contain), checks each record against the case's expected fields,
 // prints one PASS or FAIL line per case and stops at the first miss. Unit ids, digests and planted patches live in the
 // config, outside the repo. It ends DRYRUN: ok when every case passed. No key, no paid call.
 import { spawnSync } from "node:child_process";
@@ -12,7 +12,7 @@ const KEYS = /^(ANTHROPIC|OPENAI|OPENROUTER|UBICLOUD|GEMINI|GOOGLE|XAI|DEEPSEEK|
 
 export interface DryrunCase {
   name: string;
-  kind: "first" | "followon";
+  kind: "first" | "followon" | "contain";
   unit: string;
   /** The change to score; omitted for the base tree, which scores with --run-empty. */
   patch?: string;
@@ -36,6 +36,7 @@ export function misses(record: unknown, expect: Record<string, unknown>): string
 /** The CLI arguments that score one case into out. */
 export function caseArgs(c: DryrunCase, unitDir: string, out: string): string[] {
   const cell = ["--cell", c.cell ?? c.name];
+  if (c.kind === "contain") return ["outcome", "sm", "contain", "--unit", unitDir, "--out", out];
   if (c.kind === "first") return ["outcome", "sm", "score", "first", "--unit", unitDir, ...(c.patch ? ["--patch", c.patch, ...cell] : ["--patch", "/dev/null", ...cell, "--run-empty"]), "--out", out];
   if (!c.tree || !c.start || !c.patch) throw new Error("E_USAGE followon case " + c.name + " needs tree, start and patch");
   return ["outcome", "sm", "score", "followon", "--unit", unitDir, "--tree", c.tree, ...(c.tree_patch ? ["--tree-patch", c.tree_patch] : []), "--start", c.start, "--patch", c.patch, ...cell, "--out", out];

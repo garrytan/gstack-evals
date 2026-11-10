@@ -225,6 +225,7 @@ Each entry gives the meaning, the fix, and these facts:
 | [E_SM_UPSTREAM_GAP](#e_sm_upstream_gap) | 2 | U20 |
 | [E_SM_INFRA_GAP](#e_sm_infra_gap) | 2 | U20 |
 | [E_SM_FINALIZE_HALT](#e_sm_finalize_halt) | 2 | U20 |
+| [E_SM_CONTAIN](#e_sm_contain) | 2 | U20 |
 | [E_SM_APPLY_FAILED](#e_sm_apply_failed) | 1 | U20 |
 | [E_SM_TEST_PATCH_CONFLICT](#e_sm_test_patch_conflict) | 2 | U20 |
 | [E_SM_PACKET](#e_sm_packet) | 2 | U20 |
@@ -1587,6 +1588,14 @@ A state machines session closed with its metering proxy's finalize failed (the c
 Fix: Bring the session id and the proxy journal the halt line names to the Captain, who reads the journal and rules. Then relaunch the driver for the same run with --lift-halt &lt;session id>; the launch records the lift and serves the item again.
 
 Exit 2. Side effects: The session spent what its lease's ledger meter holds; the halted stage's lease is settled. Retry safe: no. Resumable: no. Owner: U20.
+
+### E_SM_CONTAIN
+
+A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem (A3's gstack checkout at the /qa pin is the one exception), or a file outside the repo holds a hidden test name or a test-side marker. Findings name refs, commits, paths and sha256s, never the test text.
+
+Fix: Bring the unit and the failed checks to the Captain. The unit halts and is not dropped. Fix the image or the setup step (strip every ref and object past the base, as GEVA-503's D7 does) test-first, and repin only between parts; then rerun sm contain on the unit.
+
+Exit 2. Side effects: No session opened and no lease was taken for the unit; the session image the check read stays built (sm contain removes its own). Retry safe: no. Resumable: no. Owner: U20.
 
 ### E_SM_TEST_PATCH_CONFLICT
 

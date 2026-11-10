@@ -31,6 +31,7 @@ describe("sm dryrun", () => {
     expect(caseArgs(cfg().cases[1]!, "/units/a", "/o/base.json")).toEqual(["outcome", "sm", "score", "first", "--unit", "/units/a", "--patch", "/dev/null", "--cell", "base", "--run-empty", "--out", "/o/base.json"]);
     expect(caseArgs({ name: "f", kind: "followon", unit: "u", tree: "A1", tree_patch: "/p/a1.patch", start: "/p/start.json", patch: "/p/f.patch", expect: {} }, "/units/a", "/o/f.json")).toEqual(["outcome", "sm", "score", "followon", "--unit", "/units/a", "--tree", "A1", "--tree-patch", "/p/a1.patch", "--start", "/p/start.json", "--patch", "/p/f.patch", "--cell", "f", "--out", "/o/f.json"]);
     expect(() => caseArgs({ name: "f", kind: "followon", unit: "u", expect: {} }, "/u", "/o")).toThrow("E_USAGE");
+    expect(caseArgs({ name: "c", kind: "contain", unit: "u", expect: { ok: true } }, "/units/a", "/o/c.json")).toEqual(["outcome", "sm", "contain", "--unit", "/units/a", "--out", "/o/c.json"]);
   });
   test("cases run in order, one line each, and the run stops at the first miss", () => {
     const d = mkdtempSync(join(tmpdir(), "sm-dryrun-"));

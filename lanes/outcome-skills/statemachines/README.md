@@ -541,6 +541,20 @@ model or unit (E_SM_PACKET).
   price with VMs: $6.16 on Opus and Sol, $0.76 on particle-1), k = 1 and E1's doubled allowance, sm-qa-admit needs
   4 * 6.16 + 30 = $54.64 and sm-qa-particle 59 * 0.76 + 6 = $50.84. They are $55 and $51; the $6 comes from the line's
   reserve, so the line stays $1,100 (items $986, crew use $60 counted). No other cap moves.
+- A containment check runs in every session image before any session (pre-data build change, 2026-11-10, contain.ts,
+  sh/contain.sh, run.ts, cli.ts `sm contain`, dryrun.ts; the Captain's scope, GSTA-2, after GEVA-503 found the upstream
+  fix behind git tags past the base in 12 of 40 SWE-rebench images). Inside the first-stage, A3 and follow-on images, as
+  the session sees them: (a) HEAD is the recorded head and every ref (peeled tags, branches, remotes, notes, replace refs,
+  the stash), FETCH_HEAD, ORIG_HEAD, MERGE_HEAD, CHERRY_PICK_HEAD and each packed-refs line names it or an ancestor;
+  (b) every commit object in the store does too; (c) no alternates (file or GIT_ALTERNATE_OBJECT_DIRECTORIES), no
+  .gitmodules or nested .git under the repo, and no other git object store on the filesystem but proc and sys, except
+  A3's gstack checkout when its HEAD is the /qa pin; (d) no file outside the repo, /tmp included, holds a hidden test
+  name (a FAIL_TO_PASS leaf name the base tree never names, as a whole word) or a marker (a line of 30 code points or
+  more that test.patch or fix-tests.patch adds and no base file holds, anywhere in a line, so a patch file's added lines
+  count). A hit keeps the path and the sha256, never the text; compressed archives outside the repo are listed by path,
+  never failed. Any failure is E_SM_CONTAIN: the unit halts before any session and is not dropped, so section 4's drop
+  rule is unchanged; the fix goes into the image or setup step, test-first, and a repin waits for the next part.
+  `sm contain --unit <dir>` runs it before sm-admit and writes one run-record line per image and check.
 - A run builds nothing when a rebuild command exits non-zero (rebuild_failed), when the print command reads report paths
   and none of them holds a fresh file (no_fresh_report), or when a stale file could not be moved aside (stale_unhidden).
   The parser does not run then, and the run parses nothing. A test command's own exit never sets it. Every one of the

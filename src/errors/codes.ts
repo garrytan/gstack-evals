@@ -1826,6 +1826,15 @@ export const CODES = {
     resumable: false,
     owner: "U20",
   },
+  E_SM_CONTAIN: {
+    exit: 2,
+    meaning: "A state machines session image fails the containment check that runs before any session (statemachines/contain.ts, sh/contain.sh): a ref, pseudo-ref or packed-refs line names a commit past the base, a commit object in the store is not the base or one of its ancestors, the repo has alternates, a .gitmodules or a nested .git, another git object store exists on the image's filesystem (A3's gstack checkout at the /qa pin is the one exception), or a file outside the repo holds a hidden test name or a test-side marker. Findings name refs, commits, paths and sha256s, never the test text.",
+    fix: "Bring the unit and the failed checks to the Captain. The unit halts and is not dropped. Fix the image or the setup step (strip every ref and object past the base, as GEVA-503's D7 does) test-first, and repin only between parts; then rerun sm contain on the unit.",
+    side_effects: "No session opened and no lease was taken for the unit; the session image the check read stays built (sm contain removes its own).",
+    retry_safe: false,
+    resumable: false,
+    owner: "U20",
+  },
   E_SM_APPLY_FAILED: {
     exit: 1,
     meaning: "A state machines session's change did not apply to a fresh copy of the unit's base tree in the scoring container (or names an unsafe path), first and after one more extraction, so the session scores no fix and is listed (preregistration section 7, step 8).",
