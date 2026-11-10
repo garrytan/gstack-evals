@@ -13,6 +13,7 @@ export const ITEMS: Record<string, ItemDef> = {
   "stage1-opus": item("opus", CAPS_USD["stage1-opus"]),
   "stage1-opus-r2": item("opus", CAPS_USD["stage1-opus-r2"]),
   "stage1-sol": item("sol", CAPS_USD["stage1-sol"]),
+  "stage1-sol-run": item("sol", CAPS_USD["stage1-sol-run"]),
   "stage1-p1": item("p1", CAPS_USD["stage1-p1"]),
   "stage3-pilot": item("opus", CAPS_USD["stage3-pilot"]),
   "stage4-opus": item("opus", CAPS_USD["stage4-opus"]),
@@ -26,7 +27,7 @@ const chunks = <T>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.leng
 export function itemPlan(name: string, s: { scored: string[]; calibration: string[] }): ItemPlan {
   const part = (p: string, rects: Rect[], extra: Partial<PartPlan> = {}): PartPlan => ({ name: p, prefix: prefixOf(name, p), rects: seeded(rects.filter((r) => r.tasks.length), HM.seed), ...extra });
   let parts: PartPlan[];
-  if (/^stage1-(opus|sol|p1)$/.test(name)) parts = chunks(s.calibration, HM.partTasks).map((tasks, i) => part("s1-" + (i + 1), [{ tasks, arms: FOUR, attempts: 1 }]));
+  if (/^stage1-(opus|sol|sol-run|p1)$/.test(name)) parts = chunks(s.calibration, HM.partTasks).map((tasks, i) => part("s1-" + (i + 1), [{ tasks, arms: FOUR, attempts: 1 }]));
   else if (name === "stage1-opus-r2") parts = [part("r2-1", [{ tasks: STAGE1_OPUS_R2_TASKS, arms: FOUR, attempts: 1 }])];
   else if (name === "stage3-pilot") {
     const pilot = s.calibration.slice(0, HM.splits.judgePilot);

@@ -174,6 +174,7 @@ describe("cli", () => {
     for (const n of ["6-ledger", "leases-per-item", "reserve-mechanics"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " PASS "))).toBe(true);
     for (const n of ["3-matcher-probes", "stop-hook-loadline", "matcher-72", "probes-189"]) expect(lines.some((l) => l.startsWith("DRYRUN " + n + " FAIL E_HM_PIN set HM_GSTACK"))).toBe(true);
     expect(lines[0]).toStartWith("DRYRUN skeleton PASS");
+    expect(lines[0]).toContain("stage1-sol 160, stage1-sol-run 160, stage1-p1 160");
     expect(lines.at(-1)).toBe("DRYRUN: FAIL");
     expect(r.exitCode).toBe(1);
     expect(readFileSync(join(out, "dryrun.txt"), "utf8").trim().split("\n")).toEqual(lines);

@@ -21,7 +21,7 @@ const run = (args: string[], env: Record<string, string> = {}) => Bun.spawnSync(
 
 describe("approvals", () => {
   test("each item's ledger takes its approval row at its recorded cap, and the row passes L1's item check", () => {
-    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-p1": 70, "stage2-replay": 90, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
+    expect(CAPS_USD).toEqual({ "stage1-opus": 150, "stage1-opus-r2": 121.685384, "stage1-sol": 180, "stage1-sol-run": 179.96147, "stage1-p1": 70, "stage2-replay": 90, "stage3-pilot": 90, "stage4-opus": 660, "stage4-sol": 800, "stage4-p1": 280, vms: 160 });
     const d = tmp();
     for (const i of items) {
       const p = join(d, i + ".jsonl");
@@ -84,7 +84,8 @@ describe("reserve mechanics", () => {
     expect(txt).toContain("RESERVE stage1-opus: cap $150, reserve per launch $30.00 (6 x $5), room for settled spend $120.00");
     expect(txt).toContain("RESERVE stage4-p1: cap $280, reserve per launch $12.00 (6 x $2), room for settled spend $268.00");
     expect(txt).not.toContain("BAD");
-    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(10);
+    expect(txt).toContain("RESERVE stage1-sol-run: cap $179.96147, reserve per launch $30.00 (6 x $5), room for settled spend $149.96; C1 projection $138.64 fits");
+    expect(txt.split("\n").filter((x) => x.startsWith("RESERVE")).length).toBe(11);
   }, 60_000);
 });
 
@@ -149,6 +150,32 @@ describe("launch guard", () => {
     } finally {
       for (const [k, v] of [["HM_SCREENED", saved[0]], ["HM_SCREENED_SHA256", saved[1]]] as const) if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }
+  });
+  test("D4: stage1-sol-run runs stage1-sol's 160 sessions inside stage1-sol's cap, once stage1-sol is done holding only the Sol gate", () => {
+    expect(toMicros(CAPS_USD["stage1-sol"]) - toMicros(0.03853)).toBe(toMicros(CAPS_USD["stage1-sol-run"]));
+    expect(ITEMS["stage1-sol-run"]).toEqual({ ...ITEMS["stage1-sol"]!, capUsd: 179.96147 });
+    const run = itemPlan("stage1-sol-run", lists), sol = itemPlan("stage1-sol", lists);
+    expect([run.sessions, run.picker_calls]).toEqual([160, 40]);
+    expect(run.parts.map((p) => [p.name, p.prefix, [...plannedCells(p).values()].reduce((a, b) => a + b, 0)])).toEqual([["s1-1", "stage1-sol-run/s1-1/", 80], ["s1-2", "stage1-sol-run/s1-2/", 80]]);
+    expect(run.parts.map((p) => p.rects)).toEqual(sol.parts.map((p) => p.rects));
+    const { out } = approved();
+    const gate = (settled: number, done: boolean) => {
+      const p = join(tmp(), "s.jsonl");
+      approve(p, "stage1-sol", 180, "t");
+      const l = new Ledger(p, "stage1-sol");
+      l.reserve("route-s-1", toMicros(5)); l.settle("route-s-1", toMicros(settled));
+      if (done) markDone(p, "stage1-sol");
+      return readRows(p);
+    };
+    expect(() => itemCheck(gate(0.03853, true), "stage1-sol", 180)).toThrow("an item serves one run");
+    const fresh = join(tmp(), "r.jsonl");
+    approve(fresh, "stage1-sol-run", CAPS_USD["stage1-sol-run"], "t");
+    expect(() => itemCheck(readRows(fresh), "stage1-sol-run", CAPS_USD["stage1-sol-run"])).not.toThrow();
+    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, false) }, crew(400_000)).total).toBe(toMicros(2880));
+    expect(lineCheck({ ...out, "stage1-sol": gate(0.03853, true) }, crew(400_000)).total).toBe(toMicros(2880));
+    expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.03853, false) }, crew(0), run.parts, []).why).toEqual(["stage1-sol-run's cap sits inside stage1-sol's, so it launches only once stage1-sol is marked done"]);
+    expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.5, true) }, crew(0), run.parts, []).why).toEqual(["stage1-sol-run's cap $179.96 is not stage1-sol's cap less its settled $0.50"]);
+    expect(launchGuard("stage1-sol-run", { ...out, "stage1-sol": gate(0.03853, true) }, crew(0), run.parts, []).ok).toBe(true);
   });
   test("C1: every session item fits fresh, and VM rows that would push the projection past the cap refuse", () => {
     for (const i of Object.keys(ITEMS) as Item[]) expect(c1Guard(i, [], itemPlan(i, lists).parts, []).fits).toBe(true);
