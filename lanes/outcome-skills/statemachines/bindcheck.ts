@@ -46,10 +46,11 @@ export async function checkRenameHere(x: Rename): Promise<string | null> {
     if (([SyntaxKind.VariableDeclaration, SyntaxKind.Parameter, SyntaxKind.BindingElement].includes(p.kind) && p.name === id && anonymous(p.initializer)) || (p.kind === SyntaxKind.BinaryExpression && p.left === id && naming.has(p.operatorToken.kind) && anonymous(p.right))) return "a function or class takes its name from it";
     return null;
   };
+  const callee = (e: Any): Any => (wrappers.has(e.kind) ? callee(e.expression) : e);
   const dynamic = (sf: SourceFile) => {
     let found = false;
     const walk = (n: Any): void => {
-      if (n.kind === SyntaxKind.WithStatement || (n.kind === SyntaxKind.CallExpression && n.expression.kind === SyntaxKind.Identifier && n.expression.text === "eval")) found = true;
+      if (n.kind === SyntaxKind.WithStatement || (n.kind === SyntaxKind.CallExpression && callee(n.expression).kind === SyntaxKind.Identifier && callee(n.expression).text === "eval")) found = true;
       else n.forEachChild(walk);
     };
     walk(sf as Any);

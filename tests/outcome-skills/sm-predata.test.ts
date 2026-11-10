@@ -23,6 +23,7 @@ import { contain, containInputs } from "../../lanes/outcome-skills/statemachines
 import { computeStart } from "../../lanes/outcome-skills/statemachines/followon.ts";
 import { qaHomeCopy } from "../../lanes/outcome-skills/statemachines/image.ts";
 import type { Lang } from "../../lanes/outcome-skills/statemachines/langs.ts";
+import { checkRename } from "../../lanes/outcome-skills/statemachines/bindcheck.ts";
 import { buildStock, stockDiffs, type StockKind } from "../../lanes/outcome-skills/statemachines/packets.ts";
 import { treeVolume } from "../../lanes/outcome-skills/statemachines/oracle.ts";
 import { runSession } from "../../lanes/outcome-skills/statemachines/run.ts";
@@ -1093,6 +1094,8 @@ describe("stock diffs keep the program's behavior: the #316 follow-ups (GST-1959
       ["js", ".mjs", ["export function count(s) {", "  const word = 'x';", "  return (s.match(/word/g) || []).length + word.length;", "}", ""], "m.count('word word')", "3"],
       ["js", ".mjs", ["export function named() {", "  const handler = () => 1;", "  return handler.name;", "}", ""], "m.named()", '"handler"'],
       ["js", ".mjs", ["export function calc(code) {", "  let total = 2;", "  return eval(code);", "}", ""], "m.calc('total * 3')", "6"],
+      ["js", ".mjs", ["export function calc(code) {", "  let total = 2;", "  return (eval)(code);", "}", ""], "m.calc('total * 3')", "6"],
+      ["ts", ".ts", ["export function calc(code: string) {", "  let total = 2;", "  return (eval as any)(code);", "}", ""], "m.calc('total * 3')", "6"],
       ["ts", ".ts", ["export function make() {", "  let total = 1;", "  class Box {", "    constructor(public total) {}", "  }", "  return new Box(total);", "}", ""], "m.make().total", "1"],
       ["js", ".jsx", ["export function Title() {", "  const label = 'Hi';", "  return <h1>label {label.toUpperCase()}</h1>;", "}", ""], null, ""],
     ];
@@ -1103,6 +1106,11 @@ describe("stock diffs keep the program's behavior: the #316 follow-ups (GST-1959
     expect(r).toContain("+  let totalValue = 0;");
     expect(run({ "c.ts": plain }, r, call(".ts", "m.sum([1, 2, 3])"))).toBe(run({ "c.ts": plain }, null, call(".ts", "m.sum([1, 2, 3])")));
   }, 120_000);
+
+  // Value: protects=section 10's rename-only control in JavaScript and TypeScript when the binder check cannot run; fails_when=a child that fails or prints nothing reads as a file with no safe rename, or as a safe one; why_new=the testing finding on bindcheck.ts:22 in this PR's /ship review; seam=bindcheck.ts checkRename; no_claim=why the child failed
+  test("a JavaScript or TypeScript rename check that cannot run refuses with E_SM_PACKET", () => {
+    expect(() => checkRename({ path: "", before: "let a = 1;", after: "let aValue = 1;", name: "a", renamed: "aValue" })).toThrow(/^E_SM_PACKET /);
+  });
 
   // Value: protects=a run host's Docker volumes when the stock build check's tree copy fails; fails_when=copyVolume creates the copy volume and then its copy fails before the try that drops it, so the volume stays behind; why_new=the deferred adversarial finding at packets.ts:520 on #316; seam=packets.ts buildStock; no_claim=a volume left by a Docker daemon that stops answering
   test("the stock build check drops its copy volume when the copy into it fails", () => {
