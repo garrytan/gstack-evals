@@ -9,11 +9,14 @@
 // allowance check, before any send, is an allowance stop for that packet and reader and is never sent again. Every reply
 // goes through the strict readers that sm packets read uses; a malformed one is recorded with E_SM_JUDGE_ANSWER and
 // never asked again, since the prereg allows no re-ask. An upstream failure is recorded and stops the send. A call once
-// sent is never sent again, including one whose answer a stopped send never recorded (recorded as lost).
+// sent is never sent again, including one whose answer a stopped send never recorded (recorded as lost): its send line
+// is on disk before the call goes out, one live send holds the item, and a send whose replies file does not name every
+// call the ledger holds for the item and run is refused before it recovers or sends anything.
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { JUDGE_REASONING_EFFORT, JUDGE_ROUTE, judgeAnswer, judgeRequest } from "../../../src/adapters/judge.ts";
 import { CODES, type ReasonCode } from "../../../src/errors/codes.ts";
 import { openLease, recordStop, settleLease, type RequireAdmission } from "../../../src/runner/ledger/ledger.ts";
@@ -85,15 +88,16 @@ const ledger = <T>(f: () => T): T => {
 };
 
 /**
- * The packets in dir that item pays for, each checked against its digest and its key, and who reads each: both labellers
- * for a label packet; for a judge packet the key's frozen judge, plus every judge whose queue (queue-<reader>.json, from
- * sm packets queue) names it. An R78 labelled item must be in both queues. Each reader's list is its queue in order, then
- * its other packets by id; the lists are sent in turn, one call from each.
+ * The packets in dir that item pays for, each checked against its digest and every key that names it, and who reads
+ * each: both labellers for a label packet; for a judge packet each key's frozen judge (two sessions with the same diff and
+ * files share one packet), plus every judge whose queue (queue-<reader>.json, from sm packets queue) names it. An R78
+ * labelled item must be in both queues. Each reader's list is its queue in order, then its other packets by id; the lists
+ * are sent in turn, one call from each.
  */
 function loadPackets(item: string, dir: string) {
   const want = KINDS[item]!;
   const packets = new Map<string, { packet: LabelPacket | JudgePacket; prompt: string }>();
-  const keys = new Map<string, Record<string, any>>();
+  const keys = new Map<string, Array<Record<string, any>>>();
   const queues = new Map<Reader, string[]>();
   for (const name of readdirSync(dir).filter((n) => n.endsWith(".json")).sort()) {
     const v = JSON.parse(readFileSync(join(dir, name), "utf8")) as Record<string, any>;
@@ -103,7 +107,7 @@ function loadPackets(item: string, dir: string) {
       const prompt = JSON.stringify(body);
       if (createHash("sha256").update(prompt).digest("hex").slice(0, 16) !== id) smFail("E_SM_PACKET", "packet " + id + " (" + name + ") no longer matches its digest, so it is not what was built and checked; rebuild it; nothing was opened");
       packets.set(id, { packet: v as LabelPacket | JudgePacket, prompt });
-    } else if (KINDS["sm-labels"]!.keys.includes(v?.schema) || KINDS["sm-judges"]!.keys.includes(v?.schema)) keys.set(v.packet, v);
+    } else if (KINDS["sm-labels"]!.keys.includes(v?.schema) || KINDS["sm-judges"]!.keys.includes(v?.schema)) keys.set(v.packet, [...(keys.get(v.packet) ?? []), v]);
     else if (v?.schema === "sm-labelled-queue.v1") {
       const reader = /^queue-(\w+)\.json$/.exec(name)?.[1] as Reader | undefined;
       if (!reader || !READERS.includes(reader)) smFail("E_SM_PACKET", name + " is a judge's queue but names no judge (" + READERS.map((r) => "queue-" + r + ".json").join(" or ") + "); nothing was opened");
@@ -112,20 +116,22 @@ function loadPackets(item: string, dir: string) {
   }
   const readers = new Map<string, Set<Reader>>();
   for (const [id, { packet }] of packets) {
-    const key = keys.get(id) ?? smFail("E_SM_PACKET", "packet " + id + " has no key in " + dir + "; a packet is sent only beside the key that says who reads it; nothing was opened");
-    if (!want.keys.includes(key.schema)) smFail("E_SM_PACKET", "packet " + id + "'s key is a " + key.schema + ", not one of " + want.keys.join(", ") + "; nothing was opened");
-    assertBlind(packet, key.schema === "sm-judge-key.v1" ? [key.model, key.unit] : [key.unit]);
-    const set = new Set<Reader>(key.schema === "sm-label-key.v1" ? READERS : []);
-    if (key.schema === "sm-judge-key.v1") {
-      const judge = judgeFor(key.model);
-      if (key.judge !== judge) smFail("E_SM_PACKET", "packet " + id + "'s key names judge " + key.judge + ", but section 10's judge for " + key.model + " is " + judge + "; nothing was opened");
-      set.add(READERS.find((r) => LABELLERS[r] === judge)!);
+    const set = new Set<Reader>();
+    for (const key of keys.get(id) ?? smFail("E_SM_PACKET", "packet " + id + " has no key in " + dir + "; a packet is sent only beside the key that says who reads it; nothing was opened")) {
+      if (!want.keys.includes(key.schema)) smFail("E_SM_PACKET", "packet " + id + "'s key is a " + key.schema + ", not one of " + want.keys.join(", ") + "; nothing was opened");
+      assertBlind(packet, key.schema === "sm-judge-key.v1" ? [key.model, key.unit] : [key.unit]);
+      if (key.schema === "sm-label-key.v1") for (const r of READERS) set.add(r);
+      if (key.schema === "sm-judge-key.v1") {
+        const judge = judgeFor(key.model);
+        if (key.judge !== judge) smFail("E_SM_PACKET", "packet " + id + "'s key names judge " + key.judge + ", but section 10's judge for " + key.model + " is " + judge + "; nothing was opened");
+        set.add(READERS.find((r) => LABELLERS[r] === judge)!);
+      }
     }
     readers.set(id, set);
   }
   for (const [reader, order] of queues) for (const id of order) (readers.get(id) ?? smFail("E_SM_PACKET", "queue-" + reader + ".json names packet " + id + ", which is not in " + dir + "; nothing was opened")).add(reader);
   for (const id of packets.keys()) {
-    if (keys.get(id)!.schema === "sm-r78-key.v1" && READERS.some((r) => !queues.get(r)?.includes(id))) smFail("E_SM_PACKET", "labelled item " + id + " is not in every judge's queue; both judges grade every labelled item, in their queue's order (sm packets queue); nothing was opened");
+    if (keys.get(id)!.some((key) => key.schema === "sm-r78-key.v1") && READERS.some((r) => !queues.get(r)?.includes(id))) smFail("E_SM_PACKET", "labelled item " + id + " is not in every judge's queue; both judges grade every labelled item, in their queue's order (sm packets queue); nothing was opened");
   }
   const sorted = [...packets.keys()].sort();
   const lists = READERS.map((r) => {
@@ -136,10 +142,38 @@ function loadPackets(item: string, dir: string) {
   return { packets, order };
 }
 
+/**
+ * One live send per item on this host, so a send never recovers or settles a lease another live send meters: an exclusive
+ * SQLite lock in a file beside the record, which the operating system lets go when the process ends.
+ */
+function holdItemLock(record: string, item: string): Database {
+  const file = join(dirname(record), "." + basename(record) + ".send-" + item + ".lock.db");
+  const db = new Database(file, { create: true });
+  try {
+    db.exec("PRAGMA busy_timeout = 0");
+    db.exec("BEGIN EXCLUSIVE");
+    return db;
+  } catch (e) {
+    db.close();
+    return smFail("E_USAGE", "another send still holds line item " + item + " on this host (" + file + ": " + (e as Error).message + "); let it finish or stop it before sending again; nothing was written, recovered or opened");
+  }
+}
+
 /** Sends every packet's calls that the out dir has not recorded, on one lease of the item, and settles the lease. */
 export async function sendPackets(o: SendOptions): Promise<SendResult> {
-  const def = ITEMS[o.item];
-  if (!def || !KINDS[o.item]) smFail("E_USAGE", "sm packets send pays from sm-labels or sm-judges, not " + JSON.stringify(o.item));
+  if (!ITEMS[o.item] || !KINDS[o.item]) smFail("E_USAGE", "sm packets send pays from sm-labels or sm-judges, not " + JSON.stringify(o.item));
+  const record = recordPath(o.record, o.env ?? process.env).path;
+  if (!existsSync(record)) smFail("E_LEDGER_MISSING", "no approval record is at " + record + "; nothing was opened");
+  const lock = holdItemLock(realpathSync(record), o.item);
+  try {
+    return await sendHeld(o, record);
+  } finally {
+    lock.close();
+  }
+}
+
+async function sendHeld(o: SendOptions, record: string): Promise<SendResult> {
+  const def = ITEMS[o.item]!;
   const concurrency = o.concurrency ?? 4;
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) smFail("E_USAGE", "--concurrency must be a whole number from 1");
   if (!o.run_id) smFail("E_USAGE", "a send names its run with --run");
@@ -153,7 +187,23 @@ export async function sendPackets(o: SendOptions): Promise<SendResult> {
   mkdirSync(out, { recursive: true });
   const repliesFile = join(out, "replies.jsonl");
   const counts = Object.fromEntries(OUTCOMES.map((k) => [k, 0])) as Record<Outcome, number>;
-  const write = (line: Record<string, unknown>) => appendFileSync(repliesFile, (existsSync(repliesFile) && cutShort(repliesFile) ? "\n" : "") + JSON.stringify({ at: new Date().toISOString(), item: o.item, run_id: o.run_id, ...line }) + "\n");
+  const write = (line: Record<string, unknown>) => {
+    const fresh = !existsSync(repliesFile);
+    const fd = openSync(repliesFile, "a");
+    try {
+      writeSync(fd, (!fresh && cutShort(repliesFile) ? "\n" : "") + JSON.stringify({ at: new Date().toISOString(), item: o.item, run_id: o.run_id, ...line }) + "\n");
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    if (!fresh) return;
+    const dir = openSync(out, "r");
+    try {
+      fsyncSync(dir);
+    } finally {
+      closeSync(dir);
+    }
+  };
   const reply = (job: Job, r: { outcome: Outcome; code?: ReasonCode; why?: string; answer?: unknown; raw?: string; micros?: number; meter_id?: string }) => {
     counts[r.outcome]++;
     write({ event: "reply", packet: job.packet, reader: job.reader, model: LABELLERS[job.reader], outcome: r.outcome, code: r.code ?? null, why: r.why ?? null, answer: r.answer ?? null, raw: r.raw ?? null, micros: r.micros ?? null, meter_id: r.meter_id ?? null });
@@ -168,22 +218,22 @@ export async function sendPackets(o: SendOptions): Promise<SendResult> {
   if (other) smFail("E_USAGE", repliesFile + " holds replies of " + other.item + " for run " + other.run_id + ", not " + o.item + " for run " + o.run_id + "; give each send its own --out");
   const k = (j: { packet: string; reader: string }) => j.packet + " " + j.reader;
   const done = new Set(prior.filter((l) => l.event === "reply").map(k));
-  for (const l of prior) {
-    if (l.event !== "send" || done.has(k(l))) continue;
-    done.add(k(l));
-    reply({ packet: l.packet, reader: l.reader }, { outcome: "lost", code: "UPSTREAM", why: "sent on meter " + l.meter_id + ", but that send stopped before its answer was recorded; the proxy journal settles the call as unknown at its full reservation, and it is never sent again", meter_id: l.meter_id });
-  }
-  const todo = order.filter((j) => !done.has(k(j)));
+  const lost = new Map<string, (typeof prior)[number]>();
+  for (const l of prior) if (l.event === "send" && !done.has(k(l)) && !lost.has(k(l))) lost.set(k(l), l);
+  const todo = order.filter((j) => !done.has(k(j)) && !lost.has(k(j)));
   const missing = [...new Set(todo.map((j) => KEY_ENV[MODEL[j.reader].provider]))].filter((name) => !env[name]);
   if (missing.length) smFail("E_KEY_MISSING", "the readers need " + missing.join(" and ") + ", not set; nothing was opened");
 
-  const record = recordPath(o.record, env).path;
   const local = ledger(() => openLocalLedger(ledgerPath(o.ledger, env)));
   const result: SendResult = { item: o.item, run_id: o.run_id, lease_id: null, sent: 0, counts, spent_micros: 0, unknown_micros: 0, replies: repliesFile };
   let lease: { lease_id: string; reserved_micros: number };
   try {
     const state = ledger(() => readItem(record, o.item));
     if (state.cap_micros !== null && (state.program !== def!.program || state.skills.join() !== def!.skills.join())) smFail("E_USAGE", "line item " + o.item + " is recorded in program " + (state.program ?? "none") + " for " + (state.skills.join(", ") || "no skill") + ", not " + def!.program + " for " + def!.skills.join(", ") + " (items.ts); nothing was opened");
+    const named = new Set(prior.flatMap((l) => (l.event === "send" && l.meter_id ? [l.meter_id] : [])));
+    const unnamed = state.leases.filter(({ lease }) => lease.run_id === o.run_id).flatMap(({ lease }) => [...local.meters(lease.lease_id).keys()].filter((m) => !named.has(m)).map((m) => "lease " + lease.lease_id + " meter " + m));
+    if (unnamed.length) smFail("E_USAGE", repliesFile + " names no send for " + unnamed.join(", ") + ", which the ledger holds for run " + o.run_id + " on line item " + o.item + ". A send resumes only from the --out that holds its replies, so a replies file that is missing, emptied, cut short by a crash or from another --out can't serve the run; nothing was recovered, settled or opened");
+    for (const l of lost.values()) reply({ packet: l.packet, reader: l.reader }, { outcome: "lost", code: "UPSTREAM", why: "sent on meter " + l.meter_id + ", but that send stopped before its answer was recorded; the proxy journal settles the call as unknown at its full reservation, and it is never sent again", meter_id: l.meter_id });
     if (state.open && state.open.run_id === o.run_id && local.getLease(state.open.lease_id)) {
       const stale = join(out, state.open.lease_id + ".journal.ndjson");
       if (existsSync(stale)) for (const r of (await reconcileJournal(stale, local)).refused) warn(r.code as ReasonCode, "recovering lease " + state.open.lease_id + ": " + r.message);

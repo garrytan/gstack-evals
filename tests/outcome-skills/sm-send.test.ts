@@ -13,6 +13,7 @@ import { judgeKey, judgePacket, labelledQueue, labelPacket } from "../../lanes/o
 import { sendPackets, type SendOptions } from "../../lanes/outcome-skills/statemachines/send.ts";
 import { recordProgram } from "../../src/runner/ledger/envelope.ts";
 import { openLease, reconcileLease, recordApproval, recordStop } from "../../src/runner/ledger/ledger.ts";
+import { openLocalLedger } from "../../src/runner/ledger/local.ts";
 import { readItem } from "../../src/runner/ledger/record.ts";
 
 const D = 1_000_000;
@@ -143,6 +144,75 @@ describe("a send on the item's own lease", () => {
     expect(replies(s, "sm-judges").every((x) => x.outcome === "answered" && x.answer.hunks[0].id === "h1")).toBe(true);
     expect(readItem(s.record, "sm-judges").leases[0]!.close).toMatchObject({ how: "settled", unknown_micros: 0 });
     expect(readItem(s.record, "sm-labels").leases.length).toBe(0);
+  });
+
+  test("judges: two sessions whose diffs match share one packet, every key of it is checked, and each key's judge reads it once", async () => {
+    const s = setup({ "sm-judges": 180 });
+    const diff = "diff --git a/src/same.go b/src/same.go\n--- a/src/same.go\n+++ b/src/same.go\n@@ -3,0 +4,4 @@\n" + "+line\n".repeat(4);
+    const { packet, lines_total } = judgePacket({ diff, files: ["src/a.go", "src/same.go"] });
+    const key = (model: string, cell: string) => judgeKey(packet, { unit: "acme__same", model, cell, lines_total, stock: null });
+    writeFileSync(join(s.packets, packet.packet + ".json"), JSON.stringify(packet, null, 1) + "\n");
+    writeFileSync(join(s.packets, "opus-a1.key.json"), JSON.stringify(key("claude-opus-5-5", "A1")));
+    writeFileSync(join(s.packets, "sol-a2.key.json"), JSON.stringify(key("openai/gpt-6.1-sol", "A2")));
+    const calls: Call[] = [];
+    const r = await send(s, "sm-judges", calls, () => ({ text: JUDGE }));
+    expect([r.code, r.message]).toEqual(["ok", ""]);
+    expect(sentTo(calls).sort()).toEqual(["claude-opus-5-5 " + packet.packet, "gpt-6-astra " + packet.packet]);
+
+    const t = setup({ "sm-judges": 180 });
+    writeFileSync(join(t.packets, packet.packet + ".json"), JSON.stringify(packet, null, 1) + "\n");
+    writeFileSync(join(t.packets, "a-tampered.key.json"), JSON.stringify({ ...key("openai/gpt-6.1-sol", "A2"), judge: "openai/gpt-6-astra" }));
+    writeFileSync(join(t.packets, "b-opus.key.json"), JSON.stringify(key("claude-opus-5-5", "A1")));
+    const tampered = await send(t, "sm-judges", calls, () => ({ text: JUDGE }));
+    expect([tampered.code, calls.length, readItem(t.record, "sm-judges").leases.length]).toEqual(["E_SM_PACKET", 2, 0]);
+  });
+});
+
+describe("one send per item and run", () => {
+  test("while a send is live, a second send on its item is refused before it writes, recovers or opens anything, from the same --out or another", async () => {
+    const s = setup({ "sm-labels": 150 });
+    labels(s, 2);
+    const calls: Call[] = [];
+    let release!: () => void, reached!: () => void;
+    const gate = new Promise<void>((r) => (release = r)), inFlight = new Promise<void>((r) => (reached = r));
+    const plain = upstream(calls, () => ({}));
+    const first = send(s, "sm-labels", calls, undefined, { fetch: async (url, init) => (reached(), await gate, plain(url, init)) });
+    await inFlight;
+    const other: Call[] = [];
+    const same = await send(s, "sm-labels", other);
+    const elsewhere = await send(s, "sm-labels", other, undefined, { out: join(s.root, "out-elsewhere") });
+    expect([same.code, elsewhere.code, other.length]).toEqual(["E_USAGE", "E_USAGE", 0]);
+    expect(same.message).toContain("another send");
+    expect(readItem(s.record, "sm-labels").open).not.toBeNull();
+    release();
+    const done = await first;
+    expect([done.code, done.message]).toEqual(["ok", ""]);
+    expect(replies(s, "sm-labels").map((x) => x.outcome)).toEqual(["answered", "answered", "answered", "answered"]);
+    expect(readItem(s.record, "sm-labels").leases.map((l) => [l.close?.how, l.close?.unknown_micros])).toEqual([["settled", 0]]);
+  });
+
+  test("a replies file that does not name every call the ledger holds for the item and run is refused before any recovery or call: another --out, a send line lost in a crash, or a dead send's open lease", async () => {
+    const s = setup({ "sm-labels": 150 });
+    labels(s, 1);
+    const calls: Call[] = [];
+    expect((await send(s, "sm-labels", calls)).code).toBe("ok");
+    const elsewhere = await send(s, "sm-labels", calls, undefined, { out: join(s.root, "out-elsewhere") });
+    expect([elsewhere.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_USAGE", 2, 1]);
+    expect(elsewhere.message).toContain(readItem(s.record, "sm-labels").leases[0]!.lease.lease_id);
+    const file = join(outDir(s, "sm-labels"), "replies.jsonl");
+    writeFileSync(file, readFileSync(file, "utf8").split("\n").filter((l) => !l.includes('"reader":"astra"')).join("\n"));
+    const cut = await send(s, "sm-labels", calls);
+    expect([cut.code, calls.length, readItem(s.record, "sm-labels").leases.length]).toEqual(["E_USAGE", 2, 1]);
+
+    const d = setup({ "sm-labels": 150 });
+    labels(d, 1);
+    const local = openLocalLedger({ path: d.ledger, rule: "--ledger" });
+    const lease = openLease(d.record, local, { item: "sm-labels", run_id: "run-1", requireAdmission: () => null });
+    expect((await local.reserve({ idempotency_key: "k-dead", lease_id: lease.lease_id, cell: { run_id: "run-1", arm: "astra", task: "p", model: "gpt-6-astra", trial: 1, attempt: 1, meter_id: "m-dead" }, max_micros: 1_000 })).ok).toBe(true);
+    local.close();
+    const dead = await send(d, "sm-labels", calls);
+    expect([dead.code, calls.length, readItem(d.record, "sm-labels").open?.lease_id]).toEqual(["E_USAGE", 2, lease.lease_id]);
+    expect(dead.message).toContain("m-dead");
   });
 });
 

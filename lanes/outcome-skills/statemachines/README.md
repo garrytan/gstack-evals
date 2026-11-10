@@ -449,9 +449,10 @@ metering proxy, one slot per call, as the product-value meter and noloss judge-r
 these two items: neither names a session model, sm-labels pays for two models, and a driver stage takes one model and
 counts sessions.
 
-- Readers. Labels: GPT-6 Astra and Opus 5.5 each answer every label packet. Judges: the key's frozen judge (Astra for
+- Readers. Labels: GPT-6 Astra and Opus 5.5 each answer every label packet. Judges: each key's frozen judge (Astra for
   Opus runs, Opus for Sol and particle-1 runs), plus every judge whose queue (queue-astra.json, queue-opus.json, from
-  `sm packets queue`) names the packet; an R78 labelled item must be in both queues. Each judge sends its queue in
+  `sm packets queue`) names the packet; an R78 labelled item must be in both queues. Two sessions with the same diff and
+  files share one packet: every key that names it is checked, and each of their judges reads it once. Each judge sends its queue in
   order, then its other packets by id, and the two readers take turns.
 - The prompt is the packet's body as JSON, the exact text its id digests. A packet that no longer matches its digest, or
   has no key, is refused before anything is opened (E_SM_PACKET). The routes and request shape are judge.ts's
@@ -472,6 +473,10 @@ counts sessions.
   the reservation, a lost send keeps it as unknown, and a 5xx without usage is charged. A rerun with the same --run and
   --out sends only calls with no record; a call that a stopped send sent but never recorded is recorded as lost and
   never sent again.
+- One live send holds an item on a host, through a lock file beside the record, so a second send on it is refused
+  (E_USAGE) and never settles a lease the live one meters. Each send line is fsynced before its call goes out. A send
+  whose replies.jsonl does not name every call the ledger holds for the item and run (another --out, or a file emptied
+  or cut short) is refused before it recovers, settles or sends anything (E_USAGE).
 - --out holds replies.jsonl (a send line before each call, then one reply line per call with packet, reader, model,
   outcome, code, why, answer, raw and micros), raw/<reader>/<packet>.txt and each lease's proxy journal.
 
