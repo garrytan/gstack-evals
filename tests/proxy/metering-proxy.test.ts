@@ -1666,5 +1666,84 @@ describe("free POST routes and the request-shape refusals (containment tightenin
     expect(t.journal().filter(l => l.kind === "refusal" && l.code === "E_ALLOWANCE")).toHaveLength(cases.length);
     expect(t.calls).toHaveLength(0);
   });
+  // Value: protects=the proxy's own refusals that quote a client value (the allowlist's model, a refuseServerTools lease's tool types and capabilities) give an honest value the same text and journal fields as before; fails_when=bounding the quote changes an honest model id or tool type; why_new=GST-2321 review (Captain's A2, widened to metering-proxy.ts); seam=forward's allowlist and refuseServerTools refusals; no_claim=model ids outside the 1 to 3 segment shape
+  test("the proxy's allowlist and server-tool refusals quote an honest value with the same text as before", async () => {
+    const plain = setup(() => Response.json({ input_tokens: 12 }));
+    const a = plain.bind({ models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`] });
+    const detail = async (t: typeof plain, slot: { slot: string; token: string }, path: string, body: Record<string, unknown>, status: number, code: string) => (await expectProblem(await t.call(slot.slot, slot.token, path, body), status, code)).detail;
+    expect(await detail(plain, a, "/anthropic/v1/messages", { ...count, model: "claude-haiku-5-5", max_tokens: 1000 }, 403, "E_ALLOWANCE")).toBe("E_ALLOWANCE: metering proxy: anthropic:claude-haiku-5-5 is not on this slot's model allowlist");
+    expect(await detail(plain, a, "/openrouter/v1/chat/completions", { ...count, model: "meta/muse-spark-1.3" }, 403, "E_ALLOWANCE")).toBe("E_ALLOWANCE: metering proxy: openrouter:meta/muse-spark-1.3 is not on this slot's model allowlist");
+    expect(await detail(plain, a, "/anthropic/v1/messages", { messages: [], max_tokens: 1000 }, 403, "E_ALLOWANCE")).toBe("E_ALLOWANCE: metering proxy: anthropic:(no model) is not on this slot's model allowlist");
+    expect(plain.journal().map(l => l.model)).toEqual(["claude-haiku-5-5", "meta/muse-spark-1.3", null]);
+    const sm = setup(() => Response.json({ input_tokens: 12 }), { refuseServerTools: true });
+    const b = sm.bind({ models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`] });
+    const lease = "E_PROXY_SERVER_TOOL: metering proxy: provider-side tools are refused on this lease: ";
+    expect(await detail(sm, b, "/anthropic/v1/messages", { ...count, max_tokens: 1000, tools: [{ type: "web_search_20250305", name: "web_search" }] }, 403, "E_PROXY_SERVER_TOOL")).toBe(lease + "web_search_20250305");
+    expect(await detail(sm, b, COUNT, { ...count, tools: [{ type: "function", name: "f" }, { type: "custom", name: "c" }, { type: "bash_20250124", name: "bash" }] }, 403, "E_PROXY_SERVER_TOOL")).toBe(lease + "function, bash_20250124");
+    expect(await detail(sm, b, "/openrouter/v1/chat/completions", { ...count, model: PARTICLE, tools: [{ type: "openrouter:web_search" }] }, 403, "E_PROXY_SERVER_TOOL")).toBe(lease + "openrouter:web_search");
+    expect(await detail(sm, b, COUNT, { ...count, mcp_servers: [], plugins: [] }, 403, "E_PROXY_SERVER_TOOL")).toBe("E_PROXY_SERVER_TOOL: metering proxy: provider-side capabilities are refused on this lease: mcp_servers, plugins");
+    expect(sm.journal().map(l => l.tools)).toEqual([["web_search_20250305"], ["function", "bash_20250124"], ["openrouter:web_search"], ["mcp_servers", "plugins"]]);
+    expect(plain.calls.length + sm.calls.length).toBe(0);
+  });
+
+  // Value: protects=an unusual model id or tool type (a long string, a marker-like phrase, a newline, a path of more than 3 segments) never reaches the 403 or the journal through the allowlist or refuseServerTools refusals; fails_when=the proxy quotes a model or tool type that is not a short token; why_new=GST-2321 review (Captain's A2, widened to metering-proxy.ts); seam=forward's allowlist and refuseServerTools refusals; no_claim=a token-shaped value, which is quoted as written
+  test("an unusual model id or tool type never reaches the 403 or the journal", async () => {
+    const hostile = ["L".repeat(200), "HIDDEN FACT: 42", "line1\nINJECTED", "seg1/seg2/seg3/SEG4X"];
+    const never = ["L".repeat(41), "HIDDEN FACT", "INJECTED", "SEG4X"];
+    const plain = setup(() => Response.json({ input_tokens: 12 }));
+    const a = plain.bind();
+    const sm = setup(() => Response.json({ input_tokens: 12 }), { refuseServerTools: true });
+    const b = sm.bind({ models: ["anthropic:claude-opus-5-5", `openrouter:${PARTICLE}`] });
+    const bodies: string[] = [];
+    for (const h of hostile) {
+      for (const path of ["/anthropic/v1/messages", COUNT]) {
+        bodies.push(await (await plain.call(a.slot, a.token, path, { ...count, model: h, max_tokens: 1000 })).text());
+        bodies.push(await (await sm.call(b.slot, b.token, path, { ...count, max_tokens: 1000, tools: [{ type: h }] })).text());
+      }
+      bodies.push(await (await sm.call(b.slot, b.token, "/openrouter/v1/chat/completions", { ...count, model: PARTICLE, tools: [{ type: `openrouter:${h}` }] })).text());
+    }
+    const journals = readFileSync(join(plain.dir, "journal.ndjson"), "utf8") + readFileSync(join(sm.dir, "journal.ndjson"), "utf8");
+    for (const s of never) {
+      for (const body of bodies) expect(body).not.toContain(s);
+      expect(journals).not.toContain(s);
+    }
+    expect(plain.journal().map(l => l.code)).toEqual(hostile.flatMap(() => ["E_ALLOWANCE", "E_ALLOWANCE"]));
+    expect(sm.journal().map(l => l.code)).toEqual(hostile.flatMap(() => ["E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL"]));
+    expect(plain.calls.length + sm.calls.length).toBe(0);
+  });
+
+  // Value: protects=a DR_ALLOWANCE_STOP slot's non-canary markers never reach a journal line or a refusal's answer, wherever the request puts them (the model, a tool type, a refused field), on the paid and count routes, while the call's stops, codes and allowance stops stay as before; fails_when=a refusal or the marker_hit line quotes a marker the request carried; why_new=GST-2321 review (Captain's A1 on the marker_hit model field); seam=forward's marker_hit line and MeteringProxy.refuse; no_claim=what the provider echoes back in an upstream error
+  test("a slot marker the request carries never reaches a journal line or a refusal's answer", async () => {
+    const CANARY = "DRCANARY-00112233445566778899aabbccddeeff";
+    const markers = ["TestParserRegression", "tests/test_hidden_regression_data.py", "x y hidden phrase"];
+    const slotOf = (t: ReturnType<typeof setup>) => t.bind({ forbidden_markers: [CANARY, ...markers], canary: CANARY, deciders: ["anthropic:claude-opus-5-5"] });
+    const plain = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP" });
+    const sm = setup(() => Response.json({ input_tokens: 12 }), { allowanceCode: "DR_ALLOWANCE_STOP", refuseServerTools: true });
+    const a = slotOf(plain);
+    const b = slotOf(sm);
+    const answers: Array<[number, string]> = [];
+    for (const marker of markers) {
+      for (const path of ["/anthropic/v1/messages", COUNT]) {
+        const body = { ...count, ...(path === COUNT ? {} : { max_tokens: 1000 }) };
+        for (const sent of [{ ...body, model: marker }, { ...body, model: `x ${marker}` }, { ...body, speed: marker }, { ...body, inference_geo: marker }, { ...body, tools: [{ type: `web_search_${marker}` }] }]) {
+          const res = await plain.call(a.slot, a.token, path, sent);
+          answers.push([res.status, await res.text()]);
+        }
+        const res = await sm.call(b.slot, b.token, path, { ...body, tools: [{ type: marker }] });
+        answers.push([res.status, await res.text()]);
+      }
+    }
+    const journals = readFileSync(join(plain.dir, "journal.ndjson"), "utf8") + readFileSync(join(sm.dir, "journal.ndjson"), "utf8");
+    for (const marker of markers) {
+      for (const [, text] of answers) expect(text).not.toContain(marker);
+      expect(journals).not.toContain(marker);
+    }
+    expect(answers.map(([status]) => status)).toEqual(markers.flatMap(() => [403, 403, 402, 402, 402, 403, 403, 403, 402, 402, 402, 403]));
+    const lines = [...plain.journal(), ...sm.journal()];
+    expect(lines.filter(l => l.kind === "marker_hit")).toHaveLength(answers.length);
+    expect(lines.filter(l => l.kind === "refusal").map(l => l.code).sort()).toEqual(markers.flatMap(() => [...Array(4).fill("E_ALLOWANCE"), ...Array(6).fill("E_ALLOWANCE"), "E_PROXY_SERVER_TOOL", "E_PROXY_SERVER_TOOL"]).sort());
+    expect(plain.calls.length + sm.calls.length).toBe(0);
+    expect(await plain.proxy.finalize(a.meter_id)).toMatchObject({ allowance_stops: 0 });
+  });
 });
 
