@@ -34,8 +34,13 @@
 //   On a request that carried slot markers past the tripwire, a refusal replaces each marker with <unquoted> in the client
 //   values it quotes (maskMarkers: nested or overlapping markers become one <unquoted>) and leaves its own text as
 //   written; the marker_hit line journals a model that holds a marker as <unquoted>. The route-not-allowlisted refusal
-//   quotes the request path the same way, masking any marker it holds, and on a DR_ALLOWANCE_STOP proxy each slot marker in
-//   that path, the canary included, is journaled in a marker_hit line before it; the refusal keeps its place, status and code.
+//   quotes the request path the same way, masking any marker it holds, and keeps its place, status and code. On a
+//   DR_ALLOWANCE_STOP proxy a slot marker in that path is journaled before it as the tripwire would journal it: a path
+//   holding the canary writes the tripwire's DR_CUSTODY_HIT refusal line, so the controller's journal check stops the run,
+//   while the call is still answered 403 E_ALLOWANCE; any other slot marker there writes a marker_hit line. An allowlisted
+//   path that holds a marker (GET /v1/models/<id>) is journaled in the same path form in every line. A slot denial
+//   (E_SLOT_DENIED) quotes an unmatched path in that form, and masks the proxy-wide markers and every open slot's markers
+//   in it and in the slot id it quotes.
 // - OpenRouter chat, Responses and Anthropic-compatible Messages calls are routed with OPENROUTER_API_KEY. The proxy
 //   replaces the request's provider routing with the price row's (its prices as max_price, and its pinned providers), and
 //   settles from the token usage OpenRouter reports, priced at the row, as for the other providers. On the Messages route
@@ -559,8 +564,10 @@ export class MeteringProxy {
     const slot = match ? this.slots.get(match[1]!) : undefined;
     const credential = presentedCredential(req);
     if (!match || !slot || !sameSecret(slot.tokenHash, credential)) {
-      const reason = !match ? `no provider route ${path}` : !slot ? `slot ${match[1]} is not open` : `the credential presented is not slot ${match[1]}'s bearer`;
-      this.journal({ kind: "refusal", code: "E_SLOT_DENIED", slot: match?.[1] ?? null, reason, source });
+      const markers = [...(this.options.forbiddenMarkers ?? []), ...[...this.slots.values()].flatMap(s => s.markers)];
+      const id = match ? maskMarkers(match[1]!, markers) : null;
+      const reason = !match ? `no provider route ${quoteClientValue(path, "path", markers)}` : !slot ? `slot ${id} is not open` : `the credential presented is not slot ${id}'s bearer`;
+      this.journal({ kind: "refusal", code: "E_SLOT_DENIED", slot: id, reason, source });
       return problem("E_SLOT_DENIED", 403, reason);
     }
     const meterId = slot.cell.meter_id;
@@ -597,13 +604,19 @@ export class MeteringProxy {
     const o = this.options;
     const { provider, route, slot } = ctx;
     const allowed = ROUTES[provider].find(r => r.method === req.method && r.path.test(route) && (!r.query || r.query.test(new URL(req.url).search)));
+    const path = [route, percentDecoded(route)].join("\n");
+    const inPath = findLeaks(path, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
     if (!allowed) {
-      const path = [route, percentDecoded(route)].join("\n");
-      ctx.marked = findLeaks(path, [...(o.forbiddenMarkers ?? []), ...slot.markers]);
-      ctx.route = quoteClientValue(route, "path", ctx.marked);
-      if (ctx.marked.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(path, o.forbiddenMarkers ?? []).length) this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, source: ctx.source, decider: false, ...hitFields(slot, ctx.marked) });
+      ctx.marked = inPath;
+      ctx.route = quoteClientValue(route, "path", inPath);
+      if (inPath.length && o.allowanceCode === "DR_ALLOWANCE_STOP" && !findLeaks(path, o.forbiddenMarkers ?? []).length) {
+        const { cell, markers } = hitFields(slot, inPath);
+        if (slot.canary !== null && inPath.includes(slot.canary)) this.journal({ kind: "refusal", code: "DR_CUSTODY_HIT", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, reason: `the request carries ${inPath.length} runner-only marker(s); custody hit, the run stops`, source: ctx.source, cell, markers });
+        else this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: null, source: ctx.source, decider: false, cell, markers });
+      }
       return this.refuse(ctx, "E_ALLOWANCE", 403, `route ${req.method} /${provider}${ctx.route} is not allowlisted`);
     }
+    if (inPath.length) ctx.route = quoteClientValue(route, "path", inPath);
     const key = (o.env ?? process.env)[KEY_ENV[provider]];
     if (!key) return this.refuse(ctx, "E_KEY_MISSING", 503, `${KEY_ENV[provider]} is not set in the proxy's environment`);
     ctx.secrets.push(key);
@@ -621,7 +634,7 @@ export class MeteringProxy {
       return out;
     };
     const forwardFree = async (body?: string) => {
-      const free = { kind: "free", meter_id: slot.cell.meter_id, provider, route, model: ctx.model || null, source: ctx.source };
+      const free = { kind: "free", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: ctx.model || null, source: ctx.source };
       let res: Response;
       let text: string;
       try {
@@ -663,7 +676,7 @@ export class MeteringProxy {
       if (slot.canary !== null && leaks.includes(slot.canary)) return this.refuse(ctx, "DR_CUSTODY_HIT", 403, `the request carries ${leaks.length} runner-only marker(s); custody hit, the run stops`, { cell, markers });
       ctx.marked = leaks;
       const shown = typeof asked === "string" ? quoteClientValue(asked, "model") : null;
-      this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route, model: shown !== null && leaks.some(m => shown.includes(m)) ? UNQUOTED : shown, source: ctx.source, decider, cell, markers });
+      this.journal({ kind: "marker_hit", meter_id: slot.cell.meter_id, provider, route: ctx.route, model: shown !== null && leaks.some(m => shown.includes(m)) ? UNQUOTED : shown, source: ctx.source, decider, cell, markers });
     } else if (leaks.length) return this.refuse(ctx, "E_TRIPWIRE", 403, `the request carries ${leaks.length} forbidden marker(s); the cell is invalid`);
     if (req.method === "GET") return forwardFree();
     if (!isJson) return this.refuse(ctx, "E_ALLOWANCE", 400, "the request body is not JSON, so it cannot be priced");
