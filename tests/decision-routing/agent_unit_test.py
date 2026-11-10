@@ -164,6 +164,7 @@ PIN = {
 ISSUE = "Fix the needle handling in src."
 SUBMIT = "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && cat patch.txt"
 ALLOW = "403 DR_ALLOWANCE_STOP: the session allowance cannot hold this call"
+OPUS_FORCED_TOOL_ERROR = 'tool_choice: type "tool" and "any" are not supported for this model.'
 OBS = "<returncode>{{output.returncode}}</returncode>\n<output>\n{{output.output}}</output>"
 TESTPY = "import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n        pass\n"
 
@@ -1016,8 +1017,10 @@ class Fake(http.server.BaseHTTPRequestHandler):
             ans = {n: s["jev"](n, q) for n, q in body["questions"].items()}
             return self.reply(200, {"model": body.get("model"), "usage": {"input_tokens": 7, "output_tokens": 1}, "answers": ans})
         if self.path.startswith("/anthropic"):
-            if (body.get("tool_choice") or {}).get("name") == "answer":
-                return self.reply(200, self.anthropic([("answer", s["gen"]("frontier", body))]))
+            if (body.get("tool_choice") or {}).get("type") in ("tool", "any"):
+                return self.reply(400, {"type": "error", "error": {"type": "invalid_request_error", "message": OPUS_FORCED_TOOL_ERROR}})
+            if (body.get("output_config") or {}).get("format"):
+                return self.reply(200, self.anthropic_json(s["gen"]("frontier", body)))
             cmds = s["main"].pop(0)
             return self.reply(200, self.anthropic([("bash", {"command": c}) for c in cmds]))
         if self.path.endswith("/responses"):
@@ -1039,6 +1042,12 @@ class Fake(http.server.BaseHTTPRequestHandler):
         blocks = [{"type": "text", "text": "ok"}] + [{"type": "tool_use", "id": f"toolu_{n}_{i}", "name": name, "input": inp} for i, (name, inp) in enumerate(tools)]
         return {"id": f"msg_{n}", "type": "message", "role": "assistant", "model": "claude-opus-5-5", "content": blocks,
                 "stop_reason": "tool_use", "stop_sequence": None, "usage": {"input_tokens": 11, "output_tokens": 4}}
+
+    def anthropic_json(self, obj):
+        n = sum(Fake.srv["hits"].values())
+        return {"id": f"msg_{n}", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+                "content": [{"type": "thinking", "thinking": "", "signature": f"sig_{n}"}, {"type": "text", "text": json.dumps(obj)}],
+                "stop_reason": "end_turn", "stop_sequence": None, "usage": {"input_tokens": 11, "output_tokens": 4}}
 
     def reply(self, code, obj):
         data = json.dumps(obj).encode()
@@ -1118,7 +1127,8 @@ def test_real_sdk_adapters_allowance_and_parse():
         req = [b for p, b in Fake.srv["bodies"] if p.startswith("/openrouter")][-1]
         check(req["max_tokens"] == 8000 and req["response_format"]["type"] == "json_schema" and req["model"] == deciders.PARTICLE_MODEL, req)
         areq = [b for p, b in Fake.srv["bodies"] if p.startswith("/anthropic")][-1]
-        check(areq["tool_choice"] == {"type": "tool", "name": "answer"} and "cache_control" not in json.dumps(areq), areq.get("tool_choice"))
+        check(areq.get("output_config") == {"format": {"type": "json_schema", "schema": deciders.Generative._schema(["yes", "no"])}} and "tool_choice" not in areq and "tools" not in areq
+              and "cache_control" not in json.dumps(areq), {k: areq.get(k) for k in ("output_config", "tool_choice", "tools")})
     finally:
         server.shutdown()
 
@@ -1149,7 +1159,7 @@ def test_real_session_routed_end_to_end():
         check(summ["exit_status"] == "submitted" and summ["decider_actions"] == 1 and summ["main_calls"] == 2, summ)
         check(summ["questions_sha256"] == Q.sha256, summ["questions_sha256"])
         check(os.path.exists(os.path.join(out, "trajectory.json")) and os.path.exists(os.path.join(out, "decisions.jsonl")), os.listdir(out))
-        mains = [b for pth, b in Fake.srv["bodies"] if pth.startswith("/anthropic") and (b.get("tool_choice") or {}).get("name") != "answer"]
+        mains = [b for pth, b in Fake.srv["bodies"] if pth.startswith("/anthropic") and not (b.get("output_config") or {}).get("format")]
         last = mains[-1]["messages"]
         uses = [c["id"] for m in last if m["role"] == "assistant" and isinstance(m["content"], list) for c in m["content"] if c.get("type") == "tool_use"]
         results = [c["tool_use_id"] for m in last if m["role"] == "user" and isinstance(m["content"], list) for c in m["content"] if c.get("type") == "tool_result"]

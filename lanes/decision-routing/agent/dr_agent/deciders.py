@@ -184,9 +184,8 @@ class Generative:
             self._client = Anthropic(api_key=self.token, base_url=self.base_url, max_retries=0, timeout=600.0)
         r = self._client.messages.create(
             model=self.model, max_tokens=self.max_tokens, system=system, messages=[{"role": "user", "content": user}],
-            tools=[{"name": "answer", "description": "Record the answer to the question.", "input_schema": schema}],
-            tool_choice={"type": "tool", "name": "answer"})
-        content = next((b.input for b in r.content if getattr(b, "type", "") == "tool_use" and b.name == "answer"), None)
+            output_config={"format": {"type": "json_schema", "schema": schema}})
+        content = "".join(b.text for b in r.content if getattr(b, "type", "") == "text") or None
         u = r.usage
         usage = {"input": u.input_tokens or 0, "output": u.output_tokens or 0,
                  "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0, "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0}

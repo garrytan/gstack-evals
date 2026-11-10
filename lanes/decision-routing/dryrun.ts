@@ -211,7 +211,7 @@ const allowOf = (cell: string, model: string): string[] => [CELLS.models[model].
 
 function classify(provider: FakeProvider, body: any): string {
   if (provider === "typesafe") return "jev";
-  if (provider === "anthropic") return body?.tool_choice?.name === "answer" ? "frontier" : "main";
+  if (provider === "anthropic") return body?.output_config?.format ? "frontier" : "main";
   if (provider === "openai") return body?.response_format ? "frontier" : "main";
   return body?.response_format ? "particle" : "main";
 }
@@ -235,10 +235,12 @@ const DEFAULT = (a: Ask): Exclude<Answer, undefined | "fail"> => (a.type === "ne
 let replyIds = 0;
 function anthropicAnswer(input: unknown, usage?: FakeUsage): FakeReply {
   const n = ++replyIds;
-  return { json: { id: "msg_dr_" + n, type: "message", role: "assistant", model: "claude-opus-5-5", content: [{ type: "tool_use", id: "toolu_dr_" + n, name: "answer", input }], stop_reason: "tool_use", stop_sequence: null, usage: anthropicUsage(usage) } };
+  const content = [{ type: "thinking", thinking: "", signature: "sig_dr_" + n }, { type: "text", text: JSON.stringify(input) }];
+  return { json: { id: "msg_dr_" + n, type: "message", role: "assistant", model: "claude-opus-5-5", content, stop_reason: "end_turn", stop_sequence: null, usage: anthropicUsage(usage) } };
 }
 
 function replyFor(provider: FakeProvider, body: any, spec: Spec, st: Record<string, number>): FakeReply {
+  if (provider === "anthropic" && ["tool", "any"].includes(body?.tool_choice?.type)) return errorReply(400, 'tool_choice: type "tool" and "any" are not supported for this model.');
   const kind = classify(provider, body);
   if (kind === "main") {
     const m = spec.main[st.main++] ?? spec.after ?? [SUBMIT_COMMAND];
